@@ -1,0 +1,31 @@
+[package]
+name = "bebop"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+name = "bebop"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bebop"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+# OS-agnostic, deterministic agent core. Depends ONLY on the invariant `dowiz-core` (domain)
+# crate — no tokio, no fs-mandatory IO in the core logic. `rand` is DEV-ONLY (entropy not in the
+# production graph; the sovereignty gate (Law 2) forbids it). The CLI's real IO (reading the log
+# file) lives in `main.rs`, isolated from the pure kernel adapter.
+[dependencies]
+dowiz-core = { path = "../domain" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+regex = "1"
+
+[dev-dependencies]
+rand = "0.8"

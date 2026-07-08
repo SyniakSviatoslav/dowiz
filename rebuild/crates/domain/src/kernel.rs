@@ -413,6 +413,181 @@ fn money_math_breach(_e: crate::MoneyError) -> DomainError {
     }
 }
 
+// ─────────────────────── ReAct agentic loop (Reason→Act→Observe→Reflect) ───────────────────────
+//
+// The promo-demo failure mode: a HIDDEN retry loop shows the user a single "perfect" iteration while
+// the real system silently retried/rewrote behind the scenes. `react_decide` makes that loop VISIBLE
+// and AUDITABLE: every attempt (draft → collision → rewrite) is recorded in a [`ReactTrace`] the shell
+// can persist as audit metadata. It composes AROUND `decide` (the red-line door) — `decide` itself is
+// NEVER modified. On a collision/denial it runs `react_reflect`, which may rewrite the command into an
+// equivalent LEGAL one (the only honest rewrite: owner→system on a SYSTEM-only edge) and retry up to
+// `iterations` (default 3). A genuinely illegal command has NO valid rewrite → the loop STOPS and
+// returns the original error (never loops forever, never invents a state).
+
+/// One VISIBLE ReAct step. Serializable so the whole trace can be persisted as audit metadata and
+/// replayed later — nothing here is hidden from the operator.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ReactStep {
+    pub iter: u32,
+    /// The combined Reason→Act→Observe→Reflect phase label for this visible iteration.
+    pub phase: String,
+    /// WHY this command / what the rewrite was (the visible self-correction note).
+    pub thought: String,
+    /// Ok(N events) or Err(code) — the environment's response this iteration.
+    pub observation: String,
+    /// 0..100 real-time quality score for THIS iteration (the eval gate). 0 = denied, 100 = clean.
+    pub eval_score: u8,
+    /// Did this iteration make progress (not denied)? The thing promo demos hide shows up here.
+    pub ok: bool,
+    /// Did a rewrite get GENERATED from this denial (an honest self-correction)? Distinct from `ok`:
+    /// a denial WITHOUT a rewrite is an honest "no valid action" (had_rewrite stays false); a denial
+    /// WITH a rewrite is the visible retry promo demos used to hide (had_rewrite becomes true).
+    pub rewrote: bool,
+}
+
+/// The full, visible Reason→Act→Observe→Reflect trace for one `react_decide` call.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub struct ReactTrace {
+    pub steps: Vec<ReactStep>,
+}
+
+impl ReactTrace {
+    fn push(&mut self, step: ReactStep) {
+        self.steps.push(step);
+    }
+    /// Was at least one iteration a DENIAL-WITH-REWRITE (the visible self-correction promo demos hide)?
+    /// Distinct from a bare denial: an honest "no valid action" denial has `rewrote:false` and does NOT
+    /// make `had_rewrite` true.
+    pub fn had_rewrite(&self) -> bool {
+        self.steps.iter().any(|s| s.rewrote)
+    }
+}
+
+/// The result of a ReAct decide: the produced events (if any) plus the ALWAYS-returned visible trace.
+pub struct ReactResult {
+    pub events: Option<Vec<Event>>,
+    pub error: Option<DomainError>,
+    pub trace: ReactTrace,
+}
+
+/// The default visible ReAct iteration count. MUST be 3 (user requirement); overridable per call.
+pub const DEFAULT_REACT_ITERS: u32 = 3;
+
+/// REAL-TIME EVAL GATE for one ReAct iteration. Mirrors the bebop `evalStep`: `decide` (the guard)
+/// decides legality; this decides QUALITY of the iteration. Falsifiable: a denial scores 0, a clean
+/// success scores 100, a neutral step 50.
+fn react_eval(denied: bool, events: usize) -> u8 {
+    if denied {
+        0
+    } else if events > 0 {
+        100
+    } else {
+        50
+    }
+}
+
+/// The ONLY honest self-correction the kernel may make: a SYSTEM-only cancel edge
+/// (CONFIRMED/PREPARING/READY→CANCELLED) attempted by an OWNER is rewritten to a SYSTEM-actor command
+/// (the dispatch-grace path keeps the edge). Any other error (a genuinely illegal transition, a
+/// pricing breach, a cc1 strand) has NO valid rewrite → `None`, and the loop must stop. No business
+/// logic is invented here — this is a documented corridor, not a new rule.
+fn react_reflect(command: &Command, err: &DomainError) -> Option<Command> {
+    if let DomainError::CorridorBreach { corridor, .. } = err {
+        if *corridor == "actor_gate" {
+            if let Command::Cancel { at, actor: Actor::Owner } = command {
+                return Some(Command::Cancel {
+                    at: *at,
+                    actor: Actor::System,
+                });
+            }
+        }
+    }
+    None
+}
+
+/// ReAct wrapper around [`decide`]. Visible, auditable, default 3 iterations. NEVER modifies `decide`.
+///
+/// Semantics (the promo-demo fix): each attempt is recorded in `trace`. On `Err`, `react_reflect` may
+/// rewrite the command into an equivalent LEGAL one and retry (up to `iterations`). If no valid
+/// rewrite exists, the loop stops immediately and returns the original error — it never loops forever
+/// and never fabricates a state. The trace is ALWAYS returned so the hidden retry becomes visible.
+pub fn react_decide(
+    state: &OrderState,
+    mut command: Command,
+    ctx: &Context,
+    iterations: u32,
+) -> ReactResult {
+    let iters = if iterations >= 1 { iterations } else { DEFAULT_REACT_ITERS };
+    let mut trace = ReactTrace::default();
+    for iter in 1..=iters {
+        let thought = format!("react attempt {iter}");
+        // ACT through the red-line door.
+        let res = decide(state, command.clone(), ctx);
+        match &res {
+            Ok(events) => {
+                trace.push(ReactStep {
+                    iter,
+                    phase: "reason→act→observe→reflect".into(),
+                    thought,
+                    observation: format!("Ok({} events)", events.len()),
+                    eval_score: react_eval(false, events.len()),
+                    ok: true,
+                    rewrote: false,
+                });
+                return ReactResult {
+                    events: Some(events.clone()),
+                    error: None,
+                    trace,
+                };
+            }
+            Err(err) => {
+                let observation = format!("Err({:?})", err.code());
+                match react_reflect(&command, err) {
+                    Some(rewritten) => {
+                        trace.push(ReactStep {
+                            iter,
+                            phase: "reason→act→observe→reflect".into(),
+                            thought: format!("{thought}: rewrote command for next iteration"),
+                            observation,
+                            eval_score: react_eval(true, 0),
+                            ok: false,
+                            rewrote: true,
+                        });
+                        command = rewritten;
+                        continue;
+                    }
+                    None => {
+                        trace.push(ReactStep {
+                            iter,
+                            phase: "reason→act→observe→reflect".into(),
+                            thought,
+                            observation,
+                            eval_score: react_eval(true, 0),
+                            ok: false,
+                            rewrote: false,
+                        });
+                        // No valid rewrite → STOP (do not loop forever, do not invent a state).
+                        return ReactResult {
+                            events: None,
+                            error: Some(*err),
+                            trace,
+                        };
+                    }
+                }
+            }
+        }
+    }
+    // Exhausted iterations without success (only reachable if a rewrite kept colliding). Honest stop.
+    ReactResult {
+        events: None,
+        error: Some(DomainError::CorridorBreach {
+            corridor: "react_exhausted",
+            code: ErrorCode::Internal,
+        }),
+        trace,
+    }
+}
+
 /// TOTAL. Applying a fact cannot fail — it already happened. Produces a new state (no `&mut self`);
 /// if this could ever fail, `decide` was wrong, and the replay property (Hard Truth Layer 2) catches
 /// it, never a runtime branch here. Each arm carries the rest of the aggregate along unchanged
@@ -946,5 +1121,114 @@ mod tests {
             "fold must stay exhaustive — a catch-all `_ =>` arm would swallow a future Event variant \
              instead of folding it (GRAND-PLAN 0b-2). Handle the new variant explicitly."
         );
+    }
+
+    // ─────────────────────── ReAct agentic loop (Reason→Act→Observe→Reflect) ───────────────────────
+
+    fn confirmed_state() -> OrderState {
+        OrderState { status: OrderStatus::Confirmed, ..OrderState::genesis() }
+    }
+
+    #[test]
+    fn react_default_iteration_count_is_3() {
+        // The user requirement: default ReAct iterations == 3.
+        assert_eq!(DEFAULT_REACT_ITERS, 3);
+    }
+
+    #[test]
+    fn react_decide_succeeds_on_first_try_and_emits_one_visible_step() {
+        // A legal command → first iteration succeeds, trace has exactly 1 step, ok=true.
+        let res = react_decide(
+            &OrderState::genesis(),
+            Command::Confirm { at: T, actor: Actor::Owner },
+            &plain_ctx(),
+            DEFAULT_REACT_ITERS,
+        );
+        assert!(res.error.is_none());
+        assert!(res.events.is_some());
+        assert_eq!(res.trace.steps.len(), 1);
+        assert!(res.trace.steps[0].ok);
+        // eval gate: clean success scores 100
+        assert_eq!(res.trace.steps[0].eval_score, 100);
+        assert!(!res.trace.had_rewrite());
+    }
+
+    #[test]
+    fn react_decide_rewrites_owner_cancel_to_system_and_makes_the_retry_visible() {
+        // CONFIRMED→CANCELLED is machine-legal but a SYSTEM-only edge: an OWNER hitting it is denied,
+        // react_reflect rewrites it to a SYSTEM-actor command, and the NEXT iteration succeeds. The
+        // hidden retry is now VISIBLE: trace shows 2 steps and had_rewrite()==true.
+        let res = react_decide(
+            &confirmed_state(),
+            Command::Cancel { at: T, actor: Actor::Owner },
+            &plain_ctx(),
+            DEFAULT_REACT_ITERS,
+        );
+        assert!(res.error.is_none(), "rewritten System cancel must succeed");
+        assert!(res.events.is_some());
+        // iter 1 = denied+rewrite (ok=false), iter 2 = success (ok=true) → 2 visible steps
+        assert_eq!(res.trace.steps.len(), 2, "both iterations must be recorded");
+        assert!(!res.trace.steps[0].ok, "first attempt (owner) is the visible denial");
+        assert!(res.trace.steps[1].ok, "second attempt (system) succeeds");
+        assert!(res.trace.had_rewrite(), "the rewrite must be visible in the trace");
+        // eval gate: denial scored 0, success scored 100
+        assert_eq!(res.trace.steps[0].eval_score, 0);
+        assert_eq!(res.trace.steps[1].eval_score, 100);
+    }
+
+    #[test]
+    fn react_iteration_count_is_configurable_and_honored() {
+        // With iterations=1 a needed-rewrite command CANNOT retry → it fails (exhausted). With 2 it
+        // rewrites on iter1 and succeeds on iter2. This proves the count is real, not cosmetic.
+        let one = react_decide(
+            &confirmed_state(),
+            Command::Cancel { at: T, actor: Actor::Owner },
+            &plain_ctx(),
+            1,
+        );
+        assert!(one.error.is_some(), "iterations=1 must not allow the rewrite to land");
+        let two = react_decide(
+            &confirmed_state(),
+            Command::Cancel { at: T, actor: Actor::Owner },
+            &plain_ctx(),
+            2,
+        );
+        assert!(two.error.is_none(), "iterations=2 allows the rewrite to succeed");
+        assert_eq!(two.trace.steps.len(), 2);
+    }
+
+    #[test]
+    fn react_decide_stops_on_a_genuinely_illegal_command_and_does_not_loop_forever() {
+        // A terminal DELIVERED order absorbing CANCEL is a hard IllegalTransition — there is NO valid
+        // rewrite. The loop must STOP at iteration 1 (not spin 3 times) and return the original error.
+        let delivered = OrderState { status: OrderStatus::Delivered, ..OrderState::genesis() };
+        let res = react_decide(
+            &delivered,
+            Command::Cancel { at: T, actor: Actor::System },
+            &plain_ctx(),
+            DEFAULT_REACT_ITERS,
+        );
+        assert!(res.error.is_some());
+        assert!(res.events.is_none());
+        assert_eq!(res.trace.steps.len(), 1, "must not loop 3x on an unrewritable denial");
+        assert!(!res.trace.steps[0].ok);
+        assert_eq!(res.trace.steps[0].eval_score, 0);
+        assert!(!res.trace.had_rewrite(), "no rewrite happened — the denial is honest");
+    }
+
+    #[test]
+    fn react_trace_is_serializable_as_audit_metadata() {
+        // The trace must round-trip through the crate's canonical bytes so the shell can persist it
+        // alongside the Envelope as audit metadata (never hidden from the operator).
+        let res = react_decide(
+            &confirmed_state(),
+            Command::Cancel { at: T, actor: Actor::Owner },
+            &plain_ctx(),
+            DEFAULT_REACT_ITERS,
+        );
+        let bytes = crate::canonical_bytes(&res.trace).expect("trace serializes");
+        let decoded: ReactTrace = crate::from_bytes(&bytes).expect("trace deserializes");
+        assert_eq!(decoded, res.trace);
+        assert!(decoded.had_rewrite());
     }
 }

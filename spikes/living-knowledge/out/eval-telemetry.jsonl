@@ -4,17 +4,17 @@
 {"q":"the long-form reference document the trimmed core operating instructions defer to","top":".claude/CLAUDE.md","recall":1,"absConf":0.6379}
 {"q":"which bash hook blocks mutations of protected paths like migrations and env","top":".claude/hooks/guard-bash.sh","recall":1,"absConf":0.782}
 {"q":"the gate that refuses edits to contract schema and governance zones","top":".claude/hooks/protect-paths.sh","recall":1,"absConf":0.6607}
-{"q":"hook that denies handing a subtask off to the fable model","top":".claude/hooks/agent-dispatch-gate.sh","recall":1,"absConf":0.6972}
+{"q":"hook that denies handing a subtask off to the fable model","top":".claude/hooks/agent-dispatch-gate.sh","recall":1,"absConf":0.6875}
 {"q":"detector for a subagent that returns zero tool calls and just parrots the injected reminder","top":".claude/hooks/subagent-return-guard.sh","recall":1,"absConf":0.7099}
-{"q":"hook that warns when the working context window is growing too large","top":".claude/hooks/context-budget-guard.sh","recall":1,"absConf":0.6155}
-{"q":"hook that forces a task to be classified before any work begins","top":"docs/operating-model/task-exit-rule.md","recall":1,"absConf":0.6125}
+{"q":"hook that warns when the working context window is growing too large","top":".claude/hooks/context-budget-guard.sh","recall":1,"absConf":0.6263}
+{"q":"hook that forces a task to be classified before any work begins","top":".claude/hooks/agent-dispatch-gate.sh","recall":1,"absConf":0.6125}
 {"q":"hook escalating edits that touch auth money or row level security to a human","top":"scripts/guardrail-hook-matchers.mjs","recall":1,"absConf":0.6071}
-{"q":"the suite that runs every governance guardrail before a commit","top":"scripts/run-armaments.sh","recall":1,"absConf":0.6941}
+{"q":"the suite that runs every governance guardrail before a commit","top":"scripts/run-armaments.sh","recall":1,"absConf":0.7146}
 {"q":"knowledge as circuits red-line pattern registry runner","top":"scripts/run-circuits.mjs","recall":1,"absConf":0.7327}
 {"q":"gate that fails when a guardrail file exists but no runner ever invokes it","top":"scripts/guardrail-no-orphan-guardrails.mjs","recall":1,"absConf":0.746}
 {"q":"checker that a loop marked certified actually has its report artifact","top":"scripts/guardrail-loop-registry-parity.mjs","recall":1,"absConf":0.7159}
 {"q":"guardrail that checks source files carry the open-source license header","top":"scripts/guardrail-license.mjs","recall":1,"absConf":0.7641}
-{"q":"guardrail enforcing the token budget routing gates","top":"docs/reflections/INBOX/2026-07-06-token-gate-warn-then-ratchet.reflection.md","recall":1,"absConf":0.7989}
+{"q":"guardrail enforcing the token budget routing gates","top":"docs/reflections/INBOX/2026-07-06-token-gate-warn-then-ratchet.reflection.md","recall":1,"absConf":0.7875}
 {"q":"guardrail that proves every enforced proof has a red case that can fail","top":"scripts/guardrail-falsifiable-proof.mjs","recall":1,"absConf":0.8125}
 {"q":"script that verifies the structural integrity of the codebase modules","top":"scripts/module-integrity.mjs","recall":1,"absConf":0.7173}
 {"q":"spreading activation bands over a helixdb-backed living knowledge store","top":"docs/operating-model/living-knowledge-helixdb-arc.md","recall":1,"absConf":0.8457}

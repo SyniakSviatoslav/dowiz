@@ -164,8 +164,15 @@ export class Governor {
   anomaly = false;
   resonanceRisky = false;
   thermoFloorHit = false;
+  private last!: GovernorState;
 
-  constructor(cfg: GovernorConfig) { this.cfg = cfg; }
+  constructor(cfg: GovernorConfig) {
+    this.cfg = cfg;
+    this.last = { authority: (cfg.uMin + cfg.uMax) / 2, pidU: 0, icir: null, factorStatus: 'unknown', resonanceRisky: false, anomaly: false, thermoFloorHit: false, error: 0 };
+  }
+
+  get authority(): number { return this.last.authority; }
+  get state(): GovernorState { return this.last; }
 
   private pushFactor(pred: number, act: number): number | null {
     this.predAct.push([pred, act]);
@@ -218,7 +225,7 @@ export class Governor {
     const floor = landauerFloor(bitsErased(s.volume));
     this.thermoFloorHit = s.cost < floor;
 
-    return { authority: clamp(authority, c.uMin, c.uMax), pidU: u, icir: icirV, factorStatus: status, resonanceRisky: this.resonanceRisky, anomaly: this.anomaly, thermoFloorHit: this.thermoFloorHit, error };
+    return (this.last = { authority: clamp(authority, c.uMin, c.uMax), pidU: u, icir: icirV, factorStatus: status, resonanceRisky: this.resonanceRisky, anomaly: this.anomaly, thermoFloorHit: this.thermoFloorHit, error });
   }
 }
 

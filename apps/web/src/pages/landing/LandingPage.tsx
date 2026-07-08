@@ -1,8 +1,10 @@
 import React, { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, useScroll, useSpring } from 'framer-motion';
+import { MeshGradient } from '@paper-design/shaders-react';
 import { useI18n, LanguageSwitcher } from '@deliveryos/ui';
 import { HorizonDrift } from './HorizonDrift.js';
+import { BebopCharacter } from './BebopCharacter.js';
 import { CityPopRadio } from './CityPopRadio.js';
 import './landing.css';
 
@@ -63,6 +65,23 @@ export function LandingPage() {
         {/* ── SESSION 01 — THE PITCH ── */}
         <section className="lp-session">
           <HorizonDrift />
+          {/* anime-grain nebula behind the character (paper-design shader) */}
+          <div className="lp-nebula" aria-hidden="true">
+            <MeshGradient
+              colors={['#16202f', '#2b3a52', '#e8a544', '#1a1512']}
+              speed={0.4}
+              distortion={0.85}
+              swirl={0.25}
+              grainMixer={0.35}
+              grainOverlay={0.25}
+              style={{ width: '100%', height: '100%' }}
+            />
+          </div>
+          <BebopCharacter
+            scrollRef={scrollRef}
+            imageSrc="/bebop-courier.png"
+            videoSrc="/bebop-courier.webm"
+          />
           <div style={{ maxWidth: '1180px', margin: '0 auto', width: '100%' }}>
             <Reveal>
               <span className="lp-eyebrow">{t('lp.s1_eyebrow', 'Session 01 — The Pitch')}</span>
@@ -79,7 +98,7 @@ export function LandingPage() {
             </Reveal>
             <Reveal delay={0.26}>
               <div style={{ display: 'flex', gap: '14px', marginTop: '32px', flexWrap: 'wrap' }}>
-                <button className="lp-cta lp-cta--primary" onClick={() => navigate('/claim')}>
+                <button id="lp-claim" className="lp-cta lp-cta--primary" onClick={() => navigate('/claim')}>
                   {t('lp.cta_claim', 'Claim your storefront')}
                 </button>
                 <button className="lp-cta lp-cta--ghost" onClick={() => navigate('/start')}>

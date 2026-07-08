@@ -1,20 +1,20 @@
 {
   "k": 5,
-  "corpus": 77,
+  "corpus": 79,
   "hitQueries": 29,
   "missQueries": 3,
-  "hashRecall": 0.621,
+  "hashRecall": 0.552,
   "hybrid": {
     "model": "Xenova/bge-small-en-v1.5",
     "recall": 1,
-    "realConf": 0.7079,
+    "realConf": 0.7082,
     "nonsenseConf": 0.5978,
     "deterministic": true,
     "cacheBuilt": 0
   },
   "layers": {
-    "nodeCount": 77,
-    "edgeCount": 172,
-    "islands": 29
+    "nodeCount": 79,
+    "edgeCount": 175,
+    "islands": 31
   }
 }

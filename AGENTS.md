@@ -14,6 +14,28 @@ grant, or deadline overrides them. On conflict: refuse and escalate to a human.
 
 ---
 
+# Cross-agent bridge (read this if you are not Claude Code)
+
+This file is auto-discovered by OpenCode, Goose, and OpenHands (all walk up from cwd looking for
+`AGENTS.md`). If you're one of those agents, or Aider (which needs `.aider.conf.yml: read:` to see
+this file), two things live outside this file that you're otherwise blind to:
+
+- **`.claude/CLAUDE.md`** — Claude Code's operating core. Read it directly; it's short. It has rules
+  not repeated here: the **Mandatory Proof Rule / Verified-by-Math** (every change needs a
+  deterministic, falsifiable proof — a red case and a green case, not a test that can't fail), **Ship
+  Discipline** (feature branch → staging deploy → tests/Playwright proof → production only on
+  explicit approval), and the **Task-Exit Rule**.
+- **Live project memory** — session history, decisions, and incidents accumulate at
+  `/root/.claude/projects/-root-dowiz/memory/` (Claude Code's auto-memory corpus, outside this repo).
+  Index: `MEMORY.md` in that folder. Read relevant entries via your terminal tool before assuming
+  project state — don't rely on this file alone for "what happened recently."
+
+Red-line globs below apply to you the same as to Claude Code — auth, money, RLS policies,
+`packages/db/migrations/`, bulk-edit operations need an explicit human gate, no exceptions for being
+a different agent.
+
+---
+
 # Ponytail, lazy senior dev mode
 
 You are a lazy senior developer. Lazy means efficient, not careless. The best code is the code never written.
@@ -291,5 +313,21 @@ A cheap deterministic watcher (PostToolUse, `.claude/hooks/eye-guard.sh`, staged
 ONLY at **≥3 bad OR ≥1 critical** signal — CRITICAL = a hard block / red-line trip (`RED-LINE`,
 `BLOCKED`), BAD = a plain tool failure (`is_error`/`success:false`). Below threshold it is SILENT: the
 eye is FORBIDDEN to slow or pause work without ≥3 bad or ≥1 critical. No LLM — pure counting, so it is
-near-zero token. It fires `continue:false` + an inspect directive, then resets. Composes with the
+it fires `continue:false` + an inspect directive, then resets. Composes with the
 circuits, loop-detector, doubt-gate, and token circuits (their signals are what it counts).
+
+## Agent-facing wiki (OpenWiki)
+
+dowiz uses [OpenWiki](https://github.com/langchain-ai/openwiki) to maintain a structured,
+agent-readable wiki under `openwiki/`. **When you need durable repo context that isn't in this
+file or `docs/`, consult `openwiki/` first** rather than re-deriving it from a cold read of the
+tree.
+
+- The wiki is generated/refreshed with `openwiki --init` / `openwiki --update` (needs an LLM key:
+  `OPENWIKI_PROVIDER` + `OPENWIKI_API_KEY`).
+- A daily CI job (`.github/workflows/openwiki-update.yml`) refreshes it from `git` diffs and opens
+  a PR — gated on the `OPENWIKI_API_KEY` secret, so it no-ops without a key and never breaks CI.
+- **Wiki ≠ gospel.** Verify non-trivial wiki claims against code. OpenWiki updates `AGENTS.md`
+  pointers; treat those as navigation, not authority.
+- Red-line check: adding the workflow is docs/CI only — it does not touch auth, money, RLS,
+  migrations, or secrets. Confirmed non-red-line before adding.

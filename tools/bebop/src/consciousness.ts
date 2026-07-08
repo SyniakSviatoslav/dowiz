@@ -18,9 +18,16 @@ import path from 'node:path';
 import { livingMemory, seedBebopCorpus, LivingMemory, runPlan, type Plan } from './memory.ts';
 import { applyCommandChecked, defaultChecker, type Command, type State, type Checker } from './kernel.ts';
 import { runCopilot, type CheckerFn } from './copilot.ts';
+import { Governor, loopResonance } from './governor.ts';
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
 const BEBOP_ROOT = path.resolve(HERE, '..');
+
+// The system's SELF-KNOWLEDGE governor: its own health telemetry drives how much freedom the
+// self-evolution loop is allowed. Math-proven (PID authority + ICIR + resonance), not vibes.
+const SELF_GOV = new Governor({ kp: 1.4, ki: 0.22, kd: 1.5, iMin: -1, iMax: 1, uMin: 0, uMax: 1, targetQuality: 0.9, deadIC: 0.02, icirVolatile: 0.3, plantM: 1, plantB: 0.6, samplePeriod: 0, anomalyK: 3, maxStep: 1 });
+
+export function selfGovernor(): Governor { return SELF_GOV; }
 
 export interface Health {
   ok: boolean;
@@ -45,10 +52,13 @@ export function selfMaintain(): Health {
     const mPass = out.match(/# pass\s+(\d+)/);
     res = { ok: false, pass: mPass ? Number(mPass[1]) : 0, fail: mFail ? Number(mFail[1]) : 1, note: 'self-harness RED' };
   }
+  // feed health into the self-knowledge governor (proven authority over the self-evolution loop)
+  const quality = res.ok ? 1 : 0;
+  SELF_GOV.step({ t: Date.now(), predictedQuality: quality, actualQuality: quality, cost: 1e-18, volume: res.pass + res.fail });
   // record into ONE living memory (associative, durable) — the system watches its own health
   livingMemory().remember(
     `health:${Date.now()}`,
-    `self-maintain ok=${res.ok} pass=${res.pass} fail=${res.fail}`,
+    `self-maintain ok=${res.ok} pass=${res.pass} fail=${res.fail} govAuthority=${SELF_GOV.authority.toFixed(3)}`,
     [livingMemory().nearest('self maintenance', 1)[0]?.id ?? seedBebopCorpus.toString()]
   );
   return res;
@@ -86,9 +96,18 @@ export function selfEvolve(idea: string): { accepted: boolean; id?: string; reas
   if (result.verdict !== 'approve') {
     return { accepted: false, reason: 'quarantined by checker gate (fail-closed)' };
   }
+  // RESONANCE PRE-CHECK (operator directive: predict resonance BEFORE applying dynamic change):
+  // a corpus mutation perturbs the self-evolution loop. Model its expected perturbation gain as Kp
+  // and refuse if that would drive the loop under-damped (ζ<0.707 → harmonic thrash / blow-up).
+  // Conservative: any mutation adds coupling → treat as Kp bump; only accept if still well-damped.
+  const perturb = 1.4 + Math.min(1.6, idea.trim().length / 40); // each mutation is a small gain bump; bulk changes trip it
+  const res = loopResonance(perturb, 1.5, 1, 0.6);
+  if (res.risky) {
+    return { accepted: false, reason: 'resonance pre-check FAILED: mutation would make self-evolution under-damped (ζ<0.707) — quarantined before apply' };
+  }
   const id = mem.remember(concept, payload, [mem.nearest('copilot default', 1)[0]?.id ?? '']);
   livingMemory().remember(`reflection:${Date.now()}`, `evolved: ${idea}`, [id]);
-  return { accepted: true, id, reason: 'approved by checker gate, persisted to living memory' };
+  return { accepted: true, id, reason: 'approved by checker gate + resonance pre-check, persisted to living memory' };
 }
 
 /**

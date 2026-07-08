@@ -1,0 +1,6 @@
+# Aider project config — auto-loaded from repo root.
+# Aider doesn't auto-discover AGENTS.md the way OpenCode/Goose/OpenHands do,
+# so point it there explicitly (read-only context: ethics charter, red-lines,
+# cross-agent bridge to .claude/CLAUDE.md + the Claude memory corpus).
+read:
+  - AGENTS.md

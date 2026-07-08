@@ -1,0 +1,45 @@
+name: openwiki-update
+
+# Keep dowiz's agent-facing wiki (openwiki/) current with code changes.
+# Mirrors langchain-ai/openwiki/examples/openwiki-update.yml. Runs on a schedule and
+# manual dispatch. Requires an LLM key in the OPENWIKI_API_KEY secret (and
+# OPENWIKI_PROVIDER); if unset, the job no-ops so it never breaks the primary CI.
+
+on:
+  schedule:
+    - cron: '37 4 * * *'        # daily, off-peak (different minute than bebop)
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-wiki:
+    if: ${{ secrets.OPENWIKI_API_KEY != '' }}
+    runs-on: ubuntu-latest
+    env:
+      OPENWIKI_PROVIDER: ${{ secrets.OPENWIKI_PROVIDER || 'openrouter' }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENWIKI_API_KEY }}
+      ANTHROPIC_API_KEY: ${{ secrets.OPENWIKI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install -g openwiki
+      - name: Refresh wiki from git diffs
+        run: openwiki --update "Update the wiki to reflect changes since the last run."
+      - name: Open PR with wiki changes
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: 'docs(openwiki): scheduled wiki refresh'
+          title: 'docs(openwiki): scheduled wiki refresh'
+          body: |
+            Automated OpenWiki update. Generated against `main` diffs.
+            Review the `openwiki/` changes before merging.
+          branch: openwiki-update
+          add-paths: openwiki/
+          sign-commits: true

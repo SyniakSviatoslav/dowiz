@@ -91,3 +91,11 @@ tools/skillspector/
 
 # offer-builder output packets contain business contact info (public, but keep outreach targets out of git)
 loops/offers/
+
+# Aider chat/input history (local scratch, not project config)
+.aider.chat.history.md
+.aider.input.history
+.aider.tags.cache.v4/
+
+# Cross-agent fallback mesh log (local scratch)
+.agents-mesh.log
