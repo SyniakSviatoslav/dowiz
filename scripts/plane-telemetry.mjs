@@ -523,7 +523,18 @@ function cmdResolve(args) {
   if (!id) return fail('resolve requires --prediction-id');
   if (!['hit', 'miss', 'partial'].includes(gap)) return fail('--gap must be hit|miss|partial');
   const rows = readJsonl(PREDICTIONS_PATH());
-  const pred = latestPredictions(rows).find((p) => p.prediction_id === id);
+  let pred = latestPredictions(rows).find((p) => p.prediction_id === id);
+  if (!pred) {
+    // Fresh-checkout fallback: predictions.jsonl is published to the telemetry/plane branch, not
+    // committed to main, so a cloud checkout that never ran `predict` locally starts with no local
+    // copy (the predictions-jsonl-durability gap, ledger miss cf2f24fa26a2). Hydrate from the branch
+    // tip the same way `inbox` does, then persist locally so a later `publish` carries it forward.
+    fetchBranch();
+    const branch = readBranchRows();
+    pred = latestPredictions(branch.predictions.filter((p) => p?.schema_version === SCHEMA_VERSION))
+      .find((p) => p.prediction_id === id);
+    if (pred) appendJsonl(PREDICTIONS_PATH(), pred);
+  }
   if (!pred) return fail(`prediction ${id} not found`, 1);
   // M1 commit-reveal ordering friction: the prediction must have been recorded STRICTLY EARLIER
   // than the run's first emitted outcome event — you cannot resolve a post-hoc "prediction".
