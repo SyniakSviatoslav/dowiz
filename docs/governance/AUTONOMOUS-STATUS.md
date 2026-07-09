@@ -570,4 +570,19 @@ this status entry.
 **Voice FE integration note (recurring, still true):** unchanged — excluded from this backlog's
 scope; needs a local session, not an autonomous continuation run.
 
+## 2026-07-09 — re-verification run #2, no new work
+
+**What:** Second re-check today per STEP 0, directly against the live repo (not prior status
+entries): `node scripts/guardrail-ledger-integrity.mjs` clean (79 rows, max #76, no duplicates,
+same pre-existing non-failing unassigned #50); `docs/design/harness/SYSTEMS-MAP.md` (19238
+bytes), `scripts/exec-telemetry.mjs` (7558 bytes) + `scripts/telemetry-analyze.mjs` (5184 bytes)
++ the `telemetry-council-review` DRAFT row in `loops/registry.md`, `loops/metric-reflection.yaml`
++ `scripts/metric-reflection.mjs` + `.test.mjs`, `docs/governance/HARNESS-IMPROVEMENTS.md` (17613
+bytes), and all three `2026-07-05` reflections + the curated lesson — all present and unchanged.
+`git status --short` was clean before this run. Nothing to pick, nothing to commit beyond this
+entry.
+
+**Voice FE integration note (recurring, still true):** unchanged — excluded from this backlog's
+scope; needs a local session, not an autonomous continuation run.
+
 backlog complete
