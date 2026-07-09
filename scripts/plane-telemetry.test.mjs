@@ -228,6 +228,25 @@ test('prediction ordering: predict-before-events resolves; predict-after-first-e
   assert.ok(rows.filter((p) => p.prediction_id === pid2).every((p) => !p.resolved), 'refused resolve must write nothing');
 });
 
+test('resolve: a prediction predicted+published from one checkout hydrates from the telemetry/plane branch on a FRESH checkout that never ran predict locally (predictions-jsonl-durability, ledger miss cf2f24fa26a2)', (t) => {
+  const { works: [workA, workB] } = makeRepos(t, 2);
+  let r = cli(['predict', '--run-id', 'rX', '--target', 'cross-checkout', '--prediction', 'will hydrate', '--confidence', '0.6'], { root: workA });
+  assert.equal(r.status, 0, r.stderr);
+  const pid = /prediction_id=(\w+)/.exec(r.stdout)[1];
+  assert.equal(cli(['publish', '--run-id', 'rX'], { root: workA, env: GIT_ENV }).status, 0, 'baseline publish must succeed');
+
+  // workB never ran `predict` — its local loops/runs/predictions.jsonl does not exist at all,
+  // reproducing a fresh cloud checkout that only ever pulls main, not the telemetry/plane branch.
+  assert.ok(!existsSync(join(workB, 'loops/runs/predictions.jsonl')), 'fixture precondition: workB starts with zero local predictions');
+  r = cli(['resolve', '--prediction-id', pid, '--actual', 'it hydrated', '--gap', 'hit'], { root: workB, env: GIT_ENV });
+  assert.equal(r.status, 0, `resolve on a fresh checkout must hydrate from the branch instead of failing "not found": ${r.stderr}`);
+  assert.match(r.stdout, /resolved=/);
+  const rows = readFileSync(join(workB, 'loops/runs/predictions.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const resolved = rows.filter((p) => p.prediction_id === pid).at(-1);
+  assert.equal(resolved?.resolved, true, 'hydrated prediction must be persisted locally, resolved');
+  assert.equal(resolved?.gap, 'hit');
+});
+
 // ---------------------------------------------------------------------------
 // DoD row: Push fail-closed (R2-C1/R3-6) — planted secret aborts, no dirty blob on branch
 // ---------------------------------------------------------------------------
