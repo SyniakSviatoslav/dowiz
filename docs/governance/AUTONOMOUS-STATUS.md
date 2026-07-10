@@ -655,4 +655,29 @@ lint rule's own tests). No product code was touched.
 **Voice FE integration note (recurring, still true):** unchanged — excluded from this backlog's
 scope; needs a local session, not an autonomous continuation run.
 
+## 2026-07-10 — re-verification run #4, no new work
+
+**What:** Per STEP 0, re-checked the ordered backlog directly against the live repo (fresh
+`git fetch` + `checkout -B fix/audit-remediation origin/fix/audit-remediation`, not prior status
+entries) before picking any next step:
+- Item 1: `node scripts/guardrail-ledger-integrity.mjs` → clean, 79 rows, max #76, no duplicates
+  (same pre-existing non-failing unassigned #50 noted in prior runs); row #68
+  (`docs/regressions/REGRESSION-LEDGER.md:167`) still names `b536ca07` with both fix proofs.
+- Item 2: `docs/design/harness/SYSTEMS-MAP.md` present (19238 bytes).
+- Item 3: `scripts/exec-telemetry.mjs` (7558 bytes) + `scripts/telemetry-analyze.mjs`
+  (5184 bytes) present; `loops/registry.md:33` still carries the `telemetry-council-review`
+  DRAFT row.
+- Item 4: `loops/metric-reflection.yaml`, `scripts/metric-reflection.mjs`, and
+  `scripts/metric-reflection.test.mjs` all present.
+- Item 5: `docs/governance/HARNESS-IMPROVEMENTS.md` present (17613 bytes).
+- Item 6: the curated lesson `docs/lessons/2026-07-05-proof-must-observe-the-effect.md` and its
+  source reflections present in `docs/reflections/INBOX/`.
+
+All 6 items confirmed done directly against files on disk — nothing to pick, nothing to commit
+beyond this entry. `git status --short` was clean before this run; no drift since the prior
+2026-07-10 re-verification.
+
+**Voice FE integration note (recurring, still true):** unchanged — excluded from this backlog's
+scope; needs a local session, not an autonomous continuation run.
+
 backlog complete
