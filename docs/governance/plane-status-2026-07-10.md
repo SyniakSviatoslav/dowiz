@@ -77,9 +77,14 @@ Telemetry: telegram=none · push=none · run_id=plane-2026-07-10T06-06-00Z
   a incentive worth naming, per the transparency test.
 - No new dep-scan findings requiring per-lib write-up (first baseline run, nothing to diff
   against yet).
-- Telemetry: `sense`/`diagnose`/`heal(skipped)`/`scout` events emitted with `run-20260710T0603`.
-  `telegram send` will report `403` in the REPORT step (same egress block as above) — expected,
-  not a new failure.
+- Telemetry: `sense`/`diagnose`/`heal(skipped)`/`scout`/`report` events emitted with
+  `run-20260710T0603`, then `plane-telemetry.mjs publish` (below).
+  `plane-telemetry.mjs send` self-reported `sent:chunked`, but a direct
+  `curl https://api.telegram.org/bot.../getMe` in the same run returns the identical `403 CONNECT
+  tunnel failed` as `fly.io` — actual delivery failed despite the tool's success report. This is
+  the already-known false-positive bug fixed in unmerged **PR #18**; not duplicated here, but
+  correcting the digest text to ground truth rather than trusting the tool's self-report (same
+  correction PR #20 made on 2026-07-08).
 - No code, config, or migration files touched this run (docs/reflections only) → Ship Discipline's
   staging-deploy-and-validate loop does not apply to this change
   (`docs/lessons/2026-06-29-docs-only-no-staging-deploy.md`).
