@@ -585,4 +585,74 @@ entry.
 **Voice FE integration note (recurring, still true):** unchanged — excluded from this backlog's
 scope; needs a local session, not an autonomous continuation run.
 
+## 2026-07-10 — re-verification run, no new work
+
+**What:** Per STEP 0, re-checked the ordered backlog directly against the live repo (not prior
+status entries) before picking any next step. The branch had drifted forward on `origin` since
+the last local checkout (concurrent-session commits: rebuild-program S1 Astro sub-target, S6 WS
+cutover router, cutover front-door harness, and related reflections/ADR-0022 work) — none of it
+touches or regresses any of the 6 backlog items:
+- Item 1: `node scripts/guardrail-ledger-integrity.mjs` → clean, 79 rows, max #76, no duplicates
+  (same pre-existing non-failing unassigned #50 noted in prior runs); row #68
+  (`docs/regressions/REGRESSION-LEDGER.md:167`) still names `b536ca07` with both fix proofs.
+- Item 2: `docs/design/harness/SYSTEMS-MAP.md` present (19238 bytes).
+- Item 3: `scripts/exec-telemetry.mjs` (7558 bytes) + `scripts/telemetry-analyze.mjs`
+  (5184 bytes) present; `loops/registry.md` still carries the `telemetry-council-review`
+  DRAFT row.
+- Item 4: `loops/metric-reflection.yaml`, `scripts/metric-reflection.mjs`, and
+  `scripts/metric-reflection.test.mjs` all present.
+- Item 5: `docs/governance/HARNESS-IMPROVEMENTS.md` present (17613 bytes).
+- Item 6: all three `2026-07-05` reflections plus the curated lesson
+  `docs/lessons/2026-07-05-proof-must-observe-the-effect.md` present in
+  `docs/reflections/INBOX/` and `docs/lessons/` (also still finding the two further
+  reflections from concurrent sessions, `2026-07-05-cutover-harness-staging-proof` and
+  `2026-07-05-rebuild-program-complete-retro`, still out of scope for this backlog and
+  untouched by this run).
+
+All 6 items confirmed done directly against files on disk — nothing to pick, nothing to commit
+beyond this entry. `git status --short` was clean before this run. Per the operator instructions,
+this run made no code/doc changes beyond this status entry.
+
+**Voice FE integration note (recurring, still true):** unchanged — excluded from this backlog's
+scope; needs a local session, not an autonomous continuation run.
+
+## 2026-07-10 — re-verification run, no new work
+
+**What:** Per STEP 0, re-checked the ordered backlog directly against the live repo (not prior
+status entries) before picking any next step. The branch had drifted forward on `origin` since
+the last local checkout (concurrent-session commits: rebuild-program S1 Astro sub-target, S6 WS
+cutover router, cutover front-door harness, and related reflections/ADR-0022 work) — none of it
+touches or regresses any of the 6 backlog items:
+- Item 1: `node scripts/guardrail-ledger-integrity.mjs` → clean, 79 rows, max #76, no duplicates
+  (same pre-existing non-failing unassigned #50 noted in prior runs); row #68
+  (`docs/regressions/REGRESSION-LEDGER.md:167`) still names `b536ca07` with both fix proofs.
+- Item 2: `docs/design/harness/SYSTEMS-MAP.md` present (19238 bytes).
+- Item 3: `scripts/exec-telemetry.mjs` (7558 bytes) + `scripts/telemetry-analyze.mjs`
+  (5184 bytes) present; `loops/registry.md` still carries the `telemetry-council-review`
+  DRAFT row.
+- Item 4: `loops/metric-reflection.yaml`, `scripts/metric-reflection.mjs`, and
+  `scripts/metric-reflection.test.mjs` all present.
+- Item 5: `docs/governance/HARNESS-IMPROVEMENTS.md` present (17613 bytes).
+- Item 6: all three `2026-07-05` reflections plus the curated lesson
+  `docs/lessons/2026-07-05-proof-must-observe-the-effect.md` present in
+  `docs/reflections/INBOX/` and `docs/lessons/` (also still finding the two further
+  reflections from concurrent sessions, `2026-07-05-cutover-harness-staging-proof` and
+  `2026-07-05-rebuild-program-complete-retro`, still out of scope for this backlog and
+  untouched by this run).
+
+All 6 items confirmed done directly against files on disk — nothing to pick, nothing to commit
+beyond this entry. `git status --short` was clean before this run.
+
+**Environment note:** this session's container started with `node_modules` absent (never
+installed), which made the `post-edit-gates` hook's `pnpm -s lint:gates` step fail on the first
+attempt at this edit — unrelated to the edit's content (docs-only). Routed around it per
+CLAUDE.md Error Recovery by running `pnpm install --frozen-lockfile` (lockfile/package.json
+untouched — `git status --short pnpm-lock.yaml package.json` empty before and after); `pnpm -s
+lint:gates` then passed clean (0 errors, 19 pre-existing warnings from
+`tools/eslint-plugin-local/__fixtures__/*`, which are intentional bad-pattern fixtures for the
+lint rule's own tests). No product code was touched.
+
+**Voice FE integration note (recurring, still true):** unchanged — excluded from this backlog's
+scope; needs a local session, not an autonomous continuation run.
+
 backlog complete
