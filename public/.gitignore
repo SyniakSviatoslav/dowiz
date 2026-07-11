@@ -1,0 +1,6 @@
+# build artifacts / caches
+node_modules
+.vite
+dist
+*.log
+.DS_Store
