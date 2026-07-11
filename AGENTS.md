@@ -64,3 +64,24 @@ Flag `no-trigger` for any comment missing an upgrade path. End: `<N> markers, <M
 ---
 
 Source: [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) — MIT
+
+---
+
+## Operating rules — memory-first + push-plans-first (operator, 2026-07-11)
+
+1. **Update living memory FIRST.** Before writing/planning any code, record new changes, plans,
+   decisions, and ground-truth facts to the canonical corpus. The corpus is the source of truth,
+   not chat history. Two repos, two corpora:
+   - dowiz (product) → `/root/.claude/projects/-root-dowiz/memory/MEMORY.md` (+ per-topic `.md`).
+   - bebop/bebop2 (protocol) → `/root/.claude/projects/-root-bebop-repo/` corpus.
+2. **Push plans to remote FIRST.** Any plan/roadmap/decision doc is committed and pushed to
+   `origin` before execution begins — so it can never be lost to a crashed session or stale context.
+3. **Ground truth outranks plans.** Re-verify code claims with `grep`/`git`/tests before trusting a
+   pasted "verified" status. A plan describes the *desired* state; the live repo is what *is*.
+   Record both separately: DONE (verified) vs PLANNED. Never let a stale plan silently overwrite
+   ground truth. (The 2026-07-11 session lost ~20 research/design reports that were cited but never
+   landed on disk — capture plan-vs-truth explicitly so it cannot recur.)
+4. **Structure before code:** categorize work into PARALLEL-SAFE (independent files, zero-pivot-risk,
+   non-red-line → own branch/worktree) vs SEQUENTIAL GATES (red-line operator decisions, external
+   validation, tier dependencies). Both repos share the same Tier spine: stabilize v1 → ship prod
+   truth → quality bars → first real order (G11 GREEN) → only then rewrite substrate.
