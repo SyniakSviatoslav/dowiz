@@ -99,6 +99,36 @@ const envelopeDoc = 'docs/governance/plane-maintainer-agent.md';
 rec('P11 feedback-contract', 'autonomy envelope documented', 'hard', has(envelopeDoc),
   has(envelopeDoc) ? `${envelopeDoc} present` : `${envelopeDoc} MISSING — the agent has no written authority boundary`);
 
+// ── channel-liveness (SOFT — --staging only) ─── ADVISORY-LIVENESS-ONLY ──────────────────
+// Recurring, previously-silent failure class: the HEAL step needs fly.io egress, the Telegram
+// REPORT channel needs api.telegram.org egress. Both went dark across runs without a
+// deterministic signal (run-20260707T0603 telegram chunk_send fail; run-20260710T0603 flyctl
+// install blocked by network policy; run-20260711T0603 both endpoints 403 at the CONNECT layer
+// per the cloud agent-proxy). Turn "discover it by ad hoc curl" into a visible probe every
+// --staging run (H3). Timeout-bounded, never throws, never blocks — reachability only, not an
+// attribution of WHY (policy vs outage vs auth) — see $HTTPS_PROXY/__agentproxy/status by hand
+// for that.
+if (STAGING) {
+  const CHANNEL_TIMEOUT_MS = Number(process.env.PLANE_CHANNEL_PROBE_TIMEOUT_MS || 4000);
+  // A bare-domain HEAD landing on exactly 403 for BOTH unrelated services (Telegram, fly.io) is
+  // the fingerprint the agent-proxy itself uses for a policy-denied CONNECT (confirmed via
+  // $HTTPS_PROXY/__agentproxy/status recentRelayFailures on 2026-07-11) — undici surfaces that
+  // as a normal (non-throwing) 403 response, so "didn't throw" alone is NOT reachability.
+  const probe = async (url) => {
+    try {
+      const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(CHANNEL_TIMEOUT_MS) });
+      return { reachable: res.status !== 403, status: res.status };
+    } catch (e) {
+      return { reachable: false, error: e.message };
+    }
+  };
+  const [tg, fly] = await Promise.all([probe('https://api.telegram.org'), probe('https://api.fly.io')]);
+  rec('channel-liveness', 'Telegram API egress reachable', 'soft', tg.reachable,
+    tg.reachable ? `api.telegram.org reachable (HTTP ${tg.status})` : `api.telegram.org UNREACHABLE from this env (${tg.error || `HTTP ${tg.status} — likely proxy CONNECT policy-denial, see $HTTPS_PROXY/__agentproxy/status`}) — Telegram report channel degraded this run (soft by design, H3)`);
+  rec('channel-liveness', 'fly.io API egress reachable', 'soft', fly.reachable,
+    fly.reachable ? `api.fly.io reachable (HTTP ${fly.status})` : `api.fly.io UNREACHABLE from this env (${fly.error || `HTTP ${fly.status} — likely proxy CONNECT policy-denial, see $HTTPS_PROXY/__agentproxy/status`}) — HEAL step (staging deploy) unavailable this run (soft by design, H3)`);
+}
+
 /* PLANE-TELEMETRY-GUARD-REGION START */
 // ── plane-telemetry governance checks (ADR-plane-telemetry-and-calibration, Decisions 5/8) ──
 // This whole region is EXCLUDED from the advisory-forever self-scan below — it legitimately
