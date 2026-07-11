@@ -77,3 +77,10 @@ Telemetry: telegram=none · push=ok · run_id=plane-2026-07-11T06-13-00Z
   3. **Telegram push failed** (`HTTP 403`, same network-policy block) — this digest's Telegram
      one-line verdict did not reach the operator's phone this run. The committed digest (this
      file) is the channel of record.
+  4. **GitHub reports 8 Dependabot alerts on `main`** (1 high, 3 moderate, 4 low) — wider than
+     the 2 moderate `pnpm audit --prod` surfaced (likely includes dev-dep paths). Not enumerated
+     or actioned this run (no Dependabot-alert-listing tool available in this session) — see
+     `https://github.com/SyniakSviatoslav/dowiz/security/dependabot` directly.
+
+## PR
+[#23 — plane-guard: add channel-liveness soft check for fly.io/telegram egress](https://github.com/SyniakSviatoslav/dowiz/pull/23) (draft; subscribed for CI/review follow-up; a ~1h check-in is scheduled)
