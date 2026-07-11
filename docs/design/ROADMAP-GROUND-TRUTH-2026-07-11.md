@@ -1,0 +1,120 @@
+# ROADMAP + GROUND TRUTH — dowiz (product) & bebop (protocol) — 2026-07-11
+
+> Canonical roadmap. Written and PUSHED to remote before any code runs (operator rule 2026-07-11:
+> memory-first + push-plans-first + ground-truth-outranks-plans). The brief this derives from spans
+> BOTH repos: bebop/bebop2 = protocol, dowiz = product. This doc is the single source of truth for
+> what to consult before writing code. It separates DONE (verified on local disk) from PLANNED (desired
+> state from the brief), because the brief repeated several claims that the live repo contradicts.
+
+## 0. GROUND TRUTH — what is actually on disk right now (re-verified 2026-07-11)
+
+### 0.1 Missing research/design reports (CRITICAL gap)
+The brief cites ~20 research/design reports dated 2026-07-11. **None of them exist on local disk in
+either repo.** If they were produced by agents, they were never written to a file / never committed.
+This is the headline risk: a large body of "findings" is currently only in chat context and will be
+lost on session close.
+
+Cited-but-MISSING (dowiz side, expected under docs/research/ or docs/design/):
+- HUB-ARCHITECTURE-REVIEW, MAX-EV-SYNTHESIS (+4 lens reports), DESIGN-LIBRARIES-RESEARCH,
+  PARTICLE-CLOUD-INTERACTION-ANALYSIS, PARTICLE-CLOUD REVIEW+PLAN, HONEST-ASSESSMENT-BEBOP-DOWIZ,
+  RELAY-HETZNER-TAILSCALE-MESH, LAUNCH-WITHOUT-LAWYER-ALBANIA, FIELD-SIM SYNTHESIS.
+- LOCAL-FIRST-HUB SYNTHESIS A/B/C/D, 03-ANONYMITY-ARCHITECTURE, 04-ANONYMITY-MESH-MESSENGER-REVISION,
+  TIDE-OVER-BEDROCK (INTERFACE-DIRECTION), PROTOCOL-TECH-COMPLETION-BLUEPRINT,
+  DESIGN-COMPLETION-BLUEPRINT, UNIFIED-DELIVERY-PROTOCOL-BLUEPRINT, MASTER-BUILD-SEQUENCE.
+
+Cited-but-MISSING (bebop side, expected under bebop-repo/docs/design/):
+- The local-first + field-sim + anonymity reports above are NOT in bebop-repo either (grep of doc
+  titles returned 0 hits). bebop-repo DOES have its own 2026-07-11 set: bebop-fable-research,
+  bebop-math-physics-fable-research, bebop2-deep-research, UNIFIED-DELIVERY-PROTOCOL-BLUEPRINT-v3,
+  multi-channel-field-integration-plan, CONSOLIDATED-AUDIT-EXTRACT, plan-audit-bebop,
+  bebop-memory-optimisation-fable-research, fable-protocol-2026-07-11/.
+
+**ACTION (operator gate):** the missing dowiz reports must be re-authored to disk and committed, OR
+the brief's findings must be treated as UNVERIFIED until then. Do NOT build code against claims in
+missing reports.
+
+### 0.2 Surviving plan-collapse docs (committed to origin/main, POST-PUSH revision)
+These ARE on disk and already correct the brief's stale claims:
+- dowiz `docs/design/MASTER-BUILD-SEQUENCE-UPDATED-2026-07-11.md` — Tier 0–5 + PARKED, with a
+  "CORRECTIONS" table that strikes /claim-404 and GDPR-trio-from-T1 as DONE.
+- dowiz `docs/design/PARALLEL-EXECUTION-PLAN-2026-07-11.md` — Batches A/B/C/D (parallel) vs sequential gates.
+- dowiz `docs/design/DRIFT-ANALYSIS-2026-07-11.md` — R1–R12 drift between bebop-protocol and dowiz-product.
+
+### 0.3 Verified code facts (grep/git, 2026-07-11)
+| Claim | Verdict | Evidence |
+|---|---|---|
+| `/claim` 404 on prod | CONTRADICTED — DONE | f0bd9966 pushed; `fix/prod-blockers-P2` adds `/claim` to SPA_ROUTES (server.ts:858). Brief's "404 everywhere / server.ts:858" is stale. |
+| `/courier-invite` missing from SPA_ROUTES | CONTRADICTED | Registered at `apps/web/src/main.tsx:51` already. |
+| Money tween real (breaks trust-cue) | CONFIRMED | `ClientLayout.tsx:154` `AnimatedNumber` on cart total; `AnalyticsPage.tsx:262` `AnimatedNumber`; `courier/EarningsPage.tsx:47` `CountUpPrice`. 3 sites, not the brief's "ClientLayout:245 / Dashboard:451 / Analytics:265" line numbers (those are wrong — real tween is at 154). |
+| bebop skin dormant (admin/courier/404 on paperSkinAttr) | CONFIRMED | `AdminRoutes.tsx:121` paperSkinAttr; `CourierRoutes.tsx:45,57` paperSkinAttr (bebopSkinAttr imported but unused). |
+| kernel::decide bypass (Command::PlaceOrder never constructed) | bebop-repo, NOT dowiz | Part of bebop PARKED protocol; dowiz checkout is Node. Not a dowiz prod blocker. |
+| In-flight parallel batches | CONFIRMED | Branches exist: feat/design-p1-tokens, feat/reliability-push, feat/ci-security-gates, feat/gtm-channel. |
+| Degrade-storm ratchet (Batch B) | IN PROGRESS on this branch | `apps/api/src/lib/reliability/ratchet.ts` (new) + `apps/api/tests/boot-ratchet.test.ts` + server.ts wiring, uncommitted on feat/ci-security-gates. |
+| Sync script `sync-memory-to-hermes.mjs` | MISSING | Referenced by living-memory skill but absent; `HERMES.md` was never generated. Skill is partially stale. |
+| Corpus state | dowiz corpus present & updated (MEMORY.md.bak shows sync ran 2026-07-11 20:05); bebop corpus dir exists but no MEMORY.md index found at expected path. |
+
+### 0.4 Repo topology
+| Repo | Role | Key branch (current) | Tests to re-run |
+|---|---|---|---|
+| /root/dowiz | Product (TS app) | feat/ci-security-gates | `git status`; pnpm lint/typecheck/build; node:test via `npx tsx --test` |
+| /root/bebop-repo | Protocol (Rust/WASM) | main (bebop2) | `cargo test --workspace` (expect green), `cargo fmt --check` |
+
+---
+
+## 1. DONE (verified) — do not re-do
+- `/claim` 404 fix → prod (f0bd9966).
+- P2 checkout enum/receiver (packages/shared-types legacy.ts 3-kinds + receiver{}).
+- P3 GDPR storage-DI into AnonymizerService (photo-purge no longer no-ops).
+- DRIFT analysis + P1/P7/P8 red-line FLAG docs (docs/ops) — written, NOT executed (red-line).
+- bebop: vault flaky fix, memory non-destructive tick, 8 math/security builders, wasm32 G9 merged.
+- Degrade-storm ratchet scaffold (this branch, uncommitted).
+- Parallel batches A/B/C/D branched and in flight.
+
+## 2. PLANNED (desired, from brief) — gate before build
+Tier 0 remaining (parallel, zero-pivot, non-red-line):
+- A: remove 3 money-tween sites + bebop-skin token-flip (admin/courier/404). RED = count-up assertion fails.
+- B: degrade-storm ratchet finish + sw.js push handler. RED = flags reset on restart; push renders.
+- C: gitleaks CI hard-fail + sync-CRDT fence + P7 gate scaffolding. RED = canary fails scan; price in MenuDelta breaks CI.
+- D: OG <300KB + channel attribution reader + QR+?ch=. RED = content-length<300KB; broken-QR detected.
+
+Tier 1 (red-line, operator decision): P1/P7/P8 execution; prod OG/demo (blocked on lost PROVISION_OPS_SECRET); remote-history scrub + branch prune.
+Tier 2 (quality bars): design 13-item "stable enough" + storefront zero-diff Playwright gate; GTM 8-point per-venue gate; courier out-of-app signal (N1/N2).
+Tier 3 (validation hinge): G11 GREEN = one real order from non-operator customer on claimed venue.
+Tier 4 (substrate, gated on G11): protocol R node = kernel::decide-bypass fix; X settlement/dispute; migration ladder; channel registry; sync-CRDT menu lane; reliability LD0–LD11.
+Tier 5 (earn-it, each gated): money crypto audit ladder (hybrid-only until audit); messenger transport (G7 survey); Astro port; .onion tier; multi-venue mesh.
+Tier X (PARKED): bebop-as-protocol (capture-protect ~1h); field-sim (sign-bug fix if revived); sovereign-core cutover mothball; B3 RLS flip last.
+
+---
+
+## 3. PARALLEL-SAFE vs SEQUENTIAL (structure before code)
+
+### PARALLEL-SAFE — run in own branch/worktree, independent files, zero-pivot-risk, non-red-line
+- Dowiz Batch A (design tokens) — branch feat/design-p1-tokens.
+- Dowiz Batch B (reliability + sw.js push) — branch feat/reliability-push.
+- Dowiz Batch C (CI/security gates) — branch feat/ci-security-gates (this one).
+- Dowiz Batch D (GTM/channel attribution) — branch feat/gtm-channel.
+- bebop capture-protect (commit/push/1 demo/memory) — small, can run anytime, doesn't touch product.
+- Re-author the missing dowiz research/design reports to disk — parallel-writable, no code deps.
+
+### SEQUENTIAL GATES — cannot parallelize; need decision or prior tier
+- Tier 1 P1/P7/P8 execution ← operator red-line approval.
+- Prod worker restart + secret rotation ← operator (no prod access; "stopped 07-03" UNVERIFIED).
+- Tier 2 quality bars ← wait on Tier 0 done.
+- Tier 3 G11 GREEN ← external, not code.
+- Tier 4/5 substrate ← wait on G11 GREEN.
+- DRIFT R2 — reputation.rs courier-scoring vs NO-COURIER-SCORING HARD FORK (architectural, red-line).
+
+### Invariant (shared spine, both repos)
+Build DOWN from the first real order, not UP from the protocol. Gates are falsifiable conditions, not
+calendar dates. bebop protocol work is PARKED until dowiz carries it.
+
+---
+
+## 4. OPEN OPERATOR DECISIONS (red-line, not auto-executed)
+1. Execute P1/P7/P8 (currently docs-only)?
+2. Prod worker restart + secret rotation (secret claim unverified)?
+3. DRIFT R2 courier-scoring fork — architectural.
+4. Re-author / recover the ~20 missing 2026-07-11 research/design reports, OR accept them as UNVERIFIED?
+5. PROVISION_OPS_SECRET lost — blocks prod demo provisioning.
+
+*Generated 2026-07-11. Source of truth: live repo + corpus. Re-verify before trusting any "DONE" line.*
