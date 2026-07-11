@@ -96,6 +96,38 @@ run should second-guess or route around. Flagging via the digest + escalation, n
   are similarly "documented but never actually completed end-to-end" (result-vs-expectation
   doubt trigger, one level up).
 
+## ADDENDUM — a second, causally-linked finding surfaced by the first (same run)
+
+While running `plane-telemetry.mjs send` to push today's digest, the CLI logged
+`telegram: sent:chunked` — a real success claim — moments after independently proving (via the
+new `channel-liveness` check above) that `api.telegram.org` was 403-blocked. That contradiction
+was the tell. Traced it to `cmdSend`'s chunk-fallback loop: each `tgApi()` call's real
+success/failure was discarded (`.catch(() => {})` on the *call result*, not just the exception),
+and `status = 'sent:chunked'` was set unconditionally after the loop regardless of whether any
+chunk actually landed. This is a false-green *inside the system whose entire purpose is
+preventing false-greens* (H3) — found live, by the new check contradicting the old one, not by
+code review.
+
+Fixed (`scripts/plane-telemetry.mjs`, ledger #58): track `chunkOkCount`, derive status from it
+(`sent:chunked` / `sent:chunked_partial(k/n)` / `failed:chunk_send`). Added a
+`PLANE_TELEMETRY_TEST_TG_RESULTS` test seam + 2 `node:test` cases; red→green proven by
+reverting only the status-derivation lines and confirming the new all-fail test reproduces
+today's exact false report (`actual: '... telegram: sent:chunked'`), then restoring → 24/24
+green. Same PR (#23), second commit.
+
+**WHY-causal (this addendum):** the class of bug is identical to the parent finding —
+`.catch()` treats "no exception" as success, but a proxied/policy-denied HTTP call returns a
+clean non-2xx response, not an exception. The FIRST time I wrote this pattern in
+`channel-liveness` (this run), I caught it myself before shipping (see DECISIONS above,
+"first implementation... WRONG"). The SECOND instance of the same anti-pattern was already
+sitting in `cmdSend`, undetected until the new check gave me a second data point to contradict
+it against. **NEXT-TIME, sharpened:** `await x().catch(() => false)` / `.catch(() => {})`
+guards against a *thrown* error only; any code path whose "have we actually confirmed success"
+question can be answered by a non-throwing non-ok HTTP response needs the response checked
+explicitly, not inferred from "didn't throw." Worth a grep sweep (future run / librarian) for
+other `.catch(() => {})`-then-assume-success shapes in `scripts/*.mjs`, since this makes two
+independent instances of the identical mistake in the same file.
+
 ## LINK
 - [[plane-maintainer-agent-2026-07-02]]
 - [[memory-corpus-meta-patterns-2026-07-02]] (pattern #12 — silent producer/consumer gap;

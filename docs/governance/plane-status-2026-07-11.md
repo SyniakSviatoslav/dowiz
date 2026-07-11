@@ -57,6 +57,18 @@ Telemetry: telegram=none · push=ok · run_id=plane-2026-07-11T06-13-00Z
   `docs/reflections/INBOX/2026-07-11-channel-liveness-network-policy-block.reflection.md`.
   Committed on `plane-maintainer/channel-liveness-guard-20260711` (feature branch, not `main`);
   PR opened for operator review.
+- **Fixed (2nd, found while diagnosing the above):** the new `channel-liveness` check
+  contradicted `plane-telemetry.mjs send`'s own report for the *same run* — the CLI logged
+  `telegram: sent:chunked` (success) right after independently confirming Telegram was 403-
+  blocked. Root cause: `cmdSend`'s chunk-fallback loop discarded each send attempt's real
+  success/failure and reported `sent:chunked` unconditionally — a false-green inside the
+  system built specifically to prevent false-greens (H3). Fixed: status now derives from actual
+  per-chunk delivery (`sent:chunked` / `sent:chunked_partial(k/n)` / `failed:chunk_send`).
+  Ledger #58, red→green proven (2 new unit tests, 24/24 total green). Re-ran `send` with the
+  fix applied — now correctly reports `telegram: failed:chunk_send`, matching reality. Same PR
+  (#23), 2nd commit. Swept `scripts/*.mjs` for the same `.catch(() => {})`-then-assume-success
+  shape elsewhere — the only other hits (`offer-builder.mjs`, `radar-scout.mjs`) are best-effort
+  Playwright waits, not status claims, so no further action.
 - **Escalated, not fixed (out of this run's autonomy envelope):**
   1. **HEAL/staging-deploy is unavailable from this cloud checkout.** `flyctl` is not installed
      and `api.fly.io` is network-policy-blocked (HTTP 403 at CONNECT) — even with
@@ -75,8 +87,10 @@ Telemetry: telegram=none · push=ok · run_id=plane-2026-07-11T06-13-00Z
      half (commit-only, no deploy proof) would violate the Mandatory Proof Rule. Left for a
      run where staging deploy is reachable, or for direct operator action.
   3. **Telegram push failed** (`HTTP 403`, same network-policy block) — this digest's Telegram
-     one-line verdict did not reach the operator's phone this run. The committed digest (this
-     file) is the channel of record.
+     one-line verdict did not reach the operator's phone this run. (Confirmed correctly reported
+     as `failed:chunk_send` after the #58 fix above — earlier in this same run it was
+     mis-reported as `sent:chunked`, which is what surfaced #58 in the first place.) The
+     committed digest (this file) is the channel of record.
   4. **GitHub reports 8 Dependabot alerts on `main`** (1 high, 3 moderate, 4 low) — wider than
      the 2 moderate `pnpm audit --prod` surfaced (likely includes dev-dep paths). Not enumerated
      or actioned this run (no Dependabot-alert-listing tool available in this session) — see
