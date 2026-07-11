@@ -406,7 +406,7 @@ const retryPolicy = new RetryPolicy();
   await lifecycleHandlers.start();
 
   // P5-0 Anonymizer Service + Workers
-  const anonymizerService = new AnonymizerService(pool, messageBus);
+  const anonymizerService = new AnonymizerService(pool, messageBus, storage);
   const anonymizerRetentionWorker = new AnonymizerRetentionWorker(pool, queue.boss, messageBus, anonymizerService);
   const gdprErasureWorker = new GdprErasureWorker(pool, queue.boss, messageBus, anonymizerService);
   await anonymizerRetentionWorker.start();
