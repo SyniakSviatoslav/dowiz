@@ -83,6 +83,14 @@ These ARE on disk and already correct the brief's stale claims:
 - bebop protocol W/A/H P0-6 = SCAFFOLDED skeletons (not production): `bebop-proto-wire`/`bebop-proto-cap`/`bebop-proto-crypto` at /root/bebop-repo/bebop2/ (untracked, `agent/protocol-wah` branch; `cargo check` green; NO-COURIER-SCORING guard in). Production logic deferred to Tier-4 (gated G11).
 - **KERNEL SLICE (2026-07-11, canonical stack):** `kernel/` Rust→WASM crate at /root/dowiz — `decide/fold` Law (order_machine.rs, 1:1 port of packages/domain/order-machine.ts) + integer money (money.rs, 1:1 port of apps/api/src/lib/money.ts). 17/17 RED+GREEN VbM tests pass; wasm32-unknown-unknown build GREEN. Branch `kernel/rust-wasm-core` (pushed). This is the FIRST canonical-stack code; TS app is legacy oracle.
 - NO-COURIER-SCORING final (DRIFT R2).
+- **WAVE-2 (2026-07-11, canonical stack, DONE+verified, on `kernel/rust-wasm-core` 5c082b66):** Node/TS/Supabase/Fly DROPPED for new slices; pure Rust+Astro/Svelte+WebGL.
+  - `kernel/src/domain.rs`: Order aggregate + compute_order_total + Decider (place_order/apply_event) via decide/fold Law.
+  - `kernel/src/analytics.rs`: ChannelLedger (orders_by_channel + funnel) + reduce_anomalies via fold_transitions — closes the open attribution measurement loop.
+  - `web/`: greenfield Astro+Svelte5 storefront, kernel-compatible order payload, no money-tween (build green).
+  - `webgl/particle-cloud`: WebGL2 event-visual vocab (4165 B gz, ≤7 kB), reduced-motion.
+  - `public/sw.js`: courier out-of-app push handler (closes locked-screen dispatch gap).
+  - Kernel: **32/32 RED+GREEN VbM tests pass; wasm32-unknown-unknown build GREEN.** NO-COURIER-SCORING enforced (0 rating fields).
+  - NOTE: 2 agents (web-astro, webgl) wrote into the main tree instead of their worktrees — reconciled + committed on `kernel/rust-wasm-core`. Kernel agents (domain, analytics) stayed in worktrees; merged via `wave2/integrate`.
 
 ## 2. PLANNED (desired, from brief) — gate before build
 Tier 0 remaining (parallel, zero-pivot, non-red-line):
