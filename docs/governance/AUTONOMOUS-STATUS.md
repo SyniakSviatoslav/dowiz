@@ -738,4 +738,17 @@ own bad-pattern test fixtures). No product code was touched.
 **Voice FE integration note (recurring, still true):** unchanged — excluded from this backlog's
 scope; needs a local session, not an autonomous continuation run.
 
+## 2026-07-11 — re-verification run #6, no new work
+
+**What:** Per STEP 0, fresh `git fetch` + `checkout -B fix/audit-remediation
+origin/fix/audit-remediation`; `HEAD..origin/fix/audit-remediation` empty (no concurrent-session
+drift since run #5, commit `45d4c2b`). `node scripts/guardrail-ledger-integrity.mjs` → clean, 79
+rows, max #76, no duplicates (same pre-existing non-failing unassigned #50 noted in prior runs).
+All six backlog items remain present on disk exactly as recorded in the prior six entries above;
+`git status --short` was clean before this run. Nothing to pick, nothing to commit beyond this
+entry.
+
+**Voice FE integration note (recurring, still true):** unchanged — excluded from this backlog's
+scope; needs a local session, not an autonomous continuation run.
+
 backlog complete
