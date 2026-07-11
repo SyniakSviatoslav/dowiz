@@ -78,12 +78,11 @@ These ARE on disk and already correct the brief's stale claims:
 
 ## 1. DONE (verified) — do not re-do
 - `/claim` 404 fix → prod (f0bd9966).
-- P2 checkout enum/receiver (packages/shared-types legacy.ts 3-kinds + receiver{}).
-- P3 GDPR storage-DI into AnonymizerService (photo-purge no longer no-ops).
-- DRIFT analysis + P1/P7/P8 red-line FLAG docs (docs/ops) — written, NOT executed (red-line).
-- bebop: vault flaky fix, memory non-destructive tick, 8 math/security builders, wasm32 G9 merged.
-- Degrade-storm ratchet scaffold (this branch, uncommitted).
-- Parallel batches A/B/C/D branched and in flight.
+- P2 checkout enum/receiver.
+- P3 GDPR storage-DI into AnonymizerService.
+- bebop protocol crates already BUILT (not stubs): proto-wire (iroh/wss transport), proto-cap (hybrid_gate/signed_frame), proto-crypto (fips_regen/wycheproof/constant_time) — at /root/bebop-repo/bebop2/ (untracked, agent/protocol-wah branch). P0-6 = verify/extend, not scaffold.
+- **KERNEL SLICE (2026-07-11, canonical stack):** `kernel/` Rust→WASM crate at /root/dowiz — `decide/fold` Law (order_machine.rs, 1:1 port of packages/domain/order-machine.ts) + integer money (money.rs, 1:1 port of apps/api/src/lib/money.ts). 17/17 RED+GREEN VbM tests pass; wasm32-unknown-unknown build GREEN. Branch `kernel/rust-wasm-core` (pushed). This is the FIRST canonical-stack code; TS app is legacy oracle.
+- NO-COURIER-SCORING final (DRIFT R2).
 
 ## 2. PLANNED (desired, from brief) — gate before build
 Tier 0 remaining (parallel, zero-pivot, non-red-line):
