@@ -1,0 +1,18 @@
+[package]
+name = "dowiz-kernel"
+version = "0.1.0"
+edition = "2021"
+description = "dowiz deterministic core: order-state machine (decide/fold Law) + integer money. Rust→WASM. The TS app is the legacy oracle; this is the canonical kernel."
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# WASM bindings (optional — kernel is pure Rust, usable headless + from wasm).
+wasm-bindgen = "0.2"
+
+[dev-dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true
