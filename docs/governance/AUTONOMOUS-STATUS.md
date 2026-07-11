@@ -776,4 +776,28 @@ runs.
 **Voice FE integration note (recurring, still true):** unchanged — excluded from this backlog's
 scope; needs a local session, not an autonomous continuation run.
 
+## 2026-07-11 — re-verification run #8, no new work
+
+**What:** Per STEP 0, fresh `git fetch origin fix/audit-remediation`; `git log
+HEAD..origin/fix/audit-remediation --oneline` empty (no concurrent-session drift since run #7,
+commit `2c08b51`). `node scripts/guardrail-ledger-integrity.mjs` → clean, 79 rows, max #76, no
+duplicates (same pre-existing non-failing unassigned #50 noted in every prior run). All eight
+backlog deliverables re-confirmed present on disk at their previously recorded byte-identical
+sizes: `docs/design/harness/SYSTEMS-MAP.md` (19238), `scripts/exec-telemetry.mjs` (7558),
+`scripts/telemetry-analyze.mjs` (5184), `loops/metric-reflection.yaml` (4933),
+`scripts/metric-reflection.mjs` (12826), `scripts/metric-reflection.test.mjs` (8261),
+`docs/governance/HARNESS-IMPROVEMENTS.md` (17613),
+`docs/lessons/2026-07-05-proof-must-observe-the-effect.md` (4491). `loops/registry.md:33` still
+carries the `telemetry-council-review` DRAFT row. `git status --short` was clean before this run.
+
+**Operator note:** this is the 8th consecutive re-verification run to find the backlog fully
+complete with zero drift, spanning three calendar days (2026-07-10 to 2026-07-11). Repeating the
+prior run's recommendation: no further autonomous work exists on this branch until either a human
+adds a new backlog item or picks up the voice FE integration (excluded, needs a local session).
+Continuing to fire this routine on its current cadence produces no additional signal beyond what
+run #7 already established — pausing or lowering the cadence is recommended.
+
+**Voice FE integration note (recurring, still true):** unchanged — excluded from this backlog's
+scope; needs a local session, not an autonomous continuation run.
+
 backlog complete
