@@ -80,7 +80,7 @@ These ARE on disk and already correct the brief's stale claims:
 - `/claim` 404 fix → prod (f0bd9966).
 - P2 checkout enum/receiver.
 - P3 GDPR storage-DI into AnonymizerService.
-- bebop protocol crates already BUILT (not stubs): proto-wire (iroh/wss transport), proto-cap (hybrid_gate/signed_frame), proto-crypto (fips_regen/wycheproof/constant_time) — at /root/bebop-repo/bebop2/ (untracked, agent/protocol-wah branch). P0-6 = verify/extend, not scaffold.
+- bebop protocol W/A/H P0-6 = SCAFFOLDED skeletons (not production): `bebop-proto-wire`/`bebop-proto-cap`/`bebop-proto-crypto` at /root/bebop-repo/bebop2/ (untracked, `agent/protocol-wah` branch; `cargo check` green; NO-COURIER-SCORING guard in). Production logic deferred to Tier-4 (gated G11).
 - **KERNEL SLICE (2026-07-11, canonical stack):** `kernel/` Rust→WASM crate at /root/dowiz — `decide/fold` Law (order_machine.rs, 1:1 port of packages/domain/order-machine.ts) + integer money (money.rs, 1:1 port of apps/api/src/lib/money.ts). 17/17 RED+GREEN VbM tests pass; wasm32-unknown-unknown build GREEN. Branch `kernel/rust-wasm-core` (pushed). This is the FIRST canonical-stack code; TS app is legacy oracle.
 - NO-COURIER-SCORING final (DRIFT R2).
 
