@@ -571,6 +571,15 @@ function composeSummary(runId, events, predictions) {
 }
 
 async function tgApi(token, method, body, isForm = false) {
+  // Test seam (mirrors PLANE_TELEMETRY_TEST_DISABLE_* elsewhere): lets the chunk-status-gating
+  // test drive real success/failure sequences without hitting the network or a live bot token.
+  const forced = process.env.PLANE_TELEMETRY_TEST_TG_RESULTS;
+  if (forced !== undefined) {
+    const queue = forced.split(',');
+    const next = queue.shift();
+    process.env.PLANE_TELEMETRY_TEST_TG_RESULTS = queue.join(',');
+    return next === 'ok';
+  }
   const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
     method: 'POST',
     ...(isForm ? { body } : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
@@ -631,11 +640,18 @@ async function cmdSend(args) {
       fd.append('document', new Blob([slice], { type: 'application/json' }), `plane-run-${runId}.jsonl`);
       const docOk = await tgApi(token, 'sendDocument', fd, true).catch(() => false);
       if (!docOk && !sentSummary) {
-        // chunk-at-3800 fallback only if the document send failed
-        for (let i = 0, n = Math.ceil(text.length / 3800); i < n; i++) {
-          await tgApi(token, 'sendMessage', { chat_id: chat, text: `(${i + 1}/${n}) ${text.slice(i * 3800, (i + 1) * 3800)}`, disable_web_page_preview: true }).catch(() => {});
+        // chunk-at-3800 fallback only if the document send failed. Each chunk's actual
+        // delivery must gate the reported status (H3) — a proxy/API failure that returns a
+        // clean non-ok response (e.g. a policy-denied 403) never throws, so `.catch()` alone
+        // cannot detect it; unconditionally reporting 'sent:chunked' after the loop was a
+        // false-green (found 2026-07-11, ledger #58).
+        const n = Math.ceil(text.length / 3800);
+        let chunkOkCount = 0;
+        for (let i = 0; i < n; i++) {
+          const ok = await tgApi(token, 'sendMessage', { chat_id: chat, text: `(${i + 1}/${n}) ${text.slice(i * 3800, (i + 1) * 3800)}`, disable_web_page_preview: true }).catch(() => false);
+          if (ok) chunkOkCount++;
         }
-        status = 'sent:chunked';
+        status = chunkOkCount === n ? 'sent:chunked' : chunkOkCount > 0 ? `sent:chunked_partial(${chunkOkCount}/${n})` : 'failed:chunk_send';
       } else if (!docOk) status = 'sent:doc_failed';
     }
     writeStatus({ telegram: { status, ts: nowIso(), run_id: runId } });

@@ -492,3 +492,36 @@ test('digest: richer rollup — pass/fail tallies, total+per-step durations, met
   // empty digest never throws
   assert.equal(cli(['digest'], { root: tmp(t) }).status, 0, 'empty digest must not throw');
 });
+
+// ---------------------------------------------------------------------------
+// send: chunk-fallback status must be GATED on actual per-chunk delivery (H3) —
+// regression found 2026-07-11 (ledger #58): a proxy/API failure that returns a clean
+// non-ok response (never throws) was swallowed by `.catch()`, and the status was set to
+// 'sent:chunked' UNCONDITIONALLY after the loop — a false green exactly of the kind this
+// telemetry system exists to prevent.
+// ---------------------------------------------------------------------------
+const TG_ENV = { TELEGRAM_BOT_TOKEN: 'test-token', PLANE_REPORT_CHAT_ID: 'test-chat' };
+
+test('send: chunk fallback ALL FAIL must report failed:chunk_send, never sent:chunked (H3 false-green regression, ledger #58)', (t) => {
+  const root = tmp(t);
+  cli(['emit', '--run-id', 'rTG1', '--kind', 'report', '--outcome', 'pass', '--detail', 'ok'], { root });
+  // sequence consumed in order: summary sendMessage, sendDocument, then chunk sendMessage(s).
+  // Small summary text => 1 chunk. All three legs fail.
+  const r = cli(['send', '--run-id', 'rTG1'], { root, env: { ...TG_ENV, PLANE_TELEMETRY_TEST_TG_RESULTS: 'fail,fail,fail' } });
+  assert.equal(r.status, 0, 'a failed send must still be a non-fatal, reported outcome');
+  assert.match(r.stderr, /telegram: failed:chunk_send/);
+  const events = readLocal(root).filter((e) => e.run_id === 'rTG1' && e.target === 'telegram');
+  assert.equal(events.length, 1);
+  assert.match(events[0].detail, /telegram=failed:chunk_send/);
+  assert.equal(events[0].outcome, 'error', 'an all-fail chunk send must record outcome=error, not pass');
+});
+
+test('send: chunk fallback ALL OK reports sent:chunked (control — the fixed logic still recognizes a real success)', (t) => {
+  const root = tmp(t);
+  cli(['emit', '--run-id', 'rTG2', '--kind', 'report', '--outcome', 'pass', '--detail', 'ok'], { root });
+  const r = cli(['send', '--run-id', 'rTG2'], { root, env: { ...TG_ENV, PLANE_TELEMETRY_TEST_TG_RESULTS: 'fail,fail,ok' } });
+  assert.equal(r.status, 0);
+  assert.match(r.stderr, /telegram: sent:chunked$/m);
+  const events = readLocal(root).filter((e) => e.run_id === 'rTG2' && e.target === 'telegram');
+  assert.equal(events[0].outcome, 'pass');
+});
