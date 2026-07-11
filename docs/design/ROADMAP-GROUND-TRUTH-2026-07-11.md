@@ -59,6 +59,21 @@ These ARE on disk and already correct the brief's stale claims:
 | /root/dowiz | Product (TS app) | feat/ci-security-gates | `git status`; pnpm lint/typecheck/build; node:test via `npx tsx --test` |
 | /root/bebop-repo | Protocol (Rust/WASM) | main (bebop2) | `cargo test --workspace` (expect green), `cargo fmt --check` |
 
+### 0.5 STACK (canonical, operator 2026-07-11 — FINAL, overrides brief's TS/Node framing)
+- **Kernel:** Rust → WASM (deterministic core: decide/fold Law over order-status machine, integer money,
+  CRDT-safe menu/presence, single-writer sequencer for money/orders). bebop2 Rust is the protocol twin.
+- **Frontend:** Astro (content/landing/owner storefront shell) + Svelte 5 (islands: owner dash, courier,
+  tracking, customer track). NOT React/TS.
+- **Rendering:** WebGL2 (hand-rolled particle-cloud, ≤7kB gz chunk gate) + canvas2D fallback; CSS/SVG only for
+  storefront polish. WebGPU optional later (fallback required). This is the "Tide over Bedrock" surface.
+- **Node.js & TypeScript are DROPPED** from the build target.
+- **Consequence:** the current /root/dowiz TS/Node production app is the LEGACY ORACLE — keep it running as the
+  reference + live demo (strangler-fig pattern), but new code targets Rust/WASM + Astro/Svelte. Swap-at-end.
+- **Wave-1 TS agents (design/reliability/gtm) dispatched 2026-07-11 are REFERENCE-ONLY** — their findings map to
+  the Svelte/Astro port, not merge targets. The money-tween/skin findings → Svelte token layer; sw.js push →
+  courier Svelte PWA service worker; OG/qr/channel-reader → Rust API + Astro owner card. Do not merge TS agents to
+  a stack being dropped.
+
 ---
 
 ## 1. DONE (verified) — do not re-do
