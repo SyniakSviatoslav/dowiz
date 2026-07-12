@@ -13,6 +13,7 @@ pub mod keccak;
 pub mod kem;
 pub mod dsa;
 pub mod envelope;
+pub mod codesign;
 pub mod x25519;
 pub mod hybrid;
 pub mod entropy;
