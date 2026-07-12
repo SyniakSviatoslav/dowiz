@@ -1,1 +1,0 @@
-{"locationId":"fbac4a78-39e9-4ca5-9d24-12784ffb0807","type":"delivery","items":[{"product_id":"6d6b9f37-9d2b-4776-8e95-c471b855f331","quantity":1}],"customer":{"phone":"+355690000001","name":"Test"},"delivery":{"pin":{"lat":41.3275,"lng":19.816667},"address_text":"Rruga e Durresit"},"payment":{"method":"cash"},"idempotency_key":"c69e0177-d7e9-40db-acdb-1a769887b64e"}
