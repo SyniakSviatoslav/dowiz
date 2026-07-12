@@ -85,3 +85,27 @@ these invariants — the invariants are non-negotiable; only their *machinery de
 - Every change ships a RED+GREEN falsifiable assertion (MANIFESTO C7).
 - Terminal must stay unblocked: no hanging background builds; verify with fresh `cargo test`
   output, never agent narrative.
+
+## D8. Plan precedence — newest outranks older (operator, 2026-07-12)
+- **Conflict rule:** when an older roadmap/blueprint and a newer approved decision conflict, the
+  **NEWEST wins**. MANIFESTO.md + DECISIONS.md (dated 2026-07-12) are the live source of truth and
+  **SUPERSEDE** the 2026-07-11 `ROADMAP-GROUND-TRUTH` and any `MASTER-BUILD-SEQUENCE` / stale
+  blueprint citation.
+- Concretely: mesh machinery is NOW in-scope (D6 overrides C8's deferral); transport = DTN/BPv7
+  (RFC 9171) + QUIC/TCPCLv4 + BIBE (D3), NOT libp2p; PQ is a protocol not primitives (C12/D4).
+- Before acting on a roadmap tier, check the date + D-series. If conflict → follow the newer artifact.
+- Mirrored in `bebop-repo/docs/RULES.md` (precedence setting, Anu line).
+
+## D9. Anu QRNG wiring — native entropy is DEFAULT + FALLBACK (operator, 2026-07-12)
+- **Remote quantum entropy IS wired in**: `kernel/src/pq/entropy.rs` `provider` module pulls REAL
+  vacuum-fluctuation noise from **ANU QRNG** (`qrng.anu.edu.au`) behind the `qrng` feature, mixed via
+  `SHAKE256(quantum ‖ os)` (NIST SP 800-90B: never raw quantum alone).
+- **Native (OS) entropy is the DEFAULT and the FALLBACK.** The sanctioned entry point
+  `entropy::master_seed()` returns OS `/dev/urandom` seed by default; when `qrng` is on AND ANU is
+  reachable it upgrades to quantum⊕os; on ANY failure (unreachable / parse error / offline) it
+  **transparently falls back to pure OS entropy** — no error, no broken boot.
+- **Rule:** a node MUST boot and produce entropy identically offline (OS-only) and online
+  (quantum-boosted). The application must NEVER hard-depend on the remote QRNG being available.
+- Production note: the bundled `mini_get` reaches ANU over plain TCP (ponytail stub). Real deployments
+  MUST gate a TLS client (reqwest/rustls) behind a `qrng-tls` feature — tracked, not silently shipped.
+- Cross-repo: bebop's `bebop2` entropy seam follows the same DEFAULT+FALLBACK contract.
