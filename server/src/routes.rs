@@ -27,8 +27,8 @@ use serde_json::json;
 use tower_http::services::{ServeDir, ServeFile};
 
 use crate::models::{
-    ChannelCount, ChannelResponse, CreateOrderRequest, EventRequest, OrderResponse,
-    PushSubResponse, SubscribeRequest,
+    ChannelCount, ChannelResponse, ClaimVenueRequest, CreateOrderRequest, EventRequest, OrderResponse,
+    PushSubResponse, SubscribeRequest, VenueResponse,
 };
 use crate::store::Store;
 
@@ -241,6 +241,78 @@ async fn healthz() -> impl IntoResponse {
     (StatusCode::OK, Json(serde_json::to_value(s).unwrap())).into_response()
 }
 
+/// `GET /api/venues/:id`
+///
+/// Returns the venue's claim status (Tier-3 plumbing: a venue must be claimed
+/// before G11 — a real order from a non-operator customer on a claimed venue).
+async fn get_venue(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> impl IntoResponse {
+    match state.store.get_venue(&id) {
+        Ok(Some((name, claimed, owner_id))) => (
+            StatusCode::OK,
+            Json(VenueResponse {
+                id,
+                name,
+                claimed,
+                owner_id,
+            }),
+        )
+            .into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({ "error": "Venue not found", "code": "NotFound" })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string(), "code": "DbError" })),
+        )
+            .into_response(),
+    }
+}
+
+/// `POST /api/venues/:id/claim`
+///
+/// Claims a venue (idempotent upsert). After this, the venue is "claimed" and
+/// eligible for a real G11 order attributed via `?ch=<venue_id>`.
+async fn claim_venue(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    Json(req): Json<ClaimVenueRequest>,
+) -> impl IntoResponse {
+    let created_at_ms = now_ms();
+    if let Err(e) = state
+        .store
+        .claim_venue(&id, &req.owner_id, req.name.as_deref().unwrap_or(&id), created_at_ms)
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string(), "code": "DbError" })),
+        )
+            .into_response();
+    }
+    // Reflect the newly-claimed state.
+    match state.store.get_venue(&id) {
+        Ok(Some((name, claimed, owner_id))) => (
+            StatusCode::OK,
+            Json(VenueResponse {
+                id,
+                name,
+                claimed,
+                owner_id,
+            }),
+        )
+            .into_response(),
+        _ => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": "claim write lost", "code": "DbError" })),
+        )
+            .into_response(),
+    }
+}
+
 /// Build the application router. `dist_dir` is the path to `web/dist` (served as
 /// a SPA fallback). When `dist_dir` does not exist, the SPA fallback is omitted
 /// (the API routes still work) so the server is usable before the frontend build.
@@ -251,7 +323,9 @@ pub fn build_router(state: AppState, dist_dir: PathBuf) -> Router {
         .route("/api/courier/push/subscribe", post(push_subscribe))
         .route("/api/courier/push/resubscribe", post(push_resubscribe))
         .route("/api/orders/channel", get(orders_channel))
-        .route("/api/healthz", get(healthz));
+        .route("/api/healthz", get(healthz))
+        .route("/api/venues/:id", get(get_venue))
+        .route("/api/venues/:id/claim", post(claim_venue));
 
     let api = api.with_state(state);
 
