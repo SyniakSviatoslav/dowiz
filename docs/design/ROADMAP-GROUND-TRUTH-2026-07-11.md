@@ -82,6 +82,12 @@ These ARE on disk and already correct the brief's stale claims:
 - P3 GDPR storage-DI into AnonymizerService.
 - bebop protocol W/A/H P0-6 = SCAFFOLDED skeletons (not production): `bebop-proto-wire`/`bebop-proto-cap`/`bebop-proto-crypto` at /root/bebop-repo/bebop2/ (untracked, `agent/protocol-wah` branch; `cargo check` green; NO-COURIER-SCORING guard in). Production logic deferred to Tier-4 (gated G11).
 - **KERNEL SLICE (2026-07-11, canonical stack):** `kernel/` Rust→WASM crate at /root/dowiz — `decide/fold` Law (order_machine.rs, 1:1 port of packages/domain/order-machine.ts) + integer money (money.rs, 1:1 port of apps/api/src/lib/money.ts). 17/17 RED+GREEN VbM tests pass; wasm32-unknown-unknown build GREEN. Branch `kernel/rust-wasm-core` (pushed). This is the FIRST canonical-stack code; TS app is legacy oracle.
+- **WAVE-3 (2026-07-12, canonical stack, DONE+verified, `kernel/rust-wasm-core` bd1da1a0):** kernel is now web-callable + both web surfaces exist.
+  - `kernel/src/wasm.rs`: wasm-bindgen JSON API (place_order_js, apply_event_js, channel_ledger_js, reduce_anomalies_js); serde+serde_json added. `kernel/pkg/` glue (~78 KiB gz wasm) generated.
+  - `web/src/components/CourierTrack.svelte` + `web/src/lib/push.js`: live tracking island (fires particle-cloud VOCAB per status, reduced-motion, no money-tween) + courier push-subscribe wiring `public/sw.js` (closes locked-screen dispatch gap).
+  - `web/src/components/OwnerDashboard.svelte` + `web/src/lib/channel.js`: orders-by-channel + funnel + anomalies reader (closes open attribution loop on the UI).
+  - Unified `web/src/pages/index.astro` mounts Storefront + OwnerDashboard + CourierTrack.
+  - Kernel: **37/37 RED+GREEN VbM tests; wasm32 build green; fmt clean.** NO-COURIER-SCORING enforced (0 rating fields). Agent-escape + index.astro merge reconciled via `wave3/integrate`.
 - NO-COURIER-SCORING final (DRIFT R2).
 - **WAVE-2 (2026-07-11, canonical stack, DONE+verified, on `kernel/rust-wasm-core` 5c082b66):** Node/TS/Supabase/Fly DROPPED for new slices; pure Rust+Astro/Svelte+WebGL.
   - `kernel/src/domain.rs`: Order aggregate + compute_order_total + Decider (place_order/apply_event) via decide/fold Law.
