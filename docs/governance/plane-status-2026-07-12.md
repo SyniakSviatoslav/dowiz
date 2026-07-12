@@ -95,9 +95,13 @@ and fixed.
   cloud container has no `flyctl` binary and the network proxy blocks `api.fly.io`/`api.telegram.org`
   (confirmed via direct `curl` probe, HTTP 403 / timeout); routed around per "use alternatives" by
   pushing a PR instead, so GitHub Actions CI (`validate` job: build+typecheck+lint+verify:all) provides
-  the deterministic proof this session cannot produce locally. **Escalating:** staging deploy + Playwright
-  E2E against `dowiz-staging.fly.dev` still needs to run (by CI or a human) before/at merge, and `main`
-  has been CI-red for ~8h — this PR should be reviewed promptly.
+  the deterministic proof this session cannot produce locally. **Update:** PR #24's CI is now green —
+  [run 29182874044](https://github.com/SyniakSviatoslav/dowiz/actions/runs/29182874044), both `validate`
+  (Build/Typecheck/Lint/Verify-all/migrations/secrets/compliance) and `fresh-provision` completed
+  `success` at 2026-07-12T06:37Z. `deploy` correctly skipped (not on `main`). **Still escalating:**
+  staging deploy + Playwright E2E against `dowiz-staging.fly.dev` per Ship Discipline still needs a
+  human/CI-capable environment to run before/at merge — this session cannot. `main` was CI-red for ~8h;
+  recommend reviewing/merging promptly now that a green fix exists.
 - **HEAL (2nd finding, self-referential):** while sending this very run's Telegram digest, found that
   `scripts/plane-telemetry.mjs send`'s chunk-fallback path reported `sent:chunked` (success)
   unconditionally, even when every chunked send actually failed — the exact case this session is in
