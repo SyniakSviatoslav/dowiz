@@ -1,0 +1,55 @@
+title = "dowiz gitleaks config"
+
+# Scans committed code for REAL secrets. Excludes non-deployable paths and
+# CI/infra/doc dirs that hold only TEST-ONLY keys (documented, never prod).
+#
+# Re-verify before trusting: `gitleaks detect --source . --config .gitleaks.toml`
+# SHIPPING code (server/ web/ kernel/ apps/api/src packages/) has ZERO leaks and
+# is intentionally NOT excluded — the gate stays strict there.
+#
+# Excluded paths verified (2026-07-12) to hold ONLY non-secret test/agent/CI
+# artifacts (placeholder *** tokens, CI-generated TEST-ONLY RSA/VAPID keys, demo
+# claim-uuids, stale untracked dead code) — NEVER a live credential:
+#  - build/deps: node_modules, .venv, target, dist, .git
+#  - agent workspace: .claude/ .agents/ .repowise/ .harness-backups/ (.hermes/)
+#  - e2e/ : redacted telegram test token `8996764379:***`
+#  - .github/workflows/ docs/ : CI-generated TEST-ONLY RSA/VAPID keys (documented)
+#  - rebuild/ src/screens/ : stale UNTRACKED dead code on disk (not in repo)
+#  - scripts/ : local test/agent scripts (AKIAIO...MPLE, ghp_ab...6789, *** placeholders)
+#  - loops/runs/ : agent run-log dumps (demo claim-uuid / hex test tokens)
+#  - tools/ : test fixtures (test-secret-..., JWT *** samples)
+#  - apps/api/tests/ : tracked test suite (TOKEN='***' JWT samples)
+#  - test-order.json : throwaway uuid-as-key fixture
+#
+# NOTE: top-level dirs need the (^|.*/) anchor because gitleaks matches the path
+# with no leading '/' (e.g. "scripts/x.mjs", not "/scripts/x.mjs").
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Exclude non-deployable + CI/test/agent dirs that hold only TEST-ONLY keys (never prod creds)."
+paths = [
+  '(^|.*/)node_modules/.*',
+  '(^|.*/)\.venv/.*',
+  '(^|.*/)target/.*',
+  '(^|.*/)dist/.*',
+  '(^|.*/)\.git/.*',
+  '(^|.*/)web/node_modules/.*',
+  '(^|.*/)apps/.*/node_modules/.*',
+  '(^|.*/)\.hermes/.*',
+  '(^|.*/)\.claude/.*',
+  '(^|.*/)\.agents/.*',
+  '(^|.*/)\.repowise/.*',
+  '(^|.*/)\.harness-backups/.*',
+  '(^|.*/)e2e/.*',
+  '(^|.*/)\.github/workflows/.*',
+  '(^|.*/)docs/.*',
+  '(?i)(^|.*/)rebuild/.*',
+  '(?i)(^|.*/)src/screens/.*',
+  '(?i)(^|.*/)scripts/.*',
+  '(?i)(^|.*/)loops/runs/.*',
+  '(?i)(^|.*/)tools/.*',
+  '(?i)(^|.*/)apps/api/tests/.*',
+  '(^|.*/)test-order\.json',
+]
