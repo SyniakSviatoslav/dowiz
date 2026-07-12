@@ -118,12 +118,13 @@ and fixed.
   recurring theme instead (see reflection below — the ephemeral-scratch pattern is the candidate).
 - **Sunday ritual §2 (Song-of-Singularity)** — done, see ☼ Infusion above; ledger updated in
   `docs/governance/song-of-singularity.md`.
-- **No GitHub PR opened this run** — no staging-verified fix exists to ship (0 hard fails, nothing
-  healed). No GitHub issue filed — `plane-report.mjs --github-issue-on-fail` did not trigger (verdict
-  PASS).
-- **Telemetry:** `telegram=none · push=none` — Telegram send failed with HTTP 403 (same network-policy
-  block as above, not a token/chat-id problem: secrets are present in env). `publish` to `telemetry/plane`
-  attempted below; result recorded in the next digest's telemetry-liveness row.
+- **GitHub PR opened:** [#24](https://github.com/SyniakSviatoslav/dowiz/pull/24) (draft) — the two HEAL
+  fixes above (StorageProvider import + telemetry send bug), bundled with this digest/reflection/ledger.
+  Subscribed to PR activity for CI/review follow-up. No separate GitHub issue filed — both hard fails
+  found this run were fixed in-session, not left open; `plane-report.mjs --github-issue-on-fail` also
+  did not trigger on its own (verdict PASS at generation time, before the later discoveries).
+- **Telemetry:** see the corrected status at the top of this digest — `telegram=failed:unreachable ·
+  push=ok` (honest, post-fix). `publish` to `telemetry/plane` succeeded.
 - **Reflection filed:** `docs/reflections/INBOX/2026-07-12-ephemeral-cloud-scratch-breaks-continuity.reflection.md`
   — three independent instances this run (predictions.jsonl, dep-baseline.json, the memory corpus itself)
   of the same causal root: the charter's daily/weekly steps assume local scratch or memory persists
