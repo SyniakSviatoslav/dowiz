@@ -1,6 +1,12 @@
 import { Pool, type PoolClient } from 'pg';
 import { loadEnv } from '@deliveryos/config';
-import { createSessionPool } from '@deliveryos/db';
+
+// ponytail: `@deliveryos/db` (retired Supabase stack, quarantined to attic/) is gone.
+// This file is the Postgres NOTIFY/LISTEN message bus; the former session-pool factory
+// is replaced by a plain `pg.Pool` wrapper. Local-first, no external DB package.
+function createSessionPool(opts?: ConstructorParameters<typeof Pool>[0]): Pool {
+  return new Pool(opts);
+}
 
 export interface MessageBus {
   publish(channel: string, msg: any): Promise<void>;
