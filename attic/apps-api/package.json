@@ -19,7 +19,6 @@
     "@aws-sdk/lib-storage": "^3.1058.0",
     "@aws-sdk/s3-request-presigner": "^3.1058.0",
     "@deliveryos/config": "workspace:*",
-    "@deliveryos/db": "workspace:^",
     "@deliveryos/domain": "workspace:*",
     "@deliveryos/platform": "workspace:^",
     "@deliveryos/shared-types": "workspace:*",
