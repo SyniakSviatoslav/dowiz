@@ -13,8 +13,13 @@
 //! verified on receipt against the *sender's* public key — PQ holds regardless of
 //! whether the underlay is QUIC, TCPCLv4, or SpaceWire (D3).
 
+mod store;
+pub use store::{Store, StoreError};
+
 use dowiz_kernel::pq::envelope::{new_identity, open, seal, SignedEnvelope, ENTROPY_LEN};
-use dowiz_kernel::pq::hybrid::{hybrid_decaps, hybrid_encaps, hybrid_keygen, HybridCiphertext, HybridKeypair};
+use dowiz_kernel::pq::hybrid::{
+    hybrid_decaps, hybrid_encaps, hybrid_keygen, HybridCiphertext, HybridKeypair,
+};
 use std::collections::HashSet;
 
 /// A custody-transfer bundle (BPv7-shaped, minimal).
@@ -48,6 +53,9 @@ pub struct Node {
     /// Hybrid transit keypair (X25519 + ML-KEM-768, both mandatory per D4). Used to
     /// encrypt bundle payloads so intermediate couriers cannot read them.
     hybrid: HybridKeypair,
+    /// Optional durability layer: a file-backed SQLite store for this node (P1 local-first).
+    /// `None` keeps the original pure-in-memory behavior; `open_store` opts in.
+    store: Option<Store>,
 }
 
 /// Split a `hybrid_pk()` blob (x_pk ‖ kem_pk) back into its two public components.
@@ -110,7 +118,55 @@ impl Node {
             sk,
             pk,
             hybrid,
+            store: None,
         }
+    }
+
+    /// Open a local file-backed SQLite store for this node (P1 local-first: no server).
+    /// Persists node identity and enables durable `save_state`/`load_state`. Safe to call
+    /// once; a node created via `new()` is deterministic per seed, so identity matches
+    /// across restarts. Does NOT change the in-memory API.
+    pub fn open_store(&mut self, path: &std::path::Path) -> Result<(), StoreError> {
+        let s = Store::open(path, &self.eid, &self.pk, &self.hybrid_pk(), &self.sk)?;
+        self.store = Some(s);
+        Ok(())
+    }
+
+    /// Persist the current custody queue + replay-dedup set to the opened store.
+    /// No-op (Err) if no store was opened.
+    pub fn save_state(&mut self) -> Result<(), StoreError> {
+        match &mut self.store {
+            Some(s) => s.save(&self.custody, &self.seen),
+            None => Err(StoreError::NoStore),
+        }
+    }
+
+    /// Load custody + replay-dedup set from the opened store into this node, making
+    /// accept/forward durable across a process restart. Returns Err if the store is
+    /// unopened, corrupted, or belongs to a different identity.
+    pub fn load_state(&mut self) -> Result<(), StoreError> {
+        match &self.store {
+            Some(s) => {
+                let (custody, seen) = s.load(&self.eid, &self.pk)?;
+                self.custody = custody;
+                self.seen = seen;
+                Ok(())
+            }
+            None => Err(StoreError::NoStore),
+        }
+    }
+
+    /// Read-only peek at a custody bundle by index (used by durability tests to verify
+    /// a restored bundle matches what was persisted).
+    pub fn peek_custody(&self, idx: usize) -> Option<&Bundle> {
+        self.custody.get(idx)
+    }
+
+    /// Test-only escape hatch: mutable access to the opened [`Store`] so durability tests
+    /// can corrupt a row directly and prove `load_state` fails closed.
+    #[cfg(test)]
+    pub(crate) fn raw_store(&mut self) -> Option<&mut Store> {
+        self.store.as_mut()
     }
 
     /// Public hybrid transit key (X25519 pk ‖ ML-KEM pk) for peers to encrypt toward us.
@@ -345,6 +401,9 @@ mod tests {
         assert_eq!(plain, msg);
         // C (not the recipient, no hybrid secret key) cannot decrypt to the real plaintext.
         let wrong = c.deliver_secret(&bundle);
-        assert!(wrong.is_err() || wrong.unwrap() != msg, "non-recipient must not read plaintext");
+        assert!(
+            wrong.is_err() || wrong.unwrap() != msg,
+            "non-recipient must not read plaintext"
+        );
     }
 }
