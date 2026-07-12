@@ -64,3 +64,4 @@ scratch-*.mjs
 graphify-out/
 # NVIDIA SkillSpector — operator security tool (agent-skill scanner), not app code
 tools/skillspector/
+node/target/

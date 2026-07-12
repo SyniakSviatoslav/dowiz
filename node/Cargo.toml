@@ -1,0 +1,13 @@
+[package]
+name = "dowiz-node"
+version = "0.1.0"
+edition = "2021"
+description = "dowiz autonomous node: DTN-style store-and-forward mesh node. Wraps the verified PQ envelope (crate::pq::envelope) into custody-transfer bundles. Production transport = dtn7-rs (BPv7/RFC 9171) under QUIC/TCPCLv4; this crate proves the custody/lifetime/dedupe/replay semantics headlessly and falsifiably."
+
+[dependencies]
+dowiz-kernel = { path = "../kernel" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+paste = "1.0"

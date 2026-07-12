@@ -40,7 +40,7 @@ pub enum EnvelopeError {
 }
 
 /// A PQ-signed, content-addressed envelope.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SignedEnvelope {
     pub payload: Vec<u8>,
     pub content_hash: [u8; HASH_LEN],
