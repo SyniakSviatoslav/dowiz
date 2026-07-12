@@ -23,7 +23,12 @@ async function main() {
     console.log('  ⚠ gitleaks not installed, skipping');
   } else {
     try {
-      const result = execSync(`"${gitleaksBin}" detect --source . --verbose -i "." 2>&1`, {
+      // Run in git mode (default: respects .gitignore, so local .env/.venv/dist
+      // are NOT scanned) and apply repo .gitleaks.toml (excludes build/deps/agent
+      // dirs + allowlists intentional test-only CI keys). .gitleaksignore is
+      // auto-loaded from the source root (reviewed false-positive fingerprints
+      // in e2e/infra/agent dirs only).
+      const result = execSync(`"${gitleaksBin}" detect --source . --verbose --config "${path.join(ROOT, '.gitleaks.toml')}" 2>&1`, {
         cwd: ROOT,
         encoding: 'utf8',
         timeout: 30000,
