@@ -42,7 +42,7 @@ pub fn hybrid_keygen(x_seed: &[u8; 32], kem_seed: &[u8; 32]) -> HybridKeypair {
 
 /// Hybrid ciphertext: carries the ML-KEM ciphertext, the ephemeral X25519 pubkey, and a
 /// key-confirmation tag binding both legs (see hybrid_decaps — this is the RED gate).
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct HybridCiphertext {
     pub kem_ct: Vec<u8>,
     pub x_ephemeral: [u8; 32],
