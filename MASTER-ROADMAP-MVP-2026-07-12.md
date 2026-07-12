@@ -101,16 +101,21 @@ All six launched streams landed, were independently validated (isolated-target
 ## 3. SEQUENTIAL GATES (red-line / external / tier-dependent — NOT parallel)
 
 > STATUS (2026-07-12): **S4 DONE** (simulated first real order end-to-end, G11 GREEN).
-> **S1 + S2/S3 IN FLIGHT** as parallel worktrees (bp7-rs codec; QUIC+rustls/aws-lc-rs bearer).
-> Quarantine (`@deliveryos/db`) DONE + pushed (cf0d319d).
+> **S1 DONE + PUSHED** (bp7-rs codec, 29 node tests green). **S2+S3 PARTIAL**: QUIC/TLS bearer
+> compiles + RED gates green, but GREEN end-to-end handshake ('closed by peer') not validated in
+> sandbox — blocked on aws-lc-rs/ring provider detail, needs live-network debug.
+> Quarantine (`@deliveryos/db`) DONE + pushed (11b49d56).
 
 - **S1 · dtn7-rs integration (L3)** — depends on P1 (store) + L2 node. Maps `Bundle` → BPv7
   structures 1:1. Operator-gated (new dependency). Verifies BIBE custody (D3).
-  *DONE (headless codec half)*: real `bp7-rs` (RFC 9171) `Bundle<->BPv7` codec + `Transport`
-  trait committed; BPv7 daemon itself is a runtime swap (does not change the custody flow).
+  *DONE*: real `bp7-rs` (RFC 9171) `Bundle<->BPv7` codec + `Transport` trait committed
+  (12cff0b3); 4 codec tests green (roundtrip + valid CBOR + 2 RED fuzz gates); full node suite
+  **29 green**, clippy clean. BPv7 daemon itself is a runtime swap (does not change custody flow).
 - **S2 · QUIC/TCPCLv4 convergence** — underlay for connected segments; depends on S1 codec.
-  *IN FLIGHT*: `quinn` QUIC + `rustls`/`aws-lc-rs` TLS 1.3 bearer carrying `Bundle` over
-  loopback, RED+GREEN tests.
+  *PARTIAL*: `quinn` QUIC + `rustls`/`aws-lc-rs` TLS 1.3 bearer carrying `Bundle` over loopback
+  implemented (real code, compiles). 2 RED gates green (unreachable endpoint / garbage payload).
+  GREEN end-to-end roundtrip NOT yet validated in sandbox (handshake 'closed by peer: 0' — aws-lc-rs
+  vs ring provider selection detail); needs live-network debug before marking DONE.
 - **S3 · Production PQ swap** — offer `rustls+aws-lc-rs (X25519MLKEM768)` + `liboqs ML-DSA`
   beside the from-scratch core (D4). *PARTIAL*: TLS 1.3/QUIC bearer landed. The `liboqs`
   ML-DSA signer swap is gated on the `liboqs` crate (not in the offline cache) — operator
