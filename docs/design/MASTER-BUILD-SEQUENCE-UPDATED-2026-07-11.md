@@ -97,10 +97,77 @@ order → only then Tier 4 rewrites substrate.** Build downward from the order, 
 protocol. Gates are falsifiable conditions, not calendar dates.
 
 ## Open items needing OPERATOR decision (red-line, not auto-executed)
-
 1. **P1/P7/P8 execution** — docs written, flagged. Approve to execute?
 2. **Prod worker restart + secret rotation** — claimed stopped 07-03, UNVERIFIED by me.
 3. **DRIFT R2** — reputation.rs courier-scoring vs NO-COURIER-SCORING HARD FORK. Architectural.
 4. **G10** — DROPPED, handed to another agent.
+
+---
+## ADDENDUM — executed + verified ground truth (2026-07-12, autopilot)
+
+Per operator autopilot ("поки не буде зроблено, повний автопілот"), the
+non-red-line plan items were executed and **re-verified with real tool runs** (the
+global rule: trust `cargo test` / `node --test` output, not doc DONE claims).
+
+### What was DONE + verified green (this session)
+- **Tier-0 A/B/C/D** — re-confirmed: no offending storefront tween (integer
+  cents only, static line math); gitleaks git-pre-commit = CLEAN (61 findings
+  all FP by label, 0 secrets); OG `web/dist/og/card.png` = 3,384 B (<300 KB),
+  `og:image` + `og:title/description` present in `web/dist/index.html`;
+  `?ch=` channel attribution wired through Storefront + channel ledger.
+- **Tier-1 audits** — `cargo audit` CLEAN (0 vulnerabilities); VbM
+  `cargo test -p dowiz-kernel` = **37/37**; `cargo build --target
+  wasm32-unknown-unknown --release` = GREEN.
+- **Tier-2 quality bars** — backend contract gate built as a real test
+  (`server/tests/integration.rs::tier2_storefront_contract`): integer money
+  round-trip, PENDING on create, persisted, `?ch=` channel attributed. **GREEN.**
+  (The Playwright UI gate is a CI artifact — deferred to after the branch-prune +
+  remote-history scrub, since it needs browser binaries on CI and the 187-file
+  tree is mid-flight.)
+- **Courier N1/N2 (Tier-2 "courier out-of-app signal")** — WAS A GAP: server
+  persisted `push_subs` + `/push_subscribe`/`/push_resubscribe` routes but had
+  **no send path**. Implemented dependency-free `server/src/notify.rs`
+  (`NotifyHub` trait + `CaptureSink` test sink + zero-dep HTTP/1.1 `WebhookSink`
+  bridged via `NOTIFY_BRIDGE_URL`). Wired into `order_event` (signals on every
+  legal transition; lifecycle never depends on delivery). Real VAPID web-push is
+  gated on Tier-4 + a configured VAPID key. Proven by
+  `green_status_transition_signals_couriers` (REAL signal emitted, correct
+  order_id + status). **No new deps added** (web-push pulls OpenSSL — rejected
+  per ponytail fewest-deps rule).
+- **Governance port (bebop→dowiz)** — already on this branch
+  (`d8c414f4`), `agent-governance/index.test.ts` = **10/10 node:test green**;
+  re-verified this session.
+
+### Server test totals after this work
+- `cargo test -p dowiz-server`: **8 lib + 12 integration = 20 passing, 0 failing**
+  (added N1/N2 signal test + Tier-2 backend contract gate + 2 notify unit tests).
+- `cargo test -p dowiz-kernel`: **37/37**.
+- `agent-governance`: **10/10**.
+
+### ROADMAP §0.1 gap — CLOSED WITH GROUND TRUTH (no fabrication)
+The 13 research/design reports cited in ROADMAP §0.1
+(HUB-ARCHITECTURE-REVIEW, MAX-EV-SYNTHESIS, DESIGN-LIBRARIES-RESEARCH,
+PARTICLE-CLOUD-INTERACTION-ANALYSIS, etc.) are **genuinely LOST** — only
+incidental mentions survive on disk (confirmed by broad grep). They are NOT
+re-created: fabrication would violate the ground-truth discipline. The
+decisions they informed survive in canonical, verified docs:
+`bebop-repo/docs/design/UNIFIED-DELIVERY-PROTOCOL-BLUEPRINT-v3-2026-07-11.md`
+(+ `bebop-fable-research-2026-07-11.md`, `plan-audit-bebop-2026-07-11.md`),
+and `docs/design/ROADMAP-GROUND-TRUTH-2026-07-11.md`. Mark §0.1 as
+RESOLVED-AS-LOST.
+
+### Red-line items — FLAGGED, NOT executed (per autopilot constraints)
+1. **P1 / P7 / P8** — prod migrations / RLS flip / bulk write. Docs only.
+2. **Prod worker restart + secret rotation** — claimed stopped 07-03, UNVERIFIED.
+3. **DRIFT R2** — courier-scoring vs NO-COURIER-SCORING hard fork (architectural).
+4. **G11 first real order** — requires a real non-operator customer on a claimed venue.
+5. **Tier-1 branch-prune (force-push scrub of remote history)** — IRREVERSIBLE
+   history rewrite; left for operator.
+6. **G10 ML-DSA NIST bit-exact** — dropped, handed to another agent.
+
+### Recommendation before next gate
+Ship the verified-green server changes (notify.rs + Tier-2 gate) on this branch,
+THEN run the planned Tier-1 branch-prune/scrub. Do not auto-execute any of the
+six red-line items above.
 
 *Revised 2026-07-11 from session push. Original sequence retained as source-of-truth for tiers 2–5.*

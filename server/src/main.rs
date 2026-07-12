@@ -5,7 +5,9 @@
 //! path. `web/dist` (relative to CWD) is served as the SPA.
 
 use std::path::PathBuf;
+use std::sync::Arc;
 
+use dowiz_server::notify::{NotifyHub, WebhookSink};
 use dowiz_server::routes::{build_router, AppState};
 use dowiz_server::store::Store;
 
@@ -32,7 +34,17 @@ async fn main() {
         .map(PathBuf::from)
         .unwrap_or_else(|_| PathBuf::from("web/dist"));
 
-    let state = AppState { store };
+    let state = AppState {
+        store,
+        // Tier-2 N1/N2: courier out-of-app notify hub. If `NOTIFY_BRIDGE_URL` is
+        // set we bridge signals to that HTTP endpoint (N2 fallback relay / VAPID
+        // gateway); otherwise signals are best-effort no-ops at the server edge
+        // (the lifecycle never depends on delivery). Real VAPID web-push lands at
+        // Tier-4 behind a configured key.
+        notify: std::env::var("NOTIFY_BRIDGE_URL")
+            .ok()
+            .map(|url| Arc::new(NotifyHub::new(Arc::new(WebhookSink::new(url))))),
+    };
     let app = build_router(state, dist_dir);
 
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
