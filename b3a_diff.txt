@@ -1,0 +1,473 @@
+diff --git a/crates/bebop/src/memory_tier.rs b/crates/bebop/src/memory_tier.rs
+new file mode 100644
+index 0000000..09a7d4b
+--- /dev/null
++++ b/crates/bebop/src/memory_tier.rs
+@@ -0,0 +1,221 @@
++//! Raw-preserving Padovan memory tiering.
++//!
++//! This is the SOUND replacement for the destructive `LivingMemory::tick`
++//! (which `retain`-deletes nodes on `hash % 7 == clock % 7`). Here memory is
++//! MOVED, never deleted: hot nodes are demoted to a `cold` ATTIC-equivalent
++//! tier on an aperiodic Padovan-indexed scheduler, and every demoted node can
++//! be `restore`d with its raw payload intact (SAFE-APPLY: tier-demotion
++//! preserves raw; importance is RANK-only and never CULLs).
++//!
++//! Padovan sequence P(n) = P(n-2) + P(n-3), P(0)=P(1)=P(2)=1 (OEIS A000931).
++//! Using Padovan-indexed ticks avoids the rhythmic sync resonance of a fixed
++//! period (the bug class in the original `tick`).
++
++use std::collections::HashMap;
++
++/// A memory node. `last_access` is a monotonic access counter used purely for
++/// least-recently-used ranking. The `payload` is the RAW data — it is never
++/// mutated or dropped by tiering.
++#[derive(Clone, Debug)]
++pub struct Node {
++    pub id: String,
++    pub concept: String,
++    pub payload: String,
++    pub last_access: u64,
++}
++
++/// Tiered memory: a hot working tier plus a cold ATTIC-equivalent tier.
++/// Demotion MOVES a node from `hot` to `cold`; it is never removed.
++pub struct TieredMemory {
++    hot: HashMap<String, Node>,
++    cold: HashMap<String, Node>,
++    clock: u64,
++    access_counter: u64,
++}
++
++impl TieredMemory {
++    pub fn new() -> Self {
++        TieredMemory {
++            hot: HashMap::new(),
++            cold: HashMap::new(),
++            clock: 0,
++            access_counter: 0,
++        }
++    }
++
++    /// Insert a node into the hot tier. Deterministic id (FNV-1a hash, no RNG).
++    pub fn remember(&mut self, concept: &str, payload: &str) -> String {
++        self.access_counter += 1;
++        let id = format!("{:08x}", hash(concept.as_bytes()));
++        self.hot.insert(
++            id.clone(),
++            Node {
++                id: id.clone(),
++                concept: concept.into(),
++                payload: payload.into(),
++                last_access: self.access_counter,
++            },
++        );
++        id
++    }
++
++    /// Number of nodes currently in the hot tier.
++    pub fn hot_size(&self) -> usize {
++        self.hot.len()
++    }
++
++    /// Number of nodes currently in the cold (ATTIC) tier.
++    pub fn cold_size(&self) -> usize {
++        self.cold.len()
++    }
++
++    /// Advance the aperiodic Padovan scheduler. On a Padovan-indexed tick we
++    /// DEMOTE (move, never delete) the least-recently-used hot node to `cold`,
++    /// preserving its raw payload. Off-Padovan ticks perform no tiering — this
++    /// aperiodicity is what prevents sync-resonance forgetting.
++    pub fn tick_padovan(&mut self, clock: u64) {
++        self.clock = clock;
++        if !is_padovan_value(clock) {
++            return;
++        }
++        // Demote the least-recently-used hot node (smallest last_access).
++        let lru_id = self
++            .hot
++            .iter()
++            .min_by_key(|(_, n)| n.last_access)
++            .map(|(id, _)| id.clone());
++        if let Some(id) = lru_id {
++            if let Some(node) = self.hot.remove(&id) {
++                self.cold.insert(id, node);
++            }
++        }
++    }
++
++    /// Retrieve a node from the cold ATTIC tier. Returns `None` only if the id
++    /// was never stored — a demoted node is ALWAYS recoverable (proves the
++    /// tiering is non-destructive).
++    pub fn restore(&self, id: &str) -> Option<&Node> {
++        self.cold.get(id)
++    }
++
++    /// Touch a hot node, bumping its LRU rank so it resists demotion.
++    pub fn access(&mut self, id: &str) {
++        self.access_counter += 1;
++        if let Some(n) = self.hot.get_mut(id) {
++            n.last_access = self.access_counter;
++        }
++    }
++}
++
++/// Padovan recurrence P(n) = P(n-2) + P(n-3), P(0)=P(1)=P(2)=1.
++/// Returns P(n). Verified: P(0..7) = 1,1,1,2,2,3,4.
++pub fn padovan(n: u64) -> u64 {
++    if n <= 2 {
++        return 1;
++    }
++    let mut a: u64 = 1; // P(k-3)
++    let mut b: u64 = 1; // P(k-2)
++    let mut c: u64 = 1; // P(k-1)
++    for k in 3..=n {
++        let next = a + b; // P(k) = P(k-3) + P(k-2)
++        a = b;
++        b = c;
++        c = next;
++        let _ = k;
++    }
++    c
++}
++
++/// True iff `x` appears as a positive value in the Padovan sequence
++/// (1, 1, 2, 2, 3, 4, 5, 7, 9, 12, ...). Used to decide whether a given clock
++/// is a Padovan-indexed tick.
++fn is_padovan_value(x: u64) -> bool {
++    if x == 0 {
++        return false;
++    }
++    if x <= 2 {
++        return true;
++    }
++    let mut a: u64 = 1;
++    let mut b: u64 = 1;
++    let mut c: u64 = 1;
++    loop {
++        let next = a + b;
++        if next == x {
++            return true;
++        }
++        if next > x {
++            return false;
++        }
++        a = b;
++        b = c;
++        c = next;
++    }
++}
++
++/// Tiny FNV-1a hash — deterministic, no deps.
++fn hash(b: &[u8]) -> u32 {
++    let mut h: u32 = 0x811C9DC5;
++    for &x in b {
++        h ^= x as u32;
++        h = h.wrapping_mul(0x01000193);
++    }
++    h
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn green_padovan_recurrence() {
++        // Correct Padovan recurrence values, OEIS A000931.
++        let v: Vec<u64> = (0..7).map(padovan).collect();
++        assert_eq!(v, vec![1, 1, 1, 2, 2, 3, 4]);
++        // A few larger values cross-check against the recurrence itself.
++        for n in 3..20 {
++            assert_eq!(padovan(n), padovan(n - 2) + padovan(n - 3));
++        }
++    }
++
++    #[test]
++    fn red_restore_after_demote_preserves_raw() {
++        // RED: would FAIL on a destructive implementation (restore -> None).
++        // On the sound (move, not delete) implementation it passes, proving
++        // tiering is non-destructive: payload survives demotion.
++        let mut tm = TieredMemory::new();
++        let ids: Vec<String> = (0..5)
++            .map(|i| tm.remember(&format!("concept{i}"), &format!("payload{i}")))
++            .collect();
++
++        // Drive Padovan-indexed ticks; each demotes one LRU hot node to cold.
++        for clk in [1u64, 2, 3, 4, 5] {
++            tm.tick_padovan(clk);
++        }
++
++        // Nothing deleted: hot drained, everything lives on in cold.
++        assert_eq!(tm.hot_size(), 0);
++        assert_eq!(tm.cold_size(), 5);
++
++        // Every originally-stored payload is recoverable and UNCHANGED.
++        for (i, id) in ids.iter().enumerate() {
++            let restored = tm
++                .restore(id)
++                .expect("node must survive demotion (non-destructive)");
++            assert_eq!(restored.payload, format!("payload{i}"));
++            assert_eq!(restored.concept, format!("concept{i}"));
++        }
++    }
++
++    #[test]
++    fn red_demote_is_move_not_delete() {
++        // RED against the original `retain`-delete pattern: after demotion the
++        // node count is conserved (hot+cold == inserted), never shrinks.
++        let mut tm = TieredMemory::new();
++        let id = tm.remember("keep", "raw-data");
++        let total = tm.hot_size() + tm.cold_size();
++        tm.tick_padovan(1); // Padovan tick -> demote
++        assert_eq!(tm.hot_size() + tm.cold_size(), total, "nodes must be conserved on demote");
++        assert!(tm.restore(&id).is_some());
++    }
++}
+diff --git a/crates/bebop/src/persistence_tda.rs b/crates/bebop/src/persistence_tda.rs
+new file mode 100644
+index 0000000..f8f8c3c
+--- /dev/null
++++ b/crates/bebop/src/persistence_tda.rs
+@@ -0,0 +1,240 @@
++//! 0-dimensional TDA persistence monitor.
++//!
++//! Minimal topological-data-analysis clustering via a Rips-style filtration
++//! over a 1-D point cloud (or, more generally, a pairwise-distance matrix
++//! supplied as a flattened `&[f64]` of length `n*n` in row-major order).
++//!
++//! Honesty note: this computes **0-dimensional persistence** — the birth and
++//! death of connected components as the proximity threshold sweeps upward
++//! (union-find over thresholded adjacency, à la Carlsson 2009). It is noise
++//! robust clustering, NOT full persistent homology (no H1/H2 cycles). Full
++//! persistent homology would additionally track loops/voids via a boundary
++//! matrix reduction; that is out of scope here.
++//!
++//! `barcode` returns `(component_id, birth, death)` persistence pairs: a
++//! 1-D point that is its own component at threshold `t` contributes a bar
++//! born at `t` and dying when it merges into a larger component. Components
++//! alive at the top threshold die at `f64::INFINITY`.
++
++use std::collections::{HashMap, HashSet};
++
++/// Union-find with path compression + union by rank.
++struct Dsu {
++    parent: Vec<usize>,
++    rank: Vec<usize>,
++}
++
++impl Dsu {
++    fn new(n: usize) -> Self {
++        Dsu {
++            parent: (0..n).collect(),
++            rank: vec![0; n],
++        }
++    }
++
++    fn find(&mut self, x: usize) -> usize {
++        // Iterative path compression (no recursion — avoids stack depth issues
++        // on large clouds while staying deterministic).
++        let mut root = x;
++        while self.parent[root] != root {
++            root = self.parent[root];
++        }
++        let mut cur = x;
++        while self.parent[cur] != root {
++            let next = self.parent[cur];
++            self.parent[cur] = root;
++            cur = next;
++        }
++        root
++    }
++
++    fn union(&mut self, a: usize, b: usize) -> bool {
++        let ra = self.find(a);
++        let rb = self.find(b);
++        if ra == rb {
++            return false;
++        }
++        if self.rank[ra] < self.rank[rb] {
++            self.parent[ra] = rb;
++        } else if self.rank[ra] > self.rank[rb] {
++            self.parent[rb] = ra;
++        } else {
++            self.parent[rb] = ra;
++            self.rank[ra] += 1;
++        }
++        true
++    }
++}
++
++/// Build the sorted list of distinct edge distances (upper triangle of the
++/// distance matrix), used as the filtration thresholds.
++fn edges(dist: &[f64], n: usize) -> Vec<f64> {
++    let mut v = Vec::new();
++    for i in 0..n {
++        for j in (i + 1)..n {
++            v.push(dist[i * n + j]);
++        }
++    }
++    v.sort_by(|a, b| a.partial_cmp(b).unwrap());
++    v.dedup();
++    v
++}
++
++/// Compute the 0-dimensional persistence barcode over a distance matrix.
++///
++/// * `dist` — flattened row-major `n*n` pairwise-distance matrix.
++/// * `n` — number of points.
++/// * `thresholds` — the filtration thresholds to sample (monotone increasing);
++///   the last threshold is assumed to be the "top" of the filtration and any
++///   still-alive component dies there (or `INFINITY` if it never merges).
++///
++/// Returns one `(component_repr, birth, death)` triple per *birth* event:
++/// a point that is an isolated component at a given threshold is born at the
++/// distance at which it first becomes "alone" relative to its merge, and dies
++/// when it merges into a larger component. The single global component that
++/// survives to the top of the filtration is reported with `death = INFINITY`.
++///
++/// Honest semantics: `birth`/`death` are the filtration distances at which a
++/// component appears / merges. Longer bars (large `death - birth`) correspond
++/// to more persistent (real) clusters; short bars are noise (transient).
++pub fn barcode(dist: &[f64], n: usize, thresholds: &[f64]) -> Vec<(usize, f64, f64)> {
++    if n == 0 {
++        return Vec::new();
++    }
++    if n == 1 {
++        // A single point is one component, born at threshold[0], never merges.
++        let top = thresholds.last().copied().unwrap_or(f64::INFINITY);
++        return vec![(0, thresholds.first().copied().unwrap_or(0.0), top)];
++    }
++
++    // Precompute sorted distinct edge distances for the full filtration.
++    let all_edges = edges(dist, n);
++
++    // Track per-component birth distance. repr -> birth threshold.
++    let mut births: HashMap<usize, f64> = HashMap::new();
++    // Pending death records: when a component dies we emit (repr, birth, death).
++    let mut result: Vec<(usize, f64, f64)> = Vec::new();
++
++    // Process each requested threshold in increasing order.
++    for &t in thresholds {
++        let mut dsu = Dsu::new(n);
++        // Connect every edge whose distance <= t.
++        for &(d) in &all_edges {
++            if d > t {
++                break;
++            }
++            // find pairs with this edge distance
++            for i in 0..n {
++                for j in (i + 1)..n {
++                    if dist[i * n + j] == d {
++                        dsu.union(i, j);
++                    }
++                }
++            }
++        }
++        // Determine components and their births/deaths at this threshold.
++        // We compute component reps and note which reps existed before.
++        let reps: Vec<usize> = (0..n).map(|i| dsu.find(i)).collect();
++        // Mark all current reps as alive; newly-seen reps are born at t.
++        let mut current: std::collections::HashSet<usize> = std::collections::HashSet::new();
++        for &r in &reps {
++            current.insert(r);
++            if !births.contains_key(&r) {
++                births.insert(r, t);
++            }
++        }
++        // Any rep that was alive at the previous threshold but is no longer a
++        // rep (it merged) dies at t. We detect this by removing dead reps from
++        // `births` and recording the death.
++        let alive_before: Vec<usize> = births.keys().copied().collect();
++        for r in alive_before {
++            if !current.contains(&r) {
++                let birth = births.remove(&r).unwrap();
++                result.push((r, birth, t));
++            }
++        }
++    }
++
++    // Components still alive at the top threshold: death = INFINITY.
++    let top = thresholds.last().copied().unwrap_or(f64::INFINITY);
++    for (&r, &birth) in births.iter() {
++        result.push((r, birth, f64::INFINITY.max(top)));
++    }
++
++    result
++}
++
++/// Convenience: build a Euclidean distance matrix from a 1-D point cloud.
++pub fn distance_matrix_1d(points: &[f64]) -> (Vec<f64>, usize) {
++    let n = points.len();
++    let mut d = vec![0.0; n * n];
++    for i in 0..n {
++        for j in 0..n {
++            d[i * n + j] = (points[i] - points[j]).abs();
++        }
++    }
++    (d, n)
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn red_two_separated_clusters_two_barcodes() {
++        // Two well-separated clusters: {0,1,2} near 0, {3,4,5} near 100.
++        // In 0-dim persistence ALL components eventually merge at the top of
++        // the filtration, so only one bar is literally infinite. The honest,
++        // falsifiable statement is: TWO distinct clusters survive to the top
++        // filtration threshold (one dies at the top when it merges, one lives
++        // forever). That is exactly "two long barcodes".
++        let pts = [0.0, 1.0, 2.0, 100.0, 101.0, 102.0];
++        let (d, n) = distance_matrix_1d(&pts);
++        // Thresholds spanning both intra- and inter-cluster gaps.
++        let thresholds = vec![0.5, 1.5, 2.5, 50.0, 200.0];
++        let top = *thresholds.last().unwrap();
++        let bars = barcode(&d, n, &thresholds);
++        // Two long-lived clusters: bars whose death reaches the top threshold
++        // (death == top, i.e. merges only at the very end, or death == INF).
++        let survivors: Vec<_> = bars
++            .iter()
++            .filter(|(_, _, death)| *death >= top)
++            .collect();
++        assert_eq!(
++            survivors.len(),
++            2,
++            "two separated clusters must yield TWO long barcodes"
++        );
++        // The noise components (born at 0.5) must die early (short bars).
++        let noise: Vec<_> = bars.iter().filter(|(_, birth, death)| *birth < top && *death < top).collect();
++        assert!(!noise.is_empty(), "expected short noise bars between clusters");
++    }
++
++    #[test]
++    fn red_one_connected_graph_one_barcode() {
++        // All points very close together -> one connected component at the
++        // top of the filtration; exactly ONE long barcode (the rest are short
++        // noise bars that die long before the top threshold).
++        let pts = [0.0, 0.1, 0.2, 0.3, 0.4];
++        let (d, n) = distance_matrix_1d(&pts);
++        let thresholds = vec![0.05, 0.15, 0.25, 0.5];
++        let top = *thresholds.last().unwrap();
++        let bars = barcode(&d, n, &thresholds);
++        let survivors: Vec<_> = bars.iter().filter(|(_, _, death)| *death >= top).collect();
++        assert_eq!(
++            survivors.len(),
++            1,
++            "one connected graph must yield a SINGLE long barcode"
++        );
++    }
++
++    #[test]
++    fn edge_empty_and_single() {
++        assert_eq!(barcode(&[], 0, &[1.0]), Vec::new());
++        let (d, n) = distance_matrix_1d(&[3.0]);
++        let bars = barcode(&d, n, &[0.0, 1.0]);
++        assert_eq!(bars.len(), 1);
++        // Single point: one component, dies at the top threshold (1.0), not INF.
++        assert_eq!(bars[0].2, 1.0);
++    }
++}

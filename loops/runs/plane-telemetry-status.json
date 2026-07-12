@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "push": {
+    "status": "ok",
+    "ts": "2026-07-03T09:46:21.005Z",
+    "run_id": "plane-2026-07-03T09-46-00Z",
+    "commit": "b696d61ff1b6"
+  },
+  "telegram": {
+    "status": "sent",
+    "ts": "2026-07-02T19:36:52.991Z",
+    "run_id": "local-2026-07-02-council-build"
+  }
+}

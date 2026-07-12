@@ -1,0 +1,11 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc ab24e6e29a61cd14f9e0175d6d5775b03eb0fdb02823778220b4195d5ed29cf4 # shrinks to delivery_fee_flat = None, free_delivery_threshold = None, min_order_value = Some(-1)
+cc 2a3594b893258ad94bb6db447142f11f0ba2ca0ddc5b026d700f8fb097e74b59 # shrinks to status = InDelivery, cmd = MarkPickedUp { at: Ts(0), actor: System }
+cc a740c6c287a6b40e073ef93f88ff45066a33f8986524ac0bed2d5ef3df4eb245 # shrinks to status = Confirmed, cmd = Cancel { at: Ts(0), actor: Owner }
+cc 84e2ebaaa33798166030f619ff1daeaf61371ae39d8d465482f2520f08393243 # shrinks to status = Confirmed, cmd = Cancel { at: Ts(0), actor: Owner }
+cc 403087dd423b9e38952a50f0e69c081ae8ba150f7a7c96240c4ed51b328bda79 # shrinks to status = Ready, cmd = MarkPickedUp { at: Ts(0), actor: System }, binding = BindingState { has_active_binding: true, has_delivered_binding: false }

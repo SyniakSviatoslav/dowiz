@@ -1,0 +1,34 @@
+{
+  "at": "2026-06-28T22:38:32.325Z",
+  "base_url": "https://dowiz-staging.fly.dev",
+  "summary": {
+    "attempted": 2,
+    "invited": 0,
+    "needs_review": 1,
+    "skipped_already_done": 1
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "loop-run-B-95cc99e4",
+      "name": "Loop Venue B",
+      "slug": "loopb-2b51b11d",
+      "warnings": [],
+      "source_id": "056665a7-e4ff-43e4-a4d0-1ad5d79a7bf0",
+      "outcome": "skipped-already-done",
+      "reason": "already-invited (active invite exists)",
+      "state": "CLAIM_OFFERED"
+    },
+    {
+      "row": 2,
+      "place_id": "loop-run-A-92a1e70f",
+      "name": "Loop Venue A",
+      "slug": "loopa-89dfdb8c",
+      "warnings": [],
+      "source_id": "575facf7-cbcb-4de1-8680-1a08113ab185",
+      "outcome": "needs-review",
+      "reason": "EXIT_STATE:MANUAL_REVIEW",
+      "state": "MANUAL_REVIEW"
+    }
+  ]
+}

@@ -1,0 +1,683 @@
+[
+ {
+  "slug": "casa-mia",
+  "name": "Trattoria Casa Mia",
+  "cuisine": "italian",
+  "primary": "#3f7d4f",
+  "bg": "#fbf6ee",
+  "menu": [
+   {
+    "name": "Fumé",
+    "category": "Të tjera",
+    "price": 800,
+    "description": "Salcë domate, mocarela, scamorza e tymosur, speck",
+    "description_sq": "Salcë domate, mocarela, scamorza e tymosur, speck",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762de325f852e1f73b846",
+    "sort_order": 0
+   },
+   {
+    "name": "La Cima Di Rapa",
+    "category": "Të tjera",
+    "price": 1150,
+    "description": "Orecchiette, cime di rapa, pangratatto, sardele kantabriane, evo",
+    "description_sq": "Orecchiette, cime di rapa, pangratatto, sardele kantabriane, evo",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762db325f852e1f73b83b",
+    "sort_order": 1
+   },
+   {
+    "name": "Risotto Asparagi E Guanciale",
+    "category": "Ëmbëlsira",
+    "price": 1050,
+    "description": "Crema di asparagi, parmigiano, karnaroli, guanciale krokante, verë e bardhë, krem asparagu, qepë e kuqe, gjalpë, parmixhano, evo",
+    "description_sq": "Crema di asparagi, parmigiano, karnaroli, guanciale krokante, verë e bardhë, krem asparagu, qepë e kuqe, gjalpë, parmixhano, evo",
+    "image_url": "https://imageproxy.wolt.com/assets/68ee1a2c17e84051d222a248",
+    "sort_order": 2
+   },
+   {
+    "name": "La Parmigiana",
+    "category": "Të tjera",
+    "price": 860,
+    "description": "Patëllxhan, salce domatesh, borzilok, parmixhano, mocarela",
+    "description_sq": "Patëllxhan, salce domatesh, borzilok, parmixhano, mocarela",
+    "image_url": "https://imageproxy.wolt.com/assets/68f7951894476edc306e5bee",
+    "sort_order": 3
+   },
+   {
+    "name": "Ciccio",
+    "category": "Të tjera",
+    "price": 290,
+    "image_url": "https://imageproxy.wolt.com/assets/68f762dd325f852e1f73b841",
+    "sort_order": 4
+   },
+   {
+    "name": "Arenile Montepulciano",
+    "category": "Të tjera",
+    "price": 1600,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8bb00325f852e1f74125e",
+    "sort_order": 5
+   },
+   {
+    "name": "La Barese",
+    "category": "Pije",
+    "price": 1100,
+    "description": "Oktapod i freskët, lëng limoni, pomodorini, majdanoz, ullinj taggiasca, majonezë me lime",
+    "description_sq": "Oktapod i freskët, lëng limoni, pomodorini, majdanoz, ullinj taggiasca, majonezë me lime",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762dd325f852e1f73b840",
+    "sort_order": 6
+   },
+   {
+    "name": "Vegetariana",
+    "category": "Të tjera",
+    "price": 700,
+    "description": "Salcë domate, mocarela, kërpudha, speca, karcof, asparag, ullinj, kungull",
+    "description_sq": "Salcë domate, mocarela, kërpudha, speca, karcof, asparag, ullinj, kungull",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762df325f852e1f73b84c",
+    "sort_order": 7
+   },
+   {
+    "name": "Prosciutto",
+    "category": "Antipasti & Sallata",
+    "price": 630,
+    "description": "Salcë domate, mocarela, proshutë cotto",
+    "description_sq": "Salcë domate, mocarela, proshutë cotto",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762de325f852e1f73b843",
+    "sort_order": 8
+   },
+   {
+    "name": "Salentina",
+    "category": "Të tjera",
+    "price": 850,
+    "description": "Patate, pomodorini, qepë e kuqe, selino, kastravecë, ullinj taggiasca, crostini buke të sthekura, evo, borzilok, kaperi, speca",
+    "description_sq": "Patate, pomodorini, qepë e kuqe, selino, kastravecë, ullinj taggiasca, crostini buke të sthekura, evo, borzilok, kaperi, speca",
+    "image_url": "https://imageproxy.wolt.com/assets/68f794f094476edc306e5be7",
+    "sort_order": 9
+   },
+   {
+    "name": "Corona",
+    "category": "Të tjera",
+    "price": 460,
+    "image_url": "https://imageproxy.wolt.com/assets/68ee1ab517e84051d222a27b",
+    "sort_order": 10
+   },
+   {
+    "name": "Schweppes",
+    "category": "Të tjera",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/68ee1a9217e84051d222a276",
+    "sort_order": 11
+   },
+   {
+    "name": "Cielo e Terra Chardonnay 2024",
+    "category": "Të tjera",
+    "price": 1800,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8bcd494476edc306e987d",
+    "sort_order": 12
+   },
+   {
+    "name": "Prosciutto E Funghi",
+    "category": "Antipasti & Sallata",
+    "price": 700,
+    "description": "Salcë domate, mocarela, proshutë cotto, kërpudha të freskëta",
+    "description_sq": "Salcë domate, mocarela, proshutë cotto, kërpudha të freskëta",
+    "image_url": "https://imageproxy.wolt.com/assets/68f7954f94476edc306e5c00",
+    "sort_order": 13
+   },
+   {
+    "name": "Fortuna Greco di Tufo",
+    "category": "Të tjera",
+    "price": 3000,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8bdf394476edc306e98df",
+    "sort_order": 14
+   },
+   {
+    "name": "Ujë Me Gaz",
+    "category": "Të tjera",
+    "price": 290,
+    "image_url": "https://imageproxy.wolt.com/assets/68f762df325f852e1f73b849",
+    "sort_order": 15
+   },
+   {
+    "name": "Leffe",
+    "category": "Të tjera",
+    "price": 580,
+    "image_url": "https://imageproxy.wolt.com/assets/68f762e1325f852e1f73b852",
+    "sort_order": 16
+   },
+   {
+    "name": "Tricolore",
+    "category": "Të tjera",
+    "price": 750,
+    "description": "Salcë domate, mocarela, proshiut krudo, rukola, parmigiano",
+    "description_sq": "Salcë domate, mocarela, proshiut krudo, rukola, parmigiano",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762de325f852e1f73b844",
+    "sort_order": 17
+   },
+   {
+    "name": "La Melanzana E Il Peperone",
+    "category": "Të tjera",
+    "price": 800,
+    "description": "Bukë altamura, krem patëllxhani, kaperi, majdanoz, speca të pjekur, krem burrata, rigon, borzilok, ullinj taggiasca, evo",
+    "description_sq": "Bukë altamura, krem patëllxhani, kaperi, majdanoz, speca të pjekur, krem burrata, rigon, borzilok, ullinj taggiasca, evo",
+    "image_url": "https://imageproxy.wolt.com/assets/68f794fb94476edc306e5be8",
+    "sort_order": 18
+   },
+   {
+    "name": "Caj Limoni",
+    "category": "Pije",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/68ee1a8917e84051d222a273",
+    "sort_order": 19
+   },
+   {
+    "name": "Ujë Natyral",
+    "category": "Të tjera",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/68f762de325f852e1f73b845",
+    "sort_order": 20
+   },
+   {
+    "name": "Peroni",
+    "category": "Të tjera",
+    "price": 300,
+    "image_url": "https://imageproxy.wolt.com/assets/68ee1aa317e84051d222a278",
+    "sort_order": 21
+   },
+   {
+    "name": "Pirovano Primitivo",
+    "category": "Të tjera",
+    "price": 2200,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8bf03fc9f2c59857d9cd1",
+    "sort_order": 22
+   },
+   {
+    "name": "Lemon Soda",
+    "category": "Pije",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/68ee1a8d17e84051d222a274",
+    "sort_order": 23
+   },
+   {
+    "name": "Bella Serata Chardonnay",
+    "category": "Të tjera",
+    "price": 1300,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8bb20fc9f2c59857d9b70",
+    "sort_order": 24
+   },
+   {
+    "name": "Polpo Alla Pignata",
+    "category": "Peshk & Detare",
+    "price": 1350,
+    "description": "Oktapod, salce domatesh, gjethe dafine, qepë e kuqe, verë e bardhë, spec djegës, hudhër, piper i zi, evo",
+    "description_sq": "Oktapod, salce domatesh, gjethe dafine, qepë e kuqe, verë e bardhë, spec djegës, hudhër, piper i zi, evo",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762dd325f852e1f73b842",
+    "sort_order": 25
+   },
+   {
+    "name": "Cialledda",
+    "category": "Të tjera",
+    "price": 800,
+    "description": "Friselle pugliesi, pomodorini, qepë e kuqe, kastraveca, borzilok, rigon, evo",
+    "description_sq": "Friselle pugliesi, pomodorini, qepë e kuqe, kastraveca, borzilok, rigon, evo",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762dd325f852e1f73b83e",
+    "sort_order": 26
+   },
+   {
+    "name": "Casa Mia",
+    "category": "Të tjera",
+    "price": 2300,
+    "description": "Produkte tipike pulieze (proshutë, djathëra dhe perime në vaj) të shoqëruara me kremra, taralli dhe bukë",
+    "description_sq": "Produkte tipike pulieze (proshutë, djathëra dhe perime në vaj) të shoqëruara me kremra, taralli dhe bukë",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762db325f852e1f73b839",
+    "sort_order": 27
+   },
+   {
+    "name": "Syrah 2023",
+    "category": "Të tjera",
+    "price": 2700,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8bfdafc9f2c59857d9d63",
+    "sort_order": 28
+   },
+   {
+    "name": "Marinara",
+    "category": "Të tjera",
+    "price": 450,
+    "description": "Salcë domate, hudhër, rigon, evo, borzilok (pa mocarela)",
+    "description_sq": "Salcë domate, hudhër, rigon, evo, borzilok (pa mocarela)",
+    "image_url": "https://imageproxy.wolt.com/assets/68f7953f94476edc306e5bfd",
+    "sort_order": 29
+   },
+   {
+    "name": "Pecorino",
+    "category": "Të tjera",
+    "price": 2000,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8bebbfc9f2c59857d9cb6",
+    "sort_order": 30
+   },
+   {
+    "name": "Incapriata",
+    "category": "Të tjera",
+    "price": 860,
+    "description": "Bathë, çikore, evo, chips bukë altamura",
+    "description_sq": "Bathë, çikore, evo, chips bukë altamura",
+    "image_url": "https://imageproxy.wolt.com/assets/68f7950594476edc306e5be9",
+    "sort_order": 31
+   },
+   {
+    "name": "Amatriciana",
+    "category": "Të tjera",
+    "price": 1050,
+    "description": "Guanciale (faqe derri), domate, pekorino l romano",
+    "description_sq": "Guanciale (faqe derri), domate, pekorino l romano",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762db325f852e1f73b83c",
+    "sort_order": 32
+   },
+   {
+    "name": "Involtino Tarantino",
+    "category": "Të tjera",
+    "price": 900,
+    "description": "Patëllxhanë, nenexhik, evo, stracciatella, mortadella, djathë pecorino, borzilok, majdanoz",
+    "description_sq": "Patëllxhanë, nenexhik, evo, stracciatella, mortadella, djathë pecorino, borzilok, majdanoz",
+    "image_url": "https://imageproxy.wolt.com/assets/68ee1a05fc392c8813ef1d03",
+    "sort_order": 33
+   },
+   {
+    "name": "Col Sandago Prosecco Rosé",
+    "category": "Pije",
+    "price": 3000,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8bd3194476edc306e9894",
+    "sort_order": 34
+   },
+   {
+    "name": "Carbonara",
+    "category": "Pasta",
+    "price": 1050,
+    "description": "Guanciale (faqe derri), vezë, pekorino romano, piper",
+    "description_sq": "Guanciale (faqe derri), vezë, pekorino romano, piper",
+    "image_url": "https://imageproxy.wolt.com/assets/690899e32b664a8501ef81d6",
+    "sort_order": 35
+   },
+   {
+    "name": "La Regina",
+    "category": "Të tjera",
+    "price": 950,
+    "description": "Mocarela buffalo, salçiçe e freskët, karcof, kërpudha, parmixhano i grirë (pa salcë)",
+    "description_sq": "Mocarela buffalo, salçiçe e freskët, karcof, kërpudha, parmixhano i grirë (pa salcë)",
+    "image_url": "https://imageproxy.wolt.com/assets/68f7957c325f852e1f73d079",
+    "sort_order": 36
+   },
+   {
+    "name": "Risotto Di Foggia",
+    "category": "Pasta",
+    "price": 1000,
+    "description": "Karnaroli, burrata, selino, karrotë, qepë, majorana, gjalpë, parmixhano (me krem), salcë domate, pomodorini konfit",
+    "description_sq": "Karnaroli, burrata, selino, karrotë, qepë, majorana, gjalpë, parmixhano (me krem), salcë domate, pomodorini konfit",
+    "image_url": "https://imageproxy.wolt.com/assets/68ee1a3417e84051d222a24a",
+    "sort_order": 37
+   },
+   {
+    "name": "Diavola 🌶️",
+    "category": "Të tjera",
+    "price": 700,
+    "description": "Salcë domate, mocarela, salçiçe pikante kalabreze e tharë",
+    "description_sq": "Salcë domate, mocarela, salçiçe pikante kalabreze e tharë",
+    "image_url": "https://imageproxy.wolt.com/assets/68f79571325f852e1f73d05c",
+    "sort_order": 38
+   },
+   {
+    "name": "Vinum Masters  (Greco di tufo)",
+    "category": "Të tjera",
+    "price": 4600,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8c046325f852e1f7414ca",
+    "sort_order": 39
+   },
+   {
+    "name": "Margherita",
+    "category": "Të tjera",
+    "price": 580,
+    "description": "Salcë domate, mocarela, borzilok, evo",
+    "description_sq": "Salcë domate, mocarela, borzilok, evo",
+    "image_url": "https://imageproxy.wolt.com/assets/68f7954894476edc306e5bff",
+    "sort_order": 40
+   },
+   {
+    "name": "Sud",
+    "category": "Të tjera",
+    "price": 800,
+    "description": "Salcë domate, mocarela, ton, qepë, karcof kaperi, sardele, ullinj të zinj",
+    "description_sq": "Salcë domate, mocarela, ton, qepë, karcof kaperi, sardele, ullinj të zinj",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762df325f852e1f73b848",
+    "sort_order": 41
+   },
+   {
+    "name": "Valpolicella Le Pezze",
+    "category": "Të tjera",
+    "price": 2000,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8c018fc9f2c59857d9d74",
+    "sort_order": 42
+   },
+   {
+    "name": "Bombette Pugliesi",
+    "category": "Mish & Grill",
+    "price": 1150,
+    "description": "Mish derri i mbushur me djathë kackavall, pancetë",
+    "description_sq": "Mish derri i mbushur me djathë kackavall, pancetë",
+    "image_url": "https://imageproxy.wolt.com/assets/68f7952f94476edc306e5bf2",
+    "sort_order": 43
+   },
+   {
+    "name": "Bufalina",
+    "category": "Të tjera",
+    "price": 750,
+    "description": "Salcë domate, mocarela di bufala, borzilok",
+    "description_sq": "Salcë domate, mocarela di bufala, borzilok",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762e0325f852e1f73b84f",
+    "sort_order": 44
+   },
+   {
+    "name": "Birrë Italiane Artizanale",
+    "category": "Pije",
+    "price": 460,
+    "image_url": "https://imageproxy.wolt.com/assets/68f762df325f852e1f73b84b",
+    "sort_order": 45
+   },
+   {
+    "name": "Pugliese",
+    "category": "Të tjera",
+    "price": 640,
+    "description": "Salcë domate, mozarela, ton, qepë, ullinj të zi",
+    "description_sq": "Salcë domate, mozarela, ton, qepë, ullinj të zi",
+    "image_url": "https://imageproxy.wolt.com/assets/68f79556325f852e1f73d027",
+    "sort_order": 46
+   },
+   {
+    "name": "Quattro Formaggi",
+    "category": "Të tjera",
+    "price": 700,
+    "description": "Mocarela, gorgonzola, parmigiano, scamorza (pa domate)",
+    "description_sq": "Mocarela, gorgonzola, parmigiano, scamorza (pa domate)",
+    "image_url": "https://imageproxy.wolt.com/assets/68f79567325f852e1f73d05b",
+    "sort_order": 47
+   },
+   {
+    "name": "Chianti Borgo Clasico",
+    "category": "Të tjera",
+    "price": 3500,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8bc6794476edc306e984b",
+    "sort_order": 48
+   },
+   {
+    "name": "Caprese",
+    "category": "Të tjera",
+    "price": 800,
+    "description": "Pomodorini, mocarela, rigon",
+    "description_sq": "Pomodorini, mocarela, rigon",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762db325f852e1f73b83a",
+    "sort_order": 49
+   },
+   {
+    "name": "Gocce",
+    "category": "Të tjera",
+    "price": 2000,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8be1cfc9f2c59857d9c7d",
+    "sort_order": 50
+   },
+   {
+    "name": "Malvasia Bianca Salento",
+    "category": "Të tjera",
+    "price": 2000,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8be49325f852e1f741409",
+    "sort_order": 51
+   },
+   {
+    "name": "Nastro Azzurro",
+    "category": "Të tjera",
+    "price": 400,
+    "image_url": "https://imageproxy.wolt.com/assets/68f762e0325f852e1f73b851",
+    "sort_order": 52
+   },
+   {
+    "name": "Disney",
+    "category": "Të tjera",
+    "price": 630,
+    "description": "Salcë domate, mocarela, salçiçe, patate të skuqura",
+    "description_sq": "Salcë domate, mocarela, salçiçe, patate të skuqura",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762e0325f852e1f73b84d",
+    "sort_order": 53
+   },
+   {
+    "name": "Il Cavatello E Il Gambero",
+    "category": "Të tjera",
+    "price": 1050,
+    "description": "Kavatelli, pomodorini, qepë e kuqe, krem qiqrash, evo, spec djegës, tartar karkalecash me lime",
+    "description_sq": "Kavatelli, pomodorini, qepë e kuqe, krem qiqrash, evo, spec djegës, tartar karkalecash me lime",
+    "image_url": "https://imageproxy.wolt.com/assets/68ee19e5fc392c8813ef1cf6",
+    "sort_order": 54
+   },
+   {
+    "name": "Napoli",
+    "category": "Të tjera",
+    "price": 750,
+    "description": "Salcë domate, mocarela, sardele, kaperi, rigon",
+    "description_sq": "Salcë domate, mocarela, sardele, kaperi, rigon",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762df325f852e1f73b84a",
+    "sort_order": 55
+   },
+   {
+    "name": "La Foggiana",
+    "category": "Të tjera",
+    "price": 800,
+    "description": "Bukë altamura, provola e pjekur, pomodorini, majdanoz, sardele cantabrico",
+    "description_sq": "Bukë altamura, provola e pjekur, pomodorini, majdanoz, sardele cantabrico",
+    "image_url": "https://imageproxy.wolt.com/assets/68ee19d8fc392c8813ef1cec",
+    "sort_order": 56
+   },
+   {
+    "name": "Sprite",
+    "category": "Pije",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/68ee1a7617e84051d222a26c",
+    "sort_order": 57
+   },
+   {
+    "name": "La Tagliata",
+    "category": "Mish & Grill",
+    "price": 1500,
+    "description": "Mish viçi, rukola e freskët, parmixhano, patate",
+    "description_sq": "Mish viçi, rukola e freskët, parmixhano, patate",
+    "image_url": "https://imageproxy.wolt.com/assets/68ee1a1b17e84051d222a23e",
+    "sort_order": 58
+   },
+   {
+    "name": "Bello Cabernet Sauvignon",
+    "category": "Të tjera",
+    "price": 3000,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8bb4a94476edc306e97d9",
+    "sort_order": 59
+   },
+   {
+    "name": "Kurtatsch Sauvignon Alto Adige",
+    "category": "Të tjera",
+    "price": 3000,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8c0b0325f852e1f7414e8",
+    "sort_order": 60
+   },
+   {
+    "name": "Bello Carmenere",
+    "category": "Të tjera",
+    "price": 3000,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8bbe694476edc306e9815",
+    "sort_order": 61
+   },
+   {
+    "name": "Quattro Stagioni",
+    "category": "Të tjera",
+    "price": 700,
+    "description": "Salcë domate, mocarela, proshutë cotto, kërpudha, karcof, ullinj të zinj",
+    "description_sq": "Salcë domate, mocarela, proshutë cotto, kërpudha, karcof, ullinj të zinj",
+    "image_url": "https://imageproxy.wolt.com/assets/68f79560325f852e1f73d046",
+    "sort_order": 62
+   },
+   {
+    "name": "Cielo e Terra Pinot Grigio 2024",
+    "category": "Të tjera",
+    "price": 1800,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8bcfcfc9f2c59857d9bf6",
+    "sort_order": 63
+   },
+   {
+    "name": "La Ionica",
+    "category": "Pije",
+    "price": 950,
+    "description": "Karkaleca, kallamar, midhje, vongole, majdanoz, hudhër, evo, pomodorini, lëng limoni",
+    "description_sq": "Karkaleca, kallamar, midhje, vongole, majdanoz, hudhër, evo, pomodorini, lëng limoni",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762dd325f852e1f73b83f",
+    "sort_order": 64
+   },
+   {
+    "name": "Il Ragu'Barese",
+    "category": "Mish & Grill",
+    "price": 1150,
+    "description": "Orecchiette, mish viçi, karrota, selino, qepë, verë e kuqe, evo",
+    "description_sq": "Orecchiette, mish viçi, karrota, selino, qepë, verë e kuqe, evo",
+    "image_url": "https://imageproxy.wolt.com/assets/68ee19f1fc392c8813ef1cfa",
+    "sort_order": 65
+   },
+   {
+    "name": "Crodino",
+    "category": "Të tjera",
+    "price": 140,
+    "image_url": "https://imageproxy.wolt.com/assets/68f762e0325f852e1f73b850",
+    "sort_order": 66
+   },
+   {
+    "name": "Corvo Terre Siciliane",
+    "category": "Të tjera",
+    "price": 2000,
+    "image_url": "https://imageproxy.wolt.com/assets/68f8bd5c325f852e1f7413a3",
+    "sort_order": 67
+   },
+   {
+    "name": "Il Gran Fritto",
+    "category": "Peshk & Detare",
+    "price": 1350,
+    "description": "Perime të prera julienne, kallamar, karkaleca, fruta deti, me farinaturë të dyfishtë me të aromatizuar",
+    "description_sq": "Perime të prera julienne, kallamar, karkaleca, fruta deti, me farinaturë të dyfishtë me të aromatizuar",
+    "image_url": "https://imageproxy.wolt.com/assets/68f7952594476edc306e5bf0",
+    "sort_order": 68
+   },
+   {
+    "name": "Coca Cola",
+    "category": "Pije",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/68ee1a6f17e84051d222a269",
+    "sort_order": 69
+   },
+   {
+    "name": "Fanta Exotic",
+    "category": "Pije",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/68ee1a7c17e84051d222a26f",
+    "sort_order": 70
+   },
+   {
+    "name": "Amatriciana",
+    "category": "Të tjera",
+    "price": 850,
+    "description": "Guanciale (faqe derri), domate, pekorino l romano",
+    "description_sq": "Guanciale (faqe derri), domate, pekorino l romano",
+    "image_url": "https://imageproxy.wolt.com/assets/68f794f094476edc306e5be7",
+    "sort_order": 71
+   },
+   {
+    "name": "Salentina",
+    "category": "Të tjera",
+    "price": 1050,
+    "description": "Patate, pomodorini, qepë e kuqe, selino, kastravecë, ullinj taggiasca, crostini buke të sthekura, evo, borzilok, kaperi, speca",
+    "description_sq": "Patate, pomodorini, qepë e kuqe, selino, kastravecë, ullinj taggiasca, crostini buke të sthekura, evo, borzilok, kaperi, speca",
+    "image_url": "https://imageproxy.wolt.com/assets/690899e32b664a8501ef81d6",
+    "sort_order": 72
+   },
+   {
+    "name": "Carbonara",
+    "category": "Pasta",
+    "price": 1500,
+    "description": "Guanciale (faqe derri), vezë, pekorino romano, piper",
+    "description_sq": "Guanciale (faqe derri), vezë, pekorino romano, piper",
+    "image_url": "https://imageproxy.wolt.com/assets/68ee1a1b17e84051d222a23e",
+    "sort_order": 73
+   },
+   {
+    "name": "La Tagliata",
+    "category": "Mish & Grill",
+    "price": 800,
+    "description": "Mish viçi, rukola e freskët, parmixhano, patate",
+    "description_sq": "Mish viçi, rukola e freskët, parmixhano, patate",
+    "image_url": "https://imageproxy.wolt.com/assets/68ee19d8fc392c8813ef1cec",
+    "sort_order": 74
+   },
+   {
+    "name": "La Foggiana",
+    "category": "Të tjera",
+    "price": 2300,
+    "description": "Bukë altamura, provola e pjekur, pomodorini, majdanoz, sardele cantabrico",
+    "description_sq": "Bukë altamura, provola e pjekur, pomodorini, majdanoz, sardele cantabrico",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762db325f852e1f73b839",
+    "sort_order": 75
+   },
+   {
+    "name": "Casa Mia",
+    "category": "Të tjera",
+    "price": 860,
+    "description": "Produkte tipike pulieze (proshutë, djathëra dhe perime në vaj) të shoqëruara me kremra, taralli dhe bukë",
+    "description_sq": "Produkte tipike pulieze (proshutë, djathëra dhe perime në vaj) të shoqëruara me kremra, taralli dhe bukë",
+    "image_url": "https://imageproxy.wolt.com/assets/68f7951894476edc306e5bee",
+    "sort_order": 76
+   },
+   {
+    "name": "La Parmigiana",
+    "category": "Të tjera",
+    "price": 1350,
+    "description": "Patëllxhan, salce domatesh, borzilok, parmixhano, mocarela",
+    "description_sq": "Patëllxhan, salce domatesh, borzilok, parmixhano, mocarela",
+    "image_url": "https://imageproxy.wolt.com/assets/68f7952594476edc306e5bf0",
+    "sort_order": 77
+   },
+   {
+    "name": "Il Gran Fritto",
+    "category": "Peshk & Detare",
+    "price": 1150,
+    "description": "Perime të prera julienne, kallamar, karkaleca, fruta deti, me farinaturë të dyfishtë me të aromatizuar",
+    "description_sq": "Perime të prera julienne, kallamar, karkaleca, fruta deti, me farinaturë të dyfishtë me të aromatizuar",
+    "image_url": "https://imageproxy.wolt.com/assets/68ee19f1fc392c8813ef1cfa",
+    "sort_order": 78
+   },
+   {
+    "name": "Il Ragu'Barese",
+    "category": "Mish & Grill",
+    "price": 950,
+    "description": "Orecchiette, mish viçi, karrota, selino, qepë, verë e kuqe, evo",
+    "description_sq": "Orecchiette, mish viçi, karrota, selino, qepë, verë e kuqe, evo",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762dd325f852e1f73b83f",
+    "sort_order": 79
+   },
+   {
+    "name": "La Ionica",
+    "category": "Pije",
+    "price": 1050,
+    "description": "Karkaleca, kallamar, midhje, vongole, majdanoz, hudhër, evo, pomodorini, lëng limoni",
+    "description_sq": "Karkaleca, kallamar, midhje, vongole, majdanoz, hudhër, evo, pomodorini, lëng limoni",
+    "image_url": "https://imageproxy.wolt.com/assets/68ee19e5fc392c8813ef1cf6",
+    "sort_order": 80
+   },
+   {
+    "name": "Il Cavatello E Il Gambero",
+    "category": "Të tjera",
+    "price": 800,
+    "description": "Kavatelli, pomodorini, qepë e kuqe, krem qiqrash, evo, spec djegës, tartar karkalecash me lime",
+    "description_sq": "Kavatelli, pomodorini, qepë e kuqe, krem qiqrash, evo, spec djegës, tartar karkalecash me lime",
+    "image_url": "https://imageproxy.wolt.com/assets/68f762db325f852e1f73b83a",
+    "sort_order": 81
+   }
+  ]
+ }
+]

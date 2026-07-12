@@ -1,0 +1,129 @@
+{
+  "tool": "plane-guard",
+  "ts": "2026-07-03T10:28:34.773Z",
+  "verdict": "PASS",
+  "staging": false,
+  "hardFails": 0,
+  "softFails": 3,
+  "results": [
+    {
+      "pattern": "P4 advisory→authority",
+      "name": "wired: scripts/guardrail-gate-armament.mjs",
+      "level": "hard",
+      "ok": true,
+      "detail": "present + wired in verify:all"
+    },
+    {
+      "pattern": "P5 fix-the-class (ratchet)",
+      "name": "wired: scripts/guardrail-ledger-integrity.mjs",
+      "level": "hard",
+      "ok": true,
+      "detail": "present + wired in verify:all"
+    },
+    {
+      "pattern": "P6 red-line topology",
+      "name": "wired: .claude/hooks/red-line-doubt-gate.sh",
+      "level": "hard",
+      "ok": true,
+      "detail": "present + wired in verify:all"
+    },
+    {
+      "pattern": "P7 council-before-code",
+      "name": "wired: .claude/hooks/serious-gate.sh",
+      "level": "hard",
+      "ok": true,
+      "detail": "present + wired in verify:all"
+    },
+    {
+      "pattern": "P9 subtractive",
+      "name": "wired: scripts/guardrail-license.mjs",
+      "level": "hard",
+      "ok": true,
+      "detail": "present + wired in verify:all"
+    },
+    {
+      "pattern": "P10 data-sovereignty",
+      "name": "wired: scripts/compliance-gate.ts",
+      "level": "hard",
+      "ok": true,
+      "detail": "present + wired in package.json (CI privacy-gate)"
+    },
+    {
+      "pattern": "P3 dark-first",
+      "name": "launch flags default OFF",
+      "level": "hard",
+      "ok": true,
+      "detail": "all *_ENABLED default false (allow-on: FUNNEL_INGEST_ENABLED)"
+    },
+    {
+      "pattern": "P1/P2 verify-artifact",
+      "name": "no commit/deploy piped to tail|head|grep",
+      "level": "hard",
+      "ok": true,
+      "detail": "no masked-exit-code pipes in tracked scripts"
+    },
+    {
+      "pattern": "P8 prod↔staging",
+      "name": "migration numbering monotonic",
+      "level": "hard",
+      "ok": true,
+      "detail": "157 migrations, monotonic"
+    },
+    {
+      "pattern": "P11 feedback-contract",
+      "name": "autonomy envelope documented",
+      "level": "hard",
+      "ok": true,
+      "detail": "docs/governance/plane-maintainer-agent.md present"
+    },
+    {
+      "pattern": "telemetry-liveness",
+      "name": "newest telemetry event < 3d",
+      "level": "soft",
+      "ok": true,
+      "detail": "newest event 0.03d old via loops/runs/plane-events-2026-07.jsonl"
+    },
+    {
+      "pattern": "prediction-resolution-liveness",
+      "name": "predictions resolved (backlog ≤ 0)",
+      "level": "soft",
+      "ok": false,
+      "detail": "1/1 prediction(s) unresolved (oldest 0.7d) — the resolve half never ran (backlog>0; soft by design)"
+    },
+    {
+      "pattern": "inbox-drain-liveness",
+      "name": "INBOX drained (≤ 3 files)",
+      "level": "soft",
+      "ok": false,
+      "detail": "8 reflection file(s) un-curated (oldest 1.2d) — librarian backlog (max 3; soft by design)"
+    },
+    {
+      "pattern": "scout-liveness",
+      "name": "scout cursors fresh (< 7d)",
+      "level": "soft",
+      "ok": false,
+      "detail": "scouts silent: scripts/scout-feeds.mjs never ran (no loops/runs/scout-cursor.json); scripts/asset-surface-scan.mjs never ran (no loops/runs/asset-surface-baseline.json) (soft by design — silence made VISIBLE)"
+    },
+    {
+      "pattern": "health-pass-freshness",
+      "name": "newest agent-health < 7d",
+      "level": "soft",
+      "ok": true,
+      "detail": "newest health pass 1.13d old via docs/governance/agent-health-2026-07-02.md"
+    },
+    {
+      "pattern": "advisory-forever",
+      "name": "prediction ledger / plane-events never wired as gate input",
+      "level": "hard",
+      "ok": true,
+      "detail": "enumerated surface clean (58 files under 7 versioned roots incl. .github/workflows + tools/loop-harness per R3-5) — friction + review-forcing, not impossibility (R2-M2)"
+    },
+    {
+      "pattern": "ingestion-authority",
+      "name": "inbox output never piped into exec/auto-apply",
+      "level": "hard",
+      "ok": true,
+      "detail": "no inbox→exec/auto-apply coupling on the enumerated surface (58 files) — friction + review-forcing, not impossibility"
+    }
+  ]
+}

@@ -1,0 +1,565 @@
+[
+ {
+  "slug": "liriada",
+  "name": "Liriada",
+  "cuisine": "traditional",
+  "primary": "#8a5a2b",
+  "bg": "#f6efe4",
+  "menu": [
+   {
+    "name": "Tavë Kosi",
+    "category": "Të tjera",
+    "price": 500,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86ecde4d917cfc1f0721",
+    "sort_order": 0
+   },
+   {
+    "name": "Birra Korça",
+    "category": "Pije",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8704de4d917cfc1f074c",
+    "sort_order": 1
+   },
+   {
+    "name": "Qofte Shtëpie",
+    "category": "Mish & Grill",
+    "price": 160,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8716de4d917cfc1f0763",
+    "sort_order": 2
+   },
+   {
+    "name": "Presh",
+    "category": "Të tjera",
+    "price": 250,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86efde4d917cfc1f0724",
+    "sort_order": 3
+   },
+   {
+    "name": "Patate Furre",
+    "category": "Të tjera",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86f2de4d917cfc1f072c",
+    "sort_order": 4
+   },
+   {
+    "name": "Djathë i Bardhë",
+    "category": "Të tjera",
+    "price": 250,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86f8de4d917cfc1f0735",
+    "sort_order": 5
+   },
+   {
+    "name": "Fileto Pule me Pilaf",
+    "category": "Mish & Grill",
+    "price": 450,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8713de4d917cfc1f0760",
+    "sort_order": 6
+   },
+   {
+    "name": "Turli",
+    "category": "Të tjera",
+    "price": 300,
+    "sort_order": 7
+   },
+   {
+    "name": "Pastiçe",
+    "category": "Të tjera",
+    "price": 300,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8701de4d917cfc1f0744",
+    "sort_order": 8
+   },
+   {
+    "name": "Turshi",
+    "category": "Të tjera",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86fbde4d917cfc1f073b",
+    "sort_order": 9
+   },
+   {
+    "name": "Coca cola",
+    "category": "Pije",
+    "price": 170,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8704de4d917cfc1f074a",
+    "sort_order": 10
+   },
+   {
+    "name": "Fileto Pule & Pilaf & Sallatë Mix",
+    "category": "Antipasti & Sallata",
+    "price": 450,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef870ade4d917cfc1f0753",
+    "sort_order": 11
+   },
+   {
+    "name": "Ivi",
+    "category": "Të tjera",
+    "price": 170,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8704de4d917cfc1f074b",
+    "sort_order": 12
+   },
+   {
+    "name": "Zarzavate me Mish",
+    "category": "Mish & Grill",
+    "price": 500,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86fede4d917cfc1f0740",
+    "sort_order": 13
+   },
+   {
+    "name": "Supë me Perime & Pilaf & Fileto Pule",
+    "category": "Mish & Grill",
+    "price": 500,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef870fde4d917cfc1f075b",
+    "sort_order": 14
+   },
+   {
+    "name": "Birra Peja",
+    "category": "Pije",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8704de4d917cfc1f0749",
+    "sort_order": 15
+   },
+   {
+    "name": "Zarzavate Mix",
+    "category": "Të tjera",
+    "price": 300,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86fede4d917cfc1f0741",
+    "sort_order": 16
+   },
+   {
+    "name": "Gjellë me Patate",
+    "category": "Të tjera",
+    "price": 250,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86f5de4d917cfc1f072f",
+    "sort_order": 17
+   },
+   {
+    "name": "Kima me Vezë",
+    "category": "Të tjera",
+    "price": 360,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8716de4d917cfc1f0762",
+    "sort_order": 18
+   },
+   {
+    "name": "Lemon Soda",
+    "category": "Pije",
+    "price": 170,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8707de4d917cfc1f0752",
+    "sort_order": 19
+   },
+   {
+    "name": "Turli me Mish",
+    "category": "Mish & Grill",
+    "price": 500,
+    "sort_order": 20
+   },
+   {
+    "name": "Pilaf",
+    "category": "Të tjera",
+    "price": 150,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86ecde4d917cfc1f0722",
+    "sort_order": 21
+   },
+   {
+    "name": "Fileto Pule",
+    "category": "Mish & Grill",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86efde4d917cfc1f0728",
+    "sort_order": 22
+   },
+   {
+    "name": "Salcë Kosi",
+    "category": "Të tjera",
+    "price": 250,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86fbde4d917cfc1f073d",
+    "sort_order": 23
+   },
+   {
+    "name": "Qofte",
+    "category": "Mish & Grill",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8701de4d917cfc1f0746",
+    "sort_order": 24
+   },
+   {
+    "name": "Speca të Mbushur",
+    "category": "Të tjera",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86fede4d917cfc1f0742",
+    "sort_order": 25
+   },
+   {
+    "name": "Supë Pule & Pilaf & Fileto Pule",
+    "category": "Mish & Grill",
+    "price": 450,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef870fde4d917cfc1f0758",
+    "sort_order": 26
+   },
+   {
+    "name": "Presh me Mish",
+    "category": "Mish & Grill",
+    "price": 450,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86f8de4d917cfc1f0738",
+    "sort_order": 27
+   },
+   {
+    "name": "Ullinj",
+    "category": "Të tjera",
+    "price": 150,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86fbde4d917cfc1f073e",
+    "sort_order": 28
+   },
+   {
+    "name": "Paçe",
+    "category": "Të tjera",
+    "price": 300,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86ecde4d917cfc1f0723",
+    "sort_order": 29
+   },
+   {
+    "name": "Birra Tirana",
+    "category": "Pije",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8701de4d917cfc1f0748",
+    "sort_order": 30
+   },
+   {
+    "name": "Patate Furre me Gjysmë Pule",
+    "category": "Mish & Grill",
+    "price": 550,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef870fde4d917cfc1f075a",
+    "sort_order": 31
+   },
+   {
+    "name": "Lakër me Mish",
+    "category": "Mish & Grill",
+    "price": 450,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86f2de4d917cfc1f072d",
+    "sort_order": 32
+   },
+   {
+    "name": "Gjellë me Patate me Mish",
+    "category": "Mish & Grill",
+    "price": 450,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86f5de4d917cfc1f0732",
+    "sort_order": 33
+   },
+   {
+    "name": "Fasule me Mish",
+    "category": "Mish & Grill",
+    "price": 450,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86f2de4d917cfc1f072e",
+    "sort_order": 34
+   },
+   {
+    "name": "Gjysmë Pule me Pilaf",
+    "category": "Mish & Grill",
+    "price": 500,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8713de4d917cfc1f075f",
+    "sort_order": 35
+   },
+   {
+    "name": "Makarona",
+    "category": "Të tjera",
+    "price": 250,
+    "sort_order": 36
+   },
+   {
+    "name": "Supë Pule & Patate Furre & Fileto Pule",
+    "category": "Mish & Grill",
+    "price": 450,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8713de4d917cfc1f0761",
+    "sort_order": 37
+   },
+   {
+    "name": "Fileto Pule me Patate Furre",
+    "category": "Mish & Grill",
+    "price": 500,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef870fde4d917cfc1f075c",
+    "sort_order": 38
+   },
+   {
+    "name": "Djathë Kaçkavall",
+    "category": "Të tjera",
+    "price": 300,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86f8de4d917cfc1f0737",
+    "sort_order": 39
+   },
+   {
+    "name": "Lakër",
+    "category": "Të tjera",
+    "price": 250,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86f2de4d917cfc1f072b",
+    "sort_order": 40
+   },
+   {
+    "name": "Supe me Perime & Patate Furre & Fileto Pule",
+    "category": "Antipasti & Sallata",
+    "price": 500,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef870fde4d917cfc1f0759",
+    "sort_order": 41
+   },
+   {
+    "name": "Djathë i Skuqur",
+    "category": "Të tjera",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86f8de4d917cfc1f0736",
+    "sort_order": 42
+   },
+   {
+    "name": "Orange Soda",
+    "category": "Pije",
+    "price": 170,
+    "image_url": "https://imageproxy.wolt.com/assets/67efae28de4d917cfc1f133c",
+    "sort_order": 43
+   },
+   {
+    "name": "Bishtaja",
+    "category": "Të tjera",
+    "price": 250,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86f8de4d917cfc1f0739",
+    "sort_order": 44
+   },
+   {
+    "name": "Patate Furre & Fileto Pule & Sallate Mix",
+    "category": "Mish & Grill",
+    "price": 450,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef870ade4d917cfc1f0754",
+    "sort_order": 45
+   },
+   {
+    "name": "Bizele me Mish",
+    "category": "Mish & Grill",
+    "price": 450,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86f5de4d917cfc1f0731",
+    "sort_order": 46
+   },
+   {
+    "name": "Bravo",
+    "category": "Të tjera",
+    "price": 180,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8707de4d917cfc1f0751",
+    "sort_order": 47
+   },
+   {
+    "name": "Bishtaja me Mish",
+    "category": "Mish & Grill",
+    "price": 450,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86efde4d917cfc1f0727",
+    "sort_order": 48
+   },
+   {
+    "name": "Perime të Ziera",
+    "category": "Të tjera",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8713de4d917cfc1f075d",
+    "sort_order": 49
+   },
+   {
+    "name": "Tasqebap",
+    "category": "Të tjera",
+    "price": 400,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86ecde4d917cfc1f0720",
+    "sort_order": 50
+   },
+   {
+    "name": "Sallatë Jeshile",
+    "category": "Antipasti & Sallata",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86fbde4d917cfc1f073c",
+    "sort_order": 51
+   },
+   {
+    "name": "Bamje me Mish",
+    "category": "Mish & Grill",
+    "price": 500,
+    "sort_order": 52
+   },
+   {
+    "name": "B52",
+    "category": "Të tjera",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef870bde4d917cfc1f0755",
+    "sort_order": 53
+   },
+   {
+    "name": "Fasule",
+    "category": "Të tjera",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86ecde4d917cfc1f071f",
+    "sort_order": 54
+   },
+   {
+    "name": "Birra Peroni",
+    "category": "Pije",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8701de4d917cfc1f0747",
+    "sort_order": 55
+   },
+   {
+    "name": "Spinaq",
+    "category": "Të tjera",
+    "price": 300,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86efde4d917cfc1f0725",
+    "sort_order": 56
+   },
+   {
+    "name": "Fanta",
+    "category": "Pije",
+    "price": 170,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8704de4d917cfc1f074d",
+    "sort_order": 57
+   },
+   {
+    "name": "Pilaf & Fileto Pule & Perime të Ziera",
+    "category": "Mish & Grill",
+    "price": 450,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8713de4d917cfc1f075e",
+    "sort_order": 58
+   },
+   {
+    "name": "Patate Furre + Fileto Pule + Perime të Ziera",
+    "category": "Mish & Grill",
+    "price": 450,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef870bde4d917cfc1f0756",
+    "sort_order": 59
+   },
+   {
+    "name": "Fërgesë",
+    "category": "Të tjera",
+    "price": 250,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86f2de4d917cfc1f072a",
+    "sort_order": 60
+   },
+   {
+    "name": "Tarator",
+    "category": "Të tjera",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86fede4d917cfc1f073f",
+    "sort_order": 61
+   },
+   {
+    "name": "Bamje",
+    "category": "Të tjera",
+    "price": 300,
+    "sort_order": 62
+   },
+   {
+    "name": "Pulë Fshati me Qullë",
+    "category": "Të tjera",
+    "price": 400,
+    "sort_order": 63
+   },
+   {
+    "name": "Pulë Furre",
+    "category": "Të tjera",
+    "price": 750,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86fede4d917cfc1f0743",
+    "sort_order": 64
+   },
+   {
+    "name": "Bizele",
+    "category": "Të tjera",
+    "price": 250,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86f5de4d917cfc1f0730",
+    "sort_order": 65
+   },
+   {
+    "name": "Sallatë Mikse",
+    "category": "Antipasti & Sallata",
+    "price": 300,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86fbde4d917cfc1f073a",
+    "sort_order": 66
+   },
+   {
+    "name": "Supë",
+    "category": "Të tjera",
+    "price": 170,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86f5de4d917cfc1f0733",
+    "sort_order": 67
+   },
+   {
+    "name": "Kos",
+    "category": "Të tjera",
+    "price": 150,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8701de4d917cfc1f0745",
+    "sort_order": 68
+   },
+   {
+    "name": "Ice Tea",
+    "category": "Të tjera",
+    "price": 170,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef870bde4d917cfc1f0757",
+    "sort_order": 69
+   },
+   {
+    "name": "Spinaq me Mish",
+    "category": "Mish & Grill",
+    "price": 500,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86efde4d917cfc1f0726",
+    "sort_order": 70
+   },
+   {
+    "name": "Fileto Pule & Pilaf & Sallatë Mix",
+    "category": "Antipasti & Sallata",
+    "price": 150,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86ecde4d917cfc1f0722",
+    "sort_order": 71
+   },
+   {
+    "name": "Pilaf",
+    "category": "Të tjera",
+    "price": 450,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef870fde4d917cfc1f0758",
+    "sort_order": 72
+   },
+   {
+    "name": "Pilaf & Fileto Pule & Perime të Ziera",
+    "category": "Mish & Grill",
+    "price": 160,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8716de4d917cfc1f0763",
+    "sort_order": 73
+   },
+   {
+    "name": "Qofte Shtëpie",
+    "category": "Mish & Grill",
+    "price": 500,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8713de4d917cfc1f075f",
+    "sort_order": 74
+   },
+   {
+    "name": "Gjysmë Pule me Pilaf",
+    "category": "Mish & Grill",
+    "price": 450,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef870ade4d917cfc1f0754",
+    "sort_order": 75
+   },
+   {
+    "name": "Patate Furre & Fileto Pule & Sallate Mix",
+    "category": "Mish & Grill",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86ecde4d917cfc1f071f",
+    "sort_order": 76
+   },
+   {
+    "name": "Fasule",
+    "category": "Të tjera",
+    "price": 300,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef86fbde4d917cfc1f073a",
+    "sort_order": 77
+   },
+   {
+    "name": "Sallatë Mikse",
+    "category": "Antipasti & Sallata",
+    "price": 150,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8701de4d917cfc1f0745",
+    "sort_order": 78
+   },
+   {
+    "name": "Kos",
+    "category": "Të tjera",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67ef8701de4d917cfc1f0746",
+    "sort_order": 79
+   }
+  ]
+ }
+]

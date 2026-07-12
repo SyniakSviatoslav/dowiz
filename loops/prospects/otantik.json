@@ -1,0 +1,599 @@
+[
+ {
+  "slug": "otantik",
+  "name": "Otantik",
+  "cuisine": "turkish",
+  "primary": "#b5471f",
+  "bg": "#faf4e8",
+  "menu": [
+   {
+    "name": "Picë me Sallam",
+    "category": "Të tjera",
+    "price": 675,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3aab04c92ea2cbf060116",
+    "sort_order": 0
+   },
+   {
+    "name": "Supë me Thjerrëza",
+    "category": "Të tjera",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a198e739d976cf2869",
+    "sort_order": 1
+   },
+   {
+    "name": "Ali Nazik",
+    "category": "Të tjera",
+    "price": 1225,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a998e739d976cf2883",
+    "sort_order": 2
+   },
+   {
+    "name": "Nigde Gazozu",
+    "category": "Të tjera",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3c65598e739d976cf3b58",
+    "sort_order": 3
+   },
+   {
+    "name": "Orange Soda",
+    "category": "Pije",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3c5fbde4d917cfc1f52b7",
+    "sort_order": 4
+   },
+   {
+    "name": "Bakllava me Fistik",
+    "category": "Të tjera",
+    "price": 550,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b41a4c92ea2cbf06031f",
+    "sort_order": 5
+   },
+   {
+    "name": "Xaxiq",
+    "category": "Të tjera",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a398e739d976cf2870",
+    "sort_order": 6
+   },
+   {
+    "name": "Qofte Zgare",
+    "category": "Mish & Grill",
+    "price": 975,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b3cc4c92ea2cbf06030d",
+    "sort_order": 7
+   },
+   {
+    "name": "Picë Vegjetariane",
+    "category": "Të tjera",
+    "price": 625,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3aa9c4c92ea2cbf060111",
+    "sort_order": 8
+   },
+   {
+    "name": "Burger Pule",
+    "category": "Mish & Grill",
+    "price": 750,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b4a698e739d976cf378b",
+    "sort_order": 9
+   },
+   {
+    "name": "Chicken Wrap",
+    "category": "Mish & Grill",
+    "price": 825,
+    "sort_order": 10
+   },
+   {
+    "name": "Coca Cola Zero",
+    "category": "Pije",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3c3a2de4d917cfc1f5077",
+    "sort_order": 11
+   },
+   {
+    "name": "Beef Cheeseburger",
+    "category": "Të tjera",
+    "price": 900,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b5204c92ea2cbf060350",
+    "sort_order": 12
+   },
+   {
+    "name": "Metabbal",
+    "category": "Të tjera",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a398e739d976cf286d",
+    "sort_order": 13
+   },
+   {
+    "name": "Adana Kebab",
+    "category": "Mish & Grill",
+    "price": 1275,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b2b34c92ea2cbf0602da",
+    "sort_order": 14
+   },
+   {
+    "name": "Birrë Peroni",
+    "category": "Pije",
+    "price": 300,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3c84ede4d917cfc1f537d",
+    "sort_order": 15
+   },
+   {
+    "name": "Birrë Paulaner",
+    "category": "Pije",
+    "price": 400,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3c80fde4d917cfc1f5363",
+    "sort_order": 16
+   },
+   {
+    "name": "Pide Mix",
+    "category": "Të tjera",
+    "price": 1050,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b14bde4d917cfc1f4c99",
+    "sort_order": 17
+   },
+   {
+    "name": "Sprite",
+    "category": "Pije",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3c60b98e739d976cf3b4c",
+    "sort_order": 18
+   },
+   {
+    "name": "Beyti Kebab",
+    "category": "Mish & Grill",
+    "price": 1425,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b36b4c92ea2cbf060300",
+    "sort_order": 19
+   },
+   {
+    "name": "Pide me Mish të Grirë",
+    "category": "Mish & Grill",
+    "price": 1100,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b114de4d917cfc1f4c89",
+    "sort_order": 20
+   },
+   {
+    "name": "Brinjë Qingji",
+    "category": "Të tjera",
+    "price": 2500,
+    "sort_order": 21
+   },
+   {
+    "name": "Steak Burger",
+    "category": "Mish & Grill",
+    "price": 1100,
+    "sort_order": 22
+   },
+   {
+    "name": "Babaganoush",
+    "category": "Të tjera",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a398e739d976cf286c",
+    "sort_order": 23
+   },
+   {
+    "name": "Shish Pule",
+    "category": "Mish & Grill",
+    "price": 875,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b30fde4d917cfc1f4cf6",
+    "sort_order": 24
+   },
+   {
+    "name": "Fajita me Mish ",
+    "category": "Mish & Grill",
+    "price": 1075,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a998e739d976cf2882",
+    "sort_order": 25
+   },
+   {
+    "name": "Lemon Soda",
+    "category": "Pije",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3c5bc4c92ea2cbf0608ad",
+    "sort_order": 26
+   },
+   {
+    "name": "Çiğ Köfte",
+    "category": "Të tjera",
+    "price": 550,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a498e739d976cf2875",
+    "sort_order": 27
+   },
+   {
+    "name": "Sallatë Greke",
+    "category": "Antipasti & Sallata",
+    "price": 650,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a498e739d976cf2877",
+    "sort_order": 28
+   },
+   {
+    "name": "Burger Vegan",
+    "category": "Mish & Grill",
+    "price": 750,
+    "sort_order": 29
+   },
+   {
+    "name": "Tarator me Karrota",
+    "category": "Të tjera",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a198e739d976cf2866",
+    "sort_order": 30
+   },
+   {
+    "name": "Sultjash në Furrë",
+    "category": "Të tjera",
+    "price": 400,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b46c4c92ea2cbf060338",
+    "sort_order": 31
+   },
+   {
+    "name": "Sarma",
+    "category": "Të tjera",
+    "price": 575,
+    "sort_order": 32
+   },
+   {
+    "name": "Pide me Mish të Grirë & Djathë",
+    "category": "Mish & Grill",
+    "price": 1100,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b134de4d917cfc1f4c8e",
+    "sort_order": 33
+   },
+   {
+    "name": "Patate të Skuqura",
+    "category": "Të tjera",
+    "price": 375,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a798e739d976cf2880",
+    "sort_order": 34
+   },
+   {
+    "name": "Birrë Corona",
+    "category": "Pije",
+    "price": 400,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3c7ebde4d917cfc1f535a",
+    "sort_order": 35
+   },
+   {
+    "name": "Krahë Pule",
+    "category": "Mish & Grill",
+    "price": 1025,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b32dde4d917cfc1f4cfc",
+    "sort_order": 36
+   },
+   {
+    "name": "Ice Tea me Pjeshkë",
+    "category": "Të tjera",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3c5e3de4d917cfc1f52b0",
+    "sort_order": 37
+   },
+   {
+    "name": "Sallatë me Rukola, Parmexhan & Avokado",
+    "category": "Antipasti & Sallata",
+    "price": 800,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a698e739d976cf287b",
+    "sort_order": 38
+   },
+   {
+    "name": "Fajita me Pule",
+    "category": "Mish & Grill",
+    "price": 975,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a998e739d976cf2885",
+    "sort_order": 39
+   },
+   {
+    "name": "Ezme Pikante",
+    "category": "Të tjera",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a198e739d976cf2868",
+    "sort_order": 40
+   },
+   {
+    "name": "Fanta Portokall",
+    "category": "Pije",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3c5a84c92ea2cbf0608a6",
+    "sort_order": 41
+   },
+   {
+    "name": "Kebab i Pjekur në Furrë",
+    "category": "Mish & Grill",
+    "price": 1625,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b3b74c92ea2cbf06030a",
+    "sort_order": 42
+   },
+   {
+    "name": "Pide me Djathë",
+    "category": "Të tjera",
+    "price": 625,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b090de4d917cfc1f4c75",
+    "sort_order": 43
+   },
+   {
+    "name": "Oriz",
+    "category": "Të tjera",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a698e739d976cf287c",
+    "sort_order": 44
+   },
+   {
+    "name": "Sallatë Gavurdaği",
+    "category": "Antipasti & Sallata",
+    "price": 800,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a698e739d976cf287a",
+    "sort_order": 45
+   },
+   {
+    "name": "Combo Wrap",
+    "category": "Të tjera",
+    "price": 925,
+    "sort_order": 46
+   },
+   {
+    "name": "Pide me Pulë & Djathë",
+    "category": "Të tjera",
+    "price": 875,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b0f14c92ea2cbf06029e",
+    "sort_order": 47
+   },
+   {
+    "name": "Kunefe",
+    "category": "Të tjera",
+    "price": 600,
+    "sort_order": 48
+   },
+   {
+    "name": "Ice Tea me Limon",
+    "category": "Të tjera",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3c5d1de4d917cfc1f52ab",
+    "sort_order": 49
+   },
+   {
+    "name": "Coca Cola",
+    "category": "Pije",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3c394de4d917cfc1f506c",
+    "sort_order": 50
+   },
+   {
+    "name": "Shish Viçi",
+    "category": "Mish & Grill",
+    "price": 1225,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b2f94c92ea2cbf0602f0",
+    "sort_order": 51
+   },
+   {
+    "name": "Sallatë Çobani",
+    "category": "Antipasti & Sallata",
+    "price": 550,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a498e739d976cf2873",
+    "sort_order": 52
+   },
+   {
+    "name": "Fileto Pule",
+    "category": "Mish & Grill",
+    "price": 875,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b355de4d917cfc1f4d03",
+    "sort_order": 53
+   },
+   {
+    "name": "Pica Margarita",
+    "category": "Të tjera",
+    "price": 575,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3aa5cde4d917cfc1f4a87",
+    "sort_order": 54
+   },
+   {
+    "name": "Chicken Cheeseburger",
+    "category": "Mish & Grill",
+    "price": 800,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b54698e739d976cf37af",
+    "sort_order": 55
+   },
+   {
+    "name": "Supa e pule",
+    "category": "Mish & Grill",
+    "price": 400,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a198e739d976cf2865",
+    "sort_order": 56
+   },
+   {
+    "name": "Bavaria Non alcoholic beer 0.33",
+    "category": "Pije",
+    "price": 300,
+    "image_url": "https://imageproxy.wolt.com/assets/6a01d28153ceb61ab866ff43",
+    "sort_order": 57
+   },
+   {
+    "name": "Birrë Heineken",
+    "category": "Pije",
+    "price": 300,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3c835de4d917cfc1f5377",
+    "sort_order": 58
+   },
+   {
+    "name": "Beef Wrap",
+    "category": "Të tjera",
+    "price": 975,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a998e739d976cf2884",
+    "sort_order": 59
+   },
+   {
+    "name": "Birre Korca Bionde Cl 33",
+    "category": "Të tjera",
+    "price": 300,
+    "image_url": "https://imageproxy.wolt.com/assets/68ed126817e84051d2227eb1",
+    "sort_order": 60
+   },
+   {
+    "name": "Ujë Natyral",
+    "category": "Të tjera",
+    "price": 100,
+    "image_url": "https://imageproxy.wolt.com/assets/6a00c57f39752f36adca2284",
+    "sort_order": 61
+   },
+   {
+    "name": "Doganay",
+    "category": "Të tjera",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3c63f98e739d976cf3b52",
+    "sort_order": 62
+   },
+   {
+    "name": "Bey Pazari",
+    "category": "Të tjera",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3c63098e739d976cf3b4f",
+    "sort_order": 63
+   },
+   {
+    "name": "Speca të Pjekur me Domate",
+    "category": "Të tjera",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a398e739d976cf286f",
+    "sort_order": 64
+   },
+   {
+    "name": "Humus",
+    "category": "Të tjera",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a198e739d976cf2867",
+    "sort_order": 65
+   },
+   {
+    "name": "Ujë me gaz",
+    "category": "Të tjera",
+    "price": 150,
+    "image_url": "https://imageproxy.wolt.com/assets/6a01d3337f4d4622e27df42c",
+    "sort_order": 66
+   },
+   {
+    "name": "Lahmaxhun me Djathë",
+    "category": "Të tjera",
+    "price": 525,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382aa98e739d976cf2888",
+    "sort_order": 67
+   },
+   {
+    "name": "Lahmaxhun",
+    "category": "Të tjera",
+    "price": 475,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a998e739d976cf2886",
+    "sort_order": 68
+   },
+   {
+    "name": "Sallatë Jeshile",
+    "category": "Antipasti & Sallata",
+    "price": 550,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a498e739d976cf2876",
+    "sort_order": 69
+   },
+   {
+    "name": "Picë me Ton",
+    "category": "Të tjera",
+    "price": 875,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3aacfde4d917cfc1f4aa9",
+    "sort_order": 70
+   },
+   {
+    "name": "Sallatë Caesar",
+    "category": "Antipasti & Sallata",
+    "price": 800,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a698e739d976cf2879",
+    "sort_order": 71
+   },
+   {
+    "name": "Otantik Klasik Burger",
+    "category": "Mish & Grill",
+    "price": 850,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b49598e739d976cf3789",
+    "sort_order": 72
+   },
+   {
+    "name": "Kërpudha në Furrë",
+    "category": "Të tjera",
+    "price": 525,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a798e739d976cf287f",
+    "sort_order": 73
+   },
+   {
+    "name": "Lahmaxhun",
+    "category": "Të tjera",
+    "price": 875,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b30fde4d917cfc1f4cf6",
+    "sort_order": 74
+   },
+   {
+    "name": "Shish Pule",
+    "category": "Mish & Grill",
+    "price": 375,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a798e739d976cf2880",
+    "sort_order": 75
+   },
+   {
+    "name": "Patate të Skuqura",
+    "category": "Të tjera",
+    "price": 875,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b0f14c92ea2cbf06029e",
+    "sort_order": 76
+   },
+   {
+    "name": "Pide me Pulë & Djathë",
+    "category": "Të tjera",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a198e739d976cf2869",
+    "sort_order": 77
+   },
+   {
+    "name": "Supë me Thjerrëza",
+    "category": "Të tjera",
+    "price": 1025,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b32dde4d917cfc1f4cfc",
+    "sort_order": 78
+   },
+   {
+    "name": "Krahë Pule",
+    "category": "Mish & Grill",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a198e739d976cf2867",
+    "sort_order": 79
+   },
+   {
+    "name": "Humus",
+    "category": "Të tjera",
+    "price": 200,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3c394de4d917cfc1f506c",
+    "sort_order": 80
+   },
+   {
+    "name": "Coca Cola",
+    "category": "Pije",
+    "price": 625,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b090de4d917cfc1f4c75",
+    "sort_order": 81
+   },
+   {
+    "name": "Pide me Djathë",
+    "category": "Të tjera",
+    "price": 1275,
+    "image_url": "https://imageproxy.wolt.com/assets/67f3b2b34c92ea2cbf0602da",
+    "sort_order": 82
+   },
+   {
+    "name": "Adana Kebab",
+    "category": "Mish & Grill",
+    "price": 975,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382a998e739d976cf2885",
+    "sort_order": 83
+   },
+   {
+    "name": "Fajita me Pule",
+    "category": "Mish & Grill",
+    "price": 525,
+    "image_url": "https://imageproxy.wolt.com/assets/67f382aa98e739d976cf2888",
+    "sort_order": 84
+   }
+  ]
+ }
+]

@@ -1,0 +1,77 @@
+{
+  "id": "cafe-basic",
+  "ocr": "CAFE AROMA\nEspresso ... 180\nCappuccino ... 250\nFlat White ... 270\nCroissant ... 220",
+  "expected": {
+    "restaurant": {
+      "name": "Cafe Aroma"
+    },
+    "products": [
+      {
+        "name": "Espresso",
+        "price": 180
+      },
+      {
+        "name": "Cappuccino",
+        "price": 250
+      },
+      {
+        "name": "Flat White",
+        "price": 270
+      },
+      {
+        "name": "Croissant",
+        "price": 220
+      }
+    ]
+  },
+  "output": {
+    "categories": [
+      {
+        "externalKey": "cat1",
+        "name": "CAFE AROMA"
+      }
+    ],
+    "products": [
+      {
+        "externalKey": "prod1",
+        "categoryKey": "cat1",
+        "name": "Espresso",
+        "description": null,
+        "price": 180,
+        "currency": "ALL",
+        "available": true
+      },
+      {
+        "externalKey": "prod2",
+        "categoryKey": "cat1",
+        "name": "Cappuccino",
+        "description": null,
+        "price": 250,
+        "currency": "ALL",
+        "available": true
+      },
+      {
+        "externalKey": "prod3",
+        "categoryKey": "cat1",
+        "name": "Flat White",
+        "description": null,
+        "price": 270,
+        "currency": "ALL",
+        "available": true
+      },
+      {
+        "externalKey": "prod4",
+        "categoryKey": "cat1",
+        "name": "Croissant",
+        "description": null,
+        "price": 220,
+        "currency": "ALL",
+        "available": true
+      }
+    ],
+    "modifierGroups": [],
+    "modifiers": [],
+    "links": [],
+    "translations": []
+  }
+}

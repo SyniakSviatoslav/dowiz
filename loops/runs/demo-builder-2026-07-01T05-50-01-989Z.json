@@ -1,0 +1,154 @@
+{
+  "at": "2026-07-01T05:50:01.989Z",
+  "base_url": "https://dowiz-staging.fly.dev",
+  "storefront_base": "https://dowiz-staging.fly.dev",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 0,
+    "invited": 0,
+    "needs_review": 1,
+    "skipped_already_done": 0,
+    "send_invite": false
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "gmaps:0x134fdbde02c0c1e7:0x52f60f9c86a4c652",
+      "name": "Eljo's Pizza",
+      "slug": "eljos-pizza",
+      "warnings": [],
+      "menu_stats": {
+        "nCats": 5,
+        "nItems": 14,
+        "descRatio": 1
+      },
+      "menu_draft": {
+        "categories": [
+          {
+            "name": "Pizza",
+            "sort_order": 0,
+            "products": [
+              {
+                "name": "Margherita",
+                "price": 500,
+                "description": "Salcë domatesh San Marzano, mozzarela fiordilatte, borzilok i freskët, vaj ulliri.",
+                "sort_order": 0
+              },
+              {
+                "name": "Prosciutto e Funghi",
+                "price": 750,
+                "description": "Salcë domatesh, mozzarela, proshutë cotto, kërpudha të freskëta.",
+                "sort_order": 1
+              },
+              {
+                "name": "Diavola",
+                "price": 800,
+                "description": "Salcë domatesh, mozzarela, sallam pikant, spec djegës, vaj ulliri.",
+                "sort_order": 2
+              },
+              {
+                "name": "Quattro Formaggi",
+                "price": 900,
+                "description": "Mozzarela, gorgonzola, parmezan, provolone mbi bazë të bardhë kremoze.",
+                "sort_order": 3
+              },
+              {
+                "name": "Capricciosa",
+                "price": 850,
+                "description": "Salcë domatesh, mozzarela, proshutë, kërpudha, angjinare, ullinj.",
+                "sort_order": 4
+              },
+              {
+                "name": "Vegjetariane",
+                "price": 700,
+                "description": "Salcë domatesh, mozzarela, speca, kungull, patëllxhan, domate cherry.",
+                "sort_order": 5
+              }
+            ]
+          },
+          {
+            "name": "Makarona",
+            "sort_order": 1,
+            "products": [
+              {
+                "name": "Spaghetti Bolognese",
+                "price": 650,
+                "description": "Spageti me ragù viçi të gatuar ngadalë dhe parmezan të grirë.",
+                "sort_order": 0
+              },
+              {
+                "name": "Penne Arrabbiata",
+                "price": 600,
+                "description": "Penne me salcë domatesh pikante, hudhër dhe borzilok.",
+                "sort_order": 1
+              },
+              {
+                "name": "Lasagna al Forno",
+                "price": 750,
+                "description": "Lasanja tradicionale me ragù, beshamel dhe parmezan, pjekur në furrë.",
+                "sort_order": 2
+              }
+            ]
+          },
+          {
+            "name": "Sallata",
+            "sort_order": 2,
+            "products": [
+              {
+                "name": "Sallatë Cesar",
+                "price": 550,
+                "description": "Marule, kroketa buke, parmezan, pulë e pjekur dhe salcë Cesar.",
+                "sort_order": 0
+              },
+              {
+                "name": "Sallatë Greke",
+                "price": 450,
+                "description": "Domate, kastravec, spec, qepë, ullinj Kalamata dhe djathë feta.",
+                "sort_order": 1
+              }
+            ]
+          },
+          {
+            "name": "Antipasta",
+            "sort_order": 3,
+            "products": [
+              {
+                "name": "Bruschetta",
+                "price": 350,
+                "description": "Bukë e thekur me domate të freskëta, hudhër, borzilok dhe vaj ulliri.",
+                "sort_order": 0
+              }
+            ]
+          },
+          {
+            "name": "Pije",
+            "sort_order": 4,
+            "products": [
+              {
+                "name": "Coca-Cola 0.33L",
+                "price": 150,
+                "description": "Pije freskuese e ftohtë, shishe qelqi 0.33L.",
+                "sort_order": 0
+              },
+              {
+                "name": "Ujë i Freskët 0.5L",
+                "price": 100,
+                "description": "Ujë natyral i pijshëm, shishe 0.5L.",
+                "sort_order": 1
+              }
+            ]
+          }
+        ]
+      },
+      "palette": {
+        "primary_color": "#c1352b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111"
+      },
+      "source_id": "76c7f09a-dc76-411c-a41b-02783c1bae82",
+      "outcome": "needs-review",
+      "reason": "NEEDS_ENRICH_SEAM: operator menu not yet persisted to ENRICHED (see memory: DB enrich seam)",
+      "state": "SOURCED"
+    }
+  ]
+}

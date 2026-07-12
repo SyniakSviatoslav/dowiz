@@ -1,0 +1,63 @@
+{
+  "at": "2026-07-01T08:21:14.805Z",
+  "base_url": "http://127.0.0.1:43725",
+  "storefront_base": "http://127.0.0.1:42223",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 0,
+    "invited": 0,
+    "needs_review": 1,
+    "skipped_already_done": 0,
+    "send_invite": false
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-goodmenu-orderable",
+      "name": "Venue orderable",
+      "slug": "veg-orderable",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#c1352b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "source_id": "258e2c48-875b-4749-b2a2-e33ee5ef89c3",
+      "org_id": "a48166c0-3601-433b-8411-ff5982d0f17f",
+      "location_id": "9fcbab57-9e70-4175-b137-12f22b49f7c5",
+      "theme_directive": {
+        "location_id": "9fcbab57-9e70-4175-b137-12f22b49f7c5",
+        "primary_color": "#c1352b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "visual_gate": {
+        "pass": false,
+        "viewports": {
+          "mobile": {
+            "pass": false,
+            "reasons": [
+              "order affordance present (menu-item-add) — B3 never-orderable violated"
+            ],
+            "itemCount": 5
+          },
+          "desktop": {
+            "pass": false,
+            "reasons": [
+              "order affordance present (menu-item-add) — B3 never-orderable violated"
+            ],
+            "itemCount": 5
+          }
+        },
+        "mode": "probe"
+      },
+      "outcome": "needs-review",
+      "reason": "VISUAL_GATE_FAILED: mobile:order affordance present (menu-item-add) — B3 never-orderable violated | desktop:order affordance present (menu-item-add) — B3 never-orderable violated",
+      "state": "VERIFIED"
+    }
+  ]
+}

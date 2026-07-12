@@ -1,0 +1,114 @@
+{
+  "at": "2026-07-01T14:28:42.602Z",
+  "base_url": "http://127.0.0.1:34083",
+  "storefront_base": "http://127.0.0.1:41059",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 0,
+    "invited": 0,
+    "needs_review": 1,
+    "skipped_already_done": 0,
+    "send_invite": false
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-goodmenu-noindexless",
+      "name": "Venue noindexless",
+      "slug": "veg-noindexless",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#937a4c",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "source_id": "52ffeb0a-e15f-4b3c-be7c-e651dedaac99",
+      "org_id": "927da154-2e5c-4e08-90c5-35554d526130",
+      "location_id": "6ad55137-be6e-4a3c-a673-106340dd66b4",
+      "theme_directive": {
+        "location_id": "6ad55137-be6e-4a3c-a673-106340dd66b4",
+        "primary_color": "#937a4c",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "maps_directive": {
+        "location_id": "6ad55137-be6e-4a3c-a673-106340dd66b4",
+        "matched_name": "Results",
+        "address": "Rruga Pavaresia, Durrës 2008, Albania",
+        "lat": 41.31251,
+        "lng": 19.4782002,
+        "phone": "+355686597167",
+        "google_rating": 4.8,
+        "google_review_count": 270,
+        "google_maps_url": "https://www.google.com/maps/place/Enles+Resto+%26+Brunch/data=!4m7!3m6!1s0x134fd9117ed92345:0x9021c2d395becff9!8m2!3d41.31251!4d19.4782002!16s%2Fg%2F11xlrgb6j1!19sChIJRSPZfhHZTxMR-c--ldPCIZA",
+        "hours_json": {
+          "monday": {
+            "isOpen": true,
+            "open": "07:00",
+            "close": "00:00"
+          },
+          "tuesday": {
+            "isOpen": true,
+            "open": "07:00",
+            "close": "00:00"
+          },
+          "wednesday": {
+            "isOpen": true,
+            "open": "07:00",
+            "close": "00:00"
+          },
+          "thursday": {
+            "isOpen": true,
+            "open": "07:00",
+            "close": "00:00"
+          },
+          "friday": {
+            "isOpen": true,
+            "open": "07:00",
+            "close": "00:00"
+          },
+          "saturday": {
+            "isOpen": true,
+            "open": "07:00",
+            "close": "00:00"
+          },
+          "sunday": {
+            "isOpen": true,
+            "open": "07:00",
+            "close": "00:00"
+          }
+        },
+        "brand_color": "#937a4c",
+        "hero_url": "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFKBA9wcVQL-WWAHD_aJXpV6oNq1e62Lz1oKrvbUd-x6vdRyIHM60IyRN47lBJVqAdW3m4uJX1LrLpCKiTs2i-Nl56WOpsMNDvYPXtAg7l_fPM8rEpeaTqTCzVJH3iyIzqyMJlXFMBw3d8x=w1600-h1200-k-no",
+        "has_hero": true
+      },
+      "visual_gate": {
+        "pass": false,
+        "viewports": {
+          "mobile": {
+            "pass": false,
+            "reasons": [
+              "missing noindex"
+            ],
+            "itemCount": 5
+          },
+          "desktop": {
+            "pass": false,
+            "reasons": [
+              "missing noindex"
+            ],
+            "itemCount": 5
+          }
+        },
+        "mode": "probe"
+      },
+      "outcome": "needs-review",
+      "reason": "VISUAL_GATE_FAILED: mobile:missing noindex | desktop:missing noindex",
+      "state": "VERIFIED"
+    }
+  ]
+}

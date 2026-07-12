@@ -1,0 +1,67 @@
+{
+  "at": "2026-06-28T22:15:11.465Z",
+  "base_url": "http://127.0.0.1:33091",
+  "summary": {
+    "attempted": 5,
+    "invited": 0,
+    "needs_review": 3,
+    "skipped_already_done": 2
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-happy-1",
+      "name": "Alpha",
+      "slug": "alpha",
+      "warnings": [],
+      "source_id": "a53916b9-ae14-4d7f-8bd8-126e33fa9aeb",
+      "outcome": "skipped-already-done",
+      "reason": "already-invited (active invite exists)",
+      "state": "CLAIM_OFFERED"
+    },
+    {
+      "row": 2,
+      "place_id": "place-happy-2-nocontact",
+      "name": "Beta",
+      "slug": "beta",
+      "warnings": [],
+      "source_id": "513a7285-370e-4633-af9c-ad692932e1c9",
+      "outcome": "skipped-already-done",
+      "reason": "already-invited (active invite exists)",
+      "state": "CLAIM_OFFERED"
+    },
+    {
+      "row": 3,
+      "place_id": "place-menunotfound-3",
+      "name": "Gamma",
+      "slug": "gamma",
+      "warnings": [],
+      "source_id": "84a49016-14ad-4e42-9c1a-0bfb41f9c6de",
+      "outcome": "needs-review",
+      "reason": "EXIT_STATE:MENU_NOT_FOUND",
+      "state": "MENU_NOT_FOUND"
+    },
+    {
+      "row": 4,
+      "place_id": "place-lowquality-4",
+      "name": "Delta",
+      "slug": "delta",
+      "warnings": [],
+      "source_id": "11a38c8a-9ba8-449a-b764-d501659d7b4a",
+      "outcome": "needs-review",
+      "reason": "EXIT_STATE:LOW_QUALITY",
+      "state": "LOW_QUALITY"
+    },
+    {
+      "row": 5,
+      "place_id": "place-emptymenu-5",
+      "name": "Eps",
+      "slug": "eps",
+      "warnings": [],
+      "source_id": "c73fabfe-2450-48f2-b048-4bc78e88116b",
+      "outcome": "needs-review",
+      "reason": "NOT_VERIFIABLE:NOT_VERIFIABLE",
+      "state": "PROVISIONED"
+    }
+  ]
+}

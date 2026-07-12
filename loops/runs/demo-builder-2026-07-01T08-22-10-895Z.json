@@ -1,0 +1,63 @@
+{
+  "at": "2026-07-01T08:22:10.896Z",
+  "base_url": "http://127.0.0.1:43639",
+  "storefront_base": "http://127.0.0.1:40755",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 0,
+    "invited": 0,
+    "needs_review": 1,
+    "skipped_already_done": 0,
+    "send_invite": false
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-goodmenu-empty",
+      "name": "Venue empty",
+      "slug": "veg-empty",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#c1352b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "source_id": "79f21d4c-0e59-4e92-ab16-f976dd181ed9",
+      "org_id": "11afb12b-410c-4761-87f5-0be3943e9316",
+      "location_id": "2a9e6bf5-f6af-40f8-a2a8-1de7f892c7e0",
+      "theme_directive": {
+        "location_id": "2a9e6bf5-f6af-40f8-a2a8-1de7f892c7e0",
+        "primary_color": "#c1352b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "visual_gate": {
+        "pass": false,
+        "viewports": {
+          "mobile": {
+            "pass": false,
+            "reasons": [
+              "only 0 menu items rendered (< 3)"
+            ],
+            "itemCount": 0
+          },
+          "desktop": {
+            "pass": false,
+            "reasons": [
+              "only 0 menu items rendered (< 3)"
+            ],
+            "itemCount": 0
+          }
+        },
+        "mode": "probe"
+      },
+      "outcome": "needs-review",
+      "reason": "VISUAL_GATE_FAILED: mobile:only 0 menu items rendered (< 3) | desktop:only 0 menu items rendered (< 3)",
+      "state": "VERIFIED"
+    }
+  ]
+}

@@ -28,7 +28,35 @@
       "Bash(echo \"Written: $?\")",
       "WebFetch(domain:plausible.io)",
       "Bash(mkdir -p \"C:/Users/Dell5/Documents/dowiz/.claude/skills/taste-skill\")",
+<<<<<<< Updated upstream
       "Bash(cat \"C:/Users/Dell5/.claude/projects/C--Users-Dell5-Documents-dowiz/7473fd35-0c0b-482d-8ad4-6dbf59818166/tool-results/b8h625iog.txt\")"
+=======
+      "Bash(cat \"C:/Users/Dell5/.claude/projects/C--Users-Dell5-Documents-dowiz/7473fd35-0c0b-482d-8ad4-6dbf59818166/tool-results/b8h625iog.txt\")",
+      "mcp__repowise__get_overview",
+      "Skill(council)",
+      "Bash(mkdir -p .claude/state)",
+      "Bash(echo \"error-contract-parse-token-economy\")",
+      "mcp__repowise__get_health",
+      "mcp__repowise__get_dead_code",
+      "mcp__repowise__get_context",
+      "Skill(audit-gate)",
+      "mcp__playwright-test__browser_resize",
+      "mcp__playwright-test__planner_setup_page",
+      "mcp__playwright-test__browser_navigate",
+      "mcp__playwright-test__browser_take_screenshot",
+      "mcp__playwright-test__browser_console_messages",
+      "mcp__playwright-test__browser_network_requests",
+      "mcp__playwright-test__browser_close",
+      "Bash(printf 's2-auth-build|1783430099\\\\n')",
+      "Bash(echo \"write exit=$?\")",
+      "Artifact",
+      "Bash(cp /root/dowiz/.claude/CLAUDE.md /root/dowiz/docs/operating-model/claude-md-reference.md)",
+      "Bash(cp /root/dowiz/docs/operating-model/proposed-claude-md/CLAUDE-CORE.md /root/dowiz/.claude/CLAUDE.md)",
+      "Bash(rm -f .claude/state/serious-cleared)",
+      "Bash(rm -rf .claude/state/eye)",
+      "Bash(node scripts/guardrail-token-gates.mjs)",
+      "Bash(bash scripts/deploy-staging.sh)"
+>>>>>>> Stashed changes
     ]
   },
   "enabledMcpjsonServers": [

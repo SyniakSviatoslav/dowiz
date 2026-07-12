@@ -1,0 +1,166 @@
+{
+  "at": "2026-07-01T14:27:35.338Z",
+  "base_url": "http://127.0.0.1:44501",
+  "storefront_base": "http://127.0.0.1:38475",
+  "summary": {
+    "attempted": 5,
+    "certified_preview": 1,
+    "invited": 0,
+    "needs_review": 4,
+    "skipped_already_done": 0,
+    "send_invite": false
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-goodmenu-alpha",
+      "name": "Alpha Pizzeria",
+      "slug": "alpha",
+      "warnings": [
+        "maps-enrich: hours gated → operator applies demo default"
+      ],
+      "palette": {
+        "primary_color": "#c1352b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "source_id": "5793cb96-74bf-4f93-9cff-9286affbb161",
+      "org_id": "3b80f548-394b-4860-a871-bd816597758a",
+      "location_id": "3b6eb4ef-7f3a-46d3-93e3-1093d24c6f58",
+      "theme_directive": {
+        "location_id": "3b6eb4ef-7f3a-46d3-93e3-1093d24c6f58",
+        "primary_color": "#c1352b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "maps_directive": {
+        "location_id": "3b6eb4ef-7f3a-46d3-93e3-1093d24c6f58",
+        "matched_name": "Alpha Trodo Caffe",
+        "address": "8F8F+35F, Rruga Pavaresia, Durrës, Albania",
+        "lat": 41.3151861,
+        "lng": 19.4730262,
+        "phone": "+355695755535",
+        "google_rating": 4.8,
+        "google_review_count": null,
+        "google_maps_url": "https://www.google.com/maps/place/Alpha+Trodo+Caffe/@41.3151861,19.4730262,17z/data=!3m1!4b1!4m6!3m5!1s0x134fdbf4131760db:0x4ab31f58a0055c5!8m2!3d41.3151861!4d19.4730262!16s%2Fg%2F11s3lgctsc",
+        "hours_json": null,
+        "brand_color": null,
+        "hero_url": "https://lh3.googleusercontent.com/gps-cs-s/APNQkAG0k9eaguGuVehAMGQABhRSAptMtqZ5adNR0R2ujJYzHfyijIG4vIgy6wVLnoVT42GUTg3De2veJJ4andxmd7a_5EOwG6067-TuFqvT1BZwN0wrycu0B1yOoP_eTr-wujpCbj-K2g=w1600-h1200-k-no",
+        "has_hero": true
+      },
+      "visual_gate": {
+        "pass": true,
+        "viewports": {
+          "mobile": {
+            "pass": true,
+            "reasons": [],
+            "itemCount": 5
+          },
+          "desktop": {
+            "pass": true,
+            "reasons": [],
+            "itemCount": 5
+          }
+        },
+        "mode": "probe"
+      },
+      "outcome": "certified-preview",
+      "state": "VERIFIED",
+      "preview_url": "http://127.0.0.1:38475/s/alpha"
+    },
+    {
+      "row": 2,
+      "place_id": "place-lowquality-beta",
+      "name": "Beta",
+      "slug": "beta",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#e08a1e",
+        "bg_color": "#201d1a",
+        "text_color": "#ffffff",
+        "heading_font": "bebas",
+        "body_font": "inter"
+      },
+      "source_id": "da49c49e-ee3e-46e4-a46b-1828e78dd5dc",
+      "outcome": "needs-review",
+      "reason": "EXTRACT:LOW_QUALITY",
+      "state": "LOW_QUALITY"
+    },
+    {
+      "row": 3,
+      "place_id": "place-menunotfound-gamma",
+      "name": "Gamma",
+      "slug": "gamma",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#8a5a2b",
+        "bg_color": "#f6efe4",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "inter"
+      },
+      "source_id": "1320ea01-8540-4ce7-bff8-0e8e99a9cb24",
+      "outcome": "needs-review",
+      "reason": "EXTRACT:MENU_NOT_FOUND",
+      "state": "MENU_NOT_FOUND"
+    },
+    {
+      "row": 4,
+      "place_id": "place-emptymenu-delta",
+      "name": "Delta",
+      "slug": "delta",
+      "warnings": [
+        "maps-enrich: hours gated → operator applies demo default"
+      ],
+      "palette": {
+        "primary_color": "#2e4466",
+        "bg_color": "#14201f",
+        "text_color": "#ffffff",
+        "heading_font": "cormorant",
+        "body_font": "dmsans"
+      },
+      "source_id": "ecec01b0-3d2c-4872-8272-536c019d54ec",
+      "org_id": "da770eb4-c422-4d52-9db9-c1daed593131",
+      "location_id": "1062d06a-1567-46a1-8f1b-8c908035ca0c",
+      "theme_directive": {
+        "location_id": "1062d06a-1567-46a1-8f1b-8c908035ca0c",
+        "primary_color": "#2e4466",
+        "bg_color": "#14201f",
+        "text_color": "#ffffff",
+        "heading_font": "cormorant",
+        "body_font": "dmsans"
+      },
+      "maps_directive": {
+        "location_id": "1062d06a-1567-46a1-8f1b-8c908035ca0c",
+        "matched_name": "Delta Durres",
+        "address": "Autostrada Tiranë - Durrës KM 30, Durrës, Albania",
+        "lat": 41.3297589,
+        "lng": 19.474308,
+        "phone": "+355692048384",
+        "google_rating": 4.5,
+        "google_review_count": null,
+        "google_maps_url": "https://www.google.com/maps/place/Delta+Durres/@41.3297589,19.474308,17z/data=!3m1!4b1!4m6!3m5!1s0x134fdb038807279d:0x2bee3a1b9a639201!8m2!3d41.3297589!4d19.474308!16s%2Fg%2F11ghn6r8d6",
+        "hours_json": null,
+        "brand_color": "#2e4466",
+        "hero_url": "https://lh3.googleusercontent.com/gps-cs-s/APNQkAEyZyr8rvqMr_2y39V5MAJKGUeotIREY-uFEIFK3B9kcdOvcXeSZ0GZ_LjsMvW-5C_05E7Wk5RLF2W2y4dZBSiJ4zM7WaGFosbFlaVlaGrZaEtdHXJQppSqhAOBzg-5jIb8n6I=w1600-h1200-k-no",
+        "has_hero": true
+      },
+      "outcome": "needs-review",
+      "reason": "NOT_VERIFIABLE:NOT_VERIFIABLE",
+      "state": "PROVISIONED"
+    },
+    {
+      "row": 5,
+      "place_id": "place-malformed-eps",
+      "name": "Eps",
+      "slug": "",
+      "warnings": [],
+      "outcome": "needs-review",
+      "reason": "MALFORMED_ROW:missing slug"
+    }
+  ]
+}

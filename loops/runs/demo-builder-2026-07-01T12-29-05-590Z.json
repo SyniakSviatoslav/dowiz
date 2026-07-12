@@ -1,0 +1,606 @@
+{
+  "at": "2026-07-01T12:29:05.590Z",
+  "base_url": "https://dowiz-staging.fly.dev",
+  "storefront_base": "https://dowiz-staging.fly.dev",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 1,
+    "invited": 0,
+    "needs_review": 0,
+    "skipped_already_done": 0,
+    "send_invite": false
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "wolt:idua-durres",
+      "name": "Idua",
+      "slug": "idua",
+      "warnings": [],
+      "menu_stats": {
+        "nCats": 5,
+        "nItems": 65,
+        "descRatio": 0,
+        "imgRatio": 0.94
+      },
+      "menu_draft": {
+        "categories": [
+          {
+            "name": "Të tjera",
+            "sort_order": 0,
+            "products": [
+              {
+                "name": "Patate Frite",
+                "price": 270,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607fcc0aef0034ebc34b9e"
+                }
+              },
+              {
+                "name": "Tasqebap",
+                "price": 400,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080dcb2a1aa1c3819f031"
+                }
+              },
+              {
+                "name": "Spageti me Fruta Deti",
+                "price": 600,
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080beb2a1aa1c3819f02c"
+                }
+              },
+              {
+                "name": "Fasule",
+                "price": 280,
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607f98b2a1aa1c3819f024"
+                }
+              },
+              {
+                "name": "Supë Thjerzash + Jufka me Fileto",
+                "price": 430,
+                "sort_order": 4,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631cba0de421580db1f3e6"
+                }
+              },
+              {
+                "name": "Tzatziki",
+                "price": 250,
+                "sort_order": 5
+              },
+              {
+                "name": "Jufka me Gjalpë",
+                "price": 250,
+                "sort_order": 6,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607fa60aef0034ebc34b96"
+                }
+              },
+              {
+                "name": "Supë Krem Thierrëzash të Kuqe",
+                "price": 280,
+                "sort_order": 7,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080cab2a1aa1c3819f02e"
+                }
+              },
+              {
+                "name": "Fasule me Suxhuk",
+                "price": 350,
+                "sort_order": 8,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607f95b2a1aa1c3819f023"
+                }
+              },
+              {
+                "name": "Turli me Perime",
+                "price": 280,
+                "sort_order": 9,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631c3fb2a1aa1c381a3152"
+                }
+              },
+              {
+                "name": "Perime Te Ziera",
+                "price": 300,
+                "sort_order": 10,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080280aef0034ebc34b9f"
+                }
+              },
+              {
+                "name": "Djathë i Bardhë",
+                "price": 250,
+                "sort_order": 11,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607f72b2a1aa1c3819f01f"
+                }
+              },
+              {
+                "name": "Spageti me Gjalpë & Djathë",
+                "price": 250,
+                "sort_order": 12,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631c19b2a1aa1c381a314a"
+                }
+              },
+              {
+                "name": "Spageti Bolognese",
+                "price": 420,
+                "sort_order": 13,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080b6b2a1aa1c3819f02b"
+                }
+              },
+              {
+                "name": "Kos",
+                "price": 170,
+                "sort_order": 14,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607fb50aef0034ebc34b98"
+                }
+              },
+              {
+                "name": "Fasule + Pilaf + Suxhuk",
+                "price": 430,
+                "sort_order": 15,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631cba0de421580db1f3e4"
+                }
+              },
+              {
+                "name": "Spageti me Salcë Napoletsne",
+                "price": 300,
+                "sort_order": 16,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631c19b2a1aa1c381a314d"
+                }
+              },
+              {
+                "name": "Perime Te Ziera Me Fileto",
+                "price": 470,
+                "sort_order": 17,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631c950de421580db1f3e0"
+                }
+              },
+              {
+                "name": "Patate Furre",
+                "price": 270,
+                "sort_order": 18,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631c6c0de421580db1f3d9"
+                }
+              },
+              {
+                "name": "Spageti me Karkaleca & Domate",
+                "price": 600,
+                "sort_order": 19,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631c6c0de421580db1f3dc"
+                }
+              },
+              {
+                "name": "Perime Zgare",
+                "price": 350,
+                "sort_order": 20,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631c3fb2a1aa1c381a3150"
+                }
+              },
+              {
+                "name": "Supë Perime",
+                "price": 280,
+                "sort_order": 21,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080ceb2a1aa1c3819f02f"
+                }
+              },
+              {
+                "name": "Supë Krem Brokoli",
+                "price": 280,
+                "sort_order": 22,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080c7b2a1aa1c3819f02d"
+                }
+              },
+              {
+                "name": "Pilaf",
+                "price": 150,
+                "sort_order": 23,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/6760805b0de421580db1b580"
+                }
+              },
+              {
+                "name": "Pure Patatesh",
+                "price": 270,
+                "sort_order": 24,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080660de421580db1b581"
+                }
+              },
+              {
+                "name": "Tasqebap",
+                "price": 250,
+                "sort_order": 25,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607fa60aef0034ebc34b96"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Mish & Grill",
+            "sort_order": 1,
+            "products": [
+              {
+                "name": "Supë Pule",
+                "price": 280,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080d1b2a1aa1c3819f030"
+                }
+              },
+              {
+                "name": "Patate me Kofshë Pule",
+                "price": 450,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607fc60aef0034ebc34b9d"
+                }
+              },
+              {
+                "name": "Pilaf me Qofte Shtëpie",
+                "price": 330,
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080580de421580db1b57f"
+                }
+              },
+              {
+                "name": "Pilaf me Fileto Pule",
+                "price": 330,
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080540de421580db1b57e"
+                }
+              },
+              {
+                "name": "Perime + Fileto + Qofte + Xaxiq",
+                "price": 450,
+                "sort_order": 4,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631c3fb2a1aa1c381a314e"
+                }
+              },
+              {
+                "name": "Eskallop Pule Primaveral",
+                "price": 500,
+                "sort_order": 5,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607f7fb2a1aa1c3819f021"
+                }
+              },
+              {
+                "name": "Eskallop Pule Genoves",
+                "price": 500,
+                "sort_order": 6,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607f83b2a1aa1c3819f022"
+                }
+              },
+              {
+                "name": "Jufka me Fileto Pule",
+                "price": 420,
+                "sort_order": 7,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607fa10aef0034ebc34b94"
+                }
+              },
+              {
+                "name": "Jufka me Kofshë Pule",
+                "price": 470,
+                "sort_order": 8,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607fa40aef0034ebc34b95"
+                }
+              },
+              {
+                "name": "Patate me Qofte Shtëpie",
+                "price": 420,
+                "sort_order": 9,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607fc40aef0034ebc34b9c"
+                }
+              },
+              {
+                "name": "Patate + Fileto + Qofte + Xaxiq",
+                "price": 450,
+                "sort_order": 10,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631c19b2a1aa1c381a314c"
+                }
+              },
+              {
+                "name": "Patate me Fileto Pule",
+                "price": 420,
+                "sort_order": 11,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607fc20aef0034ebc34b99"
+                }
+              },
+              {
+                "name": "Pilaf me Kofshë Pule",
+                "price": 370,
+                "sort_order": 12,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080500de421580db1b57d"
+                }
+              },
+              {
+                "name": "Jufka me Kofshë Pule",
+                "price": 420,
+                "sort_order": 13,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607fa10aef0034ebc34b94"
+                }
+              },
+              {
+                "name": "Jufka me Fileto Pule",
+                "price": 400,
+                "sort_order": 14,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080dcb2a1aa1c3819f031"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Antipasti & Sallata",
+            "sort_order": 2,
+            "products": [
+              {
+                "name": "Supe Brokoli + Pilaf + 2 Qofte",
+                "price": 430,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631cba0de421580db1f3e5"
+                }
+              },
+              {
+                "name": "Pilaf + Fileto + Sallatë Cesar",
+                "price": 540,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631cba0de421580db1f3e8"
+                }
+              },
+              {
+                "name": "Sallatë Cesar",
+                "price": 420,
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/6760808f0de421580db1b584"
+                }
+              },
+              {
+                "name": "Spagheti Bolonjeze + Sallatë Cesar",
+                "price": 580,
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080aeb2a1aa1c3819f02a"
+                }
+              },
+              {
+                "name": "Sallatë Greke",
+                "price": 320,
+                "sort_order": 4,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080980de421580db1b585"
+                }
+              },
+              {
+                "name": "Sallatë Jeshile",
+                "price": 250,
+                "sort_order": 5,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/6760809b0de421580db1b586"
+                }
+              },
+              {
+                "name": "Pilaf + Fileto Pule + Sallatë Jeshile",
+                "price": 410,
+                "sort_order": 6,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080330aef0034ebc34ba0"
+                }
+              },
+              {
+                "name": "Sallatë Lakër Karrotë",
+                "price": 250,
+                "sort_order": 7,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631c19b2a1aa1c381a3149"
+                }
+              },
+              {
+                "name": "Pilaf + Fileto Pule + Sallatë Rukola",
+                "price": 450,
+                "sort_order": 8,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631c3fb2a1aa1c381a3151"
+                }
+              },
+              {
+                "name": "Pilaf + Fileto Pule + Sallatë Lakër Karrotë",
+                "price": 410,
+                "sort_order": 9,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631c3fb2a1aa1c381a314f"
+                }
+              },
+              {
+                "name": "Sallatë Rukola",
+                "price": 420,
+                "sort_order": 10,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/6760809e0de421580db1b587"
+                }
+              },
+              {
+                "name": "Pilaf + Fileto Pule + Sallatë Miks",
+                "price": 450,
+                "sort_order": 11,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/6760803a0aef0034ebc34ba1"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Ëmbëlsira",
+            "sort_order": 3,
+            "products": [
+              {
+                "name": "Penne Panna Proshutë",
+                "price": 400,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631c6c0de421580db1f3da"
+                }
+              },
+              {
+                "name": "Eskallop Pule Panna Kerpudł",
+                "price": 500,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607f7ab2a1aa1c3819f020"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Pasta",
+            "sort_order": 4,
+            "products": [
+              {
+                "name": "Risotto me Pulë & Cury",
+                "price": 420,
+                "sort_order": 0
+              },
+              {
+                "name": "Penne Arrabbiata 🌶️",
+                "price": 350,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67607fde0de421580db1b577"
+                }
+              },
+              {
+                "name": "Penne Pule Pesto + Sallatë Cesar",
+                "price": 580,
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/676080040de421580db1b578"
+                }
+              },
+              {
+                "name": "Risotto me Tartuf & Kërpudhë",
+                "price": 420,
+                "sort_order": 3
+              },
+              {
+                "name": "Penne me Pulë & Pesto",
+                "price": 420,
+                "sort_order": 4,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631c6c0de421580db1f3d8"
+                }
+              },
+              {
+                "name": "Risotto Pana Proshutë",
+                "price": 400,
+                "sort_order": 5,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/6760806e0de421580db1b583"
+                }
+              },
+              {
+                "name": "Penne 4 Djathërat",
+                "price": 420,
+                "sort_order": 6,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631c6c0de421580db1f3db"
+                }
+              },
+              {
+                "name": "Risotto me Perime",
+                "price": 320,
+                "sort_order": 7
+              },
+              {
+                "name": "Spageti Carbonara",
+                "price": 420,
+                "sort_order": 8,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631c19b2a1aa1c381a314b"
+                }
+              },
+              {
+                "name": "Penne Pulë Gorgonzola + Sallatë Cesar",
+                "price": 580,
+                "sort_order": 9,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67631cba0de421580db1f3e7"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "palette": {
+        "primary_color": "#8a5a2b",
+        "bg_color": "#f6efe4",
+        "text_color": "#111111",
+        "heading_font": "playfair",
+        "body_font": "inter"
+      },
+      "source_id": "9e93a7a5-84fd-4cc9-acec-4b48f323bc39",
+      "visual_gate": {
+        "pass": true,
+        "viewports": {
+          "mobile": {
+            "url": "https://dowiz-staging.fly.dev/s/idua",
+            "itemCount": 65,
+            "consoleErrors": 0,
+            "addCount": 0,
+            "cartCount": 0,
+            "orderBtns": 0,
+            "noindex": true
+          },
+          "desktop": {
+            "url": "https://dowiz-staging.fly.dev/s/idua",
+            "itemCount": 65,
+            "consoleErrors": 0,
+            "addCount": 0,
+            "cartCount": 0,
+            "orderBtns": 0,
+            "noindex": true
+          }
+        },
+        "mode": "playwright",
+        "exitCode": 0
+      },
+      "outcome": "certified-preview",
+      "state": "VERIFIED",
+      "preview_url": "https://dowiz-staging.fly.dev/s/idua"
+    }
+  ]
+}

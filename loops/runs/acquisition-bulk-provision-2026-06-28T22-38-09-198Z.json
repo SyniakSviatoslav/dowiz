@@ -1,0 +1,37 @@
+{
+  "at": "2026-06-28T22:38:09.199Z",
+  "base_url": "https://dowiz-staging.fly.dev",
+  "summary": {
+    "attempted": 2,
+    "invited": 1,
+    "needs_review": 1,
+    "skipped_already_done": 0
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "loop-run-B-95cc99e4",
+      "name": "Loop Venue B",
+      "slug": "loopb-2b51b11d",
+      "warnings": [],
+      "source_id": "056665a7-e4ff-43e4-a4d0-1ad5d79a7bf0",
+      "org_id": "91243039-4265-402e-a539-9183c28e65fe",
+      "location_id": "69495c12-d981-4323-9c74-d7289a334af0",
+      "outcome": "invited",
+      "state": "CLAIM_OFFERED",
+      "claim_url": "https://dowiz-staging.fly.dev/claim#token=aef411c823372f36297e98f5062004708780087562d870fe7f2cfc946cbff815",
+      "decline_url": "https://dowiz-staging.fly.dev/claim#token=aef411c823372f36297e98f5062004708780087562d870fe7f2cfc946cbff815"
+    },
+    {
+      "row": 2,
+      "place_id": "loop-run-A-92a1e70f",
+      "name": "Loop Venue A",
+      "slug": "loopa-89dfdb8c",
+      "warnings": [],
+      "source_id": "575facf7-cbcb-4de1-8680-1a08113ab185",
+      "outcome": "needs-review",
+      "reason": "EXTRACT:MANUAL_REVIEW",
+      "state": "MANUAL_REVIEW"
+    }
+  ]
+}

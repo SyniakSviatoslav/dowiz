@@ -1,0 +1,25 @@
+{
+  "at": "2026-06-28T22:15:11.609Z",
+  "base_url": "http://127.0.0.1:41795",
+  "summary": {
+    "attempted": 1,
+    "invited": 0,
+    "needs_review": 1,
+    "skipped_already_done": 0
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-happy-1",
+      "name": "Alpha",
+      "slug": "alpha",
+      "warnings": [],
+      "source_id": "b44df5d2-72bc-4300-8073-dc5dc8af8a74",
+      "org_id": "c1e1f438-e67f-4f9f-b2b0-0ccddd4791cc",
+      "location_id": "2323ba5c-3ae9-464e-8d7e-bb48d8eae145",
+      "outcome": "needs-review",
+      "reason": "NOT_VERIFIABLE:200",
+      "state": "PROVISIONED"
+    }
+  ]
+}

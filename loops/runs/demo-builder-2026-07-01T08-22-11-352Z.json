@@ -1,0 +1,63 @@
+{
+  "at": "2026-07-01T08:22:11.352Z",
+  "base_url": "http://127.0.0.1:35099",
+  "storefront_base": "http://127.0.0.1:35981",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 0,
+    "invited": 0,
+    "needs_review": 1,
+    "skipped_already_done": 0,
+    "send_invite": false
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-goodmenu-noindexless",
+      "name": "Venue noindexless",
+      "slug": "veg-noindexless",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#c1352b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "source_id": "157facf5-924a-4922-a6b8-c607d20b0e6a",
+      "org_id": "10c9d4c6-e46b-4d03-8464-fb435e2d9978",
+      "location_id": "c63256eb-ecad-471d-a83a-cc0eed526ba9",
+      "theme_directive": {
+        "location_id": "c63256eb-ecad-471d-a83a-cc0eed526ba9",
+        "primary_color": "#c1352b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "visual_gate": {
+        "pass": false,
+        "viewports": {
+          "mobile": {
+            "pass": false,
+            "reasons": [
+              "missing noindex"
+            ],
+            "itemCount": 5
+          },
+          "desktop": {
+            "pass": false,
+            "reasons": [
+              "missing noindex"
+            ],
+            "itemCount": 5
+          }
+        },
+        "mode": "probe"
+      },
+      "outcome": "needs-review",
+      "reason": "VISUAL_GATE_FAILED: mobile:missing noindex | desktop:missing noindex",
+      "state": "VERIFIED"
+    }
+  ]
+}

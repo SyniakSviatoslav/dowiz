@@ -1,0 +1,130 @@
+[
+  {
+    "name": "tasks",
+    "vp": "mobile",
+    "finalUrl": "/courier",
+    "consoleErrs": [],
+    "pageErrs": [],
+    "failedReq": [],
+    "bodyPreview": "Courier | L | SQ | EN | UA | Detyrat | Offline | Nuk ka detyra aktive | Nuk ka detyra të caktuara | Detyrat | Fitimet | Historiku | Turni"
+  },
+  {
+    "name": "shift",
+    "vp": "mobile",
+    "finalUrl": "/courier/shift",
+    "consoleErrs": [
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ],
+    "pageErrs": [],
+    "failedReq": [
+      "404 /api/courier/me"
+    ],
+    "bodyPreview": "Courier | L | SQ | EN | UA | Turni | Offline | Jeni offline. Filloni turnin për të filluar të merrni detyra dërgimi. | Fillo Turnin | Mesazher për klientët | Opsionale — lejon klientët t'ju shkruajnë gjatë një dërgimi aktiv në vend që të telefonojnë. | — | Telegram | WhatsApp | Viber | Ruaj | Detyrat | Fitimet | Historiku | Turni"
+  },
+  {
+    "name": "earnings",
+    "vp": "mobile",
+    "finalUrl": "/courier/earnings",
+    "consoleErrs": [],
+    "pageErrs": [],
+    "failedReq": [],
+    "bodyPreview": "Courier | L | SQ | EN | UA | Fitimet | SOT | 0 ALL | KJO JAVË | 0 ALL | KY MUAJ | 0 ALL | Historiku i Pagesave | Nuk ka pagesa akoma | Pagesat tuaja do të shfaqen këtu pas përpunimit. | Detyrat | Fitimet | Historiku | Turni"
+  },
+  {
+    "name": "history",
+    "vp": "mobile",
+    "finalUrl": "/courier/history",
+    "consoleErrs": [],
+    "pageErrs": [],
+    "failedReq": [],
+    "bodyPreview": "Courier | L | SQ | EN | UA | Historiku | 0 dërgesa | Nuk ka dërgesa akoma | Dërgesat e përfunduara do të shfaqen këtu. | Detyrat | Fitimet | Historiku | Turni"
+  },
+  {
+    "name": "delivery-test",
+    "vp": "mobile",
+    "finalUrl": "/courier/delivery/test",
+    "consoleErrs": [
+      "Failed to load resource: the server responded with a status of 400 ()",
+      "Failed to load resource: the server responded with a status of 500 ()"
+    ],
+    "pageErrs": [],
+    "failedReq": [
+      "400 /api/courier/assignments/test",
+      "500 /api/orders/test/messages"
+    ],
+    "bodyPreview": "Nuk u gjet | Detyra e dorezimit nuk u gjet. | Kthehu te detyrat"
+  },
+  {
+    "name": "login",
+    "vp": "mobile",
+    "finalUrl": "/courier/login",
+    "consoleErrs": [],
+    "pageErrs": [],
+    "failedReq": [],
+    "bodyPreview": "SQ | EN | UA | Hyrja e postierit | Shkruani email dhe fjalëkalimin tuaj për të vazhduar | Email | Fjalëkalimi | Hyr"
+  },
+  {
+    "name": "tasks",
+    "vp": "desktop",
+    "finalUrl": "/courier",
+    "consoleErrs": [],
+    "pageErrs": [],
+    "failedReq": [],
+    "bodyPreview": "Courier | L | ALL | SQ | EN | UA | Detyrat | Offline | Nuk ka detyra aktive | Nuk ka detyra të caktuara | Detyrat | Fitimet | Historiku | Turni"
+  },
+  {
+    "name": "shift",
+    "vp": "desktop",
+    "finalUrl": "/courier/shift",
+    "consoleErrs": [
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ],
+    "pageErrs": [],
+    "failedReq": [
+      "404 /api/courier/me"
+    ],
+    "bodyPreview": "Courier | L | ALL | SQ | EN | UA | Turni | Offline | Jeni offline. Filloni turnin për të filluar të merrni detyra dërgimi. | Fillo Turnin | Mesazher për klientët | Opsionale — lejon klientët t'ju shkruajnë gjatë një dërgimi aktiv në vend që të telefonojnë. | — | Telegram | WhatsApp | Viber | Ruaj | Detyrat | Fitimet | Historiku | Turni"
+  },
+  {
+    "name": "earnings",
+    "vp": "desktop",
+    "finalUrl": "/courier/earnings",
+    "consoleErrs": [],
+    "pageErrs": [],
+    "failedReq": [],
+    "bodyPreview": "Courier | L | ALL | SQ | EN | UA | Fitimet | SOT | 0 ALL | KJO JAVË | 0 ALL | KY MUAJ | 0 ALL | Historiku i Pagesave | Nuk ka pagesa akoma | Pagesat tuaja do të shfaqen këtu pas përpunimit. | Detyrat | Fitimet | Historiku | Turni"
+  },
+  {
+    "name": "history",
+    "vp": "desktop",
+    "finalUrl": "/courier/history",
+    "consoleErrs": [],
+    "pageErrs": [],
+    "failedReq": [],
+    "bodyPreview": "Courier | L | ALL | SQ | EN | UA | Historiku | 0 dërgesa | Nuk ka dërgesa akoma | Dërgesat e përfunduara do të shfaqen këtu. | Detyrat | Fitimet | Historiku | Turni"
+  },
+  {
+    "name": "delivery-test",
+    "vp": "desktop",
+    "finalUrl": "/courier/delivery/test",
+    "consoleErrs": [
+      "Failed to load resource: the server responded with a status of 400 ()",
+      "Failed to load resource: the server responded with a status of 500 ()"
+    ],
+    "pageErrs": [],
+    "failedReq": [
+      "400 /api/courier/assignments/test",
+      "500 /api/orders/test/messages"
+    ],
+    "bodyPreview": "Nuk u gjet | Detyra e dorezimit nuk u gjet. | Kthehu te detyrat"
+  },
+  {
+    "name": "login",
+    "vp": "desktop",
+    "finalUrl": "/courier/login",
+    "consoleErrs": [],
+    "pageErrs": [],
+    "failedReq": [],
+    "bodyPreview": "SQ | EN | UA | Hyrja e postierit | Shkruani email dhe fjalëkalimin tuaj për të vazhduar | Email | Fjalëkalimi | Hyr"
+  }
+]

@@ -1,0 +1,61 @@
+{
+  "at": "2026-07-01T08:22:18.807Z",
+  "base_url": "http://127.0.0.1:36741",
+  "storefront_base": "http://127.0.0.1:36049",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 0,
+    "invited": 1,
+    "needs_review": 0,
+    "skipped_already_done": 0,
+    "send_invite": true
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-goodmenu-omega",
+      "name": "Omega",
+      "slug": "omega",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#c1352b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "source_id": "81008572-1f2c-453e-b734-7935e0aa417c",
+      "org_id": "a09cd710-4a3c-4e84-9774-c9bf9d154916",
+      "location_id": "59e71d30-2d0f-49ba-a9e8-44f002126e9b",
+      "theme_directive": {
+        "location_id": "59e71d30-2d0f-49ba-a9e8-44f002126e9b",
+        "primary_color": "#c1352b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "visual_gate": {
+        "pass": true,
+        "viewports": {
+          "mobile": {
+            "pass": true,
+            "reasons": [],
+            "itemCount": 5
+          },
+          "desktop": {
+            "pass": true,
+            "reasons": [],
+            "itemCount": 5
+          }
+        },
+        "mode": "probe"
+      },
+      "outcome": "invited",
+      "state": "CLAIM_OFFERED",
+      "preview_url": "http://127.0.0.1:36049/s/omega",
+      "claim_url": "http://127.0.0.1:36049/claim#token=claim-24282bb4-454b-451b-9325-f6a79b78e541",
+      "decline_url": "http://127.0.0.1:36049/claim#token=claim-24282bb4-454b-451b-9325-f6a79b78e541"
+    }
+  ]
+}

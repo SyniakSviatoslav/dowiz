@@ -1,0 +1,63 @@
+{
+  "at": "2026-07-01T12:23:04.802Z",
+  "base_url": "http://127.0.0.1:45211",
+  "storefront_base": "http://127.0.0.1:45815",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 0,
+    "invited": 0,
+    "needs_review": 1,
+    "skipped_already_done": 0,
+    "send_invite": false
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-goodmenu-error",
+      "name": "Venue error",
+      "slug": "veg-error",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#c1352b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "source_id": "a352cbf4-06a7-4f86-9c78-08b11f35b39d",
+      "org_id": "7dc5501a-0009-4489-9edf-0c3e3794d4d1",
+      "location_id": "03ea6605-29a2-48e0-ba37-e789bdaa1082",
+      "theme_directive": {
+        "location_id": "03ea6605-29a2-48e0-ba37-e789bdaa1082",
+        "primary_color": "#c1352b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "visual_gate": {
+        "pass": false,
+        "viewports": {
+          "mobile": {
+            "pass": false,
+            "reasons": [
+              "2 console error(s) on the page"
+            ],
+            "itemCount": 5
+          },
+          "desktop": {
+            "pass": false,
+            "reasons": [
+              "2 console error(s) on the page"
+            ],
+            "itemCount": 5
+          }
+        },
+        "mode": "probe"
+      },
+      "outcome": "needs-review",
+      "reason": "VISUAL_GATE_FAILED: mobile:2 console error(s) on the page | desktop:2 console error(s) on the page",
+      "state": "VERIFIED"
+    }
+  ]
+}

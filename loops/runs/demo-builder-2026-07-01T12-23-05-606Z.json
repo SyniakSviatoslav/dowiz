@@ -1,0 +1,31 @@
+{
+  "at": "2026-07-01T12:23:05.607Z",
+  "base_url": "http://127.0.0.1:42451",
+  "storefront_base": "http://127.0.0.1:39309",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 0,
+    "invited": 0,
+    "needs_review": 1,
+    "skipped_already_done": 0,
+    "send_invite": false
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-goodmenu-theta",
+      "name": "Theta",
+      "slug": "theta",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#8a5a2b",
+        "bg_color": "#f6efe4",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "inter"
+      },
+      "outcome": "needs-review",
+      "reason": "OPS_AUTH_404 (secret rejected / surface disabled)"
+    }
+  ]
+}

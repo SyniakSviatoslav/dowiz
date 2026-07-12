@@ -1,0 +1,78 @@
+{
+  "at": "2026-07-01T14:29:18.111Z",
+  "base_url": "http://127.0.0.1:39811",
+  "storefront_base": "http://127.0.0.1:35173",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 0,
+    "invited": 1,
+    "needs_review": 0,
+    "skipped_already_done": 0,
+    "send_invite": true
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-goodmenu-zeta",
+      "name": "Zeta",
+      "slug": "zeta",
+      "warnings": [
+        "maps-enrich: hours gated → operator applies demo default"
+      ],
+      "palette": {
+        "primary_color": "#c3894b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "source_id": "c8865a86-8c13-476d-ae31-602af218ebd2",
+      "org_id": "4beb5faa-0247-4483-832f-c2c95a29e1dc",
+      "location_id": "308223b9-1e8d-4be0-9989-0691775e3f25",
+      "theme_directive": {
+        "location_id": "308223b9-1e8d-4be0-9989-0691775e3f25",
+        "primary_color": "#c3894b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "maps_directive": {
+        "location_id": "308223b9-1e8d-4be0-9989-0691775e3f25",
+        "matched_name": "ZETA Contemporary Art Center",
+        "address": "Hekla Center, Abdyl Frashëri Street, 7, P31, A/4, 2nd floor, Rruga Abdyl Frashëri 7, Tiranë, Albania",
+        "lat": 41.3190044,
+        "lng": 19.8176478,
+        "phone": "+355682130180",
+        "google_rating": 4.6,
+        "google_review_count": null,
+        "google_maps_url": "https://www.google.com/maps/place/ZETA+Contemporary+Art+Center/@41.3190044,19.8176478,17z/data=!3m1!4b1!4m6!3m5!1s0x135031894fbdf51f:0xe776d5e09a98e136!8m2!3d41.3190044!4d19.8176478!16s%2Fg%2F11g0l4w_r5",
+        "hours_json": null,
+        "brand_color": "#c3894b",
+        "hero_url": "https://lh3.googleusercontent.com/gps-cs-s/APNQkAH54uheT01-6T7EDzjWsBFrFgMKwjHLil_OP6Fb5dDiZ4V-cOgyDHkTv4lTce9GzMRUlgBLuz6RRUdTOJW9TrjqsY1ijA_ToVjmmJynDutYyNXLMk3V1PlTncdobjgufwlYWX0guA=w1600-h1200-k-no",
+        "has_hero": true
+      },
+      "visual_gate": {
+        "pass": true,
+        "viewports": {
+          "mobile": {
+            "pass": true,
+            "reasons": [],
+            "itemCount": 5
+          },
+          "desktop": {
+            "pass": true,
+            "reasons": [],
+            "itemCount": 5
+          }
+        },
+        "mode": "probe"
+      },
+      "outcome": "invited",
+      "state": "CLAIM_OFFERED",
+      "preview_url": "http://127.0.0.1:35173/s/zeta",
+      "claim_url": "http://127.0.0.1:35173/claim#token=claim-dd04f242-4e55-42b5-ac35-8760e2d9bc78",
+      "decline_url": "http://127.0.0.1:35173/claim#token=claim-dd04f242-4e55-42b5-ac35-8760e2d9bc78"
+    }
+  ]
+}

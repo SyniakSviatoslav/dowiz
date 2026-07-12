@@ -1,0 +1,388 @@
+[
+  {
+    "page": "storefront",
+    "vp": "m",
+    "path": "/s/demo",
+    "status": "ok",
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ],
+    "textLen": 4292,
+    "snippet": "Dubin & Sushi\nL\nSQ\nEN\nDubin & Sushi\nHapur\nBeverages\n(1)\nPizzas\n(2)\nTest-Cat-1782148864348\n(1)\nSalads\n(1)\nPastas\n(1)\nCali",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "storefront",
+    "vp": "d",
+    "path": "/s/demo",
+    "status": "ok",
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ],
+    "textLen": 4296,
+    "snippet": "Dubin & Sushi\nL\nALL\nSQ\nEN\nDubin & Sushi\nHapur\nBeverages\n(1)\nPizzas\n(2)\nTest-Cat-1782148864348\n(1)\nSalads\n(1)\nPastas\n(1)\n",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-orders",
+    "vp": "m",
+    "path": "/admin/orders",
+    "status": "ok",
+    "errors": [],
+    "textLen": 4284,
+    "snippet": "Dowiz\nL\nSQ\nEN\nUA\nMirë se vini në Panel\nKëtu mund të menaxhoni porositë e ardhshme, të gjurmoni kurierët dhe të monitoron",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-orders",
+    "vp": "d",
+    "path": "/admin/orders",
+    "status": "ok",
+    "errors": [],
+    "textLen": 4418,
+    "snippet": "🍱\nDowiz\nAktivizimi\nPaneli\nPorositë\nMenu\nFurnizimet\nPromocionet\nPostierët\nAnalitika\nKlientët\nBrandingu\nCilësimet\nL\nALL\nS",
+    "overflowBy": 0,
+    "rawKeyHints": [
+      "sushi.dowiz.org"
+    ]
+  },
+  {
+    "page": "admin-menu",
+    "vp": "m",
+    "path": "/admin/menu",
+    "status": "ok",
+    "errors": [],
+    "textLen": 4836,
+    "snippet": "Dowiz\nL\nSQ\nEN\nUA\nMenaxhimi i Menusë\n\n16 kategori · 50 të disponueshme\n\nImporto PDF\nShëno kuzhinën si të zënë (ETA më e l",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-menu",
+    "vp": "d",
+    "path": "/admin/menu",
+    "status": "ok",
+    "errors": [],
+    "textLen": 4951,
+    "snippet": "🍱\nDowiz\nAktivizimi\nPaneli\nPorositë\nMenu\nFurnizimet\nPromocionet\nPostierët\nAnalitika\nKlientët\nBrandingu\nCilësimet\nL\nALL\nS",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-settings",
+    "vp": "m",
+    "path": "/admin/settings",
+    "status": "ok",
+    "errors": [],
+    "textLen": 1340,
+    "snippet": "Dowiz\nL\nSQ\nEN\nUA\nCilësimet\n\nMenaxho detajet e dyqanit, zonën e dorëzimit, oraret dhe njoftimet.\n\nDetajet e Dyqanit\nEmri ",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-settings",
+    "vp": "d",
+    "path": "/admin/settings",
+    "status": "ok",
+    "errors": [],
+    "textLen": 1446,
+    "snippet": "🍱\nDowiz\nAktivizimi\nPaneli\nPorositë\nMenu\nFurnizimet\nPromocionet\nPostierët\nAnalitika\nKlientët\nBrandingu\nCilësimet\nL\nALL\nS",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-branding",
+    "vp": "m",
+    "path": "/admin/branding",
+    "status": "ok",
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 ()",
+      "Failed to load resource: the server responded with a status of 404 ()",
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ],
+    "textLen": 1074,
+    "snippet": "Dowiz\nL\nSQ\nEN\nUA\nBrandingu\nGjenero automatikisht nga brandi juaj\n\nNgjitni faqen tuaj ekzistuese dhe/ose ngarkoni logon t",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-branding",
+    "vp": "d",
+    "path": "/admin/branding",
+    "status": "ok",
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 ()",
+      "Failed to load resource: the server responded with a status of 404 ()",
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ],
+    "textLen": 1179,
+    "snippet": "🍱\nDowiz\nAktivizimi\nPaneli\nPorositë\nMenu\nFurnizimet\nPromocionet\nPostierët\nAnalitika\nKlientët\nBrandingu\nCilësimet\nL\nALL\nS",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-analytics",
+    "vp": "m",
+    "path": "/admin/analytics",
+    "status": "ok",
+    "errors": [
+      "Failed to load resource: the server responded with a status of 500 ()"
+    ],
+    "textLen": 160,
+    "snippet": "Dowiz\nL\nSQ\nEN\nUA\nAnalitika e padisponueshme\n\nNuk arritëm t'i ngarkojmë analitikat tani. Porositë tuaja janë të sigurta —",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-analytics",
+    "vp": "d",
+    "path": "/admin/analytics",
+    "status": "ok",
+    "errors": [
+      "Failed to load resource: the server responded with a status of 401 ()",
+      "Failed to load resource: the server responded with a status of 500 ()",
+      "Failed to load resource: the server responded with a status of 500 ()"
+    ],
+    "textLen": 127,
+    "snippet": "DeliveryOS\n\nHyr si Pronar\n\nSesioni juaj ka skaduar. Ju lutem hyni sërish.\nEmail\nFjalëkalimi\nHyr\nSQ\nEN\nUA\nOSE\nVazhdo me T",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-promotions",
+    "vp": "m",
+    "path": "/admin/promotions",
+    "status": "ok",
+    "errors": [
+      "Failed to load resource: the server responded with a status of 500 ()",
+      "Failed to load resource: the server responded with a status of 500 ()",
+      "[Promotions] load failed: ApiError: Internal server error\n    at Bs (https://dowiz-staging.fly.dev/assets/apiClient-gMz8TfVh.js:14:35905)\n    at async w (https://dowiz-staging.fly.dev/assets/AdminRoutes-DQaIZXk-.js:16:41108)"
+    ],
+    "textLen": 112,
+    "snippet": "Dowiz\nL\nSQ\nEN\nUA\nPromocionet\nKrijo Promocion\n\nPromocionet nuk u ngarkuan. Provo përsëri.\n\nProvo përsëri\nMë shumë",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-promotions",
+    "vp": "d",
+    "path": "/admin/promotions",
+    "status": "ok",
+    "errors": [],
+    "textLen": 259,
+    "snippet": "🍱\nDowiz\nAktivizimi\nPaneli\nPorositë\nMenu\nFurnizimet\nPromocionet\nPostierët\nAnalitika\nKlientët\nBrandingu\nCilësimet\nL\nALL\nS",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-crm",
+    "vp": "m",
+    "path": "/admin/crm",
+    "status": "ok",
+    "errors": [],
+    "textLen": 3048,
+    "snippet": "Dowiz\nL\nSQ\nEN\nUA\nKlientët\n\n50 klientë\n\nMë shumë porosi\nLTV më i larti\nEmri A-Z\nEksporto CSV\nQA\n+3***67\n6 porosi\n7600 ALL",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-crm",
+    "vp": "d",
+    "path": "/admin/crm",
+    "status": "ok",
+    "errors": [],
+    "textLen": 3101,
+    "snippet": "🍱\nDowiz\nAktivizimi\nPaneli\nPorositë\nMenu\nFurnizimet\nPromocionet\nPostierët\nAnalitika\nKlientët\nBrandingu\nCilësimet\nL\nALL\nS",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-couriers",
+    "vp": "m",
+    "path": "/admin/couriers",
+    "status": "ok",
+    "errors": [],
+    "textLen": 2584,
+    "snippet": "Dowiz\nL\nSQ\nEN\nUA\nPostierët\n53 online\nEksporto CSV\n+ Shto Postier\n?\nKorrier në pritje\nPa telefon ende\nOnline\n?\nKorrier në",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-couriers",
+    "vp": "d",
+    "path": "/admin/couriers",
+    "status": "ok",
+    "errors": [],
+    "textLen": 3220,
+    "snippet": "🍱\nDowiz\nAktivizimi\nPaneli\nPorositë\nMenu\nFurnizimet\nPromocionet\nPostierët\nAnalitika\nKlientët\nBrandingu\nCilësimet\nL\nALL\nS",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-supplies",
+    "vp": "m",
+    "path": "/admin/supplies",
+    "status": "ok",
+    "errors": [],
+    "textLen": 1022,
+    "snippet": "Dowiz\nL\nSQ\nEN\nUA\nFurnizimet\n\n9 ing, 4 salca, 1 amb, 1 vegl\n\nShto Furnizim\nFurnizimet\nPërbërësit e shtuar këtu shfaqen në",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "admin-supplies",
+    "vp": "d",
+    "path": "/admin/supplies",
+    "status": "ok",
+    "errors": [],
+    "textLen": 1128,
+    "snippet": "🍱\nDowiz\nAktivizimi\nPaneli\nPorositë\nMenu\nFurnizimet\nPromocionet\nPostierët\nAnalitika\nKlientët\nBrandingu\nCilësimet\nL\nALL\nS",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "courier-home",
+    "vp": "m",
+    "path": "/courier",
+    "status": "ok",
+    "errors": [],
+    "textLen": 150,
+    "snippet": "Courier\nL\nSQ\nEN\nUA\nDetyrat\nOffline\nJe jashtë linje\n\nKalo në linjë nga skeda Turni për të marrë dërgesa.\n\nShko te Turni\nD",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "courier-home",
+    "vp": "d",
+    "path": "/courier",
+    "status": "ok",
+    "errors": [],
+    "textLen": 154,
+    "snippet": "Courier\nL\nALL\nSQ\nEN\nUA\nDetyrat\nOffline\nJe jashtë linje\n\nKalo në linjë nga skeda Turni për të marrë dërgesa.\n\nShko te Tur",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "courier-shift",
+    "vp": "m",
+    "path": "/courier/shift",
+    "status": "ok",
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ],
+    "textLen": 293,
+    "snippet": "Courier\nL\nSQ\nEN\nUA\nTurni\nOffline\nJeni offline. Filloni turnin për të filluar të merrni detyra dërgimi.\nFillo Turnin\nMesa",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "courier-shift",
+    "vp": "d",
+    "path": "/courier/shift",
+    "status": "ok",
+    "errors": [
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ],
+    "textLen": 297,
+    "snippet": "Courier\nL\nALL\nSQ\nEN\nUA\nTurni\nOffline\nJeni offline. Filloni turnin për të filluar të merrni detyra dërgimi.\nFillo Turnin\n",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "courier-earnings",
+    "vp": "m",
+    "path": "/courier/earnings",
+    "status": "ok",
+    "errors": [],
+    "textLen": 189,
+    "snippet": "Courier\nL\nSQ\nEN\nUA\nFitimet\nSOT\n0 ALL\nKJO JAVË\n0 ALL\nKY MUAJ\n0 ALL\nHistoriku i Pagesave\nNuk ka pagesa akoma\n\nPagesat tuaj",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "courier-earnings",
+    "vp": "d",
+    "path": "/courier/earnings",
+    "status": "ok",
+    "errors": [],
+    "textLen": 193,
+    "snippet": "Courier\nL\nALL\nSQ\nEN\nUA\nFitimet\nSOT\n0 ALL\nKJO JAVË\n0 ALL\nKY MUAJ\n0 ALL\nHistoriku i Pagesave\nNuk ka pagesa akoma\n\nPagesat ",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "courier-history",
+    "vp": "m",
+    "path": "/courier/history",
+    "status": "ok",
+    "errors": [],
+    "textLen": 136,
+    "snippet": "Courier\nL\nSQ\nEN\nUA\nHistoriku\n0 dërgesa\nNuk ka dërgesa akoma\n\nDërgesat e përfunduara do të shfaqen këtu.\n\nDetyrat\nFitimet",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "courier-history",
+    "vp": "d",
+    "path": "/courier/history",
+    "status": "ok",
+    "errors": [],
+    "textLen": 140,
+    "snippet": "Courier\nL\nALL\nSQ\nEN\nUA\nHistoriku\n0 dërgesa\nNuk ka dërgesa akoma\n\nDërgesat e përfunduara do të shfaqen këtu.\n\nDetyrat\nFit",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "courier-login",
+    "vp": "m",
+    "path": "/courier/login",
+    "status": "ok",
+    "errors": [],
+    "textLen": 114,
+    "snippet": "SQ\nEN\nUA\nDeliveryOS\nHyrja e postierit\n\nShkruani email dhe fjalëkalimin tuaj për të vazhduar\n\nEmail\nFjalëkalimi\nHyr",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "courier-login",
+    "vp": "d",
+    "path": "/courier/login",
+    "status": "ok",
+    "errors": [],
+    "textLen": 114,
+    "snippet": "SQ\nEN\nUA\nDeliveryOS\nHyrja e postierit\n\nShkruani email dhe fjalëkalimin tuaj për të vazhduar\n\nEmail\nFjalëkalimi\nHyr",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "courier-delivery",
+    "vp": "m",
+    "path": "/courier/delivery/test",
+    "status": "ok",
+    "errors": [
+      "Failed to load resource: the server responded with a status of 400 ()",
+      "Failed to load resource: the server responded with a status of 500 ()"
+    ],
+    "textLen": 74,
+    "snippet": "Destinacioni\nNuk u gjet\n\nDetyra e dorezimit nuk u gjet.\n\nKthehu te detyrat",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  },
+  {
+    "page": "courier-delivery",
+    "vp": "d",
+    "path": "/courier/delivery/test",
+    "status": "ok",
+    "errors": [
+      "Failed to load resource: the server responded with a status of 400 ()",
+      "Failed to load resource: the server responded with a status of 500 ()"
+    ],
+    "textLen": 74,
+    "snippet": "Destinacioni\nNuk u gjet\n\nDetyra e dorezimit nuk u gjet.\n\nKthehu te detyrat",
+    "overflowBy": 0,
+    "rawKeyHints": []
+  }
+]

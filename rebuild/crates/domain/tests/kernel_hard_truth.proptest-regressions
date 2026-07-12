@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 4189409a5af2da6e089120f20c04dbd236746ccc593e43d2b6ae59e2d2da8606 # shrinks to prices = [1], lines = [(0, 3)], is_pickup = false, delivery_flat = 0, rate_micro = 200001, price_includes_tax = true
+cc af9fc23e4d06c242ee6954a9e92ec67adb3393ea953f2b46b88ef2eb9555adfa # shrinks to cmds = [Confirm { at: Ts(10598880811962157), actor: System }]

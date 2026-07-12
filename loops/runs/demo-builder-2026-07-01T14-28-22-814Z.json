@@ -1,0 +1,114 @@
+{
+  "at": "2026-07-01T14:28:22.815Z",
+  "base_url": "http://127.0.0.1:39209",
+  "storefront_base": "http://127.0.0.1:43735",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 0,
+    "invited": 0,
+    "needs_review": 1,
+    "skipped_already_done": 0,
+    "send_invite": false
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-goodmenu-error",
+      "name": "Venue error",
+      "slug": "veg-error",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#1d7283",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "source_id": "2e5277a4-e32d-4faa-872a-34f9fd2e0ae2",
+      "org_id": "c60542d9-649c-4932-af71-79a431a0abc5",
+      "location_id": "ad52a7c6-5e31-4814-a23d-62e1a3a33018",
+      "theme_directive": {
+        "location_id": "ad52a7c6-5e31-4814-a23d-62e1a3a33018",
+        "primary_color": "#1d7283",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "maps_directive": {
+        "location_id": "ad52a7c6-5e31-4814-a23d-62e1a3a33018",
+        "matched_name": "Results",
+        "address": "8F95+HV7, Rruga Dalip Peza Pallati 14/1, Kati 14, Durrës 2001, Albania",
+        "lat": 41.3189953,
+        "lng": 19.4586157,
+        "phone": "+355685170400",
+        "google_rating": 4.6,
+        "google_review_count": 313,
+        "google_maps_url": "https://www.google.com/maps/place/Illyrian+Garden/data=!4m7!3m6!1s0x134fdbe7551e02bb:0x645d9fa9d4e724!8m2!3d41.3189953!4d19.4586157!16s%2Fg%2F11h8lghlkb!19sChIJuwIeVefbTxMRJOfUqZ9dZAA",
+        "hours_json": {
+          "monday": {
+            "isOpen": true,
+            "open": "08:00",
+            "close": "00:00"
+          },
+          "tuesday": {
+            "isOpen": true,
+            "open": "08:00",
+            "close": "00:00"
+          },
+          "wednesday": {
+            "isOpen": true,
+            "open": "08:00",
+            "close": "00:00"
+          },
+          "thursday": {
+            "isOpen": true,
+            "open": "08:00",
+            "close": "00:00"
+          },
+          "friday": {
+            "isOpen": true,
+            "open": "08:00",
+            "close": "00:00"
+          },
+          "saturday": {
+            "isOpen": true,
+            "open": "08:00",
+            "close": "00:00"
+          },
+          "sunday": {
+            "isOpen": true,
+            "open": "08:00",
+            "close": "00:00"
+          }
+        },
+        "brand_color": "#1d7283",
+        "hero_url": "https://lh3.googleusercontent.com/gps-cs-s/APNQkAFdFzcFOiEUBc6sqj5Q_sQQnsHM5CiXffUyd4dAO3pc3CwItEB3i1TT8Z2OVYhHoLZEQuGd-SdezBdQv6PrM3XAwDjtXdBYFAxOp8gkjWoOwOliQLi3W_0lZRjS-JG9PUeC80vF=w1600-h1200-k-no",
+        "has_hero": true
+      },
+      "visual_gate": {
+        "pass": false,
+        "viewports": {
+          "mobile": {
+            "pass": false,
+            "reasons": [
+              "2 console error(s) on the page"
+            ],
+            "itemCount": 5
+          },
+          "desktop": {
+            "pass": false,
+            "reasons": [
+              "2 console error(s) on the page"
+            ],
+            "itemCount": 5
+          }
+        },
+        "mode": "probe"
+      },
+      "outcome": "needs-review",
+      "reason": "VISUAL_GATE_FAILED: mobile:2 console error(s) on the page | desktop:2 console error(s) on the page",
+      "state": "VERIFIED"
+    }
+  ]
+}

@@ -1,0 +1,2107 @@
+{
+  "at": "2026-07-01T13:03:49.728Z",
+  "base_url": "https://dowiz-staging.fly.dev",
+  "storefront_base": "https://dowiz-staging.fly.dev",
+  "summary": {
+    "attempted": 4,
+    "certified_preview": 4,
+    "invited": 0,
+    "needs_review": 0,
+    "skipped_already_done": 0,
+    "send_invite": false
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "wolt:lamuse-durres",
+      "name": "L'Amuse",
+      "slug": "lamuse",
+      "warnings": [],
+      "menu_stats": {
+        "nCats": 3,
+        "nItems": 26,
+        "descRatio": 0.73,
+        "imgRatio": 1
+      },
+      "menu_draft": {
+        "categories": [
+          {
+            "name": "Të tjera",
+            "sort_order": 0,
+            "products": [
+              {
+                "name": "Variety Di Sushi 36 Pz",
+                "price": 4600,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb6fdea4a83292eef409f"
+                }
+              },
+              {
+                "name": "Tempura Di Gambero 6 Pz",
+                "price": 1320,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb6feea4a83292eef40a3"
+                }
+              },
+              {
+                "name": "Hot Roll Philadelphia 8 Pz",
+                "price": 1210,
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb6fdea4a83292eef40a0"
+                }
+              },
+              {
+                "name": "Pesce Bianco Marinado In Citrus Salsa",
+                "price": 1060,
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb700ea4a83292eef40ac"
+                }
+              },
+              {
+                "name": "Hot Roll Philadelphia 8 Pz",
+                "price": 1430,
+                "sort_order": 4,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb6feea4a83292eef40a2"
+                }
+              },
+              {
+                "name": "Tempura Di Gambero 6 Pz",
+                "price": 1430,
+                "sort_order": 5,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb6ffea4a83292eef40a8"
+                }
+              },
+              {
+                "name": "Variety Di Sushi 36 Pz",
+                "price": 1380,
+                "sort_order": 6,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb700ea4a83292eef40ab"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Peshk & Detare",
+            "sort_order": 1,
+            "products": [
+              {
+                "name": "Uramaki California 9pcs",
+                "price": 1480,
+                "description": "Salmon, shrimp, avocado, sesame, mayonnaise, rice, seaweed, wasabi, ginger",
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb700ea4a83292eef40a9",
+                  "description_sq": "Salmon, shrimp, avocado, sesame, mayonnaise, rice, seaweed, wasabi, ginger"
+                }
+              },
+              {
+                "name": "Uramaki Philadelphia e Special",
+                "price": 1650,
+                "description": "Philadelphia, rice, salmon, shrimp tempura, wasabi, ginger, leek",
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb701ea4a83292eef40b1",
+                  "description_sq": "Philadelphia, rice, salmon, shrimp tempura, wasabi, ginger, leek"
+                }
+              },
+              {
+                "name": "Sakura",
+                "price": 1430,
+                "description": "Salmon, rice, cucumber, philadelphia, avocado, teriyaki",
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb6feea4a83292eef40a2",
+                  "description_sq": "Salmon, rice, cucumber, philadelphia, avocado, teriyaki"
+                }
+              },
+              {
+                "name": "Tempura Special Dello Chef 8 Pz",
+                "price": 1430,
+                "description": "Shrimp, teriyaki, philadelphia, avocado, sesame",
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb6ffea4a83292eef40a8",
+                  "description_sq": "Shrimp, teriyaki, philadelphia, avocado, sesame"
+                }
+              },
+              {
+                "name": "Mix Nigiri 6 Pieces",
+                "price": 1320,
+                "description": "Salmon, tuna, wasabi rice, ginger, mushrooms, leeks",
+                "sort_order": 4,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb6ffea4a83292eef40a5",
+                  "description_sq": "Salmon, tuna, wasabi rice, ginger, mushrooms, leeks"
+                }
+              },
+              {
+                "name": "Gringo Uramaki",
+                "price": 1320,
+                "description": "Avocado, rice, philadelphia, shrimp, wasabi, teriyaki ginger, leek",
+                "sort_order": 5,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb700ea4a83292eef40aa",
+                  "description_sq": "Avocado, rice, philadelphia, shrimp, wasabi, teriyaki ginger, leek"
+                }
+              },
+              {
+                "name": "Salmon Sashimi 8 Pieces",
+                "price": 1320,
+                "description": "Salmon, arugula, fish egg, caramelized onion, wasabi, ginger",
+                "sort_order": 6,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb6ffea4a83292eef40a6",
+                  "description_sq": "Salmon, arugula, fish egg, caramelized onion, wasabi, ginger"
+                }
+              },
+              {
+                "name": "Salmon Hosomaki 8 Pieces",
+                "price": 1210,
+                "description": "Salmon, rice, seaweed, wasabi, ginger",
+                "sort_order": 7,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb6ffea4a83292eef40a4",
+                  "description_sq": "Salmon, rice, seaweed, wasabi, ginger"
+                }
+              },
+              {
+                "name": "Uramaki Primavera 8pcs",
+                "price": 1480,
+                "description": "Salmon, mango, cream cheese, white fish, sesame, ginger, fish roe, rice, seaweed, avocado, wasabi",
+                "sort_order": 8,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb700ea4a83292eef40ad",
+                  "description_sq": "Salmon, mango, cream cheese, white fish, sesame, ginger, fish roe, rice, seaweed, avocado, wasabi"
+                }
+              },
+              {
+                "name": "Sushi Dragon",
+                "price": 1210,
+                "description": "Salmon, philadelphia, mushrooms, leeks, wasabi, ginger",
+                "sort_order": 9,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb6feea4a83292eef40a1",
+                  "description_sq": "Salmon, philadelphia, mushrooms, leeks, wasabi, ginger"
+                }
+              },
+              {
+                "name": "Big Rolls",
+                "price": 1650,
+                "description": "Spring rolls, rice, salmon, philadelphia, teriyaki, mayonnaise, sweet chilli",
+                "sort_order": 10,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb6ffea4a83292eef40a7",
+                  "description_sq": "Spring rolls, rice, salmon, philadelphia, teriyaki, mayonnaise, sweet chilli"
+                }
+              },
+              {
+                "name": "Big Rolls",
+                "price": 1210,
+                "description": "Spring rolls, rice, salmon, philadelphia, teriyaki, mayonnaise, sweet chilli",
+                "sort_order": 11,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb6fdea4a83292eef40a0",
+                  "description_sq": "Spring rolls, rice, salmon, philadelphia, teriyaki, mayonnaise, sweet chilli"
+                }
+              },
+              {
+                "name": "Sakura",
+                "price": 1320,
+                "description": "Salmon, rice, cucumber, philadelphia, avocado, teriyaki",
+                "sort_order": 12,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb6feea4a83292eef40a3",
+                  "description_sq": "Salmon, rice, cucumber, philadelphia, avocado, teriyaki"
+                }
+              },
+              {
+                "name": "Tempura Special Dello Chef 8 Pz",
+                "price": 4600,
+                "description": "Shrimp, teriyaki, philadelphia, avocado, sesame",
+                "sort_order": 13,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb6fdea4a83292eef409f",
+                  "description_sq": "Shrimp, teriyaki, philadelphia, avocado, sesame"
+                }
+              },
+              {
+                "name": "Sushi Dragon",
+                "price": 1320,
+                "description": "Salmon, philadelphia, mushrooms, leeks, wasabi, ginger",
+                "sort_order": 14,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb700ea4a83292eef40aa",
+                  "description_sq": "Salmon, philadelphia, mushrooms, leeks, wasabi, ginger"
+                }
+              },
+              {
+                "name": "Gringo Uramaki",
+                "price": 1650,
+                "description": "Avocado, rice, philadelphia, shrimp, wasabi, teriyaki ginger, leek",
+                "sort_order": 15,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb701ea4a83292eef40b1",
+                  "description_sq": "Avocado, rice, philadelphia, shrimp, wasabi, teriyaki ginger, leek"
+                }
+              },
+              {
+                "name": "Uramaki Philadelphia e Special",
+                "price": 1480,
+                "description": "Philadelphia, rice, salmon, shrimp tempura, wasabi, ginger, leek",
+                "sort_order": 16,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb700ea4a83292eef40a9",
+                  "description_sq": "Philadelphia, rice, salmon, shrimp tempura, wasabi, ginger, leek"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Antipasti & Sallata",
+            "sort_order": 2,
+            "products": [
+              {
+                "name": "Salmon Futomaki",
+                "price": 1380,
+                "description": "Salmon, philadelphia, cucumber, salad, rice, seaweed",
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb700ea4a83292eef40ab",
+                  "description_sq": "Salmon, philadelphia, cucumber, salad, rice, seaweed"
+                }
+              },
+              {
+                "name": "Salmon Futomaki",
+                "price": 1210,
+                "description": "Salmon, philadelphia, cucumber, salad, rice, seaweed",
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/699eb6feea4a83292eef40a1",
+                  "description_sq": "Salmon, philadelphia, cucumber, salad, rice, seaweed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "palette": {
+        "primary_color": "#2f7d76",
+        "bg_color": "#f7f3ea",
+        "text_color": "#111111",
+        "heading_font": "cormorant",
+        "body_font": "inter"
+      },
+      "source_id": "1b4237dc-8b73-4018-be3c-34c20960429d",
+      "org_id": "16c8b537-c5ba-4851-a37e-06f315d7e521",
+      "location_id": "0e199b4e-1a4f-411b-bba4-df71d944018d",
+      "theme_directive": {
+        "location_id": "0e199b4e-1a4f-411b-bba4-df71d944018d",
+        "primary_color": "#2f7d76",
+        "bg_color": "#f7f3ea",
+        "text_color": "#111111",
+        "heading_font": "cormorant",
+        "body_font": "inter"
+      },
+      "visual_gate": {
+        "pass": true,
+        "viewports": {
+          "mobile": {
+            "url": "https://dowiz-staging.fly.dev/s/lamuse",
+            "itemCount": 26,
+            "consoleErrors": 0,
+            "addCount": 0,
+            "cartCount": 0,
+            "orderBtns": 0,
+            "noindex": true
+          },
+          "desktop": {
+            "url": "https://dowiz-staging.fly.dev/s/lamuse",
+            "itemCount": 26,
+            "consoleErrors": 0,
+            "addCount": 0,
+            "cartCount": 0,
+            "orderBtns": 0,
+            "noindex": true
+          }
+        },
+        "mode": "playwright",
+        "exitCode": 0
+      },
+      "outcome": "certified-preview",
+      "state": "VERIFIED",
+      "preview_url": "https://dowiz-staging.fly.dev/s/lamuse"
+    },
+    {
+      "row": 2,
+      "place_id": "wolt:dyrrah-mare-durres",
+      "name": "Dyrrah Mare",
+      "slug": "dyrrah-mare",
+      "warnings": [],
+      "menu_stats": {
+        "nCats": 5,
+        "nItems": 64,
+        "descRatio": 0.34,
+        "imgRatio": 0.94
+      },
+      "menu_draft": {
+        "categories": [
+          {
+            "name": "Peshk & Detare",
+            "sort_order": 0,
+            "products": [
+              {
+                "name": "Karkalec Bregu 300 Gr",
+                "price": 1980,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67f3af914c92ea2cbf060260"
+                }
+              },
+              {
+                "name": "Kallamar 300 Gr",
+                "price": 1150,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d156108df525635d5e507f"
+                }
+              },
+              {
+                "name": "Pescado",
+                "price": 1200,
+                "description": "Peshk, lakër, krem, avokado",
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d156138df525635d5e5083",
+                  "description_sq": "Peshk, lakër, krem, avokado"
+                }
+              },
+              {
+                "name": "Levrek i Butë",
+                "price": 1320,
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb77acc4a3916eb96219c"
+                }
+              },
+              {
+                "name": "Gobernador",
+                "price": 1200,
+                "description": "Karkalec, djathë, speca, qepë, domate, krem",
+                "sort_order": 4,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb8c78df525635d5e0e35",
+                  "description_sq": "Karkalec, djathë, speca, qepë, domate, krem"
+                }
+              },
+              {
+                "name": "Karkalec Viola 300 Gr",
+                "price": 2300,
+                "sort_order": 5,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d156138df525635d5e5084"
+                }
+              },
+              {
+                "name": "Midhje",
+                "price": 700,
+                "sort_order": 6,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/685570662ae352e4b7d18159"
+                }
+              },
+              {
+                "name": "Kallamarë me Spinaq",
+                "price": 990,
+                "sort_order": 7,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb76dcc4a3916eb96218c"
+                }
+              },
+              {
+                "name": "Oktapod 300 Gr",
+                "price": 1250,
+                "sort_order": 8,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d156138df525635d5e5087"
+                }
+              },
+              {
+                "name": "Pulpo",
+                "price": 1300,
+                "description": "Oktapod, avokado, limon jeshil, pomodorini, kastravec, speca, turshi",
+                "sort_order": 9,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67f3af724c92ea2cbf06025d",
+                  "description_sq": "Oktapod, avokado, limon jeshil, pomodorini, kastravec, speca, turshi"
+                }
+              },
+              {
+                "name": "Salmon Gravlax",
+                "price": 1100,
+                "description": "Salmon norvegjez i marinuar",
+                "sort_order": 10,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d15607bcb2f443170dc607",
+                  "description_sq": "Salmon norvegjez i marinuar"
+                }
+              },
+              {
+                "name": "Dyrrah Mix Platter",
+                "price": 3850,
+                "description": "Karkaleca, levrek, oktapod, salmon",
+                "sort_order": 11,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d15607bcb2f443170dc608",
+                  "description_sq": "Karkaleca, levrek, oktapod, salmon"
+                }
+              },
+              {
+                "name": "Gobernador",
+                "price": 605,
+                "description": "Karkalec, djathë, speca, qepë, domate, krem",
+                "sort_order": 12,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67f3aef598e739d976cf369b",
+                  "description_sq": "Karkalec, djathë, speca, qepë, domate, krem"
+                }
+              },
+              {
+                "name": "Pescado",
+                "price": 495,
+                "description": "Peshk, lakër, krem, avokado",
+                "sort_order": 13,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb777cc4a3916eb962196",
+                  "description_sq": "Peshk, lakër, krem, avokado"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Pasta",
+            "sort_order": 1,
+            "products": [
+              {
+                "name": "Penne me Gjalpë",
+                "price": 440,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d156168df525635d5e5089"
+                }
+              },
+              {
+                "name": "Spaghetti Alla Carbonara",
+                "price": 880,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d156108df525635d5e507e"
+                }
+              },
+              {
+                "name": "Linguine Karkalce & Kungull",
+                "price": 935,
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d1560d8df525635d5e5074"
+                }
+              },
+              {
+                "name": "Fettuccine Bolognese",
+                "price": 770,
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d1560d8df525635d5e5077"
+                }
+              },
+              {
+                "name": "Risotto Al Porcini",
+                "price": 825,
+                "sort_order": 4,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d156108df525635d5e5080"
+                }
+              },
+              {
+                "name": "Risotto me Karkaleca & Gorgonzola",
+                "price": 935,
+                "sort_order": 5,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d156108df525635d5e507d"
+                }
+              },
+              {
+                "name": "Ravioli me Kallamar & Spinaq",
+                "price": 1100,
+                "sort_order": 6
+              },
+              {
+                "name": "Penne Salcë Domate",
+                "price": 605,
+                "sort_order": 7,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d156168df525635d5e508a"
+                }
+              },
+              {
+                "name": "Linguine me Fruta Deti",
+                "price": 880,
+                "sort_order": 8,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb777cc4a3916eb962198"
+                }
+              },
+              {
+                "name": "Risotto me Fruta Deti",
+                "price": 880,
+                "sort_order": 9,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb777cc4a3916eb962199"
+                }
+              },
+              {
+                "name": "Linguine me Fruta Deti",
+                "price": 1200,
+                "sort_order": 10,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb8c78df525635d5e0e35"
+                }
+              },
+              {
+                "name": "Linguine Karkalce & Kungull",
+                "price": 770,
+                "sort_order": 11,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d1560d8df525635d5e5077"
+                }
+              },
+              {
+                "name": "Fettuccine Bolognese",
+                "price": 605,
+                "sort_order": 12,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb773cc4a3916eb962192"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Të tjera",
+            "sort_order": 2,
+            "products": [
+              {
+                "name": "Caprese",
+                "price": 660,
+                "description": "Mozzarella, domate, borzilok, vaj ulliri",
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb772cc4a3916eb96218f",
+                  "description_sq": "Mozzarella, domate, borzilok, vaj ulliri"
+                }
+              },
+              {
+                "name": "Çezar",
+                "price": 605,
+                "description": "Iceberg, kaçkavall, bukë e thekur, pulë, krem",
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb773cc4a3916eb962192",
+                  "description_sq": "Iceberg, kaçkavall, bukë e thekur, pulë, krem"
+                }
+              },
+              {
+                "name": "Fileto Mesdhetare 300 Gr",
+                "price": 1870,
+                "description": "Fileto levreku, pomodorini, speca, ullinj, barzilok",
+                "sort_order": 2,
+                "attributes": {
+                  "description_sq": "Fileto levreku, pomodorini, speca, ullinj, barzilok"
+                }
+              },
+              {
+                "name": "Pacheri Mesdhetare",
+                "price": 990,
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d1560d8df525635d5e5078"
+                }
+              },
+              {
+                "name": "Fagottino Tartufi",
+                "price": 880,
+                "sort_order": 4,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d1560d8df525635d5e5075"
+                }
+              },
+              {
+                "name": "Djathëra Platter",
+                "price": 1320,
+                "description": "Mix djathërash",
+                "sort_order": 5,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d3f7e48cd179206b1db756",
+                  "description_sq": "Mix djathërash"
+                }
+              },
+              {
+                "name": "Supë Peshku",
+                "price": 605,
+                "sort_order": 6,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67f3aef598e739d976cf369b"
+                }
+              },
+              {
+                "name": "Merluc 300 Gr",
+                "price": 960,
+                "sort_order": 7,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb77acc4a3916eb96219b"
+                }
+              },
+              {
+                "name": "Panzanella",
+                "price": 605,
+                "description": "Rukola, domate, barzilok, bukë e thekur, bajame",
+                "sort_order": 8,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb772cc4a3916eb962191",
+                  "description_sq": "Rukola, domate, barzilok, bukë e thekur, bajame"
+                }
+              },
+              {
+                "name": "Kroketa Peshku",
+                "price": 1540,
+                "sort_order": 9,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67f3af0c98e739d976cf36a0"
+                }
+              },
+              {
+                "name": "Dyrrah",
+                "price": 880,
+                "description": "Rukola, iceberg, burrata, gjethe rrepe, rrepkë, boronicë, bajame",
+                "sort_order": 10,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb772cc4a3916eb962190",
+                  "description_sq": "Rukola, iceberg, burrata, gjethe rrepe, rrepkë, boronicë, bajame"
+                }
+              },
+              {
+                "name": "Greke",
+                "price": 495,
+                "description": "Domate, kastravec, speca, qepë, djathë i bardhë, vaj ulliri",
+                "sort_order": 11,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb777cc4a3916eb962196",
+                  "description_sq": "Domate, kastravec, speca, qepë, djathë i bardhë, vaj ulliri"
+                }
+              },
+              {
+                "name": "Scampi Krudo",
+                "price": 770,
+                "sort_order": 12,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d15607bcb2f443170dc605"
+                }
+              },
+              {
+                "name": "Dyrra Toke Platter",
+                "price": 2970,
+                "description": "Salami, ham, mortadela, artichokes, cerry tomatoes, brusche-ta, anchovies, burrata, spicy cheese, corn bred, olives",
+                "sort_order": 13,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d15607bcb2f443170dc604",
+                  "description_sq": "Salami, ham, mortadela, artichokes, cerry tomatoes, brusche-ta, anchovies, burrata, spicy cheese, corn bred, olives"
+                }
+              },
+              {
+                "name": "Supë Krem Peshku",
+                "price": 605,
+                "sort_order": 14,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbac124bfc8a04be5647c"
+                }
+              },
+              {
+                "name": "Koc i Butë",
+                "price": 1320,
+                "sort_order": 15
+              },
+              {
+                "name": "Carpaccio Levreku",
+                "price": 1100,
+                "sort_order": 16,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb76dcc4a3916eb962189"
+                }
+              },
+              {
+                "name": "Tempura Miks",
+                "price": 1980,
+                "description": "Miks fruta deti",
+                "sort_order": 17,
+                "attributes": {
+                  "description_sq": "Miks fruta deti"
+                }
+              },
+              {
+                "name": "Casarecce me Karkaleca & Shparg",
+                "price": 990,
+                "sort_order": 18,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d1560d8df525635d5e5076"
+                }
+              },
+              {
+                "name": "Kërpudha në Krem Djathi",
+                "price": 770,
+                "sort_order": 19,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb76dcc4a3916eb96218d"
+                }
+              },
+              {
+                "name": "Karkaleca me Krem Parmigiano",
+                "price": 1100,
+                "sort_order": 20,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb76dcc4a3916eb96218b"
+                }
+              },
+              {
+                "name": "Carpaccio Oktapodi",
+                "price": 1100,
+                "sort_order": 21,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb76dcc4a3916eb96218a"
+                }
+              },
+              {
+                "name": "Supë Perimesh",
+                "price": 440,
+                "sort_order": 22,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb777cc4a3916eb962195"
+                }
+              },
+              {
+                "name": "Karkaleca Krudo",
+                "price": 660,
+                "sort_order": 23,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d15607bcb2f443170dc606"
+                }
+              },
+              {
+                "name": "Supë Peshku",
+                "price": 935,
+                "sort_order": 24,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d1560d8df525635d5e5074"
+                }
+              },
+              {
+                "name": "Çezar",
+                "price": 1100,
+                "description": "Iceberg, kaçkavall, bukë e thekur, pulë, krem",
+                "sort_order": 25,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceba2d8df525635d5e0e70",
+                  "description_sq": "Iceberg, kaçkavall, bukë e thekur, pulë, krem"
+                }
+              },
+              {
+                "name": "Greke",
+                "price": 880,
+                "description": "Domate, kastravec, speca, qepë, djathë i bardhë, vaj ulliri",
+                "sort_order": 26,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb772cc4a3916eb962190",
+                  "description_sq": "Domate, kastravec, speca, qepë, djathë i bardhë, vaj ulliri"
+                }
+              },
+              {
+                "name": "Dyrrah",
+                "price": 440,
+                "description": "Rukola, iceberg, burrata, gjethe rrepe, rrepkë, boronicë, bajame",
+                "sort_order": 27,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb777cc4a3916eb962197",
+                  "description_sq": "Rukola, iceberg, burrata, gjethe rrepe, rrepkë, boronicë, bajame"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Antipasti & Sallata",
+            "sort_order": 3,
+            "products": [
+              {
+                "name": "Antipastë Italiane",
+                "price": 1540,
+                "description": "Miks djathërash, sallam, proshutë",
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb773cc4a3916eb962193",
+                  "description_sq": "Miks djathërash, sallam, proshutë"
+                }
+              },
+              {
+                "name": "Sallatë Oktapodi",
+                "price": 1100,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceba318df525635d5e0e72"
+                }
+              },
+              {
+                "name": "Sallatë Deti",
+                "price": 1100,
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceba2d8df525635d5e0e70"
+                }
+              },
+              {
+                "name": "Sallatë Deti",
+                "price": 1200,
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d156138df525635d5e5083"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Mish & Grill",
+            "sort_order": 4,
+            "products": [
+              {
+                "name": "Sepje Grill 300 Gr",
+                "price": 1150,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d156108df525635d5e5081"
+                }
+              },
+              {
+                "name": "Al Cabron",
+                "price": 1100,
+                "description": "Mish, qepë të karamelizuara",
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d156168df525635d5e5088",
+                  "description_sq": "Mish, qepë të karamelizuara"
+                }
+              },
+              {
+                "name": "Supë Pule",
+                "price": 440,
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb777cc4a3916eb962197"
+                }
+              },
+              {
+                "name": "Street Corn Chicken",
+                "price": 900,
+                "description": "Mish pule, misër, qepë",
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d156168df525635d5e508b",
+                  "description_sq": "Mish pule, misër, qepë"
+                }
+              },
+              {
+                "name": "Qofte Peshku",
+                "price": 1400,
+                "sort_order": 4,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67ceb9f48df525635d5e0e64"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "palette": {
+        "primary_color": "#1f6f8b",
+        "bg_color": "#f2f6f7",
+        "text_color": "#111111",
+        "heading_font": "cormorant",
+        "body_font": "dmsans"
+      },
+      "source_id": "7316cc00-46d4-4b29-a07c-06196deac409",
+      "org_id": "0ae60cf7-9c19-4fde-9280-04e50306bd0f",
+      "location_id": "3b68d283-34c0-4e26-91a9-c24ad86e230a",
+      "theme_directive": {
+        "location_id": "3b68d283-34c0-4e26-91a9-c24ad86e230a",
+        "primary_color": "#1f6f8b",
+        "bg_color": "#f2f6f7",
+        "text_color": "#111111",
+        "heading_font": "cormorant",
+        "body_font": "dmsans"
+      },
+      "visual_gate": {
+        "pass": true,
+        "viewports": {
+          "mobile": {
+            "url": "https://dowiz-staging.fly.dev/s/dyrrah-mare",
+            "itemCount": 64,
+            "consoleErrors": 0,
+            "addCount": 0,
+            "cartCount": 0,
+            "orderBtns": 0,
+            "noindex": true
+          },
+          "desktop": {
+            "url": "https://dowiz-staging.fly.dev/s/dyrrah-mare",
+            "itemCount": 64,
+            "consoleErrors": 0,
+            "addCount": 0,
+            "cartCount": 0,
+            "orderBtns": 0,
+            "noindex": true
+          }
+        },
+        "mode": "playwright",
+        "exitCode": 0
+      },
+      "outcome": "certified-preview",
+      "state": "VERIFIED",
+      "preview_url": "https://dowiz-staging.fly.dev/s/dyrrah-mare"
+    },
+    {
+      "row": 3,
+      "place_id": "wolt:ventus-durres",
+      "name": "Ventus Harbor",
+      "slug": "ventus",
+      "warnings": [],
+      "menu_stats": {
+        "nCats": 6,
+        "nItems": 49,
+        "descRatio": 0.35,
+        "imgRatio": 0.88
+      },
+      "menu_draft": {
+        "categories": [
+          {
+            "name": "Të tjera",
+            "sort_order": 0,
+            "products": [
+              {
+                "name": "Ventus",
+                "price": 1000,
+                "description": "Crudo ham, arugula, pomodorini, grana, mozzarella, tomato sauce",
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad421043b8c23299626c5",
+                  "description_sq": "Crudo ham, arugula, pomodorini, grana, mozzarella, tomato sauce"
+                }
+              },
+              {
+                "name": "Mushrooms Today",
+                "price": 800,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad423043b8c23299626c9"
+                }
+              },
+              {
+                "name": "Mix Crudo",
+                "price": 3800,
+                "description": "2-3 people.",
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c68cd179206b1dfaa0",
+                  "description_sq": "2-3 people."
+                }
+              },
+              {
+                "name": "4 Cheeses",
+                "price": 850,
+                "description": "Gorgonzola grana, parmigiano, mozzarella",
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c88cd179206b1dfaa3",
+                  "description_sq": "Gorgonzola grana, parmigiano, mozzarella"
+                }
+              },
+              {
+                "name": "Octopus With Spicy Sauce And Croutons",
+                "price": 1200,
+                "sort_order": 4,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad423043b8c23299626c8"
+                }
+              },
+              {
+                "name": "Baby Potatoes With Truffles",
+                "price": 550,
+                "sort_order": 5,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad424043b8c23299626cf"
+                }
+              },
+              {
+                "name": "Grilled Seabream",
+                "price": 1300,
+                "sort_order": 6,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad419043b8c23299626b2"
+                }
+              },
+              {
+                "name": "Devil",
+                "price": 800,
+                "description": "Spicy salami, mozzarella, tomato sauce",
+                "sort_order": 7,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad421043b8c23299626c3",
+                  "description_sq": "Spicy salami, mozzarella, tomato sauce"
+                }
+              },
+              {
+                "name": "White Cheese With Crust And Jam",
+                "price": 550,
+                "sort_order": 8,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad424043b8c23299626cd"
+                }
+              },
+              {
+                "name": "Marinated Anchovies",
+                "price": 550,
+                "sort_order": 9,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c68cd179206b1dfa9d"
+                }
+              },
+              {
+                "name": "Focaccia",
+                "price": 450,
+                "sort_order": 10,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c68cd179206b1dfa9f"
+                }
+              },
+              {
+                "name": "Ice Cream Souffle",
+                "price": 400,
+                "sort_order": 11,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad41f043b8c23299626c0"
+                }
+              },
+              {
+                "name": "Capricious",
+                "price": 800,
+                "description": "Ham, mushrooms, peppers, olives, mozzarella, tomato sauce",
+                "sort_order": 12,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c88cd179206b1dfaa5",
+                  "description_sq": "Ham, mushrooms, peppers, olives, mozzarella, tomato sauce"
+                }
+              },
+              {
+                "name": "Trileche",
+                "price": 300,
+                "sort_order": 13,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad41f043b8c23299626bc"
+                }
+              },
+              {
+                "name": "Kaçkavall Cheese With Sesame And Honey",
+                "price": 550,
+                "sort_order": 14,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad424043b8c23299626ce"
+                }
+              },
+              {
+                "name": "ham",
+                "price": 700,
+                "description": "Ham cotto, mushrooms, mozzarella, tomato sauce",
+                "sort_order": 15,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad421043b8c23299626c2",
+                  "description_sq": "Ham cotto, mushrooms, mozzarella, tomato sauce"
+                }
+              },
+              {
+                "name": "Dubai Chocolate",
+                "price": 400,
+                "sort_order": 16,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad41f043b8c23299626be"
+                }
+              },
+              {
+                "name": "Grilled Sea Bass",
+                "price": 1300,
+                "sort_order": 17,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c48cd179206b1dfa95"
+                }
+              },
+              {
+                "name": "tone",
+                "price": 800,
+                "description": "Tuna, olives, mozzarella, tomato sauce",
+                "sort_order": 18,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c88cd179206b1dfaa2",
+                  "description_sq": "Tuna, olives, mozzarella, tomato sauce"
+                }
+              },
+              {
+                "name": "Margarita",
+                "price": 550,
+                "description": "Mozzarella, tomato sauce",
+                "sort_order": 19,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c48cd179206b1dfa99",
+                  "description_sq": "Mozzarella, tomato sauce"
+                }
+              },
+              {
+                "name": "Ice Cream Souffle",
+                "price": 1300,
+                "sort_order": 20,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c48cd179206b1dfa95"
+                }
+              },
+              {
+                "name": "Grilled Sea Bass",
+                "price": 400,
+                "sort_order": 21,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad41f043b8c23299626be"
+                }
+              },
+              {
+                "name": "Dubai Chocolate",
+                "price": 550,
+                "sort_order": 22,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c68cd179206b1dfa9d"
+                }
+              },
+              {
+                "name": "Marinated Anchovies",
+                "price": 1400,
+                "sort_order": 23,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c48cd179206b1dfa96"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Pasta",
+            "sort_order": 1,
+            "products": [
+              {
+                "name": "Seafood Risotto",
+                "price": 950,
+                "description": "Cuttlefish, squid, shrimp, mussels",
+                "sort_order": 0,
+                "attributes": {
+                  "description_sq": "Cuttlefish, squid, shrimp, mussels"
+                }
+              },
+              {
+                "name": "Linguine with Seafood",
+                "price": 950,
+                "description": "Cuttlefish, squid, shrimp, mussels",
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c28cd179206b1dfa91",
+                  "description_sq": "Cuttlefish, squid, shrimp, mussels"
+                }
+              },
+              {
+                "name": "Linguine with Seafood",
+                "price": 350,
+                "description": "Cuttlefish, squid, shrimp, mussels",
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad41f043b8c23299626bd",
+                  "description_sq": "Cuttlefish, squid, shrimp, mussels"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Antipasti & Sallata",
+            "sort_order": 2,
+            "products": [
+              {
+                "name": "Fish Soup",
+                "price": 500,
+                "sort_order": 0
+              },
+              {
+                "name": "Soup of the day",
+                "price": 450,
+                "sort_order": 1
+              },
+              {
+                "name": "Ventus Salad",
+                "price": 700,
+                "description": "Leaf mix, viola grasshopper, strawberries, grana, corn, citrus sauce",
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804ca8cd179206b1dfaa9",
+                  "description_sq": "Leaf mix, viola grasshopper, strawberries, grana, corn, citrus sauce"
+                }
+              },
+              {
+                "name": "Vegetable Soup",
+                "price": 400,
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c98cd179206b1dfaa8"
+                }
+              },
+              {
+                "name": "Octopus Salad",
+                "price": 1200,
+                "sort_order": 4
+              },
+              {
+                "name": "Cold Seafood Salad",
+                "price": 1200,
+                "description": "Cuttlefish, squid, viola shrimp, mussels",
+                "sort_order": 5,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804ca8cd179206b1dfaaa",
+                  "description_sq": "Cuttlefish, squid, viola shrimp, mussels"
+                }
+              },
+              {
+                "name": "Arugula Salad",
+                "price": 600,
+                "description": "Arugula, anchovies, strawberries, almonds",
+                "sort_order": 6,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c68cd179206b1dfa9c",
+                  "description_sq": "Arugula, anchovies, strawberries, almonds"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Peshk & Detare",
+            "sort_order": 3,
+            "products": [
+              {
+                "name": "Paccheri with Fish Ragu",
+                "price": 1200,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c28cd179206b1dfa90"
+                }
+              },
+              {
+                "name": "Salmon Fillet With Vegetables",
+                "price": 1400,
+                "sort_order": 1
+              },
+              {
+                "name": "Fried Mix",
+                "price": 1500,
+                "description": "Cuttlefish, squid, shrimp",
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c48cd179206b1dfa98",
+                  "description_sq": "Cuttlefish, squid, shrimp"
+                }
+              },
+              {
+                "name": "Casarecce with Shrimp and Pumpkin",
+                "price": 950,
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c38cd179206b1dfa93"
+                }
+              },
+              {
+                "name": "Seafood",
+                "price": 1000,
+                "description": "Squid, shrimp, mozzarella, tomato sauce",
+                "sort_order": 4,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad421043b8c23299626c4",
+                  "description_sq": "Squid, shrimp, mozzarella, tomato sauce"
+                }
+              },
+              {
+                "name": "Grilled Shrimp",
+                "price": 1400,
+                "sort_order": 5,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c48cd179206b1dfa96"
+                }
+              },
+              {
+                "name": "Salmon Fillet With Boiled Vegetables",
+                "price": 1400,
+                "sort_order": 6,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad41c043b8c23299626b8"
+                }
+              },
+              {
+                "name": "Fish Croquettes",
+                "price": 600,
+                "sort_order": 7,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad421043b8c23299626c1"
+                }
+              },
+              {
+                "name": "Grill Mix",
+                "price": 2200,
+                "description": "Cuttlefish, squid, shrimp, fish",
+                "sort_order": 8,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c48cd179206b1dfa97",
+                  "description_sq": "Cuttlefish, squid, shrimp, fish"
+                }
+              },
+              {
+                "name": "Grilled Shrimp",
+                "price": 950,
+                "sort_order": 9,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67d804c28cd179206b1dfa91"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Mish & Grill",
+            "sort_order": 4,
+            "products": [
+              {
+                "name": "Tuna Fillet With Arugula And Tomatoes",
+                "price": 1400,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad41c043b8c23299626b5"
+                }
+              },
+              {
+                "name": "Tuna Fillet",
+                "price": 1400,
+                "sort_order": 1
+              },
+              {
+                "name": "Tuna Fillet With Arugula And Tomatoes",
+                "price": 800,
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad423043b8c23299626c9"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Ëmbëlsira",
+            "sort_order": 5,
+            "products": [
+              {
+                "name": "Tiramisu",
+                "price": 350,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad41f043b8c23299626bd"
+                }
+              },
+              {
+                "name": "Tiramisu",
+                "price": 1400,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67dad41c043b8c23299626b5"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "palette": {
+        "primary_color": "#1f6f8b",
+        "bg_color": "#f2f6f7",
+        "text_color": "#111111",
+        "heading_font": "cormorant",
+        "body_font": "dmsans"
+      },
+      "source_id": "8f56cd1d-1f23-4ae2-86ab-39be3b49b208",
+      "org_id": "04ba95e0-e33d-4b46-a815-16d4a7ed899f",
+      "location_id": "d5b616c6-f9b6-405a-9465-3b9c2f8188a6",
+      "theme_directive": {
+        "location_id": "d5b616c6-f9b6-405a-9465-3b9c2f8188a6",
+        "primary_color": "#1f6f8b",
+        "bg_color": "#f2f6f7",
+        "text_color": "#111111",
+        "heading_font": "cormorant",
+        "body_font": "dmsans"
+      },
+      "visual_gate": {
+        "pass": true,
+        "viewports": {
+          "mobile": {
+            "url": "https://dowiz-staging.fly.dev/s/ventus",
+            "itemCount": 49,
+            "consoleErrors": 0,
+            "addCount": 0,
+            "cartCount": 0,
+            "orderBtns": 0,
+            "noindex": true
+          },
+          "desktop": {
+            "url": "https://dowiz-staging.fly.dev/s/ventus",
+            "itemCount": 49,
+            "consoleErrors": 0,
+            "addCount": 0,
+            "cartCount": 0,
+            "orderBtns": 0,
+            "noindex": true
+          }
+        },
+        "mode": "playwright",
+        "exitCode": 0
+      },
+      "outcome": "certified-preview",
+      "state": "VERIFIED",
+      "preview_url": "https://dowiz-staging.fly.dev/s/ventus"
+    },
+    {
+      "row": 4,
+      "place_id": "wolt:aragosta-durres",
+      "name": "Aragosta Restaurant",
+      "slug": "aragosta",
+      "warnings": [],
+      "menu_stats": {
+        "nCats": 8,
+        "nItems": 63,
+        "descRatio": 0,
+        "imgRatio": 1
+      },
+      "menu_draft": {
+        "categories": [
+          {
+            "name": "Të tjera",
+            "sort_order": 0,
+            "products": [
+              {
+                "name": "Çaj i ftohtë  Pjeshke",
+                "price": 220,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1f24bfc8a04be564a0"
+                }
+              },
+              {
+                "name": "Pulsi Beratit Nurellari",
+                "price": 2750,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564ab"
+                }
+              },
+              {
+                "name": "E Bardha Beratit Çobo",
+                "price": 2750,
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564a8"
+                }
+              },
+              {
+                "name": "Supë Peshku",
+                "price": 660,
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1724bfc8a04be56491"
+                }
+              },
+              {
+                "name": "Bravo Molle",
+                "price": 220,
+                "sort_order": 4,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564a7"
+                }
+              },
+              {
+                "name": "Kallmet Arbëri Riserva",
+                "price": 3300,
+                "sort_order": 5,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2124bfc8a04be564af"
+                }
+              },
+              {
+                "name": "Rizoto me Fruta Deti",
+                "price": 1160,
+                "sort_order": 6,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1724bfc8a04be56490"
+                }
+              },
+              {
+                "name": "Red Bull",
+                "price": 385,
+                "sort_order": 7,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564a4"
+                }
+              },
+              {
+                "name": "Barbun i Skuqur",
+                "price": 1320,
+                "sort_order": 8,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1a24bfc8a04be56493"
+                }
+              },
+              {
+                "name": "Ujë",
+                "price": 110,
+                "sort_order": 9,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1e24bfc8a04be5649b"
+                }
+              },
+              {
+                "name": "Merluc i Skuqur",
+                "price": 1100,
+                "sort_order": 10,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1724bfc8a04be5648d"
+                }
+              },
+              {
+                "name": "Pecorino",
+                "price": 2750,
+                "sort_order": 11,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564aa"
+                }
+              },
+              {
+                "name": "Shesh i Bardhë Arbëri",
+                "price": 2200,
+                "sort_order": 12,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbc50ff803e27f0484f84"
+                }
+              },
+              {
+                "name": "Fokaçe",
+                "price": 330,
+                "sort_order": 13,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1a24bfc8a04be56497"
+                }
+              },
+              {
+                "name": "Rizoto me Porcini & Parmigiano",
+                "price": 990,
+                "sort_order": 14,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb8424bfc8a04be564d1"
+                }
+              },
+              {
+                "name": "Aragosta Vermentino",
+                "price": 2750,
+                "sort_order": 15,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2124bfc8a04be564ac"
+                }
+              },
+              {
+                "name": "Kroketa Merluci",
+                "price": 790,
+                "sort_order": 16,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2524bfc8a04be564ba"
+                }
+              },
+              {
+                "name": "Bravo Pjeshke",
+                "price": 220,
+                "sort_order": 17,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564a3"
+                }
+              },
+              {
+                "name": "Djathë Kaçkavall Zgare ose Sade",
+                "price": 440,
+                "sort_order": 18,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1324bfc8a04be56489"
+                }
+              },
+              {
+                "name": "Kashmer Çobo",
+                "price": 2750,
+                "sort_order": 19,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2124bfc8a04be564b0"
+                }
+              },
+              {
+                "name": "Rizoto me Perime",
+                "price": 660,
+                "sort_order": 20,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb8024bfc8a04be564d0"
+                }
+              },
+              {
+                "name": "Patate të Skuqura",
+                "price": 330,
+                "sort_order": 21,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1324bfc8a04be5648a"
+                }
+              },
+              {
+                "name": "Çaj i ftohtë Limon",
+                "price": 220,
+                "sort_order": 22,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564a6"
+                }
+              },
+              {
+                "name": "Djathë i  Bardhë Furre ose Sade",
+                "price": 385,
+                "sort_order": 23,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb0d24bfc8a04be56483"
+                }
+              },
+              {
+                "name": "Bravo Rrushi",
+                "price": 220,
+                "sort_order": 24,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564a5"
+                }
+              },
+              {
+                "name": "Petulla",
+                "price": 330,
+                "sort_order": 25,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2524bfc8a04be564b9"
+                }
+              },
+              {
+                "name": "Kallamare Zgare ose Friturë",
+                "price": 1430,
+                "sort_order": 26,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb0d24bfc8a04be56486"
+                }
+              },
+              {
+                "name": "Açuge e Marinuar ose Friturë",
+                "price": 720,
+                "sort_order": 27,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2224bfc8a04be564b7"
+                }
+              },
+              {
+                "name": "Chardonnay Collio Cormons",
+                "price": 3080,
+                "sort_order": 28,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2024bfc8a04be564a9"
+                }
+              },
+              {
+                "name": "Miks Fruta Deti në Zgarë ose Friturë",
+                "price": 1980,
+                "sort_order": 29,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb0d24bfc8a04be56482"
+                }
+              },
+              {
+                "name": "Briosh",
+                "price": 165,
+                "sort_order": 30,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2524bfc8a04be564bb"
+                }
+              },
+              {
+                "name": "Patate të Skuqura",
+                "price": 110,
+                "sort_order": 31,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1e24bfc8a04be5649b"
+                }
+              },
+              {
+                "name": "Ujë",
+                "price": 165,
+                "sort_order": 32,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2524bfc8a04be564bb"
+                }
+              },
+              {
+                "name": "Briosh",
+                "price": 330,
+                "sort_order": 33,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2524bfc8a04be564b9"
+                }
+              },
+              {
+                "name": "Petulla",
+                "price": 1430,
+                "sort_order": 34,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1a24bfc8a04be56494"
+                }
+              },
+              {
+                "name": "Rizoto me Perime",
+                "price": 220,
+                "sort_order": 35,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1e24bfc8a04be5649c"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Antipasti & Sallata",
+            "sort_order": 1,
+            "products": [
+              {
+                "name": "Karpaçio Levrek ose Oktapod",
+                "price": 1100,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2224bfc8a04be564b6"
+                }
+              },
+              {
+                "name": "Sallatë Oktapodi",
+                "price": 1650,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2224bfc8a04be564b3"
+                }
+              },
+              {
+                "name": "Sallatë Stine",
+                "price": 660,
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1324bfc8a04be5648b"
+                }
+              },
+              {
+                "name": "Sallatë Greke",
+                "price": 550,
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1324bfc8a04be5648c"
+                }
+              },
+              {
+                "name": "Sallatë Çezar",
+                "price": 770,
+                "sort_order": 4,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1724bfc8a04be5648e"
+                }
+              },
+              {
+                "name": "Sallatë me Fruta Deti",
+                "price": 1100,
+                "sort_order": 5,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2224bfc8a04be564b5"
+                }
+              },
+              {
+                "name": "Sallatë Greke",
+                "price": 330,
+                "sort_order": 6,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2524bfc8a04be564bc"
+                }
+              },
+              {
+                "name": "Sallatë me Fruta Deti",
+                "price": 660,
+                "sort_order": 7,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb8024bfc8a04be564d0"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Pije",
+            "sort_order": 2,
+            "products": [
+              {
+                "name": "Lemon Soda",
+                "price": 220,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1f24bfc8a04be5649f"
+                }
+              },
+              {
+                "name": "Schweppes Tonic Water",
+                "price": 220,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1f24bfc8a04be564a1"
+                }
+              },
+              {
+                "name": "Sprite",
+                "price": 220,
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1f24bfc8a04be564a2"
+                }
+              },
+              {
+                "name": "Fanta Exotic",
+                "price": 220,
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1e24bfc8a04be56499"
+                }
+              },
+              {
+                "name": "Orange Soda",
+                "price": 220,
+                "sort_order": 4,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1f24bfc8a04be5649e"
+                }
+              },
+              {
+                "name": "Coca cola Zero",
+                "price": 220,
+                "sort_order": 5,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1e24bfc8a04be5649c"
+                }
+              },
+              {
+                "name": "Fanta Portokall",
+                "price": 220,
+                "sort_order": 6,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1e24bfc8a04be5649d"
+                }
+              },
+              {
+                "name": "Coca cola Zero",
+                "price": 880,
+                "sort_order": 7,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/6a11405f163733b7fe60b3fb"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Peshk & Detare",
+            "sort_order": 3,
+            "products": [
+              {
+                "name": "Oktapod Zgare",
+                "price": 1650,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb0d24bfc8a04be56485"
+                }
+              },
+              {
+                "name": "Karkalec në Zgarë",
+                "price": 1870,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb0d24bfc8a04be56484"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Mish & Grill",
+            "sort_order": 4,
+            "products": [
+              {
+                "name": "Fileto Pule në Zgarë me Patate",
+                "price": 940,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1a24bfc8a04be56496"
+                }
+              },
+              {
+                "name": "Biftek Viçi Në Zgarë me Patate",
+                "price": 1430,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1a24bfc8a04be56494"
+                }
+              },
+              {
+                "name": "Biftek Viçi Në Zgarë me Patate",
+                "price": 1100,
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2224bfc8a04be564b5"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Ëmbëlsira",
+            "sort_order": 5,
+            "products": [
+              {
+                "name": "Tortë Tradicionale",
+                "price": 330,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb2524bfc8a04be564bc"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Pizza",
+            "sort_order": 6,
+            "products": [
+              {
+                "name": "Pizza Margherita",
+                "price": 600,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1a24bfc8a04be56495"
+                }
+              },
+              {
+                "name": "Pizza Proshute Cotto Ullinj",
+                "price": 880,
+                "sort_order": 1,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/6a11405f163733b7fe60b3fb"
+                }
+              },
+              {
+                "name": "Pizza Diavola",
+                "price": 770,
+                "sort_order": 2,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/6a1140d2508522294be47145"
+                }
+              },
+              {
+                "name": "Pizza Proshute Cotto Ullinj",
+                "price": 1160,
+                "sort_order": 3,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1724bfc8a04be5648f"
+                }
+              }
+            ]
+          },
+          {
+            "name": "Pasta",
+            "sort_order": 7,
+            "products": [
+              {
+                "name": "Linguine me Fruta Deti",
+                "price": 1160,
+                "sort_order": 0,
+                "attributes": {
+                  "image_url": "https://imageproxy.wolt.com/assets/67fcbb1724bfc8a04be5648f"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "palette": {
+        "primary_color": "#1f6f8b",
+        "bg_color": "#f2f6f7",
+        "text_color": "#111111",
+        "heading_font": "cormorant",
+        "body_font": "dmsans"
+      },
+      "source_id": "a654f3d7-64f9-424c-9107-d74b434403d2",
+      "org_id": "2715755b-0ad4-4853-b1a9-7d902ec78696",
+      "location_id": "6e5f9d72-1b97-4ec5-9494-6ccc80f0e88e",
+      "theme_directive": {
+        "location_id": "6e5f9d72-1b97-4ec5-9494-6ccc80f0e88e",
+        "primary_color": "#1f6f8b",
+        "bg_color": "#f2f6f7",
+        "text_color": "#111111",
+        "heading_font": "cormorant",
+        "body_font": "dmsans"
+      },
+      "visual_gate": {
+        "pass": true,
+        "viewports": {
+          "mobile": {
+            "url": "https://dowiz-staging.fly.dev/s/aragosta",
+            "itemCount": 63,
+            "consoleErrors": 0,
+            "addCount": 0,
+            "cartCount": 0,
+            "orderBtns": 0,
+            "noindex": true
+          },
+          "desktop": {
+            "url": "https://dowiz-staging.fly.dev/s/aragosta",
+            "itemCount": 63,
+            "consoleErrors": 0,
+            "addCount": 0,
+            "cartCount": 0,
+            "orderBtns": 0,
+            "noindex": true
+          }
+        },
+        "mode": "playwright",
+        "exitCode": 0
+      },
+      "outcome": "certified-preview",
+      "state": "VERIFIED",
+      "preview_url": "https://dowiz-staging.fly.dev/s/aragosta"
+    }
+  ]
+}

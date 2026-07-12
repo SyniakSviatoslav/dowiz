@@ -1,0 +1,61 @@
+{
+  "at": "2026-07-01T10:22:33.440Z",
+  "base_url": "http://127.0.0.1:43499",
+  "storefront_base": "http://127.0.0.1:39197",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 0,
+    "invited": 1,
+    "needs_review": 0,
+    "skipped_already_done": 0,
+    "send_invite": true
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-goodmenu-zeta",
+      "name": "Zeta",
+      "slug": "zeta",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#3f7d4f",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "source_id": "0e06fd40-2bd4-4258-ac0a-579135a78999",
+      "org_id": "d479ff37-eb3d-47f7-82d6-4de48414c83f",
+      "location_id": "fc61b1f0-16eb-4dd5-8b34-c4fe1b4e3a7b",
+      "theme_directive": {
+        "location_id": "fc61b1f0-16eb-4dd5-8b34-c4fe1b4e3a7b",
+        "primary_color": "#3f7d4f",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "visual_gate": {
+        "pass": true,
+        "viewports": {
+          "mobile": {
+            "pass": true,
+            "reasons": [],
+            "itemCount": 5
+          },
+          "desktop": {
+            "pass": true,
+            "reasons": [],
+            "itemCount": 5
+          }
+        },
+        "mode": "probe"
+      },
+      "outcome": "invited",
+      "state": "CLAIM_OFFERED",
+      "preview_url": "http://127.0.0.1:39197/s/zeta",
+      "claim_url": "http://127.0.0.1:39197/claim#token=claim-01385689-6b86-486f-9c12-cb7754ee0477",
+      "decline_url": "http://127.0.0.1:39197/claim#token=claim-01385689-6b86-486f-9c12-cb7754ee0477"
+    }
+  ]
+}

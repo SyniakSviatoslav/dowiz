@@ -1,0 +1,21 @@
+{
+  "at": "2026-06-28T22:15:11.882Z",
+  "base_url": "http://127.0.0.1:33649",
+  "summary": {
+    "attempted": 1,
+    "invited": 0,
+    "needs_review": 1,
+    "skipped_already_done": 0
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-happy-1",
+      "name": "Alpha",
+      "slug": "alpha",
+      "warnings": [],
+      "outcome": "needs-review",
+      "reason": "OPS_AUTH_404 (secret rejected / surface disabled)"
+    }
+  ]
+}

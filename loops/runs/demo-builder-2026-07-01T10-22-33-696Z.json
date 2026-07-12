@@ -1,0 +1,33 @@
+{
+  "at": "2026-07-01T10:22:33.696Z",
+  "base_url": "http://127.0.0.1:36193",
+  "storefront_base": "http://127.0.0.1:39785",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 0,
+    "invited": 0,
+    "needs_review": 0,
+    "skipped_already_done": 1,
+    "send_invite": true
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-goodmenu-omega",
+      "name": "Omega",
+      "slug": "omega",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#c1352b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "source_id": "97ba367f-62dc-492f-99ea-9a8f7a410b28",
+      "outcome": "skipped-already-done",
+      "reason": "already-invited (active invite exists)",
+      "state": "CLAIM_OFFERED"
+    }
+  ]
+}

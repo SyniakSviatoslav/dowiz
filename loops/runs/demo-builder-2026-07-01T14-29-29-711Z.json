@@ -1,0 +1,112 @@
+{
+  "at": "2026-07-01T14:29:29.711Z",
+  "base_url": "http://127.0.0.1:41729",
+  "storefront_base": "http://127.0.0.1:46415",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 0,
+    "invited": 1,
+    "needs_review": 0,
+    "skipped_already_done": 0,
+    "send_invite": true
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-goodmenu-omega",
+      "name": "Omega",
+      "slug": "omega",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#964739",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "source_id": "a2dcb8dc-211f-4c55-abf7-08f4b8166ac8",
+      "org_id": "50fd6422-a84d-4809-9e2c-3d7ad943f152",
+      "location_id": "88d495d5-cd53-4067-8bb1-ebeb09b82da5",
+      "theme_directive": {
+        "location_id": "88d495d5-cd53-4067-8bb1-ebeb09b82da5",
+        "primary_color": "#964739",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "maps_directive": {
+        "location_id": "88d495d5-cd53-4067-8bb1-ebeb09b82da5",
+        "matched_name": "Results",
+        "address": "Rruga Pavaresia, Durrës 2000, Albania",
+        "lat": 41.3126206,
+        "lng": 19.4801277,
+        "phone": "+355684344156",
+        "google_rating": 4.7,
+        "google_review_count": 49,
+        "google_maps_url": "https://www.google.com/maps/place/Omega+gym/data=!4m7!3m6!1s0x134fd9bf1b6b93a7:0xb157e53df67b704c!8m2!3d41.3126206!4d19.4801277!16s%2Fg%2F11sjvxklxp!19sChIJp5NrG7_ZTxMRTHB79j3lV7E",
+        "hours_json": {
+          "monday": {
+            "isOpen": true,
+            "open": "08:00",
+            "close": "22:30"
+          },
+          "tuesday": {
+            "isOpen": true,
+            "open": "08:00",
+            "close": "22:30"
+          },
+          "wednesday": {
+            "isOpen": true,
+            "open": "08:00",
+            "close": "22:30"
+          },
+          "thursday": {
+            "isOpen": true,
+            "open": "08:00",
+            "close": "22:30"
+          },
+          "friday": {
+            "isOpen": true,
+            "open": "08:00",
+            "close": "22:30"
+          },
+          "saturday": {
+            "isOpen": true,
+            "open": "08:00",
+            "close": "21:00"
+          },
+          "sunday": {
+            "isOpen": false,
+            "open": "00:00",
+            "close": "00:00"
+          }
+        },
+        "brand_color": "#964739",
+        "hero_url": "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGSV7Mvn9UCHSkGLGpIyNoSYBDwl7DuDy3a56FLQcDL10pSRp_bpLc57OCE6x212vwLGi58iIXySNCVU7T4mT_FPzRC2bAd8bqIUJ8zF7xZkVQ2xPHQFUz1d67_wf9adxW80CrXFw=w1600-h1200-k-no",
+        "has_hero": true
+      },
+      "visual_gate": {
+        "pass": true,
+        "viewports": {
+          "mobile": {
+            "pass": true,
+            "reasons": [],
+            "itemCount": 5
+          },
+          "desktop": {
+            "pass": true,
+            "reasons": [],
+            "itemCount": 5
+          }
+        },
+        "mode": "probe"
+      },
+      "outcome": "invited",
+      "state": "CLAIM_OFFERED",
+      "preview_url": "http://127.0.0.1:46415/s/omega",
+      "claim_url": "http://127.0.0.1:46415/claim#token=claim-73d2e5be-d51a-450c-abb9-2161124b3571",
+      "decline_url": "http://127.0.0.1:46415/claim#token=claim-73d2e5be-d51a-450c-abb9-2161124b3571"
+    }
+  ]
+}

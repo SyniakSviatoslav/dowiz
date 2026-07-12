@@ -1,0 +1,132 @@
+{
+  "at": "2026-07-01T08:21:14.391Z",
+  "base_url": "http://127.0.0.1:36651",
+  "storefront_base": "http://127.0.0.1:42827",
+  "summary": {
+    "attempted": 5,
+    "certified_preview": 1,
+    "invited": 0,
+    "needs_review": 4,
+    "skipped_already_done": 0,
+    "send_invite": false
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-goodmenu-alpha",
+      "name": "Alpha Pizzeria",
+      "slug": "alpha",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#c1352b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "source_id": "104aae2c-0a80-4284-be2e-0d214648b506",
+      "org_id": "73c1c1be-129d-42fe-b003-cab7ce712a2c",
+      "location_id": "84e11bf0-5b97-49ff-bf97-d62daf7f707f",
+      "theme_directive": {
+        "location_id": "84e11bf0-5b97-49ff-bf97-d62daf7f707f",
+        "primary_color": "#c1352b",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "visual_gate": {
+        "pass": true,
+        "viewports": {
+          "mobile": {
+            "pass": true,
+            "reasons": [],
+            "itemCount": 5
+          },
+          "desktop": {
+            "pass": true,
+            "reasons": [],
+            "itemCount": 5
+          }
+        },
+        "mode": "probe"
+      },
+      "outcome": "certified-preview",
+      "state": "VERIFIED",
+      "preview_url": "http://127.0.0.1:42827/s/alpha"
+    },
+    {
+      "row": 2,
+      "place_id": "place-lowquality-beta",
+      "name": "Beta",
+      "slug": "beta",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#e08a1e",
+        "bg_color": "#201d1a",
+        "text_color": "#ffffff",
+        "heading_font": "bebas",
+        "body_font": "inter"
+      },
+      "source_id": "cf6b7f00-3182-4b06-993f-057e18b0dcc8",
+      "outcome": "needs-review",
+      "reason": "EXTRACT:LOW_QUALITY",
+      "state": "LOW_QUALITY"
+    },
+    {
+      "row": 3,
+      "place_id": "place-menunotfound-gamma",
+      "name": "Gamma",
+      "slug": "gamma",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#8a5a2b",
+        "bg_color": "#f6efe4",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "inter"
+      },
+      "source_id": "966b1966-32df-4986-961f-ebbee0df40b0",
+      "outcome": "needs-review",
+      "reason": "EXTRACT:MENU_NOT_FOUND",
+      "state": "MENU_NOT_FOUND"
+    },
+    {
+      "row": 4,
+      "place_id": "place-emptymenu-delta",
+      "name": "Delta",
+      "slug": "delta",
+      "warnings": [],
+      "palette": {
+        "primary_color": "#c8a24a",
+        "bg_color": "#14201f",
+        "text_color": "#ffffff",
+        "heading_font": "cormorant",
+        "body_font": "dmsans"
+      },
+      "source_id": "6ca73952-ac88-4f10-aeb0-a4fe0763df3d",
+      "org_id": "591601bb-bc2c-42d3-9470-80715ebf4db1",
+      "location_id": "7dff2318-44bd-4660-8eed-ac3b27e473b9",
+      "theme_directive": {
+        "location_id": "7dff2318-44bd-4660-8eed-ac3b27e473b9",
+        "primary_color": "#c8a24a",
+        "bg_color": "#14201f",
+        "text_color": "#ffffff",
+        "heading_font": "cormorant",
+        "body_font": "dmsans"
+      },
+      "outcome": "needs-review",
+      "reason": "NOT_VERIFIABLE:NOT_VERIFIABLE",
+      "state": "PROVISIONED"
+    },
+    {
+      "row": 5,
+      "place_id": "place-malformed-eps",
+      "name": "Eps",
+      "slug": "",
+      "warnings": [],
+      "outcome": "needs-review",
+      "reason": "MALFORMED_ROW:missing slug"
+    }
+  ]
+}

@@ -1,0 +1,298 @@
+[
+  {
+    "name": "storefront-s-demo",
+    "path": "/s/demo",
+    "token": null,
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ],
+    "probe": {
+      "bodyLen": 4510,
+      "rootLen": 4510,
+      "hasH": true,
+      "errBoundary": false,
+      "skeletons": 0,
+      "snippet": "Dubin & Sushi\nL\nSQ\nEN\nDubin & Sushi\nHapur\nPizzas\n(2)\nPastas\n(1)\nSalads\n(1)\nBeverages\n(1)\nCalifornia\n(6)\nPremium\n(8)\nChef's Picks\n(8)\nMaki\n(6)\nPhiladelphia\n(2)\nSignature\n(2)\nSets\n(4)\nFutomaki\n(1)\nHot r"
+    }
+  },
+  {
+    "name": "admin-orders",
+    "path": "/admin/orders",
+    "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImRldiJ9.eyJyb2xlIjoib3duZXIiLCJ1c2VySWQiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJzdWIiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJraWQiOiJkZXYiLCJpYXQiOjE3ODIzMjcwMDMsImV4cCI6MTc4MjQxMzQwM30.tG-2oIwWlfPv7wOZxqMeQCr9vfS9dYa96ie-TnOeAbI9kSjbttDeCzd0BtqzSDR5w1vNKI2eh7RKIIK_fmVDccHaptHf-g4_ubJourTbS_bsyRBexNcYvTnNjErC-ewruCDF12zDD6PLl_PftESFKevRhmNd1xgjdJy6HBKnkVKLViY4JsmwWGJgZGMLAA8jECYbfMwQhDzxfmAOz3ZNSpM0nVupr85zSSYQyr-f0tlgaNqlKrD5l7FzQcPPmlNAemuETnbp153ceiVV5DaUlnbSZEJIH-JJHhQzVTgu_kMf7jdGDq0UvQKScsXr52hRvS5ScqJa15R8rjLVHU6p3Q",
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [],
+    "probe": {
+      "bodyLen": 748,
+      "rootLen": 748,
+      "hasH": true,
+      "errBoundary": false,
+      "skeletons": 1,
+      "snippet": "Dowiz\nL\nSQ\nEN\nUA\nMirë se vini në Panel\nKëtu mund të menaxhoni porositë e ardhshme, të gjurmoni kurierët dhe të monitoroni gatishmërinë e dyqanit.\n0\nNë pritje\n4\nDuke u përgatitur\n2\nGati\n6\nNë dorëzim\n22"
+    }
+  },
+  {
+    "name": "admin-menu",
+    "path": "/admin/menu",
+    "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImRldiJ9.eyJyb2xlIjoib3duZXIiLCJ1c2VySWQiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJzdWIiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJraWQiOiJkZXYiLCJpYXQiOjE3ODIzMjcwMDMsImV4cCI6MTc4MjQxMzQwM30.tG-2oIwWlfPv7wOZxqMeQCr9vfS9dYa96ie-TnOeAbI9kSjbttDeCzd0BtqzSDR5w1vNKI2eh7RKIIK_fmVDccHaptHf-g4_ubJourTbS_bsyRBexNcYvTnNjErC-ewruCDF12zDD6PLl_PftESFKevRhmNd1xgjdJy6HBKnkVKLViY4JsmwWGJgZGMLAA8jECYbfMwQhDzxfmAOz3ZNSpM0nVupr85zSSYQyr-f0tlgaNqlKrD5l7FzQcPPmlNAemuETnbp153ceiVV5DaUlnbSZEJIH-JJHhQzVTgu_kMf7jdGDq0UvQKScsXr52hRvS5ScqJa15R8rjLVHU6p3Q",
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [],
+    "probe": {
+      "bodyLen": 4725,
+      "rootLen": 4725,
+      "hasH": true,
+      "errBoundary": false,
+      "skeletons": 0,
+      "snippet": "Dowiz\nL\nSQ\nEN\nUA\nMenaxhimi i Menusë\n\n15 kategori · 49 të disponueshme\n\nImporto PDF\nShëno kuzhinën si të zënë (ETA më e lartë)\nOraret e disponueshmërisë (vaktet)\nTë gjitha\nPizzas\n(2)\nPastas\n(1)\nSalads\n"
+    }
+  },
+  {
+    "name": "admin-analytics",
+    "path": "/admin/analytics",
+    "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImRldiJ9.eyJyb2xlIjoib3duZXIiLCJ1c2VySWQiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJzdWIiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJraWQiOiJkZXYiLCJpYXQiOjE3ODIzMjcwMDMsImV4cCI6MTc4MjQxMzQwM30.tG-2oIwWlfPv7wOZxqMeQCr9vfS9dYa96ie-TnOeAbI9kSjbttDeCzd0BtqzSDR5w1vNKI2eh7RKIIK_fmVDccHaptHf-g4_ubJourTbS_bsyRBexNcYvTnNjErC-ewruCDF12zDD6PLl_PftESFKevRhmNd1xgjdJy6HBKnkVKLViY4JsmwWGJgZGMLAA8jECYbfMwQhDzxfmAOz3ZNSpM0nVupr85zSSYQyr-f0tlgaNqlKrD5l7FzQcPPmlNAemuETnbp153ceiVV5DaUlnbSZEJIH-JJHhQzVTgu_kMf7jdGDq0UvQKScsXr52hRvS5ScqJa15R8rjLVHU6p3Q",
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [],
+    "probe": {
+      "bodyLen": 1305,
+      "rootLen": 1305,
+      "hasH": true,
+      "errBoundary": false,
+      "skeletons": 0,
+      "snippet": "Dowiz\nL\nSQ\nEN\nUA\nAnalitika\n\nPasqyrë e performancës së restorantit tuaj\n\n7 ditë\n30 ditë\nPasqyrë\nEksporto CSV\nTë Ardhurat\n136.1K\n+15% kundrejt periudhës së mëparshme\nPorositë\n77\n+5 kundrejt periudhës së"
+    }
+  },
+  {
+    "name": "admin-settings",
+    "path": "/admin/settings",
+    "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImRldiJ9.eyJyb2xlIjoib3duZXIiLCJ1c2VySWQiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJzdWIiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJraWQiOiJkZXYiLCJpYXQiOjE3ODIzMjcwMDMsImV4cCI6MTc4MjQxMzQwM30.tG-2oIwWlfPv7wOZxqMeQCr9vfS9dYa96ie-TnOeAbI9kSjbttDeCzd0BtqzSDR5w1vNKI2eh7RKIIK_fmVDccHaptHf-g4_ubJourTbS_bsyRBexNcYvTnNjErC-ewruCDF12zDD6PLl_PftESFKevRhmNd1xgjdJy6HBKnkVKLViY4JsmwWGJgZGMLAA8jECYbfMwQhDzxfmAOz3ZNSpM0nVupr85zSSYQyr-f0tlgaNqlKrD5l7FzQcPPmlNAemuETnbp153ceiVV5DaUlnbSZEJIH-JJHhQzVTgu_kMf7jdGDq0UvQKScsXr52hRvS5ScqJa15R8rjLVHU6p3Q",
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [],
+    "probe": {
+      "bodyLen": 1340,
+      "rootLen": 1340,
+      "hasH": true,
+      "errBoundary": false,
+      "skeletons": 0,
+      "snippet": "Dowiz\nL\nSQ\nEN\nUA\nCilësimet\n\nMenaxho detajet e dyqanit, zonën e dorëzimit, oraret dhe njoftimet.\n\nDetajet e Dyqanit\nEmri i Vendit\nTelefoni\nAdresa\nKonfigurimi i Dorëzimit\nTarifa e dorëzimit (ALL)\nPorosi"
+    }
+  },
+  {
+    "name": "admin-branding",
+    "path": "/admin/branding",
+    "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImRldiJ9.eyJyb2xlIjoib3duZXIiLCJ1c2VySWQiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJzdWIiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJraWQiOiJkZXYiLCJpYXQiOjE3ODIzMjcwMDMsImV4cCI6MTc4MjQxMzQwM30.tG-2oIwWlfPv7wOZxqMeQCr9vfS9dYa96ie-TnOeAbI9kSjbttDeCzd0BtqzSDR5w1vNKI2eh7RKIIK_fmVDccHaptHf-g4_ubJourTbS_bsyRBexNcYvTnNjErC-ewruCDF12zDD6PLl_PftESFKevRhmNd1xgjdJy6HBKnkVKLViY4JsmwWGJgZGMLAA8jECYbfMwQhDzxfmAOz3ZNSpM0nVupr85zSSYQyr-f0tlgaNqlKrD5l7FzQcPPmlNAemuETnbp153ceiVV5DaUlnbSZEJIH-JJHhQzVTgu_kMf7jdGDq0UvQKScsXr52hRvS5ScqJa15R8rjLVHU6p3Q",
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 ()",
+      "Failed to load resource: the server responded with a status of 404 ()",
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ],
+    "probe": {
+      "bodyLen": 1074,
+      "rootLen": 1074,
+      "hasH": true,
+      "errBoundary": false,
+      "skeletons": 0,
+      "snippet": "Dowiz\nL\nSQ\nEN\nUA\nBrandingu\nGjenero automatikisht nga brandi juaj\n\nNgjitni faqen tuaj ekzistuese dhe/ose ngarkoni logon tuaj — ne do të zbulojmë ngjyrat tuaja dhe do të ndërtojmë një vitrinë që përputh"
+    }
+  },
+  {
+    "name": "admin-promotions",
+    "path": "/admin/promotions",
+    "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImRldiJ9.eyJyb2xlIjoib3duZXIiLCJ1c2VySWQiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJzdWIiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJraWQiOiJkZXYiLCJpYXQiOjE3ODIzMjcwMDMsImV4cCI6MTc4MjQxMzQwM30.tG-2oIwWlfPv7wOZxqMeQCr9vfS9dYa96ie-TnOeAbI9kSjbttDeCzd0BtqzSDR5w1vNKI2eh7RKIIK_fmVDccHaptHf-g4_ubJourTbS_bsyRBexNcYvTnNjErC-ewruCDF12zDD6PLl_PftESFKevRhmNd1xgjdJy6HBKnkVKLViY4JsmwWGJgZGMLAA8jECYbfMwQhDzxfmAOz3ZNSpM0nVupr85zSSYQyr-f0tlgaNqlKrD5l7FzQcPPmlNAemuETnbp153ceiVV5DaUlnbSZEJIH-JJHhQzVTgu_kMf7jdGDq0UvQKScsXr52hRvS5ScqJa15R8rjLVHU6p3Q",
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [],
+    "probe": {
+      "bodyLen": 153,
+      "rootLen": 153,
+      "hasH": true,
+      "errBoundary": false,
+      "skeletons": 0,
+      "snippet": "Dowiz\nL\nSQ\nEN\nUA\nPromocionet\nKrijo Promocion\nAsnjë promocion\n\nKrijoni promocionin tuaj të parë për të ofruar ulje për klientët.\n\nKrijo Promocion\nMë shumë"
+    }
+  },
+  {
+    "name": "admin-crm",
+    "path": "/admin/crm",
+    "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImRldiJ9.eyJyb2xlIjoib3duZXIiLCJ1c2VySWQiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJzdWIiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJraWQiOiJkZXYiLCJpYXQiOjE3ODIzMjcwMDMsImV4cCI6MTc4MjQxMzQwM30.tG-2oIwWlfPv7wOZxqMeQCr9vfS9dYa96ie-TnOeAbI9kSjbttDeCzd0BtqzSDR5w1vNKI2eh7RKIIK_fmVDccHaptHf-g4_ubJourTbS_bsyRBexNcYvTnNjErC-ewruCDF12zDD6PLl_PftESFKevRhmNd1xgjdJy6HBKnkVKLViY4JsmwWGJgZGMLAA8jECYbfMwQhDzxfmAOz3ZNSpM0nVupr85zSSYQyr-f0tlgaNqlKrD5l7FzQcPPmlNAemuETnbp153ceiVV5DaUlnbSZEJIH-JJHhQzVTgu_kMf7jdGDq0UvQKScsXr52hRvS5ScqJa15R8rjLVHU6p3Q",
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [],
+    "probe": {
+      "bodyLen": 3025,
+      "rootLen": 3025,
+      "hasH": true,
+      "errBoundary": false,
+      "skeletons": 0,
+      "snippet": "Dowiz\nL\nSQ\nEN\nUA\nKlientët\n\n50 klientë\n\nMë shumë porosi\nLTV më i larti\nEmri A-Z\nEksporto CSV\nQA\n+3***67\n6 porosi\n7600 ALL\n22 orë më parë\nZbulo\nE2E Stepper\n+3***09\n1 porosi\n1050 ALL\n1 ditë më parë\nZbulo"
+    }
+  },
+  {
+    "name": "admin-couriers",
+    "path": "/admin/couriers",
+    "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImRldiJ9.eyJyb2xlIjoib3duZXIiLCJ1c2VySWQiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJzdWIiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJraWQiOiJkZXYiLCJpYXQiOjE3ODIzMjcwMDMsImV4cCI6MTc4MjQxMzQwM30.tG-2oIwWlfPv7wOZxqMeQCr9vfS9dYa96ie-TnOeAbI9kSjbttDeCzd0BtqzSDR5w1vNKI2eh7RKIIK_fmVDccHaptHf-g4_ubJourTbS_bsyRBexNcYvTnNjErC-ewruCDF12zDD6PLl_PftESFKevRhmNd1xgjdJy6HBKnkVKLViY4JsmwWGJgZGMLAA8jECYbfMwQhDzxfmAOz3ZNSpM0nVupr85zSSYQyr-f0tlgaNqlKrD5l7FzQcPPmlNAemuETnbp153ceiVV5DaUlnbSZEJIH-JJHhQzVTgu_kMf7jdGDq0UvQKScsXr52hRvS5ScqJa15R8rjLVHU6p3Q",
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [],
+    "probe": {
+      "bodyLen": 2584,
+      "rootLen": 2584,
+      "hasH": true,
+      "errBoundary": false,
+      "skeletons": 0,
+      "snippet": "Dowiz\nL\nSQ\nEN\nUA\nPostierët\n53 online\nEksporto CSV\n+ Shto Postier\n?\nKorrier në pritje\nPa telefon ende\nOnline\n?\nKorrier në pritje\nPa telefon ende\nOnline\n?\nKorrier në pritje\nPa telefon ende\nOnline\n?\nKorr"
+    }
+  },
+  {
+    "name": "admin-supplies",
+    "path": "/admin/supplies",
+    "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImRldiJ9.eyJyb2xlIjoib3duZXIiLCJ1c2VySWQiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJzdWIiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJraWQiOiJkZXYiLCJpYXQiOjE3ODIzMjcwMDMsImV4cCI6MTc4MjQxMzQwM30.tG-2oIwWlfPv7wOZxqMeQCr9vfS9dYa96ie-TnOeAbI9kSjbttDeCzd0BtqzSDR5w1vNKI2eh7RKIIK_fmVDccHaptHf-g4_ubJourTbS_bsyRBexNcYvTnNjErC-ewruCDF12zDD6PLl_PftESFKevRhmNd1xgjdJy6HBKnkVKLViY4JsmwWGJgZGMLAA8jECYbfMwQhDzxfmAOz3ZNSpM0nVupr85zSSYQyr-f0tlgaNqlKrD5l7FzQcPPmlNAemuETnbp153ceiVV5DaUlnbSZEJIH-JJHhQzVTgu_kMf7jdGDq0UvQKScsXr52hRvS5ScqJa15R8rjLVHU6p3Q",
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [],
+    "probe": {
+      "bodyLen": 1022,
+      "rootLen": 1022,
+      "hasH": true,
+      "errBoundary": false,
+      "skeletons": 0,
+      "snippet": "Dowiz\nL\nSQ\nEN\nUA\nFurnizimet\n\n9 ing, 4 salca, 1 amb, 1 vegl\n\nShto Furnizim\nFurnizimet\nPërbërësit e shtuar këtu shfaqen në redaktorin e recetave. Definoni një herë, përdorni kudo.\nTë gjitha\nPërbërësit\nS"
+    }
+  },
+  {
+    "name": "admin-activation",
+    "path": "/admin/activation",
+    "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImRldiJ9.eyJyb2xlIjoib3duZXIiLCJ1c2VySWQiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJzdWIiOiI2MmQwMWI3YS0xYjYwLTRkNTEtYjYxMy1iZTgwNTk0YmRjNzUiLCJraWQiOiJkZXYiLCJpYXQiOjE3ODIzMjcwMDMsImV4cCI6MTc4MjQxMzQwM30.tG-2oIwWlfPv7wOZxqMeQCr9vfS9dYa96ie-TnOeAbI9kSjbttDeCzd0BtqzSDR5w1vNKI2eh7RKIIK_fmVDccHaptHf-g4_ubJourTbS_bsyRBexNcYvTnNjErC-ewruCDF12zDD6PLl_PftESFKevRhmNd1xgjdJy6HBKnkVKLViY4JsmwWGJgZGMLAA8jECYbfMwQhDzxfmAOz3ZNSpM0nVupr85zSSYQyr-f0tlgaNqlKrD5l7FzQcPPmlNAemuETnbp153ceiVV5DaUlnbSZEJIH-JJHhQzVTgu_kMf7jdGDq0UvQKScsXr52hRvS5ScqJa15R8rjLVHU6p3Q",
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ],
+    "probe": {
+      "bodyLen": 685,
+      "rootLen": 685,
+      "hasH": true,
+      "errBoundary": false,
+      "skeletons": 0,
+      "snippet": "Dowiz\nL\nSQ\nEN\nUA\nLista e hapave\nPamja paraprake\nDyqani juaj është online\n\nKlientët mund të porosisin tani. Vazhdo ta përmirësosh te pamja paraprake.\n\nKonfirmoni menunë tuaj\nNgarkoni dhe kontrolloni çm"
+    }
+  },
+  {
+    "name": "courier-home",
+    "path": "/courier",
+    "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImRldiJ9.eyJyb2xlIjoiY291cmllciIsInN1YiI6ImM0YTA0MWYyLTlhNDItNDA5Mi04ODFmLTk5YzkwYTk3YmQ1MiIsImFjdGl2ZUxvY2F0aW9uSWQiOiIyODIzOTQ0Mi02M2ExLTQzMWUtOGNhYi0yZTRlZDY0YWI4ZTciLCJraWQiOiJkZXYiLCJpYXQiOjE3ODIzMjcwMDMsImV4cCI6MTc4MjQxMzQwM30.euUTOvUAqr5AOaLayCzmLVgLA2nmx-RWMXBSUGBCAO2qpjDxhlU0czTQQzQnAmyKdibMmwVhOc_S2nSfnuOms6pQEtMCSWBHFXA4v9au1yNTNNoMAo8A7ByPgl6OQKds18m--LYEtu6Lu4JiNeWmjKwMR8DcCSS0HluSqVC5fiZWRvYsSCGRTJrLPABnVqivOkPYz2LvPNCct3DntKv5tSFeyV_1d6Kdzp2pie1CPV5fch8rzZlo35jV_aBgV2gyC8jIvKAXMZsUTA_v1JBxYfvGuuM74btd1ohi_reb4PyDFmXyzg_Bw0lX18X4l3IvYtpI2OA4NBdKVfmEoFZpKQ",
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [],
+    "probe": {
+      "bodyLen": 150,
+      "rootLen": 150,
+      "hasH": true,
+      "errBoundary": false,
+      "skeletons": 0,
+      "snippet": "Courier\nL\nSQ\nEN\nUA\nDetyrat\nOffline\nJe jashtë linje\n\nKalo në linjë nga skeda Turni për të marrë dërgesa.\n\nShko te Turni\nDetyrat\nFitimet\nHistoriku\nTurni"
+    }
+  },
+  {
+    "name": "courier-shift",
+    "path": "/courier/shift",
+    "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImRldiJ9.eyJyb2xlIjoiY291cmllciIsInN1YiI6ImM0YTA0MWYyLTlhNDItNDA5Mi04ODFmLTk5YzkwYTk3YmQ1MiIsImFjdGl2ZUxvY2F0aW9uSWQiOiIyODIzOTQ0Mi02M2ExLTQzMWUtOGNhYi0yZTRlZDY0YWI4ZTciLCJraWQiOiJkZXYiLCJpYXQiOjE3ODIzMjcwMDMsImV4cCI6MTc4MjQxMzQwM30.euUTOvUAqr5AOaLayCzmLVgLA2nmx-RWMXBSUGBCAO2qpjDxhlU0czTQQzQnAmyKdibMmwVhOc_S2nSfnuOms6pQEtMCSWBHFXA4v9au1yNTNNoMAo8A7ByPgl6OQKds18m--LYEtu6Lu4JiNeWmjKwMR8DcCSS0HluSqVC5fiZWRvYsSCGRTJrLPABnVqivOkPYz2LvPNCct3DntKv5tSFeyV_1d6Kdzp2pie1CPV5fch8rzZlo35jV_aBgV2gyC8jIvKAXMZsUTA_v1JBxYfvGuuM74btd1ohi_reb4PyDFmXyzg_Bw0lX18X4l3IvYtpI2OA4NBdKVfmEoFZpKQ",
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ],
+    "probe": {
+      "bodyLen": 293,
+      "rootLen": 293,
+      "hasH": true,
+      "errBoundary": false,
+      "skeletons": 0,
+      "snippet": "Courier\nL\nSQ\nEN\nUA\nTurni\nOffline\nJeni offline. Filloni turnin për të filluar të merrni detyra dërgimi.\nFillo Turnin\nMesazher për klientët\nOpsionale — lejon klientët t'ju shkruajnë gjatë një dërgimi ak"
+    }
+  },
+  {
+    "name": "courier-earnings",
+    "path": "/courier/earnings",
+    "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImRldiJ9.eyJyb2xlIjoiY291cmllciIsInN1YiI6ImM0YTA0MWYyLTlhNDItNDA5Mi04ODFmLTk5YzkwYTk3YmQ1MiIsImFjdGl2ZUxvY2F0aW9uSWQiOiIyODIzOTQ0Mi02M2ExLTQzMWUtOGNhYi0yZTRlZDY0YWI4ZTciLCJraWQiOiJkZXYiLCJpYXQiOjE3ODIzMjcwMDMsImV4cCI6MTc4MjQxMzQwM30.euUTOvUAqr5AOaLayCzmLVgLA2nmx-RWMXBSUGBCAO2qpjDxhlU0czTQQzQnAmyKdibMmwVhOc_S2nSfnuOms6pQEtMCSWBHFXA4v9au1yNTNNoMAo8A7ByPgl6OQKds18m--LYEtu6Lu4JiNeWmjKwMR8DcCSS0HluSqVC5fiZWRvYsSCGRTJrLPABnVqivOkPYz2LvPNCct3DntKv5tSFeyV_1d6Kdzp2pie1CPV5fch8rzZlo35jV_aBgV2gyC8jIvKAXMZsUTA_v1JBxYfvGuuM74btd1ohi_reb4PyDFmXyzg_Bw0lX18X4l3IvYtpI2OA4NBdKVfmEoFZpKQ",
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [],
+    "probe": {
+      "bodyLen": 189,
+      "rootLen": 189,
+      "hasH": true,
+      "errBoundary": false,
+      "skeletons": 0,
+      "snippet": "Courier\nL\nSQ\nEN\nUA\nFitimet\nSOT\n0 ALL\nKJO JAVË\n0 ALL\nKY MUAJ\n0 ALL\nHistoriku i Pagesave\nNuk ka pagesa akoma\n\nPagesat tuaja do të shfaqen këtu pas përpunimit.\n\nDetyrat\nFitimet\nHistoriku\nTurni"
+    }
+  },
+  {
+    "name": "courier-history",
+    "path": "/courier/history",
+    "token": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImRldiJ9.eyJyb2xlIjoiY291cmllciIsInN1YiI6ImM0YTA0MWYyLTlhNDItNDA5Mi04ODFmLTk5YzkwYTk3YmQ1MiIsImFjdGl2ZUxvY2F0aW9uSWQiOiIyODIzOTQ0Mi02M2ExLTQzMWUtOGNhYi0yZTRlZDY0YWI4ZTciLCJraWQiOiJkZXYiLCJpYXQiOjE3ODIzMjcwMDMsImV4cCI6MTc4MjQxMzQwM30.euUTOvUAqr5AOaLayCzmLVgLA2nmx-RWMXBSUGBCAO2qpjDxhlU0czTQQzQnAmyKdibMmwVhOc_S2nSfnuOms6pQEtMCSWBHFXA4v9au1yNTNNoMAo8A7ByPgl6OQKds18m--LYEtu6Lu4JiNeWmjKwMR8DcCSS0HluSqVC5fiZWRvYsSCGRTJrLPABnVqivOkPYz2LvPNCct3DntKv5tSFeyV_1d6Kdzp2pie1CPV5fch8rzZlo35jV_aBgV2gyC8jIvKAXMZsUTA_v1JBxYfvGuuM74btd1ohi_reb4PyDFmXyzg_Bw0lX18X4l3IvYtpI2OA4NBdKVfmEoFZpKQ",
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [],
+    "probe": {
+      "bodyLen": 136,
+      "rootLen": 136,
+      "hasH": true,
+      "errBoundary": false,
+      "skeletons": 0,
+      "snippet": "Courier\nL\nSQ\nEN\nUA\nHistoriku\n0 dërgesa\nNuk ka dërgesa akoma\n\nDërgesat e përfunduara do të shfaqen këtu.\n\nDetyrat\nFitimet\nHistoriku\nTurni"
+    }
+  },
+  {
+    "name": "courier-login",
+    "path": "/courier/login",
+    "token": null,
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [],
+    "probe": {
+      "bodyLen": 114,
+      "rootLen": 114,
+      "hasH": true,
+      "errBoundary": false,
+      "skeletons": 0,
+      "snippet": "SQ\nEN\nUA\nDeliveryOS\nHyrja e postierit\n\nShkruani email dhe fjalëkalimin tuaj për të vazhduar\n\nEmail\nFjalëkalimi\nHyr"
+    }
+  },
+  {
+    "name": "storefront-product-modal",
+    "path": "/s/demo (modal)",
+    "token": null,
+    "navOk": true,
+    "navErr": "",
+    "pageErrors": [],
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ],
+    "probe": {
+      "modalOpened": false
+    }
+  }
+]

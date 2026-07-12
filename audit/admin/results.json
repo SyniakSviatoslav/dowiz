@@ -1,0 +1,236 @@
+[
+  {
+    "route": "admin",
+    "path": "/admin",
+    "viewport": "mobile",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/onboarding",
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 500 ()"
+    ]
+  },
+  {
+    "route": "orders",
+    "path": "/admin/orders",
+    "viewport": "mobile",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/login",
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 500 ()",
+      "Failed to load resource: the server responded with a status of 401 ()",
+      "Failed to load resource: the server responded with a status of 500 ()",
+      "Failed to load resource: the server responded with a status of 401 ()",
+      "Failed to load resource: the server responded with a status of 500 ()"
+    ]
+  },
+  {
+    "route": "menu",
+    "path": "/admin/menu",
+    "viewport": "mobile",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/menu",
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 500 ()",
+      "Failed to load resource: the server responded with a status of 500 ()"
+    ]
+  },
+  {
+    "route": "supplies",
+    "path": "/admin/supplies",
+    "viewport": "mobile",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/supplies",
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 500 ()"
+    ]
+  },
+  {
+    "route": "promotions",
+    "path": "/admin/promotions",
+    "viewport": "mobile",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/promotions",
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 500 ()",
+      "Failed to load resource: the server responded with a status of 500 ()",
+      "[Promotions] load failed: ApiError: Internal server error\n    at Bs (https://dowiz-staging.fly.dev/assets/apiClient-ns3FrdFX.js:14:35689)\n    at async b (https://dowiz-staging.fly.dev/assets/AdminRoutes-D1_il8c8.js:14:38245)"
+    ]
+  },
+  {
+    "route": "branding",
+    "path": "/admin/branding",
+    "viewport": "mobile",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/login",
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 500 ()",
+      "Failed to load resource: the server responded with a status of 401 ()",
+      "Failed to load resource: the server responded with a status of 500 ()"
+    ]
+  },
+  {
+    "route": "couriers",
+    "path": "/admin/couriers",
+    "viewport": "mobile",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/couriers",
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 500 ()"
+    ]
+  },
+  {
+    "route": "analytics",
+    "path": "/admin/analytics",
+    "viewport": "mobile",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/login",
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 401 ()",
+      "Failed to load resource: the server responded with a status of 500 ()",
+      "Failed to load resource: the server responded with a status of 500 ()"
+    ]
+  },
+  {
+    "route": "crm",
+    "path": "/admin/crm",
+    "viewport": "mobile",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/login",
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 500 ()",
+      "Failed to load resource: the server responded with a status of 401 ()",
+      "Failed to load resource: the server responded with a status of 500 ()"
+    ]
+  },
+  {
+    "route": "settings",
+    "path": "/admin/settings",
+    "viewport": "mobile",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/settings",
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 500 ()"
+    ]
+  },
+  {
+    "route": "onboarding",
+    "path": "/admin/onboarding",
+    "viewport": "mobile",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/onboarding",
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 500 ()"
+    ]
+  },
+  {
+    "route": "activation",
+    "path": "/admin/activation",
+    "viewport": "mobile",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/activation",
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ]
+  },
+  {
+    "route": "admin",
+    "path": "/admin",
+    "viewport": "desktop",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin",
+    "consoleErrors": []
+  },
+  {
+    "route": "orders",
+    "path": "/admin/orders",
+    "viewport": "desktop",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/orders",
+    "consoleErrors": []
+  },
+  {
+    "route": "menu",
+    "path": "/admin/menu",
+    "viewport": "desktop",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/menu",
+    "consoleErrors": []
+  },
+  {
+    "route": "supplies",
+    "path": "/admin/supplies",
+    "viewport": "desktop",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/supplies",
+    "consoleErrors": []
+  },
+  {
+    "route": "promotions",
+    "path": "/admin/promotions",
+    "viewport": "desktop",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/promotions",
+    "consoleErrors": []
+  },
+  {
+    "route": "branding",
+    "path": "/admin/branding",
+    "viewport": "desktop",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/branding",
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 ()",
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ]
+  },
+  {
+    "route": "couriers",
+    "path": "/admin/couriers",
+    "viewport": "desktop",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/couriers",
+    "consoleErrors": []
+  },
+  {
+    "route": "analytics",
+    "path": "/admin/analytics",
+    "viewport": "desktop",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/analytics",
+    "consoleErrors": []
+  },
+  {
+    "route": "crm",
+    "path": "/admin/crm",
+    "viewport": "desktop",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/crm",
+    "consoleErrors": []
+  },
+  {
+    "route": "settings",
+    "path": "/admin/settings",
+    "viewport": "desktop",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/settings",
+    "consoleErrors": []
+  },
+  {
+    "route": "onboarding",
+    "path": "/admin/onboarding",
+    "viewport": "desktop",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/onboarding",
+    "consoleErrors": []
+  },
+  {
+    "route": "activation",
+    "path": "/admin/activation",
+    "viewport": "desktop",
+    "status": 200,
+    "finalUrl": "https://dowiz-staging.fly.dev/admin/activation",
+    "consoleErrors": [
+      "Failed to load resource: the server responded with a status of 404 ()"
+    ]
+  }
+]

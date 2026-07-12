@@ -1,0 +1,565 @@
+[
+ {
+  "slug": "arden",
+  "name": "Arden",
+  "cuisine": "mediterranean",
+  "primary": "#2f7d76",
+  "bg": "#f7f3ea",
+  "menu": [
+   {
+    "name": "Penne Arrabbiata",
+    "category": "Pasta",
+    "price": 810,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424e37ab058cca26dde0",
+    "sort_order": 0
+   },
+   {
+    "name": "Mixed Tuna Salad",
+    "category": "Antipasti & Sallata",
+    "price": 745,
+    "description": "Salad, cucumber, tomato, onion, corn, olives, tuna fish",
+    "description_sq": "Salad, cucumber, tomato, onion, corn, olives, tuna fish",
+    "image_url": "https://imageproxy.wolt.com/assets/680f424837ab058cca26ddcb",
+    "sort_order": 1
+   },
+   {
+    "name": "Marinated Sea Bass",
+    "category": "Të tjera",
+    "price": 1610,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424d37ab058cca26ddda",
+    "sort_order": 2
+   },
+   {
+    "name": "Linguini With Seafood",
+    "category": "Peshk & Detare",
+    "price": 1095,
+    "description": "Shrimp, squid, cuttlefish, deep-sea shrimp, crab, cichlid, mussels",
+    "description_sq": "Shrimp, squid, cuttlefish, deep-sea shrimp, crab, cichlid, mussels",
+    "image_url": "https://imageproxy.wolt.com/assets/680f424d37ab058cca26ddd7",
+    "sort_order": 3
+   },
+   {
+    "name": "Shrimp Pumpkin Linguine",
+    "category": "Pasta",
+    "price": 1095,
+    "description": "Linguine with shrimps and pumpkin",
+    "description_sq": "Linguine with shrimps and pumpkin",
+    "image_url": "https://imageproxy.wolt.com/assets/6814d8032744cedc50463cbe",
+    "sort_order": 4
+   },
+   {
+    "name": "Spaghetti Carbonara",
+    "category": "Pasta",
+    "price": 920,
+    "description": "Spaghetti Carbonara",
+    "description_sq": "Spaghetti Carbonara",
+    "image_url": "https://imageproxy.wolt.com/assets/680f424d37ab058cca26dddb",
+    "sort_order": 5
+   },
+   {
+    "name": "Big Mix Antipasti",
+    "category": "Të tjera",
+    "price": 2990,
+    "description": "Raw ham, Napoli salami, Coppa ham, Cotto ham, Spicy salami, Gorgonzola, Pecorino Romano, Grana Padana, Emmental cheese, Brezaola",
+    "description_sq": "Raw ham, Napoli salami, Coppa ham, Cotto ham, Spicy salami, Gorgonzola, Pecorino Romano, Grana Padana, Emmental cheese, Brezaola",
+    "sort_order": 6
+   },
+   {
+    "name": "Shrimp Pizza",
+    "category": "Pizza",
+    "price": 1265,
+    "description": "Tomato sauce, mozzarella, pomodorini, shrimp, deep-sea shrimp",
+    "description_sq": "Tomato sauce, mozzarella, pomodorini, shrimp, deep-sea shrimp",
+    "image_url": "https://imageproxy.wolt.com/assets/680f43c637ab058cca26de36",
+    "sort_order": 7
+   },
+   {
+    "name": "Prosciutto Crudo Pizza",
+    "category": "Pizza",
+    "price": 1035,
+    "description": "Tomato sauce, mozzarella, raw ham",
+    "description_sq": "Tomato sauce, mozzarella, raw ham",
+    "image_url": "https://imageproxy.wolt.com/assets/680f442037ab058cca26de45",
+    "sort_order": 8
+   },
+   {
+    "name": "Great Natural Water",
+    "category": "Pije",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/6814d52eff8eb91f9510dba7",
+    "sort_order": 9
+   },
+   {
+    "name": "Grilled Shrimp",
+    "category": "Peshk & Detare",
+    "price": 1380,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424e37ab058cca26dddf",
+    "sort_order": 10
+   },
+   {
+    "name": "Grilled Gilthead Bream",
+    "category": "Të tjera",
+    "price": 1380,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424937ab058cca26ddcd",
+    "sort_order": 11
+   },
+   {
+    "name": "Tuna Pizza",
+    "category": "Pizza",
+    "price": 865,
+    "description": "Tomato sauce, mozzarella, tuna, small tomatoes",
+    "description_sq": "Tomato sauce, mozzarella, tuna, small tomatoes",
+    "image_url": "https://imageproxy.wolt.com/assets/6814d8032744cedc50463cc3",
+    "sort_order": 12
+   },
+   {
+    "name": "Grilled Salmon",
+    "category": "Peshk & Detare",
+    "price": 1265,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424937ab058cca26ddd0",
+    "sort_order": 13
+   },
+   {
+    "name": "Capricciosa Pizza",
+    "category": "Pizza",
+    "price": 865,
+    "description": "Tomato, mozzarella, cooked ham, mushrooms, peppers, olives",
+    "description_sq": "Tomato, mozzarella, cooked ham, mushrooms, peppers, olives",
+    "image_url": "https://imageproxy.wolt.com/assets/6814d8032744cedc50463cc9",
+    "sort_order": 14
+   },
+   {
+    "name": "Leffe",
+    "category": "Të tjera",
+    "price": 455,
+    "image_url": "https://imageproxy.wolt.com/assets/6814d5932744cedc50463cb6",
+    "sort_order": 15
+   },
+   {
+    "name": "Caprese Salad With Fior Di Latte",
+    "category": "Antipasti & Sallata",
+    "price": 690,
+    "description": "Tomatoes, basil, mozzarella, arugula",
+    "description_sq": "Tomatoes, basil, mozzarella, arugula",
+    "image_url": "https://imageproxy.wolt.com/assets/680f424561c0cdff9b1285e6",
+    "sort_order": 16
+   },
+   {
+    "name": "Pizza Margarita",
+    "category": "Pizza",
+    "price": 635,
+    "description": "Pomodoro, mozzarella, basil",
+    "description_sq": "Pomodoro, mozzarella, basil",
+    "image_url": "https://imageproxy.wolt.com/assets/6814d8032744cedc50463cc6",
+    "sort_order": 17
+   },
+   {
+    "name": "Fish Soup",
+    "category": "Antipasti & Sallata",
+    "price": 575,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424937ab058cca26ddcf",
+    "sort_order": 18
+   },
+   {
+    "name": "Marinated Acuche",
+    "category": "Të tjera",
+    "price": 575,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424b37ab058cca26ddd4",
+    "sort_order": 19
+   },
+   {
+    "name": "Fried Mullet",
+    "category": "Të tjera",
+    "price": 1450,
+    "description": "Fried mullet",
+    "description_sq": "Fried mullet",
+    "image_url": "https://imageproxy.wolt.com/assets/680f424561c0cdff9b1285e4",
+    "sort_order": 20
+   },
+   {
+    "name": "Crudo Ham With Burrata",
+    "category": "Të tjera",
+    "price": 1495,
+    "description": "Raw ham with burrata",
+    "description_sq": "Raw ham with burrata",
+    "image_url": "https://imageproxy.wolt.com/assets/680f424837ab058cca26ddc7",
+    "sort_order": 21
+   },
+   {
+    "name": "French Fries",
+    "category": "Të tjera",
+    "price": 345,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424b37ab058cca26ddd5",
+    "sort_order": 22
+   },
+   {
+    "name": "Green Salad",
+    "category": "Antipasti & Sallata",
+    "price": 455,
+    "description": "Green salad, olives",
+    "description_sq": "Green salad, olives",
+    "image_url": "https://imageproxy.wolt.com/assets/680f424561c0cdff9b1285e8",
+    "sort_order": 23
+   },
+   {
+    "name": "Penne Ragu Penne Ragu",
+    "category": "Pasta",
+    "price": 920,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424e37ab058cca26ddde",
+    "sort_order": 24
+   },
+   {
+    "name": "Grilled Mix",
+    "category": "Të tjera",
+    "price": 3450,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424937ab058cca26ddd1",
+    "sort_order": 25
+   },
+   {
+    "name": "Grilled Cuttlefish",
+    "category": "Të tjera",
+    "price": 1380,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424e37ab058cca26dddd",
+    "sort_order": 26
+   },
+   {
+    "name": "Marinated Salmon",
+    "category": "Peshk & Detare",
+    "price": 1495,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424d37ab058cca26ddd8",
+    "sort_order": 27
+   },
+   {
+    "name": "4 Cheese Pizza",
+    "category": "Pizza",
+    "price": 920,
+    "description": "Mozzarella, gorgonzola, emmental, grana",
+    "description_sq": "Mozzarella, gorgonzola, emmental, grana",
+    "image_url": "https://imageproxy.wolt.com/assets/6814d8032744cedc50463cc5",
+    "sort_order": 28
+   },
+   {
+    "name": "Grilled Octopus",
+    "category": "Të tjera",
+    "price": 1840,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424937ab058cca26ddce",
+    "sort_order": 29
+   },
+   {
+    "name": "Cooked Ham Pizza",
+    "category": "Pizza",
+    "price": 810,
+    "description": "Salcë tame, mozzarella, proshutë koto",
+    "description_sq": "Salcë tame, mozzarella, proshutë koto",
+    "image_url": "https://imageproxy.wolt.com/assets/6814d8032744cedc50463cc7",
+    "sort_order": 30
+   },
+   {
+    "name": "Natural Water",
+    "category": "Pije",
+    "price": 150,
+    "image_url": "https://imageproxy.wolt.com/assets/6814d52eff8eb91f9510dba9",
+    "sort_order": 31
+   },
+   {
+    "name": "Pizza Wudi",
+    "category": "Pizza",
+    "price": 745,
+    "description": "Salcë tame, mozzarella, wudi",
+    "description_sq": "Salcë tame, mozzarella, wudi",
+    "image_url": "https://imageproxy.wolt.com/assets/680f442b0b43fc2a1c0104d0",
+    "sort_order": 32
+   },
+   {
+    "name": "Pizza Arden",
+    "category": "Pizza",
+    "price": 1150,
+    "description": "Mozzarella, grana, coppa piacentina",
+    "description_sq": "Mozzarella, grana, coppa piacentina",
+    "image_url": "https://imageproxy.wolt.com/assets/680f43d261c0cdff9b128665",
+    "sort_order": 33
+   },
+   {
+    "name": "Viola Shrimp 100 Gr",
+    "category": "Peshk & Detare",
+    "price": 1840,
+    "description": "Viola shrimp",
+    "description_sq": "Viola shrimp",
+    "sort_order": 34
+   },
+   {
+    "name": "Small Mix Antipasti",
+    "category": "Të tjera",
+    "price": 1495,
+    "description": "Crudo ham, Napoli salami, Coppa ham, Cotto ham, Spicy salami, Gorgonzola, Pecorino Romano, Grana Padana",
+    "description_sq": "Crudo ham, Napoli salami, Coppa ham, Cotto ham, Spicy salami, Gorgonzola, Pecorino Romano, Grana Padana",
+    "image_url": "https://imageproxy.wolt.com/assets/680f424837ab058cca26ddca",
+    "sort_order": 35
+   },
+   {
+    "name": "Marinara Pizza",
+    "category": "Pizza",
+    "price": 450,
+    "description": "Marinara tomatoes, garlic, oregano, tomato sauce, garlic, oregano",
+    "description_sq": "Marinara tomatoes, garlic, oregano, tomato sauce, garlic, oregano",
+    "image_url": "https://imageproxy.wolt.com/assets/680f43e50b43fc2a1c0104c2",
+    "sort_order": 36
+   },
+   {
+    "name": "thumbs up",
+    "category": "Të tjera",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/6814d52eff8eb91f9510dba8",
+    "sort_order": 37
+   },
+   {
+    "name": "Caprese Pizza",
+    "category": "Pizza",
+    "price": 1265,
+    "description": "Caprese tomato sauce, mozzarella, fresh tomatoes, mozzarella, pesto, basil",
+    "description_sq": "Caprese tomato sauce, mozzarella, fresh tomatoes, mozzarella, pesto, basil",
+    "image_url": "https://imageproxy.wolt.com/assets/680f43c437ab058cca26de35",
+    "sort_order": 38
+   },
+   {
+    "name": "Seafood Risotto",
+    "category": "Pasta",
+    "price": 1095,
+    "description": "Shrimp, squid, cuttlefish, deep-sea shrimp, crab, cichlid, mussels",
+    "description_sq": "Shrimp, squid, cuttlefish, deep-sea shrimp, crab, cichlid, mussels",
+    "image_url": "https://imageproxy.wolt.com/assets/6814d8032744cedc50463cc2",
+    "sort_order": 39
+   },
+   {
+    "name": "Ardèn salad",
+    "category": "Antipasti & Sallata",
+    "price": 1035,
+    "description": "Arugula, raisins, walnuts, apple, white cheese, honey ardèn sauce, olive oil, salt, pepper, cinnamon, mustard",
+    "description_sq": "Arugula, raisins, walnuts, apple, white cheese, honey ardèn sauce, olive oil, salt, pepper, cinnamon, mustard",
+    "image_url": "https://imageproxy.wolt.com/assets/680f424b37ab058cca26ddd3",
+    "sort_order": 40
+   },
+   {
+    "name": "Peron",
+    "category": "Të tjera",
+    "price": 310,
+    "image_url": "https://imageproxy.wolt.com/assets/6814d5932744cedc50463cb4",
+    "sort_order": 41
+   },
+   {
+    "name": "Truffle Pizza",
+    "category": "Pizza",
+    "price": 1265,
+    "description": "Tomato sauce, mozzarella, raw ham, truffle",
+    "description_sq": "Tomato sauce, mozzarella, raw ham, truffle",
+    "image_url": "https://imageproxy.wolt.com/assets/680f440e0b43fc2a1c0104c8",
+    "sort_order": 42
+   },
+   {
+    "name": "Arugula Salad",
+    "category": "Antipasti & Sallata",
+    "price": 635,
+    "description": "Rucola, pomodorini, grana cheese",
+    "description_sq": "Rucola, pomodorini, grana cheese",
+    "image_url": "https://imageproxy.wolt.com/assets/680f424837ab058cca26ddc8",
+    "sort_order": 43
+   },
+   {
+    "name": "Grilled Vegetables",
+    "category": "Të tjera",
+    "price": 460,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424b37ab058cca26ddd6",
+    "sort_order": 44
+   },
+   {
+    "name": "Grilled Sea Bass",
+    "category": "Të tjera",
+    "price": 1380,
+    "image_url": "https://imageproxy.wolt.com/assets/6814d8032744cedc50463cc1",
+    "sort_order": 45
+   },
+   {
+    "name": "Pizza Diavola",
+    "category": "Pizza",
+    "price": 865,
+    "description": "Tamed salcë, mozzarella, pikant sallam",
+    "description_sq": "Tamed salcë, mozzarella, pikant sallam",
+    "image_url": "https://imageproxy.wolt.com/assets/680f44300b43fc2a1c0104d3",
+    "sort_order": 46
+   },
+   {
+    "name": "Fried Cod",
+    "category": "Të tjera",
+    "price": 1380,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424b37ab058cca26ddd2",
+    "sort_order": 47
+   },
+   {
+    "name": "Bavaria",
+    "category": "Të tjera",
+    "price": 310,
+    "image_url": "https://imageproxy.wolt.com/assets/6814d5932744cedc50463cb5",
+    "sort_order": 48
+   },
+   {
+    "name": "Village Salad",
+    "category": "Antipasti & Sallata",
+    "price": 575,
+    "description": "Cucumber, tomato, onion, olive, white cheese",
+    "description_sq": "Cucumber, tomato, onion, olive, white cheese",
+    "image_url": "https://imageproxy.wolt.com/assets/680f424837ab058cca26ddc9",
+    "sort_order": 49
+   },
+   {
+    "name": "Pizza Crudaiol",
+    "category": "Pizza",
+    "price": 1265,
+    "description": "Tomato sauce, mozzarella, arugula, raw ham, grana, small tomatoes",
+    "description_sq": "Tomato sauce, mozzarella, arugula, raw ham, grana, small tomatoes",
+    "image_url": "https://imageproxy.wolt.com/assets/680f43be61c0cdff9b12865c",
+    "sort_order": 50
+   },
+   {
+    "name": "Orange Soda",
+    "category": "Pije",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/6814d52eff8eb91f9510dba6",
+    "sort_order": 51
+   },
+   {
+    "name": "Coca-Cola",
+    "category": "Pije",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/6814d52eff8eb91f9510dbaa",
+    "sort_order": 52
+   },
+   {
+    "name": "Pizza Burrata",
+    "category": "Pizza",
+    "price": 1495,
+    "description": "Tomato sauce, mozzarella, burrata, arugula, small tomatoes",
+    "description_sq": "Tomato sauce, mozzarella, burrata, arugula, small tomatoes",
+    "image_url": "https://imageproxy.wolt.com/assets/680f441637ab058cca26de42",
+    "sort_order": 53
+   },
+   {
+    "name": "Pizza Salami Naples",
+    "category": "Pizza",
+    "price": 865,
+    "description": "Salcë tame, mozzarella, sallam Naples",
+    "description_sq": "Salcë tame, mozzarella, sallam Naples",
+    "image_url": "https://imageproxy.wolt.com/assets/6814d8032744cedc50463cc8",
+    "sort_order": 54
+   },
+   {
+    "name": "Vegetable Soup",
+    "category": "Antipasti & Sallata",
+    "price": 460,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424d37ab058cca26ddd9",
+    "sort_order": 55
+   },
+   {
+    "name": "Proshutë Kërpudhë",
+    "category": "Të tjera",
+    "price": 980,
+    "description": "Tamed Şalcë, mozzarella, proshute koto, kërpudha",
+    "description_sq": "Tamed Şalcë, mozzarella, proshute koto, kërpudha",
+    "image_url": "https://imageproxy.wolt.com/assets/6814d8032744cedc50463cc4",
+    "sort_order": 56
+   },
+   {
+    "name": "Caprese Salad with Burrata",
+    "category": "Antipasti & Sallata",
+    "price": 980,
+    "description": "Tomatoes, burrata, arugula",
+    "description_sq": "Tomatoes, burrata, arugula",
+    "image_url": "https://imageproxy.wolt.com/assets/680f424561c0cdff9b1285e5",
+    "sort_order": 57
+   },
+   {
+    "name": "Pizza Diavola",
+    "category": "Pizza",
+    "price": 635,
+    "description": "Tamed salcë, mozzarella, pikant sallam",
+    "description_sq": "Tamed salcë, mozzarella, pikant sallam",
+    "image_url": "https://imageproxy.wolt.com/assets/6814d8032744cedc50463cc6",
+    "sort_order": 58
+   },
+   {
+    "name": "Pizza Margarita",
+    "category": "Pizza",
+    "price": 345,
+    "description": "Pomodoro, mozzarella, basil",
+    "description_sq": "Pomodoro, mozzarella, basil",
+    "image_url": "https://imageproxy.wolt.com/assets/680f424b37ab058cca26ddd5",
+    "sort_order": 59
+   },
+   {
+    "name": "French Fries",
+    "category": "Të tjera",
+    "price": 920,
+    "image_url": "https://imageproxy.wolt.com/assets/680f424d37ab058cca26dddb",
+    "sort_order": 60
+   },
+   {
+    "name": "Spaghetti Carbonara",
+    "category": "Pasta",
+    "price": 1095,
+    "description": "Spaghetti Carbonara",
+    "description_sq": "Spaghetti Carbonara",
+    "image_url": "https://imageproxy.wolt.com/assets/680f424d37ab058cca26ddd7",
+    "sort_order": 61
+   },
+   {
+    "name": "Linguini With Seafood",
+    "category": "Peshk & Detare",
+    "price": 575,
+    "description": "Shrimp, squid, cuttlefish, deep-sea shrimp, crab, cichlid, mussels",
+    "description_sq": "Shrimp, squid, cuttlefish, deep-sea shrimp, crab, cichlid, mussels",
+    "image_url": "https://imageproxy.wolt.com/assets/680f424837ab058cca26ddc9",
+    "sort_order": 62
+   },
+   {
+    "name": "Village Salad",
+    "category": "Antipasti & Sallata",
+    "price": 865,
+    "description": "Cucumber, tomato, onion, olive, white cheese",
+    "description_sq": "Cucumber, tomato, onion, olive, white cheese",
+    "image_url": "https://imageproxy.wolt.com/assets/6814d8032744cedc50463cc9",
+    "sort_order": 63
+   },
+   {
+    "name": "Pizza Salami Naples",
+    "category": "Pizza",
+    "price": 230,
+    "description": "Salcë tame, mozzarella, sallam Naples",
+    "description_sq": "Salcë tame, mozzarella, sallam Naples",
+    "image_url": "https://imageproxy.wolt.com/assets/6814d52eff8eb91f9510dbaa",
+    "sort_order": 64
+   },
+   {
+    "name": "Coca-Cola",
+    "category": "Pije",
+    "price": 980,
+    "image_url": "https://imageproxy.wolt.com/assets/6814d8032744cedc50463cc4",
+    "sort_order": 65
+   },
+   {
+    "name": "Proshutë Kërpudhë",
+    "category": "Të tjera",
+    "price": 460,
+    "description": "Tamed Şalcë, mozzarella, proshute koto, kërpudha",
+    "description_sq": "Tamed Şalcë, mozzarella, proshute koto, kërpudha",
+    "image_url": "https://imageproxy.wolt.com/assets/680f424d37ab058cca26ddd9",
+    "sort_order": 66
+   },
+   {
+    "name": "Vegetable Soup",
+    "category": "Antipasti & Sallata",
+    "price": 230,
+    "image_url": "https://imageproxy.wolt.com/assets/6814d52eff8eb91f9510dba6",
+    "sort_order": 67
+   }
+  ]
+ }
+]

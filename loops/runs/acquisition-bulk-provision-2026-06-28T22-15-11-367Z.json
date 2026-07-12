@@ -1,0 +1,77 @@
+{
+  "at": "2026-06-28T22:15:11.368Z",
+  "base_url": "http://127.0.0.1:33091",
+  "summary": {
+    "attempted": 5,
+    "invited": 2,
+    "needs_review": 3,
+    "skipped_already_done": 0
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-happy-1",
+      "name": "Alpha",
+      "slug": "alpha",
+      "warnings": [],
+      "source_id": "a53916b9-ae14-4d7f-8bd8-126e33fa9aeb",
+      "org_id": "6f77c91a-b872-4a0e-9fad-cb8b3e308102",
+      "location_id": "a9207e43-7eb5-4cf8-abcb-ef3a333624e3",
+      "outcome": "invited",
+      "state": "CLAIM_OFFERED",
+      "claim_url": "http://127.0.0.1:33091/claim#token=claim-55445763-a75c-4d47-a5fd-81adf42f61ae",
+      "decline_url": "http://127.0.0.1:33091/claim#token=claim-55445763-a75c-4d47-a5fd-81adf42f61ae"
+    },
+    {
+      "row": 2,
+      "place_id": "place-happy-2-nocontact",
+      "name": "Beta",
+      "slug": "beta",
+      "warnings": [
+        "no invited_contact → claim link is decline-only (CONTACT_REQUIRED on web accept)"
+      ],
+      "source_id": "513a7285-370e-4633-af9c-ad692932e1c9",
+      "org_id": "727182fd-23a8-4656-80af-095cdf085904",
+      "location_id": "6142c708-1349-4bfc-bb92-7e186aa49bd2",
+      "outcome": "invited",
+      "state": "CLAIM_OFFERED",
+      "claim_url": "http://127.0.0.1:33091/claim#token=claim-503a3d6a-c724-4cb7-860e-5db4621dcc50",
+      "decline_url": "http://127.0.0.1:33091/claim#token=claim-503a3d6a-c724-4cb7-860e-5db4621dcc50"
+    },
+    {
+      "row": 3,
+      "place_id": "place-menunotfound-3",
+      "name": "Gamma",
+      "slug": "gamma",
+      "warnings": [],
+      "source_id": "84a49016-14ad-4e42-9c1a-0bfb41f9c6de",
+      "outcome": "needs-review",
+      "reason": "EXTRACT:MENU_NOT_FOUND",
+      "state": "MENU_NOT_FOUND"
+    },
+    {
+      "row": 4,
+      "place_id": "place-lowquality-4",
+      "name": "Delta",
+      "slug": "delta",
+      "warnings": [],
+      "source_id": "11a38c8a-9ba8-449a-b764-d501659d7b4a",
+      "outcome": "needs-review",
+      "reason": "EXTRACT:LOW_QUALITY",
+      "state": "LOW_QUALITY"
+    },
+    {
+      "row": 5,
+      "place_id": "place-emptymenu-5",
+      "name": "Eps",
+      "slug": "eps",
+      "warnings": [],
+      "source_id": "c73fabfe-2450-48f2-b048-4bc78e88116b",
+      "org_id": "570bace6-44bd-4d2e-852e-f6ed07f43265",
+      "location_id": "f771c64b-884e-44a4-864a-a911d1e646bf",
+      "outcome": "needs-review",
+      "reason": "NOT_VERIFIABLE:NOT_VERIFIABLE",
+      "state": "PROVISIONED"
+    }
+  ]
+}

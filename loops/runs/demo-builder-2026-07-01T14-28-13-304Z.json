@@ -1,0 +1,80 @@
+{
+  "at": "2026-07-01T14:28:13.304Z",
+  "base_url": "http://127.0.0.1:33679",
+  "storefront_base": "http://127.0.0.1:35701",
+  "summary": {
+    "attempted": 1,
+    "certified_preview": 0,
+    "invited": 0,
+    "needs_review": 1,
+    "skipped_already_done": 0,
+    "send_invite": false
+  },
+  "results": [
+    {
+      "row": 1,
+      "place_id": "place-goodmenu-empty",
+      "name": "Venue empty",
+      "slug": "veg-empty",
+      "warnings": [
+        "maps-enrich: hours gated → operator applies demo default"
+      ],
+      "palette": {
+        "primary_color": "#9e7755",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "source_id": "635ae0c3-de71-469c-819c-8bf2fde7f881",
+      "org_id": "2de2dd9e-08cf-4a54-9b2b-a3956d75310f",
+      "location_id": "7a576fb1-beb9-4b54-a4d9-500af703fce8",
+      "theme_directive": {
+        "location_id": "7a576fb1-beb9-4b54-a4d9-500af703fce8",
+        "primary_color": "#9e7755",
+        "bg_color": "#fbf6ee",
+        "text_color": "#111111",
+        "heading_font": "fraunces",
+        "body_font": "dmsans"
+      },
+      "maps_directive": {
+        "location_id": "7a576fb1-beb9-4b54-a4d9-500af703fce8",
+        "matched_name": "Results",
+        "address": "8FX8+JJ, Durrës 2001, Albania",
+        "lat": 41.3485019,
+        "lng": 19.4661471,
+        "phone": "+355697084263",
+        "google_rating": 4.9,
+        "google_review_count": 60,
+        "google_maps_url": "https://www.google.com/maps/place/Clean+City+Agrotourism/data=!4m10!3m9!1s0x134fd195f366d22d:0xf7dd73cc7ac57341!5m2!4m1!1i2!8m2!3d41.3485019!4d19.4661471!16s%2Fg%2F11y9yd217c!19sChIJLdJm85XRTxMRQXPFesxz3fc",
+        "hours_json": null,
+        "brand_color": "#9e7755",
+        "hero_url": "https://lh3.googleusercontent.com/gps-cs-s/APNQkAGsYhFkwi2ySvY76TvRDkvgDh0JKu7a-hHvX9iFXDnXTsxBojXIYZxVp6L4hpmXJcd_qgVpO9w3i5pFIfLpIvVcXIaWTepLQlCyUiC_0zlFS-9_W_T0Ox33Dsgq33IevuweBJXct4a2gK0a=w1600-h1200-k-no",
+        "has_hero": true
+      },
+      "visual_gate": {
+        "pass": false,
+        "viewports": {
+          "mobile": {
+            "pass": false,
+            "reasons": [
+              "only 0 menu items rendered (< 3)"
+            ],
+            "itemCount": 0
+          },
+          "desktop": {
+            "pass": false,
+            "reasons": [
+              "only 0 menu items rendered (< 3)"
+            ],
+            "itemCount": 0
+          }
+        },
+        "mode": "probe"
+      },
+      "outcome": "needs-review",
+      "reason": "VISUAL_GATE_FAILED: mobile:only 0 menu items rendered (< 3) | desktop:only 0 menu items rendered (< 3)",
+      "state": "VERIFIED"
+    }
+  ]
+}

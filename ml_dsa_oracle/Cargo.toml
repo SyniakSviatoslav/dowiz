@@ -1,0 +1,9 @@
+[package]
+name = "ml_dsa_oracle"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ml-dsa = "0.1.1"
+hex = "0.4"
+hybrid-array = "0.4"

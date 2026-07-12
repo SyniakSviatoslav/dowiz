@@ -1,0 +1,185 @@
+[
+ {
+  "slug": "dogu",
+  "name": "Dogu.al",
+  "cuisine": "turkish",
+  "primary": "#b5471f",
+  "bg": "#faf4e8",
+  "menu": [
+   {
+    "name": "Hot Dog Milano",
+    "category": "Pasta",
+    "price": 350,
+    "description": "Keçap, majonezë, pasta krokante",
+    "description_sq": "Keçap, majonezë, pasta krokante",
+    "image_url": "https://wolt-menu-images-cdn.wolt.com/menu-images/65cb854c52582792a12cc05b/92cb7530-d63a-11ee-8c1e-bea8b733331a_milano.jpeg",
+    "sort_order": 0
+   },
+   {
+    "name": "Hot Dog Amsterdam 🌶️",
+    "category": "Të tjera",
+    "price": 350,
+    "description": "Çips, pançetë, majonezë pikante",
+    "description_sq": "Çips, pançetë, majonezë pikante",
+    "image_url": "https://wolt-menu-images-cdn.wolt.com/menu-images/65cb854c52582792a12cc05b/88a3e826-d63a-11ee-8553-0e3a67e0cd40_amsterdam.jpeg",
+    "sort_order": 1
+   },
+   {
+    "name": "Hot Dog New York🌶️",
+    "category": "Të tjera",
+    "price": 350,
+    "description": "Qepë e karamelizuar, keçap, salcë new york",
+    "description_sq": "Qepë e karamelizuar, keçap, salcë new york",
+    "image_url": "https://wolt-menu-images-cdn.wolt.com/menu-images/65cb854c52582792a12cc05b/c68e8308-d63a-11ee-b39a-1eed6522eca0_new_york.jpeg",
+    "sort_order": 2
+   },
+   {
+    "name": "Sprite",
+    "category": "Pije",
+    "price": 150,
+    "image_url": "https://imageproxy.wolt.com/assets/688cc3a1a72bd3b131a6774d",
+    "sort_order": 3
+   },
+   {
+    "name": "Coca - Cola",
+    "category": "Pije",
+    "price": 150,
+    "image_url": "https://imageproxy.wolt.com/assets/688cc344a72bd3b131a67737",
+    "sort_order": 4
+   },
+   {
+    "name": "Chilli Bites Nuggets",
+    "category": "Të tjera",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/68076a6ca22b3052ff34c2f2",
+    "sort_order": 5
+   },
+   {
+    "name": "Coca Cola Zero",
+    "category": "Pije",
+    "price": 150,
+    "image_url": "https://imageproxy.wolt.com/assets/688cc3658272b33a30254d69",
+    "sort_order": 6
+   },
+   {
+    "name": "Mozzarella Sticks",
+    "category": "Të tjera",
+    "price": 350,
+    "image_url": "https://imageproxy.wolt.com/assets/68076a54ad8c24afb1ee914c",
+    "sort_order": 7
+   },
+   {
+    "name": "Hot Dog Mexican 🌶️",
+    "category": "Të tjera",
+    "price": 350,
+    "description": "Ketchup, misër, nacho, jalapeno",
+    "description_sq": "Ketchup, misër, nacho, jalapeno",
+    "image_url": "https://wolt-menu-images-cdn.wolt.com/menu-images/65cb854c52582792a12cc05b/a5bb7280-d63a-11ee-a527-1eed6522eca0_mexican.jpeg",
+    "sort_order": 8
+   },
+   {
+    "name": "Hot Dog Texas",
+    "category": "Të tjera",
+    "price": 350,
+    "description": "Salcë barbeque, qepë e karamelizuar, pançetë",
+    "description_sq": "Salcë barbeque, qepë e karamelizuar, pançetë",
+    "image_url": "https://wolt-menu-images-cdn.wolt.com/menu-images/65cb854c52582792a12cc05b/bc7cf85e-d63a-11ee-b76c-6a6afd0a79f1_texas.jpeg",
+    "sort_order": 9
+   },
+   {
+    "name": "Hot Dog California",
+    "category": "Antipasti & Sallata",
+    "price": 350,
+    "description": "Çedar, sallatë iceberg, salcë california, kastravec turshi",
+    "description_sq": "Çedar, sallatë iceberg, salcë california, kastravec turshi",
+    "image_url": "https://wolt-menu-images-cdn.wolt.com/menu-images/65cb854c52582792a12cc05b/b445852a-d63a-11ee-8445-6a6afd0a79f1_california.jpeg",
+    "sort_order": 10
+   },
+   {
+    "name": "Fanta Portokall",
+    "category": "Pije",
+    "price": 150,
+    "image_url": "https://imageproxy.wolt.com/assets/688cc3728272b33a30254d72",
+    "sort_order": 11
+   },
+   {
+    "name": "Hot Dog Mediterranean",
+    "category": "Të tjera",
+    "price": 350,
+    "description": "Speca jeshilë në zgarë, djathë i bardhë, majonezë",
+    "description_sq": "Speca jeshilë në zgarë, djathë i bardhë, majonezë",
+    "image_url": "https://wolt-menu-images-cdn.wolt.com/menu-images/65cb854c52582792a12cc05b/6c20a694-d63a-11ee-8f53-d2308ad125db_mediterranean.jpeg",
+    "sort_order": 12
+   },
+   {
+    "name": "Hot Dog Berlin",
+    "category": "Të tjera",
+    "price": 350,
+    "description": "Salcë curry e cila përmban ketchup, qepë, curry",
+    "description_sq": "Salcë curry e cila përmban ketchup, qepë, curry",
+    "image_url": "https://wolt-menu-images-cdn.wolt.com/menu-images/65cb854c52582792a12cc05b/9c930e0c-d63a-11ee-993e-0e3a67e0cd40_berlin.jpeg",
+    "sort_order": 13
+   },
+   {
+    "name": "Fanta Exotic",
+    "category": "Pije",
+    "price": 150,
+    "image_url": "https://imageproxy.wolt.com/assets/688cc3838272b33a30254d76",
+    "sort_order": 14
+   },
+   {
+    "name": "Patate",
+    "category": "Të tjera",
+    "price": 200,
+    "image_url": "https://wolt-menu-images-cdn.wolt.com/menu-images/65cb854c52582792a12cc05b/7d7a9c24-d63a-11ee-a2fa-5e58dd80dd55_image00004__1_.jpeg",
+    "sort_order": 15
+   },
+   {
+    "name": "Kavanoz Amsterdam 220 ml",
+    "category": "Të tjera",
+    "price": 300,
+    "image_url": "https://imageproxy.wolt.com/assets/67fe40a5ff803e27f0488e25",
+    "sort_order": 16
+   },
+   {
+    "name": "Kavanoz California 220 ml",
+    "category": "Të tjera",
+    "price": 300,
+    "image_url": "https://imageproxy.wolt.com/assets/67fe40acff803e27f0488e26",
+    "sort_order": 17
+   },
+   {
+    "name": "Hot Dog California",
+    "category": "Antipasti & Sallata",
+    "price": 200,
+    "description": "Çedar, sallatë iceberg, salcë california, kastravec turshi",
+    "description_sq": "Çedar, sallatë iceberg, salcë california, kastravec turshi",
+    "image_url": "https://wolt-menu-images-cdn.wolt.com/menu-images/65cb854c52582792a12cc05b/7d7a9c24-d63a-11ee-a2fa-5e58dd80dd55_image00004__1_.jpeg",
+    "sort_order": 18
+   },
+   {
+    "name": "Patate",
+    "category": "Të tjera",
+    "price": 350,
+    "image_url": "https://wolt-menu-images-cdn.wolt.com/menu-images/65cb854c52582792a12cc05b/88a3e826-d63a-11ee-8553-0e3a67e0cd40_amsterdam.jpeg",
+    "sort_order": 19
+   },
+   {
+    "name": "Hot Dog Mediterranean",
+    "category": "Të tjera",
+    "price": 150,
+    "description": "Speca jeshilë në zgarë, djathë i bardhë, majonezë",
+    "description_sq": "Speca jeshilë në zgarë, djathë i bardhë, majonezë",
+    "image_url": "https://imageproxy.wolt.com/assets/688cc344a72bd3b131a67737",
+    "sort_order": 20
+   },
+   {
+    "name": "Coca - Cola",
+    "category": "Pije",
+    "price": 455,
+    "image_url": "https://wolt-menu-images-cdn.wolt.com/menu-images/65cb854c52582792a12cc05b/9c930e0c-d63a-11ee-993e-0e3a67e0cd40_berlin.jpeg",
+    "sort_order": 21
+   }
+  ]
+ }
+]
