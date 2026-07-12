@@ -16,5 +16,6 @@ pub mod envelope;
 pub mod codesign;
 pub mod x25519;
 pub mod hybrid;
+pub mod volume;
 pub mod entropy;
 pub mod fractal;

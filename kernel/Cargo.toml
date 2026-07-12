@@ -14,6 +14,7 @@ wasm-bindgen = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 curve25519-dalek = "4"
+aes-gcm = { version = "0.10.3", features = ["std"] }
 
 [features]
 # Optional quantum-entropy provider (ANU QRNG over HTTPS). Off by default so the
