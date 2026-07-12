@@ -369,6 +369,55 @@ test('send with env unset: skips CLEANLY (exit 0) but LOUDLY, and the skip lands
   assert.match(events[0].detail, /telegram=skipped:env_unset/);
 });
 
+test('send with Telegram fully unreachable (every call 403s): status is NOT falsely "sent:chunked" (H3, 2026-07-12)', async (t) => {
+  // Loopback stub in a SEPARATE OS process (not an in-process http.Server): cli() below uses
+  // spawnSync, which blocks this process's event loop for the duration of the child call — an
+  // in-process server could never accept the child's connection while that block is in effect.
+  // Every request 403s, simulating what this cloud container actually sees from the real
+  // Telegram API (proxy-blocked egress).
+  const { spawn } = await import('node:child_process');
+  const serverSrc = `
+    const { createServer } = require('node:http');
+    const server = createServer((req, res) => { req.resume(); req.on('end', () => { res.writeHead(403); res.end('blocked'); }); });
+    server.listen(0, '127.0.0.1', () => { console.log('PORT ' + server.address().port); });
+  `;
+  const serverProc = spawn(process.execPath, ['-e', serverSrc], { stdio: ['ignore', 'pipe', 'ignore'] });
+  const port = await new Promise((resolve, reject) => {
+    let buf = '';
+    const onData = (chunk) => {
+      buf += chunk;
+      const m = buf.match(/PORT (\d+)/);
+      if (m) { serverProc.stdout.off('data', onData); resolve(Number(m[1])); }
+    };
+    serverProc.stdout.on('data', onData);
+    serverProc.on('error', reject);
+  });
+  t.after(() => { serverProc.kill(); });
+
+  const root = tmp(t);
+  // A long run report forces the overflow path (document + chunk fallback), which is the branch
+  // that previously discarded chunk send results.
+  for (let i = 0; i < 45; i++) {
+    assert.equal(cli(['emit', '--run-id', 'rU', '--kind', 'heal', '--outcome', 'pass', '--detail', `event-${i}`], { root }).status, 0);
+  }
+  const r = cli(['send', '--run-id', 'rU'], {
+    root,
+    env: {
+      TELEGRAM_BOT_TOKEN: 'test-token',
+      PLANE_REPORT_CHAT_ID: 'test-chat',
+      PLANE_TELEMETRY_TEST_TG_BASE_URL: `http://127.0.0.1:${port}`,
+    },
+  });
+  assert.equal(r.status, 0, 'a dead Telegram must never fail the run');
+  assert.match(r.stderr, /telegram: failed:unreachable/, `expected an honest failure status, got: ${r.stderr}`);
+  assert.doesNotMatch(r.stderr, /telegram: sent:chunked/, 'every send call 403d — reporting "sent" would be a false success (H3)');
+  const line = cli(['digest', '--status-line'], { root });
+  assert.match(line.stdout, /telegram=failed:unreachable/, 'the digest status line must not mistake a fully-blocked channel for success');
+  const events = readLocal(root).filter((e) => e.run_id === 'rU' && e.target === 'telegram');
+  assert.equal(events.length, 1);
+  assert.equal(events[0].outcome, 'error', 'a failed status must record as an error outcome, not pass');
+});
+
 // ---------------------------------------------------------------------------
 // RICHER TELEMETRY (additive extension — SCHEMA_VERSION stays 1, new OPTIONAL fields)
 // ---------------------------------------------------------------------------

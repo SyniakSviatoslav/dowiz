@@ -570,8 +570,13 @@ function composeSummary(runId, events, predictions) {
   return { text: lines.join('\n'), verdict, runEvents };
 }
 
+// Test-only seam (LOUD naming, matches the PLANE_TELEMETRY_TEST_* convention above): lets tests
+// point at a local loopback stub instead of the real Telegram API, so send-path failure handling
+// is provable without live network egress. Never set in production.
+const TG_API_BASE = process.env.PLANE_TELEMETRY_TEST_TG_BASE_URL || 'https://api.telegram.org';
+
 async function tgApi(token, method, body, isForm = false) {
-  const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+  const res = await fetch(`${TG_API_BASE}/bot${token}/${method}`, {
     method: 'POST',
     ...(isForm ? { body } : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
     signal: AbortSignal.timeout(8000),
@@ -631,11 +636,16 @@ async function cmdSend(args) {
       fd.append('document', new Blob([slice], { type: 'application/json' }), `plane-run-${runId}.jsonl`);
       const docOk = await tgApi(token, 'sendDocument', fd, true).catch(() => false);
       if (!docOk && !sentSummary) {
-        // chunk-at-3800 fallback only if the document send failed
+        // chunk-at-3800 fallback only if the document send failed. H3: a chunk send can fail the
+        // same way the summary/document did (network down, bad token/chat) — status must reflect
+        // whether any chunk actually landed, not just that the loop ran (previously hardcoded
+        // 'sent:chunked' even when every chunk failed, reporting false success — 2026-07-12).
+        let anyChunkOk = false;
         for (let i = 0, n = Math.ceil(text.length / 3800); i < n; i++) {
-          await tgApi(token, 'sendMessage', { chat_id: chat, text: `(${i + 1}/${n}) ${text.slice(i * 3800, (i + 1) * 3800)}`, disable_web_page_preview: true }).catch(() => {});
+          const ok = await tgApi(token, 'sendMessage', { chat_id: chat, text: `(${i + 1}/${n}) ${text.slice(i * 3800, (i + 1) * 3800)}`, disable_web_page_preview: true }).catch(() => false);
+          if (ok) anyChunkOk = true;
         }
-        status = 'sent:chunked';
+        status = anyChunkOk ? 'sent:chunked' : 'failed:unreachable';
       } else if (!docOk) status = 'sent:doc_failed';
     }
     writeStatus({ telegram: { status, ts: nowIso(), run_id: runId } });
