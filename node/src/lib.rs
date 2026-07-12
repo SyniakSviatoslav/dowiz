@@ -14,6 +14,7 @@
 //! whether the underlay is QUIC, TCPCLv4, or SpaceWire (D3).
 
 use dowiz_kernel::pq::envelope::{new_identity, open, seal, SignedEnvelope, ENTROPY_LEN};
+use dowiz_kernel::pq::hybrid::{hybrid_decaps, hybrid_encaps, hybrid_keygen, HybridCiphertext, HybridKeypair};
 use std::collections::HashSet;
 
 /// A custody-transfer bundle (BPv7-shaped, minimal).
@@ -26,6 +27,8 @@ pub struct Bundle {
     /// Sender's ML-DSA-65 public key — custodians verify the envelope against this,
     /// not their own key (intermediate custody is sender-authenticating, not receiver).
     pub sender_pk: Vec<u8>,
+    /// Sender's X25519+ML-KEM-768 hybrid public key (for confidential transit per D4).
+    pub sender_hybrid_pk: Vec<u8>,
     /// Creation timestamp (seconds since epoch) — RFC 9171 creation timestamp.
     pub creation_ts: u64,
     /// Lifetime (seconds) — RFC 9171 bundle lifetime; expires at creation_ts+lifetime.
@@ -34,7 +37,7 @@ pub struct Bundle {
     pub payload: Vec<u8>,
 }
 
-/// A node: holds a custody store + a dedupe set + its own PQ signing key.
+/// A node: holds a custody store + a dedupe set + its own PQ signing + hybrid transit keys.
 pub struct Node {
     pub eid: String,
     pub now: u64, // ponytail: injected clock — avoids SystemTime in tests; swap for real clock in prod.
@@ -42,12 +45,63 @@ pub struct Node {
     seen: HashSet<(String, u64)>, // (source, creation_ts) for replay detection.
     sk: Vec<u8>,
     pk: Vec<u8>,
+    /// Hybrid transit keypair (X25519 + ML-KEM-768, both mandatory per D4). Used to
+    /// encrypt bundle payloads so intermediate couriers cannot read them.
+    hybrid: HybridKeypair,
+}
+
+/// Split a `hybrid_pk()` blob (x_pk ‖ kem_pk) back into its two public components.
+fn split_hybrid_pk(blob: &[u8]) -> ([u8; 32], Vec<u8>) {
+    let mut x = [0u8; 32];
+    x.copy_from_slice(&blob[..32]);
+    (x, blob[32..].to_vec())
+}
+
+/// Derive a deterministic sub-seed for the hybrid legs from the node seed + label.
+fn hash_seed(seed: &[u8; 32], label: u8) -> [u8; 32] {
+    let mut buf = [0u8; 33];
+    buf[..32].copy_from_slice(seed);
+    buf[32] = label;
+    // reuse envelope hash (SHAKE256) — keeps deps minimal
+    let mut out = [0u8; 32];
+    dowiz_kernel::pq::keccak::shake256(&buf, &mut out);
+    out
+}
+
+/// XOR `data` with a SHAKE256 keystream keyed by `key` (a length-preserving stream cipher).
+/// Used to encrypt the confidential payload under the hybrid shared secret. ponytail: not
+/// an AEAD (no MAC) — the ML-DSA envelope already provides integrity/auth; this only hides
+/// plaintext from intermediate couriers. Upgrade trigger: real funds in transit → AES-256-GCM.
+fn xor_stream(data: &[u8], key: &[u8; 32]) -> Vec<u8> {
+    let mut stream = Vec::with_capacity(data.len());
+    let mut block = [0u8; 32];
+    let mut counter: u64 = 0;
+    let mut produced = 0;
+    while produced < data.len() {
+        let mut src = key.to_vec();
+        src.extend_from_slice(&counter.to_le_bytes());
+        dowiz_kernel::pq::keccak::shake256(&src, &mut block);
+        for b in block {
+            if produced >= data.len() {
+                break;
+            }
+            stream.push(data[produced] ^ b);
+            produced += 1;
+        }
+        counter += 1;
+    }
+    stream
 }
 
 impl Node {
-    /// Create a node with its own ML-DSA-65 identity, seeded deterministically for tests.
+    /// Create a node with its own ML-DSA-65 identity + hybrid transit keypair,
+    /// seeded deterministically for tests.
     pub fn new(eid: &str, seed: &[u8; ENTROPY_LEN], now: u64) -> Self {
         let (pk, sk) = new_identity(seed);
+        // Derive two independent seeds for the hybrid legs from the node seed.
+        let x_seed = hash_seed(seed, 1);
+        let kem_seed = hash_seed(seed, 2);
+        let hybrid = hybrid_keygen(&x_seed, &kem_seed);
         Node {
             eid: eid.to_string(),
             now,
@@ -55,7 +109,15 @@ impl Node {
             seen: HashSet::new(),
             sk,
             pk,
+            hybrid,
         }
+    }
+
+    /// Public hybrid transit key (X25519 pk ‖ ML-KEM pk) for peers to encrypt toward us.
+    pub fn hybrid_pk(&self) -> Vec<u8> {
+        let mut v = self.hybrid.x_pk.to_vec();
+        v.extend_from_slice(&self.hybrid.kem_pk);
+        v
     }
 
     /// Wrap a raw message into a PQ-signed envelope, then into a custody bundle.
@@ -68,10 +130,73 @@ impl Node {
             source: self.eid.clone(),
             dest: dest.to_string(),
             sender_pk: self.pk.clone(),
+            sender_hybrid_pk: self.hybrid_pk(),
             creation_ts,
             lifetime,
             payload,
         }
+    }
+
+    /// Confidential variant (D4): encrypt `msg` under the recipient's hybrid transit key
+    /// (X25519 + ML-KEM-768, both required — no classical-only fallback), then seal the
+    /// result in a signed envelope so couriers carry opaque, sender-authenticated bytes.
+    /// `dest_hybrid_pk` is the recipient's `hybrid_pk()` output (x_pk ‖ kem_pk).
+    /// `m` is ML-KEM encaps entropy; `eph_seed` is the ephemeral X25519 scalar seed.
+    pub fn make_secret_bundle(
+        &self,
+        dest: &str,
+        dest_hybrid_pk: &[u8],
+        msg: &[u8],
+        m: &[u8; 32],
+        eph_seed: &[u8; 32],
+        creation_ts: u64,
+        lifetime: u64,
+    ) -> Bundle {
+        let (peer_x_pk, peer_kem_pk) = split_hybrid_pk(dest_hybrid_pk);
+        let peer = HybridKeypair {
+            x_pk: peer_x_pk,
+            x_sk: [0u8; 32],
+            kem_pk: peer_kem_pk,
+            kem_sk: Vec::new(),
+        };
+        // Establish the hybrid shared secret (both legs required by hybrid.rs RED gate).
+        let (ct, ss) = hybrid_encaps(&peer, m, eph_seed);
+        // Encrypt the message under ss via a SHAKE256 keystream (zero extra deps). The
+        // ciphertext and the sealed plaintext blob travel together, serde-framed so the
+        // variable-length ML-KEM ct (1536 B) is parsed correctly.
+        let blob = xor_stream(msg, &ss);
+        let transit = serde_json::to_vec(&(ct, blob)).expect("transit serializes");
+        let rnd = [0u8; ENTROPY_LEN];
+        let env = seal(&transit, &self.sk, &rnd);
+        let payload = serde_json::to_vec(&env).expect("envelope serializes");
+        Bundle {
+            source: self.eid.clone(),
+            dest: dest.to_string(),
+            sender_pk: self.pk.clone(),
+            sender_hybrid_pk: self.hybrid_pk(),
+            creation_ts,
+            lifetime,
+            payload,
+        }
+    }
+
+    /// Deliver a confidential bundle (D4): only a node whose EID matches `dest` AND whose
+    /// hybrid secret key matches the recipient can recover the plaintext. Decapsulates the
+    /// hybrid ciphertext (X25519 + ML-KEM-768, both required) and verifies our ML-DSA envelope.
+    /// A courier that is not the final recipient cannot decrypt (no hybrid secret key).
+    pub fn deliver_secret(&self, b: &Bundle) -> Result<Vec<u8>, &'static str> {
+        if b.dest != self.eid {
+            return Err("not-addressed-to-me");
+        }
+        let env: SignedEnvelope = serde_json::from_slice(&b.payload).map_err(|_| "bad-envelope")?;
+        if open(&env, &b.sender_pk).is_err() {
+            return Err("tampered-or-unsigned");
+        }
+        // transit = JSON(ct, blob)
+        let (ct, blob): (HybridCiphertext, Vec<u8>) =
+            serde_json::from_slice(&env.payload).map_err(|_| "bad-transit")?;
+        let ss = hybrid_decaps(&self.hybrid, &ct).map_err(|_| "hybrid-decaps-failed")?;
+        Ok(xor_stream(&blob, &ss))
     }
 
     /// Accept a bundle into custody. A courier stores whatever it is handed (it is not
@@ -203,5 +328,23 @@ mod tests {
         assert_eq!(handed, 1);
         assert_eq!(b.custody_len(), 0);
         assert_eq!(c.custody_len(), 1);
+    }
+
+    #[test]
+    fn green_secret_bundle_roundtrip_only_recipient_decrypts() {
+        let a = Node::new("dtn://a", &SEED_A, 1000);
+        let mut b = Node::new("dtn://b", &SEED_B, 1000);
+        let c = Node::new("dtn://c", &SEED_C, 1000);
+        let msg = b"dispatch: 3 pizzas to grid 7";
+        let m = [7u8; 32];
+        let eph = [8u8; 32];
+        let bundle = a.make_secret_bundle("dtn://b", &b.hybrid_pk(), msg, &m, &eph, 1000, 3600);
+        assert!(b.accept(bundle.clone()).is_ok());
+        // B (the recipient) decrypts the real plaintext.
+        let plain = b.deliver_secret(&bundle).expect("recipient decrypts");
+        assert_eq!(plain, msg);
+        // C (not the recipient, no hybrid secret key) cannot decrypt to the real plaintext.
+        let wrong = c.deliver_secret(&bundle);
+        assert!(wrong.is_err() || wrong.unwrap() != msg, "non-recipient must not read plaintext");
     }
 }

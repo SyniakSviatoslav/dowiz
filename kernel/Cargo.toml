@@ -13,6 +13,12 @@ wasm-bindgen = "0.2"
 # JSON (de)serialization for the wasm-bindgen JS glue. std-only, no native deps.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+curve25519-dalek = "4"
+
+[features]
+# Optional quantum-entropy provider (ANU QRNG over HTTPS). Off by default so the
+# crypto crate stays dependency-free and RNG-free; the runtime wires in real entropy.
+qrng = []
 
 [dev-dependencies]
 paste = "1.0"

@@ -13,3 +13,7 @@ pub mod keccak;
 pub mod kem;
 pub mod dsa;
 pub mod envelope;
+pub mod x25519;
+pub mod hybrid;
+pub mod entropy;
+pub mod fractal;
