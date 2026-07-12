@@ -1,0 +1,52 @@
+[package]
+# Claim the sovereign identity. The crate PACKAGE is `dowiz-core`; the LIB name stays `domain` (below)
+# so every `use domain::...` across the workspace is unchanged — a rename with zero import churn.
+name = "dowiz-core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Lib name stays `domain` (package is `dowiz-core`) → import paths unchanged workspace-wide.
+[lib]
+name = "domain"
+
+[lints]
+workspace = true
+
+# Deliberately dependency-light: this crate is the invariant core (money, order-status
+# transitions, tenant identity, error taxonomy) and must stay pure — no IO, no sqlx, no tokio.
+# `#[derive(sqlx::Type)]` on OrderStatus (per REBUILD-MAP inventory/12 §9) is NOT wired yet —
+# see rebuild/README.md "Open questions" for why that's deferred to the contract lane.
+# `utoipa` is the ONE exception to "no framework deps": it's a compile-time schema-derive macro
+# crate (zero IO, zero runtime footprint) — needed because `ErrorEnvelope`/`ErrorCode` are the
+# ADR-0010 shape EVERY S1 operation's error response references (REBUILD-MAP §1: "utoipa ->
+# OpenAPI SSOT" is a cross-cutting decision, not api-crate-scoped); duplicating a second
+# "documentation-only" mirror struct in `crates/api` would be the actual purity violation (two
+# sources of truth for one wire shape).
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+# Canonical-bytes hashing for the S5 idempotency request-hash (codec::request_hash). Both are pure
+# Rust (RustCrypto sha2 + hex) — no getrandom/entropy, no IO — so the wasm32 sovereignty gate stays
+# green. Digest of the canonical JSON body, lowercase hex; the cross-stack byte-identity contract.
+sha2 = "0.10"
+hex = "0.4"
+# NO `v4` here — that feature pulls a randomness source (getrandom) into the PRODUCTION
+# dependency graph, which the wasm32 sovereignty gate rejects (entropy in the core, Law 2).
+# The core only needs the `Uuid` TYPE + serde. `Uuid::new_v4()` is a test-only convenience,
+# so `v4` lives in [dev-dependencies] below and is unioned in only when building tests.
+uuid = { version = "1", features = ["serde"] }
+utoipa = "5"
+
+[dev-dependencies]
+serde_json = "1"
+# `v4` (entropy) is test-only: cargo unifies this with the production `uuid` when compiling the
+# test target, so tenant.rs's `Uuid::new_v4()` still works; the production/wasm build never sees it.
+uuid = { version = "1", features = ["v4", "serde"] }
+# Phase-Zero Step 2 (Determinism Verification) — the Hard Truth suite (tests/hard_truth.rs).
+# DEV-ONLY: proptest pulls rand/entropy, but it never enters the production graph, so the wasm32
+# sovereignty gate (which builds --lib, no dev-deps) stays entropy-free.
+proptest = "1"
