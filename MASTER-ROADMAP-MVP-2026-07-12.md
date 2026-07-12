@@ -77,6 +77,27 @@ constants, money surface, or D0–D7. All ship a RED+GREEN assertion (C7).
   verification. Feeds D3 implementation. PRIMARY sources only (RFC 9171/9172/9174/9000,
   eclipse.dev/zenoh, ccsds.org, dtn7-rs, reticulum.network). (D3)
 
+### P-stream integration status — 2026-07-12 (VERIFIED, not planned)
+
+All six launched streams landed, were independently validated (isolated-target
+`cargo test`), merged into `feat/pq-crypto-tier1`, and pushed to origin.
+
+| Stream | Artifact | RED+GREEN gate | Integrated result |
+|--------|----------|----------------|-------------------|
+| P1 | `node/src/store.rs` (rusqlite, bundled) | 4 store tests | node +4 ⇒ **25** total |
+| P2 | `kernel/src/pq/volume.rs` (AES-256-GCM, vk wrapped via hybrid KEM) | 6 volume tests | kernel +6 ⇒ **144** total |
+| P3 | `kernel/src/pq/codesign.rs` (ML-DSA vs pinned root) | 6 codesign tests | kernel (incl. P2) ⇒ 144 |
+| P4 | `node/src/roles.rs` (owner/courier/customer FSM) | 5 roles tests | node (incl. P1,P5) ⇒ 25 |
+| P5 | `node/src/adapters/{nostr,activitypub,mcp}.rs` | 9 adapter tests | node ⇒ 25 |
+| P7 | `docs/transport-research-2026-07-12.md` | research doc (no code) | reaffirms DTN/BPv7+QUIC+BIBE; libp2p rejected |
+
+- **Full integrated suite (origin/feat/pq-crypto-tier1 @ 244341d4):** `cargo test` →
+  kernel **144** lib + node **25** pass, 0 failed; `cargo clippy --all-targets` → **0 errors**
+  (node clean; kernel only pre-existing cosmetic lints in the from-scratch Keccak/SHA3 core,
+  not the vetted `curve25519-dalek` x25519 path).
+- P6 (Web/WASM frontend) was intentionally **out of scope** for this wave (thin-client mandate,
+  deferred — no red-line impact). S-gates below remain the next sequential work.
+
 ## 3. SEQUENTIAL GATES (red-line / external / tier-dependent — NOT parallel)
 
 - **S1 · dtn7-rs integration (L3)** — depends on P1 (store) + L2 node. Replaces the in-crate
