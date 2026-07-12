@@ -6,9 +6,8 @@
 
 /// Reject non-integer amounts (money is integer minor units).
 pub fn to_minor_unit(amount: i64, _currency: &str) -> Result<i64, String> {
-    if amount != amount {
-        return Err("Amount must be an integer".into());
-    }
+    // i64 is always an integer; the float guard is unnecessary (compile-time guarantee
+    // that money never carries a fractional value). Kept as identity to preserve the API.
     Ok(amount)
 }
 
@@ -34,9 +33,7 @@ const SCALE: i128 = 1_000_000;
 /// Server-authoritative `applyTax` (money.ts:23). `subtotal` is integer minor units.
 /// `tax_rate` is a config input (e.g. 0.20) parsed once to micro-units.
 pub fn apply_tax(subtotal: i64, tax_rate: f64, price_includes_tax: bool) -> Result<i64, String> {
-    if subtotal % 1 != 0 {
-        return Err("subtotal must be an integer (minor units)".into());
-    }
+    // subtotal is i64 (integer minor units) — non-integer is impossible by type.
     if subtotal == 0 || tax_rate == 0.0 {
         return Ok(0);
     }
