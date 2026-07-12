@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, max-params -- test/spec/spike/helper code -- flagged strings are test data, selectors, logs, error codes and SQL, not user-facing UI copy; any/raw-any are deliberate test/integration seams */
 import type { Page, BrowserContext } from '@playwright/test';
 
 export function collectWsFrames(page: Page): { frames: string[] } {

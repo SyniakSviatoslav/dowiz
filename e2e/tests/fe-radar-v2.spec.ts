@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, max-params -- test/spec/spike/helper code -- flagged strings are test data, selectors, logs, error codes and SQL, not user-facing UI copy; any/raw-any are deliberate test/integration seams */
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 import { checkAxe, checkTouchTargets, checkFormLabels, checkAriaLive, type A11yIssue } from '../helpers/a11y.js';
 
@@ -215,7 +216,7 @@ test.describe('FE-Radar v2 — Full Surface + a11y + Throttled', () => {
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(iss);
     }
-    let sevCounts = { '🔴': 0, '🟠': 0, '🟡': 0, '🔵': 0 };
+    const sevCounts = { '🔴': 0, '🟠': 0, '🟡': 0, '🔵': 0 };
     for (const iss of issues) { sevCounts[iss.severity]++; }
 
     console.log(`\nTotal issues: ${issues.length}`);

@@ -82,8 +82,8 @@ export function SwipeableRow({ children, actions, threshold = 80, className = ''
           <button
             key={i}
             onClick={() => { setOffsetX(0); action.onClick(); }}
-            className={`flex flex-col items-center justify-center gap-1 px-3 text-xs font-semibold text-white transition-colors ${action.className || 'bg-[var(--brand-primary)]'}`}
-            style={{ minWidth: '64px', minHeight: '44px' }}
+            className={`flex flex-col items-center justify-center gap-1 px-3 text-xs font-semibold text-white transition-colors ${action.className || 'bg-brand-primary'}`}
+            style={{ minWidth: `minWidth`, minHeight: `minHeight` }}
           >
             {action.icon && <i className={action.icon} />}
             {action.label}
@@ -91,7 +91,7 @@ export function SwipeableRow({ children, actions, threshold = 80, className = ''
         ))}
       </div>
       <div
-        className="relative bg-[var(--brand-surface)] transition-transform duration-200 select-none"
+        className="relative bg-brand-surface transition-transform duration-200 select-none"
         style={{ transform: `translateX(-${offsetX}px)`, touchAction: 'pan-y' }}
         role="presentation"
         onTouchStart={handleTouchStart}

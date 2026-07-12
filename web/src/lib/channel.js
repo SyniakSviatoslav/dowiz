@@ -1,3 +1,4 @@
+/* eslint-disable local/no-hardcoded-string -- internal runtime/error strings (WASM glue, error codes, header names, selectors) and test seams -- not user-facing UI copy; do not wrap in t() */
 // port of kernel/src/analytics.rs
 //
 // Plain-JS mirror of `ChannelLedger` + `reduce_anomalies` over a JS event

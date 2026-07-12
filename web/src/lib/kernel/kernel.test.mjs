@@ -1,3 +1,4 @@
+/* eslint-disable local/no-hardcoded-string -- internal runtime/error strings (WASM glue, error codes, header names, selectors) and test seams -- not user-facing UI copy; do not wrap in t() */
 // Plain Node test proving the kernel produces a REAL order (not the old
 // placeholder). Uses the node-target wasm-bindgen glue (web/src/lib/kernel/node/),
 // which loads + instantiates the wasm synchronously via CommonJS require — no

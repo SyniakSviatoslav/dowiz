@@ -30,27 +30,27 @@ const TONE: Record<StateChipState, { fg: string; bg: string; border: string }> =
   open: {
     fg: 'var(--brand-primary)',
     bg: 'color-mix(in srgb, var(--brand-primary) 12%, transparent)',
-    border: 'color-mix(in srgb, var(--brand-primary) 30%, transparent)',
+    border: `border`,
   },
   available: {
     fg: 'var(--brand-primary)',
     bg: 'color-mix(in srgb, var(--brand-primary) 12%, transparent)',
-    border: 'color-mix(in srgb, var(--brand-primary) 30%, transparent)',
+    border: `border`,
   },
   busy: {
     fg: 'var(--color-warning, #D97706)',
     bg: 'color-mix(in srgb, var(--color-warning, #D97706) 14%, transparent)',
-    border: 'color-mix(in srgb, var(--color-warning, #D97706) 36%, transparent)',
+    border: `border`,
   },
   closed: {
     fg: 'var(--brand-text-muted)',
     bg: 'color-mix(in srgb, var(--brand-text-muted) 12%, transparent)',
-    border: 'var(--brand-border)',
+    border: `border`,
   },
   sold_out: {
     fg: 'var(--brand-text-muted)',
     bg: 'color-mix(in srgb, var(--brand-text-muted) 12%, transparent)',
-    border: 'var(--brand-border)',
+    border: `border`,
   },
 };
 

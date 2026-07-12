@@ -89,7 +89,7 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (loading || isCompleted) return;
-    if (e.key === 'Enter' || e.key === ' ') {
+    if (e.key === `Enter` || e.key === ' ') {
       e.preventDefault();
       setSlideRatio(1);
       triggerComplete();
@@ -102,11 +102,11 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
         initial={reduceMotion ? false : { scale: 0.97, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ duration: duration.base, ease: ease.out }}
-        className="h-14 rounded-full bg-[var(--color-success)] flex items-center justify-center gap-2 font-bold text-[var(--color-on-success)] shadow-[var(--elevation-2)]"
+        className={`h-14 rounded-full bg-semantic-success flex items-center justify-center gap-2 font-bold text-white shadow-elevation-2`}
       >
         {t('order.delivered', 'Delivered')}
-        <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M5 13l4 4L19 7" />
+        <svg aria-hidden="true" className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap={`strokeLinecap`} strokeLinejoin={`strokeLinejoin`}>
+          <path d={`d`} />
         </svg>
       </motion.div>
     );
@@ -125,21 +125,21 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
       aria-label={resolvedLabel}
       data-testid="task-deliver"
       onKeyDown={handleKeyDown}
-      className="relative h-14 bg-[var(--brand-surface-raised)] border border-[var(--brand-border)] rounded-full overflow-hidden flex items-center justify-center select-none transition-shadow duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
+      className={`relative h-14 bg-brand-surface-raised border border-brand-border rounded-full overflow-hidden flex items-center justify-center select-none transition-shadow duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 focus-visible:ring-offset-brand-surface`}
     >
       <div
-        className="absolute inset-y-0 left-0 bg-[var(--status-delivered-bg)] transition-[width] duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none"
+        className={`absolute inset-y-0 left-0 bg-status-delivered/20 transition-[width] duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none`}
         style={{ width: `${slideRatio * 100}%` }}
       />
       <span
-        className="font-bold text-[var(--brand-text)] z-10 pointer-events-none transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-out)] motion-reduce:transition-none"
+        className={`font-bold text-brand-text z-10 pointer-events-none transition-opacity duration-[var(--motion-fast)] ease-[var(--ease-out)] motion-reduce:transition-none`}
         style={{ opacity: 1 - slideRatio }}
       >
         {loading ? t('common.processing', 'Processing...') : resolvedLabel}
       </span>
 
       <motion.div
-        className="absolute left-1 top-1 bottom-1 w-12 bg-[var(--brand-primary)] rounded-full shadow-[var(--elevation-2)] flex items-center justify-center cursor-grab active:cursor-grabbing z-20"
+        className="absolute left-1 top-1 bottom-1 w-12 bg-brand-primary rounded-full shadow-elevation-2 flex items-center justify-center cursor-grab active:cursor-grabbing z-20"
         animate={hint
           ? { transform: ['translateX(0px)', 'translateX(6px)', 'translateX(0px)'] }
           : { transform: `translateX(${slideRatio * (containerRef.current ? containerRef.current.clientWidth - 56 : 0)}px)` }}
@@ -151,8 +151,8 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
         onMouseDown={handleDragStart}
         onTouchStart={handleDragStart}
       >
-        <svg className="h-5 w-5 text-[var(--brand-bg)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M9 6l6 6-6 6" />
+        <svg className="h-5 w-5 text-brand-bg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap={`strokeLinecap`} strokeLinejoin={`strokeLinejoin`}>
+          <path d={`d`} />
         </svg>
       </motion.div>
 
@@ -161,7 +161,7 @@ export function SwipeToComplete({ onComplete, label, isCompleted = false }: Swip
         type="button"
         onClick={() => { if (!loading && !isCompleted) { setSlideRatio(1); triggerComplete(); } }}
         disabled={loading}
-        className="sr-only focus:not-sr-only focus:absolute focus:inset-0 focus:z-30 focus:flex focus:items-center focus:justify-center focus:rounded-full focus:bg-[var(--brand-primary)] focus:text-[var(--brand-bg)] focus:font-bold focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
+        className={`sr-only focus:not-sr-only focus:absolute focus:inset-0 focus:z-30 focus:flex focus:items-center focus:justify-center focus:rounded-full focus:bg-brand-primary focus:text-brand-bg focus:font-bold focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 focus-visible:ring-offset-brand-surface`}
       >
         {t('courier.confirm_delivery', 'Confirm delivery')}
       </button>

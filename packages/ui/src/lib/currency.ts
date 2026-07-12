@@ -27,6 +27,7 @@ export function subscribeToCurrency(fn: () => void): () => void {
 }
 
 export function getCurrencies(): { code: CurrencyCode; name: string; symbol: string }[] {
+  // Currency display names are data, not translatable UI copy (consumed as identifiers).
   return [
     { code: 'ALL', name: 'Lek', symbol: 'L' },
     { code: 'EUR', name: 'Euro', symbol: '\u20AC' },

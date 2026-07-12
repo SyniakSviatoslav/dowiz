@@ -18,7 +18,6 @@
  * APNs — there is no direct Web Push on iOS without the installed PWA. Android
  * + desktop Chrome/Edge/Firefox deliver normally. See README.
  */
-/* eslint-disable local/no-hardcoded-string -- Service Worker has no i18n runtime; notification copy is the contract payload */
 /* eslint-disable local/no-empty-catch -- push payload parse fallback is intentional; nothing to log when a push body is non-JSON */
 self.addEventListener('install', function () {
   self.skipWaiting();

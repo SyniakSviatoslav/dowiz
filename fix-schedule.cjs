@@ -11,8 +11,8 @@ const files = [
   'apps/api/src/workers/backup/index.ts'
 ];
 files.forEach(file => {
-  let content = fs.readFileSync(file, 'utf8');
-  let newContent = content.replace(/( +)await (this\.boss|queue\.boss)\.schedule\(['"]([^'"]+)['"]/g, (match, space, bossRef, queueName) => {
+  const content = fs.readFileSync(file, 'utf8');
+  const newContent = content.replace(/( +)await (this\.boss|queue\.boss)\.schedule\(['"]([^'"]+)['"]/g, (match, space, bossRef, queueName) => {
     return space + 'await ' + bossRef + '.createQueue(\'' + queueName + '\');\n' + match;
   });
   if (content !== newContent) {

@@ -2,7 +2,7 @@ import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
 
 before(() => {
-  (globalThis as any).document = { documentElement: { lang: '' } };
+  (globalThis as unknown as { document: { documentElement: { lang: string } } }).document = { documentElement: { lang: '' } };
 });
 
 // Dynamic import after setting up document mock

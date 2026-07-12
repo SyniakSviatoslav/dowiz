@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, local/no-empty-catch -- test/spec/spike/helper code -- flagged strings are test data, selectors, logs, error codes and SQL, not user-facing UI copy; any/raw-any are deliberate test/integration seams */
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 
 // MVP UI-improvements proof (the GO subset per docs/research/UI-IMPROVEMENTS-TESTPLAN.md).

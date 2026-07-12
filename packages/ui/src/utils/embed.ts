@@ -6,6 +6,7 @@ export function isEmbedMode(): boolean {
 
 export function posFixed(style: string): string {
   if (isEmbedMode()) {
+    // CSS token substitution (position:/bottom:), not user-facing copy.
     return style
       .replace(/position:\s*fixed/gi, 'position: sticky')
       .replace(/bottom:\s*\d+px/gi, '');

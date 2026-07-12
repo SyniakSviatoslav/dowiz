@@ -15,8 +15,6 @@ export const CURRENCIES: Record<CurrencyCode, CurrencyConfig> = {
   EUR: { code: 'EUR', symbol: '€', locale: 'de-DE', decimals: 2 },
 };
 
-const HALF_UP = new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 8 });
-
 export function formatMoney(
   amount: number,
   displayCurrency: CurrencyCode = 'ALL',
@@ -53,9 +51,8 @@ export function normalizePhone(phone: string): string {
   return `+${clean}`;
 }
 
-export function calcETA(createdAt: string | Date, elapsedSeconds: number): string {
+export function calcETA(createdAt: string | Date, _elapsedSeconds: number): string {
   // Mock logic
-  const created = new Date(createdAt);
   return '15-25 min';
 }
 

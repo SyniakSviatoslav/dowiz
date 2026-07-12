@@ -16,10 +16,10 @@ export function AdminShell({ children, currentPath, onNavigate, onLogout }: Admi
   ];
 
   return (
-    <div className="min-h-screen bg-[var(--brand-bg)] flex flex-col md:flex-row text-[var(--brand-text)]">
+    <div className={`min-h-screen bg-brand-bg flex flex-col md:flex-row text-brand-text`}>
       {/* Desktop Sidebar / Mobile Topbar */}
-      <div className="w-full md:w-64 bg-[var(--brand-surface)] border-b md:border-b-0 md:border-r border-[var(--brand-border)] p-4 flex flex-col">
-        <h1 className="text-xl font-bold mb-6 text-[var(--brand-primary)]" style={{ fontFamily: 'var(--brand-font-heading)' }}>
+      <div className={`w-full md:w-64 bg-brand-surface border-b md:border-b-0 md:border-r border-brand-border p-4 flex flex-col`}>
+        <h1 className="text-xl font-bold mb-6 text-brand-primary" style={{ fontFamily: `fontFamily` }}>
           DeliveryOS Admin
         </h1>
         <nav className="flex md:flex-col gap-2 overflow-x-auto md:overflow-visible flex-1">
@@ -27,14 +27,14 @@ export function AdminShell({ children, currentPath, onNavigate, onLogout }: Admi
             <button
               key={item.path}
               onClick={() => onNavigate(item.path)}
-              className={`w-full text-left px-4 py-2 rounded-lg transition-colors font-medium text-sm ${currentPath === item.path ? 'bg-[var(--brand-primary-light)] text-[var(--brand-primary)]' : 'hover:bg-[var(--brand-surface-raised)]'}`}
+              className={`w-full text-left px-4 py-2 rounded-lg transition-colors font-medium text-sm ${currentPath === item.path ? `bg-[var(--brand-primary-light)] text-brand-primary` : `hover:bg-brand-surface-raised`}`}
             >
               {item.label}
             </button>
           ))}
         </nav>
         {onLogout && (
-          <button onClick={onLogout} className="mt-auto px-4 py-2 text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger-light)] rounded-lg transition-colors flex items-center gap-2">
+          <button onClick={onLogout} className={`mt-auto px-4 py-2 text-sm text-semantic-danger hover:bg-color-danger-light rounded-lg transition-colors flex items-center gap-2`}>
             <i className="ti ti-logout" /> {t('admin.logout', 'Logout')}
           </button>
         )}

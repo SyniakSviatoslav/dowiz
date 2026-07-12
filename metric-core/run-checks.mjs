@@ -19,7 +19,7 @@
  *   CI              – set to 'true' for CI output (no progress spinners)
  */
 import { execSync } from 'child_process';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { writeFileSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { platform } from 'os';
 import { fileURLToPath } from 'url';
@@ -43,7 +43,6 @@ const IS_CI = process.env.CI === 'true';
 
 // ── Langfuse setup ────────────────────────────────────────────
 let langfuseSpanProcessor = null;
-let otelTracerProvider = null;
 let otelSdk = null;
 
 async function initLangfuse() {
@@ -90,7 +89,7 @@ async function shutdownLangfuse() {
     try {
       await otelSdk.shutdown();
     } catch (err) {
-      // best-effort
+      console.warn(`[metric-core] otel shutdown error: ${err?.message}`);
     }
   }
 }
@@ -245,7 +244,6 @@ async function main() {
   // Aggregate
   const hardFailures = results.filter(r => r.gate === 'hard' && !r.passed);
   const softFailures = results.filter(r => r.gate === 'soft' && !r.passed);
-  const allPassed = results.every(r => r.passed);
   const hardPassed = hardFailures.length === 0;
   const score = results.length > 0 ? results.filter(r => r.passed).length / results.length : 0;
 

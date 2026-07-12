@@ -69,17 +69,17 @@ export function PullToRefresh({ onRefresh, children, className = '', pullThresho
         }}
       >
         {isRefreshing ? (
-          <div className="flex items-center gap-2 text-sm text-[var(--brand-text-muted)]">
+          <div className="flex items-center gap-2 text-sm text-brand-text-muted">
             <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              <path className="opacity-75" fill="currentColor" d={`d`} />
             </svg>
           </div>
         ) : pullDistance > 0 ? (
-          <i className="ti ti-arrow-down text-lg text-[var(--brand-text-muted)]" />
+          <i className="ti ti-arrow-down text-lg text-brand-text-muted" />
         ) : null}
       </div>
-      <div style={{ transform: `translateY(${pullDistance}px)`, transition: isPulling ? 'none' : 'transform 0.3s ease' }}>
+      <div style={{ transform: `translateY(${pullDistance}px)`, transition: isPulling ? 'none' : `transform 0.3s ease` }}>
         {children}
       </div>
     </div>

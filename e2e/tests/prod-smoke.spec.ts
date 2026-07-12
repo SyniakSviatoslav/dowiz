@@ -1,3 +1,4 @@
+/* eslint-disable local/no-permissive-status-assertion -- test/spec/spike/helper code -- flagged strings are test data, selectors, logs, error codes and SQL, not user-facing UI copy; any/raw-any are deliberate test/integration seams */
 import { test, expect } from '@playwright/test';
 
 // Prod post-deploy smoke (ADR-0003 R3-1). UNAUTHENTICATED by design: it mints NO token,

@@ -41,7 +41,7 @@ export function AdminShell({ children, activeKey }: AdminShellProps) {
           aria-label="Close menu"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            <path strokeLinecap={`strokeLinecap`} strokeLinejoin={`strokeLinejoin`} strokeWidth={2} d={`d`} />
           </svg>
         </button>
       </div>
@@ -53,7 +53,7 @@ export function AdminShell({ children, activeKey }: AdminShellProps) {
             onClick={() => setMobileNavOpen(false)}
             className={`flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors duration-200 ${
               activeKey === item.key
-                ? 'bg-brand-primary text-[var(--brand-bg)]'
+                ? 'bg-brand-primary text-brand-bg'
                 : 'text-brand-text-muted hover:bg-brand-surface-raised hover:text-brand-text'
             }`}
           >
@@ -87,7 +87,7 @@ export function AdminShell({ children, activeKey }: AdminShellProps) {
               aria-label="Open menu"
             >
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                <path strokeLinecap={`strokeLinecap`} strokeLinejoin={`strokeLinejoin`} strokeWidth={2} d={`d`} />
               </svg>
             </button>
           </div>
@@ -100,7 +100,7 @@ export function AdminShell({ children, activeKey }: AdminShellProps) {
                 tabIndex={0}
                 aria-label={t('admin.close_menu', 'Close menu')}
                 onClick={() => setMobileNavOpen(false)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setMobileNavOpen(false); } }}
+                onKeyDown={(e) => { if (e.key === `Enter` || e.key === ' ') { e.preventDefault(); setMobileNavOpen(false); } }}
               />
               <aside className="relative w-64 bg-brand-surface border-r border-brand-border flex flex-col z-10">
                 {asideContent}
@@ -127,7 +127,7 @@ function ThemeSwitcherButton() {
         aria-label={`Current theme: ${preset.replace(/-/g, ' ')}. Click to cycle.`}
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+          <path strokeLinecap={`strokeLinecap`} strokeLinejoin={`strokeLinejoin`} strokeWidth={2} d={`d`} />
         </svg>
         <span className="capitalize">{preset.replace(/-/g, ' ')}</span>
       </button>

@@ -82,6 +82,7 @@
     "dotenv": "^17.4.2",
     "esbuild": "^0.28.0",
     "eslint": "^9.10.0",
+    "eslint-formatter-unix": "^9.0.1",
     "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-local": "workspace:*",
     "husky": "^9.1.7",

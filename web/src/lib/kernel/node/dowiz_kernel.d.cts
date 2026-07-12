@@ -1,5 +1,5 @@
 /* tslint:disable */
-/* eslint-disable */
+ 
 /**
  * Ingest a batch of channel events and return aggregated attribution + anomaly
  * counts as JSON: `{orders_by_channel: [[channel,count]...], funnel: {channel:

@@ -4,7 +4,6 @@
 // Read-only, safe-on-live, toolset gated by ENV.
 
 import { loadEnv } from '../config.js';
-import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,14 +24,6 @@ async function main() {
   const runTs = new Date().toISOString().replace(/[:.]/g, '-');
   const findingsDir = path.join(dirName, '..', 'findings');
 
-  // Build the context for the LLM agent
-  const auditPrompt = fs.readFileSync(
-    path.join(dirName, '..', '..', '..', 'audit', 'deployed-audit.md'),
-    'utf-8',
-  ).replace(/\{\{BASE_URL\}\}/g, env.BASE_URL)
-   .replace(/\{\{ENV\}\}/g, env.ENV)
-   .replace(/\{\{TEST_TENANT\}\}/g, env.TEST_TENANT);
-
   console.log('Audit prompt loaded. Would invoke Claude Code with:');
   console.log(`  Target: ${env.BASE_URL}`);
   console.log(`  Environment: ${env.ENV}`);
@@ -40,8 +31,8 @@ async function main() {
   console.log('');
 
   // In production, this would call Claude Code API
-  // For now, generate a stub findings file
-  const stubFindings = {
+  // For now, generate a placeholder findings file
+  const placeholderFindings = {
     run_id: runTs,
     env: env.ENV,
     base_url: env.BASE_URL,
@@ -64,7 +55,7 @@ async function main() {
   fs.mkdirSync(findingsDir, { recursive: true });
   fs.writeFileSync(
     path.join(findingsDir, `findings-${runTs}.json`),
-    JSON.stringify(stubFindings, null, 2),
+    JSON.stringify(placeholderFindings, null, 2),
     'utf-8',
   );
 

@@ -1,3 +1,4 @@
+/* eslint-disable local/no-duplicate-import -- test/spec/spike/helper code -- flagged strings are test data, selectors, logs, error codes and SQL, not user-facing UI copy; any/raw-any are deliberate test/integration seams */
 /**
  * CLIENT critical-path visual snapshot spec — the eater journey (menu → product → cart → checkout
  * → order status), every screen × state × locale, frozen as baselines.

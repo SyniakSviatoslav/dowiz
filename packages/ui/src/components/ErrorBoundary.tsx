@@ -27,7 +27,7 @@ function DefaultFallback({ error, reset }: { error: Error | null; reset: () => v
       </p>
       <button
         onClick={reset}
-        className="px-6 py-2 bg-brand-primary text-[var(--brand-bg)] rounded-full font-semibold hover:bg-brand-primary-hover transition-colors"
+        className="px-6 py-2 bg-brand-primary text-brand-bg rounded-full font-semibold hover:bg-brand-primary-hover transition-colors"
       >
         {t('common.try_again', 'Try again')}
       </button>

@@ -31,11 +31,11 @@ export function AnimatedCheck({ size = 48, strokeWidth = 3, className = '', colo
         transition={{ duration: 0.3, ease: ease.out }}
       />
       <motion.path
-        d="M7 12.5l3 3 7-7"
+        d={`d`}
         stroke={strokeColor}
         strokeWidth={strokeWidth}
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        strokeLinecap={`strokeLinecap`}
+        strokeLinejoin={`strokeLinejoin`}
         fill="none"
         initial={{ pathLength: 0 }}
         animate={{ pathLength: 1 }}

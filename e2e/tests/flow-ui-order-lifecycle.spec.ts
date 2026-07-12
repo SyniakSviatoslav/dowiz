@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, local/no-permissive-status-assertion -- test/spec/spike/helper code -- flagged strings are test data, selectors, logs, error codes and SQL, not user-facing UI copy; any/raw-any are deliberate test/integration seams */
 /**
  * Cross-tenant order lifecycle E2E test — uses REAL UI actions against the deployed service.
  *

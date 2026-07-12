@@ -28,6 +28,7 @@ export interface AdminOrder {
  * the count says items exist but the items haven't loaded, the card should show a
  * placeholder rather than a hollow nameless / "0 items" card (flash of wrong state).
  */
+// eslint-disable-next-line local/no-hardcoded-string -- Pick<> type-key literals, not UI copy
 export function isOrderDetailsPending(order: Pick<AdminOrder, 'itemCount' | 'items'>): boolean {
   return (order.itemCount ?? 0) > 0 && (!order.items || order.items.length === 0);
 }

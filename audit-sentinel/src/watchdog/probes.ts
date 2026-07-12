@@ -1,5 +1,11 @@
 import { type Env } from '../config.js';
 
+function getMessage(e: unknown, fallback = 'error'): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === 'string') return e;
+  return fallback;
+}
+
 export interface ProbeResult {
   name: string;
   spec_ref: string;
@@ -22,9 +28,10 @@ export async function probeTls(env: Env): Promise<ProbeResult> {
     try {
       const resp = await fetch(`https://${domain}/`, { method: 'HEAD', signal: AbortSignal.timeout(5000) });
       results.push(`${domain}: TLS OK (status ${resp.status})`);
-    } catch (e: any) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, local/no-raw-any -- message/glue/event type
+    } catch (e) {
       allPassed = false;
-      results.push(`${domain}: TLS FAILED - ${e.message || 'unknown error'}`);
+      results.push(`${domain}: TLS FAILED - ${getMessage(e, 'unknown error')}`);
     }
   }
 
@@ -56,16 +63,17 @@ export async function probeHeaders(env: Env): Promise<ProbeResult[]> {
       severity: isRedirect ? 'INFO' : 'BLOCKER',
       timestamp,
     });
-  } catch (e: any) {
-    results.push({
-      name: 'HTTP→HTTPS redirect',
-      spec_ref: 'E2a',
-      passed: false,
-      detail: `Failed: ${e.message}`,
-      evidence: e.message || 'error',
-      severity: 'BLOCKER',
-      timestamp,
-    });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, local/no-raw-any -- message/glue/event type
+  } catch (e) {
+  results.push({
+    name: 'HTTP→HTTPS redirect',
+    spec_ref: 'E2a',
+    passed: false,
+    detail: `Failed: ${getMessage(e)}`,
+    evidence: getMessage(e),
+    severity: 'BLOCKER',
+    timestamp,
+  });
   }
 
   try {
@@ -119,13 +127,14 @@ export async function probeHeaders(env: Env): Promise<ProbeResult[]> {
       severity: cc.includes('max-age=0') ? 'MAJOR' : 'INFO',
       timestamp,
     });
-  } catch (e: any) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, local/no-raw-any -- message/glue/event type
+  } catch (e) {
     results.push({
       name: 'HTTPS headers probe',
       spec_ref: 'E2',
       passed: false,
-      detail: `Failed to fetch: ${e.message}`,
-      evidence: e.message || 'error',
+      detail: `Failed to fetch: ${getMessage(e)}`,
+      evidence: getMessage(e),
       severity: 'BLOCKER',
       timestamp,
     });
@@ -150,7 +159,8 @@ export async function probeHealth(env: Env): Promise<ProbeResult> {
     const checks: string[] = [];
     if (!pgOk) checks.push('Postgres DOWN');
     if (!workersOk) checks.push('Workers DOWN');
-    for (const [k, v] of Object.entries<any>(body.checks || {})) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, local/no-raw-any -- message/glue/event type
+    for (const [k, v] of Object.entries(body.checks || {})) {
       if (v?.status === 'degraded') checks.push(`${k}: degraded`);
     }
 
@@ -163,13 +173,14 @@ export async function probeHealth(env: Env): Promise<ProbeResult> {
       severity: isUnhealthy ? 'BLOCKER' : isDegraded ? 'MAJOR' : 'INFO',
       timestamp,
     };
-  } catch (e: any) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, local/no-raw-any -- message/glue/event type
+  } catch (e) {
     return {
       name: '/health check',
       spec_ref: 'E3',
       passed: false,
-      detail: `Health endpoint failed: ${e.message}`,
-      evidence: e.message || 'error',
+      detail: `Health endpoint failed: ${getMessage(e)}`,
+      evidence: getMessage(e),
       severity: 'BLOCKER',
       timestamp,
     };
@@ -196,13 +207,14 @@ export async function probeCache(env: Env): Promise<ProbeResult> {
       severity: 'INFO',
       timestamp,
     };
-  } catch (e: any) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, local/no-raw-any -- message/glue/event type
+  } catch (e) {
     return {
       name: 'Cache probe',
       spec_ref: 'E4',
       passed: false,
-      detail: `Menu URL failed: ${e.message}`,
-      evidence: e.message || 'error',
+      detail: `Menu URL failed: ${getMessage(e)}`,
+      evidence: getMessage(e),
       severity: 'MAJOR',
       timestamp,
     };
@@ -229,13 +241,14 @@ export async function probeRateLimit(env: Env): Promise<ProbeResult> {
       severity: limit ? 'INFO' : 'MAJOR',
       timestamp,
     };
-  } catch (e: any) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, local/no-raw-any -- message/glue/event type
+  } catch (e) {
     return {
       name: 'Rate limit probe',
       spec_ref: 'E5',
       passed: false,
-      detail: `Failed: ${e.message}`,
-      evidence: e.message || 'error',
+      detail: `Failed: ${getMessage(e)}`,
+      evidence: getMessage(e),
       severity: 'MAJOR',
       timestamp,
     };

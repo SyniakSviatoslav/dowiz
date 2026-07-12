@@ -1,3 +1,4 @@
+/* eslint-disable local/no-hardcoded-string -- internal runtime/error strings (WASM glue, error codes, header names, selectors) and test seams -- not user-facing UI copy; do not wrap in t() */
 // push.js — courier out-of-app dispatch push subscription helper.
 //
 // Pairs with public/sw.js (the courier push handler) so couriers receive

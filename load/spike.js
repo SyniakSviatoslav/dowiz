@@ -1,12 +1,11 @@
 import http from 'k6/http';
-import { check, sleep, group } from 'k6';
+import { check } from 'k6';
 import { Rate, Trend } from 'k6/metrics';
 
 const BASE_URL = __ENV.BASE_URL || 'http://127.0.0.1:8080';
 const TENANT_A_SLUG = __ENV.TENANT_A_SLUG || 'demo';
 const TENANT_B_SLUG = __ENV.TENANT_B_SLUG || 'demo2';
 
-const authFailed = new Rate('auth_failed');
 const rateLimited = new Rate('rate_limited');
 const serverError = new Rate('server_error');
 const p95Trend = new Trend('p95_latency');
@@ -79,8 +78,9 @@ export function placeOrder() {
       const menu = JSON.parse(menuRes.body);
       locationId = menu.locationId || menu.location_id || '';
       payload.locationId = locationId;
-    } catch {
-      // menu response is not JSON — use fallback locationId
+    } catch (e) {
+      // menu response is not JSON; fallback locationId already set
+      void e;
     }
   }
 

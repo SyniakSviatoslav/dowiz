@@ -33,7 +33,7 @@ export function CartDrawer({ isOpen, onClose, items, onUpdateQuantity, onCheckou
 
   useEffect(() => {
     if (!isOpen) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === `Escape`) onClose(); };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     return () => {
@@ -54,30 +54,30 @@ export function CartDrawer({ isOpen, onClose, items, onUpdateQuantity, onCheckou
             tabIndex={0}
             aria-label={t('common.close', 'Close')}
             onClick={onClose}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}
+            onKeyDown={(e) => { if (e.key === `Enter` || e.key === ' ') { e.preventDefault(); onClose(); } }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: duration.fast, ease: ease.soft }}
           />
           <motion.div
-            className="absolute bottom-0 left-0 right-0 max-h-[85vh] flex flex-col bg-[var(--brand-surface)] rounded-t-2xl"
-            style={{ boxShadow: 'var(--elev-4)', paddingBottom: 'var(--safe-bottom)' }}
-            initial={reduce ? { opacity: 0 } : { transform: 'translateY(100%)' }}
-            animate={reduce ? { opacity: 1 } : { transform: 'translateY(0%)' }}
-            exit={reduce ? { opacity: 0 } : { transform: 'translateY(100%)', transition: { duration: 0.22, ease: ease.soft } }}
+            className={`absolute bottom-0 left-0 right-0 max-h-[85vh] flex flex-col bg-brand-surface rounded-t-2xl`}
+            style={{ boxShadow: `boxShadow`, paddingBottom: 'var(--safe-bottom)' }}
+            initial={reduce ? { opacity: 0 } : { transform: `transform` }}
+            animate={reduce ? { opacity: 1 } : { transform: `transform` }}
+            exit={reduce ? { opacity: 0 } : { transform: `transform`, transition: { duration: 0.22, ease: ease.soft } }}
             transition={reduce ? { duration: duration.fast } : { duration: 0.32, ease: ease.out }}
           >
             <div className="flex items-center justify-center pt-2 pb-1 shrink-0">
-              <div className="w-10 h-1 rounded-full bg-[var(--brand-border)]" />
+              <div className="w-10 h-1 rounded-full bg-brand-border" />
             </div>
             <div className="flex items-center justify-between px-5 pt-2 pb-3 shrink-0">
-              <h2 className="text-lg font-heading font-semibold text-[var(--brand-text)] truncate">{title || t('cart.title', 'Cart')}</h2>
+              <h2 className="text-lg font-heading font-semibold text-brand-text truncate">{title || t('cart.title', 'Cart')}</h2>
               <button
                 type="button"
                 onClick={onClose}
                 aria-label={t('common.close', 'Close')}
-                className="w-9 h-9 shrink-0 flex items-center justify-center rounded-full text-[var(--brand-text-muted)] transition-colors duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none hover:bg-[var(--brand-surface-raised)] hover:text-[var(--brand-text)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+                className={`w-9 h-9 shrink-0 flex items-center justify-center rounded-full text-brand-text-muted transition-colors duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none hover:bg-brand-surface-raised hover:text-brand-text active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2`}
               >
                 <i className="ti ti-x" />
               </button>
@@ -86,11 +86,11 @@ export function CartDrawer({ isOpen, onClose, items, onUpdateQuantity, onCheckou
             <div className="flex-1 min-h-0 overflow-y-auto px-5">
               {items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center text-center py-16 gap-3">
-                  <div className="w-16 h-16 rounded-full flex items-center justify-center bg-[var(--brand-surface-raised)]" style={{ boxShadow: 'var(--elev-1)' }}>
-                    <i className="ti ti-shopping-cart text-2xl text-[var(--brand-text-muted)]" />
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center bg-brand-surface-raised" style={{ boxShadow: `boxShadow` }}>
+                    <i className="ti ti-shopping-cart text-2xl text-brand-text-muted" />
                   </div>
-                  <div className="text-[var(--brand-text)] font-medium">{emptyText || t('cart.empty', 'Your cart is empty')}</div>
-                  <p className="text-sm text-[var(--brand-text-muted)] max-w-[240px]">{t('cart.empty_hint', 'Add a few tasty items to get started.')}</p>
+                  <div className="text-brand-text font-medium">{emptyText || t('cart.empty', 'Your cart is empty')}</div>
+                  <p className={`text-sm text-brand-text-muted max-w-[240px]`}>{t('cart.empty_hint', 'Add a few tasty items to get started.')}</p>
                 </div>
               ) : (
                 <ul className="space-y-2 py-1">
@@ -105,28 +105,28 @@ export function CartDrawer({ isOpen, onClose, items, onUpdateQuantity, onCheckou
                         className="flex items-center justify-between gap-3 py-2"
                       >
                         <div className="flex-1 min-w-0">
-                          <div className="text-[var(--brand-text)] font-medium truncate">{item.name}</div>
-                          <div className="text-[var(--brand-text-muted)] text-sm tabular-nums"><PriceDisplay amount={item.price} size="sm" /></div>
+                          <div className="text-brand-text font-medium truncate">{item.name}</div>
+                          <div className="text-brand-text-muted text-sm tabular-nums"><PriceDisplay amount={item.price} size="sm" /></div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <button
                             type="button"
                             aria-label={t('cart.decrease', 'Decrease quantity')}
                             onClick={() => onUpdateQuantity(item.id, item.quantity - 1)}
-                            className="w-10 h-10 rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] flex items-center justify-center text-lg transition-[transform,background-color] duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none hover:bg-[var(--brand-border)] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+                            className={`w-10 h-10 rounded-full bg-brand-surface-raised text-brand-text flex items-center justify-center text-lg transition-[transform,background-color] duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none hover:bg-brand-border active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2`}
                           >&minus;</button>
                           <motion.span
                             key={item.quantity}
                             initial={reduce ? false : { scale: 1.25 }}
                             animate={{ scale: 1 }}
                             transition={reduce ? { duration: 0 } : { type: 'spring', stiffness: 320, damping: 18 }}
-                            className="text-[var(--brand-text)] font-bold w-6 text-center tabular-nums"
+                            className="text-brand-text font-bold w-6 text-center tabular-nums"
                           >{item.quantity}</motion.span>
                           <button
                             type="button"
                             aria-label={t('cart.increase', 'Increase quantity')}
                             onClick={() => onUpdateQuantity(item.id, item.quantity + 1)}
-                            className="w-10 h-10 rounded-full bg-[var(--brand-surface-raised)] text-[var(--brand-text)] flex items-center justify-center text-lg transition-[transform,background-color] duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none hover:bg-[var(--brand-border)] active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+                            className={`w-10 h-10 rounded-full bg-brand-surface-raised text-brand-text flex items-center justify-center text-lg transition-[transform,background-color] duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none hover:bg-brand-border active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2`}
                           >+</button>
                         </div>
                       </motion.li>
@@ -137,8 +137,8 @@ export function CartDrawer({ isOpen, onClose, items, onUpdateQuantity, onCheckou
             </div>
 
             {items.length > 0 && (
-              <div className="shrink-0 px-5 pt-3 pb-5 bg-[var(--brand-surface)]" style={{ boxShadow: '0 -8px 24px rgba(0,0,0,.06)' }}>
-                <div className="flex items-center justify-between gap-3 font-bold text-lg mb-3 text-[var(--brand-text)]">
+              <div className="shrink-0 px-5 pt-3 pb-5 bg-brand-surface" style={{ boxShadow: `boxShadow` }}>
+                <div className="flex items-center justify-between gap-3 font-bold text-lg mb-3 text-brand-text">
                   <span className="min-w-0 truncate">{totalLabel || t('cart.total', 'Total')}</span>
                   <span className="shrink-0 tabular-nums"><PriceDisplay amount={total} size="lg" /></span>
                 </div>

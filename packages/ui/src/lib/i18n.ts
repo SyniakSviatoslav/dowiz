@@ -23,16 +23,16 @@ const messages: Record<Locale, Record<string, string>> = fromCatalog(catalog);
 
 const listeners: Array<() => void> = [];
 
-export function t(key: string, fallback?: string, options?: Record<string, any>): string {
+export function t(key: string, fallback?: string, options?: Record<string, unknown>): string {
   return translate(currentLocale, key, fallback, options);
 }
 
 // Stateless translation lookup — used by I18nProvider for reactive t()
-export function translate(locale: Locale, key: string, fallback?: string, options?: Record<string, any>): string {
+export function translate(locale: Locale, key: string, fallback?: string, options?: Record<string, unknown>): string {
   const hit = messages[locale]?.[key];
   // Dev-only: a missing key silently falls back to English/raw key in prod — warn loudly in dev so
   // gaps surface during development. The CI parity gate (scripts/i18n-parity.mjs) is the hard stop.
-  if (hit === undefined && (import.meta as any)?.env?.DEV) {
+  if (hit === undefined && (import.meta as unknown as { env?: Record<string, string | undefined> })?.env?.DEV) {
     console.warn(`[i18n] missing key "${key}" for locale "${locale}" — add it in i18n-catalog.ts`);
   }
   let str = hit || fallback || key;

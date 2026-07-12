@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- test/spec/spike/helper code -- flagged strings are test data, selectors, logs, error codes and SQL, not user-facing UI copy; any/raw-any are deliberate test/integration seams */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, existsSync, readFileSync, rmSync, readdirSync } from 'node:fs';

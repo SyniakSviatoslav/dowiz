@@ -4,14 +4,20 @@
 > (27 in-flight branches on /root/dowiz + bebop main) and the Tier gates. Rule: ground truth
 > outranks plans; gate conditions are falsifiable, not calendar dates.
 
-## 0. HIDDEN PREREQUISITE (sequential blocker — must clear before any merge to main)
-`main` is currently RED: pre-commit `pnpm -r typecheck` fails on pre-existing broken imports in
-in-flight batch WIP (NOT my plan doc):
-- `apps/web/src/main.tsx:5` imports `TourProvider` from `@deliveryos/ui` — barrel doesn't re-export it.
-- `apps/web/src/routes/CourierRoutes.tsx:3` imports `bebopSkinAttr` — does not exist (only `paperSkinAttr`).
-Effect: NO branch can merge to main until this is fixed. This is a 2-line fix (add TourProvider to
-packages/ui barrel; fix/replace bebopSkinAttr ref in CourierRoutes). Do it FIRST, on its own branch,
-land to main, then everything else can integrate.
+## 0. HIDDEN PREREQUISITE (sequential blocker) — RESOLVED 2026-07-12 (verified)
+
+> **Status correction (verified, not claimed):** the blocker described below no longer exists.
+> Re-checked 2026-07-12 by direct inspection + `pnpm -r typecheck`:
+> - `TourProvider` IS exported by the `@deliveryos/ui` barrel
+>   (`packages/ui/src/components/molecules/index.ts:12` → re-exported at `packages/ui/src/index.ts:12`),
+>   so `apps/web/src/main.tsx` imports resolve.
+> - the string `bebopSkinAttr` does NOT appear anywhere in the tree (no code, no broken ref) — the
+>   cited `CourierRoutes.tsx:3` import simply isn't present in the current tree.
+> - `pnpm -r typecheck` (apps/web) exits **0** (green).
+>
+> Conclusion: there is no typecheck-RED blocking merge to main on the current branch. The 2-line fix
+> is moot. Keep this section as a reminder that pre-merge typecheck must stay green; do NOT treat it
+> as an open blocker.
 
 ## 1. PARALLEL-SAFE (Tier 0, zero-pivot-risk, independent files/branches)
 These touch disjoint files and can run as concurrent sessions. Each owns its branch; none merges

@@ -25,8 +25,8 @@ export function SunlightToggle() {
       title={t('common.sunlight_mode', 'Sunlight mode — high contrast for bright sun')}
       data-testid="sunlight-toggle"
       data-sunlight-on={on}
-      className="flex items-center justify-center w-11 h-11 rounded-lg transition-colors hover:bg-[var(--brand-surface-raised)]"
-      style={{ color: on ? 'var(--brand-primary)' : 'var(--brand-text-muted)', border: '1px solid var(--brand-border)', background: 'var(--brand-surface)' }}
+      className="flex items-center justify-center w-11 h-11 rounded-lg transition-colors hover:bg-brand-surface-raised"
+      style={{ color: on ? 'var(--brand-primary)' : 'var(--brand-text-muted)', border: `border`, background: `background` }}
     >
       <i className={on ? 'ti ti-sun-filled' : 'ti ti-sun'} style={{ fontSize: '1rem' }} aria-hidden="true" />
     </button>

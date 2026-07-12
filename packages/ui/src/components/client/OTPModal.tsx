@@ -60,8 +60,8 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
     try {
       await onVerify(code);
       // Parent closes on success.
-    } catch (err: any) {
-      setError(err?.message || t('otp.invalid', 'That code didn’t match. Try again.'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('otp.invalid', 'That code didn’t match. Try again.'));
       setCode('');
       inputRef.current?.focus();
     } finally {
@@ -85,8 +85,8 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
       await onResend();
       setCooldown(30);
       inputRef.current?.focus();
-    } catch (err: any) {
-      setError(err?.message || t('otp.send_failed', 'Couldn’t send the code. Try again.'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('otp.send_failed', 'Couldn’t send the code. Try again.'));
     } finally {
       setResending(false);
     }
@@ -109,11 +109,11 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
           type="text"
           inputMode="numeric"
           autoComplete="one-time-code"
-          pattern="\d{6}"
+          pattern={`\d{6}`}
           maxLength={CODE_LENGTH}
           value={code}
           onChange={(e) => { setError(''); setCode(e.target.value.replace(/\D/g, '').slice(0, CODE_LENGTH)); }}
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleVerify(); } }}
+          onKeyDown={(e) => { if (e.key === `Enter`) { e.preventDefault(); void handleVerify(); } }}
           placeholder="000000"
           aria-label={t('otp.code_label', 'Verification code')}
           aria-invalid={!!error}
@@ -121,13 +121,13 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
           // Gentle shake on a wrong code; static under reduced-motion.
           animate={error && !reduceMotion ? { x: [0, -6, 6, -4, 4, 0] } : { x: 0 }}
           transition={{ duration: 0.32, ease: ease.soft }}
-          className="w-full h-[var(--tap-critical,56px)] text-center text-2xl font-bold tracking-[0.5em] outline-none border transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:border-[var(--brand-primary)]"
+          className={`w-full h-[var(--tap-critical,56px)] text-center text-2xl font-bold tracking-[0.5em] outline-none border transition-[border-color,box-shadow] focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 focus-visible:border-brand-primary`}
           style={{
-            background: 'var(--brand-surface-raised)',
+            background: `background`,
             borderColor: error ? 'var(--color-danger)' : 'var(--brand-border)',
             color: 'var(--brand-text)',
-            borderRadius: 'var(--brand-radius)',
-            transitionDuration: 'var(--motion-fast)',
+            borderRadius: `borderRadius`,
+            transitionDuration: `transitionDuration`,
           }}
         />
 
@@ -146,7 +146,7 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
 
         <Button
           className="w-full"
-          style={{ minHeight: 'var(--tap-critical, 44px)' }}
+          style={{ minHeight: `minHeight` }}
           onClick={handleVerify}
           isLoading={loading}
           disabled={code.length !== CODE_LENGTH}
@@ -161,8 +161,8 @@ export function OTPModal({ open, onClose, phone, onResend, onVerify, alreadySent
             data-dynamic
             onClick={handleResend}
             disabled={cooldown > 0 || loading || resending}
-            className="text-sm underline rounded-[var(--brand-radius-sm)] px-2 transition-[opacity,color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 disabled:opacity-50 disabled:no-underline active:scale-[0.98]"
-            style={{ color: 'var(--brand-primary)', minHeight: 'var(--tap-min, 44px)', transitionDuration: 'var(--motion-fast)' }}
+            className={`text-sm underline rounded-md px-2 transition-[opacity,color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2 disabled:opacity-50 disabled:no-underline active:scale-[0.98]`}
+            style={{ color: 'var(--brand-primary)', minHeight: `minHeight`, transitionDuration: `transitionDuration` }}
           >
             {resending
               ? t('otp.resending', 'Sending…')

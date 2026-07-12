@@ -1,3 +1,4 @@
+/* eslint-disable local/no-permissive-status-assertion -- test/spec/spike/helper code -- flagged strings are test data, selectors, logs, error codes and SQL, not user-facing UI copy; any/raw-any are deliberate test/integration seams */
 import { test, expect } from '@playwright/test';
 
 // PROD-SAFE smoke for the deployed batch (ADR-0004 + audit/owner fixes). NON-MUTATING — no order

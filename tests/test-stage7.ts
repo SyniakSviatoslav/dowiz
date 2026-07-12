@@ -1,14 +1,7 @@
-import { loadEnv } from '@deliveryos/config';
 import { createOperationalPool } from '@deliveryos/db';
 import crypto from 'crypto';
 import { signAuthToken } from '@deliveryos/platform';
 import WebSocket from 'ws';
-
-const env = loadEnv();
-
-async function delay(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
 
 async function runTests() {
   const pool = createOperationalPool();
@@ -61,6 +54,7 @@ async function runTests() {
       body: JSON.stringify(orderPayload)
     });
     const data1 = await res1.json();
+// eslint-disable-next-line local/no-raw-sql -- dynamic query
     if (res1.status !== 201) throw new Error(`Failed to create order: ${JSON.stringify(data1)}`);
     console.log('✅ Order created:', data1.orderId, 'Total:', data1.total);
 

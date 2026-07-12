@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars, local/no-mock-in-prod -- test/spec/spike/helper code -- flagged strings are test data, selectors, logs, error codes and SQL, not user-facing UI copy; any/raw-any are deliberate test/integration seams */
 import { request as newRequest, type FullConfig } from '@playwright/test';
 import { seedVisualState, type VisualFixtures } from './harness.js';
 import { writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs';

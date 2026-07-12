@@ -7,13 +7,24 @@ import React, { memo, useState } from 'react';
 import { Button, useI18n, MessageThread, PriceDisplay } from '../../index.js';
 import { type AdminOrder, isOrderDetailsPending } from './types.js';
 
+interface OrderCardMessage {
+  name?: string;
+  qty?: number;
+  quantity?: number;
+  price?: number;
+}
+interface AdminOrderExtras extends AdminOrder {
+  rating?: number;
+  feedback?: string;
+}
+
 interface OrderCardProps {
   order: AdminOrder;
   onUpdateStatus: (id: string, newStatus: string) => Promise<void>;
   isLoading?: boolean;
   showMessages?: boolean;
   onToggleMessages?: (orderId: string) => void;
-  messages?: any[];
+  messages?: OrderCardMessage[];
   onSendMessage?: (orderId: string, presetKey: string, params?: Record<string, unknown>) => Promise<void>;
   onViewDetail?: (orderId: string) => void;
 }
@@ -34,15 +45,15 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
 
   const getStatusColor = (s: string) => {
     switch (s) {
-      case 'PENDING': return 'bg-[var(--status-pending-bg)] text-[var(--status-pending)] border-[var(--status-pending-border)]';
-      case 'CONFIRMED': return 'bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed)] border-[var(--status-confirmed-border)]';
-      case 'PREPARING': return 'bg-[var(--status-preparing-bg)] text-[var(--status-preparing)] border-[var(--status-preparing-border)]';
-      case 'READY': return 'bg-[var(--status-ready-bg)] text-[var(--status-ready)] border-[var(--status-ready-border)]';
-      case 'IN_DELIVERY': return 'bg-[var(--status-in-delivery-bg)] text-[var(--status-in-delivery)] border-[var(--status-in-delivery-border)]';
-      case 'DELIVERED': return 'bg-[var(--status-delivered-bg)] text-[var(--status-delivered)] border-[var(--status-delivered-border)]';
-      case 'REJECTED': return 'bg-[var(--status-rejected-bg)] text-[var(--status-rejected)] border-[var(--status-rejected-border)]';
-      case 'CANCELLED': return 'bg-[var(--status-cancelled-bg)] text-[var(--status-cancelled)] border-[var(--status-cancelled-border)]';
-      default: return 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] border-[var(--brand-border)]';
+      case 'PENDING': return `bg-[var(--status-pending-bg)] text-[var(--status-pending)] border-status-pending/30`;
+      case 'CONFIRMED': return `bg-[var(--status-confirmed-bg)] text-[var(--status-confirmed)] border-status-confirmed/30`;
+      case 'PREPARING': return `bg-[var(--status-preparing-bg)] text-[var(--status-preparing)] border-status-preparing/30`;
+      case 'READY': return `bg-[var(--status-ready-bg)] text-[var(--status-ready)] border-status-ready/30`;
+      case 'IN_DELIVERY': return `bg-[var(--status-in-delivery-bg)] text-[var(--status-in-delivery)] border-status-in-delivery/30`;
+      case 'DELIVERED': return `bg-[var(--status-delivered-bg)] text-[var(--status-delivered)] border-status-delivered/30`;
+      case 'REJECTED': return `bg-[var(--status-rejected-bg)] text-[var(--status-rejected)] border-status-rejected/30`;
+      case 'CANCELLED': return `bg-[var(--status-cancelled-bg)] text-[var(--status-cancelled)] border-status-cancelled/30`;
+      default: return `bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] border-brand-border`;
     }
   };
 
@@ -86,13 +97,13 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
   const detailsPending = isOrderDetailsPending(order);
 
   return (
-    <div className={`bg-[var(--brand-surface)] border border-[var(--brand-border)] rounded-[var(--brand-radius)] p-4 flex flex-col gap-4 ${isLoading ? 'opacity-50 pointer-events-none' : 'cursor-pointer hover:bg-[var(--brand-surface-raised)]'}`} onClick={() => onViewDetail?.(order.id)}>
+    <div className={`bg-[var(--brand-surface)] border border-brand-border rounded-lg p-4 flex flex-col gap-4 ${isLoading ? 'opacity-50 pointer-events-none' : `cursor-pointer hover:bg-brand-surface-raised`}`} onClick={() => onViewDetail?.(order.id)}>
 
       {/* Header */}
       <div className="flex justify-between items-start">
         <div>
-          <div className="font-bold text-lg text-[var(--brand-text)]">{order.shortId || '#' + order.id.substring(0, 4).toUpperCase()}</div>
-          <div data-dynamic className="text-[var(--brand-text-muted)] text-sm flex items-center gap-2">
+          <div className="font-bold text-lg text-brand-text">{order.shortId || '#' + order.id.substring(0, 4).toUpperCase()}</div>
+          <div data-dynamic className="text-brand-text-muted text-sm flex items-center gap-2">
             {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </div>
         </div>
@@ -106,19 +117,19 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
       {(confirmDelta != null || prepDelta != null || deliveryDelta != null) && (
         <div className="flex items-center gap-2 text-step-2xs font-medium mt-1">
           {confirmDelta != null && (
-            <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--status-pending-light)] text-[var(--status-pending)]" title={t('admin.confirm_time', 'Confirmation Time')}>
+            <span className={`flex items-center gap-1 px-2 py-1 rounded-lg bg-status-pending/10 text-status-pending`} title={t('admin.confirm_time', 'Confirmation Time')}>
               <i className="ti ti-clock" style={{ fontSize: '0.7rem' }} />
               {t('admin.confirm_short', 'Confirm')}: {confirmDelta}m
             </span>
           )}
           {prepDelta != null && (
-            <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--status-scheduled-light)] text-[var(--status-scheduled)]" title={t('admin.prep_time', 'Preparation Time')}>
+            <span className={`flex items-center gap-1 px-2 py-1 rounded-lg bg-status-scheduled/10 text-status-scheduled`} title={t('admin.prep_time', 'Preparation Time')}>
               <i className="ti ti-chef-hat" style={{ fontSize: '0.7rem' }} />
               {t('admin.prep_short', 'Prep')}: {prepDelta}m
             </span>
           )}
           {deliveryDelta != null && (
-            <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-[var(--status-delivered-light)] text-[var(--status-delivered)]" title={t('admin.delivery_time_hint', 'Delivery Time')}>
+            <span className={`flex items-center gap-1 px-2 py-1 rounded-lg bg-status-delivered/10 text-status-delivered`} title={t('admin.delivery_time_hint', 'Delivery Time')}>
               <i className="ti ti-truck-delivery" style={{ fontSize: '0.7rem' }} />
               {t('admin.deliv_short', 'Deliv')}: {deliveryDelta}m
             </span>
@@ -129,24 +140,24 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
       {/* Signals (Anti-Fake) */}
       <div className="flex gap-2 text-xs">
         {order.signals?.otpVerified ? (
-          <span className="flex items-center gap-1 bg-[var(--status-delivered-light)] text-[var(--status-delivered)] px-2 py-1 rounded-lg">
+          <span className={`flex items-center gap-1 bg-status-delivered/10 text-status-delivered px-2 py-1 rounded-lg`}>
             <i className="ti ti-shield-check" style={{ fontSize: '0.7rem' }} />
             {t('admin.otp', 'OTP')}
           </span>
         ) : (
-          <span className="flex items-center gap-1 bg-[var(--status-pending-light)] text-[var(--status-pending)] px-2 py-1 rounded-lg">
+          <span className={`flex items-center gap-1 bg-status-pending/10 text-status-pending px-2 py-1 rounded-lg`}>
             <i className="ti ti-shield-x" style={{ fontSize: '0.7rem' }} />
             {t('admin.no_otp', 'No OTP')}
           </span>
         )}
-        <span className={`flex items-center gap-1 px-2 py-1 rounded-lg ${order.signals && order.signals.reputationScore < 50 ? 'bg-[var(--status-cancelled-light)] text-[var(--status-cancelled)]' : 'bg-[var(--status-info-light)] text-[var(--color-info)]'}`}>
+        <span className={`flex items-center gap-1 px-2 py-1 rounded-lg ${order.signals && order.signals.reputationScore < 50 ? `bg-[var(--status-cancelled-light)] text-status-cancelled` : `bg-[var(--status-info-light)] text-semantic-info`}`}>
           <i className="ti ti-star" style={{ fontSize: '0.7rem' }} />
           {t('admin.rep', 'Rep')}: {order.signals?.reputationScore ?? t('admin.new', 'New')}
         </span>
       </div>
 
       {/* Details */}
-      <div className="text-sm space-y-1 text-[var(--brand-text)]">
+      <div className="text-sm space-y-1 text-brand-text">
         {detailsPending ? (
           <div className="space-y-1.5 py-0.5" data-testid="order-details-pending" aria-label={t('admin.loading_details', 'Loading order details…')}>
             <div className="h-4 w-2/3 rounded shimmer" />
@@ -154,13 +165,13 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
           </div>
         ) : (
           <>
-            {order.customerName && order.customerName !== 'Unknown' && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.client', 'Client:')}</span> {order.customerName}</div>}
-            {order.customerPhone && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('common.phone', 'Phone:')}</span> {maskPhone(order.customerPhone)}</div>}
-            {order.deliveryAddress && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.to', 'To:')}</span> {order.deliveryAddress}</div>}
+            {order.customerName && order.customerName !== t('common.unknown', 'Unknown') && <div><span className="text-brand-text-muted w-16 inline-block">{t('admin.client', 'Client:')}</span> {order.customerName}</div>}
+            {order.customerPhone && <div><span className="text-brand-text-muted w-16 inline-block">{t('common.phone', 'Phone:')}</span> {maskPhone(order.customerPhone)}</div>}
+            {order.deliveryAddress && <div><span className="text-brand-text-muted w-16 inline-block">{t('admin.to', 'To:')}</span> {order.deliveryAddress}</div>}
           </>
         )}
         {(() => { const n = order.items?.length || order.itemCount || 0; return (
-        <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.items', 'Items:')}</span> {n} {n === 1 ? t('admin.item_lower', 'item') : t('admin.items_lower', 'items')} (<PriceDisplay amount={order.total} />)</div>
+        <div><span className="text-brand-text-muted w-16 inline-block">{t('admin.items', 'Items:')}</span> {n} {n === 1 ? t('admin.item_lower', 'item') : t('admin.items_lower', 'items')} (<PriceDisplay amount={order.total} />)</div>
         ); })()}
         {order.items && order.items.length > 0 && (
           <div className="ml-16 text-xs space-y-0.5" style={{ color: 'var(--brand-text-muted)' }}>
@@ -172,10 +183,10 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
             ))}
           </div>
         )}
-        {order.courierName && <div><span className="text-[var(--brand-text-muted)] w-16 inline-block">{t('admin.courier', 'Courier:')}</span> {order.courierName}</div>}
+        {order.courierName && <div><span className="text-brand-text-muted w-16 inline-block">{t('admin.courier', 'Courier:')}</span> {order.courierName}</div>}
         {(order as any).rating != null && (
           <div className="flex items-start gap-1" data-testid="order-rating">
-            <span className="text-[var(--brand-text-muted)] w-16 inline-block shrink-0">{t('admin.rating', 'Rating:')}</span>
+            <span className="text-brand-text-muted w-16 inline-block shrink-0">{t('admin.rating', 'Rating:')}</span>
             <span>
               <span style={{ color: 'var(--brand-primary)' }} aria-label={`${(order as any).rating}/5`}>
                 {'★'.repeat((order as any).rating)}{'☆'.repeat(5 - (order as any).rating)}
@@ -185,20 +196,20 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
           </div>
         )}
         {order.elapsedSeconds !== undefined && order.elapsedSeconds > 1800 && (
-        <span data-dynamic className="text-[var(--color-danger)] font-bold ml-2">{t('admin.overdue', 'Overdue!')} ({Math.floor(order.elapsedSeconds / 60)} min)</span>
+        <span data-dynamic className="text-semantic-danger font-bold ml-2">{t('admin.overdue', 'Overdue!')} ({Math.floor(order.elapsedSeconds / 60)} min)</span>
         )}
       </div>
 
       {/* Messages toggle + inline thread */}
-      <div className="border-t border-[var(--brand-border)] pt-3">
+      <div className="border-t border-brand-border pt-3">
         <button
           onClick={() => onToggleMessages?.(order.id)}
-          className="flex items-center gap-2 text-sm font-medium text-[var(--brand-primary)] hover:text-[var(--brand-primary-dark)] transition-colors"
+          className={`flex items-center gap-2 text-sm font-medium text-brand-primary hover:text-brand-primary-dark transition-colors`}
         >
           <i className="ti ti-message" />
           {showMessages ? t('admin.hide_messages', 'Hide Messages') : t('admin.show_messages', 'Show Messages')}
           {messages && messages.length > 0 && !showMessages && (
-            <span className="ml-auto text-xs bg-[var(--brand-primary)] text-[var(--color-on-primary)] px-2 py-0.5 rounded-full">
+            <span className={`ml-auto text-xs bg-brand-primary text-white px-2 py-0.5 rounded-full`}>
               {messages.length}
             </span>
           )}
@@ -218,7 +229,7 @@ export const OrderCard = memo(function OrderCard({ order, onUpdateStatus, isLoad
       </div>
 
       {/* Actions */}
-      <div className="pt-3 border-t border-[var(--brand-border)] flex gap-2 overflow-x-auto no-scrollbar" onClick={(e) => e.stopPropagation()}>
+      <div className="pt-3 border-t border-brand-border flex gap-2 overflow-x-auto no-scrollbar" onClick={(e) => e.stopPropagation()}>
         {order.status === 'PENDING' && (
           <>
             <Button size="sm" data-testid="order-confirm" onClick={() => handleAction('CONFIRMED')} isLoading={loadingAction === 'CONFIRMED'}>{t('admin.accept', 'Accept')}</Button>

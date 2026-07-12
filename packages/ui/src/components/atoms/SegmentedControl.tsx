@@ -36,10 +36,10 @@ export function SegmentedControl<T extends string = string>({
             type="button"
             onClick={() => onChange(opt.value)}
             aria-pressed={active}
-            className={`flex items-center gap-1 ${pad} font-medium rounded-full snap-start shrink-0 whitespace-nowrap outline-none transition-[background-color,color,box-shadow,transform] duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--brand-bg)] ${
+            className={`flex items-center gap-1 ${pad} font-medium rounded-full snap-start shrink-0 whitespace-nowrap outline-none transition-[background-color,color,box-shadow,transform] duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none active:scale-[0.97] focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-1 focus-visible:ring-offset-brand-bg ${
               active
-                ? 'bg-[var(--brand-primary)] text-[var(--brand-bg)] shadow-[var(--elev-1)]'
-                : 'bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-[var(--brand-text)]'
+                ? `bg-[var(--brand-primary)] text-brand-bg shadow-elevation-1`
+                : `bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] [@media(hover:hover)]:hover:text-brand-text`
             }`}
           >
             {opt.icon && <i className={opt.icon} aria-hidden="true" style={{ fontSize: '0.8rem' }} />}

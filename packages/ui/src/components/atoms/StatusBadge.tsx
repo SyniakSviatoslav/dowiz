@@ -12,6 +12,8 @@ const STATUS_MAP: Record<string, { color: string; label: string; tooltip: string
   CANCELLED: { color: 'bg-status-cancelled', label: t('order.cancelled', 'Cancelled'), tooltip: t('tooltip.status_cancelled', 'Order was cancelled') },
   SCHEDULED: { color: 'bg-status-scheduled', label: t('order.scheduled', 'Scheduled'), tooltip: '' },
   PICKED_UP: { color: 'bg-status-picked-up', label: t('order.picked_up', 'Picked up'), tooltip: '' },
+  ASSIGNED: { color: 'bg-status-pending', label: t('order.pending', 'Pending'), tooltip: '' },
+  ACCEPTED: { color: 'bg-status-confirmed', label: t('order.confirmed', 'Confirmed'), tooltip: '' },
 };
 
 interface StatusBadgeProps {
@@ -26,7 +28,7 @@ export function StatusBadge({ status, pulse, icon }: StatusBadgeProps) {
   return (
     <span
       className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold text-white ${config.color} ${pulse ? 'animate-pulse' : ''}`}
-      style={{ borderRadius: 'var(--brand-radius-btn)', transition: 'background-color var(--motion-fast) var(--ease-soft)' }}
+      style={{ borderRadius: `borderRadius`, transition: `transition` }}
       title={config.tooltip || undefined}
     >
       {pulse && <span className="w-1.5 h-1.5 rounded-full bg-white" aria-hidden="true" />}
@@ -36,5 +38,3 @@ export function StatusBadge({ status, pulse, icon }: StatusBadgeProps) {
   );
 }
 
-STATUS_MAP['ASSIGNED'] = { color: 'bg-status-pending', label: t('order.pending', 'Pending'), tooltip: '' };
-STATUS_MAP['ACCEPTED'] = { color: 'bg-status-confirmed', label: t('order.confirmed', 'Confirmed'), tooltip: '' };

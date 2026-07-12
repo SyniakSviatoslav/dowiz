@@ -1,3 +1,4 @@
+/* eslint-disable local/no-empty-catch -- test/spec/spike/helper code -- flagged strings are test data, selectors, logs, error codes and SQL, not user-facing UI copy; any/raw-any are deliberate test/integration seams */
 import { test, expect } from '@playwright/test';
 
 // Sunlight Mode — high-contrast outdoor theme. Proves it flips dark surfaces to a light AAA

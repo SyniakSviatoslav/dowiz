@@ -22,6 +22,7 @@ export async function sendTelegramAlert(
     const data = await resp.json();
     return data.ok === true;
   } catch (err) {
+    console.error('[lint] ignored catch', err);
     console.error('Telegram alert failed:', err);
     return false;
   }
@@ -66,7 +67,7 @@ export function formatDailigest(
   ].join('\n');
 }
 
-let lastAlertTime: Record<string, number> = {};
+const lastAlertTime: Record<string, number> = {};
 
 export function shouldSendAlert(findingId: string, cooldownMs = 24 * 60 * 60 * 1000): boolean {
   const last = lastAlertTime[findingId] || 0;

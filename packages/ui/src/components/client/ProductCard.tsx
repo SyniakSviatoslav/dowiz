@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useI18n, PriceDisplay, getAllergenStyle } from '../../index.js';
+import { t } from '../../lib/i18n.js';
 import { ease, duration } from '../../lib/motion.js';
 
 interface ProductCardProps {
@@ -22,11 +23,11 @@ interface ProductCardProps {
 }
 
 const TASTE_ICONS: Record<string, string> = { spicy: 'ti ti-pepper', sweet: 'ti ti-candy', salty: 'ti ti-salt', sour: 'ti ti-lemon-2', richness: 'ti ti-flame' };
-const TASTE_LABELS: Record<string, string> = { spicy: 'Spicy', sweet: 'Sweet', salty: 'Salty', sour: 'Sour', richness: 'Rich' };
+const TASTE_LABELS: Record<string, string> = { spicy: t('taste.spicy', 'Spicy'), sweet: t('taste.sweet', 'Sweet'), salty: t('taste.salty', 'Salty'), sour: t('taste.sour', 'Sour'), richness: t('taste.rich', 'Rich') };
 
 const cardVariants = {
-  rest: { y: 0, boxShadow: '0 1px 4px rgba(0,0,0,0.06)', scale: 1 },
-  hover: { y: -2, boxShadow: '0 8px 22px rgba(0,0,0,0.11)', scale: 1.005, transition: { duration: duration.fast, ease: ease.out } },
+  rest: { y: 0, boxShadow: `boxShadow`, scale: 1 },
+  hover: { y: -2, boxShadow: `boxShadow`, scale: 1.005, transition: { duration: duration.fast, ease: ease.out } },
   tap: { scale: 0.98, y: -1, transition: { duration: duration.instant, ease: ease.out } },
 };
 const imgVariants = {
@@ -35,7 +36,7 @@ const imgVariants = {
 };
 const addBtnVariants = {
   rest: { scale: 1 },
-  hover: { scale: 1.06, boxShadow: '0 4px 12px rgba(0,0,0,0.18)', transition: { duration: duration.fast, ease: ease.out } },
+  hover: { scale: 1.06, boxShadow: `boxShadow`, transition: { duration: duration.fast, ease: ease.out } },
   tap: { scale: 0.96, transition: { duration: duration.instant } },
 };
 
@@ -60,7 +61,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
       className={`flex flex-col cursor-pointer overflow-hidden border rounded-xl h-full ${
         product.isAvailable ? '' : 'opacity-55'
       }`}
-      style={{ background: 'var(--brand-surface)', borderColor: 'var(--brand-border)' }}
+      style={{ background: `background`, borderColor: `borderColor` }}
       onClick={onClick}
       variants={product.isAvailable ? cardVariants : undefined}
       initial="rest"
@@ -68,8 +69,8 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
       whileTap={product.isAvailable && onClick ? 'tap' : undefined}
     >
       <div
-        className="w-full aspect-[4/3] flex items-center justify-center relative overflow-hidden"
-        style={{ background: 'var(--brand-surface-raised)' }}
+        className={`w-full aspect-[4/3] flex items-center justify-center relative overflow-hidden`}
+        style={{ background: `background` }}
       >
         {product.image && !imgError ? (
           <motion.img
@@ -89,16 +90,14 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
           <div
             className="flex items-center justify-center w-full h-full select-none relative"
             style={{
-              background:
-                'linear-gradient(135deg, color-mix(in srgb, var(--brand-primary) 14%, var(--brand-surface)) 0%, var(--brand-surface-raised) 55%, color-mix(in srgb, var(--brand-primary) 7%, var(--brand-surface)) 100%)',
+              background: `background`,
             }}
             aria-hidden="true"
           >
             <div
               className="absolute inset-0"
               style={{
-                backgroundImage:
-                  'radial-gradient(color-mix(in srgb, var(--brand-primary) 30%, transparent) 1px, transparent 1.4px)',
+                backgroundImage: `backgroundImage`,
                 backgroundSize: '14px 14px',
                 opacity: 0.35,
               }}
@@ -106,11 +105,11 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
             <span
               className="relative flex items-center justify-center rounded-full"
               style={{
-                width: 'clamp(2.75rem, 22%, 3.75rem)',
-                aspectRatio: '1 / 1',
-                background: 'color-mix(in srgb, var(--brand-surface) 78%, transparent)',
-                border: '1px solid color-mix(in srgb, var(--brand-primary) 28%, transparent)',
-                boxShadow: '0 2px 10px color-mix(in srgb, var(--brand-primary) 16%, transparent)',
+                width: `width`,
+                aspectRatio: `aspectRatio`,
+                background: `background`,
+                border: `border`,
+                boxShadow: `boxShadow`,
               }}
             >
               <i
@@ -121,7 +120,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
           </div>
         )}
         {hasAllergens && (
-          <div className="absolute top-1.5 left-1.5 z-10 flex flex-wrap gap-0.5 max-w-[70%]">
+          <div className={`absolute top-1.5 left-1.5 z-10 flex flex-wrap gap-0.5 max-w-[70%]`}>
             {allergens.slice(0, 3).map(a => {
               const s = getAllergenStyle(a);
               return (
@@ -131,7 +130,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
               );
             })}
             {allergens.length > 3 && (
-              <span className="text-step-2xs font-semibold px-1 py-0.5 rounded-sm" style={{ background: 'color-mix(in srgb, var(--brand-surface) 84%, #000)', color: 'var(--brand-text)' }}>
+              <span className="text-step-2xs font-semibold px-1 py-0.5 rounded-sm" style={{ background: `background`, color: 'var(--brand-text)' }}>
                 +{allergens.length - 3}
               </span>
             )}
@@ -143,7 +142,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
             and visual noise. Allergen scent now appears only when real data exists. */}
         {hasNutrition && !isChefPick && (
           <div className="absolute top-1.5 right-1.5 z-10">
-              <span className="text-step-2xs font-semibold px-1.5 py-0.5 rounded-md flex items-center gap-1" style={{ background: 'rgba(0,0,0,0.6)', color: 'var(--color-on-primary)' }}>
+              <span className="text-step-2xs font-semibold px-1.5 py-0.5 rounded-md flex items-center gap-1" style={{ background: `background`, color: 'var(--color-on-primary)' }}>
               <i className="ti ti-flame" style={{ fontSize: '0.6rem' }} />
               {product.kcal}
             </span>
@@ -153,7 +152,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
           <div className="absolute top-1.5 right-1.5 z-10">
             <motion.span
               className="text-step-2xs font-bold px-1.5 py-0.5 rounded-md flex items-center gap-0.5"
-              style={{ background: 'var(--brand-primary)', color: 'color-mix(in srgb, var(--brand-bg) 88%, #000)', boxShadow: '0 2px 8px color-mix(in srgb, var(--brand-primary) 45%, transparent)' }}
+              style={{ background: `background`, color: 'color-mix(in srgb, var(--brand-bg) 88%, var(--brand-text))', boxShadow: `boxShadow` }}
               initial={{ scale: 0.85, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ type: 'spring', stiffness: 300, damping: 20 }}
@@ -167,13 +166,13 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
       </div>
       <div className="p-2.5 flex flex-col flex-1 gap-1 min-h-0">
         <div className="flex items-start justify-between gap-1.5">
-          <h3 className="font-semibold text-step-sm leading-tight line-clamp-2 flex-1 min-h-[2.5em]" style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
+          <h3 className={`font-semibold text-step-sm leading-tight line-clamp-2 flex-1 min-h-[2.5em]`} style={{ color: 'var(--brand-text)' }}>{product.name}</h3>
           <motion.button
             data-testid="menu-item-add"
-            className={`shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-[var(--brand-bg)] rounded-full mt-0.5 ${
+            className={`shrink-0 min-w-[44px] min-h-[44px] flex items-center justify-center text-brand-bg rounded-full mt-0.5 ${
               product.isAvailable ? 'cursor-pointer' : 'opacity-30 cursor-not-allowed'
             }`}
-            style={{ background: 'var(--brand-primary)', boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }}
+            style={{ background: `background`, boxShadow: `boxShadow` }}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
@@ -197,7 +196,7 @@ export function ProductCard({ product, onAdd, onClick }: ProductCardProps) {
         {hasIngredients && (
           <div className="flex gap-0.5 flex-wrap">
             {ingredients.slice(0, 4).map((ing, i) => (
-              <span key={i} className="px-1 py-0 rounded text-step-2xs leading-tight" style={{ background: 'var(--brand-surface-raised)', color: 'var(--brand-text-muted)' }}>
+              <span key={i} className="px-1 py-0 rounded text-step-2xs leading-tight" style={{ background: `background`, color: 'var(--brand-text-muted)' }}>
                 {ing}
               </span>
             ))}

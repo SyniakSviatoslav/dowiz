@@ -137,7 +137,7 @@ export function OrderProgress(props: OrderProgressProps) {
       data-order-type={isPickup ? 'pickup' : 'delivery'}
     >
       {/* Track (upcoming) — inset to align with the first/last dot centers. */}
-      <div className="absolute top-1/2 h-1 rounded-full bg-[var(--brand-surface-raised)] -translate-y-1/2 z-0" style={{ left: `${inset}%`, right: `${inset}%` }} />
+      <div className="absolute top-1/2 h-1 rounded-full bg-brand-surface-raised -translate-y-1/2 z-0" style={{ left: `${inset}%`, right: `${inset}%` }} />
       {/* Filled connector — animates its width on advance, ease-out only. */}
       <motion.div
         className="absolute top-1/2 h-1 rounded-full -translate-y-1/2 z-0"
@@ -192,24 +192,24 @@ export function OrderProgress(props: OrderProgressProps) {
                       fill="none"
                       stroke="var(--color-on-primary)"
                       strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
+                      strokeLinecap={`strokeLinecap`}
+                      strokeLinejoin={`strokeLinejoin`}
                       initial={prefersReducedMotion ? false : { scale: 0.6, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
                       transition={prefersReducedMotion ? { duration: 0 } : { duration: 0.24, ease: ease.out }}
                     >
-                      <path d="M2.5 6.5 L5 9 L9.5 3.5" />
+                      <path d={`d`} />
                     </motion.svg>
                   )}
                 </motion.span>
               </span>
-              <span className={`text-step-2xs mt-1 text-center leading-tight break-words ${isFilled ? 'text-[var(--brand-text)] font-semibold' : 'text-[var(--brand-text-muted)]'}`}>
+              <span className={`text-step-2xs mt-1 text-center leading-tight break-words ${isFilled ? 'text-brand-text font-semibold' : 'text-brand-text-muted'}`}>
                 {step.label}
               </span>
               {time && (
                 <span
                   data-dynamic
-                  className="text-step-2xs text-[var(--brand-text-muted)] tabular-nums"
+                  className="text-step-2xs text-brand-text-muted tabular-nums"
                   data-testid={`order-step-${step.key.toLowerCase()}-time`}
                 >
                   {time}

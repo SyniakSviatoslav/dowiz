@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
 
 test.describe('UI: Client Menu — Detail Modal, Modifiers, Search, Filter', () => {
-  let locationSlug = 'demo';
+  const locationSlug = 'demo';
 
   test('Detail modal opens on product click and shows product info', async ({ page }) => {
     const errors: string[] = [];

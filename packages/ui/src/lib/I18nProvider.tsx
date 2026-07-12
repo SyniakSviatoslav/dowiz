@@ -6,14 +6,14 @@ interface LocaleInfo { code: Locale; name: string; displayCode: string; }
 interface I18nContextValue {
   locale: Locale;
   locales: LocaleInfo[];
-  t: (key: string, fallback?: string, options?: Record<string, any>) => string;
+  t: (key: string, fallback?: string, options?: Record<string, unknown>) => string;
   setLocale: (locale: Locale) => void;
 }
 
 const I18nContext = createContext<I18nContextValue>({
   locale: 'sq',
   locales: [],
-  t: (k, f, o) => f || k,
+  t: (k, f, _o) => f || k,
   setLocale: () => {},
 });
 
@@ -32,7 +32,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   // Create a fresh t() on every locale change so React detects dependency change
   const t = useCallback(
-    (key: string, fallback?: string, options?: Record<string, any>) => translate(locale, key, fallback, options),
+    (key: string, fallback?: string, options?: Record<string, unknown>) => translate(locale, key, fallback, options),
     [locale],
   );
 
@@ -72,7 +72,7 @@ export function LanguageSwitcher({ variant = 'compact', allowed }: { variant?: '
             key={l.code}
             onClick={() => changeLocale(l.code)}
             className={`px-3 min-h-11 inline-flex items-center text-xs font-medium transition-all duration-200 ${
-              locale === l.code ? 'text-[var(--brand-bg)] font-semibold' : 'text-[var(--brand-text)] hover:text-[var(--brand-text)]'
+              locale === l.code ? 'text-brand-bg font-semibold' : 'text-brand-text hover:text-brand-text'
             }`}
             style={locale === l.code ? { background: 'var(--brand-primary)' } : {}}
           >
@@ -104,7 +104,7 @@ export function LanguageSwitcher({ variant = 'compact', allowed }: { variant?: '
             onClick={() => setOpen(false)}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(false); } }}
           />
-          <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[130px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+          <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-32 scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
             {shown.map((l) => (
               <button key={l.code} onClick={() => { changeLocale(l.code); setOpen(false); }}
                 className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${locale === l.code ? 'font-semibold' : ''}`}

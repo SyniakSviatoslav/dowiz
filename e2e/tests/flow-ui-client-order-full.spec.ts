@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars -- test/spec/spike/helper code -- flagged strings are test data, selectors, logs, error codes and SQL, not user-facing UI copy; any/raw-any are deliberate test/integration seams */
 /**
  * Full Client Order Flow E2E — branding-preview → menu → cart → checkout → post-order
  *
@@ -33,7 +34,7 @@ test.describe.configure({ mode: 'serial' });
 test.describe(`Client: Full order flow on /branding-preview/${SLUG}`, () => {
 
   let productName: string | null = null;
-  let productPrice: number | null = null;
+  const productPrice: number | null = null;
 
   // ── STEP 1: Page loads ────────────────────────────────────────────────────────
   test('Step 1: /branding-preview/{slug} loads without JS errors or CSP violations', async ({ page }) => {

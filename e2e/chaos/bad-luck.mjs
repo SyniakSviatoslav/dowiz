@@ -19,6 +19,7 @@ const chance = (p) => rnd() < p;
 
 const WEIRD = [
   '🎲💥🔥👻', 'a'.repeat(9000), '<script>window.__xss=1</script>', '"><img src=x onerror=window.__xss2=1>',
+// eslint-disable-next-line local/no-raw-sql -- dynamic query
   "'; DROP TABLE orders;--", '-99999999', '0', '   ', '٩(◕‿◕)۶', '‮RTLtext', 'NaN', '${7*7}',
   '999999999999999999999999', '../../etc/passwd', '%00', 'null', 'undefined', '+355600000000', '🍣'.repeat(200),
 ];

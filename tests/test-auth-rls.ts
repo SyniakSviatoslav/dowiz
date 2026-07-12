@@ -1,9 +1,6 @@
-import { loadEnv } from '../packages/config/src/index.js';
 import { createOperationalPool, createSessionPool } from '../packages/db/src/index.js';
-import { signAuthToken, withTenant, issueCustomerToken, verifyAuthToken } from '../packages/platform/src/index.js';
+import { withTenant, issueCustomerToken, verifyAuthToken } from '../packages/platform/src/index.js';
 import crypto from 'crypto';
-
-const env = loadEnv();
 
 async function runTests() {
   const pool = createOperationalPool();

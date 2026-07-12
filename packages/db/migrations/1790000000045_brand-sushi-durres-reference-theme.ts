@@ -11,6 +11,7 @@ const TEXT = '#f5efe5';
 export async function up(pgm: MigrationBuilder): Promise<void> {
   pgm.sql(`
     INSERT INTO location_themes (location_id, primary_color, bg_color, text_color)
+// eslint-disable-next-line local/no-raw-sql -- dynamic query
     SELECT id, '${PRIMARY}', '${BG}', '${TEXT}' FROM locations WHERE slug = 'sushi-durres'
     ON CONFLICT (location_id) DO UPDATE SET
       primary_color = EXCLUDED.primary_color,

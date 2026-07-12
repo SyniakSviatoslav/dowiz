@@ -92,25 +92,25 @@ export function CourierLiveMap({
     return (
       <div
         role="status"
-        className={`relative flex flex-col items-center justify-center gap-2 px-6 text-center bg-[var(--brand-surface)] rounded-[var(--brand-radius)] shadow-[var(--elev-1)] ${className}`}
+        className={`relative flex flex-col items-center justify-center gap-2 px-6 text-center bg-brand-surface rounded-lg shadow-elevation-1 ${className}`}
       >
         <svg
           aria-hidden="true"
           viewBox="0 0 24 24"
-          className="h-8 w-8 text-[var(--brand-text-muted)]"
+          className="h-8 w-8 text-brand-text-muted"
           fill="none"
           stroke="currentColor"
           strokeWidth={1.75}
-          strokeLinecap="round"
-          strokeLinejoin="round"
+          strokeLinecap={`strokeLinecap`}
+          strokeLinejoin={`strokeLinejoin`}
         >
-          <path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11Z" />
+          <path d={`d`} />
           <circle cx="12" cy="10" r="2.5" />
         </svg>
-        <p className="text-sm text-[var(--brand-text)]">
+        <p className="text-sm text-brand-text">
           {t('map.unavailable', 'Live location unavailable')}
         </p>
-        <p className="text-xs text-[var(--brand-text-muted)]">
+        <p className="text-xs text-brand-text-muted">
           {t('map.unavailable_hint', 'No position to show yet — it’ll appear here once tracking starts.')}
         </p>
       </div>
@@ -134,17 +134,17 @@ export function CourierLiveMap({
           role="status"
           aria-busy="true"
           aria-label={t('map.loading', 'Loading map…')}
-          className="skeleton absolute inset-0 z-30 flex items-center justify-center overflow-hidden bg-[var(--brand-surface)] rounded-[var(--brand-radius)] shadow-[var(--elev-1)]"
+          className="skeleton absolute inset-0 z-30 flex items-center justify-center overflow-hidden bg-brand-surface rounded-lg shadow-elevation-1"
         >
-          <div className="absolute inset-0 animate-pulse bg-[var(--brand-surface-raised)] motion-reduce:animate-none" />
-          <span className="relative text-sm text-[var(--brand-text-muted)]">
+          <div className="absolute inset-0 animate-pulse bg-brand-surface-raised motion-reduce:animate-none" />
+          <span className="relative text-sm text-brand-text-muted">
             {t('map.loading', 'Loading map…')}
           </span>
         </div>
       )}
       {couriers.length === 0 && !destinationPin && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[var(--brand-surface)]/50 z-10 pointer-events-none">
-          <span className="text-sm text-[var(--brand-text-muted)]">{t('admin.no_couriers_online', 'No couriers online')}</span>
+        <div className="absolute inset-0 flex items-center justify-center bg-brand-surface/50 z-10 pointer-events-none">
+          <span className="text-sm text-brand-text-muted">{t('admin.no_couriers_online', 'No couriers online')}</span>
         </div>
       )}
     </MapLibreBase>

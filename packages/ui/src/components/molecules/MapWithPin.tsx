@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { MapLibreBase, type LngLatLike } from './MapLibreBase.js';
+import { useI18n } from '../../lib/I18nProvider.js';
 
 function getCSSVar(name: string, fallback: string): string {
   if (typeof document === 'undefined') return fallback;
@@ -37,6 +38,13 @@ export function MapWithPin({
   confirmLabel = 'Confirm location',
   placeholder = 'Tap the map to place your delivery pin',
 }: MapWithPinProps) {
+  const { t } = useI18n();
+  const confirmLabelText = confirmLabel === 'Confirm location'
+    ? t('map.confirm_location', 'Confirm location')
+    : confirmLabel;
+  const placeholderText = placeholder === 'Tap the map to place your delivery pin'
+    ? t('map.tap_pin_placeholder', 'Tap the map to place your delivery pin')
+    : placeholder;
   const [pin, setPin] = useState<LngLatLike | null>(initialPin || null);
   const [confirmed, setConfirmed] = useState(false);
   const [locating, setLocating] = useState(false);

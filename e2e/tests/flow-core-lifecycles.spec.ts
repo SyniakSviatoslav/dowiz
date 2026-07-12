@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, local/no-permissive-status-assertion -- test/spec/spike/helper code -- flagged strings are test data, selectors, logs, error codes and SQL, not user-facing UI copy; any/raw-any are deliberate test/integration seams */
 import { test, expect } from '@playwright/test';
 import crypto from 'node:crypto';
 
@@ -545,7 +546,7 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
     expect(getRes.status()).toBe(200);
-    let body = await getRes.json();
+    const body = await getRes.json();
     const origPhone = body.phone;
     const origShow = body.showPhoneOnError;
 
@@ -577,7 +578,7 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
       { headers: { Authorization: `Bearer ${authToken}` } }
     );
     expect(getRes.status()).toBe(200);
-    let body = await getRes.json();
+    const body = await getRes.json();
     const origDays = body.retentionDays || 365;
 
     const putRes = await request.put(

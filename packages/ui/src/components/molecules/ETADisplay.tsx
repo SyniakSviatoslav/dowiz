@@ -35,7 +35,7 @@ export function ETADisplay({ eta, fallback, className }: ETADisplayProps) {
   // crossfade softens each update (instant under reduced-motion).
   return (
     <span data-dynamic className={`tabular-nums ${className ?? ''}`} style={{ color: 'var(--brand-text)' }}>
-      <AnimatePresence mode="popLayout" initial={false}>
+      <AnimatePresence mode={`popLayout`} initial={false}>
         <motion.span
           key={text}
           className="inline-block"

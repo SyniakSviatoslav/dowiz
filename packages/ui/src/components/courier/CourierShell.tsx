@@ -15,7 +15,7 @@ export function CourierShell({ children, currentPath, onNavigate, tasksCount = 0
   ];
 
   return (
-    <div className="h-screen bg-[var(--brand-bg)] text-[var(--brand-text)] flex flex-col overflow-hidden">
+    <div className={`h-screen bg-brand-bg text-brand-text flex flex-col overflow-hidden`}>
       
       {/* Main Content Area */}
       <div className="flex-1 overflow-auto pb-16">
@@ -23,19 +23,19 @@ export function CourierShell({ children, currentPath, onNavigate, tasksCount = 0
       </div>
 
       {/* Bottom Navigation */}
-      <div className="fixed bottom-0 left-0 right-0 h-16 bg-[var(--brand-surface)] border-t border-[var(--brand-border)] flex items-center justify-around z-50">
+      <div className={`fixed bottom-0 left-0 right-0 h-16 bg-brand-surface border-t border-brand-border flex items-center justify-around z-50`}>
         {tabs.map(tab => {
           const isActive = currentPath === tab.path || (tab.path !== '/courier' && currentPath.startsWith(tab.path));
           return (
             <button
               key={tab.path}
               onClick={() => onNavigate(tab.path)}
-              className={`flex flex-col items-center justify-center w-full h-full transition-colors ${isActive ? 'text-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)] hover:text-[var(--brand-text)]'}`}
+              className={`flex flex-col items-center justify-center w-full h-full transition-colors ${isActive ? 'text-brand-primary' : 'text-brand-text-muted hover:text-brand-text'}`}
             >
               <span className="relative inline-flex text-xl mb-1">
                 {tab.icon}
                 {tab.label === 'Tasks' && tasksCount > 0 && (
-                  <span className="absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] rounded-full bg-[var(--color-danger)] text-white text-step-2xs font-bold flex items-center justify-center leading-none px-1 shadow-md">
+                  <span className={`absolute -top-1.5 -right-2.5 min-w-[16px] h-[16px] rounded-full bg-semantic-danger text-white text-step-2xs font-bold flex items-center justify-center leading-none px-1 shadow-md`}>
                     {tasksCount > 99 ? '99+' : tasksCount}
                   </span>
                 )}

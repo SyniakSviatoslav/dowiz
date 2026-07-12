@@ -302,7 +302,7 @@ export function MapLibreBase({
 
   if (error) {
     return (
-      <div className={`flex items-center justify-center bg-[var(--brand-surface)] text-[var(--brand-text-muted)] text-sm rounded-lg ${className}`}>
+      <div className={`flex items-center justify-center bg-brand-surface text-brand-text-muted text-sm rounded-lg ${className}`}>
         {error}
       </div>
     );
@@ -313,7 +313,7 @@ export function MapLibreBase({
     // masked from the visual-regression net (all maps render through this base).
     <div ref={containerRef} data-dynamic className={`relative ${className}`}>
       {!loaded && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[var(--brand-surface)] text-[var(--brand-text-muted)] text-sm z-20">
+        <div className={`absolute inset-0 flex items-center justify-center bg-brand-surface text-brand-text-muted text-sm z-20`}>
           {t('map.loading', 'Loading map…')}
         </div>
       )}

@@ -27,7 +27,7 @@ export function Select({ label, helper, error, className = '', id, children, ...
           id={selectId}
           aria-invalid={error ? true : undefined}
           aria-describedby={describedBy}
-          className={`w-full appearance-none px-4 pr-10 py-2.5 min-h-11 bg-brand-surface border rounded-[var(--brand-radius-sm)] text-base md:text-sm text-brand-text font-body transition-[border-color,box-shadow] duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none hover:border-brand-text-muted/60 focus:outline-none focus:ring-2 ${
+          className={`w-full appearance-none px-4 pr-10 py-2.5 min-h-11 bg-brand-surface border rounded-md text-base md:text-sm text-brand-text font-body transition-[border-color,box-shadow] duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none hover:border-brand-text-muted/60 focus:outline-none focus:ring-2 ${
             error ? 'border-semantic-danger focus:ring-semantic-danger' : 'border-brand-border focus:ring-brand-primary'
           } ${className}`}
           {...props}

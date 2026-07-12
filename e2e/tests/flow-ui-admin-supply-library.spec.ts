@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, local/no-empty-catch, max-nested-callbacks -- test/spec/spike/helper code -- flagged strings are test data, selectors, logs, error codes and SQL, not user-facing UI copy; any/raw-any are deliberate test/integration seams */
 /**
  * Supply Library lifecycle E2E — serial, UI-first
  *
@@ -106,7 +107,7 @@ async function injectAuth(page: Page, token: string) {
 
 let ownerToken: string;
 // Derived from product descriptions — deduped by supply name
-let newIngredients: IngredientData[] = [];
+const newIngredients: IngredientData[] = [];
 // One ingredient used for the live UI proof (the first new one)
 let uiIngredient: IngredientData;
 

@@ -25,7 +25,7 @@ export function BottomSheet({
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === `Escape`) onClose();
     },
     [onClose],
   );
@@ -53,37 +53,37 @@ export function BottomSheet({
   return createPortal(
     <div className="fixed inset-0 z-modal-backdrop">
       <div
-        className="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity ease-[var(--ease-out)]"
-        style={{ opacity: entered ? 1 : 0, transitionDuration: 'var(--motion-base)' }}
+        className={`absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity ease-[var(--ease-out)]`}
+        style={{ opacity: entered ? 1 : 0, transitionDuration: `transitionDuration` }}
         role="button"
         tabIndex={0}
         aria-label="Close"
         onClick={onClose}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClose(); } }}
+        onKeyDown={(e) => { if (e.key === `Enter` || e.key === ' ') { e.preventDefault(); onClose(); } }}
       />
       <div
         ref={sheetRef}
-        className={`absolute bottom-0 left-0 right-0 max-h-[85vh] bg-[var(--brand-surface)] flex flex-col transition-transform ease-[var(--ease-out)] ${className}`}
+        className={`absolute bottom-0 left-0 right-0 max-h-[85vh] bg-brand-surface flex flex-col transition-transform ease-[var(--ease-out)] ${className}`}
         style={{
           borderTopLeftRadius: 'var(--brand-radius)',
           borderTopRightRadius: 'var(--brand-radius)',
-          boxShadow: 'var(--elev-4)',
+          boxShadow: `boxShadow`,
           transform: entered ? 'translateY(0)' : 'translateY(100%)',
-          transitionDuration: 'var(--motion-base)',
+          transitionDuration: `transitionDuration`,
         }}
         role="dialog"
         aria-modal="true"
         aria-label={title}
       >
         <div className="flex items-center justify-center pt-3 pb-1">
-          <div className="w-10 h-1.5 rounded-full bg-[var(--brand-border)]" aria-hidden="true" />
+          <div className="w-10 h-1.5 rounded-full bg-brand-border" aria-hidden="true" />
         </div>
         {title && (
           <div className="flex items-center justify-between px-5 pt-2 pb-3">
-            <h2 className="text-lg font-heading font-semibold text-[var(--brand-text)]">{title}</h2>
+            <h2 className="text-lg font-heading font-semibold text-brand-text">{title}</h2>
             <button
               onClick={onClose}
-              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-[var(--brand-surface-raised)] text-[var(--brand-text-muted)] transition-[background-color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+              className={`w-8 h-8 flex items-center justify-center rounded-full hover:bg-brand-surface-raised text-brand-text-muted transition-[background-color,transform] duration-[var(--motion-fast)] ease-[var(--ease-soft)] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-primary focus-visible:ring-offset-2`}
               aria-label="Close"
             >
               <i className="ti ti-x" />

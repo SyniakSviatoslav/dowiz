@@ -20,7 +20,6 @@
  *   cloud.resize();                           // manual resize
  *   cloud.dispose();
  */
-/* eslint-disable local/no-hardcoded-string -- GLSL source + engine strings, not user-facing copy; no i18n runtime in a plain-JS module */
 /* eslint-disable max-params -- pushParticle is a per-frame hot path; explicit primitives avoid per-particle allocation */
 // Top-level binding so the ESM `export` below resolves (export is hoisted/static).
 var createParticleCloud;

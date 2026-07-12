@@ -1,5 +1,3 @@
-import type { ReactNode } from 'react';
-
 interface IconProps {
   name: string;
   size?: number | string;

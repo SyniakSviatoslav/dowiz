@@ -28,19 +28,19 @@ export function StickyActionBar({ children, className = '', embedSticky = true }
   if (embed && !embedSticky) return null;
 
   const style = keyboardOffset > 0
-    ? { transform: `translateY(-${keyboardOffset}px)`, transition: 'transform 0.2s ease' }
+    ? { transform: `translateY(-${keyboardOffset}px)`, transition: `transform 0.2s ease` }
     : {};
 
   const baseClass = embed
-    ? 'sticky bottom-0 left-0 right-0 z-sticky'
-    : 'fixed bottom-0 left-0 right-0 z-sticky';
+    ? `sticky bottom-0 left-0 right-0 z-sticky`
+    : `fixed bottom-0 left-0 right-0 z-sticky`;
 
   return (
     <div
       ref={barRef}
       data-fixed={embed ? 'true' : undefined}
-      className={`${baseClass} bg-[var(--brand-surface)] ${className}`}
-      style={{ ...style, boxShadow: '0 -8px 24px rgba(0,0,0,.07), 0 -2px 6px rgba(0,0,0,.05)' }}
+      className={`${baseClass} bg-brand-surface ${className}`}
+      style={{ ...style, boxShadow: 'var(--elev-2)' }}
     >
       <div className="flex min-w-0 flex-col px-4 py-3" style={{ paddingBottom: `calc(0.75rem + var(--safe-bottom))` }}>
         {children}

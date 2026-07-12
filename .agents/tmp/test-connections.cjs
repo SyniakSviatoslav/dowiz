@@ -2,7 +2,7 @@ const { Pool } = require('pg');
 
 async function testConnection(connectionString, description) {
   const pool = new Pool({
-    connectionString: connectionString,
+    connectionString,
     max: 1,
     ssl: { rejectUnauthorized: false }
   });

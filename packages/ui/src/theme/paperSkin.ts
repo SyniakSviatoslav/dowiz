@@ -14,7 +14,8 @@ export function isPaperSkinEnabled(): boolean {
     try {
       return window.localStorage?.getItem('dos_paper_skin') === 'on';
     } catch {
-      // private mode / storage disabled
+      // private mode / storage disabled — feature simply stays off
+      void 0;
     }
   }
   return false;

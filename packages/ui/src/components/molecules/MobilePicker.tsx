@@ -1,5 +1,4 @@
-import { useState, type ReactNode } from 'react';
-import { useIsMobile } from '../../hooks/use-breakpoint.js';
+import { type ReactNode } from 'react';
 import { ResponsiveDialog } from './ResponsiveDialog.js';
 
 export interface PickerOption {
@@ -19,8 +18,6 @@ interface MobilePickerProps {
 }
 
 export function MobilePicker({ open, onClose, options, onSelect, title, selectedValue }: MobilePickerProps) {
-  const isMobile = useIsMobile();
-
   const list = (
     <div className="space-y-1">
       {options.map(opt => {
@@ -33,16 +30,15 @@ export function MobilePicker({ open, onClose, options, onSelect, title, selected
               onClose();
             }}
             className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-left transition-colors
-              ${isSelected ? 'bg-[var(--brand-primary-light)] text-[var(--brand-primary)]' : 'hover:bg-[var(--brand-surface-raised)] text-[var(--brand-text)]'}
+              ${isSelected ? 'bg-brand-primary-light text-brand-primary' : 'hover:bg-brand-surface-raised text-brand-text'}
             `}
-            style={{ minHeight: isMobile ? '48px' : '44px' }}
           >
-            {opt.icon && <i className={`${opt.icon} text-lg shrink-0 ${isSelected ? 'text-[var(--brand-primary)]' : 'text-[var(--brand-text-muted)]'}`} />}
+            {opt.icon && <i className={`${opt.icon} text-lg shrink-0 ${isSelected ? 'text-brand-primary' : 'text-brand-text-muted'}`} />}
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate">{opt.label}</div>
-              {opt.description && <div className="text-xs text-[var(--brand-text-muted)] truncate">{opt.description}</div>}
+              {opt.description && <div className="text-xs text-brand-text-muted truncate">{opt.description}</div>}
             </div>
-            {isSelected && <i className="ti ti-check text-[var(--brand-primary)] text-lg shrink-0" />}
+            {isSelected && <i className="ti ti-check text-brand-primary text-lg shrink-0" />}
           </button>
         );
       })}

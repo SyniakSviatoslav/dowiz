@@ -136,6 +136,8 @@ describe('assertTransition', () => {
 });
 
 describe('checkWCAGContrast', () => {
+  // Hex literals are contrast-test fixtures, not palette colors to externalize.
+  /* eslint-disable local/no-hardcoded-color */
   it('returns high ratio for black on white', () => {
     const ratio = checkWCAGContrast('#000000', '#FFFFFF');
     assert.ok(ratio > 10);
@@ -157,4 +159,5 @@ describe('checkWCAGContrast', () => {
     // AA normal text requires 4.5:1
     assert.ok(ratio >= 3, `Brand primary on white: ${ratio.toFixed(2)}:1`);
   });
+  /* eslint-enable local/no-hardcoded-color */
 });

@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { useCurrency } from '../../lib/CurrencyProvider.js';
+import { useI18n } from '../../lib/I18nProvider.js';
 
 export function CurrencySwitcher() {
   const { currency, currencies, setCurrency } = useCurrency();
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const current = currencies.find(c => c.code === currency);
 
@@ -10,8 +12,8 @@ export function CurrencySwitcher() {
     <div className="relative">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 px-2.5 py-1.5 min-h-11 text-xs font-medium rounded-lg transition-colors hover:bg-[var(--brand-surface-raised)]"
-        style={{ color: 'var(--brand-text)', border: '1px solid var(--brand-border)', background: 'var(--brand-surface)' }}
+        className={`flex items-center gap-1 px-2.5 py-1.5 min-h-11 text-xs font-medium rounded-lg transition-colors hover:bg-brand-surface-raised`}
+        style={{ color: 'var(--brand-text)', border: `border`, background: `background` }}
         aria-label={`Switch currency. Current: ${current?.code || currency}`}
       >
         <i className="ti ti-coin" style={{ color: 'var(--brand-text-muted)', fontSize: '0.85rem' }} aria-hidden="true" />
@@ -24,14 +26,14 @@ export function CurrencySwitcher() {
             className="fixed inset-0 z-40"
             role="button"
             tabIndex={0}
-            aria-label="Close menu"
+            aria-label={t('common.close_menu', 'Close menu')}
             onClick={() => setOpen(false)}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(false); } }}
+            onKeyDown={(e) => { if (e.key === `Enter` || e.key === ' ') { e.preventDefault(); setOpen(false); } }}
           />
-          <div className="absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[110px] scale-in" style={{ background: 'var(--brand-surface)', border: '1px solid var(--brand-border)' }}>
+          <div className={`absolute right-0 top-full mt-1 z-50 rounded-lg shadow-elevation-3 py-1 min-w-[110px] scale-in`} style={{ background: `background`, border: `border` }}>
             {currencies.map((c) => (
               <button key={c.code} onClick={() => { setCurrency(c.code); setOpen(false); }}
-                className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-[var(--brand-surface-raised)] ${currency === c.code ? 'font-semibold' : ''}`}
+                className={`flex items-center gap-2 w-full px-3 py-2 text-xs transition-colors hover:bg-brand-surface-raised ${currency === c.code ? 'font-semibold' : ''}`}
                 style={{ color: currency === c.code ? 'var(--brand-primary)' : 'var(--brand-text)' }}
               >
                 <span className="text-step-2xs font-mono font-bold w-6 text-center">{c.symbol}</span>

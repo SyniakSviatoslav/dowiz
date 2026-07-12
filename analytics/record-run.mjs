@@ -22,7 +22,7 @@
  *   run-history.jsonl   — one JSON object per line
  */
 
-import { readFileSync, writeFileSync, existsSync, appendFileSync } from 'fs';
+import { readFileSync, existsSync, appendFileSync } from 'fs';
 import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -49,7 +49,10 @@ if (existsSync(corePath)) {
         summary: (c.summary || '').slice(0, 200),
       }));
     }
-  } catch { /* skip */ }
+  } catch (err) {
+    console.warn('[record-run] could not parse metric-core-result.json, skipping');
+    void err;
+  }
 }
 
 // ── Load eval (Phase C) ────────────────────────────────────────
@@ -58,7 +61,10 @@ const evalPath = resolve(REPO_ROOT, 'eval-layer', 'deepeval-result.json');
 if (existsSync(evalPath)) {
   try {
     evalResults = JSON.parse(readFileSync(evalPath, 'utf-8'));
-  } catch { /* skip */ }
+  } catch (err) {
+    console.warn('[record-run] could not parse deepeval-result.json, skipping');
+    void err;
+  }
 }
 
 // ── History file path ──────────────────────────────────────────
