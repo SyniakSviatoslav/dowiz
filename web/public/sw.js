@@ -56,6 +56,8 @@ self.addEventListener('push', function (event) {
     tag: data.orderId ? 'courier-' + data.orderId : (payload.tag || 'courier-dispatch'),
     renotify: true,
     data,
+    // ponytail: icons live in web/public/icons (committed). If a deployment
+    // drops them, the notification still renders without them.
     badge: '/icons/badge.png',
     icon: '/icons/icon-192.png',
     actions,
@@ -100,10 +102,17 @@ self.addEventListener('pushsubscriptionchange', function (event) {
   event.waitUntil(
     self.registration.pushManager.subscribe(event.oldSubscription.options)
       .then(function (sub) {
-        return fetch('/api/push/resubscribe', {
+        // Tier-0 B fix: the canonical server exposes this route (was 404'ing
+        // under the legacy `/api/push/resubscribe`).
+        return fetch('/api/courier/push/resubscribe', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(sub)
+          body: JSON.stringify({
+            courier_id: sub.courier_id || 'unknown',
+            endpoint: sub.endpoint,
+            auth: (sub.keys && sub.keys.auth) || '',
+            p256dh: (sub.keys && sub.keys.p256dh) || ''
+          })
         });
       })
       .catch(function () { /* best-effort resubscribe; ignore failure */ })

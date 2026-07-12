@@ -192,6 +192,50 @@ async fn green_push_subscribe_persists() {
     assert_eq!(res.status(), StatusCode::CREATED);
 }
 
+// ── GREEN: reliability ratchet healthz reflects process state ──
+#[tokio::test]
+async fn green_healthz_reports_status() {
+    let app = test_app();
+    let req = Request::builder()
+        .method("GET")
+        .uri("/api/healthz")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let s: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    // The global ratchet started clean; nothing latches a storm in normal flow.
+    assert_eq!(s["storm"], false);
+}
+
+// ── RED: reliability flags reset on restart ──
+//
+// The process-global ratchet is `LazyLock::new(Reliability::new)`, so a fresh
+// process begins with a clean flag set. We prove the reset semantics on a fresh
+// instance (the exact initializer used for the global): storm=false,
+// storm_trips=0. Because the global uses this same initializer, a process
+// restart always resets.
+#[test]
+fn red_flags_reset_on_restart() {
+    let r = dowiz_server::reliability::Reliability::new();
+    let s = r.status();
+    assert!(!s.storm, "storm must be clean on a fresh ratchet");
+    assert_eq!(s.storm_trips, 0, "storm_trips must be 0 on a fresh ratchet");
+}
+
+// ── GREEN: tripping during boot grace does NOT latch a storm ──
+#[test]
+fn green_boot_grace_absorbs_storm() {
+    let r = dowiz_server::reliability::Reliability::new();
+    assert!(r.status().boot_grace, "fresh ratchet is within boot grace");
+    let latched = r.trip_storm();
+    assert!(!latched, "storm must not latch during boot grace");
+    assert!(!r.is_storm());
+}
+
 // Sanity: ensure the kernel's transition table matches what the handler relies on.
 #[test]
 fn kernel_transition_table_sanity() {
@@ -200,3 +244,4 @@ fn kernel_transition_table_sanity() {
     assert!(assert_transition(Pending, Ready).is_err());
     assert!(assert_transition(Pending, Confirmed).is_ok());
 }
+

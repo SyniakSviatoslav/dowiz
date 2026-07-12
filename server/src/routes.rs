@@ -4,7 +4,9 @@
 //!   * `POST /api/orders`                 — kernel `place_order`, persist, return 201
 //!   * `POST /api/orders/:id/event`       — kernel `apply_event`; 409 on illegal
 //!   * `POST /api/courier/push/subscribe` — persist a web-push subscription
+//!   * `POST /api/courier/push/resubscribe` — re-persist a push subscription (SW resubscribe)
 //!   * `GET  /api/orders/channel`         — channel-attribution counts
+//!   * `GET  /api/healthz`                — reliability ratchet status
 //!   * `GET  /` (and SPA fallback)        — serve `web/dist`
 //!
 //! No courier scoring/rating occurs anywhere in this module.
@@ -199,6 +201,46 @@ async fn orders_channel(State(state): State<AppState>) -> impl IntoResponse {
     }
 }
 
+/// `POST /api/courier/push/resubscribe`
+///
+/// Mirror of `push_subscribe`; the Service Worker calls this on
+/// `pushsubscriptionchange` to re-register a rotated push endpoint. RED item
+/// (sw.js resubscribe loop was 404'ing — route now exists).
+async fn push_resubscribe(
+    State(state): State<AppState>,
+    Json(req): Json<SubscribeRequest>,
+) -> impl IntoResponse {
+    let id = new_sub_id();
+    let created_at_ms = now_ms();
+    if let Err(e) = state.store.insert_push_sub(&id, created_at_ms, &req) {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e.to_string(), "code": "DbError" })),
+        )
+            .into_response();
+    }
+    (
+        StatusCode::CREATED,
+        Json(PushSubResponse {
+            id,
+            courier_id: req.courier_id,
+            endpoint: req.endpoint,
+            created_at_ms,
+        }),
+    )
+        .into_response()
+}
+
+/// `GET /api/healthz`
+///
+/// Exposes the reliability ratchet status (Tier-0 B). The ratchet is a
+/// process-global handle (`RELIABILITY`), so flags reset on a fresh process —
+/// the RED "flags reset on restart" guarantee.
+async fn healthz() -> impl IntoResponse {
+    let s = crate::reliability::RELIABILITY.status();
+    (StatusCode::OK, Json(serde_json::to_value(s).unwrap())).into_response()
+}
+
 /// Build the application router. `dist_dir` is the path to `web/dist` (served as
 /// a SPA fallback). When `dist_dir` does not exist, the SPA fallback is omitted
 /// (the API routes still work) so the server is usable before the frontend build.
@@ -207,7 +249,9 @@ pub fn build_router(state: AppState, dist_dir: PathBuf) -> Router {
         .route("/api/orders", post(create_order))
         .route("/api/orders/:id/event", post(order_event))
         .route("/api/courier/push/subscribe", post(push_subscribe))
-        .route("/api/orders/channel", get(orders_channel));
+        .route("/api/courier/push/resubscribe", post(push_resubscribe))
+        .route("/api/orders/channel", get(orders_channel))
+        .route("/api/healthz", get(healthz));
 
     let api = api.with_state(state);
 
