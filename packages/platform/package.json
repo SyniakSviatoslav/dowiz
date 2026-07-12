@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@deliveryos/config": "workspace:*",
-    "@deliveryos/db": "workspace:*",
     "ioredis": "^5.4.1",
     "jose": "^6.2.3",
     "pg": "^8.21.0",
