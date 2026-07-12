@@ -114,6 +114,7 @@ Tier 0 remaining (parallel, zero-pivot, non-red-line):
 Tier 1 (red-line, operator decision): P1/P7/P8 execution; prod OG/demo (blocked on lost PROVISION_OPS_SECRET); remote-history scrub + branch prune.
 Tier 2 (quality bars): design 13-item "stable enough" + storefront zero-diff Playwright gate; GTM 8-point per-venue gate; courier out-of-app signal (N1/N2).
 Tier 3 (validation hinge): G11 GREEN = one real order from non-operator customer on claimed venue.
+- **Tier-3 venue/claim plumbing DONE+verified (2026-07-12, commit 0295f30a):** venues table (store.rs) + GET /api/venues/:id (404 if unknown RED) + POST /api/venues/:id/claim (idempotent upsert, name preserved, claimed=true). Combined with Tier-0 D (?ch= -> order.channel -> GET /api/orders/channel), a claimed venue + ?ch= link now fully attributes a G11 order to a venue. G11 GREEN itself = external (a real non-operator customer order) — not code; plumbing is in place. Verified: cargo test 10/10 (venue GREEN+RED), live claim v-tokyo -> 200 claimed, unknown -> 404, channel=v-tokyo attributed.
 Tier 4 (substrate, gated on G11): protocol R node = kernel::decide-bypass fix; X settlement/dispute; migration ladder; channel registry; sync-CRDT menu lane; reliability LD0–LD11.
 Tier 5 (earn-it, each gated): money crypto audit ladder (hybrid-only until audit); messenger transport (G7 survey); Astro port; .onion tier; multi-venue mesh.
 Tier X (PARKED): bebop-as-protocol (capture-protect ~1h); field-sim (sign-bug fix if revived); sovereign-core cutover mothball; B3 RLS flip last.
