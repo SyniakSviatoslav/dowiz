@@ -1,0 +1,14 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://127.0.0.1:3000",
+      "localStorage": [
+        {
+          "name": "dos_access_token",
+          "value": "eyJhbGciOiJSUzI1NiIsImtpZCI6IjEifQ.eyJyb2xlIjoiY291cmllciIsInN1YiI6IjFhOGE3ZDE3LWFlMDEtNDRlZS05OWRhLTU4NzVmYTg4ZTdmZCIsImFjdGl2ZUxvY2F0aW9uSWQiOiI4NjBkN2RkNi05YWFmLTQxNTAtOTZiYS02MTk0YjM5ZTVlNjciLCJraWQiOiIxIiwiaWF0IjoxNzgxODYxNTc2LCJleHAiOjE3ODE5NDc5NzZ9.smkMc3_06ebw_b1mKuIQB8k2toN3qTaAcPQN3D1w1vO5OGzjc08I-Srn9wmqMjjoZMAMYR6m7o_nIDwY-8_b7EF3BxAuIF9ro3Z-aXoc2DwnhoEgx6RY2BpRE1uKHMfgn8eDdCjoRuSP04r8NNiW6LQdGin3niw77Hhg8m6YWM0RePj_UM8os7xSHciboJ_ezeq1ddhZSr_ioS8hRNMEmrkCoYqHGbIhgUcgoUrR1-wBbwxohMfjntZy7VeTsP5vh0qC5CBJUnRWzVuMG_cWofqKMjpYYU2Pv3Ni6f-wnjBRd_mqMvQOkkkhff8PFpiaA5EJTHzeq6zZyG5Y58TIog"
+        }
+      ]
+    }
+  ]
+}
