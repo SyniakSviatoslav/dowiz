@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "@deliveryos/config": "workspace:*",
-    "@deliveryos/db": "workspace:*",
     "@deliveryos/platform": "workspace:*",
     "@deliveryos/shared-types": "workspace:*"
   },
