@@ -1,5 +1,5 @@
 ---
-const { title = 'dowiz storefront' } = Astro.props;
+const { title = 'dowiz storefront', description = 'dowiz — order from local venues, no commissions.', image = '/og/card.png' } = Astro.props;
 ---
 
 <!doctype html>
@@ -8,6 +8,16 @@ const { title = 'dowiz storefront' } = Astro.props;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
+    <meta name="description" content={description} />
+    <!-- Tier-0 D: Open Graph / social card (og:image <300KB, served from /og/card.png). -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={image} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content={image} />
     <style>
       :root { color-scheme: light dark; }
       body {
