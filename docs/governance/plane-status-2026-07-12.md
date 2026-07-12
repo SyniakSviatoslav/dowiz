@@ -15,7 +15,10 @@ watching the diff, which is every firing of this loop. (Ledger entry: `song-of-s
 
 🟢 **PASS** · generated 2026-07-12T06:12:53.731Z by `scripts/plane-report.mjs`
 Charter & autonomy envelope: [plane-maintainer-agent.md](./plane-maintainer-agent.md)
-Telemetry: telegram=none · push=none · run_id=plane-2026-07-12T06-12-00Z
+Telemetry (at generation time, before this run's fixes below): telegram=none · push=none ·
+run_id=plane-2026-07-12T06-12-00Z. **Final status after this run's telemetry fix (see "Actions taken"):
+`telegram=failed:unreachable · push=ok`** — an honest failure, not the false-success bug this run found
+and fixed.
 
 ## 11-pattern gate (`plane-guard`)
 12/12 hard checks pass · 2 soft warn(s)
@@ -95,6 +98,15 @@ Telemetry: telegram=none · push=none · run_id=plane-2026-07-12T06-12-00Z
   the deterministic proof this session cannot produce locally. **Escalating:** staging deploy + Playwright
   E2E against `dowiz-staging.fly.dev` still needs to run (by CI or a human) before/at merge, and `main`
   has been CI-red for ~8h — this PR should be reviewed promptly.
+- **HEAL (2nd finding, self-referential):** while sending this very run's Telegram digest, found that
+  `scripts/plane-telemetry.mjs send`'s chunk-fallback path reported `sent:chunked` (success)
+  unconditionally, even when every chunked send actually failed — the exact case this session is in
+  (Telegram unreachable). This directly contradicted the module's own H3 principle. Fixed (test-only
+  `PLANE_TELEMETRY_TEST_TG_BASE_URL` seam + a loopback-stub test), red→green proven (reverting the fix
+  reproduces the bug against the new test; restoring it passes 23/23). Regression ledger row #58, same
+  PR #24. **Re-ran `send` with the fix**: now correctly reports `telegram: failed:unreachable` instead
+  of a false "sent". `publish` to `telemetry/plane` succeeded (`git`/GitHub egress is not blocked by
+  this container's network policy, only `api.fly.io`/`api.telegram.org` are).
 - **SCOUT:** see "Net-new for the plane" above.
 - **Sunday ritual §1 (cross-pattern memory synthesis) — ESCALATED, not performed.** The charter's
   `memory-corpus-meta-patterns-2026-07-02` memory and its `[[link]]` graph live in a local Claude Code
