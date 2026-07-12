@@ -6,6 +6,7 @@ pub mod analytics;
 pub mod domain;
 pub mod money;
 pub mod order_machine;
+pub mod pq;
 pub mod wasm;
 
 // Re-export the headline types so wasm-bindgen consumers and tests share one surface.
