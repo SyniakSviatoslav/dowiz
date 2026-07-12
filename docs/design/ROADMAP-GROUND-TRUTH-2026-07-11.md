@@ -88,6 +88,12 @@ These ARE on disk and already correct the brief's stale claims:
   - `web/src/components/OwnerDashboard.svelte` + `web/src/lib/channel.js`: orders-by-channel + funnel + anomalies reader (closes open attribution loop on the UI).
   - Unified `web/src/pages/index.astro` mounts Storefront + OwnerDashboard + CourierTrack.
   - Kernel: **37/37 RED+GREEN VbM tests; wasm32 build green; fmt clean.** NO-COURIER-SCORING enforced (0 rating fields). Agent-escape + index.astro merge reconciled via `wave3/integrate`.
+- **WAVE-4 (2026-07-12, canonical stack, DONE+verified, `kernel/rust-wasm-core` fa637399):** full G11 working backend pulled forward (Tier-4 substrate ahead of G11 per operator "drop legacy" redirect).
+  - `server/` NEW Rust crate (axum+tokio+rusqlite bundled): `POST /api/orders` (kernel place_order, server-authoritative integer money), `POST /api/orders/:id/event` (apply_event, **409 on illegal transition** = RED), `POST /api/courier/push/subscribe`, `GET /api/orders/channel` (ChannelLedger), serves `web/dist`. SQLite store = local memory. **5/5 lib + 5/5 integration RED+GREEN tests.**
+  - `web/src/lib/kernel/`: wasm-bindgen glue (web+node) + `kernel.js` loader. Storefront `placeOrder` now calls REAL kernel (node test: `real kernel order id = ord_0 status = PENDING`, no money-tween).
+  - `bebop2/proto-wire` WssTransport (tokio-tungstenite) impl + signed-frame round-trip (**6/6 tests**) — **UNCOMMITTED in bebop-repo** (3-model review gate honored; awaits operator sign-off).
+  - NO-COURIER-SCORING enforced (0 rating fields across server/web/bebop).
+  - All 3 agents escaped worktrees (wrote to main trees) — reconciled + independently verified.
 - NO-COURIER-SCORING final (DRIFT R2).
 - **WAVE-2 (2026-07-11, canonical stack, DONE+verified, on `kernel/rust-wasm-core` 5c082b66):** Node/TS/Supabase/Fly DROPPED for new slices; pure Rust+Astro/Svelte+WebGL.
   - `kernel/src/domain.rs`: Order aggregate + compute_order_total + Decider (place_order/apply_event) via decide/fold Law.
