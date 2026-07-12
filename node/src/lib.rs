@@ -13,8 +13,12 @@
 //! verified on receipt against the *sender's* public key — PQ holds regardless of
 //! whether the underlay is QUIC, TCPCLv4, or SpaceWire (D3).
 
+pub mod adapters;
+
 use dowiz_kernel::pq::envelope::{new_identity, open, seal, SignedEnvelope, ENTROPY_LEN};
-use dowiz_kernel::pq::hybrid::{hybrid_decaps, hybrid_encaps, hybrid_keygen, HybridCiphertext, HybridKeypair};
+use dowiz_kernel::pq::hybrid::{
+    hybrid_decaps, hybrid_encaps, hybrid_keygen, HybridCiphertext, HybridKeypair,
+};
 use std::collections::HashSet;
 
 /// A custody-transfer bundle (BPv7-shaped, minimal).
@@ -345,6 +349,9 @@ mod tests {
         assert_eq!(plain, msg);
         // C (not the recipient, no hybrid secret key) cannot decrypt to the real plaintext.
         let wrong = c.deliver_secret(&bundle);
-        assert!(wrong.is_err() || wrong.unwrap() != msg, "non-recipient must not read plaintext");
+        assert!(
+            wrong.is_err() || wrong.unwrap() != msg,
+            "non-recipient must not read plaintext"
+        );
     }
 }
