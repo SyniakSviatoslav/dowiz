@@ -7,13 +7,22 @@ import OwnerDashboard from '../components/OwnerDashboard.svelte';
 // Mock location id (oracle-shaped uuid). In production this comes from the
 // published storefront slug resolution — not wired yet (WASM glue deferred).
 const locationId = '00000000-0000-0000-0000-000000000001';
+
+// Tier-0 D: channel attribution via ?ch=<venue>. The Storefront stamps the
+// order's `channel` with this value, so orders are attributed to the venue
+// the customer arrived from (see GET /api/orders/channel).
+const channel = Astro.url.searchParams.get('ch') ?? 'web';
+
+// Share link that re-opens this storefront stamped with the venue channel.
+const shareUrl = `${Astro.url.origin}${Astro.url.pathname}?ch=${encodeURIComponent(channel)}`;
 ---
 
 <Layout title="dowiz storefront">
   <main>
     <h1>dowiz</h1>
     <p>Greenfield Astro + Svelte 5 storefront (kernel-compatible order payload).</p>
-    <Storefront locationId={locationId} client:load />
+    <p>Channel: <code>{channel}</code></p>
+    <Storefront locationId={locationId} channel={channel} shareUrl={shareUrl} client:load />
     <OwnerDashboard client:load />
     <CourierTrack orderId="demo-001" status="IN_DELIVERY" pickup="Venue A" dropoff="Venue B" client:load />
   </main>

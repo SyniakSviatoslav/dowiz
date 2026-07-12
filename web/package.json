@@ -9,8 +9,9 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "astro": "^5.0.0",
     "@astrojs/svelte": "^7.0.0",
+    "astro": "^5.0.0",
+    "qrcode": "^1.5.4",
     "svelte": "^5.0.0"
   }
 }

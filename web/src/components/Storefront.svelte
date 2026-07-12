@@ -1,4 +1,5 @@
 <script>
+  import QRCode from 'qrcode';
   // ── Kernel status enum mirror ───────────────────────────────────────
   // Mirrors kernel/src/order_machine.rs OrderStatus::as_str() so the
   // frontend can speak the canonical string form the kernel emits.
@@ -19,7 +20,7 @@
 
   // locationId is passed from index.astro; defaulted here so the island is
   // usable standalone.
-  let { locationId = '00000000-0000-0000-0000-000000000001' } = $props();
+  let { locationId = '00000000-0000-0000-0000-000000000001', channel = 'web', shareUrl = '' } = $props();
 
   // ── Mock menu (oracle-shaped: product/modifier ids are uuids) ───────
   // price / priceDelta are integer minor units (cents). No float money.
@@ -89,6 +90,7 @@
     return {
       locationId,
       items,
+      channel, // Tier-0 D: attribute the order to the ?ch= venue channel.
       cash_pay_with: cashPayWith > 0 ? cashPayWith : null,
     };
   }
@@ -114,7 +116,14 @@
 
   const subtotal = $derived(cartLines.reduce((s, l) => s + l.lineTotal, 0));
 
-  // Kernel loader — dynamically imported in the browser only (the wasm glue is
+  // Tier-0 D: QR of the ?ch= share link, generated client-side (no server dep).
+  let qrSrc = $state('');
+  $effect(() => {
+    if (!shareUrl || typeof window === 'undefined') return;
+    QRCode.toDataURL(shareUrl, { width: 160, margin: 1 })
+      .then((url) => { qrSrc = url; })
+      .catch(() => { qrSrc = ''; });
+  });
   // --target web and relies on fetch/URL). SSR-safe: never imported at module
   // top-level, so the Astro server render never touches wasm.
   let kernelPlaceOrder = null;
@@ -185,6 +194,10 @@
     <button onclick={submitOrder} disabled={submitting}>
       {submitting ? 'Placing…' : 'Place order'}
     </button>
+    {#if qrSrc}
+      <p><small>Scan to share this venue storefront (?ch={channel}):</small></p>
+      <img src={qrSrc} alt="Storefront share QR" width="160" height="160" />
+    {/if}
   {/if}
 </section>
 
