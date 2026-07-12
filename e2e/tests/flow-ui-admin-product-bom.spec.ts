@@ -18,8 +18,13 @@
  * 8. API: GET all products → verify every product has recipeLines
  */
 import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
+<<<<<<< Updated upstream
+=======
+import { expectJwt } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
+>>>>>>> Stashed changes
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 // ── Full supply library (defaults + derived extras) ────────────────────────────
 // This is written to localStorage before the product edit UI opens,
@@ -182,6 +187,8 @@ test.describe.configure({ mode: 'serial' });
 test.describe('UI: Product BOM Editor — add recipe lines from descriptions, save, hard-reload', () => {
 
   test.beforeAll(async ({ request }) => {
+    // This spec MUTATES products (PATCH recipeLines) — never let it run against prod.
+    requireStaging(BASE);
     const r = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(r.status()).toBe(200);
     ownerToken = (await r.json()).access_token;
@@ -475,15 +482,21 @@ test.describe('UI: Product BOM Editor — add recipe lines from descriptions, sa
       }
     }
 
-    // Click Save Changes
+    // Click Save Changes — prove success by the PATCH 200, not just a modal close
+    // (a modal can also close on a JS exception or navigation error, which is NOT a successful save).
     const saveBtn = modal.getByRole('button', { name: /save|ruaj/i }).last();
     await saveBtn.waitFor({ state: 'visible', timeout: 5000 });
+    const savePatch = page.waitForResponse(
+      resp => resp.url().includes('/api/owner/menu/products') && resp.request().method() === 'PATCH',
+      { timeout: 10000 },
+    ).catch(() => null);
     await saveBtn.click();
+    const saveResp = await savePatch;
+    expect(saveResp, 'Save must issue a PATCH to /api/owner/menu/products').not.toBeNull();
+    expect(saveResp!.status(), 'Product save PATCH must return 200').toBe(200);
 
-    // Wait for success toast or modal to close
-    await page.waitForTimeout(3000);
-
-    // Modal should be gone (closed after save) or a toast should be visible
+    // …and the UI must also reflect success: modal closes or a success toast appears
+    await page.waitForTimeout(1000);
     const modalGone = await modal.isHidden({ timeout: 5000 }).catch(() => false);
     const toastVisible = await page.locator('text=/saved|ruajt|product saved/i').isVisible({ timeout: 3000 }).catch(() => false);
     expect(modalGone || toastVisible, 'Product must save: modal closes or success toast appears').toBe(true);
@@ -513,6 +526,18 @@ test.describe('UI: Product BOM Editor — add recipe lines from descriptions, sa
       console.log(`First line: ${JSON.stringify(recipeLines[0])}`);
     }
     expect(hasLines, `Product "${uiProduct.name}" must have at least one recipe line saved`).toBe(true);
+
+    // Read-back (rule #9): supplies are a client-side library and the server stores BOM as opaque
+    // JSON, so length>0 alone only proves the server echoes ANY array. Assert the persisted lines
+    // carry the EXACT supply identity we sent — names + ids from KNOWN_SUPPLIES — proving the PATCH
+    // round-tripped our payload rather than arbitrary data.
+    const knownNames = new Set(KNOWN_SUPPLIES.map(s => s.name));
+    const knownIds = new Set(KNOWN_SUPPLIES.map(s => s.id));
+    for (const line of recipeLines) {
+      const name = line.supplyName || line.name;
+      expect(knownNames.has(name), `Saved recipe line supplyName "${name}" must be a supply we sent`).toBe(true);
+      expect(knownIds.has(line.supplyId), `Saved recipe line supplyId "${line.supplyId}" must be a supply we sent`).toBe(true);
+    }
 
     // Verify allergens are aggregated from recipe lines
     const allAllergenMap: Record<string, boolean> = {};
@@ -544,18 +569,29 @@ test.describe('UI: Product BOM Editor — add recipe lines from descriptions, sa
     // Check if any allergen chip is shown on the card
     // Allergen chips are small rounded spans inside product cards
     const productCard = page.locator('div.rounded-xl.border').filter({ hasText: uiProduct.name }).first();
-    const allergenChips = productCard.locator('span.rounded-full');
+    // Allergen chips carry `leading-tight`; the stock-count badge is also `rounded-full` but does
+    // NOT — scope to that class so the stock badge can't masquerade as an allergen chip.
+    const allergenChips = productCard.locator('span.rounded-full.leading-tight');
     const chipCount = await allergenChips.count();
     console.log(`Allergen chips on "${uiProduct.name}" card: ${chipCount}`);
 
-    // If the recipe lines have allergens, chips should be shown
-    const derivedLines = descriptionToRecipeLines(uiProduct.description);
-    const allergenCount = derivedLines.flatMap(l => l.allergens).length;
-    if (allergenCount > 0) {
-      // At least one chip should be visible
-      const anyChipVisible = await allergenChips.first().isVisible({ timeout: 3000 }).catch(() => false);
-      console.log(`Allergen chips visible (expected since derived allergens exist): ${anyChipVisible}`);
-    }
+    // Ground the expectation in the SAVED product (the same source the card renders from), not in a
+    // re-derivation: the card must show allergen chips iff the persisted BOM actually has allergens.
+    const apiResp = await page.request.get(`${BASE}/api/owner/menu/products`, {
+      headers: { Authorization: `Bearer ${ownerToken}` },
+    });
+    expect(apiResp.status(), 'GET products for allergen-expectation must be 200').toBe(200);
+    const apiBody = await apiResp.json();
+    const apiProducts: any[] = apiBody.products || apiBody.data || apiBody;
+    const savedProduct = apiProducts.find(p => p.id === uiProduct.id);
+    const savedLines: any[] = savedProduct?.recipeLines || savedProduct?.attributes?.bom || [];
+    const expectAllergenChips = savedLines.some(l => Array.isArray(l.allergens) && l.allergens.length > 0);
+
+    const anyChipVisible = await allergenChips.first().isVisible({ timeout: 5000 }).catch(() => false);
+    expect(
+      anyChipVisible,
+      `Allergen chips ${expectAllergenChips ? 'must appear' : 'must NOT appear'} on "${uiProduct.name}" card after hard reload (saved BOM ${expectAllergenChips ? 'has' : 'has no'} allergens)`,
+    ).toBe(expectAllergenChips);
 
     const critical = jsErrors.filter(e => !e.includes('favicon') && !e.includes('ResizeObserver'));
     expect(critical, `JS errors after hard reload: ${critical.join('; ')}`).toEqual([]);
@@ -629,5 +665,35 @@ test.describe('UI: Product BOM Editor — add recipe lines from descriptions, sa
     if (without > 0) {
       console.log(`Note: ${without} products lack descriptions and have no derived BOM — expected`);
     }
+  });
+
+  // ── STEP 9: Security — PATCH /api/owner/menu/products/:id is owner-only ──────
+  // The bulk PATCH in Step 7 used the owner token (positive control). Here we prove the same
+  // endpoint REJECTS callers it must reject — otherwise an attacker could rewrite any product's BOM.
+  test('Step 9: API — product PATCH rejects no-token (401) and wrong-role courier (403)', async ({ request }) => {
+    test.skip(!uiProduct, 'No product from Step 1');
+
+    // NEGATIVE 1 — no token → 401 (server.verifyAuth). recipeLines:[] would CLEAR the BOM if it
+    // were (wrongly) accepted, so a 401 here also proves no unauthenticated mutation occurred.
+    const noToken = await request.patch(`${BASE}/api/owner/menu/products/${uiProduct.id}`, {
+      data: { recipeLines: [] },
+    });
+    expect(noToken.status(), 'PATCH without a token must be 401').toBe(401);
+
+    // NEGATIVE 2 — valid JWT, wrong role (courier) → 403 (server.requireRole(['owner'])).
+    const cr = await request.post(`${BASE}/api/dev/mock-auth`, { data: { role: 'courier' } });
+    expect(cr.status(), 'courier mock-auth must succeed').toBe(200);
+    const courierToken = (await cr.json()).access_token;
+    expectJwt(courierToken, 'courier access_token');
+    const wrongRole = await request.patch(`${BASE}/api/owner/menu/products/${uiProduct.id}`, {
+      headers: { Authorization: `Bearer ${courierToken}` },
+      data: { recipeLines: [] },
+    });
+    expect(wrongRole.status(), 'PATCH with a courier (non-owner) token must be 403').toBe(403);
+
+    // TODO(needs-staging): cross-tenant IDOR — a second REAL owner from a DIFFERENT tenant PATCHing
+    // this product must get 404/403 (the menu route resolves locationId from the JWT). This needs a
+    // second seeded tenant+owner on staging; the role/no-token controls above are the deterministic
+    // subset that runs without one.
   });
 });

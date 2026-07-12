@@ -311,7 +311,7 @@ export function MapLibreBase({
   return (
     // data-dynamic: live map tiles + courier marker positions vary run-to-run —
     // masked from the visual-regression net (all maps render through this base).
-    <div ref={containerRef} data-dynamic className={`relative ${className}`}>
+    <div ref={containerRef} data-testid="map-container" data-dynamic className={`relative ${className}`}>
       {!loaded && (
         <div className="absolute inset-0 flex items-center justify-center bg-[var(--brand-surface)] text-[var(--brand-text-muted)] text-sm z-20">
           {t('map.loading', 'Loading map…')}

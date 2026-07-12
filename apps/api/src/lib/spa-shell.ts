@@ -20,7 +20,7 @@ export function isBot(ua: string | undefined | null): boolean {
 // P1-SEO: escape values before interpolating into HTML attributes / text. The SPA
 // shell is hand-templated (not preact), so unlike ssr-renderer we must escape here.
 // Covers both attribute (") and element (<,>,&) contexts.
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return String(s)
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -61,7 +61,7 @@ interface TenantMeta {
 
 // Build per-tenant <title> + OG/Twitter tags, mirroring ssr-renderer's OgMetaTags
 // so the SPA shell and the bot-SSR page advertise identical metadata.
-function buildTenantMeta(m: TenantMeta): string {
+export function buildTenantMeta(m: TenantMeta): string {
   const baseUrl = process.env.APP_BASE_URL || 'https://dowiz.fly.dev';
   const title = `${m.name} — Order Online | Dowiz`;
   const desc = m.address
@@ -92,7 +92,7 @@ function buildTenantMeta(m: TenantMeta): string {
 // Inject tenant meta into the shell: replace the static <title>Dowiz</title> with the
 // per-tenant tag block. If the marker is absent (shell changed), fall back to inserting
 // before </head> so we never lose the SPA.
-function injectTenantMeta(shell: string, meta: string): string {
+export function injectTenantMeta(shell: string, meta: string): string {
   if (shell.includes('<title>Dowiz</title>')) {
     return shell.replace('<title>Dowiz</title>', meta);
   }

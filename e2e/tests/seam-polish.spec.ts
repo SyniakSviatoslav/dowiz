@@ -1,18 +1,29 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
 import crypto from 'node:crypto';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
 // Real-UI proof of the final seam-polish fixes (server read-only). Focus: no order-lifecycle
 // terminal state is a dead-end — REJECTED/CANCELLED tracking pages offer an "Order again" exit
 // and a humane, non-accusing reason (F3). Reuses the order-stepper harness.
 // Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test seam-polish --project=desktop --reporter=list
-const CREDS = { email: 'test@dowiz.com', password: 'test123456' };
-let cachedToken: string | null = null;
+
+// Mutating spec (creates orders, patches status) → never let it run against prod/unknown.
+test.beforeAll(() => requireStaging(process.env.VITE_BASE_URL));
+
+// Credentials from env (never commit plaintext into the source / CI logs). Local fallback only.
+const CREDS = {
+  email: process.env.E2E_OWNER_EMAIL ?? 'test@dowiz.com',
+  password: process.env.E2E_OWNER_PASSWORD ?? 'test123456',
+};
+// No module-level token cache: a shared cache leaks auth state across the parametrised
+// iterations and silently reuses a stale/expired token. Mint a fresh, shape-checked token per call.
 async function ownerToken(request: APIRequestContext): Promise<string> {
-  if (cachedToken) return cachedToken;
   const res = await request.post('/api/auth/local/login', { data: CREDS });
   expect(res.ok(), 'owner login').toBeTruthy();
-  cachedToken = (await res.json()).access_token as string;
-  return cachedToken;
+  const token = (await res.json()).access_token as string;
+  expectJwt(token, 'owner access_token');
+  return token;
 }
 let phoneSeq = 0;
 const uniquePhone = () => `+35562${String(Date.now()).slice(-4)}${String(++phoneSeq).padStart(2, '0')}`;
@@ -46,6 +57,7 @@ async function createDeliveryOrder(request: APIRequestContext) {
   });
   expect(created.status(), `create order: ${await created.text()}`).toBe(201);
   const order = await created.json();
+  expectUuid(order.id, 'created order id');
   const u = new URL(order.trackUrl as string);
   return { id: order.id as string, trackPath: u.pathname + u.search };
 }
@@ -65,6 +77,27 @@ for (const terminal of ['CANCELLED', 'REJECTED'] as const) {
     await expect(exit, 'terminal state shows an exit block, not a dead-end').toBeVisible({ timeout: 25000 });
     const again = page.locator('[data-testid="order-again"]');
     await expect(again, '"Order again" CTA is present').toBeVisible();
-    expect(await again.getAttribute('href'), 'reorder routes back to the storefront').toContain('/s/');
+    // Exact route shape: a relative or same-origin absolute `/s/:slug` — NOT any url that merely
+    // contains '/s/' somewhere (e.g. '/assets/...'), which a mis-wired href would slip past.
+    const href = await again.getAttribute('href');
+    expect(href, 'reorder routes back to the storefront /s/:slug').toMatch(/^(?:https?:\/\/[^/]+)?\/s\/[\w-]+/);
   });
 }
+
+// IDOR / auth negative control — the status PATCH must reject unauthenticated callers and must
+// never reach a row outside the caller's tenant. The route is RLS-scoped (withTenant), so an order
+// id the owner does not own reads 0 rows → 404 (apps/api/src/routes/orders.ts:773-774); a missing
+// token → 401 (apps/api/src/plugins/auth.ts:47).
+test('status PATCH is auth- and tenant-scoped (IDOR negative control)', async ({ request }) => {
+  const token = await ownerToken(request);
+  const foreignId = crypto.randomUUID();
+  const noAuth = await request.patch(`/api/orders/${foreignId}/status`, { data: { status: 'CANCELLED' } });
+  expect(noAuth.status(), 'unauthenticated status PATCH is rejected').toBe(401);
+  const foreign = await request.patch(`/api/orders/${foreignId}/status`, {
+    data: { status: 'CANCELLED' }, headers: { Authorization: `Bearer ${token}` },
+  });
+  expect(foreign.status(), 'owner cannot PATCH an order outside its RLS tenant scope').toBe(404);
+  // TODO(needs-staging): full cross-tenant proof — mint a SECOND tenant owner token and assert it
+  // gets 404 PATCHing THIS tenant's *real* order id (not just a random non-existent id). Requires a
+  // provisioned 2nd-tenant fixture on staging; the random-id 404 here exercises the same RLS read path.
+});

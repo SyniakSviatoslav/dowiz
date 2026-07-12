@@ -1,4 +1,13 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
+<<<<<<< Updated upstream
+=======
+import { expectJwt } from '../../helpers/assert-shape';
+import { requireStaging } from '../../helpers/staging-guard';
+
+// This spec MUTATES the demo location (pauses/un-pauses delivery). Refuse to run it
+// against prod or an unknown target — only an explicit staging/local VITE_BASE_URL.
+test.beforeAll(() => requireStaging(process.env.VITE_BASE_URL));
+>>>>>>> Stashed changes
 
 // Testplan §1b (docs/research/UI-IMPROVEMENTS-TESTPLAN.md) — prove the storefront surfaces
 // the CLOSED venue state: when the demo location is paused, /s/demo shows
@@ -49,16 +58,26 @@ async function setDeliveryPaused(request: APIRequestContext, token: string, paus
 
 test('storefront shows the venue-closed state when the location is paused', async ({ page, request }) => {
   const token = await ownerToken(request);
+  const banner = page.locator('[data-testid="venue-closed-banner"]');
+  const chip = page.locator('[data-testid="venue-state-chip"]');
+
+  // BASELINE (open) — without this, an always-rendered closed banner would also pass the
+  // CLOSED assertions below (false-green). Ensure the venue is un-paused, load /s/demo, and
+  // prove the chip is 'open' and the closed banner is ABSENT, so the banner is state-driven.
+  await setDeliveryPaused(request, token, false);
+  await page.goto('/s/demo');
+  await expect(chip).toHaveAttribute('data-state', 'open', { timeout: 25000 });
+  await expect(banner).not.toBeVisible();
 
   await setDeliveryPaused(request, token, true);
   try {
-    await page.goto('/s/demo');
+    // venueStatus is fetched once on mount (MenuPage.tsx:303 — no WS/poll), so a reload is
+    // required to pick up the flip. NOTE: this proves a FRESH load reflects the new state,
+    // not live propagation onto an already-mounted tab (see TODO: real-time below).
+    await page.reload();
 
-    const banner = page.locator('[data-testid="venue-closed-banner"]');
     await expect(banner).toBeVisible({ timeout: 25000 });
     await expect(banner).toContainText(/closed|mbyllur/i);
-
-    const chip = page.locator('[data-testid="venue-state-chip"]');
     await expect(chip).toHaveAttribute('data-state', 'closed');
 
     // closed is not busy — the busy banner must be absent.
@@ -66,4 +85,17 @@ test('storefront shows the venue-closed state when the location is paused', asyn
   } finally {
     await setDeliveryPaused(request, token, false);
   }
+
+  // TODO(needs-staging): real-time propagation. MenuPage fetches venueStatus once on mount
+  // (no WS subscription / no poll for /info), so flipping deliveryPaused on an already-open
+  // tab does NOT update the banner without a reload. Asserting a live, reload-free DOM change
+  // here would fail — this is a PRODUCT GAP to escalate, not a test to fabricate. When a live
+  // venue-state WS event exists, add: open tab OPEN → flip via API → assert closed WITHOUT
+  // reload + expect(ws.wasOpened()).toBe(true).
+
+  // TODO(needs-staging): ordering-block when closed. canAdd() (MenuPage.tsx:519) ignores
+  // venueStatus and no checkout guard blocks a closed venue, so add-to-cart / checkout are
+  // NOT disabled when closed — only a banner shows. Asserting the add control is disabled
+  // would fail today. PRODUCT GAP to escalate; add the disabled/redirect assertion once the
+  // server-side closed-venue order guard exists.
 });

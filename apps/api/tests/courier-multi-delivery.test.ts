@@ -26,7 +26,7 @@ const COURIERS = {
   D: { order: null,      pos: { lat: 41.44, lng: 19.44 }, dest: null }, // idle, on shift
 };
 
-function makeWorker() {
+function makeWorker(assignmentStatus = 'accepted') {
   const published: Array<{ channel: string; msg: any }> = [];
   const bus = { publish: async (channel: string, msg: any) => { published.push({ channel, msg }); } };
   const worker = new CourierEventsWorker({} as any, bus as any);
@@ -46,7 +46,7 @@ function makeWorker() {
       phoneMasked: '+*** *** 0000',
       position: c.pos,
       destination: c.dest,
-      assignmentStatus: 'accepted',
+      assignmentStatus,
     };
   };
 
@@ -86,6 +86,8 @@ test('multi-courier concurrent position fan-out is correct and isolated', async 
       assert.equal(m.payload.orderId, (COURIERS as any)[id].order);
       assert.equal(m.payload.courierName, `${id}***`, `order ${id} got the wrong courier`);
       assert.deepEqual(m.payload.position, (COURIERS as any)[id].pos, `order ${id} got the wrong position`);
+      // assignmentStatus 'accepted' → display 'heading_to_pickup' (mapAssignmentStatusToDisplay)
+      assert.equal(m.payload.status, 'heading_to_pickup', `order ${id} got the wrong display status`);
     }
   });
 
@@ -107,6 +109,55 @@ test('multi-courier concurrent position fan-out is correct and isolated', async 
     assert.equal(leaked.length, 0, 'an idle courier must not push to any order room');
     assert.equal(orderMsgs.length, 3, 'exactly 3 active deliveries → 3 order updates');
   });
+});
+
+// Cross-location (cross-tenant) isolation: a courier reporting a position on
+// location loc-2 must NEVER surface on loc-1's owner dashboard channel.
+test('cross-location position never leaks onto another location dashboard', async () => {
+  ensureEnv();
+  ({ CourierEventsWorker } = await import('../src/workers/courier-events.js'));
+  ({ orderChannel, courierChannel } = await import('../src/lib/registry.js'));
+  const { worker, published } = makeWorker();
+
+  await worker.handlePositionUpdated({ courierId: 'A', locationId: 'loc-2', shiftId: 'shift-A' });
+
+  // NEGATIVE: the other tenant's dashboard sees nothing.
+  const loc1 = published.filter((p) => p.channel === courierChannel('loc-1'));
+  assert.equal(loc1.length, 0, "courier on loc-2 must not appear on loc-1's dashboard");
+  // POSITIVE control: the courier's own location dashboard does get exactly one update.
+  const loc2 = published.filter((p) => p.channel === courierChannel('loc-2'));
+  assert.equal(loc2.length, 1, "courier's own location dashboard should get one update");
+  assert.equal(loc2[0].msg.payload.courierId, 'A');
+  assert.deepEqual(loc2[0].msg.payload.position, COURIERS.A.pos);
+});
+
+// picked_up exercises the route-publishing branch (worker line 172) — never hit by
+// the 'accepted' fixtures — and the 'heading_to_destination' display mapping.
+test('picked_up courier enters the route-publishing branch and maps display status', async (t) => {
+  ensureEnv();
+  ({ CourierEventsWorker } = await import('../src/workers/courier-events.js'));
+  ({ orderChannel, courierChannel } = await import('../src/lib/registry.js'));
+  const { closeRouteRedis } = await import('../src/lib/routing.js');
+  t.after(async () => { await closeRouteRedis(); }); // release the lazy Redis client so the process exits
+
+  const { worker, published } = makeWorker('picked_up');
+  // Spy publishRouteOnce so the branch is proven deterministically without real routing/Redis.
+  const routeCalls: any[][] = [];
+  (worker as any).publishRouteOnce = async (...args: any[]) => { routeCalls.push(args); };
+
+  await worker.handlePositionUpdated({ courierId: 'A', locationId: LOC, shiftId: 'shift-A' });
+
+  // The route branch fired exactly once (no stored route → init leg), with A's geometry.
+  assert.equal(routeCalls.length, 1, 'picked_up with no stored route must publish one init route');
+  assert.equal(routeCalls[0][0], COURIERS.A.order, 'route published for the wrong order');
+  assert.deepEqual(routeCalls[0][2], COURIERS.A.pos, 'route used the wrong from-position');
+  assert.deepEqual(routeCalls[0][3], COURIERS.A.dest, 'route used the wrong destination');
+
+  // Customer payload carries the picked_up display status.
+  const orderMsg = published.find((p) => p.channel === orderChannel(COURIERS.A.order));
+  assert.ok(orderMsg, 'customer must still receive a courier update');
+  assert.equal(orderMsg!.msg.type, 'order.courier_updated');
+  assert.equal(orderMsg!.msg.payload.status, 'heading_to_destination', 'picked_up → heading_to_destination');
 });
 
 // Return the foreign courier ids whose position equals the observed one.

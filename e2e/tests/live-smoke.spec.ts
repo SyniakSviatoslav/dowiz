@@ -42,8 +42,10 @@ test.describe('Live Deployment Smoke — demo tenant', () => {
     const primary = await page.evaluate(() =>
       getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim()
     );
-    expect(primary).toBeTruthy();
-    expect(primary).not.toBe('');
+    // Must be a real CSS colour (hex / rgb(a) / hsl(a)), not just any non-empty string,
+    // and not the generic black default that has nothing to do with the tenant theme.
+    expect(primary).toMatch(/^(#[0-9a-f]{3,8}|rgba?\(|hsla?\()/i);
+    expect(primary.replace(/\s/g, '').toLowerCase()).not.toMatch(/^(#000|#000000|rgb\(0,0,0\)|rgba\(0,0,0,1?\)?)$/);
   });
 
   test('i18n locale switcher works', async ({ page }) => {
@@ -54,13 +56,10 @@ test.describe('Live Deployment Smoke — demo tenant', () => {
     const enBtn = page.getByRole('button', { name: 'EN', exact: true });
     await expect(enBtn).toBeVisible();
     await enBtn.click();
-    await page.waitForTimeout(1000);
 
-    // Either the document lang flips to en, or EN content becomes visible.
-    const htmlLang = await page.locator('html').getAttribute('lang');
-    if (htmlLang !== 'en') {
-      await expect(page.locator('[data-text-en]').first()).toBeVisible();
-    }
+    // setLocale('en') sets document.documentElement.lang = 'en' (packages/ui/src/lib/i18n.ts).
+    // Web-first auto-retrying assertion replaces the fixed sleep + silently-skipped branch.
+    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
   });
 
   test('cart FAB appears after adding item', async ({ page }) => {
@@ -72,16 +71,38 @@ test.describe('Live Deployment Smoke — demo tenant', () => {
     // Quick-add via the card's add button; if the product opens a detail modal
     // (has modifiers), confirm it.
     await page.locator('[data-testid="menu-item-add"]').first().click();
-    // Products with modifiers open a detail modal instead of quick-adding; wait
-    // briefly for it and confirm if present.
+
+    // Two explicit paths: products with modifiers open a detail modal; quick-add
+    // products don't. Detect which, and on the modal path assert the confirm
+    // actually succeeded (modal closes) instead of swallowing a failed click.
     const confirm = page.locator('[data-testid="product-detail-confirm"]');
-    try {
-      await confirm.waitFor({ state: 'visible', timeout: 2500 });
+    const modalOpened = await confirm
+      .waitFor({ state: 'visible', timeout: 2500 })
+      .then(() => true, () => false);
+    if (modalOpened) {
       await confirm.click();
-    } catch { /* quick-added, no modal */ }
+      await expect(confirm).toBeHidden();
+    }
 
     const fab = page.locator('[data-testid="cart-open"]');
     await expect(fab).toBeVisible({ timeout: 5000 });
+  });
+
+  test('storefront serves the demo tenant only', async ({ page }) => {
+    await page.goto('/s/demo');
+    await page.waitForSelector(CARD, { timeout: 15000 });
+
+    // Positive control: the demo tenant's own venue heading renders (tenant
+    // identity), proving /s/demo loaded real demo data, not an empty/generic shell.
+    const heading = page.getByRole('heading', { level: 1 });
+    await expect(heading).toBeVisible();
+    await expect(heading).toHaveText(/\S/);
+    await expect(page.locator(CARD).first()).toBeVisible();
+
+    // TODO(needs-staging): assert a known SECOND tenant's product name is NOT
+    // present here. A real isolation proof requires a real 2nd tenant's product
+    // list pulled from a live staging run (an all-zero/absent id proves nothing):
+    //   expect(await page.locator(CARD).allInnerTexts()).not.toContain('<other-tenant-product>');
   });
 
   test('embed mode hides fixed elements', async ({ page }) => {
@@ -132,6 +153,8 @@ test.describe('Live Deployment Smoke — demo tenant', () => {
     await page.waitForSelector(CARD, { timeout: 15000 });
 
     const liveCount = await checkAriaLive(page);
-    expect(liveCount).toBeGreaterThanOrEqual(0);
+    // At minimum the cart/notification announcer region must exist — a floor of 0
+    // is a tautology (always passes even with zero live regions).
+    expect(liveCount).toBeGreaterThanOrEqual(1);
   });
 });

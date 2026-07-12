@@ -1,7 +1,12 @@
 import { test, expect } from '@playwright/test';
 import crypto from 'node:crypto';
+<<<<<<< Updated upstream
+=======
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
+>>>>>>> Stashed changes
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 test.describe('WS courier assignment notification (bugfix: wrong channel + wrapping)', () => {
   let ownerToken: string;
@@ -12,6 +17,9 @@ test.describe('WS courier assignment notification (bugfix: wrong channel + wrapp
   let courierId: string;
 
   test.beforeAll(async ({ request }) => {
+    // This spec MUTATES state (creates products/orders/assignments) — never let it touch prod.
+    requireStaging(BASE);
+
     // Auth as owner
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, {
       data: { role: 'owner', locationSlug: 'demo' },
@@ -76,7 +84,8 @@ test.describe('WS courier assignment notification (bugfix: wrong channel + wrapp
       `${BASE}/api/owner/locations/${locationId}/orders/${orderId}/confirm`,
       { headers: { Authorization: `Bearer ${ownerToken}` } }
     );
-    console.log('Order confirmed:', confirmRes.status());
+    // owner confirm route returns exactly 200 (apps/api/src/routes/owner/dashboard.ts:196)
+    expect(confirmRes.status()).toBe(200);
 
     // Navigate to admin to set origin for WS
     await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded', timeout: 15000 });
@@ -119,13 +128,24 @@ test.describe('WS courier assignment notification (bugfix: wrong channel + wrapp
               }
             }
 
-            // Check both direct and relayed (wrapped) message formats
-            const innerType = data.data?.type || data.type;
-            if (innerType === 'task_assigned') {
-              messages.push(`task_ok`);
-              clearTimeout(timeout);
-              ws.close();
-              resolve(messages);
+            // Accept ONLY a relayed message scoped to OUR courier room whose inner
+            // type is task_assigned — a bare top-level `type: 'task_assigned'`
+            // (broadcast/ping/debug) or a message addressed to another room must NOT pass.
+            const relayed = data.room === `courier:${cId}` && data.data?.type === 'task_assigned';
+            if (relayed) {
+              // Validate the payload actually references THIS order + THIS courier,
+              // not just any task_assigned that happened to arrive.
+              const p = data.data?.payload ?? {};
+              const orderOk = (p.orderId ?? p.id) === oId;
+              const courierOk = p.courierId === cId;
+              messages.push(`payload_order:${orderOk}`);
+              messages.push(`payload_courier:${courierOk}`);
+              if (orderOk && courierOk) {
+                messages.push(`task_ok`);
+                clearTimeout(timeout);
+                ws.close();
+                resolve(messages);
+              }
             }
           } catch {
             messages.push('parse_error');
@@ -141,7 +161,16 @@ test.describe('WS courier assignment notification (bugfix: wrong channel + wrapp
 
     expect(wsResult).toContain('msg:auth_success');
     expect(wsResult).toContain('subscribed_ok');
+    expect(wsResult).toContain('payload_order:true');
+    expect(wsResult).toContain('payload_courier:true');
     expect(wsResult).toContain('task_ok');
     expect(wsResult).not.toContain('timeout');
   });
+
+  // TODO(needs_staging): cross-tenant / IDOR negative control. A courier authenticated as
+  // courier-A must NOT receive a task_assigned addressed to `courier:<courierB_id>`. This
+  // requires a REAL second courier id in a second tenant (a nil/all-zero id proves nothing —
+  // it would 404 by absence). Implement against live staging with a seeded second courier:
+  // authenticate as A, subscribe to `courier:<B_id>`, create an assignment for B, and assert
+  // A receives ZERO task_assigned for B (with expect(ws-opened)===true before the zero claim).
 });

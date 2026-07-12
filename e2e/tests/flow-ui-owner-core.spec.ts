@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
 import crypto from 'node:crypto';
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -14,11 +16,16 @@ test.describe('UI: Owner Core Flow — Dashboard Status Transitions', () => {
   const TS = Date.now();
 
   test.beforeAll(async ({ request }) => {
+    // Mutating suite (creates category/product/order, confirms): never let it run against prod.
+    requireStaging(BASE);
+
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
     const authBody = await authRes.json();
     authToken = authBody.access_token;
     activeLocationId = authBody.activeLocationId;
+    expectJwt(authToken, 'mock-auth access_token');
+    expectUuid(activeLocationId, 'activeLocationId');
 
     const settingsRes = await request.get(`${BASE}/api/owner/settings`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -40,6 +47,8 @@ test.describe('UI: Owner Core Flow — Dashboard Status Transitions', () => {
     });
     expect(prodRes.status()).toBe(201);
     productId = (await prodRes.json()).id;
+    expectUuid(categoryId, 'categoryId');
+    expectUuid(productId, 'productId');
 
     // Create order
     const orderRes = await request.post(`${BASE}/api/orders`, {
@@ -55,6 +64,7 @@ test.describe('UI: Owner Core Flow — Dashboard Status Transitions', () => {
     });
     expect(orderRes.status()).toBe(201);
     orderId = (await orderRes.json()).id;
+    expectUuid(orderId, 'orderId');
 
     console.log('Setup:', { locationSlug, activeLocationId, orderId, productId });
   });
@@ -76,11 +86,10 @@ test.describe('UI: Owner Core Flow — Dashboard Status Transitions', () => {
     }, authToken);
 
     await page.goto(`${BASE}/admin`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
-
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
-    expect(body).toMatch(/dashboard|orders|total|count|active|delivery|pending|confirmed/i);
+    // A 401 bounces to /login; assert we stayed in the authenticated admin shell.
+    await expect(page).not.toHaveURL(/\/login/);
+    // Specific authenticated dashboard landmark — a 500 page / login wall / spinner has no WS dot.
+    await expect(page.locator('[data-testid="ws-status-dot"]')).toBeVisible({ timeout: 15000 });
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
@@ -96,18 +105,20 @@ test.describe('UI: Owner Core Flow — Dashboard Status Transitions', () => {
     await page.goto(`${BASE}/admin`, { waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    // Click Live/History toggle buttons
-    const liveBtn = page.locator('button, [role="tab"]').filter({ hasText: /live|Live|Aktiv/i }).first();
-    if (await liveBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await liveBtn.click();
-      await page.waitForTimeout(500);
-    }
+    // The view-mode tablist (Live / History) must exist — don't silently skip if missing.
+    const tabs = page.locator('[role="tablist"] [role="tab"]');
+    await expect(tabs).toHaveCount(2);
+    const liveTab = tabs.first();
+    const historyTab = tabs.nth(1);
 
-    const historyBtn = page.locator('button, [role="tab"]').filter({ hasText: /history|History|Historiku/i }).first();
-    if (await historyBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await historyBtn.click();
-      await page.waitForTimeout(500);
-    }
+    await expect(historyTab).toBeVisible();
+    await historyTab.click();
+    // Toggle must actually switch the active view (aria-selected reflects viewMode state).
+    await expect(historyTab).toHaveAttribute('aria-selected', 'true');
+
+    await expect(liveTab).toBeVisible();
+    await liveTab.click();
+    await expect(liveTab).toHaveAttribute('aria-selected', 'true');
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
@@ -123,17 +134,13 @@ test.describe('UI: Owner Core Flow — Dashboard Status Transitions', () => {
     await page.goto(`${BASE}/admin`, { waitUntil: 'networkidle' });
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
 
-    // Try clicking status filter buttons
-    const filterBtns = page.locator('button, [role="tab"]').filter({ hasText: /pending|confirmed|preparing|ready|delivery|delivered|all|PENDING|CONFIRMED|PREPARING|READY|All/i });
-    const count = await filterBtns.count();
-    if (count > 0) {
-      await filterBtns.first().click();
-      await page.waitForTimeout(500);
-      if (count > 1) {
-        await filterBtns.nth(1).click();
-        await page.waitForTimeout(500);
-      }
-    }
+    // Status filter buttons carry aria-pressed; they MUST be present (not silently skipped).
+    const filterBtns = page.locator('button[aria-pressed]');
+    await expect(filterBtns.first()).toBeVisible();
+    expect(await filterBtns.count()).toBeGreaterThan(1);
+    // Clicking a filter must actually select it (aria-pressed flips true).
+    await filterBtns.nth(1).click();
+    await expect(filterBtns.nth(1)).toHaveAttribute('aria-pressed', 'true');
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
@@ -163,10 +170,13 @@ test.describe('UI: Owner Core Flow — Dashboard Status Transitions', () => {
     }, authToken);
 
     await page.goto(`${BASE}/admin`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
+    await expect(page).not.toHaveURL(/\/login/);
 
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
+    // The just-confirmed order must actually appear on the dashboard, and its card must
+    // carry the new CONFIRMED status — not merely "the page rendered some bytes".
+    const card = page.locator(`[data-testid="order-card-${orderId}"]`);
+    await expect(card).toBeVisible({ timeout: 15000 });
+    await expect(card).toHaveAttribute('data-status', 'CONFIRMED');
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
@@ -190,7 +200,7 @@ test.describe('UI: Owner Core Flow — Dashboard Status Transitions', () => {
     expect(typeof dash.activeSignalCount).toBe('number');
   });
 
-  test('Flow 7: Admin — no cookies on dashboard', async ({ page }) => {
+  test('Flow 7: Admin — auth is Bearer-only (no cookies, no-token → 401)', async ({ page, request }) => {
     await page.addInitScript((token: string) => {
       localStorage.setItem('dos_access_token', token);
     }, authToken);
@@ -198,6 +208,17 @@ test.describe('UI: Owner Core Flow — Dashboard Status Transitions', () => {
     await page.goto(`${BASE}/admin`, { waitUntil: 'networkidle' });
     const cookies = await page.context().cookies();
     expect(cookies).toEqual([]);
+
+    // Absence of cookies isn't proof of a correct boundary: prove the protected resource
+    // actually rejects a request with NO Authorization header (auth.ts:47 → 401).
+    const noAuthRes = await request.get(
+      `${BASE}/api/owner/locations/${activeLocationId}/dashboard/snapshot`,
+    );
+    expect(noAuthRes.status()).toBe(401);
+
+    // TODO(needs-staging): mock-auth only ever mints the single dev owner, so a TRUE
+    // cross-tenant IDOR check (owner B's token must 403/404 on owner A's activeLocationId)
+    // requires a real second seeded tenant — cannot be faked with a nil/random UUID.
   });
 
   test('Flow 8: Admin — menu manager page loads', async ({ page }) => {
@@ -209,10 +230,9 @@ test.describe('UI: Owner Core Flow — Dashboard Status Transitions', () => {
     }, authToken);
 
     await page.goto(`${BASE}/admin/menu`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
-
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
+    await expect(page).not.toHaveURL(/\/login/);
+    // Menu-manager specific control rendered (not a 500/redirect satisfying body.length).
+    await expect(page.locator('[data-testid="kitchen-busy-toggle"]')).toBeVisible({ timeout: 15000 });
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
@@ -226,10 +246,9 @@ test.describe('UI: Owner Core Flow — Dashboard Status Transitions', () => {
     }, authToken);
 
     await page.goto(`${BASE}/admin/settings`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
-
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
+    await expect(page).not.toHaveURL(/\/login/);
+    // Settings page renders its section heading (SettingsPage.tsx:363) — a login wall / 500 has none.
+    await expect(page.getByRole('heading', { level: 2 }).first()).toBeVisible({ timeout: 15000 });
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
@@ -243,10 +262,9 @@ test.describe('UI: Owner Core Flow — Dashboard Status Transitions', () => {
     }, authToken);
 
     await page.goto(`${BASE}/admin/branding`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
-
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
+    await expect(page).not.toHaveURL(/\/login/);
+    // Branding page root testid (BrandingPage.tsx:277) — proves the real page, not an error wall.
+    await expect(page.locator('[data-testid="branding-page"]')).toBeVisible({ timeout: 15000 });
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
@@ -260,10 +278,9 @@ test.describe('UI: Owner Core Flow — Dashboard Status Transitions', () => {
     }, authToken);
 
     await page.goto(`${BASE}/admin/couriers`, { waitUntil: 'networkidle' });
-    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
-
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
+    await expect(page).not.toHaveURL(/\/login/);
+    // Couriers page renders its section heading (CouriersPage.tsx:228) — absent on a 500/redirect.
+    await expect(page.getByRole('heading', { level: 2 }).first()).toBeVisible({ timeout: 15000 });
 
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });

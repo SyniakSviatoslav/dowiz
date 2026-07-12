@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
+import { expectJwt, expectUuid } from '../../../e2e/helpers/assert-shape';
+import { requireStaging } from '../../../e2e/helpers/staging-guard';
 
-const BASE = 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 const TEST_SLUG = 'demo';
 
 test.describe('Health + Infrastructure', () => {
@@ -31,6 +33,22 @@ test.describe('Health + Infrastructure', () => {
     const body = await res.json();
     expect(body).toHaveProperty('error');
   });
+
+  // Negative auth controls — the gate must fire on WRITE owner routes and courier routes,
+  // not only on the one GET above. verifyAuth runs before any handler/DB, so a missing
+  // Bearer is an EXACT 401 (apps/api/src/plugins/auth.ts:46-48) — no state is mutated.
+  const NOAUTH_ROUTES: Array<{ method: 'post' | 'patch' | 'delete' | 'get'; path: string }> = [
+    { method: 'post', path: '/api/owner/menu/products' },
+    { method: 'patch', path: '/api/owner/menu/products/11111111-1111-1111-1111-111111111111' },
+    { method: 'delete', path: '/api/owner/menu/products/11111111-1111-1111-1111-111111111111' },
+    { method: 'get', path: '/api/courier/me' },
+  ];
+  for (const r of NOAUTH_ROUTES) {
+    test(`Unauthenticated ${r.method.toUpperCase()} ${r.path} → 401`, async ({ request }) => {
+      const res = await request[r.method](`${BASE}${r.path}`, { data: {} });
+      expect(res.status()).toBe(401);
+    });
+  }
 });
 
 test.describe('SPA renders without errors', () => {
@@ -80,7 +98,10 @@ test.describe('Public Menu API — full schema contract', () => {
 
   test('Category schema', async ({ request }) => {
     const res = await request.get(`${BASE}/public/locations/${TEST_SLUG}/menu`);
-    const cat = (await res.json()).categories[0];
+    const body = await res.json();
+    expect(Array.isArray(body.categories)).toBeTruthy();
+    expect(body.categories.length).toBeGreaterThan(0);
+    const cat = body.categories[0];
     expect(cat).toHaveProperty('id');
     expect(typeof cat.id).toBe('string');
     expect(cat).toHaveProperty('name');
@@ -238,5 +259,86 @@ test.describe('Menu content integrity', () => {
         expect(Number.isInteger(p.price)).toBeTruthy();
       }
     }
+  });
+});
+
+// The owner BE field-list above (OWNER_BE_PRODUCT_FIELDS) is exercised LIVE here, not just
+// compared in-memory: we mint a real owner token, hit the real authenticated route, and assert
+// the actual response body — so a server-side mapProductRow regression goes red.
+//
+// TODO(needs-staging): this suite MUTATES (mock-auth mint + product create) and needs a live
+// staging target with ALLOW_DEV_LOGIN, the dev owner bound to an active location (e.g. via
+// /api/dev/repair-test-owner so locationSlug='demo' resolves), and TENANT_B_CATEGORY_ID set to a
+// REAL second tenant's category id for the IDOR check. Run with
+// VITE_BASE_URL=https://dowiz-staging.fly.dev. It is requireStaging-guarded and never hits prod.
+test.describe('Owner API — authenticated controls (staging-only)', () => {
+  const OWNER_BE_PRODUCT_FIELDS = [
+    'id', 'name', 'price', 'description', 'available', 'categoryId',
+    'imageUrl', 'imageKey', 'stockCount', 'taste', 'recipeLines', 'attributes',
+  ];
+  let token = '';
+
+  test.beforeAll(async ({ request }) => {
+    requireStaging(BASE);
+    const res = await request.post(`${BASE}/api/dev/mock-auth`, {
+      data: { role: 'owner', locationSlug: TEST_SLUG },
+    });
+    expect(res.status()).toBe(200);
+    token = (await res.json()).access_token;
+    expectJwt(token, 'owner access_token');
+  });
+
+  // Findings #1 + #4: positive control + live field presence.
+  test('Positive control: owner GET /menu/products → 200 + every OWNER_BE field present', async ({ request }) => {
+    const res = await request.get(`${BASE}/api/owner/menu/products`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(res.status()).toBe(200);
+    const rows = await res.json();
+    expect(Array.isArray(rows)).toBeTruthy();
+    expect(rows.length).toBeGreaterThan(0);
+    const row = rows[0];
+    for (const f of OWNER_BE_PRODUCT_FIELDS) {
+      expect(row, `owner product row missing "${f}"`).toHaveProperty(f);
+    }
+    expectUuid(row.id, 'product id');
+  });
+
+  // Finding #2: seed a product with KNOWN attributes, then assert them unconditionally on readback.
+  test('Attributes round-trip: stock_count/taste/bom seeded → exact values on readback', async ({ request }) => {
+    const create = await request.post(`${BASE}/api/owner/menu/products`, {
+      headers: { authorization: `Bearer ${token}` },
+      data: {
+        name: `__contract_attr_${Date.now()}`,
+        price: 500,
+        prep_time_minutes: 10,
+        stockCount: 7,
+        taste: { sweet: 2 },
+        recipeLines: [{ ingredient: 'tuna', qty: 1 }],
+      },
+    });
+    expect(create.status()).toBe(201);
+    const created = await create.json();
+    expectUuid(created.id, 'created product id');
+    expect(created.stockCount).toBe(7);
+    expect(created.taste.sweet).toBe(2);
+    expect(Array.isArray(created.recipeLines)).toBeTruthy();
+    expect(created.recipeLines).toHaveLength(1);
+    expect(created.attributes.stock_count).toBe(7);
+  });
+
+  // Finding #5: cross-tenant / IDOR — owner A querying tenant B's category must see NO tenant-B data.
+  test('IDOR: owner cannot read another tenant\'s products via category_id', async ({ request }) => {
+    const otherCat = process.env.TENANT_B_CATEGORY_ID;
+    expect(otherCat, 'TENANT_B_CATEGORY_ID must be a REAL second-tenant category id (no nil-UUID)').toBeTruthy();
+    expectUuid(otherCat, 'tenant-B category_id');
+    const res = await request.get(`${BASE}/api/owner/menu/products?category_id=${otherCat}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    // RLS + location_id scoping means tenant B's category yields zero rows for owner A — never their data.
+    expect(res.status()).toBe(200);
+    const rows = await res.json();
+    expect(Array.isArray(rows)).toBeTruthy();
+    expect(rows.length).toBe(0);
   });
 });

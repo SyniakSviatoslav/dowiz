@@ -204,6 +204,15 @@ test.describe('courier critical path — visual', () => {
       await setLocale(page, locale);
       await page.goto(`/courier/delivery/${DELIVERY_ID}`);
       await expect(page.getByText(/Mark as Picked Up|Shëno si i marrë/i)).toBeVisible();
+      // The point of THIS test: prove the GPS-denied banner actually renders. Without this the
+      // snapshot is identical to "delivery — map + pickup" and a banner regression slips through.
+      // Text is locale-keyed courier.gps_unavailable (en / sq). watchPosition errors because we
+      // never grant geolocation (Playwright default → PERMISSION_DENIED).
+      // TODO(needs_staging): confirm the banner renders under a real Playwright run — its presence
+      // depends on the browser firing a watchPosition error for ungranted geolocation.
+      await expect(
+        page.getByText(/Location unavailable|Vendndodhja s'disponohet/i),
+      ).toBeVisible();
       await settle(page);
       await expect(page).toHaveScreenshot(`delivery-gps-denied-${locale}.png`, { mask: MASK(page) });
     }

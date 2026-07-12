@@ -18,14 +18,14 @@ function pdfBuffer(base64: string): Buffer {
 }
 
 // ── LLM test server ──────────────────────────────────────────────
-function startMockLLm(handler: (body: any) => any): Promise<{ port: number; server: http.Server }> {
+function startMockLLm(handler: (body: any, req: http.IncomingMessage) => any): Promise<{ port: number; server: http.Server }> {
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
       let body = '';
       req.on('data', (chunk) => (body += chunk));
       req.on('end', () => {
         const parsed = JSON.parse(body);
-        const response = handler(parsed);
+        const response = handler(parsed, req);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(response));
       });
@@ -171,7 +171,10 @@ test('AiOcrParser - live LLM returns valid JSON menu schema', async () => {
 // through its OpenAI-compatible chat/completions endpoint — previously the key was ignored
 // and import silently degraded to the heuristic structurer.
 test('AiOcrParser - OpenRouter provider: selected via OPENROUTER_API_KEY, returns draft', async () => {
-  const { port, server } = await startMockLLm((_body) => ({
+  let seenAuthHeader: string | undefined;
+  const { port, server } = await startMockLLm((_body, req) => {
+    seenAuthHeader = req.headers['authorization'] as string | undefined;
+    return ({
     // OpenAI-wire shape (OpenRouter mirrors it): choices[0].message.content = JSON menu.
     choices: [{ message: { content: JSON.stringify({
       categories: [{ externalKey: 'cat1', name: 'Pizzas' }],
@@ -180,7 +183,8 @@ test('AiOcrParser - OpenRouter provider: selected via OPENROUTER_API_KEY, return
       modifiers: [],
       links: []
     }) } }]
-  }));
+  });
+  });
 
   const keys = ['LLM_PROVIDER', 'LLM_ADAPTER', 'LLM_ENDPOINT', 'GROQ_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'OPENROUTER_ENDPOINT', 'OPENROUTER_MODEL'];
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
@@ -197,6 +201,8 @@ test('AiOcrParser - OpenRouter provider: selected via OPENROUTER_API_KEY, return
     assert.strictEqual(res.summary.errors, 0, 'OpenRouter path must not error');
     assert.strictEqual(res.draft.products.length, 1, 'one product from the OpenRouter LLM response');
     assert.strictEqual(res.draft.products[0]!.name, 'Margherita', 'product came from OpenRouter, not heuristic');
+    // The key must actually be sent — proves the request authenticated, not silently keyless.
+    assert.strictEqual(seenAuthHeader, 'Bearer test-or-key', 'OpenRouter request must carry the API key in Authorization');
   } finally {
     for (const [k, v] of Object.entries(saved)) {
       if (v === undefined) delete process.env[k]; else process.env[k] = v;
@@ -402,10 +408,16 @@ test('AiOcrParser - heuristic: extracts the venue name/address/phone/hours from 
 // ═════════════════════════════════════════════════════════════════════
 
 test('AiOcrParser - uses memory service to enhance prompt with examples', async () => {
+  // Spy: capture that search was actually invoked and with which query.
+  let searchCalled = false;
+  let searchQuery: string | undefined;
   // Mock the memory service
   const mockMemoryService = {
     initialize: async () => {},
     search: async (query: string, options: any) => {
+      searchCalled = true;
+      searchQuery = query;
+      void options;
       // Return mock memories that would enhance the prompt
       if (query.includes('menu ingredients description bom')) {
         return {
@@ -431,29 +443,60 @@ test('AiOcrParser - uses memory service to enhance prompt with examples', async 
     }
   };
 
-  const prev = process.env.LLM_PROVIDER;
-  process.env.LLM_PROVIDER = 'mock';
+  // Route through the REAL LLM path (not the 'mock' provider, which short-circuits
+  // before the memory-enhancement code at ai-ocr-parser.ts:431). Capture the outbound
+  // prompt so we can prove the memory example was actually spliced into it.
+  let sentPrompt = '';
+  const { port, server } = await startMockLLm((body) => {
+    sentPrompt = String(body?.prompt ?? '');
+    return {
+      response: JSON.stringify({
+        categories: [{ externalKey: 'cat1', name: 'Pizzas' }],
+        products: [{ externalKey: 'p1', categoryKey: 'cat1', name: 'Margherita', price: 850, currency: 'EUR', available: true }],
+        modifierGroups: [],
+        modifiers: [],
+        links: []
+      })
+    };
+  });
+
+  const prevEndpoint = process.env.LLM_ENDPOINT;
+  const prevProvider = process.env.LLM_PROVIDER;
+  process.env.LLM_ENDPOINT = `http://localhost:${port}/api/generate`;
+  process.env.LLM_PROVIDER = 'llama3.1:8b-instruct';
 
   // Create parser with mocked memory service
   const parser = new AiOcrParser(mockMemoryService);
-  const res = await parser.parse({
-    kind: 'pdf',
-    bytes: pdfBuffer(PDF_WITH_TEXT_BASE64),
-    config: { expectedCurrency: 'EUR', currencyMinorUnit: 2 }
-  });
+  try {
+    const res = await parser.parse({
+      kind: 'pdf',
+      bytes: pdfBuffer(PDF_WITH_TEXT_BASE64),
+      config: { expectedCurrency: 'EUR', currencyMinorUnit: 2 }
+    });
 
-  process.env.LLM_PROVIDER = prev;
+    // Basic validation that parsing worked
+    assert.strictEqual(res.summary.valid, 1);
+    assert.strictEqual(res.draft.products.length, 1);
+    // And memory retrieval must not regress the parse itself.
+    assert.strictEqual(res.summary.errors, 0);
+  } finally {
+    process.env.LLM_ENDPOINT = prevEndpoint;
+    process.env.LLM_PROVIDER = prevProvider;
+    server.close();
+  }
 
-  // Basic validation that parsing worked
-  assert.strictEqual(res.summary.valid, 1);
-  assert.strictEqual(res.draft.products.length, 1);
-  
-  // The key test: we could check if the prompt enhancement happened by
-  // verifying that the mock LLM was called with enhanced prompt, but since
-  // we're using the 'mock' provider which returns a fixed response, 
-  // we primarily verify that the integration doesn't break existing functionality
-  // and that memory service is properly integrated.
-  
-  // At minimum, we verify no errors occurred during memory retrieval
-  assert.strictEqual(res.summary.errors, 0);
+  // The memory service MUST actually be consulted during parsing — otherwise the
+  // "enhancement" is dead code and this test would pass while the feature is broken.
+  assert.ok(searchCalled, 'parser must call memoryService.search during parse');
+  assert.strictEqual(
+    searchQuery,
+    'menu ingredients description bom',
+    'parser must query memory with the BOM-enhancement prompt'
+  );
+  // And the returned memory MUST be spliced into the prompt sent to the LLM —
+  // proves the enhancement is wired through, not silently dropped.
+  assert.ok(
+    sentPrompt.includes('EXAMPLES FROM PREVIOUS CORRECTIONS') && sentPrompt.includes('Test Pizza'),
+    'memory example must be injected into the LLM prompt'
+  );
 });

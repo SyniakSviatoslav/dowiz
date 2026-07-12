@@ -21,14 +21,18 @@ const CONTRAST_FN = `
   // Walk to the first opaque solid bg. If a background-IMAGE/gradient appears first, contrast
   // is undefined by luminance (it needs a scrim, not a ratio) → signal skip.
   const effBg = (el) => { let n=el; while(n){ const s=getComputedStyle(n); if((s.backgroundImage||'none')!=='none') return {image:true}; const c=parse(s.backgroundColor); if(c&&c.a>0.5) return c; n=n.parentElement; } return {r:255,g:255,b:255,a:1}; };
-  const el = document.querySelector(sel); if(!el) return null;
-  const cs = getComputedStyle(el); const fg = parse(cs.color); const bg = effBg(el);
-  if(!fg || bg.image) return { skip:true };
-  const L1 = lum(fg.r,fg.g,fg.b), L2 = lum(bg.r,bg.g,bg.b);
-  const ratio = (Math.max(L1,L2)+0.05)/(Math.min(L1,L2)+0.05);
-  const px = parseFloat(cs.fontSize)||16; const bold = (parseInt(cs.fontWeight)||400)>=700;
-  const large = px>=24 || (px>=18.66 && bold);
-  return { ratio: Math.round(ratio*100)/100, large, text: (el.textContent||'').trim().slice(0,40) };
+  // Evaluate EVERY matching element, not just the first — a blind spot where only the first
+  // card/button was ever contrast-checked while the rest could regress unseen.
+  const evalEl = (el) => {
+    const cs = getComputedStyle(el); const fg = parse(cs.color); const bg = effBg(el);
+    if(!fg || bg.image) return { skip:true };
+    const L1 = lum(fg.r,fg.g,fg.b), L2 = lum(bg.r,bg.g,bg.b);
+    const ratio = (Math.max(L1,L2)+0.05)/(Math.min(L1,L2)+0.05);
+    const px = parseFloat(cs.fontSize)||16; const bold = (parseInt(cs.fontWeight)||400)>=700;
+    const large = px>=24 || (px>=18.66 && bold);
+    return { ratio: Math.round(ratio*100)/100, large, text: (el.textContent||'').trim().slice(0,40) };
+  };
+  return Array.from(document.querySelectorAll(sel)).map(evalEl);
 }`;
 
 test('storefront renders readable text (WCAG-AA contrast — catches dark-on-dark / theme fall-through)', async ({ page }) => {
@@ -36,23 +40,34 @@ test('storefront renders readable text (WCAG-AA contrast — catches dark-on-dar
   // Curated, always-present text surfaces (the essentials a customer must read).
   await expect(page.locator('[data-testid="menu-item"]').first()).toBeVisible({ timeout: 25000 });
   const targets = ['h1', '[data-testid="menu-item"]', 'button'];
-  let checked = 0;
+  let presentSelectors = 0;
+  let checkedSelectors = 0;
   for (const sel of targets) {
-    const res = await page.evaluate(`(${CONTRAST_FN})(${JSON.stringify(sel)})`) as { ratio: number; large: boolean; text: string; skip?: boolean } | null;
-    if (!res || res.skip) continue; // absent, or text-over-image/gradient (contrast undefined)
-    checked++;
-    const min = res.large ? 3 : 4.5;
-    expect(res.ratio, `"${res.text}" (${sel}) contrast ${res.ratio}:1 must clear WCAG ${res.large ? 'AA-large 3:1' : 'AA 4.5:1'}`).toBeGreaterThanOrEqual(min);
+    const results = await page.evaluate(`(${CONTRAST_FN})(${JSON.stringify(sel)})`) as Array<{ ratio: number; large: boolean; text: string; skip?: boolean }>;
+    if (!results || results.length === 0) continue; // selector absent from the DOM
+    presentSelectors++;
+    let checkedThisSel = 0;
+    for (const res of results) {
+      if (!res || res.skip) continue; // text-over-image/gradient (contrast undefined — separate scrim invariant)
+      checkedThisSel++;
+      const min = res.large ? 3 : 4.5;
+      expect(res.ratio, `"${res.text}" (${sel}) contrast ${res.ratio}:1 must clear WCAG ${res.large ? 'AA-large 3:1' : 'AA 4.5:1'}`).toBeGreaterThanOrEqual(min);
+    }
+    if (checkedThisSel > 0) checkedSelectors++;
   }
-  expect(checked, 'at least one curated text surface was contrast-checked').toBeGreaterThan(0);
+  expect(presentSelectors, 'at least one curated text surface was present').toBeGreaterThan(0);
+  // Sharpen the old `checked > 0`: it was satisfiable by a single non-skipped selector while the
+  // other two fell through to skip (all over images/gradients). Require EVERY present selector to
+  // contribute at least one real, solid-surface contrast check.
+  expect(checkedSelectors, `every present curated selector yielded a solid-surface contrast check (${checkedSelectors}/${presentSelectors})`).toBe(presentSelectors);
 });
 
 test('the contrast invariant is sharp — solid dark-on-dark is flagged (red arm)', async ({ page }) => {
   // Inject the #6 shape: near-equal dark text on a dark solid surface. The gate MUST flag it.
   await page.setContent(`<div style="background:#152928"><p id="bad" style="color:#213433;font-size:16px">dark on dark</p></div>
     <div style="background:#ffffff"><p id="ok" style="color:#111;font-size:16px">good</p></div>`);
-  const bad = await page.evaluate(`(${CONTRAST_FN})("#bad")`) as { ratio: number } | null;
-  const ok = await page.evaluate(`(${CONTRAST_FN})("#ok")`) as { ratio: number } | null;
+  const bad = (await page.evaluate(`(${CONTRAST_FN})("#bad")`) as Array<{ ratio: number }>)[0];
+  const ok = (await page.evaluate(`(${CONTRAST_FN})("#ok")`) as Array<{ ratio: number }>)[0];
   expect(bad?.ratio, 'dark-on-dark solid text is below AA (gate bites)').toBeLessThan(4.5);
   expect(ok?.ratio, 'black-on-white clears AA (gate passes good contrast)').toBeGreaterThanOrEqual(4.5);
 });
@@ -65,4 +80,29 @@ test('storefront paints a resolved brand surface (no empty/transparent token fal
   const bg = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   expect(bg, 'body background resolves to a real colour').toMatch(/^rgb/);
   expect(bg, 'body background is not transparent (token did resolve)').not.toBe('rgba(0, 0, 0, 0)');
+  // A token scope can resolve on <body> yet fall through on a child surface (the #13 shape in a
+  // nested scope). The menu-item card's TEXT colour falling through to transparent is always a
+  // bug (invisible text) — assert child surfaces resolve their tokens too, not just the body.
+  const card = await page.evaluate(() => {
+    const el = document.querySelector('[data-testid="menu-item"]');
+    if (!el) return null;
+    const cs = getComputedStyle(el);
+    return { bg: cs.backgroundColor, color: cs.color };
+  });
+  expect(card, 'a menu-item card is present to validate its tokens').not.toBeNull();
+  expect(card!.color, 'menu-item text colour resolved — not a token fall-through to transparent').not.toBe('rgba(0, 0, 0, 0)');
+  expect(card!.bg, 'menu-item background resolves to a colour token').toMatch(/^rgb/);
+});
+
+test('a nonexistent storefront slug does NOT fall back to another tenant (no silent cross-tenant leak)', async ({ page }) => {
+  // Negative control: every other test here only ever hits /s/demo, so a silent fallback (an
+  // unknown slug quietly serving the demo tenant's menu) would be invisible to this suite. The
+  // menu fetch 404s for an unknown slug (MenuPage sets notFound → renders a "not found" shell),
+  // so ZERO menu-item cards must paint — a non-zero count means a real cross-tenant content leak.
+  // TODO(staging): tighten to assert the not-found shell's own [data-testid] once one is added in
+  //   apps/web/src/pages/client/MenuPage.tsx (the not-found block currently has no testid); and add
+  //   a real 2nd-tenant case (bogus slug must not surface tenant B's data). Needs a live staging run.
+  await page.goto(`${BASE}/s/no-such-tenant-xyz-${Date.now()}`);
+  await page.waitForLoadState('networkidle');
+  await expect(page.locator('[data-testid="menu-item"]')).toHaveCount(0);
 });

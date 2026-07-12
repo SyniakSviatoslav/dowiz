@@ -1,4 +1,15 @@
 import { test, expect, type APIRequestContext } from '@playwright/test';
+<<<<<<< Updated upstream
+=======
+import { expectJwt, expectUuid } from '../../helpers/assert-shape';
+import { requireStaging } from '../../helpers/staging-guard';
+
+// This spec MUTATES owner state (creates modifier groups, re-attaches the demo product),
+// so guard the target: refuse to run against prod. BASE mirrors the Playwright baseURL
+// resolution (VITE_BASE_URL else localhost) so the guard reflects where requests land.
+const BASE = process.env.VITE_BASE_URL ?? 'http://localhost:3000';
+test.beforeAll(() => requireStaging(BASE));
+>>>>>>> Stashed changes
 
 // Testplan §4a/§4b/§4c — Modifier display_type rendering in the /s/demo product modal.
 // Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test modifier-display-type --project=desktop --reporter=list
@@ -90,6 +101,9 @@ test('storefront renders every modifier display_type on the product modal', asyn
     const quantityId = await makeGroup('Quantity', 'quantity', 5);
     // Un-typed single-select → resolveDisplayType infers 'radio' (MenuPage.tsx:42-43).
     const inferredId = await makeGroup('Inferred', null, 1);
+    // Un-typed MULTI-select → resolveDisplayType infers 'checkbox' (MenuPage.tsx:43, the
+    // max_select>1 branch). Exercises the other half of the legacy inference fallback.
+    const inferredCheckboxId = await makeGroup('InferredCheckbox', null, 3);
 
     const attach = await request.put(`${base}/products/${target.id}/modifier-groups`, {
       headers: auth,
@@ -100,6 +114,7 @@ test('storefront renders every modifier display_type on the product modal', asyn
         { group_id: selectId, sort_order: 92 },
         { group_id: quantityId, sort_order: 93 },
         { group_id: inferredId, sort_order: 94 },
+        { group_id: inferredCheckboxId, sort_order: 95 },
       ],
     });
     expect(attach.ok(), 'attaching seeded groups to the product should succeed').toBeTruthy();
@@ -129,21 +144,36 @@ test('storefront renders every modifier display_type on the product modal', asyn
       dialog
         .locator(`[data-testid="modifier-group"][data-display-type="${type}"]`)
         .filter({ hasText: `${tag} ${name}` });
+    // The interactive control rendered INSIDE a typed group. We assert this (not just the
+    // container's data-display-type attribute) so the test proves the modifier actually
+    // renders a clickable option — the renderer emits a [data-testid="modifier-option"]
+    // button per available modifier (MenuPage.tsx:1149-1151). Each seeded group has exactly
+    // one available modifier ("Option A"), so this resolves to a single element.
+    const control = (name: string, type: string) =>
+      group(name, type).locator('[data-testid="modifier-option"]');
 
-    // §4a — explicit radio + checkbox groups carry the correct data-display-type.
-    await expect(group('Radio', 'radio'), 'radio group renders with data-display-type=radio').toBeVisible();
-    await expect(group('Checkbox', 'checkbox'), 'checkbox group renders with data-display-type=checkbox').toBeVisible();
+    // §4a — explicit radio + checkbox groups carry the correct data-display-type AND render
+    // their option control inside that typed container.
+    await expect(control('Radio', 'radio'), 'radio group renders an option under data-display-type=radio').toBeVisible();
+    await expect(control('Radio', 'radio'), 'radio option shows the seeded modifier name').toContainText('Option A');
+    await expect(control('Checkbox', 'checkbox'), 'checkbox group renders an option under data-display-type=checkbox').toBeVisible();
 
-    // §4b — select group carries data-display-type=select.
-    await expect(group('Select', 'select'), 'select group renders with data-display-type=select').toBeVisible();
+    // §4b — select group carries data-display-type=select and renders its option control.
+    await expect(control('Select', 'select'), 'select group renders an option under data-display-type=select').toBeVisible();
 
-    // §4c — quantity group carries data-display-type=quantity.
-    await expect(group('Quantity', 'quantity'), 'quantity group renders with data-display-type=quantity').toBeVisible();
+    // §4c — quantity group carries data-display-type=quantity and renders its option control.
+    await expect(control('Quantity', 'quantity'), 'quantity group renders an option under data-display-type=quantity').toBeVisible();
 
     // §4a step 6 — the UN-typed single-select group falls back to inferred radio.
     await expect(
-      group('Inferred', 'radio'),
-      'inferred single-select group also resolves to data-display-type=radio',
+      control('Inferred', 'radio'),
+      'inferred single-select group resolves to data-display-type=radio and renders its option',
+    ).toBeVisible();
+
+    // §4a step 6 (other half) — the UN-typed MULTI-select group falls back to inferred checkbox.
+    await expect(
+      control('InferredCheckbox', 'checkbox'),
+      'inferred multi-select group resolves to data-display-type=checkbox and renders its option',
     ).toBeVisible();
   } finally {
     // Restore the product's original attachments (or clear if it had none), then drop

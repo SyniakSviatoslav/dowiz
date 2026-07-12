@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { requireStaging } from '../helpers/staging-guard';
 
 // Soft access gate UI proofs (ADR-soft-access-gate). The CTA is DARK by default
 // (ACCESS_GATE_PUBLIC_ENABLED=false) and ships only after owner-onboarding-invite-gating
@@ -28,19 +29,34 @@ test.describe('Soft access gate — CTA form (runs only when ACCESS_GATE_PUBLIC_
     if (!(await form.isVisible().catch(() => false))) {
       test.skip(true, 'access gate disabled on this build (ACCESS_GATE_PUBLIC_ENABLED=false) — CTA correctly not rendered');
     }
+    // Gate is ON → this submit INSERTs into access_requests; refuse to mutate prod/unknown.
+    requireStaging(process.env.VITE_BASE_URL);
     // Counsel R2 #4 — no pre-check dark pattern.
     const consent = page.locator('[data-testid="access-request-consent"]');
     await expect(consent).not.toBeChecked();
     // disabled until ticked
     const submit = page.locator('[data-testid="access-request-submit"]');
     await expect(submit).toBeDisabled();
-    await page.locator('[data-testid="access-request-email"]').fill('e2e@example.com');
+    // Finding #3 — unique email per run exercises the genuine NEW-insert path; a static
+    // address would hit ON CONFLICT (email) DO NOTHING forever and never prove a fresh row.
+    await page.locator('[data-testid="access-request-email"]').fill(`e2e+${Date.now()}@dowiz.dev`);
     await consent.check();
     await expect(submit).toBeEnabled();
     await submit.click();
-    await expect(page.locator('[data-testid="access-request-success"]')).toBeVisible({ timeout: 10000 });
+    const success = page.locator('[data-testid="access-request-success"]');
+    await expect(success).toBeVisible({ timeout: 10000 });
+    // Finding #1 — assert the success element carries the real "being heard" copy, not a
+    // hollow placeholder or a stale fragment from a previous render.
+    await expect(success).toContainText(/got your email|be in touch|thank/i);
+    // Finding #2 — a network error renders access-request-error, NOT success; assert it is
+    // absent so the success above cannot be a false-positive from a failed submission.
+    await expect(page.locator('[data-testid="access-request-error"]')).not.toBeVisible();
     // anti-enumeration: success copy is "being heard", never scarcity.
     await expect(page.locator('body')).not.toContainText(/waitlist|approved|under review|position #/i);
+    // TODO(needs_staging): findings #3 (duplicate email) and #4 (server-side consent=true
+    // persistence) are anti-enumeration uniform-200s — black-box-identical to a new submit.
+    // Proving "duplicate added no 2nd row" and "no-consent POST inserted ZERO rows" requires
+    // staging access_requests table introspection (POST /api/access-requests is 200 either way).
   });
 
   test('the /privacy link in the consent label resolves to a real page (not 404)', async ({ page }) => {

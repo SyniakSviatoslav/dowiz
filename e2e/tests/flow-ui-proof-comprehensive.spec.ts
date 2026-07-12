@@ -6,8 +6,13 @@
  */
 import { test, expect } from '@playwright/test';
 import crypto from 'node:crypto';
+<<<<<<< Updated upstream
+=======
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
+>>>>>>> Stashed changes
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -29,6 +34,10 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
   const COURIER_PASS = 'proof-password-123!';
 
   test.beforeAll(async ({ request }) => {
+    // This suite MUTATES (creates category/product/order/courier/assignment) — never let it
+    // run against prod (AGENTS Test Integrity #6). Fail fast on a prod/unknown target.
+    requireStaging(BASE);
+
     // --- Owner auth ---
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
@@ -121,16 +130,25 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
       `${BASE}/api/owner/locations/${locationId}/orders/${orderId}/assign-courier`,
       { headers: { Authorization: `Bearer ${authToken}` }, data: { courierId } }
     );
+<<<<<<< Updated upstream
     expect([200, 400, 422]).toContain(assignRes.status());
+=======
+    expect(assignRes.status()).toBe(200);
+    // assign-courier returns the new assignment id directly (dashboard.ts:330). Capture it
+    // here (authoritative UUID) so the downstream courier tests can never silently skip on
+    // an empty assignmentId (AGENTS Test Integrity #7 — no conditional-skip vacuity).
+    const assignBody = await assignRes.json();
+    expectUuid(assignBody.id, 'assignmentId');
+    assignmentId = assignBody.id;
+>>>>>>> Stashed changes
 
-    // --- Get assignment ID ---
+    // --- Courier's own assignments endpoint must return it (positive control) ---
     const myAssignmentsRes = await request.get(`${BASE}/api/courier/me/assignments`, {
       headers: { Authorization: `Bearer ${courierToken}` },
     });
-    if (myAssignmentsRes.status() === 200) {
-      const body = await myAssignmentsRes.json();
-      assignmentId = body.assignments?.[0]?.id || '';
-    }
+    expect(myAssignmentsRes.status()).toBe(200);
+    const myAssignments = await myAssignmentsRes.json();
+    expect(Array.isArray(myAssignments.assignments)).toBe(true);
 
     console.log('Setup complete:', { locationSlug, orderId, categoryId, productId, courierId, assignmentId });
   });
@@ -312,8 +330,12 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     });
     expect(res.status()).toBe(200);
     const orders = await res.json();
-    const ourOrder = Array.isArray(orders) ? orders.find((o: any) => o.id === orderId) : null;
-    expect(ourOrder).not.toBeNull();
+    // /api/owner/orders sends a flat array (spa-proxy.ts:403). Assert the shape explicitly so
+    // a contract drift to {orders,total,page} fails loudly instead of find()-on-non-array.
+    expect(Array.isArray(orders), 'GET /api/owner/orders must return a flat array').toBe(true);
+    const ourOrder = orders.find((o: any) => o.id === orderId);
+    // find() returns undefined when absent — .not.toBeNull() would wrongly pass on undefined.
+    expect(ourOrder).toBeTruthy();
     expect(ourOrder?.status).toBeTruthy();
     expect(ourOrder?.total).toBeGreaterThan(0);
     expect(ourOrder?.items).toBeTruthy();
@@ -323,6 +345,41 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     expect(typeof ourOrder?.signals?.reputationScore).toBe('number');
   });
 
+  test('Authz: owner orders endpoint rejects missing token and wrong-role token', async ({ request }) => {
+    // NEGATIVE controls for the owner gate. getLocationId() returns null both for a missing
+    // Bearer and for a non-owner role, and the handler maps each to 401 (spa-proxy.ts:370-372).
+    // The POSITIVE control (valid owner token → 200 with our order) is the test above.
+    const noToken = await request.get(`${BASE}/api/owner/orders`);
+    expect(noToken.status()).toBe(401);
+
+    const wrongRole = await request.get(`${BASE}/api/owner/orders`, {
+      headers: { Authorization: `Bearer ${courierToken}` },
+    });
+    expect(wrongRole.status()).toBe(401);
+  });
+
+  test('IDOR: owner cannot see a second tenant\'s orders (cross-tenant isolation)', async ({ request }) => {
+    // Provision a REAL second tenant (the vis-* venues + a seeded order), not a nil-UUID
+    // (AGENTS Test Integrity #5 — an all-zero id 404s by absence and proves nothing).
+    // TODO(needs-staging): requires the dev gate (ALLOW_DEV_LOGIN + DEV_AUTH_SECRET) open on
+    // the target — the same gate /api/dev/mock-auth already uses in beforeAll.
+    const seedRes = await request.post(`${BASE}/api/dev/seed-visual-state`, { data: {} });
+    expect(seedRes.status()).toBe(200);
+    const seed = await seedRes.json();
+    expectUuid(seed.orderId, 'second-tenant orderId');
+    expectUuid(seed.open?.locationId, 'second-tenant locationId');
+    expect(seed.open.locationId).not.toBe(locationId); // genuinely a different tenant
+
+    // The demo owner's RLS-scoped order list must NEVER contain the second tenant's order.
+    const res = await request.get(`${BASE}/api/owner/orders`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    expect(res.status()).toBe(200);
+    const orders = await res.json();
+    expect(Array.isArray(orders)).toBe(true);
+    expect(orders.find((o: any) => o.id === seed.orderId)).toBeUndefined();
+  });
+
   test('Admin: Dashboard order confirms and shows CONFIRMED status via API', async ({ request }) => {
     const verifyRes = await request.get(
       `${BASE}/api/owner/locations/${locationId}/orders/${orderId}/verify`,
@@ -330,7 +387,10 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
     );
     expect(verifyRes.status()).toBe(200);
     const body = await verifyRes.json();
-    expect(body.order?.status).toMatch(/CONFIRMED|PENDING|REJECTED|IN_DELIVERY|READY|DELIVERED|PREPARING/i);
+    // beforeAll confirmed the order (→CONFIRMED) then assigned a courier, which transitions
+    // it to IN_DELIVERY (dashboard.ts:315). Assert that EXACT post-setup state — a broken
+    // confirm/assign that left the order PENDING must fail, not pass on a permissive enum.
+    expect(body.order?.status).toBe('IN_DELIVERY');
   });
 
   // ══════════════════════════════════════════════
@@ -457,17 +517,17 @@ test.describe('Proof: UI shows real API data across all major flows', () => {
 
     await page.goto(`${BASE}/s/${locationSlug}`, { waitUntil: 'networkidle', timeout: 30000 });
 
-    await page.waitForTimeout(3000);
-    const bodyText = await page.textContent('body');
-    expect(bodyText?.length).toBeGreaterThan(100);
+    // A real menu card must render (not a blank shell / spinner / error boundary).
+    // TODO(needs-staging): client-side render of our freshly-created product — verify live.
+    await expect(page.locator('[data-testid="menu-item"]').first()).toBeVisible({ timeout: 15000 });
 
-    // Our product should be visible
+    const bodyText = await page.textContent('body');
+    // Our product MUST be present — the Menu API test proves it is in the data, so a missing
+    // name here is a real render/index failure, not an "allow empty" case (AGENTS Test Integrity #1).
     const hasOurProduct = bodyText?.includes(PROD_NAME);
+    expect(hasOurProduct).toBe(true);
     const hasPrice = bodyText?.match(/\d{2,4}/); // some price digits
-    // Allow that products may take time to index into public menu
-    if (hasOurProduct) {
-      expect(hasPrice).toBeTruthy();
-    }
+    expect(hasPrice).toBeTruthy();
 
     const criticalErrors = errors.filter(e =>
       !e.includes('favicon') && !e.includes('ResizeObserver') &&

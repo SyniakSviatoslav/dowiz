@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test';
+<<<<<<< Updated upstream
+=======
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
+>>>>>>> Stashed changes
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 const BOT_SECRET = process.env.TELEGRAM_BOT_SECRET;
 const WEBHOOK_URL = `${BASE}/webhook/telegram/${BOT_SECRET}`;
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -39,9 +44,19 @@ async function authHeaders() {
   return { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' };
 }
 
-test.describe('Telegram Complete Flow — Live https://dowiz.fly.dev', () => {
+test.describe('Telegram Complete Flow — Live (VITE_BASE_URL, staging-default)', () => {
 
   test.describe.configure({ mode: 'serial' });
+
+  // This suite MUTATES state (creates a location, products, links a Telegram chat) and
+  // exercises the webhook secret path. Fail fast if pointed at prod, or if the bot env is
+  // absent — otherwise WEBHOOK_URL would end in '/undefined' and the secret-mismatch checks
+  // (P6-NO-SECRET / P6-WRONG-SECRET) would false-green. (Test Integrity #6.)
+  test.beforeAll(() => {
+    requireStaging(BASE);
+    expect(BOT_SECRET, 'TELEGRAM_BOT_SECRET must be set').toMatch(/^[\w-]{1,256}$/);
+    expect(BOT_TOKEN, 'TELEGRAM_BOT_TOKEN must be set').toMatch(/^\d+:[\w-]+$/);
+  });
 
   // ════════════════════════════════════════════════════════════════
   // PHASE 1: SETUP — Auth + Location + Product
@@ -241,6 +256,9 @@ test.describe('Telegram Complete Flow — Live https://dowiz.fly.dev', () => {
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(body.enqueued).toBe(1);
+    // TODO(needs_staging): this only proves the job was queued, not delivered. There is no
+    // last_sent_at column on owner_notification_targets to read back, so actual delivery via
+    // the live notify worker can only be verified against a running staging worker. (Finding #5.)
   });
 
   // ════════════════════════════════════════════════════════════════
@@ -271,7 +289,7 @@ test.describe('Telegram Complete Flow — Live https://dowiz.fly.dev', () => {
     expect(status).toBe(200);
   });
 
-  test('P4-UNLINKED-USER: unlinked chat gets 200 (internally unauthorized)', async () => {
+  test('P4-UNLINKED-USER: unlinked chat gets 200 (internally unauthorized)', async ({ request }) => {
     const status = await sendWebhook({
       callback_query: {
         id: 'cb_unlinked',
@@ -281,6 +299,16 @@ test.describe('Telegram Complete Flow — Live https://dowiz.fly.dev', () => {
       },
     });
     expect(status).toBe(200);
+    // The 200 is best-effort; prove the unlinked chat was NOT processed/linked — no target
+    // for chat 444444 may exist on our location. (Finding #3.)
+    const res = await request.get(
+      `${BASE}/api/owner/locations/${locationId}/notifications/targets`,
+      { headers: await authHeaders() },
+    );
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    const hacker = body.targets.find((t: any) => t.address === '444444');
+    expect(hacker).toBeUndefined();
   });
 
   // ════════════════════════════════════════════════════════════════
@@ -329,6 +357,18 @@ test.describe('Telegram Complete Flow — Live https://dowiz.fly.dev', () => {
       },
     });
     expect(status).toBe(200);
+
+    // Prove the re-link actually flipped the target back to 'active' (it was 'disabled'
+    // after /stop) — the 200 alone is best-effort. (Finding #6.)
+    const verify = await fetch(
+      `${BASE}/api/owner/locations/${locationId}/notifications/targets`,
+      { headers: await authHeaders() },
+    );
+    expect(verify.status).toBe(200);
+    const verifyBody = await verify.json();
+    const ourTarget = verifyBody.targets.find((t: any) => t.address === String(CHAT_ID));
+    expect(ourTarget).toBeTruthy();
+    expect(ourTarget.status).toBe('active');
   });
 
   // ════════════════════════════════════════════════════════════════
@@ -412,6 +452,12 @@ test.describe('Telegram Complete Flow — Live https://dowiz.fly.dev', () => {
     expect(body.result.allowed_updates).toContain('callback_query');
   });
 
+  // TODO(needs_staging): cross-tenant IDOR on GET .../notifications/targets — requireLocationAccess
+  // returns 404 for an owner without an active membership (apps/api/src/plugins/auth.ts:153).
+  // Cannot be tested here: /dev/mock-auth always mints the SAME owner (fixed email
+  // dev@deliveryos.com, ON CONFLICT DO UPDATE), so a "second" token has legitimate access.
+  // A real second seeded tenant is required to assert the 404. (Finding #4.)
+
   // ════════════════════════════════════════════════════════════════
   // PHASE 7: NOTIFICATIONS SETTINGS UI
   // ════════════════════════════════════════════════════════════════
@@ -439,6 +485,19 @@ test.describe('Telegram Complete Flow — Live https://dowiz.fly.dev', () => {
       },
     );
     expect(res.status()).toBe(200);
+
+    // Verify the PUT actually persisted (status 200 alone is not proof) — read the target back
+    // and assert the pref landed in the prefs column. (Finding #7 / Test Integrity #9.)
+    const after = await request.get(
+      `${BASE}/api/owner/locations/${locationId}/notifications/targets`,
+      { headers: await authHeaders() },
+    );
+    expect(after.status()).toBe(200);
+    const afterBody = await after.json();
+    const updated = afterBody.targets.find((t: any) => t.id === notificationTargetId);
+    expect(updated).toBeTruthy();
+    expect(updated.prefs.order_created).toBe(true);
+    expect(updated.status).toBe('active');
   });
 
   // ════════════════════════════════════════════════════════════════

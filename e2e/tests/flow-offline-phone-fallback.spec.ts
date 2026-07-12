@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test';
 import crypto from 'node:crypto';
+<<<<<<< Updated upstream
+=======
+import { expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
+>>>>>>> Stashed changes
 
 /**
  * Invariant §4 — "fallback-на-телефон живий": when the live channel drops, the
@@ -11,10 +16,11 @@ import crypto from 'node:crypto';
  * track URL → intercept the WebSocket and close it on every attempt (REST, incl.
  * fallback-config, stays up) → assert the banner + call affordance render.
  *
- * Bootstraps from PUBLIC endpoints only, so it runs against prod / any VITE_BASE_URL.
+ * Bootstraps from PUBLIC endpoints, but MINTS a real order (mutating) — so it is
+ * guarded to staging/local only (never prod) via requireStaging() in beforeAll.
  */
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 const SLUG = process.env.TRACK_SLUG || 'sushi-durres'; // OTP off, min_order 0, real coords
 const DELIVERY_LAT = Number(process.env.TRACK_LAT ?? 41.315347);
 const DELIVERY_LNG = Number(process.env.TRACK_LNG ?? 19.4449964);
@@ -27,6 +33,8 @@ test.describe('Flow: Offline phone fallback on order status', () => {
   let expectedPhone: string;
 
   test.beforeAll(async ({ request }) => {
+    requireStaging(BASE); // mutating spec (mints an order) — never run against prod
+
     const menuRes = await request.get(`${BASE}/public/locations/${SLUG}/menu`);
     expect(menuRes.status()).toBe(200);
     const menu = await menuRes.json();
@@ -43,7 +51,9 @@ test.describe('Flow: Offline phone fallback on order status', () => {
     const fcRes = await request.get(`${BASE}/api/public/locations/${SLUG}/fallback-config`);
     expect(fcRes.status()).toBe(200);
     const fc = await fcRes.json();
-    expect(fc.showPhoneOnOffline, 'location opts into offline phone fallback').not.toBe(false);
+    // Strict: route returns a real boolean (config.show_phone_on_offline !== false);
+    // undefined/null here would mean a contract break, so demand exactly `true`.
+    expect(fc.showPhoneOnOffline, 'location opts into offline phone fallback').toBe(true);
     expect(fc.phone, 'location has a fallback phone configured').toBeTruthy();
     expectedPhone = fc.phone;
   });
@@ -61,14 +71,12 @@ test.describe('Flow: Offline phone fallback on order status', () => {
         idempotency_key: crypto.randomUUID(),
       },
     });
-    if (orderRes.status() !== 201) {
-      const body = await orderRes.json().catch(() => ({}));
-      expect(orderRes.status(), `order not 201 (${orderRes.status()}: ${JSON.stringify(body)})`).not.toBe(500);
-      expect(orderRes.status()).not.toBe(401);
-      test.skip(true, `Order not created (status ${orderRes.status()}); cannot reach status page`);
-      return;
-    }
-    const { trackUrl } = await orderRes.json();
+    // orders.ts mints a fresh order at exactly 201 (200 is the idempotency-replay
+    // branch, which a unique idempotency_key never hits). Any non-201 — 403/422/409/
+    // 429/500/401 — is a hard failure, not a silent skip.
+    const orderBody = await orderRes.text();
+    expect(orderRes.status(), `order create failed (${orderRes.status()}: ${orderBody})`).toBe(201);
+    const { trackUrl } = JSON.parse(orderBody);
     expect(typeof trackUrl, 'mint returns a trackUrl').toBe('string');
     expect(trackUrl).toContain('/order/');
 
@@ -97,4 +105,11 @@ test.describe('Flow: Offline phone fallback on order status', () => {
     await expect(callLink).toHaveAttribute('href', `tel:${expectedPhone}`);
     await expect(callLink).toContainText(/call/i);
   });
+
+  // TODO(needs_staging): negative control — on a location with show_phone_on_offline=false,
+  // the offline banner's call affordance must be ABSENT even when the WS is forced down.
+  // Requires a real second staging location configured with the flag disabled (e.g.
+  // process.env.TRACK_SLUG_NO_FALLBACK). Asserting fallback-config.showPhoneOnOffline===false
+  // then `await expect(page.getByTestId('offline-call-restaurant')).toHaveCount(0)`.
+  // Not added as a runtime-skipping stub (would be vacuous); add once the fixture exists.
 });

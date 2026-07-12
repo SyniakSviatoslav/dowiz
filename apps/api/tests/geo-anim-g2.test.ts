@@ -76,6 +76,34 @@ test('G2 geo-anim pure math', async (t) => {
     near(atEnd, 0, 1);
   });
 
+  await t.test('progressAlongRoute: empty / single-point polylines hit degenerate branches', () => {
+    const pos: LatLng = { lat: 41.35, lng: 19.80 };
+    // empty polyline → no route left, snap returns the live position unchanged
+    const empty = progressAlongRoute([], pos);
+    assert.equal(empty.remainingMeters, 0);
+    assert.deepEqual(empty.snapped, pos);
+    assert.equal(empty.segmentIndex, 0);
+    // single-point polyline → remaining is the straight-line distance to that point, snap to it
+    const dest: LatLng = { lat: 41.40, lng: 19.80 };
+    const single = progressAlongRoute([dest], pos);
+    assert.equal(single.remainingMeters, haversineMeters(pos, dest));
+    assert.deepEqual(single.snapped, dest);
+    assert.equal(single.segmentIndex, 0);
+  });
+
+  await t.test('progressAlongRoute: segmentIndex tracks which segment the snap lands on', () => {
+    const line: LatLng[] = [
+      { lat: 41.30, lng: 19.80 },
+      { lat: 41.34, lng: 19.82 },
+      { lat: 41.38, lng: 19.80 },
+    ];
+    // at the route start the snap sits on the first segment [0,1]
+    assert.equal(progressAlongRoute(line, line[0]!).segmentIndex, 0);
+    // a point on the interior of the second segment [1,2] selects index 1
+    const onSeg1: LatLng = { lat: 41.36, lng: 19.81 }; // midpoint of segment [1,2]
+    assert.equal(progressAlongRoute(line, onSeg1).segmentIndex, 1);
+  });
+
   await t.test('etaSeconds: paces by route average speed; fallback when degenerate', () => {
     // 1000 m remaining of a 2000 m / 400 s route → 5 m/s → 200 s
     assert.equal(etaSeconds(1000, 2000, 400), 200);

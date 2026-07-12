@@ -23,6 +23,8 @@ test.skip(!process.env.LOCAL_UI_PROOF, 'set LOCAL_UI_PROOF=1 and serve apps/web/
 
 test('preference-centre renders three categories and persists an operational toggle', async ({ page }) => {
   let putBody: any = null;
+  let getCount = 0;
+  let getsAtPut = -1;
   const prefs: Record<string, boolean> = { operational: true, quality: false };
 
   await page.route('**/api/**', async (route) => {
@@ -33,10 +35,12 @@ test('preference-centre renders three categories and persists an operational tog
     }
     if (url.includes('/notifications/targets') && method === 'PUT') {
       putBody = route.request().postDataJSON();
+      getsAtPut = getCount; // snapshot GET count at write time to prove a later refetch
       Object.assign(prefs, putBody?.prefs || {}); // reflect change so the UI refetch shows it
       return route.fulfill({ json: { success: true } });
     }
     if (url.includes('/notifications/targets')) {
+      getCount += 1;
       return route.fulfill({ json: { targets: [{ id: TGT, channel: 'telegram', status: 'active', address: 'chat123', prefs: { ...prefs } }] } });
     }
     if (url.includes('/settings/fallback')) {
@@ -51,8 +55,12 @@ test('preference-centre renders three categories and persists an operational tog
   const card = page.getByTestId('notif-categories');
   await expect(card).toBeVisible({ timeout: 15000 });
 
-  // 🔴 transactional is always-on (no toggle)
-  await expect(page.getByTestId('notif-cat-transactional')).toContainText(/always on/i);
+  // 🔴 transactional is always-on (no toggle). Assert the label AND the structural
+  // proof that no switch exists — a sibling "always on" text-bleed cannot satisfy a
+  // toHaveCount(0) on the category's own switch (Finding 1/2: substring false-green).
+  const txCat = page.getByTestId('notif-cat-transactional');
+  await expect(txCat).toContainText(/always on/i);
+  await expect(txCat.getByRole('switch')).toHaveCount(0);
 
   // 🟠 operational defaults ON, 🟡 quality defaults OFF
   const opToggle = page.getByTestId('notif-cat-operational').getByRole('switch');
@@ -63,6 +71,9 @@ test('preference-centre renders three categories and persists an operational tog
   // toggle operational OFF → the UI sends the correct atomic PUT body...
   await opToggle.click();
   await expect.poll(() => putBody?.prefs?.operational, { timeout: 5000 }).toBe(false);
-  // ...and reflects the new state after refetch
+  // ...the UI actually REFETCHES from the server after the write (a GET fires post-PUT),
+  // so the rendered state is server truth, not an optimistic local flip (Finding 3)...
+  await expect.poll(() => getCount, { timeout: 5000 }).toBeGreaterThan(getsAtPut);
+  // ...and reflects the new state after that refetch
   await expect(opToggle).toHaveAttribute('aria-checked', 'false');
 });

@@ -23,9 +23,14 @@ test('Message-courier button appears with a Telegram deep link', async ({ page }
     body: JSON.stringify(orderStatus({ courierMessenger: { kind: 'telegram', handle: '@courier_bob' } })) }));
 
   await page.goto(`/s/${SLUG}/order/o1`);
+  // Positive render control: the order context actually loaded (not a broken/skeleton
+  // shell from the blanket {} mocks) — the status badge only renders with a real order.
+  await expect(page.getByTestId('order-status-badge')).toBeVisible();
   const btn = page.getByTestId('message-courier-btn');
   await expect(btn).toBeVisible();
   await expect(btn).toHaveAttribute('href', 'https://t.me/courier_bob');
+  // The leading '@' MUST be stripped (raw or url-encoded) — guards the implicit strip path.
+  await expect(btn).not.toHaveAttribute('href', /@|%40/);
 });
 
 test('Message-courier button is absent when courier has no messenger', async ({ page }) => {
@@ -34,7 +39,8 @@ test('Message-courier button is absent when courier has no messenger', async ({ 
     body: JSON.stringify(orderStatus({ courierMessenger: null })) }));
 
   await page.goto(`/s/${SLUG}/order/o1`);
-  // Let the order load + render fully, then assert the button never appears.
-  await page.waitForTimeout(1500);
+  // Wait on a positive render anchor (status badge = order loaded), not a blind sleep —
+  // so the absence assertion can't pass merely because the component hasn't mounted yet.
+  await expect(page.getByTestId('order-status-badge')).toBeVisible();
   await expect(page.getByTestId('message-courier-btn')).toHaveCount(0);
 });

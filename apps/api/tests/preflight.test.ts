@@ -100,6 +100,55 @@ test('evaluatePreflight: IP velocity exceeded → soft_confirm', () => {
   assert.ok(result.reasons.some(r => r.code === 'velocity'));
 });
 
+// ─── Velocity threshold boundaries (threshold is `> 3`, so 3 is clean) ──
+test('evaluatePreflight: velocityPhoneCount=3 (at threshold, NOT >3) → clean', () => {
+  const result = evaluatePreflight(makeInput({
+    signals: {
+      velocityPhoneCount: 3, velocityIpCount: 0,
+      noShowCount: 0, noShowAgeDays: null, completedCount: 0,
+      otpRequired: false, otpVerified: false,
+    },
+  }));
+  assert.strictEqual(result.outcome, 'clean');
+  assert.strictEqual(result.reasons.length, 0);
+});
+
+test('evaluatePreflight: velocityPhoneCount=4 (just over threshold) → soft_confirm', () => {
+  const result = evaluatePreflight(makeInput({
+    signals: {
+      velocityPhoneCount: 4, velocityIpCount: 0,
+      noShowCount: 0, noShowAgeDays: null, completedCount: 0,
+      otpRequired: false, otpVerified: false,
+    },
+  }));
+  assert.strictEqual(result.outcome, 'soft_confirm');
+  assert.ok(result.reasons.some(r => r.code === 'velocity'));
+});
+
+test('evaluatePreflight: velocityIpCount=3 (at threshold, NOT >3) → clean', () => {
+  const result = evaluatePreflight(makeInput({
+    signals: {
+      velocityPhoneCount: 0, velocityIpCount: 3,
+      noShowCount: 0, noShowAgeDays: null, completedCount: 0,
+      otpRequired: false, otpVerified: false,
+    },
+  }));
+  assert.strictEqual(result.outcome, 'clean');
+  assert.strictEqual(result.reasons.length, 0);
+});
+
+test('evaluatePreflight: velocityIpCount=4 (just over threshold) → soft_confirm', () => {
+  const result = evaluatePreflight(makeInput({
+    signals: {
+      velocityPhoneCount: 0, velocityIpCount: 4,
+      noShowCount: 0, noShowAgeDays: null, completedCount: 0,
+      otpRequired: false, otpVerified: false,
+    },
+  }));
+  assert.strictEqual(result.outcome, 'soft_confirm');
+  assert.ok(result.reasons.some(r => r.code === 'velocity'));
+});
+
 test('evaluatePreflight: active no-show → soft_confirm', () => {
   const result = evaluatePreflight(makeInput({
     signals: {
@@ -174,6 +223,36 @@ test('evaluatePreflight: OTP required + not verified + ack → still soft_confir
   }));
   assert.strictEqual(result.outcome, 'soft_confirm');
   assert.strictEqual(result.requiresOtp, true);
+});
+
+// ─── DECAY window boundaries (gate is `strength > 0.5 AND ageDays <= 90`) ─
+// strength = noShowCount * exp(-ageDays/30) / max(1, completedCount).
+// noShowCount=11, completedCount=0 → strength>0.5 on BOTH days below, so the
+// ONLY thing flipping the outcome is the `ageDays <= 90` window edge.
+test('evaluatePreflight: no-show at ageDays=90 (edge, inside window) → soft_confirm', () => {
+  const result = evaluatePreflight(makeInput({
+    signals: {
+      velocityPhoneCount: 0, velocityIpCount: 0,
+      noShowCount: 11, noShowAgeDays: 90, completedCount: 0,
+      otpRequired: false, otpVerified: false,
+    },
+  }));
+  // 11 * exp(-90/30) / 1 = 11 * 0.0498 = 0.548 > 0.5, and 90 <= 90 → inside
+  assert.strictEqual(result.outcome, 'soft_confirm');
+  assert.ok(result.reasons.some(r => r.code === 'no_show_history'));
+});
+
+test('evaluatePreflight: no-show at ageDays=91 (edge, outside window) → clean', () => {
+  const result = evaluatePreflight(makeInput({
+    signals: {
+      velocityPhoneCount: 0, velocityIpCount: 0,
+      noShowCount: 11, noShowAgeDays: 91, completedCount: 0,
+      otpRequired: false, otpVerified: false,
+    },
+  }));
+  // 11 * exp(-91/30) / 1 = 0.530 > 0.5, but 91 > 90 → outside window → clean
+  assert.strictEqual(result.outcome, 'clean');
+  assert.strictEqual(result.reasons.length, 0);
 });
 
 // ─── DECAY tests ────────────────────────────────────────────────────

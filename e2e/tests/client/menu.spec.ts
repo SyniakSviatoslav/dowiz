@@ -1,5 +1,7 @@
 import { test, expect } from '@playwright/test';
 
+const hasProducts = (c: { products?: unknown[] }): boolean => (c.products || []).length > 0;
+
 test.describe('Client Menu Page', () => {
 
   test.beforeEach(async ({ page }) => {
@@ -24,15 +26,26 @@ test.describe('Client Menu Page', () => {
   });
 
   test('clicking category tab scrolls to section', async ({ page }) => {
+    // Resolve the brand primary token to its computed rgb() so we can assert the
+    // EXACT active border color, not merely "non-transparent" (which a default
+    // browser border would also satisfy).
+    const brandPrimary = await page.evaluate(() => {
+      const probe = document.createElement('span');
+      probe.style.color = getComputedStyle(document.documentElement).getPropertyValue('--brand-primary');
+      document.body.appendChild(probe);
+      const rgb = getComputedStyle(probe).color;
+      probe.remove();
+      return rgb;
+    });
+
     // Click the second category tab
     const navButtons = page.locator('nav.sticky button');
     const secondBtn = navButtons.nth(1);
     await secondBtn.click();
-    await page.waitForTimeout(500);
 
-    // Should become active after click
-    const borderColor = await secondBtn.evaluate(el => getComputedStyle(el).borderBottomColor);
-    expect(borderColor).not.toBe('rgba(0, 0, 0, 0)');
+    // toHaveCSS auto-retries until the active state settles — no hard sleep, and
+    // it asserts the precise brand-primary color rather than just non-transparency.
+    await expect(secondBtn).toHaveCSS('border-bottom-color', brandPrimary);
   });
 
   test('renders product cards with name, price, and add button', async ({ page }) => {
@@ -45,15 +58,34 @@ test.describe('Client Menu Page', () => {
     await expect(firstCard.locator('button[aria-label="Add"]')).toBeVisible();
   });
 
+<<<<<<< Updated upstream
   test('unavailable products show overlay', async ({ page }) => {
     // Find a product card that is unavailable (opacity-60)
     const unavailableCards = page.locator('article.product-card.opacity-60');
     const count = await unavailableCards.count();
+=======
+  test('unavailable products render greyed-out with a disabled add button', async ({ page }) => {
+    // Seed deterministically: force the first product of the first non-empty
+    // category to be unavailable in the menu response, so the unavailable
+    // presentation is exercised unconditionally (no vacuous if-count>0 skip).
+    await page.route('**/public/locations/**/menu*', async (route) => {
+      const res = await route.fetch();
+      const json = await res.json();
+      const cats: { products?: { available: boolean }[] }[] = json.categories || [];
+      const seeded = cats.find(hasProducts);
+      if (seeded?.products) seeded.products[0].available = false;
+      await route.fulfill({ response: res, json });
+    });
+    await page.goto('/s/test-slug?dev=true');
+    await page.waitForSelector('[data-testid="menu-item"]', { timeout: 15000 });
+>>>>>>> Stashed changes
 
-    if (count > 0) {
-      const overlay = unavailableCards.first().locator('text=Unavailable');
-      await expect(overlay).toBeVisible();
-    }
+    // The seeded product must render with the unavailable styling (opacity-55)
+    // and its add button must be disabled (ProductCard has no overlay text by
+    // design — the greyed card + disabled add IS the unavailable affordance).
+    const unavailableCard = page.locator('[data-testid="menu-item"].opacity-55').first();
+    await expect(unavailableCard).toBeVisible();
+    await expect(unavailableCard.locator('[data-testid="menu-item-add"]')).toBeDisabled();
   });
 
   test('add button click adds item to cart and shows FAB', async ({ page }) => {
@@ -63,9 +95,8 @@ test.describe('Client Menu Page', () => {
     // Click add on first product
     const addBtn = page.locator('article.product-card button[aria-label="Add"]').first();
     await addBtn.click();
-    await page.waitForTimeout(500);
 
-    // Cart FAB should appear with count
+    // Cart FAB should appear with count (expect.toBeVisible auto-polls — no hard sleep)
     const fab = page.locator('#cartFabBtn');
     await expect(fab).toBeVisible({ timeout: 5000 });
     await expect(fab).toContainText('1');
@@ -95,14 +126,19 @@ test.describe('Client Menu Page', () => {
   });
 
   test('shows skeletons during loading state', async ({ page }) => {
-    // Re-navigate and check for skeletons before product cards load
-    await page.goto('/s/test-slug?dev=true', { waitUntil: 'domcontentloaded' });
+    // Delay the menu response so the loading skeletons are DETERMINISTICALLY
+    // observable (otherwise a fast fixture races past them and the assertion is
+    // meaningless). A missing loading state now fails this test.
+    await page.route('**/public/locations/**/menu*', async (route) => {
+      await new Promise((r) => setTimeout(r, 1500));
+      await route.continue();
+    });
+    await page.goto('/s/test-slug?dev=true', { waitUntil: 'commit' });
 
-    // Check skeletons appear (skeleton-block class)
-    const skeletons = page.locator('.skeleton-block');
-    // May or may not catch them depending on timing, but page shouldn't crash
-    const skeletonCount = await skeletons.count();
-    expect(skeletonCount).toBeGreaterThanOrEqual(0);
+    // Skeletons MUST be present while the request is in flight...
+    await expect(page.locator('.skeleton-block').first()).toBeVisible({ timeout: 5000 });
+    // ...and must give way to real menu items once it resolves.
+    await expect(page.locator('[data-testid="menu-item"]').first()).toBeVisible({ timeout: 15000 });
   });
 
   test('theme variables are properly scoped', async ({ page }) => {
@@ -114,21 +150,42 @@ test.describe('Client Menu Page', () => {
         text: style.getPropertyValue('--brand-text'),
       };
     });
-    expect(vars.primary).toBeTruthy();
-    expect(vars.bg).toBeTruthy();
-    expect(vars.text).toBeTruthy();
+    // A single space ' ' is truthy — assert each var is an actual color value,
+    // not just non-empty garbage.
+    const colorRe = /^(#[0-9a-f]{3,8}|rgb|hsl|oklch|color\()/i;
+    expect(vars.primary.trim()).toMatch(colorRe);
+    expect(vars.bg.trim()).toMatch(colorRe);
+    expect(vars.text.trim()).toMatch(colorRe);
   });
 
   test('embed mode hides fixed elements', async ({ page }) => {
     await page.goto('/s/test-slug?dev=true&embed=true');
     await page.waitForSelector('article.product-card', { timeout: 15000 });
 
-    // In embed mode, fixed elements should be hidden
-    // CartFAB has class embed-hidden, but FAB only shows with items
-    // Check embed class on body or similar
-    const bodyClass = await page.locator('body').getAttribute('class');
-    // Embed mode may not add body class automatically
-    expect(bodyClass !== null || bodyClass === null).toBeTruthy(); // page loaded without crash
+    // ClientLayout applies the `embed-mode` body class in embed contexts; the
+    // CSS rule `.embed-mode .embed-hidden { display:none }` is what hides fixed
+    // chrome. Assert the class is actually present (drives the hiding behavior).
+    await expect(page.locator('body')).toHaveClass(/embed-mode/);
+  });
+
+  test('shows error state when the menu request fails', async ({ page }) => {
+    // Force the menu fetch to fail; the page must render its error fallback
+    // (not a blank page, spinner, or crash). loadMenu() catches → setFetchError.
+    await page.route('**/public/locations/**/menu*', (route) => route.abort());
+    await page.goto('/s/test-slug?dev=true');
+
+    await expect(page.getByText('Failed to load menu')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByRole('button', { name: /Retry/i })).toBeVisible();
+  });
+
+  test('rejects a non-existent slug with the not-found state', async ({ page }) => {
+    // TODO(needs_staging): exercises the REAL server slug-resolution path (a 404
+    // for an unknown slug). Run against a deployed server (VITE_BASE_URL /
+    // staging) — a local fixture server won't resolve real slugs. `?dev=true` is
+    // intentionally omitted so the genuine fetch + 404 → notFound branch runs.
+    await page.goto('/s/this-slug-does-not-exist-zzz999');
+
+    await expect(page.getByText('Restaurant not found')).toBeVisible({ timeout: 15000 });
   });
 
 });

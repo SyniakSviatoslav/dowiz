@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test';
+<<<<<<< Updated upstream
+=======
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
+>>>>>>> Stashed changes
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 let authToken: string;
 let activeLocationId: string;
 let categoryId: string;
@@ -13,6 +18,7 @@ test.describe.configure({ mode: 'serial' });
 
 test.describe('Flow: Ingredients & Modifiers — Groups, Modifiers, price_delta, product attachment', () => {
   test.beforeAll(async ({ request }) => {
+    requireStaging(BASE); // mutating spec (creates categories/products) — never touch prod
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
     const body = await authRes.json();
@@ -184,7 +190,10 @@ test.describe('Flow: Ingredients & Modifiers — Groups, Modifiers, price_delta,
     expect(listRes.status()).toBe(200);
     const list = await listRes.json();
     const group = list.data.find((g: any) => g.id === groupId);
-    expect(group?.modifierCount).toBe(0);
+    // The group MUST still exist (a missing group would make `group?.modifierCount` === undefined,
+    // masking a real failure) — assert presence first, then the DB-backed COUNT(modifiers) is 0.
+    expect(group, 'parent group must still be listed after modifier delete').toBeTruthy();
+    expect(group.modifierCount).toBe(0);
   });
 
   test('Flow 8: Owner — create modifier with zero price_delta and sort_order, verify contract', async ({ request }) => {
@@ -202,8 +211,13 @@ test.describe('Flow: Ingredients & Modifiers — Groups, Modifiers, price_delta,
     expect(body.sortOrder).toBe(0);
   });
 
-  test('Flow 4: Unauthenticated — modifier group CRUD returns 401', async ({ request }) => {
-    const routes = [
+  test('Flow 4: Unauthenticated — modifier/group/product-attach CRUD returns 401', async ({ request }) => {
+    // verifyAuth is the FIRST preValidation on every one of these routes, so a missing Bearer
+    // token short-circuits to 401 before params/role/tenant are ever resolved — the id stub is
+    // never dereferenced. Cover the mutating verbs the GET+POST sweep missed (PATCH group,
+    // DELETE modifier, PUT product↔group attach) so an accidental auth-strip on any of them fails.
+    const ID = '11111111-1111-4111-8111-111111111111';
+    const routes: Array<{ method: string; url: string; data?: unknown }> = [
       {
         method: 'POST',
         url: `${BASE}/api/owner/locations/${activeLocationId}/modifier-groups`,
@@ -213,15 +227,73 @@ test.describe('Flow: Ingredients & Modifiers — Groups, Modifiers, price_delta,
         method: 'GET',
         url: `${BASE}/api/owner/locations/${activeLocationId}/modifier-groups`,
       },
+      {
+        method: 'PATCH',
+        url: `${BASE}/api/owner/locations/${activeLocationId}/modifier-groups/${ID}`,
+        data: { name: 'should-401' },
+      },
+      {
+        method: 'DELETE',
+        url: `${BASE}/api/owner/locations/${activeLocationId}/modifiers/${ID}`,
+      },
+      {
+        method: 'PUT',
+        url: `${BASE}/api/owner/locations/${activeLocationId}/products/${ID}/modifier-groups`,
+        data: [{ group_id: ID, sort_order: 0 }],
+      },
     ];
     for (const r of routes) {
       let res;
       if (r.method === 'POST') {
         res = await request.post(r.url, { data: r.data });
+      } else if (r.method === 'PATCH') {
+        res = await request.patch(r.url, { data: r.data });
+      } else if (r.method === 'PUT') {
+        res = await request.put(r.url, { data: r.data });
+      } else if (r.method === 'DELETE') {
+        res = await request.delete(r.url);
       } else {
         res = await request.get(r.url);
       }
       expect(res.status(), `${r.method} ${r.url} should return 401`).toBe(401);
     }
+  });
+
+  test('Flow 9: Cross-tenant — owner cannot touch a SECOND tenant\'s modifier groups (404)', async ({ request }) => {
+    // REAL second tenant: /dev/seed-visual-state provisions the `vis-*` venues owned by
+    // vis-owner@dowiz.com — a DIFFERENT user than this suite's dev mock-auth owner. So the dev
+    // owner token below is a genuine cross-tenant caller (not a nil-UUID stand-in). requireLocationAccess
+    // denies a non-member owner with 404 ("don't leak existence", apps/api/src/plugins/auth.ts:152).
+    // TODO(needs-staging): depends on the gated /dev/seed-visual-state seeder to mint the foreign
+    // tenant + learn its real locationId — only runnable against a seeded staging target.
+    const seedRes = await request.post(`${BASE}/api/dev/seed-visual-state`, {
+      data: {},
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
+    expect(seedRes.status()).toBe(200);
+    const foreignLocationId = (await seedRes.json()).open.locationId;
+    expectUuid(foreignLocationId, 'foreign (second-tenant) locationId');
+    expect(foreignLocationId).not.toBe(activeLocationId); // must be a distinct tenant
+
+    const authHeaders = { Authorization: `Bearer ${authToken}` };
+    const ID = '11111111-1111-4111-8111-111111111111';
+
+    const getRes = await request.get(
+      `${BASE}/api/owner/locations/${foreignLocationId}/modifier-groups`,
+      { headers: authHeaders },
+    );
+    expect(getRes.status(), 'cross-tenant GET must be 404').toBe(404);
+
+    const patchRes = await request.patch(
+      `${BASE}/api/owner/locations/${foreignLocationId}/modifier-groups/${ID}`,
+      { data: { name: 'cross-tenant-should-404' }, headers: authHeaders },
+    );
+    expect(patchRes.status(), 'cross-tenant PATCH must be 404').toBe(404);
+
+    const delRes = await request.delete(
+      `${BASE}/api/owner/locations/${foreignLocationId}/modifier-groups/${ID}`,
+      { headers: authHeaders },
+    );
+    expect(delRes.status(), 'cross-tenant DELETE must be 404').toBe(404);
   });
 });

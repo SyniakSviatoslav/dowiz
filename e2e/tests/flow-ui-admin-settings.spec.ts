@@ -16,8 +16,13 @@
  *   → 41.315347, 19.4449964
  */
 import { test, expect } from '@playwright/test';
+<<<<<<< Updated upstream
+=======
+import { expectJwt } from '../helpers/assert-shape';
+import { requireStaging } from '../helpers/staging-guard';
+>>>>>>> Stashed changes
 
-const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 
 const FINAL_NAME = 'Dubin & Sushi';
 const FINAL_ADDRESS = 'Rruga Sulejman Kadiu, Durrës';
@@ -43,6 +48,9 @@ test.describe.configure({ mode: 'serial' });
 test.describe('UI: Admin Settings — name, address, phone, hours, delivery toggle', () => {
 
   test.beforeAll(async ({ request }) => {
+    // This spec MUTATES settings and uses the /dev/mock-auth backdoor — refuse to run
+    // against prod (where the backdoor 404s anyway, and a write would corrupt prod data).
+    requireStaging(BASE);
     const r = await request.post(`${BASE}/api/dev/mock-auth`, { data: {} });
     expect(r.status()).toBe(200);
     const body = await r.json();
@@ -159,6 +167,32 @@ test.describe('UI: Admin Settings — name, address, phone, hours, delivery togg
     console.log('Confirmed — name:', body.locationName, '| phone:', body.phone, '| lat:', body.lat, '| hoursJson set:', hasHours);
   });
 
+  // ─── STEP 5b: Auth — PUT /owner/settings is gated (negative + positive controls) ─
+  test('Step 5b: API — PUT /owner/settings rejects unauthenticated and wrong-role callers', async ({ request }) => {
+    // Negative control: no Authorization header → 401 (global auth hook, server.ts:397-401).
+    const noAuth = await request.put(`${BASE}/api/owner/settings`, { data: { locationName: 'HACK' } });
+    expect(noAuth.status(), 'Unauthenticated PUT must be 401').toBe(401);
+
+    // Wrong-role: a courier token passes the auth hook but getLocationId() returns null for
+    // role!=='owner', so the route returns 401 (no separate 403 path — spa-proxy.ts:660-662).
+    const courierRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: { role: 'courier' } });
+    expect(courierRes.status(), 'mock-auth must mint a courier token on staging').toBe(200);
+    const courierToken = (await courierRes.json()).access_token;
+    expectJwt(courierToken, 'courier token');
+    const wrongRole = await request.put(`${BASE}/api/owner/settings`, {
+      headers: { Authorization: `Bearer ${courierToken}` },
+      data: { locationName: 'HACK' },
+    });
+    expect(wrongRole.status(), 'Courier-role PUT must be rejected (401)').toBe(401);
+
+    // Positive control: the owner token still saves (200) — proves the gate is not rejecting everyone.
+    const owner = await request.put(`${BASE}/api/owner/settings`, {
+      headers: { Authorization: `Bearer ${ownerToken}` },
+      data: { locationName: baselineSettings.locationName ?? FINAL_NAME },
+    });
+    expect(owner.status(), 'Owner PUT must succeed (200)').toBe(200);
+  });
+
   // ─── STEP 6: UI — reload page and verify form displays saved values ───────────
   test('Step 6: UI — reload /admin/settings shows updated name and address', async ({ page }) => {
     await page.goto(`${BASE}/admin`, { waitUntil: 'load', timeout: 30000 });
@@ -196,19 +230,28 @@ test.describe('UI: Admin Settings — name, address, phone, hours, delivery togg
 
     const saveBtn = page.locator('button[type="submit"]').first();
     await saveBtn.waitFor({ state: 'visible', timeout: 5000 });
-    await saveBtn.click();
-    await page.waitForTimeout(3000);
 
-    const bodyText = await page.textContent('body') || '';
-    expect(bodyText.length, 'Page must render content after form submit').toBeGreaterThan(200);
+    // Finding #1: intercept the save PUT so a silent 4xx (toast never renders) FAILS the test
+    // instead of passing invisibly. The save handler calls PUT /owner/settings.
+    const [putResp] = await Promise.all([
+      page.waitForResponse(
+        r => r.url().includes('/api/owner/settings') && r.request().method() === 'PUT',
+        { timeout: 15000 },
+      ),
+      saveBtn.click(),
+    ]);
+    expect(putResp.status(), 'Save PUT /owner/settings must return 200').toBe(200);
+
+    // Assert the success confirmation actually renders (previously only console.log'd).
+    await expect(
+      page.getByTestId('settings-saved'),
+      'Success confirmation must be visible after a successful save',
+    ).toBeVisible({ timeout: 5000 });
 
     const critical = jsErrors.filter(e =>
       !e.includes('favicon') && !e.includes('ResizeObserver') && !e.includes('Non-Error')
     );
     expect(critical, `JS errors after form submit: ${critical.join('; ')}`).toEqual([]);
-
-    const hasSuccess = bodyText.includes('saved') || bodyText.includes('Saved') || bodyText.includes('ruajt');
-    console.log('Form submit result — success:', hasSuccess);
   });
 
   // ─── STEP 8: UI — delivery pause toggle ──────────────────────────────────────
@@ -218,19 +261,14 @@ test.describe('UI: Admin Settings — name, address, phone, hours, delivery togg
     await page.goto(`${BASE}/admin/settings`, { waitUntil: 'networkidle', timeout: 30000 });
     await page.waitForTimeout(2000);
 
-    // Find the delivery status toggle (wraps a checkbox/button-like element)
-    const toggle = page.locator('[role="switch"], input[type="checkbox"], label').filter({ hasText: /delivery.*status|delivery.*pause|open|closed/i }).first();
-    const hasToggle = await toggle.isVisible({ timeout: 5000 }).catch(() => false);
-
-    if (!hasToggle) {
-      console.log('Step 8 SKIP — delivery toggle not found by role/text, trying alternative locator');
-      const deliverySection = page.locator('section, div').filter({ hasText: /delivery status|delivery.*pause/i }).first();
-      const hasSec = await deliverySection.isVisible({ timeout: 3000 }).catch(() => false);
-      if (!hasSec) {
-        console.log('Step 8 SKIP — delivery toggle section not found');
-        return;
-      }
-    }
+    // Finding #2: the delivery status toggle MUST be present — a missing toggle used to
+    // silently `return` and pass the test. The Toggle component renders role="switch" with
+    // an accessible name of "Open"/"Closed" (packages/ui/src/components/admin/Toggle.tsx).
+    const toggle = page.getByRole('switch', { name: /open|closed/i }).first();
+    await expect(
+      toggle,
+      'Delivery status toggle must be present on the settings page',
+    ).toBeVisible({ timeout: 8000 });
 
     // Read initial pause state from API
     const beforeGet = await request.get(`${BASE}/api/owner/settings`, {

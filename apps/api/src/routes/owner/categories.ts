@@ -5,6 +5,14 @@ import { withTenant } from '@deliveryos/platform';
 import { toCategoryApiShape } from '../../lib/row-transformers.js';
 import { getOwnerLocationId } from '../../lib/get-owner-location.js';
 
+// SoT for the category create body. Exported so unit tests exercise the REAL schema
+// (not a drifting copy). Unknown keys are rejected (.strict).
+export const categoryCreateSchema = z.object({
+  name: z.string().min(1),
+  sort_order: z.number().int().optional(),
+  image_key: z.string().nullable().optional() // if we had image_key for categories
+}).strict();
+
 export default async function categoryRoutes(fastify: FastifyInstance) {
   const server = fastify.withTypeProvider<ZodTypeProvider>();
 
@@ -23,11 +31,7 @@ export default async function categoryRoutes(fastify: FastifyInstance) {
       preValidation: [server.verifyAuth, server.requireRole(['owner']), server.requireLocationAccess],
       schema: {
         params: LocationParams,
-        body: z.object({
-          name: z.string().min(1),
-          sort_order: z.number().int().optional(),
-          image_key: z.string().nullable().optional() // if we had image_key for categories
-        }).strict()
+        body: categoryCreateSchema
       }
     },
     async (request: any, reply: any) => {

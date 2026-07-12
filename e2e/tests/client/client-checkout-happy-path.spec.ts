@@ -18,8 +18,17 @@
 // this test is the proof the full funnel now completes.
 
 import { test, expect } from '@playwright/test';
+import { expectJwt } from '../../helpers/assert-shape';
+import { requireStaging } from '../../helpers/staging-guard';
+
+// This spec uses the dev/mock-auth backdoor + ?dev=true. Guard the target so a run
+// can never hit prod (Test Integrity §6). Intended runs set VITE_BASE_URL (local
+// :5173 or staging); an unset/prod target fails fast in beforeAll.
+const BASE = process.env.VITE_BASE_URL;
 
 test.describe('Client Checkout Flow', () => {
+  test.beforeAll(() => requireStaging(BASE));
+
   test('Browse menu, add item, open cart, checkout, order placed', async ({ page, request }) => {
     // Resolve the seeded location slug from the owner settings API (relative →
     // baseURL; vite proxies /api → the dev API), so the test follows the active
@@ -27,6 +36,9 @@ test.describe('Client Checkout Flow', () => {
     const authRes = await request.post(`/api/dev/mock-auth`, { data: {} });
     expect(authRes.status()).toBe(200);
     const { access_token } = await authRes.json();
+    // Don't trust the backdoor blindly: the token must be a real 3-segment JWT, and
+    // it must actually authorise the owner-scoped settings call below (positive control).
+    expectJwt(access_token, 'mock-auth access_token');
 
     const settingsRes = await request.get(`/api/owner/settings`, {
       headers: { Authorization: `Bearer ${access_token}` },
@@ -53,8 +65,11 @@ test.describe('Client Checkout Flow', () => {
     // The cart bar appears showing one item and its line total
     const cartBar = page.getByRole('button', { name: /Shporta/i });
     await expect(cartBar).toBeVisible({ timeout: 5000 });
-    await expect(cartBar).toContainText('1');
-    await expect(cartBar).toContainText(/ALL/);
+    // Exactly one item — the count badge reads '1', not '10'/'100' (a substring '1'
+    // assertion would pass for any of those).
+    await expect(cartBar.locator('span.absolute')).toHaveText('1');
+    // …and a positive ALL line total (digits + currency), not merely the letters 'ALL'.
+    await expect(cartBar).toContainText(/\d+\s*ALL/);
 
     // 3. Open the cart drawer and proceed to checkout
     await cartBar.click();
@@ -101,8 +116,25 @@ test.describe('Client Checkout Flow', () => {
     await notes.fill('Blue gate, third floor, ring the bell');
     await expect(notes).toHaveValue('Blue gate, third floor, ring the bell');
 
-    // 6. Order summary reflects the cart (item 850 + delivery 200 = 1050 ALL)
-    await expect(page.getByTestId('checkout-total')).toContainText(/1050\s*ALL/);
+    // 6. Order summary reflects the cart — assert the ARITHMETIC (total = subtotal +
+    //    delivery fee) read from the rendered rows, not a hardcoded constant that goes
+    //    stale the moment the fee rule changes. Labels are the sq locale this test runs in.
+    const amountOf = async (label: RegExp): Promise<number> => {
+      const row = page.locator('div', { hasText: label }).filter({ hasText: /ALL/ }).last();
+      const text = await row.innerText();
+      const m = text.match(/(\d[\d.,\s]*)\s*ALL/);
+      expect(m, `expected an "ALL" amount in summary row "${text}"`).not.toBeNull();
+      return Number((m as RegExpMatchArray)[1].replace(/[^\d]/g, ''));
+    };
+    const subtotal = await amountOf(/Nëntotali/);
+    const deliveryFee = await amountOf(/Tarifa e dorëzimit/);
+    const totalText = await page.getByTestId('checkout-total').innerText();
+    const totalMatch = totalText.match(/(\d[\d.,\s]*)\s*ALL/);
+    expect(totalMatch, `expected an "ALL" total in "${totalText}"`).not.toBeNull();
+    const total = Number((totalMatch as RegExpMatchArray)[1].replace(/[^\d]/g, ''));
+    expect(subtotal).toBeGreaterThan(0);
+    expect(deliveryFee).toBeGreaterThan(0);
+    expect(total).toBe(subtotal + deliveryFee);
 
     // 7. Place the order → redirect to the order-status page. In ?dev=true mode
     //    the order completes via the intended dev fallback (CheckoutPage.tsx:352
@@ -112,10 +144,18 @@ test.describe('Client Checkout Flow', () => {
     await placeOrder.click();
 
     await expect(page).toHaveURL(/\/order\/o_mock_123/, { timeout: 8000 });
-    await expect(page.locator('body')).toBeVisible();
-    await expect(page.locator('body')).toContainText(
-      /Duke u pergatitur|preparing|pending|delivery|order|porosi/i,
-      { timeout: 10000 },
-    );
+    // Render proof must be a specific order-status element, not loose body text — a 500
+    // page or a failed redirect contains words like "order"/"porosi" too. The status
+    // badge only renders on the loaded order view, carrying a real status token.
+    const statusBadge = page.getByTestId('order-status-badge');
+    await expect(statusBadge).toBeVisible({ timeout: 10000 });
+    await expect(statusBadge).toHaveAttribute('data-status', /[A-Za-z]{3,}/);
+    await expect(page.getByTestId('order-status-message')).toBeVisible();
+
+    // TODO(needs-staging): cross-tenant isolation. In ?dev=true mode the order is the
+    // synthetic o_mock_123 (no real DB row / tenant), so a scoping assertion here would
+    // be vacuous. On a live staging run with a REAL second tenant, fetch this order id
+    // from the second tenant's session and assert 403/404 (Test Integrity §5). Do not
+    // fake this with a nil-UUID — that 404s by absence and proves nothing.
   });
 });

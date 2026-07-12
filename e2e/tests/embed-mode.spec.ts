@@ -10,8 +10,7 @@ test.describe('Embed Mode', () => {
     await page.locator('article.product-card button[aria-label="Add"]').first().click();
     await expect(page.locator('#cartFabBtn')).toBeVisible({ timeout: 5000 });
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
+    await expect(page.locator('[data-testid="menu-item"]').first()).toBeVisible();
     const embedClassPresent = await page.evaluate(() =>
       document.documentElement.classList.contains('embed-mode') ||
       document.body.classList.contains('embed-mode')
@@ -26,8 +25,7 @@ test.describe('Embed Mode', () => {
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
     const criticalErrors = errors.filter(e => !e.includes('favicon') && !e.includes('404'));
     expect(criticalErrors).toEqual([]);
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
+    await expect(page.locator('[data-testid="menu-item"]').first()).toBeVisible({ timeout: 15000 });
   });
 
   test('embed mode has no horizontal scroll overflow', async ({ page }) => {
@@ -49,8 +47,15 @@ test.describe('Embed Mode', () => {
     await page.goto('/s/test-slug?dev=true&embed=true');
     await page.waitForSelector('article.product-card', { timeout: 15000 });
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
+<<<<<<< Updated upstream
     const cards = await page.locator('article.product-card').count();
     expect(cards).toBeGreaterThan(0);
+=======
+    const cards = await page.locator('[data-testid="menu-item"]').count();
+    // test-slug fixture seeds a full menu; smoke.spec asserts the same >=3 floor.
+    // >0 let a 1-of-N partial/broken render pass.
+    expect(cards).toBeGreaterThanOrEqual(3);
+>>>>>>> Stashed changes
     const cookies = await page.context().cookies();
     expect(cookies).toEqual([]);
   });

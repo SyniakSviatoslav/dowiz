@@ -586,6 +586,7 @@ export function DashboardPage() {
 
       {/* Orders grid */}
       {error ? (
+        <div data-testid="orders-load-error">
         <EmptyState
           title={t('common.error', 'Error')}
           description={error}
@@ -601,6 +602,7 @@ export function DashboardPage() {
             </button>
           }
         />
+        </div>
       ) : loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4" aria-busy="true" aria-label={t('admin.loading_orders', 'Loading orders')}>
           {[1, 2, 3, 4].map(i => (

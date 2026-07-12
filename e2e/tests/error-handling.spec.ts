@@ -9,10 +9,11 @@ test.describe('Error Handling', () => {
     await page.goto('/s/test-slug?dev=true');
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
     expect(errors, `JS errors on 500: ${errors.join('; ')}`).toEqual([]);
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
-    // Should show fallback/error UI, not blank
-    expect(/error|unavailable|retry|try again|something went wrong|menu|product/i.test(body)).toBe(true);
+    // Menu data must NOT render on a 500 — the error/empty state replaces the product grid.
+    await expect(page.locator('[data-testid="menu-item"]')).toHaveCount(0);
+    const body = (await page.textContent('body')) ?? '';
+    // Error-state words only (success-domain "menu"/"product" removed — they render on any page).
+    expect(/error|unavailable|retry|try again|something went wrong|failed/i.test(body)).toBe(true);
   });
 
   test('menu page handles network timeout — shows fallback', async ({ page }) => {
@@ -25,46 +26,47 @@ test.describe('Error Handling', () => {
       !e.includes('favicon') && !e.includes('404') && !e.includes('manifest') && !e.includes('Failed to fetch')
     );
     expect(criticalErrors, `JS errors on timeout: ${criticalErrors.join('; ')}`).toEqual([]);
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
+    await expect(page.locator('[data-testid="menu-item"]')).toHaveCount(0);
+    const body = (await page.textContent('body')) ?? '';
+    expect(/error|unavailable|retry|try again|something went wrong|failed/i.test(body)).toBe(true);
   });
 
   test('checkout handles 422 validation error — shows error message', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
+    // Register the 422 mock BEFORE any interaction so the real order POST is intercepted.
+    await page.route('**/customer/orders**', route => route.fulfill({ status: 422, body: JSON.stringify({ error: 'Validation failed' }) }));
     await page.goto('/s/test-slug?dev=true');
     await page.waitForSelector('article.product-card', { timeout: 15000 });
     await page.locator('article.product-card button[aria-label="Add"]').first().click();
     await expect(page.locator('#cartFabBtn')).toBeVisible({ timeout: 5000 });
     await page.locator('#cartFabBtn').click();
+    // Hard assertion (was a swallowed `if (isVisible().catch(()=>false))` that silently skipped).
     const checkoutBtn = page.locator('button:has-text("Checkout")');
-    if (await checkoutBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await checkoutBtn.click();
-      await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
-    }
-    await page.route('**/customer/orders**', route => route.fulfill({ status: 422, body: JSON.stringify({ error: 'Validation failed' }) }));
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
+    await expect(checkoutBtn).toBeVisible({ timeout: 5000 });
+    await checkoutBtn.click();
+    // TODO(needs_staging): fill checkout-phone + submit to actually fire the order POST and assert
+    // the 422 validation-error UI surfaces; requires a live staging run with a seeded menu.
+    await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
 
   test('checkout handles 429 rate limit — shows retry message', async ({ page }) => {
     const errors: string[] = [];
     page.on('pageerror', err => errors.push(err.message));
+    // Register the 429 mock BEFORE any interaction so the OTP request is intercepted.
+    await page.route('**/customer/otp/**', route => route.fulfill({ status: 429, body: JSON.stringify({ error: 'Too many requests', retryAfterSeconds: 60 }) }));
     await page.goto('/s/test-slug?dev=true');
     await page.waitForSelector('article.product-card', { timeout: 15000 });
     await page.locator('article.product-card button[aria-label="Add"]').first().click();
     await expect(page.locator('#cartFabBtn')).toBeVisible({ timeout: 5000 });
     await page.locator('#cartFabBtn').click();
     const checkoutBtn = page.locator('button:has-text("Checkout")');
-    if (await checkoutBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await checkoutBtn.click();
-      await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
-    }
-    await page.route('**/customer/otp/**', route => route.fulfill({ status: 429, body: JSON.stringify({ error: 'Too many requests', retryAfterSeconds: 60 }) }));
+    await expect(checkoutBtn).toBeVisible({ timeout: 5000 });
+    await checkoutBtn.click();
+    // TODO(needs_staging): enter checkout-phone + trigger OTP send to actually hit /customer/otp and
+    // assert the rate-limit (retry) UI surfaces; requires a live staging run with a seeded menu.
     await expect(page.locator('body')).toBeAttached({ timeout: 15000 });
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
     expect(errors, `JS errors: ${errors.join('; ')}`).toEqual([]);
   });
 
@@ -78,9 +80,11 @@ test.describe('Error Handling', () => {
       !e.includes('favicon') && !e.includes('404')
     );
     expect(criticalErrors, `JS errors: ${criticalErrors.join('; ')}`).toEqual([]);
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
-    expect(/not found|error|unavailable|order|status|404/i.test(body)).toBe(true);
+    // Positive proof of the not-found state: the "back to menu" escape renders only in the EmptyState.
+    await expect(page.locator('[data-testid="order-back-to-menu"]')).toBeVisible({ timeout: 15000 });
+    const body = (await page.textContent('body')) ?? '';
+    // Error-state words only (success-domain "order"/"status" removed).
+    expect(/not found|error|unavailable|404/i.test(body)).toBe(true);
   });
 
   test('admin page handles 401 gracefully — shows login redirect', async ({ page }) => {
@@ -93,8 +97,10 @@ test.describe('Error Handling', () => {
       !e.includes('favicon') && !e.includes('404') && !e.includes('manifest')
     );
     expect(criticalErrors, `JS errors on 401: ${criticalErrors.join('; ')}`).toEqual([]);
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
+    // Negative: a 401 must NOT leak owner data — no dashboard order cards / new-order banner render.
+    await expect(page.locator('[data-testid^="order-card-"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="owner-new-order-banner"]')).toHaveCount(0);
+    const body = (await page.textContent('body')) ?? '';
     expect(/login|unauthorized|sign in|redirect|access/i.test(body)).toBe(true);
   });
 
@@ -108,8 +114,10 @@ test.describe('Error Handling', () => {
       !e.includes('favicon') && !e.includes('404') && !e.includes('manifest')
     );
     expect(criticalErrors, `JS errors on 403: ${criticalErrors.join('; ')}`).toEqual([]);
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
+    // Negative: a 403 must NOT leak owner data — no dashboard order cards / new-order banner render.
+    await expect(page.locator('[data-testid^="order-card-"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="owner-new-order-banner"]')).toHaveCount(0);
+    const body = (await page.textContent('body')) ?? '';
     expect(/forbidden|access denied|no permission|restricted|error/i.test(body)).toBe(true);
   });
 
@@ -123,8 +131,9 @@ test.describe('Error Handling', () => {
       !e.includes('favicon') && !e.includes('404') && !e.includes('manifest')
     );
     expect(criticalErrors, `JS errors on 5xx: ${criticalErrors.join('; ')}`).toEqual([]);
-    const body = await page.textContent('body');
-    expect(body.length).toBeGreaterThan(100);
+    // Negative: a 503 must NOT leak owner data — no dashboard order cards render.
+    await expect(page.locator('[data-testid^="order-card-"]')).toHaveCount(0);
+    const body = (await page.textContent('body')) ?? '';
     expect(/unavailable|error|retry|try again|service|down|offline/i.test(body)).toBe(true);
   });
 

@@ -43,6 +43,42 @@ test('brand-extractor SSRF redirect guard', async (t) => {
     await assert.rejects(() => extractFromWebsite(PUBLIC), /internal address|internal host/i);
   });
 
+  await t.test('a redirect to the IPv6 loopback ::1 is REFUSED', async () => {
+    globalThis.fetch = (async (u: any) => {
+      const url = String(u);
+      if (url.includes('[::1]')) throw new Error('SSRF: IPv6 loopback must never be fetched');
+      return resp(302, 'http://[::1]/');
+    }) as any;
+    await assert.rejects(() => extractFromWebsite(PUBLIC), /internal address/i);
+  });
+
+  await t.test('a redirect to an IPv6 ULA (fd00::1) is REFUSED', async () => {
+    globalThis.fetch = (async (u: any) => {
+      const url = String(u);
+      if (url.includes('[fd00::1]')) throw new Error('SSRF: IPv6 ULA must never be fetched');
+      return resp(302, 'http://[fd00::1]/');
+    }) as any;
+    await assert.rejects(() => extractFromWebsite(PUBLIC), /internal address/i);
+  });
+
+  await t.test('a redirect to an IPv6 link-local (fe80::1) is REFUSED', async () => {
+    globalThis.fetch = (async (u: any) => {
+      const url = String(u);
+      if (url.includes('[fe80::1]')) throw new Error('SSRF: IPv6 link-local must never be fetched');
+      return resp(302, 'http://[fe80::1]/');
+    }) as any;
+    await assert.rejects(() => extractFromWebsite(PUBLIC), /internal address/i);
+  });
+
+  await t.test('a redirect to localhost is REFUSED (distinct host check, not IP check)', async () => {
+    globalThis.fetch = (async (u: any) => {
+      const url = String(u);
+      if (url.includes('localhost')) throw new Error('SSRF: localhost must never be fetched');
+      return resp(302, 'http://localhost/');
+    }) as any;
+    await assert.rejects(() => extractFromWebsite(PUBLIC), /internal host/i);
+  });
+
   await t.test('more than 3 redirect hops is refused', async () => {
     globalThis.fetch = (async () => resp(302, PUBLIC)) as any; // infinite public redirect loop
     await assert.rejects(() => extractFromWebsite(PUBLIC), /Too many redirects/i);
@@ -51,7 +87,8 @@ test('brand-extractor SSRF redirect guard', async (t) => {
   await t.test('a direct 200 (no redirect) still works — no regression', async () => {
     globalThis.fetch = (async () => resp(200, null, '<html><title>Acme</title></html>')) as any;
     const sig = await extractFromWebsite(PUBLIC);
-    assert.ok(sig, 'a public 200 should yield a brand signal');
+    assert.strictEqual(sig.name, 'Acme', 'the <title> must be extracted as the brand name');
+    assert.ok(sig.sources.includes('title'), 'the name source must be recorded as "title"');
   });
 
   globalThis.fetch = realFetch;

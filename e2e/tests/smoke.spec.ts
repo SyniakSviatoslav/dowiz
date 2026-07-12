@@ -16,11 +16,13 @@ test.describe('Smoke Tests — App Loads', () => {
     await expect(root).toBeVisible({ timeout: 15000 });
 
     // Filter benign errors
+    // NOTE: do NOT blanket-exclude 'Failed to load resource' — it masks real
+    // network failures for API calls, JS chunks, and images. Only known-benign
+    // static assets (favicon/manifest/serviceWorker) are excused.
     const criticalErrors = errors.filter(e =>
       !e.includes('favicon') &&
       !e.includes('404 Not Found') &&
       !e.includes('manifest') &&
-      !e.includes('Failed to load resource') &&
       !e.includes('serviceWorker')
     );
     expect(criticalErrors).toEqual([]);
@@ -34,10 +36,20 @@ test.describe('Smoke Tests — App Loads', () => {
       timeout: 20000,
     });
 
+<<<<<<< Updated upstream
     // Verify products are visible
     const cards = page.locator('article.product-card');
+=======
+    // Verify a real menu rendered — the dev-seed has many products, so a single
+    // card / render stub / stale mock must fail. Assert against the seed floor.
+    const cards = page.locator('[data-testid="menu-item"]');
+>>>>>>> Stashed changes
     const count = await cards.count();
-    expect(count).toBeGreaterThan(0);
+    expect(count).toBeGreaterThanOrEqual(3);
+
+    // At least one card must render a real, non-empty price (e.g. "1200 ALL" /
+    // "12.00 €") — a render stub with no data would have no money string.
+    await expect(cards.first()).toContainText(/\d+\s*(ALL|€)/);
 
     // Verify category nav is visible
     const nav = page.locator('nav.sticky');
@@ -75,8 +87,9 @@ test.describe('Smoke Tests — App Loads', () => {
     const primary = await page.evaluate(() => {
       return getComputedStyle(document.documentElement).getPropertyValue('--brand-primary').trim();
     });
-    expect(primary).toBeTruthy();
-    expect(primary).not.toBe('');
+    // Must be a real CSS colour — a non-empty string like 'inherit', '0', or a
+    // garbage value from a broken theme path would pass a truthy check.
+    expect(primary).toMatch(/^#[0-9a-f]{3,8}$|^rgba?\(/i);
   });
 
   test('No cookies are set', async ({ page }) => {

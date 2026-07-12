@@ -57,6 +57,14 @@
     "verify:nx": "tsx --env-file=.env apps/api/scripts/verify-nx-flow.ts",
     "verify:i18n-coverage": "tsx apps/api/scripts/verify-i18n-coverage.ts",
     "verify:contrast": "tsx apps/api/scripts/verify-contrast.ts",
+<<<<<<< Updated upstream
+=======
+    "verify:error-contract": "tsx apps/api/scripts/verify-error-contract.ts",
+    "verify:ccc-secrets": "node --test --import tsx tools/ccc/tests/secret-scan.test.ts",
+    "verify:containment": "node --test --import tsx tools/loop-harness/tests/containment.test.ts",
+    "verify:menu-parse": "tsx apps/api/tests/menu-parse/run.ts",
+    "ccc": "tsx tools/ccc/src/cli.ts",
+>>>>>>> Stashed changes
     "verify:event-wiring": "tsx --env-file=.env apps/api/scripts/verify-event-wiring.ts",
     "verify:schema-queries": "tsx --env-file=.env apps/api/scripts/verify-schema-queries.ts",
     "verify:connection-lifecycle": "tsx scripts/verify-connection-lifecycle.ts",

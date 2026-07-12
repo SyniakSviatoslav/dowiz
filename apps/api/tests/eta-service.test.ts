@@ -41,6 +41,14 @@ describe('computeEtaRange — core invariants', () => {
     assert.ok(busy.lowMin > free.lowMin);
   });
 
+  test('non-zero kitchen queue (pre_assign) pushes the estimate up — kitchenAhead is in the formula', () => {
+    const idle = computeEtaRange(base({ phase: 'pre_assign', kitchenQueueAheadMinutes: 0 }));
+    const backed = computeEtaRange(base({ phase: 'pre_assign', kitchenQueueAheadMinutes: 30 }));
+    // If kitchenAhead were silently dropped from the pre_assign core, both bounds would be identical.
+    assert.ok(backed.lowMin > idle.lowMin, `kitchen queue must raise the low (idle ${idle.lowMin} → backed ${backed.lowMin})`);
+    assert.ok(backed.highMin > idle.highMin, `kitchen queue must raise the high (idle ${idle.highMin} → backed ${backed.highMin})`);
+  });
+
   test('near-end: IN_DELIVERY with a tiny core → calm floor band, never 0', () => {
     const r = computeEtaRange(base({ phase: 'assigned', status: 'IN_DELIVERY', prepRemainingMinutes: 0, courierQueueAheadMinutes: 0, deliveryLegMinutes: 1 }));
     assert.equal(r.lowMin, ETA_DEFAULTS.nearEndLow);
@@ -106,8 +114,10 @@ describe('deliveryLegMinutes', () => {
     assert.equal(deliveryLegMinutes(undefined, undefined, undefined, undefined), null);
   });
   test('returns a finite positive minute estimate for real coords (road_factor applied)', () => {
+    // Durrës coords ≈2.6 km apart → ~10 min by moped. Bounded range catches a road_factor/units
+    // bug returning an astronomical value (e.g. 10000 min) that a bare `>= 0` would pass green.
     const min = deliveryLegMinutes(41.31, 19.44, 41.33, 19.46);
-    assert.ok(typeof min === 'number' && Number.isFinite(min) && min >= 0);
+    assert.ok(typeof min === 'number' && Number.isFinite(min) && min > 0 && min < 30, `expected 0<min<30, got ${String(min)}`);
   });
   test('same point → ~0 minutes (not negative, not NaN)', () => {
     const min = deliveryLegMinutes(41.31, 19.44, 41.31, 19.44);
