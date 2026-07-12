@@ -837,12 +837,16 @@ fastify.register(acquisitionRoutes, {
   );
 
   // SPA Fallback: Serve index.html for unknown GET requests matching SPA route patterns
-  const SPA_ROUTES = ['/admin', '/courier', '/dashboard', '/s/', '/login', '/branding-preview', '/privacy'];
+  const SPA_ROUTES = ['/admin', '/courier', '/dashboard', '/s/', '/login', '/branding-preview', '/privacy', '/claim'];
   fastify.setNotFoundHandler((request, reply) => {
+    // request.url carries the query string (?preview=…, #token= lives client-side),
+    // so match on the pathname only — otherwise /claim?preview=<id> (minted invite link)
+    // would fall through to 404 (G11).
+    const pathname = (request.url || '').split('?')[0];
     if (
       request.method === 'GET' &&
       (request.headers.accept?.includes('text/html') ||
-        SPA_ROUTES.some(prefix => request.url === prefix || request.url.startsWith(prefix + '/')))
+        SPA_ROUTES.some(prefix => pathname === prefix || pathname.startsWith(prefix + '/')))
     ) {
       return reply.sendFile('index.html');
     }

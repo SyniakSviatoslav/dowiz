@@ -36,6 +36,25 @@ export const OrderItemInput = z.object({
 }).strict();
 export type OrderItemInput = z.infer<typeof OrderItemInput>;
 
+// Canonical v1 messenger kinds — MUST stay in sync with packages/db migration
+// 1790000000074 (customers/couriers/orders CHECK constraints) and
+// apps/web/src/lib/messenger.ts (MESSENGER_KINDS). The legacy enum here only had
+// 3 kinds, so any 'phone'/'signal'/'simplex' contact (incl. every "deliver to
+// someone else" receiver) failed VALIDATION_FAILED with HTTP 400 (G03).
+export const MessengerKind = z.enum(['phone', 'whatsapp', 'viber', 'telegram', 'signal', 'simplex']);
+export type MessengerKind = z.infer<typeof MessengerKind>;
+
+// "Deliver to someone else" — the receiver's own contact channel (ADR-0016 /
+// ADR-checkout-communication). Optional (null when shipping to the customer);
+// when present, all three fields are required so the persistence path never
+// receives a partial receiver. Previously ABSENT → .strict() rejected it → 400.
+export const ReceiverInput = z.object({
+  name: z.string().min(1).max(120),
+  messenger_kind: MessengerKind,
+  handle: z.string().min(1).max(120),
+}).strict();
+export type ReceiverInput = z.infer<typeof ReceiverInput>;
+
   // ─── Create Order Input ──────────────────────────────────────────────
   export const CreateOrderInput = z.object({
     locationId: z.string().uuid(),
@@ -45,9 +64,11 @@ export type OrderItemInput = z.infer<typeof OrderItemInput>;
       phone: z.string().min(6).max(20).optional(),
       name: z.string().min(1).max(120).optional(),
       // UX-2 messenger deep-link (optional secondary contact channel).
-      messenger_kind: z.enum(['telegram', 'whatsapp', 'viber']).optional(),
+      messenger_kind: MessengerKind.optional(),
       messenger_handle: z.string().min(1).max(120).optional(),
     }).strict().optional(),
+    // "Deliver to someone else" — receiver's own contact (nullable; same-receiver = null).
+    receiver: ReceiverInput.optional(),
     delivery: z.object({
       pin: z.object({
         lat: z.number().min(-90).max(90),
