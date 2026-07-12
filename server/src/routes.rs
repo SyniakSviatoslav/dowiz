@@ -27,15 +27,19 @@ use serde_json::json;
 use tower_http::services::{ServeDir, ServeFile};
 
 use crate::models::{
-    ChannelCount, ChannelResponse, ClaimVenueRequest, CreateOrderRequest, EventRequest, OrderResponse,
-    PushSubResponse, SubscribeRequest, VenueResponse,
+    ChannelCount, ChannelResponse, ClaimVenueRequest, CreateOrderRequest, EventRequest,
+    OrderResponse, PushSubResponse, SubscribeRequest, VenueResponse,
 };
+use crate::notify::NotifyHub;
 use crate::store::Store;
 
 /// Shared app state.
 #[derive(Clone)]
 pub struct AppState {
     pub store: Arc<Store>,
+    /// Courier out-of-app notify hub (Tier-2 N1/N2). Optional so a test/app can
+    /// run without a sink (signals are best-effort and never fail the request).
+    pub notify: Option<Arc<NotifyHub>>,
 }
 
 /// Monotonic id helper (avoids an extra uuid dependency while guaranteeing
@@ -154,6 +158,12 @@ async fn order_event(
             .into_response();
     }
 
+    // Tier-2 N1/N2: signal couriers out-of-app on the status change (best-effort;
+    // never fails the transition). No scoring/ranking — all known couriers.
+    if let Some(hub) = &state.notify {
+        hub.signal(&id, updated.status.as_str());
+    }
+
     (StatusCode::OK, Json(OrderResponse::from(&updated))).into_response()
 }
 
@@ -245,10 +255,7 @@ async fn healthz() -> impl IntoResponse {
 ///
 /// Returns the venue's claim status (Tier-3 plumbing: a venue must be claimed
 /// before G11 — a real order from a non-operator customer on a claimed venue).
-async fn get_venue(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-) -> impl IntoResponse {
+async fn get_venue(State(state): State<AppState>, Path(id): Path<String>) -> impl IntoResponse {
     match state.store.get_venue(&id) {
         Ok(Some((name, claimed, owner_id))) => (
             StatusCode::OK,
@@ -283,10 +290,12 @@ async fn claim_venue(
     Json(req): Json<ClaimVenueRequest>,
 ) -> impl IntoResponse {
     let created_at_ms = now_ms();
-    if let Err(e) = state
-        .store
-        .claim_venue(&id, &req.owner_id, req.name.as_deref().unwrap_or(&id), created_at_ms)
-    {
+    if let Err(e) = state.store.claim_venue(
+        &id,
+        &req.owner_id,
+        req.name.as_deref().unwrap_or(&id),
+        created_at_ms,
+    ) {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({ "error": e.to_string(), "code": "DbError" })),
@@ -316,6 +325,9 @@ async fn claim_venue(
 /// Build the application router. `dist_dir` is the path to `web/dist` (served as
 /// a SPA fallback). When `dist_dir` does not exist, the SPA fallback is omitted
 /// (the API routes still work) so the server is usable before the frontend build.
+///
+/// `notify` is the optional courier out-of-app hub (Tier-2 N1/N2). Pass `None`
+/// to disable signalling (best-effort — the lifecycle never depends on it).
 pub fn build_router(state: AppState, dist_dir: PathBuf) -> Router {
     let api = Router::new()
         .route("/api/orders", post(create_order))

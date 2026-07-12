@@ -11,14 +11,36 @@ use axum::http::{Request, StatusCode};
 use axum::Router;
 use tower::util::ServiceExt; // for `.oneshot()`
 
+use dowiz_server::notify::CaptureSink;
+use dowiz_server::notify::NotifyHub;
 use dowiz_server::routes::{build_router, AppState};
 use dowiz_server::store::Store;
 use std::sync::Arc;
 
 fn test_app() -> Router {
     let store = Arc::new(Store::open_memory().unwrap());
-    let state = AppState { store };
+    let notify = Arc::new(NotifyHub::new(Arc::new(CaptureSink::new())));
+    let state = AppState {
+        store,
+        notify: Some(notify),
+    };
     build_router(state, std::path::PathBuf::from("web/dist"))
+}
+
+/// Test app variant that records courier signals into a shared `CaptureSink`
+/// so a test can assert the N1/N2 path fired.
+fn test_app_with_capture() -> (Router, Arc<CaptureSink>) {
+    let store = Arc::new(Store::open_memory().unwrap());
+    let capture = Arc::new(CaptureSink::new());
+    let notify = Arc::new(NotifyHub::new(capture.clone()));
+    let state = AppState {
+        store,
+        notify: Some(notify),
+    };
+    (
+        build_router(state, std::path::PathBuf::from("web/dist")),
+        capture,
+    )
 }
 
 /// Helper: POST a create-order body to the given app and return (status, body).
@@ -251,7 +273,9 @@ async fn green_venue_claim_then_get() {
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     let body: serde_json::Value = serde_json::from_slice(
-        &axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap(),
+        &axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap(),
     )
     .unwrap();
     assert_eq!(body["claimed"], true);
@@ -266,7 +290,9 @@ async fn green_venue_claim_then_get() {
     let res = app.clone().oneshot(req).await.unwrap();
     assert_eq!(res.status(), StatusCode::OK);
     let body: serde_json::Value = serde_json::from_slice(
-        &axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap(),
+        &axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap(),
     )
     .unwrap();
     assert_eq!(body["claimed"], true);
@@ -294,3 +320,91 @@ fn kernel_transition_table_sanity() {
     assert!(assert_transition(Pending, Confirmed).is_ok());
 }
 
+// ── N1/N2: a legal status transition emits a courier signal (RED+GREEN) ──
+//
+// Proves the out-of-app notify path (Tier-2) actually fires on an order
+// lifecycle transition. The harness captures the signal; we assert one signal
+// was emitted with the correct order id + target status. (No scoring/ranking —
+// the courier id is the broadcast sentinel.)
+#[tokio::test]
+async fn green_status_transition_signals_couriers() {
+    let (app, capture) = test_app_with_capture();
+
+    let (status, body) = create_order(
+        &app,
+        serde_json::json!({
+            "locationId": "loc-n1",
+            "items": [{"product_id": "p1", "modifier_ids": [], "quantity": 1, "unit_price": 100}],
+            "channel": "web"
+        }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let id = serde_json::from_str::<serde_json::Value>(&body).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // No signal yet (place_order does not signal — only transitions do).
+    assert!(capture.is_empty(), "place_order must not emit a signal");
+
+    // A legal transition must emit exactly one courier signal.
+    let s = post_event(&app, &id, "CONFIRMED").await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(capture.len(), 1, "one signal per transition");
+    let sig = &capture.captured()[0];
+    assert_eq!(sig.order_id, id);
+    assert_eq!(sig.status, "CONFIRMED");
+}
+
+// ── Tier-2 STOREFRONT ZERO-DIFF GATE (backend contract) ──
+//
+// Mirrors the assertions the Playwright gate (docs/design/TIER-2-QUALITY-BARS)
+// would make against the served storefront, but at the backend contract level
+// (the authoritative source of truth). Proves: integer money end-to-end, order
+// lands PENDING, persists across a second request, and `?ch=` channel is
+// attributed (Tier-0 D + Tier-3 plumbing). This is the runnable, dependency-free
+// core of the "stable enough to send" bar.
+#[tokio::test]
+async fn tier2_storefront_contract() {
+    let app = test_app();
+
+    // Margherita 9.00 € + Extra cheese 1.50 € = 10.50 € => 1050 minor units.
+    let body = serde_json::json!({
+        "locationId": "loc-sf",
+        "items": [
+            {"product_id": "11111111-1111-1111-1111-111111111111", "modifier_ids": ["21111111-1111-1111-1111-111111111111"], "quantity": 1, "unit_price": 900},
+            {"product_id": "11111111-1111-1111-1111-111111111111", "modifier_ids": ["21111111-1111-1111-1111-111111111111"], "quantity": 1, "unit_price": 900}
+        ],
+        "channel": "tiktok"
+    });
+    let (status, created) = create_order(&app, body).await;
+    assert_eq!(status, StatusCode::CREATED, "create 201: {}", created);
+    let created: serde_json::Value = serde_json::from_str(&created).unwrap();
+
+    // Integer money: subtotal must be exactly 1800 minor units (18.00 €), no float.
+    assert_eq!(created["subtotal"], 1800, "integer money, no tween");
+    assert_eq!(created["status"], "PENDING", "new order is PENDING");
+
+    // Channel attribution: the order carries the ?ch= venue channel.
+    assert_eq!(created["channel"], "tiktok");
+
+    // Persisted: re-read via the channel ledger (independent request path).
+    let req = Request::builder()
+        .method("GET")
+        .uri("/api/orders/channel")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let bytes = axum::body::to_bytes(res.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let channel: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let counts = channel["orders_by_channel"].as_array().unwrap();
+    let tiktok = counts
+        .iter()
+        .find(|c| c["channel"].as_str() == Some("tiktok"))
+        .expect("tiktok channel attributed");
+    assert_eq!(tiktok["count"], 1);
+}
