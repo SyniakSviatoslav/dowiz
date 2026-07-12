@@ -1,6 +1,8 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import Storefront from '../components/Storefront.svelte';
+import CourierTrack from '../components/CourierTrack.svelte';
+import OwnerDashboard from '../components/OwnerDashboard.svelte';
 
 // Mock location id (oracle-shaped uuid). In production this comes from the
 // published storefront slug resolution — not wired yet (WASM glue deferred).
@@ -12,5 +14,7 @@ const locationId = '00000000-0000-0000-0000-000000000001';
     <h1>dowiz</h1>
     <p>Greenfield Astro + Svelte 5 storefront (kernel-compatible order payload).</p>
     <Storefront locationId={locationId} client:load />
+    <OwnerDashboard client:load />
+    <CourierTrack orderId="demo-001" status="IN_DELIVERY" pickup="Venue A" dropoff="Venue B" client:load />
   </main>
 </Layout>

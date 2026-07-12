@@ -6,6 +6,7 @@ pub mod analytics;
 pub mod domain;
 pub mod money;
 pub mod order_machine;
+pub mod wasm;
 
 // Re-export the headline types so wasm-bindgen consumers and tests share one surface.
 pub use analytics::{reduce_anomalies, ChannelEvent, ChannelLedger};
@@ -15,3 +16,4 @@ pub use money::{
     to_minor_unit,
 };
 pub use order_machine::{assert_transition, fold_transitions, OrderStatus, TransitionError};
+pub use wasm::{apply_event_js, channel_ledger_js, place_order_js, reduce_anomalies_js};
