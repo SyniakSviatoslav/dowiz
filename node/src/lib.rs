@@ -15,7 +15,7 @@
 
 pub mod adapters;
 pub mod roles;
-pub mod sim;
+pub mod transport;
 mod store;
 pub use store::{Store, StoreError};
 
