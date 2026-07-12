@@ -17,6 +17,9 @@ use dowiz_kernel::pq::envelope::{new_identity, open, seal, SignedEnvelope, ENTRO
 use dowiz_kernel::pq::hybrid::{hybrid_decaps, hybrid_encaps, hybrid_keygen, HybridCiphertext, HybridKeypair};
 use std::collections::HashSet;
 
+/// Autonomous role state machines (P4): owner/merchant, courier, customer.
+pub mod roles;
+
 /// A custody-transfer bundle (BPv7-shaped, minimal).
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Bundle {
@@ -142,6 +145,7 @@ impl Node {
     /// result in a signed envelope so couriers carry opaque, sender-authenticated bytes.
     /// `dest_hybrid_pk` is the recipient's `hybrid_pk()` output (x_pk ‖ kem_pk).
     /// `m` is ML-KEM encaps entropy; `eph_seed` is the ephemeral X25519 scalar seed.
+    #[allow(clippy::too_many_arguments)]
     pub fn make_secret_bundle(
         &self,
         dest: &str,
@@ -246,6 +250,13 @@ impl Node {
 
     pub fn custody_len(&self) -> usize {
         self.custody.len()
+    }
+
+    /// Read-only snapshot of the current custody store. Lets a role inspect the
+    /// bundles it holds (e.g. the customer reading the order it was handed)
+    /// without mutating custody. Does not change crypto/money semantics.
+    pub fn custody_snapshot(&self) -> Vec<Bundle> {
+        self.custody.clone()
     }
 }
 
