@@ -73,5 +73,57 @@
 ## Parked (with triggers — see build plan §4)
 Headroom · Mem0/OpenMemory · Airweave · Octogent (`hesamsheikh/octogent`, MIT) · Pake.
 
+## Scaffolded — DO NOT USE (added 2026-07-02, dark; per-tool pilot doc in docs/research/)
+
+> Added to the registry as *candidates*, per operator request. **None are wired, in CI, or a dependency.**
+> All are **FORBIDDEN-DEP** (out-of-tree only). Adoption of each is a separate, explicit decision.
+
+| Tool | Plane | Pilot doc | Gate to adopt |
+|------|-------|-----------|---------------|
+| **CloakBrowser** | scraping | `docs/research/cloakbrowser-pilot.md` | 🔴 ethics: stealth bot-evasion vs 3rd parties — human/operator call |
+| **Firecrawl** | scraping | `docs/research/firecrawl-pilot.md` | 🔶 subprocessor/compliance gate; self-host AGPL only; pick ONE scrape lane w/ CloakBrowser |
+| **Certimate** | infra/TLS | `docs/research/certimate-pilot.md` | trigger: first custom-domain white-label storefront |
+| **OpenHands** | agent/dev | `docs/research/openhands-pilot.md` | 🔶 conflicts w/ Claude-Code harness; default REJECT unless it wins one scoped batch job |
+| **Ubicloud** | cloud/IaaS | `docs/research/ubicloud-pilot.md` | trigger: costed scale-out OR hard data-residency requirement |
+| **CF Containers (Workers+Docker)** | edge compute | `docs/research/cf-workers-docker-pilot.md` | trigger: measured edge-latency need Fly can't serve |
+
+Common controls (all six): no dowiz DB/RLS/tenant secret in any sidecar env
+(`scripts/skyvern-pilot/no-credential-attest.mjs`); scraping tools also gate on
+`scripts/scrape-pilot/scraping-conduct-attest.mjs`; verify each license before adoption.
+
 ## Privacy gate (§2.2 — build into architecture before any owner-data tool)
 Any text → vector must pass ONE ingest contract: (a) strip/pseudonymize PII, (b) tag tenant, (c) then embed locally. Tenant-isolate vectors (extend `verify:rls` to vector tables). Support erasure. Applies to Airweave / Mem0 / product AI features — NOT to Repowise (code corpus: no PII risk, only proprietary-code risk, closed by locality).
+
+## Red-team / security toolset (added 2026-07-02, per `docs/security/redteam-toolset-analysis-2026-07-02.md`)
+
+> **Governing frame:** dowiz owns **code + data, NOT infrastructure** (network/host/edge = Fly/Supabase/R2 = third parties, off-limits). Legitimate self-red-team is the **application layer** over HTTPS at owned `*.dowiz.*` hostnames only, **staging-only, modest volume**. Every finding → a red→green guardrail + `REGRESSION-LEDGER` row (same discipline as any fix).
+>
+> **Status semantics:** offensive tooling is **WORKSTATION ONLY** — run from a disposable Kali VM/container against staging; **never installed on the dev box, never a repo dependency** (same spirit as FORBIDDEN-DEP). `CODE-INTEGRATED` = a keyless/OSS capability wired into an in-repo script. `DATA` = an inert wordlist/pointer used only for own-target fuzzing.
+>
+> **🔴 Charter line:** person/social profiling is off-limits. theHarvester (email harvest) + SpiderFoot (person modules) stay scoped to owned `*.dowiz.*` assets with person-modules DISABLED. Maigret (people-profiling) is SKIP for the platform. John the Ripper never touches prod hashes (PII red-line).
+
+### Tier 1 — ADOPT
+
+| Tool | Plane | License | Status | Ethics | Purpose / concrete dowiz use |
+|------|-------|---------|--------|--------|------------------------------|
+| **Autorize** | offensive | free BApp (Burp ext) | ADOPTED — WORKSTATION ONLY (disposable Kali VM vs staging; not on dev box; not a repo dep) | ok (own assets) | Record owner-A session, replay every req as owner-B/unauth, diff responses → **the** cross-tenant/IDOR class tool (owner-revocation, ADR-0013). App-layer authz gap; RLS FORCE proves DB backstop. Start here. |
+| **JWT Editor** | offensive | Apache-2.0 (Burp ext) | ADOPTED — WORKSTATION ONLY | ok (own tokens) | Attack RS256 invariants: alg-confusion (HS256 re-sign on public key), `alg:none`, tampered tenant/role claims, expired/post-revocation owner tokens (ADR-0004 24h TTL + per-req `status='active'`). |
+| **SQLmap** | offensive | GPL-2.0 | ADOPTED — WORKSTATION ONLY | staging-only, modest `--risk`/`--level` | Prove injection immunity + tenant/RLS non-bypass on own API (menu search/filter, order-by-id, owner analytics, menu-import). Authenticated via `--cookie`/`--headers`. Never prod. |
+| **crt.sh** | asset-recon | public CT-log service (Sectigo) | CODE-INTEGRATED → `scripts/asset-surface-scan.mjs` | ok (public data) | CT-log diff of `%.dowiz.*` to catch forgotten staging/preview subdomains. Best value-to-effort (one curl). Wired keyless into the asset-surface scan lane. |
+| **theHarvester** | asset-recon | GPL-2.0 | ADOPTED — WORKSTATION ONLY | 🔶 person/email modules scoped to owned `*.dowiz.*` ONLY | Domain-scoped subdomain/email/host enum of owned assets. Latent profiling capability → keep target-restricted. |
+| **SecLists** | data | MIT | DATA — vendored/pointer, own-target fuzzing only | ok (inert wordlists) | Wordlist fuel for fuzzing own staging API + DNS brute + secret-pattern repo scan. Inert data, not executed code. |
+| **Kali Linux** | offensive (workstation base) | OSS distro (GPL/mixed) | ADOPTED — WORKSTATION ONLY (`kalilinux/kali-rolling` disposable VM/container; NOT 40 installs on dev box) | ok (isolation is the point) | Isolated red-team workstation that keeps offensive tooling out of the build/deploy env. Loads Burp Community + Autorize + JWT Editor. |
+
+### Tier 2 — PILOT
+
+| Tool | Plane | License | Status | Ethics | Purpose / trigger |
+|------|-------|---------|--------|--------|-------------------|
+| **Param Miner** | offensive | Apache-2.0 (Burp ext) | PILOT — WORKSTATION ONLY | staging-only | Hidden param/header + cache-poisoning recon on API + public SPA-proxy/`/s/:slug` (prior pool-starvation/caching history). |
+| **Hackvertor** | offensive | free BApp (Apache-2.0) | PILOT — WORKSTATION ONLY | staging-only | Encoding-chain multiplier for menu-import parser / Zod-boundary fuzzing. |
+| **John the Ripper** | offensive (credential audit) | GPL-2.0 | PILOT — WORKSTATION ONLY | 🔴 **never prod hashes** (PII red-line) | One-shot OFFLINE audit vs sample dev/staging **argon2** hashes of known-weak passwords → should NOT recover them → certifies argon2 cost params. |
+| **SpiderFoot** | asset-recon | MIT (OSS stagnant since v4.0/2022) | PILOT — WORKSTATION ONLY | 🔶 person/social modules DISABLED; owned assets only | Dark, scoped, periodic wide sweep (buckets, leaked keys, breach hits) restricted to owned assets. |
+| **RSSHub** | blue-team (SCOUT) | MIT | CODE-INTEGRATED → `scripts/scout-feeds.mjs` | ok | Fills plane-maintainer SCOUT hole (upstream dep releases/advisories). Start ZERO-dep GitHub `.releases.atom` polling wired into SCOUT; self-host RSSHub on Fly only once watchlist needs ≥~5 feed-less/non-GitHub sources. |
+| **Bambdas** | offensive | LGPL-3.0 | PILOT — WORKSTATION ONLY | staging-only | Table-filter Bambdas triage on Community; full authz scan-checks need Burp Pro (deferred). |
+
+> **PARK-with-trigger (not adopted):** Wireshark (raw WS-`?token=` capture artifact), THC-Hydra (auth rate-limit validation — prefer scripted E2E), Suricata (IDS — trigger: dowiz self-hosts network), ELK/Elastic (SIEM — trigger: centralized log search outgrows telemetry), Recon-ng (redundant), EnIGMA/SWE-agent self-red-team (trigger: dedicated gated pentest lane).
+> **SKIP:** Nmap/RustScan/Metasploit/Aircrack-ng/Snort (target = third-party infra / no surface), Parrot OS (redundant w/ Kali), Maigret (🔴 people-profiling — operator-own-handles personal leak-check ONLY, never platform/customers).

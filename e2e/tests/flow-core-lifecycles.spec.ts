@@ -1,7 +1,25 @@
 import { test, expect } from '@playwright/test';
 import crypto from 'node:crypto';
+<<<<<<< Updated upstream
+=======
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { isProdTarget } from '../helpers/staging-guard';
+
+// Courier refresh token is `<sessionUuid>.<32-byte-hex>` (apps/api/src/routes/courier/auth.ts).
+const REFRESH_TOKEN = /^[0-9a-f-]{36}\.[0-9a-f]{64}$/i;
+>>>>>>> Stashed changes
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+
+// This is ONE serial mutating lifecycle: beforeAll authenticates via the /api/dev/mock-auth
+// backdoor (closed on prod, ADR-0003) and seeds a category + product, then every Flow below
+// creates/updates orders, couriers, modifiers, settings, or translations — all owner-token
+// writes against the shared demo tenant. Post-deploy smoke runs this against BOTH staging
+// (pre-deploy, full run) and PROD (post-deploy). Against prod the suite must NEVER mutate the
+// live storefront and can't even bootstrap (mock-auth is closed), so the ENTIRE flow SKIPs
+// (reports green-skipped, not red-fail). On staging everything runs unchanged.
+const isProd = isProdTarget(BASE);
+
 let authToken: string;
 let activeLocationId: string;
 let orderId: string;
@@ -20,14 +38,27 @@ const TS = Date.now();
 const COURIER_EMAIL = `courier-e2e-${TS}@test.com`;
 const COURIER_PASSWORD = 'test-password-123!';
 
-test.describe.configure({ mode: 'serial' });
+// On staging the flow shares state in order (beforeAll seeds cat+product → Flow 1 creates an
+// order → later flows read/mutate it), so SERIAL (ordered + abort-the-chain-on-failure) is
+// correct. On prod every test skips anyway, so the mode is moot there — use the default to
+// mirror deploy-validation.spec.ts.
+test.describe.configure({ mode: isProd ? 'default' : 'serial' });
 
 test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', () => {
+
+  // Against prod, skip the whole mutating flow: every test writes to the live storefront and/or
+  // needs the (prod-closed) dev/mock-auth token. Skipping in beforeEach marks each test skipped
+  // (green) rather than letting them fail on the missing shared state. beforeAll/afterAll are
+  // separately guarded below so the setup mutations never run on prod either.
+  test.beforeEach(() => {
+    test.skip(isProd, 'mutating lifecycle — staging only');
+  });
 
   // ════════════════════════════════════════════════════════════════
   // SETUP
   // ════════════════════════════════════════════════════════════════
   test.beforeAll(async ({ request }) => {
+    if (isProd) return; // no prod mutation: mock-auth is closed and every test skips anyway
     const authRes = await request.post(`${BASE}/api/dev/mock-auth`, { data: { role: 'owner', locationSlug: 'demo' }, timeout: 30000 });
     expect(authRes.status()).toBe(200);
     const authBody = await authRes.json();
@@ -59,6 +90,7 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
   });
 
   test.afterAll(async ({ request }) => {
+    if (isProd) return; // nothing was created on prod (beforeAll returned early)
     if (productId) {
       await request.delete(`${BASE}/api/owner/menu/products/${productId}`, {
         headers: { Authorization: `Bearer ${authToken}` },
@@ -180,10 +212,15 @@ test.describe('Flow: Core Lifecycles — Orders, Courier, Settings, Modifiers', 
         delivery: { pin: { lat: 41.33, lng: 19.82 }, address_text: 'Rruga Reject' },
         payment: { method: 'cash' },
         idempotency_key: crypto.randomUUID(),
+        // Second order in the run from one IP trips the velocity speed-bump → 200
+        // soft_confirm with NO id. Ack it like Flow 1 does; 201 clean / 200 acked
+        // are both real creations — the UUID below is the actual proof (ledger #34).
+        acknowledged_codes: ['velocity'],
       },
     });
-    expect(secondOrder.status()).toBe(201);
+    expect([200, 201]).toContain(secondOrder.status());
     const rejectOrderId = (await secondOrder.json()).id;
+    expectUuid(rejectOrderId, 'reject-flow order id');
 
     const rejectRes = await request.post(
       `${BASE}/api/owner/locations/${activeLocationId}/orders/${rejectOrderId}/reject`,

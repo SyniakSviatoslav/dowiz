@@ -62,5 +62,28 @@ e2e/findings/round-*/
 scratch-*.mjs
 .claude/*.bak-*
 graphify-out/
+<<<<<<< Updated upstream
+=======
+# Audit-session screenshot evidence (800+ files) + per-app screenshot debris
+/audit/
+apps/api/*.png
+# Loop-harness run artifacts + prospect packets (generated, may carry business contacts)
+# P2 (meta-loop 2026-07-02): the design doc promises "permanent + lossless" run history, but the
+# whole dir was ignored — history lived only on one VM. The compact metrics/routing/registry
+# files are now tracked; the heavy gz run-records and business-contact packets stay local.
+loops/runs/*
+!loops/runs/metrics.jsonl
+!loops/runs/routing.jsonl
+!loops/runs/registry.json
+# NOTE (ADR-plane-telemetry-and-calibration, R2-C1/R2-M5): plane-telemetry durability does NOT
+# live here. loops/runs/ stays disposable scratch (per-box working copy). The authoritative,
+# append-only record is committed to a DEDICATED orphan branch `telemetry/plane` under a clean
+# telemetry/ path via git plumbing — never onto main, never into this scratch dir.
+loops/prospects/
+# Committed-by-accident classes: log dumps at root, python bytecode
+/*.txt
+__pycache__/
+*.pyc
+>>>>>>> Stashed changes
 # NVIDIA SkillSpector — operator security tool (agent-skill scanner), not app code
 tools/skillspector/

@@ -2,7 +2,8 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useReducedMotion } from 'framer-motion';
-import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, CourierLiveMap, MessageThread, useI18n, useGeolocation, AnimatedCheck, LiveDot, PriceDisplay, Button, ease } from '@deliveryos/ui';
+import { SwipeToComplete, EmptyState, WSStatusDot, SkeletonBase, MessageThread, useI18n, useGeolocation, AnimatedCheck, LiveDot, PriceDisplay, Button, ease } from '@deliveryos/ui';
+import { CourierLiveMap } from '../../components/maps.js';
 import type { CourierTask, CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 import { messengerLink } from '../../lib/messenger.js';

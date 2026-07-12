@@ -7,6 +7,12 @@ export default defineConfig({
   resolve: {
     alias: {
       '@ui': path.resolve(__dirname, '../../packages/ui/src'),
+      // MUST stay ABOVE the broader '@deliveryos/ui' key (aliases match in insertion
+      // order): the map side-entry is imported as '@deliveryos/ui/dist/maps.js' so
+      // tsc resolves it against the package's built d.ts, while the bundler serves
+      // the live source. Without this entry the broad alias would rewrite it to the
+      // nonexistent packages/ui/src/dist/maps.js.
+      '@deliveryos/ui/dist/maps.js': path.resolve(__dirname, '../../packages/ui/src/maps.ts'),
       '@deliveryos/ui': path.resolve(__dirname, '../../packages/ui/src'),
       '@shared-types': path.resolve(__dirname, '../../packages/shared-types/src'),
       '@deliveryos/shared-types': path.resolve(__dirname, '../../packages/shared-types/src'),

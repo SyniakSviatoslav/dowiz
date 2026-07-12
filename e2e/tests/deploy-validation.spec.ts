@@ -1,24 +1,57 @@
 import { test, expect } from '@playwright/test';
+<<<<<<< Updated upstream
 
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz.fly.dev';
+=======
+import { expectJwt, expectUuid } from '../helpers/assert-shape';
+import { isProdTarget } from '../helpers/staging-guard';
+
+const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
+
+// Post-deploy smoke runs this suite against BOTH staging (pre-deploy, full run) and PROD
+// (post-deploy). Against prod the suite must NEVER mutate the live storefront and must NEVER
+// depend on an owner token (the login path persists a refresh-token row → a prod write; and
+// mutating tests would leak test categories/products into /s/demo). So on prod every mutating
+// or auth-dependent test SKIPs (reports green-skipped, not red-fail) while the read-only
+// subset — the real post-deploy smoke — runs and must pass. On staging everything runs.
+const isProd = isProdTarget(BASE);
+// One reason string reused by every conditional skip below, so the CI log reads uniformly.
+const PROD_SKIP = 'mutating / owner-token dependent — runs on staging only (prod is read-only smoke)';
+
+>>>>>>> Stashed changes
 let authToken: string;
 let locationId: string;
-let locationSlug: string;
+// On prod there is no owner token, so tests 9/12/13 can't learn the slug from /api/owner/settings
+// (3.1 is skipped). Seed it from a known-stable PUBLIC demo slug (overridable) so the read-only
+// public-surface smokes still run. On staging, 3.1 overwrites this with the tenant's real slug.
+let locationSlug: string = isProd ? (process.env.SMOKE_PUBLIC_SLUG || 'demo') : '';
 // Suite-scoped so the afterAll cleanup can delete test data even if a mid-suite
 // step fails (mode:'serial' aborts later steps, so inline cleanup is unreliable).
 let createdCategoryId: string;
 let createdProductId: string;
 
-test.describe.configure({ mode: 'serial' });
+// On staging the mutating tests share state in order (0.1 login → 4.1 cat → 4.2 product →
+// 4.3 patch → 5.1/11.1 read it), so SERIAL (ordered + abort-the-chain-on-failure) is correct.
+// On prod every mutating/auth test is skipped and only INDEPENDENT read-only tests run — there
+// serial's abort-on-failure would let one flake cascade-skip the rest of the smoke, so use the
+// default mode (sequential under workers:1, but each test stands alone).
+test.describe.configure({ mode: isProd ? 'default' : 'serial' });
 
 test.describe('Deploy Validation — Live Session Proofs', () => {
 
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
   // ── 0. Auth: get owner token via REAL login ────────────────────────
   // The dev-login backdoor (/api/dev/mock-auth) is closed on prod (ADR-0003), so the deploy
   // validation authenticates the demo owner through the real argon2 path (test@dowiz.com has a
   // seeded password_hash). This also exercises the registered-login + refresh fixes on the
   // deployed build.
   test('0.1 — local login returns a valid owner token', async ({ request }) => {
+    // Real argon2 login (not the /dev/mock-auth backdoor), but it INSERTs an auth_refresh_tokens
+    // row → a write. Skip on prod: this is the token source every mutating test below depends on.
+    test.skip(isProd, PROD_SKIP);
     const res = await request.post(`${BASE}/api/auth/local/login`, {
       data: { email: 'test@dowiz.com', password: 'test123456' },
     });
@@ -72,6 +105,7 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
 
   // ── 3. Slug contract: settings API slug resolves to live endpoints ──
   test('3.1 — settings API returns slug that resolves on public endpoints', async ({ request }) => {
+    test.skip(isProd, PROD_SKIP); // GET /api/owner/settings needs an owner token
     const settingsRes = await request.get(`${BASE}/api/owner/settings`, {
       headers: { Authorization: `Bearer ${authToken}` },
     });
@@ -91,6 +125,7 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
 
   // ── 4. Owner menu — product creation with taste + recipeLines ──────
   test('4.1 — create category via owner API', async ({ request }) => {
+    test.skip(isProd, PROD_SKIP); // mutates the live storefront
     const catName = `Test-Cat-${Date.now()}`;
     const res = await request.post(`${BASE}/api/owner/menu/categories`, {
       data: { name: catName },
@@ -104,6 +139,7 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
   });
 
   test('4.2 — create product with taste + recipeLines via owner API', async ({ request }) => {
+    test.skip(isProd, PROD_SKIP); // mutates the live storefront
     const res = await request.post(`${BASE}/api/owner/menu/products`, {
       data: {
         name: 'Pita Test Sushi',
@@ -134,6 +170,7 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
   });
 
   test('4.3 — PATCH product preserves recipeLines on edit', async ({ request }) => {
+    test.skip(isProd, PROD_SKIP); // mutates the live storefront
     const res = await request.patch(`${BASE}/api/owner/menu/products/${createdProductId}`, {
       data: {
         name: 'Pita Test Sushi Updated',
@@ -159,6 +196,7 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
 
   // ── 5. Public menu API: attributes shape contract ───────────────────
   test('5.1 — public menu returns attributes with taste+bom, NOT top-level kcal', async ({ request }) => {
+<<<<<<< Updated upstream
     const res = await request.get(`${BASE}/public/locations/${locationSlug}/menu`);
     expect(res.status()).toBe(200);
     const body = await res.json();
@@ -167,6 +205,23 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
     const allProducts = body.categories.flatMap((c: any) => c.products || []);
     const pitaProduct = allProducts.find((p: any) => p.name && p.name.includes('Pita Test Sushi Updated'));
     expect(pitaProduct).toBeTruthy();
+=======
+    test.skip(isProd, PROD_SKIP); // asserts the product created by 4.x — no such product exists on prod
+    test.setTimeout(90_000); // the poll below must outlive the 30s menu cache; default 30s test timeout kills it
+    // The public menu has a 30s in-process stale-while-revalidate cache (the
+    // storefront-blink fix) — a just-created product appears only after the TTL.
+    // Poll past it instead of racing it (proven: visible at exactly t=30s).
+    let pitaProduct: any;
+    await expect.poll(async () => {
+      const res = await request.get(`${BASE}/public/locations/${locationSlug}/menu`);
+      if (res.status() !== 200) return false;
+      const body = await res.json();
+      if (!body.categories?.length) return false;
+      const allProducts = body.categories.flatMap((c: any) => c.products || []);
+      pitaProduct = allProducts.find((p: any) => p.name && p.name.includes('Pita Test Sushi Updated'));
+      return !!pitaProduct;
+    }, { timeout: 75_000, intervals: [5_000] }).toBe(true);
+>>>>>>> Stashed changes
 
     expect(pitaProduct.attributes).toBeTruthy();
     expect(pitaProduct.attributes.taste).toBeTruthy();
@@ -194,6 +249,7 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
   });
 
   test('6.2 — image upload with auth returns 200 or 400 for invalid image (STRICT: 500 is a failure)', async ({ request }) => {
+    test.skip(isProd, PROD_SKIP); // stores an image on a live product — mutation + needs owner token
     const fakePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAoAAAAKCAYAAACNMs+9AAAAFklEQVQYV2P8z8BQz0BFwMgwakChAAB0VQx8W6je5QAAAABJRU5ErkJggg==', 'base64');
     const res = await request.post(`${BASE}/api/owner/menu/products/${createdProductId}/image`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -215,13 +271,18 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
 
   // ── 7. Menu import AI — LLM adapter detection (strict: no 500) ──────
   test('7.1 — menu import endpoint handles LLM unavailability gracefully (no 500 crash)', async ({ request }) => {
+    test.skip(isProd, PROD_SKIP); // POST /api/owner/menu/import/preview needs an owner token
+    test.setTimeout(100_000);
     const fakePng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+    // The route bounds parsing with IMPORT_PARSE_DEADLINE_MS (55s default) and degrades
+    // gracefully — the client budget must sit ABOVE that deadline, not race it.
     const res = await request.post(`${BASE}/api/owner/menu/import/preview`, {
       headers: { Authorization: `Bearer ${authToken}` },
       multipart: {
         file: { name: 'menu.png', mimeType: 'image/png', buffer: fakePng },
         mode: 'add_only',
       },
+      timeout: 90_000,
     });
     expect(res.status()).not.toBe(401);
     expect(res.status()).not.toBe(404);
@@ -246,11 +307,18 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
     expect(body.checks.settlement.status).toBe('ok');
   });
 
-  // ── 9. SSR X-Menu-Version header ──────────────────────────────────
-  test('9.1 — SSR page includes X-Menu-Version header', async ({ request }) => {
-    const res = await request.get(`${BASE}/s/${locationSlug}`);
-    expect(res.status()).toBe(200);
-    expect(res.headers()['x-menu-version']).toBeTruthy();
+  // ── 9. SSR page loads + menu-version cache-buster header ───────────
+  test('9.1 — SSR page loads and menu API emits X-Menu-Version header', async ({ request }) => {
+    // The /s/:slug shell itself does not set X-Menu-Version — the header is emitted by the menu
+    // DATA endpoint the page hydrates from (public/menu.ts), which is where the cache-buster
+    // actually matters. Assert both: the SSR page renders (200) AND the menu API stamps a
+    // version. Shape-assert the version (a monotonically increasing integer) rather than mere
+    // truthiness, so an empty/garbage header still fails.
+    const ssrRes = await request.get(`${BASE}/s/${locationSlug}`);
+    expect(ssrRes.status()).toBe(200);
+    const menuRes = await request.get(`${BASE}/public/locations/${locationSlug}/menu`);
+    expect(menuRes.status()).toBe(200);
+    expect(menuRes.headers()['x-menu-version']).toMatch(/^\d+$/);
   });
 
   // ── 10. SPA /dashboard route fix ────────────────────────────────
@@ -263,6 +331,7 @@ test.describe('Deploy Validation — Live Session Proofs', () => {
 
   // ── 11. Product data round-trip: admin → client ────────────────────
   test('11.1 — admin product list includes taste + recipeLines', async ({ request }) => {
+    test.skip(isProd, PROD_SKIP); // needs owner token + the product created by 4.x
     const res = await request.get(`${BASE}/api/owner/menu/products?category_id=${createdCategoryId}`, {
       headers: { Authorization: `Bearer ${authToken}` },
     });

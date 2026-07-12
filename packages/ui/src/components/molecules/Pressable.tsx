@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { motion, type HTMLMotionProps } from 'framer-motion';
+import { m, type HTMLMotionProps } from 'framer-motion';
 import { scalePress, spring } from '../../lib/motion.js';
 
 interface PressableProps extends HTMLMotionProps<'div'> {
@@ -12,13 +12,13 @@ interface PressableProps extends HTMLMotionProps<'div'> {
 
 export function Pressable({ children, noTap, noHover, className = '', ...props }: PressableProps) {
   return (
-    <motion.div
+    <m.div
       className={className}
       whileTap={noTap ? undefined : { scale: scalePress.scale, transition: spring.press }}
       whileHover={noHover ? undefined : { scale: 1.01, transition: { duration: 0.15 } }}
       {...props}
     >
       {children}
-    </motion.div>
+    </m.div>
   );
 }

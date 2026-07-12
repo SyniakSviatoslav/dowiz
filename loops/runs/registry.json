@@ -1,0 +1,222 @@
+{
+  "generated_by": "scripts/loops-registry-sync.mjs",
+  "source_of_truth": "loops/registry.md",
+  "loops": [
+    {
+      "id": "---",
+      "goal": "---",
+      "version": "---",
+      "status": "---",
+      "trigger": "---",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "acquisition-bulk-provision",
+      "goal": "батч ресторанів → claimable shadow + claim invite через /internal pipeline (idempotent, gated, no-cheat)",
+      "version": "0.1",
+      "status": "CERTIFIED",
+      "trigger": "node scripts/acquisition-bulk-provision.mjs &lt;list&gt;",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "audit-gate",
+      "goal": "секції A–F PASS з артефактами",
+      "version": "0.1",
+      "status": "DRAFT",
+      "trigger": "/audit-gate",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "autoupgrade",
+      "goal": "machine-gated self-upgrade (haste iteration, fewer resources); Class A авто/Class B пропозиція; v0.2 +proven-upgrade registry +decorrelated lenses (security·reversibility·perf)",
+      "version": "0.2",
+      "status": "CERTIFIED (report-only; звіт ВТРАЧЕНО — re-cert: /build-verify-loop verify)",
+      "trigger": "/autoupgrade",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "backend-contract-convergence",
+      "goal": "сервер↔контракт у відповідність",
+      "version": "0.1",
+      "status": "DRAFT",
+      "trigger": "/converge-server",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "build-stage",
+      "goal": "етап роадмапу до ✅ чекпойнта",
+      "version": "0.1",
+      "status": "DRAFT",
+      "trigger": "/build-stage",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "cross-tenant-realtime-qa",
+      "goal": "validate live ordering across 3 roles + realtime + tenant isolation from the real staged service",
+      "trigger_tags": [
+        "qa",
+        "e2e",
+        "realtime",
+        "ordering",
+        "cross-tenant",
+        "isolation",
+        "lifecycle",
+        "ws",
+        "staging"
+      ],
+      "scope_class": "A",
+      "security_carveout": [
+        "auth",
+        "rls",
+        "tenant-isolation"
+      ],
+      "registered_at": "2026-06-27T00:00:00Z",
+      "status": "active"
+    },
+    {
+      "id": "demo-builder",
+      "goal": "prospect → ПОЛІРОВАНИЙ claimable demo storefront /s/:slug (menu-quality gate + coherent brand + VISUAL acceptance gate; preview-only default)",
+      "version": "0.1",
+      "status": "CERTIFIED",
+      "trigger": "node scripts/demo-builder.mjs &lt;prospects&gt;",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "design-convergence",
+      "goal": "загартований план серйозної зміни (Тріадна Рада)",
+      "version": "1.0",
+      "status": "CERTIFIED (звіт ВТРАЧЕНО — re-cert: /build-verify-loop verify)",
+      "trigger": "/council",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "error-fix-convergence",
+      "goal": "UI↔сервер у повну відповідність, кожен флоу зелений",
+      "version": "1.0",
+      "status": "CERTIFIED (звіт ВТРАЧЕНО — re-cert: /build-verify-loop verify)",
+      "trigger": "/converge-loop",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "exit-audit",
+      "goal": "завершеність фази (змагально)",
+      "version": "0.1",
+      "status": "DRAFT",
+      "trigger": "/exit-audit",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "incident-recovery",
+      "goal": "живий збій: стабілізувати→корінь→post-mortem",
+      "version": "0.1",
+      "status": "DRAFT",
+      "trigger": "/incident",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "investigation-triage",
+      "goal": "знайти корінь невідомого баґу (repro-first)",
+      "version": "0.1",
+      "status": "DRAFT",
+      "trigger": "/investigate",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "loop-builder",
+      "goal": "мета-петля: ціль G → найкраща harness-native петля (oracle-admissibility first, born-hardened)",
+      "version": "0.1",
+      "status": "DRAFT (report-only)",
+      "trigger": "/loop-builder",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "mobile-polish",
+      "goal": "мобільний UX (390px) кожної поверхні → PASS Mobile Rubric",
+      "version": "1.0",
+      "status": "CERTIFIED",
+      "trigger": "/mobile-polish",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "offer-builder",
+      "goal": "prospect → outreach offer packet",
+      "version": "0.1",
+      "status": "DRAFT (без картки)",
+      "trigger": "ad-hoc",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "performance",
+      "goal": "метрика в межі бюджету, без регресії",
+      "version": "0.1",
+      "status": "DRAFT",
+      "trigger": "/perf",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "refactor-convergence",
+      "goal": "дублі→єдине джерело, поведінка незмінна",
+      "version": "0.1",
+      "status": "DRAFT",
+      "trigger": "/refactor-converge",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "regression-hunt",
+      "goal": "комміт-винуватець регресії (git-bisect)",
+      "version": "0.1",
+      "status": "DRAFT",
+      "trigger": "/regression-hunt",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "security-redblue",
+      "goal": "blue-team (autonomous, safe) + red-team (human-gated, Kali-only) над ВЛАСНИМ app-layer; findings advisory→guardrail+ledger; red-line→council; advisory-forever, no-autonomous-offense",
+      "version": "0.1",
+      "status": "CERTIFIED (anti-cheat 20/20)",
+      "trigger": "/security-redblue",
+      "trigger_tags": [],
+      "source": "registry.md (synced — enrich trigger_tags/scope_class by hand or via loop-architect)"
+    },
+    {
+      "id": "test-hardening",
+      "goal": "harden a test spec by attacking blind-spots with 3 agents then strengthening assertions (no weakening)",
+      "trigger_tags": [
+        "test",
+        "hardening",
+        "critique",
+        "qa",
+        "security",
+        "false-green",
+        "coverage",
+        "spec",
+        "e2e"
+      ],
+      "scope_class": "A",
+      "security_carveout": [
+        "no-weakening"
+      ],
+      "registered_at": "2026-06-27T00:00:00Z",
+      "status": "DRAFT",
+      "version": "0.1"
+    }
+  ]
+}

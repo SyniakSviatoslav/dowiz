@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Button, Input, Select, EmptyState, CourierLiveMap, useI18n, PriceDisplay, useToast, SkeletonBase, scalePress } from '@deliveryos/ui';
+import { Button, Input, Select, EmptyState, useI18n, PriceDisplay, useToast, SkeletonBase, scalePress } from '@deliveryos/ui';
+import { CourierLiveMap } from '../../components/maps.js';
 import type { CourierOnMap, LngLatLike } from '@deliveryos/ui';
 import { apiClient } from '../../lib/index.js';
 import { z } from 'zod';

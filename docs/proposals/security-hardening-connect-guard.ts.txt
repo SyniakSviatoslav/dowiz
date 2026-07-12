@@ -1,0 +1,138 @@
+// RECOMMENDED SHAPE: new file → packages/db/src/connect-guard.ts
+// Config-free so it is unit-testable under `pnpm test:unit` WITHOUT a live env
+// (index.ts calls loadEnv() at import, which needs the full DB env — keep the guard out of that path).
+import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/**
+ * Operational-pool connect-guard (OR-1 / OR-5, security-hardening-2026-07).
+ *
+ * The operational pool must NOT connect as a role that bypasses row-level security — for such a
+ * role RLS is INERT on the hot path (a table-wide PII siphon once C1 policies narrow). The live
+ * pool role today (`dowiz_app`) has `rolbypassrls=t` (migration 1790000000077); this guard makes
+ * that fact LOUD (warn + advisory telemetry) so it can never regress silently, while staying
+ * NON-FATAL by default — a fatal boot-guard here would take down staging/prod, since the live pool
+ * IS bypassrls now. The fatal flip is B3: set `POOL_REQUIRE_NOBYPASSRLS=true` AFTER the NOBYPASSRLS
+ * migration lands, and this guard THROWS on a bypassrls role. The literal-`postgres` superuser
+ * rejection (original FX-9 guard) is preserved and is always fatal.
+ */
+
+/** Minimal structural shape of the pg client the guard needs (keeps the unit test free of a live pool). */
+export interface ConnectGuardClient {
+  query(text: string): Promise<{ rows: Array<Record<string, unknown>> }>;
+  release(destroy?: boolean): void;
+}
+
+export interface TelemetryEvent {
+  kind: string;
+  severity: string;
+  target: string;
+  detail?: string;
+}
+
+export interface ConnectGuardOptions {
+  /**
+   * When true, a `rolbypassrls` role is FATAL (throws). Defaults to `POOL_REQUIRE_NOBYPASSRLS==='true'`.
+   * Flip to true only AFTER the NOBYPASSRLS migration (B3) — until then the live pool would refuse to boot.
+   */
+  requireNoBypassRls?: boolean;
+  /** Injectable for tests; defaults to `console.warn`. */
+  warn?: (message: string) => void;
+  /** Injectable for tests; defaults to a best-effort plane-telemetry spawn. */
+  emitTelemetry?: (event: TelemetryEvent) => void;
+}
+
+/**
+ * Best-effort, non-fatal plane-telemetry egress. Silent if the script is absent or errors —
+ * telemetry is advisory and must NEVER break a pool connection.
+ */
+export function emitPlaneTelemetry(event: TelemetryEvent): void {
+  try {
+    // packages/db/src (or dist) → repo root is three levels up → scripts/plane-telemetry.mjs
+    const here = dirname(fileURLToPath(import.meta.url));
+    const script = join(here, '..', '..', '..', 'scripts', 'plane-telemetry.mjs');
+    if (!existsSync(script)) return;
+    spawnSync(
+      process.execPath,
+      [
+        script,
+        'emit',
+        '--kind',
+        event.kind,
+        '--outcome',
+        'escalated',
+        '--severity',
+        event.severity,
+        '--target',
+        event.target,
+        '--emitter',
+        'db-connect-guard',
+        ...(event.detail ? ['--detail', event.detail] : []),
+      ],
+      { stdio: 'ignore', timeout: 5000 },
+    );
+  } catch {
+    // non-fatal: telemetry is advisory, never a gate
+  }
+}
+
+/**
+ * Enforce the operational-pool role invariant on a freshly-connected client.
+ * - literal `postgres` superuser → always throws (destroys the connection).
+ * - `rolbypassrls=true` → LOUD warn + advisory telemetry; throws only when `requireNoBypassRls`.
+ * - otherwise → OK.
+ */
+export async function enforceOperationalRole(
+  client: ConnectGuardClient,
+  options: ConnectGuardOptions = {},
+): Promise<void> {
+  const warn = options.warn ?? ((m: string) => console.warn(m));
+  const emit = options.emitTelemetry ?? emitPlaneTelemetry;
+  const requireNoBypassRls =
+    options.requireNoBypassRls ?? process.env.POOL_REQUIRE_NOBYPASSRLS === 'true';
+
+  const whoami = await client.query('SELECT current_user');
+  const currentUser = String(whoami.rows[0]?.current_user ?? '');
+
+  // Preserved literal-superuser rejection — always fatal.
+  if (currentUser === 'postgres') {
+    client.release(true); // Destroy the connection
+    throw new Error(
+      "SECURITY FAULT: Operational pool connected as 'postgres' superuser. This bypasses RLS. Use a dedicated restricted role.",
+    );
+  }
+
+  // OR-5: reject rolbypassrls in general, not just the literal 'postgres' name.
+  const probe = await client.query('SELECT rolbypassrls FROM pg_roles WHERE rolname = current_user');
+  const bypassesRls = probe.rows[0]?.rolbypassrls === true;
+
+  if (bypassesRls) {
+    warn(
+      `SECURITY WARNING: Operational pool connected as role '${currentUser}' which has ` +
+        `rolbypassrls=true — RLS is INERT on the hot path (OR-1, security-hardening-2026-07). ` +
+        `This is the council-approved interim state; flip POOL_REQUIRE_NOBYPASSRLS=true after the ` +
+        `NOBYPASSRLS migration (B3) to make it fatal.`,
+    );
+    // Best-effort advisory telemetry; must not break the connection.
+    try {
+      emit({
+        kind: 'escalation',
+        severity: 'warn',
+        target: 'pool-bypassrls',
+        detail: `role=${currentUser}`,
+      });
+    } catch {
+      // non-fatal
+    }
+
+    if (requireNoBypassRls) {
+      client.release(true); // Destroy the connection
+      throw new Error(
+        `SECURITY FAULT: POOL_REQUIRE_NOBYPASSRLS=true and operational pool connected as role ` +
+          `'${currentUser}' which has rolbypassrls=true. RLS is inert for this role — use a NOBYPASSRLS role.`,
+      );
+    }
+  }
+}

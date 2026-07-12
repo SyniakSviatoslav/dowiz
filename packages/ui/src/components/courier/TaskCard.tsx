@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'framer-motion';
 import { useI18n } from '../../lib/I18nProvider.js';
 import type { CourierTask } from './types.js';
 
@@ -92,16 +92,16 @@ export function TaskCard({ task, onAccept, onReject, isLoading, offerSeconds = 6
 
       <div className="border-t border-[var(--brand-border)] pt-4 flex gap-3">
         {onReject && (
-          <motion.button
+          <m.button
             onClick={() => onReject(task.id)}
             data-testid="courier-offer-decline"
             className="flex-1 min-h-11 bg-[var(--brand-surface-raised)] [@media(hover:hover)]:hover:bg-[var(--brand-border)] text-[var(--brand-text)] py-3 rounded-[var(--brand-radius-btn)] font-semibold transition-[background-color,transform] duration-150 ease-[var(--ease-soft)] motion-reduce:transition-none active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--brand-surface)]"
             whileTap={{ scale: 0.97 }}
           >
             {t('common.reject', 'Reject')}
-          </motion.button>
+          </m.button>
         )}
-        <motion.button
+        <m.button
           onClick={() => onAccept(task.id)}
           data-testid="task-accept"
           disabled={isLoading}
@@ -117,7 +117,7 @@ export function TaskCard({ task, onAccept, onReject, isLoading, offerSeconds = 6
               {t('common.loading', 'Loading...')}
             </span>
           ) : t('courier.accept_task', 'Accept Task')}
-        </motion.button>
+        </m.button>
       </div>
 
     </div>

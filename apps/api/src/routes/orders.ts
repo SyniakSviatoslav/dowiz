@@ -6,7 +6,13 @@ import type { QueueProvider, MessageBus } from '@deliveryos/platform';
 import { loadEnv } from '@deliveryos/config';
 import { BUS_CHANNELS, QUEUE_NAMES, orderChannel, dashboardChannel, courierChannel } from '../lib/registry.js';
 import { updateOrderStatus } from '../lib/orderStatusService';
+<<<<<<< Updated upstream
 import { generateOpaqueToken } from '../lib/otp.js';
+=======
+import { assertOwnerTargetAllowed } from '../lib/orderAuthz.js';
+import { attemptHonestDispatch } from '../lib/dispatch.js';
+import { getPaymentProvider, isPrepaidEnabled, isCryptoEnabled } from '../lib/payments/registry.js';
+>>>>>>> Stashed changes
 import { evaluatePreflight } from '../lib/preflight.js';
 import { computeSignals } from '../lib/signals/compute.js';
 import type { Pool } from 'pg';
@@ -918,8 +924,23 @@ export default async function orderRoutes(fastify: FastifyInstance, opts: OrderR
             messageBus
           });
 
+<<<<<<< Updated upstream
           // 3. If transitioning to IN_DELIVERY, find and assign available courier synchronously.
           // Pickup orders are never dispatched to a courier (READY → PICKED_UP instead).
+=======
+          // deliver v2 offer-sweep-cancel addendum: the widened CONFIRMED/PREPARING/READY→CANCELLED
+          // edges are SYSTEM-only. An owner may not drive them via this request-supplied newStatus →
+          // 403 CANCEL_NOT_PERMITTED. PENDING→CANCELLED and IN_DELIVERY→CANCELLED stay permitted.
+          assertOwnerTargetAllowed(cur.rows[0].status, newStatus);
+
+          // §5 / R2-1 / R3-2 — HONEST DISPATCH. For an IN_DELIVERY target on a delivery order, find a courier
+          // BEFORE advancing the status. The old code flipped to IN_DELIVERY first, then silently no-op'd when
+          // no courier was free → an IN_DELIVERY order with NO courier and NO recovery affordance (the F1
+          // orphan). Now: no courier → DO NOT advance (stay put), report {dispatched:false,reason:'no_courier'};
+          // the owner re-taps when a courier comes on shift. An order already carrying an active binding (incl
+          // 'offered' from the owner offer-handshake — in the mig-073 partial-uniques) is already being
+          // dispatched → no conflicting insert. This holds regardless of any offer-handshake flag.
+>>>>>>> Stashed changes
           if (newStatus === 'IN_DELIVERY' && cur.rows[0].type === 'delivery') {
             const availRes = await client.query(
               `SELECT c.id AS courier_id, cs.id AS shift_id

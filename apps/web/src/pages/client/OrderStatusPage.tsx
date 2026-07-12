@@ -2,10 +2,16 @@ import { safeStorage } from '../../lib/safeStorage.js';
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { motion, useReducedMotion } from 'framer-motion';
-import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, CourierLiveMap, MessageThread, useI18n, useToast, PriceDisplay, ease, duration, Textarea } from '@deliveryos/ui';
+import { OrderProgress, SkeletonBase, WSStatusDot, EmptyState, MessageThread, useI18n, useToast, PriceDisplay, ease, duration, Textarea } from '@deliveryos/ui';
+import { CourierLiveMap } from '../../components/maps.js';
 import type { LngLatLike, CourierOnMap } from '@deliveryos/ui';
 import { apiClient, useWebSocket } from '../../lib/index.js';
 import { messengerLink } from '../../lib/messenger.js';
+<<<<<<< Updated upstream
+=======
+import { fetchVenueInfo } from '../../lib/publicApi.js';
+import { useReorder } from '../../hooks/useReorder.js';
+>>>>>>> Stashed changes
 import { z } from 'zod';
 
 const MessagesResponse = z.object({
@@ -102,6 +108,29 @@ export function OrderStatusPage() {
       .then((d: any) => { if (d?.phone && d.showPhoneOnOffline !== false) setFallbackPhone(d.phone); })
       .catch(() => {});
   }, [slug]);
+
+  // Reorder (device-local, read-only): rehydrate the cart from this past order's
+  // items, re-validating availability/price against the live menu via the shared
+  // cart add-path, then land back on the storefront with the cart populated.
+  const { reorder, busy: reorderBusy } = useReorder(slug);
+  const handleReorder = useCallback(async () => {
+    if (reorderBusy || !order?.items?.length) return;
+    const result = await reorder(order.items, { replace: true });
+    if (!result) {
+      showToast(t('order.reorder_failed', 'Could not load the menu to reorder. Please try again.'), 'error');
+      return;
+    }
+    if (result.items.length === 0) {
+      showToast(t('order.reorder_empty', 'None of these items are available right now.'), 'error');
+      return;
+    }
+    if (result.skipped.length) {
+      showToast(t('order.reorder_some_unavailable', 'Some items were unavailable and skipped — the rest are in your cart.'), 'info');
+    } else {
+      showToast(t('order.reorder_added', 'Your last order is back in the cart.'), 'success');
+    }
+    // reorder() already navigated to /s/:slug on success.
+  }, [reorderBusy, order?.items, reorder, showToast, t]);
 
   const submitRating = useCallback(async (stars: number) => {
     if (ratingBusy) return;
@@ -508,8 +537,12 @@ export function OrderStatusPage() {
         </div>
       )}
 
-      {/* Live Courier Map — delivery only (pickup has no courier) */}
-      {!isPickup && (
+      {/* Live Courier Map — delivery only (pickup has no courier), and only once the
+          delivery is actually LIVE (IN_DELIVERY or a courier fix already streaming).
+          PENDING/PREPARING views skip the map entirely so they never fetch the ~1MB
+          maplibre chunk (perf gate from product-media-OPERATOR-ENABLEMENT; matches the
+          documented expectation in e2e/tests/flow-ui-order-status.spec.ts). */}
+      {!isPickup && !isTerminalStatus && (isInDelivery || hasCourierFix) && (
         <div className="h-64 relative w-full" title={t('tooltip.courier_location', 'Courier current location')}>
           <CourierLiveMap
             className="h-full w-full"
@@ -617,9 +650,20 @@ export function OrderStatusPage() {
                   : t('order.cancelled_help', "This order was cancelled — you haven't been charged. You can order again or call the restaurant.")}
               </p>
             )}
+            {/* Reorder — the zero-friction repeat: rehydrate the cart from this order,
+                re-validated against the live menu, then jump back to the storefront.
+                Primary action; the plain "browse the menu" link stays as the escape hatch. */}
+            {order.items?.length > 0 && (
+              <button type="button" data-testid="reorder-btn" onClick={handleReorder} disabled={reorderBusy}
+                className="w-full min-h-11 inline-flex items-center justify-center gap-2 rounded-[var(--brand-radius-btn)] font-semibold transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+                style={{ background: 'var(--brand-primary)', color: 'var(--color-on-primary, var(--brand-bg))', boxShadow: 'var(--elev-1)' }}>
+                <i className={`ti ${reorderBusy ? 'ti-loader-2 animate-spin' : 'ti-refresh'}`} aria-hidden="true" />
+                {reorderBusy ? t('order.reordering', 'Adding to cart…') : t('order.reorder', 'Reorder')}
+              </button>
+            )}
             <a href={slug ? `/s/${slug}` : '/'} data-testid="order-again"
-              className="w-full min-h-11 inline-flex items-center justify-center rounded-[var(--brand-radius-btn)] font-semibold transition-[transform,box-shadow] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
-              style={{ background: 'var(--brand-primary)', color: 'var(--color-on-primary, var(--brand-bg))', boxShadow: 'var(--elev-1)' }}>
+              className="w-full min-h-11 inline-flex items-center justify-center rounded-[var(--brand-radius-btn)] border font-medium transition-[transform,background-color] duration-[var(--motion-fast)] ease-[var(--ease-soft)] hover:hover:-translate-y-0.5 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand-primary)] focus-visible:ring-offset-2"
+              style={{ borderColor: 'var(--brand-border)', color: 'var(--brand-text)' }}>
               {t('order.order_again', 'Order again')}
             </a>
             {fallbackPhone && order.status !== 'DELIVERED' && (

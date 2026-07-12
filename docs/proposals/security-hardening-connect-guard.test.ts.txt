@@ -1,0 +1,72 @@
+// Destined for packages/db/tests/connect-guard.test.ts
+// Runs under `pnpm test:unit` (node --test --import tsx 'packages/**/*.test.ts') with NO env needed.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { enforceOperationalRole } from '../src/connect-guard.js';
+
+/** Fake pg client: answers the two probe queries; records release() calls. */
+function fakeClient(currentUser: string, rolbypassrls: boolean) {
+  const released: boolean[] = [];
+  const client = {
+    async query(text: string) {
+      if (/current_user/.test(text) && !/pg_roles/.test(text)) {
+        return { rows: [{ current_user: currentUser }] };
+      }
+      if (/pg_roles/.test(text)) {
+        return { rows: [{ rolbypassrls }] };
+      }
+      return { rows: [] };
+    },
+    release(destroy?: boolean) {
+      released.push(destroy === true);
+    },
+  };
+  return { client, released };
+}
+
+test('rolbypassrls=true, flag OFF → warns + emits telemetry, does NOT throw (live-pool safe)', async () => {
+  const { client, released } = fakeClient('dowiz_app', true);
+  const warnings: string[] = [];
+  const events: unknown[] = [];
+  await enforceOperationalRole(client, {
+    requireNoBypassRls: false,
+    warn: (m) => warnings.push(m),
+    emitTelemetry: (e) => events.push(e),
+  });
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0]!, /rolbypassrls=true/);
+  assert.deepEqual(events, [
+    { kind: 'escalation', severity: 'warn', target: 'pool-bypassrls', detail: 'role=dowiz_app' },
+  ]);
+  assert.deepEqual(released, [], 'connection NOT destroyed when non-fatal');
+});
+
+test('rolbypassrls=true, flag ON → throws AND destroys the connection', async () => {
+  const { client, released } = fakeClient('dowiz_app', true);
+  await assert.rejects(
+    () => enforceOperationalRole(client, { requireNoBypassRls: true, warn: () => {}, emitTelemetry: () => {} }),
+    /POOL_REQUIRE_NOBYPASSRLS=true/,
+  );
+  assert.deepEqual(released, [true]);
+});
+
+test('rolbypassrls=false → OK: no warn, no throw', async () => {
+  const { client, released } = fakeClient('dowiz_app', false);
+  const warnings: string[] = [];
+  await enforceOperationalRole(client, {
+    requireNoBypassRls: true,
+    warn: (m) => warnings.push(m),
+    emitTelemetry: () => {},
+  });
+  assert.deepEqual(warnings, []);
+  assert.deepEqual(released, []);
+});
+
+test("literal 'postgres' → still rejected (preserved FX-9 guard)", async () => {
+  const { client, released } = fakeClient('postgres', false);
+  await assert.rejects(
+    () => enforceOperationalRole(client, { warn: () => {}, emitTelemetry: () => {} }),
+    /'postgres' superuser/,
+  );
+  assert.deepEqual(released, [true]);
+});

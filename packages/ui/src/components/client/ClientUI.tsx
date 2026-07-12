@@ -1,4 +1,6 @@
 export { ProductCard } from './ProductCard.js';
+export { ProductDetailSheet } from './ProductDetailSheet.js';
+export type { ProductDetailSheetProps, ProductDetailSheetProduct } from './ProductDetailSheet.js';
 export { StateChip } from './StateChip.js';
 export type { StateChipState, StateChipProps } from './StateChip.js';
 export { CartDrawer } from './CartDrawer.js';

@@ -12,22 +12,30 @@ On Supabase Free tier:
 - ⚠ Auto-pause risk after ~1 week idle (mitigated by health endpoint keep-alive)
 
 > **When upgrading to Pro:** PITR becomes available, RPO drops to seconds.
-> Until then, RPO = backup interval (4h).
+> Until then, RPO = backup interval (**1h** — the base cadence is hourly; see below).
 
 ## Recovery Targets (RTO/RPO)
+
+> Cadence is **hourly** (`BACKUP_HOURLY_CRON`, plus daily/weekly/monthly retention tiers in
+> `apps/api/src/workers/backup/index.ts`). This table and `docs/backup/runbooks.md` are the single
+> source of truth and must agree — RPO = the hourly interval.
 
 | Metric | Target (Free) | Target (Pro) | Measured |
 |--------|--------------|--------------|----------|
 | **RTO** | ≤ 4 hours | ≤ 2 hours | See DR drill report |
-| **RPO** | ≤ 4 hours (logical backup) | ≤ 5 min (PITR + logical) | See DR drill report |
-| **Backup cadence** | Every 4 hours | Hourly + continuous WAL | `backup_metadata` table |
+| **RPO** | ≤ 1 hour (hourly logical backup) | ≤ 5 min (PITR + logical) | See DR drill report |
+| **Backup cadence** | Hourly (+ daily/weekly/monthly tiers) | Hourly + continuous WAL | `backup_metadata` table |
 | **Restore-test** | Daily at 04:00 UTC | Daily at 04:00 UTC | `backup_audit_log` table |
 
 ## Scenarios
 
-### Scenario A: Primary DB Corrupted (data loss < 4h)
+### Scenario A: Primary DB Corrupted (data loss < 1h)
 
 **Triggers:** Health endpoint → 503 unhealthy, `backup.failed` event, Sentry alert.
+
+> For a **full restore to a fresh instance**, the authoritative step-by-step (provision → migrate →
+> `pnpm backup:restore --snapshot=<id> --confirm` → verify → cutover) lives in
+> `docs/backup/runbooks.md` §3. The steps below are the Free-tier drill/cutover variant.
 
 **Procedure:**
 
@@ -37,7 +45,7 @@ On Supabase Free tier:
    curl https://api.dowiz.org/health | jq .checks.postgres
    
    # List recent completed backups
-   pnpm backup:list --since=4h
+   pnpm backup:list --since=1h
    ```
 
 2. **Pause writes** (manual — use Supabase dashboard or scale app to 0)
