@@ -2,5 +2,6 @@
 //! integration tests. No courier scoring/rating anywhere.
 
 pub mod models;
+pub mod reliability;
 pub mod routes;
 pub mod store;
