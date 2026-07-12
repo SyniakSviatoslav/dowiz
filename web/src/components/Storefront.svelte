@@ -114,19 +114,26 @@
 
   const subtotal = $derived(cartLines.reduce((s, l) => s + l.lineTotal, 0));
 
-  // Placeholder order submit. WASM/kernel glue is deferred; for now this
-  // logs the exact kernel-compatible payload and returns a stubbed response.
-  async function placeOrder(payload) {
-    // TODO(wasm): replace with kernel call + POST /orders.
-    console.log('[placeOrder] kernel-compatible payload:', payload);
-    return { status: STATUS.Pending, id: 'placeholder-order', payload };
+  // Kernel loader — dynamically imported in the browser only (the wasm glue is
+  // --target web and relies on fetch/URL). SSR-safe: never imported at module
+  // top-level, so the Astro server render never touches wasm.
+  let kernelPlaceOrder = null;
+
+  async function loadKernel() {
+    if (kernelPlaceOrder) return kernelPlaceOrder;
+    const mod = await import('../lib/kernel.js');
+    kernelPlaceOrder = mod.placeOrder;
+    return kernelPlaceOrder;
   }
 
   async function submitOrder() {
+    if (typeof window === 'undefined') return; // SSR guard
     if (Object.keys(cart).length === 0) return;
     submitting = true;
     try {
-      lastResult = await placeOrder(buildOrderPayload());
+      const placeOrder = await loadKernel();
+      const order = await placeOrder(buildOrderPayload());
+      lastResult = order; // real kernel Order JSON { id, status, ... }
     } finally {
       submitting = false;
     }
@@ -183,7 +190,9 @@
 
 {#if lastResult}
   <section>
-    <h2>Last order payload (kernel-compatible)</h2>
-    <pre>{JSON.stringify(lastResult.payload, null, 2)}</pre>
+    <h2>Order placed</h2>
+    <p><strong>Order id:</strong> {lastResult.id}</p>
+    <p><strong>Status:</strong> {lastResult.status}</p>
+    <pre>{JSON.stringify(lastResult, null, 2)}</pre>
   </section>
 {/if}
