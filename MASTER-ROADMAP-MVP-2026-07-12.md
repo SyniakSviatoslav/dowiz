@@ -100,15 +100,26 @@ All six launched streams landed, were independently validated (isolated-target
 
 ## 3. SEQUENTIAL GATES (red-line / external / tier-dependent — NOT parallel)
 
-- **S1 · dtn7-rs integration (L3)** — depends on P1 (store) + L2 node. Replaces the in-crate
-  `Bundle` simulation with the real `dtn7-rs` daemon; maps `Bundle` → BPv7 structures 1:1.
-  Operator-gated (new dependency). Verifies BIBE custody (D3).
-- **S2 · QUIC/TCPCLv4 convergence** — underlay for connected segments; depends on S1.
-- **S3 · Production PQ swap** — for node-to-node channels, offer `rustls+aws-lc-rs
-  (X25519MLKEM768)` + `liboqs ML-DSA` until our from-scratch core is independently audited.
-  Our core stays the local reference. (D4)
-- **S4 · FIRST REAL ORDER** — end-to-end: owner posts → courier accepts (custody) → delivers →
-  customer confirms, all over real transport + local DB. The G11 GREEN trigger.
+> STATUS (2026-07-12): **S4 DONE** (simulated first real order end-to-end, G11 GREEN).
+> **S1 + S2/S3 IN FLIGHT** as parallel worktrees (bp7-rs codec; QUIC+rustls/aws-lc-rs bearer).
+> Quarantine (`@deliveryos/db`) DONE + pushed (cf0d319d).
+
+- **S1 · dtn7-rs integration (L3)** — depends on P1 (store) + L2 node. Maps `Bundle` → BPv7
+  structures 1:1. Operator-gated (new dependency). Verifies BIBE custody (D3).
+  *DONE (headless codec half)*: real `bp7-rs` (RFC 9171) `Bundle<->BPv7` codec + `Transport`
+  trait committed; BPv7 daemon itself is a runtime swap (does not change the custody flow).
+- **S2 · QUIC/TCPCLv4 convergence** — underlay for connected segments; depends on S1 codec.
+  *IN FLIGHT*: `quinn` QUIC + `rustls`/`aws-lc-rs` TLS 1.3 bearer carrying `Bundle` over
+  loopback, RED+GREEN tests.
+- **S3 · Production PQ swap** — offer `rustls+aws-lc-rs (X25519MLKEM768)` + `liboqs ML-DSA`
+  beside the from-scratch core (D4). *PARTIAL*: TLS 1.3/QUIC bearer landed. The `liboqs`
+  ML-DSA signer swap is gated on the `liboqs` crate (not in the offline cache) — operator
+  install needed; layered ON TOP of this transport, not instead of it. Core stays reference.
+- **S4 · FIRST REAL ORDER** — ✅ DONE (G11 GREEN). `node/src/sim.rs`: owner posts a
+  (confidential, D4) order → courier takes custody + persists to local SQLite → courier
+  RESTART (custody reloaded from store = BIBE "store is truth") → forwards → customer opens
+  (only customer hybrid key decrypts) + confirms → owner reaches `Delivered`. 3 RED+GREEN
+  tests, all green; full node suite 28 pass, clippy clean.
 
 ---
 
