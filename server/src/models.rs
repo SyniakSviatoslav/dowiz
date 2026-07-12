@@ -86,6 +86,23 @@ pub struct PushSubResponse {
     pub created_at_ms: i64,
 }
 
+/// Request body for `POST /api/venues/:id/claim`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClaimVenueRequest {
+    pub owner_id: String,
+    #[serde(default)]
+    pub name: Option<String>,
+}
+
+/// Response for `GET /api/venues/:id`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VenueResponse {
+    pub id: String,
+    pub name: String,
+    pub claimed: bool,
+    pub owner_id: Option<String>,
+}
+
 /// Channel count entry.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChannelCount {

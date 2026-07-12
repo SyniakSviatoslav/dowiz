@@ -79,6 +79,13 @@ impl Store {
                 p256dh       TEXT NOT NULL,
                 created_at_ms INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS venues (
+                id            TEXT PRIMARY KEY,
+                name          TEXT NOT NULL,
+                claimed       INTEGER NOT NULL DEFAULT 0,
+                owner_id      TEXT,
+                created_at_ms INTEGER NOT NULL
+            );
             "#,
         )
     }
@@ -189,6 +196,55 @@ impl Store {
         let conn = self.conn.lock().unwrap();
         let n: i64 = conn.query_row("SELECT COUNT(*) FROM push_subs", [], |row| row.get(0))?;
         Ok(n as u64)
+    }
+
+    /// Insert a venue (unclaimed by default).
+    pub fn insert_venue(&self, id: &str, name: &str, created_at_ms: i64) -> rusqlite::Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "INSERT INTO venues (id, name, claimed, owner_id, created_at_ms)
+             VALUES (?1, ?2, 0, NULL, ?3)",
+            params![id, name, created_at_ms],
+        )?;
+        Ok(())
+    }
+
+    /// Claim a venue (idempotent). Returns true if a row was updated/inserted.
+    /// `name` is used when creating a new (absent) venue; an existing venue's
+    /// name is preserved on re-claim.
+    pub fn claim_venue(
+        &self,
+        id: &str,
+        owner_id: &str,
+        name: &str,
+        created_at_ms: i64,
+    ) -> rusqlite::Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        // Upsert: claim existing or create-claimed if absent.
+        conn.execute(
+            "INSERT INTO venues (id, name, claimed, owner_id, created_at_ms)
+             VALUES (?1, ?3, 1, ?2, ?4)
+             ON CONFLICT(id) DO UPDATE SET claimed = 1, owner_id = ?2",
+            params![id, owner_id, name, created_at_ms],
+        )?;
+        Ok(true)
+    }
+
+    /// Fetch a venue by id.
+    pub fn get_venue(&self, id: &str) -> rusqlite::Result<Option<(String, bool, Option<String>)>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT name, claimed, owner_id FROM venues WHERE id = ?1",
+        )?;
+        let mut rows = stmt.query(params![id])?;
+        if let Some(row) = rows.next()? {
+            let name: String = row.get(0)?;
+            let claimed: i64 = row.get(1)?;
+            let owner: Option<String> = row.get(2)?;
+            Ok(Some((name, claimed != 0, owner)))
+        } else {
+            Ok(None)
+        }
     }
 }
 

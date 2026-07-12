@@ -236,6 +236,55 @@ fn green_boot_grace_absorbs_storm() {
     assert!(!r.is_storm());
 }
 
+// ── GREEN: claim a venue, it reports claimed=true ──
+#[tokio::test]
+async fn green_venue_claim_then_get() {
+    let app = test_app();
+    let req = Request::builder()
+        .method("POST")
+        .uri("/api/venues/v-tokyo/claim")
+        .header("content-type", "application/json")
+        .body(Body::from(
+            serde_json::json!({ "owner_id": "owner-1", "name": "Tokyo Hub" }).to_string(),
+        ))
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["claimed"], true);
+    assert_eq!(body["id"], "v-tokyo");
+
+    // Now GET reflects the claimed state.
+    let req = Request::builder()
+        .method("GET")
+        .uri("/api/venues/v-tokyo")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body: serde_json::Value = serde_json::from_slice(
+        &axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap(),
+    )
+    .unwrap();
+    assert_eq!(body["claimed"], true);
+}
+
+// ── RED: unknown venue -> 404 ──
+#[tokio::test]
+async fn red_unknown_venue_is_404() {
+    let app = test_app();
+    let req = Request::builder()
+        .method("GET")
+        .uri("/api/venues/does-not-exist")
+        .body(Body::empty())
+        .unwrap();
+    let res = app.clone().oneshot(req).await.unwrap();
+    assert_eq!(res.status(), StatusCode::NOT_FOUND);
+}
+
 // Sanity: ensure the kernel's transition table matches what the handler relies on.
 #[test]
 fn kernel_transition_table_sanity() {
