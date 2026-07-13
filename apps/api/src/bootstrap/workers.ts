@@ -7,6 +7,7 @@
 import type { Pool } from 'pg';
 import type { PgBoss, Job } from 'pg-boss';
 import type { MessageBus, PgBossQueueProvider } from '@deliveryos/platform';
+import type { StorageProvider } from '../ports.js';
 import type {
   NotificationWorker,
   NotifyDispatchJob,
