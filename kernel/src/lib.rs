@@ -4,6 +4,7 @@
 
 pub mod analytics;
 pub mod domain;
+pub mod isolation;
 pub mod intake;
 pub mod loops;
 pub mod money;

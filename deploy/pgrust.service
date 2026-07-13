@@ -1,0 +1,54 @@
+# pgrust.service — native systemd unit for the pgrust Postgres driver/service.
+#
+# DK-05 (Docker full-swap): pgrust runs as a native, systemd-managed process —
+# NOT a Docker/Podman/Nerdctl container. It is a trusted first-party component
+# (the per-node source-of-truth), so its isolation comes from the host process
+# model + app-level RLS cross-tenant gate, not from container/VM boundaries.
+#
+# RED gate: ExecStart MUST NOT reference docker/podman/nerdctl. Asserted by
+# deploy/check-no-docker.sh (exits non-zero if 'docker' appears in ExecStart).
+#
+# Install: `cp pgrust.service /etc/systemd/system/ && systemctl daemon-reload &&
+#           systemctl enable --now pgrust`
+
+[Unit]
+Description=pgrust — native Postgres driver/service (per-node source-of-truth)
+Documentation=https://github.com/dowiz/dowiz/docs/design/docker-swap
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Native binary, NOT a container runtime invocation.
+ExecStart=/usr/local/bin/pgrust --config /etc/pgrust/pgrust.toml
+EnvironmentFile=/etc/pgrust/pgrust.env
+Restart=on-failure
+RestartSec=2s
+
+# Hardening (systemd security directives). pgrust does not need broad ambient
+# authority; it opens a listen socket + a data dir + talks to the kernel host.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+# NOTE: pgrust maps a data dir; ProtectSystem=strict requires the data dir be
+# declared writable below. Adjust the path to match pgrust.toml's data_dir.
+ReadWritePaths=/var/lib/pgrust
+# pgrust is a long-running network service; deny W^X-violating exec mappings
+# only if the build is compatible (drop this line if it breaks startup).
+MemoryDenyWriteExecute=yes
+# Minimal capability set — pgrust needs no privileges beyond binding a port.
+CapabilityBoundingSet=
+AmbientCapabilities=
+# No credential escalation; run as the dedicated unprivileged service user.
+User=pgrust
+Group=pgrust
+# System call surface is left to the default filter (broad) on purpose here;
+# tightening to a seccomp profile is a follow-up ops-reliability task, not DK-05.
+
+[Install]
+WantedBy=multi-user.target

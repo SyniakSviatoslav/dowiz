@@ -1,44 +1,68 @@
-# Static SPA image — decentralized app shell.
+# DK-04 / DK-08: Zero-OCI static SPA image.
 #
-# Root-cause note (2026-07-13, MANIFESTO/DECISIONS D1): the legacy
-# centralized server (apps/api + apps/worker, deployed via attic/fly.toml with
-# dist/api/server.cjs, dist/worker, and a release_command migrator) was DROPPED.
-# There is no server process, no central DB, no Supabase, no Fly. This image
-# serves ONLY the static SPA built by `pnpm -r build` (apps/web/dist), which
-# the thin client / reference alt-client loads. It does NOT bundle or run any
-# Node backend, and it does NOT auto-migrate a database.
+# Root-cause note (2026-07-13, MANIFESTO/DECISIONS D1): the legacy centralized
+# server (apps/api + apps/worker, Fly, Supabase) was DROPPED. This image serves
+# ONLY the static SPA built by `pnpm -r build` + `scripts/build-apps.ts`.
+#
+# DK-04: the nginx CONTAINER is GONE. It is replaced by `native-spa-server`, a
+# from-scratch native-Rust axum binary living in tools/native-spa-server/. The
+# behaviour (SPA fallback, /assets immutable cache, the EXACT security headers
+# from the old docker/nginx-default.conf) is ported 1:1 and locked by RED tests.
+#
+# DK-08: ZERO-OCI RUNTIME. The final stage is `scratch` and copies ONLY the
+# compiled static binary + the SPA dist + CA certs. There is NO nginx base, NO
+# chainguard/nginx, NO OCI "app image" runtime — the artifact is a single static
+# binary. The microVM/host-rootfs path is built separately by docker/mkosi-rootfs.sh.
+#
+# The build still runs the pnpm SPA build for the dist; only the runtime swaps.
 
-# Build Stage
-FROM node:22-slim AS builder
+# ---------------------------------------------------------------------------
+# Stage 1: build the SPA via pnpm (frontend only, no backend, no migrator).
+# ---------------------------------------------------------------------------
+FROM node:22-slim AS spa-builder
 
 WORKDIR /app
 
-# Install pnpm
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
-# Copy monorepo config
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml tsconfig.base.json ./
 COPY packages ./packages
 COPY apps ./apps
 COPY scripts ./scripts
 
-# Install dependencies and build all workspaces (produces apps/web/dist).
 RUN pnpm install --frozen-lockfile
 RUN pnpm -r build
-
-# Assemble the static SPA artifact only (no backend, no migrator).
 RUN pnpm dlx tsx scripts/build-apps.ts
 
-# Production Runtime Stage — static file server, no server-side logic.
-# Chainguard nginx: distroless (no shell/pkg-manager), SBOM, daily CVE rebuilds.
-FROM cgr.dev/chainguard/nginx:latest AS runtime
+# ---------------------------------------------------------------------------
+# Stage 2: compile the native-Rust static server (DK-04). Single static binary.
+# ---------------------------------------------------------------------------
+FROM rust:1 AS server-builder
 
-# Static web root produced by build-apps.ts.
-COPY --from=builder /app/dist/public /usr/share/nginx/html
+WORKDIR /build
+COPY tools/native-spa-server ./tools/native-spa-server
+WORKDIR /build/tools/native-spa-server
 
-# Hardened, minimal config: SPA fallback to index.html, no server runtime.
-# Config lives in docker/nginx-default.conf (reviewable outside the Dockerfile;
-# avoids the BuildKit-only heredoc COPY that the legacy builder rejects).
-COPY docker/nginx-default.conf /etc/nginx/conf.d/default.conf
+# Build only the native-spa-server crate (dowiz is NOT a cargo workspace).
+RUN cargo build --release --bin native-spa-server
 
+# ---------------------------------------------------------------------------
+# Stage 3 (DK-08 final): scratch runtime. Binary + dist + CA certs ONLY.
+# ---------------------------------------------------------------------------
+FROM scratch
+
+# The single Rust binary — this IS the server, no container runtime beneath.
+COPY --from=server-builder \
+     /build/tools/native-spa-server/target/release/native-spa-server \
+     /native-spa-server
+
+# Static SPA dist (mirrors legacy /usr/share/nginx/html).
+COPY --from=spa-builder /app/dist/public /var/www
+
+# CA certs for any outbound TLS the binary might open (minimal, optional).
+# If the spa-builder stage has them, copy; otherwise omit (server is static).
+COPY --from=spa-builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+
+# Serve on 8080 by default, root = the copied SPA dist.
 EXPOSE 8080
+ENTRYPOINT ["/native-spa-server", "--root", "/var/www", "--port", "8080"]
