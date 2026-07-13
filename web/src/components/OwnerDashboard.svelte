@@ -1,25 +1,28 @@
 <script>
   // ── Owner dashboard island ──────────────────────────────────────────
   // Read-only dashboard rendering ChannelLedger output (orders_by_channel +
-  // funnel + anomalies). This is the FIRST deterministic reader of order
-  // attribution on the frontend (roadmap finding: "attribution captured but
-  // ZERO readers on prod; measurement loop open").
+  // funnel + anomalies). First deterministic reader of order attribution on
+  // the frontend (roadmap finding: "attribution captured but ZERO readers on
+  // prod; measurement loop open").
   //
-  // The real compute lives in the kernel WASM (deferred to the WASM-binding
-  // wave). For this frontend slice we ingest a hardcoded sample of
-  // ChannelEvent-like JS objects and compute counts in plain JS via the
-  // literal port web/src/lib/channel.js. Static EXACT numbers — no count-up
-  // tween, no animation. No courier scoring.
+  // Compute lives in the kernel WASM (the canonical authority). We call
+  // `channelLedger` (web/src/lib/kernel.js) which invokes the kernel's
+  // `channel_ledger_js` — one stateless call returns {orders_by_channel,
+  // funnel, anomalies}. The legacy plain-JS port (web/src/lib/channel.js) was
+  // deleted (RW-02): it was a byte-for-byte mirror of kernel/src/analytics.rs,
+  // proven equivalent by web/src/lib/kernel/kernel.test.mjs.
+  // Static EXACT numbers — no count-up tween, no animation. No courier scoring.
   //
   // ChannelEvent-like JS object shape (mirrors kernel/src/analytics.rs):
   //   { order_id: string, channel: string, status: string, at_ms: number }
   // `status` is the canonical UPPER_SNAKE string (e.g. "PENDING", "DELIVERED").
-  import { createLedger, reduceAnomalies } from '../lib/channel.js';
+  import { onMount } from 'svelte';
+  import { channelLedger } from '../lib/kernel.js';
 
   // ── Hardcoded sample events (oracle-shaped) ─────────────────────────
   // Mix of channels, a duplicate order_id (o1 re-seen, must be ignored for
   // channel attribution but updates the funnel status), and an illegal
-  // sequence (o_anom: PENDING -> DELIVERED) that the anomaly reducer flags.
+  // sequence (o_anom2: PENDING -> DELIVERED) that the anomaly reducer flags.
   const SAMPLE_EVENTS = [
     { order_id: 'o1', channel: 'tiktok', status: 'PENDING', at_ms: 1 },
     { order_id: 'o1', channel: 'instagram', status: 'CONFIRMED', at_ms: 2 }, // duplicate id -> ignored re-attribute
@@ -29,8 +32,8 @@
     { order_id: 'o5', channel: 'instagram', status: 'REJECTED', at_ms: 6 },
     { order_id: 'o6', channel: 'organic', status: 'DELIVERED', at_ms: 7 },
     { order_id: 'o7', channel: 'tiktok', status: 'PREPARING', at_ms: 8 },
-    // Anomaly stream — separate from the ledger attribution sample below is
-    // folded by reduceAnomalies over the same (order_id, status, at_ms) tuples.
+    // Anomaly stream — folded by the kernel's decide/fold Law over the same
+    // (order_id, status, at_ms) tuples.
     { order_id: 'o_anom1', channel: 'tiktok', status: 'PENDING', at_ms: 9 },
     { order_id: 'o_anom1', channel: 'tiktok', status: 'CONFIRMED', at_ms: 10 },
     { order_id: 'o_anom1', channel: 'tiktok', status: 'PREPARING', at_ms: 11 },
@@ -41,24 +44,33 @@
     { order_id: 'o_anom2', channel: 'instagram', status: 'DELIVERED', at_ms: 16 }, // illegal jump -> anomaly
   ];
 
-  // Build ledger from the sample (ingest is idempotent w.r.t. duplicate id).
-  const ledger = createLedger();
-  for (const ev of SAMPLE_EVENTS) {
-    ledger.ingest(ev);
-  }
-  const ordersByChannel = ledger.ordersByChannel();
-  const anomalyCount = reduceAnomalies(SAMPLE_EVENTS);
+  // Kernel is the authority — one stateless call returns everything.
+  let ordersByChannel = $state([]);
+  let funnelMap = $state({});
+  let anomalyCount = $state(0);
+
+  onMount(async () => {
+    const res = await channelLedger(SAMPLE_EVENTS);
+    ordersByChannel = res.orders_by_channel;
+    funnelMap = res.funnel;
+    anomalyCount = res.anomalies;
+  });
 
   // Max channel count for bar scaling.
-  const maxChannelCount = ordersByChannel.reduce((m, [, c]) => Math.max(m, c), 0);
+  const maxChannelCount = $derived(
+    ordersByChannel.reduce((m, [, c]) => Math.max(m, c), 0)
+  );
 
-  // Selected channel for the funnel view (default to first / highest count).
-  let selectedChannel = $state(ordersByChannel[0]?.[0] ?? '');
+  // Selected channel for the funnel view (default to first / highest count once loaded).
+  let selectedChannel = $state('');
+  $effect(() => {
+    if (!selectedChannel && ordersByChannel.length > 0) {
+      selectedChannel = ordersByChannel[0][0];
+    }
+  });
 
   // Funnel rows for the selected channel (status -> count, fixed stage order).
-  const funnelRows = $derived(
-    selectedChannel ? ledger.funnel(selectedChannel) : []
-  );
+  const funnelRows = $derived(selectedChannel ? (funnelMap[selectedChannel] ?? []) : []);
   const maxFunnelCount = $derived(
     funnelRows.reduce((m, [, c]) => Math.max(m, c), 0)
   );
