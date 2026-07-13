@@ -154,7 +154,10 @@ mod tests {
     // ── R4 · can_accept_native_adapter() is false here ─────────────────────
     #[test]
     fn r4_cannot_accept_native_adapter_without_kvm() {
-        assert!(!can_accept_native_adapter(), "native-process adapters require KVM; this host has none");
+        assert!(
+            !can_accept_native_adapter(),
+            "native-process adapters require KVM; this host has none"
+        );
     }
 
     // ── R5 · unknown execution model is refused (fail-closed default) ──────
@@ -166,6 +169,9 @@ mod tests {
     // ── invariant · SandboxTier discriminant identity ──────────────────────
     #[test]
     fn invariant_sandbox_tier_distinct() {
-        assert_ne!(SandboxTier::WasmComponent, SandboxTier::NativeProcessRequiresKvm);
+        assert_ne!(
+            SandboxTier::WasmComponent,
+            SandboxTier::NativeProcessRequiresKvm
+        );
     }
 }

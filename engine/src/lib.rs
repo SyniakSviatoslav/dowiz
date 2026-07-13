@@ -14,8 +14,12 @@
 
 mod bridge;
 mod loop_;
+mod money_guard;
+mod motion;
 mod widget_store;
 
 pub use bridge::{FrameProfiler, VertexBridge};
 pub use loop_::{FixedTimestep, DT_STABLE, MAX_FRAME, MAX_SUBSTEPS};
+pub use money_guard::{interpolate, FieldValue, Money, TweenGuard};
+pub use motion::{heat_kernel_delay, Spring};
 pub use widget_store::{ParticlePool, ParticlePoolRing, WidgetStore};
