@@ -4,6 +4,8 @@
 
 pub mod analytics;
 pub mod domain;
+/// MESH-06 — per-node content-addressed event-log (local-first + sync).
+pub mod event_log;
 pub mod isolation;
 pub mod intake;
 pub mod loops;
