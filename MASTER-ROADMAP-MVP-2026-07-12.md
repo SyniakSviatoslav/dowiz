@@ -100,11 +100,12 @@ All six launched streams landed, were independently validated (isolated-target
 
 ## 3. SEQUENTIAL GATES (red-line / external / tier-dependent — NOT parallel)
 
-> STATUS (2026-07-12): **S4 DONE** (simulated first real order end-to-end, G11 GREEN).
-> **S1 DONE + PUSHED** (bp7-rs codec, 29 node tests green). **S2+S3 PARTIAL**: QUIC/TLS bearer
-> compiles + RED gates green, but GREEN end-to-end handshake ('closed by peer') not validated in
-> sandbox — blocked on aws-lc-rs/ring provider detail, needs live-network debug.
+> STATUS (2026-07-13): **S4 DONE** (simulated first real order end-to-end, G11 GREEN).
+> **S1 DONE + PUSHED** (bp7-rs codec). **S2+S3 DONE + PUSHED** (QUIC/TLS1.3 bearer verified
+> GREEN — 4 tests; the earlier 'closed by peer' was a client-side connection-drop race, fixed by
+> holding `conn.closed()` until the server reads). Full node suite **33 green**, clippy clean.
 > Quarantine (`@deliveryos/db`) DONE + pushed (11b49d56).
+> Operating mode: lazy-senior → **innovating-senior** (AGENTS.md updated).
 
 - **S1 · dtn7-rs integration (L3)** — depends on P1 (store) + L2 node. Maps `Bundle` → BPv7
   structures 1:1. Operator-gated (new dependency). Verifies BIBE custody (D3).
