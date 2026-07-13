@@ -171,9 +171,29 @@ const SLIVER_MAX: u128 = 8;
 /// Banned tokens for the static purity denylist. Matching any substring in the
 /// lower-cased verify source forces a human bypass (F3).
 const BANNED_TOKENS: &[&str] = &[
-    "rand", "random", "rng", "clock", "time", "now", "date", "network", "fetch", "http", "https",
-    "llm", "gpt", "openai", "mutable", "mutex", "refcell", "cell", "volatile", "nondet",
-    "instant", "systemtime", "socket",
+    "rand",
+    "random",
+    "rng",
+    "clock",
+    "time",
+    "now",
+    "date",
+    "network",
+    "fetch",
+    "http",
+    "https",
+    "llm",
+    "gpt",
+    "openai",
+    "mutable",
+    "mutex",
+    "refcell",
+    "cell",
+    "volatile",
+    "nondet",
+    "instant",
+    "systemtime",
+    "socket",
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -203,7 +223,8 @@ fn tier_a_unsat(spec: &EtalonSpec) -> Option<IntakeError> {
             }
         }
         // Need a contradiction check only when an actual constraint is present.
-        let constrained = f.min.is_some() || f.max.is_some() || f.enum_values.is_some() || f.pinned.is_some();
+        let constrained =
+            f.min.is_some() || f.max.is_some() || f.enum_values.is_some() || f.pinned.is_some();
         if !constrained {
             continue;
         }
@@ -563,7 +584,10 @@ mod tests {
                 rule_or_core,
                 ..
             }) if rule_or_core == "empty_interval" => {}
-            other => panic!("expected Tier-A empty_interval Unsatisfiable, got {:?}", other),
+            other => panic!(
+                "expected Tier-A empty_interval Unsatisfiable, got {:?}",
+                other
+            ),
         }
     }
 
@@ -655,8 +679,16 @@ mod tests {
                 },
             ],
             rules: vec![
-                RuleSpec { a: 0, b: 1, op: BinOp::Lt }, // x < y
-                RuleSpec { a: 1, b: 0, op: BinOp::Lt }, // y < x
+                RuleSpec {
+                    a: 0,
+                    b: 1,
+                    op: BinOp::Lt,
+                }, // x < y
+                RuleSpec {
+                    a: 1,
+                    b: 0,
+                    op: BinOp::Lt,
+                }, // y < x
             ],
             verify: String::new(),
             verify_fn: None,
@@ -668,7 +700,10 @@ mod tests {
                 rule_or_core,
                 ..
             }) if rule_or_core == "ac3_domain_wipeout" => {}
-            other => panic!("expected Tier-B ac3_domain_wipeout Unsatisfiable, got {:?}", other),
+            other => panic!(
+                "expected Tier-B ac3_domain_wipeout Unsatisfiable, got {:?}",
+                other
+            ),
         }
     }
 

@@ -120,7 +120,15 @@ pub fn place_order(
     channel: Option<String>,
     cash_pay_with: Option<String>,
 ) -> Result<Order, TransitionError> {
+    let _span = tracing::info_span!(
+        "place_order",
+        id = %id,
+        n_items = items.len(),
+        channel = ?channel
+    )
+    .entered();
     let subtotal = Order::compute_subtotal(&items).map_err(TransitionError::Invalid)?;
+    tracing::debug!(subtotal_cents = subtotal, "order subtotal computed");
     Ok(Order {
         id,
         customer_id,

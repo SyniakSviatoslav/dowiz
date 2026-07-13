@@ -18,3 +18,12 @@ pub use money::{
 };
 pub use order_machine::{assert_transition, fold_transitions, OrderStatus, TransitionError};
 pub use wasm::{apply_event_js, channel_ledger_js, place_order_js, reduce_anomalies_js};
+
+/// Install a `tracing-subscriber` with `RUST_LOG` env-filter.
+/// Dev/CLI only — never called from the wasm cdylib (no stdio there).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn init_tracing() {
+    use tracing_subscriber::EnvFilter;
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
+}
