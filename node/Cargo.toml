@@ -18,19 +18,17 @@ bp7 = { git = "https://github.com/dtn7/bp7-rs", branch = "master" }
 # prod, real networks). Secured by TLS 1.3.
 # innovate: test bearer uses the `ring` provider consistently across quinn, rustls
 # and rcgen (the cert is runtime-generated via rcgen, which defaults to `ring`).
-# The operator prod swap to `aws-lc-rs` (FIPS) is a separate, documented crate
-# feature flag — see DECISIONS D9; it must be applied uniformly to quinn + rcgen
-# or the TLS 1.3 handshake aborts with "closed by peer".
+# The operator prod swap to `aws-lc-rs` (FIPS, per DECISIONS D9) is applied
+# uniformly to quinn + rcgen + this Cargo.toml's aws-lc-rs dep, OR the TLS 1.3
+# handshake aborts with "closed by peer". Keep it OUT until that swap lands.
 quinn = "0.11"
 rustls = { version = "0.23", features = ["ring"] }
 rustls-pemfile = "2"
-aws-lc-rs = "1"
 # Self-signed test cert for the TLS 1.3 layer (innovate: runtime-gen; prod uses
 # operator-provisioned certs).
 rcgen = "0.13"
 # Diagnostics for the bearer (handshake/transport tracing) — used by tests when
 # RUST_LOG is set; zero cost when unused.
-tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "io-util", "time", "rt"] }
 
