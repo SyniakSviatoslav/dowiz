@@ -228,10 +228,17 @@ def analyze(states):
     mu = _drift(a, pi, idx, n)
     spec = _spectral(a, n)
 
+    # A trap requires EVIDENCE OF STRUGGLE — at least one failure in the window.
+    # `escape==0` alone is just quiet non-test work (editing docs, reading files); it
+    # is NOT churning. Without this guard the detector false-fires on a task's wrap-up
+    # phase (all edit+probe, no run) — which is exactly how it first fired on its own
+    # author. You cannot be "stuck thrashing" if nothing is failing.
+    has_failure = any(s in ("run_fail", "edit_fail") for s in states)
+
     # verdict — severity order matters (a clean trap is also low-escape).
-    #   LIMIT_CYCLE      : ~no escape AND (low entropy OR spectral oscillation)
-    #   STRANGE_ATTRACTOR: ~no escape, no net progress, high entropy, no clean period
-    trapped = escape <= ESCAPE_LO
+    #   LIMIT_CYCLE      : struggling AND (low entropy OR spectral oscillation)
+    #   STRANGE_ATTRACTOR: struggling, no net progress, high entropy, no clean period
+    trapped = escape <= ESCAPE_LO and has_failure
     if trapped and (H <= H_LO or spec["period"]):
         verdict = "LIMIT_CYCLE"
         reason = (f"cyclic trap: escape={escape:.3f}, H={H:.3f}, "
@@ -240,6 +247,9 @@ def analyze(states):
         verdict = "STRANGE_ATTRACTOR"
         reason = (f"bounded churn never reaching progress: escape={escape:.3f}, "
                   f"H={H:.3f}, drift={mu:+.3f}, slem={spec['slem']:.3f}")
+    elif not has_failure:
+        verdict = "HEALTHY"
+        reason = f"quiet work, no failures in window (escape={escape:.3f}, H={H:.3f})"
     else:
         verdict = "HEALTHY"
         reason = f"progress reachable: escape={escape:.3f}, drift={mu:+.3f}, H={H:.3f}"
@@ -252,6 +262,7 @@ def analyze(states):
         "entropy_rate_bits": round(H, 4),
         "escape_mass": round(escape, 4),
         "drift": round(mu, 4),
+        "has_failure": has_failure,
         "slem": spec["slem"],
         "period": spec["period"],
         "eigs": spec["eigs"],

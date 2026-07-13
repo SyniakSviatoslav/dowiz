@@ -73,6 +73,17 @@ assert r8["entropy_rate_bits"] > H_LO, "star must exceed entropy threshold (entr
 assert r8["period"] is True, "spectral period signal (lambda~=-1) must fire"
 assert r8["escape_mass"] == 0, "no green run -> genuinely trapped"
 
+# 9) REGRESSION (live false-positive): the detector fired STRANGE_ATTRACTOR on its
+#    own author during task WRAP-UP — all edit+probe, zero failures, zero test runs.
+#    Quiet non-test work is NOT a trap: a trap requires evidence of struggle.
+r9 = check("wrap-up bookkeeping (no failures)",
+           ["probe", "edit", "probe", "edit", "edit", "edit", "edit", "edit"], "HEALTHY")
+assert r9["has_failure"] is False, "this window has no failure states"
+
+# 10) A longer edit/probe bookkeeping run -> still HEALTHY (no struggle signal).
+check("bookkeeping run (edit/probe only)",
+      ["edit", "probe", "edit", "probe", "edit", "edit", "probe", "edit", "edit"], "HEALTHY")
+
 # --- spectral separation proof --------------------------------------------
 lc = analyze(["edit", "run_fail"] * 8)
 sa = analyze(lcg_walk(["edit", "edit_fail", "run_fail"], 40))
