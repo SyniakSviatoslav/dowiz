@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """bench_track — dynamic benchmark tracker for a Rust/criterion crate.
 
-Runs `cargo bench` (criterion JSON output), compares each benchmark's mean
+Runs `cargo bench` and parses criterion's stable TEXT output (the
+`name  time:   [low mean high]` lines), compares each benchmark's mean
 against benches/baseline.json (committed reference), prints a degrade/upgrade
-delta table, appends a timestamped row to benches/BENCH_HISTORY.md (git-ignored,
-so no repo churn), and exits non-zero when any benchmark regresses beyond
---threshold percent.
+delta table, appends a timestamped row to benches/BENCH_HISTORY.md
+(git-ignored, so no repo churn), and exits non-zero when any benchmark
+regresses beyond --threshold percent.
 
 This is the "autotrack" mechanism: run it on every CI build / scheduled cron to
 know the moment a hot path degrades (or silently improves).
+
+Criterion 0.5 note: the `--output-format json` CLI flag was removed; text
+parsing is version-stable and needs no special flags.
 
 Usage:
     python3 benches/bench_track.py                 # run + compare + log
@@ -18,31 +22,37 @@ Usage:
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
 
-BENCH = "criterion"
+UNIT_NS = {"ns": 1.0, "µs": 1e3, "us": 1e3, "ms": 1e6, "s": 1e9}
+# criterion prints: "name  time:   [low unit mean unit high unit]"
+LINE_RE = re.compile(
+    r"^(?P<name>\S+)\s+time:\s+\[(?P<lo>[\d.]+)\s+(?P<lu>\w+)\s+"
+    r"(?P<mean>[\d.]+)\s+(?P<mu>\w+)\s+(?P<hi>[\d.]+)\s+(?P<hu>\w+)\]"
+)
 
 
 def run_bench(crate: str) -> dict:
-    out = os.path.join(crate, "benches", "_cur.json")
     cmd = [
-        "cargo", "bench", "--bench", BENCH,
-        "--", "--warm-up-time", "1", "--measurement-time", "2",
-        "--sample-size", "10", "--output-format", "json",
-        "--output-file", out,
+        "cargo", "bench", "--bench", "criterion",
+        "--", "--warm-up-time", "1", "--measurement-time", "2", "--sample-size", "10",
     ]
-    subprocess.run(cmd, cwd=crate, check=True)
-    with open(out) as f:
-        data = json.load(f)
-    os.remove(out)
+    out = subprocess.run(cmd, cwd=crate, check=True, capture_output=True, text=True)
+    # criterion streams timing lines to stderr, not stdout.
+    text = out.stdout + out.stderr
     means = {}
-    for b in data:
-        name = b.get("function_id") or b.get("id")
-        # criterion reports the mean estimate in SECONDS; normalise to ns.
-        mean_sec = b["values"]["mean"]["estimate"]
-        means[name] = mean_sec * 1e9
+    for line in text.splitlines():
+        m = LINE_RE.match(line.strip())
+        if not m:
+            continue
+        unit = m.group("mu")
+        mean_ns = float(m.group("mean")) * UNIT_NS[unit]
+        means[m.group("name")] = mean_ns
+    if not means:
+        raise RuntimeError("bench_track: no benchmark timing lines parsed from cargo bench output")
     return means
 
 
