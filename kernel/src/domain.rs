@@ -51,8 +51,17 @@ pub struct Order {
 
 impl Order {
     /// Sum of `unit_price * quantity` across all items (the gross subtotal, pre-tax/fee).
-    pub fn compute_subtotal(items: &[OrderItem]) -> i64 {
-        items.iter().map(|i| i.unit_price * i.quantity).sum()
+    /// Overflow-safe (BP-17): returns `Err` instead of panicking/wrapping.
+    pub fn compute_subtotal(items: &[OrderItem]) -> Result<i64, String> {
+        let mut sum: i64 = 0;
+        for i in items {
+            let line = i
+                .unit_price
+                .checked_mul(i.quantity)
+                .ok_or("subtotal overflow (unit_price * quantity)")?;
+            sum = sum.checked_add(line).ok_or("subtotal overflow (sum)")?;
+        }
+        Ok(sum)
     }
 
     /// Recompute `self.total` from the subtotal via `compute_order_total`.
@@ -74,18 +83,22 @@ impl Order {
 /// (orders.ts:565), restricted to this scope: tax on the subtotal only (no discount),
 /// `fee` is the flat fee slot (delivery fee), and `None` fee means zero.
 ///
-/// Returns `Err` if the resulting total would be negative (money invariant).
+/// Returns `Err` if the resulting total would overflow or go negative (money invariant).
+/// Overflow-safe (BP-17): every addition uses `checked_add`.
 pub fn compute_order_total(
     subtotal: i64,
     tax_rate: f64,
     price_includes_tax: bool,
     fee: Option<i64>,
 ) -> Result<i64, String> {
-    // `apply_tax` is infallible for integer (`i64`) subtotals (money.rs guards `% 1`,
-    // which is always 0 for i64). We propagate its `Result` for interface fidelity.
     let tax = apply_tax(subtotal, tax_rate, price_includes_tax)?;
     let fee = fee.unwrap_or(0);
-    let total = subtotal + tax + fee;
+    let with_tax = subtotal
+        .checked_add(tax)
+        .ok_or("total overflow (subtotal + tax)")?;
+    let total = with_tax
+        .checked_add(fee)
+        .ok_or("total overflow (subtotal + tax + fee)")?;
     assert_non_negative(total)?;
     Ok(total)
 }
@@ -107,7 +120,7 @@ pub fn place_order(
     channel: Option<String>,
     cash_pay_with: Option<String>,
 ) -> Result<Order, TransitionError> {
-    let subtotal = Order::compute_subtotal(&items);
+    let subtotal = Order::compute_subtotal(&items).map_err(TransitionError::Invalid)?;
     Ok(Order {
         id,
         customer_id,
