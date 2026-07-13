@@ -1,0 +1,20 @@
+[package]
+name = "dowiz-engine"
+version = "0.1.0"
+edition = "2021"
+description = "dowiz field-ui engine core (FE-01/02/03): zero-copy numeric bridge, SoA DOD store + ParticlePool ring, fixed-timestep accumulator. Pure Rust, offline-clean, headless-testable. The TS/JS UI is the legacy oracle; this is the canonical render engine."
+# NO dependencies — offline-clean by mandate. GPU is a display surface; authoritative
+# compute is CPU-side (scalar == SIMD bit-identical). wgpu/cosmic-text are OUT OF SCOPE
+# here (added behind features later) so the default build has zero external crates.
+
+[lib]
+name = "dowiz_engine"
+path = "src/lib.rs"
+
+[dependencies]
+
+[features]
+# default = offline-clean. GPU/wasm glue is opt-in so CI never pulls a GPU/JS toolchain.
+default = []
+
+[dev-dependencies]

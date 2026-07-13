@@ -1,0 +1,21 @@
+//! dowiz field-ui engine core — FE-01/02/03.
+//!
+//! Pure Rust, zero-dependency, offline-clean. Authoritative compute is
+//! CPU-side; GPU/wasm is a display surface (the "bridge" models the linear
+//! memory the GPU reads from). Every module carries a falsifiable
+//! RED→GREEN gate as a `#[test]`.
+//!
+//! Invariants (from BLUEPRINTS-FIELD-UI.md Appendix B, never violated):
+//! - Boundary kind = update frequency: transactional → JSON, per-frame →
+//!   zero-copy view. NEVER JSON in the frame loop.
+//! - Fixed dt = DT_STABLE; the integrator never sees a divergent dt.
+//! - Determinism: scalar == SIMD bit-identical (no fuzz here, but the store
+//!   is plain `f32` arrays so it is).
+
+mod bridge;
+mod loop_;
+mod widget_store;
+
+pub use bridge::{FrameProfiler, VertexBridge};
+pub use loop_::{FixedTimestep, DT_STABLE, MAX_FRAME, MAX_SUBSTEPS};
+pub use widget_store::{ParticlePool, ParticlePoolRing, WidgetStore};
