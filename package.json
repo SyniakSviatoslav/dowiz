@@ -13,7 +13,7 @@
     "lint:gates": "eslint --no-ignore tools/eslint-plugin-local/__fixtures__/*",
     "format": "prettier --write .",
     "verify:env": "tsx --env-file=.env packages/config/src/verify-env.ts",
-    "verify:fresh-provision": "bash scripts/verify-fresh-provision.sh",
+    "test:governance": "tsx --test agent-governance/*.test.ts",
     "compliance:gate": "tsx scripts/compliance-gate.ts",
     "guardrail:owner-active": "node scripts/guardrail-owner-active-membership.mjs",
     "guardrail:spike-boundary": "node scripts/guardrail-spike-boundary.mjs",

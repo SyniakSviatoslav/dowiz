@@ -193,29 +193,9 @@ export function loadEnv(): Env {
     throw new Error(`Invalid environment variables:\n${issues}`);
   }
   const env = result.data;
-  assertDevAuthDisabledInProd(env);
+  // NOTE (2026-07-13, MANIFESTO/DECISIONS D1): the legacy boot-guard D that
+  // rejected a production server carrying a dev-auth surface was removed with the
+  // centralized server itself. There is no server process to boot in the
+  // decentralized protocol, so a prod-boot dev-auth gate is dead logic.
   return env;
-}
-
-/**
- * Boot-guard D (ADR-0003) — fail-fast so a production box can NEVER carry a dev-auth
- * surface. A dev bypass on prod was a live CRITICAL; this turns the next misconfig into
- * an aborted boot instead of a silent backdoor. Fires only on the DANGEROUS direction
- * (NODE_ENV=production with any dev-auth knob set); the inverse (prod NODE_ENV not
- * 'production') is caught pre-traffic by the release_command guard, not here.
- */
-export function assertDevAuthDisabledInProd(env: Env): void {
-  if (env.NODE_ENV !== 'production') return;
-  const offenders: string[] = [];
-  if (env.ALLOW_DEV_LOGIN === 'true') offenders.push('ALLOW_DEV_LOGIN');
-  if (env.DEV_AUTH_SECRET) offenders.push('DEV_AUTH_SECRET');
-  if (env.JWT_DEV_KID) offenders.push('JWT_DEV_KID');
-  if (env.JWT_DEV_PRIVATE_KEY) offenders.push('JWT_DEV_PRIVATE_KEY');
-  if (env.JWT_DEV_PUBLIC_KEY) offenders.push('JWT_DEV_PUBLIC_KEY');
-  if (offenders.length > 0) {
-    throw new Error(
-      `FATAL: dev-auth surface present on a production box (NODE_ENV=production): ` +
-        `${offenders.join(', ')} must be unset in production. Refusing to boot.`,
-    );
-  }
 }

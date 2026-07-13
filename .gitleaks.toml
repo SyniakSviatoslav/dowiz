@@ -32,6 +32,7 @@ description = "Exclude non-deployable + CI/test/agent dirs that hold only TEST-O
 paths = [
   '(^|.*/)node_modules/.*',
   '(^|.*/)\.venv/.*',
+  '(^|.*/)\.venv-paddle/.*',
   '(^|.*/)target/.*',
   '(^|.*/)dist/.*',
   '(^|.*/)\.git/.*',
@@ -52,4 +53,11 @@ paths = [
   '(?i)(^|.*/)tools/.*',
   '(?i)(^|.*/)apps/api/tests/.*',
   '(^|.*/)test-order\.json',
+  # Force-gitignored LOCAL-ONLY fixtures (never committable — see .gitignore
+  # force-ignore negation patterns). These hold dev/test keys on a dev machine
+  # only; they cannot enter the repo or GitHub, so they are excluded from the
+  # scan (matching the "test/CI keys only" exclusion policy above). The H8
+  # scrub runbook tracks the rotated-key provenance for these.
+  '(^|.*/)\.secrets\.local',
+  '(?i)(^|.*/)\.env\.test',
 ]
