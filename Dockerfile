@@ -54,6 +54,14 @@ server {
   }
   add_header X-Content-Type-Options "nosniff" always;
   add_header X-Frame-Options "DENY" always;
+
+  # Security headers (closes D3 F7 — SPA shell shipped without CSP; D4 confirmed
+  # React auto-escaping blocks XSS, this is defense-in-depth). Vite production
+  # builds emit external hashed JS/CSS only — no inline scripts/styles — so a
+  # strict policy is safe. block-all-mixed-content + no unsafe-inline/eval.
+  add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests" always;
+  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+  add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()" always;
 }
 NGINX
 

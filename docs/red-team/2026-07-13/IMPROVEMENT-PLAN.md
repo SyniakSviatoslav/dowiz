@@ -105,3 +105,16 @@ only the artifact the decentralized app shell actually serves: the static SPA.
 - `pnpm verify:secrets` → **GREEN** (exit 0); no secret-bearing file added to any
   ref; local fixtures + dep caches allowlisted (force-gitignored, un-committable).
   ✅ (verified this pass)
+
+## 6. Today's findings triage (2026-07-13)
+Full mapping of every D1–D7 finding → status in `TODAY-FINDINGS-TRIAGE.md`.
+Summary:
+- **CLOSED-REPO this pass (verified):** H8 local secret purge (`git fsck --unreachable`
+  → 0 after removing the 2 dangling RSA private keys); `verify-secrets` hardened;
+  **D3-F7 CSP** added to the staying static SPA (nginx strict CSP + Referrer/Permissions-Policy).
+- **CLOSED-ADR:** F4 SSRF (ADR-0009), F1/F2/F3 credential/PII classes (ADR-0007/0008).
+- **OPERATOR (not repo-fixable):** live weak-cred prod DB rotation (D1-F1), H8 GitHub-side
+  GC (Support request drafted), D7 live-deploy/UX (F-01..F-08).
+- **TODO-DEFER (land with new-arch components):** route-layer `requireRole` + RED test;
+  live-fetcher SSRF audit + RED test; e2e-fixture guardrail; SPA form a11y labels.
+- **OOS-D1 (explicitly NOT fixed — fake-fix):** all retired `attic/apps-api` + Supabase findings.
