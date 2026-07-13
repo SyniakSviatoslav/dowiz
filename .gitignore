@@ -64,3 +64,10 @@ scratch-*.mjs
 graphify-out/
 # NVIDIA SkillSpector — operator security tool (agent-skill scanner), not app code
 tools/skillspector/
+
+# Rust build artifacts (native-spa-server, kernel, etc.)
+**/target/
+# 3-model review staging dir (per AGENTS.md — never commit)
+**/.review/
+# stray session debris
+kernel/=5

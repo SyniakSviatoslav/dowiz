@@ -1,0 +1,25 @@
+# pgrust.toml — minimal native pgrust configuration.
+#
+# DK-05. pgrust runs as a systemd-managed native process (no Docker). Isolation
+# comes from the host process model + the app-level Row-Level-Security
+# cross-tenant gate, not from a container boundary.
+
+# Wire protocol listen address:host.
+listen = "127.0.0.1:5432"
+
+# On-disk data directory (the source-of-truth store). Must be writable per the
+# service unit's ReadWritePaths.
+data_dir = "/var/lib/pgrust"
+
+# Connection pooling is delegated to a native PgBouncer sidecar, not pgrust
+# itself, so tenant connection multiplexing stays outside the trusted store.
+# pooler = "127.0.0.1:6432"
+
+# App-level tenant isolation. CRITICAL: cross-tenant access is denied by
+# default. This RLS gate is the real isolation boundary for pgrust and must
+# never be flipped to "allow" in production (DK-05 RED: RLS-cross-tenant = 0).
+rls = { cross_tenant = "deny" }
+
+# Optional: operator may request VM-grade DB isolation (microVM) as an
+# opt-in defense-in-depth tier. Off by default — DK-05 does NOT require it.
+# microvm_isolation = false

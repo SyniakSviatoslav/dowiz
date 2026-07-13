@@ -1,0 +1,39 @@
+[package]
+name = "native-spa-server"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "DK-04: native-Rust static SPA server (axum) replacing the nginx container. Zero-OCI runtime artifact."
+
+# NO-COURIER-SCORING: this crate is a from-scratch static file server; every
+# behaviour (SPA fallback, asset cache headers, security headers, compression)
+# is covered by in-repo RED tests (tools/native-spa-server/tests/) and is not a
+# scoring proxy. See DK-04 / DK-08 in the task manifest.
+
+[[bin]]
+name = "native-spa-server"
+path = "src/main.rs"
+
+[lib]
+name = "native_spa_server"
+path = "src/lib.rs"
+
+[dependencies]
+# axum 0.8 (cached) — HTTP routing / service composition.
+axum = "0.8"
+# tower-http (cached) — ServeDir (SPA static file serving) + CompressionLayer.
+tower-http = { version = "0.6", features = ["fs", "compression-gzip", "compression-br", "compression-deflate"] }
+# tokio (cached) — async runtime + TLS listener.
+tokio = { version = "1", features = ["full"] }
+# rustls + tokio-rustls (cached) — optional TLS / HTTP/2 when a cert is provided.
+rustls-pemfile = "2"
+tokio-rustls = "0.26"
+# hyper-util (cached) — TLS connection driver / TowerToHyperService adapter.
+hyper-util = { version = "0.1", features = ["server", "tokio", "service", "http1", "http2"] }
+# flate2 (cached) — gzip/deflate compression for the precompressed-asset variant.
+flate2 = "1"
+# clap (cached) — CLI flag / env-var configuration (no secret reads).
+clap = { version = "4", features = ["derive", "env"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
