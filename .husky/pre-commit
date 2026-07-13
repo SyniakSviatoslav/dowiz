@@ -23,9 +23,16 @@ if [ -f package.json ] && command -v pnpm >/dev/null 2>&1; then
   if [ -n "$STAGED_JS" ] && command -v npx >/dev/null 2>&1; then
     npx eslint $STAGED_JS || exit 1
   fi
-  if touches '^(apps|packages|tools|spikes)/'; then
+  # Heavy monorepo build ONLY when a BUILDABLE workspace file changed. A pure
+  # .py/.sh/.md script under tools/ etc. cannot affect the JS/TS build (it is gated
+  # by 3/4 python + syntax), so it must not eat a ~40s pnpm -r build. Fail-closed:
+  # any .ts/.js/manifest present -> full build runs.
+  WS_BUILDABLE=$(echo "$STAGED_ALL" | grep -E '^(apps|packages|tools|spikes)/' | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$|(^|/)(package\.json|tsconfig[^/]*\.json)$')
+  if [ -n "$WS_BUILDABLE" ]; then
     pnpm -r typecheck || exit 1
     pnpm -r build || exit 1
+  elif touches '^(apps|packages|tools|spikes)/'; then
+    echo "  Workspace change is script/docs only (no JS/TS/manifest) — skipping pnpm -r build."
   fi
 else
   echo "  No package.json / pnpm — legacy JS workspace absent, skipping."
