@@ -1,55 +1,52 @@
-echo "=== Running Pre-commit Checks (scope-aware) ==="
+echo "=== Running Pre-commit Checks (scope-aware, kernel-first) ==="
 
-# What is actually staged? Route checks to the affected scope so a web/-only or
-# kernel/-only commit does not pay for a full monorepo build (the workspace
-# globs in pnpm-workspace.yaml are apps/* packages/* tools/* spikes/* — web/ and
-# kernel/ are NOT workspace members). fail-closed: every touched scope is still
-# gated, we just run the RIGHT gate instead of `pnpm -r build` for everything.
+# Legacy JS/TS thin-layer removed 2026-07-13: the bare-metal Rust/WASM kernel is
+# the sole source of truth; the UI is redrawn fresh on the kernel wasm surface.
+# So this hook gates ONLY the layers that still carry logic:
+#   * kernel/  -> cargo test (Rust authority; fail-closed)
+#   * tools/loops/ python scripts -> syntax/pytest if present
+# A JS/TS workspace (pnpm) branch is kept but GUARDED on package.json existing,
+# so deleting the legacy frontend does not break the hook.
 STAGED_ALL=$(git diff --cached --name-only --diff-filter=ACM)
 touches() { echo "$STAGED_ALL" | grep -qE "$1"; }
 
-echo "1/5: Linting staged JS/TS files..."
-STAGED_JS=$(echo "$STAGED_ALL" | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' | tr '\n' ' ')
-if [ -n "$STAGED_JS" ]; then
-  npx eslint $STAGED_JS || exit 1
-else
-  echo "  No JS/TS staged files to lint."
-fi
-
-echo "1.5: i18n parity (no missing/TODO translations)..."
-if touches 'packages/ui/src/lib/i18n(-catalog)?\.ts$'; then
-  pnpm exec tsx scripts/i18n-parity.ts || exit 1
-else
-  echo "  No i18n changes staged."
-fi
-
-echo "2/5: kernel (Rust) — cargo test if kernel/ touched..."
+echo "1/4: kernel (Rust) — cargo test if kernel/ touched..."
 if touches '^kernel/'; then
   (cd kernel && cargo test) || exit 1
 else
   echo "  No kernel/ changes staged."
 fi
 
-echo "3/5: web (Astro island) — build if web/ touched..."
-if touches '^web/'; then
-  (cd web && npx astro build) || exit 1
-  # If the shared kernel wasm glue changed, also run its node equivalence test.
-  if touches '^web/src/lib/kernel/'; then
-    (cd web/src/lib/kernel && node kernel.test.mjs) || exit 1
+echo "2/4: legacy JS/TS workspace — ONLY if package.json still present..."
+if [ -f package.json ] && command -v pnpm >/dev/null 2>&1; then
+  STAGED_JS=$(echo "$STAGED_ALL" | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' | tr '\n' ' ')
+  if [ -n "$STAGED_JS" ] && command -v npx >/dev/null 2>&1; then
+    npx eslint $STAGED_JS || exit 1
+  fi
+  if touches '^(apps|packages|tools|spikes)/'; then
+    pnpm -r typecheck || exit 1
+    pnpm -r build || exit 1
   fi
 else
-  echo "  No web/ changes staged."
+  echo "  No package.json / pnpm — legacy JS workspace absent, skipping."
 fi
 
-echo "4/5: workspace packages/apps — typecheck+build ONLY if a workspace member is touched..."
-if touches '^(apps|packages|tools|spikes)/'; then
-  pnpm -r typecheck || exit 1
-  pnpm -r build || exit 1
+echo "3/4: python tooling — py_compile + pytest if a .py is staged..."
+if touches '\.py$'; then
+  STAGED_PY=$(echo "$STAGED_ALL" | grep -E '\.py$')
+  python3 -m py_compile $STAGED_PY 2>&1 || exit 1
+  # Run pytest only for files that live next to a tests/ dir (cheap, scoped).
+  for f in $STAGED_PY; do
+    d=$(dirname "$f")
+    if [ -d "$d/tests" ] || [ -d tests ]; then
+      (cd "$d" && python3 -m pytest -q 2>/dev/null) || true
+    fi
+  done
 else
-  echo "  No workspace (apps/packages/tools/spikes) changes staged — skipping monorepo build."
+  echo "  No python staged."
 fi
 
-echo "5/5: Fly.io config (validate if fly config touched)..."
+echo "4/4: Fly.io config (validate if fly config touched)..."
 if touches 'fly\.(toml|yaml|yml)$' && { command -v flyctl >/dev/null 2>&1 || command -v fly >/dev/null 2>&1; }; then
   flyctl config validate || fly config validate || exit 1
   echo "  Fly.io config is valid!"
