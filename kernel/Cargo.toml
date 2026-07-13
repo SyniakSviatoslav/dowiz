@@ -15,6 +15,10 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 curve25519-dalek = "4"
 aes-gcm = { version = "0.10.3", features = ["std"] }
+# Structured telemetry over the hot paths (order fold, place_order).
+tracing = "0.1"
+# Pretty env-filter subscriber for `init_tracing()` (shipped; dev/CLI only).
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [features]
 # Optional quantum-entropy provider (ANU QRNG over HTTPS). Off by default so the
@@ -23,6 +27,12 @@ qrng = []
 
 [dev-dependencies]
 paste = "1.0"
+# Benchmarking harness for real latency/throughput telemetry.
+criterion = "0.5"
+
+[[bench]]
+name = "criterion"
+harness = false
 
 [profile.release]
 opt-level = 3
