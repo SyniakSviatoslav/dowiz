@@ -147,7 +147,7 @@ jobs:
           ***REDACTED***: ${{ secrets.***REDACTED*** }}
           
       - name: Deploy to Fly
-        uses: superfly/flyctl-actions/setup-flyctl@master
+        uses: superfly/flyctl-actions/setup-flyctl@v1
       - run: flyctl deploy --remote-only
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
