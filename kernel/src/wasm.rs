@@ -28,6 +28,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::analytics::{reduce_anomalies, ChannelEvent, ChannelLedger};
 use crate::domain::{apply_event, place_order, Order, OrderItem};
+use crate::money::{estimate_order_total, FeeConfig, OrderTotalConfig};
 use crate::order_machine::{OrderStatus, TransitionError};
 
 /// Monotonic id / timestamp source for `place_order_js` (the JS signature does
@@ -294,6 +295,83 @@ pub fn reduce_anomalies_js(events_json: String) -> Result<u64, JsValue> {
     reduce_anomalies_logic(&events_json).map_err(|e| JsValue::from_str(&e))
 }
 
+// ── Money: order-total mirror (RW-03) ────────────────────────────────────────
+// 1:1 port of packages/ui/src/lib/money.ts. The SERVER (apps/api orders.ts fee
+// ladder) stays authoritative for what is CHARGED; this mirror drives what the
+// client SEES. All amounts are integer minor units.
+
+#[derive(Deserialize)]
+struct FeeConfigIn {
+    is_pickup: bool,
+    #[serde(default)]
+    free_delivery_threshold: Option<i64>,
+    #[serde(default)]
+    delivery_fee_flat: Option<i64>,
+    #[serde(default)]
+    has_distance_tiers: bool,
+}
+
+#[derive(Deserialize)]
+struct OrderTotalConfigIn {
+    is_pickup: bool,
+    #[serde(default)]
+    free_delivery_threshold: Option<i64>,
+    #[serde(default)]
+    delivery_fee_flat: Option<i64>,
+    #[serde(default)]
+    has_distance_tiers: bool,
+    tax_rate: f64,
+    price_includes_tax: bool,
+    #[serde(default)]
+    min_order_value: Option<i64>,
+}
+
+#[derive(Serialize)]
+struct EstimateOut {
+    fee_known: bool,
+    delivery_fee: Option<i64>,
+    tax_total: i64,
+    total: Option<i64>,
+    min_not_met: bool,
+}
+
+fn order_total_cfg_from_in(c: &OrderTotalConfigIn) -> OrderTotalConfig {
+    OrderTotalConfig {
+        fee: FeeConfig {
+            is_pickup: c.is_pickup,
+            free_delivery_threshold: c.free_delivery_threshold,
+            delivery_fee_flat: c.delivery_fee_flat,
+            has_distance_tiers: c.has_distance_tiers,
+        },
+        tax_rate: c.tax_rate,
+        price_includes_tax: c.price_includes_tax,
+        min_order_value: c.min_order_value,
+    }
+}
+
+/// Compute the client-side order-total estimate.
+/// `subtotal` and `fee` fields are integer minor units. `cfg_json` is a JSON
+/// object with the fee/tax/min-order fields (see `OrderTotalConfigIn`).
+/// Returns `{fee_known, delivery_fee, tax_total, total, min_not_met}` JSON.
+fn estimate_order_total_logic(subtotal: i64, cfg_json: &str) -> Result<String, String> {
+    let cfg_in: OrderTotalConfigIn = serde_json::from_str(cfg_json).map_err(|e| e.to_string())?;
+    let cfg = order_total_cfg_from_in(&cfg_in);
+    let est = estimate_order_total(subtotal, &cfg);
+    let out = EstimateOut {
+        fee_known: est.fee_known,
+        delivery_fee: est.delivery_fee,
+        tax_total: est.tax_total,
+        total: est.total,
+        min_not_met: est.min_not_met,
+    };
+    serde_json::to_string(&out).map_err(|e| e.to_string())
+}
+
+#[wasm_bindgen]
+pub fn estimate_order_total_js(subtotal: i64, cfg_json: String) -> Result<String, JsValue> {
+    estimate_order_total_logic(subtotal, &cfg_json).map_err(|e| JsValue::from_str(&e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -385,5 +463,62 @@ mod tests {
         assert_eq!(v["status"], "PREPARING");
         assert_eq!(v["channel"], "app");
         assert_eq!(v["customer_id"], "c9");
+    }
+
+    // ── RW-03: estimate_order_total_logic == packages/ui/src/lib/money.ts ──
+    const CFG_FLAT_EXCL: &str = r#"{"is_pickup":false,"free_delivery_threshold":null,
+        "delivery_fee_flat":200,"has_distance_tiers":false,"tax_rate":0.20,
+        "price_includes_tax":false,"min_order_value":null}"#;
+    const CFG_FREE_THR: &str = r#"{"is_pickup":false,"free_delivery_threshold":2000,
+        "delivery_fee_flat":200,"has_distance_tiers":false,"tax_rate":0.10,
+        "price_includes_tax":false,"min_order_value":null}"#;
+    const CFG_PICKUP: &str = r#"{"is_pickup":true,"free_delivery_threshold":null,
+        "delivery_fee_flat":200,"has_distance_tiers":false,"tax_rate":0.20,
+        "price_includes_tax":false,"min_order_value":null}"#;
+    const CFG_DISTANCE: &str = r#"{"is_pickup":false,"free_delivery_threshold":null,
+        "delivery_fee_flat":200,"has_distance_tiers":true,"tax_rate":0.20,
+        "price_includes_tax":false,"min_order_value":null}"#;
+    const CFG_MIN: &str = r#"{"is_pickup":false,"free_delivery_threshold":null,
+        "delivery_fee_flat":200,"has_distance_tiers":false,"tax_rate":0.20,
+        "price_includes_tax":false,"min_order_value":500}"#;
+
+    fn est(subtotal: i64, cfg: &str) -> serde_json::Value {
+        let json = estimate_order_total_logic(subtotal, cfg).expect("estimate ok");
+        serde_json::from_str(&json).unwrap()
+    }
+
+    #[test]
+    fn estimate_flat_exclusive() {
+        let v = est(1000, CFG_FLAT_EXCL);
+        assert_eq!(v["fee_known"], true);
+        assert_eq!(v["delivery_fee"], 200);
+        assert_eq!(v["tax_total"], 200);
+        assert_eq!(v["total"], 1400);
+    }
+    #[test]
+    fn estimate_free_threshold_boundary() {
+        let v = est(2000, CFG_FREE_THR);
+        assert_eq!(v["delivery_fee"], 0);
+        assert_eq!(v["tax_total"], 200);
+        assert_eq!(v["total"], 2200);
+    }
+    #[test]
+    fn estimate_pickup() {
+        let v = est(1500, CFG_PICKUP);
+        assert_eq!(v["delivery_fee"], 0);
+        assert_eq!(v["total"], 1500 + 300);
+    }
+    #[test]
+    fn estimate_distance_unknown() {
+        let v = est(1000, CFG_DISTANCE);
+        assert_eq!(v["fee_known"], false);
+        assert_eq!(v["delivery_fee"], serde_json::Value::Null);
+        assert_eq!(v["total"], serde_json::Value::Null);
+    }
+    #[test]
+    fn estimate_min_not_met() {
+        let v = est(400, CFG_MIN);
+        assert_eq!(v["min_not_met"], true);
+        assert_eq!(v["total"], 400 + 200 + 80);
     }
 }
