@@ -47,6 +47,15 @@
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/red-line-doubt-gate.sh\""
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-bash.sh\""
+          }
+        ]
       }
     ],
     "PostToolUse": [
