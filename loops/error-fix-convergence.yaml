@@ -8,6 +8,10 @@ role_mindset: "convergence-інженер: тест = специфікація, 
 preconditions:
   - "фронт піднімається; бекенд зелений локально"
   - "Zod-контракти + дизайн-токени винесені"
+certification:
+  fields:
+    - name: admit_epoch
+      pinned: 1
 execution_skills: [playwright-run-headed, root-cause-trace, minimal-fix, engineer-review]
 goal: "кожен (екран×флоу×роль×брейкпоінт×мова) зелений"
 verification: "MATRIX.md 100% GREEN; X1–X11; 3× поспіль; 0 flaky; separate-agent апрув"

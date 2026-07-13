@@ -5,6 +5,7 @@
 pub mod analytics;
 pub mod domain;
 pub mod intake;
+pub mod loops;
 pub mod money;
 pub mod order_machine;
 pub mod wasm;
