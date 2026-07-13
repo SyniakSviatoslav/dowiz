@@ -9,7 +9,30 @@ dowiz-kernel = { path = "../kernel" }
 rusqlite = { version = "0.31.0", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# ── S1: BPv7 (RFC 9171) Bundle codec ──
+# NOTE: git dep is UNPINNED (branch=master) — operator should pin to a rev/tag
+# before prod. Verified offline against current HEAD.
 bp7 = { git = "https://github.com/dtn7/bp7-rs", branch = "master" }
+# ── S2+S3 production transport bearer (RFC 9000 QUIC + RFC 9174 TCPCLv4-style) ──
+# QUIC transport for carrying Bundle bytes between nodes over loopback (and, in
+# prod, real networks). Secured by TLS 1.3.
+# innovate: test bearer uses the `ring` provider consistently across quinn, rustls
+# and rcgen (the cert is runtime-generated via rcgen, which defaults to `ring`).
+# The operator prod swap to `aws-lc-rs` (FIPS) is a separate, documented crate
+# feature flag — see DECISIONS D9; it must be applied uniformly to quinn + rcgen
+# or the TLS 1.3 handshake aborts with "closed by peer".
+quinn = "0.11"
+rustls = { version = "0.23", features = ["ring"] }
+rustls-pemfile = "2"
+aws-lc-rs = "1"
+# Self-signed test cert for the TLS 1.3 layer (innovate: runtime-gen; prod uses
+# operator-provisioned certs).
+rcgen = "0.13"
+# Diagnostics for the bearer (handshake/transport tracing) — used by tests when
+# RUST_LOG is set; zero cost when unused.
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "sync", "io-util", "time", "rt"] }
 
 [dev-dependencies]
 paste = "1.0"
