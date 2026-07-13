@@ -1,0 +1,17 @@
+[package]
+name = "agent-governance-wasm"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Phase-1 WASM binding: a thin Rust/WASM host around bebop2-core kernels, replacing the deleted agent-governance TypeScript."
+
+[lib]
+# cdylib so `cargo build --target wasm32-unknown-unknown` emits a real .wasm module;
+# rlib so `cargo test` (native) can link the unit tests. Mirrors bebop2-core's own crate-type.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# bebop2-core is a sibling path dependency (verified present; empty-import wasm32 build).
+bebop2-core = { path = "/root/bebop-repo/bebop2/core" }
+# wasm-bindgen 0.2 — works for both native (`cargo test`) and wasm32 (`cargo build --target wasm32`).
+wasm-bindgen = "0.2"

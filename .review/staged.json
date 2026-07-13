@@ -1,0 +1,11 @@
+{
+  "builder": "hermes-builder-tencent-hy3",
+  "reviewer": {
+    "agent": "reviewer-dowiz-phase1-primary",
+    "findings": "PASS. BP-08 admit(): empty interval (lo>hi)->Unsatisfiable; under-determined->Undecidable; banned-token denylist; K=3 idempotence probe; fail-closed Tier-C (Undecidable, never SAT) all verified. No panic/unwrap on empty input. WASM binding: 5 fns match bebop2-core signatures exactly (arg order/types); wasm32 build clean; .wasm import section has exactly 4 wasm-bindgen JS-glue imports, NO RNG/clock/network/LLM host imports. Tests load-bearing (assert exact Tier/rule_or_core/values). Non-blocking NITs: misleading 'empty_enum' label for non-enum empty ranges; empty-spec admits; 'empty-import' wording (4 glue imports, no host calls); red_impure_verify only checks echoed source string."
+  },
+  "overlap": {
+    "agent": "overlap-dowiz-phase1",
+    "findings": "PASS. BP-08 admit() correctly implements decide-law (static authority, stop-at-first, stable codes); Tier-C honest fail-closed Undecidable stub (never fakes SAT); entropy H=sum ln|adm| with H=0 iff determinate; no under-determined spec silently accepted. WASM binding leak-free superset of deleted resonator TS; bebop2-core signatures match exactly. Real run: kernel 45/45, wasm 8/8 unit green; wasm32 build clean. Caveats (non-blocking): Tier-C depends on caller-set spec.nonlinear flag (no auto-detect) but fails toward reject (safe); lib.rs doc overclaims 'No TS remains' — agent-governance/index.ts + test still exist but are persona/language logic with 0 governance-math refs (invariant #2 holds); BP-06 budget invariant lives in crates/bebop/entropy_ledger.rs (out of this shim's scope)."
+  }
+}
