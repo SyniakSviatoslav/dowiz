@@ -6,8 +6,10 @@ pub mod analytics;
 pub mod domain;
 /// MESH-06 — per-node content-addressed event-log (local-first + sync).
 pub mod event_log;
-pub mod isolation;
+/// RW-06 — geo / route kinematics (pure-logic port from geo-anim.ts + delivery-zone.ts). Kernel authority.
+pub mod geo;
 pub mod intake;
+pub mod isolation;
 pub mod loops;
 pub mod money;
 pub mod order_machine;
