@@ -81,6 +81,52 @@ IFS=$'\t' read -r TOOL TARGET FAILBIT ERR <<<"$LINE"
 # Unknown outcome (no tool_response shape we recognise) → stay silent, fail-open.
 [ -z "$FAILBIT" ] && exit 0
 
+# ============================================================================
+# Markov attractor signal (advisory) — ADDED 2026-07-13, operator-approved.
+# Models the recent tool-outcome stream as a first-order Markov chain
+# (Jurafsky & Martin, SLP3 Appendix A) and flags a LIMIT_CYCLE / STRANGE_
+# ATTRACTOR that the per-signature counter below is structurally blind to
+# (cycles across >=2 signatures; high-entropy churn that never reaches a green
+# run). Analyzer: tools/loop-signals/markov_attractor.py (pure stdlib, proven
+# red->green). Fail-open; never blocks; dedup'd so it fires ONCE per trap onset.
+# ============================================================================
+ATTRACTOR_LIB="$ROOT/tools/loop-signals/markov_attractor.py"
+WIN="$STATE_DIR/events.log"
+LAST_A="$STATE_DIR/.attractor-last"
+STATE=""
+case "$TOOL" in
+  Edit|Write|MultiEdit) [ "$FAILBIT" = "1" ] && STATE="edit_fail" || STATE="edit" ;;
+  Bash)
+    if [ "$FAILBIT" = "1" ]; then STATE="run_fail"
+    elif printf '%s' "$TARGET" | grep -qiE '(test|build|typecheck|tsc|lint|clippy|cargo|vitest|jest|pytest|playwright|pnpm (test|build|typecheck|lint)|make|git commit)'; then STATE="run_ok"
+    else STATE="probe"; fi ;;
+esac
+if [ -n "$STATE" ] && command -v python3 >/dev/null 2>&1 && [ -f "$ATTRACTOR_LIB" ]; then
+  printf '%s\n' "$STATE" >> "$WIN" 2>/dev/null || true
+  if [ -f "$WIN" ]; then tail -n 60 "$WIN" > "$WIN.tmp" 2>/dev/null && mv "$WIN.tmp" "$WIN" 2>/dev/null || true; fi
+  AJSON="$(python3 "$ATTRACTOR_LIB" < "$WIN" 2>/dev/null || true)"
+  AVERDICT="$(printf '%s' "$AJSON" | sed -n 's/.*"verdict": *"\([A-Z_]*\)".*/\1/p')"
+  AREASON="$(printf '%s' "$AJSON" | sed -n 's/.*"reason": *"\([^"]*\)".*/\1/p')"
+  case "$AVERDICT" in
+    LIMIT_CYCLE|STRANGE_ATTRACTOR)
+      PREV="$(cat "$LAST_A" 2>/dev/null || echo)"
+      if [ "$AVERDICT" != "$PREV" ]; then
+        printf '%s' "$AVERDICT" > "$LAST_A" 2>/dev/null || true
+        ADIR="🔴 ATTRACTOR DETECTED (Markov signal, SLP3 App. A) — the recent tool stream is a ${AVERDICT}: ${AREASON}.
+This is the DYNAMICS of your recent moves, not one repeated error — the per-signature counter cannot see it. You are orbiting without reaching a green/progress state.
+MANDATORY (Doubt model): change a STRUCTURAL variable, not the next keystroke — re-read the goal, get EXTERNAL evidence (a passing check / specialist subagent / stronger model), or escalate. Skill: doubt-escalation."
+        if command -v jq >/dev/null 2>&1; then
+          jq -nc --arg d "$ADIR" '{hookSpecificOutput:{hookEventName:"PostToolUse",additionalContext:$d}}'
+        else
+          python3 -c 'import json,sys;print(json.dumps({"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":sys.argv[1]}}))' "$ADIR"
+        fi
+        exit 0
+      fi ;;
+    HEALTHY|"") : > "$LAST_A" 2>/dev/null || true ;;
+  esac
+fi
+
+
 # --- signature = tool + target + normalized error class (digits/hex/paths squashed) ---
 ERRSIG="$(printf '%s' "$ERR" \
   | tr 'A-Z' 'a-z' \
