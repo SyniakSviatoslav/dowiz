@@ -1,0 +1,6 @@
+# Root workspace for the dowiz Rust crates (kernel + node).
+# Additive only — added so `cargo test -p dowiz-node` works from the worktree root.
+# No crate code lives at this level; the node and kernel are the only members.
+[workspace]
+resolver = "2"
+members = ["node", "kernel"]
