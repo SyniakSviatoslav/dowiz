@@ -40,10 +40,12 @@ def write_transcript(path, tokens):
 
 
 def lcg(alphabet, n, seed=1):
+    # HIGH bits (x>>16): an LCG's low bits have short periods, so `x % k` for a
+    # power-of-2 k yields an accidental perfect cycle, not churn.
     x, out = seed, []
     for _ in range(n):
         x = (1103515245 * x + 12345) & 0x7FFFFFFF
-        out.append(alphabet[x % len(alphabet)])
+        out.append(alphabet[(x >> 16) % len(alphabet)])
     return out
 
 
@@ -89,7 +91,7 @@ try:
     CASES = [
         ("limit cycle edit<->run_fail", ["edit", "run_fail"] * 8, "LIMIT_CYCLE"),
         ("healthy edit<->run_ok",        ["edit", "run_ok"] * 8,   "SILENT"),
-        ("failure churn fires a trap",   lcg(["edit", "edit_fail", "run_fail", "probe"], 36), "TRAP"),
+        ("strange churn (no green)",     lcg(["edit", "edit_fail", "run_fail", "probe"], 44), "STRANGE_ATTRACTOR"),
         ("wrap-up bookkeeping",          ["edit", "probe"] * 6,    "SILENT"),
     ]
     for name, toks, expect in CASES:

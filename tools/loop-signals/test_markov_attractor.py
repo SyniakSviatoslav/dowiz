@@ -24,12 +24,14 @@ def check(name, states, expect):
 
 
 def lcg_walk(alphabet, n, seed=1):
-    """Deterministic pseudo-random walk (no RNG import; reproducible)."""
+    """Deterministic pseudo-random walk (no RNG import; reproducible).
+    Uses the HIGH bits (x>>16): an LCG's low bits have short periods, so `x % k`
+    for a power-of-2 k produces an accidental perfect cycle (not churn)."""
     x = seed
     out = []
     for _ in range(n):
         x = (1103515245 * x + 12345) & 0x7FFFFFFF
-        out.append(alphabet[x % len(alphabet)])
+        out.append(alphabet[(x >> 16) % len(alphabet)])
     return out
 
 
@@ -52,6 +54,15 @@ check("limit cycle (3-cycle, no green)",
 # 5) RED — STRANGE-ATTRACTOR: high-entropy churn over failure states, no green.
 check("strange-attractor (churn, no green)",
       lcg_walk(["edit", "edit_fail", "run_fail"], 40), "STRANGE_ATTRACTOR")
+
+# 5b) ROBUSTNESS: genuine 4-state churn (no run_ok) must classify STRANGE across
+#     seeds. Before dropping the brittle drift<=0 gate, balanced churn flipped to
+#     HEALTHY when drift jittered slightly positive — a razor's-edge false-negative.
+for _seed in (1, 2, 3, 7, 11):
+    _r = analyze(lcg_walk(["edit", "edit_fail", "run_fail", "probe"], 44, _seed))
+    check(f"strange churn seed={_seed} (4-state)", lcg_walk(["edit", "edit_fail", "run_fail", "probe"], 44, _seed),
+          "STRANGE_ATTRACTOR")
+    assert _r["escape_mass"] == 0 and _r["has_failure"], "must be a genuine trap"
 
 # 6) Cold start -> quiet (fail-open, no false alarm).
 check("cold start (short window)", ["edit", "run_fail", "edit"], "HEALTHY")
