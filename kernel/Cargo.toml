@@ -14,8 +14,19 @@ wasm-bindgen = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
+# Structured telemetry: spans/events over the hot paths (order fold, place_order).
+# Gated to non-wasm so the wasm cdylib stays lean; native/rlib tests get full traces.
+tracing = "0.1"
+# Pretty env-filter subscriber for `init_tracing()` (shipped; dev/CLI only, never called from wasm).
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
+# Benchmarking harness for real latency/throughput telemetry on the hot paths.
+criterion = "0.5"
+
+[[bench]]
+name = "criterion"
+harness = false
 
 [profile.release]
 opt-level = 3
