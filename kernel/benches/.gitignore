@@ -1,0 +1,3 @@
+# bench_track rolling output — git-ignored so the repo doesn't churn on every run.
+BENCH_HISTORY.md
+_cur.json
