@@ -92,6 +92,8 @@ Both new ESLint rules live in `tools/eslint-plugin-local/src/index.js`, are regi
   WS payload (`courier-events.ts`); the honest `etaRange` on `/customer/orders/:id/status` is the sole
   customer ETA (D1 kept live position/route). | 2026-06-24 · this change
 
+| 21 | Legacy JS/TS thin-layer (web/, apps/web, packages/ui, shared-types, domain) duplicated kernel logic and was the only consumer of money.ts; its presence forced every kernel change to also keep a JS port in sync (double maintenance + drift risk) and blocked deletion with "don't break the UI" even after the kernel became the proven authority | the frontend was treated as a permanent oracle instead of a redrawable view; deleting it risked "losing the product" so the dup lingered (channel.js 146 LOC, money.ts 86 LOC, order-machine.ts…) | `CI-gate` (structural) | Removed the entire legacy thin-layer (261 files) in `feat/remove-legacy-thin-layer`; kernel (Rust/WASM) is now the sole source of truth. The next UI (P6 thin-client per roadmap) is drawn fresh on the kernel wasm surface. `.husky/pre-commit` dropped eslint/pnpm branches (legacy JS gone), keeps kernel `cargo test` + python tooling gates; pnpm branch guarded on `package.json` existing. | 2026-07-13
+
 ## Reversal log
 
 _(none — both guardrails active. To remove a guardrail, delete its rule + fixtures and append a
