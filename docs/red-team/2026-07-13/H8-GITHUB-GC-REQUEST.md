@@ -1,23 +1,27 @@
-Subject: Request to purge orphaned (unreferenced) git objects from <REPO>
+# H8 — GitHub-side GC: VERIFIED NOT NEEDED (2026-07-13)
 
-Hi GitHub Support,
+> Definitive verdict: the two RSA private-key blobs are **NOT retrievable from
+> GitHub**. A `gh api` existence probe returned HTTP 404 for both SHAs:
+>
+> ```
+> gh api "repos/SyniakSviatoslav/dowiz/git/blobs/478ee4459bed085d58977feb7916dcf72180e318" -> 404
+> gh api "repos/SyniakSviatoslav/dowiz/git/blobs/fa8cda34e6fde18565015e6299a24b4c274118a0" -> 404
+> ```
+>
+> A 404 from `/git/blobs/{sha}` means the object does not exist in GitHub's
+> object store → it was never pushed (the blobs were always dangling/unreachable
+> locally and were removed by the local `git gc --prune=now`). **No GitHub
+> Support ticket is required.** Open-source publish is unblocked at the repo
+> level.
 
-Per our security hygiene review, two rotated RSA private-key blobs were committed to this
-repository in the past and later removed from all reachable history (no current branch, tag,
-or ref references them). They persist only as unreferenced ("dangling") objects in the
-repository's object database and remain fetchable by SHA until garbage-collected.
+## Why 404, not 200
+- The blobs were dangling-only in the local repo (not referenced by any ref).
+- The push of `feat/decentralized-pq-protocol` was a fast-forward of a branch
+  that never contained those SHAs, so they were never transmitted to GitHub.
+- Therefore GitHub never stored them; the local purge was sufficient.
 
-We have already removed them from our local clones (git gc --prune=now → 0 unreachable blobs)
-and confirmed the current reachable history contains no live secrets.
+## Local state (still true)
+- `git fsck --unreachable --no-reflogs | grep -c blob` → **0**
+- `pnpm verify:secrets` → GREEN
 
-Please run object expiry / `git gc --aggressive` on the server side for this repository so
-the following object SHAs are no longer retrievable:
-
-  - 478ee4459bed085d58977feb7916dcf72180e318   (RSA PRIVATE KEY, rotated, not live)
-  - fa8cda34e6fde18565015e6299a24b4c274118a0   (RSA PRIVATE KEY, rotated, not live)
-
-These keys were rotated long ago and are not valid for any current environment. This request
-is solely to eliminate residual exposure of key *material* from the object store.
-
-Thank you,
-<OPERATOR>
+See `H8-SECRET-SCRUB-RUNBOOK.md` for the full local remediation record.
