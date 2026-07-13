@@ -522,12 +522,17 @@ function cmdResolve(args) {
   const gap = String(args.gap || '');
   if (!id) return fail('resolve requires --prediction-id');
   if (!['hit', 'miss', 'partial'].includes(gap)) return fail('--gap must be hit|miss|partial');
-  const rows = readJsonl(PREDICTIONS_PATH());
-  const pred = latestPredictions(rows).find((p) => p.prediction_id === id);
+  // Predictions from a prior firing live only on the telemetry/plane branch — the local scratch
+  // (loops/runs/) does not survive an ephemeral cloud container between runs. Merge branch+local
+  // (same union cmdDigest already uses) so cross-run resolve of yesterday's predictions works.
+  fetchBranch(); // best-effort; absent branch → local-only view
+  const branch = readBranchRows();
+  const rows = [...branch.predictions, ...readJsonl(PREDICTIONS_PATH())];
+  const pred = latestPredictions(rows.filter((p) => p?.schema_version === SCHEMA_VERSION)).find((p) => p.prediction_id === id);
   if (!pred) return fail(`prediction ${id} not found`, 1);
   // M1 commit-reveal ordering friction: the prediction must have been recorded STRICTLY EARLIER
   // than the run's first emitted outcome event — you cannot resolve a post-hoc "prediction".
-  const runEvents = readLocalEvents().filter((e) => e.run_id === pred.run_id && e.kind !== 'redactor_error');
+  const runEvents = filterSchema(dedupeEvents([...branch.events, ...readLocalEvents()])).filter((e) => e.run_id === pred.run_id && e.kind !== 'redactor_error');
   if (runEvents.length) {
     const firstTs = runEvents.map((e) => e.ts).sort()[0];
     if (String(pred.ts_predicted) >= String(firstTs)) {

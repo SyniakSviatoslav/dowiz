@@ -229,6 +229,38 @@ test('prediction ordering: predict-before-events resolves; predict-after-first-e
 });
 
 // ---------------------------------------------------------------------------
+// DoD row: Cross-run resolve (ephemeral-container gap) — resolve must see branch-only
+// predictions, not just loops/runs/predictions.jsonl in the CURRENT checkout. A scheduled
+// cloud maintainer gets a fresh checkout every firing; a prior day's `predict` only survives
+// in loops/runs/ within THAT firing's container and is published to telemetry/plane — the
+// next day's resolve call has no local copy at all until this fetch-and-merge exists.
+// ---------------------------------------------------------------------------
+test('resolve: finds a prediction that exists ONLY on the telemetry/plane branch (fresh checkout, no local predictions.jsonl)', (t) => {
+  const { works: [dayOne, dayTwo] } = makeRepos(t, 2);
+  // Day-one container: predict, then the run's outcome event, then publish + tear down.
+  let r = cli(['predict', '--run-id', 'd1', '--target', 'staging-deploy-egress', '--prediction', 'stays unreachable', '--confidence', '0.9'], { root: dayOne });
+  assert.equal(r.status, 0, r.stderr);
+  const pid = /prediction_id=(\w+)/.exec(r.stdout)[1];
+  assert.equal(cli(['emit', '--run-id', 'd1', '--kind', 'sense', '--outcome', 'pass', '--detail', 'confirmed unreachable'], { root: dayOne }).status, 0);
+  assert.equal(cli(['publish', '--run-id', 'd1'], { root: dayOne, env: GIT_ENV }).status, 0);
+  assert.ok(!existsSync(join(dayTwo, 'loops/runs/predictions.jsonl')), 'day-two checkout must start with zero local prediction state');
+
+  // Day-two container (brand-new checkout — this IS the ephemeral-cloud-box scenario): resolve
+  // must fetch the branch, find the prediction there, and pass the SAME M1 ordering check using
+  // the branch's own event for that run — without ever touching the day-one working tree again.
+  r = cli(['resolve', '--prediction-id', pid, '--actual', 'confirmed unreachable again', '--gap', 'hit'], { root: dayTwo, env: GIT_ENV });
+  assert.equal(r.status, 0, `cross-run resolve failed: ${r.stderr}`);
+  assert.match(r.stdout, new RegExp(`resolved=${pid} gap=hit`));
+
+  // The resolved row must publish cleanly — merges with (not clobbers) the branch's unresolved row.
+  assert.equal(cli(['publish', '--run-id', 'd1'], { root: dayTwo, env: GIT_ENV }).status, 0);
+  const inboxR = cli(['inbox', '--json'], { root: dayOne, env: { ...GIT_ENV, PLANE_TELEMETRY_NO_GH: '1', PLANE_TELEMETRY_OFFLINE: '' } });
+  assert.equal(inboxR.status, 0, inboxR.stderr);
+  const items = JSON.parse(inboxR.stdout).items;
+  assert.ok(!items.some((i) => i.kind === 'prediction_unresolved' && i.prediction_id === pid), 'resolved prediction must no longer show as unresolved after publish');
+});
+
+// ---------------------------------------------------------------------------
 // DoD row: Push fail-closed (R2-C1/R3-6) — planted secret aborts, no dirty blob on branch
 // ---------------------------------------------------------------------------
 test('publish: a planted secret in the exact committed bytes ABORTS the push, writes redactor_error, leaves no blob on the branch (R2-C1/R3-6)', (t) => {
