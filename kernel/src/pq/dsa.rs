@@ -57,8 +57,11 @@ const POLYW1_PACKEDBYTES: usize = 128;
 const POLYVECH_PACKEDBYTES: usize = OMEGA + K;
 
 pub const PUBLICKEYBYTES: usize = SEEDBYTES + K * POLYT1_PACKEDBYTES; // 1952
-pub const SECRETKEYBYTES: usize =
-    2 * SEEDBYTES + TRBYTES + L * POLYETA_PACKEDBYTES + K * POLYETA_PACKEDBYTES + K * POLYT0_PACKEDBYTES; // 4032
+pub const SECRETKEYBYTES: usize = 2 * SEEDBYTES
+    + TRBYTES
+    + L * POLYETA_PACKEDBYTES
+    + K * POLYETA_PACKEDBYTES
+    + K * POLYT0_PACKEDBYTES; // 4032
 pub const SIGNATUREBYTES: usize = CTILDEBYTES + L * POLYZ_PACKEDBYTES + POLYVECH_PACKEDBYTES; // 3309
 
 const SHAKE128_RATE: usize = 168;
@@ -316,7 +319,10 @@ fn poly_uniform(rho: &[u8; SEEDBYTES], nonce: u16) -> Poly {
     shake128(&seed, &mut buf);
     let mut a = [0i32; N];
     let ctr = rej_uniform(&mut a, &buf);
-    assert!(ctr == N, "poly_uniform: rejection sampling underflow (buffer too small)");
+    assert!(
+        ctr == N,
+        "poly_uniform: rejection sampling underflow (buffer too small)"
+    );
     a
 }
 
@@ -528,7 +534,10 @@ fn polyw1_pack(a: &Poly, out: &mut [u8]) {
 fn pack_w1(w1: &PolyVecK) -> [u8; K * POLYW1_PACKEDBYTES] {
     let mut out = [0u8; K * POLYW1_PACKEDBYTES];
     for i in 0..K {
-        polyw1_pack(&w1[i], &mut out[i * POLYW1_PACKEDBYTES..(i + 1) * POLYW1_PACKEDBYTES]);
+        polyw1_pack(
+            &w1[i],
+            &mut out[i * POLYW1_PACKEDBYTES..(i + 1) * POLYW1_PACKEDBYTES],
+        );
     }
     out
 }
@@ -1041,7 +1050,10 @@ mod tests {
         assert!(verify(&pk, msg, &sig), "verify failed on valid signature");
         let mut bad = msg.to_vec();
         bad[0] ^= 0xff;
-        assert!(!verify(&pk, &bad, &sig), "tampered message verified (RED missing)");
+        assert!(
+            !verify(&pk, &bad, &sig),
+            "tampered message verified (RED missing)"
+        );
     }
 
     #[test]

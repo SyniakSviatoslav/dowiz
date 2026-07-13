@@ -29,15 +29,27 @@ pub const CT_LEN: usize = K * 384 + 384;
 
 fn modq(a: i32) -> i32 {
     let r = a % Q;
-    if r < 0 { r + Q } else { r }
+    if r < 0 {
+        r + Q
+    } else {
+        r
+    }
 }
-fn fq_add(a: i32, b: i32) -> i32 { modq(a + b) }
-fn fq_sub(a: i32, b: i32) -> i32 { modq(a - b) }
-fn fq_mul(a: i32, b: i32) -> i32 { modq(a * b) }
+fn fq_add(a: i32, b: i32) -> i32 {
+    modq(a + b)
+}
+fn fq_sub(a: i32, b: i32) -> i32 {
+    modq(a - b)
+}
+fn fq_mul(a: i32, b: i32) -> i32 {
+    modq(a * b)
+}
 
 fn bitrev(x: usize) -> usize {
     let mut r = 0usize;
-    for b in 0..8 { r = (r << 1) | ((x >> b) & 1); }
+    for b in 0..8 {
+        r = (r << 1) | ((x >> b) & 1);
+    }
     r
 }
 
@@ -46,12 +58,16 @@ pub fn ntt(a: &[i32; N], invert: bool) -> [i32; N] {
     let mut a = *a;
     // bit-reversal permutation
     let mut tmp = [0i32; N];
-    for i in 0..N { tmp[bitrev(i)] = a[i]; }
+    for i in 0..N {
+        tmp[bitrev(i)] = a[i];
+    }
     a = tmp;
     for s in 1..=8 {
         let m = 1usize << s;
         let mut wm = modpow(ROOT as usize, (Q as usize - 1) / m, Q as usize) as i32;
-        if invert { wm = modpow(wm as usize, (Q as usize - 2) as usize, Q as usize) as i32; }
+        if invert {
+            wm = modpow(wm as usize, (Q as usize - 2) as usize, Q as usize) as i32;
+        }
         let mut k = 0usize;
         while k < N {
             let mut w = 1i32;
@@ -67,7 +83,9 @@ pub fn ntt(a: &[i32; N], invert: bool) -> [i32; N] {
     }
     if invert {
         let ninv = modpow(N as usize, (Q as usize - 2) as usize, Q as usize) as i32;
-        for x in a.iter_mut() { *x = fq_mul(*x, ninv); }
+        for x in a.iter_mut() {
+            *x = fq_mul(*x, ninv);
+        }
     }
     a
 }
@@ -78,7 +96,9 @@ fn modpow(base: usize, exp: usize, m: usize) -> usize {
     let mut b = (base % (m as usize)) as i64;
     let mut e = exp as i64;
     while e > 0 {
-        if e & 1 == 1 { result = (result * b) % m; }
+        if e & 1 == 1 {
+            result = (result * b) % m;
+        }
         b = (b * b) % m;
         e >>= 1;
     }
@@ -118,7 +138,9 @@ fn compress(p: &[i32; N], d: usize) -> [i32; N] {
     let factor = (1i64 << d) as f64 / Q as f64;
     for i in 0..N {
         out[i] = (modq(p[i]) as f64 * factor).round() as i32 % (1i32 << d);
-        if out[i] < 0 { out[i] += 1i32 << d; }
+        if out[i] < 0 {
+            out[i] += 1i32 << d;
+        }
     }
     out
 }
@@ -201,7 +223,9 @@ fn mat_vec_mul(a: &[[[i32; N]; K]; K], s: &[[i32; N]; K]) -> [[i32; N]; K] {
 fn vec_add(a: &[[i32; N]; K], b: &[[i32; N]; K]) -> [[i32; N]; K] {
     let mut out = [[0i32; N]; K];
     for r in 0..K {
-        for j in 0..N { out[r][j] = fq_add(a[r][j], b[r][j]); }
+        for j in 0..N {
+            out[r][j] = fq_add(a[r][j], b[r][j]);
+        }
     }
     out
 }
@@ -209,7 +233,9 @@ fn vec_add(a: &[[i32; N]; K], b: &[[i32; N]; K]) -> [[i32; N]; K] {
 fn transpose(a: &[[[i32; N]; K]; K]) -> [[[i32; N]; K]; K] {
     let mut t = [[[0i32; N]; K]; K];
     for r in 0..K {
-        for c in 0..K { t[c][r] = a[r][c]; }
+        for c in 0..K {
+            t[c][r] = a[r][c];
+        }
     }
     t
 }
@@ -218,7 +244,9 @@ fn vec_inner_t(a: &[[i32; N]; K], b: &[[i32; N]; K]) -> [i32; N] {
     // sum_r a[r] * b[r] (pointwise), used for t_hat · s
     let mut acc = [0i32; N];
     for r in 0..K {
-        for j in 0..N { acc[j] = fq_add(acc[j], fq_mul(a[r][j], b[r][j])); }
+        for j in 0..N {
+            acc[j] = fq_add(acc[j], fq_mul(a[r][j], b[r][j]));
+        }
     }
     acc
 }
@@ -283,7 +311,9 @@ pub fn encaps_internal(pk: &[u8], m: &[u8; 32]) -> (Vec<u8>, Vec<u8>) {
     let mntt = ntt(&mvec, false);
     let acc = vec_inner_t(&t, &s); // t_hat · s
     let mut v = [0i32; N];
-    for j in 0..N { v[j] = fq_add(acc[j], fq_add(e2[j], mntt[j])); }
+    for j in 0..N {
+        v[j] = fq_add(acc[j], fq_add(e2[j], mntt[j]));
+    }
     // ciphertext: encode in standard domain
     let mut c = Vec::with_capacity(CT_LEN);
     for i in 0..K {
@@ -328,11 +358,15 @@ pub fn decaps_internal(sk: &[u8], c: &[u8]) -> Vec<u8> {
     // m' = v - s_hat · u'
     let mut acc = [0i32; N];
     for r in 0..K {
-        for j in 0..N { acc[j] = fq_add(acc[j], fq_mul(s[r][j], u[r][j])); }
+        for j in 0..N {
+            acc[j] = fq_add(acc[j], fq_mul(s[r][j], u[r][j]));
+        }
     }
     let su = ntt(&acc, true);
     let mut mp = [0i32; N];
-    for j in 0..N { mp[j] = fq_sub(v[j], su[j]); }
+    for j in 0..N {
+        mp[j] = fq_sub(v[j], su[j]);
+    }
     let mhat = decompress(&compress(&mp, 1), 1);
     let mut m = [0u8; 32];
     for i in 0..32 {
@@ -365,7 +399,9 @@ mod tests {
     #[test]
     fn ntt_isomorphism() {
         let mut a = [0i32; N];
-        for i in 0..N { a[i] = (i * 7 + 3) as i32 % Q; }
+        for i in 0..N {
+            a[i] = (i * 7 + 3) as i32 % Q;
+        }
         let ah = ntt(&a, false);
         let a_back = ntt(&ah, true);
         assert_eq!(a, a_back);
@@ -375,11 +411,16 @@ mod tests {
     fn ntt_mul_equals_schoolbook() {
         let mut a = [0i32; N];
         let mut b = [0i32; N];
-        for i in 0..N { a[i] = (i * 5) as i32 % Q; b[i] = (i * 11 + 2) as i32 % Q; }
+        for i in 0..N {
+            a[i] = (i * 5) as i32 % Q;
+            b[i] = (i * 11 + 2) as i32 % Q;
+        }
         let ah = ntt(&a, false);
         let bh = ntt(&b, false);
         let mut pw = [0i32; N];
-        for j in 0..N { pw[j] = fq_mul(ah[j], bh[j]); }
+        for j in 0..N {
+            pw[j] = fq_mul(ah[j], bh[j]);
+        }
         let prod = ntt(&pw, true);
         // schoolbook
         let mut sb = [0i32; N];
@@ -413,7 +454,10 @@ mod tests {
         let k_tampered = decaps_internal(&sk, &ct);
         // The RED gate must NOT return the original shared secret on tamper.
         let k_clean = decaps_internal(&sk, &c);
-        assert_ne!(k_tampered, k_clean, "tampered ct must not yield clean secret");
+        assert_ne!(
+            k_tampered, k_clean,
+            "tampered ct must not yield clean secret"
+        );
     }
 
     #[test]

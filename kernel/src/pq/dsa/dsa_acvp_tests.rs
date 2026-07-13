@@ -286,13 +286,11 @@ mod generated {
     }
 
     kg_case!(
-        26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46,
-        47, 48, 49, 50
+        26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+        49, 50
     );
 
-    sg_case!(
-        21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40
-    );
+    sg_case!(21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40);
 
     sv_case!(16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30);
 }
@@ -300,15 +298,27 @@ mod generated {
 // ── Aggregate guards (prove the exact counts are exercised) ──────────────────
 #[test]
 fn acvp_mldsa65_keygen_count() {
-    assert_eq!(keygen_cases().len(), 25, "expected 25 ML-DSA-65 keyGen cases");
+    assert_eq!(
+        keygen_cases().len(),
+        25,
+        "expected 25 ML-DSA-65 keyGen cases"
+    );
 }
 #[test]
 fn acvp_mldsa65_siggen_count() {
-    assert_eq!(siggen_cases().len(), 20, "expected 20 ML-DSA-65 sigGen cases");
+    assert_eq!(
+        siggen_cases().len(),
+        20,
+        "expected 20 ML-DSA-65 sigGen cases"
+    );
 }
 #[test]
 fn acvp_mldsa65_sigver_count() {
-    assert_eq!(sigver_cases().len(), 15, "expected 15 ML-DSA-65 sigVer cases");
+    assert_eq!(
+        sigver_cases().len(),
+        15,
+        "expected 15 ML-DSA-65 sigVer cases"
+    );
 }
 
 #[cfg(test)]
@@ -325,8 +335,7 @@ mod diag {
         let cases = sigver_cases();
         let cases: Vec<_> = cases.into_iter().collect();
         for tc in [20u32, 21u32] {
-            let (_, pk, msg, sig, want) =
-                cases.iter().find(|c| c.0 == tc).unwrap();
+            let (_, pk, msg, sig, want) = cases.iter().find(|c| c.0 == tc).unwrap();
             std::eprintln!("=== tcId {} want={}", tc, want);
             let (c_tilde, _z, _h) = unpack_sig_bytes(sig).unwrap();
             std::eprintln!("ctilde={}", hx(c_tilde.as_slice()));

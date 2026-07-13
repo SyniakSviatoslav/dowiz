@@ -14,10 +14,8 @@
 //!
 //! RNG-free hot path (C10): all entropy is caller-supplied (`seed`, `rnd`).
 
-use crate::pq::envelope::{
-    new_identity, open, seal, EnvelopeError, SignedEnvelope, HASH_LEN,
-};
 use crate::pq::envelope::ENTROPY_LEN;
+use crate::pq::envelope::{new_identity, open, seal, EnvelopeError, SignedEnvelope, HASH_LEN};
 
 /// An ML-DSA-65 signing key (secret key bytes). Used only to *produce* updates.
 #[derive(Clone)]
@@ -105,11 +103,7 @@ pub fn codesign_keypair(seed: &[u8; ENTROPY_LEN]) -> (PinnedRoot, SigningKey) {
 
 /// Sign an update blob with the signing key. `rnd` is caller-supplied signing
 /// entropy (C10); never reuse it across seals.
-pub fn sign_update(
-    blob: &[u8],
-    key: &SigningKey,
-    rnd: &[u8; ENTROPY_LEN],
-) -> UpdateBlob {
+pub fn sign_update(blob: &[u8], key: &SigningKey, rnd: &[u8; ENTROPY_LEN]) -> UpdateBlob {
     UpdateBlob::Signed(seal(blob, &key.sk, rnd))
 }
 

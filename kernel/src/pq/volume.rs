@@ -174,7 +174,10 @@ pub fn open_volume(
     // (b) Unwrap the volume key under the DEM key. Fails if the wrap was not for us.
     let wrap_cipher = Aes256Gcm::new_from_slice(&dk).map_err(|_| VolumeError::DecryptFailed)?;
     let vk = wrap_cipher
-        .decrypt(Nonce::from_slice(&seal.wrap_nonce), seal.wrapped_vk.as_slice())
+        .decrypt(
+            Nonce::from_slice(&seal.wrap_nonce),
+            seal.wrapped_vk.as_slice(),
+        )
         .map_err(|_| VolumeError::DecryptFailed)?;
 
     // (c) Verify the ML-DSA envelope over the canonical wire bytes. envelope::open
@@ -229,8 +232,16 @@ mod tests {
         );
 
         // Sanity: the volume key is NOT stored in the clear.
-        assert_ne!(seal.wrapped_vk, vk.to_vec(), "volume key must be wrapped, not plaintext");
-        assert_ne!(seal.ciphertext, plaintext.to_vec(), "blob must be ciphertext");
+        assert_ne!(
+            seal.wrapped_vk,
+            vk.to_vec(),
+            "volume key must be wrapped, not plaintext"
+        );
+        assert_ne!(
+            seal.ciphertext,
+            plaintext.to_vec(),
+            "blob must be ciphertext"
+        );
 
         let recovered = open_volume(&seal, &recipient, &signer_pk)
             .expect("same recipient + valid signer must open");
@@ -280,7 +291,11 @@ mod tests {
         );
 
         let res = open_volume(&seal, &peer_b, &signer_pk); // B tries to open
-        assert_eq!(res, Err(VolumeError::WrapRejected), "wrong recipient must fail");
+        assert_eq!(
+            res,
+            Err(VolumeError::WrapRejected),
+            "wrong recipient must fail"
+        );
     }
 
     #[test]

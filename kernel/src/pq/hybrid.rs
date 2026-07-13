@@ -37,7 +37,12 @@ pub fn hybrid_keygen(x_seed: &[u8; 32], kem_seed: &[u8; 32]) -> HybridKeypair {
     let base = [9u8; 32]; // curve25519 generator u-coordinate
     let x_pk = x25519(&sk, &base);
     let (kem_pk, kem_sk) = kem::keygen_internal(kem_seed);
-    HybridKeypair { x_pk, x_sk: sk, kem_pk, kem_sk }
+    HybridKeypair {
+        x_pk,
+        x_sk: sk,
+        kem_pk,
+        kem_sk,
+    }
 }
 
 /// Hybrid ciphertext: carries the ML-KEM ciphertext, the ephemeral X25519 pubkey, and a
@@ -69,7 +74,14 @@ pub fn hybrid_encaps(
     // Combine: both secrets required; order-independent (sorted concat) so sender/recv
     // agree regardless of which leg was computed first.
     let (ss, tag) = combine(&mlkem_ss, &x_ss);
-    (HybridCiphertext { kem_ct, x_ephemeral, confirm: tag }, ss)
+    (
+        HybridCiphertext {
+            kem_ct,
+            x_ephemeral,
+            confirm: tag,
+        },
+        ss,
+    )
 }
 
 /// Decapsulate. RED gate: BOTH legs must succeed AND the key-confirmation tag must
@@ -125,7 +137,10 @@ mod tests {
         let kb = hybrid_keygen(&[3u8; 32], &[4u8; 32]);
         let (mut ct, _ssa) = hybrid_encaps(&kb, &[5u8; 32], &[6u8; 32]);
         ct.kem_ct[0] ^= 0xFF; // corrupt the PQ leg
-        assert!(hybrid_decaps(&kb, &ct).is_err(), "tampered KEM ct must be rejected");
+        assert!(
+            hybrid_decaps(&kb, &ct).is_err(),
+            "tampered KEM ct must be rejected"
+        );
     }
 
     #[test]
@@ -135,7 +150,10 @@ mod tests {
         let kc = hybrid_keygen(&[7u8; 32], &[8u8; 32]);
         let (ct, _ssa) = hybrid_encaps(&kb, &[5u8; 32], &[6u8; 32]);
         // kc is NOT the intended recipient; X25519 DH will not match, ML-KEM won't either.
-        assert!(hybrid_decaps(&kc, &ct).is_err(), "wrong peer must be rejected");
+        assert!(
+            hybrid_decaps(&kc, &ct).is_err(),
+            "wrong peer must be rejected"
+        );
     }
 
     #[test]
@@ -148,6 +166,9 @@ mod tests {
             x_ephemeral: [0u8; 32],
             confirm: [0u8; 32],
         };
-        assert!(hybrid_decaps(&kb, &ct).is_err(), "degenerate classical leg rejected");
+        assert!(
+            hybrid_decaps(&kb, &ct).is_err(),
+            "degenerate classical leg rejected"
+        );
     }
 }

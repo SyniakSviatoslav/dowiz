@@ -61,5 +61,3 @@ mod tests {
         assert_eq!(ab, ba, "X25519 not associative");
     }
 }
-
-
