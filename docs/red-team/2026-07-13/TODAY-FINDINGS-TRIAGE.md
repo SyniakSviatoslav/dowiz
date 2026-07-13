@@ -57,7 +57,7 @@ Legend:
 ## D5 — Reliability / ops / secrets
 | Finding | Class | Status | Note |
 |---|---|---|---|
-| H8 orphaned git blobs retain rotated JWT/PII/RSA | secret-hygiene | **CLOSED-REPO (local)** | **2026-07-13: local purge removed the 2 RSA private-key blobs; `git fsck --unreachable` → 0. Reachable history proven clean. GitHub-side GC = OPERATOR (Support request drafted in H8-GITHUB-GC-REQUEST.md).** |
+| H8 orphaned git blobs retain rotated JWT/PII/RSA | secret-hygiene | **CLOSED (local + GitHub)** | **2026-07-13: local purge removed the 2 RSA private-key blobs; `git fsck --unreachable` → 0. Reachable history proven clean. GitHub GC VERIFIED NOT NEEDED — `gh api /git/blobs/{sha}` → HTTP 404 for both RSA SHAs (never pushed). See H8-GITHUB-GC-REQUEST.md. Repo stays green (`pnpm verify:secrets`).** |
 | `verify-secrets` only checked filenames (D5 blind spot) | gate-gap | CLOSED-REPO | verify-secrets hardened (step 4 enumerates secret filenames added to any ref; gitleaks robust against fork binary). Gate GREEN. |
 
 ## D6 — Business value
@@ -79,6 +79,6 @@ Legend:
 ## Summary
 - **CLOSED-REPO this pass (verified):** D3-F7 (CSP on staying SPA) + D5-H8 (local secret purge) + D5-gate (verify-secrets hardened).
 - **CLOSED-ADR:** F4 SSRF, F1/F2/F3 credential/PII classes (ADR-0007/0008/0009).
-- **OPERATOR (not repo-fixable):** D1-F1/D3-F1 live weak-cred prod (DB action), D5-H8 GitHub GC (Support), D7 F-01..F-08 live-deploy/UX (CD/copy).
+- **OPERATOR (not repo-fixable, runbooks provided):** D1-F1/D3-F1 live weak-cred prod (DB rotate via `PART1-LIVE-PROD-DECOMMISSION.md`), live `dowiz.fly.dev` teardown (same runbook), D7 F-01..F-08 live-deploy/UX (CD/copy). D5-H8 GitHub GC → VERIFIED NOT NEEDED (404), no Support ticket.
 - **TODO-DEFER (land with new-arch components):** route-layer requireRole + RED test; live-fetcher SSRF audit + RED test; e2e-fixture guardrail; SPA form a11y labels.
 - **OOS-D1 (explicitly not fixed — would be fake-fix):** all retired `attic/apps-api` + Supabase findings.

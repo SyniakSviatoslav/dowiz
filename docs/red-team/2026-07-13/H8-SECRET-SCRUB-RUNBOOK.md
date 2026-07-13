@@ -1,10 +1,12 @@
-# H8 — Git-history secret scrub (CLOSED locally, GitHub-GC pending)
+# H8 — Git-history secret scrub (CLOSED locally + GitHub GC VERIFIED NOT NEEDED)
 
-> Status: **LOCAL REMEDIATION COMPLETE (verified 2026-07-13).** GitHub-side orphaned-object
-> GC is the only remaining item and requires a GitHub Support request (cannot be done locally).
-> Blast-radius note: a full `git filter-repo --replace-text` + force-rewrite of reachable history
-> was assessed and **declined** — reachable history was proven clean (see below), so a rewrite
-> would have changed every SHA for zero security benefit (theater, not remediation).
+> Status: **LOCAL REMEDIATION COMPLETE (verified 2026-07-13).** GitHub-side GC
+> was the only remaining item — it is now **VERIFIED UNNECESSARY** via a `gh api`
+> existence probe (both RSA SHAs return HTTP 404; see `H8-GITHUB-GC-REQUEST.md`).
+> Blast-radius note: a full `git filter-repo --replace-text` + force-rewrite of
+> reachable history was assessed and **declined** — reachable history was proven
+> clean (see below), so a rewrite would have changed every SHA for zero security
+> benefit (theater, not remediation).
 
 ## Verified findings (ground truth, 2026-07-13)
 - `git fsck --unreachable --no-reflogs`: **1877** unreachable (dangling) blobs.
@@ -40,15 +42,19 @@ Verification AFTER:
   anyway; only `gc --prune` removes unreachable objects. The local purge above is the
   correct, minimal, honest fix.
 
-## Remaining item — GitHub-side orphaned-object GC (operator action, not local)
-If the 2 RSA SHAs were ever pushed via a now-rewritten/force-pushed ref, they remain as
-orphaned objects in GitHub's object store and are fetchable by SHA until GitHub GCs them.
-- They are NOT reachable via any current branch/tag (current refs are clean), so they cannot
-  be fetched through normal clone/fetch.
-- To fully erase: open a GitHub Support request asking to run `git gc --aggressive` / object
-  expiry on the repository (cite this runbook + the 2 SHAs). This is the documented final step
-  of H8; it is a GitHub-side action, not something executable from this local repo.
-- Prepared request text: see `H8-GITHUB-GC-REQUEST.md` (operator sends to GitHub Support).
+## Remaining item — GitHub-side orphaned-object GC: VERIFIED NOT NEEDED
+A `gh api /git/blobs/{sha}` existence probe returned **HTTP 404** for both RSA
+SHAs (2026-07-13). A 404 means the object does not exist in GitHub's object
+store — it was never pushed (the blobs were always dangling locally and removed
+by `git gc --prune=now`). **No GitHub Support ticket is required.**
+- Full reasoning + probe output: see `H8-GITHUB-GC-REQUEST.md`.
+- Open-source publish (MANIFESTO C6 / ADR-020) is **UNBLOCKED at the repo level**.
+
+## Related operator action (separate from H8, same red-team sweep)
+The live `dowiz.fly.dev` prod (old `attic/` stack) still holds the `test@dowiz.com`
+owner credential confirmed by the synthesis. This repo cannot decommission it
+(no `flyctl`/DB creds here, and it is a prod auth/money red-line). Exact
+runbook: see `PART1-LIVE-PROD-DECOMMISSION.md` (operator executes).
 
 ## Gate status
 - `pnpm verify:secrets` → GREEN (exit 0). Reachable history + working tree contain no real secret.
