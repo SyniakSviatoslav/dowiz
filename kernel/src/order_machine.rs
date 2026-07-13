@@ -89,6 +89,8 @@ pub enum TransitionError {
     ScaffoldDisabled(OrderStatus, OrderStatus),
     /// not in the allowed transition table
     Illegal(OrderStatus, OrderStatus),
+    /// domain invariant violated (e.g. subtotal arithmetic overflow) — RED LINE
+    Invalid(String),
 }
 
 impl TransitionError {
@@ -97,6 +99,7 @@ impl TransitionError {
             Self::SameStatus(_) => "SameStatusError",
             Self::ScaffoldDisabled(_, _) => "ScaffoldDisabledError",
             Self::Illegal(_, _) => "IllegalTransitionError",
+            Self::Invalid(_) => "InvalidInputError",
         }
     }
     pub fn message(&self) -> String {
@@ -110,6 +113,7 @@ impl TransitionError {
                 )
             }
             Self::Illegal(f, t) => format!("Illegal transition: {} → {}", f.as_str(), t.as_str()),
+            Self::Invalid(msg) => msg.clone(),
         }
     }
 }
