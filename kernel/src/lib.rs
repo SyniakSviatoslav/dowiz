@@ -3,6 +3,8 @@
 //! No float on money, no I/O. Verified-by-Math: RED+GREEN tests per module.
 
 pub mod analytics;
+/// RW-07 — cart state machine (consolidate 2 JS cart impls → kernel authority). Totals via money.
+pub mod cart;
 pub mod domain;
 /// MESH-06 — per-node content-addressed event-log (local-first + sync).
 pub mod event_log;
@@ -11,6 +13,8 @@ pub mod geo;
 pub mod intake;
 pub mod isolation;
 pub mod loops;
+/// RW-08 — messenger deep-link builders (pure string logic → kernel authority).
+pub mod messenger;
 pub mod money;
 pub mod order_machine;
 pub mod wasm;
