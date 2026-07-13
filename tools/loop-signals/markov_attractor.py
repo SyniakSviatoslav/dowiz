@@ -58,7 +58,6 @@ POTENTIAL = {"run_ok": 1.0, "edit": 0.0, "probe": 0.0, "edit_fail": -1.0, "run_f
 MIN_EVENTS = 8       # short window -> stay quiet (cold start)
 H_LO = 0.5           # bits/step; rows >~75% deterministic => "cyclic", not exploring
 ESCAPE_LO = 0.05     # <5% long-run time in a progress state => effectively no escape
-DRIFT_LO = 0.0       # non-positive expected one-step progress (Foster-Lyapunov)
 DAMPING = 0.02       # PageRank teleport -> irreducible+aperiodic => unique pi
 POWER_ITERS = 300    # fixed (deterministic; damped chain contracts fast for small N)
 PERIOD_MAG = 0.85    # eigenvalue this close to the unit circle counts as persistent
@@ -243,10 +242,14 @@ def analyze(states):
         verdict = "LIMIT_CYCLE"
         reason = (f"cyclic trap: escape={escape:.3f}, H={H:.3f}, "
                   f"period={spec['period']}, slem={spec['slem']:.3f}")
-    elif trapped and mu <= DRIFT_LO and H > H_LO:
+    elif trapped and H > H_LO:
+        # trapped (escape~0 + failures) already means "never reaching progress";
+        # high entropy + no clean period => strange churn. Do NOT gate on drift:
+        # for balanced churn drift~=0 and jitters +/- with sampling noise, which
+        # would flip a genuine trap to HEALTHY on a razor's edge.
         verdict = "STRANGE_ATTRACTOR"
-        reason = (f"bounded churn never reaching progress: escape={escape:.3f}, "
-                  f"H={H:.3f}, drift={mu:+.3f}, slem={spec['slem']:.3f}")
+        reason = (f"bounded high-entropy churn never reaching progress: "
+                  f"escape={escape:.3f}, H={H:.3f}, slem={spec['slem']:.3f}")
     elif not has_failure:
         verdict = "HEALTHY"
         reason = f"quiet work, no failures in window (escape={escape:.3f}, H={H:.3f})"
