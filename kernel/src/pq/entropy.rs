@@ -121,9 +121,13 @@ pub mod provider {
         let req = format!(
             "GET /API/jsonI.php?length=32&type=uint8&size=1 HTTP/1.1\r\nHost: qrng.anu.edu.au\r\nConnection: close\r\n\r\n"
         );
-        stream.write_all(req.as_bytes()).map_err(|e| e.to_string())?;
+        stream
+            .write_all(req.as_bytes())
+            .map_err(|e| e.to_string())?;
         let mut resp = String::new();
-        stream.read_to_string(&mut resp).map_err(|e| e.to_string())?;
+        stream
+            .read_to_string(&mut resp)
+            .map_err(|e| e.to_string())?;
         // Split headers/body
         let body = resp.split_once("\r\n\r\n").map(|x| x.1).unwrap_or(&resp);
         Ok(body.to_string())
@@ -153,7 +157,10 @@ mod tests {
         let b = [0xCDu8; 32];
         let m1 = entropy_mix(&a, &b);
         let m2 = entropy_mix(&b, &a); // swapped
-        assert_ne!(m1, [0u8; 32], "seed must not be all-zero for constant input");
+        assert_ne!(
+            m1, [0u8; 32],
+            "seed must not be all-zero for constant input"
+        );
         assert_ne!(m1, m2, "mixing must be input-dependent (swapped != same)");
     }
 

@@ -9,13 +9,13 @@
 //! dependency. Bit-exactness vs the NIST reference is verified by KAT tests that
 //! decode the vendored mldsa-native / ACVP vectors.
 
+pub mod codesign;
+pub mod dsa;
+pub mod entropy;
+pub mod envelope;
+pub mod fractal;
+pub mod hybrid;
 pub mod keccak;
 pub mod kem;
-pub mod dsa;
-pub mod envelope;
-pub mod codesign;
-pub mod x25519;
-pub mod hybrid;
 pub mod volume;
-pub mod entropy;
-pub mod fractal;
+pub mod x25519;
