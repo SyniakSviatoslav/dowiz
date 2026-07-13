@@ -1,3 +1,13 @@
+# Static SPA image — decentralized app shell.
+#
+# Root-cause note (2026-07-13, MANIFESTO/DECISIONS D1): the legacy
+# centralized server (apps/api + apps/worker, deployed via attic/fly.toml with
+# dist/api/server.cjs, dist/worker, and a release_command migrator) was DROPPED.
+# There is no server process, no central DB, no Supabase, no Fly. This image
+# serves ONLY the static SPA built by `pnpm -r build` (apps/web/dist), which
+# the thin client / reference alt-client loads. It does NOT bundle or run any
+# Node backend, and it does NOT auto-migrate a database.
+
 # Build Stage
 FROM node:22-slim AS builder
 
@@ -12,34 +22,39 @@ COPY packages ./packages
 COPY apps ./apps
 COPY scripts ./scripts
 
-# Install dependencies and bundle apps
+# Install dependencies and build all workspaces (produces apps/web/dist).
 RUN pnpm install --frozen-lockfile
-# Soft access gate (ADR-soft-access-gate): the frontend CTA render flag is baked at
-# vite build time. Defaults false so prod stays DARK (STOP-1); staging passes
-# --build-arg VITE_ACCESS_GATE_PUBLIC_ENABLED=true to verify the CTA before launch.
-ARG VITE_ACCESS_GATE_PUBLIC_ENABLED=false
-ENV VITE_ACCESS_GATE_PUBLIC_ENABLED=$VITE_ACCESS_GATE_PUBLIC_ENABLED
-# Telegram notification categories (TG_CATEGORY_GATING): frontend preference-centre
-# render flag, baked at vite build time. Defaults false so prod stays DARK.
-ARG VITE_TG_CATEGORY_GATING=false
-ENV VITE_TG_CATEGORY_GATING=$VITE_TG_CATEGORY_GATING
 RUN pnpm -r build
+
+# Assemble the static SPA artifact only (no backend, no migrator).
 RUN pnpm dlx tsx scripts/build-apps.ts
 
-# Production Runtime Stage
-FROM node:22-slim
+# Production Runtime Stage — static file server, no server-side logic.
+FROM nginx:stable-alpine AS runtime
 
-WORKDIR /app
+# Static web root produced by build-apps.ts.
+COPY --from=builder /app/dist/public /usr/share/nginx/html
 
-# Copy the bundled single-file ESM artifacts
-COPY --from=builder /app/dist /app/dist
+# Hardened, minimal config: SPA fallback to index.html, no server runtime.
+COPY <<'NGINX' /etc/nginx/conf.d/default.conf
+server {
+  listen 8080;
+  server_name _;
+  root /usr/share/nginx/html;
+  index index.html;
 
-# Copy static assets (API public files and Web frontend build)
-COPY --from=builder /app/apps/api/public /app/dist/public
-COPY --from=builder /app/apps/web/dist /app/dist/public
+  # SPA client-side routing fallback.
+  location / {
+    try_files $uri $uri/ /index.html;
+  }
 
-# Install external dependencies that cannot be bundled (native modules or complex SDKs)
-RUN npm install argon2 sharp @aws-sdk/client-s3 @aws-sdk/lib-storage
+  # Long-cache hashed assets; never cache index.html (so deploys take effect).
+  location /assets/ {
+    add_header Cache-Control "public, max-age=31536000, immutable";
+  }
+  add_header X-Content-Type-Options "nosniff" always;
+  add_header X-Frame-Options "DENY" always;
+}
+NGINX
 
-# The specific script will be provided by Fly [processes] definition
-ENTRYPOINT ["node"]
+EXPOSE 8080
