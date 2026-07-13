@@ -8,6 +8,10 @@ role_mindset: "три голоси: істина інженерії / змага
 preconditions:
   - "зміна класифікована як 'serious'"
   - "є system-architect, system-breaker, counsel суб-агенти"
+certification:
+  fields:
+    - name: admit_epoch
+      pinned: 1
 execution_skills: [system-architect, system-breaker, counsel]
 goal: "план, що тримає back-of-envelope, без невирішених CRITICAL/HIGH і ETHICAL-STOP"
 verification: "0 unresolved CRITICAL/HIGH (Breaker) + 0 unresolved ETHICAL-STOP (Counsel) + поради розглянуті + інваріанти цілі"
