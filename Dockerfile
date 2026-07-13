@@ -30,39 +30,15 @@ RUN pnpm -r build
 RUN pnpm dlx tsx scripts/build-apps.ts
 
 # Production Runtime Stage — static file server, no server-side logic.
-FROM nginx:stable-alpine AS runtime
+# Chainguard nginx: distroless (no shell/pkg-manager), SBOM, daily CVE rebuilds.
+FROM cgr.dev/chainguard/nginx:latest AS runtime
 
 # Static web root produced by build-apps.ts.
 COPY --from=builder /app/dist/public /usr/share/nginx/html
 
 # Hardened, minimal config: SPA fallback to index.html, no server runtime.
-COPY <<'NGINX' /etc/nginx/conf.d/default.conf
-server {
-  listen 8080;
-  server_name _;
-  root /usr/share/nginx/html;
-  index index.html;
-
-  # SPA client-side routing fallback.
-  location / {
-    try_files $uri $uri/ /index.html;
-  }
-
-  # Long-cache hashed assets; never cache index.html (so deploys take effect).
-  location /assets/ {
-    add_header Cache-Control "public, max-age=31536000, immutable";
-  }
-  add_header X-Content-Type-Options "nosniff" always;
-  add_header X-Frame-Options "DENY" always;
-
-  # Security headers (closes D3 F7 — SPA shell shipped without CSP; D4 confirmed
-  # React auto-escaping blocks XSS, this is defense-in-depth). Vite production
-  # builds emit external hashed JS/CSS only — no inline scripts/styles — so a
-  # strict policy is safe. block-all-mixed-content + no unsafe-inline/eval.
-  add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests" always;
-  add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-  add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()" always;
-}
-NGINX
+# Config lives in docker/nginx-default.conf (reviewable outside the Dockerfile;
+# avoids the BuildKit-only heredoc COPY that the legacy builder rejects).
+COPY docker/nginx-default.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 8080
