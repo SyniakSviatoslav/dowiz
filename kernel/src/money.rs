@@ -89,6 +89,82 @@ pub fn convert_all_to_eur_cents(amount_all: i64, rate: f64) -> Result<i64, Strin
     i64::try_from(rounded).map_err(|_| "EUR conversion overflow".into())
 }
 
+// ── Order-total mirror (RW-03 authority surface) ──────────────────────────────
+// 1:1 port of `packages/ui/src/lib/money.ts` `computeDeliveryFee` + `estimateOrderTotal`.
+// The SERVER (apps/api orders.ts fee ladder) stays the single source of truth for what is
+// CHARGED; this mirror only drives what the client SEES (Approach M / ADR-0005). All amounts
+// are integer minor units. Returns `None` (fee unknown) when the fee is server-only
+// (distance-tiered) or delivery is unconfigured — the caller must degrade, never show a number
+// it can't back.
+
+#[derive(Clone, Copy)]
+pub struct FeeConfig {
+    pub is_pickup: bool,
+    pub free_delivery_threshold: Option<i64>,
+    pub delivery_fee_flat: Option<i64>,
+    /// Distance-tiered fees are RLS-hidden from /info — client cannot compute them.
+    pub has_distance_tiers: bool,
+}
+
+#[derive(Clone, Copy)]
+pub struct OrderTotalConfig {
+    pub fee: FeeConfig,
+    pub tax_rate: f64,
+    pub price_includes_tax: bool,
+    pub min_order_value: Option<i64>,
+}
+
+#[derive(Clone, Copy)]
+pub struct OrderTotalEstimate {
+    /// True only when the delivery fee is computable client-side (flat/free/pickup).
+    pub fee_known: bool,
+    pub delivery_fee: Option<i64>,
+    pub tax_total: i64,
+    /// Authoritative-by-construction total, or None when the fee is unknown.
+    pub total: Option<i64>,
+    /// Mirrors server MIN_ORDER_NOT_MET gate (applies to pickup AND delivery).
+    pub min_not_met: bool,
+}
+
+/// Mirror of money.ts `computeDeliveryFee` (orders.ts:528-560 ladder).
+pub fn compute_delivery_fee(subtotal: i64, cfg: &FeeConfig) -> Option<i64> {
+    if cfg.is_pickup {
+        return Some(0);
+    }
+    if let Some(thr) = cfg.free_delivery_threshold {
+        if subtotal >= thr {
+            return Some(0);
+        }
+    }
+    if cfg.has_distance_tiers {
+        return None; // distance-based — server-only
+    }
+    if let Some(flat) = cfg.delivery_fee_flat {
+        return Some(flat);
+    }
+    None // delivery not configured
+}
+
+/// Mirror of money.ts `estimateOrderTotal` (orders.ts:518-565). Tax is on the subtotal
+/// (not subtotal+fee), matching the server.
+pub fn estimate_order_total(subtotal: i64, cfg: &OrderTotalConfig) -> OrderTotalEstimate {
+    let delivery_fee = compute_delivery_fee(subtotal, &cfg.fee);
+    let tax_total = apply_tax(subtotal, cfg.tax_rate, cfg.price_includes_tax).unwrap_or(0);
+    let min_not_met = match cfg.min_order_value {
+        Some(min) => subtotal < min,
+        None => false,
+    };
+    let fee_known = delivery_fee.is_some();
+    let total = delivery_fee.map(|fee| subtotal + fee + tax_total);
+    OrderTotalEstimate {
+        fee_known,
+        delivery_fee,
+        tax_total,
+        total,
+        min_not_met,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -149,5 +225,93 @@ mod tests {
     fn green_all_to_eur() {
         // 1000 ALL at rate 0.01 (100 ALL = 1 EUR) → 10 EUR => 1000 cents
         assert_eq!(convert_all_to_eur_cents(1000, 0.01).unwrap(), 1000);
+    }
+
+    // ── RW-03 parity: kernel estimate_order_total == packages/ui/src/lib/money.ts ──
+    // These mirror money.ts's documented behavior (fee ladder + min-order + tax on subtotal).
+    // They are RED→GREEN: they must FAIL if the kernel ever diverges from the JS port,
+    // proving the kernel is a safe authority before money.ts is deleted.
+    fn cfg(
+        is_pickup: bool,
+        free_thr: Option<i64>,
+        flat: Option<i64>,
+        distance: bool,
+        tax_rate: f64,
+        incl: bool,
+        min: Option<i64>,
+    ) -> OrderTotalConfig {
+        OrderTotalConfig {
+            fee: FeeConfig {
+                is_pickup,
+                free_delivery_threshold: free_thr,
+                delivery_fee_flat: flat,
+                has_distance_tiers: distance,
+            },
+            tax_rate,
+            price_includes_tax: incl,
+            min_order_value: min,
+        }
+    }
+
+    // Flat fee + 20% tax exclusive: 1000 + 200 fee + 200 tax = 1400
+    #[test]
+    fn green_parity_flat_fee_exclusive() {
+        let r = estimate_order_total(1000, &cfg(false, None, Some(200), false, 0.20, false, None));
+        assert!(r.fee_known);
+        assert_eq!(r.delivery_fee, Some(200));
+        assert_eq!(r.tax_total, 200);
+        assert_eq!(r.total, Some(1400));
+        assert!(!r.min_not_met);
+    }
+
+    // Free-over-threshold boundary (threshold 2000, subtotal 2000 → fee 0)
+    #[test]
+    fn green_parity_free_threshold_boundary() {
+        let r = estimate_order_total(
+            2000,
+            &cfg(false, Some(2000), Some(200), false, 0.10, false, None),
+        );
+        assert_eq!(r.delivery_fee, Some(0));
+        assert_eq!(r.tax_total, 200);
+        assert_eq!(r.total, Some(2200));
+    }
+
+    // Pickup → fee 0, tax still applies
+    #[test]
+    fn green_parity_pickup() {
+        let r = estimate_order_total(1500, &cfg(true, None, Some(200), false, 0.20, false, None));
+        assert_eq!(r.delivery_fee, Some(0));
+        assert_eq!(r.total, Some(1500 + 300));
+    }
+
+    // Distance-tiered → fee unknown → total None (caller must degrade)
+    #[test]
+    fn green_parity_distance_unknown() {
+        let r = estimate_order_total(1000, &cfg(false, None, Some(200), true, 0.20, false, None));
+        assert!(!r.fee_known);
+        assert_eq!(r.delivery_fee, None);
+        assert_eq!(r.total, None);
+    }
+
+    // Min-order gate (min 500, subtotal 400 → min_not_met)
+    #[test]
+    fn green_parity_min_not_met() {
+        let r = estimate_order_total(
+            400,
+            &cfg(false, None, Some(200), false, 0.20, false, Some(500)),
+        );
+        assert!(r.min_not_met);
+        assert_eq!(r.total, Some(400 + 200 + 80));
+    }
+
+    // Inclusive tax: 1200 inclusive at 20% → tax 200, total = 1200 + fee(0)
+    #[test]
+    fn green_parity_inclusive_tax() {
+        let r = estimate_order_total(
+            1200,
+            &cfg(false, Some(9999), Some(0), false, 0.20, true, None),
+        );
+        assert_eq!(r.tax_total, 200);
+        assert_eq!(r.total, Some(1400)); // money.ts always adds tax_total to subtotal+fee
     }
 }
