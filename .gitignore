@@ -45,6 +45,10 @@ graphify-out/
 # Doubt model: loop-detector counters (ephemeral, per-session)
 .claude/.loop-state/
 
+# Python bytecode from loop-signals / harness tooling (never tracked)
+__pycache__/
+*.pyc
+
 # RSI synthetic-user loop — runtime artifacts (generated, never committed)
 e2e/mempalace/*.jsonl
 e2e/mempalace/*.json
