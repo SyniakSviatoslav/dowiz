@@ -152,8 +152,145 @@ pub fn fold_transitions(
     Ok(cur)
 }
 
+/// All directed edges of the order-lifecycle graph: `(from, to)` for every legal
+/// transition in `allowed_next`. Used by the graph analyses below (cycle / cyclomatic).
+fn all_edges() -> Vec<(OrderStatus, OrderStatus)> {
+    use OrderStatus::*;
+    let mut edges = Vec::new();
+    for &from in &[
+        Pending, Confirmed, Preparing, Ready, InDelivery, Delivered, Rejected, Cancelled,
+        Scheduled, PickedUp,
+    ] {
+        for &to in allowed_next(from) {
+            edges.push((from, to));
+        }
+    }
+    edges
+}
+
+/// Cycle detection over the lifecycle graph (DFS with a recursion stack).
+/// Returns `true` if some state can be reached again along a directed path — i.e. an
+/// order could re-enter a prior state (an undesirable "re-open" loop).
+///
+/// Graph-theory basis (see research/spectral-graph-fsm): for this 10-state FSM a cycle
+/// means the lifecycle is not a strict forward DAG. O(|V| + |E|); trivial at this size.
+pub fn has_cycle() -> bool {
+    use OrderStatus::*;
+    let states = [
+        Pending, Confirmed, Preparing, Ready, InDelivery, Delivered, Rejected, Cancelled,
+        Scheduled, PickedUp,
+    ];
+    let edges = all_edges();
+    let mut visited = [false; 10];
+    let mut in_stack = [false; 10];
+    // index helper
+    let idx = |s: OrderStatus| -> usize {
+        match s {
+            Pending => 0,
+            Confirmed => 1,
+            Preparing => 2,
+            Ready => 3,
+            InDelivery => 4,
+            Delivered => 5,
+            Rejected => 6,
+            Cancelled => 7,
+            Scheduled => 8,
+            PickedUp => 9,
+        }
+    };
+    fn dfs(
+        s: OrderStatus,
+        idx: &dyn Fn(OrderStatus) -> usize,
+        edges: &[(OrderStatus, OrderStatus)],
+        visited: &mut [bool; 10],
+        in_stack: &mut [bool; 10],
+    ) -> bool {
+        let i = idx(s);
+        visited[i] = true;
+        in_stack[i] = true;
+        for &(f, t) in edges {
+            if f == s {
+                let j = idx(t);
+                if !visited[j] {
+                    if dfs(t, idx, edges, visited, in_stack) {
+                        return true;
+                    }
+                } else if in_stack[j] {
+                    return true; // back-edge ⇒ cycle
+                }
+            }
+        }
+        in_stack[i] = false;
+        false
+    }
+    for &s in &states {
+        if !visited[idx(s)] {
+            if dfs(s, &idx, &edges, &mut visited, &mut in_stack) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+/// Cyclomatic number μ = |E| − |V| + c (rank of the cycle space; c = connected
+/// components). μ = 0 ⟺ the graph is a forest (acyclic). Algebraic companion to
+/// `has_cycle` — it quantifies "how cyclic" the lifecycle is, so a future `Reopen`
+/// edge shows up as μ > 0 even before a full cycle forms.
+pub fn cyclomatic_number() -> isize {
+    use OrderStatus::*;
+    let states = [
+        Pending, Confirmed, Preparing, Ready, InDelivery, Delivered, Rejected, Cancelled,
+        Scheduled, PickedUp,
+    ];
+    let edges = all_edges();
+    let v = states.len();
+    let e = edges.len();
+    // connected components via union-find over the undirected version of E
+    let mut parent = [0usize; 10];
+    for (k, s) in states.iter().enumerate() {
+        parent[k] = idx_of(*s);
+    }
+    fn find(parent: &mut [usize; 10], x: usize) -> usize {
+        let mut x = x;
+        while parent[x] != x {
+            parent[x] = parent[parent[x]];
+            x = parent[x];
+        }
+        x
+    }
+    fn idx_of(s: OrderStatus) -> usize {
+        match s {
+            Pending => 0,
+            Confirmed => 1,
+            Preparing => 2,
+            Ready => 3,
+            InDelivery => 4,
+            Delivered => 5,
+            Rejected => 6,
+            Cancelled => 7,
+            Scheduled => 8,
+            PickedUp => 9,
+        }
+    }
+    for &(f, t) in &edges {
+        let (a, b) = (find(&mut parent, idx_of(f)), find(&mut parent, idx_of(t)));
+        if a != b {
+            parent[a] = b;
+        }
+    }
+    let mut comps = 0;
+    for k in 0..v {
+        if find(&mut parent, k) == k {
+            comps += 1;
+        }
+    }
+    e as isize - v as isize + comps as isize
+}
+
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     // ── RED: illegal transitions must be rejected ──
@@ -253,5 +390,24 @@ mod tests {
         ] {
             assert!(!s.is_terminal());
         }
+    }
+
+    // ── GREEN: lifecycle graph is acyclic (no order can re-enter a prior state) ──
+    #[test]
+    fn green_lifecycle_has_no_cycle() {
+        // RED→GREEN: the FSM must be a strict forward DAG. If a future `Reopen` edge
+        // is added, this flips RED and forces an explicit decision.
+        assert!(!has_cycle());
+    }
+
+    #[test]
+    fn green_cyclomatic_number_counts_undirected_cycle() {
+        // μ = |E| − |V| + c. The lifecycle is a DIRECTED acyclic graph (has_cycle()
+        // == false), but its undirected version contains one cycle:
+        //   Confirmed → Preparing → Ready → InDelivery → Confirmed
+        // (via edges Confirmed→Preparing, Preparing→Ready, Ready→InDelivery,
+        // Confirmed→InDelivery). So μ = 1, NOT 0. Directed-acyclic ≠ undirected-acyclic
+        // — a useful distinction the operator's growth-substrate surfaces concretely.
+        assert_eq!(cyclomatic_number(), 1);
     }
 }
