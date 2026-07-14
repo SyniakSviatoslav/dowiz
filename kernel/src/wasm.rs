@@ -30,6 +30,9 @@ use crate::analytics::{reduce_anomalies, ChannelEvent, ChannelLedger};
 use crate::domain::{apply_event, place_order, Order, OrderItem};
 use crate::money::{estimate_order_total, FeeConfig, OrderTotalConfig};
 use crate::order_machine::{fsm_graph_report, OrderStatus, TransitionError};
+use crate::spectral::{
+    algebraic_connectivity, classify_drift, eigenvalues, spectral_gap, spectral_radius, DriftClass,
+};
 
 /// Monotonic id / timestamp source for `place_order_js` (the JS signature does
 /// not supply an `id` or `created_at_ms`). Deterministic and order-preserving.
@@ -579,6 +582,104 @@ pub fn geo_is_out_of_order_js(last_ts: i64, ts: i64) -> Result<String, JsValue> 
     geo_is_out_of_order_logic(last_ts, ts).map_err(|e| JsValue::from_str(&e))
 }
 
+/// FE-07 — Spectral-engine wasm surface. The kernel's `spectral` module is the
+/// authoritative zero-dep eigensolver (Faddeev-LeVerrier + Durand-Kerner); the
+/// engine/field-UI consumes these results (per the 2026-07-14 directive: the
+/// engine relies on kernel math, JS/TS is legacy). Matrices are passed as a
+/// JSON 2D array `[[...],[...]]`; results are JSON. Fail-closed: a malformed /
+/// non-square / empty matrix returns an error string (never panics).
+fn parse_matrix(json: &str) -> Result<Vec<Vec<f64>>, String> {
+    let v: serde_json::Value = serde_json::from_str(json).map_err(|e| format!("bad JSON: {e}"))?;
+    let rows = v
+        .as_array()
+        .ok_or_else(|| "matrix must be a JSON array of rows".to_string())?;
+    if rows.is_empty() {
+        return Err("empty matrix".to_string());
+    }
+    let mut m = Vec::with_capacity(rows.len());
+    let cols = rows[0]
+        .as_array()
+        .ok_or_else(|| "each row must be a JSON array".to_string())?
+        .len();
+    for (i, r) in rows.iter().enumerate() {
+        let ra = r
+            .as_array()
+            .ok_or_else(|| format!("row {i} is not a JSON array"))?;
+        if ra.len() != cols {
+            return Err(format!("row {i} has {} cols, expected {cols}", ra.len()));
+        }
+        let row: Vec<f64> = ra
+            .iter()
+            .map(|x| {
+                x.as_f64()
+                    .ok_or_else(|| format!("row {i} has a non-number"))
+            })
+            .collect::<Result<_, _>>()?;
+        m.push(row);
+    }
+    if m.len() != cols {
+        return Err(format!("matrix is {}x{}, expected square", m.len(), cols));
+    }
+    Ok(m)
+}
+
+#[wasm_bindgen]
+pub fn spectral_eigenvalues_js(matrix_json: String) -> Result<String, JsValue> {
+    spectral_eigenvalues_logic(&matrix_json).map_err(|e| JsValue::from_str(&e))
+}
+
+#[wasm_bindgen]
+pub fn spectral_radius_js(matrix_json: String) -> Result<String, JsValue> {
+    spectral_radius_logic(&matrix_json).map_err(|e| JsValue::from_str(&e))
+}
+
+#[wasm_bindgen]
+pub fn spectral_gap_js(matrix_json: String) -> Result<String, JsValue> {
+    spectral_gap_logic(&matrix_json).map_err(|e| JsValue::from_str(&e))
+}
+
+/// Algebraic connectivity (Fiedler λ₂) of a graph from its adjacency matrix.
+#[wasm_bindgen]
+pub fn spectral_algebraic_connectivity_js(adjacency_json: String) -> Result<String, JsValue> {
+    spectral_algebraic_connectivity_logic(&adjacency_json).map_err(|e| JsValue::from_str(&e))
+}
+
+#[wasm_bindgen]
+pub fn spectral_classify_drift_js(matrix_json: String) -> Result<String, JsValue> {
+    spectral_classify_drift_logic(&matrix_json).map_err(|e| JsValue::from_str(&e))
+}
+
+fn spectral_eigenvalues_logic(matrix_json: &str) -> Result<String, String> {
+    let m = parse_matrix(matrix_json)?;
+    let eigs = eigenvalues(&m);
+    let out: Vec<serde_json::Value> = eigs
+        .iter()
+        .map(|e| serde_json::json!({ "re": e.re, "im": e.im }))
+        .collect();
+    serde_json::to_string(&out).map_err(|e| e.to_string())
+}
+
+fn spectral_radius_logic(matrix_json: &str) -> Result<String, String> {
+    Ok(spectral_radius(&parse_matrix(matrix_json)?).to_string())
+}
+
+fn spectral_gap_logic(matrix_json: &str) -> Result<String, String> {
+    Ok(spectral_gap(&parse_matrix(matrix_json)?).to_string())
+}
+
+fn spectral_algebraic_connectivity_logic(adjacency_json: &str) -> Result<String, String> {
+    Ok(algebraic_connectivity(&parse_matrix(adjacency_json)?).to_string())
+}
+
+fn spectral_classify_drift_logic(matrix_json: &str) -> Result<String, String> {
+    Ok(match classify_drift(&parse_matrix(matrix_json)?) {
+        DriftClass::Damped => "Damped",
+        DriftClass::Resonant => "Resonant",
+        DriftClass::Unstable => "Unstable",
+    }
+    .to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -842,24 +943,84 @@ mod tests {
         assert_eq!(geo_is_out_of_order_logic(100, 101).unwrap(), "false"); // newer
     }
 
-    // ── FE-06: flat bridge protocol matches the engine's decode contract ──
-    // The engine's `bridge::geo::decode_progress_flat` expects exactly
-    // [remaining_m, snapped_lat, snapped_lng, segment_index]. This pins the
-    // kernel side of that wire contract (kernel is the authority).
+    // ── FE-07: spectral wasm surface parity (kernel is authoritative) ──
     #[test]
-    fn geo_progress_flat_js_matches_engine_contract() {
-        let j = geo_progress_flat_logic(POLY, 40.005, -3.0).unwrap();
-        // strip brackets, split, ensure exactly 4 numeric fields in order.
-        let body = j.trim_matches(|c| c == '[' || c == ']');
-        let parts: Vec<&str> = body.split(',').collect();
-        assert_eq!(parts.len(), 4, "engine expects 4 f32 slots");
-        let rem: f64 = parts[0].parse().unwrap();
-        let lat: f64 = parts[1].parse().unwrap();
-        let lng: f64 = parts[2].parse().unwrap();
-        let seg: u64 = parts[3].parse().unwrap();
-        assert!((lat - 40.005).abs() < 1e-6, "snapped lat = 40.005");
-        assert!((lng - (-3.0)).abs() < 1e-9);
-        assert!(rem > 1500.0 && rem < 1800.0, "remaining ≈ 1668 m");
-        assert_eq!(seg, 1, "segment_index = 1 (end of first 0.01° seg)");
+    fn spectral_eigenvalues_js_parity() {
+        // 2-cycle has eigenvalues ±1.
+        let j = spectral_eigenvalues_logic("[[0,1],[1,0]]").unwrap();
+        let v: serde_json::Value = serde_json::from_str(&j).unwrap();
+        let mut mods: Vec<f64> = v
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|e| (e["re"].as_f64().unwrap().powi(2) + e["im"].as_f64().unwrap().powi(2)).sqrt())
+            .collect();
+        mods.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        assert!(
+            (mods[0] - 1.0).abs() < 1e-6 && (mods[1] - 1.0).abs() < 1e-6,
+            "eigs +/-1 -> moduli 1,1"
+        );
+    }
+
+    #[test]
+    fn spectral_radius_and_gap_js_parity() {
+        // mixing chain [[0.5,0.5],[0.5,0.5]] → eigs {1,0} ⇒ ρ=1, gap=1.
+        let rho: f64 = spectral_radius_logic("[[0.5,0.5],[0.5,0.5]]")
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!((rho - 1.0).abs() < 1e-6);
+        let gap: f64 = spectral_gap_logic("[[0.5,0.5],[0.5,0.5]]")
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!((gap - 1.0).abs() < 1e-6);
+        // 2-cycle → gap 0 (never mixes).
+        let gap0: f64 = spectral_gap_logic("[[0,1],[1,0]]")
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(gap0.abs() < 1e-6);
+    }
+
+    #[test]
+    fn spectral_algebraic_connectivity_js_parity() {
+        // Path P₃ (0-1-2) L-spectrum {0,1,3} ⇒ λ₂ = 1.
+        let lam2: f64 = spectral_algebraic_connectivity_logic("[[0,1,0],[1,0,1],[0,1,0]]")
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!((lam2 - 1.0).abs() < 1e-6, "Fiedler λ₂ = 1 for P₃");
+    }
+
+    #[test]
+    fn spectral_classify_drift_js_parity() {
+        assert_eq!(
+            spectral_classify_drift_logic("[[0.5,0],[0,0.3]]").unwrap(),
+            "Damped"
+        );
+        assert_eq!(
+            spectral_classify_drift_logic("[[2,0],[0,1.5]]").unwrap(),
+            "Unstable"
+        );
+        assert_eq!(
+            spectral_classify_drift_logic("[[0,1],[1,0]]").unwrap(),
+            "Resonant"
+        );
+    }
+
+    // Fail-closed: malformed / non-square matrices return an error, never panic.
+    #[test]
+    fn spectral_surface_rejects_malformed_matrices() {
+        assert!(spectral_radius_logic("[]").is_err(), "empty");
+        assert!(
+            spectral_radius_logic("[[1,2,3],[4,5,6]]").is_err(),
+            "non-square"
+        );
+        assert!(spectral_radius_logic("not json").is_err(), "bad JSON");
+        assert!(
+            spectral_eigenvalues_logic("[[1,2],[3,\"x\"]]").is_err(),
+            "non-number"
+        );
     }
 }

@@ -13,10 +13,16 @@ pub mod geo;
 pub mod intake;
 pub mod isolation;
 pub mod loops;
+/// Reverse-engineering loop #R1 — Markov attractor detector (ASCENDed from markov_attractor.py);
+/// reuses `spectral` as its eigen-core, killing the dual-authority hazard.
+pub mod markov;
 /// RW-08 — messenger deep-link builders (pure string logic → kernel authority).
 pub mod messenger;
 pub mod money;
 pub mod order_machine;
+/// Reverse-engineering loop #1 — general (non-symmetric) spectral engine: eigenvalues
+/// (Faddeev-LeVerrier + Durand-Kerner), spectral gap γ, Laplacian Fiedler λ₂, DMD drift class.
+pub mod spectral;
 pub mod wasm;
 
 // Re-export the headline types so wasm-bindgen consumers and tests share one surface.
