@@ -1,8 +1,12 @@
 # Internal Retrieval, Living Memory & Spectral Search — Blueprint
 
-> Status: **v1 (2026-07-14)**. Grounded in a five-lane deep research pass (search/compression
+> Status: **v2 (2026-07-14)**. Grounded in a five-lane deep research pass (search/compression
 > SOTA · spectral-wave-search viability · tensors-vs-vectors · codebase inventory ·
-> living-memory→pgrust+TTL) plus a live read of both repos. Every claim tagged **PROVEN**
+> living-memory→pgrust+TTL) plus a live read of both repos. **v2 (§11)** incorporates the
+> operator's engineering critique — CSR / cache-locality / deterministic fixed-point push — and
+> the second-order field operator (velocity/momentum, eigenvectors, divergence, oscillators),
+> and promotes **quantization + PQ + CoD + CDC** from deferred to active. §11 refines §1a's
+> push recommendation and §3's L3 layer; read it as the load-bearing implementation spec. Every claim tagged **PROVEN**
 > (peer-reviewed / measured this session) · **RESEARCHED** (sourced) · **SPECULATIVE**
 > (design hypothesis, flagged). Companion: `math-first-architecture-blueprint.md` (this is
 > its retrieval/memory substrate — serves master-roadmap P8 ops + P9 growth), and reuses the
@@ -246,6 +250,112 @@ spectral-waves invariant** (the same `field.rs`/`markov.rs`/`spectral.rs` organs
 a content graph) and its **S6 equation-IR / memory** phase. It never front-runs the master
 INVARIANT — *build DOWN from the first real order.*
 
+## 11. v2 engineering refinements — physical engine, second-order operator, active quantization
+
+Incorporates the operator's critique (CSR / cache-locality / deterministic push) and design
+questions (eigenvectors, divergence, oscillators, velocity terms; quantization + PQ + CoD +
+CDC now). The critique is correct and sharpens the plan.
+
+### 11.1 How the graph is stored: CSR (decided)
+
+**Yes — Compressed Sparse Row.** `Vec<Vec<T>>` adjacency + `HashMap` edges are pointer-chasing =
+near-guaranteed cache misses; a 90 ns math kernel would stall on RAM. CSR lays every vertex's
+neighbours contiguously (`row_ptr[]`, `col_idx[]`, `val[]`) → a sweep reads memory sequentially
+→ hardware prefetch → high hit rate. This **is** the DOD invariant (§1.5.3) applied to the graph
+layer — the same "flatten `Vec<Vec>` → contiguous" that kills the kernel's matmul heap-churn.
+**Data layout beats formula micro-optimization** — agreed. Scale check: the memory-note CSR
+(~150 nodes, ~462 edges) is a few KB → **fits L1**; the code import graph (thousands of nodes) →
+tens–hundreds of KB → fits L2. So **at our scale CSR alone gives ~90%+ hits with no tiling**;
+cache-tiling / memory-blocking is the >L3 (~10⁶-edge) path — real, but not yet. The sweep
+(`Âπ` / `c²LU`) is a sparse mat-vec = the SIMD target (FMA over contiguous neighbour runs); the
+kernel just feeds vertices into the SIMD engine (CPU-pipeline design, yes).
+
+### 11.2 Determinism vs local-push — the critique is right; the fix (refines §1a)
+
+ACL local-push is **order-dependent** (the ε-truncated residual depends on push order), spikes on
+low-conductance bottlenecks, and cache-misses — so a naïve async push makes the kernel
+non-deterministic. The converged PPR π is unique; its ε-approximation is not. Resolution, ranked:
+1. **Deterministic synchronous fixed-point (Jacobi power-iteration)** — `π_{k+1}=α·e_seed +
+   (1−α)·π_kÂ`, fixed K, fixed summation order. Each iteration is a pure function of the previous
+   vector (one CSR mat-vec) → **order-independent, bitwise-reproducible on any hardware**. Already
+   what `kernel/src/markov.rs:123-142` does. O(K·nnz), cheap at our scale (CSR in cache). **The
+   deterministic default** — this *replaces* v1's "start with local-push."
+2. **Deterministic-ordered local-push** — ACL locality (touch only active nodes) with a *fixed*
+   worklist order (residual-priority + node-id tie-break), fixed ε → reproducible. The
+   large-graph (>10⁵-node) optimization, when a full sweep is too costly and the query is local.
+3. **Async / relaxed-consistency push** — fastest, **non-deterministic** → advisory layer ONLY,
+   never on a gated/money/RLS path. 🔴
+Float note: ranking is advisory → f64 + fixed-K + fixed-order is reproducible; if a ranking ever
+*gates* a decision, move it to integer fixed-point (math-first Pillar B). Never gate on an async push.
+
+### 11.3 Why not just diffusion — eigenvectors, divergence, oscillators, velocity terms
+
+v1's "diffusion, first-order" is the *overdamped special case* of a richer operator; use the full
+machinery for the jobs where it pays:
+
+- **Second-order field operator (velocity/momentum).** Heat diffusion `∂u/∂t=−Lu` has no
+  momentum. The general form is the field-UI engine's own **`M Ü + Γ U̇ + c²L U = S`** (FE-08,
+  ζ=1 critically-damped), read as *salience-as-a-field*: `S`=reinforcement (source at the touched
+  note), `Γ U̇`=decay (damping), `c²L U`=link-diffusion (warm wikilinked neighbours, §7), and
+  **`U̇`=momentum** — a note gaining citations has salience-*velocity*, so it ranks higher and
+  decays slower than its instantaneous score. This ONE operator subsumes diffusion-recall (its
+  overdamped limit) + momentum ranking + decay + link-warming, and it is *the same operator the
+  UI runs* (§1.5.5 made literal). **ζ=1** = monotone, no overshoot, deterministic at fixed
+  timestep → the gated/default form; **underdamped** = exploratory recall / resonance.
+- **Eigenvectors** — warranted, but **top-k iterative (Lanczos/power), never full dense O(n³)**.
+  On a static, many-query graph, precompute bottom-k Laplacian eigenvectors once and amortize:
+  Fiedler λ₂ → **module/community detection** (refactor boundaries); Laplacian eigenmaps → a
+  **coordinate embedding** of the notes. `spectral.rs` already computes these. "Avoid
+  eigendecomposition" only ever meant *avoid full dense per-query*, not *avoid the spectrum*.
+- **Divergence (∇·).** The Laplacian is discrete `div·grad`; a node's divergence = net relevance
+  out/inflow = a **hub-authority / source-sink / anomaly** signal (`wavefield::graph_spectral_notch`,
+  `mathx::divergence_2d`) — a derived signal next to the diffusion score.
+- **Oscillators / interference.** `coherence.rs |ψ₁±ψ₂|²` = **multi-query fusion** — constructive
+  (union of seeds) vs destructive (contrast, "related to A but not B"); resonance = a subgraph's
+  frequency signature. The *wave* uses the first-order heat kernel can't express.
+
+Net: retrieval/memory dynamics unify under the **same critically-damped field operator as the
+UI**, with diffusion as its overdamped limit — the strongest form of the §7 "one operator across
+layers" hypothesis, now second-order. Determinism kept by ζ=1 + fixed timestep (FE-08's monotone
+integrator).
+
+### 11.4 Quantization + PQ — active now, and deterministic
+
+Placement: **L2 embedding storage** (never L0/L1/money paths).
+- **Scalar (int8) by default now** — 4×, ~free recall, SIMD int8; deterministic with **fixed
+  ranges** (per-dim min/max from a committed snapshot, not float-order-dependent). ~10 LOC, zero-dep.
+- **Product Quantization (PQ) as the scale path** — 64× (128-d → 8 B via 8×256 codebooks). 🔴
+  **Determinism requirement**: the codebook is k-means (init/order-dependent) → train
+  **deterministically** (fixed seed, fixed iteration count, deterministic k-means++ init, fixed
+  reduction order), then **freeze + commit it** (a "codebook manifest", like the Manifesto of
+  Constants). Query-time PQ (LUT lookup) is then fully deterministic. **Never retrain a live
+  codebook.** OPQ (learned rotation first) same discipline.
+- **Binary quantization** (16–32×) only with a float/SQ8 **rescore** stage; model-dependent.
+- Standard pipeline: quantized shortlist → exact rerank against full/SQ8 vectors — keeps recall
+  at small footprint, deterministic.
+
+### 11.5 CoD + CDC — both, in the compression layer
+
+- **Chain-of-Density (CoD)** — the **compaction summariser** (§6's slow tier-3→archive step:
+  `payload → dense summary + hash`, never delete). CoD iteratively packs salient entities into a
+  fixed-length summary. **Edge/offline LLM tool** (non-AI-core preserved); its output is admitted
+  ONLY through the **`renormalizer.rs` claim-set gate** (reject if any claim dropped/hallucinated)
+  — generation at the edge, deterministic acceptance.
+- **Content-Defined Chunking (CDC — FastCDC / Rabin)** — **dedup**: split notes at content-defined
+  boundaries so near-duplicate blocks (shared boilerplate across arc files) share storage; pairs
+  with MinHash/LSH (§4). Rabin fingerprinting is **deterministic**. Complements zstd-dictionary
+  (CDC dedups *across* notes; zstd compresses *within*).
+
+### 11.6 Roadmap deltas (v2)
+
+- **M3** implementation spec = CSR + deterministic synchronous power-iteration (markov.rs), not
+  local-push; and it carries the **second-order `MÜ+ΓU̇+c²LU=S` operator** (ζ=1) as the general
+  form, diffusion as its overdamped limit.
+- **M5** gains **CoD** (compaction summariser, renormalizer-gated) + **CDC** (dedup).
+- **M6** gains **SQ int8 now** + **PQ (deterministic frozen codebook)** as the scale path.
+- **M7** (unifying operator) is explicitly the second-order field operator, ζ=1 gated / underdamped
+  exploratory — measured against the overdamped-diffusion baseline.
+
 ---
 
 ### Key sources (consolidated)
@@ -255,7 +365,10 @@ kernel as PageRank (PNAS 2007) · Haveliwala topic-sensitive PageRank · Malkov-
 aho-corasick / memchr · Robertson BM25 / BM25F · Oseledets Tensor-Train (SIAM 2011) · TT-Rec
 (arXiv:2101.11714) · Kleyko et al. VSA survey (ACM CSUR) · Settles-Meeder Half-Life Regression
 (ACL 2016) · Wixted power-law of forgetting · Megiddo-Modha ARC / Einziger W-TinyLFU · Ferragina
-PGM-index (VLDB 2020) · Leis ART (ICDE 2013) · sqlite-zstd dictionary case study · malisper/pgrust.
+PGM-index (VLDB 2020) · Leis ART (ICDE 2013) · sqlite-zstd dictionary case study · malisper/pgrust · Adams et al.
+Chain-of-Density summarization (2023) · Xia et al. FastCDC content-defined chunking (USENIX ATC
+2016) · Jégou et al. Product Quantization (TPAMI 2011) / OPQ · CSR + GraphBLAS sparse mat-vec ·
+field-UI operator `MÜ+ΓU̇+c²LU=S` (FE-08, engine/src/motion.rs, ζ=1 critical damping).
 Codebase: `spikes/living-knowledge/`, `bebop2/core/src/{vsa,fft,field}.rs`,
 `crates/bebop/src/{wavefield,coherence,memory,renormalizer}.rs`,
 `kernel/src/{spectral,markov,event_log}.rs`, `MEMORY.md` + 174 topic files, `deploy/pgrust.*`.
