@@ -32,6 +32,32 @@ pub use order_machine::{
 };
 pub use wasm::{apply_event_js, channel_ledger_js, place_order_js, reduce_anomalies_js};
 
+/// Authoritative fixed-timestep for the field-sim/animation integrator.
+///
+/// `dowiz-engine` (`engine/src/loop_.rs`) hardcodes the SAME value and its
+/// `FixedTimestep` integrator MUST only ever see this dt. This constant is the
+/// single source of truth: if you change it here, you MUST change
+/// `engine/src/loop_.rs::DT_STABLE` to match, or the integrator and the kernel's
+/// stability authority diverge silently. Pinned by [`dt_stable_is_authoritative`].
+///
+/// 0.02 s == 50 Hz — the cadence at which route-ping kinematics (geo) are sampled.
+pub const DT_STABLE: f32 = 0.02;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dt_stable_is_authoritative() {
+        // Fail-closed pin: the engine's FixedTimestep and any kernel-side
+        // stability math depend on this exact value. Never "round" it or the
+        // integrator desyncs from the kernel's sampling cadence.
+        assert_eq!(DT_STABLE, 0.02);
+        // 50 Hz cadence — the contract the field-sim hook relies on.
+        assert_eq!((1.0 / DT_STABLE as f64).round() as u32, 50);
+    }
+}
+
 /// Install a `tracing-subscriber` with `RUST_LOG` env-filter.
 /// Dev/CLI only — never called from the wasm cdylib (no stdio there).
 #[cfg(not(target_arch = "wasm32"))]
