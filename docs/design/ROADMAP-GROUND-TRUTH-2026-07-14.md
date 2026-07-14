@@ -104,4 +104,19 @@ Build DOWN from the first real order, not UP from the protocol. Gates are
 falsifiable conditions, not calendar dates. Ground truth (grep/git/cargo) always
 outranks this plan.
 
-*Generated 2026-07-14 rev-3. Re-verify before trusting any DONE line.*
+> Generated 2026-07-14 rev-3. Re-verify before trusting any DONE line.
+
+## rev-4 UPDATE (2026-07-14, kernel wave landed)
+- **Ground truth corrected:** kernel test count is now **167 green** (not 152). Two new
+  modules landed on `feat/kernel-fsm-graph-analysis` (committed + pushed):
+  * `kernel/src/householder.rs` — N≤32 Householder→Hessenberg→shifted-QR eigensolver
+    (operator stop-order mandate: max speed / stability / zero-alloc / no-std). Replaces the
+    O(n⁴) Faddeev path for n≤32; 3.15× faster at n=32. 8/8 hand-oracle tests.
+  * `kernel/src/csr.rs` — deterministic CSR graph + SYNCHRONOUS Jacobi PPR (retrieval-blueprint
+    v2: fixed iters + fixed summation order ⇒ bit-reproducible; async local-push explicitly rejected).
+  * T0-γ: 6 backup/verify scripts repointed `apps/api`→`attic/apps-api`; 2 attic test imports fixed.
+- **bebop (cross-repo):** `bebop2/core/src/linalg.rs` consolidated the eigensolver as the single
+  authoritative solver + parity gate (FL+DK vs lyapunov QR) — commit `66a9d72`, pushed,
+  workspace **777 green** (was 751). Kills the bebop dual-authority hazard.
+- Next wave per bottom-up sort: **T2-α Kalman full filter** (extend `geo::ema_next`, which is the
+  scalar steady-state = infinite-P special case). Then T2-β trigram. P7 red-line = operator gate only.
