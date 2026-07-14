@@ -1,0 +1,13 @@
+{
+  "corpus": 297,
+  "memoryFiles": 180,
+  "k": 5,
+  "oracle": 10,
+  "wikilinkEdges": 477,
+  "lexicalRecall": 0.8,
+  "diffusionRecall": 0.8,
+  "hashRecall": 0.3,
+  "realBM25Top": 20.695,
+  "nonsenseBM25Top": 13.219,
+  "note": "sovereign offline: hash→BM25⊕title→+wikilink-diffusion. Semantic bge-small upgrade → LK_BUILD_CACHE=1 (network)."
+}

@@ -1,29 +1,9 @@
-{"q":"a task counts as validated only when the proof is falsifiable and would flip red on a bad input","top":"docs/operating-model/verified-by-math.md","recall":1,"absConf":0.7015}
 {"q":"before writing any code enumerate a checkable exit list then verify each item passed afterward","top":"docs/operating-model/task-exit-rule.md","recall":1,"absConf":0.7372}
-{"q":"how to keep the harness behaving the same no matter which language model is driving it","top":"docs/operating-model/model-agnostic-playbook.md","recall":1,"absConf":0.6142}
-{"q":"the long-form reference document the trimmed core operating instructions defer to","top":".claude/CLAUDE.md","recall":1,"absConf":0.6379}
-{"q":"which bash hook blocks mutations of protected paths like migrations and env","top":".claude/hooks/guard-bash.sh","recall":1,"absConf":0.782}
-{"q":"the gate that refuses edits to contract schema and governance zones","top":".claude/hooks/protect-paths.sh","recall":1,"absConf":0.6607}
-{"q":"hook that denies handing a subtask off to the fable model","top":".claude/hooks/agent-dispatch-gate.sh","recall":1,"absConf":0.6972}
-{"q":"detector for a subagent that returns zero tool calls and just parrots the injected reminder","top":".claude/hooks/subagent-return-guard.sh","recall":1,"absConf":0.7099}
-{"q":"hook that warns when the working context window is growing too large","top":".claude/hooks/context-budget-guard.sh","recall":1,"absConf":0.6155}
-{"q":"hook that forces a task to be classified before any work begins","top":"docs/operating-model/task-exit-rule.md","recall":1,"absConf":0.6125}
-{"q":"hook escalating edits that touch auth money or row level security to a human","top":"scripts/guardrail-hook-matchers.mjs","recall":1,"absConf":0.6071}
-{"q":"the suite that runs every governance guardrail before a commit","top":"scripts/run-armaments.sh","recall":1,"absConf":0.6941}
-{"q":"knowledge as circuits red-line pattern registry runner","top":"scripts/run-circuits.mjs","recall":1,"absConf":0.7327}
-{"q":"gate that fails when a guardrail file exists but no runner ever invokes it","top":"scripts/guardrail-no-orphan-guardrails.mjs","recall":1,"absConf":0.746}
-{"q":"checker that a loop marked certified actually has its report artifact","top":"scripts/guardrail-loop-registry-parity.mjs","recall":1,"absConf":0.7159}
-{"q":"guardrail that checks source files carry the open-source license header","top":"scripts/guardrail-license.mjs","recall":1,"absConf":0.7641}
-{"q":"guardrail enforcing the token budget routing gates","top":"docs/reflections/INBOX/2026-07-06-token-gate-warn-then-ratchet.reflection.md","recall":1,"absConf":0.7989}
-{"q":"guardrail that proves every enforced proof has a red case that can fail","top":"scripts/guardrail-falsifiable-proof.mjs","recall":1,"absConf":0.8125}
-{"q":"script that verifies the structural integrity of the codebase modules","top":"scripts/module-integrity.mjs","recall":1,"absConf":0.7173}
-{"q":"spreading activation bands over a helixdb-backed living knowledge store","top":"docs/operating-model/living-knowledge-helixdb-arc.md","recall":1,"absConf":0.8457}
-{"q":"the design of the self-evolving loop system version three","top":"docs/operating-model/living-loop-system-v3.md","recall":1,"absConf":0.7532}
-{"q":"the one-shot fable audit backlog with the root cause and fifteen findings","top":"docs/operating-model/fable-audit-findings-2026-07-07.md","recall":1,"absConf":0.8366}
-{"q":"loop that recovers from a production incident with reversing actions first","top":"loops/incident-recovery.yaml","recall":1,"absConf":0.6377}
-{"q":"loop that bisects git history down to the single culprit commit","top":"loops/regression-hunt.yaml","recall":1,"absConf":0.6427}
-{"q":"loop that measures a baseline against a budget and adds a performance gate","top":"loops/performance.yaml","recall":1,"absConf":0.6385}
-{"q":"loop that implements exactly one roadmap stage up to its gate checkpoint","top":"loops/build-stage.yaml","recall":1,"absConf":0.6637}
-{"q":"reflection on removing proxy reasoning agents while keeping deterministic gates","top":"docs/reflections/INBOX/2026-07-07-ground-truth-over-proxy.reflection.md","recall":1,"absConf":0.7695}
-{"q":"reflection on compiling expensive model reasoning into cheap doer checklists","top":"docs/reflections/INBOX/2026-07-06-metacognition-transfer-0b2.reflection.md","recall":1,"absConf":0.6873}
-{"q":"reflection on the decide function composing the state machine actor gate and pricing","top":"docs/reflections/INBOX/2026-07-07-0b3-decide-composition.reflection.md","recall":1,"absConf":0.6958}
+{"q":"which bash hook blocks mutations of protected paths like migrations and env","top":".claude/hooks/protect-paths.sh","recall":1,"absConf":0.7397}
+{"q":"the gate that refuses edits to contract schema and governance zones","top":".claude/hooks/post-edit-gates.sh","recall":1,"absConf":0.6714}
+{"q":"hook that forces a task to be classified before any work begins","top":"docs/operating-model/task-exit-rule.md","recall":1,"absConf":0.573}
+{"q":"hook escalating edits that touch auth money or row level security to a human","top":".claude/hooks/red-line-doubt-gate.sh","recall":1,"absConf":0.5858}
+{"q":"loop that recovers from a production incident with reversing actions first","top":"loops/incident-recovery.yaml","recall":1,"absConf":0.6463}
+{"q":"loop that bisects git history down to the single culprit commit","top":"loops/regression-hunt.yaml","recall":1,"absConf":0.6674}
+{"q":"loop that measures a baseline against a budget and adds a performance gate","top":"loops/performance.yaml","recall":1,"absConf":0.6228}
+{"q":"loop that implements exactly one roadmap stage up to its gate checkpoint","top":"loops/build-stage.yaml","recall":1,"absConf":0.6645}
