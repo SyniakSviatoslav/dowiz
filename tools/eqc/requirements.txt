@@ -1,0 +1,3 @@
+# eqc — the equation compiler. Authoring-time only (offline codegen).
+sympy>=1.12
+# rustc must also be on PATH for the proof harness (test_eqc.py).
