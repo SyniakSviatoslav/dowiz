@@ -235,3 +235,97 @@ mod tests {
         assert_eq!(h1, h1b, "ledger step must be reproducible");
     }
 }
+
+/// A3 — EIGENSOLVER PARITY GATE. Two independent general (non-symmetric) real eigensolvers exist
+/// with NO parity gate between them: dowiz-kernel's Faddeev-LeVerrier + Durand-Kerner
+/// (`dowiz_kernel::spectral`) and bebop2-core's Hessenberg + Francis-QR
+/// (`bebop2_core::lyapunov::eigenvalues_general`). That is the exact dual-authority silent-drift
+/// hazard the kernel exists to kill (cf. `kernel/src/markov.rs`, which already closed the Python↔Rust
+/// version of it). This crate is the only bridge that already links both, so it hosts the gate:
+/// it cross-checks BOTH solvers against each other AND against analytic ground truth on shared
+/// fixtures; if either implementation drifts, it goes RED. Native `cargo test` only (dev-dep on the
+/// kernel; never in the wasm build).
+#[cfg(test)]
+mod eigensolver_parity {
+    const TOL: f64 = 1e-6;
+
+    fn flat(rows: &[Vec<f64>]) -> Vec<f64> {
+        rows.iter().flatten().copied().collect()
+    }
+    fn sort_pairs(v: &mut [(f64, f64)]) {
+        v.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap().then(a.1.partial_cmp(&b.1).unwrap()));
+    }
+    fn kernel_eigs(rows: &[Vec<f64>]) -> Vec<(f64, f64)> {
+        let mut v: Vec<(f64, f64)> =
+            dowiz_kernel::spectral::eigenvalues(rows).iter().map(|c| (c.re, c.im)).collect();
+        sort_pairs(&mut v);
+        v
+    }
+    fn bebop_eigs(rows: &[Vec<f64>]) -> Vec<(f64, f64)> {
+        let f = flat(rows);
+        let mut v: Vec<(f64, f64)> = bebop2_core::lyapunov::eigenvalues_general(&f, rows.len())
+            .iter()
+            .map(|c| (c.re, c.im))
+            .collect();
+        sort_pairs(&mut v);
+        v
+    }
+    fn assert_close(a: &[(f64, f64)], b: &[(f64, f64)], msg: &str) {
+        assert_eq!(a.len(), b.len(), "{msg}: eigenvalue COUNT differs {a:?} vs {b:?}");
+        for (x, y) in a.iter().zip(b.iter()) {
+            assert!(
+                (x.0 - y.0).abs() < TOL && (x.1 - y.1).abs() < TOL,
+                "{msg}: eigenvalue drift {x:?} vs {y:?}"
+            );
+        }
+    }
+    fn analytic(mut w: Vec<(f64, f64)>) -> Vec<(f64, f64)> {
+        sort_pairs(&mut w);
+        w
+    }
+
+    // GREEN: FL+DK ↔ Francis-QR ↔ analytic, on real-spectrum fixtures.
+    #[test]
+    fn fl_dk_matches_francis_qr_real_spectrum() {
+        // diag(2,3,5) → {2,3,5}
+        let m = vec![vec![2.0, 0.0, 0.0], vec![0.0, 3.0, 0.0], vec![0.0, 0.0, 5.0]];
+        assert_close(&kernel_eigs(&m), &bebop_eigs(&m), "diag: kernel↔bebop2");
+        assert_close(&kernel_eigs(&m), &analytic(vec![(2.0, 0.0), (3.0, 0.0), (5.0, 0.0)]), "diag: ↔analytic");
+
+        // upper-triangular → eigenvalues are the diagonal {1,4,-3}
+        let m = vec![vec![1.0, 2.0, 0.0], vec![0.0, 4.0, 5.0], vec![0.0, 0.0, -3.0]];
+        assert_close(&kernel_eigs(&m), &bebop_eigs(&m), "triangular: kernel↔bebop2");
+        assert_close(&kernel_eigs(&m), &analytic(vec![(1.0, 0.0), (4.0, 0.0), (-3.0, 0.0)]), "triangular: ↔analytic");
+
+        // companion [[0,-2],[1,-3]] → λ²+3λ+2 → {-1,-2}
+        let m = vec![vec![0.0, -2.0], vec![1.0, -3.0]];
+        assert_close(&kernel_eigs(&m), &bebop_eigs(&m), "companion: kernel↔bebop2");
+        assert_close(&kernel_eigs(&m), &analytic(vec![(-1.0, 0.0), (-2.0, 0.0)]), "companion: ↔analytic");
+    }
+
+    // GREEN: complex-conjugate spectrum — the case a symmetric-only solver gets WRONG.
+    // The 2-D rotation [[0,-1],[1,0]] has eigenvalues ±i; both GENERAL solvers must agree.
+    #[test]
+    fn complex_conjugate_eigenvalues_agree() {
+        let m = vec![vec![0.0, -1.0], vec![1.0, 0.0]];
+        assert_close(&kernel_eigs(&m), &bebop_eigs(&m), "rotation: kernel↔bebop2");
+        assert_close(&kernel_eigs(&m), &analytic(vec![(0.0, -1.0), (0.0, 1.0)]), "rotation: ↔analytic");
+    }
+
+    // GREEN: spectral radius (the scalar the wasm surface returns) — parity kernel FL+DK vs the
+    // live `spectral_radius` wasm export (bebop2 QR), cross-checked against analytic ρ.
+    #[test]
+    fn spectral_radius_parity_kernel_vs_wasm_surface() {
+        let fixtures: [(Vec<Vec<f64>>, f64); 3] = [
+            (vec![vec![2.0, 0.0, 0.0], vec![0.0, 3.0, 0.0], vec![0.0, 0.0, 5.0]], 5.0),
+            (vec![vec![0.0, -2.0], vec![1.0, -3.0]], 2.0),
+            (vec![vec![0.0, -1.0], vec![1.0, 0.0]], 1.0),
+        ];
+        for (m, rho) in &fixtures {
+            let k = dowiz_kernel::spectral::spectral_radius(m);
+            let b = crate::spectral_radius(&flat(m), m.len()); // wasm surface → bebop2 QR
+            assert!((k - b).abs() < TOL, "ρ kernel {k} ≠ bebop2 {b}");
+            assert!((k - rho).abs() < TOL, "ρ {k} ≠ analytic {rho}");
+        }
+    }
+}
