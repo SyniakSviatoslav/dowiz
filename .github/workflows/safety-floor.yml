@@ -1,0 +1,20 @@
+name: safety-floor
+# Human-owned backstop for the self-ecosystem-evolution capability.
+# Runs the floor invariant on every push/PR: if any self-mod ever removes a product red-line
+# (cookie / insecure-random / float-money / PII / migrations / auth / RLS / deploy / CI) or
+# unwires a red-line hook, CI goes RED and names the moved check. This workflow lives in .github/
+# — a RED-LINE path the agent cannot modify — so it stays a genuine external check.
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  floor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify product-safety floor is intact
+        run: bash .claude/hooks/verify-safety-floor.sh </dev/null

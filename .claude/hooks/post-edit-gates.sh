@@ -22,6 +22,10 @@ fi
 red_lines() {
   # Red lines hold in EVERY mode. Cheap grep on the edited file.
   [ -n "$REL" ] && [ -f "$REL" ] || return 0
+  # Scope to code: non-executable prose can't trip a RUNTIME red line. The regression
+  # ledger/lessons literally cite these patterns (e.g. `Math.random()` + token) as the
+  # thing to AVOID — matching them there is a false positive, not a violation.
+  case "$REL" in *.md|*.mdx|*.markdown|*.txt|*.rst) return 0 ;; esac
   if grep -nE "document\.cookie|set-cookie|Math\.random\(\).*(token|otp|secret|nonce)|parseFloat.*(price|amount|total)|customerPhone|customer_phone" "$REL" >/dev/null 2>&1; then
     echo "RED-LINE: '$REL' trips a product red line (cookie / insecure-random secret / float money / raw PII). Holds in spike+challenge too." >&2
     exit 2
@@ -41,6 +45,11 @@ case "$CLASS" in
   build|audit)
     red_lines
     node scripts/guardrail-spike-boundary.mjs >/dev/null 2>&1 || { echo "BOUNDARY: apps/packages import from spikes/." >&2; exit 2; }
-    command -v pnpm &>/dev/null && { pnpm -s lint:gates 2>&1 || { echo "lint:gates failed (hardcoded color / raw SQL / cookie?)" >&2; exit 2; }; }
+    # lint:gates only means something when a JS/TS/CSS surface exists to lint. The legacy
+    # thin-layer was removed (no root package.json) → the script is absent and this failed
+    # on EVERY edit. Run it precisely when a lintable web file is edited and pnpm+manifest exist.
+    if [ -f package.json ] && command -v pnpm &>/dev/null && printf '%s' "$REL" | grep -qE '\.(ts|tsx|js|jsx|mjs|cjs|css|scss|astro|svelte|vue)$'; then
+      pnpm -s lint:gates 2>&1 || { echo "lint:gates failed (hardcoded color / raw SQL / cookie?)" >&2; exit 2; }
+    fi
     ;;
 esac
