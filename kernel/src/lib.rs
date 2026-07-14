@@ -62,6 +62,8 @@ pub mod online;
 /// C1 — verify-failure → retrieval-trigger: a claim check that, on failure,
 /// emits a bounded structured re-verify request (the "verify then learn" loop).
 pub mod verify_retrieval;
+/// Living-knowledge retrieval — ADAPTER to the (separately-branched) JS engine.
+pub mod living_knowledge;
 /// WASM/JS bindings — the only place the kernel touches the boundary.
 pub mod wasm;
 

@@ -1,0 +1,46 @@
+# Developer Certificate of Origin (DCO)
+
+This project uses the Developer Certificate of Origin (DCO) 1.1, not a CLA.
+All commits MUST be signed off to certify the DCO terms below.
+
+## How to sign off
+
+Add a `Signed-off-by` trailer to every commit:
+
+    git commit -s -m "feat: ..."
+
+or append to an existing commit:
+
+    git commit --amend -s
+
+The trailer looks like:
+
+    Signed-off-by: Your Name <you@example.com>
+
+## DCO text (1.1)
+
+By making a contribution to this project, I certify that:
+
+(a) The contribution was created in whole or in part by me and I have the
+    right to submit it under the open source license indicated in the file; or
+
+(b) The contribution is based upon previous work that, to the best of my
+    knowledge, is covered under an appropriate open source license and I have
+    the right under that license to submit that work with modifications,
+    whether created in whole or in part by me, under the same open source
+    license (unless I am permitted to submit under a different license), as
+    indicated in the file; or
+
+(c) The contribution was provided directly to me by some other person who
+    certified (a), (b) or (c) and I have not modified it.
+
+(d) I understand and agree that this project and the contribution are public
+    and that a record of the contribution (including all personal information
+    I submit with it, including my sign-off) is maintained indefinitely and
+    may be redistributed consistent with this project and the open source
+    license(s) involved.
+
+## CI enforcement
+
+The project's CI requires a `Signed-off-by` trailer on every commit (DCO
+check). Commits lacking it are rejected.
