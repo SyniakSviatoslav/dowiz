@@ -360,6 +360,79 @@ pub fn spectral_radius() -> f64 {
     rho.abs()
 }
 
+/// Aggregate structural signature of the lifecycle FSM — combines every graph
+/// analysis into one observation that can be emitted as drift telemetry. A
+/// silent change to `allowed_next` (e.g. a sneaky `Reopen` edge, or accidentally
+/// dropping a transition) shifts one of these fields and trips a regression gate.
+///
+/// All five lenses are independent structural probes; their agreement is itself
+/// a check (see `green_graph_report_invariants`):
+///   * `is_acyclic == !has_cycle`
+///   * `cyclomatic == μ`  (|E|−|V|+c, undirected cycle rank)
+///   * `spectral_radius == ρ` (directed adjacency spectral radius; 0 ⟺ acyclic)
+///   * `topological_order` is `Some` iff the graph is acyclic
+///   * `reachable_states ==` count of states reachable from `Pending`
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct FsmGraphReport {
+    /// number of vertices (lifecycle states)
+    pub vertices: usize,
+    /// number of directed edges (legal transitions)
+    pub edges: usize,
+    /// true iff the directed lifecycle graph has no cycle
+    pub is_acyclic: bool,
+    /// cyclomatic number μ = |E| − |V| + c (undirected cycle rank)
+    pub cyclomatic: isize,
+    /// spectral radius ρ of the directed adjacency (0 ⟺ acyclic)
+    pub spectral_radius: f64,
+    /// states reachable from `Pending` (bitmask, bit i = LIFECYCLE_STATES[i])
+    pub reachable_from_pending: u16,
+    /// count of states reachable from `Pending`
+    pub reachable_states: usize,
+    /// Some(n) length of a valid topological extension, None if cyclic
+    pub topological_len: Option<usize>,
+}
+
+impl FsmGraphReport {
+    /// Serialize to a compact JSON string (no external deps — hand-rolled so the
+    /// function stays host-testable and wasm-exposable).
+    pub fn to_json(&self) -> String {
+        format!(
+            "{{\"vertices\":{},\"edges\":{},\"is_acyclic\":{},\"cyclomatic\":{},\
+\"spectral_radius\":{:.12},\"reachable_from_pending\":{},\"reachable_states\":{},\
+\"topological_len\":{}}}",
+            self.vertices,
+            self.edges,
+            self.is_acyclic,
+            self.cyclomatic,
+            self.spectral_radius,
+            self.reachable_from_pending,
+            self.reachable_states,
+            match self.topological_len {
+                Some(n) => n.to_string(),
+                None => "null".to_string(),
+            },
+        )
+    }
+}
+
+/// Build the aggregate signature for the current lifecycle graph.
+pub fn fsm_graph_report() -> FsmGraphReport {
+    let edges = all_edges();
+    let vertices = LIFECYCLE_STATES.len();
+    let reach = reachable(OrderStatus::Pending);
+    let reachable_states = (0..vertices).filter(|&i| reach & (1 << i) != 0).count();
+    FsmGraphReport {
+        vertices,
+        edges: edges.len(),
+        is_acyclic: !has_cycle(),
+        cyclomatic: cyclomatic_number(),
+        spectral_radius: spectral_radius(),
+        reachable_from_pending: reach,
+        reachable_states,
+        topological_len: topological_order().map(|o| o.len()),
+    }
+}
+
 /// Cycle detection over the lifecycle graph (DFS with a recursion stack).
 /// Returns `true` if some state can be reached again along a directed path — i.e. an
 /// order could re-enter a prior state (an undesirable "re-open" loop).
@@ -702,5 +775,45 @@ mod tests {
         // still be 0 — proving the μ=1 cycle is not a directed re-open loop.
         assert!(cyclomatic_number() > 0);
         assert!(rho_is_zero);
+    }
+
+    // ── GREEN: the aggregate report's internal lenses agree (drift-invariant) ──
+    #[test]
+    fn green_graph_report_invariants() {
+        let r = fsm_graph_report();
+        // Every lens must tell the same story about acyclicity.
+        assert_eq!(r.is_acyclic, !has_cycle());
+        assert_eq!(r.is_acyclic, r.topological_len.is_some());
+        if r.is_acyclic {
+            assert!(r.spectral_radius.abs() < 1e-9, "ρ must be 0 for a DAG");
+        } else {
+            assert!(r.spectral_radius.abs() >= 1e-9);
+        }
+        // Vertices = 10; reachable-from-Pending always includes Pending itself.
+        assert_eq!(r.vertices, 10);
+        assert!(
+            r.reachable_from_pending & 1 != 0,
+            "Pending reachable from itself"
+        );
+        assert_eq!(
+            r.reachable_states,
+            r.reachable_from_pending.count_ones() as usize
+        );
+        // cyclomatic μ must equal edges - vertices + components (components = 2:
+        // the main lifecycle + the orphan Scheduled scaffold terminal).
+        assert_eq!(r.cyclomatic, r.edges as isize - r.vertices as isize + 2);
+        // to_json round-trips without panic and contains the key fields.
+        let j = r.to_json();
+        assert!(j.contains("\"is_acyclic\""));
+        assert!(j.contains("\"spectral_radius\""));
+    }
+
+    // ── RED: a future Reopen edge must flip the report's acyclicity ──
+    #[test]
+    fn red_report_flips_on_cycle_introduced() {
+        // The current graph is acyclic; the report encodes that. If someone adds
+        // a `Delivered → Confirmed` Reopen edge, this assertion (and is_acyclic)
+        // flips RED — forcing the decision at the gate rather than silently.
+        assert!(fsm_graph_report().is_acyclic);
     }
 }
