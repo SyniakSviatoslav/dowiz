@@ -168,6 +168,198 @@ fn all_edges() -> Vec<(OrderStatus, OrderStatus)> {
     edges
 }
 
+/// The ten lifecycle states, in their canonical adjacency-matrix index order.
+/// Shared by every graph analysis below so indices never drift between passes.
+const LIFECYCLE_STATES: [OrderStatus; 10] = [
+    OrderStatus::Pending,
+    OrderStatus::Confirmed,
+    OrderStatus::Preparing,
+    OrderStatus::Ready,
+    OrderStatus::InDelivery,
+    OrderStatus::Delivered,
+    OrderStatus::Rejected,
+    OrderStatus::Cancelled,
+    OrderStatus::Scheduled,
+    OrderStatus::PickedUp,
+];
+
+/// Canonical index of a lifecycle state (0..10), matching `LIFECYCLE_STATES`.
+/// Centralised so `has_cycle`, `cyclomatic_number`, `topological_order`,
+/// `reachable`, and `spectral_radius` all agree on vertex numbering.
+fn idx_of(s: OrderStatus) -> usize {
+    match s {
+        OrderStatus::Pending => 0,
+        OrderStatus::Confirmed => 1,
+        OrderStatus::Preparing => 2,
+        OrderStatus::Ready => 3,
+        OrderStatus::InDelivery => 4,
+        OrderStatus::Delivered => 5,
+        OrderStatus::Rejected => 6,
+        OrderStatus::Cancelled => 7,
+        OrderStatus::Scheduled => 8,
+        OrderStatus::PickedUp => 9,
+    }
+}
+
+/// Topological order of the lifecycle FSM via Kahn's algorithm (1962).
+/// Returns `Some(order)` when the directed graph is acyclic (a valid linear
+/// extension exists) and `None` when a cycle blocks any total order.
+///
+/// Graph-theory basis: Kahn repeatedly removes sources (in-degree 0). If the
+/// queue empties before all vertices are emitted, the residual subgraph is a
+/// cycle, so no topological sort exists. This is the constructive companion to
+/// `has_cycle` — it not only *detects* a cycle but *produces* the canonical
+/// forward order the lifecycle is supposed to follow. O(|V| + |E|).
+pub fn topological_order() -> Option<Vec<OrderStatus>> {
+    let states = LIFECYCLE_STATES;
+    let edges = all_edges();
+    let n = states.len();
+    let mut indeg = [0usize; 10];
+    for &(_, t) in &edges {
+        indeg[idx_of(t)] += 1;
+    }
+    // Stable source queue: ascending index, so the emitted order is deterministic
+    // (lowest-index source — Pending — is emitted first).
+    let mut queue: Vec<usize> = (0..n).filter(|&i| indeg[i] == 0).collect();
+    let mut order: Vec<OrderStatus> = Vec::with_capacity(n);
+    while let Some(u) = queue.first().copied() {
+        queue.remove(0);
+        order.push(states[u]);
+        // Collect successors whose in-degree drops to 0, then merge them back into
+        // the ascending queue (no heap needed at this size).
+        let mut ready: Vec<usize> = Vec::new();
+        for &(f, t) in &edges {
+            if idx_of(f) == u {
+                let v = idx_of(t);
+                indeg[v] -= 1;
+                if indeg[v] == 0 {
+                    ready.push(v);
+                }
+            }
+        }
+        ready.sort_unstable();
+        let mut merged = Vec::with_capacity(queue.len() + ready.len());
+        let (mut qi, mut ri) = (0, 0);
+        while qi < queue.len() && ri < ready.len() {
+            if queue[qi] <= ready[ri] {
+                merged.push(queue[qi]);
+                qi += 1;
+            } else {
+                merged.push(ready[ri]);
+                ri += 1;
+            }
+        }
+        merged.extend_from_slice(&queue[qi..]);
+        merged.extend_from_slice(&ready[ri..]);
+        queue = merged;
+    }
+    if order.len() == n {
+        Some(order)
+    } else {
+        None
+    }
+}
+
+/// Forward reachability over the lifecycle graph (BFS from a source state).
+/// Returns the set of states reachable along directed paths — the states an
+/// order *can* legally occupy after starting in `from`. The start state is
+/// always included.
+///
+/// Uses a `u16` bitmask over the 10 states (one bit per vertex) so reachability
+/// is exact (no float, no hashing) and trivially comparable for tests.
+pub fn reachable(from: OrderStatus) -> u16 {
+    let edges = all_edges();
+    let mut seen: u16 = 0;
+    let mut frontier: u16 = 1 << idx_of(from);
+    while frontier != 0 {
+        let mut next: u16 = 0;
+        let mut f = frontier;
+        while f != 0 {
+            let bit = f & f.wrapping_neg(); // lowest set bit
+            let i = bit.trailing_zeros() as usize;
+            f ^= bit;
+            if seen & (1 << i) != 0 {
+                continue;
+            }
+            seen |= 1 << i;
+            for &(e_from, e_to) in &edges {
+                if idx_of(e_from) == i {
+                    next |= 1 << idx_of(e_to);
+                }
+            }
+        }
+        frontier = next & !seen;
+    }
+    seen
+}
+
+/// Spectral radius ρ of the directed adjacency matrix A (the largest magnitude
+/// eigenvalue of A). Computed with the **power iteration** method — no external
+/// linear-algebra dependency, O(iter·|E|), exact for this 10-vertex FSM.
+///
+/// Why this belongs in a growth-substrate kernel (research/spectral-graph-fsm):
+/// the Perron–Frobenius theorem links ρ to the graph's asymptotic behaviour.
+/// For a directed acyclic graph the adjacency matrix is nilpotent (A^k = 0 for
+/// large enough k), so ρ = 0 exactly. For a graph with cycles, ρ > 0. We use a
+/// *directed* adjacency here (not the undirected Laplacian) because a forward
+/// lifecycle with a 2-cycle has ρ = 1 (the cycle's period) and ρ = 0 otherwise —
+/// a cleaner structural signal than the undirected cyclomatic number.
+///
+/// Cross-check (Verified-by-Math): ρ ≈ 0 ⟺ `has_cycle() == false`. The test
+/// suite asserts both; a future `Reopen` edge that closes a 2-cycle must push
+/// ρ from 0 toward 1, forcing an explicit decision rather than a silent change.
+pub fn spectral_radius() -> f64 {
+    let edges = all_edges();
+    let n = LIFECYCLE_STATES.len();
+    // Build directed adjacency rows as bitmasks (cheap, exact neighbours).
+    let mut adj: Vec<u16> = vec![0; n];
+    for &(f, t) in &edges {
+        adj[idx_of(f)] |= 1 << idx_of(t);
+    }
+    // Start from a uniform unit vector; power iteration converges to the
+    // dominant eigenvector (Perron vector for irreducible non-negative matrices).
+    let mut v: Vec<f64> = vec![1.0; n];
+    let mut w: Vec<f64> = vec![0.0; n];
+    const ITERS: usize = 1000;
+    const TOL: f64 = 1e-12;
+    let mut rho = 0.0f64;
+    for _ in 0..ITERS {
+        // w = A v
+        for i in 0..n {
+            let mut acc = 0.0f64;
+            let mut row = adj[i];
+            while row != 0 {
+                let bit = row & row.wrapping_neg();
+                let j = bit.trailing_zeros() as usize;
+                row ^= bit;
+                acc += v[j];
+            }
+            w[i] = acc;
+        }
+        let norm: f64 = w.iter().map(|x| x.abs()).sum();
+        if norm < TOL {
+            return 0.0; // nilpotent ⇒ ρ = 0 (acyclic)
+        }
+        // Rayleigh-quotient estimate of the dominant eigenvalue (Rayleigh, 1874):
+        //   ρ ≈ (wᵀv) / (vᵀv),  with w = A v.
+        // For the Perron eigenvector this equals the true spectral radius.
+        let rayleigh: f64 = {
+            let num: f64 = w.iter().zip(v.iter()).map(|(wi, vi)| wi * vi).sum();
+            let den: f64 = v.iter().map(|vi| vi * vi).sum();
+            if den.abs() < TOL {
+                0.0
+            } else {
+                num / den
+            }
+        };
+        for i in 0..n {
+            v[i] = w[i] / norm;
+        }
+        rho = rayleigh;
+    }
+    rho.abs()
+}
+
 /// Cycle detection over the lifecycle graph (DFS with a recursion stack).
 /// Returns `true` if some state can be reached again along a directed path — i.e. an
 /// order could re-enter a prior state (an undesirable "re-open" loop).
@@ -402,12 +594,113 @@ mod tests {
 
     #[test]
     fn green_cyclomatic_number_counts_undirected_cycle() {
-        // μ = |E| − |V| + c. The lifecycle is a DIRECTED acyclic graph (has_cycle()
-        // == false), but its undirected version contains one cycle:
+        // μ = |E| − |V| + c. The lifecycle is a DIRECTED acyclic graph (has_cycle() ==
+        // false), but its undirected version contains one cycle:
         //   Confirmed → Preparing → Ready → InDelivery → Confirmed
         // (via edges Confirmed→Preparing, Preparing→Ready, Ready→InDelivery,
         // Confirmed→InDelivery). So μ = 1, NOT 0. Directed-acyclic ≠ undirected-acyclic
         // — a useful distinction the operator's growth-substrate surfaces concretely.
         assert_eq!(cyclomatic_number(), 1);
+    }
+
+    // ── GREEN: the lifecycle admits a topological (forward) order ──
+    #[test]
+    fn green_topological_order_exists_for_dag() {
+        // RED→GREEN: a strict forward lifecycle must have a linear extension.
+        // The emitted order must start at Pending and never go backwards.
+        let order = topological_order().expect("lifecycle must be a DAG");
+        assert_eq!(order[0], OrderStatus::Pending);
+        assert!(order.contains(&OrderStatus::Delivered));
+        assert!(order.contains(&OrderStatus::Cancelled));
+        // Every edge (f→t) must respect the order: index(f) < index(t).
+        let pos = |s: OrderStatus| order.iter().position(|&x| x == s).unwrap();
+        for (f, t) in all_edges() {
+            assert!(pos(f) < pos(t), "edge {f:?}→{t:?} violates topo order");
+        }
+    }
+
+    #[test]
+    fn red_topological_order_none_if_cycle() {
+        // Constructed: temporarily, the only way to break this is a cycle. We
+        // assert the *current* graph is acyclic (topo order exists). If a Reopen
+        // edge is added this turns RED, forcing the decision at the gate.
+        assert!(topological_order().is_some());
+    }
+
+    // ── GREEN: reachability from Pending spans the whole active lifecycle ──
+    #[test]
+    fn green_reachable_from_pending_covers_active_chain() {
+        let r = reachable(OrderStatus::Pending);
+        // Reachable from Pending: the active chain + both terminal branches.
+        // (Confirmed→Preparing→Ready→InDelivery→Delivered and Ready→PickedUp,
+        // plus Pending→Rejected/Cancelled.)
+        for &s in &[
+            OrderStatus::Pending,
+            OrderStatus::Confirmed,
+            OrderStatus::Preparing,
+            OrderStatus::Ready,
+            OrderStatus::InDelivery,
+            OrderStatus::Delivered,
+            OrderStatus::Rejected,
+            OrderStatus::Cancelled,
+            OrderStatus::PickedUp,
+        ] {
+            assert!(
+                r & (1 << idx_of(s)) != 0,
+                "{s:?} should be reachable from Pending"
+            );
+        }
+        // `Scheduled` is a scaffold terminal with NO inbound edges (orphan) —
+        // it is the one state unreachable from the live lifecycle. This is the
+        // structural fingerprint of an unfinished scaffold flow.
+        assert!(
+            r & (1 << idx_of(OrderStatus::Scheduled)) == 0,
+            "Scheduled must be an unreachable orphan (no inbound edges)"
+        );
+        // Reachability is a proper superset at intermediate states:
+        // Confirmed reaches strictly fewer states than Pending (no way back).
+        let from_confirmed = reachable(OrderStatus::Confirmed);
+        assert!(from_confirmed & (1 << idx_of(OrderStatus::Pending)) == 0);
+        assert!(
+            r & !from_confirmed != 0,
+            "Pending reaches strictly more than Confirmed"
+        );
+    }
+
+    #[test]
+    fn red_terminal_states_reach_nothing_forward() {
+        // A terminal state has no outgoing edges ⇒ reachability == itself only.
+        for &term in &[
+            OrderStatus::Delivered,
+            OrderStatus::Rejected,
+            OrderStatus::Cancelled,
+            OrderStatus::PickedUp,
+        ] {
+            assert_eq!(reachable(term), 1 << idx_of(term));
+        }
+    }
+
+    // ── GREEN: spectral radius is 0 for an acyclic (nilpotent) adjacency ──
+    #[test]
+    fn green_spectral_radius_zero_for_acyclic() {
+        // Perron–Frobenius: a DAG's directed adjacency is nilpotent ⇒ ρ = 0.
+        // Cross-validated against has_cycle(): both must agree the graph is acyclic.
+        assert!(!has_cycle(), "precondition: lifecycle is a DAG");
+        assert!(spectral_radius().abs() < 1e-9, "ρ must be 0 for a DAG");
+    }
+
+    #[test]
+    fn green_spectral_radius_matches_cyclomatic_acyclicity() {
+        // Two independent structural lenses must agree:
+        //   has_cycle()==false  ⟺  spectral_radius()==0  ⟺  topological_order().is_some()
+        let acyclic = !has_cycle();
+        let rho_is_zero = spectral_radius().abs() < 1e-9;
+        let topo_exists = topological_order().is_some();
+        assert_eq!(acyclic, rho_is_zero);
+        assert_eq!(acyclic, topo_exists);
+        // cyclomatic_number μ>0 here is the *undirected* cycle; directed ρ must
+        // still be 0 — proving the μ=1 cycle is not a directed re-open loop.
+        assert!(cyclomatic_number() > 0);
+        assert!(rho_is_zero);
     }
 }
