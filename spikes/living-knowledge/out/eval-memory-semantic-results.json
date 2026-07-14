@@ -1,0 +1,12 @@
+{
+  "corpus": 297,
+  "k": 5,
+  "oracle": 10,
+  "semanticRecall": 1,
+  "cacheBuilt": 0,
+  "cacheOffline": true,
+  "deterministic": true,
+  "model": "Xenova/bge-small-en-v1.5",
+  "modelOk": true,
+  "digestOk": true
+}
