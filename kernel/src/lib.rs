@@ -18,6 +18,10 @@ pub mod event_log;
 pub mod geo;
 pub mod intake;
 pub mod isolation;
+/// B1 — "Brain + Body" state estimation: a constant-velocity Kalman filter (predict = geometric
+/// transition, update = probabilistic correction). Generalizes `geo::ema_next` (the 1-D steady-state
+/// case) to courier position+velocity tracking through GPS noise.
+pub mod kalman;
 pub mod loops;
 /// Reverse-engineering loop #R1 — Markov attractor detector (ASCENDed from markov_attractor.py);
 /// reuses `spectral` as its eigen-core, killing the dual-authority hazard.
