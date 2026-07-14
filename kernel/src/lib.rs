@@ -6,6 +6,9 @@
 /// N=(I−Q)⁻¹ (exact finite sum for the DAG lifecycle), expected steps-to-terminal, absorption probs.
 pub mod absorbing;
 pub mod analytics;
+/// Contiguous row-major matrix helper — the single backing store / matmul impl
+/// the spectral + absorbing subsystems route through (DOD/SIMD prep).
+pub mod mat;
 /// RW-07 — cart state machine (consolidate 2 JS cart impls → kernel authority). Totals via money.
 pub mod cart;
 pub mod domain;
