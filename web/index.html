@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>dowiz · kernel-driven field UI</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background:#0b0f17; color:#cdd6e4; margin:0; padding:24px; }
+    h1 { font-size:16px; letter-spacing:.04em; color:#7fd1ff; }
+    .card { border:1px solid #1e2a3a; border-radius:10px; padding:16px; margin:12px 0; background:#0f1623; }
+    .k { color:#7c8aa0; } .v { color:#e6edf7; } .warn { color:#ffb454; } .bad { color:#ff6b6b; } .good { color:#7ee787; }
+    canvas { width:100%; height:160px; background:#0b0f17; border:1px solid #1e2a3a; border-radius:8px; }
+    button { background:#13243a; color:#cdd6e4; border:1px solid #25405f; border-radius:6px; padding:6px 10px; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <h1>dowiz · kernel-driven field UI (Rust kernel via wasm)</h1>
+  <p class="k">Geo + spectral math is computed by <code>dowiz-kernel</code> (wasm). This shell only renders it — no JS/TS re-implementation.</p>
+
+  <div class="card">
+    <div><span class="k">route remaining:</span> <span class="v" id="rem">–</span> m</div>
+    <div><span class="k">snapped:</span> <span class="v" id="snap">–</span></div>
+    <div><span class="k">segment:</span> <span class="v" id="seg">–</span></div>
+    <canvas id="cv" width="800" height="160"></canvas>
+    <button id="tick">advance</button>
+  </div>
+
+  <div class="card">
+    <div><span class="k">spectral radius ρ:</span> <span class="v" id="rho">–</span></div>
+    <div><span class="k">spectral gap γ:</span> <span class="v" id="gap">–</span></div>
+    <div><span class="k">Fiedler λ₂:</span> <span class="v" id="fie">–</span></div>
+    <div><span class="k">drift class:</span> <span class="v" id="drift">–</span></div>
+  </div>
+
+  <div class="card">
+    <div><span class="k">FSM states / edges:</span> <span class="v" id="fsm">–</span></div>
+    <div><span class="k">acyclic:</span> <span class="v" id="acyc">–</span></div>
+  </div>
+
+  <script type="module" src="./src/app.mjs"></script>
+</body>
+</html>
