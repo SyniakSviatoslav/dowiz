@@ -25,9 +25,6 @@ pub mod kalman;
 pub mod intake;
 pub mod isolation;
 pub mod loops;
-/// Deterministic n-gram (bigram + trigram) frequency extraction over a token
-/// stream — the self-improvement loop's pattern-surface primitive (P9 / T2-β).
-pub mod trigram;
 /// Reverse-engineering loop #R1 — Markov attractor detector (ASCENDed from markov_attractor.py);
 /// reuses `spectral` as its eigen-core, killing the dual-authority hazard.
 pub mod markov;
@@ -41,6 +38,13 @@ pub mod order_machine;
 /// Reverse-engineering loop #1 — general (non-symmetric) spectral engine: eigenvalues
 /// (Faddeev-LeVerrier + Durand-Kerner), spectral gap γ, Laplacian Fiedler λ₂, DMD drift class.
 pub mod spectral;
+/// Deterministic n-gram (bigram + trigram) frequency extraction over a token
+/// stream — the self-improvement loop's pattern-surface primitive (P9 / T2-β).
+pub mod trigram;
+/// Reverse-mode automatic differentiation (scalar tape engine) — the
+/// kernel-side fitting primitive (Tier B2: capture-field SIREN/splat fits).
+pub mod micrograd;
+/// WASM/JS bindings — the only place the kernel touches the boundary.
 pub mod wasm;
 
 // Re-export the headline types so wasm-bindgen consumers and tests share one surface.
