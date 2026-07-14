@@ -5,6 +5,9 @@
 /// Reverse-engineering loop #R3 — absorbing Markov chain closed forms: fundamental matrix
 /// N=(I−Q)⁻¹ (exact finite sum for the DAG lifecycle), expected steps-to-terminal, absorption probs.
 pub mod absorbing;
+/// C-tier "impedance lens": circuit/impedance as a resource framework — flow
+/// reflection coefficient + backpressure gate (ρ<1 with margin, not power-match).
+pub mod impedance;
 pub mod analytics;
 /// C-tier "attention lens": scaled dot-product attention as one learned-affinity
 /// diffusion step — same f(L) family as markov PPR / heat-kernel.
@@ -56,6 +59,9 @@ pub mod noether;
 /// Offline-on-node online learner (Tier B3): deterministic SGD/Adam from the
 /// node's local sample stream — local-first, no network, no vendor runtime.
 pub mod online;
+/// C1 — verify-failure → retrieval-trigger: a claim check that, on failure,
+/// emits a bounded structured re-verify request (the "verify then learn" loop).
+pub mod verify_retrieval;
 /// WASM/JS bindings — the only place the kernel touches the boundary.
 pub mod wasm;
 
