@@ -266,3 +266,167 @@ pub mod geo {
         }
     }
 }
+
+/// FE-07 — Kernel spectral-math bridge contract (mirrors [`geo`]).
+///
+/// The engine relies on the Rust kernel for spectral computation; it never
+/// re-implements eigensolving (per the 2026-07-14 directive: JS/TS is legacy,
+/// the engine uses kernel math). The kernel's `spectral_flat_js`
+/// (`kernel/src/wasm.rs`) emits the spectral summary as a flat numeric array
+/// (no JSON — dependency-free engine, no serde). Layout (see kernel doc):
+///
+/// ```text
+/// [0] rho        — spectral radius (largest |λ|)
+/// [1] gap        — γ = 1 − |λ₂| (mixing / convergence rate)
+/// [2] fiedler    — algebraic connectivity λ₂ of the graph Laplacian
+/// [3] drift_code — Damped=0, Resonant=1, Unstable=2
+/// [4] n          — number of eigenvalues
+/// [5..5+2n)      — eigenvalue pairs (re, im), descending |λ|
+/// ```
+///
+/// The engine decodes that slice fail-closed: a malformed/short payload yields
+/// `None` and the renderer keeps the last good spectral state. The layout is
+/// mirror-pinned by [`spectral_flat_layout_matches_kernel`] so the two crates
+/// cannot silently desync.
+pub mod spectral {
+    #![allow(dead_code)] // public contract surface; consumed by the FFI/renderer layer
+
+    /// Drift classification of an operator (mirrors `dowiz-kernel::spectral::DriftClass`).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum DriftClass {
+        Damped,
+        Resonant,
+        Unstable,
+    }
+
+    /// Decoded spectral summary produced by `dowiz-kernel::spectral`, received
+    /// across the bridge as a flat f32 slice.
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub struct SpectralReport {
+        pub rho: f32,
+        pub gap: f32,
+        pub fiedler: f32,
+        pub drift: DriftClass,
+        /// Dominant eigenvalues (re, im), descending by modulus.
+        pub dominant: [(f32, f32); 2],
+    }
+
+    /// Min slots for a well-formed spectral payload (5 header + 2×2 eigenvalue pairs).
+    /// The kernel emits exactly `5 + 2n` floats for an `n×n` matrix; for n≥2 this
+    /// is ≥ 9. We require at least the header + 2 pairs.
+    pub const SPECTRAL_MIN_SLOTS: usize = 9;
+
+    fn drift_from_code(code: f32) -> DriftClass {
+        match code as i32 {
+            0 => DriftClass::Damped,
+            1 => DriftClass::Resonant,
+            _ => DriftClass::Unstable,
+        }
+    }
+
+    /// Decode a kernel spectral summary received over the bridge.
+    ///
+    /// Fail-closed: returns `None` unless the slice is long enough to carry the
+    /// header + at least 2 eigenvalue pairs, and `n` matches the actual length.
+    pub fn decode_spectral_flat(slice: &[f32]) -> Option<SpectralReport> {
+        if slice.len() < SPECTRAL_MIN_SLOTS {
+            return None;
+        }
+        let n = slice[4] as usize;
+        // total = 5 header + 2*n eigenvalue floats.
+        if slice.len() != 5 + 2 * n || n < 2 {
+            return None;
+        }
+        Some(SpectralReport {
+            rho: slice[0],
+            gap: slice[1],
+            fiedler: slice[2],
+            drift: drift_from_code(slice[3]),
+            dominant: [(slice[5], slice[6]), (slice[7], slice[8])],
+        })
+    }
+
+    /// Render adapter: holds the latest kernel-computed spectral state. The engine
+    /// never computes eigensystems — it only surfaces what the kernel decided.
+    #[derive(Debug, Default, Clone, Copy)]
+    pub struct LoopDriftDetector {
+        report: Option<SpectralReport>,
+    }
+
+    impl LoopDriftDetector {
+        /// Feed a bridge payload. `None` (malformed/legacy) keeps the last good
+        /// state — fail-closed against dropped frames.
+        pub fn ingest(&mut self, slice: &[f32]) {
+            if let Some(r) = decode_spectral_flat(slice) {
+                self.report = Some(r);
+            }
+        }
+
+        /// Current drift class, if any good frame has arrived.
+        pub fn drift(&self) -> Option<DriftClass> {
+            self.report.map(|r| r.drift)
+        }
+
+        /// Spectral gap γ (mixing rate); `None` until a good frame arrives.
+        pub fn gap(&self) -> Option<f32> {
+            self.report.map(|r| r.gap)
+        }
+
+        /// True when the operator is trapped/oscillatory (Resonant — a limit
+        /// cycle, e.g. μ≈−1 period-2) and never mixes.
+        pub fn is_resonant(&self) -> bool {
+            self.drift() == Some(DriftClass::Resonant)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        // Flat layout matches the kernel `spectral_flat_js` contract. A 2-cycle
+        // matrix [[0,1],[1,0]] → eigs {±1} ⇒ rho=1, gap=0, fiedler computed from
+        // its (empty) Laplacian adjacency (0 ⇒ disconnected ⇒ λ₂=0), drift=Resonant(1).
+        #[test]
+        fn spectral_flat_layout_matches_kernel() {
+            // kernel spectral_flat_js("[[0,1],[1,0]]") → [rho=1, gap=0, fiedler, drift=1, n=2, +1,0, -1,0]
+            let flat = [1.0_f32, 0.0, 0.0, 1.0, 2.0, 1.0, 0.0, -1.0, 0.0];
+            let r = decode_spectral_flat(&flat).expect("exact-length slice decodes");
+            assert_eq!(r.rho, 1.0);
+            assert_eq!(r.gap, 0.0);
+            assert_eq!(r.drift, DriftClass::Resonant);
+            assert_eq!(r.dominant, [(1.0, 0.0), (-1.0, 0.0)]);
+        }
+
+        // Fail-closed: a malformed/partial payload is rejected; last good state kept.
+        #[test]
+        fn malformed_payload_is_rejected_keeps_last_good() {
+            let mut det = LoopDriftDetector::default();
+            let good = [1.0_f32, 0.0, 0.0, 1.0, 2.0, 1.0, 0.0, -1.0, 0.0];
+            det.ingest(&good);
+            assert_eq!(det.drift(), Some(DriftClass::Resonant));
+            // wrong length (drops a float) → rejected, state retained
+            det.ingest(&[1.0, 0.0, 0.0, 1.0, 2.0, 1.0, 0.0, -1.0]);
+            assert_eq!(det.drift(), Some(DriftClass::Resonant));
+            // n=2 but only 1 pair present → rejected
+            det.ingest(&[1.0, 0.0, 0.0, 1.0, 2.0, 1.0, 0.0]);
+            assert_eq!(det.drift(), Some(DriftClass::Resonant));
+        }
+
+        // No good frame → no drift class (renderer must not assume a state).
+        #[test]
+        fn no_good_frame_yields_no_drift() {
+            let det = LoopDriftDetector::default();
+            assert!(det.drift().is_none());
+            assert!(det.gap().is_none());
+            assert!(!det.is_resonant());
+        }
+
+        // Damped/Unstable codes map correctly.
+        #[test]
+        fn drift_codes_map() {
+            assert_eq!(drift_from_code(0.0), DriftClass::Damped);
+            assert_eq!(drift_from_code(1.0), DriftClass::Resonant);
+            assert_eq!(drift_from_code(2.0), DriftClass::Unstable);
+        }
+    }
+}
