@@ -44,6 +44,9 @@ pub mod trigram;
 /// Reverse-mode automatic differentiation (scalar tape engine) — the
 /// kernel-side fitting primitive (Tier B2: capture-field SIREN/splat fits).
 pub mod micrograd;
+/// Offline-on-node online learner (Tier B3): deterministic SGD/Adam from the
+/// node's local sample stream — local-first, no network, no vendor runtime.
+pub mod online;
 /// WASM/JS bindings — the only place the kernel touches the boundary.
 pub mod wasm;
 
