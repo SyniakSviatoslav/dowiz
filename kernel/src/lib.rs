@@ -2,6 +2,9 @@
 //! Canonical kernel. The TS app (`/root/dowiz` apps/*) is the legacy oracle; this replaces it.
 //! No float on money, no I/O. Verified-by-Math: RED+GREEN tests per module.
 
+/// Reverse-engineering loop #R3 — absorbing Markov chain closed forms: fundamental matrix
+/// N=(I−Q)⁻¹ (exact finite sum for the DAG lifecycle), expected steps-to-terminal, absorption probs.
+pub mod absorbing;
 pub mod analytics;
 /// RW-07 — cart state machine (consolidate 2 JS cart impls → kernel authority). Totals via money.
 pub mod cart;
