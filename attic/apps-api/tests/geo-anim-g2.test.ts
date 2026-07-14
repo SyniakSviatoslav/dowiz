@@ -14,7 +14,7 @@ import {
   isArriving,
   ARRIVE_THRESHOLD_M,
   type LatLng,
-} from '../../../packages/ui/src/lib/geo-anim.js';
+} from '../../../packages/ui/dist/lib/geo-anim.js';
 
 const near = (a: number, b: number, tol: number, msg?: string) =>
   assert.ok(Math.abs(a - b) <= tol, `${msg ?? ''} expected ${a} ≈ ${b} (±${tol})`);

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { applyTax as serverApplyTax } from '../src/lib/money.js';
-import { applyTax as mirrorApplyTax, estimateOrderTotal, computeDeliveryFee } from '../../../packages/ui/src/lib/money.js';
+import { applyTax as mirrorApplyTax, estimateOrderTotal, computeDeliveryFee } from '../../../packages/ui/dist/lib/money.js';
 
 // PARITY GUARDRAIL (ADR-0005, Approach M) — the client-side total MIRROR must agree with the
 // server's authoritative order-total math TO THE CENT, or the customer is shown a number the
