@@ -8,10 +8,14 @@
 //! a fixed 50Hz.
 //!
 //! Guards: `MAX_FRAME` clamp (spiral-of-death), `MAX_SUBSTEPS` cap, `dt` is a
-//! compile-const equal to the kernel's `DT_STABLE`.
+//! compile-const equal to the kernel's `DT_STABLE`
+//! (`dowiz-kernel/src/lib.rs::DT_STABLE` — the authoritative source of truth).
 
-/// Fixed physics step — MUST equal `field::DT_STABLE` so the integrator never
-/// sees a divergent dt (kernel is the authority on stability).
+/// Fixed physics step — MUST equal `dowiz-kernel::DT_STABLE`
+/// (`kernel/src/lib.rs`) so the integrator never sees a divergent dt (kernel is
+/// the authority on stability). The kernel pins its value with
+/// `dt_stable_is_authoritative`; this mirror pin catches drift on the engine
+/// side. If you change one, change both.
 pub const DT_STABLE: f32 = 0.02;
 
 /// Clamp for a single rendered frame time (guards spiral-of-death).
@@ -148,5 +152,16 @@ mod tests {
             "substep cap honored — no spiral of death"
         );
         assert!(loop_.clamped);
+    }
+
+    // Mirror pin for the kernel↔engine DT_STABLE contract. The authoritative
+    // value lives in `dowiz-kernel::DT_STABLE` (kernel/src/lib.rs). This catches
+    // drift on the engine side; the kernel's `dt_stable_is_authoritative` catches
+    // it on the kernel side. Both must stay 0.02 (50 Hz) or the integrator
+    // desyncs from the kernel's route-kinematics sampling cadence.
+    #[test]
+    fn dt_stable_matches_kernel_contract() {
+        assert_eq!(DT_STABLE, 0.02);
+        assert_eq!((1.0 / DT_STABLE as f64).round() as u32, 50);
     }
 }
