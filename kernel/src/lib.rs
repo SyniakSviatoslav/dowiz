@@ -6,22 +6,30 @@
 /// N=(I−Q)⁻¹ (exact finite sum for the DAG lifecycle), expected steps-to-terminal, absorption probs.
 pub mod absorbing;
 pub mod analytics;
-/// Contiguous row-major matrix helper — the single backing store / matmul impl
-/// the spectral + absorbing subsystems route through (DOD/SIMD prep).
-pub mod mat;
 /// RW-07 — cart state machine (consolidate 2 JS cart impls → kernel authority). Totals via money.
 pub mod cart;
+/// Deterministic CSR graph + synchronous Jacobi personalized-PageRank
+/// (retrieval-blueprint v2 diffusion/recall primitive).
+pub mod csr;
 pub mod domain;
 /// MESH-06 — per-node content-addressed event-log (local-first + sync).
 pub mod event_log;
 /// RW-06 — geo / route kinematics (pure-logic port from geo-anim.ts + delivery-zone.ts). Kernel authority.
 pub mod geo;
+/// Householder QR + shifted-QR eigensolver (the dense-`n×n` "Ferrari"): all
+/// eigenvalues, real + complex, stack-only for n ≤ 32 (no heap; FMA inner
+/// product). Replaces the O(n⁴) Faddeev-LeVerrier path as the default for the
+/// dense operators this kernel diagonalizes.
+pub mod householder;
 pub mod intake;
 pub mod isolation;
 pub mod loops;
 /// Reverse-engineering loop #R1 — Markov attractor detector (ASCENDed from markov_attractor.py);
 /// reuses `spectral` as its eigen-core, killing the dual-authority hazard.
 pub mod markov;
+/// Contiguous row-major matrix helper — the single backing store / matmul impl
+/// the spectral + absorbing subsystems route through (DOD/SIMD prep).
+pub mod mat;
 /// RW-08 — messenger deep-link builders (pure string logic → kernel authority).
 pub mod messenger;
 pub mod money;
