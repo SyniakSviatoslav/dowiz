@@ -34,3 +34,17 @@ NEXT-TIME: When designing any recurring obligation, specify in the same breath (
 LINK:      docs/regressions/REGRESSION-LEDGER.md #48 ; scripts/agent-health-pass.mjs ;
            [[meta-loop-audit-2026-07-02]]
 ---
+
+**Curation note (librarian, 2026-07-05 daily pass):** Challenged fresh. The causal claim
+("obligations that end in prose die; only hook-enforced or gate-checked behavior survives") is
+sound and CONFIRMED — but it is not a new finding: it is the SAME root already distilled into
+`docs/lessons/2026-07-02-gate-state-file-expiry.md` (source: the sibling reflection
+`2026-07-02-governance-gates-rot-open.reflection.md`, ledger #47), and this reflection's own
+guardrails (`guardrail-ledger-integrity.mjs`, `loops-registry-sync.mjs`, `agent-health-pass.mjs`,
+hook-v2 armament) are already a complete, standing ledger row (#48) — verified present and
+green on this pass (`scripts/agent-health-pass.mjs` runs; `guardrail-gate-armament.mjs`,
+`guardrail-ledger-integrity.mjs`, `loops-registry-sync.mjs` all exist). No new TRIGGER/ACTION
+survives that isn't already covered by the existing lesson + ledger row. DISCARDED as a
+duplicate rather than distilled into a second lesson — writing a near-identical lesson would
+violate "one atomic lesson" / the store-must-not-grow bias for zero marginal signal. Archived,
+not promoted separately.

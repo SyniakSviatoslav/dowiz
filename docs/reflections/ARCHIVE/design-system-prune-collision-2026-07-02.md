@@ -26,3 +26,20 @@ decisions (worktrees-by-default, re-verify a `--no-verify` commit) that need a h
 call, not a librarian promotion. Left in INBOX for the Council retro (CLAUDE.md self-improvement
 loop step 5, "On a big change / hard fix, the Council retro ... synthesises reflections") rather
 than archived — item 3's re-verify action is still open.
+
+---
+
+**Follow-up curation note (librarian, 2026-07-05 daily pass):** Re-challenged. The underlying
+causal claim (staged-but-uncommitted state has no owner in a shared git index; the correct
+solo discipline created a concurrent-session exposure window) still holds — no counter-evidence
+surfaced. Item 3's blocker is now resolved: `guard-bash.sh` registration landed the same day
+(ledger #47) and commit `0647116` (the `06471162` half-applied commit named in item 3) is
+verified an ANCESTOR of current HEAD (`git merge-base --is-ancestor 0647116 HEAD`) — its tree has
+therefore been exercised by every gate run on every subsequent commit without a reported
+regression. Treating item 3 as closed by that evidence. Items 1 (a session-attribution
+pre-commit guardrail — self-flagged by the original author as "may be infeasible": no
+session-attribution primitive exists in this repo's git/hook surface) and 2 (worktrees-by-default
+for concurrent sessions) are process/policy decisions, not deterministic checks this librarian
+can author or a lesson can enforce — they remain OPEN, flagged here for human/Council judgment,
+not resolved by this pass. Archiving now (draining the inbox); the open policy question is
+carried in this note, not silently dropped.

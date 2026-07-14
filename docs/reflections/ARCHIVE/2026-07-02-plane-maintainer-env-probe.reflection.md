@@ -49,3 +49,20 @@ cse_01Psnn1SgcmYwwqpZoyE1xtv's transcript; explicitly flagged as the open verifi
 - [[plane-maintainer-agent-2026-07-02]]
 - [[claude-cloud-github-authz-2026-07-02]]
 - [[memory-corpus-meta-patterns-2026-07-02]] (verify-artifact-not-proxy)
+
+---
+
+**Curation note (librarian, 2026-07-05 daily pass):** Challenged fresh. The causal claim ("act
+on cached remote state instead of re-`get`ting it") is plausible but this session is a single
+narrow data point on remote Claude-cloud trigger/env wiring, not repo code — there is no path
+glob or error signature the `pre-edit-lessons` hook could ever match (it only fires on
+Edit/Write/MultiEdit `file_path`), so a `docs/lessons/` entry here would be permanently dead
+weight, never actually injected. The general principle is also NOT novel: it is already recorded
+as the "verify-artifact-not-proxy" meta-pattern in `memory-corpus-meta-patterns-2026-07-02`,
+which this reflection's own LINK section cites — this file is one more instance of an
+already-generalized pattern, not a new lesson. Its own CONFIDENCE section marks the one concrete
+open item ("secrets-reach-checkout") as unverified and unresolved, i.e. not a settled, recurring
+bug class ready for a guardrail. DISCARDED (downgraded) — does not qualify for `docs/lessons/`
+(non-actionable via the hook mechanism) or for a guardrail (no deterministic check exists for
+remote trigger/env cache staleness, and the pattern is already captured at the meta-pattern
+level).

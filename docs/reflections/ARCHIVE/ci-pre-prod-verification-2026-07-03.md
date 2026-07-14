@@ -109,3 +109,21 @@ green, red arms proven). Medium on FULL mode until it runs once in CI against a 
 - [[plane-telemetry-closed-loop-2026-07-02]] (durable-local illusion = same "property-of-the-target"
   category error as prod≠staging)
 - docs/design/ci-pre-prod-verification/proposal.md · docs/proposals/ci-pre-prod-verification-wiring.md
+
+---
+
+**Curation note (librarian, 2026-07-05 daily pass):** Challenged fresh, per-pattern. P1-P6's
+common-root claim ("the deploy target was never exercised before the deploy") survives a
+hostile re-read — it is not a single coincidence but a recurring class (P3 is an explicit second
+occurrence of the 2026-06-20 outage, ledger #3). ALREADY fully promoted in a prior pass: two
+lessons name this file as source (`docs/lessons/2026-07-03-prod-staging-schema-drift.md` for
+P3, `docs/lessons/2026-07-03-rotate-prod-role-staging-rehearsal.md` for the P5 corollary), the
+guardrail is ledger row #52 (P2/P3/P4/P5), and P4/P5's TTL/boot-budget angle is separately
+locked by ledger #51. Verified present and green this pass: `scripts/ci-connection-preflight.mjs`,
+`scripts/ci-migration-preflight.mjs` (self-test 5/5), `scripts/ci-schema-drift.mjs` all exist;
+`apps/api/tests/worker-boot-budget-lock.test.ts` referenced by the rotate-prod-role lesson is
+in the standing test tree. P1 (missing pre-merge gate) and P6 (post-deploy smoke wired to the
+wrong target) remain as `docs/proposals/ci-pre-prod-verification-wiring.md` — CI-workflow wiring
+is a protect-path and stays a proposal for human/operator application, not something this
+librarian pass can apply. Completing the archival a prior pass omitted; no new lesson or ledger
+row needed.

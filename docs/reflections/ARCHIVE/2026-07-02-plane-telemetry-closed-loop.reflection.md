@@ -61,3 +61,18 @@ resolution of that prediction is itself the first calibration data point.
   (verify-artifact-not-proxy, advisory-vs-authority, council-before-code)
 - docs/design/plane-telemetry-principles/ (proposal, breaker ROUND 1-3, counsel, resolution)
 - docs/adr/ADR-plane-telemetry-and-calibration.md · REGRESSION-LEDGER #49
+
+---
+
+**Curation note (librarian, 2026-07-05 daily pass):** Challenged fresh. Both causal roots
+("durable is a property of the store, not the write"; "remote consumers bind to remote state,
+verify referenced artifacts exist remotely") are sound and already fully captured: ledger row
+#49 (the telemetry choke-point + 22/22 `plane-telemetry.test.mjs` passing on this pass) is the
+standing guardrail for this exact session's work. More importantly, the SPECIFIC risk this
+design carried (an ephemeral checkout publishing without a locally-materialized file) was not
+just theoretical — it actually manifested three days later and was independently root-caused
+and closed with its own red→green guardrail at ledger row #57 (`run-20260705T0602`,
+`predictions.jsonl` deletion on publish, fixed same day). That later, more specific entry
+supersedes this reflection's forward-looking concern. Nothing further to promote — ARCHIVED as
+superseded by #49 (direct) and #57 (the corollary bug it correctly anticipated, now separately
+closed).
