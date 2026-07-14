@@ -93,3 +93,25 @@ Source: [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) �
    non-red-line → own branch/worktree) vs SEQUENTIAL GATES (red-line operator decisions, external
    validation, tier dependencies). Both repos share the same Tier spine: stabilize v1 → ship prod
    truth → quality bars → first real order (G11 GREEN) → only then rewrite substrate.
+
+---
+
+## Integration Decart Rule — compare & probe before you adopt (operator, 2026-07-14)
+
+**Agnostic, innovative, ethical — zero ideological attachments.** Any **new integration** (new
+dependency/crate/package · external service/API · transport/provider/backend/protocol · **or a swap of
+one for another**) must **first** pass a decart evaluation and leave a **decart comparison report** in
+the change. No silent adoption.
+
+- Decide by **honest, falsifiable, critical comparison** — never by appeal to authority. Modern /
+  Rust-native is the **default and the tiebreak**; a proven classical method wins **only when an honest
+  comparison proves it genuinely better on the merits.**
+- The decart report is a table (candidates × criteria: bare-metal fit · falsifiable correctness/security ·
+  measured performance · supply-chain/license · maintainability · reversibility-as-port · evidence-cited),
+  a `DECISION:` line with a falsifiable reason, an **older-as-adapter** note if older tech is kept (bridge,
+  **not purged**), and a **mandatory probe** (the strongest honest argument *against* the choice).
+- **Banned as a deciding reason:** "industry standard / more mature / battle-tested / community-approved."
+  Social proof is not evidence. (An honest *technical* case for a mature tool is welcome — if it wins on
+  merit, it's chosen.)
+
+Full rule, table template, and a worked example → **`docs/operating-model/integration-decart-rule.md`**.
