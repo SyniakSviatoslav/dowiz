@@ -11,7 +11,7 @@
 #
 # Usage:  scripts/automation/tier3-batch.sh <sweep-name> <target-file> [target-file ...]
 #   e.g.  scripts/automation/tier3-batch.sh ts-ignore-to-expect-error \
-#           apps/api/src/lib/libretranslate-provider.ts apps/api/src/lib/ai-ocr-parser.ts
+#           attic/apps-api/src/lib/libretranslate-provider.ts attic/apps-api/src/lib/ai-ocr-parser.ts
 # Env (optional):
 #   TIER3_MODEL          model alias (default: claude-haiku-4-5-20251001)        [A5]
 #   TIER3_MAX_TURNS      per-agent loop cap (default: 14)                         [A5]
