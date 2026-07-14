@@ -120,3 +120,42 @@ outranks this plan.
   workspace **777 green** (was 751). Kills the bebop dual-authority hazard.
 - Next wave per bottom-up sort: **T2-α Kalman full filter** (extend `geo::ema_next`, which is the
   scalar steady-state = infinite-P special case). Then T2-β trigram. P7 red-line = operator gate only.
+
+## rev-5 UPDATE (2026-07-14, hydraulic-loop-v2 finished)
+
+Deep-research reconciliation of `docs/design/hydraulic-loop-v2/BLUEPRINTS.md` (23 BPs / 5 waves)
+against live trees via grep/git/cargo (ground-truth, not doc "current state"):
+
+- **BPs 01–21 + 23 all VERIFIED BUILT + GREEN.** The hydraulic-loop is effectively DONE:
+  - WAVE0: BP-01 resonator, BP-02 arccos metric — built.
+  - WAVE1: BP-03 QR eigen, BP-04 diffusion sign, BP-05 PID, BP-06 entropy-ledger, BP-07 online-DMD — built.
+  - WAVE2: BP-08 admit() intake compiler (dowiz `kernel/src/intake.rs`, `pub fn admit`+`IntakeError`),
+    BP-09 persistence, BP-10 ∂q/∂v critic, BP-11 renormalizer — built.
+  - WAVE3: BP-12 tamper-evident audit::AuditLog (wiring.rs), BP-13 salience-weighted decay (memory.rs),
+    BP-14 semantic veto (field.rs trigram_embed), BP-15 guard-bash, BP-16 agentic_git restore_node — built.
+  - WAVE4: BP-17 checked money (dowiz kernel), BP-18/19/20 instruments/orchestration — built.
+  - WAVE5: **BP-21 Kalman measurement-update — JUST BUILT** (`bebop2/core/src/kalman.rs`
+    `KalmanFilter`: predict `x=Ax,P=APA'+Q` + update `K=PH'(HPH'+R)^-1; x+=K(z-Hx); P=(I-KH)P`).
+    3 new RED→GREEN gates (variance-reduction, gain-shrinks, predict-propagation).
+  - **BP-23 yellow batch — JUST FIXED (3 real gaps):** #1 stabilizer `dt<=0` now fail-closed
+    (returns ∞ → freeze, was old fail-open V'=0 permitting motion); #5 coherence OOB edge now
+    SKIPPED not `b.min(n-1)`-remapped (was corrupting mass conservation); #6 active_inference
+    `advise` validates every `b[a]` (was panicking on ragged B). (#2/#3/#4 are TS-side in
+    `agent-governance`/`scripts` — files absent from current tree → flagged, not fabricated.)
+- **Verified baseline:** bebop-repo `cargo test --workspace` = **782 passed, 0 failed**
+  (was 777; +3 BP-21 kalman + regressions none). dowiz kernel still 167 green.
+- **Commit:** `f9abb6c` on `feat/logic-governance` (pushed) — BP-21 + BP-23 #1/#5/#6.
+- **SDD HOOK ESTABLISHED** (user 2026-07-14, binding): `.specify/{constitution,spec,plan,tasks}.md`
+  + skill `sdd-spec-driven` + MEMORY.md/AGENTS.md update. SpecKit 5-artifact pipeline is now a gate.
+
+**BLOCKED — operator decision (not auto-merged, would be unsafe/irreversible):**
+- **A2 living-knowledge `545f37df`** (recall@5=1.000, JS+ONNX spike): on divergent branch
+  `recover/stash-1-2994e6c8` / `feat/sovereign-core-phase-zero`; NOT ancestor of kernel branch.
+  Silent merge into Rust kernel = hazard. Needs explicit operator go-ahead + branch strategy.
+- **P7 decide-gateway** (red-line auth/money): no implementation file found yet → design/red-line,
+  operator gate only.
+- **P10 OSS readiness force-push** (irreversible): authorized but requires ref backup + verify no
+  real secrets before any history rewrite.
+- **OPS track A1** (backup scripts): operator-owned; partially repointed already (T0-γ rev-4).
+
+> Generated rev-5 2026-07-14. Ground truth (grep/git/cargo) outranks this plan.
