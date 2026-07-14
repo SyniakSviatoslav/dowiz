@@ -388,6 +388,174 @@ pub fn fsm_graph_report_js() -> Result<String, JsValue> {
     fsm_graph_report_logic().map_err(|e| JsValue::from_str(&e))
 }
 
+// ── Geo / route kinematics surface (RW-06) ──
+// Exposes the kernel `geo` math to JS so the field-sim hook calls the kernel
+// for every math step instead of keeping a parallel TS copy (`geo-anim.js`).
+// Plain numeric / JSON in-out, matching the control-plane wrapper style.
+
+#[derive(Serialize)]
+struct PosOut {
+    lat: f64,
+    lng: f64,
+}
+
+#[derive(Serialize)]
+struct ProgressOut {
+    remaining_m: f64,
+    snapped: PosOut,
+    segment_index: usize,
+}
+
+fn parse_polyline(json: &str) -> Result<Vec<(f64, f64)>, String> {
+    // Accepts [[lat,lng], ...] or [{"lat":..,"lng":..}, ...].
+    let v: serde_json::Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
+    let arr = v.as_array().ok_or("polyline must be an array")?;
+    let mut out = Vec::with_capacity(arr.len());
+    for p in arr {
+        if let Some(a) = p.as_array() {
+            let lat = a.get(0).and_then(|x| x.as_f64()).ok_or("bad lat")?;
+            let lng = a.get(1).and_then(|x| x.as_f64()).ok_or("bad lng")?;
+            out.push((lat, lng));
+        } else {
+            let lat = p.get("lat").and_then(|x| x.as_f64()).ok_or("bad lat")?;
+            let lng = p.get("lng").and_then(|x| x.as_f64()).ok_or("bad lng")?;
+            out.push((lat, lng));
+        }
+    }
+    Ok(out)
+}
+
+fn parse_pos(json: &str) -> Result<(f64, f64), String> {
+    let v: serde_json::Value = serde_json::from_str(json).map_err(|e| e.to_string())?;
+    if let Some(a) = v.as_array() {
+        Ok((
+            a.get(0).and_then(|x| x.as_f64()).ok_or("bad lat")?,
+            a.get(1).and_then(|x| x.as_f64()).ok_or("bad lng")?,
+        ))
+    } else {
+        Ok((
+            v.get("lat").and_then(|x| x.as_f64()).ok_or("bad lat")?,
+            v.get("lng").and_then(|x| x.as_f64()).ok_or("bad lng")?,
+        ))
+    }
+}
+
+fn geo_haversine_logic(a_lat: f64, a_lng: f64, b_lat: f64, b_lng: f64) -> Result<String, String> {
+    Ok(crate::geo::haversine_meters(a_lat, a_lng, b_lat, b_lng).to_string())
+}
+#[wasm_bindgen]
+pub fn geo_haversine_js(a_lat: f64, a_lng: f64, b_lat: f64, b_lng: f64) -> Result<String, JsValue> {
+    geo_haversine_logic(a_lat, a_lng, b_lat, b_lng).map_err(|e| JsValue::from_str(&e))
+}
+
+fn geo_lerp_logic(
+    a_lat: f64,
+    a_lng: f64,
+    b_lat: f64,
+    b_lng: f64,
+    t: f64,
+) -> Result<String, String> {
+    let (lat, lng) = crate::geo::lerp_lat_lng(a_lat, a_lng, b_lat, b_lng, t);
+    serde_json::to_string(&PosOut { lat, lng }).map_err(|e| e.to_string())
+}
+#[wasm_bindgen]
+pub fn geo_lerp_js(
+    a_lat: f64,
+    a_lng: f64,
+    b_lat: f64,
+    b_lng: f64,
+    t: f64,
+) -> Result<String, JsValue> {
+    geo_lerp_logic(a_lat, a_lng, b_lat, b_lng, t).map_err(|e| JsValue::from_str(&e))
+}
+
+fn geo_bearing_logic(a_lat: f64, a_lng: f64, b_lat: f64, b_lng: f64) -> Result<String, String> {
+    Ok(crate::geo::bearing_deg(a_lat, a_lng, b_lat, b_lng).to_string())
+}
+#[wasm_bindgen]
+pub fn geo_bearing_js(a_lat: f64, a_lng: f64, b_lat: f64, b_lng: f64) -> Result<String, JsValue> {
+    geo_bearing_logic(a_lat, a_lng, b_lat, b_lng).map_err(|e| JsValue::from_str(&e))
+}
+
+fn geo_progress_logic(poly_json: &str, pos_lat: f64, pos_lng: f64) -> Result<String, String> {
+    let poly = parse_polyline(poly_json)?;
+    let r = crate::geo::progress_along_route(&poly, (pos_lat, pos_lng));
+    let out = ProgressOut {
+        remaining_m: r.remaining_m,
+        snapped: PosOut {
+            lat: r.snapped.0,
+            lng: r.snapped.1,
+        },
+        segment_index: r.segment_index,
+    };
+    serde_json::to_string(&out).map_err(|e| e.to_string())
+}
+#[wasm_bindgen]
+pub fn geo_progress_js(poly_json: String, pos_lat: f64, pos_lng: f64) -> Result<String, JsValue> {
+    geo_progress_logic(&poly_json, pos_lat, pos_lng).map_err(|e| JsValue::from_str(&e))
+}
+
+fn geo_eta_logic(remaining_m: f64, total_m: f64, baseline_s: f64) -> Result<String, String> {
+    Ok(crate::geo::eta_seconds(remaining_m, total_m, baseline_s).to_string())
+}
+#[wasm_bindgen]
+pub fn geo_eta_js(remaining_m: f64, total_m: f64, baseline_s: f64) -> Result<String, JsValue> {
+    geo_eta_logic(remaining_m, total_m, baseline_s).map_err(|e| JsValue::from_str(&e))
+}
+
+fn geo_should_snap_logic(
+    prev_json: &str,
+    next_json: &str,
+    threshold_m: f64,
+) -> Result<String, String> {
+    let prev = parse_pos(prev_json)?;
+    let next = parse_pos(next_json)?;
+    Ok(crate::geo::should_snap(prev, next, threshold_m).to_string())
+}
+#[wasm_bindgen]
+pub fn geo_should_snap_js(
+    prev_json: String,
+    next_json: String,
+    threshold_m: f64,
+) -> Result<String, JsValue> {
+    geo_should_snap_logic(&prev_json, &next_json, threshold_m).map_err(|e| JsValue::from_str(&e))
+}
+
+fn geo_is_arriving_logic(remaining_m: f64, threshold_m: f64) -> Result<String, String> {
+    Ok(crate::geo::is_arriving(remaining_m, threshold_m).to_string())
+}
+#[wasm_bindgen]
+pub fn geo_is_arriving_js(remaining_m: f64, threshold_m: f64) -> Result<String, JsValue> {
+    geo_is_arriving_logic(remaining_m, threshold_m).map_err(|e| JsValue::from_str(&e))
+}
+
+fn geo_point_in_polygon_logic(
+    pt_lat: f64,
+    pt_lng: f64,
+    polygon_json: &str,
+) -> Result<String, String> {
+    let poly = parse_polyline(polygon_json)?;
+    Ok(crate::geo::point_in_polygon(pt_lat, pt_lng, &poly).to_string())
+}
+#[wasm_bindgen]
+pub fn geo_point_in_polygon_js(
+    pt_lat: f64,
+    pt_lng: f64,
+    polygon_json: String,
+) -> Result<String, JsValue> {
+    geo_point_in_polygon_logic(pt_lat, pt_lng, &polygon_json).map_err(|e| JsValue::from_str(&e))
+}
+
+fn geo_is_out_of_order_logic(last_ts: i64, ts: i64) -> Result<String, String> {
+    // JS sends -1 to mean "no previous timestamp" (None).
+    let last = if last_ts < 0 { None } else { Some(last_ts) };
+    Ok(crate::geo::is_out_of_order(last, ts).to_string())
+}
+#[wasm_bindgen]
+pub fn geo_is_out_of_order_js(last_ts: i64, ts: i64) -> Result<String, JsValue> {
+    geo_is_out_of_order_logic(last_ts, ts).map_err(|e| JsValue::from_str(&e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -552,5 +720,102 @@ mod tests {
         assert_eq!(v["topological_len"], 10);
         // reachable_from_pending is a bitmask; Pending (bit 0) always set.
         assert_eq!(v["reachable_from_pending"].as_u64().unwrap() & 1, 1);
+    }
+
+    // ── G-geo: wasm geo surface matches kernel math (parity within tolerance) ──
+    const POLY: &str = "[[40.0,-3.0],[40.01,-3.0],[40.02,-3.0]]"; // ~2×1° northward
+
+    #[test]
+    fn geo_haversine_js_parity() {
+        let d: f64 = geo_haversine_logic(51.5074, -0.1278, 48.8566, 2.3522)
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!(
+            (d - 343_000.0).abs() < 2_000.0,
+            "London→Paris ≈ 343km, got {d}"
+        );
+    }
+
+    #[test]
+    fn geo_lerp_js_parity() {
+        let j = geo_lerp_logic(0.0, 0.0, 10.0, 20.0, 0.5).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&j).unwrap();
+        assert!((v["lat"].as_f64().unwrap() - 5.0).abs() < 1e-9);
+        assert!((v["lng"].as_f64().unwrap() - 10.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn geo_bearing_js_parity() {
+        let b: f64 = geo_bearing_logic(51.5074, -0.1278, 48.8566, 2.3522)
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!((b - 148.0).abs() < 3.0, "London→Paris ≈ 148°, got {b}");
+    }
+
+    #[test]
+    fn geo_progress_js_parity() {
+        let j = geo_progress_logic(POLY, 40.005, -3.0).unwrap();
+        let v: serde_json::Value = serde_json::from_str(&j).unwrap();
+        // pos is midpoint of the first 0.01°-segment (≈1112 m), so it lands on
+        // segment 0 (end-node index 1), snapped lat ≈ 40.005, remaining ≈ 0.75 of
+        // the ~2224 m polyline ≈ 1668 m.
+        assert_eq!(v["segment_index"], 1);
+        assert!((v["snapped"]["lat"].as_f64().unwrap() - 40.005).abs() < 1e-6);
+        let rem = v["remaining_m"].as_f64().unwrap();
+        assert!(
+            rem > 1500.0 && rem < 1800.0,
+            "remaining ≈ 1668 m, got {rem}"
+        );
+    }
+
+    #[test]
+    fn geo_eta_js_parity() {
+        let s: f64 = geo_eta_logic(1000.0, 2000.0, 400.0)
+            .unwrap()
+            .parse()
+            .unwrap();
+        assert!((s - 200.0).abs() < 1e-9, "eta 200s, got {s}");
+        let fb: f64 = geo_eta_logic(1000.0, 0.0, 0.0).unwrap().parse().unwrap();
+        assert!(
+            (fb - 200.0).abs() < 1e-9,
+            "eta fallback 5m/s → 200s, got {fb}"
+        );
+    }
+
+    #[test]
+    fn geo_should_snap_js_parity() {
+        let t = "[0.0,0.0]";
+        let n = "[0.000045,0.0]"; // ~5 m
+        assert_eq!(geo_should_snap_logic(t, n, 500.0).unwrap(), "true");
+        let far = "[0.01,0.0]"; // ~1.1 km
+        assert_eq!(geo_should_snap_logic(t, far, 500.0).unwrap(), "false");
+    }
+
+    #[test]
+    fn geo_is_arriving_js_parity() {
+        assert_eq!(
+            geo_is_arriving_logic(120.0, crate::geo::ARRIVE_THRESHOLD_M).unwrap(),
+            "true"
+        );
+        assert_eq!(
+            geo_is_arriving_logic(300.0, crate::geo::ARRIVE_THRESHOLD_M).unwrap(),
+            "false"
+        );
+    }
+
+    #[test]
+    fn geo_point_in_polygon_js_parity() {
+        let sq = "[[0.0,0.0],[0.0,10.0],[10.0,10.0],[10.0,0.0]]";
+        assert_eq!(geo_point_in_polygon_logic(5.0, 5.0, sq).unwrap(), "true");
+        assert_eq!(geo_point_in_polygon_logic(15.0, 5.0, sq).unwrap(), "false");
+    }
+
+    #[test]
+    fn geo_is_out_of_order_js_parity() {
+        assert_eq!(geo_is_out_of_order_logic(-1, 100).unwrap(), "false"); // first ping
+        assert_eq!(geo_is_out_of_order_logic(100, 99).unwrap(), "true"); // older
+        assert_eq!(geo_is_out_of_order_logic(100, 101).unwrap(), "false"); // newer
     }
 }
