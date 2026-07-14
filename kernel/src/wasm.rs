@@ -495,6 +495,29 @@ pub fn geo_progress_js(poly_json: String, pos_lat: f64, pos_lng: f64) -> Result<
     geo_progress_logic(&poly_json, pos_lat, pos_lng).map_err(|e| JsValue::from_str(&e))
 }
 
+/// Flat bridge protocol for the engine (FE-06): emits route-progress as a plain
+/// numeric array `[remaining_m, snapped_lat, snapped_lng, segment_index]` — the
+/// exact layout the engine's `bridge::geo::decode_progress_flat` consumes. The
+/// bridge FFI parses this ONCE (outside the render loop); the loop reads flat
+/// `f32` with zero JSON. No object keys ⇒ trivial to parse, no serde on the
+/// engine side (engine is dependency-free).
+fn geo_progress_flat_logic(poly_json: &str, pos_lat: f64, pos_lng: f64) -> Result<String, String> {
+    let poly = parse_polyline(poly_json)?;
+    let r = crate::geo::progress_along_route(&poly, (pos_lat, pos_lng));
+    Ok(format!(
+        "[{},{},{},{}]",
+        r.remaining_m, r.snapped.0, r.snapped.1, r.segment_index
+    ))
+}
+#[wasm_bindgen]
+pub fn geo_progress_flat_js(
+    poly_json: String,
+    pos_lat: f64,
+    pos_lng: f64,
+) -> Result<String, JsValue> {
+    geo_progress_flat_logic(&poly_json, pos_lat, pos_lng).map_err(|e| JsValue::from_str(&e))
+}
+
 fn geo_eta_logic(remaining_m: f64, total_m: f64, baseline_s: f64) -> Result<String, String> {
     Ok(crate::geo::eta_seconds(remaining_m, total_m, baseline_s).to_string())
 }
@@ -817,5 +840,26 @@ mod tests {
         assert_eq!(geo_is_out_of_order_logic(-1, 100).unwrap(), "false"); // first ping
         assert_eq!(geo_is_out_of_order_logic(100, 99).unwrap(), "true"); // older
         assert_eq!(geo_is_out_of_order_logic(100, 101).unwrap(), "false"); // newer
+    }
+
+    // ── FE-06: flat bridge protocol matches the engine's decode contract ──
+    // The engine's `bridge::geo::decode_progress_flat` expects exactly
+    // [remaining_m, snapped_lat, snapped_lng, segment_index]. This pins the
+    // kernel side of that wire contract (kernel is the authority).
+    #[test]
+    fn geo_progress_flat_js_matches_engine_contract() {
+        let j = geo_progress_flat_logic(POLY, 40.005, -3.0).unwrap();
+        // strip brackets, split, ensure exactly 4 numeric fields in order.
+        let body = j.trim_matches(|c| c == '[' || c == ']');
+        let parts: Vec<&str> = body.split(',').collect();
+        assert_eq!(parts.len(), 4, "engine expects 4 f32 slots");
+        let rem: f64 = parts[0].parse().unwrap();
+        let lat: f64 = parts[1].parse().unwrap();
+        let lng: f64 = parts[2].parse().unwrap();
+        let seg: u64 = parts[3].parse().unwrap();
+        assert!((lat - 40.005).abs() < 1e-6, "snapped lat = 40.005");
+        assert!((lng - (-3.0)).abs() < 1e-9);
+        assert!(rem > 1500.0 && rem < 1800.0, "remaining ≈ 1668 m");
+        assert_eq!(seg, 1, "segment_index = 1 (end of first 0.01° seg)");
     }
 }

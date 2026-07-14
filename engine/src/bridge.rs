@@ -138,3 +138,131 @@ mod tests {
         assert_eq!(view[3], 0.5);
     }
 }
+
+/// FE-06 — Kernel geo-math bridge contract.
+///
+/// Canonical architecture (operator directive 2026-07-14): **the Rust engine
+/// uses & relies on the Rust kernel for all geo / route kinematics; JS/TS
+/// (`geo-anim.js` and the legacy `apps/*` oracle) is DEPRECATED.** The kernel
+/// (`dowiz-kernel::geo`) is the single source of truth for haversine, lerp,
+/// bearing, `progress_along_route`, ETA, snap, polygon tests. The engine never
+/// re-implements geo math — it *consumes* kernel output across the bridge.
+///
+/// Wire format: the kernel exposes `geo_progress_flat_js` (`kernel/src/wasm.rs`)
+/// which emits the route-progress as a flat numeric array
+/// `[remaining_m, snapped_lat, snapped_lng, segment_index]`. The bridge FFI
+/// layer parses that array ONCE (outside the render loop) into the staging
+/// buffer; the render loop then reads a flat `f32` slice with **no JSON** (see
+/// [`FrameProfiler`]). The engine side of the contract is decoded here,
+/// fail-closed: a malformed/short payload yields `None` and the renderer keeps
+/// the last good marker (never render garbage from a dropped/legacy frame). The
+/// layout is mirror-pinned by [`route_progress_layout_matches_kernel`] so the
+/// two crates cannot silently desync.
+pub mod geo {
+    // `RouteProgress` / `ROUTE_PROGRESS_SLOTS` are the public bridge contract the
+    // FFI/renderer layer consumes; no in-crate caller yet, so clippy would flag
+    // them as dead_code. They are exercised by the decoder/adapter + tests below
+    // and are the documented wire contract (FE-06), so the warning is expected.
+    #![allow(dead_code)]
+    /// Decoded route-progress produced by `dowiz-kernel::geo::progress_along_route`,
+    /// received across the bridge as a flat f32 slice.
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub struct RouteProgress {
+        pub remaining_m: f32,
+        pub snapped_lat: f32,
+        pub snapped_lng: f32,
+        /// End-node index of the segment the marker is projected onto.
+        pub segment_index: u32,
+    }
+
+    /// Number of `f32` slots in the flat bridge payload (matches kernel `ProgressOut`).
+    pub const ROUTE_PROGRESS_SLOTS: usize = 4;
+
+    /// Decode a kernel geo-progress payload received over the bridge.
+    ///
+    /// Fail-closed: returns `None` unless the slice is exactly
+    /// [`ROUTE_PROGRESS_SLOTS`] long. The renderer MUST treat `None` as
+    /// "keep last good marker" — never fabricate a position from a partial or
+    /// legacy (TS) frame.
+    pub fn decode_progress_flat(slice: &[f32]) -> Option<RouteProgress> {
+        if slice.len() != ROUTE_PROGRESS_SLOTS {
+            return None;
+        }
+        Some(RouteProgress {
+            remaining_m: slice[0],
+            snapped_lat: slice[1],
+            snapped_lng: slice[2],
+            segment_index: slice[3] as u32,
+        })
+    }
+
+    /// Render adapter: holds the latest kernel-computed marker position. The
+    /// engine never computes geo — it only surfaces what the kernel decided.
+    #[derive(Debug, Default, Clone, Copy)]
+    pub struct CourierMarker {
+        progress: Option<RouteProgress>,
+    }
+
+    impl CourierMarker {
+        /// Feed a bridge payload. `None` (malformed/legacy) keeps the last good
+        /// position — fail-closed against dropped frames.
+        pub fn ingest(&mut self, slice: &[f32]) {
+            if let Some(p) = decode_progress_flat(slice) {
+                self.progress = Some(p);
+            }
+        }
+
+        /// The kernel-decided marker position, if any good frame has arrived.
+        pub fn position(&self) -> Option<(f32, f32)> {
+            self.progress.map(|p| (p.snapped_lat, p.snapped_lng))
+        }
+
+        /// Remaining distance to route end (kernel-computed), if known.
+        pub fn remaining_m(&self) -> Option<f32> {
+            self.progress.map(|p| p.remaining_m)
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        // Flat layout matches the kernel `ProgressOut` contract (remaining_m,
+        // snapped.lat, snapped.lng, segment_index). If the kernel changes field
+        // order, this pin goes RED and names the desync.
+        #[test]
+        fn route_progress_layout_matches_kernel() {
+            assert_eq!(ROUTE_PROGRESS_SLOTS, 4);
+            let flat = [1111.95_f32, 40.005, -3.0, 1.0];
+            let p = decode_progress_flat(&flat).expect("exact-length slice decodes");
+            assert_eq!(p.remaining_m, 1111.95);
+            assert_eq!(p.snapped_lat, 40.005);
+            assert_eq!(p.snapped_lng, -3.0);
+            assert_eq!(p.segment_index, 1);
+        }
+
+        // Fail-closed: a legacy/partial payload (wrong length) is rejected and
+        // the marker keeps its last good position.
+        #[test]
+        fn malformed_payload_is_rejected_keeps_last_good() {
+            let mut marker = CourierMarker::default();
+            marker.ingest(&[1111.95, 40.005, -3.0, 1.0]); // good
+            assert!(marker.position().is_some());
+            // legacy TS frame sent 3 floats, or a dropped 2-float stub
+            marker.ingest(&[1.0, 2.0, 3.0]);
+            assert!(marker.position().is_some(), "last good position retained");
+            assert_eq!(marker.position(), Some((40.005, -3.0)));
+            // totally empty frame also safe
+            marker.ingest(&[]);
+            assert_eq!(marker.position(), Some((40.005, -3.0)));
+        }
+
+        // No good frame yet → no position (renderer must not draw a phantom marker).
+        #[test]
+        fn no_good_frame_yields_no_position() {
+            let marker = CourierMarker::default();
+            assert!(marker.position().is_none());
+            assert!(marker.remaining_m().is_none());
+        }
+    }
+}
