@@ -21,6 +21,7 @@ pub mod geo;
 /// product). Replaces the O(n⁴) Faddeev-LeVerrier path as the default for the
 /// dense operators this kernel diagonalizes.
 pub mod householder;
+pub mod kalman;
 pub mod intake;
 pub mod isolation;
 pub mod loops;
