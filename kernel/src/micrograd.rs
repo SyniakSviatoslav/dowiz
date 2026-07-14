@@ -98,6 +98,19 @@ impl Value {
         self.0.borrow().grad
     }
 
+    /// Mutate the node's value in place (used by optimizers for the SGD step).
+    /// Offline-only: the learner updates parameters from the node's local
+    /// sample stream; no network, no remote call.
+    pub fn set_data(&self, x: f64) {
+        self.0.borrow_mut().data = x;
+    }
+
+    /// Reset the accumulated gradient to zero (call between independent graphs
+    /// if reusing a `Value` as a parameter across steps).
+    pub fn zero_grad(&self) {
+        self.0.borrow_mut().grad = 0.0;
+    }
+
     pub fn add(&self, o: &Value) -> Value {
         self.binary(o, self.data() + o.data(), |g, _, _| (g, g))
     }
