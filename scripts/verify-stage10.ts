@@ -32,7 +32,7 @@ async function waitForHealth(url: string, retries = 30) {
 async function runTests() {
   console.log('Running tests...');
   return new Promise<void>((resolve, reject) => {
-    const proc = spawn('npx', ['tsx', '--env-file=.env', 'apps/api/tests/test-stage10.ts'], { stdio: 'inherit', shell: true });
+    const proc = spawn('npx', ['tsx', '--env-file=.env', 'attic/apps-api/tests/test-stage10.ts'], { stdio: 'inherit', shell: true });
     proc.on('exit', (code) => {
       if (code === 0) resolve();
       else reject(new Error(`Tests failed with code ${code}`));

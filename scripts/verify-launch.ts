@@ -245,7 +245,7 @@ async function main() {
     }
   } catch {
     // Server might not be running — check source code instead
-    const authFile = path.join(ROOT, 'apps/api/src/routes/auth.ts');
+    const authFile = path.join(ROOT, 'attic/apps-api/src/routes/auth.ts');
     if (fs.existsSync(authFile)) {
       const content = fs.readFileSync(authFile, 'utf8');
       if (content.includes('/auth/login') || content.includes('/auth/password')) {

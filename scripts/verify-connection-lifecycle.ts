@@ -20,7 +20,7 @@ function main() {
   console.log('\n=== Connection Lifecycle Audit ===\n');
 
   const searchDirs = [
-    resolve(ROOT, 'apps/api/src'),
+    resolve(ROOT, 'attic/apps-api/src'),
     resolve(ROOT, 'packages/platform/src'),
   ];
   try {
