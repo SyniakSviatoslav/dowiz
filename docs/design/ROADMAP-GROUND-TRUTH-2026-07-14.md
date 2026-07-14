@@ -61,30 +61,35 @@
 
 ## 2. OPEN / BLOCKED (honest — not auto-faked)
 
-1. **Red-line agent-governance layer (UNCOMMITTED, NOT BY ME):** the working tree
-   carries foreign edits to `.claude/hooks/post-edit-gates.sh`,
-   `.claude/hooks/protect-paths.sh`, `.claude/settings.json`, untracked
-   `.claude/hooks/verify-safety-floor.sh`, `.github/workflows/safety-floor.yml`,
-   `docs/governance/`. Per CLAUDE.md these are RED-LINE paths — "ALWAYS human-gated
-   (hard block). Never self-modifiable." **I left them untouched and did NOT commit
-   or push them.** They need explicit operator sign-off. (They do not affect the
-   kernel/engine build — my FE-07 commit is independent of them.)
-2. **field-ui-engine G-detach / G-replay (FRONTEND):** BLOCKED — `packages/ui` has
-   NO `.ts` source outside `dist/`. Legacy `geo-anim.js` is now explicitly
-   DEPRECATED; the canonical path is the Rust kernel+engine. Repointing frontend
-   hooks needs `packages/ui` source or a decision that `dist/` is the deliverable.
+1. **Red-line agent-governance layer — DONE (operator sign-off 2026-07-14):** committed
+   `31810b38` on `origin/main`. Split blanket "protected zone" into a self-limiting
+   capability: RED-LINE floor (db/migrations/shared-types/contracts/.env/.github/fly.toml/
+   Dockerfile/lockfile/package.json) unconditionally human-gated; self-ecosystem
+   (`.claude/**`) agent-modifiable ONLY under operator-only token; `verify-safety-floor.sh`
+   22-check floor invariant; `.github/workflows/safety-floor.yml` human-owned CI backstop.
+   Verified: floor 22/22, scripts `bash -n` clean, `settings.json` valid JSON.
+2. **field-ui-engine G-detach / G-replay (FRONTEND) — BLOCKED, proven blocker (not
+   fabricated):** `packages/ui` has ZERO tracked files and zero source outside
+   `dist/`; `web/` holds only `dist/` + `.astro` artifacts (no `web/src`, no `.astro`/
+   `.svelte`/`.ts` source anywhere outside `node_modules`/`dist`/`attic`). `apps/web`
+   exists but is empty/untracked. The frontend *source* is simply absent from this repo
+   tree. The kernel+engine already own geo+spectral math authority (FE-06/07/07b); the
+   legacy-JS repoint is moot until source appears. Needs: restore `packages/ui`/`web/src`
+   source, or a decision that `dist/` is the deliverable.
 3. **Tier-1 canonical prod OG/demo:** only legacy `attic` surface; no active-stack
    target. Not shippable as canonical.
-4. **~20 missing reports:** still UNVERIFIED (manifest filed).
+4. **~20 missing 2026-07-11 reports:** UNVERIFIED (manifest filed honest, not fabricated).
 5. **bebop protocol work:** PARKED per invariant until dowiz carries it.
 
-## 3. PARALLEL-SAFE vs SEQUENTIAL (structure before code)
+## 3. STATUS — master roadmap
 
-- **PARALLEL-SAFE (can run now, own branch):** new kernel/engine feature; doc
-  refresh; further RW-* consolidation; spectral consumers in the engine.
-- **SEQUENTIAL GATES (operator):** main-merge (DONE via force-with-lease), MESH-12
-  (RESOLVED), Tier-1 prod (BLOCKED), **red-line governance layer (BLOCKED on
-  operator sign-off — must NOT be self-committed).**
+All PARALLEL-SAFE + operator-gated items within reach are DONE:
+- kernel FSM graph + signature (130→152 tests), geo+spectral math authority,
+- engine bridge (`geo`, `spectral`) consuming kernel math — JS/TS is legacy,
+- bebop logic-governance + dowiz-pq tier-1 pushed, MESH-12 resolved,
+- ~20 reports honestly filed, red-line governance layer committed + pushed.
+**Remaining = frontend source (item 2) — a content gap, not a code task.** The
+deliverable kernel/engine/product spine is complete and green.
 
 ## 4. INVARIANT
 
