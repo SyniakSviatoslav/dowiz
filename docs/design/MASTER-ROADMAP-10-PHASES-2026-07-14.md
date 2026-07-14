@@ -49,7 +49,9 @@ store-and-forward / replay / lifetime / custody in `node`. **Status: DONE (144 t
 
 ### P6 — Mesh / real decentralized (bebop2) — PARKED per invariant until dowiz carries it
 PHASE-1 done (event_log MESH-06, pgrust compat gate, 4 CI gates green). Honest ceilings:
-iroh-QUIC carrier = stub (dalek-conflict + offline-policy); MESH-12 genesis-policy =
+iroh-QUIC carrier = IMPLEMENTED (real quinn/rustls QUIC carrier, 2 live RED tests
+`quic_roundtrip_signs_and_verifies` + `quic_rejects_tampered_frame`; commit 8f1d738
+on bebop `feat/logic-governance`). MESH-12 genesis-policy =
 operator-gated (HUMAN enum default Unspecified, fail-closed). **Operator gate: mesh
 protocol only advances when dowiz has a real flow to carry it.**
 
