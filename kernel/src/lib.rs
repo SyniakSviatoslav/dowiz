@@ -25,6 +25,9 @@ pub mod kalman;
 pub mod intake;
 pub mod isolation;
 pub mod loops;
+/// Deterministic n-gram (bigram + trigram) frequency extraction over a token
+/// stream — the self-improvement loop's pattern-surface primitive (P9 / T2-β).
+pub mod trigram;
 /// Reverse-engineering loop #R1 — Markov attractor detector (ASCENDed from markov_attractor.py);
 /// reuses `spectral` as its eigen-core, killing the dual-authority hazard.
 pub mod markov;
