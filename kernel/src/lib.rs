@@ -50,6 +50,9 @@ pub mod trigram;
 /// Reverse-mode automatic differentiation (scalar tape engine) — the
 /// kernel-side fitting primitive (Tier B2: capture-field SIREN/splat fits).
 pub mod micrograd;
+/// P9 / C-tier "invariance note": executable Noether check — verify a conserved
+/// quantity survives a deterministic update (catches self-improvement drift).
+pub mod noether;
 /// Offline-on-node online learner (Tier B3): deterministic SGD/Adam from the
 /// node's local sample stream — local-first, no network, no vendor runtime.
 pub mod online;
