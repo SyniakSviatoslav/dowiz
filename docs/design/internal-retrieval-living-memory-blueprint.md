@@ -1,6 +1,11 @@
 # Internal Retrieval, Living Memory & Spectral Search — Blueprint
 
-> Status: **v2 (2026-07-14)**. Grounded in a five-lane deep research pass (search/compression
+> Status: **v3 (2026-07-14)**. **v3 (§12)** adds the elevated math language — the resolvent /
+> Green's-function spectral-calculus spine (with an honest quantum-formalism audit: adopt the
+> resolvent + Dirac notation now; Quantum-PageRank gated on measured degeneracy; Lindblad /
+> density-matrix / momentum-operator / quantum-finance are intuition-only) — plus the CSR + deterministic
+> fixed-point M3 implementation spec.
+> Grounded in a five-lane deep research pass (search/compression
 > SOTA · spectral-wave-search viability · tensors-vs-vectors · codebase inventory ·
 > living-memory→pgrust+TTL) plus a live read of both repos. **v2 (§11)** incorporates the
 > operator's engineering critique — CSR / cache-locality / deterministic fixed-point push — and
@@ -355,6 +360,64 @@ Placement: **L2 embedding storage** (never L0/L1/money paths).
 - **M6** gains **SQ int8 now** + **PQ (deterministic frozen codebook)** as the scale path.
 - **M7** (unifying operator) is explicitly the second-order field operator, ζ=1 gated / underdamped
   exploratory — measured against the overdamped-diffusion baseline.
+
+## 12. The elevated math language — the resolvent/Green's-function spine (+ CSR/M3 spec)
+
+Answers the directive to use modern quantum-mechanics / quantum-finance math — HONESTLY (a
+5-lane audit). On classical hardware these single-graph constructions give **no speedup** (same
+asymptotic cost as what the kernel already runs); the value is *modeling language*, not speed.
+
+### 12.1 The genuinely unifying object = the RESOLVENT (and it's honestly classical)
+
+The quantum Green's function `Ĝ(E)=(E−Ĥ)⁻¹=Σ_μ|φ_μ⟩⟨φ_μ|/(E−ε_μ)` and personalized-PageRank
+`(I−αW)⁻¹=Σ_k φ_kφ_kᵀ/(1−αλ_k)` are the **same algebraic object** (PROVEN identity; Chung, PNAS
+2007 — already cited in this doc). So **every operation is a spectral filter `f(L)` of ONE graph
+operator**, written cleanly in **Dirac notation** `Σ_k |φ_k⟩⟨φ_k| f(λ_k)`:
+
+| filter `f(λ)` | operator | job |
+|---|---|---|
+| `1/(1−αλ)` | resolvent `(I−αW)⁻¹` | PageRank recall · Green's-function feedback |
+| `e^{−λt}` | heat kernel `e^{−tL}` | diffusion recall · salience decay · UI blur · layout relax |
+| roots `−γ/2±i√(ω²−γ²/4)` | damped field | UI motion (oscillation+decay in one equation) |
+| `e^{−iλt}` | quantum walk `e^{−iHt}` | OPTIONAL ripple/interference (Tier-2) |
+
+This is the "extraordinary math language": the **spectral calculus of one operator, resolvent as
+the spine, Dirac as the notation** — true, unifying, and classical.
+
+### 12.2 Quantum items by tier (honest, gated — no costume that adds nothing)
+
+- **TIER-1 (adopt now):** the resolvent/Green's-function spine + Dirac notation. PROVEN, unifying,
+  classical.
+- **TIER-2 (adopt only on a MEASURED need):** **Szegedy Quantum PageRank** — the one quantum item
+  with real modeling value: it **breaks ranking degeneracy** that classical PageRank ties on
+  near-degenerate / symmetric peripheral nodes (Paparo-Martín-Delgado 2012; Loke 2015).
+  Classically computable via `spectral.rs`'s existing complex eigensolver. **A/B-gate vs classical
+  PPR.** CTQW `e^{−iHt}` = optional oscillatory/reversible motion primitive (ballistic ∝ t, not
+  diffusive ∝ √t); `coherence.rs |ψ₁±ψ₂|²` = multi-query interference. QPRP = research, unsettled.
+- **TIER-3 (intuition ONLY — do NOT adopt as machinery):** Lindblad "unification" → NO
+  (`MÜ+ΓU̇+c²LU=S` already unifies osc+decay via complex roots; diagonal states need no
+  complete-positivity; the first-moment isomorphism proves quantum adds nothing to what we track).
+  Density-matrix ρ → OVERKILL (diagonal memory; von Neumann entropy = Shannon). Momentum operator
+  `−iℏ∇` / Ehrenfest → NO (relabeling, trivial for a quadratic potential). Quantum finance
+  (BS-as-Schrödinger / path-integral) → NO (Euclidean Feynman-Kac, real `e^S`, not amplitudes);
+  the **one keeper** = the classical MSR diagrammatic-perturbation technique, **filed** for when
+  the fields become nonlinear or stochastically-forced — not before.
+
+### 12.3 CSR + deterministic fixed-point — the M3 implementation spec
+
+The filter `f(L)` is applied as a sparse operator over **CSR**, deterministically:
+- **Storage:** `row_ptr[n+1]`, `col_idx[nnz]`, `val[nnz]` — every node's neighbours contiguous →
+  sequential sweep → hardware prefetch. Optional Cuthill-McKee / BFS reorder for bandwidth. At our
+  scale (10²–10⁴ nodes) the CSR fits L1/L2; tiling is the >L3 path.
+- **The apply = one SpMV** `y=Âx` (per row i, sum over its contiguous neighbour run) — the SIMD/FMA
+  target (math-first S3 / DOD realization for the graph layer).
+- **Resolvent (PPR)** `(I−αW)⁻¹b` = deterministic synchronous power-iteration / Neumann series
+  `x_{k+1}=b+αW x_k`, fixed K, fixed summation order → bitwise-reproducible = `markov.rs`.
+- **Heat kernel** `e^{−tL}u` = **Chebyshev-polynomial series in L** (matrix-free, no
+  eigendecomposition, K terms, O(K·nnz)) = bebop `chebyshev.rs::spectral_propagate` — the
+  large-graph path that dodges O(n³).
+- **Determinism:** fixed K, fixed reduction order; f64 advisory (integer fixed-point if ever
+  gated); never an async push. This is exactly the §11.2 resolution, generalized to any `f(L)`.
 
 ---
 
