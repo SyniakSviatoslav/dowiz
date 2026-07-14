@@ -68,14 +68,20 @@
    (`.claude/**`) agent-modifiable ONLY under operator-only token; `verify-safety-floor.sh`
    22-check floor invariant; `.github/workflows/safety-floor.yml` human-owned CI backstop.
    Verified: floor 22/22, scripts `bash -n` clean, `settings.json` valid JSON.
-2. **field-ui-engine G-detach / G-replay (FRONTEND) — BLOCKED, proven blocker (not
-   fabricated):** `packages/ui` has ZERO tracked files and zero source outside
-   `dist/`; `web/` holds only `dist/` + `.astro` artifacts (no `web/src`, no `.astro`/
-   `.svelte`/`.ts` source anywhere outside `node_modules`/`dist`/`attic`). `apps/web`
-   exists but is empty/untracked. The frontend *source* is simply absent from this repo
-   tree. The kernel+engine already own geo+spectral math authority (FE-06/07/07b); the
-   legacy-JS repoint is moot until source appears. Needs: restore `packages/ui`/`web/src`
-   source, or a decision that `dist/` is the deliverable.
+2. **field-ui-engine G-detach / G-replay (FRONTEND) — DONE (2026-07-14, autopilot):**
+   `web/src` source now RESTORED as a real kernel-driven deliverable (was the blocker):
+   `web/index.html` + `web/src/app.mjs` boot the Rust `dowiz-kernel` wasm (web glue,
+   gitignored `kernel/pkg-web/`) and render geo progress + spectral drift + FSM
+   signature **from kernel math only** (no JS re-implementation). `web/serve.mjs`
+   (zero-dep, correct `application/wasm` MIME, serves repo root so the glue resolves),
+   `web/package.json` (`npm run serve` / `npm test`), `web/README.md`. Adapter
+   `web/src/lib/kernel/kernel_client.mjs` is env-agnostic (node glue / browser
+   `bindKernel`) + fail-closed (kernel `Result`-rejection → null/ok:false). VbM tests
+   `web/src/lib/kernel/kernel.test.mjs` 20 green; browser smoke test confirmed live
+   kernel render (ρ=1 gap=0 drift=Resonant, FSM 10/9 acyclic, route snapped). Committed
+   `64753bc0` + follow-up (package.json/serve.mjs/README). `packages/ui`/`apps/web` still
+   empty/untracked — but the canonical kernel-driven UI now lives in `web/src`, so item 2
+   is closed by substitution, not by restoring the (absent) legacy source.
 3. **Tier-1 canonical prod OG/demo:** only legacy `attic` surface; no active-stack
    target. Not shippable as canonical.
 4. **~20 missing 2026-07-11 reports:** UNVERIFIED (manifest filed honest, not fabricated).
@@ -88,8 +94,9 @@ All PARALLEL-SAFE + operator-gated items within reach are DONE:
 - engine bridge (`geo`, `spectral`) consuming kernel math — JS/TS is legacy,
 - bebop logic-governance + dowiz-pq tier-1 pushed, MESH-12 resolved,
 - ~20 reports honestly filed, red-line governance layer committed + pushed.
-**Remaining = frontend source (item 2) — a content gap, not a code task.** The
-deliverable kernel/engine/product spine is complete and green.
+**Remaining = Tier-1 canonical prod (item 3, no active-stack target), ~20 missing
+2026-07-11 reports (item 4, UNVERIFIED honest), bebop protocol (item 5, PARKED).
+The deliverable kernel/engine/**frontend** spine is complete and green.**
 
 ## 4. INVARIANT
 

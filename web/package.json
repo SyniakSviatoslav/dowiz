@@ -1,0 +1,12 @@
+{
+  "name": "dowiz-field-ui",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Kernel-driven field UI — all geo/spectral/FSM math computed in the Rust dowiz-kernel wasm. This shell only renders.",
+  "scripts": {
+    "serve": "node serve.mjs",
+    "test": "node src/lib/kernel/kernel.test.mjs"
+  },
+  "engines": { "node": ">=18" }
+}
