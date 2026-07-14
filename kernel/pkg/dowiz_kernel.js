@@ -1,8 +1,12 @@
+
+let imports = {};
+imports['__wbindgen_placeholder__'] = module.exports;
 let wasm;
+const { TextDecoder, TextEncoder } = require(`util`);
 
-const cachedTextDecoder = (typeof TextDecoder !== 'undefined' ? new TextDecoder('utf-8', { ignoreBOM: true, fatal: true }) : { decode: () => { throw Error('TextDecoder not available') } } );
+let cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
 
-if (typeof TextDecoder !== 'undefined') { cachedTextDecoder.decode(); };
+cachedTextDecoder.decode();
 
 let cachedUint8ArrayMemory0 = null;
 
@@ -20,7 +24,7 @@ function getStringFromWasm0(ptr, len) {
 
 let WASM_VECTOR_LEN = 0;
 
-const cachedTextEncoder = (typeof TextEncoder !== 'undefined' ? new TextEncoder('utf-8') : { encode: () => { throw Error('TextEncoder not available') } } );
+let cachedTextEncoder = new TextEncoder('utf-8');
 
 const encodeString = (typeof cachedTextEncoder.encodeInto === 'function'
     ? function (arg, view) {
@@ -74,44 +78,14 @@ function passStringToWasm0(arg, malloc, realloc) {
     return ptr;
 }
 
+function isLikeNone(x) {
+    return x === undefined || x === null;
+}
+
 function takeFromExternrefTable0(idx) {
     const value = wasm.__wbindgen_export_0.get(idx);
     wasm.__externref_table_dealloc(idx);
     return value;
-}
-/**
- * Ingest a batch of channel events and return aggregated attribution + anomaly
- * counts as JSON: `{orders_by_channel: [[channel,count]...], funnel: {channel:
- * [[status,count]...]}, anomalies: u64}`.
- *
- * `events_json` is an array of `{order_id, channel, status, at_ms}`.
- * `status` is the status name string.
- * @param {string} events_json
- * @returns {string}
- */
-export function channel_ledger_js(events_json) {
-    let deferred3_0;
-    let deferred3_1;
-    try {
-        const ptr0 = passStringToWasm0(events_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.channel_ledger_js(ptr0, len0);
-        var ptr2 = ret[0];
-        var len2 = ret[1];
-        if (ret[3]) {
-            ptr2 = 0; len2 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
-    } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
-    }
-}
-
-function isLikeNone(x) {
-    return x === undefined || x === null;
 }
 /**
  * Create a new `Pending` order from a JSON item list.
@@ -124,7 +98,7 @@ function isLikeNone(x) {
  * @param {string | undefined} [channel]
  * @returns {string}
  */
-export function place_order_js(customer_id, items_json, channel) {
+module.exports.place_order_js = function(customer_id, items_json, channel) {
     let deferred5_0;
     let deferred5_1;
     try {
@@ -147,7 +121,239 @@ export function place_order_js(customer_id, items_json, channel) {
     } finally {
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
-}
+};
+
+/**
+ * @param {string} matrix_json
+ * @returns {string}
+ */
+module.exports.spectral_gap_js = function(matrix_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(matrix_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.spectral_gap_js(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+};
+
+/**
+ * Ingest a batch of channel events and return aggregated attribution + anomaly
+ * counts as JSON: `{orders_by_channel: [[channel,count]...], funnel: {channel:
+ * [[status,count]...]}, anomalies: u64}`.
+ *
+ * `events_json` is an array of `{order_id, channel, status, at_ms}`.
+ * `status` is the status name string.
+ * @param {string} events_json
+ * @returns {string}
+ */
+module.exports.channel_ledger_js = function(events_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(events_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.channel_ledger_js(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+};
+
+/**
+ * @param {bigint} subtotal
+ * @param {string} cfg_json
+ * @returns {string}
+ */
+module.exports.estimate_order_total_js = function(subtotal, cfg_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(cfg_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.estimate_order_total_js(subtotal, ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+};
+
+/**
+ * @param {string} matrix_json
+ * @returns {string}
+ */
+module.exports.spectral_flat_js = function(matrix_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(matrix_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.spectral_flat_js(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+};
+
+/**
+ * Algebraic connectivity (Fiedler λ₂) of a graph from its adjacency matrix.
+ * @param {string} adjacency_json
+ * @returns {string}
+ */
+module.exports.spectral_algebraic_connectivity_js = function(adjacency_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(adjacency_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.spectral_algebraic_connectivity_js(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+};
+
+/**
+ * @returns {string}
+ */
+module.exports.fsm_graph_report_js = function() {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.fsm_graph_report_js();
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+};
+
+/**
+ * @param {string} poly_json
+ * @param {number} pos_lat
+ * @param {number} pos_lng
+ * @returns {string}
+ */
+module.exports.geo_progress_flat_js = function(poly_json, pos_lat, pos_lng) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(poly_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.geo_progress_flat_js(ptr0, len0, pos_lat, pos_lng);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+};
+
+/**
+ * @param {bigint} last_ts
+ * @param {bigint} ts
+ * @returns {string}
+ */
+module.exports.geo_is_out_of_order_js = function(last_ts, ts) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.geo_is_out_of_order_js(last_ts, ts);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+};
+
+/**
+ * @param {number} a_lat
+ * @param {number} a_lng
+ * @param {number} b_lat
+ * @param {number} b_lng
+ * @returns {string}
+ */
+module.exports.geo_haversine_js = function(a_lat, a_lng, b_lat, b_lng) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.geo_haversine_js(a_lat, a_lng, b_lat, b_lng);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+};
 
 /**
  * Reduce a raw `(order_id, status, at_ms)` event stream to an anomaly count
@@ -156,7 +362,7 @@ export function place_order_js(customer_id, items_json, channel) {
  * @param {string} events_json
  * @returns {bigint}
  */
-export function reduce_anomalies_js(events_json) {
+module.exports.reduce_anomalies_js = function(events_json) {
     const ptr0 = passStringToWasm0(events_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.reduce_anomalies_js(ptr0, len0);
@@ -164,7 +370,34 @@ export function reduce_anomalies_js(events_json) {
         throw takeFromExternrefTable0(ret[1]);
     }
     return BigInt.asUintN(64, ret[0]);
-}
+};
+
+/**
+ * @param {string} poly_json
+ * @param {number} pos_lat
+ * @param {number} pos_lng
+ * @returns {string}
+ */
+module.exports.geo_progress_js = function(poly_json, pos_lat, pos_lng) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(poly_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.geo_progress_js(ptr0, len0, pos_lat, pos_lng);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+};
 
 /**
  * Advance an order one step. `next_status` is the status name (e.g. "CONFIRMED").
@@ -174,7 +407,7 @@ export function reduce_anomalies_js(events_json) {
  * @param {string} next_status
  * @returns {string}
  */
-export function apply_event_js(order_json, next_status) {
+module.exports.apply_event_js = function(order_json, next_status) {
     let deferred4_0;
     let deferred4_1;
     try {
@@ -195,126 +428,264 @@ export function apply_event_js(order_json, next_status) {
     } finally {
         wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
-}
+};
 
-async function __wbg_load(module, imports) {
-    if (typeof Response === 'function' && module instanceof Response) {
-        if (typeof WebAssembly.instantiateStreaming === 'function') {
-            try {
-                return await WebAssembly.instantiateStreaming(module, imports);
-
-            } catch (e) {
-                if (module.headers.get('Content-Type') != 'application/wasm') {
-                    console.warn("`WebAssembly.instantiateStreaming` failed because your server does not serve Wasm with `application/wasm` MIME type. Falling back to `WebAssembly.instantiate` which is slower. Original error:\n", e);
-
-                } else {
-                    throw e;
-                }
-            }
+/**
+ * @param {number} pt_lat
+ * @param {number} pt_lng
+ * @param {string} polygon_json
+ * @returns {string}
+ */
+module.exports.geo_point_in_polygon_js = function(pt_lat, pt_lng, polygon_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(polygon_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.geo_point_in_polygon_js(pt_lat, pt_lng, ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
         }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+};
 
-        const bytes = await module.arrayBuffer();
-        return await WebAssembly.instantiate(bytes, imports);
-
-    } else {
-        const instance = await WebAssembly.instantiate(module, imports);
-
-        if (instance instanceof WebAssembly.Instance) {
-            return { instance, module };
-
-        } else {
-            return instance;
+/**
+ * @param {string} prev_json
+ * @param {string} next_json
+ * @param {number} threshold_m
+ * @returns {string}
+ */
+module.exports.geo_should_snap_js = function(prev_json, next_json, threshold_m) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(prev_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(next_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.geo_should_snap_js(ptr0, len0, ptr1, len1, threshold_m);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
         }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
-}
+};
 
-function __wbg_get_imports() {
-    const imports = {};
-    imports.wbg = {};
-    imports.wbg.__wbindgen_string_new = function(arg0, arg1) {
-        const ret = getStringFromWasm0(arg0, arg1);
-        return ret;
-    };
-    imports.wbg.__wbindgen_init_externref_table = function() {
-        const table = wasm.__wbindgen_export_0;
-        const offset = table.grow(4);
-        table.set(0, undefined);
-        table.set(offset + 0, undefined);
-        table.set(offset + 1, null);
-        table.set(offset + 2, true);
-        table.set(offset + 3, false);
-        ;
-    };
-
-    return imports;
-}
-
-function __wbg_init_memory(imports, memory) {
-
-}
-
-function __wbg_finalize_init(instance, module) {
-    wasm = instance.exports;
-    __wbg_init.__wbindgen_wasm_module = module;
-    cachedUint8ArrayMemory0 = null;
-
-
-    wasm.__wbindgen_start();
-    return wasm;
-}
-
-function initSync(module) {
-    if (wasm !== undefined) return wasm;
-
-
-    if (typeof module !== 'undefined') {
-        if (Object.getPrototypeOf(module) === Object.prototype) {
-            ({module} = module)
-        } else {
-            console.warn('using deprecated parameters for `initSync()`; pass a single object instead')
+/**
+ * @param {number} a_lat
+ * @param {number} a_lng
+ * @param {number} b_lat
+ * @param {number} b_lng
+ * @param {number} t
+ * @returns {string}
+ */
+module.exports.geo_lerp_js = function(a_lat, a_lng, b_lat, b_lng, t) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.geo_lerp_js(a_lat, a_lng, b_lat, b_lng, t);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
         }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
+};
 
-    const imports = __wbg_get_imports();
-
-    __wbg_init_memory(imports);
-
-    if (!(module instanceof WebAssembly.Module)) {
-        module = new WebAssembly.Module(module);
-    }
-
-    const instance = new WebAssembly.Instance(module, imports);
-
-    return __wbg_finalize_init(instance, module);
-}
-
-async function __wbg_init(module_or_path) {
-    if (wasm !== undefined) return wasm;
-
-
-    if (typeof module_or_path !== 'undefined') {
-        if (Object.getPrototypeOf(module_or_path) === Object.prototype) {
-            ({module_or_path} = module_or_path)
-        } else {
-            console.warn('using deprecated parameters for the initialization function; pass a single object instead')
+/**
+ * @param {string} matrix_json
+ * @returns {string}
+ */
+module.exports.spectral_eigenvalues_js = function(matrix_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(matrix_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.spectral_eigenvalues_js(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
         }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
+};
 
-    if (typeof module_or_path === 'undefined') {
-        module_or_path = new URL('dowiz_kernel_bg.wasm', import.meta.url);
+/**
+ * @param {number} a_lat
+ * @param {number} a_lng
+ * @param {number} b_lat
+ * @param {number} b_lng
+ * @returns {string}
+ */
+module.exports.geo_bearing_js = function(a_lat, a_lng, b_lat, b_lng) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.geo_bearing_js(a_lat, a_lng, b_lat, b_lng);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
-    const imports = __wbg_get_imports();
+};
 
-    if (typeof module_or_path === 'string' || (typeof Request === 'function' && module_or_path instanceof Request) || (typeof URL === 'function' && module_or_path instanceof URL)) {
-        module_or_path = fetch(module_or_path);
+/**
+ * @param {number} remaining_m
+ * @param {number} threshold_m
+ * @returns {string}
+ */
+module.exports.geo_is_arriving_js = function(remaining_m, threshold_m) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.geo_is_arriving_js(remaining_m, threshold_m);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
+};
 
-    __wbg_init_memory(imports);
+/**
+ * @param {string} matrix_json
+ * @returns {string}
+ */
+module.exports.spectral_radius_js = function(matrix_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(matrix_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.spectral_radius_js(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+};
 
-    const { instance, module } = await __wbg_load(await module_or_path, imports);
+/**
+ * @param {string} matrix_json
+ * @returns {string}
+ */
+module.exports.spectral_classify_drift_js = function(matrix_json) {
+    let deferred3_0;
+    let deferred3_1;
+    try {
+        const ptr0 = passStringToWasm0(matrix_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.spectral_classify_drift_js(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
+        if (ret[3]) {
+            ptr2 = 0; len2 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
+    } finally {
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+};
 
-    return __wbg_finalize_init(instance, module);
-}
+/**
+ * @param {number} remaining_m
+ * @param {number} total_m
+ * @param {number} baseline_s
+ * @returns {string}
+ */
+module.exports.geo_eta_js = function(remaining_m, total_m, baseline_s) {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.geo_eta_js(remaining_m, total_m, baseline_s);
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+};
 
-export { initSync };
-export default __wbg_init;
+module.exports.__wbindgen_string_new = function(arg0, arg1) {
+    const ret = getStringFromWasm0(arg0, arg1);
+    return ret;
+};
+
+module.exports.__wbindgen_init_externref_table = function() {
+    const table = wasm.__wbindgen_export_0;
+    const offset = table.grow(4);
+    table.set(0, undefined);
+    table.set(offset + 0, undefined);
+    table.set(offset + 1, null);
+    table.set(offset + 2, true);
+    table.set(offset + 3, false);
+    ;
+};
+
+const path = require('path').join(__dirname, 'dowiz_kernel_bg.wasm');
+const bytes = require('fs').readFileSync(path);
+
+const wasmModule = new WebAssembly.Module(bytes);
+const wasmInstance = new WebAssembly.Instance(wasmModule, imports);
+wasm = wasmInstance.exports;
+module.exports.__wasm = wasm;
+
+wasm.__wbindgen_start();
+

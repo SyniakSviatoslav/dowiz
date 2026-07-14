@@ -57,24 +57,40 @@ impl Complex {
     pub fn arg(self) -> f64 {
         self.im.atan2(self.re)
     }
-    fn add(self, o: Complex) -> Complex {
+    /// Complex conjugate.
+    pub fn conj(self) -> Self {
+        Self::new(self.re, -self.im)
+    }
+    pub fn add(self, o: Complex) -> Complex {
         Complex::new(self.re + o.re, self.im + o.im)
     }
-    fn sub(self, o: Complex) -> Complex {
+    pub fn sub(self, o: Complex) -> Complex {
         Complex::new(self.re - o.re, self.im - o.im)
     }
-    fn mul(self, o: Complex) -> Complex {
+    pub fn mul(self, o: Complex) -> Complex {
         Complex::new(
             self.re * o.re - self.im * o.im,
             self.re * o.im + self.im * o.re,
         )
     }
-    fn div(self, o: Complex) -> Complex {
+    pub fn div(self, o: Complex) -> Complex {
         let d = o.re * o.re + o.im * o.im;
         Complex::new(
             (self.re * o.re + self.im * o.im) / d,
             (self.im * o.re - self.re * o.im) / d,
         )
+    }
+    /// Complex square root (principal branch).
+    pub fn sqrt(self) -> Complex {
+        let r = self.abs();
+        let re = ((r + self.re) / 2.0).sqrt();
+        let im = ((r - self.re) / 2.0).sqrt();
+        // choose sign of im to match arg (so sqrt matches the half-angle)
+        if self.im < 0.0 {
+            Complex::new(re, -im)
+        } else {
+            Complex::new(re, im)
+        }
     }
     fn powu(self, k: u32) -> Complex {
         let mut r = Complex::new(1.0, 0.0);
@@ -169,9 +185,24 @@ pub fn roots(coeffs: &[f64]) -> Vec<Complex> {
     rts
 }
 
-/// Eigenvalues of a general real matrix (char-poly ∘ roots).
+/// Eigenvalues of a general real matrix.
+///
+/// Fast path: for n ≤ 32 the matrix fits the stack-only Householder engine
+/// (`householder::eigenvalues_contig`) — O(n³), no heap, numerically armored,
+/// captures complex conjugate pairs (e.g. the μ≈−1 period-2 cycle). The legacy
+/// O(n⁴) Faddeev-LeVerrier + Durand-Kerner path is retained as a fallback for
+/// n > 32 and as the parity oracle in `householder::tests`.
 pub fn eigenvalues(a: &[Vec<f64>]) -> Vec<Complex> {
     let n = a.len();
+    if n <= 32 {
+        let mut buf = vec![0.0f64; n * n];
+        for i in 0..n {
+            for j in 0..n {
+                buf[i * n + j] = a[i][j];
+            }
+        }
+        return crate::householder::eigenvalues_contig(&mut buf, n);
+    }
     let coeffs = charpoly(a);
     // Nilpotent (char-poly = xⁿ ⇒ every eigenvalue 0). Durand-Kerner converges only
     // linearly on an n-fold zero root, so short-circuit exactly — mirrors the

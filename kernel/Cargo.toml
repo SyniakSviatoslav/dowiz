@@ -7,6 +7,13 @@ description = "dowiz deterministic core: order-state machine (decide/fold Law) +
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+# `std` (default) enables runtime CPU-feature detection for the FMA eigensolver
+# kernel. Disable (`--no-default-features`) for a no-std embedding: the solver's
+# hot path is stack-only and falls back to compile-time target_feature / scalar.
+default = ["std"]
+std = []
+
 [dependencies]
 # WASM bindings (optional — kernel is pure Rust, usable headless + from wasm).
 wasm-bindgen = "0.2"
