@@ -93,7 +93,7 @@ for (const env of SERVICE_ENV) {
 const SINK = /(console\.(log|error|warn|info|debug)|\.log\.(info|warn|error|debug)|messageBus\.publish|\.boss\.send|queue\.boss\.send|pgNotify)\s*\(/;
 const RAW_PII = /(customerName|customerPhone|deliveryAddress|customer_name|customer_phone|delivery_address|subject_phone)\b/;
 const SAFE_SUFFInX = /(Masked|masked|_hash|Hash|_encrypted|Encrypted)/;
-for (const file of [...walk('apps/api/src'), ...walk('packages/platform/src'), ...walk('apps/web/src')]) {
+for (const file of [...walk('attic/apps-api/src'), ...walk('packages/platform/src'), ...walk('apps/web/src')]) {
   const lines = read(file).split('\n');
   for (let i = 0; i < lines.length; i++) {
     if (!SINK.test(lines[i])) continue;
