@@ -15,7 +15,7 @@ import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
-import { redactFreeText, sanitizeRemote, scanForSecrets, dedupeEvents, sortEvents } from './plane-telemetry.mjs';
+import { redactFreeText, sanitizeRemote, scanForSecrets, dedupeEvents, sortEvents, chunkSendStatus } from './plane-telemetry.mjs';
 
 const CLI = join(import.meta.dirname, 'plane-telemetry.mjs');
 const MOD_URL = pathToFileURL(CLI).href;
@@ -277,6 +277,24 @@ test('publish: bootstrap racing an existing branch falls through to the append p
   assert.equal(parents, '2', 'second commit must parent on the first (append, not orphan/rewrite)');
 });
 
+test('publish: a run whose ephemeral checkout has NO local predictions.jsonl must not delete the durable one already on the branch (R3-8)', (t) => {
+  const { remote, works: [workA, workB] } = makeRepos(t, 2);
+  // Box A predicts + publishes → branch now carries predictions.jsonl.
+  assert.equal(cli(['predict', '--run-id', 'rA', '--target', 't1', '--prediction', 'p1', '--confidence', '0.6', '--method', 'primary: x | fallback: y'], { root: workA }).status, 0);
+  assert.equal(cli(['publish', '--run-id', 'rA'], { root: workA, env: GIT_ENV }).status, 0);
+  const before = g(['show', 'refs/remotes/origin/telemetry/plane:telemetry/predictions.jsonl'], workA);
+  assert.match(before, /"target":"t1"/);
+
+  // Box B is a fresh ephemeral checkout — it never ran `predict`, so it has no local
+  // predictions.jsonl at all. It only emits + publishes an unrelated event.
+  assert.equal(cli(['emit', '--run-id', 'rB', '--kind', 'sense', '--outcome', 'pass', '--detail', 'box B sense'], { root: workB }).status, 0);
+  assert.ok(!existsSync(join(workB, 'loops/runs/predictions.jsonl')), 'fixture invariant: box B must start with no local predictions.jsonl');
+  assert.equal(cli(['publish', '--run-id', 'rB'], { root: workB, env: GIT_ENV }).status, 0);
+
+  const after = g(['show', `refs/remotes/origin/telemetry/plane:telemetry/predictions.jsonl`], workB);
+  assert.match(after, /"target":"t1"/, 'box B publish must NOT drop the tip-only predictions.jsonl it never had locally');
+});
+
 // ---------------------------------------------------------------------------
 // DoD row: Subprocess safety (R2-M3) — hostile args never reach a shell
 // ---------------------------------------------------------------------------
@@ -367,6 +385,17 @@ test('send with env unset: skips CLEANLY (exit 0) but LOUDLY, and the skip lands
   assert.equal(events.length, 1, 'send outcome must be recorded as an event');
   assert.equal(events[0].outcome, 'skipped');
   assert.match(events[0].detail, /telegram=skipped:env_unset/);
+});
+
+test('chunkSendStatus: never reports "sent" unless every chunk actually succeeded (H3/never-cheat-green)', () => {
+  // The bug this guards: the chunk-fallback send loop used to `await tgApi(...).catch(() => {})`
+  // and then unconditionally set status='sent:chunked' after the loop, regardless of whether any
+  // individual HTTP call actually succeeded — so a fully network-blocked run (every chunk 403/
+  // timed out) still reported "sent:chunked", a false green in the durable status/digest.
+  assert.equal(chunkSendStatus(3, 3), 'sent:chunked', 'all chunks ok → genuinely sent');
+  assert.equal(chunkSendStatus(0, 3), 'failed:chunk_all', 'zero chunks ok → must NOT say sent');
+  assert.equal(chunkSendStatus(1, 3), 'failed:chunk_partial(1/3)', 'partial success must be visible, not rounded up to sent');
+  assert.equal(chunkSendStatus(0, 0), 'sent:chunked', 'zero-length text → trivially nothing to fail sending');
 });
 
 // ---------------------------------------------------------------------------
