@@ -1,12 +1,20 @@
 # Math-First Architecture — The Full-Rewrite Blueprint
 
-> Status: **v1 (2026-07-14)**. Grounded in a four-lane live inspection of the whole
+> Status: **v2 (2026-07-14)**. Grounded in a four-lane live inspection of the whole
 > code surface (dowiz kernel, bebop math, toolchain, low-level/hardware). Every
 > claim marked **PROVEN** (a test/build was run) · **MEASURED** (a value was read
 > off the machine) · **RESEARCHED** (external source) · **ESTIMATED** (judged).
 > Companion artifacts: `tools/eqc/` (the equation compiler, built + proven this
 > turn), `docs/design/psyonic-spectral-kernel.md` (the organ roadmap),
 > `docs/design/bebop-autonomous-self-evolution.md` (one consumer of this foundation).
+>
+> **v2 binds the operator's non-negotiable architecture (§1.5): decentralized ·
+> non-AI · mesh · local-first · Data-Oriented-Design · bridges-&-adapters · with
+> spectral-waves as the applied math principle** — and reconciles this substrate
+> rewrite with the product plan in `docs/design/MASTER-ROADMAP-10-PHASES-2026-07-14.md`.
+> The rewrite is the *engine* under that roadmap's P2 (kernel math authority) and
+> P9 (growth substrate); it never front-runs its INVARIANT — *build DOWN from the
+> first real order, not UP from the protocol.*
 
 ## 0. Thesis (one sentence)
 
@@ -35,6 +43,51 @@ From `psyonic-spectral-kernel.md` §1, sharpened by the inspection:
 not described by an equation, and no equation that reaches the repo unproven.** Side
 effects, hidden state, and transcription bugs are the enemy — each is a place where the
 system can do something the equations don't say.
+
+## 1.5 Architecture invariants (non-negotiable — the Ferrari's spec)
+
+Seven properties every phase must preserve. They are not aspirational — each already
+has a load-bearing organ in the tree; the rewrite's job is to keep them true *by
+construction*, not by convention.
+
+1. **Decentralized · mesh · local-first.** Authority is per-node, not central. State is
+   grow-only CRDT + content-addressed event log (`kernel::event_log`,
+   `event_id=SHA3(prev‖pubkey‖seq‖payload)`); consensus is a lattice-join fixpoint (pull
+   anti-entropy + Merkle equality), *not* a coordinator. A fresh node computes offline
+   from its own log; sync is reconciliation, never a round-trip to a server. (Master-P6:
+   the mesh *protocol* stays PARKED until a real dowiz flow carries it — but the
+   substrate stays mesh-shaped so nothing has to be un-built later.)
+2. **Non-AI in the core loop.** The kernel is deterministic pure functions — **no LLM in
+   the decision path.** An LLM is only a *sense* at the edge (advisory, outside the loop),
+   exactly as `resonator`'s actors are pure `fn` pointers with no I/O. Reproducibility and
+   auditability both die the moment a probabilistic model sits inside the loop.
+3. **Data-Oriented Design (DOD).** Data is laid out as it lives in memory — flat,
+   contiguous, struct-of-arrays where it's iterated. This is the *same change* as the
+   heap-kill (§5): the `Vec<Vec<f64>>` matrices become one contiguous `Vec<f64>`/stack
+   array, which is simultaneously the DOD layout, the alloc-free path, and the SIMD
+   prerequisite. Names track physical quantities (`force = mass * acceleration`), so the
+   code *is* the documentation. (Also honours DoD-as-Definition-of-Done via §benchmark: a
+   phase isn't "done" until its speed gate is green.)
+4. **Bridges & adapters (engine vs chassis).** The math core is pure `f(x)→y` and knows
+   nothing of network/disk/user; every I/O concern lives in a thin adapter — the *only*
+   place "legacy" is allowed. Swap TCP→RDMA, JSON→shared-memory, or one transport for
+   another without touching the engine. Already real: `engine/src/bridge.rs` (numeric
+   adapter), the `wasm.rs` marshalling shell, the `proto-wire`/`proto-cap`/`proto-crypto`
+   protocol adapters, and the wasip2 capability-isolated ports. Pillar C hardens this.
+5. **Spectral-waves = the applied math principle.** The recurring operator across every
+   layer is the **graph-Laplacian spectrum + wave/heat propagation** and the `|λ|`-vs-1
+   readout: loop-health & drift (`spectral` γ/SLEM, `markov`), UI field (`field`
+   `u(t)=Σe^{−λ_k t}⟨u0,φ_k⟩φ_k`), interference (`coherence` `|ψ₁±ψ₂|²`), brittleness
+   (`wavefield` graph-Fourier notch, algebraic connectivity λ₂), and — when a contact
+   graph exists — mesh mixing-time. One math principle, applied everywhere it recurs.
+6. **Manifest-in-code.** Every math module carries, at its top, the equation it implements
+   and its physical/mathematical justification (the convention already pervades the tree:
+   the closed form is written above the fn). No organ is a black box you have to reverse
+   in a month.
+7. **Benchmark-as-speedometer.** Speed is the default state, gated in CI: each organ has a
+   micro-benchmark vs a naïve reference; a regression (12ns→13ns) must be *explained*, not
+   waved through. This is quality control, not premature optimisation — and it is the
+   falsifiable Definition-of-Done for every rewrite phase.
 
 ## 2. Ground truth — where we are today (the 4-lane survey)
 
@@ -265,29 +318,57 @@ matches the equation.
 
 ## 7. The full-rewrite plan (phased, forward-only)
 
-Each phase is independently shippable, proven red→green, and never weakens a red-line.
+These are **substrate (engine) phases**, labelled `S0…S7`, orthogonal to the *product*
+phases `P1…P10` in `MASTER-ROADMAP-10-PHASES-2026-07-14.md`. They obey that roadmap's
+governing INVARIANT — **build DOWN from the first real order, not UP from the protocol** —
+so the rewrite advances the engine *only as far as a real flow needs it*, never as a
+front-run of the product. Each phase is independently shippable, proven red→green, never
+weakens a red-line, and preserves all seven §1.5 invariants.
 
-- **P0 — Foundation [DONE this turn].** `eqc` built + proven (Pillar A); this blueprint;
+| Substrate phase | Serves master phase | §1.5 invariant advanced |
+|---|---|---|
+| S0 Foundation (eqc) | P2 · P9 | manifest-in-code, non-AI |
+| S0.5 Atomic test | P9 | benchmark-as-speedometer |
+| S1 Consolidate numeric core | P2 | spectral-waves, benchmark |
+| S2 Crystallise money 🔴 | P1 | (skeleton) determinism |
+| S3 DOD + no_std + SIMD | P2 · P8 | Data-Oriented-Design |
+| S4 Zero-copy bridge | P3 · P4 | bridges-&-adapters |
+| S5 Verification lift | P1 · P9 | (all — proof) |
+| S6 Equation IR | P9 | manifest-in-code |
+| S7 Mesh-shaped substrate | P6 (PARKED) | decentralized · mesh · local-first |
+
+- **S0 — Foundation [DONE this turn].** `eqc` built + proven (Pillar A); this blueprint;
   the 4-lane ground-truth inventory.
-- **P1 — Consolidate the numeric core.** One generated eigensolver/matmul organ to replace
-  the 4 drifting Jacobi copies + FL+DK + the 3 exp-shims. Parity-gated against every current
-  copy in CI until the copies are deleted (verification doctrine rung 2). Highest-leverage:
-  it removes the live silent-drift hazard.
-- **P2 — Crystallise money.** Remove the last `tax_rate: f64`; generate `money` organs
-  (float+fixed) from equations with `eqc`; emit the parity test beside each. Red-line: 🔴
-  integer-only, operator-gated review.
-- **P3 — no_std + heap-kill + SIMD (§5).** Per-organ `#![no_std]` gating; flatten matrices;
-  `#[inline]`; `.cargo/config` target-cpu; integer-SIMD on fixed-point, float-SIMD on
-  dynamics only. Measure each with the asm probe.
-- **P4 — Zero-copy bridge (Pillar C).** Wire `engine/src/bridge.rs` as the numeric boundary;
-  replace the CSV/JSON string bridge with wasm-memory offsets; keep JSON only for
-  structured domain objects.
-- **P5 — Verification lift (Pillar D).** Provision z3 + cargo-kani (operator-gated install);
-  add machine-checked contracts to the money + FSM organs; keep the eqc/oracle rungs for the
-  rest.
-- **P6 — Equation IR.** Every kernel math organ has an `organ.eq.py` source of truth;
-  `eqc` regenerates all of them + their parity tests in one pass; a CI gate fails if a
-  committed `.rs` diverges from re-generation (drift becomes impossible, not just detected).
+- **S0.5 — The atomic test (the "garage" proof-of-concept).** Before scaling: take the ONE
+  most-critical, most-intensive math block (§8.5 argues this is the **spectral eigensolve**),
+  write a `criterion` micro-benchmark comparing the current impl to a naïve reference, and
+  record the ns. This is the first datum on the speedometer and the template for the
+  benchmark-as-CI-gate (§1.5.7). Small, concrete, falsifiable.
+- **S1 — Consolidate the numeric core (the spectral organ).** One generated eigensolver/
+  matmul organ replaces the **4 drifting Jacobi copies + FL+DK + the 3 exp-shims** — the
+  single highest-leverage move (it removes the live silent-drift hazard *and* is the
+  spectral-wave heart, §1.5.5). Parity-gated in CI against every current copy until the
+  copies are deleted (doctrine rung 2). Benchmark-gated (S0.5).
+- **S2 — Crystallise money 🔴.** Remove the last `tax_rate: f64`; generate `money` organs
+  (float+fixed) with `eqc`; emit the parity test beside each. Red-line: integer-only,
+  operator-gated review.
+- **S3 — DOD + no_std + heap-kill + SIMD (§5, §1.5.3).** Per-organ `#![no_std]` gating;
+  flatten `Vec<Vec<f64>>`→contiguous/stack (the DOD layout = the alloc-free path = the SIMD
+  prerequisite, one change); `#[inline]`; `.cargo/config` target-cpu; integer-SIMD on
+  fixed-point, float-SIMD on dynamics only. Measure each with the asm probe + the benchmark.
+- **S4 — Zero-copy bridge (Pillar C, §1.5.4).** Wire `engine/src/bridge.rs` as the numeric
+  adapter; replace the CSV/JSON string boundary with wasm-memory offsets; keep JSON only for
+  structured domain objects. The engine never learns about the transport — only the adapter
+  changes.
+- **S5 — Verification lift (Pillar D).** Provision z3 + cargo-kani (operator-gated install);
+  machine-checked contracts on the money + FSM organs; eqc/oracle rungs for the rest.
+- **S6 — Equation IR.** Every kernel math organ has an `organ.eq.py` source of truth; `eqc`
+  regenerates all + their parity tests in one pass; a CI gate fails if a committed `.rs`
+  diverges from re-generation — **drift becomes impossible, not merely detected.**
+- **S7 — Mesh-shaped substrate (§1.5.1).** Keep the kernel's math authority local-first and
+  content-addressed so the mesh *protocol* (master-P6) can carry it when a real dowiz flow
+  exists — never before. No coordinator is introduced; sync stays a CRDT lattice-join.
+  PARKED behind the product, by the same invariant that parks master-P6.
 
 ## 8. What this foundation underpins
 
@@ -298,6 +379,42 @@ Each phase is independently shippable, proven red→green, and never weakens a r
 - **The psyonic-spectral organ roadmap** (R2–R8) — every ASCEND organ becomes an `eqc`
   spec (generate + parity-test), so the roadmap's "collapse legacy → one equation" is
   mechanised, not hand-done.
+
+## 8.5 The foundational equation — where the engine starts
+
+*Your question: from which equation does the engine begin — the point where computation
+gets intensive enough to justify a custom architecture?*
+
+**The engine's `F = ma` is the spectral operator on the connection graph.** Concretely:
+the graph Laplacian `L = D − A`, its heat/wave propagator
+`u(t) = Σ_k e^{−λ_k t} ⟨u₀, φ_k⟩ φ_k`, and the single readout `|λ|` vs the unit circle
+(`< 1` damped · `= 1` resonant · `> 1` unstable), with the spectral gap `γ = 1 − |λ₂|` as
+the master dial (mixing-time `τ ≈ 1/γ`, iteration-budget `k ≈ ln(1/tol)/ln(1/|λ₂|)`).
+
+Three reasons this, and not something else, is the heart:
+
+1. **It recurs at every layer** — loop-health & self-drift (`spectral`, `markov`), the UI
+   field (`field` heat-kernel), interference (`coherence`), brittleness (`wavefield` λ₂),
+   and mesh mixing-time (when a contact graph exists). One operator, applied everywhere —
+   the definition of a foundational equation (§1.5.5).
+2. **It is the computational hot-spot** — the eigensolve is the O(n³) intensive kernel,
+   the exact place the survey found the pain (the **4× duplicated + drifted Jacobi**, plus
+   FL+DK, re-run from scratch on every query). "Where computation becomes intensive enough
+   to build custom architecture" is *literally the eigensolve.*
+3. **Its output is a control signal, not just a number** — the `|λ|`-vs-1 verdict drives
+   freeze/rollback, iteration budgets, and drift gates. The engine doesn't just compute;
+   it reads its own spectrum and decides.
+
+So the **atomic test (S0.5)** is: benchmark the one consolidated spectral eigensolve organ
+against the four naïve copies it replaces, in `criterion`, and record the ns won. That is
+the "garage" proof-of-concept — one critical function, one benchmark — and it doubles as
+the first S1 parity-and-speed gate.
+
+(The two **skeleton** equations — the integer money law `total = Σ pᵢqᵢ`, `tax =
+⌊sub·rate / SCALE⌋`, and the FSM adjacency Law `decide` — are foundational too, but they
+are the rigid *skeleton*, not the *engine/mind*. They get crystallised, S2, and pinned by
+a "Manifesto of Constants" — a single `const` module documenting every scale factor,
+threshold, and physical constant with its justification, §1.5.6.)
 
 ## 9. Red-lines (never yield, even under full autonomy)
 
