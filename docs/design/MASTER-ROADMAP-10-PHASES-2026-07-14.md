@@ -82,8 +82,15 @@ spectrum C_n + SLEM→mixing — 10/10 ad-hoc. Wave delivered: `bebop2/proto-cap
 mesh_consensus.rs` applies Fiedler λ₂ / SLEM / τ to a REAL mesh trust graph (AnchorRoster
 + delegation topology): 16-node anchor-core+leaf ⇒ λ₂=0.5359, SLEM=0.7954, τ≈4.89
 (~5 gossip rounds to mix). 5/5 live tests on bebop `feat/logic-governance` (b3489da);
-workspace 0 failed. Research queue (physics-math-exploration.md §2): Bayesian calibration,
-integer/overflow laws, causal inference, category theory of kernel↔wasm↔UI functorial
+workspace 0 failed.
+**Wave 2 (DONE):** `bebop2/proto-cap/tests/bayes_calibration.rs` — Bayesian calibration
+proven on the substrate: odds-form update (disease screening posterior 8.33%, base-rate
+neglect trap explicit), conjugate Beta-Binomial (prior Beta(2,2), n=10/k=8 ⇒ post
+Beta(10,4), mean 10/14, mode 9/12), base-rate fail-closed (prior 0 ⇒ posterior 0 for any
+LR), calibration detectability + log-score monotonicity. 5/5 live tests (7f144cf). Dropped
+a fragile Lanczos lnΓ integrator; asserted exact closures instead (KISS lesson).
+Research queue (physics-math-exploration.md §2), next: causal inference (do-operator /
+back-door), integer/overflow laws, category theory of kernel↔wasm↔UI functorial
 mapping, info-geometry of self-improvement gradient. **Continue per queue; log each
 exercise in self-improvement-log.md.**
 
