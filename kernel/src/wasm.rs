@@ -29,7 +29,7 @@ use wasm_bindgen::prelude::*;
 use crate::analytics::{reduce_anomalies, ChannelEvent, ChannelLedger};
 use crate::domain::{apply_event, place_order, Order, OrderItem};
 use crate::money::{estimate_order_total, FeeConfig, OrderTotalConfig};
-use crate::order_machine::{OrderStatus, TransitionError};
+use crate::order_machine::{fsm_graph_report, OrderStatus, TransitionError};
 
 /// Monotonic id / timestamp source for `place_order_js` (the JS signature does
 /// not supply an `id` or `created_at_ms`). Deterministic and order-preserving.
@@ -372,6 +372,22 @@ pub fn estimate_order_total_js(subtotal: i64, cfg_json: String) -> Result<String
     estimate_order_total_logic(subtotal, &cfg_json).map_err(|e| JsValue::from_str(&e))
 }
 
+/// Structural signature of the order-lifecycle FSM as JSON
+/// (`{vertices,edges,is_acyclic,cyclomatic,spectral_radius,reachable_from_pending,
+/// reachable_states,topological_len}`). Drift-telemetry surface: a silent change
+/// to the transition table shifts a field and trips a regression gate.
+///
+/// Pure host-testable logic in `fsm_graph_report` (no `JsValue`); this is a thin
+/// wrapper.
+fn fsm_graph_report_logic() -> Result<String, String> {
+    Ok(fsm_graph_report().to_json())
+}
+
+#[wasm_bindgen]
+pub fn fsm_graph_report_js() -> Result<String, JsValue> {
+    fsm_graph_report_logic().map_err(|e| JsValue::from_str(&e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -520,5 +536,21 @@ mod tests {
         let v = est(400, CFG_MIN);
         assert_eq!(v["min_not_met"], true);
         assert_eq!(v["total"], 400 + 200 + 80);
+    }
+
+    // ── GREEN: FSM graph-report surface emits a valid structural signature ──
+    #[test]
+    fn fsm_graph_report_js_shape() {
+        let json = fsm_graph_report_logic().expect("report ok");
+        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(v["vertices"], 10);
+        assert_eq!(v["is_acyclic"], true);
+        // Established structural facts (see order_machine green_cyclomatic_*
+        // tests): 9 edges, 10 vertices, 2 undirected components (Scheduled is an
+        // orphan) ⇒ μ = 9 − 10 + 2 = 1 (one undirected cycle), directed ρ = 0.
+        assert_eq!(v["cyclomatic"], 1);
+        assert_eq!(v["topological_len"], 10);
+        // reachable_from_pending is a bitmask; Pending (bit 0) always set.
+        assert_eq!(v["reachable_from_pending"].as_u64().unwrap() & 1, 1);
     }
 }
