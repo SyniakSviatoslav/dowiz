@@ -11,6 +11,9 @@ pub mod cart;
 /// Deterministic CSR graph + synchronous Jacobi personalized-PageRank
 /// (retrieval-blueprint v2 diffusion/recall primitive).
 pub mod csr;
+/// B4 — deterministic content-defined chunker (Buzhash) for the native Rust
+/// backup organ: content-addressed blocks that dedup across small edits.
+pub mod chunker;
 pub mod domain;
 /// MESH-06 — per-node content-addressed event-log (local-first + sync).
 pub mod event_log;
