@@ -35,6 +35,7 @@ export interface BackgroundWorkerDeps {
   queue: PgBossQueueProvider;
   messageBus: MessageBus;
   notifyWorker: NotificationWorker;
+  storage?: StorageProvider;
 }
 
 export interface BackgroundWorkerHandles {
@@ -97,7 +98,7 @@ export async function startBackgroundWorkers(deps: BackgroundWorkerDeps): Promis
   await lifecycleHandlers.start();
 
   // P5-0 Anonymizer Service + Workers
-  const anonymizerService = new AnonymizerService(pool, messageBus);
+  const anonymizerService = new AnonymizerService(pool, messageBus, deps.storage);
   const anonymizerRetentionWorker = new AnonymizerRetentionWorker(pool, queue.boss, messageBus, anonymizerService);
   const gdprErasureWorker = new GdprErasureWorker(pool, queue.boss, messageBus, anonymizerService);
   await anonymizerRetentionWorker.start();

@@ -343,7 +343,7 @@ async function main() {
   // shutdown time, so late population is fine). The menu must serve well before workers finish.
   const WORKER_BOOT_BUDGET_MS = 3_000;
   await Promise.race([
-    startBackgroundWorkers({ pool, backupPool, queue, messageBus, notifyWorker })
+    startBackgroundWorkers({ pool, backupPool, queue, messageBus, notifyWorker, storage })
       .then((r) => { heartbeats = r.heartbeats; })
       .catch((err: any) => console.error('[API] worker startup error (continuing to listen):', err?.message || err)),
     new Promise<void>((res) => setTimeout(() => { console.warn(`[API] worker startup exceeded ${WORKER_BOOT_BUDGET_MS}ms — listening anyway; workers continue in background`); res(); }, WORKER_BOOT_BUDGET_MS)),
