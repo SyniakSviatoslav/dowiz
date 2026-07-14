@@ -40,17 +40,22 @@
   geo_progress_flat_js` flat bridge protocol `[remaining_m, snapped_lat,
   snapped_lng, segment_index]`. `packages/ui/dist/lib/geo-anim.js` marked
   DEPRECATED/LEGACY (gitignored `dist/` artifact — local-only, not pushed).
-- **FE-07 — spectral wasm surface (THIS WAVE):** `kernel/src/spectral.rs` is a
-  zero-dep general eigensolver (Faddeev-LeVerlier + Durand-Kerner: eigenvalues,
-  spectral_radius, SLEM, spectral_gap γ, Laplacian Fiedler λ₂, DMD DriftClass). It
-  existed uncommitted in the tree (foreign-authored, coherent, 7 GREEN tests).
-  This wave added its **wasm surface** (`spectral_eigenvalues_js`,
-  `spectral_radius_js`, `spectral_gap_js`, `spectral_algebraic_connectivity_js`,
-  `spectral_classify_drift_js`) + fail-closed `parse_matrix` (rejects empty /
-  non-square / bad-JSON / non-number → `Err`, never panics) + 5 parity tests.
-  Kernel 130→**147** green. wasm32 Finished. Committed incl. the foreign
-  `kernel/src/lib.rs` `pub mod spectral;` (3-line enable, required for the module
-  to load — kernel source, not red-line).
+- **FE-07 — spectral wasm surface:** `kernel/src/spectral.rs` is a zero-dep
+  general eigensolver (Faddeev-LeVerlier + Durand-Kerner: eigenvalues,
+  spectral_radius, SLEM, spectral_gap γ, Laplacian Fiedler λ₂, DMD DriftClass).
+  Added its **wasm surface** (`spectral_eigenvalues_js`, `spectral_radius_js`,
+  `spectral_gap_js`, `spectral_algebraic_connectivity_js`, `spectral_classify_drift_js`)
+  + fail-closed `parse_matrix` (rejects empty / non-square / bad-JSON / non-number
+  → `Err`, never panics) + 5 parity tests. Kernel 130→147 green. wasm32 Finished.
+  Committed incl. the foreign `kernel/src/lib.rs` `pub mod spectral;` (3-line
+  enable, required for the module to load — kernel source, not red-line).
+- **FE-07b — engine consumes kernel spectral math:** `engine/src/bridge.rs::
+  spectral` mirrors `bridge::geo`. Kernel `spectral_flat_js` emits a flat array
+  `[rho, gap, fiedler, drift_code, n, e1re, e1im, ...]` (no JSON, no serde — engine
+  is dependency-free). Engine decodes fail-closed via `decode_spectral_flat` +
+  `LoopDriftDetector` (drift class / gap / resonant detection). Mirror-pin
+  `spectral_flat_layout_matches_kernel` (kernel) + 4 engine tests. Kernel 147→152,
+  engine 21→25 green. wasm32 Finished.
 - **MESH-12 RESOLVED**, **~20 missing 2026-07-11 reports** filed honest (UNVERIFIED,
   not fabricated), **bebop logic-governance** + **dowiz-pq tier-1** pushed.
 

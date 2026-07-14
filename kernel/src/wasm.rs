@@ -680,6 +680,54 @@ fn spectral_classify_drift_logic(matrix_json: &str) -> Result<String, String> {
     .to_string())
 }
 
+/// Flat bridge protocol for the engine (FE-07, mirrors `geo_progress_flat_js`):
+/// emits the spectral summary as a plain numeric array — no JSON keys, so the
+/// dependency-free engine decodes it with zero serde. Layout:
+/// ```text
+/// [0] rho          — spectral radius (largest |λ|)
+/// [1] gap          — γ = 1 − |λ₂| (mixing / convergence rate)
+/// [2] fiedler      — algebraic connectivity λ₂ of the graph Laplacian
+/// [3] drift_code   — Damped=0, Resonant=1, Unstable=2
+/// [4] n            — number of eigenvalues
+/// [5..5+2n)        — eigenvalue pairs (re, im) in descending |λ| order
+/// ```
+fn spectral_flat_logic(matrix_json: &str) -> Result<String, String> {
+    let m = parse_matrix(matrix_json)?;
+    let mut eigs = eigenvalues(&m);
+    // sort by descending modulus so the engine sees the dominant modes first.
+    eigs.sort_by(|a, b| {
+        b.abs()
+            .partial_cmp(&a.abs())
+            .unwrap_or(core::cmp::Ordering::Equal)
+    });
+    let mut out = vec![
+        spectral_radius(&m),
+        spectral_gap(&m),
+        algebraic_connectivity(&m),
+        match classify_drift(&m) {
+            DriftClass::Damped => 0.0,
+            DriftClass::Resonant => 1.0,
+            DriftClass::Unstable => 2.0,
+        },
+        eigs.len() as f64,
+    ];
+    for e in &eigs {
+        out.push(e.re);
+        out.push(e.im);
+    }
+    Ok(format!(
+        "[{}]",
+        out.iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<_>>()
+            .join(",")
+    ))
+}
+#[wasm_bindgen]
+pub fn spectral_flat_js(matrix_json: String) -> Result<String, JsValue> {
+    spectral_flat_logic(&matrix_json).map_err(|e| JsValue::from_str(&e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1021,6 +1069,30 @@ mod tests {
         assert!(
             spectral_eigenvalues_logic("[[1,2],[3,\"x\"]]").is_err(),
             "non-number"
+        );
+    }
+
+    // ── FE-07: flat bridge protocol matches the engine's decode contract ──
+    // The engine's `bridge::spectral::decode_spectral_flat` expects the layout
+    // [rho, gap, fiedler, drift_code, n, e1re, e1im, e2re, e2im, ...]. Pins the
+    // kernel side (kernel is the authority).
+    #[test]
+    fn spectral_flat_js_matches_engine_contract() {
+        let j = spectral_flat_logic("[[0,1],[1,0]]").unwrap();
+        let body = j.trim_matches(|c| c == '[' || c == ']');
+        let parts: Vec<f64> = body.split(',').map(|s| s.parse().unwrap()).collect();
+        assert!(parts.len() >= 9, "header + >=2 eigenvalue pairs");
+        assert!((parts[0] - 1.0).abs() < 1e-6, "rho = 1 for a 2-cycle");
+        assert!(parts[1].abs() < 1e-6, "gap = 0 (never mixes)");
+        assert_eq!(parts[3] as i32, 1, "drift = Resonant(1)");
+        assert_eq!(parts[4] as usize, 2, "n = 2 eigenvalues");
+        assert!(
+            (parts[5] - 1.0).abs() < 1e-6 && parts[6].abs() < 1e-6,
+            "eig1 = +1"
+        );
+        assert!(
+            (parts[7] + 1.0).abs() < 1e-6 && parts[8].abs() < 1e-6,
+            "eig2 = -1"
         );
     }
 }
