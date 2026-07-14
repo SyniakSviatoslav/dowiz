@@ -55,35 +55,45 @@ on bebop `feat/logic-governance`). MESH-12 genesis-policy =
 operator-gated (HUMAN enum default Unspecified, fail-closed). **Operator gate: mesh
 protocol only advances when dowiz has a real flow to carry it.**
 
-### P7 — Frontend surface depth (Sea & Sheet interfaces) — OPEN
-`packages/ui` / `apps/web` are empty/untracked (legacy source absent). The kernel-driven
-`web/src` UI (P4) is the canonical substitute. Next: grow it into the "Sea" (ambient
-field) + "Sheet" (brand-SDF) interfaces per `docs/design/dowiz-interfaces/` (DZ-*),
-standing on the kernel math. **No calendar date; gated on operator approving the UI
-direction.** Tier-1 canonical prod OG/demo still has no active-stack target (legacy
-`attic` only).
+### P7 — decide-gateway red-line (create_order → kernel::decide) — FLAGGED (RED, not fixed)
+Build-down invariant: the Rust `create_order` path bypasses the single `kernel::decide`
+door (prices via `compute_order_pricing` directly, skips actor-gate/CC-1/LC1). This is a
+RED-LINE flag, NOT a code change. Wave delivered: `rebuild/crates/api/tests/decide_gateway.sh`
+(read-only RED gate — ran exit 1 against the real parked source, proves the bypass with
+file:line) + `docs/ops/P7-DECIDE-APPLY-PATCH.md` (operator-apply diff: build
+`Command::PlaceOrder`, `OrderState::genesis()`, `decide(...)`, persist from `Event::Priced`;
+also add `Scheduled` to `OrderType`). **DO NOT self-apply — operator sign-off only.**
+(Frontend "Sea/Sheet" depth is tracked separately under docs/design/dowiz-interfaces/.)
 
-### P8 — Ops / reliability / single-pane — OPEN (partial)
-`pgrust` immediately; resurrect from `attic` (health/Sentry/notification/backup/
-rate-limit) rather than rebuild. Monitoring = VictoriaMetrics + Grafana + Netdata +
-Gatus + DEAD-MAN-SWITCH. Degrade-closed circuit breakers (payment → cash). Backups
-3-2-1-1-0 (off-Hetzner = top gap). **Honest: no canonical prod yet → these are
-spec'd, not deployed.**
+### P8 — Ops / reliability / single-pane — OPEN (partial, one artifact RUNNING)
+Resurrect from `attic` rather than rebuild. Monitoring = VictoriaMetrics + Grafana +
+Netdata + Gatus + DEAD-MAN-SWITCH. Degrade-closed circuit breakers (payment → cash).
+Backups 3-2-1-1-0 (off-Hetzner = top gap). Wave delivered: `docs/ops/P8-SINGLE-PANE-SPEC.md`
+(honest SPEC/running split) + `tools/health-gate.mjs` (zero-dep, fail-closed pre-flight:
+disk-free on `/`, volume-mount, kernel-test green; 7/7 self-test; fails closed on the
+real 7.3%-free `/`). **Honest: no canonical prod → spec'd, not deployed; health-gate is
+the one RUNNING stand-in.**
 
 ### P9 — Self-development / growth substrate (PRIMARY FOCUS, operator 2026-07-13) — IN PROGRESS
 Biggest focus = reflection, metacognition, ethics, agnostic/rational inquiry; kernel as
-growth substrate. Reverse-engineered `kernel::spectral` (the #1 missing primitive the
-hydraulic-loop design named) and proved it correct against hand-derived Laplacian
-spectra (P4: λ₂ = 2−√2; periodic Markov: ρ=1, gap=0) — 5/5 ad-hoc proof 2026-07-14.
-Research queue (physics-math-exploration.md §2): spectral graph theory → mesh consensus,
-Bayesian calibration, integer/overflow laws, causal inference, category theory of
-kernel↔wasm↔UI functorial mapping, info-geometry of self-improvement gradient.
-**Continue: deepen spectral graph theory (cycle C_n spectrum, SLEM→mixing time τ),
-log each exercise in self-improvement-log.md.**
+growth substrate. Proved `kernel::spectral` against hand-derived Laplacian spectra (P4:
+λ₂ = 2−√2; periodic Markov: ρ=1, gap=0) — 5/5 ad-hoc 2026-07-14. Then cycle-graph
+spectrum C_n + SLEM→mixing — 10/10 ad-hoc. Wave delivered: `bebop2/proto-cap/tests/
+mesh_consensus.rs` applies Fiedler λ₂ / SLEM / τ to a REAL mesh trust graph (AnchorRoster
++ delegation topology): 16-node anchor-core+leaf ⇒ λ₂=0.5359, SLEM=0.7954, τ≈4.89
+(~5 gossip rounds to mix). 5/5 live tests on bebop `feat/logic-governance` (b3489da);
+workspace 0 failed. Research queue (physics-math-exploration.md §2): Bayesian calibration,
+integer/overflow laws, causal inference, category theory of kernel↔wasm↔UI functorial
+mapping, info-geometry of self-improvement gradient. **Continue per queue; log each
+exercise in self-improvement-log.md.**
 
-### P10 — Open-source readiness (ADR-020, gated) — OPEN
-AGPLv3 + TM + DCO. Gated on secrets scrub + EUTM. SECURITY INCIDENT (creds in git
-history) rotated; REMOTE scrub force-push = open gate → HARD blocker for prod push.
+### P10 — Open-source readiness (ADR-020, gated) — OPEN (gap audit delivered)
+AGPLv3 + TM + DCO. Wave delivered `docs/design/P10-OSS-READINESS-AUDIT.md` (flag-only):
+**real gaps** — LICENSE is Apache-2.0 (roadmap mandates AGPLv3+TM+DCO); secrets recoverable
+from git history (DATABASE_URL in 9 diff-hunks, ***REDACTED*** across 47 commits) →
+scrub force-push is a HARD blocker; DCO trailers essentially absent; no CONTRIBUTING/NOTICE.
+Gated on secrets scrub + EUTM. SECURITY INCIDENT (creds in git history) rotated; REMOTE
+scrub force-push = open gate → HARD blocker for prod push.
 ~20 missing 2026-07-11 reports: UNVERIFIED manifest filed honest (not fabricated).
 
 ## Tier spine (from operating rules)
