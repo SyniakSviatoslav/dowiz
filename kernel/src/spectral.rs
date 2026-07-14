@@ -26,7 +26,17 @@
 //! (the no-float rule is money-only). Pure, no I/O, deterministic (Durand-Kerner
 //! seeds off a fixed complex spread, never RNG). Verified-by-Math tests below.
 
+use crate::mat::{matmul_contig, Mat};
 use core::f64::consts::PI;
+
+/// Thin `&[Vec<f64>]` wrapper over [`matmul_contig`] — kept so the wasm surface
+/// and existing tests (which pass `Vec<Vec<f64>>`) keep compiling. The `_n`
+/// argument preserves the historical signature (square `n × n`).
+fn matmul(a: &[Vec<f64>], b: &[Vec<f64>], _n: usize) -> Vec<Vec<f64>> {
+    let am = Mat::from_vecvec(a);
+    let bm = Mat::from_vecvec(b);
+    matmul_contig(&am, &bm).into_vecvec()
+}
 
 /// Minimal complex number (avoids a `num-complex` dependency — kernel is zero-dep).
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -76,22 +86,6 @@ impl Complex {
     fn is_zero(self) -> bool {
         self.re == 0.0 && self.im == 0.0
     }
-}
-
-fn matmul(a: &[Vec<f64>], b: &[Vec<f64>], n: usize) -> Vec<Vec<f64>> {
-    let mut c = vec![vec![0.0; n]; n];
-    for i in 0..n {
-        for k in 0..n {
-            let aik = a[i][k];
-            if aik == 0.0 {
-                continue;
-            }
-            for j in 0..n {
-                c[i][j] += aik * b[k][j];
-            }
-        }
-    }
-    c
 }
 
 fn trace(a: &[Vec<f64>], n: usize) -> f64 {
@@ -212,16 +206,18 @@ pub fn spectral_gap(a: &[Vec<f64>]) -> f64 {
 }
 
 /// Graph Laplacian L = D − A of an (assumed symmetric) adjacency matrix.
+/// Built on a contiguous `Mat` (row-major) to avoid the double `vec![vec![]]`
+/// allocation, then materialized back to `Vec<Vec<f64>>` for the wasm/API contract.
 pub fn laplacian(adj: &[Vec<f64>]) -> Vec<Vec<f64>> {
     let n = adj.len();
-    let mut l = vec![vec![0.0; n]; n];
+    let mut l = Mat::zeros(n, n);
     for i in 0..n {
         let deg: f64 = (0..n).map(|j| adj[i][j]).sum();
         for j in 0..n {
-            l[i][j] = if i == j { deg - adj[i][j] } else { -adj[i][j] };
+            l.set(i, j, if i == j { deg - adj[i][j] } else { -adj[i][j] });
         }
     }
-    l
+    l.into_vecvec()
 }
 
 /// Algebraic connectivity — the Fiedler value λ₂, the second-smallest eigenvalue
@@ -377,5 +373,75 @@ mod tests {
         assert_eq!(classify_drift(&damped), DriftClass::Damped);
         assert_eq!(classify_drift(&unstable), DriftClass::Unstable);
         assert_eq!(classify_drift(&resonant), DriftClass::Resonant);
+    }
+
+    // ── S0.5 FOUNDATION: parity proof that the contiguous `matmul_contig`
+    //    produces bit-identical results to the old `vec![vec![]]` matmul, and a
+    //    `std::time::Instant` timing of the ns delta (no criterion dep). ──
+    #[test]
+    fn spectral_matmul_contig_vs_vecvec() {
+        // Known 3×3 matrix product used as the parity fixture.
+        let a = vec![
+            vec![1.0, 2.0, 3.0],
+            vec![4.0, 5.0, 6.0],
+            vec![7.0, 8.0, 9.0],
+        ];
+        let b = vec![
+            vec![9.0, 8.0, 7.0],
+            vec![6.0, 5.0, 4.0],
+            vec![3.0, 2.0, 1.0],
+        ];
+
+        // Reference: the OLD dense `vec![vec![]]` implementation, kept inline
+        // so this test is a genuine parity check against the pre-refactor math.
+        fn old_matmul(a: &[Vec<f64>], b: &[Vec<f64>], n: usize) -> Vec<Vec<f64>> {
+            let mut c = vec![vec![0.0; n]; n];
+            for i in 0..n {
+                for k in 0..n {
+                    let aik = a[i][k];
+                    if aik == 0.0 {
+                        continue;
+                    }
+                    for j in 0..n {
+                        c[i][j] += aik * b[k][j];
+                    }
+                }
+            }
+            c
+        }
+
+        let expected = old_matmul(&a, &b, 3);
+        let am = Mat::from_vecvec(&a);
+        let bm = Mat::from_vecvec(&b);
+        let got = matmul_contig(&am, &bm).into_vecvec();
+
+        // Bit-parity to 1e-12.
+        for i in 0..3 {
+            for j in 0..3 {
+                assert!(
+                    (got[i][j] - expected[i][j]).abs() < 1e-12,
+                    "matmul_contig[{i}][{j}] = {} expected {}",
+                    got[i][j],
+                    expected[i][j]
+                );
+            }
+        }
+
+        // Timing delta (ns) — iterated to average out noise; printed via eprintln.
+        let iters = 10_000u32;
+        let start_old = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ = old_matmul(&a, &b, 3);
+        }
+        let old_ns = start_old.elapsed().as_nanos() as f64 / iters as f64;
+        let start_new = std::time::Instant::now();
+        for _ in 0..iters {
+            let _ = matmul_contig(&am, &bm);
+        }
+        let new_ns = start_new.elapsed().as_nanos() as f64 / iters as f64;
+        eprintln!(
+            "parity bench: old_vecvec={:.1} ns/call  new_contig={:.1} ns/call  delta={:+.1} ns ({:+.1}%)",
+            old_ns, new_ns, new_ns - old_ns, (new_ns - old_ns) / old_ns * 100.0
+        );
     }
 }

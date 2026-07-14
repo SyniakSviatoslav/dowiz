@@ -15,35 +15,23 @@
 //!
 //! Pure, float (dynamics, never money), Verified-by-Math below.
 
+use crate::mat::{matmul_contig, Mat};
+
+/// Identity matrix of dimension `n` (backed by a contiguous `Mat`).
 fn identity(n: usize) -> Vec<Vec<f64>> {
-    let mut m = vec![vec![0.0; n]; n];
-    for (i, row) in m.iter_mut().enumerate() {
-        row[i] = 1.0;
-    }
-    m
+    Mat::identity(n).into_vecvec()
 }
 
-/// General dense matmul (handles square N·Q and rectangular N·R).
+/// General dense matmul (handles square N·Q and rectangular N·R). Thin `&[Vec<f64>]`
+/// wrapper over the single [`matmul_contig`] implementation.
 fn matmul(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
     let ra = a.len();
     if ra == 0 {
         return vec![];
     }
-    let ca = a[0].len();
-    let cb = b[0].len();
-    let mut c = vec![vec![0.0; cb]; ra];
-    for i in 0..ra {
-        for k in 0..ca {
-            let aik = a[i][k];
-            if aik == 0.0 {
-                continue;
-            }
-            for j in 0..cb {
-                c[i][j] += aik * b[k][j];
-            }
-        }
-    }
-    c
+    let am = Mat::from_vecvec(a);
+    let bm = Mat::from_vecvec(b);
+    matmul_contig(&am, &bm).into_vecvec()
 }
 
 fn is_zero_matrix(m: &[Vec<f64>]) -> bool {
