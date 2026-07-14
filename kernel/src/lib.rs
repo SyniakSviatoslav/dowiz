@@ -27,7 +27,8 @@ pub use money::{
 };
 pub use order_machine::{
     assert_transition, cyclomatic_number, fold_transitions, fsm_graph_report, has_cycle, reachable,
-    spectral_radius, topological_order, FsmGraphReport, OrderStatus, TransitionError,
+    spectral_radius, topological_order, verify_fsm_signature, FsmGraphReport, FsmSignatureDrift,
+    OrderStatus, TransitionError,
 };
 pub use wasm::{apply_event_js, channel_ledger_js, place_order_js, reduce_anomalies_js};
 

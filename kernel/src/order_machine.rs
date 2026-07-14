@@ -433,6 +433,88 @@ pub fn fsm_graph_report() -> FsmGraphReport {
     }
 }
 
+/// Verified-by-Math drift gate — the golden fingerprint of the lifecycle FSM,
+/// captured and cross-validated on 2026-07-14 (vertices=10, edges=9, acyclic,
+/// μ=1, directed ρ=0, `Scheduled` orphan, full forward chain from `Pending`).
+///
+/// The whole point of the graph-analysis capstone is to *catch silent lifecycle
+/// drift*: a future `Reopen` edge, a deleted transition, or a reordered state
+/// must flip this gate RED instead of shipping unnoticed. Call it at boot, in
+/// CI, or after every `apply_event` fold.
+///
+/// innovovate: ceiling = signature is hand-pinned; upgrade trigger = a deliberate
+/// lifecycle change that bumps `FSM_GOLDEN_SIGNATURE` with a recorded rationale.
+pub const FSM_GOLDEN_SIGNATURE: FsmGraphReport = FsmGraphReport {
+    vertices: 10,
+    edges: 9,
+    is_acyclic: true,
+    cyclomatic: 1,
+    spectral_radius: 0.0,
+    // All active states reachable from `Pending` EXCEPT `Scheduled` (orphan
+    // scaffold terminal, bit 8): bits {0..7, 9} = 0b1011111111 = 767.
+    reachable_from_pending: 767,
+    reachable_states: 9,
+    topological_len: Some(10),
+};
+
+/// Which field(s) of the live signature diverged from the golden fingerprint.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FsmSignatureDrift {
+    pub fields: std::borrow::Cow<'static, [&'static str]>,
+}
+
+impl std::fmt::Display for FsmSignatureDrift {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "fsm signature drift in fields: {:?}", self.fields)
+    }
+}
+
+impl std::error::Error for FsmSignatureDrift {}
+
+/// Compare the *live* lifecycle graph against the golden fingerprint.
+/// `Ok(())` = no drift; `Err(drift)` lists the moved fields.
+#[inline]
+pub fn verify_fsm_signature() -> Result<(), FsmSignatureDrift> {
+    verify_fsm_signature_against(fsm_graph_report())
+}
+
+/// Compare an arbitrary report (e.g. a proposed edit) against the golden fingerprint.
+pub fn verify_fsm_signature_against(r: FsmGraphReport) -> Result<(), FsmSignatureDrift> {
+    let g = FSM_GOLDEN_SIGNATURE;
+    let mut fields: Vec<&'static str> = Vec::new();
+    if r.vertices != g.vertices {
+        fields.push("vertices");
+    }
+    if r.edges != g.edges {
+        fields.push("edges");
+    }
+    if r.is_acyclic != g.is_acyclic {
+        fields.push("is_acyclic");
+    }
+    if r.cyclomatic != g.cyclomatic {
+        fields.push("cyclomatic");
+    }
+    if (r.spectral_radius - g.spectral_radius).abs() >= 1e-9 {
+        fields.push("spectral_radius");
+    }
+    if r.reachable_from_pending != g.reachable_from_pending {
+        fields.push("reachable_from_pending");
+    }
+    if r.reachable_states != g.reachable_states {
+        fields.push("reachable_states");
+    }
+    if r.topological_len != g.topological_len {
+        fields.push("topological_len");
+    }
+    if fields.is_empty() {
+        Ok(())
+    } else {
+        Err(FsmSignatureDrift {
+            fields: std::borrow::Cow::Owned(fields),
+        })
+    }
+}
+
 /// Cycle detection over the lifecycle graph (DFS with a recursion stack).
 /// Returns `true` if some state can be reached again along a directed path — i.e. an
 /// order could re-enter a prior state (an undesirable "re-open" loop).
@@ -815,5 +897,43 @@ mod tests {
         // a `Delivered → Confirmed` Reopen edge, this assertion (and is_acyclic)
         // flips RED — forcing the decision at the gate rather than silently.
         assert!(fsm_graph_report().is_acyclic);
+    }
+
+    // ── GREEN: the live lifecycle matches the golden drift-gate signature ──
+    #[test]
+    fn green_live_signature_matches_golden() {
+        // The capstone's stated purpose: catch *silent* lifecycle drift. The
+        // 2026-07-14 verified fingerprint must pass the gate with no fields moved.
+        let r = fsm_graph_report();
+        let drift = verify_fsm_signature_against(r);
+        assert!(drift.is_ok(), "live signature drifted: {drift:?}");
+        // And the one-shot helper agrees.
+        assert!(verify_fsm_signature().is_ok());
+    }
+
+    // ── RED: a hand-crafted divergent report must trip the gate (and say which field) ──
+    #[test]
+    fn red_divergent_report_reports_drift_field() {
+        // Simulate a silent drift: someone deleted a transition (edges 9→8) and
+        // introduced an undirected cycle (μ stays 1 but the graph changed). The
+        // gate must return Err naming `edges` (and not silently pass).
+        let mut bad = FSM_GOLDEN_SIGNATURE;
+        bad.edges = 8;
+        let err = verify_fsm_signature_against(bad).expect_err("drift must be detected");
+        assert!(err.fields.iter().any(|&f| f == "edges"));
+    }
+
+    // ── GREEN: a Reopen edge makes the gate name `is_acyclic` + `topological_len` ──
+    #[test]
+    fn green_reopen_edge_flips_gate_fields() {
+        // Mirror the structural prediction inside the gate: a `Delivered →
+        // Confirmed` Reopen turns a DAG into a cycle, so is_acyclic flips false
+        // and topological_len collapses to None. The gate must surface both.
+        let mut reopened = FSM_GOLDEN_SIGNATURE;
+        reopened.is_acyclic = false;
+        reopened.topological_len = None;
+        let err = verify_fsm_signature_against(reopened).expect_err("cycle must be detected");
+        assert!(err.fields.iter().any(|&f| f == "is_acyclic"));
+        assert!(err.fields.iter().any(|&f| f == "topological_len"));
     }
 }
