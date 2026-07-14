@@ -9,8 +9,8 @@
 
 import { loadEnv } from '@deliveryos/config';
 import { createOperationalPool } from '@deliveryos/db';
-import { runRestoreVerify } from '../apps/api/src/workers/backup/backup-verify.js';
-import { runR2Verify } from '../apps/api/src/workers/backup/r2-verify.js';
+import { runRestoreVerify } from '../attic/apps-api/src/workers/backup/backup-verify.js';
+import { runR2Verify } from '../attic/apps-api/src/workers/backup/r2-verify.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 

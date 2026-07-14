@@ -15,7 +15,7 @@
 import { loadEnv } from '@deliveryos/config';
 import { createSessionPool } from '@deliveryos/db';
 import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
-import { createDecryptionStream } from '../apps/api/src/workers/backup/encrypt.js';
+import { createDecryptionStream } from '../attic/apps-api/src/workers/backup/encrypt.js';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import { createWriteStream, createReadStream } from 'node:fs';
