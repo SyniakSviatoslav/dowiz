@@ -6,6 +6,9 @@
 /// N=(I−Q)⁻¹ (exact finite sum for the DAG lifecycle), expected steps-to-terminal, absorption probs.
 pub mod absorbing;
 pub mod analytics;
+/// C-tier "attention lens": scaled dot-product attention as one learned-affinity
+/// diffusion step — same f(L) family as markov PPR / heat-kernel.
+pub mod attention;
 /// RW-07 — cart state machine (consolidate 2 JS cart impls → kernel authority). Totals via money.
 pub mod cart;
 /// Deterministic CSR graph + synchronous Jacobi personalized-PageRank
