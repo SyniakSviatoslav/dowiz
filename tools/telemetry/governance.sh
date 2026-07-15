@@ -234,33 +234,71 @@ gov_precedent_record() {
 
 # ===== 6. META-RULE: dynamic self-adjusting governance (p3) ==========
 # Rules are GUIDANCE that evolve from deterministic telemetry — not hard gates.
-# Reads prior vs current benchmark + living-memory recall + false-claim rate,
-# folds into EMAs, and emits FLEXIBLE params (lane_tol / judge_count /
-# precedent_tau). Energy (agentic work) flows freely; meta-rule only tilts.
-# Usage: gov_meta <bench_prev> <bench_now> <recall_prev> <recall_now> <false_rate>
+# STATEFUL: EMAs persist in $GOV_DIR/meta_state.json so rules truly self-adjust
+# across calls (mirrors kernel control.rs MetaRule: alpha=2/(n+1), soft guidance).
+# When any arg is "observe", it folds the latest benchmark/recall/false-rate into
+# the EMA and prints the evolved guidance; otherwise it prints current guidance.
+# Usage: gov_meta observe <bench_prev> <bench_now> <recall_prev> <recall_now> <false_rate>
+#        gov_meta            (print current evolved guidance without updating)
+GOV_LM="$DIR/living_memory.py"
 gov_meta() {
-  local bp="$1" bn="$2" rp="$3" rn="$4" fr="${5:-0}"
-  python3 - "$bp" "$bn" "$rp" "$rn" "$fr" <<'PY'
-import sys, json, os
-bp, bn, rp, rn, fr = (float(x) for x in sys.argv[1:6])
-# deltas (improvement > 0): bench = speedup-1; eval = recall delta
-bench_delta = (bn/bp - 1.0) if bp > 0 else 0.0
+  local st="$GOV_DIR/meta_state.json"
+  : >> "$st"
+  if [ "${1:-}" = "observe" ]; then
+    shift
+    local bp="$1" bn="$2" rp="$3" rn="$4" fr="${5:-0}"
+    python3 - "$st" "$bp" "$bn" "$rp" "$rn" "$fr" <<'PY'
+import json, sys
+st, bp, bn, rp, rn, fr = sys.argv[1], *sys.argv[2:7]
+bp, bn, rp, rn, fr = (float(x) for x in (bp, bn, rp, rn, fr))
+try:
+    s = json.load(open(st))
+except Exception:
+    s = {"ema_bench":0.0,"ema_eval":0.0,"ema_false":0.0,"n":0}
+n = s.get("n",0)
+a = 2.0/(n+1.0)                      # EMA window = kernel alpha
+bench_delta = (bn/bp - 1.0) if bp>0 else 0.0
 eval_delta  = rn - rp
-false_rate  = max(0.0, fr)
-# EMA (alpha=2/(n+1) equivalent window; n=1 here, single obs = identity)
-# guidance mapping (mirrors kernel control.rs MetaRule)
-lane_tol      = min(2.0, max(0.3, 1.0 + 0.5*bench_delta))
-judge_count   = int(min(7, max(1, 3 + false_rate/0.2)))
-precedent_tau = min(0.95, max(0.6, 0.82 + 0.1*eval_delta))
-print(f"META bench_delta={bench_delta:+.3f} eval_delta={eval_delta:+.3f} false_rate={false_rate:.3f}")
+s["ema_bench"] = a*bench_delta + (1-a)*s["ema_bench"]
+s["ema_eval"]  = a*eval_delta  + (1-a)*s["ema_eval"]
+s["ema_false"] = a*max(0.0,fr) + (1-a)*s["ema_false"]
+s["n"] = n+1
+json.dump(s, open(st,"w"))
+PY
+  fi
+  # emit evolved guidance (always)
+  python3 - "$st" <<'PY'
+import json, sys
+st = sys.argv[1]
+try: s = json.load(open(st))
+except Exception: s = {"ema_bench":0.0,"ema_eval":0.0,"ema_false":0.0,"n":0}
+eb, ee, ef, n = s["ema_bench"], s["ema_eval"], s["ema_false"], s["n"]
+lane_tol      = max(0.3, min(2.0, 1.0 + 0.5*eb))
+judge_count   = int(max(1, min(7, 3 + ef/0.2)))
+precedent_tau = max(0.6, min(0.95, 0.82 + 0.1*ee))
+print(f"META n={n} ema_bench={eb:+.3f} ema_eval={ee:+.3f} ema_false={ef:.3f}")
 print(f"GUIDANCE lane_tol={lane_tol:.3f} judge_count={judge_count} precedent_tau={precedent_tau:.3f}")
 print("RULES: guidance, not gates — energy flows; meta-rule tilts only.")
 PY
 }
 
+# ===== 6b. LIVING-MEMORY BRIDGE (p2 wiring: PRIMARY retrieval) ======
+# Precedent/context lookups route through the living-memory engine first
+# (recall@k proven). Falls back to the local keyword precedent store if the
+# engine is unavailable. Usage: gov_recall <query> [k]
+gov_recall() {
+  local q="$1" k="${2:-5}"
+  if [ -x "$GOV_LM" ] || [ -f "$GOV_LM" ]; then
+    python3 "$GOV_LM" --query "$q" --k "$k" 2>/dev/null || gov_precedent "$q"
+  else
+    gov_precedent "$q"
+  fi
+}
+
 # ===== 7. FALSE-CLAIM METER (p4) ======================================
 # Records a (claimed, verified) pair; computes false-estimation% + false-positive-of-done%.
-# Usage: gov_falseclaim <record|report> [claimed=1 verified=1]
+# Real session events can be fed via `record`; `report` emits the running metrics.
+# Usage: gov_falseclaim <record|report|observe> [claimed=1 verified=1]
 FC="$GOV_DIR/false_claims.jsonl"
 : >> "$FC"
 gov_falseclaim() {
@@ -270,11 +308,16 @@ gov_falseclaim() {
       local claimed="${1:-1}" verified="${2:-1}"
       local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
       echo "{\"ts\":\"$ts\",\"claimed\":$claimed,\"verified\":$verified}" >> "$FC" ;;
+    observe)
+      # fold the CURRENT false-claim rate into the meta-rule EMA
+      local fr; fr="$(gov_falseclaim report | awk -F'= ' '/false-estimation/{gsub(/%/,"",$2);print $2/100}')"
+      gov_meta observe "${2:-1}" "${3:-1}" "${4:-1}" "${5:-1}" "$fr" ;;
     report|*)
       python3 - "$FC" <<'PY'
 import json, sys
 fc = sys.argv[1]
 claimed = verified = 0
+rows = 0
 with open(fc) as f:
     for line in f:
         line = line.strip()
@@ -283,12 +326,13 @@ with open(fc) as f:
         except: continue
         claimed  += int(d.get("claimed", 1))
         verified += int(d.get("verified", 1))
+        rows += 1
 total = max(1, claimed)
 false_est = 1.0 - verified/total            # fraction of claimed-not-verified
 false_pos = 0.0 if verified == 0 else (claimed - verified)/verified
-print(f"FALSE-CLAIM: claimed={claimed} verified={verified}")
-print(f"  false-estimation%%     = {false_est*100:.1f}  (claimed but not verified)")
-print(f"  false-positive-of-done%% = {false_pos*100:.1f}  (done claimed but unverified / verified)")
+print(f"FALSE-CLAIM: events={rows} claimed={claimed} verified={verified}")
+print(f"  false-estimation%%      = {false_est*100:.1f}  (claimed but not verified)")
+print(f"  false-positive-of-done%% = {false_pos*100:.1f}  (claimed-done / verified)")
 PY
       ;;
   esac
