@@ -68,7 +68,9 @@ pub mod living_knowledge;
 pub mod wasm;
 
 // Re-export the headline types so wasm-bindgen consumers and tests share one surface.
-pub use analytics::{reduce_anomalies, ChannelEvent, ChannelLedger};
+pub use csr::{
+    precision_at_k, recall_at_k, Csr,
+};
 pub use domain::{apply_event, compute_order_total, place_order, Order, OrderItem};
 pub use money::{
     apply_tax, assert_non_negative, compute_line_total, convert_all_to_eur_cents, to_minor_unit,

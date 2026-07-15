@@ -155,6 +155,15 @@ pub struct KalmanFilter {
     h: Mat,
     q: Mat,
     r: Mat,
+    /// Most recent innovation `y = z − H·x` from the last `update`.
+    /// E0 fix (VERIFIABLE-COGNITION §2 bug #2): the innovation was computed and
+    /// discarded; it is the *surprise signal* the blueprint needs. Cached here
+    /// so it can be read after `update` returns. Length m (observation dim).
+    last_innovation: Vec<f64>,
+    /// Surprise of the most recent `update`: `‖y‖ / √tr(S)`, dimensionless,
+    /// exposed so the self-eval loop can read novelty without re-deriving S.
+    /// 0.0 until the first successful `update`.
+    last_surprise: f64,
 }
 
 impl KalmanFilter {
@@ -166,9 +175,11 @@ impl KalmanFilter {
             x: x0,
             p: p0,
             f,
-            h,
+            h: h.clone(),
             q,
             r,
+            last_innovation: Vec::new(),
+            last_surprise: 0.0,
         }
     }
 
@@ -203,13 +214,16 @@ impl KalmanFilter {
         let pht = crate::mat::matmul_contig(&self.p, &ht);
         let hph = crate::mat::matmul_contig(&self.h, &pht);
         let s = add(&hph, &self.r);
+        // Trace of the innovation covariance S = H·P·Hᵀ + R, used for the
+        // surprise signal ‖y‖/√tr(S). Computed before the inverse.
+        let s_trace: f64 = (0..s.nrows()).map(|i| s.get(i, i)).sum();
         let s_inv = match mat_inverse(&s) {
             Some(inv) => inv,
             None => return false,
         };
         // Kalman gain K = P·Hᵀ·S⁻¹
         let k = crate::mat::matmul_contig(&pht, &s_inv);
-        // innovation y = z − H·x
+        // innovation y = z − H·x  (the surprise signal — surfaced, not discarded)
         let hx = crate::mat::matmul_contig(&self.h, &col(&self.x));
         let hxv = uncol(&hx);
         let y: Vec<f64> = z
@@ -217,6 +231,14 @@ impl KalmanFilter {
             .zip(hxv.iter())
             .map(|(zi, hxi)| zi - hxi)
             .collect();
+        // Cache the innovation so the eval layer can read novelty post-update.
+        self.last_innovation = y.clone();
+        let y_norm: f64 = y.iter().map(|v| v * v).sum::<f64>().sqrt();
+        self.last_surprise = if s_trace > 0.0 {
+            y_norm / s_trace.sqrt()
+        } else {
+            0.0
+        };
         // x ← x + K·y
         let ky = crate::mat::matmul_contig(&k, &col(&y));
         let kyv = uncol(&ky);
@@ -241,6 +263,20 @@ impl KalmanFilter {
         let s = add(&hph, &self.r);
         let s_inv = mat_inverse(&s).expect("gain: S must be invertible");
         crate::mat::matmul_contig(&pht, &s_inv)
+    }
+
+    /// Most recent innovation `y = z − H·x` from the last successful `update`.
+    /// Empty (length 0) until the first `update`. The surprise signal the
+    /// self-eval loop reads for novelty / semantic-entropy-from-innovation.
+    pub fn last_innovation(&self) -> &[f64] {
+        &self.last_innovation
+    }
+
+    /// Surprise of the most recent `update`: `‖y‖ / √tr(S)`. Returns 0.0 until
+    /// the first successful `update`. Monotone-ish in how unexpected the
+    /// measurement was given the prior — the deterministic novelty scalar.
+    pub fn last_surprise(&self) -> f64 {
+        self.last_surprise
     }
 }
 
@@ -372,6 +408,37 @@ mod tests {
             close(kf.x[0], 10.0, 1e-1),
             "position estimate {} should be ≈10.0",
             kf.x[0]
+        );
+    }
+
+    // ---------------------------------------------------------------------
+    // E0 fix (VERIFIABLE-COGNITION §2 bug #2): the innovation `y = z − H·x`
+    // was computed and discarded. It must now be readable after `update`, along
+    // with the dimensionless surprise ‖y‖/√tr(S).
+    //   1-D: F=H=1, Q=0.01, R=1.0, x0=0, P0=1.
+    //   predict → x=0, P=1.01.  update z=1:  y = 1 − 0 = 1;
+    //     S = 1·1.01·1 + 1 = 2.01;  surprise = 1/√2.01 ≈ 0.705337.
+    // ---------------------------------------------------------------------
+    #[test]
+    fn update_surfaces_innovation_and_surprise() {
+        let mut kf = KalmanFilter::scalar(0.0, 1.0, 1.0, 1.0, 0.01, 1.0);
+        // Before any update the novelty signals are the zero-defaults.
+        assert_eq!(kf.last_innovation().len(), 0);
+        assert!(close(kf.last_surprise(), 0.0, 1e-15));
+
+        kf.predict();
+        let ok = kf.update(&[1.0]);
+        assert!(ok, "update must succeed (S invertible)");
+        assert_eq!(kf.last_innovation().len(), 1);
+        assert!(
+            close(kf.last_innovation()[0], 1.0, 1e-12),
+            "innovation y = z − H·x must equal 1.0"
+        );
+        let want_surprise = 1.0 / (2.01_f64).sqrt();
+        assert!(
+            close(kf.last_surprise(), want_surprise, 1e-9),
+            "surprise = ‖y‖/√tr(S) must be {}",
+            want_surprise
         );
     }
 }
