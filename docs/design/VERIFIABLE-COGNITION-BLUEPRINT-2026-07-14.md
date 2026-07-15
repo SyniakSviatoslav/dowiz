@@ -5,7 +5,7 @@ status: proposed
 type: blueprint
 owner: SyniakSviatoslav
 created: 2026-07-14
-updated: 2026-07-14
+updated: 2026-07-15
 supersedes: []
 superseded_by: null
 links:
@@ -142,15 +142,15 @@ test (only `spectral` + `order_machine` currently traverse it).
 | **Context drift** (distributional) | PSI/JSD/KL, "lost-in-the-middle" U-curve (2307.03172) | `markov::analyze:81` (entropy), new `psi()` | STRANDED | PSI>0.2 over embedding-cluster histogram; report the **full position curve**, never the mean |
 | **Hallucination** (self-consistency) | SelfCheckGPT (2303.08896); EigenScore/INSIDE (2402.03744) | `spectral::eigenvalues:195` over N-sample Gram matrix | STRANDED | **EigenScore** = mean log-eigenvalue of sample covariance; low-rank ⟺ confident |
 | **Hallucination** (semantic entropy) | Farquhar, Nature 2024 (s41586-024-07421-0) | `spectral::laplacian:242` null-space → components; `markov` entropy | STRANDED | discrete semantic entropy over cosine-graph connected components |
-| **Novelty / surprise** | innovation/residual (Kalman) | `kalman::update:201` — **innovation `y=z−Hx` is discarded at :215** | STRANDED **+ bug** | expose `y`; surprise = ‖innovation‖ / √S |
+| **Novelty / surprise** | innovation/residual (Kalman) | `kalman::update:201` — **innovation `y=z−Hx` was discarded at :215** | DONE (E0) | `last_innovation()` / `last_surprise()` exposed; surprise = ‖innovation‖ / √S |
 | **Faithfulness** (CoT-causal) | Lanham causal interventions (2307.13702); *self-consistency ≠ mechanistic* (2311.07466) | `order_machine` graph analysis as step-influence DAG | reuse WIRED | truncation-AOC, add-mistake, filler-token → argmax flip rate (pure string/argmax diff) |
 | **Faithfulness / groundedness** | ALCE NLI recall/precision (2305.14627); RAGAS-default is **LLM-judge → advisory only** | `living_knowledge::retrieve:76`, `verify_retrieval::verify_then_lookup:36` | STRANDED **+ bug** | claim↔source **coverage** = fraction of claims whose max cosine to a cited chunk > τ (upgrade to self-hosted HHEM/SummaC NLI where budget allows) |
-| **Retrieval recall** | HippoRAG PPR recall (2405.14831) | `csr::personalized_pagerank:204` (fixed-K, bit-reproducible) | STRANDED | recall@k over PPR ranking — **note: no in-kernel `recall@k` scorer exists yet**, scoring is delegated to the JS bridge |
+| **Retrieval recall** | HippoRAG PPR recall (2405.14831) | `csr::personalized_pagerank:204` (fixed-K, bit-reproducible) | DONE (E0) | `recall_at_k`/`precision_at_k` score a PPR ranking vs a relevance set (in-kernel, deterministic) |
 | **Goal convergence / agency** | GAIA/WebArena success (2311.12983 / 2307.13854); pass^k (2406.12045) | `absorbing::expected_steps:67`, `order_machine::reachable:270` | STRANDED | reachable-to-goal (bool); path-len ÷ shortest-path (efficiency); repeat-N → pass^k |
-| **Consistency / conservation** | metamorphic invariants (§3) | `noether::step_preserves:19`, `invariant_drift:48` | STRANDED | Σ‖ΔI‖ over a run; must be ≤ tol |
+| **Consistency / conservation** | metamorphic invariants (§3) | `noether::step_preserves:19`, `invariant_drift:48` | DONE (E1) | `noether_conserving`/`noether_nonconserving` MR items in `evals.rs`; Σ‖ΔI‖ ≤ tol enforced by oracle |
 | **Loop-lock / repetition** (hallucination failure-mode) | attractor detection; Foster-Lyapunov | `markov::analyze:81` (Verdict, escape_mass, drift, SLEM), `budget:69` | STRANDED | attractor Verdict + escape-mass; retry-cap `k=ln(1/tol)/ln(1/slem)` |
 | **Empowerment / health** | Klyubin channel capacity (2005) | Blahut-Arimoto over `markov` transition matrix | new | reward-free agency signal; →0 ⟺ lost control (analogue of the shipped ρ≈0 ⟺ acyclic) |
-| **Calibration / abstention** | ECE/Brier/AURC; SimpleQA rewards abstention | new `calibration.rs` over Kalman posterior var / Markov mass | new | ECE (bin |acc−conf|), Brier, risk-coverage AURC |
+| **Calibration / abstention** | ECE/Brier/AURC; SimpleQA rewards abstention | `evals.rs` `ece`/`brier`/`aurc` over kernel probability outputs | DONE (E1) | ECE (bin |acc−conf|), Brier, risk-coverage AURC — hand-validated tests in `evals.rs` |
 
 **Three concrete bugs, fixed (E0 — 2026-07-15, RED→GREEN via `cargo test` in
 `kernel/`):** the eval primitives crate now surfaces these as live, tested
@@ -190,11 +190,13 @@ A metamorphic relation (MR) checks a *relation* between `f(X)` and `f(T(X))` —
 absolute answer is unknown. The kernel's own invariants are both **generator and oracle**, unbounded and
 leak-free:
 
-- **FSM relabeling invariance** — permuting state labels must not change `has_cycle:524` / `topological_order:213` / `reachable:270`.
+- **FSM relabeling invariance** — permuting state labels must not change `has_cycle:524` / `topological_order:213` / `reachable:270`. *(Note 2026-07-15: those `order_machine` fns are parameterless singletons over a fixed FSM — they cannot take a relabeled graph as input. The E1 generator therefore uses the **input-accepting** kernel primitives below as its MR substrate; the FSM-MR is deferred behind an `FsmGraph` input adapter. See `kernel/src/evals.rs`.)*
 - **Edge-permutation invariance** of `spectral_radius:311` (and cross-check vs `spectral::spectral_radius:217` — the parity gate at `spectral.rs:351`).
 - **Kalman scaling law** — scaling process noise `Q` by `k²` scales posterior covariance predictably (`kalman.rs`).
 - **PPR seed-locality / stationarity** — the 6 hand-oracles already in `csr.rs` become MR templates.
 - **Noether conservation** — `invariant_drift:48` must stay ≤ tol under any structure-preserving transform.
+
+**E1 implemented (2026-07-15, RED→GREEN via `cargo test` in `kernel/`):** `MetamorphicGenerator` in `kernel/src/evals.rs` mints 5 MR families over the input-accepting primitives — `spectral_similarity(n)`, `kalman_q_scaling(q)`, `noether_conserving(dim)`, `noether_nonconserving(dim)`, `recall_constructed(m)` — each carrying a deterministic programmatic oracle (`passed`). Calibration metrics `ece`/`brier`/`aurc` are implemented and hand-validated. See `evals.rs` tests.
 
 Each MR yields **infinite fresh instances with a free oracle** → the benchmark never staleness-leaks.
 
@@ -205,9 +207,9 @@ Each MR yields **infinite fresh instances with a free oracle** → the benchmark
   (AdvGLUE found ~90% of raw automatic attacks change meaning — the validity filter is not optional).
 
 ### §3.3 Leakage / dedup admission gate
-- Reject a "held-out" item if its embedding cosine to any prior item > ~0.9 (semantic NN gate), and log
-  the mint-timestamp. Note *The Leaderboard Illusion* (2504.20879): **dynamic ≠ Goodhart-proof** without
-  disclosed sampling — so the mint log is disclosed, and the comparison graph stays connected.
+- **Structural gate — BUILT (2026-07-15).** `MintLog` (deterministic 128-bit FNV-1a over `(kind ‖ payload)`) rejects any exact `(kind, payload)` re-mint: `mint()` returns `None` for a seen payload. This kills byte-level contamination structurally (the LiveCodeBench timestamp-mint idea, realized as a content hash — no need for wall-clock in a hermetic suite). Test `leakage_gate_rejects_duplicate` + `identical_params_rejected_as_duplicate` green.
+- **Semantic gate — DEFERRED to the embedding adapter (§7).** Rejecting an item whose *embedding cosine* to any prior item > ~0.9 requires an embedding bridge (the `living_knowledge` / vector-index adapter). The blueprint's cosine-0.9 gate is intentionally *not* faked with a proxy in kernel; it lands when the embedding adapter (N0-adjacent) exists. Until then the structural gate is the authoritative barrier, and the mint log is disclosed so the comparison graph stays connected.
+- Note *The Leaderboard Illusion* (2504.20879): **dynamic ≠ Goodhart-proof** without disclosed sampling — so the mint log is disclosed, and the comparison graph stays connected.
 
 ### §3.4 Calibration + reliability (the abstention organ the system lacks)
 - **ECE / Brier / risk-coverage AURC** in pure Rust over the kernel's own probability outputs (Kalman
@@ -379,7 +381,7 @@ autonomy expansion). Nothing below is enacted by this document; the 🔴 rows re
 | Phase | Scope | Gate | Proof obligation (RED→GREEN) |
 |---|---|---|---|
 | **E0** Eval-primitives crate | un-strand the 9 STRANDED organs into an `evals` module w/ wasm exports + oracle tests; fix the 3 bugs (§2) | 🟢 | each metric red→green vs a hand-oracle; `verify_retrieval` dead-branch test; Kalman-innovation surfaced test |
-| **E1** Benchmark generator | metamorphic synthesis over FSM invariants; timestamp-minted oracle; cosine-0.9 leakage gate; ECE/Brier/AURC | 🟢 | generator emits N fresh items whose MR-oracle passes; leakage gate rejects a >0.9 dup (red→green) |
+| **E1** Benchmark generator | metamorphic synthesis over input-accepting kernel invariants; deterministic MintLog leakage gate; ECE/Brier/AURC | 🟢 | generator emits N fresh items whose MR-oracle passes (test `emits_fresh_passing_items`); leakage gate rejects an exact dup (test `leakage_gate_rejects_duplicate`); **DONE — 2026-07-15, 6 evals tests green, kernel suite 222 pass** |
 | **E2** Self-eval loop wiring | persist scalars (JSONL); regression gate; Kalman drift-trend; feed `analyze.mjs` | 🟡 | a seeded regression flips the gate red; a stable run stays green; persistence survives a session boundary |
 | **E3** Self-adaptation | un-strand `online`/`micrograd` to minimize eval-loss under `noether` guard | 🟡 | adaptation reduces eval-loss on held-out items **without** raising `invariant_drift` above tol |
 | **B0** bebop harness (non-crypto) | CRDT-convergence property test; wire-decode fuzz; differential G2; empty-import→pre-commit | 🟡 | §4 targets 3,4,7,8 red→green |
