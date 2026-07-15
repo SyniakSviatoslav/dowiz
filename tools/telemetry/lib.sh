@@ -43,8 +43,10 @@ log_event() {
   printf '%s\n' "$line"   # echo back for piping/inspection
 }
 
-# Send a plain-text message to Telegram with a retry loop that honors Telegram's
-# 429 rate-limit (retry_after) via bounded exponential backoff. Returns 0 on ok:true.
+# Send a plain-text message to Telegram.
+# Rate control: (1) a global minimum inter-message gap (TG_MIN_GAP, default 3.5s) so bulk
+# posters (e.g. plans batches) self-space and never trip the forum ~20msg/min limit; (2) a
+# retry loop that honors Telegram's 429 retry_after via bounded backoff. Returns 0 on ok:true.
 # Never prints the token. Honors TELEGRAM_TOPIC_ID (forum topic / message_thread_id).
 # Default hermes topic = 267.
 tg_send() {
@@ -53,6 +55,20 @@ tg_send() {
     echo "tg_send: no TELEGRAM_BOT_TOKEN (set env or dowiz/.env)" >&2
     return 1
   fi
+  # global throttle: ensure >= TG_MIN_GAP seconds since last successful/attempted send
+  local gap="${TG_MIN_GAP:-3.5}"
+  local statef="/tmp/.tg_send_last"
+  local now last delta
+  now="$(date +%s.%N 2>/dev/null || date +%s)"
+  if [ -f "$statef" ]; then
+    last="$(cat "$statef" 2>/dev/null)"
+    delta="$(awk -v n="$now" -v l="$last" 'BEGIN{d=n-l; if(d<0)d=0; printf "%.2f", d}')"
+    if awk -v d="$delta" -v g="$gap" 'BEGIN{exit !(d<g)}'; then
+      sleep "$(awk -v d="$delta" -v g="$gap" 'BEGIN{printf "%.2f", g-d}')"
+    fi
+  fi
+  date +%s.%N 2>/dev/null > "$statef" || date +%s > "$statef"
+
   local url="https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"
   local thread="${TELEGRAM_TOPIC_ID:-267}"
   local attempt resp sleep_s=2
