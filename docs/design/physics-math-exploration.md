@@ -29,8 +29,16 @@ Research queue (in order; pull the next item when the current is GREEN):
    out-of-range inputs rejected. Note: Wald assumes a *constant* LATE; the weak-IV case
    yields β>1 for a binary Y, which the math reports faithfully (the known limit, not
    hidden).
-4. ⬜ **counterfactual inference** — `P(Y_x | X=x', Y=y')` via the three-step
-   (abduction → action → prediction) on the twin-network.
+4. ✅ **counterfactual inference (twin-network, three-step)** — DONE 2026-07-15.
+   `kernel/src/causal.rs`. The deepest Pearl rung: `P(Y_x | X=x', Y=y')` — what Y would
+   have been had X=x in the world where we actually saw (x', y'). On a linear SCM
+   `X=α·U, Y=β·X+γ·U` it is the three-step: (1) **abduction** recover U=x'/α from the
+   observation; (2) **action** set X:=x; (3) **prediction** `Y_x = β·x + γ·(x'/α)`.
+   Falsifiable: hand oracle `Y_2=4`, `Y_10` differs per observed unit (12 vs 10) proving it
+   uses the *observed* U, not a population mean; a counterfactual (12) ≠ factual (6).
+   Trust-boundary RED: an observation the SCM cannot generate (e.g. (4,5) when Y=1.5·X=6)
+   is rejected — no silent fake value; α=0 (U unidentifiable from X) rejected; the
+   confounding-free case (γ=0) still works and is consistency-checked.
 5. ⬜ **d-separation oracle** — a graph algorithm deciding conditional independence
    from the DAG (the structural primitive the adjustments above all assume).
 
