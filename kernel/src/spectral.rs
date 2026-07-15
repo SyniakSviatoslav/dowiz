@@ -334,6 +334,29 @@ pub fn classify_drift(a: &[Vec<f64>]) -> DriftClass {
     }
 }
 
+/// One-line human-readable spectral report for a graph adjacency matrix — the
+/// vectorless "at-a-glance" signature. Combines the four structural invariants
+/// the kernel already computes:
+///   * energy          E = Σ|λ|            (graph activity, Gutman 1978)
+///   * spectral_radius ρ = max|λ|          (Perron–Frobenius stability)
+///   * fiedler         λ₂(L)               (algebraic connectivity)
+///   * drift ∈ {Damped|Resonant|Unstable} (ρ vs the unit circle)
+/// No embedding, no I/O, single pass over the spectrum via the reused helpers.
+pub fn graph_energy_report(adj: &[Vec<f64>]) -> String {
+    let drift = match classify_drift(adj) {
+        DriftClass::Damped => "Damped",
+        DriftClass::Resonant => "Resonant",
+        DriftClass::Unstable => "Unstable",
+    };
+    format!(
+        "energy={:.6} spectral_radius={:.6} fiedler={:.6} drift={}",
+        graph_energy(adj),
+        spectral_radius(adj),
+        algebraic_connectivity(adj),
+        drift,
+    )
+}
+
 /// Dominant oscillation period from the eigenvalue nearest the unit circle that
 /// points away from +1: ℓ ≈ 2π/|arg λ|. `Some(2.0)` for a period-2 (μ≈−1) cycle,
 /// `None` for a non-oscillatory operator. Thresholds match the Python detector.
@@ -494,6 +517,38 @@ mod tests {
         assert_eq!(classify_drift(&damped), DriftClass::Damped);
         assert_eq!(classify_drift(&unstable), DriftClass::Unstable);
         assert_eq!(classify_drift(&resonant), DriftClass::Resonant);
+    }
+
+    // ── GREEN Verified-by-Math: graph_energy_report on K3 (complete triangle).
+    //    Eigenvalues of K3 adjacency are {2, −1, −1}: E=Σ|λ|=4, ρ=2 (Unstable
+    //    for an adjacency vs unit circle), Fiedler λ₂(L)=3 (Laplacian of K3 has
+    //    eigenvalues {0,3,3}). All values are exact, hand-verified. ──
+    #[test]
+    fn green_graph_energy_report_k3() {
+        let k3 = vec![
+            vec![0.0, 1.0, 1.0],
+            vec![1.0, 0.0, 1.0],
+            vec![1.0, 1.0, 0.0],
+        ];
+        let report = graph_energy_report(&k3);
+        assert_eq!(
+            report,
+            "energy=4.000000 spectral_radius=2.000000 fiedler=3.000000 drift=Unstable",
+            "K3: E=4, ρ=2, λ₂(L)=3, ρ>1 ⇒ Unstable"
+        );
+    }
+
+    // ── GREEN Verified-by-Math: graph_energy_report on a 2-cycle. Eigenvalues
+    //    ±1: E=2, ρ=1 (Resonant), Fiedler λ₂(L)=2 (Laplacian eigs {0,2}). ──
+    #[test]
+    fn green_graph_energy_report_two_cycle_resonant() {
+        let c = vec![vec![0.0, 1.0], vec![1.0, 0.0]];
+        let report = graph_energy_report(&c);
+        assert_eq!(
+            report,
+            "energy=2.000000 spectral_radius=1.000000 fiedler=2.000000 drift=Resonant",
+            "2-cycle: E=2, ρ=1 ⇒ Resonant, λ₂(L)=2"
+        );
     }
 
     // ── S0.5 FOUNDATION: parity proof that the contiguous `matmul_contig`

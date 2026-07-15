@@ -360,6 +360,31 @@ pub fn spectral_radius() -> f64 {
     rho.abs()
 }
 
+/// Human-readable stability verdict for the lifecycle FSM. Applies the same
+/// spectral/energy drift lens used on generic graphs to the FSM's own directed
+/// transition matrix: computes ρ via `spectral_radius()` and classifies it vs
+/// the unit circle (Perron–Frobenius). For the acyclic forward lifecycle ρ=0,
+/// so the verdict is `FSM stable: ρ=0.000000 damped`. Should a cycle ever be
+/// introduced (ρ→1 or higher), the verdict flips to `resonant`/`unstable`,
+/// tripping a drift gate. Pure-std, no I/O.
+///
+/// Cross-check (Verified-by-Math): the drift word matches `classify_drift` run
+/// on the 1×1 matrix [[ρ]] — a scalar operator with the FSM's spectral radius.
+pub fn fsm_stability_report() -> String {
+    let rho = spectral_radius();
+    let word = match crate::spectral::classify_drift(&[vec![rho]]) {
+        crate::spectral::DriftClass::Damped => "damped",
+        crate::spectral::DriftClass::Resonant => "resonant",
+        crate::spectral::DriftClass::Unstable => "unstable",
+    };
+    let label = if matches!(word, "damped" | "resonant") {
+        "FSM stable"
+    } else {
+        "FSM UNSTABLE"
+    };
+    format!("{}: ρ={:.6} {}", label, rho, word)
+}
+
 /// Aggregate structural signature of the lifecycle FSM — combines every graph
 /// analysis into one observation that can be emitted as drift telemetry. A
 /// silent change to `allowed_next` (e.g. a sneaky `Reopen` edge, or accidentally
@@ -857,6 +882,19 @@ mod tests {
         // still be 0 — proving the μ=1 cycle is not a directed re-open loop.
         assert!(cyclomatic_number() > 0);
         assert!(rho_is_zero);
+    }
+
+    // ── GREEN Verified-by-Math: the FSM stability verdict. The lifecycle is a
+    //    DAG ⇒ ρ=0 ⇒ Damped ⇒ exact verdict string. This locks the wording and
+    //    the spectral value; any future re-open edge (ρ→1) flips the verdict. ──
+    #[test]
+    fn green_fsm_stability_report_damped() {
+        assert!(!has_cycle(), "precondition: lifecycle is a DAG");
+        assert_eq!(
+            fsm_stability_report(),
+            "FSM stable: ρ=0.000000 damped",
+            "acyclic FSM ⇒ ρ=0 ⇒ damped"
+        );
     }
 
     // ── GREEN: the aggregate report's internal lenses agree (drift-invariant) ──
