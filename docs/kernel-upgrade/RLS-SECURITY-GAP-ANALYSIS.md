@@ -65,8 +65,52 @@ exploitable on the current branch because the tables do not run.
   confirmation. This document is the gap analysis + reconciliation the operator
   asked for; the fixes are queued as reactivation gates, not applied.
 
+### CORRECTIONS — 2-pass subagent review (supersedes "nothing un-planned", 2026-07-15)
+The first pass overstated completeness. A deeper cross-read (deleg_84061e1e)
+found real, LIVE, un-planned gaps the attic framing hid:
+
+1. **M1–M6 MONEY INTEGRITY — entirely MISSING (not "attic-only").** These sit on
+   LIVE kernel code, not the quarantined tier:
+   - M1 client-side authoritative pricing (WASM Storefront) — no server re-price.
+   - M2 `kernel/src/domain.rs::place_order` trusts caller `unit_price`, no catalog.
+   - M4 `kernel/src/money.rs` unchecked integer math (release wraps).
+   - M5 no currency field / mixed-currency guard. M6 dead defensive checks.
+   Only safe TODAY because web glue stubs `unit_price:0` (M3). **No ADR/plan
+   covers any money finding.** Top genuine gap.
+2. **R10/R11 message-bus — LIVE, MISSING.** `packages/platform/src/message-bus.ts`
+   has raw-SQL channel-identifier interpolation (latent SQLi) + unpinned pool
+   connection. This is live TS, not attic. No plan.
+3. **D1-F2 role gate** on courier routes is plan-only-not-done (cheap route-guard,
+   deferred). D1-F1 live prod owner cred is OPERATOR (decommission runnable only
+   off repo host).
+4. **R7** (BYPASSRLS migration hygiene) + **DSAR/export** endpoint — no plan at all.
+
+=> Revised verdict: the pasted list is PARTIALLY planned. RLS/PII/most D-items are
+class-covered by ADR-0007/0008/0009 (design-level, code undone). But **money (M1–M6)
++ live message-bus (R10/R11) + D1-F2 are genuinely un-planned and on LIVE code** —
+the kernel autopilot's "0 live exposure" claim applies to RLS/SQL only, NOT to the
+money engine. Money authority is the actionable next frontier.
+
+### UNWIRED ORGANS — corrected (VertexBridge found, was missed first pass)
+- `resonator` (bebop2-core, host-gated) — WIRED via wasm `resonate`; only stranded
+  at app level (deleted JS loader). Not dead.
+- `living_knowledge` (dowiz kernel) — adapter registered + fail-closed, but the
+  JS engine it bridges to (`scripts/lk-bridge.mjs`) is ABSENT; real spike on an
+  off-tree branch. Stranded, not dead.
+- **`VertexBridge` (dowiz/engine/src/bridge.rs) — REGISTERED but UNWIRED.** This is
+  the actual "unwired organ" the directive worried about. `upload_once()` only
+  increments a counter; `wgpu` is absent from `engine/Cargo.toml`. The zero-copy
+  contract is RED→GREEN tested but models a GPU it never touches. Activation: add
+  `wgpu` behind a `gpu` feature + real `queue.write_buffer`. NOTE: this is in the
+  `engine` crate, OUTSIDE the kernel/wasm-lib autopilot scope — but it is a real
+  gap worth queueing.
+
 ### Recommended next (operator decision, not executed)
-A) Leave `attic/` quarantined (current state — safe, 0 live exposure).
+A) Leave `attic/` quarantined (current state — safe, 0 live exposure for RLS/SQL).
 B) When un-quarantining: run D2's fix list as a gated migration wave with
    `verify:rls` + boot-guard, then re-run the red-team probe before first real
    order (G11 GREEN criterion).
+C) **Money frontier (new):** draft a server/node-authoritative re-pricer design
+   (closes M1/M2); add `checked_*` arithmetic + currency field (M4/M5) to the
+   kernel — these are kernel-scope, NOT red-line, and should be planned next.
+D) **VertexBridge:** queue GPU activation behind a `gpu` feature (engine crate).
