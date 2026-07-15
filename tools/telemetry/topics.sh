@@ -127,24 +127,30 @@ git_watch_loop() {
   done
 }
 
-# ---- cloudflare watcher (proven method: wrangler tail; fallback: log-file poll) ----
+# ---- cloudflare watcher (persistent loop; proven method: wrangler tail) ----
 cf_watch_loop() {
   local iv="${1:-60}"
   local logfile="${CF_LOG_FILE:-$HOME/ops/cf/cf.log}"
-  if command -v wrangler >/dev/null 2>&1; then
-    echo "cf-watch: wrangler tail -> topic 293 (proven real-time method)" >&2
-    TELEGRAM_TOPIC_ID=293 wrangler tail --format json 2>/dev/null | while IFS= read -r ev; do
-      TELEGRAM_TOPIC_ID=293 tg_send "☁️ cf: $(printf '%s' "$ev" | head -c 200)" || true
-    done
-  elif [ -f "$logfile" ]; then
-    echo "cf-watch: polling $logfile -> topic 293 every ${iv}s" >&2
-    tail -n 0 -F "$logfile" 2>/dev/null | while IFS= read -r line; do
-      TELEGRAM_TOPIC_ID=293 tg_send "☁️ cf: $(printf '%s' "$line" | head -c 200)" || true
-    done
-  else
-    echo "cf-watch: wrangler not installed and no CF_LOG_FILE set; post a one-time note to topic 293" >&2
-    TELEGRAM_TOPIC_ID=293 tg_send "☁️ Cloudflare topic ready. Proven method: 'wrangler tail' (install wrangler + auth) or set CF_LOG_FILE=/path/to/cf.log to poll a log file. No live CF signal on this box yet." || true
-  fi
+  echo "cf-watch: -> topic 293 (proven method: 'wrangler tail'; fallback CF_LOG_FILE poll)" >&2
+  local noted=0
+  while true; do
+    if command -v wrangler >/dev/null 2>&1; then
+      echo "cf-watch: wrangler tail -> topic 293" >&2
+      TELEGRAM_TOPIC_ID=293 wrangler tail --format json 2>/dev/null | while IFS= read -r ev; do
+        TELEGRAM_TOPIC_ID=293 tg_send "☁️ cf: $(printf '%s' "$ev" | head -c 200)" || true
+      done
+    elif [ -f "$logfile" ]; then
+      tail -n 0 -F "$logfile" 2>/dev/null | while IFS= read -r line; do
+        TELEGRAM_TOPIC_ID=293 tg_send "☁️ cf: $(printf '%s' "$line" | head -c 200)" || true
+      done
+    else
+      if [ "$noted" -eq 0 ]; then
+        TELEGRAM_TOPIC_ID=293 tg_send "☁️ Cloudflare topic ready. Proven method: 'wrangler tail' (install wrangler + auth) or set CF_LOG_FILE=/path/to/cf.log to poll a log file. No live CF signal on this box yet." || true
+        noted=1
+      fi
+    fi
+    sleep "$iv"
+  done
 }
 
 # ---- benchmarks/entropy/eval watcher (60s loop, posts deltas) ----
