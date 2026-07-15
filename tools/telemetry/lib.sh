@@ -24,6 +24,46 @@ _host()     { hostname -s 2>/dev/null || echo host; }
 # JSON-escape one string value (stdin -> stdout, no surrounding quotes).
 _jesc() { python3 -c 'import json,sys;print(json.dumps(sys.stdin.read())[1:-1])'; }
 
+# --- spool-based Telegram delivery (HK-11, 2026-07-15) ---
+# The FAST critical path: append one JSON line to a spool (microseconds) and
+# return immediately. A background Rust binary (telemetry-spool) drains it at
+# the kernel-derived 3.5s pace, so the agent's work is NEVER blocked behind
+# the network. With the drainer down, tg_deliver falls back to synchronous
+# tg_send so reporting never goes silent.
+
+# Ensure exactly one spool drainer is running. Returns 0 if the drainer can run.
+tg_spool_ensure() {
+  pgrep -f 'target/release/telemetry-spool' >/dev/null 2>&1 && return 0
+  local bin="$TELEMETRY_DIR/rust-spool/target/release/telemetry-spool"
+  if [ -x "$bin" ] && _load_token; then
+    TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN" nohup "$bin" >/tmp/telemetry-spool/drainer.log 2>&1 &
+    return 0
+  fi
+  return 1
+}
+
+# Append a message to the spool (topic defaults to HERMES 267).
+tg_spool() {
+  local text="$1" topic="${2:-${TELEGRAM_TOPIC_ID:-267}}"
+  local spool="/tmp/telemetry-spool/queue.jsonl"
+  mkdir -p "$(dirname "$spool")"
+  local esc
+  esc="$(printf '%s' "$text" | _jesc)"
+  printf '{"chat_id":"%s","topic_id":%s,"text":"%s"}\n' "$CHAT_ID" "$topic" "$esc" >> "$spool"
+}
+
+# Deliver to Telegram: spool (fast) when possible, else sync fallback.
+# Honors TELEMETRY_NO_TG:1 everywhere (never touches network or spool).
+tg_deliver() {
+  local text="$1" topic="${2:-${TELEGRAM_TOPIC_ID:-267}}"
+  [ "${TELEMETRY_NO_TG:-0}" = "1" ] && return 0
+  if tg_spool_ensure 2>/dev/null; then
+    tg_spool "$text" "$topic"
+  else
+    tg_send "$text"
+  fi
+}
+
 # Append one structured event to a per-kind JSONL ledger.
 # args: <kind> <k=v>...  (values may contain spaces)
 log_event() {

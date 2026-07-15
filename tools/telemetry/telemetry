@@ -29,11 +29,24 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=governance.sh
 . "$DIR/governance.sh"
 
+# Path to the native Rust kernel binary (HK-11 compute layer). Falls back to a
+# no-op if not built, so reporting still works (just computes inline).
+KERNEL_BIN="${TELEMETRY_KERNEL_BIN:-$DIR/hermes-kernel}"
+_kernel_json() {
+  # <op> <json-body> -> emits the kernel's {"text":...} field, or nothing.
+  # json-body is built by the caller with a SINGLE-quoted printf so the
+  # structural double-quotes stay literal (no backslash-escaping pitfalls).
+  local op="$1" body="$2"
+  [ -x "$KERNEL_BIN" ] || { return 1; }
+  printf '{"op":"%s",%s}' "$op" "$body" | "$KERNEL_BIN" 2>/dev/null \
+    | python3 -c 'import sys,json;d=json.load(sys.stdin);print(d.get("text",""))' 2>/dev/null
+}
+
 _emit() {  # <kind> <telegram_prefix> <telegram_body> <k=v>...
   local kind="$1" pfx="$2" body="$3"; shift 3
   log_event "$kind" "$@" >/dev/null
   if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
-    tg_send "${pfx} ${body}" || echo "telemetry: local log written, Telegram send failed" >&2
+    tg_deliver "${pfx} ${body}"
   fi
 }
 
@@ -92,7 +105,7 @@ case "$cmd" in
       awk -v l="$load1" -v n="$nproc" 'BEGIN{exit !(n>0 && l/n>=4)}' && friction="${friction:+$friction; }CPU饱和 load1=$load1 nproc=$nproc"
       awk -v m="$mem_pct" 'BEGIN{exit !(m>=90)}' && friction="${friction:+$friction; }mem ${mem_pct}%"
       if [ -n "$friction" ] && [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
-        tg_send "🔥 friction: $friction" || true
+        tg_deliver "🔥 friction: $friction"
       fi
       sleep "$iv"
     done ;;
@@ -119,7 +132,7 @@ case "$cmd" in
       dp="$(printf '%s' "$s" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["disk_pct"])' 2>/dev/null)"
       mp="$(printf '%s' "$s" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["mem_pct"])' 2>/dev/null)"
       ld="$(printf '%s' "$s" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["load1"])' 2>/dev/null)"
-      TELEGRAM_TOPIC_ID=272 tg_send "💓 Hetzner heart — disk=${dp}% mem=${mp}% load1=${ld} @ $(date -u +%H:%M:%S)Z" \
+      TELEGRAM_TOPIC_ID=272 tg_deliver "💓 Hetzner heart — disk=${dp}% mem=${mp}% load1=${ld} @ $(date -u +%H:%M:%S)Z" \
         || echo "hetzner-heart: send failed" >&2
       sleep "$iv"
     done ;;
@@ -160,7 +173,17 @@ PY
   # evaluation/planning (sort blueprints into parallel waves by ETA) -> work. A plan is
   # created BEFORE any code with ETA timing + token/agent budget; phases ticked via `phase`.
   plan)
-    id="${1:?plan id}"; shift; title="$*"
+    id="${1:?plan id}"; shift
+    # Title = every arg up to the first --flag (FIX: the old code did title="$*"
+    # BEFORE the flag loop, so --steps/--eta-min/--eta-tokens were swallowed into
+    # the title -> ETA/tokens showed 0. Now we stop at the first flag.)
+    title=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --*) break;;
+        *) title="${title:+$title }$1"; shift;;
+      esac
+    done
     steps=0 eta_min=0 eta_tokens=0 agents=1 waves=1 topics="" risks="" before=""
     while [ $# -ge 2 ]; do
       case "$1" in
@@ -174,27 +197,27 @@ PY
       "topics=$(printf '%s' "$topics" | _jesc)" \
       "risks=$(printf '%s' "$risks" | _jesc)" "status_before=$(printf '%s' "$before" | _jesc)" \
       "state=planned" >/dev/null
-    hdr="📋 PLAN ▸ $id
-🎯 $title
-🔑 Topics: ${topics:-—}
-⚠️ Risks: ${risks:-—}
-📂 Before: ${before:-—}
-🧮 Scope: $steps steps | ⏱ ETA ${eta_min}min | 🪙 ~${eta_tokens} tok | 🤖 ${agents} agent(s) | 🌊 ${waves} wave(s)"
-    if [ "${TELEGRAM_NO_TG:-0}" != "1" ]; then
-      TELEGRAM_TOPIC_ID=291 tg_send "$hdr" || true   # Planning topic
-      tg_send "$hdr" || true                          # Hermes topic (default 267)
+    # Compute the header via the kernel (correct ETA + tokens, pure), fall back
+    # to inline render if the kernel binary is absent.
+    hdr="$(_kernel_json report_plan "$(printf '"id":"%s","title":"%s","steps":%s,"eta_min":%s,"eta_tokens":%s,"agents":%s,"waves":%s,"topics":"%s","risks":"%s","before":"%s"' "$id" "$title" "$steps" "$eta_min" "$eta_tokens" "$agents" "$waves" "$topics" "$risks" "$before")")"
+    if [ -z "$hdr" ]; then
+      hdr="$(printf '📋 PLAN ▸ %s\n🎯 %s\n🔑 Topics: %s\n⚠️ Risks: %s\n📂 Before: %s\n🧮 Scope: %s steps | ⏱ ETA %smin | 🪙 ~%s tok | 🤖 %s agent(s) | 🌊 %s wave(s)' "$id" "$title" "${topics:-—}" "${risks:-—}" "${before:-—}" "$steps" "$eta_min" "$eta_tokens" "$agents" "$waves")"
+    fi
+    if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
+      TELEGRAM_TOPIC_ID=291 tg_deliver "$hdr"   # Planning topic (fast spool)
+      tg_deliver "$hdr"                          # Hermes topic (default 267)
     fi
     printf '%s\n' "$hdr" ;;
-  # ---- phased discipline (operator 2026-07-15) ----
+
   # Tick a phase of the approved workflow: research -> critique -> blueprint -> eval -> work.
   phase)
     id="${1:?plan id}"; ph="${2:?research|critique|blueprint|eval|work}"; note="${3:-}"
     ico="🔬"; case "$ph" in critique) ico="🧐";; blueprint) ico="📐";; eval) ico="📊";; work) ico="🛠";; esac
     log_event phase "id=$id" "phase=$ph" "note=$(printf '%s' "$note" | _jesc)" >/dev/null
     msg="$ico PHASE $id ▸ $ph ${note:+ — $note}"
-    if [ "${TELEGRAM_NO_TG:-0}" != "1" ]; then
-      TELEGRAM_TOPIC_ID=291 tg_send "$msg" || true
-      tg_send "$msg" || true
+    if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
+      TELEGRAM_TOPIC_ID=291 tg_deliver "$msg"
+      tg_deliver "$msg"
     fi
     printf '%s\n' "$msg" ;;
   # Register a blueprint task for the eval/planning phase, with its own ETA + agent budget + wave.
@@ -240,9 +263,9 @@ for w in sorted(waves):
 PY
 )"
     printf '%s\n' "$out"
-    if [ "${TELEGRAM_NO_TG:-0}" != "1" ]; then
-      TELEGRAM_TOPIC_ID=291 tg_send "$out" || true
-      tg_send "$out" || true
+    if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
+      TELEGRAM_TOPIC_ID=291 tg_deliver "$out"
+      tg_deliver "$out"
     fi ;;
   step)
     id="${1:?plan id}"; done="${2:?done count}"; total="${3:-}"; note="${4:-}"
@@ -251,15 +274,17 @@ PY
       || log_event plan_step "id=$id" "done=$done" "note=$(printf '%s' "$note" | _jesc)" >/dev/null
     tot="${total:-$(_plan_total "$id")}"; tot="${tot:-$?}"
     pct=0; [ -n "$tot" ] && [ "$tot" -gt 0 ] 2>/dev/null && pct=$((100*done/tot))
-    printf 'step %s: %s/%s (%s%%)\n' "$id" "$done" "${tot:-?}" "$pct"
+    line="$(_kernel_json report_step "$(printf '"id":"%s","done":%s,"total":%s,"note":"%s"' "$id" "$done" "${tot:-0}" "$note")")"
+    [ -z "$line" ] && line="📈 $id progress: $done/${tot:-?} ($pct%) ${note:+ | $note}"
+    printf '%s\n' "$line"
     if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
-      tg_send "📈 $id progress: $done/${tot:-?} ($pct%) ${note:+ | $note}" || true
+      tg_deliver "$line"
     fi ;;
   alert)
     id="${1:?plan id}"; atype="${2:?error|decision}"; shift 2; msg="$*"
     log_event alert "id=$id" "type=$atype" "msg=$(printf '%s' "$msg" | _jesc)" "resolved=false" >/dev/null
     ico="🚨"; [ "$atype" = "decision" ] && ico="❓"
-    if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then tg_send "$ico $id [$atype] $msg" || true; fi
+    if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then tg_deliver "$ico $id [$atype] $msg"; fi
     printf '%s\n' "$ico $id [$atype] $msg" ;;
   track)
     # Background-safe 60s poll loop for a plan's % status + ETA + open alerts.
@@ -276,15 +301,12 @@ PY
 s=datetime.datetime.strptime('$start','%Y-%m-%dT%H:%M:%SZ');
 n=datetime.datetime.strptime('$now','%Y-%m-%dT%H:%M:%SZ');
 print(int((n-s).total_seconds()//60))" 2>/dev/null)
-      line="$id: $done/${tot:-?} ($pct%) | elapsed ${el_min}min / ETA ${eta_min}min"
-      over=""; [ -n "$eta_min" ] && [ "$eta_min" -gt 0 ] 2>/dev/null && [ "$el_min" -gt "$eta_min" ] 2>/dev/null \
-        && over=" | ⚠️ ETA overshoot +$((el_min-eta_min))min"
-      open="$(_plan_open_alerts "$id")"
-      dec=""; [ "$open" -gt 0 ] 2>/dev/null && dec=" | ❓ $open open alert(s)"
+      line="$(_kernel_json report_track "$(printf '"id":"%s","done":%s,"total":%s,"elapsed_min":%s,"eta_min":%s,"open_alerts":%s' "$id" "$done" "${tot:-0}" "${el_min:-0}" "${eta_min:-0}" "$(_plan_open_alerts "$id")")")"
+      [ -z "$line" ] && line="$id: $done/${tot:-?} ($pct%) | elapsed ${el_min}min / ETA ${eta_min}min"
       log_event metric "kind=plan_track" "id=$id" "pct=$pct" "elapsed_min=$el_min" "eta_min=$eta_min" "open_alerts=$open" >/dev/null
-      echo "$line$over$dec"
+      echo "$line"
       if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
-        tg_send "📡 $line$over$dec" || true
+        tg_deliver "📡 $line"
       fi
       sleep "$iv"
     done ;;
@@ -301,12 +323,13 @@ print(int((n-s).total_seconds()//60))" 2>/dev/null)
     done
     eta_min="$(_plan_get "$id" eta_min)"; eta_tokens="$(_plan_get "$id" eta_tokens)"
     start="$(_plan_get "$id" ts)"; now="$(_now)"
-    actual_min=$(python3 -c "import datetime;
+    actual_min="$(python3 -c "import datetime;
 s=datetime.datetime.strptime('$start','%Y-%m-%dT%H:%M:%SZ');
 n=datetime.datetime.strptime('$now','%Y-%m-%dT%H:%M:%SZ');
-print(int(round((n-s).total_seconds()/60)))" 2>/dev/null)
+print(int(round((n-s).total_seconds()/60)))" 2>/dev/null || echo 0)"
+    [ -z "$actual_min" ] && actual_min=0
     eta_err=0; [ -n "$eta_min" ] && [ "$eta_min" -gt 0 ] 2>/dev/null && \
-      eta_err=$(python3 -c "print(round(100*($actual_min-$eta_min)/$eta_min))" 2>/dev/null)
+      eta_err="$(python3 -c "print(round(100*($actual_min-$eta_min)/$eta_min))" 2>/dev/null || echo 0)"
     prior="$(_plan_rolling_acc)"
     log_event trajectory "id=$id" "eta_min=$eta_min" "actual_min=$actual_min" \
       "eta_tokens=$eta_tokens" "actual_tokens=$actual_tokens" "eta_err_pct=$eta_err" \
@@ -325,17 +348,15 @@ for l in open(p):
         out.append(json.dumps(d))
 open(p,"w").write("\n".join(out)+"\n")
 PY
-    trend=""; [ -n "$prior" ] && trend=" | rolling ETA-acc was ${prior}% ($([ "$(python3 -c "print(abs($eta_err))" 2>/dev/null)" -le "$prior" ] 2>/dev/null && echo improved || echo degraded))"
     agents="$(_plan_get "$id" agents)"; waves="$(_plan_get "$id" waves)"
-    summ="🏁 RETRO $id
-⏱ ETA ${eta_min}min vs actual ${actual_min}min (err ${eta_err}%)$trend
-🪙 Tokens est ${eta_tokens} vs actual ${actual_tokens}
-🤖 Agents budget ${agents:-1} | 🌊 Waves ${waves:-1}
-🐞 Issues: ${issues:-none}
-📚 Lessons: ${lessons:-none}
-🛠 Skills: ${skills:-none}
-➡️ Next: ${next:-stop}"
-    if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then tg_send "$summ" || true; fi
+    # Compute the RETRO via the kernel (correct err %, pure), fall back inline.
+    summ="$(_kernel_json report_retro "$(printf '"id":"%s","eta_min":%s,"actual_min":%s,"eta_tokens":%s,"actual_tokens":%s,"agents":%s,"waves":%s,"issues":"%s","lessons":"%s","skills":"%s","next":"%s"' "$id" "${eta_min:-0}" "$actual_min" "${eta_tokens:-0}" "$actual_tokens" "${agents:-1}" "${waves:-1}" "$issues" "$lessons" "$skills" "$next")")"
+    if [ -z "$summ" ]; then
+      summ="$(printf '🏁 RETRO %s\n⏱ ETA %smin vs actual %smin (err %s%%)\n🪙 Tokens est %s vs actual %s\n🤖 Agents budget %s | 🌊 Waves %s\n🐞 Issues: %s\n📚 Lessons: %s\n🛠 Skills: %s\n➡️ Next: %s' "$id" "$eta_min" "$actual_min" "$eta_err" "$eta_tokens" "$actual_tokens" "${agents:-1}" "${waves:-1}" "${issues:-none}" "${lessons:-none}" "${skills:-none}" "${next:-stop}")"
+    fi
+    if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
+      tg_deliver "$summ"
+    fi
     printf '%s\n' "$summ" ;;
   status)
     id="${1:?plan id}"
@@ -387,8 +408,7 @@ PY
       LIMIT_CYCLE) i="🔴";; STRANGE_ATTRACTOR) i="🟠";; *) i="🟢";; esac
     log_event health "verdict=$v" "analysis=$(printf '%s' "$verdict_json" | _jesc)" >/dev/null
     if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
-      tg_send "$i health/$v $(printf '%s' "$verdict_json" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("reason",""))' 2>/dev/null)" \
-        || echo "telemetry: local health log written, Telegram send failed" >&2
+      tg_deliver "$i health/$v $(printf '%s' "$verdict_json" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("reason",""))' 2>/dev/null)"
     fi
     printf '%s\n' "$verdict_json" ;;
   # ---- dedicated-topic aggregators (2026-07-15) ----
@@ -396,17 +416,17 @@ PY
     # First message(s) to the Planning topic: unified plans/tasks/roadmaps/todos (last 7d,
     # chronological). Chunked into <=20-line batches so the topic is readable + fast to post.
     agg="$(plans_aggregate)"
-    { echo "$agg" | head -1; echo "(posting to Planning topic 291 in batches...)"; } >&2
+    { echo "$agg" | head -1; echo "(spooling to Planning topic 291 in batches...)" ; } >&2
     chunk=""; n=0
     printf '%s\n' "$agg" | while IFS= read -r l; do
       [ -z "$l" ] && continue
       chunk="$chunk$l"$'\n'; n=$((n+1))
       if [ "$n" -ge 20 ]; then
-        TELEGRAM_TOPIC_ID=291 tg_send "$chunk" || true
+        TELEGRAM_TOPIC_ID=291 tg_deliver "$chunk"
         chunk=""; n=0
       fi
     done
-    [ -n "$chunk" ] && TELEGRAM_TOPIC_ID=291 tg_send "$chunk" || true ;;
+    [ -n "$chunk" ] && TELEGRAM_TOPIC_ID=291 tg_deliver "$chunk" ;;
   plans-watch)
     # Keep the Planning topic live: re-post the aggregate (chunked) every 15 min.
     iv="${1:-900}"
@@ -416,11 +436,11 @@ PY
         [ -z "$l" ] && continue
         chunk="$chunk$l"$'\n'; n=$((n+1))
         if [ "$n" -ge 20 ]; then
-          TELEGRAM_TOPIC_ID=291 tg_send "$chunk" || true
+          TELEGRAM_TOPIC_ID=291 tg_deliver "$chunk"
           chunk=""; n=0
         fi
       done
-      [ -n "$chunk" ] && TELEGRAM_TOPIC_ID=291 tg_send "$chunk" || true
+      [ -n "$chunk" ] && TELEGRAM_TOPIC_ID=291 tg_deliver "$chunk"
       sleep "$iv"
     done ;;
   git-watch)  git_watch_loop "${1:-60}" ;;
@@ -432,7 +452,7 @@ PY
     src="${1:-/dev/stdin}"
     out="$(waves_plan < "$src")"
     echo "$out"
-    TELEGRAM_TOPIC_ID=291 tg_send "$(printf '%s' "$out" | head -c 3500)" || true ;;
+    TELEGRAM_TOPIC_ID=291 tg_deliver "$(printf '%s' "$out" | head -c 3500)" ;;
   swarm)
     # Swarm executor: architect blueprints -> N cheap executors (max-lanes) -> verifier.
     # Pipe JSONL blueprints on stdin, or pass a file as $1.
