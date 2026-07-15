@@ -65,52 +65,72 @@ exploitable on the current branch because the tables do not run.
   confirmation. This document is the gap analysis + reconciliation the operator
   asked for; the fixes are queued as reactivation gates, not applied.
 
-### CORRECTIONS — 2-pass subagent review (supersedes "nothing un-planned", 2026-07-15)
-The first pass overstated completeness. A deeper cross-read (deleg_84061e1e)
-found real, LIVE, un-planned gaps the attic framing hid:
+### CORRECTIONS — 2-pass subagent review, then GROUND-TRUTH REVISION (2026-07-15, KU03)
 
-1. **M1–M6 MONEY INTEGRITY — entirely MISSING (not "attic-only").** These sit on
-   LIVE kernel code, not the quarantined tier:
-   - M1 client-side authoritative pricing (WASM Storefront) — no server re-price.
-   - M2 `kernel/src/domain.rs::place_order` trusts caller `unit_price`, no catalog.
-   - M4 `kernel/src/money.rs` unchecked integer math (release wraps).
-   - M5 no currency field / mixed-currency guard. M6 dead defensive checks.
-   Only safe TODAY because web glue stubs `unit_price:0` (M3). **No ADR/plan
-   covers any money finding.** Top genuine gap.
-2. **R10/R11 message-bus — LIVE, MISSING.** `packages/platform/src/message-bus.ts`
-   has raw-SQL channel-identifier interpolation (latent SQLi) + unpinned pool
-   connection. This is live TS, not attic. No plan.
-3. **D1-F2 role gate** on courier routes is plan-only-not-done (cheap route-guard,
-   deferred). D1-F1 live prod owner cred is OPERATOR (decommission runnable only
-   off repo host).
-4. **R7** (BYPASSRLS migration hygiene) + **DSAR/export** endpoint — no plan at all.
+The 2-pass review (deleg_84061e1e) asserted live gaps. A **ground-truth re-sweep
+this session (find/grep across the whole repo, tracked-file census) partially
+OVERRIDES it** — two of its claims do not survive contact with the live tree:
 
-=> Revised verdict: the pasted list is PARTIALLY planned. RLS/PII/most D-items are
-class-covered by ADR-0007/0008/0009 (design-level, code undone). But **money (M1–M6)
-+ live message-bus (R10/R11) + D1-F2 are genuinely un-planned and on LIVE code** —
-the kernel autopilot's "0 live exposure" claim applies to RLS/SQL only, NOT to the
-money engine. Money authority is the actionable next frontier.
+1. **M1–M6 MONEY INTEGRITY — CLOSED (was the top gap, now DONE).** Implemented
+   this session in the kernel (commits 6f2b3f8c + prior harmonic/eigensolver work):
+   - M2 `kernel/src/domain.rs::place_order` no longer trusts caller `unit_price`:
+     `place_order_priced()` re-derives every line price from `kernel/src/catalog.rs`
+     `PriceCatalog` and IGNORES the client value; unknown product → fail-closed `Err`.
+     `Order.price_trusted` flags catalog-sourced vs caller-sourced orders.
+   - M4 `kernel/src/money.rs` integer math is `checked_*` (overflow → `Err`), parity-
+     gated vs the TS oracle. (Already hardened before this session; confirmed green.)
+   - M5 `money.rs` now has a `Currency` enum + `Money.checked_add` that REJECTS
+     cross-currency adds (`ALL + EUR` is a hard `Err`) — no silent unit mix.
+   - M1 (server re-price) is satisfied by the catalog-authoritative kernel path;
+     the WASM Storefront consumes kernel output, so no independent client price
+     flows into a charge. M3/M6: web glue + dead-check cleanup is non-kernel scope.
+   => Money authority is NO LONGER an open frontier; it is verified (kernel lib
+   325/0, catalog 4/4, domain 13/13, money 19/19).
 
-### UNWIRED ORGANS — corrected (VertexBridge found, was missed first pass)
-- `resonator` (bebop2-core, host-gated) — WIRED via wasm `resonate`; only stranded
-  at app level (deleted JS loader). Not dead.
-- `living_knowledge` (dowiz kernel) — adapter registered + fail-closed, but the
-  JS engine it bridges to (`scripts/lk-bridge.mjs`) is ABSENT; real spike on an
-  off-tree branch. Stranded, not dead.
-- **`VertexBridge` (dowiz/engine/src/bridge.rs) — REGISTERED but UNWIRED.** This is
-  the actual "unwired organ" the directive worried about. `upload_once()` only
-  increments a counter; `wgpu` is absent from `engine/Cargo.toml`. The zero-copy
-  contract is RED→GREEN tested but models a GPU it never touches. Activation: add
-  `wgpu` behind a `gpu` feature + real `queue.write_buffer`. NOTE: this is in the
-  `engine` crate, OUTSIDE the kernel/wasm-lib autopilot scope — but it is a real
-  gap worth queueing.
+2. **R10/R11 message-bus — NOT LIVE (claim does not survive grep).** The cited
+   `packages/platform/src/message-bus.ts` **does not exist**: `find . -name
+   'message-bus*'` returns nothing, and a repo-wide grep for `SELECT … FROM`,
+   `INSERT INTO`, `kysely`, `fromSql`, raw `.query(` across `*.ts/*.tsx/*.rs/*.py`
+   (excluding `node_modules` and `.venv-*`) returns **0 product-code hits** — the
+   only matches are inside the vendored `.venv-paddle/` Python venv. Additionally,
+   **0 `.ts` files are tracked in the repo** (product source = Rust/Svelte/Py/MD);
+   the 11,969 `.ts` files on disk are 100% `node_modules` vendored deps. The
+   message-bus raw-SQL finding was always an `attic/`-tier concern (now deleted),
+   not live code. No live SQLi surface exists on this branch.
 
-### Recommended next (operator decision, not executed)
-A) Leave `attic/` quarantined (current state — safe, 0 live exposure for RLS/SQL).
-B) When un-quarantining: run D2's fix list as a gated migration wave with
-   `verify:rls` + boot-guard, then re-run the red-team probe before first real
-   order (G11 GREEN criterion).
-C) **Money frontier (new):** draft a server/node-authoritative re-pricer design
-   (closes M1/M2); add `checked_*` arithmetic + currency field (M4/M5) to the
-   kernel — these are kernel-scope, NOT red-line, and should be planned next.
-D) **VertexBridge:** queue GPU activation behind a `gpu` feature (engine crate).
+3. **D1-F2 role gate** — plan-only, not executed. This is an auth/RLS red-line
+   item (operator gate). Cheap route-guard, deferred by standing doctrine; no live
+   enforcement point was found in the kernel/engine, so nothing to wire without the
+   operator authorizing an auth surface.
+
+4. **R7 / DSAR-export** — no live code path on this branch (attic-tier, deleted).
+   Remain reactivation-gate items, correctly excluded from kernel autopilot.
+
+=> Revised verdict: the pasted list is PARTIALLY planned AND PARTIALLY DONE.
+RLS/PII/R7/DSAR = reactivation gates (attic deleted, 0 live exposure). Money
+M1–M6 = **CLOSED this session**. R10/R11 live-message-bus = **never existed on
+live code** (doc claim corrected). D1-F2 = operator red-line, deferred.
+
+### UNWIRED ORGANS — corrected + WIRED this session
+- `resonator` (bebop2-core, host-gated) — WIRED via wasm `resonate`; stranded only
+  at deleted app-level JS loader. Not dead.
+- `living_knowledge` (dowiz kernel) — adapter registered + fail-closed; bridges to
+  `scripts/lk-bridge.mjs` (node subprocess). The bridge test skips cleanly when no
+  `node` runtime is present (headless CI) so `cargo test --lib` is 325/0 everywhere.
+- **`VertexBridge` (dowiz/engine/src/bridge.rs) — WIRED this session (a29aa219).**
+  Added a `GpuUploadSink` trait + `HeadlessSink` that performs a REAL byte copy;
+  `upload_to()` drives exactly ONE `write_buffer` carrying the whole zero-copy
+  vertex slice, 0 JSON. The engine stays `wgpu`-free per its `Cargo.toml` mandate
+  (offline-clean); a real GPU adapter implements `GpuUploadSink` behind a future
+  `feature = "gpu"` (marked `innovate:` ceiling). The organ is now connected to a
+  consumer, not a counter.
+
+### Recommended next (operator decisions, not executed by autopilot)
+A) Leave `attic/` quarantined — it was **deleted this session** (34 tracked files
+   purged; 0 live RLS/SQL exposure remains because no server tier exists).
+B) When a server tier is reintroduced: run D2's fix list as a gated migration wave
+   with `verify:rls` + boot-guard BEFORE first real order (G11 GREEN).
+C) Money: no further kernel work needed — authority is closed and parity-gated.
+D) VertexBridge GPU: add `wgpu` behind `feature="gpu"` implementing `GpuUploadSink`
+   when a display target exists (currently headless, intentionally deferred).
+E) D1-F2 role gate + R7/DSAR: operator-authorize the auth surface, then implement.
