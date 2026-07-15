@@ -9,6 +9,7 @@
 #   telemetry bench  <name> <ms> [note...]          # a benchmark result (ms)
 #   telemetry task   <status> <title...>            # done|failed|started task
 #   telemetry session <title...>                    # a completed agent session
+#   telemetry health [tokenfile]                     # Markov loop/attractor signal (stdin if no file)
 #   telemetry send   <message...>                   # ad-hoc raw Telegram line
 #   telemetry selftest                              # local-only, no network
 #
@@ -45,6 +46,26 @@ case "$cmd" in
   session)
     title="$*"
     _emit session "🧠 session done" "$title" "title=$title" ;;
+  health)
+    # Markov-chain loop/attractor health signal for a run's outcome stream.
+    # Input: token file arg, else stdin. Tokens one-per-line from the alphabet
+    # {edit,edit_fail,run_ok,probe,run_fail}. Uses tools/loop-signals/markov_attractor.py.
+    src="${1:-}"; shift || true
+    MA="$REPO_ROOT/tools/loop-signals/markov_attractor.py"
+    if [ ! -f "$MA" ]; then
+      echo "telemetry health: markov_attractor.py not found at $MA" >&2
+      exit 3
+    fi
+    verdict_json="$({ [ -n "$src" ] && cat "$src" || cat; } | python3 "$MA")"
+    v="$(printf '%s' "$verdict_json" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("verdict","?"))')"
+    case "$v" in
+      LIMIT_CYCLE) i="🔴";; STRANGE_ATTRACTOR) i="🟠";; *) i="🟢";; esac
+    log_event health "verdict=$v" "analysis=$(printf '%s' "$verdict_json" | _jesc)" >/dev/null
+    if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
+      tg_send "$i health/$v $(printf '%s' "$verdict_json" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d.get("reason",""))' 2>/dev/null)" \
+        || echo "telemetry: local health log written, Telegram send failed" >&2
+    fi
+    printf '%s\n' "$verdict_json" ;;
   send)
     msg="$*"; _emit note "📣" "$msg" "message=$msg" ;;
   selftest)
