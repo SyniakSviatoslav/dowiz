@@ -1,0 +1,10 @@
+{
+  "date": "2026-07-15",
+  "phase": "pre-upgrade",
+  "kernel_rebuild_test_sec": ".453805587",
+  "kernel_tests": "",
+  "serial_6_sec": "1.817061209",
+  "parallel_6_sec": ".314627376",
+  "speedup_parallel_vs_serial": "5.77",
+  "max_concurrent_children": "3 (default, to be raised in B1)"
+}
