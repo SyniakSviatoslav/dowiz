@@ -119,3 +119,57 @@ bench_run() {
   printf 'bench/%s ms=%s rss_mb=%s rc=%s\n' "$name" "$ms" "$rss_mb" "$rc"
   return "$rc"
 }
+
+# ---- spec-driven DOD reporting helpers (2026-07-15) ----
+_plan_dir() { echo "$LOG_DIR"; }
+
+# latest done count for a plan id from plan_step.jsonl
+_plan_latest_step() {
+  local id="$1"
+  grep -F "\"id\":\"$id\"" "$LOG_DIR/plan_step.jsonl" 2>/dev/null \
+    | python3 -c 'import sys,json
+rows=[json.loads(l) for l in sys.stdin if l.strip()]
+print(rows[-1]["done"] if rows else 0)' 2>/dev/null || echo 0
+}
+_plan_total() {
+  local id="$1"
+  grep -F "\"id\":\"$id\"" "$LOG_DIR/plan_step.jsonl" 2>/dev/null \
+    | python3 -c 'import sys,json
+rows=[json.loads(l) for l in sys.stdin if l.strip()]
+print(rows[-1].get("total",0) if rows else 0)' 2>/dev/null || echo 0
+}
+# get a field from the plan.jsonl row for id
+_plan_get() {
+  local id="$1" field="$2"
+  grep -F "\"id\":\"$id\"" "$LOG_DIR/plan.jsonl" 2>/dev/null \
+    | python3 -c 'import sys,json
+for l in sys.stdin:
+    if l.strip():
+        d=json.loads(l)
+        if d.get("id")=="'"$id"'":
+            print(d.get("'"$field"'","")); break' 2>/dev/null
+}
+# open (unresolved) alert count for id
+_plan_open_alerts() {
+  local id="$1"
+  grep -F "\"id\":\"$id\"" "$LOG_DIR/alert.jsonl" 2>/dev/null \
+    | python3 -c 'import sys,json
+rows=[json.loads(l) for l in sys.stdin if l.strip()]
+# unresolved = resolved not truthy (handles bool false AND string "false" from log_event)
+def is_resolved(r):
+    v=r.get("resolved",False)
+    return str(v).lower() in ("true","1")
+opened=[r for r in rows if not is_resolved(r)]
+print(len(opened))' 2>/dev/null || echo 0
+}
+# rolling mean abs ETA-error % across all finalized trajectory rows (improvement/degradation)
+_plan_rolling_acc() {
+  python3 -c 'import json
+try:
+    rows=[json.loads(l) for l in open("'"$LOG_DIR"'/trajectory.jsonl") if l.strip()]
+except FileNotFoundError:
+    print(""); raise SystemExit
+if not rows: raise SystemExit
+acc=[abs(r.get("eta_err_pct",0)) for r in rows if "eta_err_pct" in r]
+print(round(sum(acc)/len(acc),1) if acc else "")' 2>/dev/null || echo ""
+}

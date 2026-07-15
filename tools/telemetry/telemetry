@@ -8,6 +8,13 @@
 #   telemetry metric <name> <value> [unit]          # a numeric metric
 #   telemetry kernel [rust-core path]       # sample kernel field_metrics (option-#1 C-ABI)
 #   telemetry hetzner                        # launch host-resource exporter for Gatus (60s poll)
+#   telemetry plan <id> <title> --steps N --eta-min M --eta-tokens T --topics ".." --risks ".." --before ".."   # spec-driven DOD big-plan (BEFORE work)
+#   telemetry step <id> <done> [total] [note] # progress tick (% computed)
+#   telemetry alert <id> <error|decision> <msg>  # raise alert -> immediate TG
+#   telemetry track <id> [interval=60]           # bg-safe 60s poll: %/ETA/open-alerts
+#   telemetry retro <id> --tokens N --issues ".." --lessons ".." --skills ".." --next autorun|finish|stop  # finalize + trajectory
+#   telemetry status <id>                       # one-plan view
+#   telemetry dashboard                         # all plans + rolling ETA-accuracy trend
 #   telemetry bench_run <name> [note] -- <cmd...>    # run cmd, log wall-ms + peak RSS
 #   telemetry monitor [interval_s]                  # real-time resource/friction loop (bg-safe)
 #   telemetry task   <status> <title...>            # done|failed|started task
@@ -95,6 +102,148 @@ case "$cmd" in
     # The exporter serves only on request (near-zero CPU). Background-safe.
     nohup python3 "$(dirname "$0")/hetzner_exporter.py" >/tmp/hetzner_exporter.log 2>&1 &
     echo "hetzner exporter pid=$! (kill: pkill -f hetzner_exporter.py)" ;;
+  # ---- spec-driven DOD reporting (2026-07-15) ----
+  # Creates a BEFORE-any-work big plan, ticks progress, raises/clears alerts, polls 60s for
+  # % status, and finalizes with an ETA-vs-actual RETRO + rolling improvement/degradation
+  # signal stored in vectorless JSONL tables (plan/plan_step/alert/trajectory.jsonl).
+  plan)
+    id="${1:?plan id}"; shift; title="$*"
+    steps=0 eta_min=0 eta_tokens=0 topics="" risks="" before=""
+    while [ $# -ge 2 ]; do
+      case "$1" in
+        --steps) steps="$2";; --eta-min) eta_min="$2";; --eta-tokens) eta_tokens="$2";;
+        --topics) topics="$2";; --risks) risks="$2";; --before) before="$2";;
+      esac; shift 2
+    done
+    log_event plan "id=$id" "title=$(printf '%s' "$title" | _jesc)" "steps=$steps" \
+      "eta_min=$eta_min" "eta_tokens=$eta_tokens" "topics=$(printf '%s' "$topics" | _jesc)" \
+      "risks=$(printf '%s' "$risks" | _jesc)" "status_before=$(printf '%s' "$before" | _jesc)" \
+      "state=planned" >/dev/null
+    hdr="📋 PLAN $id — $title
+🔑 Topics: ${topics:-—}
+⚠️ Risks: ${risks:-—}
+📂 Before: ${before:-—}
+🧮 Steps: $steps | ETA: ${eta_min}min / ~${eta_tokens} tok"
+    if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then tg_send "$hdr" || true; fi
+    printf '%s\n' "$hdr" ;;
+  step)
+    id="${1:?plan id}"; done="${2:?done count}"; total="${3:-}"; note="${4:-}"
+    [ -n "$total" ] && log_event plan_step "id=$id" "done=$done" "total=$total" \
+      "note=$(printf '%s' "$note" | _jesc)" >/dev/null \
+      || log_event plan_step "id=$id" "done=$done" "note=$(printf '%s' "$note" | _jesc)" >/dev/null
+    tot="${total:-$(_plan_total "$id")}"; tot="${tot:-$?}"
+    pct=0; [ -n "$tot" ] && [ "$tot" -gt 0 ] 2>/dev/null && pct=$((100*done/tot))
+    printf 'step %s: %s/%s (%s%%)\n' "$id" "$done" "${tot:-?}" "$pct"
+    if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
+      tg_send "📈 $id progress: $done/${tot:-?} ($pct%) ${note:+ | $note}" || true
+    fi ;;
+  alert)
+    id="${1:?plan id}"; atype="${2:?error|decision}"; shift 2; msg="$*"
+    log_event alert "id=$id" "type=$atype" "msg=$(printf '%s' "$msg" | _jesc)" "resolved=false" >/dev/null
+    ico="🚨"; [ "$atype" = "decision" ] && ico="❓"
+    if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then tg_send "$ico $id [$atype] $msg" || true; fi
+    printf '%s\n' "$ico $id [$atype] $msg" ;;
+  track)
+    # Background-safe 60s poll loop for a plan's % status + ETA + open alerts.
+    id="${1:?plan id}"; iv="${2:-60}"
+    echo "track $id: every ${iv}s (kill: pkill -f \"telemetry track $id\")"
+    while true; do
+      st="$(_plan_get "$id" state)"; [ "$st" = "done" ] && { echo "track $id: plan done, exiting"; break; }
+      done="$(_plan_latest_step "$id")"; tot="$(_plan_total "$id")"
+      pct=0; [ -n "$tot" ] && [ "$tot" -gt 0 ] 2>/dev/null && pct=$((100*done/tot))
+      eta_min="$(_plan_get "$id" eta_min)"
+      start="$(_plan_get "$id" ts)"; now="$(_now)"
+      el_min=0
+      [ -n "$start" ] && el_min=$(python3 -c "import datetime,sys;
+s=datetime.datetime.strptime('$start','%Y-%m-%dT%H:%M:%SZ');
+n=datetime.datetime.strptime('$now','%Y-%m-%dT%H:%M:%SZ');
+print(int((n-s).total_seconds()//60))" 2>/dev/null)
+      line="$id: $done/${tot:-?} ($pct%) | elapsed ${el_min}min / ETA ${eta_min}min"
+      over=""; [ -n "$eta_min" ] && [ "$eta_min" -gt 0 ] 2>/dev/null && [ "$el_min" -gt "$eta_min" ] 2>/dev/null \
+        && over=" | ⚠️ ETA overshoot +$((el_min-eta_min))min"
+      open="$(_plan_open_alerts "$id")"
+      dec=""; [ "$open" -gt 0 ] 2>/dev/null && dec=" | ❓ $open open alert(s)"
+      log_event metric "kind=plan_track" "id=$id" "pct=$pct" "elapsed_min=$el_min" "eta_min=$eta_min" "open_alerts=$open" >/dev/null
+      echo "$line$over$dec"
+      if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
+        tg_send "📡 $line$over$dec" || true
+      fi
+      sleep "$iv"
+    done ;;
+  retro)
+    # Finalize a plan: compares ETA vs actual, tokens est vs actual, writes trajectory.jsonl
+    # (with rolling accuracy), sends 🏁 RETRO, marks plan done.
+    id="${1:?plan id}"; shift
+    actual_tokens=0 issues="" lessons="" skills="" next=""
+    while [ $# -ge 2 ]; do
+      case "$1" in
+        --tokens) actual_tokens="$2";; --issues) issues="$2";; --lessons) lessons="$2";;
+        --skills) skills="$2";; --next) next="$2";;
+      esac; shift 2
+    done
+    eta_min="$(_plan_get "$id" eta_min)"; eta_tokens="$(_plan_get "$id" eta_tokens)"
+    start="$(_plan_get "$id" ts)"; now="$(_now)"
+    actual_min=$(python3 -c "import datetime;
+s=datetime.datetime.strptime('$start','%Y-%m-%dT%H:%M:%SZ');
+n=datetime.datetime.strptime('$now','%Y-%m-%dT%H:%M:%SZ');
+print(int(round((n-s).total_seconds()/60)))" 2>/dev/null)
+    eta_err=0; [ -n "$eta_min" ] && [ "$eta_min" -gt 0 ] 2>/dev/null && \
+      eta_err=$(python3 -c "print(round(100*($actual_min-$eta_min)/$eta_min))" 2>/dev/null)
+    prior="$(_plan_rolling_acc)"
+    log_event trajectory "id=$id" "eta_min=$eta_min" "actual_min=$actual_min" \
+      "eta_tokens=$eta_tokens" "actual_tokens=$actual_tokens" "eta_err_pct=$eta_err" \
+      "issues=$(printf '%s' "$issues" | _jesc)" "lessons=$(printf '%s' "$lessons" | _jesc)" \
+      "skills=$(printf '%s' "$skills" | _jesc)" "next=$next" >/dev/null
+    log_event metric "kind=plan_finalized" "id=$id" "eta_err_pct=$eta_err" "actual_min=$actual_min" >/dev/null
+    # mark plan done
+    python3 - "$LOG_DIR/plan.jsonl" "$id" <<'PY' 2>/dev/null || true
+import json,sys
+p,pid=sys.argv[1],sys.argv[2]
+out=[]
+for l in open(p):
+    if l.strip():
+        d=json.loads(l)
+        if d.get("id")==pid: d["state"]="done"
+        out.append(json.dumps(d))
+open(p,"w").write("\n".join(out)+"\n")
+PY
+    trend=""; [ -n "$prior" ] && trend=" | rolling ETA-acc was ${prior}% ($([ "$(python3 -c "print(abs($eta_err))" 2>/dev/null)" -le "$prior" ] 2>/dev/null && echo improved || echo degraded))"
+    summ="🏁 RETRO $id
+⏱ ETA ${eta_min}min vs actual ${actual_min}min (err ${eta_err}%)$trend
+🪙 Tokens est ${eta_tokens} vs actual ${actual_tokens}
+🐞 Issues: ${issues:-none}
+📚 Lessons: ${lessons:-none}
+🛠 Skills: ${skills:-none}
+➡️ Next: ${next:-stop}"
+    if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then tg_send "$summ" || true; fi
+    printf '%s\n' "$summ" ;;
+  status)
+    id="${1:?plan id}"
+    printf '=== plan %s ===\n' "$id"
+    grep -F "\"id\":\"$id\"" "$LOG_DIR/plan.jsonl" 2>/dev/null | tail -1
+    printf 'latest step: %s/%s\n' "$(_plan_latest_step "$id")" "$(_plan_total "$id")"
+    printf 'open alerts: %s\n' "$(_plan_open_alerts "$id")" ;;
+  dashboard)
+    # Aggregate view across all plans + rolling trajectory trend (the "terms/dashboard").
+    echo "=== DOD DASHBOARD ($(date -u +%H:%M:%SZ)) ==="
+    python3 - "$LOG_DIR" <<'PY'
+import json,os,glob
+d=os.sys.argv[1]
+def load(p):
+    try: return [json.loads(l) for l in open(p) if l.strip()]
+    except FileNotFoundError: return []
+plans=load(f"{d}/plan.jsonl")
+traj=load(f"{d}/trajectory.jsonl")
+print(f"plans: {len(plans)} | finalized: {len(traj)}")
+for p in plans:
+    pid=p.get("id"); steps=p.get("steps",0); eta=p.get("eta_min",0); st=p.get("state","?")
+    print(f"  [{st:>8}] {pid} steps={steps} eta={eta}min title={p.get('title','')[:40]}")
+if traj:
+    acc=[abs(t.get("eta_err_pct",0)) for t in traj if "eta_err_pct" in t]
+    print(f"rolling ETA-accuracy: {round(sum(acc)/len(acc),1)}% mean-abs-err across {len(acc)} plans")
+    print(f"  last 3: " + ", ".join(f"{t.get('id')}={t.get('eta_err_pct')}%" for t in traj[-3:]))
+PY
+    ;;
   task)
     st="${1:?status}"; shift || true; title="$*"
     case "$st" in done) i="✅";; failed) i="❌";; started) i="▶️";; *) i="•";; esac
