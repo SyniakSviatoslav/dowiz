@@ -26,6 +26,8 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/lib.sh"
 # shellcheck source=topics.sh
 . "$DIR/topics.sh"
+# shellcheck source=governance.sh
+. "$DIR/governance.sh"
 
 _emit() {  # <kind> <telegram_prefix> <telegram_body> <k=v>...
   local kind="$1" pfx="$2" body="$3"; shift 3
@@ -436,6 +438,10 @@ PY
     # Pipe JSONL blueprints on stdin, or pass a file as $1.
     src="${1:-/dev/stdin}"
     swarm_exec "$src" ;;
+  govern)
+    # HK-09 deliberative governance: track-record + EV route-select + research-argue
+    # + 3-judge + precedent registry. Args: <record|route|research|judge|precedent> ...
+    gov_dispatch "$@" ;;
   send)
     msg="$*"; _emit note "📣" "$msg" "message=$msg" ;;
   selftest)

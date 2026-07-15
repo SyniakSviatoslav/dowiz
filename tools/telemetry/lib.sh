@@ -55,9 +55,14 @@ tg_send() {
     echo "tg_send: no TELEGRAM_BOT_TOKEN (set env or dowiz/.env)" >&2
     return 1
   fi
-  # global throttle: ensure >= TG_MIN_GAP seconds since last successful/attempted send
+  # global throttle: ensure >= TG_MIN_GAP seconds since last actual successful send.
+  # Uses an atomic flock so the 6 concurrent daemons can't all pass the check at
+  # once (race fix). The timestamp is written ONLY after a real send succeeds.
   local gap="${TG_MIN_GAP:-3.5}"
   local statef="/tmp/.tg_send_last"
+  local lockf="/tmp/.tg_send_lock"
+  exec 9>"$lockf" 2>/dev/null || true
+  flock 9 2>/dev/null || true
   local now last delta
   now="$(date +%s.%N 2>/dev/null || date +%s)"
   if [ -f "$statef" ]; then
@@ -67,7 +72,7 @@ tg_send() {
       sleep "$(awk -v d="$delta" -v g="$gap" 'BEGIN{printf "%.2f", g-d}')"
     fi
   fi
-  date +%s.%N 2>/dev/null > "$statef" || date +%s > "$statef"
+  # do NOT stamp here; stamp after a confirmed-OK send below.
 
   local url="https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"
   local thread="${TELEGRAM_TOPIC_ID:-267}"
@@ -79,6 +84,8 @@ tg_send() {
       --data-urlencode "disable_web_page_preview=true" \
       ${thread:+--data-urlencode "message_thread_id=${thread}"} 2>&1)"
     if printf '%s' "$resp" | grep -q '"ok":true'; then
+      date +%s.%N 2>/dev/null > "$statef" || date +%s > "$statef"
+      exec 9>&- 2>/dev/null || true
       return 0
     fi
     # honor 429 retry_after if present, else exponential backoff (cap 30s)
@@ -89,6 +96,7 @@ tg_send() {
     sleep "$sleep_s"
   done
   echo "tg_send: failed after retries: $resp" >&2
+  exec 9>&- 2>/dev/null || true
   return 1
 }
 
