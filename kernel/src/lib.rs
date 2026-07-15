@@ -42,6 +42,9 @@ pub mod spool;
 /// B4 — deterministic content-defined chunker (Buzhash) for the native Rust
 /// backup organ: content-addressed blocks that dedup across small edits.
 pub mod chunker;
+/// M1/M2 — trusted price catalog: the single kernel authority on line-item prices.
+/// `place_order` re-derives `unit_price` from this, ignoring client-supplied prices.
+pub mod catalog;
 pub mod domain;
 /// MESH-06 — per-node content-addressed event-log (local-first + sync).
 pub mod event_log;

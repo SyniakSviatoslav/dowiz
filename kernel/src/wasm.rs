@@ -140,6 +140,9 @@ fn order_from_in(o: OrderIn) -> Result<Order, String> {
         created_at_ms: o.created_at_ms,
         channel: o.channel,
         cash_pay_with: o.cash_pay_with,
+        // JS-boundary reconstruction: this path deserializes an order shape that
+        // did not carry the trust flag → conservatively UNTRUSTED (fail-closed).
+        price_trusted: false,
     })
 }
 

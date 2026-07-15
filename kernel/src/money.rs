@@ -20,6 +20,73 @@ pub fn to_minor_unit(amount: i64, _currency: &str) -> Result<i64, String> {
 
 const SCALE: i128 = 1_000_000;
 
+/// M5 — currency identity. Money is integer minor units *in a specific currency*.
+/// Two amounts in different currencies may NEVER be added/compared as raw ints —
+/// the type carries the currency so a cross-currency operation is a caught error,
+/// not a silent unit confusion (the M5 gap: `unit_price` was a bare `i64`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Currency {
+    /// Albanian lek (the product's home currency).
+    All,
+    /// Euro.
+    Eur,
+    /// US dollar.
+    Usd,
+}
+
+impl Currency {
+    pub fn code(self) -> &'static str {
+        match self {
+            Currency::All => "ALL",
+            Currency::Eur => "EUR",
+            Currency::Usd => "USD",
+        }
+    }
+    pub fn from_code(s: &str) -> Option<Currency> {
+        match s {
+            "ALL" => Some(Currency::All),
+            "EUR" => Some(Currency::Eur),
+            "USD" => Some(Currency::Usd),
+            _ => None,
+        }
+    }
+}
+
+/// A currency-tagged money amount (integer minor units). Arithmetic between two
+/// `Money` values is fail-closed on currency mismatch (M5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Money {
+    pub minor: i64,
+    pub currency: Currency,
+}
+
+impl Money {
+    pub fn new(minor: i64, currency: Currency) -> Self {
+        Money { minor, currency }
+    }
+
+    /// Add two amounts. Returns `Err` if the currencies differ (never silently
+    /// mixes units) or if the sum overflows i64.
+    pub fn checked_add(self, other: Money) -> Result<Money, String> {
+        if self.currency != other.currency {
+            return Err(format!(
+                "cross-currency add rejected: {} + {}",
+                self.currency.code(),
+                other.currency.code()
+            ));
+        }
+        let minor = self
+            .minor
+            .checked_add(other.minor)
+            .ok_or("money add overflow")?;
+        Ok(Money {
+            minor,
+            currency: self.currency,
+        })
+    }
+}
+
+
 /// Server-authoritative `applyTax` (money.ts:23). `subtotal` is integer minor units.
 /// `tax_rate` is a config input (e.g. 0.20) parsed once to micro-units.
 ///
@@ -168,6 +235,36 @@ pub fn estimate_order_total(subtotal: i64, cfg: &OrderTotalConfig) -> OrderTotal
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── M5: currency guard — cross-currency add is fail-closed ──
+    #[test]
+    fn green_same_currency_add() {
+        let a = Money::new(1000, Currency::All);
+        let b = Money::new(250, Currency::All);
+        assert_eq!(a.checked_add(b).unwrap(), Money::new(1250, Currency::All));
+    }
+
+    #[test]
+    fn red_cross_currency_add_is_err() {
+        let all = Money::new(1000, Currency::All);
+        let eur = Money::new(1000, Currency::Eur);
+        assert!(all.checked_add(eur).is_err(), "ALL + EUR must be rejected");
+    }
+
+    #[test]
+    fn red_money_add_overflow_is_err() {
+        let a = Money::new(i64::MAX, Currency::Usd);
+        let b = Money::new(1, Currency::Usd);
+        assert!(a.checked_add(b).is_err());
+    }
+
+    #[test]
+    fn green_currency_code_roundtrip() {
+        for c in [Currency::All, Currency::Eur, Currency::Usd] {
+            assert_eq!(Currency::from_code(c.code()), Some(c));
+        }
+        assert_eq!(Currency::from_code("XXX"), None);
+    }
 
     // ── GREEN: tax on subtotal (not subtotal+fee), matches oracle ──
     #[test]

@@ -1,28 +1,11 @@
-# Tasks — finish hydraulic-loop remainder (RED→GREEN)
+# Tasks — KU03 (ordered, RED→GREEN)
 
-Ordered, testable increments. Each: RED (failing test) → implement → GREEN (literal cargo test).
+- T1 [LANE:1] — kernel: trusted PriceCatalog + catalog-aware place_order (M1/M2). RED: place_order honors tampered caller price; GREEN: with catalog, caller price overridden by trusted value. → kernel/src/catalog.rs, domain.rs
+- T2 [LANE:1] — kernel: Currency typed enum + cross-currency guard in money.rs (M5). RED: mixed-currency add returns Ok; GREEN: same-currency Ok, mixed Err.
+- T3 [LANE:2] — engine: VertexBridge gpu feature + HeadlessGpu mock (real write_buffer on gpu, 0 on headless). RED: upload_once no-op; GREEN: gpu=1 real upload, headless=mock(0 json).
+- T4 [LANE:3] — TS purge: scan+delete TS duplicating kernel/engine compute; write MANIFEST. RED: dupe TS present; GREEN: deleted + kernel/engine green.
+- T5 [LANE:1] — kernel: parity re-check harmonic+eigen + full lib green (regression guard).
+- T6 [LANE:2] — engine: full crate green with/without gpu feature.
+- T7 — DoD: telemetry step ticks per T; retro at end; commit all; report DONE with 0 failed.
 
-## Wave A — bebop Rust gaps (collision-free, max-lane)
-- [ ] G1 [LANE:1] stabilizer fail-closed on dt<=0
-  RED: `monitor_adaptation(v_cur,v_prev,-1.0)` returns true (allowed) — malformed dt permits motion.
-  GREEN: returns false (freeze). Grep guard: `lyapunov_derivative` dt<=0 must NOT yield "allowed".
-  Files: crates/bebop/src/stabilizer.rs. Keep existing stabilizer tests green.
-- [ ] G2 [LANE:2] coherence index-clamp D2 — skip OOB edge + record error
-  RED: edge index > n-1 silently remapped via `b.min(n-1)` corrupts neighbor sum.
-  GREEN: OOB edge skipped (no clobber), error counter increments / returns Result.
-  Files: crates/bebop/src/coherence.rs. Keep mass-conservation tests green.
-- [ ] G3 [LANE:3] active_inference advise validates every b[a] (D9 fail-closed)
-  RED: ragged `b` (b[1].len() != n*n) → `advise` panics on `b[a][...]`.
-  GREEN: `advise` returns None without panic.
-  Files: crates/bebop/src/active_inference.rs. Keep existing active_inference tests green.
-
-## Wave B — operator-gated (NOT auto-executed)
-- [ ] G4 [LANE:9] living-knowledge 545f37df merge to feat branch
-  BLOCKED on operator decision (risky JS + ONNX embedder spike; recall@5=1.0 proven but tree
-  divergent). Present plan, await go-ahead + provide merge strategy. Do NOT force-push.
-- [ ] P10 OSS readiness force-push (irreversible)
-  BLOCKED: requires ref backup + verify no real secrets. Operator go-ahead only.
-
-## Convergence
-- [ ] C1 full `cargo test --workspace` (bebop) + `cargo test` (dowiz kernel) → literal `0 failed`.
-- [ ] C2 update ROADMAP-GROUND-TRUTH with verified-done vs planned; push plan to remote first.
+Lanes: 1=kernel, 2=engine, 3=ts-purge (collision-free files → could parallelize, but MAIN re-verifies each with literal cargo test before commit).
