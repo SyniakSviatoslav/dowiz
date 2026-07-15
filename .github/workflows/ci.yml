@@ -1,59 +1,58 @@
 name: CI
 
-# NOTE (2026-07-13, MANIFESTO/DECISIONS D1): the legacy centralized `deploy`
-# job (Fly + migrate:up against the Supabase/postgres revenue stack) is RETIRED.
-# MANIFESTO D1 / DECISIONS D1 mandate: "Drop the centralized server — no server
-# process, no central DB, no Supabase, no Fly." The revenue stack was quarantined
-# to attic/ (apps/api, apps/worker, packages/db) and its pnpm scripts
-# (migrate:up, verify:migrations, verify:rls) were removed, so those CI steps can
-# no longer succeed. Backend delivery now runs on decentralized Rust/WASM peer
-# nodes, NOT this repo's CI-to-Fly pipeline.
-#
-# The only live gate here is `validate`: it proves THIS repo (frontend SPA +
-# governance math core) builds, typechecks, lints, passes the privacy/compliance
-# gates, and that the governance deterministic-core tests are GREEN (not faked).
-# The `fresh-provision` job is also retired — it exercised the deleted
-# Postgres/API stack.
+# Post "drop js" (2026-07-15): the JS/TS frontend + pnpm stack were removed.
+# The surviving testable surface is the self-contained bash telemetry bridge.
+# This CI proves it runs its local self-test (no network / no secret needed).
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "feat/kernel-fsm-graph-analysis" ]
   pull_request:
     branches: [ "main" ]
 
 jobs:
-  validate:
+  telemetry-selftest:
+    name: telemetry bridge self-test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
-        with:
-          version: 9.4.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: 'pnpm'
-      
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-        
-      - name: Build
-        run: pnpm -r build
-        
-      - name: Typecheck
-        run: pnpm -r typecheck
-        
-      - name: Lint
-        run: pnpm lint
-        
-      - name: Lint Gates
-        run: pnpm lint:gates
+      - name: Run telemetry self-test (local-only, no Telegram secret)
+        run: |
+          cd tools/telemetry
+          chmod +x *.sh
+          bash selftest-telemetry.sh
+      - name: Smoke-test the Markov health signal (uses loop-signals)
+        run: |
+          cd tools/telemetry
+          printf 'edit\nrun_fail\nedit\nrun_fail\nedit\nrun_fail\nedit\nrun_fail\n' \
+            | TELEMETRY_NO_TG=1 ./telemetry health
 
-      - name: Governance math-core tests (RED+GREEN, no fake-green)
-        run: pnpm test:governance
-
-      - name: Verify no secrets in repo
-        run: pnpm verify:secrets
-        
-      - name: Compliance gate (privacy-invariants)
-        run: pnpm compliance:gate
+  eqc-proofs:
+    name: eqc math proofs (dowiz tools/eqc)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install sympy
+        run: pip install sympy
+      - name: Regenerate a proof and assert it compiles + runs GREEN
+        run: |
+          python3 - <<'PY'
+          import sys, subprocess, tempfile, os
+          sys.path.insert(0, 'tools/eqc')
+          import sympy as sp
+          from eqc import Equation
+          b,coeff,t,k,theta,qp = sp.symbols('b coeff t k theta qp', real=True)
+          expr = 2*sp.exp(-b*coeff*t*(sp.cos(theta)+1)/2)*sp.cos(k*theta)/qp
+          eq = Equation(expr, [b,coeff,t,k,theta,qp], 'ci_smoke_inner', fixed=False)
+          src = eq.emit_proof_program(samples=[
+            {'b':2.0,'coeff':0.5,'t':1.0,'k':1.0,'theta':0.7,'qp':10.0}], eps=1e-9)
+          with tempfile.NamedTemporaryFile('w', suffix='.rs', delete=False) as f:
+            f.write(src); path=f.name
+          subprocess.run(['rustc','-O',path,'-o','/tmp/ci_proof'], check=True)
+          r = subprocess.run(['/tmp/ci_proof'], capture_output=True, text=True)
+          assert r.returncode == 0, r.stderr
+          print(r.stdout.strip())
+          PY
