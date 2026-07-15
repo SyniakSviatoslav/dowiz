@@ -184,6 +184,30 @@ impl Csr {
         }
     }
 
+    /// Materialize the dense (un-normalized) adjacency matrix `A`, where
+    /// `A[i][j]` is the weight of edge `i→j` (0 if absent). Square `n×n`,
+    /// row-major. Used by the spectral engine (eigenvalues / graph energy).
+    pub fn to_adjacency(&self) -> Vec<Vec<f64>> {
+        let n = self.nrows();
+        let mut a = vec![vec![0.0f64; n]; n];
+        for i in 0..n {
+            let lo = self.row_ptr[i];
+            let hi = self.row_ptr[i + 1];
+            for k in lo..hi {
+                a[i][self.col_idx[k]] = self.val[k];
+            }
+        }
+        a
+    }
+
+    /// Graph energy E = Σ|λᵢ| over all eigenvalues of the adjacency matrix
+    /// (Gutman–Adrić, 2001). A pure spectral invariant: high energy ⇔ many
+    /// alternating-sign modes ⇔ structurally "active" graph. Vectorless — no
+    /// embeddings, just the eigenvalue spectrum. Reuses `spectral::eigenvalues`.
+    pub fn energy(&self) -> f64 {
+        crate::spectral::graph_energy(&self.to_adjacency())
+    }
+
     /// SYNCHRONOUS Jacobi personalized-PageRank.
     ///
     /// FIXED-POINT (Jacobi) power iteration, exactly `iters` steps:
@@ -525,5 +549,26 @@ mod tests {
             !idx[..3].contains(&3),
             "distant node 3 must not outrank seed+neighbours in top-3"
         );
+    }
+
+    // ── GREEN (vectorless graph-energy): Csr.energy() over the complete graph
+    //    K₃ returns E=4, matching spectral::graph_energy. ──
+    #[test]
+    fn csr_energy_matches_spectral_k3() {
+        // K3 as undirected edges (both directions).
+        let edges = [
+            (0, 1, 1.0), (1, 0, 1.0),
+            (1, 2, 1.0), (2, 1, 1.0),
+            (0, 2, 1.0), (2, 0, 1.0),
+        ];
+        let g = Csr::from_edges(3, &edges);
+        assert!(close(g.energy(), 4.0, 1e-6), "Csr::energy(K3)=4");
+    }
+
+    // ── GREEN: empty (edgeless) graph has energy 0 via Csr. ──
+    #[test]
+    fn csr_energy_empty_is_zero() {
+        let g = Csr::from_edges(4, &[]);
+        assert!(close(g.energy(), 0.0, 1e-9), "Csr::energy(empty)=0");
     }
 }
