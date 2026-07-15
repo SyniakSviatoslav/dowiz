@@ -22,6 +22,44 @@ pub struct FrameProfiler {
     pub write_buffer_calls: usize,
 }
 
+/// The GPU upload boundary (FE-01). A real backend (`wgpu::Queue::write_buffer`)
+/// implements this; the engine stays dependency-free by owning only the trait.
+///
+/// `write_buffer(offset, data)` copies `data` into the GPU-visible buffer at byte
+/// `offset`. The GREEN contract: **exactly one** `write_buffer` call per frame,
+/// carrying the whole zero-copy vertex slice, and **zero** JSON in the loop.
+///
+/// innovate: the concrete `wgpu` sink lives behind a future `feature = "gpu"`
+/// adapter crate (keeps the engine offline-clean per the Cargo.toml mandate).
+/// ceiling: no real GPU present in headless CI. upgrade: add the wgpu adapter
+/// implementing this trait once a display surface is a build target.
+pub trait GpuUploadSink {
+    /// Copy `data` (flat f32 vertex slice) into the GPU buffer at `offset` floats.
+    fn write_buffer(&mut self, offset: usize, data: &[f32]);
+}
+
+/// Headless upload sink: the default (offline-clean) backend. It genuinely COPIES
+/// the vertex slice into an owned mirror buffer (so the upload is real work, not a
+/// no-op counter) and records how many floats were uploaded. This makes the
+/// "1 writeBuffer / 0 json" gate falsifiable without a GPU.
+#[derive(Debug, Default, Clone)]
+pub struct HeadlessSink {
+    /// The bytes (as f32s) actually copied on the last upload — proves a real copy.
+    pub mirror: Vec<f32>,
+    /// Total number of write_buffer calls (must be 1 per frame on GREEN).
+    pub writes: usize,
+}
+
+impl GpuUploadSink for HeadlessSink {
+    fn write_buffer(&mut self, offset: usize, data: &[f32]) {
+        if self.mirror.len() < offset + data.len() {
+            self.mirror.resize(offset + data.len(), 0.0);
+        }
+        self.mirror[offset..offset + data.len()].copy_from_slice(data);
+        self.writes += 1;
+    }
+}
+
 /// Owns the flat staging buffer that models the WASM linear memory the GPU
 /// reads from. `vertex_view()` returns a slice over that buffer with **no copy**.
 pub struct VertexBridge {
@@ -68,6 +106,17 @@ impl VertexBridge {
         self.vertex_view()
     }
 
+    /// WIRED upload (FE-01): drive a real [`GpuUploadSink`] with the zero-copy
+    /// vertex slice in a SINGLE `write_buffer` call. Unlike `upload_once` (which
+    /// only counts), this actually hands the bytes to the backend — the organ is
+    /// connected to a consumer. Returns the number of floats uploaded.
+    pub fn upload_to<S: GpuUploadSink>(&mut self, sink: &mut S) -> usize {
+        let view = &self.scratch[..self.count * 4];
+        sink.write_buffer(0, view); // exactly ONE write_buffer, whole slice
+        self.profiler.write_buffer_calls += 1;
+        view.len()
+    }
+
     /// The RED signature: serialize the whole frame as JSON (one alloc + parse
     /// per particle). Increments `json_parse_calls` by `count`.
     pub fn json_frame_red_path(&mut self) {
@@ -104,6 +153,28 @@ mod tests {
             bridge.profiler().write_buffer_calls,
             1,
             "GREEN frame loop performs exactly one writeBuffer upload"
+        );
+    }
+
+    // WIRED upload: the sink actually RECEIVES the vertex bytes in one call.
+    #[test]
+    fn wired_sink_receives_bytes_one_write_zero_json() {
+        let mut bridge = VertexBridge::new(3, 4);
+        bridge.write_particle(0, 1.0, 2.0, 3.0, 4.0);
+        bridge.write_particle(1, 5.0, 6.0, 7.0, 8.0);
+        bridge.write_particle(2, 9.0, 10.0, 11.0, 12.0);
+        let mut sink = HeadlessSink::default();
+        let n = bridge.upload_to(&mut sink);
+        assert_eq!(n, 12, "uploaded whole 3x4 slice");
+        assert_eq!(sink.writes, 1, "exactly ONE write_buffer call");
+        // The sink's mirror IS a real copy of the staging buffer (organ wired).
+        assert_eq!(sink.mirror, bridge.vertex_view());
+        assert_eq!(sink.mirror[0], 1.0);
+        assert_eq!(sink.mirror[11], 12.0);
+        assert_eq!(
+            bridge.profiler().json_parse_calls,
+            0,
+            "wired upload performs ZERO json"
         );
     }
 
