@@ -147,15 +147,105 @@ else:
 PY
 }
 
+# ===== 2b. LANE WIDTH via ½-Kelly (net-new from design R1) =================
+# Given a chosen route's (p, v, cost) and a token budget B + per-lane stake s,
+# commit a ½-Kelly-safe parallel width: L = floor(½·f*·(B/s)).
+# Usage: gov_lane_width <p> <value> <cost> <budget> <stake>  -> prints lane count
+gov_lane_width() {
+  python3 - "$1" "$2" "$3" "$4" "$5" <<'PY'
+import sys
+p,v,c,B,s = (float(x) for x in sys.argv[1:6])
+q = 1-p
+if p <= 0 or s <= 0:
+    print(1); sys.exit(0)
+b = (v-s)/s                 # net odds
+f = (b*p - q)/b if b>0 else 0.0
+f = max(0.0, min(1.0, f))   # Kelly fraction (kernel kelly_fraction)
+L = int((0.5*f*(B/s)))      # ½-Kelly margin
+print(max(1, L))
+PY
+}
+
+# ===== 4b. HARDNESS TRIGGERS (net-new from design R2) =====================
+# A decision routes to the 3-judge panel when ANY trigger fires. Returns the
+# trigger list (space-sep) or empty for "soft" (cheap executor + verifier only).
+# Usage: gov_hard <class> <redline> <blast_radius> <no_decart_winner> <budget_exceeded>
+gov_hard() {
+  local cls="$1" red="$2" blast="$3" nodecart="$4" budget="$5"
+  local hits=""
+  [ "$cls" = "build" ] || [ "$cls" = "audit" ] && hits="$hits build/audit"
+  [ "${red:-0}" = "1" ] && hits="$hits redline"
+  [ "${blast:-0}" -gt 1 ] 2>/dev/null && hits="$hits blast-radius=$blast"
+  [ "${nodecart:-0}" = "1" ] && hits="$hits no-decart-winner"
+  [ "${budget:-0}" = "1" ] && hits="$hits budget-exceeded"
+  echo "$hits"   # empty => soft
+}
+
+# ===== 4c. JUDGE VERDICT CITATION-GATE (net-new from design R3) ===========
+# Verifier RED-rejects any judge verdict lacking a citation token
+# (CITES / DISTINGUISHES / NO-BINDING-PRECEDENT). Usage: gov_judge_gate <verdict_line>
+gov_judge_gate() {
+  local v="$1"
+  if printf '%s' "$v" | grep -Eq 'CITES:|DISTINGUISHES:|NO-BINDING-PRECEDENT'; then
+    echo "OK"
+  else
+    echo "RED: verdict missing citation token (CITES/DISTINGUISHES/NO-BINDING-PRECEDENT)"
+  fi
+}
+
+# ===== 5b. PRECEDENT BIND GATE (net-new from design R3) ===================
+# Bind a prior only if similarity >= tau AND not overturned. Here we use a
+# crude keyword-overlap proxy for similarity (real impl: embed + cosine).
+# Usage: gov_precedent_bind <question> <tau>  -> prints P-id + winner or NO-BIND
+gov_precedent_bind() {
+  local q="$1" tau="${2:-0.82}"
+  : >> "$PREC"
+  python3 - "$PREC" "$q" "$tau" <<'PY'
+import json, sys
+prec, q, tau = sys.argv[1], sys.argv[2].lower(), float(sys.argv[3])
+best=None; best_sim=0.0
+qw=set(q.split())
+with open(prec) as f:
+    for line in f:
+        line=line.strip()
+        if not line: continue
+        try: d=json.loads(line)
+        except: continue
+        if d.get("overturned"): continue          # overturned => not binding
+        pw=set((d.get("question","")+" "+d.get("winner","")).lower().split())
+        sim = len(qw & pw)/max(1,len(qw|pw))       # Jaccard proxy for cosine
+        if sim>=tau and sim>best_sim:
+            best=d; best_sim=sim
+if best is None:
+    print("NO-BINDING-PRECEDENT")
+else:
+    print(f"BIND {best.get('id','?')} ({best_sim:.2f}): {best.get('winner')} "
+          f"| PRESUMPTION favored; burden on challenger")
+PY
+}
+
+# ===== 5c. PRECEDENT RECORD (rich schema, net-new from design R3) =========
+# Usage: gov_precedent_record <id> <question> <winner> <argued_rounds> <jury_csv>
+gov_precedent_record() {
+  local id="$1" q="$2" winner="$3" rounds="$4" jury="$5"
+  local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "{\"id\":\"$id\",\"question\":\"$q\",\"winner\":\"$winner\",\"evidence\":[],\"date\":\"$ts\",\"overturned\":null,\"argued_rounds\":$rounds,\"jury\":[\"${jury//,/\",\"}\"],\"binding\":true}" >> "$PREC"
+}
+
 # ---- CLI dispatcher (sourced by `telemetry`) ----
 gov_dispatch() {
   local cmd="${1:-help}"; shift || true
   case "$cmd" in
     record) gov_record "$@" ;;
     route)  gov_route "$@" ;;
+    lane)   gov_lane_width "$@" ;;
     research) gov_research "$@" ;;
+    hard)   gov_hard "$@" ;;
     judge)  gov_judge "$@" ;;
+    gate)   gov_judge_gate "$@" ;;
     precedent) gov_precedent "$@" ;;
-    *) echo "governance: record|route|research|judge|precedent" ;;
+    pbind)  gov_precedent_bind "$@" ;;
+    prec_rec) gov_precedent_record "$@" ;;
+    *) echo "governance: record|route|lane|research|hard|judge|gate|precedent|pbind|prec_rec" ;;
   esac
 }
