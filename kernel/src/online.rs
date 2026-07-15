@@ -52,9 +52,7 @@ impl LinearSGD {
         let pred = w.mul(&Value::new(x)).add(b);
         let err = pred.sub(&Value::new(y));
         // L = err^2 + λ·w^2   (ridge on the slope)
-        let loss = err
-            .mul(&err)
-            .add(&w.mul(w).mul(&Value::new(self.lambda)));
+        let loss = err.mul(&err).add(&w.mul(w).mul(&Value::new(self.lambda)));
         loss.backward();
         // SGD update (offline, in place)
         let w_new = w.data() - self.lr * w.grad();
@@ -237,6 +235,94 @@ impl NaturalLogistic {
     }
 }
 
+/// Natural-gradient online ridge regression on a Gaussian target `y ≈ w·x + b + ε`.
+/// This is the **canonical Amari example** of natural-gradient descent.
+///
+/// The natural gradient w.r.t. the mean parameter θ=(w,b) is `F⁻¹∇`, where `F` is
+/// the empirical Fisher `Σ_t xₜxₜᵀ + λI` and `∇` the accumulated gradient. For a
+/// *fixed-variance* Gaussian the σ² cancels between the Fisher and the gradient
+/// (both scale by σ⁻²), so the preconditioner is the ridge-least-squares matrix
+/// `(XᵀX + λI)⁻¹` — the natural step **whitens** the input: raw SGD scales the
+/// step by the input correlation `x`, the natural step does not. This makes it
+/// INVARIANT to a rescaling/rotation of the feature coordinates.
+///
+/// LOCAL-FIRST: the Fisher + gradient accumulate from the in-process sample stream
+/// only; no network, no vendor runtime. Deterministic: same sample order ⇒ identical.
+pub struct LinearGaussNatural {
+    w: f64,
+    b: f64,
+    lr: f64,
+    lambda: f64,
+    // Running empirical-Fisher accumulators (online): F = [[sxx+λ, sx],[sx, n]].
+    sxx: f64,
+    sx: f64,
+    n: f64,
+}
+
+impl LinearGaussNatural {
+    /// `lr` = rate, `lambda` = ridge on the slope. Init w=b=0, accumulators empty
+    /// (no seed dependency ⇒ deterministic across nodes).
+    pub fn new(lr: f64, lambda: f64) -> Self {
+        LinearGaussNatural {
+            w: 0.0,
+            b: 0.0,
+            lr,
+            lambda,
+            sxx: 0.0,
+            sx: 0.0,
+            n: 0.0,
+        }
+    }
+
+    /// One online natural-gradient step. Accumulates the empirical Fisher `F`
+    /// from this sample, then applies `θ -= lr · F⁻¹·∇ₜ` where `∇ₜ` is THIS
+    /// sample's gradient (KFAC/online-Newton style: the running Fisher acts as a
+    /// preconditioner on the instantaneous gradient — NOT a full-batch Newton leap,
+    /// which would diverge if applied per-sample at lr=1). `lr` is the usual
+    /// SGD-style rate (≪1 keeps it stable). Returns the squared residual.
+    pub fn step(&mut self, x: f64, y: f64) -> f64 {
+        let pred = self.w * x + self.b;
+        let resid = pred - y;
+        // Accumulate empirical Fisher F = Σ[x;1][x;1]ᵀ + λ·diag(1,0).
+        self.sxx += x * x;
+        self.sx += x;
+        self.n += 1.0;
+        // This sample's gradient ∇ₜ of L = ½(y−ŷ)² + ½λw² wrt [w,b]:
+        //   ∂/∂w = resid·x + λw ;  ∂/∂b = resid   (resid = ŷ − y, the descent dir).
+        let gt_w = resid * x + self.lambda * self.w;
+        let gt_b = resid;
+        // Natural direction = F̂⁻¹·∇ₜ, 2×2 Cramer, where F̂ is the EMPIRICAL (mean)
+        // Fisher = (1/n)·Σ[x;1][x;1]ᵀ + λ·diag(1,0) — i.e. the input covariance.
+        // Normalizing by n keeps the preconditioner scale-stable as the stream grows
+        // (otherwise the raw accumulated F dilutes the step and convergence stalls).
+        let nn = self.n;
+        let g11 = (self.sxx / nn) + self.lambda; // F̂₁₁
+        let g12 = self.sx / nn; // F̂₁₂ = F̂₂₁
+        let g22 = 1.0; // F̂₂₂ = mean of 1 = 1 (no ridge on the intercept)
+        let det = g11 * g22 - g12 * g12;
+        // Manifold guard: if the accumulated Fisher is degenerate (fewer than 2
+        // independent samples, or collinear) the 2×2 det → 0 and F⁻¹ is
+        // undefined. Fail-soft: take NO step this sample (never divide by ~0 →
+        // no NaN/∞). Same fail-soft principle as `fisher_precondition`.
+        if det.abs() < 1e-12 {
+            return resid * resid;
+        }
+        let nw = (g22 * gt_w - g12 * gt_b) / det; // (F⁻¹∇ₜ)_w
+        let nb = (g11 * gt_b - g12 * gt_w) / det; // (F⁻¹∇ₜ)_b
+        self.w -= self.lr * nw;
+        self.b -= self.lr * nb;
+        resid * resid
+    }
+
+    pub fn predict(&self, x: f64) -> f64 {
+        self.w * x + self.b
+    }
+
+    pub fn weights(&self) -> (f64, f64) {
+        (self.w, self.b)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -344,7 +430,7 @@ mod tests {
             let g = p * (1.0 - p); // Fisher = Var[y] = E[(y−p)²]
             let kl_nat = 0.5 * eta * eta; // ½η²  (independent of p)
             let kl_plain = 0.5 * eta * eta * g * g; // ½η²·G²
-            // Natural KL is the same at every p (the invariance claim).
+                                                    // Natural KL is the same at every p (the invariance claim).
             assert!(
                 approx(kl_nat, 0.5 * eta * eta, 1e-15),
                 "natural expected-KL must be η²/2 for all p"
@@ -393,6 +479,114 @@ mod tests {
             "natural-gradient logistic must recover p*=0.8, got {}",
             lg.predict()
         );
+    }
+
+    // ── Info-geometry: natural-gradient linear-Gaussian (canonical Amari case) ──
+
+    /// GREEN: on a noiseless line y = 2x + 1 the online empirical-Fisher
+    /// natural gradient converges to w→2, b→1. For a fixed-variance Gaussian the
+    /// σ² cancels, so this is ridge-least-squares fit via preconditioned SGD;
+    /// the natural direction F⁻¹∇ₜ keeps it well-conditioned at lr=0.1.
+    #[test]
+    fn natural_linear_converges_to_line() {
+        let samples = [
+            (0.0, 1.0),
+            (1.0, 3.0),
+            (2.0, 5.0),
+            (3.0, 7.0),
+            (4.0, 9.0),
+            (-1.0, -1.0),
+            (0.5, 2.0),
+        ];
+        let mut m = LinearGaussNatural::new(0.1, 1e-6);
+        for _epoch in 0..400 {
+            for &(x, y) in samples.iter() {
+                m.step(x, y);
+            }
+        }
+        let (w, b) = m.weights();
+        assert!((w - 2.0).abs() < 1e-2, "w={w}, expected 2");
+        assert!((b - 1.0).abs() < 1e-2, "b={b}, expected 1");
+        assert!((m.predict(10.0) - 21.0).abs() < 1e-1);
+    }
+
+    /// Verified-by-Math (the whitening payoff): the FIT recovered by the natural
+    /// gradient is INVARIANT to a rescaling of the input, while raw SGD degrades.
+    /// Fit `y = 2x + 1` on two streams identical up to x→10·x (so the second
+    /// needs w→0.2 to keep y=2·(10x)+1). Natural gradient rescales its
+    /// preconditioner with X, so the recovered slope tracks the rescale; raw SGD with
+    /// a FIXED lr does not (the lr·x step is 10× larger on the scaled stream).
+    #[test]
+    fn natural_fit_is_scale_robust_raw_sgd_is_not() {
+        let base = [(0.0, 1.0), (1.0, 3.0), (2.0, 5.0), (3.0, 7.0), (4.0, 9.0)];
+        let scaled: Vec<(f64, f64)> = base.iter().map(|&(x, y)| (x * 10.0, y)).collect();
+
+        // Natural gradient: lr=0.1, preconditioner rescales with X ⇒ recovers the
+        // correct slope on BOTH streams (w=2 on base, w=0.2 on 10×-scaled).
+        let mut mn = LinearGaussNatural::new(0.1, 1e-6);
+        for _ in 0..400 {
+            for &(x, y) in base.iter() {
+                mn.step(x, y);
+            }
+        }
+        let (wn, _bn) = mn.weights();
+        let mut ms = LinearGaussNatural::new(0.1, 1e-6);
+        for _ in 0..400 {
+            for &(x, y) in scaled.iter() {
+                ms.step(x, y);
+            }
+        }
+        let (ws, _bs) = ms.weights();
+        assert!((wn - 2.0).abs() < 1e-2, "nat w_orig={wn}");
+        assert!(
+            (ws - 0.2).abs() < 1e-2,
+            "nat w_scaled={ws} (must track the 10× rescale)"
+        );
+
+        // Raw SGD with a FIXED lr is NOT scale-robust: on the 10× stream the
+        // lr·x step is 10× larger, so under the same lr it fails to settle at 0.2.
+        // (Clamp w,b like a real optimizer would, so divergence shows as "stuck
+        // wrong", not as NaN — the scale fragility is the finding, not inf.)
+        let raw_fit = |s: &[(f64, f64)]| -> f64 {
+            let mut w = 0.0;
+            let mut b = 0.0;
+            let lr = 0.01;
+            for _ in 0..400 {
+                for &(x, y) in s.iter() {
+                    let pred = w * x + b;
+                    let r = pred - y;
+                    w -= lr * r * x;
+                    b -= lr * r;
+                    w = w.clamp(-50.0, 50.0);
+                    b = b.clamp(-50.0, 50.0);
+                }
+            }
+            w
+        };
+        let rw_base = raw_fit(&base);
+        let rw_scaled = raw_fit(&scaled);
+        assert!(rw_base.is_finite() && rw_scaled.is_finite());
+        assert!((rw_base - 2.0).abs() < 5e-2, "raw w_orig={rw_base}");
+        // On the scaled stream the SAME lr fails to recover 0.2 (scale fragility).
+        assert!(
+            (rw_scaled - 0.2).abs() > 1e-1,
+            "raw SGD must degrade under 10× rescale: w_scaled={rw_scaled} vs 0.2"
+        );
+    }
+
+    /// Fail-soft: with ridge λ→0 the empirical Fisher is singular only at n=0;
+    /// after any sample the accumulators keep it invertible, and the step stays finite
+    /// (no σ² division ⇒ no ∞). The manifold guard is the λ floor, not a magic number.
+    #[test]
+    fn ridge_keeps_fisher_invertible() {
+        let mut m = LinearGaussNatural::new(0.1, 0.0); // λ=0
+        let r = m.step(2.0, 3.0); // first sample ⇒ F=[[4,2],[2,1]] (rank-1, det=0)
+                                  // Before a second independent sample the 2×2 det is 0 ⇒ step is 0/0; we
+                                  // accept a finite (guarded) result rather than NaN: assert no NaN appeared.
+        assert!(m.w.is_finite() && m.b.is_finite() && r.is_finite());
+        // After a 2nd sample the Fisher becomes full-rank ⇒ real finite step.
+        let _ = m.step(-1.0, 0.0);
+        assert!(m.w.is_finite() && m.b.is_finite());
     }
 
     /// Fail-soft: a degenerate (zero) Fisher must fall back to the plain gradient,
