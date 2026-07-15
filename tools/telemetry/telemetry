@@ -4,24 +4,20 @@
 # "Dowiz-Reporting" Telegram channel. KISS: no daemon, no deps beyond curl.
 #
 # Usage:
-#   telemetry log   <level> <message...>            # info|warn|error internal log
-#   telemetry metric <name> <value> [unit]          # a numeric metric
-#   telemetry kernel [rust-core path]       # sample kernel field_metrics (option-#1 C-ABI)
-#   telemetry hetzner                        # launch host-resource exporter for Gatus (60s poll)
-#   telemetry plan <id> <title> --steps N --eta-min M --eta-tokens T --topics ".." --risks ".." --before ".."   # spec-driven DOD big-plan (BEFORE work)
+#   telemetry plan <id> <title> --steps N --eta-min M --eta-tokens T --agents A --waves W --topics ".." --risks ".." --before ".."   # phased DOD plan (BEFORE work) -> Planning+Hermes
+#   telemetry phase <id> <research|critique|blueprint|eval|work> [note]   # tick a workflow phase -> Planning+Hermes
+#   telemetry blueprint <id> <task> --eta-min M --agents A --wave W [--deps "x,y"]  # register a blueprint task
+#   telemetry wave <id>                 # sort blueprints by ETA, group into parallel waves -> Planning+Hermes
 #   telemetry step <id> <done> [total] [note] # progress tick (% computed)
 #   telemetry alert <id> <error|decision> <msg>  # raise alert -> immediate TG
-#   telemetry track <id> [interval=60]           # bg-safe 60s poll: %/ETA/open-alerts
 #   telemetry retro <id> --tokens N --issues ".." --lessons ".." --skills ".." --next autorun|finish|stop  # finalize + trajectory
-#   telemetry status <id>                       # one-plan view
 #   telemetry dashboard                         # all plans + rolling ETA-accuracy trend
-#   telemetry bench_run <name> [note] -- <cmd...>    # run cmd, log wall-ms + peak RSS
-#   telemetry monitor [interval_s]                  # real-time resource/friction loop (bg-safe)
-#   telemetry task   <status> <title...>            # done|failed|started task
-#   telemetry session <title...>                    # a completed agent session
-#   telemetry health [tokenfile]                     # Markov loop/attractor signal (stdin if no file)
-#   telemetry send   <message...>                   # ad-hoc raw Telegram line
-#   telemetry selftest                              # local-only, no network
+#   telemetry plans                             # 7d unified plans/tasks/roadmaps dump -> Planning topic 291
+#   telemetry git-watch [iv=60]                 # new dowiz+openbebop commits -> Git topic 292
+#   telemetry cf-watch [iv=60]                  # wrangler tail / CF_LOG_FILE -> Cloudflare topic 293
+#   telemetry bench-watch [iv=120]              # entropy/eval/bench -> Benchmarks topic 294
+#   telemetry monitor [interval_s]              # real-time resource/friction loop (bg-safe)
+#   telemetry send   <message...>               # ad-hoc raw Telegram line
 #
 # Env: TELEGRAM_CHAT_ID (default Dowiz-Reporting), TELEMETRY_NO_TG=1 to skip send.
 set -uo pipefail
@@ -158,26 +154,94 @@ PY
   # Creates a BEFORE-any-work big plan, ticks progress, raises/clears alerts, polls 60s for
   # % status, and finalizes with an ETA-vs-actual RETRO + rolling improvement/degradation
   # signal stored in vectorless JSONL tables (plan/plan_step/alert/trajectory.jsonl).
+  # Phased discipline (operator 2026-07-15): research -> critique -> blueprint/specs ->
+  # evaluation/planning (sort blueprints into parallel waves by ETA) -> work. A plan is
+  # created BEFORE any code with ETA timing + token/agent budget; phases ticked via `phase`.
   plan)
     id="${1:?plan id}"; shift; title="$*"
-    steps=0 eta_min=0 eta_tokens=0 topics="" risks="" before=""
+    steps=0 eta_min=0 eta_tokens=0 agents=1 waves=1 topics="" risks="" before=""
     while [ $# -ge 2 ]; do
       case "$1" in
         --steps) steps="$2";; --eta-min) eta_min="$2";; --eta-tokens) eta_tokens="$2";;
+        --agents) agents="$2";; --waves) waves="$2";;
         --topics) topics="$2";; --risks) risks="$2";; --before) before="$2";;
       esac; shift 2
     done
     log_event plan "id=$id" "title=$(printf '%s' "$title" | _jesc)" "steps=$steps" \
-      "eta_min=$eta_min" "eta_tokens=$eta_tokens" "topics=$(printf '%s' "$topics" | _jesc)" \
+      "eta_min=$eta_min" "eta_tokens=$eta_tokens" "agents=$agents" "waves=$waves" \
+      "topics=$(printf '%s' "$topics" | _jesc)" \
       "risks=$(printf '%s' "$risks" | _jesc)" "status_before=$(printf '%s' "$before" | _jesc)" \
       "state=planned" >/dev/null
-    hdr="📋 PLAN $id — $title
+    hdr="📋 PLAN ▸ $id
+🎯 $title
 🔑 Topics: ${topics:-—}
 ⚠️ Risks: ${risks:-—}
 📂 Before: ${before:-—}
-🧮 Steps: $steps | ETA: ${eta_min}min / ~${eta_tokens} tok"
-    if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then tg_send "$hdr" || true; fi
+🧮 Scope: $steps steps | ⏱ ETA ${eta_min}min | 🪙 ~${eta_tokens} tok | 🤖 ${agents} agent(s) | 🌊 ${waves} wave(s)"
+    if [ "${TELEGRAM_NO_TG:-0}" != "1" ]; then
+      TELEGRAM_TOPIC_ID=291 tg_send "$hdr" || true   # Planning topic
+      tg_send "$hdr" || true                          # Hermes topic (default 267)
+    fi
     printf '%s\n' "$hdr" ;;
+  # ---- phased discipline (operator 2026-07-15) ----
+  # Tick a phase of the approved workflow: research -> critique -> blueprint -> eval -> work.
+  phase)
+    id="${1:?plan id}"; ph="${2:?research|critique|blueprint|eval|work}"; note="${3:-}"
+    ico="🔬"; case "$ph" in critique) ico="🧐";; blueprint) ico="📐";; eval) ico="📊";; work) ico="🛠";; esac
+    log_event phase "id=$id" "phase=$ph" "note=$(printf '%s' "$note" | _jesc)" >/dev/null
+    msg="$ico PHASE $id ▸ $ph ${note:+ — $note}"
+    if [ "${TELEGRAM_NO_TG:-0}" != "1" ]; then
+      TELEGRAM_TOPIC_ID=291 tg_send "$msg" || true
+      tg_send "$msg" || true
+    fi
+    printf '%s\n' "$msg" ;;
+  # Register a blueprint task for the eval/planning phase, with its own ETA + agent budget + wave.
+  blueprint)
+    id="${1:?plan id}"; task="${2:?task}"; shift 2
+    b_eta=0 b_agents=1 b_wave=1 b_deps=""
+    while [ $# -ge 2 ]; do
+      case "$1" in
+        --eta-min) b_eta="$2";; --agents) b_agents="$2";; --wave) b_wave="$2";; --deps) b_deps="$2";;
+      esac; shift 2
+    done
+    log_event blueprint "id=$id" "task=$(printf '%s' "$task" | _jesc)" "eta_min=$b_eta" \
+      "agents=$b_agents" "wave=$b_wave" "deps=$(printf '%s' "$b_deps" | _jesc)" >/dev/null
+    printf 'blueprint %s: %s (ETA %smin, %s agent, wave %s, deps=%s)\n' \
+      "$id" "$task" "$b_eta" "$b_agents" "$b_wave" "${b_deps:-none}" ;;
+  # Print + post blueprints sorted by ETA, grouped into parallel waves (eval/planning output).
+  wave)
+    id="${1:?plan id}"
+    out="$(python3 - "$LOG_DIR" "$id" <<'PY'
+import json, os, sys
+log_dir, pid = sys.argv[1:3]
+bp = os.path.join(log_dir, "blueprint.jsonl")
+rows=[]
+if os.path.exists(bp):
+    for l in open(bp):
+        if not l.strip(): continue
+        d=json.loads(l)
+        if d.get("id")==pid: rows.append(d)
+if not rows:
+    print("⚠️ no blueprints for %s yet" % pid); raise SystemExit
+rows.sort(key=lambda r:(int(r.get("wave",1)), int(r.get("eta_min",0))))
+waves={}
+for r in rows: waves.setdefault(int(r.get("wave",1)),[]).append(r)
+print("🌊 PARALLEL WAVES — plan %s (%d blueprints)" % (pid, len(rows)))
+for w in sorted(waves):
+    items=waves[w]
+    tot=sum(int(r.get("eta_min",0)) for r in items)
+    ag=sum(int(r.get("agents",1)) for r in items)
+    print("  🌊 Wave %d — %d tasks | ∑ETA %dmin | ∑agents %d" % (w, len(items), tot, ag))
+    for r in sorted(items, key=lambda x:int(x.get("eta_min",0))):
+        print("     • %s  ⏱%smin 🤖%s 🔗%s" % (
+            r.get("task","?"), r.get("eta_min",0), r.get("agents",1), r.get("deps","none")))
+PY
+)"
+    printf '%s\n' "$out"
+    if [ "${TELEGRAM_NO_TG:-0}" != "1" ]; then
+      TELEGRAM_TOPIC_ID=291 tg_send "$out" || true
+      tg_send "$out" || true
+    fi ;;
   step)
     id="${1:?plan id}"; done="${2:?done count}"; total="${3:-}"; note="${4:-}"
     [ -n "$total" ] && log_event plan_step "id=$id" "done=$done" "total=$total" \
@@ -335,7 +399,7 @@ PY
       chunk="$chunk$l"$'\n'; n=$((n+1))
       if [ "$n" -ge 20 ]; then
         TELEGRAM_TOPIC_ID=291 tg_send "$chunk" || true
-        chunk=""; n=0; sleep 1
+        chunk=""; n=0
       fi
     done
     [ -n "$chunk" ] && TELEGRAM_TOPIC_ID=291 tg_send "$chunk" || true ;;
