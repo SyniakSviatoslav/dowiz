@@ -424,6 +424,13 @@ PY
   git-watch)  git_watch_loop "${1:-60}" ;;
   cf-watch)   cf_watch_loop "${1:-60}" ;;
   bench-watch) bench_watch_loop "${1:-120}" ;;
+  waves)
+    # ETA-sorted concurrent wave planner. Pipe JSONL blueprints on stdin, or they
+    # are read from $1 (a file). Reports the wave plan to the Planning topic 291.
+    src="${1:-/dev/stdin}"
+    out="$(waves_plan < "$src")"
+    echo "$out"
+    TELEGRAM_TOPIC_ID=291 tg_send "$(printf '%s' "$out" | head -c 3500)" || true ;;
   send)
     msg="$*"; _emit note "📣" "$msg" "message=$msg" ;;
   selftest)
