@@ -14,6 +14,9 @@ pub mod analytics;
 pub mod attention;
 /// RW-07 — cart state machine (consolidate 2 JS cart impls → kernel authority). Totals via money.
 pub mod cart;
+/// P9 growth-substrate: causal inference — back-door adjustment / do-operator
+/// (Pearl). Provable causal effect from observational tables; fail-closed.
+pub mod causal;
 /// Deterministic CSR graph + synchronous Jacobi personalized-PageRank
 /// (retrieval-blueprint v2 diffusion/recall primitive).
 pub mod csr;
@@ -79,6 +82,8 @@ pub use evals::{
 pub use csr::{
     precision_at_k, recall_at_k, Csr,
 };
+/// P9 growth-substrate: causal inference — back-door adjustment (do-operator / Pearl).
+pub use causal::{backdoor_adjust, CausalEffect};
 pub use domain::{apply_event, compute_order_total, place_order, Order, OrderItem};
 pub use money::{
     apply_tax, assert_non_negative, compute_line_total, convert_all_to_eur_cents, to_minor_unit,
