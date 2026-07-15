@@ -431,6 +431,11 @@ PY
     out="$(waves_plan < "$src")"
     echo "$out"
     TELEGRAM_TOPIC_ID=291 tg_send "$(printf '%s' "$out" | head -c 3500)" || true ;;
+  swarm)
+    # Swarm executor: architect blueprints -> N cheap executors (max-lanes) -> verifier.
+    # Pipe JSONL blueprints on stdin, or pass a file as $1.
+    src="${1:-/dev/stdin}"
+    swarm_exec "$src" ;;
   send)
     msg="$*"; _emit note "📣" "$msg" "message=$msg" ;;
   selftest)
