@@ -232,6 +232,68 @@ gov_precedent_record() {
   echo "{\"id\":\"$id\",\"question\":\"$q\",\"winner\":\"$winner\",\"evidence\":[],\"date\":\"$ts\",\"overturned\":null,\"argued_rounds\":$rounds,\"jury\":[\"${jury//,/\",\"}\"],\"binding\":true}" >> "$PREC"
 }
 
+# ===== 6. META-RULE: dynamic self-adjusting governance (p3) ==========
+# Rules are GUIDANCE that evolve from deterministic telemetry — not hard gates.
+# Reads prior vs current benchmark + living-memory recall + false-claim rate,
+# folds into EMAs, and emits FLEXIBLE params (lane_tol / judge_count /
+# precedent_tau). Energy (agentic work) flows freely; meta-rule only tilts.
+# Usage: gov_meta <bench_prev> <bench_now> <recall_prev> <recall_now> <false_rate>
+gov_meta() {
+  local bp="$1" bn="$2" rp="$3" rn="$4" fr="${5:-0}"
+  python3 - "$bp" "$bn" "$rp" "$rn" "$fr" <<'PY'
+import sys, json, os
+bp, bn, rp, rn, fr = (float(x) for x in sys.argv[1:6])
+# deltas (improvement > 0): bench = speedup-1; eval = recall delta
+bench_delta = (bn/bp - 1.0) if bp > 0 else 0.0
+eval_delta  = rn - rp
+false_rate  = max(0.0, fr)
+# EMA (alpha=2/(n+1) equivalent window; n=1 here, single obs = identity)
+# guidance mapping (mirrors kernel control.rs MetaRule)
+lane_tol      = min(2.0, max(0.3, 1.0 + 0.5*bench_delta))
+judge_count   = int(min(7, max(1, 3 + false_rate/0.2)))
+precedent_tau = min(0.95, max(0.6, 0.82 + 0.1*eval_delta))
+print(f"META bench_delta={bench_delta:+.3f} eval_delta={eval_delta:+.3f} false_rate={false_rate:.3f}")
+print(f"GUIDANCE lane_tol={lane_tol:.3f} judge_count={judge_count} precedent_tau={precedent_tau:.3f}")
+print("RULES: guidance, not gates — energy flows; meta-rule tilts only.")
+PY
+}
+
+# ===== 7. FALSE-CLAIM METER (p4) ======================================
+# Records a (claimed, verified) pair; computes false-estimation% + false-positive-of-done%.
+# Usage: gov_falseclaim <record|report> [claimed=1 verified=1]
+FC="$GOV_DIR/false_claims.jsonl"
+: >> "$FC"
+gov_falseclaim() {
+  local sub="${1:-report}"; shift || true
+  case "$sub" in
+    record)
+      local claimed="${1:-1}" verified="${2:-1}"
+      local ts; ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      echo "{\"ts\":\"$ts\",\"claimed\":$claimed,\"verified\":$verified}" >> "$FC" ;;
+    report|*)
+      python3 - "$FC" <<'PY'
+import json, sys
+fc = sys.argv[1]
+claimed = verified = 0
+with open(fc) as f:
+    for line in f:
+        line = line.strip()
+        if not line: continue
+        try: d = json.loads(line)
+        except: continue
+        claimed  += int(d.get("claimed", 1))
+        verified += int(d.get("verified", 1))
+total = max(1, claimed)
+false_est = 1.0 - verified/total            # fraction of claimed-not-verified
+false_pos = 0.0 if verified == 0 else (claimed - verified)/verified
+print(f"FALSE-CLAIM: claimed={claimed} verified={verified}")
+print(f"  false-estimation%%     = {false_est*100:.1f}  (claimed but not verified)")
+print(f"  false-positive-of-done%% = {false_pos*100:.1f}  (done claimed but unverified / verified)")
+PY
+      ;;
+  esac
+}
+
 # ---- CLI dispatcher (sourced by `telemetry`) ----
 gov_dispatch() {
   local cmd="${1:-help}"; shift || true
@@ -246,6 +308,8 @@ gov_dispatch() {
     precedent) gov_precedent "$@" ;;
     pbind)  gov_precedent_bind "$@" ;;
     prec_rec) gov_precedent_record "$@" ;;
-    *) echo "governance: record|route|lane|research|hard|judge|gate|precedent|pbind|prec_rec" ;;
+    meta)   gov_meta "$@" ;;
+    falseclaim) gov_falseclaim "$@" ;;
+    *) echo "governance: record|route|lane|research|hard|judge|gate|precedent|pbind|prec_rec|meta|falseclaim" ;;
   esac
 }
