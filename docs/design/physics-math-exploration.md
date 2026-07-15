@@ -11,8 +11,13 @@ Research queue (in order; pull the next item when the current is GREEN):
    `kernel/src/causal.rs`. Observational tables → `P(Y | do(X))`; falsifiable: a
    beneficial treatment whose *observational* association is 6.6× overstated by a
    health-conscious confounder; adjustment recovers the true +0.10 causal effect.
-2. ⬜ **front-door adjustment** — mediate when the confounder is *unobserved*; adjust
-   through the mediator `X → M → Y` (requires `P(M|X)`, `P(Y|M,Z)`, `P(Z|X)`).
+2. ✅ **front-door adjustment (Pearl)** — DONE 2026-07-15.
+   `kernel/src/causal.rs`. Handles the case back-door *cannot*: confounder `U` of
+   `X,Y` is **unobserved**, but `X → M → Y` is the only path and `M` is unconfounded.
+   `P(Y|do(X)) = Σ_m P(M|X)·Σ_x' P(Y|M,X=x')·P(X=x')`. Falsifiable: mediator-route test
+   (flipping the `Y|M` map changes `do(X=1)` 0.65→0.25 while `do(X=0)` stays 0.45);
+   no-X→-M test (effect collapses to exactly 0); trust-boundary RED (malformed P(M|X),
+   P(X), oor, empty mediator).
 3. ⬜ **instrumental variables** — when no back-door set exists, recover `P(Y|do(X))`
    via an instrument `Z → X`, `Z ⊥ Y` except through X (Wald estimand `cov(Z,Y)/cov(Z,X)`).
 4. ⬜ **counterfactual inference** — `P(Y_x | X=x', Y=y')` via the three-step

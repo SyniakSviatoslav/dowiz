@@ -115,6 +115,85 @@ pub fn backdoor_adjust(
     Ok(CausalEffect { do_p_y, naive_p_y })
 }
 
+/// Front-door adjustment (Pearl's front-door criterion).
+///
+/// Used when the confounder `U` of `X` and `Y` is **unobserved** (so back-door
+/// adjustment is impossible) but `X` affects `Y` *only through* a mediator `M`,
+/// and `M` is itself unconfounded with `X`. Then `P(Y | do(X))` is identified as
+///
+/// ```text
+///     P(Y | do(X=x)) = Σ_m  P(M=m | X=x) · Σ_x'  P(Y=1 | M=m, X=x') · P(X=x')
+/// ```
+///
+/// The inner sum weights each level of `X` by its base rate, so the *direct*
+/// `X → Y` edge is correctly integrated and the unobserved `U → X, U → Y`
+/// back-door is bypassed entirely through `M`.
+///
+/// * `p_m_x[idx]` with `idx = x_idx * n_m + m_idx` is `P(M=m | X=x)`.
+/// * `p_y_mx[idx]` is `P(Y=1 | M=m, X=x)`.
+/// * `p_x[x_idx]` is `P(X=x)` — the treatment marginal.
+///
+/// Fail-closed on the same trust-boundary violations as [`backdoor_adjust`]:
+/// empty dims, length/shape mismatch, probabilities outside `[0,1]`, `M|X` rows
+/// or `P(X)` not summing to 1.
+pub fn frontdoor_adjust(
+    p_m_x: &[f64],
+    p_y_mx: &[f64],
+    p_x: &[f64],
+    n_x: usize,
+    n_m: usize,
+) -> Result<CausalEffect, &'static str> {
+    if n_x == 0 || n_m == 0 {
+        return Err("treatment (n_x) and mediator (n_m) must be non-empty");
+    }
+    if p_m_x.len() != n_x * n_m {
+        return Err("p_m_x length must equal n_x * n_m");
+    }
+    if p_y_mx.len() != n_x * n_m {
+        return Err("p_y_mx length must equal n_x * n_m");
+    }
+    if p_x.len() != n_x {
+        return Err("p_x length must equal n_x");
+    }
+    for &p in p_m_x.iter().chain(p_y_mx).chain(p_x) {
+        if !(0.0..=1.0).contains(&p) {
+            return Err("every probability must lie in [0,1]");
+        }
+    }
+    if (p_x.iter().sum::<f64>() - 1.0).abs() > 1e-9 {
+        return Err("p_x must sum to 1");
+    }
+    // Each P(M | X=x) row must itself be a distribution.
+    for xi in 0..n_x {
+        let row_sum: f64 = (0..n_m).map(|mi| p_m_x[xi * n_m + mi]).sum();
+        if (row_sum - 1.0).abs() > 1e-9 {
+            return Err("every P(M | X=x) row must sum to 1");
+        }
+    }
+
+    let mut do_p_y = vec![0.0; n_x];
+    let mut naive_p_y = vec![0.0; n_x];
+    for xi in 0..n_x {
+        // do(X=xi): Σ_m P(M=m|X=xi) · [ Σ_x' P(Y=1|M=m,X=x')·P(X=x') ]
+        let mut do_sum = 0.0;
+        // naive: Σ_m P(Y=1|M=m,X=xi)·P(M=m|X=xi)
+        let mut naive = 0.0;
+        for mi in 0..n_m {
+            let pmx = p_m_x[xi * n_m + mi];
+            // inner sum over x' for the mediation distribution of Y at (M=m)
+            let mut inner = 0.0;
+            for xp in 0..n_x {
+                inner += p_y_mx[xp * n_m + mi] * p_x[xp];
+            }
+            do_sum += pmx * inner;
+            naive += p_y_mx[xi * n_m + mi] * pmx;
+        }
+        do_p_y[xi] = do_sum;
+        naive_p_y[xi] = naive;
+    }
+    Ok(CausalEffect { do_p_y, naive_p_y })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -218,5 +297,85 @@ mod tests {
         let mut bad_pxz = pxz.clone();
         bad_pxz[0] += 0.1; // sums to 1.1
         assert!(backdoor_adjust(&py, &pz, &bad_pxz, 2, 2).is_err());
+    }
+
+    // ── Front-door fixtures (Pearl): X→M→Y, unobserved U confounds X,Y ──
+    // Valid front-door model: Y⊥X | M (no direct X→Y edge), P(X) symmetric.
+    //   p_m_x: X0:(M0,M1)=(0.5,0.5)  X1:(0.1,0.9)
+    //   p_y_mx: M0=0.2, M1=0.7   (Y depends on M only)
+    // Hand sum: do(X=0)=0.5·0.2+0.5·0.7=0.45 ; do(X=1)=0.1·0.2+0.9·0.7=0.65
+    fn frontdoor_fixture() -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+        let p_m_x = vec![
+            0.5, 0.5, // X=0: M=0, M=1
+            0.1, 0.9, // X=1: M=0, M=1
+        ];
+        let p_y_mx = vec![
+            0.2, 0.7, // X=0: M=0, M=1
+            0.2, 0.7, // X=1: M=0, M=1
+        ];
+        let p_x = vec![0.5, 0.5];
+        (p_m_x, p_y_mx, p_x)
+    }
+
+    // ── GREEN: front-door matches the hand-derived oracle exactly ──
+    #[test]
+    fn green_frontdoor_matches_hand_derivation() {
+        let (pmx, pymx, px) = frontdoor_fixture();
+        let eff = frontdoor_adjust(&pmx, &pymx, &px, 2, 2).expect("valid tables");
+        assert!(approx(eff.do_p_y[0], 0.45), "do(0)={}", eff.do_p_y[0]);
+        assert!(approx(eff.do_p_y[1], 0.65), "do(1)={}", eff.do_p_y[1]);
+        // With no direct X→Y edge (Y⊥X|M), the front-door do coincides with the
+        // naive conditional — the identifier is internally consistent.
+        assert!(approx(eff.do_p_y[0], eff.naive_p_y[0]), "do==naive at X=0 (Y⊥X|M)");
+        assert!(approx(eff.do_p_y[1], eff.naive_p_y[1]), "do==naive at X=1 (Y⊥X|M)");
+    }
+
+    // ── GREEN: the mediator M is actually used (not a pass-through) ──
+    #[test]
+    fn green_frontdoor_routes_through_mediator() {
+        let (pmx, mut pymx, px) = frontdoor_fixture();
+        // Flip the outcome-on-mediator map: M1 now BAD (0.2), M0 GOOD (0.7).
+        pymx = vec![
+            0.7, 0.2, // X=0: M=0, M=1
+            0.7, 0.2, // X=1: M=0, M=1
+        ];
+        let eff = frontdoor_adjust(&pmx, &pymx, &px, 2, 2).unwrap();
+        // do(X=1)=0.1·0.7+0.9·0.2=0.25 ; do(X=0)=0.5·0.7+0.5·0.2=0.45
+        assert!(approx(eff.do_p_y[1], 0.25), "do(1) must track M=1's new outcome");
+        assert!(approx(eff.do_p_y[0], 0.45), "do(0) unchanged (M distn unchanged)");
+        // A pass-through (ignoring M) would have reported 0.65/0.45 — it didn't.
+        assert!(!approx(eff.do_p_y[1], 0.65), "implementation must NOT skip M");
+    }
+
+    // ── GREEN: no X→M edge ⇒ no causal effect of X on Y ──
+    #[test]
+    fn green_frontdoor_no_x_to_m_means_no_effect() {
+        let mut pmx = vec![0.5, 0.5, 0.5, 0.5]; // P(M|X) constant
+        let pymx = vec![0.2, 0.7, 0.2, 0.7];
+        let px = vec![0.5, 0.5];
+        let eff = frontdoor_adjust(&pmx, &pymx, &px, 2, 2).unwrap();
+        // do(X=0)=do(X=1)=0.5·0.2+0.5·0.7=0.45 ⇒ causal effect is exactly 0.
+        assert!(approx(eff.do_p_y[0], eff.do_p_y[1]), "no X→M ⇒ identical do(X)");
+        assert!(approx(eff.do_p_y[0], 0.45));
+    }
+
+    // ── RED (trust boundary): malformed mediator tables fail-closed ──
+    #[test]
+    fn red_frontdoor_malformed_is_rejected() {
+        let (pmx, pymx, px) = frontdoor_fixture();
+        // P(M|X) row not summing to 1
+        let mut bad_pmx = pmx.clone();
+        bad_pmx[0] += 0.1;
+        assert!(frontdoor_adjust(&bad_pmx, &pymx, &px, 2, 2).is_err());
+        // treatment marginal not summing to 1
+        let mut bad_px = px.clone();
+        bad_px[0] = 0.4;
+        assert!(frontdoor_adjust(&pmx, &pymx, &bad_px, 2, 2).is_err());
+        // probability out of range
+        let mut bad_y = pymx.clone();
+        bad_y[0] = 1.5;
+        assert!(frontdoor_adjust(&pmx, &bad_y, &px, 2, 2).is_err());
+        // empty mediator
+        assert!(frontdoor_adjust(&pmx, &pymx, &px, 2, 0).is_err());
     }
 }
