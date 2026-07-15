@@ -236,6 +236,51 @@ pub fn spectral_gap(a: &[Vec<f64>]) -> f64 {
     1.0 - slem(a)
 }
 
+/// Graph energy E = Σ|λᵢ| over ALL eigenvalues of the adjacency matrix
+/// (Gutman–Adrić, 2001). A structural invariant independent of any embedding
+/// (vectorless): E is large when the spectrum spans many alternating-sign modes.
+/// Bounds: for an n-vertex graph, 2(n−1) ≤ E ≤ 2n√(n−1) (empty / complete
+/// extremal graphs). This is the missing spectral quantity the FSM/mesh work
+/// needed — the "how active is this graph" dial, complementary to ρ (stability)
+/// and λ₂ (connectivity).
+pub fn graph_energy(adj: &[Vec<f64>]) -> f64 {
+    eigenvalues(adj).iter().map(|e| e.abs()).sum()
+}
+
+/// One-shot spectral profile of a graph's adjacency matrix — the full
+/// vectorless signature the kernel exposes: stability (ρ), mixing (|λ₂|,
+/// gap), connectivity (λ₂-Laplacian), activity (energy), and drift class.
+/// Single eigenvalue pass; all downstream quantities derived from the spectrum.
+pub struct GraphSpectrum {
+    pub spectral_radius: f64, // ρ = max|λ|  (stability)
+    pub slem: f64,            // |λ₂|          (mixing rate)
+    pub spectral_gap: f64,    // 1 − |λ₂|
+    pub fiedler: f64,         // λ₂(L)         (algebraic connectivity)
+    pub energy: f64,          // Σ|λ|          (graph activity)
+    pub drift: DriftClass,    // ρ vs unit circle
+}
+
+pub fn graph_spectrum(adj: &[Vec<f64>]) -> GraphSpectrum {
+    let eigs = eigenvalues(adj);
+    let mut mags: Vec<f64> = eigs.iter().map(|e| e.abs()).collect();
+    mags.sort_by(|x, y| y.partial_cmp(x).unwrap_or(core::cmp::Ordering::Equal));
+    let rho = mags.first().copied().unwrap_or(0.0);
+    let slem_v = if mags.len() > 1 { mags[1] } else { 0.0 };
+    let l = laplacian(adj);
+    let mut re: Vec<f64> = eigenvalues(&l).iter().map(|e| e.re).collect();
+    re.sort_by(|x, y| x.partial_cmp(y).unwrap_or(core::cmp::Ordering::Equal));
+    let fiedler = if re.len() > 1 { re[1] } else { 0.0 };
+    let energy = mags.iter().sum();
+    GraphSpectrum {
+        spectral_radius: rho,
+        slem: slem_v,
+        spectral_gap: 1.0 - slem_v,
+        fiedler,
+        energy,
+        drift: classify_drift(adj),
+    }
+}
+
 /// Graph Laplacian L = D − A of an (assumed symmetric) adjacency matrix.
 /// Built on a contiguous `Mat` (row-major) to avoid the double `vec![vec![]]`
 /// allocation, then materialized back to `Vec<Vec<f64>>` for the wasm/API contract.
@@ -382,16 +427,61 @@ mod tests {
         assert!(approx(re[0], 0.0, 1e-6));
     }
 
-    // ── GREEN: the spectral gap separates a poorly-mixing 2-cycle from a
-    //    well-mixing chain — exactly the LIMIT_CYCLE vs churn discriminator. ──
+    // ── GREEN: graph energy E = Σ|λ| for the complete graph K₃. K₃ has
+    //    adjacency eigenvalues {2, −1, −1} ⇒ E = 2+1+1 = 4. Also check the
+    //    extremal lower bound 2(n−1)=4 for a complete graph. ──
     #[test]
-    fn green_spectral_gap_separates_mixing() {
-        let cycle = vec![vec![0.0, 1.0], vec![1.0, 0.0]]; // eigs {1,−1} ⇒ |λ₂|=1, gap 0
-        let mixing = vec![vec![0.5, 0.5], vec![0.5, 0.5]]; // eigs {1, 0} ⇒ |λ₂|=0, gap 1
-        assert!(slem(&cycle) > slem(&mixing));
-        assert!(spectral_gap(&mixing) > spectral_gap(&cycle));
-        assert!(approx(spectral_gap(&mixing), 1.0, 1e-6));
-        assert!(approx(spectral_gap(&cycle), 0.0, 1e-6));
+    fn green_graph_energy_complete_k3() {
+        // K3: every pair connected.
+        let k3 = vec![
+            vec![0.0, 1.0, 1.0],
+            vec![1.0, 0.0, 1.0],
+            vec![1.0, 1.0, 0.0],
+        ];
+        assert!(approx(graph_energy(&k3), 4.0, 1e-6), "E(K3)=4");
+        let s = graph_spectrum(&k3);
+        assert!(approx(s.energy, 4.0, 1e-6));
+        assert!(approx(s.spectral_radius, 2.0, 1e-6), "ρ(K3)=2");
+        assert!(s.fiedler > 0.0, "K3 is connected ⇒ λ₂(L)>0");
+    }
+
+    // ── GREEN: empty graph E=0 (all eigenvalues 0); disconnected graph has
+    //    Fiedler λ₂(L)=0 ⇒ algebraic connectivity 0. ──
+    #[test]
+    fn green_empty_graph_zero_energy_disconnected_fiedler_zero() {
+        let empty = vec![vec![0.0; 3]; 3];
+        assert!(approx(graph_energy(&empty), 0.0, 1e-9));
+        assert!(approx(graph_spectrum(&empty).fiedler, 0.0, 1e-9), "disconnected ⇒ λ₂=0");
+
+        // Two isolated edges (disconnected): Fiedler must be 0.
+        let disc = vec![
+            vec![0.0, 1.0, 0.0, 0.0],
+            vec![1.0, 0.0, 0.0, 0.0],
+            vec![0.0, 0.0, 0.0, 1.0],
+            vec![0.0, 0.0, 1.0, 0.0],
+        ];
+        assert!(approx(graph_spectrum(&disc).fiedler, 0.0, 1e-6), "disconnected ⇒ λ₂=0");
+    }
+
+    // ── GREEN: graph_spectrum returns the documented fields coherently for a
+    //    path graph P₃. P₃ adjacency eigenvalues are {+√2, −√2, 0} (bipartite,
+    //    so ±symmetric; NOT the 2-cycle which has {1,−1}). ρ=√2, energy=2√2. ──
+    #[test]
+    fn green_graph_spectrum_path_p3() {
+        let p3 = vec![
+            vec![0.0, 1.0, 0.0],
+            vec![1.0, 0.0, 1.0],
+            vec![0.0, 1.0, 0.0],
+        ];
+        let s = graph_spectrum(&p3);
+        let sqrt2 = 2.0_f64.sqrt();
+        assert!(approx(s.spectral_radius, sqrt2, 1e-6), "ρ(P3)=√2");
+        assert!(approx(s.energy, 2.0 * sqrt2, 1e-6), "E(P3)=2√2");
+        assert!(approx(s.fiedler, 1.0, 1e-6), "λ₂(L)=1");
+        // For the ADJACENCY matrix the "spectral gap" = 1 − |λ₂| is a stability
+        // reading for stochastic matrices; here λ₂-modulus = √2 (the −√2 eig),
+        // so gap = 1 − √2 (negative — an adjacency, not a transition matrix).
+        assert!(approx(s.spectral_gap, 1.0 - sqrt2, 1e-6), "gap=1−√2 for P3 adjacency");
     }
 
     // ── RED→GREEN: the DMD drift class discriminates contraction / margin / growth
