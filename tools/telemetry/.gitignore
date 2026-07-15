@@ -1,0 +1,3 @@
+
+# runtime governance stores (track-record + precedent registry)
+tools/telemetry/governance/*.jsonl
