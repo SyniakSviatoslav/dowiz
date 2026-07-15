@@ -43,9 +43,10 @@ log_event() {
   printf '%s\n' "$line"   # echo back for piping/inspection
 }
 
-# Send a plain-text message to Telegram with a 3-try retry loop.
-# Returns 0 on ok:true, 1 otherwise. Never prints the token.
-# Honors TELEGRAM_TOPIC_ID (forum topic / message_thread_id). Default hermes topic = 267.
+# Send a plain-text message to Telegram with a retry loop that honors Telegram's
+# 429 rate-limit (retry_after) via bounded exponential backoff. Returns 0 on ok:true.
+# Never prints the token. Honors TELEGRAM_TOPIC_ID (forum topic / message_thread_id).
+# Default hermes topic = 267.
 tg_send() {
   local text="$1"
   if ! _load_token; then
@@ -54,19 +55,24 @@ tg_send() {
   fi
   local url="https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"
   local thread="${TELEGRAM_TOPIC_ID:-267}"
-  local attempt resp payload
-  for attempt in 1 2 3; do
-    payload="chat_id=${CHAT_ID}&text=${text}&disable_web_page_preview=true"
-    [ -n "${thread}" ] && payload="${payload}&message_thread_id=${thread}"
-    resp="$(curl -sS --max-time 10 "$url" --data-urlencode "chat_id=${CHAT_ID}" \
-      --data-urlencode "text=${text}" --data-urlencode "disable_web_page_preview=true" \
+  local attempt resp sleep_s=2
+  for attempt in 1 2 3 4 5 6; do
+    resp="$(curl -sS --max-time 10 "$url" \
+      --data-urlencode "chat_id=${CHAT_ID}" \
+      --data-urlencode "text=${text}" \
+      --data-urlencode "disable_web_page_preview=true" \
       ${thread:+--data-urlencode "message_thread_id=${thread}"} 2>&1)"
     if printf '%s' "$resp" | grep -q '"ok":true'; then
       return 0
     fi
-    sleep 2
+    # honor 429 retry_after if present, else exponential backoff (cap 30s)
+    local ra
+    ra="$(printf '%s' "$resp" | grep -o '"retry_after":[0-9]*' | grep -o '[0-9]*$')"
+    if [ -n "$ra" ]; then sleep_s="$ra"; else sleep_s=$((sleep_s * 2)); fi
+    [ "$sleep_s" -gt 30 ] && sleep_s=30
+    sleep "$sleep_s"
   done
-  echo "tg_send: failed after 3 attempts: $resp" >&2
+  echo "tg_send: failed after retries: $resp" >&2
   return 1
 }
 

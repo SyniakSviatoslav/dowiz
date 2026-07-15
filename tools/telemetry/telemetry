@@ -28,6 +28,8 @@ set -uo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh
 . "$DIR/lib.sh"
+# shellcheck source=topics.sh
+. "$DIR/topics.sh"
 
 _emit() {  # <kind> <telegram_prefix> <telegram_body> <k=v>...
   local kind="$1" pfx="$2" body="$3"; shift 3
@@ -289,7 +291,7 @@ for p in plans:
     pid=p.get("id"); steps=p.get("steps",0); eta=p.get("eta_min",0); st=p.get("state","?")
     print(f"  [{st:>8}] {pid} steps={steps} eta={eta}min title={p.get('title','')[:40]}")
 if traj:
-    acc=[abs(t.get("eta_err_pct",0)) for t in traj if "eta_err_pct" in t]
+    acc=[abs(int(t.get("eta_err_pct",0))) for t in traj if "eta_err_pct" in t]
     print(f"rolling ETA-accuracy: {round(sum(acc)/len(acc),1)}% mean-abs-err across {len(acc)} plans")
     print(f"  last 3: " + ", ".join(f"{t.get('id')}={t.get('eta_err_pct')}%" for t in traj[-3:]))
 PY
@@ -321,6 +323,41 @@ PY
         || echo "telemetry: local health log written, Telegram send failed" >&2
     fi
     printf '%s\n' "$verdict_json" ;;
+  # ---- dedicated-topic aggregators (2026-07-15) ----
+  plans)
+    # First message(s) to the Planning topic: unified plans/tasks/roadmaps/todos (last 7d,
+    # chronological). Chunked into <=20-line batches so the topic is readable + fast to post.
+    agg="$(plans_aggregate)"
+    { echo "$agg" | head -1; echo "(posting to Planning topic 291 in batches...)"; } >&2
+    chunk=""; n=0
+    printf '%s\n' "$agg" | while IFS= read -r l; do
+      [ -z "$l" ] && continue
+      chunk="$chunk$l"$'\n'; n=$((n+1))
+      if [ "$n" -ge 20 ]; then
+        TELEGRAM_TOPIC_ID=291 tg_send "$chunk" || true
+        chunk=""; n=0; sleep 1
+      fi
+    done
+    [ -n "$chunk" ] && TELEGRAM_TOPIC_ID=291 tg_send "$chunk" || true ;;
+  plans-watch)
+    # Keep the Planning topic live: re-post the aggregate (chunked) every 15 min.
+    iv="${1:-900}"
+    while true; do
+      agg="$(plans_aggregate)"; chunk=""; n=0
+      printf '%s\n' "$agg" | while IFS= read -r l; do
+        [ -z "$l" ] && continue
+        chunk="$chunk$l"$'\n'; n=$((n+1))
+        if [ "$n" -ge 20 ]; then
+          TELEGRAM_TOPIC_ID=291 tg_send "$chunk" || true
+          chunk=""; n=0
+        fi
+      done
+      [ -n "$chunk" ] && TELEGRAM_TOPIC_ID=291 tg_send "$chunk" || true
+      sleep "$iv"
+    done ;;
+  git-watch)  git_watch_loop "${1:-60}" ;;
+  cf-watch)   cf_watch_loop "${1:-60}" ;;
+  bench-watch) bench_watch_loop "${1:-120}" ;;
   send)
     msg="$*"; _emit note "📣" "$msg" "message=$msg" ;;
   selftest)
