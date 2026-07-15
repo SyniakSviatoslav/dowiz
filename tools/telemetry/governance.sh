@@ -357,52 +357,88 @@ PY
 #        the non-negotiable floor (no data-loss, no red-line, no ruin blow-up).
 # Decision = Anu proposes (learned correction), Ananke constrains (structure wins).
 #
-# gov_learn: trains a LEAST-SQUARES linear corrector on the organism's own
-#   (elapsed_min -> eta_err_pct) ETA records (stdlib only, no external ML dep).
-#   On <2 points or degenerate data it degrades to IDENTITY (no false learning).
-#   Writes the model (slope, intercept) to $GOV_DIR/anu_model.json for reuse.
+# gov_learn: trains SELF-SUPERVISED models on the organism's OWN telemetry
+#   (stdlib only, no external ML dep):
+#     (a) ETA-error corrector: least-squares (elapsed_min -> eta_err_pct).
+#     (b) latency model: rolling EMA of real op `ms` (the organism learns its own
+#         speed from its own benchmark stream) + a least-squares trend.
+#     (c) resource model: EMA of `rss_mb` (learns its own memory footprint).
+#   On <2 points or degenerate data each model degrades to IDENTITY/mean (no false
+#   learning). Writes models to $GOV_DIR/anu_*.json for reuse.
 #   Usage: gov_learn [metric_log]
 GOV_METRIC="${GOV_METRIC:-$DIR/logs/metric.jsonl}"
 gov_learn() {
-  local log="${1:-$GOV_METRIC}"; local out="$GOV_DIR/anu_model.json"
+  local log="${1:-$GOV_METRIC}"
   [ -f "$log" ] || { echo "NO-LEARN: $log absent"; return 0; }
-  python3 - "$log" "$out" <<'PY'
+  python3 - "$log" "$GOV_DIR" <<'PY'
 import json, sys
-log, out = sys.argv[1], sys.argv[2]
-xs, ys = [], []
+log, gov = sys.argv[1], sys.argv[2]
+eta_x, eta_y, ms_list, rss_list = [], [], [], []
 try:
     for line in open(log):
         try: d = json.loads(line)
         except: continue
+        # ETA corrector pairs
         if 'eta_err_pct' in d and 'elapsed_min' in d:
-            try: xs.append(float(d['elapsed_min'])); ys.append(float(d['eta_err_pct']))
+            try: eta_x.append(float(d['elapsed_min'])); eta_y.append(float(d['eta_err_pct']))
+            except: pass
+        # real latency / resource streams
+        if 'ms' in d:
+            try: ms_list.append(float(str(d['ms']).split('=')[-1]))
+            except: pass
+        if 'rss_mb' in d:
+            try: rss_list.append(float(str(d['rss_mb']).split('=')[-1]))
             except: pass
 except FileNotFoundError:
     print("NO-LEARN: log unreadable"); sys.exit(0)
-n = len(xs)
-if n < 2:
-    json.dump({"n": n, "slope": 0.0, "intercept": 0.0, "identity": True}, open(out, "w"))
-    print(f"ANU: identity (insufficient data n={n}); no false learning")
-    sys.exit(0)
-# least-squares fit  y = a*x + b  (corrects predicted error from elapsed)
-mx = sum(xs)/n; my = sum(ys)/n
-sxx = sum((x-mx)**2 for x in xs)
-sxy = sum((x-mx)*(y-my) for x,y in zip(xs,ys))
-a = sxy/sxx if sxx > 1e-12 else 0.0
-b = my - a*mx
-# R^2 to report fit quality (honest: how much variance the model explains)
-ss_tot = sum((y-my)**2 for y in ys)
-ss_res = sum((y-(a*x+b))**2 for x,y in zip(xs,ys))
-r2 = 1 - ss_res/ss_tot if ss_tot > 1e-12 else 0.0
-json.dump({"n": n, "slope": a, "intercept": b, "r2": r2, "identity": False}, open(out, "w"))
-print(f"ANU: trained n={n} slope={a:+.4f} intercept={b:+.4f} R2={r2:.3f}")
+
+def ls_fit(xs, ys):
+    n = len(xs)
+    if n < 2: return {"n": n, "slope": 0.0, "intercept": 0.0, "r2": 0.0, "identity": True}
+    mx = sum(xs)/n; my = sum(ys)/n
+    sxx = sum((x-mx)**2 for x in xs)
+    sxy = sum((x-mx)*(y-my) for x,y in zip(xs,ys))
+    a = sxy/sxx if sxx > 1e-12 else 0.0
+    b = my - a*mx
+    ss_tot = sum((y-my)**2 for y in ys)
+    ss_res = sum((y-(a*x+b))**2 for x,y in zip(xs,ys))
+    r2 = 1 - ss_res/ss_tot if ss_tot > 1e-12 else 0.0
+    return {"n": n, "slope": a, "intercept": b, "r2": r2, "identity": False}
+
+# (a) ETA corrector
+eta = ls_fit(eta_x, eta_y)
+json.dump(eta, open(f"{gov}/anu_eta_model.json", "w"))
+# (b) latency: EMA of real ms + trend on index
+if len(ms_list) >= 1:
+    ema = ms_list[0]
+    for v in ms_list[1:]: ema = 0.3*v + 0.7*ema
+    lat = {"n": len(ms_list), "ema_ms": ema,
+           "mean_ms": sum(ms_list)/len(ms_list), "max_ms": max(ms_list),
+           "trend": ls_fit(list(range(len(ms_list))), ms_list)}
+else:
+    lat = {"n": 0, "ema_ms": 0.0, "mean_ms": 0.0, "max_ms": 0.0, "trend": {"identity": True}}
+json.dump(lat, open(f"{gov}/anu_latency_model.json", "w"))
+# (c) resource: EMA of rss_mb (learns its own memory footprint)
+if len(rss_list) >= 1:
+    rems = rss_list[0]
+    for v in rss_list[1:]:
+        rems = 0.3*v + 0.7*rems  # prior-state EMA
+    res = {"n": len(rss_list), "ema_mb": rems,
+           "mean_mb": sum(rss_list)/len(rss_list), "max_mb": max(rss_list)}
+else:
+    res = {"n": 0, "ema_mb": 0.0, "mean_mb": 0.0, "max_mb": 0.0}
+json.dump(res, open(f"{gov}/anu_resource_model.json", "w"))
+r2s = " (identity)" if eta.get("identity") else f" R2={eta['r2']:.3f}"
+print(f"ANU: eta n={eta['n']}{r2s}"
+      f" | latency n={lat['n']} ema_ms={lat['ema_ms']:.1f} mean_ms={lat['mean_ms']:.1f}"
+      f" | resource n={res['n']} mean_mb={res['mean_mb']:.1f}")
 PY
 }
 
-# Anu prediction: apply the learned corrector to a raw ETA error estimate.
+# Anu prediction: apply the learned ETA corrector to a raw ETA error estimate.
 # Usage: gov_anu <elapsed_min>  -> prints corrected eta_err_pct (or raw if identity)
 gov_anu() {
-  local x="$1"; local m="$GOV_DIR/anu_model.json"
+  local x="$1"; local m="$GOV_DIR/anu_eta_model.json"
   [ -f "$m" ] || gov_learn >/dev/null 2>&1
   python3 - "$m" "$x" <<'PY'
 import json, sys
@@ -417,27 +453,41 @@ else:
 PY
 }
 
+# Anu latency prediction: expected next-op latency (EMA) from the organism's own stream.
+# Usage: gov_anu_latency  -> prints predicted_ms (learned) 
+gov_anu_latency() {
+  local m="$GOV_DIR/anu_latency_model.json"
+  [ -f "$m" ] || gov_learn >/dev/null 2>&1
+  python3 - "$m" <<'PY'
+import json, sys
+m = sys.argv[1]
+try: d = json.load(open(m))
+except Exception:
+    print("0.0 (no latency model)"); sys.exit(0)
+print(f"{d.get('ema_ms',0.0):.1f}  (n={d.get('n',0)} mean_ms={d.get('mean_ms',0.0):.1f} max_ms={d.get('max_ms',0.0):.1f})")
+PY
+}
+
 # Ananke structure check: returns the binding constraint list (necessity floor).
 # Red-lines + no-data-loss + ruin-cap are NON-NEGOTIABLE (structure wins over logic).
 # Usage: gov_ananke <ruin_prob> <redline_hit> <data_loss_risk>  -> prints constraints or CLEAR
 gov_ananke() {
   local ruin="${1:-0}" red="${2:-0}" loss="${3:-0}"
   local hits=""
-  # Ananke: ruin probability must stay under the meta-rule cap (structure)
-  awk -v r="$ruin" 'BEGIN{ if (r+0 > 0.20) print "ruin-cap-exceeded" }' >/dev/null 2>&1
   [ "$(awk -v r="$ruin" 'BEGIN{print (r+0>0.20)?1:0}')" = "1" ] && hits="$hits ruin-cap-exceeded"
   [ "${red:-0}" = "1" ] && hits="$hits redline"
   [ "${loss:-0}" = "1" ] && hits="$hits data-loss-risk"
   if [ -z "$hits" ]; then echo "CLEAR"; else echo "ANANKE-BLOCK:$hits"; fi
 }
 
-# Unified decision: Anu proposes (learned ETA correction + route), Ananke constrains.
+# Unified decision: Anu proposes (learned corrections), Ananke constrains.
 # Usage: gov_decide <elapsed_min> <ruin_prob> <redline> <data_loss>
 gov_decide() {
   local x="$1" ruin="$2" red="$3" loss="$4"
   local anu; anu="$(gov_anu "$x")"
+  local lat; lat="$(gov_anu_latency)"
   local ananke; ananke="$(gov_ananke "$ruin" "$red" "$loss")"
-  echo "ANU (logic):     eta_err_corrected = $anu"
+  echo "ANU (logic):     eta_err_corrected = $anu | pred_latency_ms = $lat"
   echo "ANANKE (struct): $ananke"
   case "$ananke" in
     CLEAR) echo "DECISION: PROCEED (Anu guides, Ananke clear) — energy flows." ;;
@@ -464,6 +514,7 @@ gov_dispatch() {
     falseclaim) gov_falseclaim "$@" ;;
     learn)  gov_learn "$@" ;;
     anu)    gov_anu "$@" ;;
+    anu_latency) gov_anu_latency "$@" ;;
     ananke) gov_ananke "$@" ;;
     decide) gov_decide "$@" ;;
     *) echo "governance: record|route|lane|research|hard|judge|gate|precedent|pbind|prec_rec|meta|falseclaim|learn|anu|ananke|decide" ;;
