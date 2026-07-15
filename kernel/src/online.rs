@@ -94,8 +94,14 @@ pub struct ScalarAdam {
 
 impl ScalarAdam {
     pub fn new(lr: f64) -> Self {
+        ScalarAdam::new_from(lr, 0.0)
+    }
+
+    /// Construct with an explicit initial parameter θ₀ (e.g. 1.0 = neutral
+    /// Q-scaler for the self-adaptation adapter). Offline, deterministic.
+    pub fn new_from(lr: f64, theta0: f64) -> Self {
         ScalarAdam {
-            theta: Value::var(0.0),
+            theta: Value::var(theta0),
             m: 0.0,
             v: 0.0,
             lr,
@@ -127,6 +133,13 @@ impl ScalarAdam {
 
     pub fn get(&self) -> f64 {
         self.theta.data()
+    }
+
+    /// Roll the parameter back to `v` (used by the self-adaptation noether guard
+    /// to reject an unstable proposed step — E3). Keeps the optimizer's moments
+    /// so the next step continues from the last *accepted* θ.
+    pub fn set_theta(&mut self, v: f64) {
+        self.theta.set_data(v);
     }
 }
 

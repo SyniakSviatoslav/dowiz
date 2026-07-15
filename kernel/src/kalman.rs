@@ -278,6 +278,18 @@ impl KalmanFilter {
     pub fn last_surprise(&self) -> f64 {
         self.last_surprise
     }
+
+    /// RESERVED self-adaptation knob (E3): scale the process-noise `Q` by a
+    /// positive factor `s` (Q ← s·Q). The eval-layer adapter proposes `s` and
+    /// the noether guard accepts/rejects; this setter applies an accepted `s`
+    /// in-place. `s` must be > 0 (a non-positive Q breaks PD-ness of the
+    /// predict covariance).
+    pub fn set_q_scaler(&mut self, s: f64) {
+        assert!(s > 0.0, "kalman: q_scaler must be > 0");
+        // Q is private; rebuild by scaling the stored matrix.
+        // SAFETY: `q` is an n×n PD matrix; scaling by s>0 keeps it PD.
+        self.q = scale(&self.q, s);
+    }
 }
 
 #[cfg(test)]

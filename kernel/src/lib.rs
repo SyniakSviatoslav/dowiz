@@ -56,6 +56,9 @@ pub mod micrograd;
 /// P9 / C-tier "invariance note": executable Noether check — verify a conserved
 /// quantity survives a deterministic update (catches self-improvement drift).
 pub mod noether;
+/// B3 — deterministic offline-on-node online learner (LinearSGD ridge +
+/// ScalarAdam), the self-adaptation substrate (E3). Local-first: no network.
+pub mod online;
 /// E1 — verifiable-cognition benchmark generator: metamorphic MR items with
 /// kernel-primitive oracles, deterministic mint-log leakage gate, and
 /// calibration metrics (ECE/Brier/AURC). Pure-offline, zero-dep.
@@ -71,7 +74,7 @@ pub mod wasm;
 // Re-export the headline types so wasm-bindgen consumers and tests share one surface.
 pub use evals::{
     aurc, brier, ece, EmaTracker, EvalCheck, EvalRow, MetamorphicGenerator, MintLog, MrItem,
-    RegressionGate,
+    RegressionGate, SelfAdaptator,
 };
 pub use csr::{
     precision_at_k, recall_at_k, Csr,
