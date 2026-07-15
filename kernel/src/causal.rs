@@ -241,6 +241,56 @@ pub fn instrumental_adjust(
     Ok(CausalEffect { do_p_y, naive_p_y })
 }
 
+/// Counterfactual inference on a linear structural causal model (SCM), via Pearl's
+/// **three-step** algorithm on the **twin network**.
+///
+/// Model:
+///
+/// ```text
+///     X = α·U          (U is the unobserved exogenous confounder; X reveals it)
+///     Y = β·X + γ·U    (Y is driven by X *and* by the confounder U)
+/// ```
+///
+/// A counterfactual query `Y_x | (X=x', Y=y')` — "what would Y have been had
+/// `X=x`, *in the world* where we actually observed `(x', y')`?" — is answered by:
+///
+/// 1. **Abduction** — from the observed `(x', y')` recover the unobserved `U`:
+///    `U = x' / α`. (The twin copy `(X', Y')` is pinned to the observation; the
+///    counterfactual copy `(X_cf, Y_cf)` is free.)
+/// 2. **Action** — intervene: set `X := x` (the counterfactual copy, not the twin).
+/// 3. **Prediction** — evaluate `Y_cf = β·x + γ·U` with the abducted `U`.
+///
+/// So `Y_x = β·x + γ·(x' / α)` — and crucially it depends on the *observed* `x'`,
+/// not on a population average over `U`. That is what makes it a counterfactual
+/// rather than an interventional mean `E[Y | do(X=x)]`.
+///
+/// Fail-closed (trust boundary):
+/// * `α == 0` ⇒ `U` is not identifiable from `X` ⇒ `Err`.
+/// * the observed `(x', y')` must be **consistent** with the SCM
+///   (`y' ≈ β·x' + γ·(x'/α)`); an observation that the model cannot generate is
+///   rejected (`Err`) rather than producing a silent, meaningless number.
+/// * `γ == 0` is allowed (then observation `y'` carries no extra info beyond `x'`,
+///   the usual confounding-free case) but still validated for consistency.
+pub fn counterfactual_linear(
+    alpha: f64,
+    beta: f64,
+    gamma: f64,
+    x_prime: f64,
+    y_prime: f64,
+    x_counter: f64,
+) -> Result<f64, &'static str> {
+    if alpha.abs() < 1e-12 {
+        return Err("α=0: unobserved U is not identifiable from X");
+    }
+    let u = x_prime / alpha; // abduction: recover the exogenous confounder
+    let predicted_y = beta * x_prime + gamma * u; // consistency of the observation
+    if (y_prime - predicted_y).abs() > 1e-9 {
+        return Err("observed (x', y') is inconsistent with the SCM — cannot abduce U");
+    }
+    // action + prediction on the counterfactual (twin) copy
+    Ok(beta * x_counter + gamma * u)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -484,5 +534,75 @@ mod tests {
         assert!(instrumental_adjust(1.4, px0, ey1, ey0, nx1, nx0).is_err(), "px_z1 in [0,1]");
         assert!(instrumental_adjust(px1, px0, 1.2, ey0, nx1, nx0).is_err(), "ey_z1 in [0,1]");
         assert!(instrumental_adjust(px1, px0, ey1, ey0, -0.1, nx0).is_err(), "naive in [0,1]");
+    }
+
+    // ── Counterfactual (twin-network, three-step) fixtures ──
+    // SCM: X = α·U, Y = β·X + γ·U.  With α=2, β=1, γ=1:
+    //   Y = 3U, X = 2U  =>  Y = 1.5·X, and U = X/2.
+    //   Counterfactual Y_x | (x',y') = β·x + γ·(x'/α) = x + x'/2.
+    const A: f64 = 2.0;
+    const B: f64 = 1.0;
+    const G: f64 = 1.0;
+
+    // ── GREEN: hand-derived counterfactual value ──
+    #[test]
+    fn green_counterfactual_matches_hand_derivation() {
+        // Observed (X=4, Y=6): consistent? Y=1.5·4=6 ✓.
+        // Query do(X=2):  Y_2 = 2 + 4/2 = 4.0
+        let y2 = counterfactual_linear(A, B, G, 4.0, 6.0, 2.0).expect("consistent obs");
+        assert!(approx(y2, 4.0), "Y_2 = 2 + 4/2 = 4, got {}", y2);
+        // Observed (X=0, Y=0): query do(X=1): Y_1 = 1 + 0 = 1
+        let y1 = counterfactual_linear(A, B, G, 0.0, 0.0, 1.0).unwrap();
+        assert!(approx(y1, 1.0), "Y_1 = 1 + 0 = 1, got {}", y1);
+    }
+
+    // ── GREEN: the counterfactual depends on the OBSERVED x', not a population mean ──
+    #[test]
+    fn green_counterfactual_uses_observed_unit_not_population() {
+        // Two distinct observed units, same counterfactual intervention X=10.
+        // Unit 1: saw (4,6) => U=2 => Y_10 = 10 + 2 = 12
+        let u1 = counterfactual_linear(A, B, G, 4.0, 6.0, 10.0).unwrap();
+        // Unit 2: saw (0,0) => U=0 => Y_10 = 10 + 0 = 10
+        let u2 = counterfactual_linear(A, B, G, 0.0, 0.0, 10.0).unwrap();
+        assert!(approx(u1, 12.0), "unit with U=2 => 12");
+        assert!(approx(u2, 10.0), "unit with U=0 => 10");
+        assert!(!approx(u1, u2), "counterfactual must differ by the observed unit's U");
+    }
+
+    // ── GREEN: a counterfactual answer differs from the factual (it's an inference) ──
+    #[test]
+    fn green_counterfactual_differs_from_factual() {
+        // For the observed unit (4,6), the factual Y was 6. Had X been 10 instead of 4,
+        // Y would be 12 — the counterfactual changes the outcome, as it must.
+        let cf = counterfactual_linear(A, B, G, 4.0, 6.0, 10.0).unwrap();
+        let factual = 6.0;
+        assert!(approx(cf, 12.0));
+        assert!(!approx(cf, factual), "counterfactual (12) != factual (6)");
+    }
+
+    // ── RED (trust boundary): an inconsistent observation is rejected ──
+    #[test]
+    fn red_counterfactual_rejects_inconsistent_observation() {
+        // (X=4, Y=5): with this SCM any consistent unit has Y=1.5·X=6, not 5.
+        assert!(counterfactual_linear(A, B, G, 4.0, 5.0, 2.0).is_err(),
+            "obs (4,5) impossible under SCM => reject (no silent fake value)");
+    }
+
+    // ── RED (trust boundary): α=0 makes U unidentifiable from X ──
+    #[test]
+    fn red_counterfactual_rejects_unidentifiable_u() {
+        assert!(counterfactual_linear(0.0, 1.0, 1.0, 4.0, 8.0, 2.0).is_err(),
+            "α=0 => cannot abduce U from X");
+    }
+
+    // ── GREEN: confounding-free case (γ=0) still works and is consistency-checked ──
+    #[test]
+    fn green_counterfactual_no_confounder_is_consistent() {
+        // γ=0: Y = X (pure causal), observed (3,3) consistent. Y_x = x.
+        let y = counterfactual_linear(1.0, 1.0, 0.0, 3.0, 3.0, 7.0).expect("consistent");
+        assert!(approx(y, 7.0), "no confounder => Y_x = x = 7");
+        // but (3,5) is inconsistent for γ=0 (would need Y=X) => rejected
+        assert!(counterfactual_linear(1.0, 1.0, 0.0, 3.0, 5.0, 7.0).is_err(),
+            "γ=0, (3,5) inconsistent => reject");
     }
 }
