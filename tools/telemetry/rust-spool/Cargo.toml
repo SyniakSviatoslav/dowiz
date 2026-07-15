@@ -1,0 +1,22 @@
+[package]
+name = "telemetry-spool"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Background Telegram spool drainer for the autonomous telemetry stream. Decouples network delivery from the agent's critical path."
+
+# Adapter layer (network I/O). Pure-Rust HTTP via ureq (no tokio/async, no
+# shelling curl). The agent's work path only WRITES a 1-line JSON spool entry
+# (microseconds); THIS binary drains it at the kernel-derived pace so the
+# network throttle can never block the agent. See hermes-kernel reporting.rs
+# (HK-11) pace_next for the spacing contract.
+
+[dependencies]
+# rustls+ring backend: pure-Rust TLS, no system OpenSSL dependency.
+# (operator mandate 2026-07-15: rustls with ring everywhere possible.)
+ureq = { version = "2", default-features = false, features = ["tls", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 2
