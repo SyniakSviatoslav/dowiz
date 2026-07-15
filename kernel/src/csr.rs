@@ -240,6 +240,73 @@ impl Csr {
     }
 }
 
+// ── Recall / precision scorers (HippoRAG-style groundedness) ───────────────
+//
+// E0 fix (VERIFIABLE-COGNITION §2 bug #3): there was NO in-kernel `recall@k`
+// scorer — scoring was delegated to the JS bridge. `personalized_pagerank` is
+// the diffusion; these pure functions score its ranking against a relevance
+// set, deterministically, with a stable tie-break. No HashMap (iteration-order
+// hazard); ranking is a sorted Vec with ascending-index tie-break.
+
+/// Rank `scores` descending with a *stable* tie-break by ascending node index
+/// (canonical, deterministic). Returns node indices in rank order.
+fn rank_desc(scores: &[f64]) -> Vec<usize> {
+    let mut idx: Vec<usize> = (0..scores.len()).collect();
+    idx.sort_by(|&a, &b| {
+        scores[b]
+            .partial_cmp(&scores[a])
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then(a.cmp(&b))
+    });
+    idx
+}
+
+/// `recall@k` over a ranked score vector: the fraction of `relevant` nodes that
+/// appear among the top-`k` by score. This is the groundedness scorer the PPR
+/// diffusion feeds. Deterministic; tie-break is ascending node index. Returns
+/// `0.0` if there are no scores or no relevant nodes.
+pub fn recall_at_k(scores: &[f64], relevant: &[usize], k: usize) -> f64 {
+    if scores.is_empty() || relevant.is_empty() {
+        return 0.0;
+    }
+    let kr = k.min(scores.len());
+    let ranked = rank_desc(scores);
+    let mut relevant_sorted = relevant.to_vec();
+    relevant_sorted.sort_unstable();
+    let mut hits = 0u32;
+    for &node in &relevant_sorted {
+        // `ranked[..kr]` is a descending ranking (not ascending-sorted), so use
+        // `contains` — `binary_search` would be wrong on an unsorted slice.
+        if ranked[..kr].contains(&node) {
+            hits += 1;
+        }
+    }
+    hits as f64 / relevant.len() as f64
+}
+
+/// `precision@k` over a ranked score vector: the fraction of the top-`k` nodes
+/// that are in `relevant`. Complements [`recall_at_k`]. Returns `0.0` for an
+/// empty score vector or `k == 0`.
+pub fn precision_at_k(scores: &[f64], relevant: &[usize], k: usize) -> f64 {
+    if scores.is_empty() {
+        return 0.0;
+    }
+    let kr = k.min(scores.len());
+    if kr == 0 {
+        return 0.0;
+    }
+    let ranked = rank_desc(scores);
+    let mut relevant_sorted = relevant.to_vec();
+    relevant_sorted.sort_unstable();
+    let mut hits = 0u32;
+    for &node in &ranked[..kr] {
+        if relevant_sorted.binary_search(&node).is_ok() {
+            hits += 1;
+        }
+    }
+    hits as f64 / kr as f64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -390,5 +457,73 @@ mod tests {
         assert!(pi[1] > pi[0] + 1e-9, "π[1]={} not > π[0]={}", pi[1], pi[0]);
         assert!(pi[1] > pi[2] + 1e-9, "π[1]={} not > π[2]={}", pi[1], pi[2]);
         assert!(pi[1] > pi[3] + 1e-9, "π[1]={} not > π[3]={}", pi[1], pi[3]);
+    }
+
+    // ---------------------------------------------------------------------
+    // E0 fix (VERIFIABLE-COGNITION §2 bug #3): in-kernel recall@k / precision@k
+    // scorers over a PPR ranking, deterministic with stable tie-break.
+    // ---------------------------------------------------------------------
+    #[test]
+    fn recall_at_k_hand_oracle() {
+        // scores: node 2 highest, tie between 0 and 1, 3 lowest.
+        let scores = [0.5, 0.5, 1.0, 0.1];
+        // relevant = {0, 2}.
+        // k=1 → only node 2 in top-1 ⇒ recall 1/2 = 0.5.
+        assert!(close(recall_at_k(&scores, &[0, 2], 1), 0.5, 1e-12));
+        // k=2 → top-2 are {2, 0} (tie 0/1 broken by ascending index ⇒ 0 before 1)
+        //       ⇒ both relevant present ⇒ recall 1.0.
+        assert!(close(recall_at_k(&scores, &[0, 2], 2), 1.0, 1e-12));
+        // k=2 with relevant = {0,1,3}: top-2 {2,0} ⇒ only node 0 ⇒ 1/3.
+        assert!(close(recall_at_k(&scores, &[0, 1, 3], 2), 1.0 / 3.0, 1e-12));
+        // empty inputs guard.
+        assert_eq!(recall_at_k(&[], &[0], 2), 0.0);
+        assert_eq!(recall_at_k(&scores, &[], 2), 0.0);
+    }
+
+    #[test]
+    fn precision_at_k_hand_oracle() {
+        let scores = [0.5, 0.5, 1.0, 0.1];
+        // relevant = {0, 2}. k=1 → top {2} relevant ⇒ precision 1.0.
+        assert!(close(precision_at_k(&scores, &[0, 2], 1), 1.0, 1e-12));
+        // k=2 → top {2,0} both relevant ⇒ precision 1.0.
+        assert!(close(precision_at_k(&scores, &[0, 2], 2), 1.0, 1e-12));
+        // k=3 → top {2,0,1}: only 2 and 0 relevant ⇒ 2/3.
+        assert!(close(precision_at_k(&scores, &[0, 2], 3), 2.0 / 3.0, 1e-12));
+        // k=0 and empty guard.
+        assert_eq!(precision_at_k(&scores, &[0], 0), 0.0);
+        assert_eq!(precision_at_k(&[], &[0], 2), 0.0);
+    }
+
+    #[test]
+    fn recall_scores_real_ppr_ranking() {
+        // Build a graph where node 0 is the seed; the grounded sources for a
+        // claim about node 0 are the seed itself + its neighbours {1, 2}.
+        // The distant node 3 (two hops away) must NOT outrank them.
+        let edges = [
+            (0usize, 1, 1.0),
+            (1, 0, 1.0),
+            (1, 2, 1.0),
+            (2, 1, 1.0),
+            (2, 3, 1.0),
+            (3, 2, 1.0),
+            (0, 2, 1.0),
+            (2, 0, 1.0),
+        ];
+        let a = Csr::from_edges(4, &edges).row_normalize();
+        let seed = [1.0, 0.0, 0.0, 0.0];
+        let pi = a.personalized_pagerank(&seed, 0.15, 80);
+        // Seed + immediate neighbours must fully recall at k=3.
+        let r = recall_at_k(&pi, &[0, 1, 2], 3);
+        assert!(
+            close(r, 1.0, 1e-6),
+            "PPR from node 0 must recall seed+neighbours at k=3 (got {r})"
+        );
+        // The distant node 3 must NOT be in the top-3 ranking.
+        let mut idx: Vec<usize> = (0..pi.len()).collect();
+        idx.sort_by(|&a, &b| pi[b].partial_cmp(&pi[a]).unwrap().then(a.cmp(&b)));
+        assert!(
+            !idx[..3].contains(&3),
+            "distant node 3 must not outrank seed+neighbours in top-3"
+        );
     }
 }
