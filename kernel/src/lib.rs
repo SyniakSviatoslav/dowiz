@@ -17,6 +17,11 @@ pub mod cart;
 /// P9 growth-substrate: causal inference — back-door adjustment / do-operator
 /// (Pearl). Provable causal effect from observational tables; fail-closed.
 pub mod causal;
+/// P9 growth-substrate: semi-Markovian **causal graph** primitives (directed +
+/// bidirected arcs) — the structural backbone of the ID / IDC identification
+/// algorithms: ancestors, descendants, c-components, bidirected-aware
+/// d-separation, and the `G\X` / `G[V]` subgraph algebra.
+pub mod cgraph;
 /// Deterministic CSR graph + synchronous Jacobi personalized-PageRank
 /// (retrieval-blueprint v2 diffusion/recall primitive).
 pub mod csr;
@@ -87,7 +92,8 @@ pub use csr::{
 /// criterion verifiers (do-operator / Pearl / Wald).
 pub use causal::{
     backdoor_adjust, backdoor_criterion, counterfactual_linear, d_separated, frontdoor_adjust,
-    frontdoor_criterion, instrumental_adjust, CausalEffect,
+    frontdoor_criterion, identify_causal_effect, instrumental_adjust, CausalEffect, HedgeWitness,
+    IdFormula, IdResult,
 };
 pub use domain::{apply_event, compute_order_total, place_order, Order, OrderItem};
 pub use money::{
