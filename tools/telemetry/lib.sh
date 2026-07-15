@@ -45,6 +45,7 @@ log_event() {
 
 # Send a plain-text message to Telegram with a 3-try retry loop.
 # Returns 0 on ok:true, 1 otherwise. Never prints the token.
+# Honors TELEGRAM_TOPIC_ID (forum topic / message_thread_id). Default hermes topic = 267.
 tg_send() {
   local text="$1"
   if ! _load_token; then
@@ -52,12 +53,14 @@ tg_send() {
     return 1
   fi
   local url="https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"
-  local attempt resp
+  local thread="${TELEGRAM_TOPIC_ID:-267}"
+  local attempt resp payload
   for attempt in 1 2 3; do
-    resp="$(curl -sS --max-time 10 "$url" \
-      --data-urlencode "chat_id=${CHAT_ID}" \
-      --data-urlencode "text=${text}" \
-      --data-urlencode "disable_web_page_preview=true" 2>&1)"
+    payload="chat_id=${CHAT_ID}&text=${text}&disable_web_page_preview=true"
+    [ -n "${thread}" ] && payload="${payload}&message_thread_id=${thread}"
+    resp="$(curl -sS --max-time 10 "$url" --data-urlencode "chat_id=${CHAT_ID}" \
+      --data-urlencode "text=${text}" --data-urlencode "disable_web_page_preview=true" \
+      ${thread:+--data-urlencode "message_thread_id=${thread}"} 2>&1)"
     if printf '%s' "$resp" | grep -q '"ok":true'; then
       return 0
     fi

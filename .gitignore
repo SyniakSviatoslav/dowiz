@@ -76,3 +76,5 @@ tools/skillspector/
 # stray session debris
 kernel/=5
 tools/telemetry/logs/
+
+# telemetry serialization: pure stdlib (no venv, no external libs) — see ser.py

@@ -102,6 +102,56 @@ case "$cmd" in
     # The exporter serves only on request (near-zero CPU). Background-safe.
     nohup python3 "$(dirname "$0")/hetzner_exporter.py" >/tmp/hetzner_exporter.log 2>&1 &
     echo "hetzner exporter pid=$! (kill: pkill -f hetzner_exporter.py)" ;;
+  hetzner-heart)
+    # Persistent Hetzner heartbeat to Telegram topic 272 (the dedicated Hetzner topic).
+    # Gatus only alerts on breach (silent when healthy), so this loop keeps the topic
+    # visibly alive via the SAME proven tg_send mechanism the monitor uses. 60s cadence
+    # matches the Gatus poll. Background-safe.
+    if [ "${1:-}" = "start" ]; then
+      nohup "$0" hetzner-heart --loop >/tmp/hetzner_heart.log 2>&1 &
+      echo "hetzner-heart pid=$! (kill: pkill -f 'telemetry hetzner-heart')"; exit 0
+    fi
+    iv=60; [ "${1:-}" = "--interval" ] && iv="$2"
+    while [ "${1:-}" != "--loop" ]; do :; break; done   # no-op guard for direct runs
+    echo "hetzner-heart: posting to topic 272 every ${iv}s (kill: pkill -f 'telemetry hetzner-heart')" >&2
+    while true; do
+      s="$(curl -sS --max-time 5 http://127.0.0.1:9091/health 2>/dev/null)"
+      dp="$(printf '%s' "$s" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["disk_pct"])' 2>/dev/null)"
+      mp="$(printf '%s' "$s" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["mem_pct"])' 2>/dev/null)"
+      ld="$(printf '%s' "$s" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["load1"])' 2>/dev/null)"
+      TELEGRAM_TOPIC_ID=272 tg_send "💓 Hetzner heart — disk=${dp}% mem=${mp}% load1=${ld} @ $(date -u +%H:%M:%S)Z" \
+        || echo "hetzner-heart: send failed" >&2
+      sleep "$iv"
+    done ;;
+  hetzner-start)
+    # Convenience: start BOTH the exporter (Gatus source of truth) and the persistent
+    # heartbeat to the Hetzner topic in one call.
+    "$0" hetzner >/dev/null
+    "$0" hetzner-heart start
+    echo "hetzner stack: exporter + heartbeat(topic 272) launched" ;;
+  ser-bench)
+    # Reproduce the serialization benchmark live (native f64 vs JSON edge) so the
+    # "favor native kernel/rust" decision is falsifiable on this box. PURE STDLIB: no
+    # external libs. JSON is shown only as the EDGE adapter Gatus/grep/Telegram require.
+    PY="$(dirname "$0")/ser.py"
+    python3 - "$PY" <<'PY'
+import sys, time
+sys.path.insert(0, sys.argv[1])
+import ser
+print("ser: default_edge=%s  (pure stdlib, zero external libs)" % ser.default_edge())
+resource = {"disk_pct":81.5,"load1":0.04,"mem_pct":8.5,"ts":1784134680,"nproc":4}
+kernel_f64 = [0.0,3.003585,1.501792,0.375448,8.0,0.004173,0.5,0.008346,2.0,1.0,1.0,1.0]
+def thr(fn,n=30000):
+    t=time.perf_counter()
+    for _ in range(n): fn()
+    return n/(time.perf_counter()-t)
+jb=ser.json_edge(resource).encode(); jw=thr(lambda:ser.json_edge(resource)); jr=thr(lambda:ser.from_json(jb.decode()))
+print("resource: json(edge) %dB w/s=%d r/s=%d" % (len(jb),int(jw),int(jr)))
+nb=ser.wire_f64(kernel_f64); nw=thr(lambda:ser.wire_f64(kernel_f64)); nr=thr(lambda:ser.unwire_f64(nb,len(kernel_f64)))
+print("kernel_12xf64: native %dB w/s=%d r/s=%d  (no parser/allocator; CANONICAL kernel form)" % (len(nb),int(nw),int(nr)))
+print("verdict: native is %.1fx faster write, %.1fx faster read than the json edge" % (nw/jw, nr/jr))
+PY
+    ;;
   # ---- spec-driven DOD reporting (2026-07-15) ----
   # Creates a BEFORE-any-work big plan, ticks progress, raises/clears alerts, polls 60s for
   # % status, and finalizes with an ETA-vs-actual RETRO + rolling improvement/degradation
