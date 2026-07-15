@@ -78,3 +78,7 @@ kernel/=5
 tools/telemetry/logs/
 
 # telemetry serialization: pure stdlib (no venv, no external libs) — see ser.py
+
+# governance runtime state (claims/meta) — not source
+/tools/telemetry/governance/*.jsonl
+/tools/telemetry/governance/meta_state.json
