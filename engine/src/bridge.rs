@@ -42,7 +42,12 @@ pub trait GpuUploadSink {
 /// the vertex slice into an owned mirror buffer (so the upload is real work, not a
 /// no-op counter) and records how many floats were uploaded. This makes the
 /// "1 writeBuffer / 0 json" gate falsifiable without a GPU.
+///
+/// Public utility type: a consumer (or a future GPU adapter) constructs it to
+/// drive [`VertexBridge::upload_to`]; not constructed by non-test kernel code, so
+/// the build-time dead-code lint is silenced deliberately.
 #[derive(Debug, Default, Clone)]
+#[allow(dead_code)]
 pub struct HeadlessSink {
     /// The bytes (as f32s) actually copied on the last upload — proves a real copy.
     pub mirror: Vec<f32>,

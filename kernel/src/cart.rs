@@ -5,9 +5,7 @@
 //! Totals go through [`crate::money`] (integer minor units) — money red-line.
 //!
 //! RED→GREEN GATE: one kernel cart, both wrappers become thin over it;
-//! reconcile re-prices drifted lines; total via kernel money (integer).
-
-use crate::money;
+//! Totals go through [`crate::money`] (integer minor units) — money red-line.
 
 /// A cart line: product id + option key + quantity (0 = remove).
 #[derive(Debug, Clone, PartialEq, Eq)]
