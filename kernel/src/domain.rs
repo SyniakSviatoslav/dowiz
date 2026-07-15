@@ -16,6 +16,7 @@
 //! RED LINE: no float on monetary values; no courier scoring/rating fields; `std` only,
 //! no external dependencies. `order_machine.rs` / `money.rs` are NOT modified.
 
+use crate::catalog::PriceCatalog;
 use crate::money::{apply_tax, assert_non_negative};
 use crate::order_machine::{assert_transition, verify_fsm_signature, OrderStatus, TransitionError};
 
@@ -47,6 +48,11 @@ pub struct Order {
     /// string the oracle uses (integer minor units serialized as a string on this kernel
     /// surface); kept as `Option<String>` per the task's canonical Order shape.
     pub cash_pay_with: Option<String>,
+    /// M1/M2 money-integrity flag: `true` when every line `unit_price` was
+    /// RE-DERIVED from the trusted [`PriceCatalog`] (client value ignored);
+    /// `false` on the legacy path where the caller price was accepted verbatim.
+    /// Downstream (charge/settlement) MUST refuse to charge an untrusted order.
+    pub price_trusted: bool,
 }
 
 impl Order {
@@ -139,6 +145,57 @@ pub fn place_order(
         created_at_ms,
         channel,
         cash_pay_with,
+        // Legacy path: caller-supplied unit_price accepted verbatim → UNTRUSTED.
+        price_trusted: false,
+    })
+}
+
+/// M1/M2 — catalog-authoritative order creation. Every line's `unit_price` is
+/// RE-DERIVED from the trusted [`PriceCatalog`]; the caller-supplied `unit_price`
+/// on each `OrderItem` is IGNORED (overwritten). This closes the money-integrity
+/// gap where a client could set its own price.
+///
+/// Fail-closed: if any product is unknown to the catalog, the whole order is
+/// rejected (`Err`) — an order is never priced from an untrusted client value
+/// when a trusted catalog is in force. The resulting order has
+/// `price_trusted = true`.
+pub fn place_order_priced(
+    id: String,
+    customer_id: Option<String>,
+    mut items: Vec<OrderItem>,
+    created_at_ms: i64,
+    channel: Option<String>,
+    cash_pay_with: Option<String>,
+    catalog: &PriceCatalog,
+) -> Result<Order, TransitionError> {
+    let _span = tracing::info_span!(
+        "place_order_priced",
+        id = %id,
+        n_items = items.len(),
+        channel = ?channel
+    )
+    .entered();
+    // Re-derive every line price from the trusted catalog (ignore caller value).
+    for it in items.iter_mut() {
+        let trusted = catalog
+            .unit_price(&it.product_id, &it.modifier_ids)
+            .map_err(TransitionError::Invalid)?;
+        it.unit_price = trusted;
+    }
+    let subtotal = Order::compute_subtotal(&items).map_err(TransitionError::Invalid)?;
+    tracing::debug!(subtotal_cents = subtotal, "order subtotal (catalog-authoritative)");
+    Ok(Order {
+        id,
+        customer_id,
+        status: OrderStatus::Pending,
+        items,
+        subtotal,
+        total: subtotal,
+        created_at_ms,
+        channel,
+        cash_pay_with,
+        // Every unit_price came from the trusted catalog → TRUSTED.
+        price_trusted: true,
     })
 }
 
@@ -310,5 +367,68 @@ mod tests {
             OrderStatus::from_str("IN_DELIVERY"),
             Some(OrderStatus::InDelivery)
         );
+    }
+
+    // ── M1/M2: catalog is the price authority ──────────────────────────────
+    use crate::catalog::PriceCatalog;
+
+    fn trusted_catalog() -> PriceCatalog {
+        let mut c = PriceCatalog::new();
+        c.insert_flat("p1", 5000); // real price
+        c.insert_flat("p2", 300);
+        c
+    }
+
+    // RED signature: the legacy path trusts the tampered client price.
+    #[test]
+    fn red_legacy_place_order_trusts_client_price() {
+        let tampered = vec![OrderItem {
+            product_id: "p1".into(),
+            modifier_ids: vec![],
+            quantity: 1,
+            unit_price: 1, // attacker sets price=1 for a 5000 product
+        }];
+        let o = place_order("bad".into(), None, tampered, 0, None, None).unwrap();
+        assert_eq!(o.subtotal, 1, "legacy path accepts tampered price (RED)");
+        assert!(!o.price_trusted, "legacy order must be flagged untrusted");
+    }
+
+    // GREEN: the catalog path OVERRIDES the tampered client price.
+    #[test]
+    fn green_catalog_overrides_tampered_price() {
+        let cat = trusted_catalog();
+        let tampered = vec![
+            OrderItem {
+                product_id: "p1".into(),
+                modifier_ids: vec![],
+                quantity: 1,
+                unit_price: 1, // ignored
+            },
+            OrderItem {
+                product_id: "p2".into(),
+                modifier_ids: vec![],
+                quantity: 2,
+                unit_price: 0, // ignored
+            },
+        ];
+        let o = place_order_priced("ok".into(), None, tampered, 0, None, None, &cat).unwrap();
+        // p1: 5000*1 + p2: 300*2 = 5600 — from the catalog, NOT the client.
+        assert_eq!(o.subtotal, 5600, "catalog re-derives the trusted price");
+        assert!(o.price_trusted, "catalog order is trusted");
+        assert_eq!(o.items[0].unit_price, 5000);
+        assert_eq!(o.items[1].unit_price, 300);
+    }
+
+    // Fail-closed: an unknown product is rejected, never priced from client value.
+    #[test]
+    fn red_catalog_rejects_unknown_product() {
+        let cat = trusted_catalog();
+        let items = vec![OrderItem {
+            product_id: "ghost".into(),
+            modifier_ids: vec![],
+            quantity: 1,
+            unit_price: 999,
+        }];
+        assert!(place_order_priced("x".into(), None, items, 0, None, None, &cat).is_err());
     }
 }
