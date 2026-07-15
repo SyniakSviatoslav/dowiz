@@ -76,6 +76,28 @@ coherent causal-inference ladder: **identify** (d-separation / criterion verifie
 self-development frontier: do-calculus *rules* over arbitrary graphs, or a full
 **structural-identifiability** checker (can this effect be estimated at all, and by which
 formula?).
+
+## Done: structural-identifiability checker (ID / IDC, Shpitser–Pearl) — 2026-07-15
+
+- **`kernel/src/cgraph.rs` (NEW)** — `CGraph`, the semi-Markovian graph type with directed
+  (`parents`) + bidirected (`bidirected`, latent confounders) arcs. Supports subgraph
+  constructions the ID recursion needs: `g_x_removed` (G_X̅), `g_x_incoming_removed` (G_{X bar}),
+  `subgraph_on`, `d_separated_underlined` (active-trail BFS with correct bidirected-semantics —
+  a direct a↔b confounding arc is open iff its endpoint is NOT conditioned). `c_components`
+  returns connected components of the **bidirected subgraph only** (correct c-component def).
+  Verified GREEN (confounded pair forms one c-component; d-separation respects Berkson opening)
+  + RED (asymmetric bidirected adjacency, oob nodes, reflexive arcs rejected).
+- **`kernel/src/causal.rs`** — `id(y, x, g)` (recursive identification, `causaleffect` id.R
+  1:1 port) + `idc(y, x, z, g)` (conditional, idc.R). Returns `IdResult::{Identified{formula},
+  NotIdentified{hedge}}` — fail-closed: non-identifiable effects return the **hedge witness**
+  (F/F′), never a silent wrong value. Verified GREEN: chain / fork(back-door) / front-door /
+  front-door-with-latent-mediator all IDENTIFIED; bow-arc M-graph (X→Y + X↔Y) NOT identified
+  with a returned hedge; IDC over a mediator collapses to ID by rule 2.
+- This closes the named "structural-identifiability" frontier for arbitrary graphs. The
+  remaining rung is to make `IdFormula` **numerically evaluable** over observational tables and
+  cross-validate it against the 7 proven estimators (the general algorithm must subsume each
+  special case — Verified-by-Math).
+
 ## Done: back-door adjustment — what was learned
 
 - The *naive* conditional `P(Y|X)` is **not** a causal quantity: it integrates over
