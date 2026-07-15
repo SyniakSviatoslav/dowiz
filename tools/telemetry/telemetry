@@ -324,9 +324,11 @@ for l in open(p):
 open(p,"w").write("\n".join(out)+"\n")
 PY
     trend=""; [ -n "$prior" ] && trend=" | rolling ETA-acc was ${prior}% ($([ "$(python3 -c "print(abs($eta_err))" 2>/dev/null)" -le "$prior" ] 2>/dev/null && echo improved || echo degraded))"
+    agents="$(_plan_get "$id" agents)"; waves="$(_plan_get "$id" waves)"
     summ="🏁 RETRO $id
 ⏱ ETA ${eta_min}min vs actual ${actual_min}min (err ${eta_err}%)$trend
 🪙 Tokens est ${eta_tokens} vs actual ${actual_tokens}
+🤖 Agents budget ${agents:-1} | 🌊 Waves ${waves:-1}
 🐞 Issues: ${issues:-none}
 📚 Lessons: ${lessons:-none}
 🛠 Skills: ${skills:-none}

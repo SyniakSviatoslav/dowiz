@@ -41,13 +41,15 @@ def add(ts, repo, kind, text):
     events.append((ts, repo, kind, text))
 
 # (a) DOD plans
+_dod_plans = []
 pj = os.path.join(log_dir, "plan.jsonl")
 if os.path.exists(pj):
     for l in open(pj):
         if not l.strip(): continue
         d = json.loads(l)
+        _dod_plans.append(d)
         add(d.get("ts", since), "DOD", "plan",
-            f"{d.get('id')} — {d.get('title','')[:50]} (steps={d.get('steps',0)} eta={d.get('eta_min',0)}min)")
+            f"{d.get('id')} — {d.get('title','')[:50]} (⏱{d.get('eta_min',0)}min 🪙{d.get('eta_tokens',0)} 🤖{d.get('agents',1)})")
 
 # (b) git log both repos (last 7d)
 # dowiz = local path; openbebop = ref inside the checkout
@@ -83,9 +85,22 @@ if os.path.exists(roadmap):
             add(since, "ROADMAP", "plan", cur[:70])
 
 events.sort(key=lambda e: e[0])
-print(f"Unified plans/tasks — last 7d ({len(events)} items, chronological):")
+ICON = {"DOD": "📋", "dowiz": "🟢", "openbebop": "🔵", "ROADMAP": "🗺", "git": "◆", "plan": "▸"}
+def ri(repo): return ICON.get(repo, "•")
+# ETA rollup from DOD plans present in the window.
+eta_min = sum(int(d.get("eta_min", 0)) for d in _dod_plans)
+eta_tok = sum(int(d.get("eta_tokens", 0)) for d in _dod_plans)
+n_plans = len(_dod_plans)
+print("🗂 UNIFIED PLANS & TASKS — last 7d")
+print(f"📊 {len(events)} items · {n_plans} DOD plans · ⏱ ΣETA {eta_min}min · 🪙 Σ~{eta_tok} tok")
+print("─" * 32)
+cur_day = None
 for ts, repo, kind, text in events:
-    print(f"  {ts} [{repo}/{kind}] {text}")
+    day = str(ts)[:10]
+    if day != cur_day:
+        cur_day = day
+        print(f"\n📅 {day}")
+    print(f"  {ri(repo)} [{repo}] {text}")
 PY
 }
 
