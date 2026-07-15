@@ -200,7 +200,7 @@ bench_watch_loop() {
 # emits a human-readable plan. Used by the phased discipline so independent cheap
 # tasks don't wait behind one expensive one.
 waves_plan() {
-  local width="${WAVE_WIDTH:-6}"
+  local width="${WAVE_WIDTH:-12}"
   local input; input="$(cat)"
   local PYSRC='import sys, json
 width = int(sys.argv[1] or 6)
