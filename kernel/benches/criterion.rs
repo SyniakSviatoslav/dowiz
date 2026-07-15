@@ -2,7 +2,10 @@
 //! Run: `cargo bench -p dowiz-kernel` (or `cargo bench` from kernel/).
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use dowiz_kernel::{fold_transitions, place_order, OrderItem, OrderStatus};
+use dowiz_kernel::cgraph::CGraph;
+use dowiz_kernel::{
+    empirical_identify, fold_transitions, place_order, sample_backdoor, OrderItem, OrderStatus,
+};
 
 fn bench_place_order(c: &mut Criterion) {
     c.bench_function("place_order/5_items", |b| {
@@ -58,5 +61,33 @@ fn bench_fold_transitions(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_place_order, bench_fold_transitions);
+/// The analytics-reducer hot path: observational SAMPLES → empirical joint →
+/// P(y|do(x)) for the back-door confounded fixture. Splits sampling vs. the
+/// identify+reduce pipeline so a regression in either shows up separately.
+fn bench_empirical_identify(c: &mut Criterion) {
+    let g = CGraph::new(
+        vec![vec![1], vec![], vec![1, 0]], // X pa Z; Z root; Y pa Z,X
+        vec![vec![], vec![], vec![]],
+    )
+    .unwrap();
+    // Pre-materialize the sample matrix once; bench only the identify+reduce.
+    let rows = sample_backdoor(20_000, 0xABCDEF);
+    c.bench_function("empirical_identify/20k_samples", |b| {
+        b.iter(|| black_box(empirical_identify(&rows, &[2], &[(0, 1)], &g).unwrap()))
+    });
+    // End-to-end: sampling + identify, the real inference cost.
+    c.bench_function("empirical_identify/end_to_end_20k", |b| {
+        b.iter(|| {
+            let rows = sample_backdoor(20_000, 0xABCDEF);
+            black_box(empirical_identify(&rows, &[2], &[(0, 1)], &g).unwrap())
+        })
+    });
+}
+
+criterion_group!(
+    benches,
+    bench_place_order,
+    bench_fold_transitions,
+    bench_empirical_identify
+);
 criterion_main!(benches);
