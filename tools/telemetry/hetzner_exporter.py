@@ -13,8 +13,14 @@
 #   disk_pct  — root filesystem usage %        (the real friction point; alert >90)
 #   load1     — 1-min load normalized by #cpu  (alert >1.0 sustained = saturated)
 #   mem_pct   — RAM used %                      (alert >90)
-import json, os, time
+import os, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+# Adapter seam: exporter payload format selectable per-layer via TELEMETRY_SER
+# (json | msgpack). Default json so Gatus JSON-body conditions keep working.
+# Resolve module dir from the real script path (works if copied/moved, not just cwd).
+import sys as _sys
+_sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
+from ser import dump as _ser_dump
 
 HOST, PORT = "127.0.0.1", 9091
 
@@ -47,9 +53,10 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path not in ("/health", "/"):
             self.send_response(404); self.end_headers(); return
-        body = json.dumps(gauges()).encode()
+        body = _ser_dump(gauges())
         self.send_response(200)
-        self.send_header("Content-Type", "application/json")
+        ctype = "application/msgpack" if os.environ.get("TELEMETRY_SER") == "msgpack" else "application/json"
+        self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
