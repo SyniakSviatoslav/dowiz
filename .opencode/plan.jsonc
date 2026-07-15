@@ -1,8 +1,0 @@
-﻿{
-  "approach": "Fix menu import preview: API response stripped prices/images by mapping products to only .name. One-line fix: pass through full CanonicalProduct/CanonicalCategory objects.",
-  "files": [
-    "apps/api/src/routes/owner/menu-import.ts"
-  ],
-  "keyTypes": ["CanonicalCategory", "CanonicalProduct", "CanonicalMenuDraft"],
-  "boundaryCondition": "frontend already expects correct shape (draft_preview.products[i].name/.price/.categoryKey). API must match. LLM already extracts prices."
-}

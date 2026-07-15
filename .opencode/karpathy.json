@@ -1,7 +1,0 @@
-{
-  "fileMutationTools": ["edit", "write", "patch"],
-  "planRequired": true,
-  "planName": "plan.jsonc",
-  "scopeName": "scope.jsonc",
-  "skipScopeWhenNoScopeFile": true
-}
