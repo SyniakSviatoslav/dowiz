@@ -244,30 +244,28 @@ GOV_LM="$DIR/living_memory.py"
 gov_meta() {
   local st="$GOV_DIR/meta_state.json"
   : >> "$st"
-  if [ "${1:-}" = "observe" ]; then
-    shift
-    local bp="$1" bn="$2" rp="$3" rn="$4" fr="${5:-0}"
+  local mode="oneshot"
+  if [ "${1:-}" = "observe" ]; then mode="observe"; shift; fi
+  local bp="$1" bn="$2" rp="$3" rn="$4" fr="${5:-0}"
+  # observe: fold args into persistent EMA (longitudinal evolution)
+  if [ "$mode" = "observe" ]; then
     python3 - "$st" "$bp" "$bn" "$rp" "$rn" "$fr" <<'PY'
 import json, sys
 st, bp, bn, rp, rn, fr = sys.argv[1], *sys.argv[2:7]
 bp, bn, rp, rn, fr = (float(x) for x in (bp, bn, rp, rn, fr))
-try:
-    s = json.load(open(st))
-except Exception:
-    s = {"ema_bench":0.0,"ema_eval":0.0,"ema_false":0.0,"n":0}
-n = s.get("n",0)
-a = 2.0/(n+1.0)                      # EMA window = kernel alpha
-bench_delta = (bn/bp - 1.0) if bp>0 else 0.0
-eval_delta  = rn - rp
-s["ema_bench"] = a*bench_delta + (1-a)*s["ema_bench"]
-s["ema_eval"]  = a*eval_delta  + (1-a)*s["ema_eval"]
+try: s = json.load(open(st))
+except Exception: s = {"ema_bench":0.0,"ema_eval":0.0,"ema_false":0.0,"n":0}
+n = s.get("n",0); a = 2.0/(n+1.0)
+s["ema_bench"] = a*((bn/bp - 1.0) if bp>0 else 0.0) + (1-a)*s["ema_bench"]
+s["ema_eval"]  = a*(rn - rp) + (1-a)*s["ema_eval"]
 s["ema_false"] = a*max(0.0,fr) + (1-a)*s["ema_false"]
 s["n"] = n+1
 json.dump(s, open(st,"w"))
 PY
   fi
-  # emit evolved guidance (always)
-  python3 - "$st" <<'PY'
+  # emit evolved guidance. observe -> from persisted EMA; oneshot -> from args.
+  if [ "$mode" = "observe" ]; then
+    python3 - "$st" <<'PY'
 import json, sys
 st = sys.argv[1]
 try: s = json.load(open(st))
@@ -280,6 +278,21 @@ print(f"META n={n} ema_bench={eb:+.3f} ema_eval={ee:+.3f} ema_false={ef:.3f}")
 print(f"GUIDANCE lane_tol={lane_tol:.3f} judge_count={judge_count} precedent_tau={precedent_tau:.3f}")
 print("RULES: guidance, not gates — energy flows; meta-rule tilts only.")
 PY
+  else
+    python3 - "$bp" "$bn" "$rp" "$rn" "$fr" <<'PY'
+import sys
+bp, bn, rp, rn, fr = (float(x) for x in sys.argv[1:6])
+bench_delta = (bn/bp - 1.0) if bp>0 else 0.0
+eval_delta  = rn - rp
+false_rate  = max(0.0, fr)
+lane_tol      = max(0.3, min(2.0, 1.0 + 0.5*bench_delta))
+judge_count   = int(max(1, min(7, 3 + false_rate/0.2)))
+precedent_tau = max(0.6, min(0.95, 0.82 + 0.1*eval_delta))
+print(f"META oneshot bench_delta={bench_delta:+.3f} eval_delta={eval_delta:+.3f} false_rate={false_rate:.3f}")
+print(f"GUIDANCE lane_tol={lane_tol:.3f} judge_count={judge_count} precedent_tau={precedent_tau:.3f}")
+print("RULES: guidance, not gates — energy flows; meta-rule tilts only.")
+PY
+  fi
 }
 
 # ===== 6b. LIVING-MEMORY BRIDGE (p2 wiring: PRIMARY retrieval) ======
