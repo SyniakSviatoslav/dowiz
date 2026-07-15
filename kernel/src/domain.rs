@@ -17,7 +17,7 @@
 //! no external dependencies. `order_machine.rs` / `money.rs` are NOT modified.
 
 use crate::money::{apply_tax, assert_non_negative};
-use crate::order_machine::{assert_transition, OrderStatus, TransitionError};
+use crate::order_machine::{assert_transition, verify_fsm_signature, OrderStatus, TransitionError};
 
 /// A line item on an order. Mirrors the oracle `OrderItemInput` / `OrderItemResponse`.
 /// `unit_price` is integer minor units at the moment of purchase (price snapshot).
@@ -147,8 +147,23 @@ pub fn place_order(
 ///
 /// Single-step only (the `fold` reduction is the caller's responsibility when replaying a
 /// sequence of events). Returns a new `Order` with the updated status on success.
+///
+/// **FSM drift gate (fail-closed).** After a *successful* per-order transition we re-run
+/// `verify_fsm_signature()`. A single-order fold cannot by construction alter
+/// `allowed_next`/the lifecycle graph, so this must *always* return `Ok(())`. If it returns
+/// `Err`, the topology underneath the running kernel changed out from under us (a hot-reload,
+/// a stray edit reaching production, a corrupted build) — a structural regression, not a
+/// per-order error. We treat it fail-closed: the fold is refused and the diverged fields are
+/// surfaced. This is the blueprint §4 post-fold check — the gate fires at the earliest point
+/// a topology drift could be exercised.
 pub fn apply_event(order: &Order, next: OrderStatus) -> Result<Order, TransitionError> {
     assert_transition(order.status, next)?;
+    // Fail-closed topology re-check: a successful fold must not move the golden signature.
+    if let Err(drift) = verify_fsm_signature() {
+        return Err(TransitionError::Invalid(format!(
+            "fsm signature drift after fold: {drift} (lifecycle topology changed at runtime)"
+        )));
+    }
     let mut updated = order.clone();
     updated.status = next;
     Ok(updated)

@@ -85,10 +85,20 @@ pub use money::{
 };
 pub use order_machine::{
     assert_transition, cyclomatic_number, fold_transitions, fsm_graph_report, has_cycle, reachable,
-    spectral_radius, topological_order, verify_fsm_signature, FsmGraphReport, FsmSignatureDrift,
-    OrderStatus, TransitionError,
+    spectral_radius, topological_order, verify_fsm_signature, verify_fsm_signature_against,
+    FsmGraphReport, FsmSignatureDrift, OrderStatus, TransitionError,
 };
-pub use wasm::{apply_event_js, channel_ledger_js, place_order_js, reduce_anomalies_js};
+pub use wasm::{apply_event_js, boot_verify_fsm_js, channel_ledger_js, place_order_js, reduce_anomalies_js};
+
+/// **Boot-time FSM drift gate (fail-closed).** Call this once before the event bus accepts
+/// traffic — at kernel init, before `apply_event` is ever invoked. It compares the *live*
+/// lifecycle graph against `FSM_GOLDEN_SIGNATURE`; `Err(drift)` means the committed lifecycle
+/// no longer matches the 2026-07-14 recorded fingerprint. A mismatch ⇒ refuse to start (fail-closed):
+/// a bad merge or a silent `allowed_next` edit is caught at the earliest possible point, before
+/// any order can be folded through a drifted topology. (Blueprint `spectral-graph-fsm` §4.)
+pub fn kernel_boot_verify_fsm() -> Result<(), FsmSignatureDrift> {
+    verify_fsm_signature()
+}
 
 /// Authoritative fixed-timestep for the field-sim/animation integrator.
 ///
