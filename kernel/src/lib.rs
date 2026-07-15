@@ -28,6 +28,11 @@ pub mod cgraph;
 /// Deterministic CSR graph + synchronous Jacobi personalized-PageRank
 /// (retrieval-blueprint v2 diffusion/recall primitive).
 pub mod csr;
+/// Spool — pure crash-safe async work-queue state machine (append / claim /
+/// ack / reclaim). The I/O + drainer adapter lives outside the kernel
+/// (pure-std firewall); this owns the Verified-by-Math transitions. Reused by
+/// every async subsystem (reporting, governance, mesh sync).
+pub mod spool;
 /// B4 — deterministic content-defined chunker (Buzhash) for the native Rust
 /// backup organ: content-addressed blocks that dedup across small edits.
 pub mod chunker;
