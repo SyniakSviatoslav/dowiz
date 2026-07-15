@@ -66,3 +66,56 @@ tg_send() {
   echo "tg_send: failed after 3 attempts: $resp" >&2
   return 1
 }
+
+# Sample host resources as a flat JSON string (no trailing newline issues).
+# Keys: load1, load5, mem_pct, mem_used_mb, mem_total_mb, disk_pct, disk_free_gb, nproc.
+# Best-effort; any missing /proc file degrades silently to null.
+resource_sample() {
+  local load1 load5 mem_pct mem_used mem_total disk_pct disk_free nproc
+  load1="$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo null)"
+  load5="$(awk '{print $2}' /proc/loadavg 2>/dev/null || echo null)"
+  nproc="$(nproc 2>/dev/null || echo null)"
+  if [ -r /proc/meminfo ]; then
+    mem_total="$(awk '/^MemTotal:/{print int($2/1024)}' /proc/meminfo)"
+    mem_free="$(awk '/^MemAvailable:/{print int($2/1024)}' /proc/meminfo)"
+    mem_used="$((mem_total - mem_free))"
+    mem_pct="$(awk -v u="$mem_used" -v t="$mem_total" 'BEGIN{printf "%.1f", (t>0)?100*u/t:0}')"
+  else
+    mem_pct=null mem_used=null mem_total=null
+  fi
+  disk_pct="$(df -P / 2>/dev/null | awk 'NR==2{gsub("%","",$5);print $5}')"
+  disk_free="$(df -Pm / 2>/dev/null | awk 'NR==2{print $4}')"
+  printf '{"load1":%s,"load5":%s,"mem_pct":%s,"mem_used_mb":%s,"mem_total_mb":%s,"disk_pct":%s,"disk_free_gb":%s,"nproc":%s}' \
+    "$load1" "$load5" "$mem_pct" "$mem_used" "$mem_total" "${disk_pct:-null}" "${disk_free:-null}" "$nproc"
+}
+
+# Run a command, measure wall-clock (ms) + peak RSS (MB via getrusage via `bash`/`time`),
+# and emit a `bench` + `metric` event. Usage: bench_run <name> [note] -- <cmd...>
+# Returns the command's exit code. Logs rx_rss_mb / rx_ms for real-time resource tracking.
+bench_run() {
+  local name="$1"; shift
+  local note=""
+  if [ "$1" != "--" ]; then note="$1"; shift; fi
+  [ "$1" = "--" ] && shift
+  local start_ms peak_kb rc out
+  start_ms="$(date +%s%3N)"
+  if command -v /usr/bin/time >/dev/null 2>&1; then
+    # Capture combined output; rc is the child's exit (the time binary returns it).
+    out="$(/usr/bin/time -v "$@" 2>&1)"; rc=$?
+    peak_kb="$(printf '%s' "$out" | awk -F': ' '/Maximum resident set size/{gsub(/[^0-9]/,"",$2);print $2; exit}')"
+  else
+    "$@"; rc=$?
+    peak_kb=0
+  fi
+  local end_ms; end_ms="$(date +%s%3N)"
+  local ms; ms=$((end_ms - start_ms))
+  local rss_mb=0; [ -n "$peak_kb" ] && [ "$peak_kb" != "0" ] && rss_mb=$((peak_kb / 1024))
+  log_event bench "name=$name" "ms=$ms" "rss_mb=$rss_mb" "rc=$rc" "note=$(printf '%s' "$note" | _jesc)" >/dev/null
+  log_event metric "kind=resource" "op=$name" "ms=$ms" "rss_mb=$rss_mb" >/dev/null
+  if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
+    tg_send "⏱️ bench/$name ${ms}ms rss=${rss_mb}MB rc=$rc${note:+ | $note}" \
+      || echo "telemetry: bench logged locally, Telegram send failed" >&2
+  fi
+  printf 'bench/%s ms=%s rss_mb=%s rc=%s\n' "$name" "$ms" "$rss_mb" "$rc"
+  return "$rc"
+}

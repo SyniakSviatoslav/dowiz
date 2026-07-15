@@ -7,6 +7,8 @@
 #   telemetry log   <level> <message...>            # info|warn|error internal log
 #   telemetry metric <name> <value> [unit]          # a numeric metric
 #   telemetry bench  <name> <ms> [note...]          # a benchmark result (ms)
+#   telemetry bench_run <name> [note] -- <cmd...>    # run cmd, log wall-ms + peak RSS
+#   telemetry monitor [interval_s]                  # real-time resource/friction loop (bg-safe)
 #   telemetry task   <status> <title...>            # done|failed|started task
 #   telemetry session <title...>                    # a completed agent session
 #   telemetry health [tokenfile]                     # Markov loop/attractor signal (stdin if no file)
@@ -39,6 +41,37 @@ case "$cmd" in
   bench)
     name="${1:?bench name}"; ms="${2:?ms}"; shift 2 || true; note="$*"
     _emit benchmark "⏱ bench" "$name: ${ms}ms ${note}" "name=$name" "ms=$ms" "note=$note" ;;
+  bench_run)
+    bench_run "$@" ;;
+  monitor)
+    # Real-time resource + friction loop. Samples host every ${1:-15}s, emits a `metric`
+    # event, and raises a 🔥 friction alert when a bottleneck crosses a threshold:
+    #   disk_pct >= 90  (the Hetzner box chronically pins 91% — the dominant friction)
+    #   load1/nproc  >= 4 (CPU saturation)
+    #   mem_pct     >= 90 (memory pressure)
+    # Safe to background: it loops forever; kill via `pkill -f 'telemetry monitor'`.
+    iv="${1:-15}"
+    echo "monitor: sampling every ${iv}s (kill: pkill -f 'telemetry monitor')"
+    while true; do
+      s="$(resource_sample)"
+      load1="$(printf '%s' "$s" | python3 -c 'import json,sys;print(json.load(sys.stdin)["load1"])')"
+      nproc="$(printf '%s' "$s" | python3 -c 'import json,sys;print(json.load(sys.stdin)["nproc"])')"
+      mem_pct="$(printf '%s' "$s" | python3 -c 'import json,sys;print(json.load(sys.stdin)["mem_pct"])')"
+      disk_pct="$(printf '%s' "$s" | python3 -c 'import json,sys;print(json.load(sys.stdin)["disk_pct"])')"
+      log_event metric "kind=host" "sample=$(printf '%s' "$s" | _jesc)" >/dev/null
+      # friction detection
+      friction=""
+      case "$disk_pct" in
+        ''|*[!0-9.]*) ;;
+        *) awk -v d="$disk_pct" 'BEGIN{exit !(d>=90)}' && friction="disk ${disk_pct}% (near-full; root cleanup needed)";;
+      esac
+      awk -v l="$load1" -v n="$nproc" 'BEGIN{exit !(n>0 && l/n>=4)}' && friction="${friction:+$friction; }CPU饱和 load1=$load1 nproc=$nproc"
+      awk -v m="$mem_pct" 'BEGIN{exit !(m>=90)}' && friction="${friction:+$friction; }mem ${mem_pct}%"
+      if [ -n "$friction" ] && [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
+        tg_send "🔥 friction: $friction" || true
+      fi
+      sleep "$iv"
+    done ;;
   task)
     st="${1:?status}"; shift || true; title="$*"
     case "$st" in done) i="✅";; failed) i="❌";; started) i="▶️";; *) i="•";; esac
