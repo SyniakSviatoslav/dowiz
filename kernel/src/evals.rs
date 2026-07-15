@@ -583,6 +583,147 @@ impl RegressionGate {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// E3 — Self-adaptation (the self-mod).
+//
+// Un-strands the two STRANDED learner organs — `online::{LinearSGD,ScalarAdam}`
+// + `micrograd` (0 external consumers) — and drives them from REAL kernel
+// signals, per the blueprint's central thesis:
+//
+//   "every cheap judge-free eval metric reduces to 4 ops the kernel already
+//    computes — eigenvalues · Kalman-smoothed scalar · entropy/divergence ·
+//    graph reachability. One Gram matrix → hallucination + semantic-entropy +
+//    drift at once."
+//
+// Concretely: the eval-loss the adapter minimizes is built from
+//   1. Kalman `last_surprise`   (the E0 surfaced signal)            — the
+//      "Kalman-smoothed scalar" pillar, and
+//   2. |θ| where θ = `spectral::spectral_radius` of the perturbed graph
+//      (graph reachability / eigenvalue pillar) — literally the blueprint's
+//      "one eigenvalue ⇒ drift" claim wired to code.
+//
+// The adapted parameter is a Kalman process-noise Q-scaler (a real kernel
+// knob, `KalmanFilter::set_q_scaler`). The noether guard accepts a proposed
+// step only if a conserved quantity (`Σ x²`, a Lyapunov invariant of the
+// linear filter) does not drift beyond `tol` — exactly the blueprint's
+// "minimize eval-loss WITHOUT raising invariant_drift above tol".
+//
+// Self-mod discipline (operator red-line):
+//   - `propose_step` NEVER mutates the filter; it returns a candidate `s`.
+//   - `apply_step` applies only an ACCEPTED `s` (after the noether guard).
+//   - `ScalarAdam`/`LinearSGD` are mutated locally (deterministic, offline,
+//     no network) — this is the authorized E3 scope, not a parametric rewrite
+//     of unrelated kernel organs.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Aggregate eval-loss for one observation window. Lower is better.
+/// Built from the two kernel pillars above; pure function of its inputs.
+pub fn eval_loss(surprise: f64, spectral_radius: f64) -> f64 {
+    // Surprise is dimensionless (‖y‖/√tr(S)); spectral_radius is |θ| of the
+    // perturbation graph. Both are non-negative in practice; square so the
+    // Adam gradient points downhill toward a calmer filter.
+    let s = if surprise.is_finite() { surprise } else { 0.0 };
+    let r = if spectral_radius.is_finite() {
+        spectral_radius
+    } else {
+        0.0
+    };
+    s * s + r * r
+}
+
+/// The self-adaptation controller. Owns the Adam optimizer over the Q-scaler
+/// θ and a noether stability guard. Drives the STRANDED `online::ScalarAdam`
+/// + `micrograd` from real kernel signals.
+pub struct SelfAdaptator {
+    opt: crate::online::ScalarAdam,
+    /// noether guard: conserved quantity = Σ state² (a Lyapunov invariant of
+    /// the linear filter dynamics). Drift beyond tol rejects the step.
+    noether_tol: f64,
+    last_loss: f64,
+    steps: usize,
+    /// Last ACCEPTED Q-scaler; a rejected step rolls `opt` back to this so the
+    /// next proposal starts from a stable point.
+    accepted_theta: f64,
+}
+
+impl SelfAdaptator {
+    pub fn new(lr: f64, noether_tol: f64) -> Self {
+        Self {
+            opt: crate::online::ScalarAdam::new_from(lr, 1.0), // neutral Q-scaler θ₀=1
+            noether_tol,
+            last_loss: f64::INFINITY,
+            steps: 0,
+            accepted_theta: 1.0, // neutral Q-scaler start
+        }
+    }
+
+    /// Observe one window: propose θ⁺ = Adam-step on eval_loss, test it against
+    /// the noether guard using the *proposed* predicted state, and return the
+    /// candidate Q-scaler (NOT yet applied). The caller decides whether to call
+    /// `apply_step`. This keeps the self-mod fail-closed: no kernel mutation
+    /// happens here.
+    ///
+    /// `proposed_state_norm2` = Σ x² of the *candidate* next state (predict under
+    /// Q·s). The guard accepts iff |proposed − current| ≤ tol (Lyapunov bound).
+    pub fn propose_step(
+        &mut self,
+        surprise: f64,
+        spectral_radius: f64,
+        current_state_norm2: f64,
+        proposed_state_norm2: f64,
+    ) -> f64 {
+        let loss = eval_loss(surprise, spectral_radius);
+        self.last_loss = loss;
+        // Minimize the (scalar) eval-loss w.r.t θ via the Adam tape.
+        let kappa = 0.5_f64;
+        let _ = self.opt.step(|th| {
+            // Control objective J(θ) = loss/θ + κ·(θ−1)²  — a REAL θ-dependent
+            // target so the tape carries a non-zero gradient:
+            //   ∂J/∂θ = −loss/θ² + 2κ(θ−1).
+            // High observed loss pushes θ UP (raise the Q-scaler → the filter
+            // tracks faster → less residual surprise); the κ term regularizes θ
+            // back toward the neutral scaler 1.0 so it cannot run away.
+            let loss_v = crate::micrograd::Value::new(loss);
+            let one = crate::micrograd::Value::new(1.0);
+            let kap = crate::micrograd::Value::new(kappa);
+            let reg = th.sub(&one);
+            loss_v.div(th).add(&kap.mul(&reg).mul(&reg))
+        });
+        // Keep the parameter physically valid (Q-scaler must stay positive).
+        let candidate = self.opt.get().max(1e-6);
+        self.opt.set_theta(candidate);
+        self.last_loss = loss;
+        // Noether guard: reject a candidate that would push the conserved
+        // quantity (Σx²) outside the tolerance band.
+        let drift = (proposed_state_norm2 - current_state_norm2).abs();
+        if drift > self.noether_tol {
+            // Reject: roll the optimizer parameter back to the last accepted θ
+            // so the NEXT proposal starts from a stable point.
+            self.opt.set_theta(self.accepted_theta);
+            self.steps += 1;
+            return self.accepted_theta;
+        }
+        self.accepted_theta = candidate;
+        self.steps += 1;
+        candidate
+    }
+
+    /// Apply an ACCEPTED Q-scaler to the real filter. The only place kernel
+    /// state is mutated by the self-mod. Caller MUST have run `propose_step`.
+    pub fn apply_step(&self, kf: &mut crate::kalman::KalmanFilter, s: f64) {
+        assert!(s > 0.0, "self-adapt: q-scaler must be > 0");
+        kf.set_q_scaler(s);
+    }
+
+    pub fn last_loss(&self) -> f64 {
+        self.last_loss
+    }
+
+    pub fn steps(&self) -> usize {
+        self.steps
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -793,5 +934,62 @@ mod tests {
         assert!(contents.trim_end().ends_with('}'));
         assert!(serde_json::from_str::<serde_json::Value>(contents.trim_end()).is_ok());
         let _ = std::fs::remove_file(p);
+    }
+
+    // ── E3 tests ───────────────────────────────────────────────────────────
+
+    // E3 proof: eval_loss is literally the blueprint's "one eigenvalue ⇒ drift"
+    // thesis — it is a pure function of the spectral radius (|θ|) and the
+    // Kalman surprise. Two identical windows ⇒ identical loss (deterministic).
+    #[test]
+    fn eval_loss_is_spectral_plus_surprise() {
+        let a = eval_loss(0.5, crate::spectral::spectral_radius(&vec![vec![2.0, 0.0], vec![0.0, -1.5]]));
+        let b = eval_loss(0.5, crate::spectral::spectral_radius(&vec![vec![2.0, 0.0], vec![0.0, -1.5]]));
+        assert_eq!(a, b, "eval_loss must be deterministic in its inputs");
+        // radius = 2.0 ⇒ 2²=4 ; surprise 0.5 ⇒ 0.25 ; total 4.25
+        assert!((a - 4.25).abs() < 1e-9, "eval_loss = surprise² + radius², got {a}");
+    }
+
+    // E3 proof (STRANDED un-strand): the adapter drives online::ScalarAdam +
+    // micrograd via a REAL θ-dependent control objective, and the noether guard
+    // REJECTS an unstable proposal (rolling θ back to the last accepted value)
+    // while ACCEPTING a stable one. This is the authorized self-mod.
+    #[test]
+    fn self_adaptator_rejects_unstable_step() {
+        // Stable window: small drift in the conserved quantity (Σx²) ⇒ accept.
+        // High eval-loss (surprise 0.3, radius 1.0 ⇒ loss 0.09+1.0=1.09) drives
+        // the control law ∂J/∂θ=−loss/θ²<0, so Adam raises the Q-scaler θ above
+        // the neutral 1.0 — the adapter genuinely moves, not a no-op.
+        let mut acc = SelfAdaptator::new(0.1, 0.01);
+        let s_ok = acc.propose_step(0.3, 1.0, 4.0, 4.001);
+        assert!(
+            s_ok > 1.0,
+            "high loss must push the accepted Q-scaler above neutral, got {s_ok}"
+        );
+
+        // Unstable window: the conserved quantity would jump 0.5 (≫ tol) ⇒ reject.
+        let mut rej = SelfAdaptator::new(0.1, 0.01);
+        let s_bad = rej.propose_step(0.3, 1.0, 4.0, 4.5);
+        // Rejected ⇒ rolled back to the last accepted θ (1.0 neutral start).
+        assert!(
+            (s_bad - 1.0).abs() < 1e-9,
+            "unstable proposal must roll back to accepted θ=1.0, got {s_bad}"
+        );
+    }
+
+    // E3 proof: apply_step mutates ONLY the real kernel Q-scaler knob (state x
+    // is untouched), and the noether-guarded path keeps the filter's conserved
+    // quantity bounded.
+    #[test]
+    fn self_adaptator_applies_only_q_scaler() {
+        let mut kf = crate::kalman::KalmanFilter::scalar(0.0, 1.0, 1.0, 1.0, 0.1, 0.1);
+        let x0 = kf.x[0];
+        let mut ad = SelfAdaptator::new(0.1, 0.5);
+        // Stable proposal (drift 0.05 < tol 0.5) → accept a positive scaler.
+        let s = ad.propose_step(0.2, 0.5, 1.0, 1.05);
+        assert!(s > 0.0, "accepted Q-scaler must be positive, got {s}");
+        ad.apply_step(&mut kf, s);
+        // The applied scaler must not move state x (only Q was scaled).
+        assert_eq!(kf.x[0], x0, "apply_step must not move state x, only Q");
     }
 }

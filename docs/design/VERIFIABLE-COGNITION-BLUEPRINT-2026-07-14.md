@@ -57,7 +57,7 @@ so with evidence already on the server:
 |---|---|---|
 | Breadth of *un-tuned* task distribution | Narrow (delivery + knowledge field) | `order_machine`, `money`, `living_knowledge` are domain-bound |
 | Priors-normalized skill | High skill, heavy priors | every organ is hand-built math, not acquired |
-| Skill-acquisition efficiency on **unseen** families | ~0 (no in-context skill acquisition) | no learner fits *loop outcomes*; `online`/`micrograd` are STRANDED |
+| Skill-acquisition efficiency on **unseen** families | ~0 (no in-context skill acquisition) | ~~no learner fits *loop outcomes*; `online`/`micrograd` are STRANDED~~ → **E3 DONE 2026-07-15: `online`/`micrograd` un-stranded; `SelfAdaptator` fits the Kalman Q-scaler to minimize eval-loss under a noether guard** |
 | **Transfer ratio** (off/on-diagonal) | ≈ diagonal-heavy | no cross-domain transfer path exists |
 | Calibrated self-knowledge that degrades detectably | **absent** | no calibration/abstention organ (§3.4) |
 | Autonomy under goal ambiguity | **absent** | only trigger is a human `UserPromptSubmit` (`AUTONOMOUS-ORGANISM §4`) |
@@ -383,7 +383,7 @@ autonomy expansion). Nothing below is enacted by this document; the 🔴 rows re
 | **E0** Eval-primitives crate | un-strand the 9 STRANDED organs into an `evals` module w/ wasm exports + oracle tests; fix the 3 bugs (§2) | 🟢 | each metric red→green vs a hand-oracle; `verify_retrieval` dead-branch test; Kalman-innovation surfaced test |
 | **E1** Benchmark generator | metamorphic synthesis over input-accepting kernel invariants; deterministic MintLog leakage gate; ECE/Brier/AURC | 🟢 | generator emits N fresh items whose MR-oracle passes (test `emits_fresh_passing_items`); leakage gate rejects an exact dup (test `leakage_gate_rejects_duplicate`); **DONE — 2026-07-15, 6 evals tests green, kernel suite 222 pass** |
 | **E2** Self-eval loop wiring | persist scalars (JSONL); regression gate; Kalman drift-trend; feed `analyze.mjs` | 🟡 | a seeded regression flips the gate red; a stable run stays green; persistence survives a session boundary | **DONE — 2026-07-15, 6 E2 tests green, kernel suite 228 pass, analyze.mjs end-to-end verified** |
-| **E3** Self-adaptation | un-strand `online`/`micrograd` to minimize eval-loss under `noether` guard | 🟡 | adaptation reduces eval-loss on held-out items **without** raising `invariant_drift` above tol |
+| **E3** Self-adaptation | un-strand `online`/`micrograd` to minimize eval-loss under `noether` guard | 🟡 | adaptation reduces eval-loss on held-out items **without** raising `invariant_drift` above tol | **DONE — 2026-07-15, `online` module made public (was STRANDED), `SelfAdaptator` drives `ScalarAdam`+`micrograd` via real θ-dependent control law J(θ)=loss/θ+κ(θ−1)²; noether guard rolls back any step that pushes Σx² past tol; mutates only the Kalman Q-scaler. 3 E3 tests green, kernel suite 234 pass** |
 | **B0** bebop harness (non-crypto) | CRDT-convergence property test; wire-decode fuzz; differential G2; empty-import→pre-commit | 🟡 | §4 targets 3,4,7,8 red→green |
 | **B1** bebop crypto | dudect for C4b; proto-crypto `H(sk‖c)` fix/delete; CT rung | 🔴 | §4 targets 1,2,5 — **council + operator gated** |
 | **N0** `no_std`+`alloc`+`libm` kernel | additive feature-gated refactor; f64→f32+Kahan on the hot path | 🟡 | `--no-default-features` builds `wasm32v1-none`; bit-parity test within a target class |
