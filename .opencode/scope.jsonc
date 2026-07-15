@@ -1,9 +1,0 @@
-﻿[
-  "packages/db/migrations/",
-  "packages/shared-types/src/contracts/",
-  "apps/api/src/routes/",
-  "apps/api/src/websocket.ts",
-  "apps/api/src/server.ts",
-  "packages/ui/src/",
-  "apps/web/src/"
-]
