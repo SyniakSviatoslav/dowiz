@@ -33,6 +33,7 @@ use crate::order_machine::{fsm_graph_report, OrderStatus, TransitionError};
 use crate::spectral::{
     algebraic_connectivity, classify_drift, eigenvalues, spectral_gap, spectral_radius, DriftClass,
 };
+use crate::harmonic::harmonic_centrality;
 
 /// Monotonic id / timestamp source for `place_order_js` (the JS signature does
 /// not supply an `id` or `created_at_ms`). Deterministic and order-preserving.
@@ -692,6 +693,23 @@ fn spectral_classify_drift_logic(matrix_json: &str) -> Result<String, String> {
         DriftClass::Unstable => "Unstable",
     }
     .to_string())
+}
+
+/// Harmonic centrality H(v)=Σ 1/d(u,v) for every node `0..n` of an undirected
+/// graph. `edges_json` is a JSON array of `[u, v]` pairs; `n` is the node count.
+/// Returns a JSON array of length `n`. This is the SAME primitive the agent-kernel
+/// (`centrality::harmonic_centrality`) uses for HK-05/HK-06 model routing + memory
+/// ranking — both kernels share one compute source, parity-gated.
+#[wasm_bindgen]
+pub fn harmonic_centrality_js(n: usize, edges_json: String) -> Result<String, JsValue> {
+    harmonic_centrality_logic(n, &edges_json).map_err(|e| JsValue::from_str(&e))
+}
+
+fn harmonic_centrality_logic(n: usize, edges_json: &str) -> Result<String, String> {
+    let edges: Vec<[usize; 2]> = serde_json::from_str(edges_json).map_err(|e| e.to_string())?;
+    let edges: Vec<(usize, usize)> = edges.into_iter().map(|p| (p[0], p[1])).collect();
+    let out = harmonic_centrality(n, &edges);
+    serde_json::to_string(&out).map_err(|e| e.to_string())
 }
 
 /// Flat bridge protocol for the engine (FE-07, mirrors `geo_progress_flat_js`):

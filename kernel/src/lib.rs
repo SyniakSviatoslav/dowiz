@@ -28,6 +28,12 @@ pub mod cgraph;
 /// Deterministic CSR graph + synchronous Jacobi personalized-PageRank
 /// (retrieval-blueprint v2 diffusion/recall primitive).
 pub mod csr;
+/// Harmonic centrality H(v)=Σ 1/d(u,v) — the shared graph-ranking primitive the
+/// agent-kernel (HK-05/HK-06) uses for model routing + memory ranking. Ported
+/// here so the CANONICAL kernel and the agent-kernel share ONE graph-math
+/// vocabulary (unify-the-kernels directive). Parity-gated vs the agent-kernel
+/// reference in `harmonic::tests::parity_with_agent_kernel_reference`.
+pub mod harmonic;
 /// Spool — pure crash-safe async work-queue state machine (append / claim /
 /// ack / reclaim). The I/O + drainer adapter lives outside the kernel
 /// (pure-std firewall); this owns the Verified-by-Math transitions. Reused by
