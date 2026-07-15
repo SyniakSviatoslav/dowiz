@@ -264,11 +264,11 @@ This is where the eval layer closes the three open joints from `AUTONOMOUS-ORGAN
 
 ### §5.1 Self-maintenance (persistence + enforcement joints)
 - The eval suite runs as a **regression gate** on the `bench_track.py` / `BENCH_HISTORY.md` pattern that
-  already works for kernel latency — extend it to the eval scalars.
+  already works for kernel latency — extend it to the eval scalars. **DONE (E2, 2026-07-15):** `EvalRow` in `kernel/src/evals.rs` emits `run-history.jsonl` lines byte-compatible with `analytics/analyze.mjs`; `RegressionGate` is the authoritative RED→GREEN mechanism; `EmaTracker` (over `geo::ema_next`) smooths the trend. Tests `regression_gate_flips_red_on_degradation` / `_stays_green_*` / `_recovers_*`, `ema_tracker_smooths_jitter`, `eval_row_schema_matches_analyze_mjs` green.
 - **Persist every scalar** to a durable JSONL (kills the "amnesiac `.loop-state`" joint) so the ratchet
-  can learn "this task-class drifts / loops." This is the single fix for `AUTONOMOUS-ORGANISM` joint 2.
+  can learn "this task-class drifts / loops." This is the single fix for `AUTONOMOUS-ORGANISM` joint 2. **DONE (E2):** `EvalRow::append_to` is fail-closed (test `eval_row_append_to_persists_jsonl`).
 - Feed the long-dead `analytics/analyze.mjs` A/B regression detector (written, fed nothing) with one real
-  row per eval run → the "did my last change help or hurt?" nerve.
+  row per eval run → the "did my last change help or hurt?" nerve. **DONE (E2):** patched `analyze.mjs` `parseTs` to ingest the kernel's `epoch+00:00` timestamp (JS `Date` returned NaN before — the consumer was silently dead). End-to-end verified: 3 kernel rows → analyze.mjs reports Overall 67%, Regression config 2 vs 1, Worst gate `noether`.
 
 ### §5.2 Self-adaptation (the runtime bus)
 - With a scalar utility defined, the **STRANDED learners un-strand**: `online::{LinearSGD,ScalarAdam}` +
@@ -382,7 +382,7 @@ autonomy expansion). Nothing below is enacted by this document; the 🔴 rows re
 |---|---|---|---|
 | **E0** Eval-primitives crate | un-strand the 9 STRANDED organs into an `evals` module w/ wasm exports + oracle tests; fix the 3 bugs (§2) | 🟢 | each metric red→green vs a hand-oracle; `verify_retrieval` dead-branch test; Kalman-innovation surfaced test |
 | **E1** Benchmark generator | metamorphic synthesis over input-accepting kernel invariants; deterministic MintLog leakage gate; ECE/Brier/AURC | 🟢 | generator emits N fresh items whose MR-oracle passes (test `emits_fresh_passing_items`); leakage gate rejects an exact dup (test `leakage_gate_rejects_duplicate`); **DONE — 2026-07-15, 6 evals tests green, kernel suite 222 pass** |
-| **E2** Self-eval loop wiring | persist scalars (JSONL); regression gate; Kalman drift-trend; feed `analyze.mjs` | 🟡 | a seeded regression flips the gate red; a stable run stays green; persistence survives a session boundary |
+| **E2** Self-eval loop wiring | persist scalars (JSONL); regression gate; Kalman drift-trend; feed `analyze.mjs` | 🟡 | a seeded regression flips the gate red; a stable run stays green; persistence survives a session boundary | **DONE — 2026-07-15, 6 E2 tests green, kernel suite 228 pass, analyze.mjs end-to-end verified** |
 | **E3** Self-adaptation | un-strand `online`/`micrograd` to minimize eval-loss under `noether` guard | 🟡 | adaptation reduces eval-loss on held-out items **without** raising `invariant_drift` above tol |
 | **B0** bebop harness (non-crypto) | CRDT-convergence property test; wire-decode fuzz; differential G2; empty-import→pre-commit | 🟡 | §4 targets 3,4,7,8 red→green |
 | **B1** bebop crypto | dudect for C4b; proto-crypto `H(sk‖c)` fix/delete; CT rung | 🔴 | §4 targets 1,2,5 — **council + operator gated** |

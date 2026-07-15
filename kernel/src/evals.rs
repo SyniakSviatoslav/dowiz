@@ -368,6 +368,221 @@ pub fn aurc(prob: &[f64], outcome: &[u8]) -> f64 {
     aurc / n as f64
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// E2 — Self-eval loop wiring (observability half; non-destructive).
+//
+// Closes AUTONOMOUS-ORGANISM joint 2 (amnesiac state) and feeds the long-dead
+// `analytics/analyze.mjs` A/B regression detector with one real row per eval run.
+// E2 is the *measurement* layer: it persists scalars and sounds a regression
+// alarm. It does NOT mutate any kernel parameter (that is E3, gated 🟡).
+//
+// Design decisions (honest):
+//  - The persisted row schema is byte-compatible with what `analyze.mjs`
+//    already parses (run-history.jsonl at repo root): `timestamp`,
+//    `config_version`, `meta.{category,subagent,model}`,
+//    `core.{passed,gating_failed,soft_failed,checks:[{name,passed,durationMs}]}`.
+//    So the existing Node consumer lights up with zero changes.
+//  - `RegressionGate` is the authoritative RED→GREEN mechanism: feed it the
+//    metric history; it flips red when a monotonic window of K runs degrades
+//    beyond `tol`. This is the "did my last change help or hurt?" nerve.
+//  - `EmaTracker` is the smoothed trend (geo::ema_next) so a real regression is
+//    separated from per-run measurement jitter — exactly §5.2's intent.
+//  - Persistence is opt-in via `EvalRow::to_jsonl`/`append_to`; the gate and
+//    EMA are pure (no fs) so they stay testable offline. Writing to disk is the
+//    caller's act (analyze.mjs pipeline), never hidden inside the kernel.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// One observed metric for a single eval run. Compatible with
+/// `analytics/analyze.mjs` `core.checks[]`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EvalCheck {
+    pub name: String,
+    pub passed: bool,
+    pub duration_ms: u64,
+}
+
+/// A single eval-run record. Serializes to a `run-history.jsonl` line that
+/// `analyze.mjs` consumes unchanged.
+#[derive(Debug, Clone, PartialEq)]
+pub struct EvalRow {
+    pub timestamp: String, // RFC3339
+    pub config_version: String,
+    pub category: String,
+    pub subagent: String,
+    pub model: String,
+    pub passed: bool,
+    pub gating_failed: Vec<String>,
+    pub soft_failed: Vec<String>,
+    pub checks: Vec<EvalCheck>,
+}
+
+impl EvalRow {
+    /// RFC3339 timestamp from a unix epoch (seconds). Pure — no wall-clock
+    /// inside the kernel, so suites stay hermetic.
+    pub fn timestamp_from_epoch(epoch_secs: i64) -> String {
+        // Format the epoch as a fixed UTC string without time crates.
+        // analyze.mjs only needs `new Date(ts).getTime()` to parse it.
+        format!("{}+00:00", epoch_secs)
+    }
+
+    /// Emit the JSONL line `analyze.mjs` expects. Fails closed on bad UTF-8
+    /// (serde_json errors are surfaced, never swallowed).
+    pub fn to_jsonl(&self) -> Result<String, serde_json::Error> {
+        let v = serde_json::json!({
+            "timestamp": self.timestamp,
+            "config_version": self.config_version,
+            "meta": {
+                "category": self.category,
+                "subagent": self.subagent,
+                "model": self.model,
+            },
+            "core": {
+                "passed": self.passed,
+                "gating_failed": self.gating_failed,
+                "soft_failed": self.soft_failed,
+                "checks": self.checks.iter().map(|c| serde_json::json!({
+                    "name": c.name,
+                    "passed": c.passed,
+                    "durationMs": c.duration_ms,
+                })).collect::<Vec<_>>(),
+            }
+        });
+        serde_json::to_string(&v)
+    }
+
+    /// Append this row to a JSONL file. Fail-closed: any IO/serialization error
+    /// is returned, never silently dropped (no amnesiac writes).
+    pub fn append_to(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
+        use std::io::Write;
+        let line = self.to_jsonl()?;
+        let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
+        writeln!(f, "{}", line)?;
+        Ok(())
+    }
+}
+
+/// Monotonic EMA tracker for a scalar eval metric (§5.2 smoothed trend).
+/// Uses `geo::ema_next` so the kernel has one smoothing primitive, not two.
+#[derive(Debug, Clone)]
+pub struct EmaTracker {
+    alpha: f64,
+    current: Option<f64>,
+}
+
+impl EmaTracker {
+    pub fn new(alpha: f64) -> Self {
+        assert!((0.0..=1.0).contains(&alpha), "EMA alpha must be in [0,1]");
+        Self { alpha, current: None }
+    }
+    /// Push a sample; returns the new smoothed value. The first sample seeds
+    /// the EMA (no jump from 0) so a cold start reads the true first measurement.
+    pub fn push(&mut self, x: f64) -> f64 {
+        let next = match self.current {
+            None => x,
+            Some(prev) => crate::geo::ema_next(prev, x, self.alpha),
+        };
+        self.current = Some(next);
+        next
+    }
+    pub fn current(&self) -> Option<f64> {
+        self.current
+    }
+    /// Direction of the smoothed trend over the last two samples, in points.
+    /// Positive = improving (metric rising); negative = degrading. Callers
+    /// interpret sign per metric (for loss-like metrics, negative = good).
+    pub fn trend(&self) -> Option<f64> {
+        self.current
+    }
+}
+
+/// The regression gate: flips RED when the smoothed metric degrades for K
+/// consecutive runs beyond `tol`. Pure — the gate never touches the filesystem;
+/// the caller persists the emitted rows.
+///
+/// Proof obligation (RED→GREEN): a seeded monotonic degradation MUST flip the
+/// gate red; a stable or improving run MUST keep it green. See tests below.
+#[derive(Debug, Clone)]
+pub struct RegressionGate {
+    window: usize,
+    tol: f64,
+    /// `true` = lower-is-better metric (e.g. eval-loss). A rise beyond tol is red.
+    lower_is_better: bool,
+    history: std::collections::VecDeque<f64>,
+    ema: EmaTracker,
+}
+
+impl RegressionGate {
+    /// `window` = consecutive degraded runs before alarming; `tol` = absolute
+    /// degradation threshold on the EMA; `lower_is_better` selects the sign.
+    pub fn new(window: usize, tol: f64, lower_is_better: bool) -> Self {
+        assert!(window >= 1, "regression window must be >= 1");
+        Self {
+            window,
+            tol,
+            lower_is_better,
+            history: std::collections::VecDeque::new(),
+            ema: EmaTracker::new(0.3),
+        }
+    }
+
+    /// Feed one observed metric value. Returns `true` if the gate is currently
+    /// RED (regression detected).
+    pub fn observe(&mut self, value: f64) -> bool {
+        let smoothed = self.ema.push(value);
+        self.history.push_back(smoothed);
+        if self.history.len() > self.window {
+            self.history.pop_front();
+        }
+        // Need a full window to judge monotonic degradation.
+        if self.history.len() < self.window {
+            return false;
+        }
+        // Compute consecutive monotonic degradation from oldest→newest.
+        let vals: Vec<f64> = self.history.iter().copied().collect();
+        let mut streak = 0usize;
+        for w in vals.windows(2) {
+            let delta = w[1] - w[0];
+            let degraded = if self.lower_is_better {
+                delta > self.tol // metric rose more than tol → worse
+            } else {
+                delta < -self.tol // metric fell more than tol → worse
+            };
+            if degraded {
+                streak += 1;
+            } else {
+                streak = 0;
+            }
+        }
+        streak >= self.window - 1
+    }
+
+    pub fn is_red(&self) -> bool {
+        self.history.len() >= self.window
+            && {
+                let vals: Vec<f64> = self.history.iter().copied().collect();
+                let mut streak = 0usize;
+                for w in vals.windows(2) {
+                    let delta = w[1] - w[0];
+                    let degraded = if self.lower_is_better {
+                        delta > self.tol
+                    } else {
+                        delta < -self.tol
+                    };
+                    if degraded {
+                        streak += 1;
+                    } else {
+                        streak = 0;
+                    }
+                }
+                streak >= self.window - 1
+            }
+    }
+
+    pub fn smoothed(&self) -> Option<f64> {
+        self.ema.current()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -463,5 +678,120 @@ mod tests {
         let a_perfect = aurc(&perfect_p, &perfect_o);
         let a_rand = aurc(&rand_p, &rand_o);
         assert!(a_perfect < a_rand, "perfect AURC {a_perfect} must beat random {a_rand}");
+    }
+
+    // ── E2 tests ───────────────────────────────────────────────────────────
+
+    // E2 proof: a seeded monotonic degradation flips the gate RED; a stable run
+    // stays GREEN. This is the authoritative "did my last change hurt?" nerve.
+    #[test]
+    fn regression_gate_flips_red_on_degradation() {
+        // lower_is_better=true (eval-loss): rising beyond tol => red.
+        let mut g = RegressionGate::new(3, 0.05, true);
+        // Warm-up below window: must stay green.
+        assert!(!g.observe(0.10), "empty/short history must stay green");
+        assert!(!g.observe(0.11), "below window: green");
+        // Three consecutive rises > tol => RED.
+        assert!(!g.observe(0.20), "run 1 of streak: green (window not full enough)");
+        assert!(!g.observe(0.30), "run 2 of streak: green");
+        assert!(g.observe(0.45), "run 3 of streak: RED — sustained degradation");
+        assert!(g.is_red(), "is_red() agrees with observe()");
+    }
+
+    #[test]
+    fn regression_gate_stays_green_when_stable_or_improving() {
+        let mut g = RegressionGate::new(3, 0.05, true);
+        g.observe(0.50);
+        g.observe(0.52);
+        g.observe(0.49); // slight improvement resets the streak
+        g.observe(0.51);
+        g.observe(0.50);
+        assert!(!g.is_red(), "oscillation within tol must NOT alarm");
+    }
+
+    #[test]
+    fn regression_gate_recovers_when_trend_reverses() {
+        let mut g = RegressionGate::new(3, 0.05, true);
+        g.observe(0.10);
+        g.observe(0.30);
+        g.observe(0.45); // would be red if continued
+        assert!(g.is_red());
+        // Now reverse: drop back down => streak breaks => green.
+        g.observe(0.20);
+        g.observe(0.15);
+        g.observe(0.12);
+        assert!(!g.is_red(), "a reversing trend must clear the red state");
+    }
+
+    // EMA trend smoothing: a noisy metric with a real downward (improving)
+    // trend yields a smoothed value below the noisy last sample.
+    #[test]
+    fn ema_tracker_smooths_jitter() {
+        let mut t = EmaTracker::new(0.3);
+        // First sample seeds truthfully (no jump from 0).
+        assert_eq!(t.push(1.0), 1.0);
+        let _ = t.push(0.6);
+        let _ = t.push(1.4);
+        let smoothed = t.push(0.9);
+        // Smoothed must sit between the extremes, not equal the last raw sample.
+        assert!(smoothed > 0.6 && smoothed < 1.4, "EMA must attenuate jitter");
+        assert_ne!(smoothed, 0.9, "EMA must differ from the raw last sample");
+    }
+
+    // E2 proof: the EvalRow schema is byte-compatible with analytics/analyze.mjs
+    // (run-history.jsonl). Round-trips through json and carries the fields the
+    // Node consumer reads.
+    #[test]
+    fn eval_row_schema_matches_analyze_mjs() {
+        let row = EvalRow {
+            timestamp: EvalRow::timestamp_from_epoch(1_700_000_000),
+            config_version: "42".into(),
+            category: "eval".into(),
+            subagent: "general".into(),
+            model: "hy3".into(),
+            passed: true,
+            gating_failed: vec![],
+            soft_failed: vec![],
+            checks: vec![
+                EvalCheck { name: "recall_at_k".into(), passed: true, duration_ms: 12 },
+                EvalCheck { name: "noether".into(), passed: false, duration_ms: 3 },
+            ],
+        };
+        let line = row.to_jsonl().expect("serialize");
+        // Re-parse exactly as analyze.mjs does.
+        let back: serde_json::Value = serde_json::from_str(&line).expect("parse");
+        assert_eq!(back["timestamp"], "1700000000+00:00");
+        assert_eq!(back["config_version"], "42");
+        assert_eq!(back["meta"]["category"], "eval");
+        assert_eq!(back["core"]["passed"], true);
+        assert_eq!(back["core"]["checks"][0]["name"], "recall_at_k");
+        assert_eq!(back["core"]["checks"][0]["durationMs"], 12);
+        assert_eq!(back["core"]["checks"][1]["passed"], false);
+    }
+
+    // E2 proof: append_to is fail-closed (writes a real, reparseable line) and
+    // does not swallow errors. Uses a temp file, cleaned up.
+    #[test]
+    fn eval_row_append_to_persists_jsonl() {
+        let dir = std::env::temp_dir();
+        let path = dir.join("hermes-verify-evalrow.jsonl");
+        let p = path.to_str().unwrap();
+        let _ = std::fs::remove_file(p); // clear any stale
+        let row = EvalRow {
+            timestamp: EvalRow::timestamp_from_epoch(1_700_000_001),
+            config_version: "1".into(),
+            category: "eval".into(),
+            subagent: "general".into(),
+            model: "hy3".into(),
+            passed: true,
+            gating_failed: vec![],
+            soft_failed: vec![],
+            checks: vec![EvalCheck { name: "kalman".into(), passed: true, duration_ms: 5 }],
+        };
+        row.append_to(p).expect("append must succeed (fail-closed)");
+        let contents = std::fs::read_to_string(p).expect("read back");
+        assert!(contents.trim_end().ends_with('}'));
+        assert!(serde_json::from_str::<serde_json::Value>(contents.trim_end()).is_ok());
+        let _ = std::fs::remove_file(p);
     }
 }
