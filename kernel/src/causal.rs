@@ -291,6 +291,118 @@ pub fn counterfactual_linear(
     Ok(beta * x_counter + gamma * u)
 }
 
+/// **d-separation oracle** (Pearl, *Causality* §1.2.4) — the structural primitive the
+/// back-door / front-door / IV adjustments above all assume, stated cleanly.
+///
+/// Given a DAG described by `parents[i]` (the direct causes of node `i`), returns
+/// `Ok(true)` iff `X` and `Y` are **d-separated** by the conditioning set `given`
+/// (no active trail connects them) and `Ok(false)` iff they are **d-connected**.
+///
+/// It walks the **active trails** of the graph (a BFS over directed edges that only
+/// follows *open* links given `given`):
+///   - a **chain** (`a → z → b`) or **fork** (`a ← z → b`) at node `z` is open iff `z ∉ given`;
+///   - a **collider** (`a → z ← b`) at node `z` is open iff `z` (or a *descendant* of `z`)
+///     is in `given`. So conditioning *blocks* chains/forks but *opens* colliders
+///     (Berkson's bias / Simpson's reversal) — the whole point of the primitive.
+///
+/// Trust boundary: rejects `x == y` and any node index ≥ `parents.len()`. Never panics.
+pub fn d_separated(
+    parents: &[Vec<usize>],
+    x: usize,
+    y: usize,
+    given: &[usize],
+) -> Result<bool, String> {
+    let n = parents.len();
+    if x == y {
+        return Err("d-separation needs two distinct nodes (x == y is degenerate)".into());
+    }
+    if x >= n || y >= n {
+        return Err(format!("node index out of range: x={x}, y={y}, n={n}"));
+    }
+    // children[i] = nodes that have i as a parent
+    let mut children: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for (i, ps) in parents.iter().enumerate() {
+        for &p in ps {
+            if p >= n {
+                return Err(format!("parent index {p} of node {i} out of range (n={n})"));
+            }
+            children[p].push(i);
+        }
+    }
+    for &z in given {
+        if z >= n {
+            return Err(format!("conditioning node out of range: z={z}, n={n}"));
+        }
+    }
+    // ancestor closure of `given`: the set that *unblocks* colliders.
+    let mut anc: Vec<bool> = vec![false; n];
+    let mut stack: Vec<usize> = given.to_vec();
+    while let Some(v) = stack.pop() {
+        if anc[v] {
+            continue;
+        }
+        anc[v] = true;
+        for &p in &parents[v] {
+            if !anc[p] {
+                stack.push(p);
+            }
+        }
+    }
+    let mut given_set = vec![false; n];
+    for &z in given {
+        given_set[z] = true;
+    }
+
+    // Active-trail BFS. State = (node, dir, via):
+    //   dir = 0 (start) | 1 (came from a PARENT, i.e. arrived downstream) | 2 (came from a CHILD, i.e. arrived upstream)
+    //   via = the node we arrived from (n = sentinel at the start)
+    // We never re-process a (node, dir, via) triple, bounding the search and preventing cycles.
+    use std::collections::HashSet;
+    let mut visited: HashSet<(usize, u8, usize)> = HashSet::new();
+    let mut queue: Vec<(usize, u8, usize)> = Vec::new();
+    for &c in &children[x] {
+        queue.push((c, 1, x));
+    }
+    for &p in &parents[x] {
+        queue.push((p, 2, x));
+    }
+    while let Some((u, dir, via)) = queue.pop() {
+        if u == y {
+            return Ok(false); // active trail reached Y => d-CONNECTED
+        }
+        if !visited.insert((u, dir, via)) {
+            continue;
+        }
+        // Walk to children (u → c): chain or fork at u — open iff u ∉ given.
+        if !given_set[u] {
+            for &c in &children[u] {
+                if c != via {
+                    queue.push((c, 1, u));
+                }
+            }
+        }
+        // Walk to parents (p → u): depends on how we arrived.
+        for &p in &parents[u] {
+            if p == via {
+                continue;
+            }
+            if dir == 1 {
+                // arrived downstream (parent→u): prev→u←p is a COLLIDER — open iff u (or a
+                // descendant) is in `given`.
+                if anc[u] {
+                    queue.push((p, 2, u));
+                }
+            } else {
+                // arrived upstream (child→u): p→u→prev is a CHAIN — open iff u ∉ given.
+                if !given_set[u] {
+                    queue.push((p, 2, u));
+                }
+            }
+        }
+    }
+    Ok(true) // no active trail => d-SEPARATED
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -604,5 +716,79 @@ mod tests {
         // but (3,5) is inconsistent for γ=0 (would need Y=X) => rejected
         assert!(counterfactual_linear(1.0, 1.0, 0.0, 3.0, 5.0, 7.0).is_err(),
             "γ=0, (3,5) inconsistent => reject");
+    }
+
+    // ── d-separation oracle fixtures & tests ──
+    // Four canonical cases. Each `parents` list is indexed [..parent indices..].
+
+    // Chain  X → Z → Y   (Z=1 is a mediator)
+    fn chain() -> Vec<Vec<usize>> {
+        vec![vec![], vec![0], vec![1]] // X=0, Z=1 (pa X), Y=2 (pa Z)
+    }
+    // Fork    Z → X, Z → Y   (Z=2 is a confounder — same shape as the back-door set)
+    fn fork() -> Vec<Vec<usize>> {
+        vec![vec![2], vec![2], vec![]] // X=0 (pa Z), Y=1 (pa Z), Z=2
+    }
+    // Collider  X → Z ← Y   (Z=2 is a collider)
+    fn collider() -> Vec<Vec<usize>> {
+        vec![vec![], vec![], vec![0, 1]] // Z=2 has parents X=0,Y=1
+    }
+    // Collider with descendant:  X → Z ← Y → ... → W (Z=2, W=3 child of Z)
+    fn collider_with_descendant() -> Vec<Vec<usize>> {
+        vec![vec![], vec![], vec![0, 1], vec![2]] // W=3 (pa Z)
+    }
+
+    // ── GREEN: chain — unconditionally open, blocked when conditioning on the middle ──
+    #[test]
+    fn green_chain_blocked_by_middle() {
+        let g = chain();
+        // X(0) and Y(2): trail 0→1→2 is active with nothing conditioned.
+        assert!(!d_separated(&g, 0, 2, &[]).unwrap(), "chain X→Z→Y is d-connected");
+        // Condition on Z(1): the chain is blocked => d-separated.
+        assert!(d_separated(&g, 0, 2, &[1]).unwrap(), "chain blocked by Z");
+    }
+
+    // ── GREEN: fork/confounder — d-connected, blocked by the confounder (back-door set) ──
+    #[test]
+    fn green_fork_blocked_by_confounder() {
+        let g = fork();
+        // X(0) and Y(1) share confounder Z(2): head-to-head at Z via two arrows in? No —
+        // Z→X and Z→Y is a FORK, open unconditionally.
+        assert!(!d_separated(&g, 0, 1, &[]).unwrap(), "fork Z→X, Z→Y is d-connected");
+        // This is exactly the back-door set Z: conditioning on it d-separates X and Y,
+        // which is why backdoor_adjust(&confounded(), Z) is valid.
+        assert!(d_separated(&g, 0, 1, &[2]).unwrap(), "confounder Z blocks the back-door");
+    }
+
+    // ── GREEN: collider — blocked unconditionally, OPENED by conditioning on it (Berkson) ──
+    #[test]
+    fn green_collider_opens_under_conditioning() {
+        let g = collider();
+        // X(0) and Y(1) meet at collider Z(2): trail is blocked when Z is NOT conditioned.
+        assert!(d_separated(&g, 0, 1, &[]).unwrap(), "collider X→Z←Y is d-separated (blocked)");
+        // Condition on the collider Z: Berkson's bias — the trail OPENS.
+        assert!(!d_separated(&g, 0, 1, &[2]).unwrap(), "conditioning on collider opens it");
+    }
+
+    // ── GREEN: conditioning on a DESCENDANT of a collider also opens it ──
+    #[test]
+    fn green_collider_descendant_opens_trail() {
+        let g = collider_with_descendant();
+        // Even though we never condition on Z(2) itself, conditioning on its child W(3)
+        // unblocks the collider (the descendant carries the correlation).
+        assert!(!d_separated(&g, 0, 1, &[3]).unwrap(), "descendant W of collider Z opens trail");
+        // And with nothing conditioned, still blocked.
+        assert!(d_separated(&g, 0, 1, &[]).unwrap(), "collider still blocked unconditionally");
+    }
+
+    // ── RED (trust boundary): degenerate / out-of-range inputs rejected, never panic ──
+    #[test]
+    fn red_dsep_rejects_degenerate_and_oob() {
+        let g = chain();
+        assert!(d_separated(&g, 0, 0, &[]).is_err(), "x == y is degenerate");
+        assert!(d_separated(&g, 0, 9, &[]).is_err(), "y out of range");
+        assert!(d_separated(&g, 9, 2, &[]).is_err(), "x out of range");
+        assert!(d_separated(&g, 0, 2, &[9]).is_err(), "conditioning node out of range");
+        // malformed parent index would be caught too, but our fixtures are well-formed
     }
 }

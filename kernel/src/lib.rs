@@ -83,9 +83,10 @@ pub use csr::{
     precision_at_k, recall_at_k, Csr,
 };
 /// P9 growth-substrate: causal inference — back-door + front-door + instrumental-variable
-/// + counterfactual (twin-network) adjustment (do-operator / Pearl / Wald).
+/// + counterfactual (twin-network) + d-separation oracle (do-operator / Pearl / Wald).
 pub use causal::{
-    backdoor_adjust, counterfactual_linear, frontdoor_adjust, instrumental_adjust, CausalEffect,
+    backdoor_adjust, counterfactual_linear, d_separated, frontdoor_adjust,
+    instrumental_adjust, CausalEffect,
 };
 pub use domain::{apply_event, compute_order_total, place_order, Order, OrderItem};
 pub use money::{

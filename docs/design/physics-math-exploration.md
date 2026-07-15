@@ -39,12 +39,20 @@ Research queue (in order; pull the next item when the current is GREEN):
    Trust-boundary RED: an observation the SCM cannot generate (e.g. (4,5) when Y=1.5·X=6)
    is rejected — no silent fake value; α=0 (U unidentifiable from X) rejected; the
    confounding-free case (γ=0) still works and is consistency-checked.
-5. ⬜ **d-separation oracle** — a graph algorithm deciding conditional independence
-   from the DAG (the structural primitive the adjustments above all assume).
+5. ✅ **d-separation oracle** — DONE 2026-07-15.
+   `kernel/src/causal.rs`. The structural primitive (Pearl §1.2.4) every adjustment above
+   quietly assumes: a graph algorithm deciding `X ⫫ Y | given`. Implemented as an
+   **active-trail BFS** over the DAG: chains/forks open iff the node ∉ given; colliders
+   open iff the node (or a descendant) ∈ given — so conditioning *blocks* open paths but
+   *opens* colliders (Berkson's bias). Falsifiable on the four canonical graphs: chain
+   `X→Z→Y` d-connected, blocked by `Z`; fork `Z→X, Z→Y` (the back-door confounder) d-connected,
+   blocked by `Z`; collider `X→Z←Y` blocked, *opened* by conditioning on `Z`; and a collider
+   with descendant `W` where conditioning on `W` alone also opens the trail. Trust-boundary
+   RED: degenerate `x==y` and out-of-range nodes rejected, never panics.
 
-Each entry must land with: a module, a hand-derived oracle test, a RED (fail-closed /
-falsifiable) test, and a GREEN proof test. No estimation, no float fitting.
-
+P9 causal queue COMPLETE (5/5): back-door ✅, front-door ✅, IV ✅, counterfactual ✅,
+d-separation ✅. Next self-development frontiers: do-calculus rules over arbitrary graphs,
+or a structural-identifiability checker (can this effect be estimated at all?).
 ## Done: back-door adjustment — what was learned
 
 - The *naive* conditional `P(Y|X)` is **not** a causal quantity: it integrates over
