@@ -15,8 +15,6 @@
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Money(pub i64);
 
-use std::marker::PhantomData;
-
 /// Marker trait for values the field MAY interpolate (screen coordinates,
 /// opacity, scale). Deliberately NOT implemented for [`Money`].
 pub trait FieldValue: Copy {
