@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-# test_ser.py — integration test for the serialization adapter (2026-07-15).
-# Run with the venv that has msgpack: /tmp/fmtbench-venv/bin/python test_ser.py
+# test_ser.py — integration test for the PURE-STDLIB native-first serialization (2026-07-15).
+# No external libs. Runs under any system python3.
 import sys, time, os
 sys.path.insert(0, os.path.dirname(__file__))
 import ser
@@ -17,43 +17,46 @@ plan_row = {"id": "verify-12345", "title": "Spec-driven DOD reporting",
             "topics": "plan,step,alert,track,retro", "steps": 7, "eta_min": 12,
             "state": "planned"}
 kernel_f64 = [0.0, 3.003585, 1.501792, 0.375448, 8.0, 0.004173, 0.5, 0.008346, 2.0, 1.0, 1.0, 1.0]
+SCHEMA = ["disk_pct", "load1", "mem_pct", "load5", "mem_used_mb", "mem_total_mb", "disk_free_gb", "nproc"]
 
-# 1) JSON round-trip (default) — equality
-for name, obj in (("resource", resource), ("plan_row", plan_row)):
-    b = ser.dump(obj, "json")
-    back = ser.load(b, "json")
-    ok(back == obj, f"json round-trip {name}")
-
-# 2) msgpack round-trip — equality (only if msgpack available)
-if ser.msgpack is not None:
-    for name, obj in (("resource", resource), ("plan_row", plan_row)):
-        b = ser.dump(obj, "msgpack")
-        back = ser.load(b, "msgpack")
-        ok(back == obj, f"msgpack round-trip {name} ({len(b)}B vs json {len(ser.dump(obj))}B)")
-        ok(len(b) <= len(ser.dump(obj, "json")), f"msgpack <= json bytes for {name}")
-else:
-    print("SKIP: msgpack round-trip (not installed in this interpreter)")
-
-# 3) native f64 kernel boundary — round-trip exact, and FASTER than json
-b = ser.wire_f64(kernel_f64)
-back = ser.unwire_f64(b, len(kernel_f64))
-ok(back == kernel_f64, "native f64 round-trip exact")
-# throughput sanity: native must beat json on write
 def thr(fn, n=50000):
     t = time.perf_counter()
     for _ in range(n): fn()
     return n / (time.perf_counter() - t)
-nw = thr(lambda: ser.wire_f64(kernel_f64))
-jw = thr(lambda: ser.dump(kernel_f64, "json"))
-ok(nw > jw, f"native f64 write {int(nw)}/s > json {int(jw)}/s")
 
-# 4) TELEMETRY_SER env selects default
-os.environ["TELEMETRY_SER"] = "msgpack"
-if ser.msgpack is not None:
-    ok(ser.default_fmt() == "msgpack", "env TELEMETRY_SER=msgpack honored")
-else:
-    ok(True, "env select skipped (no msgpack)")
+# 1) CANONICAL native f64 round-trip (exact, the kernel wire shape)
+b = ser.wire_f64(kernel_f64)
+back = ser.unwire_f64(b, len(kernel_f64))
+ok(back == kernel_f64, "native f64 round-trip exact")
+
+# 2) typed obj <-> native (native_of / obj_of) for the resource schema
+nb = ser.native_of(SCHEMA, resource)
+rb = ser.obj_of(SCHEMA, nb)
+ok(all(abs(rb[k] - resource[k]) < 1e-9 for k in SCHEMA), "native_of/obj_of round-trip (typed linear memory)")
+
+# 3) JSON EDGE adapter: native/typed -> JSON text -> back (Gatus/grep/Telegram boundary)
+jb = ser.json_edge(resource)
+rb2 = ser.from_json(jb)
+ok(rb2 == resource, "json_edge/from_json round-trip")
+ok(isinstance(jb, str), "json_edge returns text (edge only)")
+
+# 4) throughput: native MUST beat JSON (the reason to favor the kernel approach)
+nw = thr(lambda: ser.wire_f64(kernel_f64))
+jw = thr(lambda: ser.json_edge(kernel_f64).encode())
+ok(nw > jw, f"native f64 write {int(nw)}/s > json {int(jw)}/s")
+nr = thr(lambda: ser.unwire_f64(b, len(kernel_f64)))
+jr = thr(lambda: ser.from_json(jb))
+ok(nr > jr, f"native f64 read {int(nr)}/s > json {int(jr)}/s")
+
+# 5) default edge honors TELEMETRY_SER (json|native only; no external formats)
+os.environ["TELEMETRY_SER"] = "native"
+ok(ser.default_edge() == "native", "env TELEMETRY_SER=native honored")
+os.environ["TELEMETRY_SER"] = "bogus"
+ok(ser.default_edge() == "json", "invalid TELEMETRY_SER falls back to json")
 os.environ["TELEMETRY_SER"] = "json"
+
+# 6) zero external deps: ser must import with stdlib only (no msgpack import attempted)
+ok("msgpack" not in dir(ser), "ser.py uses ZERO external libs (no msgpack)")
 
 print("----")
 print("INTEGRATION TEST:", "ALL PASS" if FAIL == 0 else f"{FAIL} FAILED")

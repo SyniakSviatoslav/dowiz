@@ -15,28 +15,28 @@
 #   mem_pct   — RAM used %                      (alert >90)
 import os, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-# Adapter seam: exporter payload format selectable per-layer via TELEMETRY_SER
-# (json | msgpack). Default json so Gatus JSON-body conditions keep working.
-# Resolve module dir from the real script path (works if copied/moved, not just cwd).
+# Native-first: gauges are computed as a canonical f64 array (kernel C-ABI form), and the
+# HTTP EDGE uses an adapter (json | native | msgpack) per TELEMETRY_SER. Default json so
+# Gatus JSON-body conditions keep working. Resolve module dir from real script path.
 import sys as _sys
 _sys.path.insert(0, os.path.dirname(os.path.realpath(__file__)))
-from ser import dump as _ser_dump
+from ser import json_edge, wire_f64, default_edge
+ser_wire = wire_f64
 
 HOST, PORT = "127.0.0.1", 9091
 
+# Ordered numeric schema — the canonical native f64 layout (matches field_metrics thinking).
+GAUGE_SCHEMA = ["disk_pct", "load1", "mem_pct"]
 
-def gauges():
-    # disk%
+
+def gauges_native():
+    """CANONICAL: compute host resource state as a native f64 array (kernel form).
+    Non-numeric metadata (ts) rides at the edge, not in the native array."""
     st = os.statvfs("/")
     disk_pct = round((1 - st.f_bavail / st.f_blocks) * 100, 1)
-    # load1 normalized by cpu count
     load1, *_ = os.getloadavg()
-    try:
-        ncpu = os.cpu_count() or 1
-    except Exception:
-        ncpu = 1
+    ncpu = os.cpu_count() or 1
     load_norm = round(load1 / ncpu, 2)
-    # mem%
     mi = {}
     with open("/proc/meminfo") as f:
         for line in f:
@@ -46,16 +46,31 @@ def gauges():
     mem_total = mi.get("MemTotal", 1)
     mem_avail = mi.get("MemAvailable", mi.get("MemFree", 0))
     mem_pct = round((1 - mem_avail / mem_total) * 100, 1)
-    return {"disk_pct": disk_pct, "load1": load_norm, "mem_pct": mem_pct, "ts": int(time.time())}
+    return [disk_pct, load_norm, mem_pct]
+
+
+def gauges_dict():
+    """EDGE helper: native array + ts label -> JSON-friendly dict (Gatus/Telemetry text)."""
+    vals = gauges_native()
+    d = dict(zip(GAUGE_SCHEMA, vals))
+    d["ts"] = int(time.time())
+    return d
 
 
 class H(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path not in ("/health", "/"):
             self.send_response(404); self.end_headers(); return
-        body = _ser_dump(gauges())
+        # CANONICAL native array -> EDGE adapter (json for Gatus/Telemetry; native raw opt-in)
+        native = gauges_native()
+        edge = default_edge()
+        if edge == "native":
+            body = ser_wire(native)                              # raw f64 bytes (native consumer)
+            ctype = "application/octet-stream"
+        else:
+            body = json_edge(gauges_dict()).encode("utf-8")     # Gatus/Telemetry JSON edge
+            ctype = "application/json"
         self.send_response(200)
-        ctype = "application/msgpack" if os.environ.get("TELEMETRY_SER") == "msgpack" else "application/json"
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
