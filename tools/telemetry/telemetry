@@ -6,7 +6,7 @@
 # Usage:
 #   telemetry log   <level> <message...>            # info|warn|error internal log
 #   telemetry metric <name> <value> [unit]          # a numeric metric
-#   telemetry bench  <name> <ms> [note...]          # a benchmark result (ms)
+#   telemetry kernel [rust-core path]       # sample kernel field_metrics (option-#1 C-ABI)
 #   telemetry bench_run <name> [note] -- <cmd...>    # run cmd, log wall-ms + peak RSS
 #   telemetry monitor [interval_s]                  # real-time resource/friction loop (bg-safe)
 #   telemetry task   <status> <title...>            # done|failed|started task
@@ -43,6 +43,22 @@ case "$cmd" in
     _emit benchmark "⏱ bench" "$name: ${ms}ms ${note}" "name=$name" "ms=$ms" "note=$note" ;;
   bench_run)
     bench_run "$@" ;;
+  kernel)
+    # Sample the rust-core kernel's numeric state via the option-#1 C-ABI surface
+    # (`field_metrics`). Runs rust-core/examples/metrics_probe and logs the 5-tuple as a
+    # benchmark event. Usage: telemetry kernel [rust-core path]  (default: ../bebop-repo/rust-core)
+    rc_path="${1:-../bebop-repo/rust-core}"
+    probe_out="$(cd "$rc_path" && cargo run --quiet --example metrics_probe 2>/dev/null)"
+    if [ -z "$probe_out" ]; then
+      echo "kernel: probe failed (cargo run --example metrics_probe)" >&2
+      exit 1
+    fi
+    echo "$probe_out"
+    if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
+      tg_send "🔬 $probe_out" || echo "telemetry: kernel metric logged locally, Telegram send failed" >&2
+    fi
+    log_event bench "name=kernel_metrics" "note=$(printf '%s' "$probe_out" | _jesc)" >/dev/null
+    printf 'kernel: %s\n' "$probe_out" ;;
   monitor)
     # Real-time resource + friction loop. Samples host every ${1:-15}s, emits a `metric`
     # event, and raises a 🔥 friction alert when a bottleneck crosses a threshold:
