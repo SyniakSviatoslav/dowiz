@@ -164,9 +164,15 @@ class Equation:
         except FixedPointUnsupported:
             has_fixed = False
 
+        # Map sample values onto the EXPR's own free symbols by NAME (not self._symbols,
+        # whose freshly-built Symbol objects may differ from the caller's — e.g. when the
+        # caller added `positive=True`. SymPy matches subs by object identity, so a name-only
+        # match is required, else subs silently no-ops and float(2*d) fails.)
+        _by_name = {s.name: s for s in self.expr.free_symbols}
         checks = []
         for i, smp in enumerate(samples):
-            ref = float(self.expr.evalf(subs={self._symbols[a]: smp[a] for a in self.args}))
+            sub = {_by_name[a]: smp[a] for a in self.args if a in _by_name}
+            ref = float(self.expr.evalf(subs=sub))
             f64_args = ", ".join(_flit(smp[a]) for a in self.args)
             checks.append(
                 f'    let got = {self.name}_f64({f64_args});\n'
