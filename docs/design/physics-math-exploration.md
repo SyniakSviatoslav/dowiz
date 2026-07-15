@@ -18,8 +18,17 @@ Research queue (in order; pull the next item when the current is GREEN):
    (flipping the `Y|M` map changes `do(X=1)` 0.65→0.25 while `do(X=0)` stays 0.45);
    no-X→-M test (effect collapses to exactly 0); trust-boundary RED (malformed P(M|X),
    P(X), oor, empty mediator).
-3. ⬜ **instrumental variables** — when no back-door set exists, recover `P(Y|do(X))`
-   via an instrument `Z → X`, `Z ⊥ Y` except through X (Wald estimand `cov(Z,Y)/cov(Z,X)`).
+3. ✅ **instrumental variables (Wald estimand)** — DONE 2026-07-15.
+   `kernel/src/causal.rs`. The case where no back-door set is observable: a valid
+   instrument `Z` (`Z → X → Y`, `Z ⊥ Y` except through X, and Z *shifts* X) recovers
+   `P(Y|do(X))` via the Wald estimand `β = (E[Y|Z=1]−E[Y|Z=0])/(P(X=1|Z=1)−P(X=1|Z=0))`
+   giving `do(X=1)−do(X=0)=β`. Falsifiable: β matches the hand value 0.375 exactly; a
+   weaker instrument changes β (0.375→1.5) so the code is not hard-coded; the naive
+   (confounded) `E[Y|X]` is reported alongside and is *larger* than β (U inflates it).
+   Trust-boundary RED: an instrument that does not shift X (denominator 0) is rejected,
+   out-of-range inputs rejected. Note: Wald assumes a *constant* LATE; the weak-IV case
+   yields β>1 for a binary Y, which the math reports faithfully (the known limit, not
+   hidden).
 4. ⬜ **counterfactual inference** — `P(Y_x | X=x', Y=y')` via the three-step
    (abduction → action → prediction) on the twin-network.
 5. ⬜ **d-separation oracle** — a graph algorithm deciding conditional independence
