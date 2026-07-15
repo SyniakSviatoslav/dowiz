@@ -70,7 +70,8 @@ pub mod wasm;
 
 // Re-export the headline types so wasm-bindgen consumers and tests share one surface.
 pub use evals::{
-    aurc, brier, ece, MetamorphicGenerator, MintLog, MrItem,
+    aurc, brier, ece, EmaTracker, EvalCheck, EvalRow, MetamorphicGenerator, MintLog, MrItem,
+    RegressionGate,
 };
 pub use csr::{
     precision_at_k, recall_at_k, Csr,

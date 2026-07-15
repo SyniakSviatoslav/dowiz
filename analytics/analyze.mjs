@@ -37,8 +37,25 @@ if (!existsSync(historyPath)) {
 const lines = readFileSync(historyPath, 'utf-8').trim().split('\n').filter(Boolean);
 const runs = lines.map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
 
+// Tolerant timestamp parser: the kernel's eval rows emit a unix-epoch with an
+// explicit offset (`1700000000+00:00`), which JS `Date` cannot parse (NaN).
+// Accept a leading-integer epoch, else fall back to standard Date parsing.
+function parseTs(ts) {
+  if (typeof ts === 'number') return ts * 1000;
+  if (typeof ts === 'string') {
+    const m = ts.match(/^(\d{10,13})/);
+    if (m) {
+      const n = Number(m[1]);
+      return n < 1e12 ? n * 1000 : n; // 10-digit sec, 13-digit ms
+    }
+    const d = new Date(ts).getTime();
+    if (!Number.isNaN(d)) return d;
+  }
+  return NaN;
+}
+
 const cutoff = Date.now() - DAYS * 86400_000;
-const recent = runs.filter(r => new Date(r.timestamp).getTime() > cutoff);
+const recent = runs.filter(r => parseTs(r.timestamp) > cutoff);
 
 console.log(`[analyze] ${runs.length} total runs, ${recent.length} in last ${DAYS} day(s)`);
 
