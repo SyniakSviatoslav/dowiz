@@ -442,6 +442,11 @@ PY
     # HK-09 deliberative governance: track-record + EV route-select + research-argue
     # + 3-judge + precedent registry. Args: <record|route|research|judge|precedent> ...
     gov_dispatch "$@" ;;
+
+  living)
+    # PRIMARY living-memory retrieval engine (4-layer: token/BM25/hash-cosine/PPR
+    # diffusion). Args: --selftest | --query '...' [--k N]. Consulted by gov_*.
+    python3 "$DIR/living_memory.py" "$@" ;;
   send)
     msg="$*"; _emit note "📣" "$msg" "message=$msg" ;;
   selftest)
