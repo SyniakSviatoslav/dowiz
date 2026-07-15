@@ -1,0 +1,60 @@
+name: Heartbeat Monitor
+
+# External dead-man's-switch for the Hetzner box (dowiz-dev). Runs on GitHub's
+# infrastructure — fully decoupled from Hetzner/Cloudflare, so it still fires
+# if the box or its Cloudflare Tunnel is completely down. Complements the
+# on-box ops-gatus monitor (docs/design/ops-reliability/, OPS-10).
+#
+# Requires repo secret TELEGRAM_BOT_TOKEN (bot @dowizbot_bot). Chat id is not
+# a secret (already present in /root/.bashrc + cloud env per project memory).
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: heartbeat-monitor
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check webhook.dowiz.org (proxy for box + tunnel + WAF chain)
+        id: probe
+        run: |
+          set +e
+          code=$(curl -sS -o /dev/null -w "%{http_code}" \
+            --max-time 10 --retry 3 --retry-delay 5 --retry-connrefused \
+            "https://webhook.dowiz.org/")
+          echo "http_code=$code" >> "$GITHUB_OUTPUT"
+          if [ -z "$code" ] || [ "$code" -ge 500 ] || [ "$code" = "000" ]; then
+            echo "status=down" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=up" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Alert Telegram on failure
+        if: steps.probe.outputs.status == 'down'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: "-1003901655568"
+        run: |
+          set +e
+          msg="heartbeat-monitor: webhook.dowiz.org unreachable (http_code=${{ steps.probe.outputs.http_code }}). Box or Cloudflare Tunnel may be down."
+          for attempt in 1 2 3; do
+            resp=$(curl -sS --max-time 10 \
+              "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+              --data-urlencode "text=🔴 ${msg}")
+            if echo "$resp" | grep -q '"ok":true'; then
+              echo "Telegram alert sent (attempt $attempt)"
+              exit 0
+            fi
+            echo "Telegram send failed (attempt $attempt, resp: $resp), retrying..."
+            sleep 5
+          done
+          echo "::error::Telegram alert failed after 3 attempts — check TELEGRAM_BOT_TOKEN secret"
+          exit 1
