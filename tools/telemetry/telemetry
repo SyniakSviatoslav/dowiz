@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# telemetry — one dispatcher for logs, metrics, benchmarks, tasks, sessions.
+# Every event is (a) appended to a local JSONL ledger AND (b) streamed to the
+# "Dowiz-Reporting" Telegram channel. KISS: no daemon, no deps beyond curl.
+#
+# Usage:
+#   telemetry log   <level> <message...>            # info|warn|error internal log
+#   telemetry metric <name> <value> [unit]          # a numeric metric
+#   telemetry bench  <name> <ms> [note...]          # a benchmark result (ms)
+#   telemetry task   <status> <title...>            # done|failed|started task
+#   telemetry session <title...>                    # a completed agent session
+#   telemetry send   <message...>                   # ad-hoc raw Telegram line
+#   telemetry selftest                              # local-only, no network
+#
+# Env: TELEGRAM_CHAT_ID (default Dowiz-Reporting), TELEMETRY_NO_TG=1 to skip send.
+set -uo pipefail
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib.sh
+. "$DIR/lib.sh"
+
+_emit() {  # <kind> <telegram_prefix> <telegram_body> <k=v>...
+  local kind="$1" pfx="$2" body="$3"; shift 3
+  log_event "$kind" "$@" >/dev/null
+  if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
+    tg_send "${pfx} ${body}" || echo "telemetry: local log written, Telegram send failed" >&2
+  fi
+}
+
+cmd="${1:-}"; shift || true
+case "$cmd" in
+  log)
+    lvl="${1:-info}"; shift || true; msg="$*"
+    case "$lvl" in error) i="🔴";; warn) i="🟠";; *) i="🔵";; esac
+    _emit log "$i log/$lvl" "$msg" "level=$lvl" "message=$msg" ;;
+  metric)
+    name="${1:?metric name}"; val="${2:?value}"; unit="${3:-}"
+    _emit metric "📊 metric" "$name = $val $unit" "name=$name" "value=$val" "unit=$unit" ;;
+  bench)
+    name="${1:?bench name}"; ms="${2:?ms}"; shift 2 || true; note="$*"
+    _emit benchmark "⏱ bench" "$name: ${ms}ms ${note}" "name=$name" "ms=$ms" "note=$note" ;;
+  task)
+    st="${1:?status}"; shift || true; title="$*"
+    case "$st" in done) i="✅";; failed) i="❌";; started) i="▶️";; *) i="•";; esac
+    _emit task "$i task/$st" "$title" "status=$st" "title=$title" ;;
+  session)
+    title="$*"
+    _emit session "🧠 session done" "$title" "title=$title" ;;
+  send)
+    msg="$*"; _emit note "📣" "$msg" "message=$msg" ;;
+  selftest)
+    TELEMETRY_NO_TG=1 log_event selftest "message=telemetry selftest ok" >/dev/null \
+      && echo "selftest: local JSONL write OK ($LOG_DIR/selftest.jsonl)" ;;
+  *)
+    grep -E '^#( |$)' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac

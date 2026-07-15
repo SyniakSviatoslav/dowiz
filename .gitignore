@@ -75,3 +75,4 @@ tools/skillspector/
 **/.review/
 # stray session debris
 kernel/=5
+tools/telemetry/logs/
