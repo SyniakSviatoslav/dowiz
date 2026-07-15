@@ -1,0 +1,26 @@
+[package]
+name = "async-spool"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Generic JSONL async-spool drainer adapter (rustls/ring). Decouples network delivery from any producer's critical path; dispatches by `dest` to Telegram or arbitrary HTTP endpoints."
+
+# Adapter layer (network I/O). Pure-Rust HTTP via ureq with the rustls +
+# webpki-roots (ring) backend. NO OpenSSL, NO native-tls, NO curl, NO tokio.
+# The producer's work path only WRITES a 1-line JSON spool entry
+# (microseconds); THIS binary drains it at a configurable pace so the network
+# throttle can never block the producer.
+#
+# This is the generalized successor to tools/telemetry/rust-spool: instead of
+# being Telegram-only it reads a generic `{ "dest": <scheme>, ...payload }`
+# line and dispatches by `dest` ("telegram" | "http").
+
+[dependencies]
+# rustls+ring backend: pure-Rust TLS, no system OpenSSL dependency.
+# (operator mandate 2026-07-15: rustls with ring everywhere possible.)
+ureq = { version = "2", default-features = false, features = ["tls", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+opt-level = 2
