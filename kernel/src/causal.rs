@@ -403,6 +403,163 @@ pub fn d_separated(
     Ok(true) // no active trail => d-SEPARATED
 }
 
+/// Descendant closure (BFS over child edges) — used by the back-door criterion.
+fn descendant_closure(children: &[Vec<usize>], root: usize, n: usize) -> Vec<bool> {
+    let mut desc = vec![false; n];
+    let mut stack = vec![root];
+    desc[root] = true;
+    while let Some(u) = stack.pop() {
+        for &c in &children[u] {
+            if !desc[c] {
+                desc[c] = true;
+                stack.push(c);
+            }
+        }
+    }
+    desc
+}
+
+/// **Back-door criterion** (Pearl, *Causality* Def 3.3.1) — verifies a candidate
+/// adjustment set `z` is *valid* for identifying `P(y | do(x))` from the DAG alone
+/// (no tables needed). It closes the loop on [`backdoor_adjust`]: that function
+/// *assumes* a valid set; this *proves* a candidate one is valid, using the
+/// [`d_separated`] oracle above.
+///
+/// `z` satisfies the back-door criterion relative to `(x, y)` iff:
+///   1. no node in `z` is a descendant of `x`;
+///   2. `z` blocks every **back-door path** — every path between `x` and `y` that has
+///      an arrow *into* `x` (the non-causal confounder paths).
+/// Returns `Ok(true)` iff both hold. Fail-closed on malformed input (out-of-range
+/// nodes, `x == y`, `z` containing `x` or `y`).
+pub fn backdoor_criterion(
+    parents: &[Vec<usize>],
+    x: usize,
+    y: usize,
+    z: &[usize],
+) -> Result<bool, String> {
+    let n = parents.len();
+    if x == y {
+        return Err("back-door criterion needs x != y".into());
+    }
+    if x >= n || y >= n {
+        return Err(format!("node out of range: x={x}, y={y}, n={n}"));
+    }
+    for &zi in z {
+        if zi >= n {
+            return Err(format!("adjustment node out of range: z={zi}, n={n}"));
+        }
+    }
+    if z.contains(&x) || z.contains(&y) {
+        return Err("adjustment set must not contain x or y".into());
+    }
+    // children[i] = nodes that have i as a parent
+    let mut children: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for (i, ps) in parents.iter().enumerate() {
+        for &p in ps {
+            children[p].push(i);
+        }
+    }
+    // (1) no z is a descendant of x.
+    let desc = descendant_closure(&children, x, n);
+    for &zi in z {
+        if desc[zi] {
+            return Ok(false); // a descendant of x can never be in a valid back-door set
+        }
+    }
+    // (2) z blocks every back-door path. Prune all forward edges out of x; any path
+    // surviving in that graph starts with an arrow *into* x (a back-door path). z must
+    // d-separate x from y in the pruned graph — which is exactly "blocks all back-door
+    // paths" (and never opens a collider, since d_separation treats `given` as blocking).
+    let mut pruned = parents.to_vec();
+    for &c in &children[x] {
+        pruned[c].retain(|&p| p != x);
+    }
+    d_separated(&pruned, x, y, z)
+}
+
+/// **Front-door criterion** (Pearl, *Causality* Def 3.4.1) — verifies a candidate
+/// mediator set `m` identifies `P(y | do(x))` via the front-door adjustment. Companion
+/// to [`frontdoor_adjust`]: proves the graph actually satisfies the front-door
+/// assumptions, again using only [`d_separated`] (no tables).
+///
+/// `m` satisfies the front-door criterion relative to `(x, y)` iff:
+///   1. `m` intercepts **every** directed path `x → … → y` (no such path avoids `m`);
+///   2. there is **no** open back-door path from `x` to `m` (x and m are unconfounded);
+///   3. there is **no** open back-door path from `m` to `y`.
+/// Returns `Ok(true)` iff all three hold. Fail-closed on malformed input.
+pub fn frontdoor_criterion(
+    parents: &[Vec<usize>],
+    x: usize,
+    y: usize,
+    m: &[usize],
+) -> Result<bool, String> {
+    let n = parents.len();
+    if x == y {
+        return Err("front-door criterion needs x != y".into());
+    }
+    if x >= n || y >= n {
+        return Err(format!("node out of range: x={x}, y={y}, n={n}"));
+    }
+    if m.is_empty() {
+        return Err("front-door criterion needs a non-empty mediator set".into());
+    }
+    for &mi in m {
+        if mi >= n {
+            return Err(format!("mediator node out of range: m={mi}, n={n}"));
+        }
+    }
+    if m.contains(&x) || m.contains(&y) {
+        return Err("mediator set must exclude x and y".into());
+    }
+    // children[i] = nodes that have i as a parent
+    let mut children: Vec<Vec<usize>> = vec![Vec::new(); n];
+    for (i, ps) in parents.iter().enumerate() {
+        for &p in ps {
+            children[p].push(i);
+        }
+    }
+    // (1) m intercepts every directed x→…→y path: cut all mediator nodes; y must be
+    // unreachable from x along directed (child) edges.
+    let mut reachable = vec![false; n];
+    let mut stack = vec![x];
+    reachable[x] = true;
+    while let Some(u) = stack.pop() {
+        for &c in &children[u] {
+            if !reachable[c] && !m.contains(&c) {
+                reachable[c] = true;
+                stack.push(c);
+            }
+        }
+    }
+    if reachable[y] {
+        return Ok(false); // a directed x→y path exists that avoids m
+    }
+    // Prune the forward edges out of `v` (remove v from its children's parent lists) and
+    // test whether `a` and `b` are d-separated under empty conditioning in that graph.
+    let prune_forward_and_dsep = |v: usize, a: usize, b: usize| -> Result<bool, String> {
+        let mut g = parents.to_vec();
+        for &c in &children[v] {
+            g[c].retain(|&p| p != v);
+        }
+        d_separated(&g, a, b, &[])
+    };
+    // (2) no open back-door path x .. m: prune forward edges out of x, then x must be
+    // d-separated from each mediator under empty conditioning.
+    for &mi in m {
+        if !prune_forward_and_dsep(x, x, mi)? {
+            return Ok(false); // an open back-door path x..m survives
+        }
+    }
+    // (3) no open back-door path m .. y: prune forward edges out of each mediator, then
+    // the mediator must be d-separated from y under empty conditioning.
+    for &mi in m {
+        if !prune_forward_and_dsep(mi, mi, y)? {
+            return Ok(false); // an open back-door path m..y survives
+        }
+    }
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -790,5 +947,76 @@ mod tests {
         assert!(d_separated(&g, 9, 2, &[]).is_err(), "x out of range");
         assert!(d_separated(&g, 0, 2, &[9]).is_err(), "conditioning node out of range");
         // malformed parent index would be caught too, but our fixtures are well-formed
+    }
+
+    // ── back-door / front-door criterion verifiers (consume the oracle) ──
+    // Graph for the back-door criterion: X(0) ← Z(2) → Y(1)  (Z is a confounder,
+    // the back-door set). parents: X=[] no parent? wait X has parent Z.
+    // Let Z=2, X=0 (pa Z), Y=1 (pa Z): that is the fork fixture shape.
+    fn backdoor_graph() -> Vec<Vec<usize>> {
+        vec![vec![2], vec![2], vec![]] // X(0) pa Z, Y(1) pa Z, Z(2) root
+    }
+    // Front-door graph: X(0) → M(1) → Y(2), with an unobserved confounder U (not a
+    // node in `parents` — i.e. no back-door path exists in the observed graph).
+    fn frontdoor_graph() -> Vec<Vec<usize>> {
+        vec![vec![], vec![0], vec![1]] // X(0), M(1) pa X, Y(2) pa M
+    }
+
+    // ── GREEN: the confounder Z satisfies the back-door criterion for (X,Y) ──
+    #[test]
+    fn green_backdoor_z_is_valid_set() {
+        let g = backdoor_graph();
+        assert!(backdoor_criterion(&g, 0, 1, &[2]).unwrap(), "Z blocks the only back-door path");
+        // X→Y has no directed edge here (X=0,Y=1: Y's only parent is Z), so no front-door
+        // path; the only confounding path is the fork via Z, which Z blocks.
+    }
+
+    // ── GREEN: a node that does NOT block the back-door fails the criterion ──
+    #[test]
+    fn green_backdoor_empty_set_fails_when_confounded() {
+        let g = backdoor_graph();
+        // With no adjustment, X and Y are connected through Z (fork is open) ⇒ not d-sep.
+        assert!(!backdoor_criterion(&g, 0, 1, &[]).unwrap(), "unadjusted X,Y still d-connected via Z");
+    }
+
+    // ── RED (trust boundary): back-door rejects malformed input, never panics ──
+    #[test]
+    fn red_backdoor_rejects_degenerate_and_oob() {
+        let g = backdoor_graph();
+        assert!(backdoor_criterion(&g, 0, 0, &[2]).is_err(), "x == y");
+        assert!(backdoor_criterion(&g, 0, 9, &[]).is_err(), "y oob");
+        assert!(backdoor_criterion(&g, 0, 1, &[9]).is_err(), "z oob");
+        assert!(backdoor_criterion(&g, 0, 1, &[0]).is_err(), "z contains x");
+        assert!(backdoor_criterion(&g, 0, 1, &[1]).is_err(), "z contains y");
+    }
+
+    // ── GREEN: M satisfies the front-door criterion for the X→Y chain ──
+    #[test]
+    fn green_frontdoor_m_is_valid_mediator() {
+        let g = frontdoor_graph();
+        // (1) M intercepts the only directed path X→M→Y.
+        // (2) no back-door X..M (X has no parents).
+        // (3) no back-door M..Y (after pruning M→Y, M has no parents ⇒ d-sep from Y).
+        assert!(frontdoor_criterion(&g, 0, 2, &[1]).unwrap(), "M is a valid front-door set");
+    }
+
+    // ── GREEN: a mediator that does NOT intercept the directed path fails ──
+    #[test]
+    fn green_frontdoor_fails_if_mediator_skips_path() {
+        // X(0) → Y(1) directly, M(2) is a side branch off X. M does NOT sit on X→Y.
+        let g = vec![vec![], vec![0], vec![0]]; // Y(1) pa X, M(2) pa X
+        assert!(!frontdoor_criterion(&g, 0, 1, &[2]).unwrap(), "M not on the X→Y path ⇒ front-door fails");
+    }
+
+    // ── RED (trust boundary): front-door rejects malformed input, never panics ──
+    #[test]
+    fn red_frontdoor_rejects_degenerate_and_oob() {
+        let g = frontdoor_graph();
+        assert!(frontdoor_criterion(&g, 0, 0, &[1]).is_err(), "x == y");
+        assert!(frontdoor_criterion(&g, 0, 9, &[1]).is_err(), "y oob");
+        assert!(frontdoor_criterion(&g, 0, 2, &[9]).is_err(), "m oob");
+        assert!(frontdoor_criterion(&g, 0, 2, &[]).is_err(), "empty mediator set");
+        assert!(frontdoor_criterion(&g, 0, 2, &[0]).is_err(), "m contains x");
+        assert!(frontdoor_criterion(&g, 0, 2, &[2]).is_err(), "m contains y");
     }
 }

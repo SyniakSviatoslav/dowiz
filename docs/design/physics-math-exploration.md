@@ -50,9 +50,32 @@ Research queue (in order; pull the next item when the current is GREEN):
    with descendant `W` where conditioning on `W` alone also opens the trail. Trust-boundary
    RED: degenerate `x==y` and out-of-range nodes rejected, never panics.
 
-P9 causal queue COMPLETE (5/5): back-door ✅, front-door ✅, IV ✅, counterfactual ✅,
-d-separation ✅. Next self-development frontiers: do-calculus rules over arbitrary graphs,
-or a structural-identifiability checker (can this effect be estimated at all?).
+6. ✅ **back-door criterion verifier** — DONE 2026-07-15.
+   `kernel/src/causal.rs::backdoor_criterion`. Closes the loop on `backdoor_adjust`: that
+   function *assumes* a valid adjustment set; this *proves* a candidate one is valid from the
+   DAG alone (no tables). A set `Z` is valid iff (1) no `Z` is a descendant of `X`, and (2) `Z`
+   blocks every **back-door** path (path with an arrow into `X`). Implemented by pruning all
+   forward edges out of `X` then testing `d_separated(X, Y | Z)` on the pruned graph — any
+   surviving path starts with an arrow *into* `X`, i.e. is a back-door path. Verified GREEN
+   (confounder `Z` satisfies it; empty set fails when confounded) + RED (degenerate/oob/x/y in
+   set rejected).
+
+7. ✅ **front-door criterion verifier** — DONE 2026-07-15.
+   `kernel/src/causal.rs::frontdoor_criterion`. Companion to `frontdoor_adjust`: proves the
+   graph satisfies the front-door assumptions (Pearl Def 3.4.1) from the DAG alone. A mediator
+   set `M` is valid iff (1) it intercepts every directed `X→…→Y` path; (2) no open back-door
+   `X..M`; (3) no open back-door `M..Y`. Implemented via directed-reachability + pruning the
+   forward edges of `X` and each `M` then `d_separated` under empty conditioning. Verified GREEN
+   (`M` on `X→M→Y` passes; a side-branch `M` off `X→Y` fails) + RED (degenerate/oob/empty/x/y-in-M
+   rejected).
+
+P9 causal queue COMPLETE (7/7): back-door ✅, front-door ✅, IV ✅, counterfactual ✅,
+d-separation ✅, back-door criterion ✅, front-door criterion ✅. The kernel now carries a
+coherent causal-inference ladder: **identify** (d-separation / criterion verifiers from a DAG)
+→ **adjust** (back-door / front-door / IV) → **infer counterfactually** (twin-network). Next
+self-development frontier: do-calculus *rules* over arbitrary graphs, or a full
+**structural-identifiability** checker (can this effect be estimated at all, and by which
+formula?).
 ## Done: back-door adjustment — what was learned
 
 - The *naive* conditional `P(Y|X)` is **not** a causal quantity: it integrates over
