@@ -7,6 +7,7 @@
 #   telemetry log   <level> <message...>            # info|warn|error internal log
 #   telemetry metric <name> <value> [unit]          # a numeric metric
 #   telemetry kernel [rust-core path]       # sample kernel field_metrics (option-#1 C-ABI)
+#   telemetry hetzner                        # launch host-resource exporter for Gatus (60s poll)
 #   telemetry bench_run <name> [note] -- <cmd...>    # run cmd, log wall-ms + peak RSS
 #   telemetry monitor [interval_s]                  # real-time resource/friction loop (bg-safe)
 #   telemetry task   <status> <title...>            # done|failed|started task
@@ -88,6 +89,12 @@ case "$cmd" in
       fi
       sleep "$iv"
     done ;;
+  hetzner)
+    # Launch the zero-dep host-resource exporter that Gatus polls every 60s (endpoint
+    # `hetzner-box-resources`, alerts -> Telegram topic 257 on disk/mem/load breach).
+    # The exporter serves only on request (near-zero CPU). Background-safe.
+    nohup python3 "$(dirname "$0")/hetzner_exporter.py" >/tmp/hetzner_exporter.log 2>&1 &
+    echo "hetzner exporter pid=$! (kill: pkill -f hetzner_exporter.py)" ;;
   task)
     st="${1:?status}"; shift || true; title="$*"
     case "$st" in done) i="✅";; failed) i="❌";; started) i="▶️";; *) i="•";; esac
