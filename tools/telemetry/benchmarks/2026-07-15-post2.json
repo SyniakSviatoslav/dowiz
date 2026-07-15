@@ -1,0 +1,8 @@
+{
+  "date": "2026-07-15",
+  "phase": "post-upgrade-FULL (B1 max-children=12 + B4 kernel estimator)",
+  "kernel_rebuild_test_sec": ".026774334",
+  "max_concurrent_children": "12",
+  "kernel_tests": "53 passed/0 failed (HK-07 added)",
+  "note": "Parallelism lever = delegation.max_concurrent_children (raised 3->12). Kernel B4 estimator feeds waves planner with real eta/token estimates."
+}
