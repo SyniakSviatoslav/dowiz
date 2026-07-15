@@ -246,21 +246,30 @@ gov_meta() {
   : >> "$st"
   local mode="oneshot"
   if [ "${1:-}" = "observe" ]; then mode="observe"; shift; fi
-  local bp="$1" bn="$2" rp="$3" rn="$4" fr="${5:-0}"
+  local bp="${1:-1}" bn="${2:-1}" rp="${3:-1}" rn="${4:-1}" fr="${5:-0}"
   # observe: fold args into persistent EMA (longitudinal evolution)
   if [ "$mode" = "observe" ]; then
+    mkdir -p "$(dirname "$st")"
     python3 - "$st" "$bp" "$bn" "$rp" "$rn" "$fr" <<'PY'
-import json, sys
+import json, sys, os
 st, bp, bn, rp, rn, fr = sys.argv[1], *sys.argv[2:7]
 bp, bn, rp, rn, fr = (float(x) for x in (bp, bn, rp, rn, fr))
-try: s = json.load(open(st))
-except Exception: s = {"ema_bench":0.0,"ema_eval":0.0,"ema_false":0.0,"n":0}
-n = s.get("n",0); a = 2.0/(n+1.0)
-s["ema_bench"] = a*((bn/bp - 1.0) if bp>0 else 0.0) + (1-a)*s["ema_bench"]
-s["ema_eval"]  = a*(rn - rp) + (1-a)*s["ema_eval"]
-s["ema_false"] = a*max(0.0,fr) + (1-a)*s["ema_false"]
+# read prior state — corrupt/empty file => start clean (NOT silent reset of good data)
+try:
+    with open(st) as f: s = json.load(f)
+    if not isinstance(s, dict): s = {}
+except (FileNotFoundError, json.JSONDecodeError, ValueError):
+    s = {}
+n = int(s.get("n", 0) or 0)
+a = 2.0/(n+1.0)
+s["ema_bench"] = a*((bn/bp - 1.0) if bp>0 else 0.0) + (1-a)*s.get("ema_bench", 0.0)
+s["ema_eval"]  = a*(rn - rp) + (1-a)*s.get("ema_eval", 0.0)
+s["ema_false"] = a*max(0.0,fr) + (1-a)*s.get("ema_false", 0.0)
 s["n"] = n+1
-json.dump(s, open(st,"w"))
+# atomic write: temp + replace (no partial-file readers, no lost update)
+tmp = st + ".tmp"
+with open(tmp, "w") as f: json.dump(s, f)
+os.replace(tmp, st)
 PY
   fi
   # emit evolved guidance. observe -> from persisted EMA; oneshot -> from args.
@@ -268,9 +277,12 @@ PY
     python3 - "$st" <<'PY'
 import json, sys
 st = sys.argv[1]
-try: s = json.load(open(st))
-except Exception: s = {"ema_bench":0.0,"ema_eval":0.0,"ema_false":0.0,"n":0}
-eb, ee, ef, n = s["ema_bench"], s["ema_eval"], s["ema_false"], s["n"]
+try:
+    with open(st) as f: s = json.load(f)
+    if not isinstance(s, dict): s = {}
+except (FileNotFoundError, json.JSONDecodeError, ValueError):
+    s = {}
+eb, ee, ef, n = s.get("ema_bench",0.0), s.get("ema_eval",0.0), s.get("ema_false",0.0), int(s.get("n",0) or 0)
 lane_tol      = max(0.3, min(2.0, 1.0 + 0.5*eb))
 judge_count   = int(max(1, min(7, 3 + ef/0.2)))
 precedent_tau = max(0.6, min(0.95, 0.82 + 0.1*ee))
@@ -279,16 +291,20 @@ print(f"GUIDANCE lane_tol={lane_tol:.3f} judge_count={judge_count} precedent_tau
 print("RULES: guidance, not gates — energy flows; meta-rule tilts only.")
 PY
   else
-    python3 - "$bp" "$bn" "$rp" "$rn" "$fr" <<'PY'
-import sys
-bp, bn, rp, rn, fr = (float(x) for x in sys.argv[1:6])
+    python3 - "$st" "$bp" "$bn" "$rp" "$rn" "$fr" <<'PY'
+import sys, json
+bp, bn, rp, rn, fr = (float(x) for x in sys.argv[2:7])
 bench_delta = (bn/bp - 1.0) if bp>0 else 0.0
 eval_delta  = rn - rp
 false_rate  = max(0.0, fr)
 lane_tol      = max(0.3, min(2.0, 1.0 + 0.5*bench_delta))
 judge_count   = int(max(1, min(7, 3 + false_rate/0.2)))
 precedent_tau = max(0.6, min(0.95, 0.82 + 0.1*eval_delta))
-print(f"META oneshot bench_delta={bench_delta:+.3f} eval_delta={eval_delta:+.3f} false_rate={false_rate:.3f}")
+try:
+    with open(sys.argv[1]) as fh: _s = json.load(fh)
+except Exception: _s = {"n":0}
+n = _s.get("n",0)
+print(f"META n={n} oneshot bench_delta={bench_delta:+.3f} eval_delta={eval_delta:+.3f} false_rate={false_rate:.3f}")
 print(f"GUIDANCE lane_tol={lane_tol:.3f} judge_count={judge_count} precedent_tau={precedent_tau:.3f}")
 print("RULES: guidance, not gates — energy flows; meta-rule tilts only.")
 PY
