@@ -337,8 +337,103 @@ PY
       ;;
   esac
 }
+# ===== 8. ANU + ANANKE — living-environment decision layer ==============
+# Anu  = Father Heaven = LOGIC. The adaptive learner: ingests the organism's OWN
+#        logs, predicts, and UPDATES its model from evidence (self-supervised).
+# Ananke = STRUCTURE / NECESSITY. The hard constraints that telemetry dictates —
+#        the non-negotiable floor (no data-loss, no red-line, no ruin blow-up).
+# Decision = Anu proposes (learned correction), Ananke constrains (structure wins).
+#
+# gov_learn: trains a LEAST-SQUARES linear corrector on the organism's own
+#   (elapsed_min -> eta_err_pct) ETA records (stdlib only, no external ML dep).
+#   On <2 points or degenerate data it degrades to IDENTITY (no false learning).
+#   Writes the model (slope, intercept) to $GOV_DIR/anu_model.json for reuse.
+#   Usage: gov_learn [metric_log]
+GOV_METRIC="${GOV_METRIC:-$DIR/logs/metric.jsonl}"
+gov_learn() {
+  local log="${1:-$GOV_METRIC}"; local out="$GOV_DIR/anu_model.json"
+  [ -f "$log" ] || { echo "NO-LEARN: $log absent"; return 0; }
+  python3 - "$log" "$out" <<'PY'
+import json, sys
+log, out = sys.argv[1], sys.argv[2]
+xs, ys = [], []
+try:
+    for line in open(log):
+        try: d = json.loads(line)
+        except: continue
+        if 'eta_err_pct' in d and 'elapsed_min' in d:
+            try: xs.append(float(d['elapsed_min'])); ys.append(float(d['eta_err_pct']))
+            except: pass
+except FileNotFoundError:
+    print("NO-LEARN: log unreadable"); sys.exit(0)
+n = len(xs)
+if n < 2:
+    json.dump({"n": n, "slope": 0.0, "intercept": 0.0, "identity": True}, open(out, "w"))
+    print(f"ANU: identity (insufficient data n={n}); no false learning")
+    sys.exit(0)
+# least-squares fit  y = a*x + b  (corrects predicted error from elapsed)
+mx = sum(xs)/n; my = sum(ys)/n
+sxx = sum((x-mx)**2 for x in xs)
+sxy = sum((x-mx)*(y-my) for x,y in zip(xs,ys))
+a = sxy/sxx if sxx > 1e-12 else 0.0
+b = my - a*mx
+# R^2 to report fit quality (honest: how much variance the model explains)
+ss_tot = sum((y-my)**2 for y in ys)
+ss_res = sum((y-(a*x+b))**2 for x,y in zip(xs,ys))
+r2 = 1 - ss_res/ss_tot if ss_tot > 1e-12 else 0.0
+json.dump({"n": n, "slope": a, "intercept": b, "r2": r2, "identity": False}, open(out, "w"))
+print(f"ANU: trained n={n} slope={a:+.4f} intercept={b:+.4f} R2={r2:.3f}")
+PY
+}
+
+# Anu prediction: apply the learned corrector to a raw ETA error estimate.
+# Usage: gov_anu <elapsed_min>  -> prints corrected eta_err_pct (or raw if identity)
+gov_anu() {
+  local x="$1"; local m="$GOV_DIR/anu_model.json"
+  [ -f "$m" ] || gov_learn >/dev/null 2>&1
+  python3 - "$m" "$x" <<'PY'
+import json, sys
+m, x = sys.argv[1], float(sys.argv[2])
+try: d = json.load(open(m))
+except Exception:
+    print(f"{x:.4f}"); sys.exit(0)
+if d.get("identity"):
+    print(f"{x:.4f}  (identity: no learn)")
+else:
+    print(f"{d['slope']*x + d['intercept']:.4f}  (learned slope={d['slope']:+.4f} R2={d.get('r2',0):.3f})")
+PY
+}
+
+# Ananke structure check: returns the binding constraint list (necessity floor).
+# Red-lines + no-data-loss + ruin-cap are NON-NEGOTIABLE (structure wins over logic).
+# Usage: gov_ananke <ruin_prob> <redline_hit> <data_loss_risk>  -> prints constraints or CLEAR
+gov_ananke() {
+  local ruin="${1:-0}" red="${2:-0}" loss="${3:-0}"
+  local hits=""
+  # Ananke: ruin probability must stay under the meta-rule cap (structure)
+  awk -v r="$ruin" 'BEGIN{ if (r+0 > 0.20) print "ruin-cap-exceeded" }' >/dev/null 2>&1
+  [ "$(awk -v r="$ruin" 'BEGIN{print (r+0>0.20)?1:0}')" = "1" ] && hits="$hits ruin-cap-exceeded"
+  [ "${red:-0}" = "1" ] && hits="$hits redline"
+  [ "${loss:-0}" = "1" ] && hits="$hits data-loss-risk"
+  if [ -z "$hits" ]; then echo "CLEAR"; else echo "ANANKE-BLOCK:$hits"; fi
+}
+
+# Unified decision: Anu proposes (learned ETA correction + route), Ananke constrains.
+# Usage: gov_decide <elapsed_min> <ruin_prob> <redline> <data_loss>
+gov_decide() {
+  local x="$1" ruin="$2" red="$3" loss="$4"
+  local anu; anu="$(gov_anu "$x")"
+  local ananke; ananke="$(gov_ananke "$ruin" "$red" "$loss")"
+  echo "ANU (logic):     eta_err_corrected = $anu"
+  echo "ANANKE (struct): $ananke"
+  case "$ananke" in
+    CLEAR) echo "DECISION: PROCEED (Anu guides, Ananke clear) — energy flows." ;;
+    *)     echo "DECISION: HALT/RESTRICT ($ananke) — Ananke overrides Anu. Structure wins." ;;
+  esac
+}
 
 # ---- CLI dispatcher (sourced by `telemetry`) ----
+
 gov_dispatch() {
   local cmd="${1:-help}"; shift || true
   case "$cmd" in
@@ -354,6 +449,10 @@ gov_dispatch() {
     prec_rec) gov_precedent_record "$@" ;;
     meta)   gov_meta "$@" ;;
     falseclaim) gov_falseclaim "$@" ;;
-    *) echo "governance: record|route|lane|research|hard|judge|gate|precedent|pbind|prec_rec|meta|falseclaim" ;;
+    learn)  gov_learn "$@" ;;
+    anu)    gov_anu "$@" ;;
+    ananke) gov_ananke "$@" ;;
+    decide) gov_decide "$@" ;;
+    *) echo "governance: record|route|lane|research|hard|judge|gate|precedent|pbind|prec_rec|meta|falseclaim|learn|anu|ananke|decide" ;;
   esac
 }
