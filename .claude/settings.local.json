@@ -28,11 +28,12 @@
       "Bash(echo \"Written: $?\")",
       "WebFetch(domain:plausible.io)",
       "Bash(mkdir -p \"C:/Users/Dell5/Documents/dowiz/.claude/skills/taste-skill\")",
-      "Bash(cat \"C:/Users/Dell5/.claude/projects/C--Users-Dell5-Documents-dowiz/7473fd35-0c0b-482d-8ad4-6dbf59818166/tool-results/b8h625iog.txt\")"
+      "Bash(cat \"C:/Users/Dell5/.claude/projects/C--Users-Dell5-Documents-dowiz/7473fd35-0c0b-482d-8ad4-6dbf59818166/tool-results/b8h625iog.txt\")",
+      "Skill(update-config)"
     ]
   },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "repowise"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }

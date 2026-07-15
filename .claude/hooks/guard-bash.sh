@@ -39,7 +39,7 @@ process.stdin.on('end', () => {
 
 CMD=$(_extract_cmd)
 
-DANGER='fly\s+(deploy|secrets)|supabase\s|wrangler\s|git\s+push\s+(origin\s+)?main|git\s+push\s+--force|pnpm\s+migrate:up|pnpm\s+(add|remove)|npm\s+install|rm\s+-rf\s+/'
+DANGER='fly\s+(deploy|secrets)|supabase\s|git\s+push\s+(origin\s+)?main|git\s+push\s+--force|pnpm\s+migrate:up|pnpm\s+(add|remove)|npm\s+install|rm\s+-rf\s+/'
 
 if [ -n "$CMD" ] && echo "$CMD" | grep -qiE "$DANGER"; then
   echo "BLOCKED: '$CMD' — deploy/infra/deps/migration/merge-level command. Manual only." >&2

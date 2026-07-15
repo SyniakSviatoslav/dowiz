@@ -21,6 +21,10 @@ elif command -v python3 >/dev/null 2>&1; then
   fp="$(printf '%s' "$INPUT" | python3 -c 'import sys,json;ti=json.load(sys.stdin).get("tool_input",{});print(ti.get("file_path") or ti.get("path") or "")' 2>/dev/null)"
 fi
 [ -z "$fp" ] && exit 0
+case "$fp" in
+  "$ROOT"/*) : ;;
+  *) exit 0 ;;  # outside this repo's root (different repo, /tmp scratchpad, etc.) — not this hook's governance
+esac
 rel="${fp#"$ROOT"/}"
 
 # --- always pass: council/loop/config artifacts (else deadlock) ---
