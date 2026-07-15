@@ -298,6 +298,20 @@ pub fn reduce_anomalies_js(events_json: String) -> Result<u64, JsValue> {
     reduce_anomalies_logic(&events_json).map_err(|e| JsValue::from_str(&e))
 }
 
+/// Boot-time FSM drift gate (fail-closed) — mirrors [`crate::kernel_boot_verify_fsm`].
+///
+/// Call once at web-kernel init, before any order is placed or folded. Returns `"OK"`
+/// when the live lifecycle graph matches the golden `FSM_GOLDEN_SIGNATURE`; on any
+/// divergence returns an error string naming the moved fields so the host can refuse
+/// to start the event bus. (Blueprint `spectral-graph-fsm` §4.)
+#[wasm_bindgen]
+pub fn boot_verify_fsm_js() -> Result<String, JsValue> {
+    match crate::kernel_boot_verify_fsm() {
+        Ok(()) => Ok("OK".to_string()),
+        Err(drift) => Err(JsValue::from_str(&format!("fsm boot drift: {drift}"))),
+    }
+}
+
 // ── Money: order-total mirror (RW-03) ────────────────────────────────────────
 // 1:1 port of packages/ui/src/lib/money.ts. The SERVER (apps/api orders.ts fee
 // ladder) stays authoritative for what is CHARGED; this mirror drives what the
