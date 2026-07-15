@@ -76,10 +76,14 @@ Implementation:
     false-rate, emits evolved guidance.
 
 EVIDENCE (live, opposite tilts prove rules EVOLVE):
-  improving (bench 3.0→5.97, recall .9→1.0, false 0):
+  oneshot improving (bench 3.0→5.97, recall .9→1.0, false 0):
+    META oneshot bench_delta=+0.990 eval_delta=+0.100 false_rate=0.000
     GUIDANCE lane_tol=1.495 judge_count=3 precedent_tau=0.830
-  regressing (bench 5.0→3.0, recall 1.0→.8, false .4):
+  oneshot regressing (bench 5.0→3.0, recall 1.0→.8, false .4):
+    META oneshot bench_delta=-0.400 eval_delta=-0.200 false_rate=0.400
     GUIDANCE lane_tol=0.800 judge_count=5 precedent_tau=0.800
+  observe path (persistent EMA, n accumulates 1→2, converges):
+    n=1 ema_bench=+1.980 -> n=2 ema_bench=+0.990 (deterministic, converges)
   kernel tests: **79 passed, 0 failed** (was 73; +6 new: flex/EMA/entropy ×3
   +3 kalman-control). entropy test confirms even-distribution > bottleneck.
 
