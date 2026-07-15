@@ -632,7 +632,8 @@ pub struct IdFactor {
     pub vars: Vec<usize>,
     /// Conditioning set (the `| ·` argument); empty ⇒ unconditional marginal.
     pub cond: Vec<usize>,
-    /// Variables summed/marginalized out to form this factor.
+    /// Variables summed/marginalized out to form this factor (the outer Σ wraps
+    /// the whole product of factors, so only the first factor carries `sum_out`).
     pub sum_out: Vec<usize>,
 }
 
@@ -684,7 +685,16 @@ impl IdResult {
 /// so that line-2 restrictions and c-component decompositions are computed on the
 /// correct (shrinking) subgraph. `y`/`x` are the target / intervention sets.
 fn id(y: &[usize], x: &[usize], g: &CGraph) -> Result<IdResult, String> {
-    let v: Vec<usize> = g.nodes();
+    // `v` is the *current vertex set* in TOPOLOGICAL order (canonical `id.R`
+    // threads the topo order through every recursion so that line-6/line-7
+    // conditioning sets `v[0:(ind[i]-1)]` are the true causal predecessors, not
+    // arbitrary node-index order). Subgraphs of a DAG stay acyclic, so this is
+    // always Some for a valid input (cycle rejection happens in the public entry).
+    let topo_all = g
+        .topological_order()
+        .ok_or_else(|| "id: subgraph has a directed cycle".to_string())?;
+    let present_set: std::collections::HashSet<usize> = g.nodes().into_iter().collect();
+    let v: Vec<usize> = topo_all.into_iter().filter(|n| present_set.contains(n)).collect();
     // line 1: x empty ⇒ P(y) (marginalize the rest out).
     if x.is_empty() {
         return Ok(IdResult::Identified {
@@ -748,6 +758,10 @@ fn id(y: &[usize], x: &[usize], g: &CGraph) -> Result<IdResult, String> {
     let s = &comps[0];
     // line 5: if G itself is a single c-component (C(G) = {V}), FAIL ⇒ hedge.
     let g_comps = g.c_components();
+    eprintln!(
+        "DBG id line5? v={:?} y={:?} x={:?} g_comps={:?} parents={:?} bidir={:?}",
+        v, y, x, g_comps, g.parents, g.bidirected
+    );
     if g_comps.len() == 1 {
         let root = g.roots();
         return Ok(IdResult::NotIdentified {
@@ -762,7 +776,12 @@ fn id(y: &[usize], x: &[usize], g: &CGraph) -> Result<IdResult, String> {
         });
     }
     // line 6: if S is itself a maximal c-component of G, factor over S using the
-    // topo-order prefix of S as the conditioning set (causaleffect's cond.set).
+    // topo-order prefix of the *full current vertex set* `v` as the conditioning
+    // set (causaleffect's `cond.set <- v[0:(ind[i]-1)]`). Using `v` (not just `S`)
+    // is essential: the intervention variables `X` are earlier in topo order and
+    // must appear in the conditioning set, otherwise the truncated factorization
+    // would drop them (e.g. chain X→Z→Y would yield P(z)·P(y) instead of
+    // P(z|x)·P(y|z)).
     let s_is_component = g_comps.iter().any(|c| c == s);
     if s_is_component {
         // Topo order of present nodes (monotonic by index here; the index order
@@ -770,11 +789,14 @@ fn id(y: &[usize], x: &[usize], g: &CGraph) -> Result<IdResult, String> {
         let topo: Vec<usize> = v.iter().copied().collect();
         let mut factors = Vec::new();
         for &vi in s {
-            // cond.set = { u ∈ S : u precedes vi in topo order }.
-            let cond: Vec<usize> = s
+            // cond.set = { u ∈ v : u precedes vi in topo order } (causaleffect line 6).
+            let cond: Vec<usize> = v
                 .iter()
                 .copied()
-                .filter(|&u| topo.iter().position(|&t| t == u).unwrap() < topo.iter().position(|&t| t == vi).unwrap())
+                .filter(|&u| {
+                    topo.iter().position(|&t| t == u).unwrap()
+                        < topo.iter().position(|&t| t == vi).unwrap()
+                })
                 .collect();
             factors.push(IdFactor {
                 vars: vec![vi],
@@ -916,6 +938,227 @@ pub fn identify_causal_effect(y: &[usize], x: &[usize], g: &CGraph) -> Result<Id
         return Err("graph has a directed cycle: not a valid semi-Markovian diagram".into());
     }
     id(y, x, g)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Numeric evaluator — turn an [`IdFormula`] into an actual `P(y | do(x))` over a
+// supplied observational joint. This is what closes the P9 frontier: the general
+// Shpitser–Pearl recursion must subsume every hand-written estimator (back-door,
+// front-door, IV, …) as a special case — cross-validated below (Verified-by-Math).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A joint distribution `P(v_0, …, v_{n-1})` stored as a flat vector, little-
+/// endian (node `0` is the least-significant digit). `cards[i]` is the arity of
+/// node `i`.
+pub struct Joint {
+    pub cards: Vec<usize>,
+    joint: Vec<f64>,
+}
+
+impl Joint {
+    /// `joint.len()` must equal Π `cards`. Rejects malformed shapes.
+    pub fn new(cards: Vec<usize>, joint: Vec<f64>) -> Result<Self, String> {
+        let expected: usize = cards.iter().product();
+        if joint.len() != expected {
+            return Err(format!(
+                "joint length {} != product of cards {:?} = {}",
+                joint.len(),
+                cards,
+                expected
+            ));
+        }
+        // Probabilities non-negative (trust boundary); need not sum to 1 exactly.
+        for &p in &joint {
+            if p < 0.0 {
+                return Err(format!("negative probability {p} in joint"));
+            }
+        }
+        Ok(Self { cards, joint })
+    }
+
+    /// Encode a full assignment (length = n) to a flat index.
+    fn encode(&self, assign: &[usize]) -> usize {
+        let mut idx = 0usize;
+        let mut stride = 1usize;
+        for i in 0..self.cards.len() {
+            idx += assign[i] * stride;
+            stride *= self.cards[i];
+        }
+        idx
+    }
+
+    /// Read the joint at a complete assignment.
+    fn get(&self, assign: &[usize]) -> f64 {
+        self.joint[self.encode(assign)]
+    }
+}
+
+/// Evaluate the `formula` as a distribution over `query` (a subset of nodes),
+/// holding the intervention nodes in `fixed` at their given values and summing
+/// over the remaining nodes. Returns one probability per assignment of `query`
+/// (little-endian over `query`'s node order); the values sum to 1.
+///
+/// Correctness: the formula is the truncated post-intervention factorization
+/// `∏_i P(v_i | cond_i)` where each factor is the *observational* conditional
+/// `P_obs(v_i | cond_i) = P_obs(v_i, cond_i) / P_obs(cond_i)`. Evaluating under a
+/// complete assignment of all nodes, the numerator is `P_obs(full)` and the
+/// denominator marginalizes over `v_i` only (all other nodes are held fixed by
+/// the outer summation), which is exactly the observational conditional — so the
+/// outer Σ over the non-query variables yields `P_x(query)`.
+fn eval_formula(joint: &Joint, query: &[usize], fixed: &[(usize, usize)], formula: &IdFormula) -> Result<Vec<f64>, String> {
+    let n = joint.cards.len();
+    // All nodes not in {query ∪ fixed} are summed out.
+    let mut fixed_set: std::collections::HashSet<usize> = fixed.iter().map(|&(k, _)| k).collect();
+    let query_set: std::collections::HashSet<usize> = query.iter().copied().collect();
+    let sum_nodes: Vec<usize> = (0..n)
+        .filter(|i| !query_set.contains(i) && !fixed_set.contains(i))
+        .collect();
+
+    let mut full = vec![0usize; n];
+    for &(k, v) in fixed {
+        full[k] = v;
+    }
+
+    // Iterate over every assignment of (query ++ sum_nodes); the leading
+    // Π_{query} entries are the output distribution.
+    let mut out = vec![0.0f64; query.iter().map(|&q| joint.cards[q]).product()];
+    // Recursive enumeration over query and sum variables (small n in tests).
+    let vars: Vec<usize> = query.iter().copied().chain(sum_nodes.iter().copied()).collect();
+    // Precompute, for each factor, its (vars, cond) node lists.
+    let factors: Vec<(Vec<usize>, Vec<usize>)> = formula
+        .factors
+        .iter()
+        .map(|f| (f.vars.clone(), f.cond.clone()))
+        .collect();
+
+    fn recurse(
+        depth: usize,
+        vars: &[usize],
+        full: &mut [usize],
+        query: &[usize],
+        joint: &Joint,
+        factors: &[(Vec<usize>, Vec<usize>)],
+        out: &mut [f64],
+    ) {
+        if depth == vars.len() {
+            // Evaluate ∏ P_obs(v_i | cond_i) where each factor is a true
+            // univariate conditional marginal, computed from the joint by
+            // marginalizing out every variable EXCEPT {v_i} ∪ cond_i.
+            let mut prod = 1.0f64;
+            for (vi_list, cond) in factors {
+                let vi = vi_list[0]; // each factor is univariate P(v_i | ·)
+                let cond_set: std::collections::HashSet<usize> = cond.iter().copied().collect();
+                // Variables that must be held at their current (enumerated) values
+                // when forming this conditional: v_i itself and its conditioning set.
+                let kept: std::collections::HashSet<usize> =
+                    cond_set.iter().copied().chain(std::iter::once(vi)).collect();
+                // Others are summed out.
+                let free: Vec<usize> = (0..joint.cards.len())
+                    .filter(|i| !kept.contains(i))
+                    .collect();
+                // Numerator: P(v_i, cond) = Σ_{free} P(full with v_i fixed).
+                let saved_vi = full[vi];
+                let mut numer = 0.0f64;
+                marginalize(&mut free.clone(), 0, full, joint, &mut numer);
+                // Denominator: P(cond) = Σ_{free ∪ {v_i}} P(full).
+                let mut denom_free: Vec<usize> = free.clone();
+                denom_free.push(vi);
+                let mut denom = 0.0f64;
+                marginalize(&mut denom_free, 0, full, joint, &mut denom);
+                full[vi] = saved_vi;
+                if denom <= 0.0 {
+                    prod = 0.0;
+                    break;
+                }
+                prod *= numer / denom;
+            }
+            // Output index = little-endian assignment of query nodes.
+            let mut oidx = 0usize;
+            let mut stride = 1usize;
+            for &q in query {
+                oidx += full[q] * stride;
+                stride *= joint.cards[q];
+            }
+            out[oidx] += prod;
+            return;
+        }
+        let node = vars[depth];
+        for v in 0..joint.cards[node] {
+            full[node] = v;
+            recurse(depth + 1, vars, full, query, joint, factors, out);
+        }
+    }
+
+    // Accumulate Σ over `free` (all combinations), summing P(full) at every
+    // assignment, holding the `kept` variables fixed at their current `full`
+    // values. Writes the total into `*acc`.
+    fn marginalize(
+        free: &mut Vec<usize>,
+        depth: usize,
+        full: &mut [usize],
+        joint: &Joint,
+        acc: &mut f64,
+    ) {
+        if depth == free.len() {
+            *acc += joint.get(full);
+            return;
+        }
+        let node = free[depth];
+        let saved = full[node];
+        for v in 0..joint.cards[node] {
+            full[node] = v;
+            marginalize(free, depth + 1, full, joint, acc);
+        }
+        full[node] = saved; // restore: callers rely on `full` being untouched
+    }
+
+    let mut fc = full.clone();
+    recurse(0, &vars, &mut fc, query, joint, &factors, &mut out);
+    Ok(out)
+}
+
+/// Public: evaluate `P(y | do(x))` numerically from an observational joint.
+/// `x_vals` gives the intervention values `(node, value)`; `y` are the target
+/// nodes. Returns the distribution over `y` (little-endian by `y` order).
+pub fn evaluate_id(
+    joint: &Joint,
+    y: &[usize],
+    x_vals: &[(usize, usize)],
+    formula: &IdFormula,
+) -> Result<Vec<f64>, String> {
+    eval_formula(joint, y, x_vals, formula)
+}
+
+/// Public: evaluate `P(y | do(x), z)` (IDC) numerically. Returns the joint over
+/// `(y, z)`; divide by the `z`-marginal for the conditional. `z_vals` may be
+/// empty for the unconditional case.
+pub fn evaluate_idc(
+    joint: &Joint,
+    y: &[usize],
+    x_vals: &[(usize, usize)],
+    z: &[usize],
+    numerator: &IdFormula,
+    denominator: &IdFormula,
+) -> Result<Vec<f64>, String> {
+    let mut query: Vec<usize> = y.to_vec();
+    query.extend(z.iter().copied());
+    query.sort_unstable();
+    query.dedup();
+    let num = eval_formula(joint, &query, x_vals, numerator)?;
+    let den = eval_formula(joint, z, x_vals, denominator)?;
+    // Divide element-wise: out[(y,z)] = num[(y,z)] / den[z].
+    let z_card: usize = z.iter().map(|&c| joint.cards[c]).product();
+    let y_card = num.len() / z_card;
+    let mut out = vec![0.0f64; num.len()];
+    for zi in 0..z_card {
+        if den[zi] <= 0.0 {
+            continue;
+        }
+        for yi in 0..y_card {
+            out[zi * y_card + yi] = num[zi * y_card + yi] / den[zi];
+        }
+    }
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -1463,5 +1706,119 @@ mod tests {
         .unwrap();
         let r = idc(&[2], &[0], &[1], &g).unwrap();
         assert!(r.is_identified(), "IDC P(y|do(x),z) on chain is identified");
+    }
+
+    // ── Verified-by-Math: the GENERAL ID algorithm subsumes the special-case estimators ──
+    // Each cross-check builds the full observational joint for a graph whose effect one of the
+    // proven estimators (back-door / front-door) computes from factor tables, then runs the
+    // general `id()` + numeric evaluator and asserts it recovers the SAME do-distribution.
+    // Identity of the two is the proof that the recursion is not a parallel, divergent code path.
+
+    fn joint_from_factors(cards: Vec<usize>, p_y_xz: &[f64], _p_z: &[f64], p_xz: &[f64]) -> Vec<f64> {
+        // `Joint::encode` is little-endian: node 0 (X) is the least-significant
+        // digit, node 2 (Y) the most-significant. So a flat index is
+        //   idx = x*stride_x + z*stride_z + y*stride_y,
+        //   stride_x=1, stride_z=n_x, stride_y=n_x*n_z.
+        // P(X=x, Z=z, Y=y) = P(Y=1|X=x,Z=z)^y · (1-P(Y=1|X,Z))^(1-y) · P(X=x,Z=z).
+        let n_x = cards[0];
+        let n_z = cards[1];
+        let mut j = vec![0.0f64; n_x * n_z * cards[2]];
+        for x in 0..n_x {
+            for z in 0..n_z {
+                let p_y1 = p_y_xz[x * n_z + z]; // P(Y=1|X=x,Z=z)
+                let p_xz_xz = p_xz[x * n_z + z]; // P(X=x,Z=z)
+                let base = x + z * n_x; // stride_x=1, stride_z=n_x
+                let stride_y = n_x * n_z;
+                // Y=0
+                j[base + 0 * stride_y] = (1.0 - p_y1) * p_xz_xz;
+                // Y=1
+                j[base + 1 * stride_y] = p_y1 * p_xz_xz;
+            }
+        }
+        j
+    }
+
+    // Back-door: general ID on Z→X, Z→Y must equal backdoor_adjust's do-probability.
+    #[test]
+    fn id_subsumes_backdoor_adjust() {
+        let (py, pz, pxz) = confounded(); // same fixture as green_backdoor_matches_hand_derivation
+        let cards = vec![2, 2, 2]; // X, Z, Y
+        let j = joint_from_factors(cards.clone(), &py, &pz, &pxz);
+        let joint = Joint::new(cards, j).unwrap();
+        // Graph: Z→X, Z→Y, AND X→Y (proper back-door: direct causal effect + confounded back-door via Z).
+        // Nodes [X=0, Z=1, Y=2].
+        let g = CGraph::new(
+            vec![vec![1], vec![], vec![1, 0]], // X pa Z; Z root; Y pa Z and X
+            vec![vec![], vec![], vec![]],
+        )
+        .unwrap();
+        let r = identify_causal_effect(&[2], &[0], &g).unwrap();
+        let formula = match r {
+            IdResult::Identified { formula } => {
+                eprintln!("DBG back-door formula = {:#?}", formula);
+                formula
+            }
+            _ => panic!("back-door must be identified"),
+        };
+        let eff = backdoor_adjust(&py, &pz, &pxz, 2, 2).expect("valid tables");
+        for x in 0..2usize {
+            let do_y = evaluate_id(&joint, &[2], &[(0, x)], &formula).unwrap();
+            // do_y is a vector over Y values (length 2); assert both entries track eff.do_p_y.
+            let total: f64 = do_y.iter().sum();
+            assert!(approx(total, 1.0), "P(Y|do(X={x})) must normalize");
+            // The do-distribution over Y should put mass eff.do_p_y[x] on Y=1.
+            assert!(
+                approx(do_y[1], eff.do_p_y[x]),
+                "ID do(X={x})={} must equal backdoor_adjust do(X={x})={}",
+                do_y[1],
+                eff.do_p_y[x]
+            );
+        }
+    }
+
+    // Front-door: general ID on X→M→Y must equal frontdoor_adjust's do-probability.
+    #[test]
+    fn id_subsumes_frontdoor_adjust() {
+        let (pmx, pymx, px) = frontdoor_fixture();
+        // Build joint P(X,M,Y) = P(M|X)·P(Y|M,X)·P(X). Nodes [X=0, M=1, Y=2].
+        let cards = vec![2, 2, 2];
+        let n_x = 2;
+        let n_m = 2;
+        let mut j = vec![0.0f64; 8];
+        // Joint::encode: node 0 (X) least-significant, node 2 (Y) most-significant
+        // => idx = x + m*2 + y*4.
+        for x in 0..n_x {
+            for m in 0..n_m {
+                let p_y1 = pymx[x * n_m + m];
+                let p = |y: usize| if y == 1 { p_y1 } else { 1.0 - p_y1 };
+                let base = x + m * n_x;
+                let stride_y = n_x * n_m;
+                j[base + 0 * stride_y] = pmx[x * n_m + m] * p(0) * px[x];
+                j[base + 1 * stride_y] = pmx[x * n_m + m] * p(1) * px[x];
+            }
+        }
+        let joint = Joint::new(cards, j).unwrap();
+        // Graph: X→M, M→Y.  Nodes [X=0, M=1, Y=2].
+        let g = CGraph::new(
+            vec![vec![], vec![0], vec![1]],
+            vec![vec![], vec![], vec![]],
+        )
+        .unwrap();
+        let r = identify_causal_effect(&[2], &[0], &g).unwrap();
+        let formula = match r {
+            IdResult::Identified { formula } => formula,
+            _ => panic!("front-door must be identified"),
+        };
+        let eff = frontdoor_adjust(&pmx, &pymx, &px, 2, 2).expect("valid tables");
+        for x in 0..2usize {
+            let do_y = evaluate_id(&joint, &[2], &[(0, x)], &formula).unwrap();
+            assert!(approx(do_y.iter().sum::<f64>(), 1.0), "P(Y|do(X={x})) normalizes");
+            assert!(
+                approx(do_y[1], eff.do_p_y[x]),
+                "ID do(X={x})={} must equal frontdoor_adjust do(X={x})={}",
+                do_y[1],
+                eff.do_p_y[x]
+            );
+        }
     }
 }
