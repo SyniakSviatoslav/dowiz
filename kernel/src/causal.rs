@@ -194,6 +194,53 @@ pub fn frontdoor_adjust(
     Ok(CausalEffect { do_p_y, naive_p_y })
 }
 
+/// Instrumental-variable (Wald) estimation of the causal effect of `X` on `Y`.
+///
+/// Used when **no back-door set is observable** and there is no mediator, but a
+/// valid instrument `Z` exists: `Z → X → Y`, with `Z`'s *only* path to `Y` going
+/// through `X` (`Z ⊥ Y` given `X`), and `Z` does shift `X`. Then the Local Average
+/// Treatment Effect (constant-effect / monotonicity) is the **Wald estimand**
+///
+/// ```text
+///     β = (E[Y | Z=1] − E[Y | Z=0]) / (P(X=1 | Z=1) − P(X=1 | Z=0))
+/// ```
+///
+/// giving `do(X=1) − do(X=0) = β`. The unadjusted (observational) `E[Y | X]` is
+/// passed in separately as `naive_x*` — it may be *spuriously* large when an
+/// unobserved `U` confounds `X,Y`, while the IV estimate is immune to `U`.
+///
+/// * `px_z1` = `P(X=1 | Z=1)`, `px_z0` = `P(X=1 | Z=0)`.
+/// * `ey_z1` = `E[Y | Z=1]`, `ey_z0` = `E[Y | Z=0]`.
+/// * `naive_x1` = `E[Y | X=1]`, `naive_x0` = `E[Y | X=0]` (observational, possibly confounded).
+///
+/// Fail-closed: probabilities in `[0,1]`, `E[Y]` in `[0,1]`, and — critically —
+/// the instrument must move `X` (`px_z1 != px_z0`); an instrument that does not
+/// shift `X` makes `β` undefined and is rejected (`Err`).
+pub fn instrumental_adjust(
+    px_z1: f64,
+    px_z0: f64,
+    ey_z1: f64,
+    ey_z0: f64,
+    naive_x1: f64,
+    naive_x0: f64,
+) -> Result<CausalEffect, &'static str> {
+    for p in [px_z1, px_z0, ey_z1, ey_z0, naive_x1, naive_x0] {
+        if !(0.0..=1.0).contains(&p) {
+            return Err("every probability / expectation must lie in [0,1]");
+        }
+    }
+    // The instrument must actually shift X, else the Wald denominator is 0 (and
+    // Z was never a valid instrument).
+    if (px_z1 - px_z0).abs() < 1e-12 {
+        return Err("instrument Z must shift X (px_z1 != px_z0)");
+    }
+    let beta = (ey_z1 - ey_z0) / (px_z1 - px_z0); // Wald estimand
+    let base = ey_z1 - beta * px_z1; // E[Y | do(X=0)]
+    let do_p_y = vec![base, base + beta];
+    let naive_p_y = vec![naive_x0, naive_x1];
+    Ok(CausalEffect { do_p_y, naive_p_y })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -377,5 +424,65 @@ mod tests {
         assert!(frontdoor_adjust(&pmx, &bad_y, &px, 2, 2).is_err());
         // empty mediator
         assert!(frontdoor_adjust(&pmx, &pymx, &px, 2, 0).is_err());
+    }
+
+    // ── Instrumental-variable (Wald) fixtures ──
+    // Valid instrument Z (e.g. random assignment): Z shifts X, only path Z→X→Y.
+    //   P(X=1|Z=1)=0.9  P(X=1|Z=0)=0.1   (instrument moves X strongly)
+    //   E[Y|Z=1]=0.55    E[Y|Z=0]=0.25
+    // Wald β = (0.55-0.25)/(0.9-0.1) = 0.30/0.80 = 0.375
+    //   do(X=0) = 0.55 - 0.375*0.9 = 0.2125 ; do(X=1) = 0.5875
+    // Observational (confounded) E[Y|X=1]=0.7, E[Y|X=0]=0.3 => naive effect 0.40
+    // (slightly inflated vs the deconfounded 0.375 — U biases the naive estimate).
+    fn iv_fixture() -> (f64, f64, f64, f64, f64, f64) {
+        (0.9, 0.1, 0.55, 0.25, 0.7, 0.3)
+    }
+
+    // ── GREEN: Wald estimand matches the hand-derived value ──
+    #[test]
+    fn green_instrumental_matches_wald_hand_derivation() {
+        let (px1, px0, ey1, ey0, nx1, nx0) = iv_fixture();
+        let eff = instrumental_adjust(px1, px0, ey1, ey0, nx1, nx0).expect("valid instrument");
+        // do(X=0)=0.2125, do(X=1)=0.5875, causal effect = 0.375
+        assert!(approx(eff.do_p_y[0], 0.2125), "do(0)={}", eff.do_p_y[0]);
+        assert!(approx(eff.do_p_y[1], 0.5875), "do(1)={}", eff.do_p_y[1]);
+        assert!(approx(eff.do_p_y[1] - eff.do_p_y[0], 0.375), "Wald β=0.375");
+        // naive (confounded) effect is reported alongside and differs
+        assert!(approx(eff.naive_p_y[1] - eff.naive_p_y[0], 0.40), "naive effect 0.40");
+        assert!(eff.naive_p_y[1] - eff.naive_p_y[0] > eff.do_p_y[1] - eff.do_p_y[0],
+            "unobserved U inflates the naive effect over the IV estimate");
+    }
+
+    // ── GREEN: the instrument's strength changes β (not a constant) ──
+    #[test]
+    fn green_instrumental_uses_instrument_strength() {
+        let (_, _, ey1, ey0, nx1, nx0) = iv_fixture();
+        // Weaker instrument: P(X=1|Z=1)=0.6, P(X=1|Z=0)=0.4 => denom 0.2
+        let eff = instrumental_adjust(0.6, 0.4, ey1, ey0, nx1, nx0).unwrap();
+        // β = 0.30/0.20 = 1.5 — but clamped by base? base = ey1 - β*px1 = 0.55 - 1.5*0.6 = -0.35
+        // do(X=0) = -0.35, do(X=1) = 1.15 — these exceed [0,1] because a unit LATE
+        // of 1.5 is impossible for a binary Y; this is the known Wald limit (it
+        // assumes a *constant* effect, violated here). The test asserts the
+        // arithmetic is faithful, NOT that it stays in [0,1].
+        assert!(approx(eff.do_p_y[1] - eff.do_p_y[0], 1.5), "weak IV => larger β by formula");
+        assert!(!approx(eff.do_p_y[1] - eff.do_p_y[0], 0.375), "β tracks instrument strength");
+    }
+
+    // ── RED (trust boundary): a non-instrument (Z does not shift X) is rejected ──
+    #[test]
+    fn red_instrument_must_shift_x() {
+        let (_, _, ey1, ey0, nx1, nx0) = iv_fixture();
+        // P(X|Z=1) == P(X|Z=0) => Z never moves X => not a valid instrument
+        assert!(instrumental_adjust(0.5, 0.5, ey1, ey0, nx1, nx0).is_err(),
+            "instrument that does not shift X must be rejected");
+    }
+
+    // ── RED (trust boundary): out-of-range inputs rejected ──
+    #[test]
+    fn red_instrumental_malformed_is_rejected() {
+        let (px1, px0, ey1, ey0, nx1, nx0) = iv_fixture();
+        assert!(instrumental_adjust(1.4, px0, ey1, ey0, nx1, nx0).is_err(), "px_z1 in [0,1]");
+        assert!(instrumental_adjust(px1, px0, 1.2, ey0, nx1, nx0).is_err(), "ey_z1 in [0,1]");
+        assert!(instrumental_adjust(px1, px0, ey1, ey0, -0.1, nx0).is_err(), "naive in [0,1]");
     }
 }
