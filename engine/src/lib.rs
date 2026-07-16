@@ -13,6 +13,7 @@
 //!   is plain `f32` arrays so it is).
 
 mod bridge;
+mod field_frame;
 mod loop_;
 mod money_guard;
 mod motion;
