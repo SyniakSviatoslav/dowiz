@@ -90,6 +90,35 @@ pub struct BreachAlert {
     pub group_size: usize,
 }
 
+impl BreachAlert {
+    /// Fixed-layout wire bytes (40 bytes): `node_id (32) || group_size (8, LE)`.
+    /// No serde — the transport layer signs these canonical bytes. The kernel
+    /// stays network/RNG/serde-free; it only produces a carrier-neutral payload.
+    pub fn to_bytes(&self) -> [u8; 40] {
+        let mut b = [0u8; 40];
+        b[..32].copy_from_slice(&self.node_id);
+        b[32..].copy_from_slice(&self.group_size.to_le_bytes());
+        b
+    }
+
+    /// Inverse of [`to_bytes`]. Fails closed (returns `None`) on a truncated/odd
+    /// length so a mangled carrier payload can never deserialize into a valid
+    /// alert (defense against signature-stripping on the wire).
+    pub fn from_bytes(b: &[u8]) -> Option<BreachAlert> {
+        if b.len() != 40 {
+            return None;
+        }
+        let mut node_id = [0u8; 32];
+        node_id.copy_from_slice(&b[..32]);
+        let mut g = [0u8; 8];
+        g.copy_from_slice(&b[32..]);
+        Some(BreachAlert {
+            node_id,
+            group_size: usize::from_le_bytes(g),
+        })
+    }
+}
+
 /// Sentinel actor key for the organism's self-witness breach record. Distinct
 /// from any operator/FSM actor — it marks a kernel-generated WORM evidence row,
 /// not a decision event. Identity only, no authority; lets the owner prove after
@@ -637,6 +666,30 @@ mod tests {
             id,
             "broadcaster witness id matches alert claim"
         );
+    }
+
+    // ── Wire serde is fixed-layout + fails closed on truncation ──────────────
+    // The transport layer signs these 40 bytes; they MUST round-trip exactly and
+    // reject a mangled length (so a signature-stripped frame can't resurrect).
+    #[test]
+    fn breach_alert_bytes_roundtrip_and_reject_bad_len() {
+        let alert = BreachAlert {
+            node_id: [0xABu8; 32],
+            group_size: 7,
+        };
+        let b = alert.to_bytes();
+        assert_eq!(b.len(), 40);
+        let back = BreachAlert::from_bytes(&b).expect("roundtrip");
+        assert_eq!(back.node_id, [0xABu8; 32]);
+        assert_eq!(back.group_size, 7);
+        // Truncated / over-long payloads fail closed (no partial parse).
+        assert!(BreachAlert::from_bytes(&b[..39]).is_none());
+        assert!(BreachAlert::from_bytes(&b).is_some());
+        // Tamper with the length field changes the decoded group_size.
+        let mut tampered = b;
+        tampered[39] ^= 0xFF; // flips high byte of the LE group_size
+        let t = BreachAlert::from_bytes(&tampered).expect("still 40 bytes");
+        assert_ne!(t.group_size, 7, "length-field tamper must change value");
     }
 }
 
