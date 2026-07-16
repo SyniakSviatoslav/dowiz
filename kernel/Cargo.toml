@@ -21,13 +21,12 @@ std = []
 # ride behind this feature (the only one that enables serde) to keep the native
 # build serde-free; neither is part of the canonical order/money core.
 wasm = ["dep:wasm-bindgen", "dep:serde", "dep:serde_json", "dep:serde_yaml"]
-# `pgrust` is the OPTIONAL Postgres SQL adapter boundary for the living-memory
-# store (M4/W4-1). OFF by default so the kernel stays pure-`std` with no
-# network deps; the default `InMemoryStore` is native std-only. This feature is
-# currently EMPTY (no actual pgrust/Postgres dependency yet) — it only gates
-# the `PgStore` trait-boundary stub in `retrieval/memory_store.rs`. A real
-# Postgres dependency + adapter are wired behind this flag later.
-pgrust = []
+# `pgrust` is the OPTIONAL Postgres SQL adapter for the living-memory store
+# (M4/W4-1). OFF by default so the kernel stays pure-`std` with no network
+# deps; the default `InMemoryStore` is native std-only. Behind this flag,
+# `retrieval/memory_store.rs` compiles a REAL sqlx-backed `PgStore` (see its
+# `migrate()` for the explicit, opt-in DDL — never auto-run).
+pgrust = ["dep:sqlx", "dep:tokio"]
 
 [dependencies]
 # WASM bindings — only compiled under the `wasm` feature (see
@@ -40,6 +39,12 @@ wasm-bindgen = { version = "0.2", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
 serde_yaml = { version = "0.9", optional = true }
+# SQL adapter (Postgres) — ONLY compiled under the `pgrust` feature so the
+# default kernel stays pure-`std` / network-free. sqlx 0.8.6 is cached offline;
+# the runtime is Tokio (also gated) to drive the async pool from the
+# synchronous `MemoryStore` trait boundary.
+sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-rustls"], optional = true }
+tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 # Structured telemetry: spans/events over the hot paths (order fold, place_order).
 # Gated to non-wasm so the wasm cdylib stays lean; native/rlib tests get full traces.
 tracing = "0.1"
