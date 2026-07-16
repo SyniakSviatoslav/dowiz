@@ -120,8 +120,24 @@ Full rule, table template, and a worked example → **`docs/operating-model/inte
 
 ## Session/plan closing ritual — the 2-question doubt check (operator, 2026-07-16)
 
-**Before declaring any session, plan, or roadmap done, ask yourself these two questions and write
-down the answers — this is a standing self-audit, not optional when the stakes are non-trivial:**
+**MANDATORY, not optional — at three points, not just at the end (strengthened per operator
+directive 2026-07-16):**
+1. **During planning** — before a roadmap/plan's phase sequence is treated as final, apply the two
+   questions to the *dependency graph itself* (is the order real, or assumed?).
+2. **During research** — before a research/gap-analysis pass's findings are handed to a synthesis
+   step, apply the two questions to the *claims themselves* (verified live, or carried forward from
+   an earlier doc/memory unchecked?).
+3. **During blueprint organization** — before a blueprint is called execution-ready, apply the two
+   questions to the *technology/architecture decisions* it makes (do they hold up against the live
+   codebase and against each other, or does one blueprint's design silently assume something a
+   sibling blueprint's design contradicts?).
+
+A plan that only ran this ritual once, at the very end, has already let stage 1-3 mistakes compound
+into each other by the time it's caught — the G11 fast-path consolidation (2026-07-16) found the
+same class of decision drift the earlier harness-arc consolidation found, precisely because it ran
+this ritual at the blueprint-organization stage, not only at closing.
+
+**The two questions, and how to answer them, are unchanged:**
 
 1. **"What are you least confident about right now?"** List 6-7 concrete things you did not
    properly investigate — gaps you papered over, claims you took from a doc/memory instead of
@@ -201,3 +217,45 @@ git-hook/CI enforcement (e.g. a pre-commit check that a new `docs/design/**/*ROA
 linked DECART section) is a legitimate follow-up, but `.claude/` config is a protected path this session
 does not self-edit — per the standing governance gate-topology rule, that unlock is the operator's own
 `! <cmd>`, not an agent action. Flagged here as the concrete next step if literal enforcement is wanted.
+
+---
+
+## Global doctrine — Anu (logic) & Ananke (organization) (operator, 2026-07-16)
+
+**Honest provenance first, because it matters for how binding this is:** neither term was already
+established in this repo's docs before the operator introduced them. "Ananke" was first proposed in
+a separate governance document (`bebop-repo`'s "The Ananke Principle") with its own explicit
+disclaimer — *"Ananke isn't a term already in [the repo's] docs — this is my proposed reading of the
+word you introduced, offered so you can correct it rather than assume I found something that was
+already written down."* The operator has now extended that reading with a paired term, **Anu**, for
+dowiz specifically. Treat both as **doctrine the operator is establishing now**, not as authority
+being cited — apply them because the operator directed it, not because they are ancient or
+self-evidently correct.
+
+**Anu — logic.** In the reading Ananke's own document already uses (Mesopotamian: the god whose
+domain is decree/authority/order-by-reasoning), Anu governs whether a plan's decisions **follow**:
+does the dependency graph actually hold together when re-derived, not just when drafted? Does a
+technology choice's stated justification survive being checked against the live codebase? Does one
+document's design assumption contradict a sibling document's — and if so, has that contradiction
+been resolved by argument, or merely left standing? **A plan fails Anu when a decision is asserted
+but not derivable from evidence already in front of the agent that made it.**
+
+**Ananke — organization/necessity.** In the reading Ananke's own document already gives: *"anything
+that matters for long-term health should not depend on the maintainer remembering to do it... not
+'well-documented,' not 'the maintainer is disciplined' — structurally inevitable."* Applied to
+planning work specifically: does the plan's own STRUCTURE make good outcomes inevitable (a
+falsifiable done-check that must pass, a DECART report that must exist before a dependency lands, a
+consolidation step that must run before handoff) — or does it only *describe* good outcomes and hope
+they occur? **A plan fails Ananke when its quality depends on a future reader's diligence rather
+than on the plan's own structure forcing the check.**
+
+**The binding instruction**: when developing a plan — roadmap, blueprint, DECART report, or
+consolidation — an agent must check whether its decisions satisfy **both**: is this decision LOGICAL
+(Anu — derivable, checked, not merely asserted) and is this decision ORGANIZED such that the good
+outcome is NECESSARY, not optional (Ananke — structurally enforced, not merely hoped for)? Where a
+decision fails either check, name the failure explicitly (as this session's plans already do via
+`⚠ CORRECTED` / `🔴 flagged, not solved` markers) rather than silently proceeding. This is the same
+discipline the Detailed Planning Protocol above already operationalizes (ground-truth-first = Anu
+applied to claims; falsifiable done-checks + DECART-before-code + consolidation = Ananke applied to
+structure) — Anu and Ananke are the two-word name for why that protocol has the shape it has, not a
+new, separate requirement layered on top of it.
