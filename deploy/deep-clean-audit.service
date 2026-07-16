@@ -1,0 +1,34 @@
+# deep-clean-audit.service — oneshot DRY-RUN hygiene audit (BLUEPRINT-P12 §6).
+#
+# Mirrors the Hermes `deep-clean-weekly-audit` command (`deep-clean-audit.sh`):
+# `deep-clean all` with NO --commit, so it DELETES NOTHING — it only reports what
+# a real run would remove and how much the state.db would reclaim. Triggered
+# weekly by deep-clean-audit.timer.
+#
+# Install (host action, run by the operator — NOT by the agent):
+#   cp deploy/deep-clean-audit.service deploy/deep-clean-audit.timer /etc/systemd/system/ \
+#     && systemctl daemon-reload && systemctl enable --now deep-clean-audit.timer
+
+[Unit]
+Description=deep-clean — weekly DRY-RUN hygiene audit (no deletion)
+Documentation=https://github.com/dowiz/dowiz/tools/deep-clean
+
+[Service]
+Type=oneshot
+# NO --commit == dry-run: reports would-remove targets + would-reclaim bytes only.
+ExecStart=/usr/local/bin/deep-clean all
+# Even a dry-run appends to the JSONL audit log under /root/.backups/clean-log,
+# so it keeps the same filesystem reach + relaxations as deep-clean.service.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/root /tmp
+ProtectHome=no
+PrivateTmp=no
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+MemoryDenyWriteExecute=yes
+
+[Install]
+# Pulled in by deep-clean-audit.timer; nothing to enable directly.

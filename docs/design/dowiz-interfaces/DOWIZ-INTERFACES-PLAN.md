@@ -195,6 +195,13 @@ geolocation feed (courier marker kinematics). Жоден не існує сьо�
 - **Event-log локально** (дух pgrust = Rust-native infrastructure): kernel event-sourced core уже є; персистити
   event-log client-side (OPFS+SQLite-WASM браузер / native SQLite rusqlite — вже bundled у server crate) і
   **replay `fold_transitions` на завантаженні** реконструює канонічний стан без round-trip.
+  - > ⚠ CORRECTED (operator, 2026-07-16): dowiz does NOT use SQLite as an architectural choice. The spectral/sqlless
+    > approach — content-addressed `BlockStore` + JSONL `FileEventStore` (`kernel/src/backup.rs`, `kernel/src/event_log.rs`)
+    > — is the MAIN storage/retrieval path in dowiz's own kernel/engine, with **pgrust as the uniform SQL-fallback/backup
+    > target, not SQLite**. The `OPFS+SQLite-WASM браузер / native SQLite rusqlite` phrasing here (and the recap
+    > "local-first OPFS-SQLite" in §"Головні числа" below) is superseded: the client event-log persists via the
+    > content-addressed BlockStore + JSONL event-log pattern over OPFS (a pgrust-backed table only if the shape is
+    > genuinely relational), replayed by `fold_transitions` — never SQLite-WASM/rusqlite as the store engine.
 - **Меню/scene-graph/cart/order-in-progress** = 100% локальні, резидентні в пам'яті, field читає щотіка
   (money-поле, well-глибини).
 - **Сервер = async out-of-band sync peer**, не render-dependency: submission/payment/dispatch за **outbox**,

@@ -112,4 +112,39 @@ mod tests {
         let sb: Vec<String> = b.iter().map(|x| format!("{:.17e}", x)).collect();
         assert_eq!(sa.join(","), sb.join(","), "PPR byte serialization differs");
     }
+
+    #[test]
+    fn ppr_survives_serialize_reread_boundary() {
+        // Hermetic-audit Cause-and-Effect Finding B (quick-win #19): the tests above only ever
+        // compare two live values within the same test-function call stack — they never actually
+        // cross a serialization boundary, so a reproducibility claim wider than that (e.g. "safe to
+        // persist and reload") is unearned. This test writes the score vector to a real file,
+        // re-reads it in a fresh read, re-parses it, and compares against an INDEPENDENTLY fresh
+        // computation (not the cached first `Vec<f64>`) — the actual gap the finding names.
+        let ppr = line_graph(20);
+        let computed = ppr.rank(3, 0.15, 20);
+        let serialized: String = computed
+            .iter()
+            .map(|x| format!("{:.17e}", x))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let path = std::env::temp_dir()
+            .join(format!("ppr_reread_test_{}.txt", std::process::id()));
+        std::fs::write(&path, &serialized).expect("write serialized ppr scores");
+        let reread = std::fs::read_to_string(&path).expect("re-read serialized ppr scores");
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(reread, serialized, "byte content did not survive a disk round-trip");
+
+        let reparsed: Vec<f64> = reread
+            .split(',')
+            .map(|s| s.parse::<f64>().expect("reparse f64"))
+            .collect();
+        let fresh = ppr.rank(3, 0.15, 20); // independently recomputed, not the cached `computed`
+        assert_eq!(
+            reparsed, fresh,
+            "value re-read from disk does not match an independently fresh computation"
+        );
+    }
 }

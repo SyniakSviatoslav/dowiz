@@ -171,12 +171,16 @@ these clusters gate each other.
   quorum-intersection (two signed quorums `Q_A, Q_B` at `n > 3f` must overlap
   in one honest node, which can't have signed two different finalizations for
   the same `(order, epoch)` without contradiction).
-- **Files touched:** new `eqc-proofs/i_final.rs` (or equivalent) alongside the
-  existing `eqc-proofs/lambda_max_of_d.rs` pattern; bebop2 certificate
-  verification path it constrains.
+- **Files touched:** new `i_final.rs` in **`/root/bebop-repo/rust-core/eqc-proofs/`**
+  (⚠ CORRECTED 2026-07-16, Hermetic-audit Mentalism F2 / `HERMETIC-ARCHITECTURE-PRINCIPLES.md`
+  row #13: this directory does not exist anywhere in dowiz — `find`/`grep` return zero hits in this
+  repo; the existing `lambda_max_of_d.rs` this line references lives in bebop-repo, consistent with
+  I-FINAL itself being bebop2 mesh consensus, per the dependency note below and per
+  `BLUEPRINT-P02-canon-repair-operator-decisions.md` O19's independently-reached same recommendation);
+  bebop2 certificate verification path it constrains.
 - **Why P0:** cheap first step (a proof sketch, not a rewrite), continues the
   project's own established VERIFIED-BY-MATH discipline exactly the way
-  `lambda_max_of_d` already does.
+  `lambda_max_of_d.rs` (bebop-repo) already does.
 - **Acceptance criteria:** self-asserting harness compiles and runs, asserting
   the quorum-intersection contradiction is unreachable given `n > 3f`.
 - **Dependencies:** none; independent of P0-A4 despite both touching

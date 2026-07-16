@@ -174,6 +174,8 @@ drains online). ENV signals: `navigator.onLine` listener (field syncs vs pure-lo
 open-hours model (Settings working-hours → ambient Море brightness/dormancy, closed=calm dark), geolocation
 feed (courier marker kinematics = field flow along route). Reconcile supplies localStorage → event-log.
 
+> ⚠ CORRECTED (operator, 2026-07-16): the **TARGET** above previously named `OPFS+SQLite-WASM браузер / native SQLite` as the event-log store. dowiz does NOT use SQLite as an architectural choice. The spectral/sqlless approach — content-addressed `BlockStore` + JSONL `FileEventStore` (`kernel/src/backup.rs`, `kernel/src/event_log.rs`) — is the MAIN storage/retrieval path in dowiz's own kernel/engine, with **pgrust as the uniform SQL-fallback/backup target, not SQLite**. Corrected TARGET: the local event-log persists via the content-addressed BlockStore + JSONL event-log pattern over OPFS (a pgrust-backed table only if the shape is genuinely relational), replayed by `fold_transitions` on load — never SQLite-WASM/native-SQLite as the engine.
+
 **GATE:** offline → pure-local render (RED: server call); reload → replay reconstructs state; closed-hours →
 Море calm dark; GPS → courier field flow.
 

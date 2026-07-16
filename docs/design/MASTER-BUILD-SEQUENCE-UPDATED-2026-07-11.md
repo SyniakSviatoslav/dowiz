@@ -72,6 +72,11 @@
 - Protocol production: R node (`dowiz-node` single-writer sequencer = kernel::decide-bypass fix),
   X settlement/dispute (COD ledger, counter-signed handoffs, NO courier scoring — CI-enforced).
 - Migration ladder P2→P4 (SQLite replica → device-authoritative → money single-writer).
+  - > ⚠ CORRECTED (operator, 2026-07-16): the P2 "SQLite replica" stage names SQLite as the replica engine. dowiz does
+    > NOT use SQLite as an architectural choice — the spectral/sqlless approach (content-addressed `BlockStore` + JSONL
+    > `FileEventStore`) is the MAIN storage/retrieval path in dowiz's own kernel/engine, with **pgrust as the uniform
+    > SQL-fallback/backup target, not SQLite**. Corrected ladder: the P2 replica is a **pgrust replica** (or the sqlless
+    > content-addressed store) → device-authoritative → money single-writer.
 - Channel registry + sync-CRDT menu lane (price always vendor-signed).
 - Reliability gate LD0–LD11 GO before any venue cutover.
 
