@@ -4,8 +4,8 @@
 //! and cheap to hash/compare. Living-memory note names are ASCII, so byte
 //! trigrams are exact.
 
-use std::collections::HashMap;
 use regex::Regex;
+use std::collections::HashMap;
 
 /// A 3-byte key. `[u8;3]` is `Copy` + `Hash` + `Ord` ⇒ deterministic map keys.
 pub type Trigram = [u8; 3];
@@ -36,8 +36,19 @@ pub fn literal_trigrams(pattern: &str) -> Vec<Trigram> {
     for &c in b {
         let is_meta = matches!(
             c,
-            b'*' | b'+' | b'?' | b'(' | b')' | b'[' | b']' | b'{' | b'}' | b'|' | b'^' | b'$'
-                | b'.' | b'\\'
+            b'*' | b'+'
+                | b'?'
+                | b'('
+                | b')'
+                | b'['
+                | b']'
+                | b'{'
+                | b'}'
+                | b'|'
+                | b'^'
+                | b'$'
+                | b'.'
+                | b'\\'
         );
         if is_meta {
             if !cur.is_empty() {

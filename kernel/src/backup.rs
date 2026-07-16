@@ -243,7 +243,10 @@ mod tests {
 
         // A is the first backup → nothing deduped yet.
         assert_eq!(stats_a.deduped_blocks, 0);
-        assert!(stats_a.new_blocks > 3, "file A should chunk into many blocks");
+        assert!(
+            stats_a.new_blocks > 3,
+            "file A should chunk into many blocks"
+        );
 
         // B shares almost all of A's blocks: dedup ratio must exceed 0.90.
         let ratio = stats_b.dedup_ratio();

@@ -224,7 +224,12 @@ impl CGraph {
                 parents[i] = self.parents[i].clone();
             }
         }
-        CGraph { n: self.n, parents, bidirected, present: self.present.clone() }
+        CGraph {
+            n: self.n,
+            parents,
+            bidirected,
+            present: self.present.clone(),
+        }
     }
 
     /// `G\\\\X` — delete `X` and all edges (directed or bidirected) incident to any
@@ -243,14 +248,23 @@ impl CGraph {
                 continue;
             }
             present[i] = true;
-            parents[i] = self.parents[i].iter().copied().filter(|&p| !removed[p]).collect();
+            parents[i] = self.parents[i]
+                .iter()
+                .copied()
+                .filter(|&p| !removed[p])
+                .collect();
             bidirected[i] = self.bidirected[i]
                 .iter()
                 .copied()
                 .filter(|&b| !removed[b])
                 .collect();
         }
-        CGraph { n: self.n, parents, bidirected, present }
+        CGraph {
+            n: self.n,
+            parents,
+            bidirected,
+            present,
+        }
     }
 
     /// `G[V]` — restrict to node set `V` (node indices preserved). All edges
@@ -266,10 +280,23 @@ impl CGraph {
         let mut present = vec![false; self.n];
         for &i in v {
             present[i] = true;
-            parents[i] = self.parents[i].iter().copied().filter(|&p| keep[p]).collect();
-            bidirected[i] = self.bidirected[i].iter().copied().filter(|&b| keep[b]).collect();
+            parents[i] = self.parents[i]
+                .iter()
+                .copied()
+                .filter(|&p| keep[p])
+                .collect();
+            bidirected[i] = self.bidirected[i]
+                .iter()
+                .copied()
+                .filter(|&b| keep[b])
+                .collect();
         }
-        CGraph { n: self.n, parents, bidirected, present }
+        CGraph {
+            n: self.n,
+            parents,
+            bidirected,
+            present,
+        }
     }
 
     /// In `G\X`, is `a` d-separated from `b` given `given`? Bidirected-aware
@@ -475,7 +502,12 @@ impl CGraph {
                 bidirected[i].push(bd);
             }
         }
-        let g = CGraph { n: self.n, parents, bidirected, present };
+        let g = CGraph {
+            n: self.n,
+            parents,
+            bidirected,
+            present,
+        };
         g.d_separated_raw(a, b, given)
     }
 
@@ -540,7 +572,10 @@ mod tests {
         let comps = g.c_components();
         // Exactly two c-components: {0,1} and {2}.
         assert_eq!(comps.len(), 2, "two c-components");
-        let pair = comps.iter().find(|c| c.len() == 2).expect("a 2-node c-comp");
+        let pair = comps
+            .iter()
+            .find(|c| c.len() == 2)
+            .expect("a 2-node c-comp");
         assert_eq!(pair, &vec![0, 1], "the confounded pair {{0,1}}");
     }
 
@@ -565,10 +600,22 @@ mod tests {
         // Symmetrically for conditioning on 1. The pair is therefore d-connected
         // under EVERY non-trivial conditioning set — this non-separability is
         // precisely why {0,1} is ONE c-component.
-        assert!(!g.d_separated_raw(0, 1, &[]).unwrap(), "bidirected 0↔1 d-connected (empty)");
-        assert!(!g.d_separated_raw(0, 1, &[2]).unwrap(), "conditioning on collider child keeps 0,1 connected");
-        assert!(!g.d_separated_raw(0, 1, &[0]).unwrap(), "conditioning on 0 opens collider via descendant 2 — still connected");
-        assert!(!g.d_separated_raw(0, 1, &[1]).unwrap(), "conditioning on 1 opens collider via descendant 2 — still connected");
+        assert!(
+            !g.d_separated_raw(0, 1, &[]).unwrap(),
+            "bidirected 0↔1 d-connected (empty)"
+        );
+        assert!(
+            !g.d_separated_raw(0, 1, &[2]).unwrap(),
+            "conditioning on collider child keeps 0,1 connected"
+        );
+        assert!(
+            !g.d_separated_raw(0, 1, &[0]).unwrap(),
+            "conditioning on 0 opens collider via descendant 2 — still connected"
+        );
+        assert!(
+            !g.d_separated_raw(0, 1, &[1]).unwrap(),
+            "conditioning on 1 opens collider via descendant 2 — still connected"
+        );
     }
 
     // ── RED (trust boundary): malformed graph rejected, never panic ──
@@ -584,11 +631,7 @@ mod tests {
             vec![vec![1], vec![], vec![]], // asymmetric bidirected (0↔1, 1 missing 0)
         )
         .is_ok()); // symmetry is enforced, not required at input
-        // reflexive bidirected rejected
-        assert!(CGraph::new(
-            vec![vec![], vec![], vec![]],
-            vec![vec![0], vec![], vec![]],
-        )
-        .is_err());
+                   // reflexive bidirected rejected
+        assert!(CGraph::new(vec![vec![], vec![], vec![]], vec![vec![0], vec![], vec![]],).is_err());
     }
 }

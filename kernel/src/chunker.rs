@@ -52,7 +52,9 @@ impl Chunker {
             h ^= i as u64;
             h = h.wrapping_mul(0x100000001b3);
             // spread the bits so low-order cuts still vary
-            table[i] = h.rotate_left((i % 47) as u32).wrapping_mul(0x9e3779b97f4a7c15);
+            table[i] = h
+                .rotate_left((i % 47) as u32)
+                .wrapping_mul(0x9e3779b97f4a7c15);
         }
         let mask = if bits == 0 { 0 } else { (1u64 << bits) - 1 };
         Chunker {
@@ -138,7 +140,9 @@ mod tests {
         let mut x: u64 = 0x1234_5678_9abc_def0;
         (0..n)
             .map(|_| {
-                x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                x = x
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
                 (x >> 33) as u8
             })
             .collect()

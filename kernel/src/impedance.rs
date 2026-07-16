@@ -22,8 +22,8 @@ pub fn reflection_coefficient(rho: f64, k: f64) -> f64 {
     }
     let r = rho.min(1.0);
     let burst = k.max(1.0); // burstiness ≥ 1 (k<1 clamped); worse ⇒ more reflection
-    // ρ²·burstiness: light load ⇒ small (ρ=0.3 → 0.09), saturation ⇒ →1
-    // (ρ→1, burst=1 ⇒ 1), burstiness amplifies a moderate load. Bounded <1.
+                            // ρ²·burstiness: light load ⇒ small (ρ=0.3 → 0.09), saturation ⇒ →1
+                            // (ρ→1, burst=1 ⇒ 1), burstiness amplifies a moderate load. Bounded <1.
     (r * r * burst).min(0.99999)
 }
 

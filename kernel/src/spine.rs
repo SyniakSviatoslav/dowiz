@@ -126,7 +126,9 @@ pub struct KnowledgeSpine {
 impl KnowledgeSpine {
     /// A fresh, empty spine (no records, genesis link pending).
     pub fn new() -> Self {
-        Self { records: Vec::new() }
+        Self {
+            records: Vec::new(),
+        }
     }
 
     /// Number of records currently in the chain.
@@ -147,12 +149,8 @@ impl KnowledgeSpine {
             Some(tip) => tip.record_hash,
             None => GENESIS_PREV,
         };
-        let record_hash = compute_record_hash(
-            &pending.id,
-            pending.kind,
-            &pending.payload_hash,
-            &prev_hash,
-        );
+        let record_hash =
+            compute_record_hash(&pending.id, pending.kind, &pending.payload_hash, &prev_hash);
         let record = SpineRecord {
             id: pending.id,
             kind: pending.kind,
@@ -259,7 +257,10 @@ mod tests {
         let rec = spine.records_mut_for_test().get_mut(1).unwrap();
         rec.payload_hash = tampered;
 
-        assert!(!spine.verify_chain(), "tampered payload must fail verification");
+        assert!(
+            !spine.verify_chain(),
+            "tampered payload must fail verification"
+        );
     }
 
     #[test]

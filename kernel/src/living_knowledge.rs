@@ -122,6 +122,25 @@ impl LivingKnowledge for SubprocessLivingKnowledge {
     }
 }
 
+/// W18 — std-only PRIMARY recall delegation from `living_knowledge` into the
+/// kernel-owned recall path.
+///
+/// The (formerly JS-stranded) `living_knowledge` recall loop no longer shells
+/// out to the purged JS engine: this thin wrapper delegates to the deterministic,
+/// std-only BM25+trigram fusion in `crate::retrieval::recall` (the PRIMARY recall
+/// source). No JS, no network. `doc_id` is `lk:<position>` into the kernel
+/// fixture corpus. This is the `recall_at_k` surface the blueprint requires
+/// `living_knowledge` to expose; the real ranking work lives in `retrieval::recall`.
+pub fn recall_at_k(query: &str, k: usize) -> Vec<(String, f64)> {
+    crate::retrieval::recall::recall_at_k(query, k)
+}
+
+/// W18 — build the `LivingKnowledge`-implementing PRIMARY recall adapter backed
+/// by the kernel-owned std-only recall path (not the node subprocess bridge).
+pub fn primary_recall_adapter() -> crate::retrieval::recall::PrimaryRecall {
+    crate::retrieval::recall::PrimaryRecall::new()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -189,22 +208,34 @@ mod tests {
         }
         // RED→GREEN: a lexical query "pricing" must rank docs/pricing.md first.
         let lk = SubprocessLivingKnowledge::new(corpus(), Some(bridge_cmd()));
-        let hits = lk.retrieve("pricing", 3).expect("bridge retrieval must succeed");
+        let hits = lk
+            .retrieve("pricing", 3)
+            .expect("bridge retrieval must succeed");
         assert!(!hits.is_empty(), "expected at least one hit");
-        assert_eq!(hits[0].id, "docs/pricing.md", "lexical query must surface pricing doc");
+        assert_eq!(
+            hits[0].id, "docs/pricing.md",
+            "lexical query must surface pricing doc"
+        );
     }
 
     #[test]
     fn adapter_is_fail_closed_on_empty_query() {
         let lk = SubprocessLivingKnowledge::new(corpus(), Some(bridge_cmd()));
-        assert!(lk.retrieve("   ", 3).is_err(), "empty query must error (fail-closed)");
+        assert!(
+            lk.retrieve("   ", 3).is_err(),
+            "empty query must error (fail-closed)"
+        );
     }
 
     #[test]
     fn adapter_is_fail_closed_on_missing_bridge() {
         // Point at a command that does not exist → must error, never return empty OK.
-        let lk = SubprocessLivingKnowledge::new(corpus(), Some("this_bridge_does_not_exist_xyz".into()));
-        assert!(lk.retrieve("pricing", 3).is_err(), "missing bridge must error (fail-closed)");
+        let lk =
+            SubprocessLivingKnowledge::new(corpus(), Some("this_bridge_does_not_exist_xyz".into()));
+        assert!(
+            lk.retrieve("pricing", 3).is_err(),
+            "missing bridge must error (fail-closed)"
+        );
     }
 
     // ── Un-stranding the spike engine's BM25 capability into the kernel (W2-6) ──
@@ -254,8 +285,8 @@ mod tests {
 
     #[test]
     fn kernel_bm25_recall_at_5_is_one_point_zero() {
-        use crate::retrieval::bm25::{Bm25, Document};
         use crate::csr::recall_at_k;
+        use crate::retrieval::bm25::{Bm25, Document};
 
         let corpus = lk_fixture_corpus();
         let docs: Vec<Document> = corpus.iter().map(|s| Document::from_text(s)).collect();
@@ -280,7 +311,10 @@ mod tests {
             );
         }
         let mean = total / oracle.len() as f64;
-        assert_eq!(mean, 1.0, "mean recall@5 over the living-knowledge oracle must be 1.0");
+        assert_eq!(
+            mean, 1.0,
+            "mean recall@5 over the living-knowledge oracle must be 1.0"
+        );
         println!(
             "[living_knowledge] in-kernel BM25 recall@5={:.3} over {} oracle queries (spike capability un-stranded)",
             mean, oracle.len()

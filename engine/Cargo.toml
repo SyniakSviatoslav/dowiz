@@ -22,5 +22,12 @@ dowiz-kernel = { path = "../kernel" }
 [features]
 # default = offline-clean. GPU/wasm glue is opt-in so CI never pulls a GPU/JS toolchain.
 default = []
+# GPU upload sink (W20). EMPTY by design: `wgpu` is absent from the cargo cache
+# and every Cargo.lock (verified 2026-07-16), so adding it would break the
+# air-gapped offline build. The flag exists so the boundary is real; the real
+# adapter is an honest `Err("gpu adapter not built — wgpu uncached")` stub
+# (engine/src/bridge.rs::gpu::new_gpu). When `cargo add wgpu` succeeds (network),
+# implement the real `wgpu::Device`/`Queue` sink here and flip new_gpu to build it.
+gpu = []
 
 [dev-dependencies]

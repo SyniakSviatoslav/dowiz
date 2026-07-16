@@ -27,7 +27,6 @@
 
 use super::bm25::{Bm25, Document};
 use super::index::TrigramIndex;
-use crate::csr::recall_at_k;
 
 /// One oracle query: the natural-language question + the doc-id(s) that the
 /// fixture corpus declares relevant (the "ground truth" the spike's oracle
@@ -74,18 +73,54 @@ const FIXTURE_CORPUS: &[&str] = &[
 /// Paraphrased (not keyword-copied) so the test proves genuine lexical recall,
 /// not string equality — mirroring the spike's paraphrase-hard oracle.
 const ORACLE: &[Oracle] = &[
-    Oracle { query: "how is the order total calculated", relevant: &[0] },
-    Oracle { query: "when does the package get delivered", relevant: &[1] },
-    Oracle { query: "can i get my money back", relevant: &[2] },
-    Oracle { query: "where are product prices defined", relevant: &[3] },
-    Oracle { query: "how does exact substring search work", relevant: &[4] },
-    Oracle { query: "what ranks documents by word frequency", relevant: &[5] },
-    Oracle { query: "which algorithm measures node importance in a graph", relevant: &[6] },
-    Oracle { query: "how do related memories get surfaced", relevant: &[7] },
-    Oracle { query: "why do old notes lose weight", relevant: &[8] },
-    Oracle { query: "how is stored memory made smaller", relevant: &[9] },
-    Oracle { query: "how are embeddings compressed", relevant: &[10] },
-    Oracle { query: "what tracks information gain of improvements", relevant: &[11] },
+    Oracle {
+        query: "how is the order total calculated",
+        relevant: &[0],
+    },
+    Oracle {
+        query: "when does the package get delivered",
+        relevant: &[1],
+    },
+    Oracle {
+        query: "can i get my money back",
+        relevant: &[2],
+    },
+    Oracle {
+        query: "where are product prices defined",
+        relevant: &[3],
+    },
+    Oracle {
+        query: "how does exact substring search work",
+        relevant: &[4],
+    },
+    Oracle {
+        query: "what ranks documents by word frequency",
+        relevant: &[5],
+    },
+    Oracle {
+        query: "which algorithm measures node importance in a graph",
+        relevant: &[6],
+    },
+    Oracle {
+        query: "how do related memories get surfaced",
+        relevant: &[7],
+    },
+    Oracle {
+        query: "why do old notes lose weight",
+        relevant: &[8],
+    },
+    Oracle {
+        query: "how is stored memory made smaller",
+        relevant: &[9],
+    },
+    Oracle {
+        query: "how are embeddings compressed",
+        relevant: &[10],
+    },
+    Oracle {
+        query: "what tracks information gain of improvements",
+        relevant: &[11],
+    },
 ];
 
 /// Build the kernel-side BM25+trigram fusion over the fixture corpus.
@@ -96,7 +131,10 @@ const ORACLE: &[Oracle] = &[
 /// We score `max(candidates, all)` via BM25 and rank — combining the spike's
 /// exact-narrow + lexical-rank in one pure-`std` path.
 fn build_fusion() -> (Bm25, TrigramIndex) {
-    let docs: Vec<Document> = FIXTURE_CORPUS.iter().map(|s| Document::from_text(s)).collect();
+    let docs: Vec<Document> = FIXTURE_CORPUS
+        .iter()
+        .map(|s| Document::from_text(s))
+        .collect();
     let bm = Bm25::new(docs);
     let idx = TrigramIndex::new(&FIXTURE_CORPUS);
     (bm, idx)
@@ -154,6 +192,98 @@ fn fusion_rank(bm: &Bm25, idx: &TrigramIndex, query: &str) -> Vec<usize> {
     ranked
 }
 
+/// PRIMARY recall source for the self-improvement loop (W18).
+///
+/// Un-strands the living-knowledge lexical capability into the kernel: a
+/// deterministic, std-only BM25 + trigram fusion over the kernel-owned fixture
+/// corpus (`FIXTURE_CORPUS`). This is the recall path the (wasm-gated)
+/// `living_knowledge` adapter delegates to instead of the purged JS engine —
+/// see `crate::living_knowledge` and `retrieval/mod.rs`.
+pub struct PrimaryRecall {
+    bm: Bm25,
+    idx: TrigramIndex,
+    ids: Vec<String>,
+}
+
+impl PrimaryRecall {
+    /// Build the PRIMARY recall source over the kernel-owned fixture corpus.
+    pub fn new() -> Self {
+        let docs: Vec<Document> = FIXTURE_CORPUS
+            .iter()
+            .map(|s| Document::from_text(s))
+            .collect();
+        let bm = Bm25::new(docs);
+        let idx = TrigramIndex::new(&FIXTURE_CORPUS);
+        let ids = (0..FIXTURE_CORPUS.len())
+            .map(|i| format!("lk:{}", i))
+            .collect();
+        PrimaryRecall { bm, idx, ids }
+    }
+
+    /// Deterministic recall@k — the PRIMARY recall API (acceptance W18.1).
+    ///
+    /// Ranks the corpus for `query` via the BM25+trigram fusion and returns the
+    /// top-`k` as `(doc_id, score)` pairs, descending by score, tie-broken by
+    /// ascending doc-id. No JS, no float nondeterminism (the BM25 ranker fixes
+    /// its term-summation order). `doc_id` is `lk:<position>` into
+    /// `FIXTURE_CORPUS`.
+    pub fn recall_at_k(&self, query: &str, k: usize) -> Vec<(String, f64)> {
+        let ranked = fusion_rank(&self.bm, &self.idx, query);
+        let tokens = super::bm25::tokenize(query);
+        let hits = self.bm.rank(&tokens);
+        let score_of = |id: usize| -> f64 {
+            hits.iter()
+                .find(|h| h.doc_id == id)
+                .map(|h| h.score)
+                .unwrap_or(0.0)
+        };
+        ranked
+            .into_iter()
+            .take(k)
+            .map(|id| (self.ids[id].clone(), score_of(id)))
+            .collect()
+    }
+}
+
+impl Default for PrimaryRecall {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Lazy-initialized PRIMARY recall instance — the shared kernel recall source.
+static PRIMARY: std::sync::OnceLock<PrimaryRecall> = std::sync::OnceLock::new();
+
+fn primary() -> &'static PrimaryRecall {
+    PRIMARY.get_or_init(PrimaryRecall::new)
+}
+
+/// PRIMARY recall entry point used by the self-improvement loop (W18.2).
+///
+/// Thin, deterministic, std-only wrapper over [`PrimaryRecall::recall_at_k`]
+/// (kernel-owned BM25+trigram fusion). The (wasm-gated) `living_knowledge`
+/// adapter delegates its lexical recall here. No JS, no network.
+pub fn recall_at_k(query: &str, k: usize) -> Vec<(String, f64)> {
+    primary().recall_at_k(query, k)
+}
+
+/// W18 — the kernel-owned PRIMARY recall source is the lexical half of the
+/// `living_knowledge` recall path. Under the `wasm` feature, the
+/// `living_knowledge::LivingKnowledge` adapter is implemented for
+/// [`PrimaryRecall`] so the (formerly JS-stranded) recall loop runs through
+/// this deterministic, std-only Rust path. `living_knowledge` therefore has a
+/// real, non-test consumer inside `retrieval` (registration in `mod.rs`).
+#[cfg(feature = "wasm")]
+impl crate::living_knowledge::LivingKnowledge for PrimaryRecall {
+    fn retrieve(&self, query: &str, k: usize) -> Result<Vec<crate::living_knowledge::Hit>, String> {
+        Ok(self
+            .recall_at_k(query, k)
+            .into_iter()
+            .map(|(id, score)| crate::living_knowledge::Hit { id, score })
+            .collect())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -183,7 +313,7 @@ mod tests {
             for (pos, &id) in ranked.iter().enumerate() {
                 scores[id] = (ranked.len() - pos) as f64;
             }
-            let r = recall_at_k(&scores, o.relevant, k);
+            let r = crate::csr::recall_at_k(&scores, o.relevant, k);
             per_query.push((o.query.to_string(), r));
             total_recall += r;
             assert_eq!(

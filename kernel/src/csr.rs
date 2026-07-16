@@ -325,7 +325,11 @@ impl Csr {
             }
             LaplacianKind::Normalized => {
                 for i in 0..n {
-                    let inv_i = if deg[i] > 0.0 { deg[i].sqrt().recip() } else { 0.0 };
+                    let inv_i = if deg[i] > 0.0 {
+                        deg[i].sqrt().recip()
+                    } else {
+                        0.0
+                    };
                     let mut acc = x[i];
                     let (s, e) = (self.row_ptr[i], self.row_ptr[i + 1]);
                     for k in s..e {
@@ -648,9 +652,12 @@ mod tests {
     fn csr_energy_matches_spectral_k3() {
         // K3 as undirected edges (both directions).
         let edges = [
-            (0, 1, 1.0), (1, 0, 1.0),
-            (1, 2, 1.0), (2, 1, 1.0),
-            (0, 2, 1.0), (2, 0, 1.0),
+            (0, 1, 1.0),
+            (1, 0, 1.0),
+            (1, 2, 1.0),
+            (2, 1, 1.0),
+            (0, 2, 1.0),
+            (2, 0, 1.0),
         ];
         let g = Csr::from_edges(3, &edges);
         assert!(close(g.energy(), 4.0, 1e-6), "Csr::energy(K3)=4");
@@ -687,9 +694,12 @@ mod tests {
     #[test]
     fn laplacian_spmv_triangle_matches_hand_and_conserves() {
         let edges = [
-            (0usize, 1, 1.0), (1, 0, 1.0),
-            (1, 2, 1.0), (2, 1, 1.0),
-            (0, 2, 1.0), (2, 0, 1.0),
+            (0usize, 1, 1.0),
+            (1, 0, 1.0),
+            (1, 2, 1.0),
+            (2, 1, 1.0),
+            (0, 2, 1.0),
+            (2, 0, 1.0),
         ];
         let g = Csr::from_edges(3, &edges);
         let x = [0.1, 0.4, 0.9];
@@ -702,7 +712,10 @@ mod tests {
         assert!(close(y_un[2], 1.3, 1e-12), "unnormalized y2 = {}", y_un[2]);
         // Mass/momentum conservation: Σ y == 0 (rows of L sum to 0).
         let sum_un: f64 = y_un.iter().sum();
-        assert!(close(sum_un, 0.0, 1e-12), "unnormalized Σy = {sum_un} (must be 0)");
+        assert!(
+            close(sum_un, 0.0, 1e-12),
+            "unnormalized Σy = {sum_un} (must be 0)"
+        );
 
         // ── Random-walk normalized L = I − D⁻¹A ──
         let mut y_rw = [0.0; 3];
@@ -711,7 +724,10 @@ mod tests {
         assert!(close(y_rw[1], -0.1, 1e-12), "randomwalk y1 = {}", y_rw[1]);
         assert!(close(y_rw[2], 0.65, 1e-12), "randomwalk y2 = {}", y_rw[2]);
         let sum_rw: f64 = y_rw.iter().sum();
-        assert!(close(sum_rw, 0.0, 1e-12), "randomwalk Σy = {sum_rw} (must be 0)");
+        assert!(
+            close(sum_rw, 0.0, 1e-12),
+            "randomwalk Σy = {sum_rw} (must be 0)"
+        );
 
         // ── Symmetric normalized L = I − D⁻¹/² A D⁻¹/² (regular ⇒ == randomwalk) ──
         let mut y_n = [0.0; 3];
@@ -722,7 +738,10 @@ mod tests {
         // On a regular graph the symmetric normalized Laplacian has rows summing
         // to 0 too ⇒ conserved.
         let sum_n: f64 = y_n.iter().sum();
-        assert!(close(sum_n, 0.0, 1e-12), "normalized Σy = {sum_n} (regular ⇒ 0)");
+        assert!(
+            close(sum_n, 0.0, 1e-12),
+            "normalized Σy = {sum_n} (regular ⇒ 0)"
+        );
     }
 
     // ── W2-2 GREEN: constant field x = 1 ⇒ L·1 = 0 for ANY graph (strong
@@ -732,22 +751,25 @@ mod tests {
     #[test]
     fn laplacian_spmv_constant_field_conserved_nonregular() {
         // Path 0—1—2 with degrees 1,2,1 (non-regular).
-        let edges = [
-            (0usize, 1, 1.0), (1, 0, 1.0),
-            (1, 2, 1.0), (2, 1, 1.0),
-        ];
+        let edges = [(0usize, 1, 1.0), (1, 0, 1.0), (1, 2, 1.0), (2, 1, 1.0)];
         let g = Csr::from_edges(3, &edges);
         let x = [1.0, 1.0, 1.0];
 
         let mut y_un = [0.0; 3];
         g.laplacian_spmv(&x, &mut y_un, LaplacianKind::Unnormalized);
         let s_un: f64 = y_un.iter().sum();
-        assert!(close(s_un, 0.0, 1e-12), "path L·1 (unnormalized) = {s_un}, want 0");
+        assert!(
+            close(s_un, 0.0, 1e-12),
+            "path L·1 (unnormalized) = {s_un}, want 0"
+        );
 
         let mut y_rw = [0.0; 3];
         g.laplacian_spmv(&x, &mut y_rw, LaplacianKind::RandomWalk);
         let s_rw: f64 = y_rw.iter().sum();
-        assert!(close(s_rw, 0.0, 1e-12), "path L·1 (randomwalk) = {s_rw}, want 0");
+        assert!(
+            close(s_rw, 0.0, 1e-12),
+            "path L·1 (randomwalk) = {s_rw}, want 0"
+        );
     }
 
     // ── W2-2 GREEN: equivalence against a hand-built dense Laplacian on the
@@ -755,19 +777,18 @@ mod tests {
     #[test]
     fn laplacian_spmv_equals_dense_laplacian_matrix() {
         let edges = [
-            (0usize, 1, 1.0), (1, 0, 1.0),
-            (1, 2, 1.0), (2, 1, 1.0),
-            (0, 2, 1.0), (2, 0, 1.0),
+            (0usize, 1, 1.0),
+            (1, 0, 1.0),
+            (1, 2, 1.0),
+            (2, 1, 1.0),
+            (0, 2, 1.0),
+            (2, 0, 1.0),
         ];
         let g = Csr::from_edges(3, &edges);
         let x = [0.3, 0.7, 0.2];
         // Dense L = D − A for the triangle (degrees 2):
         //   L = [[2,-1,-1],[-1,2,-1],[-1,-1,2]]
-        let l = [
-            [2.0, -1.0, -1.0],
-            [-1.0, 2.0, -1.0],
-            [-1.0, -1.0, 2.0],
-        ];
+        let l = [[2.0, -1.0, -1.0], [-1.0, 2.0, -1.0], [-1.0, -1.0, 2.0]];
         let mut dense = [0.0; 3];
         for i in 0..3 {
             dense[i] = l[i][0] * x[0] + l[i][1] * x[1] + l[i][2] * x[2];

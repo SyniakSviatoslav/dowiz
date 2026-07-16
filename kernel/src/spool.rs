@@ -86,10 +86,7 @@ impl Spool {
     /// spool can be reclaimed on crash without the consumer holding a ref.
     /// Returns `None` when empty.
     pub fn claim_next(&mut self) -> Option<Record> {
-        let idx = self
-            .records
-            .iter()
-            .position(|r| !r.claimed)?;
+        let idx = self.records.iter().position(|r| !r.claimed)?;
         self.records[idx].claimed = true;
         Some(self.records[idx].clone())
     }

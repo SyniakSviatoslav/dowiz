@@ -124,11 +124,9 @@ impl Value {
     }
 
     pub fn div(&self, o: &Value) -> Value {
-        self.binary(
-            o,
-            self.data() / o.data(),
-            |g, a, b| (g / b, -g * a / (b * b)),
-        )
+        self.binary(o, self.data() / o.data(), |g, a, b| {
+            (g / b, -g * a / (b * b))
+        })
     }
 
     pub fn neg(&self) -> Value {
