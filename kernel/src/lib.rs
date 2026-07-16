@@ -48,6 +48,9 @@ pub mod harmonic;
 /// product). Replaces the O(n⁴) Faddeev-LeVerrier path as the default for the
 /// dense operators this kernel diagonalizes.
 pub mod householder;
+/// Воля АНУ — the hidden source of the self-evolving living organism. Single
+/// kernel-internal entry point for closed-loop self-evolution (G7 source-hiding).
+pub mod hydra;
 /// C-tier "impedance lens": circuit/impedance as a resource framework — flow
 /// reflection coefficient + backpressure gate (ρ<1 with margin, not power-match).
 pub mod impedance;
