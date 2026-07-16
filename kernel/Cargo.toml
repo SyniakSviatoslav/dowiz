@@ -28,6 +28,13 @@ wasm = ["dep:wasm-bindgen", "dep:serde", "dep:serde_json", "dep:serde_yaml"]
 # `migrate()` for the explicit, opt-in DDL — never auto-run).
 pgrust = ["dep:sqlx", "dep:tokio"]
 
+# innovate: rsa 0.9.x (RUSTSEC-2023-0071, Marvin timing) appears in Cargo.lock but
+# `cargo tree -i rsa` prints nothing — it is NOT linked into any active build path
+# (neither default nor pgrust). "No fixed upgrade available" + zero code usage =
+# no real exposure. Decision (2026-07-16, C-triage): do NOT force-upgrade; revisit
+# only if a future dep actually pulls rsa into the kernel graph. Upgrade trigger:
+# `cargo tree -i rsa` shows a real path OR a patched rsa release ships.
+
 [dependencies]
 # WASM bindings — only compiled under the `wasm` feature (see
 # `#[cfg(feature = "wasm")] pub mod wasm;` in lib.rs). The kernel is pure Rust
