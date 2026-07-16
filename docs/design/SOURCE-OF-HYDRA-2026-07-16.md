@@ -105,6 +105,10 @@ Parent verified: tools/eqc absent (G8 confirmed), wasm-host stub-by-default conf
   hidden, or suppressed. This neutralizes social-engineering: the alert fires deterministically, never
   asks the owner "permission to warn" (which could be socially-engineered into silence). Owner-visible
   via `state()`; M9 kill-switch always overrides. 347 kernel tests pass (11 hydra + 3 G2).
+  Durability add: `raise_breach_alarm` also self-documents the breach into the WORM log under
+  `BREACH_WITNESS_ACTOR` (content-addressed evidence row), so a tampered core can never silently heal
+  or deny it was compromised (anti-silent-heal). The witness bypasses decide/drift (it is kernel
+  self-evidence, not a topology mutation).
 
 ## 9. Operator directive (immutable spec)
 - closure = NEVER; only kill-switch (M9) stops the organism.
