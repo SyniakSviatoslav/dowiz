@@ -39,12 +39,16 @@ pub struct FieldEquilibrium {
 
 impl Default for FieldEquilibrium {
     fn default() -> Self {
-        // m=1, Γ=0.2, c²=1, dt=0.016 → bound = 1/(0.2+2) ≈ 0.455 ≫ dt: safe.
+        // ONE governed field/animation clock: dt is pinned to the kernel's
+        // authoritative `DT_STABLE` (0.02 s == 50 Hz), crossing the f32→f64
+        // boundary explicitly. m=1, Γ=0.2, c²=1, dt=0.02 → bound = 1/(0.2+2)
+        // ≈ 0.455 ≫ dt: safe (see `assert_stable`). Pinned by
+        // `field_default_dt_matches_kernel_dt_stable`.
         FieldEquilibrium {
             m: 1.0,
             gamma: 0.2,
             c2: 1.0,
-            dt: 0.016,
+            dt: dowiz_kernel::DT_STABLE as f64,
         }
     }
 }
@@ -198,6 +202,21 @@ pub fn compose(scene: &Scene, eq: &FieldEquilibrium, w: usize, h: usize, steps: 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // (0) DT_STABLE mirror pin (row #10). The field integrator's default dt MUST
+    //     equal the kernel's authoritative `DT_STABLE` (one governed 50 Hz clock).
+    //     This crosses the crate boundary via the real import, mirroring the
+    //     kernel's `dt_stable_is_authoritative` + engine loop_'s
+    //     `dt_stable_matches_kernel_contract` template: literal identity + the
+    //     50 Hz physical meaning. Reverting the default to 0.016 turns this red.
+    #[test]
+    fn field_default_dt_matches_kernel_dt_stable() {
+        assert_eq!(
+            FieldEquilibrium::default().dt,
+            dowiz_kernel::DT_STABLE as f64
+        );
+        assert_eq!((1.0 / FieldEquilibrium::default().dt).round() as u32, 50); // 50 Hz, one clock
+    }
 
     // (1) frame_buffer_dims_match_wxh_x4 -- RGBA out has exactly w*h*4 bytes.
     #[test]

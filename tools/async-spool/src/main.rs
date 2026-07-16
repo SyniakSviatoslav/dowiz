@@ -33,7 +33,13 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-/// Default pacing gap in seconds between two sends.
+/// Default pacing gap in seconds between two sends. MUST match hermes-kernel
+/// `reporting::TG_MIN_GAP_S`
+/// (`hermes-agent-kernel-rewrite/hermes-kernel/kernel/src/reporting.rs:26`).
+/// Single record of this cross-repo decision:
+/// `docs/design/hermetic-architecture-2026-07-16/PACING-CONTRACT.md`.
+/// Env-overridable via `ASYNC_SPOOL_GAP_S`; the default is pinned by
+/// `default_gap_self_pin` (+ optional present-sibling test).
 const DEFAULT_GAP_S: f64 = 3.5;
 /// Poll interval when the spool is empty (seconds).
 const IDLE_POLL_S: u64 = 2;
@@ -226,6 +232,40 @@ struct TgResponse {
     description: Option<String>,
 }
 
+/// Retry backoff delay for send `attempt` (1-based): exponential base-2 s with
+/// **full jitter** (`2s · 2^(attempt-1)`, capped at 32 s, `× rand[0.5,1.0)`).
+///
+/// ADR (H2 §2.5 / finding #24): jitter breaks spool synchronization — N drainers
+/// hitting a downed endpoint no longer retry in lock-step (thundering herd). The
+/// helper is DUPLICATED in `telemetry-spool` (the two spools share no lib crate;
+/// a `spool-common` path dep is heavier than warranted for one fn) — the
+/// duplication is a conscious, accepted trade. RNG is a dep-free splitmix64 seed
+/// off the wall clock (non-crypto is sufficient for jitter). The terminal
+/// fixed-2s transient pause in `run` and the idle poll are deliberately left
+/// un-jittered (single-drainer deployment).
+fn backoff_delay(attempt: u32) -> Duration {
+    const BASE_MS: u64 = 2_000;
+    const CAP_MS: u64 = 32_000;
+    let shift = attempt.saturating_sub(1).min(20);
+    let exp_ms = BASE_MS.saturating_mul(1u64 << shift).min(CAP_MS);
+    Duration::from_millis((exp_ms as f64 * jitter_unit()) as u64)
+}
+
+/// Dep-free jitter factor in `[0.5, 1.0)` from a wall-clock-seeded splitmix64.
+/// Non-crypto: jitter only needs to be uncorrelated across processes.
+fn jitter_unit() -> f64 {
+    let seed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos() as u64)
+        .unwrap_or(0x9E37_79B9_7F4A_7C15);
+    let mut z = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    z ^= z >> 31;
+    let unit = (z >> 11) as f64 / (1u64 << 53) as f64; // [0.0, 1.0)
+    0.5 + 0.5 * unit // [0.5, 1.0)
+}
+
 /// Deliver one sendable. Returns true on success (line should be dropped).
 fn deliver(bot_token: &str, line: &Sendable) -> bool {
     match line {
@@ -253,13 +293,13 @@ fn deliver(bot_token: &str, line: &Sendable) -> bool {
                         if attempt >= MAX_ATTEMPTS {
                             return false;
                         }
-                        std::thread::sleep(Duration::from_secs(2 * attempt as u64));
+                        std::thread::sleep(backoff_delay(attempt));
                     }
                     Err(_) => {
                         if attempt >= MAX_ATTEMPTS {
                             return false;
                         }
-                        std::thread::sleep(Duration::from_secs(2 * attempt as u64));
+                        std::thread::sleep(backoff_delay(attempt));
                     }
                 }
             }
@@ -275,7 +315,7 @@ fn deliver(bot_token: &str, line: &Sendable) -> bool {
                         if attempt >= MAX_ATTEMPTS {
                             return false;
                         }
-                        std::thread::sleep(Duration::from_secs(2 * attempt as u64));
+                        std::thread::sleep(backoff_delay(attempt));
                     }
                 }
             }
@@ -371,4 +411,78 @@ fn main() {
         }
     };
     run(bot_token);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Cross-repo pacing pin (finding #18). The authority lives in a SIBLING repo
+    // (hermes-kernel `reporting::TG_MIN_GAP_S`), which a dowiz test cannot
+    // compile-time reference. This self-assertion makes any local edit to the
+    // default break a test, forcing a conscious re-verify against
+    // PACING-CONTRACT.md rather than a silent drift. See
+    // docs/design/hermetic-architecture-2026-07-16/PACING-CONTRACT.md.
+    #[test]
+    fn default_gap_self_pin() {
+        assert_eq!(DEFAULT_GAP_S, 3.5, "pacing gap desynced from PACING-CONTRACT");
+    }
+
+    // Optional stronger tier: when the hermes-kernel sibling repo happens to be
+    // checked out alongside dowiz, assert our value matches the live authority.
+    // SKIPS cleanly (passes) when the sibling is absent so a lone dowiz checkout
+    // never false-fails.
+    #[test]
+    fn default_gap_matches_present_sibling() {
+        let sibling =
+            "/root/hermes-agent-kernel-rewrite/hermes-kernel/kernel/src/reporting.rs";
+        let src = match std::fs::read_to_string(sibling) {
+            Ok(s) => s,
+            Err(_) => {
+                eprintln!("skip: hermes-kernel sibling absent ({sibling})");
+                return;
+            }
+        };
+        match parse_const_f64(&src, "TG_MIN_GAP_S") {
+            Some(v) => assert_eq!(
+                v, DEFAULT_GAP_S,
+                "async-spool DEFAULT_GAP_S ({DEFAULT_GAP_S}) != hermes-kernel ({v})"
+            ),
+            None => eprintln!("skip: TG_MIN_GAP_S not found in {sibling} (format changed?)"),
+        }
+    }
+
+    // Retry backoff carries jitter and stays within the exponential envelope:
+    // delay(attempt) ∈ [exp/2, exp) where exp = min(2s·2^(attempt-1), 32s).
+    #[test]
+    fn backoff_delay_is_jittered_within_envelope() {
+        for attempt in 1u32..=8 {
+            let shift = attempt.saturating_sub(1).min(20);
+            let exp_ms = 2_000u64.saturating_mul(1u64 << shift).min(32_000);
+            for _ in 0..64 {
+                let ms = backoff_delay(attempt).as_millis() as u64;
+                assert!(
+                    ms >= exp_ms / 2 && ms < exp_ms,
+                    "attempt {attempt}: delay {ms}ms outside [{}, {})",
+                    exp_ms / 2,
+                    exp_ms
+                );
+            }
+        }
+    }
+
+    // Parse `... <name> ... = <f64> ;` from Rust source (test-only helper for the
+    // present-sibling pin). Returns None if no such line exists.
+    fn parse_const_f64(src: &str, name: &str) -> Option<f64> {
+        for line in src.lines() {
+            if line.contains(name) && line.contains('=') {
+                let rhs = line.split('=').nth(1)?;
+                let val = rhs.trim().trim_end_matches(';').trim();
+                if let Ok(v) = val.parse::<f64>() {
+                    return Some(v);
+                }
+            }
+        }
+        None
+    }
 }

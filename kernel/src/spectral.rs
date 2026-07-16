@@ -322,6 +322,23 @@ pub enum DriftClass {
     Unstable,
 }
 
+impl DriftClass {
+    /// The single authority for the numeric wire code carried across the
+    /// kernel→engine FE-07 bridge (`Damped=0, Resonant=1, Unstable=2`). The wasm
+    /// flat-encoder (`wasm.rs::spectral_flat_logic`) calls this instead of
+    /// re-declaring the mapping inline, and the engine's `drift_from_code`
+    /// (`engine/src/bridge.rs`) decodes it back — pinned round-trip in
+    /// `drift_wire_contract_matches_kernel`. Exhaustive match: a new variant
+    /// fails to compile here, forcing the wire code to be assigned consciously.
+    pub const fn wire_code(self) -> u8 {
+        match self {
+            DriftClass::Damped => 0,
+            DriftClass::Resonant => 1,
+            DriftClass::Unstable => 2,
+        }
+    }
+}
+
 pub fn classify_drift(a: &[Vec<f64>]) -> DriftClass {
     let rho = spectral_radius(a);
     const BAND: f64 = 1e-6;
@@ -381,6 +398,16 @@ mod tests {
 
     fn approx(a: f64, b: f64, tol: f64) -> bool {
         (a - b).abs() < tol
+    }
+
+    // Wire-code authority pin (row #23): `DriftClass::wire_code()` is the single
+    // source of the `Damped=0/Resonant=1/Unstable=2` mapping the FE-07 bridge
+    // carries. The wasm encoder and the engine decoder both key off this.
+    #[test]
+    fn drift_wire_code_is_canonical() {
+        assert_eq!(DriftClass::Damped.wire_code(), 0);
+        assert_eq!(DriftClass::Resonant.wire_code(), 1);
+        assert_eq!(DriftClass::Unstable.wire_code(), 2);
     }
 
     // ── GREEN: a directed 2-cycle has eigenvalues ±1 (period-2, μ≈−1). ──
