@@ -1,0 +1,14 @@
+[package]
+name = "ci-truth"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Native Rust CI-TRUTH floor (replaces scripts/claim-latency-append.sh +
+# scripts/v5c-reexec.sh — bash-as-logic removed per operator directive).
+# Zero-dependency: pure std. Shells out ONLY to genuinely external binaries
+# (`git`, `cargo`) that the kernel does not reimplement — the rule bars
+# bash-as-the-logic-layer, not every subprocess call.
+[[bin]]
+name = "ci-truth"
+path = "src/main.rs"
