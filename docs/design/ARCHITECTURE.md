@@ -20,30 +20,37 @@
 - **M11** Living-organism experiment = UNBOUNDED: no caps, only kill-switch + configurable access. "нахуй систему" = no governing layer above hubs except the protocol wire-format itself. LOCK.
 - **M12** Capability model (proto-cap, in-repo, 43★ UCAN rejected as heavier): ML-DSA-signed, fail-closed, nonce-replay, expiry, RevocationSet, red-line deny (auth/money/secrets/migrations). Per-agent scope. LOCK.
 
+> ### SCOPE RULE (kills all global-vs-hydra contradictions)
+> Every CI gate / policy below (V3, V5, E12, E8, E26, S4, E52/54) applies to the **canonical repo + operator's own build** ONLY.
+> It is a DEV-TIME fence, NOT a runtime control. **At runtime every hub is a sovereign Hydra (M5/M9/M11):**
+> it may fork, self-gate locally (eqc), ignore the upstream gate, change its DB/model/API/port, and replicate-or-reject any shared artifact.
+> No dev-time gate may block a hub from self-evolving. If a gate reads as "global control", it is mis-scoped — re-read it as "canonical-repo recommendation, hub MAY override".
+
 ## 1. Tech stack (V2 + D + M)
 - Core: Rust/WASM kernel + Trait-as-Port + content-addressing(sha3) + GPU offline/port-only.
 - **Rejections (DECART-gated):** managed-cloud-default, k8s(zero-OCI), GraphQL-mesh, IAM/reputation(NO-COURIER-SCORING), literal-GPU/CUDA, digital-MCU-as-now.
-- DB (D1): native vectorless DEFAULT; pgrust OPT-IN (OFF) backup/fallback read-model.
+- DB (D1): native vectorless DEFAULT for canonical build; **hub MAY promote pgrust (or any store) to primary at its discretion (M5)** — pgrust is OFF-recommendation, not a prohibition.
 - Network (D2/M6): zero-dep proto-cap + iroh-QUIC primary, quinn fallback via DECART. deny-by-default capability-tokens.
-- LLM infra (E13/E14, web-verified): self-host llama.cpp(120k★ MIT)+vLLM(86k★ Apache-2.0) GOAL; managed-advisory until GPU-unlock; Modal H100 $0.001097/s scale-to-zero.
+- LLM infra (E13/E14, web-verified): self-host llama.cpp(120k★ MIT)+vLLM(86k★ Apache-2.0) GOAL; managed-advisory until GPU-unlock; Modal H100 $0.001097/s scale-to-zero. **V3/V5 governance gates = canonical-repo DEV-TIME fences (SCOPE RULE); at runtime hub self-enforces locally — no standing global verifier/gate (M5/M9).**
 - Models (E15): harmonic_centrality+kelly_fraction adaptive tiering (wire П0-C1).
+- Legal (E52/E54): AGPLv3 + TRADEMARK applies to **canonical code/brand ONLY** — protocol + runtime are free/unbounded (M11). TM is a brand leash, NOT a mesh-control; hub MAY fork code, drop brand, keep protocol. EUTM pending (operator action).
 
 ## 2. Service architecture (S-series, code-grounded)
 - Runtime (S1): zero-OCI native static binaries + systemd; microVM when fleet>5.
 - Topology (S2): modular monolith; microVM per P1.
 - Secrets (S3): systemd EnvFile + NEVER in-repo + gitleaks. (ADR-020 LICENSE mismatch: Apache-2.0 vs AGPLv3; force-push scrub BLOCKED red-line; EUTM pending.)
-- API (S4): gRPC/protobuf internal + REST edge; GraphQL client-edge ONLY.
+- API (S4): gRPC/protobuf internal + REST edge RECOMMENDED (not mandated); GraphQL client-edge ONLY. Hub MAY open any port/bridge at its discretion (M5) — inter-hub still speaks the protocol.
 - Errors (S5): fail-closed Result always.
-- Deploy (S6): single-env, BUT V5-C red-line verifier still enforced on money/auth/RLS/migrations.
+- Deploy (S6): single-env for operator's own build; V5-C red-line check = LOCAL per-hub re-exec, not a standing global service (see SCOPE RULE). Hub self-verifies.
 - Observability (S7/S8/D7/M8): local tracing+typed CPU/GPU metrics; OTel opt-in local-only.
-- Money (S9): integer + event-sourcing + saga-compensation. BLOCKING (V3).
+- Money (S9): integer + event-sourcing + saga-compensation. canonical-repo BLOCKING CI gate; at runtime hub enforces its own money law locally (M5).
 
 ## 3. Patterns (D6/E62): Trait-as-Port | content-addressing | eqc VERIFIED-BY-MATH | deny-by-default | event-sourcing | closure-criterion | DECART-gate new deps.
 
 ## 4. Ecosystem (E1–E62 summary, see STRATEGIC-VECTORS-LOCKED)
-hub-ring(C) | GH-Actions+gitleaks | vendored+cache+audit | wasm-demo→video-after-GPU | GitHub-Discussions+AGPL | sovereign-PQ-infra(delivery=by-product) | B2B+grants | single-graph-wiki | Hermes-tool+verifier | ML-DSA-hybrid | native+pgrust-backup | UA+EN+AL(all-locales OSS) | agent-infra/models/GPU/storage/network/security/product/ops/community/business/growth clusters.
+hub-ring(C) | GH-Actions+gitleaks | vendored+cache+audit | wasm-demo→video-after-GPU | GitHub-Discussions+AGPL | sovereign-PQ-infra(delivery=by-product) | B2B+grants | PER-HUB-REPLICATED-graph-wiki (no central SPOF) | Hermes-tool+verifier | ML-DSA-hybrid | native+pgrust-backup(MAY-promote) | UA+EN+AL(all-locales OSS) | agent-infra/models/GPU/storage/network/security/product/ops/community/business/growth clusters.
 
-## 5. i18n (E12): UA+EN+AL now, EN-main, all-locales via OSS. Blocking CI gate.
+## 5. i18n (E12): UA+EN+AL now, EN-main, all-locales via OSS. **Canonical-repo blocking CI gate ONLY** (SCOPE RULE) — a hub may ship any locale set it wants.
 
 ---
 
@@ -107,7 +114,7 @@ Each: situation (possible/impossible) · consequence NOW · consequence FUTURE �
 - **F45** Route computed Dijkstra/A* over geo. SIT: gap-fill (P1). NOW: implement. FUT: optimal. PRO: real. CON: compute. LOCK + wire.
 - **F46** Partition-tolerant delivery (Union-Find/MST). SIT: gap-fill (P1). NOW: implement. FUT: survives split. PRO: robust. CON: dup-risk. LOCK + wire.
 - **F47** Demo = wasm physics/math render of a delivery. SIT: possible (E4/E41). NOW: demo. FUT: GPU after unlock. PRO: honest. CON: no video yet. LOCK.
-- **F48** Single-graph wiki (E8) indexes all delivery knowledge. SIT: possible. NOW: BD+spectral. FUT: search. PRO: memory. CON: build. LOCK.
+- **F48** PER-HUB replicated graph-wiki (E8→corrected): each Hydra head keeps its OWN graph (BD+spectral+history), syncs opportunistically over protocol, NO central authority. SIT: possible. NOW: no SPOF. FUT: emergent knowledge. PRO: survives hub loss, hub owns truth. CON: dedup/merge cost. LOCK (corrected from single-central).
 - **F49** i18n UA/EN/AL for courier app. SIT: as-designed (E12). NOW: 3 langs. FUT: all via OSS. PRO: access. CON: maint. LOCK.
 - **F50** Living-organism = hubs freely evolve, only kill-switch bounds. SIT: as-designed (M11). NOW: unbounded. FUT: emergent. PRO: no ceiling. CON: chaotic. LOCK (unbounded).
 
@@ -117,6 +124,7 @@ Each: situation (possible/impossible) · consequence NOW · consequence FUTURE �
 Single source: this guide + STRATEGIC-VECTORS-LOCKED. Arc-notes = history, not law.
 
 ## 8. Honest gaps (not self-certified)
+- **HYDRA-CONTRADICTION SWEEP (2026-07-16, operator "дозвіл на війну"):** ALL global-sounding gates re-scoped to DEV-TIME-only via SCOPE RULE. C1(V3 CI) C2(V5 verifier) C3(E12 i18n) C5(E26 pgrust) C6(S4 API) C8(V1 verifier) → none block hub autonomy. C4 (single-graph wiki) → PER-HUB REPLICATED (no central SPOF). C7 (TM) → brand-leash only, protocol/runtime free. Zero residual contradiction with M5/M9/M11.
 - ADR-020: LICENSE Apache-2.0 vs AGPLv3; force-push scrub BLOCKED (red-line); EUTM pending.
 - GPU: wgpu offline-ceiling (W21); GPU-unlock pending network.
 - QRNG: ANU/meetar beacon reachable but api.quantum-random.com down; M3 optional, ML-DSA-only fallback confirmed.
