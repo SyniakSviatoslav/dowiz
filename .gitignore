@@ -73,8 +73,6 @@ tools/skillspector/
 **/target/
 # 3-model review staging dir (per AGENTS.md — never commit)
 **/.review/
-# stray session debris
-kernel/=5
 tools/telemetry/logs/
 
 # telemetry serialization: pure stdlib (no venv, no external libs) — see ser.py
