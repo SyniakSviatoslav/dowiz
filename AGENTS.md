@@ -115,3 +115,26 @@ the change. No silent adoption.
   merit, it's chosen.)
 
 Full rule, table template, and a worked example → **`docs/operating-model/integration-decart-rule.md`**.
+
+---
+
+## Session/plan closing ritual — the 2-question doubt check (operator, 2026-07-16)
+
+**Before declaring any session, plan, or roadmap done, ask yourself these two questions and write
+down the answers — this is a standing self-audit, not optional when the stakes are non-trivial:**
+
+1. **"What are you least confident about right now?"** List 6-7 concrete things you did not
+   properly investigate — gaps you papered over, claims you took from a doc/memory instead of
+   verifying against the live repo, assumptions you made because checking would have cost more
+   tokens/time. Do not round this list down to make the work look more finished than it is.
+2. **"What's the biggest thing I'm missing about the situation? What don't I realize?"** One honest
+   answer, not a hedge — the blind spot a fresh reader would spot in thirty seconds that you can't
+   see because you're inside the work.
+
+**Then act on it, don't just report it.** For each item from question 1, spend a moment judging
+whether it's routine (fine to leave as a stated assumption) or a real risk (the "1 in 4" case where
+it turns out you took an action or made a claim without understanding something load-bearing first
+— e.g. shipped code against a canon claim that was actually stale, or built on a "done" that was
+never re-verified). Anything in the second bucket gets investigated to root cause before the
+session/plan is called closed, not left as a footnote. This mirrors — and is a *closing* complement
+to — the in-flight `doubt-escalation` skill; this ritual runs at the END of the work, not mid-flight.
