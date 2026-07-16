@@ -1,5 +1,11 @@
 //! wasm-bindgen glue exposing the kernel to the web as JS-callable JSON functions.
 //!
+//! This entire module is compiled ONLY under `#[cfg(feature = "wasm")]` (see the
+//! inner attribute below and the gated `pub mod wasm;` in `lib.rs`). Native rlib
+//! consumers (e.g. `bebop-delivery-domain`) build the kernel WITHOUT this module
+//! and therefore pull NONE of wasm-bindgen / serde / serde_json / serde_yaml.
+#![cfg(feature = "wasm")]
+//!
 //! Every function takes and returns plain JSON `String`s (or a `u64`), so the
 //! web layer never has to deal with Rust/WASM struct layout. The kernel's
 //! domain types (`Order`, `OrderItem`, `ChannelEvent`, `OrderStatus`) do NOT

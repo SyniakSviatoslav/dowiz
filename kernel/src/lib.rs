@@ -58,6 +58,10 @@ pub mod householder;
 pub mod kalman;
 pub mod intake;
 pub mod isolation;
+// `loops` (BP-20 orchestration card parsing) depends on serde / serde_yaml →
+// compiled only under the `wasm` feature so a native rlib build stays serde-free.
+// NOT part of the canonical order/money core (decide/order_machine/domain/money).
+#[cfg(feature = "wasm")]
 pub mod loops;
 /// Reverse-engineering loop #R1 — Markov attractor detector (ASCENDed from markov_attractor.py);
 /// reuses `spectral` as its eigen-core, killing the dual-authority hazard.
@@ -87,16 +91,31 @@ pub mod online;
 /// E1 — verifiable-cognition benchmark generator: metamorphic MR items with
 /// kernel-primitive oracles, deterministic mint-log leakage gate, and
 /// calibration metrics (ECE/Brier/AURC). Pure-offline, zero-dep.
+/// Uses `serde_json` for the `analyze.mjs` JSONL bridge → gated behind `wasm`
+/// so the native rlib build stays serde-free. NOT part of the order/money core
+/// (decide/order_machine/domain/money).
+#[cfg(feature = "wasm")]
 pub mod evals;
 /// C1 — verify-failure → retrieval-trigger: a claim check that, on failure,
 /// emits a bounded structured re-verify request (the "verify then learn" loop).
 pub mod verify_retrieval;
 /// Living-knowledge retrieval — ADAPTER to the (separately-branched) JS engine.
+/// serde-dependent (JSON bridge protocol) → gated behind `wasm` to keep the
+/// native rlib build serde-free. Not part of the order/money core.
+#[cfg(feature = "wasm")]
 pub mod living_knowledge;
+/// M1 / L0 exact byte+regex search (vectorless) — deterministic trigram
+/// inverted index + exact verify. NEW module; does not touch kernel authority.
+pub mod retrieval;
 /// WASM/JS bindings — the only place the kernel touches the boundary.
+/// Compiled ONLY under the `wasm` feature (see `#![cfg(feature = "wasm")]` in
+/// wasm.rs); native rlib builds exclude it and pull no wasm-bindgen/serde.
+#[cfg(feature = "wasm")]
 pub mod wasm;
 
 // Re-export the headline types so wasm-bindgen consumers and tests share one surface.
+// `evals` (benchmark/JSONL bridge) re-exported only when the `wasm` feature is on.
+#[cfg(feature = "wasm")]
 pub use evals::{
     aurc, brier, ece, EmaTracker, EvalCheck, EvalRow, MetamorphicGenerator, MintLog, MrItem,
     RegressionGate, SelfAdaptator,
@@ -121,6 +140,8 @@ pub use order_machine::{
     spectral_radius, topological_order, verify_fsm_signature, verify_fsm_signature_against,
     FsmGraphReport, FsmSignatureDrift, OrderStatus, TransitionError,
 };
+// The wasm JS entry points are exposed only when the `wasm` feature is on.
+#[cfg(feature = "wasm")]
 pub use wasm::{apply_event_js, boot_verify_fsm_js, channel_ledger_js, place_order_js, reduce_anomalies_js};
 
 /// **Boot-time FSM drift gate (fail-closed).** Call this once before the event bus accepts
@@ -147,6 +168,17 @@ pub const DT_STABLE: f32 = 0.02;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // NOTE (MESH-01 feature-gate invariant): the DEFAULT kernel build is
+    // `std`-only (no `wasm`), so a native rlib consumer pulls NONE of
+    // wasm-bindgen / serde / serde_json / serde_yaml. This is enforced by the
+    // `[features]` table (the `wasm` feature is OPT-IN) and verified out-of-band
+    // via `cargo build --no-default-features --features std` + `cargo tree -p
+    // bebop-delivery-domain -e no-dev` (no wasm-bindgen / serde in the graph).
+    // We deliberately do NOT assert `!cfg!(feature = "wasm")` here: that would
+    // false-fail when the suite is legitimately run with `--features wasm`
+    // (the wasm JS surface is then correctly compiled in). The gate's
+    // correctness is the *absence* of these crates in the DEFAULT dependency graph.
 
     #[test]
     fn dt_stable_is_authoritative() {
