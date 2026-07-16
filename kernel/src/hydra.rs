@@ -273,16 +273,44 @@ impl<S: EventStore> Hydra<S> {
         payload.extend_from_slice(&node_id);
         payload.extend_from_slice(&group_size.to_le_bytes());
         let witness = MeshEvent {
-            prev: [0u8; 32], // append() chains to current tip
+            prev: [0u8; 32], // append_raw: no chaining ⇒ stable content-id
             actor_pubkey: BREACH_WITNESS_ACTOR,
-            actor_seq: self.log.len() as u64,
+            actor_seq: 0, // fixed ⇒ content-id = f(node_id, group_size) only
             payload,
         };
-        self.log.append(witness); // kernel self-evidence, bypasses decide/drift
+        self.log.append_raw(witness); // kernel self-evidence, bypasses decide/drift
         Some(BreachAlert {
             node_id,
             group_size,
         })
+    }
+
+    /// G9 — hub convergence. When this node RECEIVES a verified breach alert
+    /// about a *peer* (sender's `witness_event_id` matched — see receiver check),
+    /// it durably records "peer `node_id` is burnt" into its own WORM log as an
+    /// external-witness row. This is the max-radius closure: one compromised core
+    /// ⇒ every hub member ingests the evidence and converges on the compromise,
+    /// with NO per-event consent (consent given at join) and NO ability to hide/
+    /// suppress it. The recording is content-addressed + idempotent, so replays
+    /// are structural no-ops and the evidence survives restart.
+    ///
+    /// `alert` MUST already be verified by the caller (ML-DSA sig + `witness_event_id`
+    /// match). This method only persists the fact; it does not re-broadcast (the
+    /// mesh layer handles fan-out from the originating node).
+    pub fn ingest_peer_breach(&mut self, alert: &BreachAlert) {
+        // External-witness row: same BREACH_WITNESS_ACTOR, seq monotonic on log len,
+        // payload = peer node_id + their group_size. Distinct content-id from any
+        // self-witness (different node_id), so both persist independently.
+        let mut payload = Vec::with_capacity(32 + 8);
+        payload.extend_from_slice(&alert.node_id);
+        payload.extend_from_slice(&alert.group_size.to_le_bytes());
+        let row = MeshEvent {
+            prev: [0u8; 32], // append_raw: no chaining ⇒ stable content-id
+            actor_pubkey: BREACH_WITNESS_ACTOR,
+            actor_seq: 0, // fixed ⇒ content-id = f(peer_node_id, group_size)
+            payload,
+        };
+        self.log.append_raw(row); // kernel self-evidence, bypasses decide/drift
     }
 }
 
@@ -510,6 +538,47 @@ mod tests {
         assert!(witnessed, "breach self-witness row persisted in WORM log");
         // group_size==0 is the only guard (no hub to warn).
         assert!(h.raise_breach_alarm([7u8; 32], 0).is_none());
+    }
+
+    /// G9 — hub convergence: a node that RECEIVES a verified peer breach alert
+    /// records it into its OWN WORM log (external-witness), with no per-event
+    /// consent. The peer node_id is now durably "burnt" at this node too. Idempotent
+    /// on replay (distinct content-id per alert ⇒ each unique breach recorded once;
+    /// a re-delivery at a new log-len still produces the same event-id ⇒ duplicate no-op).
+    #[test]
+    fn hydra_ingest_peer_breach_converges_hub() {
+        let mut node = Hydra::new(MemEventStore::new(), 3, base());
+        // A verified alert about a *peer* (caller already checked ML-DSA + witness_event_id).
+        let peer_alert = BreachAlert {
+            node_id: [9u8; 32],
+            group_size: 4096,
+        };
+        node.ingest_peer_breach(&peer_alert);
+        // The peer breach is now durable in THIS node's WORM log.
+        let external_id = {
+            use crate::event_log::MeshEvent;
+            let mut p = Vec::with_capacity(40);
+            p.extend_from_slice(&[9u8; 32]);
+            p.extend_from_slice(&4096u64.to_le_bytes());
+            MeshEvent {
+                prev: [0u8; 32],
+                actor_pubkey: BREACH_WITNESS_ACTOR,
+                actor_seq: 0,
+                payload: p,
+            }
+            .event_id()
+        };
+        assert!(
+            node.log().contains(&external_id),
+            "peer breach recorded in this node's WORM log (hub converged)"
+        );
+        // Replay (same alert, new log len) => same content-id => duplicate no-op,
+        // no second row.
+        let before = node.log().len();
+        node.ingest_peer_breach(&peer_alert);
+        assert_eq!(node.log().len(), before, "replay is idempotent");
+        // Self is still Live (ingesting a PEER breach does not lock this node).
+        assert_eq!(node.integrity_check(), OrganismState::Live);
     }
 
     /// G9 — receiver-side deterministic verification: a peer runs `witness_event_id`

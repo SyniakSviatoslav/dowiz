@@ -272,6 +272,23 @@ impl<S: EventStore> EventLog<S> {
         AppendOutcome::Committed(id)
     }
 
+    /// Append WITHOUT local-first `prev` chaining. The event's `prev` field is
+    /// taken verbatim (caller-supplied), so the content-id depends only on the
+    /// event's own fields — making it deterministic/idempotent across replays
+    /// regardless of current chain tip. Used by the Воля АНУ self-witness rows,
+    /// whose content-id must be a STABLE function of `(node_id, group_size)` so a
+    /// re-received breach alert is a structural no-op, not a new row. Still
+    /// idempotent on plain duplicate content-ids (the store dedups by id).
+    pub fn append_raw(&mut self, ev: MeshEvent) -> AppendOutcome {
+        let id = ev.event_id();
+        if self.store.contains(&id) {
+            return AppendOutcome::Duplicate(id);
+        }
+        self.store.insert(id, ev);
+        self.store.set_tip(id);
+        AppendOutcome::Committed(id)
+    }
+
     /// MESH-06 commit gate: run the kernel `decide` Law on the event **before**
     /// committing. If `decide` rejects, the event is NOT persisted (no partial
     /// commit) and the store is left exactly as it was. If it accepts, the event

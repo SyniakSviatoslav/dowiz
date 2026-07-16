@@ -109,6 +109,12 @@ Parent verified: tools/eqc absent (G8 confirmed), wasm-host stub-by-default conf
   `BREACH_WITNESS_ACTOR` (content-addressed evidence row), so a tampered core can never silently heal
   or deny it was compromised (anti-silent-heal). The witness bypasses decide/drift (it is kernel
   self-evidence, not a topology mutation).
+  Hub convergence add: `ingest_peer_breach` records a VERIFIED peer breach into THIS node's WORM log
+  (external-witness), with no per-event consent — one compromised core ⇒ every hub member converges
+  on the compromise (max-radius). Witness rows use `append_raw` (no prev-chaining, fixed seq=0) so the
+  content-id is f(node_id, group_size) only ⇒ replay-safe / idempotent (no WORM bloat under a chatty
+  mesh). `BreachAlert::witness_event_id` lets any receiver verify the alert forge-proof, no trust.
+  349 kernel tests pass (13 hydra + 3 G2).
 
 ## 9. Operator directive (immutable spec)
 - closure = NEVER; only kill-switch (M9) stops the organism.
