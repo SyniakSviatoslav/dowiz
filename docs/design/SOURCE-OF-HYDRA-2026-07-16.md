@@ -95,12 +95,16 @@ Parent verified: tools/eqc absent (G8 confirmed), wasm-host stub-by-default conf
   bridge (`candidate_drift`/`topology_adjacency`), `FileEventStore` (append-only+fsync, replay,
   idempotent, std-only, no egress), `boot_verify` (ρ<1 after restart, G5), dirty-weight guard (G6),
   single kernel-internal `Hydra::commit` (G7 source-hiding), static eqc floor accepted as live gate (G8).
-- **G9 — defensive anti-tamper (operator A–F clarification) — DONE.** `OrganismState` Live/Locked +
-  `integrity_check` (foreign tamper shifts baseline ρ≥1 → Locked, fail-closed). `commit` REFUSED while
-  Locked (tamper = ATTACK, not evolution; intervention-flag does NOT bypass). `replicate_to` consent-
-  gated + mutual-auth (ML-DSA) + bounded fan-out ≤1024 (defensive self-reproduction of STATE, NOT a
-  worm). Owner-visible via `state()` (no OS hiding); M9 kill-switch always overrides. 347 kernel tests
-  pass (11 hydra + 3 G2). Safety review applied (owner visibility, bounded replicate, tamper≠intervention).
+- **G9 — defensive anti-tamper (operator A–F + breach-alarm follow-up) — DONE.** `OrganismState`
+  Live/Locked + `integrity_check` (foreign tamper shifts baseline ρ≥1 → Locked, fail-closed). `commit`
+  REFUSED while Locked (tamper = ATTACK, not evolution; intervention-flag does NOT bypass). On tamper,
+  `raise_breach_alarm` broadcasts an UNABOUNDED, NO-per-event-consent warning to the whole opted-in hub
+  (operator: "one compromised core ⇒ all hub members at risk — all must be alerted immediately"). The
+  alert is `BreachAlert{node_id, group_size}` — carries NO executable code, only the compromised node's
+  identity + hub scope; receivers verify ML-DSA signature (mesh transport) so it cannot be forged,
+  hidden, or suppressed. This neutralizes social-engineering: the alert fires deterministically, never
+  asks the owner "permission to warn" (which could be socially-engineered into silence). Owner-visible
+  via `state()`; M9 kill-switch always overrides. 347 kernel tests pass (11 hydra + 3 G2).
 
 ## 9. Operator directive (immutable spec)
 - closure = NEVER; only kill-switch (M9) stops the organism.

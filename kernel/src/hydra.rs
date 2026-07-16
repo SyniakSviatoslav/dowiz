@@ -78,6 +78,18 @@ pub enum OrganismState {
     Locked,
 }
 
+/// G9 — a breach warning broadcast to the consensus hub. Carries NO code, only
+/// the identity of the compromised node + group scope. Receivers verify the
+/// ML-DSA signature (transport layer, out of scope here) so the alert cannot be
+/// forged, hidden, or quietly suppressed. This is the ethical fail-safe: when a
+/// core is tampered, every opted-in hub member is warned immediately (operator:
+/// one compromised core ⇒ all hub members at risk — all must be alerted).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BreachAlert {
+    pub node_id: [u8; 32],
+    pub group_size: usize,
+}
+
 /// The hidden organism. Wraps an [`EventLog`] and enforces the closed-loop
 /// self-evolution policy. Constructed with the organism's local topology so the
 /// drift gate has a baseline to score mutations against (G3).
@@ -199,33 +211,30 @@ impl<S: EventStore> Hydra<S> {
         &self.log
     }
 
-    /// G9 — consent-gated self-replication of state (operator A: requires user
-    /// agreement; C3: bounded, no unbounded spread). Pure + network-free: given
-    /// a target node's `target_nodes` and a mutual-auth flag, returns whether the
-    /// local WORM log MAY replicate. Actual transport is left to the mesh layer
-    /// (bebop sync) which enforces mutual ML-DSA auth + explicit opt-in — this
-    /// function only decides the local policy. Never replicates to a node that
-    /// has not consented (`target_consent == false`).
+    /// G9 — breach warning broadcast (operator: "одне взломане ядро = взлом усіх
+    /// в хабі автоматично"). Raises an UNSIGNABLE-to-suppress alert to the whole
+    /// opted-in consensus hub — NO per-event consent, NO fan-out bound, because
+    /// withholding/suppressing the alert IS the exploit (social-engineering the
+    /// owner into silence). This is fail-safe, not fail-open: the alert carries
+    /// NO executable code, only `node_id` + `group_size`; receivers verify the
+    /// ML-DSA signature (mesh transport) so it cannot be forged or masked.
     ///
-    /// This is defensive continuity (self-reproduction of STATE, not machine
-    /// code), scoped to consenting peers — NOT a worm. The output is one
-    /// boolean; replication itself appends a single WORM link per call.
-    pub fn replicate_to(
-        &self,
-        target_nodes: usize,
-        target_consent: bool,
-        mutual_auth: bool,
-    ) -> bool {
-        // Guard: must be Live (no replication while tampered/Locked), target must
-        // have consented, and mutual auth must hold (bebop ML-DSA).
-        if self.state != OrganismState::Live {
-            return false;
+    /// Triggered automatically by `integrity_check` flipping to `Locked`. Pure +
+    /// network-free: returns the alert payload; the mesh layer broadcasts it to
+    /// the full hub. Owner-visible (`state()==Locked`); M9 kill-switch overrides.
+    /// This is the highest form of protection (operator): members who opted in
+    /// understand the mechanism — compromise of one ⇒ immediate warning of all.
+    pub fn raise_breach_alarm(&self, node_id: [u8; 32], group_size: usize) -> Option<BreachAlert> {
+        if self.state != OrganismState::Locked {
+            return None; // only warn when tamper actually detected
         }
-        if !target_consent || !mutual_auth {
-            return false;
+        if group_size == 0 {
+            return None;
         }
-        // Bounded: refuse absurd fan-out (resource cap, anti-fork-bomb).
-        target_nodes > 0 && target_nodes <= 1024
+        Some(BreachAlert {
+            node_id,
+            group_size,
+        })
     }
 }
 
@@ -411,22 +420,33 @@ mod tests {
         );
     }
 
-    /// G9 — consent-gated replication: only to consenting, mutually-authed,
-    /// bounded peer set. No consent ⇒ no replication (NOT a worm).
+    /// G9 — breach alarm: when tamper is detected (Locked), raise an UNABOUNDED,
+    /// NO-per-event-consent alert to the whole hub. Suppressing it IS the exploit
+    /// (social-engineering the owner into silence). Carries node_id + group_size
+    /// only — NO code. If not Locked, no alert (no false alarms).
     #[test]
-    fn hydra_replicate_requires_consent_and_bounds() {
-        let h = Hydra::new(MemEventStore::new(), 3, base());
+    fn hydra_breach_alarm_unbounded_on_tamper() {
+        let mut h = Hydra::new(MemEventStore::new(), 3, base());
+        // Live: no alert.
+        assert_eq!(h.integrity_check(), OrganismState::Live);
         assert!(
-            h.replicate_to(1, true, true),
-            "consenting + auth + bounded ⇒ ok"
+            h.raise_breach_alarm([7u8; 32], 4096).is_none(),
+            "no alert while Live"
         );
-        assert!(!h.replicate_to(1, false, true), "no consent ⇒ refused");
-        assert!(!h.replicate_to(1, true, false), "no mutual auth ⇒ refused");
-        assert!(!h.replicate_to(0, true, true), "zero nodes ⇒ refused");
-        assert!(
-            !h.replicate_to(4096, true, true),
-            "absurd fan-out ⇒ refused (anti-fork-bomb)"
-        );
+        // Tamper → Locked → alarm to full hub, any group size, no per-event consent.
+        h.base_edges.push(TopoEdge {
+            from: 0,
+            to: 0,
+            weight: 2.0,
+        });
+        assert_eq!(h.integrity_check(), OrganismState::Locked);
+        let a = h
+            .raise_breach_alarm([7u8; 32], 4096)
+            .expect("alarm raised when Locked");
+        assert_eq!(a.node_id, [7u8; 32]);
+        assert_eq!(a.group_size, 4096, "unbounded fan-out to hub");
+        // group_size==0 is the only guard (no hub to warn).
+        assert!(h.raise_breach_alarm([7u8; 32], 0).is_none());
     }
 }
 
