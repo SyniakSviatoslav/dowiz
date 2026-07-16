@@ -259,3 +259,77 @@ discipline the Detailed Planning Protocol above already operationalizes (ground-
 applied to claims; falsifiable done-checks + DECART-before-code + consolidation = Ananke applied to
 structure) — Anu and Ananke are the two-word name for why that protocol has the shape it has, not a
 new, separate requirement layered on top of it.
+
+## Shared-working-tree hazard — concurrent code-writing needs worktree isolation (operator, 2026-07-16)
+
+**Incident this rule closes:** while implementing the Hermetic-remediation blueprints, a background
+subagent's `git commit` — staged correctly via `git add <9 named files>`, verified clean via
+`git status` immediately beforehand — landed a commit containing 25 files, not 9. A second,
+independent process (implementing the LLM-backend harness) was concurrently running in the **same**
+checkout and had files staged in the **same** `.git/index` at commit time. `git status` before a
+commit is not a guarantee of what that commit will contain if another process can write to the same
+index between the check and the commit — this is a TOCTOU race, not a one-off fluke. Recovered
+safely via `git reset --soft HEAD~1` (never `--hard`) + `git restore --staged <the other party's
+files>` (unstages without touching their file content) — but the right fix is to stop the race from
+being possible, not to keep detecting and un-committing it after the fact.
+
+**The rule:** any subagent dispatch that **writes code** (not docs) into this repo, when there is
+any realistic chance another process (a different session, a different subagent, the operator in
+another terminal) is also actively working in the same checkout, MUST use the Agent tool's
+`isolation: "worktree"` option. A worktree gives that agent its own working directory **and its own
+`.git/index`**, so a concurrent `git add`/`git commit`/`git checkout` elsewhere cannot leak into or
+be leaked into by this agent's commit — the race is structurally impossible, not just unlikely.
+Planning/doc-writing subagents (the common case all session) are lower-risk (they don't touch `.git`
+state the same way) but the same option is available if a doc arc is itself running in parallel with
+active code work elsewhere.
+
+**When isolation is skippable:** only when the agent is provably the sole writer to the checkout for
+the duration of its run — e.g., a single foreground, synchronous edit the calling agent performs
+itself with no other background agents or known-concurrent sessions in flight. Default to worktree
+isolation whenever in doubt; the cost (one `git worktree add`, auto-cleaned if unchanged) is far
+cheaper than a contaminated commit.
+
+**If a collision is discovered anyway** (as here): do not guess at intent for the other party's
+files. Verify with `git show --stat HEAD` (or `git diff --cached --stat` before committing) that the
+file list matches what was actually asked for — never trust "I ran `git add` on the right files" as
+sufficient once concurrency is suspected. Recover via `git reset --soft` (never `--hard`, never
+`push --force`) and `git restore --staged` on exactly the extraneous paths, leaving their content on
+disk untouched for that process to commit on its own terms. This is Ananke applied to git hygiene:
+the safety must be structural (worktree isolation), not remembered (a pre-commit `git status` glance
+that a concurrent write can invalidate between the glance and the commit).
+
+## Mandatory native telemetry & benchmarks after every change/wave (operator, 2026-07-16)
+
+**Doctrine:** every new feature / change / wave must ship WITH native telemetry and benchmark
+coverage, and a runnable probe. This is a VERIFY gate (like the falsifiable done-check), not a
+nice-to-have — "it builds" is not "it is observable and did not regress."
+
+**Native telemetry (what, not how):**
+- Any hot path that carries a cost (latency, token spend, cache hit/miss, EV value/cost) MUST emit a
+  deterministic, zero-dep telemetry record. Kernel telemetry stays `std`-only (no network/serde/RNG).
+  The harness harvest ledger (`Dispatcher` → `track_record.jsonl`, gov_route-compatible schema) is the
+  reference pattern: every dispatch is recorded as `{model,task,success,value,cost}` so the EV loop can
+  price it. Extend that ledger, do not invent a parallel channel.
+- A new capability/backend/adapter MUST be probe-able. A *probe* = a runnable check (unit test, or a
+  live `cargo test --test` / example) that FAILS if the capability broke. No probe = not done.
+
+**Benchmarks (automatic comparison, not a one-off):**
+- Every crate with hot paths has a `criterion` bench (`[[bench]]` harness=false) covering those paths.
+- `benches/bench_track.py` is the autotrack mechanism: it runs `cargo bench`, parses criterion's text
+  output, compares each bench's mean against the committed `baseline.json`, logs a delta table to the
+  git-ignored `BENCH_HISTORY.md`, and **exits non-zero on regression beyond `--threshold` (default 10%)**.
+- Rule: `bench_track.py` MUST be run after any change touching a benchmarked path, and a CI/cron job
+  MUST run it on every build. A regression print = a real defect to kill (root-cause, not a baseline
+  bump). New benches are auto-seeded into `baseline.json` on first run (no manual edit needed).
+
+**Mandatory sequence per change/wave (Ananke = structurally enforced, not remembered):**
+1. Add/extend the native telemetry record for the path you touched.
+2. Add/extend the benchmark for the hot path (criterion).
+3. Add the probe (test/example) that fails if the capability breaks.
+4. Run `bench_track.py` (and `cargo test`) — evidence is required before "done".
+5. Never let a benchmarked change land without a baseline entry; `bench_track.py` seeds it.
+
+innovate: ceilings — (a) live LLM harness benches (Ollama latency) are NOT committed as baselines
+because they are host/noisy; they run in CI as probes (pass/fail), not as regression gates. (b) kernel
+benches are deterministic and DO carry committed baselines. Upgrade trigger: when the harness bench
+variance tightens (dedicated bench host / fixed warmup), promote harness benches to baseline-gated too.

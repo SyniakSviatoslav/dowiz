@@ -1,0 +1,2 @@
+# Native tracker build artifact (same as other rust tool crates).
+/target

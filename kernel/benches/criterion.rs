@@ -3,6 +3,7 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use dowiz_kernel::cgraph::CGraph;
+use dowiz_kernel::token_bucket::TokenBucket;
 use dowiz_kernel::{
     empirical_identify, fold_transitions, place_order, sample_backdoor, OrderItem, OrderStatus,
 };
@@ -84,10 +85,21 @@ fn bench_empirical_identify(c: &mut Criterion) {
     });
 }
 
+/// The F33 bounded-budget hot path: the Dispatcher calls `try_acquire` once per chat request.
+/// This bench isolates the atomic acquire cost (refill + CAS) from any network/harvest work.
+fn bench_token_bucket(c: &mut Criterion) {
+    c.bench_function("token_bucket/try_acquire_permit", |b| {
+        // A typical chat permit is its max_tokens (8). Capacity 64, refill 8/s keeps it satisfied.
+        let bucket = TokenBucket::new(64, 8.0);
+        b.iter(|| black_box(bucket.try_acquire(8)))
+    });
+}
+
 criterion_group!(
     benches,
     bench_place_order,
     bench_fold_transitions,
-    bench_empirical_identify
+    bench_empirical_identify,
+    bench_token_bucket
 );
 criterion_main!(benches);
