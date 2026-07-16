@@ -185,8 +185,11 @@ pub struct OrderTotalEstimate {
     /// True only when the delivery fee is computable client-side (flat/free/pickup).
     pub fee_known: bool,
     pub delivery_fee: Option<i64>,
-    pub tax_total: i64,
-    /// Authoritative-by-construction total, or None when the fee is unknown.
+    /// Tax on the subtotal in minor units, or `None` when it can't be computed (a
+    /// pathological `subtotal × rate` overflows i64 in `apply_tax`). Fail-closed like
+    /// `delivery_fee`: the caller must degrade, never show a fabricated zero-tax total.
+    pub tax_total: Option<i64>,
+    /// Authoritative-by-construction total, or `None` when the fee OR the tax is unknown.
     pub total: Option<i64>,
     /// Mirrors server MIN_ORDER_NOT_MET gate (applies to pickup AND delivery).
     pub min_not_met: bool,
@@ -215,13 +218,19 @@ pub fn compute_delivery_fee(subtotal: i64, cfg: &FeeConfig) -> Option<i64> {
 /// (not subtotal+fee), matching the server.
 pub fn estimate_order_total(subtotal: i64, cfg: &OrderTotalConfig) -> OrderTotalEstimate {
     let delivery_fee = compute_delivery_fee(subtotal, &cfg.fee);
-    let tax_total = apply_tax(subtotal, cfg.tax_rate, cfg.price_includes_tax).unwrap_or(0);
+    // Fail-closed: a tax-computation failure (overflow) is `None`, NOT a silent zero.
+    // `.ok()` mirrors the fee-unknown degrade — the estimate cannot back a number it
+    // couldn't compute, so both `tax_total` and `total` degrade to `None`.
+    let tax_total = apply_tax(subtotal, cfg.tax_rate, cfg.price_includes_tax).ok();
     let min_not_met = match cfg.min_order_value {
         Some(min) => subtotal < min,
         None => false,
     };
     let fee_known = delivery_fee.is_some();
-    let total = delivery_fee.map(|fee| subtotal + fee + tax_total);
+    let total = match (delivery_fee, tax_total) {
+        (Some(fee), Some(tax)) => Some(subtotal + fee + tax),
+        _ => None,
+    };
     OrderTotalEstimate {
         fee_known,
         delivery_fee,
@@ -355,7 +364,7 @@ mod tests {
         let r = estimate_order_total(1000, &cfg(false, None, Some(200), false, 0.20, false, None));
         assert!(r.fee_known);
         assert_eq!(r.delivery_fee, Some(200));
-        assert_eq!(r.tax_total, 200);
+        assert_eq!(r.tax_total, Some(200));
         assert_eq!(r.total, Some(1400));
         assert!(!r.min_not_met);
     }
@@ -368,7 +377,7 @@ mod tests {
             &cfg(false, Some(2000), Some(200), false, 0.10, false, None),
         );
         assert_eq!(r.delivery_fee, Some(0));
-        assert_eq!(r.tax_total, 200);
+        assert_eq!(r.tax_total, Some(200));
         assert_eq!(r.total, Some(2200));
     }
 
@@ -407,7 +416,27 @@ mod tests {
             1200,
             &cfg(false, Some(9999), Some(0), false, 0.20, true, None),
         );
-        assert_eq!(r.tax_total, 200);
+        assert_eq!(r.tax_total, Some(200));
         assert_eq!(r.total, Some(1400)); // money.ts always adds tax_total to subtotal+fee
+    }
+
+    // ── RED→GREEN (Phase 7 §6, BLUEPRINT-P07): tax overflow must FAIL CLOSED ──
+    // `apply_tax` overflows i64 here (subtotal 1000 × rate 1e17 far exceeds i64::MAX).
+    // Pre-fix `.unwrap_or(0)`: tax_total=0, total=Some(1200) — a fabricated zero-tax total
+    // the estimator cannot back. Post-fix: the estimate degrades exactly as it does for an
+    // unknown (distance-tiered) fee — tax_total=None, total=None. Never a wrong number.
+    #[test]
+    fn red_tax_overflow_degrades_estimate_to_none() {
+        let r = estimate_order_total(1000, &cfg(false, None, Some(200), false, 1e17, false, None));
+        assert!(r.fee_known, "flat 200 fee is computable — the fee side is known");
+        assert_eq!(r.delivery_fee, Some(200));
+        assert_eq!(
+            r.tax_total, None,
+            "tax overflow marks the tax field unknown, never a false zero"
+        );
+        assert_eq!(
+            r.total, None,
+            "on tax overflow the total must degrade to None, never a fabricated number"
+        );
     }
 }
