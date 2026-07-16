@@ -16,6 +16,7 @@ mod bridge;
 mod loop_;
 mod money_guard;
 mod motion;
+mod scene;
 mod sdf;
 mod widget_store;
 mod zerocopy;
@@ -24,6 +25,7 @@ pub use bridge::{FrameProfiler, VertexBridge};
 pub use loop_::{FixedTimestep, DT_STABLE, MAX_FRAME, MAX_SUBSTEPS};
 pub use money_guard::{interpolate, FieldValue, Money, TweenGuard};
 pub use motion::{heat_kernel_delay, Spring};
+pub use scene::{Scene, SdfShape, BACKGROUND};
 pub use sdf::{
     op_intersection, op_smooth_union, op_subtraction, op_union, sdf_box, sdf_circle,
     sdf_line_segment, sdf_rounded_box, SdfField,

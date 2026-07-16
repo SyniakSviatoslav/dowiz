@@ -133,7 +133,11 @@ impl SdfField {
                 data[row * width + col] = f(wx, wy) as f32;
             }
         }
-        Self { width, height, data }
+        Self {
+            width,
+            height,
+            data,
+        }
     }
 
     /// Zero-copy `&[f32]` view over the raster samples (row-major, length
@@ -167,7 +171,10 @@ mod tests {
             boundary.abs() <= 1e-6,
             "on boundary must be ~0 within 1e-6: {boundary}"
         );
-        assert!((outside - 1.0).abs() <= 1e-9, "outside distance = 1, got {outside}");
+        assert!(
+            (outside - 1.0).abs() <= 1e-9,
+            "outside distance = 1, got {outside}"
+        );
     }
 
     // (2) sdf_smooth_union_bounds — smin <= both inputs and continuous.
