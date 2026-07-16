@@ -298,6 +298,51 @@ impl<S: EventStore> EventLog<S> {
         self.store.tip()
     }
 
+    /// MESH-06 + HYDRA-G2: spectral-drift fail-closed gate wired into the commit
+    /// path. Runs `classify_drift` on the organism's current adjacency BEFORE
+    /// `decide`. If the spectrum is `Unstable` (ρ > 1 + ε) the mutation is
+    /// REJECTED pre-persist — the organism cannot slip into a divergent topology.
+    ///
+    /// OPERATOR DIRECTIVE (SOURCE-OF-HYDRA §3): the gate is ACTIVE only in the
+    /// DEFAULT regime. When `intervention == true` (foreign/undefined code is
+    /// actively mutating the organism) ALL safeties are LIFTED — the drift gate
+    /// is bypassed and the mutation proceeds to `decide` regardless of spectrum.
+    /// Survival = endurance, not exclusion. The only hard stop remains kill-switch.
+    ///
+    /// This is the KEY HOLE closure: `classify_drift` (`spectral.rs:325`) was
+    /// previously computed but never bound into the decide/commit path. Now it is.
+    /// The adjacency is supplied by the caller (kernel-internal spine — NOT an
+    /// exposed surface), keeping the source hidden per G7.
+    pub fn commit_after_decide_drift_gate<D, T, E>(
+        &mut self,
+        ev: MeshEvent,
+        adjacency: &[Vec<f64>],
+        intervention: bool,
+        decide: D,
+    ) -> Result<(AppendOutcome, Option<T>), DecideRejected>
+    where
+        D: FnOnce(&MeshEvent) -> Result<T, E>,
+        E: std::fmt::Display,
+    {
+        // Intervention mode: lift ALL safeties (operator directive §3).
+        if !intervention {
+            use crate::spectral::classify_drift;
+            if matches!(
+                classify_drift(adjacency),
+                crate::spectral::DriftClass::Unstable
+            ) {
+                return Err(DecideRejected(format!(
+                    "HYDRA drift-gate REJECT: spectrum Unstable (ρ>1) — mutation would diverge; \
+                     organism endures by NOT persisting. adjacency={}x{}",
+                    adjacency.len(),
+                    adjacency.first().map(|r| r.len()).unwrap_or(0)
+                )));
+            }
+        }
+        // Default regime (or intervention lift): proceed to decide-before-commit.
+        self.commit_after_decide(ev, decide)
+    }
+
     /// Number of events persisted.
     pub fn len(&self) -> usize {
         self.store.len()
@@ -475,5 +520,59 @@ mod tests {
             payload: b"b".to_vec(),
         };
         assert_ne!(id2, unchained.event_id(), "tip chaining changed the id");
+    }
+
+    // ── HYDRA-G2: spectral-drift fail-closed gate wired into commit path ──────
+
+    /// Helper: a 2x2 adjacency with spectral radius ρ. A diagonal `[[ρ,0],[0,0]]`
+    /// has spectral radius |ρ| (eigenvalues = diagonal entries). ρ>1 ⇒ Unstable
+    /// (divergent), ρ<1 ⇒ Damped (contracting). Plain f64, no deps.
+    fn adj(rho: f64) -> Vec<Vec<f64>> {
+        vec![vec![rho, 0.0], vec![0.0, 0.0]]
+    }
+
+    /// RED+GREEN — DEFAULT regime: an Unstable spectrum (ρ>1) is REJECTED before
+    /// persist. The organism endures by refusing the divergent mutation.
+    #[test]
+    fn drift_gate_rejects_unstable_in_default_regime() {
+        let mut log = EventLog::new(MemEventStore::new());
+        let e = ev(11, 1, b"divergent-mutation");
+        let res = log.commit_after_decide_drift_gate(e, &adj(2.0), false, |_| Ok::<u64, String>(1));
+        assert!(
+            matches!(res, Err(DecideRejected(_))),
+            "Unstable (ρ=2) mutation MUST be rejected in default regime"
+        );
+        assert!(log.is_empty(), "nothing persisted on drift-gate rejection");
+    }
+
+    /// GREEN — DEFAULT regime: a Damped spectrum (ρ<1) is committed normally.
+    #[test]
+    fn drift_gate_allows_damped_in_default_regime() {
+        let mut log = EventLog::new(MemEventStore::new());
+        let e = ev(12, 1, b"convergent-mutation");
+        let (out, dec) = log
+            .commit_after_decide_drift_gate(e, &adj(0.5), false, |_| Ok::<u64, String>(1))
+            .expect("Damped (ρ=0.5) mutation must commit");
+        assert!(matches!(out, AppendOutcome::Committed(_)));
+        assert_eq!(dec, Some(1));
+        assert_eq!(log.len(), 1);
+    }
+
+    /// OPERATOR DIRECTIVE §3 — INTERVENTION regime: ALL safeties LIFTED. Even an
+    /// Unstable spectrum (ρ>1) is allowed to proceed (endurance, not exclusion).
+    #[test]
+    fn drift_gate_lifts_on_intervention() {
+        let mut log = EventLog::new(MemEventStore::new());
+        let e = ev(13, 1, b"foreign-intervention-divergent");
+        let (out, dec) = log
+            .commit_after_decide_drift_gate(e, &adj(2.0), true, |_| Ok::<u64, String>(1))
+            .expect("intervention lifts ALL safeties — Unstable allowed");
+        assert!(matches!(out, AppendOutcome::Committed(_)));
+        assert_eq!(dec, Some(1));
+        assert_eq!(
+            log.len(),
+            1,
+            "intervention: mutation persisted despite Unstable"
+        );
     }
 }
