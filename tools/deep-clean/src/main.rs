@@ -116,17 +116,61 @@ fn clean(dry: bool) {
     log("[clean] done");
 }
 
+fn prune(dry: bool, days: u64) {
+    // Safe prune: ONLY ended sessions older than `days` (never touch active/open sessions).
+    // FTS5 shadow tables are rebuilt + VACUUM after delete to stay consistent.
+    let cutoff = (ts() as f64) - (days as f64) * 86400.0;
+    log(&format!("[prune] cutoff={cutoff:.0} (>{days}d old, ended-only), dry={dry}"));
+    if dry {
+        if let Ok(conn) = rusqlite::Connection::open(STATE_DB) {
+            let n_s: i64 = conn
+                .query_row("SELECT COUNT(*) FROM sessions WHERE ended_at IS NOT NULL AND ended_at < ?", [cutoff], |r| r.get(0))
+                .unwrap_or(0);
+            let n_m: i64 = conn
+                .query_row("SELECT COUNT(*) FROM messages WHERE session_id IN (SELECT id FROM sessions WHERE ended_at IS NOT NULL AND ended_at < ?)", [cutoff], |r| r.get(0))
+                .unwrap_or(0);
+            log(&format!("[prune][dry] would delete {n_s} sessions, {n_m} messages"));
+        }
+        return;
+    }
+    match rusqlite::Connection::open(STATE_DB) {
+        Ok(conn) => {
+            conn.execute("DELETE FROM messages WHERE session_id IN (SELECT id FROM sessions WHERE ended_at IS NOT NULL AND ended_at < ?)", [cutoff]).ok();
+            conn.execute("DELETE FROM sessions WHERE ended_at IS NOT NULL AND ended_at < ?", [cutoff]).ok();
+            // Sync FTS5 shadow tables (external-content triggers may not cover bulk delete).
+            let _ = conn.execute_batch("INSERT INTO messages_fts(messages_fts) VALUES('rebuild');");
+            conn.execute_batch("VACUUM;").ok();
+            log("[prune] done: messages+sessions deleted, FTS rebuilt, VACUUM");
+        }
+        Err(e) => log(&format!("[prune] ERROR opening state.db: {e}")),
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let commit = args.iter().any(|a| a == "--commit");
     let dry = !commit;
+    let days: u64 = args
+        .iter()
+        .position(|a| a == "--days")
+        .and_then(|i| args.get(i + 1))
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(30);
     if args.iter().any(|a| a == "vacuum") {
         vacuum(dry);
     }
     if args.iter().any(|a| a == "clean") {
         clean(dry);
     }
-    if !args.iter().any(|a| a == "vacuum" || a == "clean") {
-        println!("usage: deep-clean [vacuum|clean] [--commit]  (dry-run by default)");
+    if args.iter().any(|a| a == "prune") {
+        prune(dry, days);
+    }
+    if args.iter().any(|a| a == "all") {
+        vacuum(dry);
+        clean(dry);
+        prune(dry, days);
+    }
+    if !args.iter().any(|a| a == "vacuum" || a == "clean" || a == "prune" || a == "all") {
+        println!("usage: deep-clean [vacuum|clean|prune|all] [--commit] [--days N]  (dry-run by default)");
     }
 }
