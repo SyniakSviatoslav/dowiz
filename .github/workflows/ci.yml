@@ -56,3 +56,56 @@ jobs:
           assert r.returncode == 0, r.stderr
           print(r.stdout.strip())
           PY
+
+  # ### SCOPE RULE BANNER (read before anything else — ARCHITECTURE.md §0, lines 23–27)
+  # **Everything in this phase is a canonical-repo DEV-TIME fence.** It is a blocking CI / pre-commit
+  # control on *the operator's own build and merge into the canonical repo* — it is **NOT** a runtime
+  # control over any autonomous hub. At runtime every hub is a sovereign Hydra (M5/M9/M11): it may
+  # fork this repo, delete these workflows, self-gate locally via `eqc`, ignore the upstream gate, and
+  # replicate-or-reject any artifact. **No gate in this blueprint may be read as a "global control."**
+  # Where a job header says "blocks merge", it means *blocks merge into the canonical repo*, nothing more.
+  # This banner is reproduced verbatim in the header of every workflow job this phase adds, so a future
+  # reader can never misread a red CI run as a limit on hub autonomy.
+  claim-latency-ledger:
+    name: claim-latency ledger (V5-B appender)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Append one JSONL entry per new commit (appender only; anomaly consumer = Phase 8)
+        run: bash scripts/claim-latency-append.sh
+      - name: Publish the ledger as a CI artifact (avoids a bot commit-back loop)
+        uses: actions/upload-artifact@v4
+        with:
+          name: claim-latency-ledger
+          path: docs/ledger/claim-latency.jsonl
+          if-no-files-found: warn
+
+  # ### SCOPE RULE BANNER (read before anything else — ARCHITECTURE.md §0, lines 23–27)
+  # **Everything in this phase is a canonical-repo DEV-TIME fence.** It is a blocking CI / pre-commit
+  # control on *the operator's own build and merge into the canonical repo* — it is **NOT** a runtime
+  # control over any autonomous hub. At runtime every hub is a sovereign Hydra (M5/M9/M11): it may
+  # fork this repo, delete these workflows, self-gate locally via `eqc`, ignore the upstream gate, and
+  # replicate-or-reject any artifact. **No gate in this blueprint may be read as a "global control."**
+  # Where a job header says "blocks merge", it means *blocks merge into the canonical repo*, nothing more.
+  # This banner is reproduced verbatim in the header of every workflow job this phase adds, so a future
+  # reader can never misread a red CI run as a limit on hub autonomy.
+  v5c-reexec:
+    name: v5c independent re-execution (S6/V5-C, UNSIGNED)
+    runs-on: ubuntu-latest
+    # Red-line gate (blueprint `if: red-line paths touched`) is enforced INSIDE
+    # scripts/v5c-reexec.sh: it inspects the diff range and emits verdict SKIP
+    # (exit 0) when no money.rs/order_machine.rs/event_log.rs/auth path is touched,
+    # running the full independent re-exec only when one is. UNSIGNED here — Phase 6
+    # wraps this same runner with ML-DSA key_K/key_V signatures on top.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Pre-fetch crates so the offline re-exec has its deps (no vendoring yet)
+        run: |
+          cargo fetch --manifest-path kernel/Cargo.toml
+          cargo fetch --manifest-path engine/Cargo.toml
+      - name: Re-execute the diff range in a clean independent worktree (RED|GREEN|SKIP)
+        run: bash scripts/v5c-reexec.sh origin/main HEAD
