@@ -1,0 +1,17 @@
+[package]
+name = "dowiz-wasm"
+version = "0.1.0"
+edition = "2021"
+description = "dowiz physics-render wasm bridge: exposes the engine field_frame.compose RGBA + VertexBridge graph-Laplacian field to JS via wasm-bindgen (zero TS math)."
+
+[lib]
+name = "dowiz_wasm"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+dowiz-engine = { path = "../engine" }
+dowiz-kernel = { path = "../kernel" }
+
+[features]
+default = []

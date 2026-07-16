@@ -13,7 +13,9 @@
 //!   is plain `f32` arrays so it is).
 
 mod bridge;
-mod field_frame;
+// field_frame is exposed publicly: the browser renders the kernel-computed
+// field via `field_frame::compose` (zero TS). No compute lives in the wasm crate.
+pub mod field_frame;
 mod loop_;
 mod money_guard;
 mod motion;
