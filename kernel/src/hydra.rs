@@ -80,15 +80,21 @@ pub enum OrganismState {
 
 /// G9 — a breach warning broadcast to the consensus hub. Carries NO code, only
 /// the identity of the compromised node + group scope. Receivers verify the
-/// ML-DSA signature (transport layer, out of scope here) so the alert cannot be
-/// forged, hidden, or quietly suppressed. This is the ethical fail-safe: when a
-/// core is tampered, every opted-in hub member is warned immediately (operator:
-/// one compromised core ⇒ all hub members at risk — all must be alerted).
+/// ML-DSA signature (mesh transport) so the alert cannot be forged, hidden, or
+/// suppressed. This is the ethical fail-safe: when a core is tampered, every
+/// opted-in hub member is warned immediately (operator: one compromised core ⇒
+/// all hub members at risk — all must be alerted).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct BreachAlert {
     pub node_id: [u8; 32],
     pub group_size: usize,
 }
+
+/// Sentinel actor key for the organism's self-witness breach record. Distinct
+/// from any operator/FSM actor — it marks a kernel-generated WORM evidence row,
+/// not a decision event. Identity only, no authority; lets the owner prove after
+/// the fact that this core WAS tampered (anti-silent-heal).
+pub const BREACH_WITNESS_ACTOR: [u8; 32] = [0x42; 32];
 
 /// The hidden organism. Wraps an [`EventLog`] and enforces the closed-loop
 /// self-evolution policy. Constructed with the organism's local topology so the
@@ -219,18 +225,38 @@ impl<S: EventStore> Hydra<S> {
     /// NO executable code, only `node_id` + `group_size`; receivers verify the
     /// ML-DSA signature (mesh transport) so it cannot be forged or masked.
     ///
-    /// Triggered automatically by `integrity_check` flipping to `Locked`. Pure +
-    /// network-free: returns the alert payload; the mesh layer broadcasts it to
-    /// the full hub. Owner-visible (`state()==Locked`); M9 kill-switch overrides.
-    /// This is the highest form of protection (operator): members who opted in
-    /// understand the mechanism — compromise of one ⇒ immediate warning of all.
-    pub fn raise_breach_alarm(&self, node_id: [u8; 32], group_size: usize) -> Option<BreachAlert> {
+    /// Triggered automatically by `integrity_check` flipping to `Locked`. Side
+    /// effect: the organism SELF-DOCUMENTS the breach into its own WORM log
+    /// (content-addressed evidence row under `BREACH_WITNESS_ACTOR`), so a
+    /// tampered core can NEVER silently "heal" or deny it was compromised
+    /// (anti-silent-heal). The witness is the organism's own immutable record —
+    /// not a topology mutation — so it bypasses the drift gate and `decide`.
+    /// Owner-visible (`state()==Locked`); M9 kill-switch overrides.
+    pub fn raise_breach_alarm(
+        &mut self,
+        node_id: [u8; 32],
+        group_size: usize,
+    ) -> Option<BreachAlert> {
         if self.state != OrganismState::Locked {
             return None; // only warn when tamper actually detected
         }
         if group_size == 0 {
             return None;
         }
+        // Self-witness: append an immutable evidence row to the WORM log. The
+        // actor_seq is monotonic on the current log length, so each breach is a
+        // durable, content-addressed, idempotent-on-replay record. This is the
+        // organism's own testimony — survives restart, replay, and tamper-denial.
+        let mut payload = Vec::with_capacity(32 + 8);
+        payload.extend_from_slice(&node_id);
+        payload.extend_from_slice(&group_size.to_le_bytes());
+        let witness = MeshEvent {
+            prev: [0u8; 32], // append() chains to current tip
+            actor_pubkey: BREACH_WITNESS_ACTOR,
+            actor_seq: self.log.len() as u64,
+            payload,
+        };
+        self.log.append(witness); // kernel self-evidence, bypasses decide/drift
         Some(BreachAlert {
             node_id,
             group_size,
@@ -445,6 +471,21 @@ mod tests {
             .expect("alarm raised when Locked");
         assert_eq!(a.node_id, [7u8; 32]);
         assert_eq!(a.group_size, 4096, "unbounded fan-out to hub");
+        // Self-witness: the breach is now durable in the WORM log (anti-silent-heal).
+        let witnessed = h.log().store().contains(&{
+            use crate::event_log::MeshEvent;
+            let mut p = Vec::with_capacity(40);
+            p.extend_from_slice(&[7u8; 32]);
+            p.extend_from_slice(&4096u64.to_le_bytes());
+            MeshEvent {
+                prev: [0u8; 32],
+                actor_pubkey: BREACH_WITNESS_ACTOR,
+                actor_seq: 0,
+                payload: p,
+            }
+            .event_id()
+        });
+        assert!(witnessed, "breach self-witness row persisted in WORM log");
         // group_size==0 is the only guard (no hub to warn).
         assert!(h.raise_breach_alarm([7u8; 32], 0).is_none());
     }
