@@ -32,3 +32,6 @@ pub mod bm25;
 pub mod recall;
 /// W3-3 P1 — knowledge-spine frontmatter validator + MAP.md generator organ.
 pub mod spine;
+/// M4/W4-1 — native std-only content-addressed living-memory store (default)
+/// + feature-gated `pgrust` SQL adapter boundary (OFF by default).
+pub mod memory_store;

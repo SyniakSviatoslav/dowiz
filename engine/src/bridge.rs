@@ -268,9 +268,12 @@ mod tests {
     fn bridge_field_is_kernel_laplacian_and_conserved() {
         // Undirected triangle adjacency, both directions.
         let edges = [
-            (0usize, 1, 1.0), (1, 0, 1.0),
-            (1, 2, 1.0), (2, 1, 1.0),
-            (0, 2, 1.0), (2, 0, 1.0),
+            (0usize, 1, 1.0),
+            (1, 0, 1.0),
+            (1, 2, 1.0),
+            (2, 1, 1.0),
+            (0, 2, 1.0),
+            (2, 0, 1.0),
         ];
         let graph = Csr::from_edges(3, &edges);
 
@@ -310,10 +313,7 @@ mod tests {
     //      = [0.29289…, −0.41421…, 0.29289…]
     #[test]
     fn bridge_field_matches_kernel_on_nonregular() {
-        let edges = [
-            (0usize, 1, 1.0), (1, 0, 1.0),
-            (1, 2, 1.0), (2, 1, 1.0),
-        ];
+        let edges = [(0usize, 1, 1.0), (1, 0, 1.0), (1, 2, 1.0), (2, 1, 1.0)];
         let graph = Csr::from_edges(3, &edges);
         let mut bridge = VertexBridge::new(3, 4);
         bridge.set_field_graph(graph);
@@ -321,9 +321,21 @@ mod tests {
         bridge.apply_field(&x);
         let field = bridge.field();
         let inv_sqrt2 = 2.0_f64.sqrt().recip();
-        assert!((field[0] - (1.0 - inv_sqrt2)).abs() <= 1e-12, "field[0]={}", field[0]);
-        assert!((field[1] - (1.0 - 2.0 * inv_sqrt2)).abs() <= 1e-12, "field[1]={}", field[1]);
-        assert!((field[2] - (1.0 - inv_sqrt2)).abs() <= 1e-12, "field[2]={}", field[2]);
+        assert!(
+            (field[0] - (1.0 - inv_sqrt2)).abs() <= 1e-12,
+            "field[0]={}",
+            field[0]
+        );
+        assert!(
+            (field[1] - (1.0 - 2.0 * inv_sqrt2)).abs() <= 1e-12,
+            "field[1]={}",
+            field[1]
+        );
+        assert!(
+            (field[2] - (1.0 - inv_sqrt2)).abs() <= 1e-12,
+            "field[2]={}",
+            field[2]
+        );
     }
 }
 

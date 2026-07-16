@@ -21,6 +21,13 @@ std = []
 # ride behind this feature (the only one that enables serde) to keep the native
 # build serde-free; neither is part of the canonical order/money core.
 wasm = ["dep:wasm-bindgen", "dep:serde", "dep:serde_json", "dep:serde_yaml"]
+# `pgrust` is the OPTIONAL Postgres SQL adapter boundary for the living-memory
+# store (M4/W4-1). OFF by default so the kernel stays pure-`std` with no
+# network deps; the default `InMemoryStore` is native std-only. This feature is
+# currently EMPTY (no actual pgrust/Postgres dependency yet) — it only gates
+# the `PgStore` trait-boundary stub in `retrieval/memory_store.rs`. A real
+# Postgres dependency + adapter are wired behind this flag later.
+pgrust = []
 
 [dependencies]
 # WASM bindings — only compiled under the `wasm` feature (see
