@@ -13,6 +13,7 @@ use crate::quirks::Quirks;
 use crate::transport::OpenAiCompatTransport;
 
 /// The Ollama adapter. Construct with a base URL (default `http://127.0.0.1:11434`).
+#[derive(Clone)]
 pub struct OllamaAdapter {
     transport: OpenAiCompatTransport,
 }
