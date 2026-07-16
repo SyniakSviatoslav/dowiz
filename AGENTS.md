@@ -138,3 +138,66 @@ it turns out you took an action or made a claim without understanding something 
 never re-verified). Anything in the second bucket gets investigated to root cause before the
 session/plan is called closed, not left as a footnote. This mirrors — and is a *closing* complement
 to — the in-flight `doubt-escalation` skill; this ritual runs at the END of the work, not mid-flight.
+
+---
+
+## Detailed Planning Protocol (operator precedent, 2026-07-16)
+
+**When the task is "produce a detailed plan/roadmap/blueprint" — for a feature, a subsystem, or an
+architecture arc — this is the shape that plan must take, not a suggestion.** Set by precedent: the
+sovereign-architecture roadmap (19 phases), the living-interface roadmap (12 phases, resequenced on
+operator ruling), and the `LlmBackend` harness plan (`docs/design/harness-2026-07-16/HARNESS-LLM-BACKEND.md`)
+were all built this way, and the harness plan specifically caught two internal contradictions and one
+unnecessarily-sequential build order by *following this protocol's own consolidation step* rather than
+stopping at first draft.
+
+1. **Ground truth before design.** Read the live repo — file:line citations, live command output,
+   actual running services (`systemctl`, `ollama ps`, `git log`, `grep`) — before writing a single
+   design paragraph. A claim sourced from memory, an earlier doc, or "this is probably still true" is
+   not ground truth; re-verify it or mark it explicitly unverified. (The harness plan's single biggest
+   correction — "install llama-server" was dead work because Ollama was already running — came
+   entirely from this step, not from cleverness.)
+2. **Design with explicit dependencies, not a flat list.** Every phase/step names what it depends on
+   and why, in terms of *real* technical necessity — never "it comes after because it was written
+   after." Re-derive the dependency graph at the end, don't just accept the order it was drafted in
+   (the harness plan's Wave-0/Wave-1 correction — three of its four steps turned out to be mutually
+   independent, not "strictly ordered" as first drafted — came from this re-check).
+3. **DECART every new integration, inline, before the blueprint is called done** — per the Integration
+   Decart Rule above. The decision belongs *in* the planning artifact the implementer will read, not a
+   separate file that can drift out of sync with it (a real drift this precedent caught once: a plan's
+   dispatch design still assumed `tokio` after its own DECART report had already chosen `ureq`).
+4. **Blueprint-grade, not just plan-grade, before calling it execution-ready.** A "plan" that names
+   *what* to build without exact file paths, exact struct/function signatures, and exact module layout
+   against the *actual* repo structure (workspace or not, existing convention to mirror, existing
+   primitive to reuse instead of reinventing) is not yet buildable — it is one draft short. Naming a
+   real gap honestly (e.g. "the exact call site needs one more read at implementation time") is
+   correct discipline; papering over it with an invented specific is not.
+5. **Falsifiable done-checks, not vibes.** Every phase/step ends with a real command, test name, or
+   trace that either passes or doesn't — never "looks right" or "should work."
+6. **Self-critique the plan itself** (the 2-question ritual above), applied to the planning artifact,
+   not skipped because "it's just a plan." Two of this session's three plans had a confirmed,
+   load-bearing finding surface this way (a GPU-gating category error; a half-resolved risk-map entry)
+   that a first-draft read-through did not catch.
+7. **Consolidate before handing off.** When an arc's planning is genuinely done, merge its working
+   documents (research → synthesis → DECART → blueprint) into **one** navigable artifact and delete the
+   intermediate copies — a reader implementing the work should not have to reconcile three files that
+   may have drifted from each other. The consolidation pass itself is where step 2's re-derived
+   dependency graph and step 3's DECART-drift-check most reliably surface, so treat it as a real
+   verification step, not a formatting chore.
+8. **The implementation that follows a plan built this way is itself bound to**: spec-driven
+   development (the plan is the spec — deviations get written back into it, never silently diverged
+   from), TDD (each done-check is written and run RED before the code that makes it pass), DoD (done
+   means the falsifiable check passed on a clean checkout, evidence pasted into the commit — not
+   "looks done"), event-driven design (new capability plugs into the existing event-sourced substrate,
+   never a side-channel around it), and mesh-architecture discipline (M5: capability/backend choice is
+   config, never a hard-coded fork; no dev-time gate blocks a runtime hub's own choice, per the SCOPE
+   RULE in `docs/design/ARCHITECTURE.md` §0).
+
+**On hooks**: the operator asked for rules *and* hooks. Steps 1-8 above are the rule, binding on every
+agent producing a detailed plan (same standing-instruction mechanism as the Integration Decart Rule and
+the 2-question ritual — both already enforced this way, not by a technical gate). A literal
+git-hook/CI enforcement (e.g. a pre-commit check that a new `docs/design/**/*ROADMAP*.md` or
+`*BLUEPRINT*.md` cites at least one live command-output block, or that a new dependency line requires a
+linked DECART section) is a legitimate follow-up, but `.claude/` config is a protected path this session
+does not self-edit — per the standing governance gate-topology rule, that unlock is the operator's own
+`! <cmd>`, not an agent action. Flagged here as the concrete next step if literal enforcement is wanted.
