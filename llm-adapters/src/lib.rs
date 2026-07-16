@@ -7,12 +7,14 @@
 //! which reuses Ollama's own request-level parallelism rather than re-implementing batching.
 
 pub mod cache;
+pub mod compose;
 pub mod dispatch;
 pub mod ollama;
 pub mod quirks;
 pub mod transport;
 
-pub use cache::CachingBackend;
+pub use cache::{CachingBackend, NoCache};
+pub use compose::{Harness, StackBuilder, DEFAULT_OLLAMA_BASE};
 pub use dispatch::{DispatchError, Dispatcher};
 pub use ollama::{OllamaAdapter, OllamaQuirks};
 pub use quirks::Quirks;

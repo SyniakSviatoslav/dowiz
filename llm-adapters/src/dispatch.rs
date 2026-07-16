@@ -28,12 +28,29 @@ pub enum DispatchError {
 }
 
 /// One harvested dispatch record (H1 EV ledger row).
+///
+/// Schema is a SUPERSET of what `tools/telemetry/governance.sh::gov_route` consumes
+/// (`model`, `task`, `success`, `value`, `cost`) so the same row feeds the EV pricing loop
+/// directly — closing the local-vs-managed loop without a schema-migration shim. The extra
+/// fields (`backend`, `tokens`, `ms`) are richer analytics kept in the same row.
 #[derive(Debug, Clone)]
 pub struct TrackRecord {
+    /// Dispatcher-side identity of the backend (e.g. "ollama").
     pub backend_id: String,
+    /// The model the request targeted (the `model` key gov_route groups by).
     pub model_id: String,
+    /// Total tokens of the response (0 on failure).
     pub total_tokens: u64,
+    /// Wall-clock latency of the (blocking) call in ms.
     pub ms: u64,
+    /// Task class label gov_route folds by (default "chat"; a caller may pass a richer label).
+    pub task: String,
+    /// Whether the call succeeded (1) or failed (0) — drives gov_route's success-rate.
+    pub success: bool,
+    /// Expected value of the call (EV numerator). Default 0.0; the caller/agent loop may supply it.
+    pub value: f64,
+    /// Cost of the call (EV denominator). For local Ollama we proxy cost ≈ total_tokens.
+    pub cost: f64,
 }
 
 /// A bounded dispatcher over a shared `LlmBackend`.
@@ -73,16 +90,24 @@ impl<B: LlmBackend + Send + Sync + 'static> Dispatcher<B> {
             let result = if bucket.try_acquire(cost) {
                 let t0 = std::time::Instant::now();
                 let r = backend.chat(&req).map_err(DispatchError::Backend);
-                if let Ok(ref resp) = r {
-                    let rec = TrackRecord {
-                        backend_id: backend.id().to_string(),
-                        model_id: req.model_id.clone(),
-                        total_tokens: resp.usage.cost(),
-                        ms: t0.elapsed().as_millis() as u64,
-                    };
-                    // H1 harvest: append to track_record.jsonl (local-only telemetry, M8).
-                    append_harvest(&rec);
-                }
+                let ms = t0.elapsed().as_millis() as u64;
+                // H1 harvest — record BOTH success and failure so gov_route's success-rate folds
+                // honestly. Tokens/cost are 0 on failure (no response emitted).
+                let (tokens, ok) = match &r {
+                    Ok(resp) => (resp.usage.cost(), true),
+                    Err(_) => (0, false),
+                };
+                let rec = TrackRecord {
+                    backend_id: backend.id().to_string(),
+                    model_id: req.model_id.clone(),
+                    total_tokens: tokens,
+                    ms,
+                    task: "chat".to_string(),
+                    success: ok,
+                    value: 0.0,
+                    cost: tokens as f64,
+                };
+                append_harvest(&rec);
                 r
             } else {
                 Err(DispatchError::BudgetExceeded)
@@ -92,6 +117,12 @@ impl<B: LlmBackend + Send + Sync + 'static> Dispatcher<B> {
         rx.recv().map_err(|_| DispatchError::BudgetExceeded)?
     }
 
+    /// A clone of the shared backend handle (for cache-fronted embed/rerank paths that bypass the
+    /// dispatcher's per-call token budget but still share the SAME cache store).
+    pub fn backend(&self) -> Arc<B> {
+        Arc::clone(&self.backend)
+    }
+
     /// Health passthrough (degrade-closed).
     pub fn health(&self) -> Result<(), LlmError> {
         self.backend.health()
@@ -99,12 +130,13 @@ impl<B: LlmBackend + Send + Sync + 'static> Dispatcher<B> {
 }
 
 /// Append a harvested record to `track_record.jsonl` (H1 EV ledger). Local-only, M8-compliant.
+/// Emits the `gov_route`-compatible superset schema so the EV pricing loop can fold it directly.
 /// Failures are non-fatal (telemetry must never break the call path).
 fn append_harvest(rec: &TrackRecord) {
     use std::io::Write;
     let line = format!(
-        "{{\"backend\":\"{}\",\"model\":\"{}\",\"tokens\":{},\"ms\":{}}}\n",
-        rec.backend_id, rec.model_id, rec.total_tokens, rec.ms
+        "{{\"model\":\"{}\",\"task\":\"{}\",\"success\":{},\"value\":{},\"cost\":{},\"backend\":\"{}\",\"tokens\":{},\"ms\":{}}}\n",
+        rec.model_id, rec.task, rec.success, rec.value, rec.cost, rec.backend_id, rec.total_tokens, rec.ms
     );
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)

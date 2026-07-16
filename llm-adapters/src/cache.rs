@@ -10,24 +10,27 @@
 //! provably identical. For `temperature > 0` / unpinned-seed calls a hit returns one valid prior
 //! sample; such callers should pass `CachePolicy::NoCache` when a fresh sample is contractually required.
 
-use dowiz_kernel::backup::{BlockStore, MemStore};
+use dowiz_kernel::backup::{BlockStore, Hash, MemStore};
 use dowiz_kernel::event_log::sha3_256;
 use dowiz_kernel::ports::llm::{
     Caps, ChatRequest, ChatResponse, EmbedRequest, EmbedResponse, LlmBackend, LlmError,
     RerankRequest, RerankResponse, Usage,
 };
 use serde_json::json;
-use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::sync::{Arc, Mutex};
 
 /// A response cache over any `LlmBackend`. Generic over the store so tests can supply a
 /// call-counting `BlockStore` double (done-check: second identical call makes ZERO HTTP calls).
+///
+/// `store` is an `Arc<Mutex<_>>` (NOT `RefCell`) so the cache is `Sync` and can be shared behind an
+/// `Arc` across the `Dispatcher`'s worker threads (WAVE 1(d) bound `B: Send + Sync`). The `Arc`
+/// ALSO makes `CachingBackend` `Clone` without re-cloning the store — so the `Dispatcher`'s
+/// backend handle and the `Harness`'s direct backend handle share the SAME cache contents.
+#[derive(Clone)]
 pub struct CachingBackend<B: LlmBackend, S: BlockStore> {
     inner: B,
-    /// Interior-mutability: the cache `chat`/`embed`/... are `&self`, but `BlockStore::put`
-    /// needs `&mut`. A per-call mutable borrow is sufficient and lock-free (single-threaded
-    /// touch of the local store).
-    store: RefCell<S>,
+    store: Arc<Mutex<S>>,
 }
 
 impl<B: LlmBackend> CachingBackend<B, MemStore> {
@@ -35,7 +38,7 @@ impl<B: LlmBackend> CachingBackend<B, MemStore> {
     pub fn new(inner: B) -> Self {
         CachingBackend {
             inner,
-            store: RefCell::new(MemStore::new()),
+            store: Arc::new(Mutex::new(MemStore::new())),
         }
     }
 }
@@ -44,7 +47,7 @@ impl<B: LlmBackend, S: BlockStore> CachingBackend<B, S> {
     pub fn with_store(inner: B, store: S) -> Self {
         CachingBackend {
             inner,
-            store: RefCell::new(store),
+            store: Arc::new(Mutex::new(store)),
         }
     }
 
@@ -88,7 +91,7 @@ impl<B: LlmBackend, S: BlockStore> LlmBackend for CachingBackend<B, S> {
     fn chat(&self, req: &ChatRequest) -> Result<ChatResponse, LlmError> {
         let key = Self::cache_key(req);
         if let Some(k) = key {
-            if let Some(bytes) = self.store.borrow().get(&k) {
+            if let Some(bytes) = self.store.lock().unwrap().get(&k) {
                 if let Some(resp) = decode_response(bytes) {
                     return Ok(resp); // EXACT hit — zero upstream call.
                 }
@@ -98,7 +101,7 @@ impl<B: LlmBackend, S: BlockStore> LlmBackend for CachingBackend<B, S> {
         if let Some(k) = key {
             // Idempotent put: storing the same id again is a no-op (cache-hit semantics, free).
             let bytes = encode_response(&resp);
-            self.store.borrow_mut().put(k, &bytes);
+            self.store.lock().unwrap().put(k, &bytes);
         }
         Ok(resp)
     }
@@ -145,6 +148,23 @@ fn decode_response(bytes: &[u8]) -> Option<ChatResponse> {
             total_tokens: total,
         },
     })
+}
+
+/// A no-op store: every `get` misses, every `put` is dropped. Used to compile-time-disable
+/// caching (M5 config: `StackBuilder::with_cache(false)`) without a separate code path.
+#[derive(Clone, Default)]
+pub struct NoCache;
+
+impl BlockStore for NoCache {
+    fn put(&mut self, _id: Hash, _bytes: &[u8]) -> bool {
+        false // never persists — disables the cache
+    }
+    fn get(&self, _id: &Hash) -> Option<&[u8]> {
+        None // always a miss
+    }
+    fn len(&self) -> usize {
+        0 // holds no blocks
+    }
 }
 
 #[cfg(test)]

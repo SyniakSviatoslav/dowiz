@@ -41,7 +41,7 @@ pub trait BlockStore {
 }
 
 /// In-memory content-addressed store (for tests / single-node local-first use).
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub struct MemStore {
     map: HashMap<Hash, Vec<u8>>,
 }
