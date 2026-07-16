@@ -156,12 +156,20 @@ impl MeshEvent {
 }
 
 /// Persistence seam for the event-log. The production node backs this with
-/// pgrust; tests use [`MemEventStore`].
+/// pgrust; tests use [`MemEventStore`]. A std-only durable variant
+/// ([`crate::hydra::FileEventStore`]) is available for the Воля АНУ closed loop
+/// (offline, egress-free, no external DB dependency).
 pub trait EventStore {
     /// Whether an event with this content-id is already persisted (idempotency).
     fn contains(&self, id: &[u8; 32]) -> bool;
     /// Persist an event under its content-id.
     fn insert(&mut self, id: [u8; 32], ev: MeshEvent);
+    /// Fetch a persisted event by content-id, if present (needed for durable
+    /// session-boundary re-verify, G4/G5).
+    fn get(&self, id: &[u8; 32]) -> Option<MeshEvent> {
+        let _ = id;
+        None
+    }
     /// Number of events persisted.
     fn len(&self) -> usize;
     /// Whether the store is empty.
@@ -291,6 +299,12 @@ impl<S: EventStore> EventLog<S> {
         // Commit (chains prev, records tip).
         let outcome = self.append(ev);
         Ok((outcome, Some(decision)))
+    }
+
+    /// Whether an event with this content-id is already persisted (idempotency).
+    /// Delegates to the backing store.
+    pub fn contains(&self, id: &[u8; 32]) -> bool {
+        self.store.contains(id)
     }
 
     /// Current chain tip content-id, if any.
