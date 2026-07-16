@@ -1,9 +1,9 @@
 //! ci-truth — native Rust CI truth-floor (no bash).
 //!
-//! Two subcommands, ported 1:1 from the retired bash scripts. `git` and `cargo`
-//! are genuinely external binaries (shelled via std::process::Command); all the
-//! *logic* — parsing, idempotency, red-line detection, JSON emission, worktree
-//! lifecycle — is native Rust, not bash.
+//! Three subcommands. `git` and `cargo` are genuinely external binaries (shelled
+//! via std::process::Command); all the *logic* — parsing, idempotency, red-line
+//! detection, JSON emission, anomaly detection, worktree lifecycle — is native
+//! Rust, not bash.
 //!
 //!   ci-truth claim-latency [<sha> | <base> <head> | <base>..<head>]
 //!       V5-B claim-latency ledger appender (was scripts/claim-latency-append.sh).
@@ -11,6 +11,16 @@
 //!         {commit_sha, authored_ts, ci_observed_green_ts, delta_s, diff_loc}
 //!       Idempotent: a commit already in the ledger is skipped.
 //!       EXIT 0 on success (incl. "nothing to do"); non-zero on usage/git error.
+//!
+//!   ci-truth claim-latency-check
+//!       BLUEPRINT-P08 §4 claim-latency ANOMALY detector (F36 / E47). CONSUMES the
+//!       ledger the appender above produces. For each entry, computes a falsifiable
+//!       minimum-plausible verification time from diff_loc and flags any commit whose
+//!       recorded delta_s is below it — the "52s GREEN on a 1610-line diff" self-
+//!       certification pattern (BRAIN-TOPOLOGY). Flagged entries are appended to a
+//!       LOCAL sink docs/ledger/claim-latency-anomalies.jsonl (idempotent by
+//!       commit_sha). ADVISORY: exits 0 whether or not anomalies were found — it
+//!       signals, it does not gate (that is Phase 6's signed-verifier job).
 //!
 //!   ci-truth v5c-reexec [<base>] [<head>]        (defaults: origin/main HEAD)
 //!       V5-C independent re-execution verifier (was scripts/v5c-reexec.sh).
@@ -422,6 +432,222 @@ fn v5c_reexec(pos: &[String]) -> i32 {
 }
 
 // ===========================================================================
+// Subcommand 3 — claim-latency-check  (BLUEPRINT-P08 §4, F36/E47)
+//
+// Anomaly detector over the claim-latency ledger the appender above produces.
+// It catches the BRAIN-TOPOLOGY self-certification residue — a GREEN claimed
+// faster than any real verification could have run ("52s GREEN on a 1610-line
+// diff") — by encoding a falsifiable minimum-plausible verification time as a
+// function of diff size (VERIFIED-BY-MATH: a single named, documented, tunable
+// floor constant, never a magic number).
+// ===========================================================================
+
+/// Minimum plausible verification seconds per 100 lines of diff — the single
+/// reviewed floor constant for the claim-latency anomaly rule (P08 §4).
+///
+/// TUNABLE / DOCUMENTED (VERIFIED-BY-MATH, not a magic number): raise it to make
+/// the detector stricter (flag more), lower it to loosen. Tuned against the
+/// ledger's own history and the documented worked example in BLUEPRINT-P08 §4:
+///   1610 lines * (5.0 / 100) = 80.5 s plausible minimum ⇒ the recorded 52 s
+///   (BRAIN-TOPOLOGY "52s GREEN on a 1610-line diff") is < 80.5 s ⇒ FLAG.
+const MIN_SECONDS_PER_100_LINES: f64 = 5.0;
+
+/// One parsed ledger row — the exact schema the `claim-latency` appender emits.
+#[derive(Debug, Clone, PartialEq)]
+struct LedgerEntry {
+    commit_sha: String,
+    authored_ts: i64,
+    ci_observed_green_ts: i64,
+    delta_s: i64,
+    diff_loc: i64,
+}
+
+/// Falsifiable minimum plausible verification time for a diff of `diff_loc`
+/// lines, at the reviewed floor constant. Pure — the core of acceptance §6.5.
+fn plausible_min_seconds(diff_loc: i64) -> f64 {
+    diff_loc as f64 / 100.0 * MIN_SECONDS_PER_100_LINES
+}
+
+/// The rule: a recorded `delta_s` below the plausible floor for its diff size is
+/// an anomaly (GREEN claimed implausibly fast). Pure, so the reproduction test
+/// in §6.5 can pin the 52s/1610-line case with no I/O.
+fn is_anomaly(delta_s: i64, diff_loc: i64) -> bool {
+    (delta_s as f64) < plausible_min_seconds(diff_loc)
+}
+
+/// Extract a string field `"key":"value"` from one JSONL line — hand-rolled,
+/// zero-dep, matching this crate's existing no-serde style. Reads up to the next
+/// `"` (the ledger emitter never escapes quotes inside these values).
+fn json_str_field(line: &str, key: &str) -> Option<String> {
+    let needle = format!("\"{key}\":\"");
+    let start = line.find(&needle)? + needle.len();
+    let rest = &line[start..];
+    let end = rest.find('"')?;
+    Some(rest[..end].to_string())
+}
+
+/// Extract an integer field `"key":<int>` from one JSONL line (tolerates a
+/// leading '-'). Zero-dep, matching this crate's existing style.
+fn json_int_field(line: &str, key: &str) -> Option<i64> {
+    let needle = format!("\"{key}\":");
+    let start = line.find(&needle)? + needle.len();
+    let bytes = line.as_bytes();
+    let mut i = start;
+    if i < bytes.len() && bytes[i] == b'-' {
+        i += 1;
+    }
+    let num_start = start;
+    while i < bytes.len() && bytes[i].is_ascii_digit() {
+        i += 1;
+    }
+    if i == num_start || (i == num_start + 1 && bytes[num_start] == b'-') {
+        return None;
+    }
+    line[num_start..i].parse::<i64>().ok()
+}
+
+/// Parse one ledger JSONL line into a `LedgerEntry`. Returns `None` on a blank
+/// line or any missing/malformed field (the detector is tolerant + advisory —
+/// an unparseable line is skipped, never coerced).
+fn parse_ledger_line(line: &str) -> Option<LedgerEntry> {
+    let line = line.trim();
+    if line.is_empty() {
+        return None;
+    }
+    Some(LedgerEntry {
+        commit_sha: json_str_field(line, "commit_sha")?,
+        authored_ts: json_int_field(line, "authored_ts")?,
+        ci_observed_green_ts: json_int_field(line, "ci_observed_green_ts")?,
+        delta_s: json_int_field(line, "delta_s")?,
+        diff_loc: json_int_field(line, "diff_loc")?,
+    })
+}
+
+fn claim_latency_check(_pos: &[String]) -> i32 {
+    let repo_root = match git_ok(&["rev-parse", "--show-toplevel"]) {
+        Some(r) => r,
+        None => {
+            eprintln!("claim-latency-check: not inside a git repo");
+            return 1;
+        }
+    };
+    let ledger = PathBuf::from(&repo_root).join("docs/ledger/claim-latency.jsonl");
+
+    // NOTE (P08 §4 minimal-scope): this JSONL file is the local, advisory sink
+    // this subcommand writes flagged anomalies to. It is the honest stand-in for
+    // the full typed `LogEvent::ClaimLatencyAnomaly` → M8-sink infrastructure
+    // described in BLUEPRINT-P08 §2/§3 (typed-metrics module + spool-backed sink),
+    // which is SEPARATE, larger, UNBUILT scope. Do NOT mistake this file for the
+    // complete M8 observability system — it is only F36/E47's anomaly output,
+    // sized to what is actually built today: local (not remote), advisory (not
+    // blocking), one JSON line per flagged commit.
+    let sink = PathBuf::from(&repo_root).join("docs/ledger/claim-latency-anomalies.jsonl");
+
+    let ledger_text = match fs::read_to_string(&ledger) {
+        Ok(t) => t,
+        Err(_) => {
+            // Missing ledger is not an error for an advisory scanner.
+            println!(
+                "claim-latency-check: no ledger at {} — scanned 0 entries, flagged 0 anomalies (floor {} s/100 lines).",
+                ledger.display(),
+                MIN_SECONDS_PER_100_LINES
+            );
+            return 0;
+        }
+    };
+
+    // Existing anomalies (for commit_sha idempotency — same substring approach as
+    // the appender's ledger de-dup). A commit already flagged is not re-appended.
+    let existing_anoms = fs::read_to_string(&sink).unwrap_or_default();
+
+    let mut scanned = 0i64;
+    let mut flagged = 0i64;
+    let mut newly_written = 0i64;
+    let mut already_recorded = 0i64;
+    let mut unparseable = 0i64;
+    let mut pending = String::new();
+
+    for line in ledger_text.lines() {
+        if line.trim().is_empty() {
+            continue;
+        }
+        let entry = match parse_ledger_line(line) {
+            Some(e) => e,
+            None => {
+                unparseable += 1;
+                continue;
+            }
+        };
+        scanned += 1;
+        if !is_anomaly(entry.delta_s, entry.diff_loc) {
+            continue;
+        }
+        flagged += 1;
+        let pm = plausible_min_seconds(entry.diff_loc);
+        println!(
+            "  FLAG {} — delta_s={} < plausible_min={}s ({} loc @ {} s/100 lines)",
+            entry.commit_sha, entry.delta_s, pm, entry.diff_loc, MIN_SECONDS_PER_100_LINES
+        );
+
+        let needle = format!("\"commit_sha\":\"{}\"", entry.commit_sha);
+        if existing_anoms.contains(&needle) || pending.contains(&needle) {
+            already_recorded += 1;
+            continue;
+        }
+        // Same fields as the ledger entry + plausible_min_seconds + a human reason.
+        // `reason` is composed to contain no JSON-special characters (no '"' / '\').
+        let reason = format!(
+            "delta_s {} below plausible_min {}s for {} loc at {} s/100 lines (GREEN claimed faster than plausible verification; BRAIN-TOPOLOGY self-certification pattern)",
+            entry.delta_s, pm, entry.diff_loc, MIN_SECONDS_PER_100_LINES
+        );
+        pending.push_str(&format!(
+            "{{\"commit_sha\":\"{}\",\"authored_ts\":{},\"ci_observed_green_ts\":{},\"delta_s\":{},\"diff_loc\":{},\"plausible_min_seconds\":{},\"reason\":\"{}\"}}\n",
+            entry.commit_sha,
+            entry.authored_ts,
+            entry.ci_observed_green_ts,
+            entry.delta_s,
+            entry.diff_loc,
+            pm,
+            reason
+        ));
+        newly_written += 1;
+    }
+
+    if !pending.is_empty() {
+        if let Some(dir) = sink.parent() {
+            if let Err(e) = fs::create_dir_all(dir) {
+                eprintln!("claim-latency-check: cannot create {}: {e}", dir.display());
+                return 1;
+            }
+        }
+        match OpenOptions::new().create(true).append(true).open(&sink) {
+            Ok(mut f) => {
+                if let Err(e) = f.write_all(pending.as_bytes()) {
+                    eprintln!("claim-latency-check: sink append failed: {e}");
+                    return 1;
+                }
+            }
+            Err(e) => {
+                eprintln!("claim-latency-check: cannot open sink {}: {e}", sink.display());
+                return 1;
+            }
+        }
+    }
+
+    if unparseable > 0 {
+        eprintln!("claim-latency-check: skipped {unparseable} unparseable line(s) (advisory — not coerced).");
+    }
+    // ADVISORY: always exit 0. This tool signals; it does not fail the build on a
+    // finding (that is Phase 6's signed-verifier job — separate scope).
+    println!(
+        "claim-latency-check: scanned {scanned} ledger entries, flagged {flagged} anomalies (floor {} s/100 lines) — {newly_written} newly written, {already_recorded} already recorded -> {}",
+        MIN_SECONDS_PER_100_LINES,
+        sink.display()
+    );
+    0
+}
+
+// ===========================================================================
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -430,10 +656,12 @@ fn main() {
 
     let code = match sub {
         "claim-latency" => claim_latency(pos),
+        "claim-latency-check" => claim_latency_check(pos),
         "v5c-reexec" => v5c_reexec(pos),
         _ => {
-            eprintln!("ci-truth: usage: ci-truth <claim-latency|v5c-reexec> [args]");
+            eprintln!("ci-truth: usage: ci-truth <claim-latency|claim-latency-check|v5c-reexec> [args]");
             eprintln!("  claim-latency [<sha> | <base> <head> | <base>..<head>]   append V5-B ledger entries");
+            eprintln!("  claim-latency-check                                      P08 §4 anomaly detector (advisory; exit 0) -> docs/ledger/claim-latency-anomalies.jsonl");
             eprintln!("  v5c-reexec [<base>] [<head>]                             independent re-exec (default origin/main HEAD)");
             2
         }
@@ -546,5 +774,71 @@ mod tests {
         );
         // stray quotes stripped; empty entries skipped.
         assert_eq!(json_array(&["a\"b".into(), "".into(), "c".into()]), "[\"ab\",\"c\"]");
+    }
+
+    // --- claim-latency-check: anomaly floor math (P08 §4) ---
+    #[test]
+    fn plausible_min_seconds_worked_example() {
+        // BLUEPRINT-P08 §4 worked example: 1610 lines @ 5.0 s/100 => 80.5 s.
+        assert_eq!(plausible_min_seconds(1610), 80.5);
+        assert_eq!(plausible_min_seconds(100), 5.0);
+        assert_eq!(plausible_min_seconds(0), 0.0);
+    }
+
+    // --- §6.5 REPRODUCTION TEST: the documented BRAIN-TOPOLOGY falsifier ---
+    #[test]
+    fn anomaly_flags_52s_on_1610_line_diff() {
+        // "52s GREEN on a 1610-line diff" — recorded 52 s < 80.5 s floor ⇒ FLAG.
+        assert!(is_anomaly(52, 1610));
+    }
+
+    #[test]
+    fn plausible_latency_same_diff_not_flagged() {
+        // Same 1610-line diff but a plausible 90 s (>= 80.5 s floor) ⇒ NOT flagged.
+        assert!(!is_anomaly(90, 1610));
+    }
+
+    #[test]
+    fn anomaly_boundary_is_strict_less_than() {
+        // Exactly at the floor is plausible (not an anomaly); one below flags.
+        assert!(!is_anomaly(80, 1600)); // floor = 80.0, delta 80 not < 80
+        assert!(is_anomaly(79, 1600)); // 79 < 80.0 ⇒ flag
+    }
+
+    #[test]
+    fn real_ledger_181loc_199s_not_flagged() {
+        // The actual first ledger entry from this session: floor = 9.05 s,
+        // recorded 199 s ⇒ honestly NOT an anomaly.
+        assert!(!is_anomaly(199, 181));
+    }
+
+    // --- claim-latency-check: zero-dep JSONL field parser ---
+    #[test]
+    fn parse_ledger_line_roundtrip() {
+        let line = "{\"commit_sha\":\"d3b71d3f15654bcb2390242c44597f50b0dc9295\",\"authored_ts\":1784241799,\"ci_observed_green_ts\":1784241998,\"delta_s\":199,\"diff_loc\":181}";
+        let e = parse_ledger_line(line).expect("should parse");
+        assert_eq!(e.commit_sha, "d3b71d3f15654bcb2390242c44597f50b0dc9295");
+        assert_eq!(e.authored_ts, 1784241799);
+        assert_eq!(e.ci_observed_green_ts, 1784241998);
+        assert_eq!(e.delta_s, 199);
+        assert_eq!(e.diff_loc, 181);
+    }
+
+    #[test]
+    fn parse_ledger_line_synthetic_anomaly() {
+        // Feed the detector its own worked-example shape end-to-end.
+        let line = "{\"commit_sha\":\"deadbeef\",\"authored_ts\":1000,\"ci_observed_green_ts\":1052,\"delta_s\":52,\"diff_loc\":1610}";
+        let e = parse_ledger_line(line).expect("should parse");
+        assert!(is_anomaly(e.delta_s, e.diff_loc));
+    }
+
+    #[test]
+    fn parse_ledger_line_rejects_blank_and_malformed() {
+        assert!(parse_ledger_line("").is_none());
+        assert!(parse_ledger_line("   ").is_none());
+        // missing diff_loc field ⇒ None (tolerant skip, never coerced)
+        assert!(parse_ledger_line("{\"commit_sha\":\"x\",\"authored_ts\":1,\"ci_observed_green_ts\":2,\"delta_s\":3}").is_none());
+        // negative delta tolerated by the int parser
+        assert_eq!(json_int_field("{\"delta_s\":-7}", "delta_s"), Some(-7));
     }
 }
