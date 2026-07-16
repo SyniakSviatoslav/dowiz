@@ -18,7 +18,7 @@
 //! spectral drift + static eqc floor (G8 accepted); a future in-repo eqc
 //! generator would let the floor regenerate itself.
 
-use crate::event_log::{DecideRejected, EventLog, EventStore, MeshEvent};
+use crate::event_log::{CommitError, DecideRejected, EventLog, EventStore, MeshEvent, StoreError};
 use crate::spectral::{classify_drift, spectral_radius, DriftClass};
 
 /// Max verify iterations per commit — bounded so intrinsic mutation cannot grow
@@ -217,16 +217,17 @@ impl<S: EventStore> Hydra<S> {
         delta: &[TopoEdge],
         intervention: bool,
         decide: D,
-    ) -> Result<(crate::event_log::AppendOutcome, Option<T>), DecideRejected>
+    ) -> Result<(crate::event_log::AppendOutcome, Option<T>), CommitError>
     where
         D: FnOnce(&MeshEvent) -> Result<T, E>,
         E: std::fmt::Display,
     {
-        // G9 — refuse if the core was tampered (attack, not evolution).
+        // G9 — refuse if the core was tampered (attack, not evolution). This is
+        // a Law-pole reject (never retry until re-seed / M9), NOT a store fault.
         if self.integrity_check() == OrganismState::Locked {
-            return Err(DecideRejected(
+            return Err(CommitError::Rejected(DecideRejected(
                 "core tamper detected: organism Locked (owner re-seed / M9 required)".into(),
-            ));
+            )));
         }
         // G3 — score the proposed mutation against the live baseline, NOT a
         // hand-pinned constant. Only reject in DEFAULT regime.
@@ -287,12 +288,12 @@ impl<S: EventStore> Hydra<S> {
         &mut self,
         node_id: [u8; 32],
         group_size: usize,
-    ) -> Option<BreachAlert> {
+    ) -> Result<Option<BreachAlert>, StoreError> {
         if self.state != OrganismState::Locked {
-            return None; // only warn when tamper actually detected
+            return Ok(None); // only warn when tamper actually detected
         }
         if group_size == 0 {
-            return None;
+            return Ok(None);
         }
         // Self-witness: append an immutable evidence row to the WORM log. The
         // actor_seq is monotonic on the current log length, so each breach is a
@@ -307,11 +308,13 @@ impl<S: EventStore> Hydra<S> {
             actor_seq: 0, // fixed ⇒ content-id = f(node_id, group_size) only
             payload,
         };
-        self.log.append_raw(witness); // kernel self-evidence, bypasses decide/drift
-        Some(BreachAlert {
+        // Anti-silent-heal: a lost witness returns Err, never Ok(Some(_)) — an
+        // undelivered breach record must be reported, not masked (§2.4).
+        self.log.append_raw(witness)?; // kernel self-evidence, bypasses decide/drift
+        Ok(Some(BreachAlert {
             node_id,
             group_size,
-        })
+        }))
     }
 
     /// G9 — hub convergence. When this node RECEIVES a verified breach alert
@@ -326,7 +329,7 @@ impl<S: EventStore> Hydra<S> {
     /// `alert` MUST already be verified by the caller (ML-DSA sig + `witness_event_id`
     /// match). This method only persists the fact; it does not re-broadcast (the
     /// mesh layer handles fan-out from the originating node).
-    pub fn ingest_peer_breach(&mut self, alert: &BreachAlert) {
+    pub fn ingest_peer_breach(&mut self, alert: &BreachAlert) -> Result<(), StoreError> {
         // External-witness row: same BREACH_WITNESS_ACTOR, seq monotonic on log len,
         // payload = peer node_id + their group_size. Distinct content-id from any
         // self-witness (different node_id), so both persist independently.
@@ -339,7 +342,9 @@ impl<S: EventStore> Hydra<S> {
             actor_seq: 0, // fixed ⇒ content-id = f(peer_node_id, group_size)
             payload,
         };
-        self.log.append_raw(row); // kernel self-evidence, bypasses decide/drift
+        // A lost external-witness row must surface, not be swallowed (§2.4).
+        self.log.append_raw(row)?; // kernel self-evidence, bypasses decide/drift
+        Ok(())
     }
 }
 
@@ -386,7 +391,7 @@ mod tests {
         }];
         let res = h.commit(ev(1, 1, b"mutate"), &delta, false, |_| Ok::<u64, String>(1));
         assert!(
-            matches!(res, Err(DecideRejected(_))),
+            matches!(res, Err(CommitError::Rejected(_))),
             "Unstable mutation rejected"
         );
     }
@@ -520,7 +525,7 @@ mod tests {
         assert_eq!(h.integrity_check(), OrganismState::Locked);
         let res = h.commit(ev(1, 1, b"x"), &[], true, |_| Ok::<u64, String>(1));
         assert!(
-            matches!(res, Err(DecideRejected(_))),
+            matches!(res, Err(CommitError::Rejected(_))),
             "Locked ⇒ commit refused even with intervention"
         );
     }
@@ -535,7 +540,9 @@ mod tests {
         // Live: no alert.
         assert_eq!(h.integrity_check(), OrganismState::Live);
         assert!(
-            h.raise_breach_alarm([7u8; 32], 4096).is_none(),
+            h.raise_breach_alarm([7u8; 32], 4096)
+                .expect("store ok")
+                .is_none(),
             "no alert while Live"
         );
         // Tamper → Locked → alarm to full hub, any group size, no per-event consent.
@@ -547,6 +554,7 @@ mod tests {
         assert_eq!(h.integrity_check(), OrganismState::Locked);
         let a = h
             .raise_breach_alarm([7u8; 32], 4096)
+            .expect("store ok")
             .expect("alarm raised when Locked");
         assert_eq!(a.node_id, [7u8; 32]);
         assert_eq!(a.group_size, 4096, "unbounded fan-out to hub");
@@ -566,7 +574,7 @@ mod tests {
         });
         assert!(witnessed, "breach self-witness row persisted in WORM log");
         // group_size==0 is the only guard (no hub to warn).
-        assert!(h.raise_breach_alarm([7u8; 32], 0).is_none());
+        assert!(h.raise_breach_alarm([7u8; 32], 0).expect("store ok").is_none());
     }
 
     /// G9 — hub convergence: a node that RECEIVES a verified peer breach alert
@@ -582,7 +590,7 @@ mod tests {
             node_id: [9u8; 32],
             group_size: 4096,
         };
-        node.ingest_peer_breach(&peer_alert);
+        node.ingest_peer_breach(&peer_alert).expect("ingest ok");
         // The peer breach is now durable in THIS node's WORM log.
         let external_id = {
             use crate::event_log::MeshEvent;
@@ -604,7 +612,7 @@ mod tests {
         // Replay (same alert, new log len) => same content-id => duplicate no-op,
         // no second row.
         let before = node.log().len();
-        node.ingest_peer_breach(&peer_alert);
+        node.ingest_peer_breach(&peer_alert).expect("ingest ok");
         assert_eq!(node.log().len(), before, "replay is idempotent");
         // Self is still Live (ingesting a PEER breach does not lock this node).
         assert_eq!(node.integrity_check(), OrganismState::Live);
@@ -690,6 +698,29 @@ mod tests {
         tampered[39] ^= 0xFF; // flips high byte of the LE group_size
         let t = BreachAlert::from_bytes(&tampered).expect("still 40 bytes");
         assert_ne!(t.group_size, 7, "length-field tamper must change value");
+    }
+
+    /// H1 §4 criterion 5 — G9 witness surfaces loss: `raise_breach_alarm` over a
+    /// store whose durability barrier fails returns `Err(StoreError)`, NEVER
+    /// `Ok(Some(alert))`. An undelivered anti-silent-heal witness is reported,
+    /// not masked — closing the exact RC-3 fail-open the alarm exists to prevent.
+    #[test]
+    fn breach_alarm_surfaces_lost_witness_over_faulty_store() {
+        use crate::event_log::FaultyStore;
+        let mut h = Hydra::new(FaultyStore::default(), 3, base());
+        // Drive tamper detection so the alarm actually attempts a witness append
+        // (a self-amplifying loop pushes ρ≥1 ⇒ Locked).
+        h.base_edges.push(TopoEdge {
+            from: 0,
+            to: 0,
+            weight: 2.0,
+        });
+        assert_eq!(h.integrity_check(), OrganismState::Locked);
+        let res = h.raise_breach_alarm([7u8; 32], 4096);
+        assert!(
+            matches!(res, Err(StoreError::Sync(_))),
+            "a lost breach witness MUST surface as Err(StoreError), not Ok(Some); got {res:?}"
+        );
     }
 }
 
@@ -822,9 +853,9 @@ impl EventStore for FileEventStore {
     fn contains(&self, id: &[u8; 32]) -> bool {
         self.by_id.contains_key(id)
     }
-    fn insert(&mut self, id: [u8; 32], ev: MeshEvent) {
+    fn insert(&mut self, id: [u8; 32], ev: MeshEvent) -> Result<(), StoreError> {
         if self.by_id.contains_key(&id) {
-            return; // idempotent no-op
+            return Ok(()); // idempotent no-op — nothing to persist
         }
         // Append one JSON line + fsync (crash-safe). Uses only std::fs.
         let line = format!(
@@ -837,18 +868,24 @@ impl EventStore for FileEventStore {
                 .map(|b| format!("{:02x}", b))
                 .collect::<String>()
         );
-        if let Ok(mut f) = OpenOptions::new()
+        // Each IO step now propagates a typed StoreError instead of `let _ =`
+        // swallowing it — an open failure no longer falls through silently.
+        let mut f = OpenOptions::new()
             .create(true)
             .append(true)
             .open(&self.path)
-        {
-            let _ = f.write_all(line.as_bytes());
-            let _ = f.flush();
-            let _ = f.sync_all();
-        }
+            .map_err(|e| StoreError::Open(e.to_string()))?;
+        f.write_all(line.as_bytes())
+            .map_err(|e| StoreError::Write(e.to_string()))?;
+        f.flush().map_err(|e| StoreError::Flush(e.to_string()))?;
+        f.sync_all().map_err(|e| StoreError::Sync(e.to_string()))?;
+        // Order is load-bearing (H1 §2.2): the in-memory index advances ONLY
+        // after sync_all succeeds — in-memory state never claims an event the
+        // disk does not hold.
         self.by_id.insert(id, ev);
         self.tip = Some(id);
         self.count += 1;
+        Ok(())
     }
     fn get(&self, id: &[u8; 32]) -> Option<MeshEvent> {
         self.by_id.get(id).cloned()
@@ -895,11 +932,11 @@ mod file_store_tests {
                 payload: b"genesis-intent".to_vec(),
             };
             let id = ev.event_id();
-            s.insert(id, ev.clone());
+            s.insert(id, ev.clone()).expect("insert durable");
             assert!(s.contains(&id));
             assert_eq!(s.get(&id), Some(ev.clone()));
             // Re-insert same id — idempotent no-op (count stays 1).
-            s.insert(id, ev);
+            s.insert(id, ev).expect("idempotent re-insert ok");
             assert_eq!(s.len(), 1);
         }
         // Reopen: replay must restore the event.
@@ -966,5 +1003,43 @@ mod file_store_tests {
             "baseline still acyclic after restart"
         );
         let _ = fs::remove_file(&path);
+    }
+
+    /// H1 §4 criterion 4 — `FileEventStore` no longer swallows. Point it at a
+    /// path whose parent directory does not exist so `OpenOptions::open` fails →
+    /// `insert` returns `Err(StoreError::Open(_))`; the in-memory by_id/tip/count
+    /// do NOT advance; the caller sees `Err`, never a fabricated success.
+    /// Falsifies the old `if let Ok(f)` fall-through at the former `hydra.rs:840`.
+    ///
+    /// Judgment call (flagged): the blueprint (§4 criterion 4) says "read-only
+    /// directory". A chmod 0555 dir does NOT make `open` fail for a root test
+    /// runner (root bypasses the mode bits), so a *missing parent directory* is
+    /// used instead — it fails `open` deterministically for any uid, exercising
+    /// the identical `StoreError::Open` pole the criterion targets.
+    #[test]
+    fn file_store_open_failure_surfaces_not_swallowed() {
+        let bogus = temp_dir()
+            .join(format!("h1-missing-parent-{}", std::process::id()))
+            .join("evlog.log");
+        // Ensure the parent directory truly does not exist.
+        let _ = fs::remove_dir_all(bogus.parent().unwrap());
+        // open() lazily tolerates a not-yet-existing file (nothing to replay).
+        let mut s = FileEventStore::open(&bogus).expect("open tolerates a missing file");
+        let ev = MeshEvent {
+            prev: [0u8; 32],
+            actor_pubkey: [5u8; 32],
+            actor_seq: 1,
+            payload: b"x".to_vec(),
+        };
+        let id = ev.event_id();
+        let res = s.insert(id, ev);
+        assert!(
+            matches!(res, Err(StoreError::Open(_))),
+            "open failure MUST surface as Err(StoreError::Open); got {res:?}"
+        );
+        // The in-memory index MUST NOT advance on a failed open.
+        assert!(!s.contains(&id), "by_id must not advance on open failure");
+        assert!(s.tip().is_none(), "tip must not advance on open failure");
+        assert_eq!(s.len(), 0, "count must not advance on open failure");
     }
 }

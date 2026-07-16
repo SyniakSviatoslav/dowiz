@@ -782,5 +782,30 @@ pub mod spectral {
             assert_eq!(drift_from_code(1.0), DriftClass::Resonant);
             assert_eq!(drift_from_code(2.0), DriftClass::Unstable);
         }
+
+        // Cross-crate round-trip pin (row #23): the KERNEL is the wire-code
+        // authority. For every kernel `DriftClass` variant, kernel-encode
+        // (`wire_code()`) → engine-decode (`drift_from_code`) must land on the
+        // matching engine variant. This is the ONLY test that fails loudly if the
+        // two crates' code↔variant maps diverge. The exhaustive `match` below is a
+        // COMPILE-TIME count guard: adding a 4th kernel variant (with no `_` arm)
+        // fails to compile this test until its wire code is consciously assigned.
+        #[test]
+        fn drift_wire_contract_matches_kernel() {
+            use dowiz_kernel::spectral::DriftClass as K;
+            for (k, e) in [
+                (K::Damped, DriftClass::Damped),
+                (K::Resonant, DriftClass::Resonant),
+                (K::Unstable, DriftClass::Unstable),
+            ] {
+                // kernel encode → engine decode → engine variant
+                assert_eq!(drift_from_code(k.wire_code() as f32), e);
+            }
+            // Count guard: exhaustive match, no `_` — a new kernel variant fails
+            // to COMPILE this test.
+            let _assert_three = |k: K| match k {
+                K::Damped | K::Resonant | K::Unstable => (),
+            };
+        }
     }
 }

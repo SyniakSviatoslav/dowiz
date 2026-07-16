@@ -155,6 +155,26 @@ impl MeshEvent {
     }
 }
 
+/// Durability fault taxonomy for a persistent [`EventStore`] (H1 — restore the
+/// missing failure pole on the substrate everything replays from). A durable
+/// append has four failure points; naming each lets a caller/operator tell an
+/// open-permission problem from a lost-fsync (the genuinely dangerous one).
+///
+/// Carries a rendered `io::Error` string (not the non-`Clone`/non-`Eq`
+/// `io::Error` itself) so the enum stays `Debug + Clone + PartialEq + Eq` and
+/// test assertions / the `Copy` success type are unaffected.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StoreError {
+    /// Backing file could not be opened for append (was: silent fall-through).
+    Open(String),
+    /// `write_all` of the event line failed.
+    Write(String),
+    /// `flush` of buffered bytes to the OS failed.
+    Flush(String),
+    /// `sync_all`/fsync failed — bytes may not have reached stable storage.
+    Sync(String),
+}
+
 /// Persistence seam for the event-log. The production node backs this with
 /// pgrust; tests use [`MemEventStore`]. A std-only durable variant
 /// ([`crate::hydra::FileEventStore`]) is available for the Воля АНУ closed loop
@@ -162,8 +182,10 @@ impl MeshEvent {
 pub trait EventStore {
     /// Whether an event with this content-id is already persisted (idempotency).
     fn contains(&self, id: &[u8; 32]) -> bool;
-    /// Persist an event under its content-id.
-    fn insert(&mut self, id: [u8; 32], ev: MeshEvent);
+    /// Persist an event under its content-id. Returns `Err(StoreError)` if the
+    /// durability barrier fails (open/write/flush/sync) — a lost write is now
+    /// typed, never a silent success (H1: restore the failure pole).
+    fn insert(&mut self, id: [u8; 32], ev: MeshEvent) -> Result<(), StoreError>;
     /// Fetch a persisted event by content-id, if present (needed for durable
     /// session-boundary re-verify, G4/G5).
     fn get(&self, id: &[u8; 32]) -> Option<MeshEvent> {
@@ -201,10 +223,12 @@ impl EventStore for MemEventStore {
     fn contains(&self, id: &[u8; 32]) -> bool {
         self.by_id.contains(id)
     }
-    fn insert(&mut self, id: [u8; 32], _ev: MeshEvent) {
+    fn insert(&mut self, id: [u8; 32], _ev: MeshEvent) -> Result<(), StoreError> {
+        // A HashSet insert does no IO; honest — it cannot fail.
         if self.by_id.insert(id) {
             self.count += 1;
         }
+        Ok(())
     }
     fn len(&self) -> usize {
         self.count
@@ -231,6 +255,18 @@ pub enum AppendOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DecideRejected(pub String);
 
+/// The two distinct failure poles a `decide`-gated commit can hit (H1). They
+/// MUST NOT blur: a Law rejection (correct, never retry, nothing persisted) is
+/// categorically different from a store fault (event accepted, durably lost —
+/// safe to retry / must alarm).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CommitError {
+    /// Law/drift/Locked refused it — do NOT retry (nothing was persisted).
+    Rejected(DecideRejected),
+    /// Accepted but not durable — retry / raise alarm (the dangerous pole).
+    Store(StoreError),
+}
+
 /// A per-node, content-addressed, idempotent event-log.
 ///
 /// Local-first: `append`/`commit_after_decide` runs **before** any network IO.
@@ -254,7 +290,7 @@ impl<S: EventStore> EventLog<S> {
     /// Append an event, chaining `prev` to the current tip if the caller left it
     /// zeroed (local-first hash-chain genesis/continuation). Idempotent: an
     /// event whose computed content-id already exists is a [`Duplicate`] no-op.
-    pub fn append(&mut self, mut ev: MeshEvent) -> AppendOutcome {
+    pub fn append(&mut self, mut ev: MeshEvent) -> Result<AppendOutcome, StoreError> {
         // Local-first chaining: bind prev to the current tip if the caller left
         // it zeroed. MUST happen before event_id() so the content-id reflects
         // the chain position (the chain is part of the idempotency key).
@@ -265,11 +301,14 @@ impl<S: EventStore> EventLog<S> {
         }
         let id = ev.event_id();
         if self.store.contains(&id) {
-            return AppendOutcome::Duplicate(id);
+            // Duplicate takes no IO → cannot fail durability.
+            return Ok(AppendOutcome::Duplicate(id));
         }
-        self.store.insert(id, ev);
+        // The durability barrier gates the tip: `?` short-circuits BEFORE
+        // set_tip, so in-memory state never claims an event the store rejected.
+        self.store.insert(id, ev)?;
         self.store.set_tip(id);
-        AppendOutcome::Committed(id)
+        Ok(AppendOutcome::Committed(id))
     }
 
     /// Append WITHOUT local-first `prev` chaining. The event's `prev` field is
@@ -279,14 +318,14 @@ impl<S: EventStore> EventLog<S> {
     /// whose content-id must be a STABLE function of `(node_id, group_size)` so a
     /// re-received breach alert is a structural no-op, not a new row. Still
     /// idempotent on plain duplicate content-ids (the store dedups by id).
-    pub fn append_raw(&mut self, ev: MeshEvent) -> AppendOutcome {
+    pub fn append_raw(&mut self, ev: MeshEvent) -> Result<AppendOutcome, StoreError> {
         let id = ev.event_id();
         if self.store.contains(&id) {
-            return AppendOutcome::Duplicate(id);
+            return Ok(AppendOutcome::Duplicate(id));
         }
-        self.store.insert(id, ev);
+        self.store.insert(id, ev)?;
         self.store.set_tip(id);
-        AppendOutcome::Committed(id)
+        Ok(AppendOutcome::Committed(id))
     }
 
     /// MESH-06 commit gate: run the kernel `decide` Law on the event **before**
@@ -301,7 +340,7 @@ impl<S: EventStore> EventLog<S> {
         &mut self,
         ev: MeshEvent,
         decide: D,
-    ) -> Result<(AppendOutcome, Option<T>), DecideRejected>
+    ) -> Result<(AppendOutcome, Option<T>), CommitError>
     where
         D: FnOnce(&MeshEvent) -> Result<T, E>,
         E: std::fmt::Display,
@@ -311,10 +350,13 @@ impl<S: EventStore> EventLog<S> {
         if self.store.contains(&id) {
             return Ok((AppendOutcome::Duplicate(id), None));
         }
-        // Decide BEFORE commit. On rejection, do not persist anything.
-        let decision = decide(&ev).map_err(|e| DecideRejected(e.to_string()))?;
-        // Commit (chains prev, records tip).
-        let outcome = self.append(ev);
+        // Decide BEFORE commit. On rejection, do not persist anything — this is
+        // the Law pole (never retry), kept distinct from the store-fault pole.
+        let decision = decide(&ev)
+            .map_err(|e| CommitError::Rejected(DecideRejected(e.to_string())))?;
+        // Commit (chains prev, records tip). A durability fault here is the
+        // Store pole — accepted but not durable, NOT a Law rejection.
+        let outcome = self.append(ev).map_err(CommitError::Store)?;
         Ok((outcome, Some(decision)))
     }
 
@@ -350,7 +392,7 @@ impl<S: EventStore> EventLog<S> {
         adjacency: &[Vec<f64>],
         intervention: bool,
         decide: D,
-    ) -> Result<(AppendOutcome, Option<T>), DecideRejected>
+    ) -> Result<(AppendOutcome, Option<T>), CommitError>
     where
         D: FnOnce(&MeshEvent) -> Result<T, E>,
         E: std::fmt::Display,
@@ -362,12 +404,14 @@ impl<S: EventStore> EventLog<S> {
                 classify_drift(adjacency),
                 crate::spectral::DriftClass::Unstable
             ) {
-                return Err(DecideRejected(format!(
+                // Drift rejection is a Law-pole reject (never retry), not a
+                // durability fault.
+                return Err(CommitError::Rejected(DecideRejected(format!(
                     "HYDRA drift-gate REJECT: spectrum Unstable (ρ>1) — mutation would diverge; \
                      organism endures by NOT persisting. adjacency={}x{}",
                     adjacency.len(),
                     adjacency.first().map(|r| r.len()).unwrap_or(0)
-                )));
+                ))));
             }
         }
         // Default regime (or intervention lift): proceed to decide-before-commit.
@@ -382,6 +426,44 @@ impl<S: EventStore> EventLog<S> {
     /// Whether the log is empty.
     pub fn is_empty(&self) -> bool {
         self.store.is_empty()
+    }
+}
+
+/// H1 §4 — test-only store whose durability barrier ALWAYS fails, modelling a
+/// full disk / read-only mount. Its `insert` returns `Err(StoreError::Sync)`.
+/// This shape is INEXPRESSIBLE against the pre-fix infallible `-> ()` trait —
+/// that impossibility is the RED (§4 criterion 2). `set_tip`/`len` track real
+/// state so the "no in-memory advance on a failed durability barrier"
+/// assertions are genuine (falsifiable), not tautological: a correct `append`
+/// short-circuits on the failed `insert?` BEFORE `set_tip`, so the tip/count
+/// stay at their empty values. Shared by the event_log + hydra test suites.
+#[cfg(test)]
+#[derive(Default)]
+pub(crate) struct FaultyStore {
+    tip: Option<[u8; 32]>,
+    count: usize,
+}
+
+#[cfg(test)]
+impl EventStore for FaultyStore {
+    fn contains(&self, _id: &[u8; 32]) -> bool {
+        false
+    }
+    fn insert(&mut self, _id: [u8; 32], _ev: MeshEvent) -> Result<(), StoreError> {
+        Err(StoreError::Sync("simulated fsync failure".into()))
+    }
+    fn len(&self) -> usize {
+        self.count
+    }
+    fn tip(&self) -> Option<[u8; 32]> {
+        self.tip
+    }
+    fn set_tip(&mut self, id: [u8; 32]) {
+        // Only reached if a caller advanced the tip; a correct `append`
+        // short-circuits on the failed `insert?` before this — keeping the
+        // §4 tip/len assertions false-when-buggy.
+        self.tip = Some(id);
+        self.count += 1;
     }
 }
 
@@ -485,8 +567,8 @@ mod tests {
         let e = ev(9, 5, b"illegal-intent");
         let res = log.commit_after_decide(e, |_| Err::<u64, String>("decide says no".into()));
         assert!(
-            matches!(res, Err(DecideRejected(_))),
-            "rejection propagates"
+            matches!(res, Err(CommitError::Rejected(_))),
+            "rejection propagates as the Law pole"
         );
         assert!(log.is_empty(), "nothing persisted on rejection");
     }
@@ -531,12 +613,12 @@ mod tests {
     #[test]
     fn local_first_chaining_binds_prev_to_tip() {
         let mut log = EventLog::new(MemEventStore::new());
-        let id1 = match log.append(ev(4, 1, b"a")) {
+        let id1 = match log.append(ev(4, 1, b"a")).expect("first append durable") {
             AppendOutcome::Committed(id) => id,
             _ => panic!("first must commit"),
         };
         // Second event leaves prev zeroed; the log must bind it to id1.
-        let id2 = match log.append(ev(4, 2, b"b")) {
+        let id2 = match log.append(ev(4, 2, b"b")).expect("second append durable") {
             AppendOutcome::Committed(id) => id,
             _ => panic!("second must commit"),
         };
@@ -570,7 +652,7 @@ mod tests {
         let e = ev(11, 1, b"divergent-mutation");
         let res = log.commit_after_decide_drift_gate(e, &adj(2.0), false, |_| Ok::<u64, String>(1));
         assert!(
-            matches!(res, Err(DecideRejected(_))),
+            matches!(res, Err(CommitError::Rejected(_))),
             "Unstable (ρ=2) mutation MUST be rejected in default regime"
         );
         assert!(log.is_empty(), "nothing persisted on drift-gate rejection");
@@ -605,5 +687,60 @@ mod tests {
             1,
             "intervention: mutation persisted despite Unstable"
         );
+    }
+
+    // ── H1 §4 — the failure pole is real, typed, and tested ──────────────────
+
+    /// ★§4 criterion 2 (RED-first, load-bearing) — a store whose durability
+    /// barrier fails makes `append` return `Err(StoreError::Sync(_))`, NEVER a
+    /// fabricated `Ok(AppendOutcome::Committed(_))`, and the in-memory tip/len do
+    /// NOT advance. This assertion is INEXPRESSIBLE on the pre-fix infallible
+    /// `insert(...) -> ()` / `append(...) -> AppendOutcome` signatures — there
+    /// was no `Err` to observe (that impossibility is the RED); it passes only
+    /// against the fixed fallible substrate.
+    #[test]
+    fn append_over_faulty_store_surfaces_err_not_fake_committed() {
+        let mut log = EventLog::new(FaultyStore::default());
+        let res = log.append(ev(1, 1, b"durability-fault"));
+        assert!(
+            matches!(res, Err(StoreError::Sync(_))),
+            "a failed durability barrier must surface as Err(StoreError::Sync), \
+             not Ok(Committed); got {res:?}"
+        );
+        assert!(
+            !matches!(res, Ok(AppendOutcome::Committed(_))),
+            "MUST NOT fabricate a Committed outcome on a lost write"
+        );
+        assert!(log.tip().is_none(), "tip must not advance on a failed barrier");
+        assert_eq!(log.len(), 0, "no in-memory advance on a failed barrier");
+    }
+
+    /// §4 criterion 3 — `commit_after_decide` keeps the two poles distinct over a
+    /// faulty store: a *decide-accepted* event yields `Err(CommitError::Store(_))`
+    /// (accepted-but-not-durable); a *decide-rejected* event yields
+    /// `Err(CommitError::Rejected(_))` with nothing attempted on the store. The
+    /// two are never conflated.
+    #[test]
+    fn commit_after_decide_distinguishes_store_fault_from_law_reject() {
+        // Pole 1 — decide ACCEPTS, but the durability barrier fails → Store.
+        let mut log = EventLog::new(FaultyStore::default());
+        let accepted = log.commit_after_decide(ev(2, 1, b"accepted"), |_| Ok::<u64, String>(1));
+        assert!(
+            matches!(accepted, Err(CommitError::Store(StoreError::Sync(_)))),
+            "decide-accepted + store fault ⇒ CommitError::Store; got {accepted:?}"
+        );
+        assert!(log.tip().is_none(), "no tip on a durability fault");
+        assert_eq!(log.len(), 0, "no in-memory advance on a durability fault");
+
+        // Pole 2 — decide REJECTS → Rejected, the store is never touched.
+        let mut log2 = EventLog::new(FaultyStore::default());
+        let rejected =
+            log2.commit_after_decide(ev(3, 1, b"illegal"), |_| Err::<u64, String>("no".into()));
+        assert!(
+            matches!(rejected, Err(CommitError::Rejected(_))),
+            "decide-rejected ⇒ CommitError::Rejected (store never attempted); got {rejected:?}"
+        );
+        assert!(log2.tip().is_none(), "rejection persists nothing");
+        assert_eq!(log2.len(), 0, "rejection persists nothing");
     }
 }

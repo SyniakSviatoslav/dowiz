@@ -26,7 +26,12 @@
 //!
 //! Pure std + serde_json only. No float on money. No courier scoring anywhere.
 
-use std::collections::HashMap;
+// BTreeMap (not HashMap) so `LedgerOut.funnel` serializes in a deterministic,
+// sorted key order — `serde_json::to_string` iterates the map in-order, and a
+// `std::HashMap`'s per-instance random iteration order would leak into the
+// emitted JSON (breaks golden-tests / diffs / content-addressing). Same
+// determinism pattern as `retrieval/memory_store.rs`'s `BTreeMap` snapshot_root.
+use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
@@ -105,8 +110,10 @@ struct EventIn {
 struct LedgerOut {
     /// channel -> distinct order count
     orders_by_channel: Vec<(String, u64)>,
-    /// channel -> [[status, count], ...] funnel stages in enum order
-    funnel: HashMap<String, Vec<(String, u64)>>,
+    /// channel -> [[status, count], ...] funnel stages in enum order.
+    /// `BTreeMap` (not `HashMap`) so the emitted JSON key order is deterministic
+    /// (sorted) — a pure function of the input, safe to golden-test / diff.
+    funnel: BTreeMap<String, Vec<(String, u64)>>,
     /// number of orders whose status sequence contained an illegal transition
     anomalies: u64,
 }
@@ -236,7 +243,7 @@ fn channel_ledger_logic(events_json: &str) -> Result<String, String> {
     }
 
     let by_channel = ledger.orders_by_channel();
-    let mut funnel: HashMap<String, Vec<(String, u64)>> = HashMap::new();
+    let mut funnel: BTreeMap<String, Vec<(String, u64)>> = BTreeMap::new();
     for (channel, _count) in &by_channel {
         let stages = ledger
             .funnel(channel)
@@ -745,11 +752,9 @@ fn spectral_flat_logic(matrix_json: &str) -> Result<String, String> {
         spectral_radius(&m),
         spectral_gap(&m),
         algebraic_connectivity(&m),
-        match classify_drift(&m) {
-            DriftClass::Damped => 0.0,
-            DriftClass::Resonant => 1.0,
-            DriftClass::Unstable => 2.0,
-        },
+        // Single authority for the wire code: `DriftClass::wire_code()` in
+        // `spectral.rs` (no inline 0/1/2 literals here).
+        classify_drift(&m).wire_code() as f64,
         eigs.len() as f64,
     ];
     for e in &eigs {
@@ -834,6 +839,45 @@ mod tests {
         // anomalies: all three orders are single observations with no transition
         // steps, so the reducer finds zero illegal sequences.
         assert_eq!(v["anomalies"], 0);
+    }
+
+    // Determinism pin (bundled finding #12): `LedgerOut.funnel` is a `BTreeMap`,
+    // so `serde_json::to_string` emits its keys in sorted order — a pure function
+    // of the input. Two runs on the same events must be byte-identical, and the
+    // funnel keys must appear in ascending order in the raw JSON. A `HashMap`
+    // would leak a per-instance random iteration order and fail this.
+    #[test]
+    fn channel_ledger_funnel_serialization_is_deterministic() {
+        // Channels chosen so their sorted order (alpha < beta < mango < zebra)
+        // is unambiguous and does NOT match a plausible insertion/hash order.
+        let events = r#"[
+            {"order_id":"z1","channel":"zebra","status":"PENDING","at_ms":1},
+            {"order_id":"a1","channel":"alpha","status":"PENDING","at_ms":2},
+            {"order_id":"m1","channel":"mango","status":"PENDING","at_ms":3},
+            {"order_id":"b1","channel":"beta","status":"PENDING","at_ms":4}
+        ]"#;
+        let a = channel_ledger_logic(events).unwrap();
+        let b = channel_ledger_logic(events).unwrap();
+        assert_eq!(a, b, "funnel JSON must be byte-identical across runs");
+
+        // The funnel keys, as they appear in the raw JSON, are in ascending
+        // sorted order (the BTreeMap guarantee; a HashMap would not ensure this).
+        let funnel_seg = a
+            .split("\"funnel\":")
+            .nth(1)
+            .expect("funnel object present in JSON");
+        let positions: Vec<usize> = ["alpha", "beta", "mango", "zebra"]
+            .iter()
+            .map(|k| {
+                funnel_seg
+                    .find(&format!("\"{k}\""))
+                    .unwrap_or_else(|| panic!("funnel key {k} present"))
+            })
+            .collect();
+        assert!(
+            positions.windows(2).all(|w| w[0] < w[1]),
+            "funnel keys must serialize in sorted order (deterministic), got positions {positions:?}"
+        );
     }
 
     #[test]
