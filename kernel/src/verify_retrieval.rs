@@ -83,10 +83,7 @@ mod tests {
     /// Pass: within tolerance → Ok(()), no trigger emitted.
     #[test]
     fn pass_emits_nothing() {
-        assert_eq!(
-            verify_then_lookup("c1", 1.0001, 1.0, 1e-3, 0, 2),
-            Ok(())
-        );
+        assert_eq!(verify_then_lookup("c1", 1.0001, 1.0, 1e-3, 0, 2), Ok(()));
     }
 
     /// Fail at round 0 → trigger with round 0 (harness should re-verify).
@@ -116,7 +113,10 @@ mod tests {
         assert_eq!(final_fail.as_ref().unwrap_err().round, 2);
         assert!(!t0.terminal);
         assert!(!t1.terminal);
-        assert!(final_fail.as_ref().unwrap_err().terminal, "round == max_rounds MUST be terminal");
+        assert!(
+            final_fail.as_ref().unwrap_err().terminal,
+            "round == max_rounds MUST be terminal"
+        );
     }
 
     /// RED→GREEN for the E0 dead-branch fix: the terminal flag tracks the round
@@ -127,7 +127,11 @@ mod tests {
         let max = 3;
         for r in 0..max {
             let trig = verify_then_lookup("x", 5.0, 1.0, 1e-9, r, max).unwrap_err();
-            assert_eq!(trig.terminal, r == max, "terminal must be true only at round == max_rounds");
+            assert_eq!(
+                trig.terminal,
+                r == max,
+                "terminal must be true only at round == max_rounds"
+            );
         }
     }
 

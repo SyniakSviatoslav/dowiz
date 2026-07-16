@@ -27,7 +27,10 @@ pub struct SpineError {
 impl SpineError {
     /// Single-sentence human message naming every missing key.
     pub fn message(&self) -> String {
-        format!("missing required frontmatter keys: {}", self.missing_keys.join(", "))
+        format!(
+            "missing required frontmatter keys: {}",
+            self.missing_keys.join(", ")
+        )
     }
 }
 
@@ -98,7 +101,9 @@ pub fn validate_frontmatter(fm: &Frontmatter, required: &[&str]) -> Result<(), S
     if missing.is_empty() {
         Ok(())
     } else {
-        Err(SpineError { missing_keys: missing })
+        Err(SpineError {
+            missing_keys: missing,
+        })
     }
 }
 
@@ -270,7 +275,10 @@ impl SpineIndex {
         let mut tag_index: HashMap<String, Vec<String>> = HashMap::new();
         for (id, _, tags, _) in &docs {
             for tag in tags {
-                tag_index.entry(tag.to_lowercase()).or_default().push(id.clone());
+                tag_index
+                    .entry(tag.to_lowercase())
+                    .or_default()
+                    .push(id.clone());
             }
         }
         for bucket in tag_index.values_mut() {
@@ -330,18 +338,15 @@ mod tests {
         // RED→GREEN: a doc with a leading frontmatter block must have its keys
         // parsed into the map and the body cleanly separated after the closing
         // `---`.
-        let doc = "---\ntitle: Hello World\nid: doc-1\ntags: a, b, c\n---\n# Body\nSome text here.\n";
+        let doc =
+            "---\ntitle: Hello World\nid: doc-1\ntags: a, b, c\n---\n# Body\nSome text here.\n";
         let (fm, body) = parse_frontmatter(doc);
         assert_eq!(
             fm.get("title").map(|s| s.as_str()),
             Some("Hello World"),
             "title parsed"
         );
-        assert_eq!(
-            fm.get("id").map(|s| s.as_str()),
-            Some("doc-1"),
-            "id parsed"
-        );
+        assert_eq!(fm.get("id").map(|s| s.as_str()), Some("doc-1"), "id parsed");
         assert_eq!(
             fm.get("tags").map(|s| s.as_str()),
             Some("a, b, c"),
@@ -390,9 +395,18 @@ mod tests {
         e_c.insert("title".into(), "Gamma".into());
 
         let entries = vec![
-            SpineEntry { path: "docs/b.md".into(), fm: e_a },
-            SpineEntry { path: "docs/a.md".into(), fm: e_b },
-            SpineEntry { path: "docs/c.md".into(), fm: e_c },
+            SpineEntry {
+                path: "docs/b.md".into(),
+                fm: e_a,
+            },
+            SpineEntry {
+                path: "docs/a.md".into(),
+                fm: e_b,
+            },
+            SpineEntry {
+                path: "docs/c.md".into(),
+                fm: e_c,
+            },
         ];
 
         let map = generate_map(&entries);
@@ -462,9 +476,18 @@ mod tests {
         let idx_b = tag_index(&docs_b);
         assert_eq!(idx_a, idx_b, "buckets identical regardless of input order");
         // Buckets sorted + deduped (lowercased).
-        assert_eq!(idx_a.get("a"), Some(&vec!["x".into(), "y".into(), "z".into()]));
-        assert_eq!(idx_a.get("b"), Some(&vec!["x".into(), "y".into(), "z".into()]));
-        assert_eq!(idx_a.get("c"), Some(&vec!["x".into(), "y".into(), "z".into()]));
+        assert_eq!(
+            idx_a.get("a"),
+            Some(&vec!["x".into(), "y".into(), "z".into()])
+        );
+        assert_eq!(
+            idx_a.get("b"),
+            Some(&vec!["x".into(), "y".into(), "z".into()])
+        );
+        assert_eq!(
+            idx_a.get("c"),
+            Some(&vec!["x".into(), "y".into(), "z".into()])
+        );
         assert_eq!(idx_a.get("A"), None, "tags are lowercased on insert");
     }
 
@@ -485,7 +508,11 @@ mod tests {
         ];
         let idx = tag_index(&docs);
         let bl = backlinks("b", &idx);
-        assert_eq!(bl, vec!["a".to_string(), "c".to_string()], "sorted, excludes self");
+        assert_eq!(
+            bl,
+            vec!["a".to_string(), "c".to_string()],
+            "sorted, excludes self"
+        );
         assert!(!bl.contains(&"b".to_string()), "self never returned");
         // A doc with no relations returns empty.
         assert_eq!(backlinks("a", &HashMap::new()), Vec::<String>::new());
@@ -495,9 +522,24 @@ mod tests {
     fn spine_map_grouped_by_tag_and_sorted() {
         // P3: sections + entries sorted, header present.
         let docs = vec![
-            ("c".to_string(), "Gamma".into(), vec!["ml".into()], "docs/c.md".into()),
-            ("a".to_string(), "Alpha".into(), vec!["rust".into()], "docs/a.md".into()),
-            ("b".to_string(), "Beta".into(), vec!["rust".into()], "docs/b.md".into()),
+            (
+                "c".to_string(),
+                "Gamma".into(),
+                vec!["ml".into()],
+                "docs/c.md".into(),
+            ),
+            (
+                "a".to_string(),
+                "Alpha".into(),
+                vec!["rust".into()],
+                "docs/a.md".into(),
+            ),
+            (
+                "b".to_string(),
+                "Beta".into(),
+                vec!["rust".into()],
+                "docs/b.md".into(),
+            ),
         ];
         let map = build_map(&docs);
         assert!(map.starts_with("# Knowledge Map\n\n"), "top header present");
@@ -518,9 +560,24 @@ mod tests {
     fn spine_lookup_by_tag_case_insensitive() {
         // P4: tag lookups are case-insensitive.
         let docs = vec![
-            ("a".to_string(), "Alpha".into(), vec!["Rust".into()], "docs/a.md".into()),
-            ("b".to_string(), "Beta".into(), vec!["RUST".into()], "docs/b.md".into()),
-            ("c".to_string(), "Gamma".into(), vec!["ml".into()], "docs/c.md".into()),
+            (
+                "a".to_string(),
+                "Alpha".into(),
+                vec!["Rust".into()],
+                "docs/a.md".into(),
+            ),
+            (
+                "b".to_string(),
+                "Beta".into(),
+                vec!["RUST".into()],
+                "docs/b.md".into(),
+            ),
+            (
+                "c".to_string(),
+                "Gamma".into(),
+                vec!["ml".into()],
+                "docs/c.md".into(),
+            ),
         ];
         let idx = SpineIndex::build(docs);
         assert_eq!(
@@ -533,17 +590,41 @@ mod tests {
             vec!["a".to_string(), "b".to_string()],
             "uppercase query matches"
         );
-        assert_eq!(idx.lookup_by_tag("none"), Vec::<String>::new(), "missing tag ⇒ empty");
+        assert_eq!(
+            idx.lookup_by_tag("none"),
+            Vec::<String>::new(),
+            "missing tag ⇒ empty"
+        );
     }
 
     #[test]
     fn spine_related_returns_shared_tag_docs() {
         // P4: related(id) returns docs sharing ≥1 tag (== backlinks).
         let docs = vec![
-            ("a".to_string(), "Alpha".into(), vec!["rust".into()], "docs/a.md".into()),
-            ("b".to_string(), "Beta".into(), vec!["rust".into(), "ml".into()], "docs/b.md".into()),
-            ("c".to_string(), "Gamma".into(), vec!["ml".into()], "docs/c.md".into()),
-            ("d".to_string(), "Delta".into(), vec!["crypto".into()], "docs/d.md".into()),
+            (
+                "a".to_string(),
+                "Alpha".into(),
+                vec!["rust".into()],
+                "docs/a.md".into(),
+            ),
+            (
+                "b".to_string(),
+                "Beta".into(),
+                vec!["rust".into(), "ml".into()],
+                "docs/b.md".into(),
+            ),
+            (
+                "c".to_string(),
+                "Gamma".into(),
+                vec!["ml".into()],
+                "docs/c.md".into(),
+            ),
+            (
+                "d".to_string(),
+                "Delta".into(),
+                vec!["crypto".into()],
+                "docs/d.md".into(),
+            ),
         ];
         let idx = SpineIndex::build(docs);
         assert_eq!(idx.lookup_by_id("b"), vec!["b".to_string()]);

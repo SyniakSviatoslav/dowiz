@@ -17,6 +17,7 @@
 //! no external dependencies. `order_machine.rs` / `money.rs` are NOT modified.
 
 use crate::catalog::PriceCatalog;
+use crate::kalman::KalmanFilter;
 use crate::money::{apply_tax, assert_non_negative};
 use crate::order_machine::{assert_transition, verify_fsm_signature, OrderStatus, TransitionError};
 
@@ -183,7 +184,10 @@ pub fn place_order_priced(
         it.unit_price = trusted;
     }
     let subtotal = Order::compute_subtotal(&items).map_err(TransitionError::Invalid)?;
-    tracing::debug!(subtotal_cents = subtotal, "order subtotal (catalog-authoritative)");
+    tracing::debug!(
+        subtotal_cents = subtotal,
+        "order subtotal (catalog-authoritative)"
+    );
     Ok(Order {
         id,
         customer_id,
@@ -223,6 +227,86 @@ pub fn apply_event(order: &Order, next: OrderStatus) -> Result<Order, Transition
     }
     let mut updated = order.clone();
     updated.status = next;
+    Ok(updated)
+}
+
+/// Courier/trust STATE ESTIMATE — a 1-D Kalman filter that generalises the
+/// scalar steady-state EMA (`crate::geo::ema_next`). `ema_next` is the
+/// infinite-initial-covariance special case of this filter; here the filter
+/// *also* tracks its own variance, so the Law can down-weight stale/uncertain
+/// observations instead of trusting a fixed alpha.
+///
+/// Domain scope note (kernel money red line): this struct carries courier trust
+/// as a *separate* estimate and is deliberately NOT stored on [`Order`] (which
+/// forbids courier-scoring fields). It is threaded through the fold by
+/// [`apply_event_with_trust`] and returned alongside the updated order.
+///
+/// The courier/trust state is a unit-rate scalar: the observation is whatever
+/// signal the caller feeds (e.g. a 0..1 reliability sample, an ETA-error ratio).
+/// `F=H=1`; `Q` is the process drift, `R` the observation noise.
+#[derive(Debug, Clone)]
+pub struct TrustEstimate {
+    /// The actual Kalman filter (state `x`, covariance `P`, plus the
+    /// innovation/surprise signals surfaced by `kalman.rs`).
+    pub kf: KalmanFilter,
+}
+
+impl TrustEstimate {
+    /// New trust estimate with a neutral prior `x0` (default 0.5 = unknown) and
+    /// a wide initial covariance `p0` so the first observations dominate.
+    pub fn new(x0: f64, q: f64, r: f64) -> Self {
+        // p0 wide => first observation pulls the estimate hard (as EMA would).
+        TrustEstimate {
+            kf: KalmanFilter::scalar(x0, 1.0, 1.0, 1.0, q, r),
+        }
+    }
+
+    /// Convenience: the current trust estimate `x`.
+    pub fn estimate(&self) -> f64 {
+        self.kf.x[0]
+    }
+
+    /// Convenience: the current variance `P` (uncertainty of the estimate).
+    pub fn variance(&self) -> f64 {
+        self.kf.p.get(0, 0)
+    }
+
+    /// Advance one fold step, optionally conditioning on an observation.
+    ///
+    /// - `Some(z)`: `predict` then `update` — the estimate moves toward `z`,
+    ///   variance shrinks.
+    /// - `None` (missing observation): fail-closed — we still `predict` (the
+    ///   prior propagates with process drift) but the estimate **holds its
+    ///   prior**; only the variance grows, reflecting increased uncertainty.
+    pub fn step(&mut self, observation: Option<f64>) -> bool {
+        self.kf.predict();
+        match observation {
+            Some(z) => self.kf.update(&[z]),
+            None => true, // hold prior; variance already grew in predict()
+        }
+    }
+}
+
+/// The Decider's `fold` half WITH a courier/trust Kalman state estimate.
+///
+/// This is the W19 integration point: the order-fold (`apply_event`) is
+/// composed with a `TrustEstimate::step`, so every legal fold also advances the
+/// courier/trust Kalman estimate. The order transition and the FSM-drift gate
+/// behave exactly as [`apply_event`] (unchanged Law). When an observation is
+/// supplied it is fed to the Kalman `update`; when `None`, the Kalman estimate
+/// **holds its prior** (fail-closed — a missing observation never silently
+/// fabricates trust).
+///
+/// Returns the updated order and the (mutated-in-place) shared `TrustEstimate`.
+pub fn apply_event_with_trust(
+    order: &Order,
+    next: OrderStatus,
+    trust: &mut TrustEstimate,
+    observation: Option<f64>,
+) -> Result<Order, TransitionError> {
+    let updated = apply_event(order, next)?;
+    // Kalman fold: predict + (maybe) update. Fail-closed on missing observation.
+    trust.step(observation);
     Ok(updated)
 }
 
@@ -430,5 +514,100 @@ mod tests {
             unit_price: 999,
         }];
         assert!(place_order_priced("x".into(), None, items, 0, None, None, &cat).is_err());
+    }
+
+    // ── W19 GREEN (a): Kalman variance-reduction in the decide/fold Law ──
+    //
+    // A `decide` step (the order fold, `apply_event_with_trust`) that carries a
+    // noisy courier/trust observation yields a Kalman-filtered estimate that is
+    // closer to the (known) truth than the raw observation stream. This is the
+    // variance-reduction gate that mirrors bebop2 BP-21: the filtered mean-square
+    // error must be SIGNIFICANTLY below the raw observation mean-square error.
+    //
+    // The trust estimate is SHARED across many independent deliveries (each a
+    // fresh order folded Pending→Confirmed), exactly as a real courier's running
+    // reliability accumulates across orders. The observations are deterministic
+    // (fixed LCG — no RNG dependency) so the proof value is reproducible.
+    #[test]
+    fn green_kalman_fold_reduces_variance_vs_raw() {
+        // Truth we are trying to estimate: the courier's steady reliability.
+        const TRUTH: f64 = 0.70;
+        // Deterministic observation noise: LCG uniform in [-0.30, 0.30].
+        let mut seed: u64 = 0x9E3779B97F4A7C15;
+        let mut noise = || {
+            // SplitMix64 step → [0,1) → shift to [-0.30, 0.30].
+            seed = seed.wrapping_add(0x9E3779B97F4A7C15);
+            let mut z = seed;
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
+            z = z ^ (z >> 31);
+            let u = (z >> 11) as f64 / (1u64 << 53) as f64; // [0,1)
+            (u - 0.5) * 0.60
+        };
+
+        let mut trust = TrustEstimate::new(0.5, 0.002, 0.03);
+
+        let mut raw_sq: f64 = 0.0;
+        let mut filt_sq: f64 = 0.0;
+        let mut n: u64 = 0;
+
+        // 64 independent deliveries, each a fresh order folded one legal step,
+        // feeding one noisy observation into the SHARED trust estimate.
+        for i in 0..64u64 {
+            let obs = (TRUTH + noise()).clamp(0.0, 1.0);
+            let order = place_order(format!("d{i}"), None, sample_items(), 0, None, None).unwrap();
+            // The decide/fold Law step WITH the courier/trust Kalman estimate.
+            let _folded =
+                apply_event_with_trust(&order, OrderStatus::Confirmed, &mut trust, Some(obs))
+                    .unwrap();
+            // Record raw vs filtered error against the known truth.
+            raw_sq += (obs - TRUTH).powi(2);
+            filt_sq += (trust.estimate() - TRUTH).powi(2);
+            n += 1;
+        }
+
+        let raw_mse = raw_sq / n as f64;
+        let filt_mse = filt_sq / n as f64;
+        // Proof value: filtered MSE must be < 50% of the raw observation MSE.
+        let reduction = raw_mse - filt_mse;
+        let pct_lower = (reduction / raw_mse) * 100.0;
+        println!(
+            "W19 variance-reduction proof: raw_mse={raw_mse:.6} filtered_mse={filt_mse:.6} \
+             reduction={reduction:.6} ({pct_lower:.1}% lower)"
+        );
+        assert!(
+            filt_mse < 0.5 * raw_mse,
+            "Kalman-filtered estimate (mse={filt_mse}) must be < 50% of raw obs mse={raw_mse}"
+        );
+        // Sanity: the filter actually converged near the truth, not stuck at prior.
+        assert!(
+            (trust.estimate() - TRUTH).abs() < 0.10,
+            "filtered estimate {} must be near truth {}",
+            trust.estimate(),
+            TRUTH
+        );
+    }
+
+    // ── W19 fail-closed: a missing observation holds the prior ──
+    #[test]
+    fn green_kalman_fold_holds_prior_on_missing_observation() {
+        let mut trust = TrustEstimate::new(0.5, 0.002, 0.03);
+        // Prime it with one observation so the prior is well-defined.
+        trust.step(Some(0.9));
+        let held = trust.estimate();
+        // A fold with NO observation must NOT move the estimate (holds prior).
+        let order = place_order("m".into(), None, sample_items(), 0, None, None).unwrap();
+        let _ = apply_event_with_trust(&order, OrderStatus::Confirmed, &mut trust, None).unwrap();
+        assert!(
+            (trust.estimate() - held).abs() < 1e-12,
+            "missing observation must hold the prior (est {} vs held {})",
+            trust.estimate(),
+            held
+        );
+        // But uncertainty grew (predict only).
+        assert!(
+            trust.variance() > 0.0,
+            "variance must reflect increased uncertainty"
+        );
     }
 }

@@ -226,11 +226,7 @@ impl KalmanFilter {
         // innovation y = z − H·x  (the surprise signal — surfaced, not discarded)
         let hx = crate::mat::matmul_contig(&self.h, &col(&self.x));
         let hxv = uncol(&hx);
-        let y: Vec<f64> = z
-            .iter()
-            .zip(hxv.iter())
-            .map(|(zi, hxi)| zi - hxi)
-            .collect();
+        let y: Vec<f64> = z.iter().zip(hxv.iter()).map(|(zi, hxi)| zi - hxi).collect();
         // Cache the innovation so the eval layer can read novelty post-update.
         self.last_innovation = y.clone();
         let y_norm: f64 = y.iter().map(|v| v * v).sum::<f64>().sqrt();

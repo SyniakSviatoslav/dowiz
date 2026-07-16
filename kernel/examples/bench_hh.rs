@@ -36,9 +36,12 @@ fn main() {
             },
             200,
         );
-        let fd = ns(|| {
-            let _ = faddeev(&a);
-        }, 200);
+        let fd = ns(
+            || {
+                let _ = faddeev(&a);
+            },
+            200,
+        );
         println!(
             "n={:>3}  householder={:>10.1} ns   faddeev={:>10.1} ns   speedup={:.2}x",
             n,

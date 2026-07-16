@@ -28,7 +28,10 @@ fn fixture_index_builds_with_20_docs() {
     assert_eq!(idx.len(), 20);
     assert!(idx.postings_len() > 0, "index must contain trigrams");
     // Determinism: a rebuild yields the identical literal-keyed posting count.
-    assert_eq!(TrigramIndex::new(FIXTURE).postings_len(), idx.postings_len());
+    assert_eq!(
+        TrigramIndex::new(FIXTURE).postings_len(),
+        idx.postings_len()
+    );
 }
 
 #[test]
@@ -71,7 +74,10 @@ fn verify_filters_overbroad_candidates_no_false_positives() {
     let needle = "trigram-index";
     let cand = idx.candidate_count_literal(needle);
     let matches = idx.query_literal(needle);
-    assert!(cand >= matches.len(), "candidates are a superset of matches");
+    assert!(
+        cand >= matches.len(),
+        "candidates are a superset of matches"
+    );
     // matches == oracle, i.e. exactly the docs containing the needle.
     assert_eq!(matches, linear_literal(FIXTURE, needle));
     assert_eq!(matches, vec![5]);
@@ -113,11 +119,18 @@ fn candidate_reduction_factor_on_synthetic_corpus() {
     let factor = n as f64 / cand.max(1) as f64;
     println!(
         "[retrieval::bench] synthetic n={} candidates={} matches={} reduction={:.1}x",
-        n, cand, matches.len(), factor
+        n,
+        cand,
+        matches.len(),
+        factor
     );
     assert_eq!(matches, vec![1234]);
     assert!(cand <= 1, "unique marker ⇒ ≤1 candidate");
-    assert!(factor >= 50.0, "expected ≥50× reduction, got {:.1}x", factor);
+    assert!(
+        factor >= 50.0,
+        "expected ≥50× reduction, got {:.1}x",
+        factor
+    );
 }
 
 #[test]
@@ -125,9 +138,27 @@ fn full_suite_parity_with_linear_oracle() {
     // Exhaustively check a battery of needles against the linear oracle.
     let idx = build();
     let needles = [
-        "md", "note", "schema", "push", "tier", "zstd", "vsa", "entropy", "field",
-        "divergence", "coherence", "ttrain", "pq", "cdc", "graph", "index", "decay",
-        "recall", "fusion", "gate", "ledger",
+        "md",
+        "note",
+        "schema",
+        "push",
+        "tier",
+        "zstd",
+        "vsa",
+        "entropy",
+        "field",
+        "divergence",
+        "coherence",
+        "ttrain",
+        "pq",
+        "cdc",
+        "graph",
+        "index",
+        "decay",
+        "recall",
+        "fusion",
+        "gate",
+        "ledger",
     ];
     for nd in needles {
         assert_eq!(
@@ -137,4 +168,74 @@ fn full_suite_parity_with_linear_oracle() {
             nd
         );
     }
+}
+
+// ── W18 — living_knowledge Rust adapter as PRIMARY recall source ──
+// Deterministic recall@k integration test. Does NOT depend on the deleted
+// 324-file JS corpus: it asserts the wired `retrieval::recall_at_k` PRIMARY
+// recall API returns the expected top-k over the kernel's own deterministic
+// fixture corpus (recall@5 == 1.0 over a hand-verified oracle). 0 JS.
+
+#[test]
+fn w18_primary_recall_at_k_returns_expected_top_k() {
+    // GREEN gate: call the wired PRIMARY recall API and assert the top-k
+    // matches a known deterministic fixture. We verify on the kernel's own
+    // FIXTURE_CORPUS (the PRIMARY source) using hand-verified queries whose
+    // relevant doc is doc-id 0..=11; we check that recall_at_k surfaces the
+    // correct doc at rank 1 with a positive score (deterministic, no JS).
+    let hits = super::recall::recall_at_k("how is the order total calculated", 5);
+    assert!(!hits.is_empty(), "recall must return at least one hit");
+    assert_eq!(hits.len(), 5, "recall@5 must return exactly 5 ranked hits");
+    // PrimaryRecall ids are `lk:<position>`; doc 0 ("pricing") must be rank 1.
+    assert_eq!(hits[0].0, "lk:0", "primary recall must surface lk:0 first");
+    assert!(hits[0].1 > 0.0, "top hit must carry a positive BM25 score");
+    // Scores must be in non-increasing order (descending ranking).
+    for w in hits.windows(2) {
+        assert!(
+            w[0].1 >= w[1].1,
+            "recall ranking must be non-increasing in score"
+        );
+    }
+}
+
+#[test]
+fn w18_primary_recall_at_5_is_one_point_zero_on_deterministic_fixture() {
+    // recall@5 == 1.0 over a hand-verified oracle derived from the kernel's
+    // PRIMARY corpus, certified by the kernel's own `csr::recall_at_k`. This
+    // is the headline property the blueprint requires (deterministic, 0 JS).
+    use crate::csr::recall_at_k;
+    const K: usize = 5;
+    let oracle: Vec<(&str, usize)> = vec![
+        ("how is the order total calculated", 0),
+        ("when does the package get delivered", 1),
+        ("can i get my money back", 2),
+        ("where are product prices defined", 3),
+        ("how does exact substring search work", 4),
+        ("what ranks documents by word frequency", 5),
+        ("which algorithm measures node importance in a graph", 6),
+        ("how do related memories get surfaced", 7),
+        ("why do old notes lose weight", 8),
+        ("how is stored memory made smaller", 9),
+        ("how are embeddings compressed", 10),
+        ("what tracks information gain of improvements", 11),
+    ];
+    let mut total = 0.0f64;
+    for (q, relevant) in &oracle {
+        let hits = super::recall::recall_at_k(q, K);
+        // Encode the ranking as a doc-id-indexed score vector for certify.
+        let mut scores = vec![0.0f64; 12];
+        for (pos, (id, _score)) in hits.iter().enumerate() {
+            let d: usize = id.strip_prefix("lk:").unwrap().parse().unwrap();
+            scores[d] = (hits.len() - pos) as f64;
+        }
+        let r = recall_at_k(&scores, &[*relevant], K);
+        assert_eq!(
+            r, 1.0,
+            "W18 primary recall: query '{}' must recall relevant doc lk:{} in top-{}",
+            q, relevant, K
+        );
+        total += r;
+    }
+    let mean = total / oracle.len() as f64;
+    assert_eq!(mean, 1.0, "mean recall@5 over the W18 oracle must be 1.0");
 }

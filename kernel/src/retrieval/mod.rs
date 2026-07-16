@@ -15,23 +15,39 @@
 //! deterministic accumulation order is *mirrored* in `ppr.rs`. No
 //! eigendecomposition. Same input ⇒ same bytes (fixed K, fixed summation order).
 
+/// L2 lexical ranker — pure-`std` Okapi BM25 (M2).
+pub mod bm25;
+/// L3 RELATEDNESS — wikilink fixture graph + "what relates to X" diffusion.
+pub mod diffusion;
 /// L0 exact-search corpus + synthetic generator (W1-3).
 pub mod fixtures;
 /// L0 deterministic trigram inverted index + exact verify (W1-3).
 pub mod index;
-/// L0 RED→GREEN exact-match / 0-false-positive tests (W1-3).
-pub mod tests;
-/// L3 PPR power-iteration engine — mirrors `kernel/src/markov.rs` determinism.
-pub mod ppr;
-/// L3 RELATEDNESS — wikilink fixture graph + "what relates to X" diffusion.
-pub mod diffusion;
-/// L2 lexical ranker — pure-`std` Okapi BM25 (M2).
-pub mod bm25;
-/// L2+L0 fusion — BM25 + trigram index, living-knowledge recall@5=1.0
-/// (un-strands the spike engine's lexical capability into the kernel, M2/A2).
-pub mod recall;
-/// W3-3 P1 — knowledge-spine frontmatter validator + MAP.md generator organ.
-pub mod spine;
 /// M4/W4-1 — native std-only content-addressed living-memory store (default)
 /// + feature-gated `pgrust` SQL adapter boundary (OFF by default).
 pub mod memory_store;
+/// L3 PPR power-iteration engine — mirrors `kernel/src/markov.rs` determinism.
+pub mod ppr;
+/// L2+L0 fusion — BM25 + trigram index, living-knowledge recall@5=1.0
+/// (un-strands the spike engine's lexical capability into the kernel, M2/A2).
+///
+/// W18 — `recall` ALSO hosts the PRIMARY recall source (`PrimaryRecall` +
+/// `recall_at_k`) that the self-improvement loop uses. The (wasm-gated)
+/// `crate::living_knowledge` adapter delegates its lexical recall to this
+/// kernel-owned, std-only path instead of the purged JS engine.
+pub mod recall;
+/// W18 — wire the kernel-owned PRIMARY recall source (`recall::PrimaryRecall`)
+/// as the lexical `LivingKnowledge` adapter. The (wasm-gated) `crate::living_knowledge`
+/// recall loop delegates here instead of the purged JS engine. This is a real
+/// (non-test) consumer of `living_knowledge` registered from `retrieval`.
+#[cfg(feature = "wasm")]
+pub use crate::living_knowledge::LivingKnowledge as PrimaryRecallLivingKnowledge;
+/// Construct a `LivingKnowledge`-implementing PRIMARY recall source (wasm only).
+#[cfg(feature = "wasm")]
+pub fn primary_recall_adapter() -> recall::PrimaryRecall {
+    recall::PrimaryRecall::new()
+}
+/// W3-3 P1 — knowledge-spine frontmatter validator + MAP.md generator organ.
+pub mod spine;
+/// L0 RED→GREEN exact-match / 0-false-positive tests (W1-3).
+pub mod tests;

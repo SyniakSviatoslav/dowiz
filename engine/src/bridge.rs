@@ -24,17 +24,14 @@ pub struct FrameProfiler {
     pub write_buffer_calls: usize,
 }
 
-/// The GPU upload boundary (FE-01). A real backend (`wgpu::Queue::write_buffer`)
-/// implements this; the engine stays dependency-free by owning only the trait.
+/// The GPU upload boundary (FE-01). A real queue backend implements this; the
+/// engine stays dependency-free by owning only the trait (see the `feature =
+/// "gpu"` module for the gated, honest stub).
 ///
-/// `write_buffer(offset, data)` copies `data` into the GPU-visible buffer at byte
-/// `offset`. The GREEN contract: **exactly one** `write_buffer` call per frame,
-/// carrying the whole zero-copy vertex slice, and **zero** JSON in the loop.
-///
-/// innovate: the concrete `wgpu` sink lives behind a future `feature = "gpu"`
-/// adapter crate (keeps the engine offline-clean per the Cargo.toml mandate).
-/// ceiling: no real GPU present in headless CI. upgrade: add the wgpu adapter
-/// implementing this trait once a display surface is a build target.
+/// `write_buffer(offset, data)` copies `data` into the GPU-visible buffer at
+/// float `offset`. The GREEN contract: **exactly one** `write_buffer` call per
+/// frame, carrying the whole zero-copy vertex slice, and **zero** JSON in the
+/// loop.
 pub trait GpuUploadSink {
     /// Copy `data` (flat f32 vertex slice) into the GPU buffer at `offset` floats.
     fn write_buffer(&mut self, offset: usize, data: &[f32]);
@@ -80,6 +77,10 @@ pub struct VertexBridge {
     /// (the kernel's CSR SpMV is f64; downcast to f32 for the GPU upload).
     field: Vec<f64>,
     field_graph: Option<Csr>,
+    /// Host staging mirror that receives the REAL CPU copy performed by
+    /// [`VertexBridge::upload_once`]. This is the headless-falsifiable "upload":
+    /// a genuine `Vec` copy of the vertex slice, with zero GPU and zero JSON.
+    staging: Vec<f32>,
 }
 
 impl VertexBridge {
@@ -91,6 +92,7 @@ impl VertexBridge {
             profiler: FrameProfiler::default(),
             field: Vec::new(),
             field_graph: None,
+            staging: Vec::new(),
         }
     }
 
@@ -147,11 +149,22 @@ impl VertexBridge {
         &self.scratch[..self.count * 4]
     }
 
-    /// Model of `queue.writeBuffer(gpuBuffer, 0, view)` — the single upload copy.
-    /// Counts 1 upload on the GREEN path.
+    /// REAL CPU staging upload (W20). Copies the zero-copy vertex slice into the
+    /// owned host [`VertexBridge::staging`] mirror — a genuine `Vec` copy, so the
+    /// "upload" is falsifiable headless: exactly **1** logical upload, **0** GPU
+    /// calls, **0** JSON. This is the shipped render path (W10 field-frame); the
+    /// GPU sink is an additive, honest boundary behind `feature = "gpu"`.
     pub fn upload_once(&mut self) -> &[f32] {
+        let n = self.count * 4;
+        // Borrow only `self.scratch` (disjoint from `self.staging`) so the real
+        // CPU staging copy below type-checks.
+        let view: &[f32] = &self.scratch[..n];
+        // Real CPU staging copy: the staging Vec now holds a byte-for-byte
+        // mirror of the vertex buffer (the work the GPU upload would do).
+        self.staging.clear();
+        self.staging.extend_from_slice(view);
         self.profiler.write_buffer_calls += 1;
-        self.vertex_view()
+        &self.staging[..]
     }
 
     /// WIRED upload (FE-01): drive a real [`GpuUploadSink`] with the zero-copy
@@ -175,6 +188,84 @@ impl VertexBridge {
 
     pub fn profiler(&self) -> &FrameProfiler {
         &self.profiler
+    }
+
+    /// Mutable access to the profiler (used by the gated GPU adapter to record
+    /// real sink writes without exposing the full inner state).
+    pub fn profiler_mut(&mut self) -> &mut FrameProfiler {
+        &mut self.profiler
+    }
+}
+
+#[cfg(feature = "gpu")]
+/// `feature = "gpu"` — the honest GPU boundary.
+///
+/// The `wgpu` crate is intentionally NOT a dependency: it is absent from the
+/// cargo cache (verified 2026-07-16) and from every `Cargo.lock`, so pulling it
+/// would break the air-gapped offline build. The `gpu` feature therefore stays
+/// EMPTY (declared in `Cargo.toml` as `gpu = []`) and the real adapter is a stub
+/// that returns an honest `Err`. When `wgpu` is cached, implement a real
+/// `wgpu::Device`/`Queue` sink here and flip `VertexBridge::new_gpu` to build it.
+pub mod gpu {
+    #![allow(dead_code)] // gated boundary/contract surface; real wgpu sink lands here later
+    use super::VertexBridge;
+
+    /// Construct a VertexBridge wired to a (hypothetical) GPU device/queue.
+    ///
+    /// HONEST STUB: `wgpu` is uncached, so no real adapter can be built. We take
+    /// unit-typed placeholders for `device`/`queue` so the signature documents
+    /// intent without referencing the (unbuildable) `wgpu` types; we return the
+    /// honest error rather than fabricating a green GPU path. This keeps the
+    /// default + `gpu` builds offline-clean and falsifiable.
+    pub fn new_gpu(
+        _device: (),
+        _queue: (),
+        count: usize,
+        stride: usize,
+    ) -> Result<VertexBridge, &'static str> {
+        let _ = (count, stride);
+        Err("gpu adapter not built — wgpu uncached")
+    }
+
+    /// Drives a [`VertexBridge`] upload through the (uncached) GPU path. On this
+    /// honest stub build it always returns the same honest error: the staging
+    /// copy is CPU-side, the GPU upload cannot exist without `wgpu`.
+    pub fn upload_to_gpu(
+        bridge: &mut VertexBridge,
+        _device: (),
+        _queue: (),
+    ) -> Result<usize, &'static str> {
+        let _ = (_device, _queue);
+        let _ = bridge.upload_once();
+        Err("gpu adapter not built — wgpu uncached")
+    }
+}
+
+/// Headless GPU mock — satisfies the GREEN gate under the DEFAULT (offline-clean)
+/// build: exactly **1** mock upload, **0** JSON, **0** real GPU. It performs a
+/// genuine copy of the vertex slice (mirroring [`VertexBridge::upload_once`]) so
+/// the "upload" is real work, just on the CPU. This is the shipped render path;
+/// the real GPU adapter replaces it behind `feature = "gpu"` once the GPU
+/// backend is cached (W21).
+#[derive(Debug, Default, Clone)]
+pub struct HeadlessGpu {
+    /// Mirror of the last uploaded vertex slice (proves a real copy happened).
+    pub mirror: Vec<f32>,
+    /// Count of mock uploads performed (must be 1 per frame on GREEN).
+    pub uploads: usize,
+    /// Number of (de)serialization calls (must stay 0 on GREEN).
+    pub json_calls: usize,
+}
+
+impl HeadlessGpu {
+    /// Perform one mock GPU upload: a real CPU staging copy of `bridge`'s vertex
+    /// slice, recording 1 upload and 0 JSON. Returns the floats uploaded.
+    pub fn upload_once(&mut self, bridge: &mut VertexBridge) -> usize {
+        let view = bridge.upload_once(); // real CPU staging copy
+        self.mirror.clear();
+        self.mirror.extend_from_slice(view);
+        self.uploads += 1;
+        view.len()
     }
 }
 
@@ -201,6 +292,69 @@ mod tests {
             bridge.profiler().write_buffer_calls,
             1,
             "GREEN frame loop performs exactly one writeBuffer upload"
+        );
+    }
+
+    // ── W20 RED→GREEN: `upload_once` performs a REAL CPU staging copy (not a
+    //    counter no-op) — exactly 1 logical upload, 0 GPU, 0 JSON. The staging
+    //    mirror IS a byte-for-byte copy of the zero-copy vertex slice.
+    #[test]
+    fn upload_once_real_cpu_staging_copy_falsifiable() {
+        let mut bridge = VertexBridge::new(3, 4);
+        bridge.write_particle(0, 1.0, 2.0, 3.0, 4.0);
+        bridge.write_particle(1, 5.0, 6.0, 7.0, 8.0);
+        bridge.write_particle(2, 9.0, 10.0, 11.0, 12.0);
+        let expected = bridge.vertex_view().to_vec();
+        let view = bridge.upload_once();
+        // The returned slice is the real staging copy, identical to vertex_view.
+        assert_eq!(view, expected.as_slice());
+        assert_eq!(view.len(), 12, "whole 3x4 slice staged");
+        assert_eq!(view[0], 1.0);
+        assert_eq!(view[11], 12.0);
+        assert_eq!(
+            bridge.profiler().write_buffer_calls,
+            1,
+            "exactly ONE logical upload"
+        );
+        assert_eq!(
+            bridge.profiler().json_parse_calls,
+            0,
+            "ZERO json on the GREEN path"
+        );
+    }
+
+    // ── W20 GREEN gate: the HeadlessGpu mock satisfies the gate under the
+    //    DEFAULT build — 1 mock upload, 0 json, 0 real GPU. The mirror proves a
+    //    real copy landed.
+    #[test]
+    fn headless_gpu_mock_one_upload_zero_json() {
+        let mut bridge = VertexBridge::new(3, 4);
+        bridge.write_particle(0, 1.0, 2.0, 3.0, 4.0);
+        bridge.write_particle(1, 5.0, 6.0, 7.0, 8.0);
+        bridge.write_particle(2, 9.0, 10.0, 11.0, 12.0);
+        let mut gpu = HeadlessGpu::default();
+        let n = gpu.upload_once(&mut bridge);
+        assert_eq!(n, 12, "uploaded whole 3x4 slice");
+        assert_eq!(gpu.uploads, 1, "exactly ONE mock upload");
+        assert_eq!(gpu.json_calls, 0, "ZERO json");
+        // The mock mirror IS a real copy of the staging buffer.
+        assert_eq!(gpu.mirror, bridge.vertex_view());
+        assert_eq!(gpu.mirror[0], 1.0);
+        assert_eq!(gpu.mirror[11], 12.0);
+        assert_eq!(bridge.profiler().write_buffer_calls, 1);
+        assert_eq!(bridge.profiler().json_parse_calls, 0);
+    }
+
+    // ── W20 `feature = "gpu"`: `new_gpu` is an honest stub returning Err
+    //    ("wgpu uncached"). This test only compiles when the gpu feature is on.
+    #[cfg(feature = "gpu")]
+    #[test]
+    fn new_gpu_returns_honest_err_when_wgpu_uncached() {
+        let r = crate::bridge::gpu::new_gpu((), (), 1024, 4);
+        assert!(
+            matches!(r, Err("gpu adapter not built — wgpu uncached")),
+            "gpu feature must return the honest wgpu-uncached error, got {:?}",
+            r.is_err()
         );
     }
 

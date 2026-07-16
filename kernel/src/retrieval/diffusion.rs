@@ -37,39 +37,60 @@ pub const K: usize = 20;
 /// the clean "unrelated" baseline the tests assert against.
 pub const WIKI_EDGES: &[(usize, usize)] = &[
     // 0 MEMORY.md
-    (0, 1), (0, 2), (0, 3), (0, 9),
+    (0, 1),
+    (0, 2),
+    (0, 3),
+    (0, 9),
     // 1 MEMORY-ATTIC.md
-    (1, 0), (1, 9),
+    (1, 0),
+    (1, 9),
     // 2 note-salience-decay.md
-    (2, 0), (2, 3), (2, 13),
+    (2, 0),
+    (2, 3),
+    (2, 13),
     // 3 note-wikilink-graph.md
-    (3, 0), (3, 4), (3, 8), (3, 7),
+    (3, 0),
+    (3, 4),
+    (3, 8),
+    (3, 7),
     // 4 note-pgrust-schema.md
-    (4, 3), (4, 11), (4, 18),
+    (4, 3),
+    (4, 11),
+    (4, 18),
     // 5 note-trigram-index.md
-    (5, 6), (5, 16),
+    (5, 6),
+    (5, 16),
     // 6 note-bm25-fusion.md
-    (6, 5), (6, 16),
+    (6, 5),
+    (6, 16),
     // 7 note-heat-kernel-recall.md
-    (7, 8), (7, 3),
+    (7, 8),
+    (7, 3),
     // 8 note-pagerank-local-push.md
     (8, 7),
     // 9 note-never-delete-tier.md
-    (9, 0), (9, 10), (9, 17),
+    (9, 0),
+    (9, 10),
+    (9, 17),
     // 10 note-compression-zstd.md
-    (10, 9), (10, 19),
+    (10, 9),
+    (10, 19),
     // 11 note-vsa-composite-key.md
     (11, 4),
     // 12 note-renormalizer-gate.md
-    (12, 13), (12, 16),
+    (12, 13),
+    (12, 16),
     // 13 note-entropy-ledger.md
-    (13, 2), (13, 14),
+    (13, 2),
+    (13, 14),
     // 14 note-field-operator.md
-    (14, 13), (14, 15),
+    (14, 13),
+    (14, 15),
     // 15 note-divergence-signal.md
     (15, 14),
     // 16 note-coherence-fusion.md
-    (16, 5), (16, 6),
+    (16, 5),
+    (16, 6),
     // 17 note-ttrain-deferred.md
     (17, 9),
     // 18 note-quantization-pq.md

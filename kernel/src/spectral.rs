@@ -474,7 +474,10 @@ mod tests {
     fn green_empty_graph_zero_energy_disconnected_fiedler_zero() {
         let empty = vec![vec![0.0; 3]; 3];
         assert!(approx(graph_energy(&empty), 0.0, 1e-9));
-        assert!(approx(graph_spectrum(&empty).fiedler, 0.0, 1e-9), "disconnected ⇒ λ₂=0");
+        assert!(
+            approx(graph_spectrum(&empty).fiedler, 0.0, 1e-9),
+            "disconnected ⇒ λ₂=0"
+        );
 
         // Two isolated edges (disconnected): Fiedler must be 0.
         let disc = vec![
@@ -483,7 +486,10 @@ mod tests {
             vec![0.0, 0.0, 0.0, 1.0],
             vec![0.0, 0.0, 1.0, 0.0],
         ];
-        assert!(approx(graph_spectrum(&disc).fiedler, 0.0, 1e-6), "disconnected ⇒ λ₂=0");
+        assert!(
+            approx(graph_spectrum(&disc).fiedler, 0.0, 1e-6),
+            "disconnected ⇒ λ₂=0"
+        );
     }
 
     // ── GREEN: graph_spectrum returns the documented fields coherently for a
@@ -504,7 +510,10 @@ mod tests {
         // For the ADJACENCY matrix the "spectral gap" = 1 − |λ₂| is a stability
         // reading for stochastic matrices; here λ₂-modulus = √2 (the −√2 eig),
         // so gap = 1 − √2 (negative — an adjacency, not a transition matrix).
-        assert!(approx(s.spectral_gap, 1.0 - sqrt2, 1e-6), "gap=1−√2 for P3 adjacency");
+        assert!(
+            approx(s.spectral_gap, 1.0 - sqrt2, 1e-6),
+            "gap=1−√2 for P3 adjacency"
+        );
     }
 
     // ── RED→GREEN: the DMD drift class discriminates contraction / margin / growth
@@ -532,8 +541,7 @@ mod tests {
         ];
         let report = graph_energy_report(&k3);
         assert_eq!(
-            report,
-            "energy=4.000000 spectral_radius=2.000000 fiedler=3.000000 drift=Unstable",
+            report, "energy=4.000000 spectral_radius=2.000000 fiedler=3.000000 drift=Unstable",
             "K3: E=4, ρ=2, λ₂(L)=3, ρ>1 ⇒ Unstable"
         );
     }
@@ -545,8 +553,7 @@ mod tests {
         let c = vec![vec![0.0, 1.0], vec![1.0, 0.0]];
         let report = graph_energy_report(&c);
         assert_eq!(
-            report,
-            "energy=2.000000 spectral_radius=1.000000 fiedler=2.000000 drift=Resonant",
+            report, "energy=2.000000 spectral_radius=1.000000 fiedler=2.000000 drift=Resonant",
             "2-cycle: E=2, ρ=1 ⇒ Resonant, λ₂(L)=2"
         );
     }

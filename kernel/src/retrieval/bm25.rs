@@ -283,7 +283,10 @@ mod tests {
         let bm = Bm25::new(corpus());
         let q = tokenize("rust compiler llvm");
         let hits = bm.rank(&q);
-        assert!(!hits.is_empty(), "at least the all-terms doc must score > 0");
+        assert!(
+            !hits.is_empty(),
+            "at least the all-terms doc must score > 0"
+        );
         // The top hit must be doc 0 (all three terms), not doc 1 (one term).
         assert_eq!(
             hits[0].doc_id, 0,
@@ -305,7 +308,8 @@ mod tests {
         // RED→GREEN: BM25 saturates — 10x the term frequency gives < 10x the
         // score (the (k1+1)·f / (f + k1·...) numerator saturates). Prove the
         // marginal gain from the 11th occurrence is smaller than from the 1st.
-        let once = Document::from_text("rust token token token token token token token token token token");
+        let once =
+            Document::from_text("rust token token token token token token token token token token");
         let ten_times = Document::from_text(
             "rust token token token token token token token token token token token token token token token token token token token token token token",
         );
@@ -383,7 +387,10 @@ mod tests {
         let bm = Bm25::new(docs.clone());
         let hits = bm.top_k(&tokenize("rust llvm"), 2);
         assert_eq!(hits.len(), 2);
-        assert!(hits[0].doc_id < hits[1].doc_id, "tie broken by ascending id");
+        assert!(
+            hits[0].doc_id < hits[1].doc_id,
+            "tie broken by ascending id"
+        );
         // Rebuild + rerank ⇒ byte-identical ranking (determinism).
         let bm2 = Bm25::new(docs.clone());
         let hits2 = bm2.top_k(&tokenize("rust llvm"), 2);

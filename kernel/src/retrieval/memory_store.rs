@@ -155,12 +155,10 @@ impl PgStore {
     /// Migration is a red-line op; the default/adapter path never runs this.
     /// Callers must invoke it deliberately against a known database.
     pub async fn migrate(&self) -> Result<(), String> {
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value BYTEA NOT NULL);",
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|e| e.to_string())?;
+        sqlx::query("CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value BYTEA NOT NULL);")
+            .execute(&self.pool)
+            .await
+            .map_err(|e| e.to_string())?;
         Ok(())
     }
 }
@@ -168,18 +166,17 @@ impl PgStore {
 #[cfg(feature = "pgrust")]
 impl MemoryStore for PgStore {
     fn put(&self, key: &str, value: &[u8]) -> Result<(), String> {
-        self.rt
-            .block_on(async {
-                sqlx::query(
-                    "INSERT INTO kv(key,value) VALUES($1,$2) \
+        self.rt.block_on(async {
+            sqlx::query(
+                "INSERT INTO kv(key,value) VALUES($1,$2) \
                      ON CONFLICT(key) DO UPDATE SET value=$2",
-                )
-                .bind(key)
-                .bind(value)
-                .execute(&self.pool)
-                .await
-                .map_err(|e| e.to_string())
-            })?;
+            )
+            .bind(key)
+            .bind(value)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| e.to_string())
+        })?;
         Ok(())
     }
 

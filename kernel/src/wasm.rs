@@ -34,12 +34,12 @@ use wasm_bindgen::prelude::*;
 
 use crate::analytics::{reduce_anomalies, ChannelEvent, ChannelLedger};
 use crate::domain::{apply_event, place_order, Order, OrderItem};
+use crate::harmonic::harmonic_centrality;
 use crate::money::{estimate_order_total, FeeConfig, OrderTotalConfig};
 use crate::order_machine::{fsm_graph_report, OrderStatus, TransitionError};
 use crate::spectral::{
     algebraic_connectivity, classify_drift, eigenvalues, spectral_gap, spectral_radius, DriftClass,
 };
-use crate::harmonic::harmonic_centrality;
 
 /// Monotonic id / timestamp source for `place_order_js` (the JS signature does
 /// not supply an `id` or `created_at_ms`). Deterministic and order-preserving.

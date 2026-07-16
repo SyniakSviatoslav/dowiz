@@ -241,9 +241,7 @@ impl MetamorphicGenerator {
     // not vacuous (blueprint §3 discipline).
     pub fn noether_nonconserving(&mut self, dim: usize) -> Option<MrItem> {
         let eps = 0.2_f64;
-        let update = move |x: &[f64]| -> Vec<f64> {
-            x.iter().map(|v| v + eps).collect()
-        };
+        let update = move |x: &[f64]| -> Vec<f64> { x.iter().map(|v| v + eps).collect() };
         let sum = |x: &[f64]| x.iter().sum::<f64>();
         let x0: Vec<f64> = (0..dim).map(|i| (i as f64) * 0.13 + 1.0).collect();
         let drift = invariant_drift(&x0, update, sum, 50);
@@ -356,7 +354,11 @@ pub fn aurc(prob: &[f64], outcome: &[u8]) -> f64 {
         return 0.0;
     }
     let mut idx: Vec<usize> = (0..n).collect();
-    idx.sort_by(|&a, &b| prob[b].partial_cmp(&prob[a]).unwrap_or(std::cmp::Ordering::Equal));
+    idx.sort_by(|&a, &b| {
+        prob[b]
+            .partial_cmp(&prob[a])
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
     let mut cum_err = 0usize;
     let mut aurc = 0.0;
     for (k, &i) in idx.iter().enumerate() {
@@ -455,7 +457,10 @@ impl EvalRow {
     pub fn append_to(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
         use std::io::Write;
         let line = self.to_jsonl()?;
-        let mut f = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)?;
         writeln!(f, "{}", line)?;
         Ok(())
     }
@@ -472,7 +477,10 @@ pub struct EmaTracker {
 impl EmaTracker {
     pub fn new(alpha: f64) -> Self {
         assert!((0.0..=1.0).contains(&alpha), "EMA alpha must be in [0,1]");
-        Self { alpha, current: None }
+        Self {
+            alpha,
+            current: None,
+        }
     }
     /// Push a sample; returns the new smoothed value. The first sample seeds
     /// the EMA (no jump from 0) so a cold start reads the true first measurement.
@@ -557,25 +565,24 @@ impl RegressionGate {
     }
 
     pub fn is_red(&self) -> bool {
-        self.history.len() >= self.window
-            && {
-                let vals: Vec<f64> = self.history.iter().copied().collect();
-                let mut streak = 0usize;
-                for w in vals.windows(2) {
-                    let delta = w[1] - w[0];
-                    let degraded = if self.lower_is_better {
-                        delta > self.tol
-                    } else {
-                        delta < -self.tol
-                    };
-                    if degraded {
-                        streak += 1;
-                    } else {
-                        streak = 0;
-                    }
+        self.history.len() >= self.window && {
+            let vals: Vec<f64> = self.history.iter().copied().collect();
+            let mut streak = 0usize;
+            for w in vals.windows(2) {
+                let delta = w[1] - w[0];
+                let degraded = if self.lower_is_better {
+                    delta > self.tol
+                } else {
+                    delta < -self.tol
+                };
+                if degraded {
+                    streak += 1;
+                } else {
+                    streak = 0;
                 }
-                streak >= self.window - 1
             }
+            streak >= self.window - 1
+        }
     }
 
     pub fn smoothed(&self) -> Option<f64> {
@@ -736,10 +743,18 @@ mod tests {
         // Every parameter is monotonic in `i` so each of the 100 calls is a
         // globally unique (kind, params) item — self-research sweeps the grid.
         for i in 0..20 {
-            let s = g.spectral_similarity(4 + i).expect("distinct n for spectral");
-            let k = g.kalman_q_scaling(1.0 + 0.1 * (i as f64)).expect("distinct q for kalman");
-            let nc = g.noether_conserving(4 + i).expect("distinct dim for conserving");
-            let nn = g.noether_nonconserving(4 + i).expect("distinct dim for nonconserving");
+            let s = g
+                .spectral_similarity(4 + i)
+                .expect("distinct n for spectral");
+            let k = g
+                .kalman_q_scaling(1.0 + 0.1 * (i as f64))
+                .expect("distinct q for kalman");
+            let nc = g
+                .noether_conserving(4 + i)
+                .expect("distinct dim for conserving");
+            let nn = g
+                .noether_nonconserving(4 + i)
+                .expect("distinct dim for nonconserving");
             let r = g.recall_constructed(3 + i).expect("distinct m for recall");
             assert!(s.passed, "spectral similarity must hold");
             assert!(k.passed, "kalman Q-scaling must hold");
@@ -777,16 +792,25 @@ mod tests {
     fn leakage_gate_rejects_duplicate() {
         let mut log = MintLog::new();
         let payload = [0u8, 1, 2, 3, 4, 5, 6, 7];
-        let a = log.mint("spectral_similarity", &payload).expect("first mint");
+        let a = log
+            .mint("spectral_similarity", &payload)
+            .expect("first mint");
         // Identical kind + bytes ⇒ rejected.
         let dup = log.mint("spectral_similarity", &payload);
-        assert!(dup.is_none(), "identical payload must be rejected by the mint log");
+        assert!(
+            dup.is_none(),
+            "identical payload must be rejected by the mint log"
+        );
         assert_eq!(a, 1);
         // Same payload, different kind ⇒ distinct (no cross-kind alias).
-        let b = log.mint("kalman_q_scaling", &payload).expect("different kind");
+        let b = log
+            .mint("kalman_q_scaling", &payload)
+            .expect("different kind");
         assert_eq!(b, 2);
         // Different payload, same kind ⇒ distinct.
-        let c = log.mint("spectral_similarity", &[9u8, 9, 9]).expect("different payload");
+        let c = log
+            .mint("spectral_similarity", &[9u8, 9, 9])
+            .expect("different payload");
         assert_eq!(c, 3);
     }
 
@@ -818,7 +842,10 @@ mod tests {
         let rand_o = [0, 0, 0, 1, 1, 1];
         let a_perfect = aurc(&perfect_p, &perfect_o);
         let a_rand = aurc(&rand_p, &rand_o);
-        assert!(a_perfect < a_rand, "perfect AURC {a_perfect} must beat random {a_rand}");
+        assert!(
+            a_perfect < a_rand,
+            "perfect AURC {a_perfect} must beat random {a_rand}"
+        );
     }
 
     // ── E2 tests ───────────────────────────────────────────────────────────
@@ -833,9 +860,15 @@ mod tests {
         assert!(!g.observe(0.10), "empty/short history must stay green");
         assert!(!g.observe(0.11), "below window: green");
         // Three consecutive rises > tol => RED.
-        assert!(!g.observe(0.20), "run 1 of streak: green (window not full enough)");
+        assert!(
+            !g.observe(0.20),
+            "run 1 of streak: green (window not full enough)"
+        );
         assert!(!g.observe(0.30), "run 2 of streak: green");
-        assert!(g.observe(0.45), "run 3 of streak: RED — sustained degradation");
+        assert!(
+            g.observe(0.45),
+            "run 3 of streak: RED — sustained degradation"
+        );
         assert!(g.is_red(), "is_red() agrees with observe()");
     }
 
@@ -875,7 +908,10 @@ mod tests {
         let _ = t.push(1.4);
         let smoothed = t.push(0.9);
         // Smoothed must sit between the extremes, not equal the last raw sample.
-        assert!(smoothed > 0.6 && smoothed < 1.4, "EMA must attenuate jitter");
+        assert!(
+            smoothed > 0.6 && smoothed < 1.4,
+            "EMA must attenuate jitter"
+        );
         assert_ne!(smoothed, 0.9, "EMA must differ from the raw last sample");
     }
 
@@ -894,8 +930,16 @@ mod tests {
             gating_failed: vec![],
             soft_failed: vec![],
             checks: vec![
-                EvalCheck { name: "recall_at_k".into(), passed: true, duration_ms: 12 },
-                EvalCheck { name: "noether".into(), passed: false, duration_ms: 3 },
+                EvalCheck {
+                    name: "recall_at_k".into(),
+                    passed: true,
+                    duration_ms: 12,
+                },
+                EvalCheck {
+                    name: "noether".into(),
+                    passed: false,
+                    duration_ms: 3,
+                },
             ],
         };
         let line = row.to_jsonl().expect("serialize");
@@ -927,7 +971,11 @@ mod tests {
             passed: true,
             gating_failed: vec![],
             soft_failed: vec![],
-            checks: vec![EvalCheck { name: "kalman".into(), passed: true, duration_ms: 5 }],
+            checks: vec![EvalCheck {
+                name: "kalman".into(),
+                passed: true,
+                duration_ms: 5,
+            }],
         };
         row.append_to(p).expect("append must succeed (fail-closed)");
         let contents = std::fs::read_to_string(p).expect("read back");
@@ -943,11 +991,20 @@ mod tests {
     // Kalman surprise. Two identical windows ⇒ identical loss (deterministic).
     #[test]
     fn eval_loss_is_spectral_plus_surprise() {
-        let a = eval_loss(0.5, crate::spectral::spectral_radius(&vec![vec![2.0, 0.0], vec![0.0, -1.5]]));
-        let b = eval_loss(0.5, crate::spectral::spectral_radius(&vec![vec![2.0, 0.0], vec![0.0, -1.5]]));
+        let a = eval_loss(
+            0.5,
+            crate::spectral::spectral_radius(&vec![vec![2.0, 0.0], vec![0.0, -1.5]]),
+        );
+        let b = eval_loss(
+            0.5,
+            crate::spectral::spectral_radius(&vec![vec![2.0, 0.0], vec![0.0, -1.5]]),
+        );
         assert_eq!(a, b, "eval_loss must be deterministic in its inputs");
         // radius = 2.0 ⇒ 2²=4 ; surprise 0.5 ⇒ 0.25 ; total 4.25
-        assert!((a - 4.25).abs() < 1e-9, "eval_loss = surprise² + radius², got {a}");
+        assert!(
+            (a - 4.25).abs() < 1e-9,
+            "eval_loss = surprise² + radius², got {a}"
+        );
     }
 
     // E3 proof (STRANDED un-strand): the adapter drives online::ScalarAdam +

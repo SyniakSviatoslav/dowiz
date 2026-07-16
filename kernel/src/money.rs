@@ -86,7 +86,6 @@ impl Money {
     }
 }
 
-
 /// Server-authoritative `applyTax` (money.ts:23). `subtotal` is integer minor units.
 /// `tax_rate` is a config input (e.g. 0.20) parsed once to micro-units.
 ///

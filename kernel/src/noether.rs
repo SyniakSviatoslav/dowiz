@@ -16,13 +16,7 @@
 
 /// Returns true iff the invariant `I` is conserved (within `tol`) at every
 /// step of the trajectory starting at `x0` under `update`, for `steps` steps.
-pub fn step_preserves<F, G>(
-    x0: &[f64],
-    update: F,
-    invariant: G,
-    steps: usize,
-    tol: f64,
-) -> bool
+pub fn step_preserves<F, G>(x0: &[f64], update: F, invariant: G, steps: usize, tol: f64) -> bool
 where
     F: Fn(&[f64]) -> Vec<f64>,
     G: Fn(&[f64]) -> f64,
@@ -45,12 +39,7 @@ where
 }
 
 /// Total variation of the invariant along the trajectory (for diagnostics).
-pub fn invariant_drift<F, G>(
-    x0: &[f64],
-    update: F,
-    invariant: G,
-    steps: usize,
-) -> f64
+pub fn invariant_drift<F, G>(x0: &[f64], update: F, invariant: G, steps: usize) -> f64
 where
     F: Fn(&[f64]) -> Vec<f64>,
     G: Fn(&[f64]) -> f64,

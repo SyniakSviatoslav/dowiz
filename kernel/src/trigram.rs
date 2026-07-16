@@ -63,7 +63,11 @@ pub fn probability(ng: &NGrams, tri: &Tri) -> f64 {
 /// Top-k trigrams by count. Deterministic: sort DESC by count, then ASC by
 /// lexicographic key, so ties resolve identically on any machine.
 pub fn most_common(ng: &NGrams, k: usize) -> Vec<(Tri, u64)> {
-    let mut v: Vec<(Tri, u64)> = ng.trigrams.iter().map(|(key, c)| (key.clone(), *c)).collect();
+    let mut v: Vec<(Tri, u64)> = ng
+        .trigrams
+        .iter()
+        .map(|(key, c)| (key.clone(), *c))
+        .collect();
     v.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
     v.truncate(k);
     v
@@ -89,10 +93,30 @@ mod tests {
         let bigram_windows: u64 = ng.bigrams.values().sum();
         assert_eq!(bigram_windows, 8);
         assert_eq!(ng.bigrams.len(), 4);
-        assert_eq!(ng.trigrams.get(&["a", "b", "c"].map(str::to_string)).copied(), Some(2));
-        assert_eq!(ng.trigrams.get(&["b", "c", "a"].map(str::to_string)).copied(), Some(2));
-        assert_eq!(ng.trigrams.get(&["c", "a", "b"].map(str::to_string)).copied(), Some(2));
-        assert_eq!(ng.trigrams.get(&["a", "b", "d"].map(str::to_string)).copied(), Some(1));
+        assert_eq!(
+            ng.trigrams
+                .get(&["a", "b", "c"].map(str::to_string))
+                .copied(),
+            Some(2)
+        );
+        assert_eq!(
+            ng.trigrams
+                .get(&["b", "c", "a"].map(str::to_string))
+                .copied(),
+            Some(2)
+        );
+        assert_eq!(
+            ng.trigrams
+                .get(&["c", "a", "b"].map(str::to_string))
+                .copied(),
+            Some(2)
+        );
+        assert_eq!(
+            ng.trigrams
+                .get(&["a", "b", "d"].map(str::to_string))
+                .copied(),
+            Some(1)
+        );
     }
 
     #[test]
