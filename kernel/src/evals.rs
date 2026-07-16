@@ -3,8 +3,10 @@
 //! Metamorphic generation with programmatic oracles: each generator mints fresh
 //! (instance, oracle) pairs whose PASS/FAIL is checkable WITHOUT a fixed answer
 //! (the metamorphic relation *is* the oracle). A deterministic mint-log + exact
-//! duplicate rejection is the structural leakage gate — the cosine-0.9 *semantic*
-//! gate (§3.3) requires the embedding bridge and is deferred to an adapter (§7).
+//! duplicate rejection is the structural leakage gate (Layer-A). The cosine-0.9
+//! *semantic* gate (Layer-B, §3.3) now lives here too: `MetamorphicGenerator::mint_semantic`
+//! embeds via an injected `&dyn LlmBackend` (the kernel stays zero-dep; the live embedding
+//! bridge is `OllamaAdapter::embed` in the `llm-adapters` crate).
 //!
 //! All generators are seeded (mulberry32) so items are reproducible but varied,
 //! and the oracle is a kernel primitive — no LLM judge, no external dependency.
@@ -13,7 +15,9 @@
 
 use crate::csr::{recall_at_k, Csr};
 use crate::kalman::KalmanFilter;
+use crate::leak_gate::LeakGate;
 use crate::noether::invariant_drift;
+use crate::ports::llm::LlmBackend;
 use crate::spectral::spectral_radius;
 
 // ── Deterministic RNG (mulberry32) ─────────────────────────────────────────
@@ -126,6 +130,9 @@ pub struct MrItem {
 pub struct MetamorphicGenerator {
     rng: Lcg,
     mint: MintLog,
+    /// §3.3 Layer-B (semantic) leakage gate. Native, zero-dep; the embedding model is injected
+    /// via `&dyn LlmBackend` on each `mint_semantic` call (live bridge: `OllamaAdapter::embed`).
+    leak: LeakGate,
 }
 
 impl MetamorphicGenerator {
@@ -133,11 +140,36 @@ impl MetamorphicGenerator {
         Self {
             rng: Lcg::new(seed),
             mint: MintLog::new(),
+            leak: LeakGate::new(),
         }
     }
 
     pub fn mint_log(&self) -> &MintLog {
         &self.mint
+    }
+
+    /// Layer-B (semantic) leakage gate. Mint `payload` into the exact ledger FIRST (Layer-A always
+    /// wins on exact dup). Then, if `backend` is supplied, embed `instance_text` via the injected
+    /// `LlmBackend` and reject when its cosine vs ANY held instance ≥ `SEMANTIC_LEAK_THRESHOLD`
+    /// (delegated to `LeakGate`). Returns `None` on rejection (exact or semantic), else a fresh id.
+    /// Fail-closed: a `backend` embed error does NOT auto-reject (downgrades to exact-only).
+    ///
+    /// INJECTED, not imported: `backend: &dyn LlmBackend` carries the HTTP/serde in the adapter
+    /// crate, so the kernel keeps its zero-dep invariant while still owning the gate *logic*.
+    pub fn mint_semantic(
+        &mut self,
+        kind: &str,
+        payload: &[u8],
+        instance_text: &str,
+        backend: Option<&dyn LlmBackend>,
+    ) -> Option<u64> {
+        // Layer-A: exact duplicate always rejected first.
+        let id = self.mint.mint(kind, payload)?;
+        // Layer-B: semantic near-duplicate check (no-op unless a backend is injected).
+        if !self.leak.accept(instance_text, backend) {
+            return None;
+        }
+        Some(id)
     }
 
     // MR-1: spectral similarity invariance. A' = P·A·Pᵀ (permute rows+cols by
@@ -1049,4 +1081,59 @@ mod tests {
         // The applied scaler must not move state x (only Q was scaled).
         assert_eq!(kf.x[0], x0, "apply_step must not move state x, only Q");
     }
+
+    // ── §3.3 Layer-B semantic-leakage gate (native) ─────────────────────────
+    // These exercise the `LeakGate` primitive directly (zero-dep, runs under `cargo test` native).
+    // The `MetamorphicGenerator::mint_semantic` call site (wasm-gated) delegates to this same gate.
+
+    /// Deterministic fake backend: one-hot on a hash of the input, so identical→cos1, different→cos0.
+    struct FakeEmbedder {
+        dim: usize,
+    }
+    impl LlmBackend for FakeEmbedder {
+        fn id(&self) -> &str { "fake" }
+        fn caps(&self) -> crate::ports::llm::Caps {
+            crate::ports::llm::Caps { chat: false, embed: true, rerank: false, tool_calling: false }
+        }
+        fn chat(&self, _: &crate::ports::llm::ChatRequest) -> Result<crate::ports::llm::ChatResponse, crate::ports::llm::LlmError> {
+            Err(crate::ports::llm::LlmError::Unsupported)
+        }
+        fn embed(&self, req: &crate::ports::llm::EmbedRequest) -> Result<crate::ports::llm::EmbedResponse, crate::ports::llm::LlmError> {
+            let h = req.input.bytes().fold(0usize, |a, b| a.wrapping_add(b as usize)) % self.dim;
+            let mut v = vec![0.0f32; self.dim];
+            v[h] = 1.0;
+            Ok(crate::ports::llm::EmbedResponse { embedding: v })
+        }
+        fn rerank(&self, _: &crate::ports::llm::RerankRequest) -> Result<crate::ports::llm::RerankResponse, crate::ports::llm::LlmError> {
+            Err(crate::ports::llm::LlmError::Unsupported)
+        }
+        fn health(&self) -> Result<(), crate::ports::llm::LlmError> { Ok(()) }
+    }
+
+    #[test]
+    fn layer_b_semantic_rejects_near_duplicate() {
+        let be = FakeEmbedder { dim: 64 };
+        let mut gate = crate::leak_gate::LeakGate::new();
+        // First instance accepted, stores its embedding.
+        assert!(gate.accept("the cat sat on the mat", Some(&be)));
+        // Near-identical text → same one-hot slot → cos=1.0 ≥ 0.9 → rejected.
+        assert!(!gate.accept("the cat sat on the mat", Some(&be)), "near-duplicate must be rejected by Layer-B");
+        // Genuinely different text → different slot → cos=0 < 0.9 → accepted.
+        assert!(gate.accept("a totally different sentence about rockets", Some(&be)), "distinct text must pass Layer-B");
+    }
+
+    #[test]
+    fn layer_b_no_backend_is_pass() {
+        let mut gate = crate::leak_gate::LeakGate::new();
+        // No backend → gate is a no-op pass (exact-only enforced upstream in MintLog).
+        assert!(gate.accept("same text", None));
+        assert!(gate.accept("same text", None));
+    }
+
+    #[test]
+    fn cosine_orthogonal_is_zero() {
+        assert_eq!(crate::leak_gate::LeakGate::cosine(&[1.0, 0.0], &[0.0, 1.0]), 0.0);
+        assert!((crate::leak_gate::LeakGate::cosine(&[1.0, 0.0], &[1.0, 0.0]) - 1.0).abs() < 1e-9);
+    }
 }
+
