@@ -199,6 +199,29 @@ stream as the visuals.
   acausal pair *never schedules the second sound*, and a late predecessor is *folded, not replayed*. One
   small jitter/presentation-lookahead buffer (~80–150 ms) feeds both, so the visual pulse peak and the
   audio grain land on the same perceived instant.
+- **⚠ CORRECTED 2026-07-16 (self-critique §7, item Q1-a/J2 — the sharpest confirmed finding).** The
+  resolution above conflates TWO guarantees that do not both cover both renderers, and it papers over a
+  **wire-shape** mismatch the "same ordered stream" phrasing hides:
+  1. **The `order_machine` illegal-transition guard is order-path-only.** It validates `OrderStatus`
+     transitions (`kernel/src/order_machine.rs:123` `assert_transition`, `:140` `fold_transitions`) — the
+     Phase-7 sonification path. The living-memory viz signals (`Recall`/`Gossip`/`Decide`, R-LM §2.2) are
+     **not** order transitions and never pass through `order_machine`. For the viz path the shared ordering
+     authority is the **`event_log` layer only** — `actor_seq` (`event_log.rs:140`) + `event_id` (`:148`)
+     dedup (`AppendOutcome::Duplicate`, `:222`) + `epoch` pinning. So "the authority already exists — … the
+     kernel `order_machine`'s illegal-transition guard" is true for Phase 7 and **false for Phase 8**; only
+     the `event_log` content-id ordering is common to both.
+  2. **The two renderers do NOT consume the same payload shape.** R-LM emits `ActivityDelta.Signal {
+     signal_type:u8, kind:u8, energy:f32, node:u32 }` where `node` is an **index into the epoch's
+     `LayoutKeyframe.nodes[].pos:[f32;3]`** (position by reference). R-SON's Phase-0 renderer consumes
+     `on_event(kind:u32, count:u32) + inline FieldPos` (R-SON §2.1) and explicitly **defers "living-memory
+     viz signals" out of its Phase-0**. "Same ordered stream" is accurate for **WHEN** to fire (ordering)
+     but false for **WHAT** to fire from (payload): `kind` widths differ (u8 vs u32), R-SON never reads
+     `signal_type` or `energy`, and it has no `node → LayoutKeyframe.pos` epoch-join for `PannerNode`.
+  **Consequence:** Phase 8's done-test #4 ("grain count == lit-node count … via Phase-7's renderer")
+  requires an **adapter that Phase 7's own scope does not build** — a `Signal → audio-event` map
+  (signal_type/kind → timbre, energy → amplitude) plus a `node → epoch layout position` resolve for pan.
+  **This adapter is now an explicit Phase-8 deliverable** (not a free consequence of "both consume one
+  field"). The *ordering* half of J2 stands; the *payload/impedance* half was missed and is added here.
 - **Why it is the most dangerous:** it is a **latent architectural coupling** that only manifests at
   scale / under jitter (so it passes every small-fixture test), it spans two independently-built
   subsystems (R-SON's audio crate and R-LM's viz), and it is **cheap to design in but very expensive to
@@ -238,6 +261,23 @@ stream as the visuals.
   this joint, but it is load-bearing: a MESH view of N hubs must render peers in the viewing hub's own
   neutral/spectral palette, never each peer's brand (F48 + privacy — injecting brand leaks which tenant is
   active).
+- **⚠ CORRECTED 2026-07-16 (self-critique §7, item Q1-a/J4).** "Reach the SAME verdict independently" is
+  **overstated** — the two docs converge on the *state* being brand-neutral but **diverge on the marks**.
+  R-VENDOR §4 (line 261) rules the viz **T3, unbranded — "the visualization's marks never read the 5 T1
+  tokens,"** nodes/edges/glow read only T2/T3 (contrast-controlled by dowiz). R-LM F-3 (line 400) says the
+  opposite for one mark: **"the `--spectral` edge re-derived *per brand*."** A per-brand edge IS a branded
+  mark, so this is a real contradiction the synthesis smoothed over by quoting only R-LM's brand-neutral-
+  *state* half. **Ruling (adopting R-VENDOR, the substantive case): the `--spectral` edge is DOWIZ-fixed
+  T2/T3, NOT re-derived per brand** — cross-tenant legibility + bloom-contrast control require the marks be
+  brand-invariant; only the ambient Sea the cluster floats over carries the owner tint. R-LM's "re-derived
+  per brand" language is superseded (R-VENDOR was written before R-LM existed and never saw it; R-LM never
+  saw R-VENDOR's T3 ruling). This is a *resolved divergence*, not a risk-lowering convergence.
+- **⚠ Related, flagged (self-critique §7, item Q1-a/J4-colour):** R-VENDOR §5d mandates the GPU token table
+  be **linear-RGBA** (bloom must blend in linear light); R-LM's viz bloom (§4.2, HDR emissive >1.0) is
+  exactly the case that rule protects but **R-LM never states the linear-space discipline**. Since Phase 8
+  reuses the Phase-3 bloom pass and (per the ruling above) reads the T2/T3 palette, its palette **must be
+  sourced from the same linear-RGBA `resolve()` output**, or it ships the "subtle brand-wide wrongness"
+  R-VENDOR §5d warns of. Recorded as a Phase-8 constraint, not a new phase.
 
 ### J5 — CI software-rasterizer ↔ real client GPU
 - **R-DEV §5.1a (looks correct in the emulator, breaks on a real GPU):** Lavapipe is non-conformant and
@@ -357,8 +397,95 @@ authority) and the retrofit cost is exactly the friction §5 maps.
 
 ---
 
+## 7. Self-critique pass (2026-07-16)
+
+Per the operator's standing session-closing ritual (`AGENTS.md` — the 2-question doubt check), this
+roadmap was immediately subjected to an independent, decorrelated adversarial review — a fresh pass that
+re-verified the pipeline's own chain (research doc → synthesis → blueprint → roadmap) against the **live
+repo HEAD**, not against the prior link's paraphrase. Findings below; the two load-bearing ones are already
+corrected in-place above with `⚠ CORRECTED 2026-07-16` markers.
+
+### What was checked against live source (not trusted from the chain)
+- **All the most load-bearing blueprint file:line citations — re-grepped, and they hold.** The CSP header
+  (`tools/native-spa-server/src/lib.rs:39` — `script-src 'self'`, no `'wasm-unsafe-eval'`, no COOP/COEP;
+  golden-locked at `tests/integration.rs:213`), `engine/Cargo.toml` (`default = []`, `gpu = []` empty stub,
+  comment "verified 2026-07-16"), `diffusion.rs` (`UNRELATED: [5,6,12,16]` at `:166`,
+  `green_relatedness_ranking_correct` at `:220`, `WIKI_EDGES.len()==41`), `spectral.rs` (eigen*values* only;
+  a kernel-wide grep for `eigenvector|coords_2d|coords_3d|spectral_embedding` returns **only** the Perron
+  comment in `order_machine.rs` — the "no eigenvector→coords helper exists" GAP is **true**), `ParticlePool`
+  (`widget_store.rs:68`, `pos_x/pos_y`, no `pos_z`), and `money_guard.rs` (`Money(pub i64)` deliberately not
+  `FieldValue`) **all verify exactly.** The blueprints' current-state evidence is accurate; nothing needed
+  correcting *in* them.
+- **The 11-phase dependency graph is acyclic — traced.** Every phase's declared deps point to a strictly
+  lower phase number (8→{5,7}; 7→{6,0}; 6→{3,4,5}; 5→{2,4}; 4→3; 3→{1,2}; 2→0). It is a clean topological
+  order; no cycle, no back-edge. (The Phase 8→7 edge is *under-specified*, not circular — see Confirmed #1.)
+- **The COOP/COEP-vs-`wasm-unsafe-eval` split (§2) actually improves on its own research input.** R-DEV
+  §6.4 bundled COOP+COEP+`wasm-unsafe-eval` as one Phase-0 header edit and claimed sonification "depends on"
+  COOP/COEP; R-SON §5a explicitly designs around it (`postMessage`, no COEP). The synthesis **caught this
+  and split them correctly** (Decision A early / B deferred), and P00 correctly implements "Decision A only."
+  This is the pipeline re-verifying and fixing a research-doc overstatement — cleared, no action.
+
+### Confirmed, load-bearing (corrected in-place)
+1. **J2 was only half-resolved (Q1-a).** The roadmap declared its "most dangerous joint" solved by a single
+   shared ordering authority, but (a) the `order_machine` FSM guard covers only order-status transitions,
+   **not** the viz's memory-graph signals (for those the shared authority is the `event_log` layer only),
+   and (b) the two renderers consume **different wire shapes** — R-LM's `ActivityDelta.Signal{signal_type,
+   kind:u8, energy:f32, node:u32}` vs R-SON's `on_event(kind:u32, count:u32)+FieldPos`. "Same ordered
+   stream" is true for *when* to fire, false for *what* to fire from. Phase 8's "grain per activation via
+   Phase-7's renderer" therefore needs an **adapter Phase 7 does not build** — now an explicit Phase-8
+   deliverable. Corrected at J2.
+2. **J4's "convergence" was a smoothed-over contradiction (Q1-a).** R-VENDOR §4 rules the viz marks
+   T3/unbranded ("never read the 5 T1 tokens"); R-LM F-3 says the `--spectral` edge is "re-derived *per
+   brand*." Those disagree on the marks. Ruled in R-VENDOR's favour (marks are brand-invariant T2/T3; only
+   the ambient Sea is tinted) and flagged the linked colour-space gap (R-LM's bloom must read `resolve()`'s
+   linear-RGBA palette). Corrected at J4.
+
+### Flagged, not resolved (for the operator / an implementation pass — not silently decided)
+- **The `wasm-unsafe-eval` necessity is inferred, not browser-verified.** R-DEV rates it HIGH but never ran
+  it; P00's done-test 3b correctly makes it a *manual Chrome-console confirm*. It is consistent with current
+  Chromium CSP behaviour (WASM compile needs `'wasm-unsafe-eval'` or `'unsafe-eval'` when a `script-src` is
+  set), so shipping the one-token header edit is low-risk regardless — but the arc should treat "the current
+  kernel wasm is blocked in prod today" as *probable*, not *proven*, until the one-line browser check runs.
+- **The browser wasm-artifact ledger is ambiguous (C6).** §3 amends "two → three" (adds `dowiz_audio` for
+  the AudioWorklet realm), but R-VENDOR P0-1 independently introduces a `brand-resolve` crate compiled to
+  wasm for the live brand preview — a potential **fourth** browser artifact. The realm argument that forces
+  `dowiz_audio` to be separate does **not** apply to `brand-resolve` (fold-vs-standalone is unspecified).
+  Needs a definitive artifact ledger before Phase 1/7 land.
+- **R-SON's "delete legacy `use-sound.ts`" headline is largely a no-op (C8).** Verified: `apps/web` is
+  **untracked** (`git ls-files apps/web` = 0), `use-sound.ts` survives only under
+  `apps/web/node_modules/@deliveryos/.ignored_ui/`, and the active tree already greps **zero** `.mp3` /
+  `new Audio(`. Deleting it is a git no-op on quarantined dead code (P07 itself half-acknowledges this).
+  Phase 7's done-test #1 is a documentation/regression-lock, not a live migration — the roadmap slightly
+  over-frames it as a real deliverable. Non-blocking.
+
+### Q2 — the biggest thing the arc is missing (flagged for the operator, not decided)
+The same G11 ("first real order") priority tension the sovereign-architecture roadmap flagged applies here
+**and is sharper.** That roadmap left it as an open charter question; for this arc the honest reading is
+harder still: the living-interface arc's *visible* Phase-0 slice (§6) is **not the customer order path.**
+Its two headline deliverables are (Phase 7) an order-lifecycle **audio enhancement** — R-SON's own
+done-test 7.5 certifies audio is "never load-bearing" — and (Phase 8) an **owner-only 3-D diagnostic of the
+hub's own memory graph** (the MEMORY.md wikilink fixture): pure agent self-introspection with **zero
+customer touch**. The genuinely order-gating customer UI (Sea & Sheet, DZ-01..09) sits at Phase 6/9, deep
+behind the GPU engine foundation, spectral eigensolver, and DSP crate — and even then it *re-renders an
+order flow the legacy TS/JS stack already ships* into a wave-field. So the "UI is customer-facing therefore
+more justified than crypto" argument does **not** rescue this arc as scoped: a product with zero completed
+orders does not need its working order UI re-rendered on the GPU, and needs the memory-graph visualizer
+least of all. **The one framing under which this arc is on-mission is the operator's PRIMARY directive
+(MEMORY.md: "Main job = growth — reflection, metacognition, … bare-metal kernel as growth substrate"):**
+under *that* charter the living-memory viz is core self-development, not a distraction, and G11 is a
+secondary commercial goal. Which charter governs — commercial-delivery-first (→ this arc is premature
+infrastructure; do the reliability-gate order path first) or growth-substrate-first (→ Phase 8 is
+on-mission) — is an **operator-level decision this roadmap does not prejudge.** It is flagged here, not
+resolved. Nothing in the arc should be built past Phase 1 until that charter question is answered, because
+the answer changes the whole ordering.
+
+---
+
 *End roadmap. 11 phases (0–10), each with a name, covered new work, slotted existing FE/RW/DZ items,
 explicit dependencies, and a falsifiable done-test. Planning only — no product code, CI config, or canon
 edited. Supersedes nothing; extends FE-01..17 / RW-01..12 / DZ-01..12 / physics-ui-capture without
 re-litigating their decided content. The one required amendment to existing canon (RW-09/RW-01 third wasm
-artifact) is noted in §3 as a precondition of Phase 7, left for an implementation pass to apply.*
+artifact) is noted in §3 as a precondition of Phase 7, left for an implementation pass to apply. A
+self-critique pass (§7, 2026-07-16) re-verified the chain against live HEAD: all blueprint file:line
+citations hold and the phase graph is acyclic; two synthesis-level findings (J2 payload/impedance,
+J4 viz-brand convergence) were corrected in-place; the G11 priority tension is flagged for the operator.*
