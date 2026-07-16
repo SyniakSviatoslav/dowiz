@@ -11,6 +11,14 @@
 > **Sequencing/joints:** `LIVING-INTERFACE-ROADMAP.md` §1 (R-LM prerequisite row), §4 (Phase 5/8 rows),
 > §5 (J1/J2/J7/J9). This document turns R-LM's recommendations into concrete module/function/wire targets.
 > Every kernel fact below is cited against **live source verified 2026-07-16** (not the stale Repowise index).
+>
+> **⚠ Cross-reference (2026-07-16):** §2 below (the Phase-5 spectral-coords primitive) is
+> **G11-relevant** and has been duplicated into `G11-FAST-PATH-CONSOLIDATED.md` §6 as part of the
+> fast-path consolidation, alongside `BLUEPRINT-P00/P01/P02/P06/P09A` (those five were deleted after
+> merging; **this file was NOT deleted** because §§1,3-8 cover the full HUB-tier living-memory
+> visualization, which is off the G11 fast-path per `LIVING-INTERFACE-ROADMAP.md` §8 and remains the
+> growth-substrate track's separate deliverable). This file stays the authoritative source for
+> everything except §2, which now has two homes by design — keep them in sync if either changes.
 
 ---
 

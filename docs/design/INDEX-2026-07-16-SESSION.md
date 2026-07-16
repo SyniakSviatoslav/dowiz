@@ -49,19 +49,28 @@ never waits on the audio/memory-viz enhancements it doesn't need.
 Skips Phase 7 (sonification), Phase 8 (memory-viz), Phase 10 entirely — none is required for a customer
 to browse, cart, checkout, and track an order.
 
-**All 6 fast-path phases now have execution-ready blueprints:**
+**All fast-path phases are now consolidated into ONE indexed document** (2026-07-16, superseding the
+six separate per-phase blueprints that were merged into it — deleted, per the same consolidate-and-delete
+discipline applied to the harness arc):
 
-| Phase | Blueprint | Headline finding |
-|---|---|---|
-| 0 | `BLUEPRINT-P00-dev-ci-deploy-enablement.md` | CSP missing `'wasm-unsafe-eval'` blocks wasm in prod *today* |
-| 1/3/4 | `BLUEPRINT-P01-brand-token-pipeline.md` | One canonical `resolve(T1)` — zero brand-token drift by construction |
-| 2 | `BLUEPRINT-P02-gpu-engine-foundation.md` | No path reaches a real GPU device yet; `upload_once()` already does real staging (W20) |
-| 6 | `BLUEPRINT-P06-sea-sheet-backbone-event-stream.md` | Two-layer ordering authority: `event_log` (common) + `order_machine` (order-path only) |
-| 8 (primitive only) | `BLUEPRINT-P08-living-memory-viz-phase0.md` | The one net-new kernel primitive (spectral coords) — memory-viz-only, off the G11 path |
-| **9a** | **`BLUEPRINT-P09A-order-critical-product-surface.md`** | **⚠ `place_order_js` trusts client-supplied `unit_price`; server `PriceCatalog` sits unused — now a named blocking prerequisite** |
+**[`living-interface-2026-07-16/G11-FAST-PATH-CONSOLIDATED.md`](living-interface-2026-07-16/G11-FAST-PATH-CONSOLIDATED.md)**
+— context + execution blueprint + wave/parallel-dev structure for every phase 0→1→2→3→4→5→6→9a, plus
+an independent 2-question audit of the load-bearing technology decisions (§9) and an honest cross-phase
++ within-phase wave map (§10 — the seven phases are a real sequential chain; the genuine parallelism is
+*within* each phase, not claimed across them). Headline findings preserved from the six source
+blueprints: CSP missing `'wasm-unsafe-eval'` blocks wasm in prod *today* (§2); one canonical `resolve(T1)`
+gives zero brand-token drift by construction (§3); no path reaches a real GPU device yet, though
+`upload_once()` already does real staging per W20 (§4); a two-layer ordering authority —
+`event_log` (common substrate) + `order_machine` (order-path only) — closes the roadmap's most dangerous
+joint (§7); and **`place_order_js` currently trusts a client-supplied `unit_price` while the server-side
+`PriceCatalog` sits unused** — the single most load-bearing correctness gap on the entire fast-path,
+now a named blocking prerequisite, not a latent bug (§8).
 
-Off-path (still fully blueprinted, for the growth-substrate track): `BLUEPRINT-P07-sonification-phase0.md`
-(sound as third renderer), `BLUEPRINT-P08` (full — living-memory 3D viz).
+Off-path (still separately blueprinted, for the growth-substrate track, NOT part of this consolidation):
+`BLUEPRINT-P07-sonification-phase0.md` (sound as third renderer), `BLUEPRINT-P08-living-memory-viz-phase0.md`
+(full — living-memory 3D viz; its §2, the Phase-5 spectral-coords primitive, is duplicated into the
+consolidated doc above since that slice is G11-relevant, but this file remains the authoritative source
+for the rest of Phase 8).
 
 ---
 
