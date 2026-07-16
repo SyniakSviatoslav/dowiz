@@ -115,5 +115,11 @@ M11 living-organism UNBOUNDED ("нахуй систему" = no layer above hubs
 F1-10 autonomy/hub-rules | F11-20 mesh/transport | F21-30 security/quantum | F31-40 observability/cost | F41-50 product/delivery-on-protocol.
 Each: situation(possible/impossible) · now · future · pro · con · LOCK. Full text in ARCHITECTURE.md §6.
 
+### HYDRA-CONTRADICTION SWEEP (2026-07-16, operator "дозвіл на війну")
+All global-sounding gates re-scoped DEV-TIME-only via SCOPE RULE in ARCHITECTURE.md §0.
+C1 V3-CI, C2 V5-verifier, C3 E12-i18n, C5 E26-pgrust, C6 S4-API, C8 V1-verifier → none block hub autonomy (canonical-repo fence, hub MAY override).
+C4 single-graph-wiki → PER-HUB REPLICATED (no central SPOF). C7 TM → brand-leash only, protocol/runtime free.
+ZERO residual contradiction with M5/M9/M11. "нахуй систему" = no layer above hubs but wire-format.
+
 ### Total locked: V1-6 + D1-8 + S1-9 + E1-62 + M1-12 + F1-50 = 147 anchors.
 Single source: ARCHITECTURE.md (canon) + this doc. Arc-notes = history, not law.
