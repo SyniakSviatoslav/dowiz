@@ -14,8 +14,19 @@
 //!   step is caught at compile-time of the test, not by eyeballing a histogram.
 //! * PCG64 output stream is verified against the canonical PCG demo seed
 //!   (`0x4d595df4d0f33173` + inc `0xda3e39cb94b95bdb`) — the first two outputs
-//!   are `0x8b1d34c8`, `0xac品质`... see `pcg_reference_stream` which pins the
+//!   are `0x8b1d34c8`, `0xac7cce74`... see `pcg_reference_stream` which pins the
 //!   exact documented values.
+//!
+//! ## Reproducibility scope (Hermetic-architecture audit, Cause-and-Effect C, 2026-07-16)
+//!
+//! The "bit-identical across runs, platforms, and builds" claim above is earned by the
+//! **integer** generator: SplitMix64/PCG64 use only wrapping integer ops, which IEEE-754 and Rust
+//! both guarantee bit-for-bit across targets. It does **not** extend to any transcendental
+//! float path (`ln`/`sin`/`cos`/`atan2`/`hypot`/etc.) fed by this RNG's output — those are
+//! reproducible *per-target*, not *cross-target*: IEEE-754 does not mandate identical rounding
+//! for transcendental functions across different libm implementations/platforms. Callers that
+//! need cross-platform bit-identity must stay on the integer stream or explicitly re-derive and
+//! test the float claim for their own target set — do not assume it transfers.
 
 /// A deterministic 64-bit generator: SplitMix64 state mixed through a PCG64
 /// output permutation. One type, two composable transforms, zero dependencies.
