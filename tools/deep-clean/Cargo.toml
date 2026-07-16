@@ -1,0 +1,14 @@
+[package]
+name = "deep-clean"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Native Rust DEEP-CLEAN (replaces deep-clean.py/bash). No bash logic.
+# Offline-buildable: rusqlite + libsqlite3-sys are in the cargo cache.
+[dependencies]
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+[[bin]]
+name = "deep-clean"
+path = "src/main.rs"
