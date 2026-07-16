@@ -508,6 +508,48 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------
+    // 4b. Hermetic-audit Cause-and-Effect Finding B (quick-win #19): the above only
+    //     compares two live values in one call stack — never crosses an actual
+    //     serialization boundary. Disk round-trip + independently fresh recompute.
+    // ---------------------------------------------------------------------
+    #[test]
+    fn csr_ppr_survives_serialize_reread_boundary() {
+        let edges = [
+            (0usize, 1, 1.0),
+            (1, 2, 1.0),
+            (2, 0, 1.0),
+            (0, 2, 1.0),
+            (2, 1, 1.0),
+        ];
+        let a = Csr::from_edges(3, &edges).row_normalize();
+        let seed = [0.2, 0.5, 0.3];
+        let computed = a.personalized_pagerank(&seed, 0.15, 60);
+        let serialized: String = computed
+            .iter()
+            .map(|x| format!("{:.17e}", x))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let path =
+            std::env::temp_dir().join(format!("csr_ppr_reread_test_{}.txt", std::process::id()));
+        std::fs::write(&path, &serialized).expect("write serialized csr ppr scores");
+        let reread = std::fs::read_to_string(&path).expect("re-read serialized csr ppr scores");
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(reread, serialized, "byte content did not survive a disk round-trip");
+
+        let reparsed: Vec<f64> = reread
+            .split(',')
+            .map(|s| s.parse::<f64>().expect("reparse f64"))
+            .collect();
+        let fresh = a.personalized_pagerank(&seed, 0.15, 60); // independently recomputed
+        assert_eq!(
+            reparsed, fresh,
+            "value re-read from disk does not match an independently fresh computation"
+        );
+    }
+
+    // ---------------------------------------------------------------------
     // 5. PPR stationary (SYMMETRIC undirected, uniform seed, converged).
     //    Undirected triangle: each node degree 2 ⇒ regular graph.
     //    For a uniform seed e, the fixed point of  π = α e + (1−α) π·Â  is the
