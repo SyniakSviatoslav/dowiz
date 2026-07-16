@@ -340,6 +340,42 @@ mod tests {
         assert_eq!(a, b, "fusion ranking must be deterministic");
     }
 
+    /// Hermetic-audit Cause-and-Effect Finding B (quick-win #19): the test above only compares
+    /// two live values in one call stack — never crosses an actual serialization boundary.
+    /// Disk round-trip + independently fresh recompute.
+    #[test]
+    fn fusion_ranking_survives_serialize_reread_boundary() {
+        let (bm, idx) = build_fusion();
+        let computed = fusion_rank(&bm, &idx, "how is the order total calculated");
+        let serialized = computed
+            .iter()
+            .map(|id| id.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let path = std::env::temp_dir()
+            .join(format!("fusion_rank_reread_test_{}.txt", std::process::id()));
+        std::fs::write(&path, &serialized).expect("write serialized ranking");
+        let reread = std::fs::read_to_string(&path).expect("re-read serialized ranking");
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(reread, serialized, "byte content did not survive a disk round-trip");
+
+        let reparsed: Vec<usize> = if reread.is_empty() {
+            Vec::new()
+        } else {
+            reread
+                .split(',')
+                .map(|s| s.parse::<usize>().expect("reparse usize"))
+                .collect()
+        };
+        let fresh = fusion_rank(&bm, &idx, "how is the order total calculated");
+        assert_eq!(
+            reparsed, fresh,
+            "value re-read from disk does not match an independently fresh computation"
+        );
+    }
+
     #[test]
     fn trigram_narrows_candidates_for_query() {
         // The trigram index must reduce the candidate set for a unique token,

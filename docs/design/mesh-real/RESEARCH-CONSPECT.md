@@ -54,6 +54,11 @@ compatible» ЗАСТАРІЛИЙ. → pgrust per-node store de-risked; дамп
   await-custody-ack-or-timeout→exp-backoff→drop-past-lifetime); bundle-expiry=CreationTimestamp+Lifetime vs real-
   clock (reuse); offline-reconnect=persist-undelivered-per-dest-queue(rusqlite/pgrust) drain-oldest-first, each
   replay FRESH-channel-binding (never-resend-byte-identical).
+  > ⚠ CORRECTED (operator, 2026-07-16): the undelivered-queue persistence lists `rusqlite` (SQLite). dowiz does NOT
+  > use SQLite as an architectural choice — the spectral/sqlless approach (content-addressed `BlockStore` + JSONL
+  > `FileEventStore`) is the MAIN storage/retrieval path in dowiz's own kernel/engine, with **pgrust as the uniform
+  > SQL-fallback/backup target, not SQLite**. Corrected: the per-dest undelivered queue is an append-only
+  > spectral/sqlless store (or a pgrust-backed queue if SQL-shaped) — never rusqlite/SQLite.
 - FIX B3: (F1-TLS) WSS→tokio-rustls(pure-Rust, native-tls-ban-compliant) + iroh-QUIC-mandatory-TLS1.3 + ON-TOP
   ML-KEM-768→XChaCha20-Poly1305 SignedFrame-payload-enc (both KAT-tested in core, defense-in-depth-past-semi-
   trusted-relay). (F2/F3-replay) channel_binding from REAL TLS/QUIC-exporter (RFC5705 export_keying_material,

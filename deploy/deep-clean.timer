@@ -1,0 +1,22 @@
+# deep-clean.timer — daily 04:37 trigger for deep-clean.service (BLUEPRINT-P12 §6).
+#
+# Mirrors the Hermes `deep-clean-daily` schedule (cron `37 4 * * *`). Persistent=true
+# so a run missed while the host was off fires at next boot (matching the
+# Persistent semantics the ops floor wants: hygiene is never silently skipped).
+#
+# Enable (host action, run by the operator — NOT by the agent):
+#   systemctl enable --now deep-clean.timer
+# Verify it is registered from THIS in-repo unit (the acceptance test):
+#   systemctl list-timers deep-clean.timer
+
+[Unit]
+Description=Daily disk-hygiene timer (deep-clean all --commit --days 7)
+Documentation=https://github.com/dowiz/dowiz/tools/deep-clean
+
+[Timer]
+OnCalendar=*-*-* 04:37:00
+Persistent=true
+# Unit= defaults to the same-name .service (deep-clean.service).
+
+[Install]
+WantedBy=timers.target

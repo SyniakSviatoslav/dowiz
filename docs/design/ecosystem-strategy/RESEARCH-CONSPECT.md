@@ -33,6 +33,12 @@ orchestrator/control-plane (each=SPOF), CRDT-in-money, ANN-in-decide() (breaks d
 APPLIES-AS-IS high-leverage (casync mesh-sync). CAP=AP. system-design-primer=vocabulary-not-solutions.
 build-your-own-x=★own-infra (courier-phone IS node, managed-Redis/Kafka/ALB unavailable): validates decide/
 fold+embedded-rusqlite+content-addressed-chunking.
+> ⚠ CORRECTED (operator, 2026-07-16): this validates the own-infra data path as including `embedded-rusqlite`
+> (SQLite). dowiz does NOT use SQLite as an architectural choice — the spectral/sqlless approach (content-addressed
+> `BlockStore` + JSONL `FileEventStore`) is the MAIN storage/retrieval path in dowiz's own kernel/engine, with
+> **pgrust as the uniform SQL-fallback/backup target, not SQLite**. Corrected own-infra data path: decide/fold +
+> content-addressed sqlless BlockStore + pgrust (SQL fallback), never embedded-rusqlite/SQLite (which is host-tooling
+> compat only, per BLUEPRINT-P12 §3).
 
 ## Lane 4 — Dev-tooling (ІНФРАСТРУКТУРА: dev-velocity)
 rg=ADOPT (harness-discipline, filtering>speed). eza/bat=optional-human-sugar. Cursor=INSPIRE (autonomy-

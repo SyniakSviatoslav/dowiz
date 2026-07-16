@@ -202,6 +202,39 @@ mod tests {
         );
     }
 
+    /// Hermetic-audit Cause-and-Effect Finding B (quick-win #19): same-process double-call
+    /// comparison only proves two live values match — it never proves the value survives an
+    /// actual serialization boundary. Write to disk, re-read, re-parse, compare against an
+    /// independently fresh computation.
+    #[test]
+    fn diffusion_ppr_survives_serialize_reread_boundary() {
+        let ppr = wiki_ppr();
+        let computed = ppr.rank(SEED, ALPHA, K);
+        let serialized: String = computed
+            .iter()
+            .map(|x| format!("{:.17e}", x))
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let path = std::env::temp_dir()
+            .join(format!("diffusion_ppr_reread_test_{}.txt", std::process::id()));
+        std::fs::write(&path, &serialized).expect("write serialized diffusion scores");
+        let reread = std::fs::read_to_string(&path).expect("re-read serialized diffusion scores");
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(reread, serialized, "byte content did not survive a disk round-trip");
+
+        let reparsed: Vec<f64> = reread
+            .split(',')
+            .map(|s| s.parse::<f64>().expect("reparse f64"))
+            .collect();
+        let fresh = ppr.rank(SEED, ALPHA, K); // independently recomputed, not `computed`
+        assert_eq!(
+            reparsed, fresh,
+            "value re-read from disk does not match an independently fresh computation"
+        );
+    }
+
     /// Mass is conserved by the (1−α) diffusion + α restart — no per-step
     /// normalization needed, which is what buys bitwise determinism.
     #[test]

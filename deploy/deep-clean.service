@@ -1,0 +1,51 @@
+# deep-clean.service — oneshot disk-hygiene job (BLUEPRINT-P12 §6, S1 / E30 / F37).
+#
+# Makes the hygiene rhythm REPRODUCIBLE FROM CANON. Today the schedule lives only
+# on the Hermes host (registered cron `deep-clean-daily`), and the Hermes gateway
+# is DOWN, so it never fires (P12 §1 Finding A). This in-repo unit + its timer
+# reproduce the schedule from a clean checkout, independent of Hermes.
+#
+# Triggered by deep-clean.timer (OnCalendar=*-*-* 04:37:00). Mirrors the Hermes
+# `deep-clean-daily.sh` command exactly: `deep-clean all --commit --days 7`.
+#
+# Install (host action, run by the operator — NOT by the agent):
+#   cargo build --release --manifest-path tools/deep-clean/Cargo.toml \
+#     && cp tools/deep-clean/target/release/deep-clean /usr/local/bin/
+#   cp deploy/deep-clean.service deploy/deep-clean.timer /etc/systemd/system/ \
+#     && systemctl daemon-reload && systemctl enable --now deep-clean.timer
+
+[Unit]
+Description=deep-clean — daily disk hygiene (vacuum + clean + prune)
+Documentation=https://github.com/dowiz/dowiz/tools/deep-clean
+# Not a network service; no ordering deps required for a local maintenance job.
+
+[Service]
+Type=oneshot
+# `all --commit --days 7` == the Hermes deep-clean-daily command, verbatim.
+ExecStart=/usr/local/bin/deep-clean all --commit --days 7
+# Runs as root (implicit): it VACUUMs /root/.hermes/state.db, prunes ended
+# sessions, and removes regenerable caches across /root and the REAL /tmp. The
+# hard deny-list in src/main.rs structurally excludes all secret material.
+
+# Hardening — pgrust.service template, adjusted for a root maintenance job that
+# legitimately reaches across the filesystem. Two DELIBERATE relaxations:
+#   * ProtectHome=no  — the job MUST write /root/.hermes/state.db and /root/.backups.
+#   * PrivateTmp=no    — the job MUST clean the REAL /tmp (a private tmp defeats it).
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/root /tmp
+ProtectHome=no
+PrivateTmp=no
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+# Bundled SQLite does no JIT; deny W^X mappings. Drop if a build ever regresses.
+MemoryDenyWriteExecute=yes
+# Caps are left at the default set on purpose: the job deletes across many
+# root-owned trees; emptying CapabilityBoundingSet risks a DAC edge on an
+# oddly-permissioned cache. Tighten in a follow-up ops task, not here.
+
+[Install]
+# A oneshot has no [Install] of its own worth enabling; it is pulled in by the
+# timer. Kept WantedBy empty intentionally — enable deep-clean.timer, not this.

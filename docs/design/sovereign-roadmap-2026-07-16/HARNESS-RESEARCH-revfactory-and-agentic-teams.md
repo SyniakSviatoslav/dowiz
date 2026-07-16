@@ -313,3 +313,11 @@ evidence the likely verdicts are: revfactory → harvest pattern, reject dep (no
 telemetry, self-reported n=15 evidence); external telemetry SaaS → reject (sovereignty);
 OTel/SQLite → only if JSONL provably fails (rusqlite is already in-tree, so even SQL needs no
 new crate).
+
+> ⚠ CORRECTED (operator, 2026-07-16): the gap-table row #3 ("SQL-queryable store … `rusqlite` already in-tree") and
+> the fallback note above lean on reusing `tools/deep-clean`'s `rusqlite` for a dowiz harness logging store. dowiz
+> does NOT use SQLite as an architectural choice — the spectral/sqlless approach (content-addressed `BlockStore` +
+> JSONL `FileEventStore`) is the MAIN storage/retrieval path, and deep-clean's `rusqlite` is **host-tooling compat
+> (Hermes `state.db`), not the pattern to extend** (see BLUEPRINT-P12 §3 / `tools/deep-clean` docstring). JSONL-first
+> is already the right recommendation; if a genuinely SQL-queryable surface is ever needed, it is **pgrust — the
+> uniform SQL-fallback/backup target, not SQLite/rusqlite**.

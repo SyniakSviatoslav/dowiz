@@ -195,6 +195,41 @@ mod tests {
         );
     }
 
+    /// Hermetic-audit Cause-and-Effect Finding B (quick-win #19): the tests above only compare
+    /// two live values within one call stack — never cross an actual serialization boundary.
+    /// Disk round-trip + independently fresh recompute, scoped to the integer stream (per the
+    /// reproducibility-scope doctrine added in this same audit pass, see the module docstring).
+    #[test]
+    fn rng_integer_stream_survives_serialize_reread_boundary() {
+        let seed = 0x1234_5678_9abc_def0u64;
+        let mut r = Rng::new(seed, 1);
+        let computed: Vec<u64> = (0..8).map(|_| r.next_u64()).collect();
+        let serialized = computed
+            .iter()
+            .map(|x| x.to_string())
+            .collect::<Vec<_>>()
+            .join(",");
+
+        let path =
+            std::env::temp_dir().join(format!("rng_reread_test_{}.txt", std::process::id()));
+        std::fs::write(&path, &serialized).expect("write serialized rng stream");
+        let reread = std::fs::read_to_string(&path).expect("re-read serialized rng stream");
+        std::fs::remove_file(&path).ok();
+
+        assert_eq!(reread, serialized, "byte content did not survive a disk round-trip");
+
+        let reparsed: Vec<u64> = reread
+            .split(',')
+            .map(|s| s.parse::<u64>().expect("reparse u64"))
+            .collect();
+        let mut fresh_r = Rng::new(seed, 1); // independently fresh instance, same seed
+        let fresh: Vec<u64> = (0..8).map(|_| fresh_r.next_u64()).collect();
+        assert_eq!(
+            reparsed, fresh,
+            "value re-read from disk does not match an independently fresh computation"
+        );
+    }
+
     // Deterministic categorical sampling: with weights [1,1] and a fixed seed,
     // the first 16 draws must match a recorded bit-exact pattern.
     #[test]
