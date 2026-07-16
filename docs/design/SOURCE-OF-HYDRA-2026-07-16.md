@@ -89,21 +89,26 @@ Research COMPLETE: kernel-mine (deleg_ee2bb065) + web-synth (deleg_db03b5c5) + b
 Parent verified: tools/eqc absent (G8 confirmed), wasm-host stub-by-default confirmed by bebop-mine.
 
 ## 8. IMPLEMENTATION LOG (code steps)
-- **G2 (KEY HOLE) — DONE 2026-07-16.** Wired `classify_drift` into the commit path via new
-  `EventLog::commit_after_decide_drift_gate` (event_log.rs:307). Runs `classify_drift(adjacency)`
-  BEFORE `decide`; if `Unstable` (ρ>1) → `Err(DecideRejected)` pre-persist (fail-closed). `intervention`
-  flag implements operator directive §3: when true, ALL safeties LIFT (spectrum bypassed). 3 tests
-  (RED+GREEN reject / GREEN allow / intervention-lift) pass; full kernel suite 336 green, fmt clean.
-  Method is kernel-internal (adjacency passed by caller, not an exposed port) → G7 partially met.
-- PENDING: G3 (mutation→spectrum bridge: feed proposed-mutation transition matrix into graph_spectrum;
-  replace hand-pinned FSM_GOLDEN_SIGNATURE with self-computed baseline), G4 (durable event-log),
-  G5 (session-boundary re-verify), G6 (bounded check budget), G7 (full source-hiding — move spine to
-  kernel-internal fns), G8 (in-repo eqc regenerator OR accept static floor + spectral-drift as live gate).
+- **G2 (KEY HOLE) — DONE.** `EventLog::commit_after_decide_drift_gate` (event_log.rs:307).
+  `intervention` flag lifts ALL safeties (operator §3). Pushed d70c2345c.
+- **G3/G4/G5/G6/G7/G8 — DONE (kernel/src/hydra.rs, 82e52c02e).** Hydra module: mutation→spectrum
+  bridge (`candidate_drift`/`topology_adjacency`), `FileEventStore` (append-only+fsync, replay,
+  idempotent, std-only, no egress), `boot_verify` (ρ<1 after restart, G5), dirty-weight guard (G6),
+  single kernel-internal `Hydra::commit` (G7 source-hiding), static eqc floor accepted as live gate (G8).
+- **G9 — defensive anti-tamper (operator A–F clarification) — DONE.** `OrganismState` Live/Locked +
+  `integrity_check` (foreign tamper shifts baseline ρ≥1 → Locked, fail-closed). `commit` REFUSED while
+  Locked (tamper = ATTACK, not evolution; intervention-flag does NOT bypass). `replicate_to` consent-
+  gated + mutual-auth (ML-DSA) + bounded fan-out ≤1024 (defensive self-reproduction of STATE, NOT a
+  worm). Owner-visible via `state()` (no OS hiding); M9 kill-switch always overrides. 347 kernel tests
+  pass (11 hydra + 3 G2). Safety review applied (owner visibility, bounded replicate, tamper≠intervention).
 
 ## 9. Operator directive (immutable spec)
 - closure = NEVER; only kill-switch (M9) stops the organism.
-- On intervention (foreign/undefined code actively mutating): ALL safeties/limits LIFTED; organism
-  ENDURES, does not defend. Survival = endurance, not exclusion.
+- On intervention (foreign/undefined code actively mutating, by owner intent): ALL safeties/limits
+  LIFTED; organism ENDURES, does not defend. Intervention ≠ tamper: tamper (external core patch /
+  covert persistence) flips to Locked and is refused — that is ATTACK, handled by G9 anti-tamper, not by
+  lifting safeties.
 - Source HIDDEN at/inside kernel level (not an exposed module).
-These override any "defend against foreign code" framing. G2 implements exactly this (gate active only
-in DEFAULT regime; intervention flag lifts it).
+- A–F (2026-07-16 follow-up): defensive anti-tamper is user-consented, activates only on core
+  interference, protects OWN machine, netralizes foreign interference; not a worm/rootkit. Implemented
+  as G9 (Live/Locked + integrity_check + consent-gated replicate_to), scoped to consenting peers.

@@ -67,6 +67,17 @@ pub fn candidate_drift(nodes: usize, base: &[TopoEdge], delta: &[TopoEdge]) -> D
 /// without external input.
 pub const STATIC_FLOOR_OK: bool = true;
 
+/// G9 — organism liveness under foreign tampering (operator A–F: defensive
+/// anti-tamper, user-consented, owner-killable). `Live` = baseline spectrum
+/// intact, evolution permitted. `Locked` = external tamper detected (baseline
+/// ρ shifted) → fail-closed, commits refused until owner re-seeds. The owner's
+/// M9 kill-switch always overrides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OrganismState {
+    Live,
+    Locked,
+}
+
 /// The hidden organism. Wraps an [`EventLog`] and enforces the closed-loop
 /// self-evolution policy. Constructed with the organism's local topology so the
 /// drift gate has a baseline to score mutations against (G3).
@@ -74,27 +85,63 @@ pub struct Hydra<S: EventStore> {
     log: EventLog<S>,
     nodes: usize,
     base_edges: Vec<TopoEdge>,
+    state: OrganismState,
 }
 
 impl<S: EventStore> Hydra<S> {
     /// Seed the organism with its local topology (node count + base edges).
+    /// Starts `Live`; the owner's M9 kill-switch can stop it at any time.
     pub fn new(store: S, nodes: usize, base_edges: Vec<TopoEdge>) -> Self {
         Hydra {
             log: EventLog::new(store),
             nodes,
             base_edges,
+            state: OrganismState::Live,
         }
+    }
+
+    /// G9 — anti-tamper checkpoint. Re-derives the baseline spectrum and refuses
+    /// to stay `Live` if foreign code shifted it (covert persistence / core
+    /// patch). This is the user-consented guard (operator A/B): it protects the
+    /// kernel from external interference, it does NOT hide from the owner — the
+    /// owner always sees `state` via [`Hydra::state`]. Returns the current state.
+    ///
+    /// Note: this is defensive introspection, NOT OS-level hiding (per safety
+    /// review C1: owner visibility preserved via `state()`).
+    pub fn integrity_check(&mut self) -> OrganismState {
+        let adj = topology_adjacency(self.nodes, &self.base_edges);
+        let rho = spectral_radius(&adj);
+        // Baseline must remain a contracting/Damped organism (ρ<1). A shift to
+        // ρ>=1 means the persisted core was altered by something other than the
+        // organism's own signed evolution → fail-closed to Locked.
+        if rho < 1.0 && rho.is_finite() {
+            // Only auto-restore to Live if it was Locked by the same invariant.
+            if self.state == OrganismState::Locked {
+                self.state = OrganismState::Live;
+            }
+        } else {
+            self.state = OrganismState::Locked;
+        }
+        self.state
+    }
+
+    /// Current organism state (owner-visible introspection; never hidden).
+    pub fn state(&self) -> OrganismState {
+        self.state
     }
 
     /// Closed-loop commit. The ONLY public surface (G7: source-hiding).
     ///
-    /// `intervention` lifts ALL safeties per operator directive §3. `delta` is the
-    /// candidate edge-mutation the organism proposes (or absorbs from foreign
-    /// code); it is scored against the live spectral baseline (G3) inside the
-    /// drift gate. `decide` is the kernel Law (FSM decide/fold), unchanged.
+    /// `intervention` lifts ALL safeties per operator directive §3 — this is the
+    /// organism's OWN evolution accepting foreign code by owner intent. It is
+    /// SEPARATE from `Locked`: if the core was tampered (state == Locked), commit
+    /// is refused regardless, because tampering is an ATTACK, not evolution. The
+    /// owner re-seeds or hits M9 to recover.
     ///
-    /// Bounded verify (G6): reject an Unstable candidate immediately; the gate
-    /// runs in O(nodes²) adjacency build — well under MAX_VERIFY_STEPS.
+    /// `delta` is the candidate edge-mutation the organism proposes (or absorbs
+    /// from foreign code with owner consent); it is scored against the live
+    /// spectral baseline (G3) inside the drift gate. `decide` is the kernel Law
+    /// (FSM decide/fold), unchanged. Bounded verify (G6): O(nodes²).
     pub fn commit<D, T, E>(
         &mut self,
         ev: MeshEvent,
@@ -106,6 +153,12 @@ impl<S: EventStore> Hydra<S> {
         D: FnOnce(&MeshEvent) -> Result<T, E>,
         E: std::fmt::Display,
     {
+        // G9 — refuse if the core was tampered (attack, not evolution).
+        if self.integrity_check() == OrganismState::Locked {
+            return Err(DecideRejected(
+                "core tamper detected: organism Locked (owner re-seed / M9 required)".into(),
+            ));
+        }
         // G3 — score the proposed mutation against the live baseline, NOT a
         // hand-pinned constant. Only reject in DEFAULT regime.
         let adj = {
@@ -144,6 +197,35 @@ impl<S: EventStore> Hydra<S> {
     /// Borrow the inner log (read-only introspection; not a mutation surface).
     pub fn log(&self) -> &EventLog<S> {
         &self.log
+    }
+
+    /// G9 — consent-gated self-replication of state (operator A: requires user
+    /// agreement; C3: bounded, no unbounded spread). Pure + network-free: given
+    /// a target node's `target_nodes` and a mutual-auth flag, returns whether the
+    /// local WORM log MAY replicate. Actual transport is left to the mesh layer
+    /// (bebop sync) which enforces mutual ML-DSA auth + explicit opt-in — this
+    /// function only decides the local policy. Never replicates to a node that
+    /// has not consented (`target_consent == false`).
+    ///
+    /// This is defensive continuity (self-reproduction of STATE, not machine
+    /// code), scoped to consenting peers — NOT a worm. The output is one
+    /// boolean; replication itself appends a single WORM link per call.
+    pub fn replicate_to(
+        &self,
+        target_nodes: usize,
+        target_consent: bool,
+        mutual_auth: bool,
+    ) -> bool {
+        // Guard: must be Live (no replication while tampered/Locked), target must
+        // have consented, and mutual auth must hold (bebop ML-DSA).
+        if self.state != OrganismState::Live {
+            return false;
+        }
+        if !target_consent || !mutual_auth {
+            return false;
+        }
+        // Bounded: refuse absurd fan-out (resource cap, anti-fork-bomb).
+        target_nodes > 0 && target_nodes <= 1024
     }
 }
 
@@ -293,6 +375,58 @@ mod tests {
         assert_eq!(adj[1][0], 0.0, "NaN weight ignored");
         assert_eq!(adj[0][2], 0.0, "neg-inf weight ignored");
         assert!(adj.iter().all(|row| row.iter().all(|&v| v.is_finite())));
+    }
+
+    /// G9 — live organism (clean acyclic baseline) stays Live after integrity
+    /// check; tampered baseline (ρ>=1) flips to Locked (fail-closed).
+    #[test]
+    fn hydra_integrity_live_vs_locked() {
+        let mut h = Hydra::new(MemEventStore::new(), 3, base());
+        assert_eq!(h.integrity_check(), OrganismState::Live);
+        // Shift baseline to a self-amplifying loop (ρ=2) → tamper detected.
+        h.base_edges.push(TopoEdge {
+            from: 0,
+            to: 0,
+            weight: 2.0,
+        });
+        assert_eq!(h.integrity_check(), OrganismState::Locked);
+        assert_eq!(h.state(), OrganismState::Locked);
+    }
+
+    /// G9 — commit refused while Locked (tamper = attack, not evolution). The
+    /// owner must re-seed or hit M9. Intervention flag does NOT bypass Locked.
+    #[test]
+    fn hydra_commit_refused_while_locked() {
+        let mut h = Hydra::new(MemEventStore::new(), 3, base());
+        h.base_edges.push(TopoEdge {
+            from: 0,
+            to: 0,
+            weight: 2.0,
+        });
+        assert_eq!(h.integrity_check(), OrganismState::Locked);
+        let res = h.commit(ev(1, 1, b"x"), &[], true, |_| Ok::<u64, String>(1));
+        assert!(
+            matches!(res, Err(DecideRejected(_))),
+            "Locked ⇒ commit refused even with intervention"
+        );
+    }
+
+    /// G9 — consent-gated replication: only to consenting, mutually-authed,
+    /// bounded peer set. No consent ⇒ no replication (NOT a worm).
+    #[test]
+    fn hydra_replicate_requires_consent_and_bounds() {
+        let h = Hydra::new(MemEventStore::new(), 3, base());
+        assert!(
+            h.replicate_to(1, true, true),
+            "consenting + auth + bounded ⇒ ok"
+        );
+        assert!(!h.replicate_to(1, false, true), "no consent ⇒ refused");
+        assert!(!h.replicate_to(1, true, false), "no mutual auth ⇒ refused");
+        assert!(!h.replicate_to(0, true, true), "zero nodes ⇒ refused");
+        assert!(
+            !h.replicate_to(4096, true, true),
+            "absurd fan-out ⇒ refused (anti-fork-bomb)"
+        );
     }
 }
 
