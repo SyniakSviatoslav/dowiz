@@ -250,12 +250,19 @@ Quoting HK05 §5 and SYNTHESIZED §2-C's own framing, carried here deliberately:
 
 Corollaries, load-bearing:
 
-- **E13/E14 are explicitly NOT built here.** This phase formalizes the **current
-  managed-advisory tier as correct-for-now** (headroom proxy + hosted models).
-  Self-hosting llama.cpp (120k★ MIT) / vLLM (86k★ Apache-2.0) as the *execution*
-  tier is a **separate blueprint that ships in Phase 15**, gated on **GPU-unlock**
-  — an external trigger (operator / network `cargo add wgpu`, ARCHITECTURE §8),
-  **not this phase's job** (R2 dependency graph: E13-execution ⟵ GPU-unlock).
+- **E13/E14 are explicitly NOT built here** — but the gating split as of the
+  2026-07-16 self-critique pass, triple-confirmed (this session's SELF-CRITIQUE
+  §3 + HARNESS-IMPROVEMENT-SYNTHESIS-PLAN §2 H3 + independent live host probes):
+  gating *all* self-hosted execution on GPU-unlock was a category error.
+  llama.cpp (120k★ MIT) is CPU-first by design and needs no GPU; this host
+  (8-vCPU EPYC Milan, 32GB RAM) can run it today, with `huggingface.co`
+  reachable and `llama-server` already on disk. The corrected split — **E13-cpu**
+  (llama.cpp Tier-1, gated only on a DECART report + operator go, **no GPU
+  condition**) vs **E13-gpu** (vLLM/Modal Tier-2, still gated on real
+  `cargo add wgpu`/GPU-unlock, O18) — ships as the `LlmBackend` Trait-as-Port
+  design in Phase 15 §9, still **not this phase's job to deploy**. This phase
+  formalizes the managed-API tier as the correct DEFAULT for now (Tier 0), not
+  as the only tier until an external trigger fires.
 - The one legitimate *future* hook (HK05 §5): *if* dowiz ever ships an AI-agent
   product feature (e.g. an owner-panel assistant), EV-driven tiered routing is
   already a proven pattern to reuse under the same `bebop mcp` port — but that is

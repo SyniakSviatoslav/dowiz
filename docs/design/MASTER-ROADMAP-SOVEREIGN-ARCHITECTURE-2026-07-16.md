@@ -166,7 +166,8 @@ safe to offer) is in `BLUEPRINT-P02`. Highest-leverage first:
 | O19 | **I-FINAL proof home** — bebop consensus path vs. dowiz `tools/eqc`; the file the old blueprint cited doesn't exist at either candidate location (it exists at a third, legacy path) | Phase 13 (F46 full closure) | Sharper than originally scoped — see BLUEPRINT-P13 |
 | O9 | **V1-B verifier isolation bar** — fresh worktree vs. separate machine vs. different model family | Phase 6 | One sentence of canon closes this |
 | O8 | **F10 max sub-hub recursion depth** | Phase 15 | Numeric value only |
-| O2, O6, O10-O18 | Cheap/mechanical: E10≡E36 ratification, E35 "3-tier locality" definition, S7/S8 split, M12/F25 replay bound, "BD" expansion, M9 subtree-kill semantics, E13-20 numbering, canon rewordings, EUTM brand choice, public-flip go, GPU-unlock (external) | Bookkeeping / Phases 8,9,10,14,15,18 | `BLUEPRINT-P02` offers a recommended default for each — operator can accept or override |
+| O2, O6, O10-O17 | Cheap/mechanical: E10≡E36 ratification, E35 "3-tier locality" definition, S7/S8 split, M12/F25 replay bound, "BD" expansion, M9 subtree-kill semantics, E13-20 numbering, canon rewordings, EUTM brand choice, public-flip go | Bookkeeping / Phases 8,9,10,14,15,18 | `BLUEPRINT-P02` offers a recommended default for each — operator can accept or override |
+| O18 | **SPLIT 2026-07-16** (was one "GPU-unlock" trigger; a triple-confirmed self-critique pass — see §7 below — found this bundled two unrelated things): **O18a** `graphics-unlock` (network `cargo add wgpu` succeeding — verified RED/403 as of 2026-07-16) stays external/environment-gated; **O18b** `model-weights-unlock` (llama.cpp CPU tier — GGUF fetch + local server) is verified GREEN-ish on this host today and requires only a DECART report + operator go, **not** an external trigger | P17 (O18a only); P15 E13-gpu (O18a); P15 E13-cpu (O18b — actionable now) | Not cheap/mechanical — O18b is the single highest-leverage unblocked item in the whole roadmap right now |
 
 **Practical read:** Waves 0-2 (Phases 1-5, 7, 8, 11, 12) need **no operator input** to start — pure
 engineering against already-diagnosed gaps. Wave 3 onward (Phases 6, 9, 10, 13, 14, 15) benefit
@@ -220,3 +221,45 @@ documents plus the phase table above.
    things).
 4. As each phase's implementation lands, its blueprint's falsifiable done-test is the closure
    criterion — not a subjective "looks done."
+
+---
+
+## 7. Follow-up pass (2026-07-16, same day) — self-critique + harness/LLM-infra research
+
+Per the operator's standing session-closing ritual (now codified in `AGENTS.md` — the 2-question
+doubt check), this roadmap was immediately subjected to an independent adversarial review, plus two
+research passes the operator requested on the agent harness itself. All in
+`sovereign-roadmap-2026-07-16/`:
+
+- **[SELF-CRITIQUE-2Q-DOUBT-AUDIT.md](sovereign-roadmap-2026-07-16/SELF-CRITIQUE-2Q-DOUBT-AUDIT.md)**
+  — a decorrelated Opus pass answering "what are you least confident about" (7 items, each
+  investigated to a verdict, not just listed) and "what's the biggest thing missing." **Two items hit
+  the big-deal threshold**, both confirmed by live probes, not just doubted: (1) Phases 5/15 gated
+  ALL self-hosted LLM execution on an external "GPU-unlock" trigger, but llama.cpp is CPU-first by
+  design and needs no GPU — this was a real category error, now corrected (§3 of this document, and
+  in `BLUEPRINT-P05`/`BLUEPRINT-P15`/`R2-MERGED-PHASE-ROADMAP.md` directly). (2) The critical path
+  (P3→P9→P10→P13→...) makes the quantum-mesh substrate load-bearing-first, while G11 ("first real
+  order" — the only proof the product is wanted) sits as a late done-test rather than a Wave-0 gate —
+  **this is flagged, not resolved**; it is an operator-level charter question this roadmap does not
+  prejudge.
+- **[HARNESS-RESEARCH-revfactory-and-agentic-teams.md](sovereign-roadmap-2026-07-16/HARNESS-RESEARCH-revfactory-and-agentic-teams.md)**
+  — dowiz's telemetry *consumers* (EV/Kelly model routing, false-claim meter) are already ahead of
+  the open-source agent-team-harness genre (incl. `revfactory/harness`, 8.2k★), but starving on
+  hand-written data (9 rows in `track_record.jsonl`).
+- **[LLM-INFRA-RESEARCH-wandr-vllm-llamacpp.md](sovereign-roadmap-2026-07-16/LLM-INFRA-RESEARCH-wandr-vllm-llamacpp.md)**
+  — independently reaches the same llama.cpp/GPU-gating verdict, with a concrete `LlmBackend`
+  Trait-as-Port design (managed-API default, llama.cpp/vLLM as hub-chosen adapters, per M5).
+- **[HARNESS-IMPROVEMENT-SYNTHESIS-PLAN.md](sovereign-roadmap-2026-07-16/HARNESS-IMPROVEMENT-SYNTHESIS-PLAN.md)**
+  — the combined, sequenced fix: **H1** auto-harvest the governance ledgers from session transcripts
+  (cheapest, highest leverage — zero new deps), **H2** sovereign per-repo Telegram coverage for
+  dowiz/openbebop/hermes (contract-shared, code-independent — cross-repo calls explicitly rejected as
+  a central-SPOF shape), **H3** the `LlmBackend` port + operator-gated llama.cpp Tier-1 rollout.
+- **[OPEN-SOURCE-CREDITS-LIST.md](sovereign-roadmap-2026-07-16/OPEN-SOURCE-CREDITS-LIST.md)** — every
+  repo/service/tool integrated, borrowed from, or reverse-engineered across dowiz + bebop-repo +
+  hermes-kernel's full history (~150 active dependencies, 32 design influences, 21 specs/standards,
+  26 evaluated-and-rejected), for the operator to star/credit.
+
+`BLUEPRINT-P05` §8, `BLUEPRINT-P15` §9/§10, and `R2-MERGED-PHASE-ROADMAP.md`'s O18 row / Phase-5 /
+Phase-15 rows / dependency graph have already been corrected to reflect the O18 split (E13-cpu vs.
+E13-gpu). `ARCHITECTURE.md:34` still needs the operator's canon-merge pass (per `BLUEPRINT-P02`'s
+mechanism) — not edited here, same boundary as the rest of this roadmap.

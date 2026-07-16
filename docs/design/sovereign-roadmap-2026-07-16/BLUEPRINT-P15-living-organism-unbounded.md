@@ -308,32 +308,57 @@ defect from, and the future condition that would make it non-vacuous is named.
 
 ---
 
-## 9. E13 self-host provider — BLUEPRINT ONLY, execution GPU-unlock-gated (deferred)
+## 9. E13 self-host provider — `LlmBackend` port design; E13-cpu unlockable NOW, E13-gpu stays O18-gated
 
-**Explicitly deferred: this phase designs the provider; it does not deploy it.** E13's *execution* is
-gated on the external GPU-unlock trigger (O18: network `cargo add wgpu`, operator/environment — **not**
-in this phase's control), and the trigger-gated *activation* lives in **Phase 17**, not here
-(`R2:81` records E13 as "managed-advisory current tier; self-host … execution is gated on GPU-unlock and
-ships via Phase 15's blueprint"). What this phase delivers is the falsifiable design, ready to activate.
+**CORRECTED 2026-07-16 (triple-confirmed: this session's SELF-CRITIQUE §3, an independent LLM-infra
+research pass, and live host probes all reached the same verdict — settled fact, not re-litigated).**
+The original framing gated ALL self-host execution on GPU-unlock. That conflated two unrelated
+triggers: llama.cpp is CPU-first by design (its whole reason for existing) and needs no GPU, while
+only the vLLM/Modal tier genuinely benefits from one. Live evidence on this host (2026-07-16,
+8-vCPU EPYC Milan, 32GB RAM): `/usr/local/lib/ollama/llama-server` already installed, no `/dev/nvidia*`,
+`huggingface.co` → 200, `crates.io`/`cargo add wgpu` → 403. The two capabilities have *opposite*
+current availability — proof they were never one trigger. See `HARNESS-IMPROVEMENT-SYNTHESIS-PLAN.md`
+§2 H3 for the full design; this section is re-scoped to match it.
 
-**Blueprint:**
+**Split gating, both still ship *design only* in this phase — deployment is a separate, later action:**
+- **E13-cpu (llama.cpp, Tier 1):** gate = a dated DECART report + operator go. **No GPU condition.**
+  Unlockable now — this phase still only designs it; the operator's go and the actual deploy are a
+  following action, not automatically triggered by this blueprint landing.
+- **E13-gpu (vLLM/Modal, Tier 2):** unchanged — stays gated on the real external GPU-unlock trigger
+  (O18: network `cargo add wgpu` succeeding, operator/environment), with trigger-gated *activation*
+  in **Phase 17**.
 
-1. **Behind a Trait-as-Port.** A llama.cpp (GGUF) / vLLM (OpenAI-compatible) service plugs in as a
-   **provider profile behind a port** — the same Trait-as-Port pattern the kernel uses (`ARCHITECTURE.md:30, 48`).
-   R1-B §E13 verified Hermes already has the provider plumbing (`plugins/model-providers/custom/`,
-   OpenAI-compatible client) that makes this a config-not-code change when unlocked.
-2. **sha3-verified weights.** Model weights are ingested through §5's manifest `{url, sha3}` verify-or-
-   deny path — no unverified GGUF blob runs.
-3. **Budget ceiling.** A `TokenBucket` / `Budget` spend ceiling (reusing the Phase-5 per-agent budget and
-   the existing `transport_policy.rs` `TokenBucket`) bounds GPU/inference cost; Modal H100 burst
-   ($0.001097/s, scale-to-zero, `ARCHITECTURE.md:34`) sits behind the same ceiling, degrade-closed when
-   over budget.
-4. **Executes only when the trigger fires.** Until GPU-unlock, managed-advisory remains the reality
-   (`ARCHITECTURE.md:34`); the port returns an honest `Err` offline (the E21 boundary pattern). The
-   deployment is Phase 17's, gated on O18.
+**Blueprint (the `LlmBackend` Trait-as-Port, per HARNESS-IMPROVEMENT-SYNTHESIS-PLAN §2 H3):**
 
-**Do not** schedule any E13 *deployment* work inside Phase 15. The line is bright: Phase 15 = blueprint;
-Phase 17 + O18 = activation.
+1. **`ports/llm.rs` — one trait, one transport, three adapters.** `trait LlmBackend { id, caps, chat,
+   embed, rerank, health }`; kernel sees only `&dyn LlmBackend`, adapters live in a separate crate the
+   kernel never imports (compile firewall). One `OpenAiCompatTransport` with per-backend `Quirks` (the
+   Hermes-proven pattern, `plugins/model-providers/custom/`): `ManagedApiAdapter` (Tier 0, default,
+   live now), `LlamaCppAdapter` (Tier 1, `127.0.0.1:8080`, static binary + systemd unit, S1-native
+   zero-OCI — operator-unlockable now), `VllmAdapter` (Tier 2, local GPU or Modal H100 burst,
+   $0.001097/s scale-to-zero — stays O18-gated).
+2. **Hub choice = config, not kernel change.** Selected per-hub via `HubPolicy.llm_backend` /
+   `LLM_BACKEND=` + `LLM_BASE_URL=` in EnvFile — this is M5 ("every hub may use any models/API at its
+   discretion") made real for the first time; no dev-time gate may block a runtime hub from switching
+   (SCOPE RULE).
+3. **sha3-verified weights.** Model weights are ingested through §5's manifest `{url, sha3}` verify-or-
+   deny path — no unverified GGUF blob runs, for either tier.
+4. **Budget ceiling.** A `TokenBucket` / `Budget` spend ceiling (reusing the Phase-5 per-agent budget and
+   the existing `transport_policy.rs` `TokenBucket`) bounds inference cost for both tiers, degrade-closed
+   when over budget.
+5. **Honest absence.** With the backend down/unconfigured, `health()`/`embed()` return a typed `Err`
+   (the E21 boundary pattern) — never a mock, never a silent fallback to a different tier.
+6. **First Tier-1 consumers named (value, not capability theater):** the VERIFIABLE-COGNITION §3.3
+   semantic-leakage gate (deferred solely for lack of an embeddings bridge — `llama-server
+   /v1/embeddings` is that bridge, at $0/call) and a sovereign advisory judge (`eval-layer/
+   openrouter_judge.py` already honors `OPENAI_BASE_URL` — advisory-only, never the gate).
+7. **EV loop closure.** Local-backend calls feed Phase 1's harvested `track_record.jsonl` (per
+   `HARNESS-IMPROVEMENT-SYNTHESIS-PLAN.md` H1), so `gov_route` prices local-vs-managed on measured
+   data, not vibes.
+
+**Do not** schedule any E13-gpu *deployment* work inside Phase 15 — that stays Phase 17 + O18. E13-cpu's
+design ships here; its deployment (DECART report → operator go → actual rollout) is a distinct,
+separately-scheduled action this phase does not itself trigger.
 
 ---
 
@@ -365,9 +390,11 @@ must be logged, not silently swallowed):
 9. **F7 recorded vacuous.** F7 is recorded in canon text as **vacuous, satisfied by absence**, with the
    named non-vacuity trigger (a real consensus engine existing to defect from) — §8 note above, staged
    for the operator's canon merge.
-10. **E13 is blueprint-only.** The llama.cpp/vLLM provider exists as a **design behind a port** (sha3
-    weights + budget ceiling); **no deployment** work was done; execution remains gated on O18 / Phase 17.
-    Default `cargo build`/`test` dependency graph is byte-identical to today (no GPU crate added).
+10. **E13 is blueprint-only, split gating.** The `LlmBackend` port + three adapters exist as a **design**
+    (sha3 weights + budget ceiling); **no deployment** work was done. E13-cpu (llama.cpp) is
+    **unlockable now** via DECART report + operator go, **no GPU condition**; E13-gpu (vLLM/Modal)
+    remains gated on O18 / Phase 17. Default `cargo build`/`test` dependency graph is byte-identical to
+    today (no HTTP/adapter crate added by this phase).
 
 **Anchor coverage check:** M11 (§1, the whole dependent-not-independent framing + red-line-bounded
 realization), E17 (§6 MCP completion), E18 (§6 per-agent minting), F3 (§5), F4 (§6 sign qualifier),
