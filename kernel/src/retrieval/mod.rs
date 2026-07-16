@@ -25,3 +25,8 @@ pub mod tests;
 pub mod ppr;
 /// L3 RELATEDNESS — wikilink fixture graph + "what relates to X" diffusion.
 pub mod diffusion;
+/// L2 lexical ranker — pure-`std` Okapi BM25 (M2).
+pub mod bm25;
+/// L2+L0 fusion — BM25 + trigram index, living-knowledge recall@5=1.0
+/// (un-strands the spike engine's lexical capability into the kernel, M2/A2).
+pub mod recall;

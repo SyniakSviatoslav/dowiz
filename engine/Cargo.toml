@@ -12,6 +12,12 @@ name = "dowiz_engine"
 path = "src/lib.rs"
 
 [dependencies]
+# Local path dependency on the deterministic kernel so the engine's VertexBridge
+# can drive the graph-Laplacian field (W2-2: `laplacian_spmv`) directly on the
+# CPU. This is the SAME local-crate relationship `agent-governance-wasm` uses; no
+# external/wgpu/serde crate is introduced, so the engine stays offline-clean.
+# The kernel's own deps (tracing/regex) are already in-tree and cached.
+dowiz-kernel = { path = "../kernel" }
 
 [features]
 # default = offline-clean. GPU/wasm glue is opt-in so CI never pulls a GPU/JS toolchain.

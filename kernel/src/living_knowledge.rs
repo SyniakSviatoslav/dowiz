@@ -206,4 +206,84 @@ mod tests {
         let lk = SubprocessLivingKnowledge::new(corpus(), Some("this_bridge_does_not_exist_xyz".into()));
         assert!(lk.retrieve("pricing", 3).is_err(), "missing bridge must error (fail-closed)");
     }
+
+    // ── Un-stranding the spike engine's BM25 capability into the kernel (W2-6) ──
+    // The living-knowledge spike (`recover/stash-1-2994e6c8`) proved recall@5=1.0
+    // by fusing semantic + lexical(BM25) + title signals. This test reuses the
+    // kernel's OWN pure-`std` BM25 ranker (`crate::retrieval::bm25`) to prove the
+    // lexical half of that engine now lives in the kernel — not only behind a
+    // node subprocess. A kernel-owned fixture corpus + hand-verified oracle must
+    // recall its relevant memory entry in the top-5 with the kernel's own metric.
+    //
+    // Always green under `--features wasm` (this module is gated there); the
+    // bridge-dependent test above stays skipped when node is absent, but this one
+    // needs no node and exercises the real in-kernel ranker.
+    fn lk_fixture_corpus() -> Vec<String> {
+        vec![
+            "pricing model computes subtotal delivery fee tax and total cost for orders".into(),
+            "delivery flow tracks the courier from pickup to dropoff and estimates arrival".into(),
+            "refund policy returns money to the customer within fourteen days of a return".into(),
+            "catalog holds the trusted price list and line item unit prices for products".into(),
+            "trigram index builds a deterministic inverted index over byte trigrams for exact search".into(),
+            "bm25 fusion ranks documents by lexical term frequency and inverse document frequency".into(),
+            "pagerank computes the stationary importance of each node in a directed web graph".into(),
+            "heat kernel recall diffuses activation over a graph to surface related memory entries".into(),
+            "salience decay lowers the weight of stale notes so recent memories rank higher".into(),
+            "compression zstd reduces the stored size of memory blobs with a content defined chunker".into(),
+            "quantization pq compresses embeddings into product codes to shrink the vector index".into(),
+            "entropy ledger records the information gain and divergence of each self improvement step".into(),
+        ]
+    }
+
+    fn lk_oracle() -> Vec<(&'static str, &'static [usize])> {
+        vec![
+            ("how is the order total calculated", &[0]),
+            ("when does the package get delivered", &[1]),
+            ("can i get my money back", &[2]),
+            ("where are product prices defined", &[3]),
+            ("how does exact substring search work", &[4]),
+            ("what ranks documents by word frequency", &[5]),
+            ("which algorithm measures node importance in a graph", &[6]),
+            ("how do related memories get surfaced", &[7]),
+            ("why do old notes lose weight", &[8]),
+            ("how is stored memory made smaller", &[9]),
+            ("how are embeddings compressed", &[10]),
+            ("what tracks information gain of improvements", &[11]),
+        ]
+    }
+
+    #[test]
+    fn kernel_bm25_recall_at_5_is_one_point_zero() {
+        use crate::retrieval::bm25::{Bm25, Document};
+        use crate::csr::recall_at_k;
+
+        let corpus = lk_fixture_corpus();
+        let docs: Vec<Document> = corpus.iter().map(|s| Document::from_text(s)).collect();
+        let bm = Bm25::new(docs);
+        let k = 5usize;
+        let mut total = 0.0f64;
+        let oracle = lk_oracle();
+        for (q, relevant) in &oracle {
+            let hits = bm.top_k_text(q, k);
+            // Encode the BM25 ranking as a doc-id-indexed score vector and let the
+            // kernel's own `recall_at_k` certify the property.
+            let mut scores = vec![0.0f64; corpus.len()];
+            for (pos, h) in hits.iter().enumerate() {
+                scores[h.doc_id] = (hits.len() - pos) as f64;
+            }
+            let r = recall_at_k(&scores, relevant, k);
+            total += r;
+            assert_eq!(
+                r, 1.0,
+                "living-knowledge query '{}' must recall relevant doc in top-{} (got {})",
+                q, k, r
+            );
+        }
+        let mean = total / oracle.len() as f64;
+        assert_eq!(mean, 1.0, "mean recall@5 over the living-knowledge oracle must be 1.0");
+        println!(
+            "[living_knowledge] in-kernel BM25 recall@5={:.3} over {} oracle queries (spike capability un-stranded)",
+            mean, oracle.len()
+        );
+    }
 }
