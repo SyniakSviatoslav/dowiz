@@ -4,7 +4,7 @@
 //! browser paints physics directly — ZERO TypeScript math. The kernel/engine is
 //! the single source of truth; this crate is a thin, offline-clean FFI.
 
-use dowiz_engine::field_frame::{compose, FieldEquilibrium};
+use dowiz_engine::field_frame::{compose, FieldEquilibrium, FieldFrame};
 use dowiz_engine::{Scene, SdfShape};
 use dowiz_engine::VertexBridge;
 use dowiz_kernel::csr::Csr;
@@ -56,6 +56,56 @@ fn vertex_field_impl(count: usize, edges: &[f64], x: &[f64]) -> Vec<f64> {
 #[wasm_bindgen]
 pub fn compose_field(circles: &[f64], w: usize, h: usize, steps: usize) -> Vec<u8> {
     compose_field_impl(circles, w, h, steps)
+}
+
+/// Stateful field-frame integrator exposed to JS for a live rAF loop. The
+/// browser calls `step()` once per animation frame to advance the physics and
+/// `frame()` to blit the returned RGBA — ALL math stays in the kernel/engine.
+#[wasm_bindgen]
+pub struct FieldSim {
+    frame: FieldFrame,
+    source: Vec<f32>,
+    eq: FieldEquilibrium,
+    w: usize,
+    h: usize,
+}
+
+#[wasm_bindgen]
+impl FieldSim {
+    /// Build a sim from a flat circle list `[cx,cy,r, ...]`, rasterize the SDF
+    /// source `S`, and allocate a zeroed field `U`. The browser only blits.
+    #[wasm_bindgen(constructor)]
+    pub fn new(circles: &[f64], w: usize, h: usize) -> FieldSim {
+        let scene = scene_from_circles(circles);
+        let source = scene.render_frame(w, h);
+        FieldSim {
+            frame: FieldFrame::new(w, h),
+            source,
+            eq: FieldEquilibrium::default(),
+            w,
+            h,
+        }
+    }
+
+    /// Advance one physics timestep. The rAF loop calls this per frame.
+    pub fn step(&mut self) {
+        self.frame.step(&self.source, &self.eq);
+    }
+
+    /// RGBA8 frame the canvas paints (`len == w*h*4`, never NaN bytes).
+    pub fn frame(&self) -> Vec<u8> {
+        self.frame.frame_rgba()
+    }
+
+    /// Frame width (JS sizes the `ImageData`).
+    pub fn width(&self) -> usize {
+        self.w
+    }
+
+    /// Frame height (JS sizes the `ImageData`).
+    pub fn height(&self) -> usize {
+        self.h
+    }
 }
 
 #[wasm_bindgen]
@@ -202,5 +252,51 @@ mod tests {
         assert_eq!(rel, vec!["b".to_string()], "a shares rust with b only");
         let rel_b = related_docs("b", docs);
         assert_eq!(rel_b, vec!["a".to_string(), "c".to_string()], "b↔a rust, b↔c ml");
+    }
+
+    // ===== W8: stateful FieldSim (live rAF physics) RED→GREEN tests =====
+
+    // (7) FieldSim advances with finite bytes + actually evolves. 20 steps with
+    //     3 circles must yield a w*h*4 frame, all bytes finite (no NaN), and a
+    //     frame that differs from step 0 (proving the physics moved, not frozen).
+    #[test]
+    fn wasm_fieldsim_advances_finite() {
+        let circles = [0.0_f64, 0.0, 3.0, 4.0, 2.0, 1.0, -4.0, -2.0, 2.0];
+        let mut sim = FieldSim::new(&circles, 32, 32);
+        assert_eq!(sim.width(), 32);
+        assert_eq!(sim.height(), 32);
+
+        let f0 = sim.frame();
+        assert_eq!(f0.len(), 32 * 32 * 4, "RGBA8 = w*h*4");
+        // u8 bytes are finite by construction (frame_rgba maps non-finite→0).
+        // A non-all-zero step-0 frame proves real SDF-driven content.
+        assert!(f0.iter().any(|&b| b != 0), "step-0 frame must have content");
+
+        for _ in 0..20 {
+            sim.step();
+        }
+        let f20 = sim.frame();
+        assert_eq!(f20.len(), 32 * 32 * 4, "RGBA8 = w*h*4");
+        // u8 bytes are finite by construction; frame must be non-collapsed.
+        assert!(f20.iter().any(|&b| b != 0), "step-20 frame must have content");
+        // Field must have evolved: step-20 frame differs from step-0 frame.
+        assert_ne!(f20, f0, "FieldSim must evolve over 20 steps (not frozen)");
+    }
+
+    // (8) FieldSim is deterministic: two sims with identical circles produce
+    //     bit-identical frame bytes after the same number of steps.
+    #[test]
+    fn wasm_fieldsim_deterministic() {
+        let circles = [0.0_f64, 0.0, 3.0, 4.0, 2.0, 1.0, -4.0, -2.0, 2.0];
+        let mut a = FieldSim::new(&circles, 32, 32);
+        let mut b = FieldSim::new(&circles, 32, 32);
+        for _ in 0..20 {
+            a.step();
+            b.step();
+        }
+        let fa = a.frame();
+        let fb = b.frame();
+        assert_eq!(fa.len(), 32 * 32 * 4);
+        assert_eq!(fa, fb, "FieldSim must be bit-deterministic across sims");
     }
 }
