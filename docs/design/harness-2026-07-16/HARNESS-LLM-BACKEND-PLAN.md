@@ -214,6 +214,13 @@ batching; the harness does not re-implement batching.**
 
 ### 4.2 Harness-level concurrency control — `TokenBucket`-bounded `tokio` dispatch
 
+> **⚠ CORRECTED 2026-07-16.** This subsection's `tokio`-based framing predates
+> `DECART-llm-backend-integration.md`'s Decision 2, which chose `ureq` (synchronous, no tokio) for
+> `llm-adapters`'s HTTP client — matching the exact dependency already used twice elsewhere in this
+> repo (`tools/telemetry/rust-spool`, `tools/async-spool`) under the 2026-07-15 operator mandate. The
+> `TokenBucket`(F33) primitive below is unchanged; the dispatch *mechanism* around it is not tokio —
+> see `BLUEPRINT-LLM-BACKEND-PORT.md` §4 for the corrected thread-pool + `std::sync::mpsc` design.
+
 **Honest correction to the prior design:** P15 §9.4 says "reusing … the existing `transport_policy.rs`
 `TokenBucket`." **There is no such file and no existing Rust `TokenBucket`** — a repo-wide
 `grep` for `TokenBucket`/`token_bucket` over `*.rs` returns nothing. What exists is the **F33
