@@ -74,7 +74,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Append one JSONL entry per new commit (appender only; anomaly consumer = Phase 8)
-        run: bash scripts/claim-latency-append.sh
+        run: cargo run --offline --manifest-path tools/ci-truth/Cargo.toml -- claim-latency
       - name: Publish the ledger as a CI artifact (avoids a bot commit-back loop)
         uses: actions/upload-artifact@v4
         with:
@@ -95,10 +95,10 @@ jobs:
     name: v5c independent re-execution (S6/V5-C, UNSIGNED)
     runs-on: ubuntu-latest
     # Red-line gate (blueprint `if: red-line paths touched`) is enforced INSIDE
-    # scripts/v5c-reexec.sh: it inspects the diff range and emits verdict SKIP
-    # (exit 0) when no money.rs/order_machine.rs/event_log.rs/auth path is touched,
-    # running the full independent re-exec only when one is. UNSIGNED here — Phase 6
-    # wraps this same runner with ML-DSA key_K/key_V signatures on top.
+    # the native `ci-truth v5c-reexec` binary: it inspects the diff range and emits
+    # verdict SKIP (exit 0) when no money.rs/order_machine.rs/event_log.rs/auth path
+    # is touched, running the full independent re-exec only when one is. UNSIGNED
+    # here — Phase 6 wraps this same runner with ML-DSA key_K/key_V signatures on top.
     steps:
       - uses: actions/checkout@v4
         with:
@@ -108,4 +108,4 @@ jobs:
           cargo fetch --manifest-path kernel/Cargo.toml
           cargo fetch --manifest-path engine/Cargo.toml
       - name: Re-execute the diff range in a clean independent worktree (RED|GREEN|SKIP)
-        run: bash scripts/v5c-reexec.sh origin/main HEAD
+        run: cargo run --offline --manifest-path tools/ci-truth/Cargo.toml -- v5c-reexec origin/main HEAD
