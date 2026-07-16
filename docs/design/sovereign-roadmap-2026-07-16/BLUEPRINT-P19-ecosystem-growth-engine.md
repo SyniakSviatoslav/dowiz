@@ -133,10 +133,15 @@ job, not this phase's to execute.**
    telemetry, no courier scoring/surveillance — M8/E58), post-quantum readiness ahead of harvest-now-
    decrypt-later, EU/UA sovereignty (E60).
 3. **Technical merit / credibility** — cite the concrete built substrate: ML-DSA-65 + ML-KEM-768 with
-   in-repo FIPS 204/203 KATs, self-certifying node identity (ADR-0007), local SQLite PQ-at-rest
-   (ADR-0008), the eqc VERIFIED-BY-MATH proof discipline. **If Phase 14 has landed, add the two-hub
+   in-repo FIPS 204/203 KATs, self-certifying node identity (ADR-0007), local PQ-at-rest persistence
+   (ADR-0008 — see CORRECTED note), the eqc VERIFIED-BY-MATH proof discipline. **If Phase 14 has landed, add the two-hub
    per-hub-wiki delta-exchange demo** as evidence of working replication (this is the soft dependency's
    payoff).
+   > ⚠ CORRECTED (operator, 2026-07-16): this dossier previously cited "local SQLite PQ-at-rest" as built substrate.
+   > dowiz does NOT use SQLite as an architectural choice — the spectral/sqlless approach (content-addressed
+   > `BlockStore` + JSONL `FileEventStore`) is the MAIN storage/retrieval path in dowiz's own kernel/engine, with
+   > **pgrust as the uniform SQL-fallback/backup target, not SQLite** (ADR-0008 is being updated SQLite→pgrust). Cite
+   > the PQ-at-rest substrate as the spectral/sqlless content-addressed store + pgrust, never SQLite.
 4. **Work plan / deliverables** — map work-packages to roadmap phases that are genuinely R&D and not
    yet done at flip time (candidates: P3 PQ trust-root hardening, P9 confidential self-healing wire,
    P14 dispute/escrow + per-hub graph-wiki). Each WP = a falsifiable done-test lifted from the roadmap.

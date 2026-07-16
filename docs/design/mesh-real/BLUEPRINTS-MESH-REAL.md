@@ -105,6 +105,12 @@
   (CreationTimestamp+Lifetime-vs-real-clock). **НЕ** dtn7-rs-daemon (дублює HybridGate + routing-metrics-ризик-NO-
   COURIER-SCORING; нема-QUIC-CL). Offline-reconnect = persist-undelivered-per-dest-queue(pgrust/rusqlite) drain-oldest-
   first, FRESH-channel-binding-each-replay.
+  > ⚠ CORRECTED (operator, 2026-07-16): the undelivered-queue persistence lists `rusqlite` (SQLite) as a co-option.
+  > dowiz does NOT use SQLite as an architectural choice — the spectral/sqlless approach (content-addressed
+  > `BlockStore` + JSONL `FileEventStore`) is the MAIN storage/retrieval path in dowiz's own kernel/engine, with
+  > **pgrust as the uniform SQL-fallback/backup target, not SQLite**. Corrected: the per-dest undelivered queue is an
+  > append-only spectral/sqlless store (natural fit for drain-oldest-first) or a **pgrust**-backed queue if a SQL shape
+  > is genuinely needed — never rusqlite/SQLite.
 - **Reuse:** Transport-trait, envelope, framing, matcher-Transport-abstraction. **RED:** offline_courier_reconnect_
   delivers_exactly_once (drop-mid-session→queue→reconnect-fresh-channel→single-delivery-via-custody-ack-dedupe). **Хвиля:** G6. 🔴
 
