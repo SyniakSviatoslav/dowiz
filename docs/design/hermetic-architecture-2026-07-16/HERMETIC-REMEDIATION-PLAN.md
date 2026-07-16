@@ -221,6 +221,17 @@ Form per `BLUEPRINT-P02-canon-repair-operator-decisions.md` §4 (the rsa-triage 
   *Owner:* operator (kernel lane). *Revisit-trigger:* a third production `L=D−A` construction
   appears anywhere, OR `csr::laplacian_spmv` gains its first production caller — parity test lands
   in that same commit. *Date:* 2026-07-16.
+  ⚠ TRIGGER FIRED (2026-07-16, `feat/spectral-energy-flow-evolution`): `csr::laplacian_spmv` now
+  has a production caller — `engine/src/bridge.rs:125` (`VertexBridge::apply_field`, W20), wired
+  public API though only test-reached today (not yet on a live runtime loop). The parity test this
+  trigger calls for is now designed: `docs/design/spectral-energy-flow-evolution-2026-07-16/
+  BLUEPRINT-E1-gradient-lyapunov-and-laplacian-parity.md` — a discrete grad/div incidence
+  factorization pinning `csr.rs`/`spectral.rs` (agree, `+(D−A)`) against `field_frame.rs` (found
+  live-diverging, `−(D−A)` — an unpinned sign-convention split this backlog entry did not know
+  about in the original audit). Scope note: E1 deliberately does NOT merge all Laplacian call
+  sites into one operator (three hot-path representations are kept, parity-tested instead) —
+  narrower than this backlog item's original "route both through csr::laplacian_spmv" framing,
+  and the honest reason is in E1 §2. Status: blueprinted, not yet implemented.
 - **#9 — PPR triplication.** *What:* collapse `retrieval/ppr.rs` / `diffusion.rs` / `markov.rs`
   PPR math to one engine or parity-gate them; fix the R-LM design pointer to the survivor.
   *Why-suspended:* all three are live and individually tested; no consumer is currently misrouted
