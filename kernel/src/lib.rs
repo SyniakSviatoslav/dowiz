@@ -57,6 +57,9 @@ pub mod impedance;
 pub mod intake;
 pub mod isolation;
 pub mod kalman;
+/// §3.3 Layer-B (semantic) leakage gate — cosine-0.9 near-duplicate rejection over an injected
+/// `&dyn LlmBackend` embedding model. Native, zero-dep; the live bridge lives in `llm-adapters`.
+pub mod leak_gate;
 /// P9 wave: deterministic seedable PRNG (SplitMix64 → PCG64), zero-dep,
 /// reproducible Monte-Carlo for the empirical causal joint.
 pub mod rng;
@@ -106,6 +109,10 @@ pub mod noether;
 /// ScalarAdam), the self-adaptation substrate (E3). Local-first: no network.
 pub mod online;
 pub mod order_machine;
+/// External capability ports (the seams where the kernel meets the outside world without importing
+/// it) — currently the `LlmBackend` pluggable LLM backend trait (zero HTTP/serde; the concrete
+/// `llm-adapters` crate implements it).
+pub mod ports;
 /// M1 / L0 exact byte+regex search (vectorless) — deterministic trigram
 /// inverted index + exact verify. NEW module; does not touch kernel authority.
 pub mod retrieval;
@@ -115,6 +122,9 @@ pub mod spectral;
 /// Self-improvement loop: recurring-pattern surface over the tool-outcome
 /// token stream (W19 — consumes `trigram` into the loop's telemetry path).
 pub mod telemetry;
+/// F33 — deterministic compute-budget token bucket (monotonic-clock, atomic, degrade-closed).
+/// The `llm-adapters` `Dispatcher` reuses this to bound LLM-call concurrency.
+pub mod token_bucket;
 /// Deterministic n-gram (bigram + trigram) frequency extraction over a token
 /// stream — the self-improvement loop's pattern-surface primitive (P9 / T2-β).
 pub mod trigram;
