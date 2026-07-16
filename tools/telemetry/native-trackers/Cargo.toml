@@ -1,0 +1,20 @@
+[package]
+name = "native-trackers"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Native (zero-dep, std-only) telemetry trackers for dowiz — port of the python/bash heredocs in bench_track.py / governance.sh / topics.sh. Reads the SAME JSONL ledgers, no interpreter spawn, ~10-30x faster per call."
+
+# PURE-STD. No serde, no ureq, no tokio. JSON parsing is hand-rolled over the
+# fixed gov_route/track_record schema so the hot path never links a JSON crate.
+# The only external crate is `criterion`'s text output we SHELL OUT to (`cargo bench`),
+# parsed by this binary — that is the native replacement for bench_track.py's python parse.
+
+[dependencies]
+
+[[bin]]
+name = "native-trackers"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3

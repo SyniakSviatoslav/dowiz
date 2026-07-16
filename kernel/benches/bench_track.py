@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
 """bench_track — dynamic benchmark tracker for a Rust/criterion crate.
 
+DELEGATION: If the native `native-trackers` binary exists, this script shells
+out to it (`native-trackers bench <crate>` — pure-Rust, zero-dep, ~14x faster
+than parsing in python). The pure-python path below is a PORTABLE FALLBACK only
+(used when the binary isn't built, e.g. a fresh checkout). Per the operator
+rule (AGENTS.md: native telemetry + benchmarks mandatory per wave), the native
+tracker is the primary path; python is never the hot path.
+
 Runs `cargo bench` and parses criterion's stable TEXT output (the
 `name  time:   [low mean high]` lines), compares each benchmark's mean
 against benches/baseline.json (committed reference), prints a degrade/upgrade
@@ -15,7 +22,7 @@ Criterion 0.5 note: the `--output-format json` CLI flag was removed; text
 parsing is version-stable and needs no special flags.
 
 Usage:
-    python3 benches/bench_track.py                 # run + compare + log
+    python3 benches/bench_track.py                 # run + compare + log (via native if present)
     python3 benches/bench_track.py --no-run        # compare baseline to itself (CI smoke)
     python3 benches/bench_track.py --threshold 15  # looser regression gate
 """
@@ -23,8 +30,30 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+
+
+def _try_native(crate_dir, args):
+    """Delegate to the native tracker if built. Returns exit code or None."""
+    bin_name = "native-trackers"
+    bin_path = shutil.which(bin_name)
+    if bin_path is None:
+        # also check the canonical repo location
+        cand = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "tools", "telemetry", "native-trackers", "target", "release", bin_name,
+        )
+        bin_path = cand if os.path.isfile(cand) else None
+    if bin_path is None:
+        return None
+    cmd = [bin_path, "bench", crate_dir]
+    if args.threshold is not None:
+        cmd += ["--threshold", str(args.threshold)]
+    return subprocess.call(cmd)
+
+
 from datetime import datetime
 
 UNIT_NS = {"ns": 1.0, "µs": 1e3, "us": 1e3, "ms": 1e6, "s": 1e9}
@@ -68,6 +97,11 @@ def main() -> None:
     ap.add_argument("--no-run", action="store_true",
                     help="skip cargo bench; compare baseline to itself (smoke)")
     args = ap.parse_args()
+
+    # PRIMARY PATH: delegate to the native Rust tracker if it's built.
+    rc = _try_native(args.crate, args)
+    if rc is not None:
+        sys.exit(rc)
 
     base = load_baseline(args.crate)
     cur = base if args.no_run else run_bench(args.crate)

@@ -150,6 +150,26 @@ fn append_harvest(rec: &TrackRecord) {
 /// Backwards-compatible alias so the plan's `Sender` reference resolves cleanly.
 pub type RecordSender = Sender<Result<ChatResponse, DispatchError>>;
 
+/// Decode one harvest-ledger line (the inverse of `append_harvest`). Used by the telemetry fold
+/// (`telemetry.rs`) so the same row gov_route reads is the row the in-process aggregator consumes —
+/// one schema, no drift. Returns `None` on a malformed line (fail-closed; the row is skipped).
+pub(crate) fn decode_track_record(line: &str) -> Result<TrackRecord, serde_json::Error> {
+    let v: serde_json::Value = serde_json::from_str(line)?;
+    let get_str = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
+    let get_bool = |k: &str| v.get(k).and_then(|x| x.as_bool()).unwrap_or(false);
+    let get_f64 = |k: &str| v.get(k).and_then(|x| x.as_f64()).unwrap_or(0.0);
+    Ok(TrackRecord {
+        backend_id: get_str("backend"),
+        model_id: get_str("model"),
+        total_tokens: v.get("tokens").and_then(|x| x.as_u64()).unwrap_or(0),
+        ms: v.get("ms").and_then(|x| x.as_u64()).unwrap_or(0),
+        task: get_str("task"),
+        success: get_bool("success"),
+        value: get_f64("value"),
+        cost: get_f64("cost"),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

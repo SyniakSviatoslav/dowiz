@@ -11,6 +11,7 @@ pub mod compose;
 pub mod dispatch;
 pub mod ollama;
 pub mod quirks;
+pub mod telemetry;
 pub mod transport;
 
 pub use cache::{CachingBackend, NoCache};
