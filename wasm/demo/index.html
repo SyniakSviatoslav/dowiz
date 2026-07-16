@@ -1,0 +1,86 @@
+<!doctype html>
+<!--
+  dowiz physics-render demo — STATIC, OFFLINE, ZERO npm, ZERO TypeScript.
+  Serve from this dir:  python3 -m http.server 8080  (then open /index.html)
+  All physics math (M∇²U+ΓU̇+c²LU=S field evolution + Knowledge Map) runs in
+  the Rust/wasm kernel; JS only BLITS the returned RGBA8 to a canvas.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>dowiz · physics field render (kernel/wasm, zero TS)</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0a0a0f; color: #cdd; font: 13px/1.4 ui-monospace, monospace; }
+  header { padding: 10px 14px; border-bottom: 1px solid #1d2733; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  button { background: #14202c; color: #cde; border: 1px solid #2a3a4a; border-radius: 6px; padding: 6px 10px; cursor: pointer; }
+  button:hover { background: #1d2c3b; }
+  main { display: flex; gap: 14px; padding: 14px; align-items: flex-start; flex-wrap: wrap; }
+  canvas { image-rendering: pixelated; border: 1px solid #1d2733; background: #000; width: 384px; height: 384px; }
+  pre { flex: 1; min-width: 280px; max-height: 384px; overflow: auto; background: #0d141c; border: 1px solid #1d2733; border-radius: 6px; padding: 10px; white-space: pre-wrap; }
+  .hint { opacity: .6; }
+</style>
+</head>
+<body>
+<header>
+  <strong>dowiz</strong><span class="hint">physics field render — kernel/wasm, no TS</span>
+  <button id="reset">reset field</button>
+  <button id="map">show Knowledge Map</button>
+  <label class="hint">circles <input id="n" type="range" min="1" max="12" value="4" /></label>
+</header>
+<main>
+  <canvas id="cv" width="384" height="384"></canvas>
+  <pre id="km">Click "show Knowledge Map" to render the kernel-built tag MAP (no DOM/TS app).</pre>
+</main>
+
+<script type="module">
+  import init, { FieldSim, knowledge_map } from "./pkg/dowiz_wasm.js";
+
+  const W = 384, H = 384;
+  const cv = document.getElementById("cv");
+  const ctx = cv.getContext("2d");
+  const img = ctx.createImageData(W, H);
+  let sim = null;
+
+  function randomCircles(n) {
+    const a = new Float64Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      a[i * 3 + 0] = 40 + Math.random() * (W - 80); // cx
+      a[i * 3 + 1] = 40 + Math.random() * (H - 80); // cy
+      a[i * 3 + 2] = 22 + Math.random() * 34;        // r
+    }
+    return a;
+  }
+
+  function rebuild(n) {
+    sim = new FieldSim(randomCircles(n), W, H);
+  }
+
+  function frame() {
+    if (!sim) return;
+    sim.step();                       // one kernel physics timestep
+    const rgba = sim.frame();         // RGBA8 from the engine (sign→hue, mag→bright)
+    img.data.set(rgba);
+    ctx.putImageData(img, 0, 0);      // JS only BLITS
+    requestAnimationFrame(frame);
+  }
+
+  document.getElementById("reset").onclick = () => rebuild(+document.getElementById("n").value);
+  document.getElementById("n").oninput   = (e) => rebuild(+e.target.value);
+  document.getElementById("map").onclick = () => {
+    const docs = JSON.stringify([
+      { id: "w1", title: "Wave 6: wasm front",     tags: ["render", "wasm"],        path: "w6.md" },
+      { id: "w2", title: "Wave 7: spine→wasm",      tags: ["render", "knowledge"],   path: "w7.md" },
+      { id: "w3", title: "Self-mod effector",       tags: ["knowledge", "autonomy"], path: "sm.md" },
+      { id: "w4", title: "MESH-09 QUIC transport",   tags: ["mesh", "autonomy"],     path: "m9.md" },
+    ]);
+    document.getElementById("km").textContent = knowledge_map(docs);
+  };
+
+  await init();
+  rebuild(4);
+  requestAnimationFrame(frame);
+</script>
+</body>
+</html>
