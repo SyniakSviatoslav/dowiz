@@ -149,14 +149,25 @@ Phases 0 and 1 are mutually independent and start immediately (Wave 0). The rest
 | **6** | **Sea & Sheet Backbone + One-Field Event Stream** | (The `S(t)` forcing stream both viz and audio consume originates here — the J2 joint, §5) | **DZ-01** (Shell 3-act two-layer), **DZ-02** (token 3-tiers + `<Money>`, on the canonical `resolve()`), **DZ-03** (spectral edge + transitions), **DZ-04** (OrderStatus→Море), **DZ-05** (Green's feedback vocab), **DZ-06** (local-first event-log + `fold_transitions` replay) | 3, 4, 5 | (1) 3 acts = 3 URL states, working-back intact; Море under every screen; reduced-motion → static gradient, state legible. (2) Status advance → amplitude jump + terracotta→gold shift; illegal transition → red recoil (local `channel.js` validate, **no server call**). (3) Reload → `fold_transitions` replay reconstructs canonical state with no round-trip. |
 | **7** | **Sonification Phase-0 (R-SON)** | R-SON full Phase-0: Rust `audio` DSP crate → **THIRD wasm artifact** + **ONE `AudioWorklet`**, `postMessage` transport (**no COEP**); sonify the DZ-04 order lifecycle from the same `S(t)`; **delete legacy `use-sound.ts`** (4 canned MP3s); `PannerNode` follows CourierTrack FieldPos; money-never-sonified guard 🔴. Scheduled off the kernel-validated monotonic sequence (§5, J2). | Consumes **DZ-04/05/06**, **RW-05** (`on_event`), **FE-09**/`money_guard`; **requires the RW-09+RW-01 amendment (§3)** | 6 (+ §3 amendment) + 0 (`wasm-unsafe-eval` for the 3rd artifact) | (1) **0** pre-recorded audio files loaded (`use-sound.ts` deleted; grep no `.mp3`/`new Audio(`). (2) Render worklet output offline → **FFT asserts** `delivered` resolves to a consonant interval (3rd/5th) and `rejected` to a muted dissonant cadence (♭2/damped). (3) Courier note stereo pan **tracks marker FieldPos.x**. (4) Under injected **200 ms WS jitter**, events schedule in kernel-validated **causal order** (error never precedes its attempt). (5) `AudioContext` never resumed ⇒ **every state legible** via visual/text channel. |
 | **8** | **Living-Memory Viz Phase-0 — HUB tier (R-LM)** | R-LM full Phase-0: 3-tier data model in the *protocol* from day one (`tier`+`epoch`+`graph_id`), but **only the HUB builder ships**; current/local hub, read-only, **owner-scope fail-closed**; over the in-kernel **20-node/41-edge `retrieval/diffusion.rs` fixture**; server streams **`LayoutKeyframe`** (spectral positions via the Phase-5 helper + `graph_spectrum` + PPR) and **`ActivityDelta`** (pinned to epoch, dedup by `event_id`); client renders a 3-D SoA cluster, bloom, ONE signal type (`Recall` wave) + **one audio grain per activation** (via Phase-7's renderer). proto-cap access gate. | Consumes **FE-12** (positions), **RW-01** field-math (eigensolver), **RW-04**+`pos_z`, **RW-05**, **FE-08/14/16**, the Phase-3 bloom pass | 5, 7 | (1) Same graph ⇒ **byte-identical** positions. (2) Activity ⟺ kernel truth: the 4 unreachable nodes **`{5,6,12,16}` render DARK** (PPR score exactly 0, bound to `diffusion.rs` test). (3) Seeding a query lights the top-5 containing the relevant node (ties to `recall_at_k == 1.0`). (4) **grain count == lit-node count** (A/V sync). (5) No owner capability ⇒ **explicit stream reject (Err), not empty**. |
-| **9** | **Product-Surface Migration + Hybrid a11y + Multimodal** | (No new-design item originates here; this is where the existing per-role product surfaces ride everything built above) | **DZ-07/08/09** (CLIENT/COURIER/OWNER full checklists), **RW-11** (view→wgpu-field per-island), **FE-15/DZ-11** (hybrid DOM a11y + input overlay), **RW-06/07/08** (port geo/cart/messenger), **RW-02/03/12 + FE-17** (delete JS dups, kill money-tweens 🔴), **DZ-10** (multimodal input), **DZ-12** (cross-platform WebGL2/native/AR) | 6, 7, 8 | (1) Every migrated island: full master-checklist feature preserved (RED: enumerate missing); money `<Money>` snap; degrade path works; SSR menu stays DOM. (2) Screen-reader reads the semantic mirror (RED: canvas invisible to AT). (3) `grep` money-bound `AnimatedNumber` = 0. |
-| **10** | **Deferred Optimizations** | **COOP/COEP header migration** (Decision B, §2 — proxy/CORP-tag MapLibre + R2 first) → **`SharedArrayBuffer`** low-latency audio sync; **Tier-2 coherence `|ψ₁±ψ₂|²`** interference — visuals AND audio, gated on the SAME flag; **MESH + NODE viz tiers** (new server graph-builders, no wire-format change); **large-graph Lanczos** eigensolver (R-LM F-9); **RevocationSet** wiring (R-LM F-4 gap); **real-device CI** (R-DEV deferred: GPU-runner Playwright/xvfb, BrowserStack/LambdaTest) | (Extends FE-12 Lanczos path; adds MESH transport = SignedFrame; no FE/RW/DZ item is *first* built here) | 8, 9 (+ operator gate for COEP) | (1) `crossOriginIsolated === true` and MapLibre map + R2 photos still load (RED: COEP breaks cross-origin subresources). (2) SAB audio path: measured jitter < the `postMessage` baseline. (3) MESH tier renders N hubs; a **partition tints/splits** the cluster when streamed `fiedler λ₂(L)` crosses ~0 (no special partition protocol). (4) Revoked viz capability stops streaming within one session boundary. |
+| **9a** ⚠ | **Order-Critical Product Surface** (the G11 fast-path: a customer can place + complete a real order on the new interface) | (No new-design item originates here; the order-gating customer/courier surfaces ride the engine built above) | **DZ-07** (CLIENT menu/detail/checkout/track), **DZ-08** (COURIER shift/tasks/delivery/earnings), **RW-06/07/08** (port geo/cart/messenger — real checkout math), **RW-02/03/12 + FE-17** (delete JS dups, kill money-tweens 🔴 — the new UI is the ONLY UI, no legacy fallback confusion), **FE-15/DZ-11** (hybrid DOM a11y + input overlay — a11y is non-optional, kept here not deferred) | **6** (transitively 3,4,5) — ⚠ **NOT 7, NOT 8** (verified §8: no order-critical item depends on sonification or memory-viz) | The **reliability-gate order-lifecycle trace** (`/reliability-gate` — ONE order `/s/:slug` → L0–L11 → delivered+feedback) passes on the new interface: browse menu → add to cart → checkout (OTP + idempotency + **server-priced** total) → track to DELIVERED, every surface consistent, exactly-once. Plus: money `<Money>` snap (`grep` money-bound `AnimatedNumber` = 0); screen-reader reads the semantic mirror (RED: canvas invisible to AT); degrade path works; SSR menu stays DOM. **No Phase-7 audio or Phase-8 viz touched.** |
+| **9b** ⚠ | **Full Surface — Owner/Admin + Multimodal + Cross-Platform** | (No new-design item originates here; the remaining non-order-gating surfaces + the natural surfacing point for Phases 7/8 *where built*) | **DZ-09** (OWNER/ADMIN full checklist), **DZ-10** (multimodal input — voice = on-device STT, gesture), **DZ-12** (cross-platform WebGL2/native/AR panel), **RW-11** (view→wgpu-field per-island for whatever's left) | **9a** — ⚠ **7/8 are OPTIONAL integrations, NOT hard deps** (verified §8: DZ-10 voice is input-side STT ≠ R-SON output DSP; DZ-12 AR renders the field ≠ R-LM viz). *If* Phases 7/8 are built (growth-substrate track) they surface here (owner memory-viz panel + owner-dashboard sonification via the J2 adapter). | (1) Every migrated owner/admin island: full master-checklist feature preserved (RED: enumerate missing); money `<Money>` snap; WS dashboard merge; degrade path works. (2) Voice "add X" = same field response as tap (DZ-10, RED: divergent path). (3) WebGL2-only device renders; AR panel ray→FieldPos = same Intent as pointer (DZ-12). |
+| **10** | **Deferred Optimizations** | **COOP/COEP header migration** (Decision B, §2 — proxy/CORP-tag MapLibre + R2 first) → **`SharedArrayBuffer`** low-latency audio sync; **Tier-2 coherence `|ψ₁±ψ₂|²`** interference — visuals AND audio, gated on the SAME flag; **MESH + NODE viz tiers** (new server graph-builders, no wire-format change); **large-graph Lanczos** eigensolver (R-LM F-9); **RevocationSet** wiring (R-LM F-4 gap); **real-device CI** (R-DEV deferred: GPU-runner Playwright/xvfb, BrowserStack/LambdaTest) | (Extends FE-12 Lanczos path; adds MESH transport = SignedFrame; no FE/RW/DZ item is *first* built here) | 8, 9b (+ operator gate for COEP) | (1) `crossOriginIsolated === true` and MapLibre map + R2 photos still load (RED: COEP breaks cross-origin subresources). (2) SAB audio path: measured jitter < the `postMessage` baseline. (3) MESH tier renders N hubs; a **partition tints/splits** the cluster when streamed `fiedler λ₂(L)` crosses ~0 (no special partition protocol). (4) Revoked viz capability stops streaming within one session boundary. |
 
 **Coverage accounting (zero new-design item unslotted):**
 - **R-DEV:** Phase-0 recs 1–4 → Phase 0; deferred real-device automation → Phase 10. `wasm-unsafe-eval` → Phase 0; COOP/COEP → Phase 10 (Decision split, §2).
 - **R-VENDOR:** P0-1/P0-2 → Phase 1; P0-3/P0-5 → Phase 3; P0-4/P0-6 → Phase 4; the living-memory-viz **T3 (unbranded)** verdict → constrains Phase 8 (viz marks read only T2/T3; ambient Sea tint inherited from the owner Shell, no special rule). All 6 P0 items + the tier verdict covered.
 - **R-SON:** full Phase-0 → Phase 7; RW-09/RW-01 amendment → §3 (precondition of Phase 7); SAB/COEP + Tier-2 coherence audio + mesh/node audio tiers + FFT reverse mode → Phase 10.
 - **R-LM:** full Phase-0 HUB tier → Phase 8; the one net-new kernel primitive → Phase 5; MESH/NODE tiers + Tier-2 coherence visuals + Lanczos + RevocationSet → Phase 10.
+
+**Two critical paths (⚠ ADDED 2026-07-16 — operator ruling, §8; supersedes the single-chain reading):**
+- **Critical path to G11 (first real order on the new interface):** `0 → 1 → 2 → 3 → 4 → 5 → 6 → 9a`.
+  **Skips Phase 7 (sonification), Phase 8 (memory-viz), and Phase 10 entirely** — none is required for a
+  customer to browse, cart, checkout, and track an order. (Phase 5 stays on this path *only* because DZ-04/05
+  need FE-10 Green's-feedback; Phase 5's spectral-embedding primitive — the memory-viz kernel primitive — is
+  itself *off* the G11 path.)
+- **Critical path to full-arc completion:** `0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9b → 10` (with `9a`
+  branching off `6` in parallel and `9b` folding in `7`/`8` where built). G11 lands at **9a**, several phases
+  before the arc completes at **10**.
 
 ---
 
@@ -416,9 +427,12 @@ corrected in-place above with `⚠ CORRECTED 2026-07-16` markers.
   (`widget_store.rs:68`, `pos_x/pos_y`, no `pos_z`), and `money_guard.rs` (`Money(pub i64)` deliberately not
   `FieldValue`) **all verify exactly.** The blueprints' current-state evidence is accurate; nothing needed
   correcting *in* them.
-- **The 11-phase dependency graph is acyclic — traced.** Every phase's declared deps point to a strictly
-  lower phase number (8→{5,7}; 7→{6,0}; 6→{3,4,5}; 5→{2,4}; 4→3; 3→{1,2}; 2→0). It is a clean topological
-  order; no cycle, no back-edge. (The Phase 8→7 edge is *under-specified*, not circular — see Confirmed #1.)
+- **The 12-phase dependency graph is acyclic — traced** (⚠ **UPDATED 2026-07-16** for the Phase-9 split, §8).
+  Every phase's declared deps point to a strictly earlier phase (8→{5,7}; 7→{6,0}; 6→{3,4,5}; 5→{2,4}; 4→3;
+  3→{1,2}; 2→0; **9a→6; 9b→9a; 10→{8,9b}**). It is a clean topological order; no cycle, no back-edge. The
+  Phase-9 split *removed* the artificial `9→{7,8}` edges (there was never a real order-critical dependency on
+  audio/viz, §8): `9a` now depends on `6` alone, and `9b` on `9a`. (The Phase 8→7 edge is *under-specified*,
+  not circular — see Confirmed #1.)
 - **The COOP/COEP-vs-`wasm-unsafe-eval` split (§2) actually improves on its own research input.** R-DEV
   §6.4 bundled COOP+COEP+`wasm-unsafe-eval` as one Phase-0 header edit and claimed sonification "depends on"
   COOP/COEP; R-SON §5a explicitly designs around it (`postMessage`, no COEP). The synthesis **caught this
@@ -479,13 +493,108 @@ on-mission) — is an **operator-level decision this roadmap does not prejudge.*
 resolved. Nothing in the arc should be built past Phase 1 until that charter question is answered, because
 the answer changes the whole ordering.
 
+**⚠ RESOLVED 2026-07-16 (operator ruling — see new §8).** The operator answered the charter question:
+*"It DOES lead to a real order — once the interface is built, that resolves the question."* This selects the
+**commercial-delivery-first** framing: interface → G11 (first real order) is the priority, not open-ended
+growth-substrate work. The consequence for *this roadmap* is a sequencing correction — the order-critical
+customer UI must **not** wait on the audio/viz enhancements it never technically needed. §8 documents the
+verification (DZ-07/08 depend on Phase 6 only, never 7/8), the Phase-9 → 9a/9b split, and the recomputed
+critical path to G11 (`0→1→2→3→4→5→6→9a`, skipping 7/8/10). Q2's "which charter governs" is thereby answered;
+its "is the arc premature infrastructure" caution now applies to Phases 7/8/10 (deferred off the G11 path),
+not to 9a.
+
 ---
 
-*End roadmap. 11 phases (0–10), each with a name, covered new work, slotted existing FE/RW/DZ items,
-explicit dependencies, and a falsifiable done-test. Planning only — no product code, CI config, or canon
-edited. Supersedes nothing; extends FE-01..17 / RW-01..12 / DZ-01..12 / physics-ui-capture without
+## 8. Operator ruling: order-critical path prioritized (2026-07-16)
+
+§7's Q2 flagged a real tension: the arc's *visible* Phase-0 slice (§6) is Phase 7 (sonification, certified
+"never load-bearing") + Phase 8 (an owner-only memory-graph diagnostic, "zero customer touch"), while the
+genuinely order-gating customer UI sat behind them. This section records the operator's resolution of that
+tension and the surgical resequencing it requires — nothing in §§1–6 is re-litigated.
+
+### 8.1 The ruling (verbatim in spirit)
+> **"It DOES lead to a real order — once the interface is built, that resolves the question."**
+
+This selects the **commercial-delivery-first** charter: build the interface → land **G11 (the first real
+order)** is the priority. It is *not* an instruction to cancel the growth-substrate work (Phases 7/8 remain
+in the arc); it is a ruling that the **order-critical customer path must be the fast path**, never gated
+behind decorative enhancements. A roadmap that makes the checkout UI wait for audio + memory-viz would
+contradict this ruling, so the sequencing is corrected below.
+
+### 8.2 What was verified (dependency check — not assumed)
+The claim under test: *does the order-critical subset (browse menu → cart → checkout → track) have any real
+technical dependency on Phase 7 (sonification) or Phase 8 (living-memory viz)?* Verified against the actual
+blueprint dependency lines, not intuition:
+
+| Item (Phase-9 bundle) | Blueprint-declared deps | Depends on Phase 7/8? |
+|---|---|---|
+| **DZ-07** CLIENT (menu/detail/checkout/track) | `DZ-01..06` | **No** — Phase 6 only |
+| **DZ-08** COURIER (shift/tasks/delivery/earnings) | `DZ-01..06` | **No** — Phase 6 only |
+| **DZ-09** OWNER/ADMIN | `DZ-01..06` | **No** — Phase 6 only |
+| **DZ-10** multimodal (voice/gesture) | `FE-*` | **No** — `VoiceSource` = wake-word → **on-device STT** (Moonshine/Web-Speech/whisper) → command grammar → `Intent`. This is **input-side speech recognition**, structurally unrelated to R-SON's audio **output** synthesis DSP crate (Karplus-Strong/FM/biquad). The input/output asymmetry §3 already flagged (`InputSource` has no `OutputSink`) is exactly why these do not couple. |
+| **DZ-11** a11y hybrid | `FE-15` | **No** |
+| **DZ-12** cross-platform / AR | `FE-16` | **No** — AR = the Sea/Sheet **order field** → off-screen texture → curved XR panel (`FieldPos.w` = panel normal). It renders the product surface in AR; it does **not** embed R-LM's memory-graph viz. |
+| **RW-02/03** delete channel.js / money.ts | `—` (independent) | **No** |
+| **RW-06/07/08** geo / cart / messenger ports | `—` (PORT pure) | **No** — needed for real checkout math (geo ETA/zone, cart totals, messenger deep-links), all pre-Phase-6 |
+| **RW-11** view→wgpu-field per-island | `RW-04..10 + DZ-07..09` | **No** — earlier items only |
+| **RW-12 + FE-17** legacy dedup + kill money-tweens | `—` (FE-17) | **No** |
+
+**Finding: the Phase-9 dependency on Phase 7 and Phase 8 was ARTIFICIAL, not technical.** The synthesis
+agent bundled *everything that had not shipped yet* into one catch-all "Phase 9: Product-Surface Migration"
+and set its `Depends on` to `6, 7, 8` because those were the immediately-preceding built phases — not because
+any order-critical item reads audio or memory-viz. No genuine Phase-7/8 dependency exists anywhere in the
+bundle (the two candidates most likely to have one — DZ-10 voice and DZ-12 AR — were checked closely and
+are both independent, per the table).
+
+### 8.3 Resequencing applied — Phase 9 → 9a + 9b
+Because the dependency was artificial, Phase 9 is split so the order-critical surface stops waiting on
+audio/viz (numbering kept as `9a`/`9b` sub-labels; Phase 10 unchanged — least disruptive to cross-references):
+
+- **Phase 9a — Order-Critical Product Surface** (the G11 fast-path): **DZ-07** (CLIENT), **DZ-08** (COURIER),
+  **RW-06/07/08** (geo/cart/messenger — real checkout math), **RW-02/03/12 + FE-17** (delete JS dups, kill
+  money-tweens 🔴 — so the new UI is the *only* UI, no legacy fallback confusion), **FE-15/DZ-11** (hybrid
+  a11y — non-optional, kept here not deferred). **Depends on Phase 6 only** (transitively 3,4,5). Falsifiable
+  done-test = the **reliability-gate order-lifecycle trace** (`/reliability-gate` — ONE order `/s/:slug` →
+  L0–L11 → delivered+feedback, exactly-once, cross-surface-consistent) passing on the new interface.
+- **Phase 9b — Full Surface (Owner/Admin + Multimodal + Cross-Platform)**: **DZ-09** (OWNER/ADMIN), **DZ-10**
+  (multimodal), **DZ-12** (cross-platform/AR), **RW-11** (per-island wgpu migration for what remains).
+  **Depends on 9a.** Phases 7 and 8 are **optional integrations, not hard prerequisites** — if they are
+  built on the growth-substrate track, this is where they surface (owner memory-viz panel; owner-dashboard
+  sonification via the J2 signal→audio adapter that §5 J2 already assigns to Phase 8). No 9b item is *blocked*
+  by 7/8.
+
+The one dependency worth naming precisely (per the task's "preserve a real dependency if you find one"): the
+only real coupling to 7/8 that survives is the **J2 audio/viz adapter** (§5), which is already scoped as a
+**Phase-8 deliverable**, and the *product* surfacing of 7/8 inside the owner console — both live in 9b, both
+optional, neither on the G11 path.
+
+### 8.4 Recomputed critical path to G11
+- **Fast path to G11 (customer places + completes a real order):** `0 → 1 → 2 → 3 → 4 → 5 → 6 → 9a`.
+  **Phase 7 (sonification), Phase 8 (memory-viz) and Phase 10 are skipped entirely** — none is on the path.
+- **One honest caveat on Phase 5** (verified, not assumed): the working hypothesis was that G11 could also
+  skip Phase 5. It cannot *fully* — DZ-04/05 declare `dep FE-10` (Green's-function feedback), and FE-10 is
+  bundled in Phase 5, so Phase 5 stays on the G11 path via FE-10. But Phase 5's **spectral-embedding
+  primitive** (FE-12 + the net-new eigenvector→coords helper) is the "ONE net-new kernel primitive **R-LM**
+  needs" (§4, Phase 5 row) — it is **memory-viz-only and off the G11 path**. So within Phase 5, only the
+  FE-10 slice is G11-load-bearing; the spectral primitive could later be re-slotted toward Phase 8 to tighten
+  Phase 5's footprint, but that is an FE-item re-slot beyond this surgical resequencing.
+- **Full-arc completion** remains `0 → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9b → 10` (9a branches off 6 in
+  parallel; 9b folds in 7/8 where built). **G11 lands at 9a — several phases before the arc completes at 10.**
+
+**Net effect of the ruling:** the customer order path is now the shortest chain in the roadmap, exactly as
+the operator's commercial-delivery-first framing requires; the audio and memory-viz work is preserved but
+correctly sequenced *off* the G11 critical path rather than in front of it.
+
+---
+
+*End roadmap. 12 phases (0–8, 9a, 9b, 10), each with a name, covered new work, slotted existing FE/RW/DZ
+items, explicit dependencies, and a falsifiable done-test. Planning only — no product code, CI config, or
+canon edited. Supersedes nothing; extends FE-01..17 / RW-01..12 / DZ-01..12 / physics-ui-capture without
 re-litigating their decided content. The one required amendment to existing canon (RW-09/RW-01 third wasm
 artifact) is noted in §3 as a precondition of Phase 7, left for an implementation pass to apply. A
 self-critique pass (§7, 2026-07-16) re-verified the chain against live HEAD: all blueprint file:line
 citations hold and the phase graph is acyclic; two synthesis-level findings (J2 payload/impedance,
-J4 viz-brand convergence) were corrected in-place; the G11 priority tension is flagged for the operator.*
+J4 viz-brand convergence) were corrected in-place. The G11 priority tension (§7 Q2) was **resolved by the
+operator's 2026-07-16 ruling (§8)**: commercial-delivery-first; Phase 9 split into 9a (order-critical, on the
+G11 fast-path) and 9b (full surface); the customer order UI no longer waits behind the audio/viz phases it
+never technically needed.*
