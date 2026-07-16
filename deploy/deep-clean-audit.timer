@@ -1,0 +1,20 @@
+# deep-clean-audit.timer — weekly Sunday 04:37 trigger (BLUEPRINT-P12 §6).
+#
+# Mirrors the Hermes `deep-clean-weekly-audit` schedule (cron `37 4 * * 0` ==
+# Sundays). Persistent=true so a missed weekly audit fires at next boot.
+#
+# Enable (host action, run by the operator — NOT by the agent):
+#   systemctl enable --now deep-clean-audit.timer
+#   systemctl list-timers deep-clean-audit.timer
+
+[Unit]
+Description=Weekly disk-hygiene DRY-RUN audit timer
+Documentation=https://github.com/dowiz/dowiz/tools/deep-clean
+
+[Timer]
+OnCalendar=Sun *-*-* 04:37:00
+Persistent=true
+# Unit= defaults to the same-name .service (deep-clean-audit.service).
+
+[Install]
+WantedBy=timers.target
