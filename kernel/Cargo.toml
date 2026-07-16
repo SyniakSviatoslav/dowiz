@@ -13,17 +13,32 @@ crate-type = ["cdylib", "rlib"]
 # hot path is stack-only and falls back to compile-time target_feature / scalar.
 default = ["std"]
 std = []
+# `wasm` pulls the wasm-bindgen JS glue + the serde (de)serialization it needs.
+# OFF by default so a native rlib consumer (e.g. bebop-delivery-domain) links the
+# kernel WITHOUT wasm-bindgen / serde / serde_json / serde_yaml in its graph.
+# The kernel's decide/order_machine/domain/money core is pure-Rust and
+# feature-independent. `loops` + `living_knowledge` are serde-dependent, so they
+# ride behind this feature (the only one that enables serde) to keep the native
+# build serde-free; neither is part of the canonical order/money core.
+wasm = ["dep:wasm-bindgen", "dep:serde", "dep:serde_json", "dep:serde_yaml"]
 
 [dependencies]
-# WASM bindings (optional — kernel is pure Rust, usable headless + from wasm).
-wasm-bindgen = "0.2"
-# JSON (de)serialization for the wasm-bindgen JS glue. std-only, no native deps.
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-serde_yaml = "0.9"
+# WASM bindings — only compiled under the `wasm` feature (see
+# `#[cfg(feature = "wasm")] pub mod wasm;` in lib.rs). The kernel is pure Rust
+# and usable headless + as a native rlib without this.
+wasm-bindgen = { version = "0.2", optional = true }
+# JSON/YAML (de)serialization for the wasm-bindgen JS glue + the serde-dependent
+# modules (`loops`, `living_knowledge`). Feature-gated (see `wasm` feature) so a
+# native rlib build pulls NONE of them.
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+serde_yaml = { version = "0.9", optional = true }
 # Structured telemetry: spans/events over the hot paths (order fold, place_order).
 # Gated to non-wasm so the wasm cdylib stays lean; native/rlib tests get full traces.
 tracing = "0.1"
+# L0 exact-search verify step (trigram inverted-index narrows candidates,
+# regex verifies each — deterministic, 0 false positives). Blueprint M1/W1-3.
+regex = "1"
 # Pretty env-filter subscriber for `init_tracing()` (shipped; dev/CLI only, never called from wasm).
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
