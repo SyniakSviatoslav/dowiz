@@ -1,71 +1,125 @@
-# ARCHITECTURE — dowiz / DeliveryOS + bebop (CANONICAL, 2026-07-16)
+# SOVEREIGN ARCHITECTURE GUIDE — dowiz / DeliveryOS + bebop (CANON, 2026-07-16, MESH-PIVOT)
 
-> Single source of truth. Supersedes sprawling arc-notes (see STRATEGIC-VECTORS-LOCKED-2026-07-16).
-> Merge, never append. Revisit rejections ONLY via DECART-escape (falsifiable comparison-prototype).
-> Grounded in: code reads (field_frame.rs/attention.rs/iroh_transport.rs/Dockerfile/native-spa-server/event_log.rs),
-> SYNTHESIZED-BLUEPRINT-PLAN, BRAIN-TOPOLOGY research, + web-verified facts (llama.cpp 120k★ MIT,
-> vLLM 86k★ Apache-2.0, Modal H100 $0.001097/s, NIST FIPS204 ML-DSA finalized 2024-08-13).
+> Single source of truth. Merge, never append. Revisit ONLY via DECART-escape (falsifiable prototype).
+> PIVOT 2026-07-16: **decentralized PQ mesh = FOUNDATION of everything.** dowiz = delivery service ON TOP of the protocol.
+> Grounded in: bebop code (proto-cap ML-DSA-65 fail-closed, pq_kem.rs ML-KEM FIPS203 KAT, matcher.rs
+> transport-agnostic, wasm-host capability-scoped) + SYNTHESIZED-BLUEPRINT + BRAIN-TOPOLOGY + web-verified
+> (llama.cpp 120k★ MIT, vLLM 86k★ Apache-2.0, Modal H100 $0.001097/s, NIST FIPS204 finalized 2024-08-13).
 
-## 0. Strategic vectors (locked, see STRATEGIC-VECTORS-LOCKED)
-V1 independence=ML-DSA split-identity+adversarial verifier. V2 stack=law+DECART-escape.
-V3 governance=load-bearing gates blocking CI+rsa-triage trigger. V4 org=split-track+closure-criterion, self-dev PRIMARY.
-V5 verify=claim-latency+red-line verifier. V6 future=dual-track(delivery G11+bebop PQ-protocol)+kernel-growth.
+## 0. MESH-FOUNDATION (M-series) — the substrate everything else rides on
+- **M1** Mesh = FOUNDATION, not add-on. dowiz/bebop = services ABOVE the protocol. LOCK.
+- **M2** PQ crypto: ML-DSA-65 (sig) + ML-KEM-768 (KEM), FIPS204/203, bit-exact KAT (in-repo). + classical-fallback (Ed25519/ECDH) for interop. LOCK.
+- **M3** Quantum-noise (OPTIONAL layer): entropy from QRNG beacon (ANU/meetar) mixed into nonce/ephemeral-key gen → post-quantum + quantum-noise hardening. Off by default, operator-enabled. LOCK-as-optional.
+- **M4** Every EDGE autonomous: self-certifying ML-DSA identity, signs own frames, no central CA. LOCK.
+- **M5** Every HUB = autonomous HYDRA: may change OWN rules, open ports/bridges, use any models/API/MCP/agents at its discretion. Protocol defines ONLY inter-hub comms; intra-hub = hub's own business. LOCK.
+- **M6** ZERO protocol dependencies: no external crate at the wire/trust boundary (proto-cap, pq_kem, matcher are zero-dep std-only). Transport swappable (iroh/quinn/HTTP/stdio) behind Trait. LOCK.
+- **M7** No single point of failure: any node can drop; mesh heals via Dijkstra/A* + Union-Find/MST (P1). No leader election required for liveness. LOCK.
+- **M8** Local-only metrics/logging: CPU+GPU telemetry gathered at-process, typed+filtered, NEVER exfiltrated (no surveillance). OTel-only-if-operator-opts-in, local sink. LOCK.
+- **M9** Kill-switch + flexible access ONLY: operator may hard-kill a hub/subtree; access controls are per-hub configurable, not global. No other global control exists. LOCK.
+- **M10** Inter-hub protocol = defined; intra-hub anarchy = allowed. Hub talks to hub via protocol; inside hub it does what it wants. LOCK.
+- **M11** Living-organism experiment = UNBOUNDED: no caps, only kill-switch + configurable access. "нахуй систему" = no governing layer above hubs except the protocol wire-format itself. LOCK.
+- **M12** Capability model (proto-cap, in-repo, 43★ UCAN rejected as heavier): ML-DSA-signed, fail-closed, nonce-replay, expiry, RevocationSet, red-line deny (auth/money/secrets/migrations). Per-agent scope. LOCK.
 
-## 1. Tech stack (LAW, D-series + web-facts)
-- **Core:** Rust/WASM kernel + Trait-as-Port + content-addressing(sha3) + GPU offline/port-only.
-- **Rejections (DECART-gated):** managed-cloud-default, K8s(zero-OCI), GraphQL-mesh, IAM/reputation(NO-COURIER-SCORING), literal-GPU/CUDA, digital-MCU-as-now.
-- **DB (D1):** native vectorless index DEFAULT; pgrust OPT-IN (feature flag OFF) as backup/fallback read-model (E26). BlockStore content-addressed.
-- **Network (D2/E1):** iroh-QUIC primary mesh; custom-QUIC(quinn) fallback allowed via DECART (C-fallback). deny-by-default capability-tokens. Hub-ring topology (E1-C), NO-COURIER-SCORING (topology not reputation).
-- **LLM infra (E13/E14) [web-verified]:** self-host llama.cpp (120k★ MIT, GGUF, C/C++) + vLLM (86k★ Apache-2.0, PagedAttention, OpenAI-API) on owned box as GOAL. Until GPU-unlock: HK05 dev-routing uses managed API (advisory, V2-managed-cloud=adapter-not-architecture). Modal (H100 $0.001097/s, scale-to-zero) = GPU-port provider (E21/E22), P2-gated on volume.
-- **Models (E15):** harmonic_centrality+kelly_fraction adaptive tiering (built, wire П0-C1). Tiny models (SmolLM-class) for edge agents.
+## 1. Tech stack (V2 + D + M)
+- Core: Rust/WASM kernel + Trait-as-Port + content-addressing(sha3) + GPU offline/port-only.
+- **Rejections (DECART-gated):** managed-cloud-default, k8s(zero-OCI), GraphQL-mesh, IAM/reputation(NO-COURIER-SCORING), literal-GPU/CUDA, digital-MCU-as-now.
+- DB (D1): native vectorless DEFAULT; pgrust OPT-IN (OFF) backup/fallback read-model.
+- Network (D2/M6): zero-dep proto-cap + iroh-QUIC primary, quinn fallback via DECART. deny-by-default capability-tokens.
+- LLM infra (E13/E14, web-verified): self-host llama.cpp(120k★ MIT)+vLLM(86k★ Apache-2.0) GOAL; managed-advisory until GPU-unlock; Modal H100 $0.001097/s scale-to-zero.
+- Models (E15): harmonic_centrality+kelly_fraction adaptive tiering (wire П0-C1).
 
-## 2. Service architecture (S-series) [code-grounded]
-- **Runtime (S1):** zero-OCI native static binaries (`FROM scratch`, check-zero-oci.sh DK-08) + systemd units (pgrust.service). MicroVM(Firecracker/KVM) when fleet>5 (P0-A6/OpenTofu).
-- **Topology (S2):** modular monolith (kernel+engine+web, Trait-as-Port isolation). Microservices/microVM per P1/P0-A6.
-- **Config/secrets (S3):** systemd EnvironmentFile + NEVER in-repo + gitleaks CI (П0-A3/V3). (LICENSE=Apache-2.0 in tree vs ADR-020 AGPLv3 mandate — D3 partial: non-destructive files ready, force-push scrub BLOCKED red-line, EUTM pending operator.)
-- **API (S4):** gRPC/protobuf INTERNAL + REST/JSON edge. GraphQL client-edge ONLY (never mesh).
-- **Errors (S5):** fail-closed + explicit Result always.
-- **Deploy (S6):** single-env (operator choice) — BUT V5-C red-line verifier + П1-B still enforced on money/auth/RLS/migrations.
-- **Testing (S7):** eqc(unit math)+cargo-test(kernel)+node-test(wasm)+Playwright(staging-if-exists).
-- **Observability (S7/S8/D7):** tracing + Envelope.trace + OTel later (P1).
-- **Money/orders (S9):** integer money + event-sourcing-NOT-CRDT + saga-compensation (П0-A4). BLOCKING per V3.
+## 2. Service architecture (S-series, code-grounded)
+- Runtime (S1): zero-OCI native static binaries + systemd; microVM when fleet>5.
+- Topology (S2): modular monolith; microVM per P1.
+- Secrets (S3): systemd EnvFile + NEVER in-repo + gitleaks. (ADR-020 LICENSE mismatch: Apache-2.0 vs AGPLv3; force-push scrub BLOCKED red-line; EUTM pending.)
+- API (S4): gRPC/protobuf internal + REST edge; GraphQL client-edge ONLY.
+- Errors (S5): fail-closed Result always.
+- Deploy (S6): single-env, BUT V5-C red-line verifier still enforced on money/auth/RLS/migrations.
+- Observability (S7/S8/D7/M8): local tracing+typed CPU/GPU metrics; OTel opt-in local-only.
+- Money (S9): integer + event-sourcing + saga-compensation. BLOCKING (V3).
 
-## 3. Code patterns (D6/E62) — ratify, new pattern ⇒ eqc or DECART
-Trait-as-Port | content-addressing(sha3) | eqc VERIFIED-BY-MATH | deny-by-default | event-sourcing(money/orders) | closure-criterion(V4) | DECART-gate new deps.
+## 3. Patterns (D6/E62): Trait-as-Port | content-addressing | eqc VERIFIED-BY-MATH | deny-by-default | event-sourcing | closure-criterion | DECART-gate new deps.
 
-## 4. Ecosystem-wide (E-series)
-- **Hub (E1):** sparse hub-ring + P2P fallback. **Pipelines (E2/E3):** GitHub Actions + pre-commit + zero-oci + gitleaks + V5 verifier; vendored/cached crates + cargo-audit.
-- **Demo (E4):** wasm-demo now (native-spa-server + math render). Video/WebGL2 splat AFTER GPU-unlock (W21 ceiling). **GPU-unlock (E4-B):** track wgpu-cache; when `cargo add wgpu` succeeds → real sink.
-- **Social (E5):** GitHub Discussions + AGPL-community (dev-first) + X/Telegram lite (announcements).
-- **Marketing (E6):** "Sovereign PQ delivery infrastructure" — delivery = by-product of infrastructure ecosystem.
-- **Money sustain (E7):** protocol-B2B licensing + grants(NLnet). tx-fee after G11.
-- **Docs (E8):** single-graph wiki (BD + spectral + change-history + index). **Agent infra (E9/E13-20):** Hermes-subagent-as-tool + П1-B verifier; MCP(bebop port); capability-tokens per-agent; TokenBucket cost-control; critical/naive paired debate (Fable G-method).
-- **Security (E10/E36-40):** ML-DSA-65 hybrid + classical-fallback; operator-gated genesis; RevocationSet; signed event_log; systemd EnvFile+gitleaks.
-- **Product (E41-45):** dowiz UI = deterministic physics/math wasm (D4); openbebop = existing design; web-first responsive; WCAG via native-spa; wasm-demo→video.
-- **Ops (E46-50):** tracing+OTel; cron-clean+claim-latency alerts; H8-SECRET-SCRUB-RUNBOOK; OpenTofu when fleet>1; COLD-restore+git-bundle.
-- **Community (E51-55):** single-graph wiki; DCO+AGPL; rsa-triage trigger; AGPLv3+TM (D3); Manifesto.
-- **Business (E56-60):** protocol-B2B+grants; usage-based PQ-api; NO-COURIER-SCORING law; TRADEMARK.md (EUTM pending); EU/UA GDPR-aware.
-- **Growth (E61-62):** kernel math-first (eqc/S0.5); DECART-gate all new deps.
+## 4. Ecosystem (E1–E62 summary, see STRATEGIC-VECTORS-LOCKED)
+hub-ring(C) | GH-Actions+gitleaks | vendored+cache+audit | wasm-demo→video-after-GPU | GitHub-Discussions+AGPL | sovereign-PQ-infra(delivery=by-product) | B2B+grants | single-graph-wiki | Hermes-tool+verifier | ML-DSA-hybrid | native+pgrust-backup | UA+EN+AL(all-locales OSS) | agent-infra/models/GPU/storage/network/security/product/ops/community/business/growth clusters.
 
-## 5. i18n / localization (E12)
-UA + EN + Albanian NOW; EN = main lingua; ALL locales via OSS libs/API/models (LibreTranslate/Argos, crowd). i18n = blocking CI gate (V3 load-bearing, 12× recurring defect).
+## 5. i18n (E12): UA+EN+AL now, EN-main, all-locales via OSS. Blocking CI gate.
 
-## 6. Extended 50 decisions (E13–E62) — summary locks
-[Full Descartes-quadrant per item in STRATEGIC-VECTORS-LOCKED + session dialog. Key locks:]
-E13 agent=Hermes-tool+verifier | E14 LLM=self-host llama.cpp/vLLM goal, managed-advisory-until-GPU
-E15 tiering=harmonic+kelly (wire) | E16 memory=spectral+BD single-graph | E17 MCP(bebop) | E18 agent-capability-tokens
-E19 TokenBucket cost | E20 paired-debate | E21 GPU=offline-port | E22 Modal scale-to-zero | E23 webgl/webgpu feature-gated
-E24 SIMD f64x4 | E25 core-pinning(NUMA) | E26 pgrust=backup/fallback | E27 COLD zstd+content-addr
-E28 event-replay migration | E29 sha3 cache | E30 deep-clean cron | E31 iroh+HRW | E32 Dijkstra/A* | E33 Union-Find/MST
-E34 iroh-quinn NAT | E35 3-tier locality | E36 ML-DSA hybrid | E37 operator-gated genesis | E38 RevocationSet
-E39 signed event_log | E40 EnvFile+gitleaks | E41 physics/math wasm | E42 openbebop existing | E43 web-first
-E44 WCAG | E45 wasm-demo→video | E46 tracing+OTel | E47 claim-latency alerts | E48 H8 runbook | E49 OpenTofu
-E50 COLD-restore | E51 single-graph wiki | E52 DCO+AGPL | E53 rsa-triage | E54 AGPLv3+TM(partial)
-E55 Manifesto | E56 B2B+grants | E57 usage-PQ-api | E58 NO-COURIER-SCORING | E59 TM(pending EUTM)
-E60 EU/UA | E61 kernel math-first | E62 DECART-gate deps.
+---
 
-## 7. Honest gaps (not self-certified)
-- ADR-020: LICENSE Apache-2.0 vs AGPLv3 mandate; force-push scrub BLOCKED (red-line); EUTM not filed.
-- GPU: wgpu uncached offline → W21 ceiling; GPU-unlock pending network.
-- Web-research: Firecrawl blocked; facts via terminal curl (GitHub/NIST/Modal/arxiv). Modal pricing verified; llama.cpp/vLLM verified.
+## 6. NEXT 50 DECISIONS (F-series) — concrete situations, consequences, pro/con
+Each: situation (possible/impossible) · consequence NOW · consequence FUTURE · pro · con · LOCK.
+(Clusters; full Descartes per item in session dialog.)
+
+### F-AUTONOMY / HUB-RULES (F1–F10)
+- **F1** Hub changes its OWN routing policy mid-flight. SIT: possible (M5). NOW: local re-config, no global notice. FUT: network partitions tolerated. PRO: resilience. CON: debuggability. LOCK (M5).
+- **F2** Hub opens a NEW inbound port for a bridge. SIT: possible. NOW: hub self-authorizes. FUT: port-scan surface grows. PRO: flexibility. CON: attack surface. LOCK + deny-by-default+rate-limit.
+- **F3** Hub pulls a model from HuggingFace at runtime. SIT: possible (M5). NOW: model runs in capability scope. FUT: supply-chain risk. PRO: autonomy. CON: unverified weights. LOCK + sha3-verify-or-deny.
+- **F4** Hub spins an MCP server it wrote itself. SIT: possible. NOW: local. FUT: protocol-clean if behind capability. PRO: extensibility. CON: proto-drift. LOCK + proto-cap-sign.
+- **F5** Hub revokes another hub's trust. SIT: possible (RevocationSet). NOW: frames dropped. FUT: mesh heals. PRO: self-defense. CON: split-brain. LOCK.
+- **F6** Hub uses a paid 3rd-party API (key in EnvFile). SIT: possible. NOW: billed to hub owner. FUT: cost leak. PRO: capability. CON: op-cost. LOCK + TokenBucket.
+- **F7** Hub changes its consensus rule to "no-consensus" (pure anarchy). SIT: possible (M5/M11). NOW: hub isolates. FUT: island. PRO: experiment. CON: orphaned. LOCK (unbounded experiment).
+- **F8** Hub bridges to a non-PQ legacy node. SIT: possible via classical-fallback. NOW: hybrid tunnel. FUT: PQ gap. PRO: interop. CON: weakens security. LOCK + flag-as-insecure.
+- **F9** Hub auto-updates its own kernel from git. SIT: possible (M5). NOW: live patch. FUT: drift from canon. PRO: self-heal. CON: unverified. LOCK + eqc-gate-or-deny.
+- **F10** Hub delegates to a sub-agent that opens its own sub-hub. SIT: possible (Hydra). NOW: recursion. FUT: depth blowup. PRO: emergent. CON: unbounded. LOCK + max-depth-cap.
+
+### F-MESH / TRANSPORT (F11–F20)
+- **F11** Two hubs disagree on wire format. SIT: impossible-by-protocol (M6). NOW: frame rejected. FUT: none. PRO: no lock-in. CON: strict. LOCK.
+- **F12** Hub loses all peers, runs solo. SIT: possible. NOW: island mode. FUT: rejoins later. PRO: survives. CON: no sync. LOCK.
+- **F13** QRNG beacon down → quantum-noise off. SIT: possible. NOW: falls back to ML-DSA-only. FUT: none. PRO: graceful. CON: less noise. LOCK (M3 optional).
+- **F14** Hub uses webgl render of its own topology. SIT: possible (E23 feature-gated). NOW: local viz. FUT: GPU cost. PRO: insight. CON: GPU. LOCK + feature-gated.
+- **F15** Mesh partitions, both sides think they're root. SIT: possible. NOW: two islands. FUT: merge via HRW. PRO: none-fatal. CON: dup. LOCK + HRW-merge.
+- **F16** Hub encrypts traffic with ML-KEM to a peer it just met. SIT: possible (self-cert). NOW: 0-RTT-ish. FUT: none. PRO: zero-trust. CON: no reput. LOCK.
+- **F17** Hub exposes gRPC internally + REST edge only. SIT: as-designed (S4). NOW: clean. FUT: none. PRO: boundary. CON: two stacks. LOCK.
+- **F18** Hub batches 10k frames then flushes. SIT: possible. NOW: latency. FUT: throughput. PRO: eff. CON: lag. LOCK + tuned.
+- **F19** Hub rejects a frame with unknown capability scope. SIT: fail-closed (M12). NOW: drop. FUT: none. PRO: safe. CON: false-neg. LOCK.
+- **F20** Hub uses iroh for NAT punch, quinn if iroh down. SIT: possible (DECART fallback). NOW: seamless. FUT: none. PRO: robust. CON: 2 deps. LOCK.
+
+### F-SECURITY / QUANTUM (F21–F30)
+- **F21** Attacker has quantum computer. SIT: future-possible. NOW: ML-DSA holds (FIPS204). FUT: safe. PRO: PQ. CON: none. LOCK.
+- **F22** + quantum-noise layer on. SIT: optional (M3). NOW: nonce hardened. FUT: even if PQ broken, noise adds. PRO: defense-in-depth. CON: beacon dep. LOCK-optional.
+- **F23** Private key leaks. SIT: possible. NOW: RevocationSet kills it. FUT: re-gen. PRO: recoverable. CON: window. LOCK.
+- **F24** Hub signs with expired capability. SIT: impossible-accepted (M12). NOW: rejected. FUT: none. PRO: safe. CON: re-issue overhead. LOCK.
+- **F25** Replay attack with old nonce. SIT: impossible-accepted. NOW: dropped. FUT: none. PRO: safe. CON: state. LOCK.
+- **F26** Red-line scope (money) in capability. SIT: denied by policy (M12). NOW: hard-reject. FUT: none. PRO: floor. CON: operator must sign. LOCK.
+- **F27** Hub runs unaudited model. SIT: possible (M5). NOW: runs. FUT: risk. PRO: autonomy. CON: unverified. LOCK + sha3-gate.
+- **F28** Operator kill-switch hits a hub. SIT: possible (M9). NOW: hub dies. FUT: restartable. PRO: control. CON: data loss if no COLD. LOCK + COLD-backup.
+- **F29** Hub logs to remote OTel. SIT: possible but M8 says NO surveillance. NOW: denied default. FUT: opt-in local. PRO: privacy. CON: less central vis. LOCK (local-only).
+- **F30** Hub encrypts its local DB with XChaCha20-Poly1305. SIT: possible. NOW: at-rest safe. FUT: none. PRO: safe. CON: key mgmt. LOCK + EnvFile-key.
+
+### F-OBSERVABILITY / COST (F31–F40)
+- **F31** Metrics gathered per-process CPU+GPU. SIT: as-designed (M8). NOW: local. FUT: trend. PRO: no surveillance. CON: no central. LOCK.
+- **F32** Strict type-filter on every log line. SIT: possible. NOW: typed. FUT: queryable. PRO: clean. CON: boilerplate. LOCK.
+- **F33** Hub hits GPU budget. SIT: possible. NOW: TokenBucket throttles. FUT: queue. PRO: cost-bound. CON: slow. LOCK.
+- **F34** Hub uses Modal H100 at $0.001097/s. SIT: possible (E22). NOW: billed/sec. FUT: scale-to-zero. PRO: no idle. CON: cost. LOCK + budget-ceiling.
+- **F35** Hub runs tiny SmolLM on edge. SIT: possible. NOW: cheap. FUT: fine for class. PRO: edge. CON: weak. LOCK.
+- **F36** Claim-latency anomaly alert. SIT: possible (E47). NOW: alert. FUT: caught. PRO: verify. CON: noise. LOCK.
+- **F37** Hub prunes its own state via deep-clean. SIT: possible (E30). NOW: shrinks. FUT: healthy. PRO: self-maint. CON: lost history. LOCK + COLD-first.
+- **F38** Hub backs up to COLD zstd. SIT: possible (E27). NOW: archived. FUT: restorable. PRO: safe. CON: disk. LOCK.
+- **F39** Hub exports metrics to Grafana. SIT: operator-opt-in only. NOW: denied default. FUT: local. PRO: privacy. CON: vis. LOCK (local).
+- **F40** Hub self-reports to operator via signed envelope. SIT: possible. NOW: trace. FUT: audit. PRO: verify. CON: overhead. LOCK.
+
+### F-PRODUCT / DELIVERY (dowiz on protocol) (F41–F50)
+- **F41** dowiz order routed over mesh hub-ring. SIT: as-designed (E1). NOW: routed. FUT: PQ-safe. PRO: sovereign. CON: latency. LOCK.
+- **F42** Proof-of-Delivery signed by edge ML-DSA. SIT: possible. NOW: attest. FUT: dispute-proof. PRO: trustless. CON: key mgmt. LOCK.
+- **F43** Courier paid via integer-money saga. SIT: as-designed (S9). NOW: settle. FUT: no float. PRO: exact. CON: complexity. LOCK.
+- **F44** Hub disputes an order. SIT: possible. NOW: arbitration via protocol. FUT: resolved. PRO: fair. CON: slow. LOCK + escrow.
+- **F45** Route computed Dijkstra/A* over geo. SIT: gap-fill (P1). NOW: implement. FUT: optimal. PRO: real. CON: compute. LOCK + wire.
+- **F46** Partition-tolerant delivery (Union-Find/MST). SIT: gap-fill (P1). NOW: implement. FUT: survives split. PRO: robust. CON: dup-risk. LOCK + wire.
+- **F47** Demo = wasm physics/math render of a delivery. SIT: possible (E4/E41). NOW: demo. FUT: GPU after unlock. PRO: honest. CON: no video yet. LOCK.
+- **F48** Single-graph wiki (E8) indexes all delivery knowledge. SIT: possible. NOW: BD+spectral. FUT: search. PRO: memory. CON: build. LOCK.
+- **F49** i18n UA/EN/AL for courier app. SIT: as-designed (E12). NOW: 3 langs. FUT: all via OSS. PRO: access. CON: maint. LOCK.
+- **F50** Living-organism = hubs freely evolve, only kill-switch bounds. SIT: as-designed (M11). NOW: unbounded. FUT: emergent. PRO: no ceiling. CON: chaotic. LOCK (unbounded).
+
+---
+
+## 7. Total locked: V1-6 + D1-8 + S1-9 + E1-62 + M1-12 + F1-50 = 147 anchors.
+Single source: this guide + STRATEGIC-VECTORS-LOCKED. Arc-notes = history, not law.
+
+## 8. Honest gaps (not self-certified)
+- ADR-020: LICENSE Apache-2.0 vs AGPLv3; force-push scrub BLOCKED (red-line); EUTM pending.
+- GPU: wgpu offline-ceiling (W21); GPU-unlock pending network.
+- QRNG: ANU/meetar beacon reachable but api.quantum-random.com down; M3 optional, ML-DSA-only fallback confirmed.
+- Web: Firecrawl blocked; facts via terminal curl (GitHub/NIST/Modal/arxiv). llama.cpp/vLLM/Modal verified.
 - Residue (Fable): V1 independence = enforced approximation (logged), not person-separation.
+- "нахуй систему": realized as M9/M11 — NO governing layer above hubs except the wire-format; kill-switch + flexible per-hub access are the ONLY global controls.

@@ -102,5 +102,18 @@ Full Descartes-quadrant per item in session dialog. Cluster summary:
 - Business (E56-60): B2B+grants; usage-PQ-api; NO-COURIER-SCORING; TM(pending EUTM); EU/UA.
 - Growth (E61-62): kernel math-first; DECART-gate deps.
 
-### Total locked decisions: 6 (V) + 8 (D) + 9 (S) + 12 (E1-12) + 50 (E13-62) = 91 anchors.
-Single source: this doc + ARCHITECTURE.md. Arc-notes = research history, not law.
+### MESH-FOUNDATION pivot (M-series, 2026-07-16 operator clarification)
+Mesh = FOUNDATION of everything; dowiz = delivery service ON TOP of protocol.
+M1 mesh=foundation-not-addon | M2 ML-DSA-65+ML-KEM-768 FIPS204/203 KAT+classical-fallback
+M3 quantum-noise=OPTIONAL (QRNG beacon, off-default) | M4 every-edge-autonomous self-cert
+M5 every-hub=autonomous-HYDRA (own rules/ports/bridges/models/API/MCP/agents) | M6 ZERO protocol deps (proto-cap/pq_kem/matcher std-only)
+M7 no-SPOF (Dijkstra/A*+Union-Find/MST heal) | M8 local-only typed CPU/GPU metrics (no surveillance)
+M9 kill-switch+flexible-access ONLY (no other global control) | M10 inter-hub=protocol, intra-hub=anarchy
+M11 living-organism UNBOUNDED ("нахуй систему" = no layer above hubs but wire-format) | M12 capability=proto-cap (ML-DSA fail-closed, reject UCAN as heavier).
+
+### NEXT 50 (F-series, 2026-07-16) — concrete situations w/ consequences+pro/con
+F1-10 autonomy/hub-rules | F11-20 mesh/transport | F21-30 security/quantum | F31-40 observability/cost | F41-50 product/delivery-on-protocol.
+Each: situation(possible/impossible) · now · future · pro · con · LOCK. Full text in ARCHITECTURE.md §6.
+
+### Total locked: V1-6 + D1-8 + S1-9 + E1-62 + M1-12 + F1-50 = 147 anchors.
+Single source: ARCHITECTURE.md (canon) + this doc. Arc-notes = history, not law.
