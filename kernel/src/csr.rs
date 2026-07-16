@@ -264,6 +264,97 @@ impl Csr {
     }
 }
 
+// ── Spectral core: Laplacian SpMV (W2-2) ─────────────────────────────────
+// Unifies the FEM M∇²U diffusion field with the graph-energy approach: the
+// per-frame physics field is `y = L·x`. The orientation matches `spmv`'s
+// LEFT product; because every Laplacian variant here is built from the
+// symmetric adjacency A, and for a *symmetric* matrix A[i][j] = A[j][i], the
+// LEFT product `out_j = Σ_i x_i·A[i][j]` equals `(A x)_j`. We implement
+// `laplacian_spmv` directly (no intermediate CSR materialization) so the
+// per-edge hot loop is allocation-free; only a single O(n) degree scratch is
+// allocated per call (outside the edge loop).
+
+/// Which Laplacian to apply in [`Csr::laplacian_spmv`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LaplacianKind {
+    /// Standard graph Laplacian `L = D − A`. Rows sum to 0 ⇒ `L·1 = 0`
+    /// (mass/momentum conserved for ANY graph).
+    Unnormalized,
+    /// Symmetric normalized Laplacian `L = I − D^{−1/2} A D^{−1/2}`. PSD &
+    /// symmetric; null space contains `D^{1/2}·1`. Conserves mass on
+    /// *regular* graphs (where it reduces to `I − (1/d)·A`).
+    Normalized,
+    /// Random-walk normalized Laplacian `L = I − D^{−1} A`. Every row sums
+    /// to 0 ⇒ `L·1 = 0` ⇒ mass/momentum conserved for ANY graph (the
+    /// divergence-free diffusion operator).
+    RandomWalk,
+}
+
+impl Csr {
+    /// Laplacian matrix-vector product `y = L·x` via CSR SpMV.
+    ///
+    /// The Laplacian is built from the row out-weight `d_i = Σ_j A_ij`
+    /// (degree). For an undirected graph pass BOTH `(s,d,w)` and `(d,s,w)`
+    /// so `d_i` equals the true degree.
+    ///
+    /// * `Unnormalized`: `y_i = d_i·x_i − Σ_j A_ij·x_j`
+    /// * `Normalized`:   `y_i = x_i − Σ_j A_ij / √(d_i·d_j) · x_j`
+    /// * `RandomWalk`:   `y_i = x_i − Σ_j (A_ij / d_i)·x_j`
+    ///
+    /// `x` and `out` must have length `n`. `out` is overwritten. No heap is
+    /// touched in the per-edge accumulation loop (only an O(n) degree scratch
+    /// is allocated once, before the loop).
+    pub fn laplacian_spmv(&self, x: &[f64], out: &mut [f64], kind: LaplacianKind) {
+        let n = self.nrows();
+        debug_assert_eq!(x.len(), n, "csr::laplacian_spmv: x length must be n");
+        debug_assert_eq!(out.len(), n, "csr::laplacian_spmv: out length must be n");
+        // Degree (row out-weight) — O(n) scratch, computed BEFORE the hot loop.
+        let deg: Vec<f64> = (0..n)
+            .map(|i| self.val[self.row_ptr[i]..self.row_ptr[i + 1]].iter().sum())
+            .collect();
+        match kind {
+            LaplacianKind::Unnormalized => {
+                for i in 0..n {
+                    let mut acc = deg[i] * x[i];
+                    let (s, e) = (self.row_ptr[i], self.row_ptr[i + 1]);
+                    for k in s..e {
+                        acc -= self.val[k] * x[self.col_idx[k]];
+                    }
+                    out[i] = acc;
+                }
+            }
+            LaplacianKind::Normalized => {
+                for i in 0..n {
+                    let inv_i = if deg[i] > 0.0 { deg[i].sqrt().recip() } else { 0.0 };
+                    let mut acc = x[i];
+                    let (s, e) = (self.row_ptr[i], self.row_ptr[i + 1]);
+                    for k in s..e {
+                        let j = self.col_idx[k];
+                        let w = if deg[j] > 0.0 {
+                            self.val[k] * inv_i * deg[j].sqrt().recip()
+                        } else {
+                            0.0
+                        };
+                        acc -= w * x[j];
+                    }
+                    out[i] = acc;
+                }
+            }
+            LaplacianKind::RandomWalk => {
+                for i in 0..n {
+                    let inv_i = if deg[i] > 0.0 { deg[i].recip() } else { 0.0 };
+                    let mut acc = x[i];
+                    let (s, e) = (self.row_ptr[i], self.row_ptr[i + 1]);
+                    for k in s..e {
+                        acc -= self.val[k] * inv_i * x[self.col_idx[k]];
+                    }
+                    out[i] = acc;
+                }
+            }
+        }
+    }
+}
+
 // ── Recall / precision scorers (HippoRAG-style groundedness) ───────────────
 //
 // E0 fix (VERIFIABLE-COGNITION §2 bug #3): there was NO in-kernel `recall@k`
@@ -570,5 +661,126 @@ mod tests {
     fn csr_energy_empty_is_zero() {
         let g = Csr::from_edges(4, &[]);
         assert!(close(g.energy(), 0.0, 1e-9), "Csr::energy(empty)=0");
+    }
+
+    // ── W2-2 RED→GREEN: laplacian_spmv on a tiny triangle graph matches a
+    //    hand-computed reference AND conserves mass (Σ y == 0) on constant x
+    //    for the random-walk / unnormalized Laplacians.
+    //
+    //    Triangle K₃, undirected (both directions), unit weights:
+    //      adj A = [[0,1,1],[1,0,1],[1,1,0]], degree d = [2,2,2].
+    //    For x = [0.1, 0.4, 0.9]:
+    //      Unnormalized L·x:
+    //        y0 = 2*0.1 - (0.4+0.9)        = 0.2 - 1.3 = -1.1
+    //        y1 = 2*0.4 - (0.1+0.9)        = 0.8 - 1.0 = -0.2
+    //        y2 = 2*0.9 - (0.1+0.4)        = 1.8 - 0.5 =  1.3
+    //        Σ y = -1.1 - 0.2 + 1.3 = 0  ✓ (mass conserved, rows sum to 0)
+    //      RandomWalk (I − D⁻¹A)·x  = x − Σ_j A_ij/d_i · x_j
+    //        y0 = 0.1 - (0.4/2 + 0.9/2)   = 0.1 - 0.65 = -0.55
+    //        y1 = 0.4 - (0.1/2 + 0.9/2)   = 0.4 - 0.5  = -0.1
+    //        y2 = 0.9 - (0.1/2 + 0.4/2)   = 0.9 - 0.25 =  0.65
+    //        Σ y = -0.55 - 0.1 + 0.65 = 0  ✓
+    //      Normalized (symmetric, regular graph d=2 ⇒ reduces to I − (1/2)A):
+    //        y0 = 0.1 - (0.4+0.9)/2       = 0.1 - 0.65 = -0.55
+    //        (identical to RandomWalk here because the triangle is regular)
+    // ──────────────────────────────────────────────────────────────────────
+    #[test]
+    fn laplacian_spmv_triangle_matches_hand_and_conserves() {
+        let edges = [
+            (0usize, 1, 1.0), (1, 0, 1.0),
+            (1, 2, 1.0), (2, 1, 1.0),
+            (0, 2, 1.0), (2, 0, 1.0),
+        ];
+        let g = Csr::from_edges(3, &edges);
+        let x = [0.1, 0.4, 0.9];
+
+        // ── Unnormalized L = D − A ──
+        let mut y_un = [0.0; 3];
+        g.laplacian_spmv(&x, &mut y_un, LaplacianKind::Unnormalized);
+        assert!(close(y_un[0], -1.1, 1e-12), "unnormalized y0 = {}", y_un[0]);
+        assert!(close(y_un[1], -0.2, 1e-12), "unnormalized y1 = {}", y_un[1]);
+        assert!(close(y_un[2], 1.3, 1e-12), "unnormalized y2 = {}", y_un[2]);
+        // Mass/momentum conservation: Σ y == 0 (rows of L sum to 0).
+        let sum_un: f64 = y_un.iter().sum();
+        assert!(close(sum_un, 0.0, 1e-12), "unnormalized Σy = {sum_un} (must be 0)");
+
+        // ── Random-walk normalized L = I − D⁻¹A ──
+        let mut y_rw = [0.0; 3];
+        g.laplacian_spmv(&x, &mut y_rw, LaplacianKind::RandomWalk);
+        assert!(close(y_rw[0], -0.55, 1e-12), "randomwalk y0 = {}", y_rw[0]);
+        assert!(close(y_rw[1], -0.1, 1e-12), "randomwalk y1 = {}", y_rw[1]);
+        assert!(close(y_rw[2], 0.65, 1e-12), "randomwalk y2 = {}", y_rw[2]);
+        let sum_rw: f64 = y_rw.iter().sum();
+        assert!(close(sum_rw, 0.0, 1e-12), "randomwalk Σy = {sum_rw} (must be 0)");
+
+        // ── Symmetric normalized L = I − D⁻¹/² A D⁻¹/² (regular ⇒ == randomwalk) ──
+        let mut y_n = [0.0; 3];
+        g.laplacian_spmv(&x, &mut y_n, LaplacianKind::Normalized);
+        assert!(close(y_n[0], -0.55, 1e-12), "normalized y0 = {}", y_n[0]);
+        assert!(close(y_n[1], -0.1, 1e-12), "normalized y1 = {}", y_n[1]);
+        assert!(close(y_n[2], 0.65, 1e-12), "normalized y2 = {}", y_n[2]);
+        // On a regular graph the symmetric normalized Laplacian has rows summing
+        // to 0 too ⇒ conserved.
+        let sum_n: f64 = y_n.iter().sum();
+        assert!(close(sum_n, 0.0, 1e-12), "normalized Σy = {sum_n} (regular ⇒ 0)");
+    }
+
+    // ── W2-2 GREEN: constant field x = 1 ⇒ L·1 = 0 for ANY graph (strong
+    //    conservation invariant). Uses a NON-regular graph (path with degrees
+    //    1,2,1) to prove Unnormalized + RandomWalk conserve for arbitrary
+    //    topology; Normalized only conserves on regular graphs (triangle above).
+    #[test]
+    fn laplacian_spmv_constant_field_conserved_nonregular() {
+        // Path 0—1—2 with degrees 1,2,1 (non-regular).
+        let edges = [
+            (0usize, 1, 1.0), (1, 0, 1.0),
+            (1, 2, 1.0), (2, 1, 1.0),
+        ];
+        let g = Csr::from_edges(3, &edges);
+        let x = [1.0, 1.0, 1.0];
+
+        let mut y_un = [0.0; 3];
+        g.laplacian_spmv(&x, &mut y_un, LaplacianKind::Unnormalized);
+        let s_un: f64 = y_un.iter().sum();
+        assert!(close(s_un, 0.0, 1e-12), "path L·1 (unnormalized) = {s_un}, want 0");
+
+        let mut y_rw = [0.0; 3];
+        g.laplacian_spmv(&x, &mut y_rw, LaplacianKind::RandomWalk);
+        let s_rw: f64 = y_rw.iter().sum();
+        assert!(close(s_rw, 0.0, 1e-12), "path L·1 (randomwalk) = {s_rw}, want 0");
+    }
+
+    // ── W2-2 GREEN: equivalence against a hand-built dense Laplacian on the
+    //    triangle for Unnormalized L = D − A  (y = L x == (D − A) x, exact).
+    #[test]
+    fn laplacian_spmv_equals_dense_laplacian_matrix() {
+        let edges = [
+            (0usize, 1, 1.0), (1, 0, 1.0),
+            (1, 2, 1.0), (2, 1, 1.0),
+            (0, 2, 1.0), (2, 0, 1.0),
+        ];
+        let g = Csr::from_edges(3, &edges);
+        let x = [0.3, 0.7, 0.2];
+        // Dense L = D − A for the triangle (degrees 2):
+        //   L = [[2,-1,-1],[-1,2,-1],[-1,-1,2]]
+        let l = [
+            [2.0, -1.0, -1.0],
+            [-1.0, 2.0, -1.0],
+            [-1.0, -1.0, 2.0],
+        ];
+        let mut dense = [0.0; 3];
+        for i in 0..3 {
+            dense[i] = l[i][0] * x[0] + l[i][1] * x[1] + l[i][2] * x[2];
+        }
+        let mut y = [0.0; 3];
+        g.laplacian_spmv(&x, &mut y, LaplacianKind::Unnormalized);
+        for i in 0..3 {
+            assert!(
+                close(y[i], dense[i], 1e-12),
+                "node {i}: CSR laplacian_spmv {} != dense Lx {}",
+                y[i],
+                dense[i]
+            );
+        }
     }
 }

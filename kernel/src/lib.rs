@@ -39,9 +39,17 @@ pub mod harmonic;
 /// (pure-std firewall); this owns the Verified-by-Math transitions. Reused by
 /// every async subsystem (reporting, governance, mesh sync).
 pub mod spool;
+/// W2-7 — event-sourced, tamper-evident hash-chain knowledge spine
+/// (Memory/Identity/Intent). Append-only record log; `verify_chain()` re-walks
+/// the chain to detect any mutation. Pure-std (reuses `event_log::sha3_256`).
+pub mod spine;
 /// B4 — deterministic content-defined chunker (Buzhash) for the native Rust
 /// backup organ: content-addressed blocks that dedup across small edits.
 pub mod chunker;
+/// B4 — native content-addressed backup organ: chunk (via `chunker`) → store
+/// unique blocks by sha3_256 id → restore byte-identically from a manifest.
+/// Dedups across small edits; fail-closed restore. Pure-Rust, no new deps.
+pub mod backup;
 /// M1/M2 — trusted price catalog: the single kernel authority on line-item prices.
 /// `place_order` re-derives `unit_price` from this, ignoring client-supplied prices.
 pub mod catalog;
