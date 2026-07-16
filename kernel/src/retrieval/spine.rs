@@ -164,6 +164,163 @@ pub fn generate_map(entries: &[SpineEntry]) -> String {
     out
 }
 
+// ===== P2: tag-graph cross-linking =====
+
+/// Parse a raw `tags:` frontmatter value into a de-duplicated, lowercased,
+/// trimmed tag list. Splits on commas, semicolons, and any whitespace; empty
+/// fragments are dropped. Order follows first appearance (stable); callers sort
+/// buckets for byte-exact determinism.
+pub fn parse_tags(raw: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for frag in raw.split(|c: char| c == ',' || c == ';' || c.is_whitespace()) {
+        let t = frag.trim().to_lowercase();
+        if !t.is_empty() && !out.contains(&t) {
+            out.push(t);
+        }
+    }
+    out
+}
+
+/// P2 — Build a deterministic `tag → [doc-id]` index from frontmatter docs.
+/// Each bucket is sorted ascending (byte order) and de-duplicated, so the map
+/// is reproducible regardless of input ordering.
+pub fn tag_index(docs: &[(String, &Frontmatter)]) -> HashMap<String, Vec<String>> {
+    let mut idx: HashMap<String, Vec<String>> = HashMap::new();
+    for (id, fm) in docs {
+        if let Some(raw) = fm.get("tags") {
+            for tag in parse_tags(raw) {
+                idx.entry(tag).or_default().push(id.clone());
+            }
+        }
+    }
+    for bucket in idx.values_mut() {
+        bucket.sort();
+        bucket.dedup();
+    }
+    idx
+}
+
+/// P2 — Docs that share ≥1 tag with `id`, sorted ascending, excluding `id` itself.
+/// Cross-references are derived from the `tag_index` buckets that contain `id`.
+pub fn backlinks(id: &str, index: &HashMap<String, Vec<String>>) -> Vec<String> {
+    let mut related: Vec<String> = Vec::new();
+    for bucket in index.values() {
+        if bucket.iter().any(|d| d == id) {
+            for other in bucket {
+                if other != id && !related.contains(other) {
+                    related.push(other.clone());
+                }
+            }
+        }
+    }
+    related.sort();
+    related
+}
+
+// ===== P3: hierarchical multi-doc MAP aggregation =====
+
+/// P3 — Group docs by their FIRST tag into `## <tag>` sections, each doc listed
+/// as `- [title](path) · id`. Sections (by tag) and docs (by id) are sorted
+/// deterministically; docs with no tag fall under `## (untagged)`. A top
+/// `# Knowledge Map` header precedes the sections. Stable, no trailing-ws drift.
+pub fn build_map(docs: &[(String, String, Vec<String>, String)]) -> String {
+    // Bucket doc indices by first tag.
+    let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
+    for (i, (_, _, tags, _)) in docs.iter().enumerate() {
+        let tag = tags
+            .first()
+            .cloned()
+            .unwrap_or_else(|| "(untagged)".to_string());
+        match groups.iter_mut().find(|(t, _)| *t == tag) {
+            Some((_, ids)) => ids.push(i),
+            None => groups.push((tag, vec![i])),
+        }
+    }
+    groups.sort_by(|a, b| a.0.cmp(&b.0));
+    for (_, ids) in groups.iter_mut() {
+        ids.sort_by(|&a, &b| docs[a].0.cmp(&docs[b].0));
+    }
+
+    let mut out = String::from("# Knowledge Map\n\n");
+    for (tag, ids) in &groups {
+        out.push_str(&format!("## {}\n", tag));
+        for &i in ids {
+            let (id, title, _, path) = &docs[i];
+            out.push_str(&format!("- [{}]({}) · {}\n", title, path, id));
+        }
+        out.push('\n');
+    }
+    out
+}
+
+// ===== P4: query/lookup API over an in-memory index =====
+
+/// P4 — An in-memory knowledge-spine index built once from a corpus, supporting
+/// deterministic id / tag / related lookups. `tags` are a pre-split list; the
+/// index lowercases them for case-insensitive tag queries.
+pub struct SpineIndex {
+    docs: Vec<(String, String, Vec<String>, String)>,
+    tag_index: HashMap<String, Vec<String>>,
+}
+
+impl SpineIndex {
+    /// Build the index from `(id, title, tags, path)` records. Tag buckets are
+    /// sorted + de-duplicated up front for O(1) deterministic lookups.
+    pub fn build(docs: Vec<(String, String, Vec<String>, String)>) -> SpineIndex {
+        let mut tag_index: HashMap<String, Vec<String>> = HashMap::new();
+        for (id, _, tags, _) in &docs {
+            for tag in tags {
+                tag_index.entry(tag.to_lowercase()).or_default().push(id.clone());
+            }
+        }
+        for bucket in tag_index.values_mut() {
+            bucket.sort();
+            bucket.dedup();
+        }
+        SpineIndex { docs, tag_index }
+    }
+
+    /// P4 — Lookup by exact id. Ids are unique, so this returns a single-element
+    /// `Vec` when found, empty otherwise (uniform `Vec<String>` return shape).
+    pub fn lookup_by_id(&self, id: &str) -> Vec<String> {
+        if self.docs.iter().any(|(i, _, _, _)| i == id) {
+            vec![id.to_string()]
+        } else {
+            Vec::new()
+        }
+    }
+
+    /// P4 — Lookup by tag, case-insensitive against the index. Returns the sorted
+    /// bucket of doc ids sharing that tag.
+    pub fn lookup_by_tag(&self, tag: &str) -> Vec<String> {
+        self.tag_index
+            .get(&tag.to_lowercase())
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// P4 — `related(id)` == backlinks: every doc sharing ≥1 tag with `id`,
+    /// sorted, excluding `id`. Pure over the in-memory tag index.
+    pub fn related(&self, id: &str) -> Vec<String> {
+        let my_tags: Vec<String> = match self.docs.iter().find(|(i, _, _, _)| i == id) {
+            Some((_, _, tags, _)) => tags.iter().map(|t| t.to_lowercase()).collect(),
+            None => return Vec::new(),
+        };
+        let mut out: Vec<String> = Vec::new();
+        for tag in &my_tags {
+            if let Some(bucket) = self.tag_index.get(tag) {
+                for other in bucket {
+                    if other != id && !out.contains(other) {
+                        out.push(other.clone());
+                    }
+                }
+            }
+        }
+        out.sort();
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,5 +434,129 @@ mod tests {
         let (fm3, body3) = parse_frontmatter("");
         assert!(fm3.is_empty());
         assert_eq!(body3, "");
+    }
+
+    // ===== P2–P4 RED→GREEN tests =====
+
+    #[test]
+    fn spine_tag_index_deterministic() {
+        // Same input (different order) ⇒ identical sorted buckets.
+        let mut fm1 = Frontmatter::new();
+        fm1.insert("tags".into(), "B, A, c, A".into());
+        let mut fm2 = Frontmatter::new();
+        fm2.insert("tags".into(), "c;A B".into());
+        let mut fm3 = Frontmatter::new();
+        fm3.insert("tags".into(), "a, b, C".into());
+
+        let docs_a = vec![
+            ("x".to_string(), &fm1),
+            ("y".to_string(), &fm2),
+            ("z".to_string(), &fm3),
+        ];
+        let docs_b = vec![
+            ("z".to_string(), &fm1),
+            ("y".to_string(), &fm3),
+            ("x".to_string(), &fm2),
+        ];
+        let idx_a = tag_index(&docs_a);
+        let idx_b = tag_index(&docs_b);
+        assert_eq!(idx_a, idx_b, "buckets identical regardless of input order");
+        // Buckets sorted + deduped (lowercased).
+        assert_eq!(idx_a.get("a"), Some(&vec!["x".into(), "y".into(), "z".into()]));
+        assert_eq!(idx_a.get("b"), Some(&vec!["x".into(), "y".into(), "z".into()]));
+        assert_eq!(idx_a.get("c"), Some(&vec!["x".into(), "y".into(), "z".into()]));
+        assert_eq!(idx_a.get("A"), None, "tags are lowercased on insert");
+    }
+
+    #[test]
+    fn spine_backlinks_excludes_self_and_is_sorted() {
+        // Three docs: a↔b share `rust`; b↔c share `ml`. backlinks(b) = [a, c].
+        let mut fm_a = Frontmatter::new();
+        fm_a.insert("tags".into(), "rust".into());
+        let mut fm_b = Frontmatter::new();
+        fm_b.insert("tags".into(), "rust, ml".into());
+        let mut fm_c = Frontmatter::new();
+        fm_c.insert("tags".into(), "ml".into());
+
+        let docs = vec![
+            ("a".to_string(), &fm_a),
+            ("b".to_string(), &fm_b),
+            ("c".to_string(), &fm_c),
+        ];
+        let idx = tag_index(&docs);
+        let bl = backlinks("b", &idx);
+        assert_eq!(bl, vec!["a".to_string(), "c".to_string()], "sorted, excludes self");
+        assert!(!bl.contains(&"b".to_string()), "self never returned");
+        // A doc with no relations returns empty.
+        assert_eq!(backlinks("a", &HashMap::new()), Vec::<String>::new());
+    }
+
+    #[test]
+    fn spine_map_grouped_by_tag_and_sorted() {
+        // P3: sections + entries sorted, header present.
+        let docs = vec![
+            ("c".to_string(), "Gamma".into(), vec!["ml".into()], "docs/c.md".into()),
+            ("a".to_string(), "Alpha".into(), vec!["rust".into()], "docs/a.md".into()),
+            ("b".to_string(), "Beta".into(), vec!["rust".into()], "docs/b.md".into()),
+        ];
+        let map = build_map(&docs);
+        assert!(map.starts_with("# Knowledge Map\n\n"), "top header present");
+        // Section `## ml` comes before `## rust` (tags sorted ascending), and
+        // within rust, entries sorted by id (a before b).
+        let pos_rust = map.find("## rust").expect("rust section");
+        let pos_ml = map.find("## ml").expect("ml section");
+        assert!(pos_ml < pos_rust, "sections sorted by tag (ml before rust)");
+        let pos_a = map.find("- [Alpha](docs/a.md) · a").expect("row a");
+        let pos_b = map.find("- [Beta](docs/b.md) · b").expect("row b");
+        assert!(pos_a < pos_b, "entries within section sorted by id");
+        assert!(map.contains("- [Gamma](docs/c.md) · c"), "ml entry present");
+        // No trailing whitespace drift on entry lines.
+        assert!(!map.lines().any(|l| l.starts_with("- ") && l.ends_with(' ')));
+    }
+
+    #[test]
+    fn spine_lookup_by_tag_case_insensitive() {
+        // P4: tag lookups are case-insensitive.
+        let docs = vec![
+            ("a".to_string(), "Alpha".into(), vec!["Rust".into()], "docs/a.md".into()),
+            ("b".to_string(), "Beta".into(), vec!["RUST".into()], "docs/b.md".into()),
+            ("c".to_string(), "Gamma".into(), vec!["ml".into()], "docs/c.md".into()),
+        ];
+        let idx = SpineIndex::build(docs);
+        assert_eq!(
+            idx.lookup_by_tag("rust"),
+            vec!["a".to_string(), "b".to_string()],
+            "lowercase query matches mixed-case tags"
+        );
+        assert_eq!(
+            idx.lookup_by_tag("RUST"),
+            vec!["a".to_string(), "b".to_string()],
+            "uppercase query matches"
+        );
+        assert_eq!(idx.lookup_by_tag("none"), Vec::<String>::new(), "missing tag ⇒ empty");
+    }
+
+    #[test]
+    fn spine_related_returns_shared_tag_docs() {
+        // P4: related(id) returns docs sharing ≥1 tag (== backlinks).
+        let docs = vec![
+            ("a".to_string(), "Alpha".into(), vec!["rust".into()], "docs/a.md".into()),
+            ("b".to_string(), "Beta".into(), vec!["rust".into(), "ml".into()], "docs/b.md".into()),
+            ("c".to_string(), "Gamma".into(), vec!["ml".into()], "docs/c.md".into()),
+            ("d".to_string(), "Delta".into(), vec!["crypto".into()], "docs/d.md".into()),
+        ];
+        let idx = SpineIndex::build(docs);
+        assert_eq!(idx.lookup_by_id("b"), vec!["b".to_string()]);
+        assert_eq!(idx.lookup_by_id("zzz"), Vec::<String>::new());
+        assert_eq!(
+            idx.related("b"),
+            vec!["a".to_string(), "c".to_string()],
+            "shares rust(→a) and ml(→c), excludes self"
+        );
+        assert_eq!(
+            idx.related("d"),
+            Vec::<String>::new(),
+            "isolated doc has no related"
+        );
     }
 }
