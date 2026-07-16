@@ -1,1 +1,4 @@
 track_record.jsonl
+
+# rolling bench history (git-ignored, no repo churn)
+BENCH_HISTORY.md
