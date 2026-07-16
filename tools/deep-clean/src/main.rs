@@ -13,6 +13,14 @@
 //!                    a SQLite payload, re-hash the tree vs the manifest, log JSONL, delete scratch.
 //!                    Read-only against production; exits non-zero on any FAIL.
 //!
+//!   NOTE (operator, 2026-07-16): dowiz's own architecture is spectral/SQLLESS (content-addressed
+//!   `BlockStore` + JSONL `FileEventStore`), with **pgrust as the uniform backup/fallback target**,
+//!   never SQLite. `vacuum`/`prune`/the `PRAGMA integrity_check` branch above exist only because
+//!   Hermes — external host tooling this crate does not own or architect — happens to keep its own
+//!   state in `state.db`. Treat this as host-tooling compat, not a pattern to extend: any FUTURE
+//!   dowiz-owned data needing SQL-shaped restore-verify goes through the `--pgrust` leg
+//!   (BLUEPRINT-P12 §3/§5), not a new SQLite payload type.
+//!
 //! Design (per operator DEEP-CLEAN PROTOCOL + research 2026-07-16 + BLUEPRINT-P12 §3):
 //!   - Deny-list structurally excludes secrets (.env*, .harness-backups, .auth, *credential*, *secret*)
 //!     and KEEP-deliverables (docs/, design/, blueprint*, research/, synthesis/, wasm/demo/).

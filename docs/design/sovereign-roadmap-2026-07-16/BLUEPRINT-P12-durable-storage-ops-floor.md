@@ -111,6 +111,19 @@ write and `rename` leaves NO half-written block visible to `get` (the temp file 
 
 ## 3. COLD-archive `restore-verify` design (E27/F38 + pgrust drill E50/E11)
 
+> ⚠ CORRECTED (operator, 2026-07-16, mid hermetic-remediation implementation): **dowiz does not use
+> SQLite as an architectural choice.** The spectral/sqlless approach — content-addressed `BlockStore`
+> (§2), the JSONL `FileEventStore` (§4.2) — is the MAIN storage/retrieval path everywhere in dowiz's
+> own kernel/engine, with **pgrust as the uniform SQL-fallback/backup target**, not SQLite, anywhere
+> a SQL-shaped restore is needed. The `SQLite payload` case named below (step 3) exists ONLY because
+> the real `state-db-2026-07-16.tar.zst` COLD archive currently contains `~/.hermes/state.db` — the
+> **Hermes CLI's own external host-tooling state**, a system dowiz does not own or architect, not a
+> dowiz data store. `restore-verify`'s SQLite branch is therefore **host-tooling compat, not the
+> pattern to extend** — any future dowiz-owned data needing SQL-shaped backup/restore-verify goes
+> through the `--pgrust` leg below, never a new SQLite payload type. If Hermes's own state is ever
+> migrated off SQLite (out of scope here — that's Hermes's own architecture, not dowiz's), this
+> compat branch retires with it.
+
 **Where it lives.** Extend `tools/deep-clean` with two new subcommands (it already owns
 `/root/.backups/`, has the deny-list, and logs JSONL to `/root/.backups/clean-log/`) — or a sibling
 `tools/cold-archive` crate if the operator prefers separation of "delete" from "preserve". Prefer
