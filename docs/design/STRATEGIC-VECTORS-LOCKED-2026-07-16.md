@@ -70,3 +70,37 @@
 
 All six vectors point one direction. Revisit any via its named escape clause, with falsifiable
 evidence — never by overlay.
+
+---
+
+## EXTENDED ECOSYSTEM DECISIONS (E-series, operator dialog 2026-07-16)
+
+### Web-research evidence (terminal curl, Firecrawl blocked — no credits)
+- llama.cpp: 120,590★ MIT, "LLM inference in C/C++", GGUF self-host standard.
+- vLLM: 86,420★ Apache-2.0, PagedAttention, OpenAI-compatible serving.
+- Modal GPU: H100 $0.001097/s (~$3.95/hr), A100-80G $0.000694/s, L4 $0.000222/s, scale-to-zero, $30/mo free. Confirms P2-B1 (~$1.25-1.67/job).
+- NIST FIPS 204 (ML-DSA): finalized 2024-08-13. Confirms PQ-strategy.
+- arXiv: context-engineering / multi-agent / tool-learning agent-infra papers exist (E13/E20 direction).
+
+### E1–E12 (operator locked)
+E1 hub-ring+sparse-P2P(C) | E2 GH-Actions+gitleaks+V5(A) | E3 vendored+cache+audit(A)
+E4 demo=wasm now, video AFTER GPU-unlock(B) | E5 GitHub-Discussions+AGPL+X/Telegram-lite(A+B)
+E6 "sovereign PQ delivery infra"(A) delivery=by-product | E7 B2B+grants(A+C)
+E8 single-graph wiki BD+spectral+history(A) | E9 agent=Hermes-tool+verifier(A) | E10 ML-DSA hybrid(A)
+E11 native+pgrust-backup(A) | E12 UA+EN+AL, EN-main, all-locales OSS(A)
+
+### E13–E62 (agent-proposed locks, operator "lock all")
+Full Descartes-quadrant per item in session dialog. Cluster summary:
+- Agent infra/models (E13-20): self-host llama.cpp/vLLM GOAL; managed-advisory until GPU; harmonic+kelly tiering; spectral+BD memory; MCP; per-agent capability-tokens; TokenBucket; paired-debate.
+- Compute/GPU (E21-25): offline-port; Modal scale-to-zero; webgl/webgpu feature-gated; SIMD f64x4; NUMA core-pinning.
+- Storage (E26-30): pgrust=backup/fallback; COLD zstd; event-replay; sha3 cache; deep-clean cron.
+- Network/mesh (E31-35): iroh+HRW; Dijkstra/A*; Union-Find/MST; iroh-quinn NAT; 3-tier locality.
+- Security (E36-40): ML-DSA hybrid; operator-gated genesis; RevocationSet; signed event_log; EnvFile+gitleaks.
+- Product (E41-45): physics/math wasm; openbebop existing; web-first; WCAG; wasm-demo→video.
+- Ops (E46-50): tracing+OTel; claim-latency alerts; H8 runbook; OpenTofu; COLD-restore.
+- Community (E51-55): single-graph wiki; DCO+AGPL; rsa-triage; AGPLv3+TM(partial); Manifesto.
+- Business (E56-60): B2B+grants; usage-PQ-api; NO-COURIER-SCORING; TM(pending EUTM); EU/UA.
+- Growth (E61-62): kernel math-first; DECART-gate deps.
+
+### Total locked decisions: 6 (V) + 8 (D) + 9 (S) + 12 (E1-12) + 50 (E13-62) = 91 anchors.
+Single source: this doc + ARCHITECTURE.md. Arc-notes = research history, not law.
