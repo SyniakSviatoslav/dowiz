@@ -364,7 +364,9 @@ struct OrderTotalConfigIn {
 struct EstimateOut {
     fee_known: bool,
     delivery_fee: Option<i64>,
-    tax_total: i64,
+    /// `None` (serialized as JSON `null`) when tax couldn't be computed (overflow) —
+    /// the JS mirror degrades instead of showing a fabricated zero-tax total.
+    tax_total: Option<i64>,
     total: Option<i64>,
     min_not_met: bool,
 }
