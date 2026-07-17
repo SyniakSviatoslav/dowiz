@@ -181,6 +181,22 @@ fn reduce_hessenberg(a: &mut [f64], n: usize) {
     }
 }
 
+// ── eig2x2: closed-form eigenvalues of a 2×2 block [[a, b],[d, e]] ─────────
+// Pure motion of the duplicated inline root computation (T2/A4 dedup). The body
+// is a token-for-token copy of the expression DAG used at the deflation site and
+// the Wilkinson-shift site: same operands, same ops, same order, no reassociation
+// — so the compiler emits byte-identical float arithmetic and bit-exact output.
+// Call sites keep their own post-steps (realification / closer-to-corner select).
+fn eig2x2(a: Complex, b: Complex, d: Complex, e: Complex) -> (Complex, Complex) {
+    let tr = a.add(e);
+    let det = a.mul(e).sub(b.mul(d));
+    let disc = tr.mul(tr).sub(det.mul(Complex::new(4.0, 0.0)));
+    let sq = disc.sqrt();
+    let r1 = tr.add(sq).mul(Complex::new(0.5, 0.0));
+    let r2 = tr.sub(sq).mul(Complex::new(0.5, 0.0));
+    (r1, r2)
+}
+
 // ── Shifted QR on Hessenberg, complex arithmetic ─────────────────────────────
 // Reads Hessenberg H (n×n, stride n). Returns all eigenvalues (real + complex).
 fn eig_hessenberg(h: &[f64], n: usize) -> Vec<Complex> {
@@ -221,12 +237,7 @@ fn eig_hessenberg(h: &[f64], n: usize) -> Vec<Complex> {
             let b = c[m - 2][m - 1];
             let dd = c[m - 1][m - 2];
             let e = c[m - 1][m - 1];
-            let tr = a.add(e);
-            let det = a.mul(e).sub(b.mul(dd));
-            let disc = tr.mul(tr).sub(det.mul(Complex::new(4.0, 0.0)));
-            let sq = disc.sqrt();
-            let r1 = tr.add(sq).mul(Complex::new(0.5, 0.0));
-            let r2 = tr.sub(sq).mul(Complex::new(0.5, 0.0));
+            let (r1, r2) = eig2x2(a, b, dd, e);
             if r1.im.abs() < 1e-9 && r2.im.abs() < 1e-9 {
                 out.push(Complex::new(r1.re, 0.0));
                 out.push(Complex::new(r2.re, 0.0));
@@ -242,12 +253,7 @@ fn eig_hessenberg(h: &[f64], n: usize) -> Vec<Complex> {
         let b = c[m - 2][m - 1];
         let dd = c[m - 1][m - 2];
         let e = c[m - 1][m - 1];
-        let tr = a.add(e);
-        let det = a.mul(e).sub(b.mul(dd));
-        let disc = tr.mul(tr).sub(det.mul(Complex::new(4.0, 0.0)));
-        let sq = disc.sqrt();
-        let r1 = tr.add(sq).mul(Complex::new(0.5, 0.0));
-        let r2 = tr.sub(sq).mul(Complex::new(0.5, 0.0));
+        let (r1, r2) = eig2x2(a, b, dd, e);
         // Wilkinson shift: root CLOSER to the bottom corner e ⇒ fast convergence.
         let d1 = r1.sub(e).abs();
         let d2 = r2.sub(e).abs();
@@ -494,5 +500,68 @@ mod tests {
         let s = dot(&a, &b);
         let refr: f64 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
         assert!(close(s, refr, 1e-12));
+    }
+
+    #[test]
+    fn eig2x2_bit_capture_oracle() {
+        // BIT-CAPTURE ORACLE for T2/A4 (eig2x2 dedup). These bits were recorded
+        // from `eigenvalues_contig` on the CURRENT (pre-refactor) build and must
+        // remain EXACTLY unchanged after factoring the duplicated 2×2 root
+        // computation into `eig2x2`. Any drift in compiled floating-point
+        // arithmetic breaks this test (proves the helper is not a pure motion).
+        let p3 = vec![
+            vec![1.0, -1.0, 0.0],
+            vec![-1.0, 2.0, -1.0],
+            vec![0.0, -1.0, 1.0],
+        ];
+        let k3 = vec![
+            vec![0.0, 1.0, 1.0],
+            vec![1.0, 0.0, 1.0],
+            vec![1.0, 1.0, 0.0],
+        ];
+        let rot = vec![vec![0.0, -1.0], vec![1.0, 0.0]];
+        let jordan = vec![vec![1.0, 1.0], vec![0.0, 1.0]];
+
+        // (re.to_bits(), im.to_bits()) tuples, in sorted (re, im) order.
+        let expect_p3 = [
+            (4368949133479152128u64, 0u64),
+            (4607182418800017408u64, 0u64),
+            (4613937818241073152u64, 0u64),
+        ];
+        let expect_k3 = [
+            (13830554455654793216u64, 0u64),
+            (13830554455654793215u64, 0u64),
+            (4611686018427387902u64, 0u64),
+        ];
+        let expect_rot = [
+            (0u64, 13830554455654793216u64),
+            (0u64, 4607182418800017408u64),
+        ];
+        let expect_jordan = [
+            (4607182418800017408u64, 0u64),
+            (4607182418800017408u64, 0u64),
+        ];
+
+        fn cap(m: &[Vec<f64>]) -> Vec<(u64, u64)> {
+            let n = m.len();
+            let mut buf = vec![0.0f64; n * n];
+            for i in 0..n {
+                for j in 0..n {
+                    buf[i * n + j] = m[i][j];
+                }
+            }
+            let mut e = eigenvalues_contig(&mut buf, n);
+            e.sort_by(|x, y| {
+                x.re.partial_cmp(&y.re)
+                    .unwrap()
+                    .then(x.im.partial_cmp(&y.im).unwrap())
+            });
+            e.iter().map(|z| (z.re.to_bits(), z.im.to_bits())).collect()
+        }
+
+        assert_eq!(cap(&p3), expect_p3, "P3 oracle drift");
+        assert_eq!(cap(&k3), expect_k3, "K3 oracle drift");
+        assert_eq!(cap(&rot), expect_rot, "rotation oracle drift");
+        assert_eq!(cap(&jordan), expect_jordan, "repeated-root oracle drift");
     }
 }
