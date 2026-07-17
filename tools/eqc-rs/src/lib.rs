@@ -45,6 +45,10 @@
 use std::collections::HashMap;
 use std::fmt;
 
+// ── T8 / A6: integer-CORDIC fixed-point sin/cos primitive (digest-pinned) ────
+// Promoted from `reexam-builds/item4_cordic.rs`; see `cordic.rs` + `tests/cordic_digest.rs`.
+pub mod cordic;
+
 /// A math expression tree. Build with `Expr::sym`/`Expr::num` plus the
 /// `+`, `-`, `*`, unary `-`, `.pow(n)`, `.sqrt()`, `.sin()`, `.cos()`, `.exp()`
 /// operators — deliberately mirrors ordinary math notation.
