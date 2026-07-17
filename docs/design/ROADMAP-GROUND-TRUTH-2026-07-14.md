@@ -1,6 +1,8 @@
 # ROADMAP + GROUND TRUTH — dowiz & bebop (product) & dowiz-pq — 2026-07-14 UPDATE (rev 3)
 
-> **Supersedes** `ROADMAP-GROUND-TRUTH-2026-07-11.md`, rev-1, rev-2.
+> **⚠ SUPERSEDED as of 2026-07-17** by [`GROUND-TRUTH-2026-07-17.md`](GROUND-TRUTH-2026-07-17.md)
+> (live `git` snapshot: main=`d1a6ef89f`, 452 default + 107 pq-KAT tests green, 20 feat/* ON-MAIN
+> / 8 OFF-MAIN). This 07-14 doc is kept as historical audit trail only — do NOT re-derive state from it.
 > Re-verified against live disk on 2026-07-14 (autopilot session, operator full
 > autonomy + push-gate lifted). Memory-first + push-plans-first still apply.
 > Ground truth (grep/git/cargo) always outranks this plan.
