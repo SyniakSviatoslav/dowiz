@@ -439,4 +439,75 @@ mod tests {
         assert!(budget(0.99, 1e-3).is_finite());
         assert_eq!(budget(1.0, 1e-3), f64::INFINITY);
     }
+
+    // ── T3/A5 markov regression pin: |slem_new − slem_old| ≤ 1e-9 ────────────
+    /// Rebuild the exact row-normalised transition matrix Â that `analyze_detailed`
+    /// feeds to `spectral_cache::slem_cached`, from a state sequence, so we can
+    /// compare the cached SLEM against the raw `spectral::slem` baseline.
+    fn transition_matrix(states: &[&str]) -> Vec<Vec<f64>> {
+        let states: Vec<&str> = states.iter().copied().filter(|s| !s.is_empty()).collect();
+        let l = states.len();
+        let mut alpha: Vec<&str> = states.clone();
+        alpha.sort_unstable();
+        alpha.dedup();
+        let n = alpha.len();
+        let idx_of = |alpha: &[&str], s: &str| alpha.iter().position(|&x| x == s).unwrap();
+        let mut counts = vec![vec![0.0f64; n]; n];
+        for t in 0..l.saturating_sub(1) {
+            counts[idx_of(&alpha, states[t])][idx_of(&alpha, states[t + 1])] += 1.0;
+        }
+        let mut a = vec![vec![0.0f64; n]; n];
+        for i in 0..n {
+            let s: f64 = counts[i].iter().sum();
+            for j in 0..n {
+                a[i][j] = if s > 0.0 {
+                    counts[i][j] / s
+                } else {
+                    1.0 / n as f64
+                };
+            }
+        }
+        a
+    }
+
+    /// REGRESSION (T3/A5): the canonical-key change in `slem_cached` must NOT
+    /// move the markov SLEM by more than ULPs (division + remultiplication by the
+    /// pivot). Pin `|slem_new − slem_old| ≤ 1e-9` over the existing fixture corpus.
+    #[test]
+    fn a5_slem_cached_matches_raw_slem_within_1e9() {
+        // The parity corpus (each yields a distinct transition matrix Â).
+        let cases: Vec<Vec<&str>> = vec![
+            rep(&["edit", "run_ok"], 8),
+            rep(&["edit", "run_fail"], 8),
+            rep(&["edit", "run_fail", "edit_fail"], 5),
+            lcg_walk(&["edit", "edit_fail", "run_fail"], 40, 1),
+            lcg_walk(&["edit", "edit_fail", "run_fail", "probe"], 44, 7),
+            ["edit", "run_fail", "edit"].to_vec(),
+            rep(&["edit", "run_ok"], 3),
+        ];
+        for (k, c) in cases.iter().enumerate() {
+            let a = transition_matrix(c);
+            if a.len() < 2 {
+                continue; // too short to have a λ₂
+            }
+            let slem_old = crate::spectral::slem(&a);
+            let mut cache = crate::spectral_cache::DecompCache::new();
+            let slem_new = crate::spectral_cache::slem_cached(&mut cache, &a);
+            assert!(
+                (slem_new - slem_old).abs() <= 1e-9,
+                "case {k}: |slem_new({slem_new}) − slem_old({slem_old})| > 1e-9"
+            );
+            // And the cache must be honest: a repeat on the SAME matrix hits.
+            let slem_repeat = crate::spectral_cache::slem_cached(&mut cache, &a);
+            assert_eq!(
+                cache.recomputes(),
+                0,
+                "case {k}: same matrix ⇒ zero recomputes (cache honest)"
+            );
+            assert!(
+                (slem_repeat - slem_new).abs() < 1e-15,
+                "case {k}: repeat must be bit-identical to first solve"
+            );
+        }
+    }
 }
