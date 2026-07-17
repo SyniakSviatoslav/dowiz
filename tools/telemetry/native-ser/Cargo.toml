@@ -1,0 +1,20 @@
+[package]
+name = "native-ser"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Native (zero-dep, std-only) serialization with EDGE adapters — pure-Rust replacement for tools/telemetry/ser.py. Canonical form = raw little-endian f64 array (the kernel C-ABI field_metrics wire shape); JSON edge adapter only where text is required."
+
+# PURE-STD. No serde, no struct crate needed (we pack f64 by hand). The kernel
+# emits/consumes this exact wire shape; this binary reproduces ser.py's contract
+# (wire_f64/unwire_f64/native_of/obj_of/json_edge/from_json/default_edge) so any
+# consumer that shelled out to the Python keeps working unchanged.
+
+[dependencies]
+
+[[bin]]
+name = "native-ser"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3

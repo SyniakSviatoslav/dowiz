@@ -1,0 +1,21 @@
+[package]
+name = "hetzner-exporter"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Native (pure-std) host-resource exporter for Gatus — pure-Rust replacement for tools/telemetry/hetzner_exporter.py. Serves a tiny JSON snapshot of disk/load/mem gauges on 127.0.0.1:9091/health. Near-zero CPU: computes on request, no background loop."
+
+# PURE-STD. No framework, no external crates. The HTTP edge uses only
+# std::net::TcpListener (the Python used http.server). Gauges are computed as a
+# canonical f64 array (kernel C-ABI form) and served as JSON by default; the
+# native f64 wire form (opt-in via TELEMETRY_SER=native) reuses native-ser's
+# contract semantics.
+
+[dependencies]
+
+[[bin]]
+name = "hetzner-exporter"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3
