@@ -127,6 +127,13 @@ pub mod evals;
 pub mod living_knowledge;
 #[cfg(feature = "wasm")]
 pub mod loops;
+/// Deterministic, zero-dependency fault-injection harness (P-H W-H1). The whole
+/// module is `#[cfg(any(test, feature = "chaos"))]`; in a release build it
+/// compiles to `()`, so no chaos symbol reaches a production artifact. This
+/// `mod` line is the structural grep-guard (P24-grep-guard style): its presence
+/// asserts the harness is reachably compiled under `cargo test` / `--features chaos`.
+#[cfg(any(test, feature = "chaos"))]
+pub mod chaos;
 /// Reverse-engineering loop #R1 — Markov attractor detector (ASCENDed from markov_attractor.py);
 /// reuses `spectral` as its eigen-core, killing the dual-authority hazard.
 pub mod markov;

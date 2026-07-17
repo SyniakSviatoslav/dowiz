@@ -61,8 +61,28 @@ impl TokenBucket {
 
     /// Refill lazily, then grant iff `tokens >= n` (decrement on success).
     /// Returns `true` iff granted; `false` ⇒ caller must degrade-closed.
+    ///
+    /// A6 (P-H) — poison-cascade hardening: if a previous `try_acquire` panicked
+    /// while holding the lock (the bug class the chaos harness injects at
+    /// `ChaosSite::TokenBucketCritical`), `Mutex::lock` would otherwise return
+    /// `Err(PoisonError)` on EVERY subsequent call — a denial-of-service by
+    /// lock-poisoning. `Inner` is two POD fields (`f64`, `Instant`) with no
+    /// invariant spanning a panic point (no `Drop`, no cross-field coupling), so
+    /// `into_inner()` is sound: we recover the last-consistent state instead of
+    /// cascading the panic. A poisoned bucket degrades-closed (refuses) rather
+    /// than taking down the caller.
     pub fn try_acquire(&self, n: f64) -> bool {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        // P-H W-H4 F4 seam (seam B): a chaos plan armed at `TokenBucketCritical`
+        // panics here to reproduce the poison-cascade bug class; the
+        // `unwrap_or_else(into_inner)` recovery above is what lets the NEXT call
+        // degrade-closed instead of cascading. Compiles to `()` without the
+        // `chaos` feature / outside tests.
+        #[cfg(any(test, feature = "chaos"))]
+        crate::chaos::chaos_point!(crate::chaos::ChaosSite::TokenBucketCritical);
         self.refill_locked(&mut inner);
         if inner.tokens >= n {
             inner.tokens -= n;
@@ -73,8 +93,12 @@ impl TokenBucket {
     }
 
     /// Current available token count (refills lazily first). For telemetry/tests.
+    /// Same poison recovery as [`Self::try_acquire`] (A6).
     pub fn available(&self) -> f64 {
-        let mut inner = self.inner.lock().unwrap();
+        let mut inner = self
+            .inner
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         self.refill_locked(&mut inner);
         inner.tokens
     }
