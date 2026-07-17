@@ -127,7 +127,34 @@ jobs:
   # replicate-or-reject any artifact. **No gate in this blueprint may be read as a "global control."**
   # Where a job header says "blocks merge", it means *blocks merge into the canonical repo*, nothing more.
   # This banner is reproduced verbatim in the header of every workflow job this phase adds, so a future
-  # reader can never misread a red CI run as a limit on hub autonomy.
+  # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
+  # P-H W-H3 (BLUEPRINT-P-H-ops-telemetry §2.1): bench-regression gate. Runs the
+  # autotrack mechanism (benches/bench_track.py) on every push/PR so a silent
+  # hot-path degrade (or a benchmark added without a baseline entry) goes RED.
+  # Deterministic kernel benches only — see AGENTS.md ceiling note: harness/LLM
+  # benches stay probes (pass/fail), NOT baseline-gated (host/noisy variance).
+  bench-regression:
+    name: bench regression (kernel hot paths, baseline-gated)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Pre-fetch crates offline (no network in CI — see P01 §2.1)
+        run: cargo fetch --manifest-path kernel/Cargo.toml
+      - name: Run kernel criterion benches + compare against committed baseline
+        run: |
+          cd kernel
+          python3 benches/bench_track.py --threshold 10
+      - name: Upload bench history on regression (trend artifact, no commit-back loop)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-history
+          path: kernel/benches/BENCH_HISTORY.md
+          if-no-files-found: warn
+
+  # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
   # P01 §2.2 (BLUEPRINT-P01): recover the gitleaks gate dropped in f9ab28ff1. Points at the existing
   # .gitleaks.toml. --exit-code 1 makes a planted secret RED (acceptance §4.1).
   gitleaks:

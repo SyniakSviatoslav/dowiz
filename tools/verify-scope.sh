@@ -5,6 +5,11 @@
 # saving the commit-retry cycle. FAIL-CLOSED: every touched scope is still gated,
 # just the right gate instead of `pnpm -r build` for everything.
 #
+# NOTE (row 20 prune, 2026-07-17): the legacy JS/TS + web/Astro branches were
+# removed — the legacy thin-layer (row 21) was deleted 2026-07-13, so eslint and
+# `astro build` routing referenced deleted scopes. This guardrail now tracks only
+# the surviving Rust surface (kernel + engine), matching reality.
+#
 # Usage:
 #   bash tools/verify-scope.sh            # verifies staged (else unstaged) diff
 #   bash tools/verify-scope.sh path/a path/b   # verifies explicit paths
@@ -25,22 +30,14 @@ FILES=$(resolve_files "$@")
 touches() { echo "$FILES" | grep -qE "$1"; }
 
 echo "=== verify-scope: routing by touched scope (fail-closed) ==="
-[ -z "$FILES" ] && echo "  no changed files detected — nothing to verify."
+[ -z "$FILES" ] && { echo "  no changed files detected — nothing to verify."; exit 0; }
 
-echo "[1/3] Lint staged JS/TS..."
-JS=$(echo "$FILES" | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$')
-if [ -n "$JS" ]; then npx eslint $JS || exit 1; else echo "  skip (no JS/TS)"; fi
-
-echo "[2/3] kernel (Rust)..."
+echo "[1/2] kernel (Rust)..."
 if touches '^kernel/'; then (cd kernel && cargo test) || exit 1
 else echo "  skip (no kernel change)"; fi
 
-echo "[3/3] web (Astro island)..."
-if touches '^web/'; then
-  (cd web && npx astro build) || exit 1
-  if touches '^web/src/lib/kernel/'; then
-    (cd web/src/lib/kernel && node kernel.test.mjs) || exit 1
-  fi
-else echo "  skip (no web change)"; fi
+echo "[2/2] engine (Rust)..."
+if touches '^engine/'; then (cd engine && cargo test) || exit 1
+else echo "  skip (no engine change)"; fi
 
 echo "=== verify-scope: ALL GATES PASSED ==="
