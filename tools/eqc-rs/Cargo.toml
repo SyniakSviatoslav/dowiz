@@ -1,0 +1,15 @@
+[package]
+name = "eqc-rs"
+version = "0.1.0"
+edition = "2021"
+description = "eqc — the equation compiler. ONE source-of-truth math expression -> committed, hand-inspectable Rust. Pure-Rust rewrite (zero deps, no Python/SymPy) of the retired tools/eqc/eqc.py — see README.md."
+
+[lib]
+name = "eqc_rs"
+path = "src/lib.rs"
+
+[[bin]]
+name = "eqc-demo"
+path = "src/bin/demo.rs"
+
+[dependencies]
