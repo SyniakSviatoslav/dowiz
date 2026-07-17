@@ -196,8 +196,17 @@ pub fn analyze_detailed(states: &[&str]) -> DetailedReport {
         drift += pi[i] * step;
     }
 
-    // spectrum — the SHARED kernel eigensolver (no more Python duplicate)
-    let slem = spectral::slem(&a);
+    // spectrum — the SHARED kernel eigensolver (no more Python duplicate).
+    // Route `slem` through the content-addressed DecompCache so a re-analysis
+    // of an UNCHANGED transition matrix reuses the prior eigen-decomposition
+    // instead of re-running Faddeev-LeVerrier + Durand-Kerner. Keyed on a
+    // deterministic hash of the matrix contents (markov has no store handle;
+    // the cache is honest & content-addressed without one).
+    // TODO(operator): lift the cache to a longer-lived `&mut` (caller-owned) so
+    // it survives across `analyze_detailed` calls; here it warms/reuses within
+    // a single call and exercises the primitive end-to-end.
+    let mut decomp_cache = crate::spectral_cache::DecompCache::new();
+    let slem = crate::spectral_cache::slem_cached(&mut decomp_cache, &a);
     let period = spectral::dominant_period(&a).is_some();
     let gap = 1.0 - slem;
     let mixing_time = if gap > 1e-12 {
