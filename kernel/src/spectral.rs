@@ -339,12 +339,15 @@ impl DriftClass {
     }
 }
 
+/// Tolerance band around ρ=1 for drift classification AND the integrity
+/// hysteresis derivation. Was function-local `BAND` in `classify_drift`.
+pub const DRIFT_BAND: f64 = 1e-6;
+
 pub fn classify_drift(a: &[Vec<f64>]) -> DriftClass {
     let rho = spectral_radius(a);
-    const BAND: f64 = 1e-6;
-    if rho < 1.0 - BAND {
+    if rho < 1.0 - DRIFT_BAND {
         DriftClass::Damped
-    } else if rho > 1.0 + BAND {
+    } else if rho > 1.0 + DRIFT_BAND {
         DriftClass::Unstable
     } else {
         DriftClass::Resonant
