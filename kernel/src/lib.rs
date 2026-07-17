@@ -2,6 +2,12 @@
 //! Canonical kernel. The TS app (`/root/dowiz` apps/*) is the legacy oracle; this replaces it.
 //! No float on money, no I/O. Verified-by-Math: RED+GREEN tests per module.
 
+/// OPT-IN post-quantum crypto core (ML-DSA-65 / ML-KEM-768 / X25519 / AES-GCM).
+/// KAT-gated byte-exact vs NIST ACVP vectors. Behind `pq` feature so the
+/// canonical order/money core stays serde-free. Mesh/transport identity seam.
+#[cfg(feature = "pq")]
+pub mod pq;
+
 /// Reverse-engineering loop #R3 — absorbing Markov chain closed forms: fundamental matrix
 /// N=(I−Q)⁻¹ (exact finite sum for the DAG lifecycle), expected steps-to-terminal, absorption probs.
 pub mod absorbing;
