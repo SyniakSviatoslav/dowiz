@@ -121,7 +121,60 @@
   skipped cleanly. No guardrail was weakened — the deleted branches referenced scopes that no longer
   exist at HEAD.
 
+## Ledger — NEW rows (CORE-ROADMAP A–B–C–D, 2026-07-17)
+
+> T9 close-out: one consolidated commit per layer's regression-ratchet rows. Each
+> row names a deterministic guardrail (red→green proven) that makes the bug
+> physically hard to reintroduce. Cites live commits + real test functions.
+
+| # | Symptom | Root cause | Guardrail type | Where (file / test / rule) | Date / commit |
+|---|---------|-----------|----------------|----------------------------|---------------|
+| 25 | Kernel-scale sin/cos drift in `empirical_identify`/`empirical_identify_end_to_end` (I2 math risk): float `sin/cos` has platform-dependent ULP error, so a digest pinned to the float result would NOT be reproducible across machines/builds | `empirical_identify` used `f64` `sin`/`cos`; no integer-deterministic trig primitive existed; digest reproducibility requires bit-identical trig | `cargo-test` + `bench-gate` | `tools/eqc-rs/src/cordic.rs::cordic_sincos` (digest-pinned integer CORDIC, fixed 32-bit I/F scale, u32::from_le_bytes folded into the digest) + `kernel` callers route through it; `pin-and-verify.rs` program pins the digest. RED→GREEN: cross-platform float `sin`/`cos` differ in the last ULP (non-reproducible); CORDIC gives bit-identical output deterministically. | 2026-07-17 · `d692c59fc` (`feat(eqc-rs,P-A)`), consumed in `a0a375ad8`/`9eacf59ba` |
+| 26 | `spectral_cache::slem_cached` hashed the RAW stochastic matrix — so two matrices that normalize to the SAME row-stochastic form got DIFFERENT content-addresses, defeating the cache and making the spectrum non-reproducible across equivalent inputs | the hash key was computed over the un-normalized `Csr` (rows not yet divided by out-weight); `matrix_content_address` had no normalization contract | `cargo-test` + `grep-CI-gate` (type-system invariant) | `kernel/src/csr.rs` `NormalizedTile`/`TileAddress` (private fields; sole constructors run `row_normalize`) + `kernel/src/spectral_cache.rs::slem_cached(tile: &NormalizedTile)` (key via `content_address()`, eigensolve via `to_dense()`). `matrix_content_address` demoted to `private`. Tests: `spectral_cache.rs::adversarial_two_node_hash_divergence_without_normalization` (raw hash diverges; normalized identical), `canonical_address_and_spectrum_derive_from_same_object`, `canonicalize_drops_explicit_zeros_and_sorts_columns`, `slem_cached_scale_invariant_key_and_payload`. Structural guard: grep `pub fn matrix_content_address` is empty; all `slem_cached` callers pass `&NormalizedTile`. | 2026-07-17 · `7f2fc6880` (`merge(kernel,P-B)`) |
+| 27 | Anti-vacuity breach in the drift-gate: a tile could be classified `Resonant` (stable) on its normalized form while its RAW operator dynamics were `Unstable`, letting an unstable base slip through retention | `classify_drift` ran AFTER normalization, so the gate measured the canonical form, not the live raw dynamics | `cargo-test` + `unit` | `kernel/src/spectral_cache.rs::RetainedBase` (admits ONLY after `classify_drift` on the RAW operator). Tests: `unstable_raw_rebuild_is_refused_retention` (raw-unstable + normalized-resonant → `SnapshotRejected`), `drift_gate_measures_raw_dynamics_not_normalized_form`. | 2026-07-17 · `7f2fc6880` (`merge(kernel,P-B)`) |
+| 28 | `integrity_check` flap-without-hysteresis false-tripped self-heal (churned the durable loop / wasted restarts on a transient 1-tick deviation) | `integrity_check` had no release hysteresis band, so any single-sample deviation fired the heal predicate | `cargo-test` + `unit` | `kernel/src/hydra.rs::INTEGRITY_BAND` (hysteresis release band) + `kernel/src/bounded_drainer.rs::launch_permitted` (restart-intensity predicate). Tests: `hydra::hydra_integrity_flap_without_hysteresis_regression`, `hydra::hydra_durable_closed_loop_across_restart`, `bounded_drainer::restart_gate_refuses_sixth_launch_in_window`, `restart_gate_clock_rewind_fails_closed`, `restart_gate_slow_periodic_crash_is_legitimate`, `restart_gate_first_launch_always_permitted`. | 2026-07-17 · `ffe508458` (`merge(kernel,P-C)`) |
+| 29 | Unbounded per-epoch capability mint (P-D red-line-adjacent): a root delegation could mint delegations without a per-epoch cap, so a compromised/insider anchor could flood the mesh with credentials in one epoch | `sign_delegation` had NO issuance budget seam; `Delegation::sign` was callable from anywhere | `cargo-test` + `grep-CI-gate` (bulkhead) | `bebop2/proto-cap/src/node_id.rs` `IssuanceBudget` + `issuance_epoch`/`can_issue`/`charge_issuance`/`sign_delegation_budgeted` (all signing routed ONLY through `Delegation::sign` inside the seam). 10 TDD RED→GREEN tests: `red_attacker_10_mints_against_cap_3_refused_from_4th`, `red_unspecified_policy_mints_nothing`, `red_web_of_trust_has_no_budget_rule_yet`, `red_unenrolled_anchor_cannot_mint`, `red_revoked_anchor_mints_nothing`, `red_budget_not_transferable_between_anchors`, `red_clock_rollback_refuses`, `red_epoch_rollover_rearms_exactly_max`, `red_epoch_len_zero_is_eternal_epoch`, `red_stale_budget_replay_cannot_rearm`. CI grep gate `scripts/ci-budgeted-issuance.sh`. **Bulkhead proof:** `roster.rs` diff EMPTY (verify_chain/wire untouched). **P06-independence:** `cargo tree` shows NO `key_V`/`dowiz-kernel` edge — the budget seam touches no PQ mint path. | 2026-07-17 · `e08eb07` (`merge(proto-cap,P-D)`) |
+
+---
+
+## Guardrails added by this change (red→green proof)
+
+### Layer A — integer-CORDIC sin/cos (row 25)
+- **RED** — `f64::sin`/`f64::cos` evaluated on two platforms (or under `-ffast-math` /
+  different libm) produce differing ULP; a digest pinned to that float result is
+  NOT reproducible → the hash-chain / empirical_identify digest would diverge.
+- **GREEN** — `cordic_sincos` is pure integer fixed-point (CORDIC rotation, 32-bit
+  I/F scale); output is bit-identical on every target. `pin-and-verify.rs` pins the
+  digest; the kernel `empirical_identify*` paths route through it. `cargo test -p
+  eqc-rs` green.
+
+### Layer B — normalize-before-hash (rows 26, 27)
+- **RED** — hash the raw `Csr` (un-normalized rows) → two matrices that normalize
+  identically (e.g. `W` and `2·W`) get DIFFERENT content-addresses; the cache
+  recomputes and the spectrum is input-representation-dependent. `classify_drift`
+  on normalized form → a raw-unstable/resonant-normalized tile is admitted.
+- **GREEN** — `slem_cached` takes `&NormalizedTile` (constructor runs `row_normalize`);
+  `W`, `2W`, `3W` share one canonical key ⇒ identical slem + zero recomputes
+  (`slem_cached_scale_invariant_key_and_payload`). Raw-unstable → `SnapshotRejected`
+  (`unstable_raw_rebuild_is_refused_retention`, `drift_gate_measures_raw_dynamics_not_normalized_form`).
+  Grep guard: `pub fn matrix_content_address` is empty (not exported).
+
+### Layer C — integrity hysteresis + restart predicate (row 28)
+- **RED** — a 1-tick `integrity_check` deviation fires the heal predicate (churn);
+  a 6th launch in the window is permitted (restart storm); a clock rewind is treated
+  as progress.
+- **GREEN** — `INTEGRITY_BAND` release hysteresis; `launch_permitted` refuses the
+  6th launch in-window, fails-closed on clock rewind, permits slow legitimate
+  periodic crashes. 6 tests green (`hydra::*` + `bounded_drainer::restart_gate_*`).
+
+### Layer D — budgeted issuance bulkhead (row 29)
+- **RED** — 10 mints against cap-3 all succeed (no `BudgetExhausted`); `Unspecified`
+  / `WebOfTrust` policies mint; unenrolled/revoked/mismatched anchors mint; clock
+  rollback is accepted; epoch rollover grants >max; a stale replayed budget re-arms.
+- **GREEN** — all 10 RED scenarios return their specific `IssuanceError`; signing is
+  reachable ONLY through the budgeted seam. `roster.rs` is byte-identical (bulkhead);
+  `cargo tree -p bebop-proto-cap` has no `key_V`/`dowiz-kernel` edge (P06-independent).
+
 ## Reversal log
 
-_(none — all guardrails active. To remove a guardrail, delete its rule + fixtures and append a
-justification row here.)_
+_(none — all guardrails active.)_
