@@ -14,11 +14,21 @@
 //!
 //! No new deps: reuses `crate::chunker::Chunker` for CDC and the kernel's
 //! existing `crate::event_log::sha3_256` (via the chunker's `Block.id`). The
-//! store is an in-memory `HashMap<Hash, Vec<u8>>` behind a `BlockStore` trait so
-//! a real append-log / R2 backend can drop in later (product/infra scope).
+//! store is behind a `BlockStore` trait so a real append-log / R2 backend can
+//! drop in later (product/infra scope). Two implementations ship today:
+//!   - `MemStore`            — in-memory `HashMap` (tests / single-node local).
+//!   - `FileBlockStore`      — disk-backed, content-addressed (P12 §2): one file
+//!     per unique block under `<root>/blocks/<xx>/<yy>/<hex>`, crash-atomic
+//!     writes via `tmp/<id>.partial` + POSIX-rename, and an in-memory index so
+//!     the existing `get`/`len` borrow contract is preserved (no new dep, std
+//!     only). `get_owned` re-reads the on-disk bytes and re-hashes them against
+//!     the filename — a content-address integrity check (fail-closed None).
 
 use crate::chunker::Chunker;
+use crate::event_log::sha3_256;
 use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 
 /// Content-address of a block: the chunker's sha3_256 id.
 pub type Hash = [u8; 32];
@@ -32,6 +42,12 @@ pub trait BlockStore {
     fn put(&mut self, id: Hash, bytes: &[u8]) -> bool;
     /// Fetch bytes for `id`, if present.
     fn get(&self, id: &Hash) -> Option<&[u8]>;
+    /// Fetch owned bytes for `id`, if present. Disk-backed stores (which cannot
+    /// return a borrowed slice tied to `&self`) override this directly; the
+    /// default impl just clones what `get` returns so `MemStore` is unchanged.
+    fn get_owned(&self, id: &Hash) -> Option<Vec<u8>> {
+        self.get(id).map(|s| s.to_vec())
+    }
     /// Number of distinct blocks held.
     fn len(&self) -> usize;
     /// True when no blocks are held.
@@ -76,6 +92,167 @@ impl BlockStore for MemStore {
     }
 }
 
+/// Disk-backed, content-addressed block store (P12 §2). One file per unique
+/// block, named by its sha3 id, under a 65536-way sharded fan-out:
+///
+///   `<root>/blocks/<hex[0:2]>/<hex[2:4]>/<hex>`
+///
+/// Writes are crash-atomic: content is written to `<root>/tmp/<id>.partial`,
+/// `fsync`'d, then `rename`'d into place (POSIX rename is atomic), so a
+/// kill-9 between the partial write and the rename leaves NO half-written
+/// block visible — `put` is all-or-nothing. A block whose final path already
+/// exists is a dedup no-op (returns `false`, mirroring `MemStore`).
+///
+/// The on-disk `blocks/` tree is the durable source of truth. To satisfy the
+/// trait's borrowed-slice `get`/`len` contract (which a disk read cannot meet
+/// without interior mutability), an in-memory `cache: HashMap<Hash, Vec<u8>>`
+/// mirrors the bytes; `get_owned` always re-reads the on-disk file and
+/// re-hashes it against the filename — a mismatch (on-disk bit-rot /
+/// corruption) yields fail-closed `None`, never unverified bytes.
+///
+/// No new dependency: `std::fs` only. M6/V2 zero-dep at the storage boundary.
+pub struct FileBlockStore {
+    root: PathBuf,
+    cache: HashMap<Hash, Vec<u8>>,
+}
+
+impl FileBlockStore {
+    /// Open (creating if needed) a store rooted at `root`. Loads the existing
+    /// `blocks/` tree into the in-memory cache so a store reopened across
+    /// process restarts still answers `get`/`len`.
+    pub fn open(root: impl Into<PathBuf>) -> std::io::Result<Self> {
+        let root = root.into();
+        fs::create_dir_all(root.join("blocks"))?;
+        fs::create_dir_all(root.join("manifests"))?;
+        fs::create_dir_all(root.join("tmp"))?;
+        let mut cache = HashMap::new();
+        Self::load(&root, &mut cache)?;
+        Ok(FileBlockStore { root, cache })
+    }
+
+    /// Recursively walk `blocks/` and read every `<hex>` file's bytes into the
+    /// cache. Files whose name is not a valid 32-byte hex id are skipped.
+    fn load(root: &PathBuf, cache: &mut HashMap<Hash, Vec<u8>>) -> std::io::Result<()> {
+        let blocks_dir = root.join("blocks");
+        if !blocks_dir.exists() {
+            return Ok(());
+        }
+        for entry in fs::read_dir(&blocks_dir)? {
+            let e = entry?;
+            let p1 = e.path();
+            if !p1.is_dir() {
+                continue;
+            }
+            for entry2 in fs::read_dir(&p1)? {
+                let e2 = entry2?;
+                let p2 = e2.path();
+                if !p2.is_dir() {
+                    continue;
+                }
+                for entry3 in fs::read_dir(&p2)? {
+                    let e3 = entry3?;
+                    let file = e3.path();
+                    if !file.is_file() {
+                        continue;
+                    }
+                    let name = match file.file_name().and_then(|n| n.to_str()) {
+                        Some(n) => n,
+                        None => continue,
+                    };
+                    let id = match parse_hex32(name) {
+                        Ok(id) => id,
+                        Err(_) => continue,
+                    };
+                    let bytes = match fs::read(&file) {
+                        Ok(b) => b,
+                        Err(_) => continue,
+                    };
+                    cache.insert(id, bytes);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Path of the final on-disk block file for `id`.
+    fn block_path(&self, id: &Hash) -> PathBuf {
+        let hex = hex_encode(id);
+        self.root
+            .join("blocks")
+            .join(&hex[0..2])
+            .join(&hex[2..4])
+            .join(&hex)
+    }
+}
+
+impl BlockStore for FileBlockStore {
+    fn put(&mut self, id: Hash, bytes: &[u8]) -> bool {
+        let final_path = self.block_path(&id);
+        if final_path.exists() {
+            // Idempotent dedup: already physically present.
+            return false;
+        }
+        // Ensure the shard directory exists before writing.
+        if let Some(parent) = final_path.parent() {
+            if let Err(e) = fs::create_dir_all(parent) {
+                panic!("FileBlockStore: failed to create shard dir {parent:?}: {e}");
+            }
+        }
+        // Crash-atomic write: <root>/tmp/<id>.partial → fsync → rename.
+        let hex = hex_encode(&id);
+        let partial = self.root.join("tmp").join(format!("{hex}.partial"));
+        // Best-effort: drop any stale partial from a prior interrupted write
+        // of the same id so the partial represents THIS write only.
+        let _ = fs::remove_file(&partial);
+        if let Err(e) = fs::write(&partial, bytes) {
+            let _ = fs::remove_file(&partial);
+            panic!("FileBlockStore: failed to write partial {partial:?}: {e}");
+        }
+        // fsync the partial so its bytes are durable before the atomic rename.
+        if let Ok(f) = fs::File::open(&partial) {
+            let _ = f.sync_all();
+        }
+        if let Err(e) = fs::rename(&partial, &final_path) {
+            let _ = fs::remove_file(&partial);
+            panic!("FileBlockStore: failed to rename into place {final_path:?}: {e}");
+        }
+        self.cache.insert(id, bytes.to_vec());
+        true
+    }
+
+    fn get(&self, id: &Hash) -> Option<&[u8]> {
+        // Borrowed slice comes from the in-memory cache, which mirrors disk.
+        self.cache.get(id).map(|v| v.as_slice())
+    }
+
+    fn get_owned(&self, id: &Hash) -> Option<Vec<u8>> {
+        let path = self.block_path(id);
+        if !path.exists() {
+            return None;
+        }
+        let bytes = fs::read(&path).ok()?;
+        // Content-address integrity: the filename IS the key. Re-hash the
+        // stored bytes and compare; a mismatch (corruption / bit-rot) is a
+        // fail-closed None — never return unverified bytes.
+        if sha3_256(&bytes) != *id {
+            return None;
+        }
+        Some(bytes)
+    }
+
+    fn len(&self) -> usize {
+        self.cache.len()
+    }
+}
+
+impl FileBlockStore {
+    /// Total bytes physically retained (sum of unique block sizes on disk) —
+    /// the real on-disk cost after dedup.
+    pub fn stored_bytes(&self) -> u64 {
+        self.cache.values().map(|v| v.len() as u64).sum()
+    }
+}
+
 /// An ordered list of block ids that reconstructs one file. Restoring it
 /// concatenates `store.get(id)` for each id in order.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -107,6 +284,48 @@ impl BackupStats {
     }
 }
 
+/// Lowercase hex encode of a 32-byte hash (no dependency, std only).
+fn hex_encode(id: &[u8; 32]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut s = String::with_capacity(64);
+    for &b in id {
+        s.push(HEX[(b >> 4) as usize] as char);
+        s.push(HEX[(b & 0x0f) as usize] as char);
+    }
+    s
+}
+
+/// Parse a 64-char lowercase-hex string into a `[u8; 32]`. Errors on wrong
+/// length or non-hex characters (used when scanning the on-disk `blocks/` tree
+/// so stray files are ignored rather than crashing the loader).
+fn parse_hex32(s: &str) -> Result<[u8; 32], ()> {
+    if s.len() != 64 {
+        return Err(());
+    }
+    let bytes = s.as_bytes();
+    let mut out = [0u8; 32];
+    for i in 0..32 {
+        let hi = match val(bytes[i * 2]) {
+            Some(v) => v,
+            None => return Err(()),
+        };
+        let lo = match val(bytes[i * 2 + 1]) {
+            Some(v) => v,
+            None => return Err(()),
+        };
+        out[i] = (hi << 4) | lo;
+    }
+    Ok(out)
+}
+
+fn val(c: u8) -> Option<u8> {
+    match c {
+        b'0'..=b'9' => Some(c - b'0'),
+        b'a'..=b'f' => Some(c - b'a' + 10),
+        _ => None,
+    }
+}
+
 /// The backup organ: owns a chunker config + a content-addressed store.
 pub struct BackupOrgan<S: BlockStore> {
     chunker: Chunker,
@@ -132,7 +351,7 @@ impl<S: BlockStore> BackupOrgan<S> {
         // Guard against intra-stream repeats double-counting a physical write.
         let mut written_this_call: HashMap<Hash, ()> = HashMap::new();
         for blk in &blocks {
-            let already = self.store.get(&blk.id).is_some();
+            let already = self.store.get_owned(&blk.id).is_some();
             if already {
                 deduped += 1;
             } else if written_this_call.contains_key(&blk.id) {
@@ -169,8 +388,11 @@ impl<S: BlockStore> BackupOrgan<S> {
     pub fn restore(&self, manifest: &Manifest) -> Result<Vec<u8>, RestoreError> {
         let mut out = Vec::with_capacity(manifest.total_len);
         for id in &manifest.blocks {
-            match self.store.get(id) {
-                Some(bytes) => out.extend_from_slice(bytes),
+            // Prefer `get_owned` so disk-backed stores return their own bytes
+            // (FileBlockStore additionally re-hashes for content-address
+            // integrity). Falls back to the borrowed `get` otherwise.
+            match self.store.get_owned(id) {
+                Some(bytes) => out.extend_from_slice(&bytes),
                 None => return Err(RestoreError::MissingBlock(*id)),
             }
         }
@@ -318,5 +540,163 @@ mod tests {
         assert!(manifest.blocks.is_empty());
         let restored = organ.restore(&manifest).expect("empty restore");
         assert!(restored.is_empty());
+    }
+
+    // ---- FileBlockStore (P12 §2) tests: same properties, disk-backed ----
+
+    fn fbs_organ(root: &std::path::Path) -> BackupOrgan<FileBlockStore> {
+        let store = FileBlockStore::open(root).expect("open store");
+        BackupOrgan::new(store, 1024, 32 * 1024, 12)
+    }
+
+    /// Round-trip identity for the disk-backed store.
+    #[test]
+    fn fileblockstore_restore_is_byte_identical() {
+        let tmp = std::env::temp_dir().join(format!("fbs_rid_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let data = sample(120_000);
+        let mut organ = fbs_organ(&tmp);
+        let (manifest, _stats) = organ.backup(&data);
+        let restored = organ.restore(&manifest).expect("restore ok");
+        assert_eq!(
+            restored, data,
+            "FileBlockStore restore must be byte-identical"
+        );
+        assert_eq!(restored.len(), manifest.total_len);
+        // Reopen the store from disk and confirm the manifest still restores
+        // (durability: bytes live on disk, not only in RAM).
+        drop(organ);
+        let organ2 = fbs_organ(&tmp);
+        let restored2 = organ2.restore(&manifest).expect("restore from disk");
+        assert_eq!(restored2, data, "FileBlockStore must restore after reopen");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// DEDUP across a 1-byte edit, disk-backed, mirrors the MemStore property.
+    #[test]
+    fn fileblockstore_one_byte_edit_dedups_over_90pct() {
+        let tmp = std::env::temp_dir().join(format!("fbs_dedup_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let file_a = sample(200_000);
+        let mut file_b = file_a.clone();
+        let mid = file_b.len() / 2;
+        file_b[mid] ^= 0xff;
+
+        let mut organ = fbs_organ(&tmp);
+        let (man_a, stats_a) = organ.backup(&file_a);
+        let (man_b, stats_b) = organ.backup(&file_b);
+
+        assert_eq!(stats_a.deduped_blocks, 0);
+        assert!(stats_a.new_blocks > 3);
+        let ratio = stats_b.dedup_ratio();
+        assert!(ratio > 0.90, "dedup ratio too low: {ratio:.4}");
+        assert!(
+            stats_b.new_blocks <= 3,
+            "expected <=3 new blocks, got {}",
+            stats_b.new_blocks
+        );
+
+        let restored_a = organ.restore(&man_a).expect("restore A");
+        let restored_b = organ.restore(&man_b).expect("restore B");
+        assert_eq!(restored_a, file_a);
+        assert_eq!(restored_b, file_b);
+
+        let stored = organ.store().stored_bytes();
+        assert!(
+            stored < (file_a.len() + file_b.len()) as u64,
+            "store did not dedup"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// Re-backing identical content is 100% dedup, disk-backed.
+    #[test]
+    fn fileblockstore_identical_rebackup_fully_dedups() {
+        let tmp = std::env::temp_dir().join(format!("fbs_reback_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let data = sample(60_000);
+        let mut organ = fbs_organ(&tmp);
+        let (_m1, _s1) = organ.backup(&data);
+        let store_len_after_first = organ.store().len();
+        let (_m2, s2) = organ.backup(&data);
+        assert_eq!(s2.new_blocks, 0, "re-backup must write no new blocks");
+        assert_eq!(s2.dedup_ratio(), 1.0);
+        assert_eq!(organ.store().len(), store_len_after_first);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// Fail-closed restore: a missing block yields Err, disk-backed.
+    #[test]
+    fn fileblockstore_missing_block_fails_closed() {
+        let tmp = std::env::temp_dir().join(format!("fbs_missing_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let data = sample(40_000);
+        let mut organ = fbs_organ(&tmp);
+        let (mut manifest, _s) = organ.backup(&data);
+        manifest.blocks.push([0xAB; 32]);
+        manifest.total_len += 1;
+        let err = organ.restore(&manifest).unwrap_err();
+        assert_eq!(err, RestoreError::MissingBlock([0xAB; 32]));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// Content-address integrity: a 1-bit on-disk corruption makes `get_owned`
+    /// fail-closed (None), never return unverified bytes.
+    #[test]
+    fn fileblockstore_corrupt_block_rejected() {
+        let tmp = std::env::temp_dir().join(format!("fbs_corrupt_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        // One fixed block so the id is deterministic and known.
+        let block = vec![0x42u8; 4096];
+        let id = crate::event_log::sha3_256(&block);
+        let mut store = FileBlockStore::open(&tmp).expect("open store");
+        assert!(store.put(id, &block), "first put is new");
+
+        // get_owned returns the bytes, and they verify.
+        let got = store.get_owned(&id).expect("clean block readable");
+        assert_eq!(got, block);
+
+        // Flip one byte of the on-disk file.
+        let hex = hex_encode(&id);
+        let path = tmp
+            .join("blocks")
+            .join(&hex[0..2])
+            .join(&hex[2..4])
+            .join(&hex);
+        let mut raw = std::fs::read(&path).expect("read block file");
+        raw[0] ^= 0x01; // 1-bit flip
+        std::fs::write(&path, &raw).expect("rewrite corrupted");
+
+        // Corrupted block is rejected fail-closed.
+        assert!(
+            store.get_owned(&id).is_none(),
+            "corrupted block must be rejected"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// Crash-atomicity invariant: a `.partial` left behind (simulating a kill-9
+    /// between the partial write and the rename) is NOT visible as a block.
+    /// `get_owned` must ignore the temp file and return None for that id.
+    #[test]
+    fn fileblockstore_partial_write_invisible() {
+        let tmp = std::env::temp_dir().join(format!("fbs_partial_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let block = vec![0x7u8; 2048];
+        let id = crate::event_log::sha3_256(&block);
+        let hex = hex_encode(&id);
+        // Simulate an interrupted write: leave only a .partial, no final file.
+        let tmp_dir = tmp.join("tmp");
+        std::fs::create_dir_all(&tmp_dir).expect("create tmp dir");
+        std::fs::write(tmp_dir.join(format!("{hex}.partial")), &block).expect("write partial");
+        let store = FileBlockStore::open(&tmp).expect("open store");
+        // The block must not be readable; get_owned sees only the final path.
+        assert!(
+            store.get_owned(&id).is_none(),
+            "a .partial must never be visible as a stored block"
+        );
+        // And the blocks/ tree stays empty (no half-written file leaked).
+        assert_eq!(store.len(), 0);
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }
