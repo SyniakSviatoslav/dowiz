@@ -1,0 +1,20 @@
+[package]
+name = "swarm-proof"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Native (pure-std) proof of the swarm hypothesis — pure-Rust replacement for tools/telemetry/swarm_proof.py. (A) Economic crossover N where parallel cheap-executor swarm beats one expensive agent, from real 2026 API prices. (B) Wall-clock proof: thread fan-out vs serial, using std::thread (the kernel's own parallel dispatch primitive)."
+
+# PURE-STD. No sympy (the deleted Python needed it only as an authoring-time
+# equation source; this crate is the runtime proof, no equation compiler).
+# Parallel fan-out uses std::thread::scope — the same model the agent engine
+# uses for subagents.
+
+[dependencies]
+
+[[bin]]
+name = "swarm-proof"
+path = "src/main.rs"
+
+[profile.release]
+opt-level = 3

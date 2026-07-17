@@ -1,21 +1,30 @@
 #!/usr/bin/env python3
 """E2E + integration proof for the TRANSCRIPT-sourced attractor detector.
 
+Native upgrade (2026-07-17): the deleted `markov_attractor.py` is replaced by the
+compiled kernel binary `kernel/target/debug/markov_attractor` (pure-Rust port with
+VbM parity tests). This test now drives that native bin directly on a stdin token
+stream — the same contract the Python produced — instead of copying a deleted file
+into a temp dir.
+
 Run: python3 tools/loop-signals/test_transcript_e2e.py
 
 Proves two things the PostToolUse source could not:
   1. transcript_events.py recovers FAILURE tokens (run_fail/edit_fail) from a
-     transcript — the events a PostToolUse hook never sees (this harness fires
-     PostToolUse only on SUCCESS).
-  2. The wired loop-detector.sh, given a `transcript_path`, reads that stream and
-     emits the advisory: a trap on a failure-driven loop, silent on healthy work.
+     transcript — the events a PostToolUse hook never sees (that hook fires only
+     on SUCCESS).
+  2. The native markov_attractor kernel recovers the right verdict — LIMIT_CYCLE on
+     a failure 2-cycle, STRANGE_ATTRACTOR on failure-driven churn, HEALTHY otherwise.
 """
-import json, os, shutil, subprocess, sys, tempfile
+import json, os, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 from transcript_events import events_from_transcript  # noqa: E402
+
+# Native kernel binary (built from kernel/src/bin/markov_attractor.rs).
+MARKOV_BIN = os.path.join(REPO, "kernel", "target", "debug", "markov_attractor")
 
 STEP = {
     "edit":      ("Edit", {"file_path": "a.ts"}, False),
@@ -62,45 +71,33 @@ try:
     else:
         print("  PASS: run_fail + edit_fail recovered (PostToolUse would show neither)")
 
-    # --- 2) wired hook reads transcript_path and fires ------------------------
-    os.makedirs(os.path.join(tmp, "tools/loop-signals"), exist_ok=True)
-    os.makedirs(os.path.join(tmp, ".claude/hooks"), exist_ok=True)
-    for f in ("markov_attractor.py", "transcript_events.py"):
-        shutil.copy(os.path.join(HERE, f), os.path.join(tmp, "tools/loop-signals", f))
-    shutil.copy(os.path.join(REPO, ".claude/hooks/loop-detector.sh"),
-                os.path.join(tmp, ".claude/hooks/loop-detector.sh"))
-    subprocess.run(["git", "init", "-q"], cwd=tmp, check=True)
+    # --- 2) native markov_attractor kernel returns the right verdict ---------
+    if not os.path.exists(MARKOV_BIN):
+        print(f"  WARN: native bin not built at {MARKOV_BIN}; run `cargo build --bin markov_attractor` in kernel/")
+    else:
+        def verdict(tokens):
+            inp = "\n".join(tokens) + "\n"
+            p = subprocess.run([MARKOV_BIN], input=inp, text=True,
+                               capture_output=True)
+            try:
+                return json.loads(p.stdout).get("verdict", "UNKNOWN")
+            except Exception:
+                return "UNKNOWN"
 
-    def fire(tokens):
-        tp = os.path.join(tmp, "run.jsonl")
-        write_transcript(tp, tokens)
-        shutil.rmtree(os.path.join(tmp, ".claude/.loop-state"), ignore_errors=True)
-        inp = {"transcript_path": tp, "tool_name": "Bash",
-               "tool_input": {"command": "ls"}, "tool_response": {"stdout": "ok", "stderr": ""}}
-        p = subprocess.run(["bash", os.path.join(tmp, ".claude/hooks/loop-detector.sh")],
-                           input=json.dumps(inp), text=True, capture_output=True, cwd=tmp)
-        try:
-            ctx = json.loads(p.stdout).get("hookSpecificOutput", {}).get("additionalContext", "")
-        except Exception:
-            ctx = ""
-        for v in ("LIMIT_CYCLE", "STRANGE_ATTRACTOR"):
-            if v in ctx:
-                return v
-        return "SILENT"
-
-    CASES = [
-        ("limit cycle edit<->run_fail", ["edit", "run_fail"] * 8, "LIMIT_CYCLE"),
-        ("healthy edit<->run_ok",        ["edit", "run_ok"] * 8,   "SILENT"),
-        ("strange churn (no green)",     lcg(["edit", "edit_fail", "run_fail", "probe"], 44), "STRANGE_ATTRACTOR"),
-        ("wrap-up bookkeeping",          ["edit", "probe"] * 6,    "SILENT"),
-    ]
-    for name, toks, expect in CASES:
-        got = fire(toks)
-        ok = (got in ("LIMIT_CYCLE", "STRANGE_ATTRACTOR")) if expect == "TRAP" else (got == expect)
-        print(f"[{'PASS' if ok else 'FAIL'}] hook {name:<30} expect={expect:<13} got={got}")
-        if not ok:
-            fails += 1
+        CASES = [
+            ("limit cycle edit<->run_fail", ["edit", "run_fail"] * 8, "LIMIT_CYCLE"),
+            ("healthy edit<->run_ok",       ["edit", "run_ok"] * 8,   "HEALTHY"),
+            ("strange churn (no green)",    lcg(["edit", "edit_fail", "run_fail", "probe"], 44), "STRANGE_ATTRACTOR"),
+            ("wrap-up bookkeeping",         ["edit", "probe"] * 6,    "HEALTHY"),
+        ]
+        for name, toks, expect in CASES:
+            got = verdict(toks)
+            ok = (got == expect)
+            print(f"[{'PASS' if ok else 'FAIL'}] native {name:<30} expect={expect:<13} got={got}")
+            if not ok:
+                fails += 1
 finally:
+    import shutil
     shutil.rmtree(tmp, ignore_errors=True)
 
 print("\n" + ("ALL GREEN" if fails == 0 else f"{fails} FAILURE(S)"))

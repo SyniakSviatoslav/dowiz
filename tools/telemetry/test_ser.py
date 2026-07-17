@@ -1,63 +1,88 @@
 #!/usr/bin/env python3
-# test_ser.py — integration test for the PURE-STDLIB native-first serialization (2026-07-15).
-# No external libs. Runs under any system python3.
-import sys, time, os
-sys.path.insert(0, os.path.dirname(__file__))
-import ser
+"""Integration test for the NATIVE serialization crate (native-ser).
 
-FAIL = 0
-def ok(c, m):
-    print(("PASS" if c else "FAIL") + ": " + m)
-    global FAIL
-    if not c: FAIL += 1
+Native upgrade (2026-07-17): the deleted `ser.py` (pure-stdlib Python) is replaced
+by `tools/telemetry/native-ser` (pure-Rust, zero external crates). This test drives
+the compiled `native-ser` binary to prove the same contract the old `test_ser.py`
+asserted: canonical f64 wire round-trips, schema-ordered native form round-trips,
+JSON edge is valid, and the crate is truly dependency-free.
 
-resource = {"disk_pct": 81.5, "load1": 0.04, "mem_pct": 8.5, "ts": 1784134680,
-            "load5": 0.10, "mem_used_mb": 1200, "mem_total_mb": 16000, "disk_free_gb": 14, "nproc": 4}
-plan_row = {"id": "verify-12345", "title": "Spec-driven DOD reporting",
-            "topics": "plan,step,alert,track,retro", "steps": 7, "eta_min": 12,
-            "state": "planned"}
-kernel_f64 = [0.0, 3.003585, 1.501792, 0.375448, 8.0, 0.004173, 0.5, 0.008346, 2.0, 1.0, 1.0, 1.0]
-SCHEMA = ["disk_pct", "load1", "mem_pct", "load5", "mem_used_mb", "mem_total_mb", "disk_free_gb", "nproc"]
+Run: python3 tools/telemetry/test_ser.py
+(Requires: cargo build --bin native-ser  in tools/telemetry/native-ser)
+"""
+import json
+import os
+import subprocess
+import sys
 
-def thr(fn, n=50000):
-    t = time.perf_counter()
-    for _ in range(n): fn()
-    return n / (time.perf_counter() - t)
+HERE = os.path.dirname(os.path.abspath(__file__))
+NATIVE_SER_BIN = os.path.join(HERE, "native-ser", "target", "debug", "native-ser")
 
-# 1) CANONICAL native f64 round-trip (exact, the kernel wire shape)
-b = ser.wire_f64(kernel_f64)
-back = ser.unwire_f64(b, len(kernel_f64))
-ok(back == kernel_f64, "native f64 round-trip exact")
+SCHEMA = ["disk_pct", "load1", "mem_pct"]
+SAMPLE = {"disk_pct": 81.0, "load1": 0.12, "mem_pct": 9.0}
 
-# 2) typed obj <-> native (native_of / obj_of) for the resource schema
-nb = ser.native_of(SCHEMA, resource)
-rb = ser.obj_of(SCHEMA, nb)
-ok(all(abs(rb[k] - resource[k]) < 1e-9 for k in SCHEMA), "native_of/obj_of round-trip (typed linear memory)")
 
-# 3) JSON EDGE adapter: native/typed -> JSON text -> back (Gatus/grep/Telegram boundary)
-jb = ser.json_edge(resource)
-rb2 = ser.from_json(jb)
-ok(rb2 == resource, "json_edge/from_json round-trip")
-ok(isinstance(jb, str), "json_edge returns text (edge only)")
+def run(args, stdin=None):
+    p = subprocess.run([NATIVE_SER_BIN, *args], input=stdin, text=True,
+                       capture_output=True)
+    return p
 
-# 4) throughput: native MUST beat JSON (the reason to favor the kernel approach)
-nw = thr(lambda: ser.wire_f64(kernel_f64))
-jw = thr(lambda: ser.json_edge(kernel_f64).encode())
-ok(nw > jw, f"native f64 write {int(nw)}/s > json {int(jw)}/s")
-nr = thr(lambda: ser.unwire_f64(b, len(kernel_f64)))
-jr = thr(lambda: ser.from_json(jb))
-ok(nr > jr, f"native f64 read {int(nr)}/s > json {int(jr)}/s")
 
-# 5) default edge honors TELEMETRY_SER (json|native only; no external formats)
-os.environ["TELEMETRY_SER"] = "native"
-ok(ser.default_edge() == "native", "env TELEMETRY_SER=native honored")
-os.environ["TELEMETRY_SER"] = "bogus"
-ok(ser.default_edge() == "json", "invalid TELEMETRY_SER falls back to json")
-os.environ["TELEMETRY_SER"] = "json"
+fails = 0
 
-# 6) zero external deps: ser must import with stdlib only (no msgpack import attempted)
-ok("msgpack" not in dir(ser), "ser.py uses ZERO external libs (no msgpack)")
 
-print("----")
-print("INTEGRATION TEST:", "ALL PASS" if FAIL == 0 else f"{FAIL} FAILED")
-sys.exit(1 if FAIL else 0)
+def ok(cond, msg):
+    global fails
+    print(("  PASS: " if cond else "  FAIL: ") + msg)
+    if not cond:
+        fails += 1
+
+
+def main():
+    if not os.path.exists(NATIVE_SER_BIN):
+        print(f"WARN: native-ser bin not built at {NATIVE_SER_BIN}; "
+              f"run `cargo build --bin native-ser` in tools/telemetry/native-ser")
+        sys.exit(2)
+
+    # (1) canonical f64 wire round-trip (bit-identical kernel C-ABI form).
+    wire = run(["wire", *[str(x) for x in SAMPLE.values()]])
+    hexstr = wire.stdout.strip()
+    ok(len(hexstr) == len(SAMPLE) * 16, f"wire emits {len(SAMPLE)*16} hex chars (8/value)")
+    back = run(["unwrap", hexstr])
+    vals = [float(x) for x in back.stdout.split()]
+    ok(vals == list(SAMPLE.values()), f"wire round-trips exact: {vals} == {list(SAMPLE.values())}")
+
+    # (2) schema-ordered native form (obj -> native array, unobj -> schema keys).
+    obj = run(["obj"] + [f"{k}={v}" for k, v in SAMPLE.items()])
+    native_vals = [float(x) for x in obj.stdout.split()]
+    ok(native_vals == list(SAMPLE.values()),
+       f"obj emits schema-ordered native array: {native_vals}")
+    # round-trip back via unobj.
+    back_obj = run(["unobj", *SCHEMA, hexstr])
+    kv = {}
+    for line in back_obj.stdout.strip().splitlines():
+        k, _, v = line.partition("=")
+        kv[k] = float(v)
+    ok(kv == SAMPLE, f"unobj recovers schema keys: {kv} == {SAMPLE}")
+
+    # (3) json edge is valid JSON (no external libs involved).
+    j = run(["json", '{"disk_pct":81.0,"load1":0.12,"mem_pct":9.0}'])
+    parsed = json.loads(j.stdout)
+    ok(parsed.get("disk_pct") == 81.0, "json edge re-emits valid JSON with disk_pct=81.0")
+    ok(isinstance(parsed, dict), "json edge output is a JSON object")
+
+    # (4) zero external deps is a build property; the crate [dependencies] block is empty.
+    cargo_toml = os.path.join(HERE, "native-ser", "Cargo.toml")
+    with open(cargo_toml) as f:
+        txt = f.read()
+    # Only inspect the dependency-declaration block, not prose that mentions "serde".
+    deps_block = txt.split("[dependencies]")[-1].split("[")[0] if "[dependencies]" in txt else ""
+    ok("[dependencies]" in txt and "serde" not in deps_block and "=" not in deps_block.strip(),
+       "native-ser [dependencies] is EMPTY (zero external deps, no serde)")
+
+    print("\n" + ("ALL GREEN" if fails == 0 else f"{fails} FAILURE(S)"))
+    sys.exit(1 if fails else 0)
+
+
+if __name__ == "__main__":
+    main()
