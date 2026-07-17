@@ -62,6 +62,11 @@ pub mod householder;
 /// Воля АНУ — the hidden source of the self-evolving living organism. Single
 /// kernel-internal entry point for closed-loop self-evolution (G7 source-hiding).
 pub mod hydra;
+/// BLUEPRINT-E1 — discrete gradient/divergence (oriented-edge incidence) and the
+/// CANONICAL reference Laplacian `L = BᵀWB` (+(D−A) convention). The small
+/// hand-oracle-tested reference every other Laplacian (dense/CSR/grid-stencil) is
+/// parity-bound against; retires the last unpinned mirror at the kernel↔engine seam.
+pub mod incidence;
 /// C-tier "impedance lens": circuit/impedance as a resource framework — flow
 /// reflection coefficient + backpressure gate (ρ<1 with margin, not power-match).
 pub mod impedance;
@@ -84,6 +89,11 @@ pub mod rng;
 /// scalar op order → bit-identical to `softmax_scalar` / `attention::softmax`.
 /// AVX2 fast path with a scalar fallback (mirrors `householder.rs` runtime gate).
 pub mod simd;
+/// E2 — the kernel's single uncertainty primitive: mean SE / normal & Wilson
+/// intervals / the relocated CLT convergence envelope / a seeded bootstrap.
+/// Zero-dep leaf (sibling of `rng`/`money`/`noether`); every layer depends on it
+/// downward so a reported scalar can carry the check that would refute it.
+pub mod stats;
 /// W2-7 — event-sourced, tamper-evident hash-chain knowledge spine
 /// (Memory/Identity/Intent). Append-only record log; `verify_chain()` re-walks
 /// the chain to detect any mutation. Pure-std (reuses `event_log::sha3_256`).

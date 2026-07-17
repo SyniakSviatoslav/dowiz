@@ -16,6 +16,11 @@ mod bridge;
 // field_frame is exposed publicly: the browser renders the kernel-computed
 // field via `field_frame::compose` (zero TS). No compute lives in the wasm crate.
 pub mod field_frame;
+// BLUEPRINT-E1 energy-gate + sign-pin at the kernel↔engine seam. TEST-ONLY:
+// it changes no runtime contract (test-side reference oracle, never on the
+// FieldFrame::step hot path), so it compiles only under `cfg(test)`.
+#[cfg(test)]
+mod field_energy;
 mod loop_;
 mod money_guard;
 mod motion;
