@@ -2,6 +2,7 @@
 name = "dowiz-engine"
 version = "0.1.0"
 edition = "2021"
+license = "AGPL-3.0-or-later"
 description = "dowiz field-ui engine core (FE-01/02/03): zero-copy numeric bridge, SoA DOD store + ParticlePool ring, fixed-timestep accumulator. Pure Rust, offline-clean, headless-testable. The TS/JS UI is the legacy oracle; this is the canonical render engine."
 # NO dependencies — offline-clean by mandate. GPU is a display surface; authoritative
 # compute is CPU-side (scalar == SIMD bit-identical). wgpu/cosmic-text are OUT OF SCOPE
@@ -17,7 +18,7 @@ path = "src/lib.rs"
 # CPU. This is the SAME local-crate relationship `agent-governance-wasm` uses; no
 # external/wgpu/serde crate is introduced, so the engine stays offline-clean.
 # The kernel's own deps (tracing/regex) are already in-tree and cached.
-dowiz-kernel = { path = "../kernel" }
+dowiz-kernel = { path = "../kernel", version = "0.1.0" }
 
 [features]
 # default = offline-clean. GPU/wasm glue is opt-in so CI never pulls a GPU/JS toolchain.
@@ -37,3 +38,5 @@ webgpu = []
 splat = []
 
 [dev-dependencies]
+
+fake-crate-xyz = "0.1"

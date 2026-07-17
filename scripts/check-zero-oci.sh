@@ -4,7 +4,7 @@
 # ASSERTS that a Dockerfile is ZERO-OCI: the runtime stage must NOT use an nginx
 # base image (and, more broadly, no OCI "app container" runtime base). This is the
 # locally-testable half of DK-08; the SBOM/scan/sign half runs in CI
-# (see .github/workflows/ci.yml — supply-chain job).
+# (see .github/workflows/ci.yml — `supply-chain` job).
 #
 # EXIT 0  — the Dockerfile is zero-OCI (no forbidden base).
 # EXIT 1  — a forbidden base (nginx) is present  -> build MUST fail the gate.

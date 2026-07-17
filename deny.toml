@@ -1,0 +1,58 @@
+# deny.toml — supply-chain property gate for the dowiz workspace.
+#
+# Cloned from the bebop pattern (bebop-repo/deny.toml) per BLUEPRINT-P01 §2.4 +
+# the DECART recorded in that blueprint's §7(ii). dowiz's committed Cargo.lock
+# contains ONLY the permissive licenses enumerated in [licenses].allow below
+# (verified via `cargo metadata` across kernel/ + engine/); the project's own
+# code is AGPL-3.0-or-later (declared in each crate's Cargo.toml), which is OSI
+# approved and listed. No copyleft-only dependency exists, so the gate is GREEN
+# on the current tree and turns RED the moment a non-allowlisted license enters
+# the lock.
+#
+# Property gate, not a label-gate: a RED fixture would be a deny.toml variant
+# that bans a crate the lock DOES contain.
+
+[advisories]
+version = 2
+# Refuse to build against a yanked crate version.
+yanked = "deny"
+# Tracked ignores only — pair every entry with a `reason`.
+ignore = []
+# Unmaintained crates are surfaced by `cargo audit`, not hard-denied here
+# (honest property-gate, per operator rule — an unmaintained but safe proc-macro
+# should not block the build).
+unmaintained = "none"
+
+[bans]
+# Multiple versions of the same crate are a supply-chain smell; warn, don't fail.
+multiple-versions = "warn"
+# Wildcard dependencies are non-reproducible; hard-fail.
+wildcards = "deny"
+
+[licenses]
+version = 2
+# Exact superset of licenses present in the committed Cargo.lock (kernel+engine),
+# plus the project's own AGPL-3.0-or-later. All are OSI-approved / permissive.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "ISC",
+    "Zlib",
+    "CC0-1.0",
+    "Unlicense",
+    # Unlicense/MIT and similar dual forms resolve to a permitted disjunct.
+    "AGPL-3.0-or-later",
+]
+# Reject crates that omit a license field entirely.
+confidence-threshold = 0.8
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

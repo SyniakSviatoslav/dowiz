@@ -5,7 +5,17 @@ This software is licensed under the GNU Affero General Public License v3.0 (AGPL
 See the file LICENSE for the full license text.
 
 TRADEMARK NOTICE
-"The dowiz name, the DeliveryOS name, and associated logos are trademarks of the
+"dowiz name, the DeliveryOS name, and associated logos are trademarks of the
 project owner. They may not be used to identify or promote derived products or
 services without prior written permission, except as required to comply with the
 AGPLv3 (e.g. reasonable attribution). See TRADEMARK.md for the full policy.
+
+PER-TOOL LICENSE CARVE-OUT (BLUEPRINT-P01 §6 operator note)
+The following internal utility crates are distributed under the MIT license,
+carved out from the AGPL-3.0-or-later project license:
+  - tools/async-spool   (license = "MIT")
+  - tools/native-spa-server (license = "MIT")
+These are standalone, non-derivative build/serving helpers with no AGPL kernel
+code linked in; the carve-out is recorded here per the canonical suspension form
+(E53). If either later links AGPL-3.0-or-later project code, it must be
+relicensed to AGPL-3.0-or-later to stay compliant.

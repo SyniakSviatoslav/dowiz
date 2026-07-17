@@ -118,3 +118,96 @@ jobs:
         run: cargo test --offline --manifest-path kernel/Cargo.toml
       - name: Run engine test suite (offline)
         run: cargo test --offline --manifest-path engine/Cargo.toml
+
+  # ### SCOPE RULE BANNER (read before anything else — ARCHITECTURE.md §0, lines 23–27)
+  # **Everything in this phase is a canonical-repo DEV-TIME fence.** It is a blocking CI / pre-commit
+  # control on *the operator's own build and merge into the canonical repo* — it is **NOT** a runtime
+  # control over any autonomous hub. At runtime every hub is a sovereign Hydra (M5/M9/M11): it may
+  # fork this repo, delete these workflows, self-gate locally via `eqc`, ignore the upstream gate, and
+  # replicate-or-reject any artifact. **No gate in this blueprint may be read as a "global control."**
+  # Where a job header says "blocks merge", it means *blocks merge into the canonical repo*, nothing more.
+  # This banner is reproduced verbatim in the header of every workflow job this phase adds, so a future
+  # reader can never misread a red CI run as a limit on hub autonomy.
+  # P01 §2.2 (BLUEPRINT-P01): recover the gitleaks gate dropped in f9ab28ff1. Points at the existing
+  # .gitleaks.toml. --exit-code 1 makes a planted secret RED (acceptance §4.1).
+  gitleaks:
+    name: gitleaks secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan history + working tree for secrets
+        run: gitleaks detect --config .gitleaks.toml --redact --exit-code 1
+
+  # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
+  # P01 §2.3 (BLUEPRINT-P01): makes CONTRIBUTING.md:17 TRUE. Every commit in the PR
+  # range (origin/main..HEAD) must carry a `Signed-off-by:` trailer (acceptance §4.4/§4.10).
+  dco-check:
+    name: DCO sign-off check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require Signed-off-by on every commit
+        run: |
+          rc=0
+          for sha in $(git rev-list origin/main..HEAD); do
+            if ! git log -1 --format=%B "$sha" | grep -qE '^Signed-off-by: .+ <.+@.+>'; then
+              echo "::error::$sha missing Signed-off-by trailer"
+              rc=1
+            fi
+          done
+          exit $rc
+
+  # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
+  # P01 §2.4 (BLUEPRINT-P01): supply-chain gate. cargo-audit (advisories) + cargo-deny
+  # (licenses/bans/sources, deny.toml cloned from bebop pattern) + zero-OCI check.
+  # Named `supply-chain` so scripts/check-zero-oci.sh:8 references a real job.
+  supply-chain:
+    name: supply-chain (audit + deny + zero-oci)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Pre-fetch crates offline
+        run: |
+          cargo fetch --manifest-path kernel/Cargo.toml
+          cargo fetch --manifest-path engine/Cargo.toml
+      - name: cargo audit (RUSTSEC advisories)
+        run: cargo audit
+      - name: cargo deny check (licenses / bans / sources)
+        run: |
+          cargo deny --manifest-path kernel/Cargo.toml check
+          cargo deny --manifest-path engine/Cargo.toml check
+      - name: zero-OCI base-image check (DK-08)
+        run: bash scripts/check-zero-oci.sh
+
+  # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
+  # P01 §2.5 (BLUEPRINT-P01): a new dependency without a DECART report / marker => RED.
+  decart-dep-lint:
+    name: decart dependency lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Lint new dependencies for DECART justification
+        run: bash scripts/decart-dep-lint.sh origin/main HEAD
+
+  # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
+  # P01 §2.6 (BLUEPRINT-P01, E58): dowiz-side wire of the NO-COURIER-SCORING red-line.
+  # A reputation/scoring identifier in kernel/engine/tools fails the build.
+  no-courier-scoring:
+    name: no courier scoring (E58)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reject courier reputation/scoring identifiers
+        run: |
+          ! git grep -nEi 'courier[_-]?(score|rating|reputation|rank)' -- \
+            'kernel/**' 'engine/**' 'tools/**' ':!**/*NO-COURIER-SCORING*'
