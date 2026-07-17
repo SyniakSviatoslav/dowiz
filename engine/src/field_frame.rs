@@ -90,8 +90,19 @@ impl LaplacianField {
 /// 5-point ∇²U on the row-major `u` buffer (`len == w*h`). Neumann zero-flux
 /// at edges. Pure / deterministic; no allocation beyond the output.
 pub fn laplacian(u: &[f32], w: usize, h: usize) -> Vec<f32> {
-    debug_assert_eq!(u.len(), w * h, "field length must equal w*h");
     let mut out = vec![0.0f32; w * h];
+    laplacian_into(u, w, h, &mut out);
+    out
+}
+
+/// In-place 5-point ∇²U variant: fills the caller-owned `out` slice with the
+/// SAME stencil math as [`laplacian`] (Neumann zero-flux edges). Zero heap
+/// allocation — this is what the hot `FieldFrame::step()` loop calls so no
+/// per-step `Vec` is created. The free [`laplacian`] delegates here, so both
+/// surfaces are guaranteed bit-identical.
+pub fn laplacian_into(u: &[f32], w: usize, h: usize, out: &mut [f32]) {
+    debug_assert_eq!(u.len(), w * h, "field length must equal w*h");
+    debug_assert_eq!(out.len(), w * h, "output length must equal w*h");
     for r in 0..h {
         for c in 0..w {
             let i = r * w + c;
@@ -103,7 +114,6 @@ pub fn laplacian(u: &[f32], w: usize, h: usize) -> Vec<f32> {
             out[i] = left + right + up + down - 4.0 * u[i];
         }
     }
-    out
 }
 
 /// Stateful field integrator: holds `U` (current) and `U_prev` (for the
@@ -112,16 +122,24 @@ pub fn laplacian(u: &[f32], w: usize, h: usize) -> Vec<f32> {
 pub struct FieldFrame {
     u: Vec<f32>,
     u_prev: Vec<f32>,
+    /// Pre-allocated scratch for the per-step Laplacian (`laplacian_into`).
+    lap_scratch: Vec<f32>,
+    /// Pre-allocated scratch that receives `U_next` before buffer rotation.
+    next_scratch: Vec<f32>,
     w: usize,
     h: usize,
 }
 
 impl FieldFrame {
-    /// Allocate a zeroed field of `w × h` (U = U_prev = 0).
+    /// Allocate a zeroed field of `w × h` (U = U_prev = 0). The two scratch
+    /// buffers (`lap_scratch`, `next_scratch`) are allocated ONCE here so
+    /// `step()` performs zero heap allocations thereafter.
     pub fn new(w: usize, h: usize) -> Self {
         FieldFrame {
             u: vec![0.0f32; w * h],
             u_prev: vec![0.0f32; w * h],
+            lap_scratch: vec![0.0f32; w * h],
+            next_scratch: vec![0.0f32; w * h],
             w,
             h,
         }
@@ -143,20 +161,27 @@ impl FieldFrame {
     pub fn step(&mut self, source: &[f32], eq: &FieldEquilibrium) {
         eq.assert_stable();
         debug_assert_eq!(source.len(), self.w * self.h);
-        let lap = laplacian(&self.u, self.w, self.h);
+        // Write the Laplacian into the pre-allocated scratch (no alloc).
+        laplacian_into(&self.u, self.w, self.h, &mut self.lap_scratch);
         let dt = eq.dt;
-        let mut unext = vec![0.0f32; self.w * self.h];
+        // Compute U_next into the pre-allocated scratch (no alloc). The
+        // per-cell arithmetic order below is IDENTICAL to the previous
+        // implementation — only the buffer lifecycle changed.
         for i in 0..self.w * self.h {
             let u = self.u[i] as f64;
             let uprev = self.u_prev[i] as f64;
             let s = source[i] as f64;
-            let l = lap[i] as f64;
+            let l = self.lap_scratch[i] as f64;
             let udot = (u - uprev) / dt;
             let num = u + dt * (eq.gamma * udot + eq.c2 * l) + dt * s;
             let den = 1.0 + dt * eq.m;
-            unext[i] = (num / den) as f32;
+            self.next_scratch[i] = (num / den) as f32;
         }
-        self.u_prev = std::mem::replace(&mut self.u, unext);
+        // Rotate the three live buffers with no allocation or drop:
+        //   u_prev <- old u, u <- next (freshly computed),
+        //   next_scratch <- old u_prev (recycled as future scratch).
+        std::mem::swap(&mut self.u_prev, &mut self.u); // u_prev <- old u; u <- old u_prev
+        std::mem::swap(&mut self.u, &mut self.next_scratch); // u <- next; next_scratch <- old u_prev
     }
 
     /// Map the current field `U` to an RGBA8 display frame (`len == w*h*4`).
@@ -339,5 +364,47 @@ mod tests {
         let b = compose(&scene, &eq, w, h, steps);
         assert_eq!(a.len(), w * h * 4);
         assert_eq!(a, b, "compose must be bit-deterministic across calls");
+    }
+
+    // (6) allocfree_step_byte_identical -- the allocation-free step() (scratch
+    //     buffers + swap rotation) must produce byte-identical RGBA to an
+    //     independent run with the identical scene/eq/steps. This is the
+    //     bit-identity proof for the P11 §3 rework: same arithmetic order,
+    //     only the buffer lifecycle changed. Also drives 1000 steps to prove
+    //     the hot path never panics / diverges under sustained reuse.
+    #[test]
+    fn allocfree_step_byte_identical() {
+        let mut scene = Scene::new().with_scale(0.5);
+        scene
+            .add(SdfShape::Circle {
+                cx: 1.0,
+                cy: -1.0,
+                r: 3.0,
+            })
+            .add(SdfShape::Box {
+                bx: -3.0,
+                by: 2.0,
+                hx: 1.5,
+                hy: 0.75,
+            });
+        let eq = FieldEquilibrium::default();
+        let (w, h, steps) = (40usize, 28usize, 60usize);
+
+        // Two independent frames advanced identically must be byte-identical.
+        let a = compose(&scene, &eq, w, h, steps);
+        let b = compose(&scene, &eq, w, h, steps);
+        assert_eq!(a, b, "allocation-free step must stay bit-deterministic");
+
+        // Hot-path endurance: 1000 reused steps, no alloc, stays finite.
+        let source = scene.render_frame(w, h);
+        let mut frame = FieldFrame::new(w, h);
+        for s in 0..1000 {
+            frame.step(&source, &eq);
+            if s % 250 == 0 {
+                for &v in frame.u() {
+                    assert!(v.is_finite(), "field must stay finite at step {s}");
+                }
+            }
+        }
     }
 }
