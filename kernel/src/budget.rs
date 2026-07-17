@@ -91,7 +91,10 @@ pub struct ComputeBudget {
 impl ComputeBudget {
     /// Create an empty accumulator with the given `ceiling`.
     pub fn new(ceiling: f64) -> Self {
-        ComputeBudget { spent: 0.0, ceiling }
+        ComputeBudget {
+            spent: 0.0,
+            ceiling,
+        }
     }
 
     /// Current spend accumulator.

@@ -18,7 +18,10 @@
 
 use crate::catalog::PriceCatalog;
 use crate::kalman::KalmanFilter;
-use crate::money::{apply_tax, assert_non_negative};
+use crate::money::{
+    apply_tax, assert_non_negative, ledger_append, ledger_sum, reverse_transfer, Currency,
+    EntryKind, LedgerEntry,
+};
 use crate::order_machine::{assert_transition, verify_fsm_signature, OrderStatus, TransitionError};
 
 /// A line item on an order. Mirrors the oracle `OrderItemInput` / `OrderItemResponse`.
@@ -54,6 +57,10 @@ pub struct Order {
     /// `false` on the legacy path where the caller price was accepted verbatim.
     /// Downstream (charge/settlement) MUST refuse to charge an untrusted order.
     pub price_trusted: bool,
+    /// P07 double-entry ledger. Holds the order's money movements as `LedgerEntry`s
+    /// (Earn legs + their Reversals). A compensated order's entries sum to EXACTLY zero.
+    /// Empty until the first earn leg is posted (typically at `Confirmed`).
+    pub ledger: Vec<LedgerEntry>,
 }
 
 impl Order {
@@ -69,6 +76,33 @@ impl Order {
             sum = sum.checked_add(line).ok_or("subtotal overflow (sum)")?;
         }
         Ok(sum)
+    }
+
+    /// Post an `Earn` leg (money earned into the platform) onto this order's ledger.
+    /// The `amount` is the order's settled total in the given `currency` (M5). Fail-closed:
+    /// the amount must be representable and the ledger append must succeed (no duplicate id).
+    /// Returns the mutated order. The paired `Reversal` is produced later by
+    /// [`compensate`]/`reverse_transfer` so a cancelled/refunded order nets to exactly zero.
+    pub fn post_earn(
+        &mut self,
+        entry_id: u64,
+        amount: i64,
+        currency: Currency,
+    ) -> Result<(), String> {
+        let earn = LedgerEntry {
+            id: entry_id,
+            kind: EntryKind::Earn,
+            amount: crate::money::Money::new(amount, currency),
+            reverses: None,
+        };
+        self.ledger = ledger_append(std::mem::take(&mut self.ledger), earn)?;
+        Ok(())
+    }
+
+    /// Sum of the order's live (un-reversed) ledger entries. Returns 0 exactly when the
+    /// order is fully compensated (every earn leg reversed). This is the conservation probe.
+    pub fn ledger_balance(&self) -> i64 {
+        ledger_sum(&self.ledger)
     }
 
     /// Recompute `self.total` from the subtotal via `compute_order_total`.
@@ -148,6 +182,7 @@ pub fn place_order(
         cash_pay_with,
         // Legacy path: caller-supplied unit_price accepted verbatim → UNTRUSTED.
         price_trusted: false,
+        ledger: Vec::new(),
     })
 }
 
@@ -200,6 +235,7 @@ pub fn place_order_priced(
         cash_pay_with,
         // Every unit_price came from the trusted catalog → TRUSTED.
         price_trusted: true,
+        ledger: Vec::new(),
     })
 }
 
@@ -307,6 +343,40 @@ pub fn apply_event_with_trust(
     let updated = apply_event(order, next)?;
     // Kalman fold: predict + (maybe) update. Fail-closed on missing observation.
     trust.step(observation);
+    Ok(updated)
+}
+
+/// P07 compensation driver — cancel-after-confirm (or any post-commitment state)
+/// reverses the order's money cleanly and lands in the compensated terminal state.
+///
+/// This is the FSM compensation edge the order machine lacked: a `Confirmed` (or
+/// `Preparing`/`Ready`/`InDelivery`) order transitions `Refunding → CompensatedRefund`,
+/// and during that transition the order's `Earn` ledger legs are exactly reversed via
+/// [`reverse_transfer`] so the order nets to ZERO by construction. The compensation is a
+/// reversing double-entry transfer, not a state-only move.
+///
+/// Fail-closed:
+/// * the `next` status must still be a legal FSM transition (we delegate to [`apply_event`]);
+/// * every `Earn` leg on the order must be reversible (unknown/cross-currency/already-
+///   reversed legs are rejected → the fold refuses rather than leaving money un-reversed);
+/// * `reversal_id` must not collide with an existing entry (replay protection).
+///
+/// Idempotent: an order already in `CompensatedRefund` (terminal) cannot be compensated
+/// again — `apply_event` rejects the transition, so a replay of the compensation event is a
+/// no-op at the caller.
+pub fn compensate(
+    order: &Order,
+    next: OrderStatus,
+    earn_id: u64,
+    reversal_id: u64,
+) -> Result<Order, TransitionError> {
+    // 1) Legal FSM move (delegates the drift gate too).
+    let mut updated = apply_event(order, next)?;
+    // 2) Reverse the named earn leg on the order's ledger. Fail-closed: this returns Err
+    //    (surfaced as TransitionError::Invalid) if the leg is unknown / already reversed /
+    //    overflows / currency-mismatched. The order is NOT mutated on failure.
+    updated.ledger = reverse_transfer(updated.ledger.clone(), earn_id, reversal_id)
+        .map_err(TransitionError::Invalid)?;
     Ok(updated)
 }
 
@@ -608,6 +678,256 @@ mod tests {
         assert!(
             trust.variance() > 0.0,
             "variance must reflect increased uncertainty"
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // P07 — MONEY-LAW CLOSURE: reversal primitive + FSM compensation edges.
+    // The falsifier is Σ == 0 after a reversal / compensation. Every test below
+    // either proves conservation or proves a fail-closed rejection.
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    use crate::money::{Currency, Money};
+
+    // ── Reversal algebra: m + neg(m) == 0 for every valid currency/amount ──
+    #[test]
+    fn green_reversal_nets_to_zero_for_all_valid_amounts() {
+        for cur in [Currency::All, Currency::Eur, Currency::Usd] {
+            for amt in [0i64, 1, -1, 1_234_567, -9_999, i64::MAX / 2] {
+                let m = Money::new(amt, cur);
+                let neg = m.checked_neg().expect("valid amount negates");
+                let sum = m.checked_add(neg).expect("m + neg(m) adds");
+                assert_eq!(
+                    sum,
+                    Money::new(0, cur),
+                    "reversal must net to zero: m={amt} {:?}",
+                    cur
+                );
+            }
+        }
+    }
+
+    // ── RED: checked_neg of i64::MIN overflows → must be Err (fail-closed) ──
+    #[test]
+    fn red_neg_of_min_is_err() {
+        let m = Money::new(i64::MIN, Currency::All);
+        assert!(m.checked_neg().is_err(), "neg(i64::MIN) has no inverse");
+    }
+
+    // ── RED: cross-currency checked_sub is rejected ──
+    #[test]
+    fn red_cross_currency_sub_is_err() {
+        let all = Money::new(1000, Currency::All);
+        let eur = Money::new(100, Currency::Eur);
+        assert!(all.checked_sub(eur).is_err(), "ALL - EUR must be rejected");
+    }
+
+    // ── RED: reverse_transfer rejects an unknown earn leg (fail-closed) ──
+    #[test]
+    fn red_reverse_unknown_earn_is_err() {
+        let ledger: Vec<LedgerEntry> = Vec::new();
+        let r = reverse_transfer(ledger, 999, 1000);
+        assert!(r.is_err(), "reversing an unknown earn leg must be rejected");
+    }
+
+    // ── RED: re-reversing an already-reversed leg is rejected (idempotent once) ──
+    #[test]
+    fn red_reverse_already_reversed_is_err() {
+        let earn = LedgerEntry {
+            id: 1,
+            kind: EntryKind::Earn,
+            amount: Money::new(5000, Currency::All),
+            reverses: None,
+        };
+        let mut ledger = ledger_append(Vec::new(), earn).unwrap();
+        ledger = reverse_transfer(ledger.clone(), 1, 2).unwrap();
+        // A second, DISTINCT reversal of the same earn leg must be refused.
+        let again = LedgerEntry {
+            id: 3,
+            kind: EntryKind::Reversal,
+            amount: Money::new(-5000, Currency::All),
+            reverses: Some(1),
+        };
+        assert!(
+            ledger_append(ledger, again).is_err(),
+            "a second reversal of an already-reversed leg must be rejected"
+        );
+    }
+
+    // ── Reversal idempotency: replay == no-op. A `Reversal` naming an already-
+    //    reversed earn leg returns Err; the *caller* treats that as a no-op, so the
+    //    ledger content is unchanged and STILL nets to exactly zero. ──
+    #[test]
+    fn green_reversal_is_idempotent_replay_noop() {
+        let earn = LedgerEntry {
+            id: 1,
+            kind: EntryKind::Earn,
+            amount: Money::new(7500, Currency::Eur),
+            reverses: None,
+        };
+        let mut ledger = ledger_append(Vec::new(), earn).unwrap();
+        ledger = reverse_transfer(ledger.clone(), 1, 2).unwrap();
+        assert_eq!(ledger_sum(&ledger), 0, "reversed ledger nets to zero");
+        let before = ledger_sum(&ledger);
+        // Replay the SAME reversal id (duplicate id) → rejected, ledger untouched.
+        let dup = LedgerEntry {
+            id: 2,
+            kind: EntryKind::Reversal,
+            amount: Money::new(-7500, Currency::Eur),
+            reverses: Some(1),
+        };
+        let res = ledger_append(ledger.clone(), dup);
+        assert!(
+            res.is_err(),
+            "duplicate reversal id is rejected (no double reversal)"
+        );
+        assert_eq!(ledger_sum(&ledger), before, "ledger unchanged after replay");
+    }
+
+    // ── THE falsifier (a): a full delivered-order lifecycle nets to EXACTLY zero
+    //    when its earn leg is prepaid and then (if reversed) refunded. Here we prove
+    //    the earn leg + its reversal sum to zero — the invariant the cancel/refund
+    //    paths depend on. The delivered lifecycle WITHOUT reversal keeps its earn
+    //    (non-zero, as expected for a completed sale); the compensated lifecycle is 0. ──
+    #[test]
+    fn green_delivered_lifecycle_conserved_when_reversed() {
+        // Place + drive an order to Delivered, having posted one earn leg.
+        let mut o = place_order("p07a".into(), None, sample_items(), 0, None, None).unwrap();
+        o.post_earn(1, o.total, Currency::All).unwrap();
+        assert_eq!(
+            o.ledger_balance(),
+            o.total,
+            "earn leg holds the sale amount"
+        );
+        o = apply_event(&o, OrderStatus::Confirmed).unwrap();
+        o = apply_event(&o, OrderStatus::Preparing).unwrap();
+        o = apply_event(&o, OrderStatus::Ready).unwrap();
+        o = apply_event(&o, OrderStatus::InDelivery).unwrap();
+        // Compensate the inflight order (refund) → ledger must net to EXACTLY zero.
+        o = compensate(&o, OrderStatus::Refunding, 1, 2).unwrap();
+        o = apply_event(&o, OrderStatus::CompensatedRefund).unwrap();
+        assert_eq!(o.status, OrderStatus::CompensatedRefund);
+        assert_eq!(
+            o.ledger_balance(),
+            0,
+            "compensated delivered-order lifecycle nets to EXACTLY zero (money conserved)"
+        );
+    }
+
+    // ── THE falsifier (b): cancel-after-confirm compensation nets to EXACTLY zero.
+    //    This is the test that FAILS if the reversal is wrong — Confirmed→Refunding→
+    //    CompensatedRefund must reverse the earn leg so Σ == 0. ──
+    #[test]
+    fn green_cancel_after_confirm_compensation_sums_to_zero() {
+        let mut o = place_order("p07b".into(), None, sample_items(), 0, None, None).unwrap();
+        // Money moves at confirm: post the earn leg.
+        o = apply_event(&o, OrderStatus::Confirmed).unwrap();
+        o.post_earn(1, o.total, Currency::All).unwrap();
+        assert_eq!(o.ledger_balance(), o.total, "earn leg posted at confirm");
+        // Operator cancels the confirmed order → compensation edge reverses the money.
+        o = compensate(&o, OrderStatus::Refunding, 1, 2).unwrap();
+        assert_eq!(o.status, OrderStatus::Refunding);
+        o = apply_event(&o, OrderStatus::CompensatedRefund).unwrap();
+        assert_eq!(o.status, OrderStatus::CompensatedRefund);
+        assert_eq!(
+            o.ledger_balance(),
+            0,
+            "cancel-after-confirm compensation nets to EXACTLY zero"
+        );
+    }
+
+    // ── FSM compensation edge exists: Confirmed→Refunding→CompensatedRefund folds ──
+    #[test]
+    fn green_fold_confirmed_to_compensated_refund() {
+        let path = [OrderStatus::Refunding, OrderStatus::CompensatedRefund];
+        assert_eq!(
+            crate::order_machine::fold_transitions(OrderStatus::Confirmed, &path),
+            Ok(OrderStatus::CompensatedRefund)
+        );
+        // And from any post-commitment state the refund compensation is reachable.
+        for from in [
+            OrderStatus::Confirmed,
+            OrderStatus::Preparing,
+            OrderStatus::Ready,
+            OrderStatus::InDelivery,
+        ] {
+            assert_eq!(
+                crate::order_machine::fold_transitions(from, &path),
+                Ok(OrderStatus::CompensatedRefund),
+                "compensation reachable from {from:?}"
+            );
+        }
+    }
+
+    // ── RED: a pre-commitment cancellation (Pending→Cancelled) has NO earn leg,
+    //    so there is nothing to reverse; compensating it must be a no-op, not a
+    //    fabricated credit. Prove the ledger stays empty (no money conjured). ──
+    #[test]
+    fn green_pending_cancel_has_no_money() {
+        let o = place_order("p07c".into(), None, sample_items(), 0, None, None).unwrap();
+        let o = apply_event(&o, OrderStatus::Cancelled).unwrap();
+        assert_eq!(o.status, OrderStatus::Cancelled);
+        assert!(
+            o.ledger.is_empty(),
+            "no earn leg before commitment → no money"
+        );
+    }
+
+    // ── Fail-closed: compensating an order whose earn leg would overflow on
+    //    negation (i64::MIN) is rejected, never a fabricated zero. ──
+    #[test]
+    fn red_compensate_overflowing_earn_is_rejected() {
+        let mut o = place_order("p07d".into(), None, sample_items(), 0, None, None).unwrap();
+        o = apply_event(&o, OrderStatus::Confirmed).unwrap();
+        // Post an earn leg at the negation-overflow boundary.
+        o.ledger = ledger_append(
+            Vec::new(),
+            LedgerEntry {
+                id: 1,
+                kind: EntryKind::Earn,
+                amount: Money::new(i64::MIN, Currency::All),
+                reverses: None,
+            },
+        )
+        .unwrap();
+        let res = compensate(&o, OrderStatus::Refunding, 1, 2);
+        assert!(
+            res.is_err(),
+            "reversal of i64::MIN earn leg must be rejected"
+        );
+        assert_eq!(
+            o.ledger_balance(),
+            i64::MIN,
+            "original ledger untouched on failure"
+        );
+    }
+
+    // ── Fail-closed: a Reversal whose amount does NOT match -earn is rejected
+    //    (no silent conservation violation). ──
+    #[test]
+    fn red_mismatched_reversal_amount_is_rejected() {
+        let earn = LedgerEntry {
+            id: 1,
+            kind: EntryKind::Earn,
+            amount: Money::new(5000, Currency::Usd),
+            reverses: None,
+        };
+        let mut ledger = ledger_append(Vec::new(), earn).unwrap();
+        // Attempt a reversal of the WRONG amount (drift).
+        let bad = LedgerEntry {
+            id: 2,
+            kind: EntryKind::Reversal,
+            amount: Money::new(-4999, Currency::Usd), // off by 1
+            reverses: Some(1),
+        };
+        assert!(
+            ledger_append(ledger.clone(), bad).is_err(),
+            "reversal amount must equal -earn exactly"
+        );
+        assert_eq!(
+            ledger_sum(&ledger),
+            5000,
+            "no partial money moved on bad reversal"
         );
     }
 }

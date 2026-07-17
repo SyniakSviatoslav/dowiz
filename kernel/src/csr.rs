@@ -536,7 +536,10 @@ mod tests {
         let reread = std::fs::read_to_string(&path).expect("re-read serialized csr ppr scores");
         std::fs::remove_file(&path).ok();
 
-        assert_eq!(reread, serialized, "byte content did not survive a disk round-trip");
+        assert_eq!(
+            reread, serialized,
+            "byte content did not survive a disk round-trip"
+        );
 
         let reparsed: Vec<f64> = reread
             .split(',')

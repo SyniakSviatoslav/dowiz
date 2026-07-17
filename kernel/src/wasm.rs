@@ -156,6 +156,7 @@ fn order_from_in(o: OrderIn) -> Result<Order, String> {
         // JS-boundary reconstruction: this path deserializes an order shape that
         // did not carry the trust flag → conservatively UNTRUSTED (fail-closed).
         price_trusted: false,
+        ledger: Vec::new(),
     })
 }
 
