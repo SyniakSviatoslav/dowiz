@@ -311,3 +311,20 @@ The cheap, structural fix (not performed here, since this pass's scope is limite
 section) would be a one-line `STATUS: IMPLEMENTED — commit 4dec04218, kernel 367/engine 49 passing`
 marker directly under the title, so the next reader doesn't have to re-derive what this appendix just
 verified.
+
+---
+
+## Sibling-finding addendum (2026-07-17, appended — Phase-27 fault-isolation audit)
+
+H1's disease class — an infallible port signature forcing its durable impl to collapse the failure
+pole — has exactly one remaining instance in the kernel, found and verified by the Phase-27 audit
+(`BLUEPRINT-FAULT-ISOLATION-DECENTRALIZED-ARCHITECTURE-2026-07-17.md` §1.2 finding **A2**,
+CRITICAL): `BlockStore::put(&mut self, id, bytes) -> bool` has no error pole, and where the
+pre-fix `FileEventStore` *swallowed*, `FileBlockStore::put` takes the other collapse — it
+**panics** on `create_dir`/`write`/`rename` failure (`kernel/src/backup.rs:198,209,217`). No
+caller outside `backup.rs` today, but it is the disk half of the public trait offered to future
+backends. The fix (Phase-27 Wave F0) is this blueprint's own pattern re-applied: `put ->
+Result<(), StoreError>` reusing the H1 error taxonomy, memory state advanced only after the
+durability barrier, plus an H1-style `FaultyStore` RED test. Phase 27 also generalizes the
+lesson into a standing rule ("every port that can touch I/O is fallible", its §3.1/§6) so a
+third instance cannot be introduced silently.

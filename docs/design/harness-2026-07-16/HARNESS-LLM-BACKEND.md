@@ -433,3 +433,27 @@ still separate): `docs/design/sovereign-roadmap-2026-07-16/HARNESS-IMPROVEMENT-S
 port design), `BLUEPRINT-P11-compute-budget-cache.md` §4 (F33 `TokenBucket` spec, unchanged),
 `kernel/src/backup.rs` / `event_log.rs` / `evals.rs` (reused primitives). Planning only — no code
 written; implementation begins when the operator says so, on `feat/harness-llm-backend`.*
+
+---
+
+## Audit addendum (2026-07-17, appended — Phase-27 fault-isolation audit of the landed code)
+
+Two verified defects in the implementation that has since landed on `feat/harness-llm-backend`
+(full context: `BLUEPRINT-FAULT-ISOLATION-DECENTRALIZED-ARCHITECTURE-2026-07-17.md` §1.2):
+
+1. **The Dispatcher's concurrency bound is dead code (A4, HIGH).** `llm-adapters/src/dispatch.rs`
+   stores `workers` (`:60,:70`) but never reads it; `dispatch()` does `thread::spawn`
+   unconditionally per call (`:89`). The module doc's claim "N workers ≤ the backend's own
+   parallelism cap (e.g. 2 for Ollama)" is not enforced — `TokenBucket` bounds volume over time,
+   not concurrent in-flight calls, so arbitrarily many threads can hammer the backend at once.
+   Fix owned by Phase-27 Wave F1b: a counting semaphore honoring `workers`, over-cap ⇒ typed
+   `Busy` refusal (degrade-closed). Done-check: 3×`workers` concurrent dispatches against a slow
+   fake backend ⇒ observed in-flight never exceeds `workers`.
+2. **The exact-match cache is unbounded (A3, HIGH — convergently found twice).**
+   `CachingBackend`'s `Arc<Mutex<MemStore>>` (`cache.rs:36-44` → `kernel/src/backup.rs:78-86`)
+   has no eviction/TTL/size cap; every distinct prompt tuple is cached for process lifetime. Fix
+   is OWNED by Phase 26 (`BLUEPRINT-MEMORY-OPTIMIZATION-FLOW-ANALYSIS-2026-07-17.md` §1.4 —
+   byte-bounded LRU behind the `BlockStore` trait); recorded here so this doc's cache section is
+   not read as final. Related latent hazard (A12): the shared cache lock is taken with
+   `.lock().unwrap()` (`cache.rs:94,104`) — safe only while the store impl is panic-free inside
+   the lock; the Phase-27 poisoning-discipline sweep covers it.
