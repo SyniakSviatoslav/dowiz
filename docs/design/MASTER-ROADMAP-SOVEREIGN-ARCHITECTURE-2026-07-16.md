@@ -263,3 +263,121 @@ research passes the operator requested on the agent harness itself. All in
 Phase-15 rows / dependency graph have already been corrected to reflect the O18 split (E13-cpu vs.
 E13-gpu). `ARCHITECTURE.md:34` still needs the operator's canon-merge pass (per `BLUEPRINT-P02`'s
 mechanism) — not edited here, same boundary as the rest of this roadmap.
+
+---
+
+## 8. Second follow-up pass (2026-07-17) — four new phases, one cross-phase addendum, a
+## completeness audit, native-cleanup tracking
+
+Same rule as §7: every claim below is either re-derived from live code/tests this session or
+named as an open decision, never asserted from a prior doc's authority.
+
+### 8.1 Four new phases (P20–P23)
+
+None of these existed in the 19-phase table in §2. Each has an execution-grade blueprint already
+written (research + DECART + 2-question doubt audit + Anu/Ananke check, same protocol as P01–P19).
+Adding them here is bookkeeping, not new design work — the design already exists in the cited file.
+
+| # | Phase | Blueprint | Depends on | Note |
+|---|---|---|---|---|
+| 20 | Demo & Marketing Pipeline Refactor | [DEMO-MARKETING-PIPELINE-REFACTOR-2026-07-17.md](DEMO-MARKETING-PIPELINE-REFACTOR-2026-07-17.md) | 7 (its DM-2 offer-redemption ledger hard-depends on P07's replay-dedup fix), 18 (all publication gated behind public-flip, mirroring P19's own boundary) | 7 work units (DM-1..DM-7); no new crate, reuses engine `compose` + a committed glyph atlas |
+| 21 | Local AI / Local Agents (resident-agent plane) | [LOCAL-AI-LOCAL-AGENTS-RESEARCH-2026-07-17.md](LOCAL-AI-LOCAL-AGENTS-RESEARCH-2026-07-17.md) | 5 (routing organism, done) | Extends the already-shipped `LlmBackend`/Ollama port (harness-2026-07-16) with a plan→act→observe loop; zero new external deps per its own DECART; shares sequencing with the agentic-mesh arc (separate branch) but does not depend on it landing |
+| 22 | Multi-Platform Social Auto-Posting | [BLUEPRINT-SOCIAL-AUTO-POSTING-2026-07-17.md](BLUEPRINT-SOCIAL-AUTO-POSTING-2026-07-17.md) | 1 (CI floor) | New `SocialPoster` port mirroring the `LlmBackend` port pattern exactly; Wave 0 = Telegram (no operator decision needed); Wave 1 (Viber) blocked on **O-SOC-1** (public media-hosting location); Wave 2 (Meta) gated on its own approval-process calendar, not a build dependency |
+| 23 | Device Auth + 2FA | [BLUEPRINT-AUTH-DEVICE-2FA-2026-07-17.md](BLUEPRINT-AUTH-DEVICE-2FA-2026-07-17.md) | none for its P1 (a zero-dep `totp.rs` primitive, buildable today); **P3 (full HTTP wiring) depends on a dynamic admin HTTP surface that does not exist anywhere in this roadmap yet** — a real gap, named here rather than assumed away. Native Rust primitive chosen over Better Auth because the JS/TS stack (Better Auth's runtime) is fully deleted from `origin/main`, not merely paused |
+
+**Wave placement:** P20–P23 are Wave-0-eligible in the same sense P1–P5 are (P21's `totp.rs` and
+P22's Telegram adapter need no operator ruling; P20 and P23 have a named phase dependency but no
+operator-decision dependency). None of them sit on the P3→P9→P10→P13 critical path (§2); they are
+off-critical-path lanes exactly like P5/P8/P11/P12/P18-prep, fan out whenever capacity is idle.
+
+### 8.2 One cross-phase addendum, not a new phase — Hub design vs. vendor market research
+
+[HUB-DESIGN-VENDOR-MARKET-RESEARCH-2026-07-17.md](HUB-DESIGN-VENDOR-MARKET-RESEARCH-2026-07-17.md)
+compared dowiz's hub design against general vendor-facing delivery-platform market patterns
+(menu-as-data, external-channel bridging, multi-fleet dispatch, store-state/kitchen-load modeling,
+multi-location semantics) and found six gaps (G1–G6). **This is deliberately not phase 24** — every
+gap-closing item (D1–D6) extends an *existing* phase (10, 13, 15, 16) rather than standing alone, per
+the addendum's own scope decision (no new phase, no new mechanism, every fix reuses something already
+in the roadmap). One new operator decision came out of it:
+
+| # | Decision | Blocks | Stakes |
+|---|---|---|---|
+| O20 | **Multi-location semantics** — is a "location" a sub-hub (P15 agent-recursion) or a flat intra-hub row? The legacy schema had organizations→locations; the mesh model never ruled this | Phase 16 (multi-location UI), the D6 addendum | Recommended default: intra-hub row for v1, sub-hub-as-target for later scale — flagged overridable, not forced |
+
+The doc's own counterweight, restated because it is easy to lose in a gap list: dowiz is **ahead** of
+every platform it was compared against on offline resilience, customer-data ownership, zero take-rate
+economics, and courier dignity (NO-COURIER-SCORING is a genuine differentiator, not a compliance
+cost). The gaps are real; so is the lead.
+
+### 8.3 Roadmap completeness audit (2026-07-17)
+
+A dedicated pass re-verified every blueprint in this roadmap plus H1–H4 (hermetic-remediation) and
+B1/B3/B4/E1/E2 (the agentic-mesh and spectral-evolution arcs, separate worktrees) against live
+code/tests, and appended a "Planning-protocol completion appendix" to 25 files where the blueprint's
+own claims had drifted from what is actually built — always append-only, nothing rewritten, nothing
+committed by the audit itself. Two findings apply across the whole roadmap, not to any one phase:
+
+1. **"Landed" is branch-implicit.** The same claim ("still open" vs. "already built") can be true or
+   false depending on which branch/worktree is checked out — confirmed independently on P07's dedup
+   fix, B3's `TokenBucket::release`, and B4's crypto bench, each of which exists only on its own
+   feature branch. Every appendix now names its branch explicitly; a reader who doesn't check the
+   branch is the single most common way this roadmap goes stale in practice.
+2. **The dominant staleness direction is "assumed-unbuilt, actually built."** Nine blueprints (P01,
+   P07, P08, P12, H1, H2, E1, E2, and P06's own `v1-verify` gate contract — see §8.4) had real
+   implementation land after their blueprint's evidence pass, with no header update recording it.
+   The fix in each case was appending the landed state, not rewriting the design.
+
+Two operator-decision items surfaced by this pass are not yet in §3's table and are added here:
+**O2b** (P14's reproduced F2 dispute table silently dropped a phrase load-bearing to Contradiction A —
+needs a re-derivation, not a ruling) and a note that **O18** and **O19**'s "resolved" status in three
+2026-07-16 docs contradicts MEMORY.md's own record of them as still-open blockers — named, not
+adjudicated, exactly per this roadmap's own rule of recording contradictions rather than picking a
+side silently.
+
+### 8.4 P06's merge-gate contract is now executable (found during the audit, not separately built)
+
+`tools/ci-truth/src/v1.rs` implements BLUEPRINT-P06 §2–§5's anchor loader, TLV
+encode/decode, and merge-gate policy as a real, tested Rust module — with signing
+behind an explicit `Signer` trait whose only production implementation
+(`UnsignedSigner`) honestly emits `"signed":false`, exactly mirroring
+`main.rs:423`'s existing placeholder. This is *not* a violation of P06's own hard
+precondition ("no signing until Phase 3 closes C4b on `mod_l`") — it contains no
+signing, only the policy the signing eventually plugs into.
+
+STATUS (2026-07-17):
+- (a) **DONE** — the module now has a `#[cfg(test)]` suite (8 contract tests:
+  TLV round-trip, K≠V load invariant, and the §5 merge-gate policy covering the 3
+  mandated RED cases — missing attestation note, key_K==key_V self-sign, residue
+  missing — plus red-line-touch honesty and GREEN-required-on-red-line). `ci-truth
+  v1-verify <sha>` is wired and runnable; verified 27/27 ci-truth tests green,
+  0 warnings. The contract is now falsifiable by this roadmap's own bar.
+- (b) **OPEN (operator-gated)** — per P06-EXECUTION-PLAN-2026-07-17.md §2, the
+  dowiz-side verifier still needs a *real* Ed25519/ML-DSA-65 verify-only
+  implementation behind this contract. `v1.rs`'s `digest32` is explicitly a
+  placeholder (`git hash-object`, not sha3-256), named as such in its own comment —
+  not a finished crypto primitive. The `Signer` trait slot is left open for the
+  bebop2 hybrid (Ed25519⊕ML-DSA) implementation that lands after Phase 3 closes C4b.
+  Until then, `v1-verify` correctly emits RED on any commit lacking the two git
+  notes, which is the honest Phase-1 behavior.
+
+### 8.5 Native-only cleanup — tracked, not fully executed
+
+Per the operator's standing direction (no Python/Node runtime code outside adapters/bridges): this
+session deleted genuinely dead artifacts (14 one-off `audit/*.py` scripts that manually poked
+`apps/api` endpoints deleted with the rest of the JS/TS stack; two stale root-level duplicates of
+`eval-layer/{metrics,openrouter_judge,eval_runs}.py`; an unused `.venv-paddle/` OCR experiment
+directory). **Not deleted, and why:**
+
+- `tools/eqc/eqc.py` — actively wired into `.github/workflows/ci.yml`'s `eqc-proofs` job. Deleting it
+  without a Rust replacement would break CI. Tracked as a named follow-up: port to Rust under Phase 1
+  (CI Truth Floor) once someone picks it up — not silently left, not silently deleted.
+- `tools/skillspector-rs/gen_rules.py` and `tools/skillspector/src/skillspector/`'s Python source —
+  this is a legitimate bridge, not a dinosaur: `gen_rules.py` parses the Python analyzer source as its
+  "source of truth" (its own comment) and generates `skillspector-rs`'s `rules.rs` from it. The Python
+  never runs in production; it is a code-generation input, the exact "adapter, not runtime" exception
+  the operator's own direction allows.
+- `tools/loop-signals/transcript_events.py`, `tools/telemetry/test_ser.py`, `kernel/benches/bench_track.py`
+  — not re-audited this pass; flagged here so they are a known open question, not an assumed-clean
+  item.
+
+---

@@ -28,6 +28,17 @@
 //!       event_log.rs / auth·otp·jwt, it re-runs kernel + engine `cargo test` in a
 //!       CLEAN independent git worktree and emits RED|GREEN; otherwise SKIP.
 //!       EXIT 0 GREEN|SKIP, 1 RED, 2 usage/git-resolution error.
+//!
+//!   ci-truth v1-verify [<sha>]                    (default: HEAD)
+//!       BLUEPRINT-P06 §5 merge-gate evaluator. Fetches refs/notes/v1-diff-attest
+//!       (key_K) and refs/notes/v1-verdict (key_V) for <sha>, then runs the §5
+//!       policy: both notes present, key_K ≠ key_V, hash-binding intact, GREEN
+//!       required on red-line diffs, residue present, redline_touch honesty.
+//!       HONESTY: real ML-DSA key_K/key_V signing is HARD-GATED on Phase 3 closing
+//!       C4b (see src/v1.rs); the contract/gate is executable and testable now.
+//!       EXIT 0 GREEN, 1 RED.
+
+mod v1;
 
 use std::fs::{self, OpenOptions};
 use std::io::Write;
@@ -658,11 +669,13 @@ fn main() {
         "claim-latency" => claim_latency(pos),
         "claim-latency-check" => claim_latency_check(pos),
         "v5c-reexec" => v5c_reexec(pos),
+        "v1-verify" => v1::v1_verify(pos),
         _ => {
-            eprintln!("ci-truth: usage: ci-truth <claim-latency|claim-latency-check|v5c-reexec> [args]");
+            eprintln!("ci-truth: usage: ci-truth <claim-latency|claim-latency-check|v5c-reexec|v1-verify> [args]");
             eprintln!("  claim-latency [<sha> | <base> <head> | <base>..<head>]   append V5-B ledger entries");
             eprintln!("  claim-latency-check                                      P08 §4 anomaly detector (advisory; exit 0) -> docs/ledger/claim-latency-anomalies.jsonl");
             eprintln!("  v5c-reexec [<base>] [<head>]                             independent re-exec (default origin/main HEAD)");
+            eprintln!("  v1-verify [<sha>]                                        BLUEPRINT-P06 §5 merge-gate (default HEAD; exit 0 GREEN, 1 RED)");
             2
         }
     };
