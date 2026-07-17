@@ -141,6 +141,26 @@ non-canonical encoding, or small-order `A`/`R` falls back to per-frame single ve
 batch-accept can never admit a frame the single path wouldn't; (iv) verdict equality
 demonstrated on RFC 8032 §7.1 KATs + the SSR-2020 edge-vector suite (§4.3).
 
+> **Correction (2026-07-17, post-F1 fix — measured; supersedes the 15–20 % claim above):** pin
+> (iii), as landed (`bebop2/core/src/sign.rs::verify_batch`, 2026-07-17), is implemented as
+> *confirm-every-accept*: a small-order filter alone does NOT close the SSR-2020 mixed-order gap
+> (a mixed-order forgery slipped straight through it — see `batch_rejects_ssr2020_mixed_order_forgery`),
+> so the cofactored batch equation is an accept-HINT / sound fast-REJECT only, and every
+> batch-accept is confirmed by a full per-item cofactorless single verify. The accept path
+> therefore costs the batch equation *plus* N singles — ≥ N singles by construction. Measured on
+> the fixed code (bebop `docs/ledger/crypto-bench.jsonl`, 2026-07-17): batch/64 = 131.2 ms vs
+> 64 × single = 40.3 ms → batch costs **3.26×** the singles with this repo's naive
+> (non-Straus/Pippenger) `scalar_mul`. The "trims a hybrid burst by roughly 15–20 %" claim above is
+> **structurally unreachable in this implementation** — batching currently has NO throughput
+> benefit even on the classical leg; its only value is the sound fast-reject. The original figure
+> (from R4 §2's ~273 k → ~134 k cycles/sig) remains true of Ed25519 batch verification *in
+> general* — i.e., without this soundness pin, or under a ZIP-215-style cofactored-single
+> acceptance authority — but not here. Recovering any real throughput would additionally require a
+> Straus/Pippenger multi-scalar mult (out of scope per §5's DECART-gated deferral), and even then
+> the accept path stays ≥ N singles while pin (iii) stands. The burst list (a)/(b) survives only
+> as *where the fast-reject applies*; B1/B2 must budget no batching speedup (B1 §(a) carries the
+> matching correction).
+
 ### §2.4 Envelope size budget (recomputed, not quoted)
 
 Per-frame hybrid signature tax, from source: `SIGNATUREBYTES = 3309` (pq_dsa.rs:64) + 64 B
