@@ -4,3 +4,6 @@
 
 /// `LlmBackend` port — pluggable local/managed LLM backend trait + value types (zero HTTP/serde).
 pub mod llm;
+
+/// `AgentBridge` port (B1) — hybrid-signed, fail-closed agent-admission seam.
+pub mod agent;

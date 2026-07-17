@@ -92,7 +92,7 @@ impl FuelTrancheRunner {
         let mut consumed_units = 0u64;
         loop {
             // Prepay the next tranche. On refusal: TERMINATE — do not load fuel again.
-            if !bucket.try_acquire(self.tranche_units) {
+            if !bucket.try_acquire(self.tranche_units as f64) {
                 return Err(FuelError::BudgetExceeded { consumed_units });
             }
             self.set_fuel_calls.fetch_add(1, Ordering::SeqCst);
@@ -218,7 +218,7 @@ mod tests {
     #[test]
     fn crit4_compute_bomb_terminates_with_budget_exceeded() {
         // Bucket: 20 units, no refill. Tranche = 8 units, small fuel_per_unit for speed.
-        let bucket = TokenBucket::new(20, 0.0);
+        let bucket = TokenBucket::new(20 as f64, 0.0);
         let runner = FuelTrancheRunner::new(1, 8);
         let mut guest = DeterministicFuelMeter::infinite(); // never finishes
         let res = runner.run(&mut guest, &bucket);
@@ -239,7 +239,7 @@ mod tests {
     #[test]
     fn finite_guest_completes_within_budget() {
         // Bucket huge; guest needs 10 * fuel_per_unit(=1000) = ... finishes within 2 tranches.
-        let bucket = TokenBucket::new(1_000_000, 0.0);
+        let bucket = TokenBucket::new(1_000_000 as f64, 0.0);
         let runner = FuelTrancheRunner::new(1000, 8); // 1 tranche = 8*1000 = 8000 fuel
         let mut guest = DeterministicFuelMeter::needs(10_000); // needs 2 tranches (8000 + 2000)
         let units = runner.run(&mut guest, &bucket).expect("finite guest finishes");
@@ -255,7 +255,7 @@ mod tests {
         // fuel; wasmtime traps OutOfFuel; the loop advances until the bucket is empty.
         let wat = r#"(module (func (export "run") (loop br 0)))"#;
         let mut meter = super::WasmtimeFuelMeter::from_wat(wat).expect("wat compiles");
-        let bucket = TokenBucket::new(24, 0.0); // 3 grantable tranches of 8
+        let bucket = TokenBucket::new(24 as f64, 0.0); // 3 grantable tranches of 8
         let runner = FuelTrancheRunner::new(1000, 8);
         let res = runner.run(&mut meter, &bucket);
         assert!(matches!(res, Err(FuelError::BudgetExceeded { .. })), "compute bomb terminated");

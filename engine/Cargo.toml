@@ -39,4 +39,3 @@ splat = []
 
 [dev-dependencies]
 
-fake-crate-xyz = "0.1"

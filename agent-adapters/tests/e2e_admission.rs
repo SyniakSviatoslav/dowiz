@@ -116,7 +116,7 @@ fn e2e_admits_valid_and_rejects_invalid_against_real_file_event_store() {
     assert_eq!(log.len(), len_before + 1, "one AgentAdmitted event landed durably");
     // The minted envelope exists and has budget (do NOT drain it — the invoke below needs it).
     assert_eq!(rec.granted_capacity, 256);
-    assert!(rec.bucket.available() >= 4, "minted bucket carries the granted envelope");
+    assert!(rec.bucket.available() >= 4.0, "minted bucket carries the granted envelope");
 
     // One bridged invoke through the minted envelope → exactly one TrackRecord row.
     let quirks = AgentQuirks::mcp_server(allowlist());
