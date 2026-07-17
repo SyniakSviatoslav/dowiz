@@ -107,6 +107,22 @@ pub fn matrix_content_address(a: &[Vec<f64>]) -> String {
     format!("{:016x}", h)
 }
 
+/// Canonical (scale-invariant) content-address for `slem_cached`.
+///
+/// Placeholder body for the RED phase: this delegates straight to
+/// `matrix_content_address` (raw `to_bits`) so the scale-invariance bug is
+/// live — `W` and `c·W` hash to different roots and the cache recomputes.
+/// The GREEN commit replaces this with the pivot-scaled canonical hash.
+pub fn canonical_content_address(a: &[Vec<f64>]) -> String {
+    matrix_content_address(a)
+}
+
+/// Bit pattern of a canonical quiet-NaN used by [`canonical_content_address`] to
+/// map any NaN input to a single deterministic id (so corrupted tiles are
+/// content-addressed identically across runs/platforms).
+#[allow(dead_code)]
+pub const CANONICAL_QUIET_NAN: u64 = 0x7ff8_0000_0000_0000;
+
 /// Content-addressed `spectral::slem` (second-largest eigenvalue modulus) routed
 /// through a `DecompCache`. The expensive `eigenvalues` solve is performed only
 /// when `a`'s content-address changes; otherwise the cached spectrum is reused.
@@ -200,5 +216,66 @@ mod tests {
         };
         assert_eq!(cache.recomputes(), 1, "no thrash on the new root either");
         assert_eq!(vals_b2, vec![0.9, 0.7]);
+    }
+
+    // ── T3/A5 (W1-L10, doc-19 bridge-gap #1) RED tests ────────────────────────
+    /// Integer-valued fixture tile whose uniform-scale family is exactly
+    /// representable (power-of-two and small-int scales). This is the canonical
+    /// "logical tile" two nodes may build at different scale.
+    fn fixture_tile() -> Vec<Vec<f64>> {
+        // A simple stochastic-like matrix of small integers.
+        vec![
+            vec![1.0, 2.0, 0.0],
+            vec![3.0, 1.0, 2.0],
+            vec![0.0, 1.0, 3.0],
+        ]
+    }
+
+    /// Multiply every entry of `a` by `c` (uniform scale).
+    fn scale(a: &[Vec<f64>], c: f64) -> Vec<Vec<f64>> {
+        a.iter()
+            .map(|row| row.iter().map(|&x| x * c).collect::<Vec<f64>>())
+            .collect()
+    }
+
+    /// Build a 1×1 tile containing exactly `x`.
+    fn tile_with(x: f64) -> Vec<Vec<f64>> {
+        vec![vec![x]]
+    }
+
+    /// RED (scale-invariance bug): `W`, `2·W`, `3·W` are the same logical tile;
+    /// the cache must fill once and HIT twice → `recomputes() == 0`. Today the
+    /// raw hash keyed on `to_bits` makes each scale a distinct key ⇒ 2 recomputes.
+    /// TODAY this FAILS (recomputes == 2) — proving the bug live before the fix.
+    #[test]
+    fn slem_cached_scale_invariant_key_and_payload() {
+        let w = fixture_tile();
+        let mut cache = DecompCache::new();
+        let s1 = slem_cached(&mut cache, &w);
+        let w2 = scale(&w, 2.0);
+        let w3 = scale(&w, 3.0);
+        let s2 = slem_cached(&mut cache, &w2);
+        let s3 = slem_cached(&mut cache, &w3);
+        assert_eq!(
+            cache.recomputes(),
+            0,
+            "W, 2W, 3W share one canonical key ⇒ zero recomputes"
+        );
+        assert!(
+            (s2 - 2.0 * s1).abs() < 1e-12 && (s3 - 3.0 * s1).abs() < 1e-12,
+            "slem scales linearly with pivot p: s2≈2·s1, s3≈3·s1 (got s1={s1}, s2={s2}, s3={s3})"
+        );
+    }
+
+    /// RED (`-0.0`/`+0.0`): value-identical but bit-distinct tiles must canonicalise
+    /// to the SAME id. Today `to_bits` differs for -0.0 vs +0.0 ⇒ distinct roots.
+    /// TODAY this FAILS (ids differ) — proving the latent case live before the fix.
+    #[test]
+    fn neg_zero_and_pos_zero_are_the_same_tile() {
+        assert_eq!(
+            canonical_content_address(&tile_with(0.0)),
+            canonical_content_address(&tile_with(-0.0)),
+            "-0.0 and +0.0 must canonicalise to the same content id"
+        );
     }
 }
