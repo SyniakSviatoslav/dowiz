@@ -638,3 +638,24 @@ owned gaps — which is the most this appendix can do without itself becoming th
 (line 29, pgrust binary absence); `kernel/src/event_log.rs` (`EventStore`/`MemEventStore`/pgrust doc
 comments); git history for `apps/web/src/pages/courier/DeliveryPage.tsx` at `79ef316f6^`;
 `packages/db/migrations/1780421100043_courier-payouts-scaffold.ts`. No code or canon changed.*
+
+---
+
+## Addendum (2026-07-17, Layer-I consolidation, L3) — courier out-of-band notification/wake sub-unit
+
+Folded in from `MASTER-BUILD-SEQUENCE-UPDATED-2026-07-11.md` (`:132-141`, the built-then-deleted
+`server/src/notify.rs` `NotifyHub`/`WebhookSink`/VAPID seam — would otherwise be lost, per
+`CORE-ROADMAP-2026-07-17/P-I-audit-cross-repo-consolidation.md` §3 item L3). Disposition, two
+halves stated exactly:
+
+1. **Dissolved-by-mesh (the delivery semantics):** in the mesh model a courier device is a node
+   that receives `MeshEvent`s directly — the old "signal couriers on every legal order transition
+   via a server-side notify hub" mechanism has no successor because the need it served is now the
+   transport layer itself. No re-build.
+2. **Kept as a P13 courier-leg sub-unit (the wake path):** a *sleeping/offline* courier device
+   still needs an out-of-band wake alert before it can receive anything on the mesh. This is a real
+   sub-unit of this phase's courier leg, not covered elsewhere. Cross-references: P08's alerting
+   sink is the natural emission point; the live Telegram alerting pipeline (`rust-spool`, flagged
+   A1 in `BLUEPRINT-FAULT-ISOLATION-DECENTRALIZED-ARCHITECTURE-2026-07-17.md`) is the closest
+   surviving analog and must have its head-of-line-blocking defect fixed before it carries
+   wake-critical traffic.

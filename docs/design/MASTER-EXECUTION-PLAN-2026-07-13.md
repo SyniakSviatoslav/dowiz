@@ -1,3 +1,13 @@
+> **SUPERSEDED (2026-07-17)** — see `MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md` (canonical
+> roadmap, phases P01–P30; its header names this doc) and `CORE-ROADMAP-INDEX.md` +
+> `CORE-ROADMAP-2026-07-17/` (the Layer A–I execution structure). Preserved for historical/
+> audit-trail purposes only. **Lineage note (P-I audit §2.5):** this doc's 4-phase altitude spine
+> (Земля → ядро → поверхня → платформа) is the direct ancestor of the Layer A–I axis — the same
+> idea, re-expressed. Its lasting value is as the historical index to the 9 pre-pivot sub-plan
+> directories (~151 blueprint units), whose live navigation now lives in MEMORY.md → "Active arcs
+> (earlier)". This doc was omitted from CORE-ROADMAP-STANDARD §0's original 5-doc inventory — the
+> P-I audit corrected the count to 6.
+
 # dowiz / bebop2 — MASTER EXECUTION ROADMAP (усі плани 2026-07-13)
 
 > Один майстер-план, що зводить 9 тематичних дизайн-планів + 1 виконаний операційний трек у **логічну

@@ -24,6 +24,10 @@ or an older doc's claim):
 - `docs/design/MASTER-BUILD-SEQUENCE-UPDATED-2026-07-11.md`
 - `docs/design/MASTER-INTEGRATION-PLAN-2026-07-14.md`
 - `docs/design/MASTER-ROADMAP-10-PHASES-2026-07-14.md`
+- `docs/design/MASTER-EXECUTION-PLAN-2026-07-13.md` — **added 2026-07-17**: omitted from this
+  inventory as originally written; the P-I Wave-1 audit (§0/§2.5) found it (the SOVEREIGN doc's own
+  header already named it) — so the superseded set is **5 older docs, not 4**, and the banner pass
+  covered all 5.
 - `docs/design/MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md` — **the newest, most-actively-
   referenced one**, with 19 phase blueprints already written (`docs/design/sovereign-roadmap-
   2026-07-16/BLUEPRINT-P01..P19-*.md`) and a live P06-blocks-three-arcs finding already tracked in
@@ -144,6 +148,14 @@ skips any of these is incomplete, not merely light:
 ---
 
 ## 3. Phase structure — lowest (core) to highest, absorbing existing work rather than re-deriving
+
+> **NAMING RULING (2026-07-17, Wave 3 — P-I audit §4):** the "P-A..P-I" letters below are ratified
+> as **`Layer A..I`** — an orthogonal **altitude axis** grouping clusters of numeric phases, never a
+> renumbering of the canonical execution numbering **P01–P30** (P01–P19 as numbered blueprint files
+> in `sovereign-roadmap-2026-07-16/`; P20–P30 as standalone blueprints indexed from SOVEREIGN
+> §8.1–§8.12 — this section's original "P01-P19" reconcile scope is stale by 11 phases). The "P-"
+> prefix is retired from prose to kill the P-D/P04 lexical collision; on-disk filenames keep their
+> provenance names. Crosswalk table: `CORE-ROADMAP-INDEX.md`.
 
 Ordering rule (operator, restated across this whole session): smallest kernel-level abstraction
 first, highest-level product/UI last. Each phase below states what it absorbs from the existing
