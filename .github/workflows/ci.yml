@@ -28,34 +28,14 @@ jobs:
             | TELEMETRY_NO_TG=1 ./telemetry health
 
   eqc-proofs:
-    name: eqc math proofs (dowiz tools/eqc)
+    name: eqc math proofs (dowiz tools/eqc-rs)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install sympy
-        run: pip install sympy
-      - name: Regenerate a proof and assert it compiles + runs GREEN
+      - name: cargo test (compiles + runs each generated proof program via rustc)
         run: |
-          python3 - <<'PY'
-          import sys, subprocess, tempfile, os
-          sys.path.insert(0, 'tools/eqc')
-          import sympy as sp
-          from eqc import Equation
-          b,coeff,t,k,theta,qp = sp.symbols('b coeff t k theta qp', real=True)
-          expr = 2*sp.exp(-b*coeff*t*(sp.cos(theta)+1)/2)*sp.cos(k*theta)/qp
-          eq = Equation(expr, [b,coeff,t,k,theta,qp], 'ci_smoke_inner', fixed=False)
-          src = eq.emit_proof_program(samples=[
-            {'b':2.0,'coeff':0.5,'t':1.0,'k':1.0,'theta':0.7,'qp':10.0}], eps=1e-9)
-          with tempfile.NamedTemporaryFile('w', suffix='.rs', delete=False) as f:
-            f.write(src); path=f.name
-          subprocess.run(['rustc','-O',path,'-o','/tmp/ci_proof'], check=True)
-          r = subprocess.run(['/tmp/ci_proof'], capture_output=True, text=True)
-          assert r.returncode == 0, r.stderr
-          print(r.stdout.strip())
-          PY
+          cd tools/eqc-rs
+          cargo test --release
 
   # ### SCOPE RULE BANNER (read before anything else — ARCHITECTURE.md §0, lines 23–27)
   # **Everything in this phase is a canonical-repo DEV-TIME fence.** It is a blocking CI / pre-commit
