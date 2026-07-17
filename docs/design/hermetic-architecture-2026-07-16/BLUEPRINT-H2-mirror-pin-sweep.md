@@ -240,3 +240,119 @@ ONE-Laplacian): by making the drift-class and integration-rate mirrors provably 
 remaining unpinned-mirror surface at that boundary to the Laplacian operator identity itself, which
 H-series Correspondence work (separate blueprint) can then address in isolation. Per the §3 leverage
 note in the principles doc, this is action (4) of the four highest-leverage root-cause fixes.
+
+---
+
+## §6 — Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+### (i) Citation verification + new grounding — this blueprint is already built, all 5 sites
+
+Live re-verification against current HEAD (`cc3d5c916`) confirms all five sites landed in the same
+commit as H1, **`4dec04218`** (2026-07-16T22:21:42Z), matching §2's design exactly. `git log --oneline
+4dec04218..HEAD -- engine/src/field_frame.rs engine/src/bridge.rs kernel/src/spectral.rs
+kernel/src/wasm.rs tools/telemetry/rust-spool/src/main.rs tools/async-spool/src/main.rs` is **empty**
+for every file — none has moved since. Corrected, live line numbers (all shifted from planning-time
+citations by the commit's own insertions):
+
+- **Site 1** (`dt` mirror, row #10): `FieldEquilibrium::default()` now sets
+  `dt: dowiz_kernel::DT_STABLE as f64` (`engine/src/field_frame.rs:51`); pin test
+  `field_default_dt_matches_kernel_dt_stable` at `:213-219` asserts both the literal equality and the
+  50 Hz derived invariant, exactly as §2.1 specified.
+- **Site 2** (`DriftClass`, row #23): `DriftClass::wire_code()` added at `kernel/src/spectral.rs:333`
+  (the single mapping authority, replacing the old inline `wasm.rs` literals — confirmed `wasm.rs` no
+  longer contains bare `=> 0.0/1.0/2.0` arms); kernel-side pin `drift_wire_code_is_canonical`
+  (`spectral.rs:407-410`). Engine-side round-trip + count-guard test
+  `drift_wire_contract_matches_kernel` at `engine/src/bridge.rs:793-802`, alongside the retained
+  one-sided `drift_codes_map` (`:780-784`) — both present, as §2.2 specified (strengthen, don't
+  replace).
+- **Site 3** (`TG_MIN_GAP_S`, row #18): self-pin in `rust-spool` (`tools/telemetry/rust-spool/src/main.rs:34,261-264`)
+  and `async-spool` (`tools/async-spool/src/main.rs:43,426-429`); a present-sibling gated test exists
+  in both (`rust-spool:270-286`, `async-spool:435-449`) that greps the live
+  `hermes-agent-kernel-rewrite` path and skips cleanly when absent — the "optional stronger tier" (§2.3
+  point 3) was in fact built, not left optional. `PACING-CONTRACT.md` exists at
+  `docs/design/hermetic-architecture-2026-07-16/PACING-CONTRACT.md` (confirmed via `find`), referenced
+  by both spool comments.
+- **Site 4** (`funnel` BTreeMap, row #12): `kernel/src/wasm.rs:34` imports `BTreeMap`; `LedgerOut.funnel`
+  field at `:116`; determinism pin `channel_ledger_funnel_serialization_is_deterministic` at `:852-881`
+  (asserts byte-identical JSON across two runs **and** ascending key order) — stronger than §4's
+  literal wording ("byte-identical JSON emitted"), since it also proves the *sorted* property the
+  `BTreeMap` choice specifically buys.
+- **Site 5** (backoff, row #24): `backoff_delay` at `rust-spool/src/main.rs:130-137` and
+  `async-spool/src/main.rs:246-...`, both exponential+jittered as designed, each with an
+  `envelope`-shape test (`rust-spool:293-...`, `async-spool:458-...`). Verified the jitter source is a
+  **dependency-free** wall-clock-seeded splitmix64 (`jitter_unit`, `rust-spool/src/main.rs:139-150`) —
+  not the `rand` crate — confirmed via `git diff 82e52c02e 4dec04218 -- */Cargo.toml`: **empty**, zero
+  new dependencies added anywhere in the H1+H2 commit.
+- **Live test run, this pass:** `cargo test --manifest-path tools/telemetry/rust-spool/Cargo.toml` → 3
+  passed; `cargo test --manifest-path tools/async-spool/Cargo.toml` → 3 passed; kernel/engine counts as
+  reported in BLUEPRINT-H1's own appendix (367/422/49, all green, this pass). All five §4 acceptance
+  criteria are satisfied live, not merely designed.
+
+### (ii) DECART judgment
+
+**No DECART owed**, and this blueprint's own text (§2.5) left one implicit choice slightly open —
+worth naming even though it resolved correctly. §2.5 says jitter "needs a seeded/simple RNG only (no
+crypto)" without committing to *hand-rolled vs. a crate* (e.g. the `rand` crate would have been a
+plausible, very common choice here and WOULD have required a DECART entry — a new external
+dependency). The landed implementation chose a dependency-free splitmix64 (verified above), which is
+the correct call under the ALL-RUST-NATIVE / minimal-deps direction this repo is actively pursuing (the
+same session's `4519bd7ff`/`cc3d5c916` telemetry ports specifically *removed* Python deps rather than
+add Rust ones). Because zero new dependency was actually added, no DECART table is owed retroactively
+— but the blueprint's own planning text should have foreclosed the crate option explicitly rather than
+leaving "seeded/simple RNG" ambiguous between a std-only and a dependency path; flagged here as a
+process gap the plan left to the implementer to resolve correctly, rather than resolving it itself
+(Detailed Planning Protocol step 3: DECART belongs in the planning artifact, before the choice is made,
+not discovered after the fact by an auditor).
+
+### (iii) Per-blueprint 2-question doubt audit
+
+**Q1 — concrete, unresolved doubts:**
+1. **Site 3's cross-repo present-sibling test is real but I did not execute it against a live sibling
+   checkout in this pass** — I confirmed the test code exists and skips cleanly (per its own logic) but
+   did not run it with `/root/hermes-agent-kernel-rewrite` present to see the *positive* path (actual
+   equality assertion against the live `reporting.rs` value) fire; I only confirmed the pin (self-shape)
+   tests are green.
+2. **Site 2's `DriftClass` count-guard** (`bridge.rs:793-802`, "adding a hypothetical 4th kernel variant
+   fails to compile") is a compile-time property — I read the code and judged it correct (an exhaustive
+   match with no `_` arm) but did not mechanically prove it by actually adding a 4th variant to a
+   throwaway branch and confirming the compile failure; this is inference from reading, not an executed
+   falsification.
+3. **Site 4's stronger test subsumes but does not literally match §4's wording** ("byte-identical JSON,"
+   no mention of key order) — I judged the extra key-order assertion a strict improvement, not a scope
+   change, but did not check whether any downstream consumer of the funnel JSON depends on a *specific*
+   key order other than ascending (unlikely, but unverified).
+4. **The `mat.rs`/eigenvector/PPR-triplication findings this sweep explicitly does NOT touch** (rows #8,
+   #9, #21, #22, #25 — backlog per HERMETIC-REMEDIATION-PLAN.md §5) remain exactly as backlogged; I did
+   not re-check whether any of H2's five site fixes accidentally created a new forcing trigger for one
+   of those backlog items (e.g., whether the `DriftClass` centralization at `spectral.rs:333` changes
+   the calculus for row #8's "does `csr::laplacian_spmv` gain a caller" trigger — it does not, on
+   inspection, but I did not exhaustively cross-check all five backlog triggers against this diff).
+5. **Cross-blueprint collision claim (H2 ∥ P4 on `wasm.rs`)** flagged in the umbrella plan §6.Q1.1 as
+   unverified at diff-level — I did not re-check it either; H2's actual landed diff touches
+   `wasm.rs:29-34,109-116,239-258` (import + `LedgerOut` + build site), which is a narrow, identifiable
+   region a P4 wasm-export addition could plausibly avoid, but I have not read any P4 implementation
+   diff to confirm.
+
+**Q2 — biggest blind spot:** identical in shape to H1's — the document presents as a forward-looking
+"Wave-0-safe, buildable now" plan, but is in fact fully shipped and tested; a reader trusting the
+header alone would not know. The compounding risk here is slightly higher than H1's because H2 bundles
+**five independent sites** — a reader could reasonably assume partial completion (e.g., "maybe only the
+`DT_STABLE` pin landed") without a way to check which of the five shipped short of reading this
+appendix or the commit diff directly.
+
+### (iv) Anu (logic) & Ananke (organization) check
+
+**Anu.** All five site designs are derivable from their own live-code citations, and each is now
+also verifiable against the shipped implementation line-for-line (§(i)). The one place a decision was
+left implicit rather than derived — Site 5's RNG source (§(ii)) — is named, not hidden, and resolved
+correctly by the implementer; Anu is satisfied in outcome but the *planning* document itself should
+have made that derivation explicit rather than relying on the builder to make the right call
+independently.
+
+**Ananke.** Same structural gap as H1, amplified by scope: nothing in the document forces a reader to
+discover (a) that it shipped at all, or (b) that it shipped as **one atomic commit covering all five
+sites**, not five independent landings. The §4 acceptance criteria are well-formed falsifiable checks
+in principle, and this pass executed all of them green — but that proof lives in this appendix and in
+`git log`, not in the document's own status. As with H1, the structurally inevitable fix (not applied
+here, since this pass's mandate is to append, not to rewrite the header) would be a one-line
+`STATUS: IMPLEMENTED — commit 4dec04218 (all 5 sites)` marker under the title.

@@ -334,3 +334,110 @@ courier photo bootstrap is Phase 16's courier surface. P17 sits at the tail of t
 (`P3 → P9 → P10 → P13 → {P14, P16} → P17`) and is parallel-safe with 18/19. Its PRE-unlock half adds
 no dependency; its POST-unlock half is the **single place in the whole roadmap** where `wgpu` and the
 splat crates legitimately enter the tree — and only after the §3 trigger and their DECART reports.
+
+---
+
+## 10. Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+### 10.1 — Citation verification + new grounding
+
+Every file:line citation in §1-§9 was re-checked against the live repo at current HEAD (branch
+`feat/harness-llm-backend`), not carried forward from the 2026-07-16 draft unchecked.
+
+**Confirmed exact:** `engine/Cargo.toml:24` `default = []`, `:31` `gpu = []`; `engine/src/bridge.rs:
+200-243` — the `#[cfg(feature = "gpu")] pub mod gpu` honest stub is verbatim, `new_gpu` returns
+`Err("gpu adapter not built — wgpu uncached")`; `engine/src/bridge.rs:556` `pub struct CourierMarker`;
+`wasm/src/lib.rs:57` `pub fn compose_field(...)`; `web/src/app.mjs:1-33` matches verbatim (kernel-only
+math boot, no JS re-implementation, exits non-zero on any `!ok`). Fresh network probe (2026-07-17, this
+pass): `curl crates.io/api/v1/crates/wgpu` → **403**, reproducing the blueprint's 2026-07-16 finding one
+day later — **O18a/graphics-unlock is still RED today**, not stale.
+
+**Line-drift found (small, not fabricated):** four citations are off by 4-9 lines from the live file,
+traced to two intervening commits (`4dec04218` "H1 event-log fail-open fix + H2 kernel<->engine
+mirror-pin sweep", `aedba0133` "P07 §6 money tax-overflow fix") that touched exactly these files after
+the blueprint's 2026-07-16 draft: `engine/src/field_frame.rs:189` cited → `compose()` is actually at
+**line 193**; `wasm/src/lib.rs:78` cited (`FieldSim::new/step/frame`) → the `FieldSim` struct is at
+**line 65**; `wasm/src/lib.rs:172` cited (wasm-bindgen-cli honest ceiling) → the comment is at **line
+174**; `kernel/src/wasm.rs:288` cited (`apply_event_js`) → the function is at **line 295**. None of these
+drifts change any claim's truth value — the cited code exists and does what's claimed — but a future
+reader following the exact numbers will land 4-9 lines off. Corrected here rather than left silently
+wrong.
+
+**New grounding on the item this pass was specifically asked to check — the O18a/O18b split:**
+`R2-MERGED-PHASE-ROADMAP.md:162` records that **O18 was SPLIT 2026-07-16** into two independent
+triggers, confirmed by an adversarial verifier pass at `SELF-CRITIQUE-2Q-DOUBT-AUDIT.md` §3 (lines
+226-292, live probes: `ls /dev/nvidia*` absent, `curl huggingface.co` → 200, `curl crates.io` → 403):
+**O18a `graphics-unlock`** (`cargo add wgpu` reachable) gates **P17 video/wgpu/F14/E23 only**; **O18b
+`model-weights-unlock`** (GGUF fetched + llama-server runnable) gates **P15 E13-cpu only, with no GPU
+condition**. The roadmap's own O-table is explicit: *"P17 video/wgpu (O18a only)."*
+
+**Finding: this blueprint is STALE against that split — it still uses the pre-split fused name
+throughout.** Every one of P17's references to the trigger (header preamble, §3's heading "The
+GPU-unlock trigger," §3's "R2 §4 O18" citation, §8 acceptance criteria #5/#9, §9's closing paragraph)
+says bare **"GPU-unlock"** / **"O18"**, never **"O18a"** or **"graphics-unlock."** Practically this does
+not change P17's scope — P17 never touches E13/llama.cpp, and everything it gates on (wgpu, video, F14,
+splat rendering) is exactly what O18a covers post-split, so no acceptance criterion is factually wrong.
+But the staleness is real: a reader holding only this blueprint, without also holding the roadmap's
+O-table, would reasonably (and now incorrectly) infer P17's GPU work is coupled to whatever unlocks
+self-hosted LLM inference (E13) — the opposite of the corrected roadmap's point, that the two are now
+proven-independent (crates.io 403 vs HuggingFace 200, different resources, different current states).
+**Correction recorded:** every "GPU-unlock" reference in this blueprint's trigger discussion should be
+read as **O18a / `graphics-unlock`** specifically, with no coupling to O18b/E13/llama.cpp implied. The
+fire-condition text in §3 itself (crates.io reachability + vendored `Cargo.lock` + DECART + operator go)
+remains completely correct for O18a; only the *label* is stale, not the substance.
+
+### 10.2 — DECART
+
+No DECART owed by this appendix. §6/§7/§8 already carry full inline DECART for every new crate this
+phase would introduce (`wgpu`, `bytemuck`, `mosure/bevy_gaussian_splatting`, the `Backend = Modal |
+VastApi | RunPodApi | HetznerGex44` rental-adapter choice) with rejected alternatives and a case-against
+(§7's 11 numbered rejections). The O18a/O18b correction above is a terminology fix, not a new dependency
+or vendor decision — DECART does not apply to it.
+
+### 10.3 — 2-question doubt audit
+
+**Q1 — 6 concrete items actually checked, not filler:**
+1. The O18a/O18b terminology staleness (§10.1) — real, corrected here; the blueprint body itself is not
+   edited in this doc-only pass, so the correction lives only in this appendix until folded back into
+   §3/§8/§9.
+2. Four citation line-drifts (§10.1) — checked via live `grep -n`, traced to two specific commits, not
+   left as an assumption.
+3. `FieldSim::step`/`frame` (cited alongside `::new`) were not individually re-verified beyond confirming
+   the struct exists at `:65` — whether they do exactly what §2's per-tick construction claims was not
+   re-derived further in this pass.
+4. `web/demo/scenario/delivery-01.json`, `web/demo/run-node.mjs`, `web/demo/index.html` (§2, §8) are
+   **planned, not yet built** per this blueprint's own framing — I did not check whether any already
+   exist on disk; their absence would not be a defect (P17 is planning-only) but I did not verify it.
+5. `mosure/bevy_gaussian_splatting`'s Apache-2.0 licensing claim (§6 P1.2, §7 item 10) was not
+   re-verified against the live upstream repo in this pass — carried forward from GS §2.3/§4 as
+   instructed ("cited verbatim, not re-derived").
+6. Modal's per-second pricing figures ("~$1.25–1.67/job on A100," §6 P1.1) were not re-fetched from
+   Modal's current pricing page — carried forward from GS per the same "verbatim" instruction, but
+   pricing is exactly the kind of external fact that can drift silently between passes.
+
+**Q2 — biggest blind spot:** this pass verified the O18a/O18b *labeling* is stale in P17 but did not
+check whether the roadmap's own OTHER references to bare "GPU-unlock" have been migrated either — they
+have not: `R2-MERGED-PHASE-ROADMAP.md` lines 93 and 107 (the phase-17 row and the dependency-graph row)
+still say bare "GPU-unlock," and only the O-table (line 162) carries the split. That means this
+blueprint's staleness is not an isolated drift — it inherited an inconsistency that exists in its own
+upstream source. Fixing P17 alone, without a corresponding fix to R2's phase-table/dependency-graph
+rows, would leave the correction only half-applied across the roadmap family.
+
+### 10.4 — Anu / Ananke check
+
+**Anu (logic):** the O18a/O18b split is derivable, not asserted here — it is lifted from a dedicated,
+already-adversarially-verified investigation (`SELF-CRITIQUE-2Q-DOUBT-AUDIT.md` §3) that ran live
+probes, independently reproduced fresh in this pass (§10.1's crates.io 403 re-probe). The claim "P17 is
+unaffected in substance, only in label" is also derivable: every P17 acceptance criterion mentioning the
+trigger (§8 #5, #9) refers only to wgpu/video/splat, never E13/llama.cpp, so O18a's narrower scope
+covers exactly what P17 already needed.
+
+**Ananke (organization):** this is where the finding is real. The blueprint's structure does **not**
+force the terminology fix — nothing in P17 checks itself against the roadmap's O-table at read time; a
+future implementer opening only this file has no structural prompt to discover the split unless they
+separately open `R2-MERGED-PHASE-ROADMAP.md:162` or `SELF-CRITIQUE-2Q-DOUBT-AUDIT.md` §3. **Named
+diligence-reliance:** whoever next edits this blueprint's body (not just appends to it) must manually
+carry the O18a rename into §3's heading, the header's dependency line, and acceptance criteria #5/#9 —
+nothing here makes that automatic. A stronger structural fix (out of scope for this doc-only pass) would
+be a single canonical trigger-name registry the whole roadmap family greps against, so a split like this
+propagates once instead of needing N manual edits across N blueprints.

@@ -293,3 +293,136 @@ marketing copy to any live surface; it does not build E57 billing/metering (spec
 it does not build Phase 13/16's order path (it only records G11 once they land); it does not run the
 public flip (Phase 18) it depends on. It writes no product code — planning blueprint plus in-doc draft
 copy only.
+
+---
+
+## 8. Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+### 8.1 — Citation verification + new grounding
+
+This blueprint entered this pass with **one** citation (`ac1caba40`, §1/§3) across 295 lines — by a wide
+margin the weakest-grounded of the three blueprints in this assignment. Every claim below was
+independently checked against the live repo; nothing is carried forward on trust.
+
+**Existing citations verified exact:** `MANIFESTO.md` §0's quoted sentence ("A self-hosted, decentralized
+network of autonomous nodes...") matches the live file line-for-line. `ARCHITECTURE.md:4` matches the
+"PIVOT 2026-07-16... mesh = FOUNDATION" line exactly. `STRATEGIC-VECTORS:57` (`docs/design/
+STRATEGIC-VECTORS-LOCKED-2026-07-16.md`) is confirmed: its V6 section header sits at line 56, with "bebop
+PQ-protocol as HEADLINER" on the next line — the headliner/by-product framing §2's draft copy builds on
+is genuinely sourced, not invented. `ac1caba40`'s AGPLv3-flip claim (§1, §3) is confirmed an ancestor of
+HEAD and present on `origin/main` (same check performed for the sibling P18 blueprint).
+
+**New grounding — LICENSE/ADR-020 state (task-directed check).** `LICENSE` at repo root is the full
+AGPLv3 text (`GNU AFFERO GENERAL PUBLIC LICENSE` first line, 33831 bytes) — the "FOSS license mandate —
+SATISFIED" claim (§3) holds. `docs/adr/0020-oss-license-tm-dco.md` exists (Status: Accepted,
+2026-07-16) and is the authoritative decision record this dossier plan should point a grant reviewer at
+for the license claim — this blueprint does not currently cite it by path.
+
+**New grounding — the ADR-0008 SQLite→pgrust correction is itself citing a moving target.**
+`docs/adr/0008-local-sqlite-pq-at-rest.md` is confirmed **Status: PROPOSED** (dated 2026-07-13), still
+titled and framed entirely around "Per-node local SQLite + PQ at-rest envelope" — confirming §3's own
+"⚠ CORRECTED" note that this ADR "is being updated SQLite→pgrust" is accurate as a description of
+in-flight, not-yet-landed work. The substrate claim itself is grounded: `kernel/src/backup.rs:29`
+`pub trait BlockStore` and `kernel/src/hydra.rs:743 FileEventStore` both exist as claimed, and `pgrust`
+is a real, non-vaporware reference across `kernel/src/event_log.rs`, `hydra.rs`, `retrieval/{fixtures,
+memory_store,diffusion,mod}.rs`, `kernel/Cargo.toml`, `deploy/pgrust.toml`, and `tools/deep-clean/src/
+main.rs` — the correction's replacement claim ("spectral/sqlless BlockStore + pgrust, never SQLite") is
+grounded in real code, not merely asserted in reaction to the operator's correction.
+
+**New grounding — an existing in-tree artifact this phase never cites.**
+`docs/design/sovereign-roadmap-2026-07-16/OPEN-SOURCE-CREDITS-LIST.md` exists (373 lines, dated
+2026-07-16, a full 3-repo dependency/attribution sweep with an explicit "so the operator can star/thank
+each one" purpose). This is squarely on-topic for an "ecosystem growth engine" phase — crediting upstream
+projects is a standard, low-cost community-goodwill growth action, cheaper than either the grant dossier
+or the pricing refresh this phase already covers — and it is never referenced anywhere in this blueprint.
+This is the one piece of "what can be grounded" the task asked for that was sitting unused in the same
+directory.
+
+**New grounding — the stale brand-bible pointer (§1) is confirmed as described, nothing further found.**
+`ls docs/design/dowiz-brand/` → no such directory; `find . -iname "*brand-bible*"` → zero hits; a search
+of the memory corpus (`/root/.claude/projects/-root-dowiz/memory/`) for brand-related topic files also
+returns nothing that resolves the pointer. §1's finding stands as written — this pass adds no new angle
+on it beyond confirming the negative search is genuinely exhaustive, not a single missed `ls`.
+
+**New grounding — `docs/pricing.md` exists but is NOT the stale pricing-v2 this phase supersedes
+(checked, cleared, not a gap).** A repo-wide search for "pricing" turns up `docs/pricing.md` (33 lines)
+— but it is the **order-level pricing *engine*** (line-item/tax/delivery-fee calculation formula,
+Server-Side-Wins, integer minor-units), an entirely different concern from the **business/subscription
+tier pricing** (§4's Free/Pro/Business framing) this phase addresses. No conflict, no overlap, no
+citation owed — confirmed and cleared rather than left as an open question.
+
+**New grounding — repo-visibility spot-check (the one load-bearing "depends on" edge, P19◄18).** The
+task asked for a spot-verification of P19's hard dependency on Phase 18 (a public repo is the surface
+grant reviewers/B2B prospects/landing visitors need). Live check (2026-07-17): `gh auth status` shows an
+authenticated fine-grained PAT for `SyniakSviatoslav`; `gh repo view SyniakSviatoslav/dowiz` fails
+("Could not resolve to a Repository"); `gh api user/repos?affiliation=owner&visibility=all --paginate`
+enumerates **29** owned repositories and **`dowiz` is not among them**; meanwhile `git ls-remote origin
+HEAD` (SSH) **succeeds**. This does not contradict the dependency — if anything it reinforces why growth
+work must wait for a verified, API-visible, public flip — but it means the assumption "the repo simply
+becomes gh-API-visible at flip" is itself unverified from this sandbox, and the same token-scope gap
+noted in the sibling P18 blueprint's own appendix applies here: whatever confirms the flip took (P18 §4's
+post-flip `gh repo view` check) needs a token that can actually see this repo, which the one available
+here cannot.
+
+### 8.2 — DECART
+
+No DECART owed. Nothing in §1-§7 or this appendix introduces a new crate, tool, or vendor choice: Modal's
+pricing (§4) is reused/cited from prior DECART work elsewhere in the roadmap, not a fresh decision here;
+NLnet (§3) is a grant-funding body, not a software dependency; the positioning/pricing/CITATION-adjacent
+deliverables are prose documents, not infrastructure. This matches the blueprint's own self-description
+("writes no product code — planning blueprint plus in-doc draft copy only").
+
+### 8.3 — 2-question doubt audit
+
+**Q1 — 6 concrete items actually checked, not filler:**
+1. `OPEN-SOURCE-CREDITS-LIST.md` exists in the same directory and is directly on-topic but uncited —
+   real gap found above, not speculative.
+2. The repo-visibility/token-scope gap (§8.1) — checked live via `gh auth status` + `gh api user/repos`
+   + `git ls-remote`, not assumed from either direction.
+3. ADR-0008's SQLite→pgrust migration is confirmed still-`PROPOSED` — meaning §3's "⚠ CORRECTED" note is
+   itself citing an ADR that may need a second correction pass once ADR-0008 actually lands as pgrust.
+4. The NLnet "target the next open call" timing claim (§3) was **not** re-verified against nlnet.nl's
+   live call calendar in this pass — the assignment's own instruction says this research was "already
+   web-verified this session, do NOT re-research," so this remains exactly as carried forward, unchecked
+   by me, and should be re-confirmed close to actual submission time since call windows move.
+5. `docs/design/PRICING-B2B-MESH-2026.md` (§4's proposed deliverable path) does not yet exist — checked
+   (`find . -iname "*PRICING*"` finds only the unrelated `docs/pricing.md`) — consistent with §4
+   describing a deliverable still to be written, not a stale pointer.
+6. The G11 recording template's "named owner" (§6) defaults to naming the operator — I did not check
+   whether any other canon file already names a different accountable person for delivery-track
+   ownership that this default could conflict with; left as originally written.
+
+**Q2 — biggest blind spot:** this blueprint (and the R1-E research it draws from) treats "growth" work
+as safely startable in parallel with everything else because drafting doesn't require a public repo —
+true for the *writing*, but the repo-visibility spot-check above (§8.1) surfaces a sharper version of the
+hard dependency than the blueprint states: it's not just that a reviewer "needs a public repo to look
+at," it's that the tooling this whole roadmap family (P18's script, this phase's post-flip credibility
+checks) leans on to *verify* the flip took is itself unverified against this specific repo from this
+environment. A plan that is otherwise careful about separating "agent-preparable" from "operator-only"
+(mirroring P18's own discipline) has not yet asked whether the verification step itself has the access
+it will need when the moment comes — that's the gap a fresh reader would spot and this pass did not
+close, only surface.
+
+### 8.4 — Anu / Ananke check
+
+**Anu (logic):** most of this phase's claims are prose/positioning, not technical assertions, so "Anu"
+mostly reduces to: is the *evidence for going ahead* (AGPLv3 satisfied, NLnet eligibility, the mesh-pivot
+architectural rationale for rejecting hosted-cloud-only pricing) actually derivable from cited fact rather
+than asserted? After this pass's checks, yes — the AGPLv3/ADR-0020 chain, the BlockStore/pgrust substrate
+citations, and the STRATEGIC-VECTORS V6 headliner language all trace to live, re-verified sources. The
+one place Anu was weakest before this pass — a single citation across 295 lines — is substantially
+strengthened by §8.1's new groundings; the remaining ungrounded material (draft marketing copy, pricing
+philosophy) is honestly non-code subject matter the assignment itself said to treat as such rather than
+force citations onto.
+
+**Ananke (organization):** the phase's own §7 acceptance checklist is a good Ananke structure — each item
+is falsifiable (a submission receipt OR a dated non-apply decision; a grep for `BUILD-TRIGGER`; a grep for
+forbidden pricing language). But two diligence-reliances surface from this pass: (a) nothing in this
+blueprint's structure would have surfaced the uncited `OPEN-SOURCE-CREDITS-LIST.md` sitting in the same
+directory — cross-referencing sibling documents in the same roadmap folder is left entirely to a future
+reader's initiative, not to any checklist item; (b) the P19◄18 dependency is stated as a phase-ordering
+rule ("Depends on: Phase 18 (HARD)") but nothing in either phase's structure requires confirming, at the
+moment growth work actually starts, that the verification tooling (a `gh` token scoped to this repo) is
+actually in place — it is assumed available when needed, the same way P18's §2.4 script assumes a
+`repo:admin` token will simply exist. Both phases share this diligence-reliance; naming it once here
+does not close it in either.

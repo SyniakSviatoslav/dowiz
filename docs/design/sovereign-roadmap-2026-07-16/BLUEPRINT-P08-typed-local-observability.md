@@ -310,3 +310,138 @@ here, owned there); it does not build Phase 6's split-identity verifier (the ano
 not a merge gate); it does not add a GPU adapter (typed-None until the compute-phase port); it does not
 host-scan other processes (M8 anti-surveillance). It writes no product code — this is a planning
 blueprint only.
+
+---
+
+## 8 — Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+> Independent verifier pass. Checked which of this blueprint's twelve owned anchors have actually
+> landed on the live `feat/harness-llm-backend` checkout, whether §1's headline M8-vs-Telegram
+> contradiction survived the recent telemetry Rust ports, and re-derived §5's ML-DSA "reuse" claim.
+
+### (i) Citation-verification results
+
+**Corrected — §4's claim-latency anomaly detector is NO LONGER "zero hits."** §1 states F36/E47 have
+"zero hits in repo or tooling." This is stale: `tools/ci-truth/src/main.rs` (lines 425-660-ish) now
+implements exactly the design in §4 — a `claim-latency-check` subcommand with a named, documented
+floor constant `MIN_SECONDS_PER_100_LINES: f64 = 5.0`, a pure `plausible_min_seconds`/`is_anomaly` pair,
+and the identical worked example this blueprint's §4 uses ("1610 lines * (5.0/100) = 80.5 s... the
+recorded 52 s... is < 80.5 s ⇒ FLAG") — the implementer visibly took the constant straight from this
+blueprint's own prose. Output goes to `docs/ledger/claim-latency-anomalies.jsonl`, advisory (exit 0
+either way), matching §4's "signals, does not gate" framing exactly. **Landed via commit `b9d23b7ed`
+("feat(hermetic): P08 §4 -- claim-latency anomaly detector (rows #7, #27)").** This closes acceptance
+criterion #5 in §6.
+
+**The code itself already documents the boundary honestly** — worth quoting because it is exactly the
+kind of self-aware scoping this task's Ananke lens rewards: a comment at the top of `claim_latency_check`
+reads *"this JSONL file... is the honest stand-in for the full typed `LogEvent::ClaimLatencyAnomaly` →
+M8-sink infrastructure described in BLUEPRINT-P08 §2/§3..., which is SEPARATE, larger, UNBUILT scope. Do
+NOT mistake this file for the complete M8 observability system."* Independently confirmed: grepping for
+`ProcCpuSample`, `MetricSample`, `LogEvent::`, and `remote-sink.optin` across the whole repo returns
+hits **only** inside that one comment string in `main.rs` — §2 (typed CPU/GPU module), §3 (typed schema
++ spool sink), and §5 (signed envelope + opt-in marker) are all still exactly as un-built as when this
+blueprint was written. Of the twelve anchors in the coverage table, only **F36/E47** show real code.
+
+**§1's headline finding is NOT stale — re-verified live, still true today.** The recent native-Rust
+telemetry ports (`4519bd7ff`, `cc3d5c916`) did not touch the Telegram egress path this blueprint's
+headline is about. `tools/telemetry/lib.sh` still exists, still contains `tg_deliver()` posting to
+`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage` (line 117), still gated only by
+`TELEMETRY_NO_TG` defaulting to unset/off (opt-out, not opt-in, lines 59/188). The new Rust crates
+(`tools/telemetry/native-ser`, `native-trackers`, `swarm-proof`, `hetzner-exporter`) were checked and
+contain zero references to `telegram`, signing, or `ML-DSA` — they ported *other* telemetry compute
+(self-improvement-loop pattern-surfacing, security scanning, hetzner export) to Rust, not the egress
+path this blueprint's §1/§5 are about. The exfiltration contradiction M8 vs practice is exactly as live
+as described.
+
+**A cross-repo assumption error, same shape as one already found in this batch's P04 pass.** §5's F40
+design says the ML-DSA-65 envelope "reuses the existing zero-dep, ACVP-verified ML-DSA-65 primitive
+(the bebop2 / pq crate leg)" and calls sharing it into dowiz *"an in-repo sovereign-crate wiring
+(M2/M6-consistent)... not a new external dependency."* This is not accurate: dowiz's kernel has **no**
+ML-DSA implementation today (`grep -rl "ml_dsa\|MlDsa\|dilithium" kernel/src engine/src` → only an
+unrelated mention in `hydra.rs`); the real, ACVP-verified primitive lives at
+`/root/bebop-repo/bebop2/core/src/pq_dsa.rs` — a **separate git repository**, exactly the same
+dowiz↔bebop-repo boundary `SELF-CRITIQUE-2Q-DOUBT-AUDIT.md` §1.2 already confirmed is not a real
+dependency edge today. Calling this "in-repo wiring" is wrong regardless of M6-consistency; it is a new
+cross-repo sourcing decision this blueprint has not actually made, only asserted as already resolved.
+
+### (ii) DECART — owed, and written here since the blueprint asserts a choice without evaluating it
+
+§5 needs dowiz to acquire ML-DSA-65 signing capability from *somewhere*; the blueprint's "just reuse
+bebop2's" answer is not free (per (i) above). A real decart, not previously done:
+
+| Criterion | Vendor bebop2's `pq_dsa.rs` (port, no network) | crates.io `ml-dsa`/`pqcrypto-dilithium` | Reimplement FIPS 204 from spec in dowiz |
+|---|---|---|---|
+| Rust-native fit | pure Rust, already ACVP/KAT-verified in its home repo | pure/FFI-backed Rust, unvetted in this repo | pure Rust, but a from-scratch PQ primitive |
+| Correctness proof | inherits bebop2's existing KAT verification (re-run locally after the port) | would need its own KAT/ACVP re-verification before trust | needs full independent KAT verification — the highest-risk option; this repo's own rule ("Never fake crypto/PQ... Real KAT-gated primitives only") makes an unverified reimplementation the worst default |
+| Measured perf | same perf as bebop2's (same code) | unknown until benchmarked | unknown, and slowest to get there |
+| Supply-chain | zero new external dependency (source copy, same license family) | **currently blocked**: live-checked this pass, `curl crates.io/api/v1/crates/ml-dsa` → **403**, same block already documented for `wgpu` | zero-dep but high-risk |
+| Maintainability | two copies to keep in sync (bridge, not merge) — same tradeoff as any vendor-not-share decision | normal crate-update maintenance, if reachable | highest maintenance burden (owns a PQ primitive's correctness forever) |
+| Reversibility | a port/adapter, easy to re-sync or drop | a dependency, easy to swap once network unlocks | a core commitment, hard to walk back once other code depends on it |
+| Evidence | `bebop-repo/bebop2/core/src/pq_dsa.rs` exists today, already exercised by bebop2's hybrid gate | crates.io 403 (checked live, this pass) | no existing artifact in this repo |
+
+**DECISION (proposed, since none exists in the blueprint): vendor a Rust-source port of bebop2's
+`pq_dsa.rs` into dowiz** (matching this repo's own "older/proven-as-adapter, not purged" pattern and the
+existing `OllamaAdapter`-style thin-port convention) **until `cargo add ml-dsa`-class crates.io access
+unlocks**, at which point re-run this decart. **Older-as-adapter:** the bebop2 original stays canonical
+and continues to receive its own updates; the dowiz copy is a tracked port, not a fork-and-forget.
+**Probe (the honest case against):** a vendored copy of a cryptographic primitive is exactly the kind of
+drift risk this repo's own DECART template warns about (two implementations of the same PQ primitive
+that can silently diverge) — a `pq_dsa.rs` bugfix in bebop2 that isn't mirrored into dowiz would leave
+dowiz's F40 envelope signing on a stale, possibly-vulnerable copy. This is a real, not hypothetical, cost
+of the chosen option, and is the honest reason the crates.io option would be preferred the moment it's
+reachable.
+
+### (iii) 2-question doubt audit
+
+**Q1 — least confident about (concrete):**
+1. I did not re-verify that `tracing`/`tracing-subscriber` really are wired at `order_machine.rs:144` as
+   §7 claims — I confirmed the crates are real kernel deps via a broader grep but did not pin that exact
+   line this pass.
+2. I did not check whether `kernel/src/spool.rs`'s cited test names (`crash_reclaim_recovers_inflight`)
+   still exist and pass — §2/§3's entire sink design leans on this substrate being exactly as described,
+   and I did not re-run it.
+3. The crates.io 403 I found for `ml-dsa` was checked live this pass but is a point-in-time network
+   condition (same caveat the SELF-CRITIQUE doc already logged for `wgpu`) — it could change without
+   this appendix being revisited, silently invalidating half of my DECART's supply-chain row.
+4. I did not check whether dowiz's `hydra.rs` mention of ML-DSA-adjacent terms (the one grep hit outside
+   `main.rs`) is a stub, a comment, or a real partial start at an in-repo PQ primitive that would change
+   the DECART's "dowiz has none today" premise — I read it as a passing mention, not in depth.
+5. I did not verify the S7-vs-bebop-core "different crate, different constraints" framing in §7 against
+   `KERNEL-OBSERVABILITY-DECART-2026-07-15.md`'s actual current text — cited as settled, not re-read.
+6. I have not confirmed whether the `TELEGRAM_BOT_TOKEN`/`CHAT_ID` this blueprint's §1 headline is built
+   on are still live secrets in this environment (vs. rotated/dead) — the egress *code path* is
+   unambiguously still there and still opt-out, but whether it currently sends anything real to a real
+   chat was not tested.
+
+**Q2 — biggest thing I might be missing:** the pattern that mattered most in this pass wasn't specific
+to P08 — it's that **the same cross-repo-dependency-assumed-as-real error appeared independently in two
+different blueprints in this batch** (P04's Phase-9 consumption claim, P08's F40 "in-repo" ML-DSA reuse),
+neither written by the same author-pass as the other, and neither caught by the original chain that
+produced them. That is a *systemic* blind spot in how this roadmap's authors reason about the
+dowiz/bebop-repo boundary — worth surfacing to whoever owns the roadmap-level consolidation (the
+`HERMETIC-REMEDIATION-PLAN.md` pattern), since a third instance elsewhere in the 19-phase set is now the
+more-likely-than-not default assumption, not a one-off.
+
+### (iv) Anu & Ananke check
+
+**Anu.** §4's "Phase 1 owns the ledger, Phase 8 owns the anomaly detector" dependency is now the
+strongest-confirmed claim in this whole batch of five files: both halves live in the **same binary**
+(`tools/ci-truth/src/main.rs`), so the dependency is not just derivable, it is *already executing*. By
+contrast, §5's "reuse bebop2's ML-DSA primitive... not a new dependency" fails Anu outright — it is
+asserted, and re-deriving it (checking whether dowiz's kernel actually links or vendors that code) shows
+it does not; there is no primitive to reuse without a real sourcing decision this blueprint skipped.
+
+**Ananke.** What survives on structure alone: §6's 8 acceptance criteria are genuinely falsifiable
+commands/observations, and criterion #5 (claim-latency anomaly) is *already* checkable today by running
+`cargo run --manifest-path tools/ci-truth/Cargo.toml -- claim-latency-check` against the real ledger —
+no reader needs to remember this blueprint to verify it. What does NOT survive on structure alone: the
+M8-vs-Telegram contradiction §1 documents as "the load-bearing finding" has **no expiry mechanism** —
+nothing in this repo will flag it again if another pass (like this one) doesn't happen to re-check
+`lib.sh` by hand. Given this pass found the Rust telemetry ports specifically did NOT touch that path,
+the risk is concrete, not hypothetical: a future reader could see "telemetry ported to native Rust" in
+recent commit messages and reasonably (wrongly) infer the M8 violation was swept up in that port. The
+cheapest structural fix (not built here, flagged for whoever lands §5): the still-unbuilt
+`no-courier-scoring`-style CI grep guard pattern (Phase 1 §2.6) could be extended with one more job —
+`grep -n 'api.telegram.org' tools/telemetry/*.sh` failing unless a corresponding `remote-sink.optin`
+signed-marker check also exists in the same commit — turning "is M8 still violated" from a manual
+re-audit like this one into a CI-checked invariant.

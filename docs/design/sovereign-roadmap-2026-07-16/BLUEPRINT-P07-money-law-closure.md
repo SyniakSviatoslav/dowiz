@@ -306,3 +306,120 @@ diff. Sequencing (Phase 7 depends on Phase 1, is parallel-safe with Phase 6):
 — the replay-on-non-empty-log RED test is the acceptance criterion the original blueprint omitted.
 No code written; red-line money/orders/event-log changes earn a careful separate implementation pass
 informed by this document.*
+
+---
+
+## 9 — Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+> Independent verifier pass. Re-checked every cited file:line on the actual branch this blueprint lives
+> on (`feat/harness-llm-backend`, HEAD `cc3d5c916`), and specifically checked whether either of the two
+> fixes this blueprint designs (§2 dedup, §6 tax-overflow) have already landed — since this is exactly
+> the kind of claim recent commits can make stale.
+
+### (i) Citation-verification results
+
+**Corrected — §1.4/§6 tax-overflow fix IS ALREADY BUILT on this branch.** `kernel/src/money.rs`'s
+`estimate_order_total` no longer has the `.unwrap_or(0)` §1.4 describes. Live code today:
+`apply_tax(...).ok()` feeds `tax_total: Option<i64>`, and `total` is computed as `match (delivery_fee,
+tax_total) { (Some,Some) => Some(...), _ => None }` — i.e. a tax-overflow degrades `total` to `None`
+exactly as §6's fix design specifies, down to reusing the existing fee-unknown-degrade pattern the
+blueprint names as the template. A test comment at `money.rs:425` ("Pre-fix `.unwrap_or(0)`:
+tax_total=0, total=Some(1200) — a fabricated zero-tax total") documents the RED-before/GREEN-after this
+blueprint's acceptance criterion #8 asks for. **This landed via commit `aedba0133` ("fix(hermetic):
+P07 §6 money tax-overflow fix (row #11)")** — done-test #8 in §7 is satisfied today.
+
+**NOT stale — §1.1/§2's dedup bug is still live on this branch, but a fix exists on a sibling branch.**
+`kernel/src/event_log.rs`'s `commit_after_decide` (currently at line 339, `event_id()` at 148, `append()`
+at 293) still shows the exact pre-fix pattern: it computes `id = ev.event_id()` from the caller-supplied
+(unbound) `prev` at line 348, dedup-checks that id, then commits via `self.append(ev)` at line 359 —
+`append` itself rebinds `prev` to the tip and re-hashes, reproducing the divergence §1.1 describes. **A
+fix exists — commit `f30189262` ("feat(agentic-mesh): P07 dedup fix...")** — but it lives on branch
+`feat/agentic-mesh-protocol-2026-07-17`, confirmed via `git merge-base --is-ancestor f30189262 HEAD` →
+**not an ancestor of this branch's HEAD.** So relative to the branch this blueprint (and this appendix)
+actually lives on, §1.1/§2's "not yet fixed" framing remains accurate — but it will go stale the moment
+that branch merges, and worth flagging precisely because **the landed fix takes a structurally different
+approach than this blueprint designs**: §2 proposes reordering `bind_prev` to run *before* the hash on
+both paths, keeping prev-chaining; the actual fix instead makes `commit_after_decide` stop prev-chaining
+entirely and persist under the event's raw content-id via a new `append_raw` (justified in the commit
+message: prev-chaining is "provably incompatible with true replay-idempotence for zero-prev events").
+Both satisfy this blueprint's own §7 acceptance criteria #1-#2 (dedup id == stored id; replay-on-
+non-empty-log caught as `Duplicate`, `decide` runs exactly once) — but a future merge of that branch will
+make §2's specific "reorder bind_prev" design (not its acceptance criteria) obsolete. Not corrected in
+the blueprint body per this task's read-only-except-appendix rule; flagged here so the next reader does
+not implement §2 as literally written once the other branch lands.
+
+**Re-verified, unchanged:** `order_machine.rs` — `is_terminal:54`, `allowed_next:64`,
+`FSM_GOLDEN_SIGNATURE:472`, `verify_fsm_signature_against:507` all match the cited ranges exactly;
+`Refunding`/`CompensatedRefund`/`LedgerEntry`/`checked_neg`/`checked_sub` — zero grep hits anywhere in
+the kernel, confirming §3, §4, §5 (compensation states, reversal primitives, event-sourced money) remain
+entirely unbuilt, exactly as designed and not yet touched.
+
+**Minor drift:** the genesis-only test `dup_event_is_idempotent_no_state_change` cited at
+`event_log.rs:433-462` now sits at **line 533** (other commits — G9 hub convergence, the Воля АНУ
+organism work, the H1 fail-open fix — inserted ~100 lines above it since this blueprint was written).
+Content and behavior unchanged; only the line range needs re-pinning.
+
+### (ii) DECART
+
+**No DECART owed.** Every change this blueprint designs is internal kernel logic (`event_log.rs`,
+`order_machine.rs`, `money.rs`) — no new crate, service, or external dependency anywhere in the
+document.
+
+### (iii) 2-question doubt audit
+
+**Q1 — least confident about (concrete):**
+1. I read the `f30189262` diff and commit message but did not check out that branch and run its test
+   suite myself — I am trusting the commit message's "kernel: 403 passed... zero regressions" claim,
+   not independently re-executing it.
+2. I did not check whether `Hydra::commit` (named in the `f30189262` message as `commit_after_decide`'s
+   "only production caller" that "no longer prev-chains") is actually the only caller on *this* branch
+   too, or whether this branch's `hydra.rs`/other callers assume prev-chaining still happens — if any
+   caller here relies on `commit_after_decide` chaining `prev`, merging that fix later would be a real
+   behavioral break this pass did not check for.
+3. I did not verify whether the FSM golden-signature re-key hand-derivation in §3 (the table predicting
+   vertices=12, edges=14, μ=4, reachable_from_pending=3839) is numerically correct — the blueprint itself
+   says "confirm by execution," and I did not execute it (no compensation states exist to run
+   `fsm_graph_report()` against yet).
+4. I did not confirm the "Phase 12 depends on Phase 7 for the dedup precondition" claim (§5, "E28")
+   against Phase 12's own blueprint text — out of my assigned files, flagged rather than assumed.
+5. §1.5's engine-panic-as-fail-closed citation (`field_frame.rs:53-70`) was not re-read this pass; I
+   relied on it being orthogonal to the money/event-log changes I was checking.
+6. I did not check whether any code on this branch already partially anticipates the LedgerEntry/
+   reversal design (e.g. a stub type or a TODO) that a plain grep for the exact names would miss —
+   only exact-string greps were run.
+
+**Q2 — biggest thing I might be missing:** this blueprint's own §8 already names the risk that Phase 7
+could land as a red-line diff before Phase 6's signed verifier exists — what it doesn't anticipate is
+that the dedup fix would land on a **different, not-yet-merged branch**, meaning that when that branch
+does merge, the merge itself becomes exactly the kind of red-line diff (`event_log.rs`) whose commit
+message will need re-verification against §7's acceptance criteria, but under a design the original
+author of that fix (a decorrelated pass per its own commit message) chose independently rather than by
+reading this blueprint's §2. That is actually a small positive signal — two independent passes converged
+on satisfying the same acceptance criteria via different means — but it means whoever merges that
+branch should re-run §7's criteria #1-#2 against the merged code, not assume this blueprint's §2 prose
+still describes what's there.
+
+### (iv) Anu & Ananke check
+
+**Anu.** The one dependency this blueprint states plainly — "Depends on: Phase 1... kernel tests must
+run in CI to gate this red-line diff" — is not merely asserted; it is now **directly checkable and
+true**: `tools/ci-truth/src/main.rs:228-230` greps the diff range for exactly `money.rs`,
+`order_machine.rs`, `event_log.rs` — the identical three files this blueprint calls its red-line
+surface. Re-deriving this claim (rather than trusting the roadmap table) confirms it holds, and holds
+more strongly than when written (the gate now exists in code, not just in a phase-dependency table).
+The Q1.2 gap above (whether the cross-branch fix breaks a same-branch caller) is the one place this
+pass could not fully re-derive a safety claim from evidence in front of it — flagged rather than
+asserted clean.
+
+**Ananke.** What survives on structure alone: the acceptance criteria (§7, 10 items) are genuinely
+falsifiable and, per (i) above, one of them (criterion #8, tax overflow) has already been mechanically
+satisfied and could be checked today by running the test suite — nobody needs to remember this
+blueprint exists for that fix to stay correct, because it is pinned by a passing test. What does NOT
+survive on structure alone: the relationship between this blueprint's §2 design and the actual,
+differently-shaped fix on the sibling branch depends entirely on a human (or a future pass like this
+one) noticing the divergence before treating §2's prose as an implementation spec — nothing here or in
+the sibling branch's commit cross-links the two, so a merge could silently orphan this blueprint's §2
+narrative while its acceptance criteria stay satisfied by coincidence of correct design, not by
+traceable linkage. Flagged here as the concrete fix: when that branch merges, add one line to §2 or to
+the merge commit noting "implemented via `append_raw`, not reordered `bind_prev` — see commit
+`f30189262`" so the record closes instead of silently diverging.

@@ -258,3 +258,104 @@ is the whole point — R2 §1 merge note and §3 adjacency list make the consume
 Any of these re-implementing route/DSU/MST/geo would violate the "one implementation" mandate and
 the E61 zero-dep exemplar. Phase 4 is small (2 anchors) precisely because its value is
 **consolidation**: one library, built exactly once, proven by the checklist above.
+
+---
+
+## 8 — Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+> Independent verifier pass. Re-checked every cited file:line against the live `feat/harness-llm-backend`
+> checkout and re-derived §7's load-bearing sequencing claim by finding (or failing to find) a real
+> file-level dependency edge, per this task's instructions.
+
+### (i) Citation-verification results
+
+**All dowiz-side citations re-verified accurate, none stale — nothing has landed yet.** `kernel/src/router.rs`
+and `kernel/src/dsu.rs` do not exist; this remains a pure planning document with zero implementation
+drift since authorship. Spot-checked and confirmed at the cited lines: `kernel/src/geo.rs`
+(`haversine_meters:15`, `bearing_deg:30`, `ema_next:39`, `progress_along_route:70`, `eta_seconds:153`,
+`point_in_polygon:200`); `kernel/src/cgraph.rs` (`c_components:171`; test fixtures `chain_graph`/`m_graph`
+and the two `green_*` regression tests exist within a line or two of the cited `:558`/`:569`);
+`kernel/src/csr.rs` (`from_edges:79`, `to_adjacency:190`); `kernel/Cargo.toml`'s `wasm` feature line;
+`/root/bebop-repo/crates/bebop/src/cost_estimate.rs` (`route`, the A* heuristic, `build_shortcuts`,
+`reachable`, `weighted_adj`, `hybrid_route` all present, function bodies matching the description).
+`engine/src/field_frame.rs:189` (`compose`) and the wasm-export citations all confirmed byte-accurate,
+including `wasm_compose_deterministic`/`wasm_fieldsim_deterministic` at the exact cited lines and the
+`innovate:` ceiling comment at `:172`.
+
+**One precision correction, harmless but literal.** §5 cites `dowiz-wasm/src/lib.rs`. `dowiz-wasm` is
+the **crate name** (`wasm/Cargo.toml:2`); the **path** is `wasm/src/lib.rs`, not `dowiz-wasm/src/lib.rs`
+— a reader following the citation as a filesystem path will not find that directory. All the specific
+line numbers cited under that name (57, 64, 172, 204, 288) are otherwise exactly right.
+
+### (ii) DECART
+
+**No DECART owed.** Every new module this blueprint designs (`router.rs`, `dsu.rs`, the six geo
+functions) is explicitly pure-`std`, zero-external-dependency, and acceptance criterion #7 makes that
+an falsifiable invariant ("default `cargo build`/`test` dependency graph is byte-identical to today").
+No new crate, service, or vendor choice is introduced anywhere in this document.
+
+### (iii) 2-question doubt audit
+
+**Q1 — least confident about (concrete):**
+1. I did not re-derive the exact byte offsets of `cost_estimate.rs:35` (`Prio` `total_cmp` wrapper) —
+   the line I read at that offset was a `#[derive(...)]` attribute, not the wrapper struct itself; the
+   wrapper is nearby but I did not pin its exact line, so §2's citation may be off by a few lines the
+   way the SELF-CRITIQUE pass already found for this same file (R1-A cited "238-290", R2/P04 cited
+   "205-290" for the same function — a pre-existing, documented drift this pass did not re-resolve).
+2. I did not build or dry-run any part of the router/DSU port to confirm the admissibility contract
+   (haversine as a valid Euclidean-in-degree-space substitute lower bound) actually holds under real
+   OSM edge weights — the argument in §2 is sound on paper (great-circle ≤ any road path in metres) but
+   untested against a real graph.
+3. I did not verify the DSU byte-parity claim (§3, "`Dsu::components` must reproduce exactly [cgraph's]
+   ordering") against an actual DSU implementation, because none exists — this is a design constraint,
+   not yet a checked one, and union-by-rank's natural output order is NOT ascending-by-construction, so
+   the "sets ordered by ascending minimum member" requirement will need real post-processing the
+   blueprint names but does not show is cheap.
+4. I did not check whether the GS geo functions' cited spec document
+   (`GAUSSIAN-SPLATTING-…-SYNTHESIS-2026-07-16.md §2.6`) still matches §4's verbatim restatement — I
+   trusted the "not re-derived here" framing at face value.
+5. I did not check whether `wasm.rs:470-607` (`geo_*_js` pattern) or `wasm.rs:507` (`parse_polyline`)
+   still sit at those exact lines — high-churn file per this repo's own hotspot data is `apps/*`, not
+   `kernel/src/wasm.rs`, so risk is lower, but I did not spot-check it this pass.
+6. The zero-dep discipline (criterion #7) assumes `cargo vendor`/offline builds stay feasible — I did
+   not re-check whether Phase 1's vendoring decision (a real open item in that blueprint) affects this
+   phase's own "byte-identical Cargo.lock" claim if vendoring changes how deps resolve.
+
+**Q2 — biggest thing this plan might be missing:** the phase's own §7 marquee claim — "math primitives
+land ONCE here, consumed by Phase 9" — is **not just under-derived, it is confirmed underivable as
+written** (see Anu below). The blueprint is otherwise careful and self-contained for the dowiz-only
+half of its scope (router/DSU/geo/wasm, all real file citations, all zero-dep), but its own stated
+*reason for existing at Wave-0 priority* — "consolidation before Phase 9/13 need it" — rests on a
+cross-repo consumption path that has no dependency edge today and a canon law (M6) standing against
+creating one casually. A reader could build everything in §2-§5 correctly and still not have
+delivered what §7 promises Phase 9 will get.
+
+### (iv) Anu & Ananke check
+
+**Anu — the load-bearing sequencing claim does not survive re-derivation.** §7 asserts "Phase 9 hard-
+depends on Phase 4 (adjacency: P9 ← P3, P4)" and "[Phase 9] consumes `router::route` + `dsu`/`kruskal_mst`
+directly." I checked this the way the task asks: `BLUEPRINT-P09-confidential-self-healing-wire.md`
+plans its self-healing/mesh-heal work inside **`bebop-repo`**'s `proto-wire`/`mesh-node`/`bebop2-core`
+crates (confirmed by its own text: "Phase 9 touches `proto-wire` + a new heal module"). This blueprint's
+router/DSU land in **`/root/dowiz/kernel`** — a **different git repository**. There is no Cargo
+dependency edge between them today, and M6 (canon: zero-dep protocol boundary) stands against creating
+one casually. This is not a new finding — `SELF-CRITIQUE-2Q-DOUBT-AUDIT.md` §1.2 already confirmed the
+identical problem for the master roadmap's merge table ("CONFIRMED — the merge's marquee de-duplication
+is not proven buildable as written") — but P04 §7 restates the un-derivable claim as settled fact
+("R2 §1 'Major merges' is explicit... They do not get their own copies") without carrying that doubt
+forward into its own text. Per Anu, this decision should be downgraded from "hard-depends" to: **the
+consumption path requires an unresolved cross-repo decision (vendor the router/DSU into bebop2, publish
+a shared crate, or duplicate with a documented parity test) that neither this blueprint nor P09 makes**
+— a DECART-shaped decision this phase's own scope does not currently own.
+
+**Ananke.** What survives on structure alone: the acceptance criteria (§6, 8 items, each a real
+command/assertion) and the zero-dep invariant (#7) are genuinely self-checking — a future implementer
+cannot silently violate them without a failing `cargo build`/`test` diff. What does NOT survive on
+structure alone: the Phase-9/13/16/17 "consumption" story in §7 is pure prose with no artifact that
+would fail if the cross-repo edge never gets built — nothing here creates a test, a DECART placeholder,
+or even a TODO in the P09 blueprint that would force the question to be asked again before Phase 9's
+implementer discovers, mid-build, that the library they were told to import lives in a repo they cannot
+depend on. The cheapest structural fix (not built here, flagged for whoever picks up Phase 9): P09's own
+blueprint should carry an explicit, named open item — "router/DSU source repo: dowiz kernel vs vendored
+copy vs shared crate — unresolved, blocks the 'consumes Phase 4' claim" — so the gap is a checked
+precondition, not a silent assumption a builder inherits by trusting this document's confident tone.

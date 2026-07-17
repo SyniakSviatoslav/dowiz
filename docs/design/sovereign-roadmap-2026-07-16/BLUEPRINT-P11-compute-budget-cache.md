@@ -285,6 +285,121 @@ in play). Adopting on speculation would be exactly the appeal-to-modernity the D
 
 ---
 
+## 9. Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+Per the Detailed Planning Protocol (`AGENTS.md`) and the Anu/Ananke doctrine. This blueprint had no 2Q
+audit or Anu/Ananke check — supplied here — alongside fresh citation verification and a DECART gap-check.
+
+### 9.1 — Citation verification against live repo (dowiz HEAD, this session)
+
+This blueprint's citations are dowiz-side (kernel/engine), and are the most precise of the four assigned
+files — nearly every one checked landed on the exact cited line or within 1-2 lines. Re-verified:
+- `engine/src/field_frame.rs`: `laplacian()` (cited 88-103) at lines 91-103 (near-exact); `step()`
+  (cited 139-156) at 142-158 (near-exact); the two per-step allocations (cited lines 90/144) confirmed
+  present, off by 1-2 lines; `std::mem::replace` (cited line 155) confirmed at the exact tail of `step()`.
+  All four test names cited by inference (`laplacian_of_constant_field_is_zero`,
+  `laplacian_peak_negative_at_center_of_disk`, `step_reduces_magnitude_toward_source_equilibrium`,
+  `compose_returns_deterministic_frame`, cited near line 301) confirmed to **exist verbatim** at lines
+  231/248/273/321.
+- `engine/Cargo.toml`: `gpu = []` confirmed at the **exact cited line 31**; the "wgpu uncached...
+  `Err("gpu adapter not built...")`" comment confirmed **verbatim**; the "NO dependencies... offline-clean
+  by mandate" framing (cited lines 6-8) confirmed verbatim.
+- `engine/src/loop_.rs`: `DT_STABLE: f32 = 0.02` confirmed at the exact cited value/line; `MAX_SUBSTEPS:
+  u32 = 5` confirmed at the **exact cited line 25**.
+- `kernel/src/householder.rs`: FMA dot-product + `is_x86_feature_detected!("fma")` confirmed within the
+  cited 29-60 range.
+- `kernel/src/spectral.rs`: Faddeev-LeVerrier + Durand-Kerner doc-comment confirmed within the cited
+  17-27 range, verbatim phrasing match.
+- `kernel/src/attention.rs`: `exps.iter().sum()` (cited line 34) confirmed at the **exact cited line 34**.
+- `kernel/src/retrieval/memory_store.rs`: `snapshot_root()` trait method (cited line 36) and impl (cited
+  "85+") both confirmed, doc-comment verbatim.
+
+**One real drift found:** `kernel/src/markov.rs:164-166` is cited as where `spectral::slem`/
+`spectral::dominant_period` are called — the actual call sites are at **lines 200-201** (36-line drift;
+164-166 is mid-power-iteration code, unrelated). The underlying claim (markov.rs genuinely calls both,
+confirmed to exist at `spectral.rs:222`/`:380`) is **true**; only the line pointer is stale. Corrected:
+**`markov.rs:200-201`**.
+
+**Verdict:** citation quality here is excellent — the drift found is cosmetic (a wrong line pointer to a
+true fact), not substantive staleness like the P09 wss_transport.rs finding. No corrections needed beyond
+the one line-number fix above.
+
+### 9.2 — DECART
+
+**§7's NUMA bake-off is already a model-quality inline DECART** — comparison (`core_affinity` vs
+`hwlocality`), a stated decision (defer, ship a no-op trait port only), and a genuine mandatory probe
+(single-socket Hetzner host today ⇒ expected no-win ⇒ correctly not adopted). No further work owed there.
+
+**One real gap: the Modal.com job port (§4, E22/F34) names a specific external vendor with no comparison
+table in this document.** Investigated whether this is a fresh, undiscussed choice or a reuse of an
+existing decision: **it is a reuse.** `docs/design/GAUSSIAN-SPLATTING-ADDRESS-PICKER-SYNTHESIS-
+2026-07-16.md` §2.3 already ran the real comparison for this exact use case (one-shot rented-GPU jobs,
+splat reconstruction) — Modal (~$1.25-1.67/job A100, true scale-to-zero, per-second billing) vs.
+Vast.ai/RunPod marketplace (~$0.06-0.25/job, cheaper but more self-built orchestration) vs. a standing
+Hetzner GPU box (rejected: idle cost at one-time-per-address volume), landing on Modal-as-default with
+marketplace adapters as a documented future cost-optimization swap behind the same trait. **This
+blueprint does not cite that document** — a reader implementing P11's `JobPort`/`BudgetedJobPort` design
+would have no way to know the vendor pick was justified elsewhere and could reasonably read it as
+asserted without basis (an Anu-shaped concern that dissolves once the sibling document is found, but
+only if it's found). **Recommended fix (not applied here — a citation addition to that file's own
+scope, outside this task's assignment):** P11 §4 should add one line citing
+`GAUSSIAN-SPLATTING-ADDRESS-PICKER-SYNTHESIS-2026-07-16.md §2.3` as the DECART of record for Modal,
+rather than leaving the pick to read as settled-by-assertion.
+
+### 9.3 — 2-question doubt audit (per-blueprint)
+
+**Q1:**
+1. I did not check whether `field_frame.rs`'s current tests already assume the allocating
+   `laplacian()`/`step()` shapes in a way needing edits alongside `laplacian_into` (§3) — I confirmed the
+   four test names exist, not that they'd pass unchanged against a refactored allocation-free `step()`
+   without test-side edits (the blueprint claims this; I did not independently re-derive it from test
+   bodies).
+2. The `DecompCache` design (§2) keys on `snapshot_root()`, confirmed real — but I did not check every
+   `markov.rs`/harmonic/hydraulic call site to confirm none mutates topology in a way that wouldn't bump
+   `snapshot_root` (a cache-correctness precondition asserted, not traced call-site-by-call-site).
+3. I did not independently re-derive the DCT-II closed-form eigenvalue claim (§2, the μ_{p,q} formula)
+   against `field_frame.rs::laplacian()`'s actual boundary handling — the reflective/clamped-index
+   Neumann framing matches by inspection, but the separable-eigenbasis claim is read as plausible, not
+   proven.
+4. I did not check `kernel/src/kalman.rs` at all (cited only by name in §6) to confirm the N-courier SoA
+   layout described is compatible with its current per-courier struct shape.
+5. The Modal DECART cross-reference found (§9.2) resolves the vendor-choice question, but I did not check
+   whether that document's pricing (dated 2026-07-16) is still current.
+6. I did not check whether Phase 1's "DECART-dep lint" (referenced in this blueprint's own §7 and §8.15
+   as the CI mechanism enforcing new-dep hygiene) actually exists and runs today — if it doesn't,
+   §8.15's "Phase 1's lint stays green" acceptance criterion is unfalsifiable as written.
+
+**Q2 — biggest thing this pass might be missing:** this blueprint's near-perfect citation precision may
+be partly an artifact of scope — P11 cites small, self-contained, already-well-tested modules
+(`field_frame.rs`, `householder.rs`, `loop_.rs`) exactly the kind of code likely to hold still between
+citation and build, unlike P09's sprawling mesh-crypto surface under active development. The lesson is
+narrower than "this blueprint is more rigorous" — it may be "this blueprint's *subject matter* drifts
+less," worth naming so the citation-quality contrast across this pass's four files isn't mistaken for a
+difference in authorial care.
+
+### 9.4 — Anu (logic) & Ananke (organization) check
+
+**Anu.** The corrected-framing argument in §1 (O(n) stencil vs. O(n³) eigendecomposition) is the
+strongest Anu instance in this whole pass: re-derived from first principles (reading `step()` line by
+line, counting allocations) rather than inherited from the earlier `SYNTHESIZED-BLUEPRINT-PLAN`'s wrong
+framing, and it names *why* that framing was wrong rather than silently substituting a better answer.
+The NUMA DECART (§7) is Anu-compliant by construction — decision tracks measured evidence, not appeal to
+modernity. The one soft spot: the DCT-II closed-form claim (§9.3 Q1.3) is asserted with mathematical
+confidence but not re-derived by this pass or, as far as citations show, formally proven anywhere
+in-repo — plausible, not yet demonstrated. The acceptance criterion (§8.4) only requires no numeric
+eigensolve is invoked, a weaker property than "the analytic form is correct."
+
+**Ananke.** The `recomputes == 0` / `recomputes == exactly 1` counter (§2) is an excellent Ananke
+instance — a falsifier that catches both failure directions (stuck-stale cache reads as 0 forever;
+thrashing reads as >1) by construction. The byte-identical `cargo tree --offline` diff (§5) is equally
+structural. **What relies on diligence:** the Modal-DECART cross-reference gap (§9.2) — nothing forces a
+blueprint reusing an external-vendor decision made in a sibling document to cite it; a future reader has
+no structural signal the pick was justified elsewhere versus asserted fresh. Same class of gap the P10
+appendix's §8.4 names for its own implied-dependency case: strong per-document rigor, no cross-document
+linking mechanism that forces citation of where a decision was actually made.
+
+---
+
 *Blueprint P11. Sources: R1-C §0.3/§1(E21–E30,F31–F40)/§2.4/§3-K4 (corrected O(n)-stencil framing),
 R2 master table row 11, ARCHITECTURE.md §1/D6/§8 + F33/F34/F35, SYNTHESIZED-BLUEPRINT-PLAN §P0-A1
 (original framing, superseded). Code grounded: `engine/src/field_frame.rs:88–156`,

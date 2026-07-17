@@ -396,6 +396,128 @@ action: ensure it's linked from ADR-020 and README; no rebuild needed.
 
 ---
 
+## 6 — Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+> Independent verifier pass. **Per this task's special rule: this pass does NOT resolve or recommend
+> rulings on any O1–O19 item beyond what §2 already proposes.** It verifies evidence, checks
+> citations against the live tree, and applies the 2Q/Anu-Ananke checks to the DOCKET DOCUMENT itself,
+> not to the merits of any individual O-item. Verdict: **DEEPENED, content still
+> BLOCKED-ON-OPERATOR-DECISION** (§2's own framing — this pass changes that status for zero items).
+
+### (i) Citation-verification results
+
+**Major correction — §3's central claim is STALE, in the good direction.** §3 states *"no
+`docs/adr/ADR-020*.md` exists (verified: `find -iname '*ADR-020*'` → 0)."* This is no longer true:
+**`docs/adr/0020-oss-license-tm-dco.md` now exists** (following the repo's own `NNNN-name.md`
+convention used by 0001-0009, not the `ADR-020-name.md` form the blueprint's outline sketch used —
+so a literal `find -iname '*ADR-020*'` would still print 0, and Done-test §5 item #6 as *literally
+worded* would still fail even though the deliverable it's checking for is real; the done-test's
+filename pattern needs updating to `*0020*` or `*0020-oss*`). Read in full, the landed ADR:
+- Follows §3's proposed structure closely (Status/Context/Decision/Consequences, the same five
+  decision points) and explicitly cites `BLUEPRINT-P02-canon-repair-operator-decisions.md §3` as its
+  source in its own "What this ADR closes" section — direct confirmation this blueprint's draft
+  outline was used, not superseded.
+- Is honest about what it does NOT close: it states plainly that `ARCHITECTURE.md`'s stale S3/§8 lines
+  (C-1/C-2) remain **unmerged** ("this ADR does not touch `ARCHITECTURE.md` itself"), and that
+  `CONTRIBUTING.md:17`'s DCO claim is still false pending Phase 1's `dco-check` job.
+- Confirms independently, re-verified live by the ADR's own author: `LICENSE` is 660-line AGPLv3
+  (matches §3's citation exactly), the two MIT tool crates are still unflipped, `kernel/Cargo.toml`
+  still has no `license` field — i.e. every OTHER §1/§5 done-test this pass re-checked is still
+  correctly described as open.
+
+**Re-verified, unchanged (not stale):** `ARCHITECTURE.md:41` and `:128` still read verbatim as C-1/C-2
+quote them (the "Apache-2.0 vs AGPLv3 mismatch... force-push scrub BLOCKED" line is still live);
+`ARCHITECTURE.md:123` and `STRATEGIC-VECTORS-LOCKED-2026-07-16.md:124` both still say "= 147 anchors"
+(C-3's "exactly two tracked files" claim holds); grep for `D5`/`D8` as literal tokens in either canon
+file still returns zero (O1's premise holds); `kernel/Cargo.toml:31`'s rsa `innovate:` marker is
+byte-accurate at the cited line. So Done-test items #1-#5 and #7 in §5 remain genuinely unmet — the
+canon-diffs are proposed, not merged, exactly as §0's standing note says.
+
+**A citation-precision issue, not a staleness issue.** O2 cites `hybrid_gate.rs:24-34` for
+`RequireBoth`/`ClassicalUntilPqAudit` — the lines are byte-accurate, but the file is
+`/root/bebop-repo/bebop2/proto-cap/src/hybrid_gate.rs`, a **different git repository** than the one
+this blueprint's canon lives in. A reader in `/root/dowiz` following this citation literally (as a
+relative or repo-root path) will not find it. Worth a one-line repo-qualifier in the citation.
+
+**New evidence relevant to O4 (not a ruling — reporting a fact the docket's own text asks for).** O4
+names "the `crdt-fence` guard's intent... must be resolved before choosing" as its tie-breaker. The
+live guard (`/root/bebop-repo/scripts/ci-crdt-fence.sh`) is scoped: it fails a build only when a crate
+*whose source touches* `order_machine|money|ledger|claim_machine|MeshEvent|assert_transition` also
+depends on `automerge`/`cr-sqlite`. It does **not** blanket-forbid CRDTs — a wiki/knowledge crate with
+no money/order-state coupling is outside its fence. A sibling document already reached the same reading
+(`BLUEPRINT-P14-dispute-escrow-graph-wiki.md:94,250,314`: "the `crdt-fence` guard's intent is now
+concrete... permitted for the wiki"). This is offered as evidence for whoever rules O4, not as this
+pass overriding the "do not pick here" instruction — Option A vs B is still the operator's call; what
+changes is that the "must resolve the guard's intent first" precondition O4 itself names now has an
+answer on record, in a place O4's own text doesn't point to yet.
+
+### (ii) DECART
+
+**No DECART owed by this blueprint's own text.** P02 is a canon-repair/decision-docket document; it
+adds no new dependency, crate, or external service itself. Where a downstream choice could imply one
+(O4 Option B's "possible new dep (DECART)" for a CRDT merge crate), the blueprint already correctly
+defers it rather than deciding — exactly the discipline the Detailed Planning Protocol asks for
+(DECART inline *when a choice is made*; flagging a future DECART obligation when it is deliberately
+not made is the correct alternative, not a gap).
+
+### (iii) 2-question doubt audit (of the docket document itself)
+
+**Q1 — least confident about (concrete):**
+1. I did not re-derive the "97.8% single authorship" figure ADR-0020 §Context cites (nor did §3
+   originally) — took it as carried from R1-E without an independent `git shortlog -sn` re-count.
+2. I did not check whether STRATEGIC-VECTORS-LOCKED-2026-07-16.md's other cited lines (beyond 89/98/124,
+   which I did check) still match — O10, O11, O12, O13's citations to specific line ranges in that file
+   were not individually re-verified this pass.
+3. O19's claim that "eqc proofs are emitted ephemerally in CI" — I confirmed the eqc CI job exists
+   (`ci.yml`'s `eqc-proofs` job, still Python+sympy, unchanged) but did not confirm no proof artifact
+   is ever persisted anywhere (e.g. as a CI artifact) — "ephemeral" is a slightly stronger claim than I
+   independently checked.
+4. The DECISIONS.md D-numbering collision O1 names (canon-D3=legal vs DECISIONS-D3=DTN transport) — I
+   spot-read DECISIONS.md's D1/D2 but did not read its D3-D8 to independently confirm the exact collision
+   shape O1 describes; I am relying on O1's own characterization.
+5. I did not verify O16/O17/O18's "relayed, not ruled here" framing against Phase 18's actual blueprint
+   text (whether Phase 18 in fact restates and owns these, closing the loop O2 opens) — out of scope for
+   my assigned files, flagged rather than silently assumed consistent.
+6. Whether the ADR-0020 filename mismatch (`0020-oss-license-tm-dco.md` vs the done-test's literal
+   `ADR-020-oss-license-tm-dco.md` pattern) is itself worth a correction to §5's done-test wording, or
+   whether the done-test's grep was always meant loosely — I judged it a real gap (a literal `grep`/`find`
+   as written would false-negative) but did not find a stated intent either way.
+
+**Q2 — biggest thing this pass might be missing:** the docket's own "cannot close without a ruling"
+framing for O1/O3/O4 is honest, but the ADR-0020 discovery reveals a *pattern* worth naming: **this
+docket's mechanical items (O2, O5-O16 marked "cheap — REC to adopt") have a real risk of silently
+executing piecemeal**, the same way ADR-0020 partially executed §3 without the operator having
+formally "ruled" on §2's docket as a whole. That is not necessarily bad — mechanical items were always
+meant to ship on the recommended default — but it means "the docket is still open" (this appendix's
+verdict) is a document-level truth that individual line items can quietly stop being true one at a
+time, with no single event that marks the docket "closed." Nothing in §5's done-test currently
+distinguishes "fully closed" from "closed except D5/D8/F44/F48" — a state this repo may already be
+approaching.
+
+### (iv) Anu & Ananke check
+
+**Anu.** Every load-bearing "cannot close without X" claim in §2 (O1, O3, O4) is correctly marked
+as such and none is silently resolved by this pass, per the special rule. The one place Anu is worth
+naming a gap: O4's "must resolve the guard's intent first" precondition is now *answerable from
+evidence already sitting in this repo* (the guard script + BLUEPRINT-P14's independent reading) — §2's
+own text does not yet point to that evidence, so a future reader ruling O4 could easily not know it
+exists and re-derive it from scratch, or worse, rule without it. Recorded above in (i) precisely so
+that gap is closed by citation, not by this pass overriding the operator.
+
+**Ananke.** The docket's structure is honest about what depends on a future reader: §5's done-test #4
+("each of O1–O19 has a written ruling or an explicit dated deferral") is the correct falsifiable
+mechanism — a grep over canon §8 either finds all 19 or it doesn't. What does NOT yet survive on
+structure alone: nothing currently checks that a *partial* execution (ADR-0020 landing while §2's
+ruling is still open) gets recorded as such rather than being mistaken for full closure — this appendix
+had to manually reconcile "the artifact exists" against "the docket says BLOCKED" by reading both. A
+cheap structural fix (not built here, flagged for the Phase-2 implementer): have ADR-0020 (or a
+successor edit to it) carry a literal `BLUEPRINT-P02: OPEN — O1,O3,O4 unresolved` line the way
+`docs/adr/README.md`'s honest-dating convention already asks ADRs to self-date — so the next reader of
+the ADR alone, without cross-referencing this blueprint, sees the same "not fully closed" truth this
+pass had to reconstruct by hand.
+
+---
+
 *Blueprint P02 complete. This is a proposal, not an edit. ARCHITECTURE.md and STRATEGIC-VECTORS remain
 untouched by this document per their "merge, never append" rule — the operator (or a delegated merge
 task) applies §1's diffs, rules O1–O19 in §2, and lands §3/§4 as new files. Load-bearing rulings

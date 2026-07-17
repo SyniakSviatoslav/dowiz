@@ -164,3 +164,151 @@ independent peer-driven integrity probe that turns silence into evidence, compos
 BreachAlert/`ingest_peer_breach`/`append_raw` primitives (not duplicating them) and routing its verdict
 through P06's key_V. Sequenced strictly after in-flight G9 work on the shared `hydra.rs`. No code written by
 this document.*
+
+---
+
+## 6. Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+### (i) Citation verification + new grounding (priority pass — this blueprint had one citation in 166 lines)
+
+**Headline finding: H3's hard sequencing gate is now met.** §0's header said "build after all in-flight
+G9 work lands, not in parallel." `git log --oneline 4dec04218..HEAD -- kernel/src/hydra.rs` is **empty**
+— H1 landed (`4dec04218`, 2026-07-16T22:21:42Z) and `hydra.rs` has been quiescent ever since (confirmed
+against current HEAD `cc3d5c916`, 2026-07-17T02:26Z). H3's own step 1 gate ("confirm all in-flight G9
+commits have landed and `hydra.rs` is quiescent") is satisfied for real, not just asserted — and, as an
+extra load-bearing fact this blueprint's own text anticipated but could not yet confirm: **H3 must build
+against the *post-H1* API**, because H1 changed exactly the two functions H3's design calls
+(`raise_breach_alarm`, `ingest_peer_breach`) from `Option<BreachAlert>`/`()` to
+`Result<Option<BreachAlert>, StoreError>`/`Result<(), StoreError>`. This blueprint's §3.5 design
+("Wire the Locked verdict to the existing `ingest_peer_breach`") must therefore `?`/handle a
+`StoreError`, not treat the call as infallible — a concrete, previously-unstated correction this pass
+supplies.
+
+**Every citation re-verified and corrected against live `hydra.rs` (all shifted ~+130 lines from the
+pre-H1 baseline this blueprint was written against):**
+
+| Blueprint claim | Original cite | **Live, corrected cite (this pass)** |
+|---|---|---|
+| `raise_breach_alarm` self-triggered only when `Locked` | `:291-293` | **`hydra.rs:287-294`** (fn header `:287-291`; the guard `if self.state != OrganismState::Locked { return Ok(None); }` at `:292-294`) — content confirmed identical, only the gate now returns `Result` |
+| `integrity_check` is `&mut self` over own baseline | `:180-195` | **`hydra.rs:180-195`** — coincidentally unchanged (H1's edits landed below this fn) |
+| `boot_verify` is `&self` over own `base_edges` | `:252-264` | **`hydra.rs:253-265`** |
+| `ingest_peer_breach` purely receptive | `:329-343` | **`hydra.rs:332-348`** — now returns `Result<(), StoreError>` (H1 §2.4), confirmed |
+| `BreachAlert::witness_event_id` content-addressed digest | `:135-147` | **`hydra.rs:128-148`** |
+| receiver-verifiable test | `hydra_breach_alert_receiver_verifiable, :617-669` | **`hydra.rs:625-677`** |
+| `raise_breach_alarm`/`:286-315` | `:286-315` | **`hydra.rs:272-318`** (doc comment `:272-286`, body `:287-318`) |
+| unbounded-fan-out test | `:532-570` | **`hydra.rs:538-578`** (`hydra_breach_alarm_unbounded_on_tamper`) |
+| hub-convergence test | `:577-611` | **`hydra.rs:585-619`** (`hydra_ingest_peer_breach_converges_hub`) |
+| `hydra.rs:283` anti-silent-heal prose | `:283` | **`hydra.rs:282-284`** ("tampered core can NEVER silently 'heal' or deny it was compromised (anti-silent-heal)") — content confirmed intact at the new location |
+
+**New grounding this pass adds (none of this was cited before — the "missing evidence research" this
+pass was tasked with):**
+- `OrganismState` enum: **`hydra.rs:75-79`** (`Live`/`Locked`, exactly as §2's design assumes).
+- `BreachAlert` struct + wire codec: **`hydra.rs:87-120`** (`to_bytes`/`from_bytes`, 40-byte fixed
+  layout, fails closed on bad length — the exact pattern H3 §3 step 2 says to mirror for its own
+  `IntegrityProbe`/`IntegrityAttestation` structs).
+- `BREACH_WITNESS_ACTOR`: **`hydra.rs:126`** — the sentinel actor key H3 §3 step 4 reuses for its
+  `0x01`-tagged probe-timeout witness row.
+- `Hydra<S: EventStore>` struct: **`hydra.rs:153-158`**; `commit`: **`hydra.rs:214-245`**; `log()`:
+  **`hydra.rs:268-270`**.
+- `EventLog::append_raw` signature (post-H1): **`kernel/src/event_log.rs:321`** —
+  `Result<AppendOutcome, StoreError>`, confirming the `?` H3's own `attest_integrity`/
+  `record_probe_timeout` (not yet written) will need to propagate.
+- Confirmed via `grep -rn "attest\|IntegrityProbe\|IntegrityAttestation\|record_probe_timeout\|verify_attestation" kernel/src/ tools/`
+  (excluding `node_modules`): **zero hits**. None of H3's proposed primitives exist yet anywhere in the
+  repo — the design is still 100% prospective, unlike H1/H2 (see their appendices).
+
+**The instructed check on the native Rust telemetry ports (`4519bd7ff`, `cc3d5c916`) — result: NOT
+relevant, verified rather than assumed.** I read both commits' diffs and the new crates
+(`tools/skillspector-rs` — a static source-pattern security scanner ported from Python;
+`tools/telemetry/native-trackers`, `native-ser`, `hetzner-exporter`, `swarm-proof` — host
+metrics/wire-format/economic-calc tooling; `tools/telemetry/topics` — a Telegram aggregator). None of
+them contain `breach`, `integrity_check`, `attest`, or `Probe` (grep-confirmed above); they are an
+**ops/observability/security-linting surface**, entirely disjoint from H3's kernel-internal
+peer-to-peer mesh breach-detection design. H3's own text never actually cited these files — it was
+already correctly scoped to `hydra.rs`/G9/P03/P06/P09 before this pass. **Conclusion: the "H3 claims may
+be stale due to the telemetry ports" hypothesis does not hold** — verified negative, not silently
+dropped, per the same discipline as the rest of this pass.
+- Confirmed via `kernel/Cargo.toml` (full file read): **no crypto/ML-DSA crate dependency exists in
+  dowiz's kernel** — P03's actual PQ crypto work lives in a **different repo**
+  (`/root/bebop-repo/bebop2/`, crates `core`/`proto-cap`/`proto-crypto`/`proto-wire`, per
+  `BLUEPRINT-P03-pq-trust-root-hardening.md` header, re-read this pass) — not dowiz kernel at all. This
+  sharpens H3's own gate: **the pure-kernel primitives (§3 steps 2-5: `IntegrityProbe`/
+  `IntegrityAttestation` structs, `attest_integrity`, `verify_attestation`, `record_probe_timeout`) have
+  NO live dependency on P03/P06/P09 and are buildable today** (H1's gate is clear); only **§3 step 6**
+  (ML-DSA signing, key_V-role anchor, P09 gossip transport) is blocked, and blocked cross-*repo*, not
+  merely cross-blueprint — P06/P09 remain blueprint-only in dowiz (confirmed: only `.md` files exist
+  under `docs/design/sovereign-roadmap-2026-07-16/`, no implementing code).
+
+### (ii) DECART judgment
+
+**No DECART owed.** H3's design is explicit that the kernel stays "network/RNG/serde-free" (§2, §3
+step 7) and reuses existing G9 primitives; the only crypto dependency it needs (ML-DSA signing) is
+inherited from P03's already-scoped choice in a different repo, not a new choice H3 introduces. If P03's
+ML-DSA crate choice was itself DECART'd, that DECART belongs to P03's blueprint (outside my assigned set
+— `BLUEPRINT-P03-pq-trust-root-hardening.md` is not one of the four files I was asked to complete); H3
+neither makes nor should make that choice itself.
+
+### (iii) Per-blueprint 2-question doubt audit
+
+**Q1 — concrete, unresolved doubts:**
+1. **The sequencing correction above (H3 must `?`-propagate `StoreError` from the now-fallible
+   `raise_breach_alarm`/`ingest_peer_breach`) is my own derivation, not something this blueprint's
+   original text anticipated** — I did not find any line in H3 acknowledging the post-H1 signature
+   change explicitly; it is a real, load-bearing gap this pass closes, but I did not go further and
+   sketch what the resulting `Result`-threading through `verify_attestation`/`ProbeVerdict` should look
+   like — that is real design work for the eventual build pass, not this appendix.
+2. **P09's actual wire/gossip implementation status was not independently verified beyond "the
+   blueprint file exists."** I confirmed `BLUEPRINT-P09-confidential-self-healing-wire.md` exists and
+   re-read its header (Wave 2, "writes no code"), but did not grep bebop-repo or dowiz for a partial P09
+   implementation that might already exist outside my search scope (I searched dowiz only, per my
+   assignment; P09/mesh code plausibly lives in `/root/bebop-repo`, which I did not audit).
+3. **I did not verify P06's actual current build status beyond "no `key_V`/`key_K` string appears in
+   dowiz kernel/src."** This is a real grep result, not an assumption, but P06 (like P03) may have
+   partial implementation in `/root/bebop-repo` that a dowiz-only grep would miss — I did not cross the
+   repo boundary to check, since that repo is outside this task's assigned file set.
+4. **The `git log --oneline 4dec04218..HEAD -- kernel/src/hydra.rs` quiescence check is a point-in-time
+   fact (as of `cc3d5c916`)** — if further G9/hydra work lands between this appendix and an actual H3
+   build pass, the gate re-closes; this appendix asserts quiescence NOW, not a permanent property, and
+   nothing in H3's text (nor this appendix) re-checks it automatically before a future build starts.
+5. **I did not attempt to actually write or compile a throwaway `IntegrityProbe`/`attest_integrity`
+   stub** to confirm the design's claimed byte layout (`prober_id(32) ‖ nonce(32) ‖ deadline_unix(8)` /
+   `echoed_nonce(32) ‖ node_id(32) ‖ state_tag(1) ‖ rho_bits(8) ‖ worm_tip(32)`) actually compiles
+   cleanly against `BreachAlert`'s existing `to_bytes`/`from_bytes` pattern (`hydra.rs:97-120`) — the
+   design reads as consistent with that template on inspection, but this is unexecuted, unlike H1/H2's
+   citations which I ran as live tests.
+6. **The residual-limitation section (§5) cites `BLUEPRINT-P06 §8`** for the "identity ≠ person"
+   framing — I confirmed that exact phrase and section number exist in the live P06 file (`grep -n`,
+   confirmed `identity != person` at line 168 and "## 8. Residual limitation" at line 304), but did not
+   read P06 §8 in full to confirm the analogy H3 draws is faithful to P06's complete argument, only that
+   the citation resolves to real content (Mentalism-style "does it resolve," not "is the argument
+   sound").
+
+**Q2 — biggest blind spot:** this blueprint's own header already names its sequencing constraint
+precisely and conservatively ("do not open a concurrent edit on `hydra.rs`") — the actual risk this pass
+surfaces is the **opposite** of what the header worried about: the gate has been *clear* for a full day
+(since `4dec04218`) and nothing in the repo's structure notified anyone that H3 became buildable. A
+blueprint that gates on "wait for X" but has no mechanism to announce "X happened" reproduces, in
+miniature, exactly the Rhythm/RC-2 pattern (`AGENTS.md`'s own 2Q ritual; HERMETIC-ARCHITECTURE-PRINCIPLES.md
+Finding 5) this entire hermetic-architecture arc exists to fix: a condition that must be *periodically
+re-checked* to stay honest, currently checked only because this decorrelated pass happened to check it.
+
+### (iv) Anu (logic) & Ananke (organization) check
+
+**Anu.** The blueprint's central technical claim — that G9 already solved the receptive/forge-proof
+halves and the sole genuine gap is the *initiative* half — is now derivable against the live,
+post-H1 `hydra.rs` exactly as it was against the pre-H1 version the blueprint audited: `raise_breach_alarm`
+is still gated on `self.state` (`:292`), `integrity_check` is still `&mut self` (`:180`),
+`ingest_peer_breach` is still purely receptive (`:332`), and no `attest`/`Probe` primitive exists
+anywhere (grep-confirmed). The problem statement survives H1's changes untouched — a good sign the
+original diagnosis was addressing the right layer, not an artifact of a since-changed API. The one
+place Anu was NOT fully closed by the original document — the post-H1 `Result`-propagation implication
+— is supplied in this appendix (§(i) above), not left standing.
+
+**Ananke.** The blueprint's own gate ("build after H1 lands... do not open a concurrent edit") is a
+structurally sound *constraint statement*, but it is not a structurally sound *trigger*: nothing pings
+whoever owns H3 when H1 lands. This is the same class of gap the umbrella plan's §6.Q2 already names for
+the whole arc ("nothing makes the audit recur") and H4 (separately) proposes a partial, operator-gated
+mitigation for at the plan-artifact layer. H3 has no equivalent even at the design level — its
+diligence-reliance is: *a human or agent must think to re-check `git log -- hydra.rs` before starting
+the build*. Naming it here (rather than silently trusting the header) is the concrete Ananke action this
+pass takes; building a re-check mechanism is out of scope for a doc-only pass.

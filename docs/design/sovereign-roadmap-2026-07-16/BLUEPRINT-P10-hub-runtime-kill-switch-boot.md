@@ -378,3 +378,132 @@ enforces locally; P9 gossips.**
   **ingestion** (sha3-verify-or-deny). This phase builds the HubPolicy data + hot-reload + apply
   pipeline + floor-gate that Phase 15 authors *into*; it does not build the self-mod author, the
   model fetch/verify path, or F10 subtree-kill semantics (deferred, O13).
+
+---
+
+## 8. Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+Per the Detailed Planning Protocol (`AGENTS.md`) and the Anu/Ananke doctrine. This blueprint had no
+DECART, 2Q audit, or Anu/Ananke check — all supplied here, alongside fresh citation verification.
+
+### 8.1 — Citation verification against live repo (bebop-repo HEAD `397b8cd8`)
+
+All 8 of this blueprint's file:line/grep citations were checked directly. **All hold up, several to the
+exact line:**
+- `crates/bebop/src/guard.rs:64-124` (`KillSwitch` ≥2/3 consensus vote) — confirmed: struct + doc-comment
+  ("no single node can kill another") at lines 64-77, `vote_suspend`/`recompute` logic follows within
+  range. Accurate.
+- `bebop2/proto-wire/src/transport_policy.rs:17-45` (`MAX_MESSAGE_BYTES`, `IDLE_TIMEOUT_SECS`,
+  `TokenBucket`) — confirmed exact: `MAX_MESSAGE_BYTES` line 19, `IDLE_TIMEOUT_SECS` line 23,
+  `TokenBucket` struct line 28. **Notable, not cited by the blueprint:** this file's own header now reads
+  *"MESH-10 transport hardening policy"* — the same hardening pass that fixed the wss_transport.rs
+  staleness found in the P09 pass (that file's §12.1) also touched this exact file. No claim here is
+  invalidated, but it corroborates the file is under active, recent churn.
+- `bebop2/proto-cap/src/redline.rs:1-45` (`RedLinePolicy` default-DENY) and `hybrid_gate.rs:24-34`
+  (`HybridPolicy::{RequireBoth, ClassicalUntilPqAudit}`) — both confirmed exact, doc-comments match
+  verbatim.
+- `bebop2/proto-cap/src/node_id.rs:80-180` (genesis loader) — confirmed: `GenesisError` enum +
+  fail-closed doc-comments ("FAIL-CLOSED: ... enrolls NOTHING") present in this range.
+- `roster.rs:187-204` (frozen `AnchorRoster`) — confirmed, doc-comment "the roster is frozen: exactly
+  these keys may bootstrap" at line ~187.
+- **`grep load_genesis mesh-node/` = 0 — re-run fresh this pass, still zero.** Loader-never-called
+  finding confirmed current, not stale.
+- **`grep -niE "kill.switch|kill_switch|killswitch"` across `proto-wire`/`mesh-node` = 0 — re-run fresh,
+  still zero.** Confirmed current.
+- `revocation.rs:35-55`/`:13-15` and `discovery.rs:82` (`evict_revoked`) — confirmed, `evict_revoked` is
+  an **exact** line match.
+
+**Verdict: this blueprint's evidence base is the strongest of the four assigned to this pass** — dense,
+all-verified, no staleness found (contrast with P09's one material stale claim). Worth noting precisely
+because it shows the citation quality this protocol asks for is achievable, not merely aspirational.
+
+### 8.2 — DECART
+
+**Owed and missing — two real new-tool choices, neither DECART'd. Written here:**
+
+**(1) Hot-reload file-watch mechanism (§2.2).** *"a file-watch (inotify) on hub-policy.txt fires on
+change"* — naming a Linux facility with no existing crate dependency anywhere in this repo
+(`grep -rn "notify\|inotify" Cargo.lock`/`Cargo.toml` across both repos → zero). A genuine new-dependency
+decision, undiscussed until now.
+
+| Candidate | Bare-metal fit | Correctness/security | Perf | Supply-chain | Maintainability | Reversibility | Evidence |
+|---|---|---|---|---|---|---|---|
+| `notify` crate (cross-platform inotify/kqueue/ReadDirectoryChangesW) | Good, but pulls 3 platform-specific backends a hub only ever runs one of | Mature; needs debounce for save patterns, crate provides it | Instant, event-driven | New dep, moderate transitive surface | External maintenance, occasional API churn | High — swappable behind a `PolicyWatcher` trait | crates.io |
+| raw `inotify` crate | Linux-only (breaks portability) | Correct, needs hand-rolled event coalescing | Instant | Smaller than `notify`, still new | More manual code, single-platform | Medium | crates.io |
+| **stat-`mtime` polling loop (`std::fs::metadata().modified()` on a timer)** | Universal, zero OS-specific code | Trivially correct (compare a timestamp) | 1-2s worst-case detection latency (tunable) — irrelevant for a hand-edited config file | **Zero new dependency** | Simplest to audit (15-line loop) | Trivial to swap later | — |
+| shell out to `inotifywait` (external binary) | **REJECTED** — violates ALL-RUST-NATIVE (runtime binary dependency, not a thin Rust port) | — | — | — | — | — | — |
+
+**DECISION: stat-`mtime` polling loop, zero new dependency.** Matches the codebase's own demonstrated
+bias — nearly every cited module in this pass carries a "no new dependency" comment (`revocation.rs`,
+`hydra.rs`'s `FileEventStore`, `field_frame.rs`'s SIMD work) — and the trigger here (an operator
+hand-editing a rarely-changed policy file) does not need sub-second reactivity. **Mandatory probe
+(honest case against):** if an operator's incident-response workflow ever depends on a policy edit
+taking effect *instantly* (e.g., closing a listener under active attack), a 1-2s poll delay is a real
+cost — and the signed-`PolicyUpdate`-over-the-mesh trigger (§2.2's second path) already covers the urgent
+case, which somewhat defangs the objection but does not eliminate it for the *local* file-edit path. If
+raised at build time, `notify` is the correct upgrade — this is a cheapest-sufficient default, not a
+permanent rejection.
+
+**(2) `HubPolicy` concurrent-swap primitive (§2.2 step 3).** *"Atomically swap the in-memory
+`Arc<HubPolicy>` (RCU-style — readers hold a snapshot, no lock on the hot path)"* — ambiguous between
+`std::sync::RwLock<Arc<HubPolicy>>` (std-only, but a read-lock IS a lock, however cheap) and the
+`arc-swap` crate (genuinely lock-free `ArcSwap::load()`, purpose-built for this pattern, no dependency
+currently in either repo). **This is the one case in this pass where the specialized crate may be
+genuinely justified by the blueprint's own stated constraint** — "no lock on the hot path" is a literal
+requirement plain `RwLock` does not satisfy under contention, however unlikely. Recorded rather than
+decided: if per-frame policy reads are frequent enough that `RwLock` contention is measurable,
+`arc-swap` is the correct outcome; if not, plain `RwLock<Arc<HubPolicy>>` is the zero-dep default.
+Flagged for a build-time bake-off — the blueprint text should say this explicitly rather than leave
+"RCU-style" doing unexamined work.
+
+### 8.3 — 2-question doubt audit (per-blueprint)
+
+**Q1:**
+1. §2.2's inotify mention reads as an aside, not a decided design element — I treated it as a real
+   commitment worth a DECART; a charitable reading is it was one illustrative option. I judged it worth
+   doing anyway per the task's instruction to flag implied new-tool choices.
+2. I did not check whether `guard.rs::KillSwitch` has any existing caller today that would break if
+   *deleted* rather than merely bypassed — the acceptance criterion (§6.7) only requires the new kill
+   path not depend on it, weaker than "safe to delete." I did not grep for `KillSwitch::` call sites.
+3. `KEY-CEREMONY.md` (§4.4) is specified in detail but I did not check whether a document by that name
+   (or an equivalent, alongside the H8/P1-PAUSE runbooks found in the P12 pass) already exists.
+4. I confirmed `load_genesis` in `node_id.rs` but did not specifically verify Phase 6's
+   `derive_pq_seed`/K-V keygen machinery §4.4 says this ceremony reuses.
+5. The floor-gate invariant (§2.2 step 2) depends on `redline.rs` — confirmed to exist and match the
+   cited range, but that file gained new Auth/Secret/Migration categories in commits `c4edbf1`/`4f3553f`
+   *after* this blueprint's implicit baseline. I did not check whether P10's floor-gate design already
+   accounts for these newer categories.
+6. I did not check whether "a frame in flight completes against the snapshot it began with" (§2.2 step
+   3) is achievable given how frames are currently dispatched in `mesh-node` — asserted, not verified
+   against a concrete call site.
+
+**Q2 — biggest thing this pass might be missing:** this blueprint is the most evidence-rigorous of the
+four (§8.1), which risks over-trusting its *design* sections (§2-§7) by association — strong
+current-state evidence does not imply the proposed HubPolicy/kill-switch/boot design is itself correct,
+only that the problem statement is accurate. The design has not been red-teamed here. The two DECART
+gaps found (§8.2) suggest the design sections were written with "good citations, thinner
+tooling-decision rigor" — reused-primitive-heavy evidence sections were rigorous *because* they were
+reuse, while the design sections introduce genuinely new mechanisms (a hot-reload watcher, a concurrent
+swap) that got named but not chosen.
+
+### 8.4 — Anu (logic) & Ananke (organization) check
+
+**Anu.** The headline claim — M9's kill-switch doesn't exist, and the same-named legacy construct
+implements its structural opposite — is independently re-derivable from the two live greps in §8.1
+(kill-switch grep = 0, `guard.rs::KillSwitch` = quorum-gated) and holds. The kill-frame verification path
+(§3.1) is logically chained to real, checked primitives (hybrid roster, replay ledger from F25, genesis
+anchors) rather than asserted floating requirements. Where the design cannot be derived from what exists
+today — e.g., whether `RwLock` contention is actually a problem — this appendix names that as unresolved
+(§8.2) rather than the blueprint silently picking "RCU-style" language that reads more decided than it
+is. That imprecision is the one place this blueprint's Anu compliance was weaker than its evidence
+sections.
+
+**Ananke.** The floor-gate invariant (§2.2) and COLD-snapshot-before-halt ordering (§3.2) are both
+genuinely structural: the acceptance criteria (§6.5, §6.9) test the *invariant*, not a description of
+intended behavior, and the §3.2 state machine makes "halt before backup" a code path that must not
+exist, not a convention to remember. **What relies on future diligence:** the two DECART gaps in §8.2 —
+nothing in this blueprint's structure would have caught "a new dependency was implied without a DECART"
+except this decorrelated pass; there is no equivalent of Phase 1's "DECART-dep lint" (referenced in
+sibling blueprint P11 §7) wired to catch an *implied* dependency named only in blueprint prose rather
+than an actual `Cargo.toml` line. That lint protects code, not planning documents — worth naming as a
+structural gap the planning protocol itself has.

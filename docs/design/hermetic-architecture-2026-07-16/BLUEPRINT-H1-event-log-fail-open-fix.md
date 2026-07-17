@@ -207,3 +207,107 @@ untouched by G9 and collision-free.
 propagated through two `EventLog` appends, the three commit paths (via `CommitError`), and the two G9
 witness fns — turning a byte-indistinguishable fail-open into a typed, RED-tested failure pole under
 the cause-and-effect substrate every downstream guarantee replays from.*
+
+---
+
+## §6 — Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+### (i) Citation verification + new grounding — headline finding: **this blueprint is already built**
+
+Live re-verification against current HEAD (`cc3d5c916`, 2026-07-17T02:26Z) shows every design decision
+in §2–§4 landed in commit **`4dec04218`** ("fix(hermetic): H1 event-log fail-open fix + H2
+kernel<->engine mirror-pin sweep", 2026-07-16T22:21:42Z) — **after** this blueprint was written, and
+matching it exactly. `git log --oneline 4dec04218..HEAD -- kernel/src/hydra.rs kernel/src/event_log.rs`
+returns **empty**: neither file has moved since, so H1's own line citations are stale by exactly one
+commit's worth of insertions, corrected here:
+
+- `StoreError` enum: `event_log.rs:167-176` (was `:88-94` at planning time). `Open/Write/Flush/Sync`
+  variants present verbatim as designed.
+- `EventStore::insert -> Result<(), StoreError>`: trait at `event_log.rs:188`; `MemEventStore` impl
+  (`Ok(())` always) at `:226-231`; `FileEventStore` impl at `hydra.rs:856-889` — `OpenOptions::open`
+  now `.map_err(StoreError::Open)?` (`:873-877`), `write_all/flush/sync_all` each `.map_err(...)?`
+  (`:878-881`), and the in-memory `by_id`/`tip`/`count` advance is confirmed to sit **strictly after**
+  `sync_all?` (`:882-887`) — the load-bearing ordering constraint (§2.2) is implemented exactly as
+  specified, not merely attempted.
+- `CommitError` enum: `event_log.rs:263-266` (`Rejected`/`Store` variants, as designed).
+  `EventLog::append`/`append_raw` → `event_log.rs:293,321`. `Hydra::commit` →
+  `hydra.rs:214-245`, using `CommitError` at `:220,228`.
+- G9 collision (§2.4): `raise_breach_alarm` now `Result<Option<BreachAlert>, StoreError>`
+  (`hydra.rs:287-318`, `?` on `append_raw` at `:313`); `ingest_peer_breach` now
+  `Result<(), StoreError>` (`hydra.rs:332-348`, `?` at `:346`) — both exactly as §2.4 specified.
+- **RED-first fault-injection test (§4 criterion 2)**: `FaultyStore` (`event_log.rs:448-...`, `insert`
+  hardcoded `Err` at `:452`) plus **two** live tests exercising it —
+  `commit_after_decide_distinguishes_store_fault_from_law_reject` (`event_log.rs:724`) and, in
+  `hydra.rs`, `breach_alarm_surfaces_lost_witness_over_faulty_store` (`:707-724`, asserts
+  `Err(StoreError::Sync(_))`, never `Ok(Some(alert))` — criterion 5) and
+  `file_store_open_failure_surfaces_not_swallowed` (`:1019-1044`, criterion 4). The implementer's own
+  code comment at `:1013-1018` flags one **honest, self-graded deviation**: the blueprint's criterion 4
+  said "read-only directory"; the test instead uses a missing-parent-directory (root bypasses chmod
+  bits, so read-only would not fail for a root test runner) — a sound substitution, but a self-graded
+  one, named here rather than silently accepted.
+- **Live test run, this pass** (fresh, not carried from the commit message):
+  `cargo test --manifest-path kernel/Cargo.toml` → **367 passed, 0 failed** (**422** with
+  `--features wasm`); `cargo test --manifest-path engine/Cargo.toml` → **49 passed, 0 failed**. These
+  exceed the implementation commit's own reported 361/416/49 by the tests two later, unrelated commits
+  added (P08 §4, quick-win #19) — consistent, no drift, no regression. `git diff 82e52c02e 4dec04218 --
+  kernel/Cargo.toml engine/Cargo.toml` is empty: **zero new dependencies** were added to implement H1.
+- Net effect: §4's six acceptance criteria are not just falsifiable-in-principle, they are **falsified
+  green, live, in this pass** — the blueprint's job is done and provably so.
+
+### (ii) DECART judgment
+
+**No DECART owed.** H1 is a pure type/signature change inside existing kernel code
+(`StoreError`/`CommitError` are hand-rolled `std`-only enums); confirmed via `git diff` above that no
+crate was added to either `Cargo.toml` to implement it. No new dependency, tool, or vendor choice is
+made anywhere in this blueprint or its landed implementation.
+
+### (iii) Per-blueprint 2-question doubt audit
+
+**Q1 — concrete, unresolved doubts (this pass did not fully investigate):**
+1. **No visible locking around `FileEventStore`'s fields.** `by_id`/`tip`/`count` are plain struct
+   fields (`hydra.rs:743-748`); the state-advance-after-`sync_all?` ordering (§2.2) is correct for a
+   *single* caller but I did not check whether any planned multi-threaded hub server would share one
+   `FileEventStore` across threads — if so, two concurrent `insert`s racing past `sync_all?` could
+   still interleave the in-memory advance non-atomically. Outside H1's stated scope, but adjacent and
+   unaudited.
+2. **Torn mid-write (partial `write_all`) is not the fault mode H1's RED test exercises.** The test
+   uses an *open* failure (missing parent dir); a crash mid-`write_all` leaving a truncated JSON line
+   is a different failure shape, explicitly deferred to P12 §4.2's "torn-write truncation" — I did not
+   verify P12 §4.2 has since been built (it is outside my assigned file set) to confirm this deferred
+   half actually landed.
+3. **The hand-rolled `serde_json_like_parse`/`extract_hex` replay reader** (`hydra.rs:792-850`) sits
+   immediately downstream of the fix and is unchanged by H1; I did not check whether a line
+   truncated by a torn write could parse as a *different, shorter-but-valid* event rather than being
+   skipped as corrupt — a subtler failure than "skip the line," not covered by any test I found.
+4. **Repo-wide caller completeness.** I confirmed no `Cargo.toml` changed and reran the kernel/engine
+   test suites green, but I did not re-grep the *entire* repo (beyond kernel/engine/tools) for any
+   other consumer of `EventStore::insert`/`AppendOutcome` — I am relying on the blueprint's own §1
+   blast-radius audit (which the live tests corroborate) rather than an independent full-repo grep.
+5. **The criterion-4 test's self-graded substitution** (missing-parent-dir instead of read-only-dir,
+   `hydra.rs:1013-1018`) was judged sound by me on inspection, but nobody decorrelated from the
+   implementer reviewed that specific judgment call before it shipped — a small instance of the exact
+   same-party-grades-itself pattern RC-1/RC-2 name, here in a place too minor to gate on but worth
+   surfacing.
+
+**Q2 — biggest blind spot:** the document's own header still reads forward-looking ("Wave 0 —
+buildable now," "Planning artifact only. No `.rs` file is written here") even though the fix landed in
+full, one commit later, and is live-tested green today. A reader who trusts the file's own framing
+without independently checking `git log` would not discover it is done — this is an *under-claim*
+staleness (the mirror image of the RC-1 pattern the audit worries about, where docs over-claim). The
+blueprint has no way of knowing about its own completion, and nothing in its structure surfaces that.
+
+### (iv) Anu (logic) & Ananke (organization) check
+
+**Anu.** Every load-bearing decision in this blueprint is derivable from the cited evidence, and now
+doubly so: the live implementation is not just consistent with the design, it is checkable
+line-for-line against it (§(i) above), and the test suite is green, not asserted. No Anu failure found
+— the one self-graded judgment call (Q1.5) is a minor exception, correctly flagged in the code itself
+rather than hidden.
+
+**Ananke.** Passes on falsifiability (§4's criteria are real commands, and this pass ran them) but
+**fails on one structural point**: nothing forces a future reader to learn the fix already shipped —
+that fact currently survives only in `git log` and in this appendix, not in the document's own header.
+The cheap, structural fix (not performed here, since this pass's scope is limited to appending this
+section) would be a one-line `STATUS: IMPLEMENTED — commit 4dec04218, kernel 367/engine 49 passing`
+marker directly under the title, so the next reader doesn't have to re-derive what this appendix just
+verified.

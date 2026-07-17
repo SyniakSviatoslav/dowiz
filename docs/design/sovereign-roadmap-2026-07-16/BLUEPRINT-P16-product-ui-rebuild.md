@@ -394,3 +394,242 @@ DeliveryOS-As-Built-Summary-v1.md, DOWIZ-INTERFACES-PLAN.md, BLUEPRINTS-DOWIZ-IN
 Load-bearing facts (deletion commits, `git ls-files apps` = 0 at HEAD + origin/main, i18n catalog
 recovery, `web/` shell + 24 wasm exports, `compose` absence) re-verified against the live tree
 2026-07-16. This document plans; it changes no product code.*
+
+---
+
+## 10 — Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+> Independent grounding/DECART/doubt pass per `AGENTS.md` Detailed Planning Protocol + the 2-question
+> ritual, run by an agent decorrelated from the one that wrote §0-§9. This blueprint entered with the
+> weakest citation density of the three assigned (one line-numbered citation in 396 lines), so this
+> appendix's priority — per its own assignment — is grounding, not merely auditing. Read-only against
+> `/root/dowiz`; nothing edited outside this appendix. **Headline finding: §1/§9's "hard dependency on
+> Phase 4" for the Sea layer's `compose` export is stale** — see 10.1.
+
+### 10.1 — Citation verification + new grounding (the Rust UI-surface inventory this blueprint needed)
+
+**The one existing citation is imprecise.** §1 cites `engine/src/field_frame.rs:299-323` for
+`compose_returns_deterministic_frame`. Live read: `compose` itself is at line **193**
+(`pub fn compose(scene: &Scene, eq: &FieldEquilibrium, w: usize, h: usize, steps: usize) -> Vec<u8>`)
+and the determinism test is at lines **321-342**, not 299-323 — off by roughly twenty lines. The
+substance holds (`assert_eq!(a, b, "compose must be bit-deterministic across calls")` is real and
+present), so this is a citation-hygiene correction, not a substantive one, but it is the document's
+*only* line-numbered citation and it was wrong — a fact worth weighing against how much else in this
+document has no citation to check at all.
+
+**The load-bearing correction: `field_frame::compose` is already reachable from JS today, via a
+sibling crate this document never mentions.** §1 states *"`field_frame::compose` is NOT exported from
+`wasm.rs` (grep for `compose`/`rgba` in `wasm.rs` returns 0 this session)... This export is **Phase 4's
+deliverable**... Phase 16 **consumes** it; it does not build it. This is the hard dependency edge on
+Phase 4."* The `wasm.rs`-scoped grep is accurate as far as it goes — but it is the wrong scope. A
+repo-wide check finds `/root/dowiz/wasm/` (crate `dowiz-wasm`, `Cargo.toml` description: *"exposes the
+engine field_frame.compose RGBA + VertexBridge graph-Laplacian field to JS via wasm-bindgen (zero TS
+math)"*), which:
+
+- exports `#[wasm_bindgen] pub fn compose_field(circles: &[f64], w: usize, h: usize, steps: usize) ->
+  Vec<u8>` (`wasm/src/lib.rs:56-58`), a direct wasm-bindgen wrapper around `engine`'s `compose`;
+- exports a stateful `#[wasm_bindgen] pub struct FieldSim` with `new`/`step`/`frame`/`width`/`height`
+  methods for a live render loop (`wasm/src/lib.rs:64-111`);
+- carries its own passing determinism test, `wasm_compose_deterministic` (mirrors the engine-level test
+  exactly: two `FieldSim`s with identical inputs produce bit-identical frames);
+- is **tracked in git at current HEAD** (`git ls-files wasm/` lists `wasm/Cargo.toml`, `wasm/src/lib.rs`,
+  and a **built demo artifact** `wasm/demo/pkg/dowiz_wasm_bg.wasm` + `wasm/demo/smoke.mjs`, a headless
+  Node smoke test that instantiates `FieldSim` and steps it 30 times) — this is not aspirational or
+  work-in-progress, it is committed, compiled, and has a passing offline smoke test today;
+- `web/src/lib/kernel/kernel_client.mjs`'s own header comment even says *"Runtime block copied verbatim
+  from in-repo `wasm/demo/pkg/dowiz_wasm.js`"* — the `web/` shell's authors already knew this crate
+  exists; they copied its wasm-bindgen glue boilerplate, but did not wire its `compose_field`/`FieldSim`
+  exports into `app.mjs`. `grep -rn "compose_field|FieldSim|dowiz_wasm" web/src web/index.html` (excluding
+  the one comment) returns zero calls.
+
+**What this means for §1/§4/§9's dependency framing:** the *capability* Phase 4 is described as owing
+(§1: *"`compose` reachable from node via wasm with bit-identical frames across two runs"*) **already
+exists and already passes that exact bar**, in a different crate than the one this document grepped.
+The real, narrower gap is that `web/`'s live JS shell does not yet call it — a wiring task, not a
+cross-phase math dependency. §4's "Dependency honesty" paragraph and §9's "Hard dependency on Phase 4's
+`compose` export (verified absent from `wasm.rs` today)" should read: *verified absent from
+`kernel/src/wasm.rs` specifically; present and tested in the sibling `wasm/` crate; the remaining work is
+wiring `web/app.mjs` to `wasm/demo/pkg/dowiz_wasm.js`'s `FieldSim`, not waiting on Phase 4.* This does not
+mean Phase 4 has no remaining scope (it may still own other exports), but the Sea-layer-specific
+blocker this document leans on throughout §4/§9/AC-4 is not accurate as written.
+
+**A second stale figure, propagated across three documents.** §1 states web's `kernel.test.mjs` carries
+*"the 20 kernel-math (VbM) assertions (W17)."* Live read: `kernel.test.mjs` is 32 lines with **4 test
+cases / 5 `assert()` calls** (spectral radius, malformed-input fail-closed, fsm report, geo progress).
+The repo's own retro doc, `docs/design/W22-RETRO-GOVERNANCE-2026-07-16.md:14`, independently confirms
+this: *"`node web/src/lib/kernel/kernel.test.mjs` → **4 ok**... EXIT=0."* The "20 assertions" figure
+appears not only here but also in `R1-D-product-on-protocol-gap-analysis.md:71` and
+`BLUEPRINT-P17-demo-splat-gpu-unlock.md:25` — the same wrong number copy-pasted forward through the
+pipeline. **A related, previously uncited gap:** `kernel_client.mjs` today binds only **3 of the
+kernel's 24 `_js` exports** (`spectral_radius_js`, `geo_progress_flat_js`, `fsm_graph_report_js`) — not
+`place_order_js`/`apply_event_js`/`estimate_order_total_js`, the exact functions §3/§8-item-5's checkout
+and order-lifecycle flow will need to call. The "math debug page" (§1) is real but narrower than "the
+kernel's wasm surface is wired" implies; most of the 24 exports are unbound in JS today.
+
+**Deletion/quarantine chain — mostly matches, two refinements.** `git cat-file -t` confirms `79ef316f6`
+and `db766de47` are both real commits with **identical diff content** (267 files, -48358/+278) and an
+identical message — they are the same logical change on two refs (one an `origin/*` remote-tracking
+pointer, one a local branch pointer not itself an ancestor of current HEAD), not two separate deletions
+as "commits `79ef316f6` + `db766de47`" could be read to imply. Separately, `fce5738b0` (the quarantine
+commit) is real, but **`attic/` was not left in a quarantined state** — a later commit
+(`f9ab28ff1`/`e1505e1d9`, *"drop ALL JS/TS (per operator)... Remove entire JS/TS surface (web/, packages/,
+spikes/, attic/, tools JS)..."*) fully deleted `attic/` (including the quarantined `apps/api`) the next
+day, recoverable only via a named backup branch, `backup/pre-drop-js-20260715-161134` (confirmed to
+exist via `git for-each-ref`). §0/§1 never claim `attic/` is retrievable today, so nothing here
+contradicts the document's conclusion — but a reader could reasonably infer "quarantined" means
+"still there, just out of the way," and it is not; `git ls-files 'attic/*'` = 0 and the directory does
+not exist on disk. Worth one added sentence.
+
+**i18n recovery — fully re-verified, exactly as claimed.** `git show db766de47~1:packages/ui/src/lib/
+i18n-catalog.ts` and `...i18n.ts` both recover cleanly; `Locale = 'sq'|'en'|'uk'`, default `'sq'`,
+key-major catalog confirmed verbatim. `git show db766de47~1:scripts/i18n-parity.mjs` correctly fails
+("does not exist in db766de47~1") — the blueprint's "not recoverable at that rev" claim is accurate, not
+just plausible.
+
+**As-Built summary — mostly accurate, one stale label.** `DeliveryOS-As-Built-Summary-v1.md` confirms
+"92 unique tests × 3 breakpoints = 276 total" and "Frontend React PWA (18 screens, 4 map components)"
+verbatim. **"L0-L11" (§1, line 32) does not appear anywhere in the As-Built summary itself** — that
+document instead describes a "10-state machine." The repo's own audit,
+`docs/audit/2026-06-18/reliability-gate-SKILL-reconciled.md:18`, has already reconciled this exact label
+downward: *"Stages L0–L11 → L0–L9 mapped to real code."* §1's "L0-L11 order lifecycle" phrase reuses a
+label the repo's own governance has already superseded — a small but genuine staleness in the one
+narrative section of this document that reads as most authoritative.
+
+**Canon check (D4, SCOPE RULE).** The SCOPE RULE is verbatim at `ARCHITECTURE.md:23` as cited. **D4 is
+not defined in `ARCHITECTURE.md`** (`grep -n "D4"` → zero hits there); it is defined at
+`R1-D-product-on-protocol-gap-analysis.md:55` (*"D4 — Product UI determinism: dowiz UI = deterministic
+physics/math wasm"*). §0's header does not explicitly claim D4 lives in `ARCHITECTURE.md`, so this is not
+a contradiction, only a gap worth closing: a reader following "Canon is ARCHITECTURE.md" (a phrase this
+document's siblings use) could look in the wrong file for D4's definition.
+
+### 10.2 — DECART
+
+**(a) i18n serving layer — a DECART is named but not executed; done here.** §5 correctly identifies the
+choice (R1-D: zero-dep JS lookup vs. R1-E: Rust-native locale table) and correctly defers to "the
+phase's DECART log," but no comparison table exists anywhere in this document or, as far as this pass
+found, anywhere else in the roadmap.
+
+| Option | For | Against |
+|---|---|---|
+| **Rust-native locale table, compiled into/shipped alongside the wasm surface (std-only)** | Zero new dependency; consistent with D4's "no JS math" ethos extended to data, not just arithmetic; one build artifact instead of two parallel lookup implementations | The catalog is currently TypeScript (`i18n-catalog.ts`) — porting ~1291 keys × 3 locales into a Rust-embeddable form (e.g. a build-time-generated `phf` map or a flat binary table) is nontrivial one-time work with no existing precedent in this repo |
+| **Zero-dep JS key-major lookup (recovered catalog served as static JSON/JS, no framework)** | Minimal new work — the recovered `i18n-catalog.ts`/`i18n.ts` port almost directly; zero new Rust code; i18n is display, not arithmetic, so it never crosses the D4/wasm-math gate either way | Two parallel string-lookup implementations conceptually exist (kernel math is Rust/wasm, locale strings are JS) — not a *violation* of D4, but a design seam the Rust-native-default rule (per this assignment's hard constraint) would prefer collapsed |
+| **CHOSEN — per the rust-native-default rule this assignment operates under: Rust-native locale table is the correct default; zero-dep JS lookup is the acceptable, lower-effort fallback if the port proves costly.** | — | Case against, honestly: this is a preference, not a proof — nothing in the recovered catalog or this repo demonstrates the Rust-native path is actually cheaper to build than it looks; if the practical port cost turns out high, the JS fallback is not a compromise, it is the correct call, and should be recorded as such rather than treated as second-best by default. |
+
+**(b) The `web/` shell's assumed reintroduction of Svelte — a real, unresolved contradiction with the
+project's own zero-dep precedent. Flagged with evidence; not resolved or rewritten here, per this
+assignment's instruction.** §3 states: *"Every page follows the `web/` shell pattern: DOM/**Svelte**
+view layer for structure and text..."* Live evidence bearing directly on this:
+
+- `web/package.json` today has **no `dependencies` or `devDependencies` key at all** — it is a
+  deliberately zero-dependency vanilla-JS shell (`"description": "Kernel-driven field UI — all
+  geo/spectral/FSM math computed in the Rust dowiz-kernel wasm. This shell only renders."`).
+- The original product frontend **was** Astro/Svelte-based, and its removal is the deletion this
+  blueprint's §0 documents (`79ef316f6`'s own commit message: *"remove legacy JS/TS thin-layer"*,
+  covering an Astro/Svelte `web/` predecessor per that commit's stat).
+- After a same-day full JS/TS purge (`f9ab28ff1`, §10.1 above) deleted even the freshly-rebuilt shell,
+  it was rebuilt **again**, the next day, as the current zero-dependency `web/` — i.e. the zero-dep
+  choice for this exact shell has already been made, deliberately, **twice** in this repo's history.
+- Introducing Svelte means introducing a JS compiler + runtime dependency (a real, new external tool
+  choice) into a surface whose own `package.json` self-describes as dependency-free, and would be the
+  **third** reversal of the same decision.
+
+**This is exactly the tension this assignment asked to be surfaced, not silently resolved.** The
+blueprint's design intent for a component-templating layer is legible and not unreasonable on its own
+terms (Svelte is commonly chosen for exactly the DOM-reconciliation problem §6's "hidden semantic DOM
+mirror" describes) — but it is asserted once, in passing, with no DECART, against a repo that has
+twice chosen the opposite. Per this assignment's explicit instruction, this is recorded as a conflict for
+the operator/next planning pass to resolve, not rewritten here: either (i) §3's "Svelte" is a loose word
+for "component-templating discipline" and the actual implementation stays zero-dep vanilla JS/DOM
+(consistent with precedent, no DECART needed), or (ii) Svelte is genuinely intended, in which case it
+needs the same DECART table treatment as (a) above — including at least one rejected zero-dep
+alternative (e.g., a small hand-rolled DOM-diffing helper, which is what the current `web/` shell already
+implies it would need anyway for the semantic-DOM mirror in §6) — before this phase is buildable as
+written.
+
+### 10.3 — Two-question doubt audit
+
+**Q1 — least confident about, concrete:**
+
+1. **The Phase-4 dependency correction (10.1) is the load-bearing one** — I am confident `wasm/`'s
+   `compose_field`/`FieldSim` exist, are tracked, and pass a determinism test matching the engine-level
+   one; I am less confident about *why* `web/`'s shell doesn't already call them (a deliberate
+   phase-sequencing choice? an oversight? abandoned mid-build?) — I did not find a comment or commit
+   message explaining the gap, only its existence.
+2. **The Svelte/zero-dep contradiction (10.2b)** is presented as a live tension, not resolved — I
+   genuinely do not know which reading (loose word vs. literal dependency) the original blueprint author
+   intended, and did not find internal evidence in §3-§8 pointing definitively either way.
+3. **The "26 pages" checklist derivation (§2 Step 2)** — I verified the three source documents exist and
+   sampled their content, but did not personally re-derive the 3+7+16=26 count against
+   `DOWIZ-INTERFACES-PLAN.md`'s full per-screen checklist (a 39KB document); the blueprint's own text
+   already says "the exact enumeration is settled by counting the checklist, not this blueprint," which
+   is honest, but I have not done that count either, so it remains genuinely open.
+4. **`kernel_client.mjs`'s narrow binding (3 of 24 `_js` exports)** — I confirmed the current state but
+   did not assess how much work remains to bind the other 21 (some, like `place_order_js`, likely need
+   richer JS-side plumbing than the three already bound simple functions); this could be a materially
+   larger gap than "just wire compose in" implies for the rest of the wasm surface.
+5. **The `attic/` full-deletion finding (10.1)** — I confirmed the backup branch
+   `backup/pre-drop-js-20260715-161134` exists as a ref, but did not check it out or verify its contents
+   are complete/intact; "recoverable via backup branch" is confirmed to the level of "a ref with that
+   name exists," not "checking it out actually restores a working `apps/api`."
+6. **The "20 assertions" stale figure's blast radius** — I found it copy-pasted in three documents but
+   did not search the *entire* `docs/design/` tree for further copies; there may be more.
+7. **I did not verify the DZ-01..12 work-unit documents' internal consistency** with this blueprint's
+   §4/§6/§7 claims about them (Sea/Sheet, three-act shell, hybrid-DOM accessibility) — I confirmed the
+   three source documents exist and sampled one-line summaries, not a claim-by-claim cross-check.
+
+**Q2 — the biggest thing this pass might be missing:** the specific failure shape here — *"this
+capability is described as blocked on a future phase, when a repo-wide (not file-scoped) check would
+have shown it already exists"* — is **the same failure shape this roadmap's own
+`SELF-CRITIQUE-2Q-DOUBT-AUDIT.md` §3 already found and formally investigated for llama.cpp/GPU-unlock**
+(there: "self-host LLM" was bundled with a `cargo add wgpu` trigger that was actually about an unrelated
+graphics crate; here: "Sea-layer `compose`" was bundled with "Phase 4's deliverable" when a sibling crate
+already ships it). That prior investigation's own root-cause diagnosis — *"the error entered at the
+canon and was reinforced rather than challenged at each downstream link"* — applies here nearly
+verbatim: R1-D wrote the "absent, Phase-4-gated" framing, R2's phase table restated it, this blueprint
+inherited it, and nothing in three passes re-ran the grep at repo scope instead of file scope. Given that
+the roadmap has now made this exact mistake shape at least twice (once caught, once — until this pass —
+uncaught), the biggest miss is not this one instance; it is that **there is still no standing check
+(a script, a CI step, a "before citing X is absent, grep the whole repo not just the obvious file"
+habit) that would catch the *next* instance of this same error automatically.** That is a process gap
+this document cannot fix by itself, but it is the pattern a fresh reader would spot fastest: two
+independent "assumed-blocked, actually-already-built" errors in one 19-phase roadmap, both caught only by
+a decorrelated re-read, neither by the roadmap's own machinery.
+
+### 10.4 — Anu & Ananke check
+
+**Anu.** The "hard dependency on Phase 4" claim (§1/§4/§9) **fails Anu as written**: it is asserted from
+a citation (`grep compose|rgba` in `kernel/src/wasm.rs` returns 0) that is true but insufficiently scoped
+to support the conclusion drawn from it ("this export is Phase 4's deliverable... hard dependency edge").
+A repo-wide grep — the same kind of check this document's own §0 uses correctly elsewhere (e.g. "`git ls
+-files 'apps/*'` returns 0 files" is exactly the right scope for that claim) — would have surfaced
+`wasm/`. This is the clearest single Anu failure found across all three assigned blueprints this pass
+reviewed: a conclusion that does not survive being re-derived at the correct scope. The Svelte claim
+(§3) similarly fails Anu in a smaller way — it is asserted, not derived from or reconciled against the
+`web/package.json` evidence that was sitting one directory away and contradicts it directly.
+
+**Ananke.** The feature-inventory reconciliation ledger (§2) is a genuine Ananke strength: it makes
+"every shipped feature gets a disposition, every DROPPED row needs an operator signature" a structural
+requirement (AC-1's falsifier), not a hope. The wasm-math CI grep gate (§3, AC-3) is a second real
+structural win — a planted-violation RED→GREEN falsifier is exactly the kind of check whose own
+existence forces the invariant, rather than relying on a future developer's diligence not to
+reintroduce client-side math. But this appendix's own headline finding is itself an Ananke gap the
+document doesn't name: **nothing in this blueprint's structure would have caught "Phase 4 dependency is
+stale" before an implementer wasted real calendar time waiting on Phase 4** — there is no built-in
+"before treating any capability as absent, re-grep the whole repo, not just the obvious crate" step
+anywhere in §1's methodology or in the AC-4 acceptance criterion itself. Given that this exact failure
+shape has now occurred at least twice in this roadmap (10.3/Q2), a standing mechanical habit or check
+would move this from "caught by a decorrelated pass, this time" to "structurally can't happen" — which
+is precisely the distinction Ananke asks a plan's own organization, not a future reader's care, to
+guarantee.
+
+---
+
+*Appendix sources (2026-07-17): live grep/read against `/root/dowiz` HEAD `cc3d5c916`;
+`engine/src/field_frame.rs` (lines 193, 321-342); `wasm/Cargo.toml`, `wasm/src/lib.rs` (lines 56-58,
+64-111); `web/package.json`, `web/src/lib/kernel/{kernel_client.mjs,kernel.test.mjs}`;
+`docs/design/W22-RETRO-GOVERNANCE-2026-07-16.md:14`; git history for `apps/web`/`packages/ui`/`attic/`
+(commits `79ef316f6`, `db766de47`, `fce5738b0`, `f9ab28ff1`/`e1505e1d9`, branch
+`backup/pre-drop-js-20260715-161134`); `DeliveryOS-As-Built-Summary-v1.md`;
+`docs/audit/2026-06-18/reliability-gate-SKILL-reconciled.md:18`; `ARCHITECTURE.md:23`;
+`R1-D-product-on-protocol-gap-analysis.md:55`; `SELF-CRITIQUE-2Q-DOUBT-AUDIT.md §3` (the analogous
+llama.cpp/GPU-unlock precedent). No code or canon changed.*
