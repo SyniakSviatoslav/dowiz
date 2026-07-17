@@ -533,6 +533,123 @@ Phase 9 is done when **all** of the following pass — these are the R2 done-tes
 
 ---
 
+## 12. Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+Per the Detailed Planning Protocol (`AGENTS.md`) and the Anu/Ananke doctrine, applied as a decorrelated
+audit pass. This blueprint already carries strong (a) evidence and DECART-shaped framing (§3); this
+appendix supplies the missing (c) 2Q doubt audit and (d) Anu/Ananke check, plus fresh citation
+verification.
+
+### 12.1 — Citation verification against live repo (bebop-repo HEAD `397b8cd8`, dowiz current session)
+
+Re-verified a representative, load-bearing sample of this blueprint's ~30 file:line citations. `bebop-
+repo` has advanced 8 commits past the cited baseline `b87b7e2` (confirmed ancestor via `git merge-base
+--is-ancestor`), 4 of which touch cited files (`iroh_transport.rs` +64 lines via later breach-domain-
+separation work; `proto-cap/src/redline.rs` gained Auth/Secret/Migration mapping — not cited by P09, no
+effect here).
+
+**One material stale claim, corrected:**
+- §1.1's third bullet — *"The WSS carrier runs plaintext `ws://`, not `wss://`"*, citing
+  `wss_transport.rs:451-458` as "readable by a passive on-path observer" — **is false as production
+  behavior today.** `wss_transport.rs:403-413` (`connect`) and `:465-479` (`accept`) implement **MESH-10**
+  (commit `85fcee2`, predating even this blueprint's own citation baseline): production **rejects**
+  plaintext `ws://`/`Listen` with `WireError::InsecureTransport` unless the test-only `insecure-test`
+  feature is enabled, and `wss://` completes a **real client/server rustls TLS1.3 handshake** ("a real
+  `wss://` connection now completes end-to-end"). The cited lines 451-458 are a **stale, orphaned doc-
+  comment** (`innovate: H6`) never deleted when MESH-10 shipped — the evidence chain took a leftover
+  comment at face value instead of the code five lines above it. **Corrected framing:** the wire IS
+  confidential-in-transit today via classical TLS1.3; the real gap is specifically **post-quantum**
+  confidentiality (harvest-now-decrypt-later resistance), not "every frame readable in plaintext." F16's
+  headline verdict (NOT BUILT — zero `encaps`/`decaps` on the wire, re-confirmed fresh via `grep`) is
+  unaffected; only the supporting threat-model bullet needed correction.
+- Minor line drift only (content unaffected): `Cargo.toml:38` (`default = ["insecure-tls"]`) is now at
+  line **50**; `iroh_transport.rs:149-155` (`InsecureAcceptAny`) is now at **~156-197**;
+  `crates/bebop/src/cost_estimate.rs:205-290` → `pub fn route(` is at **209** (matches
+  `SELF-CRITIQUE-2Q-DOUBT-AUDIT.md` §1.4's independent finding that this exact range is "loose but not
+  wrong" across two other citing documents too).
+- Confirmed accurate, unchanged: `iroh_transport.rs:23` (NAT-punch out-of-scope marker, exact line);
+  `transport_policy.rs:107-133` (`NoopPayloadEnc`); `dowiz/kernel/src/order_machine.rs:611-656`
+  (union-find inside `cyclomatic_number()`); `crates/bebop/src/vault.rs` (XChaCha20-Poly1305 + Argon2id +
+  ML-KEM-768⊕X25519, exact match); `discovery.rs:82` (`evict_revoked`, exact line match).
+- **Fresh (not merely trusted) re-verification of two headline claims, run live this pass:**
+  `grep -rliE "dijkstra|union.find|kruskal|\bmst\b" bebop2/ --include="*.rs"` → **zero** hits (M7 heal
+  layer confirmed still 0% at current HEAD, independent of R1-B's original grep). `grep -n "iroh"
+  ARCHITECTURE.md` → line 33 still reads *"iroh-QUIC primary, quinn fallback via DECART"* (D2-vs-reality
+  inversion confirmed still live in canon, unamended). **Also freshly checked: Phase 4's kernel
+  graph-math exports (Dijkstra/A\*/DSU/MST) do NOT yet exist in `dowiz/kernel/src/*.rs`**
+  (`grep "fn dijkstra\|struct.*DSU\|pub fn mst"` → zero) — the blueprint's own Wave-0 gate #2 ("do not
+  start §2 until Phase 4 exports these") is, as of this pass, **still red**. This is the load-bearing
+  "depends on" claim spot-verified per the task instruction: real and currently unmet, not decorative.
+
+### 12.2 — DECART
+
+**No DECART owed.** Every concrete mechanism this blueprint commits to text is a reuse of an
+already-existing primitive or already-canonical choice: ML-KEM-768 (Phase 3's canonical KEM),
+XChaCha20-Poly1305 (already in `vault.rs`), HRW/rendezvous hashing (already in `matcher.rs`),
+Dijkstra/A\*/DSU/MST (Phase 4's library, consumed not invented), SHA3/SHAKE KDF (`bebop2-core`,
+zero-dep). The one real choice — D2's iroh-vs-quinn direction (§3) — is explicitly **not decided by
+this blueprint**; it is Phase 2's ruling (O5), which Phase 9 only *executes* as a written DECART
+artifact at build time. That is correct posture: pre-empting an un-ruled operator decision would itself
+be an Anu violation.
+
+One **under-specified future choice flagged for build-time, not decided here**: §7's stdio/HTTP
+transport additions do not name a concrete implementation. stdio is trivially std-only; HTTP is not —
+if the builder reaches for a crate beyond the already-present `http` (types-only) dependency, **that
+pick owes its own DECART at that time**, named here so it isn't silently skipped.
+
+### 12.3 — 2-question doubt audit (per-blueprint)
+
+**Q1 — least confident about, concrete:**
+1. I spot-checked ~12 of ~30 file:line citations, not all — the F23/E38 revocation-gossip, F25
+   replay-persistence, and F18 batching citations were checked only for the cited struct/fn *existing*,
+   not diffed line-by-range the way the wss_transport.rs claim that turned out stale was diffed. More
+   comments-left-behind-after-a-fix could exist in the 3 commits (`c4edbf1`, `4f3553f`, `f9c14ea`) I did
+   not open in full diff.
+2. The wss_transport.rs staleness calls into question how the *original* R1-A gap analysis was produced
+   — if it trusted a stale comment once, the same failure mode could recur elsewhere in R1-A/R1-B's
+   other 19-anchor claims for this phase; I did not re-audit all of them for the identical pattern.
+3. I confirmed Phase 4's kernel exports are absent today, but did not check whether Phase 4's own
+   blueprint (a sibling document, not read this pass) specifies the exact export shape (`csr.rs`
+   graph-ingestion port) P09 §2.2 assumes — a shape mismatch would break the "hard dependency, not a
+   soft copy" compile-fail guarantee in §2.3.
+4. §6's "one AEAD across the system... distinct nonce domains" is asserted as a design property; I did
+   not verify a concrete nonce-domain-separation mechanism exists anywhere in the cited code today.
+5. The E35/O6-conditional item (§9.19) — I did not check whether O6 has since been ruled; if so, this
+   blueprint's "conditional" framing may already be resolvable more concretely.
+6. I did not check whether dowiz's own recent native-Rust-port commits (`cc3d5c916`, `4519bd7ff`) touch
+   Phase 8's telemetry sink that §5/§2 cross-reference — if that shape changed, P09's telemetry pointers
+   may need refreshing.
+
+**Q2 — biggest thing this pass might be missing:** the wss_transport.rs finding (§12.1) is a genuine
+instance of the exact failure mode this protocol exists to catch — a stale artifact trusted at face
+value. I found it only because I happened to open that exact function for an unrelated reason (verifying
+MESH-10 via the Cargo feature it gates), not via a systematic staleness sweep. A blueprint this size (20
+anchors, ~30 citations) genuinely needs either a scripted citation-freshness check or acceptance that
+some fraction of its evidence will drift silently between planning and build — the same "no re-audit
+cadence" gap `HERMETIC-REMEDIATION-PLAN.md` §6.Q2 already named as this whole roadmap's structural weak
+point.
+
+### 12.4 — Anu (logic) & Ananke (organization) check
+
+**Anu.** The phase's central claims are derivable, re-checked fresh in §12.1: M7 = 0% built (re-grepped,
+holds), D2 canon-inversion (re-grepped `ARCHITECTURE.md`, holds), Phase-4 dependency unmet (re-grepped
+`kernel/`, holds). Where the blueprint cannot derive a decision, it defers correctly (D2/O5 §3, F25/O11
+§4.2, E35/O6 item 19) rather than asserting past its evidence. The one Anu violation found was in the
+**inherited source evidence, not this blueprint's own reasoning**: R1-A asserted "readable by a passive
+on-path observer" from a comment the code five lines above it already contradicted — an evidence-
+gathering failure this blueprint inherited, now corrected in §12.1.
+
+**Ananke.** The numbered acceptance criteria (§10) are genuinely falsifiable — a packet-capture
+ciphertext check, a `grep encaps|decaps` non-zero check, an HRW-convergence assertion, all checkable
+cold. §8's regression-guard is a strong Ananke instance: it names the exact existing test suites (F11
+fuzz/reject, F12 island/custody) that must stay green *at every step*, not just at exit. **What does not
+survive on structure alone:** the cross-phase gates (§9 items 1-2) are *stated* as hard gates but nothing
+mechanically blocks work from starting early — a builder who skips the checklist line would only be
+caught by the compile-fail-if-absent property in §2.3 criterion 4, a real but *late* backstop (fails at
+build time, not planning-gate time). Recorded as a known, bounded gap rather than silently assumed away.
+
+---
+
 *Blueprint P09 complete. 20 anchors (M3, M6, M7, D2, E31, E32, E33, E34, E38, F11, F12, F13, F15, F16,
 F18, F20, F22, F23, F25, F30) each mapped to a sub-section with current-state evidence, target design,
 and acceptance criteria; F11/F12 explicitly regression-guarded. Sources: `R1-A-mesh-crypto-gap-analysis.md`

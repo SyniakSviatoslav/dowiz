@@ -293,6 +293,146 @@ metadata, one stale script comment); canon-prose truth is Phase 2.
 
 ---
 
+## 7 — Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+> Independent verifier pass, not part of the chain that wrote §1-§6. Re-checked every load-bearing
+> citation against the live `feat/harness-llm-backend` checkout (HEAD `cc3d5c916` at write-time) and
+> re-derived the one sequencing claim spot-verification requires. Nothing in §1-§6 is edited.
+
+### (i) Citation-verification results
+
+**Corrected — §1.8 "V5-B and V5-C are NOT BUILT" is STALE.** Both landed after this blueprint was
+written, on this branch:
+- `tools/ci-truth/Cargo.toml` + `tools/ci-truth/src/main.rs` (844 lines) — a native Rust binary with
+  three subcommands: `claim-latency` (the V5-B appender), `claim-latency-check` (BLUEPRINT-P08 §4's
+  anomaly consumer — see that blueprint's appendix), `v5c-reexec` (the V5-C independent re-executor).
+- `.github/workflows/ci.yml` now has **four** jobs, not the two §1.1 describes: `telemetry-selftest`,
+  `eqc-proofs` (both pre-existing), plus **`claim-latency-ledger`** (lines 69-80) and **`v5c-reexec`**
+  (lines 82-103) — both new, both calling `cargo run --manifest-path tools/ci-truth/Cargo.toml`.
+- `docs/ledger/claim-latency.jsonl` exists with real entries, e.g.
+  `{"commit_sha":"d3b71d3f1...","authored_ts":1784241799,"ci_observed_green_ts":1784241998,"delta_s":199,"diff_loc":181}`.
+- `v5c-reexec`'s red-line gate matches the blueprint's own list byte-for-byte: `tools/ci-truth/src/main.rs:228-230`
+  greps the diff for `money.rs` / `order_machine.rs` / `event_log.rs`, exactly §2.8's `if: red-line
+  paths touched`. This is the single strongest confirmation in this pass — a *derived*, not merely
+  asserted, dependency (see Anu below).
+
+**Still accurate — NOT stale.** §1.1's headline (CI regressed, gitleaks dropped), §1.3 (`.gitleaks.toml`
+exists, no CI wiring), §1.5 (no `deny.toml`/`advisories/`; `cargo-audit`/`cargo-deny` binaries ARE
+present at `/root/.cargo/bin/` but neither is wired into CI), §1.6 (no `decart-dep-lint.sh` — grep
+zero), §1.7 (no `no-courier-scoring` CI job — grep zero), §1.9 (`kernel/Cargo.toml` and
+`engine/Cargo.toml` still carry **no `license` field**; `tools/async-spool/Cargo.toml` and
+`tools/native-spa-server/Cargo.toml` still say `license = "MIT"`), §1.10 (`check-zero-oci.sh:8` still
+references the non-existent "supply-chain job") are all re-verified true today. Of the seven new jobs
+§2 designs, only 2 of 7 (`claim-latency-ledger`, `v5c-reexec`) are built; `cargo-test` (unconditional),
+`gitleaks`, `dco-check`, `supply-chain`, `decart-dep-lint`, `no-courier-scoring` remain exactly as
+described — genuinely not built, not stale.
+
+**Corrected — test counts drifted.** §1.2 cites "kernel 337 + engine 47." Live `cargo test --offline`
+today: kernel **371** (367 lib + 4 integration), engine **49** — both 0 failed. Ironically this drift
+sits inside the very row (§1.2/§4.2) whose point is "these counts are not CI-enforced" — the counts
+moved *because* nothing pins them, which is itself a small live demonstration of the finding, not a
+refutation of it. §1.2's substance ("no unconditional `cargo-test` job exists") is unchanged: even
+today, `v5c-reexec` only runs the suites when a red-line path is touched, emitting `SKIP` otherwise
+(`tools/ci-truth/src/main.rs:380`) — so an ordinary non-red-line commit still gets zero CI test
+execution, exactly as §1.2 describes.
+
+**Not re-verified (flagged, not fixed):** §1.4 (CONTRIBUTING.md:17 DCO claim), §1.11 (V3 i18n/IDOR/OTP
+gates on deleted surfaces) — re-read and unchanged at a glance but not independently re-derived this
+pass; low risk since they are prose/absence claims (grep-checkable, not line-shifted).
+
+### (ii) DECART
+
+**No new DECART owed by this blueprint's own text.** §2.4's `cargo-deny` adoption is the one item that
+looks like a new tool choice, but the blueprint explicitly frames it as "cloned from the bebop pattern"
+(bebop-repo already ships `deny.toml` at its root) rather than an independent decision — reuse of an
+already-adopted sibling-repo tool, not a fresh one. Because dowiz itself has never run `cargo-deny` in
+CI, and the blueprint does not itself argue the merits (it just says "clone it"), a decart is owed at
+implementation time, written here since none exists yet:
+
+| Criterion | `cargo-deny` (proposed) | `cargo-audit` alone (status quo) | hand-rolled grep/script |
+|---|---|---|---|
+| Rust-native fit | pure-Rust cargo subcommand, already installed (`/root/.cargo/bin/cargo-deny`) | already installed, already used manually | zero-dep but reinvents license/ban logic |
+| Correctness/security | checks RUSTSEC advisories + license allowlist + duplicate-version bans in one deterministic pass | advisories only, no license/ban gate | only as strong as the hand-rolled rules |
+| Measured perf | not benchmarked in this repo yet | already the manual step (rsa triage) | N/A |
+| Supply-chain/license | is itself the supply-chain/license tool | doesn't cover license | doesn't cover license without new code |
+| Maintainability | one `deny.toml`, bebop's is a ready-made template to fork | simplest, already habitual | most code to own and keep correct |
+| Reversibility | a config file + one CI step; drop-in-drop-out | already the fallback | port, not a dependency, but duplicate effort |
+| Evidence | `bebop-repo/deny.toml` + `ci-crdt-fence.sh`-style CI wiring exist and are exercised there today | this repo's own rsa/RUSTSEC-2023-0071 triage (`kernel/Cargo.toml:31`) is the E53 exemplar it must keep working under `cargo-deny` | none in this repo |
+
+**DECISION:** adopt `cargo-deny`, cloned from `bebop-repo/deny.toml`, with the rsa waiver ported into
+it in the E53 form (named owner + falsifiable revisit trigger) — do not lose that exemplar under the
+new tool. **Older-as-adapter:** `cargo-audit` stays in the `supply-chain` job alongside it (§2.4 already
+says this); it is not replaced, since `cargo-deny`'s advisory-db check and `cargo-audit`'s are
+overlapping-but-not-identical and the manual rsa triage habit is worth keeping as a belt-and-suspenders
+step. **Probe (the honest case against):** `cargo-deny` adds a second config file (`deny.toml`) whose
+allow/ban/license lists silently drift out of sync with reality exactly like `.gitleaks.toml`'s "wide
+allowlist" already does per §1.2's own R1-C flag (S3) — a `deny.toml` nobody revisits is no better than
+no gate at all. This is not disqualifying (the same objection applies to every allowlist-based gate
+this repo already runs), but it is the real cost, not a hypothetical one.
+
+### (iii) 2-question doubt audit
+
+**Q1 — least confident about (concrete):**
+1. I did not verify whether `v5c-reexec`'s "clean independent worktree" (§2.8, `main.rs`) is a *true*
+   fresh `git worktree` or a same-directory checkout-and-restore — the distinction matters for O9 (V1-B
+   context-isolation bar, owned by P02) and I read the doc-comment's claim, not the worktree-creation
+   code path itself.
+2. I did not check whether `claim-latency-ledger`'s CI-artifact-only publish (no commit-back, per
+   §2.7's own stated tradeoff) means the ledger file in the working tree (`docs/ledger/claim-latency.jsonl`,
+   the one I read) is committed to git at all, or is a local/untracked artifact from a prior local run —
+   if it's untracked, "the ledger grows by one per commit" (done-test #8) may not hold in CI at all,
+   only locally. I read one file's contents; I did not check `git ls-files docs/ledger/`.
+3. I did not attempt to actually trigger a RED run of any of the seven still-unbuilt jobs on a probe
+   branch — I only confirmed their absence from `ci.yml`, not that the acceptance criteria (§4) would
+   pass once built. That remains exactly as un-exercised as it was when this blueprint was written.
+4. §1.5's "cargo-audit/cargo-deny are installed" is now stronger evidence than R1-C had (I ran `which`
+   myself), but I did not check *which* cargo-deny/audit *version* is installed or whether it matches
+   whatever bebop's `deny.toml` assumes — a version mismatch could make the "clone the bebop pattern"
+   plan non-trivial.
+5. I did not re-verify §1.4 (DCO claim) or §1.11 (V3 gate re-scoping) against the live tree this pass —
+   flagged above as "not re-verified," carried forward on trust from the original citations.
+6. The DECART I wrote for `cargo-deny` above is mine, added because none existed — I did not consult
+   the operator or find an existing dowiz-side rejection of `cargo-deny` I might have missed; it is a
+   reasonable default, not a ratified choice.
+
+**Q2 — biggest thing I might be missing:** this blueprint's central thesis ("until CI tells the truth,
+every downstream GREEN is unverifiable") is now **half self-refuting in a good way**: two of its own
+seven planned jobs already exist and already work exactly as designed (the red-line gate literally
+matches P07's red-line paths, verified independently in that blueprint's own appendix). The risk this
+creates is a false sense of momentum — a reader skimming git log and seeing "P01 §2.7+§2.8" commit
+messages could conclude Phase 1 is mostly done, when 5 of 7 jobs (including the two with the widest
+blast radius — `gitleaks` and `cargo-test` unconditional) remain unbuilt, and the phase's own §4 done-test
+#7 ("clean signed commit → all jobs green") cannot be evaluated at all until `gitleaks`/`dco-check` exist.
+Partial completion of a truth-floor is a strictly weaker claim than "the floor exists" — this blueprint
+does not yet have a place that tracks percent-complete, only a binary built/not-built list I had to
+reconstruct by grep.
+
+### (iv) Anu & Ananke check
+
+**Anu.** The one dependency claim worth re-deriving (§5: "Phase 7 is the first real consumer of the
+V5-C verifier on a red-line diff") does NOT hold as a historical fact: `git log --oneline` shows the
+P07 tax-overflow fix (`aedba0133`) landed *before* `v5c-reexec` existed (`e595913d5`) on this branch —
+so no red-line diff has actually been re-verified by this mechanism yet; the claim is correct as a
+*forward* statement ("will be, once both exist and a red-line diff lands after") but was asserted in
+§5 as if already in motion. Downgraded here to: **derivable as a future fact, not yet observed as a
+past one.** Everywhere else in §5, the "Phase 1 unblocks X" claims are now stronger than when written —
+Phase 8's consumption of the claim-latency ledger is not just planned but **live in the same binary**
+(`tools/ci-truth/src/main.rs` hosts both `claim-latency` and `claim-latency-check`), which is Anu at its
+best: a dependency that used to be asserted from a roadmap table is now checkable by reading one file.
+
+**Ananke.** What survives on structure alone, unchanged since original authorship: the §4 falsifiable
+acceptance criteria (14 numbered, each a real command/diff) and the migration order in §3 (vendoring
+before test jobs, `supply-chain` before its comment is fixed). What does NOT yet survive on structure:
+nothing forces *this appendix's own freshness* — the "2 of 7 jobs built" tally above will itself drift
+the next time a job lands, exactly the way §1.2's test counts already drifted once. The cheapest
+structural fix (not built here, flagged for whoever lands the remaining jobs): have the `decart-dep-lint`
+job, once it exists, also assert that `ci.yml`'s job count matches a count recorded in this blueprint's
+own header — turning "is P01 done" from a question requiring a fresh grep-audit like this one into a
+CI-checked invariant. Until then, this blueprint's completion state is accurate as of this pass and
+will silently go stale exactly like the original test-count citation did.
+
+---
+
 *Blueprint P01 complete. Sources: R1-C (kernel/service/compute/storage gap), R1-E (ecosystem/legal/growth
 gap), ARCHITECTURE.md §0 SCOPE RULE + anchor defs, STRATEGIC-VECTORS-LOCKED (E-anchor cluster defs),
 R2-MERGED-PHASE-ROADMAP §1/§2/§3/§4/§5. This document plans work; it writes no CI or code.*

@@ -241,5 +241,122 @@ operator a fully-prepped, evidence-backed table and a one-line "go" to sign — 
 
 ---
 
+## 6. Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+### 6.1 — Citation verification + new grounding
+
+Every load-bearing citation in §1-§5 was re-checked against the live repo, not carried forward unchecked.
+
+**Exact matches, byte-for-byte:** `wc -c LICENSE NOTICE DCO TRADEMARK.md MANIFESTO.md` reproduces the
+§1 table's figures **exactly** (33831 / 534 / 1651 / 1504 / 4818). `LICENSE` first line = "GNU AFFERO
+GENERAL PUBLIC LICENSE" — confirmed. `CONTRIBUTING.md:17` is confirmed **line-exact**: "CI rejects
+commits without a valid `Signed-off-by`." — and confirmed **false today**: `.github/workflows/` holds
+only `ci.yml`, `heartbeat-monitor.yml`, `safety-floor.yml`, `skill-security.yml`, `visual.yml` — none
+reference `gitleaks` or DCO/`Signed-off-by`, so gate 8 (§4) is correctly marked `⬜ DEP`, not stale.
+`ac1caba40` is confirmed an ancestor of HEAD (`git merge-base --is-ancestor` exits 0) **and** confirmed
+present on `origin/main` (`git branch -r --contains ac1caba40` lists it) — the commit message itself
+("feat(oss): AGPLv3 + DCO + NOTICE + TM policy...") matches the blueprint's characterization exactly,
+including its own note: *"local history was git-filter-repo scrubbed... remote force-push pending
+operator re-authorization."* The H8 runbook (`docs/red-team/2026-07-13/H8-SECRET-SCRUB-RUNBOOK.md`) is
+confirmed titled "CLOSED locally + GitHub GC VERIFIED NOT NEEDED," with the exact figures cited (35818
+reachable blobs, 2 dangling RSA blobs, HTTP 404 existence probe). `bebop-repo/SECURITY.md`,
+`GOVERNANCE.md`, `CITATION.cff` all exist and `GOVERNANCE.md:39-56` matches the `gh repo edit`/topics/
+branch-protection block §2.4 describes cloning. Root-level `SECURITY.md`, `CODE_OF_CONDUCT.md`,
+`README.md`, `CITATION.cff` are confirmed **absent** (fresh `ls`, 2026-07-17) — the "currently ABSENT"
+claims in §2.1-2.3/2.6 hold.
+
+**New grounding — an ADR now exists that §1's "Sources" list never picked up.** `docs/adr/
+0020-oss-license-tm-dco.md` **exists in tree** (Status: Accepted, same day as this blueprint's own
+2026-07-16 draft) and formalizes exactly the license/DCO/scrub facts this blueprint's §1 asserts —
+including the identical "both false at HEAD" framing for the stale `ARCHITECTURE.md` §8/S3 lines. This
+blueprint's §1/§4 evidence chain cites `P10-OSS-READINESS-AUDIT.md` and the raw files but never cites
+this ADR directly; a future editor should add `docs/adr/0020-oss-license-tm-dco.md` as a first-class
+evidence citation for gates 1-3 (§4), since it is now the authoritative decision record, not merely a
+prep document.
+
+**New grounding — a live contradiction in the operator's own memory, found and NOT resolved (per the
+task's explicit instruction not to resolve it).** The project's persisted memory index
+(`MEMORY.md`, "🔴 SECURITY INCIDENT: creds in git history," dated 2026-07-03) still reads: *"rotated;
+REMOTE scrub force-push = open gate, HARD blocker for prod."* That is in direct tension with three
+same-family, later (2026-07-16) planning documents — this blueprint's own §1, `BLUEPRINT-P02`'s C-1
+correction, and `docs/adr/0020-oss-license-tm-dco.md`'s Context section — which all independently
+conclude the scrub question is **substantively resolved** and **not** a flip blocker. Both cannot be the
+current operative truth; this is named here, not adjudicated (per the assignment's explicit instruction
+and per this blueprint's own charter of never blurring agent-prepared analysis with operator decision).
+
+**New grounding — the `gh` token available in this sandbox cannot even target the repo §2.4's script
+assumes.** `gh auth status` shows an authenticated fine-grained PAT (`SyniakSviatoslav`). `gh repo view
+SyniakSviatoslav/dowiz` fails ("Could not resolve to a Repository"), and `gh api user/repos?
+affiliation=owner&visibility=all --paginate` enumerates 29 owned repos with **no `dowiz` among them** —
+while `git ls-remote origin HEAD` (SSH) succeeds. Whatever token grants this repo's `repo:admin` access
+at flip time is evidently scoped differently from the one available in this session; §2.4's script is
+correct to require the operator supply their own token, but this pass found a concrete reason that
+assumption is load-bearing, not a formality.
+
+### 6.2 — DECART
+
+No DECART owed. Nothing in §1-§5 or this appendix introduces a new dependency, tool, or vendor: GitHub
+Private Vulnerability Reporting and Discussions are native GitHub features (not a new integration),
+Contributor Covenant v2.1 is adopted verbatim as a governance text (not code), and `gh`/`gitleaks` are
+already-established tools in this repo's toolchain (`/usr/bin/gitleaks` confirmed installed; `gh`
+confirmed authenticated). The rust-native/all-Rust-native DECART rule has no surface here — this phase
+authors markdown and a shell script wrapping an existing CLI, nothing that touches the Cargo dependency
+graph.
+
+### 6.3 — 2-question doubt audit
+
+**Q1 — 6 concrete items actually checked:**
+1. The MEMORY.md-vs-planning-docs contradiction on scrub-blocker status (above) — real, found, and
+   deliberately left unresolved per instruction.
+2. The current sandbox's `gh` token cannot resolve or administer the `dowiz` repo at all (checked live,
+   not assumed) — the §2.4 script's "operator runs it" precondition is more fragile than the blueprint
+   states.
+3. `docs/adr/0020-oss-license-tm-dco.md` exists but is uncited by this blueprint — a citation-completeness
+   gap, not a factual error, but real.
+4. Gate 8's CI-truth-floor status was verified as still-pending by checking all 5 live workflow files
+   directly; I did **not** open `BLUEPRINT-P01-ci-truth-floor.md` itself in this pass to independently
+   confirm whether Phase 1's own blueprint still describes the same target or has already been
+   superseded by implementation — that cross-phase check stops at the grep-confirmed absence of a
+   gitleaks/DCO job, not a read of P01's current content.
+5. The bebop-repo template files (`SECURITY.md`, `GOVERNANCE.md`, `CITATION.cff`) are `-rw-------`
+   (root-only readable) on this host; if the agent that eventually authors §2.1/§2.6 runs as a
+   non-root user in a different sandbox, cloning the pattern could fail on a permission boundary this
+   blueprint doesn't anticipate.
+6. Gate 6 ("~20 reports manifest," §4) cites "Roadmap L87 + D6 L267" as declaring the gap honestly — I
+   did not re-open those exact line numbers in this pass to confirm they still say what's claimed; this
+   remains as originally asserted, unchecked further here.
+
+**Q2 — biggest blind spot:** every gate in §4 is about repo-*content* truth (does the right file exist,
+does it say the right thing) — none of them is a pre-flip dry-run against GitHub's own *rendering* of
+that content (does GitHub's license-detector actually recognize AGPL-3.0, does the branch-protection API
+call in §2.4 actually succeed against the real settings surface, does the repo even resolve for the
+token that will run it). §4's own post-flip verification row (`gh repo view` returning the license
+correctly) is explicitly deferred to *after* the one-way door opens. Combined with this pass's finding
+that the *current* token can't even see the repo, there's a real risk the operator discovers a
+GitHub-side surprise only after the irreversible step — the gates prove the paperwork is in order, not
+that the API surface behaves as assumed.
+
+### 6.4 — Anu / Ananke check
+
+**Anu (logic):** every load-bearing "already true" claim in §1 is derivable from live, re-checked
+evidence in this pass — byte-exact file sizes, an exact `CONTRIBUTING.md:17` line match, a confirmed
+ancestor+origin/main relationship for `ac1caba40`, and a confirmed-absent CI gitleaks/DCO job. Nothing
+here is asserted without a matching live check; the blueprint's central inference ("a Phase 18 README
+saying 'we are AGPLv3 with DCO and a trademark policy' is a *true* statement today," §1) holds.
+
+**Ananke (organization):** mixed. The §4 GO/NO-GO table and the §5 agent-may/agent-may-NOT split are
+genuine Ananke-satisfying structures — each gate names a required artifact, not a vibe, and the
+authorization boundary is stated as an explicit list a reader can't easily blur. But two diligence-
+reliances are named here that the blueprint's own structure does not close: (a) nothing in §4 forces a
+re-check of a "✅ DONE" row before it's trusted — it is a static markdown table, not a generated or
+CI-verified artifact, so a DONE row could rot exactly the way `ARCHITECTURE.md` §8 itself rotted (the
+failure this whole phase-2/phase-18 correction exists to fix) — a future reader must re-verify DONE rows
+before relying on them, nothing here checks that for them; (b) the MEMORY.md contradiction found in §6.1
+shows that resolving a status in a blueprint/ADR does not by itself propagate into the *other* place
+(the operator's own memory ledger) that separately asserts a status — nothing in this phase's structure,
+or in this appendix, performs that reconciliation; it only names the gap for the operator to close.
+
+---
+
 *Blueprint P18. Prepares D3 close + E5/E54/E59. Depends: Phase 1 (CI truth), Phase 2 (canon repair).
 No file created, no setting changed, no ref rewritten, no flip performed by authoring this document.*

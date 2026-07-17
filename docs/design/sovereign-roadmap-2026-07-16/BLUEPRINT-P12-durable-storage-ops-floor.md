@@ -352,6 +352,158 @@ F37 (§6) · F38 (§3). All 14 anchors land; zero deferred outside the phase.
 
 ---
 
+## 9. Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+Per the Detailed Planning Protocol (`AGENTS.md`) and the Anu/Ananke doctrine. This blueprint had no 2Q
+audit or Anu/Ananke check — supplied here, alongside citation verification that surfaced a significant
+since-blueprint implementation update.
+
+### 9.1 — Citation verification, INCLUDING a major since-blueprint implementation update
+
+**Critical finding: two of this blueprint's own designs (§3 restore-verify, §6 systemd units) have
+already been BUILT since this document was written**, per commit `c396fa6b4` ("feat(hermetic): P12
+§3+§6 — restore-verify + systemd units (rows #4, #5, #6)", 2026-07-16 23:00 UTC — same day as this
+blueprint, later). Verified live:
+- `tools/deep-clean/src/main.rs` now has `sha3`/`archive`/`restore-verify` subcommands at lines
+  797/806/817 — matching §3's design almost exactly (the commit message confirms it was demonstrated
+  against a real 1.45 GB archive with `integrity_check=ok`, and against a 1-byte-corrupted copy failing
+  loudly at the sha3 gate — §3's falsifiable acceptance criterion has **already been satisfied**, not
+  merely designed).
+- `deploy/` now contains `deep-clean.service`, `deep-clean.timer`, `deep-clean-audit.service`,
+  `deep-clean-audit.timer`, and `native-spa-server.service` — all five units §6 calls for **exist
+  in-repo today**.
+- **However, live-checked this pass:** `systemctl list-timers` shows **none** of these registered with
+  the running systemd (`systemctl is-enabled deep-clean.timer` → `not-found`), and `hermes cron status`
+  **still** reports *"Gateway is not running"* (confirmed live, identical to Finding A's original claim).
+  The commit message is explicit: *"Actual systemctl enable/start and the Hermes gateway revival are
+  left as a deliberate host-level action, not run by this commit."* **§6's acceptance criterion (§8.7)
+  remains unmet** — the in-repo artifact exists; the runtime demonstration does not.
+- The `--pgrust` restore-verify sub-mode (§3, criterion §8.5) is confirmed **not yet built** —
+  correctly, per the commit message ("`--pgrust` sub-mode correctly omitted... rather than stubbed"),
+  consistent with §5 (pgrust install) also being unbuilt (confirmed live: `/usr/local/bin/pgrust`
+  absent).
+
+**Net correction to this blueprint's framing:** §1's "current-state evidence" and §3's "the load-bearing
+new capability" read as though restore-verify is entirely undesigned/unbuilt. As of this pass,
+**restore-verify (file-tree + SQLite legs) is built, tested, and demonstrated; only the pgrust leg and
+the runtime systemd enablement remain.** A builder picking this up should treat §3 (file-tree/SQLite
+leg) and half of §6 (unit files) as **DONE**, and focus on: the pgrust leg (blocked on §5), actually
+`systemctl enable`-ing the timers + reviving the Hermes gateway, `FileBlockStore` (§2, confirmed **not**
+built — no `struct FileBlockStore` anywhere in `kernel/src/`), the `opentofu/` module (§7, confirmed
+**not** built — no `*.tf`/`*.tofu` file anywhere), and the pgrust smoke-test (§5).
+
+**A second, more subtle finding on §4 (durable EventStore):** a `FileEventStore` **already exists** at
+`kernel/src/hydra.rs:743-785` (git-blamed to earlier "Воля АНУ self-evolving organism" work, likely
+predating this blueprint), genuinely implementing the same `EventStore` trait (`impl EventStore for
+FileEventStore` at `hydra.rs:852`) with the **exact crash-safety contract §4.2 specifies**: JSONL
+append, `sync_all()` (fsync) before acknowledging, replay-on-open with forward-tolerant corrupt-line
+skipping. This is either (a) the deliverable §4 wants, already done under a different name/location than
+expected, or (b) a narrower store built for the Hydra/G9 breach-witness subsystem specifically, not
+(yet) wired as the general-purpose durable default. **Which is true was not resolved by this pass** —
+it requires checking whether anything outside `hydra.rs`'s own tests constructs a `FileEventStore`,
+which was not done. Flagged so a P12 builder checks before writing a duplicate.
+
+**The Phase-7 hard-dependency reasoning (§4.1, the dedup-id bug) was independently re-derived, not just
+re-cited, and confirmed STILL PRESENT at current HEAD** (line numbers drifted: `commit_after_decide` is
+now at `event_log.rs:339-361` with `let id = ev.event_id()` at line **348**, not the cited 283-303/292 —
+a ~56-line drift — but the bug itself is unchanged: this early `id` is computed before `self.append(ev)`
+at line 359 internally re-binds `ev.prev` and computes its own, different id for storage, so the
+`contains()` check at line 350 can pass against a wrong key). **This is the single most load-bearing
+citation in the blueprint** (it's the entire justification for P12 being Wave-2, gated on Phase 7) and
+it holds up under independent re-derivation, not just re-reading. Corrected line numbers:
+**`event_log.rs:339-361` (`commit_after_decide`), id computed at `:348`, `append` itself at `:293-311`.**
+
+Other citations checked and confirmed accurate: `backup.rs:29` (`BlockStore` trait, exact);
+`event_log.rs:162`-area (`EventStore` trait, exact section unchanged); `revocation.rs`/`discovery.rs:82`
+(shared with the P10 pass, confirmed there).
+
+### 9.2 — DECART
+
+**§7's OpenTofu state-backend decision tree (pg vs local vs S3-compatible) is correctly NOT decided
+here** — explicitly conditioned on a live probe (§5's `pg_advisory_lock` test) that has not run
+(pgrust isn't installed). Deferring a DECART until its deciding evidence exists is the correct move,
+not a gap.
+
+**§2's `get_owned`-vs-LRU decision is already a real, if compressed, inline DECART** — adequate for a
+same-crate API-shape choice with no new dependency either way.
+
+**§3's zstd choice is the one real gap: a one-line assertion, not a full DECART, for a genuine new-tool
+question.** Written properly here:
+
+| Candidate | Bare-metal fit | Correctness/security | Perf | Supply-chain | Maintainability | Reversibility | Evidence |
+|---|---|---|---|---|---|---|---|
+| **Shell out to system `/usr/bin/zstd` via `std::process::Command`** | Thin Rust adapter over an already-installed, verified-present system binary (confirmed this pass) — same pattern as this codebase's `OllamaAdapter` (external tool behind a narrow Rust port) | Reference implementation; failure = nonzero exit code, checkable | Native compression speed, one process-spawn per archive/restore (irrelevant — a one-shot, infrequent op) | **Zero new Rust dependency**; depends on the system package existing at deploy time (a real, small portability cost) | Simplest: no crate version, no binding to maintain | Trivial to swap for a crate later behind the same CLI surface | `ls /usr/bin/zstd` confirmed present |
+| `zstd` Rust crate (libzstd bindings, or pure-Rust `ruzstd`) | Adds a real dependency (FFI, or a slower pure-Rust reimplementation) | Equally correct; removes the "must be on PATH" assumption | Comparable (bindings) or slower (pure-Rust) | New dep + (bindings) a C-library link requirement — the exact `native-tls`/`openssl-sys` shape this codebase's own `proto-wire/Cargo.toml` explicitly rejects elsewhere | One more crate to version-track | N/A — already the crate option | — |
+
+**DECISION: shell out to system `zstd`, zero new Rust dependency** — matches the blueprint's own stated
+preference and, more importantly, this codebase's repeatedly-demonstrated bias against FFI/C-linked
+crates (the `proto-wire` no-`native-tls` rationale, verified in the P09 pass, is the identical shape of
+argument). **Mandatory probe (honest case against):** shelling out means COLD-archive creation silently
+breaks if the host image ever lacks `/usr/bin/zstd` (a packaging/provisioning risk, not a code risk) —
+worth a boot-time or CI presence-check, not a hard blocker.
+
+### 9.3 — 2-question doubt audit (per-blueprint)
+
+**Q1:**
+1. My biggest finding this pass — that §3/§6 are already substantially built — came from noticing a
+   suspiciously-recent commit message, not a systematic check; I did check §2 (`FileBlockStore`) and §7
+   (OpenTofu) directly and found neither exists, but my search terms could miss a differently-named
+   equivalent the way `FileEventStore` turned out to live in `hydra.rs` rather than beside
+   `event_log.rs`.
+2. I did not resolve whether `hydra.rs`'s `FileEventStore` is the general-purpose deliverable §4 wants
+   or a Hydra-scoped variant (named explicitly above) — a real, consequential ambiguity for anyone
+   picking up §4 next, left open rather than guessed.
+3. I re-derived the `event_log.rs` dedup bug myself rather than trusting the blueprint's description
+   verbatim, and it held up — but did not check whether a fix has been attempted and reverted, or exists
+   on an unmerged branch; only this branch's current HEAD was checked.
+4. The H8 secret-scrub runbook reuse (§1 Finding, "E48 ALREADY BUILT") — I did not open
+   `docs/red-team/2026-07-13/H8-SECRET-SCRUB-RUNBOOK.md` myself, only noted the citation trail (R1-E
+   §E48) is independently named.
+5. I did not check whether `PGRUST_RLS_CROSS_TENANT=deny` (§5 step 2, the "DK-05 red-line") actually
+   appears in `deploy/pgrust.env` today, or is a name the blueprint invented as the intended contract.
+6. I did not open `isolation/microvm.rs` to confirm its probe's output shape is compatible with what a
+   real `dmacvicar/libvirt` `libvirt_domain` resource (§7) would need — both are named as compatible but
+   not cross-checked.
+
+**Q2 — biggest thing this pass might be missing:** this blueprint was written the same day it was
+partially implemented (`c396fa6b4` landed hours after this blueprint's own dated evidence pass), which
+means **the gap between "planning artifact" and "ground truth" that the whole Detailed Planning Protocol
+worries about is not hypothetical here — it already happened, within the same session's timeline, and
+nothing caught it until this decorrelated pass.** The structural lesson is sharper than "re-verify
+citations before build": for a fast-moving repo where implementation follows planning within hours, a
+blueprint's "current-state evidence" section has a **half-life shorter than the time it takes to read
+it**, and no mechanism in this protocol (or the sibling `HERMETIC-REMEDIATION-PLAN.md`'s own §6.Q2,
+which flagged the identical "no re-audit cadence" gap for a different reason) closes that loop.
+
+### 9.4 — Anu (logic) & Ananke (organization) check
+
+**Anu.** The Phase-7-must-land-first argument (§4.1) is this blueprint's strongest Anu instance —
+re-derived independently this pass (not just re-cited) by reading `commit_after_decide`/`append` side by
+side, and it holds. The state-backend decision tree (§7) is Anu-compliant by construction: it names the
+exact condition (`pg_advisory_lock` probe result) that determines the branch, rather than picking a
+backend and rationalizing it after. The one Anu gap found: §1's Finding-A/B framing and §3's
+"load-bearing new capability" language assert an un-built state that, as of `c396fa6b4`, is now
+partially derivable as already-built from the same repo this document claims to have checked "against
+the live tree 2026-07-16" — either the evidence pass ran *before* that commit landed (a timing issue,
+not a logic error) or the "re-verified at authoring time" claim needs a timestamp caveat. Recorded, not
+blamed — same-day races are exactly what the shared-working-tree hazard rule (`AGENTS.md`) exists to
+name.
+
+**Ananke.** The falsifiable acceptance criteria (§8, all 10 items) are genuinely mechanical — "1-bit
+corruption is rejected," "kill -9 loses zero acked events," "tofu plan shows an empty diff" all pass or
+fail, not judgment calls. The COLD-archive drill design (§3) is a strong Ananke instance specifically
+because it converts "we have backups" from an assertion into a scheduled, logged, re-runnable check —
+exactly the structural fix the sibling `HERMETIC-REMEDIATION-PLAN.md`'s row #4 ("Schrödinger's backup")
+asks for. **What relies on future diligence:** nothing currently re-runs §8's ten criteria automatically
+once they first pass — no CI job or systemd timer *checking the checker* (e.g., a periodic re-run of
+`restore-verify` to catch a COLD archive silently rotting, or a periodic re-grep confirming
+`FileBlockStore` hasn't quietly regressed to in-memory-only). This is the identical "no re-audit
+cadence" gap the `HERMETIC-REMEDIATION-PLAN.md`'s own §6.Q2 names for the whole roadmap, now found
+concretely inside one of its Wave-2 phases: a done-check that passes once is not structurally
+guaranteed to still pass later, and nothing here schedules it to be asked again.
+
+---
+
 *Blueprint P12 complete. Builds nothing; specifies the durable-storage/deploy/ops floor so that
 Phase 7's correctness is the only thing that gets persisted. Two flagged regressions to surface to
 the operator immediately: the DEAD Hermes cron gateway (hygiene loop not firing) and the MISSING

@@ -328,3 +328,173 @@ interfaces without a redesign when Phase 2 delivers them.
 this session: `crates/bebop/src/ledger.rs` (escrow primitive), `bebop2/core/src/anti_entropy.rs`
 (existing pull-based sync), `scripts/ci-crdt-fence.sh` (MESH-08 fence scope), `kernel/src/{living_knowledge,
 spine,trigram,csr,backup}.rs` (built substrate). No code written; O3/O4/O12 presented, not resolved.*
+
+---
+
+## 6 — Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+> Independent grounding/DECART/doubt pass per `AGENTS.md` Detailed Planning Protocol + the 2-question
+> ritual, run by an agent decorrelated from the one that wrote §1-§5. Read-only against `/root/dowiz`
+> and `/root/bebop-repo` (separate git repos — `F2-dispute-arbitration.md`, `ledger.rs`, `anti_entropy.rs`,
+> `matcher.rs`, `reputation.rs`, `guard.rs`, `ci-crdt-fence.sh`, `ci-no-courier-scoring.sh` all resolve
+> under `/root/bebop-repo`; `living_knowledge.rs`/`spine.rs`/`trigram.rs`/`csr.rs`/`backup.rs` under
+> `/root/dowiz/kernel`). Nothing edited outside this appendix.
+
+### 6.1 — Citation verification + new grounding
+
+**All pre-existing citations re-verified and hold.** `F2-dispute-arbitration.md` exists at
+`bebop-repo/docs/design/fable-protocol-2026-07-11/`; its 6-state table is at lines 26-33, the
+fail-closed invariant at line 35, the RED test at lines 78-87 — all as cited. `ledger.rs`'s `conserved()`
+(:79-81) and `transfer()` (:89-113) hold exactly, reconciled against Phase 13's independent citation of
+the same lines (no drift between blueprints). `anti_entropy.rs`'s `digest`/`diff`/`SyncPlan`/`apply_pull`
+all exist and the crate is confirmed zero-dependency (`Cargo.toml`: `[dependencies] # none.`).
+`ci-crdt-fence.sh` and `ci-no-courier-scoring.sh` both exist at `bebop-repo/scripts/` with exactly the
+grep logic §1.4/§1.2 describe. `PROTOCOL-CENTRALIZATION-MAP.md:141` is verbatim as cited. `reputation.rs::score`
+(:69) and `guard.rs`'s `KillSwitch` (:70, `≥2/3` at :107) both exist and are real, live code — not
+hypothetical — which sharpens Contradiction A: the coupling F2 §1 describes is not a stale design note,
+it points at two files that exist today and would need to be wired exactly as F2 states if built as
+written. M6/M12 are confirmed canon at `ARCHITECTURE.md:15` and `:21` respectively.
+
+**One citation-fidelity gap found, worth naming.** §1.1's reproduction of F2's state table paraphrases
+the `ESCALATE` row as `"panel empanelled"` — the real source (`F2-dispute-arbitration.md:31`) reads
+`"jury empanelled (**reputation-weighted sample**)"`. §1.2 (Contradiction A) independently discusses the
+reputation-weighting problem at length two paragraphs later, so nothing is hidden or distorted in
+substance — but the table quote itself is not verbatim, and a reader skimming only the table would miss
+the exact phrase that motivates Contradiction A. Minor, but the kind of drift the Detailed Planning
+Protocol's "quotes should be checked, not paraphrased-and-trusted" discipline exists to catch.
+
+**New grounding for currently-uncited claims:**
+
+- **"grep -rniI 'escrow|arbitrat|dispute' --include=*.rs returns zero matches" (§1.1).** Re-run live,
+  today, over both repos: zero output, zero matches, confirming the claim has not gone stale between
+  2026-07-16 and now.
+- **O3/O4/O12 genuinely open, not secretly pre-ruled (§1.5, §2.3, §3.3, §4).** Read
+  `BLUEPRINT-P02-canon-repair-operator-decisions.md` directly: **O3** (line 133, `[LOAD-BEARING — no
+  silent pick]`) presents both candidates and states outright "REC: do not pick here… the choice is a
+  genuine architecture value-call… reserved for the operator" (line 148). **O4** (line 153, also
+  `[LOAD-BEARING — no silent pick]`) likewise: "REC: do not pick here — but flag that the crdt-fence
+  guard's intent is the tie-breaker" (line 165). **O12** (line 229, `[cheap — REC to adopt]`) is
+  different in kind from O3/O4: P02 **already ventures a concrete, code-grounded guess** — `BD :=
+  "Bounded Diffusion"`, pointing at `kernel/src/retrieval/diffusion.rs` (confirmed to exist; its own
+  module doc reads "diffusion.rs — L3 RELATEDNESS layer… diffuse its personalized-PageRank mass over a
+  wikilink graph") — flagged explicitly as a REC awaiting ratification, not a locked decision. **§4's
+  framing ("this blueprint deliberately does not guess what 'BD' stands for") is honest about *this*
+  document not guessing, but slightly understates the situation**: P02 already guessed, on the record,
+  with a citation; what's missing is ratification, not a first guess. Worth one added sentence in §4
+  pointing at O12's existing REC so a reader doesn't have to independently rediscover it.
+- **Phase 13 dependency, spot-verified (§1.5, "escrow reuses Phase 13's ledger").**
+  `BLUEPRINT-P13-delivery-on-protocol.md` §5 (lines 246-251) explicitly promises to "bring `ledger.rs`'s
+  double-entry law… into the canonical path" — this is a real, checked dependency edge (both blueprints
+  cite the same primitive at the same lines), not an assumed one.
+- **R2 anchor definitions (E8/E16/E51/F44/F48).** `R2-MERGED-PHASE-ROADMAP.md` confirms Phase 14's anchor
+  set at line 90 and E16's seam-anchor status at line 169 ("one anchor fell between the five clusters'
+  ownership: E16"). **One phrase in this blueprint's §1.4 — "PER-HUB REPLICATED design (C4 corrected
+  from single-graph-wiki)" — does not appear verbatim anywhere in R2**; it is this blueprint's own
+  synthesis of R2's actual language (single-hub substrate built, zero replication, per-hub design as the
+  resolution), not a direct quote as the phrasing implies. The underlying fact is still correct; the
+  attribution should read "R2's substance, restated" rather than implying a pinned citation.
+
+### 6.2 — DECART
+
+**No DECART owed for anything this blueprint actually commits to today.** Every primitive §2-§3 design
+reuses existing zero-dependency code (`ledger.rs`, `anti_entropy.rs`, the DoD gate, `SignedFrame`) and no
+new external crate is proposed for the state machine, the escrow entries, or the sync transport. Both
+load-bearing choices (O3 arbiter model, O4 merge policy) are correctly left to the operator rather than
+silently picked — that is the DECART discipline working as intended, not an omission.
+
+**One follow-on DECART this blueprint should flag but doesn't — supplied here pre-emptively.** §3.3
+names "O4 candidate B — CRDT-style convergent merge... an add-wins / OR-Set style convergent type" as a
+permitted option, but never says *what would implement it* if O4 selects it. That is itself a real,
+future dependency/vendor decision the rust-native-default rule and the phase's own zero-dep posture
+(every other primitive here is std-only) would require a DECART for, and it should be named now so it
+isn't silently smuggled in later as "just add a CRDT crate":
+
+| Option | What it is | For | Against |
+|---|---|---|---|
+| **Hand-rolled Rust OR-Set / add-wins-set** | A small in-repo convergent-set type over the mutable pointer layer only | Zero new dependency; matches `anti_entropy.rs`'s own "pure, deterministic, std-only" posture for exactly this class of problem; no risk of `automerge`/`cr-sqlite` (the fence's own named-forbidden crates) appearing anywhere in the repo, even scoped to the wiki | Correct OR-Set semantics (esp. tombstone GC for removed pointers) are a known source of subtle bugs; less battle-tested than a mature library |
+| **`automerge`** | The general-purpose Rust/JS CRDT document library | Mature, widely used, handles GC and causal ordering | The `ci-crdt-fence.sh` guard's entire existence is built around treating `automerge` as the named signal of the thing being fenced out of money/order crates; introducing it *anywhere* in the repo — even in a permitted, out-of-scope wiki crate — creates exactly the kind of "is this crate present because it's permitted-here or because the fence failed" ambiguity a future auditor would have to resolve by hand each time, working against Ananke (structural clarity) even where it's technically M6/fence-compliant |
+| **`yrs`** (Rust port of Yjs) | A smaller, Rust-native CRDT library, no JS runtime coupling | Real prior art, smaller footprint than `automerge` | Still an external crate with zero prior art in either repo; no DECART exists for it anywhere in canon today |
+| **CHOSEN (if O4 = candidate B): hand-rolled OR-Set** | — | — | Case against, stated honestly: if a hand-rolled implementation turns out buggy under real concurrent-edit load, revisit — this is a preference for zero-dep-first, not a claim that hand-rolling is strictly safer |
+
+### 6.3 — Two-question doubt audit
+
+**Q1 — least confident about, concrete:**
+
+1. **The F2 table-quote fidelity gap (6.1)** — the reproduced ESCALATE row silently drops "(reputation-
+   weighted sample)," the exact phrase Contradiction A is about. Not a distortion given §1.2's separate
+   discussion, but a verbatim-quote discipline slip I would not have caught without re-reading the source
+   table cell-by-cell.
+2. **The CRDT-implementation-choice DECART gap (6.2)** is real and, before this pass, entirely
+   unaddressed — §3.3 permits CRDT for the wiki but never asks "CRDT from where," which is exactly the
+   kind of new-dependency question the rust-native-default rule exists to force before it's silently
+   answered by whoever implements it first.
+3. **§3.1's "give the substrate a hub-scoped root" is asserted, not designed.** I did not verify whether
+   `kernel/src/living_knowledge.rs`'s actual API already has a parameter or concept resembling a
+   "hub-scoped root," or whether this requires new code inside a substrate this blueprint otherwise
+   treats as untouched ("no recall-path math changes"). If it requires new code, §3.1 undersells the
+   amount of work "give it a root" implies.
+4. **§1.5's dependency ledger lists Phase 6 ("K/V diff-signer ceremony") as needed "for arbiter-capability
+   minting audit"** — I did not verify `BLUEPRINT-P06-v1-split-identity-verifier.md` actually promises a
+   capability-minting-audit primitive shaped the way this phase needs it (unlike the Phase 13 dependency,
+   which I did spot-check and confirm). This is an unverified edge in the dependency ledger.
+5. **AC-3's "no central node at any point" is confirmed true of `anti_entropy.rs` in isolation** (pure,
+   no network built in) but I did not verify how two real hub *processes* would actually invoke
+   `digest`/`diff`/`apply_pull` over Phase 9's wire end-to-end — that wiring is itself unbuilt, so the
+   falsifier is currently untestable, a gap this blueprint's honest-register style elsewhere names for
+   other items but not explicitly for AC-3/AC-7's transport layer.
+6. **F2 §3's "Kleros whitepaper... zero of it implemented" characterization** was not independently
+   re-read by this pass (only the state table and RED test regions of F2 were verified); I am relying on
+   the prior pass's reading of that section without re-checking it myself.
+7. **I did not check whether the "PER-HUB REPLICATED... C4 corrected" phrase (6.1) appears in some OTHER
+   document in this directory that R2 itself cites** (e.g. a standalone C4 canon-diff note) before
+   concluding it's this blueprint's own synthesis — it is possible the phrase is quoted faithfully from a
+   document neither research pass searched.
+
+**Q2 — the biggest thing this pass might be missing:** Phase 14 is, by its own header, gated on **three**
+unresolved Phase-2 operator decisions (O3, O4, O12) and reuses a full jury/arbitration/escrow state
+machine designed for a business that — per this same roadmap's own `SELF-CRITIQUE-2Q-DOUBT-AUDIT.md` §2
+— **has never completed a single real order and just had its entire product UI deleted.** This blueprint
+is honest about being blocked on operator rulings, and honest that F44/F48 have zero implementation
+today. What it does not do is turn that same self-critique on itself: a dispute-arbitration system exists
+to resolve conflicts between real customers, real couriers, and real owners over real deliveries — none
+of which exist yet, and won't until Phase 13 (order spine) and Phase 16 (UI) both land. The interface
+design here (§2.3, §3.3) is genuinely good Ananke — it makes either O3/O4 ruling drop in without a
+redesign — but "build a fair, cryptographically fail-closed jury system now, wire the actual
+decision in later" is still choosing to spend planning effort on a phase whose entire subject matter
+(disputes) cannot occur until two other phases and a first real order exist. This is the same
+"completionism ahead of demand" pattern the roadmap's own decorrelated audit already named for the whole
+19-phase edifice, applied here to its most extreme single instance, and this blueprint does not name it
+about itself.
+
+### 6.4 — Anu & Ananke check
+
+**Anu.** The load-bearing dependency on Phase 13 is now a checked citation, not an assumed one (6.1).
+O3/O4/O12 are confirmed genuinely open against their source document, not silently pre-ruled — a real
+Anu pass, not a rubber stamp. The one place Anu was not fully satisfied before this appendix: §3.3
+permits CRDT for the wiki as a *conclusion* ("permitted... the fence forbids CRDT only in crates touching
+[list]... the graph-wiki touches none of these") without deriving what a CRDT choice would actually cost
+(a new dependency, itself needing a DECART) — asserting permission is not the same as deriving the full
+consequence of exercising it. §6.2 closes that gap.
+
+**Ananke.** The pluggable-port pattern (§2.3 arbiter, §3.3 merge-policy) is a genuine structural strength:
+whichever way O3/O4 land, the state graph/escrow/timeouts/sync-transport are unchanged by construction —
+good outcomes here really are structurally forced, not left to a future reader's diligence, which is
+exactly what Ananke asks for. But one gap remains, newly named here: **nothing in this document's own
+structure forces O3/O4/O12 to actually get ruled before Phase 14 code gets written.** Compare to Phase
+13's AC-12, which at least demands (weakly) "written DECART reports exist" as a checklist item before
+that phase is called done — Phase 14 has no equivalent gate that would stop an implementer from guessing
+at an arbiter model or a merge policy and building against the guess rather than waiting for the
+operator. The "blocked-until-Phase-2" language in §5 is a stated intention, not a structural block; there
+is no file, test, or CI check anywhere that would fail if someone started implementing §2/§3 against an
+unratified guess. Naming this here converts it from a silent assumption into an owed follow-up: a real
+gate (e.g., a CI check that Phase 14 code cannot merge without a resolved-O3/O4 marker in
+`BLUEPRINT-P02`) would close it; today, only the operator's own attention does.
+
+---
+
+*Appendix sources (2026-07-17): live grep/read against `/root/dowiz` HEAD `cc3d5c916` and
+`/root/bebop-repo` (current tip); `F2-dispute-arbitration.md` (lines 26-37, full state table +
+"Mapping to code" line); `BLUEPRINT-P02-canon-repair-operator-decisions.md` (O3 line 133, O4 line 153,
+O12 line 229); `BLUEPRINT-P13-delivery-on-protocol.md` §5 (lines 246-251); `kernel/src/retrieval/diffusion.rs`
+(O12's grounded-guess target); `scripts/ci-crdt-fence.sh`, `scripts/ci-no-courier-scoring.sh`
+(both in `/root/bebop-repo/scripts/`); `ARCHITECTURE.md:15,21` (M6/M12). No code or canon changed.*
