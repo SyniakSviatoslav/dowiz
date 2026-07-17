@@ -33,12 +33,12 @@
 - Network (D2/M6): zero-dep proto-cap + iroh-QUIC primary, quinn fallback via DECART. deny-by-default capability-tokens.
 - LLM infra (E13/E14, web-verified): self-host llama.cpp(120k★ MIT)+vLLM(86k★ Apache-2.0) GOAL; managed-advisory until GPU-unlock; Modal H100 $0.001097/s scale-to-zero. **V3/V5 governance gates = canonical-repo DEV-TIME fences (SCOPE RULE); at runtime hub self-enforces locally — no standing global verifier/gate (M5/M9).**
 - Models (E15): harmonic_centrality+kelly_fraction adaptive tiering (wire П0-C1).
-- Legal (E52/E54): AGPLv3 + TRADEMARK applies to **canonical code/brand ONLY** — protocol + runtime are free/unbounded (M11). TM is a brand leash, NOT a mesh-control; hub MAY fork code, drop brand, keep protocol. EUTM pending (operator action).
+- Legal (E52/E54): AGPLv3 + TRADEMARK applies to **canonical code/brand ONLY** — protocol + runtime are free/unbounded (M11). TM is a brand leash, NOT a mesh-control; hub MAY fork code, drop brand, keep protocol. EUTM pending (operator action; see ADR-020).
 
 ## 2. Service architecture (S-series, code-grounded)
 - Runtime (S1): zero-OCI native static binaries + systemd; microVM when fleet>5.
 - Topology (S2): modular monolith; microVM per P1.
-- Secrets (S3): systemd EnvFile + NEVER in-repo + gitleaks. (ADR-020 LICENSE mismatch: Apache-2.0 vs AGPLv3; force-push scrub BLOCKED red-line; EUTM pending.)
+- Secrets (S3): systemd EnvFile + NEVER in-repo + gitleaks. (ADR-020: LICENSE now AGPLv3 since `ac1caba40`; secret scrub assessed CLOSED 2026-07-13, force-push declined as redundant — see `docs/adr/0020-oss-license-tm-dco.md`. EUTM still operator action.)
 - API (S4): gRPC/protobuf internal + REST edge RECOMMENDED (not mandated); GraphQL client-edge ONLY. Hub MAY open any port/bridge at its discretion (M5) — inter-hub still speaks the protocol.
 - Errors (S5): fail-closed Result always.
 - Deploy (S6): single-env for operator's own build; V5-C red-line check = LOCAL per-hub re-exec, not a standing global service (see SCOPE RULE). Hub self-verifies.
@@ -125,7 +125,7 @@ Single source: this guide + STRATEGIC-VECTORS-LOCKED. Arc-notes = history, not l
 
 ## 8. Honest gaps (not self-certified)
 - **HYDRA-CONTRADICTION SWEEP (2026-07-16, operator "дозвіл на війну"):** ALL global-sounding gates re-scoped to DEV-TIME-only via SCOPE RULE. C1(V3 CI) C2(V5 verifier) C3(E12 i18n) C5(E26 pgrust) C6(S4 API) C8(V1 verifier) → none block hub autonomy. C4 (single-graph wiki) → PER-HUB REPLICATED (no central SPOF). C7 (TM) → brand-leash only, protocol/runtime free. Zero residual contradiction with M5/M9/M11.
-- ADR-020: LICENSE Apache-2.0 vs AGPLv3; force-push scrub BLOCKED (red-line); EUTM pending.
+- ADR-020: LICENSE now AGPLv3 (flipped `ac1caba40`); secret scrub assessed CLOSED 2026-07-13 (force-push declined as redundant) — see `docs/adr/0020-oss-license-tm-dco.md`. EUTM pending (operator action).
 - GPU: wgpu offline-ceiling (W21); GPU-unlock pending network.
 - QRNG: ANU/meetar beacon reachable but api.quantum-random.com down; M3 optional, ML-DSA-only fallback confirmed.
 - Web: Firecrawl blocked; facts via terminal curl (GitHub/NIST/Modal/arxiv). llama.cpp/vLLM/Modal verified.
