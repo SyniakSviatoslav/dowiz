@@ -29,3 +29,10 @@ wasmtime-fuel = ["dep:wasmtime"]
 [lib]
 name = "agent_adapters"
 path = "src/lib.rs"
+
+[dev-dependencies]
+criterion = "0.5"
+
+[[bench]]
+name = "fuel_bench"
+harness = false

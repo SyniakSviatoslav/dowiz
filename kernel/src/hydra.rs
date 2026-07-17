@@ -114,7 +114,7 @@ impl BreachAlert {
         g.copy_from_slice(&b[32..]);
         Some(BreachAlert {
             node_id,
-            group_size: usize::from_le_bytes(g),
+            group_size: u64::from_le_bytes(g) as usize,
         })
     }
 }
