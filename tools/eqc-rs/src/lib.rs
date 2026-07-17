@@ -420,6 +420,14 @@ mod unit_tests {
     }
 
     #[test]
+    fn ema_with_negative_power_refused_by_fixed_subset() {
+        let (p, s, a) = (Expr::sym("p"), Expr::sym("s"), Expr::sym("a"));
+        // alpha⁻¹ smuggled in: 1/a is NOT fixed-point-representable (lib.rs:376-380)
+        let bad = Equation::new("ema_bad", &["p", "s", "a"], p.clone() + a.pow(-1) * (s - p));
+        assert!(bad.emit_fixed_rust().is_err()); // refusal, never a silent fallback
+    }
+
+    #[test]
     #[should_panic(expected = "expr uses symbols not in args")]
     fn rejects_symbol_not_in_args() {
         let (a, b) = (Expr::sym("a"), Expr::sym("b"));
