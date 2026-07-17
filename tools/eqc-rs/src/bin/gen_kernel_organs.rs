@@ -18,5 +18,5 @@ fn main() {
         &["prev", "sample", "alpha"],
         prev.clone() + alpha * (sample - prev),
     );
-    println!("{}", ema.emit_f64_rust());
+    println!("{}", ema.emit_f64_rust().expect("emit ema_next"));
 }
