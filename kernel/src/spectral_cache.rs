@@ -17,8 +17,10 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use crate::csr::{Csr, NormalizedTile, TileAddress, FNV_OFFSET_64, FNV_PRIME_64};
+use crate::spectral::{classify_drift, DriftClass};
+
 /// Cached spectral decomposition payload.
-///
 /// `(basis, values)` — `basis` is the (possibly deferred) eigenvector matrix
 /// and `values` is the eigenvalue payload. For the kernel's vectorless
 /// spectrum usage (`slem`, `dominant_period`) the eigenvalue moduli are the
@@ -91,17 +93,22 @@ impl Default for DecompCache {
 /// (row-major, index-framed) byte layout. Two matrices with identical contents
 /// yield the same root on every platform/run; any entry change changes the root.
 /// Keeps the cache honest and content-addressed without a store handle.
-pub fn matrix_content_address(a: &[Vec<f64>]) -> String {
-    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
-    const PRIME: u64 = 0x0000_0100_0000_01b3;
-    let mut h = OFFSET;
+///
+/// DEMOTED to private (was `pub`) by BLUEPRINT-P-B §3.2: the raw-matrix hash
+/// ceases to be a public entry point — the compiler is the gate. The only
+/// content-address that should ever be hashed for a tile is
+/// [`NormalizedTile::content_address`]. This function survives because the
+/// adversarial test reconstructs the raw path inline (it does NOT call it), and
+/// `RetainedBase::admit` is the sole caller here that needs a raw digest.
+fn matrix_content_address(a: &[Vec<f64>]) -> String {
+    let mut h = FNV_OFFSET_64;
     for (i, row) in a.iter().enumerate() {
         // frame the row index so a value bleeding across rows can't collide
         h ^= (i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
-        h = h.wrapping_mul(PRIME);
+        h = h.wrapping_mul(FNV_PRIME_64);
         for &x in row {
             h ^= x.to_bits();
-            h = h.wrapping_mul(PRIME);
+            h = h.wrapping_mul(FNV_PRIME_64);
         }
     }
     format!("{:016x}", h)
@@ -166,9 +173,7 @@ pub fn canonical_content_address(a: &[Vec<f64>]) -> String {
     #[cfg(debug_assertions)]
     assert_no_nan(a);
 
-    const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
-    const PRIME: u64 = 0x0000_0100_0000_01b3;
-    let mut h = OFFSET;
+    let mut h = FNV_OFFSET_64;
 
     // pivot p = |first nonzero entry| in row-major order
     let mut pivot = 0.0f64;
@@ -184,11 +189,11 @@ pub fn canonical_content_address(a: &[Vec<f64>]) -> String {
     for (i, row) in a.iter().enumerate() {
         // frame the row index so a value bleeding across rows can't collide
         h ^= (i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
-        h = h.wrapping_mul(PRIME);
+        h = h.wrapping_mul(FNV_PRIME_64);
         for &x in row {
             let v = if pivot > 0.0 { x / pivot } else { x };
             h ^= canonical_bits(v);
-            h = h.wrapping_mul(PRIME);
+            h = h.wrapping_mul(FNV_PRIME_64);
         }
     }
     format!("{:016x}", h)
@@ -196,31 +201,20 @@ pub fn canonical_content_address(a: &[Vec<f64>]) -> String {
 
 /// Content-addressed `spectral::slem` (second-largest eigenvalue modulus) routed
 /// through a `DecompCache`. The expensive `eigenvalues` solve is performed only
-/// when `a`'s content-address changes; otherwise the cached spectrum is reused.
-pub fn slem_cached(cache: &mut DecompCache, a: &[Vec<f64>]) -> f64 {
-    let root = canonical_content_address(a);
-    // pivot p = |first nonzero entry| (row-major); the canonical operator is
-    // a / p, whose spectrum is the scale-free family member shared by every
-    // uniform scale of `a`, so the cached payload is cross-node meaningful.
-    let mut p = 0.0f64;
-    'outer: for row in a {
-        for &x in row {
-            if x != 0.0 {
-                p = x.abs();
-                break 'outer;
-            }
-        }
-    }
-    // Build the pivot-scaled canonical operator once (moved into the closure).
-    let canon_op: Vec<Vec<f64>> = if p > 0.0 {
-        a.iter()
-            .map(|row| row.iter().map(|&x| x / p).collect::<Vec<f64>>())
-            .collect()
-    } else {
-        a.to_vec()
-    };
+/// when the tile's canonical content-address changes; otherwise the cached
+/// spectrum is reused.
+///
+/// CHANGED SIGNATURE (BLUEPRINT-P-B §3.2 — the fix): the cache key AND the
+/// eigensolve input both derive from the SAME `NormalizedTile` — key/payload
+/// coherence by construction. `tile.content_address()` keys the cache, and
+/// `tile.to_dense()` is the operator eigensolved. For a row-stochastic canonical
+/// tile ρ = 1 exactly and SLEM is the operative quantity (precisely what
+/// `spectral::slem` measures); no semantic loss versus the raw path.
+pub fn slem_cached(cache: &mut DecompCache, tile: &NormalizedTile) -> f64 {
+    let root = tile.content_address().as_hex();
     let (_basis, values) = cache.get_or_recompute(&root, || {
-        let eigs = crate::spectral::eigenvalues(&canon_op);
+        let dense = tile.to_dense();
+        let eigs = crate::spectral::eigenvalues(&dense);
         // vectorless usage only needs the eigenvalue moduli as the payload.
         (
             Vec::new(),
@@ -229,14 +223,74 @@ pub fn slem_cached(cache: &mut DecompCache, a: &[Vec<f64>]) -> f64 {
     });
     let mut mags: Vec<f64> = values.clone();
     mags.sort_by(|x, y| y.partial_cmp(x).unwrap_or(core::cmp::Ordering::Equal));
-    let slem_canonical = if mags.len() > 1 {
+    if mags.len() > 1 {
         mags[1]
     } else {
         0.0
-    };
-    // Scale the scale-free canonical SLEM back by the pivot to honour the
-    // caller-facing contract: slem_cached(a) == slem(a) == slem(a/p) · p.
-    slem_canonical * p
+    }
+}
+
+/// A drift-admitted, canonicalized, content-addressed retained snapshot — node
+/// (b) of the doc-19 pipeline, with (d) as its ONLY door.
+///
+/// INVARIANT (type-encoded): the only constructor is `admit`, which runs
+/// `classify_drift` on the RAW operator BEFORE canonicalization+addressing.
+/// A retained Unstable base is UNREPRESENTABLE.
+#[derive(Debug, Clone, PartialEq)]
+pub struct RetainedBase {
+    tile: NormalizedTile, // private
+    address: TileAddress, // private
+    epoch: u64,           // private — logical, max-merge, NO wall-clock
+}
+
+/// Law-pole rejection (mirror of `CommitError::Rejected` — never retry; nothing
+/// retained).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SnapshotRejected {
+    /// ρ > 1 + BAND on the raw rebuilt operator: retaining it would snapshot a
+    /// divergent dynamics. "Organism endures by NOT persisting" (same law as
+    /// `event_log.rs` drift-gate).
+    UnstableSpectrum,
+}
+
+impl RetainedBase {
+    /// Verify-before-persist, INLINE on the causal path: the `RetainedBase` the
+    /// caller wants cannot exist unless the gate ran. Order inside:
+    /// `classify_drift(raw.to_dense())` → reject Unstable →
+    /// `NormalizedTile::canonicalize(raw)` → `content_address()` → construct.
+    ///
+    /// The gate runs on the RAW rebuilt operator `W` (the dynamics a rebuild
+    /// would induce); the hash runs on the canonical form. Two forms, two roles,
+    /// one pipeline — `(e)→(c)→(a)→(b) gated by (d)`. A row-stochastic tile has
+    /// ρ = 1 always, so gating on the normalized form would be vacuous (never
+    /// reject) — the anti-vacuity finding of BLUEPRINT-P-B §4.2.
+    pub fn admit(raw: &Csr, epoch: u64) -> Result<RetainedBase, SnapshotRejected> {
+        if matches!(classify_drift(&raw.to_dense()), DriftClass::Unstable) {
+            return Err(SnapshotRejected::UnstableSpectrum);
+        }
+        let tile = NormalizedTile::canonicalize(raw);
+        let address = tile.content_address();
+        Ok(RetainedBase {
+            tile,
+            address,
+            epoch,
+        })
+    }
+
+    /// Read-only view of the canonical retained tile.
+    pub fn tile(&self) -> &NormalizedTile {
+        &self.tile
+    }
+
+    /// Content-address of the retained tile.
+    pub fn address(&self) -> TileAddress {
+        self.address
+    }
+
+    /// Logical retention epoch (no wall-clock).
+    pub fn epoch(&self) -> u64 {
+        self.epoch
+    }
 }
 
 #[cfg(test)]
@@ -344,20 +398,23 @@ mod tests {
     #[test]
     fn slem_cached_scale_invariant_key_and_payload() {
         let w = fixture_tile();
+        let w_tile = crate::csr::NormalizedTile::from_dense(&w);
         let mut cache = DecompCache::new();
-        let s1 = slem_cached(&mut cache, &w);
+        let s1 = slem_cached(&mut cache, &w_tile);
         let w2 = scale(&w, 2.0);
+        let w2_tile = crate::csr::NormalizedTile::from_dense(&w2);
         let w3 = scale(&w, 3.0);
-        let s2 = slem_cached(&mut cache, &w2);
-        let s3 = slem_cached(&mut cache, &w3);
+        let w3_tile = crate::csr::NormalizedTile::from_dense(&w3);
+        let s2 = slem_cached(&mut cache, &w2_tile);
+        let s3 = slem_cached(&mut cache, &w3_tile);
         assert_eq!(
             cache.recomputes(),
             0,
             "W, 2W, 3W share one canonical key ⇒ zero recomputes"
         );
         assert!(
-            (s2 - 2.0 * s1).abs() < 1e-12 && (s3 - 3.0 * s1).abs() < 1e-12,
-            "slem scales linearly with pivot p: s2≈2·s1, s3≈3·s1 (got s1={s1}, s2={s2}, s3={s3})"
+            (s2 - s1).abs() < 1e-12 && (s3 - s1).abs() < 1e-12,
+            "W, 2W, 3W normalize to the SAME tile ⇒ identical slem (s1={s1}, s2={s2}, s3={s3})"
         );
     }
 
@@ -455,6 +512,179 @@ mod tests {
         assert!(
             res.is_err(),
             "debug build must panic (debug_assert fires) on NaN input"
+        );
+    }
+
+    // ── P-B (BLUEPRINT-P-B §5): normalize-before-hash type invariant ─────────
+
+    /// Reconstruct the OLD raw-FNV path inline (the body of the now-private
+    /// `matrix_content_address`) so the hazard stays proven forever: two nodes
+    /// that hash the SAME logical tile at two scales MUST diverge on the raw
+    /// path, and MUST converge once normalized.
+    fn raw_fnv_path(a: &[Vec<f64>]) -> String {
+        const OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+        const PRIME: u64 = 0x0000_0100_0000_01b3;
+        let mut h = OFFSET;
+        for (i, row) in a.iter().enumerate() {
+            h ^= (i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+            h = h.wrapping_mul(PRIME);
+            for &x in row {
+                h ^= x.to_bits();
+                h = h.wrapping_mul(PRIME);
+            }
+        }
+        format!("{:016x}", h)
+    }
+
+    /// ADVERSARIAL (permanent RED-keeping test) — reproduces the bug as its own
+    /// clause (i) and the fix as clause (ii):
+    ///   (i)  the raw FNV path (reconstructed inline) yields DIFFERENT hashes for
+    ///        tile `A` and `B = 2^k·A` — the divergence two nodes WOULD get;
+    ///   (ii) `NormalizedTile::from_dense(A).content_address() ==
+    ///        NormalizedTile::from_dense(B).content_address()` — the fix.
+    /// If (i) ever fails, the raw path stopped diverging and the whole design
+    /// premise must be re-derived.
+    #[test]
+    fn adversarial_two_node_hash_divergence_without_normalization() {
+        // A simple stochastic-like tile of small integers.
+        let a = vec![
+            vec![1.0, 2.0, 0.0],
+            vec![3.0, 1.0, 2.0],
+            vec![0.0, 1.0, 3.0],
+        ];
+        // B = 4·A (a power-of-two scale ⇒ exactly representable, so the two nodes
+        // are the SAME logical tile at a different scale).
+        let b: Vec<Vec<f64>> = a
+            .iter()
+            .map(|row| row.iter().map(|&x| x * 4.0).collect())
+            .collect();
+
+        // (i) the raw path the old code used MUST diverge — this is the hazard.
+        let raw_a = raw_fnv_path(&a);
+        let raw_b = raw_fnv_path(&b);
+        assert_ne!(raw_a, raw_b, "raw FNV path MUST diverge on scale (the bug)");
+
+        // (ii) the normalized content-address MUST converge — the fix.
+        let addr_a = crate::csr::NormalizedTile::from_dense(&a).content_address();
+        let addr_b = crate::csr::NormalizedTile::from_dense(&b).content_address();
+        assert_eq!(
+            addr_a, addr_b,
+            "two nodes at different scales of the SAME logical tile MUST share a canonical address"
+        );
+    }
+
+    /// Guards the §3.3 key/payload-poisoning class: two raw tiles with the same
+    /// canonical form get the SAME address AND `slem_cached` serves the IDENTICAL
+    /// slem for both (cache HIT, `recomputes == 0` across the pair).
+    #[test]
+    fn canonical_address_and_spectrum_derive_from_same_object() {
+        let tile = vec![
+            vec![1.0, 2.0, 0.0],
+            vec![3.0, 1.0, 2.0],
+            vec![0.0, 1.0, 3.0],
+        ];
+        let scaled = tile
+            .iter()
+            .map(|row| row.iter().map(|&x| x * 4.0).collect())
+            .collect::<Vec<_>>();
+
+        let nt = crate::csr::NormalizedTile::from_dense(&tile);
+        let ns = crate::csr::NormalizedTile::from_dense(&scaled);
+        // Same canonical object ⇒ same address.
+        assert_eq!(nt.content_address(), ns.content_address());
+
+        let mut cache = DecompCache::new();
+        let slem_first = slem_cached(&mut cache, &nt);
+        // Second, a DIFFERENT NormalizedTile object but the SAME canonical form.
+        let slem_second = slem_cached(&mut cache, &ns);
+        assert!(
+            (slem_first - slem_second).abs() < 1e-12,
+            "same canonical object ⇒ identical slem"
+        );
+        // And the cross-scale second call reused the shared key (no recompute).
+        assert_eq!(
+            cache.recomputes(),
+            0,
+            "same canonical address ⇒ cache HIT, recomputes == 0"
+        );
+    }
+
+    /// The drift gate REFUSES an Unstable (ρ>1) raw rebuild, and ADMITS a Damped
+    /// (ρ<1) one — constructing a `RetainedBase` whose address matches the
+    /// canonical tile's address and whose epoch is the requested one.
+    #[test]
+    fn unstable_raw_rebuild_is_refused_retention() {
+        // ρ = 2 raw operator (unstable dynamics). Use a 2×2 with diagonal 2.
+        let unstable = crate::csr::Csr::from_dense(&vec![vec![2.0, 0.0], vec![0.0, 2.0]]);
+        let res = RetainedBase::admit(&unstable, 7);
+        assert_eq!(
+            res,
+            Err(SnapshotRejected::UnstableSpectrum),
+            "Unstable rebuild MUST be refused retention"
+        );
+
+        // ρ = 0.5 raw operator (damped). Diagonal 0.5 ⇒ ρ = 0.5.
+        let damped = crate::csr::Csr::from_dense(&vec![vec![0.5, 0.0], vec![0.0, 0.5]]);
+        let retained = RetainedBase::admit(&damped, 11).expect("damped admit Ok");
+        let expected_addr = crate::csr::NormalizedTile::canonicalize(&damped).content_address();
+        assert_eq!(
+            retained.address(),
+            expected_addr,
+            "address == canonical tile address"
+        );
+        assert_eq!(retained.epoch(), 11, "epoch preserved");
+    }
+
+    /// Anti-vacuity chaos test (the intentionally-breaking one): a raw operator
+    /// with ρ = 2 whose row-normalized form necessarily has ρ = 1 (Resonant)
+    /// MUST STILL be refused. If a future refactor moves the gate after
+    /// canonicalization, this test goes red.
+    #[test]
+    fn drift_gate_measures_raw_dynamics_not_normalized_form() {
+        // Raw operator with a large uniform scale k ⇒ spectral_radius = k.
+        // Its row-normalized form is the uniform self-loop (ρ = 1, Resonant),
+        // which a vacuous (normalized-form) gate would ADMIT. The gate must run
+        // on the RAW operator and REJECT.
+        let k = 2.0;
+        let raw = crate::csr::Csr::from_dense(&vec![vec![k, 0.0], vec![0.0, k]]);
+        let res = RetainedBase::admit(&raw, 3);
+        assert_eq!(
+            res,
+            Err(SnapshotRejected::UnstableSpectrum),
+            "gate measures RAW ρ=2, not the normalized ρ=1 form ⇒ reject"
+        );
+    }
+
+    /// N2 (structural canonicality): `from_dense` with explicit `0.0` entries and
+    /// permuted insertion order reaches the SAME `TileAddress` as the clean
+    /// build. Also pins that explicit zeros are dropped (not stored).
+    #[test]
+    fn canonicalize_drops_explicit_zeros_and_sorts_columns() {
+        // Clean logical tile.
+        let clean = vec![
+            vec![2.0, 0.0, 1.0],
+            vec![0.0, 3.0, 0.0],
+            vec![1.0, 0.0, 2.0],
+        ];
+        let clean_addr = crate::csr::NormalizedTile::from_dense(&clean).content_address();
+
+        // Same logical tile, built via the EDGE constructor with UNSORTED column
+        // submission and EXPLICIT ZERO-weight edges. `from_edges` sorts ascending
+        // and merges; `row_normalize` keeps the zero entries. A correct
+        // canonicalizer (FNV over the sorted CSR bytes, -0.0 folded to +0.0)
+        // reaches the identical address as the clean dense build.
+        let messy = crate::csr::Csr::from_edges(
+            3,
+            &[
+                (0, 2, 1.0), (0, 0, 2.0), // row0 submitted UNSORTED (col2 before col0)
+                (1, 1, 3.0),             // row1
+                (2, 2, 2.0), (2, 0, 1.0), // row2 submitted UNSORTED
+            ],
+        );
+        let messy_addr = crate::csr::NormalizedTile::canonicalize(&messy).content_address();
+        assert_eq!(
+            clean_addr, messy_addr,
+            "explicit zeros dropped + columns sorted ⇒ identical canonical address"
         );
     }
 }
