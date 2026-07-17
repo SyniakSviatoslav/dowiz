@@ -200,6 +200,190 @@ Everything seeded and deterministic: `bootstrap_interval` takes `&mut Rng` and d
 - Counteracts the named "no falsifiable statistic" habit at the layer where it does the most damage:
   every reported number now carries the check that would refute it.
 
+---
+
+## Extended Context
+
+The framing "the CLT was imprisoned in one test" undersells why an uncertainty primitive is
+load-bearing rather than tidy. This whole session has been built around one discipline —
+**honest claims** — and its two named failure shapes: **Mentalism** (the map is not the territory;
+a stated number is a claim *about* reality, not reality) and **RC-1 self-certification** (a claim
+substituting for a check — the `HERMETIC…` "52s GREEN on a 1610-line diff" case, MEMORY.md's
+BRAIN-TOPOLOGY watch). A point estimate shipped as a headline — `recall@5 = 1.0` — is not a smaller,
+softer version of that failure. It is *structurally the same object*: a number nobody can falsify
+because it does not state its own confidence. `1.0` with no interval makes exactly the assertion an
+unverified "done" makes — "trust the value, there is nothing left to check" — and it is wrong in the
+same way, because 12/12 lucky Bernoulli trials cannot license certainty. An interval is the check
+travelling *with* the claim; without it, the claim is self-certifying by construction.
+
+The first real consumer this unblocks is concrete and already computed elsewhere this session: the
+living-knowledge **recall@5** metric, whose live in-kernel oracle is **12 queries**
+(`living_knowledge.rs:269-322`, `retrieval/tests.rs:202-241`), each a single-relevant-doc Bernoulli
+trial, so `1.0` means 12/12. The honest bound on that exact sample is a **Wilson 95% lower bound
+≈ 0.76** — meaning the true recall could sit as low as ≈0.76 and still be perfectly consistent with
+12 clean passes. Once this primitive ships, a reader of that metric sees **`1.0 [0.76, 1.0] n=12`**
+instead of a bare `1.0`.
+
+That change is materially more honest for one reason that survives adversarial reading: the bare `1.0`
+is *unfalsifiable as displayed* — no reader can tell whether it rests on 12 trials or 12 000 — whereas
+`1.0 [0.76, 1.0] n=12` states its own weakness on its face. It publishes the sample size (so the
+reader knows how much evidence stands behind it), publishes the floor (so "as good as 1.0, as weak as
+0.76" is legible without re-deriving anything), and makes the memory arc's own standing "NEXT: bigger
+oracle" a *quantified* action rather than a vibe — the interval says exactly what a bigger oracle
+buys (0.76 → 0.88 at n=29 → higher). The number stops being a trophy and becomes a measurement.
+
+## Definition of Done
+
+Distinct from §4's falsifiable acceptance criteria (which are per-test RED/GREEN oracles), the DoD
+below is the set of structural gates that must ALL hold for the work to be considered complete. Each
+is checkable; none is a matter of taste.
+
+- **D1 — Layering gate (downward-only).** `kernel/src/stats.rs` must depend on **nothing above the
+  leaf layer** — concretely: `stats.rs` must **not** `use` `evals.rs` or `causal.rs`; only the reverse
+  is permitted (`causal.rs` and `evals.rs` import *down* into `stats.rs`). This restates §2's location
+  decision as an enforceable rule, and the reasoning is re-checked and still sound: the consumers span
+  `causal.rs` (foundational Pearl stack), `evals.rs` (harness), and the retrieval/recall tests; if the
+  primitive lived in `evals.rs`, `causal.rs` would have to import *upward* from the eval-harness layer
+  — a layering inversion P2 forbids. A zero-dep sibling of `rng.rs`/`money.rs`/`noether.rs` that every
+  layer imports downward is the only home that avoids the inversion. **Verification:** a grep for
+  `use crate::evals` or `use crate::causal` inside `stats.rs` returns zero hits, and the crate compiles
+  with `stats` declared *before* `evals`/`causal` have any bearing on it.
+- **D2 — Regression-safety gate (no verdict may flip).** Substituting the primitive
+  (`within_clt_envelope`) into `causal.rs`'s existing `empirical_converges_to_analytic_as_n_grows`
+  test must **not flip that test's — or any existing test's — pass/fail verdict.** This is proven, not
+  asserted, by a named procedure: **run the full `causal.rs` test suite immediately before the
+  substitution and immediately after, and diff the two verdict sets — they must be identical
+  (same tests present, same green/red for each).** The substitution is only safe because
+  `within_clt_envelope(err, n, se_factor, 6.0)` is the **byte-identical expression** to the inline
+  `err * (n as f64).sqrt() < se_factor * 6.0`, so no numeric drift is possible; D2 is the demonstration
+  that this identity was actually preserved and not merely intended. A deliberately inverted primitive
+  (inequality reversed) MUST make the before/after diff go red — that is the falsifier that proves the
+  gate has teeth. This gate generalizes beyond `causal.rs`: **no existing test anywhere in the kernel
+  suite may change verdict** as a result of this change; the suite grows by new RED/GREEN tests only.
+- **D3 — Single-source gate (P2).** After the rewrite, the inline `err * … .sqrt() < … * 6.0` pattern
+  exists in exactly one place (`stats.rs` / its test); a grep for it elsewhere returns the single
+  relocated call. The √N law is written once.
+- **D4 — Number-reproduction gate.** The Wilson bounds are **recomputed by the implementer**, not
+  copied from this doc: `wilson_interval(12,12,1.96).0` ≈ 0.7575 and `(29,29,1.96).0` ≈ 0.8830 are
+  reproduced to their pinned digits, and a failing recall query (11/12) is shown to *move* the lower
+  bound rather than leave it at an assertable constant.
+- **D5 — Determinism gate (P6).** `bootstrap_interval` draws only through `crate::rng::Rng::next_index`
+  and reproduces bit-identically across a serialize→re-read second-process run; `stats.rs` contains no
+  `std::time`, no thread RNG, no HashMap-order leak into any emitted number.
+- **D6 — Zero-dep / suite-green gate.** `stats.rs` adds no crate to `Cargo.toml`; the full kernel suite
+  is green after the change (D2's "after" run *is* this run).
+- **D7 — Backward-compatibility gate.** The existing point-estimate functions (`brier`/`ece`/`aurc`)
+  and the hand-`tol` `RegressionGate::new` constructor remain present and unchanged in behavior; the
+  interval-returning companions and the SE-derived constructor are **additive**. No existing caller is
+  broken by this change (this is the flip side of D2 for non-test callers).
+- **D8 — Misuse-warning gate.** Each analytic primitive that assumes large-n iid (`mean_se`,
+  `normal_interval`, `within_clt_envelope`) carries a doc-comment stating that assumption and pointing
+  to `wilson_interval` for small-n binomial and to §2's block-bootstrap for dependent streams (see
+  Safety below — this is currently the *only* guardrail against the EMA-stream misuse, and D8 makes
+  writing it non-optional).
+
+## Event-Driven Architecture Treatment
+
+**Stated plainly: a pure statistics/math leaf is not naturally event-sourced, and this blueprint does
+not force that framing onto it.** `mean_se`, `normal_interval`, `wilson_interval`,
+`within_clt_envelope`, and `bootstrap_interval` are referentially transparent functions of their
+inputs — same arguments, same output, no state, no time, no I/O. There is no lifecycle to log, no
+prior-event dependency, nothing to replay. `stats.rs` sits beside `rng.rs`/`money.rs`/`noether.rs`,
+which are event-sourced by *nobody*. Inventing an event stream for a `sqrt` would be exactly the
+metaphor-forcing the arc's V6 discipline rejects.
+
+The one genuine question is downstream: when a computed interval gets **attached to a metric that a
+verdict-bearing consumer acts on**, does the provenance of that interval (which primitive, what sample
+size, what `z`) survive into the record a future auditor reads? The honest, code-checked answer starts
+by correcting the question's implied plumbing. **`RegressionGate`'s RED verdict does not flow through
+the content-addressed `MeshEvent` log at all.** The gate is explicitly *pure* — "the gate and EMA are
+pure (no fs) so they stay testable offline. Writing to disk is the caller's act… never hidden inside
+the kernel" (`evals.rs:415-426`). A RED verdict is surfaced by the caller writing an **`EvalRow`** to a
+separate **append-only JSONL trace** (`run-history.jsonl` via `EvalRow::append_to`, `evals.rs:489`),
+consumed by the Node `analyze.mjs` pipeline — *not* a `MeshEvent` whose `payload: Vec<u8>` is hashed
+into the SHA3-256 content chain (`event_log.rs:134-153`). So the literal "carry provenance into the
+event's payload" scenario does not arise today: there is no `MeshEvent` in the regression path.
+
+But the analogous provenance question **is real one layer down, at the JSONL trace** — and there it is
+a genuine, small gap, not a covered case. `EvalRow`'s schema is fixed and byte-locked to `analyze.mjs`
+(`timestamp`, `config_version`, `category`, `subagent`, `model`, `passed`, `gating_failed`,
+`soft_failed`, `checks[]` — `evals.rs:441-452`). If the interval-aware constructor (§3 step 6) fires
+RED because `tol = z · SE` was crossed, the row written to `run-history.jsonl` records only the failed
+check *names* (`gating_failed`/`soft_failed` are `Vec<String>`); it records **nothing** about the `SE`,
+`n`, `z`, or which `stats.rs` primitive produced the tolerance. A future auditor reading that line
+cannot reconstruct *why* the regression was flagged without re-deriving the math from the raw window —
+if the raw window is even still available. **Concrete, minimal design to close it, without breaking the
+byte-lock:** the interval-aware constructor emits an *additive*, optional sidecar object on the row —
+`tol_provenance: { primitive: "wilson"|"mean_se"|"block_bootstrap", primitive_version, n, z, se }` —
+serialized as an extra JSON key. This is safe against the `analyze.mjs` byte-compat invariant
+(`evals.rs:415-421`) precisely because JSON is forward-compatible: the Node consumer reads only the
+keys it knows and ignores unknown ones, so the existing pipeline "lights up with zero changes" exactly
+as the comment promises. The provenance rides *only* on rows the SE-derived path produced; hand-`tol`
+rows carry nothing new. If a RED verdict is ever promoted into the real `MeshEvent` log later (E3
+auto-apply territory, gated), those same sidecar bytes are precisely what would go into `payload` —
+so designing the sidecar now makes the future event self-explaining for free. This is a real-but-minor
+gap the interval-aware constructor should carry; it is not a blocker and does not touch red-line paths.
+
+## Long-Term Consequences, Safety, Scalability
+
+**(a) Scalability — the bootstrap's cost, measured against real consumers.** `bootstrap_interval` is
+O(resamples × N) — the standard concern is thousands of resamples over a large sample. The check that
+matters is whether any *realistic* consumer in this codebase is large-N. It is not. The one genuinely
+large number in the arc — `causal.rs`'s empirical gate at `N ∈ {200, 2 000, 20 000, 200 000}` — uses
+the **analytic** `within_clt_envelope` (a single `sqrt` and a compare, O(1)), **never the bootstrap**.
+The bootstrap's actual consumers are all small: `aurc` over an eval-set (tens–hundreds of samples), the
+`RegressionGate` window (a handful), and the 12-query recall oracle (which uses `wilson_interval`
+anyway, not the bootstrap). So at realistic sizes — say 2 000 resamples × a few hundred samples ≈ 10⁶
+cheap float ops — this is milliseconds, a non-issue in practice. The honest ceiling to name: the day
+someone bootstraps `aurc` over an eval-set of thousands *with* thousands of resamples (≈10⁷–10⁸ ops),
+it starts to bite. That is not a current consumer; the guardrail is a one-line doc-comment on
+`bootstrap_interval` noting the O(resamples × N) cost and a sane default resample cap, so the cost is
+visible at the call site rather than discovered in a slow suite.
+
+**(b) Safety — the misuse risk, named.** The sharp risk is a caller applying the **CLT/normal-approx**
+interval (`mean_se` → `normal_interval`, or `within_clt_envelope`) to a sample that is **genuinely
+small or non-iid** — most concretely the EMA-smoothed `RegressionGate` stream that §2 already flags as
+needing a *different* treatment. Running `mean_se` over the autocorrelated EMA history would badly
+*under*-estimate the true error (effective sample size ≪ n) and yield an interval that **looks
+rigorous but is confidently wrong** — the self-certification failure wearing a lab coat. **What
+actually prevents this today: a documentation convention, not an enforced barrier — state this
+honestly.** The blueprint as written ships *separate named free functions* (`normal_interval` vs
+`wilson_interval` vs the §2 block-bootstrap) plus the §2 "which-bound-for-which-consumer" table plus
+the D8 doc-comment warnings. That is discipline, not enforcement: nothing at the type level stops a
+caller from handing a 12-sample or an EMA-smoothed slice to `mean_se`/`normal_interval` and getting a
+plausible-looking wrong answer. The *cheapest real hardening*, if this risk is judged worth enforcing,
+is a type-level distinction that makes the wrong call hard to write — e.g. returning distinct types
+(`CltInterval` for large-n iid vs `WilsonInterval` for small-n binomial) so a consumer cannot silently
+treat one as the other, or requiring an explicit `iid`/`n` witness argument the caller must supply
+consciously. **The blueprint does not currently mandate that type barrier — so as it stands the
+guardrail is a convention (D8) that a hurried caller can bypass.** Named here so the choice is
+deliberate, not defaulted.
+
+**(c) Ethics / long-term — the Ananke question.** The recall@5 example shows a real number *changing
+meaning* once honestly bounded: `1.0` becomes "1.0, and could be as low as 0.76." The organizational
+risk is that the primitive gets *built and then its output ignored* — the interval computed but the
+dashboard, report, or memory line still quoting the bare point estimate. Is there a structural
+enforcement point, or does honest reporting stay a discipline that can quietly lapse? **The honest
+answer: it is mostly convention, with exactly one structural foothold.** By deliberate design (D7,
+backward-compatibility), the bare `brier`/`ece`/`aurc` functions survive *and* `RegressionGate`'s
+hand-`tol` constructor survives; the interval companions are *additive*. Nothing type-forces a
+consumer to consume the interval — a dashboard can keep calling `brier(...)` and print the scalar
+forever, and a gate caller can keep passing a hand `tol` and never compute an SE. The interval can be
+computed-then-ignored, or never computed at all. **The one place the good outcome fires
+structurally** is the recall@5 test (§3 step 4): it *asserts* the Wilson lower bound, so if that bound
+regresses the suite goes red — a genuine ratchet, but only for that single consumer, and only inside
+the test suite, not in whatever dashboard a human actually reads. **Ananke verdict: the good outcome
+does NOT fire structurally in general.** Honest reporting here depends on someone remembering to look
+at the interval — precisely the "does the good outcome fire structurally, or does it depend on
+someone remembering?" trap. The only thing that would make it structural is removing/deprecating the
+bare point-estimate returns (or making the interval the sole return type), which the blueprint
+consciously declines for backward-compatibility. That trade is stated, not hidden: **today the
+interval is available everywhere and enforced almost nowhere** — flagged so a later owner can decide
+whether to convert the recall-test foothold into a broader consumption gate rather than assume the
+discipline holds itself.
+
+---
+
 *E2 blueprint. Evidence re-read against the live tree on `feat/spectral-energy-flow-evolution`
 2026-07-16 (`causal.rs`, `evals.rs`, `rng.rs`, `csr.rs`, `living_knowledge.rs`, `retrieval/tests.rs`,
 `HERMETIC-ARCHITECTURE-PRINCIPLES.md`). Wilson bounds computed, not guessed. No code written or edited.*
