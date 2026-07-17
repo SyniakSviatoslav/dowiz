@@ -92,6 +92,7 @@ pub mod spool;
 /// claim-latency anomaly detector (§4). F40 ML-DSA signed envelope DEFERRED
 /// pending bebop2 C4b — see `metrics.rs` header. Fail-closed local sink.
 pub mod metrics;
+pub mod bounded_drainer;
 // `loops` (BP-20 orchestration card parsing) depends on serde / serde_yaml →
 // compiled only under the `wasm` feature so a native rlib build stays serde-free.
 // NOT part of the canonical order/money core (decide/order_machine/domain/money).

@@ -197,6 +197,39 @@ impl VertexBridge {
     }
 }
 
+    // ── P11 §1 / E21 regression-guard (DEFAULT no-GPU build). ──────────────
+    //    E21 is ALREADY BUILT correctly (the `gpu` feature is empty and
+    //    `gpu::new_gpu` is an honest `Err` stub). P11's only E21 work is this
+    //    guard so the fail-closed boundary can never silently flip to a fake
+    //    GPU adapter during later refactors:
+    //      (a) the `gpu` cargo feature is OFF in the default build — so the
+    //          unbuildable fake-adapter path is not even compiled; and
+    //      (b) the shipped default render path is the CPU-side `HeadlessGpu`
+    //          mock, which does REAL work (a genuine vertex copy) with ZERO
+    //          json and ZERO real GPU. If someone flips `default` to pull in a
+    //          `gpu` adapter, (a) turns this red immediately.
+    #[test]
+    fn e21_default_build_has_no_real_gpu_adapter() {
+        assert!(
+            !cfg!(feature = "gpu"),
+            "E21 regression: the `gpu` feature MUST stay OFF in the default build \
+             (empty by design; a real wgpu adapter is out of scope until W21)"
+        );
+        // The default render path is the honest CPU-side mock, not a real GPU.
+        let mut bridge = VertexBridge::new(2, 4);
+        bridge.write_particle(0, 1.0, 2.0, 3.0, 4.0);
+        bridge.write_particle(1, 5.0, 6.0, 7.0, 8.0);
+        let mut gpu = HeadlessGpu::default();
+        gpu.upload_once(&mut bridge);
+        assert_eq!(gpu.uploads, 1, "exactly one CPU-side mock upload");
+        assert_eq!(gpu.json_calls, 0, "GREEN boundary performs ZERO json");
+        assert_eq!(
+            gpu.mirror,
+            bridge.vertex_view(),
+            "mock upload is a real copy"
+        );
+    }
+
 #[cfg(feature = "gpu")]
 /// `feature = "gpu"` — the honest GPU boundary.
 ///
