@@ -82,6 +82,98 @@ impl BoundedDrainer {
     }
 }
 
+/// OTP MaxR/MaxT restart-intensity bound as a PURE LAUNCH-PATH PREDICATE.
+/// (Synthesis §7 T-6 / V2 W3-L4: "a monotone relaunch fact checked by a pure
+/// predicate IN the launch path — degrade-closed refuse-to-launch; a standing
+/// sampler process is never built.")
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RestartBudget {
+    /// Max launches permitted inside any sliding window (OTP MaxR).
+    pub max_restarts: u32,
+    /// Sliding window length, milliseconds (OTP MaxT).
+    pub window_ms: u64,
+}
+
+/// Kernel default: 5 relaunches per rolling 60 s. A sustained crash loop
+/// (mean time-to-crash < 12 s) is stopped within one minute; slower periodic
+/// restarts (< 5/min) are legitimate. The systemd substrate mirror, where a
+/// unit exists, MUST copy these numbers (StartLimitBurst=5,
+/// StartLimitIntervalSec=60) so both planes enforce the same physics —
+/// Phase 27 §3.4 leaves unit-existence (unverified); resolve at implementation.
+pub const DRAINER_RESTART_BUDGET: RestartBudget =
+    RestartBudget { max_restarts: 5, window_ms: 60_000 };
+
+const _: () = assert!(DRAINER_RESTART_BUDGET.max_restarts >= 1);
+const _: () = assert!(DRAINER_RESTART_BUDGET.window_ms > 0);
+
+/// Proof-of-admission token. The ONLY constructor is `launch_permitted` (the
+/// field is module-private). A launcher entry point written as
+/// `fn run_drainer(token: LaunchToken, ...)` therefore CANNOT be invoked
+/// without the predicate having run — bypass is a compile error, not a
+/// runtime gap (doc 19 §2.3 axis 1: absence-is-visible).
+pub struct LaunchToken { _private: () }
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum LaunchRefused {
+    /// MaxR launches already inside the MaxT window.
+    IntensityExceeded { attempts_in_window: u32, max_restarts: u32, window_ms: u64 },
+    /// `now_ms` earlier than the last recorded launch. A rewound clock could
+    /// smuggle launches past the window; unprovable headroom refuses (fail-closed).
+    ClockRewound { last_launch_ms: u64, now_ms: u64 },
+}
+
+impl std::fmt::Display for LaunchRefused {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LaunchRefused::IntensityExceeded {
+                attempts_in_window,
+                max_restarts,
+                window_ms,
+            } => write!(
+                f,
+                "BLOCKER: launch refused — {} launches in {} ms (max {}); lane stays down",
+                attempts_in_window, window_ms, max_restarts
+            ),
+            LaunchRefused::ClockRewound {
+                last_launch_ms,
+                now_ms,
+            } => write!(
+                f,
+                "BLOCKER: launch refused — clock rewound (now={} ms < last={} ms); lane stays down",
+                now_ms, last_launch_ms
+            ),
+        }
+    }
+}
+
+/// The predicate. PURE and TOTAL over the monotone launch-attempt history:
+/// `prior_launches_ms` is append-only with non-decreasing timestamps (the
+/// launcher appends the grant time before exec; entries are never edited).
+/// An entry `t` is in-window iff `now_ms − t < window_ms` (strict).
+pub fn launch_permitted(
+    budget: &RestartBudget,
+    prior_launches_ms: &[u64],
+    now_ms: u64,
+) -> Result<LaunchToken, LaunchRefused> {
+    if let Some(&last) = prior_launches_ms.last() {
+        if now_ms < last {
+            return Err(LaunchRefused::ClockRewound { last_launch_ms: last, now_ms });
+        }
+    }
+    let attempts_in_window = prior_launches_ms.iter().rev()
+        .take_while(|&&t| now_ms - t < budget.window_ms)
+        .count() as u32;
+    if attempts_in_window >= budget.max_restarts {
+        Err(LaunchRefused::IntensityExceeded {
+            attempts_in_window,
+            max_restarts: budget.max_restarts,
+            window_ms: budget.window_ms,
+        })
+    } else {
+        Ok(LaunchToken { _private: () })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -141,6 +233,76 @@ mod tests {
         assert!(
             bucket.available() < 1.0,
             "budget fully spent on the 7 units"
+        );
+    }
+
+    // P-C §7 T5 — the constructed "unsafe launch": 5 grants inside the window
+    // then a 6th attempt is refused (IntensityExceeded). One tick past window
+    // (strict inequality) the oldest entry ages out and launch is permitted.
+    #[test]
+    fn restart_gate_refuses_sixth_launch_in_window() {
+        let b = DRAINER_RESTART_BUDGET;
+        let hist = [0u64, 10_000, 20_000, 30_000, 40_000];
+        // 6th launch at now=59_999: all 5 still in-window → refused.
+        let r = launch_permitted(&b, &hist, 59_999);
+        assert!(
+            matches!(
+                r,
+                Err(LaunchRefused::IntensityExceeded {
+                    attempts_in_window: 5,
+                    max_restarts: 5,
+                    window_ms: 60_000,
+                })
+            ),
+            "the 6th launch inside the window must be refused"
+        );
+        // At now=60_000 the t=0 entry has aged out (60_000-0 = 60_000, not < 60_000).
+        assert!(
+            launch_permitted(&b, &hist, 60_000).is_ok(),
+            "strict-inequality boundary: oldest entry expires exactly at window_ms"
+        );
+    }
+
+    // P-C §7 T6 — adversarial clock rewind fails closed.
+    #[test]
+    fn restart_gate_clock_rewind_fails_closed() {
+        let b = DRAINER_RESTART_BUDGET;
+        let hist = [10_000u64, 50_000];
+        let r = launch_permitted(&b, &hist, 49_999);
+        assert!(
+            matches!(
+                r,
+                Err(LaunchRefused::ClockRewound {
+                    last_launch_ms: 50_000,
+                    now_ms: 49_999,
+                })
+            ),
+            "a rewound clock cannot smuggle a launch past the window"
+        );
+    }
+
+    // P-C §7 T7 — slow legitimate periodic restart (< 5/min) is always permitted.
+    #[test]
+    fn restart_gate_slow_periodic_crash_is_legitimate() {
+        let b = DRAINER_RESTART_BUDGET;
+        let mut hist: Vec<u64> = Vec::new();
+        for i in 0..20 {
+            let now = i * 15_000; // one launch every 15 s (4/min)
+            let r = launch_permitted(&b, &hist, now);
+            assert!(r.is_ok(), "legitimate launch #{i} at t={now} must be permitted");
+            hist.push(now);
+        }
+        assert_eq!(hist.len(), 20);
+    }
+
+    // P-C §7 T8 — first launch with empty history is always permitted.
+    #[test]
+    fn restart_gate_first_launch_always_permitted() {
+        let b = DRAINER_RESTART_BUDGET;
+        let hist: [u64; 0] = [];
+        assert!(
+            launch_permitted(&b, &hist, 0).is_ok(),
+            "empty history ⇒ first launch permitted"
         );
     }
 }

@@ -72,11 +72,46 @@ pub const STATIC_FLOOR_OK: bool = true;
 /// intact, evolution permitted. `Locked` = external tamper detected (baseline
 /// ρ shifted) → fail-closed, commits refused until owner re-seeds. The owner's
 /// M9 kill-switch always overrides.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum OrganismState {
     Live,
     Locked,
 }
+
+/// P-C §3.2 — Two-threshold hysteresis band for the Live<->Locked flip
+/// (Batch 3 §5 fix). The trigger pole trips fail-closed in one check; release
+/// requires `healthy_checks` consecutive samples at or below `release`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HysteresisBand {
+    /// Lock (fail-closed) when ρ >= trigger or ρ non-finite. Trips in ONE check.
+    pub trigger: f64,
+    /// Eligible to release only when ρ <= release. Strictly < trigger (enforced below).
+    pub release: f64,
+    /// Consecutive checks with ρ <= release required before Locked->Live.
+    pub healthy_checks: u32,
+}
+
+pub const INTEGRITY_BAND: HysteresisBand = HysteresisBand {
+    trigger: 1.0,                                     // unchanged fail-closed line
+    release: 1.0 - 2.0 * crate::spectral::DRIFT_BAND, // = 0.999998
+    healthy_checks: 3,
+};
+
+// Compile-time enforcement (contract item 14 — the bug class becomes a build
+// failure): a band with trigger == release, an inverted band, or a gap
+// narrower than the full Resonant band width cannot compile.
+const _: () = assert!(INTEGRITY_BAND.release < INTEGRITY_BAND.trigger);
+const _: () = assert!(
+    // Float-safe form of `trigger - release >= 2*DRIFT_BAND`. The literal
+    // release `1.0 - 2e-6` rounds down so the exact-gap difference is
+    // ~5e-14 below 2e-6; a 1e-12 tolerance (6 OOM below the 2e-6 band) keeps
+    // the invariant while tolerating f64 literal rounding. Fails on inversion
+    // (release == trigger ⇒ gap 0) and on any narrowing below the full
+    // Resonant width (see compile-time RED check (a) in the commit message).
+    INTEGRITY_BAND.trigger - INTEGRITY_BAND.release + 1e-12
+        >= 2.0 * crate::spectral::DRIFT_BAND
+);
+const _: () = assert!(INTEGRITY_BAND.healthy_checks >= 2);
 
 /// G9 — a breach warning broadcast to the consensus hub. Carries NO code, only
 /// the identity of the compromised node + group scope. Receivers verify the
@@ -155,6 +190,10 @@ pub struct Hydra<S: EventStore> {
     nodes: usize,
     base_edges: Vec<TopoEdge>,
     state: OrganismState,
+    /// P-C §3.2 — consecutive checks with ρ <= INTEGRITY_BAND.release while
+    /// Locked. Required to reach `healthy_checks` before a Locked→Live release.
+    /// Reset to 0 on any trip or dead-band sample.
+    healthy_streak: u32,
 }
 
 impl<S: EventStore> Hydra<S> {
@@ -166,6 +205,7 @@ impl<S: EventStore> Hydra<S> {
             nodes,
             base_edges,
             state: OrganismState::Live,
+            healthy_streak: 0,
         }
     }
 
@@ -180,18 +220,32 @@ impl<S: EventStore> Hydra<S> {
     pub fn integrity_check(&mut self) -> OrganismState {
         let adj = topology_adjacency(self.nodes, &self.base_edges);
         let rho = spectral_radius(&adj);
-        // Baseline must remain a contracting/Damped organism (ρ<1). A shift to
-        // ρ>=1 means the persisted core was altered by something other than the
-        // organism's own signed evolution → fail-closed to Locked.
-        if rho < 1.0 && rho.is_finite() {
-            // Only auto-restore to Live if it was Locked by the same invariant.
-            if self.state == OrganismState::Locked {
-                self.state = OrganismState::Live;
-            }
-        } else {
+        if !(rho < INTEGRITY_BAND.trigger) || !rho.is_finite() {
+            // Trip pole: instantaneous, one check — fail-closed latency unchanged.
+            // (`!(rho < t)` also catches NaN; is_finite kept for the +inf pole and clarity.)
             self.state = OrganismState::Locked;
+            self.healthy_streak = 0;
+        } else if self.state == OrganismState::Locked {
+            if rho <= INTEGRITY_BAND.release {
+                self.healthy_streak += 1;
+                if self.healthy_streak >= INTEGRITY_BAND.healthy_checks {
+                    self.state = OrganismState::Live;
+                    self.healthy_streak = 0;
+                }
+            } else {
+                // Dead band (release < ρ < trigger): hold the lock, reset the streak.
+                self.healthy_streak = 0;
+            }
         }
+        // Live with ρ < trigger: stays Live (the band is sticky in both directions —
+        // identical to today's Live-side behavior; zero behavior change while Live).
         self.state
+    }
+
+    /// P-C §3.2 — owner-visible introspection of the consecutive-healthy streak
+    /// (same pattern as `state()`; telemetry hook, contract item 10).
+    pub fn healthy_streak(&self) -> u32 {
+        self.healthy_streak
     }
 
     /// Current organism state (owner-visible introspection; never hidden).
@@ -723,6 +777,126 @@ mod tests {
         assert!(
             matches!(res, Err(StoreError::Sync(_))),
             "a lost breach witness MUST surface as Err(StoreError), not Ok(Some); got {res:?}"
+        );
+    }
+
+    /// P-C §7 T2 — from Locked, releasing takes exactly `healthy_checks` (3)
+    /// consecutive samples with ρ <= release. Assert the exact state sequence.
+    #[test]
+    fn hydra_locked_release_requires_streak() {
+        let mut h = Hydra::new(MemEventStore::new(), 3, base());
+        // Force Locked first: push a tampering self-loop (ρ=2).
+        h.base_edges.push(TopoEdge {
+            from: 0,
+            to: 0,
+            weight: 2.0,
+        });
+        assert_eq!(h.integrity_check(), OrganismState::Locked);
+        // Now rewrite the self-loop to a clearly-Damped weight (w=0.9990 <= release).
+        h.base_edges.last_mut().unwrap().weight = 0.9990;
+        let s1 = h.integrity_check(); // streak 1
+        let s2 = h.integrity_check(); // streak 2
+        let s3 = h.integrity_check(); // streak 3 → release on 3rd
+        assert_eq!(
+            [s1, s2, s3],
+            [OrganismState::Locked, OrganismState::Locked, OrganismState::Live],
+            "Locked→Live must require exactly 3 consecutive healthy checks"
+        );
+        assert_eq!(h.healthy_streak(), 0, "streak resets after release");
+    }
+
+    /// P-C §7 T3 (adversarial graze) — from Locked, an intermittent sample that
+    /// lands in the dead band (release < ρ < trigger) must RESET the streak.
+    #[test]
+    fn hydra_dead_band_holds_lock() {
+        let mut h = Hydra::new(MemEventStore::new(), 3, base());
+        h.base_edges.push(TopoEdge {
+            from: 0,
+            to: 0,
+            weight: 2.0,
+        });
+        assert_eq!(h.integrity_check(), OrganismState::Locked);
+        // Sequence: two healthy (≤release), one dead-band graze, three healthy.
+        // The graze must reset the streak so release is delayed by one check.
+        let weights = [0.9990, 0.9990, 0.999999, 0.9990, 0.9990, 0.9990];
+        let mut seq = Vec::new();
+        for &w in &weights {
+            h.base_edges.last_mut().unwrap().weight = w;
+            seq.push(h.integrity_check());
+        }
+        assert_eq!(
+            seq,
+            vec![
+                OrganismState::Locked,
+                OrganismState::Locked,
+                OrganismState::Locked,
+                OrganismState::Locked,
+                OrganismState::Locked,
+                OrganismState::Live,
+            ],
+            "a dead-band graze must reset the streak; release happens one check later"
+        );
+    }
+
+    /// P-C §7 T4 — fail-closed latency is provably unchanged: a Live organism
+    /// trips to Locked on a single check at ρ = trigger exactly.
+    #[test]
+    fn hydra_trigger_trips_in_one_check() {
+        let mut h = Hydra::new(MemEventStore::new(), 3, base());
+        // Clean acyclic base ⇒ Live.
+        assert_eq!(h.integrity_check(), OrganismState::Live);
+        // Push a self-loop at exactly w = 1.0 (ρ = trigger) ⇒ trips immediately.
+        h.base_edges.push(TopoEdge {
+            from: 0,
+            to: 0,
+            weight: 1.0,
+        });
+        assert_eq!(h.integrity_check(), OrganismState::Locked);
+        assert_eq!(h.healthy_streak(), 0);
+    }
+
+    /// P-C §3.1 / §7 T1 (RED FIRST — proves the hysteresis bug). Adversarial
+    /// oscillation inducer: a self-loop edge on node 0 whose weight `w` is
+    /// dithered between `1.0 - DRIFT_BAND/2` and `1.0 + DRIFT_BAND/2` for 8
+    /// checks. A self-loop gives ρ = w exactly. Against the memoryless
+    /// `rho < 1.0 && rho.is_finite()` predicate this flaps every check (7
+    /// transitions); the post-fix hysteresis band collapses it to ≤ 2.
+    #[test]
+    fn hydra_integrity_flap_without_hysteresis_regression() {
+        use crate::spectral::DRIFT_BAND;
+        // Start Live (acyclic base). Add a self-loop on node 0 whose weight we
+        // rewrite between checks to dither ρ across 1.0.
+        let mut h = Hydra::new(MemEventStore::new(), 3, base());
+        h.base_edges.push(TopoEdge {
+            from: 0,
+            to: 0,
+            weight: 1.0,
+        });
+        let low = 1.0 - DRIFT_BAND / 2.0; // = 0.9999995
+        let high = 1.0 + DRIFT_BAND / 2.0; // = 1.0000005
+        let mut states = Vec::new();
+        let mut prev: Option<OrganismState> = None;
+        let mut transitions = 0usize;
+        for i in 0..8 {
+            // Alternate low/high across the 8 checks.
+            let w = if i % 2 == 0 { low } else { high };
+            // Rewrite the self-loop weight directly (tests module mutates base_edges).
+            h.base_edges.last_mut().unwrap().weight = w;
+            let s = h.integrity_check();
+            if let Some(p) = prev {
+                if p != s {
+                    transitions += 1;
+                }
+            }
+            states.push(s);
+            prev = Some(s);
+        }
+        // Assert the oscillation is bounded. Pre-fix (memoryless) code produces
+        // 7 transitions; the hysteresis fix must hold it to ≤ 2.
+        assert!(
+            transitions <= 2,
+            "integrity_check flapped {transitions} times (states={states:?}); \
+             hysteresis band must bound Live<->Locked transitions to ≤ 2"
         );
     }
 }
