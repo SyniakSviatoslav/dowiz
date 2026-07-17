@@ -29,5 +29,11 @@ default = []
 # (engine/src/bridge.rs::gpu::new_gpu). When `cargo add wgpu` succeeds (network),
 # implement the real `wgpu::Device`/`Queue` sink here and flip new_gpu to build it.
 gpu = []
+# P11 §5 (E23 scaffolding): WebGL render boundary, EMPTY by design — no deps pulled.
+webgl = []
+# P11 §5 (E23 scaffolding): WebGPU render boundary, EMPTY by design — no deps pulled.
+webgpu = []
+# P11 §5 (E23 scaffolding): Gaussian-splat reconstruction boundary, EMPTY by design — no deps pulled.
+splat = []
 
 [dev-dependencies]
