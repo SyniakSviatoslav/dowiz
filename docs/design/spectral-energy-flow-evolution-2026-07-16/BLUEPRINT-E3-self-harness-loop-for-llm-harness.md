@@ -225,6 +225,226 @@ loop's own GREEN authorizes anything — the cheapest honest step from *hand-tun
 
 ---
 
+## Extended Context
+
+Of the seven blueprints raised this session, **this is the one with the sharpest self-certification
+risk, and it is not close.** The other six extend a computed object (a Laplacian, a CLT envelope, a
+lineage seam) whose correctness is external to the extending agent. This one is an agent proposing
+changes to *its own operating parameters* — the token budget, cache policy, and model routing that
+govern how the same agent thinks. When the proposer and the validator are one session, the loop's
+GREEN is a statement the loop makes about itself, and "validation" collapses into decoration (RC-2, the
+audit's exact finding shape for the hermes done-gate #2 and the unfed `FalseClaimMeter` #7). This is
+precisely why the phase split is not a convenience but the load-bearing safety structure: **Phase A is
+advisory-only** — it proposes and signals, a human applies, so a self-run measurement can never
+silently *become* applied state — and **Phase B (auto-apply) is hard-blocked on P06's `key_V`**
+independent re-execution path, which today has zero code hits outside docs, lives cross-repo on the
+bebop2 PQ substrate, and is itself blocked on Phase 3 closing the C4b `mod_l` side-channel. Auto-apply
+is not "later"; it is structurally unbuildable until an identity that the proposer cannot be re-runs the
+frozen suite and signs the verdict.
+
+That discipline was reached here **independently of, and before, the agentic-mesh-protocol arc** —
+whose entire design rests on the same refusal, expressed in mesh vocabulary as the rejection of *inline
+self-auditing* (a node cannot vouch for its own state; trust must be a signed capability re-checked by a
+distinct party, never a self-asserted score). The two arcs converged on the identical rule from opposite
+starting points — one from a single Kalman scalar's propose/guard/accept loop, the other from mesh
+trust topology — and that convergence is worth naming as **evidence the discipline is structural, not
+stylistic**: two independent derivations landing on "the validator must be a party the proposer cannot
+be" is a much stronger signal than either alone. The dependency now runs in reverse, too — the mesh
+arc's `AgentManifest` config-axes design (B1) explicitly follows *this* blueprint's Phase-A
+proposal-lattice shape (single-axis, bounded, enumerable, DATA-not-free-form), so the pattern minted
+here is already load-bearing outside its own arc.
+
+What breaks without this blueprint is concrete and current: **the LLM harness (`llm-adapters/`) has
+zero tuning loop.** Every config choice — `workers`, `capacity`, `refill_rate`, `cache`, `max_tokens`,
+`top_p`, `temperature`, `cache_policy`, model-per-`TaskClass` — is a static default set once in
+`StackBuilder`/`ChatRequest` at deployment and never revisited against real usage. The
+`track_record.jsonl` harvest ledger already streams the exact signal that would say *which* knob is
+weak (per-model success-rate, token cost, EV), and the `EvalRow` trace log is a durable record with no
+in-kernel reader at all. The data to improve the harness flows today and is thrown away. This blueprint
+is the reader that turns it into a proposal — advisory, single-axis, human-gated — instead of a
+never-consulted log.
+
+---
+
+## Definition of Done
+
+This DoD is **distinct from and additional to** the §4 acceptance criteria (which test the loop's
+behaviour on fixtures). It governs *when the work may be called finished* and, more importantly, the
+hard boundary between the two phases.
+
+**The Phase A / Phase B split is a HARD DoD boundary, stated without euphemism:**
+
+1. **Phase A is independently completable.** All seven §4 acceptance criteria pass; the module header is
+   stamped *advisory-only; auto-apply gated on P06 `key_V`; canonical-repo DEV-TIME scope (M5/M6)*; a
+   grep for any apply-call from the loop returns nothing (criterion #6). When these hold, **Phase A is
+   DONE** — it does not wait on Phase B, on `key_V`, or on anything cross-repo. Phase A shipping is a
+   real, closeable deliverable.
+2. **Phase B cannot be STARTED — not merely "is not yet done" — until `key_V` exists.** This is the
+   distinction that matters: there is no partial Phase B, no scaffolding-ahead, no "wire the apply path
+   now and gate it behind a flag." An apply path built before `key_V` is RC-2 self-certification the
+   moment it can fire, regardless of the flag's default. The DoD for *beginning* Phase B design is a
+   single external precondition: `BLUEPRINT-P06`'s `key_V` independent re-execution path exists in code
+   (fresh worktree, `key_K ≠ key_V`, signed verdict), which today it does not (zero code hits outside
+   docs). Until then, the only legal Phase-B artifact is the named precondition itself. **Attempting
+   Phase B before `key_V` is a scope violation, not early progress.**
+
+**Re-verification ledger (live, this pass, against the CURRENT worktree state).** Because the
+harness/LLM-backend work merged since this blueprint was first written, the config surface was
+re-verified line-by-line. Result:
+
+3. **The proposal-lattice axis list is accurate and needs no correction.** All five named surfaces are
+   unchanged from the blueprint's §1/§2 description: `StackBuilder` (`compose.rs:75-82`: `workers` def 2,
+   `capacity` def 64, `refill_rate` def 8.0, `cache` def true — `workers` clamps `n.max(1)`, which the
+   `{1,2}` domain already respects); `ChatRequest` (`ports/llm.rs:43-75`: `temperature` 0.0, `top_p` 1.0,
+   `max_tokens` 1024, `seed: Option<u64>`, `task_class`, `cache_policy`, `options`); `CachePolicy`
+   (`:78-87`: `Exact`/`SemanticOk`/`NoCache`, with the `:52-55` doc-contract that gate-critical callers
+   MUST NOT use `SemanticOk` — the lattice's exclusion of `SemanticOk` is still structurally justified);
+   `TaskClass` (`:28-33`: `Code`/`General`/`Embedding`); and `route_model` (`ollama.rs:36-45`:
+   Code→`qwen2.5-coder:7b`, General→`llama3.1:8b`, Embedding→`nomic-embed-text`, request `model_id`
+   override). **Every lattice axis and domain in §2's table maps to a live knob.**
+4. **The no-retry correction still holds.** `quirks.rs` (`:11-28`) contains only wire-correctness deltas
+   (`pass_tag_ids_verbatim`, `strip_sentinel_fingerprint`, `embeddings_path`,
+   `native_embeddings_path`, `surface_options`, `extra_headers`) — no retry/backoff field.
+   `dispatch.rs` remains degrade-closed with a typed `BudgetExceeded` and no retry anywhere in the file.
+   The research sketch's invented "retry policy in `quirks.rs`" is still correctly excluded from the
+   lattice; do not re-introduce it.
+5. **One additive delta found — recorded, not a contradiction of §1.** The `Dispatcher`'s harvest row
+   grew (commit `c7f53c689`, "consumer wiring + EV-loop close"). `track_record.jsonl` now emits the
+   gov_route-compatible **superset** `{model, task, success, value, cost, backend, tokens, ms}`
+   (`dispatch.rs::append_harvest` `:135-148`) — the §1 field list `(model, task, success, tokens, ms,
+   cost)` is still present and correct but **incomplete**: it omits `value` (the EV numerator, default
+   0.0, supplied by the caller/agent loop) and `backend`. More importantly, `track_record.jsonl` **now
+   has a native in-process Rust reader** it did not have when §1 was written: `decode_track_record`
+   (`dispatch.rs:156`) plus the `Telemetry::from_ledger` fold (`telemetry.rs:73`), which already
+   computes per-model `dispatches`/`successes`/`success_rate`/`mean_tokens`/`total_value` — exactly the
+   weakness signal §2(i)'s reducer needs. **DoD consequence:** the Phase-A weakness-mining reducer MUST
+   reuse `decode_track_record`/`Telemetry` rather than re-parse the ledger (one schema, no drift — the
+   telemetry module's own stated discipline), and it SHOULD consume the `value` field as a weakness
+   signal, not just `success`/`tokens`. This enrichment strengthens §2(i)'s "bootstrap on live data"
+   claim; it does not weaken any existing statement, so §1's prose is left intact and the correction
+   lives here.
+6. **`EvalRow` still has zero in-kernel Rust readers** (confirmed live: only tests `:955`/`:997`/`:1012`
+   and the `lib.rs:154` re-export touch it; the external `analyze.mjs` remains the sole non-test
+   consumer). The blueprint's framing — that giving `EvalRow` its first reader is Phase A's first job —
+   is unchanged and still accurate.
+
+Phase A is DONE when items 1, 3–6 hold and §4 passes. Phase B's DoD does not begin to accrue until
+`key_V` lands.
+
+---
+
+## Event-Driven Architecture Treatment
+
+This blueprint is genuinely event-adjacent: `EvalRow::append_to` (`evals.rs:489`) is already a durable,
+append-only, fail-closed record, and the harvest ledger is a second append-only stream. The question
+is whether a **Phase-A proposal's full lifecycle** should be recorded as a sequence of typed events in
+its own durable log, so a future audit can reconstruct *why a config change was proposed and what
+evidence backed it* rather than seeing only the final report and having to trust it. **It should.** The
+lifecycle is a natural event sequence:
+
+```
+ProposalEvent =
+  | WeaknessMined      { bucket, fail_rate, source_ledger, rank }
+  | ConfigProposed     { axis, from, to, motivating_bucket }
+  | ValidatedFrozen    { suite_hash, pass_rate_before, pass_rate_after, gate_verdict }
+  | Tagged             { recommend | flag_regression, delta }
+  | HumanDisposition   { applied | rejected, operator_note }   // appended out-of-band by the human
+```
+
+Recording these as typed rows makes the propose/validate/reject cycle **auditable rather than
+ephemeral** — the exact Ananke/DoD goal: someone six months later can ask "why is `cache_policy` set to
+`NoCache` for Code?" and replay the `WeaknessMined → ConfigProposed → ValidatedFrozen → Tagged →
+HumanDisposition` chain that produced it, with the frozen-suite hash proving *which* suite scored it.
+The `HumanDisposition` event closes the loop the report alone cannot: it captures that a human actually
+saw and decided, which is the whole point of advisory posture.
+
+**Design call: a simpler local append-log (the `EvalRow` shape), NOT `kernel/src/event_log.rs`'s
+primitives directly.** The reasoning is specific, not aesthetic. `MeshEvent`
+(`event_log.rs:134`) is content-addressed over `(prev, actor_pubkey, actor_seq, payload)` and
+`EventLog::append` is built for a *mesh-shared, multi-actor, adversarial-trust* substrate — its
+identity field is a real signing key, and its whole value is that a distinct party can verify a
+node's claims. A Phase-A harness-tuning log is the opposite: **local, single-actor, dev-time
+(M5/M6 canonical-repo DEV-TIME scope), not mesh-shared state.** Forcing it through `MeshEvent` means
+either minting a fake `actor_pubkey` — which is *dishonest*, inventing a signing identity for a log
+that has none — or dragging the PQ-signing substrate into dev-tooling that has no trust boundary to
+defend. That is exactly the anti-pattern the mesh arc and this blueprint jointly reject. The right
+weight is `EvalRow`'s: a typed enum serialized to a local JSONL via the same fail-closed `append_to`
+appender, offline, deterministic, zero-dep.
+
+What *should* be borrowed from `event_log.rs` is the **pattern, not the code**: (a) append-only +
+fail-closed persistence (already `EvalRow`'s), and (b) optionally a lightweight **prev-line hash chain**
+using the kernel's existing SHA3 content-address helper (`event_log.rs:28`, `:146`) so the proposal log
+is *tamper-evident* — an auditor can detect a rewritten history — **without** an identity. That is a
+zero-cost integrity win that needs no signing key. Crucially, this leaves a clean **forward seam for
+Phase B**: when `key_V` eventually exists, the *validated-verdict* event is the one — and the only one —
+that graduates to full `MeshEvent`/signed semantics, because at that point an independent identity
+really is signing a real claim. In other words, Phase A's log is a local append-log by design, and the
+single event that becomes mesh-trust-relevant is exactly the event Phase B introduces. The architecture
+does not need to be retrofitted; it needs one event type promoted when its second party arrives.
+
+---
+
+## Long-Term Consequences, Safety, Scalability
+
+**(a) Scalability of the single-axis discipline.** "Perturb exactly one axis by one step from the last
+accepted config" is, in optimization terms, **coordinate descent** — and the honest statement is that it
+converges to a good configuration *only under assumptions that weaken as the lattice grows*. Today's
+nine axes with 2–3 values each give a small neighbourhood where near-exhaustive single-axis A/B is
+cheap and the proven scalar-loop shape (`propose_step`'s single Adam step) transfers cleanly. But two
+real scaling limits are foreseeable and should be named rather than papered over: **(i) iteration count
+grows at least linearly** with axis count — each accepted move re-opens the full axis fan, so a lattice
+of N axes needs O(N) validations per improvement round, and each validation re-runs the frozen suite;
+**(ii) coordinate descent cannot see axis interactions** — if the *joint* move `(max_tokens↑,
+temperature↑)` helps but neither single step does, single-axis search is blind to it and can stall in a
+coordinate-wise local optimum that is not a joint optimum. So the answer to "does single-axis-at-a-time
+scale indefinitely?" is **no, and this blueprint should not claim it does.** It is the correct *starting*
+strategy — minimal, provably-shaped like the scalar loop, near-exhaustively validatable — and the
+honest future-scaling question is: *when the axis count crosses roughly a dozen, or when suspected axis
+interactions appear in the weakness data, a smarter proposal strategy will be needed* (candidates,
+named for the future implementer, not adopted now: grouping correlated axes into joint moves, a
+screening/fractional-factorial design to find the interacting subset cheaply, or a small surrogate model
+over the lattice). This is flagged as a real future-work trigger, not solved here.
+
+**(b) Safety — the worst case for Phase A specifically.** The dangerous case is not a bug in the
+propose/validate loop; it is a proposal that **passes the frozen validation suite and is nonetheless
+bad in a way the suite does not cover** — the suite's own blind spot. Example: raising `max_tokens`
+lifts the metamorphic pass-rate (longer answers satisfy more oracles) while quietly tripling token cost
+and latency in production, which the offline suite never measures. Because Phase A **never auto-applies**,
+the last line of defense is the human reviewer — so the safety question reduces to: *what does the human
+actually SEE?* If the report surfaces only a `recommend` / `flag-regression` **pass/fail tag, that is a
+real gap in the human-in-the-loop safety story** — a human rubber-stamping a green tag catches nothing
+the suite missed, and the "human as second party" mitigation (§5) degrades to theatre. The design must
+therefore surface the **full evidence trail on every recommendation**, not a verdict: (1) the
+weakness-mining data that motivated the axis (which bucket, its fail-rate, its rank, from which ledger);
+(2) the before/after **frozen-suite scores** with the measured delta, not just "improved"; (3) the exact
+`(axis, from, to)` diff and the deterministic mapping-table rule that selected it; and — tying in E2 —
+(4) the **confidence interval** on the pass-rate delta (a +2% move whose CI straddles zero is not the
+same evidence as a +2% move with a tight CI). Surfacing (1)–(4) is what lets a human catch a
+suite-blind-spot regression *that the suite itself declared green*. **Recommendation: promote "full
+evidence trail per proposal" from an implied nicety to an explicit Phase-A acceptance requirement** — it
+is the only thing that makes the human a real reviewer rather than a green-light presser, and it is the
+concrete fix for the gap this walk-through exposes.
+
+**(c) Ethics / long-term — the complacency failure mode.** §5 already names this blueprint's honest
+residual limitation (the validator's *identity*, not just its verdict, is what Phase A cannot supply).
+The long-term risk is that the operator **forgets** this and starts treating a running string of
+Phase-A `recommend` flags as authoritative — applying them reflexively without reading the evidence
+trail from (b), which quietly re-creates the exact self-certification the phase split exists to prevent,
+just with a human as the silent conduit. A one-time caveat in a doc header does not defend against this;
+memory decays and headers go unread. The structural nudge is to make the warning **impossible to
+forget without actively ignoring it**: every single recommendation the loop emits — every row of the
+report, not one banner at the top — carries an inline marker, e.g. `⚠ NOT independently verified —
+advisory only; auto-trust requires P06 key_V (absent)`. The property that matters is *repetition at the
+point of decision*: complacency then requires the operator to ignore the same warning on every proposal
+they act on, which is a conscious, visible choice, rather than the passive drift of forgetting a caveat
+they read once. This is the same "friction, not a gate" philosophy the repo already applies to advisory
+signals (the Markov-attractor loop-signals precedent) — the loop cannot and must not *stop* a human from
+applying a change, but it can make sure the human is told, every time, exactly how far short of
+independent verification the recommendation stands. When `key_V` lands, that marker is the line that
+flips to `✓ independently re-executed (key_V)` — and only then.
+
+---
+
 *Blueprint E3 complete. Scope: cluster 4 (Self-Harness) at harness-config scale. Reuses the
 `evals.rs` propose/guard/accept/rollback machinery (`:545-764`) and the `llm-adapters/` config surface
 (`compose.rs`/`ports/llm.rs`/`ollama.rs`) verified live on `feat/spectral-energy-flow-evolution`

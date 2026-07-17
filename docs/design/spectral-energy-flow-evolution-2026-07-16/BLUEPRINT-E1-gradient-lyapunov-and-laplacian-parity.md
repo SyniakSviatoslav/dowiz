@@ -244,5 +244,255 @@ Lyapunov certificate) and honestly defers the full one-implementation unificatio
 bind to named future work. The incidence primitive it lands is also the natural seed for finding
 #22's `from_edges` conversion hub and #25's second-party checks, should those triggers fire next.
 
+---
+
+## §6 — Extended Context
+
+**Why this matters beyond closing a Hermetic finding — the split is a *latent* bug, and its
+invisibility is the danger.** Today the CI is fully green: `field_frame`'s stencil (`−(D−A)`) and
+`csr`/`spectral` (`+(D−A)`) each have their own passing tests, and *nothing is red*. That green is
+precisely the hazard. A latent sign bug that produces zero failures is worse than a loud one, because
+it carries no pressure to be fixed and it will ship silently into the first caller who crosses the
+seam. The only thing standing between the split and a production incident is the *accident* that no
+caller has yet computed a step with the `+`-convention operator and fed it into the `−`-convention
+integrator (or vice-versa). `engine/src/bridge.rs:125` is the near-miss on the record: `apply_field`
+already calls `laplacian_spmv(.., Normalized)` in a non-test `impl` block — reached only from tests
+today, but a wired public API one call away from the seam. The remediation plan named exactly this
+condition as the trigger to un-suspend finding #8; it has fired.
+
+**What a caller crossing the unpinned seam would actually observe.** Physical diffusion is
+`∂U/∂t = +c²∇²U` with `∇² = −(D−A)` — it drives a field toward its local average and *settles*, energy
+monotone down, the screen relaxing into smooth gradients. If a caller assumes the `+(D−A)` sign the
+kernel operators expose and plugs *that* into the integrator's diffusion term, the effective sign
+flips to anti-diffusion: the eigenmodes with the **largest** Laplacian eigenvalue now grow fastest,
+the field's amplitude increases every step, and the simulation **blows up** — an exponential
+divergence that saturates to `NaN`/`Inf` within tens of steps once `f32` overflows, rendered as a
+display that explodes into noise instead of quieting. The decisive point: the existing
+bounded-and-converges test (`field_frame.rs:273-316`) runs the *correct internal path* and stays
+green throughout — it cannot see the mismatch because it never crosses the seam. **No test in the
+tree has a failure mode that says "a caller wired the wrong-sign operator into the integrator."** That
+absence — not any defect inside either module — is the finding, and the sign-pin test (§2a #3 /
+§4.2) is the missing tripwire.
+
+**Connection to the agentic-mesh-protocol arc (B1-B4): honestly, there is none — and saying so is the
+point.** Direct check of the sibling arc: B1 (`AgentBridge` port + signed manifest admission), B2
+(`WorkReceipt` + HTLC settlement), B3 (`ExposureLedger` + rate envelopes), B4 (crypto ground-truth
+bench + Ed25519 batching) are the mesh's *economic-trust and admission-capability* layer — "who may
+act, and what they owe." The **only** occurrence of "spectral" anywhere in the entire B-series is a
+documentation cross-reference in B1's header pointing at E3's self-harness blueprint; not one B
+blueprint reads, extends, or depends on `laplacian`, `incidence`, `field_frame`, `noether`, or the
+Dirichlet energy. E1's Laplacian work and the mesh protocol are **orthogonal**, and forcing a link
+would be exactly the metaphor-discipline (V6) violation this arc's classification was built to reject
+(it is why clusters 6 and 7 were rejected). The one substrate the two arcs *could* have shared —
+`event_log.rs::commit_after_decide` (H1/hydra), which the mesh work touches for money/receipt events —
+E1 does **not** touch at all: E1 is pure kernel math plus a test-side gate, changing no runtime
+contract. That non-overlap is what makes E1 Wave-0 parallel-safe not just with H1-H4 but with the
+whole B-series.
+
+---
+
+## §7 — Definition of Done
+
+The §4 acceptance criteria are per-artifact falsifiable checks. This DoD is the complementary
+*boundary and integration* contract: what "done" includes, what it deliberately excludes, and how it
+sits against work already shipped this session.
+
+**In scope — E1 is done when:**
+- All six §4 acceptance criteria are green, each pin/gate witnessed **RED→GREEN** against its injected
+  break first (the sign-pin goes red on a flipped `field_frame.rs:103`; the energy gate goes red on
+  the anti-diffusion and negated-Γ variants).
+- The three deliverables exist and no more: `kernel/src/incidence.rs` (new reference operator),
+  `noether::lyapunov_nonincreasing` (~15-line one-sided sibling in the existing file), and the
+  engine-side energy-gate **test** module. One `pub mod incidence;` line in `kernel/src/lib.rs`.
+- The doc-side ledger is reconciled (a **documentation** action, not code): remediation-plan finding
+  #8's row is marked "code-half landed," and the arc gains its MEMORY.md index line (per
+  `SPECTRAL-EVOLUTION-CONSOLIDATED.md` §6 Ananke).
+
+**Out of scope — "done" explicitly does NOT include (each deferred item is a named E53-form waiver,
+not a silent drop):**
+1. **Merging the ≥4 Laplacians into one implementation.** The dense/CSR/implicit-grid trio stay
+   separate hot-path representations, bound by parity tests, *not* collapsed (§2b). See §9(c) for the
+   debt this books and its revisit trigger.
+2. **bebop `core/field.rs:82` cross-repo bind — confirmed still deferred, and now *owned*.** The
+   existing §2b text names this as future work but assigns no owner; this DoD closes that gap in E53
+   form so it is a real, trackable item rather than a floating "future work":
+   > *what:* parity-bind bebop's fourth Laplacian (`core/field.rs:82`) to the dowiz reference operator.
+   > *why-suspended:* a cross-repo bind needs a shared fixture/crate; finding #18's lesson is that
+   > cross-repo *comment*-pins do not hold. *named-owner:* the next author to touch bebop
+   > `core/field.rs` (cross-listed on the bebop UNIFIED-DELIVERY arc — do **not** mint a second owner).
+   > *revisit-trigger:* a shared kernel/fixture crate spanning dowiz⊕bebop exists (removing the #18
+   > fragility), **or** `field.rs:82` gains a caller crossing into dowiz-shared state. *date:*
+   > 2026-07-16.
+3. **The Normalized-Laplacian branch is NOT parity-bound.** The fixtures bind `Unnormalized +(D−A)`
+   (and the dense operator); the live trigger caller `bridge.rs:125` uses `laplacian_spmv(Normalized)`
+   — a *different* operator the parity web does not cover. Recorded here and in §9(b) as a known
+   coverage gap with its own trigger ("a Normalized-convention consumer moves from wired-API to a live
+   loop" ⇒ add a Normalized parity fixture).
+4. **No `FieldFrame::step` runtime change, and no wiring of the energy gate into a live loop.** The
+   gate is a test-side adapter (§2b); promoting it to a runtime detector is a separate, triggered
+   decision (§8).
+5. Completing finding #22's `mat.rs`/`from_edges` consolidation hub (future; the incidence primitive
+   is its natural seed, not its delivery).
+
+**Sequencing against the Hermetic-remediation work already shipped this session — E1 duplicates
+nothing:**
+- **vs H2 (mirror-pin sweep).** H2 pinned two mirrors of a *different kind*: `DT_STABLE` (an `f32`
+  constant) and `DriftClass` (a three-variant enum + its wire mapping) — **scalar/enum value**
+  mirrors, pinned by self-assertion tests, touching `field_frame.rs` (dt default), `spectral.rs`
+  (`wire_code`), `wasm.rs`, `loop_.rs`, and the spool tools. E1 binds the **operator** mirror — the
+  function identity `L = D−A` across three *implementations* — by property tests on shared graph
+  fixtures, touching `incidence.rs` (new), `noether.rs`, and test modules. Same *discipline*
+  (pin-by-test over independent declarations), **different objects**, **disjoint files**. This is not
+  overlap but the explicit hand-off: H2 §5 states its work "narrows the remaining unpinned-mirror
+  surface … to the Laplacian operator identity itself, which H-series Correspondence work … can then
+  address in isolation" — **E1 is that isolation.** The single shared file, `field_frame.rs`, E1
+  touches test-only (or not at all if the gate lands in a separate test file); H2 Site-1 already
+  landed the `dt` pin there (`field_frame.rs:51` reads `DT_STABLE`) and E1 does not revisit it.
+- **vs H1 (event-log `Result` fix).** H1 restored the typed `StoreError` failure pole on `EventStore`.
+  E1 touches the event log **not at all**, so there is no ordering constraint — strictly parallel.
+- **Net:** E1 has one *soft* prerequisite (H2, whose Site-1 is already on this branch, narrowing the
+  seam and supplying the template) and zero hard ones. It may land independently of the remaining
+  Hermetic rows.
+
+**Done does NOT mean** "all Laplacians unified" nor "the field integrator carries a runtime energy
+alarm." It means: one canonical reference operator exists, one sign convention is pinned across the
+seam by a red-provable test, and the integrator carries a falsifiable, non-vacuous energy-monotonicity
+certificate — with every larger ambition booked as a named, triggered waiver.
+
+---
+
+## §8 — Event-Driven Architecture Treatment
+
+**Plainly: this is kernel MATH machinery — Laplacian operators, a Dirichlet energy functional, a
+Lyapunov check — and it is not naturally event-sourced.** The incidence primitive, the parity tests,
+and the energy gate are pure, deterministic functions over state vectors; there is no command, no
+projection, no fold, no `MeshEvent` in the design, and none is being retrofitted. Forcing an
+event-sourcing frame onto operator algebra would be ceremony without a consumer.
+
+**The one genuine question worth a real call: if `noether::lyapunov_nonincreasing` ever detected an
+energy-monotonicity violation at *runtime* — a live field simulation in production, not a test —
+should that emit an auditable, replayable `MeshEvent` ("the field integrator's energy invariant was
+violated at tick N"), the way `hydra.rs::integrity_check` failures already do via
+`raise_breach_alarm`?**
+
+**Design call: NO — no `MeshEvent`, no runtime mesh alarm. Justified, not defaulted:**
+
+1. **The field integrator is client-side UI physics, not a mesh-trust computation.** `FieldFrame`
+   lives in the `engine` crate, which is CPU-side and whose `Cargo.toml` states plainly that GPU/wasm
+   is "a display surface" — it is the ambient-field renderer for the Sea interface. Its output is
+   *pixels*. Nothing downstream trusts the field's energy the way the mesh trusts a signed
+   `WorkReceipt` or the organism trusts its own persisted topology spectrum.
+2. **Contrast with `raise_breach_alarm` is categorical, not degree.** That alarm fires because the
+   **kernel core's own base-topology spectral radius** crossed `ρ≥1` (`hydra.rs:180-194`) — evidence
+   the persisted, hash-chained core was *tampered by foreign code*. That is intrinsically
+   mesh-trust-relevant: a tampered core is an attack on every peer in the hub ("одне взломане ядро =
+   взлом усіх"), so it self-witnesses to the WORM log (content-addressed evidence row) and broadcasts
+   an ML-DSA-signed, unsuppressable alert. An energy violation in a client's field renderer has **no
+   cross-peer consequence**: it is a numerical or authoring bug in one client's UI; forging or
+   suppressing it social-engineers nobody; no settlement, admission, or fold decision consumes the
+   number. It fails the exact test this arc used to reject clusters 6 (quantum-steering trust) and 7
+   (circuits) — *no mesh-trust decision reads it.*
+3. **The blueprint already places the check test-side, where the correct auditable record is CI, not
+   a runtime event.** A Lyapunov violation in the engine-side test module is a **test failure** — CI
+   red plus git history is the replayable, durable log for a dev-time invariant, exactly as
+   `noether::catches_euler_energy_drift` is a *test*, never a runtime alarm. Emitting a `MeshEvent`
+   from a CI assertion would be a category error.
+4. **Where the answer would flip — the named trigger.** IF the field integrator were ever promoted to
+   a mesh-trust role — field energy becoming an input to a settlement/admission decision, or a
+   *server-side* (not client) field computation feeding shared state — THEN a runtime detector
+   emitting a `MeshEvent` **would** be warranted, and the shape already exists to reuse:
+   `commit_after_decide` / the breach-witness pattern, `payload = {tick N, E_prev, E_next,
+   operator-id}`, self-witnessing and replayable. That promotion is out of scope (§7 item 4) and
+   should itself be an E53-triggered decision. **Revisit-trigger:** *field energy becomes an input to
+   any mesh-trust decision (settlement, admission, or a shared-state fold), or the field integrator
+   runs server-side rather than client-side.* Until then: no runtime mesh event-sourcing, by design.
+
+---
+
+## §9 — Long-Term Consequences, Safety, Scalability
+
+**(a) Scalability of the incidence `grad`/`div` primitive.** First, an honest correction to the
+premise: in the *shipped* design the incidence operator does **not** run on every field-integrator
+step. `FieldFrame::step` (`field_frame.rs:143-160`) keeps the hand-rolled 5-point stencil
+(`field_frame.rs:146`) as the runtime operator, unchanged (§4 acceptance #6); `incidence.laplacian` is
+the **test-side reference oracle**, exercised on fixture graphs (`K₃`, `P₃`, a small lattice). So its
+runtime cost is a non-question for production — it runs `O(once)` in CI on graphs of a handful of
+nodes. Addressing the hypothetical the question raises (a future caller wiring incidence — or the
+energy check — into a live per-step loop):
+- *Stencil:* one `Vec<f32>` alloc of `w·h`, one structured strided pass with fixed `±1`/`±w` offsets
+  (cache-friendly), ~5 flops/cell — sub-millisecond well past `256×256`.
+- *Incidence `L = BᵀWB`:* `grad` allocates a `Vec<f64>` of length `n_edges`, `div` a `Vec<f64>` of
+  length `n`; for a `w×h` grid `n_edges ≈ 2·w·h`, so ~2-3× the memory traffic **plus** edge-indexed
+  gather/scatter (each edge touches two arbitrary node indices ⇒ cache-unfriendly indirect access,
+  unlike the stencil's fixed offsets) **plus** `f64` vs the stencil's `f32`.
+- *Crossover:* incidence is more expensive at *every* grid size (strictly more allocation, worse
+  locality), but the **absolute** gap only becomes measurable — say the >1 ms/step that threatens a
+  16 ms 60 fps frame budget — once `w·h` reaches the tens of thousands (a `256×256 ≈ 65k`-cell field),
+  where the stencil is still comfortably sub-ms but the incidence gather begins thrashing cache. Below
+  ~`64×64` (~4k cells) the difference is noise.
+- *Does it matter?* For the shipped design, **no** — incidence never touches the hot path. For the
+  hypothetical, it runs **client-side in the UI** (the engine is a CPU-side display renderer), *not*
+  the mesh-critical path: a client dropping frames on its own ambient-field animation degrades that
+  one client's visual smoothness and harms no peer and no ledger. The worst-case blast radius is one
+  client's frame-rate. This is precisely why keeping the stencil as the runtime operator and incidence
+  as the test oracle is the right split — full parity guarantee, zero incidence cost where it would
+  bite.
+
+**(b) Safety — can a passing parity test give false confidence?** Yes, and this is a real limit of
+test-based parity-binding versus a proof, stated honestly. Two implementations can agree on the
+*test's specific topology* while diverging on one the test never exercises. Concrete divergence classes
+the `K₃`/`P₃`/small-lattice fixtures do **not** cover:
+- *Self-loops / multi-edges* — incidence's "one oriented edge per undirected pair" contract and CSR's
+  symmetric two-edge doubling handle these differently.
+- *Disconnected graphs / isolated (degree-0) nodes* — empty rows.
+- *Signed or zero edge weights.*
+- *Large-degree hub nodes* — floating-point summation order in the accumulator differs between
+  implementations (non-associativity), so an exact `==` parity assertion could even *falsely fail*, or
+  a `tol`-based one *falsely pass*.
+- **The sharpest hole: the Normalized Laplacian.** The parity web binds `Unnormalized +(D−A)`, but the
+  live trigger caller `bridge.rs:125` uses `laplacian_spmv(Normalized)` — `D^{-1/2}(D−A)D^{-1/2}`, a
+  *different operator* the fixtures never touch. **The test that "fires" on the trigger caller does not
+  cover the branch that caller actually uses.**
+
+Named honestly: test-based parity-binding proves *agreement on the tested topologies*, not *operator
+identity* — an existence-of-agreement check, not a `∀`-graphs proof. Closing the gap meaningfully
+needs either (1) a symbolic/algebraic equivalence argument (both structurally compute `BᵀWB`), or,
+more practically, (2) **topology-diverse property testing** — a `proptest`/`quickcheck` generator over
+random `n`, random edge sets *including* self-loops, multi-edges, disconnected components, and random
+weights, **plus** an explicit Normalized-convention parity fixture binding the `bridge.rs:125` branch.
+Until that Normalized fixture exists, the DoD (§7 item 3) records "Normalized branch unbound" as a
+known coverage gap. The minimum fixture additions to move from "green on three graphs" toward "green
+on the divergence classes that bite": a disconnected graph, a non-unit-weighted graph, a hub/star
+graph (degree + summation-order stress), a self-loop/multi-edge case exercising the incidence-vs-CSR
+contract difference explicitly, and the Normalized parity test.
+
+**(c) Long-term — the debt of three parity-tested implementations.** The decision to keep three
+hot-path representations (dense for the `n≤32` eigensolve, CSR for PPR/SpMV sparsity, allocation-free
+implicit-grid stencil for the UI hot path) bound by parity tests *rather than merged into one* books
+concrete debt: every future edit to any one of the three must re-run and, for new cases, extend the
+parity suite; a new Laplacian variant (a fourth hot path, or the currently-unbound Normalized branch)
+must be *actively added to the parity web* or it drifts unpinned; and the tests are the *only* thing
+holding the identity — tests can be skipped, weakened, or left behind, so the guarantee is exactly as
+durable as the suite's upkeep. **Is this permanent or temporary?** Honestly: a *deliberate,
+possibly-permanent* scope-narrowing, not an accident. The three representations serve genuinely
+different performance profiles, and merging would pessimize at least two while touching the
+eigensolver and the integrator (§2b) — so this is not debt awaiting an obvious payoff. It is
+**revisitable but not urgent**, and it carries a named trigger in the same E53-waiver discipline the
+arc uses elsewhere:
+> *what:* unify the ≥3 Laplacian implementations behind one operator (retire parity-by-test for
+> identity-by-construction). *why-suspended:* three distinct hot-path performance profiles; merge
+> pessimizes ≥2 and is a much larger refactor. *named-owner:* the kernel-operators owner (E1's
+> `incidence.rs` author; same owner as finding #22's `from_edges` hub). *revisit-trigger:* a **fourth**
+> Laplacian representation is proposed, **or** the parity suite's maintenance cost (parity-test edits
+> per Laplacian change) exceeds what a single-implementation refactor would remove, **or** finding
+> #22's `mat.rs` `from_edges` hub lands as the single home. *date:* 2026-07-16.
+
+Until a trigger fires, "three implementations, parity-tested" is the standing architecture — a
+conscious choice with a written exit condition, not silent debt.
+
+---
+
 *Verified live on `feat/spectral-energy-flow-evolution` as of 2026-07-16. Read-only planning
-artifact; no source code was written or edited.*
+artifact; no source code was written or edited. §6-§9 added 2026-07-17; all file:line and cross-arc
+claims (`hydra.rs`, `event_log.rs`, `field_frame.rs`, `engine/Cargo.toml`, B1-B4 mesh blueprints,
+H2 §5) re-read live before writing.*
