@@ -419,6 +419,59 @@ pub fn v1_verify(pos: &[String]) -> i32 {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Note-emitter helpers (BLUEPRINT-H3 §consume): the *note production* side, as
+// a downstream breach-probe arc (hermetic H3 / spectral E3) would call them
+// BEFORE writing the two git notes. NO cryptography — these mirror exactly the
+// encode() shapes the gate consumes, so an honest probe verdict can be proven
+// end-to-end through `evaluate_gate` without ever touching the C4b crypto slot.
+// ---------------------------------------------------------------------------
+
+/// Build the key_K DiffAttestation note (raw TLV bytes), as an honest diff-owner
+/// would before `git notes --ref v1-diff-attest add`. Unsigned (Phase-1 state).
+pub fn build_attestation(
+    commit: [u8; 32],
+    diff_sha3: [u8; 32],
+    base_sha3: [u8; 32],
+    key_k: [u8; 32],
+    redline_touch: u8,
+    timestamp: u64,
+) -> Vec<u8> {
+    DiffAttestation {
+        commit_sha3: commit,
+        diff_sha3,
+        base_sha3,
+        key_k_anchor_id: key_k,
+        redline_touch,
+        timestamp,
+    }
+    .encode()
+}
+
+/// Build the key_V Verdict note (raw TLV bytes) bound to a DiffAttestation.
+/// `diff_attest_sha3` is computed as the canonical binding `digest32(attest_raw)`
+/// — exactly what `evaluate_gate` §5.3 re-derives — so the hash-binding bites.
+/// `recomputed_diff_sha3` is the verifier's independent recomputation of the
+/// diff digest. Verdict is GREEN (0x01), unsigned (Phase-1 state).
+pub fn build_verdict(
+    attest_raw: &[u8],
+    recomputed_diff_sha3: [u8; 32],
+    key_v: [u8; 32],
+    ctx: &str,
+    rationale: &str,
+) -> Vec<u8> {
+    let diff_attest_sha3 = digest32(attest_raw);
+    Verdict {
+        diff_attest_sha3,
+        recomputed_diff_sha3,
+        verdict: 0x01,
+        key_v_anchor_id: key_v,
+        context_descriptor: ctx.to_string(),
+        rationale: rationale.to_string(),
+    }
+    .encode()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -576,5 +629,60 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0)
+    }
+
+    // -----------------------------------------------------------------------
+    // H3 end-to-end contract proofs (BLUEPRINT-H3 / Wave B)
+    // -----------------------------------------------------------------------
+
+    /// Prove an H3-style breach-probe verdict flows through the P06 gate GREEN,
+    /// produced entirely via the note-emitter helpers above, unsigned/honest.
+    #[test]
+    fn h3_verdict_flows_through_gate_green() {
+        let key_k: [u8; 32] = [0x11; 32];
+        let key_v: [u8; 32] = [0x22; 32]; // distinct anchor: K ≠ V
+        let diff_sha3: [u8; 32] = [0x99; 32];
+        let commit: [u8; 32] = {
+            let mut c = [0u8; 32];
+            c[0] = 0xAB;
+            c
+        };
+        let base: [u8; 32] = [0u8; 32];
+
+        let attest = build_attestation(commit, diff_sha3, base, key_k, 0, 1_700_000_000);
+        // verifier's independent recomputation of the diff digest == author's
+        let verdict = build_verdict(&attest, diff_sha3, key_v, "h3-breach-probe", "no breach found");
+
+        assert_eq!(evaluate_gate(&attest, &verdict, false), GateVerdict::Green);
+    }
+
+    /// Prove the §5.3 hash-binding actually bites: a downstream arc cannot
+    /// present a verdict bound to a different attestation. Flipping the
+    /// verifier's recomputed diff_sha3 (which propagates into the binding via
+    /// the verifier's own gate recomputation of attest) is caught as RED.
+    ///
+    /// Here we simulate a *mismatched* verdict by building it against the wrong
+    /// attestation (so `diff_attest_sha3` no longer equals `digest32(real
+    /// attest)`), then running the gate on the real attestation.
+    #[test]
+    fn h3_binding_mismatch_rejected() {
+        let key_k: [u8; 32] = [0x11; 32];
+        let key_v: [u8; 32] = [0x22; 32];
+        let diff_a: [u8; 32] = [0x99; 32];
+        let diff_b: [u8; 32] = [0x77; 32];
+        let commit: [u8; 32] = [0u8; 32];
+        let base: [u8; 32] = [0u8; 32];
+
+        // real attestation for diff_a
+        let attest_a = build_attestation(commit, diff_a, base, key_k, 0, 1_700_000_000);
+        // a verdict honestly built against a DIFFERENT attestation (diff_b)
+        let attest_b = build_attestation(commit, diff_b, base, key_k, 0, 1_700_000_000);
+        let mismatched = build_verdict(&attest_b, diff_a, key_v, "h3", "mismatched binding");
+
+        // gate must REJECT: verdict.diff_attest_sha3 != digest32(attest_a)
+        assert!(matches!(
+            evaluate_gate(&attest_a, &mismatched, false),
+            GateVerdict::Red(s) if s.contains("bind")
+        ));
     }
 }
