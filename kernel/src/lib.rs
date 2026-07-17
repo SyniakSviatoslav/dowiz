@@ -36,6 +36,10 @@ pub mod chunker;
 /// (retrieval-blueprint v2 diffusion/recall primitive).
 pub mod csr;
 pub mod domain;
+/// P04 product-math: Disjoint-Set Union (union-find) + Kruskal MST — the single
+/// canonical DSU/MST primitive. `cgraph::c_components` delegates here; Phase 9
+/// mesh-heal + Phase 13 partition-tolerant delivery consume it directly.
+pub mod dsu;
 /// MESH-06 — per-node content-addressed event-log (local-first + sync).
 pub mod event_log;
 /// RW-06 — geo / route kinematics (pure-logic port from geo-anim.ts + delivery-zone.ts). Kernel authority.
@@ -119,6 +123,10 @@ pub mod ports;
 /// M1 / L0 exact byte+regex search (vectorless) — deterministic trigram
 /// inverted index + exact verify. NEW module; does not touch kernel authority.
 pub mod retrieval;
+/// P04 product-math: CSR-native Dijkstra / A* shortest path + Contraction-
+/// Hierarchy shortcuts + OSM road-graph ingestion. Ported from bebop
+/// `cost_estimate.rs`, zero-dep. Consumed by Phase 9/13/16/17 route work.
+pub mod router;
 /// Reverse-engineering loop #1 — general (non-symmetric) spectral engine: eigenvalues
 /// (Faddeev-LeVerrier + Durand-Kerner), spectral gap γ, Laplacian Fiedler λ₂, DMD drift class.
 pub mod spectral;

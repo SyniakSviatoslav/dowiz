@@ -217,6 +217,108 @@ pub fn point_in_polygon(pt_lat: f64, pt_lng: f64, polygon: &[(f64, f64)]) -> boo
     inside
 }
 
+// ── GS (Gaussian-Splatting) address-picker geo functions (BLUEPRINT-P04 §4) ──
+// Six deterministic, zero-dep functions for the v1 address picker / floor
+// slice / arrow / field-of-view / line-of-sight advisory. Angles in degrees,
+// 0=N clockwise (matching `bearing_deg`). Reuse `DEG2RAD`/`bearing_deg`/
+// `point_in_polygon`.
+
+/// Per-storey height in metres. Measured `height/levels` when BOTH are present
+/// and `levels > 0`; otherwise a generic **3.0 m** storey. NEVER fabricates a
+/// level count — it returns only a per-storey height. `levels = Some(0)` ⇒
+/// 3.0 m (no divide-by-zero).
+pub fn storey_height_m(height_m: Option<f64>, levels: Option<u32>) -> f64 {
+    match (height_m, levels) {
+        (Some(h), Some(l)) if l > 0 && h > 0.0 => h / l as f64,
+        _ => 3.0,
+    }
+}
+
+/// Height (m) of the mid-storey cut plane for a given floor: `(floor + 0.5) *
+/// storey_h`. The `+0.5` puts the slice through windows/doors, not the ceiling.
+pub fn floor_slice_height_m(floor: u32, storey_h: f64) -> f64 {
+    (floor as f64 + 0.5) * storey_h
+}
+
+/// Smallest unsigned angular separation between two compass bearings, seam-
+/// correct across the 0°/360° wrap. Oracle: `angular_diff_deg(350, 10) == 20`.
+pub fn angular_diff_deg(a: f64, b: f64) -> f64 {
+    let d = (a - b).rem_euclid(360.0);
+    d.min(360.0 - d)
+}
+
+/// Screen rotation (deg) for a facing arrow given the current view rotation:
+/// `(facing - view_rotation).rem_euclid(360)`. On a north-up slice
+/// (`view_rotation = 0`) this is `facing` unchanged — one global frame; v1 does
+/// NOT rotate the view to straighten facades.
+pub fn arrow_screen_rotation_deg(facing_deg: f64, view_rotation_deg: f64) -> f64 {
+    (facing_deg - view_rotation_deg).rem_euclid(360.0)
+}
+
+/// True when `target_bearing_deg` lies within the field of view centred on
+/// `facing_deg`: `angular_diff_deg(facing, target) <= fov_deg / 2`. Default
+/// `fov_deg = 120` (±60°); pass `60.0` for the ±30° "direct" cone. Correctness
+/// across the 0°/360° seam falls out of `angular_diff_deg`.
+pub fn in_field_of_view(facing_deg: f64, target_bearing_deg: f64, fov_deg: f64) -> bool {
+    angular_diff_deg(facing_deg, target_bearing_deg) <= fov_deg / 2.0
+}
+
+/// Coarse **2D** line-of-sight advisory: `true` iff the `a → b` segment crosses
+/// no edge of any building footprint. Each footprint is a `(lat,lng)` ring.
+///
+/// STATED LIMITS (GS §2.6 — kept loud): this ignores height (false-positive
+/// over a low wall, false-negative across an open courtyard) and reads empty
+/// footprint data as "all clear". It therefore drives a **soft advisory hint
+/// only**, never a hard visibility claim. If either endpoint sits inside a
+/// footprint the view is treated as blocked.
+pub fn los_clear(a: (f64, f64), b: (f64, f64), footprints: &[Vec<(f64, f64)>]) -> bool {
+    // Endpoint-inside-building ⇒ blocked (advisory).
+    for ring in footprints {
+        if point_in_polygon(a.0, a.1, ring) || point_in_polygon(b.0, b.1, ring) {
+            return false;
+        }
+    }
+    for ring in footprints {
+        let m = ring.len();
+        if m < 2 {
+            continue;
+        }
+        for i in 0..m {
+            let p = ring[i];
+            let q = ring[(i + 1) % m];
+            if segments_intersect(a, b, p, q) {
+                return false;
+            }
+        }
+    }
+    true
+}
+
+/// Orientation sign of the ordered triple (p, q, r): >0 CCW, <0 CW, 0 collinear.
+fn orient(p: (f64, f64), q: (f64, f64), r: (f64, f64)) -> f64 {
+    (q.0 - p.0) * (r.1 - p.1) - (q.1 - p.1) * (r.0 - p.0)
+}
+
+/// True when `r` lies on segment `pq`, given collinearity (`orient == 0`).
+fn on_segment(p: (f64, f64), q: (f64, f64), r: (f64, f64)) -> bool {
+    r.0 >= p.0.min(q.0) && r.0 <= p.0.max(q.0) && r.1 >= p.1.min(q.1) && r.1 <= p.1.max(q.1)
+}
+
+/// Proper/improper 2D segment intersection test (standard orientation method).
+fn segments_intersect(a: (f64, f64), b: (f64, f64), c: (f64, f64), d: (f64, f64)) -> bool {
+    let d1 = orient(c, d, a);
+    let d2 = orient(c, d, b);
+    let d3 = orient(a, b, c);
+    let d4 = orient(a, b, d);
+    if ((d1 > 0.0) != (d2 > 0.0)) && ((d3 > 0.0) != (d4 > 0.0)) {
+        return true;
+    }
+    (d1 == 0.0 && on_segment(c, d, a))
+        || (d2 == 0.0 && on_segment(c, d, b))
+        || (d3 == 0.0 && on_segment(a, b, c))
+        || (d4 == 0.0 && on_segment(a, b, d))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -347,5 +449,65 @@ mod tests {
         assert!(point_in_polygon(5.0, 5.0, &sq));
         assert!(!point_in_polygon(15.0, 5.0, &sq));
         assert!(!point_in_polygon(-1.0, 5.0, &sq));
+    }
+
+    // ── GS P0.1 six-item acceptance (BLUEPRINT-P04 §4/§6 #5) ────────────
+
+    // (1) pin-drop everywhere + (3) open-space degrade: no OSM tags ⇒ generic
+    //     3.0 m storey, never a fabricated floor count, never a crash.
+    #[test]
+    fn gs_pin_drop_and_open_space_degrade() {
+        assert_eq!(storey_height_m(None, None), 3.0);
+        assert_eq!(storey_height_m(None, Some(5)), 3.0);
+        assert_eq!(storey_height_m(Some(15.0), None), 3.0);
+        assert_eq!(storey_height_m(Some(15.0), Some(0)), 3.0); // no div-by-zero
+                                                               // no footprint data ⇒ los reads "all clear" (soft advisory), no crash.
+        assert!(los_clear((0.0, 0.0), (1.0, 1.0), &[]));
+    }
+
+    // (2) floor-slice range vs raw OSM tag.
+    #[test]
+    fn gs_floor_slice_vs_raw_tag() {
+        // building: height 12 m, 4 levels ⇒ 3.0 m storey (matches raw tag math).
+        let sh = storey_height_m(Some(12.0), Some(4));
+        assert!((sh - 3.0).abs() < 1e-12);
+        // floor 0 mid-plane = 0.5*3 = 1.5 m; floor 3 = 3.5*3 = 10.5 m.
+        assert!((floor_slice_height_m(0, sh) - 1.5).abs() < 1e-12);
+        assert!((floor_slice_height_m(3, sh) - 10.5).abs() < 1e-12);
+    }
+
+    // (4) arrow bearing vs bearing_deg <1°.
+    #[test]
+    fn gs_arrow_bearing_matches_bearing_deg() {
+        // north-up view (rotation 0) ⇒ arrow rotation == facing bearing.
+        let facing = bearing_deg(0.0, 0.0, 1.0, 1.0);
+        let arrow = arrow_screen_rotation_deg(facing, 0.0);
+        assert!(angular_diff_deg(arrow, facing) < 1.0);
+        // oracle for angular_diff seam.
+        assert!((angular_diff_deg(350.0, 10.0) - 20.0).abs() < 1e-12);
+    }
+
+    // (5) FOV correct across the 0°/360° seam.
+    #[test]
+    fn gs_fov_across_seam() {
+        // facing 350°, target 10° ⇒ 20° apart ⇒ inside default 120° fov.
+        assert!(in_field_of_view(350.0, 10.0, 120.0));
+        // target 200° from facing 350° ⇒ 150° apart ⇒ outside 120° fov.
+        assert!(!in_field_of_view(350.0, 200.0, 120.0));
+        // ±30° "direct" cone (fov 60): 20° apart still inside.
+        assert!(in_field_of_view(350.0, 10.0, 60.0));
+        assert!(!in_field_of_view(350.0, 40.0, 60.0)); // 50° apart > 30°
+    }
+
+    // (6) los_clear false across a rectangle, true routing around it.
+    #[test]
+    fn gs_los_clear_blocked_and_around() {
+        // rectangle footprint centred near origin.
+        let rect = vec![(0.0, 0.0), (0.0, 2.0), (2.0, 2.0), (2.0, 0.0)];
+        let fps = [rect];
+        // a→b passes straight through the rectangle ⇒ blocked.
+        assert!(!los_clear((1.0, -1.0), (1.0, 3.0), &fps));
+        // routing well around it (far to the side) ⇒ clear.
+        assert!(los_clear((-1.0, -1.0), (-1.0, 3.0), &fps));
     }
 }
