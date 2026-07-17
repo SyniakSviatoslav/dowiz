@@ -212,11 +212,12 @@ pub use order_machine::{
     spectral_radius, topological_order, verify_fsm_signature, verify_fsm_signature_against,
     FsmGraphReport, FsmSignatureDrift, OrderStatus, TransitionError,
 };
-// The wasm JS entry points are exposed only when the `wasm` feature is on.
+// The wasm JS entry points are exposed only when the `wasm` feature is on. Re-export
+// EVERY `#[wasm_bindgen]` item from `wasm` (not a hand-picked 5) so the cdylib and
+// the generated `pkg-web` carry the full surface — a hand-list silently drops exports
+// (the bug that left pkg-web missing fieldsim_*/knowledge_map/geo_*/spectral_*).
 #[cfg(feature = "wasm")]
-pub use wasm::{
-    apply_event_js, boot_verify_fsm_js, channel_ledger_js, place_order_js, reduce_anomalies_js,
-};
+pub use wasm::*;
 
 /// **Boot-time FSM drift gate (fail-closed).** Call this once before the event bus accepts
 /// traffic — at kernel init, before `apply_event` is ever invoked. It compares the *live*

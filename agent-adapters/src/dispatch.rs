@@ -12,8 +12,10 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use dowiz_kernel::ports::agent::{AgentBridge, AgentError, AgentInvocation, AgentResponse, AgentTask};
+use dowiz_kernel::ports::agent::{AgentBridge, AgentError, AgentInvocation, AgentResponse, AgentTask, FUEL_PER_UNIT};
 use dowiz_kernel::token_bucket::TokenBucket;
+
+use crate::fuel::{DeterministicFuelMeter, FuelError, FuelTrancheRunner};
 
 use crate::cache::AgentCache;
 
@@ -140,6 +142,11 @@ pub struct AgentDispatcher<B: AgentBridge, H: HarvestSink> {
     /// caching (every call reaches the bridge). Only idempotent reads are cached; tool
     /// invocations are always `NoCache`.
     cache: Option<Arc<AgentCache>>,
+    /// Prepaid-tranche fuel runner (B1). Used in the execution path to enforce the F2
+    /// budget envelope via the SAME loop that drives the real wasmtime guest — 1-unit
+    /// tranche keeps budget accounting exact (no over-acquire) while reusing the
+    /// production fuel-control logic instead of a bare `try_acquire`.
+    fuel_runner: FuelTrancheRunner,
 }
 
 impl<B: AgentBridge, H: HarvestSink> AgentDispatcher<B, H> {
@@ -153,6 +160,10 @@ impl<B: AgentBridge, H: HarvestSink> AgentDispatcher<B, H> {
             sink,
             seq: AtomicU64::new(0),
             cache: None,
+            // B1: 1-unit tranche ⇒ exact-cost budget envelope (no over-acquire), while
+            // reusing the production FuelTrancheRunner loop that drives the real wasmtime
+            // guest. FUEL_PER_UNIT converts budget units → fuel for the meter.
+            fuel_runner: FuelTrancheRunner::new(FUEL_PER_UNIT, 1),
         }
     }
 
@@ -208,11 +219,23 @@ impl<B: AgentBridge, H: HarvestSink> AgentDispatcher<B, H> {
             }
         }
 
-        // F2 budget: acquire BEFORE the call, typed refusal on shortfall.
+        // F2 budget: enforce the envelope through the FuelTrancheRunner (B1) — the SAME
+        // prepaid, tranche-wise loop that gates the real wasmtime guest. 1-unit tranche
+        // keeps accounting exact; on bucket exhaustion it terminates with a typed refusal.
         let cost = inv.cost_units.max(1);
-        if !self.bucket.try_acquire(cost as f64) {
-            self.harvest(&model_id, &task_label, false, 0, cost, 0);
-            return Err(AgentDispatchError::BudgetExceeded);
+        let mut meter = DeterministicFuelMeter::needs(cost.saturating_mul(FUEL_PER_UNIT));
+        match self.fuel_runner.run(&mut meter, self.bucket.as_ref()) {
+            Ok(_) => {}
+            Err(FuelError::BudgetExceeded { .. }) => {
+                self.harvest(&model_id, &task_label, false, 0, cost, 0);
+                return Err(AgentDispatchError::BudgetExceeded);
+            }
+            Err(FuelError::Trap(_)) => {
+                self.harvest(&model_id, &task_label, false, 0, cost, 0);
+                return Err(AgentDispatchError::Backend(AgentError::Refused(
+                    "fuel-loop trap".into(),
+                )));
+            }
         }
 
         let t0 = Instant::now();
