@@ -323,71 +323,24 @@ pub fn reachable(from: OrderStatus) -> u16 {
     seen
 }
 
-/// Spectral radius ρ of the directed adjacency matrix A (the largest magnitude
-/// eigenvalue of A). Computed with the **power iteration** method — no external
-/// linear-algebra dependency, O(iter·|E|), exact for this 10-vertex FSM.
+/// Proven spectral radius ρ of the lifecycle FSM's directed adjacency.
 ///
-/// Why this belongs in a growth-substrate kernel (research/spectral-graph-fsm):
-/// the Perron–Frobenius theorem links ρ to the graph's asymptotic behaviour.
-/// For a directed acyclic graph the adjacency matrix is nilpotent (A^k = 0 for
-/// large enough k), so ρ = 0 exactly. For a graph with cycles, ρ > 0. We use a
-/// *directed* adjacency here (not the undirected Laplacian) because a forward
-/// lifecycle with a 2-cycle has ρ = 1 (the cycle's period) and ρ = 0 otherwise —
-/// a cleaner structural signal than the undirected cyclomatic number.
+/// The lifecycle graph is a compile-time-constant DAG (see `allowed_next`) ⇒ its
+/// adjacency matrix is nilpotent (A^k = 0 for large enough k) ⇒ by Perron–
+/// Frobenius ρ = 0 exactly. This is therefore a compile-time constant; the
+/// runtime power-iteration loop that previously computed it is gone from the hot
+/// path and survives only as the test-side oracle `spectral_radius_oracle`
+/// (which re-derives ρ from the actual graph and cross-checks this const).
+pub const FSM_SPECTRAL_RADIUS: f64 = 0.0;
+
+/// Spectral radius of the lifecycle FSM's directed adjacency.
 ///
-/// Cross-check (Verified-by-Math): ρ ≈ 0 ⟺ `has_cycle() == false`. The test
-/// suite asserts both; a future `Reopen` edge that closes a 2-cycle must push
-/// ρ from 0 toward 1, forcing an explicit decision rather than a silent change.
+/// Returns the proven constant [`FSM_SPECTRAL_RADIUS`] (ρ = 0). The iterative
+/// power-iteration that used to live here now exists only as the test-side
+/// oracle `spectral_radius_oracle`, where it verifies the const against the real
+/// graph. T7/A7: spectral_radius → proven const.
 pub fn spectral_radius() -> f64 {
-    let edges = all_edges();
-    let n = LIFECYCLE_STATES.len();
-    // Build directed adjacency rows as bitmasks (cheap, exact neighbours).
-    let mut adj: Vec<u16> = vec![0; n];
-    for &(f, t) in &edges {
-        adj[idx_of(f)] |= 1 << idx_of(t);
-    }
-    // Start from a uniform unit vector; power iteration converges to the
-    // dominant eigenvector (Perron vector for irreducible non-negative matrices).
-    let mut v: Vec<f64> = vec![1.0; n];
-    let mut w: Vec<f64> = vec![0.0; n];
-    const ITERS: usize = 1000;
-    const TOL: f64 = 1e-12;
-    let mut rho = 0.0f64;
-    for _ in 0..ITERS {
-        // w = A v
-        for i in 0..n {
-            let mut acc = 0.0f64;
-            let mut row = adj[i];
-            while row != 0 {
-                let bit = row & row.wrapping_neg();
-                let j = bit.trailing_zeros() as usize;
-                row ^= bit;
-                acc += v[j];
-            }
-            w[i] = acc;
-        }
-        let norm: f64 = w.iter().map(|x| x.abs()).sum();
-        if norm < TOL {
-            return 0.0; // nilpotent ⇒ ρ = 0 (acyclic)
-        }
-        // Rayleigh-quotient estimate of the dominant eigenvalue (Rayleigh, 1874):
-        //   ρ ≈ (wᵀv) / (vᵀv),  with w = A v.
-        // For the Perron eigenvector this equals the true spectral radius.
-        let rayleigh: f64 = {
-            let num: f64 = w.iter().zip(v.iter()).map(|(wi, vi)| wi * vi).sum();
-            let den: f64 = v.iter().map(|vi| vi * vi).sum();
-            if den.abs() < TOL {
-                0.0
-            } else {
-                num / den
-            }
-        };
-        for i in 0..n {
-            v[i] = w[i] / norm;
-        }
-        rho = rayleigh;
-    }
-    rho.abs()
+    FSM_SPECTRAL_RADIUS
 }
 
 /// Human-readable stability verdict for the lifecycle FSM. Applies the same
@@ -514,7 +467,7 @@ pub const FSM_GOLDEN_SIGNATURE: FsmGraphReport = FsmGraphReport {
     edges: 14,
     is_acyclic: true,
     cyclomatic: 4,
-    spectral_radius: 0.0,
+    spectral_radius: FSM_SPECTRAL_RADIUS,
     // All active states reachable from `Pending` EXCEPT `Scheduled` (orphan
     // scaffold terminal, bit 8): bits {0..7, 9,10,11} = 3839.
     reachable_from_pending: 3839,
@@ -1022,6 +975,212 @@ mod tests {
         bad.edges = 8;
         let err = verify_fsm_signature_against(bad).expect_err("drift must be detected");
         assert!(err.fields.iter().any(|&f| f == "edges"));
+    }
+
+    // ── GREEN: T7/A7 — the proven const equals the iterative oracle (ρ=0) ──
+    /// Power-iteration oracle for ρ of the lifecycle FSM's *directed* adjacency.
+    /// This is the runtime loop that T7/A7 lifted out of `spectral_radius()` —
+    /// it lives here only so the proven constant can be checked against the real
+    /// graph. O(ITERS·|E|), exact for this 12-vertex FSM.
+    fn spectral_radius_oracle() -> f64 {
+        let edges = all_edges();
+        let n = LIFECYCLE_STATES.len();
+        let mut adj: Vec<u16> = vec![0; n];
+        for &(f, t) in &edges {
+            adj[idx_of(f)] |= 1 << idx_of(t);
+        }
+        let mut v: Vec<f64> = vec![1.0; n];
+        let mut w: Vec<f64> = vec![0.0; n];
+        const ITERS: usize = 1000;
+        const TOL: f64 = 1e-12;
+        let mut rho = 0.0f64;
+        for _ in 0..ITERS {
+            for i in 0..n {
+                let mut acc = 0.0f64;
+                let mut row = adj[i];
+                while row != 0 {
+                    let bit = row & row.wrapping_neg();
+                    let j = bit.trailing_zeros() as usize;
+                    row ^= bit;
+                    acc += v[j];
+                }
+                w[i] = acc;
+            }
+            let norm: f64 = w.iter().map(|x| x.abs()).sum();
+            if norm < TOL {
+                return 0.0; // nilpotent ⇒ ρ = 0 (acyclic)
+            }
+            let rayleigh: f64 = {
+                let num: f64 = w.iter().zip(v.iter()).map(|(wi, vi)| wi * vi).sum();
+                let den: f64 = v.iter().map(|vi| vi * vi).sum();
+                if den.abs() < TOL {
+                    0.0
+                } else {
+                    num / den
+                }
+            };
+            for i in 0..n {
+                v[i] = w[i] / norm;
+            }
+            rho = rayleigh;
+        }
+        rho.abs()
+    }
+
+    #[test]
+    fn green_const_equals_oracle() {
+        // T7/A7: the proven constant `FSM_SPECTRAL_RADIUS` must match the
+        // iterative oracle run against the *real* lifecycle graph, to 1e-12.
+        let const_val = FSM_SPECTRAL_RADIUS;
+        let oracle_val = spectral_radius_oracle();
+        assert!(
+            (const_val - oracle_val).abs() < 1e-12,
+            "const ρ={const_val} != oracle ρ={oracle_val}"
+        );
+        // And the public accessor must return the const.
+        assert_eq!(spectral_radius(), FSM_SPECTRAL_RADIUS);
+    }
+
+    // ── RED: a back-edge (cycle) must make the oracle report ρ > 0 AND trip the
+    //    existing acyclic-signature gate (forcing a deliberate re-key, not a
+    //    silent FSM change). Fails if the lifecycle graph is ever mutated without
+    //    updating both `FSM_SPECTRAL_RADIUS` and the golden signature. ──
+    #[test]
+    fn red_back_edge_makes_oracle_positive_and_gate_reject() {
+        // Mutation under test: add ONE back-edge (Delivered → Confirmed), turning
+        // the strict forward DAG into a cyclic graph. We exercise the oracle
+        // against this mutated edge list directly.
+        let base = all_edges();
+        let mut cyclic_edges = base.clone();
+        cyclic_edges.push((OrderStatus::Delivered, OrderStatus::Confirmed));
+
+        // Oracle over the mutated graph must report ρ > 0.
+        let rho = spectral_radius_oracle_edges(&cyclic_edges);
+        assert!(
+            rho > 0.0,
+            "oracle must report ρ>0 for a cyclic FSM, got {rho}"
+        );
+
+        // The existing acyclic-signature gate must REJECT the mutated graph.
+        // We rebuild the live report's acyclicity check against the mutated edges
+        // via `has_cycle_edges` and confirm `verify_fsm_signature` would reject a
+        // report marking it cyclic. The gate's `is_acyclic` field is the guard.
+        let mutated_acyclic = !has_cycle_edges(&cyclic_edges);
+        assert!(!mutated_acyclic, "mutated graph must be detected as cyclic");
+        // A report reflecting the mutated (cyclic) graph must fail the gate.
+        let mut mutated_report = fsm_graph_report();
+        mutated_report.is_acyclic = false;
+        mutated_report.topological_len = None;
+        mutated_report.spectral_radius = rho;
+        let gate = verify_fsm_signature_against(mutated_report);
+        assert!(gate.is_err(), "signature gate must REJECT the mutated FSM");
+        assert!(gate.unwrap_err().fields.iter().any(|&f| f == "is_acyclic"));
+
+        // Sanity: the ORIGINAL (unmutated) graph is acyclic and passes the gate.
+        assert!(!has_cycle(), "original lifecycle must remain a DAG");
+        assert!(
+            verify_fsm_signature().is_ok(),
+            "original FSM must pass the gate"
+        );
+    }
+
+    /// Power-iteration oracle over an *explicit* edge list (so tests can mutate it).
+    fn spectral_radius_oracle_edges(edges: &[(OrderStatus, OrderStatus)]) -> f64 {
+        let n = LIFECYCLE_STATES.len();
+        let mut adj: Vec<u16> = vec![0; n];
+        for &(f, t) in edges {
+            adj[idx_of(f)] |= 1 << idx_of(t);
+        }
+        let mut v: Vec<f64> = vec![1.0; n];
+        let mut w: Vec<f64> = vec![0.0; n];
+        const ITERS: usize = 1000;
+        const TOL: f64 = 1e-12;
+        let mut rho = 0.0f64;
+        for _ in 0..ITERS {
+            for i in 0..n {
+                let mut acc = 0.0f64;
+                let mut row = adj[i];
+                while row != 0 {
+                    let bit = row & row.wrapping_neg();
+                    let j = bit.trailing_zeros() as usize;
+                    row ^= bit;
+                    acc += v[j];
+                }
+                w[i] = acc;
+            }
+            let norm: f64 = w.iter().map(|x| x.abs()).sum();
+            if norm < TOL {
+                return 0.0;
+            }
+            let rayleigh: f64 = {
+                let num: f64 = w.iter().zip(v.iter()).map(|(wi, vi)| wi * vi).sum();
+                let den: f64 = v.iter().map(|vi| vi * vi).sum();
+                if den.abs() < TOL {
+                    0.0
+                } else {
+                    num / den
+                }
+            };
+            for i in 0..n {
+                v[i] = w[i] / norm;
+            }
+            rho = rayleigh;
+        }
+        rho.abs()
+    }
+
+    /// Cycle detection over an *explicit* edge list (so tests can mutate it).
+    fn has_cycle_edges(edges: &[(OrderStatus, OrderStatus)]) -> bool {
+        let states = [
+            OrderStatus::Pending,
+            OrderStatus::Confirmed,
+            OrderStatus::Preparing,
+            OrderStatus::Ready,
+            OrderStatus::InDelivery,
+            OrderStatus::Delivered,
+            OrderStatus::Rejected,
+            OrderStatus::Cancelled,
+            OrderStatus::Scheduled,
+            OrderStatus::PickedUp,
+            OrderStatus::Refunding,
+            OrderStatus::CompensatedRefund,
+        ];
+        let mut visited = [false; 12];
+        let mut in_stack = [false; 12];
+        let idx = |s: OrderStatus| -> usize { idx_of(s) };
+        fn dfs(
+            s: OrderStatus,
+            idx: &dyn Fn(OrderStatus) -> usize,
+            edges: &[(OrderStatus, OrderStatus)],
+            visited: &mut [bool; 12],
+            in_stack: &mut [bool; 12],
+        ) -> bool {
+            let i = idx(s);
+            visited[i] = true;
+            in_stack[i] = true;
+            for &(f, t) in edges {
+                if f == s {
+                    let j = idx(t);
+                    if !visited[j] {
+                        if dfs(t, idx, edges, visited, in_stack) {
+                            return true;
+                        }
+                    } else if in_stack[j] {
+                        return true;
+                    }
+                }
+            }
+            in_stack[i] = false;
+            false
+        }
+        for &s in &states {
+            if !visited[idx(s)] {
+                if dfs(s, &idx, edges, &mut visited, &mut in_stack) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     // ── GREEN: a Reopen edge makes the gate name `is_acyclic` + `topological_len` ──
