@@ -1,0 +1,31 @@
+[package]
+name = "agent-adapters"
+version = "0.1.0"
+edition = "2021"
+description = "AgentBridge adapters (MCP-server bridge) for dowiz — JSON-RPC 2.0, no tokio; Wasmtime fuel behind a feature."
+
+# Standalone crate at repo root (sibling to kernel/ and llm-adapters/), NOT a workspace
+# member. Build with `cargo build` from this directory, matching how llm-adapters builds
+# independently.
+
+[dependencies]
+dowiz-kernel = { path = "../kernel" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Wasmtime is the sandbox-tier fuel runtime (blueprint DECART: 46.0.1, component model +
+# cranelift, offline-present — re-verified this session). It is OPTIONAL and OFF by
+# default so `cargo build/test --offline` stays fast, deterministic, and offline-safe:
+# the default fuel-tranche loop uses a deterministic in-crate `FuelMeter` that models
+# wasmtime's fuel semantics exactly. The real wasmtime-backed meter compiles behind the
+# `wasmtime-fuel` feature. `FUEL_PER_UNIT` remains a B4-pending placeholder either way.
+wasmtime = { version = "46", optional = true, default-features = false, features = ["cranelift", "runtime", "wat"] }
+
+[features]
+default = []
+# Compile the real wasmtime-backed `FuelMeter` (the ~30-crate cranelift tree). Adapter-
+# side only; the M6 kernel port is never touched.
+wasmtime-fuel = ["dep:wasmtime"]
+
+[lib]
+name = "agent_adapters"
+path = "src/lib.rs"

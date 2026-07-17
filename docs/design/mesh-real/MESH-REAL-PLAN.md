@@ -43,6 +43,18 @@ enforced, nonce-set bounded. IMPROVEMENT-PLAN §0 це фіксує. → **фу�
 | **Per-node store** | pgrust compat-PASSED (hub-interim) | per-node-pgrust+event-log+sync UNBUILT (ADR-0008 PROPOSED) |
 | **Identity** | — | node_id=H(pq_pub‖classical_pub) ADR-0007 PROPOSED-unbuilt |
 
+> ⚠ CORRECTED (2026-07-17, agentic-mesh consolidation, live-verified): the Capability/authz and
+> Identity STUB claims above are stale — since 2026-07-13 the following are BUILT on the live tree
+> (`/root/bebop-repo/bebop2/proto-cap/`): **RevocationSet** with `merge`/`drop_anchor`/`gossip_payload`
+> (`revocation.rs:49,94,105,114`); **H2 fix** — verify-then-record nonce ordering with RED property
+> test (`hybrid_gate.rs:188-206,571`); **genesis loader** fail-closed (`load_genesis`,
+> `node_id.rs:116`); **KernelFacade** (`facade.rs:64-96`, `submit_intent`); **node_id =
+> H(pq_pub‖classical_pub)** (`node_id.rs:46`, ADR-0007 realized). §8's "revocation-propagation =
+> найбільший невирішений" is PARTIALLY resolved: the set + anti-entropy union + sorted gossip payload
+> exist; what remains open is propagation *guarantees* (delivery/convergence bounds), not the
+> mechanism. The agentic-mesh arc (docs/design/agentic-mesh-protocol-2026-07-17/) builds ON these as
+> existing primitives.
+
 **DECIDED (MANIFESTO/DECISIONS 2026-07-12 > 07-11 blueprints):** decentralized/local-first/PQ/mesh non-negotiable
 (D6 mesh-NOW); transport=**DTN/BPv7** (D3-locked, reject libp2p/Zenoh); PQ=composed-protocol; central-server DROPPED;
 integer-money; reliability>latency store-and-forward. ⚠️ Суперечність: D3 каже DTN/BPv7, а збудовано WSS+iroh-stub.
