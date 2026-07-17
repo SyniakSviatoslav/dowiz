@@ -24,7 +24,14 @@ PREC="$GOV_DIR/precedents.jsonl"
 FC="$GOV_DIR/false_claims.jsonl"
 mkdir -p "$GOV_DIR"
 : >> "$TRACK"; : >> "$PREC"; : >> "$FC"
-GOV_LM="$DIR/living_memory.py"
+# Native-kernel living-memory retrieval CLI (replaces out-of-tree living_memory.py).
+# Built from the kernel crate: `cargo build --release --bin lm` →
+#   kernel/target/release/lm  (or target/debug/lm).
+# Max speed: in-process BM25+trigram fusion over the live memory corpus.
+GOV_LM_BIN="$(cd "$DIR/../.." && pwd)/kernel/target/release/lm"
+if [ ! -x "$GOV_LM_BIN" ]; then
+  GOV_LM_BIN="$(cd "$DIR/../.." && pwd)/kernel/target/debug/lm"
+fi
 
 # ---- native bridge: pipe a JSON object to the kernel binary, echo response ----
 gov_kern() { # json-string

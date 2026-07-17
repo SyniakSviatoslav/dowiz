@@ -251,6 +251,57 @@ impl Default for PrimaryRecall {
     }
 }
 
+impl PrimaryRecall {
+/// Ingest a real memory corpus from `dir` — every `*.md` file becomes one
+/// document, keyed by its file stem (e.g. `MEMORY` from `MEMORY.md`). Pure-`std`
+/// directory walk; no recursion into subdirs (the living-memory corpus is flat).
+/// Fail-closed: a directory that yields zero `*.md` files errors rather than
+/// returning an empty ranker that would silently answer every query with nothing.
+///
+/// This is the native-kernel replacement for the out-of-tree `living_memory.py`
+/// (which indexed this same directory in 177ms of Python). The kernel owns the
+/// BM25 + trigram fusion already (recall@5 = 1.0 proven over the fixture), so
+/// ingesting the live corpus here is wiring, not new algorithm code — max speed
+/// (in-process, zero subprocess, zero interpreter).
+pub fn from_dir(dir: &std::path::Path) -> Result<PrimaryRecall, String> {
+    if !dir.is_dir() {
+        return Err(format!("PrimaryRecall::from_dir: not a directory: {}", dir.display()));
+    }
+    let mut paths: Vec<std::path::PathBuf> = Vec::new();
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| format!("PrimaryRecall::from_dir: read_dir {}: {e}", dir.display()))?;
+    for e in entries {
+        let e = e.map_err(|e| format!("PrimaryRecall::from_dir: read entry: {e}"))?;
+        let p = e.path();
+        if p.extension().and_then(|x| x.to_str()) == Some("md") {
+            paths.push(p);
+        }
+    }
+    if paths.is_empty() {
+        return Err(format!(
+            "PrimaryRecall::from_dir: no *.md files in {}",
+            dir.display()
+        ));
+    }
+    // Stable order ⇒ deterministic index regardless of read_dir iteration order.
+    paths.sort();
+    let texts: Vec<String> = paths
+        .iter()
+        .map(|p| std::fs::read_to_string(p).unwrap_or_default())
+        .collect();
+    let docs: Vec<Document> = texts.iter().map(|s| Document::from_text(s)).collect();
+    let strs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
+    let bm = Bm25::new(docs);
+    let idx = TrigramIndex::new(&strs);
+    let ids: Vec<String> = paths
+        .iter()
+        .map(|p| p.file_stem().and_then(|s| s.to_str()).unwrap_or("?").to_string())
+        .collect();
+    Ok(PrimaryRecall { bm, idx, ids })
+}
+
+} // impl PrimaryRecall
+
 /// Lazy-initialized PRIMARY recall instance — the shared kernel recall source.
 static PRIMARY: std::sync::OnceLock<PrimaryRecall> = std::sync::OnceLock::new();
 

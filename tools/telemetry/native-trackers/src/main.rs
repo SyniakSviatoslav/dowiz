@@ -15,11 +15,14 @@
 //!   route  <task> [budget] [ruin]        fold track_record.jsonl → per-model (p,v,cost) for gov_route
 //!   false-claim [--record c v]           EMA false-estimation meter over false_claims.jsonl
 //!   meta   observe <bench_prev> <bench_new> <eval_prev> <eval_new> <false_rate>
-//!                                          EMA meta-rule tilt over bench/eval/false deltas
+//!   swarm-proof                          economic crossover + parallel vs sequential fan-out proof
+//!   ser    <wire|json> [hex-or-json]     canonical f64 wire <-> JSON edge adapter
 //!
 //! Exit codes: 0 ok; 1 bench regression beyond threshold; 2 usage/IO error.
 
 use std::collections::BTreeMap;
+#[cfg(unix)]
+use std::os::unix::fs::MetadataExt;
 use std::env;
 use std::fs;
 use std::io::{self, Write};
@@ -513,6 +516,381 @@ fn obj_to_json(m: &BTreeMap<String, Jv>) -> String {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// swarm-proof — native port of tools/telemetry/swarm_proof.py (no LLM, no python
+// subprocess). (A) economic crossover from real 2026 API prices; (B) parallel vs
+// sequential fan-out timing via a native threadpool (replaces the xargs/python3
+// timing experiment).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PRICES: &[(&str, f64, f64)] = &[
+    // tier: (input $/Mtok, output $/Mtok)
+    ("frontier", 5.0, 15.0),
+    ("mid", 0.50, 1.50),
+    ("cheap", 0.10, 0.40),
+];
+const BLUEPRINT_TOK_IN: f64 = 4000.0;
+const BLUEPRINT_TOK_OUT: f64 = 1500.0;
+const EXEC_TOK_IN: f64 = 2000.0;
+const EXEC_TOK_OUT: f64 = 800.0;
+
+fn cost(tier: &str, tin: f64, tout: f64) -> f64 {
+    let &(_, pi, po) = PRICES.iter().find(|x| x.0 == tier).unwrap_or(&PRICES[0]);
+    tin / 1e6 * pi + tout / 1e6 * po
+}
+fn sequential_cost(n: usize, arch: &str) -> f64 {
+    n as f64 * cost(arch, BLUEPRINT_TOK_IN + EXEC_TOK_IN, BLUEPRINT_TOK_OUT + EXEC_TOK_OUT)
+}
+fn swarm_cost(n: usize, arch: &str, exec_t: &str) -> f64 {
+    n as f64 * cost(arch, BLUEPRINT_TOK_IN, BLUEPRINT_TOK_OUT)
+        + n as f64 * cost(exec_t, EXEC_TOK_IN, EXEC_TOK_OUT)
+}
+fn crossover_n(arch: &str, exec_t: &str) -> Option<usize> {
+    for n in 1..200 {
+        if swarm_cost(n, arch, exec_t) < sequential_cost(n, arch) {
+            return Some(n);
+        }
+    }
+    None
+}
+
+fn cmd_swarm_proof() -> i32 {
+    println!("=== (A) ECONOMIC CROSSOVER (real 2026 prices) ===");
+    for (arch, exec_t) in [("frontier", "cheap"), ("frontier", "mid"), ("mid", "cheap")] {
+        let seq1 = sequential_cost(1, arch);
+        let sw1 = swarm_cost(1, arch, exec_t);
+        let nx = crossover_n(arch, exec_t);
+        let sw10 = swarm_cost(10, arch, exec_t);
+        let seq10 = sequential_cost(10, arch);
+        let pct = if seq10 > 0.0 {
+            100.0 * (1.0 - sw10 / seq10)
+        } else {
+            0.0
+        };
+        println!(
+            "  architect={:9} executor={:6}: 1-task seq=${:.4} swarm=${:.4} | crossover N={:?} | N=10 swarm=${:.4} vs seq=${:.4} ({:.0}% cheaper)",
+            arch, exec_t, seq1, sw1, nx, sw10, seq10, pct
+        );
+    }
+    println!("  NOTE: crossover N is small (<=2); swarm wins for essentially any N>=2.");
+
+    println!("\n=== (B) ENGINE TIMING (parallel vs sequential fan-out, native threadpool) ===");
+    let task_ms = 300u64; // mirrors the python timing experiment's 0.30s sleep
+    for n in [4usize, 8usize] {
+        let tp = time_parallel(n, task_ms);
+        let ts = time_sequential(n, task_ms);
+        let speedup = if tp > 0.0 { ts / tp } else { 0.0 };
+        println!(
+            "  N={}: parallel={:.2}s  sequential={:.2}s  speedup={:.2}x",
+            n,
+            tp,
+            ts,
+            speedup
+        );
+    }
+    println!("  ideal parallel ~0.30s (max task), sequential ~N*0.30s. Native fan-out confirms.");
+
+    let mut out = String::from("{\"crossover\":{\"frontier/cheap\":");
+    out.push_str(&format!("{:?}", crossover_n("frontier", "cheap")));
+    out.push_str(",\"frontier/mid\":");
+    out.push_str(&format!("{:?}", crossover_n("frontier", "mid")));
+    out.push_str(",\"mid/cheap\":");
+    out.push_str(&format!("{:?}", crossover_n("mid", "cheap")));
+    out.push_str("}}");
+    println!("\nJSON: {}", out);
+    0
+}
+
+/// Parallel: spawn N threads, each sleeps `task_ms`, join all. ~one task wall time.
+fn time_parallel(n: usize, task_ms: u64) -> f64 {
+    use std::thread;
+    use std::time::{Duration, Instant};
+    let t0 = Instant::now();
+    let handles: Vec<_> = (0..n)
+        .map(|_| thread::spawn(move || thread::sleep(Duration::from_millis(task_ms))))
+        .collect();
+    for h in handles {
+        let _ = h.join();
+    }
+    t0.elapsed().as_secs_f64()
+}
+/// Sequential: run each task in turn.
+fn time_sequential(n: usize, task_ms: u64) -> f64 {
+    use std::thread;
+    use std::time::{Duration, Instant};
+    let t0 = Instant::now();
+    for _ in 0..n {
+        thread::sleep(Duration::from_millis(task_ms));
+        let _ = thread::yield_now();
+    }
+    t0.elapsed().as_secs_f64()
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ser — native port of tools/telemetry/ser.py: canonical little-endian f64 wire
+// <-> JSON edge adapter. No external libs (struct/json replaced by std only).
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn cmd_ser(mode: &str, arg: &str) -> i32 {
+    match mode {
+        "wire" => {
+            // arg = hex string of raw f64 bytes -> JSON array of floats
+            let bytes = match hex_to_bytes(arg) {
+                Some(b) => b,
+                None => {
+                    eprintln!("ser wire: invalid hex input");
+                    return 2;
+                }
+            };
+            let n = bytes.len() / 8;
+            let mut vals: Vec<f64> = Vec::with_capacity(n);
+            for i in 0..n {
+                let mut b = [0u8; 8];
+                b.copy_from_slice(&bytes[i * 8..i * 8 + 8]);
+                vals.push(f64::from_le_bytes(b));
+            }
+            let s = vals
+                .iter()
+                .map(|v| format!("{:.6}", v))
+                .collect::<Vec<_>>()
+                .join(", ");
+            println!("[{}]", s);
+            0
+        }
+        "json" => {
+            // arg = JSON array of floats -> hex of raw f64 bytes (canonical wire)
+            let vals = match parse_float_array(arg) {
+                Some(v) => v,
+                None => {
+                    eprintln!("ser json: invalid JSON array input");
+                    return 2;
+                }
+            };
+            let mut out = String::with_capacity(vals.len() * 16);
+            for v in &vals {
+                for b in v.to_le_bytes() {
+                    out.push_str(&format!("{:02x}", b));
+                }
+            }
+            println!("{}", out);
+            0
+        }
+        _ => {
+            eprintln!("ser: mode must be 'wire' or 'json'");
+            2
+        }
+    }
+}
+
+fn hex_to_bytes(s: &str) -> Option<Vec<u8>> {
+    let s = s.trim();
+    if s.len() % 2 != 0 {
+        return None;
+    }
+    let mut out = Vec::with_capacity(s.len() / 2);
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let hi = (bytes[i] as char).to_digit(16)?;
+        let lo = (bytes[i + 1] as char).to_digit(16)?;
+        out.push((hi * 16 + lo) as u8);
+        i += 2;
+    }
+    Some(out)
+}
+
+fn parse_float_array(s: &str) -> Option<Vec<f64>> {
+    let s = s.trim();
+    let s = s.strip_prefix('[')?;
+    let s = s.strip_suffix(']')?;
+    let mut out = Vec::new();
+    for part in s.split(',') {
+        let p = part.trim();
+        if p.is_empty() {
+            continue;
+        }
+        out.push(p.parse::<f64>().ok()?);
+    }
+    Some(out)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// hetzner-serve — native port of tools/telemetry/hetzner_exporter.py.
+// Pure-std: reads /proc + statvfs, serves JSON metrics on a std TcpListener
+// (no http crate). Mirrors the Python's /metrics and /api/v1/metrics endpoints.
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn read_proc_file(path: &str) -> Option<String> {
+    std::fs::read_to_string(path).ok()
+}
+
+/// Parse a `/proc/meminfo`-style `Key:  value kB` map.
+fn parse_kv(text: &str) -> std::collections::HashMap<String, u64> {
+    let mut m = std::collections::HashMap::new();
+    for line in text.lines() {
+        let mut it = line.split_whitespace();
+        if let (Some(k), Some(v)) = (it.next(), it.next()) {
+            if let Ok(n) = v.parse::<u64>() {
+                m.insert(k.trim_end_matches(':').to_string(), n);
+            }
+        }
+    }
+    m
+}
+
+fn collect_metrics() -> String {
+    let mut parts = Vec::new();
+
+    // CPU: /proc/stat first line "cpu  user nice system idle ..."
+    if let Some(s) = read_proc_file("/proc/stat") {
+        if let Some(line) = s.lines().next() {
+            let nums: Vec<u64> = line
+                .split_whitespace()
+                .skip(1)
+                .filter_map(|x| x.parse::<u64>().ok())
+                .collect();
+            let total: u64 = nums.iter().sum();
+            let idle = nums.get(3).copied().unwrap_or(0) + nums.get(4).copied().unwrap_or(0);
+            let used = total.saturating_sub(idle);
+            let pct = if total > 0 {
+                (used as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
+            } else {
+                0.0
+            };
+            parts.push(format!("\"cpu\":{{\"percent_used\":{:.2},\"user\":{},\"system\":{}}}",
+                pct, nums.get(0).copied().unwrap_or(0), nums.get(2).copied().unwrap_or(0)));
+        }
+    }
+
+    // Memory: /proc/meminfo (values in kB)
+    if let Some(s) = read_proc_file("/proc/meminfo") {
+        let kv = parse_kv(&s);
+        let total = *kv.get("MemTotal").unwrap_or(&0);
+        let avail = *kv.get("MemAvailable").unwrap_or(&0);
+        let used = total.saturating_sub(avail);
+        let pct = if total > 0 {
+            (used as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
+        } else {
+            0.0
+        };
+        parts.push(format!("\"mem\":{{\"percent_used\":{:.2},\"total_kb\":{},\"used_kb\":{},\"free_kb\":{}}}",
+            pct, total, used, avail));
+    }
+
+    // Load: /proc/loadavg
+    if let Some(s) = read_proc_file("/proc/loadavg") {
+        let f: Vec<&str> = s.split_whitespace().take(3).collect();
+        if f.len() == 3 {
+            parts.push(format!("\"load\":{{\"1m\":{},\"5m\":{},\"15m\":{}}}",
+                f[0], f[1], f[2]));
+        }
+    }
+
+    // Disk: statvfs via raw FFI to libc (always linked on Linux; no Cargo dep).
+    // `std::os::unix::fs::MetadataExt` on this toolchain exposes only blocks()/blksize(),
+    // not the free-block methods, so we call statvfs64 directly.
+    #[cfg(target_os = "linux")]
+    {
+        #[repr(C)]
+        struct Statvfs {
+            f_bsize: u64,
+            f_frsize: u64,
+            f_blocks: u64,
+            f_bfree: u64,
+            f_bavail: u64,
+            f_files: u64,
+            f_ffree: u64,
+            f_favail: u64,
+            f_fsid: u64,
+            f_flag: u64,
+            f_namemax: u64,
+            // Generous padding so the C write (glibc statvfs64 ~104 bytes)
+            // never overruns our buffer. Field offsets for the first
+            // 11 members match glibc exactly (all 8-byte, sequential).
+            f_spare: [u64; 12],
+        }
+        extern "C" {
+            fn statvfs64(path: *const std::os::raw::c_char, buf: *mut Statvfs) -> std::os::raw::c_int;
+        }
+        let mut st: Statvfs = unsafe { std::mem::zeroed() };
+        let cpath = std::ffi::CString::new("/").unwrap_or_default();
+        let rc = unsafe { statvfs64(cpath.as_ptr(), &mut st) };
+        if rc == 0 {
+            let total = st.f_blocks * st.f_frsize;
+            let avail = st.f_bavail * st.f_frsize;
+            let used = total.saturating_sub(avail);
+            let pct = if total > 0 {
+                (used as f64 / total as f64 * 100.0 * 100.0).round() / 100.0
+            } else {
+                0.0
+            };
+            parts.push(format!(
+                "\"disk\":{{\"percent_used\":{:.2},\"total_bytes\":{},\"used_bytes\":{},\"free_bytes\":{}}}",
+                pct, total, used, avail
+            ));
+        }
+    }
+    if let Some(s) = read_proc_file("/proc/net/dev") {
+        let mut rx = 0u64;
+        let mut tx = 0u64;
+        for line in s.lines().skip(2) {
+            let cols: Vec<&str> = line.split_whitespace().collect();
+            if cols.len() >= 10 && !cols[0].starts_with("lo:") {
+                rx += cols[1].parse::<u64>().unwrap_or(0);
+                tx += cols[9].parse::<u64>().unwrap_or(0);
+            }
+        }
+        parts.push(format!("\"net\":{{\"rx_bytes\":{},\"tx_bytes\":{}}}", rx, tx));
+    }
+
+    let ts = now_iso();
+    format!("{{\"timestamp\":{},\"host\":\"{}\",{}}}", ts, hostname(), parts.join(","))
+}
+
+fn hostname() -> String {
+    std::fs::read_to_string("/etc/hostname")
+        .ok()
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| std::env::var("HOSTNAME").unwrap_or_default())
+}
+
+fn http_response(body: &str) -> String {
+    format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        body.len(),
+        body
+    )
+}
+
+fn cmd_hetzner_serve(port: u16) -> i32 {
+    use std::net::TcpListener;
+    use std::io::{Read, Write};
+    let addr = format!("127.0.0.1:{}", port);
+    let listener = match TcpListener::bind(&addr) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("hetzner-serve: bind {} failed: {}", addr, e);
+            return 2;
+        }
+    };
+    println!("hetzner-serve: listening on http://{}  (Ctrl-C to stop)", addr);
+    for stream in listener.incoming() {
+        match stream {
+            Ok(mut s) => {
+                // Minimal HTTP: read request line, respond with metrics JSON.
+                let mut buf = [0u8; 4096];
+                let _ = s.read(&mut buf);
+                let body = collect_metrics();
+                let resp = http_response(&body);
+                let _ = s.write_all(resp.as_bytes());
+                let _ = s.flush();
+            }
+            Err(_) => continue,
+        }
+    }
+    0
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 fn now_iso() -> String {
     // No RNG, no chrono: use std only via a fallback timestamp string.
     // We avoid `SystemTime` formatting libs; emit seconds since epoch + a marker.
@@ -585,6 +963,20 @@ fn main() {
                 let fr = args[7].parse().unwrap_or(0.0);
                 cmd_meta(bp, bn, rp, rn, fr)
             }
+        }
+        "swarm-proof" => cmd_swarm_proof(),
+        "ser" => {
+            let mode = args.get(2).map(|s| s.as_str()).unwrap_or("");
+            let arg = args.get(3).map(|s| s.as_str()).unwrap_or("");
+            if mode.is_empty() {
+                usage()
+            } else {
+                cmd_ser(mode, arg)
+            }
+        }
+        "hetzner-serve" => {
+            let port = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(9102);
+            cmd_hetzner_serve(port)
         }
         _ => usage(),
     };

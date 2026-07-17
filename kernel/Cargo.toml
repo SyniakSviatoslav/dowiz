@@ -69,6 +69,20 @@ criterion = "0.5"
 name = "criterion"
 harness = false
 
+# Native-kernel living-memory retrieval CLI — the max-speed replacement for the
+# out-of-tree living_memory.py (177ms Python/query). Links dowiz_kernel directly,
+# ranks the live memory corpus with the in-kernel BM25+trigram fusion in-process.
+[[bin]]
+name = "lm"
+path = "src/bin/lm.rs"
+
+# Native-kernel Markov attractor detector CLI — replaces the out-of-tree
+# tools/loop-signals/markov_attractor.py (now deleted; kernel `markov` module is
+# the port, with VbM parity tests). Emits the exact JSON contract check.sh parses.
+[[bin]]
+name = "markov_attractor"
+path = "src/bin/markov_attractor.rs"
+
 [profile.release]
 opt-level = 3
 lto = true

@@ -1,0 +1,15 @@
+[package]
+name = "topics"
+version = "0.1.0"
+edition = "2021"
+
+# Native port of tools/telemetry/topics.sh — Telegram topic aggregator.
+# Pure std for git/log polling + `ureq` for the Telegram Bot API (network is
+# inherent to the function). No langchain/typer/rich, no python subprocess.
+[dependencies]
+ureq = { version = "2", features = ["json"] }
+serde_json = "1"
+
+[[bin]]
+name = "topics"
+path = "src/main.rs"

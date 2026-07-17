@@ -22,7 +22,20 @@ fi
 if [ -z "$TX" ] || [ ! -f "$TX" ]; then
   echo "loop self-check: no session transcript found (fail-open)"; exit 0
 fi
-JSON="$(python3 "$HERE/transcript_events.py" "$TX" "$N" 2>/dev/null | python3 "$HERE/markov_attractor.py" 2>/dev/null)"
+# Stage 2 (Markov analyze) is now the native kernel binary `markov_attractor`
+# (built from the kernel crate: `cargo build --release --bin markov_attractor` →
+# kernel/target/release/markov_attractor). Stage 1 (transcript→token mapping) stays
+# the Python extractor. The bin emits the exact JSON contract this script parses.
+MA_BIN="$(cd "$ROOT" && pwd)/kernel/target/release/markov_attractor"
+if [ ! -x "$MA_BIN" ]; then
+  MA_BIN="$(cd "$ROOT" && pwd)/kernel/target/debug/markov_attractor"
+fi
+if [ -x "$MA_BIN" ]; then
+  JSON="$(python3 "$HERE/transcript_events.py" "$TX" "$N" 2>/dev/null | "$MA_BIN" 2>/dev/null)"
+else
+  # Fallback: keep the (now-deleted) Python path silent rather than fail-closed on missing build.
+  JSON=""
+fi
 [ -z "$JSON" ] && { echo "loop self-check: analyzer produced no output (fail-open)"; exit 0; }
 python3 - "$JSON" "$TX" <<'PY'
 import json, sys
