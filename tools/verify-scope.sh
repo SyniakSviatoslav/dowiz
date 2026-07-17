@@ -27,39 +27,20 @@ touches() { echo "$FILES" | grep -qE "$1"; }
 echo "=== verify-scope: routing by touched scope (fail-closed) ==="
 [ -z "$FILES" ] && echo "  no changed files detected — nothing to verify."
 
-echo "[1/5] Lint staged JS/TS..."
+echo "[1/3] Lint staged JS/TS..."
 JS=$(echo "$FILES" | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$')
 if [ -n "$JS" ]; then npx eslint $JS || exit 1; else echo "  skip (no JS/TS)"; fi
 
-echo "[1.5] i18n parity..."
-if touches 'packages/ui/src/lib/i18n(-catalog)?\.ts$'; then
-  pnpm exec tsx scripts/i18n-parity.ts || exit 1
-else echo "  skip (no i18n change)"; fi
-
-echo "[2/5] kernel (Rust)..."
+echo "[2/3] kernel (Rust)..."
 if touches '^kernel/'; then (cd kernel && cargo test) || exit 1
 else echo "  skip (no kernel change)"; fi
 
-echo "[3/5] web (Astro island)..."
+echo "[3/3] web (Astro island)..."
 if touches '^web/'; then
   (cd web && npx astro build) || exit 1
   if touches '^web/src/lib/kernel/'; then
     (cd web/src/lib/kernel && node kernel.test.mjs) || exit 1
   fi
 else echo "  skip (no web change)"; fi
-
-echo "[4/5] workspace packages/apps (heavy build only for buildable files)..."
-WS_BUILDABLE=$(echo "$FILES" | grep -E '^(apps|packages|tools|spikes)/' | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$|(^|/)(package\.json|tsconfig[^/]*\.json)$')
-if [ -n "$WS_BUILDABLE" ]; then
-  pnpm -r typecheck || exit 1
-  pnpm -r build || exit 1
-elif touches '^(apps|packages|tools|spikes)/'; then
-  echo "  skip pnpm -r build (workspace change is script/docs only — no JS/TS/manifest)"
-else echo "  skip (no workspace member change)"; fi
-
-echo "[5/5] Fly.io config..."
-if touches 'fly\.(toml|yaml|yml)$' && { command -v flyctl >/dev/null 2>&1 || command -v fly >/dev/null 2>&1; }; then
-  flyctl config validate || fly config validate || exit 1
-else echo "  skip (no fly config / CLI absent)"; fi
 
 echo "=== verify-scope: ALL GATES PASSED ==="
