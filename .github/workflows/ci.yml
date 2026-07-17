@@ -109,3 +109,32 @@ jobs:
           cargo fetch --manifest-path engine/Cargo.toml
       - name: Re-execute the diff range in a clean independent worktree (RED|GREEN|SKIP)
         run: cargo run --offline --manifest-path tools/ci-truth/Cargo.toml -- v5c-reexec origin/main HEAD
+
+  # ### SCOPE RULE BANNER (read before anything else — ARCHITECTURE.md §0, lines 23–27)
+  # **Everything in this phase is a canonical-repo DEV-TIME fence.** It is a blocking CI / pre-commit
+  # control on *the operator's own build and merge into the canonical repo* — it is **NOT** a runtime
+  # control over any autonomous hub. At runtime every hub is a sovereign Hydra (M5/M9/M11): it may
+  # fork this repo, delete these workflows, self-gate locally via `eqc`, ignore the upstream gate, and
+  # replicate-or-reject any artifact. **No gate in this blueprint may be read as a "global control."**
+  # Where a job header says "blocks merge", it means *blocks merge into the canonical repo*, nothing more.
+  # This banner is reproduced verbatim in the header of every workflow job this phase adds, so a future
+  # reader can never misread a red CI run as a limit on hub autonomy.
+  # P01 CI-Truth Floor (BLUEPRINT-P01 §2.1): runs kernel + engine suites --offline, NO `if:` path
+  # filter — this job is unconditional so a planted assert!(false) in any kernel test goes RED on
+  # every push/PR, not only when red-line paths change. Requires the vendoring decision so CI has no
+  # network.
+  cargo-test:
+    name: cargo test (kernel + engine, offline, unconditional)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Pre-fetch crates offline (no network in CI — see BLUEPRINT-P01 §2.1)
+        run: |
+          cargo fetch --manifest-path kernel/Cargo.toml
+          cargo fetch --manifest-path engine/Cargo.toml
+      - name: Run kernel test suite (offline)
+        run: cargo test --offline --manifest-path kernel/Cargo.toml
+      - name: Run engine test suite (offline)
+        run: cargo test --offline --manifest-path engine/Cargo.toml
