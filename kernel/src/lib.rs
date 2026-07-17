@@ -68,14 +68,14 @@ pub mod householder;
 /// Воля АНУ — the hidden source of the self-evolving living organism. Single
 /// kernel-internal entry point for closed-loop self-evolution (G7 source-hiding).
 pub mod hydra;
+/// C-tier "impedance lens": circuit/impedance as a resource framework — flow
+/// reflection coefficient + backpressure gate (ρ<1 with margin, not power-match).
+pub mod impedance;
 /// BLUEPRINT-E1 — discrete gradient/divergence (oriented-edge incidence) and the
 /// CANONICAL reference Laplacian `L = BᵀWB` (+(D−A) convention). The small
 /// hand-oracle-tested reference every other Laplacian (dense/CSR/grid-stencil) is
 /// parity-bound against; retires the last unpinned mirror at the kernel↔engine seam.
 pub mod incidence;
-/// C-tier "impedance lens": circuit/impedance as a resource framework — flow
-/// reflection coefficient + backpressure gate (ρ<1 with margin, not power-match).
-pub mod impedance;
 pub mod intake;
 pub mod isolation;
 pub mod kalman;
@@ -95,11 +95,6 @@ pub mod rng;
 /// scalar op order → bit-identical to `softmax_scalar` / `attention::softmax`.
 /// AVX2 fast path with a scalar fallback (mirrors `householder.rs` runtime gate).
 pub mod simd;
-/// E2 — the kernel's single uncertainty primitive: mean SE / normal & Wilson
-/// intervals / the relocated CLT convergence envelope / a seeded bootstrap.
-/// Zero-dep leaf (sibling of `rng`/`money`/`noether`); every layer depends on it
-/// downward so a reported scalar can carry the check that would refute it.
-pub mod stats;
 /// W2-7 — event-sourced, tamper-evident hash-chain knowledge spine
 /// (Memory/Identity/Intent). Append-only record log; `verify_chain()` re-walks
 /// the chain to detect any mutation. Pure-std (reuses `event_log::sha3_256`).
@@ -109,9 +104,33 @@ pub mod spine;
 /// (pure-std firewall); this owns the Verified-by-Math transitions. Reused by
 /// every async subsystem (reporting, governance, mesh sync).
 pub mod spool;
+/// E2 — the kernel's single uncertainty primitive: mean SE / normal & Wilson
+/// intervals / the relocated CLT convergence envelope / a seeded bootstrap.
+/// Zero-dep leaf (sibling of `rng`/`money`/`noether`); every layer depends on it
+/// downward so a reported scalar can carry the check that would refute it.
+pub mod stats;
 // `loops` (BP-20 orchestration card parsing) depends on serde / serde_yaml →
 // compiled only under the `wasm` feature so a native rlib build stays serde-free.
 // NOT part of the canonical order/money core (decide/order_machine/domain/money).
+/// Deterministic, zero-dependency fault-injection harness (P-H W-H1). The whole
+/// module is `#[cfg(any(test, feature = "chaos"))]`; in a release build it
+/// compiles to `()`, so no chaos symbol reaches a production artifact. This
+/// `mod` line is the structural grep-guard (P24-grep-guard style): its presence
+/// asserts the harness is reachably compiled under `cargo test` / `--features chaos`.
+#[cfg(any(test, feature = "chaos"))]
+pub mod chaos;
+/// External capability ports (the seams where the kernel meets the outside world without importing
+/// it) — currently the `LlmBackend` pluggable LLM backend trait (zero HTTP/serde; the concrete
+/// `llm-adapters` crate implements it).
+/// BLUEPRINT-P-F (Layer F) — MoE mesh DecisionUnit family: closed `DomainTag` capability routing
+/// (NO-COURIER-SCORING), `DecisionUnit` family type (pure `decide()`, Escalate first-class),
+/// FraudAuth escalate-only output, and the Pricing operator-activation money-gate. Kernel-only,
+/// zero network/serde. See `decision/mod.rs` header for the firewall + red-line rationale.
+pub mod decision;
+/// A2 (BLUEPRINT-P-A §3.1) — generated kernel "organs" committed from eqc-rs.
+/// Each fn is emitted by `tools/eqc-rs/src/bin/gen_kernel_organs.rs`; verify
+/// against the hand-written law with a bit-parity `#[test]`.
+pub mod eqc_gen;
 /// E1 — verifiable-cognition benchmark generator: metamorphic MR items with
 /// kernel-primitive oracles, deterministic mint-log leakage gate, and
 /// calibration metrics (ECE/Brier/AURC). Pure-offline, zero-dep.
@@ -127,20 +146,9 @@ pub mod evals;
 pub mod living_knowledge;
 #[cfg(feature = "wasm")]
 pub mod loops;
-/// Deterministic, zero-dependency fault-injection harness (P-H W-H1). The whole
-/// module is `#[cfg(any(test, feature = "chaos"))]`; in a release build it
-/// compiles to `()`, so no chaos symbol reaches a production artifact. This
-/// `mod` line is the structural grep-guard (P24-grep-guard style): its presence
-/// asserts the harness is reachably compiled under `cargo test` / `--features chaos`.
-#[cfg(any(test, feature = "chaos"))]
-pub mod chaos;
 /// Reverse-engineering loop #R1 — Markov attractor detector (ASCENDed from markov_attractor.py);
 /// reuses `spectral` as its eigen-core, killing the dual-authority hazard.
 pub mod markov;
-/// A2 (BLUEPRINT-P-A §3.1) — generated kernel "organs" committed from eqc-rs.
-/// Each fn is emitted by `tools/eqc-rs/src/bin/gen_kernel_organs.rs`; verify
-/// against the hand-written law with a bit-parity `#[test]`.
-pub mod eqc_gen;
 /// Contiguous row-major matrix helper — the single backing store / matmul impl
 /// the spectral + absorbing subsystems route through (DOD/SIMD prep).
 pub mod mat;
@@ -157,9 +165,6 @@ pub mod noether;
 /// ScalarAdam), the self-adaptation substrate (E3). Local-first: no network.
 pub mod online;
 pub mod order_machine;
-/// External capability ports (the seams where the kernel meets the outside world without importing
-/// it) — currently the `LlmBackend` pluggable LLM backend trait (zero HTTP/serde; the concrete
-/// `llm-adapters` crate implements it).
 pub mod ports;
 /// M1 / L0 exact byte+regex search (vectorless) — deterministic trigram
 /// inverted index + exact verify. NEW module; does not touch kernel authority.
@@ -184,14 +189,14 @@ pub mod token_bucket;
 /// Deterministic n-gram (bigram + trigram) frequency extraction over a token
 /// stream — the self-improvement loop's pattern-surface primitive (P9 / T2-β).
 pub mod trigram;
-/// C1 — verify-failure → retrieval-trigger: a claim check that, on failure,
-/// emits a bounded structured re-verify request (the "verify then learn" loop).
-pub mod verify_retrieval;
 /// P08 — typed metrics pure core: `/proc/self` sampling (CPU/mem) + a
 /// deterministic, serde-free, parse-or-reject text schema for typed metric
 /// records. NO egress / signing change; GPU is typed-absent (`Option`) until
 /// hardware exists. Pure-std (default build has no serde).
 pub mod typed_metrics;
+/// C1 — verify-failure → retrieval-trigger: a claim check that, on failure,
+/// emits a bounded structured re-verify request (the "verify then learn" loop).
+pub mod verify_retrieval;
 /// WASM/JS bindings — the only place the kernel touches the boundary.
 /// Compiled ONLY under the `wasm` feature (see `#![cfg(feature = "wasm")]` in
 /// wasm.rs); native rlib builds exclude it and pull no wasm-bindgen/serde.
