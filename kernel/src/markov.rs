@@ -77,24 +77,59 @@ fn idx_of(alpha: &[&str], s: &str) -> usize {
     alpha.iter().position(|&a| a == s).unwrap()
 }
 
-/// Analyse a window of tool-outcome tokens. Pure. Fail-open (short window ⇒ HEALTHY).
-pub fn analyze(states: &[&str]) -> Report {
+/// Full analysis output — the exact JSON contract `markov_attractor.py` emitted
+/// (`json.dumps(analyze(toks))`), so shell consumers (`check.sh`) and parity
+/// tests keep working once the Python is deleted. The kernel is the single
+/// source of truth; the CLI bin serialises this to JSON.
+pub struct DetailedReport {
+    pub report: Report,
+    /// Sorted unique state alphabet (matches Python `alphabet`).
+    pub alphabet: Vec<String>,
+    /// Eigenvalues of Â as (re, im), sorted by modulus descending (Python `eigs`).
+    pub eigs: Vec<(f64, f64)>,
+    /// Stationary π keyed by state name (Python `stationary`).
+    pub stationary: Vec<(String, f64)>,
+    /// Human-readable reason string (Python `reason`).
+    pub reason: String,
+}
+
+impl DetailedReport {
+    /// Verdict as the Python's upper-case string ("HEALTHY" / "LIMIT_CYCLE" / …).
+    pub fn verdict_str(&self) -> &'static str {
+        match self.report.verdict {
+            Verdict::Healthy => "HEALTHY",
+            Verdict::LimitCycle => "LIMIT_CYCLE",
+            Verdict::StrangeAttractor => "STRANGE_ATTRACTOR",
+        }
+    }
+}
+
+/// Analyse a window of tool-outcome tokens, returning the FULL report (verdict +
+/// metrics + spectrum + stationary + reason). Pure. Fail-open (short window ⇒
+/// HEALTHY with empty spectral fields).
+pub fn analyze_detailed(states: &[&str]) -> DetailedReport {
     let states: Vec<&str> = states.iter().copied().filter(|s| !s.is_empty()).collect();
     let l = states.len();
-    let healthy = |verdict, h, escape, drift, has_failure, slem, period, gap, mixing| Report {
-        verdict,
-        events: l,
-        entropy_rate_bits: h,
-        escape_mass: escape,
-        drift,
-        has_failure,
-        slem,
-        period,
-        gap,
-        mixing_time: mixing,
+    let cold = DetailedReport {
+        report: Report {
+            verdict: Verdict::Healthy,
+            events: l,
+            entropy_rate_bits: 0.0,
+            escape_mass: 0.0,
+            drift: 0.0,
+            has_failure: false,
+            slem: 0.0,
+            period: false,
+            gap: 1.0,
+            mixing_time: 1.0,
+        },
+        alphabet: Vec::new(),
+        eigs: Vec::new(),
+        stationary: Vec::new(),
+        reason: "window too short".to_string(),
     };
     if l < MIN_EVENTS {
-        return healthy(Verdict::Healthy, 0.0, 0.0, 0.0, false, 0.0, false, 1.0, 1.0);
+        return cold;
     }
 
     // alphabet = sorted unique
@@ -183,17 +218,61 @@ pub fn analyze(states: &[&str]) -> Report {
         Verdict::Healthy // not struggling, or progress reachable
     };
 
-    healthy(
-        verdict,
-        h,
-        escape,
-        drift,
-        has_failure,
-        slem,
-        period,
-        gap,
-        mixing_time,
-    )
+    let reason = match verdict {
+        Verdict::LimitCycle => format!(
+            "cyclic trap: escape={escape:.3} H={h:.3} period={period} slem={slem:.3}"
+        ),
+        Verdict::StrangeAttractor => format!(
+            "bounded high-entropy churn never reaching progress: escape={escape:.3} H={h:.3} slem={slem:.3}"
+        ),
+        Verdict::Healthy if !has_failure => {
+            format!("quiet work, no failures in window (escape={escape:.3} H={h:.3})")
+        }
+        Verdict::Healthy => {
+            format!("progress reachable: escape={escape:.3} drift={drift:+.3} H={h:.3}")
+        }
+    };
+
+    // eigenvalues (modulus-desc), stationary keyed by alphabet
+    let mut eigs: Vec<(f64, f64)> = spectral::eigenvalues(&a)
+        .iter()
+        .map(|c| (c.re, c.im))
+        .collect();
+    eigs.sort_by(|a, b| {
+        (b.0 * b.0 + b.1 * b.1)
+            .partial_cmp(&(a.0 * a.0 + a.1 * a.1))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let stationary = alpha
+        .iter()
+        .enumerate()
+        .map(|(i, s)| (s.to_string(), pi[i]))
+        .collect();
+
+    DetailedReport {
+        report: Report {
+            verdict,
+            events: l,
+            entropy_rate_bits: h,
+            escape_mass: escape,
+            drift,
+            has_failure,
+            slem,
+            period,
+            gap,
+            mixing_time,
+        },
+        alphabet: alpha.iter().map(|s| s.to_string()).collect(),
+        eigs,
+        stationary,
+        reason,
+    }
+}
+
+/// Analyse a window of tool-outcome tokens. Pure. Fail-open (short window ⇒ HEALTHY).
+/// Thin view over [`analyze_detailed`] — the kernel's single analysis path.
+pub fn analyze(states: &[&str]) -> Report {
+    analyze_detailed(states).report
 }
 
 #[cfg(test)]
