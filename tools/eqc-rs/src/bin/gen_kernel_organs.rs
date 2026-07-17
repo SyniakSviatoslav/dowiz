@@ -19,4 +19,36 @@ fn main() {
         prev.clone() + alpha * (sample - prev),
     );
     println!("{}", ema.emit_f64_rust().expect("emit ema_next"));
+
+    // A3 — money-law shadow organs (BLUEPRINT-P-A §3.3). Both legs of `apply_tax`
+    // expressed in the integer-exact mode. Emitted via `emit_int_checked_rust` so
+    // the committed artifact in kernel/src/eqc_gen.rs has ZERO runtime dependency
+    // on eqc-rs and mirrors apply_tax's BP-17 fail-closed contract.
+    let (sub, rate) = (Expr::sym("sub"), Expr::sym("rate_micro"));
+    let s = Expr::int(1_000_000);
+    // exclusive: tax = (sub*rate + s/2)/s
+    let tax_excl = Equation::new(
+        "apply_tax_exclusive",
+        &["sub", "rate_micro"],
+        Expr::div_half_up(sub.clone() * rate.clone(), s.clone()),
+    );
+    // inclusive: net = (sub*s + (s+rate)/2)/(s+rate); tax = sub - net
+    let net = Expr::div_half_up(sub.clone() * s.clone(), s.clone() + rate.clone());
+    let tax_incl = Equation::new(
+        "apply_tax_inclusive",
+        &["sub", "rate_micro"],
+        sub.clone() - net,
+    );
+    println!(
+        "{}",
+        tax_excl
+            .emit_int_checked_rust()
+            .expect("emit apply_tax_exclusive")
+    );
+    println!(
+        "{}",
+        tax_incl
+            .emit_int_checked_rust()
+            .expect("emit apply_tax_inclusive")
+    );
 }
