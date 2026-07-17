@@ -28,6 +28,13 @@ wasm = ["dep:wasm-bindgen", "dep:serde", "dep:serde_json", "dep:serde_yaml"]
 # `retrieval/memory_store.rs` compiles a REAL sqlx-backed `PgStore` (see its
 # `migrate()` for the explicit, opt-in DDL — never auto-run).
 pgrust = ["dep:sqlx", "dep:tokio"]
+# `pq` — KAT-gated post-quantum crypto core (ML-DSA-65 / ML-KEM-768 / X25519 /
+# AES-GCM volume), zero external PQ crates, byte-exact vs NIST ACVP vectors.
+# OFF by default so the canonical order/money core stays pure-`std` and
+# serde-free; `pq` is an OPT-IN subsystem (mesh/transport identity seam), not
+# part of the decide/fold Law. `serde`/`aes-gcm`/`curve25519-dalek` ride ONLY
+# behind this feature (same discipline as `wasm`).
+pq = ["dep:serde", "dep:serde_json", "dep:aes-gcm", "dep:curve25519-dalek"]
 
 # innovate: rsa 0.9.x (RUSTSEC-2023-0071, Marvin timing) appears in Cargo.lock but
 # `cargo tree -i rsa` prints nothing — it is NOT linked into any active build path
@@ -43,7 +50,8 @@ pgrust = ["dep:sqlx", "dep:tokio"]
 wasm-bindgen = { version = "0.2", optional = true }
 # JSON/YAML (de)serialization for the wasm-bindgen JS glue + the serde-dependent
 # modules (`loops`, `living_knowledge`). Feature-gated (see `wasm` feature) so a
-# native rlib build pulls NONE of them.
+# native rlib build pulls NONE of them. `pq` reuses `serde` (derive) under its
+# own feature flag.
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
 serde_yaml = { version = "0.9", optional = true }
@@ -53,6 +61,9 @@ serde_yaml = { version = "0.9", optional = true }
 # synchronous `MemoryStore` trait boundary.
 sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-rustls"], optional = true }
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
+# PQ subsystem deps — OPTIONAL, only linked under the `pq` feature.
+aes-gcm = { version = "0.10.3", features = ["std"], optional = true }
+curve25519-dalek = { version = "4", optional = true }
 # Structured telemetry: spans/events over the hot paths (order fold, place_order).
 # Gated to non-wasm so the wasm cdylib stays lean; native/rlib tests get full traces.
 tracing = "0.1"
@@ -65,6 +76,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 [dev-dependencies]
 # Benchmarking harness for real latency/throughput telemetry on the hot paths.
 criterion = "0.5"
+# PQ KAT test macro expansion (dsa_acvp_tests.rs) — dev-only, not in any build path.
+paste = "1.0"
 
 [[bench]]
 name = "criterion"
