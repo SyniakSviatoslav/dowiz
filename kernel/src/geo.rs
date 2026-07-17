@@ -510,4 +510,52 @@ mod tests {
         // routing well around it (far to the side) ⇒ clear.
         assert!(los_clear((-1.0, -1.0), (-1.0, 3.0), &fps));
     }
+
+    // ── A2 (BLUEPRINT-P-A §3.1) generated-organ parity fixtures ─────────────
+    // Covers ±0.0, subnormal, ±INFINITY, alpha ∈ {0.0, 1.0, -0.5, 1.5}, large
+    // magnitude. The generated organ (crate::eqc_gen::ema_next_f64) must be
+    // bit-identical to the hand-written `ema_next` on every one of these.
+    const EMA_PARITY_FIXTURES: &[(f64, f64, f64)] = &[
+        // basic / in-range
+        (0.0, 1.0, 0.5),
+        (10.0, 20.0, 0.1),
+        (-10.0, 5.0, 0.3),
+        // ±0.0 sign distinction
+        (0.0, 0.0, 0.5),
+        (-0.0, 0.0, 0.5),
+        (0.0, -0.0, 0.5),
+        (-0.0, -0.0, 0.5),
+        // alpha corner cases
+        (0.0, 100.0, 0.0),   // alpha = 0 ⇒ stays at prev
+        (50.0, 100.0, 1.0),  // alpha = 1 ⇒ jumps to sample
+        (50.0, 100.0, -0.5), // alpha negative
+        (50.0, 100.0, 1.5),  // alpha > 1 (overshoot)
+        // infinities
+        (f64::INFINITY, 1.0, 0.5),
+        (-f64::INFINITY, 1.0, 0.5),
+        (1.0, f64::INFINITY, 0.5),
+        (1.0, -f64::INFINITY, 0.5),
+        (f64::INFINITY, f64::INFINITY, 0.5),
+        // subnormals
+        (f64::MIN_POSITIVE / 2.0, f64::MIN_POSITIVE / 4.0, 0.5),
+        (-f64::MIN_POSITIVE / 2.0, f64::MIN_POSITIVE / 4.0, 0.5),
+        // large magnitude
+        (1e300, 2e300, 0.5),
+        (-1e300, 1e300, 0.5),
+        (1e-300, -2e-300, 1.5),
+    ];
+
+    // Bit-parity: the generated organ must be bit-identical to the hand-written
+    // law for every fixture. RED against a stub returning 0.0; GREEN once the
+    // real generated body is committed into kernel/src/eqc_gen.rs.
+    #[test]
+    fn ema_next_generated_parity_bit_identical() {
+        for &(p, s, a) in EMA_PARITY_FIXTURES {
+            assert_eq!(
+                ema_next(p, s, a).to_bits(),
+                crate::eqc_gen::ema_next_f64(p, s, a).to_bits(),
+                "generated organ diverged from hand-written law at ({p},{s},{a})"
+            );
+        }
+    }
 }

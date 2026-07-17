@@ -12,4 +12,8 @@ path = "src/lib.rs"
 name = "eqc-demo"
 path = "src/bin/demo.rs"
 
+[[bin]]
+name = "gen_kernel_organs"
+path = "src/bin/gen_kernel_organs.rs"
+
 [dependencies]
