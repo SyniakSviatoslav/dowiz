@@ -66,7 +66,7 @@ impl<B: LlmBackend + Send + Sync + 'static> Dispatcher<B> {
     pub fn new(backend: B, workers: usize, capacity: u64, refill_rate: f64) -> Self {
         Dispatcher {
             backend: Arc::new(backend),
-            bucket: Arc::new(TokenBucket::new(capacity, refill_rate)),
+            bucket: Arc::new(TokenBucket::new(capacity as f64, refill_rate)),
             workers: workers.max(1),
         }
     }
@@ -79,7 +79,7 @@ impl<B: LlmBackend + Send + Sync + 'static> Dispatcher<B> {
         let (tx, rx) = channel::<Result<ChatResponse, DispatchError>>();
         let backend = Arc::clone(&self.backend);
         let bucket = Arc::clone(&self.bucket);
-        let cost = (req.max_tokens as u64).max(1); // budget in approx-output units; degrade-closed.
+        let cost = (req.max_tokens as f64).max(1.0); // budget in approx-output units; degrade-closed.
 
         // Bound in-flight jobs: block the caller until a slot frees (visible back-pressure).
         // Simplest correct form: spawn, but cap via a semaphore-style count is overkill here —

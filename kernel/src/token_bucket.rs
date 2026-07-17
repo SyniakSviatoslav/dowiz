@@ -1,123 +1,126 @@
-//! token_bucket.rs — F33 compute-budget `TokenBucket` (zero-dep, monotonic-clock).
+//! token_bucket.rs — P11 §4 / F33 compute-budget `TokenBucket` (zero-dep, monotonic-clock).
 //!
 //! Verified-by-math property (the falsifier): the total tokens granted across any window of
-//! `elapsed` seconds NEVER exceeds `capacity + refill_rate * elapsed`. Degrade-closed: when empty,
-//! `try_acquire` returns `false` (the caller's typed `Err`), never silently queues-then-downgrades.
+//! `elapsed` seconds NEVER exceeds `capacity + refill_rate * elapsed`. Degrade-closed: when the
+//! bucket lacks `n` tokens, `try_acquire` returns `false` (the caller's typed `Err`) — never a
+//! partial grant, never a silent downgrade.
 //!
 //! This is the budget primitive the `llm-adapters` `Dispatcher` reuses to bound concurrency on
-//! LLM calls (§4.2). It is deliberately plain-std (no tokio) so it can live in the kernel.
+//! LLM calls (§4.2). It is deliberately plain-`std` (no tokio, no time crate) so it can live in
+//! the kernel with zero new dependencies.
 //!
-//! Tokens are held as a `f64` inside an `AtomicU64` (bit-cast) so fractional refills accumulate
-//! across calls (a 0.1/s rate must reach 1.0 after 1s even when probed every 100ms — the earlier
-//! integer-truncation version lost sub-unit time).
+//! Design: a `Mutex<Inner>` holds `tokens: f64` and `last_refill: Instant`. The mutex keeps
+//! refill+decrement a single atomic critical section (no lost sub-unit time, no CAS races), which
+//! is what the over-grant invariant needs. Refill is computed from MONOTONIC time (`Instant`),
+//! never wall-clock — so an NTP jump can never bypass the throttle.
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
-/// Bit-cast f64 <-> u64 for lock-free atomic storage of the fractional token count.
-fn pack(x: f64) -> u64 {
-    x.to_bits()
-}
-fn unpack(b: u64) -> f64 {
-    f64::from_bits(b)
+struct Inner {
+    tokens: f64,
+    last_refill: Instant,
 }
 
-/// A monotonic token bucket.
+/// A monotonic-clock token bucket. `capacity` caps the burst; `refill_rate` is tokens/second.
 pub struct TokenBucket {
     capacity: f64,
-    refill_rate: f64, // tokens per second
-    tokens: AtomicU64,
-    last: Mutex<Instant>,
+    refill_rate: f64,
+    inner: Mutex<Inner>,
 }
 
 impl TokenBucket {
-    pub fn new(capacity: u64, refill_rate: f64) -> Self {
+    /// Create a full bucket (starts at `capacity` tokens).
+    pub fn new(capacity: f64, refill_rate: f64) -> Self {
         TokenBucket {
-            capacity: capacity as f64,
+            capacity,
             refill_rate,
-            tokens: AtomicU64::new(pack(capacity as f64)),
-            last: Mutex::new(Instant::now()),
+            inner: Mutex::new(Inner {
+                tokens: capacity,
+                last_refill: Instant::now(),
+            }),
         }
     }
 
-    /// Refill based on elapsed wall-clock (fractional, accumulates), then atomically subtract `n`.
-    /// Returns `true` iff granted; `false` ⇒ caller must degrade-closed.
-    pub fn try_acquire(&self, n: u64) -> bool {
-        self.refill();
-        let need = n as f64;
-        let mut cur = unpack(self.tokens.load(Ordering::Acquire));
-        loop {
-            if cur < need {
-                return false; // degrade-closed: no partial grant, no silent downgrade.
-            }
-            let next = pack(cur - need);
-            match self
-                .tokens
-                .compare_exchange_weak(pack(cur), next, Ordering::AcqRel, Ordering::Acquire)
-            {
-                Ok(_) => return true,
-                Err(c) => cur = unpack(c),
-            }
-        }
-    }
-
-    /// Lazy fractional refill: advance the clock by `elapsed` unconditionally (so sub-unit time
-    /// accumulates), add `refill_rate * elapsed` to the token count, cap at `capacity`.
-    fn refill(&self) {
-        let mut last = self.last.lock().unwrap();
+    /// Lazy monotonic refill: `tokens = min(capacity, tokens + refill_rate * elapsed_secs)`.
+    /// Advances `last_refill` to `now` so sub-unit time is never lost. Underflow clamped at 0.
+    /// Caller must hold the lock.
+    fn refill_locked(&self, inner: &mut Inner) {
         let now = Instant::now();
-        let elapsed = now.saturating_duration_since(*last);
-        if elapsed <= Duration::ZERO {
-            return;
+        let elapsed = now.saturating_duration_since(inner.last_refill).as_secs_f64();
+        if elapsed > 0.0 {
+            inner.tokens = (inner.tokens + self.refill_rate * elapsed).min(self.capacity);
+            if inner.tokens < 0.0 {
+                inner.tokens = 0.0;
+            }
+            inner.last_refill = now;
         }
-        let add = self.refill_rate * elapsed.as_secs_f64();
-        let cur = unpack(self.tokens.load(Ordering::Acquire));
-        let mut new = cur + add;
-        if new > self.capacity {
-            new = self.capacity;
-        }
-        self.tokens.store(pack(new), Ordering::Release);
-        *last = now; // clock advances by full elapsed even when add rounds < 1 unit.
     }
 
-    /// Current token count (for telemetry/tests).
-    pub fn available(&self) -> u64 {
-        self.refill();
-        unpack(self.tokens.load(Ordering::Acquire)).max(0.0) as u64
+    /// Refill lazily, then grant iff `tokens >= n` (decrement on success).
+    /// Returns `true` iff granted; `false` ⇒ caller must degrade-closed.
+    pub fn try_acquire(&self, n: f64) -> bool {
+        let mut inner = self.inner.lock().unwrap();
+        self.refill_locked(&mut inner);
+        if inner.tokens >= n {
+            inner.tokens -= n;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Current available token count (refills lazily first). For telemetry/tests.
+    pub fn available(&self) -> f64 {
+        let mut inner = self.inner.lock().unwrap();
+        self.refill_locked(&mut inner);
+        inner.tokens
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::time::Duration;
 
     #[test]
-    fn never_exceeds_capacity_plus_refill() {
-        // F33 falsifier: total granted over any window never exceeds capacity + refill_rate*elapsed.
-        let capacity = 10u64;
-        let rate = 1.0; // 1 token/sec
-        let b = TokenBucket::new(capacity, rate);
-        let mut granted = 0u64;
-        while b.try_acquire(1) {
-            granted += 1;
-        }
-        assert_eq!(granted, capacity, "can only grant up to capacity initially");
-        // Now empty → acquire must fail (degrade-closed).
-        assert!(!b.try_acquire(1), "empty bucket must refuse");
-        // After a full ~1.1s (fractional refill must accumulate), ~1 token available → succeeds.
-        std::thread::sleep(Duration::from_millis(1100));
-        assert!(b.try_acquire(1), "after ~1.1s refill, one token granted");
-        // Invariant: granted this run + currently-available ≤ capacity + ~1 (refill over the window).
-        assert!(b.available() <= capacity + 1);
+    fn token_bucket_grants_within_capacity() {
+        let b = TokenBucket::new(10.0, 1.0);
+        assert!(b.try_acquire(3.0));
+        assert!(b.try_acquire(3.0));
+        assert!(b.try_acquire(3.0));
+        // Only ~1 token left (refill over these µs is negligible) → 4th grant of 3.0 refused.
+        assert!(!b.try_acquire(3.0), "4th acquire of 3.0 must fail with ~1 token left");
     }
 
     #[test]
-    fn budget_exhausted_returns_typed_false() {
-        let b = TokenBucket::new(2, 0.0); // no refill
-        assert!(b.try_acquire(1));
-        assert!(b.try_acquire(1));
-        assert!(!b.try_acquire(1), "third acquire must be typed-false (degrade-closed)");
+    fn token_bucket_refills_over_time() {
+        let b = TokenBucket::new(1.0, 100.0); // 100 tokens/sec
+        assert!(b.try_acquire(1.0), "first acquire drains the full bucket");
+        assert!(!b.try_acquire(1.0), "bucket empty → refuse");
+        std::thread::sleep(Duration::from_millis(20)); // ~2 tokens refilled, capped at capacity=1
+        assert!(b.try_acquire(1.0), "after ~20ms refill, one token granted again");
+    }
+
+    #[test]
+    fn token_bucket_never_over_grants_under_refill() {
+        // F33 falsifier: total granted over a window ≤ capacity + refill_rate*elapsed + ε.
+        let capacity = 5.0;
+        let rate = 50.0; // tokens/sec
+        let b = TokenBucket::new(capacity, rate);
+        let unit = 0.001;
+        let t0 = Instant::now();
+        let mut granted = 0.0f64;
+        for _ in 0..5000 {
+            if b.try_acquire(unit) {
+                granted += unit;
+            }
+        }
+        let elapsed = t0.elapsed().as_secs_f64();
+        let ceiling = capacity + rate * elapsed + 1e-6;
+        assert!(
+            granted <= ceiling,
+            "over-grant invariant violated: granted={granted} > ceiling={ceiling} (elapsed={elapsed}s)"
+        );
     }
 }
-
