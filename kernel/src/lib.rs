@@ -26,6 +26,11 @@ pub mod causal;
 /// algorithms: ancestors, descendants, c-components, bidirected-aware
 /// d-separation, and the `G\X` / `G[V]` subgraph algebra.
 pub mod cgraph;
+/// P11 §6 — `f64x4` struct-of-arrays (SoA) SIMD batch lane: vectorises softmax
+/// ACROSS the batch (4 independent rows per step), each lane replaying the exact
+/// scalar op order → bit-identical to `softmax_scalar` / `attention::softmax`.
+/// AVX2 fast path with a scalar fallback (mirrors `householder.rs` runtime gate).
+pub mod simd;
 /// P11 §7 — CorePinning trait seam (Trait-as-Port): pluggable CPU-core-affinity
 /// port with a zero-cost `NoOpCorePinning` default (NUMA crate DECART-deferred).
 pub mod core_pinning;
