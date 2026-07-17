@@ -210,7 +210,7 @@ impl<B: AgentBridge, H: HarvestSink> AgentDispatcher<B, H> {
 
         // F2 budget: acquire BEFORE the call, typed refusal on shortfall.
         let cost = inv.cost_units.max(1);
-        if !self.bucket.try_acquire(cost) {
+        if !self.bucket.try_acquire(cost as f64) {
             self.harvest(&model_id, &task_label, false, 0, cost, 0);
             return Err(AgentDispatchError::BudgetExceeded);
         }
@@ -339,7 +339,7 @@ mod tests {
     fn crit8_every_pole_appends_exactly_one_row() {
         let sink = VecHarvest::new();
         // capacity 6, no refill: first success (5) fits; a second 5-cost call refuses.
-        let bucket = Arc::new(TokenBucket::new(6, 0.0));
+        let bucket = Arc::new(TokenBucket::new(6 as f64, 0.0));
         let d = AgentDispatcher::new(bridge(Some("bad")), bucket, 3, sink.clone());
 
         // 1) success
@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn read_resource_served_from_private_cache_on_second_call() {
         let sink = VecHarvest::new();
-        let bucket = Arc::new(TokenBucket::new(1_000, 0.0));
+        let bucket = Arc::new(TokenBucket::new(1_000 as f64, 0.0));
         let b = bridge(None);
         let cache = Arc::new(AgentCache::new());
         let d = AgentDispatcher::new(b.clone(), bucket, 3, sink).with_cache(cache);
@@ -392,7 +392,7 @@ mod tests {
     #[test]
     fn crit5_depth_cap_fires() {
         let sink = VecHarvest::new();
-        let bucket = Arc::new(TokenBucket::new(1_000, 0.0));
+        let bucket = Arc::new(TokenBucket::new(1_000 as f64, 0.0));
         // granted_depth 0 (delegate=false): a depth-0 DIRECT call succeeds…
         let d0 = AgentDispatcher::new(bridge(None), bucket.clone(), 0, sink.clone());
         assert!(d0.dispatch(invoke("good", 1, 0)).is_ok(), "direct call (depth 0) allowed");
