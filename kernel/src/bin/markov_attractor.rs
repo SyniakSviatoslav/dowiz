@@ -27,7 +27,11 @@ fn main() {
         println!("{{\"verdict\": \"HEALTHY\", \"reason\": \"analyzer error\"}}");
         exit(0);
     }
-    let toks: Vec<&str> = buf.lines().map(|l| l.trim()).filter(|l| !l.is_empty()).collect();
+    let toks: Vec<&str> = buf
+        .lines()
+        .map(|l| l.trim())
+        .filter(|l| !l.is_empty())
+        .collect();
     let r = analyze_detailed(&toks);
 
     // Hand-rolled JSON — matches the Python key order exactly (kernel is serde-free).
@@ -41,7 +45,11 @@ fn main() {
         .iter()
         .map(|(k, v)| format!("\"{}\": {:.4}", esc(k), v))
         .collect();
-    let alpha_json: Vec<String> = r.alphabet.iter().map(|s| format!("\"{}\"", esc(s))).collect();
+    let alpha_json: Vec<String> = r
+        .alphabet
+        .iter()
+        .map(|s| format!("\"{}\"", esc(s)))
+        .collect();
 
     println!(
         "{{\"verdict\": \"{}\", \"reason\": \"{}\", \"events\": {}, \
@@ -98,10 +106,7 @@ fn selftest() {
 
     println!(
         "SELFTEST PASS: HEALTHY={:?} LIMIT_CYCLE={:?} STRANGE={:?} cold={:?}",
-        healthy_rhythm.report.verdict,
-        lc.report.verdict,
-        sa.report.verdict,
-        cold.report.verdict
+        healthy_rhythm.report.verdict, lc.report.verdict, sa.report.verdict, cold.report.verdict
     );
 }
 

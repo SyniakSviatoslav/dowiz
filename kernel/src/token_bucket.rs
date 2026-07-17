@@ -47,7 +47,9 @@ impl TokenBucket {
     /// Caller must hold the lock.
     fn refill_locked(&self, inner: &mut Inner) {
         let now = Instant::now();
-        let elapsed = now.saturating_duration_since(inner.last_refill).as_secs_f64();
+        let elapsed = now
+            .saturating_duration_since(inner.last_refill)
+            .as_secs_f64();
         if elapsed > 0.0 {
             inner.tokens = (inner.tokens + self.refill_rate * elapsed).min(self.capacity);
             if inner.tokens < 0.0 {
@@ -90,7 +92,10 @@ mod tests {
         assert!(b.try_acquire(3.0));
         assert!(b.try_acquire(3.0));
         // Only ~1 token left (refill over these µs is negligible) → 4th grant of 3.0 refused.
-        assert!(!b.try_acquire(3.0), "4th acquire of 3.0 must fail with ~1 token left");
+        assert!(
+            !b.try_acquire(3.0),
+            "4th acquire of 3.0 must fail with ~1 token left"
+        );
     }
 
     #[test]
@@ -99,7 +104,10 @@ mod tests {
         assert!(b.try_acquire(1.0), "first acquire drains the full bucket");
         assert!(!b.try_acquire(1.0), "bucket empty → refuse");
         std::thread::sleep(Duration::from_millis(20)); // ~2 tokens refilled, capped at capacity=1
-        assert!(b.try_acquire(1.0), "after ~20ms refill, one token granted again");
+        assert!(
+            b.try_acquire(1.0),
+            "after ~20ms refill, one token granted again"
+        );
     }
 
     #[test]

@@ -16,6 +16,12 @@ pub enum OrderStatus {
     Cancelled,
     Scheduled,
     PickedUp,
+    /// P07 compensation state — a reversal (money refund) is in progress. Reachable
+    /// from any post-commitment state (money has moved after `Confirmed`).
+    Refunding,
+    /// P07 compensated terminal — the order was refunded/cancelled-after-confirm and
+    /// its ledger nets to exactly zero. Terminal (is_terminal → true).
+    CompensatedRefund,
 }
 
 impl OrderStatus {
@@ -32,6 +38,8 @@ impl OrderStatus {
             "CANCELLED" => Some(Self::Cancelled),
             "SCHEDULED" => Some(Self::Scheduled),
             "PICKED_UP" => Some(Self::PickedUp),
+            "REFUNDING" => Some(Self::Refunding),
+            "COMPENSATED_REFUND" => Some(Self::CompensatedRefund),
             _ => None,
         }
     }
@@ -48,13 +56,19 @@ impl OrderStatus {
             Self::Cancelled => "CANCELLED",
             Self::Scheduled => "SCHEDULED",
             Self::PickedUp => "PICKED_UP",
+            Self::Refunding => "REFUNDING",
+            Self::CompensatedRefund => "COMPENSATED_REFUND",
         }
     }
 
     pub fn is_terminal(&self) -> bool {
         matches!(
             self,
-            Self::Delivered | Self::PickedUp | Self::Rejected | Self::Cancelled
+            Self::Delivered
+                | Self::PickedUp
+                | Self::Rejected
+                | Self::Cancelled
+                | Self::CompensatedRefund
         )
     }
 }
@@ -65,15 +79,17 @@ fn allowed_next(from: OrderStatus) -> &'static [OrderStatus] {
     use OrderStatus::*;
     match from {
         Pending => &[Confirmed, Rejected, Cancelled],
-        Confirmed => &[Preparing, InDelivery],
-        Preparing => &[Ready],
-        Ready => &[InDelivery, PickedUp],
-        InDelivery => &[Delivered],
+        Confirmed => &[Preparing, InDelivery, Refunding],
+        Preparing => &[Ready, Refunding],
+        Ready => &[InDelivery, PickedUp, Refunding],
+        InDelivery => &[Delivered, Refunding],
         Delivered => &[],
         Rejected => &[],
         Cancelled => &[],
         Scheduled => &[],
         PickedUp => &[],
+        Refunding => &[CompensatedRefund],
+        CompensatedRefund => &[],
     }
 }
 
@@ -158,8 +174,18 @@ fn all_edges() -> Vec<(OrderStatus, OrderStatus)> {
     use OrderStatus::*;
     let mut edges = Vec::new();
     for &from in &[
-        Pending, Confirmed, Preparing, Ready, InDelivery, Delivered, Rejected, Cancelled,
-        Scheduled, PickedUp,
+        Pending,
+        Confirmed,
+        Preparing,
+        Ready,
+        InDelivery,
+        Delivered,
+        Rejected,
+        Cancelled,
+        Scheduled,
+        PickedUp,
+        Refunding,
+        CompensatedRefund,
     ] {
         for &to in allowed_next(from) {
             edges.push((from, to));
@@ -170,7 +196,7 @@ fn all_edges() -> Vec<(OrderStatus, OrderStatus)> {
 
 /// The ten lifecycle states, in their canonical adjacency-matrix index order.
 /// Shared by every graph analysis below so indices never drift between passes.
-const LIFECYCLE_STATES: [OrderStatus; 10] = [
+const LIFECYCLE_STATES: [OrderStatus; 12] = [
     OrderStatus::Pending,
     OrderStatus::Confirmed,
     OrderStatus::Preparing,
@@ -181,9 +207,11 @@ const LIFECYCLE_STATES: [OrderStatus; 10] = [
     OrderStatus::Cancelled,
     OrderStatus::Scheduled,
     OrderStatus::PickedUp,
+    OrderStatus::Refunding,
+    OrderStatus::CompensatedRefund,
 ];
 
-/// Canonical index of a lifecycle state (0..10), matching `LIFECYCLE_STATES`.
+/// Canonical index of a lifecycle state (0..12), matching `LIFECYCLE_STATES`.
 /// Centralised so `has_cycle`, `cyclomatic_number`, `topological_order`,
 /// `reachable`, and `spectral_radius` all agree on vertex numbering.
 fn idx_of(s: OrderStatus) -> usize {
@@ -198,6 +226,8 @@ fn idx_of(s: OrderStatus) -> usize {
         OrderStatus::Cancelled => 7,
         OrderStatus::Scheduled => 8,
         OrderStatus::PickedUp => 9,
+        OrderStatus::Refunding => 10,
+        OrderStatus::CompensatedRefund => 11,
     }
 }
 
@@ -214,7 +244,7 @@ pub fn topological_order() -> Option<Vec<OrderStatus>> {
     let states = LIFECYCLE_STATES;
     let edges = all_edges();
     let n = states.len();
-    let mut indeg = [0usize; 10];
+    let mut indeg = [0usize; 12];
     for &(_, t) in &edges {
         indeg[idx_of(t)] += 1;
     }
@@ -459,27 +489,37 @@ pub fn fsm_graph_report() -> FsmGraphReport {
 }
 
 /// Verified-by-Math drift gate — the golden fingerprint of the lifecycle FSM,
-/// captured and cross-validated on 2026-07-14 (vertices=10, edges=9, acyclic,
-/// μ=1, directed ρ=0, `Scheduled` orphan, full forward chain from `Pending`).
+/// captured and cross-validated on 2026-07-17 (after P07 compensation edges):
+/// vertices=12 (added Refunding, CompensatedRefund), edges=14 (added 5 compensation
+/// edges: Confirmed→Refunding, Preparing→Refunding, Ready→Refunding, InDelivery→Refunding,
+/// Refunding→CompensatedRefund), acyclic, μ=4, directed ρ=0, `Scheduled` orphan, full
+/// forward chain from `Pending` now including the refund compensation sub-flow.
 ///
 /// The whole point of the graph-analysis capstone is to *catch silent lifecycle
 /// drift*: a future `Reopen` edge, a deleted transition, or a reordered state
 /// must flip this gate RED instead of shipping unnoticed. Call it at boot, in
 /// CI, or after every `apply_event` fold.
 ///
+/// Re-key rationale (P07, 2026-07-17): the compensation sub-flow is a deliberate,
+/// reviewed lifecycle change (see BLUEPRINT-P07 §3). The new values were produced by
+/// running `fsm_graph_report()` against the new graph and pinned here with this
+/// recorded rationale — NOT hand-edited to force the gate green. Hand-derivation
+/// (μ = |E|−|V|+c = 14−12+2) and the BFS reachability (3839 = bits {0..7,9,10,11})
+/// both match the executed report.
+///
 /// innovovate: ceiling = signature is hand-pinned; upgrade trigger = a deliberate
 /// lifecycle change that bumps `FSM_GOLDEN_SIGNATURE` with a recorded rationale.
 pub const FSM_GOLDEN_SIGNATURE: FsmGraphReport = FsmGraphReport {
-    vertices: 10,
-    edges: 9,
+    vertices: 12,
+    edges: 14,
     is_acyclic: true,
-    cyclomatic: 1,
+    cyclomatic: 4,
     spectral_radius: 0.0,
     // All active states reachable from `Pending` EXCEPT `Scheduled` (orphan
-    // scaffold terminal, bit 8): bits {0..7, 9} = 0b1011111111 = 767.
-    reachable_from_pending: 767,
-    reachable_states: 9,
-    topological_len: Some(10),
+    // scaffold terminal, bit 8): bits {0..7, 9,10,11} = 3839.
+    reachable_from_pending: 3839,
+    reachable_states: 11,
+    topological_len: Some(12),
 };
 
 /// Which field(s) of the live signature diverged from the golden fingerprint.
@@ -549,12 +589,22 @@ pub fn verify_fsm_signature_against(r: FsmGraphReport) -> Result<(), FsmSignatur
 pub fn has_cycle() -> bool {
     use OrderStatus::*;
     let states = [
-        Pending, Confirmed, Preparing, Ready, InDelivery, Delivered, Rejected, Cancelled,
-        Scheduled, PickedUp,
+        Pending,
+        Confirmed,
+        Preparing,
+        Ready,
+        InDelivery,
+        Delivered,
+        Rejected,
+        Cancelled,
+        Scheduled,
+        PickedUp,
+        Refunding,
+        CompensatedRefund,
     ];
     let edges = all_edges();
-    let mut visited = [false; 10];
-    let mut in_stack = [false; 10];
+    let mut visited = [false; 12];
+    let mut in_stack = [false; 12];
     // index helper
     let idx = |s: OrderStatus| -> usize {
         match s {
@@ -568,14 +618,16 @@ pub fn has_cycle() -> bool {
             Cancelled => 7,
             Scheduled => 8,
             PickedUp => 9,
+            Refunding => 10,
+            CompensatedRefund => 11,
         }
     };
     fn dfs(
         s: OrderStatus,
         idx: &dyn Fn(OrderStatus) -> usize,
         edges: &[(OrderStatus, OrderStatus)],
-        visited: &mut [bool; 10],
-        in_stack: &mut [bool; 10],
+        visited: &mut [bool; 12],
+        in_stack: &mut [bool; 12],
     ) -> bool {
         let i = idx(s);
         visited[i] = true;
@@ -612,18 +664,28 @@ pub fn has_cycle() -> bool {
 pub fn cyclomatic_number() -> isize {
     use OrderStatus::*;
     let states = [
-        Pending, Confirmed, Preparing, Ready, InDelivery, Delivered, Rejected, Cancelled,
-        Scheduled, PickedUp,
+        Pending,
+        Confirmed,
+        Preparing,
+        Ready,
+        InDelivery,
+        Delivered,
+        Rejected,
+        Cancelled,
+        Scheduled,
+        PickedUp,
+        Refunding,
+        CompensatedRefund,
     ];
     let edges = all_edges();
     let v = states.len();
     let e = edges.len();
     // connected components via union-find over the undirected version of E
-    let mut parent = [0usize; 10];
+    let mut parent = [0usize; 12];
     for (k, s) in states.iter().enumerate() {
         parent[k] = idx_of(*s);
     }
-    fn find(parent: &mut [usize; 10], x: usize) -> usize {
+    fn find(parent: &mut [usize; 12], x: usize) -> usize {
         let mut x = x;
         while parent[x] != x {
             parent[x] = parent[parent[x]];
@@ -643,6 +705,8 @@ pub fn cyclomatic_number() -> isize {
             Cancelled => 7,
             Scheduled => 8,
             PickedUp => 9,
+            Refunding => 10,
+            CompensatedRefund => 11,
         }
     }
     for &(f, t) in &edges {
@@ -774,13 +838,12 @@ mod tests {
 
     #[test]
     fn green_cyclomatic_number_counts_undirected_cycle() {
-        // μ = |E| − |V| + c. The lifecycle is a DIRECTED acyclic graph (has_cycle() ==
-        // false), but its undirected version contains one cycle:
-        //   Confirmed → Preparing → Ready → InDelivery → Confirmed
-        // (via edges Confirmed→Preparing, Preparing→Ready, Ready→InDelivery,
-        // Confirmed→InDelivery). So μ = 1, NOT 0. Directed-acyclic ≠ undirected-acyclic
-        // — a useful distinction the operator's growth-substrate surfaces concretely.
-        assert_eq!(cyclomatic_number(), 1);
+        // μ = |E| − |V| + c. After P07 the lifecycle has 14 edges / 12 vertices across
+        // 2 components (Scheduled orphan), so μ = 14 − 12 + 2 = 4. Directed-acyclic
+        // (ρ=0) ≠ undirected-acyclic — the 4 undirected cycles (e.g. Confirmed→Preparing→
+        // Ready→InDelivery→Confirmed, plus the four Refunding→CompensatedRefund reversals'
+        // undirected triangle closings with their inbound edge) are not directed re-open loops.
+        assert_eq!(cyclomatic_number(), 4);
     }
 
     // ── GREEN: the lifecycle admits a topological (forward) order ──
@@ -910,7 +973,7 @@ mod tests {
             assert!(r.spectral_radius.abs() >= 1e-9);
         }
         // Vertices = 10; reachable-from-Pending always includes Pending itself.
-        assert_eq!(r.vertices, 10);
+        assert_eq!(r.vertices, 12);
         assert!(
             r.reachable_from_pending & 1 != 0,
             "Pending reachable from itself"

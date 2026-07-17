@@ -352,8 +352,8 @@ impl<S: EventStore> EventLog<S> {
         }
         // Decide BEFORE commit. On rejection, do not persist anything — this is
         // the Law pole (never retry), kept distinct from the store-fault pole.
-        let decision = decide(&ev)
-            .map_err(|e| CommitError::Rejected(DecideRejected(e.to_string())))?;
+        let decision =
+            decide(&ev).map_err(|e| CommitError::Rejected(DecideRejected(e.to_string())))?;
         // Commit (chains prev, records tip). A durability fault here is the
         // Store pole — accepted but not durable, NOT a Law rejection.
         let outcome = self.append(ev).map_err(CommitError::Store)?;
@@ -711,7 +711,10 @@ mod tests {
             !matches!(res, Ok(AppendOutcome::Committed(_))),
             "MUST NOT fabricate a Committed outcome on a lost write"
         );
-        assert!(log.tip().is_none(), "tip must not advance on a failed barrier");
+        assert!(
+            log.tip().is_none(),
+            "tip must not advance on a failed barrier"
+        );
         assert_eq!(log.len(), 0, "no in-memory advance on a failed barrier");
     }
 

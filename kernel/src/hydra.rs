@@ -574,7 +574,10 @@ mod tests {
         });
         assert!(witnessed, "breach self-witness row persisted in WORM log");
         // group_size==0 is the only guard (no hub to warn).
-        assert!(h.raise_breach_alarm([7u8; 32], 0).expect("store ok").is_none());
+        assert!(h
+            .raise_breach_alarm([7u8; 32], 0)
+            .expect("store ok")
+            .is_none());
     }
 
     /// G9 — hub convergence: a node that RECEIVES a verified peer breach alert
