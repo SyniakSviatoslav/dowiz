@@ -2,6 +2,7 @@
 name = "agent-adapters"
 version = "0.1.0"
 edition = "2021"
+license = "AGPL-3.0-or-later"
 description = "AgentBridge adapters (MCP-server bridge) for dowiz — JSON-RPC 2.0, no tokio; Wasmtime fuel behind a feature."
 
 # Standalone crate at repo root (sibling to kernel/ and llm-adapters/), NOT a workspace
