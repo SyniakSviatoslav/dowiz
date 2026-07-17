@@ -208,6 +208,9 @@ pub trait EventStore {
 #[derive(Debug, Clone, Default)]
 pub struct MemEventStore {
     by_id: HashSet<[u8; 32]>,
+    /// Full event bodies, keyed by content-id, so the read-back walk
+    /// (`EventLog::verify_chain`, P-H W-H4 F2) can detect corruption at rest.
+    by_event: std::collections::HashMap<[u8; 32], MeshEvent>,
     tip: Option<[u8; 32]>,
     count: usize,
 }
@@ -223,12 +226,16 @@ impl EventStore for MemEventStore {
     fn contains(&self, id: &[u8; 32]) -> bool {
         self.by_id.contains(id)
     }
-    fn insert(&mut self, id: [u8; 32], _ev: MeshEvent) -> Result<(), StoreError> {
+    fn insert(&mut self, id: [u8; 32], ev: MeshEvent) -> Result<(), StoreError> {
         // A HashSet insert does no IO; honest — it cannot fail.
         if self.by_id.insert(id) {
             self.count += 1;
         }
+        self.by_event.insert(id, ev);
         Ok(())
+    }
+    fn get(&self, id: &[u8; 32]) -> Option<MeshEvent> {
+        self.by_event.get(id).cloned()
     }
     fn len(&self) -> usize {
         self.count
@@ -273,7 +280,9 @@ pub enum CommitError {
 /// Once persistently committed, the event can be gossiped/synced (MESH-07) and
 /// the network layer never re-runs `decide` — it only verifies signatures.
 pub struct EventLog<S: EventStore> {
-    store: S,
+    /// The backing store. `pub(crate)` so the chaos adversarial suite (P-H W-H4
+    /// A1) can assert `insert_calls == 0` (drift-gate-before-store-touch).
+    pub(crate) store: S,
 }
 
 impl<S: EventStore> EventLog<S> {
@@ -444,10 +453,78 @@ impl<S: EventStore> EventLog<S> {
         self.store.len()
     }
 
-    /// Whether the log is empty.
+    /// Number of events persisted.
     pub fn is_empty(&self) -> bool {
         self.store.is_empty()
     }
+
+    /// P-H W-H4 (F2) — read-back integrity walk. Starting from the current tip,
+    /// follow `prev` links back to the genesis event, recomputing each event's
+    /// content-id (`MeshEvent::event_id()`) from its stored body and comparing
+    /// against the id under which it was persisted. Returns the first mismatch
+    /// as a typed [`ChainDefect`], or `Ok(())` if the chain is internally
+    /// consistent. A corruption *between* hash and persist (torn write / bad
+    /// sector) leaves the stored id unchanged but mutates the body — this walk
+    /// is the only observer that catches it (the `CorruptPayload` injection in
+    /// `chaos.rs` exercises exactly this).
+    ///
+    /// Requires the backing store to honor `EventStore::get` (the default
+    /// returns `None`; `MemEventStore` overrides it). On a store that cannot
+    /// read bodies back, the walk degrades-closed: it cannot prove integrity,
+    /// so it returns `Err(ChainDefect::Unreadable)`.
+    pub fn verify_chain(&self) -> Result<(), ChainDefect> {
+        let mut cursor = match self.store.tip() {
+            Some(id) => id,
+            None => return Ok(()), // empty log is trivially consistent
+        };
+        // Walk at most `len()` hops to avoid an infinite loop on a cyclic chain.
+        let max_hops = self.store.len();
+        for _ in 0..=max_hops {
+            let ev = match self.store.get(&cursor) {
+                Some(ev) => ev,
+                None => return Err(ChainDefect::BrokenPrev { at: cursor }),
+            };
+            // Recompute the id from the (possibly corrupted) body.
+            let recomputed = ev.event_id();
+            if recomputed != cursor {
+                return Err(ChainDefect::HashMismatch {
+                    at: cursor,
+                    stored: cursor,
+                    recomputed,
+                });
+            }
+            // Genesis has a zero `prev`.
+            if ev.prev.iter().all(|&b| b == 0) {
+                return Ok(());
+            }
+            cursor = ev.prev;
+        }
+        // More hops than events ⇒ cycle; treat as broken-prev (unreachable genesis).
+        Err(ChainDefect::BrokenPrev { at: cursor })
+    }
+}
+
+/// P-H W-H4 — the typed defect a [`EventLog::verify_chain`] walk can surface.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChainDefect {
+    /// A stored id has no corresponding body (dangling `prev` / missing event).
+    BrokenPrev {
+        /// The content-id at which the walk could not continue.
+        at: [u8; 32],
+    },
+    /// A persisted body no longer hashes to the id under which it was stored —
+    /// the signature of corruption between hash and persist (F2).
+    HashMismatch {
+        /// The content-id under which the event was persisted.
+        stored: [u8; 32],
+        /// The id recomputed from the (possibly mutated) body.
+        recomputed: [u8; 32],
+        /// (kept for symmetry with `BrokenPrev` readability)
+        at: [u8; 32],
+    },
+    /// The backing store cannot read event bodies back (default `get`), so
+    /// integrity is unprovable — degrade-closed rather than falsely green.
+    Unreadable,
 }
 
 /// H1 §4 — test-only store whose durability barrier ALWAYS fails, modelling a

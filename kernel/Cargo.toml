@@ -22,6 +22,11 @@ std = []
 # ride behind this feature (the only one that enables serde) to keep the native
 # build serde-free; neither is part of the canonical order/money core.
 wasm = ["dep:wasm-bindgen", "dep:serde", "dep:serde_json", "dep:serde_yaml"]
+# `chaos` — the zero-dependency deterministic fault-injection harness (P-H W-H1).
+# OFF by default so production artifacts carry NO chaos symbols (the whole
+# `chaos` module is `#[cfg(any(test, feature = "chaos"))]`); a release build
+# compiles the injection machinery to `()`, unrepresentable-at-the-boundary.
+chaos = []
 # `pgrust` is the OPTIONAL Postgres SQL adapter for the living-memory store
 # (M4/W4-1). OFF by default so the kernel stays pure-`std` with no network
 # deps; the default `InMemoryStore` is native std-only. Behind this flag,
