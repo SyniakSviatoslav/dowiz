@@ -109,6 +109,7 @@ fn bench_spectral_cache_slem_cached(c: &mut Criterion) {
     c.bench_function("spectral_cache/slem_cached_10x10_hit", |b| {
         b.iter(|| {
             let mut cache = DecompCache::new();
+            let tile = dowiz_kernel::csr::NormalizedTile::from_dense(&tile);
             let first = slem_cached(&mut cache, &tile);
             // second call: same tile ⇒ identical content-address ⇒ HIT, no recompute.
             let second = slem_cached(&mut cache, &tile);

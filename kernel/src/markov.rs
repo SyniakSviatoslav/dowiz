@@ -206,7 +206,8 @@ pub fn analyze_detailed(states: &[&str]) -> DetailedReport {
     // it survives across `analyze_detailed` calls; here it warms/reuses within
     // a single call and exercises the primitive end-to-end.
     let mut decomp_cache = crate::spectral_cache::DecompCache::new();
-    let slem = crate::spectral_cache::slem_cached(&mut decomp_cache, &a);
+    let a_tile = crate::csr::NormalizedTile::from_dense(&a);
+    let slem = crate::spectral_cache::slem_cached(&mut decomp_cache, &a_tile);
     let period = spectral::dominant_period(&a).is_some();
     let gap = 1.0 - slem;
     let mixing_time = if gap > 1e-12 {
@@ -492,13 +493,14 @@ mod tests {
             }
             let slem_old = crate::spectral::slem(&a);
             let mut cache = crate::spectral_cache::DecompCache::new();
-            let slem_new = crate::spectral_cache::slem_cached(&mut cache, &a);
+            let a_tile = crate::csr::NormalizedTile::from_dense(&a);
+            let slem_new = crate::spectral_cache::slem_cached(&mut cache, &a_tile);
             assert!(
                 (slem_new - slem_old).abs() <= 1e-9,
                 "case {k}: |slem_new({slem_new}) − slem_old({slem_old})| > 1e-9"
             );
             // And the cache must be honest: a repeat on the SAME matrix hits.
-            let slem_repeat = crate::spectral_cache::slem_cached(&mut cache, &a);
+            let slem_repeat = crate::spectral_cache::slem_cached(&mut cache, &a_tile);
             assert_eq!(
                 cache.recomputes(),
                 0,
