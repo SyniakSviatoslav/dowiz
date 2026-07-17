@@ -532,17 +532,23 @@ mod tests {
             }
         }
 
-        // Adversarial overflow sweep: sub=i64::MAX, rate_micro=2_000_000 MUST return Err
-        // for BOTH organs — never wrap.
+        // Adversarial overflow sweep: the EXCLUSIVE organ at sub=i64::MAX,
+        // rate_micro=2_000_000 MUST return Err (the half-up product overflows i64) —
+        // never wrap. The INCLUSIVE organ can never overflow the final i64 narrowing
+        // (tax = sub - net ≤ sub ≤ i64::MAX for non-negative rate, and sub*s fits i128),
+        // so it returns Ok there and must equal the law exactly. Both paths are
+        // fail-closed: whatever they return is the true, in-range value (no silent wrap).
         let got_excl = crate::eqc_gen::apply_tax_exclusive_int(i64::MAX, 2_000_000);
         let got_incl = crate::eqc_gen::apply_tax_inclusive_int(i64::MAX, 2_000_000);
         assert!(
             got_excl.is_err(),
             "exclusive organ must refuse overflow, got {got_excl:?}"
         );
-        assert!(
-            got_incl.is_err(),
-            "inclusive organ must refuse overflow, got {got_incl:?}"
+        let want_incl = apply_tax(i64::MAX, 2.0, true);
+        assert_eq!(
+            got_incl,
+            want_incl.map_err(|_| "tax overflow: subtotal * rate exceeds i64"),
+            "inclusive organ must match the law at the i64::MAX boundary (no wrap)"
         );
 
         // Property grid: divergence-hunting sweep over the integer basis. Any single
