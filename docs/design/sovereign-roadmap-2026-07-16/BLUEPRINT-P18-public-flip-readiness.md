@@ -10,7 +10,13 @@
 > `bebop-repo/GOVERNANCE.md:39-56`, `bebop-repo/SECURITY.md`, `bebop-repo/CITATION.cff`.
 > **The prime directive of this phase:** cleanly separate *what the agent can prepare today* from
 > *what only the operator may decide/act on*. Those lines are never blurred.
-
+>
+> ⚠️ **CANON DRIFT — 2026-07-17.** §2.1–§2.6 / done-table rows 7 & 9 / appendix assert SECURITY.md,
+> CODE_OF_CONDUCT.md, CITATION.cff, README.md are "currently ABSENT (verified)". That was true at
+> write-time; P18 `aea7955a4` (on `feat/p18-public-flip-prep`) has since shipped ALL of them +
+> repo-settings.sh. Those rows are now DONE, not AGENT-PREP. The operator-gated flip (O16 brand, EUTM,
+> written go) remains the one-way door. Live repo is truth.
+>
 ---
 
 ## 1. Canon correction — what is ALREADY done (contradicting stale §8)

@@ -5,6 +5,13 @@
 > sequence for the entire anchor set of `ARCHITECTURE.md` + `STRATEGIC-VECTORS-LOCKED-2026-07-16.md`.
 > Every claim inherited from R1 was spot-verified where load-bearing (CI jobs, LICENSE, CONTRIBUTING.md,
 > E10/E36 text, D5/D8 absence — all re-checked against the live tree this session).
+>
+> ⚠️ **CANON DRIFT — 2026-07-17.** This roadmap's "CI regressed to 2 jobs / gitleaks dropped / no
+> cargo-test / CONTRIBUTING.md:17 false" claims (§1.2, Phase-1 row) describe the pre-P01 state and are
+> now FALSE vs HEAD. P01 `4b05ee588` added all seven CI gates (gitleaks, dco-check, supply-chain,
+> decart-dep-lint, no-courier-scoring, cargo-test, + pre-existing). Phase-18 row "governance files
+> remaining" is STALE — P18 `aea7955a4` shipped SECURITY/CoC/README/CITATION/repo-settings. Live repo is
+> truth; see `feat/p01-ci-truth-floor` + `feat/p18-public-flip-prep`.
 > No pre/post-MVP split. Every anchor lands in exactly one numbered phase. Phases are real
 > build-dependency order; parallel-safety is stated explicitly wherever it exists.
 
