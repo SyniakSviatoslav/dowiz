@@ -137,6 +137,10 @@ pub mod chaos;
 /// Reverse-engineering loop #R1 — Markov attractor detector (ASCENDed from markov_attractor.py);
 /// reuses `spectral` as its eigen-core, killing the dual-authority hazard.
 pub mod markov;
+/// A2 (BLUEPRINT-P-A §3.1) — generated kernel "organs" committed from eqc-rs.
+/// Each fn is emitted by `tools/eqc-rs/src/bin/gen_kernel_organs.rs`; verify
+/// against the hand-written law with a bit-parity `#[test]`.
+pub mod eqc_gen;
 /// Contiguous row-major matrix helper — the single backing store / matmul impl
 /// the spectral + absorbing subsystems route through (DOD/SIMD prep).
 pub mod mat;
