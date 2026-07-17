@@ -5,6 +5,14 @@
 > Evidence base: `R1-C-kernel-service-compute-storage-gap-analysis.md` + `R1-E-ecosystem-community-business-legal-growth-gap-analysis.md`.
 > Every current-state claim below carries a file:line or commit citation from those reports — none re-derived.
 >
+> ⚠️ **CANON DRIFT — 2026-07-17 (P01 merged `4b05ee588` on `feat/p01-ci-truth-floor`).** This blueprint
+> was written *before* P01 landed. Its §1.x "current state" claims (CI has 2 jobs, no gitleaks/DCO/
+> supply-chain/decart/no-courier gates, no `license` fields, no `deny.toml`) describe the **pre-merge**
+> state and are now FALSE vs HEAD. P01 built all seven §2 jobs, added `deny.toml`, `scripts/decart-dep-
+> lint.sh`, license fields, and the MIT-tool carve-out. The §7 appendix verdict ("only 2 of 7 built")
+> was corrected in-place above. Read this doc as the *plan*; the live repo (`git show HEAD:.github/
+> workflows/ci.yml`) is the *truth*.
+>
 > ### SCOPE RULE BANNER (read before anything else — ARCHITECTURE.md §0, lines 23–27)
 > **Everything in this phase is a canonical-repo DEV-TIME fence.** It is a blocking CI / pre-commit
 > control on *the operator's own build and merge into the canonical repo* — it is **NOT** a runtime
@@ -316,16 +324,7 @@ written, on this branch:
   paths touched`. This is the single strongest confirmation in this pass — a *derived*, not merely
   asserted, dependency (see Anu below).
 
-**Still accurate — NOT stale.** §1.1's headline (CI regressed, gitleaks dropped), §1.3 (`.gitleaks.toml`
-exists, no CI wiring), §1.5 (no `deny.toml`/`advisories/`; `cargo-audit`/`cargo-deny` binaries ARE
-present at `/root/.cargo/bin/` but neither is wired into CI), §1.6 (no `decart-dep-lint.sh` — grep
-zero), §1.7 (no `no-courier-scoring` CI job — grep zero), §1.9 (`kernel/Cargo.toml` and
-`engine/Cargo.toml` still carry **no `license` field**; `tools/async-spool/Cargo.toml` and
-`tools/native-spa-server/Cargo.toml` still say `license = "MIT"`), §1.10 (`check-zero-oci.sh:8` still
-references the non-existent "supply-chain job") are all re-verified true today. Of the seven new jobs
-§2 designs, only 2 of 7 (`claim-latency-ledger`, `v5c-reexec`) are built; `cargo-test` (unconditional),
-`gitleaks`, `dco-check`, `supply-chain`, `decart-dep-lint`, `no-courier-scoring` remain exactly as
-described — genuinely not built, not stale.
+**Still accurate — NOT stale (at the time of writing).** §1.1's headline (CI regressed, gitleaks dropped), §1.3–§1.10 described the state *before* P01 merged. **CANON DRIFT (2026-07-17):** P01 commit `4b05ee588` built ALL seven §2 jobs (`cargo-test`, `gitleaks`, `dco-check`, `supply-chain`, `decart-dep-lint`, `no-courier-scoring` — plus the pre-existing `claim-latency-ledger`/`v5c-reexec`). The assertion "only 2 of 7 are built; the other five remain genuinely not built" is now **FALSE vs HEAD** and is recorded here as a historical snapshot, not current truth. Of the seven new jobs §2 designs, all seven are now built and enforced in `ci.yml`. Kernel/engine `license` fields were also added (`AGPL-3.0-or-later`), and `check-zero-oci.sh:8` now references the real `supply-chain` job. See `feat/p01-ci-truth-floor`.
 
 **Corrected — test counts drifted.** §1.2 cites "kernel 337 + engine 47." Live `cargo test --offline`
 today: kernel **371** (367 lib + 4 integration), engine **49** — both 0 failed. Ironically this drift

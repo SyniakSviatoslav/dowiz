@@ -10,6 +10,12 @@
 > never append."* Merging is the operator's act (or a delegated-back merge task). Everything below is
 > a **proposal**: exact before/after diffs (§1), a decision docket the operator rules on (§2), the
 > ADR-020 draft (§3), and the V4 closure template (§4). Nothing here is applied. Where a ruling is
+>
+> ⚠️ **CANON DRIFT — 2026-07-17.** §1 C-1/C-2 premise ("ARCHITECTURE.md:41/:128 still claim Apache-2.0
+> mismatch; force-push scrub BLOCKED") was already corrected at `574f05604` (LICENSE is AGPLv3 since
+> `ac1caba40`; scrub CLOSED) and again in P18 — so those canon-merge proposals are now MOOT. §3 done-test
+> #6 ("no ADR-020*.md exists") is also stale: the ADR lives at `docs/adr/0020-oss-license-tm-dco.md`.
+> The proposal's historical value stands; its "live rot" premises do not. Live repo is truth.
 > **load-bearing** (O1 D5/D8, O3 F44, O4 F48) the recommendation is explicitly overridable and the
 > phase **cannot close** until the operator rules or dates a deferral. Where a ruling is
 > **mechanical** (rewordings, D2 phrasing, S7/S8 split) a default is recommended for adoption.
