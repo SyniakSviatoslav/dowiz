@@ -1,3 +1,11 @@
+> **SUPERSEDED (2026-07-17)** — see `MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md` (canonical
+> roadmap, phases P01–P30) and `CORE-ROADMAP-INDEX.md` + `CORE-ROADMAP-2026-07-17/` (the Layer A–I
+> execution structure). Preserved for historical/audit-trail purposes only — its Tier-0..5 spine
+> targets the Node/TS stack fully deleted at `5675c349b`. Would-be-lost items folded in (P-I audit
+> §3): **L3** courier out-of-app notification/wake → Phase 13 blueprint sub-unit; **L4** `.onion`/Tor
+> tier → E53-form waiver in the canonical doc §9; **L5** "lost reports" ledger → closed-as-lost,
+> decisions survive in `UNIFIED-DELIVERY-PROTOCOL-BLUEPRINT-v3`.
+
 # Master Build Sequence — UPDATED 2026-07-11 (post-push revision)
 
 > Revision of the original session master sequence. The original was written BEFORE the

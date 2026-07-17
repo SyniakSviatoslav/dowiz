@@ -1,3 +1,11 @@
+> **SUPERSEDED (2026-07-17)** — see `docs/design/MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md`
+> (canonical roadmap, phases P01–P30) and `docs/design/CORE-ROADMAP-INDEX.md` +
+> `docs/design/CORE-ROADMAP-2026-07-17/` (the Layer A–I execution structure). This document is
+> preserved for historical/audit-trail purposes only — do not plan against it. Its two
+> would-be-lost items were folded in (P-I audit §3): **L1** update-blob code-signing → Phase 10
+> blueprint; **L2** transport bake-off rationale → `docs/transport-research-2026-07-12.md`
+> (restored) cross-linked from the Phase 9 blueprint.
+
 # MASTER ROADMAP & MVP — dowiz / bebop decentralized PQ delivery protocol
 
 > **Source of truth: this doc (dated 2026-07-12) + MANIFESTO.md + DECISIONS.md.**

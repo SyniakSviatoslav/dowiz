@@ -9,7 +9,9 @@
 > repo's ACTUAL current state to that architecture, in full, with zero anchors deferred outside a
 > phase and zero pre/post-MVP split, per the operator's 2026-07-16 directive. It supersedes
 > `MASTER-ROADMAP-10-PHASES-2026-07-14.md`, `MASTER-EXECUTION-PLAN-2026-07-13.md`,
-> `MASTER-INTEGRATION-PLAN-2026-07-14.md`, and `MASTER-ROADMAP-MVP-2026-07-12.md` (root) — all
+> `MASTER-INTEGRATION-PLAN-2026-07-14.md`, `MASTER-BUILD-SEQUENCE-UPDATED-2026-07-11.md`
+> (added 2026-07-17 — omitted from the original list; P-I consolidation audit §0 confirmed it is
+> superseded like the rest), and `MASTER-ROADMAP-MVP-2026-07-12.md` (root) — all
 >
 > ⚠️ **CANON DRIFT — 2026-07-17.** §1.3/§1.6(a) "CI runs exactly 2 jobs / kernel+engine tests run nowhere
 > / CONTRIBUTING.md:17 false / ARCHITECTURE.md §8 still claims Apache-2.0 mismatch" describe the pre-P01
@@ -457,5 +459,42 @@ directory). **Not deleted, and why:**
 | # | Phase | Blueprint | Depends on | Note |
 |---|---|---|---|---|
 | 30 | Bebop2 Mesh Masterwork — 9-batch synthesis: equations-first kernel organs, exactly-once/hysteresis correctness closure, arena/breaker/eigenvector substrate, capability-Sybil-proof mesh composition, staged product→kernel migration | [bebop2-mesh-tensor-hermetic-2026-07-17/BLUEPRINT-BEBOP2-MESH-MASTERWORK-SYNTHESIS.md](bebop2-mesh-tensor-hermetic-2026-07-17/BLUEPRINT-BEBOP2-MESH-MASTERWORK-SYNTHESIS.md) (synthesis over batches 10–18 in the same directory; `INDEX.md` there navigates) | **None hard for Waves 1–2** (startable now: eqc-rs→`geo.rs ema_next` wiring, `event_log.rs:359` `append_raw` exactly-once port — a LIVE money-red-line bug on this branch, `hydra.rs` hysteresis, `order_machine` ρ=0 const, householder eig2x2 dedup, wasm-boundary clamps, then arena.rs/breaker.rs/eigenvector-R1-R3/gossip-epoch). **P06 (key_V)** — the standing 3-way blocker gains a 4th consumer: the DecisionUnit *signed* import-verdict form and the tamper-leg closure both plug into P06's `Signer` slot (unsigned local-replay import gate builds earlier; synthesis §6). **P28** — co-owned substrate: P30 W2 *builds* P28's `arena.rs` and rung-1 solver per the eigenvector-refactor plan (no second arena, no lowrank.rs). **P29** — design authority for DecisionUnit gossip (= Decision Compiler; P30 adds only epoch/import-gate/rollback-in-same-log). **RLS NOBYPASSRLS** (`docs/ops/P8-NOBYPASSRLS-FLAG.md`) — a SEPARATE parallel workstream, never folded in; it hard-gates only the W4 product T4 write-path lane. New operator rulings docketed: **R-1** 0x12→0x13 discriminant, **R-2** budget-unit semantics, **R-3** `RootDelegationPolicy`, **R-4** money-law eqc flip + S2 integer basis-points (+ optional C8 bilateral-memory flag). Operator verdicts applied as binding: Sybil-proof via asymmetric anchor-rooted capability issuance (Batch 7 PROVEN-VIABLE — Cheng–Friedman's own asymmetric escape class; `verify_chain` already implements it), reputation/scoring/watchdogs/proxies rejected on physics+red-line. Verdict ledger: 14 ADOPT (+4 gated), 10 EXTEND, 17 ALREADY-EQUIVALENT, 16 DEFER-with-numeric-trigger, 19 REJECT-on-physics; zero concepts dropped (Batch 6 §5.1 completeness sweep is the spine). Zero new external deps in Waves 1–2. Off-critical-path lane structure like P5/P8/P11/P12/P24–P29, but W1-L2 (exactly-once port) is a correctness red-line item and should not idle |
+
+---
+
+## 9. Consolidation pass (2026-07-17, Layer I) — the altitude axis, the master index, and the
+## would-be-lost ledger
+
+Appended by the CORE-ROADMAP Wave-3 consolidation pass (same append-only rule as §7/§8). Full
+execution detail: `CORE-ROADMAP-2026-07-17/BLUEPRINT-P-I-consolidation.md`; ground-truth audit:
+`CORE-ROADMAP-2026-07-17/P-I-audit-cross-repo-consolidation.md`.
+
+### 9.1 The Layer A–I altitude axis and the master index
+
+The numeric phases **P01–P30 in this document remain the sole execution numbering — nothing is
+renumbered.** The CORE-ROADMAP effort's letter groupings are ratified as **`Layer A..I`** (the
+former "P-A..P-I" spelling is retired from prose to kill the P-D/P04 lexical collision; on-disk
+`BLUEPRINT-P-X-*.md` filenames keep their provenance names). Each Layer is an **altitude lens over
+a cluster of numeric phases**, not a phase itself — the full crosswalk table (Layer ↔ numeric
+phases ↔ blueprints ↔ arcs) and the navigation map of the whole planning corpus live in
+**[`CORE-ROADMAP-INDEX.md`](CORE-ROADMAP-INDEX.md)**, which is this roadmap's companion index
+(this doc stays the canonical WHAT/WHEN; the index is the canonical WHERE). The Layer A–I axis
+descends directly from `MASTER-EXECUTION-PLAN-2026-07-13.md`'s ground→core→surface→platform
+spine — lineage stated, not re-derived.
+
+The five older master docs (`MVP-2026-07-12` root, `BUILD-SEQUENCE-UPDATED-2026-07-11`,
+`INTEGRATION-PLAN-2026-07-14`, `10-PHASES-2026-07-14`, `EXECUTION-PLAN-2026-07-13`) now carry
+SUPERSEDED banners pointing here — preserved in full as audit trail, never planned against.
+
+### 9.2 Would-be-lost ledger (P-I audit §3) — all six dispositioned, zero silent drops
+
+| ID | Item | Disposition (executed 2026-07-17) |
+|---|---|---|
+| L1 | Update-blob **code-signing** (ML-DSA verify vs pinned root; `kernel/src/pq/codesign.rs` is live on this branch) | Folded into **Phase 10** — boot/update-integrity unit note appended to `BLUEPRINT-P10` |
+| L2 | Transport bake-off rationale (Zenoh/Reticulum/TCPCLv4/BIBE; libp2p rejected) | `docs/transport-research-2026-07-12.md` **restored from git blob `94e257fe9`** + cross-linked from `BLUEPRINT-P09` |
+| L3 | Courier out-of-app notification/wake path (`NotifyHub`/VAPID lineage) | Folded into **Phase 13** — delivery semantics dissolved-by-mesh (courier node receives `MeshEvent`s directly); out-of-band device-wake kept as a P13 sub-unit, xref P08 alerting |
+| L4 | Anonymous `.onion`/Tor tier | **E53-form waiver** — what: anonymity/Tor access tier; why-suspended: no vendor-node tier exists and no anonymity demand demonstrated; trigger to revisit: vendor-node tier ships AND a venue requires anonymity |
+| L5 | "Lost reports" honesty ledger (13 + ~20 pre-2026-07-12 reports) | Closed-as-lost, decisions survive in `UNIFIED-DELIVERY-PROTOCOL-BLUEPRINT-v3`; not resurrected (would violate ground-truth discipline) |
+| L6 | Self-development research queue (causal/do-operator, category-theory functorial mapping, info-geometry, integer laws) | **Deliberately NOT a numeric phase** — separate always-running axis; indexed from `CORE-ROADMAP-INDEX.md` → MEMORY `physics-math-exploration.md` |
 
 ---

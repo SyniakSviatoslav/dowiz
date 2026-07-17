@@ -657,3 +657,9 @@ and acceptance criteria; F11/F12 explicitly regression-guarded. Sources: `R1-A-m
 row P9 + §1 major-merges + §4 operator decisions, `ARCHITECTURE.md` §0/§1/§6/§8. All file:line citations
 inherited from R1 (bebop-repo tip `b87b7e2`) — re-verify against the live tree at build time. This document
 plans; it writes no code.*
+
+> **Cross-link (added 2026-07-17, Layer-I consolidation, L2):** the transport bake-off *rationale*
+> behind this phase's BPv7/`Transport`-trait design — DTN/dtn7-rs vs QUIC/TCPCLv4 vs Zenoh vs
+> Reticulum vs SpaceWire/SpaceFibre, with **libp2p explicitly rejected** and BIBE custody
+> verification — is `docs/transport-research-2026-07-12.md` (restored from git blob `94e257fe9`).
+> The decision is already embodied in code; that doc is where the comparison lives.

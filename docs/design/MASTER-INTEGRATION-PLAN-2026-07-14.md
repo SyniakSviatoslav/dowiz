@@ -1,3 +1,11 @@
+> **SUPERSEDED (2026-07-17)** — see `MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md` (canonical
+> roadmap, phases P01–P30) and `CORE-ROADMAP-INDEX.md` + `CORE-ROADMAP-2026-07-17/` (the Layer A–I
+> execution structure). Preserved for historical/audit-trail purposes only. The P-I audit (§2.3)
+> found this doc's findings the best-absorbed of all five older masters — every concrete item has a
+> named carrier in P01–P30 (Kalman→P04, autodiff→P17, backup organ→P12, eigensolver
+> dual-authority→P11 + the eigenvector refactor plan, recall@5 engine→P02/R1-D, etc.); zero
+> would-be-lost items.
+
 # Master Integration Plan — Research Findings → Integration Steps (2026-07-14)
 
 > Consolidates this session's deep-research (TensorFlow · Transformer/attention · circuit-impedance ·

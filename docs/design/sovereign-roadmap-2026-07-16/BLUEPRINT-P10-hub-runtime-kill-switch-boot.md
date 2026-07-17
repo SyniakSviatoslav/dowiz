@@ -507,3 +507,17 @@ except this decorrelated pass; there is no equivalent of Phase 1's "DECART-dep l
 sibling blueprint P11 §7) wired to catch an *implied* dependency named only in blueprint prose rather
 than an actual `Cargo.toml` line. That lint protects code, not planning documents — worth naming as a
 structural gap the planning protocol itself has.
+
+---
+
+## Addendum (2026-07-17, Layer-I consolidation, L1) — update-blob code-signing is a Phase-10 unit
+
+Folded in from `MASTER-ROADMAP-MVP-2026-07-12.md` (D4.4, `:41,68,89` — would otherwise be lost,
+per `CORE-ROADMAP-2026-07-17/P-I-audit-cross-repo-consolidation.md` §3 item L1): **node self-update
+artifacts must ML-DSA-verify against a pinned root before apply; an unsigned or tampered update
+blob refuses (RED gate).** This lands in Phase 10 because this phase already owns boot integrity
+and the M9 kill-switch signing path — update-blob verification is the same trust-root discipline
+applied to the boot artifact's successor. The primitive is **already built and live on this
+branch**: `kernel/src/pq/codesign.rs` (`codesign_keypair` + `PinnedRoot`, with tests — verified
+2026-07-17). The unit here is wiring it into the hub-runtime update path, not building it; it
+inherits this blueprint's Phase-3/C4b gating exactly like the kill-switch signing leg.

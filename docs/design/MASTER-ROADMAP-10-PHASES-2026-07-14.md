@@ -1,3 +1,11 @@
+> **SUPERSEDED (2026-07-17)** — see `MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md` (canonical
+> roadmap, phases P01–P30; its header already declared supersession of this doc) and
+> `CORE-ROADMAP-INDEX.md` + `CORE-ROADMAP-2026-07-17/` (the Layer A–I execution structure).
+> Preserved for historical/audit-trail purposes only. Its one would-be-lost item (P-I audit §3
+> **L6**, the P9 self-development research queue: causal/do-operator, category-theory functorial
+> mapping, info-geometry, integer laws) was deliberately NOT folded into P01–P30 — it is a separate
+> always-running axis, indexed from `CORE-ROADMAP-INDEX.md` → MEMORY `physics-math-exploration.md`.
+
 # MASTER ROADMAP — dowiz / DeliveryOS + bebop (10 phases)
 
 > Source of truth: this doc + `ROADMAP-GROUND-TRUTH-2026-07-14.md` + `MASTER-ROADMAP-MVP-2026-07-12.md`
