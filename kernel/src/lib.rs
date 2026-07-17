@@ -119,6 +119,10 @@ pub mod retrieval;
 /// Reverse-engineering loop #1 — general (non-symmetric) spectral engine: eigenvalues
 /// (Faddeev-LeVerrier + Durand-Kerner), spectral gap γ, Laplacian Fiedler λ₂, DMD drift class.
 pub mod spectral;
+/// P11 §2 — content-addressed spectral eigensolve cache (zero-dep); routes
+/// `spectral::eigenvalues` through a `&mut` cache with a recomputes-counter
+/// falsifier (no thrashing, no stale-cache).
+pub mod spectral_cache;
 /// Self-improvement loop: recurring-pattern surface over the tool-outcome
 /// token stream (W19 — consumes `trigram` into the loop's telemetry path).
 pub mod telemetry;
