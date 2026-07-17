@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+title: "{{BRAND}}: Sovereign, Post-Quantum Delivery Infrastructure — a Deterministic Rust/WASM Kernel and Mesh Protocol"
+message: "If you use this software or its components (deterministic kernel, money-reversal FSM, post-quantum mesh protocol, ML-DSA-65 proof-of-delivery), please cite it."
+type: software
+authors:
+  - given-names: "Syniak"
+    family-names: "Sviatoslav"
+    orcid: "https://github.com/SyniakSviatoslav"
+repository-code: "https://github.com/SyniakSviatoslav/dowiz"
+url: "https://github.com/SyniakSviatoslav/dowiz"
+license: AGPL-3.0-or-later
+version: 0.1.0
+date-released: 2026-07-17
+keywords:
+  - delivery
+  - post-quantum
+  - mesh
+  - rust
+  - wasm
+  - agpl
+  - self-hosted
+  - deterministic
+  - event-sourcing
+  - offline-first
