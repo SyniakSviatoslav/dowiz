@@ -160,6 +160,11 @@ pub mod trigram;
 /// C1 — verify-failure → retrieval-trigger: a claim check that, on failure,
 /// emits a bounded structured re-verify request (the "verify then learn" loop).
 pub mod verify_retrieval;
+/// P08 — typed metrics pure core: `/proc/self` sampling (CPU/mem) + a
+/// deterministic, serde-free, parse-or-reject text schema for typed metric
+/// records. NO egress / signing change; GPU is typed-absent (`Option`) until
+/// hardware exists. Pure-std (default build has no serde).
+pub mod typed_metrics;
 /// WASM/JS bindings — the only place the kernel touches the boundary.
 /// Compiled ONLY under the `wasm` feature (see `#![cfg(feature = "wasm")]` in
 /// wasm.rs); native rlib builds exclude it and pull no wasm-bindgen/serde.
