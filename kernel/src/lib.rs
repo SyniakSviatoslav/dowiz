@@ -29,6 +29,9 @@ pub mod cgraph;
 /// P11 §7 — CorePinning trait seam (Trait-as-Port): pluggable CPU-core-affinity
 /// port with a zero-cost `NoOpCorePinning` default (NUMA crate DECART-deferred).
 pub mod core_pinning;
+/// P11 §1 — compute budget accumulator (degrade-closed, zero-dep) + §4 Modal
+/// `JobPort` / `BudgetedJobPort` seam (offline-err default; real adapter deferred).
+pub mod budget;
 /// B4 — deterministic content-defined chunker (Buzhash) for the native Rust
 /// backup organ: content-addressed blocks that dedup across small edits.
 pub mod chunker;
