@@ -7,6 +7,7 @@ use dowiz_kernel::token_bucket::TokenBucket;
 use dowiz_kernel::{
     empirical_identify, fold_transitions, place_order, sample_backdoor, OrderItem, OrderStatus,
 };
+use dowiz_kernel::spectral_cache::{canonical_content_address, slem_cached, DecompCache};
 
 fn bench_place_order(c: &mut Criterion) {
     c.bench_function("place_order/5_items", |b| {
@@ -95,11 +96,47 @@ fn bench_token_bucket(c: &mut Criterion) {
     });
 }
 
+/// T4/A5: content-addressed spectral cache hot path (P-A §6 / §10.4).
+///
+/// `slem_cached` builds a 10×10 tile once, then calls `slem_cached` TWICE on the
+/// SAME `DecompCache` — the second call is a HIT (cached spectrum reused, no
+/// `eigenvalues` solve). We time the pair so the amortised hit cost is visible
+/// against the one-time solve cost.
+fn bench_spectral_cache_slem_cached(c: &mut Criterion) {
+    let tile: Vec<Vec<f64>> = (0..10)
+        .map(|i| (0..10).map(|j| ((i * 7 + j * 3) % 11) as f64 + 1.0).collect())
+        .collect();
+    c.bench_function("spectral_cache/slem_cached_10x10_hit", |b| {
+        b.iter(|| {
+            let mut cache = DecompCache::new();
+            let first = slem_cached(&mut cache, &tile);
+            // second call: same tile ⇒ identical content-address ⇒ HIT, no recompute.
+            let second = slem_cached(&mut cache, &tile);
+            black_box((first, second))
+        })
+    });
+}
+
+/// T4/A5: canonical content-address cost on a 32×32 dense tile (P-A §6 / §10.4).
+///
+/// Isolates the hashing/pivot-scaling path from the `eigenvalues` solve, so a
+/// regression in the scale-invariant address computation shows up on its own.
+fn bench_spectral_cache_canonical_address(c: &mut Criterion) {
+    let tile: Vec<Vec<f64>> = (0..32)
+        .map(|i| (0..32).map(|j| ((i * 13 + j * 5) % 17) as f64 + 1.0).collect())
+        .collect();
+    c.bench_function("spectral_cache/canonical_address_32x32", |b| {
+        b.iter(|| black_box(canonical_content_address(&tile)))
+    });
+}
+
 criterion_group!(
     benches,
     bench_place_order,
     bench_fold_transitions,
     bench_empirical_identify,
-    bench_token_bucket
+    bench_token_bucket,
+    bench_spectral_cache_slem_cached,
+    bench_spectral_cache_canonical_address
 );
 criterion_main!(benches);
