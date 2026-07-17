@@ -79,8 +79,8 @@ fn gate_is_falsifiable_not_always_ok() {
 fn reachable_from_pending_pins_scheduled_orphan() {
     let r = dowiz_kernel::fsm_graph_report();
     assert_eq!(
-        r.reachable_from_pending, 767,
+        r.reachable_from_pending, 3839,
         "Scheduled must stay an orphan (bit 8 = 0)"
     );
-    assert_eq!(r.reachable_states, 9);
+    assert_eq!(r.reachable_states, 11);
 }

@@ -210,13 +210,15 @@ mod tests {
             .collect::<Vec<_>>()
             .join(",");
 
-        let path =
-            std::env::temp_dir().join(format!("rng_reread_test_{}.txt", std::process::id()));
+        let path = std::env::temp_dir().join(format!("rng_reread_test_{}.txt", std::process::id()));
         std::fs::write(&path, &serialized).expect("write serialized rng stream");
         let reread = std::fs::read_to_string(&path).expect("re-read serialized rng stream");
         std::fs::remove_file(&path).ok();
 
-        assert_eq!(reread, serialized, "byte content did not survive a disk round-trip");
+        assert_eq!(
+            reread, serialized,
+            "byte content did not survive a disk round-trip"
+        );
 
         let reparsed: Vec<u64> = reread
             .split(',')

@@ -13,6 +13,10 @@ pub mod attention;
 /// unique blocks by sha3_256 id → restore byte-identically from a manifest.
 /// Dedups across small edits; fail-closed restore. Pure-Rust, no new deps.
 pub mod backup;
+pub mod bounded_drainer;
+/// P11 §1 — compute budget accumulator (degrade-closed, zero-dep) + §4 Modal
+/// `JobPort` / `BudgetedJobPort` seam (offline-err default; real adapter deferred).
+pub mod budget;
 /// RW-07 — cart state machine (consolidate 2 JS cart impls → kernel authority). Totals via money.
 pub mod cart;
 /// M1/M2 — trusted price catalog: the single kernel authority on line-item prices.
@@ -26,20 +30,12 @@ pub mod causal;
 /// algorithms: ancestors, descendants, c-components, bidirected-aware
 /// d-separation, and the `G\X` / `G[V]` subgraph algebra.
 pub mod cgraph;
-/// P11 §6 — `f64x4` struct-of-arrays (SoA) SIMD batch lane: vectorises softmax
-/// ACROSS the batch (4 independent rows per step), each lane replaying the exact
-/// scalar op order → bit-identical to `softmax_scalar` / `attention::softmax`.
-/// AVX2 fast path with a scalar fallback (mirrors `householder.rs` runtime gate).
-pub mod simd;
-/// P11 §7 — CorePinning trait seam (Trait-as-Port): pluggable CPU-core-affinity
-/// port with a zero-cost `NoOpCorePinning` default (NUMA crate DECART-deferred).
-pub mod core_pinning;
-/// P11 §1 — compute budget accumulator (degrade-closed, zero-dep) + §4 Modal
-/// `JobPort` / `BudgetedJobPort` seam (offline-err default; real adapter deferred).
-pub mod budget;
 /// B4 — deterministic content-defined chunker (Buzhash) for the native Rust
 /// backup organ: content-addressed blocks that dedup across small edits.
 pub mod chunker;
+/// P11 §7 — CorePinning trait seam (Trait-as-Port): pluggable CPU-core-affinity
+/// port with a zero-cost `NoOpCorePinning` default (NUMA crate DECART-deferred).
+pub mod core_pinning;
 /// Deterministic CSR graph + synchronous Jacobi personalized-PageRank
 /// (retrieval-blueprint v2 diffusion/recall primitive).
 pub mod csr;
@@ -75,9 +71,19 @@ pub mod kalman;
 /// §3.3 Layer-B (semantic) leakage gate — cosine-0.9 near-duplicate rejection over an injected
 /// `&dyn LlmBackend` embedding model. Native, zero-dep; the live bridge lives in `llm-adapters`.
 pub mod leak_gate;
+/// P08 typed local-observability core — the pure-std, no-network, no-signing
+/// HALF: typed-metrics schema + closed `LogEvent` enum (§2/§3) and the
+/// claim-latency anomaly detector (§4). F40 ML-DSA signed envelope DEFERRED
+/// pending bebop2 C4b — see `metrics.rs` header. Fail-closed local sink.
+pub mod metrics;
 /// P9 wave: deterministic seedable PRNG (SplitMix64 → PCG64), zero-dep,
 /// reproducible Monte-Carlo for the empirical causal joint.
 pub mod rng;
+/// P11 §6 — `f64x4` struct-of-arrays (SoA) SIMD batch lane: vectorises softmax
+/// ACROSS the batch (4 independent rows per step), each lane replaying the exact
+/// scalar op order → bit-identical to `softmax_scalar` / `attention::softmax`.
+/// AVX2 fast path with a scalar fallback (mirrors `householder.rs` runtime gate).
+pub mod simd;
 /// W2-7 — event-sourced, tamper-evident hash-chain knowledge spine
 /// (Memory/Identity/Intent). Append-only record log; `verify_chain()` re-walks
 /// the chain to detect any mutation. Pure-std (reuses `event_log::sha3_256`).
@@ -87,12 +93,6 @@ pub mod spine;
 /// (pure-std firewall); this owns the Verified-by-Math transitions. Reused by
 /// every async subsystem (reporting, governance, mesh sync).
 pub mod spool;
-/// P08 typed local-observability core — the pure-std, no-network, no-signing
-/// HALF: typed-metrics schema + closed `LogEvent` enum (§2/§3) and the
-/// claim-latency anomaly detector (§4). F40 ML-DSA signed envelope DEFERRED
-/// pending bebop2 C4b — see `metrics.rs` header. Fail-closed local sink.
-pub mod metrics;
-pub mod bounded_drainer;
 // `loops` (BP-20 orchestration card parsing) depends on serde / serde_yaml →
 // compiled only under the `wasm` feature so a native rlib build stays serde-free.
 // NOT part of the canonical order/money core (decide/order_machine/domain/money).

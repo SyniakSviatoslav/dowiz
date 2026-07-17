@@ -59,11 +59,7 @@ impl DecompCache {
     ///   `recomputes` is incremented by exactly 1 — **but only when an existing
     ///   key is being replaced**. The very first population of an empty cache
     ///   is initialisation, not a recompute, so it does not increment.
-    pub fn get_or_recompute(
-        &mut self,
-        root: &str,
-        compute: impl FnOnce() -> Decomp,
-    ) -> &Decomp {
+    pub fn get_or_recompute(&mut self, root: &str, compute: impl FnOnce() -> Decomp) -> &Decomp {
         if self.key.as_deref() == Some(root) {
             // HIT — serve the cached decomposition, no recompute.
             return self.cached.as_ref().expect("key set implies payload set");
@@ -119,7 +115,10 @@ pub fn slem_cached(cache: &mut DecompCache, a: &[Vec<f64>]) -> f64 {
     let (_basis, values) = cache.get_or_recompute(&root, || {
         let eigs = crate::spectral::eigenvalues(a);
         // vectorless usage only needs the eigenvalue moduli as the payload.
-        (Vec::new(), eigs.iter().map(|e| e.abs()).collect::<Vec<f64>>())
+        (
+            Vec::new(),
+            eigs.iter().map(|e| e.abs()).collect::<Vec<f64>>(),
+        )
     });
     let mut mags: Vec<f64> = values.clone();
     mags.sort_by(|x, y| y.partial_cmp(x).unwrap_or(core::cmp::Ordering::Equal));
@@ -136,10 +135,7 @@ mod tests {
 
     /// Fixed dummy decomposition used by the falsifier tests.
     fn dummy() -> Decomp {
-        (
-            vec![vec![1.0, 0.0], vec![0.0, 1.0]],
-            vec![0.5, 0.3],
-        )
+        (vec![vec![1.0, 0.0], vec![0.0, 1.0]], vec![0.5, 0.3])
     }
 
     /// FALSIFIER (no-thrash): 1000 `get_or_recompute` calls with the SAME root

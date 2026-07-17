@@ -84,6 +84,181 @@ impl Money {
             currency: self.currency,
         })
     }
+
+    /// Additive inverse — the compensating credit of a debit (P07 reversal primitive).
+    /// Fail-closed on `i64::MIN` (its negation overflows i64): `checked_neg` returns `Err`
+    /// rather than wrapping to `i64::MIN` (UB-adjacent; S5 fail-closed).
+    pub fn checked_neg(self) -> Result<Money, String> {
+        let minor = self
+            .minor
+            .checked_neg()
+            .ok_or("money neg overflow (i64::MIN has no additive inverse)")?;
+        Ok(Money {
+            minor,
+            currency: self.currency,
+        })
+    }
+
+    /// Subtract two amounts. Cross-currency fail-closed (same M5 guard as `checked_add`),
+    /// then `checked_sub` on `minor` (never wraps).
+    pub fn checked_sub(self, other: Money) -> Result<Money, String> {
+        if self.currency != other.currency {
+            return Err(format!(
+                "cross-currency sub rejected: {} - {}",
+                self.currency.code(),
+                other.currency.code()
+            ));
+        }
+        let minor = self
+            .minor
+            .checked_sub(other.minor)
+            .ok_or("money sub overflow")?;
+        Ok(Money {
+            minor,
+            currency: self.currency,
+        })
+    }
+}
+
+/// ── P07 double-entry ledger + reversal primitive ──────────────────────────────
+/// RED LINE: money movements are modelled as a per-order double-entry ledger. Every
+/// `Earn` (debit/credit) leg has an exact compensation (`Reversal`) produced by
+/// `reversed_leg`, so a compensated order's entries sum to EXACTLY zero by construction:
+///
+///   entry(m).amount.checked_add(reversed_leg(m).amount).unwrap() == Money::new(0, m.currency)
+///
+/// Conservation invariant: `ledger_sum(entries)` (Σ of `amount.minor` for entries that are
+/// NOT reversed) must equal 0 at every compensated terminal state. The compensating credit
+/// of a debit is defined as the `checked_neg` of the original — a debit and its reversal net
+/// to zero. This is the kernel's money-correctness falsifier.
+
+/// The kind of a ledger entry (one side of a double entry).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EntryKind {
+    /// Money earned into the platform (a debit from customer / credit to platform).
+    Earn,
+    /// The exact compensation of a prior `Earn` leg — amount = `checked_neg` of the original.
+    /// Conserves the ledger (Σ == 0 with its paired earn leg).
+    Reversal,
+}
+
+/// A single ledger entry. `id` is a caller-assigned stable key (used for idempotency + for a
+/// `Reversal` to name the `Earn` it reverses via `reverses`). Fail-closed: a `Reversal` MUST
+/// name an existing `Earn` id, and a given earn leg may be reversed at most once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LedgerEntry {
+    pub id: u64,
+    pub kind: EntryKind,
+    pub amount: Money,
+    /// For `Reversal`: the `id` of the `Earn` leg being compensated. `None` for an `Earn`.
+    pub reverses: Option<u64>,
+}
+
+/// Build the exact compensating `Reversal` of an `Earn` leg. The reversal's amount is the
+/// `checked_neg` of the earn's amount, so the pair nets to exactly zero. The reversal references
+/// the earn's `id` so it can be replayed/idempotently matched.
+///
+/// Fail-closed: an `Earn` leg with `amount.minor == i64::MIN` cannot be reversed
+/// (`checked_neg` overflows) → this returns `Err` rather than fabricating a non-cancelling credit.
+pub fn reversed_leg(earn: &LedgerEntry, reversal_id: u64) -> Result<LedgerEntry, String> {
+    if earn.kind != EntryKind::Earn {
+        return Err("reversed_leg requires an Earn leg".into());
+    }
+    let neg = earn.amount.checked_neg()?;
+    Ok(LedgerEntry {
+        id: reversal_id,
+        kind: EntryKind::Reversal,
+        amount: neg,
+        reverses: Some(earn.id),
+    })
+}
+
+/// Append `entry` to `ledger`, enforcing the reversal Law fail-closed:
+/// * cross-currency / arithmetic overflow inside `Money` is rejected (S5).
+/// * a `Reversal` must name an existing `Earn` id present in the ledger.
+/// * an `Earn` leg may be reversed at most once (a second reversal is rejected → idempotent
+///   replay is a no-op at the caller, but a *distinct* second reversal is refused here).
+/// * duplicate `id` insertions are rejected (replay protection at the ledger level).
+///
+/// Returns the (possibly extended) ledger. `ledger` is owned so callers thread it through.
+pub fn ledger_append(
+    mut ledger: Vec<LedgerEntry>,
+    entry: LedgerEntry,
+) -> Result<Vec<LedgerEntry>, String> {
+    // Duplicate id → reject (replay must not re-append; caller should detect first).
+    if ledger.iter().any(|e| e.id == entry.id) {
+        return Err(format!("ledger: duplicate entry id {}", entry.id));
+    }
+    match entry.kind {
+        EntryKind::Earn => {
+            // Earn is always accepted (its amount was already checked by the caller via Money).
+            ledger.push(entry);
+        }
+        EntryKind::Reversal => {
+            let target = entry
+                .reverses
+                .ok_or("reversal must name the earn leg it compensates")?;
+            let earn = ledger
+                .iter()
+                .find(|e| e.id == target && e.kind == EntryKind::Earn)
+                .ok_or_else(|| format!("reversal targets unknown earn leg {target}"))?;
+            // Fail-closed: reversal amount must be the exact negation of the earn (no silent drift).
+            let expected = earn.amount.checked_neg()?;
+            if entry.amount != expected {
+                return Err(format!(
+                    "reversal amount {} != -earn {} (conservation violated)",
+                    entry.amount.minor, expected.minor
+                ));
+            }
+            // At most one reversal per earn leg.
+            if ledger.iter().any(|e| e.reverses == Some(target)) {
+                return Err(format!(
+                    "earn leg {target} already reversed (idempotent once)"
+                ));
+            }
+            ledger.push(entry);
+        }
+    }
+    Ok(ledger)
+}
+
+/// Sum the `minor` units of all entries that are NOT themselves reversed. A compensated terminal
+/// order (Earn + its Reversal) sums to exactly 0; an uncompensated earn sums to its amount.
+///
+/// This is the conservation probe: returns `Ok(0)` iff the ledger nets to zero.
+pub fn ledger_sum(ledger: &[LedgerEntry]) -> i64 {
+    ledger
+        .iter()
+        // A reversed earn leg is excluded from the live balance (its credit cancelled it);
+        // the Reversal entry itself nets the same amount to zero, so it is also excluded.
+        .filter(|e| !matches!(e.kind, EntryKind::Reversal))
+        .filter(|e| {
+            if e.kind == EntryKind::Earn {
+                !ledger.iter().any(|r| r.reverses == Some(e.id))
+            } else {
+                true
+            }
+        })
+        .map(|e| e.amount.minor)
+        .sum()
+}
+
+/// Fail-closed compensation driver: given a ledger and an earn leg id, produce and append the
+/// exact reversal. Idempotent — calling on an already-reversed earn leg returns `Err`
+/// ("already reversed"), which the caller treats as a no-op (replay = no-op).
+///
+/// Rejects: unknown earn leg, overflow on `checked_neg`, or an already-reversed leg.
+pub fn reverse_transfer(
+    ledger: Vec<LedgerEntry>,
+    earn_id: u64,
+    reversal_id: u64,
+) -> Result<Vec<LedgerEntry>, String> {
+    let earn = ledger
+        .iter()
+        .find(|e| e.id == earn_id && e.kind == EntryKind::Earn)
+        .ok_or_else(|| format!("reverse_transfer: unknown earn leg {earn_id}"))?;
+    let rev = reversed_leg(earn, reversal_id)?;
+    ledger_append(ledger, rev)
 }
 
 /// Server-authoritative `applyTax` (money.ts:23). `subtotal` is integer minor units.
@@ -428,7 +603,10 @@ mod tests {
     #[test]
     fn red_tax_overflow_degrades_estimate_to_none() {
         let r = estimate_order_total(1000, &cfg(false, None, Some(200), false, 1e17, false, None));
-        assert!(r.fee_known, "flat 200 fee is computable — the fee side is known");
+        assert!(
+            r.fee_known,
+            "flat 200 fee is computable — the fee side is known"
+        );
         assert_eq!(r.delivery_fee, Some(200));
         assert_eq!(
             r.tax_total, None,
@@ -438,5 +616,74 @@ mod tests {
             r.total, None,
             "on tax overflow the total must degrade to None, never a fabricated number"
         );
+    }
+
+    // ── P07 RED→GREEN: reversal primitive — m + neg(m) == 0, fail-closed ──
+    #[test]
+    fn green_checked_neg_nets_to_zero() {
+        let m = Money::new(5000, Currency::All);
+        let neg = m.checked_neg().unwrap();
+        assert_eq!(m.checked_add(neg).unwrap(), Money::new(0, Currency::All));
+    }
+
+    #[test]
+    fn red_checked_neg_min_overflow_is_err() {
+        assert!(Money::new(i64::MIN, Currency::All).checked_neg().is_err());
+    }
+
+    #[test]
+    fn green_checked_sub_same_currency() {
+        let a = Money::new(1000, Currency::Eur);
+        let b = Money::new(300, Currency::Eur);
+        assert_eq!(a.checked_sub(b).unwrap(), Money::new(700, Currency::Eur));
+    }
+
+    #[test]
+    fn red_checked_sub_cross_currency_is_err() {
+        let a = Money::new(1000, Currency::Usd);
+        let b = Money::new(1000, Currency::All);
+        assert!(a.checked_sub(b).is_err());
+    }
+
+    // ── P07 RED→GREEN: ledger double-entry + reversal conservation ──
+    #[test]
+    fn green_ledger_earn_then_reversal_sums_to_zero() {
+        let earn = LedgerEntry {
+            id: 1,
+            kind: EntryKind::Earn,
+            amount: Money::new(1300, Currency::All),
+            reverses: None,
+        };
+        let ledger = ledger_append(Vec::new(), earn).unwrap();
+        assert_eq!(ledger_sum(&ledger), 1300);
+        let ledger = reverse_transfer(ledger, 1, 2).unwrap();
+        assert_eq!(
+            ledger_sum(&ledger),
+            0,
+            "earn + reversal nets to exactly zero"
+        );
+    }
+
+    #[test]
+    fn red_ledger_reversal_unknown_earn_is_err() {
+        assert!(reverse_transfer(Vec::new(), 42, 43).is_err());
+    }
+
+    #[test]
+    fn red_ledger_duplicate_entry_id_is_err() {
+        let earn = LedgerEntry {
+            id: 1,
+            kind: EntryKind::Earn,
+            amount: Money::new(100, Currency::All),
+            reverses: None,
+        };
+        let mut ledger = ledger_append(Vec::new(), earn).unwrap();
+        let dup = LedgerEntry {
+            id: 1, // same id
+            kind: EntryKind::Earn,
+            amount: Money::new(200, Currency::All),
+            reverses: None,
+        };
+        assert!(ledger_append(ledger.clone(), dup).is_err());
     }
 }
