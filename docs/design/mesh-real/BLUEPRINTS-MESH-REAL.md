@@ -141,6 +141,18 @@
   RevocationSet BEFORE-wiring-KernelFacade, so-facade-inherits-real-revoke); nonce-not-consumed-by-unauthenticated-frame
   (H2). **Хвиля:** G8. 🔴 · найбільший open-item.
 
+> ⚠ CORRECTED (2026-07-17, agentic-mesh consolidation, live-verified): MESH-11's premise
+> ("revocation НЕ існує сьогодні") and MESH-12's ("зараз лише-тести-enroll",
+> "ADR-0007 … unbuilt") are stale. BUILT on the live tree (`bebop2/proto-cap/`): `RevocationSet` +
+> `merge` anti-entropy union + `gossip_payload` sorted wire form + `drop_anchor`
+> (`revocation.rs:49,94,105,114`); H2 verify-then-record fix with RED test
+> (`hybrid_gate.rs:188-206,571`); `load_genesis` fail-closed (`node_id.rs:116`);
+> `NodeId::from_keys = SHA3-256(pq_pub‖classical_pub)` (`node_id.rs:46`). GENUINELY still open:
+> mesh-wide propagation *guarantees* (convergence/delivery bounds beyond anti-entropy union), and
+> MESH-12's HUMAN gate — `RootDelegationPolicy` defaults to `Unspecified` and fails closed until the
+> operator chooses (`node_id.rs:157-183`), so the genesis root-delegation decision remains the
+> operator's.
+
 ### MESH-12 · node_id self-cert + genesis-loader-prod + roster bootstrap
 - **Мета:** self-certifying node-identity (ADR-0007) + production roster-genesis (зараз лише-тести-enroll).
 - **Межа:** ЧІПАЄМО — node_id-derivation + prod-genesis-loader. НЕ ЧІПАЄМО — verify_chain (reuse).
