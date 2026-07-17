@@ -79,6 +79,11 @@ pub mod spine;
 /// (pure-std firewall); this owns the Verified-by-Math transitions. Reused by
 /// every async subsystem (reporting, governance, mesh sync).
 pub mod spool;
+/// P08 typed local-observability core — the pure-std, no-network, no-signing
+/// HALF: typed-metrics schema + closed `LogEvent` enum (§2/§3) and the
+/// claim-latency anomaly detector (§4). F40 ML-DSA signed envelope DEFERRED
+/// pending bebop2 C4b — see `metrics.rs` header. Fail-closed local sink.
+pub mod metrics;
 // `loops` (BP-20 orchestration card parsing) depends on serde / serde_yaml →
 // compiled only under the `wasm` feature so a native rlib build stays serde-free.
 // NOT part of the canonical order/money core (decide/order_machine/domain/money).
