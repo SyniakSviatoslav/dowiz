@@ -26,6 +26,9 @@ pub mod causal;
 /// algorithms: ancestors, descendants, c-components, bidirected-aware
 /// d-separation, and the `G\X` / `G[V]` subgraph algebra.
 pub mod cgraph;
+/// P11 §7 — CorePinning trait seam (Trait-as-Port): pluggable CPU-core-affinity
+/// port with a zero-cost `NoOpCorePinning` default (NUMA crate DECART-deferred).
+pub mod core_pinning;
 /// B4 — deterministic content-defined chunker (Buzhash) for the native Rust
 /// backup organ: content-addressed blocks that dedup across small edits.
 pub mod chunker;
