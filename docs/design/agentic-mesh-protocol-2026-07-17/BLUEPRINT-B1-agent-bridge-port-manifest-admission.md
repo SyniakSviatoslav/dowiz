@@ -454,6 +454,23 @@ wall-clock terms*, so the anti-replay horizon is a function of traffic, not time
 raw throughput is out of scope and correctly gated: the AVX2/NTT ML-DSA port (~3×, B4 §5), triggered only
 by *measured* traffic exceeding the *measured* ceiling — never speculatively.
 
+> **Correction (2026-07-17, post-F1 batch-verify fix — measured):** the ~15–20 % `check_batch` trim
+> above is **dead as implemented** and must not be budgeted as a relief valve for the invocation-path
+> ceiling. `bebop2/core/src/sign.rs::verify_batch` (landed 2026-07-17) hardens against the SSR-2020
+> mixed-order forgery class by treating the cofactored batch equation as an accept-HINT / sound
+> fast-REJECT only and **confirming every batch-accept with a full per-item cofactorless single
+> verify** — so the accept path always costs the batch equation *plus* N singles, ≥ N singles by
+> construction. Measured on the fixed code (bebop `docs/ledger/crypto-bench.jsonl`, 2026-07-17):
+> batch/64 = 131.2 ms vs 64 × single = 40.3 ms → batch costs **3.26×** the singles with this repo's
+> naive (non-Straus/Pippenger) `scalar_mul`. Batching currently yields **no throughput benefit
+> anywhere**; its only remaining value is a sound fast-reject on a bad burst. The 15–20 % figure
+> remains true of Ed25519 batch verification *in general* (R4 §2, without this soundness pin);
+> recovering any real throughput here would additionally require a Straus/Pippenger multi-scalar
+> mult — out of scope per B4 §5's DECART-gated deferral — and even then the accept path stays
+> ≥ N singles while single verify remains the sole acceptance authority. Capacity planning for the
+> invocation path therefore rests on the measured single-verify envelope alone (and, if truly
+> exceeded, the AVX2/NTT route above).
+
 **(b) Safety — the WASM boundary is integrity, not confidentiality, and here is exactly where that bites.**
 §2.4 names it plainly ("WASM is an *integrity* boundary, not confidentiality"), and honesty demands
 spelling out both sides. From inside a WASM-sandboxed **malicious** bridged agent, an attacker CAN:

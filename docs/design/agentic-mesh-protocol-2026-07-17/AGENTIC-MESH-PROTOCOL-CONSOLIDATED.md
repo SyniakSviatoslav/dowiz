@@ -199,6 +199,20 @@ frame, the true wire delta is ≈5,330 B, roughly 2 KB worse. B4 §2.4 pins the 
 admission the PQ key is referenced by 32-byte `pq_key_id`, never re-shipped — turning the omission
 into a wire-schema test (B4 acceptance 4).
 
+> **Correction (2026-07-17, post-F1 batch-verify fix — measured):** B4's batching half landed
+> *hardened*: `bebop2/core/src/sign.rs::verify_batch` confirms every batch-accept with a full
+> per-item cofactorless single verify (the SSR-2020 mixed-order class defeats a small-order filter,
+> so the batch equation is an accept-HINT / sound fast-REJECT only). Batch-accept therefore costs
+> ≥ N singles by construction — measured batch/64 = 3.26× the cost of 64 singles (bebop
+> `docs/ledger/crypto-bench.jsonl`, 2026-07-17) with the repo's naive non-Straus/Pippenger
+> `scalar_mul`. **The batching lever provides no throughput benefit anywhere in this arc**; B4
+> §2.3's "15–20 % trim" and B1 §(a)'s citation of it carry matching in-place corrections. Wave-2's
+> B4 steps 4–6 stand (the `HybridGate::check_batch` / `ENVELOPE_BATCH_*` surface is still the right
+> shape) but must be designed for correctness + fast-reject, never for a latency trim; any real
+> throughput would additionally require the DECART-gated Straus/Pippenger multi-scalar mult (B4 §5),
+> and even then batch-accept stays ≥ N singles while single verify remains the sole acceptance
+> authority.
+
 **Why these three catches matter more than trivia:** each is a case where a blueprint author re-read
 the live source its own R-doc or synthesis had already cited and found the carried claim wrong or
 incomplete — the exact drift class the Detailed Planning Protocol's step 1 and the 2-question ritual

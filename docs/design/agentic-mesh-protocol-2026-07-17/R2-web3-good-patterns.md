@@ -291,6 +291,14 @@ aggregation scheme**. So the mesh's scaling tool is *batch verification* (amorti
 Ed25519) and *envelope design* (one hybrid signature over a batch/checkpoint of events,
 not per-tiny-event), not signature aggregation.
 
+> **Correction (2026-07-17, post-F1 batch-verify fix):** the general amortization property above
+> is real, but as implemented in bebop2 (`sign.rs::verify_batch`, hardened against SSR-2020
+> mixed-order forgeries by confirming every batch-accept with per-item single verifies) batch
+> verification amortizes nothing — batch-accept costs ≥ N singles (measured 3.26× for N=64, bebop
+> `docs/ledger/crypto-bench.jsonl`). Of the two scaling tools named here, only *envelope design*
+> currently delivers; batch verification survives as a sound fast-reject. See B4 §2.3's correction
+> for the full accounting.
+
 **Transferable lesson.** Real-time verifiability for the mesh is a signature-systems
 problem: signed claims verified in ~0.1ms are the hot path; validity proofs (Section 2)
 are the periodic checkpoint layer; nothing in between is currently buildable. dowiz/bebop2's
