@@ -87,5 +87,3 @@ path = "src/bin/markov_attractor.rs"
 [profile.release]
 opt-level = 3
 lto = true
-
-fake-dep = "0.1"
