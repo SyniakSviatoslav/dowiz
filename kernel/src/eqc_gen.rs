@@ -9,7 +9,5 @@
 /// f64 variant — dynamics path (not bitwise-deterministic across targets on libm calls).
 #[inline(always)]
 pub fn ema_next_f64(prev: f64, sample: f64, alpha: f64) -> f64 {
-    // RED stub — returns 0.0 so the parity test fails until the real generated
-    // body is committed (GREEN phase). Do NOT hand-edit the math; regenerate.
-    0.0
+    (prev + (alpha * (sample + (-1.0f64 * prev))))
 }
