@@ -2246,8 +2246,13 @@ mod tests {
             let do_y = empirical_identify(&rows, &[2], &[(0, 1)], &g).expect("identified");
             let err = (do_y[1] - analytic[1]).abs();
             // error·√N must stay within 6σ of the estimator's true asymptotic std.
+            // E2 (P2 close): the envelope predicate `err·√N < se_factor·6.0` used to
+            // live inline here — the CLT imprisoned in one test. It now calls the
+            // reusable `stats::within_clt_envelope`, which is the BYTE-IDENTICAL
+            // expression, so this test's pass/fail cannot drift. The domain-specific
+            // `se_factor` derivation (back-door ratio estimator) rightly stays local.
             assert!(
-                err * (n as f64).sqrt() < se_factor * 6.0,
+                crate::stats::within_clt_envelope(err, n, se_factor, 6.0),
                 "N={n}: error·√N={} exceeds 6σ·{:.3} CLT envelope (no √N convergence?)",
                 err * (n as f64).sqrt(),
                 se_factor

@@ -220,6 +220,7 @@ fn w18_primary_recall_at_5_is_one_point_zero_on_deterministic_fixture() {
         ("what tracks information gain of improvements", 11),
     ];
     let mut total = 0.0f64;
+    let mut successes = 0u64;
     for (q, relevant) in &oracle {
         let hits = super::recall::recall_at_k(q, K);
         // Encode the ranking as a doc-id-indexed score vector for certify.
@@ -235,7 +236,36 @@ fn w18_primary_recall_at_5_is_one_point_zero_on_deterministic_fixture() {
             q, relevant, K
         );
         total += r;
+        // Each query has exactly one relevant doc ⇒ a Bernoulli trial; r==1.0 is a
+        // success. mean recall@5 == 1.0 therefore means successes/n == 12/12.
+        if r == 1.0 {
+            successes += 1;
+        }
     }
+    let n = oracle.len() as u64;
     let mean = total / oracle.len() as f64;
     assert_eq!(mean, 1.0, "mean recall@5 over the W18 oracle must be 1.0");
+
+    // E2 (§4 criterion 3 / D4): the bare `1.0` is unfalsifiable as displayed — a
+    // reader cannot tell whether it rests on 12 trials or 12 000. Attach the honest
+    // 95% Wilson lower bound. At p̂=1.0 the Wald interval degenerates to [1,1]; Wilson
+    // does not — for k=n it is n/(n+z²), computed here (NOT hardcoded from the doc).
+    assert_eq!(successes, 12, "12/12 Bernoulli successes back the 1.0 headline");
+    let (lo, hi) = crate::stats::wilson_interval(successes, n, 1.96);
+    let closed = n as f64 / (n as f64 + 1.96 * 1.96);
+    assert!((lo - closed).abs() < 1e-12, "12/12 Wilson lower must equal n/(n+z²)={closed}");
+    assert!(
+        (lo - 0.7575).abs() < 1e-4,
+        "recall@5 12-query Wilson 95% lower bound must be ≈0.7575, got {lo}"
+    );
+    assert!((hi - 1.0).abs() < 1e-12, "Wilson upper clamps to 1.0 at full success");
+    // A failing query (11/12) MUST move the floor — the interval reacts to evidence,
+    // it is not an assertable constant. (§4 criterion 3, D4.)
+    let (lo_miss, _) = crate::stats::wilson_interval(11, n, 1.96);
+    assert!(lo_miss < lo, "an 11/12 result must drop the Wilson floor below {lo}");
+    // The reported string now carries the interval, not a bare 1.0.
+    println!(
+        "[living_knowledge] recall@5 = {:.3}  [Wilson 95% {:.4}, {:.4}]  n={} (successes={})",
+        mean, lo, hi, n, successes
+    );
 }
