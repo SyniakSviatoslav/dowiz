@@ -209,5 +209,180 @@ optimize a cost R4 §5 shows sits 1–2 orders of magnitude below network RTT.
 
 ---
 
+## Extended Context
+
+**Why B4 is the numbers-provider the consolidation runs FIRST (Wave 0).** It is the smallest unit
+in the arc — a bench-only crate plus `docs/ledger/` rows, **zero product-code edits** (§3 step 1) —
+and it has **zero dependencies** (header: "Depends on: none"). Against that near-nothing cost sit
+three *named constants in sibling blueprints that are symbolic against B4's output and cannot be
+finalized without it*: B1's `FUEL_PER_UNIT` ("pinned after a B4 bench", CONSOLIDATED §4), B2's
+settlement-window `Δ` ("value awaits B4's verify bench", CONSOLIDATED §4/§5 Q5), and B3's
+`try_commit`-overhead acceptance criterion ("≤ 5 % of measured gate p99", §2.2). CONSOLIDATED §4
+makes the ordering an explicit preference, not a description of tension: running B4 first converts
+its own migration step 3 — a retroactive editing pass over three *landed* blueprints — into a plain
+citation at landing time, "eliminating exactly the multi-document stale-number drift this arc's
+discipline exists to prevent." Being parallel-safe with B1 anyway, B4-first costs nothing.
+
+**What happens if B4 is SKIPPED.** Every other blueprint's latency-adjacent acceptance criterion —
+B1's admission budget, B2's settlement-window sizing and sweep cost, B3's exposure-check overhead —
+stays an *unverified literature estimate* (R4 §1's `0.2–1 ms/verify [U]`, extrapolated from
+pq-crystals' Skylake cycle counts) wearing a requirement's clothes, never a measured fact. This is
+**exactly the epistemic gap the whole Hermetic-audit arc existed to close.** The direct line:
+Mentalism (`PRINCIPLE-1-MENTALISM.md §1`) holds that "an idea asserted as real without code that
+manifests it" is a defect — and a latency *budget* asserted as a binding acceptance *requirement*
+without a measurement that manifests it is precisely that defect. §0 already names the shape as
+"the RC-2 'claim replaces check' shape"; the through-line is RC-1 itself (`HERMETIC-ARCHITECTURE-
+PRINCIPLES.md:132` — "self-certification: the claim replaces the check"): skipping B4 leaves the
+arc *self-certifying its own performance requirements*, the same class as ADR-020's phantom
+authority and the dead cron the Hermetic pass catalogued. B4 is the check that stops the claim from
+standing in for it.
+
+**The concrete deliverable.** Not a paragraph of prose but a durably-recorded, host-fingerprinted
+`docs/ledger/crypto-bench.jsonl` row that **other blueprints cite by SYMBOL, not by re-quoting a
+number** — `ledger:hybrid_gate_check/d1.p99` becomes the single source of truth, and the literal
+string "0.2–1 ms" becomes grep-forbidden in acceptance criteria across the arc (§4.1). This mirrors
+the `claim-latency.jsonl` precedent (P01 §2.7, `docs/ledger/README.md`): one JSONL row per
+observation, appender-only, consumers kept separate. The number lives in exactly one place and is
+referenced, never copied — so it can never go stale in four documents at once.
+
+## Definition of Done
+
+Distinct from and additional to §4's acceptance criteria; all four must hold before B4's Wave-0 half
+is "done."
+
+1. **The bench ran on the real deployment host, and a future reader can prove which hardware
+   produced the number.** The appender MUST populate the ledger row's `host` and `cpu` fields
+   (§2.2) by *reading the live machine at run time* (hostname + `/proc/cpuinfo` model string), never
+   from a hand-typed literal, and MUST record `commit_bebop`/`commit_dowiz` so the measurement is
+   reproducible against exact source. A row whose `host`/`cpu` does not match the deployment host's
+   live fingerprint is not a valid ledger entry (§2.1: "a laptop run is not a valid ledger entry") —
+   the CI grep gate of §4.1 is extended to reject it. This is the operational proof of §1.5's
+   "estimates-don't-transfer caveat is satisfied by running here."
+2. **The DECART note for `criterion` is present and complete.** Confirmed: §2.1 carries it in full —
+   criterion 0.5 vs a zero-dep `std::time::Instant` harness, DECIDED for criterion in an isolated
+   never-shipped bench crate on three in-family precedents + statistical rigor, M6 trust boundary
+   untouched, with the `Instant` harness named as the documented fallback if bebop2 policy ever
+   forbids sibling dev-crates. It is not thin and needs no sharpening; the DoD requirement is only
+   that it **stay inline** (Detailed Planning Protocol step 3) and that the named fallback remain the
+   explicit degrade path — both hold as written.
+3. **The cofactor pin has a falsifiable NEGATIVE test vector, not only positive ones — and a
+   vacuity guard.** The blueprint's positive coverage exists (RFC 8032 §7.1 KATs accept under both
+   single and batch paths, §2.3.iv / acceptance 3). The DoD ADDS the missing negative case: a
+   known-**bad** "Taming the Many EdDSAs" (SSR-2020 §5) divergence vector — a signature with a
+   small-order / mixed-order component in `A` or `R` that the **cofactorless single** verify
+   *rejects* (`S·B ≠ R + k·A` after canonical-S, §1.3) but a **naive cofactored batch** equation
+   (`8·S·B = 8·R + 8·k·A`) would *accept* (SSR-2020's canonical vectors #4/#5/#6). DoD assertion
+   (BLOCKING): placed inside a batch, this frame's overall verdict is **REJECT** — the fallback to
+   single verify fires and single, the sole acceptance authority (§2.3.iii), rejects it. Plus a
+   **mutation/vacuity guard** in the same discipline as this session's `noether.rs`
+   explicit-Euler-gains-energy test (which proves the energy monitor is real by feeding it a
+   known-bad integrator that MUST trip it): temporarily stub out the fallback-to-single path and
+   assert the batch NOW accepts the bad vector — proving the pin is load-bearing, not decorative. A
+   positive-only suite is passed vacuously by a batch equation that accepts everything; the negative
+   vector + mutation guard is what makes the pin non-vacuous.
+4. **The one-shot-ness of the ledger row is enforced by an explicit uniqueness scheme** (designed in
+   the next section): the appender writes a `run_key`, never overwrites an existing row, and the
+   symbol-resolution rule is documented so `ledger:<id>.<stat>` deterministically resolves to one row.
+
+## Event-Driven Architecture Treatment
+
+**Honest framing: this blueprint is mostly NOT event-sourced, and that is correct.** A benchmark run
+is a *local, one-off measurement on the deployment host* — it never rides `commit_after_decide`,
+never enters the WORM `EventStore`, never gossips, and is not a `MeshEvent`. Manufacturing a
+"`BenchEvent`" to force the mesh framing would be a fabricated connection: MESH-03's wire vocabulary
+is for protocol frames exchanged between peers, not for dev-time host telemetry that no counterparty
+verifies or replays. B4 produces *facts about the hardware and code*, not *state of the mesh*. The
+blueprint states this plainly rather than dressing a bench loop as an event stream.
+
+**But one real event-discipline question does apply: the `crypto-bench.jsonl` row itself deserves
+the same idempotency discipline as `claim-latency.jsonl`** (the P01 §2.7 / Hermetic-remediation
+precedent — one appender-only row per observation, consumers separate). §2.2 specifies the row's
+*fields* but not its *key or uniqueness scheme*; designed concretely here:
+
+- **Append-only, never overwrite or delete.** Exactly `claim-latency.jsonl`'s contract ("one JSONL
+  entry per commit, appended by the appender"). Every bench run appends; no run silently clobbers a
+  prior measurement. Old rows are *retained on purpose* as the drift record — the whole point of
+  §Long-Term (c) is that today's number will change, and comparison across time requires that the
+  old numbers stay readable.
+- **Identity = a derived `run_key` field** (added to §2.2's schema): `run_key = sha3_256(bench_id ‖
+  commit_bebop ‖ commit_dowiz ‖ host ‖ cpu ‖ msg_bytes ‖ chain_depth ‖ samples ‖ warmup_s ‖
+  measure_s)` truncated to 16 hex — the content-id of *what configuration was measured*. Two runs of
+  the identical configuration over time share a `run_key` but differ in `ts` (and may differ in
+  `p99_ns`); grouping rows by `run_key` is exactly how a consumer sees the same measurement *drift*
+  as hardware/implementation change. This is the analogue of claim-latency's `commit_sha` identity,
+  generalized to "(config) measured (when)".
+- **Symbol-resolution rule (the citation contract for B1/B2/B3).** `ledger:<bench_id>.<stat>`
+  resolves to the row with the **newest `ts` whose `run_key` matches the CURRENT-HEAD configuration**
+  (current `commit_bebop`/`commit_dowiz` + the live deploy-host fingerprint). Citations therefore
+  always resolve to the freshest *valid* measurement; superseded rows remain in the file for
+  comparison but are never cited. Idempotency falls out cleanly: identity is `run_key`, recency is
+  `ts`, overwriting is forbidden, and "the same thing benched twice" is handled by keeping both rows
+  and citing the newer — never by mutating history.
+
+## Long-Term Consequences, Safety, Scalability
+
+**(a) Scalability — the AVX2/NTT trigger, named (sharpening §5's vague "proves insufficient").**
+§5 defers the ~3× AVX2/NTT-vectorized `pq_dsa` port (522 k → 179 k cycles) "only if §4.1's measured
+throughput proves insufficient for *measured* mesh traffic." Sharpened into a falsifiable threshold
+read off this blueprint's own bench, per this session's E53 waiver-form discipline:
+
+> **E53 waiver — AVX2/NTT vectorization of `pq_dsa::verify`.**
+> *what:* SIMD port, R4's published ~3× verify upgrade. *why-suspended:* measured verify cost sits
+> 1–2 orders of magnitude below network RTT (R4 §5); speculative optimization forbidden.
+> *owner:* whoever runs §3 step 6's re-bench. *date:* 2026-07-17.
+> *trigger (named number):* start the work when **measured sustained mesh hybrid-verify demand
+> crosses 50 % of one core's measured scalar throughput** — i.e. `T_core / 2` verifies/s, where
+> `T_core = 1e9 / ledger:hybrid_gate_check/d1.mean_ns` (against R4's ~1,000 verify/s/core estimate
+> that is ≈ **500 verifies/s/core sustained**, meaning the mesh would have to dedicate more than one
+> of `dowiz-dev`'s 8 cores continuously to verification) — **OR** when a single MESH-07 Sync·Pull
+> segment catch-up measures a p99 wall-clock re-verify time exceeding B2's settlement window
+> **Δ = 60 ticks (60 s at the 1 tick/s reference profile)**, whichever fires first.
+
+Both limbs are read directly from ledger rows (the crypto-bench `mean_ns`/`p99_ns` plus a companion
+sustained-rate stat recorded at the B2 emitter), so the trigger is a checkable number, not "if
+needed." Below it, per R4 §5, AVX2 optimizes a cost far under the latency floor and is out of scope.
+
+**(b) Safety — the cofactor pin is a non-negotiable, blocking gate.** The batch-verification cofactor
+pitfall is a named historical vulnerability class (SSR-2020 / ZIP-215, §2.3). State the consequence
+of the pin being wrong or later silently regressed plainly: **a forged batch-verification result
+accepts an invalid signature as valid** — an unauthorized or forged frame admitted into the mesh as
+*authentic*. In an architecture whose entire premise (R3 §8) is that the cryptographic agent trust
+plane is the one part that *must* be built and cannot be delegated to any external authority,
+admitting a forgery is a **total soundness break of the trust plane — about as severe as a safety
+bug gets in a crypto-verified mesh.** Therefore the negative-vector test (DoD item 3) and acceptance
+criterion 3 are treated as **BLOCKING / non-negotiable, not one test among many**: a red there blocks
+the *entire batch feature* from landing, and the system stays in its current safe state
+(single-verify-only) until green. Batch verification is a pure optional throughput optimization and
+must never sit on the critical acceptance path; "single verify remains the sole acceptance authority"
+(§2.3.iii) is the structural backstop, but the fallback logic *is code that can regress*, which is
+exactly why the mutation/vacuity guard (DoD item 3) is mandatory rather than nice-to-have.
+
+**(c) Ethics / long-term — measurement staleness and the re-bench trigger, honestly.** The numbers
+B4 records are true only of *today's* hardware and *today's* `pq_dsa.rs`; both will change, and a
+citation `ledger:hybrid_gate_check/d1.p99` silently becomes a lie the moment either does — the row
+now describes a machine or a code path that no longer runs. Three re-bench triggers, in decreasing
+reliability:
+
+1. **New hardware generation deployed** → the row's `host`/`cpu` fingerprint ≠ the live deploy-host
+   fingerprint → the symbol resolves to no HEAD-matching row → stale, re-bench required.
+2. **Implementation change on the verify path** (`pq_dsa.rs`, `sign.rs`, `hybrid_gate.rs`) → the
+   row's `commit_bebop` ≠ HEAD → `run_key` mismatch → stale, re-bench required.
+3. **A time-based cadence** (e.g. quarterly) — advisory only, see below.
+
+The honest mitigation, and its limit: a **periodic re-bench cron would be a dead pendulum.** The "no
+cron reliably fires" problem this session found elsewhere applies here directly and is *live right
+now* — `PRINCIPLE-5-RHYTHM.md §2` re-verified the Hermes gateway DOWN with all four registered jobs
+at `last_run=None`, so a "quarterly re-bench job" is structurally guaranteed **not** to fire while
+MEMORY would record it as running. So trigger 3 is recorded as **secondary advisory only, explicitly
+flagged unreliable.** The primary guarantee uses the pattern B2 chose over a timer (sweep-on-commit,
+not a clock): make staleness detection **ride a path that always runs.** Extend acceptance-criterion
+§4.1's CI grep gate so it ALSO fails when a *cited* ledger symbol's `run_key` does not match HEAD's
+configuration, or when the resolved row's `host`/`cpu` ≠ the deploy-host fingerprint. Because every
+change already runs CI, this is "structurally guaranteed to fire" in the `PRINCIPLE-5-RHYTHM.md` /
+Ananke "structurally inevitable, not remembered" sense — triggers 1 and 2 become a failing build the
+first time the hardware or the verify code moves, never a checklist item anyone has to recall.
+
+---
+
 *Planning artifact only — no code written or edited. All file:line citations re-resolved live
 on 2026-07-17 against `/root/bebop-repo/bebop2` and `/root/dowiz-agentic-mesh`.*
