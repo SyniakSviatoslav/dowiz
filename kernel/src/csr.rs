@@ -151,6 +151,58 @@ impl Csr {
         }
     }
 
+    /// Build a CSR from a dense `n×n` (or ragged) matrix of floats.
+    ///
+    /// Drops explicit zeros (N2 — a stored `0.0` and an absent entry are the
+    /// SAME tile) and emits each row in **ascending-column order** (canonical
+    /// structural form). Entries equal to `0.0` are not stored; `-0.0` is
+    /// treated as `0.0` so it does not spuriously appear. Used by
+    /// `NormalizedTile::from_dense` and the doc-19 canonical pipeline.
+    pub fn from_dense(a: &[Vec<f64>]) -> Csr {
+        let n = a.len();
+        let mut row_ptr = Vec::with_capacity(n + 1);
+        let mut col_idx = Vec::new();
+        let mut val = Vec::new();
+        row_ptr.push(0);
+        for row in a.iter() {
+            // Collect (col, val) pairs, dropping explicit zeros.
+            let mut entries: Vec<(usize, f64)> = Vec::new();
+            for (j, &x) in row.iter().enumerate() {
+                if x != 0.0 {
+                    entries.push((j, x));
+                }
+            }
+            // Ascending-column order (N2).
+            entries.sort_by_key(|&(c, _)| c);
+            for (c, w) in entries {
+                col_idx.push(c);
+                val.push(w);
+            }
+            row_ptr.push(col_idx.len());
+        }
+        Csr {
+            row_ptr,
+            col_idx,
+            val,
+        }
+    }
+
+    /// Materialize the dense matrix `A` from the CSR (zero for absent entries).
+    /// Square `n×n`, where `n = nrows()`. Inverse of `from_dense` up to explicit
+    /// zeros (those are recovered as `0.0`).
+    pub fn to_dense(&self) -> Vec<Vec<f64>> {
+        let n = self.nrows();
+        let mut a = vec![vec![0.0f64; n]; n];
+        for i in 0..n {
+            let lo = self.row_ptr[i];
+            let hi = self.row_ptr[i + 1];
+            for k in lo..hi {
+                a[i][self.col_idx[k]] = self.val[k];
+            }
+        }
+        a
+    }
+
     /// Sparse matrix-vector product, LEFT-vector orientation:
     ///
     /// ```text
@@ -424,6 +476,120 @@ pub fn precision_at_k(scores: &[f64], relevant: &[usize], k: usize) -> f64 {
         }
     }
     hits as f64 / kr as f64
+}
+
+// ── P-B (BLUEPRINT-P-B §3.2): canonical-tile type-system invariant ─────────
+//
+// The bug class "hashed a tile that was not canonicalized" becomes a COMPILE
+// ERROR through three structural facts:
+//   (i)   `NormalizedTile` has a private field and its only constructors run
+//         `row_normalize` — a NormalizedTile that skipped canonicalization is
+//         UNREPRESENTABLE;
+//   (ii)  `TileAddress` has no public constructor; its only producer is
+//         `NormalizedTile::content_address`;
+//   (iii) the raw-matrix hash `matrix_content_address` is demoted to private in
+//         `spectral_cache.rs`.
+// There is no runtime check to forget and no reviewer vigilance to depend on.
+
+/// FNV-1a-64 single authority (consolidates the two inline literal sites in
+/// `spectral_cache.rs` + `memory_store`).
+pub const FNV_OFFSET_64: u64 = 0xcbf2_9ce4_8422_2325;
+pub const FNV_PRIME_64: u64 = 0x0000_0100_0000_01b3;
+
+/// A tile in CANONICAL form (N1+N2+N3, §3.1 of the blueprint).
+///
+/// INVARIANT (type-encoded, not runtime-checked): the field is private and the
+/// only constructors run `row_normalize` (N1: row-stochastic; N2: via
+/// `from_dense` / a sort-dedup pass on the CSR path; N3: by construction —
+/// rational/fixed-order ops only). A `NormalizedTile` that skipped
+/// canonicalization is UNREPRESENTABLE. No `&mut` accessor exists.
+#[derive(Debug, Clone, PartialEq)]
+pub struct NormalizedTile {
+    csr: Csr, // private
+}
+
+impl NormalizedTile {
+    /// The only ways in. Both canonicalize:
+    /// * `canonicalize` runs `row_normalize` on a raw [`Csr`];
+    /// * `from_dense` builds a CSR (dropping explicit zeros, ascending-column
+    ///   rows per N2) and row-normalizes it.
+    /// `a` is already row-stochastic (e.g. a markov transition matrix) ⇒ the
+    /// normalize pass is value-idempotent up to ulp — re-dividing perturbs
+    /// entries ≤ a few ulp.
+    pub fn canonicalize(raw: &Csr) -> NormalizedTile {
+        NormalizedTile {
+            csr: raw.row_normalize(),
+        }
+    }
+
+    /// Build a canonical tile from a dense matrix (see [`Csr::from_dense`]).
+    pub fn from_dense(a: &[Vec<f64>]) -> NormalizedTile {
+        let csr = Csr::from_dense(a);
+        NormalizedTile {
+            csr: csr.row_normalize(),
+        }
+    }
+
+    /// THE ONLY PRODUCER of a [`TileAddress`] in the crate.
+    ///
+    /// FNV-1a-64 over the canonical CSR bytes, length-framed, fixed order:
+    /// `nrows`, then per row: `frame(i)`, then `(col_idx[k] as u64, val[k].to_bits())`
+    /// ascending `k`. O(nnz), not O(n²). `-0.0` is folded to `+0.0` bits so a
+    /// value-identical tile with a sign-distinct zero shares an address.
+    pub fn content_address(&self) -> TileAddress {
+        let csr = &self.csr;
+        let n = csr.nrows();
+        let mut h = FNV_OFFSET_64;
+        // frame nrows
+        h ^= n as u64;
+        h = h.wrapping_mul(FNV_PRIME_64);
+        for i in 0..n {
+            // frame the row index so a value bleeding across rows can't collide
+            h ^= (i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+            h = h.wrapping_mul(FNV_PRIME_64);
+            let lo = csr.row_ptr[i];
+            let hi = csr.row_ptr[i + 1];
+            for k in lo..hi {
+                let col = csr.col_idx[k] as u64;
+                let v = csr.val[k];
+                // fold -0.0 → +0.0 bits (value-identical tiles share an address)
+                let bits = if v == 0.0 {
+                    0.0f64.to_bits()
+                } else {
+                    v.to_bits()
+                };
+                h ^= col;
+                h = h.wrapping_mul(FNV_PRIME_64);
+                h ^= bits;
+                h = h.wrapping_mul(FNV_PRIME_64);
+            }
+        }
+        TileAddress(h)
+    }
+
+    /// Read-only view of the canonical CSR (eigensolve input; snapshot
+    /// retention). No mutation path.
+    pub fn as_csr(&self) -> &Csr {
+        &self.csr
+    }
+
+    /// Dense round-trip of the canonical tile.
+    pub fn to_dense(&self) -> Vec<Vec<f64>> {
+        self.csr.to_dense()
+    }
+}
+
+/// Opaque content-address of a CANONICAL tile. No public constructor — possession
+/// of a `TileAddress` is proof normalization ran (Curry-Howard cheap).
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct TileAddress(u64);
+
+impl TileAddress {
+    /// Hex form for `DecompCache`'s `&str` key path (reuse, not a second
+    /// authority).
+    pub fn as_hex(&self) -> String {
+        format!("{:016x}", self.0)
+    }
 }
 
 #[cfg(test)]
