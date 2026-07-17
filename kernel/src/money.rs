@@ -18,7 +18,8 @@ pub fn to_minor_unit(amount: i64, _currency: &str) -> Result<i64, String> {
     Ok(amount)
 }
 
-const SCALE: i128 = 1_000_000;
+// Single scale authority (promoted from private `SCALE`, BLUEPRINT-P-A §2/A3).
+pub const MONEY_SCALE_MICRO: i128 = 1_000_000;
 
 /// M5 — currency identity. Money is integer minor units *in a specific currency*.
 /// Two amounts in different currencies may NEVER be added/compared as raw ints —
@@ -275,13 +276,13 @@ pub fn apply_tax(subtotal: i64, tax_rate: f64, price_includes_tax: bool) -> Resu
     let sub = subtotal as i128;
 
     let tax = if price_includes_tax {
-        // net = round(sub * SCALE / (SCALE + rate)); tax = sub - net
-        let denom = SCALE + rate_micro;
-        let net = (sub * SCALE + denom / 2) / denom; // half-up
+        // net = round(sub * MONEY_SCALE_MICRO / (MONEY_SCALE_MICRO + rate)); tax = sub - net
+        let denom = MONEY_SCALE_MICRO + rate_micro;
+        let net = (sub * MONEY_SCALE_MICRO + denom / 2) / denom; // half-up
         sub - net
     } else {
-        // tax = round(sub * rate / SCALE)
-        (sub * rate_micro + SCALE / 2) / SCALE // half-up
+        // tax = round(sub * rate / MONEY_SCALE_MICRO)
+        (sub * rate_micro + MONEY_SCALE_MICRO / 2) / MONEY_SCALE_MICRO // half-up
     };
     i64::try_from(tax).map_err(|_| "tax overflow: subtotal * rate exceeds i64".into())
 }
@@ -492,6 +493,100 @@ mod tests {
         // pathological: huge subtotal × rate=2.0 → tax ≈ i64::MAX*2 exceeds i64.
         let r = apply_tax(i64::MAX, 2.0, false);
         assert!(r.is_err(), "tax overflow must be Err, got {:?}", r);
+    }
+
+    // ── A3: money-law SHADOW organ exact-integer parity pin (BLUEPRINT-P-A §3.3) ──
+    // The generated organs (crate::eqc_gen::apply_tax_{exclusive,inclusive}_int) are a
+    // verbatim transcription of the equations of truth; this test pins them against the
+    // hand-written `apply_tax` (the still-authoritative law — the authority flip is
+    // R-4-gated, NOT done here). Exact-integer equality, no tolerance. Any mismatch is RED.
+    #[test]
+    fn apply_tax_generated_parity_exact_integers() {
+        // Every existing apply_tax corpus case from money.rs:454-495, reused as fixtures.
+        const MONEY_TAX_FIXTURES: &[(i64, f64, bool)] = &[
+            (1000, 0.20, false), // green_tax_added_exclusive → 200
+            (1200, 0.20, true),  // green_tax_inclusive_net → 200
+            (0, 0.20, false),    // green_zero_subtotal_or_rate → 0
+            (1000, 0.0, false),  // green_zero_subtotal_or_rate → 0
+            (i64::MAX, 2.0, false), // red_tax_overflow_is_err → Err
+        ];
+        for &(sub, rate, incl) in MONEY_TAX_FIXTURES {
+            // Same boundary conversion as apply_tax (money.rs:275).
+            let rate_micro = (rate * 1_000_000.0).round() as i64;
+            let want = apply_tax(sub, rate, incl);
+            let got = if incl {
+                crate::eqc_gen::apply_tax_inclusive_int(sub, rate_micro)
+            } else {
+                crate::eqc_gen::apply_tax_exclusive_int(sub, rate_micro)
+            };
+            match want {
+                Ok(v) => assert_eq!(
+                    got.unwrap(),
+                    v,
+                    "parity mismatch at (sub={sub}, rate={rate}, incl={incl})"
+                ),
+                Err(_) => assert!(
+                    got.is_err(),
+                    "both must refuse at (sub={sub}, rate={rate}, incl={incl}); got {got:?}"
+                ),
+            }
+        }
+
+        // Adversarial overflow sweep: the EXCLUSIVE organ at sub=i64::MAX,
+        // rate_micro=2_000_000 MUST return Err (the half-up product overflows i64) —
+        // never wrap. The INCLUSIVE organ can never overflow the final i64 narrowing
+        // (tax = sub - net ≤ sub ≤ i64::MAX for non-negative rate, and sub*s fits i128),
+        // so it returns Ok there and must equal the law exactly. Both paths are
+        // fail-closed: whatever they return is the true, in-range value (no silent wrap).
+        let got_excl = crate::eqc_gen::apply_tax_exclusive_int(i64::MAX, 2_000_000);
+        let got_incl = crate::eqc_gen::apply_tax_inclusive_int(i64::MAX, 2_000_000);
+        assert!(
+            got_excl.is_err(),
+            "exclusive organ must refuse overflow, got {got_excl:?}"
+        );
+        let want_incl = apply_tax(i64::MAX, 2.0, true);
+        assert_eq!(
+            got_incl,
+            want_incl.map_err(|_| "tax overflow: subtotal * rate exceeds i64"),
+            "inclusive organ must match the law at the i64::MAX boundary (no wrap)"
+        );
+
+        // Property grid: divergence-hunting sweep over the integer basis. Any single
+        // mismatch is RED — this is the test *designed to break* the transcription.
+        let subs = [0i64, 1, 999, 1_000_000, i64::MAX / 2];
+        let rates = [0i64, 1, 200_000, 999_999];
+        for &sub in subs.iter() {
+            for &rate_micro in rates.iter() {
+                // f64 rate round-trips the micro basis for the hand-written law.
+                let rate_f = rate_micro as f64 / 1_000_000.0;
+                let want_excl = apply_tax(sub, rate_f, false);
+                let want_incl = apply_tax(sub, rate_f, true);
+                let got_excl = crate::eqc_gen::apply_tax_exclusive_int(sub, rate_micro);
+                let got_incl = crate::eqc_gen::apply_tax_inclusive_int(sub, rate_micro);
+                match want_excl {
+                    Ok(v) => assert_eq!(
+                        got_excl.unwrap(),
+                        v,
+                        "excl grid mismatch at sub={sub} rate_micro={rate_micro}"
+                    ),
+                    Err(_) => assert!(
+                        got_excl.is_err(),
+                        "excl grid both-refuse at sub={sub} rate_micro={rate_micro}; got {got_excl:?}"
+                    ),
+                }
+                match want_incl {
+                    Ok(v) => assert_eq!(
+                        got_incl.unwrap(),
+                        v,
+                        "incl grid mismatch at sub={sub} rate_micro={rate_micro}"
+                    ),
+                    Err(_) => assert!(
+                        got_incl.is_err(),
+                        "incl grid both-refuse at sub={sub} rate_micro={rate_micro}; got {got_incl:?}"
+                    ),
+                }
+            }
+        }
     }
 
     #[test]
