@@ -336,6 +336,24 @@ impl<S: EventStore> EventLog<S> {
     ///
     /// `decide` returns `Ok(decision)` (carried back to the caller) or
     /// `Err(reason)`. The decision value is opaque to the log.
+    ///
+    /// # P07 §2 — dedup keys off a STABLE content-id (no local-first rebind)
+    ///
+    /// The dedup guard below computes `ev.event_id()` from the event's fields
+    /// **exactly as the caller supplied them** (its raw content-id), and the
+    /// commit is persisted under that SAME raw id via [`Self::append_raw`] — NOT
+    /// via [`Self::append`], which rebinds a zero `prev` to the tip and would key
+    /// the store under a *different* (chain-bound) id. Keying dedup and storage on
+    /// one id is what makes a replay a true `Duplicate`: the module contract
+    /// ("replays of the same content are idempotent") only holds for a
+    /// chain-independent id. Were this to rebind (as `append` does), a replay of a
+    /// zero-`prev` event onto a NON-EMPTY log would compute the raw id, miss the
+    /// stored rebound id, re-run `decide`, and chain the replay onto the current
+    /// tip as a *fresh* event — a double-run of `decide` and a double-commit of
+    /// one logical event (the P07 §2 defect; the money-law violation B2's DoD
+    /// gates on: a replayed `SettlementClaimed` must never re-run its hashlock
+    /// side effect). A caller that wants explicit local-first chaining calls
+    /// [`Self::append`] directly; a decide-gated commit is idempotent by content.
     pub fn commit_after_decide<D, T, E>(
         &mut self,
         ev: MeshEvent,
@@ -345,8 +363,10 @@ impl<S: EventStore> EventLog<S> {
         D: FnOnce(&MeshEvent) -> Result<T, E>,
         E: std::fmt::Display,
     {
+        // Idempotency first: dedup on the RAW content-id — the same id `append_raw`
+        // stores under below — so a replay is caught regardless of how far the tip
+        // has advanced. A duplicate never re-runs decide (state unchanged).
         let id = ev.event_id();
-        // Idempotency first: a duplicate never re-runs decide (state unchanged).
         if self.store.contains(&id) {
             return Ok((AppendOutcome::Duplicate(id), None));
         }
@@ -354,9 +374,10 @@ impl<S: EventStore> EventLog<S> {
         // the Law pole (never retry), kept distinct from the store-fault pole.
         let decision = decide(&ev)
             .map_err(|e| CommitError::Rejected(DecideRejected(e.to_string())))?;
-        // Commit (chains prev, records tip). A durability fault here is the
-        // Store pole — accepted but not durable, NOT a Law rejection.
-        let outcome = self.append(ev).map_err(CommitError::Store)?;
+        // Commit under the SAME raw id the dedup check tested (stable content-id,
+        // no rebind). A durability fault here is the Store pole — accepted but not
+        // durable, NOT a Law rejection.
+        let outcome = self.append_raw(ev).map_err(CommitError::Store)?;
         Ok((outcome, Some(decision)))
     }
 
@@ -558,6 +579,98 @@ mod tests {
         assert_eq!(dec2, None, "duplicate yields no new decision");
         assert_eq!(decide_calls, 1, "decide NOT re-run for a duplicate");
         assert_eq!(log.len(), 1, "state unchanged by the replay");
+    }
+
+    /// RED→GREEN — P07 §2 dedup-ordering fix. Replaying a zero-`prev` event that
+    /// was ORIGINALLY committed onto a NON-EMPTY log must be recognised as a true
+    /// `Duplicate` and MUST NOT re-run `decide`.
+    ///
+    /// The non-empty precondition is load-bearing (B2 DoD hard-gate 1): on an
+    /// empty log `tip()` is `None` so there is nothing to rebind onto and the bug
+    /// is invisible. Only a replay onto a non-empty log exposes it. Pre-fix,
+    /// `commit_after_decide` dedup-checked the RAW zero-`prev` id but persisted via
+    /// `append`, which rebinds `prev` to the tip and stores the event under a
+    /// *different* (chain-bound) id — so the raw-id dedup check missed, `decide`
+    /// re-ran, and `append` chained the replay onto the now-advanced tip as a
+    /// brand-new event: a double-run of `decide` AND a full double-commit (log
+    /// grew, `Committed` returned for a logical duplicate). The fix keys dedup and
+    /// storage on the SAME raw content-id (`append_raw`), so a replay is a
+    /// structural no-op. Pinned to a `SettlementClaimed`-shaped payload per the B2
+    /// DoD sharpening: a claim replay whose `decide` re-runs the hashlock/preimage
+    /// side effect twice is a money-law violation, not a cosmetic bug.
+    #[test]
+    fn commit_after_decide_replay_on_nonempty_log_is_true_duplicate() {
+        let mut log = EventLog::new(MemEventStore::new());
+        let mut decide_calls = 0usize;
+
+        // (1) Genesis event onto the EMPTY log — makes the log non-empty (a tip
+        // now exists), which is the precondition that exposed the pre-fix bug.
+        log.commit_after_decide(ev(1, 1, b"genesis"), |_| {
+            decide_calls += 1;
+            Ok::<u64, String>(1)
+        })
+        .expect("genesis commits");
+        assert_eq!(log.len(), 1);
+
+        // (2) The ORIGINAL logical event: a zero-`prev`, SettlementClaimed-shaped
+        // event committed onto the NON-EMPTY log. `decide` runs exactly once here.
+        let target = ev(2, 1, b"SettlementClaimed{s}");
+        let (out1, dec1) = log
+            .commit_after_decide(target.clone(), |_| {
+                decide_calls += 1;
+                Ok::<u64, String>(1)
+            })
+            .expect("original target commits");
+        let stored_id = match out1 {
+            AppendOutcome::Committed(id) => id,
+            other => panic!("first target commit must be Committed, got {other:?}"),
+        };
+        assert_eq!(dec1, Some(1));
+        assert_eq!(log.len(), 2);
+        assert_eq!(decide_calls, 2, "one decide per distinct event so far");
+        // Content-address consistency (the fix): a decide-gated commit is stored
+        // under the event's OWN raw content-id — NOT a rebound/chain-bound id — so
+        // the dedup key and the store key are one and the same. (Pre-fix this went
+        // through `append`, which rebinds, storing under a *different* id — the
+        // divergence the bug exploited.)
+        assert_eq!(
+            stored_id,
+            target.event_id(),
+            "commit_after_decide stores under the stable raw content-id (no rebind)"
+        );
+
+        // (3) Replay the ORIGINAL zero-`prev` bytes again onto the now-non-empty
+        // log (same content, prev still zero, NOT rebound) — the bug trigger.
+        let (out2, dec2) = log
+            .commit_after_decide(target, |_| {
+                decide_calls += 1;
+                Ok::<u64, String>(1)
+            })
+            .expect("replay must not error");
+
+        // Every one of these is FALSE against pre-P07 code, where the replay
+        // double-commits: out2 == Committed(new id), dec2 == Some(1), counter==3,
+        // len==3.
+        assert!(
+            matches!(out2, AppendOutcome::Duplicate(_)),
+            "replay onto a non-empty log must be a Duplicate, got {out2:?}"
+        );
+        assert_eq!(
+            dec2, None,
+            "a duplicate carries NO decision — pre-fix leaks Some(decision)"
+        );
+        assert_eq!(
+            decide_calls, 2,
+            "decide MUST run exactly once for the target — pre-fix runs it twice (counter==3)"
+        );
+        assert_eq!(log.len(), 2, "replay must not grow the log");
+
+        // DoD sharpening: the Duplicate keys off the SAME content-id the commit was
+        // stored under — catches a partial fix that reorders the check but mis-keys
+        // the store (e.g. dedup on raw id, store under a rebound id, or vice-versa).
+        if let AppendOutcome::Duplicate(dup_id) = out2 {
+            assert_eq!(dup_id, stored_id, "duplicate id must equal the stored content-id");
+        }
     }
 
     /// RED — local `decide` rejection MUST NOT persist anything (no partial commit).

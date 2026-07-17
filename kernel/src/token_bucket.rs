@@ -86,6 +86,44 @@ impl TokenBucket {
         self.refill();
         unpack(self.tokens.load(Ordering::Acquire)).max(0.0) as u64
     }
+
+    /// Return `n` previously-acquired tokens to the bucket, saturating at `capacity`.
+    ///
+    /// The refund entry point the `EnvelopeMap` two-level check needs (§2.2): when the
+    /// aggregate lane refuses after the per-peer envelope already granted, the peer's tokens
+    /// must be given back rather than silently taxed. Interior-mutability `&self`, mirroring
+    /// `try_acquire` — a sibling of acquire, not a new mutation discipline.
+    ///
+    /// F33 bound preserved *by construction*: the stored balance is clamped to `capacity` on
+    /// write, so `release` can never mint tokens beyond what a prior `try_acquire` removed.
+    /// Releasing more than was acquired, or releasing after a long idle refill has already
+    /// topped the bucket up, saturates at the ceiling — it never overflows past `capacity`.
+    pub fn release(&self, n: u64) {
+        let add = n as f64;
+        let mut cur = unpack(self.tokens.load(Ordering::Acquire));
+        loop {
+            let mut next = cur + add;
+            if next > self.capacity {
+                next = self.capacity; // saturate: never accumulate past the ceiling.
+            }
+            match self
+                .tokens
+                .compare_exchange_weak(pack(cur), pack(next), Ordering::AcqRel, Ordering::Acquire)
+            {
+                Ok(_) => return,
+                Err(c) => cur = unpack(c),
+            }
+        }
+    }
+
+    /// Raw internal token count WITHOUT the lazy refill/cap — test-only. Lets the F33
+    /// saturation test observe that `release` itself caps *by construction*, independent of
+    /// `refill`'s read-path cap (which has an `elapsed == 0` early-return hole and so cannot
+    /// be relied on to enforce the ceiling).
+    #[cfg(test)]
+    fn raw_tokens(&self) -> f64 {
+        unpack(self.tokens.load(Ordering::Acquire))
+    }
 }
 
 #[cfg(test)]
@@ -118,6 +156,47 @@ mod tests {
         assert!(b.try_acquire(1));
         assert!(b.try_acquire(1));
         assert!(!b.try_acquire(1), "third acquire must be typed-false (degrade-closed)");
+    }
+
+    #[test]
+    fn release_returns_exact_tokens_when_below_capacity() {
+        // §2.2 refund path (bounded case): a release that stays under `capacity` gives back
+        // exactly `n` tokens — the aggregate-refusal path can restore the peer's lane precisely.
+        let capacity = 10u64;
+        let b = TokenBucket::new(capacity, 0.0); // rate 0: isolate `release` from clock refill.
+        while b.try_acquire(1) {} // drain fully.
+        let before = b.available();
+        assert_eq!(before, 0, "drained bucket is empty before release");
+        let n = 3u64;
+        b.release(n);
+        let after = b.available();
+        assert_eq!(after - before, n, "release adds back exactly n when below capacity");
+        assert!(after <= capacity, "F33 bound: available never exceeds capacity");
+    }
+
+    #[test]
+    fn release_saturates_at_capacity() {
+        // F33 falsifier for "release mints free budget": acquire n, then release 2n (past the
+        // ceiling). Available MUST saturate at exactly `capacity`, never overflow it — a naive
+        // unclamped add would land at capacity + n and this assertion catches it.
+        let capacity = 10u64;
+        let b = TokenBucket::new(capacity, 0.0); // rate 0: no refill in play.
+        let n = 4u64;
+        assert!(b.try_acquire(n)); // available now capacity - n = 6.
+        b.release(2 * n); // 6 + 8 = 14 naively; must clamp to capacity (10).
+        // Deterministic falsifier: `release` must cap the INTERNAL store, not lean on refill's
+        // read-path cap. A naive unclamped add leaves raw_tokens == 14 here and fails this line.
+        assert!(
+            b.raw_tokens() <= capacity as f64,
+            "release capped by construction: internal store never exceeds capacity (was {})",
+            b.raw_tokens()
+        );
+        assert_eq!(
+            b.available(),
+            capacity,
+            "release past capacity saturates at exactly capacity, never mints beyond it"
+        );
+        assert!(b.available() <= capacity, "F33 bound: available <= capacity, ever");
     }
 }
 
