@@ -175,8 +175,17 @@ first, highest-level product/UI last. Each phase below states what it absorbs fr
 
 P06 (ML-DSA `key_V` split-identity verifier) remains the cross-cutting blocker already identified
 (memory: `sovereign-architecture-19-phase-roadmap-2026-07-17.md`) — it gates P-C's independent-
-verification leg, P-D's capability issuance, and P-G's product-safety story. Highest-leverage
-single build item across every phase above, unchanged finding.
+verification leg and P-G's product-safety story. Highest-leverage single build item across those
+phases, unchanged finding.
+
+**Correction (2026-07-17, P-D audit + BLUEPRINT-P-D, both independently verified):** P-D's
+capability issuance (`RootDelegationPolicy` in `bebop-repo/bebop2/proto-cap/src/node_id.rs:156-184`)
+is **NOT gated by P06**. P06 is a dev-time CI merge fence over code diffs; P-D's issuance is
+runtime courier onboarding. They share substrate (`load_genesis`/`verify_chain`) and the open C4b
+hardening item, but neither functionally blocks the other — P-D's mint/admission path is
+Ed25519-only today, with zero `key_V` dependency in the code (grep-confirmed). See
+`docs/design/CORE-ROADMAP-2026-07-17/P-D-audit-root-delegation-policy.md` §3 for the full
+Descartes-square reasoning behind this correction.
 
 ---
 

@@ -36,9 +36,13 @@ partition).
 | **H** | Ops / telemetry / benchmarks / regression | P01 (`ci.yml:23` fix) · P08 · P24 · P25 (· P26 soft) · chaos harness · `docs/regressions/REGRESSION-LEDGER.md` |
 | **I** | Cross-repo consolidation (meta — this index, banners, fold-ins) | **no numeric phase** — proof the letters are a lens, not a renumbering |
 
-Cross-cutting blocker, unchanged: **P06 `key_V`** gates Layer C's independent-verification leg,
-Layer D's capability issuance, Layer G's product-safety story, E3-Phase-B (spectral arc), and P30's
-signed DecisionUnit import (MEMORY: `sovereign-architecture-19-phase-roadmap-2026-07-17.md`).
+Cross-cutting blocker: **P06 `key_V`** gates Layer C's independent-verification leg, Layer G's
+product-safety story, E3-Phase-B (spectral arc), and P30's signed DecisionUnit import (MEMORY:
+`sovereign-architecture-19-phase-roadmap-2026-07-17.md`). **Correction (P-D audit §3, 2026-07-17):**
+the earlier "P06 gates Layer D's capability issuance" edge is **withdrawn** — P06 is a dev-time merge
+fence over code diffs; `RootDelegationPolicy` is runtime courier onboarding. They share substrate
+(`load_genesis`/`verify_chain`) and the open **C4b** signing-path hardening, but neither functionally
+blocks the other; Layer D ships P06-independent.
 
 ## 2. Layer blueprints (Wave 2 + Wave 3, `CORE-ROADMAP-2026-07-17/`)
 
@@ -47,9 +51,9 @@ signed DecisionUnit import (MEMORY: `sovereign-architecture-19-phase-roadmap-202
 | A | [BLUEPRINT-P-A-kernel-primitives.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P-A-kernel-primitives.md) | eqc-rs equation wiring + eig2x2 dedup + normalize-before-hash groundwork; IS masterwork Wave 1 formalized to the 20-point contract |
 | B | [BLUEPRINT-P-B-state-consistency.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P-B-state-consistency.md) | The three correctness closures of tile→normalize→hash→snapshot: exactly-once `commit_after_decide` port, hash-canonicalization as a type invariant, drift-gated snapshot admission |
 | C | [BLUEPRINT-P-C-safety-self-healing.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P-C-safety-self-healing.md) | `integrity_check` hysteresis band + restart-intensity as a launch-path predicate; finite-anchored-authority doctrine applied |
-| D | **OPEN — not written.** Blocked on the R-3 `RootDelegationPolicy` operator ruling; its Wave-1 audit is MISSING (§3) — surviving quotes: `BLUEPRINT-P-E` §1 (IssuanceBudget seam, `P-D-audit:131-135,107,217`) | — |
+| D | **OPEN — not written**, but its Wave-1 audit is now [ON DISK](CORE-ROADMAP-2026-07-17/P-D-audit-root-delegation-policy.md) (§3). Blocked only on the R-3 `RootDelegationPolicy` operator ruling — the audit finds the closure ships on **today's** substrate, **P06-independent**: recommend A (`OperatorSigned` + monotonic `IssuanceBudget`, `:170-175`), B (`FirstContactQr` + hw-attestation) as an operator-gated phone overlay, C (`WebOfTrust`) deferred | — |
 | E | [BLUEPRINT-P-E-network-crypto-core.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P-E-network-crypto-core.md) | AVX2 SIMD crypto-verify lane (parallel-independent-verify, NEVER batch-accept); crypto is 8–20× the whole packet stack |
-| F | **OPEN — not written.** Was pending the MoE-specific masterwork redo; interim grounding: doc 21 + P21/P15/P29 rows in §1 | — |
+| F | [BLUEPRINT-P-F-local-ai-mesh.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P-F-local-ai-mesh.md) | Domain experts as DecisionUnit FAMILIES (DomainTag × compiled units × hub-only build-time oracle — operator-confirmed), NOT per-node models; three gossip extensions to P29 §2 (epoch max-merge, key_V-shaped import replay, lineage-in-one-log); checkpoint-STARK deferred with triggers. Reconstructed 2026-07-17 after loss to concurrent git activity |
 | G | [BLUEPRINT-P-G-product-ui.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P-G-product-ui.md) | Greenfield `web/` build-out (NOT a migration): wire `FieldSim`, bind the remaining 21 kernel exports, first real DOM surface; money-flip explicitly gated out |
 | H | [BLUEPRINT-P-H-ops-telemetry.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P-H-ops-telemetry.md) | Chaos/fault-injection harness + the one real CI bug (`ci.yml:23`) + benchmark CI gate + ledger migration; P24/P25 folded in by reference, not re-derived |
 | I | [BLUEPRINT-P-I-consolidation.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P-I-consolidation.md) | This consolidation, formalized + executed: banners, fold-ins L1–L6, this index, the Layer ruling |
@@ -59,9 +63,9 @@ signed DecisionUnit import (MEMORY: `sovereign-architecture-19-phase-roadmap-202
 | Audit | Status |
 |---|---|
 | [P-I-audit-cross-repo-consolidation.md](CORE-ROADMAP-2026-07-17/P-I-audit-cross-repo-consolidation.md) | ON DISK — the authority behind §§5–8 of this index |
-| `P-D-audit-root-delegation-policy.md` | **MISSING ON DISK** (verified 2026-07-17 — quoted with line numbers by `BLUEPRINT-P-E` §1, then lost; dir was untracked, no git recovery). Do NOT re-run blind: harvest the surviving quotes first |
+| [P-H-audit-telemetry-regression-benchmarks.md](CORE-ROADMAP-2026-07-17/P-H-audit-telemetry-regression-benchmarks.md) | **RECONSTRUCTED ON DISK (2026-07-17)** — full re-verification fresh on `main @ caba2203c`; supersedes the stale line numbers embedded in `BLUEPRINT-P-H`/`BLUEPRINT-P-A` (delta table in its §6). Confirms the `ci.yml:23` bug and the `FaultyStore` precedent both still hold |
+| [P-D-audit-root-delegation-policy.md](CORE-ROADMAP-2026-07-17/P-D-audit-root-delegation-policy.md) | **ON DISK — reconstructed 2026-07-17** (was lost pre-commit; rebuilt by harvesting `BLUEPRINT-P-E` §1's surviving quotes + re-verifying every cite fresh — all still match). Corrects the "P06 gates Layer D" edge (§3): the capability-issuance leg is **P06-independent** |
 | `P-G-audit-product-ui-post-decommission.md` | **MISSING ON DISK** — its scope statement and G1–G3 gap table survive adopted verbatim in `BLUEPRINT-P-G` §0–§1 |
-| `P-H-audit-telemetry-regression-benchmarks.md` | **MISSING ON DISK** — its Areas 3–4 verdicts survive in `BLUEPRINT-P-H` §0–§1 and `BLUEPRINT-P-A` §0 (criterion-harness row) |
 
 ## 4. The quality contract
 
