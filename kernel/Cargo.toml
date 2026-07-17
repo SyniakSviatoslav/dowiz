@@ -2,6 +2,7 @@
 name = "dowiz-kernel"
 version = "0.1.0"
 edition = "2021"
+license = "AGPL-3.0-or-later"
 description = "dowiz deterministic core: order-state machine (decide/fold Law) + integer money. Rust→WASM. The TS app is the legacy oracle; this is the canonical kernel."
 
 [lib]
@@ -86,3 +87,5 @@ path = "src/bin/markov_attractor.rs"
 [profile.release]
 opt-level = 3
 lto = true
+
+fake-dep = "0.1"
