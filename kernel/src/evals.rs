@@ -402,6 +402,109 @@ pub fn aurc(prob: &[f64], outcome: &[u8]) -> f64 {
     aurc / n as f64
 }
 
+// ── E2: interval-returning companions ──────────────────────────────────────────
+// Every scalar above is a naked point estimate; these attach the check that would
+// refute it (§2 table). ADDITIVE — the bare fns survive for callers that want only
+// the scalar (D7). `z` is the standard-normal quantile (1.96 ≈ 95%).
+
+/// [`brier`] as a point estimate **plus** its 95%-style normal interval. Brier is
+/// the mean of the per-sample squared errors `(p−o)²`, a genuine sample mean, so
+/// the CLT applies directly: SE = `mean_se` of those per-sample terms. Returns
+/// `(point, (lo, hi))`; `point` is bit-identical to [`brier`].
+pub fn brier_ci(prob: &[f64], outcome: &[u8], z: f64) -> (f64, (f64, f64)) {
+    assert_eq!(prob.len(), outcome.len());
+    if prob.is_empty() {
+        return (0.0, (0.0, 0.0));
+    }
+    let terms: Vec<f64> = prob
+        .iter()
+        .zip(outcome.iter())
+        .map(|(p, &o)| {
+            let o = o as f64;
+            (p - o) * (p - o)
+        })
+        .collect();
+    let point = terms.iter().sum::<f64>() / terms.len() as f64;
+    let se = crate::stats::mean_se(&terms);
+    (point, crate::stats::normal_interval(point, se, z))
+}
+
+/// [`ece`] as a point estimate **plus** its normal interval. ECE is a per-sample
+/// mean too: `ECE = (1/n)·Σ_i |acc_{b(i)} − conf_{b(i)}|`, where each sample carries
+/// the absolute accuracy-vs-confidence gap of its own bin. `mean_se` over that
+/// per-sample gap vector is the SE (CLT). `point` equals [`ece`] to float
+/// precision (per-sample vs per-bin summation order differ by at most an ULP).
+pub fn ece_ci(prob: &[f64], outcome: &[u8], bins: usize, z: f64) -> (f64, (f64, f64)) {
+    assert_eq!(prob.len(), outcome.len());
+    if prob.is_empty() || bins == 0 {
+        return (0.0, (0.0, 0.0));
+    }
+    let bins = bins.max(1);
+    let mut acc_sum = vec![0.0f64; bins];
+    let mut conf_sum = vec![0.0f64; bins];
+    let mut count = vec![0usize; bins];
+    let mut bin_of = vec![0usize; prob.len()];
+    for (j, (&p, &o)) in prob.iter().zip(outcome.iter()).enumerate() {
+        let mut b = (p * bins as f64) as usize;
+        if b >= bins {
+            b = bins - 1;
+        }
+        acc_sum[b] += o as f64;
+        conf_sum[b] += p;
+        count[b] += 1;
+        bin_of[j] = b;
+    }
+    // Per-bin absolute gap, then broadcast to each sample so ECE = mean of a
+    // per-sample vector (matching the bare `ece`'s bin-weighted sum exactly).
+    let mut gap = vec![0.0f64; bins];
+    for i in 0..bins {
+        if count[i] == 0 {
+            continue;
+        }
+        gap[i] = (acc_sum[i] / count[i] as f64 - conf_sum[i] / count[i] as f64).abs();
+    }
+    let per_sample: Vec<f64> = bin_of.iter().map(|&b| gap[b]).collect();
+    let point = per_sample.iter().sum::<f64>() / per_sample.len() as f64;
+    let se = crate::stats::mean_se(&per_sample);
+    (point, crate::stats::normal_interval(point, se, z))
+}
+
+/// [`aurc`] as a point estimate **plus** a **seeded bootstrap** interval. AURC is
+/// rank-cumulative — not a simple mean — so it has no closed-form SE; we resample
+/// paired `(prob, outcome)` rows through `crate::rng::Rng` (deterministic, P6) and
+/// take the spread of the replicate statistics. `point` is bit-identical to
+/// [`aurc`]. `resamples` bounds cost O(resamples × n); keep it a few thousand.
+pub fn aurc_ci(
+    prob: &[f64],
+    outcome: &[u8],
+    resamples: usize,
+    z: f64,
+    rng: &mut crate::rng::Rng,
+) -> (f64, (f64, f64)) {
+    assert_eq!(prob.len(), outcome.len());
+    let n = prob.len();
+    if n == 0 {
+        return (0.0, (0.0, 0.0));
+    }
+    // Bootstrap over row INDICES (encoded as f64); the stat reconstructs the paired
+    // prob/outcome from a resampled index list and calls `aurc`. This keeps the two
+    // columns paired under resampling (a plain per-column bootstrap would not).
+    let indices: Vec<f64> = (0..n).map(|i| i as f64).collect();
+    let stat = |idx: &[f64]| {
+        let mut p = Vec::with_capacity(idx.len());
+        let mut o = Vec::with_capacity(idx.len());
+        for &ix in idx {
+            let i = ix as usize;
+            p.push(prob[i]);
+            o.push(outcome[i]);
+        }
+        aurc(&p, &o)
+    };
+    let point = aurc(prob, outcome);
+    let interval = crate::stats::bootstrap_interval(&indices, stat, resamples, z, rng);
+    (point, interval)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // E2 — Self-eval loop wiring (observability half; non-destructive).
 //
@@ -563,6 +666,21 @@ impl RegressionGate {
             history: std::collections::VecDeque::new(),
             ema: EmaTracker::new(0.3),
         }
+    }
+
+    /// E2 (§3 step 6): **interval-aware / SE-derived tolerance.** Instead of a
+    /// feel-picked `tol`, derive it from the sampling error of the RAW (pre-EMA)
+    /// per-run metric window: `tol = z · mean_se(raw_window)`. Per §2, separate
+    /// eval runs are far closer to iid than their EMA outputs, so the raw window is
+    /// the defensible sample for `mean_se`; the EMA stays the *display* trend while
+    /// the *decision* threshold reads the raw independent samples. This turns the
+    /// gate's false-positive rate into a stated, testable quantity: a degradation
+    /// smaller than one standard error is statistically indistinguishable from
+    /// noise and must NOT alarm. Additive — the hand-`tol` [`RegressionGate::new`]
+    /// stays for callers that want a fixed threshold (backward-compat, D7).
+    pub fn from_se(window: usize, raw_window: &[f64], z: f64, lower_is_better: bool) -> Self {
+        let tol = z * crate::stats::mean_se(raw_window);
+        Self::new(window, tol, lower_is_better)
     }
 
     /// Feed one observed metric value. Returns `true` if the gate is currently
@@ -877,6 +995,99 @@ mod tests {
         assert!(
             a_perfect < a_rand,
             "perfect AURC {a_perfect} must beat random {a_rand}"
+        );
+    }
+
+    // ── E2: interval-returning companions carry the check with the scalar ────
+
+    #[test]
+    fn brier_ci_point_is_identical_and_interval_brackets() {
+        let prob = [0.9, 0.1, 0.8, 0.2];
+        let outcome = [1u8, 0, 1, 0];
+        let (point, (lo, hi)) = brier_ci(&prob, &outcome, 1.96);
+        assert_eq!(point, brier(&prob, &outcome), "brier_ci point == brier");
+        assert!(lo < point && point < hi, "interval must bracket the point");
+        assert!(hi - lo > 0.0, "spread terms ⇒ positive-width interval");
+        // A perfectly-constant term vector has zero SE ⇒ degenerate interval.
+        let (p2, (l2, h2)) = brier_ci(&[0.5, 0.5], &[1, 0], 1.96);
+        assert_eq!((p2, l2, h2), (0.25, 0.25, 0.25));
+    }
+
+    #[test]
+    fn ece_ci_point_matches_ece_and_interval_brackets() {
+        let prob = [0.95, 0.90, 0.10, 0.05, 0.60, 0.55];
+        let outcome = [1u8, 0, 0, 1, 1, 0];
+        let (point, (lo, hi)) = ece_ci(&prob, &outcome, 5, 1.96);
+        assert!((point - ece(&prob, &outcome, 5)).abs() < 1e-12, "ece_ci point == ece");
+        assert!(lo <= point && point <= hi, "interval brackets the point");
+    }
+
+    #[test]
+    fn aurc_ci_point_identical_and_bootstrap_is_seeded_deterministic() {
+        let prob = [0.9, 0.2, 0.8, 0.3, 0.7, 0.4, 0.6, 0.1];
+        let outcome = [1u8, 0, 1, 0, 1, 0, 0, 1];
+        let mut r1 = crate::rng::Rng::new(0xA11C, 5);
+        let (p1, iv1) = aurc_ci(&prob, &outcome, 600, 1.96, &mut r1);
+        assert_eq!(p1, aurc(&prob, &outcome), "aurc_ci point == aurc");
+        // Same seed ⇒ bit-identical interval (P6 determinism).
+        let mut r2 = crate::rng::Rng::new(0xA11C, 5);
+        let (p2, iv2) = aurc_ci(&prob, &outcome, 600, 1.96, &mut r2);
+        assert_eq!((p1, iv1), (p2, iv2), "seeded bootstrap must reproduce");
+        assert!(iv1.0 <= p1 && p1 <= iv1.1, "interval brackets the point");
+    }
+
+    // ── E2 §4 criterion 5: the SE-derived gate beats the hand-tuned tol ──────
+    //
+    // The honest falsifier. A degradation SMALLER than one standard error of the
+    // raw metric is statistically indistinguishable from noise and must NOT alarm;
+    // a real shift LARGER than the SE must. A feel-picked `tol` below the noise
+    // floor fires on noise (false positive); the SE-derived `tol = z·mean_se` does
+    // not, yet still catches a genuine regression. Both directions asserted, so the
+    // gate's false-positive behavior becomes a stated, testable quantity.
+    #[test]
+    fn se_derived_gate_suppresses_noise_but_catches_real_regression() {
+        const W: usize = 5;
+        let z = 1.96;
+        // Flat-mean noisy per-run window (mean 0.50, sample std 0.02).
+        let raw_window = [0.50, 0.53, 0.47, 0.51, 0.49, 0.52, 0.48, 0.50];
+        let se = crate::stats::mean_se(&raw_window);
+        let derived_tol = z * se; // ≈ 0.01386 for this window
+        assert!(derived_tol > 0.0);
+
+        // Feed a monotone ramp of per-step `d`; in EMA steady state the smoothed
+        // delta converges to `d` exactly, so the streak logic sees deltas ≈ d.
+        fn feed_ramp(g: &mut RegressionGate, base: f64, step: f64, steps: usize) {
+            for t in 0..steps {
+                g.observe(base + step * t as f64);
+            }
+        }
+
+        // (a) SUB-NOISE drift: hand_tol(=0.1·dt) < d(=0.5·dt) < derived_tol(=dt).
+        let hand_tol = derived_tol * 0.1; // deliberately too tight (feel-picked)
+        let sub_noise_step = derived_tol * 0.5;
+        let mut hand = RegressionGate::new(W, hand_tol, true);
+        let mut derived = RegressionGate::from_se(W, &raw_window, z, true);
+        feed_ramp(&mut hand, 0.50, sub_noise_step, 24);
+        feed_ramp(&mut derived, 0.50, sub_noise_step, 24);
+        assert!(
+            hand.is_red(),
+            "hand-tuned tol below the noise floor FIRES on sub-noise drift (false positive)"
+        );
+        assert!(
+            !derived.is_red(),
+            "SE-derived gate correctly stays GREEN: drift < one standard error"
+        );
+
+        // (b) REAL regression: a shift > z·σ (σ = sample std). The SE-derived gate
+        // must fire — it is not merely 'always green'.
+        let sigma = 0.02; // the raw window's sample std
+        let real_step = derived_tol * 4.0;
+        assert!(real_step > z * sigma, "constructed shift exceeds z·σ (a real regression)");
+        let mut derived_real = RegressionGate::from_se(W, &raw_window, z, true);
+        feed_ramp(&mut derived_real, 0.50, real_step, 24);
+        assert!(
+            derived_real.is_red(),
+            "SE-derived gate FIRES on a genuine shift > z·σ"
         );
     }
 

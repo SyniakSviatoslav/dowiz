@@ -60,6 +60,44 @@ where
     total
 }
 
+/// One-sided **Lyapunov** check (BLUEPRINT-E1 §2b): the potential `V` is monotone
+/// NON-INCREASING along the trajectory, within `tol` slack — `V(f(x)) − V(x) ≤ tol`
+/// at every step. Returns `false` on the first step whose increase exceeds `tol`
+/// (or on a dimension change ⇒ fail-closed).
+///
+/// This is the correct certificate for a **dissipative** scheme (damped wave /
+/// gradient flow), where energy legitimately DECAYS and must never spontaneously
+/// grow. `step_preserves` is two-sided (`|ΔI| ≤ tol`) and would wrongly forbid
+/// that legitimate decay; this thin sibling accepts any decrease and only rejects
+/// growth. Reuse `invariant_drift` for the reported total dissipation `Σ|ΔV|`.
+pub fn lyapunov_nonincreasing<F, G>(
+    x0: &[f64],
+    update: F,
+    potential: G,
+    steps: usize,
+    tol: f64,
+) -> bool
+where
+    F: Fn(&[f64]) -> Vec<f64>,
+    G: Fn(&[f64]) -> f64,
+{
+    let mut x = x0.to_vec();
+    let mut v_prev = potential(&x);
+    for _ in 0..steps {
+        let x_next = update(&x);
+        if x_next.len() != x.len() {
+            return false; // dimension changed ⇒ not a valid state transition
+        }
+        let v_next = potential(&x_next);
+        if v_next - v_prev > tol {
+            return false; // spontaneous growth beyond slack ⇒ not a Lyapunov fn
+        }
+        x = x_next;
+        v_prev = v_next;
+    }
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -94,6 +132,47 @@ mod tests {
         // loose tol ⇒ accepted (matches physics: slow growth)
         let drift = invariant_drift(&[1.0, 0.0], euler, energy, 200);
         assert!(drift > 0.0);
+    }
+
+    /// NON-VACUOUS proof for the one-sided Lyapunov checker (BLUEPRINT-E1 §4.3),
+    /// mirroring `catches_euler_energy_drift` for `step_preserves`:
+    ///   (a) explicit Euler on the oscillator GAINS energy ⇒ `false` (caught);
+    ///   (b) mass-conserving exchange keeps V flat (ΔV=0 ≤ tol) ⇒ `true`;
+    ///   (c) a strictly DISSIPATIVE (contracting) update makes V decrease every
+    ///       step ⇒ `true` — the one-sided acceptance `step_preserves` (two-sided)
+    ///       would wrongly REJECT, which is the whole reason this sibling exists.
+    #[test]
+    fn lyapunov_catches_growth_accepts_decay() {
+        let dt = 0.05;
+        let energy = |x: &[f64]| 0.5 * (x[0] * x[0] + x[1] * x[1]);
+
+        // (a) explicit Euler gains energy ⇒ NOT non-increasing.
+        let euler = |x: &[f64]| vec![x[0] + dt * x[1], x[1] - dt * x[0]];
+        assert!(
+            !lyapunov_nonincreasing(&[1.0, 0.0], euler, energy, 200, 1e-9),
+            "explicit-Euler energy growth must be caught (false)"
+        );
+
+        // (b) mass-conserving exchange: I = a+b constant ⇒ ΔV = 0 ⇒ true.
+        let eps = 0.1;
+        let exchange = move |x: &[f64]| {
+            let flow = eps * (x[1] - x[0]);
+            vec![x[0] + flow, x[1] - flow]
+        };
+        let mass = |x: &[f64]| x[0] + x[1];
+        assert!(lyapunov_nonincreasing(&[1.0, 3.0], exchange, mass, 100, 1e-9));
+
+        // (c) strict contraction x ↦ 0.9·x drives energy DOWN every step ⇒ true
+        //     for the one-sided check, but two-sided `step_preserves` REJECTS it.
+        let contract = |x: &[f64]| x.iter().map(|v| 0.9 * v).collect::<Vec<_>>();
+        assert!(
+            lyapunov_nonincreasing(&[2.0, -1.0], contract, energy, 50, 1e-12),
+            "monotone energy DECAY must be accepted (true)"
+        );
+        assert!(
+            !step_preserves(&[2.0, -1.0], contract, energy, 50, 1e-12),
+            "two-sided step_preserves must REJECT the same legitimate decay"
+        );
     }
 
     /// HAND ORACLE 3 — identity update preserves ANY invariant.
