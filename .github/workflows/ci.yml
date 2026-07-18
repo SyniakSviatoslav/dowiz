@@ -9,6 +9,11 @@ on:
     branches: [ "main", "feat/kernel-fsm-graph-analysis" ]
   pull_request:
     branches: [ "main" ]
+  # P45-W0 §4b.1: recurring security scan. A RUSTSEC advisory published between
+  # pushes is currently invisible until the next commit; a daily scheduled run
+  # catches it within 24h. Both security-class jobs below gain a failure alert.
+  schedule:
+    - cron: "17 3 * * *"   # daily 03:17 UTC, off-peak
 
 jobs:
   telemetry-selftest:
@@ -165,7 +170,20 @@ jobs:
         with:
           fetch-depth: 0
       - name: Scan history + working tree for secrets
+        id: scan
         run: gitleaks detect --config .gitleaks.toml --redact --exit-code 1
+      - name: Page S0 on secret leak (P45-W0 §4b.1)
+        if: failure() && (github.event_name == 'schedule' || github.event_name == 'push')
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          OPS_ALERTS_TOPIC: ${{ secrets.OPS_ALERTS_TOPIC }}
+        run: |
+          curl -sS --max-time 10 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "message_thread_id=${OPS_ALERTS_TOPIC}" \
+            --data-urlencode "text=🔴 S0 gitleaks: secret detected in ${{ github.repository }}@${{ github.sha }} — https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            >/dev/null || true
 
   # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
   # P01 §2.3 (BLUEPRINT-P01): makes CONTRIBUTING.md:17 TRUE. Every commit in the PR
@@ -211,6 +229,18 @@ jobs:
           cargo deny --manifest-path engine/Cargo.toml check
       - name: zero-OCI base-image check (DK-08)
         run: bash scripts/check-zero-oci.sh
+      - name: Page S1 on supply-chain finding (P45-W0 §4b.1)
+        if: failure() && (github.event_name == 'schedule' || github.event_name == 'push')
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          OPS_ALERTS_TOPIC: ${{ secrets.OPS_ALERTS_TOPIC }}
+        run: |
+          curl -sS --max-time 10 "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "message_thread_id=${OPS_ALERTS_TOPIC}" \
+            --data-urlencode "text=🟠 S1 supply-chain: audit/deny/zero-oci finding in ${{ github.repository }}@${{ github.sha }} — https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            >/dev/null || true
 
   # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
   # P01 §2.5 (BLUEPRINT-P01): a new dependency without a DECART report / marker => RED.
