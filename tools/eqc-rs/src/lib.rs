@@ -607,8 +607,20 @@ fn emit_int_checked(expr: &Expr) -> Result<String, IntEmissionUnsupported> {
         }
         // f64-only nodes (and the Q-format subset) are NOT in the integer-exact set.
         Expr::Sqrt(_) => Err(IntEmissionUnsupported("sqrt not in the integer-exact subset".into())),
-        Expr::Sin(_) => Err(IntEmissionUnsupported("sin not in the integer-exact subset".into())),
-        Expr::Cos(_) => Err(IntEmissionUnsupported("cos not in the integer-exact subset".into())),
+        // A6 / T8 — integer-CORDIC fixed-point sin/cos: routes through the digest-pinned
+        // Q30 substrate `eqc_rs::cordic::cordic_sincos` instead of hard-refusing. This
+        // EXTENDS the representable integer-exact subset (without touching the f64 dynamics
+        // path). Convention: the argument is Q30 fixed-point radians and the result is Q30
+        // (unit-magnitude, like a scaled sine/cosine). Deterministic — same i64 add/sub/
+        // compare/arithmetic-shift ops the digest in `tests/cordic_digest.rs` pins.
+        Expr::Sin(inner) => {
+            let z = emit_int_checked(inner)?;
+            Ok(format!("(eqc_rs::cordic::cordic_sincos(({z}) as i64).1 as i128)"))
+        }
+        Expr::Cos(inner) => {
+            let z = emit_int_checked(inner)?;
+            Ok(format!("(eqc_rs::cordic::cordic_sincos(({z}) as i64).0 as i128)"))
+        }
         Expr::Exp(_) => Err(IntEmissionUnsupported("exp not in the integer-exact subset".into())),
         Expr::Asin(_) => Err(IntEmissionUnsupported("asin not in the integer-exact subset".into())),
         Expr::Atan2(_, _) => {
@@ -729,5 +741,40 @@ mod unit_tests {
         let run = std::process::Command::new(&bp).output().expect("run bin");
         assert!(run.status.success(), "generated overflow test FAILED: {}", String::from_utf8_lossy(&run.stderr));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ── A6 / T8 — Sin/Cos no longer hard-refuse in integer-exact mode ───────
+    // The emitter used to return `Err(IntEmissionUnsupported("sin/cos not in the
+    // integer-exact subset"))`. A6/T8 routes Sin/Cos through the digest-pinned Q30
+    // CORDIC substrate, so emission now SUCCEEDS and the emitted code calls
+    // `eqc_rs::cordic::cordic_sincos`. The f64 dynamics path is untouched.
+    #[test]
+    fn sin_cos_int_mode_routes_through_cordic() {
+        let theta = Expr::sym("theta");
+        let sin_eq = Equation::new("my_sin", &["theta"], theta.clone().sin());
+        let cos_eq = Equation::new("my_cos", &["theta"], theta.cos());
+
+        let sin_src = sin_eq
+            .emit_int_checked_rust()
+            .expect("A6/T8: Sin MUST now emit in integer-exact mode (no longer refused)");
+        let cos_src = cos_eq
+            .emit_int_checked_rust()
+            .expect("A6/T8: Cos MUST now emit in integer-exact mode (no longer refused)");
+
+        assert!(
+            sin_src.contains("eqc_rs::cordic::cordic_sincos"),
+            "emitted sin must call the CORDIC substrate:\n{sin_src}"
+        );
+        assert!(
+            cos_src.contains("eqc_rs::cordic::cordic_sincos"),
+            "emitted cos must call the CORDIC substrate:\n{cos_src}"
+        );
+
+        // The f64 dynamics path is unchanged: still uses .sin()/.cos().
+        assert!(sin_eq.emit_f64_rust().unwrap().contains(".sin()"));
+        assert!(cos_eq.emit_f64_rust().unwrap().contains(".cos()"));
+        // Fixed-point Q-format subset still refuses Sin/Cos (orthogonal path).
+        assert!(sin_eq.emit_fixed_rust().is_err());
+        assert!(cos_eq.emit_fixed_rust().is_err());
     }
 }
