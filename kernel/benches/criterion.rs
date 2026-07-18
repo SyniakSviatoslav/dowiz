@@ -2,7 +2,11 @@
 //! Run: `cargo bench -p dowiz-kernel` (or `cargo bench` from kernel/).
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use dowiz_kernel::absorbing;
+use dowiz_kernel::attention;
 use dowiz_kernel::cgraph::CGraph;
+use dowiz_kernel::retrieval::ppr::Ppr;
+use dowiz_kernel::retrieval::recall::PrimaryRecall;
 use dowiz_kernel::spectral_cache::{canonical_content_address, slem_cached, DecompCache};
 use dowiz_kernel::token_bucket::TokenBucket;
 use dowiz_kernel::{
@@ -176,6 +180,64 @@ fn bench_graph_rebuild_rank(c: &mut Criterion) {
     });
 }
 
+/// Blind-spot coverage: personalized PageRank (retrieval M3) is O(k·n^2) in the
+/// transition matrix — unbounded graph size makes this the retrieval hot path
+/// that was previously UNBENCHED. Bench at a realistic n so regressions surface.
+fn bench_ppr(c: &mut Criterion) {
+    let n = 32usize;
+    // Deterministic row-stochastic transition matrix (ring + skip edges).
+    let mut w = vec![vec![0.0f64; n]; n];
+    for i in 0..n {
+        let j1 = (i + 1) % n;
+        let j7 = (i + 7) % n;
+        w[i][j1] = 0.5;
+        w[i][j7] = 0.5;
+    }
+    let ppr = Ppr::new(w);
+    c.bench_function("ppr/rank_32x32_k20", |b| {
+        b.iter(|| black_box(ppr.rank(0, 0.85, 20)))
+    });
+}
+
+/// Blind-spot coverage: absorbing Markov fundamental matrix is O(n^3) — used by
+/// agentic decision gating. Was UNBENCHED; regressions here are silent until a
+/// large state space is hit. Bench at a modest n to anchor the baseline.
+fn bench_absorbing(c: &mut Criterion) {
+    let n = 16usize;
+    // Q submatrix of transient-transition probabilities (row-stochastic-ish).
+    let mut q = vec![vec![0.0f64; n]; n];
+    for i in 0..n {
+        let j1 = (i + 1) % n;
+        let j3 = (i + 3) % n;
+        q[i][j1] = 0.6;
+        q[i][j3] = 0.4;
+    }
+    c.bench_function("absorbing/fundamental_matrix_16", |b| {
+        b.iter(|| black_box(absorbing::fundamental_matrix(&q)))
+    });
+}
+
+/// Blind-spot coverage: BM25+trigram fusion recall (W18 self-improvement loop).
+/// Previously UNBENCHED despite being on the living-knowledge read path.
+fn bench_retrieval_recall(c: &mut Criterion) {
+    let recall = PrimaryRecall::new();
+    c.bench_function("retrieval/recall_at_k_5", |b| {
+        b.iter(|| black_box(recall.recall_at_k("pricing model computes subtotal delivery fee", 5)))
+    });
+}
+
+/// Blind-spot coverage: attention matmul (O(n^2·d) core). UNBENCHED before.
+fn bench_attention(c: &mut Criterion) {
+    let m = 8usize;
+    let d = 8usize;
+    let q: Vec<Vec<f64>> = (0..m).map(|i| (0..d).map(|j| ((i + j) as f64) / (d as f64)).collect()).collect();
+    let k: Vec<Vec<f64>> = (0..m).map(|i| (0..d).map(|j| ((i * 2 + j) as f64) / (d as f64)).collect()).collect();
+    let v: Vec<Vec<f64>> = (0..m).map(|i| (0..d).map(|j| ((i + j * 3) as f64) / (d as f64)).collect()).collect();
+    c.bench_function("attention/matmul_8x8", |b| {
+        b.iter(|| black_box(attention::attention(&q, &k, &v)))
+    });
+}
+
 criterion_group!(
     benches,
     bench_place_order,
@@ -184,6 +246,10 @@ criterion_group!(
     bench_token_bucket,
     bench_spectral_cache_slem_cached,
     bench_spectral_cache_canonical_address,
-    bench_graph_rebuild_rank
+    bench_graph_rebuild_rank,
+    bench_ppr,
+    bench_absorbing,
+    bench_retrieval_recall,
+    bench_attention
 );
 criterion_main!(benches);
