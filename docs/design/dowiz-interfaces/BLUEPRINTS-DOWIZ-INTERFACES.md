@@ -301,6 +301,30 @@ reinforce; all on-device no server.
 **ACCEPTANCE:** ☐ Intent/FieldPos/InputSource ☐ voice command-grammar local ☐ MediaPipe gesture ☐ fusion ☐
 on-device. **OUT OF SCOPE:** AR (DZ-12).
 
+> **FRAMING-КОРЕКЦІЯ (операторська директива 2026-07-18) — intent-interface = несуча UX-філософія, НЕ
+> "optional integration".** Оператор: критично важливо, щоб власнику/клієнту/кур'єру не доводилось довго
+> думати, вникати, гуглити чи постійно клацати — саме ТОМУ існують локальний агент + голосовий контроль +
+> інтерфейс намірів, рендерений через фізику як продовження/відображення бекенду. Це корекція РАМКИ, не
+> послідовності:
+>
+> 1. **Секвенування НЕ рухається.** Імплементація DZ-10 лишається Хвиля 4 / Phase-9b (master roadmap P38b
+>    DoD-3: «DZ-10 voice + gesture remain at Phase-9b priority — pulling them forward is a scope violation,
+>    not initiative») — голос не збудуєш раніше, ніж існує order-flow, яким керувати.
+> 2. **Але архітектурно голос — НЕ периферійна фіча.** Touch, voice, gesture — три вхідні методи ОДНОГО
+>    механізму: будь-яка модальність → `Intent{pos: FieldPos, magnitude}` → `S`-імпульс оператора
+>    `M·Ü+Γ·U̇+c²·L·U=S` (IP-05: INTENT→`S`-імпульс у FieldPos, `InputSource` trait уніфікує
+>    миша/тач/голос/жест/AR-промінь; IP-07: одночасні джерела = суперпозиція `S₁+S₂`, не «останній виграв»).
+>    Див. [BLUEPRINTS-INTEGRATION-PORTS.md](../integration-ports/BLUEPRINTS-INTEGRATION-PORTS.md) IP-05/IP-07.
+> 3. **Це і є причина існування P38 та P40.** WebGPU field-render (P38a/P38b) рендерить UI як фізико-польове
+>    відображення стану бекенду САМЕ ТОМУ, що така поверхня відповідає на НАМІР (тап, голосова команда,
+>    жест — той самий field impulse), замість змушувати користувача навігувати конвенційне меню-дерево;
+>    local-agent tool loop (P40) — той самий intent-канал у текстовій формі. Intent-паттерн присутній з дня
+>    один: `Intent`/`FieldPos`/`InputSource` — це P38b DoD-1 (перша хвиля коду), ще ДО голосу; VoiceSource
+>    пізніше лише ДОДАЄ backend до вже несучого механізму.
+> 4. **Наслідок для виконавців (діє з дня один):** жоден DZ/FE не сміє будувати input-шлях, що працює лише
+>    для pointer'а — кожен вхід іде через `Intent` (ОДИН code path; gate DZ-10 вже це вимагає). «Optional»
+>    у Phase-9b означає «пізніше», НЕ «збоку».
+
 ### DZ-11 — A11y semantic mirror + input overlay (hybrid)
 **Depends** FE-15 · **Est** L
 

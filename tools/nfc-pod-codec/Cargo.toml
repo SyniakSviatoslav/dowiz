@@ -1,0 +1,27 @@
+# Hardware-independent NDEF proof-of-delivery codec (server-side, std).
+#
+# This is a DEV-TOOLING / server-side crate: it encodes and verifies the dowiz
+# proof-of-delivery (PoD) payload that a passive NFC tag (NTAG213/215/216) carries
+# and that any NDEF-capable reader (a courier phone, or a Flipper Zero in dev) taps.
+#
+# Reuses the kernel's audited SHAKE256 (FIPS 202) as the keyed-MAC primitive — no
+# new crypto is invented here. The full ML-DSA-65 envelope is NOT used on-tag: its
+# 3309-byte signature does not fit a passive NDEF tag (NTAG213 = 144 B user memory);
+# a truncated keyed SHAKE256 MAC is the size-appropriate proof for the tag surface.
+#
+# Empty [workspace] table => this crate is its own workspace root, so it is never
+# accidentally pulled into any ancestor cargo workspace.
+[workspace]
+
+[package]
+name = "nfc-pod-codec"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "Hardware-independent NDEF proof-of-delivery codec for dowiz (server-side)."
+
+[dependencies]
+# Reuse the kernel's SHAKE256 (kernel::pq::keccak::shake256). `pq` is the feature
+# that compiles the crypto core; default `std` stays on (same build the pq-KAT
+# tests use). We invent no crypto — the MAC is SHAKE256 over key || context.
+dowiz-kernel = { path = "../../kernel", features = ["pq"] }

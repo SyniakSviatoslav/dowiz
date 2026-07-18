@@ -600,9 +600,19 @@ already-tested protocol code from stranded to load-bearing.
    `HybridGate`/`verify_chain`/`RevocationSet` — all already built) are the PRIMARY auth model;
    conventional password+TOTP is never primary (D3 device-bound keypair primary; TOTP/WebAuthn
    are step-up only). Binding on DELIVERY P37 DoD-4 and P39.
-4. **WebGPU/field-render UI, never DOM-first.** The UI is a WebGPU/WASM render of backend
-   physics-field state; DOM survives ONLY as FE-15's invisible AccessKit mirror for
-   screen-reader/IME input. Binding on DELIVERY P38a/P38b.
+4. **WebGPU/field-render UI, never DOM-first — and its input complement, the intent-interface.**
+   The UI is a WebGPU/WASM render of backend physics-field state; DOM survives ONLY as FE-15's
+   invisible AccessKit mirror for screen-reader/IME input. Binding on DELIVERY P38a/P38b.
+   *Reframed 2026-07-18 (operator directive — owner/client/courier must never need to think
+   long, dig in, google, or click through menu trees):* the input half of this invariant is the
+   **intent-interface** — every modality (touch today; voice/gesture at DZ-10's unchanged
+   Phase-9b slot) is the SAME `Intent{FieldPos, magnitude}` → `S`-field-impulse mechanism
+   (IP-05's 8-parameter operator, INTENT→`S`; IP-07 superposition `S₁+S₂`), and this is WHY the
+   field-render (P38) and the local-agent loop (P40) exist: the surface answers INTENT rather
+   than requiring conventional menu-tree navigation. Load-bearing UX philosophy from day one
+   (`Intent`/`InputSource` land in P38b DoD-1); voice later only ADDS a backend to the already
+   load-bearing mechanism — sequencing unchanged (P38b DoD-3 stands), framing corrected (see
+   the DZ-10 framing note in `docs/design/dowiz-interfaces/BLUEPRINTS-DOWIZ-INTERFACES.md`).
 5. **Compilation-firewall pattern (repo-wide).** Consumers reach protected surfaces only through
    a facade whose lack of direct kernel imports is proven by `cargo tree` + a committed
    red-proof. Three instances, one pattern: PROTOCOL's KernelFacade
@@ -1002,13 +1012,14 @@ One-line ledger:
 #### P41 — Three-mode operation: no-AI / local-offline / connected — one tool interface, swappable backend
 **Absorbs:** P21 (mode/degradation half) · operator three-mode directive (verbatim requirement, the spine of this section)
 **Status:** PARTIAL (backend swappability largely shipped; mode-parity proof and degradation contract are the gap)
-**Role & responsibility:** Make the three operating modes an enforced, tested property rather than an intention. Mode 1 (no-AI) requires **zero new code** — CORE+PROTOCOL are AI-free by design and this phase only locks that in as a regression-proof invariant. Modes 2 and 3 must differ ONLY in which `LlmBackend` impl is selected (Ollama local vs managed/remote — both adapter families already exist per the blueprint's Tier-0 `ManagedApiAdapter` / Tier-1 Ollama split and `dispatch.rs`), never in the tool-loop shape: one port, swappable backend, no second tool-calling implementation.
-**Blueprint:** `docs/design/harness-2026-07-16/HARNESS-LLM-BACKEND.md` §2.2 (one `OpenAiCompatTransport` + per-adapter `Quirks`) is the swappable-backend half; no existing blueprint covers the degradation contract — small design pass needed here (a policy note, not a document).
+**Role & responsibility:** Make the three operating modes an enforced, tested property rather than an intention. Mode 1 (no-AI) requires **zero new code** — CORE+PROTOCOL are AI-free by design and this phase only locks that in as a regression-proof invariant. Modes 2 and 3 must differ ONLY in which `LlmBackend` impl is selected (Ollama local vs managed/remote — both adapter families already exist per the blueprint's Tier-0 `ManagedApiAdapter` / Tier-1 Ollama split and `dispatch.rs`), never in the tool-loop shape: one port, swappable backend, no second tool-calling implementation. *Extended 2026-07-18 (operator BYO-AI directive):* mode 3 "connected" explicitly includes the owner's OWN AI subscription — any OpenAI-compatible endpoint + owner-supplied key, same `ManagedApiAdapter`/`Quirks::managed_api` path, no vendor list, a config-provenance sub-distinction (managed-default vs BYO) rather than a fourth mode; the fresh-venue DEFAULT PRESET is written-explicit mode 2 (local Ollama) — BYO is the opt-in upgrade, local-first is the zero-owner-config default; the owner-facing settings surface lives with P48's hub (cross-reference only, designed in P48's own lane).
+**Blueprint:** `docs/design/harness-2026-07-16/HARNESS-LLM-BACKEND.md` §2.2 (one `OpenAiCompatTransport` + per-adapter `Quirks`) is the swappable-backend half; the degradation contract and the BYO-AI/default-preset extension are designed in `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P41-three-mode-ai-operation.md` (§3.5, §3.6).
 **DoD:**
 1. **No-AI proof:** CORE/PROTOCOL test suites pass with AGENT crates absent from the build graph (`cargo tree -p dowiz-kernel` shows no llm/agent-loop crates — the blueprint's existing firewall check, promoted to a mode-1 invariant). Consistency anchor: PROTOCOL's `ac6_solo_island_full_flow_no_peers` already proves the full flow with no peers; mode 1 is that plus no-AI, and it must stay green untouched.
 2. **Mode parity:** P40's single-tool test passes with the backend swapped by configuration only — zero source diff in the loop or tool port between local and connected runs.
 3. **Graceful degradation:** with Ollama stopped (typed `LlmError::Unavailable`) and no network, the order/courier flow is provably unaffected and the agent surface returns a typed "assistant unavailable" outcome — never a hang, never a blocked order.
 4. **Local-offline proof:** mode-2 run passes with all remote endpoints unreachable (network-isolated test), consistent with the solo-island guarantee.
+5. **BYO/preset (2026-07-18 addendum):** a BYO endpoint+key composes the IDENTICAL connected stack as the managed-default case (provenance is attribution metadata, never behavior), and the fresh-venue provisioning preset resolves to explicit local mode through the normal config path — per BLUEPRINT-P41 §3.6.
 **Anti-scope:** No new code for mode 1 (writing any is a design smell — reject it in review). No second tool-loop implementation for remote backends. No "smart" auto-escalation from local to remote without explicit configuration. Routing help from the model stays advisory-only — the deterministic HRW matcher remains the sole courier-assignment authority in every mode.
 **Depends on / blocks:** Depends on P40 (needs the loop and one tool to prove parity over). DoD item 1 is provable TODAY, before P40 — land it first as the locked baseline. Independent of PROTOCOL P34/P35 completeness by construction (offline-first). Blocks P42 (MCP exposure must inherit the same three-mode contract).
 
@@ -1039,11 +1050,16 @@ One-line ledger:
 #### Existing P22 — Social Auto-Posting (confirmed home, not renumbered)
 P22 is **confirmed 0% built** — no `SocialPoster` trait, no `TelegramAdapter`/`ViberChannelAdapter`, no `social-adapters` crate anywhere. But its blueprint (`docs/design/BLUEPRINT-SOCIAL-AUTO-POSTING-2026-07-17.md`) already correctly cites **IP-10/IP-15/IP-16 as prior art**, which means P22 is *already* the correct numbered home for those three units. **They are ABSORBED INTO existing P22 — do not renumber, do not duplicate under P43.** Note for whoever starts it: the reusable substrate already exists in kernel (`Spool`/`TokenBucket`/`ChannelLedger`), making Wave-0 (Telegram) cheap once DELIVERY gives it something to post about.
 
+**Scope expansion (2026-07-18 operator directive — blueprint §11, same file):** P22 additionally owns:
+1. **Content generation, dual-path**: a native template renderer (deterministic, zero-AI — works in P41 mode 1/`AiMode::Off`) AND an `LlmBackend`-drafted path (modes 2/3, via the existing Harness/Dispatcher), both producing the same reviewed `MasterPost` type so downstream posting cannot tell which path authored a draft. Post types are a closed set of five (daily special, sold-out, offer announcement — render-only over P20 DM-1/DM-7 objects, hours/area change, aggregate social proof with a ≥10-count privacy threshold).
+2. **Posting modes**: manual owner approval is the **DEFAULT** for every draft from every source; agentic auto-posting is a per-venue, per-post-type **opt-in** behind an earned-autonomy ratchet (first-10-always-reviewed, 10-consecutive-clean counter, dedicated 1/day/platform `TokenBucket`, revoke-on-`Rejected`, kill switch). Drafting is exposed to the P40 agent loop as a future `ToolPort` extension (**P42-gated** — no P40 enum changes now); **publish/approve are never model-callable actions** at any autonomy level.
+3. **The campaign lane** for recipient-list channels: **mailing lists + SMS** ride the absorbed IP-15 `ChannelAdapter` shape under this phase's number — sharing P22's drafts/approval/outbox/`?ch=` attribution but **not** the `SocialPoster` trait (per-recipient fan-out + consent/unsubscribe ledger; recipient lists are PII, so the lane is blocked on its own consent-ledger mini-blueprint). **SMS is per-message PAID via any provider** (Twilio/TurboSMS-class), unlike free Telegram/Viber posting — preflight must show `recipients × unit_cost`. Transactional sends (order-status/OTP over messenger/SMS/email) are **NOT** P22 — they stay P43 DoD-2 + P49.
+
 #### P43 — External Integration Ports: Messenger / Marketing / Export / Backup-Export / Hosting
 **Absorbs:** IP-11, IP-12, IP-13, IP-14, IP-19, IP-20. (IP-10/15/16 → ABSORBED INTO existing P22, not renumbered.)
 **Status:** PLANNED (with two false premises corrected and one small live bug)
-**Role & responsibility:** All customer/operator-facing external channels that are not social auto-posting: messenger delivery-notification ports, marketing/channel-tracking, data export, and hosting/automation ports. These follow the arc's core-immutable/integrations-as-ports doctrine: adapters at the edge, never leaking into kernel Law.
-**Blueprint:** none yet — source arc: `/root/.claude/projects/-root-dowiz/memory/integration-ports-reactive-arc-2026-07-13.md`. Write a blueprint only when this phase unblocks; do not rewrite the arc doc.
+**Role & responsibility:** All customer/operator-facing external channels that are not social auto-posting: messenger delivery-notification ports, marketing/channel-tracking, data export, and hosting/automation ports. These follow the arc's core-immutable/integrations-as-ports doctrine: adapters at the edge, never leaking into kernel Law. **Boundary vs P22 (clarified 2026-07-18):** P43's messenger/SMS/email surface is **transactional** — order-status notifications and OTP (the DoD-2 send path, consumed customer-side by P49). Marketing **campaign** sends to opted-in recipient lists (mailing lists, SMS campaigns) belong to P22's campaign lane (the absorbed IP-15 `ChannelAdapter` — see P22's 2026-07-18 scope expansion and blueprint §11.5); the two may eventually share a low-level provider adapter, but the producer pipelines (order events here vs owner-authored/AI-drafted content there) never merge.
+**Blueprint:** `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P43-external-integration-ports.md` (2026-07-18): Telegram-first `ChannelSend` port; **httpSMS** as the recommended own-infra SMS default (paid Twilio-class optional); **WhatsApp Cloud API** transactional adapter with honest per-template cost model (free customer-initiated 24h windows exploited structurally); **SimpleX Chat** as the architecturally-preferred ADDITIONAL privacy channel (CLI-sidecar WebSocket bot, one-time-invitation onboarding, self-hosted SMP relay = optional P45 ops item); `?ch=` tracking, export port, native media-import port. Source arc: `/root/.claude/projects/-root-dowiz/memory/integration-ports-reactive-arc-2026-07-13.md` (do not rewrite the arc doc).
 
 **Two arc claims CONFIRMED FALSE (wrong even when written — correct the record, do not build on them):**
 1. *"`?ch=` channel-tracking spine already exists at `Storefront.svelte:93`"* — **false.** `Storefront.svelte` does not exist anywhere in the current repo (it lived in the old, deleted `apps/` stack). Current `web/src` is a greenfield rebuild with zero `?ch=` code. Channel tracking is a from-scratch item, not a "wire-up" item.
@@ -1056,7 +1072,7 @@ P22 is **confirmed 0% built** — no `SocialPoster` trait, no `TelegramAdapter`/
 2. One real customer-facing messenger send path exists (Telegram first) that actually transmits — falsified by `messenger.rs` still being the only "messenger" code.
 3. `?ch=` channel tracking exists in the *new* `web/src` and is asserted by at least one E2E check.
 4. One data-export port (orders/menu) produces a file an operator can download from a live deployment.
-**Anti-scope:** Do NOT build any adapter before DELIVERY P37/P38 gives it a live order flow to notify about — a messenger port with nothing to send is dead code. Do NOT re-implement social posting here (P22 owns it). Do NOT touch the `tools/telemetry` Telegram bridge; it is OPS plumbing, not a product channel.
+**Anti-scope:** Do NOT build any adapter before DELIVERY P37/P38 gives it a live order flow to notify about — a messenger port with nothing to send is dead code. Do NOT re-implement social posting here (P22 owns it). Do NOT build marketing-campaign / mailing-list / SMS-campaign tooling here — that is P22's campaign lane (2026-07-18 expansion); P43's SMS/email use is transactional-notification only. Do NOT touch the `tools/telemetry` Telegram bridge; it is OPS plumbing, not a product channel.
 **Depends on / blocks:** Depends on DELIVERY P37/P38 (live order/courier flow) and PROTOCOL P34 (capability-gated egress). Blocks nothing on the critical path. QRNG bug fix (DoD-1) has no dependency and may land any time.
 
 #### P44 — Cache Layers (EC-05) + Own-RAG / Own-Inference Scale-Out — LOW PRIORITY / FAR-FUTURE
@@ -1136,7 +1152,7 @@ absences the roadmap's own scenario walk revealed, added under the operator's pa
 **Absorbs:** none — genuinely new; no prior unit ID anywhere names a payment rail (grep for
 payment/stripe/liqpay/cash-on-delivery across `kernel/`, `engine/`, `web/`, `llm-adapters/` and
 bebop2's `delivery-domain`/`proto-cap`: zero non-test hits, verified live 2026-07-18).
-**Status:** PLANNED
+**Status:** PLANNED — decision RESOLVED (2026-07-18, operator ruling), build-out open
 **Role & responsibility:** `SettlementRecorded` exists as a wire event
 (`bebop2/proto-cap/src/event_dict.rs:122,279` — payload + variant, verified this pass) and
 money math is airtight range-checked `i64` (`kernel/src/money.rs`) — but nothing names how
@@ -1149,6 +1165,30 @@ mesh's own local-first stance — with the courier's signed cash-collected attes
 `SettlementRecorded` source. Card/digital rails are a later, more complex addition requiring a
 real payment-processor integration decision this roadmap does NOT make unilaterally — ⚠
 OPERATOR DECISION (see §11.2-1).
+
+> **RESOLVED (2026-07-18, operator ruling):** rail sequencing decided in three waves.
+> **Wave 0 = cash** — the blueprint's own recommendation is now CONFIRMED by the operator, not
+> merely recommended. **Wave 1 = crypto** — explicitly ordered BEFORE conventional payment
+> processors ("у планах крипта, та останнє уже платіжні системи"). This ordering is not
+> arbitrary: a crypto payment is a signed transaction, which fits the mesh's own
+> capability-cert / PQ-signature settlement model (signed `CashAttestation`-style events,
+> `verify_chain`/`RevocationSet` reuse) far more naturally than a centralized-processor
+> integration — the rail extends machinery the stack already trusts instead of importing a
+> foreign trust model. **Wave 2 (last) = Stripe / Payoneer / Google Pay / Apple Pay**, and for
+> this wave the operator BINDS an explicit constraint: use OFFICIAL, PROVEN THIRD-PARTY
+> LIBRARIES — no custom native reimplementation ("варто застосовувати готові і перевірені
+> бібліотеки без власного нативного коду"). This is a DELIBERATE, NAMED EXCEPTION to the repo's
+> native-Rust / re-derive-first default (memory: `rust-native-bare-metal-decision-2026-07-14` —
+> which itself demands honest falsifiable comparison, not purity): payment-processor
+> integration is high-liability, PCI-DSS-adjacent compliance surface where reinventing audited,
+> certified handling in native code is a real security/liability risk, not a purity concern.
+> Official SDKs exist precisely because this territory is solved and certified. Verified live
+> on crates.io 2026-07-18: Stripe publishes NO first-party Rust SDK; the de-facto crate is
+> community-maintained `async-stripe` (1.0.0-rc.6, actively maintained) — so Wave-2 candidates
+> are `async-stripe` OR Stripe's official REST API directly, and Google Pay / Apple Pay via
+> their standard web/native Payment Request APIs. Final vendor pick within this constraint
+> stays a build-time engineering choice — the operator did not pick a vendor and neither does
+> this note.
 **Blueprint:** `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P47-P50-gap-closing-phases.md` §2.
 **DoD:**
 1. A `PaymentPort` trait exists in the kernel-ports layer (plain structs, no HTTP/serde in
@@ -1162,10 +1202,27 @@ OPERATOR DECISION (see §11.2-1).
 4. Card/digital rail: a dated operator decision note (vendor, geography, fee model — operator
    judgment) exists BEFORE any card-rail adapter code lands; adapter code present without the
    note is the fail condition.
+   — *RESOLVED-in-part (2026-07-18): the ruling above IS the sequencing + constraint note
+   (waves fixed, official-libraries-only for Wave 2). The specific Wave-2 vendor pick is
+   delegated to build time WITHIN that constraint; geography/fee-model specifics still surface
+   to the operator when a concrete vendor is proposed.*
+5. *(added 2026-07-18, per ruling)* Wave-1 crypto rail: a design note maps crypto settlement
+   onto the existing signed-event model (attestation-style signed transaction →
+   `SettlementRecorded` fold, `verify_chain`/`RevocationSet` reuse, all amounts `i64`) BEFORE
+   any crypto adapter lands; gated behind DoD-2 (cash rail green first).
+6. *(added 2026-07-18, per ruling)* Wave-2 processor rail: adapters wrap an official/proven
+   third-party library only — candidates to evaluate: `async-stripe` (no first-party Stripe
+   Rust SDK exists; verified crates.io 2026-07-18) or Stripe's official REST API directly;
+   Google Pay / Apple Pay via their standard Payment Request APIs. RED check: any custom
+   native implementation of processor-side payment cryptography or card-data handling is the
+   fail condition.
 **Anti-scope:** Do NOT build a custom payment processor. Do NOT touch the money
 integer-arithmetic law — it is CORE's scope and already correct. Do NOT couple to any specific
 geography's payment rails (bank APIs, national schemes) without an operator ruling. No
-card/digital adapter before DoD-4's note exists.
+card/digital adapter before DoD-4's note exists. *(2026-07-18 addendum: "no custom payment
+processor" is now reinforced and extended by the Wave-2 ruling — no native reimplementation of
+processor SDK territory either; official libraries are binding there, a named exception to the
+native-Rust default.)*
 **Depends on / blocks:** Depends on P37 (an order surface to settle against). Blocks nothing on
 the wiring critical path — deliberately late-critical-path: needed before real revenue (P50's
 first-real-order gate names it a prerequisite), not before the wiring proof.
@@ -1173,7 +1230,7 @@ first-real-order gate names it a prerequisite), not before the wiring proof.
 #### P48 — Owner/Admin operational surface (DELIVERY component)
 **Absorbs:** none — new; makes concrete the workflow implied by menu-as-data + capability certs
 (silence-ledger item 2), which every existing phase implies and none owns.
-**Status:** PLANNED
+**Status:** PLANNED — decision RESOLVED (2026-07-18, operator ruling), build-out open
 **Role & responsibility:** The venue owner's working surface: menu editing, live order
 visibility, and staff/courier roster management. Today this is owned by nobody — P37's
 anti-scope explicitly excludes "an admin CRUD surface," P38b's Sea & Sheet are customer-facing,
@@ -1182,9 +1239,32 @@ FIRST open question — named here, not decided: is the admin surface WebGPU-ren
 customer surface (§10.3 invariant 4), or does it get a DOM exemption on FE-15-adjacent
 reasoning (the a11y mirror already establishes that DOM survives where WebGPU genuinely cannot
 serve; admin UIs are data-dense and form-heavy)? ⚠ OPERATOR DECISION (see §11.2-2).
-**Blueprint:** `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P47-P50-gap-closing-phases.md` §3.
+
+> **RESOLVED (2026-07-18, operator ruling):** two decisions in one ruling. **(a) Rendering:
+> WebGPU, NO DOM exemption.** The interface logic is the same as everywhere else in the
+> product — "продовження рендер бекенду через фізику," a continuation of the backend rendered
+> through physics. §10.3 invariant 4 holds uniformly; FE-15's a11y mirror remains the only DOM
+> survivor. **(b) The role itself is bigger than the open question assumed: the admin surface
+> IS a HUB architecture.** The operator's own framing: the owner manages and processes the
+> food vendor and its orders arriving from MULTIPLE INTAKE CHANNELS — social media, websites,
+> bots, etc. — all funneling into ONE hub, with agentic support ("тут власне уся суть, що
+> замовити може будь-хто і з різних входів"). Omnichannel order intake is therefore not a
+> P22/P43 nice-to-have — it is what P48's hub architecture actually IS: every intake channel
+> maps into the SAME order pipeline, i.e. the same
+> `DeliveryEvent::OrderPlaced(OrderPlacedPayload)` wire vocabulary P34 already defines
+> (`bebop2/proto-cap/src/event_dict.rs:279` variant, `:106` payload — verified live
+> 2026-07-18). Agentic support ties to P40's tool loop: an agent can plausibly help the owner
+> triage/process orders arriving from different channels. Boundary note: INBOUND channel
+> intake belongs to P48's hub; the OUTBOUND notification send path stays P43's (unchanged).
+**Blueprint:** `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P48-owner-hub-surface.md`
+(standalone, promoted 2026-07-18 — carries this entry's DoD 1–7 forward and adds the
+same-day scope expansion: two-way messenger order flow, adaptive notification channels,
+Google-Maps reviews ingestion, event-log-first hub sync; the original resolved-decision
+text remains in `BLUEPRINT-P47-P50-gap-closing-phases.md` §3 as provenance).
 **DoD:**
 1. Rendering-approach decision recorded (operator ruling, dated) before surface build-out.
+   — *✅ RESOLVED (2026-07-18): WebGPU, no DOM exemption — see the ruling note above. Surface
+   build-out is unblocked.*
 2. An owner edits a menu item and sees the change reflected in a live order-flow test: edit → a
    subsequently placed order's fold-derived state carries the change. (The sentence no P31–P46
    DoD contains; this phase's reason to exist.)
@@ -1196,19 +1276,33 @@ serve; admin UIs are data-dense and form-heavy)? ⚠ OPERATOR DECISION (see §11
    mutating request is rejected in a test.
 5. Auth: the surface authenticates with the SAME capability-cert model as P37 (owner-scoped
    cert); a negative test proves no password-based admin login path exists.
+6. *(added 2026-07-18, per ruling)* Omnichannel intake, Wave-0: at least TWO concrete
+   non-native intake channels land as candidates — (i) a social-media DM/message intake
+   adapter and (ii) a simple web-form intake — BOTH mapping into the same
+   `DeliveryEvent::OrderPlaced(OrderPlacedPayload)` vocabulary
+   (`bebop2/proto-cap/src/event_dict.rs:279`/`:106`, verified live 2026-07-18). RED check: an
+   intake channel minting its own order representation instead of `OrderPlaced` is the fail
+   condition — channels differ, the pipeline does not.
+7. *(added 2026-07-18, per ruling)* Agentic support: a design note ties hub triage to P40's
+   tool loop (agent-assisted processing of orders across channels); advisory at Wave 0, not a
+   gate on DoD-2/3/4.
 **Anti-scope:** NO separate admin-password system — a second, weaker auth path for the most
 privileged user is an anti-pattern, explicitly rejected (capability certs are the auth model
 per §10.3 invariant 3; TOTP/WebAuthn are step-up only per P39). Do NOT build a general-purpose
 admin framework — scope is exactly the named menu/order/roster operations. No
-analytics/marketing dashboards (P20/P22/P43 territory).
+analytics/marketing dashboards (P20/P22/P43 territory). *(2026-07-18 correction, per ruling:
+the P22/P43 boundary above governs dashboards and the outbound send path only — INBOUND
+omnichannel order intake is P48's own hub scope, not deferred territory.)*
 **Depends on / blocks:** Depends on P37 (auth + API surface); on P38a only if the rendering
-ruling picks WebGPU. Blocks P50's first-real-order gate (a real venue needs a managed menu).
+ruling picks WebGPU. *(2026-07-18: the ruling picked WebGPU — the P38a dependency is now
+unconditional.)* Blocks P50's first-real-order gate (a real venue needs a managed menu).
 
 #### P49 — Customer identity, notification & tracking UX (DELIVERY component)
 **Absorbs:** the customer-side closure of P43's corrected claim (§10.5.5 confirmed "Telegram
 already has full push+OTP" FALSE — a real customer-facing send path does not exist); otherwise
 no prior unit ID.
-**Status:** PLANNED
+**Status:** PLANNED — decision RESOLVED (2026-07-18, operator ruling): planned-but-deferred;
+simple Wave-0 default now, mechanism revisited at 5–50 real clients
 **Role & responsibility:** Three inseparable customer-facing concerns. (a) **Identity** — how an
 anonymous customer places, tracks, and re-identifies to an order WITHOUT a device-bound
 capability cert: certs are specified for couriers/operators/devices, and requiring a customer
@@ -1224,10 +1318,31 @@ mechanism is ⚠ OPERATOR DECISION (see §11.2-3) with three named candidates, n
 (1) short-lived session token bound to a device fingerprint; (2) a lighter capability grant
 scoped to a single order (reuses proto-cap machinery, no hardware enrollment); (3) magic-link
 via email/SMS.
+
+> **RESOLVED (2026-07-18, operator ruling):** "варто спланувати, та узагалі некритично і
+> відкладається до перших 5/50 реальних клієнтів" — worth planning at design level, NOT
+> critical, the mechanism decision is DEFERRED until the first 5–50 real clients exist. The
+> operator gate on the mechanism pick is LIFTED and demoted to a build-time engineering
+> choice: pick a simple pragmatic default from the three named candidates as a Wave-0 minimal
+> default WITHOUT extensive validation (the blueprint's own table already notes candidate 2 is
+> pure proto-cap reuse and best offline-fit — but the pick stays with the build, not this
+> note), then revisit properly once real usage data exists. Do not over-engineer or block
+> anything on perfecting identity now. **Urgency context (operator, same date, recorded as
+> context not decision):** "потрібен, перший клієнт тестував і чекає на оновлену частину, ще
+> декілька клієнтів також ЧЕКАЮТЬ" — a first real client has already tested the product and is
+> waiting for the updated version, and several more clients are also waiting. That is why
+> "simple default now, don't perfect it" is the right call: the roadmap needs a working simple
+> version FASTER than a perfect one. Cross-reference: this feeds P50's first-real-order gate
+> directly (blueprint §5.3) — that milestone is not hypothetical; real clients are already
+> waiting on it.
 **Blueprint:** `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P47-P50-gap-closing-phases.md` §4.
 **DoD:**
 1. Identity-mechanism decision recorded (one of the three candidates, or an operator-supplied
    better one), dated, before build-out.
+   — *✅ RESOLVED (2026-07-18): the operator ruling above replaces the mechanism ruling with a
+   deferral — build picks a simple default from the three candidates (build-time engineering
+   choice, no further operator gate), records THAT pick as a dated note, and the proper
+   mechanism decision is re-opened at 5–50 real clients. Build-out is unblocked.*
 2. Build-out once decided: an anonymous customer places an order and later re-identifies to
    track it, over P37's wire, with no durable customer account created — one integration test.
 3. One real notification reaches the customer's channel on an order state change (rides P43
@@ -1290,9 +1405,177 @@ first-real-order gate must be green before multi-product work means anything.
 
 ### 11.2 Operator decisions introduced by this section (3 — same convention as §3)
 
+> **ALL THREE RESOLVED 2026-07-18 (operator ruling; full text in each phase's RESOLVED note
+> above — original framings preserved below, per convention).**
+
 1. **P47** — which card/digital payment rail (vendor, geography, fee model), if any, follows
    cash-on-delivery. The Wave-0 cash rail itself needs no ruling — it has no vendor to choose.
+   — *✅ RESOLVED (2026-07-18): waves fixed — cash (confirmed) → crypto → processors last;
+   Wave-2 binds to official/proven third-party libraries, no native reimplementation; specific
+   Wave-2 vendor delegated to build time within that constraint.*
 2. **P48** — admin-surface rendering: WebGPU per §10.3 invariant 4, or a DOM exemption on
    FE-15-adjacent reasoning for a data-dense/form-heavy surface.
+   — *✅ RESOLVED (2026-07-18): WebGPU, no DOM exemption; plus the role is a multi-channel
+   intake HUB with agentic support — see the P48 ruling note.*
 3. **P49** — customer identity mechanism: device-fingerprint session token vs one-order
    capability grant vs magic-link email/SMS (or an operator-supplied alternative).
+
+---
+
+## 12. Operator-directed phases (2026-07-18, appended after §11)
+
+Appended by a separate 2026-07-18 pass (same append-only rule as §7-§11). **This section
+extends the phase index from P31-P50 to P31-P51.** It is deliberately NOT folded into §11:
+§11.0's own charter is "exactly these four, and nothing else" (the end-state-vision pass's
+silence ledger), and P51 comes from a direct operator directive, not from that pass — a
+different provenance deserves a different section. §10.2's index table remains stale per
+§11's own note; the same later consolidation pass reconciles both.
+
+#### P51 — Open map + routing: OSM vector data, field-rendered routes, pin-drop, live tracking (DELIVERY component)
+**Absorbs:** none — genuinely new phase; it *feeds and closes* existing seams rather than
+absorbing units: P04's landed in-kernel router (`kernel/src/router.rs` — Dijkstra/A*/CH +
+`road_graph_from_ways`, whose own doc names OSM parsing "a downstream concern" — P51 IS that
+concern), P04's never-landed `route_js` wasm line (0 grep hits in `wasm/src/lib.rs`, verified
+2026-07-18), P49's DoD-4 tracking-view supply side, and the gaussian-splatting arc's Stage-1
+pin-drop (supplied, not re-litigated).
+**Status:** PLANNED
+**Role & responsibility:** Operator directive (2026-07-18, verbatim intent): OpenStreetMap
+with pin-drop + route tracking, or better a physics-render of the route/map from satellite
+data — hard constraints non-paid, non-vendor-lock-in. The blueprint's cited 2026 research
+verdict: satellite-based street rendering is infeasible without cost (free global optical
+tops out at Sentinel-2's 10 m/px — a road is one pixel; every sub-meter source is paid,
+non-commercial, or country-patchwork; imagery-tile ToS forbid derivative offline use), which
+independently re-confirms the splatting arc's own satellite rejection from a new angle. The
+chosen design delivers the operator's "better and more interesting" branch honestly: **OSM
+vector data (ODbL) rendered through the existing field engine** — roads and building outlines
+as `SdfShape::LineSegment` scene layers, the planned route as a field *source term* whose
+glow is `compose()`'s own diffusion (the physics-render, by construction), courier marker as
+a P38-G2 particle, routing via the already-landed zero-dep kernel router, live tracking via a
+`kalman.rs` constant-velocity configuration + `geo.rs` route snap/ETA, pins via
+`nearest_road_node` + `point_in_polygon` zone gating. Fully offline-capable (F12): one
+content-addressed MapPack per venue region, no tile server, no routing server, no geocoder at
+runtime. A spectral/Laplacian *layout* of the road network was explicitly rejected (topology
+≠ geography; a navigator needs geographic fidelity) — the field integration is real, not
+decorative.
+**Blueprint:** `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P51-open-map-routing.md` (full
+20-point-standard blueprint: research citations, DECART engine comparison — OSRM/Valhalla/
+GraphHopper honestly compared and rejected Wave-0 on substrate, with Valhalla pre-named as
+the dynamic-costing fallback boundary — MapPack format, seven build items M1-M7, DoD,
+benches, ODbL compliance).
+**DoD (summary — falsifiable detail in the blueprint §6):**
+1. MapPack pipeline: deterministic extractor (`tools/map-pack`, byte-identical reruns) +
+   fail-closed kernel parse (bit-flip ⇒ typed refusal, truncation fuzz panic-free).
+2. Pin-drop: on-street pin snaps via `nearest_road_node`; out-of-zone pin refused before
+   `decide`; unroutable tail honest (raw pin + walk distance, never fabricated).
+3. Route render: composed frame byte-identical across runs; route glow localized to the
+   route polyline; unreachable destination ⇒ typed `NoRoute` + labeled straight-line hint —
+   a fabricated road path is unrepresentable.
+4. Live tracking: event-sequence tests (drive ⇒ `[Updated…, Snapped…, Arriving]`; detour ⇒
+   `OffRoute×K ⇒ RerouteNeeded`); GPS noise burst absorbed by the KF without false off-route;
+   teleport/out-of-order samples rejected with bit-stable filter state.
+5. One `TrackFrame`, two consumers: courier surface and customer live view (this supplies
+   P49 DoD-4 — P49 cites, does not re-implement); wasm ptr/len exports close P04's gap.
+6. Privacy: `CourierPositionUpdated` (≤32 B, ≤0.5 Hz) emittable ONLY between
+   assignment-accept and delivery-complete — asserted at the emit site.
+7. ODbL: "© OpenStreetMap contributors" rendered on every map view (a11y-mirror path now,
+   MSDF when P38-G3 lands); MapPacks published under ODbL; no proprietary geometry ever
+   inside a pack (collective-database invariant); P50 audit row added.
+**Anti-scope:** NO paid mapping/geocoding/imagery API ever, including as fallback (hard
+operator constraint — a Google/Mapbox/HERE import is a scope violation regardless of test
+state). No turn-by-turn voice (AGENT/DZ-10 Phase-9b territory). No text-address
+geocoding/autocomplete Wave-0 (pin-first; self-hosted Photon/Nominatim is the named future
+unit). No tile servers, no planet scale, no live-traffic dynamic costing (Valhalla self-host
+pre-named at that boundary). No satellite texture work (Sentinel-2 10 m ambient backdrop
+recorded as deferred-decorative in the blueprint, not scope). Does not touch splatting
+Stage-2, money, or any red-line.
+**Depends on / blocks:** Depends on P38a (G2/G3 render legs; CPU compose path works today —
+map/route/track math and tests are GPU-independent), P34/P37 (the wire the position event and
+MapPack asset ride; local-first paths work without them per F12), and nothing else. Blocks
+P49 DoD-4 (its tracking view consumes P51's `TrackFrame`) and the splatting arc's Stage-1
+dependency; feeds P50's audit with its ODbL row.
+   — *✅ RESOLVED (2026-07-18): deferred until 5–50 real clients; simple Wave-0 default picked
+   at build time from the three candidates, no further operator gate; real clients already
+   waiting elevates urgency of the simple version (see P49 ruling note).*
+
+---
+
+## 13. Audit-minted phases (2026-07-18, appended after §12)
+
+Appended by a separate 2026-07-18 pass (same append-only rule as §7-§12). **This section
+extends the phase index from P31-P51 to P31-P52.** Provenance: the same-day MVP audit
+(`docs/design/DELIVERY-MVP-FEATURE-COMPLETENESS-AUDIT-2026-07-18.md`) found exactly one
+MVP-blocking ownership vacuum (§6 M1, "the largest single omission this audit found") and the
+operator directed minting a phase for it. P52 is DELIVERY-component work and belongs
+conceptually beside P37-P39/P47-P49 — it is appended HERE rather than inside §10.5.3 because
+the append-only convention (§12's own precedent: P51 is DELIVERY too and got its own tail
+section) beats section-thematic placement; §10.2's index table remains stale per §11's note,
+and the same later consolidation pass reconciles all of it.
+
+#### P52 — Courier working surface: shift, claims, run, proof-of-delivery, earnings (DELIVERY component)
+**Absorbs:** none — genuinely new phase. It *executes and closes* existing seams rather than
+absorbing units: DZ-08's courier interaction design
+(`docs/design/dowiz-interfaces/BLUEPRINTS-DOWIZ-INTERFACES.md:225` — designed in the arc,
+executed by nobody: P38b is customer-facing by its own §10.5.3 text), the MVP audit's M1
+(courier surface), M4 (matcher candidate-set supply — `matcher.rs:63 assign(order,
+candidates, max)`'s `candidates` has no producer; grep for shift/on_duty/availability across
+delivery-domain + proto-cap: zero hits, re-verified 2026-07-18), and M10 (the P48-DoD-4 ↔
+P23-P2 courier-invite handoff seam, "implied by both DoDs and named by neither").
+**Status:** PLANNED
+**Role & responsibility:** The courier's own working surface — the third leg of the one
+physics-render pattern (customer = P38b Sea & Sheet, owner = P48 hub, courier = P52), on the
+SAME P38a substrate under the P48 rendering ruling (WebGPU, no DOM exemption) — for the actor
+whose PROTOCOL side is the most built part of the stack (claim_machine, HRW matcher, k-of-n
+PoD, settlement events — all landed and tested in bebop2) and whose SCREEN was owned by
+nobody. Seven build items: K1 availability (the Wave-0 candidate-set rule stated as law —
+all certified-unrevoked couriers, pull-based claims — plus a node-local duty fold + cap-gated
+toggle; deliberately NOT a new proto-cap wire variant), K2 claim inbox consuming
+`DeliveryEvent::Claim` (`Action::ClaimOffered/ClaimAccepted/ClaimReleased`,
+`bebop2/proto-cap/src/scope.rs:94-98`, `event_dict.rs:294-297` — relayed intents only, claim
+Law legality stays receiver-side), K3 delivery-run screen consuming P51's
+`map_scene`/`TrackFrame` (routing/tracking 100% P51's, zero re-design), K4 proof-of-delivery
+capture — the UI for the BUILT k-of-n hybrid-signed `DeliveryClaim`
+(`bebop2/delivery-domain/src/pod.rs:62-74`; its `location` is opaque bytes with NO photo/
+signature/GPS-fence concept — P52 pins the 12-byte micro7 geo encoding and gates `Delivered`
+on `is_settled()`), K5 earnings as a derive-only second reader over `SettlementRecorded`
+folds (D5 pattern; zero new money logic), K6 the concrete invite handoff (owner mints a
+short-lived single-use DOMAIN_DELEGATION-scoped enrollment capability → QR/deep-link → the
+courier's un-enrolled device redeems it through P39's `enroll_device` and comes out
+cert-enrolled; manual operator ceremony documented as the courier-#1 MVP fallback), K7 the
+cash-collected attestation input (P47 Wave-0's `SettlementRecorded` source — hub-derived
+amounts, witness-typed emit site). Phase-level falsifier: one end-to-end test from
+un-enrolled device to statement row.
+**Blueprint:** `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P52-courier-working-surface.md`
+(full 20-point-standard blueprint: live-verified ground truth incl. the availability-gap and
+PoD-shape findings, K1-K7 build items, adversarial sets, DoD, budgets, ledger rows).
+**DoD (summary — falsifiable detail in the blueprint §5):**
+1. Availability: bootstrap rule (empty duty fold ⇒ all certified-unrevoked candidates) +
+   toggle exclusion + duty≠claim decoupling, all tested; revoked courier's toggle 403s.
+2. Claim flow: offer→inbox fold; accept/decline event sequences; 60s expiry → `ClaimReleased`
+   → `primary_for` requeue (never-drop re-asserted); illegal accept = typed refusal, no
+   shadow state; island accept = queued-unconfirmed intent, never a fabricated `Claimed`.
+3. Run screen: renders P51 `TrackFrame`; SwipeToComplete never-fake-success (completes only
+   on receiver-confirmed fold); stale track labeled, never presented live.
+4. PoD: capture → k-of-n signature collection → `is_settled()` gates the `Delivered` intent;
+   below-threshold/tamper/duplicate-signer arms asserted at the surface; photo evidence
+   content-addressed and NOT signature-load-bearing (gated `#[ignore = "M3-blob-path"]`).
+5. Earnings: courier-scoped statement, integer-exact, reconciles against the ledger fold
+   (P47 DoD-3's property shape shared).
+6. Invite handoff: mint → redeem → cert passes `verify_chain` and admits a courier route
+   end-to-end; expired/spent/bad-chain/revoked-issuer all refuse; single-use enforced.
+7. Cash attestation: emittable only from a Delivered-pending run (witness type); amount
+   hub-derived, never UI-supplied; double-tap idempotent.
+**Anti-scope:** NO fourth rendering technology (P38a pipelines only; P48's WebGPU ruling
+inherited; zero visible DOM). NO new proto-cap `Action`/`Resource` variants and NO matcher/
+claim-Law changes (P34's lane — P52 is a consumer). NO map/routing/Kalman code (P51's lane).
+NO payment/settlement semantics (P47's lane). NO owner/hub features (P48) or customer
+identity (P49). NO courier scoring/rating/reputation in any form, ever (structural +
+CI-locked; the gate extends over P52's modules). NO multi-order batching, NO tipping (each
+needs its own operator ruling before existing anywhere).
+**Depends on / blocks:** Depends on P34 (wire vocabulary + fold path), P38a (render
+pipelines; CPU compose path usable today, GPU legs behind O18a like everyone else), P51
+(routing/tracking/`TrackFrame`), P37 (routes + cap middleware for duty/claim/attestation),
+P39 (`enroll_device` for K6), P48 (roster grant as K6's input), P47 (attestation semantics
+K7 feeds). Blocks nothing further downstream — but it is itself **MVP-blocking** per the
+audit §7 ("the courier cannot see, accept, or attest a delivery without SOME surface"): P50's
+first-real-order gate cannot go green without it, so it sits on the first-transaction
+critical path beside P47/P48/P49.

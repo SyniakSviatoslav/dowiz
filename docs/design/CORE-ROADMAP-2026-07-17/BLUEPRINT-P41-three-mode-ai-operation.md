@@ -64,6 +64,7 @@ Ground truth is non-discussible; everything below builds on this table only.
 | C-d | **Mode-parity proof**: P40's single-tool e2e test passes with the backend swapped by configuration only — zero source diff in loop or tool port |
 | C-e | **Graceful-degradation contract**: Ollama stopped + no network ⇒ typed `AssistantUnavailable`; order/courier flow provably unaffected, in the same test process |
 | C-f | **Local-offline proof**: the mode-2 run passes fully network-isolated (network-namespace script), consistent with the solo-island guarantee |
+| C-g | **BYO-AI subscription (operator directive 2026-07-18)**: the owner connects THEIR OWN AI subscription — any OpenAI-compatible endpoint + owner-supplied key — through the SAME `ManagedApiAdapter`/`Quirks::managed_api` path as C-c (zero new transport, zero new adapter); plus the default-preset invariant: a fresh venue's WRITTEN preset = mode 2 local Ollama, BYO is the opt-in upgrade path (§3.6) |
 
 **P41 explicitly does NOT do (anti-scope, each a review-rejectable smell):**
 
@@ -95,6 +96,14 @@ Ground truth is non-discussible; everything below builds on this table only.
 7. **NOT touching `AgentBridge`/`agent-adapters`** (PROTOCOL's mesh foreign-agent admission,
    `kernel/src/ports/agent/` + `agent-adapters/` — see P40 §4.4's non-conflation check, which
    P41's close-out re-runs).
+8. **NOT billing/subscription management for BYO-AI (C-g).** Scope is "how the owner's own
+   endpoint+key get configured and used" — payment/plan management for that subscription is the
+   provider's problem (and commerce is P47's adjacent lane, not entered). P41 stores a base URL
+   and a key-file path, nothing else.
+9. **NOT a vendor list (C-g).** "OpenAI-compatible API" is the ONE generalized target —
+   `OpenAiCompatTransport` is provider-agnostic by design (HARNESS §2.2); per-vendor adapters or
+   provider enumerations are review-rejectable. Provider-side MCP as a connection method is
+   flagged for P42's lane (which inherits this three-mode contract), not designed here.
 
 **Dependency posture (from §10.5.4, restated precisely):** C-a is provable TODAY, before P40 —
 land it FIRST as the locked baseline (the roadmap's own instruction). C-b/C-c are buildable in
@@ -379,6 +388,58 @@ produces `AssistantUnavailable`/typed connect failure, NOT a pass — demonstrat
 namespace actually severs egress (the isolation has teeth; a proof that cannot fail proves
 nothing — `verified-by-math` discipline).
 
+### 3.6 C-g — BYO-AI subscription: owner's own endpoint + key, default preset local (operator directive 2026-07-18, appended)
+
+**The directive (verbatim intent):** open-source third-party services AND adapters for the most
+popular paid ones are permitted — e.g. API/MCP/direct-connect with the client's OWN AI
+subscription; convenient settings so the owner can change what fits vs what doesn't; but WITH a
+ready DEFAULT PRESET that includes the local agent.
+
+**Confirmed: the mechanism already exists — cite, don't re-derive.** "Owner brings their own
+subscription" is EXACTLY mode 3 as already designed: `AiMode::Connected` +
+`DOWIZ_LLM_BASE_URL=<the provider's OpenAI-compat endpoint>` +
+`DOWIZ_LLM_API_KEY_FILE=<owner's key>` through the SHIPPED `OpenAiCompatTransport` +
+`Quirks::managed_api` (HARNESS §2.2's one-transport-many-Quirks split; C-c's
+`ManagedApiAdapter` is the one struct still to land, §3.3). Any provider exposing an
+OpenAI-compatible API is thereby supported with zero new architecture — that is the generalized
+target, deliberately not a vendor list (§1 anti-scope 9).
+
+**What C-g actually adds (small, configuration-provenance only):**
+
+1. **A named sub-distinction under Connected — NOT a fourth enum variant.** `Connected` splits
+   at the CONFIG level into `connected/managed-default` (a dowiz-operated default endpoint,
+   if/when one exists) vs `connected/byo` (owner-supplied endpoint + key). Same
+   `AiMode::Connected`, same `ManagedApiAdapter`, same code path — the distinction is WHO
+   supplies `base_url`+key, recorded as `DOWIZ_LLM_PROVENANCE = "managed" | "byo"` in the §2
+   env-contract doc so telemetry/H1 rows attribute cost to the right party. A provenance branch
+   inside the loop or adapter is the same §1-item-2 smell — provenance is attribution metadata,
+   never behavior.
+2. **The default-preset invariant, reconciled with fail-closed — two layers, both kept.**
+   `from_env`'s CODE default stays `Off` (unset env ⇒ no AI, §2 — never weakened). The PRODUCT
+   default is a provisioning-time preset: a fresh venue install WRITES an explicit
+   `DOWIZ_AI_MODE=local` EnvFile — so zero-OWNER-config = local Ollama agent, while the mode
+   remains explicit written configuration (the preset file IS the explicit config; no silent
+   default enters the code). BYO is the opt-in upgrade path FROM that preset — local-first is
+   the zero-config default, never the other way around.
+3. **The settings surface lives in P48's owner hub — cross-reference ONLY.** The owner-facing
+   "connect your own AI" settings (endpoint, key file, local/connected toggle) belong to P48's
+   owner/admin operational surface (master roadmap §11 / §10.5.x P48 — the owner's management
+   view, per its 2026-07-18 hub ruling). P48 is specified in its own parallel lane; this
+   blueprint deliberately designs NO UI and touches NO P48 section. The whole contract is one
+   sentence: P48's settings write the SAME env/EnvFile configuration that `from_env` (or the
+   future `from_policy(hub)`, §4.2) reads — one writer, one reader, no second config channel.
+4. **MCP as a connection method: deferred to P42, flagged not designed.** Where a provider
+   exposes MCP rather than an OpenAI-compat API, that connection rides P42's MCP lane (which
+   already must inherit this three-mode contract); designing it here would front-run P42.
+
+RED→GREEN (config-level, extends the §3.2 matrix): `byo_connected_is_plain_connected` — env set
+to a BYO endpoint+key composes the IDENTICAL `ManagedApiAdapter` stack as the managed-default
+case (same type, same quirks profile — provenance changes nothing); and
+`preset_file_is_explicit_local` — the provisioning preset parses to `LocalOffline` through the
+normal `from_env` path, no special-casing. **Adversarial:** the provenance-neutrality grep
+guard — `DOWIZ_LLM_PROVENANCE` read in exactly ONE place (telemetry attribution), zero hits in
+`agent-loop/` or adapter dispatch; a second read site is a behavior fork and fails the guard.
+
 ---
 
 ## 4. Cross-cutting design obligations (items 6, 8, 9, 11–16)
@@ -463,6 +524,7 @@ demonstrably true.
 | C-d parity | `mode_parity_local` RED before from_env wiring | mode-2 leg green with the SHARED assertion fn; `grep AiMode agent-loop/src` → empty; connected leg written + `#[ignore]`d with declared activation condition | `agent-loop/tests/mode_parity.rs::{mode_parity_local, mode_parity_connected(#[ignore], declared)}` + the `AiMode`-blindness grep in `agent-loop/tests/firewall.rs` |
 | C-e degradation | `assistant_down_orders_still_flow` RED vs missing typed path | daemon-stopped run: typed `AssistantUnavailable` within deadline + full order fold green in-process; stalling-listener double yields `Timeout` not hang | `agent-facade/tests/degradation.rs::{assistant_down_orders_still_flow, stalling_backend_times_out}` |
 | C-f offline | isolation-teeth run (connected-in-netns) must FAIL typed — proving the namespace severs egress | `offline-proof.sh` exit 0: mode-2 e2e fully green inside loopback-only netns | `tools/ci/offline-proof.sh` (nightly/release CI gate; per-commit decision recorded in the job comment) |
+| C-g BYO | byo/preset tests RED (contract absent) | `byo_connected_is_plain_connected` + `preset_file_is_explicit_local` green; provenance single-read grep guard green; P48 settings-surface cross-ref recorded, NO UI built here | `llm-adapters` compose tests: `{byo_connected_is_plain_connected, preset_file_is_explicit_local}` + provenance-neutrality grep guard |
 
 Ledger obligations (`docs/regressions/REGRESSION-LEDGER.md`, ratchet rule `:9-16`): one row for
 the no-AI firewall ("AI crate in CORE/engine graph — guardrail: CI-gate `no-ai-firewall`,
@@ -619,7 +681,15 @@ landed.
    `llm-adapters/benches/BENCH_HISTORY.md`; record the mode-1 zero-overhead sentence
    verbatim. Acceptance: budgets met or the miss recorded + investigated, never silently
    accepted.
-8. **T8 (close-out).** Run: `cd kernel && cargo test --lib`, `cd engine && cargo test`,
+8. **T9 (C-g — alongside/after T2+T3; listed before close-out, numbering appended 2026-07-18).**
+   Extend §2's env-contract doc comment with `DOWIZ_LLM_PROVENANCE` (attribution-only field);
+   add the two §3.6 compose tests + the provenance-neutrality grep guard RED-first; write the
+   provisioning preset as an EnvFile template (`tools/preset/dowiz-ai.env.default`, containing
+   `DOWIZ_AI_MODE=local` + a comment naming the invariant) and point
+   `preset_file_is_explicit_local` at it. Do NOT touch P48's blueprint or roadmap section
+   (parallel lane — cross-reference only, §3.6 item 3). Acceptance:
+   `cd llm-adapters && cargo test compose` green including both new tests.
+9. **T8 (close-out).** Run: `cd kernel && cargo test --lib`, `cd engine && cargo test`,
    `cd llm-adapters && cargo test`, `cd agent-loop && cargo test`, the C-e choreography, and
    `offline-proof.sh`. Re-run P40's non-conflation check
    (`git diff --stat <base>..HEAD -- kernel/src/ports/agent agent-adapters` → empty). In
