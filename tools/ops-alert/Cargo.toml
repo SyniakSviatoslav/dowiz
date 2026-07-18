@@ -1,0 +1,16 @@
+[package]
+name = "ops-alert"
+version = "0.1.0"
+edition = "2021"
+
+# P45-W0 ops-alert tooling (§4b.2 fences, §4c.2 regression-digest, §4b.3 bench-drift).
+# Pure std — no network deps. Telegram delivery (when present) reuses the existing
+# tools/telemetry/lib.sh `tg_send` via shell-out; this crate never implements a 2nd sender.
+
+[[bin]]
+name = "fence-check"
+path = "src/fence_check.rs"
+
+[[bin]]
+name = "regression-digest"
+path = "src/regression_digest.rs"

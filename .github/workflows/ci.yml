@@ -268,3 +268,28 @@ jobs:
         run: |
           ! git grep -nEi 'courier[_-]?(score|rating|reputation|rank)' -- \
             'kernel/**' 'engine/**' 'tools/**' ':!**/*NO-COURIER-SCORING*'
+
+  # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
+  # P45-W0 §4b.2: declarative security fences (tools/ops-alert/fences.toml) enforced by
+  # the fence-check binary. A tripped must-never assertion (BYPASSRLS in a live migration,
+  # insecure-tls default feature, a dead pager) is S0 => RED merge. fence_count guards
+  # against a fence being silently deleted (weakening-guardrail class).
+  fence-check:
+    name: security fences (P45-W0 §4b.2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce fences.toml must-never assertions
+        run: cargo run --offline --manifest-path tools/ops-alert/Cargo.toml --bin fence-check
+
+  # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
+  # P45-W0 §4c.2: regression-digest drift gate. The committed REGRESSION-DIGEST.md is a
+  # generated VIEW of REGRESSION-LEDGER.md; --check regenerates and fails if the committed
+  # copy is stale or hand-edited (same regenerate-and-diff pattern as the codegen gate).
+  regression-digest:
+    name: regression digest drift (P45-W0 §4c.2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify committed digest matches the ledger
+        run: cargo run --offline --manifest-path tools/ops-alert/Cargo.toml --bin regression-digest -- --check
