@@ -367,6 +367,22 @@ pub fn classify_drift(a: &[Vec<f64>]) -> DriftClass {
             }
         }
     }
+    // FAIL-CLOSED (root-cause: index-leak / jagged-matrix OOB). A ragged
+    // operator (rows of unequal length) would let `Mat::from_vecvec` stride
+    // past a short row's bound on `get(i,j)` → out-of-bounds read of a
+    // neighbouring element (silent corruption) or a release-path panic.
+    // Reject ragged input as Unstable before any indexing happens.
+    let width = a.first().map_or(0, |r| r.len());
+    for row in a {
+        if row.len() != width {
+            return DriftClass::Unstable;
+        }
+    }
+    // Secondary defense: if the operator cannot even be built (ragged / non-finite),
+    // `from_vecvec_checked` returns Err — treat as Unstable.
+    if crate::mat::Mat::from_vecvec_checked(a).is_err() {
+        return DriftClass::Unstable;
+    }
     let rho = spectral_radius(a);
     if rho < 1.0 - DRIFT_BAND {
         DriftClass::Damped
@@ -464,6 +480,39 @@ mod tests {
     fn red_spectral_radius_never_nan() {
         let poisoned = vec![vec![0.0, f64::NAN], vec![0.0, 0.0]];
         assert!(spectral_radius(&poisoned).is_finite());
+    }
+
+    // ── FAIL-CLOSED (root-cause: index-leak / jagged-matrix OOB). A ragged
+    // operator (rows of unequal length) would let `Mat::from_vecvec` stride
+    // past a short row's bound on `get(i,j)` → out-of-bounds read of a
+    // neighbouring element (silent corruption) or release-path panic. classify_drift
+    // MUST reject it as Unstable before any indexing. (Same root-cause as the
+    // NaN fold — both are "malformed input admitted as healthy".)
+    #[test]
+    fn red_ragged_matrix_classifies_unstable() {
+        // second row shorter than the first → ragged.
+        let ragged = vec![vec![1.0, 2.0], vec![3.0]];
+        assert_eq!(classify_drift(&ragged), DriftClass::Unstable);
+        // first row shorter → ragged the other way.
+        let ragged2 = vec![vec![1.0], vec![2.0, 3.0]];
+        assert_eq!(classify_drift(&ragged2), DriftClass::Unstable);
+    }
+
+    // The checked constructor refuses ragged / non-finite input instead of
+    // building a Mat whose `get` would read out of bounds.
+    #[test]
+    fn red_from_vecvec_checked_rejects_malformed() {
+        use crate::mat::{Mat, MatrixError};
+        assert_eq!(
+            Mat::from_vecvec_checked(&vec![vec![1.0, 2.0], vec![3.0]]),
+            Err(MatrixError::Ragged)
+        );
+        assert_eq!(
+            Mat::from_vecvec_checked(&vec![vec![0.0, f64::NAN], vec![0.0, 0.0]]),
+            Err(MatrixError::NonFinite)
+        );
+        // well-formed rectangular finite input builds fine.
+        assert!(Mat::from_vecvec_checked(&vec![vec![1.0, 0.0], vec![0.0, 1.0]]).is_ok());
     }
 
     // ── GREEN: a directed 2-cycle has eigenvalues ±1 (period-2, μ≈−1). ──
@@ -627,6 +676,46 @@ mod tests {
             report, "energy=4.000000 spectral_radius=2.000000 fiedler=3.000000 drift=Unstable",
             "K3: E=4, ρ=2, λ₂(L)=3, ρ>1 ⇒ Unstable"
         );
+    }
+
+    // ── G4 (ROUND-2 GAP-AUDIT V3 4.2): a ragged operator (rows of unequal
+    //    length) must be rejected as Unstable, never indexed (index-leak /
+    //    OOB read or release-path panic). ──
+    #[test]
+    fn ragged_matrix_is_unstable_not_oob() {
+        // 2 rows, second row one element shorter → get(i,j) would stride past
+        // the short row's bound. Pre-fix this was a silent OOB read.
+        let ragged = vec![vec![1.0, 0.0], vec![0.0]];
+        assert_eq!(
+            classify_drift(&ragged),
+            DriftClass::Unstable,
+            "ragged operator must be fail-closed as Unstable"
+        );
+        // from_vecvec_checked rejects it too (the secondary defense).
+        assert_eq!(
+            crate::mat::Mat::from_vecvec_checked(&ragged),
+            Err(crate::mat::MatrixError::Ragged)
+        );
+    }
+
+    // ── G4 (ROUND-2 GAP-AUDIT V3 4.2 / NaN root-cause): a non-finite entry
+    //    anywhere must be fail-closed as Unstable, not read as a healthy
+    //    spectrum (the NaN-fail-open root cause). ──
+    #[test]
+    fn non_finite_entry_is_unstable() {
+        let nan = vec![vec![1.0, f64::NAN], vec![0.0, 1.0]];
+        assert_eq!(
+            classify_drift(&nan),
+            DriftClass::Unstable,
+            "NaN entry must be fail-closed as Unstable"
+        );
+        assert_eq!(
+            crate::mat::Mat::from_vecvec_checked(&nan),
+            Err(crate::mat::MatrixError::NonFinite)
+        );
+
+        let inf = vec![vec![1.0, f64::INFINITY], vec![0.0, 1.0]];
+        assert_eq!(classify_drift(&inf), DriftClass::Unstable);
     }
 
     // ── GREEN Verified-by-Math: graph_energy_report on a 2-cycle. Eigenvalues
