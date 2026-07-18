@@ -186,6 +186,11 @@ pub mod spectral;
 /// `spectral::eigenvalues` through a `&mut` cache with a recomputes-counter
 /// falsifier (no thrashing, no stale-cache).
 pub mod spectral_cache;
+/// WAVE LAP — graph-Laplacian eigenmodes consumer of `spectral::eigh`: the
+/// `k` smallest-eigenvalue eigenpairs (Fourier modes / field-UI basis) of a CSR
+/// graph. New module; does not touch `spectral_cache`, `csr`, `householder`, or
+/// `spectral`'s existing code.
+pub mod spectral_laplacian;
 /// Self-improvement loop: recurring-pattern surface over the tool-outcome
 /// token stream (W19 — consumes `trigram` into the loop's telemetry path).
 pub mod telemetry;
