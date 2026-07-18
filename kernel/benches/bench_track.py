@@ -104,15 +104,30 @@ def main() -> None:
         sys.exit(rc)
 
     base = load_baseline(args.crate)
+    if args.no_run:
+        # SMOKE ONLY: compares the committed baseline against ITSELF. This can
+        # never detect a regression (delta is always 0) and MUST NOT be used as
+        # the CI regression gate — it would be a fail-open. It exists solely to
+        # smoke-test the comparison/printing path on a fresh checkout.
+        print("WARNING: --no-run compares baseline to itself; it is a smoke "
+              "check ONLY and cannot catch regressions. Do NOT use it as the "
+              "regression gate.", file=sys.stderr)
     cur = base if args.no_run else run_bench(args.crate)
 
     print(f"{'benchmark':26} {'baseline_ns':>12} {'current_ns':>12} {'delta':>9}  verdict")
     rows = []
+    missing = 0
     for name, bmean in base.items():
         cmean = cur.get(name)
         if cmean is None:
-            print(f"{name:26} {bmean:12.2f} {'-':>12} {'MISSING':>9}  !!")
-            rows.append((name, bmean, None, None))
+            # FAIL-CLOSED: a benchmark that disappears from the run is a
+            # regression of the worst kind (a hot path was silently dropped).
+            # The native tracker encodes this as `worst = threshold + 1`; the
+            # python fallback must agree and exit non-zero, not print "MISSING"
+            # and pass. Record a sentinel delta that trips the regression loop.
+            print(f"{name:26} {bmean:12.2f} {'-':>12} {'MISSING':>9}  REGRESS")
+            rows.append((name, bmean, None, args.threshold + 1.0))
+            missing += 1
             continue
         delta = (cmean - bmean) / bmean * 100.0
         if delta > args.threshold:
@@ -123,6 +138,10 @@ def main() -> None:
             verdict = "ok"
         print(f"{name:26} {bmean:12.2f} {cmean:12.2f} {delta:+8.1f}%  {verdict}")
         rows.append((name, bmean, cmean, delta))
+
+    if missing:
+        print(f"\nFAIL-CLOSED: {missing} benchmark(s) MISSING from current run "
+              f"(hot path removed) — treating as regression.", file=sys.stderr)
 
     # Append to the (git-ignored) rolling history so trends are visible over time.
     hist = os.path.join(args.crate, "benches", "BENCH_HISTORY.md")
