@@ -1,0 +1,32 @@
+---
+// web/src/pages/fieldsim.astro
+//
+// G3 FieldSim — Astro SSR shell (template/markup only, NO TS/JS hand logic).
+//
+// This front-matter block contains no computation — only the path the
+// client-only island uses to fetch the kernel wasm. All math lives in the
+// bound kernel wasm exports consumed by the <FieldSim> island, which paints a
+// single WebGPU <canvas>. The page is a mount point, not a logic layer.
+const kernelWasmPath = '/kernel/dowiz_kernel_bg.wasm';
+---
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>dowiz · FieldSim (WebGPU, kernel-driven)</title>
+    <style>
+      :root { color-scheme: dark; }
+      body { margin: 0; background: #0b0f17; }
+      /* The canvas is the only painted surface; this just centers it. */
+      main { display: grid; place-items: center; min-height: 100vh; }
+      canvas { width: min(800px, 92vw); height: auto; border: 1px solid #1e2a3a; border-radius: 10px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <!-- client:only ⇒ runs in the browser, binds kernel wasm, paints WebGPU.
+           No server-side execution, no DOM logic. -->
+      <FieldSim client:only="svelte" wasmPath={kernelWasmPath} />
+    </main>
+  </body>
+</html>
