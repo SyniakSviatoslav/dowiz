@@ -645,7 +645,14 @@ An intent outside the enum is unrepresentable, not policy-refused (P40's structu
 reapplied). **NOT a use case, under any wording:** posting, publishing, messaging, or any
 repeated/scheduled interaction with any third-party platform — §11.5.
 
-### 11.2 Engine verdict — Stagehand-rust confirmed as the only candidate, adoption DEFERRED with named triggers
+### 11.2 Engine verdict — Stagehand-rust confirmed as the only candidate, adoption DEFERRED with named triggers — **DEFERRAL SUPERSEDED same day by §11.7** (operator follow-up, 2026-07-18)
+
+> *Supersession note (2026-07-18, second same-day pass): the operator directed that the
+> cloud/no-MCP finding below not end in a deferral — §11.7 designs a NATIVE local engine that
+> solves both findings instead of waiting on stagehand-rust. Findings 1–3 and the rejected
+> alternatives STAND as the reasons that design exists; only the "wait for T-B1" posture is
+> retired. §11.7.1 maps exactly what is superseded, revised, and retained. The v0 engine-free
+> path below is unchanged and still lands first.*
 
 Findings applied (from §11.0, not recalled):
 
@@ -879,3 +886,229 @@ form-submission loop, at any autonomy level (P22 A6's authority rule, inherited 
   decline (internal, §11.0).
 - Re-verify rule: §11.0's web rows go stale like any others — T-B1 explicitly requires
   re-fetching the repositories, not trusting this table.
+
+### 11.7 Native local-browser engine — second same-day addendum (2026-07-18 operator follow-up): design, not deferral
+
+Operator follow-up, applied as directed: §11.2's cloud/no-MCP finding must not terminate in a
+deferral — research further and design a NATIVE engine. This section is that design: a
+first-party Rust MCP-server binary that drives a browser **locally**, which solves BOTH of
+§11.2's structural findings (no MCP surface in any Rust artifact; cloud custody incompatible
+with the owner-session use case) rather than working around one of them. Positioning, stated
+before anything else: **this is a capability upgrade behind the existing fence, not a boundary
+change** — §11.4's four legs, §11.3's types, §11.1's closed use set, and §11.5's euphemism
+clause apply to this engine verbatim and unweakened (§11.7.4 restates this mechanically).
+Nothing in this section may be read as reopening the declined pattern.
+
+#### 11.7.0 Ground-truth addendum (rows verified live this pass, 2026-07-18, second pass)
+
+| Claim | Fresh cite (this pass) | Status |
+|---|---|---|
+| In-process runtime discipline is **sync**: `LlmBackend` is a plain sync trait (`fn chat(&self, req: &ChatRequest) -> Result<ChatResponse, LlmError>`, no async); `agent-adapters` self-describes as "A synchronous JSON-RPC 2.0 transport" with a byte-IO `RpcChannel` seam whose stated real bindings are "stdio pipe, streamable-HTTP, or an in-memory test double" | `kernel/src/ports/llm.rs:154-169`, `agent-adapters/src/transport.rs:1-24`, live read this pass | verified — corrects this pass's own tasking premise ("async-heavy conventions"), which live code disproves; the DECART below is judged against the REAL convention, and the sync client half of this design already has its seam in-repo |
+| `mattsse/chromiumoxide`: async CDP client, "chromiumoxide only supports the tokio runtime"; can "launch a headless or full (non-headless) Chrome or Chromium instance **or connect to an already running instance**"; CDP bindings **auto-generated at build time** from Chromium's own PDL files (Rust rewrite of the chromium-tree Python parser, ~60K generated lines); MIT OR Apache-2.0; v0.9.1 released 2026-02-25; ~2.90M downloads | repo README + crates.io API, WebFetch this pass | verified — connect-to-running + codegen-from-PDL are the two load-bearing rows |
+| `jonhoo/fantoccini`: W3C WebDriver client ("uses the WebDriver protocol to drive a conforming (potentially headless) browser"), tokio async, requires a separate running `chromedriver`/`geckodriver`; **no attach-to-existing-session/profile documented**; MIT OR Apache-2.0; v0.22.1 released 2026-02-28; ~3.50M downloads; active (Jon Gjengset) | repo README + crates.io API, WebFetch this pass | verified — most battle-tested of the three by adoption; the attach gap is structural to WebDriver, not a doc omission |
+| `rust-headless-chrome` (`headless_chrome` crate): CDP client, **synchronous** API on plain threads, self-described Puppeteer equivalent; supports launch AND attach (`pub fn connect(debug_ws_url: String) -> Result<Self>` — "Allows you to drive an externally-launched Chrome process"); acknowledges unimplemented CDP areas (frames, file picker, touchscreen, network-condition emulation, XHR replay, HTTP Basic Auth, EventSource/WebSocket inspection); MIT; v1.0.22 released 2026-06-11; ~2.67M downloads; 142 open issues | repo README + docs.rs `Browser` page + crates.io API, WebFetch this pass | verified — the freshest release of the three; coverage gaps are self-declared, hand-maintained bindings |
+| `chaser-oxide` (`ccheshirecat/chaser-oxide`, mirrored `0xchasercat/`, on crates.io): a chromiumoxide fork whose tagline is verbatim "**Undetectable, high-performance browser automation in Rust. Protocol-level stealth for Chromium**"; ships fingerprint profiles, a "Human Interaction Engine" with "physics-based mouse movements and realistic typing patterns"; sibling project `chaser-cf` self-describes as a "High-performance **Cloudflare bypass** library"; advertises testing against Cloudflare Turnstile/WAF, CreepJS, bot-detection suites | web search + repo taglines, this pass | verified — named in §11.7.2 as REJECTED on principle so no future reader adopts it in ignorance |
+| Chrome ≥136 (2025): `--remote-debugging-port`/`--remote-debugging-pipe` are **ignored when pointing at the default user data directory**; a separate `--user-data-dir` is mandatory for CDP debugging (security hardening against cookie/credential exfiltration from the daily profile); Chrome team recommends Chrome for Testing for automation | developer.chrome.com "Changes to remote debugging switches to improve security", WebFetch this pass | verified — forces (and improves) §11.7.3's M-attach profile design |
+| MCP spec: current **stable revision 2025-11-25**; a 2026-07-28 release candidate is announced to ship in ten days (protocol-level statelessness for HTTP, `initialize` handshake removed at the protocol layer) — **stdio transport is materially unaffected**; §0's "2025-06-18" row has aged two revisions | modelcontextprotocol.io spec + MCP blog RC post, web this pass | verified — the owning phase pins ONE revision repo-wide together with D-c's `agent-mcp` at its own PR time; this blueprint does not pre-pin |
+
+#### 11.7.1 Supersession map — exactly what changes, what does not
+
+| §11.2 element | Disposition | Reason |
+|---|---|---|
+| Findings 1–2 (no Rust MCP surface; Browserbase cloud custody fails U1) | **STAND** | They are the problem statement this design answers natively |
+| Finding 3 (tokio vs sync discipline → "out-of-process sidecar only") | **RESOLVED BY CONSTRUCTION** | The engine IS a separate OS process (§11.7.3); tokio never enters in-process code — proven by cargo-tree red-proof, not by promise |
+| "Adoption DEFERRED", trigger **T-B1** (watch stagehand-rust) | **RETIRED** | We no longer wait on a third party's roadmap; the operator directive replaces watching with building |
+| Trigger **T-B2** (operator DECART for the async-runtime boundary) | **SATISFIED BY §11.7.2 + §11.7.3** | The DECART below is that comparison; the sidecar shape is the boundary; operator merge of the owning phase's PR is the sign-off `rust-native-bare-metal-decision-2026-07-14` requires |
+| Trigger **T-B3** (≥3 real onboarding imports where v0 failed) | **RETAINED, re-scoped to scheduling** | v1 is now designed and buildable, but it is still BUILT when demand evidence arrives — the capability follows recorded need, not novelty (unchanged doctrine) |
+| Rejected alternative "writing our own CDP engine — a product in itself" | **STANDS, and is not what this is** | §11.7.3 adopts a community-maintained CDP client whose protocol layer is generated from Chromium's own PDL; dowiz writes only the MCP server shell + fence glue. The rejection was of implementing CDP ourselves; that rejection is intact |
+| v0 (capped native GET + `LlmBackend` structuring) | **UNCHANGED, still lands first** | v0 remains the first binding and the permanent fallback; the engine is a second binding behind the same port (§11.7.3) |
+| §11.1 uses, §11.3 types, §11.4 fence, §11.5 clause | **UNCHANGED, verbatim** | §11.7.4 |
+
+#### 11.7.2 DECART — native engine crate (falsifiable, re-runnable; three candidates on merit, one rejection on principle)
+
+Technical comparison first — `chaser-oxide` is deliberately NOT a column here; its rejection
+(below the table) is on principle and must not be laundered through a merit table.
+
+| Criterion (falsifiable) | `chromiumoxide` 0.9.1 | `fantoccini` 0.22.1 | `headless_chrome` 1.0.22 |
+|---|---|---|---|
+| Protocol + depth | CDP direct — full generated surface (~60K lines from PDL) | W3C WebDriver — high-level, browser-portable, **less deep than CDP by design** (no request-interception/coverage-class features) | CDP direct — hand-maintained subset with self-declared gaps (§11.7.0 row) |
+| **Attach to a RUNNING local browser** (U1's load-bearing property) | **YES** — "connect to an already running instance" (README) | **NO** — WebDriver creates its own session through a driver binary; no attach path exists in the protocol | **YES** — `Browser::connect(debug_ws_url)` (docs.rs, verified) |
+| Extra processes to ship + version-match | none beyond Chrome itself | `chromedriver`/`geckodriver` — a second foreign binary whose version must track the browser's | none beyond Chrome itself |
+| Runtime | tokio-only | tokio | sync, plain threads |
+| Runtime-discipline fit | in-process: violates sync discipline → **sidecar mandatory**; inside the §11.7.3 sidecar binary: no conflict | same as chromiumoxide | only crate that COULD bind in-process — but fault isolation (§11.7.3) mandates the sidecar anyway, which neutralizes this sole advantage |
+| CDP/protocol-drift absorption | **build-time codegen from Chromium's own PDL** — upstream protocol churn is absorbed by regeneration + an active maintainer, not by hand-porting | rides the W3C WebDriver **standard** (genuinely stable) — but drift re-enters via chromedriver↔Chrome version-matching ops | hand-maintained bindings; the self-declared unimplemented list IS the drift debt, visible |
+| Maintenance signals (2026-07-18) | v0.9.1 2026-02-25, ~2.90M dl, active | v0.22.1 2026-02-28, ~3.50M dl, active, longest-established maintainer | v1.0.22 2026-06-11 (freshest), ~2.67M dl, 142 open issues |
+| License | MIT OR Apache-2.0 | MIT OR Apache-2.0 | MIT |
+| MCP-server-role conflict | none — the sidecar binary's single tokio runtime drives both the stdio JSON-RPC loop and the CDP websocket handler task (chromiumoxide's required shape) | none technically, but the driver binary adds a third process to the topology | none — sync engine calls from server loop threads |
+
+**Verdict: `chromiumoxide`.** Two deciding factors, in order: **(1) U1 requires attaching to
+the owner's already-running, already-authenticated LOCAL browser — WebDriver cannot express
+that operation, which eliminates `fantoccini` for the use case this engine exists for**
+(honestly noted: fantoccini is the most battle-tested of the three and would be a defensible
+pick if only U2's launch-mode existed); **(2) of the two CDP crates, chromiumoxide's
+build-time PDL codegen is the genuinely low-maintenance path for CDP drift** — the protocol
+layer regenerates from Chromium's own definition files and an active community absorbs the
+churn, whereas `headless_chrome` hand-maintains bindings with a self-declared gap list. Since
+§11.7.3's fault-isolation argument mandates a sidecar process regardless of crate,
+`headless_chrome`'s sync API — its one structural advantage under this repo's discipline —
+buys nothing here. **Falsifier (re-run trigger):** if chromiumoxide breaks
+connect-to-running, or goes >12 months without a release across a Chromium CDP break, this
+table is re-run; named fallback = `headless_chrome` (attach verified), full retreat = v0
+(which never left).
+
+**`chaser-oxide` — REJECTED on principle, separated from merit.** As a chromiumoxide fork it
+would nominally match or exceed the winner on every technical row above; it is rejected
+BEFORE technical evaluation because its stated purpose is the category this project declined
+(§11.0 last row): its own tagline is "Undetectable… Protocol-level stealth for Chromium," it
+ships fingerprint-spoofing profiles and a "Human Interaction Engine" that mimics human mouse
+physics and typing, and its sibling project is a self-described Cloudflare-bypass library
+tested against Turnstile and CreepJS. That is browser automation engineered to defeat
+platform anti-bot systems — §11.4 leg 4's exact target. It is named here, with this
+reasoning, precisely so a future reader who independently discovers it does not adopt it
+without knowing why it was excluded. Mechanical echo: its marketing vocabulary
+(undetectable/stealth/fingerprint) is leg 4's grep list — importing it would turn the fence
+RED by name alone. Not adoptable under ANY framing, including "it is technically more
+capable"; capability is not the axis it fails on.
+
+#### 11.7.3 The design — `dowiz-browser-mcp`, a first-party LOCAL MCP-server sidecar
+
+```
+agent loop (sync) ── ToolPort ──► browser-adapters lib (sync; fence leg 1 pre-check;
+                                   MCP CLIENT over child stdio pipes — reuses
+                                   JsonRpcTransport + a real stdio RpcChannel binding)
+                                        │  spawn + JSON-RPC 2.0 / stdio
+                              ═══ process boundary (the runtime firewall) ═══
+                                        ▼
+                          dowiz-browser-mcp bin (tokio + chromiumoxide;
+                          MCP SERVER: initialize / tools/list / tools/call;
+                          in-engine denylist re-check on every hop)
+                                        │  CDP over LOOPBACK websocket only
+                                        ▼
+                          local Chrome/Chromium (M-launch or M-attach)
+```
+
+- **Crate layout (leg 3 holds without editing the gate):** the `browser-adapters/` directory
+  owns TWO crates — `browser-adapters` (lib: sync, in-process, implements the `ToolPort`
+  binding, speaks MCP as a client to the child) and `browser-adapters/mcp-server` (bin crate
+  `dowiz-browser-mcp`: tokio + chromiumoxide, the engine). Both live under `browser-adapters/`,
+  so §11.4 leg 3's path confinement applies unchanged. **Runtime firewall, fourth instance of
+  D-e's choreography:** `cargo tree -p browser-adapters --depth 1` shows no `tokio` and no
+  `chromiumoxide` — committed red-proof. The bin imports `agent-facade` only (for §11.3's
+  types + denylist const re-exported through the one firewall door), never `dowiz-kernel`
+  directly — same proof obligation as `agent-mcp`.
+- **Being an MCP server, concretely:** JSON-RPC 2.0 over **stdio** serving `initialize`,
+  `tools/list` (one card: `browse_extract`, §11.3's SkillCard verbatim), `tools/call` —
+  exactly D-c's surface, hand-framed with `serde_json` like `agent-mcp` (anti-scope 3/8
+  honored: no transport invention, no SDK adoption without DECART; the official `rmcp` SDK is
+  the named re-examine option if the MCP surface ever grows past these three methods). Spec
+  revision: pinned at the owning phase's PR to the SAME revision `agent-mcp` lands — one
+  revision repo-wide (2025-11-25 stable today; the 2026-07-28 RC's stateless-HTTP changes do
+  not materially touch stdio — §11.7.0 row). No chromiumoxide/server-role conflict: one tokio
+  runtime in the bin drives the stdio read loop and the CDP handler task.
+- **Contract reuse, not redefinition:** the tool served is §11.3's `browse_extract` with
+  `BrowseIntent` / `BrowseRequest` / `BrowseRefusal` / `BROWSER_DOMAIN_DENYLIST` /
+  `MAX_BROWSE_*` / `BROWSE_USER_AGENT` **verbatim** — this section adds zero fields, zero
+  variants, zero constants to that contract.
+- **Two engine modes, both LOCAL (the property Browserbase structurally could not offer —
+  custody solved, not worked around):**
+  - **M-launch** (U2 + JS-only public pages): the bin launches a managed headless Chromium
+    (Chrome for Testing per the Chrome team's automation guidance) with a throwaway
+    dowiz-owned `--user-data-dir`. No owner cookies exist in this mode at all.
+  - **M-attach** (U1 authenticated): the owner starts a browser on THEIR machine with
+    `--remote-debugging-port` bound to loopback and a **dedicated owner-import profile**
+    (`--user-data-dir`), logs into their legacy system there once, and the tool attaches to
+    the loopback CDP URL. Chrome ≥136 refuses CDP on the default profile (§11.7.0 row), so
+    the dedicated profile is forced — and it is BETTER custody than the naive wish: the
+    engine can only ever see the import profile, never the owner's daily browsing profile.
+    The debug endpoint is treated as a credential: attach parse-validates **loopback-only**
+    (non-loopback ws host ⇒ typed `BadUrl`, fail-closed, the same move as `BrowseUrl`), is
+    never persisted, and dies with the session. Browser, profile, and CDP socket all live on
+    hardware the owner or dowiz controls; no third party ever holds the session.
+- **Extraction stays LLM-shaped, not selector-shaped (the maintenance-cost design decision):**
+  the engine's job ends at "rendered DOM text (+ optional screenshot) of the owner-named
+  page"; structuring into menu/catalog rows stays with `LlmBackend`, exactly as v0. There is
+  deliberately no per-site selector library to rot.
+- **Fault isolation (why sidecar even if the crate were sync):** a wedged or crashed browser
+  must never hang the agent loop. Child process with kill-on-budget/timeout; engine down ⇒
+  typed refusal in P41 §3.5's degradation family, never a hang.
+- **v0 relationship:** v0's capped-GET binding remains first and is the permanent fallback;
+  the engine is the SECOND binding behind the same port, selected only when v0 cannot serve
+  (JS-only rendering, or M-attach need). T-B3's demand evidence schedules the build.
+
+#### 11.7.4 Fence carry-over — unchanged, stated explicitly
+
+Solving cloud custody and the missing MCP surface is a capability upgrade; **the anti-scope
+boundary is identical before and after this section.** Mechanically:
+
+- **Leg 1 (denylist), now enforced twice:** `browser-adapters` (lib) checks the request URL
+  before the child ever spawns/receives it (§11.4's "before the engine sees the URL",
+  unchanged), AND `dowiz-browser-mcp` re-checks **every navigation and redirect hop** inside
+  the engine via CDP request interception on document requests — hops happen inside the
+  browser, so hop-2 `fb.watch → facebook.com` now dies where it occurs. Same compiled-in
+  `BROWSER_DOMAIN_DENYLIST`, same label-aligned matcher, same typed `DeniedDomain` abort.
+- **Leg 2 (read-only verbs):** `ToolAction` still has exactly `{ Read }`. chromiumoxide
+  exposes click/type/submit APIs — none is wired to any tool verb; a write on a third-party
+  page remains unrepresentable in the grant vocabulary, and any future proposal for one is
+  already pre-committed to §11.5's `PendingReview` pattern. The leg-2 CI grep is unchanged.
+- **Leg 3 (no autonomy/repetition):** single owner-initiated invocation, `page_budget`
+  clamped, no queue/cron reachable; the path-confinement grep holds verbatim because both new
+  crates live under `browser-adapters/`.
+- **Leg 4 (no human-mimicry):** M-launch pins `BROWSE_USER_AGENT`
+  (`honest_user_agent_pinned`, unchanged). M-attach drives the owner's genuine browser at the
+  owner's direction — the session's identity is truthfully the owner's own browser, and
+  ALTERING it would be the misrepresentation; no stealth, humanization, or fingerprint code
+  path exists in either mode, and leg 4's vocabulary grep covers both new crates' lanes
+  (`browser-adapters/**` already matches them).
+- **New named tests (additive, none replacing §11.4's):**
+  `denied_domain_hop_aborts_inside_engine` (fixture redirect chain into a denied domain; CDP
+  interception log proves zero frames committed past the hop),
+  `attach_rejects_non_loopback_ws_url`, `no_tokio_in_browser_adapters_lib` (cargo-tree
+  red-proof, committed), `engine_down_is_typed_refusal_not_hang`,
+  `page_budget_kills_child_process`.
+
+#### 11.7.5 What this actually commits to (maintenance honesty)
+
+Adopting a native engine is real, ongoing work — named plainly, not priced as free:
+
+1. **The Chromium release train** ships roughly every four weeks and CDP is explicitly not a
+   frozen API. Mitigation is genuine but partial: chromiumoxide regenerates its protocol
+   layer from Chromium's own PDL and an active maintainer absorbs the churn — dowiz's
+   residual cost is riding crate updates on Chromium majors: low, but perpetual. This
+   codegen-plus-community property is THE deciding maintenance factor of §11.7.2; the other
+   two candidates each carry a heavier residual (hand-ported bindings; driver
+   version-matching).
+2. **A real browser in production is an ops surface:** memory ceilings, zombie processes,
+   sandbox flags, headless-mode behavior changes. The sidecar + kill-on-budget bounds the
+   blast radius; it does not erase the surface.
+3. **Extraction robustness** is largely dodged by design (LLM structures visible text; no
+   selector library), residual: pages that fight rendering.
+4. **M-attach's owner workflow** (dedicated profile + debug flag on loopback) is real
+   onboarding friction that owner-facing docs must own when the owning phase lands.
+5. **Exit ramps are pre-named:** §11.7.2's falsifier (fallback `headless_chrome`, retreat
+   v0). And the honest end-state from §11.2 survives in modified form: if T-B3's demand
+   evidence never arrives, **v0 forever remains a legitimate outcome** — this section makes
+   the engine buildable-by-design, not mandatory-by-momentum.
+
+#### 11.7.6 Build items + DoD deltas (owning phase's PR, never P42's — §11.6 discipline unchanged)
+
+| Item | Content | DoD (falsifiable, RED→GREEN) |
+|---|---|---|
+| BR-1 | §11.3 types + card land via §3.1's growth rule (unchanged from §11.6) | existing §11.4 named tests green |
+| BR-2 | Fence-first: §11.4 legs + `browser-fence` CI in the SAME PR as the first browse line (sequencing rule unchanged) | each leg REDs independently when its guard is violated |
+| BR-3 | v0 binding: capped native GET + `LlmBackend` structuring (§11.2, unchanged) | one real menu page → typed rows, offline test with canned bytes |
+| BR-4 | `browser-adapters` lib: `ToolPort` binding, leg-1 pre-check, sync MCP client over child stdio (reuses `JsonRpcTransport` + a stdio `RpcChannel`) | `no_tokio_in_browser_adapters_lib` cargo-tree red-proof committed; `denied_domain_refused_before_engine_runs` (spy: zero child spawns) |
+| BR-5 | `dowiz-browser-mcp` bin: stdio MCP server (initialize/tools/list/tools/call, revision pinned with `agent-mcp`), chromiumoxide engine, M-launch + M-attach, loopback-only attach validation, in-engine hop re-check | `attach_rejects_non_loopback_ws_url`; `denied_domain_hop_aborts_inside_engine`; `tools/list` serves exactly one card |
+| BR-6 | e2e: JS-rendered fixture menu extracted via M-launch; engine-kill path | `page_budget_kills_child_process`; `engine_down_is_typed_refusal_not_hang` |
+
+Regression-ledger row (extends §11.6's fixed text, which stays valid): "…guardrails:
+`browser-fence` CI job + `denied_domain_refused_before_engine_runs` +
+`denied_domain_hop_aborts_inside_engine` + `no_tokio_in_browser_adapters_lib`."
+
+Links added by this section: `mattsse/chromiumoxide` README + crates.io ·
+`jonhoo/fantoccini` README + crates.io · `rust-headless-chrome` README + docs.rs `Browser`
+page + crates.io · `ccheshirecat/chaser-oxide` + `chaser-cf` taglines (rejection evidence) ·
+developer.chrome.com "Changes to remote debugging switches to improve security" (Chrome ≥136
+rule) · modelcontextprotocol.io spec 2025-11-25 + MCP blog 2026-07-28 RC post ·
+`kernel/src/ports/llm.rs` + `agent-adapters/src/transport.rs` (live sync-discipline cites).
+Re-verify rule inherited: every web row in §11.7.0 goes stale like any other; the owning
+phase's PR re-fetches before build.

@@ -393,6 +393,35 @@ Audit-and-gate only: no compliance framework, no policy generators, no legal-dep
 no implementation work smuggled in under "while we're here." No self-certified compliance
 claims, ever — the standing anti-self-certification rule binds hardest exactly here.
 
+### 5.6 Operator position on liability — RECORDED 2026-07-18, narrows §5.1-5.4 scope
+**Operator's stated business/legal position (verbatim intent):** "легальна перевірка і тд —
+не моя проблема, а відповідальність користувачів за згодою на користування сервісом,
+протокол узагалі просто протокол" — legal compliance is not dowiz's obligation; it is the
+*user's* responsibility, accepted via consent to the service's terms; the protocol itself is
+neutral infrastructure (the same posture ARCHITECTURE.md M1-M12 already takes technically —
+dowiz is a service riding a protocol it doesn't centrally control; this extends that posture
+to the legal layer).
+
+**What this changes, concretely:** §5.2's audit scope narrows from "does dowiz itself
+implement GDPR-class compliance mechanisms" to "does dowiz's own Terms of Service clearly and
+sufficiently disclaim liability to the end user, consistent with this stance" — a materially
+smaller build surface (a ToS document + consent capture at signup/first-order, not a
+data-subject-rights implementation program). §5.3's first-order gate is unaffected (it still
+requires *a* ToS/consent step to exist — "did we get consent," not "did we build a compliance
+department").
+
+**What this does NOT change, per §5.5's own standing rule, not weakened by this ruling:**
+whether a ToS-based liability disclaimer actually *holds up* under a given jurisdiction's law
+(GDPR processor/controller obligations do not universally vanish via a ToS clause; food-safety
+and tax-collection duties in particular are often non-disclaimable by contract in many
+jurisdictions) is itself a legal question, not a technical one — this document still reaches
+no legal conclusion on that question and still routes it ⚠ OPERATOR/COUNSEL (§5.2 item 4,
+unchanged). Recording the operator's *chosen posture* is not the same as certifying the
+posture is legally sufficient; that gap is named here explicitly so it isn't lost.
+DoD addendum: **B4** — a ToS/consent-capture artifact exists and is shown at signup/first-order
+(§3 build item, narrower than a compliance program); the audit's classification contract (§5.2
+item 3) is otherwise unchanged.
+
 ---
 
 ## 6. Cross-phase dependency map

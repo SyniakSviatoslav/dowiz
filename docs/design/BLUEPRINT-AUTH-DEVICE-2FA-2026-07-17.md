@@ -250,6 +250,113 @@ without re-deriving this size constraint.
 - Password + 2FA as the primary shape — with capability certs, the *device* is the first factor
   and TOTP the enrollment/step-up factor; no password table, nothing to breach or reset.
 
+### 5.5 Hub OAuth login — "Better Auth" reconciled as a zero-custody external-IdP connector (2026-07-18 operator directive; append-preserving, §3/§5.4 NOT reversed)
+
+**Directive (verbatim):** "добав змогу логінитись через хаб через betterauth також — збереження і
+захист персональних ключів і тд на моїй стороні не буде — лише самостійно через ручні сервіси чи
+мануально. Тобто проблему витоку даних я обираю вирішувати відмовою від збору персональних даних
+та не зберігання особистої конфіденційної інформації для авторизації настільки наскільки можливо."
+Additive ("також"), and paired with an explicit **zero-custody** constraint: dowiz must not store
+or protect personal keys/credentials; the leak problem is solved by *not collecting*.
+
+**The reconciliation — two different things share the name "Better Auth":**
+- **(a) Better-Auth-as-credential-database** — its password/session/account tables, its CLI
+  migrator, its Node runtime as the system of record. This is what §3 and §5.4 rejected, and the
+  directive's own zero-custody clause *independently* forbids it: a password table is exactly the
+  custody being refused. §3/§5.4 stand unedited and remain correct for what they rejected.
+- **(b) Better-Auth-as-OAuth-connector** — the credential (password/passkey) lives entirely at an
+  **external IdP** (Google, GitHub, …); dowiz only runs the OAuth dance and records "provider X
+  verified this identity at time T." This is what the directive actually maps to, and it
+  *composes with* §5.2's capability-cert model instead of replacing it.
+
+**Live-verified findings (better-auth.com docs + web, 2026-07-18):**
+1. **Honest correction to the expected blocker:** Better Auth today CAN run without a database —
+   "Better Auth also works without any database"; omitting the DB config auto-enables stateless
+   mode, and post-OAuth account data can live in an encrypted cookie (`storeAccountCookie`), with
+   named limits (revocation lag under cookie cache; large provider JWTs exceed cookie size). So
+   "its architecture hard-requires a DB even for OAuth-only" is **false in 2026** — the zero-custody
+   shape is not architecturally incompatible with Better Auth itself.
+2. **But §3's decisive objection was never the DB — it was the runtime, and that stands.** Even
+   stateless Better Auth is a Node/TS server library, and there is no Node surface left to host it
+   (§1.1/§1.2). What use-case (b) actually needs is the standard **OAuth2 authorization-code +
+   PKCE client flow**: build redirect URL, verify `state`, exchange the code server-side, fetch
+   identity, done. The repo has already designed native OAuth-as-client in exactly the right lane:
+   P48 §3.3's `GbpReviewIngest` ("OAuth as the owner", hub-adapters lane, `ureq`). **VERDICT:
+   native Rust OAuth2/OIDC client in the hub-adapters lane; "Better Auth" is read as the
+   operator's shorthand for "OAuth social login", honored in intent, not in runtime** — the same
+   reasoning class that took Ghost-Downloader and Browser Use to native equivalents (2026-07-18)
+   and Proton's Go bridge to sidecar-only (P43 §11.2). The `oauth2`/`openidconnect` crates are
+   named as the bounded-adapter fallback if provider edge cases outgrow the hand flow — that swap
+   gets its own DECART then, same shape as §5.3's option (ii).
+3. **No new signature crypto needed.** The login-only flow can take identity from the provider's
+   `userinfo` endpoint over the same TLS channel as the token exchange, or rely on OIDC Core 1.0
+   §3.1.3.7's direct-communication allowance (ID token received straight from the token endpoint
+   → TLS server validation may stand in for signature checking) — either way, no RS256/JWKS
+   implementation is required. *(Spec-stable knowledge, clause cited, not re-fetched live —
+   same marking convention as §8 item 1.)*
+
+**Zero-custody persistence contract (the concrete part — what is and is not stored):**
+- **Never persisted:** passwords (none exist anywhere in this design); **OAuth refresh tokens —
+  never even requested** (no `access_type=offline` / `offline_access` scope; a login flow needs
+  none — any future need is its own dated exception with reasoning, not a default); access tokens
+  and ID tokens (in memory only for the seconds between code exchange and identity extraction,
+  then dropped); email/name/avatar claims (not stored — if the operator wants a human label on a
+  binding, they type one manually, per the directive's "мануально").
+- **Transient (server-side, minutes, expiring):** the in-flight `state` + PKCE verifier pair.
+- **Persisted (event log, the ONLY durable record):** one binding
+  `{provider_id, subject_ref = H(issuer ‖ sub), grant_ref, minted_at, expiry}` — the fact
+  "provider X verified subject Y at time T," nothing else. Honest GDPR note: even a hashed
+  pairwise subject is an online identifier, so the claim is **minimal-custody, not
+  zero-personal-data** — which is exactly the directive's own bound ("настільки наскільки можливо").
+- **Composition with §5.2 (adds a proof source, replaces nothing):** a fresh OAuth assertion from
+  a bound identity is a **second personhood proof feeding the same cert-minting path TOTP feeds**
+  — usable at new-device enrollment and as a bootstrap/recovery login on a cert-less device. Once
+  enrolled, the device cert remains the first factor; red-line operations (money/GDPR/revocation)
+  still require device-cert + TOTP step-up — an external provider compromise must never clear a
+  red-line on its own.
+
+**Optionality — binding constraint (operator clarification, same day, verbatim):** "якщо людина не
+бажає використовувати сторонні сервіси для автентифікації - sso logins & device mesh login - без
+жодної вимоги у номерах телефонів чи пошти - це все опціонально і ніколи не обов'язково."
+Stated as a cross-check, not an implication: **SSO's addition does not narrow the zero-identifier
+device-cert path; both remain first-class, user-chosen, mutually optional.** Concretely:
+- The OAuth/SSO path above is ONE option among several — never the only path, and never a hidden
+  dependency of the device-cert path (no flow below may assume a bound SSO identity exists).
+- §5.2's capability-cert path is and must remain **fully self-sufficient with ZERO phone number,
+  ZERO email, ZERO third-party provider**: enrollment proof = TOTP (an offline shared secret —
+  §5.4 already rejected SMS/email OTP precisely because it drags in a contact channel), recovery =
+  §6-item-2's offline one-time backup codes (hashed at rest, no delivery channel), lost-device =
+  §5.2's `RevocationSet` entry + re-enrollment — none of these touches an email, a phone, or a
+  provider. Audit of this section's own additions: no piece of the OAuth design above is load-
+  bearing for enrollment, recovery, or revocation — it only ever *adds* a proof source. If any
+  future build item makes SSO (or an email/phone) a soft requirement anywhere in the auth surface,
+  that is a violation of this constraint, review-rejectable by name.
+- The falsifiable form: every §7/§5.5 done-check for enrollment→use→recovery→revocation must pass
+  on a fixture with no email, no phone, and no SSO binding configured.
+
+**Providers (config-time candidates, deliberately not finalized):** Google and GitHub (standard
+OIDC/OAuth2). **Proton-direct: verified NOT available** — Proton offers no public "Sign in with
+Proton" IdP (its business SSO is Proton-as-*service-provider* consuming external IdPs; an IdP
+offering exists only as open community requests), so P43 §11.3 anti-scope 13 ("NOT 'log in with
+Proton'") survives intact without needing this directive to be read against it. The
+Proton-*adjacent* path that DOES exist: **SimpleLogin (Proton-owned) is a real OAuth2/OIDC
+provider** ("Sign in with SimpleLogin"; live `oauth2/{authorize,token,userinfo}` endpoints) and a
+Proton account signs into SimpleLogin — recorded as a config-time candidate, no P43 change implied.
+
+**Scope:** **owner hub (P48) only for now** — the directive says "через хаб". Customer side: noted
+as a potential *fourth candidate row* for P49 §4.2's deferred identity table ("sign in with
+Google" = zero enrollment burden and zero custody, but adds a provider dependency plus a durable
+cross-order identifier — the exact linkability P49's option 2 avoids). Flagged for P49's
+5–50-real-clients re-decision; **not resolved here** (P49's scope, per its own operator ruling).
+Anti-scope carried: this is a login/session-verification mechanism only — no account/profile
+system, no stored contact channels, no identity platform.
+
+**Falsifiable checks when this builds (extends §7's shape):** RED first — callback with a wrong or
+replayed `state` rejected; PKCE verifier mismatch rejected; grep-gate proves no `refresh_token`
+string is ever persisted and no email claim reaches the event log. GREEN — a full dance against
+one real provider mints a grant whose frames verify via `HybridGate::check`; revoking the binding
+revokes access with no password-reset analogue anywhere.
+
 ## §6 — What is borrowed from Better Auth (design only, no code)
 
 1. ±1-period TOTP acceptance window (clock skew) — §1.6.
@@ -312,3 +419,6 @@ answered by *scheduling P3*, not by re-litigating the primitive.
   memory `rust-native-bare-metal-decision-2026-07-14.md`, AGENTS.md §Integration-Decart-Rule +
   §Detailed-Planning-Protocol
 - Better Auth references (design inspiration only): better-auth.com/docs/plugins/{2fa,passkey,device-authorization}
+- §5.5 references (2026-07-18): better-auth.com/docs/concepts/{database,session-management}
+  (stateless mode) · simplelogin.io/developer (OAuth2/OIDC endpoints) · P48 §3.3 `GbpReviewIngest`
+  (native OAuth-as-client precedent) · P43 §11.3 anti-scope 13 · P49 §4.2 (customer-identity flag)
