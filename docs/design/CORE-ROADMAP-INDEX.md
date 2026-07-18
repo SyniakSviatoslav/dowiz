@@ -2,7 +2,7 @@
 
 > **This is the WHERE. The WHAT/WHEN is
 > [`MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md`](MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md)
-> (canonical roadmap, execution phases P01–P30, §9 there points back here).** Every planning
+> (canonical roadmap, execution phases P01–P46, §9/§10 there point back here).** Every planning
 > document in the corpus is reachable from this file in ≤2 hops; a plan not listed here does not
 > exist for navigation purposes (add a row when adding a doc). Built by the Layer-I consolidation
 > pass ([`CORE-ROADMAP-2026-07-17/BLUEPRINT-P-I-consolidation.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P-I-consolidation.md));
@@ -12,11 +12,30 @@
 > **Numbering, once and canonically:** `P01–P30` is the sole execution numbering (P01–P19 =
 > numbered blueprint files in `sovereign-roadmap-2026-07-16/`; **P20–P30 exist only as standalone
 > blueprint files indexed from SOVEREIGN §8.1–§8.12** — auditing "the P0x files" alone misses a
-> third of the roadmap). `Layer A..I` is an orthogonal **altitude axis** over clusters of those
+> third of the roadmap). **2026-07-18 addendum:** SOVEREIGN §10 extends the execution numbering
+> with `P31–P46` (ecosystem-component consolidation phases; §10.2 there is the phase index) —
+> `P01–P30` semantics unchanged. `Layer A..I` is an orthogonal **altitude axis** over clusters of those
 > phases — formerly spelled "P-A..P-I", renamed to kill the P-D/P04 lexical collision (ruling:
 > P-I audit §4). On-disk `BLUEPRINT-P-X-*.md` filenames keep their provenance names.
 
 ---
+
+## 0. The Ecosystem-Component axis (2026-07-18)
+
+Co-equal in importance to the Layer A–I altitude axis (§1) and the P01–P46 numeric axis — a
+THIRD lens for navigation, not a replacement for either. Ask "which ecosystem part" first (this
+table), then "which phase" (§2 below or MASTER-ROADMAP §10.2), then "which file" (per-phase
+Blueprint links) — three lenses, same underlying phases. Full component sections with per-phase
+DoD/anti-scope: [SOVEREIGN §10.5](MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md). Row
+order IS the critical path.
+
+| Component | Mission | Phases | One-line status (live-verified 2026-07-18) |
+|---|---|---|---|
+| **CORE** | decide/fold Law, event-log, money, capability primitives, spectral math, self-tuning control loops | P31–P33 | ~90% done, not the bottleneck; dominant failure mode is built-but-unwired code |
+| **PROTOCOL** | mesh, capability issuance, crypto, transport, delivery-domain (bebop2) | P34–P36 | ~70% built and PROVEN but 100% stranded from dowiz's own kernel — the single biggest lever in the whole roadmap (P34 = #1 next action) |
+| **DELIVERY** | the dowiz product surface: UI, order/courier/payment flow, auth, demo/marketing, app-shell | P37–P39 | ~0% deployable (no HTTP server, no rendered UI, no live deployment) but math/domain logic mostly done in CORE+PROTOCOL — wiring-heavy, not from-scratch |
+| **AGENT** | local/network AI, tool-use loop, MCP; three operating modes (no-AI / local-offline / connected) | P40–P42 | substrate (LlmBackend/Ollama) shipped; executor loop connecting it to anything is 0% — a chat backend today, not an agent |
+| **ECOSYSTEM/OPS** | external integrations, deployment, monitoring, multi-product platform | P43–P46 | explicitly and deliberately LAST — near-zero built, correctly so, since nothing exists yet to integrate/deploy/monitor |
 
 ## 1. Crosswalk — Layer A..I ↔ P01–P30 (the anti-double-numbering artifact)
 
@@ -99,7 +118,7 @@ Not duplicated here — that INDEX is authoritative for its own directory.
 | Agentic mesh protocol (B1–B4) | [agentic-mesh-protocol-2026-07-17/AGENTIC-MESH-PROTOCOL-CONSOLIDATED.md](agentic-mesh-protocol-2026-07-17/AGENTIC-MESH-PROTOCOL-CONSOLIDATED.md) | Authored in worktree `/root/dowiz-agentic-mesh`, merged in (`cabc01f6a`); Wave 0 landed `f30189262`; canon-diffs CD-1..8 operator-merge pending |
 | Spectral energy-flow evolution (E1–E3) | [spectral-energy-flow-evolution-2026-07-16/SPECTRAL-EVOLUTION-CONSOLIDATED.md](spectral-energy-flow-evolution-2026-07-16/SPECTRAL-EVOLUTION-CONSOLIDATED.md) | Authored in worktree `/root/dowiz-spectral-evolution`, merged in (`230cc6998`); E1+E2 landed `6bd181a02`; E3-Phase-B gated on P06 `key_V` |
 | Living Interface (feeds Layer G / P16) | [living-interface-2026-07-16/LIVING-INTERFACE-ROADMAP.md](living-interface-2026-07-16/LIVING-INTERFACE-ROADMAP.md) | In-repo and easy to overlook — listed here so no reader needs prior knowledge of the directory |
-| Native pgrust tenant-schema rebuild (red-line, RLS) | [BLUEPRINT-P-NATIVE-PGRUST-TENANT-REBUILD.md](../BLUEPRINT-P-NATIVE-PGRUST-TENANT-REBUILD.md) | Added 2026-07-18 (`f9b2eb9bb`), not yet /council-reviewed. **Deliberately NOT a Layer A-I item** — RLS/migrations/auth are explicitly out of kernel-autopilot scope (per P30's own note, MASTER-ROADMAP §8.12). Proposal-only, 0 code; the reactivation gate for `attic/` tenant-table revival once a server tier exists. Own DoD/anti-scope already in the doc's §0/§4 — no separate blueprint needed |
+| Native pgrust tenant-schema rebuild (red-line, RLS) | [BLUEPRINT-P-NATIVE-PGRUST-TENANT-REBUILD.md](BLUEPRINT-P-NATIVE-PGRUST-TENANT-REBUILD.md) | Added 2026-07-18 (`f9b2eb9bb`), not yet /council-reviewed. **Deliberately NOT a Layer A-I item** — RLS/migrations/auth are explicitly out of kernel-autopilot scope (per P30's own note, MASTER-ROADMAP §8.12). Proposal-only, 0 code; the reactivation gate for `attic/` tenant-table revival once a server tier exists. Own DoD/anti-scope already in the doc's §0/§4 — no separate blueprint needed |
 
 ## 8. Superseded master roadmaps (historical / audit-trail ONLY — never plan against these)
 
@@ -114,6 +133,26 @@ canonical; the other **five carry SUPERSEDED banners** as of 2026-07-17:
 | [MASTER-EXECUTION-PLAN-2026-07-13.md](MASTER-EXECUTION-PLAN-2026-07-13.md) | Historical — bannered; ancestor of the Layer A–I altitude spine; its 9 sub-plan dirs are indexed in MEMORY "Active arcs (earlier)" |
 | [MASTER-INTEGRATION-PLAN-2026-07-14.md](MASTER-INTEGRATION-PLAN-2026-07-14.md) | Historical — bannered; best-absorbed of the five (zero would-be-lost items) |
 | [MASTER-ROADMAP-10-PHASES-2026-07-14.md](MASTER-ROADMAP-10-PHASES-2026-07-14.md) | Historical — bannered; sourced L6 (the cross-track pointer) |
+
+## 9. Previously-orphaned arcs — now absorbed into SOVEREIGN §10 (2026-07-18)
+
+The 2026-07-18 audit's biggest finding: the ten arcs below had **ZERO reference in this index**
+before today. Each is now owned by a P31–P46 phase (SOVEREIGN §10.2 = fast phase index;
+§10.5.1–5 = full per-phase DoD/anti-scope). MEMORY-only arcs are cited by filename, not linked
+(they live outside the repo, in the agent memory corpus).
+
+| Arc dir/doc | Absorbed into | One-line note |
+|---|---|---|
+| [field-ui-engine/](field-ui-engine/) + [field-ui-engine.md](field-ui-engine.md) | P38a | FE-01..17; math substrate DONE (compose/zerocopy/widget_store/loop_/motion/money_guard), GPU path 0% — gated on the O18a `graphics-unlock` (`cargo add wgpu`) |
+| [dowiz-interfaces/](dowiz-interfaces/) | P38b | DZ-01..12 Sea & Sheet surfaces; DZ-10 voice deliberately Phase-9b-deferred, not lost |
+| [rust-engine-rewrite/](rust-engine-rewrite/) | P37 + P38a | RW-01..12; RW-02/03/06/07/08 DONE substrate; RW-09 thin-shell rule → P37; RW-01/04/05/10/11 → P38a |
+| integration-ports arc (MEMORY `integration-ports-reactive-arc-2026-07-13.md`) | P42 + P43 (+ existing P22) | IP-08→P42, IP-11/12/13/14/19/20→P43, IP-10/15/16→P22 (not renumbered); IP-01..07/09/17/18/21 flagged unassigned — SOVEREIGN §10.0 |
+| ecosystem-strategy arc (MEMORY `ecosystem-strategy-arc-2026-07-13.md`) | P44 + P46 | EC-05 + scale-out units → P44 (LOW PRIORITY); EC-17 + remainder → P46 (FURTHEST FUTURE); shared-KernelFacade concept already built in PROTOCOL |
+| ops-reliability arc (MEMORY `ops-reliability-arc-2026-07-13.md`) | P45 | OPS-01..22; attic-revival path dead twice over — formally superseded by the native pgrust rebuild (§7 row above) |
+| [mesh-real/](mesh-real/) | P34 + P34B | MESH-01..13 (~70% built + PROVEN, 100% stranded pre-P34 — the roadmap's #1 lever); MESH-14 unaccounted, flagged SOVEREIGN §10.0 |
+| [docker-swap/](docker-swap/) | P35 | DK-01..10; DK-01/02/03/07 DONE with real `wasip2` component + deny-by-default WASI host — previously zero index reference despite working code |
+| [math-first-architecture-blueprint.md](math-first-architecture-blueprint.md) | P31 | S0/S1/S2/S4 DONE; S3→P31c, S5→P31d, S6(=B3, counted once)→P31e, S7 parked→PROTOCOL |
+| [hydraulic-loop-v2/](hydraulic-loop-v2/) | P32 + P33 | BP-01..23; resonator/DMD wiring gaps → P32b/P32c; BP-03/04/11/12–21/23 unconfirmed-status audit → P33b |
 
 ---
 
