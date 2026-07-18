@@ -1046,13 +1046,14 @@ mod tests {
     fn fsm_graph_report_js_shape() {
         let json = fsm_graph_report_logic().expect("report ok");
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(v["vertices"], 10);
+        // Post-P07 lifecycle: 12 vertices (Refunding, CompensatedRefund added),
+        // 14 edges, 2 undirected components (Scheduled orphan) ⇒
+        // μ = 14 − 12 + 2 = 4 (undirected cycle rank), directed ρ = 0, acyclic.
+        // Mirrors FSM_GOLDEN_SIGNATURE in order_machine.rs.
+        assert_eq!(v["vertices"], 12);
         assert_eq!(v["is_acyclic"], true);
-        // Established structural facts (see order_machine green_cyclomatic_*
-        // tests): 9 edges, 10 vertices, 2 undirected components (Scheduled is an
-        // orphan) ⇒ μ = 9 − 10 + 2 = 1 (one undirected cycle), directed ρ = 0.
-        assert_eq!(v["cyclomatic"], 1);
-        assert_eq!(v["topological_len"], 10);
+        assert_eq!(v["cyclomatic"], 4);
+        assert_eq!(v["topological_len"], 12);
         // reachable_from_pending is a bitmask; Pending (bit 0) always set.
         assert_eq!(v["reachable_from_pending"].as_u64().unwrap() & 1, 1);
     }
