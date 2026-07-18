@@ -125,6 +125,79 @@ mobile-native win, a *thin* PWA manifest+SW costs little extra and keeps the F12
 browser-tab path alive for a device Tauri's mobile build doesn't yet cover — build both,
 Tauri primary/PWA secondary, not "two full shells").
 
+### 1.2 Shell refinement (2026-07-18, SECOND operator ruling — payment-path §4-A — refines §1.1's Tauri-Wave-0 block on the desktop-webview point ONLY)
+
+> Append-only correction per repo convention. §1.1's RESOLVED block (Tauri native wrapper =
+> Wave-0) STANDS as written for mobile and as the packaging/installer mechanism. Nothing above
+> is deleted. What this block refines is the **desktop webview-hosting-the-UI assumption** that
+> §1.1's "honest residual risk" paragraph carried (lines ~116–126: "Tauri's webview on
+> Android/iOS actually hosts `wgpu`'s WebGPU backend"). A second, later operator ruling on the
+> **same day** — the payment-surface decision — made the *desktop half* of that assumption
+> obsolete. Recording it here rather than silently reinterpreting §1.1.
+
+**The ruling that produces this** (`SYNTHESIS-LAUNCH-BLOCKERS-2026-07-18.md` §4-A, now CLOSED):
+the operator chose **Path C — hosted redirect for card capture** on **web and desktop** (redirect
+to the payment provider's own verified domain over a signed, short-TTL, single-use session;
+the **server-side webhook is the source of truth** — NOT a client-side "success redirect"),
+**explicitly rejecting Path A** (scoped provider-iframe overlay). Per that synthesis's own
+dependency table (§2, X3): Path A was the *only* PCI-compliant card-capture surface that required
+a **live webview/DOM host on desktop** (X3 desktop row). With Path A rejected, that forcing
+function is gone.
+
+**Consequence — desktop targets `winit` + `wgpu` + AccessKit, with NO embedded webview** (X3
+desktop row verbatim: "choosing C frees desktop to be `winit`+`wgpu`+AccessKit; choosing A forces
+a webview host"):
+- The desktop card-capture step happens through the **system's own browser / an OS-level URL
+  handler** (the hosted redirect) — **not** an embedded webview. Payment was the last remaining
+  reason a desktop build would need a DOM host; it no longer does.
+- Every other desktop surface is already zero-DOM full-`wgpu` (§16.30, *ad fontes* §16.42) with a
+  **native AccessKit** accessibility tree — production-ready on winit desktop (synthesis X1:
+  "Native (winit desktop, Android): AccessKit crate directly … zero hand-rolling"). No other
+  desktop DOM requirement exists.
+- **SUPERSEDED for desktop:** §1.1's residual-risk clause — "Tauri's webview … hosts `wgpu`'s
+  WebGPU backend at acceptable frame time" — is **moot on desktop**, because the desktop UI is not
+  hosted in a webview at all. That risk survives **only** for the *mobile* webview question, which
+  P63 measures (below). Any §1.1 reading that assumed a Tauri desktop webview would host the
+  payment UI or any other DOM content is marked superseded here.
+- **Preserved (be precise):** §1.1's **Tauri-as-packaging/installer** role is NOT superseded by
+  this block. If a packager (Tauri or otherwise) is used purely to produce/sign a **desktop
+  installer around the `winit`+`wgpu` binary**, that is orthogonal to webview-hosting and is
+  untouched here. What is superseded is specifically "a Tauri **webview** hosts the desktop UI /
+  desktop payment DOM." Zero desktop DOM content — payment or otherwise — lives in an embedded
+  webview.
+
+**Mobile (Tauri) — shell unchanged, distinct card path:**
+- Tauri remains the **mobile packaging/shell mechanism**; §1.1's mobile-native rationale
+  (NFC/biometric plugins, §1.1's P52 §3.4b NFC-PoD + §5.3 biometric-custody links) stands
+  unchanged. Mobile **keeps its native Tauri webview/shell**.
+- Mobile card-capture default is **Path B — native provider SDK sheet** (zero DOM, the cleanest
+  §16.30 fit — X3 mobile row), with **Path C (hosted redirect) as the mobile fallback**.
+- Path B rests on a **named, still-unresolved engineering unknown**: the **native-SDK-over-GPU-
+  surface bridge** (the Tauri-plugin-over-`wgpu`-surface question — synthesis R2 risk #3, listed
+  as an engineering unknown in synthesis §4-E). This block does **NOT** resolve it — it is cited
+  as an open unknown, exactly as the synthesis leaves it. Until P63 reports, Path B is the
+  directional default, not a confirmed-feasible one.
+
+**This is a *directional* ruling; `BLUEPRINT-P63` supplies the *evidence*:** this decision is now a
+named **input to P63 (shell & platform spike)**. Per the synthesis build sequence (§3.2, "P63 is
+first among equals"), P63 produces the **measured verdict** — desktop `winit`+`wgpu` vs any
+alternative, **mobile raw-`wgpu`-surface vs WebGPU-in-webview**, and the native-SDK-over-GPU
+bridge feasibility — on real budget hardware (frame time, battery) that **confirms or refines**
+this ruling with benchmarks. This file records the operator's **directional** shell ruling only;
+P63 records the **evidence**. If P63's measurements contradict the directional ruling (a desktop
+`winit`+`wgpu` path unviable on a target OS, or the mobile Path-B bridge infeasible), P63's
+evidence governs and a further dated block refines this one. Cross-refs:
+`SYNTHESIS-LAUNCH-BLOCKERS-2026-07-18.md` §2 (X3 coupling table), §4-A (the CLOSED ruling), §5
+(the **P39-rev** canon-diff row and the **P63** blueprint row that name this exact intake).
+
+**Installability / PWA / service-worker consequence (see the note appended at §3.2):** the
+manifest + service worker (leg A / W39-2) are a **web-browser-path artifact only** — a service
+worker requires a browser/DOM context, which the desktop `winit`+`wgpu` shell does **not** have.
+On desktop there is no webview ⇒ no service worker, no PWA install: **desktop installability is
+the native binary/installer, not the PWA path.** The manifest+SW stay live for the browser-tab /
+web path (§1.1's demoted-to-secondary PWA shell) and for installed-PWA push on iOS-Safari web
+customers (X10) — unaffected by this desktop refinement.
+
 ---
 
 ## 2. Predefined types & constants (standard item 4 — named BEFORE implementation)
@@ -240,6 +313,14 @@ The SW: precache the shell asset list at install, serve cache-first for precache
   byte-identical and is NEVER answered from cache — asserted by a server-side nonce echo;
   (iii) *SW-absent parity*: the full web test suite passes with the SW unregistered — the SW
   is an accelerant, never a dependency (same "additive-only" proof shape as P38's `e21`).
+
+> **Note (2026-07-18, §1.2 cross-ref — no-webview-on-desktop consequence):** W39-2's manifest+SW
+> are **web-browser-path only**. Following §1.2's second operator ruling (desktop =
+> `winit`+`wgpu`+AccessKit, **no embedded webview**), the desktop shell has no DOM/browser
+> context, therefore **no service worker and no PWA install** — desktop installability is the
+> native binary/installer, not this SW. Everything in §3.2/§3.7 applies to the **browser-tab /
+> web** path (and installed-PWA push on iOS-Safari web customers, X10); it is inert-by-absence on
+> desktop, not merely inert-by-passthrough.
 
 ### 3.3 W39-3 — P23-P1 `totp.rs` (bebop-repo)
 
