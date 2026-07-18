@@ -20,6 +20,14 @@ pub mod analytics;
 /// P11 §7 — CorePinning trait seam (Trait-as-Port): pluggable CPU-core-affinity
 /// port with a zero-cost `NoOpCorePinning` default (NUMA crate DECART-deferred).
 pub mod arena;
+/// OPT-IN generational-index slot arena — per-element sibling to `arena::BumpArena`.
+/// Thin dowiz wrapper over `thunderdome::Arena`: stable `Copy` handles whose stale
+/// (removed-then-recycled) form is a safe `None` (ABA / stale-index unrepresentable).
+/// Behind `slot-arena` so the default build pulls zero extra crates. Forward-looking
+/// infra landed per operator override of the deep-dive's "no adoption yet" verdict
+/// (docs/research/OPUS-PERF-ARENA-DEEPDIVE-2026-07-18.md).
+#[cfg(feature = "slot-arena")]
+pub mod slot_arena;
 /// C-tier "attention lens": scaled dot-product attention as one learned-affinity
 /// diffusion step — same f(L) family as markov PPR / heat-kernel.
 pub mod attention;
