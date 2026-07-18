@@ -85,7 +85,7 @@ serde_yaml = { version = "0.9", optional = true }
 # default kernel stays pure-`std` / network-free. sqlx 0.8.6 is cached offline;
 # the runtime is Tokio (also gated) to drive the async pool from the
 # synchronous `MemoryStore` trait boundary.
-sqlx = { version = "0.8", features = ["postgres", "runtime-tokio-rustls"], optional = true }
+sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio-rustls"], optional = true }
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 # PQ subsystem deps — OPTIONAL, only linked under the `pq` feature.
 aes-gcm = { version = "0.10.3", features = ["std"], optional = true }
