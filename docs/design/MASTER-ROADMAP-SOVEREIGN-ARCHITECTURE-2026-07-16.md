@@ -2261,3 +2261,29 @@ Renaissance-humanist reference — returning to first-principles primitives rath
 inherited/derivative UI-library abstractions. This is the coherent philosophical throughline
 behind the whole §16.30/§16.34/§16.35/§16.39/§16.40 cluster of decisions, recorded here as a
 named principle so future sections can cite it directly instead of re-deriving the rationale.
+
+### 16.43 Ad fontes scope — UI/rendering/interaction layer only
+Operator's ruling (Recommended option, confirmed): §16.42's *ad fontes* principle applies to the
+UI/rendering/interaction layer only — crypto, protocol, storage, and networking keep using
+established, vetted crates (ML-DSA-65 and the rest of the existing kernel's dependency set are
+correct as-is; a from-scratch crypto primitive would be a genuine safety regression, not
+simplification). Prevents §16.42 from being over-read as a blanket minimal-dependency mandate
+across the whole Cargo workspace — it is not; the existing kernel architecture is unaffected.
+
+### 16.44 Friction for consequential actions — encoded as field state, not a discrete confirm dialog (RESEARCH DIRECTION)
+Operator's framing, verbatim: *"наміри та відображення інтерфейсу, його динамічна зміна у
+амплітуді хвиль, інтенсивності середовища, кольорів й самого ритму - інтерфейс слугує
+продовженням і відображенням органічно стану бекенду і ядра."* Deliberate friction for
+money-moving/destructive actions (confirm order/payment, cancel) is not a discrete modal
+dialog in this design — it is encoded directly in the field's own dynamics: wave amplitude,
+environmental intensity, color, and rhythm shift in response to an action's real stakes,
+because the interface is designed to be an organic, continuous reflection of the backend/
+kernel's actual state rather than a separate presentation layer bolted on top of it. **Recorded
+honestly as a real design principle, not yet a buildable spec**: this still needs a concrete
+answer to how a specific field-state variable maps numerically to a specific stake (money
+amount, irreversibility), what completes vs. cancels a gesture in that language, and how a
+first-time user acquires the intuition for it before any learned association exists — those
+are Tier-3-blueprint-level questions, not resolved by this dialogue pass. Directly answers the
+original 5-persona audit's Herzog-lens "friction-as-a-feature for destructive actions"
+checklist item (`AUDIT-PROMPT-TEMPLATE-2026-07-18.md`) with a concrete (if not yet fully
+specified) mechanism, rather than leaving it unaddressed.
