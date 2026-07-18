@@ -18,6 +18,11 @@
 > бенчмарки, evals, etc для перевірки та харнесу у реальному часі" — §3.7–§3.9. (3) model options
 > "ollama, mistral, mixture of agents" + "Mixture-of-Experts/Mixtral — потрібно це, якщо є змога
 > використовувати повністю локально" — §3.4, honest verdicts from live-measured numbers.
+>
+> **PART 2 appended same day (§11):** the operator's Tiered-Intelligence/SMMA proposal,
+> reconciled and live-verified. NOTE: Part 1's disk-crisis numbers (90% full) are SUPERSEDED —
+> disk was recovered to 65%/26GB free later this session (§11.6 lists exactly which verdicts
+> that moves; TRIGGER-MIXTRAL is not one of them).
 
 ---
 
@@ -696,3 +701,302 @@ here). T1 first (it seeds every baseline); T2–T5 are collision-free after it.
    kernel firewall grep (P41 C-a) unchanged; §5 rows all green or declared-open; ledger rows
    (incl. TRIGGER-MIXTRAL + MoA deferral) present. The Hermes-side acceptance (T3) has no CI —
    its evidence lives in the ledger row, stated plainly, never claimed as CI-covered.
+
+---
+
+# PART 2 — Tiered-Intelligence reconciliation (operator proposal, same day, 2026-07-18)
+
+## 11. The operator's SMMA/tiered proposal, verified and reconciled against Part 1
+
+> **Provenance.** The operator delivered a real engineering analysis (not prose): (a) Mixtral
+> 8x7B is infeasible for 12 parallel swarm workers on ~32GB/8 cores by RAM arithmetic — an
+> independent second angle on Part 1 §3.4.3's disk+budget rejection; (b) a three-tier
+> "Tiered Intelligence" architecture (Tier 0 small always-resident router model · Tier 1
+> lightweight-client swarm workers against ONE central inference server ("SMMA") · Tier 2
+> heavier expert model for deep reasoning); (c) a model table (Gemma-2-9B-IT / Mistral-7B-v0.3 /
+> Phi-3-medium-14B) with size and CPU tok/s estimates; (d) a priority-queue + prefill-batching
+> serving design, with llama.cpp HTTP-server mode named as a candidate over Ollama; (e) a
+> closing question: *"чи вистачить тобі однієї Mistral-7B для виконання всіх ролей, чи тобі
+> критично потрібно розділяти моделі за спеціалізаціями?"* Every load-bearing claim below was
+> re-verified live this pass; operator numbers are labeled as estimates wherever not
+> independently corroborated. This part EXTENDS Part 1 — where a Part 1 number is superseded
+> (disk state), §11.6 says so explicitly; nothing else in Part 1 moves.
+
+### 11.0 Fresh ground truth (this pass, 2026-07-18 — supplements §0)
+
+| Claim | Fresh evidence (this pass) | Status |
+|---|---|---|
+| **Disk is NO LONGER the binding constraint**: `/` now 65% used, **26GB free** (was 90% / 7.6GB in §0) | `BLUEPRINT-DISK-OPS-CLEANUP-2026-07-18.md` §1 — 19 git-ignored `target/` dirs cleared this session, `df` verified 90%→65% | verified — §11.6 lists which Part 1 verdicts this moves (and which it does NOT) |
+| RAM: operator says "32GB"; live is **30Gi total / 27Gi available, 0B swap** (§0) | `free -h` (§0, unchanged host) | verified — the ~2GB delta changes no verdict; all math below uses 30GB |
+| Ollama `mistral` / `mistral:7b` latest tag **IS Mistral-7B-Instruct v0.3** ("A new version of Mistral 7B that supports function calling"), 4.4GB default quant | `ollama.com/library/mistral` fetched this pass | verified — the operator's "Mistral-7B-v0.3" and Part 1's `mistral:7b` are the SAME model; the operator's 6–8GB row is its Q8_0 quant, Part 1's 4.4GB is the default ~Q4 tag |
+| Ollama request queue is **FIFO-only** (`OLLAMA_MAX_QUEUE` 512 → 503); **no request priority**; **no Unix-socket listener** (feature request open since 2023, unimplemented) | web search this pass: Ollama concurrency docs coverage + `ollama/ollama#739` (open) | verified — the operator's priority queue does NOT exist daemon-side; §11.3 puts it client-side |
+| **Head-of-line-blocking report exists**: `ollama/ollama#14578` (2026-03, v0.17.5, open, maintainer-unconfirmed) — a ~300ms request to one loaded model waited ~50s behind a long generation on ANOTHER loaded model | issue fetched this pass | verified-as-reported — unconfirmed and on an older daemon than our 0.30.9; converted to a falsifiable probe (`llm.hol_block_ms`, §11.5), not assumed true |
+| `llama-server` (llama.cpp): `--parallel/-np` slots + `--cont-batching` (default ON) + `--cache-prompt`/`--cache-reuse` prefix reuse + `-ctk/-ctv` KV-cache quantization + **Unix socket** (`--host *.sock`); **no request-priority mechanism either** | `tools/server/README.md` fetched this pass | verified — the ONE feature the switch was proposed for (priority) exists in NEITHER server |
+| Live sizes for the operator's table: `gemma2:9b` default 5.4GB, `9b-instruct-q6_K` **7.6GB**, `q8_0` **9.8GB**; `phi3:14b` (q4) **7.9GB**; `phi3:mini`/3.8b **2.2GB** | `ollama.com/library/{gemma2,phi3}/tags` fetched this pass | verified — operator's Gemma 8–10GB ✓ accurate; operator's Phi-3-medium "10–12GB" overstates (live q4 = 7.9GB) |
+| **Real swarm workload mix** (the evidence the closing question is answered from): `git log` 2026-07-17→18 on `main` shows ~15 kernel Rust feat/fix commits (CORDIC Q30, Kalman SoA AVX2, eigensolver, money-law overflow fixes marked `[RED-LINE money]`, HybridSigner, P40 AgentLoop, P42 MCP port), ~12 `docs(roadmap)` full-blueprint commits, ~14 `integrate(wave)` merge lanes, ~3 CI/grep-gate edits, ~2 audit/archaeology passes — **zero simple-classification payloads**; all authored by remote frontier-model lanes | `git log --since=2026-07-17` this pass | verified — §11.4.3's answer is grounded on THIS distribution, not a hypothetical one |
+| P25's DECART **categorically rejected LLM-in-the-loop admission** ("ask an agent 'should I dispatch?' — ✗ violates LOCAL-DECISION rule outright") | P25 DECART table, re-read this pass | verified — load-bearing for §11.1 |
+
+### 11.1 Tier 0 reconciled: the router is DETERMINISTIC CODE that already exists — the "small fast model" is a small WORKER, not the router
+
+The operator's Tier 0 asks for "a small, always-resident, very fast model whose job is
+understanding where to route a request." Verified against what exists: **both lanes already have
+a router, and neither is (or should be) an LLM.**
+
+- **Lane 1 (Hermes):** HK-05 `classify_complexity` (`routing.rs:67`) + `rank_models_for_bucket`
+  (`:114`) — pure Rust, µs-scale, **already wired live once per turn** (`turn_context.py:187-191`,
+  §0). It is "always-resident and very fast" by construction, because it is a function, not a
+  model: zero RAM held, zero decode latency, deterministic, per-bucket outcome-learned.
+- **Lane 2 (dowiz product):** the G3 router (research Wave C) — the same pattern over
+  `TrackRecord`/`Telemetry` folds, equally deterministic.
+- **Why a router MODEL is rejected, not just deferred:** (a) P25's DECART already rejected
+  LLM-in-the-loop dispatch decisions categorically (§11.0 last row) — a routing decision is an
+  admission-adjacent decision and inherits that ruling; (b) arithmetic: even the smallest
+  candidate (Qwen2-1.5B, ~0.9GB) at this host's decode rates spends ~1–3 s per routing decision
+  and holds RAM permanently, replacing a µs-scale pure function — a strict regression on every
+  axis it was proposed to improve; (c) it would be a second competing router next to a live one
+  (Part 1 anti-scope: resolve the overlap, never duplicate).
+
+**What survives of Tier 0 — the small-worker tier (real, already named):** the legitimate need
+under the operator's Tier 0 is *cheap classification/extraction sub-tasks* (semantic triage,
+tagging, schema-fill) that heuristics can't do. Those are WORK, not routing: the deterministic
+router dispatches them TO a small model like any other task. That tier already exists in Part 1
+as the P-2 small tier (`qwen2.5:3b`, 1.9GB, live-priced §0). The operator's named candidates
+slot into the SAME tier as probe alternates: `phi3:mini` (2.2GB live, but 4k context in its
+4k variant — tight for the prefill-heavy §3.6.1 design) and Qwen2-1.5B (~0.9GB, two
+generations behind the qwen2.5/qwen3 series). **Ruling: one EVAL-20 + decode probe picks at
+most ONE small-tier model; `qwen2.5:3b` remains the front-runner; no model ever sits IN the
+routing path.** Concretely, the architecture is:
+
+```
+            requests (both lanes)
+                    │
+        ┌───────────▼───────────┐
+        │ DETERMINISTIC ROUTER   │  Tier 0 = code, not a model
+        │ Lane1: HK-05 (live)    │  µs-scale, always-resident
+        │ Lane2: G3 (Wave C)     │  learns from TrackRecord/history
+        └───┬───────┬───────┬───┘
+   simple   │       │       │  beyond-local
+   bounded  │       │       └────────────► Tier 2 = REMOTE frontier lane
+            ▼       ▼                      (Hermes fallback chain — exists)
+      small tier   resident pair           §11.4.3: NOT a third local model
+      qwen2.5:3b   qwen2.5-coder:7b
+      (P-2 probe)  + llama3.1:8b        ── ALL local calls → ONE Ollama daemon
+                   (mistral:7b v0.3        127.0.0.1:11434 (SMMA, §11.3)
+                    probe-gated challenger)
+```
+
+### 11.2 Ollama vs llama.cpp-direct — resolved by live feature check, not assumption
+
+The switch was proposed for three capabilities. Checked against both servers' actual 2026
+surfaces (§11.0):
+
+| Wanted capability | raw `llama-server` | Ollama 0.30.x | Verdict |
+|---|---|---|---|
+| **Priority queueing** | NO — slots + FIFO task queue, no per-request priority | NO — FIFO, `OLLAMA_MAX_QUEUE` → 503 | **Neither has it.** The switch buys nothing for its headline justification; priority must live client-side either way (§11.3) — and the client-side machinery already exists (P25) |
+| **Unix-socket transport** | YES (`--host *.sock`) | NO (issue #739, open since 2023) | Real differentiator, worthless here: loopback-TCP overhead is µs–ms against 1–10 s generations — never load-bearing at this host's latency scale |
+| **Explicit prompt-batching / cache control** | `--cont-batching` (default ON), `--cache-prompt`, `--cache-reuse N`, `-ctk/-ctv` KV quant | continuous batching + per-slot prompt caching inherited (Ollama's runner is llama.cpp-based); KV-cache quantization via daemon-global `OLLAMA_KV_CACHE_TYPE` + `OLLAMA_FLASH_ATTENTION` ⚠ (env-var surface from prior knowledge — verify at execution) | llama.cpp exposes FINER control; Ollama exposes ENOUGH for this host: at `NUM_PARALLEL=2` there is nothing for `--cache-reuse` tuning to win that the P-1 probe wouldn't show |
+
+**VERDICT: stay on Ollama.** HARNESS §5 Decision 1's DECART (running, probed, reversible-as-a-
+port) stands; the operator's proposed reason to leave (priority) exists in neither server, and
+what llama.cpp-direct genuinely adds (Unix socket, per-run cache flags) is not load-bearing at
+this host's measured latency scale. Switching would also discard the landed `OllamaAdapter`,
+the native `/api/tags` listing (M-a), and model lifecycle management, for zero measured gain.
+**Named reopening trigger — TRIGGER-LLAMACPP-DIRECT:** if the `llm.hol_block_ms` probe (§11.5)
+reproduces #14578-shaped cross-model head-of-line blocking on OUR daemon (0.30.9) AND the
+shallow-queue discipline of §11.3 cannot contain it, the first escape is **a second Ollama
+instance on a second loopback port** (config-only, the workaround named in #14578 itself —
+small-tier daemon + pair daemon); `llama-server`-direct is the escape after that, entering
+through the same OpenAI-compat transport (adapter change ≈ base-URL + listing path).
+
+### 11.3 The SMMA queue — P25's admission function IS the priority queue (one additive field, no fork)
+
+Three of the operator's four serving claims are confirmed-and-already-true; the fourth is a
+genuine small extension:
+
+1. **"ONE centralized inference server, workers as lightweight clients" — already the
+   architecture, now stated as an invariant.** Every local consumer (the `OllamaAdapter`, the
+   Hermes `native` aliases, `llm-bench`, EVAL-20) is an HTTP client of the single daemon at
+   `127.0.0.1:11434`; no worker process holds weights (§3.1 "the same physical daemon serves
+   both lanes"). The operator's feared shape — 12 workers × one model copy each — is doubly
+   unreachable: the daemon is the only weight-holder, and P25 §3.5 rule 2 (each in-flight local
+   inference counts against the 4-slot C budget) means an admission-honest system never has 12
+   local inferences in flight — at `OLLAMA_NUM_PARALLEL=2`, at most 2 decode while others wait.
+   (Today's real 11-wave swarm never touched this path at all: its lanes were remote-model
+   D-class clients, §11.0.)
+2. **"KV-cache sized for one large shared context (12–16GB), not per-stream" — right spirit,
+   wrong number for this box.** Keeping slot-count low so KV is shared-not-multiplied is
+   exactly what `NUM_PARALLEL=2` already does. But a standing 12–16GB KV pool would consume
+   P25 §3.4's committed `MEM_AGENT_BUDGET = 16GB` entirely — the §3.5 reservation table already
+   prices KV honestly (`f(num_ctx × num_parallel)`, ~1–2GB incl. daemon overhead at defaults,
+   re-reserved through `MemoryBudget` when a request raises `num_ctx`). Adopted in spirit,
+   corrected in arithmetic; no number in P25/P26 moves.
+3. **"Batching where queued requests share a prefill pass" — already daemon-owned.** Continuous
+   batching is ON in the llama.cpp runner under Ollama; client-side prefill-merging machinery
+   would duplicate it blind. The P-1 probe (aggregate ≥1.5× serialized at NUM_PARALLEL=2, §3.5)
+   is the falsifier that says whether daemon batching pays on this host; build nothing until it
+   has run.
+4. **Priority — the real gap, closed as a P25 EXTENSION.** P25 §3.6's verdict is
+   `Admit | Defer { retry_after_ms }` — admission-or-not, with no ORDER among deferred units;
+   and the daemon's own queue is FIFO with no priority (§11.0). So the operator's priority
+   queue lands as two rules in the EXISTING admission design, not a new queue anywhere:
+   - **Additive type:** the L-class work unit gains a tag —
+     `pub enum LlmPriority { Interactive, Harness, Batch }` — and deferred L-class units
+     re-admit in `(priority, then age)` order instead of pure backoff-timer order. One field +
+     one sort at the §3.6 re-admission point; `admission.rs` is still unbuilt (§0), so this
+     lands as a spec amendment to P25 §3.6 now and one table-driven unit test when it lands.
+     Until then the lead applies it manually, exactly like P25 §3.6's "callers" clause.
+   - **Shallow-queue discipline (invariant):** at most `OLLAMA_NUM_PARALLEL` L-class requests
+     are ever in flight to the daemon; NOTHING deliberately waits in the daemon's FIFO
+     (`OLLAMA_MAX_QUEUE` remains an overflow backstop that 503s, never a scheduler). All
+     ordering authority stays client-side where priority exists. This is also the structural
+     mitigation for #14578-shaped blocking: a queue the design keeps empty cannot
+     head-of-line-block, and the `llm.hol_block_ms` probe verifies the residual (in-decode)
+     blocking is bounded.
+
+   Is this "P25's I/O-bound-dispatch lane reused"? No — and P25 already answered why: L-class
+   is its own third class (§3.5, "a C-class storm wearing a D-class label"). Local inference
+   needed no fourth mechanism either: the distinct queue discipline the operator sensed is
+   real, and it is exactly one enum + one invariant on the class that already exists.
+
+### 11.4 Model verdict — the operator's table reconciled, and the closing question answered
+
+#### 11.4.1 Version alignment + the table, corrected against live numbers
+
+**`mistral:7b` ≡ Mistral-7B-Instruct-v0.3 — CONFIRMED** (§11.0: the library page's own "v0.3 /
+latest / supports function calling"). Part 1's probe-gated candidate and the operator's table
+row are the same model at different quants: 4.4GB default (~Q4) vs the operator's 6–8GB Q8_0.
+On a memory-bandwidth-bound CPU host, Q8_0 nearly doubles the bytes read per token for a
+marginal quality delta at 7B — the default ~Q4 tag stays the probe target.
+
+Decode corroboration method (falsifiable, replaces trusting anyone's tok/s): CPU decode is
+memory-bandwidth-bound, so `tok/s ≈ effective_bandwidth / weight_bytes`. Part 1's MEASURED
+4.8–10.5 tok/s at 4.4–4.9GB implies this host sustains ~23–49 GB/s effective. Scaling:
+
+| Model (live size, §11.0) | Operator's claim | Bandwidth-scaled prediction (this host) | Verdict |
+|---|---|---|---|
+| Mistral-7B-v0.3 ~Q4, 4.4GB | "6–9 tok/s, fastest, best tool-calling" | **measured class: 4.8–10.5** (Part 1 §0) | operator's rate ✓ consistent with measurement; "fastest" ✓ (smallest weights); tool-calling = the P-3 probe's question, not assumed |
+| Gemma-2-9B-IT Q6_K 7.6GB / Q8_0 9.8GB | "~8–10GB ✓, 4–6 tok/s, best reasoning" | ~3.0–6.4 (Q6_K) / ~2.3–5.0 (Q8_0) ⚠ estimate | size ✓ accurate; rate plausible-to-slightly-optimistic; "best reasoning" is a claim EVAL-20 must earn, and §11.4.2 shows the RAM cost is the real problem |
+| Phi-3-medium-14B q4, live **7.9GB** | "~10–12GB, 2–4 tok/s, 32–64k ctx" | ~2.9–6.2 ⚠ estimate | size row CORRECTED (live 7.9GB, not 10–12); rate plausible; its 128k-ctx tags exist but long-context prefill at 636 tok/s ≈ 3.4 min for 128k — context headroom this host can't actually afford to fill |
+
+All ⚠ rows are estimates until a T1-style probe on this host; none is copied into any verdict
+as fact — verdicts below rest only on sizes (live) and the measured 7-8B floor.
+
+#### 11.4.2 The tier verdicts on THIS host (disk unblocked, RAM now the binding constraint)
+
+- **Mixtral 8x7B — REJECTION STANDS, now doubly grounded.** Part 1 §3.4.3 rejected on disk
+  (26GB pull vs 7.6GB free) + RAM budget. The disk leg has moved (26GB free) but STILL fails
+  the §3.5 pull rule (free − 3GB floor = 23GB < 26GB). The operator's RAM math is the second,
+  independent leg and it is decisive regardless of disk: ~26GB weights + per-stream KV on a
+  30GB host leaves ~4–6GB for OS + embeddings + everything; on a generic 32GB box WITH swap
+  that collapses to swap-thrash (operator's "1 token per 10–20s", breaking agent timeout
+  chains); on THIS box with **0B swap** the failure mode is harsher — the OOM-killer, i.e.
+  degrade-open. Same verdict from two directions; **TRIGGER-MIXTRAL (§3.4.3) unchanged**
+  (≥64GB RAM ∧ ≥30GB free model-store disk).
+- **Local Tier 2 (Gemma-2-9B-IT Q6_K / Phi-3-medium-14B) — NOT as a third resident model.**
+  Resident math: 10.7GB (pair) + 7.6–7.9GB (tier-2) + ~1–2GB KV/daemon + ~4GB OS ≈ 24–25GB →
+  `MEM_AGENT_BUDGET` collapses from the committed 16GB to ~5–7GB — it would break P25 §3.4's
+  arithmetic to serve a tier whose decode (~2.3–6.4 tok/s ⚠) is SLOWER than the tier-1 pair it
+  escalates from. As a **swap-in batch model** (evict one 7-8B, ~40–60s load ⚠ scaled from the
+  measured 25–31s at 5GB) it is now disk-affordable (7.6GB ≤ 23GB pull budget) and allowed as
+  a PROBE-GATED offline/batch candidate — legitimate only if a real workload materializes that
+  the pair fails on EVAL-20-extended AND that tolerates minutes-scale turnaround.
+  **TRIGGER-LOCAL-TIER2:** host RAM ≥ 48GB (third-resident becomes budget-honest) OR that
+  probe-documented workload exists. Until then, **Tier 2 IS the remote frontier lane** that
+  Hermes' fallback chain already provides — see the workload evidence next.
+- **`mistral-nemo` (12B, 7.1GB):** Part 1's named trigger ("≥12GB free") **has now fired** via
+  the disk cleanup. It joins `mistral:7b` as a probe-gated candidate under the same EVAL-20
+  gate — noting its ~8GB residency prices it as a pair-REPLACEMENT (vs llama3.1:8b), never an
+  addition, by the same §3.4 arithmetic.
+
+#### 11.4.3 The closing answer: one Mistral-7B for all roles, or specialization?
+
+**Answer: NO — one Mistral-7B does not cover all roles; but the split that earns its
+complexity is NOT three local model-tiers. It is: deterministic router (code) + TWO resident
+local dense models + tiny probe-gated small tier + REMOTE escalation.** Grounded in the real
+workload distribution (§11.0), not a hypothetical one:
+
+1. **The routing role needs NO model at all.** The largest "role" the operator's Tier 0
+   assigns — knowing where to route — is already done in microseconds by HK-05/G3 code
+   (§11.1). Giving it to any LLM, including Mistral-7B, is a regression.
+2. **The dominant observed workloads exceed EVERY local candidate.** Today's real swarm output
+   was kernel Rust with `[RED-LINE money]` invariants, crypto signers, AVX2 numerics, and
+   ~12 full 20-point blueprints — work done by remote frontier lanes. No 7B, and no local 9-14B
+   "expert tier", credibly holds these roles; pretending otherwise is capability theater
+   (Part 1 §3.4.4's own standard). **The real Tier 2 already exists and is remote.**
+3. **Within the roles local models CAN hold** — bounded tool-calling loops, structured
+   extraction (schema-`format` output), EVAL-20/bench, ≤200-token status entries, draft
+   passes — the measured task split is code-shaped vs general/tool-shaped, and the resident
+   pair (`qwen2.5-coder:7b` + `llama3.1:8b`) IS that specialization, already on disk, already
+   priced (10.7GB residency inside the §3.5 arithmetic). One Mistral-7B replacing BOTH would
+   save ~5GB RAM at the cost of merging two measurably distinct capability profiles into one
+   unprobed one — the wrong trade while the budget holds.
+4. **Where Mistral-7B-v0.3 actually enters:** as Part 1 §3.4.2 already ruled — a probe-gated
+   CHALLENGER: if it beats `llama3.1:8b` on EVAL-20 + the tool-calls probe, it takes the
+   general/tools slot (pull now disk-unblocked, §11.6). If the operator ever forces a
+   ONE-model constraint (e.g. a smaller future host), Mistral-7B-v0.3 is the right single
+   pick — smallest weights, fastest measured class, native function calling — and that
+   contingency is hereby recorded so it needn't be re-derived.
+
+So: **specialization is critical, and it is already 80% built** — the missing 20% is the P-2
+small-tier probe and the mistral:7b challenger probe, both EVAL-20-gated, both now unblocked.
+
+### 11.5 Harness metrics for the tiered shape — named ids into P45 §4b.3 (extends §3.9's three rows; same mechanism, zero new)
+
+| New tracked id | What it measures | Source | Baseline (seeded T1′) | Breach rule (P45 consts) |
+|---|---|---|---|---|
+| `llm.queue_wait_ms.<prio>` | admission→daemon-dispatch wait per `LlmPriority` class (median + p95) | dispatch log rows at the §11.3 admission point | T1′ run | p95 above baseline×(1+PCT), 2 consecutive nights → S1; `Interactive` additionally hard-capped: p95 > 5000ms is an immediate S1 (an interactive lane silently degrading to batch is the tiering failing) |
+| `llm.queue_depth` | deferred L-class units at sample time | same log, sampled by the nightly runner | T1′ (expected ~0–2) | median > `NUM_PARALLEL × 2` two nights → S1 (standing backlog = admission mis-tuned or daemon degraded) |
+| `llm.hol_block_ms` | head-of-line probe: wall time of a short (`max_tokens=8`) request to model A fired mid-generation of a long request on model B, minus its solo baseline | new `llm-bench` concurrent probe (the #14578 falsifier on OUR daemon) | T1′ | above baseline×(1+PCT) 2 nights → S1; first-ever run is the accept/reject evidence for TRIGGER-LLAMACPP-DIRECT's precondition |
+| `llm.tier2_escalation_rate` | share of local-first turns that escalated to the remote lane | Lane 1: Hermes fallback-chain outcomes (`model_routing_history`); Lane 2: `TrackRecord` folds — both existing stores, §4.3 | T1′ | drift BOTH directions: above baseline band 2 nights → S1 (local tier failing its roles); ~0 for 7 days → S2 (escalation path possibly broken/fail-open — cry-wolf-checked like every P45 rule) |
+| `llm.route_efficacy` | 1 − (fallback-after-route rate): fraction of routed turns whose FIRST-ranked model completed without falling back | same fallback-chain outcome rows | T1′ | below baseline×(1−PCT) 2 nights → S1 |
+
+**Honesty note on "tier-0 routing accuracy":** true routing ACCURACY is unmeasurable without
+ground-truth labels for "which model should have gotten this turn." `llm.route_efficacy` is the
+honest outcome-grounded proxy (the router's pick sufficed / didn't) and is named as a proxy —
+same discipline as `llm.ttft1_ms` standing in for TTFT (§3.7). Per-tier LATENCY needs no new
+id: `llm.decode_tok_s.<model>` / `llm.ttft1_ms.<model>` (§3.9) are already per-model, and the
+tiers are model-sets. All five rows ride the existing nightly runner → `bench.jsonl` →
+`ops-alert bench-drift` → 2-breach S1 pipeline; the plant + 30-night-noise falsifiers (§5 M-g)
+re-run over the expanded id list. No new cron, checker, or channel — anti-scope 3 still
+load-bearing.
+
+### 11.6 Amendments to Part 1 (explicit supersessions — nothing else moves) + DoD/task additions
+
+| Part 1 claim | Status after this pass |
+|---|---|
+| §0: "`/` 75G at 90% (7.6G free)"; §3.4.2/§3.4.3/§3.5 disk math built on it | **SUPERSEDED**: 65% used, 26GB free (`BLUEPRINT-DISK-OPS-CLEANUP-2026-07-18.md`). §3.5's disk RULE (pull ≤ free − 3GB floor) is unchanged and now yields a 23GB pull budget |
+| §3.4.2 `mistral:7b` "barely fits" / disk-gated | pull now unblocked; the EVAL-20/tool-probe gate (the real gate) unchanged |
+| §3.4.2 `mistral-nemo` "BLOCKED BY DISK — trigger ≥12GB free" | **trigger FIRED** — promoted to probe-gated pair-replacement candidate (§11.4.2) |
+| §3.4.3 TRIGGER-MIXTRAL | **STANDS** — disk leg still fails the pull rule (26 > 23) and the RAM leg (≥64GB) is decisive; operator's swap/OOM math added as the second independent ground |
+| §3.9 tracked-id list (3 rows) | extended to 8 rows by §11.5 (same mechanism) |
+
+**DoD additions (extend §5):**
+
+| Item | RED | GREEN | Named permanent check |
+|---|---|---|---|
+| M-h `LlmPriority` + ordered re-admission (P25 §3.6 amendment) | — (spec now; code lands with `admission.rs`) | table-driven test: deferred units re-admit in (priority, age) order | future `kernel/src/admission.rs` tests; until then the §11.3 invariant is applied manually and named in wave plans |
+| M-i HoL probe | probe absent — #14578-shaped blocking would be invisible | `llm-bench` concurrent probe emits `llm.hol_block_ms`; daemon-stopped run stays VOID per §3.7 | `llm-adapters/src/bin/llm-bench.rs` (probe added) |
+| M-j metric wiring | new ids absent from tracker | 5 ids tracked; plant fires exactly one S1, 30-night noise fires zero | P45 §4b.3 tracker config id list |
+
+**Worker-task additions (extend §10; T8+ depends on T1/T4/T5):**
+
+8. **T8 — probes now unblocked by disk.** (a) `ollama pull mistral:7b` (4.4GB ≤ 23GB budget;
+   `{url, sha3}` ledger row per F3/F27) → run EVAL-20 + the tool-calls probe vs `llama3.1:8b`;
+   swap the general/tools slot only on a win, ledger-rowed. (b) Same for `qwen2.5:3b` (P-2
+   small tier; operator alternates `phi3:mini`/Qwen2-1.5B enter only if it fails). (c) Do NOT
+   pull Gemma-2-9B/`mistral-nemo`/Phi-3-14B without the §11.4.2 trigger conditions in hand.
+9. **T9 — `llm-bench` HoL probe (M-i).** Implement §11.5's concurrent probe; record the
+   first-run verdict in the ledger as the TRIGGER-LLAMACPP-DIRECT precondition evidence.
+10. **T10 — metric + amendment wiring (M-h, M-j).** Add the 5 ids to P45 §4b.3's tracker +
+    re-run its falsifiers; append the `LlmPriority` amendment to P25 §3.6 (spec edit, cited
+    back here); ledger rows: mistral-nemo trigger-fired, TRIGGER-LLAMACPP-DIRECT,
+    TRIGGER-LOCAL-TIER2, and the one-model contingency ruling (§11.4.3 item 4).
+
+**Compliance note (STANDARD §2, Part 2 scope):** ground truth §11.0 (item 1); DoD §11.6
+(item 2); adversarial cases — HoL probe, cry-wolf-checked escalation-rate, hard-capped
+interactive wait (item 5); hazard math — OOM-vs-swap distinction, shallow-queue invariant,
+budget-collapse arithmetic (item 6); links — P25 §3.5/§3.6 + DECART, P26 §3.1/§3.4,
+P45 §4b.3, `DISK-OPS-CLEANUP` §1, `ollama/ollama#739`/`#14578`, llama.cpp
+`tools/server/README.md`, `ollama.com/library/{mistral,gemma2,phi3}` (item 7); reuse-first —
+every §11 verdict consumes an existing mechanism or extends one by a field/row, and every
+operator estimate is labeled ⚠ unless independently corroborated (item 19).
