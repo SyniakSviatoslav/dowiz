@@ -2487,3 +2487,16 @@ Three closes, all Recommended options confirmed:
 - **No vendor quality bar at all** — extends §16.26's courier no-scoring red line to vendors:
   dowiz does not gate, exclude, or rank vendors by quality/performance/rating. Per-hub reviews
   (§16.26) are a signal visible to that hub's own customers, never a dowiz-side gate.
+
+### 16.60 Pickup/dine-in is part of order-flow from the start; agent excluded from customer PII by default
+Two closes:
+- **Pickup/dine-in** is part of the unified order-flow (§16.5) from Wave-0, not a
+  delivery-only platform — an order without courier-matching (the customer collects it
+  themselves) is the same order-flow minus the dispatch step, not a separate product mode.
+  Broadens "малих і великих фуд вендорів" (the operator's original vision framing) to include
+  vendors whose model doesn't need delivery at all.
+- **The in-hub assistant agent (§16.4) is excluded from customer PII by default** — it sees
+  aggregated/anonymized data (order counts, popular items) rather than a specific customer's
+  name or address, tightening the money/decision-authority boundary already established into a
+  data-visibility boundary too. Narrows the attack/leak surface specifically for the case
+  where §16.4's BYO-model option (§16.52) points the agent at a connected, non-local backend.
