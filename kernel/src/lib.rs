@@ -172,6 +172,11 @@ pub mod noether;
 pub mod online;
 pub mod order_machine;
 pub mod ports;
+/// WAVE P40 — bounded, fail-closed AgentLoop executor. Wires through the existing
+/// `ports::tool` (`ToolPort`/`SkillRegistry`) + `ports::mcp` (`McpPort`) capability
+/// firewall and the `token_bucket` degrade-closed budget. No tool runs without a
+/// verified capability; unknown tools rejected; budget exhaustion terminates the loop.
+pub mod agent;
 /// M1 / L0 exact byte+regex search (vectorless) — deterministic trigram
 /// inverted index + exact verify. NEW module; does not touch kernel authority.
 pub mod retrieval;
@@ -186,6 +191,11 @@ pub mod spectral;
 /// `spectral::eigenvalues` through a `&mut` cache with a recomputes-counter
 /// falsifier (no thrashing, no stale-cache).
 pub mod spectral_cache;
+/// WAVE LAP — graph-Laplacian eigenmodes consumer of `spectral::eigh`: the
+/// `k` smallest-eigenvalue eigenpairs (Fourier modes / field-UI basis) of a CSR
+/// graph. New module; does not touch `spectral_cache`, `csr`, `householder`, or
+/// `spectral`'s existing code.
+pub mod spectral_laplacian;
 /// Self-improvement loop: recurring-pattern surface over the tool-outcome
 /// token stream (W19 — consumes `trigram` into the loop's telemetry path).
 pub mod telemetry;
