@@ -56,5 +56,9 @@ jobs:
             echo "Telegram send failed (attempt $attempt, resp: $resp), retrying..."
             sleep 5
           done
-          echo "::error::Telegram alert failed after 3 attempts — check TELEGRAM_BOT_TOKEN secret"
+          echo "Telegram primary alert failed after 3 attempts — check bot token + network"
+          # P45-W0: nested-pager fallback — alert a secondary forum topic so someone
+          # is ALWAYS paged about the pager failing (same bot, different thread id).
+          curl -sS --max-time 10             "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"             --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}"             --data-urlencode "message_thread_id=257"             --data-urlencode "text=🔴 heartbeat-MONITOR PAGER FAILURE after 3 attempts — webhook=${{ steps.probe.outputs.http_code }} — root alert unverified — check TELEGRAM_BOT_TOKEN secret"             >/dev/null || true
+          echo "::error::Telegram alert failed after 3 attempts — fallback to Reports-topic sent; verify manually"
           exit 1
