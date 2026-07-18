@@ -2343,3 +2343,20 @@ Three closes:
 - **Tax/VAT**: fully the vendor's responsibility (Recommended, confirmed) — consistent with
   §16.29's dispute/refund stance; the vendor sets their own rate inside the free-form menu
   schema (§16.17), dowiz calculates and tracks nothing tax-related.
+
+### 16.50 Friction accessibility, voice as one of several equal intent channels, implicit onboarding
+Three closes, all within the §16.35/§16.40 generative-UI cluster:
+- **Friction is multi-modal, with full audio support** — not a color/visual-only signal (which
+  would fail colorblind users). Operator adds a broader claim worth recording precisely but
+  **not yet treated as proven**: that physics/math-driven rendering inherently solves much of
+  cross-device/cross-platform portability without per-platform adapters, because the same
+  equations render identically wherever wgpu runs. Consistent with this repo's own
+  verified-by-math culture ([[verified-by-math-2026-07-07]]), this is recorded as a claimed
+  benefit to validate during the Tier-3 build (real devices, real platforms), not asserted as
+  already true.
+- **Voice is one of several equal-standing intent channels** (voice + touch/gesture on canvas),
+  not a primary channel that others merely supplement — the user picks whichever channel fits
+  the moment (quiet vs. hands-busy environments, e.g. a courier mid-ride).
+- **Onboarding is implicit/adaptive, embedded in the field itself** — no separate modal or
+  text how-to screen; the interface teaches its own use through the same state-communication
+  mechanism §16.44 already established for friction, rather than a bolted-on tutorial layer.
