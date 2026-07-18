@@ -2500,3 +2500,50 @@ Two closes:
   name or address, tightening the money/decision-authority boundary already established into a
   data-visibility boundary too. Narrows the attack/leak surface specifically for the case
   where §16.4's BYO-model option (§16.52) points the agent at a connected, non-local backend.
+
+---
+
+## 17. Long-term ecosystem decisions (2026-07-18, dialogue pass continued)
+
+Appended by a continuation of the §16 dialogue pass, per the operator's explicit request to
+cover *"екосистеми у цілому, зокрема довгострокові"* (the ecosystem as a whole, specifically
+long-term aspects) — a deliberate register shift from §16's Wave-0 implementation questions to
+multi-year sustainability, governance, and survivability. Same append-only, decision-record
+convention as §16.
+
+### 17.1 Protocol governance — BDFL now, open to revision later
+Operator's ruling (Recommended option, confirmed): the operator decides protocol/kernel changes
+unilaterally for now (AGPLv3, §16.57, permits this — copyleft governs redistribution, not
+decision-making authority), with no formal RFC/maintainer-council process imposed prematurely.
+Explicitly **open to revision once the ecosystem has external contributors or independent
+self-host vendors who'd need a real voice** — recorded as a deliberate, revisitable choice, not
+a permanent structural decision. Named here so a future governance change has a clear "why now"
+anchor rather than looking like an unexplained reversal.
+
+### 17.2 Crypto-agility — a rotation plan from day one, not deferred
+Operator's ruling (Recommended option, confirmed): given ML-DSA-65 and other algorithms in the
+capability-cert stack (§16.48 root/delegating certs, HybridSigner) could be broken or
+deprecated over a 10-20 year horizon, and thousands of independently self-hosted, isolated
+hubs (§16.6) would each need to migrate, a **crypto-agile architecture is required from Wave-0**
+— versioned capability-certs, an algorithm-migration path that doesn't require a hard fork of
+the whole mesh. This is a real, non-trivial addition to the certificate design (already
+partially aligned with the existing hybrid ML-DSA-65⊕Ed25519 scheme's own precedent of running
+two algorithms simultaneously) — named as a concrete requirement for the P39/P48/capability-cert
+blueprint work, not designed in full here.
+
+### 17.3 Ecosystem survivability if dowiz (the company) ceases to exist
+Operator's ruling (Recommended option, confirmed): **claimed hubs must keep working
+independently of dowiz's continued existence** — the hub software is AGPL-open (§16.57) so the
+code itself survives regardless, and this section adds the deployment-level guarantee: no new
+hub can be created without dowiz.org (§16.32's claim mechanic is dowiz-run infrastructure), but
+an **already-running hub must not silently lose remote accessibility** if dowiz disappears.
+**Real contradiction caught and resolved this pass**: §16.45 committed all hubs to tunnel
+through one dowiz-operated Cloudflare account, which would have made every self-hosted hub's
+remote access a hard dependency on dowiz's continued operation — directly undermining this
+section's own survivability goal. **Resolution (Recommended option, confirmed)**: the hub
+software must support **switching its tunnel target to the vendor's own Cloudflare account (or
+another tunnel provider)** — a portable escape hatch, not the Wave-0 default. §16.45's
+dowiz-operated-by-default design stands unchanged for the common case; this adds the fallback
+path that makes "hubs survive without dowiz" an actual mechanism rather than only a stated
+intent. Named as a concrete requirement for the hub-provisioning/tunnel blueprint, not designed
+in full here.
