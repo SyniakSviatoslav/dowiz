@@ -11,7 +11,7 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use native_spa_server::{build_router, resolve_root, DEFAULT_PORT, DEFAULT_ROOT};
+use native_spa_server::{api::ApiState, build_router, resolve_root, DEFAULT_PORT, DEFAULT_ROOT};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -45,7 +45,8 @@ struct Cli {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     let root = resolve_root(Some(cli.root.clone()));
-    let router = build_router(&root);
+    let api = ApiState::build_default();
+    let router = build_router(&root, api);
     let addr = format!("{}:{}", cli.bind, cli.port);
 
     match (cli.tls_cert, cli.tls_key) {

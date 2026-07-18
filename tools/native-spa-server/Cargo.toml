@@ -21,6 +21,21 @@ path = "src/lib.rs"
 [dependencies]
 # axum 0.8 (cached) — HTTP routing / service composition.
 axum = "0.8"
+# serde (cached) — the server crate owns ONLY its request/response bodies and the
+# capability-frame codec; it relays order JSON to the kernel as an opaque String
+# (the kernel's `json_api` module owns order (de)serialization, gated behind the
+# kernel's `json-api` feature — NOT compiled into the server's serde graph for
+# order data).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Base64 (cached) — encode/decode the capability frame in the `x-dowiz-cap`
+# header. (base64 0.22 cached offline.)
+base64 = "0.22"
+# SHA-256 (cached) — body digest for the capability-scope binding + replay ring.
+sha2 = "0.10"
+# The kernel: the order JSON authority (P37 W37-1). We enable ONLY `json-api`
+# (no wasm-bindgen) so the server pulls no browser-shaped deps.
+dowiz-kernel = { path = "../../kernel", features = ["json-api"] }
 # tower-http (cached) — ServeDir (SPA static file serving) + CompressionLayer.
 tower-http = { version = "0.6", features = ["fs", "compression-gzip", "compression-br", "compression-deflate"] }
 # tokio (cached) — async runtime + TLS listener.
@@ -37,3 +52,6 @@ clap = { version = "4", features = ["derive", "env"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
+# The kernel (json-api feature) — needed by the W37-5 offline-parity test, which
+# drives order placement with NO server process at all.
+dowiz-kernel = { path = "../../kernel", features = ["json-api"] }
