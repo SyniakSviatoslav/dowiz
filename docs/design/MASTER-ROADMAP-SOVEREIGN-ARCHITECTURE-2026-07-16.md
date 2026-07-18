@@ -2287,3 +2287,22 @@ are Tier-3-blueprint-level questions, not resolved by this dialogue pass. Direct
 original 5-persona audit's Herzog-lens "friction-as-a-feature for destructive actions"
 checklist item (`AUDIT-PROMPT-TEMPLATE-2026-07-18.md`) with a concrete (if not yet fully
 specified) mechanism, rather than leaving it unaddressed.
+
+### 16.45 Cloudflare Tunnel multi-tenancy — one dowiz-operated CF account for all hubs
+Closes §16.2's named gap (Recommended option, confirmed): every hub — Hetzner-hosted or
+self-hosted — tunnels through a single dowiz-operated Cloudflare account, not a
+per-venue CF account the vendor registers themselves. Zero CF setup burden for the vendor
+(matches §16.32's low-friction claim mechanic), at the cost of dowiz owning tenant-isolation
+between tunnels/routes/credentials on its own CF account — named as real engineering work for
+whichever blueprint builds hub provisioning, not yet designed here. Scoped explicitly to
+Wave-0; the operator flagged this as revisitable if hub count grows enough to strain one
+account's practical limits.
+
+### 16.46 Food-court checkout — unified cart across vendors, one delivery, split payment required
+Closes part of §16.15's named gap (Recommended option, confirmed): a customer ordering from
+multiple vendors inside one food-court hub gets a single unified cart and one delivery — not
+separate per-vendor checkouts/deliveries. **Consequence for §16.13's payment adapter**: it now
+needs split-payment/settlement logic to divide one payment across multiple vendors within the
+same hub — this reopens part of §16.24's "no split-payout logic needed" framing, but only for
+the intra-hub food-court case, not for courier payout (§16.24 stands unchanged for couriers).
+Named as a concrete new requirement on the payment-adapter blueprint, not yet designed.
