@@ -2392,3 +2392,21 @@ Three closes:
   wallet-filled fields are held as a local draft and restored automatically on reconnect — no
   lost progress, payment simply doesn't fire until the client is back online. Extends §16.14's
   honest-status and client-side-state principles to the checkout flow specifically.
+
+### 16.53 Courier-in-motion voice priority, spam rate-limiting, hub heartbeat monitoring
+Three closes:
+- **Voice is the practical primary input while a courier is actively delivering (in motion)** —
+  a safety-driven exception to §16.50's general "equal channels" stance, not a paradigm change:
+  hands-busy/eyes-on-road contexts specifically favor voice, other contexts keep all channels
+  equal.
+- **Spam/fake orders**: the mandatory online-payment gate (§16.13) is the primary defense (no
+  card, no order), but the operator adds an explicit **rate-limit at the hub level** on top of
+  it — covering attempted/abandoned-checkout spam that never reaches a successful payment (a
+  DoS/nuisance vector distinct from fraudulent-but-paid orders, which the payment provider's own
+  fraud filtering already covers per §16.13).
+- **Hub heartbeat monitoring**: dowiz receives a heartbeat/liveness signal from every hub via
+  the CF Tunnel layer (§16.2/§16.45) and can alert if one silently drops — a deliberate,
+  narrow exception to §16.14's data isolation (liveness only, never hub data), justified as
+  operational pragmatism over architectural purity. Enables an operator alert for the exact
+  §16.14 offline-during-order scenario's *silent, unexplained* variant, distinct from the
+  already-designed honest-status UX for a hub the client can see is unreachable.
