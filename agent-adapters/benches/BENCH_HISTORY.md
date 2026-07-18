@@ -64,3 +64,10 @@
 - fuel_loop_throughput/needs_256: 61.15ns -> 61.11ns (-0.1%)
 - fuel_loop_throughput/needs_64: 61.12ns -> 60.97ns (-0.3%)
 - fuel_loop_throughput/needs_8: 61.03ns -> 61.16ns (+0.2%)
+
+## 1784410144
+- native-trackers run (replaces bench_track.py)
+- fuel_loop_throughput/needs_1: 61.19ns -> 61.02ns (-0.3%)
+- fuel_loop_throughput/needs_256: 61.15ns -> 60.99ns (-0.3%)
+- fuel_loop_throughput/needs_64: 61.12ns -> 60.99ns (-0.2%)
+- fuel_loop_throughput/needs_8: 61.03ns -> 60.93ns (-0.2%)
