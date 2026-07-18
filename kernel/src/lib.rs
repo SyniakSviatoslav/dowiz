@@ -58,13 +58,6 @@ pub mod domain;
 pub mod dsu;
 /// MESH-06 — per-node content-addressed event-log (local-first + sync).
 pub mod event_log;
-/// P34 — cross-repo mesh kernel wiring: append-only signed-append log
-/// (`MeshLog`) + caller-supplied `HubTransport` trait (config-driven, NO
-/// hardcoded endpoint, NO real cross-repo push). Gated behind `pq` because it
-/// reuses the kernel's ML-DSA-65 primitive for signing/verification (see
-/// `mesh.rs` header for the KAT-gated crypto rationale).
-#[cfg(feature = "pq")]
-pub mod mesh;
 /// RW-06 — geo / route kinematics (pure-logic port from geo-anim.ts + delivery-zone.ts). Kernel authority.
 pub mod geo;
 /// Harmonic centrality H(v)=Σ 1/d(u,v) — the shared graph-ranking primitive the
@@ -95,6 +88,13 @@ pub mod kalman;
 /// §3.3 Layer-B (semantic) leakage gate — cosine-0.9 near-duplicate rejection over an injected
 /// `&dyn LlmBackend` embedding model. Native, zero-dep; the live bridge lives in `llm-adapters`.
 pub mod leak_gate;
+/// P34 — cross-repo mesh kernel wiring: append-only signed-append log
+/// (`MeshLog`) + caller-supplied `HubTransport` trait (config-driven, NO
+/// hardcoded endpoint, NO real cross-repo push). Gated behind `pq` because it
+/// reuses the kernel's ML-DSA-65 primitive for signing/verification (see
+/// `mesh.rs` header for the KAT-gated crypto rationale).
+#[cfg(feature = "pq")]
+pub mod mesh;
 /// P08 typed local-observability core — the pure-std, no-network, no-signing
 /// HALF: typed-metrics schema + closed `LogEvent` enum (§2/§3) and the
 /// claim-latency anomaly detector (§4). F40 ML-DSA signed envelope DEFERRED
@@ -224,6 +224,9 @@ pub mod typed_metrics;
 /// C1 — verify-failure → retrieval-trigger: a claim check that, on failure,
 /// emits a bounded structured re-verify request (the "verify then learn" loop).
 pub mod verify_retrieval;
+/// P62 / M1 — the intra-hub vendor partition identity (`VendorId`). The fan-out
+/// key for `catalog::validate_tree` / `domain::charge_legs` / `domain::kitchen_tickets`.
+pub mod vendor;
 /// WASM/JS bindings — the only place the kernel touches the browser boundary.
 /// Compiled ONLY under the `wasm` feature (see `#![cfg(feature = "wasm")]` in
 /// wasm.rs); native rlib builds exclude it and pull no wasm-bindgen/serde.
