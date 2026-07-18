@@ -416,7 +416,13 @@ pub fn estimate_order_total(subtotal: i64, cfg: &OrderTotalConfig) -> OrderTotal
     };
     let fee_known = delivery_fee.is_some();
     let total = match (delivery_fee, tax_total) {
-        (Some(fee), Some(tax)) => Some(subtotal + fee + tax),
+        // V3 1.5 (ROUND-2 GAP-AUDIT): `subtotal + fee + tax` is unchecked i64 add —
+        // a near-i64::MAX subtotal overflows (panic in debug / wrap in release).
+        // Use checked_add so overflow degrades to `None` (fail-closed), consistent
+        // with the tax-computation failure path above.
+        (Some(fee), Some(tax)) => {
+            subtotal.checked_add(fee).and_then(|s| s.checked_add(tax))
+        }
         _ => None,
     };
     OrderTotalEstimate {
@@ -489,6 +495,34 @@ mod tests {
     fn green_non_negative() {
         assert!(assert_non_negative(0).is_ok());
         assert!(assert_non_negative(-1).is_err());
+    }
+
+    // ── M2 (ROUND-2 GAP-AUDIT V3 1.5): estimate_order_total must not overflow
+    //    the `subtotal + fee + tax` sum. A near-i64::MAX subtotal degrades the
+    //    total to `None` (fail-closed), never panics/wraps. ──
+    #[test]
+    fn red_estimate_order_total_overflow_degrades_to_none() {
+        let cfg = OrderTotalConfig {
+            tax_rate: 0.20,
+            price_includes_tax: false,
+            fee: FeeConfig {
+                is_pickup: false,
+                delivery_fee_flat: Some(100),
+                free_delivery_threshold: None,
+                has_distance_tiers: false,
+            },
+            min_order_value: None,
+        };
+        // subtotal one short of i64::MAX; +100 fee + ~20% tax overflows i64.
+        let est = estimate_order_total(i64::MAX - 1, &cfg);
+        assert_eq!(
+            est.total,
+            None,
+            "overflow must degrade total to None (fail-closed), not panic/wrap"
+        );
+        // A sane subtotal still computes a concrete total.
+        let ok = estimate_order_total(1000, &cfg);
+        assert_eq!(ok.total, Some(1000 + 100 + 200));
     }
 
     // ── RED→GREEN: overflow must return Err, never panic/wrap ──
