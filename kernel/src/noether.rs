@@ -12,7 +12,16 @@
 //! asymmetry bug — caught here, deterministically, before it ships.
 //!
 //! DETERMINISTIC, zero deps, offline. Float tol is explicit; this is a dynamics
-//! guard, never money.
+//! invariant checker, not a proof system.
+//!
+//! HONESTY NOTE (FEYNMAN-17): the name is a *lens* — this module checks that a
+//! supplied invariant `I` is conserved along a sampled trajectory
+//! (`|I(f(x)) − I(x)| ≤ tol`). It does NOT derive conservation from symmetry
+//! (that is the actual content of Noether's theorem: symmetry ⇒ conservation
+//! law). Converse-free and symmetry-free by construction: a passing check
+//! certifies trajectory-wise invariance, not a neighborhood stability proof.
+//! The checkers are non-vacuous (proven by good hand oracles) but the theorem's
+//! derivation is out of scope here.
 
 /// Returns true iff the invariant `I` is conserved (within `tol`) at every
 /// step of the trajectory starting at `x0` under `update`, for `steps` steps.
