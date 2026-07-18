@@ -456,7 +456,7 @@ pub fn eigh_contig(a: &mut [f64], n: usize) -> (Vec<Vec<f64>>, Vec<f64>) {
     // deterministic (value-ordered) output. Stable sort keeps equal eigenvalues
     // (degenerate eigenspaces) in the order the Jacobi sweep produced.
     let mut order: Vec<usize> = (0..n).collect();
-    order.sort_by(|&a, &b| d[a].partial_cmp(&d[b]).unwrap());
+    order.sort_by(|&a, &b| d[a].total_cmp(&d[b]));
     let sorted_vals: Vec<f64> = order.iter().map(|&i| d[i]).collect();
     let sorted_basis: Vec<Vec<f64>> = order.iter().map(|&i| basis[i].clone()).collect();
     (sorted_basis, sorted_vals)
@@ -656,8 +656,8 @@ mod tests {
         let got = eigenvalues_contig(&mut buf2, n);
         let mut g: Vec<f64> = got.iter().map(|z| z.re).collect();
         let mut w = vals.clone();
-        g.sort_by(|x, y| x.partial_cmp(y).unwrap());
-        w.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        g.sort_by(|x, y| x.total_cmp(y));
+        w.sort_by(|x, y| x.total_cmp(y));
         for (x, y) in g.iter().zip(w.iter()) {
             assert!((x - y).abs() < tol, "eigh/values parity: {x} vs {y}");
         }
@@ -685,7 +685,7 @@ mod tests {
         };
         // values must be {0,1,3}.
         let mut v = values.clone();
-        v.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        v.sort_by(|x, y| x.total_cmp(y));
         for (got, want) in v.iter().zip([0.0, 1.0, 3.0].iter()) {
             assert!((got - want).abs() < 1e-9, "eigenvalue {got} != {want}");
         }
@@ -880,15 +880,13 @@ mod tests {
         // sort both by (re, im) for comparison
         let mut g = got.clone();
         g.sort_by(|x, y| {
-            x.re.partial_cmp(&y.re)
-                .unwrap()
-                .then(x.im.partial_cmp(&y.im).unwrap())
+            x.re.total_cmp(&y.re)
+                .then(x.im.total_cmp(&y.im))
         });
         let mut w = want.clone();
         w.sort_by(|x, y| {
-            x.re.partial_cmp(&y.re)
-                .unwrap()
-                .then(x.im.partial_cmp(&y.im).unwrap())
+            x.re.total_cmp(&y.re)
+                .then(x.im.total_cmp(&y.im))
         });
         for (i, (x, y)) in g.iter().zip(w.iter()).enumerate() {
             assert!(
@@ -911,14 +909,14 @@ mod tests {
         let e = eigenvalues_contig(&mut a.clone(), 2);
         assert_eq!(e.len(), 2);
         let mut mags: Vec<f64> = e.iter().map(|x| x.abs()).collect();
-        mags.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        mags.sort_by(|x, y| x.total_cmp(y));
         assert!(
             close(mags[0], 1.0, 1e-9) && close(mags[1], 1.0, 1e-9),
             "magnitudes = 1"
         );
         // exactly one +i and one -i
         let mut ims: Vec<f64> = e.iter().map(|x| x.im).collect();
-        ims.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        ims.sort_by(|x, y| x.total_cmp(y));
         assert!(
             close(ims[0], -1.0, 1e-9) && close(ims[1], 1.0, 1e-9),
             "eigs = ±i"
@@ -991,7 +989,7 @@ mod tests {
         let e = m.eigenvalues(4);
         assert_eq!(e.len(), 4);
         let mut mags: Vec<f64> = e.iter().map(|x| x.abs()).collect();
-        mags.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        mags.sort_by(|x, y| x.total_cmp(y));
         // path P₄ adjacency eigenvalues 2cos(kπ/5), k=1..4 → max = 2cos(π/5) = φ
         let phi = (1.0 + 5.0_f64.sqrt()) / 2.0;
         assert!(close(mags[3], phi, 1e-9), "largest adjacency eig of P₄ = φ");
@@ -1056,9 +1054,8 @@ mod tests {
             }
             let mut e = eigenvalues_contig(&mut buf, n);
             e.sort_by(|x, y| {
-                x.re.partial_cmp(&y.re)
-                    .unwrap()
-                    .then(x.im.partial_cmp(&y.im).unwrap())
+                x.re.total_cmp(&y.re)
+                    .then(x.im.total_cmp(&y.im))
             });
             e.iter().map(|z| (z.re.to_bits(), z.im.to_bits())).collect()
         }

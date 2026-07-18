@@ -134,7 +134,7 @@ pub fn related(seed: usize) -> Vec<(usize, f64)> {
     let ppr = wiki_ppr();
     let scores = ppr.rank(seed, ALPHA, K);
     let mut v: Vec<(usize, f64)> = (0..N).map(|i| (i, scores[i])).collect();
-    v.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
+    v.sort_by(|a, b| b.1.total_cmp(&a.1));
     v
 }
 

@@ -71,6 +71,18 @@ impl RoadGraph {
 /// Dijkstra / A* over the CSR. `heuristic == false` ⇒ pure Dijkstra (`h ≡ 0`);
 /// `true` ⇒ haversine A* (admissible metre lower bound to `dst`).
 ///
+/// OPERATIVE PROPERTY (FEYNMAN-18): correctness of the no-reopen / closed-set
+/// A* below requires the heuristic to be **consistent**, not merely admissible:
+/// `h(u) ≤ w(u,v) + h(v)` for every edge, equivalently `w(u,v) ≥ haversine(u,v)`
+/// since `h` is great-circle-to-`dst`. Haversine-to-a-fixed-dst satisfies the
+/// triangle inequality, hence IS consistent whenever every edge weight ≥ the
+/// great-circle distance between its endpoints — which holds for metre/length
+/// costs but NOT for arbitrary `(u,v,cost)` triples fed via `road_graph_from_ways`
+/// (e.g. travel-time costs, which are numerically smaller than metres). Feeding
+/// inconsistent costs with `heuristic=true` yields silently sub-optimal routes.
+/// The `debug_assert!` in the relaxation loop catches this in debug/test builds;
+/// for non-metric costs, call with `heuristic = false` (pure Dijkstra, always optimal).
+///
 /// `shortcuts` augment the adjacency at query time (empty ⇒ exact node
 /// sequence). Returns `(node path src→dst, total weight)` or `None` if
 /// unreachable. Deterministic tie-break by node id via the `(Prio, usize)` heap

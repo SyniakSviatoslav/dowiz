@@ -251,14 +251,15 @@ impl KalmanFilter {
 
     /// Current Kalman gain that *would* be applied by the next `update`,
     /// for the steady-state / EMA-equivalence check. Computed from the
-    /// current covariance (no mutation).
-    pub fn gain(&self) -> Mat {
+    /// current covariance (no mutation). Returns `None` if the innovation
+    /// covariance S is singular (degrades instead of panicking — TORVALDS-17).
+    pub fn gain(&self) -> Option<Mat> {
         let ht = transpose(&self.h);
         let pht = crate::mat::matmul_contig(&self.p, &ht);
         let hph = crate::mat::matmul_contig(&self.h, &pht);
         let s = add(&hph, &self.r);
-        let s_inv = mat_inverse(&s).expect("gain: S must be invertible");
-        crate::mat::matmul_contig(&pht, &s_inv)
+        let s_inv = mat_inverse(&s)?;
+        Some(crate::mat::matmul_contig(&pht, &s_inv))
     }
 
     /// Most recent innovation `y = z − H·x` from the last successful `update`.
@@ -363,15 +364,19 @@ mod tests {
     // ---------------------------------------------------------------------
     // 2. 1-D constant model: EMA is the steady-state special case.
     //    F=H=1, Q=0.01, R=1.0. Hand-derived steady gain:
-    //      s = (q + √(q²+4qr))/2 = 0.105125
-    //      k* = s/(s+r)            = 0.095124
+    //      s = (q + √(q²+4qr))/2 = 0.105125          (predicted covariance)
+    //      p* = s − q = 0.095125                      (posterior covariance)
+    //      k* = p* / (p* + r) = 0.086863              (the gain the filter APPLIES)
+    // NOTE: the gain the update step actually applies is K = P_prior/(P_prior+R)
+    // = p*/(p*+r), NOT s/(s+r) — FEYNMAN-04 mis-stated the formula; the code was
+    // correct and this test asserts the TRUE gain.
     // ---------------------------------------------------------------------
     #[test]
     fn scalar_kf_steady_gain_matches_hand() {
         // 1-D constant model: F=H=1, Q=0.01, R=1.0.
-        // Steady-state Riccati (scalar KF): let a = p*+q, then
-        //   p* = a·r/(a+r)  ⇒  with s = p*+q :  s² − q·s − q·r = 0
-        //   s = (q + √(q²+4qr))/2 ;  p* = s − q ;  k* = p* / (p* + r).
+        // Steady-state Riccati (scalar KF): let s = p*+q, then
+        //   s² − q·s − q·r = 0  ⇒  s = (q + √(q²+4qr))/2 ;  p* = s − q.
+        // The gain the update step applies is K = p*/(p*+r) (posterior form).
         // Hand values: s = 0.105125, p* = 0.095125, k* = 0.086863.
         let q = 0.01_f64;
         let r = 1.0_f64;
@@ -385,7 +390,7 @@ mod tests {
             kf.predict();
             let _ = kf.update(&[1.0]);
         }
-        let g = kf.gain().get(0, 0);
+        let g = kf.gain().expect("S invertible at steady state").get(0, 0);
         assert!(
             close(g, k_star, 1e-4),
             "KF steady gain {g} must equal hand k* {k_star}"
@@ -394,9 +399,11 @@ mod tests {
 
     #[test]
     fn scalar_kf_equival_ema_next() {
-        // With alpha = the KF steady gain k*, BOTH converge to the SAME
-        // estimate — but only at steady state (the KF has a transient from
-        // its high P0; fixed-alpha EMA has none). Warm up, then compare.
+        // With alpha = the KF steady gain k* (= p*/(p*+r), the gain the filter
+        // APPLIES), BOTH converge to the SAME estimate — but only at steady
+        // state (the KF has a transient from its high P0; fixed-alpha EMA has
+        // none). Warm up, then compare. FEYNMAN-04: the equivalence holds with
+        // the posterior-form gain k* = p*/(p*+r).
         let q = 0.01_f64;
         let r = 1.0_f64;
         let s = (q + (q * q + 4.0 * q * r).sqrt()) / 2.0;

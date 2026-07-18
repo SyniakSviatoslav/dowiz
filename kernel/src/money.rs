@@ -573,6 +573,12 @@ mod tests {
             (0, 0.20, false),       // green_zero_subtotal_or_rate → 0
             (1000, 0.0, false),     // green_zero_subtotal_or_rate → 0
             (i64::MAX, 2.0, false), // red_tax_overflow_is_err → Err
+            // FEYNMAN-10: the negative-rate edge the parity suite used to skip.
+            // The law (apply_tax) refuses denom ≤ 0; the generated organs must
+            // refuse the same — both directions, so a future authority flip to
+            // the generated organ cannot silently change red-line behavior.
+            (1000, -2.0, false),    // red negative effective rate ⇒ Err
+            (1000, -2.0, true),     // red negative effective rate (inclusive) ⇒ Err
         ];
         for &(sub, rate, incl) in MONEY_TAX_FIXTURES {
             // Same boundary conversion as apply_tax (money.rs:275).
@@ -618,7 +624,7 @@ mod tests {
         // Property grid: divergence-hunting sweep over the integer basis. Any single
         // mismatch is RED — this is the test *designed to break* the transcription.
         let subs = [0i64, 1, 999, 1_000_000, i64::MAX / 2];
-        let rates = [0i64, 1, 200_000, 999_999];
+        let rates = [0i64, 1, 200_000, 999_999, -2_000_000];
         for &sub in subs.iter() {
             for &rate_micro in rates.iter() {
                 // f64 rate round-trips the micro basis for the hand-written law.

@@ -183,8 +183,13 @@ bench_run() {
   local end_ms; end_ms="$(date +%s%3N)"
   local ms; ms=$((end_ms - start_ms))
   local rss_mb=0; [ -n "$peak_kb" ] && [ "$peak_kb" != "0" ] && rss_mb=$((peak_kb / 1024))
-  log_event bench "name=$name" "ms=$ms" "rss_mb=$rss_mb" "rc=$rc" "note=$(printf '%s' "$note" | _jesc)" >/dev/null
-  log_event metric "kind=resource" "op=$name" "ms=$ms" "rss_mb=$rss_mb" >/dev/null
+  log_event bench "name=$name" "ms=$ms" "rss_mb=$rss_mb" "rc=$rc" "note=$note" >/dev/null
+  # TORVALDS-09 fix: (a) drop the pre-_jesc — log_event already escapes each
+  # value once (double-escaping produced a doubly-escaped payload); (b) the
+  # metric kind is emitted positionally by log_event as "kind":"metric", so a
+  # literal "kind=resource" here created a DUPLICATE key (last-wins clobbered
+  # the metric kind). Rename the dimension to "rt=resource" instead.
+  log_event metric "rt=resource" "op=$name" "ms=$ms" "rss_mb=$rss_mb" >/dev/null
   if [ "${TELEMETRY_NO_TG:-0}" != "1" ]; then
     tg_send "⏱️ bench/$name ${ms}ms rss=${rss_mb}MB rc=$rc${note:+ | $note}" \
       || echo "telemetry: bench logged locally, Telegram send failed" >&2
