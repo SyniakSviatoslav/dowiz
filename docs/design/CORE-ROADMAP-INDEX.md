@@ -2,7 +2,9 @@
 
 > **This is the WHERE. The WHAT/WHEN is
 > [`MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md`](MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md)
-> (canonical roadmap, execution phases P01–P46, §9/§10 there point back here).** Every planning
+> (canonical roadmap, execution phases P01–P56, §9/§10 there point back here — **2026-07-18
+> update: extended P31–P46 → P31–P56 across §11–§15**, see §10 there for the phase index).**
+> Every planning
 > document in the corpus is reachable from this file in ≤2 hops; a plan not listed here does not
 > exist for navigation purposes (add a row when adding a doc). Built by the Layer-I consolidation
 > pass ([`CORE-ROADMAP-2026-07-17/BLUEPRINT-P-I-consolidation.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P-I-consolidation.md));
@@ -160,6 +162,24 @@ before today. Each is now owned by a P31–P46 phase (SOVEREIGN §10.2 = fast ph
 | [docker-swap/](docker-swap/) | P35 | DK-01..10; DK-01/02/03/07 DONE with real `wasip2` component + deny-by-default WASI host — previously zero index reference despite working code |
 | [math-first-architecture-blueprint.md](math-first-architecture-blueprint.md) | P31 | S0/S1/S2/S4 DONE; S3→P31c, S5→P31d, S6(=B3, counted once)→P31e, S7 parked→PROTOCOL |
 | [hydraulic-loop-v2/](hydraulic-loop-v2/) | P32 + P33 | BP-01..23; resonator/DMD wiring gaps → P32b/P32c; BP-03/04/11/12–21/23 unconfirmed-status audit → P33b |
+
+## 10. New phases P47–P56 + operational runbooks (2026-07-18, same-day follow-ups)
+
+Genuinely new work, not absorbed-orphan-arc registration — each links to its blueprint file
+directly. Full DoD/anti-scope lives in the blueprint; SOVEREIGN §11–§15 carry the phase-entry
+summaries (Absorbs/Status/Role/DoD/Anti-scope/Depends-blocks) in the same template as §10.5.
+
+| Phase / doc | Component | Blueprint | One-line note |
+|---|---|---|---|
+| P47–P50 | DELIVERY / ECOSYSTEM-OPS | [CORE-ROADMAP-2026-07-17/BLUEPRINT-P47-P50-gap-closing-phases.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P47-P50-gap-closing-phases.md) + [BLUEPRINT-P48-owner-hub-surface.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P48-owner-hub-surface.md) (P48 promoted to its own file) | Payment rails, owner hub, customer identity, legal/first-order gate — all 3 operator rulings RESOLVED (SOVEREIGN §11) |
+| P51 | DELIVERY | [CORE-ROADMAP-2026-07-17/BLUEPRINT-P51-open-map-routing.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P51-open-map-routing.md) | OSM vector + field-rendered routes; satellite imagery rejected on cited resolution physics |
+| P52 | DELIVERY | [CORE-ROADMAP-2026-07-17/BLUEPRINT-P52-courier-working-surface.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P52-courier-working-surface.md) | Closes the MVP audit's #1 finding — courier had zero owned UI despite the most-built protocol side |
+| P53 | DELIVERY | [CORE-ROADMAP-2026-07-17/BLUEPRINT-P53-tor-onion-integration.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P53-tor-onion-integration.md) | Activates fold-in ledger L4; system-`tor` sidecar not arti (arti hosting still experimental) |
+| P54 | AGENT | [CORE-ROADMAP-2026-07-17/BLUEPRINT-P54-llm-agent-verification-harness.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P54-llm-agent-verification-harness.md) | LLM/agent adversarial probes; fine-tuning DEFERRED against the operator's own glossary criteria |
+| P55 | PROTOCOL/CORE | [CORE-ROADMAP-2026-07-17/BLUEPRINT-P55-protocol-ecosystem-testing.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P55-protocol-ecosystem-testing.md) | Regression taxonomy from 4 real same-session bugs; proptest confirmed already-live (400 cases) |
+| P56 | ECOSYSTEM-OPS | [CORE-ROADMAP-2026-07-17/BLUEPRINT-P56-verification-harness-infrastructure.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P56-verification-harness-infrastructure.md) | Shared storage/scheduling/meta-verification substrate for P54+P55; `hetzner:dowiz/test-results/` sync |
+| P21 Part 2 | AGENT | [CORE-ROADMAP-2026-07-17/BLUEPRINT-P21-local-llm-hermes-native.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P21-local-llm-hermes-native.md) §11 | Tiered-Intelligence architecture evaluated against operator proposal — Tier-0-model rejected, Ollama stays, model verdict grounded in real workload |
+| Disk-ops runbook | ECOSYSTEM-OPS | [CORE-ROADMAP-2026-07-17/BLUEPRINT-DISK-OPS-CLEANUP-2026-07-18.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-DISK-OPS-CLEANUP-2026-07-18.md) | Operational runbook, not a numbered phase — 90%→65% disk fix executed same pass; `hetzner:dowiz` remote confirmed live |
 
 ---
 
