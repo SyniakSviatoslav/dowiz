@@ -2636,3 +2636,20 @@ Two closes:
   deliberately undecided** (Recommended, confirmed) — consistent with §17.1's own "open to
   revision, not designed now" framing; no premature foundation structure is being built ahead
   of the actual need for one.
+
+### 17.9 Hetzner also abstracted as a swappable VPS port; synthesis of the four forever-dependency fixes
+Hetzner gets the identical abstraction (Recommended, confirmed): an abstract VPS-hosting port
+with Hetzner as the Wave-0 default, not hardcoded into the architecture — completing the
+symmetry with §17.8's Cloudflare-tunnel fix.
+
+**Synthesis, worth stating plainly**: this dialogue pass systematically applied one question —
+*"what happens to a running hub if this specific company/account stops existing?"* — across
+every infrastructure dependency in turn, and found four real single-points-of-failure, all now
+resolved the same way (an abstract port with a Wave-0-default implementation, never a hardcoded
+dependency): the dowiz-operated Cloudflare account for tunneling (§17.3), the dowiz-signed
+capability-cert root (§17.7), Cloudflare-the-company as tunnel provider (§17.8), and Hetzner-
+the-company as VPS provider (this entry). Combined with the already-existing adapter-port
+pattern for payment (§16.13), storage (§16.29), and the AI model (§16.52), **every named
+infrastructure dependency in this entire roadmap is now a swappable port with a Wave-0 default
+— none is architecturally permanent.** This is the concrete, falsifiable form of §17.3's "hubs
+survive without dowiz" claim, not just a restated intention.
