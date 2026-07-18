@@ -425,22 +425,30 @@ impl Csr {
         for i in 0..n {
             let start = off[i];
             let end = off[i + 1];
-            // Sort this row's bucket by column (deterministic order).
+            // Sort each row's bucket ascending by column — the partition step
+            // above fills buckets in INPUT-EDGE ORDER, NOT sorted, so without
+            // this the arena path diverges from the heap `from_edges`
+            // (which `sort_by_key`s). Same operation order ⇒ byte-identical.
             scratch[start..end].sort_by_key(|&(c, _)| c);
-            // Merge adjacent duplicate columns by summing weights.
-            let mut merged: Vec<(usize, f64)> = Vec::new();
-            for &(c, w) in &scratch[start..end] {
-                if let Some(last) = merged.last_mut() {
-                    if last.0 == c {
-                        last.1 += w;
-                        continue;
+            // In-place duplicate-column merge by SUMMING weights (deterministic).
+            // the arena serves the bucket scratch from ONE region, so the ONLY
+            // heap Vecs on the arena path are the three owned outputs. Degrades
+            // to the heap `from_edges` on exhaustion (byte-identical).
+            let mut w = start;
+            for r in start..end {
+                let (c, v) = scratch[r];
+                if w > start && scratch[w - 1].0 == c {
+                    scratch[w - 1].1 += v; // sum duplicate column weights
+                } else {
+                    if w != r {
+                        scratch[w] = (c, v);
                     }
+                    w += 1;
                 }
-                merged.push((c, w));
             }
-            for (c, w) in merged {
-                col_idx.push(c);
-                val.push(w);
+            for s in start..w {
+                col_idx.push(scratch[s].0);
+                val.push(scratch[s].1);
             }
             row_ptr.push(col_idx.len());
         }
