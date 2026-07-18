@@ -1091,23 +1091,45 @@ mod tests {
         dim: usize,
     }
     impl LlmBackend for FakeEmbedder {
-        fn id(&self) -> &str { "fake" }
-        fn caps(&self) -> crate::ports::llm::Caps {
-            crate::ports::llm::Caps { chat: false, embed: true, rerank: false, tool_calling: false }
+        fn id(&self) -> &str {
+            "fake"
         }
-        fn chat(&self, _: &crate::ports::llm::ChatRequest) -> Result<crate::ports::llm::ChatResponse, crate::ports::llm::LlmError> {
+        fn caps(&self) -> crate::ports::llm::Caps {
+            crate::ports::llm::Caps {
+                chat: false,
+                embed: true,
+                rerank: false,
+                tool_calling: false,
+            }
+        }
+        fn chat(
+            &self,
+            _: &crate::ports::llm::ChatRequest,
+        ) -> Result<crate::ports::llm::ChatResponse, crate::ports::llm::LlmError> {
             Err(crate::ports::llm::LlmError::Unsupported)
         }
-        fn embed(&self, req: &crate::ports::llm::EmbedRequest) -> Result<crate::ports::llm::EmbedResponse, crate::ports::llm::LlmError> {
-            let h = req.input.bytes().fold(0usize, |a, b| a.wrapping_add(b as usize)) % self.dim;
+        fn embed(
+            &self,
+            req: &crate::ports::llm::EmbedRequest,
+        ) -> Result<crate::ports::llm::EmbedResponse, crate::ports::llm::LlmError> {
+            let h = req
+                .input
+                .bytes()
+                .fold(0usize, |a, b| a.wrapping_add(b as usize))
+                % self.dim;
             let mut v = vec![0.0f32; self.dim];
             v[h] = 1.0;
             Ok(crate::ports::llm::EmbedResponse { embedding: v })
         }
-        fn rerank(&self, _: &crate::ports::llm::RerankRequest) -> Result<crate::ports::llm::RerankResponse, crate::ports::llm::LlmError> {
+        fn rerank(
+            &self,
+            _: &crate::ports::llm::RerankRequest,
+        ) -> Result<crate::ports::llm::RerankResponse, crate::ports::llm::LlmError> {
             Err(crate::ports::llm::LlmError::Unsupported)
         }
-        fn health(&self) -> Result<(), crate::ports::llm::LlmError> { Ok(()) }
+        fn health(&self) -> Result<(), crate::ports::llm::LlmError> {
+            Ok(())
+        }
     }
 
     #[test]
@@ -1117,9 +1139,15 @@ mod tests {
         // First instance accepted, stores its embedding.
         assert!(gate.accept("the cat sat on the mat", Some(&be)));
         // Near-identical text → same one-hot slot → cos=1.0 ≥ 0.9 → rejected.
-        assert!(!gate.accept("the cat sat on the mat", Some(&be)), "near-duplicate must be rejected by Layer-B");
+        assert!(
+            !gate.accept("the cat sat on the mat", Some(&be)),
+            "near-duplicate must be rejected by Layer-B"
+        );
         // Genuinely different text → different slot → cos=0 < 0.9 → accepted.
-        assert!(gate.accept("a totally different sentence about rockets", Some(&be)), "distinct text must pass Layer-B");
+        assert!(
+            gate.accept("a totally different sentence about rockets", Some(&be)),
+            "distinct text must pass Layer-B"
+        );
     }
 
     #[test]
@@ -1132,8 +1160,10 @@ mod tests {
 
     #[test]
     fn cosine_orthogonal_is_zero() {
-        assert_eq!(crate::leak_gate::LeakGate::cosine(&[1.0, 0.0], &[0.0, 1.0]), 0.0);
+        assert_eq!(
+            crate::leak_gate::LeakGate::cosine(&[1.0, 0.0], &[0.0, 1.0]),
+            0.0
+        );
         assert!((crate::leak_gate::LeakGate::cosine(&[1.0, 0.0], &[1.0, 0.0]) - 1.0).abs() < 1e-9);
     }
 }
-

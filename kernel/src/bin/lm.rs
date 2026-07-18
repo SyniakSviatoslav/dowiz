@@ -92,16 +92,31 @@ fn selftest_run() {
     let tmp = std::env::temp_dir().join(format!("lm_selftest_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&tmp);
     std::fs::create_dir_all(&tmp).expect("mk temp");
-    std::fs::write(tmp.join("kalman.md"), "kalman filter estimates state from noisy measurements with prediction and update steps").unwrap();
-    std::fs::write(tmp.join("delivery.md"), "delivery flow tracks the courier from pickup to dropoff").unwrap();
-    std::fs::write(tmp.join("refund.md"), "refund policy returns money to the customer").unwrap();
+    std::fs::write(
+        tmp.join("kalman.md"),
+        "kalman filter estimates state from noisy measurements with prediction and update steps",
+    )
+    .unwrap();
+    std::fs::write(
+        tmp.join("delivery.md"),
+        "delivery flow tracks the courier from pickup to dropoff",
+    )
+    .unwrap();
+    std::fs::write(
+        tmp.join("refund.md"),
+        "refund policy returns money to the customer",
+    )
+    .unwrap();
 
     let pr = PrimaryRecall::from_dir(&tmp).expect("ingest temp corpus");
     let a = pr.recall_at_k("kalman", 3);
     let b = pr.recall_at_k("kalman", 3);
     assert_eq!(a, b, "ranking must be deterministic");
     assert!(!a.is_empty(), "expected hits");
-    assert_eq!(a[0].0, "kalman", "lexical query must surface kalman.md first");
+    assert_eq!(
+        a[0].0, "kalman",
+        "lexical query must surface kalman.md first"
+    );
     println!(
         "SELFTEST PASS: ingested {} docs, 'kalman' -> rank1={} score={:.4}",
         a.len(),

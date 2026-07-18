@@ -52,10 +52,12 @@ impl TokenBucket {
                 return false; // degrade-closed: no partial grant, no silent downgrade.
             }
             let next = pack(cur - need);
-            match self
-                .tokens
-                .compare_exchange_weak(pack(cur), next, Ordering::AcqRel, Ordering::Acquire)
-            {
+            match self.tokens.compare_exchange_weak(
+                pack(cur),
+                next,
+                Ordering::AcqRel,
+                Ordering::Acquire,
+            ) {
                 Ok(_) => return true,
                 Err(c) => cur = unpack(c),
             }
@@ -117,7 +119,9 @@ mod tests {
         let b = TokenBucket::new(2, 0.0); // no refill
         assert!(b.try_acquire(1));
         assert!(b.try_acquire(1));
-        assert!(!b.try_acquire(1), "third acquire must be typed-false (degrade-closed)");
+        assert!(
+            !b.try_acquire(1),
+            "third acquire must be typed-false (degrade-closed)"
+        );
     }
 }
-

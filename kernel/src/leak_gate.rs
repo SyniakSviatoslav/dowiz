@@ -30,8 +30,16 @@ impl LeakGate {
             return 0.0;
         }
         let dot: f64 = a.iter().zip(b).map(|(x, y)| *x as f64 * *y as f64).sum();
-        let na: f64 = a.iter().map(|x| (*x as f64) * (*x as f64)).sum::<f64>().sqrt();
-        let nb: f64 = b.iter().map(|x| (*x as f64) * (*x as f64)).sum::<f64>().sqrt();
+        let na: f64 = a
+            .iter()
+            .map(|x| (*x as f64) * (*x as f64))
+            .sum::<f64>()
+            .sqrt();
+        let nb: f64 = b
+            .iter()
+            .map(|x| (*x as f64) * (*x as f64))
+            .sum::<f64>()
+            .sqrt();
         if na == 0.0 || nb == 0.0 {
             return 0.0;
         }
@@ -72,24 +80,46 @@ impl LeakGate {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ports::llm::{Caps, ChatRequest, ChatResponse, EmbedRequest, EmbedResponse, LlmBackend, LlmError, RerankRequest, RerankResponse};
+    use crate::ports::llm::{
+        Caps, ChatRequest, ChatResponse, EmbedRequest, EmbedResponse, LlmBackend, LlmError,
+        RerankRequest, RerankResponse,
+    };
 
     /// Deterministic fake backend: one-hot on a hash of the input → identical cos1, different cos0.
     struct FakeEmbedder {
         dim: usize,
     }
     impl LlmBackend for FakeEmbedder {
-        fn id(&self) -> &str { "fake" }
-        fn caps(&self) -> Caps { Caps { chat: false, embed: true, rerank: false, tool_calling: false } }
-        fn chat(&self, _: &ChatRequest) -> Result<ChatResponse, LlmError> { Err(LlmError::Unsupported) }
+        fn id(&self) -> &str {
+            "fake"
+        }
+        fn caps(&self) -> Caps {
+            Caps {
+                chat: false,
+                embed: true,
+                rerank: false,
+                tool_calling: false,
+            }
+        }
+        fn chat(&self, _: &ChatRequest) -> Result<ChatResponse, LlmError> {
+            Err(LlmError::Unsupported)
+        }
         fn embed(&self, req: &EmbedRequest) -> Result<EmbedResponse, LlmError> {
-            let h = req.input.bytes().fold(0usize, |a, b| a.wrapping_add(b as usize)) % self.dim;
+            let h = req
+                .input
+                .bytes()
+                .fold(0usize, |a, b| a.wrapping_add(b as usize))
+                % self.dim;
             let mut v = vec![0.0f32; self.dim];
             v[h] = 1.0;
             Ok(EmbedResponse { embedding: v })
         }
-        fn rerank(&self, _: &RerankRequest) -> Result<RerankResponse, LlmError> { Err(LlmError::Unsupported) }
-        fn health(&self) -> Result<(), LlmError> { Ok(()) }
+        fn rerank(&self, _: &RerankRequest) -> Result<RerankResponse, LlmError> {
+            Err(LlmError::Unsupported)
+        }
+        fn health(&self) -> Result<(), LlmError> {
+            Ok(())
+        }
     }
 
     #[test]
@@ -98,7 +128,10 @@ mod tests {
         let mut gate = LeakGate::new();
         assert!(gate.accept("the cat sat on the mat", Some(&be)));
         // Same text → cos=1.0 ≥ 0.9 → rejected.
-        assert!(!gate.accept("the cat sat on the mat", Some(&be)), "near-duplicate must be rejected");
+        assert!(
+            !gate.accept("the cat sat on the mat", Some(&be)),
+            "near-duplicate must be rejected"
+        );
         // Different text → cos=0 < 0.9 → accepted.
         assert!(gate.accept("a totally different sentence about rockets", Some(&be)));
     }
@@ -114,12 +147,29 @@ mod tests {
     fn backend_error_downgrades_to_pass() {
         struct Broken;
         impl LlmBackend for Broken {
-            fn id(&self) -> &str { "broken" }
-            fn caps(&self) -> Caps { Caps { chat: false, embed: true, rerank: false, tool_calling: false } }
-            fn chat(&self, _: &ChatRequest) -> Result<ChatResponse, LlmError> { Err(LlmError::Unsupported) }
-            fn embed(&self, _: &EmbedRequest) -> Result<EmbedResponse, LlmError> { Err(LlmError::Unavailable) }
-            fn rerank(&self, _: &RerankRequest) -> Result<RerankResponse, LlmError> { Err(LlmError::Unsupported) }
-            fn health(&self) -> Result<(), LlmError> { Err(LlmError::Unavailable) }
+            fn id(&self) -> &str {
+                "broken"
+            }
+            fn caps(&self) -> Caps {
+                Caps {
+                    chat: false,
+                    embed: true,
+                    rerank: false,
+                    tool_calling: false,
+                }
+            }
+            fn chat(&self, _: &ChatRequest) -> Result<ChatResponse, LlmError> {
+                Err(LlmError::Unsupported)
+            }
+            fn embed(&self, _: &EmbedRequest) -> Result<EmbedResponse, LlmError> {
+                Err(LlmError::Unavailable)
+            }
+            fn rerank(&self, _: &RerankRequest) -> Result<RerankResponse, LlmError> {
+                Err(LlmError::Unsupported)
+            }
+            fn health(&self) -> Result<(), LlmError> {
+                Err(LlmError::Unavailable)
+            }
         }
         let mut gate = LeakGate::new();
         // A backend error must NOT freeze generation (fail-closed downgrade to pass).
@@ -133,4 +183,3 @@ mod tests {
         assert_eq!(LeakGate::cosine(&[], &[1.0]), 0.0);
     }
 }
-
