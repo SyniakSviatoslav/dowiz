@@ -37,8 +37,58 @@ use crate::{git_ok, is_redline};
 /// on every verdict; a verdict lacking it is malformed => RED.
 pub const V1_RESIDUE: &str = "enforced approximation: identity != person";
 
+/// TLV tag carrying the REAL hybrid signature over `signing_bytes()` for the
+/// key_K DiffAttestation (Ed25519⊕ML-DSA-65, RequireBoth). Present on every
+/// signed note; EXCLUDED from `signing_bytes()` so the signature commits to the
+/// exact bytes re-derived by the verifier (BLUEPRINT-P06 §3/§4, Bug-2 fix).
+pub const SIG_TAG_K: u8 = 0x07;
+/// TLV tag carrying the REAL hybrid signature for the key_V Verdict.
+pub const SIG_TAG_V: u8 = 0x08;
+
 /// Anchor-file path: two public keys, tagged role=K / role=V (BLUEPRINT-P06 §2).
 pub const KV_GENESIS: &str = "config/kv-genesis.txt";
+
+/// Native telemetry sink (mandatory-telemetry doctrine: cheap ring local sink).
+/// One JSONL line per signature-verification event; append-only, greppable.
+/// Never contains key material — only role, anchor-id prefix, latency, result.
+pub const V1_TELEMETRY: &str = "docs/ledger/v1-sigverify-telemetry.jsonl";
+
+/// Append one telemetry record (JSONL) to the local v1 verification sink.
+/// Failures are non-fatal (telemetry must never break the gate).
+pub fn record_telemetry(repo_root: &Path, ev: &V1SigEvent) {
+    if let Some(dir) = Path::new(repo_root).join(V1_TELEMETRY).parent() {
+        let _ = fs::create_dir_all(dir);
+    }
+    let path = Path::new(repo_root).join(V1_TELEMETRY);
+    // tolerant hand-rolled JSON — no allocation of a Value, no serde dep.
+    let line = format!(
+        "{{\"t\":{ts},\"op\":\"{op}\",\"role\":\"{role}\",\"anchor\":\"{anchor}\",\"sha256_signed\":\"{signed_sha}\",\"ms\":{ms},\"ok\":{ok}}}
+",
+        ts = ev.ts,
+        op = ev.op,
+        role = ev.role,
+        anchor = ev.anchor,
+        signed_sha = ev.signed_sha256,
+        ms = ev.ms,
+        ok = ev.ok,
+    );
+    use std::io::Write;
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = f.write_all(line.as_bytes());
+    }
+}
+
+/// One signature-verification telemetry event (cheap, no key material).
+#[derive(Clone, Debug)]
+pub struct V1SigEvent {
+    pub ts: u64,
+    pub op: &'static str,
+    pub role: char,
+    pub anchor: String,
+    pub signed_sha256: String,
+    pub ms: u64,
+    pub ok: bool,
+}
 
 /// Digest helper: the blueprint specifies sha3-256 (32 bytes). `sha3sum` is not
 /// guaranteed on every host, so we use `git hash-object` (always present) and
@@ -99,7 +149,7 @@ fn hexplit(hex: &str, n: usize) -> [u8; 32] {
 /// A loaded K/V anchor: hex public key + role.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Anchor {
-    pub role: char,     // 'K' or 'V'
+    pub role: char, // 'K' or 'V'
     pub pub_hex: String,
 }
 
@@ -194,10 +244,15 @@ pub struct DiffAttestation {
     pub key_k_anchor_id: [u8; 32],
     pub redline_touch: u8,
     pub timestamp: u64,
+    /// REAL hybrid signature (Ed25519⊕ML-DSA-65) over `signing_bytes()`,
+    /// populated when signed by `HybridSigner`. Empty in the unsigned state.
+    pub sig_k: Vec<u8>,
 }
 
 impl DiffAttestation {
-    pub fn encode(&self) -> Vec<u8> {
+    /// The exact bytes the signature commits to — every TLV field EXCEPT the
+    /// signature itself, so the verifier re-derives identical bytes (BLUEPRINT-P06 §3).
+    pub fn signing_bytes(&self) -> Vec<u8> {
         let mut b = Vec::new();
         tlv_put(&mut b, 0x01, &self.commit_sha3);
         tlv_put(&mut b, 0x02, &self.diff_sha3);
@@ -207,10 +262,17 @@ impl DiffAttestation {
         tlv_put(&mut b, 0x06, &self.timestamp.to_be_bytes());
         b
     }
+    pub fn encode(&self) -> Vec<u8> {
+        let mut b = self.signing_bytes();
+        if !self.sig_k.is_empty() {
+            tlv_put(&mut b, SIG_TAG_K, &self.sig_k);
+        }
+        b
+    }
     pub fn decode(buf: &[u8]) -> Option<Self> {
         let m = tlv_get(buf);
         let get32 = |t: u8| field32(&m, t);
-        Some(Self {
+        let mut out = Self {
             commit_sha3: get32(0x01)?,
             diff_sha3: get32(0x02)?,
             base_sha3: get32(0x03)?,
@@ -222,7 +284,12 @@ impl DiffAttestation {
                 a.copy_from_slice(&v[..8.min(v.len())]);
                 u64::from_be_bytes(a)
             },
-        })
+            sig_k: Vec::new(),
+        };
+        if let Some(s) = m.get(&SIG_TAG_K) {
+            out.sig_k = s.clone();
+        }
+        Some(out)
     }
 }
 
@@ -234,10 +301,14 @@ pub struct Verdict {
     pub key_v_anchor_id: [u8; 32],
     pub context_descriptor: String,
     pub rationale: String,
+    /// REAL hybrid signature over `signing_bytes()`; empty in unsigned state.
+    pub sig_v: Vec<u8>,
 }
 
 impl Verdict {
-    pub fn encode(&self) -> Vec<u8> {
+    /// The exact bytes the signature commits to — every TLV field EXCEPT the
+    /// signature (tag 0x08) and residue (tag 0x09), re-derived by the verifier.
+    pub fn signing_bytes(&self) -> Vec<u8> {
         let mut b = Vec::new();
         tlv_put(&mut b, 0x01, &self.diff_attest_sha3);
         tlv_put(&mut b, 0x02, &self.recomputed_diff_sha3);
@@ -245,6 +316,13 @@ impl Verdict {
         tlv_put(&mut b, 0x05, &self.key_v_anchor_id);
         tlv_put(&mut b, 0x06, self.context_descriptor.as_bytes());
         tlv_put(&mut b, 0x07, self.rationale.as_bytes());
+        b
+    }
+    pub fn encode(&self) -> Vec<u8> {
+        let mut b = self.signing_bytes();
+        if !self.sig_v.is_empty() {
+            tlv_put(&mut b, SIG_TAG_V, &self.sig_v);
+        }
         tlv_put(&mut b, 0x09, V1_RESIDUE.as_bytes()); // residue always present
         b
     }
@@ -255,14 +333,19 @@ impl Verdict {
         if residue != V1_RESIDUE.as_bytes() {
             return None; // residue missing/changed => malformed
         }
-        Some(Self {
+        let mut out = Self {
             diff_attest_sha3: get32(0x01)?,
             recomputed_diff_sha3: get32(0x02)?,
             verdict: *m.get(&0x03)?.first()?,
             key_v_anchor_id: get32(0x05)?,
             context_descriptor: String::from_utf8_lossy(m.get(&0x06)?).into_owned(),
             rationale: String::from_utf8_lossy(m.get(&0x07)?).into_owned(),
-        })
+            sig_v: Vec::new(),
+        };
+        if let Some(s) = m.get(&SIG_TAG_V) {
+            out.sig_v = s.clone();
+        }
+        Some(out)
     }
 }
 
@@ -362,14 +445,34 @@ fn hex_decode(s: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// Tolerant parser for `bebop2-kv verify` output: `{"ok":bool}`, a bare
-/// `"true"`/`"ok"`, or any line containing `"ok":true`.
+/// Strict parser for `bebop2-kv verify` output. The CLI emits exactly
+/// `{"ok":true}` or `{"ok":false}`. A naive `contains("true")` would treat the
+/// FALSE case as success (because the literal substring "true" appears inside
+/// "false"), so we parse the boolean field explicitly — a forged/any signature
+/// must fail verification (BLUEPRINT-P06 §7.7/§7.9, Bug-1 real-verify fix).
 fn parse_ok(s: &str) -> bool {
+    // Strip whitespace; accept `{"ok":true}` / `{"ok":false}` (key/value may be
+    // space-separated; tolerate `: ` and surrounding spaces).
     let s = s.trim();
-    if s.contains("\"ok\"") {
-        return s.contains("true");
+    if s.is_empty() {
+        return false;
     }
-    s.eq_ignore_ascii_case("true") || s.eq_ignore_ascii_case("ok")
+    // Fast literal match first (the CLI's exact output).
+    if s == "{\"ok\":true}" {
+        return true;
+    }
+    if s == "{\"ok\":false}" {
+        return false;
+    }
+    // Tolerant fallback: extract the value after `"ok":`.
+    if let Some(pos) = s.find("\"ok\"") {
+        let rest = &s[pos + 4..];
+        if let Some(colon) = rest.find(':') {
+            let val = rest[colon + 1..].trim().trim_end_matches('}');
+            return val == "true";
+        }
+    }
+    false
 }
 
 /// Production Signer (post-C4b). Shells `bebop2-kv` to sign/verify note bytes
@@ -387,11 +490,12 @@ impl Signer for HybridSigner {
         true
     }
     fn sign(&self, bytes: &[u8]) -> Vec<u8> {
-        // bebop2-kv sign <role> <master-hex> <hex(bytes)> -> hex sig on stdout
+        // bebop2-kv sign <role=K|V> <master-hex> <hex(bytes)> -> hybrid sig hex
+        // (ed_sig 64B ++ pq_sig 3309B) on stdout. Fail-closed: empty on error.
         match Command::new(kv_bin())
             .args([
                 "sign",
-                &self.role.to_string(),
+                &format!("role={}", self.role),
                 &self.master_hex,
                 &hex_encode(bytes),
             ])
@@ -409,33 +513,170 @@ impl Signer for HybridSigner {
 impl HybridSigner {
     /// Verify a hybrid signature over `bytes` against the public anchor line
     /// (the kv-genesis line for this role). Shells
-    /// `bebop2-kv verify <anchor-line> <hex(bytes)> <sig_hex>`.
-    pub fn verify_signature(&self, pub_anchor_line: &str, bytes: &[u8], sig_hex: &str) -> bool {
-        match Command::new(kv_bin())
-            .args([
-                "verify",
-                pub_anchor_line,
-                &hex_encode(bytes),
-                sig_hex,
-            ])
+    /// `bebop2-kv verify <anchor-line> <hex(bytes)> <sig-hex>`.
+    /// Latency + result are recorded to the native telemetry sink when
+    /// `repo_root` is `Some` (pass `None` in tests that don't want I/O).
+    pub fn verify_signature(
+        &self,
+        pub_anchor_line: &str,
+        bytes: &[u8],
+        sig_hex: &str,
+        repo_root: Option<&Path>,
+    ) -> bool {
+        let t0 = std::time::Instant::now();
+        let out = match Command::new(kv_bin())
+            .args(["verify", pub_anchor_line, &hex_encode(bytes), sig_hex])
             .output()
         {
             Ok(o) if o.status.success() => parse_ok(&String::from_utf8_lossy(&o.stdout)),
             _ => false,
+        };
+        // Telemetry (mandatory doctrine): record every real verify op, never
+        // blocking the result.
+        if let Some(root) = repo_root {
+            let signed_sha256 = digest32(bytes);
+            record_telemetry(
+                root,
+                &V1SigEvent {
+                    ts: now_unix_ts(),
+                    op: "verify",
+                    role: self.role,
+                    anchor: anchor_id_prefix(pub_anchor_line),
+                    signed_sha256: hex_encode(&signed_sha256),
+                    ms: t0.elapsed().as_millis() as u64,
+                    ok: out,
+                },
+            );
         }
+        out
     }
 
     /// Derive this role's public anchor line (hex) for `verify_signature`, by
-    /// shelling `bebop2-kv pubkey <role> <master-hex>`. Empty on failure.
+    /// shelling `bebop2-kv genkeys <master-hex>` (prints the K line then the V
+    /// line) and selecting the line matching this role. The `pubkey`
+    /// subcommand does NOT exist on bebop2-kv (only genkeys|sign|verify) — this
+    /// is the Bug-3 fix (BLUEPRINT-P06 §2 ceremony shape). Empty on failure.
     pub fn pub_anchor_line(&self) -> String {
         match Command::new(kv_bin())
-            .args(["pubkey", &self.role.to_string(), &self.master_hex])
+            .args(["genkeys", &self.master_hex])
             .output()
         {
-            Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim().to_string(),
+            Ok(o) if o.status.success() => {
+                let out = String::from_utf8_lossy(&o.stdout);
+                // genkeys prints "<hex> role=K" on line 1, "<hex> role=V" on line 2.
+                for line in out.lines() {
+                    if line.trim().ends_with(&format!("role={}", self.role)) {
+                        return line.trim().to_string();
+                    }
+                }
+                String::new()
+            }
             _ => String::new(),
         }
     }
+}
+
+/// First 8 hex chars of an anchor line, for telemetry correlation (no full key).
+fn anchor_id_prefix(anchor_line: &str) -> String {
+    let hex = anchor_line.split_whitespace().next().unwrap_or("");
+    let take = hex.len().min(8);
+    hex[..take].to_string()
+}
+
+/// Current unix seconds (telemetry timestamp).
+fn now_unix_ts() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// Split a raw note (attestation or verdict) into the signing-covered bytes and
+/// the signature tag value. The signature tag (`SIG_TAG_K`/`SIG_TAG_V`) MUST be
+/// excluded from the bytes that get re-verified, otherwise the verifier would
+/// try to verify a message that includes its own signature (always fails).
+/// Returns `(signing_bytes, sig)` where `sig` is empty if the note is unsigned.
+pub fn split_note_sig(raw: &[u8], sig_tag: u8) -> (Vec<u8>, Vec<u8>) {
+    let m = tlv_get(raw);
+    let mut sig = Vec::new();
+    if let Some(s) = m.get(&sig_tag) {
+        sig = s.clone();
+    }
+    // Reconstruct the signing-covered bytes from the TLV map, EXCLUDING sig_tag.
+    // Order must match `signing_bytes()` (tags 0x01..0x07; residue 0x09 is
+    // carried but never signed). Iterating a BTreeMap yields sorted tags.
+    let mut b = Vec::new();
+    for (tag, val) in m.iter() {
+        if *tag == sig_tag {
+            continue;
+        }
+        tlv_put(&mut b, *tag, val);
+    }
+    (b, sig)
+}
+
+/// Reconstruct the exact message a signature was computed over.
+/// Mirrors `signing_bytes()` for a raw note: the TLV bytes with `sig_tag`
+/// excluded. Used by the real-sig acceptance test to re-derive the signed
+/// payload that `HybridSigner::sign` consumed.
+pub fn verify_message(raw: &[u8], sig_tag: u8) -> Vec<u8> {
+    split_note_sig(raw, sig_tag).0
+}
+
+// ---------------------------------------------------------------------------
+// Native telemetry (BLUEPRINT-NATIVE-TELEMETRY-LATENCY-EXPLAINABLE-EVENTS-2026-07-17)
+// Every real crypto / gate operation emits a latency + explainable-event sink
+// record. Output goes to stderr via `telemetry_sink` so it never corrupts the
+// machine-readable stdout gate verdict.
+// ---------------------------------------------------------------------------
+
+/// Resolve the K/V anchor line for a role from the operator kv-genesis file.
+/// Fail-closed: returns `None` if the genesis file is absent, or has no entry
+/// for `role`. Production uses this so verification is anchored to a committed
+/// trust root, not to a freshly re-derived key.
+pub fn resolve_kv_anchor(repo_root: &Path, role: char) -> Option<String> {
+    let anchors = load_kv_genesis(repo_root)?;
+    for a in anchors {
+        if a.role == role {
+            return Some(format!("role={} {}", a.role, a.pub_hex));
+        }
+    }
+    None
+}
+
+/// Measure `f` and report elapsed microseconds through the native telemetry sink.
+/// Returns the result of `f`.
+fn measure<F, T>(stage: &str, f: F) -> T
+where
+    F: FnOnce() -> T,
+{
+    let t0 = std::time::Instant::now();
+    let r = f();
+    let us = t0.elapsed().as_micros();
+    record_probe(stage, us, None);
+    r
+}
+
+/// Emit one native telemetry probe line to stderr.
+/// Format: `{"telemetry":{"stage":<stage>,"us":<micros>,"note":<optional>}}`
+fn record_probe(stage: &str, us: u128, note: Option<&str>) {
+    match note {
+        Some(n) => {
+            eprintln!("{{\"telemetry\":{{\"stage\":\"{stage}\",\"us\":{us},\"note\":\"{n}\"}}}}")
+        }
+        None => eprintln!("{{\"telemetry\":{{\"stage\":\"{stage}\",\"us\":{us}}}}}"),
+    }
+}
+
+/// Native telemetry sink: a `ci-truth` CLI hook emitting aggregate gate metrics.
+/// Prints a single JSON line to stdout describing the last gate run, useful for
+/// CI dashboards / the mandatory-telemetry doctrine.
+pub fn telemetry_sink(stage: &str, us: u128, red: bool) {
+    println!(
+        "{{\"v1_telemetry\":{{\"stage\":\"{stage}\",\"us\":{us},\"verdict\":{}}}}}",
+        if red { "\"RED\"" } else { "\"GREEN\"" }
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -469,10 +710,24 @@ pub enum GateVerdict {
 /// Evaluate the merge gate for a commit given its two notes' raw bytes.
 /// `ci_redline_touch` = CI's independent recomputation of whether the diff
 /// touches a red-line path (the blueprint §5.6 honesty check).
+///
+/// `kv_master` = `Some(master_hex)` ONLY when the operator has minted a real
+/// kv-genesis (and `bebop2-kv` is available). When `Some`, the gate performs
+/// REAL hybrid (Ed25519⊕ML-DSA-65, RequireBoth) signature verification over
+/// each note's `signing_bytes()` via `bebop2-kv verify` — Bug-1 fix. When
+/// `None`, signature verification is SKIPPED (Phase-1 unsigned state) and the
+/// gate falls back to the structural contract checks only. This keeps the gate
+/// usable/testable without the operator trust root while never faking a
+/// cryptographic pass.
+///
+/// `repo_root` is used only for telemetry emission (native sink); pass `None`
+/// to suppress I/O (unit tests).
 pub fn evaluate_gate(
     diff_attest_raw: &[u8],
     verdict_raw: &[u8],
     ci_redline_touch: bool,
+    kv_master: Option<&str>,
+    repo_root: Option<&Path>,
 ) -> GateVerdict {
     // §5.1 — both signatures/notes present
     if diff_attest_raw.is_empty() {
@@ -512,16 +767,80 @@ pub fn evaluate_gate(
     }
 
     // §5.5 — residue present (already enforced by decode; double-check)
-    if !verdict_raw.windows(V1_RESIDUE.len()).any(|w| w == V1_RESIDUE.as_bytes()) {
+    if !verdict_raw
+        .windows(V1_RESIDUE.len())
+        .any(|w| w == V1_RESIDUE.as_bytes())
+    {
         return GateVerdict::Red("verdict missing residue line".into());
     }
 
     // §5.6 — redline_touch honesty: CI's recomputation must agree with author's bit
     if ci_redline_touch && attest.redline_touch == 0 {
-        return GateVerdict::Red("author signed redline_touch=0 but CI matches red-line path".into());
+        return GateVerdict::Red(
+            "author signed redline_touch=0 but CI matches red-line path".into(),
+        );
     }
     if !ci_redline_touch && attest.redline_touch != 0 {
-        return GateVerdict::Red("author signed redline_touch=1 but CI matches no red-line path".into());
+        return GateVerdict::Red(
+            "author signed redline_touch=1 but CI matches no red-line path".into(),
+        );
+    }
+
+    // --- REAL SIGNATURE VERIFICATION (Bug-1 fix, BLUEPRINT-P06 §5/§7.7) --------
+    // When the operator trust root is present, actually verify BOTH the key_K
+    // DiffAttestation signature and the key_V Verdict signature through the
+    // hybrid gate (RequireBoth). A missing/forge/garbage sig => RED. This is the
+    // check that the prior implementation silently skipped (self-consistency
+    // only). Fail-closed: if the binary is declared available (master set) but a
+    // verify fails for ANY reason, the gate is RED.
+    if let Some(master) = kv_master {
+        let k_signer = HybridSigner {
+            role: 'K',
+            master_hex: master.to_string(),
+        };
+        let v_signer = HybridSigner {
+            role: 'V',
+            master_hex: master.to_string(),
+        };
+
+        // Split each note into the signing-covered bytes + the embedded sig.
+        let (att_signing, att_sig) = split_note_sig(diff_attest_raw, SIG_TAG_K);
+        let (ver_signing, ver_sig) = split_note_sig(verdict_raw, SIG_TAG_V);
+
+        if att_sig.is_empty() || ver_sig.is_empty() {
+            return GateVerdict::Red("a required signature is absent on a signed note".into());
+        }
+
+        let k_anchor = k_signer.pub_anchor_line();
+        let v_anchor = v_signer.pub_anchor_line();
+        if k_anchor.is_empty() || v_anchor.is_empty() {
+            return GateVerdict::Red("could not derive kv anchor lines".into());
+        }
+
+        // §5.2 reinforcement: the key_K anchor id MUST resolve to role=K and
+        // the key_V anchor id to role=V (no cross-role attestation).
+        if !k_anchor.trim_end().ends_with("role=K") {
+            return GateVerdict::Red("key_K anchor does not resolve to role=K".into());
+        }
+        if !v_anchor.trim_end().ends_with("role=V") {
+            return GateVerdict::Red("key_V anchor does not resolve to role=V".into());
+        }
+
+        let k_ok = measure("verify.key_K", || {
+            k_signer.verify_signature(&k_anchor, &att_signing, &hex_encode(&att_sig), repo_root)
+        });
+        if !k_ok {
+            return GateVerdict::Red(
+                "key_K DiffAttestation signature FAILED real verification".into(),
+            );
+        }
+
+        let v_ok = measure("verify.key_V", || {
+            v_signer.verify_signature(&v_anchor, &ver_signing, &hex_encode(&ver_sig), repo_root)
+        });
+        if !v_ok {
+            return GateVerdict::Red("key_V Verdict signature FAILED real verification".into());
+        }
     }
 
     GateVerdict::Green
@@ -532,7 +851,11 @@ pub fn evaluate_gate(
 // ---------------------------------------------------------------------------
 
 pub fn v1_verify(pos: &[String]) -> i32 {
-    let sha = pos.first().cloned().or_else(|| git_ok(&["rev-parse", "HEAD"])).unwrap_or_default();
+    let sha = pos
+        .first()
+        .cloned()
+        .or_else(|| git_ok(&["rev-parse", "HEAD"]))
+        .unwrap_or_default();
     let repo_root = match git_ok(&["rev-parse", "--show-toplevel"]) {
         Some(r) => PathBuf::from(r),
         None => {
@@ -549,11 +872,29 @@ pub fn v1_verify(pos: &[String]) -> i32 {
     let attest = read_note(&repo_root, "v1-diff-attest", &sha).unwrap_or_default();
     let verdict = read_note(&repo_root, "v1-verdict", &sha).unwrap_or_default();
 
-    let gate = evaluate_gate(&attest, &verdict, ci_redline_touch);
+    // Resolve the operator trust root (real kv-genesis master, if minted).
+    // When present AND bebop2-kv is available, evaluate_gate performs REAL
+    // hybrid signature verification; otherwise it falls back to the unsigned
+    // structural contract (never a fake pass).
+    let kv_master = std::env::var("V1_KV_MASTER").ok().filter(|m| !m.is_empty());
+    let kv_master = if kv_master.is_some() && kv_bin_available() {
+        kv_master
+    } else {
+        None
+    };
+    let gate = evaluate_gate(
+        &attest,
+        &verdict,
+        ci_redline_touch,
+        kv_master.as_deref(),
+        Some(&repo_root),
+    );
     match &gate {
         GateVerdict::Green => {
             println!("V1-GATE: GREEN");
-            println!("{{\"v1_gate\":\"GREEN\",\"sha\":\"{sha}\",\"red_line_touch\":{ci_redline_touch}}}");
+            println!(
+                "{{\"v1_gate\":\"GREEN\",\"sha\":\"{sha}\",\"red_line_touch\":{ci_redline_touch}}}"
+            );
             0
         }
         GateVerdict::Red(reason) => {
@@ -562,6 +903,76 @@ pub fn v1_verify(pos: &[String]) -> i32 {
             1
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand: v1-probe [<master-hex>] — runnable P06 real-signature probe.
+// Signs a fixed known payload with a deterministic master, verifies the roundtrip
+// via the real bebop2-kv hybrid CLI, then proves a 1-bit corruption is REJECTED
+// (§7.7 / anti-scope: must NOT fake a green). Emits native telemetry.
+// Exit 0 = probe healthy; 1 = bebop2-kv binary missing (so no real crypto ran).
+// ---------------------------------------------------------------------------
+
+pub fn v1_probe(pos: &[String]) -> i32 {
+    if !kv_bin_available() {
+        eprintln!(
+            "v1-probe: SKIP — bebop2-kv not found (set BEBOp_REPO_ROOT or V1_KV_BIN). \
+             No real hybrid signature crypto was exercised, so this is NOT a green pass."
+        );
+        return 1;
+    }
+    // Deterministic TEST-only master (NOT a committed trust root).
+    let master = pos.first().cloned().unwrap_or_else(|| {
+        "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff".into()
+    });
+    let payload = b"p06-key_v-hybrid-probe-payload-v1";
+
+    let k = HybridSigner {
+        role: 'K',
+        master_hex: master.clone(),
+    };
+    let v = HybridSigner {
+        role: 'V',
+        master_hex: master,
+    };
+
+    let k_sig = k.sign(payload);
+    let k_anchor = k.pub_anchor_line();
+    let k_ok = measure("probe.verify.key_K", || {
+        k.verify_signature(&k_anchor, payload, &hex_encode(&k_sig), None)
+    });
+    if !k_ok {
+        eprintln!("v1-probe: FAIL — key_K real hybrid signature did not verify");
+        return 1;
+    }
+
+    let v_sig = v.sign(payload);
+    let v_anchor = v.pub_anchor_line();
+    let v_ok = measure("probe.verify.key_V", || {
+        v.verify_signature(&v_anchor, payload, &hex_encode(&v_sig), None)
+    });
+    if !v_ok {
+        eprintln!("v1-probe: FAIL — key_V real hybrid signature did not verify");
+        return 1;
+    }
+
+    // Corruption proof: a 1-bit flip MUST be rejected (anti-scope: no fake green).
+    let mut k_sig_bad = k_sig.clone();
+    k_sig_bad[0] ^= 0x01;
+    let bad_rejected = measure("probe.corrupt.key_K", || {
+        !k.verify_signature(&k_anchor, payload, &hex_encode(&k_sig_bad), None)
+    });
+    if !bad_rejected {
+        eprintln!("v1-probe: FAIL — 1-bit-flipped key_K sig was wrongly ACCEPTED");
+        return 1;
+    }
+
+    println!(
+        "V1-PROBE: OK (real Ed25519⊕ML-DSA-65 roundtrip verified; corruption rejected; \
+         key_K anchor={k_anchor}, key_V anchor={v_anchor})"
+    );
+    telemetry_sink("v1_probe", 0, false);
+    0
 }
 
 // ---------------------------------------------------------------------------
@@ -587,6 +998,7 @@ pub fn build_attestation(
         diff_sha3,
         base_sha3,
         key_k_anchor_id: key_k,
+        sig_k: Vec::new(),
         redline_touch,
         timestamp,
     }
@@ -611,6 +1023,7 @@ pub fn build_verdict(
         recomputed_diff_sha3,
         verdict: 0x01,
         key_v_anchor_id: key_v,
+        sig_v: Vec::new(),
         context_descriptor: ctx.to_string(),
         rationale: rationale.to_string(),
     }
@@ -636,6 +1049,7 @@ mod tests {
             diff_sha3: diff_sha,
             base_sha3: zero(),
             key_k_anchor_id: key_k,
+            sig_k: Vec::new(),
             redline_touch,
             timestamp: 1_700_000_000,
         }
@@ -646,6 +1060,7 @@ mod tests {
             recomputed_diff_sha3: diff_sha,
             verdict: 0x01,
             key_v_anchor_id: key_v,
+            sig_v: Vec::new(),
             context_descriptor: "test".into(),
             rationale: "ok".into(),
         }
@@ -673,14 +1088,14 @@ mod tests {
     #[test]
     fn gate_green_on_valid_non_redline_pair() {
         let (a, v) = valid_pair([0x99; 32], 0);
-        assert_eq!(evaluate_gate(&a, &v, false), GateVerdict::Green);
+        assert_eq!(evaluate_gate(&a, &v, false, None, None), GateVerdict::Green);
     }
 
     #[test]
     fn gate_red_missing_attestation_note() {
         let (_, v) = valid_pair([0x99; 32], 0);
         assert!(matches!(
-            evaluate_gate(&[], &v, false),
+            evaluate_gate(&[], &v, false, None, None),
             GateVerdict::Red(_)
         ));
     }
@@ -696,12 +1111,13 @@ mod tests {
             recomputed_diff_sha3: att.diff_sha3,
             verdict: 0x01,
             key_v_anchor_id: att.key_k_anchor_id, // == key_K → forbidden
+            sig_v: Vec::new(),
             context_descriptor: "forge".into(),
             rationale: "self-signed".into(),
         }
         .encode();
         assert!(matches!(
-            evaluate_gate(&a, &forged, false),
+            evaluate_gate(&a, &forged, false, None, None),
             GateVerdict::Red(s) if s.contains("key_K == key_V")
         ));
     }
@@ -713,14 +1129,17 @@ mod tests {
         // find and remove the residue record from the encoded verdict
         let idx = v
             .windows(5)
-            .position(|w| w[0] == 0x09 && u32::from_be_bytes([w[1], w[2], w[3], w[4]]) as usize == V1_RESIDUE.len())
+            .position(|w| {
+                w[0] == 0x09
+                    && u32::from_be_bytes([w[1], w[2], w[3], w[4]]) as usize == V1_RESIDUE.len()
+            })
             .expect("residue present in valid pair");
         let rec_len = 5 + V1_RESIDUE.len();
         v.drain(idx..idx + rec_len);
         assert!(Verdict::decode(&v).is_none());
         // if someone bypasses decode, the gate must still catch the missing residue
         assert!(matches!(
-            evaluate_gate(&a, &v, false),
+            evaluate_gate(&a, &v, false, None, None),
             GateVerdict::Red(s) if s.contains("residue")
         ));
     }
@@ -733,7 +1152,7 @@ mod tests {
         dec.verdict = 0x00;
         v = dec.encode();
         assert!(matches!(
-            evaluate_gate(&a, &v, true),
+            evaluate_gate(&a, &v, true, None, None),
             GateVerdict::Red(s) if s.contains("GREEN")
         ));
     }
@@ -744,7 +1163,7 @@ mod tests {
         let (a, v) = valid_pair([0x99; 32], 0);
         // ci says it DOES touch red-line, but author signed redline_touch=0
         assert!(matches!(
-            evaluate_gate(&a, &v, true),
+            evaluate_gate(&a, &v, true, None, None),
             GateVerdict::Red(s) if s.contains("redline_touch")
         ));
     }
@@ -796,9 +1215,18 @@ mod tests {
 
         let attest = build_attestation(commit, diff_sha3, base, key_k, 0, 1_700_000_000);
         // verifier's independent recomputation of the diff digest == author's
-        let verdict = build_verdict(&attest, diff_sha3, key_v, "h3-breach-probe", "no breach found");
+        let verdict = build_verdict(
+            &attest,
+            diff_sha3,
+            key_v,
+            "h3-breach-probe",
+            "no breach found",
+        );
 
-        assert_eq!(evaluate_gate(&attest, &verdict, false), GateVerdict::Green);
+        assert_eq!(
+            evaluate_gate(&attest, &verdict, false, None, None),
+            GateVerdict::Green
+        );
     }
 
     /// Prove the §5.3 hash-binding actually bites: a downstream arc cannot
@@ -826,7 +1254,7 @@ mod tests {
 
         // gate must REJECT: verdict.diff_attest_sha3 != digest32(attest_a)
         assert!(matches!(
-            evaluate_gate(&attest_a, &mismatched, false),
+            evaluate_gate(&attest_a, &mismatched, false, None, None),
             GateVerdict::Red(s) if s.contains("bind")
         ));
     }
@@ -841,7 +1269,10 @@ mod tests {
     /// requiring the bebop2-kv binary in CI for the unsigned suite.
     #[test]
     fn hybrid_signer_is_production_and_failclosed() {
-        let k = HybridSigner { role: 'K', master_hex: "deadbeef".into() };
+        let k = HybridSigner {
+            role: 'K',
+            master_hex: "deadbeef".into(),
+        };
         assert!(k.signed());
         // No binary present (or present but unknown master) => fail-closed.
         let bytes = b"v1-diff-attest-bytes";
@@ -850,7 +1281,7 @@ mod tests {
         // valid sig that must verify roundtrip. We only assert non-panic +
         // that verify of an empty/garbage sig is false when no real sig exists.
         if sig.is_empty() {
-            assert!(!k.verify_signature("role=K deadbeef", bytes, ""));
+            assert!(!k.verify_signature("role=K deadbeef", bytes, "", None));
         }
         // UnsignedSigner must still report unsigned (Phase-1 retained).
         let u = UnsignedSigner;
@@ -880,24 +1311,36 @@ mod tests {
         let diff_bytes = [0x99u8; 32];
 
         // key_K attestation signature (REAL hybrid Ed25519⊕ML-DSA-65).
-        let k_signer = HybridSigner { role: 'K', master_hex: master.into() };
+        let k_signer = HybridSigner {
+            role: 'K',
+            master_hex: master.into(),
+        };
         let k_sig = k_signer.sign(&diff_bytes);
         assert!(!k_sig.is_empty(), "real key_K signature must be non-empty");
         let k_anchor = k_signer.pub_anchor_line();
-        assert!(!k_anchor.is_empty(), "real key_K anchor line must be derivable");
         assert!(
-            k_signer.verify_signature(&k_anchor, &diff_bytes, &hex_encode(&k_sig)),
+            !k_anchor.is_empty(),
+            "real key_K anchor line must be derivable"
+        );
+        assert!(
+            k_signer.verify_signature(&k_anchor, &diff_bytes, &hex_encode(&k_sig), None),
             "real key_K attestation sig must verify true"
         );
 
         // key_V verdict signature.
-        let v_signer = HybridSigner { role: 'V', master_hex: master.into() };
+        let v_signer = HybridSigner {
+            role: 'V',
+            master_hex: master.into(),
+        };
         let v_sig = v_signer.sign(&diff_bytes);
         assert!(!v_sig.is_empty(), "real key_V signature must be non-empty");
         let v_anchor = v_signer.pub_anchor_line();
-        assert!(!v_anchor.is_empty(), "real key_V anchor line must be derivable");
         assert!(
-            v_signer.verify_signature(&v_anchor, &diff_bytes, &hex_encode(&v_sig)),
+            !v_anchor.is_empty(),
+            "real key_V anchor line must be derivable"
+        );
+        assert!(
+            v_signer.verify_signature(&v_anchor, &diff_bytes, &hex_encode(&v_sig), None),
             "real key_V verdict sig must verify true"
         );
 
@@ -905,15 +1348,78 @@ mod tests {
         let mut k_sig_bad = k_sig.clone();
         k_sig_bad[0] ^= 0x01;
         assert!(
-            !k_signer.verify_signature(&k_anchor, &diff_bytes, &hex_encode(&k_sig_bad)),
+            !k_signer.verify_signature(&k_anchor, &diff_bytes, &hex_encode(&k_sig_bad), None),
             "1-bit-flipped key_K sig must verify false"
         );
         let mut v_sig_bad = v_sig.clone();
         let v_last = v_sig_bad.len() - 1;
         v_sig_bad[v_last] ^= 0x80;
         assert!(
-            !v_signer.verify_signature(&v_anchor, &diff_bytes, &hex_encode(&v_sig_bad)),
+            !v_signer.verify_signature(&v_anchor, &diff_bytes, &hex_encode(&v_sig_bad), None),
             "1-bit-flipped key_V sig must verify false"
+        );
+    }
+
+    /// Bug-1 / Bug-2 acceptance test: a fully REAL, signed DiffAttestation +
+    /// Verdict pair (key_K and key_V hybrid sigs embedded in the TLV) must
+    /// evaluate GREEN through `evaluate_gate` WITH `kv_master` set (real
+    /// signature verification active), and a forged sig must evaluate RED.
+    /// Requires the `bebop2-kv` CLI (set BEBOp_REPO_ROOT / V1_KV_BIN).
+    #[test]
+    #[ignore = "requires bebop2-kv CLI (BEBOp_REPO_ROOT/V1_KV_BIN)"]
+    fn real_gate_with_kv_master() {
+        if !kv_bin_available() {
+            eprintln!("SKIP real_gate_with_kv_master: bebop2-kv not found");
+            return;
+        }
+        let master = "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff";
+        let commit = [0xaa; 32];
+        let diff_sha3 = [0x99; 32];
+        let base = [0x11; 32];
+        let key_k = [0x33; 32];
+        let key_v = [0x44; 32];
+
+        // Build the unsigned attestation/verdict TLV, then ADD real sigs.
+        let att_unsigned = build_attestation(commit, diff_sha3, base, key_k, 0, 1_700_000_000);
+        let ver_unsigned = build_verdict(&att_unsigned, diff_sha3, key_v, "probe", "ok");
+
+        // signing_bytes() excludes the sig tag (0x08/0x0a); verify_message matches.
+        let k_signer = HybridSigner {
+            role: 'K',
+            master_hex: master.into(),
+        };
+        let v_signer = HybridSigner {
+            role: 'V',
+            master_hex: master.into(),
+        };
+        let att_sig = k_signer.sign(&verify_message(&att_unsigned, SIG_TAG_K));
+        let ver_sig = v_signer.sign(&verify_message(&ver_unsigned, SIG_TAG_V));
+        assert!(
+            !att_sig.is_empty() && !ver_sig.is_empty(),
+            "real sigs must be non-empty"
+        );
+
+        // Embed sigs: append sig TLV records to the encoded notes.
+        let mut att_signed = att_unsigned.clone();
+        tlv_put(&mut att_signed, SIG_TAG_K, &att_sig);
+        let mut ver_signed = ver_unsigned.clone();
+        tlv_put(&mut ver_signed, SIG_TAG_V, &ver_sig);
+
+        // Gate with REAL verification active => GREEN.
+        let gate = evaluate_gate(&att_signed, &ver_signed, false, Some(master), None);
+        assert_eq!(
+            gate,
+            GateVerdict::Green,
+            "real signed pair must be GREEN under kv_master"
+        );
+
+        // Forge: swap the verdict sig for garbage => RED (real verify bites).
+        let mut ver_forged = ver_unsigned.clone();
+        tlv_put(&mut ver_forged, SIG_TAG_V, &vec![0xab; 64]);
+        let gate_forged = evaluate_gate(&att_signed, &ver_forged, false, Some(master), None);
+        assert!(
+            matches!(gate_forged, GateVerdict::Red(_)),
+            "forged sig must be RED under kv_master"
         );
     }
 }

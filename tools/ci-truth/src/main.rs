@@ -81,8 +81,16 @@ fn numstat_sum(output: &str) -> i64 {
         let a = cols.next();
         let d = cols.next();
         if let (Some(a), Some(d)) = (a, d) {
-            let av = if a == "-" { 0 } else { a.parse::<i64>().unwrap_or(0) };
-            let dv = if d == "-" { 0 } else { d.parse::<i64>().unwrap_or(0) };
+            let av = if a == "-" {
+                0
+            } else {
+                a.parse::<i64>().unwrap_or(0)
+            };
+            let dv = if d == "-" {
+                0
+            } else {
+                d.parse::<i64>().unwrap_or(0)
+            };
             sum += av + dv;
         }
     }
@@ -106,7 +114,11 @@ fn resolve_commits(pos: &[String]) -> Result<Vec<String>, i32> {
         1 => {
             if pos[0].contains("..") {
                 let out = git_ok(&["rev-list", "--reverse", &pos[0]]).ok_or(1)?;
-                Ok(out.lines().filter(|l| !l.is_empty()).map(String::from).collect())
+                Ok(out
+                    .lines()
+                    .filter(|l| !l.is_empty())
+                    .map(String::from)
+                    .collect())
             } else {
                 let spec = format!("{}^{{commit}}", pos[0]);
                 let c = git_ok(&["rev-parse", &spec]).ok_or(1)?;
@@ -116,7 +128,11 @@ fn resolve_commits(pos: &[String]) -> Result<Vec<String>, i32> {
         2 => {
             let range = format!("{}..{}", pos[0], pos[1]);
             let out = git_ok(&["rev-list", "--reverse", &range]).ok_or(1)?;
-            Ok(out.lines().filter(|l| !l.is_empty()).map(String::from).collect())
+            Ok(out
+                .lines()
+                .filter(|l| !l.is_empty())
+                .map(String::from)
+                .collect())
         }
         _ => Err(2),
     }
@@ -215,7 +231,10 @@ fn claim_latency(pos: &[String]) -> i32 {
                 }
             }
             Err(e) => {
-                eprintln!("claim-latency: cannot open ledger {}: {e}", ledger.display());
+                eprintln!(
+                    "claim-latency: cannot open ledger {}: {e}",
+                    ledger.display()
+                );
                 return 1;
             }
         }
@@ -358,7 +377,10 @@ fn run_suite(worktree: &Path, manifest: &str) -> (i32, i64, i64, String) {
 }
 
 fn v5c_reexec(pos: &[String]) -> i32 {
-    let base_ref = pos.first().cloned().unwrap_or_else(|| "origin/main".to_string());
+    let base_ref = pos
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "origin/main".to_string());
     let head_ref = pos.get(1).cloned().unwrap_or_else(|| "HEAD".to_string());
 
     let head_sha = match resolve_ref(&head_ref) {
@@ -382,8 +404,11 @@ fn v5c_reexec(pos: &[String]) -> i32 {
 
     // --- red-line detection over the diff range ---
     let changed = git_ok(&["diff", "--name-only", &base_sha, &head_sha]).unwrap_or_default();
-    let redline_hits: Vec<String> =
-        changed.lines().filter(|p| is_redline(p)).map(String::from).collect();
+    let redline_hits: Vec<String> = changed
+        .lines()
+        .filter(|p| is_redline(p))
+        .map(String::from)
+        .collect();
 
     if redline_hits.is_empty() {
         println!("V5C-VERDICT: SKIP");
@@ -394,11 +419,8 @@ fn v5c_reexec(pos: &[String]) -> i32 {
     }
 
     // --- clean independent worktree at the head SHA ---
-    let worktree = std::env::temp_dir().join(format!(
-        "v5c-reexec.{}.{}",
-        std::process::id(),
-        now_unix()
-    ));
+    let worktree =
+        std::env::temp_dir().join(format!("v5c-reexec.{}.{}", std::process::id(), now_unix()));
     let add_ok = Command::new("git")
         .args(["worktree", "add", "--detach"])
         .arg(&worktree)
@@ -413,7 +435,9 @@ fn v5c_reexec(pos: &[String]) -> i32 {
         return 2;
     }
     // From here on, the guard guarantees teardown on every exit path.
-    let guard = WorktreeGuard { path: worktree.clone() };
+    let guard = WorktreeGuard {
+        path: worktree.clone(),
+    };
 
     let (k_exit, k_pass, k_fail, k_log) = run_suite(&guard.path, "kernel/Cargo.toml");
     let (e_exit, e_pass, e_fail, e_log) = run_suite(&guard.path, "engine/Cargo.toml");
@@ -639,7 +663,10 @@ fn claim_latency_check(_pos: &[String]) -> i32 {
                 }
             }
             Err(e) => {
-                eprintln!("claim-latency-check: cannot open sink {}: {e}", sink.display());
+                eprintln!(
+                    "claim-latency-check: cannot open sink {}: {e}",
+                    sink.display()
+                );
                 return 1;
             }
         }
@@ -670,12 +697,14 @@ fn main() {
         "claim-latency-check" => claim_latency_check(pos),
         "v5c-reexec" => v5c_reexec(pos),
         "v1-verify" => v1::v1_verify(pos),
+        "v1-probe" => v1::v1_probe(pos),
         _ => {
             eprintln!("ci-truth: usage: ci-truth <claim-latency|claim-latency-check|v5c-reexec|v1-verify> [args]");
             eprintln!("  claim-latency [<sha> | <base> <head> | <base>..<head>]   append V5-B ledger entries");
             eprintln!("  claim-latency-check                                      P08 §4 anomaly detector (advisory; exit 0) -> docs/ledger/claim-latency-anomalies.jsonl");
             eprintln!("  v5c-reexec [<base>] [<head>]                             independent re-exec (default origin/main HEAD)");
             eprintln!("  v1-verify [<sha>]                                        BLUEPRINT-P06 §5 merge-gate (default HEAD; exit 0 GREEN, 1 RED)");
+            eprintln!("  v1-probe [<master-hex>]                                  P06 real-signature probe: signs+verifies a known payload via bebop2-kv, proves 1-bit corruption is rejected (exit 0 ok, 1 missing binary)");
             2
         }
     };
@@ -786,7 +815,10 @@ mod tests {
             "[\"kernel/src/money.rs\",\"kernel/src/auth.rs\"]"
         );
         // stray quotes stripped; empty entries skipped.
-        assert_eq!(json_array(&["a\"b".into(), "".into(), "c".into()]), "[\"ab\",\"c\"]");
+        assert_eq!(
+            json_array(&["a\"b".into(), "".into(), "c".into()]),
+            "[\"ab\",\"c\"]"
+        );
     }
 
     // --- claim-latency-check: anomaly floor math (P08 §4) ---
@@ -850,7 +882,10 @@ mod tests {
         assert!(parse_ledger_line("").is_none());
         assert!(parse_ledger_line("   ").is_none());
         // missing diff_loc field ⇒ None (tolerant skip, never coerced)
-        assert!(parse_ledger_line("{\"commit_sha\":\"x\",\"authored_ts\":1,\"ci_observed_green_ts\":2,\"delta_s\":3}").is_none());
+        assert!(parse_ledger_line(
+            "{\"commit_sha\":\"x\",\"authored_ts\":1,\"ci_observed_green_ts\":2,\"delta_s\":3}"
+        )
+        .is_none());
         // negative delta tolerated by the int parser
         assert_eq!(json_int_field("{\"delta_s\":-7}", "delta_s"), Some(-7));
     }
