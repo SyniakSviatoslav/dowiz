@@ -598,3 +598,137 @@ answer, worked in full in
    inherits that document's §5.4 test plan (KAT `A·v = λ·v`, orthonormality, sparse-vs-dense
    parity, byte-determinism, reconstruction-error monotonicity). Rungs 2–4 of the ladder are
    unaffected.
+
+---
+
+## 8. BumpArena swarm-dispatch readiness — added 2026-07-18
+
+> Re-verified live this pass (2026-07-18), not inherited from the 2026-07-17 text above. This
+> section does not rewrite §3.3/§4 row 5/§7 W5 — it packages them into dispatch-ready form and
+> records what has drifted since authoring.
+
+### 8.1 Role & responsibility
+
+`BumpArena` is a zero-dependency, hand-rolled bump/region allocator — a single `Vec<u8>` backing
+region with a monotonically-advancing `Cell<usize>` offset — that exists to remove the per-rebuild
+malloc/free churn at the graph/spectral rebuild hot path (§3.3's chosen site, re-verified live
+below). It does O(1) allocation by pointer-bump and O(1) bulk deallocation by resetting the offset
+to zero, is restricted to `T: Copy` so the bumpalo-class no-Drop hazard is a compile error rather
+than a runtime convention, and degrades closed on exhaustion (falls back to a plain heap `Vec`,
+never grows, never panics) — it does not become a new failure mode, only a fast path that can
+silently stop being fast. It plugs into the maintenance-pass call sites task 1/2 of this blueprint
+create or already touch, verified live this pass:
+- `kernel/src/csr.rs:79-115` `Csr::from_edges` — n-row bucket sort + duplicate-merge-by-summing at
+  `csr.rs:93-103` (confirmed live, byte-identical to the doc's own description).
+- `kernel/src/csr.rs:125-152` `Csr::row_normalize` — deterministic dangling-node self-loop
+  (confirmed live, exact line match to §1.4/§3.3's citation).
+- `kernel/src/csr.rs:280-316` `Csr::personalized_pagerank` — fixed-K synchronous Jacobi (the
+  behavior this blueprint's §1.2/§3.3 cites as `csr.rs:228-264` has **drifted ~52 lines**: live
+  grep places the function at 280-316, not 228-264, because `to_adjacency` and `energy`
+  (`csr.rs:239-264` in the live file) were inserted between `row_normalize` and
+  `personalized_pagerank` sometime after this blueprint was authored. The allocation shape and
+  determinism contract are unchanged — only the citation is stale. Fix the line numbers in §1.2/§3.3
+  the next time this file is touched for substance, not as part of this append-only pass.)
+- `kernel/src/spectral.rs:35-39` the `matmul` wrapper (`Mat::from_vecvec` ×2 + `matmul_contig` +
+  `into_vecvec` per call) and `kernel/src/spectral.rs:113-137` `charpoly` (Faddeev-LeVerrier, n−1
+  calls into `matmul`) — both confirmed live, exact line match, ≈n²+O(n) transient allocations per
+  `charpoly` call for n > 32 unchanged.
+- `kernel/src/retrieval/ppr.rs:47` the per-iteration `let mut nxt = vec![0.0f64; self.n];` inside
+  `Ppr::rank`'s k-loop — confirmed live, exact line match.
+
+### 8.2 Definition of DONE — falsifiable, numbered
+
+1. `kernel/src/arena.rs` exists and implements the exact API §3.3 already specifies — every
+   signature, verbatim:
+   - `pub struct BumpArena { buf: std::cell::UnsafeCell<Vec<u8>>, offset: std::cell::Cell<usize>, high_water: std::cell::Cell<usize> }`
+   - `pub fn with_capacity(bytes: usize) -> Self`
+   - `pub fn alloc_slice<T: Copy + Default>(&self, len: usize) -> Option<&mut [T]>` — zero-initialized,
+     alignment rounded to `align_of::<T>()`, `None` on exhaustion (never grows, never panics).
+   - `pub fn reset(&mut self)` — O(1), `&mut self` so the borrow checker proves no live loans.
+   - `pub fn high_water(&self) -> usize`
+   - Exactly one documented `unsafe` block inside `alloc_slice` (pointer cast + write), matching
+     the confinement discipline already in-convention at `householder.rs`/`simd.rs`/`messenger.rs`.
+2. It is **wired into the real call sites**, not standalone: additive `_in` variants exist and are
+   exercised by the maintenance pass —
+   `Csr::from_edges_in(n, edges, &arena)`, `Csr::row_normalize_in`, `Csr::personalized_pagerank_in`,
+   a `matmul_contig`-based charpoly scratch path taking an arena, and the eigenvector rung-1 solver
+   (per the addendum above: `spectral::topk_symmetric`, NOT `lowrank.rs`) born arena-aware. Every
+   `_in` variant falls back to the pre-existing heap path on `None` — existing non-`_in` signatures
+   are untouched (additive only, per §3.3's "Integration" note).
+3. The named falsifiers from §3.3/§7 W5 exist and pass:
+   - Criterion A/B benchmark group `graph_rebuild_rank` with `heap` and `arena` sub-benchmarks
+     (i.e. `graph_rebuild_rank/heap` vs `graph_rebuild_rank/arena`) in the existing
+     `kernel/benches/criterion.rs` harness (confirmed live: this file and `criterion = "0.5"`
+     dev-dependency already exist, `kernel/Cargo.toml:83,88` — no new bench infra needed), with the
+     result recorded as a new row in the existing `kernel/benches/BENCH_HISTORY.md` (confirmed live,
+     already present).
+   - A counting-allocator test asserting ≤ 8 heap allocations on the arena path for the n=1024
+     maintenance-pass rebuild, against the ≈2,055-allocation heap baseline this blueprint computed
+     (§0.3/§3.3) — the baseline number itself must be re-measured, not assumed, since it is
+     currently a hand count over the code shown in §8.1, not an instrumented run.
+   - A determinism falsifier: PPR output byte-identical arena-vs-heap on the same fixture graph. Per
+     §3.3's own rule, if this ever fails the arena variant is abandoned for that call site —
+     determinism outranks the microseconds.
+   - The arena's own unit tests (bump/reset/exhaustion/alignment) pass under Miri (§5 Q1.3's
+     explicit ask — the soundness argument for `&mut [T]` from `&self` "must survive Miri, not just
+     [the] paragraph").
+   - `high_water()` is exercised and its reported value used to size the arena's real capacity
+     constant (§3.3's "sized by measured `high_water` + slack").
+
+### 8.3 Definition of NOT-done / explicit anti-scope
+
+1. **`arena.rs` existing and compiling but not wired into the CSR-rebuild/dense-charpoly call
+   sites is NOT done.** An allocator module with passing unit tests and zero real callers proves
+   nothing about the ≈2k-malloc-pair claim this blueprint exists to make — see DoD item 2. This is
+   the single most common false-completion trap for allocator/arena work: a clean, well-tested
+   module sitting unused reads as "done" in a diff but changes nothing at the hot path it was built
+   for.
+2. **Swapping in `bumpalo` (or any general-purpose arena crate) instead of the zero-dep hand-rolled
+   version is scope regression, not progress**, and directly contradicts this blueprint's own
+   DECART verdict: §4 row 5 explicitly evaluated "BumpArena hand-roll ... vs bumpalo dep" and
+   rejected the dependency — "zero (bumpalo REJECTED: external dep for an ~80-LOC subset)" — because
+   the repo's zero-external-dep-in-kernel convention (§1.4) and the small size of the needed subset
+   both favor the hand-roll. Reaching for `bumpalo` under time pressure produces a worse outcome
+   than this blueprint already rejected once.
+3. **Building `kernel/src/lowrank.rs` is NOT part of this item's done-criteria.** It is a separate
+   P28 sub-item (rung 1 of the tensor ladder, §3.2) that this same file's own later addendum
+   (2026-07-17, "rung-1 solver re-homed") explicitly supersedes: `lowrank.rs` is **not built**; the
+   rung-1 solver lands as `spectral::topk_symmetric` instead. Live-verified this pass (2026-07-18):
+   neither `kernel/src/lowrank.rs`, nor `spectral::topk_symmetric`, nor `householder::eigh_contig`
+   exist yet (`find`/`grep -rn` over `kernel/src/` all empty). `MASTER-ROADMAP-SOVEREIGN-
+   ARCHITECTURE-2026-07-16.md` §8.12 (P30 row) states this in one line: "P28 — co-owned substrate:
+   P30 W2 builds P28's `arena.rs` and rung-1 solver per the eigenvector-refactor plan (**no second
+   arena, no lowrank.rs**)." Do not conflate the two sub-items' DoD, and do not build `lowrank.rs`
+   under any name — it was designed and then explicitly retired within this same document.
+4. **Skipping the Miri run or the byte-identical determinism falsifier because the criterion
+   benchmark alone looks good is NOT done.** §3.3/§7 W5 require BOTH a speed proof (criterion A/B +
+   allocation-count assertion) AND a correctness proof (Miri clean + byte-identical output) before
+   this item counts as closed — a fast arena that silently reorders or corrupts f64 accumulation is
+   a worse outcome than no arena, per the doc's own "determinism outranks the µs" rule (§3.3, §6
+   Ananke).
+5. **Treating the ≈2,055-allocations/≈40–200 µs claim as already-proven is NOT done.** §3.3 is
+   explicit that this is "the benchmark's null hypothesis... not padding" and the malloc/free 20–100
+   ns figure is an "order-of-magnitude prior" (§5 Q1.5) — the criterion A/B result is the actual
+   authority, and a result outside that range does not itself invalidate the arena (only the
+   expected-saving sentence).
+6. **Widening scope to the LLM-dispatch I/O path is explicitly out of scope** (§4 row 6: "Rebuild/
+   spectral pass only... the dispatch path is excluded because it has no recurring same-shaped-
+   buffer loop for a region to serve").
+
+### 8.4 Context & docs
+
+- [BLUEPRINT-P-A-kernel-primitives.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P-A-kernel-primitives.md)
+  §1 ("P-A cites-and-sequences but does not restate... the BumpArena (W2-L1, fully designed in
+  `BLUEPRINT-CACHE-REFERENCE-GRAPH-TENSOR-ARENA-2026-07-17.md` §3.3)... Their designs are decided;
+  re-deriving them here would violate the standard's own reuse rule") and §4.4 ("Non-contradiction
+  with the eigenvector plan" — the hard sequencing constraint: A4's `eig_hessenberg` dedup must land
+  before W2-L2 `eigh_contig` starts; `topk_symmetric`/`eigh_contig` signatures are untouched by P-A).
+- `MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md` §8.12 (P30 row) — co-ownership: "P30 W2
+  builds P28's `arena.rs` and rung-1 solver per the eigenvector-refactor plan (no second arena, no
+  lowrank.rs)."
+- [CORE-ROADMAP-INDEX.md](CORE-ROADMAP-INDEX.md) Layer A row (P04 · P11 · P28 · eqc-rs wiring ·
+  this file) and Layer B row (P28 snapshot seam, P30 W1-L2/L11) — the two altitude rows this item
+  is indexed under.
+- [BLUEPRINT-EIGENVECTOR-REFACTOR-PLAN-2026-07-17.md](BLUEPRINT-EIGENVECTOR-REFACTOR-PLAN-2026-07-17.md)
+  §5 — the sibling design for the rung-1 solver this arena item must stay arena-aware for, without
+  building it itself.

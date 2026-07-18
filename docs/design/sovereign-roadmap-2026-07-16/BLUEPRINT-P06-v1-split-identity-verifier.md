@@ -329,3 +329,139 @@ hybrid_gate, canonical TLV, node_id genesis loader) per R1-B §V1 file:line. Bui
 independent re-execution + merge gate on top of Phase 1's unsigned V5-C harness; blocked on Phase 3's
 C4b closure for the hybrid signing path; the isolation bar is a flagged recommendation pending
 Phase-2 ruling O9. No code written by this document.*
+
+---
+
+## 9. key_V real-crypto swarm-dispatch readiness — added 2026-07-18
+
+### 9.1 Role & responsibility
+
+The `Signer`/key_V slot is the cryptographic teeth behind a merge gate that, as landed, is pure
+policy: `evaluate_gate` (`tools/ci-truth/src/v1.rs:472-528`) checks that two TLV notes decode, that
+their hash fields agree, and that the two anchor-id byte strings differ — it never calls a signature
+verifier. Anyone who can write two git notes with self-consistent bytes and two different 32-byte
+`anchor_id` values passes the gate today; nothing cryptographically ties either note to the holder of
+a private key. Filling the slot means that `v1-verify` stops asking "are these two notes internally
+consistent?" and starts asking "did the entities enrolled as `role=K` and `role=V` in
+`config/kv-genesis.txt` actually produce these bytes?" — the difference between a claim shape and a
+check. Per `docs/design/CORE-ROADMAP-INDEX.md:39-41`, this is a **cross-cutting blocker**: "P06
+`key_V` gates Layer C's independent-verification leg, Layer G's product-safety story, E3-Phase-B
+(spectral arc), and P30's signed DecisionUnit import." Each needs a *real* signature, not just the
+policy shape, for the same reason: H3 breach-probe verdicts, E3-Phase-B phase-gates, and P30
+DecisionUnit imports all consume a key_V verdict as their **trust boundary** — if that verdict can be
+forged by anyone who knows the TLV encoding (true today), the downstream consumer inherits a false
+sense of independent verification while actually trusting whoever wrote the note.
+
+### 9.2 Definition of DONE — falsifiable, numbered
+
+1. **C4b closed in bebop-repo FIRST — ALREADY TRUE as of 2026-07-18.** Confirmed live: bebop-repo
+   `main` (`e56ba6a`) contains the merge `d3d4d8c` ("cycle-accurate dudect gate for mod_l +
+   sensitivity check", 2026-07-18 00:16:45 UTC), on top of the original constant-time fix (`7af7496`,
+   `94f7184`, 2026-07-17). Proof re-run live this session: `cargo test -p bebop2-core c4b` →
+   `sign::c4b_mod_l_timing_gate::mod_l_is_constant_time ... ok` (the real dudect Welch-t gate, |t| <
+   4.5) AND `sign::c4b_mod_l_timing_gate::gate_detects_deliberate_leak ... ok` (the adversarial
+   sensitivity check — the gate must RED on a known-leaky function, proving it isn't a gate that
+   always passes). **This means P06's own hard precondition (§0/§7.9, "no signing until Phase 3
+   closes C4b") is now satisfied** — `MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md` §8.4,
+   `GROUND-TRUTH-2026-07-17.md:51`, and `P06-EXECUTION-PLAN-2026-07-17.md` §2 all still say C4b is
+   open; they predate this closure by 13-24 hours and are now stale on this one point specifically.
+2. **A `Signer` impl exists — but is not wired into the gate.** `tools/ci-truth/src/v1.rs:273-280`
+   defines the trait; `UnsignedSigner` (`:285-296`) is the Phase-1 impl; `HybridSigner`
+   (`:380-439`, landed in commit `b1e5b723c`, "HybridSigner fills the crypto slot") shells the
+   external `bebop2-kv` CLI (`bebop2/proto-cap/src/bin/bebop2-kv.rs` in bebop-repo — real
+   Ed25519⊕ML-DSA-65, `genkeys`/`sign`/`verify` subcommands, `RequireBoth`). **Two concrete gaps
+   found by actually running it this session, not merely reading it:** (i) `evaluate_gate`
+   (`:472-528`) and `v1_verify` (`:534-565`) never call `HybridSigner::verify_signature` anywhere —
+   the merge gate does not check any signature today, `HybridSigner` is exercised only by its own
+   unit tests, not by the policy path it's supposed to arm; (ii) the `DiffAttestation`/`Verdict` TLV
+   schema (`:189-267`) has no tag for signature bytes at all — there is currently nowhere to *put* a
+   signature even if the gate did check one, so this is a schema gap, not just a wiring gap. (iii)
+   `HybridSigner::pub_anchor_line()` (`:428-438`) shells a `pubkey` subcommand that **does not exist**
+   in `bebop2-kv` — its actual CLI is `genkeys | sign | verify` only (confirmed by reading
+   `bebop2-kv.rs:120-133`). Built the CLI and ran the repo's own `#[ignore]`d end-to-end test live
+   this session (`BEBOp_REPO_ROOT=/root/bebop-repo cargo test ... -- --ignored`): it does not merely
+   skip, it **panics** — `real key_K anchor line must be derivable` at `v1.rs:887`. DONE requires all
+   three closed: gate calls a real verify, TLV carries a signature field, and `pub_anchor_line` uses a
+   subcommand that actually exists (or `genkeys` re-derivation, since `bebop2-kv genkeys <master-hex>`
+   already emits both anchor lines).
+3. **`digest32` upgraded from placeholder to real sha3-256.** Still unchanged — `v1.rs:49-69` shells
+   `git hash-object --stdin` (SHA-1, not SHA3-256) and widens/truncates to 32 bytes, exactly as its own
+   comment (`:43-48`) and `P06-EXECUTION-PLAN-2026-07-17.md` §2 item 1 name it. TLV slots are already
+   32 bytes so the schema doesn't change; only the primitive swaps (vendor a KAT-gated `sha3`/
+   `tiny-keccak`, or shell `sha3sum`).
+4. **27/27 (now 30/30 + 1 ignored) ci-truth tests still pass AND a new adversarial test proves a
+   tampered/forged signature is REJECTED *by the gate itself*.** Re-run live this session: `cargo
+   test` in `tools/ci-truth` → 30 passed, 0 failed, 1 ignored (test count grew from the
+   `P06-EXECUTION-PLAN`'s cited 27 once `HybridSigner`'s own tests landed). This is not sufficient for
+   DONE: `hybrid_signer_is_production_and_failclosed` and the `#[ignore]`d
+   `real_hybrid_sig_roundtrip_and_corruption_rejected` test `HybridSigner` in isolation, not through
+   `evaluate_gate`. A DONE-qualifying test submits a note pair with a *forged* signature (or the
+   `pubkey`/schema gaps in item 2 fixed enough to make this possible) and asserts `evaluate_gate`
+   itself returns `GateVerdict::Red`, mirroring the acceptance-criteria pattern already proven for the
+   structural forgery case (`gate_red_kequalskv`, `:689-707`) but for a cryptographic forgery instead
+   of an anchor-id swap.
+5. **`v1-verify` emits a real, checkable `"signed":true`.** Not just "not false" — today's JSON output
+   (`v1.rs:556` and `:561`) has **no `signed` key at all** (`{"v1_gate":...,"sha":...,
+   "red_line_touch":...}`), unlike `main.rs:423`'s `v5c-reexec` output, which explicitly carries
+   `"signed":false`. DONE means the field exists, is `true` on a commit whose notes carry real,
+   gate-verified signatures, and is checkable — i.e., re-running `v1-verify` on the same commit from a
+   different checkout reproduces the same `true` with no shared state.
+
+### 9.3 Definition of NOT-done / explicit anti-scope
+
+1. Wiring `HybridSigner` into `evaluate_gate` before C4b closes would have been forbidden by this
+   blueprint's own hard precondition — moot now that C4b is closed (§9.2 item 1), but the general rule
+   still applies to any *future* crypto-path change gated on a still-open finding: a working signature
+   over a leaky primitive is worse than no signature, because it produces false confidence instead of
+   an honest `"signed":false`.
+2. Swapping `digest32` to sha3-256 alone, without wiring a real signature check into `evaluate_gate`,
+   is a **partial step** — do not report it as key_V done. It closes §9.2 item 3 only; items 2, 4, and
+   5 remain open independently.
+3. Landing `HybridSigner` as a struct that compiles and has passing unit tests (true today) is **not**
+   the same as key_V being done — §9.2 item 2 found it is not called by the gate at all, and its own
+   `#[ignore]`d end-to-end test fails when actually run against the real CLI it claims to shell out to.
+   "The Signer trait has an impl" and "the merge gate cryptographically verifies notes" are different
+   claims; only the second is this item's DONE bar.
+4. Implementing signing — the diff-signer / key_K side, §3 of this document — is a **different,
+   separate leg**. `HybridSigner` as landed is role-generic (`role: char`, `'K'` or `'V'`) and its
+   `sign()` method takes a `master_hex` seed directly, meaning the *same* struct both signs (would
+   hold/derive the private material via a CLI argument) and verifies. `P06-EXECUTION-PLAN-2026-07-17.md`
+   §2 item 2-3 explicitly designed this leg as **verify-only** — "NO signing keys are generated by
+   ci-truth; it only *verifies* notes produced by the operator-held key_K/key_V... ci-truth itself
+   never holds the signing secret." The landed `HybridSigner.sign()` contradicts that stated intent by
+   construction (it accepts and uses a master seed). Closing key_V does not mean "make `HybridSigner`
+   sign things" — it means "make `evaluate_gate` verify a real signature," ideally via a verify-only
+   code path that never accepts a private seed as an argument at all. Conflating the two legs is the
+   trap: don't let key_K's signing convenience (useful for the note-production tooling in
+   `P06-EXECUTION-PLAN` §2 item 3) leak into key_V's verification-only scope.
+4b. Passing `master_hex` — private key material — as a CLI argument (`HybridSigner::sign`,
+   `v1.rs:389-406`) is itself a secrets-hygiene smell (process-list/shell-history exposure) that
+   should not be carried into whatever note-production tooling eventually fills §2 item 3; flagged
+   here as a trap found in the current code, not something to silently copy forward.
+5. Self-certifying the new/completed `Signer` wiring instead of an independent replay-verify is NOT
+   acceptable, per this repo's RC-2 discipline (memory: `crypto-safe-first-pass-2026-07-14`, "3-model
+   reviewed" precedent on the same crypto substrate). The falsifiable test in §9.2 item 4 must be
+   re-derivable by a party other than the one who wrote the `HybridSigner` wiring — running the
+   existing tests is not that; a fresh checkout re-verifying a real signed commit is.
+6. Marking §9.2 item 1 (C4b) as the *only* remaining blocker is also a trap: it was the only
+   *hard-precondition* blocker, but items 2 (gate wiring + TLV schema + `pubkey` subcommand), 3
+   (digest32), 4 (adversarial gate-level test), and 5 (`signed:true` emission) are independent,
+   unstarted-or-partial pieces of work that C4b closing does not automatically finish.
+
+### 9.4 Context & docs
+
+- `docs/design/MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md` §8.4 — "P06's merge-gate contract
+  is now executable" (the STATUS (2026-07-17) (a)/(b) split this section updates).
+- This blueprint's own §7 acceptance criteria (numbered checklist, especially #7/#9 — hybrid
+  signatures real, Phase-3 precondition honored).
+- `docs/design/sovereign-roadmap-2026-07-16/P06-EXECUTION-PLAN-2026-07-17.md` §2 — the "Remaining
+  (OPERATOR-GATED)" checklist this section re-verifies against live code.
+- C4b tracking in bebop-repo: `bebop2/core/src/sign.rs:1215-1371` (the dudect Welch-t gate + the
+  adversarial sensitivity-check test that proves the gate itself isn't a rubber stamp); closure
+  commits `7af7496`, `94f7184`, `dc7ad51`, `6f56e58`, merged at `d3d4d8c` (bebop-repo `main`).
+- `docs/design/CORE-ROADMAP-INDEX.md:39-45` — the cross-cutting-blocker note naming the four
+  downstream items (Layer C, Layer G, E3-Phase-B, P30) and the P-D audit correction (Layer D is
+  P06-independent, contra an earlier withdrawn edge).
+- External context (operator memory, not a repo doc — do not open): the memory pointer
+  `crypto-safe-first-pass-2026-07-14` records this repo's precedent for independent (3-model)
+  review of crypto substrate changes, which the RC-2 discipline in §9.3 item 5 draws on.
