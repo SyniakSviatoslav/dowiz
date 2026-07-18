@@ -28,7 +28,6 @@
 /// call site composing a courier's Kalman step with that courier's own FSM fold
 /// event; the batched fn is only ever invoked from inside that ownership
 /// boundary (NO-COURIER-SCORING red line respected).
-
 use crate::domain::TrustEstimate;
 
 /// Scalar reference softmax — mirror of `attention.rs::softmax` *exactly* (same
@@ -294,10 +293,7 @@ unsafe fn kalman_lane4(
 /// AVX2 fast path consumes 4 couriers per `kalman_lane4` step; the `<4`
 /// remainder (and the whole batch when AVX2 is absent) runs through the scalar
 /// `TrustEstimate::step` reference, which is trivially bit-identical.
-pub fn kalman_batch_step(
-    estimates: &mut [TrustEstimate],
-    observations: &[Option<f64>],
-) {
+pub fn kalman_batch_step(estimates: &mut [TrustEstimate], observations: &[Option<f64>]) {
     assert_eq!(
         estimates.len(),
         observations.len(),
@@ -338,10 +334,9 @@ pub fn kalman_batch_step(
                     if let Some(_z) = zs[lane] {
                         let y = ys[lane];
                         let s = pps[lane] + rs[lane]; // S = predicted P + R
-                        estimates[i + lane].kf.set_signals(
-                            vec![y],
-                            if s > 0.0 { y.abs() / s.sqrt() } else { 0.0 },
-                        );
+                        estimates[i + lane]
+                            .kf
+                            .set_signals(vec![y], if s > 0.0 { y.abs() / s.sqrt() } else { 0.0 });
                     }
                 }
                 i += 4;
@@ -361,9 +356,7 @@ pub fn kalman_batch_step(
 /// zipped slices; provided so a caller that already legitimately holds N
 /// couriers' `&mut TrustEstimate` (e.g. inside `apply_event_with_trust`) can
 /// advance them in one SoA pass without allocating an intermediate slice.
-pub fn kalman_batch_step_trust(
-    pairs: &mut [(&mut TrustEstimate, Option<f64>)],
-) {
+pub fn kalman_batch_step_trust(pairs: &mut [(&mut TrustEstimate, Option<f64>)]) {
     let n = pairs.len();
     let mut i = 0;
 
@@ -711,7 +704,10 @@ mod tests {
             // The SIMD lane must be at least as fast as scalar (no regression);
             // on an AVX2 host it is materially faster. We gate >= 1.0 to avoid
             // flaky CI while still recording the real measured ratio above.
-            assert!(speedup >= 1.0, "kalman SoA path regressed vs scalar: {speedup}x");
+            assert!(
+                speedup >= 1.0,
+                "kalman SoA path regressed vs scalar: {speedup}x"
+            );
             let _ = make_rng();
         }
     }

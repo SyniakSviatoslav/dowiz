@@ -30,13 +30,12 @@ use std::collections::HashMap;
 
 use crate::event_log::sha3_256;
 use crate::ports::agent::cap::{
-    verify_chain, AnchorRoster, ChainError, Delegation, RevocationSet,
-    SignatureVerifier,
+    verify_chain, AnchorRoster, ChainError, Delegation, RevocationSet, SignatureVerifier,
 };
 // `Capability` is the *struct* (courier cert) re-exported at `ports::agent`,
 // distinct from the `cap` submodule above (M6 seam: reuse, don't re-declare).
-use crate::ports::agent::Capability;
 use crate::ports::agent::scope::{Action, Resource, Scope};
+use crate::ports::agent::Capability;
 
 /// The settlement rail an attestation rode. Closed set.
 ///
@@ -194,7 +193,10 @@ impl SettlementState {
     /// and no overflow is possible on a single record.
     pub fn fold_event(&mut self, ev: SettlementEvent) {
         match &ev {
-            SettlementEvent::OrderPlaced { order_id, total_i64 } => {
+            SettlementEvent::OrderPlaced {
+                order_id,
+                total_i64,
+            } => {
                 self.orders.insert(
                     order_id.clone(),
                     OrderSettle {
@@ -210,7 +212,11 @@ impl SettlementState {
                     o.delivered = true;
                 }
             }
-            SettlementEvent::SettlementRecorded { order_id, amount_i64, .. } => {
+            SettlementEvent::SettlementRecorded {
+                order_id,
+                amount_i64,
+                ..
+            } => {
                 if let Some(o) = self.orders.get_mut(order_id) {
                     o.settled = Some(*amount_i64);
                 }
@@ -276,7 +282,9 @@ impl SettlementState {
         let mut sum: i64 = 0;
         for o in self.orders.values() {
             if let Some(a) = o.settled {
-                sum = sum.checked_add(a).ok_or("sum_folded_settlements overflow")?;
+                sum = sum
+                    .checked_add(a)
+                    .ok_or("sum_folded_settlements overflow")?;
             }
         }
         Ok(sum)
@@ -606,8 +614,13 @@ mod tests {
         assert_eq!(
             seq,
             vec![
-                SettlementEvent::OrderPlaced { order_id: "O1".into(), total_i64: 1500 },
-                SettlementEvent::OrderDelivered { order_id: "O1".into() },
+                SettlementEvent::OrderPlaced {
+                    order_id: "O1".into(),
+                    total_i64: 1500
+                },
+                SettlementEvent::OrderDelivered {
+                    order_id: "O1".into()
+                },
                 SettlementEvent::SettlementRecorded {
                     order_id: "O1".into(),
                     amount_i64: 1500,
@@ -707,8 +720,13 @@ mod tests {
         let (auth, cert_ref) = good_auth(1_000);
         let port = CashOnDeliveryPort;
         let mut state = SettlementState::new();
-        state.fold_event(SettlementEvent::OrderPlaced { order_id: "O1".into(), total_i64: 700 });
-        state.fold_event(SettlementEvent::OrderDelivered { order_id: "O1".into() });
+        state.fold_event(SettlementEvent::OrderPlaced {
+            order_id: "O1".into(),
+            total_i64: 700,
+        });
+        state.fold_event(SettlementEvent::OrderDelivered {
+            order_id: "O1".into(),
+        });
         let att = att_for("O1", 700, cert_ref, vec![1]);
         let first = port.settle(&state, &att, &auth);
         assert!(matches!(first, SettlementOutcome::Recorded { .. }));
@@ -723,7 +741,9 @@ mod tests {
         let second = port.settle(&state, &att, &auth);
         assert_eq!(
             second,
-            SettlementOutcome::Rejected(SettlementReject::AlreadySettled { order_id: "O1".into() })
+            SettlementOutcome::Rejected(SettlementReject::AlreadySettled {
+                order_id: "O1".into()
+            })
         );
         // idempotency key: exactly ONE SettlementRecorded for O1.
         let recorded = state
@@ -741,7 +761,10 @@ mod tests {
         let (auth, cert_ref) = good_auth(1_000);
         let port = CashOnDeliveryPort;
         let mut state = SettlementState::new();
-        state.fold_event(SettlementEvent::OrderPlaced { order_id: "O1".into(), total_i64: 700 });
+        state.fold_event(SettlementEvent::OrderPlaced {
+            order_id: "O1".into(),
+            total_i64: 700,
+        });
         // NO OrderDelivered appended.
         let att = att_for("O1", 700, cert_ref, vec![1]);
         let outcome = port.settle(&state, &att, &auth);
@@ -755,12 +778,10 @@ mod tests {
         // No settlement event appended.
         assert!(!state.is_settled("O1"));
         assert_eq!(state.settled_amount("O1"), None);
-        assert!(
-            state
-                .events()
-                .iter()
-                .all(|e| !matches!(e, SettlementEvent::SettlementRecorded { .. }))
-        );
+        assert!(state
+            .events()
+            .iter()
+            .all(|e| !matches!(e, SettlementEvent::SettlementRecorded { .. })));
     }
 
     // (3) amount mismatch → typed reject, never silently adjusts either number.
@@ -769,8 +790,13 @@ mod tests {
         let (auth, cert_ref) = good_auth(1_000);
         let port = CashOnDeliveryPort;
         let mut state = SettlementState::new();
-        state.fold_event(SettlementEvent::OrderPlaced { order_id: "O1".into(), total_i64: 700 });
-        state.fold_event(SettlementEvent::OrderDelivered { order_id: "O1".into() });
+        state.fold_event(SettlementEvent::OrderPlaced {
+            order_id: "O1".into(),
+            total_i64: 700,
+        });
+        state.fold_event(SettlementEvent::OrderDelivered {
+            order_id: "O1".into(),
+        });
         // courier attests 999, but the fold-derived total is 700.
         let att = att_for("O1", 999, cert_ref, vec![1]);
         let outcome = port.settle(&state, &att, &auth);
@@ -796,8 +822,13 @@ mod tests {
         auth.revocations.revoke_key(auth.courier_subject_key);
         let port = CashOnDeliveryPort;
         let mut state = SettlementState::new();
-        state.fold_event(SettlementEvent::OrderPlaced { order_id: "O1".into(), total_i64: 700 });
-        state.fold_event(SettlementEvent::OrderDelivered { order_id: "O1".into() });
+        state.fold_event(SettlementEvent::OrderPlaced {
+            order_id: "O1".into(),
+            total_i64: 700,
+        });
+        state.fold_event(SettlementEvent::OrderDelivered {
+            order_id: "O1".into(),
+        });
         let att = att_for("O1", 700, cert_ref, vec![1]);
         let outcome = port.settle(&state, &att, &auth);
         assert_eq!(
@@ -822,8 +853,13 @@ mod tests {
         };
         let port = CashOnDeliveryPort;
         let mut state = SettlementState::new();
-        state.fold_event(SettlementEvent::OrderPlaced { order_id: "O1".into(), total_i64: 700 });
-        state.fold_event(SettlementEvent::OrderDelivered { order_id: "O1".into() });
+        state.fold_event(SettlementEvent::OrderPlaced {
+            order_id: "O1".into(),
+            total_i64: 700,
+        });
+        state.fold_event(SettlementEvent::OrderDelivered {
+            order_id: "O1".into(),
+        });
         let att = att_for("O1", 700, cert_ref, vec![1]);
         let outcome = port.settle(&state, &att, &auth);
         assert!(matches!(
@@ -848,8 +884,13 @@ mod tests {
         };
         let port = CashOnDeliveryPort;
         let mut state = SettlementState::new();
-        state.fold_event(SettlementEvent::OrderPlaced { order_id: "O1".into(), total_i64: 700 });
-        state.fold_event(SettlementEvent::OrderDelivered { order_id: "O1".into() });
+        state.fold_event(SettlementEvent::OrderPlaced {
+            order_id: "O1".into(),
+            total_i64: 700,
+        });
+        state.fold_event(SettlementEvent::OrderDelivered {
+            order_id: "O1".into(),
+        });
         let att = att_for("O1", 700, cert_ref, vec![1]);
         let outcome = port.settle(&state, &att, &auth);
         assert!(matches!(
@@ -865,8 +906,13 @@ mod tests {
         let (auth, _cert_ref) = good_auth(1_000);
         let port = CashOnDeliveryPort;
         let mut state = SettlementState::new();
-        state.fold_event(SettlementEvent::OrderPlaced { order_id: "O1".into(), total_i64: 700 });
-        state.fold_event(SettlementEvent::OrderDelivered { order_id: "O1".into() });
+        state.fold_event(SettlementEvent::OrderPlaced {
+            order_id: "O1".into(),
+            total_i64: 700,
+        });
+        state.fold_event(SettlementEvent::OrderDelivered {
+            order_id: "O1".into(),
+        });
         // Attestation claims a cert-ref that is NOT the verified courier's key hash.
         let wrong_ref = sha3_256(&[99u8; 32]);
         let att = att_for("O1", 700, wrong_ref, vec![1]);
@@ -886,12 +932,16 @@ mod tests {
         let mut state = SettlementState::new();
         // price came from an untrusted (client) source → no settlement allowed.
         state.fold_placed_untrusted("O1".into(), 700);
-        state.fold_event(SettlementEvent::OrderDelivered { order_id: "O1".into() });
+        state.fold_event(SettlementEvent::OrderDelivered {
+            order_id: "O1".into(),
+        });
         let att = att_for("O1", 700, cert_ref, vec![1]);
         let outcome = port.settle(&state, &att, &auth);
         assert_eq!(
             outcome,
-            SettlementOutcome::Rejected(SettlementReject::UntrustedPrice { order_id: "O1".into() })
+            SettlementOutcome::Rejected(SettlementReject::UntrustedPrice {
+                order_id: "O1".into()
+            })
         );
         assert!(!state.is_settled("O1"));
     }

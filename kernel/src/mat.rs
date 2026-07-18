@@ -149,3 +149,37 @@ pub fn matmul_contig(a: &Mat, b: &Mat) -> Mat {
     }
     c
 }
+
+/// Arena-aware twin of [`matmul_contig`] (W5 — the dense `charpoly` scratch
+/// path). The result matrix `c` (n² `f64`) is served from `arena` during the
+/// multiply; on exhaustion (`alloc_slice` returns `None`) it degrades to the
+/// heap [`matmul_contig`] (same bytes, never a panic). Byte-identical output
+/// guaranteed — the arena moves where the scratch lives, never the multiply
+/// order. The returned `Mat` owns its `Vec` (arena memory cannot outlive the
+/// loan), so the win is keeping the transient n×n product buffer off the heap
+/// for the duration of the call.
+pub fn matmul_contig_in(a: &Mat, b: &Mat, arena: &crate::arena::BumpArena) -> Option<Mat> {
+    let m = a.nrows;
+    let k = a.ncols;
+    let n = b.ncols;
+    debug_assert_eq!(k, b.nrows, "matmul_contig_in: inner dims must agree");
+    let scratch: &mut [f64] = arena.alloc_slice(m * n)?;
+    for v in scratch.iter_mut() {
+        *v = 0.0;
+    }
+    for i in 0..m {
+        for kk in 0..k {
+            let aik = a.get(i, kk);
+            if aik == 0.0 {
+                continue;
+            }
+            let row_base = i * n;
+            for j in 0..n {
+                scratch[row_base + j] += aik * b.get(kk, j);
+            }
+        }
+    }
+    let mut c = Mat::zeros(m, n);
+    c.data.copy_from_slice(scratch);
+    Some(c)
+}

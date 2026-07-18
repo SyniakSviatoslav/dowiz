@@ -364,7 +364,11 @@ mod tests {
 
     /// Env reader backed by a fixed map; models an explicit operator environment.
     fn env<'a>(map: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
-        move |k: &str| map.iter().find(|(key, _)| *key == k).map(|(_, v)| v.to_string())
+        move |k: &str| {
+            map.iter()
+                .find(|(key, _)| *key == k)
+                .map(|(_, v)| v.to_string())
+        }
     }
 
     // ── (a) default Off when env absent ────────────────────────────────────────
@@ -388,7 +392,11 @@ mod tests {
             ("DOWIZ_LLM_API_KEY_FILE", "/tmp/never-read.key"),
         ]))
         .expect("leftover vars without mode must parse to Off, never escalate");
-        assert_eq!(cfg.mode, AiMode::Off, "no mode set ⇒ Off even with trailing vars");
+        assert_eq!(
+            cfg.mode,
+            AiMode::Off,
+            "no mode set ⇒ Off even with trailing vars"
+        );
         assert_eq!(cfg.api_key, None, "key file is never read when mode is Off");
     }
 
@@ -402,7 +410,10 @@ mod tests {
         // local, no explicit base ⇒ loopback default pinned
         let local = BackendConfig::from_env_get(env(&[("DOWIZ_AI_MODE", "local")])).unwrap();
         assert_eq!(local.mode, AiMode::LocalOffline);
-        assert!(is_loopback(&local.base_url), "local default must be loopback");
+        assert!(
+            is_loopback(&local.base_url),
+            "local default must be loopback"
+        );
         assert_eq!(local.api_key, None);
 
         // local, explicit loopback base
@@ -424,10 +435,7 @@ mod tests {
         let cfg = BackendConfig::from_env_get(env(&[
             ("DOWIZ_AI_MODE", "connected"),
             ("DOWIZ_LLM_BASE_URL", "https://api.example.com/v1"),
-            (
-                "DOWIZ_LLM_API_KEY_FILE",
-                key_path.to_str().unwrap(),
-            ),
+            ("DOWIZ_LLM_API_KEY_FILE", key_path.to_str().unwrap()),
         ]))
         .expect("fully-specified connected config must parse");
         assert_eq!(cfg.mode, AiMode::Connected);
@@ -476,7 +484,10 @@ mod tests {
         let err = BackendConfig::from_env_get(env(&[
             ("DOWIZ_AI_MODE", "connected"),
             ("DOWIZ_LLM_BASE_URL", "https://api.example.com/v1"),
-            ("DOWIZ_LLM_API_KEY_FILE", "/nonexistent/and/unreadable/key.file"),
+            (
+                "DOWIZ_LLM_API_KEY_FILE",
+                "/nonexistent/and/unreadable/key.file",
+            ),
         ]))
         .unwrap_err();
         assert_eq!(err, ConfigError::MissingApiKey);
