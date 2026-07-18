@@ -164,6 +164,7 @@ impl SignatureVerifier for RefSigner {
 }
 
 /// A single-use, signed authorization statement (mirrors bebop2 `Capability`).
+#[cfg_attr(feature = "json-api", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Capability {
     /// Ed25519 public key (32 bytes) of the subject. Identity, never a score.
@@ -220,6 +221,7 @@ impl Capability {
 
 /// A signed frame carrying a [`Capability`] + an opaque payload (the B1 admission frame
 /// carries the canonical `AgentManifest` TLV as its payload).
+#[cfg_attr(feature = "json-api", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone)]
 pub struct SignedFrame {
     /// The authorization statement.
@@ -282,6 +284,7 @@ impl SignedFrame {
 }
 
 /// A single delegation link in a UCAN-subset chain (mirrors bebop2 `Delegation`).
+#[cfg_attr(feature = "json-api", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Delegation {
     /// Parent / issuer key. Must be an enrolled anchor at the root, else equal the
