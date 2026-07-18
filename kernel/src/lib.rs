@@ -172,6 +172,11 @@ pub mod noether;
 pub mod online;
 pub mod order_machine;
 pub mod ports;
+/// WAVE P40 — bounded, fail-closed AgentLoop executor. Wires through the existing
+/// `ports::tool` (`ToolPort`/`SkillRegistry`) + `ports::mcp` (`McpPort`) capability
+/// firewall and the `token_bucket` degrade-closed budget. No tool runs without a
+/// verified capability; unknown tools rejected; budget exhaustion terminates the loop.
+pub mod agent;
 /// M1 / L0 exact byte+regex search (vectorless) — deterministic trigram
 /// inverted index + exact verify. NEW module; does not touch kernel authority.
 pub mod retrieval;
