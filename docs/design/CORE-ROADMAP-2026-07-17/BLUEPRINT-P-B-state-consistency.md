@@ -301,6 +301,13 @@ constructing `RetainedBase { … }` outside `spectral_cache.rs`, calling the dem
 `matrix_content_address` from another module. Cheap CI backstop (smart index, item 14): a grep
 gate asserting `pub fn matrix_content_address` does not exist in `kernel/src/` (ledger §11).
 
+> **WAVE F enforcement added:** the grep backstop is now an *active* CI job
+> `no-pub-raw-matrix-hash` in `.github/workflows/ci.yml` (BLUEPRINT-P-B §5 note-4).
+> `matrix_content_address` is demoted to `fn` (private) in `kernel/src/spectral_cache.rs`,
+> so the gate passes today; if it is ever re-promoted to `pub`, the job goes RED and blocks
+> merge into the canonical repo. The drift-gate `RetainedBase::admit` is the only internal
+> caller and reaches it via the private path.
+
 ---
 
 ## 6. DoD (contract item 2 — machine-checkable, RED→GREEN)
