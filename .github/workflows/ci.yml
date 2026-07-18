@@ -324,3 +324,25 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify committed digest matches the ledger
         run: cargo run --offline --manifest-path tools/ops-alert/Cargo.toml --bin regression-digest -- --check
+
+  # P40 compile-firewall gate (fix-wave: makes the audit's "DeadProbe" RED-able).
+  # The agent-loop crate MUST NOT DIRECTLY depend on dowiz-kernel — all kernel
+  # access goes through agent-facade (transitive kernel use is fine). The
+  # roadmap falsifier ("cargo tree shows the loop crate does not import
+  # dowiz-kernel directly") is satisfied today, but it could silently regress;
+  # this job turns that into a hard RED gate. We check the manifest for a
+  # DIRECT dependency edge (not cargo tree, which shows the legitimate
+  # transitive kernel pull through agent-facade) so the gate is precise and
+  # RED-able: add `dowiz-kernel = ...` to agent-loop/Cargo.toml and CI fails.
+  firewall-agent-loop:
+    name: agent-loop kernel firewall (P40)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fail if agent-loop directly depends on dowiz-kernel
+        run: |
+          if grep -Eq '^[[:space:]]*dowiz-kernel[[:space:]]*=' agent-loop/Cargo.toml; then
+            echo "FIREWALL BREACH: agent-loop must not depend on dowiz-kernel directly (use agent-facade)" >&2
+            exit 1
+          fi
+          echo "OK: agent-loop firewall intact (no direct dowiz-kernel dependency)"
