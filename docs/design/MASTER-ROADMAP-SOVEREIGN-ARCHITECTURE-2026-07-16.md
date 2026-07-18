@@ -2619,3 +2619,20 @@ Three closes:
   support, never required (Recommended, confirmed) — the free-form menu schema (§16.17) gains
   opt-in fields for vendors who want interoperability with external systems, without dowiz
   inventing a competing closed taxonomy or mandating external-standard compliance.
+
+### 17.8 Cloudflare itself abstracted as a swappable tunnel layer; governance form deferred
+Two closes:
+- **Cloudflare-the-company is a third dependency in the same risk class** as the dowiz-account
+  CF Tunnel (§17.3) and the dowiz-signed cert root (§17.7) — caught by asking the same class of
+  question a third time. **Resolution (Recommended, confirmed)**: the tunnel mechanism is
+  abstracted as a port, Cloudflare Tunnel is the Wave-0 default implementation, but alternative
+  tunnel providers (WireGuard, other relay options) are technically substitutable — the same
+  adapter-port pattern already used for hosting (§16.1), payment (§16.13), storage (§16.29),
+  and now the AI model (§16.52), applied one more time. **This closes the third and (so far)
+  final dowiz/vendor-forever dependency found this dialogue pass** — together with §17.3 and
+  §17.7, the mesh's survivability no longer rests on any single company's continued existence
+  by design, not merely by stated intent.
+- **Governance's eventual form (informal BDFL vs. a formal non-profit foundation) is
+  deliberately undecided** (Recommended, confirmed) — consistent with §17.1's own "open to
+  revision, not designed now" framing; no premature foundation structure is being built ahead
+  of the actual need for one.
