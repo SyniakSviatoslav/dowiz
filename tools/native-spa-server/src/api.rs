@@ -33,7 +33,6 @@ use base64::Engine;
 use dowiz_kernel::json_api;
 use dowiz_kernel::ports::agent::{
     cap::{revocation_hash, verify_chain, SignatureVerifier},
-    scope,
 };
 
 // Re-export kernel types the integration tests construct (cap-gated frames,
@@ -281,17 +280,6 @@ impl<V: SignatureVerifier + Send + Sync + 'static> CapVerifier for KernelCapVeri
             Err(ChainError::UnknownIssuer) => Err(ApiReject::Unauthorized),
             Err(_) => Err(ApiReject::Forbidden),
         }
-    }
-}
-
-/// Helper to keep the `Forbidden` construction ergonomic inside the chain above
-/// (small local shim so we don't repeat the arm).
-trait CloneForbidden {
-    fn clone_forbidden() -> Self;
-}
-impl CloneForbidden for ApiReject {
-    fn clone_forbidden() -> Self {
-        ApiReject::Forbidden
     }
 }
 
