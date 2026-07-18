@@ -144,16 +144,27 @@ impl<P: JobPort> BudgetedJobPort<P> {
 
     /// Current spend accumulator (read-only view for telemetry/tests).
     pub fn spent(&self) -> f64 {
-        self.budget.lock().unwrap().spent()
+        self.budget
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .spent()
     }
 }
 
 impl<P: JobPort> JobPort for BudgetedJobPort<P> {
     fn submit(&self, job: &Job) -> Result<JobHandle, JobError> {
+        // V1 #5 (ROUND-2 GAP-AUDIT): a NaN or negative `estimate` must be refused,
+        // not debited. A NaN makes `spent + NaN > ceiling` evaluate false → it would
+        // be debited as a poisoned non-finite spend (degrade-OPEN, the exact failure
+        // the doc warns about). A negative estimate would roll spend backwards. Both
+        // are malformed input → refuse before any debit (degrade-CLOSED).
+        if !job.estimate.is_finite() || job.estimate < 0.0 {
+            return Err(JobError::BudgetExceeded);
+        }
         // Degrade-closed gate: refuse BEFORE any spend is recorded when the
         // projected total would exceed the ceiling.
         {
-            let mut b = self.budget.lock().unwrap();
+            let mut b = self.budget.lock().unwrap_or_else(|e| e.into_inner());
             if b.spent() + job.estimate > b.ceiling() {
                 return Err(JobError::BudgetExceeded);
             }
@@ -253,6 +264,45 @@ mod tests {
             before,
             "accumulator must not advance on a refused (over-ceiling) submit"
         );
+    }
+
+    /// (c) V1 #5 (ROUND-2 GAP-AUDIT) — a NaN or negative `estimate` is malformed
+    /// input and MUST be refused before any debit. Pre-fix, a NaN made
+    /// `spent + NaN > ceiling` evaluate false, so it was debited as a poisoned
+    /// non-finite spend (degrade-OPEN); a negative estimate rolled spend backwards.
+    #[test]
+    fn budgeted_jobport_refuses_nan_and_negative_estimate() {
+        let port = BudgetedJobPort::new(OfflineJobPort, 10.0);
+
+        // NaN estimate → refused, no spend recorded, accumulator stays finite at 0.
+        let res_nan = port.submit(&Job { estimate: f64::NAN });
+        assert!(
+            matches!(res_nan, Err(JobError::BudgetExceeded)),
+            "NaN estimate must be refused (degrade-closed)"
+        );
+        assert_eq!(port.spent(), 0.0, "NaN submit must not debit");
+        assert!(
+            port.spent().is_finite(),
+            "spend must never become non-finite"
+        );
+
+        // +inf estimate → refused, no spend.
+        let res_inf = port.submit(&Job {
+            estimate: f64::INFINITY,
+        });
+        assert!(
+            matches!(res_inf, Err(JobError::BudgetExceeded)),
+            "infinite estimate must be refused"
+        );
+        assert_eq!(port.spent(), 0.0, "inf submit must not debit");
+
+        // Negative estimate → refused, spend does not roll backwards.
+        let res_neg = port.submit(&Job { estimate: -5.0 });
+        assert!(
+            matches!(res_neg, Err(JobError::BudgetExceeded)),
+            "negative estimate must be refused"
+        );
+        assert_eq!(port.spent(), 0.0, "negative submit must not move spend");
     }
 
     /// (c) P11 §4 — the default offline adapter returns `Err(Offline)`, never a
