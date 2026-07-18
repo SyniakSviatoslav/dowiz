@@ -219,5 +219,79 @@ itself could create a vulnerability. It can. **The trial merge was run `--no-com
   canonicalization decision (which sig-representation design is canonical).
 - No merge of either pq branch — archive recommendations.
 - No deletion, retag, or force-push of any investigated branch.
-- The only code change committed on this branch is the p47 cosmetic comment-reword merge
-  (documentation-grade; no money arithmetic, no crypto logic).
+- The p47 cosmetic comment-reword merge (documentation-grade; no money arithmetic, no crypto
+  logic) plus the three §7 hand-derived p06 carve-outs below are the only code changes committed
+  on this branch. **Still not done: no merge of the p06 crypto branch itself** (§2 disposition
+  stands) and no merge of this reconciliation branch into `main`.
+
+---
+
+## 7. p06 carve-outs — HAND-DERIVED onto `main`'s canonical struct-field design (NOT a merge)
+
+Per §2 point 2, the three carve-outs the archived `feat/p06-v1-real-signer` (`d250025790`) had that
+`main`'s canonical `58987d79d` lacked have now been **hand re-implemented against `main`'s current
+struct-field sig design** in `tools/ci-truth/src/{v1.rs,main.rs}`. This is **NOT** a merge/splice
+of the branch's TLV-embedded bytes — the branch's `sig_k`/`sig_v` TLV tags, `split_note_sig`, and
+`verify_message` byte-layout were **deliberately not copied**, because pasting them onto `main`'s
+`.sig` struct-field design is exactly the byte-mismatch vulnerability class §2 identified. Each
+carve-out was translated as a FEATURE onto `main`'s actual data structures (`DiffAttestation.sig` /
+`Verdict.sig` struct fields, `signing_bytes()`, the `HybridSigner` 3-arg `verify_signature`, and the
+`SignedGate` gate path), purely additively.
+
+**The canonical sign/verify BYTE-PATH is provably UNMODIFIED.** `git diff` shows zero `+/-` lines in
+either `DiffAttestation::signing_bytes()` or `Verdict::signing_bytes()`, in `encode()`/`decode()`,
+in the TLV tag layout (`0x07`/`0x08`), or in `HybridSigner::verify_signature` (still 3-arg). The
+only `signing_bytes` diff lines are the two `evaluate_gate` call-sites where `attest.signing_bytes()`
+was hoisted into a local `att_signing` and passed as `&att_signing` — the **identical bytes** — so
+the `measure()` closure can borrow them. Hybrid **AND-semantics remain fail-closed**: `evaluate_gate`
+reaches `Green` only if BOTH the key_K attestation and key_V verdict signatures verify (short-circuit
+early-return `Red` otherwise), proven live by `real_hybrid_sig_roundtrip_and_corruption_rejected`
+(GREEN on authentic notes; RED on a 1-bit-flipped verdict sig) running against the real `bebop2-kv`
+CLI.
+
+### The three carve-outs, as landed
+
+1. **`v1-probe` subcommand** (`v1.rs::v1_probe`, dispatched from `main.rs`). Signs a fixed known
+   payload with the key_K and key_V hybrid keys via the real `bebop2-kv` CLI, verifies each
+   roundtrip, then proves a 1-bit corruption of the signature is REJECTED. Fail-closed: without the
+   binary it prints a SKIP notice and returns **1** (not a fake green). Verified live: with
+   `BEBOp_REPO_ROOT` set the CLI prints `V1-PROBE: OK (real Ed25519⊕ML-DSA-65 roundtrip verified;
+   1-bit corruption rejected …)` exit 0; without it, SKIP exit 1. It calls `main`'s canonical
+   `HybridSigner::{sign, pub_anchor_line, verify_signature}` unchanged — it adds no new byte-path.
+2. **Local telemetry sink** (`V1_TELEMETRY = docs/ledger/v1-sigverify-telemetry.jsonl`,
+   `V1SigEvent`, `record_telemetry`, and the `measure()` timing wrapper). Purely observational —
+   `measure()` times a verify closure and passes its boolean through UNCHANGED, so it can never
+   alter a verify decision. It records ONLY non-secret metadata: a timestamp, the op name, the role
+   char, an ≤8-char PREFIX of the PUBLIC anchor id, a DIGEST (`sha`/`git hash-object`) of the
+   public-metadata signing bytes, latency ms, and the outcome bool. It NEVER writes the kv master
+   seed, a signature, or payload plaintext. The sink is gitignored (`never commit`, local ledger).
+   Wired into `evaluate_gate`'s signed branch and into `v1-probe`.
+3. **Cross-role anchor check** (`v1.rs::anchor_matches_role`, wired into `evaluate_gate`'s signed
+   branch and into `v1-probe`). Before verifying, the anchor line for the key_K path must
+   `ends_with("role=K")` and the key_V path `ends_with("role=V")` — a role mismatch is fail-closed
+   RED, blocking cross-role attestation confusion (a key_K self-attestation masquerading as an
+   independent key_V verdict). Additive: a correctly-roled pair is unaffected.
+
+### Test evidence (all green; `cargo test` in `tools/ci-truth/`)
+
+- Existing canonical suite unbroken: **34 tests pass** (was 31 + 3 new), including
+  `gate_green_on_valid_non_redline_pair`, `gate_red_kequalskv`, `gate_red_residue_missing`,
+  `gate_red_redline_diff_requires_green`, `h3_*`, and `real_hybrid_sig_roundtrip_and_corruption_rejected`.
+- New carve-out proofs:
+  - `v1_probe_roundtrip_and_corruption_rejected` — probe GREEN with real crypto; 1-bit flip rejected;
+    fail-closed (returns 1) when the binary is absent.
+  - `telemetry_never_logs_key_material` — FORBIDDEN_MARKERS-style negative assertion (mirrors
+    `kernel/src/ports/payment_capability.rs`): the JSONL sink contains none of the master-seed,
+    signing-bytes-plaintext, signature, or full-anchor sentinels — only the digest + anchor prefix +
+    outcome.
+  - `cross_role_anchor_check_rejects_mismatch` — a role=K anchor is rejected where role=V is expected
+    and vice versa; correctly-roled and trailing-whitespace anchors pass; a tagless anchor is rejected.
+- Real-crypto run (`BEBOp_REPO_ROOT=/root/bebop-repo`, `--test-threads=1`): all 34 pass in ~1.2s
+  (vs 0.02s unsigned), confirming the real ML-DSA-65 path actually executed for the probe and e2e
+  tests.
+
+**Not done (deliberately):** these carve-outs are committed to
+`fix/reconcile-redline-branches-2026-07-18` only. The p06 crypto branch is still NOT merged; `main`'s
+`58987d79d` remains the canonical P06 key_V gate (§2). If any carve-out had required touching the
+signed-byte path rather than being additive, it would have been reported as still-needs-human-design
+rather than forced in — none did.

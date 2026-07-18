@@ -93,3 +93,6 @@ temp/
 
 # runtime harvest ledger (native telemetry; never commit)
 track_record.jsonl
+
+# v1 sig-verification telemetry (native local sink; never commit) — ci-truth P06
+docs/ledger/v1-sigverify-telemetry.jsonl
