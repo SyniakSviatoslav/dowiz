@@ -277,12 +277,24 @@ pub fn apply_tax(subtotal: i64, tax_rate: f64, price_includes_tax: bool) -> Resu
 
     let tax = if price_includes_tax {
         // net = round(sub * MONEY_SCALE_MICRO / (MONEY_SCALE_MICRO + rate)); tax = sub - net
+        // V3 1.4 (ROUND-2 GAP-AUDIT): a negative effective rate makes
+        // `MONEY_SCALE_MICRO + rate_micro <= 0`, turning the half-up division
+        // below into a div-by-zero panic. Refuse non-positive denominators.
         let denom = MONEY_SCALE_MICRO + rate_micro;
+        if denom <= 0 {
+            return Err("apply_tax: negative effective tax rate (denominator <= 0)".into());
+        }
         let net = (sub * MONEY_SCALE_MICRO + denom / 2) / denom; // half-up
         sub - net
     } else {
         // tax = round(sub * rate / MONEY_SCALE_MICRO)
-        (sub * rate_micro + MONEY_SCALE_MICRO / 2) / MONEY_SCALE_MICRO // half-up
+        // V3 1.6 (ROUND-2 GAP-AUDIT): `sub * rate_micro` can overflow i128 when
+        // `tax_rate` is pathologically large (rate_micro saturates toward i128::MAX).
+        // Use checked arithmetic so it returns Err instead of panicking.
+        let prod = sub
+            .checked_mul(rate_micro)
+            .ok_or("apply_tax: subtotal * rate overflows i128")?;
+        (prod + MONEY_SCALE_MICRO / 2) / MONEY_SCALE_MICRO // half-up
     };
     i64::try_from(tax).map_err(|_| "tax overflow: subtotal * rate exceeds i64".into())
 }
@@ -493,6 +505,23 @@ mod tests {
         // pathological: huge subtotal × rate=2.0 → tax ≈ i64::MAX*2 exceeds i64.
         let r = apply_tax(i64::MAX, 2.0, false);
         assert!(r.is_err(), "tax overflow must be Err, got {:?}", r);
+    }
+
+    // ── M1 (ROUND-2 GAP-AUDIT V3 1.4 / 1.6): apply_tax must not panic. ──
+    #[test]
+    fn red_tax_negative_rate_is_err_not_divzero() {
+        // V3 1.4: rate_micro <= -MONEY_SCALE_MICRO makes the inclusive denominator
+        // <= 0 → pre-fix this was a div-by-zero panic. Now refused as Err.
+        let r = apply_tax(1000, -2.0, true);
+        assert!(r.is_err(), "negative effective rate must be Err, got {:?}", r);
+    }
+
+    #[test]
+    fn red_tax_i128_overflow_is_err_not_panic() {
+        // V3 1.6: a pathologically large rate saturates rate_micro toward i128::MAX;
+        // pre-fix `sub * rate_micro` overflowed i128 (panicked in release). Now Err.
+        let r = apply_tax(1_000_000_000_000, 1e15, false);
+        assert!(r.is_err(), "i128 overflow must be Err, got {:?}", r);
     }
 
     // ── A3: money-law SHADOW organ exact-integer parity pin (BLUEPRINT-P-A §3.3) ──
