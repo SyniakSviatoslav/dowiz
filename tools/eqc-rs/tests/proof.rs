@@ -200,3 +200,124 @@ fn div_half_up_int_mode_proven() {
     assert!(run.status.success(), "generated int proof FAILED:\n{}", String::from_utf8_lossy(&run.stderr));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// Local float-literal formatter (mirrors `eqc_rs::flit`, which is private): a
+// rustc-accepted f64 literal with no e-notation.
+fn flit(x: f64) -> String {
+    if x.is_nan() {
+        return "f64::NAN".to_string();
+    }
+    if x.is_infinite() {
+        return if x > 0.0 {
+            "f64::INFINITY".to_string()
+        } else {
+            "f64::NEG_INFINITY".to_string()
+        };
+    }
+    let mut s = format!("{x:.17}");
+    while s.ends_with('0') && !s.ends_with(".0") {
+        s.pop();
+    }
+    format!("{s}f64")
+}
+
+#[test]
+fn sin_cos_cordic_int_mode_proven() {
+    // A6 — WIRE the integer-CORDIC Q30 sin/cos into int-mode emission.
+    //
+    // RED (pre-fix) behaviour: `emit_int_checked_rust` refused Sin/Cos with
+    // `IntEmissionUnsupported("sin/cos not in the integer-exact subset")`, so the
+    // `.expect(...)` below would panic -> this test FAILS. GREEN (post-fix): the
+    // same call emits a zero-float `_cordic_sincos` kernel and the test passes.
+    //
+    // The emitted program is rustc-compiled and RUN; it asserts the emitted
+    // CORDIC sin/cos equals `f64::sin`/`f64::cos` at a battery of angles within
+    // the measured Q30 fixed-point precision bound.
+    let theta = Expr::sym("theta");
+    let sin_eq = Equation::new("wave", &["theta"], theta.clone().sin());
+
+    let sin_int = sin_eq
+        .emit_int_checked_rust()
+        .expect("A6: int-mode must emit CORDIC sin/cos (refused before the fix)");
+
+    // The inlined, self-contained integer-CORDIC helper must be present...
+    assert!(sin_int.contains("_cordic_sincos"), "{sin_int}");
+    assert!(sin_int.contains("fn wave_cordic_sincos"), "{sin_int}");
+    // ...and emission must be byte-deterministic (same Expr -> same bytes).
+    assert_eq!(
+        sin_int,
+        Equation::new("wave", &["theta"], theta.clone().sin())
+            .emit_int_checked_rust()
+            .unwrap(),
+        "int-mode emission must be digest-pinned-deterministic"
+    );
+    // The companion fn returns the raw (cos_q30, sin_q30) tuple so we can check BOTH.
+    assert!(
+        sin_int.contains("pub fn wave_int(theta: i64) -> Result<i64, &'static str>"),
+        "{sin_int}"
+    );
+
+    // Measured precision bound (Wave E): worst-case |Q30_CORDIC - f64| over
+    // [-3pi,3pi] is ~1.37e-8 (~14.7 * 2^-30) on both sin and cos. 2.0e-8 leaves
+    // ample headroom and is documented as the ratified bound.
+    const EPS: f64 = 2.0e-8;
+    const ONE_Q30: f64 = 1073741824.0f64; // 2^30
+    // Codegen-safe literal: `f64` formatted with `{}` renders `1073741824`
+    // (bare int) which breaks the generated `f64 / 1073741824` (E0277).
+    // `flit` forces the `1073741824.0f64` float-literal form the emitter needs.
+    let one_q30_lit = flit(ONE_Q30);
+
+    let angles: &[f64] = &[
+        0.0,
+        0.1,
+        0.5,
+        std::f64::consts::FRAC_PI_6,
+        std::f64::consts::FRAC_PI_4,
+        std::f64::consts::FRAC_PI_3,
+        std::f64::consts::FRAC_PI_2,
+        1.0,
+        2.0,
+        std::f64::consts::PI,
+        3.7,
+        4.0,
+        5.0,
+        std::f64::consts::TAU,
+        7.3,
+        10.0,
+        -0.25,
+        -1.0,
+        -2.5,
+        -std::f64::consts::PI,
+        -4.0,
+        -(1.5 * std::f64::consts::PI), // -3π/2
+        -std::f64::consts::TAU,
+        1.23456789,
+        -3.14159,
+    ];
+
+    let mut checks = String::new();
+    for (i, &a) in angles.iter().enumerate() {
+        // int-mode contract: angle is a raw i64 already in Q30-radians units.
+        let z = (a * ONE_Q30).round() as i64;
+        let s_ref = flit(a.sin());
+        let c_ref = flit(a.cos());
+        checks.push_str(&format!(
+            "    let (c{i}, s{i}) = wave_cordic_sincos({z}i64);\n\
+             \x20   let sc{i} = (s{i} as f64) / {one_q30_lit};\n\
+             \x20   let cc{i} = (c{i} as f64) / {one_q30_lit};\n\
+             \x20   assert!((sc{i} - ({s_ref})).abs() < {EPS}, \"sin sample {i} (angle {a}): got {{}} want {s_ref}\", sc{i});\n\
+             \x20   assert!((cc{i} - ({c_ref})).abs() < {EPS}, \"cos sample {i} (angle {a}): got {{}} want {c_ref}\", cc{i});\n\
+             \x20   let r{i} = wave_int({z}i64);\n\
+             \x20   assert!(r{i}.is_ok(), \"wave_int sample {i}: overflow {{:?}}\", r{i});\n\
+             \x20   let ri{i} = (r{i}.unwrap() as f64) / {one_q30_lit};\n\
+             \x20   assert!((ri{i} - ({s_ref})).abs() < {EPS}, \"wave_int sample {i} (angle {a}): got {{}} want {s_ref}\", ri{i});\n"
+        ));
+    }
+
+    let src = format!(
+        "{sin_int}\n\nfn main() {{\n{checks}    println!(\"eqc int CORDIC sin/cos proof OK: {n} angles, eps={eps}\");\n}}\n",
+        n = angles.len(),
+        eps = EPS,
+    );
+    compile_and_run(&src, "sincos");
+}

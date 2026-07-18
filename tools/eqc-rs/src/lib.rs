@@ -49,6 +49,48 @@ use std::fmt;
 // Promoted from `reexam-builds/item4_cordic.rs`; see `cordic.rs` + `tests/cordic_digest.rs`.
 pub mod cordic;
 
+/// Inlined, SELF-CONTAINED integer-CORDIC Q30 `sin/cos` helper emitted into
+/// `emit_int_checked_rust` output ONLY when the equation actually uses `Sin`/`Cos`.
+///
+/// This is a verbatim copy of `crate::cordic::cordic_sincos` (the digest-pinned
+/// primitive, `CORDIC_SINCOS_DIGEST = 0x9d1c_0e89_c65c_be08`) rendered as a plain
+/// Rust `fn` string. It is inlined rather than `use`d so the emitted organ keeps
+/// ZERO runtime dependency on eqc-rs (the kernel-gen standing rule). It uses ONLY
+/// `i64` add/sub/compare and arithmetic `>>` — no `f64`, no libm.
+///
+/// SYNC RULE: if `crate::cordic::cordic_sincos` (its atan table, gain, or
+/// iteration count) ever changes, this string MUST change in lock-step and the
+/// digest re-pinned. The proof test `sin_cos_cordic_int_mode_proven` exercises the
+/// *emitted* copy against `f64::sin`/`f64::cos` at a battery of angles, so any
+/// drift here is caught at runtime.
+const CORDIC_HELPER_SRC: &str = r#"
+// ── A6: inlined integer-CORDIC Q30 sin/cos (zero-float, digest-pinned) ──
+// Verbatim copy of eqc-rs::cordic::cordic_sincos (CORDIC_SINCOS_DIGEST =
+// 0x9d1c_0e89_c65c_be08). Self-contained: no dependency on eqc-rs.
+const _ATAN_Q30: [i64; 31] = [843314857, 497837829, 263043837, 133525159, 67021687, 33543516, 16775851, 8388437, 4194283, 2097149, 1048576, 524288, 262144, 131072, 65536, 32768, 16384, 8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1];
+const _CORDIC_K_Q30: i64 = 652032874;
+const _HALF_PI_Q30: i64 = 1686629713;
+const _PI_Q30: i64 = 3373259426;
+const _TWO_PI_Q30: i64 = 6746518852;
+#[inline(always)]
+fn _cordic_sincos(mut z: i64) -> (i64, i64) {
+    while z >  _PI_Q30 { z -= _TWO_PI_Q30; }
+    while z < -_PI_Q30 { z += _TWO_PI_Q30; }
+    let mut negate = false;
+    if z >  _HALF_PI_Q30 { z -= _PI_Q30; negate = true; }
+    else if z < -_HALF_PI_Q30 { z += _PI_Q30; negate = true; }
+    let mut x: i64 = _CORDIC_K_Q30;
+    let mut y: i64 = 0;
+    for i in 0..31u32 {
+        let dx = x >> i;
+        let dy = y >> i;
+        if z >= 0 { x -= dy; y += dx; z -= _ATAN_Q30[i as usize]; }
+        else { x += dy; y -= dx; z += _ATAN_Q30[i as usize]; }
+    }
+    if negate { (-x, -y) } else { (x, y) }
+}
+"#;
+
 /// A math expression tree. Build with `Expr::sym`/`Expr::num` plus the
 /// `+`, `-`, `*`, unary `-`, `.pow(n)`, `.sqrt()`, `.sin()`, `.cos()`, `.exp()`
 /// operators — deliberately mirrors ordinary math notation.
@@ -175,6 +217,21 @@ impl Expr {
             Expr::Pow(b, _) | Expr::Sqrt(b) | Expr::Sin(b) | Expr::Cos(b) | Expr::Exp(b)
             | Expr::Asin(b) => b.any_div_half_up(),
             Expr::Atan2(y, x) => y.any_div_half_up() || x.any_div_half_up(),
+        }
+    }
+
+    /// True if the tree contains any `Sin`/`Cos` node. `emit_int_checked_rust` uses
+    /// this to decide whether to inline the self-contained integer-CORDIC Q30
+    /// `sin/cos` helper (`CORDIC_HELPER_SRC`), per A6. The A6 helper is *not*
+    /// always emitted — only when the equation actually uses Sin/Cos — so the
+    /// zero-runtime-dependency contract is preserved for equations that don't.
+    fn any_sin_cos(&self) -> bool {
+        match self {
+            Expr::Sin(_) | Expr::Cos(_) => true,
+            Expr::Sym(_) | Expr::Num(_) | Expr::DivHalfUp(_, _) => false,
+            Expr::Sum(xs) | Expr::Prod(xs) => xs.iter().any(|x| x.any_sin_cos()),
+            Expr::Pow(b, _) | Expr::Sqrt(b) | Expr::Exp(b) | Expr::Asin(b) => b.any_sin_cos(),
+            Expr::Atan2(y, x) => y.any_sin_cos() || x.any_sin_cos(),
         }
     }
 
@@ -398,12 +455,35 @@ impl Equation {
             .map(|a| format!("{a}: i64"))
             .collect::<Vec<_>>()
             .join(", ");
+        // A6 — if the equation uses Sin/Cos, inline the self-contained integer-
+        // CORDIC Q30 sin/cos helper ONCE. It is emitted only on demand so equations
+        // that don't use Sin/Cos keep the zero-runtime-dependency contract.
+        let helper = if self.expr.any_sin_cos() {
+            format!("{CORDIC_HELPER_SRC}\n")
+        } else {
+            String::new()
+        };
+        // A6 companion (integer-CORDIC Q30 sin/cos, zero-float, digest-pinned).
+        // Emitted alongside `{name}_int` ONLY when the equation uses Sin/Cos, so a
+        // caller that wants both cos and sin (most rotations do) gets them from a
+        // single CORDIC call rather than two. It simply forwards to the inlined
+        // `_cordic_sincos` helper.
+        let companion = if self.expr.any_sin_cos() {
+            let n = self.name.clone();
+            format!(
+                "\n/// A6 companion (integer-CORDIC Q30 sin/cos, zero-float, digest-pinned).\n\
+                 /// Emitted only when the equation uses Sin/Cos. Returns (cos_q30, sin_q30).\n\
+                 pub fn {n}_cordic_sincos(z: i64) -> (i64, i64) {{\n    _cordic_sincos(z)\n}}\n"
+            )
+        } else {
+            String::new()
+        };
         Ok(format!(
-            "/// GENERATED by eqc-rs from: {name}\n\
+            "{helper}/// GENERATED by eqc-rs from: {name}\n\
              /// Integer-exact variant — raw i64 (minor units), i128 arithmetic, every\n\
              /// step checked. Returns Result<i64, &'static str> (Err on overflow/div-by-zero).\n\
              #[inline(always)]\n\
-             pub fn {name}_int({params}) -> Result<i64, &'static str> {{\n    use std::convert::TryFrom; i64::try_from({inner}).map_err(|_| \"overflow: result exceeds i64\")\n}}",
+             pub fn {name}_int({params}) -> Result<i64, &'static str> {{\n    use std::convert::TryFrom; i64::try_from({inner}).map_err(|_| \"overflow: result exceeds i64\")\n}}{companion}",
             name = self.name,
         ))
     }
@@ -607,8 +687,22 @@ fn emit_int_checked(expr: &Expr) -> Result<String, IntEmissionUnsupported> {
         }
         // f64-only nodes (and the Q-format subset) are NOT in the integer-exact set.
         Expr::Sqrt(_) => Err(IntEmissionUnsupported("sqrt not in the integer-exact subset".into())),
-        Expr::Sin(_) => Err(IntEmissionUnsupported("sin not in the integer-exact subset".into())),
-        Expr::Cos(_) => Err(IntEmissionUnsupported("cos not in the integer-exact subset".into())),
+        // A6 — Sin/Cos are represented in int-mode by the inlined integer-CORDIC
+        // Q30 primitive (`_cordic_sincos`, digest-pinned). `emit_int_checked_rust`
+        // has already inlined that helper. CONTRACT: the argument is a raw `i64`
+        // already in Q30-radians units (i.e. `round(theta_rad * 2^30)`) — this is
+        // the same Q30 representation the CORDIC kernel itself speaks, so it is
+        // passed straight through with no rescale. The result is a Q30-radians
+        // fixed-point `i128` (caller scales back by >>30 as needed). Zero float
+        // ops on the emitted path.
+        Expr::Sin(b) => {
+            let z = emit_int_checked(b)?;
+            Ok(format!("{{ let _z = ({z}); let (_c, _s) = _cordic_sincos(_z as i64); _s as i128 }}"))
+        }
+        Expr::Cos(b) => {
+            let z = emit_int_checked(b)?;
+            Ok(format!("{{ let _z = ({z}); let (_c, _s) = _cordic_sincos(_z as i64); _c as i128 }}"))
+        }
         Expr::Exp(_) => Err(IntEmissionUnsupported("exp not in the integer-exact subset".into())),
         Expr::Asin(_) => Err(IntEmissionUnsupported("asin not in the integer-exact subset".into())),
         Expr::Atan2(_, _) => {
