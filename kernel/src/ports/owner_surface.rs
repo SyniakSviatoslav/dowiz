@@ -492,6 +492,8 @@ pub fn place_order_with_menu_price(
             modifier_ids: vec![],
             quantity: *q,
             unit_price: 0,
+            vendor_id: *_vid,
+            currency: *_cur,
         })
         .collect();
     place_order_priced(
