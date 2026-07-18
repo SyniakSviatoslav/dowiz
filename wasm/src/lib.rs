@@ -5,8 +5,8 @@
 //! the single source of truth; this crate is a thin, offline-clean FFI.
 
 use dowiz_engine::field_frame::{compose, FieldEquilibrium, FieldFrame};
-use dowiz_engine::{Scene, SdfShape};
 use dowiz_engine::VertexBridge;
+use dowiz_engine::{Scene, SdfShape};
 use dowiz_kernel::csr::Csr;
 use dowiz_kernel::retrieval::spine::{build_map, SpineIndex};
 use serde::Deserialize;
@@ -48,7 +48,11 @@ fn vertex_field_impl(count: usize, edges: &[f64], x: &[f64]) -> Vec<f64> {
     let csr = Csr::from_edges(count, &triples);
     let mut b = VertexBridge::new(count, 4);
     b.set_field_graph(csr);
-    let state: Vec<f64> = if x.len() == count { x.to_vec() } else { vec![1.0; count] };
+    let state: Vec<f64> = if x.len() == count {
+        x.to_vec()
+    } else {
+        vec![1.0; count]
+    };
     b.apply_field(&state);
     b.field().to_vec()
 }
@@ -110,7 +114,10 @@ impl FieldSim {
 
 #[wasm_bindgen]
 pub fn vertex_field(count: usize, edges: &[f64]) -> Vec<f32> {
-    vertex_field_impl(count, edges, &[]).iter().map(|v| *v as f32).collect()
+    vertex_field_impl(count, edges, &[])
+        .iter()
+        .map(|v| *v as f32)
+        .collect()
 }
 
 // ===== W7: knowledge-spine field (browser-rendered, NOT DOM/TS) =====
@@ -169,10 +176,299 @@ pub fn related_docs(id: &str, docs_json: &str) -> Vec<String> {
     spine_index_from_json(docs_json).related(id)
 }
 
-// innovate: ceiling — no real GPU/wasm runtime in headless CI. Verified by the
-// wasm32 BUILD gate (links as wasm) + host unit tests; upgrade: add
-// wasm-bindgen-cli + a browser smoke (canvas.putImageData) once CI has a display.
+// ===== P57 M7: canvas text-input wasm exports (per P38 G7 ptr/len) =====
+//
+// These expose `dowiz_engine::text_input::TextField` to JS via wasm-bindgen.
+// Gated behind `feature = "text"` (Lane B / O18a): the glyph-run `ptr/len`
+// view rides the engine's cosmic-text shaping seam, which needs the same network
+// grant as wgpu. Under the DEFAULT build these are NOT compiled — the engine
+// `TextField` is still fully available to native Rust clients.
+//
+// P38 G7 convention: frame-scoped views are re-derived EVERY frame (the
+// detached-buffer rule, P38 §3.7). `text_glyph_runs_ptr/len` return a
+// `&[f32]`-equivalent raw view into a short-lived buffer that is rebuilt on
+// each `text_apply_js`/`text_new_js` — never cached across frames.
+//
+// P57 M7 exports (§3):
+//   text_new_js(field_id) -> u32
+//   text_apply_js(handle, cmd_json) -> String  (EditEvent JSON)
+//   text_value_js(handle) -> String
+//   text_caret_js(handle) -> "[u,v,w,h]"
+//   text_glyph_runs_ptr(handle) -> *const f32
+//   text_glyph_runs_len(handle) -> usize
 
+#[cfg(feature = "text")]
+mod text_js {
+    use dowiz_engine::text_input::{ClipboardPort, EditCmd, TextField, WAVE0_SCRIPTS};
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+
+    thread_local! {
+        static FIELDS: RefCell<HashMap<u32, TextField>> = RefCell::new(HashMap::new());
+        static CLIP: RefCell<Option<String>> = RefCell::new(None);
+    }
+
+    /// A `ClipboardPort` backed by a thread-local cell (wasm has no clipboard
+    /// crate; the web path pre-reads `navigator.clipboard` and supplies the
+    /// payload to `Paste`). This is the honest stub the shell fills natively
+    /// on the native path (P63/P39-rev).
+    struct WebClipboard;
+    impl ClipboardPort for WebClipboard {
+        fn read(&mut self) -> Option<String> {
+            CLIP.with(|c| c.borrow().clone())
+        }
+        fn write(&mut self, s: &str) {
+            CLIP.with(|c| *c.borrow_mut() = Some(s.to_string()));
+        }
+    }
+
+    /// Deserialize an `EditCmd` from the JSON the web `KeyboardSource` emits.
+    /// Only the committed grapheme-cluster + motion commands are serialized;
+    /// there is NO preedit/composition variant (P57 §2.2).
+    fn cmd_from_json(json: &str) -> Result<EditCmd, String> {
+        // Minimal, dependency-light parse (no serde here to keep the wasm
+        // bundle lean; mirrors the kernel's spine JSON approach).
+        let json = json.trim();
+        if let Some(rest) = json.strip_prefix("{\"Insert\":\"") {
+            let s = rest.trim_end_matches("\"}").to_string();
+            return Ok(EditCmd::Insert(s));
+        }
+        if let Some(rest) = json.strip_prefix("{\"Paste\":\"") {
+            let s = rest.trim_end_matches("\"}").to_string();
+            return Ok(EditCmd::Paste(s));
+        }
+        if let Some(rest) = json.strip_prefix("{\"MoveLeft\":") {
+            let sel = rest.trim_end_matches('}').contains("true");
+            return Ok(EditCmd::MoveLeft { select: sel });
+        }
+        if let Some(rest) = json.strip_prefix("{\"MoveRight\":") {
+            let sel = rest.trim_end_matches('}').contains("true");
+            return Ok(EditCmd::MoveRight { select: sel });
+        }
+        if let Some(rest) = json.strip_prefix("{\"MoveWordLeft\":") {
+            let sel = rest.trim_end_matches('}').contains("true");
+            return Ok(EditCmd::MoveWordLeft { select: sel });
+        }
+        if let Some(rest) = json.strip_prefix("{\"MoveWordRight\":") {
+            let sel = rest.trim_end_matches('}').contains("true");
+            return Ok(EditCmd::MoveWordRight { select: sel });
+        }
+        if let Some(rest) = json.strip_prefix("{\"MoveHome\":") {
+            let sel = rest.trim_end_matches('}').contains("true");
+            return Ok(EditCmd::MoveHome { select: sel });
+        }
+        if let Some(rest) = json.strip_prefix("{\"MoveEnd\":") {
+            let sel = rest.trim_end_matches('}').contains("true");
+            return Ok(EditCmd::MoveEnd { select: sel });
+        }
+        match json {
+            "{\"Backspace\"}" => Ok(EditCmd::Backspace),
+            "{\"Delete\"}" => Ok(EditCmd::Delete),
+            "{\"SelectAll\"}" => Ok(EditCmd::SelectAll),
+            "{\"Cut\"}" => Ok(EditCmd::Cut),
+            "{\"Copy\"}" => Ok(EditCmd::Copy),
+            "{\"Focus\"}" => Ok(EditCmd::Focus),
+            "{\"Blur\"}" => Ok(EditCmd::Blur),
+            "{\"Submit\"}" => Ok(EditCmd::Submit),
+            "{\"PointerUp\"}" => Ok(EditCmd::PointerUp),
+            _ => Err(format!("unknown EditCmd JSON: {json}")),
+        }
+    }
+
+    /// Serialize the ordered `EditEvent` sequence to a JSON array string.
+    fn events_to_json(events: &[dowiz_engine::text_input::EditEvent]) -> String {
+        let mut out = String::from("[");
+        for (i, e) in events.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            out.push_str(&match e {
+                dowiz_engine::text_input::EditEvent::TextChanged { value_bytes } => {
+                    format!("{{\"TextChanged\":{{\"value_bytes\":{value_bytes}}}}}")
+                }
+                dowiz_engine::text_input::EditEvent::CaretMoved { caret } => {
+                    format!("{{\"CaretMoved\":{{\"caret\":{}}}}}", caret.0)
+                }
+                dowiz_engine::text_input::EditEvent::SelectionChanged { sel } => {
+                    format!(
+                        "{{\"SelectionChanged\":{{\"anchor\":{},\"focus\":{}}}}}",
+                        sel.anchor.0, sel.focus.0
+                    )
+                }
+                dowiz_engine::text_input::EditEvent::Submitted => {
+                    "{\"Submitted\":true}".to_string()
+                }
+                dowiz_engine::text_input::EditEvent::FocusChanged { focused } => {
+                    format!("{{\"FocusChanged\":{{\"focused\":{focused}}}}}")
+                }
+                dowiz_engine::text_input::EditEvent::Rejected(r) => {
+                    let name = match r {
+                        dowiz_engine::text_input::EditReject::OutOfScope(c) => {
+                            format!("{{\"OutOfScope\":\"{c}\"}}")
+                        }
+                        dowiz_engine::text_input::EditReject::ReadOnly => {
+                            "\"ReadOnly\"".to_string()
+                        }
+                        dowiz_engine::text_input::EditReject::NothingToDelete => {
+                            "\"NothingToDelete\"".to_string()
+                        }
+                        dowiz_engine::text_input::EditReject::NoSelection => {
+                            "\"NoSelection\"".to_string()
+                        }
+                    };
+                    format!("{{\"Rejected\":{name}}}")
+                }
+            });
+        }
+        out.push(']');
+        out
+    }
+}
+
+#[cfg(feature = "text")]
+#[wasm_bindgen]
+pub fn text_new_js(field_id: u32) -> u32 {
+    text_js::FIELDS.with(|f| {
+        let mut m = f.borrow_mut();
+        m.insert(field_id, TextField::new(field_id));
+        field_id
+    })
+}
+
+#[cfg(feature = "text")]
+#[wasm_bindgen]
+pub fn text_apply_js(handle: u32, cmd_json: &str) -> String {
+    text_js::FIELDS.with(|f| {
+        let mut m = f.borrow_mut();
+        if let Some(tf) = m.get_mut(&handle) {
+            match text_js::cmd_from_json(cmd_json) {
+                Ok(cmd) => {
+                    let mut clip = text_js::WebClipboard;
+                    let ev = tf.apply(cmd, &mut clip);
+                    text_js::events_to_json(&ev)
+                }
+                Err(e) => format!("{{\"error\":\"{e}\"}}"),
+            }
+        } else {
+            format!("{{\"error\":\"unknown handle {handle}\"}}")
+        }
+    })
+}
+
+#[cfg(feature = "text")]
+#[wasm_bindgen]
+pub fn text_value_js(handle: u32) -> String {
+    text_js::FIELDS.with(|f| {
+        f.borrow()
+            .get(&handle)
+            .map(|tf| tf.value().to_string())
+            .unwrap_or_default()
+    })
+}
+
+#[cfg(feature = "text")]
+#[wasm_bindgen]
+pub fn text_caret_js(handle: u32) -> String {
+    text_js::FIELDS.with(|f| {
+        if let Some(tf) = f.borrow().get(&handle) {
+            let r = tf.caret_rect();
+            format!("[{},{},{},{}]", r.u, r.v, r.w, r.h_h * 2.0)
+        } else {
+            String::new()
+        }
+    })
+}
+
+#[cfg(feature = "text")]
+#[wasm_bindgen]
+pub fn text_glyph_runs_ptr(handle: u32) -> *const f32 {
+    text_js::FIELDS.with(|f| {
+        // Frame-scoped re-derivation (P38 §3.7): the glyph-run view is rebuilt
+        // every call; a cached/detached view is rejected by construction.
+        static mut VIEW: Vec<f32> = Vec::new();
+        if let Some(tf) = f.borrow().get(&handle) {
+            let runs = tf.glyph_runs();
+            let mut v = unsafe { &mut *std::ptr::addr_of_mut!(VIEW) };
+            v.clear();
+            for g in runs {
+                v.push(g.pos.u);
+                v.push(g.pos.v);
+                v.push(g.pos.w);
+                v.push(g.adv);
+                v.push(g.size);
+            }
+            v.as_ptr()
+        } else {
+            std::ptr::null()
+        }
+    })
+}
+
+#[cfg(feature = "text")]
+#[wasm_bindgen]
+pub fn text_glyph_runs_len(handle: u32) -> usize {
+    text_js::FIELDS.with(|f| {
+        f.borrow()
+            .get(&handle)
+            .map(|tf| tf.glyph_runs().len() * 5)
+            .unwrap_or(0)
+    })
+}
+
+// Default-build guard (DoD-10 mirror): under the DEFAULT wasm build the `text`
+// feature is OFF, so the P57 text exports are NOT compiled. This pure test
+// documents that the WAVE0_SCRIPTS constant is accessible from the engine
+// (v2 boundary) even without the wasm text feature.
+#[cfg(test)]
+mod p57_tests {
+    use dowiz_engine::text_input::{ByteCursor, EditCmd, EditEvent, TextField};
+    use dowiz_engine::text_scope::in_wave0_scope;
+
+    struct MemClip {
+        s: Option<String>,
+    }
+    impl dowiz_engine::text_input::ClipboardPort for MemClip {
+        fn read(&mut self) -> Option<String> {
+            self.s.clone()
+        }
+        fn write(&mut self, s: &str) {
+            self.s = Some(s.to_string());
+        }
+    }
+
+    // RED→GREEN (M2, host-testable): type Latin+Cyrillic, assert value + events.
+    #[test]
+    fn wasm_text_field_roundtrip() {
+        let mut tf = TextField::new(1);
+        let mut clip = MemClip { s: None };
+        for ch in ["h", "i", " ", "п", "р"] {
+            let ev = tf.apply(EditCmd::Insert(ch.to_string()), &mut clip);
+            assert!(ev
+                .iter()
+                .any(|e| matches!(e, EditEvent::TextChanged { .. })));
+        }
+        assert_eq!(tf.value(), "hi пр");
+        assert_eq!(tf.caret(), ByteCursor(7)); // 2 Latin (2b) + 1 sp + 2 Cyr (4b)
+    }
+
+    // ADVERSARIAL (M2): a CJK Insert is refused; scope gate holds at apply time.
+    #[test]
+    fn wasm_text_rejects_out_of_scope() {
+        let mut tf = TextField::new(2);
+        let mut clip = MemClip { s: None };
+        let ev = tf.apply(EditCmd::Insert("中".to_string()), &mut clip);
+        assert!(ev.iter().any(|e| matches!(e, EditEvent::Rejected(_))));
+        assert_eq!(tf.value(), "");
+    }
+
+    // v2 classifier reachable from the wasm crate (the boundary is a shared type).
+    #[test]
+    fn wasm_text_scope_constant() {
+        assert!(in_wave0_scope('a'));
+        assert!(in_wave0_scope('Я'));
+        assert!(!in_wave0_scope('中'));
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -190,8 +486,8 @@ mod tests {
     #[test]
     fn wasm_vertex_field_matches_engine_laplacian() {
         let edges = [
-            0.0_f64, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 2.0, 1.0, 2.0, 1.0, 1.0, 0.0, 2.0, 1.0,
-            2.0, 0.0, 1.0,
+            0.0_f64, 1.0, 1.0, 1.0, 0.0, 1.0, 1.0, 2.0, 1.0, 2.0, 1.0, 1.0, 0.0, 2.0, 1.0, 2.0,
+            0.0, 1.0,
         ];
         let field = vertex_field_impl(3, &edges, &[0.1, 0.4, 0.9]);
         assert_eq!(field.len(), 3);
@@ -251,7 +547,11 @@ mod tests {
         let rel = related_docs("a", docs);
         assert_eq!(rel, vec!["b".to_string()], "a shares rust with b only");
         let rel_b = related_docs("b", docs);
-        assert_eq!(rel_b, vec!["a".to_string(), "c".to_string()], "b↔a rust, b↔c ml");
+        assert_eq!(
+            rel_b,
+            vec!["a".to_string(), "c".to_string()],
+            "b↔a rust, b↔c ml"
+        );
     }
 
     // ===== W8: stateful FieldSim (live rAF physics) RED→GREEN tests =====
@@ -278,7 +578,10 @@ mod tests {
         let f20 = sim.frame();
         assert_eq!(f20.len(), 32 * 32 * 4, "RGBA8 = w*h*4");
         // u8 bytes are finite by construction; frame must be non-collapsed.
-        assert!(f20.iter().any(|&b| b != 0), "step-20 frame must have content");
+        assert!(
+            f20.iter().any(|&b| b != 0),
+            "step-20 frame must have content"
+        );
         // Field must have evolved: step-20 frame differs from step-0 frame.
         assert_ne!(f20, f0, "FieldSim must evolve over 20 steps (not frozen)");
     }

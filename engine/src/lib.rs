@@ -26,6 +26,8 @@ mod money_guard;
 mod motion;
 mod scene;
 mod sdf;
+pub mod text_input;
+pub mod text_scope;
 mod widget_store;
 mod zerocopy;
 
@@ -38,5 +40,11 @@ pub use sdf::{
     op_intersection, op_smooth_union, op_subtraction, op_union, sdf_box, sdf_circle,
     sdf_line_segment, sdf_rounded_box, SdfField,
 };
+pub use text_input::{
+    ByteCursor, ClipboardPort, EditCmd, EditEvent, EditReject, FieldPos, KeyMods, Rect, Selection,
+    ShapedGlyph, TextField, WidgetId, CARET_BAR_HALF_W, CARET_BLINK_HZ, FIELD_MAX_BYTES,
+    WORD_BOUNDARY,
+};
+pub use text_scope::{in_wave0_scope, str_in_scope, WAVE0_SCRIPTS};
 pub use widget_store::{ParticlePool, ParticlePoolRing, WidgetStore};
 pub use zerocopy::{view_as_f32, write_into_linear, GpuSink, ParticleBuffer};
