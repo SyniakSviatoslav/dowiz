@@ -17,6 +17,9 @@ pub mod pq;
 /// N=(I−Q)⁻¹ (exact finite sum for the DAG lifecycle), expected steps-to-terminal, absorption probs.
 pub mod absorbing;
 pub mod analytics;
+/// P11 §7 — CorePinning trait seam (Trait-as-Port): pluggable CPU-core-affinity
+/// port with a zero-cost `NoOpCorePinning` default (NUMA crate DECART-deferred).
+pub mod arena;
 /// C-tier "attention lens": scaled dot-product attention as one learned-affinity
 /// diffusion step — same f(L) family as markov PPR / heat-kernel.
 pub mod attention;
@@ -44,9 +47,6 @@ pub mod cgraph;
 /// B4 — deterministic content-defined chunker (Buzhash) for the native Rust
 /// backup organ: content-addressed blocks that dedup across small edits.
 pub mod chunker;
-/// P11 §7 — CorePinning trait seam (Trait-as-Port): pluggable CPU-core-affinity
-/// port with a zero-cost `NoOpCorePinning` default (NUMA crate DECART-deferred).
-pub mod arena;
 pub mod core_pinning;
 /// Deterministic CSR graph + synchronous Jacobi personalized-PageRank
 /// (retrieval-blueprint v2 diffusion/recall primitive).
@@ -118,6 +118,11 @@ pub mod stats;
 // `loops` (BP-20 orchestration card parsing) depends on serde / serde_yaml →
 // compiled only under the `wasm` feature so a native rlib build stays serde-free.
 // NOT part of the canonical order/money core (decide/order_machine/domain/money).
+/// WAVE P40 — bounded, fail-closed AgentLoop executor. Wires through the existing
+/// `ports::tool` (`ToolPort`/`SkillRegistry`) + `ports::mcp` (`McpPort`) capability
+/// firewall and the `token_bucket` degrade-closed budget. No tool runs without a
+/// verified capability; unknown tools rejected; budget exhaustion terminates the loop.
+pub mod agent;
 /// Deterministic, zero-dependency fault-injection harness (P-H W-H1). The whole
 /// module is `#[cfg(any(test, feature = "chaos"))]`; in a release build it
 /// compiles to `()`, so no chaos symbol reaches a production artifact. This
@@ -172,11 +177,6 @@ pub mod noether;
 pub mod online;
 pub mod order_machine;
 pub mod ports;
-/// WAVE P40 — bounded, fail-closed AgentLoop executor. Wires through the existing
-/// `ports::tool` (`ToolPort`/`SkillRegistry`) + `ports::mcp` (`McpPort`) capability
-/// firewall and the `token_bucket` degrade-closed budget. No tool runs without a
-/// verified capability; unknown tools rejected; budget exhaustion terminates the loop.
-pub mod agent;
 /// M1 / L0 exact byte+regex search (vectorless) — deterministic trigram
 /// inverted index + exact verify. NEW module; does not touch kernel authority.
 pub mod retrieval;

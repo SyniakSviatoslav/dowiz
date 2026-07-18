@@ -156,8 +156,7 @@ fn order_from_in(o: OrderIn) -> Result<Order, String> {
     // NOT be trusted. Recompute them server-authoritatively from the items
     // (Layer G money recompute) so a forged total cannot survive a fold. The
     // JSON values are dropped.
-    let subtotal = Order::compute_subtotal(&items)
-        .map_err(|e| format!("order_from_in: {}", e))?;
+    let subtotal = Order::compute_subtotal(&items).map_err(|e| format!("order_from_in: {}", e))?;
     // Total is provisional (tax/fee not folded until a server estimate) — matching
     // place_order, which sets total = subtotal on creation.
     let total = subtotal;
@@ -858,14 +857,19 @@ mod tests {
         v["subtotal"] = serde_json::json!(forged);
         let tampered = serde_json::to_string(&v).unwrap();
 
-        let updated = apply_event_logic(&tampered, "CONFIRMED")
-            .expect("apply_event_logic ok");
+        let updated = apply_event_logic(&tampered, "CONFIRMED").expect("apply_event_logic ok");
         let out: serde_json::Value = serde_json::from_str(&updated).unwrap();
 
         // True total = 2*500 + 300 = 1300 (provisional, no tax/fee folded).
         let expected = 2 * 500 + 300;
-        assert_ne!(out["total"], forged, "forged total must NOT survive the fold");
-        assert_eq!(out["total"], expected, "total must be recomputed from items");
+        assert_ne!(
+            out["total"], forged,
+            "forged total must NOT survive the fold"
+        );
+        assert_eq!(
+            out["total"], expected,
+            "total must be recomputed from items"
+        );
         assert_ne!(out["subtotal"], forged, "forged subtotal must NOT survive");
         assert_eq!(out["subtotal"], expected);
     }
