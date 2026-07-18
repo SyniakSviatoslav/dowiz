@@ -2445,3 +2445,16 @@ full wgpu, for consistency — no exception for dowiz's own marketing surface. R
 "one path" stance: the *ad fontes* commitment applies uniformly across the whole product,
 including the surface most tempted to cut as "just a landing page." §16.55's bot-facing static
 files remain the SEO answer for this page too, unchanged by this ruling.
+
+### 16.57 Abandoned demo-hub claims stay with the vendor permanently; hub-software license confirmed AGPLv3+TM+DCO
+Two closes:
+- **No reclaim policy** — a claimed demo hub that a vendor never finishes configuring (or never
+  reopens) stays theirs indefinitely, not returned to the claimable pool after inactivity.
+  Simpler operationally, at the cost of the pre-generated demo pool depleting over time with no
+  automatic recycling — the claim-supply pipeline (§16.32) needs to account for net consumption,
+  not assume any pool refresh from abandonment.
+- **License confirmed**: the hub software uses the same AGPLv3 + trademark + DCO plan already
+  adopted for kernel/protocol open-sourcing ([[open-source-goal-adr020-2026-07-03]]) — no
+  separate licensing decision needed. AGPLv3's network-copyleft closes the obvious gap a
+  competing hosted-SaaS fork of the hub software would otherwise exploit; the trademark clause
+  protects the "dowiz" name specifically, separate from the code license.
