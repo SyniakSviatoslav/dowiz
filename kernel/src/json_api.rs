@@ -83,6 +83,8 @@ fn item_to_domain(i: ItemInput) -> OrderItem {
         modifier_ids: i.modifier_ids,
         quantity: i.quantity,
         unit_price: i.unit_price,
+        vendor_id: VendorId(0),
+        currency: Currency::All,
     }
 }
 

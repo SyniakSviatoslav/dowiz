@@ -60,6 +60,10 @@ pub mod core_pinning;
 /// (retrieval-blueprint v2 diffusion/recall primitive).
 pub mod csr;
 pub mod domain;
+/// BLUEPRINT-P72 — food-court N-leg checkout spine. Composes P60 `run_nleg_saga` /
+/// `NLegPlan` / `VendorLeg` / `RefundRequest` with P62 vendor-partitioned
+/// `charge_legs` / `kitchen_tickets`. Pure Rust, no DOM, no float on money.
+pub mod foodcourt;
 /// P04 product-math: Disjoint-Set Union (union-find) + Kruskal MST — the single
 /// canonical DSU/MST primitive. `cgraph::c_components` delegates here; Phase 9
 /// mesh-heal + Phase 13 partition-tolerant delivery consume it directly.
