@@ -2149,3 +2149,21 @@ architecture for full-wgpu UI (§16.30), the voice/gesture command surface (§16
 claim-mechanic's concrete implementation (§16.32), and the full remainder of the question set
 (interface/design details not yet asked). This section grows via the same append-only
 convention as further rounds settle each one — it is not a final architecture document.
+
+### 16.34 wgpu text input, voice recognition locality, and courier-app rendering parity
+Three related closes:
+- **Text input inside canvas is fully custom** (Recommended-against option not taken) — no HTML
+  `<input>` overlay hybrid. This is, honestly, one of the hardest sub-problems in UI
+  engineering: a from-scratch text editor (cursor, selection, clipboard, IME composition for
+  non-Latin scripts given §16.20's multi-language requirement) plus its own accessibility
+  exposure (an AccessKit-style bridge, not a browser's native text-field a11y for free).
+  Recorded as accepted scope, not softened — the §16.30 a11y-mirror pattern now has to cover
+  live text editing state, not just static content.
+- **Voice recognition runs locally/offline** (e.g. whisper.cpp or equivalent, wasm or native
+  Tauri-side) — consistent with §16.4's no-AI-first/local-first stance; this is client-side
+  transcription, a different category from the AI-decision-authority boundary §16.4 draws.
+- **Courier app is also full wgpu** — chosen for rendering-architecture consistency across the
+  whole product over the battery/simplicity tradeoff a lighter native courier UI would have
+  offered. Named as a real tradeoff accepted deliberately, not overlooked: a courier on a bike
+  running a GPU-rendered UI for a full shift is a genuine battery-life question the Tier-3/
+  P52 build needs to benchmark, not assume away.
