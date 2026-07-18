@@ -77,3 +77,43 @@ none require a design decision — all are mechanical/operational:
 | **Total** | **90+** | **4+** | **15+** | **33+** | **13+** |
 
 Full detail, evidence, and fix-guidance per finding: the 5 source reports in `docs/research/`.
+
+---
+
+## 6. Fix-work priority triage (analyst-append, 2026-07-18)
+
+> Read-only audit + this triage: NO code/fix applied. This section SORTS the fix-work by
+> priority so the operator can dispatch waves in the right order. Priority axis = exploit/correctness
+> exposure first, then observability that hides future breakage, then deployability/money-path, then
+> cleanup. "Blocker" = needs operator red-line decision before a fix may touch it.
+
+### Tier 0 — BLOCKED on operator go-ahead (red-line: secrets/auth/prod), fix is mechanical
+1. **`.env` mode 666 → 600** — write hole on courier PII key + JWT key + CF token. One command. **BLOCKER: awaiting operator confirm** (§4.1).
+2. **`dowiz.fly.dev` zombie** — LIVE PROD serving source deleted 5 days ago, unpatchable by construction. Decide: kill or restore source. **BLOCKER: operator decision** (§4.2).
+3. **Telegram/monitoring blindness** — finish 5 Rust replacements OR revert to deleted Python stack. **BLOCKER: operator decision** (§4.3).
+
+### Tier 1 — CRITICAL correctness (silent data corruption / safety check that lies) — NOT blocked, dispatch now
+4. **FEYNMAN canonical field operator: 4 inconsistent equations, one numerically unstable** (spectral radius 1.588, `‖u‖→10³⁹` in 200 steps) *inside a "fail-closed" check*. Highest-leverage kernel fix: collapse to ONE derived operator, cross-check vs its own derivation. Stable, verifiable.
+5. **PROTOCOL no_std RED regression** — confirmed open again this pass. Breaks the PQ core build on no_std targets.
+6. **PROTOCOL insecure-TLS default-on** — confirmed open again. Ships an insecure default; flip to secure-by-default.
+
+### Tier 2 — CRITICAL observability (the meta-failure: "claimed fixed, never verified") — NOT blocked
+7. **Bench-regression gate fail-open (3 paths)** — partial baseline coverage, exit-0-always tracker, rejected cross-host CI comparison. This is the gate that should catch Tier-1 regressions recurring silently. Fix first enables catching #5/#6's class a 4th time. (§4.4)
+8. **P56 `StaleGround` detector / meta-verification: 0% wired** — the system built to catch "claimed-done-but-isn't" is itself unwired. Until #7+#8 land, every "fixed" claim is unverifiable by automation.
+9. **P40/P41 DeadProbe** — a "proof" in the no-AI verification that isn't proving anything. Replace with a live probe.
+
+### Tier 3 — Deployability / money-path (DELIVERY grade F) — BLOCKED-ish (large rewrite, needs design decision)
+10. **`web/index.html` crashes on load** — imports Node `fs`, calls `process.exit`. Root `/` serves Figma mockup of fictional pizzeria. Blocks ALL real customer/revenue touch. **Needs operator scope decision (rewrite old stack vs new kernel UI).**
+11. **DELIVERY 0% deployable / interface misrepresents state** — README claims rendering that never produced a pixel. Tie to #10.
+12. **AGENT `AgentLoop` zero callers / MCP no binary** — already addressed in-kernel (P40 AgentLoop executor + tools, this session, GREEN, unpushed). Remaining: wire a host binary + emit the 20 designed metric IDs (currently 0 emit).
+
+### Tier 4 — Quality / drift (lower urgency, real but not safety-bearing)
+13. **PROTOCOL 100% stranded from dowiz kernel** — reconnect the ~70% proven delivery-domain. Drift/bit-rot risk, not active danger.
+14. **Feynman medium-severity math (12) / Torvalds medium (16)** — batch-fix; each has fix-guidance in its source report.
+15. **ECOSYSTEM `pgrust.service` targets nonexistent binary** — mechanical; tie to #3 revert-or-finish.
+
+### One-line priority order to dispatch
+`#1→#2→#3` (operator unblock) → `#4` (kernel correctness, biggest single win) → `#5,#6` (protocol regressions) → `#7,#8,#9` (observability so fixes STAY fixed) → `#10,#11,#12` (money-path, needs design call) → `#13,#14,#15` (drift/cleanup).
+
+*Note: items #5,#6,#12's kernel half, #9's detection were worked this session (P40 AgentLoop GREEN, R-3/P34 PQ primitives GREEN, P47 red-line-clean scaffold). Those are capability builds, not the audit's regression fixes — the audit regressions above remain OPEN pending the operator's Tier-0 go-ahead and a Tier-1/2 fix wave.*
+
