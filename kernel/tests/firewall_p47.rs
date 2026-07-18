@@ -53,7 +53,12 @@ fn cargo_tree_kernel_has_no_payment_adapter_dep() {
     let tree = String::from_utf8_lossy(&out.stdout);
     let mut violations = Vec::new();
     for forbidden in FORBIDDEN_IN_KERNEL_GRAPH {
-        if tree.lines().any(|l| l.split_whitespace().next().unwrap_or("").starts_with(forbidden)) {
+        if tree.lines().any(|l| {
+            l.split_whitespace()
+                .next()
+                .unwrap_or("")
+                .starts_with(forbidden)
+        }) {
             violations.push(*forbidden);
         }
     }

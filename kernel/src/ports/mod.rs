@@ -13,6 +13,13 @@ pub mod agent;
 /// one) lives outside the kernel, mirroring `LlmBackend` / `AgentBridge`.
 pub mod payment;
 
+/// `PaymentCapability` (P47 operator ruling) — pure CAPABILITY DECLARATION for the rail set
+/// { Fiat, Crypto, Stripe, Google/Apple Pay, OtherLater }. No client, no credentials, no
+/// network: a feature flag only. `validate()` rejects `OtherLater` (`NotYetSupported`). The
+/// red-line (no real provider/secret refs) is proven by construction via the module test that
+/// greps this file's own source.
+pub mod payment_capability;
+
 /// `ToolPort` firewall (P40/P42) — the closed tool authority (writes
 /// UNREPRESENTABLE) + the Skills-pattern discovery layer (P42).
 pub mod tool;

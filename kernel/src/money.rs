@@ -420,9 +420,7 @@ pub fn estimate_order_total(subtotal: i64, cfg: &OrderTotalConfig) -> OrderTotal
         // a near-i64::MAX subtotal overflows (panic in debug / wrap in release).
         // Use checked_add so overflow degrades to `None` (fail-closed), consistent
         // with the tax-computation failure path above.
-        (Some(fee), Some(tax)) => {
-            subtotal.checked_add(fee).and_then(|s| s.checked_add(tax))
-        }
+        (Some(fee), Some(tax)) => subtotal.checked_add(fee).and_then(|s| s.checked_add(tax)),
         _ => None,
     };
     OrderTotalEstimate {
@@ -516,8 +514,7 @@ mod tests {
         // subtotal one short of i64::MAX; +100 fee + ~20% tax overflows i64.
         let est = estimate_order_total(i64::MAX - 1, &cfg);
         assert_eq!(
-            est.total,
-            None,
+            est.total, None,
             "overflow must degrade total to None (fail-closed), not panic/wrap"
         );
         // A sane subtotal still computes a concrete total.
@@ -547,7 +544,11 @@ mod tests {
         // V3 1.4: rate_micro <= -MONEY_SCALE_MICRO makes the inclusive denominator
         // <= 0 → pre-fix this was a div-by-zero panic. Now refused as Err.
         let r = apply_tax(1000, -2.0, true);
-        assert!(r.is_err(), "negative effective rate must be Err, got {:?}", r);
+        assert!(
+            r.is_err(),
+            "negative effective rate must be Err, got {:?}",
+            r
+        );
     }
 
     #[test]
@@ -567,10 +568,10 @@ mod tests {
     fn apply_tax_generated_parity_exact_integers() {
         // Every existing apply_tax corpus case from money.rs:454-495, reused as fixtures.
         const MONEY_TAX_FIXTURES: &[(i64, f64, bool)] = &[
-            (1000, 0.20, false), // green_tax_added_exclusive → 200
-            (1200, 0.20, true),  // green_tax_inclusive_net → 200
-            (0, 0.20, false),    // green_zero_subtotal_or_rate → 0
-            (1000, 0.0, false),  // green_zero_subtotal_or_rate → 0
+            (1000, 0.20, false),    // green_tax_added_exclusive → 200
+            (1200, 0.20, true),     // green_tax_inclusive_net → 200
+            (0, 0.20, false),       // green_zero_subtotal_or_rate → 0
+            (1000, 0.0, false),     // green_zero_subtotal_or_rate → 0
             (i64::MAX, 2.0, false), // red_tax_overflow_is_err → Err
         ];
         for &(sub, rate, incl) in MONEY_TAX_FIXTURES {

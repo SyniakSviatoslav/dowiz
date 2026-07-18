@@ -74,12 +74,7 @@ pub struct OrderTrackingGrant {
 impl OrderTrackingGrant {
     /// Mint a grant for `order_id` at `issued_tick` with `lifetime_ticks`.
     /// The handle is drawn from `rng` (256 bits of entropy).
-    pub fn mint(
-        order_id: &str,
-        rng: &mut Rng,
-        issued_tick: u64,
-        lifetime_ticks: u64,
-    ) -> Self {
+    pub fn mint(order_id: &str, rng: &mut Rng, issued_tick: u64, lifetime_ticks: u64) -> Self {
         let handle = random_handle(rng);
         let expiry_tick = issued_tick.saturating_add(lifetime_ticks);
         let mac = grant_mac(order_id, &handle, issued_tick, expiry_tick);
@@ -101,7 +96,12 @@ impl OrderTrackingGrant {
         if now_tick >= self.expiry_tick {
             return Err(GrantError::Expired);
         }
-        let expected = grant_mac(&self.order_id, &self.handle, self.issued_tick, self.expiry_tick);
+        let expected = grant_mac(
+            &self.order_id,
+            &self.handle,
+            self.issued_tick,
+            self.expiry_tick,
+        );
         if expected != self.mac {
             return Err(GrantError::BadMac);
         }
@@ -126,7 +126,12 @@ fn random_handle(rng: &mut Rng) -> [u8; GRANT_HANDLE_BYTES] {
 
 /// Domain-separated SHA3 commitment binding order_id + handle + issued + expiry
 /// under the server-side mint secret. Tampering with any field breaks the MAC.
-fn grant_mac(order_id: &str, handle: &[u8; GRANT_HANDLE_BYTES], issued: u64, expiry: u64) -> [u8; 32] {
+fn grant_mac(
+    order_id: &str,
+    handle: &[u8; GRANT_HANDLE_BYTES],
+    issued: u64,
+    expiry: u64,
+) -> [u8; 32] {
     let mut buf = Vec::with_capacity(
         DOMAIN_GRANT.len() + MINT_SECRET.len() + order_id.len() + GRANT_HANDLE_BYTES + 16,
     );
@@ -351,15 +356,23 @@ mod tests {
         )
         .expect("anonymous place must succeed");
         // Anti-scope assertion: the order carries NO customer account/profile.
-        assert!(order.customer_id.is_none(), "P49: no customer account of any kind");
+        assert!(
+            order.customer_id.is_none(),
+            "P49: no customer account of any kind"
+        );
 
         // 2. Mint the per-order grant AT placement.
         let mut rng = Rng::new(0xABC_D_EF0, 1);
-        let grant = TrackingAuthority::mint_grant(&order.id, &mut rng, 1_000, DEFAULT_GRANT_LIFETIME_TICKS);
+        let grant =
+            TrackingAuthority::mint_grant(&order.id, &mut rng, 1_000, DEFAULT_GRANT_LIFETIME_TICKS);
 
         // 3. Later (no login, no account), the client re-identifies with the grant.
-        let re_id = TrackingAuthority::reidentify(&grant, 2_000).expect("valid live grant re-identifies");
-        assert_eq!(re_id, order.id, "re-identification recovers the bound order");
+        let re_id =
+            TrackingAuthority::reidentify(&grant, 2_000).expect("valid live grant re-identifies");
+        assert_eq!(
+            re_id, order.id,
+            "re-identification recovers the bound order"
+        );
 
         // 4. Track — deterministic view built from kernel geo math.
         let route = vec![(50.4500, 30.5234), (50.4520, 30.5260), (50.4540, 30.5280)];
@@ -375,8 +388,14 @@ mod tests {
         )
         .expect("tracking view for own order");
         assert_eq!(view.order_id, order.id);
-        assert!(view.remaining_m >= 0.0, "remaining distance must be non-negative");
-        assert!(view.eta_seconds.is_finite(), "eta must be finite for a live order");
+        assert!(
+            view.remaining_m >= 0.0,
+            "remaining distance must be non-negative"
+        );
+        assert!(
+            view.eta_seconds.is_finite(),
+            "eta must be finite for a live order"
+        );
     }
 
     // ── §4.5-1: grant handle carries stated entropy; brute-force infeasible ──
@@ -386,12 +405,20 @@ mod tests {
         // Mint many independent grants for distinct orders.
         let mut seen = std::collections::HashSet::new();
         for i in 0..512u64 {
-            let g = OrderTrackingGrant::mint(&format!("ORD-{i}"), &mut rng, 0, DEFAULT_GRANT_LIFETIME_TICKS);
+            let g = OrderTrackingGrant::mint(
+                &format!("ORD-{i}"),
+                &mut rng,
+                0,
+                DEFAULT_GRANT_LIFETIME_TICKS,
+            );
             // (a) handle is exactly 256 bits.
             assert_eq!(g.handle.len(), GRANT_HANDLE_BYTES);
             assert!(g.handle_entropy_bits() >= GRANT_HANDLE_MIN_ENTROPY_BITS);
             // (b) handles never collide across orders (no linkability).
-            assert!(seen.insert(g.handle), "two orders must never share a handle");
+            assert!(
+                seen.insert(g.handle),
+                "two orders must never share a handle"
+            );
         }
     }
 
@@ -406,7 +433,7 @@ mod tests {
         let g = OrderTrackingGrant::mint("ORD-TARGET", &mut rng, 0, DEFAULT_GRANT_LIFETIME_TICKS);
         let space_bits = g.handle_entropy_bits() as f64; // 256.0
         let guesses_per_sec: f64 = 1_000_000_000.0; // 1 GHz-class wire-rate guesser (generous)
-        // Average guesses = 2^(space_bits-1); time in seconds (computed in log space).
+                                                    // Average guesses = 2^(space_bits-1); time in seconds (computed in log space).
         let seconds = 2f64.powf(space_bits - 1.0) / guesses_per_sec;
         let age_of_universe_s: f64 = 13_800_000_000.0 * 365.0 * 24.0 * 3600.0;
         assert!(
@@ -436,28 +463,57 @@ mod tests {
         // Live window: valid.
         assert!(g.verify(150).is_ok(), "grant valid mid-lifetime");
         // At/after expiry: dead. Replay after the order is done is rejected.
-        assert_eq!(g.verify(200), Err(GrantError::Expired), "expiry in the type rejects replay");
-        assert_eq!(g.verify(999), Err(GrantError::Expired), "long-past expiry rejected");
+        assert_eq!(
+            g.verify(200),
+            Err(GrantError::Expired),
+            "expiry in the type rejects replay"
+        );
+        assert_eq!(
+            g.verify(999),
+            Err(GrantError::Expired),
+            "long-past expiry rejected"
+        );
 
         // Tracking view with an expired grant is fail-closed.
         let route = vec![(50.45, 30.52), (50.46, 30.53)];
         let res = TrackingAuthority::tracking_view(
-            &g, "ORD-EXP", 200, OrderStatus::Delivered, (50.45, 30.52), &route, 600.0, 0.0,
+            &g,
+            "ORD-EXP",
+            200,
+            OrderStatus::Delivered,
+            (50.45, 30.52),
+            &route,
+            600.0,
+            0.0,
         );
-        assert_eq!(res, Err(GrantError::Expired), "expired grant yields no tracking view");
+        assert_eq!(
+            res,
+            Err(GrantError::Expired),
+            "expired grant yields no tracking view"
+        );
     }
 
     #[test]
     fn adversarial_tampered_grant_rejected() {
         let mut rng = Rng::new(0x1357_9BDF, 1);
-        let mut g = OrderTrackingGrant::mint("ORD-TAMPER", &mut rng, 0, DEFAULT_GRANT_LIFETIME_TICKS);
+        let mut g =
+            OrderTrackingGrant::mint("ORD-TAMPER", &mut rng, 0, DEFAULT_GRANT_LIFETIME_TICKS);
         // Flip a handle bit — forgery attempt.
         g.handle[5] ^= 0x01;
-        assert_eq!(g.verify(10), Err(GrantError::BadMac), "tampered handle fails MAC");
+        assert_eq!(
+            g.verify(10),
+            Err(GrantError::BadMac),
+            "tampered handle fails MAC"
+        );
         // Flip an order_id char instead.
-        let mut g2 = OrderTrackingGrant::mint("ORD-ORIG", &mut rng, 0, DEFAULT_GRANT_LIFETIME_TICKS);
+        let mut g2 =
+            OrderTrackingGrant::mint("ORD-ORIG", &mut rng, 0, DEFAULT_GRANT_LIFETIME_TICKS);
         g2.order_id = "ORD-FAKE".into();
-        assert_eq!(g2.verify(10), Err(GrantError::BadMac), "tampered order_id fails MAC");
+        assert_eq!(
+            g2.verify(10),
+            Err(GrantError::BadMac),
+            "tampered order_id fails MAC"
+        );
     }
 
     // ── §4.5-3 (LOAD-BEARING): cross-order leak → fail-closed ────────────────
@@ -472,7 +528,14 @@ mod tests {
         assert!(grant_a.verify(10).is_ok());
         // But requesting order B's tracking with grant A MUST be rejected.
         let leak = TrackingAuthority::tracking_view(
-            &grant_a, "ORD-B", 10, OrderStatus::InDelivery, (50.45, 30.52), &route, 600.0, 0.0,
+            &grant_a,
+            "ORD-B",
+            10,
+            OrderStatus::InDelivery,
+            (50.45, 30.52),
+            &route,
+            600.0,
+            0.0,
         );
         assert_eq!(
             leak,
@@ -481,13 +544,27 @@ mod tests {
         );
         // And symmetrically: grant B cannot read A.
         let leak2 = TrackingAuthority::tracking_view(
-            &grant_b, "ORD-A", 10, OrderStatus::InDelivery, (50.45, 30.52), &route, 600.0, 0.0,
+            &grant_b,
+            "ORD-A",
+            10,
+            OrderStatus::InDelivery,
+            (50.45, 30.52),
+            &route,
+            600.0,
+            0.0,
         );
         assert_eq!(leak2, Err(GrantError::OrderMismatch));
 
         // The legitimate same-order request succeeds and returns ONLY A's data.
         let ok = TrackingAuthority::tracking_view(
-            &grant_a, "ORD-A", 10, OrderStatus::InDelivery, (50.45, 30.52), &route, 600.0, 0.0,
+            &grant_a,
+            "ORD-A",
+            10,
+            OrderStatus::InDelivery,
+            (50.45, 30.52),
+            &route,
+            600.0,
+            0.0,
         )
         .expect("same-order tracking succeeds");
         assert_eq!(ok.order_id, "ORD-A");
@@ -517,14 +594,25 @@ mod tests {
             if j != i {
                 let oj = format!("O{j:04}");
                 let cj = router.deliver(&oj).expect("bound order routes");
-                assert_ne!(cj, ci, "order {i}'s channel must never receive order {j}'s notification");
+                assert_ne!(
+                    cj, ci,
+                    "order {i}'s channel must never receive order {j}'s notification"
+                );
             }
         }
         // Fail-closed: an unbound order delivers nowhere (no default channel).
-        assert_eq!(router.deliver("O-UNBOUND"), None, "unbound order: no send, never a default channel");
+        assert_eq!(
+            router.deliver("O-UNBOUND"),
+            None,
+            "unbound order: no send, never a default channel"
+        );
         // After unbinding (order terminal), no leak.
         router.unbind("O0000");
-        assert_eq!(router.deliver("O0000"), None, "terminal order's binding is released");
+        assert_eq!(
+            router.deliver("O0000"),
+            None,
+            "terminal order's binding is released"
+        );
     }
 
     // ── TrackingView reuses kernel kalman math (no new math) ──────────────────
@@ -567,8 +655,14 @@ mod tests {
             channel_ref: "CH-B2".into(),
         });
         // Once P43 transmits, a state change on ORD-B2 must arrive at CH-B2 only.
-        let delivered = router.deliver("ORD-B2").expect("P43 delivers to the bound channel");
+        let delivered = router
+            .deliver("ORD-B2")
+            .expect("P43 delivers to the bound channel");
         assert_eq!(delivered, "CH-B2");
-        assert_ne!(router.deliver("ORD-OTHER"), Some("CH-B2"), "never leaks to another order");
+        assert_ne!(
+            router.deliver("ORD-OTHER"),
+            Some("CH-B2"),
+            "never leaks to another order"
+        );
     }
 }

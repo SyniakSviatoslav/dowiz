@@ -236,7 +236,11 @@ pub fn eigh(a: &[Vec<f64>]) -> crate::spectral_cache::Decomp {
 /// correction, so the Csr is never densified). Deterministic: index-graded
 /// start vector, fixed `iters`, fixed summation order inherited from `spmv`,
 /// sign fixed as in `eigh_contig`. Returns `(basis, values)` descending `|λ|`.
-pub fn topk_symmetric(a: &crate::csr::Csr, k: usize, iters: usize) -> crate::spectral_cache::Decomp {
+pub fn topk_symmetric(
+    a: &crate::csr::Csr,
+    k: usize,
+    iters: usize,
+) -> crate::spectral_cache::Decomp {
     let n = a.nrows();
     debug_assert!(n > 0, "topk_symmetric: empty matrix");
     let kk = k.min(n);
@@ -966,7 +970,10 @@ mod tests {
         let mut v = values.clone();
         v.sort_by(|x, y| x.partial_cmp(y).unwrap());
         for (got, want) in v.iter().zip([0.0, 1.0, 3.0].iter()) {
-            assert!((got - want).abs() < 1e-9, "eigh P3 eigenvalue {got} != {want}");
+            assert!(
+                (got - want).abs() < 1e-9,
+                "eigh P3 eigenvalue {got} != {want}"
+            );
         }
         // residual + orthonormality
         let n = 3;
@@ -1068,7 +1075,11 @@ mod tests {
         ];
         let csr = crate::csr::Csr::from_dense(&k3);
         let (_v, vals) = crate::spectral::topk_symmetric(&csr, 3, 2000);
-        assert!((vals[0].abs() - 2.0).abs() < 1e-6, "K3 dominant |λ| = {}", vals[0]);
+        assert!(
+            (vals[0].abs() - 2.0).abs() < 1e-6,
+            "K3 dominant |λ| = {}",
+            vals[0]
+        );
     }
 
     // ── §5.4.6: reconstruction-error Frobenius monotonicity in k ──
@@ -1101,7 +1112,9 @@ mod tests {
             assert!(
                 err <= prev + 1e-9,
                 "reconstruction error not non-increasing at k={}: {} > {}",
-                k, err, prev
+                k,
+                err,
+                prev
             );
             prev = err;
         }

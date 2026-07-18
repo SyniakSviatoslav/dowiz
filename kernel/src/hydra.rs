@@ -108,8 +108,7 @@ const _: () = assert!(
     // the invariant while tolerating f64 literal rounding. Fails on inversion
     // (release == trigger ⇒ gap 0) and on any narrowing below the full
     // Resonant width (see compile-time RED check (a) in the commit message).
-    INTEGRITY_BAND.trigger - INTEGRITY_BAND.release + 1e-12
-        >= 2.0 * crate::spectral::DRIFT_BAND
+    INTEGRITY_BAND.trigger - INTEGRITY_BAND.release + 1e-12 >= 2.0 * crate::spectral::DRIFT_BAND
 );
 const _: () = assert!(INTEGRITY_BAND.healthy_checks >= 2);
 
@@ -799,7 +798,11 @@ mod tests {
         let s3 = h.integrity_check(); // streak 3 → release on 3rd
         assert_eq!(
             [s1, s2, s3],
-            [OrganismState::Locked, OrganismState::Locked, OrganismState::Live],
+            [
+                OrganismState::Locked,
+                OrganismState::Locked,
+                OrganismState::Live
+            ],
             "Locked→Live must require exactly 3 consecutive healthy checks"
         );
         assert_eq!(h.healthy_streak(), 0, "streak resets after release");

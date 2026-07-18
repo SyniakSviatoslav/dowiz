@@ -28,12 +28,14 @@ pub mod manifest;
 pub mod scope;
 
 pub use admission::{
-    AdmissionError, AdmissionGate, AdmissionLimiter, AdmissionRecord, Admitter, ReferenceHybridGate,
-    B1_NEW_SCOPES, DEFAULT_MAX_AGENT_DEPTH, FUEL_PER_UNIT, MAX_VERIFY_CHAIN_LINKS, TRANCHE_UNITS,
+    AdmissionError, AdmissionGate, AdmissionLimiter, AdmissionRecord, Admitter,
+    ReferenceHybridGate, B1_NEW_SCOPES, DEFAULT_MAX_AGENT_DEPTH, FUEL_PER_UNIT,
+    MAX_VERIFY_CHAIN_LINKS, TRANCHE_UNITS,
 };
 pub use cap::{
     pq_key_id, revocation_hash, verify_chain, AnchorRoster, Capability, ChainError, Delegation,
-    HybridPolicy, NodeId, RefSigner, RevocationSet, SignatureVerifier, SignedFrame, ML_DSA_65_PK_LEN,
+    HybridPolicy, NodeId, RefSigner, RevocationSet, SignatureVerifier, SignedFrame,
+    ML_DSA_65_PK_LEN,
 };
 pub use manifest::{
     config_axis_domain, AgentCaps, AgentManifest, BudgetRequest, CostDenomination, ExecutionModel,
