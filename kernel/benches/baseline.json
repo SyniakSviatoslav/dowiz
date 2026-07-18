@@ -1,7 +1,11 @@
 {
-  "place_order/5_items": 72.822,
+  "empirical_identify/20k_samples": 112560,
+  "empirical_identify/end_to_end_20k": 883950,
   "fold_transitions/5_hops": 4.2797,
-  "empirical_identify/20k_samples": 112560.0,
-  "empirical_identify/end_to_end_20k": 883950.0,
+  "graph_rebuild_rank/arena": 85792,
+  "graph_rebuild_rank/heap": 120300,
+  "place_order/5_items": 72.822,
+  "spectral_cache/canonical_address_32x32": 1241,
+  "spectral_cache/slem_cached_10x10_hit": 15625,
   "token_bucket/try_acquire_permit": 51.924
 }

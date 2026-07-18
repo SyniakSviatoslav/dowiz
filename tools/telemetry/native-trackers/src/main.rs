@@ -27,7 +27,7 @@ use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Minimal JSON value + fixed-schema extraction (no serde).
@@ -140,7 +140,7 @@ fn get_bool(m: &BTreeMap<String, Jv>, k: &str) -> bool {
 // 1. BENCH — native replacement for bench_track.py
 // ─────────────────────────────────────────────────────────────────────────────
 
-fn cmd_bench(crate_dir: &str, threshold: f64) -> i32 {
+fn cmd_bench(crate_dir: &str, threshold: f64, bench_name: Option<&str>) -> i32 {
     let crate_path = Path::new(crate_dir);
     let baseline_p = crate_path.join("benches/baseline.json");
     let baseline = if baseline_p.exists() {
@@ -150,45 +150,79 @@ fn cmd_bench(crate_dir: &str, threshold: f64) -> i32 {
         BTreeMap::new()
     };
 
-    // Run cargo bench, capture combined output.
-    let out = Command::new("cargo")
-        .args([
-            "bench",
-            "--bench",
-            "criterion",
-            "--",
-            "--warm-up-time",
-            "1",
-            "--measurement-time",
-            "2",
-            "--sample-size",
-            "10",
-        ])
+    // Run cargo bench, stream combined output to a TEMP FILE (not a captured
+    // pipe). A captured pipe (Command::output()) can fill up on a large bench
+    // run and make cargo bench exit early — dropping the LATER benchmarks from
+    // the output (seen as spurious "MISSING" for empirical_identify/token_bucket).
+    // Writing to a file has no pipe buffer limit, so every benchmark's timing
+    // line is preserved. Parsed after the run completes.
+    let tmp = std::env::temp_dir().join("native-trackers-bench.log");
+    let file = match fs::File::create(&tmp) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("native-trackers: cannot create temp bench log: {e}");
+            return 2;
+        }
+    };
+    let mut cargo_args: Vec<&str> = vec!["bench"];
+    // Default bench target is `criterion` (kernel/llm/crates-bebop). agent-adapters
+    // uses `fuel_bench`; callers pass `--bench <name>` to override. We never run a
+    // bare `cargo bench` (which also runs lib/doctests that reject criterion's
+    // `--warm-up-time` etc. and fail the whole run).
+    let bench = bench_name.unwrap_or("criterion");
+    cargo_args.push("--bench");
+    cargo_args.push(bench);
+    cargo_args.push("--");
+    cargo_args.push("--warm-up-time");
+    cargo_args.push("1");
+    cargo_args.push("--measurement-time");
+    cargo_args.push("2");
+    cargo_args.push("--sample-size");
+    cargo_args.push("10");
+    let status = Command::new("cargo")
+        .args(&cargo_args)
         .current_dir(crate_dir)
-        .output();
-    let out = match out {
-        Ok(o) => o,
+        .stdout(Stdio::from(file.try_clone().expect("clone bench log")))
+        .stderr(Stdio::from(file))
+        .status();
+    let status = match status {
+        Ok(s) => s,
         Err(e) => {
             eprintln!("native-trackers: cargo bench failed to spawn: {e}");
             return 2;
         }
     };
-    if !out.status.success() {
+    if !status.success() {
         eprintln!("native-trackers: cargo bench exited non-zero");
         return 2;
     }
-    let text = format!(
-        "{}{}",
-        String::from_utf8_lossy(&out.stdout),
-        String::from_utf8_lossy(&out.stderr)
-    );
+    let text = match fs::read_to_string(&tmp) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("native-trackers: cannot read bench log: {e}");
+            return 2;
+        }
+    };
 
     // Parse "name  time:   [lo unit mean unit hi unit]"
     let re = regex_lite();
     let mut cur = BTreeMap::new();
+    // criterion prints the benchmark name on its own line (`Benchmarking X`)
+    // and the `time: [...]` result on the NEXT line. For short names both land
+    // on one line; for long names the name line stands alone. We track the last
+    // seen `Benchmarking` name and use it when a `time:` line carries no inline
+    // name (this is what made empirical_identify/token_bucket read as MISSING).
+    let mut last_bench: Option<String> = None;
     for line in text.lines() {
         let line = line.trim();
-        if let Some((name, mean_ns)) = parse_timing(line, &re) {
+        if let Some(rest) = line.strip_prefix("Benchmarking ") {
+            // `Benchmarking X` and `Benchmarking X: Warming up for ...` both
+            // appear; keep only the name (up to the first ':' or whitespace).
+            let name = rest.split(':').next().unwrap_or(rest).trim();
+            last_bench = Some(name.to_string());
+            continue;
+        }
+        if let Some((name, mean_ns)) = parse_timing(line, &re, last_bench.clone()) {
             cur.insert(name, mean_ns);
         }
     }
@@ -268,19 +302,20 @@ fn cmd_bench(crate_dir: &str, threshold: f64) -> i32 {
 fn regex_lite() -> () {
     ()
 }
-fn parse_timing(line: &str, _re: &()) -> Option<(String, f64)> {
+fn parse_timing(line: &str, _re: &(), last: Option<String>) -> Option<(String, f64)> {
     // criterion output line shape:  `name  time:   [lo unit mean unit hi unit]`
-    // Require the literal "time:" preceded by whitespace, and a real name token
-    // (i.e. the first token must NOT itself be "time:" — that filters the
-    // "time:" progress-only lines and the harness meta string).
+    // The name may be on the SAME line (short names) or on the preceding
+    // `Benchmarking <name>` line (long names). When it's not inline we fall
+    // back to `last` (the most recent Benchmarking name).
     let line = line.trim();
     let time_idx = line.find("time:")?;
     // The token immediately before "time:" must be a non-empty name.
     let before = &line[..time_idx];
-    let name = before.split_whitespace().next_back()?;
-    if name.is_empty() || name == "time:" {
-        return None;
-    }
+    let inline_name = before.split_whitespace().next_back();
+    let name = match inline_name {
+        Some(n) if !n.is_empty() && n != "time:" => n.to_string(),
+        _ => last?, // long-name case: use the tracked Benchmarking name
+    };
     let open = line[time_idx..].find('[')? + time_idx;
     let close = line[open..].find(']')? + open;
     let inner = &line[open + 1..close];
@@ -904,7 +939,7 @@ fn now_iso() -> String {
 
 fn usage() -> i32 {
     eprintln!(
-        "usage:\n  native-trackers bench <crate-dir> [--threshold N]\n  native-trackers route <task> [budget] [ruin]\n  native-trackers false-claim [--record claimed verified]\n  native-trackers meta observe <bench_prev> <bench_new> <eval_prev> <eval_new> <false_rate>"
+        "usage:\n  native-trackers bench <crate-dir> [--bench <name>] [--threshold N]\n  native-trackers route <task> [budget] [ruin]\n  native-trackers false-claim [--record claimed verified]\n  native-trackers meta observe <bench_prev> <bench_new> <eval_prev> <eval_new> <false_rate>"
     );
     2
 }
@@ -921,12 +956,18 @@ fn main() {
             } else {
                 let crate_dir = &args[2];
                 let mut threshold = 10.0;
+                let mut bench_name: Option<String> = None;
                 if let Some(pos) = args.iter().position(|a| a == "--threshold") {
                     if let Some(v) = args.get(pos + 1) {
                         threshold = v.parse().unwrap_or(10.0);
                     }
                 }
-                cmd_bench(crate_dir, threshold)
+                if let Some(pos) = args.iter().position(|a| a == "--bench") {
+                    if let Some(v) = args.get(pos + 1) {
+                        bench_name = Some(v.clone());
+                    }
+                }
+                cmd_bench(crate_dir, threshold, bench_name.as_deref())
             }
         }
         "route" => {
