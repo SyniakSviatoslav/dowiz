@@ -180,6 +180,7 @@ summaries (Absorbs/Status/Role/DoD/Anti-scope/Depends-blocks) in the same templa
 | P56 | ECOSYSTEM-OPS | [CORE-ROADMAP-2026-07-17/BLUEPRINT-P56-verification-harness-infrastructure.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P56-verification-harness-infrastructure.md) | Shared storage/scheduling/meta-verification substrate for P54+P55; `hetzner:dowiz/test-results/` sync |
 | P21 Part 2 | AGENT | [CORE-ROADMAP-2026-07-17/BLUEPRINT-P21-local-llm-hermes-native.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P21-local-llm-hermes-native.md) §11 | Tiered-Intelligence architecture evaluated against operator proposal — Tier-0-model rejected, Ollama stays, model verdict grounded in real workload |
 | Disk-ops runbook | ECOSYSTEM-OPS | [CORE-ROADMAP-2026-07-17/BLUEPRINT-DISK-OPS-CLEANUP-2026-07-18.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-DISK-OPS-CLEANUP-2026-07-18.md) | Operational runbook, not a numbered phase — 90%→65% disk fix executed same pass; `hetzner:dowiz` remote confirmed live |
+| §16 Deployment topology | ALL | [MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md §16](MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md#16-deployment-topology--operating-model-decisions-2026-07-18-dialogue-pass) | Post-audit dialogue pass: 3-mode hosting (CF Pages/Hetzner/self-host), CF Tunnel remote access, venue-owned couriers confirmed, single assistant-role in-hub agent, unified multi-channel order-flow, isolated-hub MVP topology (dowiz.org=directory), hybrid auto-posting, Fly.io fully retired (teardown blocked on operator `flyctl auth login`) |
 
 ---
 
