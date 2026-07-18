@@ -1,5 +1,12 @@
 # BLUEPRINT P42 — MCP port + capability-scoped tool boundary (Skills-pattern discovery) (2026-07-18)
 
+> **STATUS CORRECTION (2026-07-18, later same day — consistency pass):** no longer purely
+> planned. The wave swarm landed `kernel/src/ports/mcp.rs` (488 lines) + `kernel/src/ports/tool.rs`
+> (383 lines) — the MCP port + capability-scoped tool boundary — commits `575a75a20`/`09b2c7edd`.
+> P42 is **PARTIAL** (the "executes after P40 T1-T9" sequencing note below is historical: the
+> swarm landed P40 and P42 code the same day). Design-vs-implementation reconciliation
+> deliberately NOT done in this note.
+
 > **Planning document — writes no product code.** Written against the 20-point contract in
 > `docs/design/CORE-ROADMAP-STANDARD-2026-07-17.md` §2 (compliance map in §9 — every point
 > addressed, none skipped). Deepens the roadmap-index DoD for **P42** in

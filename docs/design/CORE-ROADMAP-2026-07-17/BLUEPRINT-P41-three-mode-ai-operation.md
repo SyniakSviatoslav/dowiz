@@ -1,5 +1,12 @@
 # BLUEPRINT P41 — Three-mode operation: no-AI / local-offline / connected (2026-07-18)
 
+> **STATUS CORRECTION (2026-07-18, later same day — consistency pass):** no longer purely
+> planned. The wave swarm landed `kernel/src/ports/llm.rs` (375 lines): `AiMode` +
+> `BackendConfig::from_env`, fail-closed, default Off — commits `e74fc3e4f`/`4d8e292b0`.
+> P41 is **PARTIAL** (mode substrate landed; parity proof + full degradation contract per
+> this blueprint still open). Design-vs-implementation reconciliation deliberately NOT done
+> in this note.
+
 > **Planning document — writes no product code.** Written against the 20-point contract in
 > `docs/design/CORE-ROADMAP-STANDARD-2026-07-17.md` §2 (compliance map in §9 — every point
 > addressed, none skipped). Deepens the roadmap-index DoD for **P41** in
