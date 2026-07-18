@@ -711,3 +711,139 @@ These are **added to** §4's list 1–9 (none of which is weakened) and folded i
     presence check, not by timing), and a shared cache exists **only** when an operator-signed `cache_group_id`
     co-scopes them; a manifest that self-declares a shared group is refused (the group is read from operator
     config, never the manifest).
+
+---
+
+## Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+> Additive; nothing above is modified or weakened. This appendix discharges the two protocol parts B1
+> did not yet carry per-blueprint — the 2-question doubt audit and the Anu/Ananke check (both existed
+> only at arc level, consolidation §5/§6) — and, per DoD item 4's own rule ("this blueprint is updated
+> wherever the built code *necessarily* diverges"), records the landed-state verification now that
+> most of B1 has shipped.
+
+### A.1 Landed-state verification (protocol step 1, re-applied post-landing)
+
+Commit `f30189262` on `feat/agentic-mesh-protocol-2026-07-17` (this worktree) landed migration
+steps 1–6 plus SH-1–SH-4: `kernel/src/ports/agent/{mod,admission,cap,manifest,scope}.rs` and the
+`agent-adapters` crate (`manifest/transport/quirks/dispatch/cache/mcp/fuel.rs` +
+`tests/e2e_admission.rs`). Corrections to the body, verified live this session:
+
+- **§1's "What does NOT exist" is stale on this branch** (it remains true on dowiz
+  `feat/harness-llm-backend` as of `cc3d5c916` — that checkout has no `ports/agent/` and no
+  `agent-adapters`). The claim was correct when written; it is superseded here, not silently.
+- **A genuine design deviation, annotated per DoD item 4:** §2.2 step 2's "No new verification code
+  is written" did not survive the repo boundary. The dowiz kernel does not link bebop2 `proto-cap`,
+  so verification runs through a `SignatureVerifier` trait seam (`cap.rs`) with
+  `admission.rs::ReferenceHybridGate` **reproducing** `HybridGate::check`'s fixed order
+  (`hybrid_gate.rs:124-209`) rather than calling it. The port stays M6-clean, but the verification
+  *order* now exists in two implementations across two repos — an RC-4 unpinned-mirror shape. See
+  doubt item 1.
+- **Step 7 is half-landed, honestly gated:** `fuel.rs` implements the full prepaid-tranche loop
+  against a `FuelMeter` trait with an in-crate `DeterministicFuelMeter`; the real Wasmtime meter
+  compiles only behind the `wasmtime-fuel` feature (`agent-adapters/Cargo.toml:21,27` — optional,
+  default-off, so default builds stay offline/deterministic). `FUEL_PER_UNIT = 100_000` is pinned
+  as a placeholder (`admission.rs:56`) awaiting the B4 calibration bench.
+- **Discriminants landed pinned-with-flag:** `ports/agent/scope.rs:16-22` pins
+  `Resource::AgentBridge = 0x12` and provisional `Action` bytes `0x1F/0x20`, with the collision
+  flag in-file; bebop2 `proto-cap/src/scope.rs` is unmodified (verified: no `AgentBridge` there;
+  high-water mark still `Migration = 0x11`). DoD item 7 remains OPEN — see doubt item 4.
+- **Landed stronger than designed, two places:** (i) the manifest envelope carries a fixed 16-byte
+  domain+version magic with version tag `\x01` (`manifest.rs:28-40`) — a partial version hedge the
+  Long-Term (c) section asked for, with the *negotiable* version-TLV ruling still explicitly
+  deferred to the operator in-code; (ii) `AdmissionLimiter` (`admission.rs:253-265`) implements
+  SH-1's mandatory global bucket + optional fixed-shard fairness exactly in the stated preference
+  order, built entirely from the existing `TokenBucket`.
+- **DoD item 6 is half-open:** the e2e admission test exists (`tests/e2e_admission.rs`), but no
+  captured `DEMO-RUN.md`-style artifact (host + commit fingerprints, printed content-id, unchanged
+  store digest) exists anywhere in this worktree. The *artifact* half of item 6 is still owed.
+
+### A.2 DECART status — verified present; consolidation drift repaired
+
+DoD item 5's inline Wasmtime DECART satisfies protocol step 3. Its load-bearing probe re-verified
+this session: `wasmtime-46.0.1`, `wasmtime-internal-component-{macro,util}-46.0.1`, and the
+cranelift crates are all present in the offline `~/.cargo/registry` cache. The landed wiring is
+*stronger* than the DECART's structural-isolation claim: the dependency is optional and off by
+default, so the ~30-crate cranelift tree does not even compile into default builds. No further
+DECART is owed: the only other `agent-adapters` dependencies are `dowiz-kernel` (path) and
+`serde`/`serde_json` — the exact mirror of `llm-adapters`' existing pattern, not a new choice.
+Drift repaired: `AGENTIC-MESH-PROTOCOL-CONSOLIDATED.md` §5 Q1.4 still recorded this DECART as
+"owed"; a dated correction note now points here.
+
+### A.3 The 2-question doubt audit (per-blueprint, per `AGENTS.md`)
+
+**Q1 — least confident about, concretely (each item verified, not assumed):**
+
+1. **The mirror gate has no structural pin.** `ReferenceHybridGate` reproduces
+   `hybrid_gate.rs:124-209`'s check order in a second codebase, and *nothing* forces the two to
+   agree: no shared test-vector file, no fixture generated from bebop2 and consumed by dowiz tests
+   (grep this session: zero cross-repo fixtures). If bebop2 ever reorders or extends the gate
+   (e.g. under P06's verifier work), dowiz admission silently enforces yesterday's law. Cheapest
+   structural fix: one canonical vector file (valid frame + 6 rejection variants) committed to
+   bebop2, re-exported into `agent-adapters/tests/`, asserted by both repos' suites.
+2. **`wasmtime-fuel` has no CI lane.** Grep over `.github/workflows/`: zero hits for the feature.
+   The real Wasmtime-backed `FuelMeter` (`fuel.rs:155-251`) can rot undetected — its first compile
+   error would surface only when someone finally builds `--features wasmtime-fuel` at step-7
+   finalization. A scheduled offline `cargo check -p agent-adapters --features wasmtime-fuel` lane
+   is the falsifiable guard; until it exists this is a stated, owned risk.
+3. **`FUEL_PER_UNIT` is a comment-promise.** The placeholder (`admission.rs:56`) is pinned "until
+   the B4 bench," but nothing goes RED if that bench never runs — no done-check binds the constant
+   to a bench artifact. Proposed gate: `wasmtime-fuel` may not become a default feature until a
+   `BENCH_RESULTS.md`-convention artifact pins the calibrated value; recorded here as the missing
+   Ananke hook.
+4. **The `0x12` ruling is still the operator/lead's, and the flag is only prose.**
+   `discriminants_are_pinned` freezes the bytes *within this repo*; nothing mechanical fires if
+   B2's code lands its own `0x12` (B2 is still a doc). The collision detection is currently a
+   comment in `scope.rs:16-22` plus consolidation §5 Q1.1 — diligence, not structure. BLOCKED on
+   the named Wave-0 allocation act; not resolvable from inside B1.
+5. **DoD item 6's artifact half.** A green e2e test is not the captured demonstrated-run artifact
+   the DoD demands (fingerprints, printed content-id, byte-identical store digest). Cheap to
+   produce; not produced. Until it exists, item 6 cannot honestly be checked off.
+6. **SH-1 Guard A's fairness keying still floats on MESH-09.** The landed `AdmissionLimiter`
+   ships the transport-independent global ceiling (correct per SH-1's preference order), but the
+   shard key is whatever the caller supplies — the honest `ConnId` dependency named in SH-1 is
+   still unowned because MESH-09 (transport) remains out of scope and unbuilt. Per-source fairness
+   is therefore *declared, not yet real*.
+7. **The pre-B1 binding test baseline was never captured.** DoD item 3 requires the pre-B1 green
+   pass-count from a clean run "on the pre-B1 tip" as the non-regression gate; no such captured
+   number exists in the worktree docs (MEMORY's "kernel 403 pass" is a post-landing note, and DoD
+   item 3 itself warns MEMORY snapshots are advisory). The gate is currently unenforceable as
+   specified.
+
+**Q2 — the biggest thing this blueprint might be missing:** the admission *law* now lives in two
+places — bebop2's `HybridGate` (the authority) and dowiz's `ReferenceHybridGate` (the mirror) —
+and no document in the arc, including this one, names the **reconciliation act** for when the
+authority changes. B1's body could still say "No new verification code is written" while the tree
+said otherwise; a fresh reader diffs the two repos and spots it in thirty seconds. This appendix
+closes the *documentation* half (the deviation is now recorded); the *structural* half is doubt
+item 1's vector pin, which should ride with whichever change next touches either gate.
+
+### A.4 Anu (logic) & Ananke (organization) check
+
+**Anu.** Re-derived post-landing: (i) the header's "depends on nothing already-unbuilt" claim
+held — every primitive §1 cites existed before `f30189262`, and the build needed no new ones;
+(ii) the one body claim that was asserted-but-not-derivable was §2.2 step 2's direct
+`HybridGate::check` reuse — underivable across an unlinked repo boundary, and the implementation
+correctly broke it rather than force a bad link; the failure is now named (A.1) instead of
+standing; (iii) the DECART's decision logic survives re-derivation — the offline-registry probe
+still passes, and the strongest case-against (the cranelift supply-chain tree) is now *structurally*
+answered by the optional-feature wiring, not just by adapter placement; (iv) the sequencing
+consequence in consolidation §4 (B1 before B2/B3's consumption of admitted identity) is confirmed
+by the landed code: B3's `TokenBucket::release` landed independently in the same commit, exactly
+as the parallel-safety claim predicted.
+
+**Ananke.** What survives with no one remembering: the `discriminants_are_pinned` test (bytes
+frozen mechanically), fail-closed TLV decode (unknown T/axis/policy byte structurally
+unrepresentable), the `B1_NEW_SCOPES` compile-fail enumeration contract, SH-3's three-layer
+Poly-Network test including the borrow-checker structural guard, and the ports/agent compile
+firewall backed by the migration-step-2 `cargo tree` done-check. What still relies on diligence —
+named, per the doctrine: (a) mirror-gate equivalence (doubt 1 — no forcing structure yet);
+(b) `FUEL_PER_UNIT` calibration (doubt 3 — comment-promise); (c) `wasmtime-fuel` compile health
+(doubt 2 — no CI lane); (d) DoD item 6's artifact capture (doubt 5 — convention only);
+(e) consolidation-flag reconciliation as a class — §5 Q1.4 sat stale for a session after B1
+discharged it, and nothing detects the next such drift; the consolidation remains the arc's one
+document whose freshness is purely diligence-borne.
+
+*Appendix written 2026-07-17 against live reads of this worktree (`f30189262`..`84a1e272d`),
+`/root/dowiz` at `cc3d5c916`, and `/root/bebop-repo/bebop2/proto-cap/src/scope.rs`. No code
+written or edited.*

@@ -406,3 +406,86 @@ first time the hardware or the verify code moves, never a checklist item anyone 
 
 *Planning artifact only — no code written or edited. All file:line citations re-resolved live
 on 2026-07-17 against `/root/bebop-repo/bebop2` and `/root/dowiz-agentic-mesh`.*
+
+---
+
+## 2-Question Doubt Audit (blueprint-organization stage, 2026-07-17 decorrelated pass)
+
+> Added by a decorrelated audit pass per `AGENTS.md`'s three-point doubt ritual. This blueprint
+> already carries an inline DECART (§2.1, for `criterion`) and a working Anu/Ananke-shaped argument
+> (Long-Term (c) invokes Ananke by name for the CI-grep staleness gate); the one part missing was the
+> explicit per-blueprint 2-question audit, appended here. Nothing above this point is modified.
+> Independently re-verified against `/root/bebop-repo` (read-only) and the live
+> `docs/ledger/crypto-bench.jsonl` row set, 2026-07-17.
+
+**Post-landing state re-checked first, since it gates everything else: honestly recorded, confirmed.**
+The §2.3 "Correction (2026-07-17, post-F1 fix — measured)" block's every load-bearing number was
+independently recomputed from the raw ledger row at commit `6541ae8` rather than trusted: `batch/64`
+`mean_ns = 131,167,487.5` (≈131.2 ms, matches); `ed25519_verify_single` `mean_ns = 629,556.5`, so
+`64 × single = 40,291,616 ns` ≈ 40.3 ms (matches); ratio `131,167,487.5 / 40,291,616 = 3.256` ≈ 3.26×
+(matches exactly). The named regression test `batch_rejects_ssr2020_mixed_order_forgery` exists at
+`bebop2/core/src/sign.rs:1382` in that commit, and `verify_batch`/`verify_batch_no_fallback`/
+`verify_batch_inner` (`:971-984` onward) implement exactly the "confirm every accept via full single
+verify" fix the correction note describes. This is a rare case of a post-landing claim standing up to
+independent re-derivation from raw data, not just re-reading prose — recorded as a positive finding, not
+merely "checked."
+
+**Q1 — least confident about, each actually checked:**
+
+1. **`ed25519_verify_single`'s recorded cost (≈630 µs) is high for Ed25519 verification and neither the
+   blueprint nor this pass explains why.** Optimized implementations (e.g. `ed25519-dalek`) verify in
+   tens of microseconds; this repo's is a "naive non-Straus/Pippenger `scalar_mul`" per the consolidated
+   doc's own correction, which plausibly explains a 5-10× slowdown but not obviously a ~10× *from that*
+   baseline too. Taken from the ledger at face value; not independently re-derived from a cycle count.
+2. **`mldsa65_verify_single` (≈792 µs) is only ~26% above `ed25519_verify_single` (≈630 µs), which is
+   surprisingly close for two structurally different schemes** (NTT-based lattice vs. elliptic-curve
+   scalar mult) — this could mean ML-DSA-65 really is that cheap relative to this repo's slow Ed25519, or
+   it could mean a shared fixed cost (fixture setup, `black_box` overhead, hashing) dominates both
+   numbers. Neither this blueprint nor this pass isolates the two possibilities; flagged rather than
+   resolved.
+3. **The commit message's phrase "Instant-based, zero-dep" could misread as contradicting the §2.1
+   DECART decision for `criterion` — checked directly, it does not.** `bebop2/bench/Cargo.toml` (at
+   `6541ae8`) keeps `criterion = "0.5"` as the sole dev-dependency exactly as decided, used in
+   `benches/crypto.rs`. The "Instant-based, zero-dep" description refers to a *second*, separate tool
+   (`src/bin/record-ledger.rs`) that produces the durable `p99`-bearing ledger row specifically because
+   "criterion does not expose p99" (the Cargo.toml's own comment) — a real gap in §2.2's original
+   design (which specifies the ledger row's *fields* but not which tool computes them) that the
+   implementation closed consistently with the DECART, not around it. Worth noting as an
+   implementation-time elaboration the blueprint text doesn't anticipate, not a deviation.
+4. **The landed code and ledger rows live only on `feat/b4-crypto-groundtruth-bench`** (local and
+   `openbebop` remote in `/root/bebop-repo`) **— not on the branch actually checked out in this
+   read-only clone right now** (`feat/verification-harness`, confirmed dirty with unrelated staged
+   `delivery-domain` changes), and `git merge-base --is-ancestor 6541ae8 HEAD` returns **no** on that
+   checkout. A re-verification pass that greps the currently-checked-out working tree instead of
+   fetching/reading the specific commit would wrongly conclude neither `verify_batch` nor the ledger
+   rows exist. (This is the same branch-vs-worktree trap this session's B3 pass hit independently for
+   `TokenBucket::release` in the dowiz repo — see that appendix — now confirmed a second time on the
+   bebop-repo side.)
+5. **The 3.26× figure was recomputed from the recorded numbers, not from re-running the benchmark.**
+   This pass confirms the *arithmetic* is honest (item above) but did not re-execute
+   `cargo bench -p bebop2-bench` to confirm the measurement reproduces within noise on a second run —
+   routine risk for a perf number, stated rather than silently assumed.
+6. **DoD item 4's "never-overwrite" `run_key` uniqueness scheme was checked against the schema
+   description, not against `record-ledger`'s actual insert logic.** The recorded rows' `run_key` fields
+   are present and are 16 hex characters (matching "truncated to 16 hex"), and no duplicate `run_key`
+   appears in the observed rows — consistent with, but not a substitute for, reading the binary's insert
+   code to confirm it structurally refuses to overwrite rather than merely happening not to have been
+   run twice yet.
+
+**Q2 — the biggest thing this pass might be missing:** **this is the third time in one session that a
+"landed" claim in this arc turned out to be real but living on a branch other than the one obviously
+checked out** (dowiz's `TokenBucket::release` off `feat/harness-llm-backend`'s default checkout in the B3
+pass; the P07 dedup fix similarly off-branch per that same pass; now B4's bench + ledger off
+`feat/verification-harness`). Individually each is a non-issue once traced (the commit is real, the code
+is real, the numbers check out) — but the *pattern* suggests this arc's "landed" bookkeeping is
+branch-implicit rather than branch-explicit: nothing in any of these three documents states *which
+branch* is authoritative for a "landed" claim, so each verification pass has had to independently
+rediscover the right branch by trial. The honest blind spot: this pass has no way to confirm whether
+`feat/b4-crypto-groundtruth-bench` is intended to merge into `feat/verification-harness` (or main) before
+this arc is called done, or whether it is expected to stay a permanent side-branch that downstream
+blueprints must remember to fetch — that decision sits with the operator/lead agent, not with a
+read-only audit pass over `/root/bebop-repo`.
+
+*2-Question audit pass, 2026-07-17. No code read in this pass was edited; nothing above this section was
+modified. Grounded in live reads of `/root/bebop-repo` commit `6541ae8` (`sign.rs`, `bebop2/bench/
+Cargo.toml`, `benches/crypto.rs`) and the `docs/ledger/crypto-bench.jsonl` rows at that commit.*

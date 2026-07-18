@@ -299,6 +299,12 @@ are final until the first ledger rows exist.**
    `wasmtime-46.0.1` and its component-model crates are present in the offline
    `~/.cargo/registry` cache, so the wgpu/W21 network-block failure mode does not apply. The DECART
    is still owed before B1 step 7 is called execution-ready; recorded here rather than papered over.
+   > **RESOLVED (2026-07-17, later pass):** the DECART now exists inline in B1 — Definition of Done
+   > item 5 (`BLUEPRINT-B1-agent-bridge-port-manifest-admission.md`), full table + DECISION + probe
+   > form, and the landed wiring made the dependency optional/default-off
+   > (`agent-adapters/Cargo.toml:21,27`), stronger than the DECART's own isolation claim. B1's
+   > "Planning-protocol completion appendix" A.2 records the re-verified registry probe. This flag
+   > is discharged; it is kept above unedited for provenance.
 5. **Δ has two floor formulations.** B2 §2.3: "Δ = smallest named constant ≥ 10 × (RTT + verify +
    commit) in ticks"; B4 §2.2's symbolic criterion for B2: "settlement window ≥ 100 × measured gate
    p99." Both are satisfied trivially by the 60-tick reference profile and are not numerically
