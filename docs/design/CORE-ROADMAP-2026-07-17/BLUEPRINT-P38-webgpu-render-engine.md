@@ -11,6 +11,15 @@
 > (`BLUEPRINTS-DOWIZ-INTERFACES.md:46-320`); re-deriving them here would violate standard
 > item 19. Structural template: `BLUEPRINT-P-A-kernel-primitives.md` (numbering mirrored).
 
+> **⚠ CANON-DIFF appended 2026-07-18 (see §12) — append-only, originals preserved.** This
+> blueprint carries a dated correction block from `SYNTHESIS-LAUNCH-BLOCKERS-2026-07-18.md`
+> (§0.2-2, §2 X2, §5 canon-diffs row **P38-rev**): (1) G6's transparent-`<input>` overlay is
+> **struck** — text input is now P57's fully-custom in-canvas `cosmic-text` path (§12.1);
+> (2) four AR/VR insurance constraints are added as **hard requirements** (§12.2); (3) FE-15
+> (mirror) + FE-16 (fallback ladder) are reaffirmed as the shared base every new W1/W2/W3
+> blueprint imports (§12.3). The original G6/overlay text below is preserved unaltered, with an
+> inline SUPERSEDED marker at the point of the struck claim (§3.6).
+
 ---
 
 ## 0. Ground truth — every cite re-verified live this pass (standard §2 item 1)
@@ -292,6 +301,15 @@ propagated.
   per frame (only on list *change* — piggybacks G5's settle gate, dormant UI = dormant mirror).
 - Overlay: transparent `<input>` (type=email/tel preserved) for IME/autofill/mobile keyboard
   (arc spec `FIELD-UI:391-395`).
+  > **SUPERSEDED 2026-07-18 — see §12.1 (CANON-DIFF).** This transparent-`<input>` overlay is
+  > **STRUCK** by operator ruling (SYNTHESIS §0.2-2): Wave-0 text input is Latin+Cyrillic ONLY,
+  > entered fully custom in-canvas via `cosmic-text` — **no DOM `<input>` exists on any
+  > platform** (enforces MASTER-ROADMAP §16.34 in canon). IME-composition scripts
+  > (Arabic/CJK/Thai/Indic) are deferred to v2 alongside §16.58's RTL-deferred-to-v2 ruling. The
+  > bullet text above is preserved for the record; the replacement is blueprint **P57** (canvas
+  > text input & editing). §3.6's remaining Mirror/FE-16 legs and the a11y-tree proof are
+  > unaffected — only the input-overlay leg is removed (web live-edit a11y becomes P58's
+  > synthetic ARIA-textbox, per §12.1).
 - FE-16: the empty `webgpu = []`/fallback flags (`engine/Cargo.toml:36`) become functional:
   ladder = WebGPU → WebGL2 → CPU `compose_field` + canvas2d `putImageData` (the wasm export
   exists TODAY, `wasm/src/lib.rs:57` — the floor is already built, the ladder just has to
@@ -624,3 +642,109 @@ dynamics, focus wells) and G5 (settle) alongside it: the settle gate IS the held
 instrument, TIDE/attending speeds ARE the tempo instrument, and its verdict is binding here —
 narrative pacing is Sea/T2 dowiz-fixed; NO brand pacing token exists (the 5-token Sheet limit
 of DZ-02 is unchanged).
+
+---
+
+## 12. CANON-DIFF (2026-07-18) — append-only corrections, originals preserved above
+
+> Source of authority: `SYNTHESIS-LAUNCH-BLOCKERS-2026-07-18.md` §0.2-2, §2 (X2), and §5's
+> canon-diffs table (row **P38-rev**). This block corrects P38 **without deleting a prior
+> claim** — every superseded statement above stays in place, with an inline SUPERSEDED marker at
+> the point of the struck claim (§3.6); this section states what changed and why. Convention:
+> this repo never silently reinterprets canon.
+
+### 12.1 G6's transparent-`<input>` overlay is STRUCK — text input moves fully in-canvas (P57)
+
+**What was written (preserved above, unaltered):** the G6 "input overlay (invisible DOM)"
+leg — §1 scope table (G6 row), §1 anti-scope ("DOM survives ONLY as the invisible a11y mirror +
+input overlay"), §2's G6 comment context, §3.6's Overlay bullet ("transparent `<input>`
+(type=email/tel preserved) for IME/autofill/mobile keyboard"), §3.6 verified-how ("the overlay
+input has no painted box"), §3.7 RW-11 grep gate ("no `createElement` outside `a11y_mirror.mjs`
++ overlay module"), §5 DoD row 6, and §10 T4 ("`a11y_mirror.mjs` + overlay per §2/§3.6").
+
+**What changed, and why:** the operator ruled (SYNTHESIS §0.2-2) that **Wave-0 text input is
+Latin + Cyrillic ONLY, entered fully custom inside the canvas via `cosmic-text`** (buffer,
+cursor, selection, clipboard) — **no DOM `<input>` element exists on any platform.** This
+enforces MASTER-ROADMAP §16.34 ("text input inside canvas is fully custom — no HTML `<input>`
+overlay hybrid") in **canon**, not just in prose, and resolves the R1 §0 contradiction that
+SYNTHESIS X2 flags. Non-Latin scripts that require **IME composition** (Arabic, CJK, Thai,
+Indic) are **deferred to v2**, consistent with §16.58's existing RTL-deferred-to-v2 scope
+boundary — a scope cut, not a new exception. Because Latin+Cyrillic need **no composition
+events**, the entire keydown→buffer→GPU-glyph path is self-contained (SYNTHESIS X2).
+
+**Where it is now built:** the struck overlay is replaced by blueprint **P57 — Canvas text
+input & editing (Latin+Cyrillic)** (`cosmic-text` buffer/cursor/selection/clipboard over the
+FE-06 MSDF glyph render; keydown wiring native + web; explicit v2 boundary for IME scripts).
+P57 is the owner of every typed field across P69/P70/P71/P73.
+
+**Residual engineering consequences (named in SYNTHESIS §0.2-2 / X2 — recorded, not reopened):**
+(a) the **web** a11y mirror for *live text editing* uses R1's **synthetic ARIA-textbox** variant
+(the hidden-editable-element variant is now ruled out) — owned by P58's a11y convention, cited
+by P57's a11y half; (b) raising the **mobile-web soft keyboard** with no editable DOM element has
+no standard mechanism → a **named spike** (P63); the installed Tauri client has native
+soft-keyboard control (`show_soft_input`) and is unaffected, and voice (§16.31) is the honest
+interim input on that one web-mobile combination if the spike comes back empty.
+
+**DoD delta (not-done clauses this adds):** a build that ships any DOM `<input>`/editable element
+for text entry on any platform = **NOT done** (grep gate: no `<input>` / `contenteditable` in the
+render/web tree); text entry that is not the P57 in-canvas path = NOT done. The §3.7 RW-11 grep
+gate is tightened accordingly — `createElement` is permitted **only** inside `a11y_mirror.mjs`
+(the semantic mirror); the "overlay module" exemption is **removed**.
+
+### 12.2 AR/VR insurance constraints — four HARD requirements (not deferred, not Track-R)
+
+Per MASTER-ROADMAP §17.5 ("build in AR/VR / new-form-factor readiness **now**, not deferred")
+and SYNTHESIS §2/§5 (R1 §8), P38's render core carries four **structural** constraints as of this
+pass. These are cheap architectural insurance **paid now**; the actual OpenXR (native) / WebXR
+(web) **backend implementation stays deferred** to Track-R. This is a shape requirement on the
+render core, **not** a feature build — no XR device support ships in Wave-0.
+
+1. **View/projection-matrix-driven pipeline, end-to-end.** The render pipeline MUST be driven by
+   an explicit `view` × `projection` matrix pair from vertex transform onward — **no baked
+   2D-only assumption** anywhere. Consequence for §2's types (stated here, §2 left intact per
+   append-only): `FrameUniforms` (currently `screen`/`dpr` only, §2) gains a
+   `view_proj: [[f32;4];4]`, and the flat 2D screen case becomes the **orthographic identity**
+   configuration of that matrix — never a separate hardcoded path. RectInstance/SDF quads
+   position through the matrix: a 2D screen is `ortho()`, a spatial surface is a real
+   perspective, one code path. Falsifier: a render of the standard screen scene under the
+   ortho-identity matrix must match the current 2D output bit-for-bit (the G1 oracle extended).
+2. **`FieldPos` is 3D end-to-end — never 2D-with-a-3D-facade.** The scene-position type is
+   already declared 3D in §11.2 (`pub struct FieldPos { pub u: f32, pub v: f32, pub w: f32 }`).
+   This constraint makes that load-bearing: `w` must survive **unchanged** through layout
+   (FE-07/11), scene assembly, the `VertexBridge` upload, and the GPU vertex path — no stage may
+   collapse to `(u, v)` and reconstruct `w`, and no `FieldPos` may be silently truncated to 2D.
+   Falsifier: a round-trip test asserting a non-zero `w` is preserved bit-identically from intent
+   through to the vertex buffer.
+3. **All input routes through the intent-abstracted `InputSource`.** No render/interaction code
+   may consume raw mouse/touch events directly. Every input channel — pointer, keyboard,
+   **voice, gesture, and any future XR controller** — normalizes to `Intent` via an `InputSource`
+   implementation (§11.2 already declares `pub trait InputSource { fn poll(&mut self) ->
+   Option<Intent>; }` and the `Intent` enum). PointerSource ships in P38b; VoiceSource/gesture
+   are P64; an XR-controller source is a later `InputSource` impl needing **zero** change to the
+   intent surface. Falsifier: grep gate — no event-type-specific handler
+   (`mousedown`/`touchstart`/…) outside the `InputSource` adapters.
+4. **Exactly one XR seam.** There is **one** extension point where an XR backend (OpenXR native,
+   WebXR web) supplies the per-eye `view`/`projection` matrices (constraint 1) and pose-derived
+   `Intent`s (constraint 3); the render core consumes them unchanged. Adding the XR backend later
+   must require **no restructuring** of the render core — it is a new provider behind that one
+   seam, exactly as `TunnelProvider`/`VpsProvider` are named-but-unbuilt ports elsewhere in the
+   roadmap (SYNTHESIS §3.2 rationale 6). The seam is named now; the backend is Track-R.
+
+**Not-done clauses:** a pipeline with a 2D-only transform path, a `FieldPos` truncated to 2D at
+any stage, an input handler bound to a concrete event type outside an `InputSource`, or more than
+one (or zero) XR seam = **NOT done** — regardless of Wave-0 green totals. Building an actual
+OpenXR/WebXR backend in Wave-0 remains out of scope (Track-R); only the four structural
+properties are required now.
+
+### 12.3 FE-15 (mirror base) + FE-16 (fallback ladder) reaffirmed as the shared imported base
+
+FE-15 (the a11y **semantic-mirror base** — §2's mirror-node shape + §3.6's per-frame reconcile,
+clip-path SR-only root, zero painted pixels) and FE-16 (the **WebGL2 → CPU `compose_field`
+fallback ladder** — §3.6) are the **canonical shared foundations** that every new W1/W2/W3 surface
+blueprint **imports**, not re-derives. Specifically: **P57, P58, P69, P70, P71, and P73** cite
+FE-15/FE-16 from this file — P58 generalizes the FE-15 mirror to every screen (plus the shared
+Playwright a11y-tree gate), and P57's a11y half rides P58's ARIA-textbox convention on top of it;
+every surface blueprint carries the FE-16 "renders correctly on the WebGL2 and CPU floors" DoD
+line (SYNTHESIS §3.2's WebGL2-floor standing gate). There is exactly **one** mirror implementation
+and **one** fallback ladder in the product; a blueprint that stands up a second of either = scope
+violation, not initiative.

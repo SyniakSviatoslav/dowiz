@@ -16,6 +16,7 @@ name = "agent-loop"
 version = "0.1.0"
 dependencies = [
  "agent-facade",
+ "llm-adapters",
 ]
 
 [[package]]
