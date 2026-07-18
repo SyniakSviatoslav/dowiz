@@ -2,6 +2,11 @@
 //! Canonical kernel. The TS app (`/root/dowiz` apps/*) is the legacy oracle; this replaces it.
 //! No float on money, no I/O. Verified-by-Math: RED+GREEN tests per module.
 
+/// In-code protocol/wire version for the kernel. Independent of the repo CalVer
+/// tag so a breaking kernel change (FSM-graph / `_js` export / ledger-layout) can
+/// be gated without a repo retag. Bump on any such change.
+pub const KERNEL_PROTO_VERSION: &str = "2026.07.0";
+
 /// OPT-IN post-quantum crypto core (ML-DSA-65 / ML-KEM-768 / X25519 / AES-GCM).
 /// KAT-gated byte-exact vs NIST ACVP vectors. Behind `pq` feature so the
 /// canonical order/money core stays serde-free. Mesh/transport identity seam.
