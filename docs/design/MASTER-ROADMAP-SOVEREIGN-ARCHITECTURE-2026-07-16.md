@@ -2022,12 +2022,54 @@ the owner-facing Tauri client (P39) needs a genuine multi-hub connection mode (h
 capability-certs, one per hub, fan out reads/writes, merge client-side) — not yet designed,
 named as a gap against P39/P48.
 
-### 16.19 What this section deliberately does not resolve
-Per the operator's own instruction (*"продовжував працювати у визначеному напрямку"* — a
-~50-question progressive dialogue, tracked outside this file, roughly 25 of ~50 answered as of
-this checkpoint), several real sub-questions are named but not yet closed: the Cloudflare
-Tunnel multi-tenant credential-isolation design (§16.2), the exact Tier-3 web-UI rebuild scope
-(audit triage `#10`/`#11`, DELIVERY grade F), the payment-adapter port/adapter design (§16.13),
-the in-hub multi-vendor data model (§16.15), the owner multi-hub client mode (§16.18), and the
+### 16.20 Target market — multi-language/multi-market from day one
+Operator's ruling: no single-market MVP restriction (the stale openspec Albania/`sq` framing
+is explicitly superseded) — i18n architecture from Wave-0, though the *first real order* can
+still land in whichever single market is fastest; the requirement is architectural (no
+hardcoded locale/currency), not a demand for N markets simultaneously live at launch.
+
+### 16.21 `dowiz.org` public role — pure infrastructure, no public vendor catalog
+Operator's ruling (Recommended option, confirmed), reversing this section's own earlier
+§16.6 framing: *NOT even a directory of links.* `dowiz.org` publicly lists no vendors at all.
+Each venue gets its `/s/:slug` link and markets it entirely through its own channels (social
+media, QR codes, the §16.7 auto-posting automation) — dowiz never inserts itself between a
+venue and its own customers as a discovery layer. `dowiz.org`'s public surface is a
+product/demo page for **prospective venue owners** evaluating the platform (the original
+"переглянути та спробувати" framing was about trying the *product*, not browsing food) plus
+the self-serve signup flow (§16.12) and installable-client hosting (§16.8). **Supersedes**
+§16.6's "dowiz.org as directory" line — recorded as a correction, not silently overwritten:
+§16.6's isolated-hub topology stands, only the "directory" characterization of `dowiz.org`
+itself is retracted.
+
+### 16.22 Push notifications — hub-owned, no central token store
+Operator's ruling (Recommended option, confirmed): each hub pushes to APNs/FCM directly and
+stores its own push tokens locally — no dowiz-central token store, extending §16.14's
+zero-central-server-state invariant to notifications specifically, closing what would
+otherwise have been a real architectural exception to that rule.
+
+### 16.23 Customer identity — client-side data wallet, no dowiz account, no per-venue re-entry
+Operator's ruling: neither a separate account per venue (friction) nor a central dowiz account
+(would violate §16.6/§16.14 isolation) — a **client-side data wallet**. The customer's own
+device/browser/app stores their details (name, address, payment method) locally and offers to
+autofill them at any new hub's checkout, with no server-side account anywhere, dowiz-operated
+or per-venue. This is the same client-side-aggregation principle §16.18 already established for
+the owner's multi-hub view, applied symmetrically to the customer side — a second confirmation
+that "no central state" resolves these UX-friction questions via the client, not via a new
+server-side exception each time one comes up.
+
+### 16.24 Courier payout — fully the venue's responsibility, dowiz touches no courier money
+Operator's ruling (Recommended option, confirmed): dowiz does not facilitate courier payout in
+any form — consistent with §16.3 (venue brings its own couriers) and §16.16 (dowiz takes no
+transaction percentage, vendor keeps 100%). dowiz remains a dispatch **protocol**, never a
+money intermediary for courier compensation. The payment adapter (§16.13) needs no split-payout
+logic — this closes what could otherwise have become scope creep into the payment design.
+
+### 16.25 What this section deliberately does not resolve
+Per the operator's own instruction (a ~50-question progressive dialogue, tracked outside this
+file, ~32 of ~50 answered as of this checkpoint), several real sub-questions are named but not
+yet closed: the Cloudflare Tunnel multi-tenant credential-isolation design (§16.2), the exact
+Tier-3 web-UI rebuild scope (audit triage `#10`/`#11`, DELIVERY grade F), the payment-adapter
+port/adapter design (§16.13), the in-hub multi-vendor data model (§16.15), the owner multi-hub
+client mode (§16.18), the client-side data-wallet's concrete implementation (§16.23), and the
 full remaining question set. This section grows via the same append-only convention as further
 rounds settle each one — it is not a final architecture document.
