@@ -149,14 +149,26 @@ fn item_from_domain(i: &OrderItem) -> ItemOut {
 fn order_from_in(o: OrderIn) -> Result<Order, String> {
     let status = OrderStatus::from_str(&o.status)
         .ok_or_else(|| format!("unknown OrderStatus: {}", o.status))?;
-    let items = o.items.into_iter().map(item_to_domain).collect();
+    let items: Vec<OrderItem> = o.items.into_iter().map(item_to_domain).collect();
+
+    // V3 1.2 / 5.6 (ROUND-2 GAP-AUDIT, E1 forged-order-total): the `subtotal`
+    // and `total` carried in the untrusted JSON are attacker-controlled and MUST
+    // NOT be trusted. Recompute them server-authoritatively from the items
+    // (Layer G money recompute) so a forged total cannot survive a fold. The
+    // JSON values are dropped.
+    let subtotal = Order::compute_subtotal(&items)
+        .map_err(|e| format!("order_from_in: {}", e))?;
+    // Total is provisional (tax/fee not folded until a server estimate) — matching
+    // place_order, which sets total = subtotal on creation.
+    let total = subtotal;
+
     Ok(Order {
         id: o.id,
         customer_id: o.customer_id,
         status,
         items,
-        subtotal: o.subtotal,
-        total: o.total,
+        subtotal,
+        total,
         created_at_ms: o.created_at_ms,
         channel: o.channel,
         cash_pay_with: o.cash_pay_with,
@@ -829,6 +841,34 @@ mod tests {
         {"product_id":"p1","modifier_ids":["m1"],"quantity":2,"unit_price":500},
         {"product_id":"p2","modifier_ids":[],"quantity":1,"unit_price":300}
     ]"#;
+
+    #[test]
+    fn apply_event_recomputes_forged_total_from_items() {
+        // V3 1.2 / 5.6 (ROUND-2 GAP-AUDIT, E1 forged-order-total): an attacker
+        // controls the `total`/`subtotal` fields in the JSON they hand to
+        // apply_event_js. The kernel must recompute them from the items, never
+        // trust the wire value.
+        let json = place_order_logic(Some("c1".into()), SAMPLE_ITEMS, Some("web".into()))
+            .expect("place_order_logic ok");
+
+        // Tamper: stamp a forged total onto the serialized order.
+        let mut v: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let forged = 9_999_999i64;
+        v["total"] = serde_json::json!(forged);
+        v["subtotal"] = serde_json::json!(forged);
+        let tampered = serde_json::to_string(&v).unwrap();
+
+        let updated = apply_event_logic(&tampered, "CONFIRMED")
+            .expect("apply_event_logic ok");
+        let out: serde_json::Value = serde_json::from_str(&updated).unwrap();
+
+        // True total = 2*500 + 300 = 1300 (provisional, no tax/fee folded).
+        let expected = 2 * 500 + 300;
+        assert_ne!(out["total"], forged, "forged total must NOT survive the fold");
+        assert_eq!(out["total"], expected, "total must be recomputed from items");
+        assert_ne!(out["subtotal"], forged, "forged subtotal must NOT survive");
+        assert_eq!(out["subtotal"], expected);
+    }
 
     #[test]
     fn place_order_rejects_negative_quantity_and_price() {
