@@ -811,3 +811,176 @@ H-1 code block. Per the §"Long-Term Consequences (b)" ownership split: `strange
 are **local operator magnitudes** (risk appetite, per-node), while `PENALTY_HALFLIFE_TICKS` and the
 penalty shape are **protocol-defaults with a pinned floor** (a node may tighten — forgive slower,
 penalize harder — never loosen the dampener into uselessness).
+
+---
+
+## Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+> Added by a decorrelated audit/deepening pass per `AGENTS.md`'s Detailed Planning Protocol (steps 3, 5,
+> 6) and the Anu/Ananke doctrine. This blueprint predates the per-blueprint DECART/2Q/Anu-Ananke
+> discipline B1/B2/B4 carry inline; this appendix supplies it without touching §0–§5, Extended Context,
+> Definition of Done, Event-Driven Architecture Treatment, Long-Term Consequences, or Safety Hardening
+> above — those sections stand exactly as written. Re-verified live against the current tip of
+> `feat/agentic-mesh-protocol-2026-07-17` (worktree `/root/dowiz-agentic-mesh`, through `84a1e272d`),
+> 2026-07-17.
+
+### (a) Code-grounded re-verification — citations checked, drift found and corrected
+
+**Confirmed landed exactly as designed — `TokenBucket::release` (Phase A migration step 1).**
+`kernel/src/token_bucket.rs:101-115` (current numbering) carries `pub fn release(&self, n: u64)` with
+the exact saturating-at-capacity semantics §2.2/DoD specify, plus a `#[cfg(test)] fn raw_tokens(&self)`
+test-only reader (`:124-127`) and two tests — `release_returns_exact_tokens_when_below_capacity`
+(`:161-171`) and `release_saturates_at_capacity` (`:173-193`) — that are the exact two falsifiers the
+DoD's "sharpened sub-DoD" names (release past capacity must clamp to exactly `capacity`, provable
+against the *internal* store, not just the refill-masked `available()` read path). This landed via
+dowiz commit `f30189262`, on **this worktree's branch specifically**: `/root/dowiz`'s own default
+checkout (`feat/harness-llm-backend`) does **not** contain this commit
+(`git merge-base --is-ancestor f30189262 HEAD` → no, on that branch/checkout) — the code exists only on
+`feat/agentic-mesh-protocol-2026-07-17`, which is this worktree. A re-verification against a bare
+`/root/dowiz` checkout on a different branch would wrongly conclude `release` is still missing.
+
+**§1's own framing is now historical, not wrong.** §1's claim "the API (`new`/`try_acquire`/`available`)
+has no settlement, release, or refund entry point" was true of the pre-`f30189262` file and is exactly
+the gap §2.2/§3 step 1 were written to close — it is now closed, by this blueprint's own step 1. Not a
+defect; recorded so a reader doesn't mistake §1 for the current state of the file.
+
+**`event_log.rs` citations in §1 have drifted ~18-20 lines and should be read as historical, not
+current.** B3's mtime (01:32) predates `f30189262`'s P07 dedup-fix commit (02:30), which added a
+substantial doc-comment block ahead of `commit_after_decide` and restructured its dedup path. Re-verified
+current positions:
+- `commit_after_decide` — cited `:339-361`; now `:357-382` (dedup check now at `:369-372`, not
+  `:350-351`; the durability barrier — `self.append_raw(ev)` — now at `:380`, not `:359`).
+- `commit_after_decide_drift_gate` — cited `:389-419`; now starts `:410`; the Unstable-rejection
+  `return Err(...)` is now at `:430` (cited `:409-414`).
+- `CommitError` enum — cited `:263-268`; unchanged, confirmed byte-identical.
+- Duplicate-short-circuit-before-decide — the *behavior* cited (`:350-351`) is confirmed still true, now
+  living at `:369-372`.
+None of this changes what §1 asserts about the mechanism (drift gate → decide → durability barrier,
+typed Law/Store poles) — every described property re-verified true at the new line numbers. This is a
+citation-drift finding, not a design finding: worth a line-number refresh the next time this file is
+touched, not a re-review of the design.
+
+**A side effect of re-checking these same lines, outside this blueprint's own scope but worth recording
+here:** the current `commit_after_decide` body (`:366-372`) dedups and persists under the *same* raw
+content-id via `append_raw` — i.e. the P07 §2 fix `BLUEPRINT-B2` §1.1 names as its own hard precondition
+reads, on this branch, as **landed**, not open. B3 takes no position on B2's gate and does not depend on
+P07; flagged only because this pass's citation check happened to read the exact lines B2's precondition
+concerns, and the consolidated doc's §5 Q1.2 ("P07 §2 fix is not landed anywhere in this repository")
+predates this commit. Not resolved here (out of this file's scope, and the consolidated doc is read-only
+for this pass) — surfaced for the lead agent's attention.
+
+**"bebop2 token_bucket paths" — none exist to verify.** Checked: B3 makes zero references to `bebop2` or
+`bebop-repo` anywhere in its text, and `/root/bebop-repo` has no `token_bucket`-named file at all. This
+blueprint is entirely `kernel/src`-scoped (dowiz); there is nothing bebop2-side to cross-check here.
+
+**Confirmed still entirely unbuilt — Phase A steps 2–3, all of Phase B, all of Safety Hardening
+H-1/H-2/H-3.** A grep for `EnvelopeMap`, `try_dispatch`, `ExposureLedger`, `ExposureError`, `Commitment`
+across `kernel/src/` returns **zero** matches outside a single forward-reference doc-comment in
+`token_bucket.rs` (`:92`, naming `EnvelopeMap` as `release`'s future consumer). Matches the task framing
+exactly: "the envelope+ledger halves remain."
+
+**A genuine, previously-unflagged dependency gap: `CapabilityClass` does not exist under that name (or
+any obvious alias) in B1's landed surface.** B3's header states its only hard dependency on B1 is "the
+source of `CapabilityClass`," and §2.2 keys `EnvelopeMap` on `(PeerId, CapabilityClass)`. B1's landed
+code (`kernel/src/ports/agent/{cap,scope,manifest,admission}.rs`, same `f30189262` commit) defines
+`Capability`, `HybridPolicy`, `NodeId`, `Delegation`, `AnchorRoster`, `RevocationSet`, `SignedFrame` —
+grepped exhaustively for `class`/`Class` over every file in `kernel/src/ports/agent/`, and **no
+`CapabilityClass` type, field, or documented alias exists**. Phase A step 2 (`EnvelopeMap`) is therefore
+not literally startable yet against the landed B1 surface — the prose dependency has not yet been
+satisfied by a concrete symbol to read. Two honest possibilities, neither resolved here: (i) B1
+(actively being edited by the lead agent concurrently with this pass) has not yet landed this piece, or
+(ii) `CapabilityClass` is meant to be *derived* from one of the landed types (`Capability`'s fields, or
+`HybridPolicy`) rather than be its own enum, in which case B3's own text should name the derivation once
+B1 settles. Recorded as the sharpest Q1 doubt below rather than guessed at.
+
+### (b) DECART judgment
+
+**No DECART owed — confirmed, not assumed.** Grepped B3's own text for `crate` (zero hits) and diffed
+`kernel/Cargo.toml` across `f30189262` (zero changes). Every type this blueprint introduces (`PeerId`,
+`Commitment`, `PeerExposure`, `ExposureLedger`, `EnvelopeMap`, `ExchangeRegime`) is built from
+`std::collections::BTreeMap`, fixed-size byte arrays, and integer arithmetic; every operation it adds
+(`try_commit`/`apply`/`fold_exposure`/`try_dispatch`/`release`) composes existing in-kernel primitives
+(`TokenBucket`, `EventLog::commit_after_decide*`, `Hydra::ingest_peer_breach`,
+`order_machine::fold_transitions`'s reducer shape). No new crate, no vendor choice, no external tool
+anywhere in this design — the ALL-RUST-NATIVE constraint is satisfied trivially because nothing
+non-stdlib is proposed. Consistent with the rest of the arc's pattern (B4 owed a DECART because it adds
+`criterion`; B1's Wasmtime dependency owed one per consolidated §5 Q1.4; B3 owes none because it is pure
+composition over primitives that already exist in-repo).
+
+### (c) 2-question doubt audit (per-blueprint, `AGENTS.md` "blueprint-organization stage")
+
+**Q1 — least confident about, each actually checked:**
+
+1. **`event_log.rs` line citations in §1 are stale by ~18-20 lines** (drift from the P07 commit landing
+   after this blueprint's last re-verification) — corrected above; substance unaffected.
+2. **`CapabilityClass` has no concrete symbol in B1's landed surface** — checked exhaustively by grep,
+   zero hits; Phase A step 2 cannot literally begin against a name that does not exist yet. The sharpest
+   doubt in this pass (elevated to Q2).
+3. **`TokenBucket::release`'s "every pre-existing test still green" claim was verified by reading
+   source, not by running `cargo test`.** Confirmed the two new tests exist and match the described
+   falsifier shape exactly, and that the diff touched no pre-existing test body — but this pass did not
+   execute the suite to observe a live GREEN. Routine risk (the diff is additive-only and small), stated
+   rather than silently assumed executed.
+4. **Phase A step 2's "landable before B2" claim is doubly conditioned, not singly.** The header states
+   only a B1 dependency; this pass found that dependency presently unsatisfied by name (item 2) — so
+   "landable before B2" is accurate (no B2 dependency exists) but incomplete: it should currently read
+   "landable before B2, blocked on B1 landing (or B3 naming) a concrete `CapabilityClass` symbol."
+5. **The entire Safety-Hardening section (H-1/H-2/H-3) is designed against types that do not exist
+   yet** (`ExposureLedger`/`PeerExposure`/`Commitment` are Phase-B, unbuilt) — internally consistent with
+   the base design, but nothing in H-1/H-2/H-3 has been checked against *live* struct definitions the
+   way B2's SH-1/SH-2 cite live `capability.rs`/`redline.rs` lines, simply because no live struct exists
+   yet to check against. Not a flaw — a scope note: this section's citations are all forward
+   (self-referential to §2.1's own sketch), not backward to shipped code.
+6. **The `try_commit`/`decide`/`append` gate ordering (§2.1) composes cleanly against
+   `event_log.rs`'s *current* `commit_after_decide_drift_gate` shape** — but no existing sibling
+   "exposure gate" stub was found anywhere in the kernel to confirm the exact insertion slot is as clean
+   in practice as it reads on paper (no code exists yet to insert into — expected for a Phase-B item, not
+   a red flag, but the composition claim is design-level verified, not integration-level verified).
+7. **B4's crypto-bench dependency the consolidated doc names for B3** (§4 table's "`try_commit`-overhead
+   criterion" symbolic-against-B4) does not appear anywhere in B3's own text — B3 never mentions B4 or a
+   bench-derived constant. Either the dependency is looser than the consolidated doc implies (plausible:
+   B3's thresholds are all integer fractions of operator-set caps, none reading a latency number), or it
+   is a real gap the consolidated doc asserts and this blueprint doesn't carry. Flagged, not resolved —
+   B3's own §2.3 consts (`HIGH_WATER`, `LIMIT_DWELL_TICKS`) are stated as "single-authority" with no
+   external bench citation, so the likelier read is the former.
+
+**Q2 — the biggest thing this pass might be missing:** the `CapabilityClass` gap (Q1 item 2) could
+already be a non-issue by the time this is read — **B1 is being actively edited by the lead agent in
+this same directory, concurrently with this pass** — and may land the missing symbol (or an explicit
+alias/derivation) before this appendix is read. This pass's grep is a snapshot of a moving target, not a
+guarantee; the honest blind spot is that the one real gap found here is exactly the kind of thing a
+concurrent edit could close without this document ever being told. Whoever next touches B3's Phase A
+step 2 should re-grep `kernel/src/ports/agent/` for a capability-class-shaped symbol before assuming the
+gap is still open.
+
+### (d) Anu (logic) & Ananke (organization) check
+
+**Anu.** The Phase A / Phase B split (Definition of Done) is genuinely derived, not asserted: Phase A's
+"depends only on B1" is checked in this pass against the actual landed B1 surface (partially failing —
+the `CapabilityClass` finding in (a)) rather than accepted from the header. The Phase-B gate ("MUST NOT
+be marked done while `expiry_tick` and B2's two settlement-outcome event kinds are not frozen...
+checkable form: a Phase-B 'done' claim is invalid unless `git grep` shows B2's TLV constants landed") is
+a real, falsifiable derivation, mirroring B2's own P07 gate — Anu holds there. Where Anu is
+**incomplete**: the header's "Depends-on: B1 for the source of `CapabilityClass`... this blueprint
+defines no competing concept" is stated as satisfied-by-composition, but this pass shows the concept
+does not yet resolve to a concrete symbol in the landed dependency — that Phase A step 2 is presently
+unblocked is derivable only for "no *B2* block exists," not for "no block exists at all."
+
+**Ananke.** The Phase-B gate is Ananke-shaped by design (a `git grep`-checkable precondition, not a
+memory-reliant one) — genuinely good structure, called out approvingly. The `CapabilityClass` gap this
+pass found is **not** yet Ananke-shaped: today it lives only as prose ("Depends-on: B1 for..."), which
+relies on a future implementer noticing the symbol is missing rather than a structural check that forces
+the noticing. Recommended (not applied here — out of scope for an appended pass to rewrite the existing
+DoD): a future edit to this file's Definition of Done should add a Phase-A-step-2 precondition symmetric
+to the existing Phase-B one — e.g. "step 2 is not done unless `git grep` shows a `CapabilityClass` (or a
+named, documented alias) resolving to a concrete type under `kernel/src/ports/agent/`" — so this exact
+gap cannot silently reopen the next time someone re-reads this blueprint and assumes B1 already supplies
+it because the header says so.
+
+*Appendix pass, 2026-07-17. Planning artifact only — no `.rs` file was edited in this pass; no existing
+section of this blueprint (§0–§5, Extended Context, Definition of Done, Event-Driven Architecture
+Treatment, Long-Term Consequences, Safety Hardening) was modified. Grounded in live reads of
+`kernel/src/token_bucket.rs` (current, 202 lines), `kernel/src/event_log.rs` (`:263-268`, `:357-382`,
+`:410-437`), `kernel/src/ports/agent/{cap,scope,manifest,admission}.rs` (grep for `CapabilityClass` and
+any `class`-bearing symbol), `kernel/Cargo.toml` (diffed across `f30189262`), and the `f30189262` commit
+diff itself.*
