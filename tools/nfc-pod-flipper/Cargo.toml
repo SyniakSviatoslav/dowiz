@@ -1,0 +1,39 @@
+# Flipper Zero (flipperzero-rs) app: dev-tooling NFC reader for dowiz PoD tags.
+#
+# no_std, target thumbv7em-none-eabihf. This is a DEV/TEST harness — a Flipper Zero
+# is a $50-ish portable NFC read/write/emulate device an engineer can use to author
+# and validate the on-tag NDEF format BEFORE any production NTAG stickers or courier
+# phones exist. It is NOT proposed as production hardware (see the research report).
+#
+# NOTE ON TOOLCHAIN: the upstream flipperzero-template pins nightly ONLY to use the
+# unstable `cargo-features = ["different-binary-name"]` (to rename the output to
+# `<name>.fap`) — a packaging nicety, not a compile requirement. We drop it so the
+# real compile+link runs on STABLE; the `.fap` rename is a post-build step.
+#
+# Empty [workspace] => own workspace root (never pulled into an ancestor workspace).
+[workspace]
+
+[package]
+name = "nfc-pod-flipper"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85.0"
+license = "MIT"
+description = "Flipper Zero dev-tooling reader for dowiz proof-of-delivery NDEF tags."
+autobins = false
+
+[[bin]]
+name = "nfc-pod-flipper"
+path = "src/main.rs"
+bench = false
+test = false
+
+[dependencies]
+flipperzero = "0.16.0"
+flipperzero-sys = "0.16.0"
+flipperzero-rt = "0.16.0"
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+lto = true

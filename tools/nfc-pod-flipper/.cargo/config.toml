@@ -1,0 +1,24 @@
+# Build config for the Flipper Zero FAP, taken verbatim from the upstream
+# flipperzero-rs/flipperzero-template (.cargo/config.toml), which links a
+# relocatable Cortex-M4 binary against the flipperzero-rt linker script.
+[target.thumbv7em-none-eabihf]
+rustflags = [
+    # CPU is Cortex-M4 (STM32WB55)
+    "-C", "target-cpu=cortex-m4",
+
+    # Size optimizations
+    "-C", "panic=abort",
+    "-C", "debuginfo=0",
+    "-C", "opt-level=z",
+
+    # LTO helps reduce binary size
+    "-C", "embed-bitcode=yes",
+    "-C", "lto=yes",
+
+    # Linker flags for relocatable binary (flipperzero-rt.ld is emitted by
+    # flipperzero-rt's build.rs into OUT_DIR, which is on the link-search path).
+    "-C", "link-args=--script=flipperzero-rt.ld --Bstatic --relocatable --discard-all --strip-all --lto-O3 --lto-whole-program-visibility",
+]
+
+[build]
+target = "thumbv7em-none-eabihf"

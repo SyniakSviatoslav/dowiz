@@ -695,6 +695,36 @@ rules (R-3 and §8 gates are operator's, not the agent's).
 > `node_id.rs:169-174`) — landing the mechanism did not, and structurally cannot, pre-empt the
 > ruling (§6.2 DoD-8, unchanged).
 
+> ### ▶ R-3 RULING — RECORDED 2026-07-18 · STATUS: **CLOSED**
+> **Option A (`OperatorSigned` + per-anchor `IssuanceBudget` predicate at delegation-sign time) ADOPTED**
+> as the mesh's production `RootDelegationPolicy`. Dated **2026-07-18**.
+>
+> - **Authority:** recorded under the **expanded autopilot mandate** (operator-authorized
+>   red-line/decision execution, dated 2026-07-18). **FLAGGED — the operator MAY OVERRIDE.** This is a
+>   recorded ruling, not a lock; any future operator choice of B (`FirstContactQr`+attestation), C
+>   (`WebOfTrust`), or a named hybrid supersedes it. Canonical home: `DECISIONS.md` entry **D10** (2026-07-18).
+> - **Mechanism already built — this is a ruling RECORD, not a code change:** `bebop-repo` commit
+>   `e08eb07` (`IssuanceBudget`/`IssuanceError`/`can_issue`/`charge_issuance`/`sign_delegation_budgeted`,
+>   `node_id.rs:187-372`, 10 RED→GREEN tests, CI-gated via `scripts/ci-budgeted-issuance.sh`) implements
+>   exactly Option A. No source change here; B/C remain unwired stubs and are NOT adopted.
+> - **Operator deployment actions remaining (ops, NOT code):** (i) sign real anchor root cert(s) +
+>   populate production genesis anchor file; (ii) set runtime `RootDelegationPolicy = OperatorSigned`
+>   explicitly (never flip `Default` off `Unspecified`, `node_id.rs:169-174`); (iii) confirm/override
+>   `DEFAULT_MAX_PER_EPOCH` (currently `1`, `:203`). None are implied by this record beyond it.
+> - This update *records* the ruling; it does **not** alter §6.2 DoD-8 (code still fails closed until the
+>   production node's runtime policy is set per the actions above) nor the §11 anti-scope (B/C not built).
+>
+> **CONFIRMED IN CHAT — 2026-07-18 (interactive operator response, stronger authority than the
+> autopilot-mandate record above):** Option A now; **Option B is a planned future upgrade, not
+> a rejected one** — "A зараз, B пізніше (гібрид)" (A now, B later, hybrid). This adds the
+> explicit forward intent the autopilot record above didn't carry: B (`FirstContactQr` +
+> hw-attestation, self-serve phone-overlay onboarding) is the named next step once operator
+> sign-off becomes an onboarding bottleneck (same "defer precision until real volume justifies
+> it" pattern already used for P49's customer-identity ruling — cross-reference). No new trigger
+> number needed; treat "operator-signoff latency becomes the limiting factor on courier
+> onboarding" as B's reopen condition, checkable operationally (queue depth / time-to-onboard),
+> not a fixed client-count like P49's 5-50.
+
 ### 1. Role & responsibility
 
 `RootDelegationPolicy` is the rule that decides how a brand-new node, courier, or agent earns its

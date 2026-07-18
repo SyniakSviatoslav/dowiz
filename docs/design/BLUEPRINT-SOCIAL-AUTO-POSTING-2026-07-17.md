@@ -38,6 +38,17 @@
   Google Business Profile (vendor approval form). **WhatsApp is explicitly re-scoped out**: it has
   no feed; "posting" there is opt-in customer messaging = the existing IP-15 `ChannelAdapter`
   design's territory, not this port's.
+- **Extended 2026-07-18 (§11, operator directive):** content generation (native-template
+  zero-AI path + `LlmBackend`-drafted path, one `MasterPost` output type), manual-approval
+  DEFAULT with opt-in earned-autonomy agentic posting (P40 `ToolPort` seam, P42-gated), and the
+  channel-breadth map — mailing lists + SMS ride the IP-15 `ChannelAdapter` campaign lane under
+  this phase's number, never the `SocialPoster` trait; transactional sends stay P43/P49.
+- **Extended 2026-07-18 (§12, operator directive): YouTube** joins as **Wave 2-Y** — a Shorts
+  *relay* of owner-shot vertical clips via `videos.insert` (quota restructured per official
+  2026-06-01 docs: dedicated bucket, 100 uploads/day per API project, fleet-shared). YouTube
+  **Community posts have no write API** — never offered (IP-15 honesty); `compose()`-derived
+  auto-Shorts **deferred behind TRIGGER-YT-AUTOGEN** (no video encoder exists in-repo and none
+  is added). Instagram + Facebook remain fully covered by the existing Meta Wave 2 lane.
 - **Biggest single risk found** (see §8, §9): the Meta lane concentrates every client behind
   dowiz's *one* reviewed app — one spam flag / failed re-review suspends posting for *all* venues
   at once. Telegram/Viber use per-venue tokens with no shared app identity and have no such choke
@@ -661,3 +672,287 @@ couple this feature's viability to the harness arc. Recorded so it's a decision,
 - Does not promise Meta/TikTok timelines — external review queues are named as unschedulable.
 - Does not add WhatsApp broadcast — re-scoped to IP-15's messaging design (§2.6).
 - Does not build UI — composer/preview/OAuth surfaces are Phase-16 dependencies, named in §7.
+
+---
+
+## 11. EXTENSION (2026-07-18) — content generation, manual/agentic modes, channel breadth
+
+> **Origin: operator directive 2026-07-18** (verbatim intent): not only Telegram — auto-posting
+> of AI-generated OR natively-authored content to social media, channels, messengers, mailing
+> lists, SMS — supporting BOTH manual posting AND agentic-workflow-driven posting.
+>
+> This section EXTENDS §0–§10. It changes **no** Wave 0/1/2 platform structure, no §3 port type,
+> no §6 decision, no §8 risk row. Cross-referenced designs, read live this pass:
+> `CORE-ROADMAP-2026-07-17/BLUEPRINT-P40-agent-loop-tool-wiring.md` (§2 `ToolPort` shape, §1
+> anti-scope, §4.1 reachability argument) · `BLUEPRINT-P41-three-mode-ai-operation.md` (§2
+> `AiMode { Off, LocalOffline, Connected }`, default Off, no auto-escalation) ·
+> `DEMO-MARKETING-PIPELINE-REFACTOR-2026-07-17.md` (P20 DM-1/DM-7 offer objects) · master
+> roadmap §10.5.5 (P22/P43 absorption ledger).
+
+### 11.1 Content generation — dual path, ONE output type
+
+The §5.1 flow already begins "owner authors ONE master post" without naming a type. Named now:
+
+```rust
+/// The pre-adapt master post — what BOTH generation paths and the manual composer produce.
+/// Downstream (approve → adapt → preflight → Spool) consumes MasterPost and cannot tell
+/// which path created it; the parity test below pins that.
+pub struct MasterPost {
+    pub venue_id: String,
+    pub caption: String,
+    pub media: Vec<MediaItem>,        // §3 type, reused verbatim
+    pub link: Option<String>,
+    pub source: DraftSource,          // provenance — load-bearing (§11.3 badge + ratchet)
+    pub status: DraftStatus,
+}
+pub enum DraftSource { Manual, Template(TemplateId), Llm { model_id: String } }
+pub enum DraftStatus { PendingReview, Approved, Discarded }
+```
+
+- **Path A — native template (zero-AI; works in P41 mode 1 / `AiMode::Off`).** A closed set of
+  deterministic templates (one per §11.2 post type), pure fn
+  `render_template(TemplateId, &Facts) -> MasterPost` — no LLM, no network, table-tested.
+  Facts are structured inputs (menu-item name/price, offer terms, new hours), never free text
+  from a model. Example: new menu item added → "Новинка в меню: {name} — {price} грн. {link}".
+- **Path B — AI draft (P41 modes 2/3).** One `LlmBackend.chat` call through the existing
+  Harness/Dispatcher (budget + harvest apply — no second budget mechanism, P40 §3.6 discipline);
+  prompt = the same structured facts + optional venue voice notes; output = `MasterPost` with
+  `Llm` provenance. `AssistantUnavailable` ⇒ degrade to Path A or the plain manual composer —
+  typed, never a blocked post. This also answers §9 Q2's per-platform-tone problem: Path B can
+  draft per-platform caption variants where Path A emits one caption for all.
+- **Reconciliation with §9 Q2's recorded deferral** (honesty, not silent contradiction): §9
+  deliberately kept LLM caption drafting OUT of v1 because it "would couple this feature's
+  viability to the harness arc." The 2026-07-18 operator directive supersedes the deferral, and
+  the coupling concern is answered structurally rather than waved off: **Path A keeps the
+  feature fully viable at `AiMode::Off`** — AI is an enhancement lane, never a dependency. This
+  is the P41 three-mode invariant applied to marketing content.
+- **Parity done-check (falsifiable):** one table-driven test feeds a `Template`-produced and an
+  `Llm`-produced `MasterPost` with identical content through adapt + every adapter's
+  `preflight` and asserts byte-identical treatment — downstream indifference proven, not stated.
+
+### 11.2 Post types — grounded, closed set (a venue owner's five, not a marketing suite)
+
+| # | Type | Facts source | Path A template |
+|---|---|---|---|
+| T1 | Daily special / new menu item | menu change (name, price, photo) | yes |
+| T2 | Sold-out notice ("Деруни закінчились — приходьте завтра") | menu item state change | yes |
+| T3 | Offer/promotion announcement | **P20 DM-1 offer objects / DM-7 operator offers — render-only.** The discount math, redemption ledger, and publish-gating stay P20's scope entirely; this post type consumes a computed offer and formats it | yes |
+| T4 | Hours / delivery-area change | venue config change | yes |
+| T5 | Aggregate social proof ("50 замовлень сьогодні") | order-event aggregate count | yes |
+
+- **T5 privacy check (done before proposing, per the directive):** the count is an aggregate over
+  the event log — the same aggregation level as `ChannelLedger.orders_by_channel()`
+  (`analytics.rs`), zero customer fields read. Two guards anyway: (a) minimum threshold — the
+  post type is only offered when count ≥ 10 (a count of 1-2 in a tiny venue is both embarrassing
+  and weakly correlatable to an individual order); (b) the number is READ from the log, never
+  authored — a fabricated count is unrepresentable because the template's fact slot is filled by
+  the aggregate query, not by any text input (model or human).
+- **Closed-set discipline:** a sixth post type is a reviewed enum addition, not configuration.
+  This is the anti-CMS line (§11.6).
+
+### 11.3 Manual vs agentic — approval is the DEFAULT, autonomy is earned
+
+**Manual (DEFAULT, stated as such):** every `MasterPost` — regardless of `DraftSource` — lands
+`PendingReview`. The owner reviews (with an AI-drafted badge from provenance), edits per
+platform, approves. **Only `Approved` drafts are adapted + enqueued to the Spool.** Posting to a
+business's public channels without human review is a real reputational risk; auto-post is
+therefore an explicit opt-in, never a default — this is a design commitment, restated in §11.6
+anti-scope so it cannot be "optimized away" later.
+
+**Agentic (OPT-IN, ratcheted — concrete and falsifiable, not "with guardrails"):**
+
+| # | Guardrail | Falsifier (each a named test at build time) |
+|---|---|---|
+| A1 | First-N: the first **10** posts per (venue, post-type) ALWAYS require approval, opt-in flag notwithstanding | test: post #10 with opt-in on still lands `PendingReview` |
+| A2 | Earned: autonomy activates only after **10 consecutive approved-without-edit** drafts of that type; any edit or rejection resets the counter to 0 | counter-reset test: 9 clean + 1 edited ⇒ counter 0 |
+| A3 | Rate: autonomous posts draw from a **dedicated `TokenBucket` (capacity 1, refill 1/day per platform)** — max one autonomous post per platform per day; manual posts do not consume it | exhaustion test: 2nd autonomous draft same day ⇒ `PendingReview`, not queued |
+| A4 | Revoke: any `SocialError::Rejected` on an autonomous post revokes autonomy for that post-type back to manual (the platform said the content is bad — the P5 return-swing) | revoke test: `Rejected` receipt ⇒ next draft `PendingReview` |
+| A5 | Kill switch: one per-venue config bit disables all autonomy instantly | config-flip test |
+| A6 | **Publish authority is never the model's** (§11.4): even at full autonomy the model only DRAFTS; the `PendingReview → Approved` transition is executed by the deterministic policy layer evaluating A1–A5 | grep/namespace check: no publish/approve symbol reachable from the tool executor |
+
+### 11.4 Agent-loop integration — P40 `ToolPort` pattern, exact seam, correctly gated
+
+P40's live shape (read this pass): closed enums `ToolResource { OrderStatus }` /
+`ToolAction { Read }`, `ToolSpec`/`ToolInvocation`/`ToolOutput`/`ToolError`, `trait ToolPort`
+behind the `agent-facade` firewall — and a hard anti-scope: **exactly one tool in P40; P42
+standardizes the extension pattern.** Therefore the tools below are a **named FUTURE ToolPort
+extension, buildable only after P42's pattern lands** — P40 ships untouched, no enum variant is
+added today.
+
+Two tools, pre-declared (small set — deliberately not a framework):
+
+1. **`draft_social_post`** — scope `{resource: SocialDraft (new closed-enum variant), action:
+   Draft (new variant)}`. Args: post type + structured facts. Executor = §11.1 Path A or Path B
+   selected by `AiMode`; appends a `MasterPost(PendingReview)` to the review queue — and can
+   reach **nothing else** (the facade re-exports the queue-append fn only; same
+   namespace-reachability argument as P40 §4.1). `Publish`/`Approve` are deliberately NOT
+   `ToolAction` variants — unrepresentable, the same structural move P40 used for writes.
+2. **`read_post_queue`** — scope `{resource: SocialDraft, action: Read}`. Lists draft statuses +
+   DEAD rows (§5.1), so the assistant can report "Tuesday's Viber post failed: token expired —
+   re-connect in settings" conversationally.
+
+**Worst-case reachability (P40 §4.1 style):** a fully adversarial model can (i) append drafts to
+a queue a human reads, (ii) read draft/DEAD statuses. It cannot publish, cannot approve, cannot
+name `SocialPoster`, the token store, or the Spool. The blast radius of a hallucinated draft is
+one row in a review queue.
+
+### 11.5 Channel breadth — where each operator-named channel lives (mapped, not lumped)
+
+| Operator's channel | Home | Reasoning |
+|---|---|---|
+| Social media (IG/FB, TikTok, X) | **P22 `SocialPoster`** — Waves 1-2 + §2.4/§2.5 triggers, unchanged | already scoped |
+| Channels (Telegram, Viber channels) | **P22 `SocialPoster`** — Wave 0/1, unchanged | already scoped |
+| Video (YouTube Shorts) *(row added 2026-07-18)* | **P22 `SocialPoster`** — §12 Wave 2-Y | Shorts relay only; Community posts have no write API (§12.1), auto-generation deferred (D-YT-3) |
+| Messengers (WhatsApp/Viber 1:1 campaigns) | **IP-15 `ChannelAdapter` campaign lane** (under P22's number per the roadmap §10.5.5 absorption ledger; a SEPARATE lane from `SocialPoster`) | §2.6's precedent verbatim: recipient-list broadcast to opted-in customers = CRM messaging, not feed publishing |
+| Mailing lists (email) | **same IP-15 campaign lane** | not `SocialPoster`-shaped: N recipients + bounce/unsubscribe/consent ledger vs one `post_id` per channel; legal unsubscribe obligations; needs an email-provider adapter + its own mini-blueprint (named, not written here) |
+| SMS | **same IP-15 campaign lane** | same shape as email, plus the cost honesty below |
+| Transactional sends (order-status, OTP) over ANY channel incl. SMS/email | **NOT this feature — P43 DoD-2 send path + P49 customer-side consumer** | notification ≠ marketing; P43/P49 own it; anti-scope here |
+
+- **SMS cost honesty (directive-mandated, stated plainly):** SMS is per-message **PAID** through
+  any provider (Twilio, TurboSMS, etc.), unlike Telegram/Viber-channel posting which is free.
+  Exact rates are market/provider-dependent (UNVERIFIED here — priced at build time, not
+  assumed); the structural consequence is certain either way: campaign-lane preflight MUST show
+  `recipient_count × unit_cost` before send, and cost pass-through to the venue must be explicit
+  in the UI. A 500-recipient blast is a real invoice, not a free post.
+- **Why the campaign lane shares P22's number but not its trait:** it reuses the producer side
+  verbatim — same `MasterPost`, same §11.3 approval gate + ratchet, same Spool/TokenBucket
+  outbox doctrine, same `?ch=` attribution — and diverges only at egress (per-recipient fan-out
+  + consent ledger). One content pipeline, two egress families. Splitting the producer side
+  across two phases would duplicate the approval/ratchet machinery; forcing recipient-list
+  egress into `SocialPoster` would corrupt a clean one-post-one-receipt trait. The roadmap's
+  "IP-15 → absorbed into P22, do not duplicate under P43" ledger line already points this way.
+
+### 11.6 Added anti-scope (extends §10)
+
+- **NOT a CMS / content-calendar / marketing suite.** Closed 5-type post set (§11.2); no
+  calendar UI; no analytics dashboards beyond the existing `ChannelLedger` readers.
+- **Auto-post-without-review is NEVER the default** — explicit per-venue, per-post-type opt-in
+  behind the §11.3 ratchet, full stop.
+- **Publish is never a model-callable action** (A6/§11.4) — at any autonomy level.
+- **No re-design of P20's discount/offer math** — T3 is render-only consumption of DM-1/DM-7
+  objects; publication gating stays P20/P18's.
+- **No P43 re-scoping** — export/backup/hosting ports and the transactional send path are
+  untouched; only the P22↔P43 boundary is clarified (§11.5).
+- **No SMS/email adapter before the campaign-lane mini-blueprint + consent-ledger design
+  exists.** Recipient lists are personal data (phone numbers, emails) — the one place this
+  extension touches PII, named honestly; the `SocialPoster` lane deliberately holds none.
+  Consent/opt-in/unsubscribe design is a precondition, not a retrofit.
+- **P40 untouched** — no `ToolResource`/`ToolAction` variants until P42's extension pattern
+  lands.
+
+### 11.7 Wave placement (extends §7 — no renumbering, no existing done-check changed)
+
+- **Wave 1-C gains:** `MasterPost` + `DraftSource`/`DraftStatus` + the Path A template renderer
+  + review-queue statuses — all pure, no external approvals, and the §11.1 parity done-check.
+- **New Wave A (agent lane)** — strictly after P40 T1–T9 land AND P42's tool-extension pattern
+  exists: the two §11.4 tools + the §11.3 policy layer. Done-checks: (a) tool-produced draft
+  lands `PendingReview` with a spy asserting **zero** `SocialPoster` calls; (b) ratchet tests
+  A1–A5 green; (c) the §11.1 parity test extended to tool-produced drafts.
+- **Campaign lane (mailing lists / SMS):** blocked on its own mini-blueprint (provider DECART +
+  consent ledger); claims no wave number until that exists.
+
+---
+
+## 12. EXTENSION (2026-07-18) — YouTube as a posting channel (Wave 2-Y)
+
+> **Origin: operator directive 2026-07-18** — add YouTube explicitly as a content-posting
+> channel. This section EXTENDS §0–§11: no §3 port type is changed, no §6 decision reopened, no
+> existing wave renumbered. Research web-verified 2026-07-18 against Google's **official** docs
+> (quota page last updated 2026-06-01) plus secondary passes; claims that could not be verified
+> are marked UNVERIFIED per the §2 convention.
+>
+> **Instagram + Facebook are NOT re-designed here.** Both are already adequately covered by the
+> existing Meta Wave 2 lane — §2.3 research, §7 steps 2a/2b/2e, risks R1–R3 — under Meta's
+> single Graph API app umbrella (Meta owns both platforms; one app, one review, two adapters).
+> YouTube is an *addition to* the wave sequence, not a revision of it.
+
+### 12.1 Platform research — YouTube — MEDIUM-HIGH friction, Meta-class gatekeeping
+
+- **Community posts (text/image posts to a channel's Community tab) — NO write API exists.**
+  The YouTube Data API v3 has no community-post endpoint at all (verified against the official
+  API reference index; a years-old, still-open gap every third-party poster project confirms).
+  Creation is YouTube-Studio-only. Consequence under the IP-15 honesty rule (§1.3): the UI must
+  never offer "post to YouTube Community" — the capability is unrepresentable, exactly like
+  WhatsApp feed posting (§2.6).
+- **Shorts — the one API-reachable posting surface.** No separate Shorts endpoint exists; a
+  Short is an ordinary `videos.insert` upload that YouTube auto-classifies by shape: vertical
+  (9:16), ≤60 s (the reliably-supported bound; the 2024 "3-minute Shorts" expansion as an API
+  classification bound is UNVERIFIED — pin 60 s), plus `#Shorts` in title/description as a
+  conventional hint. Upload is **direct bytes (resumable/multipart)** — like Telegram, zero
+  dependency on the O-SOC-1 public-media-host ruling. Native scheduling exists
+  (`status.publishAt` with `privacyStatus: private`) → `native_schedule: true`.
+- **Quota — restructured; verified against the official quota page (updated 2026-06-01).**
+  `videos.insert` now draws from its **own dedicated bucket: default 100 calls/day per API
+  project** — no longer the legacy 1600-units-against-10,000 model (secondary sources still
+  quoting 1600 are stale). `search.list` likewise has its own 100/day bucket; all other
+  endpoints share the 10,000 units/day pool. **The bucket is per-project, not per-venue**:
+  every venue's uploads ride dowiz's one Google Cloud project → 100 Shorts/day across the
+  whole fleet (≈33 venues at 3/day). Ample for pilot; a quota-extension request form exists.
+  Maps verbatim onto §5: `TokenBucket[platform]` is already per-platform-global — YouTube's is
+  capacity 100, refill 100/day.
+- **Gatekeeping (the real cost — same class as Meta §2.3), two independent Google gates:**
+  (a) **API compliance audit** — uploads from unverified API projects are **locked private**
+  (policy in force since 2020-07-28, still current); locked videos cannot be appealed, only
+  re-uploaded after verification. Pre-audit uploads *succeed* (real video id in the receipt)
+  but stay invisible to the public — an honest single-tenant test surface, a silent failure
+  mode multi-tenant (R8). (b) **OAuth app verification** — `youtube.upload` is a sensitive
+  scope; unverified apps cap at 100 test users, and "Testing"-status apps get 7-day
+  refresh-token expiry. Both are unschedulable external review queues → the paperwork belongs
+  in the Wave-0 lane beside Meta's 0f; multi-tenant activation gates on both passing.
+- **Auth mechanics:** OAuth 2.0 authorization-code flow per venue channel (needs a redirect
+  surface — the same P16-or-minimal-hosted-page dependency as Meta step 2e); refresh tokens are
+  long-lived once the app reaches production status. Token store: `tokens.rs` (§4.5) unchanged,
+  a `youtube_oauth` record kind with refresh housekeeping beside the IG 60-day lane.
+
+### 12.2 Scope decision — Shorts relay YES · Community posts IMPOSSIBLE · auto-generation DEFERRED
+
+- **D-YT-1 — Community posts: not offered.** No API ⇒ no adapter capability ⇒ never in the UI.
+  Revisit only if Google ships a community-post write endpoint (grep-able:
+  **TRIGGER-YT-COMMUNITY**).
+- **D-YT-2 — YouTube lane v1 = Shorts *relay* of owner-shot vertical clips.** The venue owner
+  films a 15-60 s vertical clip on a phone (the production step stays human, free, and
+  per-venue — which also keeps the R2 anti-template posture intact); dowiz uploads it with
+  title/description carrying the `?ch=youtube` link → `ChannelLedger` attribution closes
+  exactly as §5.4. **§3 types are reused verbatim**: a `PostDraft` with one
+  `MediaItem { kind: Video }`; `YoutubeAdapter` caps = `{ text: false, photo: false,
+  video: true, album: false, max_caption_chars: 5000 (description bytes), max_media_per_post:
+  1, media_by_upload: true, media_by_url: false, links_clickable: true, native_schedule:
+  true }`. One named additive delta, decided at build time and never silently: `MediaItem`
+  carries no duration/aspect, which Shorts-shape preflight needs — either the composer supplies
+  them as facts or `MediaItem` gains two `Option` fields (additive; no parallel type). §11.1's
+  dual generation paths apply to the *title/description text only* — the clip itself is never
+  generated (D-YT-3).
+- **D-YT-3 — `compose()`-derived auto-Shorts: honestly evaluated, DEFERRED.** The tempting
+  move: `engine/src/field_frame.rs:218` `compose()` already emits bit-deterministic RGBA
+  frames (P38's oracle), so a frame sequence "could become" an animated Short. The honest gap:
+  **frames ≠ video file.** YouTube ingests encoded containers (MP4/WebM); this repo has no
+  video encoder, no muxer, and not even a JPEG encoder — §4.4 already deliberately kept image
+  codecs out of the adapter crate, and a video-codec dep (or an ffmpeg external binary) is a
+  supply-chain DECART that loses today with zero demand signal. A plausible
+  zero-new-Rust-dep route does exist — the P16 composer rendering via P38's surface and
+  capturing client-side (`canvas.captureStream()` + `MediaRecorder` → WebM in the browser; the
+  adapter only relays bytes) — but it depends on P16+P38 landing, and an abstract physics-field
+  animation is not obviously *food marketing* content anyway; the owner's dish clip is.
+  **TRIGGER-YT-AUTOGEN** (grep-able): ≥3 paying venues on the YouTube lane request generated
+  Shorts AND the P16 composer + P38 render surface are live (unlocking the browser-capture
+  path) → then DECART browser-capture vs in-repo encoder. Until the trigger fires: nothing is
+  built, no codec enters the tree.
+
+### 12.3 Wave placement — Wave 2-Y (parallel lane inside Wave 2; paperwork joins the Wave-0 lane)
+
+Readiness class matches Meta, not Telegram: the REST + per-venue OAuth code is easy, but the
+compliance-audit + scope-verification queues are the long pole ⇒ Wave 2, never Wave 0/1.
+
+| # | Step | Done-check (falsifiable) |
+|---|---|---|
+| 0g (joins the 0f lane) | **Google paperwork (no code)**: Cloud project, OAuth consent screen, sensitive-scope verification submission, YouTube API compliance-audit submission | Submissions recorded in-tree — same artifact convention as 0f |
+| 2f | `YoutubeAdapter` (`videos.insert` resumable upload; caps per D-YT-2; preflight incl. Shorts-shape) | Single-tenant live probe on the operator's own channel: real video id in `PostReceipt`; pre-audit the probe ASSERTS `privacyStatus` comes back locked-private (the honest expected state) — never pretends public |
+| 2g | `youtube_oauth` token flow in `tokens.rs` (refresh; production-status precondition documented) | Clock-mocked refresh test, mirror of 2c |
+| 2h | **Multi-tenant activation** — gated on BOTH Google gates (audit + scope verification) passing | First non-operator venue connects via OAuth and publishes a *public* Short |
+
+### 12.4 Risk register additions (extends §8)
+
+| # | Risk | Severity | Mitigation (structural) |
+|---|---|---|---|
+| R8 | **Google shared-project SPOF** — same shape as R1: all venues ride dowiz's ONE Cloud project; a failed/revoked audit or lapsed OAuth verification locks every venue's uploads private **silently** (uploads still "succeed") | HIGH | Same doctrine as R1: the per-venue-token lane (TG/Viber) stays the resilient baseline; the receipt records `privacyStatus` and the owner UI surfaces "uploaded but private-locked" as a warning row — never a silent success |
+| R9 | Quota bucket is fleet-shared: 100 uploads/day per project, all venues combined | MED | Global YouTube `TokenBucket` (capacity 100/day) → the drainer degrades to queue-and-wait, never a 403 spray; quota-extension form filed when the fleet approaches ~50/day sustained |

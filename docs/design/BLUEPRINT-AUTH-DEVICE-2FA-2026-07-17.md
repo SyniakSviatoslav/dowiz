@@ -229,6 +229,20 @@ WebAuthn, since the browser-side key can live in the wasm kernel (`kernel/pkg-we
 marginal win is OS-keychain/biometric custody, not the trust model. **(iii) now, revisit after P3
 exists** is the default this blueprint records; overriding it is one operator sentence.
 
+### 5.3b NFC/hardware-key question — answered by a real build attempt (2026-07-18)
+The operator asked directly whether NFC tags or a Flipper Zero (Momentum firmware) should carry
+device identity. A real attempt (`docs/design/CORE-ROADMAP-2026-07-17/RESEARCH-NFC-FLIPPER-ZERO-DEV-TOOLING-2026-07-18.md`)
+settles this with evidence, not opinion: **no** to both, for a physical reason, not a taste
+preference — a passive NFC tag (NTAG213/215/216, 144 B) cannot hold this repo's own device
+signature (ML-DSA-65, 3309 B), so a tag was never a candidate for §5.2's device-bound keypair;
+it is at most a symmetric-MAC artifact, which belongs to P52's proof-of-delivery evidence leg
+(§3.4b there), not to auth. Flipper Zero adds nothing here either way — same size ceiling applies
+regardless of reader. This does not change §5.3's own conclusion: **WebAuthn/FIDO2 remains the
+correct answer for hardware-bound identity when/if §5.3's option (ii)/(iii)-revisit is exercised**
+— platform authenticators (already in every phone) or an optional ~$30 FIDO2 key, never an NFC
+tag or a pentesting device. Recorded here so a future reader doesn't re-open the NFC question
+without re-deriving this size constraint.
+
 ### 5.4 Explicit rejections
 - Better Auth as runtime/code — §3.
 - `deviceAuthorization` (RFC 8628) — wrong problem (§2, D1).
