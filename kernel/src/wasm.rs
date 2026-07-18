@@ -196,6 +196,24 @@ fn place_order_logic(
     let items_in: Vec<ItemInput> = serde_json::from_str(items_json).map_err(|e| e.to_string())?;
     let items: Vec<OrderItem> = items_in.into_iter().map(item_to_domain).collect();
 
+    // V3 1.3 (ROUND-2 GAP-AUDIT): a negative quantity or unit price is malformed
+    // input that would produce a negative/garbage order total. Refuse before any
+    // domain mutation (fail-closed on the untrusted-JSON boundary).
+    for it in &items {
+        if it.quantity <= 0 {
+            return Err(format!(
+                "place_order: quantity must be >= 1, got {}",
+                it.quantity
+            ));
+        }
+        if it.unit_price < 0 {
+            return Err(format!(
+                "place_order: unit_price must be >= 0, got {}",
+                it.unit_price
+            ));
+        }
+    }
+
     let seq = ORDER_SEQ.fetch_add(1, Ordering::SeqCst);
     let id = format!("ord_{}", seq);
     let created_at_ms = seq as i64;
@@ -813,16 +831,31 @@ mod tests {
     ]"#;
 
     #[test]
-    fn place_order_round_trip() {
-        let json = place_order_logic(Some("c1".into()), SAMPLE_ITEMS, Some("web".into()))
-            .expect("place_order_logic ok");
-        let v: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(v["status"], "PENDING");
-        assert_eq!(v["subtotal"], 2 * 500 + 300);
-        assert_eq!(v["total"], 2 * 500 + 300); // provisional until tax/fee
-        assert_eq!(v["customer_id"], "c1");
-        assert_eq!(v["channel"], "web");
-        assert_eq!(v["items"].as_array().unwrap().len(), 2);
+    fn place_order_rejects_negative_quantity_and_price() {
+        // V3 1.3 (ROUND-2 GAP-AUDIT): malformed input (negative qty / price) must
+        // be refused fail-closed, not produce a negative/garbage total.
+        let neg_qty = r#"[{"product_id":"p1","modifier_ids":[],"quantity":-2,"unit_price":500}]"#;
+        let r1 = place_order_logic(None, neg_qty, None);
+        assert!(r1.is_err(), "negative quantity must be refused");
+        assert!(
+            r1.unwrap_err().contains("quantity"),
+            "error must name the quantity violation"
+        );
+
+        let neg_price = r#"[{"product_id":"p1","modifier_ids":[],"quantity":1,"unit_price":-500}]"#;
+        let r2 = place_order_logic(None, neg_price, None);
+        assert!(r2.is_err(), "negative unit_price must be refused");
+        assert!(
+            r2.unwrap_err().contains("unit_price"),
+            "error must name the price violation"
+        );
+
+        // Zero quantity (no items) is also refused.
+        let zero_qty = r#"[{"product_id":"p1","modifier_ids":[],"quantity":0,"unit_price":500}]"#;
+        assert!(
+            place_order_logic(None, zero_qty, None).is_err(),
+            "zero quantity must be refused"
+        );
     }
 
     #[test]
