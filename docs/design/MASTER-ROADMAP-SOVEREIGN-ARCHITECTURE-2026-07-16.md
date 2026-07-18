@@ -2093,9 +2093,19 @@ Two related operator rulings closing the self-host reliability gap:
   ecosystem-wide protocol consistency against an individual owner's need for control after a
   bad update.
 
-### 16.28 What this section deliberately does not resolve
+### 16.29 Media storage and dispute handling
+- **Media storage**: vendor-uploaded menu photos/video default to Cloudflare R2/Images (already
+  in the stack per §16.1 — no new vendor lock-in), with an easy vendor-side option to connect
+  their own storage instead — the same "managed default + easy opt-out" shape as hosting
+  (§16.1) and payment providers (§16.13).
+- **Disputes/refunds**: fully the vendor's and payment provider's responsibility (Recommended,
+  confirmed) — extends §16.16/§16.24's "dowiz touches no money beyond the adapter" stance;
+  refund execution runs through the payment adapter's own refund API, dowiz is not a
+  dispute-resolution party.
+
+### 16.30 What this section deliberately does not resolve
 Per the operator's own instruction (a ~50-question progressive dialogue, tracked outside this
-file, ~42 of ~50 answered as of this checkpoint), several real sub-questions are named but not
+file, ~44 of ~50 answered as of this checkpoint), several real sub-questions are named but not
 yet closed: the Cloudflare Tunnel multi-tenant credential-isolation design (§16.2), the exact
 Tier-3 web-UI rebuild scope (audit triage `#10`/`#11`, DELIVERY grade F), the payment-adapter
 port/adapter design (§16.13), the in-hub multi-vendor data model (§16.15), the owner multi-hub
