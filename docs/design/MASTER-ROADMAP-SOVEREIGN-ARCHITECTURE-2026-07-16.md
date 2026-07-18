@@ -2064,12 +2064,42 @@ transaction percentage, vendor keeps 100%). dowiz remains a dispatch **protocol*
 money intermediary for courier compensation. The payment adapter (§16.13) needs no split-payout
 logic — this closes what could otherwise have become scope creep into the payment design.
 
-### 16.25 What this section deliberately does not resolve
+### 16.26 Courier matching, reviews, and cold-start discovery
+Three related closes in one round:
+- **Courier matching stays HRW-automatic**, scoped to the venue's own courier pool (§16.3) —
+  the existing rendezvous-hash mechanism and its no-scoring red line are unchanged by the
+  "venue brings its own couriers" model; only the candidate set shrank from "all couriers" to
+  "this venue's couriers," the algorithm itself didn't change.
+- **Reviews/ratings are per-hub in MVP** — visible only within the brand that earned them, no
+  cross-hub or dowiz-wide reputation system, consistent with the whole brand-isolation stance
+  (§16.4, §16.6, §16.23).
+- **Cold-start discovery is NOT purely the vendor's problem**, refining §16.21: dowiz actively
+  helps each venue's `/s/:slug` page get found — SEO, AEO/GEO (answer/generative-engine
+  optimization for AI search surfaces — ChatGPT/Perplexity/Google AI Overviews), plus the
+  already-scoped auto-posting (§16.7), personalized mailings, and chat/channel/bot presence.
+  This does **not** reopen §16.21 (dowiz.org itself still hosts no public catalog) — the help is
+  per-venue technical/content tooling, not a dowiz-run discovery surface. Extends §16.4's
+  agent-as-assistant role explicitly into marketing/growth, not just operations.
+
+### 16.27 Self-host durability — built-in encrypted auto-backup and auto-update with rollback
+Two related operator rulings closing the self-host reliability gap:
+- **Backup**: self-hosted hubs get a built-in encrypted auto-backup to `hetzner:dowiz` (or the
+  vendor's own S3-compatible target) — dowiz never sees plaintext data, but a venue whose
+  hardware fails can still recover. Extends the disk-cleanup pass's already-confirmed
+  `hetzner:dowiz` remote (`BLUEPRINT-DISK-OPS-CLEANUP-2026-07-18.md`) to a new purpose (per-hub
+  encrypted backup target, not just dev-tooling result storage).
+- **Updates**: auto-update by default (keeps the mesh from fragmenting into stale protocol
+  versions), with an explicit owner-triggered rollback to a prior version — balances
+  ecosystem-wide protocol consistency against an individual owner's need for control after a
+  bad update.
+
+### 16.28 What this section deliberately does not resolve
 Per the operator's own instruction (a ~50-question progressive dialogue, tracked outside this
-file, ~32 of ~50 answered as of this checkpoint), several real sub-questions are named but not
+file, ~42 of ~50 answered as of this checkpoint), several real sub-questions are named but not
 yet closed: the Cloudflare Tunnel multi-tenant credential-isolation design (§16.2), the exact
 Tier-3 web-UI rebuild scope (audit triage `#10`/`#11`, DELIVERY grade F), the payment-adapter
 port/adapter design (§16.13), the in-hub multi-vendor data model (§16.15), the owner multi-hub
-client mode (§16.18), the client-side data-wallet's concrete implementation (§16.23), and the
-full remaining question set. This section grows via the same append-only convention as further
-rounds settle each one — it is not a final architecture document.
+client mode (§16.18), the client-side data-wallet's concrete implementation (§16.23), the
+SEO/AEO/GEO tooling's concrete design (§16.26), and the remainder of the question set. This
+section grows via the same append-only convention as further rounds settle each one — it is
+not a final architecture document.
