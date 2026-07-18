@@ -319,7 +319,7 @@ Adding them here is bookkeeping, not new design work — the design already exis
 | # | Phase | Blueprint | Depends on | Note |
 |---|---|---|---|---|
 | 20 | Demo & Marketing Pipeline Refactor | [DEMO-MARKETING-PIPELINE-REFACTOR-2026-07-17.md](DEMO-MARKETING-PIPELINE-REFACTOR-2026-07-17.md) | 7 (its DM-2 offer-redemption ledger hard-depends on P07's replay-dedup fix), 18 (all publication gated behind public-flip, mirroring P19's own boundary) | 7 work units (DM-1..DM-7); no new crate, reuses engine `compose` + a committed glyph atlas |
-| 21 | Local AI / Local Agents (resident-agent plane) | [LOCAL-AI-LOCAL-AGENTS-RESEARCH-2026-07-17.md](LOCAL-AI-LOCAL-AGENTS-RESEARCH-2026-07-17.md) | 5 (routing organism, done) | Extends the already-shipped `LlmBackend`/Ollama port (harness-2026-07-16) with a plan→act→observe loop; zero new external deps per its own DECART; shares sequencing with the agentic-mesh arc (separate branch) but does not depend on it landing. **2026-07-18: full standalone blueprint now exists — [CORE-ROADMAP-2026-07-17/BLUEPRINT-P21-local-llm-hermes-native.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P21-local-llm-hermes-native.md)** (native `/models` via Ollama `/api/tags` + Hermes routing-lane ruling + P25 L-class/P26 MemoryBudget consumption + real-time bench/eval harness via P45 §4b.3; Mixtral verdict + MoA deferral recorded there with live-measured numbers) |
+| 21 | Local AI / Local Agents (resident-agent plane) | [LOCAL-AI-LOCAL-AGENTS-RESEARCH-2026-07-17.md](LOCAL-AI-LOCAL-AGENTS-RESEARCH-2026-07-17.md) | 5 (routing organism, done) | Extends the already-shipped `LlmBackend`/Ollama port (harness-2026-07-16) with a plan→act→observe loop; zero new external deps per its own DECART; shares sequencing with the agentic-mesh arc (separate branch) but does not depend on it landing. **2026-07-18: full standalone blueprint now exists — [CORE-ROADMAP-2026-07-17/BLUEPRINT-P21-local-llm-hermes-native.md](CORE-ROADMAP-2026-07-17/BLUEPRINT-P21-local-llm-hermes-native.md)** (native `/models` via Ollama `/api/tags` + Hermes routing-lane ruling + P25 L-class/P26 MemoryBudget consumption + real-time bench/eval harness via P45 §4b.3; Mixtral verdict + MoA deferral recorded there with live-measured numbers). **Part 2 (same day, same file, §11): Tiered Intelligence architecture evaluated against the operator's own proposal — Tier-0-router REJECTED (two deterministic routers already exist), Ollama stays (neither server has priority queueing), model verdict = resident code/general pair + existing remote lane as "Tier 2", not a new local heavy model — see §15 below.** |
 | 22 | Multi-Platform Social Auto-Posting | [BLUEPRINT-SOCIAL-AUTO-POSTING-2026-07-17.md](BLUEPRINT-SOCIAL-AUTO-POSTING-2026-07-17.md) | 1 (CI floor) | New `SocialPoster` port mirroring the `LlmBackend` port pattern exactly; Wave 0 = Telegram (no operator decision needed); Wave 1 (Viber) blocked on **O-SOC-1** (public media-hosting location); Wave 2 (Meta) gated on its own approval-process calendar, not a build dependency |
 | 23 | Device Auth + 2FA | [BLUEPRINT-AUTH-DEVICE-2FA-2026-07-17.md](BLUEPRINT-AUTH-DEVICE-2FA-2026-07-17.md) | none for its P1 (a zero-dep `totp.rs` primitive, buildable today); **P3 (full HTTP wiring) depends on a dynamic admin HTTP surface that does not exist anywhere in this roadmap yet** — a real gap, named here rather than assumed away. Native Rust primitive chosen over Better Auth because the JS/TS stack (Better Auth's runtime) is fully deleted from `origin/main`, not merely paused |
 
@@ -593,6 +593,9 @@ already-tested protocol code from stranded to load-bearing.
 | P51 | DELIVERY | Open map + routing: OSM vector, field-rendered routes, pin-drop, live tracking | PLANNED (blueprint ON DISK; kernel router landed pre-phase in P04) | none — feeds/closes P04 router + `route_js` gap, P49 DoD-4 supply, splatting Stage-1 | P38a (render legs; CPU compose works today), P34/P37 (wire/asset ride) | P49 DoD-4 (TrackFrame consumer), splatting arc Stage-1; feeds P50 audit (ODbL row) |
 | P52 | DELIVERY | Courier working surface: shift, claims, run, PoD, earnings | PLANNED (blueprint ON DISK; protocol side already the most-built part of stack) | none — executes DZ-08, MVP-audit M1/M4/M10 seams | P34, P38a, P51, P37, P39 (K6), P48 (roster), P47 (attestation) | nothing downstream, but itself MVP-blocking: P50's gate cannot go green without it |
 | P53 | DELIVERY | Tor/onion integration: anonymous-access tier, Onion-Location + QR | PLANNED (blueprint ON DISK; W0 buildable today) | fold-in ledger L4 (activated 2026-07-18) | W0: nothing; W1 (live onion service): P37 + P45, operator-run | nothing — feeds P48 share panel, P52 K6 (QR encoder), P50 audit (privacy-tier row) |
+| P54 | AGENT | LLM/agent behavioral verification: adversarial probes, money-trust fence, fine-tuning gate | PLANNED (blueprint ON DISK; fine-tuning explicitly DEFERRED, zero LoRA/QLoRA built) | none — new phase, consumes P21/P40/P41/P42 | P21 (backend), P40 (AgentReasoner seam), P56 (storage/scheduling substrate) | none downstream; strengthens P54→P56 alerting only |
+| P55 | PROTOCOL/CORE | Protocol/ecosystem testing: regression taxonomy, proptest/mutation, chaos-injection | PLANNED (blueprint ON DISK; proptest confirmed already-live dev-dep, 400-case suite) | none — new phase, extends P24/P27/P36 | P27 (CircuitBreaker), P24 (flight-recorder spans), P56 (storage/scheduling) | none downstream; feeds P36/P34 regression coverage |
+| P56 | ECOSYSTEM/OPS | Verification-harness shared infrastructure: storage, scheduling, meta-verification | PLANNED (blueprint ON DISK; 4 meta-detectors designed, `hetzner:dowiz/test-results/` sync policy) | none — new phase, shared substrate for P54+P55 | P25 (admission control, extended not forked), P45 (alerting, extended not forked), disk-cleanup pass (local storage now unblocked) | P54, P55 (both consume this as their storage/scheduling substrate) |
 
 ### 10.3 Cross-cutting invariants (binding across components; each stated once)
 
@@ -1680,3 +1683,131 @@ api tests to exist). W1 (live onion service) depends on P37 (the HTTP surface) +
 (deployment) and is operator-run. Feeds P48 (share panel), P52 K6 (shared QR encoder), and
 P50's audit (privacy-tier row: onion access collects no client IPs by construction). Blocks
 nothing — a hub without the sidecar loses only the onion mirror.
+
+---
+
+## 15. Verification/benchmark/research harness + local-LLM tiering (2026-07-18, appended after §14)
+
+Appended by a same-day follow-up pass (same append-only rule as §7-§14). **This section
+extends the phase index from P31-P53 to P31-P56** (§10.2's table already carries the P54-P56
+rows as of this edit). Provenance: two direct operator directives — (a) a detailed technical
+proposal for local-LLM resource tiering on this machine's real hardware, requiring the
+already-written `BLUEPRINT-P21-local-llm-hermes-native.md` to grow a Part 2; (b) a mandate for
+"a research team of top engineers/data-scientists"-grade verification harness spanning the
+LLM/agent layer, the protocol/ecosystem layer, and dowiz/bebop2/openbebop jointly, grounded in
+a supplied ML/CS-fundamentals glossary used as a falsifiable checklist, not prose to summarize.
+
+### P21 Part 2 — Tiered Intelligence architecture (extends the existing P21 phase, no new number)
+Read the full design in `BLUEPRINT-P21-local-llm-hermes-native.md` §11 — this entry records
+only the verdicts, per this file's own index-not-duplicate convention. The operator's
+Tier-0/Tier-1/Tier-2 proposal was evaluated point-by-point against live evidence, not adopted
+wholesale: **Tier-0-as-a-model REJECTED** (two deterministic routers already exist —
+HK-05 `classify_complexity`, live per-turn; the planned G3 router — and P25's own DECART
+already rejected LLM-in-the-loop dispatch as a category; an always-resident router model would
+regress every axis it claims to improve). **Ollama stays** over raw `llama.cpp`-direct (neither
+server has priority queueing, the operator's own headline reason to switch; priority lands
+client-side over P25's existing admission design instead, with a named reopening trigger).
+**Model verdict:** not one general model, not three local tiers — this session's own real
+workload (kernel Rust with money red-lines, a dozen full blueprints, per the day's own git log)
+exceeds every viable local candidate, so "Tier 2" is the *existing* remote/connected lane, not
+a new local heavy model; local splits into resident code-vs-general roles; `mistral:7b`
+(confirmed v0.3, 4.4GB, disk-unblocked by the same-day cleanup pass) enters as an eval-gated
+challenger. **Mixtral rejection now doubly grounded**: disk (the original P21 finding) AND the
+operator's own RAM math, sharpened by one more live fact — this box has 0 swap, so the failure
+mode is OOM, not merely degraded latency.
+
+### P54 — LLM/agent behavioral verification harness (AGENT component)
+**Absorbs:** none — new phase. Consumes P21 (backend), P40 (`AgentReasoner` seam), P56 (storage/scheduling substrate it runs on).
+**Status:** PLANNED (blueprint ON DISK, 822 lines)
+**Role & responsibility:** Adversarial/absurd-case prompt probes and behavioral verification
+for the agent loop, grounded in the operator-supplied ML/CS glossary applied as a literal
+checklist: tokenization failure-mode probes (letter-counting, leading-space sensitivity,
+arithmetic inconsistency) mapped to concrete falsifiable tests; the glossary's own
+"signals against fine-tuning" criteria applied honestly to this project's real maturity.
+**DoD (summary):** a money-arithmetic-trust probe, two-pronged — (1) a *structural* always-green
+fence proving no money/tax tool exists in the agent's tool namespace at all
+(`MONEY_DECISION_CONSUMPTIONS_MAX=0`, proven in-process against `apply_tax()`), so a wrong
+LLM-computed figure is provably unconsumable regardless of what the model says; (2) a
+*behavioral* divergence-tracking probe (`money_freetext_divergence_cents`, observed not
+gating) that is safe to fail precisely because prong 1 already makes it inert. Fine-tuning
+readiness: **DEFERRED**, every one of the glossary's own "signals against" criteria fires
+(no ≥500-example labeled corpus, no measured prompt-only baseline, CPU-only/0-VRAM hardware
+independently confirms QLoRA impracticality) — `TRIGGER-FINETUNE` named (≥500 verified
+examples AND measured baseline AND found insufficient AND a GPU host), zero LoRA/QLoRA
+infrastructure built ahead of that trigger. Native Rust only (`agent-probe` crate, seeded
+bounded wave runner, `criterion` reused for micro-benches per convention) — no Python/Bash
+eval framework. 9 new `dowiz_agent_*` metric IDs extend P45 §4b.3; results feed the existing
+`RegressionGate`/P32d critic/Markov detector as structured `ProbeRow`s, `rclone move`d to
+`hetzner:dowiz/agent-verification/`.
+**Anti-scope:** does not attempt to make the LLM compute money correctly (unachievable and
+the wrong goal — the structural fence is what matters); no LoRA/QLoRA build ahead of the
+named trigger; no Python/Bash test runner.
+**Depends on / blocks:** depends on P21, P40, P56. Blocks nothing downstream.
+
+### P55 — Protocol/ecosystem testing: regression taxonomy, property/mutation testing, chaos injection (PROTOCOL/CORE cross-cutting)
+**Absorbs:** none — new phase. Extends P24 (flight-recorder spans), P27 (CircuitBreaker/fault-isolation), P36 (bebop remediation).
+**Status:** PLANNED (blueprint ON DISK)
+**Role & responsibility:** Systematic, repo-wide testing discipline answering "how do we stop
+this exact failure class" for a regression-class taxonomy (RC-1..RC-4) derived directly from
+**four real bugs this same session found by hand**: RC-1 advisory-CI-gate-exists-but-unenforced
+(the no_std wasm32 regression); RC-2 unexercised feature-flag combination (the `kernel-rlib`
+E0004 regression — live inventory found ~14 named non-default configs, CI exercises 3);
+RC-3 unsafe security default (`insecure-tls` default-on); RC-4 silently-stopped automation
+(this same day's disk-cleanup finding: a memory-claimed cron job that isn't actually
+scheduled). Each RC gets a concrete native-Rust mechanism with a RED-first falsifier proven
+against the real historical incident (a required-checks liveness ratchet, a checked-in
+feature-matrix coverage gate, a resolved-default security auditor over `cargo metadata`, a
+heartbeat ledger).
+**DoD (summary):** `proptest` — confirmed **already a live kernel dev-dependency** with a real
+400-case suite (`ports/payment.rs:644`) — extended to `order_machine::assert_transition`,
+`domain.rs::compute_order_total`, `claim_machine::assert_transition`, `matcher::assign` (all
+four signatures re-verified live), and to bebop2/proto-cap where a trigger was already
+recorded. `cargo-mutants` adopted as a **scheduled CI dev-binary** (local crates.io returned
+403; GitHub runners have real egress — routed around the local sandbox limit rather than
+skipping the tool), scoped to the deterministic core, advisory-then-gated. Chaos/network
+injection extends an **already-built** `chaos.rs` (not a new mechanism) plus a weekly
+netns-scoped `tc`/`netem` lane (`sch_netem` confirmed present); the offline-first
+`ac6_solo_island_full_flow_no_peers` test serves as the partition oracle.
+**Anti-scope:** no foreign-language test framework (Python `hypothesis` etc. rejected, Rust
+`proptest`/`cargo-mutants` only); does not re-instrument what P24 already covers, only adds
+the new spans this task needs; does not redesign P27's fault-isolation primitives, only adds
+chaos-injection on top of them.
+**Depends on / blocks:** depends on P27, P24, P56. Blocks nothing downstream; feeds tighter
+regression coverage back into P34/P36.
+
+### P56 — Verification-harness shared infrastructure: storage, scheduling, meta-verification (ECOSYSTEM/OPS component)
+**Absorbs:** none — new phase, the shared substrate P54 and P55 both consume; owns no specific probes itself.
+**Status:** PLANNED (blueprint ON DISK)
+**Role & responsibility:** The machinery underneath P54/P55 — result storage, async wave
+scheduling, cross-platform/multi-device test-dimension modeling, and (the hardest, most novel
+piece) **meta-verification**: checking that the tests/measurements themselves aren't reaching
+false conclusions, not merely checking their results.
+**DoD (summary):** four typed meta-verification detectors, each itself a registered probe with
+a mandatory known-RED canary — **FlakyProbe** (differing verdicts on an identical
+`(probe_id, probe_version, env_fingerprint, seed)` key, quantified via the kernel's own
+`stats.rs::wilson_interval`, excluded from trend input so a harness bug never pages as a
+product regression); **InstrumentTooNoisy** (a benchmark whose own measured noise band exceeds
+the regression threshold it polices gets suppressed to `Inconclusive`, never a false
+positive/negative); **StaleGround** (every probe carries content-addressed `grounds` —
+fixture hashes, contract-enum shapes, doc anchors — a moved referent demotes a GREEN
+structurally; **the worked fixture is this same day's own P34 case**, where the kernel gained
+two new `OrderStatus` variants after being marked "proven" — this session's single most-
+repeated failure mode, now encoded as the canonical test the meta-layer must catch
+automatically, not found by hand again); **DeadProbe** (a probe with no known-RED canary
+registers a panic, and canaries re-fire every 8 waves — GREEN-on-canary means the probe checks
+nothing). Result schema is `event_log.rs`'s exact content-addressed pattern
+(`TestRunEvent{schema_v, prev-chain, wave_id, probe_id+version, EnvDims, git_sha, seed,
+metrics, verdict, meta}`); local storage is a 64MB-bounded index only, `rclone move`d to
+`hetzner:dowiz/test-results/` after every wave (the disk-cleanup pass's `hetzner:dowiz`
+remote, confirmed live 2026-07-18) — results never accumulate on local disk. A new Telegram
+topic (`Testing-Research`) extends `tools/telemetry/lib.sh`'s existing `tg_send` mechanism for
+ongoing best-practices research digests, per the operator's explicit request, rather than a
+new bot/channel.
+**Anti-scope:** does not design the specific LLM probes (P54's job) or protocol/chaos tests
+(P55's job) — shared machinery only; does not invent a new scheduler (extends P25's L-class
+admission) or a new alerting mechanism (extends P45's `Severity`/topic/noise-floor design);
+does not pretend multi-OS/GPU testing is achievable on this single machine today (named gap,
+not papered over).
+**Depends on / blocks:** depends on P25 (admission), P45 (alerting), the disk-cleanup pass
+(local storage headroom). Blocks nothing directly — P54 and P55 both consume it as their
+storage/scheduling substrate, named as a soft dependency each.
