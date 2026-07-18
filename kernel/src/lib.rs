@@ -148,6 +148,13 @@ pub mod chaos;
 /// External capability ports (the seams where the kernel meets the outside world without importing
 /// it) — currently the `LlmBackend` pluggable LLM backend trait (zero HTTP/serde; the concrete
 /// `llm-adapters` crate implements it).
+/// BLUEPRINT-P59 — capability-cert chain & crypto-agility: a biscuit-style, hybrid-signed
+/// (`Ed25519 ⊕ ML-DSA-65` via the `SignatureVerifier` seam), algorithm-agile cert chain —
+/// self-signed hub/owner roots, owner→hub single-hop delegation, suite negotiation +
+/// downgrade binding, overlap rotation, and owner-signed gossip-able revocation blobs.
+/// Default-built (rides the default `RefSigner` seam so it verifies under `RequireBoth` even
+/// without the `pq` feature; production injects real bebop2 crypto at the seam).
+pub mod capability_cert;
 /// BLUEPRINT-P-F (Layer F) — MoE mesh DecisionUnit family: closed `DomainTag` capability routing
 /// (NO-COURIER-SCORING), `DecisionUnit` family type (pure `decide()`, Escalate first-class),
 /// FraudAuth escalate-only output, and the Pricing operator-activation money-gate. Kernel-only,
