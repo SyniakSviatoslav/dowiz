@@ -2306,3 +2306,25 @@ needs split-payment/settlement logic to divide one payment across multiple vendo
 same hub — this reopens part of §16.24's "no split-payout logic needed" framing, but only for
 the intra-hub food-court case, not for courier payout (§16.24 stands unchanged for couriers).
 Named as a concrete new requirement on the payment-adapter blueprint, not yet designed.
+
+### 16.47 Data wallet portability — device-resident with Signal-style QR device-linking, self-custody
+Closes §16.23's remaining gap: the wallet lives on-device by default (no cross-device sync
+service, consistent with §16.14/§16.23's no-central-server stance), with a **Signal-style QR
+device-linking transfer** for moving it to a new device — one-time codes, generated once, loss
+is explicitly the user's own responsibility. This is the same self-custody framing already
+used for crypto/authenticator-style secrets elsewhere in this ecosystem (capability-certs,
+HybridSigner keys) — applied consistently to customer data rather than inventing a new trust
+model for this one case.
+
+### 16.48 Owner multi-hub credentials — a root/delegating capability-cert, not N flat per-hub certs
+Refines §16.18/§16.32: neither "auto-issued via a dowiz.org account" (conflicts with §16.14's
+no-dowiz-account stance) nor "manual QR-import per hub" (too much friction per hub) — the
+operator wants a **root credential the owner holds themselves**, capable of self-service
+adding, modifying, and revoking hub nodes under it. This is a hierarchical/delegating
+capability-certificate pattern (a root cert that can mint or authorize child hub-certs) rather
+than a flat set of N independent per-hub certs — fits naturally with the existing capability-
+cert architecture (ML-DSA-65 hybrid signing) already used for couriers and hub identity
+elsewhere in this roadmap, extended one level to support owner-side delegation. **Not yet
+designed**: the concrete cert-hierarchy/revocation mechanics belong in the P39/P48 blueprint
+work, not this dialogue-decisions section — recorded here as the shape of the answer, not the
+full spec.
