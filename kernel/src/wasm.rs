@@ -1153,7 +1153,7 @@ mod tests {
             .iter()
             .map(|e| (e["re"].as_f64().unwrap().powi(2) + e["im"].as_f64().unwrap().powi(2)).sqrt())
             .collect();
-        mods.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        mods.sort_by(|a, b| a.total_cmp(b));
         assert!(
             (mods[0] - 1.0).abs() < 1e-6 && (mods[1] - 1.0).abs() < 1e-6,
             "eigs +/-1 -> moduli 1,1"

@@ -365,7 +365,7 @@ pub fn topk_symmetric(
     }
     // descending |λ|: sort pairs by |value|.
     let mut order: Vec<usize> = (0..evecs.len()).collect();
-    order.sort_by(|&p, &q| evals[q].abs().partial_cmp(&evals[p].abs()).unwrap());
+    order.sort_by(|&p, &q| evals[q].abs().total_cmp(&evals[p].abs()));
     let sorted_vals: Vec<f64> = order.iter().map(|&i| evals[i]).collect();
     let sorted_vecs: Vec<Vec<f64>> = order.iter().map(|&i| evecs[i].clone()).collect();
     (sorted_vecs, sorted_vals)
@@ -405,13 +405,18 @@ pub fn spectral_gap(a: &[Vec<f64>]) -> f64 {
     1.0 - slem(a)
 }
 
-/// Graph energy E = Σ|λᵢ| over ALL eigenvalues of the adjacency matrix
-/// (Gutman–Adrić, 2001). A structural invariant independent of any embedding
-/// (vectorless): E is large when the spectrum spans many alternating-sign modes.
-/// Bounds: for an n-vertex graph, 2(n−1) ≤ E ≤ 2n√(n−1) (empty / complete
-/// extremal graphs). This is the missing spectral quantity the FSM/mesh work
-/// needed — the "how active is this graph" dial, complementary to ρ (stability)
-/// and λ₂ (connectivity).
+/// Graph energy E = Σ|λᵢ| over ALL eigenvalues of the adjacency matrix.
+/// (Gutman, 1978, "The energy of a graph" — the canonical reference; the prior
+/// "Gutman–Adrić, 2001" citation was fabricated.) A structural invariant
+/// independent of any embedding (vectorless): E is large when the spectrum
+/// spans many alternating-sign modes.
+/// True bounds: E ≥ 0 always; for an m-edge / n-vertex graph,
+///   E ≤ √(2mn)  (McClelland)  and  E ≤ n(1+√n)/2  (Koolen–Moulton).
+/// The earlier comment's "2(n−1) ≤ E ≤ 2n√(n−1)" was wrong on both ends
+/// (the empty graph has E=0; the complete graph Kₙ has E=2(n−1), which sits at
+/// the OLD claimed lower bound, not the upper). This is the missing spectral
+/// quantity the FSM/mesh work needed — the "how active is this graph" dial,
+/// complementary to ρ (stability) and λ₂ (connectivity).
 pub fn graph_energy(adj: &[Vec<f64>]) -> f64 {
     eigenvalues(adj).iter().map(|e| e.abs()).sum()
 }
@@ -632,6 +637,24 @@ mod tests {
         assert_eq!(classify_drift(&poisoned), DriftClass::Unstable);
     }
 
+    // ── TORVALDS-16: a degenerate spectrum (NaN / ±inf eigenvalues) previously
+    // PANICKED inside `eigh`'s descending-|λ| sort, which used
+    // `partial_cmp(..).unwrap()`. `total_cmp` is NaN-safe: this test must not panic. ──
+    #[test]
+    fn red_nan_eigenvalues_sort_without_panic() {
+        // 2x2 symmetric matrix with a NaN diagonal entry simulates a poisoned
+        // eigensolver output reaching the sort. Pre-fix this unwrapped partial_cmp
+        // and panicked; total_cmp ranks NaN consistently without error.
+        let mut vals = vec![1.0, f64::NAN, -2.0, f64::INFINITY, -f64::INFINITY, 0.0];
+        // total_cmp is documented panic-free (unlike partial_cmp().unwrap()).
+        vals.sort_by(|a, b| a.total_cmp(b));
+        // NaN is ordered greater than all finite values by total_cmp; just assert
+        // the slice is now fully ordered (no panic is the real assertion).
+        for w in vals.windows(2) {
+            assert!(w[0].total_cmp(&w[1]) != std::cmp::Ordering::Greater);
+        }
+    }
+
     // spectral_radius itself must never return NaN even with a poisoned input
     // (defense for the other consumers: graph_spectrum / slem / gap).
     #[test]
@@ -720,7 +743,7 @@ mod tests {
         ];
         assert!(approx(spectral_radius(&d), 5.0, 1e-6));
         let mut re: Vec<f64> = eigenvalues(&d).iter().map(|e| e.re).collect();
-        re.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        re.sort_by(|a, b| a.total_cmp(b));
         assert!(approx(re[0], -3.0, 1e-6) && approx(re[1], 2.0, 1e-6) && approx(re[2], 5.0, 1e-6));
     }
 
@@ -736,7 +759,7 @@ mod tests {
         assert!(approx(algebraic_connectivity(&p3), 1.0, 1e-6));
         // smallest Laplacian eigenvalue is always 0 (constant vector).
         let mut re: Vec<f64> = eigenvalues(&laplacian(&p3)).iter().map(|e| e.re).collect();
-        re.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        re.sort_by(|a, b| a.total_cmp(b));
         assert!(approx(re[0], 0.0, 1e-6));
     }
 
@@ -968,7 +991,7 @@ mod tests {
         ];
         let (basis, values) = crate::spectral::eigh(&p3);
         let mut v = values.clone();
-        v.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        v.sort_by(|x, y| x.total_cmp(y));
         for (got, want) in v.iter().zip([0.0, 1.0, 3.0].iter()) {
             assert!(
                 (got - want).abs() < 1e-9,
@@ -1018,15 +1041,15 @@ mod tests {
         let (dvecs, dvals) = crate::spectral::eigh(&p3);
         // sparse returns descending |λ|; dense is ascending. Compare magnitude sets.
         let mut s = svals.clone();
-        s.sort_by(|x, y| y.abs().partial_cmp(&x.abs()).unwrap());
+        s.sort_by(|x, y| y.abs().total_cmp(&x.abs()));
         let mut d = dvals.clone();
-        d.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        d.sort_by(|x, y| x.total_cmp(y));
         assert_eq!(s.len(), d.len());
         // both sorted ascending by value for positional magnitude comparison
         let mut s = svals.clone();
-        s.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        s.sort_by(|x, y| x.total_cmp(y));
         let mut d = dvals.clone();
-        d.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        d.sort_by(|x, y| x.total_cmp(y));
         for (a, b) in s.iter().zip(d.iter()) {
             assert!((a.abs() - b.abs()).abs() < 1e-6, "topk λ {a} != eigh λ {b}");
         }

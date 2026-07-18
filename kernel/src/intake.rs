@@ -18,6 +18,12 @@
 //!
 //! All checks are deterministic and std-only.
 
+/// Maximum width of a bounded integer range that `admit()` will materialize as
+/// a `Vec` during the emptiness probe (Tier A). Specs with a wider range are
+/// treated as unbounded for emptiness (a bounded-but-huge range is never empty
+/// by structure) — caps memory at O(n·|enum|) and prevents an adversarial
+/// `min:0, max:1_000_000_000` from allocating a multi-GB `Vec` (FEYNMAN-09).
+const MAX_ENUM_WIDTH: i64 = 4096;
 use std::collections::BTreeMap;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -236,8 +242,17 @@ fn tier_a_unsat(spec: &EtalonSpec) -> Option<IntakeError> {
         } else if let Some(ev) = &f.enum_values {
             domain = ev.clone();
         } else if let (Some(lo), Some(hi)) = (f.min, f.max) {
-            // Only enumerate bounded ranges for the emptiness probe.
-            domain = (lo..=hi).collect();
+            // Only enumerate bounded ranges for the emptiness probe. Cap the
+            // enumeration width so an adversarial spec (min:0, max:1e9) cannot
+            // allocate a multi-GB Vec (FEYNMAN-09): beyond the cap we treat the
+            // range as effectively unbounded for emptiness — a bounded-but-huge
+            // range is never empty by structure, so this preserves correctness
+            // while bounding memory to O(n·|enum|).
+            if hi - lo <= MAX_ENUM_WIDTH {
+                domain = (lo..=hi).collect();
+            } else {
+                continue;
+            }
         } else {
             // Unbounded range with no enum/pinned cannot be empty by structure.
             continue;
@@ -287,13 +302,20 @@ fn bounded_domains(spec: &EtalonSpec) -> Vec<Domain> {
             if let Some(v) = f.pinned {
                 return Some(vec![v]);
             }
-            // Enumerate only when both bounds are present (finite).
+            // Enumerate only when both bounds are present (finite) AND the width
+            // is within the materialization cap (FEYNMAN-09). A wider range is
+            // returned as `None` (unbounded for AC-3) — it is never empty by
+            // structure, so skipping it preserves correctness.
             if let (Some(lo), Some(hi)) = (f.min, f.max) {
-                let mut d: Vec<i64> = (lo..=hi).collect();
-                if let Some(ev) = &f.enum_values {
-                    d.retain(|v| ev.contains(v));
+                if hi - lo <= MAX_ENUM_WIDTH {
+                    let mut d: Vec<i64> = (lo..=hi).collect();
+                    if let Some(ev) = &f.enum_values {
+                        d.retain(|v| ev.contains(v));
+                    }
+                    Some(d)
+                } else {
+                    None
                 }
-                Some(d)
             } else {
                 None // unbounded — not enumerated here
             }
