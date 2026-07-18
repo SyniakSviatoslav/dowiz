@@ -115,6 +115,17 @@ impl LaplacianField {
 
 /// 5-point ∇²U on the row-major `u` buffer (`len == w*h`). Neumann zero-flux
 /// at edges. Pure / deterministic; no allocation beyond the output.
+///
+/// SIGN CONVENTION (TORVALDS-21): this is the **physics** Laplacian
+/// `∇² = −(D − A)` — negative-definite (the operator on a constant field is 0,
+/// on a bump it points downhill). This is the OPPOSITE sign of the kernel's
+/// graph Laplacian `L = +(D − A)` (PSD, `L·1 = 0`; see
+/// `crate::spectral::laplacian` / `incidence::Graph::laplacian`). The two are
+/// different discretizations of different domains (continuous field PDE vs
+/// discrete graph spectrum): for an INTERIOR grid node with all-real
+/// neighbours (degree 4) the relation `engine_lap ≈ −kernel_lap` holds exactly;
+/// at Neumann-mirrored boundaries the endpoint degree differs (3, not 1), so do
+/// NOT transpose signs across the engine↔kernel boundary without recomputing.
 pub fn laplacian(u: &[f32], w: usize, h: usize) -> Vec<f32> {
     let mut out = vec![0.0f32; w * h];
     laplacian_into(u, w, h, &mut out);
@@ -478,6 +489,65 @@ mod tests {
                     assert!(v.is_finite(), "field must stay finite at step {s}");
                 }
             }
+        }
+    }
+
+    // TORVALDS-21 sign-convention KAT: the engine grid Laplacian `∇² = −(D−A)`
+    // and the kernel graph Laplacian `L = +(D−A)` are OPPOSITE-sign
+    // discretizations. On an INTERIOR grid node (all-real neighbours, degree 4)
+    // the relation `engine_lap ≈ −kernel_lap` holds exactly. This pins the
+    // boundary so a future sign flip in either crate fails loudly.
+    #[test]
+    fn laplacian_sign_convention_matches_kernel() {
+        // 3×3 field; center node (index 4) is interior with 4 real neighbours.
+        let u: Vec<f32> = vec![
+            1.0, 2.0, 3.0,
+            4.0, 5.0, 6.0,
+            7.0, 8.0, 9.0,
+        ];
+        let w = 3;
+        let h = 3;
+        let engine_lap = laplacian(&u, w, h);
+
+        // Build the kernel's 4-neighbour grid graph (same 3×3 topology) and its
+        // `+D−A` Laplacian at node 4, via the real imported kernel crate.
+        let mut adj: Vec<Vec<f64>> = vec![vec![0.0; w * h]; w * h];
+        let idx = |r: usize, c: usize| r * w + c;
+        for r in 0..h {
+            for c in 0..w {
+                let i = idx(r, c);
+                for (dr, dc) in [(0i32, -1i32), (0, 1), (-1, 0), (1, 0)] {
+                    let (nr, nc) = (r as i32 + dr, c as i32 + dc);
+                    if (0..h as i32).contains(&nr) && (0..w as i32).contains(&nc) {
+                        adj[i][idx(nr as usize, nc as usize)] = 1.0;
+                    }
+                }
+            }
+        }
+        // kernel `L = D − A` at node 4: D=4, minus the 4 neighbour values.
+        let center = idx(1, 1);
+        let kernel_lap: f64 = 4.0 * u[center] as f64
+            - adj[center]
+                .iter()
+                .enumerate()
+                .map(|(j, a)| *a * u[j] as f64)
+                .sum::<f64>();
+
+        // Engine center must equal −(kernel center) for the interior node.
+        assert!(
+            (engine_lap[center] as f64 + kernel_lap).abs() < 1e-6,
+            "TORVALDS-21: engine ∇² must be sign-inverted vs kernel L at interior node; \
+             engine={} kernel={}",
+            engine_lap[center],
+            kernel_lap
+        );
+
+        // Both must annihilate a constant field (graph-Laplacian identity for
+        // both conventions).
+        let flat = vec![3.0f32; w * h];
+        let flat_engine = laplacian(&flat, w, h);
+        for &v in &flat_engine {
+            assert!(v.abs() < 1e-6, "engine ∇² of constant field must be 0");
         }
     }
 }
