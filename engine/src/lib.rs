@@ -24,10 +24,21 @@ mod field_energy;
 mod loop_;
 mod money_guard;
 mod motion;
-mod scene;
+pub mod scene;
 mod sdf;
 pub mod text_input;
 pub mod text_scope;
+// P58 — a11y-mirror-everywhere (M1 model + M6 invariant). Offline-clean; the
+// `serde` feature (optional, cached) lets the wasm boundary (de)serialize the
+// tree. `mirror()` / `diff()` / `tree_hash()` are the shared contract every
+// surface blueprint consumes.
+pub mod semantics;
+// P58 — M4 native AccessKit adapter. Feature-gated (`a11y_native`): the real
+// `accesskit*` crates are NOT in the cargo cache (AK-unlock pending), so the
+// default build compiles ZERO AccessKit code. Offline gates (role-totality,
+// EditState bounds, composing-refused) live here and are tested now.
+#[cfg(feature = "a11y_native")]
+pub mod a11y_native;
 mod widget_store;
 mod zerocopy;
 
