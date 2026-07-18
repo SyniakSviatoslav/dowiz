@@ -17,6 +17,16 @@
 > sequencing (§2.2), P48 rendering + hub role (§3.2/§3.1), P49 identity deferral (§4.2) are
 > each RESOLVED with dated notes appended next to the original open-question framing (framings
 > preserved, per convention). D-items are green; B-item build-out is open.
+>
+> **STATUS CORRECTION (2026-07-18, later still — consistency pass): P47 and P49 are now
+> PARTIAL, not build-out-open.** The wave swarm landed real code the same day: **P47** —
+> `kernel/src/ports/payment.rs` (914 lines: PaymentPort + CashAttestation + reconciliation)
+> + `kernel/tests/firewall_p47.rs`, commits `e6367ae73`/`de56a27d6`; **P49** —
+> `kernel/src/ports/customer.rs` (574 lines: per-order capability grant identity, option 2,
+> privacy-minimal), commits `f55ff8911`/`69bdb2a71`. §0's "Zero payment code anywhere" row is
+> therefore historical (true when verified, superseded by the swarm). P48/P50 remain as
+> stated (P50's audit half is ON DISK: `P50-COMPLIANCE-AUDIT.md`, `568ff51c4`/`788cbee5a`).
+> Design-vs-implementation reconciliation deliberately NOT done in this note.
 
 ---
 

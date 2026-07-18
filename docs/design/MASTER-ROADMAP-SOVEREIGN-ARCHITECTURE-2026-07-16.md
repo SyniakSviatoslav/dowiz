@@ -458,7 +458,7 @@ directory). **Not deleted, and why:**
 
 | # | Phase | Blueprint | Depends on | Note |
 |---|---|---|---|---|
-| 30 | Bebop2 Mesh Masterwork — 9-batch synthesis: equations-first kernel organs, exactly-once/hysteresis correctness closure, arena/breaker/eigenvector substrate, capability-Sybil-proof mesh composition, staged product→kernel migration | [bebop2-mesh-tensor-hermetic-2026-07-17/BLUEPRINT-BEBOP2-MESH-MASTERWORK-SYNTHESIS.md](bebop2-mesh-tensor-hermetic-2026-07-17/BLUEPRINT-BEBOP2-MESH-MASTERWORK-SYNTHESIS.md) (synthesis over batches 10–18 in the same directory; `INDEX.md` there navigates) | **None hard for Waves 1–2** (startable now: eqc-rs→`geo.rs ema_next` wiring, `event_log.rs:359` `append_raw` exactly-once port — a LIVE money-red-line bug on this branch, `hydra.rs` hysteresis, `order_machine` ρ=0 const, householder eig2x2 dedup, wasm-boundary clamps, then arena.rs/breaker.rs/eigenvector-R1-R3/gossip-epoch). **P06 (key_V)** — the standing 3-way blocker gains a 4th consumer: the DecisionUnit *signed* import-verdict form and the tamper-leg closure both plug into P06's `Signer` slot (unsigned local-replay import gate builds earlier; synthesis §6). **P28** — co-owned substrate: P30 W2 *builds* P28's `arena.rs` and rung-1 solver per the eigenvector-refactor plan (no second arena, no lowrank.rs). **P29** — design authority for DecisionUnit gossip (= Decision Compiler; P30 adds only epoch/import-gate/rollback-in-same-log). **RLS NOBYPASSRLS** (`docs/ops/P8-NOBYPASSRLS-FLAG.md`) — a SEPARATE parallel workstream, never folded in; it hard-gates only the W4 product T4 write-path lane. New operator rulings docketed: **R-1** 0x12→0x13 discriminant, **R-2** budget-unit semantics, **R-3** `RootDelegationPolicy`, **R-4** money-law eqc flip + S2 integer basis-points (+ optional C8 bilateral-memory flag). Operator verdicts applied as binding: Sybil-proof via asymmetric anchor-rooted capability issuance (Batch 7 PROVEN-VIABLE — Cheng–Friedman's own asymmetric escape class; `verify_chain` already implements it), reputation/scoring/watchdogs/proxies rejected on physics+red-line. Verdict ledger: 14 ADOPT (+4 gated), 10 EXTEND, 17 ALREADY-EQUIVALENT, 16 DEFER-with-numeric-trigger, 19 REJECT-on-physics; zero concepts dropped (Batch 6 §5.1 completeness sweep is the spine). Zero new external deps in Waves 1–2. Off-critical-path lane structure like P5/P8/P11/P12/P24–P29, but W1-L2 (exactly-once port) is a correctness red-line item and should not idle |
+| 30 | Bebop2 Mesh Masterwork — 9-batch synthesis: equations-first kernel organs, exactly-once/hysteresis correctness closure, arena/breaker/eigenvector substrate, capability-Sybil-proof mesh composition, staged product→kernel migration | [bebop2-mesh-tensor-hermetic-2026-07-17/BLUEPRINT-BEBOP2-MESH-MASTERWORK-SYNTHESIS.md](bebop2-mesh-tensor-hermetic-2026-07-17/BLUEPRINT-BEBOP2-MESH-MASTERWORK-SYNTHESIS.md) (synthesis over batches 10–18 in the same directory; `INDEX.md` there navigates) | **None hard for Waves 1–2** (startable now: eqc-rs→`geo.rs ema_next` wiring, `event_log.rs:330` `append_raw` (line corrected 2026-07-18; was `:359`, file changed, symbol unchanged) exactly-once port — a LIVE money-red-line bug on this branch, `hydra.rs` hysteresis, `order_machine` ρ=0 const, householder eig2x2 dedup, wasm-boundary clamps, then arena.rs/breaker.rs/eigenvector-R1-R3/gossip-epoch). **P06 (key_V)** — the standing 3-way blocker gains a 4th consumer: the DecisionUnit *signed* import-verdict form and the tamper-leg closure both plug into P06's `Signer` slot (unsigned local-replay import gate builds earlier; synthesis §6). **P28** — co-owned substrate: P30 W2 *builds* P28's `arena.rs` and rung-1 solver per the eigenvector-refactor plan (no second arena, no lowrank.rs). **P29** — design authority for DecisionUnit gossip (= Decision Compiler; P30 adds only epoch/import-gate/rollback-in-same-log). **RLS NOBYPASSRLS** (`docs/ops/P8-NOBYPASSRLS-FLAG.md`) — a SEPARATE parallel workstream, never folded in; it hard-gates only the W4 product T4 write-path lane. New operator rulings docketed: **R-1** 0x12→0x13 discriminant, **R-2** budget-unit semantics, **R-3** `RootDelegationPolicy`, **R-4** money-law eqc flip + S2 integer basis-points (+ optional C8 bilateral-memory flag). Operator verdicts applied as binding: Sybil-proof via asymmetric anchor-rooted capability issuance (Batch 7 PROVEN-VIABLE — Cheng–Friedman's own asymmetric escape class; `verify_chain` already implements it), reputation/scoring/watchdogs/proxies rejected on physics+red-line. Verdict ledger: 14 ADOPT (+4 gated), 10 EXTEND, 17 ALREADY-EQUIVALENT, 16 DEFER-with-numeric-trigger, 19 REJECT-on-physics; zero concepts dropped (Batch 6 §5.1 completeness sweep is the spine). Zero new external deps in Waves 1–2. Off-critical-path lane structure like P5/P8/P11/P12/P24–P29, but W1-L2 (exactly-once port) is a correctness red-line item and should not idle |
 
 ---
 
@@ -562,7 +562,11 @@ something is live). **P34 is the single most important next action across the en
 roadmap** — bigger leverage than any other phase, because it converts ~70% of already-built,
 already-tested protocol code from stranded to load-bearing.
 
-### 10.2 Full P31–P46 index (swarm fast-lookup; sub-letter detail lives in §10.5)
+### 10.2 Full P31–P53 index (swarm fast-lookup; sub-letter detail lives in §10.5, P47–P53 full sections in §11–§14)
+
+> Extended P47–P53 on 2026-07-18 by the consolidation/consistency pass §11's note anticipated
+> ("a later consolidation pass reconciles that table" — this is that pass). Same-day swarm
+> landings folded into the P40/P41/P42 status cells with commit hashes.
 
 | Phase | Component | Name | Status | Absorbs | Depends on | Blocks |
 |---|---|---|---|---|---|---|
@@ -575,13 +579,20 @@ already-tested protocol code from stranded to load-bearing.
 | P37 | DELIVERY | Minimal HTTP/API surface for orders | PLANNED (0% — no dynamic HTTP server exists in-repo) | 1 unit: RW-09 (+ unblocks P23-P3; supplies wire half of P13) | P34 for mesh-backed data (can start against local delivery-domain) | P23-P3, P13, P39, AGENT P40 real tool target, P45 (hard) |
 | P38 | DELIVERY | WebGPU render engine (P38a) + Sea & Sheet surfaces (P38b) | P38a PARTIAL (math substrate DONE, GPU path 0%); P38b PLANNED (0%) | 27 units: FE-04(=RW-04)/05–07/10–16 + RW-01/05/10/11 (P38a) · DZ-01–12 (P38b) | O18a graphics-unlock (hard, environment-gated); P38b ← P38a + P37/P34 | P38b; P17 splat-tier closure |
 | P39 | DELIVERY | App-shell: installability + capability-auth wiring + offer math | PLANNED (installability undecided; P23-P1 and P20 DM-1 unblocked today) | 1 new unit (installability gap) + hosts P23-P1/P3 wiring and P20 DM-1 (their numbers unchanged) | P37 (auth wiring); P38a/b (installable target) | P17/P20 demo credibility; step-up auth for AGENT flows |
-| P40 | AGENT | AgentLoop executor + tool-calling capability wiring | PLANNED (substrate DONE; loop 0 grep hits) | P21 (executor half) | P37 for the real read-order tool (scaffold now against a stub) | P41, P42 |
-| P41 | AGENT | Three-mode operation: no-AI / local-offline / connected | PARTIAL (backend swappability shipped; parity proof + degradation contract missing) | P21 (mode/degradation half) + operator three-mode directive | P40 (DoD-1 no-AI proof landable today, before P40) | P42 |
-| P42 | AGENT | MCP port + agent-as-capability boundary | PLANNED | 1 unit: IP-08 | P40 + P41 | ECOSYSTEM external consumption of AGENT tools |
+| P40 | AGENT | AgentLoop executor + tool-calling capability wiring | PARTIAL — 2026-07-18 swarm landed `kernel/src/agent/loop.rs` AgentLoop (fail-closed, `626236886`/`e25e9fed8`); was "PLANNED (loop 0 grep hits)" | P21 (executor half) | P37 for the real read-order tool (scaffold now against a stub) | P41, P42 |
+| P41 | AGENT | Three-mode operation: no-AI / local-offline / connected | PARTIAL — 2026-07-18 swarm landed `kernel/src/ports/llm.rs` AiMode + BackendConfig::from_env (fail-closed, default Off, `e74fc3e4f`/`4d8e292b0`); parity proof + full degradation contract still open | P21 (mode/degradation half) + operator three-mode directive | P40 (DoD-1 no-AI proof landable today, before P40) | P42 |
+| P42 | AGENT | MCP port + agent-as-capability boundary | PARTIAL — 2026-07-18 swarm landed `kernel/src/ports/mcp.rs` + `ports/tool.rs` capability-scoped tool boundary (`575a75a20`/`09b2c7edd`); was PLANNED | 1 unit: IP-08 | P40 + P41 | ECOSYSTEM external consumption of AGENT tools |
 | P43 | ECOSYSTEM/OPS | External integration ports (messenger/marketing/export/backup/hosting) | PLANNED (+1 live QRNG-endpoint bug fixable now) | 6 units: IP-11/12/13/14/19/20 (IP-10/15/16 → existing P22, not renumbered) | DELIVERY P37/P38; PROTOCOL P34 | nothing on critical path |
 | P44 | ECOSYSTEM/OPS | Cache layers (EC-05) + own-RAG/own-inference scale-out | PLANNED (0/5 layers) — LOW PRIORITY / FAR-FUTURE | ~9 units: EC-05 + own-inference/RAG/chunking/gossip units of EC-03/04/06/08/12–15 | AGENT P40/P41 real traffic; DELIVERY P37 load | nothing; nothing waits on it |
 | P45 | ECOSYSTEM/OPS | Deployment + monitoring floor (minimum viable ops) | PARTIAL — barely; the arc's own premise (attic) is gone | 22 units: OPS-01–22 | HARD-blocked by P37; data-layer items gated on pgrust-rebuild /council | P46 |
 | P46 | ECOSYSTEM/OPS | Multi-product platform ("dowiz Local" + marketplace) | PLANNED (0%) — FURTHEST FUTURE | EC-17 + multi-product/marketplace remainder of the EC arc | everything above: P37/P38 live, P45 green (incl. off-site backup), P43 ≥1 port | nothing — terminal node of the roadmap |
+| P47 | DELIVERY | Payment & settlement rails (cash → crypto → processors) | PARTIAL — ruling LANDED (Wave 0 = cash, §11); Wave-0 rail code landed 2026-07-18: `kernel/src/ports/payment.rs` PaymentPort + CashAttestation + reconciliation + `tests/firewall_p47.rs` (`e6367ae73`/`de56a27d6`) | none — genuinely new | P37 (order surface to settle against) | nothing on wiring critical path; prerequisite for P50's first-real-order gate |
+| P48 | DELIVERY | Owner/Admin operational surface (omnichannel hub) | PLANNED — rulings LANDED (WebGPU no-DOM-exemption; hub model, §11); build-out open | none — new (silence-ledger item 2) | P37 (auth + API); P38a only conditionally (ruling made it unconditional) | P50's first-real-order gate (a real venue needs a managed menu) |
+| P49 | DELIVERY | Customer identity, notification & tracking UX | PARTIAL — ruling LANDED (deferred to 5–50 real clients; Wave-0 default = per-order capability grant, §11); grant identity code landed 2026-07-18: `kernel/src/ports/customer.rs` (option 2, privacy-minimal, `f55ff8911`/`69bdb2a71`) | customer-side closure of P43's corrected claim (§10.5.5) | P37 (wire), P38a/b (tracking render), P43 DoD-2 (send path) | P50's first-real-order gate ("real customer" leg) |
+| P50 | ECOSYSTEM/OPS | Legal/compliance & first-order validation gate | PARTIAL — audit half ON DISK (`CORE-ROADMAP-2026-07-17/P50-COMPLIANCE-AUDIT.md`, `568ff51c4`/`788cbee5a`); first-order gate open | G11 + old-stack legal-surface audit obligation | audit: nothing (startable now); gate: P47/P48/P49 + P34/P37/P38 critical path | P46 (and any scale-out) |
+| P51 | DELIVERY | Open map + routing: OSM vector, field-rendered routes, pin-drop, live tracking | PLANNED (blueprint ON DISK; kernel router landed pre-phase in P04) | none — feeds/closes P04 router + `route_js` gap, P49 DoD-4 supply, splatting Stage-1 | P38a (render legs; CPU compose works today), P34/P37 (wire/asset ride) | P49 DoD-4 (TrackFrame consumer), splatting arc Stage-1; feeds P50 audit (ODbL row) |
+| P52 | DELIVERY | Courier working surface: shift, claims, run, PoD, earnings | PLANNED (blueprint ON DISK; protocol side already the most-built part of stack) | none — executes DZ-08, MVP-audit M1/M4/M10 seams | P34, P38a, P51, P37, P39 (K6), P48 (roster), P47 (attestation) | nothing downstream, but itself MVP-blocking: P50's gate cannot go green without it |
+| P53 | DELIVERY | Tor/onion integration: anonymous-access tier, Onion-Location + QR | PLANNED (blueprint ON DISK; W0 buildable today) | fold-in ledger L4 (activated 2026-07-18) | W0: nothing; W1 (live onion service): P37 + P45, operator-run | nothing — feeds P48 share panel, P52 K6 (QR encoder), P50 audit (privacy-tier row) |
 
 ### 10.3 Cross-cutting invariants (binding across components; each stated once)
 
@@ -616,7 +627,8 @@ already-tested protocol code from stranded to load-bearing.
 5. **Compilation-firewall pattern (repo-wide).** Consumers reach protected surfaces only through
    a facade whose lack of direct kernel imports is proven by `cargo tree` + a committed
    red-proof. Three instances, one pattern: PROTOCOL's KernelFacade
-   (`proto-cap/src/facade.rs:64 submit_intent`, MESH-02), AGENT's ToolPort (P40 DoD-1), and the
+   (`proto-cap/src/facade.rs:123 submit_intent` — line corrected 2026-07-18, file grew, symbol
+   unchanged, MESH-02), AGENT's ToolPort (P40 DoD-1), and the
    MCP layer (P42 DoD-3).
 6. 🔴 **Two live regressions** demanding attention regardless of critical-path sequencing (P36
    DoD-1/DoD-2): bebop's `no_std` wasm32 build is RED right now
@@ -823,7 +835,7 @@ One-line ledger:
 
 **Done inventory (one line each, verified live this session):**
 - MESH-01 delivery-domain crate — `bebop2/delivery-domain/{lib.rs,intake.rs,pod.rs,finalization.rs,hub_ring.rs}`, 1844 lines, incl. proven solo-island offline test `intake.rs::ac6_solo_island_full_flow_no_peers` (full order→delivery with ZERO peers — directly satisfies the operator's "offline agent" requirement).
-- MESH-02 KernelFacade — `bebop2/proto-cap/src/facade.rs:64` `submit_intent`; the compilation-firewall pattern (any port importing dowiz-kernel directly fails to build).
+- MESH-02 KernelFacade — `bebop2/proto-cap/src/facade.rs:123` `submit_intent` (line corrected 2026-07-18; was `:64`, file grew, symbol unchanged); the compilation-firewall pattern (any port importing dowiz-kernel directly fails to build).
 - MESH-03 event vocabulary — `proto-cap/src/event_dict.rs:278-299`, `DeliveryEvent::{OrderPlaced,ClaimOffered,ClaimAccepted,ClaimReleased,SettlementRecorded}`.
 - MESH-04 claim_machine — `proto-cap/src/claim_machine.rs:85` `assert_transition`.
 - MESH-05 matcher — `proto-cap/src/matcher.rs:63` `assign()` HRW rendezvous-hash + `hub_ring.rs:62`; deterministic, NO courier-scoring.
@@ -835,7 +847,7 @@ One-line ledger:
 
 **DoD (falsifiable):**
 1. A cargo dependency edge exists from a dowiz workspace member (kernel-adjacent adapter crate, not the web app) to `bebop2` `delivery-domain`/`proto-cap`, and it builds in CI — falsified by `cargo tree` showing no such edge.
-2. The MESH-02 compilation firewall survives the wiring: dowiz consumes the protocol **only** through `KernelFacade::submit_intent` (`facade.rs:64`); a committed red-proof demonstrates that adding a direct dowiz-kernel import to any port fails the build.
+2. The MESH-02 compilation firewall survives the wiring: dowiz consumes the protocol **only** through `KernelFacade::submit_intent` (`facade.rs:123`, line corrected 2026-07-18); a committed red-proof demonstrates that adding a direct dowiz-kernel import to any port fails the build.
 3. Event-vocabulary round-trip: dowiz's order lifecycle maps 1:1 onto the five `DeliveryEvent` variants (`event_dict.rs:278-299`); an integration test folds a complete dowiz order through `claim_machine.rs:85 assert_transition` with zero illegal transitions.
 4. Matcher consumption: at least one dowiz-side integration test calls `matcher.rs:63 assign()` for courier assignment and asserts determinism (identical inputs → identical assignment). No scoring, ranking, or reputation input is added (standing rejection).
 5. Offline proof re-anchored: the `ac6_solo_island_full_flow_no_peers` scenario runs green **driven from the dowiz-kernel decider side** — full order→delivery with zero peers, using dowiz's Law as the fold.
@@ -1123,10 +1135,10 @@ P22 is **confirmed 0% built** — no `SocialPoster` trait, no `TelegramAdapter`/
 
 Appended by the 2026-07-18 end-state-vision follow-up pass (same session as §10; same
 append-only rule as §7/§8/§9/§10). **This section extends the phase index from P31–P46 to
-P31–P50.** §10.2's index table still reads "P31–P46" and is deliberately left untouched here (a
-parallel pass may be editing nearby text); a later consolidation pass reconciles that table.
-Until then, §10.2's upper bound is stale by four phases and this section is the authority for
-P47–P50. Blueprint — ONE combined file for all four (deliberately; see its own header for why):
+P31–P50.** §10.2's index table originally still read "P31–P46" and was deliberately left
+untouched here (a parallel pass may have been editing nearby text); the anticipated later
+consolidation pass extended it through P53 on 2026-07-18. This section remains the full-text
+authority for P47–P50. Blueprint — ONE combined file for all four (deliberately; see its own header for why):
 `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P47-P50-gap-closing-phases.md`.
 
 ### 11.0 Why this section exists
@@ -1152,7 +1164,11 @@ absences the roadmap's own scenario walk revealed, added under the operator's pa
 **Absorbs:** none — genuinely new; no prior unit ID anywhere names a payment rail (grep for
 payment/stripe/liqpay/cash-on-delivery across `kernel/`, `engine/`, `web/`, `llm-adapters/` and
 bebop2's `delivery-domain`/`proto-cap`: zero non-test hits, verified live 2026-07-18).
-**Status:** PLANNED — decision RESOLVED (2026-07-18, operator ruling), build-out open
+**Status:** PLANNED — decision RESOLVED (2026-07-18, operator ruling), build-out open.
+*Correction (2026-07-18, later same day): PARTIAL — the wave swarm landed the Wave-0 cash rail:
+`kernel/src/ports/payment.rs` (PaymentPort + CashAttestation + reconciliation) +
+`kernel/tests/firewall_p47.rs` (`e6367ae73`/`de56a27d6`). Design-vs-implementation
+reconciliation deliberately not done here.*
 **Role & responsibility:** `SettlementRecorded` exists as a wire event
 (`bebop2/proto-cap/src/event_dict.rs:122,279` — payload + variant, verified this pass) and
 money math is airtight range-checked `i64` (`kernel/src/money.rs`) — but nothing names how
@@ -1302,7 +1318,10 @@ unconditional.)* Blocks P50's first-real-order gate (a real venue needs a manage
 already has full push+OTP" FALSE — a real customer-facing send path does not exist); otherwise
 no prior unit ID.
 **Status:** PLANNED — decision RESOLVED (2026-07-18, operator ruling): planned-but-deferred;
-simple Wave-0 default now, mechanism revisited at 5–50 real clients
+simple Wave-0 default now, mechanism revisited at 5–50 real clients.
+*Correction (2026-07-18, later same day): PARTIAL — the wave swarm landed the Wave-0 default:
+`kernel/src/ports/customer.rs` per-order capability grant identity (option 2, privacy-minimal,
+`f55ff8911`/`69bdb2a71`). Design-vs-implementation reconciliation deliberately not done here.*
 **Role & responsibility:** Three inseparable customer-facing concerns. (a) **Identity** — how an
 anonymous customer places, tracks, and re-identifies to an order WITHOUT a device-bound
 capability cert: certs are specified for couriers/operators/devices, and requiring a customer
@@ -1428,8 +1447,8 @@ Appended by a separate 2026-07-18 pass (same append-only rule as §7-§11). **Th
 extends the phase index from P31-P50 to P31-P51.** It is deliberately NOT folded into §11:
 §11.0's own charter is "exactly these four, and nothing else" (the end-state-vision pass's
 silence ledger), and P51 comes from a direct operator directive, not from that pass — a
-different provenance deserves a different section. §10.2's index table remains stale per
-§11's own note; the same later consolidation pass reconciles both.
+different provenance deserves a different section. (§10.2's index table was extended through
+P53 on 2026-07-18 — the consolidation pass §11's note anticipated.)
 
 #### P51 — Open map + routing: OSM vector data, field-rendered routes, pin-drop, live tracking (DELIVERY component)
 **Absorbs:** none — genuinely new phase; it *feeds and closes* existing seams rather than
@@ -1508,8 +1527,8 @@ MVP-blocking ownership vacuum (§6 M1, "the largest single omission this audit f
 operator directed minting a phase for it. P52 is DELIVERY-component work and belongs
 conceptually beside P37-P39/P47-P49 — it is appended HERE rather than inside §10.5.3 because
 the append-only convention (§12's own precedent: P51 is DELIVERY too and got its own tail
-section) beats section-thematic placement; §10.2's index table remains stale per §11's note,
-and the same later consolidation pass reconciles all of it.
+section) beats section-thematic placement. (§10.2's index table was extended through P53 on
+2026-07-18 — the consolidation pass §11's note anticipated.)
 
 #### P52 — Courier working surface: shift, claims, run, proof-of-delivery, earnings (DELIVERY component)
 **Absorbs:** none — genuinely new phase. It *executes and closes* existing seams rather than
@@ -1590,8 +1609,9 @@ activating fold-in ledger item **L4** (§9.2 — "Anonymous `.onion`/Tor tier", 
 waiver). The waiver's trigger ("vendor-node tier ships AND a venue requires anonymity") is
 SUPERSEDED by the operator's direct request, recorded explicitly rather than silently: the
 demand-signal leg is satisfied by the request itself; the vendor-node-tier leg is honored
-by the phase's own wave split (code now, live onion service only WITH P37+P45). §10.2's
-index table remains stale per §11's note; the same later consolidation pass reconciles it.
+by the phase's own wave split (code now, live onion service only WITH P37+P45). (§10.2's
+index table was extended through P53 on 2026-07-18 — the consolidation pass §11's note
+anticipated.)
 
 #### P53 — Tor/onion integration: anonymous-access tier, Onion-Location + QR convenience (DELIVERY component, PROTOCOL cross-ref)
 **Absorbs:** fold-in ledger **L4** (§9.2) — the only ledger item still in waiver form, now

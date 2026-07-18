@@ -1,5 +1,12 @@
 # BLUEPRINT P40 — AgentLoop executor + tool-calling capability wiring (2026-07-18)
 
+> **STATUS CORRECTION (2026-07-18, later same day — consistency pass):** no longer purely
+> planned. The wave swarm landed a real `AgentLoop` executor: `kernel/src/agent/loop.rs`
+> (651 lines) + `kernel/src/agent/mod.rs`, fail-closed, commits `626236886`/`e25e9fed8`;
+> `kernel/src/ports/tool.rs` (ToolPort) landed with the P42 wave (`575a75a20`). P40 is
+> **PARTIAL**. The swarm may have implemented details differently than designed below —
+> reconciling design-vs-implementation is deliberately NOT done in this note.
+
 > **Planning document — writes no product code.** Written against the 20-point contract in
 > `docs/design/CORE-ROADMAP-STANDARD-2026-07-17.md` §2 (compliance map in §9 below — every point
 > addressed, none skipped). This blueprint deepens the roadmap-index DoD for **P40** in

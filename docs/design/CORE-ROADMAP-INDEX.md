@@ -17,6 +17,13 @@
 > `P01–P30` semantics unchanged. `Layer A..I` is an orthogonal **altitude axis** over clusters of those
 > phases — formerly spelled "P-A..P-I", renamed to kill the P-D/P04 lexical collision (ruling:
 > P-I audit §4). On-disk `BLUEPRINT-P-X-*.md` filenames keep their provenance names.
+>
+> **2026-07-18 addendum (later same day, consistency pass):** SOVEREIGN §11–§14 extend the
+> numbering further to **P47–P53** (payment rails, owner hub, customer identity, compliance
+> gate, open map/routing, courier surface, Tor/onion) — every "P01–P46"/"P31–P46" range in this
+> file predates that extension; §10.2 there is now the full P31–P53 index. Same day, the wave
+> swarm landed first real code for P40/P41/P42/P47/P49 (+G3 render shell), so §0's AGENT
+> "executor loop … is 0%" line is historical — see SOVEREIGN §10.2's corrected status cells.
 
 ---
 
