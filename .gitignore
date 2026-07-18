@@ -93,3 +93,4 @@ temp/
 
 # runtime harvest ledger (native telemetry; never commit)
 track_record.jsonl
+.worktrees/
