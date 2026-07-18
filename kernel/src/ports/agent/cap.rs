@@ -268,7 +268,9 @@ impl SignedFrame {
     /// Verify the classical leg (real, never relaxed).
     pub fn verify_classical<V: SignatureVerifier>(&self, verifier: &V) -> bool {
         match &self.classical_sig {
-            Some(sig) => verifier.verify_classical(&self.capability.subject_key, &self.signing_domain(), sig),
+            Some(sig) => {
+                verifier.verify_classical(&self.capability.subject_key, &self.signing_domain(), sig)
+            }
             None => false,
         }
     }
@@ -337,7 +339,8 @@ impl Delegation {
         nonce: [u8; 8],
         issuer_secret: &[u8; 32],
     ) -> Delegation {
-        let canonical = Self::canonical_bytes(&issued_by, &subject, &scope, &effect, expiry, &nonce);
+        let canonical =
+            Self::canonical_bytes(&issued_by, &subject, &scope, &effect, expiry, &nonce);
         let signature = verifier.sign_classical(issuer_secret, &canonical);
         Delegation {
             issued_by,
@@ -626,7 +629,13 @@ mod tests {
         let anchor_pk = s.classical_public(&anchor_secret);
         let leaf_pk = s.classical_public(&leaf_secret);
         let scope = Scope::single(Resource::AgentBridge, Action::AdmitAgent);
-        let cap = Capability::new_hybrid(leaf_pk, s.pq_public(&[12u8; 32]), scope.clone(), [1u8; 8], 9999);
+        let cap = Capability::new_hybrid(
+            leaf_pk,
+            s.pq_public(&[12u8; 32]),
+            scope.clone(),
+            [1u8; 8],
+            9999,
+        );
         let link = Delegation::sign(
             &s,
             anchor_pk,

@@ -86,9 +86,17 @@ impl MemSample {
         let mut vm_hwm_kb: Option<u64> = None;
         for line in status.lines() {
             if let Some(rest) = line.strip_prefix("VmRSS:") {
-                vm_rss_kb = rest.trim().split_whitespace().next().and_then(|s| s.parse().ok());
+                vm_rss_kb = rest
+                    .trim()
+                    .split_whitespace()
+                    .next()
+                    .and_then(|s| s.parse().ok());
             } else if let Some(rest) = line.strip_prefix("VmHWM:") {
-                vm_hwm_kb = rest.trim().split_whitespace().next().and_then(|s| s.parse().ok());
+                vm_hwm_kb = rest
+                    .trim()
+                    .split_whitespace()
+                    .next()
+                    .and_then(|s| s.parse().ok());
             }
         }
         Some(Self {
@@ -151,7 +159,10 @@ impl MetricLine {
         }
         match tag {
             "Cpu" => {
-                check_keys(&kv, &["pid", "utime_ticks", "stime_ticks", "clk_tck", "mono_ns"])?;
+                check_keys(
+                    &kv,
+                    &["pid", "utime_ticks", "stime_ticks", "clk_tck", "mono_ns"],
+                )?;
                 let pid: u32 = kv["pid"].parse().map_err(|_| "bad pid")?;
                 let utime_ticks: u64 = kv["utime_ticks"].parse().map_err(|_| "bad utime_ticks")?;
                 let stime_ticks: u64 = kv["stime_ticks"].parse().map_err(|_| "bad stime_ticks")?;
@@ -274,24 +285,25 @@ mod tests {
             mem_used_mb: 1024,
         };
         let gline = MetricLine::Gpu(gpu).to_line();
-        assert_eq!(MetricLine::parse_line(&gline).unwrap(), MetricLine::Gpu(gpu));
+        assert_eq!(
+            MetricLine::parse_line(&gline).unwrap(),
+            MetricLine::Gpu(gpu)
+        );
 
         // Parse-or-reject: unknown tag.
         assert!(MetricLine::parse_line("garbage:::").is_err());
         // Parse-or-reject: malformed token that is not a clean "Cpu ..." record.
         assert!(MetricLine::parse_line("Cpu{x=notanumber}").is_err());
         // Parse-or-reject: type mismatch (non-numeric where integer required).
-        assert!(
-            MetricLine::parse_line("Cpu pid=abc utime_ticks=1 stime_ticks=1 clk_tck=1 mono_ns=1")
-                .is_err()
-        );
+        assert!(MetricLine::parse_line(
+            "Cpu pid=abc utime_ticks=1 stime_ticks=1 clk_tck=1 mono_ns=1"
+        )
+        .is_err());
         // Parse-or-reject: unknown key.
-        assert!(
-            MetricLine::parse_line(
-                "Cpu pid=1 utime_ticks=1 stime_ticks=1 clk_tck=1 mono_ns=1 foo=bar"
-            )
-            .is_err()
-        );
+        assert!(MetricLine::parse_line(
+            "Cpu pid=1 utime_ticks=1 stime_ticks=1 clk_tck=1 mono_ns=1 foo=bar"
+        )
+        .is_err());
         // Parse-or-reject: missing required field (was a latent Index panic →
         // now correctly Err).
         assert!(MetricLine::parse_line("Cpu pid=1 utime_ticks=1").is_err());
