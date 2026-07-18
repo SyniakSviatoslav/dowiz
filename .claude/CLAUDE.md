@@ -36,7 +36,9 @@
 > All governance gates / red-line friction / mandatory-proof requirements are REMOVED for
 > full self-management of the repo (see settings.json hooks block — emptied; all hook scripts
 > are no-op pass-throughs). The technical guidance below is OPTIONAL, not enforced:
-> - UI change: Playwright E2E against `https://dowiz.fly.dev` (`/s/:slug` public, `/admin/*` owner).
+> - UI change: Playwright E2E against the live Hetzner/Cloudflare deploy target
+>   (`/s/:slug` public, `/admin/*` owner). Fly.io fully retired 2026-07-18 —
+>   `dowiz.fly.dev` is no longer a deploy target or proof target.
 > - API change: a `request.*` assertion or existing coverage.
 > - Proof is encouraged but NOT required to mark a task done.
 
@@ -54,9 +56,10 @@ These are defined in `AGENTS.md` at the project root. Any agent reading AGENTS.m
 ## Ship Discipline — SUSPENDED (operator directive 2026-07-15)
 
 > All ship gates / mandatory deploy-validation / "never commit to main" rules are REMOVED.
-> Operator has authorized full control of GitHub, Claude, and Cloudflare. For reference only
-> (no longer enforced): staging deploy via `flyctl deploy -a dowiz-staging --remote-only`;
-> prod on merge to `main`; UI validation via Playwright E2E against the deployed URL.
+> Operator has authorized full control of GitHub, Claude, Hetzner, and Cloudflare. Fly.io is
+> fully retired (2026-07-18 operator directive) — Hetzner + Cloudflare only, no Fly deploy
+> target of any kind (prod or staging). UI validation via Playwright E2E against the live
+> Hetzner/Cloudflare deploy target.
 
 ## Self-improvement loop — SUSPENDED (operator directive 2026-07-15)
 

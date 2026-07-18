@@ -1811,3 +1811,150 @@ not papered over).
 **Depends on / blocks:** depends on P25 (admission), P45 (alerting), the disk-cleanup pass
 (local storage headroom). Blocks nothing directly — P54 and P55 both consume it as their
 storage/scheduling substrate, named as a soft dependency each.
+
+---
+
+## 16. Deployment topology + operating-model decisions (2026-07-18, dialogue pass)
+
+Appended by a separate 2026-07-18 pass (same append-only rule as §7-§15). Provenance:
+directly following the 5-persona hostile audit (§synthesis in `docs/research/AUDIT-2026-07-18-
+SYNTHESIS-SCORECARD.md`, GO/NO-GO = NO-GO), the operator restated dowiz's target end-state in
+their own words and asked for a **dialogue-format** clarification pass (not another silent
+document dump) — a sequence of `AskUserQuestion` rounds, each answered directly, before any
+further build work. This section is the **decisions record** of that pass; it does not
+introduce new numbered phases — it constrains and cross-links existing ones (P37/P38a/P39/P52,
+Sea&Sheet, P40/P41's AiMode) and settles topology questions no prior section had pinned down.
+
+### 16.1 Hosting topology — three modes, deliberately not mixed
+Operator's own framing: *"хостинг на cloudflare pages або hetzner - щоб не змішувати +
+self-host, self-app."* Three clean deployment targets for the same open hub software, chosen
+per-venue, never blended within one deployment:
+1. **Cloudflare Pages** — edge delivery for static/brand content (the Sheet layer, client-app
+   assets). Global CDN, zero server management, fits the "installable or domain-hosted link"
+   requirement for `dowiz.org`-served client apps directly.
+2. **Hetzner** — dowiz-operated managed hub hosting, the default for venues that don't want to
+   self-host. This is where the mesh-hub backend (kernel, event log, capability-cert store,
+   the single in-hub agent) actually runs.
+3. **Self-host** — the identical open hub software run on the venue's own hardware/devices.
+   Not a degraded tier; the same binary, same protocol, same capability-cert model as Hetzner —
+   only the physical host differs.
+**Consequence for existing blueprints:** none of P37/P38a/P39/P52 assumed a single fixed host;
+this section makes the three-mode split explicit so none of them silently bake in a
+Hetzner-only or Cloudflare-only assumption going forward.
+
+### 16.2 Remote access to self-hosted/Hetzner hubs — Cloudflare Tunnel, unconditionally
+Operator's ruling: *"dowiz Cloudflare Tunnel з коробки."* A venue that self-hosts on hardware
+inside their own premises still needs the owner/courier to reach the hub from outside — without
+the venue ever hand-configuring port-forwarding. The hub software bundles `cloudflared` and
+provisions a tunnel to the operator's own Cloudflare account automatically at install time. This
+is the **same** mechanism used for Hetzner-hosted hubs (no separate ingress design needed) — one
+Cloudflare-side mechanism covers both non-CF-Pages hosting modes uniformly. **Open engineering
+question, not yet closed**: per-venue tunnel provisioning/credential lifecycle (one Cloudflare
+account fronting N independently-owned hubs — isolation between tenants at the tunnel layer)
+needs its own design pass; flagged here as a named gap, not designed in this section.
+
+### 16.3 Courier model — venue brings its own, dowiz stays protocol-only
+Operator's ruling (Recommended option, confirmed): *"Заклад приводить своїх кур'єрів."* dowiz
+does not recruit, employ, or centrally pool couriers. Each venue onboards its own couriers
+through the existing capability-cert flow; dowiz is dispatch protocol, not a labor marketplace.
+**Confirms, does not change,** P52's existing courier-onboarding design (`BLUEPRINT-P52-
+courier-working-surface.md`) — no rework needed, this closes the "which onboarding model"
+question P52 had left implicit.
+
+### 16.4 In-hub agent — exactly one, assistant not autopilot
+Operator's ruling, verbatim: *"один активний агент, для багатьох речей підійдуть автоматизовані
+скрипти і автоматизації, немає потреби в окремих агентах суто на постинг чи аналітику - тут
+власне агент це не автопілот, а права рука, помічник власника, щоб розвантажувати його, а не
+приймати за нього рішення."* Exactly one active agent per hub (local Ollama or a connected
+backend — the existing three-mode `AiMode`, unchanged). Routine/repetitive work (posting,
+analytics) is handled by deterministic automation scripts, **not** separate specialized agents —
+avoids an agent-per-function sprawl no one asked for. The role framing itself is load-bearing:
+the agent offloads work FROM the owner, it does not make decisions FOR the owner. This is the
+same structural boundary P40/P41 already enforce (AI excluded from money/order-confirm/cancel
+authority) — this section extends that boundary from "money" specifically to "the owner's
+decisions" generally, and settles that no per-hub arbitration/locking mechanism is needed since
+there is only ever one active agent to arbitrate between.
+
+### 16.5 Order intake — every channel is a full-featured adapter, one kernel order-flow
+Operator's ruling (Recommended option, confirmed): every intake channel (WhatsApp, Telegram,
+web link, httpSMS, etc.) gets the *same* full capability — menu, payment, tracking — not a
+"lightweight" subset. One order-flow lives in the kernel; each channel is a thin
+transport/adapter translating its native format into the same kernel calls (ports/adapters,
+already this repo's standing pattern — IP-* integration-ports arc). No channel-specific
+business logic, no channel-tiering to design or maintain.
+
+### 16.6 Mesh topology — isolated hubs, `dowiz.org` as directory (MVP), federation named-deferred
+Operator's ruling (Recommended option, confirmed): each hub is a fully autonomous, isolated
+instance (own data, own couriers, own clients). `dowiz.org` is a **directory of links**, not a
+federation/discovery protocol — a customer or courier does not, in the MVP, search or route
+across multiple hubs simultaneously. This is the deliberately simple reading of "decentralized
+mesh hubs": decentralization means no dowiz-owned central data store or control plane, **not**
+inter-hub network discovery. Federation is explicitly named as a possible later addition, not
+designed here — adding it later must not require re-architecting the isolated-hub model, since
+each hub is already self-sufficient by construction.
+
+### 16.7 Auto-posting review — hybrid, owner-configurable per venue
+Operator's ruling: *"гібрид, на розсуд користувача."* Consistent with §16.4's agent-role
+framing (posting is a decision with brand-visible consequences, not a background operation): the
+owner configures, per venue, whether posts queue for their approval before publishing or publish
+autonomously from a one-time template/ruleset. Both modes must be supported; this is a setting,
+not an architecture fork — no separate design path needed for each.
+
+### 16.8 `dowiz.org` access model — web-try-first, install as the daily-user upgrade
+Operator asked directly for a recommendation (*"твоя думка? загалом для мобілок"*) rather than
+choosing between options. Recommendation given and not yet contested: a web link
+(`dowiz.org/s/venue-slug`, matching the existing public storefront pattern) is the zero-friction
+"look, then try" path on any device — this is literally what "переглянути та спробувати"
+requires. The installable client (Tauri, already Wave-0 per P39's operator-reversed verdict) is
+the upgrade path for daily/repeat users — the owner managing a hub continuously, and the courier
+who needs push notifications, offline resilience, and native GPS. Mirrors the standard
+food-delivery UX split (DoorDash/Uber Eats: web always works, the app is for return visitors).
+The operator's own mobile emphasis reinforces this rather than contesting it — Tauri 2.x's
+mobile targets (confirmed earlier this session, `BLUEPRINT-AUTH-DEVICE-2FA-2026-07-17.md` §5.3b)
+already carry native NFC/biometric plugins.
+
+### 16.9 Brand customization — confirmed as-is, no change
+The operator's "kастомізовувати інтерфейс під власний бренд у межах визначеного дизайну" maps
+directly onto the already-designed Sea&Sheet 5-token brand model (accent/ink/paper/type/radius) —
+Sea (dowiz-owned ambient physics field/narrative layer) stays fixed, Sheet (brand content) is
+customizable within that 5-token envelope. No new design work triggered by this dialogue pass;
+recorded here only so the mapping is explicit and citable.
+
+### 16.10 Fly.io — fully retired, not deferred
+Operator's ruling, twice-confirmed: kill the Fly zombie now (*"вимкнути зараз, клієнт
+повідомлений про нову версію"*), remove Fly from the codebase entirely (*"прибирай з коду
+повністю"*). Actioned this same pass:
+- `.env` mode 666→600 (unrelated pre-existing audit action, done same session, unblocking
+  nothing about Fly specifically but recorded for the same commit's provenance).
+- Stale `dowiz.fly.dev` references in live-behavior-driving config updated to reflect
+  Hetzner+Cloudflare-only: `.mcp.json` (`VITE_BASE_URL`), `openspec/config.yaml` (tech-stack +
+  Mandatory Proof Rule target), `.claude/CLAUDE.md` (both SUSPENDED-section Fly mentions).
+  `fly.toml` and the old TS backend (`apps-api`/`apps-worker`/`packages-db`) were already
+  quarantined to `attic/` in an earlier commit (`fce5738b0`) — this pass only had stale
+  *references* left to clean, not a live deploy pipeline.
+- **Actual teardown is blocked on operator action**, not a design question: this sandbox holds
+  no prod Fly credential (only a `dowiz-staging`-scoped token was ever intentionally saved, per
+  `staging-fly-access` memory — prod tokens were deliberately never persisted). The operator
+  must run `flyctl auth login` interactively (`! ~/.fly/bin/flyctl auth login`) before teardown
+  can proceed.
+- A **pre-existing runbook already covers this exact teardown**:
+  `docs/red-team/2026-07-13/PART1-LIVE-PROD-DECOMMISSION.md` — written 5 days before this
+  dialogue pass, already scoped as "NOT EXECUTABLE FROM THIS HOST" for the same credential
+  reason. Its Step A (rotate the seeded `test@dowiz.com` owner credential in the live prod
+  Supabase DB, confirmed live/owner-privileged by the 2026-07-13 red-team synthesis) is a
+  prerequisite BEFORE Step B's `fly scale count 0` / `fly apps suspend` teardown, so the
+  teardown window itself can't be abused. Step A is a live-prod auth/money-adjacent DB write —
+  **not executed without separate explicit operator confirmation**, same red-line standard as
+  every other prod-DB action this session.
+**Depends on / blocks:** blocks nothing else in this roadmap — the new stack's build (Tier 3 web
+UI, tracked via the audit triage's `#10`/`#11`) proceeds independently of when the Fly teardown
+itself executes.
+
+### 16.11 What this section deliberately does not resolve
+Per the operator's own next instruction (*"продовжував працювати у визначеному напрямку"* — a
+~50-question progressive dialogue is in progress, tracked outside this file), several real
+sub-questions surfaced during this pass are named but not closed: the Cloudflare Tunnel
+multi-tenant credential-isolation design (§16.2), the exact Tier-3 web-UI rebuild scope (audit
+triage `#10`/`#11`, DELIVERY grade F), and the full remaining question set the operator
+requested. This section will grow via the same append-only convention as further dialogue
+rounds settle each one — it is not a final architecture document.

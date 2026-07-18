@@ -5,9 +5,15 @@ context: |
   platform (storefront `/s/:slug`, owner `/admin/*`, courier app). Albanian
   market (locale `sq`), solo-maintained.
 
-  Tech stack: TypeScript, pnpm monorepo (13 workspaces) — apps/api (Fastify),
-  apps/web (React + Vite), apps/worker, packages/{db,ui,config,domain,
-  shared-types,platform}. Postgres. Deployed on Fly.io (dowiz.fly.dev).
+  Tech stack: Rust-native (no Node.js/TypeScript, ever). Cargo workspace —
+  kernel, engine, protocol/proto-wire, agent-loop, agent-adapters, delivery
+  domain crates. Deployed on Hetzner + Cloudflare only — Fly.io fully
+  retired (2026-07-18 operator directive); `dowiz.fly.dev` is a legacy
+  zombie being decommissioned, not a deploy target. NOTE: this context
+  block predates the Rust-native rewrite in several other particulars
+  (apps/api, apps/web, pnpm monorepo, Postgres-direct — all superseded);
+  treat CLAUDE.md + docs/design/MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-*.md
+  as the current source of truth, this file needs a fuller refresh.
 
   Conventions:
   - Conventional Commits; commits end with the Co-Authored-By trailer.
@@ -19,8 +25,9 @@ context: |
   - AI proposes, a human approves — zero autonomous unreviewed mutation. In
     OpenSpec terms: a human approves the proposal/spec BEFORE `apply`.
   - Mandatory Proof Rule: every behavior change needs programmatic proof — UI
-    change -> Playwright E2E vs dowiz.fly.dev; API-only -> a request.* assertion
-    or cited test. Never declare done without pasting proof output.
+    change -> Playwright E2E vs the live Hetzner/Cloudflare deploy target
+    (Fly.io retired 2026-07-18, no longer a target); API-only -> a request.*
+    assertion or cited test. Never declare done without pasting proof output.
   - Governance-protected zones (a PreToolUse hook blocks edits without manual
     approval): packages/shared-types (contracts), package.json/lockfile and
     other infra/schema. Changes there must be human-approved.
