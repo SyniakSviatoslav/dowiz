@@ -13,7 +13,11 @@
 > cost model — it is NOT free like Telegram), a researched **SimpleX Chat adapter** as the
 > architecturally-preferred ADDITIONAL privacy channel (§3.4b, second 2026-07-18 operator
 > directive), and a **native Rust media-import port** for menu photos, pattern-referenced
-> from Ghost-Downloader and deliberately NOT adopting it (§3.7).
+> from Ghost-Downloader and deliberately NOT adopting it (§3.7). A third 2026-07-18 operator
+> directive adds **Proton integration** (§11, appended): Mail Bridge as the researched
+> transactional-email mechanism behind ONE protocol-shaped `SmtpSender` (paid-tier finding
+> recorded honestly), and Proton Drive RE-SCOPED from menu media to an optional P45
+> off-site-backup destination (§11.2's honest verdict).
 
 ---
 
@@ -872,3 +876,180 @@ anti-scope). T1 is ungated — land it any time, including today.
    transmitter; P22's campaign lane may lift the shared httpSMS low-level adapter (§1.2)
    when its consent-ledger precondition clears; P48's storage decision replaces
    `FsBlobStore` behind `BlobSink` with zero importer changes.
+
+---
+
+## 11. Proton integration (third 2026-07-18 operator directive): Mail Bridge as the mailer mechanism · Drive scoped to what it actually fits
+
+> Appended after §10; §0–§10 untouched. §9's compliance map covers this section unchanged —
+> §11 self-carries its ground truth (§11.0), DoD (§11.4), anti-scope (§11.3) and worker
+> instructions (§11.5). Two integrations, both honest-DECART'd; neither is adopted merely
+> because it was requested — one lands as a design, the other is deliberately RE-SCOPED away
+> from the surface it was proposed for.
+
+### 11.0 Ground-truth addendum — rows verified this pass (same trust rule as §0)
+
+| Claim | Fresh cite (2026-07-18) | Status |
+|---|---|---|
+| The mailer gap is named twice this session: "SMS/email OTP as the second factor — weakest channel; and **dowiz has no native mailer today**"; and this file's own anti-scope 9 ("transactional email has no researched design yet") | `BLUEPRINT-AUTH-DEVICE-2FA-2026-07-17.md:249` (live grep); §1.4-9 above | verified — §11.1 discharges the "no researched design" premise; the demand trigger survives |
+| **Proton Mail Bridge** = a local proxy daemon that decrypts/encrypts Proton's E2E locally and exposes **standard IMAP/SMTP on loopback** (defaults 1143/1025) with a bridge-generated per-account password; official support is desktop apps; headless/server use runs via `bridge --cli` + community Docker images (VideoCurio/ProtonMailBridgeDocker, shenxn/protonmail-bridge-docker) — community-proven, **officially unsupported on servers**. No public Proton Mail API exists in 2026 (community-requested; Proton's own 2026 roadmap names a "Deep Integration" year and cites its Pass API as the access-model precedent) — Bridge IS the practical programmatic mail mechanism today | web research 2026-07-18 (proton.me/mail/bridge + support pages; community Docker repos) | verified — §11.1's sidecar shape designed against this, the §3.4b Ollama-precedent class |
+| **Bridge is PAID-ONLY**: the free tier has NO Bridge/IMAP/SMTP access at all; a paid plan (Mail Plus class, €3.99–4.99/mo annual/monthly, or higher tiers) is required. Free tier also caps sending at 150 msgs/day; paid tiers lift the cap (anti-abuse throttling still applies) | web research 2026-07-18 (proton.me/pricing + support/imap-smtp-and-pop3-setup + support/email-sending-limits) | verified — the cost row §11.1's DECART turns on; NOT free, stated up front |
+| **Proton-API-Bridge** (github.com/henrybear327/Proton-API-Bridge): a **Go LIBRARY** (not a CLI), Drive-APIs-only ("only Proton Drive APIs are bridged, as we are aiming to implement a backend for rclone"), MIT license, SRP username/password auth (2FA listed as a TODO in its own README; rclone's config layer exposes `2fa` + a separate mailbox-password option), session/token caching; **ARCHIVED 2026-02-05, read-only** | web research 2026-07-18 (github README) | verified — the "mature third-party bridge" premise CORRECTED: proven-by-rclone yes, but now unmaintained upstream; §11.2's DECART weighs this |
+| **rclone `protondrive` backend**: built on Proton-API-Bridge over go-proton-api; rclone's own docs mark it **Beta**, state the protocol was **reverse-engineered** ("Proton hasn't published API documentation") with account-compat risk as the protocol evolves; caveats: modification times not updatable, SHA1-only hashes, **concurrent clients not recommended** (stale metadata cache; change-event tracking unimplemented) | web research 2026-07-18 (rclone.org/protondrive) | verified — production-proven for single-writer sync/backup; §11.2 scopes usage to exactly that shape |
+| **Proton Drive official tooling is early**: preview SDK (not GA) + Drive CLI v0.4.3 (2026-06-10) | operator research pass 2026-07-18 | verified (operator-supplied) — a WATCH row, not a Wave-0 substrate |
+| **P45 already owns off-site backup**: §4a.3 = highest-priority item; copy 2 R2-class Hetzner-near, copy 3 **rsync.net (SSH-only, immutable/Object-Lock-class), W3 operator-gated**; artifacts `age`-encrypted BEFORE upload; freshness metric `dowiz_ops_backup_last_success_seconds` per subject per copy | `BLUEPRINT-P45-ops-security-monitoring.md` §4a.3 (`:216-248`), W3 row `:104` (read this pass) | verified — §11.2's Drive role slots INTO this lane, displacing nothing |
+| **MVP audit M3** (menu media): "no blob/media-storage concept anywhere in the new stack"; blocks first-client ACCEPTANCE parity, not transaction mechanics; proposed home = P48 storage decision + shared PoD/blob path | `DELIVERY-MVP-FEATURE-COMPLETENESS-AUDIT-2026-07-18.md:102,158,200-202` | verified (re-cited from §0) — §11.2's verdict: M3 stays on the NATIVE path, not Drive |
+
+### 11.1 Transactional email — `SmtpSender`: ONE adapter; Proton Mail Bridge as its recommended backend, never the only one
+
+The load-bearing move mirrors §3.3 and §3.4b verbatim: **the adapter speaks the protocol
+(SMTP submission), the vendor is config.** `SmtpSender` implements `ChannelSend` for the
+already-declared `Channel::Email` (§2 — zero kernel type changes; anti-scope 9 reserved the
+variant slot for exactly this). What sits behind the configured endpoint — Proton Bridge on
+loopback, a conventional relay, a self-hosted MTA — is one config row, the httpSMS
+`base_url` argument applied to mail. Choosing (or leaving) Proton later costs zero code.
+
+**DECART — mailer backend (all four options, honest):**
+
+| Criterion | **Proton Mail Bridge (loopback sidecar) — RECOMMENDED backend** | Conventional SMTP relay | Self-hosted Postfix | Defer (no email) |
+|---|---|---|---|---|
+| Vendor cost | **Paid plan required — NOT free** (Mail Plus class ≈ €48/yr, §11.0); one service-account seat covers the platform | Free tiers exist at venue volumes; metered above | Zero vendor fee | Zero |
+| Privacy alignment | E2E at provider, zero-access storage, Swiss jurisdiction — unique among the four; matches the repo's posture (§1.3, §3.4b) | Provider reads/retains mail | Self-sovereign but plaintext-at-rest unless built | n/a |
+| Ops shape | Sidecar daemon on loopback — the §3.4b Ollama/SimpleX precedent, P45's floor keeps it up; headless is community-supported only (§11.0) | One TLS socket, no daemon | Full MTA ownership | none |
+| Deliverability | Proton's domain/IP reputation, carried by them | Vendor's reputation, carried by them | **Own IP reputation + SPF/DKIM/DMARC + PTR + port-25 friction on fresh cloud IPs — the classic self-hosting trap** | n/a |
+| Lock-in | Low: the adapter is protocol-shaped; Bridge is swappable config | Low (same reason) | None | n/a |
+
+**Verdict, stated straight:** (i) **email remains non-MVP-critical** — the messenger channels
+above cover order notifications, the MVP audit's notification row never names email, and
+anti-scope 9's demand trigger ("first real venue that asks for email receipts") SURVIVES as
+the wave gate. What changes is its premise: "no researched design yet" is discharged HERE,
+so when the trigger fires the build is §11.5-T10, not a research pass. (ii) **Proton is NOT
+the automatic Wave-0 default** — the paid-tier finding plus officially-unsupported-headless
+make the honest default config *whatever SMTP endpoint the venue already has*; Proton Bridge
+is the recommended backend for privacy-aligned venues and for the platform's own service
+account (one paid seat, the strongest-privacy option in the map). (iii) Postfix is rejected
+for Wave-0 on the deliverability row — operationally the most expensive "free" option.
+(iv) One adapter serves all three futures; nothing here is Proton-only.
+
+**Adapter mechanics + honest v1 scope cut:** minimal hand-rolled SMTP submission client over
+`std::net::TcpStream` (EHLO → AUTH → MAIL FROM/RCPT TO/DATA — the §3.4b hand-rolled-RFC-6455
+precedent applied to RFC 5321) is sufficient for the **loopback leg**: Bridge performs the
+TLS + E2E crypto to Proton inside the daemon; the local leg authenticates with the
+bridge-generated password on 127.0.0.1. A REMOTE relay leg requires TLS (RFC 8314) — a
+TLS-dependency DECART (rustls-class) deliberately DEFERRED until a venue actually configures
+a remote relay; named, not hidden. Composition is §3.2's verbatim: Spool outbox, TokenBucket
+budget, `NotifyKind::{OrderStatus,Otp}` only.
+
+```rust
+// notify-adapters (edge crate) — NO kernel changes: Channel::Email exists (§2).
+pub struct SmtpConfig {
+    pub endpoint: String,        // "127.0.0.1:1025" = Proton Bridge SMTP default; relay host:port otherwise
+    pub username: String,        // Bridge account address / relay user (token-store discipline, §3.2)
+    pub password: String,        // Bridge-generated app password (CLI `info`) / relay secret
+    pub from: String,            // venue sender address
+    pub loopback_plaintext_ok: bool, // may be true ONLY for 127.0.0.1 — constructor-guarded, tested
+}
+pub const SMTP_DEFAULT_ENDPOINT: &str = "127.0.0.1:1025";
+```
+
+Failure typing reuses `SendError` unchanged: daemon/relay unreachable → `ProviderDown` (the
+SimpleX sidecar rule — ops owns the daemon); AUTH reject → `NotConfigured`; RCPT reject →
+`InvalidRecipient`; 4xx-class → `RateLimited` (Proton's anti-abuse throttle is a real
+throttle, §11.0). RED→GREEN: `smtp_send_wire_shape` against a spy SMTP server asserting the
+exact command sequence + envelope; ONE env-gated live probe (`SMTP_TEST_*` config present ⇒
+delivers a real message through a real Bridge sidecar; skips otherwise — the Ollama-gate
+pattern). **Adversarial:** (i) `loopback_plaintext_ok` with a non-loopback endpoint →
+refused at construction, zero connects (credentials never cross a wire unencrypted — the
+`ws_loopback_only` rhyme); (ii) sidecar down → `ProviderDown`, spool row survives redrain,
+order flow untouched; (iii) DATA-stage 5xx → typed, row DEAD with rendered reason, visible;
+(iv) CRLF in recipient/subject → refused BEFORE any I/O (SMTP header injection, the
+protocol's classic hazard, closed at the type edge like §3.5's `?ch=` vocabulary).
+
+### 11.2 Proton Drive — honest verdict: WRONG shape for menu media; RIGHT shape (optionally) for encrypted off-site backup
+
+Menu photos are small, numerous, and **meant to be public** — fetched by every browsing
+customer, cache/CDN-shaped, latency-sensitive, explicitly NOT secret. Proton Drive is the
+opposite shape on every axis that matters here: E2E-encrypted private storage (its whole
+virtue — for public images a decrypt cost with zero benefit), no public hot-serving path
+(share links route through Proton's surface, not `<img>`-grade origins), and the only
+production-proven programmatic access chain is a **Beta, reverse-engineered** backend whose
+base library is **archived** (§11.0 rows 4-5 of the addendum). Forcing M3 onto Drive would
+trade the already-designed native path — `chunker` → `BlobSink` → `FsBlobStore` (§3.7/T8)
+served by P37 — for a slower, less reliable, less maintained one, against the repo's
+native-not-vendored bias (the same session that rejected Ghost-Downloader as a dependency).
+**M3 stays native. §3.7 and T8 are unchanged by this directive.**
+
+Where Drive genuinely fits is P45's off-site backup lane — and only as an option:
+
+**DECART — Drive access mechanism + role:**
+
+| Option | Verdict |
+|---|---|
+| Link Proton-API-Bridge into our build | REJECTED — Go (foreign runtime; the row that rejected the TS SDK §3.4b and Ghost-Downloader §3.7) AND archived upstream 2026-02 — a dead dependency on day one |
+| Native Rust Drive client (SRP login + key management + Drive protocol) | REJECTED — the protocol is undocumented and evolving (§11.0); adopting a standing reverse-engineering liability for a redundant backup copy fails every cost test; anti-scope 11's posture verbatim |
+| Official Drive CLI v0.4.3 / preview SDK | WATCH — official but pre-GA; revisit when GA (Proton's "Deep Integration" year makes that plausible); not a Wave-0 substrate |
+| **rclone (shipped binary) at the P45 ops edge — CHOSEN, optional** | The `smp-server`/`simplex-chat` posture (§1.4-11): run the proven artifact at the edge, don't rebuild or link it. rclone's protondrive backend is Beta with named caveats — acceptable for a REDUNDANT copy, unacceptable as a primary |
+
+**Role, honestly bounded:** P45 §4a.3 already chose copy 2 (R2-class) and copy 3
+(rsync.net — immutable, mature, SSH-only). Drive **displaces neither**: it has no
+Object-Lock-class immutability, and its client stack is Beta where rsync.net's is boring.
+Drive earns an OPTIONAL **copy-4 / alternative destination slot for operators already inside
+a Proton subscription** (storage already paid: 15 GB Mail Plus / 500 GB Unlimited-class) —
+provider + jurisdiction diversity at zero marginal storage cost, and a natural pairing for a
+venue that adopted the §11.1 Bridge account anyway. Two honesty notes so nobody oversells
+this: (i) backup artifacts are `age`-encrypted BEFORE upload (P45 §4a.3) — Drive's E2E adds
+approximately nothing for THIS payload; the argument is paid-for storage and diversity, NOT
+extra secrecy, and claiming otherwise would be decorative privacy. (ii) the
+concurrent-client staleness caveat (§11.0) does not bite a single-writer append-only backup
+push — the one usage shape the Beta warnings leave clean. If a future phase mints genuinely
+PRIVATE operator documents, Drive is a plausible second fit — named as a direction only; no
+feature is invented for it here.
+
+**Zero P43 code lands for Drive:** the deliverable is one rclone remote + one destination
+row in P45 §4a.3's list + the existing per-copy freshness metric — an ops-config hand-off to
+P45 (§11.5-T11), recorded in this file only because the operator directive landed here.
+
+### 11.3 Anti-scope additions (13–16; same rule as §1.4 — each a review-rejectable smell)
+
+13. **NOT "log in with Proton".** Exactly ONE owner-side service-account credential set
+    (Bridge account / rclone remote) under §3.2's token-store discipline. Customer-facing
+    Proton SSO or account linking has no trigger and is out of scope by name.
+14. **NOT menu media on Drive.** §11.2's verdict is the guard; the `BlobSink`/`FsBlobStore`
+    path is unchanged. Proposing Drive for any public-serving surface is the smell.
+15. **NOT linking Proton client libraries into any crate.** Proton access is
+    sidecar/edge-binary only (Bridge daemon, rclone). A `Cargo.toml`/workspace diff adding
+    the archived Go bridge, a Go toolchain, or a reverse-engineered Drive client is the smell.
+16. **NOT a mail system.** No inbound parsing, no mailbox sync, no IMAP consumer —
+    `SmtpSender` transmits `NotifyKind::{OrderStatus,Otp}` and nothing else (the §1.4-1
+    closed-enum guard binds email the moment the adapter exists). Inbound email, if ever
+    wanted, is P48-hub intake scope (§1.2), not this port.
+
+### 11.4 DoD additions (extend §5's table as rows 9–10 when built; ledger row appended)
+
+| Item | RED (fails before) | GREEN (passes after) | Named test / check |
+|---|---|---|---|
+| 9 email `SmtpSender` — **demand-gated** (anti-scope 9's trigger unchanged; design-ready) | no SMTP code anywhere (grep preamble) | spy wire-shape (EHLO/AUTH/envelope/DATA) + env-gated live delivery through a real Proton Bridge sidecar; 4 §11.1 adversaries typed | `notify-adapters/tests/smtp.rs::{smtp_send_wire_shape, smtp_plaintext_never_leaves_loopback, smtp_sidecar_down_is_provider_down, smtp_crlf_injection_refused, smtp_5xx_goes_dead}` |
+| 10 Drive backup option — **P45-owned config, no P43 code** | — | restore drill from the Proton Drive copy with the other destinations' credentials deliberately withheld (P45's R2-drill pattern, §4a.3) | P45 §4a.3 drill extension (that file's ledger, not this one) |
+
+Ledger obligation (e), joining §5's (a)–(d): "SMTP credentials never cross a non-loopback
+wire unencrypted; guardrail: `smtp_plaintext_never_leaves_loopback`".
+
+### 11.5 Worker instructions (extends §10; zero session context assumed)
+
+10. **T10 (email — GATED on anti-scope 9's demand trigger; do not build speculatively).**
+    When a real venue asks for email receipts: implement `SmtpSender` in `notify-adapters/`
+    per §11.1 (hand-rolled loopback SMTP submission; `SmtpConfig` with the constructor-guarded
+    `loopback_plaintext_ok`; Spool/TokenBucket composition verbatim from T3). Surface the
+    paid-plan prerequisite to the operator BEFORE building the Proton path (Mail Plus class,
+    ≈€48/yr, §11.0) — if declined, the SAME adapter ships against the venue's own SMTP
+    endpoint; remote-TLS support requires the deferred rustls-class DECART first. Bridge
+    sidecar runs headless (`bridge --cli` under systemd, or a community Docker image) on
+    P45's ops floor — the SimpleX-sidecar precedent, T5b. Write the 5 §11.4-row-9 tests;
+    live probe env-gated, skipped never faked. Acceptance: crate tests green; ledger row (e)
+    added; `git diff kernel/` empty.
+11. **T11 (Drive — hand-off, no P43 code).** File one addendum into P45 §4a.3's destination
+    list: OPTIONAL copy-4 `proton-drive` rclone remote (operator-provisioned, W3 class, for
+    operators with an existing Proton subscription), covered by the same per-copy
+    `dowiz_ops_backup_last_success_seconds` metric and the §11.4-row-10 withheld-credentials
+    restore drill. Do NOT add any Proton library, Go toolchain, or Drive client to any
+    manifest (anti-scope 15); do NOT route menu media at Drive (anti-scope 14).

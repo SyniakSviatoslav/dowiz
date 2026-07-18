@@ -608,3 +608,274 @@ e2e in T3.
    and P43's future read-tools now have their extension pattern — each lands under its OWN
    phase number via §3.1's growth rule (card + variant + registration), never by editing the
    loop or agent-mcp.
+
+---
+
+## 11. Pre-declared FUTURE capability — agentic browser (`browse_extract`), fence-first (2026-07-18 operator directive, same-day addendum)
+
+Positioning first, so this section cannot be misread as scope creep on §1.3: **P42's PR still
+ships exactly ONE tool** — anti-scope 2 stands verbatim. This section does for the operator's
+"agentic browser" directive what P22 §11.4 did for the social tools: pre-declare a future
+catalog entry with its scope vocabulary and its enforcement designed BEFORE any code exists.
+With one addition specific to this capability, stated as a hard sequencing rule (§11.4): the
+**fence lands before the engine**. The failure mode here is not a bug but a drift into a
+pattern this project already explicitly declined (§11.0 last row) — so the boundary is designed
+as mechanism (denylist in the grant path, unrepresentable verbs, CI grep-gates), never as a
+paragraph asking the model nicely.
+
+### 11.0 Ground-truth addendum (rows verified live this pass, 2026-07-18)
+
+| Claim | Fresh cite (this pass) | Status |
+|---|---|---|
+| `browserbase/stagehand-rust`: official Rust SDK for Stagehand, self-declared "**ALPHA release and is not production-ready**"; architecture = REST client of a **Stagehand API server** (`STAGEHAND_BASE_URL`) + CDP WebSocket to **Browserbase cloud** sessions (`wss://connect.browserbase.com?sessionId=…&apiKey=…`); primitives `act`/`extract`/`observe`/`execute`; deps `tokio` + `reqwest` + `serde` (optional `chromiumoxide` feature for direct CDP); requires `BROWSERBASE_API_KEY`/`BROWSERBASE_PROJECT_ID`; **zero mention of MCP anywhere in the repo** | repo README, WebFetch this pass | verified — the "MCP-native Rust SDK" hope is FALSE; the custody + runtime findings drive §11.2's verdict |
+| `browserbase/stagehand` (main repo): TypeScript-primary (83.7%) + a Python port; README documents `act`/`agent`/`extract` primitives; **no MCP server and no REST surface documented there**; setup is Browserbase-credential-shaped | repo README, WebFetch this pass | verified — MCP is not in the SDK family itself |
+| `browserbase/mcp-server-browserbase`: the MCP interface DOES exist, one door over — official, self-hostable, **TypeScript (97.5%)**, exposes `act`/`extract`/`observe` among six MCP tools; **requires Browserbase cloud** (`BROWSERBASE_API_KEY` + `BROWSERBASE_PROJECT_ID`), no local-browser mode — "cloud browser automation" by its own description | repo README, WebFetch this pass | verified — protocol fit with our `agent-adapters` foreign-MCP gate is real; custody is what fails it (§11.2) |
+| `browser-use/browser-use`: open-source **Python** library turning an LLM into a browser agent, ~89.1% on WebVoyager | operator-supplied research relayed this pass (not re-fetched) | provenance-marked — rejected in §11.2 on the runtime rule regardless of benchmark |
+| **Session decline (internal provenance, this session, 2026-07-18):** browser automation designed to mimic human behavior specifically to evade platform anti-bot detection, for posting to social/messenger platforms that have (or are being integrated via) official APIs — **explicitly declined** | this session's own record | binding — inherited as hard anti-scope; §11.5's euphemism clause makes it drift-proof |
+
+### 11.1 Sanctioned uses — a closed set, each named and bounded
+
+| # | Use (intent variant) | What it is | What bounds it |
+|---|---|---|---|
+| U1 | `MenuImportAssist` | Owner onboarding: extract + structure the owner's OWN menu from a page they name (their old site, a legacy ordering system with no export API) into dowiz types | Owner-present, owner-initiated, once-per-onboarding. Read-only extraction. Authenticated pages: owner handoff in v0 (owner saves/pastes the page from their own browser), owner-LOCAL session attach in the engine future — **the tool never logs in anywhere** (§11.3: no credential field exists) |
+| U2 | `SupplierCatalogRead` | Public supplier/ingredient catalog page with no API → structured prices for the owner's own purchasing decisions | Single capped fetch per page, honest self-identifying UA, page-budgeted. Reading a public page once at the owner's direction — not crawling, not a consumer platform's protected surface |
+| U3 | QA of dowiz's OWN surfaces | Agent-driven exploratory/E2E testing of our interfaces | **Routed OUT of the product tool loop**: already served by the repo's Playwright E2E conventions as dev tooling. NOT a `ToolPort`, no new engine, nothing to grant — listed so nobody re-imports it as a product capability "for testing" |
+
+An intent outside the enum is unrepresentable, not policy-refused (P40's structural move,
+reapplied). **NOT a use case, under any wording:** posting, publishing, messaging, or any
+repeated/scheduled interaction with any third-party platform — §11.5.
+
+### 11.2 Engine verdict — Stagehand-rust confirmed as the only candidate, adoption DEFERRED with named triggers
+
+Findings applied (from §11.0, not recalled):
+
+1. **The MCP claim fails where it matters.** stagehand-rust itself has no MCP surface; the
+   real MCP interface is a separate TypeScript server that is Browserbase-cloud-only. So the
+   clean "MCP-native engine plugs into P42's port pattern" story does not exist today in any
+   Rust artifact.
+2. **Custody is the structural disqualifier, independent of maturity.** Both live routes (Rust
+   SDK, MCP server) run the browser in Browserbase's cloud. For U1 that would place the
+   owner's authenticated session inside a third party's rented browser — failing this
+   section's own custody rule (the tool rides the owner's local context or gets handed bytes;
+   it never exports a session) and the repo's sovereignty stance generally. Not alpha-jitter;
+   a mismatch of shape.
+3. **Runtime:** `tokio` + `reqwest` against the thrice-DECART'd `ureq` sync discipline (§0
+   last row) — DECART-able only as an out-of-process sidecar, and not worth running while
+   findings 1–2 stand.
+
+**Rejected alternatives (DECART-style, one line each):** *Browser Use* — Python runtime for an
+adapter-shaped need; the same rejection P43 §3.7 issued for Ghost-Downloader (a foreign runtime
+and its supply chain are not priced into a benchmark number). *`mcp-server-browserbase` through
+`agent-adapters`' foreign-MCP gate* — protocol fit is genuinely clean (operator-signed manifest
+→ closed `(Resource, Action)` scopes, fail-closed drop; near-zero new plumbing) and is the
+route to re-examine FIRST if a local-browser mode ever ships; rejected today on custody (cloud
+browser) + a Node sidecar. *Writing our own CDP engine* — a browser-automation engine is a
+product in itself; out of all proportion to U1/U2's shape.
+
+**v0, engine-free — what U1/U2 actually need today:** `browse_extract` backed by a single
+capped native HTTP GET (`ureq`-class, P43 §3.7's media-import fetch shape) + `LlmBackend`
+structuring of the fetched page's visible text into typed menu/catalog rows — behind the SAME
+contract, denylist, grant, and tests as any future engine (the engine is a swappable binding
+behind the port; the fence is engine-independent). Authenticated or JS-only pages in v0: owner
+handoff — the owner saves/pastes the page from their OWN browser and the tool structures bytes
+it was handed. v0 is deliberately NOT "agentic browsing" (no `act`, no `observe`, no live DOM
+session); it is owner-directed page extraction, and it plausibly covers most real onboarding
+imports.
+
+**Un-defer triggers for the engine (ALL required; fence-first sequencing on top):**
+
+- **T-B1** — stagehand-rust exits alpha AND documents a local-browser mode (the optional
+  `chromiumoxide` direct-CDP feature is the named watch-point). Re-verify the repo live;
+  §11.0's rows go stale like any web rows.
+- **T-B2** — an operator DECART approves the async-runtime boundary (engine as a separate OS
+  process/sidecar; `tokio` never enters in-process adapter code), per
+  `rust-native-bare-metal-decision-2026-07-14`.
+- **T-B3** — demand: ≥3 real venue onboarding imports where v0 demonstrably failed (JS-only
+  menu, handoff impossible). The capability follows recorded need, not novelty.
+
+If T-B1 never fires, the honest end-state is v0 forever — stated now so nobody "helpfully"
+adopts a worse-fit engine to close the gap.
+
+### 11.3 The contract — predefined types (land with the owning phase's PR, never P42's)
+
+```rust
+// kernel/src/ports/tool.rs — additions at the OWNING phase's build time, via
+// §3.1's growth rule (card + variant + registration). Shown here so the scope
+// vocabulary is fixed before any code exists.
+
+// ToolResource gains: WebPage      (new closed-enum variant; kernel-ports diff)
+// ToolAction stays:   { Read }     — Submit/Fill/Click/Type/Post are NOT added.
+//   A write to a third-party site is UNREPRESENTABLE in the grant vocabulary:
+//   the same structural move as P40's read-only tool and P22 §11.4's absent
+//   Publish/Approve variants. §11.5 pre-commits what adding one would require.
+
+/// The ONLY sanctioned purposes (closed set — §11.1). Carried in every
+/// invocation and logged; an un-enumerated purpose cannot be expressed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BrowseIntent { MenuImportAssist, SupplierCatalogRead }
+
+/// NOTE what is ABSENT, deliberately: no credential field, no cookie/session
+/// import, no schedule field, no submit payload, no UA override. Absence of
+/// the knob is the guarantee (§4.1's no-bind-knob argument, reapplied).
+pub struct BrowseRequest {
+    pub intent: BrowseIntent,
+    pub url: BrowseUrl,   // parse-validated: https only, no userinfo, no IP literal
+    pub page_budget: u8,  // clamped to MAX_BROWSE_PAGES_PER_INVOCATION
+}
+
+/// Compiled-in, closed, label-aligned suffix match (host == entry or host ends
+/// with "." + entry) — subdomains covered, lookalikes NOT accidentally caught.
+/// NOT config, NOT disk-loaded: changing it is a reviewed source diff that
+/// §11.4 leg 1 watches. MEMBERSHIP RULE (list maintained by rule, not vibes):
+/// every platform family that P22 §11.5 / P43 route through an official
+/// adapter lane is denied here — an official channel existing means the
+/// browser is definitionally the wrong door to that platform.
+pub const BROWSER_DOMAIN_DENYLIST: &[&str] = &[
+    // Telegram (P22 Wave 0/1 official adapter; P43 E-b)
+    "telegram.org", "telegram.me", "t.me",
+    // WhatsApp (P43 E-d Cloud API adapter)
+    "whatsapp.com", "whatsapp.net", "wa.me",
+    // Instagram / Facebook / Messenger (P22 Meta lane)
+    "instagram.com", "instagr.am", "facebook.com", "fb.com", "fb.me",
+    "fb.watch", "messenger.com",
+    // YouTube (P22 §12 Wave 2-Y)
+    "youtube.com", "youtu.be", "youtube-nocookie.com",
+    // SimpleX (P43 E-h sidecar adapter)
+    "simplex.chat",
+    // Remaining P22 §11.5 official-lane families
+    "tiktok.com", "x.com", "twitter.com", "t.co", "viber.com",
+];
+
+pub const MAX_BROWSE_PAGES_PER_INVOCATION: u8 = 8;
+pub const MAX_BROWSE_FETCH_BYTES: usize = 4 * 1024 * 1024; // 4 MiB per page
+
+/// Honest self-identification — pinned by test. Leg 4's positive half:
+/// the agent DECLARES itself; it never dresses as a human.
+pub const BROWSE_USER_AGENT: &str = "DowizAgent/1 (+https://dowiz.dev/agent)";
+
+/// Typed refusals — every fence hit is a value, never a silent skip.
+#[derive(Debug)]
+pub enum BrowseRefusal {
+    DeniedDomain { host: String }, // denylist hit — ANY hop, before the engine
+    BadUrl(String),                // scheme / userinfo / IP-literal / parse
+    PageBudgetExhausted,
+    OverFetchCap,
+}
+```
+
+The catalog entry — the §2 `SkillCard` pattern applied to a fenced capability (description
+186 B, under the cap):
+
+```rust
+SkillCard {
+    name: "browse_extract",
+    description: "Read-only extraction from an owner-named web page (menu import, \
+                  supplier catalog). Platform domains with official adapters are \
+                  refused; no login, no form fill, no posting, no scheduling.",
+    surface: Surface::Owner,
+    scope: ToolScope { resource: ToolResource::WebPage, action: ToolAction::Read },
+}
+```
+
+**Grant example (D-d's mechanism, unchanged):** an operator constructing an owner-surface MCP
+session that may browse grants exactly `GrantSet([ToolScope { WebPage, Read }])`.
+`GrantSet::default()` still grants nothing — a session that was never granted browsing never
+even SEES the card (§3.4's discovery-leak rule, inherited). The denylist check runs INSIDE the
+tool's invoke path on top of the grant: the grant answers "may this session browse at all?";
+the denylist answers "may this URL ever be browsed by anyone?" — two independent fail-closed
+layers, neither substituting for the other.
+
+### 11.4 The fence — four independent legs, each mechanical
+
+**Sequencing rule (hard):** the fence tests + CI job land in the SAME PR as the first line of
+browse code, before any engine integration — RED-first, like every gate in this family.
+
+| Leg | Runtime mechanism | CI gate | Named tests |
+|---|---|---|---|
+| 1. Platform denylist | every navigation AND every redirect hop is label-aligned-suffix-checked BEFORE the fetch/engine sees the URL; hit ⇒ typed `DeniedDomain`, session aborts; unparseable ⇒ `BadUrl` (fail-closed). Redirect re-check is why shortener enumeration completeness is not load-bearing — `fb.watch → facebook.com` dies at hop 2 regardless | leg 1: the operator-named families' literals must be present in `kernel/src/ports/` whenever `browser-adapters/` exists | `denied_domain_refused_before_engine_runs` (spy engine records ZERO calls — P40 §3.1 spy discipline), `redirect_hop_to_denied_domain_aborts`, `subdomain_of_denied_domain_refused`, `lookalike_domain_not_denied` (matcher label-alignment, both directions), `ip_literal_and_userinfo_urls_refused` |
+| 2. Read-only verb set | `ToolAction` has no write variant — writes are unrepresentable, not forbidden | leg 2: any `ToolAction::(Submit\|Fill\|Click\|Type\|Post\|Publish\|Approve)` token in `*.rs` fails the build (the shape pin; P22's `Draft` writes to OUR review queue and is deliberately not in the banned set) | compile-level — the grep IS the pin |
+| 3. No autonomy / repetition | owner-initiated single invocation (P40 anti-scope 6 inherited); `page_budget` clamped; no Spool/queue/cron integration exists to hold a browse | leg 3: `browse_extract` may appear in `*.rs` only under `browser-adapters/`, `agent-facade/` (registration line), `kernel/src/ports/` | `page_budget_exhaustion_typed` |
+| 4. No human-mimicry | pinned honest UA; no stealth code path exists to reach | leg 4: anti-detection vocabulary in browse lanes fails the build | `honest_user_agent_pinned` |
+
+Credential absence is not listed as a leg because it is stronger than a leg: `BrowseRequest`
+has no field to put a credential in, and the adapter crate holds no token store — unlike
+P22/P43 adapters, which hold OFFICIAL tokens for platforms we integrate with by contract. That
+asymmetry is the design: official doors get keys; the browser door gets none.
+
+CI job text (normative now, wired by the owning phase; mirrors `no-courier-scoring` (E58) and
+`no-pub-raw-matrix-hash` in `.github/workflows/ci.yml`):
+
+```yaml
+  # BLUEPRINT-P42 §11.4: agentic-browser fence. Four legs; each REDs independently.
+  browser-fence:
+    name: agentic-browser fence (P42 §11.4)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: "Leg 1: denylist literals present once the adapter exists"
+        run: |
+          if [ -d browser-adapters ]; then
+            for d in telegram.org t.me whatsapp.com wa.me instagram.com \
+                     facebook.com messenger.com youtube.com youtu.be simplex.chat; do
+              git grep -q "\"$d\"" -- 'kernel/src/ports/' \
+                || { echo "::error::BROWSER_DOMAIN_DENYLIST missing $d"; exit 1; }
+            done
+          fi
+      - name: "Leg 2: third-party write verbs are unrepresentable (shape pin)"
+        run: |
+          ! git grep -nE 'ToolAction::(Submit|Fill|Click|Type|Post|Publish|Approve)' -- '*.rs'
+      - name: "Leg 3: browse tool referenced only from its own lane"
+        run: |
+          ! git grep -n 'browse_extract' -- '*.rs' \
+            ':!browser-adapters/**' ':!agent-facade/**' ':!kernel/src/ports/**'
+      - name: "Leg 4: no human-mimicry / anti-detection vocabulary in browse lanes"
+        run: |
+          ! git grep -nEi 'stealth|humaniz|anti[_-]?bot|undetect|fingerprint[_-]?(spoof|mask|evad)|captcha[_-]?(solv|bypass)' \
+            -- 'browser-adapters/**' 'kernel/src/ports/**'
+```
+
+Legs 2–4 are trivially green today and MAY be wired dormant ahead of the capability (they pin
+the boundary in advance at zero cost); leg 1 self-activates when `browser-adapters/` appears.
+
+### 11.5 Why drift into the declined pattern is a four-diff event
+
+The declined pattern (§11.0 last row) requires, simultaneously: **(a)** reaching a
+social/messenger platform surface — leg 1 denies every named family at every hop; **(b)**
+writing (posting/submitting) — leg 2 makes the verb inexpressible in the grant vocabulary;
+**(c)** repetition/scheduling — leg 3 confines the tool to single owner-initiated invocations
+with no queue reachable; **(d)** not looking like an agent — leg 4 pins honest
+self-identification. Re-creating the pattern therefore requires **four separate reviewed
+diffs, each turning a named CI gate RED** in a PR a human reads. Same doctrine as courier
+scoring (E58): prose asks nicely; gates refuse.
+
+**Euphemism clause (binding on future blueprint authors, this one included):** any proposal
+whose EFFECT is model-driven posting/messaging on those platforms through a driven browser
+session is this declined pattern regardless of its name — "content syndication", "engagement
+automation", "channel amplification", "growth tooling" included. The ONLY posting lane is
+P22's official-API `SocialPoster` behind its §11.3 `PendingReview`-by-default review queue.
+And should a write action on ANY third-party page ever be genuinely proposed (e.g. submitting
+a supplier order form), it is pre-committed here to P22 §11.3's pattern: a new `ToolAction`
+variant (kernel-ports diff + a deliberate leg-2 RED a reviewer must consciously update),
+whose result lands `PendingReview` for the owner to approve — never an autonomous
+form-submission loop, at any autonomy level (P22 A6's authority rule, inherited verbatim).
+
+### 11.6 Obligations on landing + links (append-only: §5/§7/§9 above are not edited)
+
+- DoD rows, bench budgets, and wave placement land with the owning phase's blueprint (this
+  capability gets its own phase number at roadmap level, like every §3.1 growth-rule consumer
+  — never P42's). The regression-ledger row text is fixed now: "Agentic browser stays
+  read-only + platform-fenced; guardrails: `browser-fence` CI job +
+  `denied_domain_refused_before_engine_runs`."
+- Links added by this section: P22 `BLUEPRINT-SOCIAL-AUTO-POSTING-2026-07-17.md`
+  §11.3/§11.4/§11.5 (approval-default, pre-declared-tool precedent, official channel homes =
+  the denylist membership rule's source) · P43 §3.7 (foreign-runtime rejection precedent +
+  the capped-fetch shape v0 reuses) · `.github/workflows/ci.yml` `no-courier-scoring` +
+  `no-pub-raw-matrix-hash` (the grep-gate family `browser-fence` joins) ·
+  `agent-adapters/src/{lib,mcp}.rs` (the foreign-MCP admission door considered and rejected
+  on custody, §11.2) · `browserbase/stagehand-rust`, `browserbase/stagehand`,
+  `browserbase/mcp-server-browserbase` READMEs (web, this pass) · the 2026-07-18 session
+  decline (internal, §11.0).
+- Re-verify rule: §11.0's web rows go stale like any others — T-B1 explicitly requires
+  re-fetching the repositories, not trusting this table.
