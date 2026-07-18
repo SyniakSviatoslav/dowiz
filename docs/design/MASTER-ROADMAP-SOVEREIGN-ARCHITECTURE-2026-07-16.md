@@ -2601,3 +2601,21 @@ Two closes:
   a courier is any agent holding a valid cert. No separate autonomous-delivery protocol is
   anticipated as a future need — this is a durability property of the existing design, not a
   new build item.
+
+### 17.7 Root-of-trust decentralization, legacy-version security posture, optional open-standard interop
+Three closes:
+- **Each hub can be its own self-signed capability-cert root** (Recommended, confirmed) — closes
+  a real potential dowiz-forever dependency for cryptography, exactly parallel to §17.3's
+  CF-tunnel-portability fix, and caught by asking the same class of question. dowiz may still
+  optionally sign/verify roots as part of the claim flow (§16.32) for convenience, but a hub
+  never *needs* dowiz's continued existence to be trusted — its own root is self-sufficient.
+  This is now the second of two dowiz-forever dependencies found and resolved this dialogue
+  pass; §17.3's tunnel fix and this cert-root fix together are what make §17.3's "hubs survive
+  without dowiz" claim actually load-bearing rather than aspirational.
+- **Legacy/unpatched self-host versions**: vendor-responsibility (Recommended, confirmed,
+  consistent with §17.5's regulatory stance) — dowiz publishes security advisories (CVE-style)
+  for transparency, but does not force-patch or reach into a vendor's own deployment.
+- **Open data standards** (GS1 barcodes, Open Food Facts ingredient/allergen data): optional
+  support, never required (Recommended, confirmed) — the free-form menu schema (§16.17) gains
+  opt-in fields for vendors who want interoperability with external systems, without dowiz
+  inventing a competing closed taxonomy or mandating external-standard compliance.
