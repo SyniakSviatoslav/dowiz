@@ -33,7 +33,7 @@ Branch: dowiz `main` @ `e4d191c3f`. Verified by `cargo test -p dowiz-kernel` →
 | Item | LIVE STATUS |
 |---|---|
 | capability issuance (IssuanceBudget) | DONE in bebop-repo (`node_id.rs:187-372`, `IssuanceBudget`/`IssuanceError`/`can_issue`/`charge_issuance`/`sign_delegation_budgeted`, 10 tests, CI-gated). **CORRECTED 2026-07-18:** commit is `e08eb07`, not `332bc59` (that hash is an unrelated Lyapunov-guard commit — citation error caught during blueprint DoD pass). |
-| R-3 RootDelegationPolicy operator ruling | OPEN — genuinely still no operator ruling on record anywhere (checked `DECISIONS.md`, MEMORY, this doc). Narrower than it looks: option A's *mechanism* is now fully built (row above) — the gap is purely the dated ruling, not code. Options B/C remain unwired stubs. Full DoD: `BLUEPRINT-P-D-consensus-capability.md` §11. |
+| R-3 RootDelegationPolicy operator ruling | **CLOSED — ruling RECORDED 2026-07-18.** Option A (`OperatorSigned` + per-anchor `IssuanceBudget` predicate at delegation-sign time) ADOPTED under the expanded autopilot mandate (2026-07-18), **flagged for operator override**. Mechanism already built: `bebop-repo` commit `e08eb07` (`node_id.rs:187-372`, 10 tests, CI-gated). B/C remain unwired stubs, NOT adopted. Canonical: `DECISIONS.md` D10 + `BLUEPRINT-P-D-consensus-capability.md` §11. |
 
 ## Layer E — Network / crypto
 | Item | LIVE STATUS |
@@ -60,7 +60,7 @@ Branch: dowiz `main` @ `e4d191c3f`. Verified by `cargo test -p dowiz-kernel` →
 2. **Layer B/W2 tensor arena** (`arena.rs`) — confirmed absent on disk 2026-07-18 (`find kernel/src -iname arena*` → none); large structural, thousands of LOC. Full DoD: `BLUEPRINT-CACHE-REFERENCE-GRAPH-TENSOR-ARENA-2026-07-17.md` §8.
 3. **Layer E kalman SoA** — confirmed still a named TODO 2026-07-18 (`kernel/src/simd.rs:21-23`); small-ish, write-cadence-authority-adjacent (NOT the NO-COURIER-SCORING red line — confirmed not implicated). Full DoD: `BLUEPRINT-P-E-network-crypto-core.md` §13.
 4. ~~Layer G `web/app.mjs` FieldSim + 21 kernel exports wiring~~ — **CORRECTED 2026-07-18: NOT open.** 24/24 exports wired, `app.mjs` is 204 lines (see Layer G row above). Remaining sliver: G3's DOM/FieldSim render pass only.
-5. **Layer D R-3 operator ruling** — decision, not code; option A's mechanism is fully built (see Layer D row above). Full DoD: `BLUEPRINT-P-D-consensus-capability.md` §11.
+5. ~~Layer D R-3 operator ruling~~ — **CLOSED 2026-07-18: ruling RECORDED.** Option A adopted under expanded autopilot mandate (flagged for operator override); mechanism already built (`e08eb07`). See Layer D row above + `DECISIONS.md` D10 + `BLUEPRINT-P-D-consensus-capability.md` §11.
 6. **P06 `key_V` HybridSigner completion** — reclassified 2026-07-18 from "blocked on C4b" to "C4b closed, implementation has 3 concrete bugs" (see Layer F row above). Now the top autopilot candidate by leverage: unblocks Layer C/G/E3-Phase-B/P30. Full DoD: `BLUEPRINT-P06-v1-split-identity-verifier.md` §9.
 
 ## Conclusion for autopilot
