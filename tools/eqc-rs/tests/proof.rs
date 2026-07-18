@@ -200,3 +200,97 @@ fn div_half_up_int_mode_proven() {
     assert!(run.status.success(), "generated int proof FAILED:\n{}", String::from_utf8_lossy(&run.stderr));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn sin_cos_int_mode_cordic_parity_proven() {
+    // A6 / T8 — the integer-exact Sin/Cos emission routes through the digest-pinned
+    // Q30 CORDIC substrate. This proof EMITS the int code, COMPILES it (linking the
+    // eqc_rs rlib so `cordic::cordic_sincos` resolves), RUNS it, and self-asserts
+    // that the Q30 output matches the f64 reference (`Expr::eval`, the independent
+    // interpreter referee) within the measured Q30 tolerance (~13 units, see
+    // `src/bin/cordic_probe.rs`). If codegen is wrong the asserts fail and the
+    // process exits non-zero, so this test is real verification, not a claim.
+    let theta = Expr::sym("theta");
+    let sin_eq = Equation::new("my_sin", &["theta"], theta.clone().sin());
+    let cos_eq = Equation::new("my_cos", &["theta"], theta.cos());
+    let sin_src = sin_eq
+        .emit_int_checked_rust()
+        .expect("A6/T8: Sin must emit in integer-exact mode");
+    let cos_src = cos_eq
+        .emit_int_checked_rust()
+        .expect("A6/T8: Cos must emit in integer-exact mode");
+
+    // Locate the freshly-built eqc_rs rlib so the emitted code can call cordic_sincos.
+    let rlib = std::env::var("EQCRS_RLIB").unwrap_or_else(|_| {
+        format!(
+            "{}/target/release/libeqc_rs.rlib",
+            env!("CARGO_MANIFEST_DIR")
+        )
+    });
+    assert!(
+        std::path::Path::new(&rlib).exists(),
+        "eqc_rs rlib not found at {rlib} — run `cargo build --release` first"
+    );
+
+    // Sample points spanning the range-reduction paths (|theta| up to ~3.5 rad).
+    let samples: &[f64] = &[
+        0.0,
+        0.25,
+        0.5,
+        1.0,
+        std::f64::consts::FRAC_PI_2,
+        2.0,
+        -1.3,
+        3.5,
+        -3.5,
+    ];
+    const ONE_Q30: f64 = (1i64 << 30) as f64;
+    // Tolerance: measured max Q30 deviation is 13 (cos sweep, ~1.2e-8 rad). Use a
+    // tight 20-unit bound — small enough to catch a real wiring/transcription bug,
+    // not inflated (ledger ratchet rule forbids tolerance inflation).
+    const TOL_Q30: i64 = 20;
+
+    let mut checks = String::new();
+    for (i, &rad) in samples.iter().enumerate() {
+        let q = (rad * ONE_Q30).round() as i64;
+        let ref_s = (rad.sin() * ONE_Q30).round() as i64;
+        let ref_c = (rad.cos() * ONE_Q30).round() as i64;
+        checks.push_str(&format!(
+            "    let (s{i}, c{i}) = (my_sin_int({q}i64).unwrap(), my_cos_int({q}i64).unwrap());\n\
+             \x20   \x20   assert!((s{i} - {ref_s}).abs() <= {tol}, \"sin sample {i}: got {{}} want {ref_s} (tol {tol})\", s{i});\n\
+             \x20   \x20   assert!((c{i} - {ref_c}).abs() <= {tol}, \"cos sample {i}: got {{}} want {ref_c} (tol {tol})\", c{i});\n",
+            tol = TOL_Q30,
+        ));
+    }
+    let src = format!(
+        "{sin_src}\n{cos_src}\nextern crate eqc_rs;\nfn main() {{\n{checks}    println!(\"eqc cordic int parity OK ({n} samples, tol {tol} Q30)\");\n}}\n",
+        n = samples.len(),
+        tol = TOL_Q30,
+    );
+    let dir = std::env::temp_dir().join(format!("eqc-rs-cordic-int-{}-{}", std::process::id(), std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create temp dir");
+    let sp = dir.join("cordic_int.rs");
+    let bp = dir.join("cordic_int");
+    std::fs::write(&sp, &src).expect("write generated source");
+    let cc = Command::new("rustc")
+        .args(["-O", "-L", dir.parent().unwrap().to_str().unwrap()])
+        .arg("--extern")
+        .arg(format!("eqc_rs={rlib}"))
+        .args(["-o"])
+        .arg(&bp)
+        .arg(&sp)
+        .output()
+        .expect("rustc on PATH");
+    assert!(
+        cc.status.success(),
+        "rustc FAILED:\n{}",
+        String::from_utf8_lossy(&cc.stderr)
+    );
+    let run = Command::new(&bp).output().expect("run generated binary");
+    assert!(
+        run.status.success(),
+        "generated cordic int parity FAILED:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
