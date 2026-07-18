@@ -2588,3 +2588,16 @@ Three closes:
   whether the ecosystem is growing or stagnating without violating §16.14's data-isolation
   invariant; extends §16.53's heartbeat (liveness-only) with an explicit, consent-gated
   aggregate-metrics layer, kept clearly distinct from it.
+
+### 17.6 Fork-competition accepted as the price of openness; courier protocol is species-agnostic
+Two closes:
+- **A competing protocol forked from the AGPL-open hub software is an accepted outcome, not a
+  risk to design against** (Recommended, confirmed) — coherent with §17.1/§17.3's own openness
+  commitments; AGPLv3's network-copyleft (§16.57) still requires any such fork's modifications
+  to stay open, so a fork can't out-close the original, but it can genuinely compete. Recorded
+  explicitly so this isn't later treated as an unforeseen threat.
+- **Drone/robot couriers use the same courier protocol, not a new one** (Recommended, confirmed)
+  — the capability-cert and HRW-matching design (§16.3) are already agnostic to human-vs-machine;
+  a courier is any agent holding a valid cert. No separate autonomous-delivery protocol is
+  anticipated as a future need — this is a durability property of the existing design, not a
+  new build item.
