@@ -1,0 +1,26 @@
+[package]
+name = "dowiz-courier"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "BLUEPRINT P71 — courier surface: the rendered, voice-primary, dispatch-wired full-wgpu courier app (P52-rev). Rust/wgpu, offline-clean. Reuses dowiz-engine (P38a CPU floor + P58 a11y mirror + TweenGuard money law)."
+
+[lib]
+name = "dowiz_courier"
+path = "src/lib.rs"
+
+[dependencies]
+# P38a render floor (SDF→field buffer), P58 a11y-mirror, P57 text, TweenGuard
+# money law — all live in `dowiz-engine`. OFFLINE-CLEAN: the engine carries
+# ZERO external crates in its default build (see engine/Cargo.toml), so this
+# surface pulls no network deps. GPU/WebGL2 rungs are behind engine features
+# that are uncached in this environment; the CPU floor is the honest default.
+dowiz-engine = { path = "../../engine" }
+
+[features]
+default = []
+
+# NOTE: no `wgpu`/`serde` pulled into the default build — P71 is the SAME
+# offline-clean discipline as the engine. The full-wgpu *realization* rides the
+# engine's `gpu`/`webgl` features when the operator unlocks the network grant;
+# until then the CPU floor is the render path (P63 SP-1 adversarial (i)).
