@@ -6,7 +6,8 @@
   "description": "Kernel-driven field UI — all geo/spectral/FSM math computed in the Rust dowiz-kernel wasm. This shell only renders.",
   "scripts": {
     "serve": "node serve.mjs",
-    "test": "node src/lib/kernel/kernel.test.mjs"
+    "test": "node src/lib/kernel/kernel.test.mjs",
+    "test:dom": "node src/dom.render.test.mjs"
   },
   "engines": { "node": ">=18" }
 }
