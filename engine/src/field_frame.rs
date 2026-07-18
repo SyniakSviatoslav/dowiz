@@ -17,14 +17,25 @@ use crate::scene::{Scene, SdfShape};
 
 /// Physically-stable integration constants for the field operator.
 ///
-/// Stability (explicit part of the semi-implicit scheme): the Laplacian's
-/// discrete eigenvalues live in `[-4, 0]`, so a CFL-ish bound keeps the
-/// explicit `c²·L·U` term bounded:
+/// Stability (explicit part of the semi-implicit scheme): the 2-D 5-point
+/// Neumann Laplacian here (left+right+up+down−4u, zero-flux edges) has discrete
+/// eigenvalues λ ∈ [−8, 0] — NOT the 1-D 3-point range [−4, 0]. The actual
+/// integration recurrence is the second-order scheme
 ///
-///   dt ≤ M / (Γ + 2·c²)   →   fail-closed: `assert_stable` panics otherwise.
+///   (1 + dt·M)·u_{n+1} = (1 + Γ + dt·c²·λ)·u_n − Γ·u_{n−1}
 ///
-/// (The implicit M term widens the real margin, but we assert the conservative
-/// bound so a divergent dt can never reach the integrator.)
+/// whose von Neumann / Jury stability condition (p(−1) > 0 at the worst-case
+/// λ = −8) is the BINDING one:
+///
+///   dt < (2 + 2·Γ) / (8·c² − M)   →   fail-closed: `assert_stable` panics otherwise.
+///
+/// (A stricter `<` (not `<=`) is required: equality gives spectral radius ρ = 1,
+/// i.e. a marginally unstable mode that grows at the checkerboard scale.)
+/// `M/(Γ+2c²)` is 1-D numerology and is intentionally NOT used — it admits
+/// timesteps (e.g. dt = 0.45) under which the scheme diverges to |u| ~ 1e39.
+///
+/// (The implicit M term only widens the real margin; we assert the conservative
+/// 2-D bound so a divergent dt can never reach the integrator.)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FieldEquilibrium {
     /// Mass / inertia M (must be > 0).
@@ -54,18 +65,33 @@ impl Default for FieldEquilibrium {
 }
 
 impl FieldEquilibrium {
-    /// Fail-closed: panic if dt is outside the CFL-ish stability bound, or if
+    /// Fail-closed: panic if dt is outside the Jury stability bound, or if
     /// the coefficients are non-physical. Called before every integration step.
     pub fn assert_stable(&self) {
-        assert!(self.m > 0.0, "FieldEquilibrium.m must be > 0 (mass/inertia)");
         assert!(
-            self.gamma + 2.0 * self.c2 > 0.0,
-            "FieldEquilibrium: Gamma + 2*c2 must be > 0 for the stability denominator"
+            self.m > 0.0,
+            "FieldEquilibrium.m must be > 0 (mass/inertia)"
         );
-        let bound = self.m / (self.gamma + 2.0 * self.c2);
+        // The integrating denominator (Γ + 2·c²) guard below is subsumed by the
+        // Jury denominator (8·c² − M); keep the coefficient sanity checks.
         assert!(
-            self.dt > 0.0 && self.dt <= bound,
-            "dt={} exceeds stability bound dt <= M/(Gamma+2*c2)={} (fail-closed)",
+            self.gamma >= 0.0,
+            "FieldEquilibrium.gamma must be >= 0 (damping)"
+        );
+        // von Neumann / Jury boundary for the 2-D 5-point Neumann Laplacian
+        // (λ ∈ [−8, 0]): the scheme is stable iff
+        //     8·c² − M > 0   AND   dt < (2 + 2·Γ) / (8·c² − M).
+        // If 8·c² − M <= 0 the explicit scheme is unconditionally unstable and
+        // must never integrate. `<` (not `<=`) because equality gives ρ = 1.
+        let jury_denom = 8.0 * self.c2 - self.m;
+        assert!(
+            jury_denom > 0.0,
+            "FieldEquilibrium: 8*c2 must exceed M (else the 2-D field scheme is unconditionally unstable)"
+        );
+        let bound = (2.0 + 2.0 * self.gamma) / jury_denom;
+        assert!(
+            self.dt > 0.0 && self.dt < bound,
+            "dt={} exceeds Jury stability bound dt < (2+2*Gamma)/(8*c2−M)={} (fail-closed)",
             self.dt,
             bound
         );
@@ -243,6 +269,50 @@ mod tests {
         assert_eq!((1.0 / FieldEquilibrium::default().dt).round() as u32, 50); // 50 Hz, one clock
     }
 
+    // (0b) JURY BOUND — the guard must REJECT dt in the forbidden region that the
+    //      old 1-D formula (M/(Γ+2c²) ≈ 0.455) wrongly admitted. At dt = 0.45 the
+    //      true 2-D scheme has spectral radius ρ ≈ 1.588 and diverges to |u| ~ 1e39
+    //      in ~200 steps; this guard previously passed it. Now it must panic.
+    //      (This is the regression canary that turns the latent blow-up RED.)
+    #[test]
+    #[should_panic(expected = "Jury stability bound")]
+    fn stable_guard_rejects_divergent_dt() {
+        let bad = FieldEquilibrium {
+            m: 1.0,
+            gamma: 0.2,
+            c2: 1.0,
+            dt: 0.45, // > (2+2Γ)/(8c²−M) = 2.4/7 ≈ 0.3429 → must be rejected
+        };
+        bad.assert_stable(); // must panic
+    }
+
+    // (0c) JURY BOUND — a dt just inside the true 2-D boundary (0.34 < 0.3429)
+    //      must still be accepted by the guard (the safe operating region).
+    #[test]
+    fn stable_guard_accepts_valid_dt() {
+        let ok = FieldEquilibrium {
+            m: 1.0,
+            gamma: 0.2,
+            c2: 1.0,
+            dt: 0.34, // < (2+2Γ)/(8c²−M) ≈ 0.3429 → accepted
+        };
+        ok.assert_stable(); // must NOT panic
+    }
+
+    // (0d) JURY BOUND — when 8·c² ≤ M the explicit 2-D scheme is unconditionally
+    //      unstable; the guard must refuse to integrate regardless of dt.
+    #[test]
+    #[should_panic(expected = "unconditionally unstable")]
+    fn stable_guard_rejects_unconditionally_unstable() {
+        let bad = FieldEquilibrium {
+            m: 10.0,
+            gamma: 0.2,
+            c2: 1.0, // 8·c² = 8 < M = 10 → unstable denominator
+            dt: 0.01,
+        };
+        bad.assert_stable(); // must panic
+    }
+
     // (1) frame_buffer_dims_match_wxh_x4 -- RGBA out has exactly w*h*4 bytes.
     #[test]
     fn frame_buffer_dims_match_wxh_x4() {
@@ -281,7 +351,10 @@ mod tests {
         let lap = laplacian(&u, w, h);
         let center = lap[cy * w + cx];
         // At the peak: 0+0+0+0 - 4*1 = -4  (negative -- correct for a max).
-        assert!(center < 0.0, "∇² at a peak (centre) must be negative: {center}");
+        assert!(
+            center < 0.0,
+            "∇² at a peak (centre) must be negative: {center}"
+        );
         // Immediate neighbour (up): centre(1)+three 0s - 0 = +1  (positive rim).
         let rim = lap[(cy - 1) * w + cx];
         assert!(rim > 0.0, "∇² at the spike's rim must be positive: {rim}");
