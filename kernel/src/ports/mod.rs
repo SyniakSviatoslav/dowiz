@@ -20,3 +20,8 @@ pub mod tool;
 /// MCP port + capability-scoped tool boundary (P42) — verify_chain-gated,
 /// fail-closed, Skill-discovering. Typed; the stdio/JSON framing lives downstream.
 pub mod mcp;
+
+/// P49 — per-order customer identity (capability grant, privacy-minimal, no
+/// device/personal data). Reuses the proto-cap signing *convention* (domain-
+/// separated SHA3 commitment) over existing kernel math (geo/kalman/rng).
+pub mod customer;
