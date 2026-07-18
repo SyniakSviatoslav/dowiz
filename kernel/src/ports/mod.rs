@@ -13,6 +13,13 @@ pub mod agent;
 /// one) lives outside the kernel, mirroring `LlmBackend` / `AgentBridge`.
 pub mod payment;
 
+/// `PaymentProvider` port (BLUEPRINT-P60, W1/P60) — provider-agnostic online-fiat rail seam
+/// (R2 §5.2 shape) + the idempotency contract (X6) + N-leg vendor-as-MoR atomicity (§0.2-1) +
+/// the type-level no-card-data firewall (PCI red-line, structural). Compile firewall: kernel has
+/// NO payment-adapter dependency; the concrete Stripe adapter lives OUT-OF-KERNEL in the
+/// `payment-adapters` crate. No card-data type exists in core (no PAN / cvv / card_*).
+pub mod payment_provider;
+
 /// `PaymentCapability` (P47 operator ruling) — pure CAPABILITY DECLARATION for the rail set
 /// { Fiat, Crypto, Stripe, Google/Apple Pay, OtherLater }. No client, no credentials, no
 /// network: a feature flag only. `validate()` rejects `OtherLater` (`NotYetSupported`). The
