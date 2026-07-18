@@ -2474,3 +2474,16 @@ Three closes, all Recommended options confirmed:
   their 5-token changes (§16.9) rendered in the real field engine before customers do, avoiding
   a published-then-regretted color/font combination. Adds a draft-vs-live state to the brand
   config, not yet designed in detail here.
+
+### 16.59 Client-app license, vendor offboarding grace period, no vendor quality bar
+Three closes, all Recommended options confirmed:
+- **Client/courier Tauri apps use the same AGPLv3+TM+DCO** as the hub software (§16.57) — one
+  unified license across everything a claim-vendor touches, not a separate closed license for
+  end-user apps.
+- **Vendor cancellation (Hetzner-hosted hub)**: a grace period follows cancellation, during
+  which the hub stays read-only-accessible so the vendor can export or migrate to self-host —
+  no immediate hard shutdown. Coheres with §16.54 (hub software is open source, so self-host
+  migration is genuinely available, not a hollow option).
+- **No vendor quality bar at all** — extends §16.26's courier no-scoring red line to vendors:
+  dowiz does not gate, exclude, or rank vendors by quality/performance/rating. Per-hub reviews
+  (§16.26) are a signal visible to that hub's own customers, never a dowiz-side gate.
