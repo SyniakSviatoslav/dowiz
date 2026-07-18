@@ -27,6 +27,7 @@ use std::collections::HashMap;
 use crate::event_log::sha3_256;
 use crate::geo;
 use crate::kalman::KalmanFilter;
+use crate::vendor::VendorId;
 use crate::order_machine::OrderStatus;
 use crate::rng::Rng;
 
@@ -334,6 +335,7 @@ mod tests {
     use super::*;
     use crate::domain::{place_order, OrderItem};
     use crate::kalman::KalmanFilter;
+    use crate::money::Currency;
     use crate::order_machine::OrderStatus;
 
     // ── B1: anonymous place → later re-identify → track, no durable account ──
@@ -345,6 +347,8 @@ mod tests {
             modifier_ids: vec![],
             quantity: 2,
             unit_price: 500,
+            vendor_id: VendorId(0),
+            currency: Currency::All,
         }];
         let order = place_order(
             "ORD-P49-B1".into(),
