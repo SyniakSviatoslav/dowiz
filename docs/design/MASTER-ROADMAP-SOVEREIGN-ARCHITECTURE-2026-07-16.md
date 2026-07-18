@@ -493,7 +493,7 @@ SUPERSEDED banners pointing here — preserved in full as audit trail, never pla
 | L1 | Update-blob **code-signing** (ML-DSA verify vs pinned root; `kernel/src/pq/codesign.rs` is live on this branch) | Folded into **Phase 10** — boot/update-integrity unit note appended to `BLUEPRINT-P10` |
 | L2 | Transport bake-off rationale (Zenoh/Reticulum/TCPCLv4/BIBE; libp2p rejected) | `docs/transport-research-2026-07-12.md` **restored from git blob `94e257fe9`** + cross-linked from `BLUEPRINT-P09` |
 | L3 | Courier out-of-app notification/wake path (`NotifyHub`/VAPID lineage) | Folded into **Phase 13** — delivery semantics dissolved-by-mesh (courier node receives `MeshEvent`s directly); out-of-band device-wake kept as a P13 sub-unit, xref P08 alerting |
-| L4 | Anonymous `.onion`/Tor tier | **E53-form waiver** — what: anonymity/Tor access tier; why-suspended: no vendor-node tier exists and no anonymity demand demonstrated; trigger to revisit: vendor-node tier ships AND a venue requires anonymity |
+| L4 | Anonymous `.onion`/Tor tier | **E53-form waiver** — what: anonymity/Tor access tier; why-suspended: no vendor-node tier exists and no anonymity demand demonstrated; trigger to revisit: vendor-node tier ships AND a venue requires anonymity. **→ ACTIVATED 2026-07-18** (direct operator request supersedes the trigger — recorded, not silent): phase **P53**, §14 below; blueprint `CORE-ROADMAP-2026-07-17/BLUEPRINT-P53-tor-onion-integration.md` |
 | L5 | "Lost reports" honesty ledger (13 + ~20 pre-2026-07-12 reports) | Closed-as-lost, decisions survive in `UNIFIED-DELIVERY-PROTOCOL-BLUEPRINT-v3`; not resurrected (would violate ground-truth discipline) |
 | L6 | Self-development research queue (causal/do-operator, category-theory functorial mapping, info-geometry, integer laws) | **Deliberately NOT a numeric phase** — separate always-running axis; indexed from `CORE-ROADMAP-INDEX.md` → MEMORY `physics-math-exploration.md` |
 
@@ -1579,3 +1579,84 @@ K7 feeds). Blocks nothing further downstream — but it is itself **MVP-blocking
 audit §7 ("the courier cannot see, accept, or attest a delivery without SOME surface"): P50's
 first-real-order gate cannot go green without it, so it sits on the first-transaction
 critical path beside P47/P48/P49.
+
+---
+
+## 14. Operator-directed phases, second batch (2026-07-18, appended after §13)
+
+Appended by a separate 2026-07-18 pass (same append-only rule as §7-§13). **This section
+extends the phase index from P31-P52 to P31-P53.** Provenance: direct operator directive
+activating fold-in ledger item **L4** (§9.2 — "Anonymous `.onion`/Tor tier", E53-form
+waiver). The waiver's trigger ("vendor-node tier ships AND a venue requires anonymity") is
+SUPERSEDED by the operator's direct request, recorded explicitly rather than silently: the
+demand-signal leg is satisfied by the request itself; the vendor-node-tier leg is honored
+by the phase's own wave split (code now, live onion service only WITH P37+P45). §10.2's
+index table remains stale per §11's note; the same later consolidation pass reconciles it.
+
+#### P53 — Tor/onion integration: anonymous-access tier, Onion-Location + QR convenience (DELIVERY component, PROTOCOL cross-ref)
+**Absorbs:** fold-in ledger **L4** (§9.2) — the only ledger item still in waiver form, now
+activated. Otherwise genuinely new; it extends seams rather than absorbing units: P37's
+`build_router`/headers-middleware extension point (`tools/native-spa-server/src/lib.rs:93-106`,
+verified live 2026-07-18), the `deploy/` operator-run systemd tier (pgrust precedent), and
+P52 K6's QR handoff (shared encoder).
+**Status:** PLANNED
+**Role & responsibility:** Operator directive (2026-07-18, verbatim): "можливість tor, onion
+інтеграції і взаємодії — зручної" — a CONVENIENT Tor/onion access tier, standard privacy
+networking (the BBC/ProPublica/SecureDrop pattern: clients reach the hub without exposing
+their network identity; a hub can serve without publishing its location). The blueprint's
+2026 research verdict, DECART'd against primary sources: **onion-service HOSTING = system C
+`tor` daemon as an optional deploy-tier sidecar** (two torrc lines forwarding to a loopback
+listener; production-grade PoW DoS defense since tor 0.4.8) — NOT embedded `arti`, because
+the Tor Project's own docs mark arti's service-side hosting "suitable for testing and
+experimentation only" with DoS protection unimplemented as of Arti 2.5.0 (Jun 2026); the
+arti migration is a named trigger (its experimental warning drops + service-side PoW
+lands), and the torrc shape is chosen to translate 1:1 to arti's `proxy_ports` when it
+fires. Convenience layer: the standard **`Onion-Location` response header** (Tor Browser ≥
+9.5 shows a one-tap ".onion available" pill on the clearnet site) emitted by a new tower
+layer beside the existing `security_headers` middleware, plus a pure in-kernel **QR
+encoder** (`kernel/src/qr_code.rs`, no new deps) feeding a two-QR share panel on P48's hub
+surface: primary QR = clearnet URL (works everywhere; Tor Browser users get the pill),
+secondary labeled QR = the onion URL — nobody ever types a 56-char address. **Honest
+latency boundary (not oversold):** onion circuits are six relays with 0.5-1.5 s rendezvous
+setup and high-variance RTT — ordering and menu browsing over Tor work well within P37/P51
+budgets; the customer tracking view works labeled-degraded (~1-2 s lag); courier live
+navigation is NOT offered over Tor; and hub-to-hub mesh transport over Tor is
+designed-and-deferred (PROTOCOL cross-ref): Tor carries TCP streams only, so the quinn/QUIC
+carrier physically cannot ride it — a future `TorTransport` is a sibling of the wss
+carrier behind the same M6 Trait, deferred until a hub actually needs location-hidden or
+censorship-resistant inter-hub links (trigger named in the blueprint §5.3). Trust model
+untouched: a Tor client authenticates with the same capability certs on the same routes —
+anonymity is network-layer only, never an auth bypass; Tor adds a privacy layer and
+substitutes for none of the PQ wire security.
+**Blueprint:** `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P53-tor-onion-integration.md`
+(full 20-point-standard blueprint: live-verified ground truth, cited 2026 research pass —
+arti release line, Onion-Location spec/adoption, Tor Browser 15.0.x Android status, onion
+latency measurements — DECART tables, build items O1-O6, adversarial sets, DoD, deploy
+checklist).
+**DoD (summary — falsifiable detail in the blueprint §6):**
+1. `OnionAddress` validated type: v3-only parse, typed refusals (charset/length/v2), the
+   sole path to the header value (injection unrepresentable).
+2. `Onion-Location` layer: exact header on clearnet-listener responses, ABSENT on the
+   onion listener (spec) and absent with no config (bit-identical responses — zero-config
+   regression guard); invalid config = startup refusal, never warn-and-serve.
+3. QR encoder: deterministic bit-exact fixture matrices, capacity refusal (never
+   truncation), verified once by an INDEPENDENT decoder (no self-certification).
+4. Deploy tier: torrc fragment (PoW ON) + operator checklist incl. 🔴 onion-key custody;
+   sidecar-kill drill proves clearnet unaffected; all host steps operator-run.
+5. Auth unchanged: P37's cap-gated 401/403 tests pass identically on BOTH listeners; a
+   grep-lint proves listener identity never reaches auth code.
+6. Two-QR share panel spec consumed by P48; onion QR pins `http://` scheme.
+7. W1 (with P37+P45, operator-run): live onion service reachable via Tor Browser; measured
+   Tor latency recorded once at deploy time (no fake network benches in CI).
+**Anti-scope:** NO auth/trust-model change for Tor clients, ever (an auth difference between
+listeners = NOT done regardless of green totals). NOT a substitute for PQ wire crypto
+(MESH-10/P36 untouched). NO moderation-evasion machinery — one router serves both ingresses,
+same content, same policy, same gates. NO arti or qrcode cargo dep without the named
+trigger/unlock. NO mesh `TorTransport` code (deferred, PROTOCOL-owned when triggered). NO
+onionbalance/bridges/single-onion mode/vanity addresses Wave-0 (each named-deferred or
+rejected in the blueprint).
+**Depends on / blocks:** W0 code depends on nothing (buildable today; O5 waits for P37's
+api tests to exist). W1 (live onion service) depends on P37 (the HTTP surface) + P45
+(deployment) and is operator-run. Feeds P48 (share panel), P52 K6 (shared QR encoder), and
+P50's audit (privacy-tier row: onion access collects no client IPs by construction). Blocks
+nothing — a hub without the sidecar loses only the onion mirror.
