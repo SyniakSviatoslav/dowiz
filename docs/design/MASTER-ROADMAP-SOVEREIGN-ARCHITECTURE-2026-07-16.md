@@ -2653,3 +2653,98 @@ pattern for payment (§16.13), storage (§16.29), and the AI model (§16.52), **
 infrastructure dependency in this entire roadmap is now a swappable port with a Wave-0 default
 — none is architecturally permanent.** This is the concrete, falsifiable form of §17.3's "hubs
 survive without dowiz" claim, not just a restated intention.
+
+---
+
+## 18. Launch-blocker research → synthesis → blueprint program (2026-07-18)
+
+Appended as the closing pass of the same-day dialogue that produced §16-§17. Once the operator's
+~150-question dialogue settled the architecture, the explicit next instruction was: prioritize
+for "first real order," dispatch Opus research per priority cluster grounded in the settled
+architecture, synthesize with Fable into one build plan, then have Opus write swarm/wave-ready
+blueprints — full interface ambition preserved, not truncated, with product-designer rigor.
+
+### 18.1 Research phase — 5 parallel Opus passes
+Each grounded in the relevant §16/§17 sections, researching real 2026 prior art via WebSearch
+(not guessed), written to `docs/research/`:
+- **R1** `OPUS-R1-INTERFACE-RENDERING-2026-07-18.md` — wgpu UI, a11y, text input, typography,
+  voice, deployment, SEO, AR/VR. Flagship pass. Found: full GPU app UI is production-real
+  (GPUI/Zed); AccessKit native-ready but web/canvas backend planning-only; cosmic-text/parley
+  solve text shaping (not greenfield); no precedent for physics-generated glyphs (stated
+  honestly); caught a real contradiction (§16.34 vs. P38's own planned IME-input DOM overlay).
+- **R2** `OPUS-R2-PAYMENT-MONEYFLOW-2026-07-18.md` — payment adapter, PCI-vs-canvas, split
+  payment. Found: canvas card capture is PCI-impossible (SAQ-D); three compliant paths
+  identified; surfaced the merchant-of-record fork for food-court.
+- **R3** `OPUS-R3-HUB-PROVISIONING-IDENTITY-2026-07-18.md` — CF Tunnel automation, capability-
+  cert hierarchy, crypto-agility, Hetzner provisioning. Found: dowiz's ML-DSA-65⊕Ed25519 hybrid
+  is already IETF composite suite OID `1.3.6.1.5.5.7.6.48`; the 1,000-tunnel/account cliff;
+  biscuit-style chains over the existing HybridSigner, not SPIRE (no PQC support).
+- **R4** `OPUS-R4-ORDERFLOW-COURIER-NOTIFICATIONS-2026-07-18.md` — notifications, offline
+  drafts, unified order machine, wallet transfer. Found: the HRW matcher and unified pickup/
+  delivery order machine already exist in code; CRDTs explicitly not warranted for drafts;
+  iOS-Safari-web-push-only-for-installed-PWAs is a real coverage gap.
+- **R5** `OPUS-R5-MULTIVENDOR-ECOSYSTEM-OPS-2026-07-18.md` — backup, auto-update, food-court
+  data model, brand preview, moderation, licensing. Found: `age`-style envelope over
+  rclone-crypt; `self_update` has no rollback (A/B-slot supervisor needed); row-scoped
+  single-DB food-court model; brand preview is a uniform-buffer swap, not a second renderer.
+
+Two real cross-report contradictions surfaced this pass and were resolved directly with the
+operator (not silently defaulted): food-court merchant-of-record (resolved: **each vendor is
+their own MoR** — dowiz never becomes a party to the money) and R1's IME-vs-§16.34 conflict
+(resolved: **Latin+Cyrillic only for Wave-0**, non-Latin/IME scripts deferred to v2, consistent
+with §16.58's existing RTL ruling).
+
+### 18.2 Synthesis phase — Fable
+`docs/design/CORE-ROADMAP-2026-07-17/SYNTHESIS-LAUNCH-BLOCKERS-2026-07-18.md` reconciles all
+five reports against §16-§17 and the two rulings above into: a cross-cutting dependency map
+(12 resolutions, X1-X12 — e.g. AccessKit-web being planning-only forces a hand-rolled a11y-mirror
+on every web screen; the payment-path and desktop-shell choices are one coupled decision), a
+build sequence to four milestones (**M1** first real pickup order, **M2** first delivery order,
+**M3** first claimed/automated hub, **M4** first food-court order), four further operator
+decisions (raised and closed the same pass — card-capture surface/desktop shell, backup
+break-glass severity, abandoned-hub suspension, food-court market scope), and the blueprint
+breakdown consumed by §18.3.
+
+**Four decisions closed in this pass** (beyond the two research-phase rulings): (A) card capture
+via **hosted redirect** (Path C) for web+desktop — frees desktop to pure `winit`+`wgpu`+
+AccessKit with no webview; mobile keeps Tauri for a native provider SDK sheet. (B) **No
+break-glass, ever** — self-custody is absolute across wallet, backup, and cert-root loss alike;
+consistent with §16.47. (C) An abandoned claimed hub **may be suspended-but-preserved** (compute
+released, state retained, still the vendor's) — qualifies §16.57 without reopening it.
+(D) Food-court N-leg checkout proven first in **Eurozone/EUR via Stripe Connect + Adyen**,
+a feature-scope limit, not a platform-architecture one (§16.20 stays market-agnostic).
+
+### 18.3 Blueprint phase — Opus, swarm/wave-ready
+2 canon-diffs (dated append-only corrections, not rewrites) + 18 new blueprints across 4 build
+waves, each written against the 20-point standard with live-verified ground truth (real
+file:line citations against actual kernel/engine code, not assumed):
+
+| Unit | File | Wave | One-line finding |
+|---|---|---|---|
+| P38-rev | `BLUEPRINT-P38-webgpu-render-engine.md` §12 | canon-diff | Strikes the planned IME `<input>` overlay (superseded by the Latin+Cyrillic ruling); adds 4 AR/VR insurance constraints as hard requirements now |
+| P39-rev | `BLUEPRINT-P39-app-shell-installability.md` §1.2 | canon-diff | Records desktop = `winit`+`wgpu`+AccessKit, no webview (from ruling A); mobile keeps Tauri |
+| P57 | `BLUEPRINT-P57-canvas-text-input.md` | W1 | Zero text-input code exists anywhere (verified by grep); two-lane build, cosmic-text, Latin+Cyrillic only |
+| P58 | `BLUEPRINT-P58-a11y-mirror-everywhere.md` | W1 | Mirror doesn't exist yet; engine has no semantic layer — designs a new `engine/src/semantics.rs`; owns the ARIA-textbox convention |
+| P59 | `BLUEPRINT-P59-capability-cert-chain.md` | W1 | A biscuit-style chain is already ~70% built in `cap.rs`; found the real gap (signing is Ed25519-only, not hybrid) |
+| P60 | `BLUEPRINT-P60-payment-adapter-core.md` | W1 | Reuses the kernel's existing compile-firewall pattern for the no-PAN guarantee; N-leg atomicity as an event-sourced saga with proptest proof |
+| P61 | `BLUEPRINT-P61-notification-fabric.md` | W1 | The send path is already scaffolded (`NotificationRouter`, one ignored test); resolves a real scope overlap with the existing P43 |
+| P62 | `BLUEPRINT-P62-catalog-multivendor-data-model.md` | W1 | The existing catalog is currency- and vendor-blind — that gap *is* the X7 leaf invariant; owns it as an unrepresentable-if-invalid type |
+| P63 | `BLUEPRINT-P63-shell-platform-spike.md` | W1 | A measurement blueprint, not a feature — 4-valued verdict system (Confirms/Refines/Contradicts/Blocked) forbids asserting unmeasured numbers |
+| P64 | `BLUEPRINT-P64-intent-engine-friction-voice.md` | W1 | `Money` is type-proven not a `FieldValue` — the field animates, the payment amount never does; `CommitToken` unconstructible without the full held gesture |
+| P65 | `BLUEPRINT-P65-dispatch-orchestrator.md` | W2 | Primitives are cross-repo (bebop-repo + dowiz); no-scoring red line enforced by a byte-identical offer-sequence test, zero new order-FSM edges |
+| P66 | `BLUEPRINT-P66-data-wallet-offline-drafts.md` | W2 | Wallet-transfer crypto reuses existing kernel primitives (zero new deps); animated-QR transport chosen with a real size-budget justification |
+| P69 | `BLUEPRINT-P69-customer-storefront-checkout.md` | W2 | M1 critical path; designs the redirect-payment suspend/resume `Journey` state machine; bot-pack generated from catalog state with an anti-drift test |
+| P70 | `BLUEPRINT-P70-owner-surface.md` | W2 | Precise supersede/extend split against the existing P48; GDPR delete solved via crypto-erasure (resolves append-only-log vs. right-to-erasure by math) |
+| P67 | `BLUEPRINT-P67-hub-provisioning-claim.md` | W3 | Caught a real bug before it was code: per-hub tunnel token/root key must be injected at first boot, never baked into the shared golden snapshot |
+| P68 | `BLUEPRINT-P68-hub-supervisor-update-backup.md` | W3 | Confirms zero-new-crypto-deps reuse (like P66); structurally forbids a dowiz recipient key; separates plaintext-local vs. encrypted-offsite snapshots |
+| P71 | `BLUEPRINT-P71-courier-surface.md` | W3 | Found and resolved a real numeric conflict (P52's 60s offer-timeout vs. P65's 30s) in P65's favor; kept the battery DoD honestly conditional on P63 |
+| P73 | `BLUEPRINT-P73-dowiz-org-landing.md` | W3 | The landing hero *is* the live field engine demoing itself; vendor-listing is made type-level unreachable, not just policy-forbidden |
+| P72 | `BLUEPRINT-P72-foodcourt-checkout-nleg.md` | W4 | Pure composition of P60+P62+P69; "dowiz never becomes a payment party" encoded as a type, not prose |
+| P74 | `BLUEPRINT-P74-moderation-reports-blocklist.md` | W4 | The HRW matcher lives in a crate with no dependency edge to the kernel at all — the strongest possible form of the no-scoring red line |
+
+**Milestone gates**: M1 = P69+P70(minimal)+P61+P60 on one manually-provisioned hub. M2 = +P65+P71.
+M3 = +P67+P68. M4 = +P72. Full dependency ordering, single-owner shared-contract assignments
+(idempotency → P60, catalog invariant → P62, golden-image → P67/P68, a11y harness → P58, intent
+grammar → P64, cert wire format → P59), and Track-R (procedural glyphs, XR backends, deepened
+intent-UI research — permanently off the critical path) are in the synthesis document, not
+duplicated here. This section is the index; the blueprints and the synthesis are the source.
