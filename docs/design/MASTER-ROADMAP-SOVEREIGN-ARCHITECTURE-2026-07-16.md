@@ -2248,3 +2248,16 @@ the intent-driven generative-UI research program itself (§16.35, §16.39-§16.4
 program of work, not a single decision), and the full remainder of the extended question set.
 This section grows via the same append-only convention as further rounds settle each one — it
 is not a final architecture document.
+
+### 16.42 Named design philosophy — *ad fontes*: math/physics primitives over library dependencies
+Operator's own framing for §16.30/§16.35/§16.39-§16.40's UI direction, worth naming precisely
+rather than leaving implicit: *"це велике спрощення у відмові від надбудов і залежностей -
+математика і фізика, значно більш контрольована і класичніша за будь-які бібліотеки, окрім
+цього простір безмежний"* — a deliberate rejection of UI-library superstructure in favor of
+mathematical/physical primitives, framed as *simplification* (fewer external dependencies,
+more directly controlled behavior) rather than added complexity, with an explicitly unbounded
+design space as the payoff. Named **ad fontes** ("to the sources") per the operator's own
+Renaissance-humanist reference — returning to first-principles primitives rather than
+inherited/derivative UI-library abstractions. This is the coherent philosophical throughline
+behind the whole §16.30/§16.34/§16.35/§16.39/§16.40 cluster of decisions, recorded here as a
+named principle so future sections can cite it directly instead of re-deriving the rationale.
