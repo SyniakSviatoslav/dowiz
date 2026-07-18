@@ -270,7 +270,10 @@ pub struct SpineIndex {
 
 impl SpineIndex {
     /// Build the index from `(id, title, tags, path)` records. Tag buckets are
-    /// sorted + de-duplicated up front for O(1) deterministic lookups.
+    /// sorted + de-duplicated up front so tag lookups are deterministic and
+    /// amortized O(1) via the `HashMap`; id lookups use a linear scan
+    /// (`lookup_by_id`, O(n) in the number of docs). Deterministic, not O(1)
+    /// for every access path.
     pub fn build(docs: Vec<(String, String, Vec<String>, String)>) -> SpineIndex {
         let mut tag_index: HashMap<String, Vec<String>> = HashMap::new();
         for (id, _, tags, _) in &docs {

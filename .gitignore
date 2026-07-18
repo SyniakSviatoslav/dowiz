@@ -77,6 +77,12 @@ tools/telemetry/logs/
 
 # telemetry serialization: pure stdlib (no venv, no external libs) — see ser.py
 
+# TORVALDS-11: the native compute binary is built from source at provision
+# time, NOT committed (it is platform-specific and silently drifts from the
+# source of truth otherwise). Build it from the hermes-kernel crate; stamp the
+# source commit into `--version`.
+/tools/telemetry/hermes-kernel
+
 # governance runtime state (claims/meta) — not source
 /tools/telemetry/governance/*.jsonl
 /tools/telemetry/governance/meta_state.json
