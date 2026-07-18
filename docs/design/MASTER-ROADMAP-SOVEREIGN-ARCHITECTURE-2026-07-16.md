@@ -2458,3 +2458,19 @@ Two closes:
   separate licensing decision needed. AGPLv3's network-copyleft closes the obvious gap a
   competing hosted-SaaS fork of the hub software would otherwise exploit; the trademark clause
   protects the "dowiz" name specifically, separate from the code license.
+
+### 16.58 RTL deferred to v2, vendor-responsible GDPR deletion with dowiz tooling, live brand preview
+Three closes, all Recommended options confirmed:
+- **RTL languages (Arabic, Hebrew) deferred to v2** — Wave-0 targets LTR languages; the
+  architecture doesn't exclude RTL, it's simply not built for Tier-3's first cut. Named
+  explicitly so the Tier-3 blueprint doesn't have to guess whether this was an oversight or a
+  deliberate scope cut — it's the latter.
+- **GDPR right-to-be-forgotten**: the vendor is legally responsible for deletion requests
+  against their own hub's order history (consistent with §16.29's full-vendor-responsibility
+  stance on disputes/data), but dowiz provides a built-in "delete everything about customer X"
+  tool in the hub software itself, so the vendor isn't left building this from scratch. The
+  client-side data wallet (§16.47) is already trivially self-deletable by the customer directly.
+- **Brand customization gets a live draft/staging preview** before publishing — a vendor sees
+  their 5-token changes (§16.9) rendered in the real field engine before customers do, avoiding
+  a published-then-regretted color/font combination. Adds a draft-vs-live state to the brand
+  config, not yet designed in detail here.
