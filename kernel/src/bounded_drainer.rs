@@ -100,8 +100,10 @@ pub struct RestartBudget {
 /// unit exists, MUST copy these numbers (StartLimitBurst=5,
 /// StartLimitIntervalSec=60) so both planes enforce the same physics —
 /// Phase 27 §3.4 leaves unit-existence (unverified); resolve at implementation.
-pub const DRAINER_RESTART_BUDGET: RestartBudget =
-    RestartBudget { max_restarts: 5, window_ms: 60_000 };
+pub const DRAINER_RESTART_BUDGET: RestartBudget = RestartBudget {
+    max_restarts: 5,
+    window_ms: 60_000,
+};
 
 const _: () = assert!(DRAINER_RESTART_BUDGET.max_restarts >= 1);
 const _: () = assert!(DRAINER_RESTART_BUDGET.window_ms > 0);
@@ -111,12 +113,18 @@ const _: () = assert!(DRAINER_RESTART_BUDGET.window_ms > 0);
 /// `fn run_drainer(token: LaunchToken, ...)` therefore CANNOT be invoked
 /// without the predicate having run — bypass is a compile error, not a
 /// runtime gap (doc 19 §2.3 axis 1: absence-is-visible).
-pub struct LaunchToken { _private: () }
+pub struct LaunchToken {
+    _private: (),
+}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum LaunchRefused {
     /// MaxR launches already inside the MaxT window.
-    IntensityExceeded { attempts_in_window: u32, max_restarts: u32, window_ms: u64 },
+    IntensityExceeded {
+        attempts_in_window: u32,
+        max_restarts: u32,
+        window_ms: u64,
+    },
     /// `now_ms` earlier than the last recorded launch. A rewound clock could
     /// smuggle launches past the window; unprovable headroom refuses (fail-closed).
     ClockRewound { last_launch_ms: u64, now_ms: u64 },
@@ -157,10 +165,15 @@ pub fn launch_permitted(
 ) -> Result<LaunchToken, LaunchRefused> {
     if let Some(&last) = prior_launches_ms.last() {
         if now_ms < last {
-            return Err(LaunchRefused::ClockRewound { last_launch_ms: last, now_ms });
+            return Err(LaunchRefused::ClockRewound {
+                last_launch_ms: last,
+                now_ms,
+            });
         }
     }
-    let attempts_in_window = prior_launches_ms.iter().rev()
+    let attempts_in_window = prior_launches_ms
+        .iter()
+        .rev()
         .take_while(|&&t| now_ms - t < budget.window_ms)
         .count() as u32;
     if attempts_in_window >= budget.max_restarts {
@@ -289,7 +302,10 @@ mod tests {
         for i in 0..20 {
             let now = i * 15_000; // one launch every 15 s (4/min)
             let r = launch_permitted(&b, &hist, now);
-            assert!(r.is_ok(), "legitimate launch #{i} at t={now} must be permitted");
+            assert!(
+                r.is_ok(),
+                "legitimate launch #{i} at t={now} must be permitted"
+            );
             hist.push(now);
         }
         assert_eq!(hist.len(), 20);

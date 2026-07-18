@@ -355,7 +355,9 @@ mod tests {
         assert!(p
             .check(&Scope::single(Resource::Ledger, Action::SettlementRecorded))
             .is_err());
-        assert!(p.check(&Scope::single(Resource::Menu, Action::Read)).is_ok());
+        assert!(p
+            .check(&Scope::single(Resource::Menu, Action::Read))
+            .is_ok());
     }
 
     #[test]

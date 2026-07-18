@@ -10,7 +10,9 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use dowiz_kernel::backup::MemStore;
-use dowiz_kernel::ports::llm::{CachePolicy, ChatRequest, LlmBackend, LlmError, Message, TaskClass};
+use dowiz_kernel::ports::llm::{
+    CachePolicy, ChatRequest, LlmBackend, LlmError, Message, TaskClass,
+};
 use llm_adapters::cache::CachingBackend;
 use std::collections::BTreeMap;
 
@@ -59,10 +61,7 @@ impl LlmBackend for FakeBackend {
             tool_calling: false,
         }
     }
-    fn chat(
-        &self,
-        _req: &ChatRequest,
-    ) -> Result<dowiz_kernel::ports::llm::ChatResponse, LlmError> {
+    fn chat(&self, _req: &ChatRequest) -> Result<dowiz_kernel::ports::llm::ChatResponse, LlmError> {
         Ok(dowiz_kernel::ports::llm::ChatResponse {
             content: "cached-answer".into(),
             usage: dowiz_kernel::ports::llm::Usage {
@@ -70,6 +69,7 @@ impl LlmBackend for FakeBackend {
                 completion_tokens: 2,
                 total_tokens: 6,
             },
+            tool_calls: Vec::new(),
         })
     }
     fn embed(

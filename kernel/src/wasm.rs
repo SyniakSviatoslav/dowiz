@@ -132,6 +132,115 @@ struct LedgerOut {
 // ONE JSON authority. The wrappers below (`place_order_js` / `apply_event_js`)
 // now call `crate::json_api::*` directly. Do NOT re-inline order logic here.
 
+fn order_from_in(o: OrderIn) -> Result<Order, String> {
+    let status = OrderStatus::from_str(&o.status)
+        .ok_or_else(|| format!("unknown OrderStatus: {}", o.status))?;
+    let items: Vec<OrderItem> = o.items.into_iter().map(item_to_domain).collect();
+
+    // V3 1.2 / 5.6 (ROUND-2 GAP-AUDIT, E1 forged-order-total): the `subtotal`
+    // and `total` carried in the untrusted JSON are attacker-controlled and MUST
+    // NOT be trusted. Recompute them server-authoritatively from the items
+    // (Layer G money recompute) so a forged total cannot survive a fold. The
+    // JSON values are dropped.
+    let subtotal = Order::compute_subtotal(&items).map_err(|e| format!("order_from_in: {}", e))?;
+    // Total is provisional (tax/fee not folded until a server estimate) — matching
+    // place_order, which sets total = subtotal on creation.
+    let total = subtotal;
+
+    Ok(Order {
+        id: o.id,
+        customer_id: o.customer_id,
+        status,
+        items,
+        subtotal,
+        total,
+        created_at_ms: o.created_at_ms,
+        channel: o.channel,
+        cash_pay_with: o.cash_pay_with,
+        // JS-boundary reconstruction: this path deserializes an order shape that
+        // did not carry the trust flag → conservatively UNTRUSTED (fail-closed).
+        price_trusted: false,
+        ledger: Vec::new(),
+    })
+}
+
+fn order_to_out(o: &Order) -> OrderOut {
+    OrderOut {
+        id: o.id.clone(),
+        customer_id: o.customer_id.clone(),
+        status: o.status.as_str().to_string(),
+        items: o.items.iter().map(item_from_domain).collect(),
+        subtotal: o.subtotal,
+        total: o.total,
+        created_at_ms: o.created_at_ms,
+        channel: o.channel.clone(),
+        cash_pay_with: o.cash_pay_with.clone(),
+    }
+}
+
+fn status_err(e: TransitionError) -> String {
+    // Mirror the oracle's error reporting: human-readable message string.
+    e.message()
+}
+
+// ── Pure logic (testable on native host) ──
+
+fn place_order_logic(
+    customer_id: Option<String>,
+    items_json: &str,
+    channel: Option<String>,
+) -> Result<String, String> {
+    let items_in: Vec<ItemInput> = serde_json::from_str(items_json).map_err(|e| e.to_string())?;
+    let items: Vec<OrderItem> = items_in.into_iter().map(item_to_domain).collect();
+
+    // V3 1.3 (ROUND-2 GAP-AUDIT): a negative quantity or unit price is malformed
+    // input that would produce a negative/garbage order total. Refuse before any
+    // domain mutation (fail-closed on the untrusted-JSON boundary).
+    for it in &items {
+        if it.quantity <= 0 {
+            return Err(format!(
+                "place_order: quantity must be >= 1, got {}",
+                it.quantity
+            ));
+        }
+        if it.unit_price < 0 {
+            return Err(format!(
+                "place_order: unit_price must be >= 0, got {}",
+                it.unit_price
+            ));
+        }
+    }
+
+    let seq = ORDER_SEQ.fetch_add(1, Ordering::SeqCst);
+    let id = format!("ord_{}", seq);
+    let created_at_ms = seq as i64;
+
+    let order = place_order(
+        id,
+        customer_id,
+        items,
+        created_at_ms,
+        channel,
+        None, // cash_pay_with is not part of the JS placement surface
+    )
+    .map_err(status_err)?;
+
+    let out = order_to_out(&order);
+    serde_json::to_string(&out).map_err(|e| e.to_string())
+}
+
+fn apply_event_logic(order_json: &str, next_status: &str) -> Result<String, String> {
+    let parsed: OrderIn = serde_json::from_str(order_json).map_err(|e| e.to_string())?;
+    let order = order_from_in(parsed)?;
+
+    let next = OrderStatus::from_str(next_status)
+        .ok_or_else(|| format!("unknown OrderStatus: {}", next_status))?;
+
+    let updated = apply_event(&order, next).map_err(status_err)?;
+    let out = order_to_out(&updated);
+    serde_json::to_string(&out).map_err(|e| e.to_string())
+}
+
 fn channel_ledger_logic(events_json: &str) -> Result<String, String> {
     let events: Vec<EventIn> = serde_json::from_str(events_json).map_err(|e| e.to_string())?;
     // V3 1.1 (ROUND-2 GAP-AUDIT): pre-fix, every event leaked two `&'static str`
