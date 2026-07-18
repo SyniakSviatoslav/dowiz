@@ -56,6 +56,11 @@ pub struct ChatRequest {
     /// Backend-specific options surfaced verbatim (Ollama `keep_alive`/`num_ctx`/`think`, etc.).
     /// Passed through untouched; parsed per-adapter in the transport layer.
     pub options: std::collections::BTreeMap<String, String>,
+    /// Tool declarations for this call (OpenAI `tools` array). Empty for a plain
+    /// chat. Extend-don't-rewrite: `Default` seeds `Vec::new()` so every existing
+    /// call site compiles and behaves identically (no tool calls requested). The
+    /// adapter serializes this into the wire `tools` array.
+    pub tools: Vec<ToolDecl>,
 }
 
 impl Default for ChatRequest {
@@ -70,6 +75,7 @@ impl Default for ChatRequest {
             task_class: TaskClass::General,
             cache_policy: CachePolicy::Exact,
             options: std::collections::BTreeMap::new(),
+            tools: Vec::new(),
         }
     }
 }
@@ -106,6 +112,29 @@ impl Usage {
 pub struct ChatResponse {
     pub content: String,
     pub usage: Usage,
+    /// Tool calls the model returned this turn (OpenAI `message.tool_calls`).
+    /// Empty when the model answered directly. Iterating on a single tool call is
+    /// the loop's job; the kernel carries all of them verbatim, unparsed.
+    pub tool_calls: Vec<ToolCallReq>,
+}
+
+/// A tool the backend may be asked to call — the kernel-side declaration. The
+/// adapter serializes this into the OpenAI `tools` array; the struct carries
+/// owned `String`s (the kernel port stays `'static`-free at the wire boundary).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolDecl {
+    pub name: String,
+    pub description: String,
+    pub arg_name: String,
+}
+
+/// A single tool call the model returned — parsed by the adapter from
+/// `message.tool_calls[].function`. Carries the raw argument JSON so the port
+/// impl (not the kernel) owns argument parsing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolCallReq {
+    pub name: String,
+    pub arguments_json: String,
 }
 
 /// An embedding request.

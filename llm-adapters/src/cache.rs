@@ -55,7 +55,10 @@ impl<B: LlmBackend, S: BlockStore> CachingBackend<B, S> {
     /// requests (`Exact` policy, or `SemanticOk` which falls back to Exact on a miss) participate;
     /// `NoCache` bypasses entirely.
     fn cache_key(req: &ChatRequest) -> Option<[u8; 32]> {
-        if matches!(req.cache_policy, dowiz_kernel::ports::llm::CachePolicy::NoCache) {
+        if matches!(
+            req.cache_policy,
+            dowiz_kernel::ports::llm::CachePolicy::NoCache
+        ) {
             return None;
         }
         let mut m = BTreeMap::new();
@@ -76,6 +79,19 @@ impl<B: LlmBackend, S: BlockStore> CachingBackend<B, S> {
         // `options` (Ollama knobs) affect the output ⇒ part of the key.
         let opts: BTreeMap<String, String> = req.options.clone();
         m.insert("options", serde_json::to_string(&opts).unwrap_or_default());
+        // HARNESS §3.2: a tool-bearing request partitions the cache from its
+        // tool-less twin. Omitting `tools` here would poison the cache — a cached
+        // tool-less answer served to a tool run (or vice versa). The key carries a
+        // stable, comparable form: each tool's name+arg_name (the declaration, not
+        // the description text, which is model-facing prose and excludes nothing
+        // semantically). Sorted for determinism.
+        let mut tool_keys: Vec<String> = req
+            .tools
+            .iter()
+            .map(|t| format!("{}:{}", t.name, t.arg_name))
+            .collect();
+        tool_keys.sort();
+        m.insert("tools", tool_keys.join(","));
         let canonical = serde_json::to_vec(&json!(m)).unwrap_or_default();
         Some(sha3_256(&canonical))
     }
@@ -147,6 +163,7 @@ fn decode_response(bytes: &[u8]) -> Option<ChatResponse> {
             completion_tokens: completion,
             total_tokens: total,
         },
+        tool_calls: Vec::new(),
     })
 }
 
@@ -184,7 +201,9 @@ mod tests {
     }
     impl CountingBackend {
         fn new() -> Self {
-            CountingBackend { calls: RefCell::new(0) }
+            CountingBackend {
+                calls: RefCell::new(0),
+            }
         }
         fn call_count(&self) -> usize {
             *self.calls.borrow()
@@ -195,7 +214,12 @@ mod tests {
             "double"
         }
         fn caps(&self) -> Caps {
-            Caps { chat: true, embed: false, rerank: false, tool_calling: false }
+            Caps {
+                chat: true,
+                embed: false,
+                rerank: false,
+                tool_calling: false,
+            }
         }
         fn chat(&self, _req: &ChatRequest) -> Result<ChatResponse, LlmError> {
             *self.calls.borrow_mut() += 1;
@@ -206,6 +230,7 @@ mod tests {
                     completion_tokens: 2,
                     total_tokens: 5,
                 },
+                tool_calls: Vec::new(),
             })
         }
         fn embed(&self, _req: &EmbedRequest) -> Result<EmbedResponse, LlmError> {
@@ -245,7 +270,11 @@ mod tests {
         // Identical temperature=0 request → served from cache, NO upstream call.
         let r2 = cached.chat(&req(0.0)).unwrap();
         assert_eq!(r2.content, "cached-answer");
-        assert_eq!(cached.inner.call_count(), 1, "second identical call must hit cache (0 HTTP)");
+        assert_eq!(
+            cached.inner.call_count(),
+            1,
+            "second identical call must hit cache (0 HTTP)"
+        );
     }
 
     #[test]
@@ -256,7 +285,11 @@ mod tests {
         assert_eq!(cached.inner.call_count(), 1);
         // Different temperature → different canonical key → miss → upstream call.
         let _ = cached.chat(&req(0.5)).unwrap();
-        assert_eq!(cached.inner.call_count(), 2, "changed sampling param must miss");
+        assert_eq!(
+            cached.inner.call_count(),
+            2,
+            "changed sampling param must miss"
+        );
     }
 
     #[test]
@@ -269,5 +302,39 @@ mod tests {
         let _ = cached.chat(&r).unwrap();
         assert_eq!(cached.inner.call_count(), 2, "NoCache must never hit cache");
     }
-}
 
+    // B-c (HARNESS §3.2): a tool-bearing request PARTITIONS the cache from its
+    // tool-less twin. Two requests that are identical except for `tools=[]` vs
+    // `tools=[read_order_status]` must produce two distinct cache entries and
+    // therefore TWO upstream calls (never a poisoned shared hit). This is the
+    // regression guard against cache-poisoning once `ChatRequest.tools` lands.
+    #[test]
+    fn tools_field_partitions_the_cache() {
+        let backend = CountingBackend::new();
+        let cached = CachingBackend::with_store(backend, MemStore::new());
+        let plain = req(0.0);
+        let mut tooled = req(0.0);
+        tooled.tools.push(dowiz_kernel::ports::llm::ToolDecl {
+            name: "read_order_status".to_string(),
+            description: "Read order status.".to_string(),
+            arg_name: "order_id".to_string(),
+        });
+
+        let _ = cached.chat(&plain).unwrap();
+        let _ = cached.chat(&tooled).unwrap();
+        assert_eq!(
+            cached.inner.call_count(),
+            2,
+            "tool-bearing request must NOT collide with its tool-less twin in the cache"
+        );
+
+        // A repeat of each still hits its own partition (no extra upstream call).
+        let _ = cached.chat(&plain).unwrap();
+        let _ = cached.chat(&tooled).unwrap();
+        assert_eq!(
+            cached.inner.call_count(),
+            2,
+            "identical re-requests must each hit their own distinct cache partition"
+        );
+    }
+}
