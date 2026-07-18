@@ -66,7 +66,9 @@ prev="$(readlink -f "$CURRENT_LINK" 2>/dev/null || true)"
 
 # 2) Local pre-swap health-check: start the NEW binary on a throwaway port,
 #    probe /healthz, then kill it. Refuses swap if the new build is broken.
-TEST_PORT=$((8080 + $$ % 1000))
+# TEST_PORT_OVERRIDE lets a constrained/sandboxed host steer clear of busy
+# low ports (default 8080 + PID-derived offset).
+TEST_PORT="${TEST_PORT_OVERRIDE:-$((8080 + ($$ + $(date +%N) % 100000) % 1000))}"
 TEST_URL="http://127.0.0.1:${TEST_PORT}/healthz"
 "$BIN_PATH" --root "${SPA_ROOT:-/var/www}" --port "$TEST_PORT" --bind 127.0.0.1 >/dev/null 2>&1 &
 _test_pid=$!
