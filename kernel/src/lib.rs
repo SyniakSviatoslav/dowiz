@@ -213,11 +213,19 @@ pub mod typed_metrics;
 /// C1 — verify-failure → retrieval-trigger: a claim check that, on failure,
 /// emits a bounded structured re-verify request (the "verify then learn" loop).
 pub mod verify_retrieval;
-/// WASM/JS bindings — the only place the kernel touches the boundary.
+/// WASM/JS bindings — the only place the kernel touches the browser boundary.
 /// Compiled ONLY under the `wasm` feature (see `#![cfg(feature = "wasm")]` in
 /// wasm.rs); native rlib builds exclude it and pull no wasm-bindgen/serde.
 #[cfg(feature = "wasm")]
 pub mod wasm;
+
+/// `json-api` — the JSON string boundary shared by the wasm JS surface AND the
+/// native HTTP adapter (P37 `native-spa-server`). Compiled ONLY under the
+/// `json-api` feature (and therefore under `wasm`, which enables it); the
+/// DEFAULT kernel build stays serde-free. This is the single order JSON
+/// authority for both surfaces (BLUEPRINT-P37 W37-1).
+#[cfg(feature = "json-api")]
+pub mod json_api;
 
 // Re-export the headline types so wasm-bindgen consumers and tests share one surface.
 // `evals` (benchmark/JSONL bridge) re-exported only when the `wasm` feature is on.

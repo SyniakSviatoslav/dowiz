@@ -3,10 +3,21 @@ name: Heartbeat Monitor
 # External dead-man's-switch for the Hetzner box (dowiz-dev). Runs on GitHub's
 # infrastructure — fully decoupled from Hetzner/Cloudflare, so it still fires
 # if the box or its Cloudflare Tunnel is completely down. Complements the
-# on-box ops-gatus monitor (docs/design/ops-reliability/, OPS-10).
+# on-box ops-gatus monitor (docs/design/ops-reliability/, OPS-10) and the
+# on-box `tools/ops-alert deadman-check` cron (P45-W2, §4a.2 item 2) — the two
+# watchers use different infrastructure AND different send paths, so one
+# compromised/successful-silent lane cannot mute both.
 #
 # Requires repo secret TELEGRAM_BOT_TOKEN (bot @dowizbot_bot). Chat id is not
 # a secret (already present in /root/.bashrc + cloud env per project memory).
+#
+# P45-W2 §4a.2 item 1: probe list is a workflow-level env matrix
+# (PROBE_TARGETS) — retargeting at P37 is a one-line diff (MASTER DoD-2).
+# Format: space-separated "name=url" pairs.
+
+env:
+  PROBE_TARGETS: "tunnel=https://webhook.dowiz.org/"
+  OPS_ALERTS_TOPIC: "257"
 
 on:
   schedule:
@@ -22,39 +33,58 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check webhook.dowiz.org (proxy for box + tunnel + WAF chain)
+      - name: Probe targets (dead-man's-switch targets)
         id: probe
         run: |
           set +e
-          code=$(curl -sS -o /dev/null -w "%{http_code}" \
-            --max-time 10 --retry 3 --retry-delay 5 --retry-connrefused \
-            "https://webhook.dowiz.org/")
-          echo "http_code=$code" >> "$GITHUB_OUTPUT"
-          if [ -z "$code" ] || [ "$code" -ge 500 ] || [ "$code" = "000" ]; then
+          down_list=""
+          for entry in $PROBE_TARGETS; do
+            name="${entry%%=*}"
+            url="${entry#*=}"
+            code=$(curl -sS -o /dev/null -w "%{http_code}" \
+              --max-time 10 --retry 3 --retry-delay 5 --retry-connrefused "$url")
+            if [ -z "$code" ] || [ "$code" -ge 500 ] || [ "$code" = "000" ]; then
+              down_list="${down_list}${name}(${url}:${code}) "
+            fi
+          done
+          echo "down_list=${down_list}" >> "$GITHUB_OUTPUT"
+          if [ -n "$down_list" ]; then
             echo "status=down" >> "$GITHUB_OUTPUT"
           else
             echo "status=up" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Alert Telegram on failure
+      - name: Alert Telegram on failure (S0, OPS_ALERTS topic)
         if: steps.probe.outputs.status == 'down'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: "-1003901655568"
+          OPS_ALERTS_TOPIC: ${{ env.OPS_ALERTS_TOPIC }}
         run: |
           set +e
-          msg="heartbeat-monitor: webhook.dowiz.org unreachable (http_code=${{ steps.probe.outputs.http_code }}). Box or Cloudflare Tunnel may be down."
+          down="${{ steps.probe.outputs.down_list }}"
+          msg="heartbeat-monitor: target(s) DOWN — ${down}. Box or Cloudflare Tunnel may be down."
           for attempt in 1 2 3; do
             resp=$(curl -sS --max-time 10 \
               "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
               --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
-              --data-urlencode "text=🔴 ${msg}")
+              --data-urlencode "message_thread_id=${OPS_ALERTS_TOPIC}" \
+              --data-urlencode "text=🔴 S0 ${msg}")
             if echo "$resp" | grep -q '"ok":true'; then
-              echo "Telegram alert sent (attempt $attempt)"
+              echo "Telegram S0 alert sent (attempt $attempt)"
               exit 0
             fi
             echo "Telegram send failed (attempt $attempt, resp: $resp), retrying..."
             sleep 5
           done
-          echo "::error::Telegram alert failed after 3 attempts — check TELEGRAM_BOT_TOKEN secret"
+          echo "Telegram primary alert failed after 3 attempts — check bot token + network"
+          # P45-W0 §4a.2 item 4: nested-pager fallback — alert a secondary forum
+          # topic (same bot) so someone is ALWAYS paged about the pager failing.
+          curl -sS --max-time 10 \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+            --data-urlencode "message_thread_id=257" \
+            --data-urlencode "text=🔴 heartbeat-MONITOR PAGER FAILURE after 3 attempts — targets=${down} — root alert unverified — check TELEGRAM_BOT_TOKEN secret" \
+            >/dev/null || true
+          echo "::error::Telegram alert failed after 3 attempts — fallback to OPS_ALERTS-topic sent; verify manually"
           exit 1

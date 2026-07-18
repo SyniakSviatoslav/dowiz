@@ -24,6 +24,7 @@
 
 /// A protocol resource an agent capability may target. Closed set ⇒ the admission
 /// gate is exhaustively checkable; an unknown discriminant byte fails decode (fail-closed).
+#[cfg_attr(feature = "json-api", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Resource {
     /// A transport route / channel.
@@ -101,6 +102,7 @@ impl Resource {
 }
 
 /// An action permitted on a [`Resource`]. Closed set.
+#[cfg_attr(feature = "json-api", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Action {
     /// Authorize a send on the resource.
@@ -184,6 +186,7 @@ impl Action {
 
 /// A set of authorized `(resource, action)` pairs (UCAN "narrow-only" attenuation
 /// works over set-subset, mirroring bebop2 `Scope`/`Effect`). No score, no rating.
+#[cfg_attr(feature = "json-api", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Scope {
     /// Set of authorized `(resource, action)` pairs.

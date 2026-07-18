@@ -86,3 +86,41 @@ To rotate the `BACKUP_ENCRYPTION_KEY`:
 - Backup drift > 70 min → daily digest alert
 - Restore dry-run failure → immediate escalation
 - R2 reachability → `/health` endpoint exposes `backup.r2_reachable`
+
+## 6. P45-W3 off-Hetzner immutable copy (copy 3) — OPERATOR-GATED
+
+Topology per OPS-14 (`tools/ops-alert/offsite-copy.sh`): copy 3a = rsync.net
+(SSH-only, zero-egress, credential-isolated); copy 3b = Object-Lock COMPLIANCE
+bucket (immutable leg — early deletion impossible even for the key holder, OPS-14
+adversarial case a). Both are OPTIONAL and guarded: the script no-ops each target
+until its env is set, so it is safe to cron BEFORE provisioning.
+
+**Operator provisioning (human-only — agent does NOT create accounts/buckets):**
+
+1. rsync.net account + SSH key. Then set on the box:
+   `RSYNC_NET_HOST`, `RSYNC_NET_USER`, `RSYNC_NET_PATH` (= `/dowiz-backup/copy3`).
+2. Object-Lock bucket in COMPLIANCE mode — **set at bucket CREATION, not
+   retrofittable**. Then set `OFFSITE_BUCKET` + `AWS_REGION` + standard
+   `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`. Use a credential-isolated IAM
+   principal (separate from the Hetzner blast radius, OPS-15 key custody).
+3. Cron: `tools/ops-alert/offsite-copy.sh` on the backup interval (≤ RPO 1h).
+
+**Freshness metric (§4a.3 monitoring hook):** the script writes Prometheus
+textfile at `$METRICS_FILE`:
+- `dowiz_ops_backup_last_success_seconds{subject="kernel_state",copy="rsyncnet"|"objectlock"}`
+- `dowiz_ops_backup_bytes_written{...}`
+
+Ride existing pager rules (no new alerting code): age > `BACKUP_STALENESS_FACTOR`
+× interval ⇒ **S0** (pager rule 5 — backup failure is the silent failure); a
+sudden bytes-written drop ⇒ **S1** (pager rule 7). Absence of a copy's metric
+rows on a provisioned host means that copy's last run failed (fail-closed: a
+0-byte or errored run emits NOTHING for that copy).
+
+**RED test (R2, W3):** with Hetzner credentials deliberately withheld, an
+`aws s3 cp` / `rsync` to copy 3 from a *different* host (or after revoking the
+Hetzner IAM principal) still restores — copy 3 survives Hetzner-unreachable.
+
+**Honest residual:** copy 3 shares the box's `TELEGRAM_BOT_TOKEN` until W3's
+separate infra bot (§4e.2) lands; a revoked/blocked bot mutes the metric's alert
+lane. Named, not hidden.
+

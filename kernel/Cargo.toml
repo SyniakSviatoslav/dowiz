@@ -14,6 +14,14 @@ crate-type = ["cdylib", "rlib"]
 # hot path is stack-only and falls back to compile-time target_feature / scalar.
 default = ["std"]
 std = []
+# `json-api` = the JSON string boundary WITHOUT wasm-bindgen. It pulls the SAME
+# serde/serde_json the `wasm` surface needs for the order (de)serialization, but
+# no browser glue — so the native HTTP adapter (native-spa-server) and the wasm
+# JS surface share ONE JSON authority (`kernel/src/json_api.rs`). The default
+# kernel build stays serde-free (verified via `cargo tree -p dowiz-kernel
+# --no-default-features -e no-dev | grep -c serde` → 0). `wasm` becomes a
+# superset of `json-api` so the browser surface is unchanged.
+json-api = ["dep:serde", "dep:serde_json"]
 # `wasm` pulls the wasm-bindgen JS glue + the serde (de)serialization it needs.
 # OFF by default so a native rlib consumer (e.g. bebop-delivery-domain) links the
 # kernel WITHOUT wasm-bindgen / serde / serde_json / serde_yaml in its graph.
@@ -21,7 +29,7 @@ std = []
 # feature-independent. `loops` + `living_knowledge` are serde-dependent, so they
 # ride behind this feature (the only one that enables serde) to keep the native
 # build serde-free; neither is part of the canonical order/money core.
-wasm = ["dep:wasm-bindgen", "dep:serde", "dep:serde_json", "dep:serde_yaml"]
+wasm = ["json-api", "dep:wasm-bindgen", "dep:serde_yaml"]
 # `chaos` — the zero-dependency deterministic fault-injection harness (P-H W-H1).
 # OFF by default so production artifacts carry NO chaos symbols (the whole
 # `chaos` module is `#[cfg(any(test, feature = "chaos"))]`); a release build

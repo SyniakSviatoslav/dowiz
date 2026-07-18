@@ -125,136 +125,12 @@ struct LedgerOut {
     anomalies: u64,
 }
 
-// ── Internal mapping helpers (free of wasm_bindgen so they are unit-testable
-//    on the native target and reused by every exported function) ──
-
-fn item_to_domain(i: ItemInput) -> OrderItem {
-    OrderItem {
-        product_id: i.product_id,
-        modifier_ids: i.modifier_ids,
-        quantity: i.quantity,
-        unit_price: i.unit_price,
-    }
-}
-
-fn item_from_domain(i: &OrderItem) -> ItemOut {
-    ItemOut {
-        product_id: i.product_id.clone(),
-        modifier_ids: i.modifier_ids.clone(),
-        quantity: i.quantity,
-        unit_price: i.unit_price,
-    }
-}
-
-fn order_from_in(o: OrderIn) -> Result<Order, String> {
-    let status = OrderStatus::from_str(&o.status)
-        .ok_or_else(|| format!("unknown OrderStatus: {}", o.status))?;
-    let items: Vec<OrderItem> = o.items.into_iter().map(item_to_domain).collect();
-
-    // V3 1.2 / 5.6 (ROUND-2 GAP-AUDIT, E1 forged-order-total): the `subtotal`
-    // and `total` carried in the untrusted JSON are attacker-controlled and MUST
-    // NOT be trusted. Recompute them server-authoritatively from the items
-    // (Layer G money recompute) so a forged total cannot survive a fold. The
-    // JSON values are dropped.
-    let subtotal = Order::compute_subtotal(&items)
-        .map_err(|e| format!("order_from_in: {}", e))?;
-    // Total is provisional (tax/fee not folded until a server estimate) — matching
-    // place_order, which sets total = subtotal on creation.
-    let total = subtotal;
-
-    Ok(Order {
-        id: o.id,
-        customer_id: o.customer_id,
-        status,
-        items,
-        subtotal,
-        total,
-        created_at_ms: o.created_at_ms,
-        channel: o.channel,
-        cash_pay_with: o.cash_pay_with,
-        // JS-boundary reconstruction: this path deserializes an order shape that
-        // did not carry the trust flag → conservatively UNTRUSTED (fail-closed).
-        price_trusted: false,
-        ledger: Vec::new(),
-    })
-}
-
-fn order_to_out(o: &Order) -> OrderOut {
-    OrderOut {
-        id: o.id.clone(),
-        customer_id: o.customer_id.clone(),
-        status: o.status.as_str().to_string(),
-        items: o.items.iter().map(item_from_domain).collect(),
-        subtotal: o.subtotal,
-        total: o.total,
-        created_at_ms: o.created_at_ms,
-        channel: o.channel.clone(),
-        cash_pay_with: o.cash_pay_with.clone(),
-    }
-}
-
-fn status_err(e: TransitionError) -> String {
-    // Mirror the oracle's error reporting: human-readable message string.
-    e.message()
-}
-
-// ── Pure logic (testable on native host) ──
-
-fn place_order_logic(
-    customer_id: Option<String>,
-    items_json: &str,
-    channel: Option<String>,
-) -> Result<String, String> {
-    let items_in: Vec<ItemInput> = serde_json::from_str(items_json).map_err(|e| e.to_string())?;
-    let items: Vec<OrderItem> = items_in.into_iter().map(item_to_domain).collect();
-
-    // V3 1.3 (ROUND-2 GAP-AUDIT): a negative quantity or unit price is malformed
-    // input that would produce a negative/garbage order total. Refuse before any
-    // domain mutation (fail-closed on the untrusted-JSON boundary).
-    for it in &items {
-        if it.quantity <= 0 {
-            return Err(format!(
-                "place_order: quantity must be >= 1, got {}",
-                it.quantity
-            ));
-        }
-        if it.unit_price < 0 {
-            return Err(format!(
-                "place_order: unit_price must be >= 0, got {}",
-                it.unit_price
-            ));
-        }
-    }
-
-    let seq = ORDER_SEQ.fetch_add(1, Ordering::SeqCst);
-    let id = format!("ord_{}", seq);
-    let created_at_ms = seq as i64;
-
-    let order = place_order(
-        id,
-        customer_id,
-        items,
-        created_at_ms,
-        channel,
-        None, // cash_pay_with is not part of the JS placement surface
-    )
-    .map_err(status_err)?;
-
-    let out = order_to_out(&order);
-    serde_json::to_string(&out).map_err(|e| e.to_string())
-}
-
-fn apply_event_logic(order_json: &str, next_status: &str) -> Result<String, String> {
-    let parsed: OrderIn = serde_json::from_str(order_json).map_err(|e| e.to_string())?;
-    let order = order_from_in(parsed)?;
-
-    let next = OrderStatus::from_str(next_status)
-        .ok_or_else(|| format!("unknown OrderStatus: {}", next_status))?;
-
-    let updated = apply_event(&order, next).map_err(status_err)?;
-    let out = order_to_out(&updated);
-    serde_json::to_string(&out).map_err(|e| e.to_string())
-}
+// ── Order JSON authority lives in `json_api` (P37 W37-1) ──
+// The order `place_order_logic` / `apply_event_logic` functions and their
+// mapping helpers MOVED verbatim to `kernel/src/json_api.rs` (gated behind the
+// `json-api` feature) so the wasm JS surface AND the native HTTP adapter share
+// ONE JSON authority. The wrappers below (`place_order_js` / `apply_event_js`)
+// now call `crate::json_api::*` directly. Do NOT re-inline order logic here.
 
 fn channel_ledger_logic(events_json: &str) -> Result<String, String> {
     let events: Vec<EventIn> = serde_json::from_str(events_json).map_err(|e| e.to_string())?;
@@ -333,7 +209,8 @@ pub fn place_order_js(
     items_json: String,
     channel: Option<String>,
 ) -> Result<String, JsValue> {
-    place_order_logic(customer_id, &items_json, channel).map_err(|e| JsValue::from_str(&e))
+    crate::json_api::place_order_logic(customer_id, &items_json, channel)
+        .map_err(|e| JsValue::from_str(&e))
 }
 
 /// Advance an order one step. `next_status` is the status name (e.g. "CONFIRMED").
@@ -341,7 +218,8 @@ pub fn place_order_js(
 /// transition (same status / illegal edge / scaffold disabled).
 #[wasm_bindgen]
 pub fn apply_event_js(order_json: String, next_status: String) -> Result<String, JsValue> {
-    apply_event_logic(&order_json, &next_status).map_err(|e| JsValue::from_str(&e))
+    crate::json_api::apply_event_logic(&order_json, &next_status)
+        .map_err(|e| JsValue::from_str(&e))
 }
 
 /// Ingest a batch of channel events and return aggregated attribution + anomaly
@@ -837,87 +715,13 @@ pub fn spectral_flat_js(matrix_json: String) -> Result<String, JsValue> {
 mod tests {
     use super::*;
 
-    const SAMPLE_ITEMS: &str = r#"[
-        {"product_id":"p1","modifier_ids":["m1"],"quantity":2,"unit_price":500},
-        {"product_id":"p2","modifier_ids":[],"quantity":1,"unit_price":300}
-    ]"#;
-
-    #[test]
-    fn apply_event_recomputes_forged_total_from_items() {
-        // V3 1.2 / 5.6 (ROUND-2 GAP-AUDIT, E1 forged-order-total): an attacker
-        // controls the `total`/`subtotal` fields in the JSON they hand to
-        // apply_event_js. The kernel must recompute them from the items, never
-        // trust the wire value.
-        let json = place_order_logic(Some("c1".into()), SAMPLE_ITEMS, Some("web".into()))
-            .expect("place_order_logic ok");
-
-        // Tamper: stamp a forged total onto the serialized order.
-        let mut v: serde_json::Value = serde_json::from_str(&json).unwrap();
-        let forged = 9_999_999i64;
-        v["total"] = serde_json::json!(forged);
-        v["subtotal"] = serde_json::json!(forged);
-        let tampered = serde_json::to_string(&v).unwrap();
-
-        let updated = apply_event_logic(&tampered, "CONFIRMED")
-            .expect("apply_event_logic ok");
-        let out: serde_json::Value = serde_json::from_str(&updated).unwrap();
-
-        // True total = 2*500 + 300 = 1300 (provisional, no tax/fee folded).
-        let expected = 2 * 500 + 300;
-        assert_ne!(out["total"], forged, "forged total must NOT survive the fold");
-        assert_eq!(out["total"], expected, "total must be recomputed from items");
-        assert_ne!(out["subtotal"], forged, "forged subtotal must NOT survive");
-        assert_eq!(out["subtotal"], expected);
-    }
-
-    #[test]
-    fn place_order_rejects_negative_quantity_and_price() {
-        // V3 1.3 (ROUND-2 GAP-AUDIT): malformed input (negative qty / price) must
-        // be refused fail-closed, not produce a negative/garbage total.
-        let neg_qty = r#"[{"product_id":"p1","modifier_ids":[],"quantity":-2,"unit_price":500}]"#;
-        let r1 = place_order_logic(None, neg_qty, None);
-        assert!(r1.is_err(), "negative quantity must be refused");
-        assert!(
-            r1.unwrap_err().contains("quantity"),
-            "error must name the quantity violation"
-        );
-
-        let neg_price = r#"[{"product_id":"p1","modifier_ids":[],"quantity":1,"unit_price":-500}]"#;
-        let r2 = place_order_logic(None, neg_price, None);
-        assert!(r2.is_err(), "negative unit_price must be refused");
-        assert!(
-            r2.unwrap_err().contains("unit_price"),
-            "error must name the price violation"
-        );
-
-        // Zero quantity (no items) is also refused.
-        let zero_qty = r#"[{"product_id":"p1","modifier_ids":[],"quantity":0,"unit_price":500}]"#;
-        assert!(
-            place_order_logic(None, zero_qty, None).is_err(),
-            "zero quantity must be refused"
-        );
-    }
-
-    #[test]
-    fn apply_event_happy_and_illegal() {
-        let created = place_order_logic(None, SAMPLE_ITEMS, None).unwrap();
-        let confirmed = apply_event_logic(&created, "CONFIRMED").unwrap();
-        let v: serde_json::Value = serde_json::from_str(&confirmed).unwrap();
-        assert_eq!(v["status"], "CONFIRMED");
-
-        // Pending -> Delivered is illegal; must surface an error string.
-        let bad = apply_event_logic(&created, "DELIVERED");
-        assert!(bad.is_err());
-        let msg = bad.unwrap_err();
-        assert!(
-            msg.contains("Illegal"),
-            "expected illegal-transition error, got: {msg}"
-        );
-
-        // Unknown status name rejected.
-        let unknown = apply_event_logic(&confirmed, "NOPE");
-        assert!(unknown.is_err());
-    }
+    // NOTE: the order `place_order_logic` / `apply_event_logic` tests
+    // (`apply_event_recomputes_forged_total_from_items`,
+    // `place_order_rejects_negative_quantity_and_price`,
+    // `apply_event_happy_and_illegal`, `round_trip_full_order_json`) MOVED to
+    // `kernel/src/json_api.rs` (P37 W37-1) — single authority, exercised under
+    // `--features json-api` (and transitively `wasm`). They are NOT duplicated
+    // here.
 
     #[test]
     fn channel_ledger_output_shape() {

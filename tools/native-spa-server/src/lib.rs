@@ -8,11 +8,13 @@
 //! * The exact security headers ported 1:1 from `docker/nginx-default.conf`.
 //! * gzip/deflate (and precompressed `.gz`/`.br`/`.zz`) compression for text.
 //! * HTTP/1.1 by default; HTTP/2 when a TLS cert is supplied.
+//! * A minimal cap-gated order API (P37) merged on top — see `api`.
 //!
 //! Configuration is via CLI flags / env vars only — there are NO secret reads
 //! and no `.env` loading. NO-COURIER-SCORING guard is asserted below.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use axum::{
     extract::Request,
@@ -22,6 +24,9 @@ use axum::{
     Router,
 };
 use tower_http::services::{ServeDir, ServeFile};
+
+/// The minimal HTTP order surface (P37 W37-2/3): cap-gated `/api/order*`.
+pub mod api;
 
 /// DEFAULT_ROOT mirrors the legacy nginx web root.
 pub const DEFAULT_ROOT: &str = "/usr/share/nginx/html";
@@ -90,7 +95,9 @@ fn insert_header(headers: &mut header::HeaderMap, name: &str, value: &str) {
 /// * `ServeDir` handles real files (with precompressed variants).
 /// * `ServeFile` of `index.html` is the SPA fallback for unknown routes
 ///   (mirrors nginx `try_files $uri $uri/ /index.html`).
-pub fn build_router(root: impl AsRef<Path>) -> Router {
+/// * The cap-gated order API (P37) is merged on top — its middleware runs only
+///   on the `/api/*` + `/healthz` routes, so static serving is byte-unchanged.
+pub fn build_router(root: impl AsRef<Path>, api: Arc<api::ApiState>) -> Router {
     let root = root.as_ref().to_path_buf();
     let index = root.join("index.html");
     let serve_dir = ServeDir::new(&root)
@@ -101,6 +108,7 @@ pub fn build_router(root: impl AsRef<Path>) -> Router {
 
     Router::new()
         .fallback_service(serve_dir)
+        .merge(api::build_api_router(api))
         .layer(axum::middleware::from_fn(asset_cache_control))
         .layer(axum::middleware::from_fn(security_headers))
 }
