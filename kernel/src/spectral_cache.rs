@@ -655,6 +655,27 @@ mod tests {
         );
     }
 
+    /// FAIL-CLOSED (gap-audit round-2): a raw rebuild carrying a NaN/±inf entry
+    /// MUST be refused retention. Pre-fix, `classify_drift` let NaN slip through
+    /// `f64::max` as `Resonant`, so the poisoned snapshot was silently admitted.
+    #[test]
+    fn nan_poisoned_raw_rebuild_is_refused_retention() {
+        let poisoned = crate::csr::Csr::from_dense(&vec![vec![0.0, f64::NAN], vec![0.0, 0.0]]);
+        assert_eq!(
+            RetainedBase::admit(&poisoned, 7),
+            Err(SnapshotRejected::UnstableSpectrum),
+            "NaN-poisoned rebuild MUST be refused (was silently admitted pre-fix)"
+        );
+
+        let inf_poisoned =
+            crate::csr::Csr::from_dense(&vec![vec![f64::INFINITY, 0.0], vec![0.0, 0.0]]);
+        assert_eq!(
+            RetainedBase::admit(&inf_poisoned, 7),
+            Err(SnapshotRejected::UnstableSpectrum),
+            "±inf-poisoned rebuild MUST be refused"
+        );
+    }
+
     /// N2 (structural canonicality): `from_dense` with explicit `0.0` entries and
     /// permuted insertion order reaches the SAME `TileAddress` as the clean
     /// build. Also pins that explicit zeros are dropped (not stored).

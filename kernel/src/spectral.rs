@@ -214,8 +214,19 @@ pub fn eigenvalues(a: &[Vec<f64>]) -> Vec<Complex> {
 }
 
 /// ρ(A) — spectral radius = largest eigenvalue modulus.
+///
+/// NaN-safe fold: a non-finite eigenvalue (numerical divergence / poisoned
+/// input) is excluded from the max so this fn never returns NaN. Callers that
+/// need to *reject* ill-formed operators must check [`classify_drift`], which
+/// hard-fails on any non-finite entry. (P-B `RetainedBase::admit` depended on
+/// the un-masked version — NaN leaked through as `Resonant` and was admitted.
+/// This fold alone is NOT sufficient: see `classify_drift`'s guard.)
 pub fn spectral_radius(a: &[Vec<f64>]) -> f64 {
-    eigenvalues(a).iter().map(|e| e.abs()).fold(0.0, f64::max)
+    eigenvalues(a)
+        .iter()
+        .map(|e| e.abs())
+        .filter(|m| m.is_finite())
+        .fold(0.0, f64::max)
 }
 
 /// SLEM — second-largest eigenvalue modulus |λ₂| (the mixing / convergence rate).
@@ -344,6 +355,18 @@ impl DriftClass {
 pub const DRIFT_BAND: f64 = 1e-6;
 
 pub fn classify_drift(a: &[Vec<f64>]) -> DriftClass {
+    // FAIL-CLOSED (BLUEPRINT-P-B §4.2 / gap-audit round-2): any non-finite entry
+    // (NaN poison, ±inf overflow) means the rebuilt operator is ill-formed.
+    // Retaining it would snapshot divergent dynamics, so it MUST classify as
+    // Unstable and be rejected by `RetainedBase::admit`. The old code let NaN
+    // slip through `f64::max` into `Resonant` (a silent admit) — fixed here.
+    for row in a {
+        for &x in row {
+            if !x.is_finite() {
+                return DriftClass::Unstable;
+            }
+        }
+    }
     let rho = spectral_radius(a);
     if rho < 1.0 - DRIFT_BAND {
         DriftClass::Damped
@@ -411,6 +434,36 @@ mod tests {
         assert_eq!(DriftClass::Damped.wire_code(), 0);
         assert_eq!(DriftClass::Resonant.wire_code(), 1);
         assert_eq!(DriftClass::Unstable.wire_code(), 2);
+    }
+
+    // ── FAIL-CLOSED (gap-audit round-2): NaN/±inf in the operator MUST NOT be
+    // admitted as `Resonant`/`Damped`. They classify as `Unstable` so
+    // `RetainedBase::admit` rejects them. The pre-fix code let NaN leak through
+    // `f64::max` into `Resonant` (silent admit of a poisoned snapshot). ──
+    #[test]
+    fn red_nan_entry_classifies_unstable() {
+        let poisoned = vec![vec![0.0, f64::NAN], vec![0.0, 0.0]];
+        assert_eq!(classify_drift(&poisoned), DriftClass::Unstable);
+    }
+
+    #[test]
+    fn red_inf_entry_classifies_unstable() {
+        let poisoned = vec![vec![f64::INFINITY, 0.0], vec![0.0, 0.0]];
+        assert_eq!(classify_drift(&poisoned), DriftClass::Unstable);
+    }
+
+    #[test]
+    fn red_neg_inf_entry_classifies_unstable() {
+        let poisoned = vec![vec![-f64::INFINITY, 0.0], vec![0.0, 0.0]];
+        assert_eq!(classify_drift(&poisoned), DriftClass::Unstable);
+    }
+
+    // spectral_radius itself must never return NaN even with a poisoned input
+    // (defense for the other consumers: graph_spectrum / slem / gap).
+    #[test]
+    fn red_spectral_radius_never_nan() {
+        let poisoned = vec![vec![0.0, f64::NAN], vec![0.0, 0.0]];
+        assert!(spectral_radius(&poisoned).is_finite());
     }
 
     // ── GREEN: a directed 2-cycle has eigenvalues ±1 (period-2, μ≈−1). ──
