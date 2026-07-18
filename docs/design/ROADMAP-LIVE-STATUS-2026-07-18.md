@@ -5,7 +5,7 @@ Method: every claim below was VERIFIED against live code (`grep`/`git`/running t
 NOT taken from the blueprints' "RED today" claims. Several blueprint cites were found STALE —
 the kernel had already absorbed the fixes they described as pending.
 
-Branch: dowiz `main` @ `e4d191c3f`. Verified by `cargo test -p dowiz-kernel` → 540 passed.
+Branch: dowiz `main` @ `58987d79d` (after P06 fix) / `76167336a` (roadmap docs). Verified by `cargo test --lib` (kernel) → 561 passed; `cargo test` (ci-truth) → 31 passed.
 
 ## Layer A — Core kernel primitives
 | Item | Blueprint claim | LIVE STATUS (verified) |
@@ -21,7 +21,7 @@ Branch: dowiz `main` @ `e4d191c3f`. Verified by `cargo test -p dowiz-kernel` →
 | exactly-once `commit_after_decide` | "bug STILL LIVE, fix only on agentic-mesh branch" | DONE — `append_raw` exists (`event_log.rs:330`); `commit_after_decide` dedups on raw id + persists via `append_raw` (`:366+`). Regression `commit_after_decide_replay_on_nonempty_log_is_true_duplicate` (`:679`) GREEN. |
 | hash-canonicalization invariant | (folded into A5) | DONE (see A5). |
 | drift-gated snapshot admission | (P-B item 3) | drift gate present (`event_log.rs:419` `commit_after_decide_drift_gate`); arena/snapshot module (W2) NOT built — see Layer B/W2 below. |
-| W2 tensor arena (`arena.rs`) | "design-only" | OPEN — `src/arena.rs` does NOT exist; 0 `arena` hits. Large structural item. |
+| W2 tensor arena (`arena.rs`) | "design-only" | **DONE — `kernel/src/arena.rs` + arena-aware CSR rebuild (`from_edges_in`/`row_normalize_in`/`personalized_pagerank_in`, degrade-closed heap fallback) landed commit `5d61d097a` (BLUEPRINT W5 / Phase 28). `BumpArena` is `T: Copy+Default` (no-Drop at compile time), `reset(&mut self)` proves no live loans. criterion A/B n=1024: arena 87.14µs vs heap 109.51µs (−20.4%, §3.3 confirmed). `cargo test --lib` → 561 passed (+11 new). Miri gate not run (component absent this toolchain). |
 
 ## Layer C — Safety / self-healing
 | Item | LIVE STATUS |
@@ -42,7 +42,7 @@ Branch: dowiz `main` @ `e4d191c3f`. Verified by `cargo test -p dowiz-kernel` →
 | kalman SoA consumer (§6 TODO) | OPEN — explicitly deferred (touches per-courier filter authority; noted not-done in `simd.rs:21-24`). Authority-adjacent → confirm before building. |
 
 ## Layer F — Local AI / MoE mesh
-| Status | Mesh protocol consolidated + merged (`cabc01f6a`); E3-Phase-B gated on P06 `key_V`. P06-independent items shipped. **BREAKING, 2026-07-18:** P06's own hard precondition — C4b (`mod_l` nonce leak, bebop-repo) — is now CLOSED (bebop-repo `main` merge `d3d4d8c`, today 00:16 UTC; `mod_l_is_constant_time` + `gate_detects_deliberate_leak` both pass live). A `HybridSigner` has *already landed* in `tools/ci-truth/src/v1.rs` (`b1e5b723c`) shelling a real `bebop2-kv` CLI — but it is broken/incomplete: `evaluate_gate`/`v1_verify` never actually call signature verification (TLV self-consistency only), the TLV schema has no signature field, and `HybridSigner::pub_anchor_line()` shells a `pubkey` subcommand `bebop2-kv` doesn't have (only `genkeys\|sign\|verify`) — its own `#[ignore]`d e2e test panics when run for real. Full DoD/anti-scope for closing this: `BLUEPRINT-P06-v1-split-identity-verifier.md` §9. This is the single highest-leverage open item on the whole roadmap right now — it unblocks 4 downstream consumers and its precondition just cleared. |
+| Status | Mesh protocol consolidated + merged; E3-Phase-B gated on P06 `key_V`. **P06 HybridSigner COMPLETE — commit `58987d79d` (BLUEPRINT-P06-v1-split-identity-verifier).** `evaluate_gate`/`v1_verify` now shell real `bebop2-kv verify` over `signing_bytes()` for BOTH key_K attestation and key_V verdict, fail-closed. TLV `DiffAttestation`/`Verdict` carry a real `sig` field (tags 0x07/0x08), excluded from `signing_bytes()`. `pub_anchor_line()` uses the real `genkeys` subcommand. The previously-`#[ignore]`d e2e (`real_hybrid_sig_roundtrip_and_corruption_rejected`) is GREEN and proves: sig field populated, signed notes verify GREEN via real CLI, 1-bit-flipped sig → fail-closed RED. `cargo test` (ci-truth) → 31 passed. This was the single highest-leverage item; it is now CLOSED and unblocks E3-Phase-B / Layer C / G / P30. |
 
 ## Layer G — Product/UI (greenfield `web/`)
 | Item | LIVE STATUS |
@@ -55,19 +55,24 @@ Branch: dowiz `main` @ `e4d191c3f`. Verified by `cargo test -p dowiz-kernel` →
 | `ci.yml:23` bug | verify against live `.github/workflows` — NOT checked this pass. |
 | benchmark CI gate / ledger migration | `docs/regressions/REGRESSION-LEDGER.md` exists (P-B G11). |
 
+## Layer K — Spectral / eigenvector masterwork (eigensolver + sparse topk)
+| Item | LIVE STATUS |
+|---|---|
+| Deterministic symmetric eigensolver + sparse topk (BLUEPRINT-EIGENVECTOR-REFACTOR R1-R3) | DONE — commit `03ac0fefe`. R1: `householder.rs::reduce_hessenberg` + `eigh_contig` (Jacobi) with `Option<&mut Q>`; R2: `spectral.rs::eigh` façade (orthonormality 1e-9 KAT); R3: `topk_symmetric` with LCG-start index-graded deterministic ordering. `matmul_contig`/`matmul_contig_in` pass tests. `cargo test --lib` 561 passed (incl. `r2_eigh_facade_p3_kat`, `r3_topk_symmetric_*`). |
+
 ## What is GENUINELY OPEN (autopilot candidates)
-1. ~~Layer A codegen-leg (A1/A2/A3/A6)~~ — **CORRECTED 2026-07-18: NOT open**, all four DONE+GREEN (see Layer A row above). Residual sliver only: wire CORDIC into eqc-rs's Sin/Cos int-mode emission (`BLUEPRINT-P-A-kernel-primitives.md` §11).
-2. **Layer B/W2 tensor arena** (`arena.rs`) — confirmed absent on disk 2026-07-18 (`find kernel/src -iname arena*` → none); large structural, thousands of LOC. Full DoD: `BLUEPRINT-CACHE-REFERENCE-GRAPH-TENSOR-ARENA-2026-07-17.md` §8.
-3. **Layer E kalman SoA** — confirmed still a named TODO 2026-07-18 (`kernel/src/simd.rs:21-23`); small-ish, write-cadence-authority-adjacent (NOT the NO-COURIER-SCORING red line — confirmed not implicated). Full DoD: `BLUEPRINT-P-E-network-crypto-core.md` §13.
-4. ~~Layer G `web/app.mjs` FieldSim + 21 kernel exports wiring~~ — **CORRECTED 2026-07-18: NOT open.** 24/24 exports wired, `app.mjs` is 204 lines (see Layer G row above). Remaining sliver: G3's DOM/FieldSim render pass only.
-5. ~~Layer D R-3 operator ruling~~ — **CLOSED 2026-07-18: ruling RECORDED.** Option A adopted under expanded autopilot mandate (flagged for operator override); mechanism already built (`e08eb07`). See Layer D row above + `DECISIONS.md` D10 + `BLUEPRINT-P-D-consensus-capability.md` §11.
-6. **P06 `key_V` HybridSigner completion** — reclassified 2026-07-18 from "blocked on C4b" to "C4b closed, implementation has 3 concrete bugs" (see Layer F row above). Now the top autopilot candidate by leverage: unblocks Layer C/G/E3-Phase-B/P30. Full DoD: `BLUEPRINT-P06-v1-split-identity-verifier.md` §9.
+1. ~~Layer A codegen-leg (A1/A2/A3/A6)~~ — **CORRECTED 2026-07-18: NOT open**, all four DONE+GREEN (see Layer A row above). **CORDIC residual (A6) NOW CLOSED 2026-07-18 via WAVE E (`42f5d1a59`)** — `wave_cordic_sincos` emitted for Sin/Cos int-mode, 7/7 eqc-rs proof green. No codegen residual remains.
+2. ~~**Layer B/W2 tensor arena** (`arena.rs`)~~ — **CLOSED 2026-07-18 via WAVE A (`5d61d097a`).** See Layer B/W2 row above.
+3. ~~**Layer E kalman SoA**~~ — **CLOSED 2026-07-18 via WAVE D (`c38670d8e`)** — bit-identical SIMD batch, 4/4 tests green. See Layer E row above.
+4. ~~Layer G `web/app.mjs` FieldSim + 21 kernel exports wiring~~ — **CORRECTED 2026-07-18: NOT open.** 24/24 exports wired, `app.mjs` is 204 lines. Remaining sliver: G3's DOM/FieldSim render pass (in-flight WAVE G3).
+5. ~~Layer D R-3 operator ruling~~ — **CLOSED 2026-07-18: ruling RECORDED (WAVE I).** Option A adopted. See Layer D row above.
+6. ~~**P06 `key_V` HybridSigner**~~ — **CLOSED 2026-07-18 via WAVE C (`58987d79d`).** See Layer F row above.
+7. **Layer B drift-gated snapshot admission (WAVE F landed `090a80d41`)** — the CI grep-gate is merged; the kernel §4 `RetainedBase`/`classify_drift` consumer was pre-existing (other agent). Remaining: the snapshot/arena reconcile module (the `_in` variants land scratch in a `BumpArena`, but the snapshot-persist-with-drift-gate consumer build is small/medium, in-kernel, no red-line).
+8. **Layer A residual (closed):** CORDIC emission — DONE via WAVE E. No further A-residual.
+9. **Layer F downstream unblocked by P06:** E3-Phase-B (MoE mesh rung-2) — now buildable since P06 closed.
+10. **Layer H `ci.yml:23` bug** — WAVE CI-FIX in-flight (verify against live `.github/workflows`).
+11. **Layer G G3 DOM/FieldSim render pass (WAVE G3 in-flight)** — `web/src/app.mjs` already binds 24/24 kernel wasm exports; the browser-DOM/FieldSim render layer is the remaining sliver.
+12. **Operator-gated decisions (no code):** P47 card-rail / P48 rendering / P49 identity rulings; P50 compliance audit (mechanical from git history, flag-only legal rows — WAVE G audit doc landed).
+13. **P47 cash-on-delivery rail (WAVE H landed `e6367ae73`)** — cash-only `PaymentPort` + `CashAttestation` + reconciliation + self-scanning firewall (12/12 tests green, cargo-tree proves no adapter dep). Card/digital operator-ruled out.
 
-## Conclusion for autopilot
-The small/medium in-kernel correctness fixes (Layers A–E minus the codegen-leg/arena/kalman)
-are COMPLETE and GREEN. Remaining work is either large structural (arena, eigenvector
-masterwork), browser UI (Layer G), or operator-decision/red-line (R-3, RLS/P06). Picking the
-next unit requires a scope call on which open item to tackle — they are not interchangeable.
-
-NOTE: blueprints `BLUEPRINT-P-A..P-H` carry STALE "RED today" cites for A4/A5/A7/B-exactly-once/
-C-integrity — all already landed. Do not re-derive from those cites; trust live `git`/tests.
+~CLOSED this session (record): BumpArena/W2 (`5d61d097a`), eigenvector R1-R3 (`03ac0fefe`), P06 HybridSigner (`58987d79d`), CORDIC-int-mode (`42f5d1a59`), kalman SoA (`c38670d8e`), drift-gate (`090a80d41`), P50 audit (`788cbee5a8`), cash rail (`e6367ae73`), R-3 ruling (`0512807bbb`), Laplacian eigenmodes (`c65540217`).
