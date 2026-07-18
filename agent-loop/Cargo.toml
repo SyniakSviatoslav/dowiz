@@ -8,7 +8,12 @@ description = "P40 AgentLoop executor — bounded plan→act→observe over a to
 # Standalone crate at repo root (sibling to kernel/), NOT a workspace member.
 
 [dependencies]
+# Firewall: agent-loop depends on `agent-facade` (the only allowed kernel port) and
+# `llm-adapters` (which implements `LlmBackend` and re-exports agent-facade types).
+# It must NEVER list `dowiz-kernel` directly — the committed firewall test in
+# tests/firewall.rs greps Cargo.toml for that and fails the build if present.
 agent-facade = { path = "../agent-facade" }
+llm-adapters = { path = "../llm-adapters" }
 
 [dev-dependencies]
 criterion = "0.5"
@@ -16,3 +21,9 @@ criterion = "0.5"
 [lib]
 name = "agent_loop"
 path = "src/lib.rs"
+
+# Host binary (audit #12): runs the loop over a real backend + emits the designed
+# `dowiz_agent_*` metric IDs into the shared harvest ledger (track_record.jsonl).
+[[bin]]
+name = "agent-loop"
+path = "src/main.rs"

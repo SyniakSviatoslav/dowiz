@@ -84,3 +84,6 @@ dogfood-output/
 qa-shots/
 temp/
 *.png
+
+# runtime harvest ledger (native telemetry; never commit)
+track_record.jsonl
