@@ -32,3 +32,8 @@ pub mod mcp;
 /// device/personal data). Reuses the proto-cap signing *convention* (domain-
 /// separated SHA3 commitment) over existing kernel math (geo/kalman/rng).
 pub mod customer;
+
+/// BLUEPRINT-P61 — notification fabric: `Notifier` fan-out over `PushPort`/`SmsPort`/`EmailPort`,
+/// hub-local `ChannelRegistry`, the proven X10 coverage matrix, and dead-token eviction. Compile
+/// firewall: ZERO network / HTTP / serde / tokio — the concrete adapters live in `notify-adapters`.
+pub mod notification;
