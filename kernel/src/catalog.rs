@@ -91,6 +91,7 @@ impl PriceCatalog {
 // money only — NO float on any monetary value.
 // ═══════════════════════════════════════════════════════════════════════════
 
+use crate::domain::{Order, OrderItem};
 use crate::money::{assert_non_negative, Currency, Money};
 use crate::vendor::VendorId;
 
@@ -203,6 +204,21 @@ pub enum CatalogError {
     LeafHasChildren(NodeId),
     CycleInTree(NodeId),
     DanglingParent(NodeId),
+}
+
+impl std::fmt::Display for CatalogError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CatalogError::NegativePrice => write!(f, "negative price rejected"),
+            CatalogError::CrossCurrency => write!(f, "cross-currency line rejected (one order = one currency)"),
+            CatalogError::CrossVendor => write!(f, "cross-vendor component rejected"),
+            CatalogError::Overflow => write!(f, "price/amount overflow"),
+            CatalogError::UnknownLeaf(l) => write!(f, "unknown leaf {l:?}"),
+            CatalogError::LeafHasChildren(n) => write!(f, "leaf node {n:?} has children"),
+            CatalogError::CycleInTree(n) => write!(f, "cycle detected at node {n:?}"),
+            CatalogError::DanglingParent(n) => write!(f, "dangling parent {n:?}"),
+        }
+    }
 }
 
 /// Fold a base leaf + chosen components into ONE resolved unit `Money`. The
@@ -733,4 +749,88 @@ mod tests {
         let ids: Vec<String> = leaves.iter().map(|l| l.leaf_id.0.clone()).collect();
         assert_eq!(ids, vec!["a".to_string(), "m".to_string(), "z".to_string()]);
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// P62 / M4 — PER-VENDOR CHARGE-LEG DERIVATION + KDS FAN-OUT (§3, §4.4, §4.5).
+//
+// BLUEPRINT-P72 composes with these two pure functions. They are the
+// catalog-authoritative `group_by(vendor_id)` over an order's line items — the
+// food-court fan-out axis. Neither re-derives a money primitive nor invents an
+// atomicity law: `charge_legs` sums with `Money::checked_add` (cross-currency +
+// overflow fail-closed, money.rs); `kitchen_tickets` is a pure grouping. Both
+// preserve deterministic `VendorId` order (BTreeMap) so plan derivation and KDS
+// routing are reproducible (P6 determinism). A client cannot forge which vendor
+// a line settles to: `OrderItem.vendor_id` is set by `place_order_priced` from
+// the trusted catalog (P62 §4.4), never from a request field.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// One vendor's share of an order — the unit of settlement + KDS routing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChargeLeg {
+    pub vendor_id: VendorId,
+    /// Total owed to this vendor (Σ unit_price*quantity, integer minor units).
+    pub amount: Money,
+    /// Number of line items fanning into this leg (for KDS + reconciliation).
+    pub line_count: usize,
+}
+
+/// Per-vendor charge-leg derivation (P62 §3, R5 §3.4).
+///
+/// `group_by(vendor_id)`, summing each vendor's `unit_price * quantity` with
+/// `Money::checked_add`. Deterministic `VendorId` order (ascending). Fail-closed:
+/// a single order is ONE currency Wave-0 (§4-D) — two lines in different
+/// currencies make the whole order `Err(CatalogError::CrossCurrency)`, never a
+/// silent conversion; an overflow makes it `Err(CatalogError::Overflow)`.
+/// Returns `Err` (never a partial plan). Each returned `ChargeLeg.amount` carries
+/// the order's single currency.
+pub fn charge_legs(order: &Order) -> Result<Vec<ChargeLeg>, CatalogError> {
+    use std::collections::BTreeMap;
+    let mut currency: Option<Currency> = None;
+    let mut by_vendor: BTreeMap<VendorId, (Money, usize)> = BTreeMap::new();
+    for item in &order.items {
+        // Pin the order's single currency on first line; reject a mixed cart.
+        match currency {
+            None => currency = Some(item.currency),
+            Some(c) if c == item.currency => {}
+            Some(_) => return Err(CatalogError::CrossCurrency),
+        }
+        let cur = item.currency;
+        let line = Money::new(
+            item.unit_price
+                .checked_mul(item.quantity)
+                .ok_or(CatalogError::Overflow)?,
+            cur,
+        );
+        let entry = by_vendor.entry(item.vendor_id).or_insert_with(|| {
+            (Money::new(0, cur), 0)
+        });
+        entry.0 = entry.0.checked_add(line).map_err(|_| CatalogError::Overflow)?;
+        entry.1 += 1;
+    }
+    let cur = currency.unwrap_or(Currency::All);
+    let mut legs = Vec::with_capacity(by_vendor.len());
+    for (vendor_id, (amount, line_count)) in by_vendor {
+        legs.push(ChargeLeg {
+            vendor_id,
+            amount: Money::new(amount.minor, cur),
+            line_count,
+        });
+    }
+    Ok(legs)
+}
+
+/// Per-vendor KDS fan-out (P62 §4.5). One order → N kitchen tickets, each keyed
+/// by `VendorId`. A vendor's KDS connection (with `app.vendor_scope` set to its
+/// own id) reads only its own rows; the inner RLS filter is applied by the
+/// caller's DB layer — this fn is the PURE derivation it consumes.
+/// Σ(line_count) across all tickets == order item count: nothing dropped,
+/// nothing duplicated.
+pub fn kitchen_tickets(order: &Order) -> BTreeMap<VendorId, Vec<&OrderItem>> {
+    use std::collections::BTreeMap;
+    let mut tickets: BTreeMap<VendorId, Vec<&OrderItem>> = BTreeMap::new();
+    for item in &order.items {
+        tickets.entry(item.vendor_id).or_default().push(item);
+    }
+    tickets
 }

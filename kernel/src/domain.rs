@@ -18,6 +18,7 @@
 
 use crate::catalog::PriceCatalog;
 use crate::kalman::KalmanFilter;
+use crate::vendor::VendorId;
 use crate::money::{
     apply_tax, assert_non_negative, ledger_append, ledger_sum, reverse_transfer, Currency,
     EntryKind, LedgerEntry,
@@ -32,6 +33,16 @@ pub struct OrderItem {
     pub modifier_ids: Vec<String>,
     pub quantity: i64,
     pub unit_price: i64,
+    /// P62 M4 — the vendor this line belongs to. Catalog-authoritative: set by
+    /// `place_order_priced` from the trusted `PriceCatalog`/`PriceableLeaf`, never
+    /// from a client-supplied value. A client cannot forge which vendor a line
+    /// settles to (P62 §4.4). Defaults to `VendorId(0)` on the legacy path, which
+    /// is just ordinary key (no reserved sentinel per `vendor.rs`).
+    pub vendor_id: VendorId,
+    /// P62 M4 — the currency of this line. Every line in one Wave-0 order shares a
+    /// single currency (EUR); a cart mixing currencies is refused fail-closed
+    /// (BLUEPRINT-P72 M1 `CrossCurrencyCart`). Mirrors `PriceableLeaf.price.currency`.
+    pub currency: Currency,
 }
 
 /// The Order aggregate. Status enum is `crate::order_machine::OrderStatus` — kept
@@ -181,6 +192,7 @@ pub fn place_order(
         channel,
         cash_pay_with,
         // Legacy path: caller-supplied unit_price accepted verbatim → UNTRUSTED.
+        // `vendor_id` is the default single-vendor key (no reserved sentinel).
         price_trusted: false,
         ledger: Vec::new(),
     })
@@ -212,6 +224,11 @@ pub fn place_order_priced(
     )
     .entered();
     // Re-derive every line price from the trusted catalog (ignore caller value).
+    // `vendor_id` is preserved from the input item, which a trusted caller builds
+    // from a `PriceableLeaf` (the catalog-authoritative source — P62 §4.4). The
+    // flat `PriceCatalog` carries no vendor, so the leaf is the vendor source of
+    // truth; a client-supplied `OrderItem` on the legacy `place_order` path stays
+    // on the default vendor key and is never trusted to set a foreign vendor.
     for it in items.iter_mut() {
         let trusted = catalog
             .unit_price(&it.product_id, &it.modifier_ids)
@@ -410,12 +427,16 @@ mod tests {
                 modifier_ids: vec!["m1".into()],
                 quantity: 2,
                 unit_price: 500,
+                vendor_id: VendorId(0),
+                currency: Currency::All,
             },
             OrderItem {
                 product_id: "p2".into(),
                 modifier_ids: vec![],
                 quantity: 1,
                 unit_price: 300,
+                vendor_id: VendorId(0),
+                currency: Currency::All,
             },
         ]
     }
@@ -624,6 +645,8 @@ mod tests {
             modifier_ids: vec![],
             quantity: 1,
             unit_price: 1, // attacker sets price=1 for a 5000 product
+            vendor_id: VendorId(0),
+            currency: Currency::All,
         }];
         let o = place_order("bad".into(), None, tampered, 0, None, None).unwrap();
         assert_eq!(o.subtotal, 1, "legacy path accepts tampered price (RED)");
@@ -640,12 +663,16 @@ mod tests {
                 modifier_ids: vec![],
                 quantity: 1,
                 unit_price: 1, // ignored
+                vendor_id: VendorId(0),
+                currency: Currency::All,
             },
             OrderItem {
                 product_id: "p2".into(),
                 modifier_ids: vec![],
                 quantity: 2,
                 unit_price: 0, // ignored
+                vendor_id: VendorId(0),
+                currency: Currency::All,
             },
         ];
         let o = place_order_priced("ok".into(), None, tampered, 0, None, None, &cat).unwrap();
@@ -665,6 +692,8 @@ mod tests {
             modifier_ids: vec![],
             quantity: 1,
             unit_price: 999,
+            vendor_id: VendorId(0),
+            currency: Currency::All,
         }];
         assert!(place_order_priced("x".into(), None, items, 0, None, None, &cat).is_err());
     }
