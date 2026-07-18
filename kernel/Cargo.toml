@@ -119,6 +119,14 @@ proptest = "1.11"
 name = "criterion"
 harness = false
 
+# Contended multi-threaded benchmarks for the three Mutex sites flagged
+# NEEDS-CONTENDED-BENCH-FIRST by docs/research/OPUS-PERF-KERNEL-AUDIT-2026-07-18.md
+# (token_bucket A1, budget A2, admission seen-set A3). N∈{1,2,4,8} threads hammer one
+# shared object; each candidate atomic/lock-free impl is measured against the Mutex.
+[[bench]]
+name = "contention"
+harness = false
+
 # NOTE: the W5 counting-allocator integration test (tests/arena_counting_allocs.rs)
 # is not yet wired — the counting global-allocator feature exists (`count-allocs`,
 # line 35) but the dedicated target's source was never committed. The allocation

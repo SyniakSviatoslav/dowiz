@@ -91,7 +91,10 @@ fn bench_empirical_identify(c: &mut Criterion) {
 }
 
 /// The F33 bounded-budget hot path: the Dispatcher calls `try_acquire` once per chat request.
-/// This bench isolates the atomic acquire cost (refill + CAS) from any network/harvest work.
+/// This bench isolates the SINGLE-THREADED, uncontended acquire cost (refill + decrement under a
+/// short Mutex, clock read hoisted outside — NOT a CAS) from any network/harvest work. For the
+/// CONTENDED (multi-thread) cost that a Mutex only pays under real concurrency, see the dedicated
+/// `benches/contention.rs::contended_token_bucket` (Mutex vs clock-outside vs lock-free GCRA).
 fn bench_token_bucket(c: &mut Criterion) {
     c.bench_function("token_bucket/try_acquire_permit", |b| {
         // A typical chat permit is its max_tokens (8). Capacity 64, refill 8/s keeps it satisfied.
