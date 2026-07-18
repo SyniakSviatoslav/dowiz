@@ -1,0 +1,29 @@
+[package]
+name = "shell-spike"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "BLUEPRINT-P63 shell/platform spike: the thin engine⇄platform boundary (THROWAWAY, gated, deleted at close)."
+# Offline-clean: the ONLY non-std dependency is the in-tree engine (a path dep,
+# no external crate). No winit/tauri/accesskit/wgpu/web — every hardware spike
+# row is encoded as an honestly Blocked verdict (BLUEPRINT-P63 §3 / §4.1). The
+# TS/NODE BAN holds: Rust only, zero DOM.
+
+[lib]
+name = "shell_spike"
+path = "src/lib.rs"
+
+[dependencies]
+# The render side. We consume ONLY the bit-deterministic `compose()` oracle and
+# the public scene/equilibrium types — never a platform/window type.
+dowiz-engine = { path = "../../engine", version = "0.1.0" }
+
+[dev-dependencies]
+# None — the crate is its own test harness.
+
+[features]
+# SP-6 floor-parity is the durable, reusable gate (BLUEPRINT-P63 §3.6). It is
+# the ONE spike output kept out of the throwaway `rm -rf` (it lands under
+# engine/ once P63 closes). Its harness compiles deterministically offline via
+# the real `compose()` reference — no GPU, no DOM.
+floor_parity = []
