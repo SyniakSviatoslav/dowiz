@@ -9,6 +9,56 @@
 >
 > Status: PROPOSED. Zero operator gates required (no money/auth/RLS/migration surface touched).
 > Executable by an agent with zero session context via §10.
+>
+> **Correction (2026-07-18, session verification pass):** Build 1 (the hysteresis band, §3) has
+> **LANDED on `main`** — commit `a50d44ab0`, `HysteresisBand` now live at `hydra.rs:85`, including
+> the `!rho.is_finite()` guard on the hydra path (ground truth per
+> `ROADMAP-UPDATE-SESSION-SYNTHESIS-2026-07-18.md` §0, re-verified there via `git show main`).
+> The status line above is retained for provenance; treat §3 as a record of the landed design, and
+> §1's pre-fix line numbers (`hydra.rs:180-195` etc.) as the *pre-landing* state they were verified
+> against. Build 2 (§4 restart predicate) was **not re-verified** in that pass — do not assume
+> either way; check `bounded_drainer.rs` on live `main` before executing §10 steps 7–9. Full
+> session fold-in: §13.
+
+---
+
+## 0. Why this layer exists (context for a reader with zero session history)
+
+Layer C is the kernel's answer to a question every long-running autonomous system faces: **what
+keeps the organism safe when something inside it goes wrong, given that this codebase has banned
+the standard answer?** The standard answer is a watchdog — a standing supervisor process that
+samples health and intervenes. This repo rejected that shape on proven grounds (doc 19's compiled
+toy, §2.2/§4.2 below): a watchdog can be silently absent (deleting it leaves no compile error, no
+signal — the bad state just persists unobserved), it samples *after the fact* (the toy observed
+the bad state three times even with the watchdog running), and it regresses infinitely ("who
+watches the watcher"). Layer C's replacement doctrine is that safety must live **in the causal
+path of the guarded action itself**: a check whose deletion is a compile error, a bound that is
+arithmetic over a monotone fact, an invariant that makes the unsafe state unrepresentable rather
+than detected-later.
+
+Concretely, the kernel already had most of this (budget debit, drift gate, fuel trap — §2.1), but
+two real gaps remained, and they are this blueprint's two builds:
+
+1. **The organism's own integrity flip could be made to flap.** `integrity_check` compares the
+   baseline's spectral radius ρ against 1.0 with no memory: one healthy sample re-opens commits,
+   one bad sample locks them. An adversary (or a marginal re-seed) that dithers the baseline
+   across the ρ=1 line gets a commit accepted *every second check* — fail-closed in name,
+   oscillating in practice. The fix (§3) is a classical two-threshold hysteresis band plus an
+   N-consecutive-healthy dwell: tripping stays instantaneous (fail-closed latency unchanged), but
+   release now demands sustained, provably-Damped evidence. This is a debounce filter stated as a
+   deterministic finite automaton, not a supervisor.
+2. **A crash-looping process could relaunch forever.** A dead process cannot check itself, and the
+   ban on watchdogs does not repeal that fact — so the restart bound (§4) is placed at the one
+   moment something *outside* the dead process necessarily acts: the launch. `launch_permitted` is
+   a pure function over the append-only launch ledger (OTP's MaxR/MaxT restart-intensity, made a
+   launch-path predicate), and the `LaunchToken` proof-of-admission type makes bypassing it a
+   compile error. The residual authority — custody of the ledger file that survives the crash — is
+   named honestly in §2.2 as the *finite anchor*, not defined away.
+
+Everything else in the Layer-C cluster (breaker module F1a, M7 heal, wasm clamps, P06's
+independent-verification leg) is deliberately out of scope here and owned elsewhere (§5, §11).
+The layer's one-sentence law, applied throughout: **safety is physics (types + arithmetic on the
+causal path), never bureaucracy (a remembered ritual or a standing monitor).**
 
 ---
 
@@ -565,3 +615,73 @@ split, §9 build order items 1+4) · `19-SYSTEM-COHERENCE-AND-AUTHORITY-BOUNDARY
 | 18 agent instructions | §10 |
 | 19 reuse-first | §11 |
 | 20 Hermetic | §6 |
+
+---
+
+## 13. Session research fold-in (2026-07-18) — verification CRITICALs + round-2 containment, Layer-C-owned
+
+Added after the 2026-07-17 writing pass; sources read in full, none of §1–§12 is retracted.
+Sources: `docs/design/ROADMAP-UPDATE-SESSION-SYNTHESIS-2026-07-18.md` (§0–§2, the per-repo
+verification CRITICALs) and `docs/design/fail-operational-layout-versioning-2026-07-17/round-2/
+BLUEPRINT-ROUND-2-MASTER-SYNTHESIS.md` (§2.3, §6 — the Layer-C-routed artifacts).
+
+### 13.1 Landing status (what changed on `main` since this blueprint was written)
+
+- **Build 1 LANDED** (`a50d44ab0`, `hydra.rs:85` `HysteresisBand` — see the header correction).
+- The neighbouring Layer-B drift-gate this blueprint cross-cites also landed (`RetainedBase`
+  admission, `7f2fc6880`/`fc330a622`) — **and is currently NaN-fail-open** because the
+  `spectral_radius` NaN fold (`spectral.rs:218` `fold(0.0, f64::max)`) did not land with it:
+  NaN spectrum → ρ=0.0 → `Damped` → admitted. That fix is **Layer B's owned DoD** (the synthesis
+  promotes it to URGENT, §2 there), but the *law it applies is this layer's* value-bound /
+  self-termination law (§2.1's class), and it is the most-corroborated finding of the session
+  (dowiz V3 4.1 + spectral-evolution V1 #4 + the drift-gate chain). Note the asymmetry this
+  blueprint already encoded: the **hydra path is guarded** (`!rho.is_finite()` shipped in Build 1);
+  the `classify_drift`/`spectral_radius` path shared by the Layer-B gate is not. One ~5-line fix
+  closes all three corroborated findings.
+
+### 13.2 Verification CRITICALs that land in Layer C (red-team pass, `verification-2026-07-17/`, still-live @ `main 87da9ccd4`)
+
+These are *found defects in shipped code*, folded in as owned Layer-C follow-ups — each one is an
+instance of a §2 class failing in practice, which is exactly why it belongs here:
+
+| Finding | Why it is a Layer-C item | Class it defeats |
+|---|---|---|
+| **`budget.rs` NaN/negative `estimate` flips degrade-closed → degrade-open** (V1 #5, HIGH): no `is_finite()`/`>= 0` guard on the estimate input, so a NaN or negative estimate permanently passes the ceiling check | §2.1 lists `ComputeBudget::debit` as *genuine zero-authority* ("refuses past ceiling"). That classification is correct **for well-formed inputs only** — the arithmetic totality assumption fails at NaN, the same hole-shape as the spectral fold. Fix = the same value-bound law (`is_finite && >= 0` at the boundary), RED-first | degrade-closed (§2.1 budget row) |
+| **`budget.rs:147,156` `.lock().unwrap()` poison-cascade** (V1 #6, MED): hardened in `token_bucket.rs` (the P-H A6 fix landed), but *relocated, not eliminated* — the same pattern survives in `budget.rs` | The A6 chaos scenario (BLUEPRINT-P-H §2.4) proved this class RED against `token_bucket.rs` and forced the fix; the identical pattern one file over is the bulkhead lesson half-applied. Follow-up: extend the A6 fix (or degrade-closed deny) to `budget.rs`, ledger row per the P-H precedent | bulkhead / poison containment |
+| **drift-gate `intervention == true` is an unauthenticated bool; no real `fn kill` exists** (V3 4.10, HIGH): any caller can lift the spectrum gate; the "kill-switch is the only safe stop" doctrine (`hydra.rs` boot message, §1) has no corresponding kill mechanism | The gate-lift is a *self-certified* authority claim — precisely the RC-2 shape §2.2 says only P06 `key_V` can close. Until then, the honest posture: `intervention` is an operator-ceremony input, and its unauthenticated reachability is a **named open hole**, not a feature | finite-anchored authority (§2.2) |
+| **`noether.rs` Lyapunov gate primitive is fail-OPEN on NaN** (spectral V1 #2): `NaN > tol == false` admits, no `is_finite` guard (worked around in the *test*, not the *gate*); per-step-only tolerance admits unbounded cumulative growth | Same value-bound law, third instance. The 12×12 unit-weight *application* survives; the exported *primitive* does not — do not reuse `noether.rs`'s gate as a Layer-C invariant primitive until guarded | value-bound totality |
+
+The pattern across all four (and 13.1) is one lesson, stated once: **every §2.1 "zero-authority
+arithmetic" claim is conditional on input totality — NaN/negative/poison inputs re-open the very
+authority the arithmetic dissolved.** The §3.2 state machine already models this correctly
+(`!(rho < t)` catches NaN by comparison semantics, plus an explicit `is_finite`); the follow-ups
+above are that same discipline applied to the remaining unguarded boundaries.
+
+### 13.3 Round-2 fail-operational artifacts routed to Layer C (round-2 master synthesis §6)
+
+The round-2 pass (FEC / CSC-LAW / CWR / LaneFrameHeader / DeltaPatch) self-mapped its artifacts
+onto the Layer axis; three land here, absorbed by reference (designs live in the round-2 docs —
+this section only records ownership and the reuse links):
+
+- **Sandbox-tier containment is Layer-C substrate** (round-2 §6: "WASM gate (built), microVM VMM
+  follow-up, C′ tier restriction"). Pattern C′ / CSC-LAW (Fable-B) lets a *contained* bridge
+  self-certify its own work — admissible **only** because three containment layers (spatial WASM
+  deny-by-default import gate · structural sealed `BridgeResult` · authority red-line
+  un-nameability) bound the certifier's strongest lie to a red-line-free, fail-operational lane.
+  The containment layers are bulkheading in this layer's exact §2 sense; the scope/grant law half
+  is Layer D's. Named open item inherited: **the microVM tier has a probe but no VMM launch** —
+  C′ cannot certify the native tier until that lands (round-2 §5.2). Test B-T6
+  (`csc_never_granted_to_inprocess_tier`) is the Layer-C pin.
+- **The deterministic circuit-breaker eviction predicate** (Fable-C §4.1, ADOPT): an integer
+  counter of *consecutive* boolean gate refusals with a fixed bound N → intake disabled. This is
+  **the same idiom as §3.2's `healthy_checks` release streak** (round-2 independently converged on
+  the consecutive-count shape; health scores and innovation-magnitude triggers were explicitly
+  rejected for the slot — NO-SCORING held). When the Phase-27 F1a `breaker.rs` is built, all three
+  (this band, the round-2 eviction predicate, the breaker's `probe_successes`) must share §3.2's
+  one formula — one idiom, three instances, per P2 Correspondence and §5's existing note.
+- **Honest boundary carried forward, not re-litigated:** CSC-LAW's **RC-2-broad residual stays
+  open** (a well-formed translation of *wrong content* is structurally undetectable; pinned
+  executably by B-T4/E-T4, closure only via witness/N-version, both DEFER-WITH-TRIGGER — round-2
+  §5.1). This matches §2.2/§6-P7's stance here exactly: containment bounds and makes visible; it
+  never converts self-certification into independent verification. P06 `key_V` remains the
+  independent-verification leg's blocker, unchanged.

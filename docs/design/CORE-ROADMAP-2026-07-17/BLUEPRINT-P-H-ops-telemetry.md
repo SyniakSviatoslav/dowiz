@@ -12,6 +12,29 @@
 
 ---
 
+## Why this layer exists (context for a reader with zero session history)
+
+Layer H is the layer that watches the other layers. Every phase A–G ships correctness claims —
+"this gate fails closed," "this path never regresses," "this invariant holds under fault." Layer H
+is where those claims stop being prose and become **machine-checked, permanently, in CI**. Its
+governing worry is the failure mode that kills long-lived autonomous systems: a safety property
+that was true when it was written and quietly stopped being true, with nothing to notice. So this
+layer builds the instruments that make silence impossible — a chaos/fault-injection harness that
+deliberately breaks each invariant and proves it holds anyway, a benchmark gate that turns a
+performance regression into a red build, a fixed CI bug that was silently passing a step that did
+nothing, and a regression ledger that keeps every past fix pinned forever.
+
+The discipline that shapes every choice here is **reuse over re-derivation**: two sibling
+blueprints (P24 native telemetry, P25 wave scheduling) already own all runtime telemetry and all
+concurrency/scheduling, so Layer H folds them in *by reference* and adds exactly four things on top
+(§0 lists them). Even the chaos harness is not invented from scratch — it generalizes a
+fault-injection double (`FaultyStore`) the audit's own grep initially missed, so the repo ends with
+one injection authority, not two. The problem Layer H solves, in one line: **make every other
+layer's safety claim falsifiable and continuously falsified in CI, so a regression is a red build
+and never a silent surprise.**
+
+---
+
 ## 0. DO NOT RE-DERIVE — the two sibling blueprints that already own half this phase
 
 Per standard §2 item 19 (reuse-first) and the Wave-1 audit's Area-4 verdict, these are folded in
@@ -437,6 +460,61 @@ deterministic; the state-machine-level A4 covers the invariant logic, not the OS
 
 ---
 
+---
+
+## 9. Session fold-in (2026-07-18) — GitHub hygiene + versioning land in Layer H
+
+Added after the Wave-2 writing pass; §0–§8 stand. This layer's §6 already lists ledger rows and CI
+jobs as its deliverables; the 2026-07-18 session added a **repo-hygiene** dimension that belongs
+here (ops), routed from `docs/repo-maintenance-2026-07-17/GITHUB-MAINTENANCE-AUDIT-dowiz.md`. These
+are ops/CI items, not code — an operator-gated docket (the tag/branch actions need a human and a
+broadened token) plus the versioning scheme this layer owns. Landing status of the four §6 build
+items (W-H1..W-H5) is also refreshed here from the session synthesis.
+
+### 9.1 Landing status refresh (from `ROADMAP-UPDATE-SESSION-SYNTHESIS-2026-07-18.md` §0)
+
+The P-H build largely **landed**: the chaos harness + A1–A6 adversarial suite + the bench-regression
+CI gate are on `main` (`f4802927e` / `a952af354`, per the synthesis's "+41 commits" wave list; this
+worktree's own log shows `a952af354 feat(kernel,P-H): W-H3 bench-regression CI gate + W-H5 ledger
+migration`). One consequence worth surfacing for this layer specifically: **the bench baseline and
+the 452-test count in `GROUND-TRUTH-2026-07-17.md` are now stale** — GROUND-TRUTH anchors
+`origin/main = 9f78b91d5`, but live `main` is `87da9ccd4` (+41 commits), and because so many
+test-adding waves landed, the **452 figure must be re-run, not trusted** (this is exactly the
+regression-surface hygiene this layer is responsible for; the DoD's "re-verify the live count against
+git, do not trust the remembered number" rule, §6, applies to GROUND-TRUTH itself now).
+
+### 9.2 GitHub hygiene docket (Layer H ops · Layer I docs) — GH-tag, operator-gated
+
+The audit found the remote in a state no release-engineering layer should tolerate; the concrete
+target state and its blockers:
+
+| Item | Finding (audit) | Layer-H action |
+|---|---|---|
+| **Zero tags / zero releases on the remote** | the 5 local tags are all defensive backup markers, none pushed; GitHub sees no version history at all | cut the first annotated tag **`2026.07.0`** on `main`; one GitHub Release per tag thereafter |
+| **Versioning scheme** | no `CHANGELOG`/`VERSION`; the project versions by date everywhere; SemVer `0.y.z` would carry no compat promise (no external consumer) | **CalVer `YYYY.MM.PATCH` for the repo/product tag** + an **independent in-code `KERNEL_PROTO_VERSION` / `MESH_WIRE_VERSION`** for the event-log/wire format (the two artifacts that DO need real compat semantics — independent nodes must interoperate). Seed `CHANGELOG.md` (Keep a Changelog) from wave history |
+| **PAT scope** | the fine-grained PAT cannot see the private `dowiz` repo (SSH works, API is blind) — so topics/description/Releases are unreadable via `gh` | **not fixable from inside CI** — operator broadens the PAT scope or uses a token that can see the repo. Flagged, not worked around |
+| **61 remote branches, ~39% scratch/bot/backup/snapshot** | `recover/*` (13), `plane-maintainer/*` bot (6), `docs/plane-status-*` (3), `backup*` (2) — none meant to be permanent | archive-then-delete (bundle/tag first — move-not-delete rule); enable `deleteBranchOnMerge`; fix the `plane-maintainer` bot to stop leaving permanent branches. Per-branch deletion needs a human given concurrent work |
+| **6 build-output dirs tracked in git** | `temp/`, `dogfood-output/`, `graphify-out/`, `qa-shots/`, `qa-onboarding-shots/`, `playwright-report/` — two already in `.gitignore` (committed before the ignore rule) | `git rm -r --cached` these paths; low risk, non-destructive to the working tree |
+| **Stale Repowise index in `.claude/CLAUDE.md`** | indexed 2026-06-14; still lists the deleted `apps/`+`packages/` tree — any agent trusting it navigates a repo that no longer exists | re-index or annotate as superseded (Layer I docs overlap; recorded here because it is a CI/tooling-hygiene item) |
+
+**Why this is Layer H and not just chores:** versioning the *wire/event-log format independently
+of the product tag* is a correctness concern (a format-breaking change is a real breaking change
+even with zero app consumers), and it is the same discipline as this layer's bench-baseline and
+regression-ledger ownership — the repo's compatibility surface is an ops invariant. The tag/branch
+*actions* are operator-gated (need a human + a broadened token, docket item **GH-tag** in the
+session synthesis §4); the *scheme decision* (CalVer + in-code proto version) is Layer H's to
+specify, which it does above.
+
+### 9.3 Net effect
+
+No change to §2–§6's four build items or their landing status beyond the refresh in 9.1. Layer H
+gains a **repo-hygiene / versioning** sub-scope (GH-tag docket, operator-gated) and the standing
+note that GROUND-TRUTH's test/commit anchors are stale and must be re-run — the latter being this
+layer's own regression-surface responsibility applied reflexively to the roadmap's own numbers.
+
+---
+
 *Registered under P-H in `CORE-ROADMAP-STANDARD-2026-07-17.md` §3. Supersedes nothing; extends
 the Wave-1 audit (two corrections, §1) and consumes P24/P25 by reference. Ledger rows land with
-W-H5, not with this document.*
+W-H5, not with this document. §9 folded in 2026-07-18 from the session GitHub-maintenance audit +
+verification synthesis.*
