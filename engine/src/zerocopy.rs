@@ -104,33 +104,27 @@ pub fn write_into_linear(mem: &mut [u8], offset: usize, buf: &ParticleBuffer) ->
 ///
 /// This is the JS `Float32Array::view(memory.buffer, offset)` leg, done in
 /// Rust: the returned slice borrows the *same bytes* — no allocation, no
-/// copy. The view length is asserted to equal
-/// `particle_count * FLOATS_PER_PARTICLE`.
+/// copy. The view length equals `particle_count * FLOATS_PER_PARTICLE`.
 ///
-/// Safety is checked, not assumed: the region start must be 4-byte aligned
-/// (exactly the `byteOffset % 4 === 0` requirement `Float32Array` imposes),
-/// and the slice must fit within `mem`.
-pub fn view_as_f32(mem: &[u8], offset: usize, particle_count: usize) -> &[f32] {
+/// The boundary check is performed HERE (not by the caller) and is
+/// release-safe: this returns `None` instead of panicking on a malformed
+/// guest-supplied `offset`/`particle_count` — an out-of-bounds region must
+/// never reach `from_raw_parts` (TORVALDS-18). Unlike a debug-only `assert!`,
+/// this holds under `--release` where asserts are elided.
+pub fn view_as_f32(mem: &[u8], offset: usize, particle_count: usize) -> Option<&[f32]> {
     let f32_count = particle_count * FLOATS_PER_PARTICLE;
     let byte_len = f32_count * 4;
-    assert!(
-        (mem.as_ptr() as usize + offset) % 4 == 0,
-        "linear-memory region must be 4-byte aligned for an f32 view (offset={}, base={:p})",
-        offset,
-        mem.as_ptr()
-    );
-    assert!(
-        offset + byte_len <= mem.len(),
-        "f32 view overruns linear memory: need {} bytes at offset {}, have {}",
-        byte_len,
-        offset,
-        mem.len()
-    );
+    // Safety gate: 4-byte aligned start + region fits within `mem`. Either
+    // failure ⇒ out-of-bounds view ⇒ return None (never build the slice).
+    let aligned = (mem.as_ptr() as usize + offset) % 4 == 0;
+    if !aligned || offset + byte_len > mem.len() {
+        return None;
+    }
     let ptr = unsafe { mem.as_ptr().add(offset) as *const f32 };
     let view = unsafe { std::slice::from_raw_parts(ptr, f32_count) };
     // Invariant called out in the brief: view length == particles * floats/particle.
     debug_assert_eq!(view.len(), particle_count * FLOATS_PER_PARTICLE);
-    view
+    Some(view)
 }
 
 /// Mock of the GPU/JS sink side of the boundary.
@@ -213,7 +207,7 @@ mod tests {
         assert_eq!(written, n * FLOATS_PER_PARTICLE * 4);
 
         // JS side: 0-copy Float32Array view over the same bytes.
-        let view = view_as_f32(&mem, offset, n);
+        let view = view_as_f32(&mem, offset, n).expect("valid in-bounds view");
 
         // Invariant: view length == particle count * floats-per-particle.
         assert_eq!(view.len(), n * FLOATS_PER_PARTICLE);
@@ -245,7 +239,7 @@ mod tests {
             b
         };
         write_into_linear(&mut mem, offset, &pb);
-        let view = view_as_f32(&mem, offset, n);
+        let view = view_as_f32(&mem, offset, n).expect("valid in-bounds view");
 
         let mut sink = GpuSink::new();
         let uploads = sink.upload_frame(view);
@@ -272,7 +266,7 @@ mod tests {
         }
         write_into_linear(&mut mem, offset, &pb);
         // The view is a borrow; nothing is allocated/serialized here.
-        let view = view_as_f32(&mem, offset, n);
+        let view = view_as_f32(&mem, offset, n).expect("valid in-bounds view");
         let mut sink = GpuSink::new();
         sink.upload_frame(view);
 
@@ -297,7 +291,7 @@ mod tests {
             pb.set(i, f, f * -1.5, f * 0.01, f - 10.0, f / (f + 1.0));
         }
         write_into_linear(&mut mem, offset, &pb);
-        let view = view_as_f32(&mem, offset, n);
+        let view = view_as_f32(&mem, offset, n).expect("valid in-bounds view");
 
         // (a) exact round-trip
         assert_eq!(view, pb.as_f32());
@@ -306,5 +300,21 @@ mod tests {
         assert_eq!(sink.upload_frame(view), 1);
         // (c) zero JSON in the hot path
         assert_eq!(sink.json_calls, 0);
+    }
+
+    // TORVALDS-18: a malformed guest-supplied region (offset/particle_count that
+    // would overrun linear memory, or an unaligned start) must be rejected with
+    // `None` — never reach `from_raw_parts` and never panic, even under
+    // `--release` where debug asserts are elided. Pre-fix used `assert!` (elided
+    // in release) and trusted the caller to bounds-check.
+    #[test]
+    fn red_oob_view_rejected_not_panics() {
+        let (mem, _offset) = aligned_linear_memory(8192);
+        // Oversized particle count ⇒ region overruns `mem`.
+        assert!(view_as_f32(&mem, 0, 10_000).is_none());
+        // Offset near the end + one particle ⇒ overruns.
+        assert!(view_as_f32(&mem, mem.len() - 4, 2).is_none());
+        // Valid aligned + in-bounds still works.
+        assert!(view_as_f32(&mem, 64, 4).is_some());
     }
 }

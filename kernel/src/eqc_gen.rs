@@ -49,6 +49,13 @@ pub fn apply_tax_exclusive_int(sub: i64, rate_micro: i64) -> Result<i64, &'stati
 #[inline(always)]
 pub fn apply_tax_inclusive_int(sub: i64, rate_micro: i64) -> Result<i64, &'static str> {
     use std::convert::TryFrom;
+    // Mirror the law (apply_tax): a zero subtotal is tax-free regardless of
+    // rate, checked BEFORE the non-positive-denominator guard below. Without
+    // this short-circuit, sub=0 with a negative rate would diverge from the
+    // law (law returns Ok(0), a naive guard would Err).
+    if sub == 0i64 {
+        return Ok(0);
+    }
     i64::try_from(
         ((sub as i128)
             .checked_add(
@@ -57,8 +64,15 @@ pub fn apply_tax_inclusive_int(sub: i64, rate_micro: i64) -> Result<i64, &'stati
                         let b = ((1000000i128)
                             .checked_add((rate_micro as i128))
                             .ok_or("overflow in Sum")?);
-                        if b == 0i128 {
-                            return Err("division by zero in DivHalfUp");
+                        // FEYNMAN-10: the law (apply_tax) refuses an effective
+                        // denominator ≤ 0 (negative/invalid rate). The generated
+                        // organ must refuse the same — a negative `b` makes
+                        // `(sub·1e6 + b/2)/b` NOT half-up rounding and would
+                        // silently diverge from the law on the one edge the
+                        // parity suite used to skip. Refuse ≤ 0, mirroring
+                        // `apply_tax`'s `denom ≤ 0 ⇒ Err` guard.
+                        if b <= 0i128 {
+                            return Err("invalid (non-positive) tax denominator");
                         }
                         (((sub as i128)
                             .checked_mul((1000000i128))

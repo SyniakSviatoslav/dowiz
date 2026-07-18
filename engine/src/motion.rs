@@ -82,8 +82,16 @@ impl Spring {
     }
 }
 
-/// Heat-kernel stagger delay (FE-08 global transitions): delay of node `j`
-/// relative to a source node, ∝ graph distance / √α. Returns seconds.
+/// Stagger delay by graph distance (FE-08 global transitions): delay of node `j`
+/// relative to a source node, ∝ graph distance / √α.
+///
+/// NOTE (FEYNMAN-16): this is **wave-front / ballistic** scaling (`t = d/√α`,
+/// a propagation speed of `√α`), NOT diffusive heat-kernel scaling (which would
+/// be `t ∝ d²/α`). The `√α` is a propagation speed, so the documented unit is
+/// "distance / speed" (same dimension as the caller's time unit), not seconds
+/// per se. The monotonicity (↑distance ⇒ ↑delay, ↑α ⇒ ↓delay) the callers rely
+/// on holds for the wave-front model; rename to `wavefront_delay` is deferred
+/// to avoid a cross-crate symbol churn — the physics is documented here instead.
 pub fn heat_kernel_delay(graph_distance: f32, alpha: f32) -> f32 {
     if alpha <= 0.0 {
         return f32::INFINITY;

@@ -10,8 +10,10 @@
 //!    so `Spring<Money>` / `interpolate(money, ..)` is a build error. The type
 //!    system makes the illegal path unrepresentable.
 //! 2. **Runtime guard:** `TweenGuard::present_money` refuses any fractional/
-/// Integer minor-unit money. The kernel is the authority; this is a presentation
-/// boundary only.
+//!    interpolated money. It takes an `f64` precisely so a fractional value is
+//!    representable and rejected (FEYNMAN-07: an `i64` parameter could never be
+//!    fractional, so the old guard was dead code). Money is integer minor-unit
+//!    by construction; a non-integer here is the RED signature of tweening.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Money(pub i64);
 
@@ -45,20 +47,25 @@ pub fn interpolate<T: FieldValue>(a: T, b: T, t: f32) -> T {
 }
 
 /// Runtime guard for presenting money. Money is emitted as the DECIDED integer
-/// — never an interpolated fraction. Returns the integer; rejects any attempt
-/// to present a non-integer "in-between" amount.
+/// — never an interpolated fraction. Takes an `f64` (not `i64`) so that a
+/// fractional/"interpolated" value is actually representable and can be
+/// rejected (FEYNMAN-07: the old `i64` parameter made the guard dead code
+/// because every `i64` is an exact integer as `f64`).
 pub struct TweenGuard;
 
 impl TweenGuard {
-    /// Present a decided money amount. `amount` MUST be an integer minor unit;
-    /// the guard rejects fractional presentation (the RED signature of tweening).
-    pub fn present_money(amount_minor: i64) -> Result<i64, String> {
-        // Money is already integer by type; this guard exists so a caller that
-        // tried to pass an interpolated float (e.g. lerp result) is rejected.
-        if amount_minor as f64 != (amount_minor as f64).round() {
-            return Err("money must be presented as a decided integer, never interpolated".into());
+    /// Present a decided money amount. `amount_minor` MUST be an integer minor
+    /// unit; the guard rejects a fractional presentation (the RED signature of
+    /// tweening). Returns the integer minor value on success.
+    pub fn present_money(amount_minor: f64) -> Result<i64, String> {
+        // Live guard: reject any fractional input. (An `f64` can be non-integral;
+        // an `i64` parameter could not, which is why the prior guard was dead.)
+        if (amount_minor.fract()).abs() > 1e-9 {
+            return Err(
+                "money must be presented as a decided integer, never interpolated".into(),
+            );
         }
-        Ok(amount_minor)
+        Ok(amount_minor.round() as i64)
     }
 
     /// The ONLY legal money transition: jump integer→integer, no interpolation.
@@ -86,7 +93,25 @@ mod tests {
     fn money_jumps_integer_to_integer() {
         let m = TweenGuard::jump(Money(100), Money(250));
         assert_eq!(m.0, 250);
-        assert!(TweenGuard::present_money(250).is_ok());
+        assert!(TweenGuard::present_money(250.0).is_ok());
+    }
+
+    // RED→GREEN: the guard is LIVE — a fractional/"interpolated" amount is
+    // actually rejected (FEYNMAN-07 fixed the dead `i64` guard).
+    #[test]
+    fn present_money_rejects_fractional() {
+        // The classic tween product: lerp(100,250,0.37) = 155.5 minor units.
+        let interpolated: f64 = 100.0 + (250.0 - 100.0) * 0.37; // 155.5
+        assert!(
+            interpolated.fract().abs() > 1e-9,
+            "setup: the interpolated value is genuinely fractional"
+        );
+        assert!(
+            TweenGuard::present_money(interpolated).is_err(),
+            "fractional money (the RED tween signature) must be rejected"
+        );
+        // A clean integer presentation still succeeds.
+        assert_eq!(TweenGuard::present_money(155.0).unwrap(), 155);
     }
 
     // Compile-time proof that Money is NOT a FieldValue:
@@ -94,17 +119,18 @@ mod tests {
     //   interpolate(Money(100), Money(250), 0.5);  // ERROR: Money: !FieldValue
     //   Spring::<Money>::snappy(Money(0));          // ERROR: Spring requires FieldValue
     //
-    // Runtime mirror of that guarantee: present_money rejects fractional input.
+    // Runtime mirror of the compile-time guarantee: present_money rejects a
+    // genuinely fractional (interpolated) amount.
     #[test]
     fn compile_time_boundary_mirrored_at_runtime() {
-        // A fractional "interpolated" amount must be rejected by the guard.
-        let fractional = (100.0 + (250.0 - 100.0) * 0.37) as i64; // ~155, but if it were non-integer:
-                                                                  // Force a clearly non-integer scenario by checking the guard rejects any
-                                                                  // value that is not representable as an integer minor unit.
+        // The interpolated "in-between" amount a tween would produce.
+        let interpolated: f64 = 100.0 + (250.0 - 100.0) * 0.37; // 155.5 — fractional
         assert!(
-            (TweenGuard::present_money(fractional).is_ok())
-                == ((fractional as f64).fract().abs() < 1e-9)
+            TweenGuard::present_money(interpolated).is_err(),
+            "fractional (interpolated) money must be rejected by the live guard"
         );
+        // A clean integer decides fine.
+        assert_eq!(TweenGuard::present_money(155.0).unwrap(), 155);
         // The real guarantee: Money never enters interpolate(). We assert the
         // type does not carry fractional state by construction.
         let decided = Money(155);
