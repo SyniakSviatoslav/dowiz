@@ -2167,3 +2167,47 @@ Three related closes:
   offered. Named as a real tradeoff accepted deliberately, not overlooked: a courier on a bike
   running a GPU-rendered UI for a full shift is a genuine battery-life question the Tier-3/
   P52 build needs to benchmark, not assume away.
+
+### 16.35 UI paradigm — intent-driven generative rendering, not a button/menu interface (RESEARCH DIRECTION)
+Operator's framing, verbatim intent: *"моє бачення передбачає мінімальну і майже відсутню
+кількість кнопок чи елементів, замість цього наміри на які фізика + AI рендерить і показує
+заготовлені речі через функції, або узагалі малює з нуля."* Explicitly requested to be
+recorded as research, not a simple ship/defer checkbox — and treated that way here. The
+proposal: rather than a conventional button/menu-driven admin UI, the interface is
+**intent-driven** — the user expresses an intent (plausibly via the §16.31 voice channel, or a
+minimal gesture/input), and the field engine + local AI (§16.4's assistant, not a decision-maker)
+renders the appropriate response — either composing pre-built UI functions/fragments, or
+generating the visual entirely from scratch procedurally. **Stated honestly, not softened**:
+this is a substantially more ambitious paradigm than any known production food-delivery-scale
+admin surface, layered on top of §16.30's already-large full-wgpu-UI and §16.34's
+already-large custom-text-input commitments. It is recorded here as a genuine design direction
+the operator wants researched and prototyped, not as settled Wave-0 buildable scope — the
+Tier-3 blueprint needs to name a concrete fallback (a conventional, function-driven admin
+surface) if the generative-rendering research doesn't converge in time, so this ambition
+doesn't silently block the first real order.
+
+### 16.36 Admin dashboard scope timing — orders/menu/couriers Wave-0, marketing Wave-0 (basic), analytics deferred
+- **Analytics/reports**: may wait for v2, after the first real order — the owner reads raw order
+  data directly in admin (per §16.35's framing, likely via the generative/intent interface
+  rather than a dedicated chart-heavy screen) until a purpose-built dashboard exists.
+- **Marketing/auto-posting panel** (§16.7, §16.26 SEO/AEO): **Wave-0**, at least a basic
+  auto-posting capability from day one — raises Tier-3 scope further; needs the social/channel
+  bot integrations live before the first real order, not deferred to v2 as analytics is.
+
+### 16.37 Checkout flow — multi-step wizard, framed as a small narrative journey
+Operator's ruling: multi-step (menu → cart → delivery → payment, separate screens), described
+as already present in existing design docs/artifacts as *"невелика пригода"* (a small
+adventure). **Confirmed existing reference, not a new concept**: `BLUEPRINT-P38-webgpu-render-
+engine.md` already names a "narrative-cinematic reading of the Sea: the order-lifecycle pacing
+arc with named beats" (P38 §, live-verified this pass) — the checkout wizard is this arc applied
+concretely to the order flow, not a separate new design. Fits §16.23's client-side data wallet
+naturally: each step can autofill from the wallet without a separate account per venue.
+
+### 16.38 Localization mechanism — local open-source translation model, not hand-maintained i18n tables
+Operator's correction to §16.20's original framing: multi-language does not require
+hand-maintained per-locale string tables (the old stack's SQ/EN/UA switcher pattern). Instead,
+translation runs through a **local open-source model** (HuggingFace-class, run via the same
+Ollama/local-LLM infrastructure as §16.4's assistant and §16.34's voice recognition) —
+consistent with the whole local-first stance rather than a new exception. Removes what would
+otherwise have been an ongoing manual-translation maintenance burden as the vendor/venue count
+grows across markets.
