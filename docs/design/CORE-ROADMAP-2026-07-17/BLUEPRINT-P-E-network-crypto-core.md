@@ -453,3 +453,132 @@ reason §2.1 exists), `sovereign-architecture-19-phase-roadmap-2026-07-17.md` (P
 the cross-cutting blocker for P-D issuance; this lane does not depend on it),
 `performance-priority-over-minimal-change-2026-07-17.md` (the scoped perf mandate this phase
 executes). Supersedes: nothing — v1 Batch 5 is already superseded by its own v2.
+
+---
+
+## §13. Kalman SoA consumer swarm-dispatch readiness — added 2026-07-18
+
+> Ground truth for this section was re-verified live this pass (2026-07-18), not inherited: the
+> TODO wording quoted below is `kernel/src/simd.rs:21-23` as it reads today; the filter/ownership
+> claims are `kernel/src/domain.rs:279-357` and `kernel/src/kalman.rs:149-224` as they read today.
+
+### §13.1 Role & responsibility
+
+The Kalman SoA consumer's job is to batch **N couriers' existing per-courier Kalman/EMA filter
+update** into one SIMD-lane pass — a Structure-of-Arrays layout directly analogous to how
+`simd.rs` already batches AVX2 softmax reduction across independent rows (`softmax_lane4`,
+`simd.rs:59-149`; `softmax_batch_lane`, `simd.rs:157-180`). "The existing per-courier filter" is
+the scalar 1-D `KalmanFilter` (`kalman.rs:149-224`, `predict`/`update` at `kalman.rs:200,212`)
+wrapped by `TrustEstimate` (`domain.rs:279-334`); `geo.rs::ema_next` (`geo.rs:39`) is the
+infinite-initial-covariance special case of that same filter, parity-proven bit-identical to it at
+`kalman.rs:357-379` (`scalar_kf_equival_ema_next`) — confirming the memory pointer
+(`integration-research-tf-attention-circuit-kalman-arc-2026-07-14`, "★KALMAN-FIRST") live. There is
+no new filter to invent here: the consumer must execute the SAME `predict`/`update` arithmetic for
+many couriers per SIMD step, not a redesigned filter, exactly as §2.1 of this blueprint forbids
+combining two *signatures'* algebra — here the equivalent forbidden move is combining two
+*couriers'* Kalman algebra into one shared computation instead of N independent ones executed in
+parallel lanes.
+
+**What "authority" concretely means here (Step 1 finding — narrower than courier-trust/scoring):**
+it is **write-path / cadence authority**, not identity or reputation authority. Per
+`domain.rs:336-357`, `apply_event_with_trust` is the sole composition point (the "W19 integration
+point") that advances a courier's `TrustEstimate` — it takes `trust: &mut TrustEstimate` from the
+caller and steps it (`predict` + `update`-or-hold-prior) exactly once per legal order-fold event,
+fail-closed on a missing observation (`domain.rs:327-333`). There is no per-courier lock, actor, or
+map in the kernel (`grep -rn "courier_id" kernel/src` and `grep -rn "TrustEstimate" --include=*.rs`
+return zero call sites outside `domain.rs` itself) — ownership today is simply "whichever caller
+holds the `&mut TrustEstimate` for that courier's fold." The risk a naive SoA consumer introduces
+is a **second, out-of-band write path**: e.g. a periodic "batch tick" that steps N couriers'
+filters together on a fixed cadence, decoupled from each courier's own event-sourced fold. That
+would change *when* and *by what* a courier's trust estimate advances — a cadence/ownership change
+— even though the arithmetic itself stayed bit-identical. That is the one real authority risk; it
+is not about courier reputation/scoring as a concept (see §13.4 on NO-COURIER-SCORING below).
+
+### §13.2 Definition of DONE (falsifiable, numbered)
+
+a. A `kalman_batch_step` (name illustrative — final name decided at build time) SoA fn exists in
+   `kernel/src/simd.rs` (or a new cfg-gated sibling module using the identical AVX2-detect +
+   scalar-fallback shape as `softmax_batch_lane`, `simd.rs:157-180`), with a signature that takes N
+   independent `(&mut TrustEstimate, Option<f64>)` pairs (or an SoA-native `x`/`P` array pair that
+   round-trips losslessly into/out of `TrustEstimate`) and advances each exactly as
+   `TrustEstimate::step` (`domain.rs:327-333`) would, one call site's worth of couriers at a time.
+b. A bit-identity parity test — same pattern as `simd_softmax_bit_identical_to_scalar`
+   (`simd.rs:218-232`) and `ema_next_generated_parity_bit_identical` (`geo.rs:552-558`) — proves,
+   over a random battery of N independent couriers each with their own `x0`/`Q`/`R`/observation
+   sequence (including `None` observations to hit the fail-closed hold-prior path), that calling
+   the batched SoA fn once produces `f64::to_bits()`-exact-identical `x`/`P` state to calling
+   `TrustEstimate::step` N times in scalar sequence, for every lane, on every N (including
+   non-multiples of the lane width, mirroring `simd_softmax_handles_non_multiple_of_four`,
+   `simd.rs:234-247`).
+c. A benchmark (`std::time::Instant`, zero new dependencies, matching the P-E §3.2 bench-harness
+   pattern already specified earlier in this file) proves a **measured** wall-clock speedup of the
+   AVX2 SoA path over the scalar per-courier loop at realistic N (e.g. N ∈ {4, 32, 256}) — a real
+   number recorded in this blueprint and the regression ledger, not an estimate.
+d. No change to which code owns/writes courier state: `apply_event_with_trust`
+   (`domain.rs:347-357`) remains the sole call site composing a courier's Kalman step with that
+   courier's own FSM fold event. The batched fn is invoked **from inside** that ownership boundary
+   — i.e., by a caller that already legitimately holds N couriers' `&mut TrustEstimate` for their
+   respective, already-occurring fold events — never as a replacement ticker that advances a
+   courier's trust independent of that courier's own fold event.
+
+### §13.3 Definition of NOT-done / explicit anti-scope
+
+1. Vectorizing the math while ALSO changing update cadence, locking, or which task authors courier
+   state is NOT in scope — that is an authority change disguised as a perf change, exactly what
+   `simd.rs:21-23`'s TODO comment warns against.
+2. Adding a new Kalman filter design (different Q/R tuning, a different state vector, a
+   "courier-optimized" variant) is NOT this item — it is a batching/execution change over the
+   EXISTING `KalmanFilter`/`TrustEstimate` (`kalman.rs:149-224`, `domain.rs:279-334`); bit-identical
+   output is required, not merely "close."
+3. Shipping without the parity test because "it obviously matches" is NOT done — every other SIMD
+   batching item in this repo (softmax, `simd.rs:218-232`) required a bit-identity test; this item
+   is not exempt.
+4. Introducing any new courier-reputation/IAM/access-control use of the batched trust estimate is
+   NOT in scope. This would be the one path that actually could cross the real NO-COURIER-SCORING
+   red line (`docs/design/ARCHITECTURE.md:31`) — see §13.4: that red line is about IAM/reputation
+   as an access-control mechanism, not about the existing FSM-fold trust estimate, so simply
+   batching the existing arithmetic does NOT cross it, but building a new scoring/ranking/gating
+   use on top of the batched output WOULD.
+5. Batching couriers whose fold events are NOT already co-occurring into one artificial SIMD tick
+   (i.e., forcing couriers whose real events arrive at different times to "wait" so they can be
+   stepped together) is NOT in scope — that changes *when* a courier's trust updates relative to
+   its own order-fold event, which is precisely the cadence-authority risk named in §13.1. The SoA
+   lane batches couriers whose fold events are ALREADY concurrent at the caller; it must not create
+   artificial synchronization to fill a SIMD lane.
+6. Reworking `TrustEstimate`'s or `KalmanFilter`'s public API (e.g. exposing raw `x`/`P` mutation
+   that bypasses `predict`/`update`, `kalman.rs:200,212`) to make SoA layout more convenient is NOT
+   in scope — the batching must go through the existing `predict`/`update` semantics, the same way
+   `softmax_batch_lane` reuses `softmax_scalar`'s exact op order (`simd.rs:29-42`) rather than
+   inventing a new reduction.
+
+### §13.4 Context & docs
+
+- `kernel/src/simd.rs` (whole file) — the existing AVX2 `f64x4` SoA softmax pattern
+  (`softmax_lane4` at `simd.rs:59-149`, `softmax_batch_lane` at `simd.rs:157-180`, bit-identity
+  tests at `simd.rs:218-274`) to mirror; the TODO itself is at `simd.rs:21-23`: *"The N-courier
+  Kalman SoA consumer from §6 is a TODO — the `f64x4` lane primitive here is exactly the substrate
+  it needs; integrating `kalman.rs` is deferred to avoid touching the per-courier filter authority
+  (noted, not done, per task scope)."*
+- `kernel/src/kalman.rs` (full n-D deterministic Kalman filter, `KalmanFilter` struct/`predict`/
+  `update` at `kalman.rs:149-224`, `mat::Mat`-only, no external linear-algebra dep, no_std) and
+  `kernel/src/domain.rs:279-357` (`TrustEstimate`, `apply_event_with_trust` — the fold-Law
+  ownership boundary) — the existing per-courier filter this item batches, not redesigns.
+- `kernel/src/geo.rs:39` (`ema_next`) — the scalar EMA precedent, proven the infinite-covariance
+  special case of `KalmanFilter` at `kalman.rs:357-379`. Memory pointer (not an openable doc):
+  `integration-research-tf-attention-circuit-kalman-arc-2026-07-14` — "★KALMAN-FIRST
+  (geo.rs::ema_next IS 1D Kalman)".
+- `docs/design/CORE-ROADMAP-INDEX.md` Layer A row (kernel primitives — eqc-rs wiring, `geo.rs`/
+  `domain.rs`) and Layer E row (this blueprint) — cross-referenced because P-E's own SIMD-lane TODO
+  points at this work, but the batching itself is kernel-primitive/execution-shape work over an
+  existing filter, not a network/crypto lever; noted here so a future indexer files it under the
+  right Layer rather than assuming it belongs to P-E's crypto-verify scope.
+- **NO-COURIER-SCORING — confirmed real and live, checked this pass:** `docs/design/
+  ARCHITECTURE.md:31` rejects "IAM/reputation(NO-COURIER-SCORING)" as an access-control/identity
+  mechanism (DECART-gated rejection, alongside managed-cloud-default/k8s/GraphQL-mesh). **Not
+  implicated by this item as scoped:** the `TrustEstimate` this item batches already exists today,
+  is explicitly kept OFF `Order` per a documented "kernel money red line" (`domain.rs:285-288`:
+  *"this struct carries courier trust as a separate estimate and is deliberately NOT stored on
+  `Order` (which forbids courier-scoring fields)"*), and this item changes only the execution
+  parallelism of that existing math — it introduces no new reputation/IAM/access-control
+  consumption of the trust estimate (see anti-scope item 4 above, which is the trip-wire if a
+  future change tried to add one).

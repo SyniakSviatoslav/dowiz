@@ -658,3 +658,150 @@ audit quotes; attestation types) · `sovereign-roadmap-2026-07-16/BLUEPRINT-P06-
 rules (R-3 and §8 gates are operator's, not the agent's).
 **Supersedes:** nothing. **Superseded by:** nothing — this is the Layer D blueprint the index's
 "OPEN — not written" row awaited.
+
+---
+
+## §11. R-3 operator-decision dispatch readiness — added 2026-07-18
+
+> **Live re-verification this pass, not inherited.** Since this blueprint's 2026-07-17
+> reconstruction, **Option A's mechanism has been fully built, tested, and merged** —
+> `bebop-repo` commit `e08eb07` ("merge(proto-cap,P-D): budgeted delegation issuance (Option A,
+> P06-independent) (DCO)"), on `main`/`openbebop/main` as of the current HEAD `e56ba6a`.
+> `bebop2/proto-cap/src/node_id.rs` grew to 885 lines; `IssuanceBudget` (struct `:211-221`),
+> `IssuanceError` (7-pole enum `:226-243`), `can_issue` (`:277`), `charge_issuance` (`:303`), and
+> `sign_delegation_budgeted` (`:335`) all exist verbatim as this blueprint's §3.2–§3.3 specified,
+> under the section banner `// ── Layer D / P-D (consensus/capability) — Option A: budgeted
+> issuance ──` (`:187-197`). The CI gate (`scripts/ci-budgeted-issuance.sh`) exists in
+> `bebop-repo` root. `docs/regressions/REGRESSION-LEDGER.md:137` (row 29) records all 10
+> RED→GREEN tests, the bulkhead proof, and the P06-independence witness, landed 2026-07-17. This
+> is independently corroborated by `docs/design/ROADMAP-LIVE-STATUS-2026-07-18.md:32-36` (today's
+> live status doc): *"capability issuance (IssuanceBudget) — DONE in bebop-repo … R-3
+> RootDelegationPolicy operator ruling — OPEN — operator decision (audit recommends A/B/C); not
+> code-blocked."* **Options B (`FirstContactQr` + attestation) and C (`WebOfTrust`) remain
+> unimplemented** — grep confirms only the enum stub and, for C, the single standing refusal test
+> `red_web_of_trust_has_no_budget_rule_yet` (`node_id.rs:648-661`); no attestation precondition,
+> no split-budget cap, no flow-based trust construction exists anywhere in `bebop2/`.
+> **Correction to the same-day live-status doc:** its `:35` citation of commit `332bc59` for this
+> landing is a mis-citation — `332bc59` is a real but *unrelated* commit ("merge(spectral):
+> Lyapunov NaN/PSD fail-closed guard"); the actual landing commit, verified against both the
+> regression ledger and `bebop-repo`'s own git log, is `e08eb07`. Re-verify citations fresh even
+> from a same-day doc; do not chain-trust.
+>
+> **What this means for R-3:** the code-readiness gap this blueprint worried about is closed for
+> the recommended default. What remains open is narrower and purely a decision: no file in this
+> repo, `bebop-repo`, or the operator's `DECISIONS.md`/MEMORY records an explicit operator ruling
+> that authorizes Option A (or B, C, or a hybrid) as the mesh's *live* production policy. The code
+> still fails closed by construction (`RootDelegationPolicy::default() == Unspecified`,
+> `node_id.rs:169-174`) — landing the mechanism did not, and structurally cannot, pre-empt the
+> ruling (§6.2 DoD-8, unchanged).
+
+### 1. Role & responsibility
+
+`RootDelegationPolicy` is the rule that decides how a brand-new node, courier, or agent earns its
+*first* capability into the mesh — the root of trust for onboarding, upstream of everything
+`verify_chain` (`roster.rs:252-316`) later enforces. It matters because Sybil-resistance in this
+protocol is not cryptographic scarcity (identity is free — Ed25519 keypairs cost nothing) but
+*issuance discipline*: Batch 7's proof that asymmetric anchor-rooted delegation is Sybil-proof
+holds only as long as an anchor is disciplined about *who* it signs for and *how often*. The
+`IssuanceBudget` seam (§3 above, now landed) bounds the "how often" with a per-epoch cap — that
+half of the problem is solved and verified. It does **not** bound the "who" or "by what channel":
+whether a new identity earns a delegation because an operator personally vetted and signed it
+(`OperatorSigned`), because it was scanned at physical commissioning with a hardware attestation
+(`FirstContactQr`+B), or transitively through vouches (`WebOfTrust`) is a **security-posture vs
+onboarding-friction tradeoff with no code-derivable answer** — it depends on threat model, fleet
+composition (owner hubs vs phones), operator vetting capacity, and how much of the trust base the
+operator is willing to share with third-party attestation roots (Google/Apple, per §8's Descartes
+square). A wrong default here does not surface as a bug; it surfaces as either a mesh that cannot
+onboard couriers fast enough or one that is silently Sybil-open — exactly the class of decision
+this repo's `never-bypass-human-gates-2026-06-29.md` rule reserves for the operator, not an agent
+extrapolating from "the audit recommends A."
+
+### 2. Definition of DONE
+
+**(a) The decision itself.** DONE requires an explicit, dated operator ruling choosing among A, B
+(stacked on A), C, or a named hybrid/4th option — not an agent's inference from "A is the
+recommended default" or from A's code already existing. Record it as a new dated entry in
+`/root/dowiz/DECISIONS.md` (repo root, AUTHORITATIVE since 2026-07-12, the existing D0–D3-style
+canonical operator-decision ledger — this is the natural home, not a new file) **and** cross-link
+it from this blueprint's §11 in one follow-up line, so a future reader hits the ruling from either
+direction. Until that entry exists, R-3 is open — full stop, regardless of code state.
+
+**(b) Code-level DoD, per branch, only after (a) rules:**
+
+- **If Option A is ruled the production policy:** the falsifiable DoD is **already met** — §6.2's
+  ten items (RED→GREEN tests, empty `roster.rs` diff, CI gate, regression-ledger row, telemetry
+  hook, P06-independence witness) all verified live this pass, commit `e08eb07`. What is *not* yet
+  done and is a **deployment/ops action**, not a code change: (i) the operator generates and signs
+  the real anchor root cert(s) and populates a production `genesis.example.txt`-shaped anchor file
+  (`load_genesis`, `node_id.rs:117-142`) — today no such file exists outside test fixtures; (ii)
+  the operator sets the production node's runtime `RootDelegationPolicy` to `OperatorSigned`
+  explicitly (never a code-level default flip — `Default` must stay `Unspecified`, `:169-174`);
+  (iii) the operator confirms or overrides `DEFAULT_MAX_PER_EPOCH` (currently `1`, `:203`) against
+  real onboarding throughput needs. None of these three are "build a feature" — they are
+  "operate the already-built feature," and none should happen before (a).
+- **If Option B is ruled adopted (stacks on A):** one-line DoD stub — build the attestation
+  precondition slot + split `max_per_epoch_unattested`/`max_per_epoch_attested` caps exactly as
+  designed in §8 above, gated behind its own `⛔ STOP` marker until a real-device StrongBox/App
+  Attest probe across heterogeneous handsets is run (§8, audit §4-B) — not before.
+- **If Option C is ruled adopted:** one-line DoD stub — specify and prove a flow-based (never
+  vote-counting) `WebOfTrust` construction that keeps `red_vote_counting_never_authority` (§9.2)
+  green, only once onboarding demand exceeds A(+B) ceremony throughput (§9.1's placeholder
+  trigger: >50 new couriers/week/anchor, operator sets the real number at revisit time).
+
+### 3. Definition of NOT-done / explicit anti-scope
+
+1. **Treating Option A's landed code as the ruling is NOT done.** As of this pass, A's mechanism
+   is fully built, tested, and merged (`e08eb07`) — but code readiness is not an operator
+   decision. No file checked this pass (`DECISIONS.md`, MEMORY, `ROADMAP-LIVE-STATUS-2026-07-18.md`)
+   contains a dated operator ruling for R-3; all three say `OPEN`. An agent (or a future reader)
+   reading "the code for A exists" as "A was chosen" is exactly the anti-pattern this item exists
+   to prevent, and directly violates `node_id.rs:21-28`'s own module doctrine: *"the code MUST NOT
+   silently pick one as 'chosen' … Do not 'helpfully' default to a real policy."*
+2. **Building Option B's hardware-attestation overlay speculatively is NOT in scope** until the
+   ruling opens it — it sits behind an explicit `⛔ STOP — REQUIRES OPERATOR DECISION` marker
+   (§8 above) precisely because it imports Google/Apple attestation roots into the trust base, a
+   one-way sovereignty cost the operator alone should accept.
+3. **Conflating this with P06 is NOT correct.** The stale "P06 gates Layer D's capability
+   issuance" edge was withdrawn by the audit (`P-D-audit-root-delegation-policy.md` §3) and
+   corroborated by code (§7 above): the mint and admission paths are Ed25519-only, zero `key_V`.
+   Do not re-couple R-3 to P06's `key_V` signed-done-gate status — they are independent blockers.
+4. **Chain-trusting a same-day doc's citation without re-verifying is NOT safe practice** —
+   `ROADMAP-LIVE-STATUS-2026-07-18.md:35` cites commit `332bc59` for the Option A landing; live
+   `git log` shows `332bc59` is a real but unrelated commit (Lyapunov NaN/PSD guard). The correct
+   commit, cross-checked against `REGRESSION-LEDGER.md` row 29 and `bebop-repo`'s own history, is
+   `e08eb07`. Re-verify every cite fresh, including ones from today.
+5. **Silently changing `DEFAULT_MAX_PER_EPOCH` or writing a real production genesis/anchor file
+   is NOT done** without the (a) ruling on record first — this would be operating the mechanism
+   under an implicit, unrecorded policy choice, the exact failure mode `require_explicit_policy`
+   (`:180-184`) was written to make structurally impossible in code, and would only be recreated
+   procedurally by an agent acting on inference.
+6. **Treating "the audit recommends A" as sufficient license to proceed is NOT done** — a
+   recommendation is not a ruling. Per `never-bypass-human-gates-2026-06-29.md`: blanket
+   permission (or a strong recommendation) is not per-change approval for a decision this
+   consequential to the mesh's security posture.
+
+### 4. Context & docs
+
+- [`P-D-audit-root-delegation-policy.md`](P-D-audit-root-delegation-policy.md) §3 (P06-independence
+  correction, the authority this blueprint's §7 corroborates in code) and §4–§5 (the A/B/C
+  dispositions + the full Descartes square this blueprint's §8 reproduces).
+- Cheng, A. & Friedman, E., *"Sybilproof Reputation Mechanisms,"* P2PECON 2005 — the theorem
+  behind Option C's deferral (no symmetric aggregation is Sybil-proof; only asymmetric,
+  path-rooted, flow-based mechanisms escape) — cited fresh in `P-D-audit…md` §9.1/§4/§7 and this
+  blueprint's §9.1.
+- [`CORE-ROADMAP-INDEX.md`](../CORE-ROADMAP-INDEX.md) §1 (lines 39–45) — the cross-cutting-blocker
+  note carrying the "P06 gates Layer D" edge withdrawal; still the authoritative correction.
+- `CORE-ROADMAP-STANDARD-2026-07-17.md:176-179` — **still stale**, per this blueprint's own §7.2
+  (edit pending, out of this pass's scope — docs-only append, not a rewrite of other files).
+- **Where to record the ruling once made:** `/root/dowiz/DECISIONS.md` (repo root, AUTHORITATIVE,
+  the existing D0–D3 operator-decision ledger) is the natural canonical home — add a new dated
+  `D-N. RootDelegationPolicy = Option <X> (CONFIRMED, operator, <date>)` entry there, then
+  cross-link it back into this §11 in a one-line follow-up edit so both directions resolve.
+- `docs/design/ROADMAP-LIVE-STATUS-2026-07-18.md` lines 32–36 — today's live status snapshot,
+  corroborates "IssuanceBudget DONE / R-3 OPEN" independently of this pass (commit-hash citation
+  there needs the correction noted above).
+- `docs/regressions/REGRESSION-LEDGER.md` row 29 (line 137) — the landed Option A mechanism's
+  permanent regression record, commit `e08eb07`.
+- `never-bypass-human-gates-2026-06-29.md` (MEMORY) — the standing rule under which R-3 is
+  reserved for the operator; the correct filename/date (the blueprint's own §10 "Memory" list
+  above cites `never-bypass-human-gates-2026-07-29`, which does not match the file on disk).
