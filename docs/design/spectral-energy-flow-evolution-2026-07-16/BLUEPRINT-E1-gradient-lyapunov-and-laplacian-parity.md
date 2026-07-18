@@ -496,3 +496,192 @@ conscious choice with a written exit condition, not silent debt.
 artifact; no source code was written or edited. §6-§9 added 2026-07-17; all file:line and cross-arc
 claims (`hydra.rs`, `event_log.rs`, `field_frame.rs`, `engine/Cargo.toml`, B1-B4 mesh blueprints,
 H2 §5) re-read live before writing.*
+
+---
+
+## §10 — Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+> Written by a decorrelated verification pass per `AGENTS.md`'s Detailed Planning Protocol (step 6,
+> self-critique) and the operator's Anu/Ananke doctrine. Did not write §0-§9; re-checked their claims
+> against the LIVE tree rather than trusting the doc, per the same discipline
+> `RESEARCH-VERIFICATION.md` already applied one layer up. Read-only: no `.rs` file touched.
+
+### (i) Citation-verification results
+
+**Headline finding, stated plainly first because it changes what this document IS.** Since §9 was
+written, **this blueprint's design has been fully implemented and committed** —
+`git log --oneline -1` on this exact worktree/branch shows commit `6bd181a02`
+("feat(spectral-evolution): E1 Laplacian parity + Lyapunov gate, E2 CLT primitive", authored
+2026-07-17 02:30:49 UTC, same branch `feat/spectral-energy-flow-evolution`). This blueprint's own
+header line — **"Status: PLANNING ARTIFACT ONLY. No `.rs` file is edited by this document"** — is
+therefore stale as a description of the *arc's* current state, though it remains true of what *this
+specific document* did (nothing in `BLUEPRINT-E1-*.md` itself was ever code). The distinction matters:
+a reader opening this file today, seeing "planning artifact only," would wrongly conclude the work is
+unbuilt. It is built, tested, and committed. Every one of the following was re-read live (not trusted
+from the commit message) to confirm the implementation matches the design:
+
+1. **`kernel/src/incidence.rs` exists (306 lines)** and matches §2a's signature exactly:
+   `Incidence::{from_edges, nodes, n_edges, grad, div, laplacian}` (`:35-118`), plus five hand-oracle
+   tests (K₃, P₃, div=transpose(grad), weighted, `L·1=0`, `:132-186`) and **three** parity tests
+   (`:188-306`), not two as §3 step 2 named.
+2. **§7 item 3 and §9(b)'s "Normalized branch unbound" are now STALE — the implementation closed that
+   gap.** The blueprint's own DoD explicitly recorded "the Normalized-Laplacian branch is NOT
+   parity-bound... a known coverage gap" (§7 item 3) and named it "the sharpest hole" (§9(b)). Live
+   code contradicts this: `incidence.rs:252-305`
+   (`parity_incidence_reference_matches_csr_normalized`) binds the symmetric-normalized operator
+   `D^{-1/2}·L_un·D^{-1/2}` to `csr::laplacian_spmv(_, Normalized)` on K₃ and P₃, and
+   `engine/src/field_energy.rs:399-414` (`dirichlet_energy_nonnegative_both_conventions`) proves the
+   Dirichlet-energy well is non-negative under **both** conventions. The exact trigger caller,
+   `bridge.rs:125`'s `Normalized` branch, is now covered. **This is a real, confirmed correction to the
+   document's own stated scope, not a nitpick** — a future reader relying on §7/§9(b) as the current
+   state would believe a gap exists that has been closed.
+3. **`kernel/src/noether.rs:63-99`** — `lyapunov_nonincreasing` exists with the exact one-sided
+   signature §2b specifies; its non-vacuous proof (`:144-176`,
+   `lyapunov_catches_growth_accepts_decay`) covers three cases, one more than §4 criterion 3 names:
+   Euler energy-gain (caught, `false`), mass-conserving flat (`true`), **and** a strict-contraction
+   decay case that `step_preserves` (two-sided) would wrongly reject but `lyapunov_nonincreasing`
+   correctly accepts — a sharper non-vacuousness proof than the blueprint required.
+4. **`engine/src/field_energy.rs` (new file, 414 lines, `#[cfg(test)] mod field_energy;` at
+   `engine/src/lib.rs:22-23`)** — confirmed test-gated, so §4 criterion 6's "no runtime contract
+   change" holds exactly (verified the `#[cfg(test)]` attribute directly, not inferred). Contains all
+   of: the sign-pin test (`:200-248`, three-part proof — pin holds, naive `+`-form is provably false at
+   interior nodes, the field is non-constant so the sign matters), a **transcription-fidelity test**
+   (`:258-278`) proving the packed-state model is bit-identical to the real `FieldFrame::step` over 300
+   steps — a rigor addition §2b's design implied but never named as a separate acceptance item — the
+   energy-monotonicity gate (`:288-320`), and both non-vacuous mutation tests (anti-diffusion `:332-371`,
+   anti-damping `:376-392`). Ran `cargo test --release field_energy` live: **6/6 pass**
+   (`dirichlet_energy_nonnegative_both_conventions`, `energy_gate_catches_anti_diffusion`,
+   `energy_gate_catches_anti_damping`, `sign_pin_field_frame_stencil_is_negative_incidence`,
+   `field_step_transcription_matches_real_integrator`, `field_energy_is_monotone_nonincreasing`).
+5. **The three pre-existing sites §1 cites are unchanged**, confirmed live: `field_frame.rs:103`
+   still `out[i] = left + right + up + down - 4.0 * u[i];`; `csr.rs`'s `Unnormalized` branch (currently
+   at `:316-324`, one line later than the blueprint's `:316-325` — a one-line drift, immaterial)
+   unchanged; `spectral::laplacian` (`spectral.rs:287-297`) unchanged. `field_frame.rs:51` confirmed
+   still reads `dowiz_kernel::DT_STABLE as f64` (H2 Site-1 claim holds).
+6. **The `bridge.rs:125` wiring caveat still holds, re-checked today.** `bridge.rs:121-128`'s
+   `apply_field` still calls `laplacian_spmv(x, &mut y, LaplacianKind::Normalized)` at `:125` in a plain
+   (non-test) `impl` block; `scene.rs:168`'s `render_to_bridge` and its call site (`:291`) still do
+   **not** call `apply_field`/`set_field_graph`. The "wired public API, not yet a live loop" framing
+   from `RESEARCH-VERIFICATION.md` Check 4 is still accurate today — nothing shipped in this commit
+   changed that.
+7. **Falsifiable test-count claims, all independently reproduced (not copied from the commit
+   message):** live `cargo test --release` in `kernel/` → **387 passed, 0 failed**; `--features wasm`
+   → **446 passed, 0 failed**; `cargo test --release` in `engine/` → **55 passed, 0 failed** (of which 6
+   are `field_energy`'s, confirmed by name via a targeted `cargo test --release field_energy` run,
+   "49 filtered out" matching 55−6). `grep -c '#\[test\]' kernel/src/causal.rs` → **41**, matching the
+   commit message's "41 causal tests" (this figure is E2's claim, cross-checked here because it shares
+   the commit). Every number in the commit's own summary line reproduced exactly.
+8. **§6's mesh-orthogonality claim ("not one B blueprint reads, extends, or depends on... noether")
+   — confirmed with one precision nuance, not a correction.** Grepped
+   `laplacian|incidence|field_frame|noether|Dirichlet` across
+   `docs/design/agentic-mesh-protocol-2026-07-17/*.md`: B1's only "spectral" hit (`:8`) points at E3
+   (self-harness), matching §6 exactly. One additional occurrence exists that §6 does not mention:
+   `B4-crypto-groundtruth-bench-batching.md:297` cites "the same discipline as this session's
+   `noether.rs`" — but this is a prose citation of a *testing discipline* (mutation/vacuity-proof
+   pattern), not a code or build dependency; B4 does not import, call, or extend anything in
+   `noether.rs`. §6's claim ("reads, extends, or depends on") survives on its precise wording; a reader
+   should know one discipline-level citation exists so "not one B blueprint" isn't mistaken for "zero
+   occurrences of the word anywhere."
+9. **Cross-repo bebop citation, precision note only.** `bebop2/core/src/field.rs` exists at
+   `/root/bebop-repo/bebop2/core/src/field.rs` (the blueprint's shorthand "`core/field.rs:82`" refers
+   to a path inside the bebop2 crate, not a literal repo-root path). Line 82 in the *current* file is
+   mid-CSR-construction (`row_ptr[i + 1] = row_ptr[i] + nbr[i].len() as i32;`), not itself a Laplacian
+   sign expression — the file's Laplacian/eigensolve logic sits a little further down (an `H3
+   eigensolver routing` comment follows immediately after). This item is explicitly out-of-scope future
+   work per the blueprint's own §9(c)/DoD item 2, so a full independent re-derivation of bebop's sign
+   convention was not performed — flagged in the 2Q audit below rather than silently skipped.
+
+### (ii) DECART
+
+**No DECART owed.** `git show 6bd181a02 -- kernel/Cargo.toml engine/Cargo.toml` returns an empty diff
+— neither manifest changed. `incidence.rs` and the `noether.rs` addition are zero-dependency, pure-`std`
+kernel code exactly as designed; no new crate, tool, or vendor choice was made anywhere in the landed
+implementation. This confirms §2a's "zero deps, pure std" claim held all the way to commit, and the
+hard constraint (ALL-RUST-NATIVE, no new dep) was never at risk here.
+
+### (iii) Per-blueprint 2-question doubt audit
+
+**Q1 — least confident about, checked and left standing rather than rounded down:**
+
+1. **The `tol_E = 1e-6` calibration** (`field_energy.rs:155-165`) is justified by a code comment citing
+   an empirical run ("largest per-step change... −1.09e-4... on a 12×12 grid"). I did not independently
+   re-run that calibration sweep to reproduce the −1.09e-4 figure myself; I verified the *test that
+   depends on it passes* (`field_energy_is_monotone_nonincreasing`, green) but took the specific
+   constant's provenance on the comment's word.
+2. **The Normalized-branch factorization's algebra** (`D^{-1/2}·L_un·D^{-1/2}`, `incidence.rs:260-269`)
+   — I confirmed the test asserting it passes, but did not hand-derive the identity independently on
+   paper; I am trusting the test oracle's construction is itself correct, not just that it's
+   internally consistent.
+3. **The bebop `core/field.rs` sign convention** (item 9 above) — confirmed the file exists at the
+   right path, did not confirm its Laplacian actually uses a *third* independent sign convention (the
+   blueprint's "≥4 implementations" count depends on this). This is named future work in the blueprint
+   itself, but the count claim ("at least three times inside dowiz... plus a fourth in bebop") rests on
+   a file I did not fully read.
+4. **Whether any OTHER caller besides `bridge.rs:125` now exists for `laplacian_spmv(Normalized)`** —
+   I checked `scene.rs` specifically (named by the blueprint) but did not grep the whole tree fresh for
+   every call site of `LaplacianKind::Normalized`; a second caller elsewhere would change the "wired but
+   unconsumed" framing.
+5. **The engine +6 / kernel E1 +9 test-count attribution** — I confirmed the *totals* (387/446/55) and
+   the *field_energy* count (6) directly by name, and counted incidence.rs (8) + noether.rs's one new
+   test (1) = 9 by inspection, but did not mechanically diff the full pre-commit test list against
+   post-commit to prove no *other* file lost or gained tests that happen to cancel out to the same
+   totals — the arithmetic is consistent, not independently reconstructed from a real before/after set
+   diff.
+6. **I did not re-run the RED side of any RED→GREEN claim** (e.g., actually flipping
+   `field_frame.rs:103`'s sign and confirming the sign-pin test goes red, or actually negating Γ outside
+   the test harness). I trust the mutation tests *inside* `field_energy.rs` (which do inject the
+   mutants programmatically and assert `false`) as sufficient evidence of non-vacuousness, but did not
+   perform an out-of-band mutation on the real source file myself.
+7. **I did not check whether `MEMORY.md`'s active-arcs index or the remediation plan's finding #8 row
+   were actually updated** to say "code-half landed" — §7's DoD says this reconciliation is in-scope,
+   but confirming it would mean reading files outside my assigned scope; left unchecked, named here
+   rather than silently assumed done.
+
+**Q2 — the biggest thing this pass might be missing:** the blueprint was written, and this appendix is
+being added, entirely on the assumption that "verify the design against the live repo" is the terminal
+step. But the design is no longer prospective — it's *shipped, tested code on a branch not yet merged to
+`main`* (confirmed: `/root/dowiz` on `feat/harness-llm-backend` has `kernel/` and `engine/` directories
+but **no** `stats.rs`/`incidence.rs` — the implementation exists only on
+`feat/spectral-energy-flow-evolution`). The real open question this appendix cannot answer is *process*,
+not *content*: should a blueprint whose design has already been fully implemented still be read by a
+future implementer as a *plan to execute*, or does it need a visible top-of-file flag ("IMPLEMENTED —
+see commit `6bd181a02`") so nobody re-does this work or, worse, treats the still-"PLANNING ARTIFACT ONLY"
+header as license to diverge from what already shipped? That flag does not exist yet, and adding it is
+outside this pass's assigned scope (doc-only verification, not a rewrite of the blueprint's own header) —
+named here as the sharpest structural gap, not silently left for a reader to discover.
+
+### (iv) Anu (logic) & Ananke (organization) check
+
+**Anu.** The blueprint's core decisions hold up derivably against the live re-read: the sign split is
+real (confirmed bit-for-bit via the sign-pin test), the parity-bind design is sound (three parity tests
+green, including the Normalized branch the original design under-scoped), and the "no runtime contract
+change" claim is derivable from the literal `#[cfg(test)]` gate on `field_energy`'s module declaration —
+not merely asserted. One decision in the *existing* document (§9(b)'s "Normalized branch unbound... the
+sharpest hole") **failed** Anu at the moment this appendix was written, in a specific, checkable way: it
+was asserted as still-true when the live tree had already falsified it. This appendix names that failure
+explicitly (item 2 above) rather than leaving it standing, which is the corrective Anu demands.
+
+**Ananke.** Does the good outcome here depend on a future reader's diligence, or does the structure force
+it? Partially forced, partially not. **Forced:** the RED→GREEN discipline is real and reproducible — a
+skeptical reader can `cargo test --release field_energy` today and get the same 6/6 green this appendix
+reports, with zero reliance on trusting prose. The zero-new-dependency claim is similarly `git diff`-able
+by anyone, not just asserted. **Not forced — a real Ananke gap, named because it wasn't before:** the
+blueprint's own "Status: PLANNING ARTIFACT ONLY" header is now misleading, and nothing in the document's
+structure prevents a future reader from trusting that header over the live repo — the *correction* lives
+in this appendix, at the bottom of a long file, not at the top where a skimming reader would see it
+first. A structural fix that would make the good outcome inevitable rather than diligence-dependent: the
+header block at the top of this file should carry a one-line status update ("§0-§9 designed; IMPLEMENTED
+2026-07-17 in commit `6bd181a02` — see §10") the next time *anyone* touches this file, so the very first
+thing a reader sees matches reality. This appendix does not make that edit (out of scope: it is
+additive-only per the task's append format), so the gap is flagged, not closed — exactly the "name it
+rather than silently proceed" discipline Ananke requires when a plan's own organization does not yet
+force the good outcome.
+
+---
+
+*Appendix verified live on `feat/spectral-energy-flow-evolution` 2026-07-17
+(`incidence.rs`, `noether.rs`, `field_energy.rs`, `field_frame.rs`, `csr.rs`, `spectral.rs`,
+`bridge.rs`, `scene.rs`, `engine/src/lib.rs`, `kernel/Cargo.toml`, `engine/Cargo.toml`, live
+`cargo test` runs in both crates, `git log`/`git show` on commit `6bd181a02`,
+`agentic-mesh-protocol-2026-07-17/*.md`, `bebop2/core/src/field.rs`). No `.rs` file edited; no commit
+made.*
