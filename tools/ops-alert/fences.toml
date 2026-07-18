@@ -1,0 +1,39 @@
+# P45-W0 §4b.2 Security fences — declarative must-never assertions.
+#
+# Checked by tools/ops-alert/fence-check (CI `fence-check` job, S0 on trip, RED CI).
+# Each entry is traceable to a real incident (not imagined):
+#   - no-bypassrls        : pgrust track R7 seam — never bypass row-level security
+#   - no-insecure-tls     : P36 DoD-2 — insecure-tls must never re-enter a default feature set
+#   - pager-alive         : fence on the pager itself (§4a.2) — schedule present + probe list non-empty
+#
+# Adversarial case (§4b.2): editing/deleting a fence = weakening a guardrail (RED-gate class).
+# Mitigation: `fence_count` MUST equal the number of [[fence]] tables below. The
+# regression-digest drift check flags any count decrease without a ledger reversal entry.
+# Do NOT hand-edit fence_count — add/remove a [[fence]] block and bump it together.
+
+fence_count = 3
+
+[[fence]]
+id = "no-bypassrls"
+kind = "grep-absent"
+pattern = "BYPASSRLS"
+glob = "**/*.sql"
+severity = "S0"
+note = "pgrust R7 seam: never bypass row-level security in a migration"
+
+[[fence]]
+id = "no-insecure-tls-default"
+kind = "cargo-feature-absent"
+crate = "proto-wire"
+feature = "insecure-tls"
+severity = "S0"
+note = "P36 DoD-2: insecure-tls must never re-enter a default feature set"
+
+[[fence]]
+id = "pager-alive"
+kind = "workflow-present"
+file = ".github/workflows/heartbeat-monitor.yml"
+require_schedule = true
+require_probes = true
+severity = "S0"
+note = "fence on the pager itself (§4a.2): schedule present + PROBE_TARGETS non-empty"

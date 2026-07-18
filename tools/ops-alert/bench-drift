@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# tools/ops-alert/bench-drift — P45-W0 §4b.3 benchmark-regression tracker (mechanism).
+#
+# NOT "run cargo bench". It consumes the ALREADY-existing absolute tracker's output
+# (tools/telemetry/logs/bench.jsonl via log_event) and compares each bench's rolling
+# median against the pinned kernel/benches/baseline.json. Breach = median > baseline
+# * (1 + BENCH_REGRESSION_PCT/100). Fires S1 only after BENCH_CONFIRM_RUNS consecutive
+# nightly breaches of the SAME bench id (noise math: ±5% host noise -> median-of-3
+# compresses tail; 2 consecutive nightly median breaches at 10% => sustained shift, not noise).
+#
+# Mockable offline (no cargo/network): BENCH_JSONL / BASELINE / ALERT_SEND override.
+# State (consecutive-breach counts) persists in BENCH_STATE per bench id.
+
+set -uo pipefail
+
+REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
+BENCH_JSONL="${BENCH_JSONL:-$REPO_ROOT/tools/telemetry/logs/bench.jsonl}"
+BASELINE="${BASELINE:-$REPO_ROOT/kernel/benches/baseline.json}"
+BENCH_STATE="${BENCH_STATE:-/tmp/bench-drift-state.json}"
+BENCH_CONFIRM_RUNS="${BENCH_CONFIRM_RUNS:-2}"
+BENCH_REGRESSION_PCT="${BENCH_REGRESSION_PCT:-10}"
+ALERT_SEND="${ALERT_SEND:-tools/telemetry/lib.sh tg_send OPS_ALERTS}"
+
+log() { echo "bench-drift: $*" >&2; }
+
+median() {  # reads numbers from stdin, prints median
+  local -a a; local n=0 x
+  while read -r x; do [[ "$x" =~ ^[0-9.eE+-]+$ ]] && { a[n]="$x"; n=$((n+1)); }; done
+  (( n == 0 )) && { echo 0; return; }
+  # sort numerically
+  local IFS=$'\n'; local -a s; s=($(printf '%s\n' "${a[@]}" | sort -g))
+  local mid=$((n/2))
+  if (( n % 2 == 1 )); then echo "${s[mid]}";
+  else
+    awk -v a="${s[mid-1]}" -v b="${s[mid]}" 'BEGIN{printf "%.6f",(a+b)/2}'
+  fi
+}
+
+# extract last BENCH_CONFIRM_RUNS medians for a bench id from jsonl.
+# Contract: one JSON object per line: {"bench":"<id>","median":<float>}
+latest_medians() {  # $1=bench_id  -> echoes up to N recent medians (oldest..newest)
+  [[ -f "$BENCH_JSONL" ]] || { return; }
+  grep -E "\"bench\"[: ]+\"$1\"" "$BENCH_JSONL" 2>/dev/null | tail -n "$BENCH_CONFIRM_RUNS" \
+    | sed -E 's/.*"median"[: ]+([0-9.eE+-]+).*/\1/'
+}
+
+bump_state() {  # $1=bench_id $2=delta(+1/-1) ; rewrites BENCH_STATE count
+  local id="$1" d="$2" cur=0
+  [[ -f "$BENCH_STATE" ]] && cur=$(grep -E "^$id " "$BENCH_STATE" | awk '{print $2}' | tail -1)
+  cur=$(( ${cur:-0} + d ))
+  (( cur < 0 )) && cur=0
+  echo "$id $cur" >> "$BENCH_STATE"
+  echo "$cur"
+}
+
+baseline_for() {  # $1=bench_id -> baseline mean (from baseline.json {"id":{"mean":N}})
+  [[ -f "$BASELINE" ]] || { echo 0; return; }
+  # find the id's object, then its first "mean": number
+  tr -d '\n' < "$BASELINE" \
+    | grep -oE "\"$1\"[[:space:]]*:[[:space:]]*\{[^}]*\"mean\"[[:space:]]*:[[:space:]]*[0-9.]+" \
+    | grep -oE '"mean"[[:space:]]*:[[:space:]]*[0-9.]+' | grep -oE '[0-9.]+' | head -1
+}
+
+main() {
+  [[ -f "$BENCH_JSONL" ]] || { log "no bench.jsonl yet — nothing to compare (green)"; exit 0; }
+  # discover bench ids present in jsonl (value of each "bench" field)
+  local ids; ids=$(sed -E -n 's/.*"bench"[: ]+"([a-zA-Z0-9_]+)".*/\1/p' "$BENCH_JSONL" | sort -u)
+  local alerted=0
+  for id in $ids; do
+    local base; base=$(baseline_for "$id")
+    [[ "$base" == "0" || -z "$base" ]] && { log "no baseline for $id — skip"; continue; }
+    local meds; meds=$(latest_medians "$id")
+    local m; m=$(printf '%s\n' "$meds" | median)
+    local thr; thr=$(awk -v b="$base" -v p="$BENCH_REGRESSION_PCT" 'BEGIN{printf "%.6f", b*(1+p/100)}')
+    local breach=0
+    awk -v m="$m" -v t="$thr" 'BEGIN{exit !(m>t)}' && breach=1
+    if (( breach )); then
+      local cnt; cnt=$(bump_state "$id" +1)
+      if (( cnt >= BENCH_CONFIRM_RUNS )); then
+        local pct; pct=$(awk -v m="$m" -v b="$base" 'BEGIN{printf "%.1f", (m-b)/b*100}')
+        log "S1: $id median=$m > baseline $base (${pct}%> thr ${thr}) for $cnt consecutive nights"
+        $ALERT_SEND "🟠 S1 bench-drift: $id median ${m}µs +${pct}% vs baseline ${base}µs (${cnt} consecutive nights)" || true
+        alerted=1
+      fi
+    else
+      bump_state "$id" -1 >/dev/null
+    fi
+  done
+  exit $alerted
+}
+main "$@"

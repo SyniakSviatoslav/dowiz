@@ -1,0 +1,16 @@
+# Regression Digest — dowiz / DeliveryOS
+
+> GENERATED VIEW. The `REGRESSION-LEDGER.md` is authoritative; this digest is
+> a one-line-per-row readable projection. Each row links back via its id.
+> Regenerate with `cargo run --manifest-path tools/ops-alert/Cargo.toml --bin regression-digest`.
+
+SUMMARY: 3 live guardrails | 3 green | 0 unverified (generated via regression-digest by regression-digest)
+
+| # | class (≤15 words) | guardrail type | how to run | status | last verified |
+|---|---|---|---|---|---|
+| 18 | Agent burns turns stuck and the loop-detector never notices: (a) a limit cycle across ≥2 | unit + hook (Markov attractor, red→green + e2e) | path: tools/loop-signals/markov_attractor.py models the tool-outcome stream as a first-order Markov chain (SLP3 App. A: transition matrix A, stationary π) → deterministic signals: entropy-rate, escape-mass (long-run occupancy of a progress state), Foster-Lyapunov drift, + spectral SLEM/period via Faddeev-LeVerrier char-poly + Durand-Kerner roots (closes the hydraulic-loop-v2 μ≈−1 eigensolver gap). Progress-vs-probe fix: benign reads (ls/cat/grep) are neutral probe, not progress. Wired ADVISORY into .claude/hooks/loop-detector.sh (fail-open, dedup'd, never blocks, augments the N=3 counter). Proof: tools/loop-signals/test_markov_attractor.py 8/8 (RED on limit-cycle H=0 + bipartite-star H=0.79-via-spectral + strange-churn H=1.46; GREEN on edit↔run_ok escape=0.5 + cold start) + e2e driver (live hook fires LIMIT_CYCLE/STRANGE_ATTRACTOR once at the window boundary, silent on healthy) | GREEN | 2026-07-13 · a6a299b4 |
+| 20 | Agent wastes a commit-retry cycle: errors only surface at git commit (post-edit), and the old | CI-gate (tool, fail-closed) | path: tools/verify-scope.sh — callable on-demand (bash tools/verify-scope.sh [paths]) before staging; mirrors .husky/pre-commit routing so edit→verify errors are caught early and the commit-retry cycle shrinks. 2026-07-17 PRUNE (row 20): the legacy JS/TS (eslint npx) and web/Astro (astro build) branches were removed — the legacy thin-layer (row 21) was deleted 2026-07-13, so those scopes no longer exist. The guardrail now routes only the surviving Rust surface (kernel/ → cargo test, engine/ → cargo test), fail-closed. bash -n clean; run on a kernel path gates cargo test, engine path skipped cleanly. Skill equivalence-proof-before-delete (Hermes runtime) captures the RW-02 rewire-proof pattern so future sessions don't reinvent it. | GREEN | 2026-07-13 · d5e04920 (pruned 2026-07-17, f4802927e-wave) |
+| 21 | Legacy JS/TS thin-layer (web/, apps/web, packages/ui, shared-types, domain) duplicated kernel logic and was the only | CI-gate (structural) | path: Removed the entire legacy thin-layer (261 files) in feat/remove-legacy-thin-layer; kernel (Rust/WASM) is now the sole source of truth. The next UI (P6 thin-client per roadmap) is drawn fresh on the kernel wasm surface. .husky/pre-commit dropped eslint/pnpm branches (legacy JS gone), keeps kernel cargo test + python tooling gates; pnpm branch guarded on package.json existing. tools/verify-scope.sh (row 20) updated to match. | GREEN | 2026-07-13 |
+
+---
+*Readability sign-off (operator): ___ how many live / which red / re-run row N ___ (DoD-c)
