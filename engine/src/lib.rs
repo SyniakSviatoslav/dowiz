@@ -33,6 +33,19 @@ pub mod text_scope;
 // tree. `mirror()` / `diff()` / `tree_hash()` are the shared contract every
 // surface blueprint consumes.
 pub mod semantics;
+// P64 M1/M2/M3/M7 — intent engine + UI composition + friction mapping + onboarding.
+// Core P64 runtime (native engine side). Offline-clean; always built.
+pub mod intent;        // Intent runtime (extends P38 §11.2 types); classifier; router
+pub mod compose_ui;    // FragmentRegistry + Composer (intent → Scene directive)
+pub mod friction;      // the §16.44 mapping, FrictionFsm, CommitToken (M3/M4)
+pub mod onboarding;    // HintPolicy (§3.7)
+// P64 M5 — voice: wake + Moonshine streaming + Whisper multilingual fallback.
+// Feature-gated (`voice`): the real ASR model crates are NOT in the cargo cache, so
+// default build compiles ZERO voice/ASR code. The offline stubs + gates (wake-gate
+// battery lever, locale fallback, friction-never-bypassed) are tested under the
+// feature. Offline-clean — no non-cached deps are added.
+#[cfg(feature = "voice")]
+pub mod voice;
 // P58 — M4 native AccessKit adapter. Feature-gated (`a11y_native`): the real
 // `accesskit*` crates are NOT in the cargo cache (AK-unlock pending), so the
 // default build compiles ZERO AccessKit code. Offline gates (role-totality,

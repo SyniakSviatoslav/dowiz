@@ -63,6 +63,15 @@ splat = []
 # ONLY the cosmic-text shaping seam (`text_input::cosmic_text`), which stays
 # OFF until the operator unlocks the network grant.
 text = ["dep:cosmic-text"]
+# P64 M5 — voice: wake + Moonshine streaming + Whisper multilingual fallback.
+# EMPTY by design: the real `moonshine`/`whisper.cpp` model crates are NOT in
+# the cargo cache (no network grant), so the `voice` feature compiles ZERO ASR
+# model code by default — only the offline stubs + gates (wake-gate battery
+# lever, locale→model selection, voice-never-bypasses-friction) are built and
+# tested. The real model bodies land behind this same flag once the grant lands.
+# Adding an external dep here would break the air-gapped offline build, so none
+# is added (the feature exists so the boundary is real and CI-honest).
+voice = []
 
 [dev-dependencies]
 

@@ -96,6 +96,20 @@ impl Scene {
         self
     }
 
+    /// Number of SDF shapes currently in the scene (read-only view).
+    #[inline]
+    pub fn shape_count(&self) -> usize {
+        self.shapes.len()
+    }
+
+    /// Borrow the scene's shapes (read-only). Used by composition tests and
+    /// downstream consumers that need to inspect the composed geometry without
+    /// mutating the scene.
+    #[inline]
+    pub fn shapes(&self) -> &[SdfShape] {
+        &self.shapes
+    }
+
     /// Signed distance of the composed scene at world point `(wx,wy)`. An empty
     /// scene yields [`BACKGROUND`] (uniformly outside). Otherwise the shapes are
     /// folded with boolean UNION (`op_union`) — negative inside the union,
