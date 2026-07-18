@@ -2547,3 +2547,23 @@ dowiz-operated-by-default design stands unchanged for the common case; this adds
 path that makes "hubs survive without dowiz" an actual mechanism rather than only a stated
 intent. Named as a concrete requirement for the hub-provisioning/tunnel blueprint, not designed
 in full here.
+
+### 17.4 Business model, federation, and agent-autonomy boundary — all long-term stances
+Three closes:
+- **Fixed subscription, no transaction percentage, is a principle forever** — not a Wave-0
+  starting point subject to later monetization creep. Revenue growth comes only from hub count
+  and tariff tiers for capability/support, never from taking a cut of vendor transaction volume.
+  Hardens §16.16 from an initial choice into a durable commitment.
+- **Hub isolation (§16.6) is the permanent default; an optional federation phase is possible
+  later, never mandatory.** A vendor who wants their hub discoverable by/interoperable with
+  others could opt into a future federation protocol (ActivityPub-style, named only as an
+  analogy, not a commitment to that specific protocol) — but isolation-by-default is not
+  something later scale is expected to erode. This is the long-term counterpart to §16.6's own
+  MVP-scoped framing — now explicitly durable, not just "not yet built."
+- **The agent's "does not decide for the owner" boundary (§16.4/§16.40's design philosophy) can
+  loosen — but only under the individual owner's own explicit control**, never as a platform-
+  wide default shift. An owner may personally grant their own agent more autonomy over time;
+  dowiz does not unilaterally relax the boundary for everyone. **Implies a graduated-consent
+  mechanism** (the owner explicitly expanding their own agent's authority, presumably
+  reversible) that is not yet designed — named as a gap for whichever blueprint eventually
+  specifies the agent's permission model in detail.
