@@ -35,6 +35,12 @@ wasm = ["json-api", "dep:wasm-bindgen", "dep:serde_yaml"]
 # `chaos` module is `#[cfg(any(test, feature = "chaos"))]`); a release build
 # compiles the injection machinery to `()`, unrepresentable-at-the-boundary.
 chaos = []
+# `count-allocs` — installs a counting global allocator (W5 DoD §8.2) that
+# measures HEAP allocations around a code region, so the criterion A/B's
+# "≤ 8 heap allocations on the arena path" assertion is INSTRUMENTED rather
+# than structural. OFF by default (installs no custom allocator in normal
+# builds); enabled by the dedicated `arena_counting_allocs` test target.
+count-allocs = []
 # `pgrust` is the OPTIONAL Postgres SQL adapter for the living-memory store
 # (M4/W4-1). OFF by default so the kernel stays pure-`std` with no network
 # deps; the default `InMemoryStore` is native std-only. Behind this flag,
@@ -112,6 +118,16 @@ proptest = "1.11"
 [[bench]]
 name = "criterion"
 harness = false
+
+# NOTE: the W5 counting-allocator integration test (tests/arena_counting_allocs.rs)
+# is not yet wired — the counting global-allocator feature exists (`count-allocs`,
+# line 35) but the dedicated target's source was never committed. The allocation
+# ceiling is instead falsified by the in-lib `arena_path_uses_fewer_heap_allocs_than_heap`
+# test. Re-add this `[[test]]` block once tests/arena_counting_allocs.rs lands.
+# [[test]]
+# name = "arena_counting_allocs"
+# path = "tests/arena_counting_allocs.rs"
+# required-features = ["count-allocs"]
 
 # Native-kernel living-memory retrieval CLI — the max-speed replacement for the
 # out-of-tree living_memory.py (177ms Python/query). Links dowiz_kernel directly,
