@@ -25,6 +25,13 @@
 //!   * `reduce_anomalies_js(events_json) -> anomaly count (u64)`
 //!
 //! Pure std + serde_json only. No float on money. No courier scoring anywhere.
+//!
+//! Resource caps on the untrusted-JSON trust boundary (round-2 gap-audit V3 1.1 / 1.7):
+//! an attacker-controlled event list or node count must not let a single call
+//! allocate unbounded memory. These bounds are conservative defaults; they are
+//! checked at the `*_logic` entry points BEFORE any allocation.
+const MAX_CHANNEL_EVENTS: usize = 100_000;
+const MAX_HARMONIC_NODES: usize = 50_000;
 
 // BTreeMap (not HashMap) so `LedgerOut.funnel` serializes in a deterministic,
 // sorted key order — `serde_json::to_string` iterates the map in-order, and a
@@ -221,6 +228,16 @@ fn apply_event_logic(order_json: &str, next_status: &str) -> Result<String, Stri
 
 fn channel_ledger_logic(events_json: &str) -> Result<String, String> {
     let events: Vec<EventIn> = serde_json::from_str(events_json).map_err(|e| e.to_string())?;
+    // V3 1.1 (ROUND-2 GAP-AUDIT): pre-fix, every event leaked two `&'static str`
+    // via `Box::leak`, a PERMANENT allocation that the kernel never recovers →
+    // OOM under a large/untrusted event feed. Cap the input before allocating.
+    if events.len() > MAX_CHANNEL_EVENTS {
+        return Err(format!(
+            "channel_ledger: too many events ({} > {})",
+            events.len(),
+            MAX_CHANNEL_EVENTS
+        ));
+    }
 
     let mut ledger = ChannelLedger::new();
     // Owned copy of the (order_id, status, at_ms) stream for the anomaly reducer.
@@ -725,6 +742,15 @@ pub fn harmonic_centrality_js(n: usize, edges_json: String) -> Result<String, Js
 }
 
 fn harmonic_centrality_logic(n: usize, edges_json: &str) -> Result<String, String> {
+    // V3 1.7 (ROUND-2 GAP-AUDIT): `n` is attacker-controlled (from the caller).
+    // Pre-fix, `harmonic_centrality` allocated `O(n^2)` buffers (adjacency +
+    // distance) and panicked on absurd `n`, an OOM/DoS vector. Cap before alloc.
+    if n == 0 || n > MAX_HARMONIC_NODES {
+        return Err(format!(
+            "harmonic_centrality: n out of range (0 < n <= {})",
+            MAX_HARMONIC_NODES
+        ));
+    }
     let edges: Vec<[usize; 2]> = serde_json::from_str(edges_json).map_err(|e| e.to_string())?;
     let edges: Vec<(usize, usize)> = edges.into_iter().map(|p| (p[0], p[1])).collect();
     let out = harmonic_centrality(n, &edges);
@@ -881,6 +907,55 @@ mod tests {
             positions.windows(2).all(|w| w[0] < w[1]),
             "funnel keys must serialize in sorted order (deterministic), got positions {positions:?}"
         );
+    }
+
+    #[test]
+    fn channel_ledger_rejects_oversized_event_feed() {
+        // V3 1.1 (ROUND-2 GAP-AUDIT): a huge untrusted event feed must be capped
+        // BEFORE the per-event `Box::leak` allocations, not leaked permanently.
+        let mut events = String::from("[");
+        for i in 0..(MAX_CHANNEL_EVENTS + 10) {
+            if i > 0 {
+                events.push(',');
+            }
+            events.push_str(&format!(
+                "{{\"order_id\":\"o{i}\",\"channel\":\"c\",\"status\":\"PENDING\",\"at_ms\":{i}}}"
+            ));
+        }
+        events.push(']');
+        let res = channel_ledger_logic(&events);
+        assert!(
+            res.is_err(),
+            "oversized event feed must be refused, not leaked"
+        );
+        assert!(
+            res.unwrap_err().contains("too many events"),
+            "error must name the cap violation"
+        );
+    }
+
+    #[test]
+    fn harmonic_centrality_rejects_out_of_range_n() {
+        // V3 1.7 (ROUND-2 GAP-AUDIT): attacker-controlled `n` must not drive an
+        // unbounded O(n^2) allocation / panic. Any n == 0 or n > cap is refused.
+        let edges = "[]";
+        assert!(
+            harmonic_centrality_logic(0, edges).is_err(),
+            "n == 0 must be refused"
+        );
+        let huge = harmonic_centrality_logic(MAX_HARMONIC_NODES + 1, edges);
+        assert!(
+            huge.is_err(),
+            "n > cap must be refused (no O(n^2) alloc / panic)"
+        );
+        assert!(
+            huge.unwrap_err().contains("out of range"),
+            "error must name the range violation"
+        );
+        // A sane in-range n still computes.
+        let ok = harmonic_centrality_logic(3, "[[0,1],[1,2]]").unwrap();
+        let v: Vec<f64> = serde_json::from_str(&ok).unwrap();
+        assert_eq!(v.len(), 3);
     }
 
     #[test]
