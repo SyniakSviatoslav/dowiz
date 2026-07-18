@@ -21,6 +21,28 @@
 
 ---
 
+## Why this layer exists (context for a reader with zero session history)
+
+Layer F is the mesh's answer to "where does the AI live?" — and the answer, arrived at by
+measurement rather than fashion, is deliberately unglamorous: **the LLM is a build-time tool on
+one machine, not a runtime service on every node.** The naive vision (each mesh node runs a small
+model; the mesh is a distributed mixture-of-experts) dies on this host's physics: local decode is
+memory-bandwidth-bound and does not parallelize, layer-sharding across a phone mesh is 3–4 orders
+of magnitude too slow, and the transport refuses GB-scale weight blobs (§0 has the numbers). So
+this layer inverts the idea: **gossip the compiled OUTPUT of inference — DecisionUnits — not the
+inference.** A DecisionUnit is a pure `decide()` function harvested from real recurring judgments
+and compiled to native code; it runs in nanoseconds and zero tokens, so the bandwidth wall simply
+does not apply to it. A "domain expert" becomes a *family* of these units sharing a `DomainTag`,
+authored by one hub-only oracle at compile time, never a model-per-node (§2). The only genuinely
+new design ground is the three things distributing that output needs: version ordering across hubs
+(epoch max-merge, §4.1), an independent replay gate before trusting a foreign compiled unit (§4.2,
+the P06 `key_V` shape), and rollback lineage inside the one event log (§4.3, not a second DAG).
+Everything else is reuse. The problem this layer solves, in one line: **get LLM-quality judgment
+onto every node at native speed, by moving the compile off the hot path and gossiping the
+result.**
+
+---
+
 ## §0. The settled physics: raw distributed inference is REJECTED — read this first
 
 This phase does **not** build a distributed LLM inference layer, and the reason is measured, not
@@ -491,3 +513,58 @@ nothing else earned new code.
 re-open "should nodes run separate small models." Citation drift found during reconstruction:
 `ollama.rs` routing 33-40 → 33-45; `event_log.rs` drift-gate 389 → 410; `ports/llm.rs:29-33` and
 `sync_pull.rs:159` exact and unchanged.*
+
+---
+
+## §13. Dated status note (2026-07-18) — the Mistral/local-LLM audit CONFIRMS this layer's verdicts
+
+Added after the reconstruction pass as a **status note, not a design change** — §0–§12 stand
+exactly as written. Source: `docs/repo-maintenance-2026-07-17/LOCAL-LLM-AGENTIC-INFRA-MISTRAL-AUDIT.md`
+(a read-only audit run against the live Ollama daemon this session). It independently re-measured
+this layer's foundations and confirms every verdict; nothing here reopens a settled decision.
+
+**The §0 physics verdict is re-confirmed against the live host.** The audit re-ran the probes:
+`llama3.1:8b` at **~9.2–10.0 tok/s single-stream, flat across 1/2/4 concurrent** (9.21 / 9.36 /
+9.80) — the same memory-bandwidth ceiling §0 cites, re-measured, not inherited. The host is 30 GB
+RAM, CPU-only, ~26 GB free, Ollama daemon live (4 models pulled: `qwen2.5-coder:7b`,
+`llama3.1:8b`, `nomic-embed-text`, `qwen3-embedding:0.6b` — exactly the `TaskClass` routing targets
+§1 cites).
+
+**Mistral/Mixtral: ZERO code, and pulling Mixtral 8×7B is explicitly rejected.** A grep over the
+whole tree (`mistral|mixtral` across `*.rs *.ts *.tsx *.js *.json *.toml *.yaml *.sh`) returns
+**zero matches** — all 8 mentions anywhere are docs/skill fixtures, never executable wiring. The
+audit's recommendation, grounded in this host's measured numbers, matches §0's own reframe
+verdict exactly:
+
+- The bottleneck is **memory bandwidth, not FLOPs**, and MoE only saves FLOPs. Mixtral's 2-of-8
+  expert trick cuts compute per token but its ~13B active params still stream from RAM → **slower
+  per token than the 8B dense model** on this bandwidth-bound host. The architecture the brainstorm
+  (item 128) praised does not help the metric that limits this host — which is precisely why §2
+  reframes the MoE-mirror into *build-time DecisionUnit families*, not a runtime MoE model.
+- **Fit is hostile:** Mixtral 8×7B Q4 ≈ 26–28 GB vs ~26 GB free — loads to essentially all RAM
+  (the Ollama service already peaked at 19.5 G), risking OOM, for a model that is architecturally
+  worse on this workload.
+- **The re-open condition is unchanged and narrow:** revisit *only* if a measured table shows
+  Ollama's coarse knobs cost >30% aggregate throughput vs tuned alternatives — and even then the
+  fix is tuning / `llama-server`, not an MoE model pull. Keep the dense-model + typed-fallback
+  Ollama stack; spend effort on the answer-cache / build-time-compile path (i.e. this layer's
+  DecisionUnit compile pipeline, §2–§4), not on a new model.
+
+**The `LlmBackend` / `OllamaAdapter` oracle plumbing this layer depends on is confirmed healthy.**
+The audit ran `cargo test --tests` in `llm-adapters/` against the live daemon: **12 unit + 3
+integration green** — a real, non-mocked chat roundtrip, a 768-dim embed, and rerank-fail-closed,
+all green against `127.0.0.1:11434`. This is the exact plumbing §2.1(3) / §3 route the hub-only
+compile oracle through (`TaskClass::Code` → `qwen2.5-coder:7b`). One honest caveat the audit adds,
+consistent with this layer's own framing: the stack is library + test code, **not yet a product
+runtime call-site** — which is fine here, because §2's oracle is a *build-time* consumer, exactly
+the seam the audit found working.
+
+**One housekeeping item surfaced (routed to Layer H/I, noted here for completeness):** the audit's
+link-resolution pass found `MEMORY.md` has 1 broken link —
+`UNIFIED-DELIVERY-PROTOCOL-BLUEPRINT-2026-07-11.md` should repoint to the `-v3-` variant. Not a
+Layer-F design item; recorded so it is not lost.
+
+**Net effect:** zero design change. This layer's central bet — LLM at compile time on the hub,
+native DecisionUnits at runtime on every node — is the correct response to a bandwidth wall that
+has now been measured three independent times (doc 21 originally, synthesis §C-C, and this audit).
+The settled-canon marker on §2 stands reinforced, not merely restated.

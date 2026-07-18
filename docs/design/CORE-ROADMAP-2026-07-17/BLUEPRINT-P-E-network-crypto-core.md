@@ -14,6 +14,35 @@
 
 ---
 
+## §0. Why this layer exists (context for a reader with zero session history)
+
+Layer E is where the mesh meets the wire and the silicon. Its governing discovery — the single
+fact that shapes every decision in this phase — is a **measured cost inversion**: on the receiving
+node, verifying a message's two signature legs costs ~55–140 µs, while the *entire* kernel UDP
+packet stack costs ~7 µs and a raw syscall ~0.18 µs. Crypto verification is **8–20× the whole
+packet stack** (§1). Every instinct imported from datacenter networking — kernel-bypass (DPDK),
+RDMA, NIC flow-steering — optimizes the ~7 µs and ignores the ~100 µs. So this layer's one real
+build item is not a faster network path; it is a **faster verifier** (§2, the AVX2 SIMD
+crypto-verify lane), and its longest rejection section (§5) exists to stop a future engineer from
+re-litigating DPDK/RDMA on the old, wrong-target grounds.
+
+The verifier work carries one non-negotiable constraint that a reader must hold before reading
+§2: **the speedup may never come from batching signatures into a shared verdict.** That is not
+caution — it is scar tissue. This month, bebop's own `verify_batch` accepted a *real* SSR-2020
+mixed-order forgery (a small-order curve component invisible to the batch's combined equation),
+and the fix was to re-verify every batch member singly, making batching 3.26× *slower* than
+singles. So this layer draws a bright, tested line (§2.1): SIMD accelerates the *arithmetic inside
+and across independent verifications*, and every verdict `out[i]` stays a pure function of input
+`i` alone. "Parallel-independent-verify," never "batch-accept."
+
+The rest of the cluster is smaller: an operator-gated hardware-attestation overlay that would
+price Sybil-minting in real devices at the cost of admitting Google/Apple trust roots (§4, a
+sovereignty tradeoff the operator rules on, not the code); the DPDK/RDMA rejection (§5); and a
+table of already-resolved transport/hardware items (§6). The 2026-07-18 session fold-in (§13) adds
+the wire-format and forward-error-correction work that a later research pass routed to this layer.
+
+---
+
 ## §1. Ground truth (verified THIS pass, live — contract item 1)
 
 Every claim below was re-checked against the working tree this session, not inherited:
@@ -453,3 +482,97 @@ reason §2.1 exists), `sovereign-architecture-19-phase-roadmap-2026-07-17.md` (P
 the cross-cutting blocker for P-D issuance; this lane does not depend on it),
 `performance-priority-over-minimal-change-2026-07-17.md` (the scoped perf mandate this phase
 executes). Supersedes: nothing — v1 Batch 5 is already superseded by its own v2.
+
+---
+
+## §13. Session fold-in (2026-07-18) — FEC + wire-format land in Layer E
+
+Added after the 2026-07-17 writing pass; §1–§12 stand unretracted. Source: the round-2
+fail-operational master synthesis
+(`docs/design/fail-operational-layout-versioning-2026-07-17/round-2/BLUEPRINT-ROUND-2-MASTER-SYNTHESIS.md`),
+whose own §6 mapping table routes two build artifacts to **Layer E** by operator ruling. Both are
+carriers/wire-format work — the network half of this layer that the crypto-verify lane (§2) did not
+cover. Designs live in the round-2 docs; this section records ownership, the operator rulings behind
+them, and how they compose with §2's verify lane. Neither is re-derived here.
+
+### §13.1 Reed-Solomon FEC on the loss-visible lanes (round-2 Fable-A, ADOPT-NOW by operator ruling)
+
+**What flipped and why.** Round 1 deferred FEC; the operator ruled *"reed-solomon will be used, add
+FEC too."* The reconciliation that makes this correct rather than cargo-culted (Fable-A §0): *the
+decision changed; the physics did not.* Both live carriers (WSS/TCP, iroh/QUIC streams) already do
+ARQ, so FEC stays **OUT** of reliable-stream lanes where it is physically inert. Adoption means
+building FEC exactly where loss is app-visible:
+
+- **L1 — the new QUIC unreliable-datagram lane** (RFC 9221; `quinn 0.11` is already a direct
+  dependency) for latency-critical, supersedable telemetry (courier position/dispatch on the
+  cellular profile). Quantified: an 8-datagram-class ML-DSA-65 signed frame at 5% loss goes from
+  ~18.5% (k=4) / ~33.7% (k=8) unreconstructable to ~0.22% with the CellularDefault parity rule —
+  **~84× at k=4, m=2.**
+- **L2 — BPv7 bundle sharding** across couriers/paths (RAID-across-couriers — the one lane where FEC
+  buys *delivery probability under partition*).
+- **L3 — future non-ARQ carriers**, pre-hardened.
+
+**The doctrine that ties FEC to §2 (load-bearing — this is why FEC is a Layer-E, not a Layer-B,
+item):** FEC is a **reliability** control, never an **authenticity** control, and **FEC-decode sits
+strictly BELOW crypto-verify** (Fable-A §2.2; pinned by test T3
+`fec_valid_forgery_still_rejected_by_gate`). An attacker's tampered bytes are FEC-perfect by
+construction — parity says nothing about provenance — so a tampered-then-validly-FEC-encoded frame
+must reconstruct fine and then **die at `gate.check` with `CapabilityVerify`, not `Fec*`**. This is
+the same authenticity-is-the-only-authority stance §2.1 takes for the verify lane, one layer down
+the pipeline: FEC hands whole bytes up, the §2 verifier is still the sole gate. Nothing signed
+changes on the FEC lane — signatures commit to the TLV signing domain, untouched.
+
+- **Dependency:** `reed-solomon-simd = "3.1"` (v3.1.0, MIT AND BSD-3-Clause, ADR-020 clean; DECART
+  done in Fable-A §1). Note it is *itself* SIMD — complementary to §2's hand-rolled AVX2 crypto
+  lane, not a substitute; RaptorQ/fountain codes stay DEFER (licensing DECART precondition).
+- **Bonus findings folded in as Wave-2 fixes:** `quinn::Connection` is currently dropped in
+  `QuicTransport` (only `_endpoint` + streams retained) — the datagram lane needs it back (Fable-A
+  §2.4); and the iroh stream-lane `recv` is missing the `ReplayLedger` + `max_frame_bytes` that the
+  wss `recv` has — routed to whichever pass owns MESH-10 carrier parity (Fable-A §0.3). Both belong
+  to this layer's transport surface.
+- **Adaptive-ratio tension, recorded not resolved (round-2 §5.3 item 2):** a per-peer loss estimator
+  that tunes `m` "walks straight at the NO-COURIER-SCORING / no-per-source-weight fence." Held OUT
+  until explicitly re-adjudicated; `RecoveryRule::Fixed(m)` from netem measurements is the only
+  tuning path today. This is the same NO-SCORING red-line Layer D and F enforce, arriving on the
+  network tuning surface — flagged so a future perf pass does not cross it accidentally.
+
+### §13.2 `LaneFrameHeader` — the 32-byte lane-boundary wire format (round-2 Fable-D, ADOPT)
+
+The concrete reconciled wire artifact of the round-2 work, routed here as "Layer E wire format"
+(round-2 §6). It is the header an adapter emits at the *lane boundary* (adapter→kernel), decoded
+into the Layer-B ingest gate — **explicitly NEVER a network preamble** (the cleartext-first-bytes
+carrier stays REJECT-ON-PHYSICS; magic is admissible *only* because of the lane-boundary placement,
+Fable-D §5). Shape: `LaneFrameHeader { epoch_id: u64, payload_len: u32, tier: u8, content_address:
+u64 }`, `LANE_HEADER_BYTES = 32`, magic `0xBEB0_0BEE`, schema `V1`, **no Confidence field, no CRC
+field**, reserved-and-flags MUST be zero, FNV content-address with **recompute-as-sole-authority**
+(a wire address value can never override the receiver's recompute — Fable-D T7).
+
+Why it lands in Layer E rather than B: it is the *format on the boundary carrier*, the network/wire
+half; its decoded *consumption* (the ingest gate, tier↔grant cross-check) is Layer B/D and cross-cited
+there. Two decode laws worth surfacing because they are this layer's "what may exist on the wire"
+doctrine (round-2 §6 routes the ConfidenceLevel rejection to "Layer E doctrine"):
+
+- **`ConfidenceLevel` / `SampleQuality` / HDOP-as-R may not exist as a wire field, in any spelling**
+  (Fable-C/D, REJECT-AS-CARRIER): a self-reported quality metric is priced at zero for a forger
+  (#15 self-assigned-quality threat) — the legitimate idea lives receiver-side as `trace(P)` +
+  `last_surprise`, never transmitted. This is the wire-side twin of §2.1's "no self-certification"
+  rule. Pinned by `reserved_and_flags_must_be_zero` (Fable-D T4).
+- **The self-incrimination rule for any future sender-settable flag bit:** admissible only if
+  setting it can *worsen*, never *improve*, the sender's own lane treatment. No flag bits are
+  assigned today. This is the general form of "the wire never carries an authority claim."
+
+The header's decode-failure vocabulary is **reused** from the Layer-B `BridgeFault` enum — zero new
+result types, per reuse-first. It composes cleanly under §2: `LaneFrameHeader` decode is a
+lane-boundary event *after* the network path (§2's `gate.check` is still the sole authenticity
+authority on the wire path); the two never overlap. `DeltaPatch` (the adapter's op-list payload
+under this header) is Layer B, cross-cited only.
+
+### §13.3 Net effect on this layer
+
+§2 (AVX2 crypto-verify) remains the phase's center of gravity and one real *new-code* build. §13's
+two artifacts extend Layer E's **network/carrier** surface — FEC where loss is app-visible, a typed
+lane-boundary header where adapters meet the kernel — and both are governed by the same authenticity
+bright line §2 draws: reliability and format are below the verifier, never beside it. No §5
+rejection is weakened (DPDK/RDMA still optimize the wrong ~10%; FEC is application-layer erasure
+coding, an entirely different lever). No operator gate is added beyond §4's attestation gate; the
+FEC and header adoptions are operator-ruled ADOPT-NOW already.
