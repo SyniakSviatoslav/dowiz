@@ -18,6 +18,8 @@
   <h1>dowiz · kernel-driven field UI (Rust kernel via wasm)</h1>
   <p class="k">Geo + spectral math is computed by <code>dowiz-kernel</code> (wasm). This shell only renders it — no JS/TS re-implementation.</p>
 
+  <div id="boot-banner" class="bad" hidden></div>
+
   <div class="card">
     <div><span class="k">route remaining:</span> <span class="v" id="rem">–</span> m</div>
     <div><span class="k">snapped:</span> <span class="v" id="snap">–</span></div>
@@ -36,6 +38,14 @@
   <div class="card">
     <div><span class="k">FSM states / edges:</span> <span class="v" id="fsm">–</span></div>
     <div><span class="k">acyclic:</span> <span class="v" id="acyc">–</span></div>
+  </div>
+
+  <div class="card">
+    <div><span class="k">order status:</span> <span class="v" id="order-status">–</span></div>
+    <div><span class="k">order:</span> <span class="v" id="order-line">–</span></div>
+    <button id="place">place order</button>
+    <div id="order-actions"></div>
+    <div id="order-flash" class="good" hidden></div>
   </div>
 
   <script type="module" src="./src/app.mjs"></script>
