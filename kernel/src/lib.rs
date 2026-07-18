@@ -256,6 +256,11 @@ pub mod wasm;
 #[cfg(feature = "json-api")]
 pub mod json_api;
 
+/// `storefront` — P69 customer storefront & checkout journey state machine (BLUEPRINT-P69).
+/// Pure kernel logic (no serde / no wasm-bindgen); always compiled so the FSM is testable and
+/// reusable by the `json-api` bot pack and the native SPA server alike.
+pub mod storefront;
+
 // Re-export the headline types so wasm-bindgen consumers and tests share one surface.
 // `evals` (benchmark/JSONL bridge) re-exported only when the `wasm` feature is on.
 /// P9 growth-substrate: causal inference — back-door + front-door + instrumental-variable
