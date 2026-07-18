@@ -2103,13 +2103,49 @@ Two related operator rulings closing the self-host reliability gap:
   refund execution runs through the payment adapter's own refund API, dowiz is not a
   dispute-resolution party.
 
-### 16.30 What this section deliberately does not resolve
-Per the operator's own instruction (a ~50-question progressive dialogue, tracked outside this
-file, ~44 of ~50 answered as of this checkpoint), several real sub-questions are named but not
-yet closed: the Cloudflare Tunnel multi-tenant credential-isolation design (§16.2), the exact
-Tier-3 web-UI rebuild scope (audit triage `#10`/`#11`, DELIVERY grade F), the payment-adapter
-port/adapter design (§16.13), the in-hub multi-vendor data model (§16.15), the owner multi-hub
-client mode (§16.18), the client-side data-wallet's concrete implementation (§16.23), the
-SEO/AEO/GEO tooling's concrete design (§16.26), and the remainder of the question set. This
-section grows via the same append-only convention as further rounds settle each one — it is
-not a final architecture document.
+### 16.30 UI rendering approach — full wgpu, not DOM-for-forms + field-for-ambience
+Operator's ruling: the physics/field engine (wgpu, Sea&Sheet, SDF text) renders the **entire**
+UI — menu, checkout, admin dashboard — not just ambient/hero moments with conventional DOM for
+forms and lists. **This is the single most scope-expanding decision in this dialogue so far,
+flagged honestly rather than absorbed silently**: a bare wgpu canvas has zero native
+accessibility (no screen-reader tree, no native keyboard focus/tab order, no browser
+find-in-page). P51 already established the needed pattern for one surface — an "a11y-mirror
+path" (a parallel accessible DOM tree kept in sync with the rendered canvas) for the map — this
+decision means that pattern must now cover **every** screen, not just the map, which is
+substantially more engineering than a conventional-DOM Tier-3 rebuild would have needed.
+Recorded as a hard requirement, not softened — but the a11y-mirror-everywhere design itself is
+NOT yet done and belongs in the Tier-3 blueprint, not this section.
+
+### 16.31 Voice/gesture control — Wave-0 requirement, not deferred
+Operator's ruling: basic voice navigation/ordering ships in Wave-0 — this was scoped as an
+audit-evaluation criterion in the original 5-persona audit prompt, and the operator now
+confirms it is a real build requirement, not a "nice to have re-evaluated later." Combines with
+§16.30 to substantially raise Tier-3's real scope beyond what the audit triage's `#10`/`#11`
+line items assumed when they were written (those predate this dialogue pass).
+
+### 16.32 Vendor onboarding mechanism — claim pre-generated demo hubs, not live self-serve provisioning
+Refines §16.12: rather than a hub being provisioned live and automatically at signup time (which
+would need a fully unattended infra-provisioning pipeline as a Wave-0 dependency), the operator's
+actual plan is a **claim mechanic** — pre-generated, ready-to-use demo hub instances exist ahead
+of time; a prospective vendor claims one and starts using it immediately (ownership assignment,
+not live provisioning, which is a much smaller/safer piece of engineering). A parallel,
+non-mandatory path exists for cases outside the pre-generated pool: a signup/interest form on
+`dowiz.org` notifies the operator directly, for manual follow-up. **`dowiz.org`'s own homepage
+can be minimal** — a landing page with the signup form and links to the GitHub repository.
+**New fact surfaced**: dowiz's codebase (or some part of it) is intended to be publicly visible
+on GitHub — consistent with, and now more concretely confirmed than, §16.16's "self-host = one-time
+license OR free/open-source" branch. Does not reopen §16.21 (still no public vendor catalog) —
+the GitHub link is to the *product's source*, not a vendor directory.
+
+### 16.33 What this section deliberately does not resolve
+Per the operator's own instruction (an extended, ~150-question-total progressive dialogue now
+requested — "ще 100 питань" added on top of the original ~50, spanning interface/design as well
+as remaining architecture — tracked outside this file, ~47 answered as of this checkpoint),
+many real sub-questions remain open: the Cloudflare Tunnel multi-tenant credential-isolation
+design (§16.2), the payment-adapter port/adapter design (§16.13), the in-hub multi-vendor data
+model (§16.15), the owner multi-hub client mode (§16.18), the client-side data-wallet's concrete
+implementation (§16.23), the SEO/AEO/GEO tooling's concrete design (§16.26), the a11y-mirror
+architecture for full-wgpu UI (§16.30), the voice/gesture command surface (§16.31), the
+claim-mechanic's concrete implementation (§16.32), and the full remainder of the question set
+(interface/design details not yet asked). This section grows via the same append-only
+convention as further rounds settle each one — it is not a final architecture document.
