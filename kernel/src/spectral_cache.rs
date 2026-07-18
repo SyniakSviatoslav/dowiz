@@ -697,9 +697,11 @@ mod tests {
         let messy = crate::csr::Csr::from_edges(
             3,
             &[
-                (0, 2, 1.0), (0, 0, 2.0), // row0 submitted UNSORTED (col2 before col0)
-                (1, 1, 3.0),             // row1
-                (2, 2, 2.0), (2, 0, 1.0), // row2 submitted UNSORTED
+                (0, 2, 1.0),
+                (0, 0, 2.0), // row0 submitted UNSORTED (col2 before col0)
+                (1, 1, 3.0), // row1
+                (2, 2, 2.0),
+                (2, 0, 1.0), // row2 submitted UNSORTED
             ],
         );
         let messy_addr = crate::csr::NormalizedTile::canonicalize(&messy).content_address();

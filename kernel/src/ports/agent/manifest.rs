@@ -316,8 +316,16 @@ impl AgentManifest {
         put_field(&mut out, T_SUBJECT_KEY, &self.subject_key);
         put_field(&mut out, T_SUBJECT_KEY_PQ, &self.subject_key_pq);
         put_field(&mut out, T_AGENT_CAPS, &[self.agent_caps.to_bits()]);
-        put_field(&mut out, T_ACTION_SCOPES, &self.action_scopes.to_tlv_bytes());
-        put_field(&mut out, T_RESOURCE_NEEDS, &encode_resource_needs(&self.resource_needs));
+        put_field(
+            &mut out,
+            T_ACTION_SCOPES,
+            &self.action_scopes.to_tlv_bytes(),
+        );
+        put_field(
+            &mut out,
+            T_RESOURCE_NEEDS,
+            &encode_resource_needs(&self.resource_needs),
+        );
         put_field(
             &mut out,
             T_COST_DENOM,
@@ -344,7 +352,11 @@ impl AgentManifest {
                 ExecutionModel::NativeProcess => ExecutionModel::B_NATIVE,
             }],
         );
-        put_field(&mut out, T_CONFIG_AXES, &encode_config_axes(&self.config_axes));
+        put_field(
+            &mut out,
+            T_CONFIG_AXES,
+            &encode_config_axes(&self.config_axes),
+        );
         put_field(&mut out, T_DEPTH_REQUEST, &[self.depth_request]);
         put_field(
             &mut out,
@@ -378,10 +390,12 @@ impl AgentManifest {
         let subject_key_pq = c.field_fixed(T_SUBJECT_KEY_PQ, ML_DSA_65_PK_LEN)?.to_vec();
 
         let caps_byte = c.field_fixed(T_AGENT_CAPS, 1)?[0];
-        let agent_caps = AgentCaps::from_bits(caps_byte).ok_or(ManifestParseError::ReservedCapBit)?;
+        let agent_caps =
+            AgentCaps::from_bits(caps_byte).ok_or(ManifestParseError::ReservedCapBit)?;
 
         let scope_bytes = c.field_var(T_ACTION_SCOPES)?;
-        let action_scopes = Scope::from_tlv_bytes(scope_bytes).ok_or(ManifestParseError::BadScope)?;
+        let action_scopes =
+            Scope::from_tlv_bytes(scope_bytes).ok_or(ManifestParseError::BadScope)?;
 
         let needs_bytes = c.field_var(T_RESOURCE_NEEDS)?;
         let resource_needs = decode_resource_needs(needs_bytes)?;
@@ -639,7 +653,10 @@ mod tests {
         let b = m.canonical_bytes();
         assert_eq!(a, b, "canonical encoding is deterministic");
         assert_eq!(AgentManifest::decode(&a).unwrap(), m);
-        assert_eq!(AgentManifest::decode(&a).unwrap().content_id(), m.content_id());
+        assert_eq!(
+            AgentManifest::decode(&a).unwrap().content_id(),
+            m.content_id()
+        );
     }
 
     #[test]
@@ -657,7 +674,10 @@ mod tests {
         m2.config_axes = vec![(0x01, 5)];
         assert_eq!(
             AgentManifest::decode(&m2.canonical_bytes()),
-            Err(ManifestParseError::ConfigValueOutOfRange { axis: 0x01, value: 5 })
+            Err(ManifestParseError::ConfigValueOutOfRange {
+                axis: 0x01,
+                value: 5
+            })
         );
     }
 
