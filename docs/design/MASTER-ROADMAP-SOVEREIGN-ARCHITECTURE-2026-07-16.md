@@ -1950,11 +1950,84 @@ Operator's ruling, twice-confirmed: kill the Fly zombie now (*"вимкнути 
 UI, tracked via the audit triage's `#10`/`#11`) proceeds independently of when the Fly teardown
 itself executes.
 
-### 16.11 What this section deliberately does not resolve
-Per the operator's own next instruction (*"продовжував працювати у визначеному напрямку"* — a
-~50-question progressive dialogue is in progress, tracked outside this file), several real
-sub-questions surfaced during this pass are named but not closed: the Cloudflare Tunnel
-multi-tenant credential-isolation design (§16.2), the exact Tier-3 web-UI rebuild scope (audit
-triage `#10`/`#11`, DELIVERY grade F), and the full remaining question set the operator
-requested. This section will grow via the same append-only convention as further dialogue
+### 16.12 Vendor onboarding — self-serve, automatic
+Operator's ruling (Recommended option, confirmed): a new vendor registers through `dowiz.org`'s
+directory and the hub is provisioned automatically on submission (Shopify-style), not a manual
+curated approval queue. Chosen explicitly for scalability — the operator does not want to be a
+bottleneck on every new venue. **Consequence:** the hub-provisioning path (whichever hosting
+mode §16.1 offers) must itself be a fully automated, unattended flow — this is now a hard
+requirement on whatever builds the self-serve signup, not an optional nicety.
+
+### 16.13 Payment — online-mandatory from Wave-0, multi-provider adapter layer
+Operator's ruling: online payment is **mandatory from the start** (not deferred, not
+cash-on-delivery-only) — reverses what would otherwise have been the simpler MVP default.
+Provider choice: **multi-provider via an adapter layer from day one**, not a single
+Stripe-only integration — mirrors the §16.5 channel-adapter pattern and P51's own
+no-vendor-lock-in stance on mapping providers. **Consequence:** this promotes payment-gateway
+integration to a Wave-0 blocking dependency (was previously deferred in the audit triage's
+Tier 3), and the payment layer needs a port/adapter boundary analogous to the order-channel
+one — not yet blueprinted, named here as a gap for the next blueprint pass.
+
+### 16.14 Offline-hub behavior — no central dowiz state, honest client-side status, venue-side fallback preferred
+This resolved a real self-contradiction the dialogue surfaced: §16.6 committed to "isolated
+hubs, no dowiz-owned central data store," but the operator's first answer on offline-hub
+behavior ("fallback/queue at dowiz.org") would have required exactly that central store.
+Operator's own correction, verbatim: *"без центрального тоді узагалі, показувати чесно або ж
+добавити фолбеки на стороні самого закладу (це імпонує)."* Resolved cleanly in favor of the
+stronger invariant: **dowiz.org/the client holds zero server-side order state, ever.** When a
+hub is unreachable, the client shows an honest "hub offline" status — no disguised retry, no
+central queue. Any resilience beyond that (e.g., capturing an attempted order locally and
+retrying once the hub is reachable again) lives on the venue's own hub side or the customer's
+own device, never on a dowiz-operated server. This is now the strongest, most explicit
+statement of the "no central data store" invariant in this roadmap — future sections must not
+reintroduce a central queue/buffer without an explicit, named reopening of this decision.
+
+### 16.15 Hub ↔ vendor cardinality — one hub can serve multiple vendors (food-court model)
+Operator's ruling: a single hub is not strictly one-vendor — it can host **multiple vendors
+sharing one delivery/courier pool** (food court, or several small locations under one roof).
+This settles the earlier "small vs large vendor" framing from the operator's original vision
+statement: cardinality is a hub-configuration choice, not a vendor-size tier. A chain with
+multiple physical locations still maps to multiple hubs (one per location, per §16.1's
+per-venue framing); the food-court case is the genuine one-hub/multi-vendor scenario.
+**Consequence:** the in-hub data model needs a vendor-scoping layer (per-vendor menu/catalog,
+shared courier/delivery pool) — not yet designed, named as a gap.
+
+### 16.16 Monetization — fixed per-hub subscription, no transaction percentage; self-host economics differ
+Operator's ruling: dowiz charges a **fixed subscription per hub**, not a percentage of order
+value — vendors keep 100% of their payment volume, simplifying the §16.13 payment-adapter
+design (no split/settlement logic needed inside the payment path itself). **Self-host has
+different economics**, confirmed as a follow-up: a one-time license fee or fully free/
+open-source, not a recurring subscription — Hetzner-hosted hubs pay recurring for hosting +
+protocol/updates/support; self-hosted hubs pay (if anything) once, for the software itself.
+Exact self-host pricing (one-time-paid vs. fully free) is left open — named as a business,
+not architecture, decision.
+
+### 16.17 Menu/catalog schema — fully vendor-defined, no fixed dowiz schema
+Operator's ruling (Recommended option, confirmed): vendors define their own categories,
+modifiers, and variants freely — dowiz does not impose a fixed schema (no hardcoded
+"appetizers/mains/desserts" structure). This is what makes the platform viable for non-typical
+food businesses, and by extension any small business beyond food (a "flowers" or "goods"
+vendor fits without a schema exception). **Consequence:** the catalog data model needs to be
+schema-flexible (vendor-authored category/modifier trees), which the old TS stack's
+`AllergenEditor`/`Recipe BOM editor` (referenced in stale Repowise index entries) may partially
+inform but does not dictate — those were built against the now-retired centralized stack.
+
+### 16.18 Multi-hub owner view — client-side aggregation, never server-side
+Follows directly from §16.6's hub isolation and §16.14's "no central dowiz state" invariant: an
+owner running multiple hubs (a chain, per §16.15) sees them together via their own device/app
+connecting to each hub independently and merging the view locally — never via a dowiz-operated
+aggregation server. Confirmed as the Recommended option specifically because it extends the
+same invariant §16.14 just hardened, rather than opening a new exception for owners. **Consequence:**
+the owner-facing Tauri client (P39) needs a genuine multi-hub connection mode (hold N
+capability-certs, one per hub, fan out reads/writes, merge client-side) — not yet designed,
+named as a gap against P39/P48.
+
+### 16.19 What this section deliberately does not resolve
+Per the operator's own instruction (*"продовжував працювати у визначеному напрямку"* — a
+~50-question progressive dialogue, tracked outside this file, roughly 25 of ~50 answered as of
+this checkpoint), several real sub-questions are named but not yet closed: the Cloudflare
+Tunnel multi-tenant credential-isolation design (§16.2), the exact Tier-3 web-UI rebuild scope
+(audit triage `#10`/`#11`, DELIVERY grade F), the payment-adapter port/adapter design (§16.13),
+the in-hub multi-vendor data model (§16.15), the owner multi-hub client mode (§16.18), and the
+full remaining question set. This section grows via the same append-only convention as further
 rounds settle each one — it is not a final architecture document.
