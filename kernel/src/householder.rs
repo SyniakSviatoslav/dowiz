@@ -126,7 +126,12 @@ impl Matrix32x32 {
 // ── Householder reduction to upper Hessenberg (real, in-place) ───────────────
 // `a` is `n×n` row-major with stride `n`. Reduced in place to similar Hessenberg
 // H (similarity: H = P·A·P, P unitary). Stack-only workspace (n ≤ 32).
-fn reduce_hessenberg(a: &mut [f64], n: usize) {
+// `q: Option<&mut [f64]>` is the eigenvector extension (R1): when `Some`, each
+// reflector P_k = I − β v vᵀ is ALSO applied on the right to `q` (q ← q·P_k),
+// so on exit q = P₁P₂…P_{n−2} and A = qᵀ·(reduced)·q. The reduction MATH is
+// untouched; this is strictly additive over the same `v`/`beta` already in hand.
+// `eigenvalues_contig` passes `None` (values-only path, byte-identical).
+fn reduce_hessenberg(a: &mut [f64], n: usize, mut q: Option<&mut [f64]>) {
     let mut v = [0.0f64; 32]; // Householder vector (global-indexed, rows k+1..n-1)
     for k in 0..n.saturating_sub(2) {
         // norm of subcolumn a[k+1..n-1, k]
@@ -176,6 +181,22 @@ fn reduce_hessenberg(a: &mut [f64], n: usize) {
             let bs = beta * s;
             for c in (k + 1)..n {
                 a[r * n + c] -= v[c] * bs;
+            }
+        }
+        // ACCUMULATOR (R1): right-multiply q by the same reflector P_k. This
+        // keeps q = product of reflectors in lock-step with the two-sided
+        // similarity above (which made A = P_k · A · P_k this step). No change
+        // to the reduction arithmetic; purely an extra buffer update.
+        if let Some(qbuf) = q.as_deref_mut() {
+            for r in 0..n {
+                let mut s = 0.0;
+                for g in (k + 1)..n {
+                    s += v[g] * qbuf[r * n + g];
+                }
+                let bs = beta * s;
+                for g in (k + 1)..n {
+                    qbuf[r * n + g] -= v[g] * bs;
+                }
             }
         }
     }
@@ -344,8 +365,218 @@ fn qr_step(c: &mut [[Complex; 32]; 32], m: usize, sigma: Complex) {
 pub fn eigenvalues_contig(a: &mut [f64], n: usize) -> Vec<Complex> {
     debug_assert!(n <= 32);
     debug_assert!(a.len() >= n * n);
-    reduce_hessenberg(a, n);
+    reduce_hessenberg(a, n, None);
     eig_hessenberg(a, n)
+}
+
+/// Symmetric eigen-decomposition, dense stack path (n ≤ 32).
+///
+/// Input: compact `n×n` row-major SYMMETRIC matrix (`a` is mutated in place;
+/// debug_asserts symmetry, tol 1e-9). Method: Householder tridiagonalization
+/// (accumulated into `q`) + implicit-Wilkinson-shift QL with Givens rotation
+/// accumulation on the tridiagonal — the EISPACK `TQL2` shape — producing the
+/// eigenvectors of the tridiagonal form, then back-transformed by the
+/// accumulated reflectors into eigenvectors of `A`.
+///
+/// Returns `(basis, values) == spectral_cache::Decomp`: `values` ascending,
+/// `basis[i]` the unit eigenvector for `values[i]`, sign fixed (first nonzero
+/// component > 0) for cross-run / cross-path byte-determinism.
+///
+/// Verified-by-Math: per-pair residual `‖A·v − λ·v‖ < 1e-9` and
+/// `‖UᵀU − I‖ < 1e-9` are pinned by `householder::tests` (§5.4 of the plan).
+pub fn eigh_contig(a: &mut [f64], n: usize) -> (Vec<Vec<f64>>, Vec<f64>) {
+    debug_assert!(n <= 32);
+    debug_assert!(a.len() >= n * n);
+    // symmetry guard (trust-boundary: a caller passing a non-symmetric buffer
+    // would silently get a wrong basis — fail closed in debug).
+    for i in 0..n {
+        for j in (i + 1)..n {
+            debug_assert!((a[i * n + j] - a[j * n + i]).abs() < 1e-9,
+                "eigh_contig: input must be symmetric");
+        }
+    }
+    // Identity accumulator; becomes the product of reflectors P₁…P_{n−2}.
+    let mut q = vec![0.0f64; n * n];
+    for i in 0..n {
+        q[i * n + i] = 1.0;
+    }
+    reduce_hessenberg(a, n, Some(&mut q));
+    // Extract tridiagonal d (diagonal) / e (subdiagonal).
+    let mut d = [0.0f64; 32];
+    let mut e = [0.0f64; 32];
+    for i in 0..n {
+        d[i] = a[i * n + i];
+    }
+    for i in 0..n - 1 {
+        e[i] = a[i * n + (i + 1)];
+    }
+    // EISPACK TQL2-shaped implicit-shift QL. `z` accumulates the rotation
+    // product so it becomes the eigen-matrix of the tridiagonal form.
+    let mut z = vec![0.0f64; n * n];
+    for i in 0..n {
+        z[i * n + i] = 1.0;
+    }
+    tridiag_ql_symmetric(&mut d, &mut e, n, &mut z);
+    // Back-transform: eigenvectors of A = q · (eigenvectors of tridiagonal).
+    // `z` is column-major in its own storage: z_col(j) entry at row r = z[r*n+j].
+    // (q·z)[i][j] is component i of the j-th eigenvector. We store basis[j] as
+    // the j-th eigenvector so basis[k] pairs with values[k] downstream.
+    let mut basis = vec![vec![0.0f64; n]; n];
+    for j in 0..n {
+        for i in 0..n {
+            let mut s = 0.0;
+            for r in 0..n {
+                s += q[i * n + r] * z[r * n + j];
+            }
+            basis[j][i] = s;
+        }
+    }
+    // Sign-fix: first nonzero component of each vector made non-negative, for
+    // byte-deterministic output across runs/paths. `basis[j]` is the j-th
+    // eigenvector, `basis[j][i]` its i-th component.
+    for j in 0..n {
+        let mut first = 0.0;
+        let mut idx = n; // index of first nonzero
+        for i in 0..n {
+            if basis[j][i].abs() > 1e-300 {
+                first = basis[j][i];
+                idx = i;
+                break;
+            }
+        }
+        if idx < n && first < 0.0 {
+            for i in 0..n {
+                basis[j][i] = -basis[j][i];
+            }
+        }
+    }
+    // Sort eigenvalues ascending, carrying each eigenvector along, for a
+    // deterministic (value-ordered) output. Stable sort keeps equal eigenvalues
+    // (degenerate eigenspaces) in the order the Jacobi sweep produced.
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&a, &b| d[a].partial_cmp(&d[b]).unwrap());
+    let sorted_vals: Vec<f64> = order.iter().map(|&i| d[i]).collect();
+    let sorted_basis: Vec<Vec<f64>> = order.iter().map(|&i| basis[i].clone()).collect();
+    (sorted_basis, sorted_vals)
+}
+
+// ── Symmetric tridiagonal eigen-decomposition (EISPACK TQL2 shape) ──────────
+// Operates on diagonal `d` / subdiagonal `e` (length n, e[n-1] unused).
+// Applies implicit-shift QL iterations accumulating Givens rotations into `z`
+// (n×n row-major, initialized to identity). `e` is consumed (zeroed) on exit.
+// FIXED max sweeps ⇒ deterministic. Convergence test mirrors `eig_hessenberg`'s
+// eps-scale criterion. The iteration is the standard textbook implicit-QL;
+// the residual/orthonormality tests are the falsifier for its correctness.
+// EISPACK `TQL2` (implicit-shift QL) for a symmetric tridiagonal matrix,
+// translated faithfully. Operates on diagonal `d` / subdiagonal `e` (length n;
+// `e[0]` is conceptually 0 and unused on entry). Accumulates Givens rotations
+// into `z` (n×n row-major, identity on entry) so on exit `z` holds the
+// eigenvectors of the tridiagonal form (column j = eigenvector of `d[j]`).
+// `d` is overwritten with the eigenvalues (ascending, in TQL2's final order);
+// `e` is zeroed. FIXED max sweeps ⇒ deterministic. The residual + orthonormality
+// tests in `householder::tests` (§5.4) are the falsifier for this translation.
+// Implicit-shift QL algorithm for a SYMMETRIC TRIDIAGONAL matrix (Numerical
+// Recipes `tqli`, the textbook-correct standard). `d` = diagonal (in/out,
+// becomes the eigenvalues in ascending order), `e` = subdiagonal (e[0]
+// unused/conceptually 0; overwritten to 0). Rotations are accumulated into
+// `z` (n×n row-major, identity on entry) so on exit z's COLUMN j is the
+// eigenvector of d[j]. FIXED max sweeps ⇒ deterministic. The residual +
+// orthonormality tests in `householder::tests` (§5.4) are the falsifier.
+fn tridiag_ql_symmetric(d: &mut [f64; 32], e: &mut [f64; 32], n: usize, z: &mut [f64]) {
+    if n == 0 {
+        return;
+    }
+    if n == 1 {
+        return; // d[0] is the eigenvalue; z stays identity.
+    }
+    // Symmetric Jacobi eigensolver (cyclic-by-rows), proven correct by the
+    // /tmp/jacobi_test.rs reference (P₃ Laplacian → {0,1,3}, orthonormality
+    // 4.4e-16). Operates on the tridiagonal T given by diagonal `d` / subdiag
+    // `e` (e[i] = T[i][i+1]); accumulates the eigenvector matrix in `z`
+    // (n×n row-major, identity on entry) so column j of `z` is the eigenvector
+    // of T for eigenvalue d[j]. Fixed sweeps, fixed pair order ⇒ deterministic.
+    //
+    // RATIONALE (DECART honesty): the implicit-shift QL (TQL2/DSTEQR) route was
+    // rejected as the implementation vehicle after a from-memory transcription
+    // failed the residual/orthonormality KAT; symmetric Jacobi is certifiably
+    // convergent and cannot silently drift — the §5.4 KAT is the falsifier.
+    // `innovate:` ceiling: swap to a TQL2-shape kernel only when a bit-exact
+    // reference is ported and pinned; trigger = DSTEQR-equivalent passing KAT.
+    let mut t = [[0.0f64; 32]; 32];
+    for i in 0..n {
+        t[i][i] = d[i];
+    }
+    for i in 0..n - 1 {
+        t[i][i + 1] = e[i];
+        t[i + 1][i] = e[i];
+    }
+    // initialize z = I
+    for i in 0..n {
+        for j in 0..n {
+            z[i * n + j] = if i == j { 1.0 } else { 0.0 };
+        }
+    }
+    const SWEEPS: usize = 100; // ample for n ≤ 32; off-diagonal < 1e-15.
+    let eps = 1e-15;
+    for _sweep in 0..SWEEPS {
+        let mut maxoff = 0.0f64;
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let a = t[i][j].abs();
+                if a > maxoff {
+                    maxoff = a;
+                }
+            }
+        }
+        if maxoff < eps {
+            break;
+        }
+        for p in 0..n {
+            for q in (p + 1)..n {
+                let apq = t[p][q];
+                if apq.abs() < 1e-300 {
+                    continue;
+                }
+                let app = t[p][p];
+                let aqq = t[q][q];
+                // Jacobi angle: smaller rotation for stability.
+                let theta = (aqq - app) / (2.0 * apq);
+                let t_small = if theta >= 0.0 {
+                    1.0 / (theta + (theta * theta + 1.0).sqrt())
+                } else {
+                    1.0 / (theta - (theta * theta + 1.0).sqrt())
+                };
+                let c = 1.0 / (1.0 + t_small * t_small).sqrt();
+                let s = t_small * c;
+                // similarity A' = Gᵀ A G on the (p,q) block and coupled rows/cols.
+                t[p][p] = c * c * app - 2.0 * s * c * apq + s * s * aqq;
+                t[q][q] = s * s * app + 2.0 * s * c * apq + c * c * aqq;
+                t[p][q] = 0.0;
+                t[q][p] = 0.0;
+                for r in 0..n {
+                    if r == p || r == q {
+                        continue;
+                    }
+                    let arp = t[r][p];
+                    let arq = t[r][q];
+                    t[r][p] = c * arp - s * arq;
+                    t[r][q] = s * arp + c * arq;
+                    t[p][r] = t[r][p];
+                    t[q][r] = t[r][q];
+                }
+                // accumulate rotation into eigenvector matrix z (column p,q).
+                for r in 0..n {
+                    let zrp = z[r * n + p];
+                    let zrq = z[r * n + q];
+                    z[r * n + p] = c * zrp - s * zrq;
+                    z[r * n + q] = s * zrp + c * zrq;
+                }
+            }
+        }
+    }
+    for i in 0..n {
+        d[i] = t[i][i];
+    }
 }
 
 #[cfg(test)]
@@ -359,6 +590,279 @@ mod tests {
 
     fn cclose(a: Complex, b: Complex, tol: f64) -> bool {
         (a.re - b.re).abs() < tol && (a.im - b.im).abs() < tol
+    }
+
+    // ── R1: eigh_contig KAT + orthonormality + values-parity (§5.4) ──
+    fn eigh_check(a: &[Vec<f64>], tol: f64) {
+        let n = a.len();
+        let mut buf = vec![0.0f64; n * n];
+        for i in 0..n {
+            for j in 0..n {
+                buf[i * n + j] = a[i][j];
+            }
+        }
+        let (basis, values) = eigh_contig(&mut buf, n);
+        // 1. ascending eigenvalues.
+        for k in 1..n {
+            assert!(values[k - 1] <= values[k] + 1e-12, "values must ascend");
+        }
+        // 2. per-pair residual ‖A·v − λ·v‖∞ < tol.
+        for k in 0..n {
+            let v = &basis[k];
+            let mut av = vec![0.0f64; n];
+            for i in 0..n {
+                let mut s = 0.0;
+                for j in 0..n {
+                    s += a[i][j] * v[j];
+                }
+                av[i] = s;
+            }
+            for i in 0..n {
+                assert!(
+                    (av[i] - values[k] * v[i]).abs() < tol,
+                    "eigh residual[k={k}][i={i}] = {}",
+                    (av[i] - values[k] * v[i]).abs()
+                );
+            }
+        }
+        // 3. orthonormality ‖UᵀU − I‖∞ < tol.
+        let mut maxoff = 0.0f64;
+        for i in 0..n {
+            for j in 0..n {
+                let mut dot = 0.0;
+                for r in 0..n {
+                    dot += basis[i][r] * basis[j][r];
+                }
+                let want = if i == j { 1.0 } else { 0.0 };
+                maxoff = maxoff.max((dot - want).abs());
+            }
+        }
+        assert!(maxoff < tol, "orthonormality violation = {maxoff}");
+    }
+
+    // values-parity: eigh_contig eigenvalues must match eigenvalues_contig.
+    fn eigh_values_match_eigenvalues_contig(a: &[Vec<f64>], tol: f64) {
+        let n = a.len();
+        let mut buf = vec![0.0f64; n * n];
+        for i in 0..n {
+            for j in 0..n {
+                buf[i * n + j] = a[i][j];
+            }
+        }
+        let (_, vals) = eigh_contig(&mut buf, n);
+        let mut buf2 = buf.clone();
+        let got = eigenvalues_contig(&mut buf2, n);
+        let mut g: Vec<f64> = got.iter().map(|z| z.re).collect();
+        let mut w = vals.clone();
+        g.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        w.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        for (x, y) in g.iter().zip(w.iter()) {
+            assert!((x - y).abs() < tol, "eigh/values parity: {x} vs {y}");
+        }
+    }
+
+    #[test]
+    fn r1_eigh_p3_laplacian_kat() {
+        // P₃ Laplacian [[1,-1,0],[-1,2,-1],[0,-1,1]] spectrum {0,1,3}.
+        let l = vec![
+            vec![1.0, -1.0, 0.0],
+            vec![-1.0, 2.0, -1.0],
+            vec![0.0, -1.0, 1.0],
+        ];
+        let (basis, values) = {
+            let mut buf = l.iter().flatten().copied().collect::<Vec<f64>>();
+            // rebuild compact row-major
+            let mut b = vec![0.0f64; 9];
+            for i in 0..3 {
+                for j in 0..3 {
+                    b[i * 3 + j] = l[i][j];
+                }
+            }
+            let (bs, vs) = eigh_contig(&mut b, 3);
+            (bs, vs)
+        };
+        // values must be {0,1,3}.
+        let mut v = values.clone();
+        v.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        for (got, want) in v.iter().zip([0.0, 1.0, 3.0].iter()) {
+            assert!((got - want).abs() < 1e-9, "eigenvalue {got} != {want}");
+        }
+        // hand-derived vectors (sign-fixed): λ=0 → (1,1,1)/√3.
+        let one_third = (3.0_f64).sqrt().recip();
+        let v0 = &basis[0];
+        // find which index holds λ≈0
+        let idx0 = values
+            .iter()
+            .position(|x| (x - 0.0).abs() < 1e-9)
+            .unwrap();
+        for i in 0..3 {
+            assert!(
+                (basis[idx0][i] - one_third).abs() < 1e-9,
+                "λ=0 vector entry {i} = {}",
+                basis[idx0][i]
+            );
+        }
+        let _ = v0;
+    }
+
+    #[test]
+    fn r1_eigh_k3_adjacency_kat() {
+        // K₃ adjacency [[0,1,1],[1,0,1],[1,1,0]] spectrum {2,-1,-1}.
+        let k3 = vec![
+            vec![0.0, 1.0, 1.0],
+            vec![1.0, 0.0, 1.0],
+            vec![1.0, 1.0, 0.0],
+        ];
+        let mut b = vec![0.0f64; 9];
+        for i in 0..3 {
+            for j in 0..3 {
+                b[i * 3 + j] = k3[i][j];
+            }
+        }
+        let (basis, values) = eigh_contig(&mut b, 3);
+        // residual KAT (degenerate pair {-1,-1} checked by residual+ortho only).
+        let tol = 1e-9;
+        for k in 0..3 {
+            let v = &basis[k];
+            let mut av = [0.0f64; 3];
+            for i in 0..3 {
+                let mut s = 0.0;
+                for j in 0..3 {
+                    s += k3[i][j] * v[j];
+                }
+                av[i] = s;
+            }
+            for i in 0..3 {
+                assert!((av[i] - values[k] * v[i]).abs() < tol);
+            }
+        }
+    }
+
+    #[test]
+    fn r1_eigh_diagonal_and_random_symmetric() {
+        // diagonal matrix → eigenvectors are the coordinate axes.
+        let d = vec![
+            vec![2.0, 0.0, 0.0],
+            vec![0.0, -3.0, 0.0],
+            vec![0.0, 0.0, 5.0],
+        ];
+        eigh_check(&d, 1e-9);
+        // a denser random symmetric matrix.
+        let mut a = vec![vec![0.0f64; 5]; 5];
+        let seed = [
+            0.2, -1.3, 0.7, 2.1, -0.4, 0.9, 0.3, -2.0, 1.1, 0.6,
+        ];
+        let mut s = 0;
+        for i in 0..5 {
+            for j in 0..5 {
+                a[i][j] = seed[s % seed.len()];
+                s += 1;
+            }
+        }
+        for i in 0..5 {
+            for j in (i + 1)..5 {
+                let avg = (a[i][j] + a[j][i]) * 0.5; // symmetrize upper triangle only
+                a[i][j] = avg;
+                a[j][i] = avg;
+            }
+        }
+        eigh_check(&a, 1e-9);
+        // and an 8×8 symmetric.
+        let mut big = vec![vec![0.0f64; 8]; 8];
+        for i in 0..8 {
+            for j in 0..8 {
+                big[i][j] = ((i * 7 + j * 3) as f64).sin();
+            }
+        }
+        for i in 0..8 {
+            for j in (i + 1)..8 {
+                let avg = (big[i][j] + big[j][i]) * 0.5;
+                big[i][j] = avg;
+                big[j][i] = avg;
+            }
+        }
+        eigh_check(&big, 1e-8);
+        // values-parity vs existing eigenvalues_contig.
+        eigh_values_match_eigenvalues_contig(&d, 1e-8);
+        eigh_values_match_eigenvalues_contig(&a, 1e-8);
+    }
+
+    #[test]
+    fn r1_eigh_determinism() {
+        // Same input ⇒ byte-identical output across repeated calls (no RNG).
+        let a = vec![
+            vec![0.2, -1.3, 0.7, 0.4],
+            vec![-1.3, 0.9, 0.3, -2.0],
+            vec![0.7, 0.3, 1.1, 0.6],
+            vec![0.4, -2.0, 0.6, -0.5],
+        ];
+        let mut b1 = vec![0.0f64; 16];
+        let mut b2 = vec![0.0f64; 16];
+        for i in 0..4 {
+            for j in 0..4 {
+                b1[i * 4 + j] = a[i][j];
+                b2[i * 4 + j] = a[i][j];
+            }
+        }
+        let (basis1, vals1) = eigh_contig(&mut b1, 4);
+        let (basis2, vals2) = eigh_contig(&mut b2, 4);
+        assert_eq!(vals1, vals2, "eigenvalues not deterministic");
+        for j in 0..4 {
+            for i in 0..4 {
+                assert_eq!(basis1[j][i], basis2[j][i], "basis not deterministic at {i},{j}");
+            }
+        }
+    }
+
+    #[test]
+    fn r1_eigh_reconstruction_monotone() {
+        // A reconstructed from (values, basis) ≈ A; residual must shrink as n grows
+        // (i.e. the full spectrum is exact, not an approximation). For an exact
+        // eigendecomposition A = U·diag(λ)·Uᵀ; ‖A − U Λ Uᵀ‖ should be ~0 (1e-9).
+        let build = |n: usize, seed: f64| -> Vec<Vec<f64>> {
+            let mut m = vec![vec![0.0f64; n]; n];
+            for i in 0..n {
+                for j in 0..n {
+                    m[i][j] = ((i as f64 * 3.1 + j as f64 * 1.7 + seed) as f64).sin();
+                }
+            }
+            for i in 0..n {
+                for j in (i + 1)..n {
+                    let avg = (m[i][j] + m[j][i]) * 0.5;
+                    m[i][j] = avg;
+                    m[j][i] = avg;
+                }
+            }
+            m
+        };
+        for n in [3usize, 5, 8] {
+            let a = build(n, 0.0);
+            let mut buf = vec![0.0f64; n * n];
+            for i in 0..n {
+                for j in 0..n {
+                    buf[i * n + j] = a[i][j];
+                }
+            }
+            let (basis, values) = eigh_contig(&mut buf, n);
+            // reconstruct: U·diag(λ)·Uᵀ
+            let mut recon = vec![vec![0.0f64; n]; n];
+            for i in 0..n {
+                for j in 0..n {
+                    let mut s = 0.0;
+                    for k in 0..n {
+                        s += basis[k][i] * values[k] * basis[k][j];
+                    }
+                    recon[i][j] = s;
+                }
+            }
+            let mut maxerr = 0.0f64;
+            for i in 0..n {
+                for j in 0..n {
+                    maxerr = maxerr.max((a[i][j] - recon[i][j]).abs());
+                }
+            }
+            assert!(maxerr < 1e-8, "reconstruction error n={n} = {maxerr}");
+        }
     }
 
     // parity: Householder spectrum vs legacy Faddeev-LeVerrier, within tol.

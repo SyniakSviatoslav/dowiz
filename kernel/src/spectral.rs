@@ -213,6 +213,160 @@ pub fn eigenvalues(a: &[Vec<f64>]) -> Vec<Complex> {
     roots(&coeffs)
 }
 
+/// Full symmetric eigen-decomposition (dense, n ≤ 32) — façade over
+/// `householder::eigh_contig`, mirroring the `eigenvalues` dispatch pattern.
+/// n > 32 dense-symmetric has no consumer and no path: use [`topk_symmetric`]
+/// on a `Csr` instead. Returns `(basis, values) == crate::spectral_cache::Decomp`
+/// with `values` ascending and `basis[i]` the unit eigenvector for `values[i]`.
+pub fn eigh(a: &[Vec<f64>]) -> crate::spectral_cache::Decomp {
+    let n = a.len();
+    debug_assert!(n <= 32, "eigh: dense symmetric path supports n ≤ 32");
+    let mut buf = vec![0.0f64; n * n];
+    for i in 0..n {
+        for j in 0..n {
+            buf[i * n + j] = a[i][j];
+        }
+    }
+    crate::householder::eigh_contig(&mut buf, n)
+}
+
+/// Deterministic top-k eigenpairs of a SYMMETRIC `Csr` — the sparse tier.
+/// Fixed-iteration power method + implicit Hotelling deflation over
+/// [`Csr::spmv`] (the deflation `A := A − λ v vᵀ` is applied as a per-spmv
+/// correction, so the Csr is never densified). Deterministic: index-graded
+/// start vector, fixed `iters`, fixed summation order inherited from `spmv`,
+/// sign fixed as in `eigh_contig`. Returns `(basis, values)` descending `|λ|`.
+pub fn topk_symmetric(a: &crate::csr::Csr, k: usize, iters: usize) -> crate::spectral_cache::Decomp {
+    let n = a.nrows();
+    debug_assert!(n > 0, "topk_symmetric: empty matrix");
+    let kk = k.min(n);
+    // Hotelling-deflated spmv: out = A·x − Σ_m (λ_m v_mᵀ x) v_m.
+    // The deflated components are stored in (eigenvalue, eigenvector) pairs.
+    let mut evals: Vec<f64> = Vec::with_capacity(kk);
+    let mut evecs: Vec<Vec<f64>> = Vec::with_capacity(kk);
+    let mut x = vec![0.0f64; n];
+    let mut ax = vec![0.0f64; n];
+    let mut tmp = vec![0.0f64; n];
+    for _m in 0..kk {
+        // Deterministic start vector (no RNG): a fixed-seed LCG yields a
+        // reproducible, generically-non-orthogonal seed so the power method
+        // converges to the true dominant eigenpair — an arithmetic "index-graded"
+        // seed [1,2,3,…] is orthogonal to path-graph top eigenvectors and would
+        // stall. Fixed seed ⇒ byte-deterministic across runs/paths.
+        let mut rng = 0x9E37_79B9_7F4A_7C15u64;
+        let mut norm = 0.0;
+        for i in 0..n {
+            rng = rng
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let frac = ((rng >> 11) as f64) / ((1u64 << 52) as f64); // [0,1)
+            x[i] = frac * 2.0 - 1.0; // [-1,1]
+            norm += x[i] * x[i];
+        }
+        norm = norm.sqrt();
+        for i in 0..n {
+            x[i] /= norm;
+        }
+        // orthogonalize the START against already-found eigenvectors so the
+        // power method converges to the NEXT one (Hotelling deflation seed).
+        for v in evecs.iter() {
+            let mut proj = 0.0;
+            for i in 0..n {
+                proj += v[i] * x[i];
+            }
+            for i in 0..n {
+                x[i] -= proj * v[i];
+            }
+        }
+        // fixed-iteration power method with per-step deflation
+        for _ in 0..iters {
+            a.spmv(&x, &mut ax);
+            // deflate already-found eigenpairs: ax ← ax − Σ_m (v_mᵀ ax) v_m
+            for v in evecs.iter() {
+                let mut proj = 0.0;
+                for i in 0..n {
+                    proj += v[i] * ax[i];
+                }
+                for i in 0..n {
+                    ax[i] -= proj * v[i];
+                }
+            }
+            // normalize x ← ax / ‖ax‖
+            let mut nr = 0.0;
+            for i in 0..n {
+                nr += ax[i] * ax[i];
+            }
+            nr = nr.sqrt();
+            if nr == 0.0 {
+                break;
+            }
+            for i in 0..n {
+                x[i] = ax[i] / nr;
+            }
+        }
+        // Rayleigh quotient on the deflated space: λ = xᵀ (A x) with A x
+        // orthogonalized to found pairs. Recompute deflated ax once more.
+        a.spmv(&x, &mut tmp);
+        for v in evecs.iter() {
+            let mut proj = 0.0;
+            for i in 0..n {
+                proj += v[i] * tmp[i];
+            }
+            for i in 0..n {
+                tmp[i] -= proj * v[i];
+            }
+        }
+        let mut lambda = 0.0;
+        for i in 0..n {
+            lambda += x[i] * tmp[i];
+        }
+        // final orthogonalize + normalize of x for storage
+        for v in evecs.iter() {
+            let mut proj = 0.0;
+            for i in 0..n {
+                proj += v[i] * x[i];
+            }
+            for i in 0..n {
+                x[i] -= proj * v[i];
+            }
+        }
+        let mut nx = 0.0;
+        for i in 0..n {
+            nx += x[i] * x[i];
+        }
+        nx = nx.sqrt();
+        if nx == 0.0 {
+            // degenerate / deflated away: fill a zero vector placeholder
+            x = vec![0.0f64; n];
+        } else {
+            for i in 0..n {
+                x[i] /= nx;
+            }
+        }
+        // sign-fix: first nonzero component > 0
+        let mut first = 0.0;
+        for i in 0..n {
+            if x[i].abs() > 1e-300 {
+                first = x[i];
+                break;
+            }
+        }
+        if first < 0.0 {
+            for i in 0..n {
+                x[i] = -x[i];
+            }
+        }
+        evals.push(lambda);
+        evecs.push(x.clone());
+    }
+    // descending |λ|: sort pairs by |value|.
+    let mut order: Vec<usize> = (0..evecs.len()).collect();
+    order.sort_by(|&p, &q| evals[q].abs().partial_cmp(&evals[p].abs()).unwrap());
+    let sorted_vals: Vec<f64> = order.iter().map(|&i| evals[i]).collect();
+    let sorted_vecs: Vec<Vec<f64>> = order.iter().map(|&i| evecs[i].clone()).collect();
+    (sorted_vecs, sorted_vals)
+}
+
 /// ρ(A) — spectral radius = largest eigenvalue modulus.
 ///
 /// NaN-safe fold: a non-finite eigenvalue (numerical divergence / poisoned
@@ -798,5 +952,160 @@ mod tests {
             "parity bench: old_vecvec={:.1} ns/call  new_contig={:.1} ns/call  delta={:+.1} ns ({:+.1}%)",
             old_ns, new_ns, new_ns - old_ns, (new_ns - old_ns) / old_ns * 100.0
         );
+    }
+
+    // ── R2: spectral::eigh façade (§5.4) ──
+    #[test]
+    fn r2_eigh_facade_p3_kat() {
+        let p3 = vec![
+            vec![1.0, -1.0, 0.0],
+            vec![-1.0, 2.0, -1.0],
+            vec![0.0, -1.0, 1.0],
+        ];
+        let (basis, values) = crate::spectral::eigh(&p3);
+        let mut v = values.clone();
+        v.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        for (got, want) in v.iter().zip([0.0, 1.0, 3.0].iter()) {
+            assert!((got - want).abs() < 1e-9, "eigh P3 eigenvalue {got} != {want}");
+        }
+        // residual + orthonormality
+        let n = 3;
+        for k in 0..n {
+            let mut av = vec![0.0f64; n];
+            for i in 0..n {
+                let mut s = 0.0;
+                for j in 0..n {
+                    s += p3[i][j] * basis[k][j];
+                }
+                av[i] = s;
+            }
+            for i in 0..n {
+                assert!((av[i] - values[k] * basis[k][i]).abs() < 1e-9);
+            }
+        }
+        let mut maxoff = 0.0f64;
+        for i in 0..n {
+            for j in 0..n {
+                let mut dot = 0.0;
+                for r in 0..n {
+                    dot += basis[i][r] * basis[j][r];
+                }
+                let want = if i == j { 1.0 } else { 0.0 };
+                maxoff = maxoff.max((dot - want).abs());
+            }
+        }
+        assert!(maxoff < 1e-9, "eigh orthonormality {maxoff}");
+    }
+
+    // ── R3: sparse topk_symmetric parity vs dense eigh (§5.4) ──
+    #[test]
+    fn r3_topk_symmetric_parity_p3() {
+        let p3 = vec![
+            vec![1.0, -1.0, 0.0],
+            vec![-1.0, 2.0, -1.0],
+            vec![0.0, -1.0, 1.0],
+        ];
+        let csr = crate::csr::Csr::from_dense(&p3);
+        // full spectrum from sparse top-k = dense eigh spectrum (descending |λ|)
+        let (svecs, svals) = crate::spectral::topk_symmetric(&csr, 3, 2000);
+        let (dvecs, dvals) = crate::spectral::eigh(&p3);
+        // sparse returns descending |λ|; dense is ascending. Compare magnitude sets.
+        let mut s = svals.clone();
+        s.sort_by(|x, y| y.abs().partial_cmp(&x.abs()).unwrap());
+        let mut d = dvals.clone();
+        d.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        assert_eq!(s.len(), d.len());
+        // both sorted ascending by value for positional magnitude comparison
+        let mut s = svals.clone();
+        s.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        let mut d = dvals.clone();
+        d.sort_by(|x, y| x.partial_cmp(y).unwrap());
+        for (a, b) in s.iter().zip(d.iter()) {
+            assert!((a.abs() - b.abs()).abs() < 1e-6, "topk λ {a} != eigh λ {b}");
+        }
+        // dominant eigenvector residual (k=1): A v ≈ λ v
+        let v = &svecs[0];
+        let lam = svals[0];
+        let mut av = vec![0.0f64; 3];
+        for i in 0..3 {
+            let mut ss = 0.0;
+            for j in 0..3 {
+                ss += p3[i][j] * v[j];
+            }
+            av[i] = ss;
+        }
+        for i in 0..3 {
+            assert!((av[i] - lam * v[i]).abs() < 1e-6, "topk dominant residual");
+        }
+        let _ = dvecs;
+    }
+
+    #[test]
+    fn r3_topk_symmetric_determinism() {
+        let k3 = vec![
+            vec![0.0, 1.0, 1.0],
+            vec![1.0, 0.0, 1.0],
+            vec![1.0, 1.0, 0.0],
+        ];
+        let csr = crate::csr::Csr::from_dense(&k3);
+        let (v1, l1) = crate::spectral::topk_symmetric(&csr, 3, 2000);
+        let (v2, l2) = crate::spectral::topk_symmetric(&csr, 3, 2000);
+        assert_eq!(l1, l2, "topk values not deterministic");
+        for k in 0..3 {
+            for i in 0..3 {
+                assert_eq!(v1[k][i], v2[k][i], "topk vector not deterministic");
+            }
+        }
+    }
+
+    #[test]
+    fn r3_topk_symmetric_k3_values() {
+        // K₃ adjacency {2, -1, -1}; dominant |λ| = 2.
+        let k3 = vec![
+            vec![0.0, 1.0, 1.0],
+            vec![1.0, 0.0, 1.0],
+            vec![1.0, 1.0, 0.0],
+        ];
+        let csr = crate::csr::Csr::from_dense(&k3);
+        let (_v, vals) = crate::spectral::topk_symmetric(&csr, 3, 2000);
+        assert!((vals[0].abs() - 2.0).abs() < 1e-6, "K3 dominant |λ| = {}", vals[0]);
+    }
+
+    // ── §5.4.6: reconstruction-error Frobenius monotonicity in k ──
+    #[test]
+    fn r3_reconstruction_monotonic_in_k() {
+        // Path graph P4 Laplacian (spectrum {0, 0.586, 2, 3.414}, symmetric).
+        let p4 = vec![
+            vec![1.0, -1.0, 0.0, 0.0],
+            vec![-1.0, 2.0, -1.0, 0.0],
+            vec![0.0, -1.0, 2.0, -1.0],
+            vec![0.0, 0.0, -1.0, 1.0],
+        ];
+        let (basis, values) = crate::spectral::eigh(&p4);
+        let n = 4;
+        let mut prev = f64::INFINITY;
+        for k in 1..=n {
+            // ‖W − U_k Λ_k U_kᵀ‖_F
+            let mut err = 0.0;
+            for i in 0..n {
+                for j in 0..n {
+                    let mut recon = 0.0;
+                    for m in 0..k {
+                        recon += values[m] * basis[m][i] * basis[m][j];
+                    }
+                    let diff = p4[i][j] - recon;
+                    err += diff * diff;
+                }
+            }
+            let err = err.sqrt();
+            assert!(
+                err <= prev + 1e-9,
+                "reconstruction error not non-increasing at k={}: {} > {}",
+                k, err, prev
+            );
+            prev = err;
+        }
+        // k=n should reconstruct to ~0 (full spectrum).
+        assert!(prev < 1e-9, "full reconstruction residual {}", prev);
     }
 }
