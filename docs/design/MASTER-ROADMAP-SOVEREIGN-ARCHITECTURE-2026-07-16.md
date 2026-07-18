@@ -1100,3 +1100,199 @@ P22 is **confirmed 0% built** — no `SocialPoster` trait, no `TelegramAdapter`/
 2. Reuse is measured, not asserted: the second product's non-kernel code line count is published against the first product's.
 **Anti-scope:** **Do not start this before a single product has second-tenant proof** — the original EC plan's own sequencing wisdom warned against building marketplace infrastructure before proving reuse empirically, and that warning is honored here as a hard gate, not a suggestion. No marketplace scaffolding, no plugin registry, no partner API before DoD-1 of this phase is even startable, which itself requires DELIVERY P37/P38 live with real tenants.
 **Depends on / blocks:** Depends on literally everything above: DELIVERY P37/P38 live, P45 ops floor green (including off-site backup), P43 at least one working external port. Blocks nothing — it is the terminal node of the entire roadmap.
+
+---
+
+## 11. Gap-closing phases (2026-07-18, found by the §10 end-state-vision pass)
+
+Appended by the 2026-07-18 end-state-vision follow-up pass (same session as §10; same
+append-only rule as §7/§8/§9/§10). **This section extends the phase index from P31–P46 to
+P31–P50.** §10.2's index table still reads "P31–P46" and is deliberately left untouched here (a
+parallel pass may be editing nearby text); a later consolidation pass reconciles that table.
+Until then, §10.2's upper bound is stale by four phases and this section is the authority for
+P47–P50. Blueprint — ONE combined file for all four (deliberately; see its own header for why):
+`docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P47-P50-gap-closing-phases.md`.
+
+### 11.0 Why this section exists
+
+These four phases exist because the end-state-vision pass — walking concrete user scenarios ("a
+customer orders dinner and pays," "an owner changes a price," "a regulator asks a question,"
+"the first real order happens") through the full P01–P46 set — found real functional gaps that
+no existing phase owns, recorded in that pass's silence ledger: no phase names how money
+physically enters or leaves the system (its own words: "the largest silence in the entire
+end-state"); no phase owns the owner's operational surface (P37's anti-scope explicitly
+excludes "an admin CRUD surface," P38b's Sea & Sheet are customer-facing, and no P31–P46 DoD
+says "owner edits a menu item and sees it live"); no phase specifies how an anonymous customer
+orders, tracks, and re-identifies (capability certs are specified for couriers/operators/
+devices only), nor real customer notifications, nor a tracking UX over the geo math that
+already exists; and no phase carries the legal/compliance surface the old stack had (GDPR
+routes) or promotes the "first real order" proof (§7's own G11 flag, unresolved) from a late
+done-test to a tracked gate. These are not speculative scope creep — they are structural
+absences the roadmap's own scenario walk revealed, added under the operator's paired directive
+("знайти прогалини, сліпи зони у роадмапі і добавити, розширити" AND "нічого не добавляти що не
+критично"): exactly these four, and nothing else.
+
+#### P47 — Payment & settlement rails (DELIVERY component; extends the P37–P39 range)
+**Absorbs:** none — genuinely new; no prior unit ID anywhere names a payment rail (grep for
+payment/stripe/liqpay/cash-on-delivery across `kernel/`, `engine/`, `web/`, `llm-adapters/` and
+bebop2's `delivery-domain`/`proto-cap`: zero non-test hits, verified live 2026-07-18).
+**Status:** PLANNED
+**Role & responsibility:** `SettlementRecorded` exists as a wire event
+(`bebop2/proto-cap/src/event_dict.rs:122,279` — payload + variant, verified this pass) and
+money math is airtight range-checked `i64` (`kernel/src/money.rs`) — but nothing names how
+money physically enters or leaves. P47 owns that boundary: a payment-provider port trait in the
+kernel-ports layer (`kernel/src/ports/`, mirroring `llm.rs` conventions) behind a
+capability-scoped adapter under the same compilation-firewall pattern as KernelFacade (§10.3
+invariant 5). **Cash-on-delivery is the recommended Wave-0 rail, named explicitly:** it is the
+only rail with zero external dependency, zero vendor, and zero central authority — exactly the
+mesh's own local-first stance — with the courier's signed cash-collected attestation as the
+`SettlementRecorded` source. Card/digital rails are a later, more complex addition requiring a
+real payment-processor integration decision this roadmap does NOT make unilaterally — ⚠
+OPERATOR DECISION (see §11.2-1).
+**Blueprint:** `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P47-P50-gap-closing-phases.md` §2.
+**DoD:**
+1. A `PaymentPort` trait exists in the kernel-ports layer (plain structs, no HTTP/serde in
+   kernel, per `ports/llm.rs` conventions); rail adapters live outside the kernel; `cargo tree`
+   shows the kernel has no payment-adapter dependency (same firewall proof as §10.3 invariant
+   5), red-proof committed.
+2. Cash-on-delivery wired end-to-end: an integration test drives place → deliver → courier
+   cash-collected attestation → `SettlementRecorded` folded, over P37's wire, all amounts `i64`.
+3. Reconciliation property test: folded settlement totals equal fold-derived order totals
+   exactly (integer equality, no epsilon), across arbitrary order sequences.
+4. Card/digital rail: a dated operator decision note (vendor, geography, fee model — operator
+   judgment) exists BEFORE any card-rail adapter code lands; adapter code present without the
+   note is the fail condition.
+**Anti-scope:** Do NOT build a custom payment processor. Do NOT touch the money
+integer-arithmetic law — it is CORE's scope and already correct. Do NOT couple to any specific
+geography's payment rails (bank APIs, national schemes) without an operator ruling. No
+card/digital adapter before DoD-4's note exists.
+**Depends on / blocks:** Depends on P37 (an order surface to settle against). Blocks nothing on
+the wiring critical path — deliberately late-critical-path: needed before real revenue (P50's
+first-real-order gate names it a prerequisite), not before the wiring proof.
+
+#### P48 — Owner/Admin operational surface (DELIVERY component)
+**Absorbs:** none — new; makes concrete the workflow implied by menu-as-data + capability certs
+(silence-ledger item 2), which every existing phase implies and none owns.
+**Status:** PLANNED
+**Role & responsibility:** The venue owner's working surface: menu editing, live order
+visibility, and staff/courier roster management. Today this is owned by nobody — P37's
+anti-scope explicitly excludes "an admin CRUD surface," P38b's Sea & Sheet are customer-facing,
+and no P31–P46 DoD contains "an owner edits a menu item and sees it live." The blueprint's
+FIRST open question — named here, not decided: is the admin surface WebGPU-rendered like the
+customer surface (§10.3 invariant 4), or does it get a DOM exemption on FE-15-adjacent
+reasoning (the a11y mirror already establishes that DOM survives where WebGPU genuinely cannot
+serve; admin UIs are data-dense and form-heavy)? ⚠ OPERATOR DECISION (see §11.2-2).
+**Blueprint:** `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P47-P50-gap-closing-phases.md` §3.
+**DoD:**
+1. Rendering-approach decision recorded (operator ruling, dated) before surface build-out.
+2. An owner edits a menu item and sees the change reflected in a live order-flow test: edit → a
+   subsequently placed order's fold-derived state carries the change. (The sentence no P31–P46
+   DoD contains; this phase's reason to exist.)
+3. Live order visibility: the owner surface lists current orders as a read-only projection of
+   fold-derived state — no shadow state.
+4. Roster: an owner grants and revokes a courier capability cert through the surface,
+   exercising the existing proto-cap issuance + `RevocationSet`
+   (`bebop2/proto-cap/src/revocation.rs:49`, verified this pass); a revoked courier's next
+   mutating request is rejected in a test.
+5. Auth: the surface authenticates with the SAME capability-cert model as P37 (owner-scoped
+   cert); a negative test proves no password-based admin login path exists.
+**Anti-scope:** NO separate admin-password system — a second, weaker auth path for the most
+privileged user is an anti-pattern, explicitly rejected (capability certs are the auth model
+per §10.3 invariant 3; TOTP/WebAuthn are step-up only per P39). Do NOT build a general-purpose
+admin framework — scope is exactly the named menu/order/roster operations. No
+analytics/marketing dashboards (P20/P22/P43 territory).
+**Depends on / blocks:** Depends on P37 (auth + API surface); on P38a only if the rendering
+ruling picks WebGPU. Blocks P50's first-real-order gate (a real venue needs a managed menu).
+
+#### P49 — Customer identity, notification & tracking UX (DELIVERY component)
+**Absorbs:** the customer-side closure of P43's corrected claim (§10.5.5 confirmed "Telegram
+already has full push+OTP" FALSE — a real customer-facing send path does not exist); otherwise
+no prior unit ID.
+**Status:** PLANNED
+**Role & responsibility:** Three inseparable customer-facing concerns. (a) **Identity** — how an
+anonymous customer places, tracks, and re-identifies to an order WITHOUT a device-bound
+capability cert: certs are specified for couriers/operators/devices, and requiring a customer
+to enroll a hardware identity to order food is not plausible — extending certs to customers
+must be justified, not assumed. (The old stack solved this with `softVerifyAuth` anonymous
+order tracking — commit `c3bd16cf9`, deleted with the purge — a real precedent, not a design
+from nothing.) (b) **Notifications** — real order-status delivery to the customer's channel:
+P43 DoD-2 builds the transmitting send path; this phase is its customer-side consumer, closing
+the correction from the customer's perspective. (c) **Live tracking UX** — the existing
+Kalman/EMA geo math (`kernel/src/kalman.rs`; `kernel/src/geo.rs:39 ema_next`, verified this
+pass) rendered through P38's pipelines; no §10 phase specifies this today. The identity
+mechanism is ⚠ OPERATOR DECISION (see §11.2-3) with three named candidates, none picked here:
+(1) short-lived session token bound to a device fingerprint; (2) a lighter capability grant
+scoped to a single order (reuses proto-cap machinery, no hardware enrollment); (3) magic-link
+via email/SMS.
+**Blueprint:** `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P47-P50-gap-closing-phases.md` §4.
+**DoD:**
+1. Identity-mechanism decision recorded (one of the three candidates, or an operator-supplied
+   better one), dated, before build-out.
+2. Build-out once decided: an anonymous customer places an order and later re-identifies to
+   track it, over P37's wire, with no durable customer account created — one integration test.
+3. One real notification reaches the customer's channel on an order state change (rides P43
+   DoD-2's send path; stays RED until that path actually transmits).
+4. A live tracking view renders real geo state (Kalman/EMA output) through P38a's pipelines,
+   with a deterministic test against kernel math per P38's own convention.
+**Anti-scope:** No customer account/profile system beyond what one order needs — no loyalty, no
+CRM, no marketing identity. Do NOT conflate customer identity with courier/operator identity
+(device-bound certs stay theirs). Do NOT build a second notification transport — P43 owns the
+send path.
+**Depends on / blocks:** Depends on P37 (wire), P38a/P38b (tracking render), and P43 DoD-2 (a
+transmitting messenger path). Blocks P50's first-real-order gate (its "real customer" leg).
+
+#### P50 — Legal/compliance & first-order validation gate (ECOSYSTEM/OPS component; extends the P43–P46 range)
+**Absorbs:** G11 (§7's self-critique flagged "first real order" as the only proof the product is
+wanted, sitting as a late done-test — unresolved, operator-level) + the audit obligation implied
+by the old stack's deleted legal surface.
+**Status:** PLANNED
+**Role & responsibility:** Two distinct things deliberately bundled, because both are "did we
+forget something structurally important" GATES rather than build-heavy phases. (a) **Compliance
+audit:** the old stack had real GDPR machinery — `attic/apps-api/src/routes/owner/gdpr.ts`,
+`attic/apps-api/src/workers/anonymizer-gdpr.ts`, `attic/apps-api/src/public/admin/gdpr.html`
+(deleted `f9ab28ff1`) and `packages/shared-types/src/contracts/owner/gdpr.ts` (deleted
+`79ef316f6`) — verified in git history this pass; `attic/` itself is no longer on disk, so git
+history is the source. The new roadmap never mentions the topic. The audit proves the pivot did
+not silently drop a legal obligation — it is NOT a full compliance program. (b) **First-order
+gate:** promote "one real order through the full stack, end to end, for a real transaction"
+from a late incidental done-test to an explicit Wave-0-style gate the roadmap tracks as a
+first-class, dated milestone — separate from, and prior to, any scale-out work.
+**Blueprint:** `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P47-P50-gap-closing-phases.md` §5.
+**DoD:**
+1. A written audit compares the old-stack legal/compliance surface (recovered from pre-purge
+   git history — the four files above are the starting inventory; tax/food-safety handling is
+   greppable the same way) against new-stack status, with EVERY item marked exactly one of:
+   ported / deliberately-dropped-with-reason / genuinely-missing. No item left unclassified.
+2. Every audit item requiring real legal judgment is flagged ⚠ OPERATOR/COUNSEL — this phase
+   does NOT self-certify compliance claims (the standing anti-self-certification rule applies
+   especially hard to legal claims).
+3. A named, dated milestone — not just a test — exists for "first real order, real money, real
+   courier, real customer," with an explicit go/no-go checklist whose prerequisites are P47 (a
+   way to pay), P48 (a managed menu), and P49 (a customer who can order and track), on top of
+   the P34→P37 critical path.
+**Anti-scope:** Not a legal-implementation project — audit-and-gate only; no compliance
+framework, no policy generators, no legal-department process. No self-certified compliance
+claims, ever. Do NOT let the milestone decay back into a test-suite line item — it is an
+operator-visible go/no-go event.
+**Depends on / blocks:** The audit half depends on nothing — git history exists today; it is
+the one genuinely unblocked item in this section, startable now. The gate half depends on
+P47/P48/P49 plus the P34/P37/P38 critical path. Blocks P46 (and any scale-out): the
+first-real-order gate must be green before multi-product work means anything.
+
+### 11.1 Silence-ledger cross-reference (nothing orphaned)
+
+| # | Silence-ledger item (end-state-vision pass, its own words) | Closing phase |
+|---|---|---|
+| 1 | "no phase names how money physically enters or leaves — no payment-provider port, no cash-handling flow, no fiat leg… the largest silence in the entire end-state" | **P47** |
+| 2 | "P37's anti-scope explicitly excludes 'an admin CRUD surface'; P38b's Sea & Sheet are customer-facing; no P31–P46 DoD says 'owner edits a menu item and sees it live'" | **P48** |
+| 3 | "How an anonymous customer orders, tracks, and re-identifies… is unspecified" + customer notifications exist only as P43's to-be-designed send path + no §10 phase specifies the tracking UX over the existing Kalman/EMA geo math | **P49** |
+| 4 | "the old stack had GDPR routes; the new roadmap never mentions the topic" + G11: the first-real-order proof "sits as a late done-test, not a Wave-0 gate. Unresolved, operator-level" | **P50** |
+
+### 11.2 Operator decisions introduced by this section (3 — same convention as §3)
+
+1. **P47** — which card/digital payment rail (vendor, geography, fee model), if any, follows
+   cash-on-delivery. The Wave-0 cash rail itself needs no ruling — it has no vendor to choose.
+2. **P48** — admin-surface rendering: WebGPU per §10.3 invariant 4, or a DOM exemption on
+   FE-15-adjacent reasoning for a data-dense/form-heavy surface.
+3. **P49** — customer identity mechanism: device-fingerprint session token vs one-order
+   capability grant vs magic-link email/SMS (or an operator-supplied alternative).
