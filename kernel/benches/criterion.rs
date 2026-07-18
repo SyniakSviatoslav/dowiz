@@ -58,5 +58,59 @@ fn bench_fold_transitions(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, bench_place_order, bench_fold_transitions);
+/// Layer-E hot-path telemetry: batched N-courier Kalman SoA step vs scalar loop.
+/// Run: `cargo bench -p dowiz-kernel --bench criterion kalman`. The measured
+/// speedup (AVX2 lane over scalar reference) is the §13.2.c DoD number; it is
+/// recorded in the bench output, not asserted in `cargo test` (perf in unit CI
+/// is flaky — correctness is asserted in simd.rs's parity tests instead).
+fn bench_kalman_batch(c: &mut Criterion) {
+    use dowiz_kernel::kalman::CourierKalman;
+    use dowiz_kernel::simd::{kalman_batch_step, kalman_batch_step_scalar};
+
+    let make = |n: usize| -> (Vec<CourierKalman>, Vec<Option<(f64, f64)>>, f64) {
+        let dt = 1.0;
+        let mut couriers = Vec::with_capacity(n);
+        let mut obs = Vec::with_capacity(n);
+        for i in 0..n {
+            let c = CourierKalman::new(
+                i as f64,
+                (i * 7) as f64,
+                100.0,
+                1e-3,
+                1e-3,
+                4.0,
+            );
+            couriers.push(c);
+            obs.push(Some(((i as f64) + 0.3, (i as f64 * 7.0) - 0.2)));
+        }
+        (couriers, obs, dt)
+    };
+
+    for &n in &[4usize, 32, 256] {
+        let (couriers, obs, dt) = make(n);
+        let name = format!("kalman_batch_step/avx2_n{n}");
+        c.bench_function(&name, |b| {
+            b.iter(|| {
+                let mut cs = couriers.clone();
+                kalman_batch_step(black_box(&mut cs), dt, black_box(&obs));
+            })
+        });
+
+        let (couriers, obs, dt) = make(n);
+        let name = format!("kalman_batch_step/scalar_n{n}");
+        c.bench_function(&name, |b| {
+            b.iter(|| {
+                let mut cs = couriers.clone();
+                kalman_batch_step_scalar(black_box(&mut cs), dt, black_box(&obs));
+            })
+        });
+    }
+}
+
+criterion_group!(
+    benches,
+    bench_place_order,
+    bench_fold_transitions,
+    bench_kalman_batch
+);
 criterion_main!(benches);

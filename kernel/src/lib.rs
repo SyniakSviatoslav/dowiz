@@ -22,6 +22,9 @@ pub mod isolation;
 /// transition, update = probabilistic correction). Generalizes `geo::ema_next` (the 1-D steady-state
 /// case) to courier position+velocity tracking through GPS noise.
 pub mod kalman;
+/// P11 §6 `f64x4` SoA SIMD batch lane + the Layer-E N-courier Kalman SoA
+/// consumer (BLUEPRINT-P-E §13). Bit-identical AVX2 lane + scalar fallback.
+pub mod simd;
 pub mod loops;
 /// Reverse-engineering loop #R1 — Markov attractor detector (ASCENDed from markov_attractor.py);
 /// reuses `spectral` as its eigen-core, killing the dual-authority hazard.

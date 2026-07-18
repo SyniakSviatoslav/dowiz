@@ -69,6 +69,53 @@ impl AxisKalman {
         self.p_vp = p_vp;
         self.p_vv = p_vv;
     }
+
+    // ── Canonical-state accessors (SoA gather/scatter substrate) ──────────────
+    // These are the EXACT same `(pos, vel, p_pp, p_pv, p_vp, p_vv)` tuple that
+    // `predict`/`update` operate on; exposing them as a single struct does NOT
+    // bypass or reimplement the filter arithmetic — it only makes the
+    // Structure-of-Arrays layout (simd.rs `kalman_batch_step`) able to gather
+    // and scatter the canonical state without inventing a new mutation path.
+    // The filter's predict/update semantics are NEVER re-derived here.
+
+    /// The full canonical state vector (read).
+    #[inline]
+    pub fn state(&self) -> AxisState {
+        AxisState {
+            pos: self.pos,
+            vel: self.vel,
+            p_pp: self.p_pp,
+            p_pv: self.p_pv,
+            p_vp: self.p_vp,
+            p_vv: self.p_vv,
+        }
+    }
+
+    /// Set the full canonical state vector (write) — the only supported way to
+    /// move state in/out of an `AxisKalman` for SoA batching.
+    #[inline]
+    pub fn set_state(&mut self, s: AxisState) {
+        self.pos = s.pos;
+        self.vel = s.vel;
+        self.p_pp = s.p_pp;
+        self.p_pv = s.p_pv;
+        self.p_vp = s.p_vp;
+        self.p_vv = s.p_vv;
+    }
+}
+
+/// The canonical `(pos, vel, P)` state of one [`AxisKalman`]. A plain-DTO mirror
+/// of the struct's private fields — used to gather/scatter the struct-of-arrays
+/// SIMD lane in `simd.rs` without granting raw `x`/`P` mutation that bypasses
+/// `predict`/`update`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AxisState {
+    pub pos: f64,
+    pub vel: f64,
+    pub p_pp: f64,
+    pub p_pv: f64,
+    pub p_vp: f64,
+    pub p_vv: f64,
 }
 
 /// A 2-D courier tracker: two independent per-axis constant-velocity Kalman filters (lat, lng).
@@ -119,6 +166,29 @@ impl CourierKalman {
     }
     pub fn velocity(&self) -> (f64, f64) {
         (self.lat.vel, self.lng.vel)
+    }
+
+    // ── Read-only noise-config accessors (SoA gather substrate) ──────────────
+    // The process/measurement-noise config is fixed at construction and is part
+    // of the courier's canonical filter parameters. Exposing them read-only lets
+    // `simd.rs::kalman_batch_step` gather each courier's `(q_pos, q_vel, r)`
+    // into the struct-of-arrays lane without changing which code owns the
+    // filter (the config stays set-only in `new`, mirroring the scalar path).
+
+    /// Process-noise on position (set at construction).
+    #[inline]
+    pub fn q_pos(&self) -> f64 {
+        self.q_pos
+    }
+    /// Process-noise on velocity (set at construction).
+    #[inline]
+    pub fn q_vel(&self) -> f64 {
+        self.q_vel
+    }
+    /// Measurement (GPS) variance (set at construction).
+    #[inline]
+    pub fn r(&self) -> f64 {
+        self.r
     }
 }
 
