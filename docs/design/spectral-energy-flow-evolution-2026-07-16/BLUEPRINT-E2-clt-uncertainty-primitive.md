@@ -387,3 +387,187 @@ discipline holds itself.
 *E2 blueprint. Evidence re-read against the live tree on `feat/spectral-energy-flow-evolution`
 2026-07-16 (`causal.rs`, `evals.rs`, `rng.rs`, `csr.rs`, `living_knowledge.rs`, `retrieval/tests.rs`,
 `HERMETIC-ARCHITECTURE-PRINCIPLES.md`). Wilson bounds computed, not guessed. No code written or edited.*
+
+---
+
+## Planning-protocol completion appendix (2026-07-17, decorrelated pass)
+
+> Written by a decorrelated verification pass per `AGENTS.md`'s Detailed Planning Protocol (step 6,
+> self-critique) and the operator's Anu/Ananke doctrine. Did not write the sections above; re-checked
+> their claims against the LIVE tree. Read-only: no `.rs` file touched, no commit made.
+
+### (i) Citation-verification results
+
+**Headline finding, shared with BLUEPRINT-E1: this blueprint has already been fully implemented and
+committed.** `git log --oneline -1` on this worktree/branch shows commit `6bd181a02`
+("feat(spectral-evolution): E1 Laplacian parity + Lyapunov gate, E2 CLT primitive", 2026-07-17
+02:30:49 UTC). This document's own header ("Scope: planning artifact only. No code is written or
+edited here") is stale as a description of the arc's current state, though true of what this specific
+file did. Every claim below was re-read live, not trusted from the commit message:
+
+1. **`kernel/src/stats.rs` exists (346 lines), registered `pub mod stats;` in `kernel/src/lib.rs:75`.**
+   Matches §2's signature list exactly: `mean_se`, `normal_interval`, `wilson_interval`,
+   `within_clt_envelope`, `bootstrap_interval`, plus a private `bessel_std` helper the blueprint didn't
+   name explicitly but which is a reasonable internal factoring shared by `mean_se` and
+   `bootstrap_interval`. Contains **11** `#[test]` functions, matching the commit message's
+   "E2 +11 default" claim exactly (counted directly: `mean_se_of_constant_is_zero`,
+   `mean_se_matches_hand_derivation`, `normal_interval_is_symmetric_about_point`,
+   `wilson_lower_bound_for_full_success_matches_closed_form`,
+   `wilson_does_not_degenerate_at_boundary`, `wilson_lower_bound_moves_when_a_query_fails`,
+   `wilson_zero_n_is_maximally_uncertain`,
+   `within_clt_envelope_is_byte_identical_and_inversion_flips`, `bootstrap_interval_brackets_the_mean`,
+   `bootstrap_interval_edge_cases`, `bootstrap_interval_survives_serialize_reread_boundary`).
+2. **Wilson numbers reproduced independently, not copied.** `wilson_lower_bound_for_full_success_matches_closed_form`
+   (`stats.rs:229-243`) computes the closed form `n/(n+z²)` itself and asserts
+   `wilson_interval(12,12,1.96).0 ≈ 0.7575` and `wilson_interval(29,29,1.96).0 ≈ 0.8830` — both pinned
+   digits match §4 criterion 3 / D4 exactly. `cargo test --release` in `kernel/` (run live this
+   session): **387 passed, 0 failed** (default), **446 passed, 0 failed** (`--features wasm`) —
+   matching the commit's own summary line exactly, independently reproduced.
+3. **`causal.rs` rewrite confirmed exact.** `causal.rs:2255` now reads
+   `crate::stats::within_clt_envelope(err, n, se_factor, 6.0)`, replacing the former inline predicate;
+   the `se_factor` derivation (`:2238-2243`) stays local as designed. `grep -c '#\[test\]'
+   kernel/src/causal.rs` → **41**, matching the commit message's "41 causal tests" precisely. The full
+   suite is green (387/0 failed, item 2), consistent with D2's "no verdict may flip" — though see the
+   2Q audit below: I did not perform the literal before/after diff D2 prescribes myself, only confirmed
+   the current green state.
+4. **`evals.rs` interval companions confirmed at their exact new locations:** `brier_ci` (`:414`),
+   `ece_ci` (`:437`), `aurc_ci` (`:477`) — all call into `stats.rs` as designed. `RegressionGate::from_se`
+   (`:681-684`) computes `tol = z · mean_se(raw_window)` exactly per §2's "preferred" recommendation,
+   additive alongside the unchanged `RegressionGate::new` (`:657-663`, byte-identical to before). D7
+   (backward-compatibility) holds: `brier`/`ece`/`aurc` remain at the **exact same line numbers**
+   (`:331`, `:348`, `:382`) §1 originally cited — unchanged, confirmed.
+5. **The `tol_provenance` sidecar (Event-Driven Architecture Treatment, "a real-but-minor gap... not a
+   blocker") was NOT implemented — and this is NOT a stale claim, it's an accurately-still-open
+   recommendation.** `grep -n "tol_provenance" kernel/src/evals.rs` returns zero hits. The document
+   already framed this as a should-have, not a shipped requirement, so its absence does not contradict
+   anything asserted as done — flagged here only so a reader doesn't assume it shipped alongside
+   everything else in this section.
+6. **A genuine, concrete implementation gap, confirmed by direct read and cross-check — NOT
+   flagged anywhere in the document above.** §3 step 4 and §4 criterion 3 both explicitly name **two**
+   sites needing the Wilson interval attached: `retrieval/tests.rs:240` **and**
+   `living_knowledge.rs:314`. Only the first was done. Live evidence:
+   - `retrieval/tests.rs:253-268` — Wilson interval fully attached (`wilson_interval(successes, n,
+     1.96)`, closed-form cross-check, the 11/12-must-move-the-floor assertion, and the interval printed
+     in the headline `println!`). This matches §4 criterion 3 exactly.
+   - `living_knowledge.rs:287-322` (`kernel_bm25_recall_at_5_is_one_point_zero`) — **still a bare**
+     `assert_eq!(mean, 1.0, "mean recall@5 over the living-knowledge oracle must be 1.0")` at
+     `:314-317`, and the `println!` at `:318-321` reports only `recall@5={:.3}` with **no interval**.
+     Confirmed exhaustively: `grep -rn "wilson_interval" kernel/src/` returns exactly two call sites,
+     both in `retrieval/tests.rs` (`:254`, `:264`) — zero in `living_knowledge.rs`. Independently
+     confirmed via `git show 6bd181a02 --stat`: `living_knowledge.rs` is **absent** from the 9
+     changed files (`field_energy.rs`, `engine/lib.rs`, `causal.rs`, `evals.rs`, `incidence.rs`,
+     `kernel/lib.rs`, `noether.rs`, `retrieval/tests.rs`, `stats.rs`) — it was never touched by this
+     commit. **The exact citation the blueprint used (`living_knowledge.rs:314`) is the precise line
+     still bare today.** This means acceptance criterion 3 is only half-satisfied: one of the two named
+     recall@5 headlines in the tree still reads a self-certifying bare `1.0`, which is the specific
+     failure mode (§0, Extended Context) this whole blueprint exists to close.
+7. **The 12-query oracle count re-confirmed exactly, in both places.** `living_knowledge.rs`'s
+   `lk_oracle()` (`:269-283`) has exactly 12 entries (indices 0-11); `retrieval/tests.rs`'s companion
+   oracle asserts `successes, n=12` (`:227-253`) over the same structure. The "12, not 29" correction
+   from `RESEARCH-VERIFICATION.md` holds precisely; the 29-query figure belongs to the distinct,
+   earlier `harness-hardening-living-knowledge-2026-07-07` oracle (a different file, not re-verified in
+   this pass — out of scope).
+8. **D1 (layering) and D8 (misuse-warning) gates independently confirmed.** `stats.rs` contains no
+   `use crate::evals` / `use crate::causal` (its only `use` is `crate::rng::Rng`, test-module-scoped) —
+   D1 holds. The module doc-comment's "which bound for which sample shape" table (`stats.rs:21-39`) is
+   present verbatim as D8 requires. No type-level enforcement (e.g. distinct `CltInterval` /
+   `WilsonInterval` types) was added — `mean_se`/`normal_interval`/`wilson_interval` all still return
+   plain `(f64, f64)` tuples — confirming the blueprint's own honest self-assessment ("today the
+   interval is available everywhere and enforced almost nowhere," Safety §b/c) remains accurate, not
+   overtaken by the implementation.
+
+### (ii) DECART
+
+**No DECART owed.** `git show 6bd181a02 -- kernel/Cargo.toml` is an empty diff (shared evidence with
+BLUEPRINT-E1, same commit) — zero new crates. `stats.rs` uses only `+ − × ÷ √` (`f64::sqrt`) and
+`crate::rng::Rng`; no external statistics crate (e.g. `statrs`, `rand_distr`) was reached for. This
+confirms §2's "pure `+,−,×,÷,√` only" design constraint held all the way to commit — the blueprint did
+not sneak in a dependency, and the ALL-RUST-NATIVE / zero-new-dep hard constraint was never at risk.
+
+### (iii) Per-blueprint 2-question doubt audit
+
+**Q1 — least confident about, checked and left standing rather than rounded down:**
+
+1. **D2's regression-safety gate was not proven by ME via the prescribed before/after diff procedure.**
+   D2 says: "run the full `causal.rs` test suite immediately before the substitution and immediately
+   after, and diff the two verdict sets." I confirmed the *current* state is green (387/0 failed) and
+   that the substituted expression is textually byte-identical to the description, but I did not
+   check out the pre-commit tree and independently re-run the *before* suite myself to produce the
+   literal diff D2 demands — I am trusting that the commit author did this, based on the commit
+   message's claim of "identical verdict set before and after."
+2. **The `living_knowledge.rs:314` gap (item 6) — is it an oversight or a deliberate deferral?** I found
+   no comment, TODO, or E53-form waiver anywhere in `living_knowledge.rs` or this blueprint explaining
+   why that specific site was left bare while its sibling in `retrieval/tests.rs` was updated. I did not
+   find evidence either way (no commit discussion, no follow-up doc) — I'm reporting the gap as
+   observed fact, not asserting intent.
+3. **I did not re-verify the historical 29-query oracle's file location** — `RESEARCH-VERIFICATION.md`
+   and this blueprint both point to "the earlier `harness-hardening-living-knowledge-2026-07-07`
+   oracle" as a separate file; I did not locate and re-read that file to confirm its Wilson bound is
+   still ≈0.88 today (it may itself have changed independently of this arc).
+4. **I did not check whether any consumer OTHER than `retrieval/tests.rs` and `living_knowledge.rs`
+   asserts a bare `recall@5`-shaped equality that this blueprint's scope should also have reached** — my
+   grep was targeted at `wilson_interval`/`recall`/`assert_eq!(mean` patterns in the two named files,
+   not a repo-wide sweep for every bare point-estimate assertion the "no falsifiable statistic" framing
+   (§0) implies exists.
+5. **The `aurc_ci` bootstrap determinism claim (D5)** — I read the function signature and confirmed it
+   threads `&mut crate::rng::Rng`, but did not personally re-run the serialize→re-read second-process
+   determinism test for `aurc_ci` specifically (only `stats.rs`'s own `bootstrap_interval` test, which
+   is the primitive `aurc_ci` calls — I am trusting the composition rather than re-testing the composed
+   function).
+6. **RegressionGate::from_se's false-positive/false-negative claim (§4 criterion 5)** — I confirmed the
+   function exists and computes the designed formula, and that `evals.rs` tests reference `from_se`
+   (`:1069`, `:1086`), but did not independently construct the synthetic noise-vs-shift streams myself
+   to re-verify the "old gate fires on noise, new gate doesn't; both fire on a real shift" claim beyond
+   trusting the existing green test suite.
+7. **Whether `MEMORY.md`'s "NEXT: bigger oracle" line has been updated** to reflect that this work now
+   quantifies the exact trade (0.76 at n=12 vs 0.88 at n=29) is unchecked — outside this pass's file
+   scope, named rather than assumed.
+
+**Q2 — the biggest thing this pass might be missing:** the same process question as BLUEPRINT-E1's
+appendix — this document still reads as prospective ("Scope: planning artifact only") when the design
+is shipped code on an unmerged branch — but E2 carries an *additional*, sharper version of the same risk
+because of finding 6. A future reader who trusts this blueprint's own acceptance criterion 3 at face
+value ("recall tests emit... recall@5 = 1.0, 95% Wilson lower bound = L") would reasonably believe BOTH
+recall@5 sites in the tree now report an honest interval. One of them does not. If nobody re-reads
+`living_knowledge.rs:314` against this specific citation, the exact self-certification failure this
+blueprint's Extended Context (§0) diagnoses — "a number nobody can falsify... `1.0` with no interval" —
+persists in the one place someone would most expect it to be fixed, precisely because the acceptance
+criteria imply it already is.
+
+### (iv) Anu (logic) & Ananke (organization) check
+
+**Anu.** Most of this blueprint's decisions are derivable and now doubly confirmed: the layering
+argument (D1) is checkable by grep, not merely asserted; the Wilson-over-Wald choice is derivable from
+the degenerate-`[1,1]`-at-p̂=1 argument and independently reproduced by the implementer's own oracle test;
+the zero-dependency claim is `git diff`-verifiable. One place Anu is **not** fully satisfied by the
+current state of the tree, found by this pass: acceptance criterion 3 ("recall tests emit... 1.0, 95%
+Wilson lower bound") is stated as a general property of "the recall tests" but is derivable as true for
+only one of the two sites the blueprint itself names in §3 step 4. The claim as written in §4 is broader
+than what the live tree supports — not a logic error in the blueprint's reasoning, but a **completion**
+gap between the acceptance criterion's scope and the shipped implementation's scope, now named rather
+than left for a future reader to discover by accident.
+
+**Ananke.** Does the good outcome (every recall@5 headline carries an honest interval) fire structurally,
+or does it depend on someone remembering the second site? **This pass's answer: it depends on
+remembering, and the structure does not yet force it.** Nothing in the codebase — no lint, no shared
+helper, no single "the" recall@5 assertion — prevents `living_knowledge.rs` and `retrieval/tests.rs`
+from silently drifting apart the way they already have: one carries the honest interval, the other does
+not, and both compile and pass green either way. The blueprint's own Ananke analysis (Long-Term
+Consequences §c) already predicted exactly this failure mode in the abstract ("the primitive gets built
+and its output ignored... a dashboard can keep calling `brier(...)` and print the scalar forever") — this
+appendix's finding 6 is that prediction **materializing concretely**, in this same commit, in the
+sibling file the blueprint itself named as the second site. The cheapest structural fix, named
+concretely rather than left as a vibe: a single shared helper (e.g. `fn report_recall_headline(mean: f64,
+successes: u64, n: u64) -> String` in `stats.rs` or `evals.rs`) that both `living_knowledge.rs` and
+`retrieval/tests.rs` call, so there is exactly one place that formats a recall headline and it always
+carries the interval — making "forgot to attach the interval" a compile-time impossibility rather than a
+per-call-site discipline. This appendix does not make that edit (doc-only, additive per the task's
+append format); it is named as the concrete next step rather than left as an implied "someone should fix
+this."
+
+---
+
+*Appendix verified live on `feat/spectral-energy-flow-evolution` 2026-07-17 (`stats.rs`, `causal.rs`,
+`evals.rs`, `retrieval/tests.rs`, `living_knowledge.rs`, `kernel/src/lib.rs`, `kernel/Cargo.toml`, live
+`cargo test` runs, `git log`/`git show --stat` on commit `6bd181a02`, a repo-wide
+`grep -rn "wilson_interval" kernel/src/`). No `.rs` file edited; no commit made.*
