@@ -376,7 +376,11 @@ impl Csr {
     /// DETERMINISM: identical output to `from_edges` (same sort/merge order, same
     /// duplicate-sum semantics). The arena moves where the scratch lives, never the
     /// operation order — the byte-identical-output falsifier must hold.
-    pub fn from_edges_in(n: usize, edges: &[(usize, usize, f64)], arena: &crate::arena::BumpArena) -> Self {
+    pub fn from_edges_in(
+        n: usize,
+        edges: &[(usize, usize, f64)],
+        arena: &crate::arena::BumpArena,
+    ) -> Self {
         // Per-row degree (one small arena slice) to size the flat bucket scratch.
         let deg: &mut [usize] = match arena.alloc_slice(n) {
             Some(d) => d,
@@ -421,26 +425,38 @@ impl Csr {
         for i in 0..n {
             let start = off[i];
             let end = off[i + 1];
-            // Sort this row's bucket by column (deterministic order).
+            // Sort each row's bucket ascending by column — the partition step
+            // above fills buckets in INPUT-EDGE ORDER, NOT sorted, so without
+            // this the arena path diverges from the heap `from_edges`
+            // (which `sort_by_key`s). Same operation order ⇒ byte-identical.
             scratch[start..end].sort_by_key(|&(c, _)| c);
-            // Merge adjacent duplicate columns by summing weights.
-            let mut merged: Vec<(usize, f64)> = Vec::new();
-            for &(c, w) in &scratch[start..end] {
-                if let Some(last) = merged.last_mut() {
-                    if last.0 == c {
-                        last.1 += w;
-                        continue;
+            // In-place duplicate-column merge by SUMMING weights (deterministic).
+            // the arena serves the bucket scratch from ONE region, so the ONLY
+            // heap Vecs on the arena path are the three owned outputs. Degrades
+            // to the heap `from_edges` on exhaustion (byte-identical).
+            let mut w = start;
+            for r in start..end {
+                let (c, v) = scratch[r];
+                if w > start && scratch[w - 1].0 == c {
+                    scratch[w - 1].1 += v; // sum duplicate column weights
+                } else {
+                    if w != r {
+                        scratch[w] = (c, v);
                     }
+                    w += 1;
                 }
-                merged.push((c, w));
             }
-            for (c, w) in merged {
-                col_idx.push(c);
-                val.push(w);
+            for s in start..w {
+                col_idx.push(scratch[s].0);
+                val.push(scratch[s].1);
             }
             row_ptr.push(col_idx.len());
         }
-        Self { row_ptr, col_idx, val }
+        Self {
+            row_ptr,
+            col_idx,
+            val,
+        }
     }
 
     /// Arena-aware `personalized_pagerank` (W5). Serves the `e` / `pi` / `next`
@@ -1222,12 +1238,7 @@ mod tests {
 
     #[test]
     fn row_normalize_in_matches_heap_and_degrades() {
-        let edges = [
-            (0usize, 1, 2.0),
-            (0, 2, 1.0),
-            (1, 0, 1.0),
-            (2, 0, 1.0),
-        ];
+        let edges = [(0usize, 1, 2.0), (0, 2, 1.0), (1, 0, 1.0), (2, 0, 1.0)];
         let g = Csr::from_edges(3, &edges);
         let heap = g.row_normalize();
         let big = crate::arena::BumpArena::with_capacity(1 << 20);
@@ -1295,8 +1306,14 @@ mod tests {
         let heap = Csr::from_edges(n, &edges);
         let arena = crate::arena::BumpArena::with_capacity(1 << 24);
         let arena_csr = Csr::from_edges_in(n, &edges, &arena);
-        assert_eq!(arena_csr, heap, "W5: arena from_edges_in identical at n=1024");
+        assert_eq!(
+            arena_csr, heap,
+            "W5: arena from_edges_in identical at n=1024"
+        );
         // high_water reports the real scratch bytes used (telemetry for sizing).
-        assert!(arena.high_water() > 0, "high_water must record scratch usage");
+        assert!(
+            arena.high_water() > 0,
+            "high_water must record scratch usage"
+        );
     }
 }

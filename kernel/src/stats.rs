@@ -199,7 +199,10 @@ mod tests {
         assert_eq!(mean_se(&[2.0; 3]), 0.0);
         assert_eq!(mean_se(&[0.0; 16]), 0.0);
         // Non-dyadic constant: mathematically 0, float-zero to machine epsilon.
-        assert!(mean_se(&[0.7; 8]) < 1e-15, "non-dyadic constant SE is float-zero");
+        assert!(
+            mean_se(&[0.7; 8]) < 1e-15,
+            "non-dyadic constant SE is float-zero"
+        );
         // n < 2 is undefined → 0.0 by convention.
         assert_eq!(mean_se(&[42.0]), 0.0);
         assert_eq!(mean_se(&[]), 0.0);
@@ -233,24 +236,36 @@ mod tests {
         let (lo12, hi12) = wilson_interval(12, 12, z);
         let closed12 = 12.0 / (12.0 + z2);
         assert!(approx(lo12, closed12, 1e-12), "12/12 lower={lo12}");
-        assert!(approx(lo12, 0.7575, 1e-4), "12/12 lower ≈ 0.7575, got {lo12}");
+        assert!(
+            approx(lo12, 0.7575, 1e-4),
+            "12/12 lower ≈ 0.7575, got {lo12}"
+        );
         assert!(approx(hi12, 1.0, 1e-12), "12/12 upper clamps to 1.0");
 
         let (lo29, _) = wilson_interval(29, 29, z);
         let closed29 = 29.0 / (29.0 + z2);
         assert!(approx(lo29, closed29, 1e-12), "29/29 lower={lo29}");
-        assert!(approx(lo29, 0.8830, 1e-4), "29/29 lower ≈ 0.8830, got {lo29}");
+        assert!(
+            approx(lo29, 0.8830, 1e-4),
+            "29/29 lower ≈ 0.8830, got {lo29}"
+        );
     }
 
     /// §4 criterion 4: Wilson does NOT degenerate to the Wald `[1,1]` at p̂=1.0.
     #[test]
     fn wilson_does_not_degenerate_at_boundary() {
         let (lo, hi) = wilson_interval(12, 12, 1.96);
-        assert!(lo > 0.0 && lo < 1.0, "Wilson lower strictly inside (0,1): {lo}");
+        assert!(
+            lo > 0.0 && lo < 1.0,
+            "Wilson lower strictly inside (0,1): {lo}"
+        );
         assert!(hi <= 1.0);
         // The Wald interval at p̂=1.0 is the degenerate [1,1]; Wilson must differ.
         let wald_lo = 1.0; // p̂ ± z·√(p̂(1-p̂)/n) with p̂=1 ⇒ ±0 ⇒ [1,1]
-        assert!(lo < wald_lo, "Wilson {lo} must beat the degenerate Wald {wald_lo}");
+        assert!(
+            lo < wald_lo,
+            "Wilson {lo} must beat the degenerate Wald {wald_lo}"
+        );
     }
 
     /// D4: a failing query (11/12) must MOVE the lower bound, not leave it at an
@@ -259,7 +274,10 @@ mod tests {
     fn wilson_lower_bound_moves_when_a_query_fails() {
         let full = wilson_interval(12, 12, 1.96).0;
         let one_miss = wilson_interval(11, 12, 1.96).0;
-        assert!(one_miss < full, "11/12 lower {one_miss} must drop below 12/12 {full}");
+        assert!(
+            one_miss < full,
+            "11/12 lower {one_miss} must drop below 12/12 {full}"
+        );
     }
 
     #[test]
@@ -279,7 +297,11 @@ mod tests {
         for &n in &[200usize, 2_000, 20_000, 200_000] {
             for &err in &[0.0, 1e-4, 1e-2, 5.0] {
                 let inline = err * (n as f64).sqrt() < se * z;
-                assert_eq!(within_clt_envelope(err, n, se, z), inline, "n={n} err={err}");
+                assert_eq!(
+                    within_clt_envelope(err, n, se, z),
+                    inline,
+                    "n={n} err={err}"
+                );
                 // A deliberately inverted primitive must disagree wherever the
                 // strict inequality is decisive (i.e. the two sides are unequal).
                 if err * (n as f64).sqrt() != se * z {
@@ -305,15 +327,30 @@ mod tests {
         let mean = |s: &[f64]| s.iter().sum::<f64>() / s.len() as f64;
         let point = mean(&samples);
         let (lo, hi) = bootstrap_interval(&samples, mean, 800, 1.96, &mut rng);
-        assert!(lo < point && point < hi, "[{lo},{hi}] must bracket mean {point}");
-        assert!(hi - lo > 0.0, "bootstrap width must be positive on a spread sample");
+        assert!(
+            lo < point && point < hi,
+            "[{lo},{hi}] must bracket mean {point}"
+        );
+        assert!(
+            hi - lo > 0.0,
+            "bootstrap width must be positive on a spread sample"
+        );
     }
 
     #[test]
     fn bootstrap_interval_edge_cases() {
         let mut rng = Rng::new(1, 1);
-        let mean = |s: &[f64]| if s.is_empty() { 0.0 } else { s.iter().sum::<f64>() / s.len() as f64 };
-        assert_eq!(bootstrap_interval(&[], mean, 100, 1.96, &mut rng), (0.0, 0.0));
+        let mean = |s: &[f64]| {
+            if s.is_empty() {
+                0.0
+            } else {
+                s.iter().sum::<f64>() / s.len() as f64
+            }
+        };
+        assert_eq!(
+            bootstrap_interval(&[], mean, 100, 1.96, &mut rng),
+            (0.0, 0.0)
+        );
         // Zero resamples ⇒ point ± 0.
         let (lo, hi) = bootstrap_interval(&[2.0, 4.0], mean, 0, 1.96, &mut rng);
         assert_eq!((lo, hi), (3.0, 3.0));
@@ -332,15 +369,23 @@ mod tests {
         let (lo, hi) = bootstrap_interval(&samples, stat, 500, 1.96, &mut r);
         let serialized = format!("{lo}|{hi}");
 
-        let path = std::env::temp_dir().join(format!("stats_boot_reread_{}.txt", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("stats_boot_reread_{}.txt", std::process::id()));
         std::fs::write(&path, &serialized).expect("write serialized bootstrap interval");
         let reread = std::fs::read_to_string(&path).expect("re-read serialized interval");
         std::fs::remove_file(&path).ok();
-        assert_eq!(reread, serialized, "byte content did not survive a disk round-trip");
+        assert_eq!(
+            reread, serialized,
+            "byte content did not survive a disk round-trip"
+        );
 
         // Independently fresh instance, same seed ⇒ identical interval.
         let mut fresh = Rng::new(seed, 3);
         let (lo2, hi2) = bootstrap_interval(&samples, stat, 500, 1.96, &mut fresh);
-        assert_eq!(format!("{lo2}|{hi2}"), reread, "fresh recompute must match re-read bytes");
+        assert_eq!(
+            format!("{lo2}|{hi2}"),
+            reread,
+            "fresh recompute must match re-read bytes"
+        );
     }
 }

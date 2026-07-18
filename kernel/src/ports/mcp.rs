@@ -459,8 +459,7 @@ mod tests {
             9999,
         );
         let roster = AnchorRoster::new(); // empty ⇒ no anchor can vouch
-        let res =
-            McpPort::from_verified_capability(&v, &roster, &[], &cap, 0, reg, Surface::Owner);
+        let res = McpPort::from_verified_capability(&v, &roster, &[], &cap, 0, reg, Surface::Owner);
         assert!(matches!(res, Err(McpServeError::Unauthorized)));
     }
 

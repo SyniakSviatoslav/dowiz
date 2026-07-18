@@ -160,7 +160,13 @@ mod tests {
             vec![x[0] + flow, x[1] - flow]
         };
         let mass = |x: &[f64]| x[0] + x[1];
-        assert!(lyapunov_nonincreasing(&[1.0, 3.0], exchange, mass, 100, 1e-9));
+        assert!(lyapunov_nonincreasing(
+            &[1.0, 3.0],
+            exchange,
+            mass,
+            100,
+            1e-9
+        ));
 
         // (c) strict contraction x ↦ 0.9·x drives energy DOWN every step ⇒ true
         //     for the one-sided check, but two-sided `step_preserves` REJECTS it.

@@ -26,7 +26,8 @@
 //! (the no-float rule is money-only). Pure, no I/O, deterministic (Durand-Kerner
 //! seeds off a fixed complex spread, never RNG). Verified-by-Math tests below.
 
-use crate::mat::{matmul_contig, Mat};
+use crate::arena::BumpArena;
+use crate::mat::{matmul_contig, matmul_contig_in, Mat};
 use core::f64::consts::PI;
 
 /// Thin `&[Vec<f64>]` wrapper over [`matmul_contig`] — kept so the wasm surface
@@ -136,6 +137,35 @@ pub fn charpoly(a: &[Vec<f64>]) -> Vec<f64> {
     (0..=n).map(|i| c[n - i]).collect() // highest-degree first
 }
 
+/// Arena-aware twin of [`charpoly`] (W5 — the dense `charpoly` scratch path).
+/// The transient `m`/`mk`/`am` matrices (each n² `f64`, n−1 `matmul` calls ⇒
+/// ≈ n²+O(n) allocations per call for n > 32, per §3.3) are served from
+/// `arena` via [`matmul_contig_in`]; on exhaustion it degrades to the heap
+/// [`charpoly`] (same bytes, never a panic). Byte-identical output guaranteed.
+pub fn charpoly_in(a: &[Vec<f64>], arena: &BumpArena) -> Option<Vec<f64>> {
+    let n = a.len();
+    if n == 0 {
+        return Some(vec![1.0]);
+    }
+    let am_mat = Mat::from_vecvec(a);
+    let mut c = vec![0.0; n + 1];
+    c[n] = 1.0;
+    // M_1 = I
+    let mut m = Mat::identity(n);
+    c[n - 1] = -trace(&matmul_contig_in(&am_mat, &m, arena)?.into_vecvec(), n);
+    for k in 2..=n {
+        let am = matmul_contig_in(&am_mat, &m, arena)?; // A · M_{k-1}
+        let add = c[n - k + 1];
+        let mut mk = am;
+        for i in 0..n {
+            mk.set(i, i, mk.get(i, i) + add); // M_k = A·M_{k-1} + c_{n-k+1}·I
+        }
+        m = mk;
+        c[n - k] = -trace(&matmul_contig_in(&am_mat, &m, arena)?.into_vecvec(), n) / (k as f64);
+    }
+    Some((0..=n).map(|i| c[n - i]).collect())
+}
+
 /// All (complex) roots of a monic polynomial (coeffs highest-degree first) via
 /// Durand-Kerner simultaneous iteration. Deterministic seed — no RNG.
 pub fn roots(coeffs: &[f64]) -> Vec<Complex> {
@@ -236,7 +266,11 @@ pub fn eigh(a: &[Vec<f64>]) -> crate::spectral_cache::Decomp {
 /// correction, so the Csr is never densified). Deterministic: index-graded
 /// start vector, fixed `iters`, fixed summation order inherited from `spmv`,
 /// sign fixed as in `eigh_contig`. Returns `(basis, values)` descending `|λ|`.
-pub fn topk_symmetric(a: &crate::csr::Csr, k: usize, iters: usize) -> crate::spectral_cache::Decomp {
+pub fn topk_symmetric(
+    a: &crate::csr::Csr,
+    k: usize,
+    iters: usize,
+) -> crate::spectral_cache::Decomp {
     let n = a.nrows();
     debug_assert!(n > 0, "topk_symmetric: empty matrix");
     let kk = k.min(n);
@@ -365,6 +399,135 @@ pub fn topk_symmetric(a: &crate::csr::Csr, k: usize, iters: usize) -> crate::spe
     let sorted_vals: Vec<f64> = order.iter().map(|&i| evals[i]).collect();
     let sorted_vecs: Vec<Vec<f64>> = order.iter().map(|&i| evecs[i].clone()).collect();
     (sorted_vecs, sorted_vals)
+}
+
+/// Arena-aware twin of [`topk_symmetric`] (W5 — the rung-1 solver from the
+/// arena blueprint's addendum is born arena-aware, as DoD §8.2 item 2
+/// mandates). The per-iteration working vectors `x` / `ax` / `tmp` and the
+/// already-found `evecs` storage are served from `arena`; on exhaustion
+/// (`alloc_slice` returns `None`) it degrades to the heap [`topk_symmetric`]
+/// (same bytes, never a panic). Byte-identical output guaranteed — the arena
+/// moves where the scratch lives, never the operation order.
+pub fn topk_symmetric_in(
+    a: &crate::csr::Csr,
+    k: usize,
+    iters: usize,
+    arena: &BumpArena,
+) -> Option<crate::spectral_cache::Decomp> {
+    let n = a.nrows();
+    debug_assert!(n > 0, "topk_symmetric_in: empty matrix");
+    let kk = k.min(n);
+    let mut evals: Vec<f64> = Vec::with_capacity(kk);
+    let mut evecs: Vec<Vec<f64>> = Vec::with_capacity(kk);
+    let x: &mut [f64] = arena.alloc_slice(n)?;
+    let ax: &mut [f64] = arena.alloc_slice(n)?;
+    let tmp: &mut [f64] = arena.alloc_slice(n)?;
+    for _m in 0..kk {
+        let mut rng = 0x9E37_79B9_7F4A_7C15u64;
+        let mut norm = 0.0;
+        for i in 0..n {
+            rng = rng
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let frac = ((rng >> 11) as f64) / ((1u64 << 52) as f64);
+            x[i] = frac * 2.0 - 1.0;
+            norm += x[i] * x[i];
+        }
+        norm = norm.sqrt();
+        for i in 0..n {
+            x[i] /= norm;
+        }
+        for v in evecs.iter() {
+            let mut proj = 0.0;
+            for i in 0..n {
+                proj += v[i] * x[i];
+            }
+            for i in 0..n {
+                x[i] -= proj * v[i];
+            }
+        }
+        for _ in 0..iters {
+            a.spmv(x, ax);
+            for v in evecs.iter() {
+                let mut proj = 0.0;
+                for i in 0..n {
+                    proj += v[i] * ax[i];
+                }
+                for i in 0..n {
+                    ax[i] -= proj * v[i];
+                }
+            }
+            let mut nr = 0.0;
+            for i in 0..n {
+                nr += ax[i] * ax[i];
+            }
+            nr = nr.sqrt();
+            if nr == 0.0 {
+                break;
+            }
+            for i in 0..n {
+                x[i] = ax[i] / nr;
+            }
+        }
+        a.spmv(x, tmp);
+        for v in evecs.iter() {
+            let mut proj = 0.0;
+            for i in 0..n {
+                proj += v[i] * tmp[i];
+            }
+            for i in 0..n {
+                tmp[i] -= proj * v[i];
+            }
+        }
+        let mut lambda = 0.0;
+        for i in 0..n {
+            lambda += x[i] * tmp[i];
+        }
+        for v in evecs.iter() {
+            let mut proj = 0.0;
+            for i in 0..n {
+                proj += v[i] * x[i];
+            }
+            for i in 0..n {
+                x[i] -= proj * v[i];
+            }
+        }
+        let mut nx = 0.0;
+        for i in 0..n {
+            nx += x[i] * x[i];
+        }
+        nx = nx.sqrt();
+        if nx == 0.0 {
+            x.fill(0.0);
+        } else {
+            for i in 0..n {
+                x[i] /= nx;
+            }
+        }
+        let mut first = 0.0;
+        for i in 0..n {
+            if x[i].abs() > 1e-300 {
+                first = x[i];
+                break;
+            }
+        }
+        if first < 0.0 {
+            for i in 0..n {
+                x[i] = -x[i];
+            }
+        }
+        evals.push(lambda);
+        // Copy the converged eigenvector out of the arena loan into an owned Vec
+        // (arena memory cannot outlive the loan); this is the only owned heap
+        // allocation introduced by the arena variant, and it is unavoidable
+        // (the Decomp must be returned).
+        evecs.push(x.to_vec());
+    }
+    let mut order: Vec<usize> = (0..evecs.len()).collect();
+    order.sort_by(|&p, &q| evals[q].abs().partial_cmp(&evals[p].abs()).unwrap());
+    let sorted_vals: Vec<f64> = order.iter().map(|&i| evals[i]).collect();
+    let sorted_vecs: Vec<Vec<f64>> = order.iter().map(|&i| evecs[i].clone()).collect();
+    Some((sorted_vecs, sorted_vals))
 }
 
 /// ρ(A) — spectral radius = largest eigenvalue modulus.
@@ -966,7 +1129,10 @@ mod tests {
         let mut v = values.clone();
         v.sort_by(|x, y| x.partial_cmp(y).unwrap());
         for (got, want) in v.iter().zip([0.0, 1.0, 3.0].iter()) {
-            assert!((got - want).abs() < 1e-9, "eigh P3 eigenvalue {got} != {want}");
+            assert!(
+                (got - want).abs() < 1e-9,
+                "eigh P3 eigenvalue {got} != {want}"
+            );
         }
         // residual + orthonormality
         let n = 3;
@@ -1068,7 +1234,11 @@ mod tests {
         ];
         let csr = crate::csr::Csr::from_dense(&k3);
         let (_v, vals) = crate::spectral::topk_symmetric(&csr, 3, 2000);
-        assert!((vals[0].abs() - 2.0).abs() < 1e-6, "K3 dominant |λ| = {}", vals[0]);
+        assert!(
+            (vals[0].abs() - 2.0).abs() < 1e-6,
+            "K3 dominant |λ| = {}",
+            vals[0]
+        );
     }
 
     // ── §5.4.6: reconstruction-error Frobenius monotonicity in k ──
@@ -1101,11 +1271,78 @@ mod tests {
             assert!(
                 err <= prev + 1e-9,
                 "reconstruction error not non-increasing at k={}: {} > {}",
-                k, err, prev
+                k,
+                err,
+                prev
             );
             prev = err;
         }
         // k=n should reconstruct to ~0 (full spectrum).
         assert!(prev < 1e-9, "full reconstruction residual {}", prev);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // W5 (BumpArena integration): the arena-aware twins must produce
+    // BYTE-IDENTICAL output to their heap twins, and degrade cleanly to the heap
+    // path on a too-small arena. The arena moves where scratch lives, never the
+    // operation order (DoD §8.2 item 3).
+    // ─────────────────────────────────────────────────────────────────────────
+    #[test]
+    fn topk_symmetric_in_matches_heap_and_degrades() {
+        let k3 = vec![
+            vec![0.0, 1.0, 1.0],
+            vec![1.0, 0.0, 1.0],
+            vec![1.0, 1.0, 0.0],
+        ];
+        let csr = crate::csr::Csr::from_dense(&k3);
+        let (hv, hl) = crate::spectral::topk_symmetric(&csr, 3, 2000);
+        let big = crate::arena::BumpArena::with_capacity(1 << 20);
+        let (av, al) =
+            crate::spectral::topk_symmetric_in(&csr, 3, 2000, &big).expect("arena large enough");
+        assert_eq!(al, hl, "topk_symmetric_in values must match heap");
+        for (a, h) in av.iter().zip(hv.iter()) {
+            assert_eq!(a, h, "topk_symmetric_in vectors must match heap");
+        }
+        // Too-small arena ⇒ None (caller falls back to heap).
+        let tiny = crate::arena::BumpArena::with_capacity(4);
+        assert!(crate::spectral::topk_symmetric_in(&csr, 3, 2000, &tiny).is_none());
+    }
+
+    #[test]
+    fn charpoly_in_matches_heap_and_degrades() {
+        // A 5×5 matrix (n>32 path is NOT triggered, but charpoly_in exercises
+        // the matmul_contig_in scratch for any n).
+        let a: Vec<Vec<f64>> = (0..5)
+            .map(|i| (0..5).map(|j| ((i + 2 * j) % 5) as f64 - 2.0).collect())
+            .collect();
+        let heap = crate::spectral::charpoly(&a);
+        let big = crate::arena::BumpArena::with_capacity(1 << 20);
+        let arena = crate::spectral::charpoly_in(&a, &big).expect("arena large enough");
+        assert_eq!(arena, heap, "charpoly_in must equal charpoly");
+        // Too-small arena ⇒ None (caller falls back to heap).
+        let tiny = crate::arena::BumpArena::with_capacity(4);
+        assert!(crate::spectral::charpoly_in(&a, &tiny).is_none());
+    }
+
+    #[test]
+    fn matmul_contig_in_matches_heap_and_degrades() {
+        let a_data = vec![
+            vec![1.0, 2.0, 0.0],
+            vec![0.0, 1.0, 1.0],
+            vec![2.0, 0.0, 3.0],
+        ];
+        let b_data = vec![
+            vec![0.0, 1.0, 1.0],
+            vec![1.0, 0.0, 2.0],
+            vec![1.0, 1.0, 1.0],
+        ];
+        let am = crate::mat::Mat::from_vecvec(&a_data);
+        let bm = crate::mat::Mat::from_vecvec(&b_data);
+        let heap = crate::mat::matmul_contig(&am, &bm);
+        let big = crate::arena::BumpArena::with_capacity(1 << 20);
+        let arena = crate::mat::matmul_contig_in(&am, &bm, &big).expect("arena large enough");
+        assert_eq!(arena, heap, "matmul_contig_in must equal matmul_contig");
+        let tiny = crate::arena::BumpArena::with_capacity(4);
+        assert!(crate::mat::matmul_contig_in(&am, &bm, &tiny).is_none());
     }
 }
