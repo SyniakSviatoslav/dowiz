@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# tools/ops-alert/deadman-check — P45-W2 §4a.2 item 2 (watch-the-watcher).
+#
+# The GitHub-Actions heartbeat-monitor.yml is the PRIMARY dead-man's-switch.
+# This on-box cron is the SECOND lane: it asks the GitHub API for that
+# workflow's most recent run; if the newest run is older than
+# 3 x DEADMAN_PERIOD_MIN (not merely *failed* — *absent*, which catches the
+# 60-day schedule-disable silent failure), it pages S0 via the box's OWN
+# tg_send path (tools/telemetry/lib.sh) — DIFFERENT infrastructure and a
+# DIFFERENT send path from the GitHub runner + repo secret, so one
+# compromised/successful-silent lane cannot mute both.
+#
+# Honest residual (BLUEPRINT §4a.2): both lanes share ONE bot token. Until
+# W3's separate infra bot, a revoked/blocked bot mutes the whole pager — a
+# NAMED accepted residual, not hidden.
+#
+# Testability: GH_API / CURL_CMD / ALERT_SEND are overridable so the logic can
+# be exercised without network or a live Telegram bot.
+
+set -uo pipefail
+
+# --- config (env-overridable) ---------------------------------------------
+REPO="${GH_REPO:-SyniakSviatoslav/dowiz}"
+WF="${GH_WORKFLOW:-heartbeat-monitor.yml}"
+GH_API="${GH_API:-https://api.github.com}"
+DEADMAN_PERIOD_MIN="${DEADMAN_PERIOD_MIN:-10}"      # must match the cron period
+STALE_FACTOR="${DEADMAN_STALE_FACTOR:-3}"          # 3x => 30 min
+THRESHOLD_MIN=$(( DEADMAN_PERIOD_MIN * STALE_FACTOR ))
+CURL_CMD="${CURL_CMD:-curl -sS --max-time 15}"
+ALERT_SEND="${ALERT_SEND:-}"                        # if empty, source tg_send
+
+# --- alert path ------------------------------------------------------------
+if [[ -z "$ALERT_SEND" ]]; then
+  LIB="$(dirname "$0")/../telemetry/lib.sh"
+  if [[ -f "$LIB" ]]; then
+    # shellcheck disable=SC1090
+    source "$LIB"
+  fi
+fi
+send_alert() {  # $1 = message
+  if [[ -n "$ALERT_SEND" ]]; then
+    $ALERT_SEND "$1"; return $?
+  fi
+  if command -v tg_send >/dev/null 2>&1; then
+    tg_send "🔴 S0 $1"; return $?
+  fi
+  echo "deadman-check: (no send path) $1" >&2
+  return 1
+}
+
+# --- fetch newest heartbeat run -------------------------------------------
+# Returns epoch-seconds of the most recent run's created_at, or 0 if none.
+newest_run_epoch() {
+  local json
+  json="$("$CURL_CMD" \
+    "$GH_API/repos/$REPO/actions/workflows/$WF/runs?per_page=1" \
+    2>/dev/null)"
+  if [[ -z "$json" || "$json" == "{"*'"message"'* ]]; then
+    echo 0; return 1   # API error / forbidden -> treat as unknown (don't page spuriously)
+  fi
+  # created_at is ISO-8601 UTC; convert via date(1) (GNU/coreutils present on box).
+  local created
+  created="$(printf '%s' "$json" \
+    | grep -o '"created_at":"[^"]*"' | head -1 | sed 's/"created_at":"//;s/"//')"
+  [[ -z "$created" ]] && { echo 0; return 1; }
+  date -u -d "$created" +%s 2>/dev/null || echo 0
+}
+
+main() {
+  local now epoch age_min rc=0
+  now="$(date -u +%s)"
+  epoch="$(newest_run_epoch)"; rc=$?
+  if [[ "$epoch" -eq 0 ]]; then
+    if [[ "$rc" -ne 0 ]]; then
+      # API error: report but don't page (avoid a storm on transient API blips).
+      echo "deadman-check: GitHub API unavailable/unauthorized — skipping (rc=$rc)"
+      return 0
+    fi
+    # No runs ever: only page if the workflow has existed long enough to expect one.
+    echo "deadman-check: no heartbeat runs found — first-run or just-enabled; not paging"
+    return 0
+  fi
+  age_min=$(( (now - epoch) / 60 ))
+  if [[ "$age_min" -gt "$THRESHOLD_MIN" ]]; then
+    send_alert "dead-man's-switch STALE: last heartbeat run ${age_min}m ago (>${THRESHOLD_MIN}m threshold). Workflow '$WF' in $REPO may be disabled/silenced — verify the GitHub schedule is live."
+    return 1
+  fi
+  echo "deadman-check: OK — last heartbeat run ${age_min}m ago (threshold ${THRESHOLD_MIN}m)"
+  return 0
+}
+
+main "$@"
