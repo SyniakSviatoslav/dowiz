@@ -83,6 +83,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 criterion = "0.5"
 # PQ KAT test macro expansion (dsa_acvp_tests.rs) — dev-only, not in any build path.
 paste = "1.0"
+# Property-test harness for the P47 reconciliation invariant (B3) — arbitrary order
+# sequences folded vs. settlement totals, exact-i64 equality. Cached offline (1.11.0),
+# dev-only, never linked into a production build path.
+proptest = "1.11"
 
 [[bench]]
 name = "criterion"

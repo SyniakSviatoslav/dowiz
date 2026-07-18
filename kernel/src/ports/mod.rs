@@ -7,3 +7,8 @@ pub mod llm;
 
 /// `AgentBridge` port (B1) — hybrid-signed, fail-closed agent-admission seam.
 pub mod agent;
+
+/// `PaymentPort` port (P47 Wave-0) — cash-on-delivery settlement rail seam. Compile firewall:
+/// kernel has NO payment-adapter dependency; the concrete adapter (if any future Wave needs
+/// one) lives outside the kernel, mirroring `LlmBackend` / `AgentBridge`.
+pub mod payment;
