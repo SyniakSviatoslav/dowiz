@@ -12,3 +12,11 @@ pub mod agent;
 /// kernel has NO payment-adapter dependency; the concrete adapter (if any future Wave needs
 /// one) lives outside the kernel, mirroring `LlmBackend` / `AgentBridge`.
 pub mod payment;
+
+/// `ToolPort` firewall (P40/P42) — the closed tool authority (writes
+/// UNREPRESENTABLE) + the Skills-pattern discovery layer (P42).
+pub mod tool;
+
+/// MCP port + capability-scoped tool boundary (P42) — verify_chain-gated,
+/// fail-closed, Skill-discovering. Typed; the stdio/JSON framing lives downstream.
+pub mod mcp;
