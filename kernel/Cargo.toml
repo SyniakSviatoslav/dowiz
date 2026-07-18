@@ -98,14 +98,15 @@ proptest = "1.11"
 name = "criterion"
 harness = false
 
-# Dedicated integration-test target for the W5 counting-allocator assertion
-# (DoD §8.2). Compiled WITH the `count-allocs` feature so the module-private
-# counting global allocator is installed, and run via
-# `cargo test -p dowiz-kernel --features count-allocs --test arena_counting_allocs`.
-[[test]]
-name = "arena_counting_allocs"
-path = "tests/arena_counting_allocs.rs"
-required-features = ["count-allocs"]
+# NOTE: the W5 counting-allocator integration test (tests/arena_counting_allocs.rs)
+# is not yet wired — the counting global-allocator feature exists (`count-allocs`,
+# line 35) but the dedicated target's source was never committed. The allocation
+# ceiling is instead falsified by the in-lib `arena_path_uses_fewer_heap_allocs_than_heap`
+# test. Re-add this `[[test]]` block once tests/arena_counting_allocs.rs lands.
+# [[test]]
+# name = "arena_counting_allocs"
+# path = "tests/arena_counting_allocs.rs"
+# required-features = ["count-allocs"]
 
 # Native-kernel living-memory retrieval CLI — the max-speed replacement for the
 # out-of-tree living_memory.py (177ms Python/query). Links dowiz_kernel directly,
