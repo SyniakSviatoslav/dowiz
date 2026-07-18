@@ -129,13 +129,15 @@ mod tests {
             .collect::<Vec<_>>()
             .join(",");
 
-        let path = std::env::temp_dir()
-            .join(format!("ppr_reread_test_{}.txt", std::process::id()));
+        let path = std::env::temp_dir().join(format!("ppr_reread_test_{}.txt", std::process::id()));
         std::fs::write(&path, &serialized).expect("write serialized ppr scores");
         let reread = std::fs::read_to_string(&path).expect("re-read serialized ppr scores");
         std::fs::remove_file(&path).ok();
 
-        assert_eq!(reread, serialized, "byte content did not survive a disk round-trip");
+        assert_eq!(
+            reread, serialized,
+            "byte content did not survive a disk round-trip"
+        );
 
         let reparsed: Vec<f64> = reread
             .split(',')

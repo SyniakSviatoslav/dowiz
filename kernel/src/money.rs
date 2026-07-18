@@ -428,7 +428,10 @@ mod tests {
     #[test]
     fn red_tax_overflow_degrades_estimate_to_none() {
         let r = estimate_order_total(1000, &cfg(false, None, Some(200), false, 1e17, false, None));
-        assert!(r.fee_known, "flat 200 fee is computable — the fee side is known");
+        assert!(
+            r.fee_known,
+            "flat 200 fee is computable — the fee side is known"
+        );
         assert_eq!(r.delivery_fee, Some(200));
         assert_eq!(
             r.tax_total, None,
