@@ -109,3 +109,34 @@ these invariants — the invariants are non-negotiable; only their *machinery de
 - Production note: the bundled `mini_get` reaches ANU over plain TCP (ponytail stub). Real deployments
   MUST gate a TLS client (reqwest/rustls) behind a `qrng-tls` feature — tracked, not silently shipped.
 - Cross-repo: bebop's `bebop2` entropy seam follows the same DEFAULT+FALLBACK contract.
+
+## D10. R-3 RootDelegationPolicy = Option A (OperatorSigned + per-anchor IssuanceBudget) — RULING RECORDED (operator, 2026-07-18)
+
+- **Ruling:** adopt **Option A** — `RootDelegationPolicy::OperatorSigned` bound to a per-anchor
+  monotonic `IssuanceBudget` predicate checked at delegation-sign time (`can_issue` / `charge_issuance`
+  / `sign_delegation_budgeted`). Dated **2026-07-18**.
+- **Authority / FLAG for override:** recorded under the **expanded autopilot mandate** (operator-
+  authorized red-line/decision execution, dated 2026-07-18). **FLAGGED — the operator MAY OVERRIDE at
+  any time.** This is a recorded ruling, not a lock; a future operator choice of B (`FirstContactQr` +
+  hardware attestation), C (`WebOfTrust`), or a named hybrid supersedes it. Cross-ref:
+  `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P-D-consensus-capability.md` §11;
+  `docs/design/CORE-ROADMAP-2026-07-17/P-D-audit-root-delegation-policy.md`.
+- **Why A:** the P-D audit's recommended default — ships on today's `AnchorRoster`/`verify_chain`
+  substrate, fully sovereign (operator is the only root; no Google/Apple attestation dependency),
+  P06-independent, and it closes the Batch-7 Sybil residual (bounded per-epoch issuance). Options B and
+  C remain unwired stubs and are **NOT adopted**.
+- **Mechanism already built — no code change in this ruling:** `bebop-repo` commit `e08eb07`
+  (`bebop2/proto-cap/src/node_id.rs:187-372`; `IssuanceBudget` / `IssuanceError` / `can_issue` /
+  `charge_issuance` / `sign_delegation_budgeted`; 10 RED→GREEN tests; CI gate
+  `scripts/ci-budgeted-issuance.sh`). This D10 entry is a **ruling RECORD**, not a code change. Per
+  `BLUEPRINT-P-D-consensus-capability.md` §11 anti-scope, B's attestation overlay and C's flow-based
+  construction are explicitly NOT adopted by this ruling.
+- **Operator deployment actions still required (ops, not code):** (i) generate + Ed25519-sign the real
+  anchor root cert(s) and populate a production `genesis.example.txt`-shaped anchor file
+  (`load_genesis`, `node_id.rs:117-142`); (ii) set the production node's runtime `RootDelegationPolicy`
+  to `OperatorSigned` **explicitly** — keep `Default = Unspecified` (`node_id.rs:169-174`, never flip the
+  code default); (iii) confirm or override `DEFAULT_MAX_PER_EPOCH` (currently `1`, `:203`) against real
+  onboarding throughput.
+- **Standing anti-scope (unchanged):** do NOT silently change `DEFAULT_MAX_PER_EPOCH` or write a real
+  production genesis/anchor file without this ruling on record; do NOT build B/C speculatively; do NOT
+  re-couple R-3 to P06 `key_V` (independent per the audit §3).
