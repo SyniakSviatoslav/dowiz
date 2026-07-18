@@ -2410,3 +2410,18 @@ Three closes:
   operational pragmatism over architectural purity. Enables an operator alert for the exact
   §16.14 offline-during-order scenario's *silent, unexplained* variant, distinct from the
   already-designed honest-status UX for a hub the client can see is unreachable.
+
+### 16.54 Open-source scope, demo-hub fixtures, full offline Tauri client
+Three closes, all Recommended options confirmed:
+- **GitHub open-source scope**: the hub software (kernel/protocol/UI-rendering — whatever a
+  self-host vendor actually installs) is open source; `dowiz.org`'s own infrastructure (the
+  claim mechanic, CF-tenant-isolation, the directory-of-nothing landing site itself) stays
+  closed — that is dowiz's own operating infrastructure, not the product a vendor runs.
+  Sharpens §16.32's "some part of the codebase" into a precise boundary.
+- **Demo hubs are pre-populated with fixtures** (test menu, test couriers) rather than empty —
+  a claimed hub demonstrates real value immediately, the vendor replaces fixtures with their
+  own data at their own pace rather than starting from a blank screen.
+- **The installed Tauri client is cache-first with full offline functionality** — menu,
+  statuses, and draft orders are cached locally and usable with zero network, syncing on
+  reconnect. Extends §16.52's offline-checkout-draft principle to the whole installed client,
+  not just the checkout step.
