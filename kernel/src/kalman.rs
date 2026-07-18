@@ -286,6 +286,45 @@ impl KalmanFilter {
         // SAFETY: `q` is an n×n PD matrix; scaling by s>0 keeps it PD.
         self.q = scale(&self.q, s);
     }
+
+    // ── §13 SoA batch-lane accessors (WAVE D / BLUEPRINT-P-E §13.2) ──────
+    // Crate-internal (`pub(crate)`, NOT part of the public API) helpers used by
+    // `simd::kalman_batch_step`. These do NOT bypass `predict`/`update`: the
+    // AVX2 lane in `simd.rs` replays the EXACT `predict`+`update` op order and
+    // only uses these to (read) the per-courier Q/R noise and (write back) the
+    // lane's already-computed `x`/`P` state and innovation/surprise signals.
+    // They are the SoA analog of `softmax_batch_lane` reading/writing scalar
+    // row buffers — same discipline, no new public surface (anti-scope §13.3-6).
+    #[inline]
+    pub(crate) fn q_entry(&self) -> f64 {
+        self.q.get(0, 0)
+    }
+    #[inline]
+    pub(crate) fn r_entry(&self) -> f64 {
+        self.r.get(0, 0)
+    }
+    #[inline]
+    pub(crate) fn set_xp(&mut self, x: f64, p: f64) {
+        self.x[0] = x;
+        self.p.set(0, 0, p);
+    }
+    #[inline]
+    pub(crate) fn set_signals(&mut self, innovation: Vec<f64>, surprise: f64) {
+        self.last_innovation = innovation;
+        self.last_surprise = surprise;
+    }
+    /// Crate-internal read of the last innovation (used by `simd` parity tests).
+    #[inline]
+    #[cfg(test)]
+    pub(crate) fn innovation_bits(&self) -> Vec<u64> {
+        self.last_innovation.iter().map(|v| v.to_bits()).collect()
+    }
+    /// Crate-internal read of the last surprise (used by `simd` parity tests).
+    #[inline]
+    #[cfg(test)]
+    pub(crate) fn surprise_bits(&self) -> u64 {
+        self.last_surprise.to_bits()
+    }
 }
 
 #[cfg(test)]

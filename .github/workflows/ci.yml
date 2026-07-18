@@ -238,3 +238,27 @@ jobs:
         run: |
           ! git grep -nEi 'courier[_-]?(score|rating|reputation|rank)' -- \
             'kernel/**' 'engine/**' 'tools/**' ':!**/*NO-COURIER-SCORING*'
+
+  # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
+  # BLUEPRINT-P-B §5 note-4 (WAVE F): compile-time backstop for the
+  # normalize-before-hash invariant (§3.2). `matrix_content_address` was
+  # demoted to private so the ONLY content-address path for a tile is
+  # `NormalizedTile::content_address` (canonical form). If it is ever
+  # re-promoted to `pub`, this grep gate goes RED — silently re-opening the
+  # raw-bits hash hazard the type system closed. The drift-gate
+  # `RetainedBase::admit` already calls the private fn internally; no other
+  # module may reach it.
+  no-pub-raw-matrix-hash:
+    name: spectral invariant grep gate (P-B §5)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Assert matrix_content_address is NOT pub in kernel/src
+        run: |
+          if git grep -nE 'pub fn matrix_content_address' -- 'kernel/src/**'; then
+            echo "::error::matrix_content_address re-promoted to pub — violates BLUEPRINT-P-B §3.2/§5"
+            exit 1
+          fi
+          echo "OK: matrix_content_address is private (raw-matrix hash demoted)"
