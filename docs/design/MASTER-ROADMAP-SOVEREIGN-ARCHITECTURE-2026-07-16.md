@@ -2328,3 +2328,18 @@ elsewhere in this roadmap, extended one level to support owner-side delegation. 
 designed**: the concrete cert-hierarchy/revocation mechanics belong in the P39/P48 blueprint
 work, not this dialogue-decisions section — recorded here as the shape of the answer, not the
 full spec.
+
+### 16.49 Payment call site, courier-unavailable handling, tax responsibility
+Three closes:
+- **Payment calls happen client-side, hub never sees card data** (Recommended, confirmed) — a
+  PCI-standard SDK pattern (card data flows directly from client to provider); the hub receives
+  only a token/confirmation. Reduces the hub's PCI compliance burden substantially versus a
+  server-side-secret-key design, at the cost of §16.46's split-payment logic needing to live in
+  the provider's own split/Connect-style API rather than inside hub code.
+- **No courier available at order time**: the order is accepted and waits/queues for a courier
+  (Recommended, confirmed) — extends §16.14's honest-status principle to this case too: the
+  order is real and pending, not silently rejected, but also not fabricated as "assigned" before
+  a courier actually exists.
+- **Tax/VAT**: fully the vendor's responsibility (Recommended, confirmed) — consistent with
+  §16.29's dispute/refund stance; the vendor sets their own rate inside the free-form menu
+  schema (§16.17), dowiz calculates and tracks nothing tax-related.
