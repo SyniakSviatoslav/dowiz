@@ -131,6 +131,43 @@ fn bench_spectral_cache_canonical_address(c: &mut Criterion) {
     });
 }
 
+/// W5 (BumpArena): the graph/spectral rebuild-and-rank pass — `from_edges` →
+/// `row_normalize` → `personalized_pagerank` — timed heap-vs-arena. The
+/// arena serves the transient scratch from one region (O(1) reset between
+/// passes); the heap path allocates per pass. The measured delta is the
+/// blueprint's §3.3 authority; record it in `BENCH_HISTORY.md`.
+fn bench_graph_rebuild_rank(c: &mut Criterion) {
+    // n=1024 cycle+skip graph, nnz≈2n — the §3.3 benchmark shape.
+    let n = 1024usize;
+    let mut edges: Vec<(usize, usize, f64)> = Vec::with_capacity(2 * n);
+    for i in 0..n {
+        edges.push((i, (i + 1) % n, 1.0));
+        edges.push((i, (i + 7) % n, 1.0));
+    }
+    let seed: Vec<f64> = (0..n).map(|i| ((i % 3) as f64) / 3.0).collect();
+
+    c.bench_function("graph_rebuild_rank/heap", |b| {
+        b.iter(|| {
+            let g = dowiz_kernel::csr::Csr::from_edges(n, &edges);
+            let a = g.row_normalize();
+            black_box(a.personalized_pagerank(&seed, 0.15, 30))
+        })
+    });
+
+    let mut arena = dowiz_kernel::arena::BumpArena::with_capacity(1 << 24);
+    c.bench_function("graph_rebuild_rank/arena", |b| {
+        b.iter(|| {
+            arena.reset(); // O(1) — the whole point: one region, reset between passes.
+            let g = dowiz_kernel::csr::Csr::from_edges_in(n, &edges, &arena);
+            let a = g.row_normalize_in(&arena);
+            black_box(
+                a.personalized_pagerank_in(&seed, 0.15, 30, &arena)
+                    .expect("arena sized for pass"),
+            )
+        })
+    });
+}
+
 criterion_group!(
     benches,
     bench_place_order,
@@ -138,6 +175,7 @@ criterion_group!(
     bench_empirical_identify,
     bench_token_bucket,
     bench_spectral_cache_slem_cached,
-    bench_spectral_cache_canonical_address
+    bench_spectral_cache_canonical_address,
+    bench_graph_rebuild_rank
 );
 criterion_main!(benches);
