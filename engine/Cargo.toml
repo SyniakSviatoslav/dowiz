@@ -19,10 +19,26 @@ path = "src/lib.rs"
 # external/wgpu/serde crate is introduced, so the engine stays offline-clean.
 # The kernel's own deps (tracing/regex) are already in-tree and cached.
 dowiz-kernel = { path = "../kernel", version = "0.1.0" }
+# P58 §M2/M4 (wasm mirror export + future native adapter): `serde` is OPTIONAL and
+# OFFLINE-CACHED. It is NOT pulled into the default build (engine stays
+# zero-external-crate, matching the offline-clean mandate). The `wasm` crate
+# enables `features = ["serde"]` so the `A11yTree` can cross the wasm boundary as
+# JSON; the `a11y_native` path will enable it too once the AK-unlock grant lands.
+serde = { version = "1", optional = true, features = ["derive"] }
 
 [features]
 # default = offline-clean. GPU/wasm glue is opt-in so CI never pulls a GPU/JS toolchain.
 default = []
+# P58 §M2 — (de)serialize the `SemanticScene`/`A11yTree` across the wasm boundary.
+# Optional; only the `wasm` crate enables it, so the default engine build stays clean.
+serde = ["dep:serde"]
+# P58 §M4 — native AccessKit adapter. PRE-UNLOCK: the real `accesskit*` crates are
+# NOT in the cargo cache (AK-unlock network grant pending), so this feature is
+# declared but the adapter body is empty by default and compiles zero AccessKit
+# code. The offline gates (role-totality / EditState bounds / composing-refused)
+# are tested now; the `to_tree_update`/`apply_action` AccessKit bodies land with
+# the grant. Declaring the feature early keeps the boundary real and CI-honest.
+a11y_native = ["serde"]
 # GPU upload sink (W20). EMPTY by design: `wgpu` is absent from the cargo cache
 # and every Cargo.lock (verified 2026-07-16), so adding it would break the
 # air-gapped offline build. The flag exists so the boundary is real; the real
