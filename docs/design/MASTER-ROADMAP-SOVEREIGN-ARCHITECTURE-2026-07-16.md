@@ -2360,3 +2360,20 @@ Three closes, all within the §16.35/§16.40 generative-UI cluster:
 - **Onboarding is implicit/adaptive, embedded in the field itself** — no separate modal or
   text how-to screen; the interface teaches its own use through the same state-communication
   mechanism §16.44 already established for friction, rather than a bolted-on tutorial layer.
+
+### 16.51 Order cancellation authority, device baseline, content moderation
+Three closes:
+- **Cancellation**: the customer may cancel freely before the vendor confirms the order; once
+  the vendor has confirmed (started preparing), only the vendor can cancel further — cancellation
+  after confirmation is a money action (triggers a refund) and routes through §16.29's
+  vendor+payment-provider dispute channel rather than a unilateral client action.
+- **Device baseline — no UI-paradigm fallback, but a real optimization target**: §16.40's "one
+  path" decision stands (no separate legacy UI mode), but the operator clarifies the same
+  physics/math rendering must run efficiently on older/budget devices through lean Rust/wasm/
+  kernel implementation — *"без тяжких бібліотек"* — rather than by degrading to a different,
+  simpler interface. Consistent with, not an exception to, §16.42's *ad fontes* stance: the
+  fallback is engineering discipline (an efficient kernel), not a second UI to design/maintain.
+- **Content moderation**: full vendor trust, no pre-publication review, for Wave-0 (Recommended,
+  confirmed) — consistent with §16.12/§16.17's self-serve/free-schema automation stance. A
+  post-hoc report/blocklist mechanism for abuse is implied as necessary but not yet designed —
+  named as a gap for the Tier-3/moderation blueprint, not resolved here.
