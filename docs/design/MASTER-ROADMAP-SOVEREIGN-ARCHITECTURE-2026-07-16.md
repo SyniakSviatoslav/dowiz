@@ -2425,3 +2425,23 @@ Three closes, all Recommended options confirmed:
   statuses, and draft orders are cached locally and usable with zero network, syncing on
   reconnect. Extends §16.52's offline-checkout-draft principle to the whole installed client,
   not just the checkout step.
+
+### 16.55 SEO/AEO crawlability without any DOM — separate bot-facing files, not the a11y-mirror
+Resolves the §16.30-vs-§16.26 tension flagged this pass, with an answer sharper than either
+option offered: **no DOM at all, for anyone** — not even a hidden/off-screen a11y-mirror serving
+double duty as SEO content. Instead, crawlers and AI/answer-engine bots get **purpose-built
+static machine-readable files** (`robots.txt`, `manifest.json`, and by the same logic
+`sitemap.xml`, schema.org JSON-LD data, and an `llms.txt`-style feed for AI crawlers
+specifically) served alongside the canvas, with zero rendered markup. **This is a genuinely
+different mechanism from §16.30's a11y-mirror**, worth keeping distinct rather than conflating:
+the a11y-mirror serves a human using assistive technology who needs an interactive tree; these
+bot-facing files serve a crawler that only needs facts, not interactivity. Two audiences, two
+purpose-built solutions, neither one a DOM. Concrete file formats/schema are a Tier-3 design
+task, not resolved here.
+
+### 16.56 `dowiz.org` landing page — also full wgpu, no static-page exception
+Operator's ruling: the landing page (§16.32 — minimal, Cloudflare-Pages-hosted) is **also**
+full wgpu, for consistency — no exception for dowiz's own marketing surface. Reinforces §16.40's
+"one path" stance: the *ad fontes* commitment applies uniformly across the whole product,
+including the surface most tempted to cut as "just a landing page." §16.55's bot-facing static
+files remain the SEO answer for this page too, unchanged by this ruling.
