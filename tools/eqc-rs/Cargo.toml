@@ -16,4 +16,8 @@ path = "src/bin/demo.rs"
 name = "gen_kernel_organs"
 path = "src/bin/gen_kernel_organs.rs"
 
+[[bin]]
+name = "cordic_probe"
+path = "src/bin/cordic_probe.rs"
+
 [dependencies]

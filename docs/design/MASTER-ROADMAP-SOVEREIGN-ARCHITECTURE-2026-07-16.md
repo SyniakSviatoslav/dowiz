@@ -2748,3 +2748,40 @@ M3 = +P67+P68. M4 = +P72. Full dependency ordering, single-owner shared-contract
 grammar → P64, cert wire format → P59), and Track-R (procedural glyphs, XR backends, deepened
 intent-UI research — permanently off the critical path) are in the synthesis document, not
 duplicated here. This section is the index; the blueprints and the synthesis are the source.
+
+### 18.4 Architectural tension found at commit time — resolved, §16/§18 wins
+
+While committing §18's blueprint program, a concurrent swarm's merge to `main`
+(`588188efad0` — `merge(feat/g3-dom-fieldsim)`) landed **DOM-based web UI work**
+(`web/index.html`, `web/src/app.mjs`, wasm-driven, Layer-G/"G3" naming from the pre-dialogue
+Layer A-I axis) — a `<div>`/`<script type="module">` browser page consuming kernel wasm exports
+directly, with **no wgpu, no canvas, real DOM elements throughout**.
+
+**This directly contradicts §16.30/§16.40**: the entire UI (menu, checkout, admin, courier)
+renders through the wgpu field engine, canvas-only, zero DOM anywhere, no legacy-DOM fallback
+mode — a closed decision the operator reaffirmed knowingly even after being shown its real
+schedule cost (§16.40's "one path, full set at once, timeline shifts accordingly").
+`feat/g3-dom-fieldsim`'s DOM approach is an **older, parallel track** (its base commit sits
+before this session's UI-paradigm dialogue even started) — it was not built in defiance of
+§16.30, it simply predates it and nobody had yet told that branch's own swarm the axis had
+changed.
+
+**Resolution, stated plainly so no future reader or swarm has to re-derive it**: **§16/§17/§18
+is the current, prioritized axis.** Where `feat/g3-dom-fieldsim` (or any pre-dialogue Layer-G/
+wasm+DOM work) conflicts with §16.30's wgpu-only mandate, **§16.30 wins** — the DOM-based
+`web/` prototype is legacy, not canon, and must not be extended further as if it were the
+product's real UI track. Its wasm-export-binding discipline ("kernel is the sole FSM/money
+authority, no JS reimplementation of geo/spectral/FSM math") is a genuinely good property worth
+preserving conceptually — but the rendering layer itself (DOM, `<script type="module">`,
+`app.mjs`) is superseded by P38/P57-P74's wgpu-canvas program. This is **not** a request to
+delete `feat/g3-dom-fieldsim`'s work outright (it may still be useful as a reference/fallback or
+for non-product tooling) — it is a priority statement: new product-UI work builds on §16/§18's
+wgpu track, not the DOM track, and any future reconciliation should migrate `web/`'s
+wasm-binding logic onto the canvas substrate rather than growing the DOM path further.
+
+**Also found the same commit-time pass**: several long-lived feature branches have drifted from
+`main` — `feat/kalman-organ` (1052 ahead / **677 behind**, the most stale), `feat/agentic-mesh-*`
+(226 ahead / ~0-1 behind), `feat/spectral-energy-*` (228 ahead / ~0-1 behind), and the
+`research/*-verify-redteam-*` branches (162-228 ahead / 0-2 behind). Reconciliation against
+`main` (which now carries the full §16-§18 axis) is tracked as separate operational work, not
+folded into this roadmap section — see the isolated reconciliation branch this same pass.
