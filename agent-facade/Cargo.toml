@@ -1,0 +1,18 @@
+[package]
+name = "agent-facade"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "P40 agent facade — the ONLY crate in the agent lane that imports dowiz-kernel. Re-exports the llm + tool port surfaces and owns the one concrete tool (read_order_status). Kernel mutation symbols are not re-exported — agent-loop cannot name decide/fold/apply_tax/stores."
+
+# Standalone crate at repo root (sibling to kernel/), NOT a workspace member.
+# Build with `cargo build` from this directory.
+
+[dependencies]
+dowiz-kernel = { path = "../kernel" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lib]
+name = "agent_facade"
+path = "src/lib.rs"

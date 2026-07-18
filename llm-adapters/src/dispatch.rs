@@ -10,9 +10,7 @@
 //! Every dispatched call emits an H1 harvest row (`track_record.jsonl`) priced by the backend's
 //! returned `usage.total_tokens`, closing the EV loop so `gov_route` can price local-vs-managed.
 
-use dowiz_kernel::ports::llm::{
-    ChatRequest, ChatResponse, LlmBackend, LlmError,
-};
+use dowiz_kernel::ports::llm::{ChatRequest, ChatResponse, LlmBackend, LlmError};
 use dowiz_kernel::token_bucket::TokenBucket;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
@@ -174,8 +172,8 @@ pub(crate) fn decode_track_record(line: &str) -> Result<TrackRecord, serde_json:
 mod tests {
     use super::*;
     use dowiz_kernel::ports::llm::{
-        Caps, ChatRequest, ChatResponse, EmbedRequest, EmbedResponse, LlmBackend, LlmError, Usage,
-        RerankRequest, RerankResponse,
+        Caps, ChatRequest, ChatResponse, EmbedRequest, EmbedResponse, LlmBackend, LlmError,
+        RerankRequest, RerankResponse, Usage,
     };
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
@@ -205,6 +203,7 @@ mod tests {
                     completion_tokens: 1,
                     total_tokens: 2,
                 },
+                tool_calls: Vec::new(),
             })
         }
         fn embed(&self, _req: &EmbedRequest) -> Result<EmbedResponse, LlmError> {
@@ -228,7 +227,14 @@ mod tests {
     #[test]
     fn budget_exhausted_returns_typed_refusal() {
         // capacity=8, refill_rate=0 ⇒ exactly one call (cost=max_tokens=8) fits; the 2nd is refused.
-        let d = Dispatcher::new(FakeBackend { calls: AtomicUsize::new(0) }, 1, 8, 0.0);
+        let d = Dispatcher::new(
+            FakeBackend {
+                calls: AtomicUsize::new(0),
+            },
+            1,
+            8,
+            0.0,
+        );
         // Use Arc to share the fake so we can count calls.
         let shared = d.backend.clone();
         let _ = d.dispatch(req()).expect("first call within budget");
@@ -236,12 +242,23 @@ mod tests {
             Err(DispatchError::BudgetExceeded) => {}
             other => panic!("second call must be BudgetExceeded, got {:?}", other),
         }
-        assert_eq!(shared.calls.load(Ordering::SeqCst), 1, "only one upstream call made");
+        assert_eq!(
+            shared.calls.load(Ordering::SeqCst),
+            1,
+            "only one upstream call made"
+        );
     }
 
     #[test]
     fn within_budget_succeeds_and_counts() {
-        let d = Dispatcher::new(FakeBackend { calls: AtomicUsize::new(0) }, 2, 100, 0.0);
+        let d = Dispatcher::new(
+            FakeBackend {
+                calls: AtomicUsize::new(0),
+            },
+            2,
+            100,
+            0.0,
+        );
         for _ in 0..3 {
             d.dispatch(req()).expect("within budget");
         }
@@ -251,7 +268,14 @@ mod tests {
     // Keep `Arc` import meaningful even if a test is removed.
     #[test]
     fn backend_is_shared_arc() {
-        let d = Dispatcher::new(FakeBackend { calls: AtomicUsize::new(0) }, 1, 100, 0.0);
+        let d = Dispatcher::new(
+            FakeBackend {
+                calls: AtomicUsize::new(0),
+            },
+            1,
+            100,
+            0.0,
+        );
         let _: Arc<FakeBackend> = d.backend.clone();
     }
 }

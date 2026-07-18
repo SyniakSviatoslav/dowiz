@@ -129,8 +129,16 @@ impl StackBuilder {
         let backend = Arc::new(CachingBackend::with_store(ollama, store));
         // `Dispatcher::new` Arcs the backend again; both handles share the SAME cache store
         // (Arc clone inside CachingBackend is a Mutex clone = same inner store).
-        let dispatcher = Dispatcher::new((*backend).clone(), self.workers, self.capacity, self.refill_rate);
-        Harness { dispatcher, backend }
+        let dispatcher = Dispatcher::new(
+            (*backend).clone(),
+            self.workers,
+            self.capacity,
+            self.refill_rate,
+        );
+        Harness {
+            dispatcher,
+            backend,
+        }
     }
 
     /// Build with the in-memory cache enabled.
@@ -189,7 +197,10 @@ mod tests {
         let req = chat_req("qwen2.5-coder:7b", "cache hit test — say PONG");
         let r1 = h.chat(req.clone()).expect("chat 1");
         let r2 = h.chat(req.clone()).expect("chat 2 (cache)");
-        assert_eq!(r1.content, r2.content, "cache hit returns identical content");
+        assert_eq!(
+            r1.content, r2.content,
+            "cache hit returns identical content"
+        );
     }
 
     // Live: embed path works through the same cache-fronted backend.
@@ -202,6 +213,10 @@ mod tests {
                 input: "semantic gate probe".into(),
             })
             .expect("live embed through stack");
-        assert_eq!(r.embedding.len(), 768, "nomic-embed-text returns 768-d vectors");
+        assert_eq!(
+            r.embedding.len(),
+            768,
+            "nomic-embed-text returns 768-d vectors"
+        );
     }
 }
