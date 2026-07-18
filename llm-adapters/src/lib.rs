@@ -16,7 +16,7 @@ pub mod transport;
 
 pub use cache::{CachingBackend, NoCache};
 pub use compose::{Harness, StackBuilder, DEFAULT_OLLAMA_BASE};
-pub use dispatch::{DispatchError, Dispatcher};
+pub use dispatch::{DispatchError, Dispatcher, TrackRecord, append_harvest};
 pub use ollama::{OllamaAdapter, OllamaQuirks};
 pub use quirks::Quirks;
 pub use transport::OpenAiCompatTransport;

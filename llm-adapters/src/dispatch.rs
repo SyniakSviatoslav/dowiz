@@ -130,7 +130,11 @@ impl<B: LlmBackend + Send + Sync + 'static> Dispatcher<B> {
 /// Append a harvested record to `track_record.jsonl` (H1 EV ledger). Local-only, M8-compliant.
 /// Emits the `gov_route`-compatible superset schema so the EV pricing loop can fold it directly.
 /// Failures are non-fatal (telemetry must never break the call path).
-fn append_harvest(rec: &TrackRecord) {
+///
+/// Made `pub` so other consumers of the harvest ledger (e.g. the `agent-loop` host binary) emit
+/// the EXACT same row the `Dispatcher` writes — one channel, no schema drift (AGENTS.md:
+/// "extend that ledger, do not invent a parallel channel").
+pub fn append_harvest(rec: &TrackRecord) {
     use std::io::Write;
     let line = format!(
         "{{\"model\":\"{}\",\"task\":\"{}\",\"success\":{},\"value\":{},\"cost\":{},\"backend\":\"{}\",\"tokens\":{},\"ms\":{}}}\n",
