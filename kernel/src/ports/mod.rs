@@ -44,3 +44,12 @@ pub mod customer;
 /// hub-local `ChannelRegistry`, the proven X10 coverage matrix, and dead-token eviction. Compile
 /// firewall: ZERO network / HTTP / serde / tokio — the concrete adapters live in `notify-adapters`.
 pub mod notification;
+
+/// BLUEPRINT-P70 (W2) — Owner Surface: node-local management & configuration lanes for the
+/// hub owner. All panes are deterministic FOLDS of signed, content-addressed events (the
+/// `hub_no_shadow_store` invariant) — there is no admin database, no dowiz aggregator, no
+/// analytics dashboard (§1.4-1, deferred to v2). Every mutating owner action is an
+/// owner-cap-cert-signed intent; confirm/cancel reuses the P48 facade (agent-invocable
+/// confirm/cancel is UNREPRESENTABLE — `no-agent-order-authority` grep gate). Reuse-first:
+/// consumes P62 catalog, P59 cap-certs, P48 orders, P58 a11y mirror. Zero network/HTTP/serde.
+pub mod owner_surface;
