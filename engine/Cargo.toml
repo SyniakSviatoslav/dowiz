@@ -20,6 +20,9 @@ path = "src/lib.rs"
 # The kernel's own deps (tracing/regex) are already in-tree and cached.
 dowiz-kernel = { path = "../kernel", version = "0.1.0" }
 
+# P57 Lane B (O18a only). Optional: the default build links NO cosmic-text.
+cosmic-text = { version = "*", optional = true }
+
 [features]
 # default = offline-clean. GPU/wasm glue is opt-in so CI never pulls a GPU/JS toolchain.
 default = []
@@ -36,6 +39,14 @@ webgl = []
 webgpu = []
 # P11 §5 (E23 scaffolding): Gaussian-splat reconstruction boundary, EMPTY by design — no deps pulled.
 splat = []
+# P57 M2/M5: cosmic-text text-model + shaping leg. EMPTY by design: `cosmic-text`
+# is OUT OF SCOPE here (added behind this feature only at O18a) so the default
+# build stays offline-clean with zero external crates — the SAME one network
+# grant as `gpu` (P38 §2). The full P57 editor (`text_input::TextField`) is
+# implemented Lane-A (dependency-free) and ALWAYS built; this feature gates
+# ONLY the cosmic-text shaping seam (`text_input::cosmic_text`), which stays
+# OFF until the operator unlocks the network grant.
+text = ["dep:cosmic-text"]
 
 [dev-dependencies]
 
