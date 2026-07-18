@@ -4,7 +4,7 @@
 //! Synchronous (ureq, no tokio). Maps transport failures to typed `LlmError` — never a mock.
 
 use dowiz_kernel::ports::llm::{
-    ChatRequest, ChatResponse, EmbedRequest, EmbedResponse, LlmError, Message, Usage,
+    ChatRequest, ChatResponse, EmbedRequest, EmbedResponse, LlmError, Message, ToolCallReq, Usage,
 };
 use serde_json::{json, Value};
 
@@ -25,7 +25,10 @@ impl OpenAiCompatTransport {
         while base.ends_with('/') {
             base.pop();
         }
-        OpenAiCompatTransport { base_url: base, quirks }
+        OpenAiCompatTransport {
+            base_url: base,
+            quirks,
+        }
     }
 
     /// Chat completion → `/v1/chat/completions`.
@@ -48,6 +51,33 @@ impl OpenAiCompatTransport {
         });
         if let Some(seed) = req.seed {
             body["seed"] = json!(seed);
+        }
+        // Tool declarations (OpenAI `tools` array). Empty when no tool call is
+        // requested. The adapter owns all JSON framing; the kernel struct carries
+        // plain strings. Declaring tools does NOT force the model to call one — a
+        // tool-less reply still returns `tool_calls: []` (handled in parse_chat).
+        if !req.tools.is_empty() {
+            let tools: Vec<Value> = req
+                .tools
+                .iter()
+                .map(|t| {
+                    json!({
+                        "type": "function",
+                        "function": {
+                            "name": t.name,
+                            "description": t.description,
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    t.arg_name.to_string(): { "type": "string", "description": t.arg_name }
+                                },
+                                "required": [t.arg_name],
+                            }
+                        }
+                    })
+                })
+                .collect();
+            body["tools"] = Value::Array(tools);
         }
         // Ollama-only options (keep_alive/num_ctx/think) surfaced verbatim when the adapter wants.
         if self.quirks.surface_options && !req.options.is_empty() {
@@ -119,6 +149,38 @@ impl OpenAiCompatTransport {
             Err(_) => Err(LlmError::Unavailable),
         }
     }
+
+    /// Per-model capability probe against Ollama's native `POST /api/show`.
+    ///
+    /// Returns the `capabilities` array for `model_id` (e.g. `["tools", "completion"]`
+    /// for tool-capable models). ANY failure — HTTP error, transport error, missing
+    /// field, or a non-array `capabilities` — maps to `Err(LlmError::Unsupported)`,
+    /// which callers interpret as "tool_calling == false" (fail-closed: a probe
+    /// failure is indistinguishable from "no capability").
+    pub fn show_capabilities(&self, model_id: &str) -> Result<Vec<String>, LlmError> {
+        let url = format!("{}/api/show", self.base_url);
+        let body = json!({ "model": model_id });
+        let mut reqb = ureq::post(&url).timeout(std::time::Duration::from_secs(20));
+        for (k, v) in &self.quirks.extra_headers {
+            reqb = reqb.set(k, v);
+        }
+        let resp = reqb.send_json(body);
+        let raw: serde_json::Value = match resp {
+            Ok(r) => r.into_json().map_err(|_| LlmError::Unsupported)?,
+            Err(_) => return Err(LlmError::Unsupported),
+        };
+        let caps = raw
+            .get("capabilities")
+            .and_then(|c| c.as_array())
+            .ok_or(LlmError::Unsupported)?;
+        let mut out = Vec::with_capacity(caps.len());
+        for c in caps {
+            if let Some(s) = c.as_str() {
+                out.push(s.to_string());
+            }
+        }
+        Ok(out)
+    }
 }
 
 /// Parse an OpenAI chat/completions response into `ChatResponse`.
@@ -129,11 +191,39 @@ fn parse_chat(raw: &Value) -> Result<ChatResponse, LlmError> {
         .and_then(|c| c.get("message"))
         .and_then(|m| m.get("content"))
         .and_then(|c| c.as_str())
-        .ok_or_else(|| LlmError::BadRequest("missing choices[0].message.content".into()))?;
+        .unwrap_or("")
+        .to_string();
     let usage = raw.get("usage").map(parse_usage).unwrap_or_default();
+    // Tool calls (OpenAI `message.tool_calls[].function.{name,arguments}`).
+    // Absent ⇒ empty vec ⇒ the loop treats the reply as a direct answer.
+    let tool_calls = raw
+        .get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c| c.get("message"))
+        .and_then(|m| m.get("tool_calls"))
+        .and_then(|t| t.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|tc| {
+                    let fn_obj = tc.get("function")?;
+                    let name = fn_obj.get("name")?.as_str()?.to_string();
+                    let arguments_json = fn_obj
+                        .get("arguments")
+                        .and_then(|a| a.as_str())
+                        .unwrap_or("{}")
+                        .to_string();
+                    Some(ToolCallReq {
+                        name,
+                        arguments_json,
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
     Ok(ChatResponse {
-        content: content.to_string(),
+        content,
         usage,
+        tool_calls,
     })
 }
 
@@ -158,7 +248,10 @@ fn parse_embed(raw: &Value) -> Result<EmbedResponse, LlmError> {
 fn parse_usage(v: &Value) -> Usage {
     Usage {
         prompt_tokens: v.get("prompt_tokens").and_then(|x| x.as_u64()).unwrap_or(0) as u32,
-        completion_tokens: v.get("completion_tokens").and_then(|x| x.as_u64()).unwrap_or(0) as u32,
+        completion_tokens: v
+            .get("completion_tokens")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0) as u32,
         total_tokens: v.get("total_tokens").and_then(|x| x.as_u64()).unwrap_or(0) as u32,
     }
 }

@@ -1018,7 +1018,10 @@ mod tests {
         let prob = [0.95, 0.90, 0.10, 0.05, 0.60, 0.55];
         let outcome = [1u8, 0, 0, 1, 1, 0];
         let (point, (lo, hi)) = ece_ci(&prob, &outcome, 5, 1.96);
-        assert!((point - ece(&prob, &outcome, 5)).abs() < 1e-12, "ece_ci point == ece");
+        assert!(
+            (point - ece(&prob, &outcome, 5)).abs() < 1e-12,
+            "ece_ci point == ece"
+        );
         assert!(lo <= point && point <= hi, "interval brackets the point");
     }
 
@@ -1082,7 +1085,10 @@ mod tests {
         // must fire — it is not merely 'always green'.
         let sigma = 0.02; // the raw window's sample std
         let real_step = derived_tol * 4.0;
-        assert!(real_step > z * sigma, "constructed shift exceeds z·σ (a real regression)");
+        assert!(
+            real_step > z * sigma,
+            "constructed shift exceeds z·σ (a real regression)"
+        );
         let mut derived_real = RegressionGate::from_se(W, &raw_window, z, true);
         feed_ramp(&mut derived_real, 0.50, real_step, 24);
         assert!(

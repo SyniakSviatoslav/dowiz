@@ -72,10 +72,7 @@ impl TokenBucket {
     /// cascading the panic. A poisoned bucket degrades-closed (refuses) rather
     /// than taking down the caller.
     pub fn try_acquire(&self, n: f64) -> bool {
-        let mut inner = self
-            .inner
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         // P-H W-H4 F4 seam (seam B): a chaos plan armed at `TokenBucketCritical`
         // panics here to reproduce the poison-cascade bug class; the
         // `unwrap_or_else(into_inner)` recovery above is what lets the NEXT call
@@ -95,10 +92,7 @@ impl TokenBucket {
     /// Current available token count (refills lazily first). For telemetry/tests.
     /// Same poison recovery as [`Self::try_acquire`] (A6).
     pub fn available(&self) -> f64 {
-        let mut inner = self
-            .inner
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
+        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
         self.refill_locked(&mut inner);
         inner.tokens
     }

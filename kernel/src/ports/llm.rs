@@ -56,6 +56,11 @@ pub struct ChatRequest {
     /// Backend-specific options surfaced verbatim (Ollama `keep_alive`/`num_ctx`/`think`, etc.).
     /// Passed through untouched; parsed per-adapter in the transport layer.
     pub options: std::collections::BTreeMap<String, String>,
+    /// Tool declarations for this call (OpenAI `tools` array). Empty for a plain
+    /// chat. Extend-don't-rewrite: `Default` seeds `Vec::new()` so every existing
+    /// call site compiles and behaves identically (no tool calls requested). The
+    /// adapter serializes this into the wire `tools` array.
+    pub tools: Vec<ToolDecl>,
 }
 
 impl Default for ChatRequest {
@@ -70,6 +75,7 @@ impl Default for ChatRequest {
             task_class: TaskClass::General,
             cache_policy: CachePolicy::Exact,
             options: std::collections::BTreeMap::new(),
+            tools: Vec::new(),
         }
     }
 }
@@ -106,6 +112,29 @@ impl Usage {
 pub struct ChatResponse {
     pub content: String,
     pub usage: Usage,
+    /// Tool calls the model returned this turn (OpenAI `message.tool_calls`).
+    /// Empty when the model answered directly. Iterating on a single tool call is
+    /// the loop's job; the kernel carries all of them verbatim, unparsed.
+    pub tool_calls: Vec<ToolCallReq>,
+}
+
+/// A tool the backend may be asked to call — the kernel-side declaration. The
+/// adapter serializes this into the OpenAI `tools` array; the struct carries
+/// owned `String`s (the kernel port stays `'static`-free at the wire boundary).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolDecl {
+    pub name: String,
+    pub description: String,
+    pub arg_name: String,
+}
+
+/// A single tool call the model returned — parsed by the adapter from
+/// `message.tool_calls[].function`. Carries the raw argument JSON so the port
+/// impl (not the kernel) owns argument parsing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolCallReq {
+    pub name: String,
+    pub arguments_json: String,
 }
 
 /// An embedding request.
@@ -364,7 +393,11 @@ mod tests {
 
     /// Env reader backed by a fixed map; models an explicit operator environment.
     fn env<'a>(map: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
-        move |k: &str| map.iter().find(|(key, _)| *key == k).map(|(_, v)| v.to_string())
+        move |k: &str| {
+            map.iter()
+                .find(|(key, _)| *key == k)
+                .map(|(_, v)| v.to_string())
+        }
     }
 
     // ── (a) default Off when env absent ────────────────────────────────────────
@@ -388,7 +421,11 @@ mod tests {
             ("DOWIZ_LLM_API_KEY_FILE", "/tmp/never-read.key"),
         ]))
         .expect("leftover vars without mode must parse to Off, never escalate");
-        assert_eq!(cfg.mode, AiMode::Off, "no mode set ⇒ Off even with trailing vars");
+        assert_eq!(
+            cfg.mode,
+            AiMode::Off,
+            "no mode set ⇒ Off even with trailing vars"
+        );
         assert_eq!(cfg.api_key, None, "key file is never read when mode is Off");
     }
 
@@ -402,7 +439,10 @@ mod tests {
         // local, no explicit base ⇒ loopback default pinned
         let local = BackendConfig::from_env_get(env(&[("DOWIZ_AI_MODE", "local")])).unwrap();
         assert_eq!(local.mode, AiMode::LocalOffline);
-        assert!(is_loopback(&local.base_url), "local default must be loopback");
+        assert!(
+            is_loopback(&local.base_url),
+            "local default must be loopback"
+        );
         assert_eq!(local.api_key, None);
 
         // local, explicit loopback base
@@ -424,10 +464,7 @@ mod tests {
         let cfg = BackendConfig::from_env_get(env(&[
             ("DOWIZ_AI_MODE", "connected"),
             ("DOWIZ_LLM_BASE_URL", "https://api.example.com/v1"),
-            (
-                "DOWIZ_LLM_API_KEY_FILE",
-                key_path.to_str().unwrap(),
-            ),
+            ("DOWIZ_LLM_API_KEY_FILE", key_path.to_str().unwrap()),
         ]))
         .expect("fully-specified connected config must parse");
         assert_eq!(cfg.mode, AiMode::Connected);
@@ -476,7 +513,10 @@ mod tests {
         let err = BackendConfig::from_env_get(env(&[
             ("DOWIZ_AI_MODE", "connected"),
             ("DOWIZ_LLM_BASE_URL", "https://api.example.com/v1"),
-            ("DOWIZ_LLM_API_KEY_FILE", "/nonexistent/and/unreadable/key.file"),
+            (
+                "DOWIZ_LLM_API_KEY_FILE",
+                "/nonexistent/and/unreadable/key.file",
+            ),
         ]))
         .unwrap_err();
         assert_eq!(err, ConfigError::MissingApiKey);

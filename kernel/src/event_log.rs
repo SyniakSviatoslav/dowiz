@@ -381,8 +381,8 @@ impl<S: EventStore> EventLog<S> {
         }
         // Decide BEFORE commit. On rejection, do not persist anything — this is
         // the Law pole (never retry), kept distinct from the store-fault pole.
-        let decision = decide(&ev)
-            .map_err(|e| CommitError::Rejected(DecideRejected(e.to_string())))?;
+        let decision =
+            decide(&ev).map_err(|e| CommitError::Rejected(DecideRejected(e.to_string())))?;
         // Commit under the SAME raw id the dedup check tested (stable content-id,
         // no rebind). A durability fault here is the Store pole — accepted but not
         // durable, NOT a Law rejection.
@@ -746,7 +746,10 @@ mod tests {
         // stored under — catches a partial fix that reorders the check but mis-keys
         // the store (e.g. dedup on raw id, store under a rebound id, or vice-versa).
         if let AppendOutcome::Duplicate(dup_id) = out2 {
-            assert_eq!(dup_id, stored_id, "duplicate id must equal the stored content-id");
+            assert_eq!(
+                dup_id, stored_id,
+                "duplicate id must equal the stored content-id"
+            );
         }
     }
 
@@ -901,7 +904,10 @@ mod tests {
             !matches!(res, Ok(AppendOutcome::Committed(_))),
             "MUST NOT fabricate a Committed outcome on a lost write"
         );
-        assert!(log.tip().is_none(), "tip must not advance on a failed barrier");
+        assert!(
+            log.tip().is_none(),
+            "tip must not advance on a failed barrier"
+        );
         assert_eq!(log.len(), 0, "no in-memory advance on a failed barrier");
     }
 

@@ -48,6 +48,13 @@ pgrust = ["dep:sqlx", "dep:tokio"]
 # part of the decide/fold Law. `serde`/`aes-gcm`/`curve25519-dalek` ride ONLY
 # behind this feature (same discipline as `wasm`).
 pq = ["dep:serde", "dep:serde_json", "dep:aes-gcm", "dep:curve25519-dalek"]
+# `gpu` — P38 O18a graphics unlock. OFF by default so the canonical order/money
+# core and the wasm cdylib stay lean and GPU-free. Behind this flag,
+# `render/gpu.rs` compiles a REAL headless wgpu bring-up (Instance→Adapter→
+# Device). `wgpu`'s adapter request is async, so `pollster` rides the same flag
+# to block_on it from the synchronous kernel boundary (no async runtime pulled
+# into the default build). The default build compiles `render` to nothing.
+gpu = ["dep:wgpu", "dep:pollster"]
 
 # innovate: rsa 0.9.x (RUSTSEC-2023-0071, Marvin timing) appears in Cargo.lock but
 # `cargo tree -i rsa` prints nothing — it is NOT linked into any active build path
@@ -85,6 +92,12 @@ tracing = "0.1"
 regex = "1"
 # Pretty env-filter subscriber for `init_tracing()` (shipped; dev/CLI only, never called from wasm).
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# GPU render backend (P38 O18a) — ONLY compiled under the `gpu` feature so the
+# default kernel carries zero GPU symbols (feature-additive; guard-restorable).
+wgpu = { version = "30.0.0", optional = true }
+# Minimal executor to block_on wgpu's async adapter/device requests from the
+# synchronous kernel boundary — gated with `gpu`, never in the default graph.
+pollster = { version = "1.0.1", optional = true }
 
 [dev-dependencies]
 # Benchmarking harness for real latency/throughput telemetry on the hot paths.

@@ -4,6 +4,9 @@
 //! Code→qwen2.5-coder:7b, General→llama3.1:8b, Embedding→nomic-embed-text (qwen3-embedding:0.6b
 //! as the higher-quality option). `:tag` ids pass through verbatim; `fp_ollama` sentinel is ignored.
 
+use std::collections::BTreeMap;
+use std::sync::Mutex;
+
 use dowiz_kernel::ports::llm::{
     Caps, ChatRequest, ChatResponse, EmbedRequest, EmbedResponse, LlmBackend, LlmError,
     RerankRequest, RerankResponse, TaskClass,
@@ -16,12 +19,18 @@ use crate::transport::OpenAiCompatTransport;
 #[derive(Clone)]
 pub struct OllamaAdapter {
     transport: OpenAiCompatTransport,
+    /// Memoized per-model `tool_calling` probe results. The probe runs lazily on
+    /// the first `caps()` call (never at construction, so building an adapter while
+    /// the daemon is down stays cheap and non-failing). A probe failure is recorded
+    /// as `false` (fail-closed) — never a panic, never a stale `true`.
+    toolkit: std::sync::Arc<Mutex<BTreeMap<String, bool>>>,
 }
 
 impl OllamaAdapter {
     pub fn new(base_url: &str) -> Self {
         OllamaAdapter {
             transport: OpenAiCompatTransport::new(base_url, Quirks::ollama()),
+            toolkit: std::sync::Arc::new(Mutex::new(BTreeMap::new())),
         }
     }
 
@@ -43,6 +52,33 @@ impl OllamaAdapter {
             TaskClass::Embedding => "nomic-embed-text".to_string(),
         }
     }
+
+    /// Probe (and memoize) whether `model_id` supports tool calling, via Ollama's
+    /// native `/api/show` capabilities. Fail-closed: any failure ⇒ `false`
+    /// (recorded so the same model is never re-probed into a `true`).
+    fn tool_calling_for(&self, model_id: &str) -> bool {
+        // Fast path: reuse a prior probe.
+        if let Some(&v) = self.toolkit.lock().unwrap().get(model_id) {
+            return v;
+        }
+        let ok = self
+            .transport
+            .show_capabilities(model_id)
+            .map(|caps| caps.iter().any(|c| c.eq_ignore_ascii_case("tools")))
+            .unwrap_or(false);
+        self.toolkit
+            .lock()
+            .unwrap()
+            .insert(model_id.to_string(), ok);
+        ok
+    }
+
+    /// Public probe entry point used by tests and callers wanting to check an
+    /// arbitrary model id (not just the General route). Shares the memoized logic
+    /// and the same fail-closed semantics as `caps()`.
+    pub fn probe_tool_calling(&self, model_id: &str) -> bool {
+        self.tool_calling_for(model_id)
+    }
 }
 
 impl LlmBackend for OllamaAdapter {
@@ -51,12 +87,19 @@ impl LlmBackend for OllamaAdapter {
     }
 
     fn caps(&self) -> Caps {
-        // Ollama on this host: chat + embed confirmed live (§1.2). Rerank/tool-calling not assumed.
+        // Ollama on this host: chat + embed confirmed live (§1.2). Rerank not wired.
+        // `tool_calling` is NO LONGER hard-pinned: it is discovered live per the
+        // General-route model the loop actually uses (llama3.1:8b), with a
+        // fail-closed probe (failure ⇒ false, never fail-open).
+        let model = self.route_model(&ChatRequest {
+            task_class: TaskClass::General,
+            ..Default::default()
+        });
         Caps {
             chat: true,
             embed: true,
             rerank: false,
-            tool_calling: false,
+            tool_calling: self.tool_calling_for(&model),
         }
     }
 

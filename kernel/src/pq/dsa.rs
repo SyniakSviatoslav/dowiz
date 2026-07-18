@@ -43,10 +43,10 @@ const GAMMA1: i32 = 1 << 19;
 const GAMMA2: i32 = (Q - 1) / 32;
 const OMEGA: usize = 55;
 
-const SEEDBYTES: usize = 32;
+pub const SEEDBYTES: usize = 32;
 const CRHBYTES: usize = 64;
 const TRBYTES: usize = 64;
-const RNDBYTES: usize = 32;
+pub const RNDBYTES: usize = 32;
 const CTILDEBYTES: usize = 48;
 
 const POLYT1_PACKEDBYTES: usize = 320;

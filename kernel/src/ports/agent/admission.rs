@@ -198,7 +198,8 @@ impl<V: SignatureVerifier> AdmissionGate for ReferenceHybridGate<V> {
         let nonce = frame.capability.nonce;
 
         // 2. authorization root-of-trust: anchor-rooted UCAN-subset chain.
-        verify_chain(&self.verifier, roster, chain, &frame.capability, now).map_err(map_chain_err)?;
+        verify_chain(&self.verifier, roster, chain, &frame.capability, now)
+            .map_err(map_chain_err)?;
 
         // 3. red-line (armed) — after chain (never burn a nonce on an unauthenticated
         //    frame), before revocation. Deny-by-default.
@@ -322,7 +323,13 @@ pub struct AdmissionRecord {
 impl AdmissionRecord {
     /// Whether the granted ENVELOPE (not the bucket state) matches another record — used
     /// for the semantic re-admission short-circuit.
-    fn same_envelope(&self, capacity: u64, refill_milli: u64, tier: SandboxTier, depth: u8) -> bool {
+    fn same_envelope(
+        &self,
+        capacity: u64,
+        refill_milli: u64,
+        tier: SandboxTier,
+        depth: u8,
+    ) -> bool {
         self.granted_capacity == capacity
             && self.granted_refill_milli == refill_milli
             && self.tier == tier
@@ -346,7 +353,12 @@ pub struct Admitter<G: AdmissionGate> {
 impl<G: AdmissionGate> Admitter<G> {
     /// Build an admitter. `actor_pubkey` is the ADMITTING NODE's identity (the local
     /// operator making the decision — the agent is the subject, the node is the actor).
-    pub fn new(gate: G, limiter: AdmissionLimiter, per_peer_budget_cap: u64, actor_pubkey: [u8; 32]) -> Self {
+    pub fn new(
+        gate: G,
+        limiter: AdmissionLimiter,
+        per_peer_budget_cap: u64,
+        actor_pubkey: [u8; 32],
+    ) -> Self {
         Admitter {
             gate,
             limiter,
@@ -415,7 +427,8 @@ impl<G: AdmissionGate> Admitter<G> {
         let recomputed = NodeId::from_keys(&manifest.subject_key_pq, &manifest.subject_key);
         if recomputed.0 != manifest.agent_node_id
             || frame.capability.subject_key != manifest.subject_key
-            || frame.capability.subject_key_pq.as_deref() != Some(manifest.subject_key_pq.as_slice())
+            || frame.capability.subject_key_pq.as_deref()
+                != Some(manifest.subject_key_pq.as_slice())
         {
             return Err(AdmissionError::IdentityMismatch);
         }
@@ -429,7 +442,10 @@ impl<G: AdmissionGate> Admitter<G> {
         };
 
         // 5. budget envelope (F2 rate-limit): min(request, per-peer cap).
-        let granted_capacity = manifest.budget_request.capacity.min(self.per_peer_budget_cap);
+        let granted_capacity = manifest
+            .budget_request
+            .capacity
+            .min(self.per_peer_budget_cap);
         let granted_refill_milli = manifest.budget_request.refill_milli_units_per_sec;
         let refill = granted_refill_milli as f64 / 1000.0;
 
@@ -446,7 +462,14 @@ impl<G: AdmissionGate> Admitter<G> {
         let content_id = manifest.content_id();
         if let Some(existing) = self.admitted.get(&content_id) {
             let live = existing.expiry > now;
-            if live && existing.same_envelope(granted_capacity, granted_refill_milli, tier, granted_depth) {
+            if live
+                && existing.same_envelope(
+                    granted_capacity,
+                    granted_refill_milli,
+                    tier,
+                    granted_depth,
+                )
+            {
                 return Ok(existing.clone());
             }
         }
@@ -523,7 +546,7 @@ fn encode_admission_event(
 mod tests {
     use super::*;
     use crate::event_log::MemEventStore;
-    use crate::ports::agent::cap::{Capability, Delegation, ML_DSA_65_PK_LEN, RefSigner};
+    use crate::ports::agent::cap::{Capability, Delegation, RefSigner, ML_DSA_65_PK_LEN};
     use crate::ports::agent::manifest::{
         BudgetRequest, CostDenomination, ExecutionModel, QuirksProfile, ResourceNeed,
         ValidationPolicy,
@@ -618,14 +641,27 @@ mod tests {
         let mut frame = SignedFrame::new(cap, manifest.canonical_bytes());
         frame.sign_classical(v, cls_secret);
         frame.sign_pq(v, pq_secret);
-        let link = Delegation::sign(v, anchor, cls, scope.clone(), scope, 9999, nonce, anchor_secret);
+        let link = Delegation::sign(
+            v,
+            anchor,
+            cls,
+            scope.clone(),
+            scope,
+            9999,
+            nonce,
+            anchor_secret,
+        );
         let mut roster = AnchorRoster::new();
         roster.enroll(&anchor);
         (frame, roster, vec![link])
     }
 
     fn open_gate() -> ReferenceHybridGate<RefSigner> {
-        ReferenceHybridGate::new_redlined(HybridPolicy::RequireBoth, RedLinePolicy::DenyByDefault, RefSigner)
+        ReferenceHybridGate::new_redlined(
+            HybridPolicy::RequireBoth,
+            RedLinePolicy::DenyByDefault,
+            RefSigner,
+        )
     }
 
     /// A generous limiter that never throttles (for the non-SH-1 tests).
@@ -644,17 +680,30 @@ mod tests {
         let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
         let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
         let scope = Scope::single(Resource::AgentBridge, Action::AdmitAgent);
-        let (mut frame, roster, chain) = valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
+        let (mut frame, roster, chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
         // Corrupt one bit of the classical signature.
         frame.classical_sig.as_mut().unwrap()[0] ^= 0x01;
 
         let mut adm = admitter();
         let mut log = EventLog::new(MemEventStore::new());
         let len_before = log.len();
-        let res = adm.admit(&frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0);
+        let res = adm.admit(
+            &frame,
+            &roster,
+            &chain,
+            &RevocationSet::new(),
+            &mut log,
+            0,
+            0,
+        );
         assert!(matches!(res, Err(AdmissionError::BadSignature)));
         // No event, no admitted record — store byte-identical.
-        assert_eq!(log.len(), len_before, "no event on a corrupted-signature frame");
+        assert_eq!(
+            log.len(),
+            len_before,
+            "no event on a corrupted-signature frame"
+        );
         assert!(adm.admitted(&manifest.content_id()).is_none());
     }
 
@@ -670,9 +719,21 @@ mod tests {
 
         let mut adm = admitter();
         let mut log = EventLog::new(MemEventStore::new());
-        let res = adm.admit(&frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0);
+        let res = adm.admit(
+            &frame,
+            &roster,
+            &chain,
+            &RevocationSet::new(),
+            &mut log,
+            0,
+            0,
+        );
         assert!(matches!(res, Err(AdmissionError::ManifestParseError(_))));
-        assert_eq!(adm.gate().check_count(), 0, "gate MUST NOT be reached on a parse failure");
+        assert_eq!(
+            adm.gate().check_count(),
+            0,
+            "gate MUST NOT be reached on a parse failure"
+        );
         assert_eq!(log.len(), 0);
     }
 
@@ -687,7 +748,15 @@ mod tests {
 
         let mut adm = admitter();
         let mut log = EventLog::new(MemEventStore::new());
-        let res = adm.admit(&frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0);
+        let res = adm.admit(
+            &frame,
+            &roster,
+            &chain,
+            &RevocationSet::new(),
+            &mut log,
+            0,
+            0,
+        );
         // This host has no /dev/kvm (see microvm.rs R1) ⇒ AdapterRejected, no downgrade.
         assert!(matches!(res, Err(AdmissionError::AdapterRejected)));
         assert_eq!(log.len(), 0);
@@ -707,7 +776,15 @@ mod tests {
 
         let mut adm = admitter();
         let mut log = EventLog::new(MemEventStore::new());
-        let res = adm.admit(&frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0);
+        let res = adm.admit(
+            &frame,
+            &roster,
+            &chain,
+            &RevocationSet::new(),
+            &mut log,
+            0,
+            0,
+        );
         assert!(matches!(res, Err(AdmissionError::IdentityMismatch)));
         assert_eq!(log.len(), 0);
     }
@@ -724,7 +801,15 @@ mod tests {
         let mut adm = admitter();
         let mut log = EventLog::new(MemEventStore::new());
         let rec = adm
-            .admit(&frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0)
+            .admit(
+                &frame,
+                &roster,
+                &chain,
+                &RevocationSet::new(),
+                &mut log,
+                0,
+                0,
+            )
             .expect("valid manifest admits");
         assert_eq!(rec.tier, SandboxTier::WasmComponent);
         assert_eq!(rec.granted_depth, 2, "delegate=true, min(2,3)=2");
@@ -747,7 +832,15 @@ mod tests {
         let mut adm = admitter();
         let mut log = EventLog::new(MemEventStore::new());
         let rec = adm
-            .admit(&frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0)
+            .admit(
+                &frame,
+                &roster,
+                &chain,
+                &RevocationSet::new(),
+                &mut log,
+                0,
+                0,
+            )
             .unwrap();
         assert_eq!(rec.granted_depth, 0, "delegate=false ⇒ depth 0 (F10)");
     }
@@ -759,15 +852,36 @@ mod tests {
         let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
         let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
         let scope = Scope::single(Resource::AgentBridge, Action::AdmitAgent);
-        let (frame, roster, chain) = valid_frame(&v, &cls, &pq, &anch, &manifest, scope.clone(), [7u8; 8]);
+        let (frame, roster, chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope.clone(), [7u8; 8]);
         let mut adm = admitter();
         let mut log = EventLog::new(MemEventStore::new());
-        let r1 = adm.admit(&frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0).unwrap();
+        let r1 = adm
+            .admit(
+                &frame,
+                &roster,
+                &chain,
+                &RevocationSet::new(),
+                &mut log,
+                0,
+                0,
+            )
+            .unwrap();
         assert_eq!(log.len(), 1);
         // Re-present the SAME manifest bytes (a NEW frame w/ a fresh nonce so the gate
         // does not replay-reject) — envelope identical ⇒ short-circuit, no new event.
         let (frame2, _, chain2) = valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [9u8; 8]);
-        let r2 = adm.admit(&frame2, &roster, &chain2, &RevocationSet::new(), &mut log, 0, 0).unwrap();
+        let r2 = adm
+            .admit(
+                &frame2,
+                &roster,
+                &chain2,
+                &RevocationSet::new(),
+                &mut log,
+                0,
+                0,
+            )
+            .unwrap();
         assert_eq!(log.len(), 1, "semantic re-admission appends NO new event");
         assert_eq!(r1.content_id, r2.content_id);
         assert_eq!(r1.event_id, r2.event_id);
@@ -787,15 +901,29 @@ mod tests {
         let mut throttled = 0usize;
         for i in 0..20u8 {
             // Distinct nonces so absent throttling every frame would reach the gate.
-            let (frame, _, chain) = valid_frame(&v, &cls, &pq, &anch, &manifest, scope.clone(), [i; 8]);
-            if let Err(AdmissionError::AdmissionThrottled) =
-                adm.admit(&frame, &roster_for(&v, &anch), &chain, &RevocationSet::new(), &mut log, 0, 0)
-            {
+            let (frame, _, chain) =
+                valid_frame(&v, &cls, &pq, &anch, &manifest, scope.clone(), [i; 8]);
+            if let Err(AdmissionError::AdmissionThrottled) = adm.admit(
+                &frame,
+                &roster_for(&v, &anch),
+                &chain,
+                &RevocationSet::new(),
+                &mut log,
+                0,
+                0,
+            ) {
                 throttled += 1;
             }
         }
-        assert_eq!(adm.gate().check_count(), 3, "only the 3 within the ceiling reach the gate");
-        assert_eq!(throttled, 17, "the flood beyond the ceiling is dropped pre-crypto");
+        assert_eq!(
+            adm.gate().check_count(),
+            3,
+            "only the 3 within the ceiling reach the gate"
+        );
+        assert_eq!(
+            throttled, 17,
+            "the flood beyond the ceiling is dropped pre-crypto"
+        );
     }
 
     fn roster_for(v: &RefSigner, anchor_secret: &[u8; 32]) -> AnchorRoster {
@@ -811,24 +939,51 @@ mod tests {
         let gate = ReferenceHybridGate::new_redlined(
             HybridPolicy::RequireBoth,
             RedLinePolicy::DenyByDefault,
-            CountingVerifier { inner: RefSigner, verifies: verifies.clone() },
+            CountingVerifier {
+                inner: RefSigner,
+                verifies: verifies.clone(),
+            },
         );
         let v = RefSigner;
         let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
         let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
         let scope = Scope::single(Resource::AgentBridge, Action::AdmitAgent);
-        let (frame, roster, _chain) = valid_frame(&v, &cls, &pq, &anch, &manifest, scope.clone(), [7u8; 8]);
+        let (frame, roster, _chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope.clone(), [7u8; 8]);
         // A chain longer than MAX_VERIFY_CHAIN_LINKS (16) — 17 links.
         let anchor = v.classical_public(&anch);
         let over: Vec<Delegation> = (0..17)
-            .map(|i| Delegation::sign(&v, anchor, anchor, scope.clone(), scope.clone(), 9999, [i as u8; 8], &anch))
+            .map(|i| {
+                Delegation::sign(
+                    &v,
+                    anchor,
+                    anchor,
+                    scope.clone(),
+                    scope.clone(),
+                    9999,
+                    [i as u8; 8],
+                    &anch,
+                )
+            })
             .collect();
         let mut adm = Admitter::new(gate, open_limiter(), 1_000_000, [0u8; 32]);
         let mut log = EventLog::new(MemEventStore::new());
-        let res = adm.admit(&frame, &roster, &over, &RevocationSet::new(), &mut log, 0, 0);
+        let res = adm.admit(
+            &frame,
+            &roster,
+            &over,
+            &RevocationSet::new(),
+            &mut log,
+            0,
+            0,
+        );
         assert!(matches!(res, Err(AdmissionError::ChainTooLong)));
         assert_eq!(adm.gate().check_count(), 0, "gate never reached");
-        assert_eq!(verifies.load(Ordering::SeqCst), 0, "ZERO signature verifications");
+        assert_eq!(
+            verifies.load(Ordering::SeqCst),
+            0,
+            "ZERO signature verifications"
+        );
         // Distinct from the DEFAULT_MAX_AGENT_DEPTH=3 dispatch cap.
         assert_ne!(MAX_VERIFY_CHAIN_LINKS, DEFAULT_MAX_AGENT_DEPTH as usize);
     }
@@ -847,7 +1002,15 @@ mod tests {
         let mut log = EventLog::new(MemEventStore::new());
         // Wrong admission scope is checked first (before the gate) — so this proves the
         // admission-scope gate; the red-line gate itself is unit-tested in scope.rs.
-        let res = adm.admit(&frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0);
+        let res = adm.admit(
+            &frame,
+            &roster,
+            &chain,
+            &RevocationSet::new(),
+            &mut log,
+            0,
+            0,
+        );
         assert!(matches!(res, Err(AdmissionError::WrongAdmissionScope)));
     }
 
@@ -884,8 +1047,16 @@ mod tests {
                 let _ = adm.admit(&frame, &roster, &chain, &revocations, &mut log, 0, 0);
             }
 
-            assert_eq!(roster.snapshot_sorted(), roster_before, "roster unchanged for scope {r:?}/{a:?}");
-            assert_eq!(revocations.snapshot_sorted(), revs_before, "revocations unchanged for {r:?}/{a:?}");
+            assert_eq!(
+                roster.snapshot_sorted(),
+                roster_before,
+                "roster unchanged for scope {r:?}/{a:?}"
+            );
+            assert_eq!(
+                revocations.snapshot_sorted(),
+                revs_before,
+                "revocations unchanged for {r:?}/{a:?}"
+            );
 
             // The bindings ARE genuinely `&mut`-capable — but mutation is reachable ONLY
             // via the out-of-band operator path, NEVER from the capability surface above.
@@ -916,8 +1087,14 @@ mod tests {
         poison_remove(&mut roster, &anchor);
 
         let after = roster.snapshot_sorted();
-        assert_ne!(after, before, "the before/after check MUST detect roster mutation (not vacuous)");
-        assert!(!roster.contains(&anchor), "poison actually removed the anchor");
+        assert_ne!(
+            after, before,
+            "the before/after check MUST detect roster mutation (not vacuous)"
+        );
+        assert!(
+            !roster.contains(&anchor),
+            "poison actually removed the anchor"
+        );
     }
 
     /// LAYER 3 (structural): `admit` borrows roster/revocations SHARED (`&`), never
@@ -944,6 +1121,9 @@ mod tests {
         // Shared borrow #2 — `admit` takes `&roster`. Coexists ONLY because it is `&`.
         let _ = adm.admit(&frame, &roster, &chain, &revocations, &mut log, 0, 0);
         // Use #1 AFTER `admit` — compiles only because `admit` borrowed shared, not `&mut`.
-        assert!(shared_hold.contains(&anchor), "roster still readable — admit took a shared borrow");
+        assert!(
+            shared_hold.contains(&anchor),
+            "roster still readable — admit took a shared borrow"
+        );
     }
 }

@@ -17,5 +17,8 @@ pub mod fractal;
 pub mod hybrid;
 pub mod keccak;
 pub mod kem;
+/// R-3 `RootDelegationPolicy` (Layer D): operator-signed root + at-most-one overlay hop;
+/// `Deferred` (Web-Of-Trust) exists at the type level but verifies as `Unsupported` in v1.
+pub mod root_delegation;
 pub mod volume;
 pub mod x25519;

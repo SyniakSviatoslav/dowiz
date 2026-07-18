@@ -124,7 +124,8 @@ impl FaultPlan {
                 Trigger::EveryNth(k) => k != 0 && n % k == 0,
                 Trigger::Always => true,
                 Trigger::Probability(p) => {
-                    let mut rng = Rng::new(self.seed ^ 0x9e3779b97f4a7c15, self.stream ^ (n as u64));
+                    let mut rng =
+                        Rng::new(self.seed ^ 0x9e3779b97f4a7c15, self.stream ^ (n as u64));
                     rng.next_f64() < p
                 }
             };
@@ -241,7 +242,10 @@ impl<S: EventStore> EventStore for ChaosStore<S> {
                 // F1 — fail the durability barrier WITHOUT touching `inner`.
                 Err(StoreError::Sync("chaos: injected StoreSyncFail".into()))
             }
-            Some(FaultInjection::CorruptPayload { xor_mask, byte_index }) if self.corrupt_copy => {
+            Some(FaultInjection::CorruptPayload {
+                xor_mask,
+                byte_index,
+            }) if self.corrupt_copy => {
                 // F2 — persist the corrupted twin; the `id` stays uncorrupted,
                 // so a later `verify_chain` walk is the only detector.
                 let corrupted = Self::apply_corrupt(&ev, xor_mask, byte_index);
@@ -302,7 +306,15 @@ impl FaultyStore {
         FaultyStore {
             inner: ChaosStore::new(
                 crate::event_log::MemEventStore::new(),
-                FaultPlan::new(0, 1, vec![(ChaosSite::StoreInsert, FaultInjection::StoreSyncFail, Trigger::Always)]),
+                FaultPlan::new(
+                    0,
+                    1,
+                    vec![(
+                        ChaosSite::StoreInsert,
+                        FaultInjection::StoreSyncFail,
+                        Trigger::Always,
+                    )],
+                ),
             ),
         }
     }
@@ -333,19 +345,34 @@ mod tests {
 
     #[test]
     fn fault_plan_oncall_fires_once() {
-        let mut plan = FaultPlan::new(1, 1, vec![
-            (ChaosSite::StoreInsert, FaultInjection::StoreSyncFail, Trigger::OnCall(2)),
-        ]);
+        let mut plan = FaultPlan::new(
+            1,
+            1,
+            vec![(
+                ChaosSite::StoreInsert,
+                FaultInjection::StoreSyncFail,
+                Trigger::OnCall(2),
+            )],
+        );
         assert!(plan.fire(ChaosSite::StoreInsert).is_none()); // call 1
-        assert!(matches!(plan.fire(ChaosSite::StoreInsert), Some(FaultInjection::StoreSyncFail))); // call 2
+        assert!(matches!(
+            plan.fire(ChaosSite::StoreInsert),
+            Some(FaultInjection::StoreSyncFail)
+        )); // call 2
         assert!(plan.fire(ChaosSite::StoreInsert).is_none()); // call 3
     }
 
     #[test]
     fn fault_plan_everynth_fires_periodically() {
-        let mut plan = FaultPlan::new(1, 1, vec![
-            (ChaosSite::StoreInsert, FaultInjection::StoreSyncFail, Trigger::EveryNth(3)),
-        ]);
+        let mut plan = FaultPlan::new(
+            1,
+            1,
+            vec![(
+                ChaosSite::StoreInsert,
+                FaultInjection::StoreSyncFail,
+                Trigger::EveryNth(3),
+            )],
+        );
         for n in 1..=6 {
             let hit = plan.fire(ChaosSite::StoreInsert).is_some();
             assert_eq!(hit, n % 3 == 0, "EveryNth(3) should fire on call {n}");
@@ -356,20 +383,44 @@ mod tests {
     fn fault_plan_probability_is_seeded() {
         // Same seed ⇒ identical draw sequence (reproducibility invariant).
         let draw = |seed| {
-            let mut plan = FaultPlan::new(seed, 1, vec![
-                (ChaosSite::StoreInsert, FaultInjection::StoreSyncFail, Trigger::Probability(0.5)),
-            ]);
-            (0..8).map(|_| plan.fire(ChaosSite::StoreInsert).is_some()).collect::<Vec<_>>()
+            let mut plan = FaultPlan::new(
+                seed,
+                1,
+                vec![(
+                    ChaosSite::StoreInsert,
+                    FaultInjection::StoreSyncFail,
+                    Trigger::Probability(0.5),
+                )],
+            );
+            (0..8)
+                .map(|_| plan.fire(ChaosSite::StoreInsert).is_some())
+                .collect::<Vec<_>>()
         };
-        assert_eq!(draw(0xabcd), draw(0xabcd), "Probability draws must be reproducible");
-        assert_ne!(draw(0xabcd), draw(0xdcba), "different seed ⇒ different sequence");
+        assert_eq!(
+            draw(0xabcd),
+            draw(0xabcd),
+            "Probability draws must be reproducible"
+        );
+        assert_ne!(
+            draw(0xabcd),
+            draw(0xdcba),
+            "different seed ⇒ different sequence"
+        );
     }
 
     #[test]
     fn chaos_store_always_fail_keeps_tip_stable() {
         let mut store = ChaosStore::new(
             crate::event_log::MemEventStore::new(),
-            FaultPlan::new(0, 1, vec![(ChaosSite::StoreInsert, FaultInjection::StoreSyncFail, Trigger::Always)]),
+            FaultPlan::new(
+                0,
+                1,
+                vec![(
+                    ChaosSite::StoreInsert,
+                    FaultInjection::StoreSyncFail,
+                    Trigger::Always,
+                )],
+            ),
         );
         let id = [7u8; 32];
         let ev = MeshEvent {
@@ -386,9 +437,15 @@ mod tests {
     #[test]
     fn chaos_guard_clears_thread_local() {
         {
-            let _g = install_plan(FaultPlan::new(1, 1, vec![
-                (ChaosSite::BetweenDecideAndInsert, FaultInjection::PanicMidTransaction, Trigger::Always),
-            ]));
+            let _g = install_plan(FaultPlan::new(
+                1,
+                1,
+                vec![(
+                    ChaosSite::BetweenDecideAndInsert,
+                    FaultInjection::PanicMidTransaction,
+                    Trigger::Always,
+                )],
+            ));
             // Inside the scope the plan is armed.
             let armed = ACTIVE_PLAN.with(|p| p.borrow().is_some());
             assert!(armed, "plan installed within guard scope");
@@ -431,7 +488,15 @@ mod adversarial {
         let adj: Vec<Vec<f64>> = vec![vec![0.0, 2.0], vec![2.0, 0.0]];
         let mut log = EventLog::new(ChaosStore::new(
             MemEventStore::new(),
-            FaultPlan::new(0, 1, vec![(ChaosSite::StoreInsert, FaultInjection::StoreSyncFail, Trigger::Always)]),
+            FaultPlan::new(
+                0,
+                1,
+                vec![(
+                    ChaosSite::StoreInsert,
+                    FaultInjection::StoreSyncFail,
+                    Trigger::Always,
+                )],
+            ),
         ));
         let res = log.commit_after_decide_drift_gate(
             ev([0u8; 32], 1, 1, b"mutate"),
@@ -455,7 +520,15 @@ mod adversarial {
         // as the Store pole, never a fabricated commit.
         let mut log2 = EventLog::new(ChaosStore::new(
             MemEventStore::new(),
-            FaultPlan::new(0, 1, vec![(ChaosSite::StoreInsert, FaultInjection::StoreSyncFail, Trigger::Always)]),
+            FaultPlan::new(
+                0,
+                1,
+                vec![(
+                    ChaosSite::StoreInsert,
+                    FaultInjection::StoreSyncFail,
+                    Trigger::Always,
+                )],
+            ),
         ));
         let res2 = log2.commit_after_decide_drift_gate(
             ev([0u8; 32], 1, 1, b"mutate"),
@@ -512,14 +585,28 @@ mod adversarial {
         assert!(log.verify_chain().is_ok(), "clean chain verifies OK");
 
         // Now a ChaosStore that persists a CORRUPTED twin of event 1 (F2).
-        let mut cstore = ChaosStore::new(MemEventStore::new(), FaultPlan::new(0, 1, vec![
-            (ChaosSite::StoreInsert, FaultInjection::CorruptPayload { xor_mask: 0x01, byte_index: 0 }, Trigger::Always),
-        ]));
+        let mut cstore = ChaosStore::new(
+            MemEventStore::new(),
+            FaultPlan::new(
+                0,
+                1,
+                vec![(
+                    ChaosSite::StoreInsert,
+                    FaultInjection::CorruptPayload {
+                        xor_mask: 0x01,
+                        byte_index: 0,
+                    },
+                    Trigger::Always,
+                )],
+            ),
+        );
         cstore.corrupt_copy = true;
         let mut clog = EventLog::new(cstore);
         // Event 0 stored clean, event 1 stored corrupted (payload byte 0 flipped).
-        clog.append(ev([0u8; 32], 1, 1, b"genesis")).expect("e0 committed");
-        clog.append(ev(id0, 1, 2, b"step1")).expect("e1 committed (corrupted at rest)");
+        clog.append(ev([0u8; 32], 1, 1, b"genesis"))
+            .expect("e0 committed");
+        clog.append(ev(id0, 1, 2, b"step1"))
+            .expect("e1 committed (corrupted at rest)");
         // verify_chain is the ONLY observer: it recomputes the id from the
         // mutated body and finds a HashMismatch.
         match clog.verify_chain() {
@@ -555,7 +642,10 @@ mod adversarial {
             let crashed_once = rec.id % 7 == 0 && !already_crashed.contains(&rec.id);
             if crashed_once {
                 // Consumer crashed without ack ⇒ reclaim makes it claimable again.
-                assert!(spool.reclaim(rec.id), "reclaim must succeed for a claimed id");
+                assert!(
+                    spool.reclaim(rec.id),
+                    "reclaim must succeed for a claimed id"
+                );
                 already_crashed.insert(rec.id);
                 reclaimed += 1;
             } else {
@@ -567,14 +657,29 @@ mod adversarial {
         // acked on its second pass. Nothing lost, nothing left pending.
         let expected_crashed = (0..n).filter(|i| i % 7 == 0).count();
         assert_eq!(spool.len(), 0, "every record eventually acked (zero loss)");
-        assert_eq!(reclaimed, expected_crashed as u64, "crash/reclaim path exercised (n/7 crashed once)");
-        assert_eq!(delivered, n + reclaimed as u64, "FIFO replays each crashed record exactly once");
+        assert_eq!(
+            reclaimed, expected_crashed as u64,
+            "crash/reclaim path exercised (n/7 crashed once)"
+        );
+        assert_eq!(
+            delivered,
+            n + reclaimed as u64,
+            "FIFO replays each crashed record exactly once"
+        );
         assert_eq!(acked, n, "all n records acked in total");
     }
     fn a5_sustained_disk_full_degrade_closed() {
         let mut log = EventLog::new(ChaosStore::new(
             MemEventStore::new(),
-            FaultPlan::new(0, 1, vec![(ChaosSite::StoreInsert, FaultInjection::StoreSyncFail, Trigger::Always)]),
+            FaultPlan::new(
+                0,
+                1,
+                vec![(
+                    ChaosSite::StoreInsert,
+                    FaultInjection::StoreSyncFail,
+                    Trigger::Always,
+                )],
+            ),
         ));
         for i in 0..10_000u64 {
             let res = log.append(ev([0u8; 32], 1, i, b"durability-fault"));
@@ -596,26 +701,37 @@ mod adversarial {
         use crate::token_bucket::TokenBucket;
         let bucket = TokenBucket::new(10.0, 1.0);
         // Arm the panic seam inside the critical section.
-        let _g = install_plan(FaultPlan::new(1, 1, vec![
-            (ChaosSite::TokenBucketCritical, FaultInjection::PanicMidTransaction, Trigger::OnCall(1)),
-        ]));
+        let _g = install_plan(FaultPlan::new(
+            1,
+            1,
+            vec![(
+                ChaosSite::TokenBucketCritical,
+                FaultInjection::PanicMidTransaction,
+                Trigger::OnCall(1),
+            )],
+        ));
         // First call hits the armed seam ⇒ panics. Catch it (simulates the crash
         // that poisoned the mutex).
-        let first = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            bucket.try_acquire(1.0)
-        }));
-        assert!(first.is_err(), "armed seam must panic on the first call (RED evidence)");
+        let first =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| bucket.try_acquire(1.0)));
+        assert!(
+            first.is_err(),
+            "armed seam must panic on the first call (RED evidence)"
+        );
         // After poisoning, the NEXT call must NOT panic — it recovers via
         // `into_inner` and returns a bool (degrade-closed), proving the cascade
         // is broken.
-        let recovered = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            bucket.try_acquire(1.0)
-        }));
+        let recovered =
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| bucket.try_acquire(1.0)));
         assert!(
             recovered.is_ok(),
             "post-poison try_acquire must recover (no cascade panic) — A6 fix holds"
         );
         // And it returns a real decision (here: grant, since capacity unspent).
-        assert_eq!(recovered.unwrap(), true, "recovered bucket still grants when tokens available");
+        assert_eq!(
+            recovered.unwrap(),
+            true,
+            "recovered bucket still grants when tokens available"
+        );
     }
 }
