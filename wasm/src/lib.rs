@@ -469,6 +469,57 @@ mod p57_tests {
         assert!(!in_wave0_scope('中'));
     }
 }
+// ===== P58 — a11y-mirror-everywhere: the wasm boundary exports (M1/M2/M3/M6) =====
+//
+// Under the TS/NODE BAN the JS-side hidden-DOM mirror (`web/src/lib/a11y_mirror.mjs`)
+// is NOT implemented here (deferred per the operator ruling). What THIS crate
+// provides is the boundary the spec calls "wasm/js mirror exports": the
+// `A11yTree` is serialized to JSON and handed to JS as a `String`, and the
+// machine-checkable synthetic-ARIA-textbox contract (§M3) — role tokens + the
+// `data-*` / announcer constants — is exposed so the future web mirror and P57's
+// editor reconcile to ONE written contract, not code archaeology. The subtree is
+// then rendered by the (separately-landed) DOM mirror; this crate does zero DOM.
+
+/// Build the accessible tree from a JS-supplied `SemanticScene` JSON and return
+/// the `A11yTree` as JSON. This is the `mirror()` derivation crossed the wasm
+/// boundary (P38 G7 shape — the browser re-derives every reconcile, never caches).
+/// On a typed `MirrorError` (cycle / dup-id / text-input-without-edit / missing
+/// child) returns `{"error":"…"}` — a refusal, never a silently-wrong tree (§M1).
+#[wasm_bindgen]
+pub fn a11y_build_mirror(scene_json: &str) -> String {
+    match serde_json::from_str::<dowiz_engine::semantics::SemanticScene>(scene_json) {
+        Ok(scene) => match dowiz_engine::semantics::mirror(&scene) {
+            Ok(tree) => serde_json::to_string(&tree).unwrap_or_else(|e| {
+                serde_json::json!({ "error": format!("serialize: {}", e) }).to_string()
+            }),
+            Err(e) => serde_json::json!({ "error": format!("{:?}", e) }).to_string(),
+        },
+        Err(e) => serde_json::json!({ "error": format!("scene parse: {}", e) }).to_string(),
+    }
+}
+
+/// The canonical ARIA role token for a `Role` (by name, §M3). The web mirror
+/// renders `role={a11y_role_aria_token(role)}`; P57 reconciles its editor to this.
+#[wasm_bindgen]
+pub fn a11y_role_aria_token(role: &str) -> String {
+    use dowiz_engine::semantics::Role;
+    let r = match role {
+        "Group" => Role::Group,
+        "Heading" => Role::Heading,
+        "Label" => Role::Label,
+        "Button" => Role::Button,
+        "Link" => Role::Link,
+        "Image" => Role::Image,
+        "List" => Role::List,
+        "ListItem" => Role::ListItem,
+        "Status" => Role::Status,
+        "Alert" => Role::Alert,
+        "TextInput" => Role::TextInput,
+        _ => return String::new(),
+    };
+    dowiz_engine::semantics::role_to_aria_token(r).to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -601,5 +652,103 @@ mod tests {
         let fb = b.frame();
         assert_eq!(fa.len(), 32 * 32 * 4);
         assert_eq!(fa, fb, "FieldSim must be bit-deterministic across sims");
+    }
+
+    // ===== P58 — a11y-mirror-everywhere: wasm boundary exports (M1/M2/M3/M6) =====
+
+    // (9) `a11y_build_mirror` crosses the tree as JSON and round-trips an order's
+    //     status into an accessible node (the §M2 "role=status DELIVERED" case,
+    //     the general form of P51 §4.7's map-attribution assertion).
+    #[test]
+    fn wasm_a11y_mirror_builds_status_node() {
+        let scene = r#"{
+            "root": 0,
+            "nodes": [
+                {"id":0,"role":"Group","name":"root","bounds":[0,0,100,100],
+                 "focusable":false,"tab_index":0,"state":{"disabled":false,"selected":false,"busy":false,"value_text":null},
+                 "edit":null,"children":[1,2]},
+                {"id":1,"role":"Button","name":"Checkout","bounds":[0,0,50,20],
+                 "focusable":true,"tab_index":1,"state":{"disabled":false,"selected":false,"busy":false,"value_text":null},
+                 "edit":null,"children":[]},
+                {"id":2,"role":"Status","name":"Order #42","bounds":[0,20,50,20],
+                 "focusable":false,"tab_index":0,"state":{"disabled":false,"selected":false,"busy":false,"value_text":"DELIVERED"},
+                 "edit":null,"children":[]}
+            ]
+        }"#;
+        let tree_json = a11y_build_mirror(scene);
+        let v: serde_json::Value = serde_json::from_str(&tree_json).unwrap();
+        // The status node carries the order id + DELIVERED (P51 §4.7 generalized).
+        let names: Vec<&str> = v["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|n| n["name"].as_str().unwrap())
+            .collect();
+        assert!(
+            names.contains(&"Order #42"),
+            "status node present in mirror"
+        );
+        let statuses: Vec<&str> = v["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|n| n["role"] == "Status")
+            .map(|n| n["state"]["value_text"].as_str().unwrap())
+            .collect();
+        assert_eq!(statuses, vec!["DELIVERED"], "status text == DELIVERED");
+    }
+
+    // (10) `a11y_build_mirror` mirrors a TextInput's EditState into the tree; the
+    //      synthetic ARIA-textbox wire shape (§M3) round-trips caret/sel/text.
+    #[test]
+    fn wasm_a11y_mirror_textinput_edit_state() {
+        let scene = r#"{
+            "root": 0,
+            "nodes": [
+                {"id":0,"role":"TextInput","name":"Name","bounds":[0,0,40,12],
+                 "focusable":true,"tab_index":2,
+                 "state":{"disabled":false,"selected":false,"busy":false,"value_text":null},
+                 "edit":{"text":"hi","caret":2,"sel_anchor":0,"composing":false},
+                 "children":[]}
+            ]
+        }"#;
+        let tree_json = a11y_build_mirror(scene);
+        let v: serde_json::Value = serde_json::from_str(&tree_json).unwrap();
+        let node = &v["nodes"][0];
+        assert_eq!(node["role"], "TextInput");
+        assert_eq!(node["edit"]["text"], "hi");
+        assert_eq!(node["edit"]["caret"], 2);
+        assert_eq!(node["edit"]["sel_anchor"], 0);
+        // The convention token the web mirror renders (§M3).
+        assert_eq!(a11y_role_aria_token("TextInput"), "textbox");
+    }
+
+    // (11) `a11y_build_mirror` refuses a TextInput without EditState (§M1
+    //      adversarial) — the mirror is a typed refusal, never a silent drop.
+    #[test]
+    fn wasm_a11y_mirror_refuses_textinput_without_edit() {
+        let scene = r#"{
+            "root": 0,
+            "nodes": [
+                {"id":0,"role":"TextInput","name":"Name","bounds":[0,0,40,12],
+                 "focusable":true,"tab_index":2,
+                 "state":{"disabled":false,"selected":false,"busy":false,"value_text":null},
+                 "edit":null,"children":[]}
+            ]
+        }"#;
+        let tree_json = a11y_build_mirror(scene);
+        // An error serializes as {"error": "..."}; the bad node must not appear.
+        let v: serde_json::Value = serde_json::from_str(&tree_json).unwrap();
+        assert!(v.get("error").is_some(), "mirror refused the bad node");
+    }
+
+    // (12) `a11y_role_aria_token` is the canonical synthetic-textbox convention
+    //      (§M3) — the contract P57 consumes.
+    #[test]
+    fn wasm_a11y_aria_tokens_canonical() {
+        assert_eq!(a11y_role_aria_token("TextInput"), "textbox");
+        assert_eq!(a11y_role_aria_token("Status"), "status");
+        assert_eq!(a11y_role_aria_token("Alert"), "alert");
+        assert_eq!(a11y_role_aria_token("Button"), "button");
     }
 }

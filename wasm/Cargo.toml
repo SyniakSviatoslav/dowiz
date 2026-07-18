@@ -15,7 +15,7 @@ crate-type = ["cdylib", "rlib"]
 # crate to the CLI we have. innovate: when a 0.2.126 (or newer) CLI is
 # available in the build env, lift this pin and regenerate.
 wasm-bindgen = "=0.2.95"
-dowiz-engine = { path = "../engine" }
+dowiz-engine = { path = "../engine", features = ["serde"] }
 dowiz-kernel = { path = "../kernel" }
 # serde + serde_json are OFFLINE-CACHED (verified in registry cache); used to
 # parse the JS-supplied doc array into SpineIndex records. They do NOT pull any

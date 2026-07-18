@@ -28,6 +28,7 @@ name = "dowiz-engine"
 version = "0.1.0"
 dependencies = [
  "dowiz-kernel",
+ "serde",
 ]
 
 [[package]]
