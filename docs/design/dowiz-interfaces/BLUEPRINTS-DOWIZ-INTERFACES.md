@@ -385,6 +385,131 @@ spatial. **OUT OF SCOPE:** WebXR-WebGPU binding (deferred until ships).
 9. Owner touches 5 tokens; coherence by construction (cross-brand ~95% shared).
 10. One Intent all modalities all platforms (field.apply one path).
 
+## ДОДАТОК C — НАРАТИВНО-КІНЕМАТОГРАФІЧНА ЯКІСТЬ: ДЕ ВОНА ЖИВЕ І ЩО ВОНА ОЗНАЧАЄ (2026-07-18)
+
+> Операторський запит: «бренд-кастомізація у межах наративного кінематографічного інтент-хвильового
+> інтерфейсу — який має бути саме досвідом взаємодії з користувачем». Це НЕ нова робоча одиниця і НЕ
+> декоративний шар поверх механічно-функціонального shell — це явне іменування ЯКОСТІ, якою Море вже
+> мусило бути (не просто "ambient field", а ambient field з наративним/кінематографічним pacing), плюс
+> перевірка, що 5-токенна межа Sheet цим запитом не порушується. Читати разом із DZ-01/03/04/05 та
+> [BLUEPRINT-P38](../CORE-ROADMAP-2026-07-17/BLUEPRINT-P38-webgpu-render-engine.md) §11.
+
+### C.1 Вердикт: наратив/кінематографія = Sea. Sheet лишається 5 токенів. Шостого токена НЕМАЄ.
+
+Аргумент, не постулат:
+
+1. **Правило приналежності вже вирішило.** План §2.1: «Motion між станами або у відповідь на дію →
+   МОРЕ». Pacing — це і Є motion між станами, розгорнутий у часі. Драматургія (яка подія отримує
+   паузу, яка — швидкий зріз) = темпоральна форма arrival/transitions/tracking/feedback — всі чотири
+   Sea-owned (план §2.2). Кінематографічність не СИДИТЬ у Sea — вона з правила приналежності ВИПЛИВАЄ.
+2. **Темп уже структурно brand-agnostic.** ζ-словник (план §8.2), `--ease-snap/tide`,
+   `--spectral-speed` 6s→attend 1.4s, `--status` lifecycle — все T2 DOWIZ-FIXED «never overridable»
+   (план §8.1). Цей додаток нічого не переносить із Sheet у Sea — він називає якість, яку T2 вже
+   структурно захищає, точно як сам оператор `M·Ü+Γ·U̇+c²·L·U=S` brand-agnostic.
+3. **Кросбрендова легібельність = moat.** Клієнт, що вивчив мову замовлення в одній venue, мусить
+   читати її в кожній («lifecycle identical every brand», T2 `--status`). Кінограматика працює так
+   само: зріз і затримана склейка означають те саме в кожному фільмі; студія обирає палітру й акторів,
+   не значення монтажу. Бренд, якому дозволили «зробити драматичніше», зламав би словник для всіх.
+4. **Чесність стану.** Біти дуги прив'язані до реальних доменних подій (kernel fold, local validate).
+   Бренд-ручка темпу дозволила б розіграти напругу, якої стан не має (fake urgency), або приглушити
+   провал — та сама причина, чому money never tweens архітектурно, а не конвенційно (план §2.5).
+
+**Steelman розглянуто і відхилено:** «спокійний fine-dining vs гучний fast-food — нехай бренд обирає
+темп». Відповідь: бренд-регістр уже входить через 5 токенів — hue/chroma акценту, type-pair, radius
+перефарбовують ОДИН і той самий рух (теплий terracotta читається інакше, ніж холодний slate, на
+ідентичній хвилі); а темп уже модулюється СЕМАНТИЧНО, не брендово: attending 6s→1.4s, energy scalar,
+open-hours calm-dark — ручки СТАНУ, не смаку. Шостий токен «drama/pacing» відкрив би arms race уваги
+(та сама причина відмови від per-component overrides — Hick's для owner) і зруйнував би «coherence by
+construction ~95% shared» (інваріант B-9). **Вердикт: NO шостому токену.** Кінематографічна якість —
+медіум, не фіча з меню бренду. Наслідок для DZ-09 Branding: full token editor НЕ отримує поля
+motion/drama/pacing; спроба додати = порушення інваріантів B-6/B-9 і gate DZ-02 (owner touches 5).
+
+### C.2 Наративна дуга замовлення — pacing beats на наявній механіці
+
+Життєвий цикл замовлення — не flat progress bar, а дуга з бітами. Кожен біт = вже-наявне джерело
+VOCAB (DZ-04/05) плюс явна темпоральна вказівка. Інструменти — тільки наявні: ζ-пресети
+(`motion.rs:66-76` snappy/fluid/playful + TIDE/SPREAD план §8.2), `heat_kernel_delay` (стагер),
+settle gate FE-14 (тиша, вимірювана), spectral attending speed (urgency), energy scalar (гучність
+партитури). Жодного нового примітива — хореографія наявних джерел.
+
+| Біт | Подія | Field (наявний VOCAB) | Темп (нове ІМЕНУВАННЯ, не нова механіка) |
+|---|---|---|---|
+| Inciting | order placed | amber burst 1.4 | SNAP-удар МИТТЄВО (інваріант B-7: consequence ≤ `--motion-instant` — підтвердження на Sheet ніколи не чекає); далі **held beat**: Море ~600-900ms осідає БЕЗ нових імпульсів — вага рішення = тиша ПІСЛЯ підтвердження, не затримка підтвердження |
+| First answer | confirmed | ember drift 0.3 | одна низька хвиля FLUID — тихе запевнення, НЕ фанфари; світ відповів |
+| Long middle | preparing / ready | ember drift 0.3 | найтихіший відрізок дуги: TIDE ζ>1 ambient, settle gate активний (0 rAF wake-ups) — впевнена нерухомість; терпіння чесне, бо ETA — range, не єдине число |
+| Tempo cut | courier assigned / picked up | teal swirl 1.6 | зміна регістру = зміна КІНЕМАТИКИ (реальний рух кур'єра, GPS flow DZ-06), не додаткова анімація; spectral attending пришвидшується 6s→1.4s |
+| Tracking shot | in transit | field flow along route | камера = focus well на маркері кур'єра (FE-11); ETA падає → attending speed росте, НЕ мигання/пульсація |
+| Climax | delivered | **gold bloom burst 1.8** | ЄДИНИЙ максимум амплітуди успішної гілки — зароблений попередньою стриманістю; потім видих: поле → calm, settle gate забирає кадр (denouement = тиша) |
+| Tragedy (чесна) | rejected / cancelled | blood turbulence 3.4 | без пом'якшення І без соромлення користувача; після shake — recovery beat 300-600ms тиші перед наступним CTA |
+
+**Амплітудний бюджет (falsifiable, у межах gate DZ-04):** на успішній гілці жоден проміжний біт не
+гучніший за Delivered — max amplitude per state монотонно накопичується до клаймаксу. Held beat
+present (поле без нових source-імпульсів N ms після order_created burst) — перевіряється тим самим
+event-log'ом DZ-06. Той самий шаблон успадковують courier (task offered = один incoming ripple → run
+→ SwipeToComplete gold bloom, DZ-08) і owner (order created ripple → lifecycle actions → settled,
+DZ-09) — три ролі, одна драматургія, бо дуга належить домену, не ролі.
+
+### C.3 Кінематографічний grade — на НАЯВНІЙ OKLCH-механіці, нуль нових токенів
+
+Наявне: `--spectral` oklch terracotta→accent→gold (план §2.4), `--sea-backdrop` = color-mix(brand-bg
+12% #060402), `--sea-tint` = brand-primary, terracotta→gold color travel (DZ-04), open-hours
+calm-dark (DZ-06). Це ВЖЕ grade: tracking-дуга і є color grade, розгорнутий у часі.
+
+Розширення (T2, dowiz-fixed): **grade = пара скалярів (ΔL, ΔC) поверх Sea-кольорів як f(біт)**.
+OKLCH тут не випадковість, а причина: L і C зсуваються рівномірно БЕЗ спотворення brand-hue
+(перцептивна рівномірність) — регістр змінюється, бренд лишається собою. Establishing (Act 1) — ледь
+притемнено/десатуровано; confirmed — теплий підйом L; delivered — gold lift (вже є); closed — calm
+dark (вже є). Імплементація = ті самі color-mix відсотки + VOCAB кольори; жодного нового brand-токена.
+**Межа: grade живе ТІЛЬКИ на Sea (під Sheet).** Sheet ink/paper НІКОЛИ не graded — контраст контенту
+(AA validated, T1) не сміє їздити на драматургії: гроші/слова/рішення читаються однаково в кожному біті.
+
+### C.4 Мова камери — що безкоштовне, що чесно коштує
+
+Безкоштовне (мапиться 1:1 на наявні примітиви; лише іменування):
+- **Establishing shot** = Act 1 arrive: full-bleed Море, hero = найглибший well (3-second hierarchy,
+  план §8.4-4) — це DZ-01, назване кінотерміном.
+- **Cut / dissolve** = dive (ring-wipe, anchored on pressed button) / sheet-rise (DZ-03) — це і є
+  вся монтажна граматика; інших «склейок» не існує і не треба.
+- **Close-up / rack focus** = V(x) potential well (FE-11) + його readouts scale/brightness/blur/
+  saturation (план §2.2); переміщення well = rack focus.
+
+Чесно коштує (НЕ будувати зараз; окреме costed-рішення, якщо колись знадобиться):
+- **Full-scene depth-of-field** — post-process blur pass поверх кадру (новий render target поверх
+  P38a G3) — не покривається single-well blur readouts. Named cost, not free.
+- **3D-камера / dolly / parallax** — поле 2D (`FieldPos{u,v}`; `w` = AR panel-normal, НЕ глибина
+  сцени, DZ-12). Будь-який perspective transform = нова система координат і новий render шлях.
+  REJECTED for now; splatting-арка — окрема і НЕ є цим.
+
+### C.5 Стриманість — несуча дисципліна, не примітка
+
+«Кінематографічний» НЕ означає максималізм чи attention-grabbing. Прочитання для виконавця, прямим
+текстом, щоб «cinematic» ніколи не читалося як «додай анімації скрізь»:
+
+1. **Кінематографічність — критерій ВИДАЛЕННЯ так само, як додавання.** Рух, що не сидить на
+   іменованому біті дуги (C.2) або в словнику feedback (DZ-05), — кандидат на видалення. Idle-декор
+   порушує settle gate (FE-14: 0 rAF wake-ups settled — тиша ВИМІРЮВАНА, не побажання).
+2. **Частотне правило:** дії, які роль виконує десятки/сотні разів на день (courier accept, owner
+   lifecycle actions, keyboard-ініційовані) — SNAP або без анімації взагалі; delight-біти лише на
+   рідкісних термінальних моментах (delivered, first-run). Earnings/money — ніколи (вже закон, B-2).
+3. **Клаймакс заробляється тишею.** Gold bloom вражає РІВНО тому, що preparing був майже нерухомий;
+   якщо все «кінематографічне» — ніщо не кінематографічне. Амплітудний бюджет C.2 — механічна форма
+   цієї тези.
+4. **Exit швидший за enter; recovery space після помилки; reduced-motion — перший клас:** дуга
+   РОЗПОВІДАЄТЬСЯ і статично (pills/color/text, інваріант B-9 плану §8.4-9) — наратив не залежить
+   від руху, рух лише його виконує.
+
+Це узгоджено з brand-voice canon (Warm Cosmo-Noir): noir — це передусім тінь і пауза; іронія — у
+стриманості, не в спецефектах. Голос dowiz у ЧАСІ = ця драматургія; Sheet-токени лише вдягають її.
+
+### C.6 Прив'язка (нуль нових одиниць, нуль нових токенів)
+
+Цей додаток НЕ додає DZ-13. Він нормативно уточнює наявні одиниці: DZ-01 (акти = establishing/arc
+shell), DZ-03 (dive/rise = єдина монтажна граматика), DZ-04 (дуга C.2 + амплітудний бюджет + grade
+C.3 — gates розширюються тут, не в новій одиниці), DZ-05 (біти = Green's sources з темповою
+вказівкою), DZ-08/09 (успадкування дуги per-role), DZ-09 Branding (no pacing field — C.1). Інтент-
+рамка DZ-10 без змін: біт відповідає на Intent однаково для touch/voice/gesture — кінематографічна
+якість = ЯК поле відповідає на намір у часі, і саме тому вона живе у двигуні, а не в скіні.
+
 ---
 *Кінець блюпринтів. 12 робочих одиниць DZ-01..12, 4 хвилі, стоять на engine FE-01..17. Джерело:
 DOWIZ-INTERFACES-PLAN.md + 4 інвентарі коду + 2 дослідження + референс-артефакт. Критерій — когерентність +

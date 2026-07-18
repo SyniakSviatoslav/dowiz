@@ -631,3 +631,93 @@ field ANYWHERE (CI-locked); no new proto-cap `Action`/`Resource` variants; no ma
 Kalman code (consume P51); no money arithmetic in surface code (hub-derived amounts only); no
 DOM-visible widgets (P38 gates apply); no batching; no tipping (needs its own operator
 ruling); no photo work before the M3 blob decision beyond the ignored marker.
+
+---
+
+## 11. K8 — run-scoped conversation pane (2026-07-18 addendum; consumes P48 §10, owns the courier half)
+
+> Appended after §10; §0–§10 untouched (the P43-§11 append convention). Origin: the
+> operator's same-day follow-up to the conversations directive — "так, і це фіча як для
+> власника, так і для кур'єра" — the unified-conversation feature serves the courier too.
+> The SHARED spine (the `Conversation` type, the channel-routing law, channel-continuity,
+> the autonomy machinery, and the structural order-authority exclusion) is designed once,
+> in `BLUEPRINT-P48-owner-hub-surface.md` §10 — read §10.1/§10.2/§10.6/§10.7 there before
+> building this. This section owns ONLY what is courier-specific: the run-screen pane, the
+> access-window enforcement, and the courier-side gates.
+
+### 11.1 The pane (spec)
+
+The `ActiveRun` screen (§3.3) gains a conversation region: the thread bound to the active
+claim's order (the order's intake binding names its `ConversationKey` — P48 §10.1), rendered
+through P38a in log order with P48 §10.3's provenance badges (customer/owner/courier/agent).
+The courier can: read the thread, send a manual reply ("залишу під дверима — добре"), and —
+where the VENUE's `AutonomyPolicy` permits — receive agent-drafted reply suggestions
+(`DraftFamily::{StatusAnswer, ClarificationReply}` via the same `draft_conversation_reply`
+tool, `Surface::Courier`). Every outbound reply obeys the channel-routing law: it egresses
+on the conversation's OWN channel via P43's `ChannelSend` — the customer who ordered on
+Telegram gets the courier's "not home? — leaving at the door" on Telegram, never elsewhere.
+
+**One thread, no handoff (the shared-vs-separate answer, restated from P48 §10.7 as this
+side's law):** the courier does NOT get a separate thread with the customer and there is no
+handoff ceremony at pickup — owner and courier are stage-scoped participants in the ONE
+conversation per (venue, channel, peer). The customer's channel-side view is continuous;
+routing decides who acts. The owner's inbox keeps full visibility throughout (the venue owns
+its log — M5), so an in-transit exchange the courier handles is never invisible to the owner.
+
+### 11.2 The access window — a law, and deliberately the SAME window as P51's position privacy
+
+Courier access to the conversation (read AND draft AND send) exists exactly from
+claim-accept to delivery-complete — the identical window P51 M6 already imposes on
+`CourierPositionUpdated` emission, consumed here as a second application of the same
+invariant: **a courier's visibility into a customer, in every form (location, messages),
+exists only while carrying that customer's order.** Before accept and after `Delivered`,
+access is a typed refusal; the window is fold-derived from the claim Law (like duty —
+never a stored flag). This is not a venue setting — no configuration widens it.
+
+### 11.3 Courier-side gates (cross-referenced, NOT redesigned — each already lives where it lives)
+
+- **Order authority:** the agent on this surface can never confirm/cancel an order — P48
+  §10.6's three walls (no `ToolAction` variant, closed config, `no-agent-order-authority`
+  CI gate) apply verbatim; the CI grep set covers the courier lane.
+- **Delivery-complete / PoD / cash attestation:** remain witness-typed human acts exactly
+  as §3.4/§3.4b/§3.7 design them — none is a `ToolAction`, none is a `DraftFamily`, none
+  is autonomy-eligible under any configuration. An agent may draft the MESSAGE "I've
+  arrived"; it can never emit the `Delivered` intent, sign a PoD leg, or attest cash. The
+  §10.6 grep pattern's `Complete|Settle|Deliver` alternates are exactly these.
+- **Autonomy config:** the venue's `AutonomyPolicy` governs; the courier's surface adds a
+  personal kill switch and may only tighten, never widen (P48 §10.7).
+- **No scoring:** conversation events carry no courier metric of any kind;
+  `ci-no-courier-scoring.sh`'s file set extends over the K8 modules (same teeth-proof
+  choreography as §10-T1).
+
+### 11.4 RED tests, DoD row, adversarials
+
+RED today: no conversation concept exists anywhere (P48 §10.8's grep preamble). GREEN:
+
+- `k8_courier_access_windowed` — read/draft attempts before claim-accept and after
+  `Delivered` ⇒ typed refusal, zero `ConversationEvent`s appended (the window law).
+- `k8_one_thread_per_peer` — customer messages before order, in transit, and after
+  delivery land in ONE `conversation_id`; the courier sees only the in-window slice
+  surface-side; the customer-side channel never changes.
+- `k8_reply_same_channel` — courier reply on a Telegram-originated conversation egresses
+  via the Telegram adapter (spy `ChannelSend`; `receipt.channel == key.channel`).
+- `k8_agent_cannot_complete_delivery` — grep/compile check: no agent-lane symbol reaches
+  the `Delivered` emit-site, the PoD signing call, or the attestation builder (the
+  witness types make this a compile fact; the test pins it against regression).
+- **Adversarial:** (i) two concurrent orders, one peer, two couriers ⇒ both run panes
+  surface the thread badge-tagged per order; an order-ambiguous inbound routes through
+  H1's `Ambiguous` family (clarification), never a guess — P48 §10.7's named case,
+  asserted from this side; (ii) a courier attempting to read a conversation for an order
+  they DECLINED ⇒ refusal (window never opened); (iii) hostile message text renders inert
+  on the run screen (P48 §10.3-adv-ii's fixture class, re-run in this pane).
+
+DoD table (extends §5): **K8** | RED: no conversation pane | GREEN: the four tests above +
+adversarials | permanent: `k8_courier_access_windowed` (ledger row, joining P48 §10.8's
+row h). The §5 phase-level falsifier `p52_courier_end_to_end` is NOT extended — K8 is
+additive and must not gate the MVP courier leg (a venue with zero conversation traffic
+still delivers); stated so nobody couples them.
+
+**Sequencing:** after P48's T9 (the spine) and P52's T2/T4 (claim fold + routes) — the
+window is derived from the claim fold, so K8 cannot land first. Forbidden here: any
+courier-side conversation store (the venue's log is the one store); any access-window
+configuration surface; any second thread per order or per courier.

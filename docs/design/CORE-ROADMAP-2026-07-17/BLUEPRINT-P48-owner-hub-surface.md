@@ -726,3 +726,452 @@ price/amount field appearing in parser/intent types; (iv) any review write/moder
 auto-respond capability, or a reply path without owner-cert provenance (red-line §1.4-8);
 (v) a P48-side customer-preference store (P49's lane); (vi) any DOM surface (the ruling is
 final); (vii) a central aggregation endpoint of any kind (§1.5).
+
+---
+
+## 10. Conversations, personalized messaging & configurable agent scope (fourth 2026-07-18 operator directive; appended — §0–§9 untouched)
+
+> Appended after §9, the sibling convention (P43 §11, P22 §11, P42 §11): this section
+> self-carries its ground truth (§10.0), types (§10.1), build items (H5–H8), DoD (§10.8),
+> anti-scope additions and worker instructions (§10.9). §8's compliance map covers it
+> unchanged. A same-day operator follow-up ("так, і це фіча як для власника, так і для
+> кур'єра") extends the design to the COURIER surface — §10.7, with the courier-specific
+> half appended to `BLUEPRINT-P52-courier-working-surface.md` §11 (that file's own lane).
+>
+> **The directive (verbatim):** "важлива річ для dowiz — має бути персоналізована змога
+> створювати розсилки для відповіді на замовлення, промоції, і також комунікація чи вживу
+> людиною через один вхід на відповідний канал клієнта звідки було зроблено замовлення чи
+> відповіді, розмови AI агента — загалом локальний чи підключений агент має мати змогу
+> менеджити майже усе, окрім явних red lines — тобто бути налаштовуваним у діях,
+> контрольованим з людським gate на підтвердження чи скасування замовлень — ну і власне
+> ai режим може бути відключений — усе на розсуд користувача"
+>
+> Decomposed into three pieces, each a build item family below:
+> 1. **Personalized messaging** — one-to-one order replies + targeted-segment promos
+>    (NOT P22's public feed posting; that lane is untouched) — §10.4/§10.5.
+> 2. **One entry point per customer channel** — a unified `Conversation` thread: every
+>    party (customer, owner, courier, agent-draft) communicates through the SAME channel
+>    the customer originally used — §10.1/§10.2/§10.3.
+> 3. **Configurable agent scope with ONE non-negotiable gate** — the agent manages "almost
+>    everything" in this surface, owner-configurable, EXCEPT the hard red-lines
+>    (money/auth/RLS/migrations, unchanged) AND order confirm/cancel, which is a FIXED
+>    human gate regardless of configuration — §10.6. AI mode itself stays fully
+>    disable-able (`AiMode::Off`, P41 C-b, the fail-closed default): "усе на розсуд
+>    користувача" governs WHETHER AI runs and WHAT it may draft — never whether
+>    order-mutating actions need a human. They always do.
+
+### 10.0 Ground-truth addendum (design-time cites, read this pass 2026-07-18)
+
+| Claim | Cite (this pass) | Status |
+|---|---|---|
+| Event-log spine: content-addressed, local-first, duplicate = structural no-op | carried from §0 row 4 (`kernel/src/event_log.rs:1-23`, verified this same day) | verified — the Conversation spine IS this machinery, nothing new |
+| P43 channel vocabulary: `Channel { Telegram, Sms, WhatsApp, SimpleX, Email }`, `Recipient`, `SendReceipt`, `ChannelSend`; `NotifyKind { OrderStatus, Otp }` closed, `Marketing` deliberately absent, `Notification` holds ONE recipient (bulk unrepresentable) | `BLUEPRINT-P43-external-integration-ports.md` §2, §1.4-1/2, §4.1 (read this pass) | verified — reused, never redeclared; the promo lane consequence in §10.5 follows from the closed enum |
+| P22 dual-path generation + provenance: `MasterPost { …, source: DraftSource, status: DraftStatus }`, `DraftSource { Manual, Template, Llm }`, `DraftStatus { PendingReview, Approved, Discarded }`; Path A templates work at `AiMode::Off`; parity done-check | `BLUEPRINT-SOCIAL-AUTO-POSTING-2026-07-17.md` §11.1 (read this pass) | verified — §10.4 retargets this SHAPE; shared vocabulary, not a fork |
+| P22 earned-autonomy ratchet: guardrails A1–A6 (First-10, 10-clean-earned, 1/day bucket, revoke-on-reject, kill switch, publish-authority-never-the-model), each with a named falsifier | P22 §11.3 (read this pass) | verified — §10.6 reuses A1–A6 verbatim as the ratchet shape |
+| P42 grant/catalog pattern: `Surface { Owner, Courier, Customer, Ops }`, `SkillCard`, `SkillRegistry`, `GrantSet` (closed-enum scopes, "open-world strings never enter the closed grant"); tool growth = reviewed enum variant + registration, never loop edits | `BLUEPRINT-P42-mcp-agent-skills.md` §2, §3.1 (read this pass) | verified — §10.4's tools join via this rule |
+| NO-COURIER-SCORING structural gate: CI job rejects scoring identifiers by grep, `! git grep -nEi 'courier[_-]?(score\|rating\|reputation\|rank)'` over kernel/engine/tools | `.github/workflows/ci.yml:239-249` (read this pass) | verified — §10.6's order-authority exclusion mirrors exactly this mechanism |
+| P49 identity posture: durable identity DEFERRED until 5–50 real clients (operator ruling); `NotificationBinding` dies with the order; misbinding adversarial (order A must never notify order B) | `BLUEPRINT-P47-P50-gap-closing-phases.md` §4.2 (RESOLVED note), §4.3, §4.5-4 (read this pass) | verified — drives §10.2's no-auto-merge answer |
+| P52 courier surface: at-most-one ActiveRun; PoD/`Delivered`/cash-attestation are witness-typed, emit-gated human acts; P51's position-privacy window = assignment-accept → delivery-complete | `BLUEPRINT-P52-courier-working-surface.md` §2, §3.4/§3.7, §0 row P51 (read this pass) | verified — §10.7 reuses the SAME window for conversation access; the courier exclusions cross-reference, never redesign |
+| P50 liability posture + ToS/consent-capture artifact (B4) exists as the consent home | `BLUEPRINT-P47-P50-gap-closing-phases.md` §5.6 (read this pass; messaging-consent note appended there this pass) | verified — §10.5's consent flag lands there |
+
+### 10.1 The `Conversation` spine — one thread, one channel, one log (H5's data half)
+
+**The concept in one sentence:** a Conversation is a fold-derived thread over the venue's
+own event log, keyed by `(venue_id, channel, peer_address)`, into which every message —
+customer-sent, owner-sent, courier-sent, agent-drafted — is an append-only event, and out
+of which every outbound message leaves on the conversation's OWN channel via P43's
+matching `ChannelSend` adapter. No parallel store, no second truth (§1.5's argument
+applies verbatim; `hub_no_shadow_store` extends over this pane).
+
+```rust
+// ── kernel/src/ports/conversation.rs — NEW module (H5/H6). Same zero-I/O
+// firewall as hub_intake.rs. Reuses P43's Channel/Recipient/SendReceipt and
+// P22 §11.1's DraftSource/DraftStatus verbatim — shared vocabulary, no fork. ──
+
+/// One thread per (venue, channel, channel-shaped peer address). Deliberately
+/// NOT keyed by durable customer identity (none exists — P49 §4.2 deferral)
+/// and NOT keyed per order: orders REFERENCE their conversation via the intake
+/// binding; the thread outlives any one order on that channel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConversationKey { pub venue_id: String, pub channel: Channel, pub peer: String }
+
+/// Message provenance — load-bearing for inbox tags (§10.3) and the ratchet
+/// (§10.6). `Agent` authors DRAFTS; agent-authored SENDS exist only via the
+/// ratchet policy over `AutonomyEligible` families, never otherwise.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MsgAuthor { Customer, Owner, Courier([u8; 32]), Agent { model_id: String } }
+
+/// Node-local event family on the venue's event_log spine (§10.0 row 1) —
+/// NOT proto-cap wire variants (P34 anti-scope; the same move as P52 §2's
+/// node-local DutyEvent). Content-addressing gives replay/dedup for free.
+#[derive(Debug, Clone)]
+pub enum ConversationEvent {
+    Inbound  { key: ConversationKey, provider_msg_id: String, text: String, unix_ms: u64 },
+    Draft    { key: ConversationKey, draft_id: u64, author: MsgAuthor,
+               family: DraftFamily, source: DraftSource, text: String },   // status: PendingReview
+    Approved { key: ConversationKey, draft_id: u64, approver: MsgAuthor }, // human act, or
+                                                                           // ratchet policy (§10.6)
+    Discarded{ key: ConversationKey, draft_id: u64 },
+    Sent     { key: ConversationKey, draft_id: Option<u64>, author: MsgAuthor,
+               text: String, receipt: SendReceipt },   // via P43 ChannelSend — SAME channel, law below
+    Linked   { key: ConversationKey, other: ConversationKey, proof_ref: String }, // §10.2 only
+}
+
+/// What a draft is FOR — the closed family set the autonomy policy (§10.6)
+/// is keyed by. Order confirm/cancel is DELIBERATELY not a family: it is not
+/// a draft, it is a Law intent behind a human signature (§10.6's exclusion).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DraftFamily { StatusAnswer, ClarificationReply, ReviewReply, PromoReply }
+```
+
+**The channel-routing law (extends §3.1's confirmation rule to ALL conversation
+outbound):** every `Sent` event's `receipt.channel` MUST equal the conversation's own
+`key.channel`, and the send goes through P43's matching adapter — Telegram stays Telegram,
+WhatsApp stays WhatsApp. The only sanctioned exception is an H2 notification preference
+the CUSTOMER explicitly set (§3.2's lane, unchanged) — and that governs order-status
+fan-out, not conversational replies. Falsifier: `conv_outbound_same_channel` — a property
+test over all Sent events; a reply egressing on any channel ≠ `key.channel` is the RED.
+
+**Send seam, honestly named (cross-lane, NOT edited here):** P43's `NotifyKind` is closed
+at `{OrderStatus, Otp}` and this file may not edit P43 (§9 stop-and-flag i). A
+human-authored/approved conversational reply fits neither variant. The seam this design
+needs is ONE reviewed variant in P43's lane — `NotifyKind::Conversational` (one recipient,
+one open conversation, reply-shaped) — proposed here, decided there, with `Marketing`
+STAYING absent (the §10.5 consequence depends on that absence). Until P43 accepts it, H1's
+existing clarification-reply pathway is the only conversational egress — a real
+sequencing dependency, recorded, not papered over.
+
+### 10.2 Channel continuity — a new channel is a NEW conversation; linking is explicit, merging never happens (the concrete answer)
+
+The question: customer ordered via Telegram, later writes on WhatsApp — same conversation
+or new? **Answer: NEW conversation, always.** Conversations never auto-merge across
+channels. They may become LINKED — append-only, both threads keep their own key and their
+own outbound law — and ONLY on an explicit customer-presented proof: the customer supplies
+their order's re-identification handle (P49's tracking-grant machinery, whatever Wave-0
+default that phase picks) on the new channel; the `Linked` event carries the proof
+reference. Four reasons, each falsifiable:
+
+1. **There is no identity to merge on.** Durable customer identity is DEFERRED by operator
+   ruling (P49 §4.2); the only identity that exists today is the channel-shaped address.
+   Two addresses on two channels are, to the type system, two strangers. Merging them on a
+   heuristic (display-name match, "mentioned the same order") is the misbinding hazard
+   P49 §4.5-4 tests against, applied to messages instead of notifications. Falsifier:
+   `conv_no_heuristic_link` — a fixture with identical display names and an order-id
+   mentioned in both threads produces ZERO `Linked` events absent a grant proof.
+2. **Auto-merge is a privacy join M8 forbids.** Correlating a person across channels
+   without their explicit act is exactly the enrichment/join posture §4.1 already declares
+   nonexistent for review authors — extended here to customers. The join type does not
+   exist; the `Linked` event is the ONLY cross-channel edge, and it is customer-initiated
+   by construction (constructor requires the proof reference).
+3. **The outbound law survives linking.** Linked ≠ merged: a reply composed in
+   conversation A egresses on A's channel even when A↔B are linked — the owner SEES the
+   linked context (one inbox card renders both, badged), the wire never crosses.
+   Falsifier: `conv_linked_outbound_still_same_channel`.
+4. **Bogus proof is a typed refusal.** A `Linked` event whose proof fails P49's grant
+   verification (expired, wrong order, guessed handle) is refused before append —
+   `conv_bad_link_proof_refused`, riding P49 §4.5's adversarial arms (guessing,
+   replay-after-terminal, cross-order).
+
+Session continuity, then, is: same channel ⇒ same thread forever (the key is stable);
+new channel ⇒ new thread, optionally linked by the customer's own proof, never fused.
+
+### 10.3 H5 — the unified inbox pane (owner hub; physics-rendered per the standing canon)
+
+One pane, all conversations across all live channels, newest-activity-first — a
+fold-derived projection of `ConversationEvent`s rendered through P38a exactly like every
+other pane (§1.5; the rendering ruling is settled and not re-litigated). Per-thread view:
+messages in log order, each carrying its `MsgAuthor` tag rendered as a provenance badge
+(customer / owner / courier / agent — P22 §11.3's AI-drafted badge convention, extended to
+four authors). **Drafts are visually distinct from sent messages by state, not by
+styling convention:** a `Draft` event without a matching `Approved`+`Sent` renders in the
+compose region with the pending-review affordance (approve / edit / discard), never
+inline in the sent history — the distinction is fold-derived (`DraftStatus`), so a
+"draft rendered as sent" is a projection bug with a named test, not a CSS mistake.
+`NotAnOrder` intake outcomes (§3.1) land here — this pane is the "hub inbox pane" H1
+already routes to, now given its full shape.
+
+RED→GREEN: `h5_inbox_folds_threads` (fixture events on 2 channels ⇒ 2 threads, correct
+order, correct badges) + `h5_draft_never_renders_as_sent` (a PendingReview draft asserts
+absent from the sent-history region — pixel-region assertion per P38's oracle discipline).
+**Adversarial:** (i) replayed inbound (`provider_msg_id` dup + content-address no-op —
+§1.5 arg 2's falsifier, third application); (ii) hostile message text renders inert
+(same fixture class as §3.3-adv-5: script tags, RTL overrides, template-expansion
+attempts — carried opaque); (iii) a thread with 10³ messages renders windowed (fold is
+linear, projection is windowed — the scaling axis named in §10.8).
+
+### 10.4 H6 — personalized reply drafting: `ConversationReply`, the P22 §11.1 dual path retargeted
+
+**The type distinction, named precisely:** P22's `MasterPost` is a PUBLIC post (caption +
+media + link, adapted per platform, one → many channels). A `ConversationReply` is a
+PRIVATE message (body text, one conversation, ONE channel — the conversation's own). They
+are different types with different blast radii — but they SHARE the generation machinery
+and the provenance vocabulary verbatim: `DraftSource { Manual, Template, Llm }`,
+`DraftStatus { PendingReview, Approved, Discarded }`, and the dual path:
+
+- **Path A — native template (`AiMode::Off` works; the load-bearing path):** closed
+  template set per `DraftFamily` — status answers render from the order fold's
+  closed-vocabulary status words (P40 §3.4's discipline: the fold fills the slot, the
+  author cannot), clarification replies from H1's `Ambiguity` candidates (§3.1's existing
+  templated reply, now landing as a reviewable draft when the owner wants review, or
+  auto-sent as today for the parser's own clarifications — the parser's automatic
+  clarification is NOT an agent act and stays outside the ratchet).
+- **Path B — AI draft (P41 modes 2/3):** one `LlmBackend.chat` call through the existing
+  Harness/Dispatcher (budget + harvest — no second budget mechanism), prompt = the
+  conversation's recent fold + the structured facts; output = a `ConversationReply` with
+  `Llm` provenance, landing `PendingReview`. `AssistantUnavailable` ⇒ Path A or plain
+  manual compose — typed, never a blocked reply (P22 §11.1's degradation shape verbatim).
+
+**Tool declaration (P42's growth rule — P40 is NOT edited; its one-tool discipline
+stands):** `draft_conversation_reply` — scope `{resource: ConversationDraft (new closed-
+enum variant when P42's pattern lands), action: Draft (P22 §11.4's variant, shared)}`,
+`Surface::Owner` (and `Surface::Courier` per §10.7). Args: conversation key + family +
+facts. It appends a `Draft` event and can reach nothing else — the facade re-exports the
+draft-append fn only (P40 §4.1's namespace argument, applied again). It joins §3.4's H4
+tools (`read_hub_inbox`, `draft_reply`) in P42's catalog; `read_hub_inbox`'s remit
+naturally widens to this pane (same tool, richer fold — no new tool minted for reading).
+
+RED→GREEN: `h6_reply_dual_path_parity` (Template-produced and Llm-produced replies with
+identical content are byte-identically treated downstream — P22 §11.1's parity check,
+retargeted) + `h6_tool_draft_lands_pending_review` (spy asserts zero `ChannelSend` calls —
+H4's grep gate `h4_agent_cannot_transmit` already covers the crate; this is the runtime
+twin). **Adversarial:** a drafted status answer whose status word contradicts the live
+fold ⇒ the Path-A template cannot represent it (slot is fold-filled); the Path-B draft
+carries it only as PendingReview text a human reads — and an LLM-sourced `StatusAnswer`
+is NEVER autonomy-eligible (§10.6's table), so a hallucinated status cannot auto-send.
+
+### 10.5 H7 — segmented promo drafts: the event-log ceiling and the consent gate (⚠ flagged, not decided)
+
+**Segment = a closed predicate set over the EXISTING event log — that is the whole
+ceiling, stated up front:**
+
+```rust
+/// Closed, fold-computable predicates — everything here is a pure fold over
+/// order events that already exist. A predicate needing a profile, attribute,
+/// or any store that doesn't exist is UNREPRESENTABLE. This is the anti-CRM
+/// line as a type: dowiz does not grow a customer-analytics platform here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SegmentPredicate {
+    OrderedItem { menu_item_id: String, within_days: u32 },
+    OrderedAtLeast { count: u32, within_days: u32 },
+    IntakeChannel(Channel),
+}
+pub struct Segment(Vec<SegmentPredicate>);   // conjunction; evaluated count-only at draft time
+```
+
+**Privacy property, load-bearing:** the `draft_segment_promo` tool (scope
+`{ConversationDraft, Draft}`, `Surface::Owner` only — couriers do not run promos) takes
+predicates + offer facts and returns a draft + an AUDIENCE COUNT. The model never sees an
+address; the recipient list materializes only at send time, after human approval AND after
+the consent check below, inside P22's IP-15 campaign lane — which is where the send
+belongs structurally, not just by policy: P43's `NotifyKind` has no `Marketing` variant
+and `Notification` holds one recipient, so a promo blast through the transactional port is
+UNREPRESENTABLE (§10.0 row 2). Segment promos ride the campaign lane (consent ledger,
+`recipients × unit_cost` preflight, P22 §11.5) or they do not ride at all.
+
+**The consent question — named, flagged, NOT decided here:** a customer who placed an
+order did NOT thereby opt into marketing messages — or did they? Placing an order is a
+transactional basis (P43 §4.1's own wording); whether it also constitutes promo consent is
+a legal/posture question this repo's culture routes to an explicit decision, not a silent
+assumption. **⚠ OPERATOR/COUNSEL — recorded in P50 §5.6's messaging-consent addendum
+(appended this pass, its natural home: the ToS/consent-capture artifact B4 is where an
+explicit marketing opt-in would be captured if the ruling requires one).** Until that
+ruling lands AND P22's consent ledger exists, H7 drafts can be composed and counted but
+NOT sent — the send precondition is the same one P22 §11.6 already sets for its campaign
+lane, inherited verbatim. RED→GREEN: `h7_segment_count_only_no_pii_to_model` (spy asserts
+the tool's arg/output surface contains zero addresses) + `h7_send_blocked_without_consent_
+ledger` (the send path refuses typed while the precondition is absent). **Adversarial:**
+a predicate crafted to isolate ONE customer (`OrderedAtLeast{count: 7}` matching a single
+person) is still count-only at draft time and consent-gated at send time — but the
+k-anonymity smell is real and named: segments matching < 5 recipients render the count as
+"< 5" (the P22 §11.2 T5 threshold logic, reused) so the tool cannot be used as a
+person-lookup oracle.
+
+### 10.6 H8 — configurable agent scope, and the ONE gate that is not configurable
+
+**The configurable part (reuses P22 §11.3, extends it — does not reinvent):** an
+owner-settable `AutonomyPolicy` keyed by `(venue, DraftFamily)`, each family in one of two
+modes: `Manual` (every draft lands PendingReview — the DEFAULT, always) or `Ratcheted`
+(P22 §11.3's A1–A6 verbatim: first-10 always reviewed, autonomy earned by 10 consecutive
+approved-without-edit, dedicated 1/day `TokenBucket`, revoke on any provider `Rejected`,
+per-venue kill switch, and A6 — the approve transition is executed by the deterministic
+policy layer, never by the model). The owner decides per family what the agent may
+eventually auto-send vs must always draft-for-review; the courier surface consumes the
+venue's policy and adds its own kill switch (§10.7). "Налаштовуваним у діях" is exactly
+this table — and nothing outside it.
+
+```rust
+/// The ratchet's ENTIRE domain. This enum is the law: a family absent here
+/// cannot be made autonomous by ANY configuration, ratchet state, or grant.
+/// ReviewReply is deliberately absent (red-line §1.4-8: review-reply SENDING
+/// is a human act, always). LLM-sourced StatusAnswer drafts are excluded by
+/// the eligibility fn below (a hallucinated status must never auto-send).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AutonomyEligible { StatusAnswerTemplate, ClarificationReply, PromoReply }
+// eligibility(family, source) -> Option<AutonomyEligible>:
+//   (StatusAnswer, Template) => Some(StatusAnswerTemplate)
+//   (StatusAnswer, Llm)      => None      // fold-truth only auto-sends
+//   (ClarificationReply, _)  => Some(..)  // menu-anchored candidates, low blast radius
+//   (PromoReply, _)          => Some(..)  // still consent-gated at send (§10.5)
+//   (ReviewReply, _)         => None      // red-line §1.4-8
+```
+
+**The non-configurable part — order confirm/cancel is a FIXED human gate, designed the
+way NO-COURIER-SCORING is enforced, and this paragraph exists so a future reader cannot
+mistake it for a preference:** the operator's own words single out "людським gate на
+підтвердження чи скасування замовлень" as standing OUTSIDE the configurable scope —
+read as red-line-class, stricter than the adjustable table above. It is therefore NOT a
+`DraftFamily`, NOT an `AutonomyEligible` variant, NOT a config key, and NOT a default
+that could be toggled. Three independent structural walls, each mechanically checkable:
+
+1. **Type level (P40 §4.1's argument, third application):** the agent-reachable
+   `ToolAction` set is `{Read, Draft}` — there is no `Confirm`, `Cancel`, `Send`,
+   `Complete`, `Settle`, or `Approve` variant, so a model-invoked order mutation is
+   unrepresentable, not reviewed-against. Order confirm/cancel exist ONLY as capability-
+   cert-signed human intents through the facade (owner cert; or the CUSTOMER's own
+   channel-verified cancel via H1's management family — the customer IS the human for
+   their own order, Law-checked as today). The agent may DRAFT text that recommends
+   confirming/cancelling; the intent is emitted by a human tap, full stop.
+2. **Config level:** `AutonomyPolicy`'s parser is closed over `DraftFamily` — an
+   `order_confirm: auto` config line is a typed `ConfigError` (P41 §3.2's
+   junk-mode-refused shape), never an ignored OR honored setting.
+3. **CI level — `no-agent-order-authority`, mirroring `no-courier-scoring`
+   (ci.yml:239-249):**
+
+   ```yaml
+   no-agent-order-authority:
+     name: no agent order authority (P48 §10.6)
+     steps:
+       - run: |
+           ! git grep -nEi 'ToolAction::(Confirm|Cancel|Complete|Settle|Deliver|Approve|Send)' -- \
+             'kernel/**' 'agent-*/**' 'tools/**'
+           ! git grep -nEi 'AutonomyEligible::(Order|Confirm|Cancel|Complete|Settle|Deliver)' -- \
+             'kernel/**' 'agent-*/**' 'tools/**'
+   ```
+
+   plus a `#[test]`-wrapped source-anchored whitelist check (P41 §3.2's one-constructor-
+   guard shape) asserting `AutonomyEligible`'s variant list equals exactly the §10.6 set —
+   so ADDING a variant is a two-place diff (enum + test) that review cannot miss. Teeth
+   proven the standing way: scratch-branch red-proof (add `ToolAction::Cancel`, paste the
+   CI failure into the landing commit, revert).
+
+A diff that makes order confirm/cancel ratchet-eligible is the same review-reject class as
+a `Marketing` variant in `NotifyKind` or a `score` field on `Courier` — a law violation,
+not a feature request. The existing hard red-lines (money/auth/RLS/migrations —
+`test-integrity-rules-2026-06-27`, `never-bypass-human-gates-2026-06-29`) are unchanged
+and sit BELOW all of this: no extension point in this section reaches them (P40 §1
+anti-scope 3, inherited).
+
+**`AiMode::Off` (the third piece of the directive, closed):** the entire conversation
+surface is human-only-complete — inbox, manual replies, manual promo compose, the human
+order gates — with the agent lane absent, not degraded (P41's mode-1 invariant; the H4/H6
+tools simply don't exist at Off). The mode-off suite run in §5's H4 row extends over
+H5–H8.
+
+### 10.7 The courier as the second consumer (operator follow-up, same day) — one thread, stage-scoped access, no handoff ceremony
+
+The follow-up ruling: this feature serves BOTH the owner AND the courier. The design
+consequence is NOT a second conversation system — it is a second CONSUMER of the same
+one, and the shared-vs-separate question gets a concrete answer:
+
+**Answer: owner and courier share ONE conversation per (venue, channel, peer) — there is
+never a separate courier thread and never a handoff ceremony.** From the customer's
+channel-side view the thread is continuous: they message "the venue" and do not know or
+care that owner and courier are different people mid-transit. Routing, not thread
+topology, decides who acts: while a courier's active claim covers the order a
+conversation is bound to (the order's intake binding, §10.1), inbound customer messages
+ALSO surface on that courier's run screen (P52's lane), and the courier may read and
+draft/send replies in that thread under the same channel-routing law and the same
+autonomy machinery. The owner never loses visibility — the venue owns its log (M5), and
+the inbox pane shows courier-authored messages with the `Courier` badge.
+
+**The access window is a law, not a setting, and it is the SAME window that already
+bounds courier position events (P51 M6, consumed by P52):** claim-accept → delivery-
+complete. Before accept and after `Delivered`, courier access to the conversation is a
+typed refusal — read AND draft. One window concept, two consumers (position + messages),
+which is exactly the P2-correspondence move: a courier's visibility into a customer, in
+every form, exists only while they are carrying that customer's order. Falsifiers:
+`conv_courier_access_windowed` (read/draft before accept or after Delivered ⇒ typed
+refusal, zero events) and `conv_one_thread_per_peer` (customer messages pre-order,
+in-transit, and post-delivery land in ONE conversation_id; the customer-side channel
+never changes; only the badge set does).
+
+**Courier agent scope:** same `AutonomyPolicy` shape; the VENUE's policy governs (the
+owner sets what any agent on this venue's conversations may do); the courier gets a
+personal kill switch for agent drafting on their surface, and may only tighten, never
+widen, the venue policy. The structural exclusions extend unchanged and gain the courier-
+specific members, cross-referenced to where they already live: delivery-complete, PoD,
+and cash-collected attestation remain witness-typed human acts per P52 §3.4/§3.4b/§3.7 —
+none is a `ToolAction`, and the `no-agent-order-authority` grep set covers the courier
+lane (the `Complete|Settle|Deliver` alternates in §10.6's pattern are exactly these).
+
+**Named adversarial (not solved deeply, bounded honestly):** one customer, one channel,
+TWO concurrent orders with two different couriers ⇒ both run screens surface the same
+thread (each badge-tagged with its own order binding); a message that doesn't say which
+order it concerns routes through H1's `Ambiguous` management family (a clarification
+ask), never a guess. At P52's Wave-0 scale (1–3 couriers) this is acceptable and
+recorded; the break point (couriers × concurrent orders per peer makes shared visibility
+unreasonable) is named in §10.8's scaling axes.
+
+The courier-side build half (run-screen pane, window enforcement tests, P52 DoD row)
+lives in `BLUEPRINT-P52-courier-working-surface.md` §11 — appended this pass, that
+file's own lane; this section owns the shared spine and the law.
+
+### 10.8 DoD additions, ledger rows, scaling axes, anti-scope additions
+
+New DoD rows (extend §5's table; RED = no conversation concept exists anywhere today —
+grep preamble `grep -rn "ConversationKey" --include="*.rs" .` → 0 hits):
+
+| Item | GREEN | Named tests (permanent) |
+|---|---|---|
+| H5 spine + inbox | threads fold from fixture events across 2 channels; drafts never render as sent; replay no-op | `h5_inbox_folds_threads`, `h5_draft_never_renders_as_sent`, `conv_outbound_same_channel`, `conv_no_heuristic_link`, `conv_linked_outbound_still_same_channel`, `conv_bad_link_proof_refused` |
+| H6 reply drafting | dual-path parity; tool drafts land PendingReview with zero transmit reach | `h6_reply_dual_path_parity`, `h6_tool_draft_lands_pending_review` (+ H4's grep gate re-run over the new tool) |
+| H7 segment promos | count-only drafts; send refused without consent precondition; <5 threshold | `h7_segment_count_only_no_pii_to_model`, `h7_send_blocked_without_consent_ledger`, `h7_small_segment_thresholded` |
+| H8 autonomy + the gate | ratchet A1–A6 green per family; eligibility table enforced; CI gate red-proof committed | P22 §11.3's A1–A6 falsifiers retargeted + `h8_llm_status_answer_never_autonomous`, `h8_order_confirm_not_a_config_key` (typed ConfigError), `no-agent-order-authority` CI job + whitelist test |
+| courier consumption | window + one-thread laws | `conv_courier_access_windowed`, `conv_one_thread_per_peer` (P52 §11 hosts the run-screen half) |
+
+Ledger obligations (extend §5's a–d): (e) "order confirm/cancel is never agent-invocable
+nor autonomy-eligible under any configuration — guardrail: CI-gate
+`no-agent-order-authority` + the `AutonomyEligible` whitelist test, red-proof committed";
+(f) "conversation outbound never crosses channels — guardrail:
+`conv_outbound_same_channel`"; (g) "cross-channel linking requires customer-presented
+grant proof — guardrail: `conv_no_heuristic_link` + `conv_bad_link_proof_refused`";
+(h) "courier conversation access bounded by the claim window — guardrail:
+`conv_courier_access_windowed`".
+
+Scaling axes: conversations/venue ≈ distinct (channel, peer) pairs ≈ customer count —
+low thousands over a venue lifetime, log growth noise-level next to orders (§4.2's
+compaction story covers it); messages/thread windowed at render (break point none before
+multi-venue); segment folds are linear over order events (10³–10⁴, milliseconds — a
+break point at 10⁶ joins the P34B compaction trigger); the courier-visibility break
+point per §10.7.
+
+Anti-scope additions (extend §1.4): (9) **no CRM/analytics platform** — `SegmentPredicate`
+is the ceiling; a predicate requiring a store that doesn't exist is the smell; (10) **no
+configurable order-confirm/cancel autonomy, ever** — §10.6's law; the toggle existing at
+all is the smell; (11) **no cross-channel identity heuristics** — a `Linked` event without
+a grant proof is the smell; (12) **no promo sends outside P22's consent-gated campaign
+lane** — a `Marketing`-shaped payload through P43's transactional port is already
+unrepresentable; re-representing it here is the smell.
+
+### 10.9 Worker instructions additions (extend §9; same gate check + stop-and-flag list, three additions)
+
+9.  **T9 (H5).** Create `kernel/src/ports/conversation.rs` (§10.1 verbatim); the inbox
+    fold + P38a pane; the six H5/continuity tests. Do NOT create any conversation store
+    outside the event log (`hub_no_shadow_store` extends). Linking requires P49's grant
+    verification — if P49's Wave-0 default isn't landed, `Linked` stays unbuildable and
+    flagged, exactly like §9-T4's preference-store rule.
+10. **T10 (H6/H7).** `ConversationReply` dual path (Path A templates first — must be green
+    at `AiMode::Off` before Path B exists); the two tools via P42's catalog growth rule
+    (NOT via P40 edits — its one-tool discipline stands); H7 count-only segment fold. The
+    consent-ledger send precondition is a HARD gate: if it doesn't exist, `h7_send_blocked_
+    without_consent_ledger` is the permanent state, not a TODO.
+11. **T11 (H8 + courier).** `AutonomyPolicy` + `AutonomyEligible` + eligibility fn + A1–A6
+    retargeted tests; the `no-agent-order-authority` CI job with scratch-branch red-proof
+    in the landing commit; the whitelist `#[test]`. Then the P52 §11 courier half (that
+    file's T-list) — venue-policy consumption + window enforcement. Do not mark H8 done if
+    the CI gate lacks its committed red-proof.
+
+**Stop-and-flag additions:** (viii) any `ToolAction`/`AutonomyEligible` variant naming an
+order-lifecycle transition (the §10.6 law); (ix) any recipient address reaching a model
+prompt or tool output (H7's privacy property); (x) any auto-merge/heuristic-link code
+path (§10.2); (xi) any courier conversation access outside the claim window (§10.7).
