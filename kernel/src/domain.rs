@@ -254,6 +254,16 @@ pub fn place_order_priced(
 /// surfaced. This is the blueprint §4 post-fold check — the gate fires at the earliest point
 /// a topology drift could be exercised.
 pub fn apply_event(order: &Order, next: OrderStatus) -> Result<Order, TransitionError> {
+    // V3 5.2 / 5.3 (ROUND-2 GAP-AUDIT): the compensated terminal `CompensatedRefund`
+    // must NOT be reachable through the public fold. It is only ever produced by
+    // `compensate`, which reverses the order's earn ledger legs first (money
+    // conservation). Allowing `apply_event(.., CompensatedRefund)` directly would
+    // let a caller reach the terminal state with an UN-reversed ledger.
+    if next == OrderStatus::CompensatedRefund {
+        return Err(TransitionError::Invalid(
+            "CompensatedRefund is reachable only via compensate() (ledger-reversing)".into(),
+        ));
+    }
     assert_transition(order.status, next)?;
     // Fail-closed topology re-check: a successful fold must not move the golden signature.
     if let Err(drift) = verify_fsm_signature() {
@@ -370,13 +380,22 @@ pub fn compensate(
     earn_id: u64,
     reversal_id: u64,
 ) -> Result<Order, TransitionError> {
-    // 1) Legal FSM move (delegates the drift gate too).
-    let mut updated = apply_event(order, next)?;
-    // 2) Reverse the named earn leg on the order's ledger. Fail-closed: this returns Err
-    //    (surfaced as TransitionError::Invalid) if the leg is unknown / already reversed /
-    //    overflows / currency-mismatched. The order is NOT mutated on failure.
-    updated.ledger = reverse_transfer(updated.ledger.clone(), earn_id, reversal_id)
+    // The compensation edge is `Refunding → CompensatedRefund` ONLY. Any other
+    // (from, to) pair is rejected — this is the single legal compensation move.
+    if order.status != OrderStatus::Refunding || next != OrderStatus::CompensatedRefund {
+        return Err(TransitionError::Illegal(order.status, next));
+    }
+    // 1) Reverse the named earn leg FIRST (fail-closed). If the leg is unknown /
+    //    already reversed / overflows / currency-mismatched this returns Err and
+    //    the order is NOT mutated — money conservation is preserved by construction.
+    let ledger = reverse_transfer(order.ledger.clone(), earn_id, reversal_id)
         .map_err(TransitionError::Invalid)?;
+    // 2) Only after a successful reversal do we land in the compensated terminal.
+    //    `CompensatedRefund` is unreachable through the public `apply_event` fold,
+    //    so this is the sole path that produces it (V3 5.2 / 5.3).
+    let mut updated = order.clone();
+    updated.status = next;
+    updated.ledger = ledger;
     Ok(updated)
 }
 
@@ -403,8 +422,12 @@ mod tests {
 
     // ── RED: illegal aggregate transitions must be rejected ──
     #[test]
-    fn red_illegal_pending_to_ready() {
-        let o = place_order(
+    fn red_compensated_refund_not_reachable_via_apply_event() {
+        // V3 5.2 / 5.3 (ROUND-2 GAP-AUDIT): CompensatedRefund is the money-
+        // conserving terminal, only produced by `compensate` (which reverses the
+        // earn ledger). The public fold must REFUSE to land there directly — a
+        // caller reaching it via apply_event would leave an UN-reversed ledger.
+        let mut o = place_order(
             "o1".into(),
             Some("c1".into()),
             sample_items(),
@@ -413,12 +436,64 @@ mod tests {
             None,
         )
         .unwrap();
-        // Pending → Ready is not in the allowed transition table.
-        assert!(matches!(
-            apply_event(&o, OrderStatus::Ready),
-            Err(TransitionError::Illegal(_, _))
-        ));
+        o = apply_event(&o, OrderStatus::Confirmed).unwrap();
+        o = apply_event(&o, OrderStatus::Refunding).unwrap();
+        assert_eq!(o.status, OrderStatus::Refunding);
+        // Direct fold to CompensatedRefund is rejected.
+        let r = apply_event(&o, OrderStatus::CompensatedRefund);
+        assert!(r.is_err(), "CompensatedRefund must be unreachable via apply_event");
+        // And the ledger is still empty (no earn leg was ever posted).
+        assert_eq!(o.ledger_balance(), 0);
     }
+
+    #[test]
+    fn compensate_reverses_ledger_and_is_sole_path() {
+        // V3 5.2 / 5.3: compensate is the ONLY path to CompensatedRefund, and it
+        // must reverse the earn leg so the order nets to EXACTLY zero.
+        let mut o = place_order(
+            "o1".into(),
+            Some("c1".into()),
+            sample_items(),
+            0,
+            None,
+            None,
+        )
+        .unwrap();
+        o = apply_event(&o, OrderStatus::Confirmed).unwrap();
+        o = apply_event(&o, OrderStatus::Refunding).unwrap();
+        o.post_earn(1, o.total, Currency::All).unwrap();
+        assert_eq!(o.ledger_balance(), o.total, "earn leg posted at confirm");
+
+        let comp = compensate(&o, OrderStatus::CompensatedRefund, 1, 2);
+        assert!(comp.is_ok(), "compensate must succeed with a valid earn leg");
+        let comp = comp.unwrap();
+        assert_eq!(comp.status, OrderStatus::CompensatedRefund);
+        assert_eq!(comp.ledger_balance(), 0, "compensated order nets to ZERO");
+    }
+
+    #[test]
+    fn compensate_without_earn_leg_is_rejected_and_order_untouched() {
+        // V3 5.3: a compensate call whose reversal target is unknown must fail
+        // closed and leave the order (status + ledger) completely unchanged.
+        let mut o = place_order(
+            "o1".into(),
+            Some("c1".into()),
+            sample_items(),
+            0,
+            None,
+            None,
+        )
+        .unwrap();
+        o = apply_event(&o, OrderStatus::Confirmed).unwrap();
+        o = apply_event(&o, OrderStatus::Refunding).unwrap();
+        // No earn leg posted; reversal of id 1 must fail.
+        let before = o.clone();
+        let r = compensate(&o, OrderStatus::CompensatedRefund, 1, 2);
+        assert!(r.is_err(), "compensate without a matching earn leg must fail");
+        assert_eq!(o.status, before.status);
+        assert_eq!(o.ledger_balance(), before.ledger_balance());
+    }
+
 
     #[test]
     fn red_terminal_order_cannot_advance() {
@@ -804,8 +879,8 @@ mod tests {
         o = apply_event(&o, OrderStatus::Ready).unwrap();
         o = apply_event(&o, OrderStatus::InDelivery).unwrap();
         // Compensate the inflight order (refund) → ledger must net to EXACTLY zero.
-        o = compensate(&o, OrderStatus::Refunding, 1, 2).unwrap();
-        o = apply_event(&o, OrderStatus::CompensatedRefund).unwrap();
+        o = apply_event(&o, OrderStatus::Refunding).unwrap();
+        o = compensate(&o, OrderStatus::CompensatedRefund, 1, 2).unwrap();
         assert_eq!(o.status, OrderStatus::CompensatedRefund);
         assert_eq!(
             o.ledger_balance(),
@@ -825,9 +900,8 @@ mod tests {
         o.post_earn(1, o.total, Currency::All).unwrap();
         assert_eq!(o.ledger_balance(), o.total, "earn leg posted at confirm");
         // Operator cancels the confirmed order → compensation edge reverses the money.
-        o = compensate(&o, OrderStatus::Refunding, 1, 2).unwrap();
-        assert_eq!(o.status, OrderStatus::Refunding);
-        o = apply_event(&o, OrderStatus::CompensatedRefund).unwrap();
+        o = apply_event(&o, OrderStatus::Refunding).unwrap();
+        o = compensate(&o, OrderStatus::CompensatedRefund, 1, 2).unwrap();
         assert_eq!(o.status, OrderStatus::CompensatedRefund);
         assert_eq!(
             o.ledger_balance(),
@@ -890,7 +964,7 @@ mod tests {
             },
         )
         .unwrap();
-        let res = compensate(&o, OrderStatus::Refunding, 1, 2);
+        let res = compensate(&o, OrderStatus::CompensatedRefund, 1, 2);
         assert!(
             res.is_err(),
             "reversal of i64::MIN earn leg must be rejected"
