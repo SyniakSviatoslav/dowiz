@@ -61,6 +61,20 @@ pq = ["dep:serde", "dep:serde_json", "dep:aes-gcm", "dep:curve25519-dalek"]
 # to block_on it from the synchronous kernel boundary (no async runtime pulled
 # into the default build). The default build compiles `render` to nothing.
 gpu = ["dep:wgpu", "dep:pollster"]
+# `slot-arena` — OPT-IN generational-index slot arena (thunderdome, zero runtime
+# deps). OFF by default so the canonical order/money core stays pure-`std` and
+# pulls NO extra crate into its graph — same opt-in discipline as `pq`/`gpu`/
+# `pgrust`. Behind this flag, `slot_arena.rs` wraps `thunderdome::Arena` behind a
+# thin, dowiz-flavored `SlotArena<T>` / `Handle` API whose generational handles
+# make a stale (removed-then-recycled) handle a safe `None` — the ABA / stale-index
+# bug is unrepresentable. Forward-looking infrastructure: the first named trigger
+# is an incremental mesh/graph index that deletes nodes while other structures hold
+# references to them (deep-dive §5). Added per operator directive OVERRIDING that
+# deep-dive's own "no adoption yet" verdict — see
+# `docs/research/OPUS-PERF-ARENA-DEEPDIVE-2026-07-18.md`. The default build carries
+# zero thunderdome symbols (verify: `cargo tree -p dowiz-kernel -e no-dev |
+# grep -c thunderdome` → 0).
+slot-arena = ["dep:thunderdome"]
 
 # innovate: rsa 0.9.x (RUSTSEC-2023-0071, Marvin timing) appears in Cargo.lock but
 # `cargo tree -i rsa` prints nothing — it is NOT linked into any active build path
@@ -104,6 +118,12 @@ wgpu = { version = "30.0.0", optional = true }
 # Minimal executor to block_on wgpu's async adapter/device requests from the
 # synchronous kernel boundary — gated with `gpu`, never in the default graph.
 pollster = { version = "1.0.1", optional = true }
+# Generational-index slot arena — ONLY compiled under the `slot-arena` feature so
+# the default kernel pulls zero extra crates. thunderdome has NO transitive runtime
+# dependencies (its own `Cargo.toml` has no `[dependencies]` section); 8-byte keys
+# with a niche-packed 8-byte `Option<Index>`. `slot_arena.rs` wraps it behind the
+# dowiz `SlotArena<T>` / `Handle` API so call sites never touch `thunderdome::*`.
+thunderdome = { version = "0.6", optional = true }
 
 [dev-dependencies]
 # Benchmarking harness for real latency/throughput telemetry on the hot paths.
