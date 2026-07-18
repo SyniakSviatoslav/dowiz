@@ -80,3 +80,7 @@ tools/telemetry/logs/
 # governance runtime state (claims/meta) — not source
 /tools/telemetry/governance/*.jsonl
 /tools/telemetry/governance/meta_state.json
+dogfood-output/
+qa-shots/
+temp/
+*.png
