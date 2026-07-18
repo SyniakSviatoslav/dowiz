@@ -2377,3 +2377,18 @@ Three closes:
   confirmed) — consistent with §16.12/§16.17's self-serve/free-schema automation stance. A
   post-hoc report/blocklist mechanism for abuse is implied as necessary but not yet designed —
   named as a gap for the Tier-3/moderation blueprint, not resolved here.
+
+### 16.52 Agent model sourcing, SMS/email fallback, offline checkout resilience
+Three closes:
+- **Agent model**: BYO-model is an option, dowiz-fixed local model is the default (Recommended,
+  confirmed) — the same pattern already established for hosting (§16.1), payment (§16.13), and
+  storage (§16.29): a managed default with an easy opt-out, applied consistently to the AI layer
+  too rather than inventing a fourth different shape for this one adapter.
+- **SMS/email is a mandatory Wave-0 fallback**, not push+in-app-only (reverses the Recommended
+  option) — a customer without the installed app, with push disabled, or on the web client
+  still needs to receive order-status updates. **Consequence**: an SMS/email adapter is now a
+  Wave-0 dependency on the hub's notification path, alongside §16.22's hub-owned push.
+- **Offline checkout resilience**: if network drops mid-checkout, the in-progress cart/data-
+  wallet-filled fields are held as a local draft and restored automatically on reconnect — no
+  lost progress, payment simply doesn't fire until the client is back online. Extends §16.14's
+  honest-status and client-side-state principles to the checkout flow specifically.
