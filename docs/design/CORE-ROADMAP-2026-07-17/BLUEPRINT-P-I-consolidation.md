@@ -16,7 +16,44 @@
 
 ---
 
+## Why this layer exists (context for a reader with zero session history)
+
+Layer I is the only layer that maps to **no numeric phase** — and that is the point. It exists to
+answer a navigation problem, not a build problem: this repo accumulated **six** overlapping "master
+roadmap" documents across a week of planning rounds, none bannered, each plausibly claiming to be
+*the* plan. A future reader (human or agent) landing on the wrong one would re-derive against stale
+structure and re-litigate settled decisions — the exact waste the operator's "don't revisit the
+same thing twice" rule forbids. Layer I makes that structurally impossible: it designates **one**
+canonical roadmap (SOVEREIGN), banners the other five as superseded with a pointer at their very
+top, disposition every would-be-lost item so nothing evaporates, and builds a single navigation
+index (`CORE-ROADMAP-INDEX.md`) from which every planning doc is reachable in ≤2 hops. It also
+killed a real naming collision — the "P-A..P-I" letters were renamed to "Layer A..I" so they stop
+colliding lexically with the P01–P30 execution numbers (the letters are an *altitude axis* over
+clusters of numbered phases, never a renumbering).
+
+Uniquely among the layer blueprints, this one **executed in the same pass it was written** — the
+banners, the index, and the fold-ins are already on disk. So a future agent's job here is
+verification and maintenance (§8), not construction: add exactly one index row per new doc, never
+rename P01–P30, and keep the single-canonical-root invariant true. The problem Layer I solves, in
+one line: **guarantee there is exactly one place to start, and that everything is reachable from
+it — so no plan is ever re-derived from a stale copy.**
+
+---
+
 ## 1. Ground truth (contract item 1 — every claim verified live THIS pass, 2026-07-17)
+
+> **Correction (2026-07-18, session verification pass): G5 below is now STALE — both missing layer
+> blueprints have since been written.** `BLUEPRINT-P-D-consensus-capability.md` (Layer D, budgeted
+> anchor-rooted issuance — reconstructed after its own pre-commit loss) and
+> `BLUEPRINT-P-F-local-ai-mesh.md` (Layer F, DecisionUnit-family mesh — likewise reconstructed) are
+> **both on disk** in this directory as of this pass. The `CORE-ROADMAP-INDEX.md` §2 Layer-D row
+> that still reads "OPEN — not written" is corrected in place this pass to link the file (see the
+> index's own dated correction). G5's "D was blocked on R-3, F on the MoE redo" remains true as
+> *history* — both shipped as blueprints that are fail-closed until their respective operator gates
+> (R-3 for D's production policy; the money/P06 gates for F) — but the blueprints themselves exist.
+> No other G-row changed. The three lost Wave-1 audits noted in G6 have also since been
+> **reconstructed on disk** (`P-D-audit-*`, `P-G-audit-*` content in BLUEPRINT-P-G §0–§1,
+> `P-H-audit-*`), per the index §3 status column.
 
 Branch `feat/p19-growth-engine`, HEAD `b64a2c1c6` (the audit ran at `f01f9bb6b`; five commits have
 landed since, incl. the agentic-mesh and spectral-evolution worktree merges — re-verified, none
