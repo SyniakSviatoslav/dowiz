@@ -3,11 +3,11 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use dowiz_kernel::cgraph::CGraph;
+use dowiz_kernel::spectral_cache::{canonical_content_address, slem_cached, DecompCache};
 use dowiz_kernel::token_bucket::TokenBucket;
 use dowiz_kernel::{
     empirical_identify, fold_transitions, place_order, sample_backdoor, OrderItem, OrderStatus,
 };
-use dowiz_kernel::spectral_cache::{canonical_content_address, slem_cached, DecompCache};
 
 fn bench_place_order(c: &mut Criterion) {
     c.bench_function("place_order/5_items", |b| {
@@ -104,7 +104,11 @@ fn bench_token_bucket(c: &mut Criterion) {
 /// against the one-time solve cost.
 fn bench_spectral_cache_slem_cached(c: &mut Criterion) {
     let tile: Vec<Vec<f64>> = (0..10)
-        .map(|i| (0..10).map(|j| ((i * 7 + j * 3) % 11) as f64 + 1.0).collect())
+        .map(|i| {
+            (0..10)
+                .map(|j| ((i * 7 + j * 3) % 11) as f64 + 1.0)
+                .collect()
+        })
         .collect();
     c.bench_function("spectral_cache/slem_cached_10x10_hit", |b| {
         b.iter(|| {
@@ -124,7 +128,11 @@ fn bench_spectral_cache_slem_cached(c: &mut Criterion) {
 /// regression in the scale-invariant address computation shows up on its own.
 fn bench_spectral_cache_canonical_address(c: &mut Criterion) {
     let tile: Vec<Vec<f64>> = (0..32)
-        .map(|i| (0..32).map(|j| ((i * 13 + j * 5) % 17) as f64 + 1.0).collect())
+        .map(|i| {
+            (0..32)
+                .map(|j| ((i * 13 + j * 5) % 17) as f64 + 1.0)
+                .collect()
+        })
         .collect();
     c.bench_function("spectral_cache/canonical_address_32x32", |b| {
         b.iter(|| black_box(canonical_content_address(&tile)))

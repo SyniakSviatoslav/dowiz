@@ -441,7 +441,10 @@ mod tests {
         assert_eq!(o.status, OrderStatus::Refunding);
         // Direct fold to CompensatedRefund is rejected.
         let r = apply_event(&o, OrderStatus::CompensatedRefund);
-        assert!(r.is_err(), "CompensatedRefund must be unreachable via apply_event");
+        assert!(
+            r.is_err(),
+            "CompensatedRefund must be unreachable via apply_event"
+        );
         // And the ledger is still empty (no earn leg was ever posted).
         assert_eq!(o.ledger_balance(), 0);
     }
@@ -465,7 +468,10 @@ mod tests {
         assert_eq!(o.ledger_balance(), o.total, "earn leg posted at confirm");
 
         let comp = compensate(&o, OrderStatus::CompensatedRefund, 1, 2);
-        assert!(comp.is_ok(), "compensate must succeed with a valid earn leg");
+        assert!(
+            comp.is_ok(),
+            "compensate must succeed with a valid earn leg"
+        );
         let comp = comp.unwrap();
         assert_eq!(comp.status, OrderStatus::CompensatedRefund);
         assert_eq!(comp.ledger_balance(), 0, "compensated order nets to ZERO");
@@ -489,11 +495,13 @@ mod tests {
         // No earn leg posted; reversal of id 1 must fail.
         let before = o.clone();
         let r = compensate(&o, OrderStatus::CompensatedRefund, 1, 2);
-        assert!(r.is_err(), "compensate without a matching earn leg must fail");
+        assert!(
+            r.is_err(),
+            "compensate without a matching earn leg must fail"
+        );
         assert_eq!(o.status, before.status);
         assert_eq!(o.ledger_balance(), before.ledger_balance());
     }
-
 
     #[test]
     fn red_terminal_order_cannot_advance() {

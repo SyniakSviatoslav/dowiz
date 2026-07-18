@@ -365,7 +365,12 @@ mod tests {
                 scope: order_status_scope(),
             },
         };
-        let c = card("read_order_status", "d", Surface::Owner, order_status_scope());
+        let c = card(
+            "read_order_status",
+            "d",
+            Surface::Owner,
+            order_status_scope(),
+        );
         let reg = StaticSkillRegistry::new(vec![(c, Box::new(tool))]);
         // Never a default tool, never a fuzzy match.
         assert!(reg.resolve("transfer_money").is_none());

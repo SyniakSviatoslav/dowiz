@@ -391,8 +391,10 @@ pub fn eigh_contig(a: &mut [f64], n: usize) -> (Vec<Vec<f64>>, Vec<f64>) {
     // would silently get a wrong basis — fail closed in debug).
     for i in 0..n {
         for j in (i + 1)..n {
-            debug_assert!((a[i * n + j] - a[j * n + i]).abs() < 1e-9,
-                "eigh_contig: input must be symmetric");
+            debug_assert!(
+                (a[i * n + j] - a[j * n + i]).abs() < 1e-9,
+                "eigh_contig: input must be symmetric"
+            );
         }
     }
     // Identity accumulator; becomes the product of reflectors P₁…P_{n−2}.
@@ -691,10 +693,7 @@ mod tests {
         let one_third = (3.0_f64).sqrt().recip();
         let v0 = &basis[0];
         // find which index holds λ≈0
-        let idx0 = values
-            .iter()
-            .position(|x| (x - 0.0).abs() < 1e-9)
-            .unwrap();
+        let idx0 = values.iter().position(|x| (x - 0.0).abs() < 1e-9).unwrap();
         for i in 0..3 {
             assert!(
                 (basis[idx0][i] - one_third).abs() < 1e-9,
@@ -749,9 +748,7 @@ mod tests {
         eigh_check(&d, 1e-9);
         // a denser random symmetric matrix.
         let mut a = vec![vec![0.0f64; 5]; 5];
-        let seed = [
-            0.2, -1.3, 0.7, 2.1, -0.4, 0.9, 0.3, -2.0, 1.1, 0.6,
-        ];
+        let seed = [0.2, -1.3, 0.7, 2.1, -0.4, 0.9, 0.3, -2.0, 1.1, 0.6];
         let mut s = 0;
         for i in 0..5 {
             for j in 0..5 {
@@ -809,7 +806,10 @@ mod tests {
         assert_eq!(vals1, vals2, "eigenvalues not deterministic");
         for j in 0..4 {
             for i in 0..4 {
-                assert_eq!(basis1[j][i], basis2[j][i], "basis not deterministic at {i},{j}");
+                assert_eq!(
+                    basis1[j][i], basis2[j][i],
+                    "basis not deterministic at {i},{j}"
+                );
             }
         }
     }
