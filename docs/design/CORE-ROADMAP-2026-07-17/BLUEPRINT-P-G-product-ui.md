@@ -14,6 +14,33 @@
 
 ---
 
+## Why this layer exists (context for a reader with zero session history)
+
+Layer G is where the kernel finally becomes a *product* — the first real surface a human touches.
+Everything below it (A–F) is math, state, safety, consensus, crypto, and AI running headless; Layer
+G is the thin, honest membrane that turns those exports into something on a screen. The reason it
+needs its own blueprint — rather than "just write some UI" — is that this repo made an unusual
+architectural bet: **the UI holds no logic.** No money arithmetic, no FSM transition table, no
+geo/spectral math lives in JavaScript. The kernel (compiled to WASM) is the sole authority for
+every value the UI shows; the UI's entire job is to call an export, validate the shape of what
+comes back, and render it — or render the kernel's typed error. A price the UI computed itself, a
+status transition the UI decided was legal, a distance the UI calculated — each of those is a
+*defect by construction*, caught by a grep gate (§7 gate G), not a code review.
+
+That bet is why this phase is a **greenfield build-out, not a migration**: the old Node/TS
+storefront was decommissioned (commit `5675c349b`), so there is no app to port and no backend to
+re-plumb — `web/` is backend-less, local-first, driven entirely through the wasm kernel. The work
+is narrow and concrete: wire the already-built physics-field simulation into the canvas (G1), bind
+the 21 kernel exports that `web/` doesn't call yet (G2), and put the first real DOM on screen —
+live cards, a ticking canvas, and one minimal order surface that places an order and walks its
+lifecycle through `apply_event_js` (G3). The one thing this phase pointedly does **not** do is flip
+money charge-authority to the kernel: with the old API gone there is no live charge path, which
+makes flipping *tempting* and is exactly why it stays operator-gated (§8). The problem Layer G
+solves, in one line: **expose the kernel as a real product surface without letting a single
+authoritative value be computed anywhere but the kernel.**
+
+---
+
 ## 0. Scope (honest, binding)
 
 Three gaps, three fixes, in this phase — nothing more:
@@ -367,6 +394,64 @@ replaced.
 
 ---
 
+## 13. Session fold-in (2026-07-18) — the E1 forged-total CRITICAL makes §8's recompute rule load-bearing
+
+Added after the Wave-2 writing pass; §0–§12 stand. Source:
+`docs/design/ROADMAP-UPDATE-SESSION-SYNTHESIS-2026-07-18.md` §1.2 (dowiz kernel red-team, V3
+findings, re-verified STILL-LIVE on `main @ 87da9ccd4`). The red-team pass found the exact hazard
+§8's dual-authority discipline exists to contain, live in shipped kernel code — which converts §8
+from a cautious posture into an owned Layer-G DoD.
+
+### 13.1 E1 — forged order total is STILL LIVE (V3 1.2 / 5.6, HIGH)
+
+`apply_event_js` / `price_trusted`: a client-supplied order total is accepted with the
+`price_trusted: false` flag **set but read by no money path** — the flag exists, the enforcement
+does not. So a forged total crosses the JS→kernel boundary and is not independently recomputed. This
+is precisely the unsafe state S* §8's hazard argument names ("UI shows a money value not produced by
+kernel math"), except the defect is one layer deeper than the UI: it is in the kernel's own JS
+boundary. **Disposition — this is Layer G's money-recompute DoD:** the kernel money leg must
+**recompute the total from items × unit_price server-side and ignore any client-supplied total**,
+with `price_trusted: false` actually gating a recompute rather than being a dead flag. The §7 test
+T5's `subtotal === Σ qty·unit_price` assertion is the *display-side* pin of this; E1 requires the
+*authority-side* pin — the kernel refusing a mismatching client total, not just the UI validating
+shape. This is the money-recompute leg of the G11 direction §8 already references ("server
+recompute"), now with a named live defect behind it. RED-first, permanent regression row
+(`PG-forged-total-recompute`).
+
+**Relation to the §8 money-flip gate (do not conflate):** E1 is **not** the dual-authority flip.
+The flip (kernel becomes the sole *charge* authority) stays operator-gated and P06-tied, unchanged.
+E1 is narrower and unconditional: whichever authority charges, a **client-forged total must never be
+trusted** — recompute is mandatory on *both* sides of the eventual flip. Fixing E1 does not
+pre-empt the flip ruling; it removes a defect that exists regardless of how the ruling goes.
+
+### 13.2 The money-arithmetic cluster (V3 1.3–1.6) — Layer A primitives the UI must surface, never mask
+
+The same red-team pass found a cluster of money-arithmetic defects that are **Layer A** (kernel
+primitive) fixes, folded in here because Layer G is their *display* surface and §3's validators are
+their last line of defense at the boundary:
+
+| Finding | Owner | Layer-G consequence |
+|---|---|---|
+| **V3 1.3** `place_order_js` negative qty / unit_price → negative money | Layer A/G | §3's `validate<OrderOut>` must reject negative money fields (extend the `isSafeInteger` check to `>= 0` where semantically required); T7-class adversarial test |
+| **V3 1.4** `apply_tax` div-by-zero panic at `tax_rate ≈ -1.0` (all build profiles) | Layer A | a kernel panic surfaces at the JS boundary as an init/call failure — §9's bulkhead (kernel-bytes failure = fail-closed) is the containment, but the *fix* is Layer A guarding the divisor |
+| **V3 1.5/1.6** `estimate_order_total` i64 + `apply_tax` i128 unchecked overflow → fabricated total/tax | Layer A | this is exactly why `EstimateOut.tax_total/total` are **nullable** in §3 (overflow → `null` degrade, never a fabricated zero) — T9 already pins the display-side degrade; the Layer-A fix is checked arithmetic |
+
+The Layer-G rule these share: **a kernel-side money defect is owned by the kernel's own parity/
+overflow tests (§8's "Residual: a kernel-side bug, owned by the kernel"), but the UI must degrade
+visibly (null/ERR), never render a fabricated value.** §3's nullable money fields + fail-closed
+validators are that discipline; E1 (13.1) is the one that additionally demands an authority-side
+recompute, because a forged-but-well-formed total passes shape validation.
+
+### 13.3 Net effect
+
+No change to G1/G2/G3 scope or the §8 flip gate. What changes: **§8's server-recompute direction
+gains a named, live, HIGH defect (E1) and becomes an owned Layer-G DoD item**, and §3's money
+validators are reinforced as the boundary containment for the V3 1.3–1.6 Layer-A cluster. The UI
+still holds no money logic — it recomputes nothing — but the *kernel* leg it calls must recompute
+the total and refuse a forged one, and the UI must render the refusal, not the forgery.
+
+---
+
 *Wave-2 blueprint for P-G. Sources verified this pass (live HEAD `f01f9bb6b`): all of `web/`
 (`app.mjs`, `index.html`, `serve.mjs`, `kernel_client.mjs`, `kernel.test.mjs`, `package.json`),
 `kernel/src/wasm.rs` (export surface + money/FSM/geo/spectral contract bodies),
@@ -374,4 +459,5 @@ replaced.
 full), `wasm/demo/smoke.mjs`, `docs/regressions/` (ledger exists). Grounding docs read in full:
 `CORE-ROADMAP-STANDARD-2026-07-17.md`, `P-G-audit-product-ui-post-decommission.md`,
 `BLUEPRINT-P16-product-ui-rebuild.md` (incl. §10 appendix), `LIVING-INTERFACE-ROADMAP.md`
-(incl. §8 ruling). This document plans; it changes no product code.*
+(incl. §8 ruling). §13 folded in 2026-07-18 from the session verification synthesis. This document
+plans; it changes no product code.*
