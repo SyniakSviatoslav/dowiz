@@ -418,3 +418,67 @@ Folded as **Phase 28's refined rung-1 execution plan**, not a new phase — re-r
 new deterministic `kernel/src/lowrank.rs` …"); this plan changes the solver's home and adds the
 householder `eigh` extension, without changing the phase's dependencies, consumers, or ladder. A
 dated amendment line is appended under §8.10 pointing here; the original row text is preserved.
+
+---
+
+## 9. Implementation deviations (honest record — committed 2026-07-18, commit `03ac0fefe`)
+
+This plan was executed and committed, but TWO algorithm choices diverged from §3/§5 spec under
+test pressure. Both divergences were load-bearing (the spec'd method did not converge to KAT
+tolerance on the hand-derived spectra); both were caught by the falsifiable tests this plan
+mandated, not by prose. Recorded here per the Detailed-Planning-Protocol's "don't paper over a
+deviation with an invented specific" rule.
+
+### 9.1 Dense path: Jacobi, NOT DSTEQR-shaped implicit-QL/QR
+- **Plan said (§3.1, §5.1):** Householder tridiagonalization + *implicit-Wilkinson-shift symmetric
+  tridiagonal **QR** with Givens rotation-accumulation* — the `DSTEQR` shape (`tridiag_qr_symmetric`
+  in §5.1).
+- **Actual (committed, `householder.rs::eigh_contig`):** classical **cyclic Jacobi** sweep over the
+  full symmetric matrix — `reduce_hessenberg` (Householder) builds the reflector basis `Q`, then a
+  fixed-sweep Jacobi rotation loop diagonalizes `Qᵀ A Q`, accumulating the product of Jacobi
+  rotations into `Q` to yield the eigenvector basis. `eigh_contig` is the public façade;
+  `spectral.rs::eigh` wraps it.
+- **Why:** the implicit-QL/QR driver (`qr_step` Wilkinson-shift deflation) repeatedly failed the
+  orthonormality KAT (`r2_eigh_facade_p3_kat` demands `UᵀU = I` to 1e-9) on near-degenerate spectra
+  and produced wrong eigenvalues on the `k`-sized P3 hand-derived matrix. Jacobi, though O(n³) per
+  sweep, is unconditionally stable for n ≤ 32 dense-symmetric (our only dense consumer) and hit
+  1e-9 orthonormality + correct λ on every oracle. The plan's own §8 Ananke argument ("regression
+  structurally impossible") still holds: `eigenvalues_contig` and its 8 oracle tests are untouched;
+  only the *new* `eigh_contig` internals differ. Determinism contract unchanged (fixed max sweeps,
+  fixed rotation order, sign fixed by first-nonzero > 0).
+- **Cost:** Jacobi is the slower of the two for large n, but n ≤ 32 → negligible; the plan's own
+  n ≤ 32 stack-only bound makes this a non-issue. No consumer needs the tridiagonal intermediate.
+- **Upgrade trigger (per `innovate:` convention):** if a dense n ≫ 32 symmetric consumer appears,
+  swap `eigh_contig`'s inner loop for the spec'd implicit-QL with properly-accumulated Givens and
+  re-pin `r2_eigh_facade_p3_kat`. Until then Jacobi stays.
+
+### 9.2 Sparse path: LCG-seeded start, NOT index-graded
+- **Plan said (§5.1 `topk_symmetric`, §3 determinism contract):** *index-graded start vector*
+  (deterministic start derived from row indices), matching the PPR/spmv determinism contract.
+- **Actual (committed, `spectral.rs::topk_symmetric`):** start vector is seeded by a **fixed-seed
+  LCG** (`x₀[i] = lcg(seed, i)`), not from index-graded spmv state. Power+Hotelling-deflation
+  (A := A − λ v vᵀ per spmv) is otherwise exactly as spec'd: fixed `iters`, fixed summation order
+  inherited from `Csr::spmv`, sign fixed as in `eigh_contig`, descending |λ|.
+- **Why:** an index-graded start produced eigenvalue-order instability across runs on the oracle
+  (the `r3_topk_symmetric_*` tests asserted a *deterministic* λ ordering; index-graded starts
+  occasionally flipped the k-th vs (k+1)-th pair on clustered spectra). A fixed-seed LCG start is
+  byte-identical across runs/hosts for the same binary and removed the ordering nondeterminism. The
+  determinism *guarantee* the plan required (cross-run byte-determinism) is still met — just via a
+  seeded PRNG rather than index arithmetic.
+- **Cost:** none for correctness; the determinism story is now "determinism-per-host + per-fixed-
+  seed" (same as the PPR/matmul fallback the plan itself permitted at §7), not "index-graded closed
+  form." Documented in `topk_symmetric`'s doc comment.
+- **Upgrade trigger:** if a consumer requires the start vector to be a *function of the matrix
+  structure* (e.g. warm-start from a prior decomposition), reintroduce index-graded starts and
+  re-pin the ordering KAT.
+
+### 9.3 Closure evidence (falsifiable, run this session)
+- `cargo test --lib` (kernel) → **561 passed** (+11 vs pre-R1-R3 baseline 550).
+- Key KATs GREEN: `r1_*` (Householder + eigh_contig), `r2_eigh_facade_p3_kat` (UᵀU=I to 1e-9,
+  correct λ on P3 hand-derived matrix), `r3_topk_symmetric_*` (deterministic top-k, descending |λ|,
+  byte-stable across repeated runs).
+- No existing public signature changed; `eigenvalues_contig` + 8 oracle tests untouched (§8 Ananke
+  claim verified, not assumed).
+- Remaining honest gap: §10-style "3-eigensolver dual-authority" grep rule + module doc-comment
+  guard added in `householder.rs` (R1) — the `lowrank.rs` second-authority was never created, so
+  single eigen-surface (`spectral.rs`) holds.
