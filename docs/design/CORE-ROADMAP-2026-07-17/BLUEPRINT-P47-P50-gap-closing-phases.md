@@ -422,6 +422,17 @@ DoD addendum: **B4** — a ToS/consent-capture artifact exists and is shown at s
 (§3 build item, narrower than a compliance program); the audit's classification contract (§5.2
 item 3) is otherwise unchanged.
 
+**Messaging-consent scope (2026-07-18 addendum, from P48 §10.5 — flagged here because B4 is
+its natural capture point):** does placing an order constitute consent to PROMOTIONAL
+messages on that customer's channel, or is marketing consent a separate explicit opt-in?
+**⚠ OPERATOR/COUNSEL — deliberately NOT decided by any blueprint.** Transactional messages
+(order status, OTP) ride the order's own basis (P43 §4.1); segment promos (P48 §10.5) are a
+different basis entirely. If the ruling requires explicit opt-in, B4's ToS/consent-capture
+artifact is where the checkbox lives, and P22's campaign-lane consent ledger is the
+enforcement mechanism; until the ruling AND that ledger exist, promo sends stay refused
+typed (`h7_send_blocked_without_consent_ledger`, P48 §10.8). Recorded in both places so
+neither lane silently assumes the answer.
+
 ---
 
 ## 6. Cross-phase dependency map

@@ -611,3 +611,16 @@ No DOM-first screens (G6's assertions apply to Sea/Sheet unchanged). No Whisper 
 ahead of the order path. No second token system. Hard-depends on P38a's pipelines (G1-G3) and,
 for real order data, P37 + PROTOCOL P34; blocks nothing downstream except demo polish
 (P17/P20 benefit, not gated).
+
+### 11.5 Experiential/craft layer (cross-ref, 2026-07-18)
+
+P38a's build items are mechanism; the QUALITY those mechanisms must produce is specified in
+`docs/design/dowiz-interfaces/BLUEPRINTS-DOWIZ-INTERFACES.md` **Додаток C** — the
+narrative-cinematic reading of the Sea: the order-lifecycle pacing arc with named beats and an
+amplitude budget (C.2), the OKLCH grade riding existing tokens (C.3), camera language mapped
+onto existing primitives with 3D/DoF honestly costed-out (C.4), and the restraint discipline
+(C.5 — "cinematic" is a deletion criterion as much as an addition one). Read G4 (field
+dynamics, focus wells) and G5 (settle) alongside it: the settle gate IS the held-stillness
+instrument, TIDE/attending speeds ARE the tempo instrument, and its verdict is binding here —
+narrative pacing is Sea/T2 dowiz-fixed; NO brand pacing token exists (the 5-token Sheet limit
+of DZ-02 is unchanged).
