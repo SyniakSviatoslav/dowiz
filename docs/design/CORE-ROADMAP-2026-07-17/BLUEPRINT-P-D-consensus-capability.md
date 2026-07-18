@@ -30,6 +30,17 @@
 
 ## §0. The problem, one paragraph, no metaphor
 
+*(Orientation for a reader with zero session history: in this mesh, "authority" is never an
+account or a role — it is a **capability**: a signed, narrow, expiring delegation chain rooted at
+a genesis-frozen anchor set, re-derived from scratch at every admission. A "Sybil attack" is the
+generic attack on any open network: identities are free, so an attacker mints N of them to
+outvote/outnumber the honest side. The mesh's standing defense is asymmetry — free keys carry no
+authority, only anchor-rooted delegation paths do — which reduces the whole problem to the one
+paragraph below: what disciplines the anchor's own signing hand. This blueprint closes exactly
+that, and §12 (written as "§11" on its source branch, renumbered at merge) records that the gap it
+closes has since been observed as a live red-team finding in a sibling arc, not just a theoretical
+residual.)*
+
 Sybil-resistance in the bebop2 mesh is already the theorem-permitted asymmetric kind: authority
 exists only as an anchor-rooted, narrow-only, signed delegation path (`verify_chain`), so N free
 keypairs are inert (`CapError::UnknownIssuer`). Batch 7 proved this PROVEN-VIABLE-WITH-CAVEATS and
@@ -835,3 +846,74 @@ direction. Until that entry exists, R-3 is open — full stop, regardless of cod
 - `never-bypass-human-gates-2026-06-29.md` (MEMORY) — the standing rule under which R-3 is
   reserved for the operator; the correct filename/date (the blueprint's own §10 "Memory" list
   above cites `never-bypass-human-gates-2026-07-29`, which does not match the file on disk).
+
+---
+
+## §12. Session fold-in (2026-07-18) — the gap this blueprint closes is now a LIVE red-team finding
+
+> **Merge note (2026-07-18 reconciliation):** this section was written on
+> `research/dowiz-verify-redteam-2026-07-17` as its own "§11", concurrently with §11 above landing
+> on `main`; renumbered to §12 at merge. Where §12.3 says "R-3 … remains the sole operator gate",
+> §11's recorded R-3 ruling (Option A adopted, operator-overridable) is the later, superseding
+> status. The branch also carried a second, truncated duplicate of this section (cut mid-sentence
+> at EOF) — dropped at merge; this is the complete version.
+
+Added after the reconstruction pass; nothing in §0–§10 is retracted. This section folds in the
+2026-07-18 verification/red-team synthesis
+(`docs/design/ROADMAP-UPDATE-SESSION-SYNTHESIS-2026-07-18.md` §1.2) and the round-2 fail-operational
+master synthesis (`fail-operational-layout-versioning-2026-07-17/round-2/…` §6). Its single most
+important effect: it upgrades §0's threat from "the one real residual Batch 7 isolated" to **an
+observed, exploitable defect in a shipped sibling arc** — the strongest possible motivation for
+building Option A.
+
+### §12.1 The agentic-mesh red-team confirms §0's threat in shipped code (branch `84a1e272d`, Wave-0 landed `f30189262`)
+
+The agentic-mesh arc ships a capability layer that is, per the synthesis, a "verbatim bebop2 clone"
+of the substrate this blueprint budgets. The red-team pass found the §0 gap live and worse than
+predicted:
+
+| Finding | Relation to this blueprint | Layer-D disposition |
+|---|---|---|
+| **A5 (HIGH, inherited):** unbounded per-anchor Sybil issuance — **"no `IssuanceBudget`/`RootDelegationPolicy`"** | This is §0's residual, observed. The exact type this blueprint specifies (§3.2 `IssuanceBudget`) is the named-missing control. A5 is the empirical proof that §0 is not hypothetical | **Option A (§3) IS the fix for A5.** Build it |
+| **B-3 (HIGH, most dangerous):** `RefSigner` is `pub` (not `#[cfg(test)]`-gated), trivially forgeable **and leaks the signer's secret** — observing one anchor-rooted delegation recovers the anchor key → unlimited anchored Sybils with no anchor compromise | Directly attacks §6.1's honest boundary: this blueprint says a budget "DOES NOT BIND a malicious anchor holding its own seed." B-3 is worse — it lets an *observer* become that malicious anchor. The visibility-ratchet §6.1 proposes (`Delegation::sign` → `pub(crate)`, and by extension `RefSigner` → test-gated) is the structural fix | **Reinforces §6.1's visibility-ratchet** as a *required* follow-up, not optional: a `pub` test signer is the compile-time-catchable half of the malicious-anchor threat. Ledger + `ci-budgeted-issuance.sh` (§6.3) should additionally grep for `pub` signer/`RefSigner` exposure outside `#[cfg(test)]` |
+| **A7/B-6 (MED):** red-line gate arming is caller-**optional** AND inspects the **wrong scope field** — manifest `action_scopes` (money/auth/secret/migration) never pass `RedLinePolicy::check` at admit | The red-line-scope-check gap: a capability naming a red-line resource is admitted because the check reads a different field than the one the grant carries. This is the *admission-side* mirror of this blueprint's mint-side discipline | **Named Layer-D follow-up (not in Option A's scope, flagged honestly):** Option A budgets *minting*; A7/B-6 is an *admission* red-line-scope bug in `verify_chain`'s consumer. It belongs to Layer D but to the admission path (`RedLinePolicy::check` must read the granted scope, and arming must be mandatory-by-construction, not caller-optional). Cross-ref BLUEPRINT-P-G §8's money-gate reasoning: red-line resources must be *un-nameable*, echoing §3.2's `RedLineAdmissible` sealing in the round-2 work below |
+| **B-1 (HIGH):** nonce eviction half-drop → replay (`admission.rs:243`); **B-2 (HIGH):** caller-controlled `now=0` → total expiry bypass; **B-4 (MED):** `TokenBucket .lock().unwrap()` poison cascade | B-2 is the admission-path sibling of §3.1 predicate 5 (`EpochRegression` refuses a future/rolled-back tick): a caller-controlled clock is exactly why this blueprint's `can_issue` takes `now_tick` as a checked input with a monotonicity pole, never reads an ambient clock (Hermetic P6). B-4 is the same poison-cascade class Layer C (BLUEPRINT-P-C §13.2) and P-H A6 own | B-2 **validates §3.1's ambient-clock ban**; B-1/B-4 are admission/transport-path items cross-owned with Layer C/E |
+
+**Memory-claim corrections carried in (do NOT carry the old optimistic claims forward — the
+synthesis §1.2 re-verified these):** the "0x12 discriminant collision found+fixed" is **NOT fixed
+— DEFERRED/UNRATIFIED** (B1 took `0x12` unilaterally, B2 unbuilt; docket R-1 still open); the "B4
+SSR-2020 fix protects this arc" is **closed by non-existence** (no batch-verify path in-tree — see
+BLUEPRINT-P-E §2.1 for why batch-accept is rejected anyway); **B2/B3
+WorkReceipt/Settlement/ExposureLedger are NOT built** (blueprint-only; their claimed properties are
+untestable today). Survivors worth keeping: A6 Poly-Network invariant (3-layer test incl. a
+compile-time borrow guard — *stronger* than bebop2's), P07 dedup, `MAX_VERIFY_CHAIN_LINKS=16`.
+
+### §12.2 Round-2 fail-operational artifacts owned by Layer D (round-2 master synthesis §6)
+
+The round-2 pass routes two artifacts to Layer D; both are the *capability/red-line* half of the
+CSC-LAW bridge work (its containment/isolation half is Layer C, its gate substrate is Layer B):
+
+- **`BRIDGE_GRANTABLE_RESOURCES` + the sealed `RedLineAdmissible` trait** (Fable-B, ADOPT): red-line
+  resources (Ledger/Auth/Secret/Migration) are made **un-nameable in any bridge scope and
+  un-typeable at commit** — the same "red-line is a type-level absence, not a runtime filter"
+  discipline this blueprint applies to money (`money_gated` in BLUEPRINT-P-F §3; `FeeBps` integer
+  basis-points). This is the *structural* answer to the A7/B-6 red-line-scope-check gap above: had
+  the agentic-mesh manifest scopes been typed this way, an `action_scope` naming a red-line
+  resource could not have been constructed to bypass the check. **Cross-reference recorded so the
+  A7/B-6 admission fix reuses this pattern rather than re-inventing a runtime check.**
+- **CWR's tier law leans on Layer D** (round-2 §6: "CWR boundary types … tier law is D"): the
+  telemetry-vs-critical tier of an admitted frame is a *capability-class* decision — the grant is
+  the authority, the wire tier byte must equal it (Fable-D T5 `tier_discriminants_and_grant_authority`).
+  This is the same "declared capability, never a measured quality" law as this blueprint's routing
+  discipline (§2 here mirrors BLUEPRINT-P-F §2.2's NO-COURIER-SCORING routing). No new Layer-D
+  mechanism; a cross-link so the tier-grant equality test is recognised as Layer-D-owned.
+
+### §12.3 Net effect on this blueprint's status
+
+Nothing in Option A's design changes. What changes is its **priority and its evidence base**: §0's
+"one real residual" is now a HIGH red-team finding (A5) in shipped sibling code, and §6.1's
+proposed visibility-ratchet is corroborated as necessary by a second HIGH finding (B-3). The
+build recommendation stands and is strengthened. R-3 (`RootDelegationPolicy` variant ruling)
+remains the sole operator gate; A7/B-6 (admission red-line-scope) is added as a **named sibling
+Layer-D item on the admission path**, distinct from this blueprint's mint-path scope and not folded
+into Option A.
