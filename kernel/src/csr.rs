@@ -1035,7 +1035,7 @@ mod tests {
         );
         // The distant node 3 must NOT be in the top-3 ranking.
         let mut idx: Vec<usize> = (0..pi.len()).collect();
-        idx.sort_by(|&a, &b| pi[b].partial_cmp(&pi[a]).unwrap().then(a.cmp(&b)));
+        idx.sort_by(|&a, &b| pi[b].total_cmp(&pi[a]).then(a.cmp(&b)));
         assert!(
             !idx[..3].contains(&3),
             "distant node 3 must not outrank seed+neighbours in top-3"

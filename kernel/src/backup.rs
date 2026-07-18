@@ -195,7 +195,11 @@ impl BlockStore for FileBlockStore {
         // Ensure the shard directory exists before writing.
         if let Some(parent) = final_path.parent() {
             if let Err(e) = fs::create_dir_all(parent) {
-                panic!("FileBlockStore: failed to create shard dir {parent:?}: {e}");
+                // A durability primitive must NEVER panic on I/O (the disk is most
+                // likely to be full exactly when the backup runs). Signal failure
+                // via the trait's bool return instead — TORVALDS-14.
+                eprintln!("FileBlockStore: failed to create shard dir {parent:?}: {e}");
+                return false;
             }
         }
         // Crash-atomic write: <root>/tmp/<id>.partial → fsync → rename.
@@ -206,7 +210,8 @@ impl BlockStore for FileBlockStore {
         let _ = fs::remove_file(&partial);
         if let Err(e) = fs::write(&partial, bytes) {
             let _ = fs::remove_file(&partial);
-            panic!("FileBlockStore: failed to write partial {partial:?}: {e}");
+            eprintln!("FileBlockStore: failed to write partial {partial:?}: {e}");
+            return false;
         }
         // fsync the partial so its bytes are durable before the atomic rename.
         if let Ok(f) = fs::File::open(&partial) {
@@ -214,7 +219,8 @@ impl BlockStore for FileBlockStore {
         }
         if let Err(e) = fs::rename(&partial, &final_path) {
             let _ = fs::remove_file(&partial);
-            panic!("FileBlockStore: failed to rename into place {final_path:?}: {e}");
+            eprintln!("FileBlockStore: failed to rename into place {final_path:?}: {e}");
+            return false;
         }
         self.cache.insert(id, bytes.to_vec());
         true
@@ -698,5 +704,48 @@ mod tests {
         // And the blocks/ tree stays empty (no half-written file leaked).
         assert_eq!(store.len(), 0);
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// TORVALDS-14: the backup store must NOT panic when the underlying filesystem
+    /// write fails (full disk / permission denied). It signals failure via the
+    /// `bool` return so the caller can degrade instead of crashing the process.
+    /// Prior to the fix, `put` `panic!`-ed on `create_dir_all`/`write`/`rename`
+    /// failure — i.e. it died exactly when the disk was most likely to be full.
+    #[test]
+    fn fileblockstore_put_fails_without_panic_on_io_error() {
+        let tmp = std::env::temp_dir().join(format!("fbs_ro_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        // A valid store.
+        let mut store = FileBlockStore::open(&tmp).expect("open store");
+        let block = vec![0x9u8; 512];
+        let id = crate::event_log::sha3_256(&block);
+        // Block the shard directory's *parent* by placing a regular file where
+        // `put` will try to `create_dir_all` the shard path. `create_dir_all`
+        // then fails with ENOTDIR — an error even root cannot bypass (unlike a
+        // read-only bit, which root ignores). This simulates the realistic
+        // "filesystem write failed" path without depending on permissions.
+        let hex = hex_encode(&id);
+        let blocked = tmp.join("blocks").join(&hex[0..2]);
+        std::fs::write(&blocked, b"not-a-dir").expect("plant blocking file");
+        let _guard = scopeguard_remove_all(&tmp);
+        // Must return false (failure signalled), NOT panic.
+        let ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            store.put(id, &block)
+        }));
+        match ok {
+            Ok(ret) => assert!(!ret, "put must return false on I/O failure, not succeed"),
+            Err(_) => panic!("FileBlockStore::put panicked on I/O error — TORVALDS-14 regression"),
+        }
+    }
+
+    /// Best-effort removal of the temp dir (so the test doesn't leak).
+    fn scopeguard_remove_all(path: &std::path::Path) -> impl Drop + '_ {
+        struct G<'a>(&'a std::path::Path);
+        impl Drop for G<'_> {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(self.0);
+            }
+        }
+        G(path)
     }
 }
