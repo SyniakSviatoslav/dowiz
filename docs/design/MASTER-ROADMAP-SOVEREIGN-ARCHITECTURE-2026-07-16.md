@@ -2211,3 +2211,40 @@ Ollama/local-LLM infrastructure as §16.4's assistant and §16.34's voice recogn
 consistent with the whole local-first stance rather than a new exception. Removes what would
 otherwise have been an ongoing manual-translation maintenance burden as the vendor/venue count
 grows across markets.
+
+### 16.39 Typography — physics/math-generated glyphs, not font files (RESEARCH DIRECTION, extends §16.35)
+Operator's framing, verbatim: *"ще дикіша ідея - малювання шрифтів через математику і
+фізику."* Goes beyond §16.30's already-planned SDF-rendered text (glyphs from real font files,
+rendered via signed-distance fields — an established technique) to something categorically
+further: glyphs generated procedurally from the same field-engine math (the Laplacian/wave
+primitives already driving the rest of the UI) rather than sourced from any font file at all.
+**Stated honestly**: this is typography R&D with no known production precedent — recorded as a
+research direction under the same §16.35 umbrella, not settled Wave-0 buildable scope on its
+own.
+
+### 16.40 Intent-driven UI — full replacement from day one, no traditional-navigation fallback; schedule risk knowingly accepted
+Sharpens §16.35: the operator confirmed **full replacement of traditional navigation from day
+one**, not a layer over a conventional fallback (reversing this section's own earlier
+recommendation, which had proposed keeping conventional screens as the safety net). Combined
+with §16.30 (full wgpu), §16.34 (custom canvas text input), and §16.39 (physics-generated
+type), this is now one of the most technically ambitious UI stacks recorded in this roadmap —
+flagged directly to the operator as a real risk to the audit triage's own top priority (first
+real order, Tier 3). **Operator's explicit, informed response, verbatim: "Один шлях: повний
+набір одразу, графік зсувається як є"** (one path: the full set at once, the timeline shifts
+accordingly) — a deliberate, informed acceptance of schedule risk in exchange for building the
+complete vision as one coherent system rather than a phased/hedged rollout. Recorded as a
+closed decision, not to be re-litigated on schedule-risk grounds alone; the Tier-3 blueprint
+should still name concrete milestones so slippage is visible early, not discovered late.
+
+### 16.41 What this section deliberately does not resolve
+Per the operator's own instruction (an extended progressive dialogue — originally ~50, extended
+to ~150 total, now also covering interface/design in depth — tracked outside this file, ~53
+answered as of this checkpoint), substantial ground remains open: the Cloudflare Tunnel
+multi-tenant credential-isolation design (§16.2), the payment-adapter port/adapter design
+(§16.13), the in-hub multi-vendor data model (§16.15), the owner multi-hub client mode
+(§16.18), the client-side data-wallet's concrete implementation (§16.23), the SEO/AEO/GEO
+tooling's concrete design (§16.26), the a11y-mirror architecture for full-wgpu UI (§16.30),
+the intent-driven generative-UI research program itself (§16.35, §16.39-§16.40 — this is a
+program of work, not a single decision), and the full remainder of the extended question set.
+This section grows via the same append-only convention as further rounds settle each one — it
+is not a final architecture document.
