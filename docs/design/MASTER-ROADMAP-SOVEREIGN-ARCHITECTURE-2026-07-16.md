@@ -2567,3 +2567,24 @@ Three closes:
   mechanism** (the owner explicitly expanding their own agent's authority, presumably
   reversible) that is not yet designed — named as a gap for whichever blueprint eventually
   specifies the agent's permission model in detail.
+
+### 17.5 AR/VR readiness now, regulatory compliance stays vendor-side, opt-in anonymous ecosystem telemetry
+Three closes:
+- **Build in AR/VR/new-form-factor readiness now** (reverses the Recommended "not priority yet"
+  option) — consistent with this dialogue's established pattern (§16.40, §16.56: the operator
+  consistently picks the more ambitious, no-deferred-exception path over a scoped-down default).
+  The *ad fontes* physics/math foundation (§16.42) is claimed to extend naturally to spatial
+  interfaces; this ruling means that extension is designed for now, not left as a theoretical
+  future compatibility claim. Adds real scope to the already-large §16.30/§16.35 UI research
+  program — named honestly, consistent with how §16.40's schedule-risk acceptance was recorded.
+- **Regulatory compliance (food safety, courier labor/gig-economy law, payment regulation)
+  stays permanently the vendor's/venue's responsibility** (Recommended, confirmed) — coherent
+  with dowiz's protocol-not-operator stance throughout this roadmap (§16.3 couriers, §16.29
+  disputes, §16.49 tax). The free-form menu schema (§16.17) lets a vendor add whatever
+  region-specific compliance fields their jurisdiction requires without dowiz hardcoding
+  per-region rules.
+- **Ecosystem-wide health visibility**: opt-in anonymous aggregate telemetry (order counts, no
+  PII), vendor-controlled opt-out (Recommended, confirmed) — gives dowiz a real signal on
+  whether the ecosystem is growing or stagnating without violating §16.14's data-isolation
+  invariant; extends §16.53's heartbeat (liveness-only) with an explicit, consent-gated
+  aggregate-metrics layer, kept clearly distinct from it.
