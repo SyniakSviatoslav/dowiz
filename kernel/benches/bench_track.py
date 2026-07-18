@@ -1,165 +1,101 @@
 #!/usr/bin/env python3
-"""bench_track — dynamic benchmark tracker for a Rust/criterion crate.
+"""bench_track — thin delegation wrapper around the native benchmark tracker.
 
-DELEGATION: If the native `native-trackers` binary exists, this script shells
-out to it (`native-trackers bench <crate>` — pure-Rust, zero-dep, ~14x faster
-than parsing in python). The pure-python path below is a PORTABLE FALLBACK only
-(used when the binary isn't built, e.g. a fresh checkout). Per the operator
-rule (AGENTS.md: native telemetry + benchmarks mandatory per wave), the native
-tracker is the primary path; python is never the hot path.
+This script is intentionally a THIN WRAPPER. All benchmark parsing, baseline
+comparison, and regression gating live in the pure-Rust, zero-dep native
+tracker at `tools/telemetry/native-trackers` (built with
+`cargo build --release` there). Per AGENTS.md, native telemetry + benchmarks
+are mandatory per wave, so the Rust tracker is the ONLY path — there is no
+python fallback parser (the old python parser duplicated the Rust logic and
+drifted, which is what produced the spurious FAIL-CLOSED "MISSING" reads for
+empirical_identify / token_bucket).
 
-Runs `cargo bench` and parses criterion's stable TEXT output (the
-`name  time:   [low mean high]` lines), compares each benchmark's mean
-against benches/baseline.json (committed reference), prints a degrade/upgrade
-delta table, appends a timestamped row to benches/BENCH_HISTORY.md
-(git-ignored, so no repo churn), and exits non-zero when any benchmark
-regresses beyond --threshold percent.
-
-This is the "autotrack" mechanism: run it on every CI build / scheduled cron to
-know the moment a hot path degrades (or silently improves).
-
-Criterion 0.5 note: the `--output-format json` CLI flag was removed; text
-parsing is version-stable and needs no special flags.
+What it does:
+  - Locates the `native-trackers` binary (PATH or the canonical repo location).
+  - Delegates: `native-trackers bench <crate> [--threshold N] [--bench <name>]`.
+  - Forwards the native tracker's exit code unchanged (0 ok, 1 regression,
+    2 usage/IO error). If the binary isn't built, exits 2 with a clear message.
 
 Usage:
-    python3 benches/bench_track.py                 # run + compare + log (via native if present)
-    python3 benches/bench_track.py --no-run        # compare baseline to itself (CI smoke)
+    python3 benches/bench_track.py                 # run + compare + log (via native)
     python3 benches/bench_track.py --threshold 15  # looser regression gate
+    python3 benches/bench_track.py --bench criterion  # specific bench target
 """
 import argparse
-import json
 import os
-import re
 import shutil
 import subprocess
 import sys
 
-
-def _try_native(crate_dir, args):
-    """Delegate to the native tracker if built. Returns exit code or None."""
-    bin_name = "native-trackers"
-    bin_path = shutil.which(bin_name)
-    if bin_path is None:
-        # also check the canonical repo location
-        cand = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "tools", "telemetry", "native-trackers", "target", "release", bin_name,
-        )
-        bin_path = cand if os.path.isfile(cand) else None
-    if bin_path is None:
-        return None
-    cmd = [bin_path, "bench", crate_dir]
-    if args.threshold is not None:
-        cmd += ["--threshold", str(args.threshold)]
-    return subprocess.call(cmd)
+BIN_NAME = "native-trackers"
 
 
-from datetime import datetime
-
-UNIT_NS = {"ns": 1.0, "µs": 1e3, "us": 1e3, "ms": 1e6, "s": 1e9}
-# criterion prints: "name  time:   [low unit mean unit high unit]"
-LINE_RE = re.compile(
-    r"^(?P<name>\S+)\s+time:\s+\[(?P<lo>[\d.]+)\s+(?P<lu>\w+)\s+"
-    r"(?P<mean>[\d.]+)\s+(?P<mu>\w+)\s+(?P<hi>[\d.]+)\s+(?P<hu>\w+)\]"
-)
+def _repo_root():
+    # benches/bench_track.py -> ../.. == crate root; ../../.. == repo root
+    return os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-def run_bench(crate: str) -> dict:
-    cmd = [
-        "cargo", "bench", "--bench", "criterion",
-        "--", "--warm-up-time", "1", "--measurement-time", "2", "--sample-size", "10",
-    ]
-    out = subprocess.run(cmd, cwd=crate, check=True, capture_output=True, text=True)
-    # criterion streams timing lines to stderr, not stdout.
-    text = out.stdout + out.stderr
-    means = {}
-    for line in text.splitlines():
-        m = LINE_RE.match(line.strip())
-        if not m:
-            continue
-        unit = m.group("mu")
-        mean_ns = float(m.group("mean")) * UNIT_NS[unit]
-        means[m.group("name")] = mean_ns
-    if not means:
-        raise RuntimeError("bench_track: no benchmark timing lines parsed from cargo bench output")
-    return means
+def _native_dir():
+    return os.path.join(_repo_root(), "tools", "telemetry", "native-trackers")
 
 
-def load_baseline(crate: str) -> dict:
-    with open(os.path.join(crate, "benches", "baseline.json")) as f:
-        return json.load(f)
+def _find_native():
+    """Return path to the native-trackers binary, or None if not built."""
+    bin_path = shutil.which(BIN_NAME)
+    if bin_path is not None:
+        return bin_path
+    cand = os.path.join(_native_dir(), "target", "release", BIN_NAME)
+    if os.path.isfile(cand):
+        return cand
+    return None
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--crate", default=".")
-    ap.add_argument("--threshold", type=float, default=10.0)
-    ap.add_argument("--no-run", action="store_true",
-                    help="skip cargo bench; compare baseline to itself (smoke)")
+    ap = argparse.ArgumentParser(
+        description="Delegate benchmark tracking to the native Rust tracker.")
+    ap.add_argument("--crate", default=".",
+                    help="crate directory to benchmark (default: current dir)")
+    ap.add_argument("--threshold", type=float, default=10.0,
+                    help="regression gate percentage (default: 10)")
+    ap.add_argument("--bench", default=None,
+                    help="specific bench target name (default: all in crate)")
+    ap.add_argument("--build-native", action="store_true",
+                    help="build native-trackers if missing, then run")
     args = ap.parse_args()
 
-    # PRIMARY PATH: delegate to the native Rust tracker if it's built.
-    rc = _try_native(args.crate, args)
-    if rc is not None:
-        sys.exit(rc)
+    bin_path = _find_native()
+    if bin_path is None:
+        native_dir = _native_dir()
+        if args.build_native and os.path.isdir(native_dir):
+            print(f"bench_track: building native-trackers in {native_dir} ...",
+                  file=sys.stderr)
+            rc = subprocess.call(["cargo", "build", "--release"], cwd=native_dir)
+            if rc != 0:
+                print("bench_track: native-trackers build failed", file=sys.stderr)
+                sys.exit(2)
+            bin_path = _find_native()
+        if bin_path is None:
+            print(
+                "bench_track: native-trackers binary not found.\n"
+                f"  Build it: cd {native_dir} && cargo build --release\n"
+                "  (native tracking is the mandatory per-wave path; no python "
+                "fallback parser exists by design.)",
+                file=sys.stderr)
+            sys.exit(2)
 
-    base = load_baseline(args.crate)
-    if args.no_run:
-        # SMOKE ONLY: compares the committed baseline against ITSELF. This can
-        # never detect a regression (delta is always 0) and MUST NOT be used as
-        # the CI regression gate — it would be a fail-open. It exists solely to
-        # smoke-test the comparison/printing path on a fresh checkout.
-        print("WARNING: --no-run compares baseline to itself; it is a smoke "
-              "check ONLY and cannot catch regressions. Do NOT use it as the "
-              "regression gate.", file=sys.stderr)
-    cur = base if args.no_run else run_bench(args.crate)
-
-    print(f"{'benchmark':26} {'baseline_ns':>12} {'current_ns':>12} {'delta':>9}  verdict")
-    rows = []
-    missing = 0
-    for name, bmean in base.items():
-        cmean = cur.get(name)
-        if cmean is None:
-            # FAIL-CLOSED: a benchmark that disappears from the run is a
-            # regression of the worst kind (a hot path was silently dropped).
-            # The native tracker encodes this as `worst = threshold + 1`; the
-            # python fallback must agree and exit non-zero, not print "MISSING"
-            # and pass. Record a sentinel delta that trips the regression loop.
-            print(f"{name:26} {bmean:12.2f} {'-':>12} {'MISSING':>9}  REGRESS")
-            rows.append((name, bmean, None, args.threshold + 1.0))
-            missing += 1
-            continue
-        delta = (cmean - bmean) / bmean * 100.0
-        if delta > args.threshold:
-            verdict = "REGRESS"
-        elif delta < -args.threshold:
-            verdict = "improve"
-        else:
-            verdict = "ok"
-        print(f"{name:26} {bmean:12.2f} {cmean:12.2f} {delta:+8.1f}%  {verdict}")
-        rows.append((name, bmean, cmean, delta))
-
-    if missing:
-        print(f"\nFAIL-CLOSED: {missing} benchmark(s) MISSING from current run "
-              f"(hot path removed) — treating as regression.", file=sys.stderr)
-
-    # Append to the (git-ignored) rolling history so trends are visible over time.
-    hist = os.path.join(args.crate, "benches", "BENCH_HISTORY.md")
-    ts = datetime.now().isoformat(timespec="seconds")
-    with open(hist, "a") as f:
-        f.write(f"\n## {ts}\n")
-        for name, bmean, cmean, delta in rows:
-            if cmean is None:
-                f.write(f"- {name}: baseline {bmean:.2f}ns, current MISSING\n")
-            else:
-                f.write(f"- {name}: {bmean:.2f}ns -> {cmean:.2f}ns ({delta:+.1f}%)\n")
-
-    # Exit non-zero on any regression beyond threshold.
-    for name, _b, _c, delta in rows:
-        if delta is not None and delta > args.threshold:
-            print(f"\nREGRESSION: {name} +{delta:.1f}% > {args.threshold}% threshold")
-            sys.exit(1)
-    print("\nOK: no regression beyond threshold.")
+    cmd = [bin_path, "bench", args.crate, "--threshold", str(args.threshold)]
+    # Pick the bench target: agent-adapters uses `fuel_bench`; everything else
+    # uses the default `criterion` (kernel/llm/crates-bebop). Callers may also
+    # pass `--bench <name>` explicitly to override.
+    if args.bench is not None:
+        bench = args.bench
+    elif "agent-adapters" in os.path.abspath(args.crate):
+        bench = "fuel_bench"
+    else:
+        bench = None  # native-trackers defaults to `criterion`
+    if bench is not None:
+        cmd += ["--bench", bench]
+    sys.exit(subprocess.call(cmd))
 
 
 if __name__ == "__main__":
