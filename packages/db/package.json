@@ -1,0 +1,20 @@
+{
+  "name": "@deliveryos/db",
+  "version": "2026.7.0",
+  "private": true,
+  "description": "RLS/postgres data tier for dowiz. NOBYPASSRLS flip is GATED — it aborts unless every fail-open table (D2 R1-R6) carries FORCE ROW LEVEL SECURITY with a sound tenant predicate.",
+  "scripts": {
+    "migrate": "node-pg-migrate up -m migrations -j ts",
+    "verify:rls": "ts-node scripts/verify-nobypassrls.ts",
+    "probe:rls": "ts-node scripts/staging-probe-nobypassrls.ts"
+  },
+  "dependencies": {
+    "pg": "^8.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "node-pg-migrate": "^7.6.0",
+    "ts-node": "^10.9.0",
+    "typescript": "^5.4.0"
+  }
+}
