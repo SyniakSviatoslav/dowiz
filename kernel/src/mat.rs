@@ -20,6 +20,17 @@ pub struct Mat {
     data: Vec<f64>,
 }
 
+/// Error returned when a matrix cannot be built fail-closed.
+#[derive(Debug, Clone, PartialEq)]
+pub enum MatrixError {
+    /// Rows are not all the same length (ragged) → `get(i,j)` would stride
+    /// out of a short row's bound (index-leak / OOB read or release panic).
+    Ragged,
+    /// A non-finite entry (NaN poison, ±inf overflow). Root-cause of the
+    /// spectral NaN-fail-open: a poisoned spectrum must not read as healthy.
+    NonFinite,
+}
+
 impl Mat {
     /// Construct an `r × c` zero matrix.
     #[inline]
@@ -63,9 +74,37 @@ impl Mat {
         self.data[i * self.ncols + j] = v;
     }
 
+    /// Build from a `Vec<Vec<f64>>` (row-major, rectangular required).
+    ///
+    /// FAIL-CLOSED: returns `Err` on a ragged matrix or any non-finite entry,
+    /// instead of building a `Mat` whose `get(i,j)` would read out of bounds
+    /// (index-leak) or silently mis-index. Prefer this over [`Mat::from_vecvec`]
+    /// at every external / untrusted input boundary.
+    pub fn from_vecvec_checked(m: &[Vec<f64>]) -> Result<Mat, MatrixError> {
+        let nrows = m.len();
+        let ncols = m.first().map_or(0, |r| r.len());
+        for row in m {
+            if row.len() != ncols {
+                return Err(MatrixError::Ragged);
+            }
+            for &x in row {
+                if !x.is_finite() {
+                    return Err(MatrixError::NonFinite);
+                }
+            }
+        }
+        let mut data = Vec::with_capacity(nrows * ncols);
+        for row in m {
+            data.extend_from_slice(row);
+        }
+        Ok(Mat { nrows, ncols, data })
+    }
+
     /// Build from a `Vec<Vec<f64>>` (row-major, rectangular allowed).
-    /// Panics if rows are ragged — callers pass well-formed matrices.
-    pub fn from_vecvec(m: &[Vec<f64>]) -> Self {
+    /// Panics if rows are ragged (callers pass well-formed matrices only) — for
+    /// internal/trusted construction. Untrusted input must use
+    /// [`from_vecvec_checked`] instead.
+    pub fn from_vecvec(m: &[Vec<f64>]) -> Mat {
         let nrows = m.len();
         let ncols = m.first().map_or(0, |r| r.len());
         let mut data = Vec::with_capacity(nrows * ncols);
@@ -73,7 +112,7 @@ impl Mat {
             debug_assert_eq!(row.len(), ncols, "ragged matrix in from_vecvec");
             data.extend_from_slice(row);
         }
-        Self { nrows, ncols, data }
+        Mat { nrows, ncols, data }
     }
 
     /// Materialize back to `Vec<Vec<f64>>` for backwards-compatible returns
