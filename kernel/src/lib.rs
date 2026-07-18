@@ -58,6 +58,13 @@ pub mod domain;
 pub mod dsu;
 /// MESH-06 — per-node content-addressed event-log (local-first + sync).
 pub mod event_log;
+/// P34 — cross-repo mesh kernel wiring: append-only signed-append log
+/// (`MeshLog`) + caller-supplied `HubTransport` trait (config-driven, NO
+/// hardcoded endpoint, NO real cross-repo push). Gated behind `pq` because it
+/// reuses the kernel's ML-DSA-65 primitive for signing/verification (see
+/// `mesh.rs` header for the KAT-gated crypto rationale).
+#[cfg(feature = "pq")]
+pub mod mesh;
 /// RW-06 — geo / route kinematics (pure-logic port from geo-anim.ts + delivery-zone.ts). Kernel authority.
 pub mod geo;
 /// Harmonic centrality H(v)=Σ 1/d(u,v) — the shared graph-ranking primitive the
