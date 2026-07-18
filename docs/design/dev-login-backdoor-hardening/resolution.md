@@ -542,7 +542,7 @@ ACCEPT-RISK (reduced). Owner: Operator (secret hygiene) + Architect (D fail-fast
 
 ## R2-4 — [MED B-CONSIST] C.1 switches the header kid but not the signing KEY → **FIX (kid AND key move together via one helper)**
 
-**Verified true.** `signAuthToken` (`jwt.ts:36-41`) signs with `getPrivateKey()` = `env.***REDACTED***`
+**Verified true.** `signAuthToken` (`jwt.ts:36-41`) signs with `getPrivateKey()` = `env.JWT_PRIVATE_KEY`
 unconditionally; original C.1 changed only `setProtectedHeader({...kid})`. A dev-kid token would be
 **signed by the prod key** → the staging dev-verifier (dev public key) rejects it on signature → the
 proof obligation could never pass. **Resolution (proposal §3-C C.1; ADR #2 C.1):** the signer takes an

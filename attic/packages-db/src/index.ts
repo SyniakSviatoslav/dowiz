@@ -16,7 +16,7 @@ const env = loadEnv();
  */
 export function createOperationalPool(): pg.Pool {
   const pool = new Pool({
-    connectionString: env.***REDACTED***,
+    connectionString: env.DATABASE_URL_OPERATIONAL,
     // Hot-path pool size. Supavisor transaction mode (:6543) multiplexes, so this safely
     // exceeds the old hardcoded 8 — raised to stop public-storefront bursts from starving the
     // pool (the "menu blinks empty under load" fix). Env-tunable; default 20.
@@ -24,7 +24,7 @@ export function createOperationalPool(): pg.Pool {
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
     // Honor sslmode=disable (local / tunneled DBs without TLS); default to TLS otherwise.
-    ssl: /[?&]sslmode=disable/.test(env.***REDACTED***) ? false : { rejectUnauthorized: false }
+    ssl: /[?&]sslmode=disable/.test(env.DATABASE_URL_OPERATIONAL) ? false : { rejectUnauthorized: false }
   });
 
   // FX-9: statement_timeout for operational queries — kill slow queries fast
@@ -47,11 +47,11 @@ export function createOperationalPool(): pg.Pool {
  */
 export function createSessionPool(): pg.Pool {
   const pool = new Pool({
-    connectionString: env.***REDACTED***,
+    connectionString: env.DATABASE_URL_SESSION,
     max: 3,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
-    ssl: /[?&]sslmode=disable/.test(env.***REDACTED***) ? false : { rejectUnauthorized: false }
+    ssl: /[?&]sslmode=disable/.test(env.DATABASE_URL_SESSION) ? false : { rejectUnauthorized: false }
   });
 
   // FX-9: statement_timeout for session queries — longer, for workers/analytics

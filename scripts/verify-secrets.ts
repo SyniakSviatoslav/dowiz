@@ -74,10 +74,10 @@ async function main() {
   const srcFiles = findFiles(path.join(ROOT, 'apps'), ['.ts', '.js', '.mjs'])
     .filter(f => !f.includes('/tests/') && !f.includes('\\tests\\'));
   const jwtKeyPatterns = [
-    { pattern: /process\.env\.***REDACTED***\s*\|\|[^|]/, label: '***REDACTED*** default' },
-    { pattern: /process\.env\.***REDACTED***\s*\|\|[^|]/, label: '***REDACTED*** default' },
+    { pattern: /process\.env\.JWT_PRIVATE_KEY\s*\|\|[^|]/, label: 'JWT_PRIVATE_KEY default' },
+    { pattern: /process\.env\.JWT_PUBLIC_KEY\s*\|\|[^|]/, label: 'JWT_PUBLIC_KEY default' },
     { pattern: /BEGIN RSA PRIVATE KEY/, label: 'RSA private key in source' },
-    { pattern: /process\.env\.***REDACTED***\s*\|\|[a-zA-Z0-9]/, label: '***REDACTED*** default' },
+    { pattern: /process\.env\.TELEGRAM_BOT_TOKEN\s*\|\|[a-zA-Z0-9]/, label: 'TELEGRAM_BOT_TOKEN default' },
     { pattern: /process\.env\.VAPID_PRIVATE_KEY\s*\|\|[a-zA-Z0-9]/, label: 'VAPID_PRIVATE_KEY default' },
     { pattern: /process\.env\.SENTRY_DSN\s*\|\|[a-zA-Z0-9]/, label: 'SENTRY_DSN default' },
   ];

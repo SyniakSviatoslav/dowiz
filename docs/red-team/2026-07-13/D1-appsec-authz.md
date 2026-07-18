@@ -100,9 +100,9 @@ From that foothold the attacker chains to:
 ---
 
 ### F5 — MEDIUM · Telegram webhook: secret-token header not enforced (+ full bypass when secret is empty)
-- **Severity**: **Medium (High if `***REDACTED***` is unset/empty) — CONFIRMED (from code)**
-- **Location**: `attic/apps-api/src/routes/telegram-webhook.ts:36-61`; wiring `attic/apps-api/src/server.ts:640-646` (`telegramBotSecret: env.***REDACTED*** || ''`).
-- **Root cause**: (a) When the `x-telegram-bot-api-secret-token` header is **absent**, the request is processed anyway (`:57-60`, "process anyway for backward compat") — leaving only the URL path segment as the gate. (b) When present, the comparison is a plain `!==` (`:50`), not constant-time. (c) If `***REDACTED***` is empty, `if (telegramBotSecret)` is falsy, the whole check is skipped and the route mounts at the predictable path `/webhook/telegram/` with **zero authentication**.
+- **Severity**: **Medium (High if `TELEGRAM_BOT_SECRET` is unset/empty) — CONFIRMED (from code)**
+- **Location**: `attic/apps-api/src/routes/telegram-webhook.ts:36-61`; wiring `attic/apps-api/src/server.ts:640-646` (`telegramBotSecret: env.TELEGRAM_BOT_SECRET || ''`).
+- **Root cause**: (a) When the `x-telegram-bot-api-secret-token` header is **absent**, the request is processed anyway (`:57-60`, "process anyway for backward compat") — leaving only the URL path segment as the gate. (b) When present, the comparison is a plain `!==` (`:50`), not constant-time. (c) If `TELEGRAM_BOT_SECRET` is empty, `if (telegramBotSecret)` is falsy, the whole check is skipped and the route mounts at the predictable path `/webhook/telegram/` with **zero authentication**.
 - **Exploit** (path secret leaks readily via logs/proxy; or empty):
   ```bash
   curl -X POST "https://dowiz.fly.dev/webhook/telegram/<BOT_SECRET_OR_EMPTY>" \
@@ -110,7 +110,7 @@ From that foothold the attacker chains to:
     -d '{"callback_query":{"id":"1","from":{"id":<OWNER_TG_ID>},"message":{"chat":{"id":<OWNER_TG_ID>},"message_id":1,"text":"x"},"data":"order.confirm:<ORDER_UUID>"}}'
   ```
 - **Impact**: Forged Telegram updates drive order state (confirm/reject), shift open, storefront close, notification-pref changes — bypassing the intended header auth. See F11 for the identity-forgery amplifier.
-- **Fix**: Require the header unconditionally, compare with `crypto.timingSafeEqual`, and FATAL boot-guard if `***REDACTED***` is empty.
+- **Fix**: Require the header unconditionally, compare with `crypto.timingSafeEqual`, and FATAL boot-guard if `TELEGRAM_BOT_SECRET` is empty.
 
 ---
 
@@ -222,7 +222,7 @@ From that foothold the attacker chains to:
 2. **[HIGH] Add `requireRole(['owner'])` to `owner/couriers.ts`** (and audit every `/api/owner/*` plugin for the same omission — `courier-invites.ts`, the `couriers.ts` PATCH). (F2, F9, F13)
 3. **[HIGH] Validate `customerId` against the caller's location in `gdpr.ts`** and add `AND location_id=$2` to the anonymizer SELECT/UPDATE; tighten the `customers` `anonymous_update`/`anonymous_select` policies. (F3)
 4. **[HIGH] Fix the SSRF IPv6 gap** — unwrap `::ffff:` mapped addresses in `isPrivateIp`; pin resolved IP into the fetch dispatcher. (F4)
-5. **[MED] Enforce the Telegram webhook secret header** unconditionally with `timingSafeEqual`; FATAL boot-guard on empty `***REDACTED***`; de-dup `update_id`. (F5, F11)
+5. **[MED] Enforce the Telegram webhook secret header** unconditionally with `timingSafeEqual`; FATAL boot-guard on empty `TELEGRAM_BOT_SECRET`; de-dup `update_id`. (F5, F11)
 6. **[MED] Enforce the customer token's `orderId` claim** in all `customer/orders.*` and `order-messages.*` handlers. (F6)
 7. **[MED] Scope settlement regeneration to `locationId`.** (F7)
 8. **[MED] Introduce a real `admin` role** for `/api/admin/*`, make `locationId` mandatory, drop verbose `detail` errors; keep the prod kill-switch until then. (F8)

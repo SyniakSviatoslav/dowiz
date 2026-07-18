@@ -24,7 +24,7 @@ After step 4 ships, the release_command will refuse the rollout if this is wrong
 
 ## 3. Rotate the prod signing key — kills the ALREADY-LEAKED kid:1 token (R-6)
 The leaked owner token (kid:1, ~24h TTL) is a valid prod-kid token; only key rotation
-invalidates it before expiry. Rotate `***REDACTED***`/`***REDACTED***` + bump `JWT_KID`
+invalidates it before expiry. Rotate `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY` + bump `JWT_KID`
 (e.g. `1` → `2`) on `dowiz`. NOTE: this re-auths all live prod sessions (intended).
 
 ## 4. Land the permanent fix on prod (via main) + CI redesign

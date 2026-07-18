@@ -27,10 +27,10 @@ export function clientOrderSmokePlan(base: string): Decision[] {
 
 // ── LlmReasoner — the authentic Phase-B persona engine (OpenRouter, low temp). ──
 // Page text is passed as DATA inside a fenced block with an explicit anti-injection guard.
-// REQUIRES ***REDACTED*** (or compatible) — throws otherwise, so Phase B cannot run
+// REQUIRES OPENROUTER_API_KEY (or compatible) — throws otherwise, so Phase B cannot run
 // without a real reasoner (no silent scripted fallback masquerading as discovery).
 export class LlmReasoner implements Reasoner {
-  private apiKey = process.env.***REDACTED*** || '';
+  private apiKey = process.env.OPENROUTER_API_KEY || '';
   private endpoint = process.env.OPENROUTER_ENDPOINT || 'https://openrouter.ai/api/v1/chat/completions';
   // Free-tier model chain: the :free slugs are heavily rate-limited per provider, so we rotate
   // across providers on 429/5xx. Override with DOS_DRIVER_MODEL (comma-separated allowed).
@@ -40,7 +40,7 @@ export class LlmReasoner implements Reasoner {
   constructor() {
     if (!this.apiKey) {
       throw new Error(
-        'LlmReasoner needs ***REDACTED*** (driver model + per-round cost-cap). ' +
+        'LlmReasoner needs OPENROUTER_API_KEY (driver model + per-round cost-cap). ' +
         'Phase B / real persona discovery is gated on this — set it to run authentic rounds.',
       );
     }

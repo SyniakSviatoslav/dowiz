@@ -42,7 +42,7 @@ KEYCHAIN_KEYS = (
     "GOOGLE_GENAI_API_KEY", "SCRAPECREATORS_API_KEY", "APIFY_API_TOKEN",
     "AUTH_TOKEN", "CT0", "BSKY_HANDLE", "BSKY_APP_PASSWORD",
     "TRUTHSOCIAL_TOKEN", "BRAVE_API_KEY", "EXA_API_KEY", "SERPER_API_KEY",
-    "***REDACTED***", "PARALLEL_API_KEY", "XQUIK_API_KEY",
+    "OPENROUTER_API_KEY", "PARALLEL_API_KEY", "XQUIK_API_KEY",
     "XIAOHONGSHU_API_BASE",
 )
 
@@ -328,7 +328,7 @@ def get_config() -> dict[str, Any]:
         ('BRAVE_API_KEY', None),
         ('EXA_API_KEY', None),
         ('SERPER_API_KEY', None),
-        ('***REDACTED***', None),
+        ('OPENROUTER_API_KEY', None),
         ('PARALLEL_API_KEY', None),
         ('XQUIK_API_KEY', None),
         ('FROM_BROWSER', None),

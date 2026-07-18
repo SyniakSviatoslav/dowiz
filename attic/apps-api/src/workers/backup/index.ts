@@ -92,7 +92,7 @@ export class BackupCronWorker {
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
         try {
           // 1. Create Dump Stream
-          const dump = await this.deps.createLogicalDump(env.***REDACTED***, backupId);
+          const dump = await this.deps.createLogicalDump(env.DATABASE_URL_MIGRATIONS, backupId);
 
           // 2. Encryption wrapper
           if (!env.BACKUP_ENCRYPTION_KEY) {

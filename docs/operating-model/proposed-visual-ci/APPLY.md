@@ -23,7 +23,7 @@
 | pnpm | **9.4.0** | `package.json` `packageManager: "pnpm@9.4.0"` + CI `pnpm/action-setup version: 9.4.0` |
 | `@playwright/test` | **1.60.0** (installed) / spec `^1.60.0` | `node_modules/@playwright/test/package.json` + `package.json` devDeps |
 | Playwright Docker image | **`mcr.microsoft.com/playwright:v1.60.0-jammy`** | matches the installed `@playwright/test` exactly — the iron rule (renderer parity) |
-| Migrate command | **`pnpm migrate:up`** (`node-pg-migrate`, env `***REDACTED***`) | `package.json` scripts (`scripts/migrate-runner.ts` is the bundled prod twin) |
+| Migrate command | **`pnpm migrate:up`** (`node-pg-migrate`, env `DATABASE_URL_MIGRATIONS`) | `package.json` scripts (`scripts/migrate-runner.ts` is the bundled prod twin) |
 | API boot | **`pnpm dev:api:1`** → `PORT=3000` | `package.json` `dev:api:1` (the API serves the SPA on :3000; matches `playwright.visual.config.ts` default `baseURL`) |
 | Config path | **`playwright.visual.config.ts`** | this branch |
 | Baseline dir | **`e2e/visual/__screenshots__/`** | `snapshotPathTemplate` in the config |
@@ -91,7 +91,7 @@ jobs:
       VISUAL_BASE_URL: http://localhost:3000
       # sslmode=disable: bare Postgres is plain TCP; the shared pool otherwise
       # forces ssl and dies with "server does not support SSL connections".
-      ***REDACTED***: postgresql://dowiz_migrator:migrator_pw@127.0.0.1:5432/dowiz_visual?sslmode=disable
+      DATABASE_URL_MIGRATIONS: postgresql://dowiz_migrator:migrator_pw@127.0.0.1:5432/dowiz_visual?sslmode=disable
       DATABASE_URL: postgresql://dowiz_app:app_pw@127.0.0.1:5432/dowiz_visual?sslmode=disable
       REDIS_URL: redis://127.0.0.1:6379
 
@@ -137,7 +137,7 @@ jobs:
 
       - name: Run migrations against the service Postgres
         run: pnpm migrate:up
-        # pnpm migrate:up reads ***REDACTED*** from env (set above).
+        # pnpm migrate:up reads DATABASE_URL_MIGRATIONS from env (set above).
         # --envPath .env in the script is harmless: real env vars take precedence.
 
       # The API needs app secrets to boot (JWT RS256 keypair, VAPID, etc.).
@@ -147,10 +147,10 @@ jobs:
           cat > .env <<'EOF'
           NODE_ENV=development
           PORT=3000
-          ***REDACTED***=12345678901234567890123456789012
+          JWT_SIGNING_SECRET=12345678901234567890123456789012
           JWT_KID=1
-          ***REDACTED***=visual-ci.apps.googleusercontent.com
-          ***REDACTED***=visual-ci-secret
+          GOOGLE_CLIENT_ID=visual-ci.apps.googleusercontent.com
+          GOOGLE_CLIENT_SECRET=visual-ci-secret
           VAPID_PUBLIC_KEY=BEu3SBqHCfb9gzfBqkmFeV1WXidH9CgN53_VMDp9mx_61PaFXgPz5gDHuGIXHihtv4IDLKO7aOrvxQpkxaYVP8Y
           VAPID_PRIVATE_KEY=_R-pnIHQ3TvGlHVOwPiWggeqQNQEdd5Ky_QpHQ2y-7E
           IP_HASH_SALT=visual-ci-salt
@@ -158,13 +158,13 @@ jobs:
           DEV_AUTH_SECRET=visual-ci-secret
           REDIS_URL=redis://127.0.0.1:6379
           DATABASE_URL=postgresql://dowiz_app:app_pw@127.0.0.1:5432/dowiz_visual?sslmode=disable
-          ***REDACTED***=postgresql://dowiz_migrator:migrator_pw@127.0.0.1:5432/dowiz_visual?sslmode=disable
+          DATABASE_URL_MIGRATIONS=postgresql://dowiz_migrator:migrator_pw@127.0.0.1:5432/dowiz_visual?sslmode=disable
           EOF
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/jwt_priv.pem 2>/dev/null
           openssl rsa -in /tmp/jwt_priv.pem -pubout -out /tmp/jwt_pub.pem 2>/dev/null
           {
-            printf '***REDACTED***="'; awk '{printf "%s\\n", $0}' /tmp/jwt_priv.pem; printf '"\n'
-            printf '***REDACTED***="';  awk '{printf "%s\\n", $0}' /tmp/jwt_pub.pem;  printf '"\n'
+            printf 'JWT_PRIVATE_KEY="'; awk '{printf "%s\\n", $0}' /tmp/jwt_priv.pem; printf '"\n'
+            printf 'JWT_PUBLIC_KEY="';  awk '{printf "%s\\n", $0}' /tmp/jwt_pub.pem;  printf '"\n'
           } >> .env
 
       # Boot the built API (serves the SPA on :3000) in the background, then wait

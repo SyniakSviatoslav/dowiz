@@ -167,10 +167,10 @@ test('AiOcrParser - live LLM returns valid JSON menu schema', async () => {
   assert.strictEqual(res.summary.errors, 0);
 });
 
-// Regression proof: ***REDACTED*** alone must select the OpenRouter provider and route
+// Regression proof: OPENROUTER_API_KEY alone must select the OpenRouter provider and route
 // through its OpenAI-compatible chat/completions endpoint — previously the key was ignored
 // and import silently degraded to the heuristic structurer.
-test('AiOcrParser - OpenRouter provider: selected via ***REDACTED***, returns draft', async () => {
+test('AiOcrParser - OpenRouter provider: selected via OPENROUTER_API_KEY, returns draft', async () => {
   const { port, server } = await startMockLLm((_body) => ({
     // OpenAI-wire shape (OpenRouter mirrors it): choices[0].message.content = JSON menu.
     choices: [{ message: { content: JSON.stringify({
@@ -182,10 +182,10 @@ test('AiOcrParser - OpenRouter provider: selected via ***REDACTED***, returns dr
     }) } }]
   }));
 
-  const keys = ['LLM_PROVIDER', 'LLM_ADAPTER', 'LLM_ENDPOINT', 'GROQ_API_KEY', 'OPENAI_API_KEY', '***REDACTED***', 'OPENROUTER_ENDPOINT', 'OPENROUTER_MODEL'];
+  const keys = ['LLM_PROVIDER', 'LLM_ADAPTER', 'LLM_ENDPOINT', 'GROQ_API_KEY', 'OPENAI_API_KEY', 'OPENROUTER_API_KEY', 'OPENROUTER_ENDPOINT', 'OPENROUTER_MODEL'];
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   keys.forEach((k) => delete process.env[k]);
-  process.env.***REDACTED*** = 'test-or-key';
+  process.env.OPENROUTER_API_KEY = 'test-or-key';
   process.env.OPENROUTER_ENDPOINT = `http://localhost:${port}/v1/chat/completions`;
 
   try {

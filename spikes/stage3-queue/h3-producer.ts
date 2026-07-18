@@ -4,7 +4,7 @@ import { loadEnv } from '@deliveryos/config';
 async function run() {
   const env = loadEnv();
   const boss = new PgBoss({
-    connectionString: env.***REDACTED***,
+    connectionString: env.DATABASE_URL_SESSION,
     max: 2,
   });
 

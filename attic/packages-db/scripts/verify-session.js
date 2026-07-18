@@ -10,8 +10,8 @@ async function verifySessionPool() {
     process.exit(1);
   }
 
-  if (!env.***REDACTED***) {
-    console.error('Error: Please fill ***REDACTED*** in .env');
+  if (!env.DATABASE_URL_SESSION) {
+    console.error('Error: Please fill DATABASE_URL_SESSION in .env');
     process.exit(1);
   }
 

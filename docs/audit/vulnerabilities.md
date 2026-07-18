@@ -42,7 +42,7 @@
 
 **Attack:** Replay old refresh token, extract JWT from URL.
 
-**Evidence:** `routes/auth.ts:164` — refresh token exchange in POST body (not URL). `lib/jwt.ts` uses HS256 with `***REDACTED***` from env. Refresh token family rotation in `auth_refresh_tokens` table — reuse-detection via `used` boolean (`routes/auth.ts:164-188`).
+**Evidence:** `routes/auth.ts:164` — refresh token exchange in POST body (not URL). `lib/jwt.ts` uses HS256 with `JWT_SIGNING_SECRET` from env. Refresh token family rotation in `auth_refresh_tokens` table — reuse-detection via `used` boolean (`routes/auth.ts:164-188`).
 
 **Result: HOLDS** — Token exchange opaque-code→POST pattern. Refresh token reuse detected and revokes family. Kid present (`kid='v1'`). Secret ≥256 bits via `openssl rand -hex 32`.
 
@@ -86,7 +86,7 @@
 
 **Attack:** Grep for secrets in build output.
 
-**Evidence:** `.env` in `.gitignore`. `GITLEAKS_SKIP=1` in `.gitleaksignore`. `***REDACTED***` only in env/Fly secrets. `packages/config/src/verify-env.ts` validates required env vars.
+**Evidence:** `.env` in `.gitignore`. `GITLEAKS_SKIP=1` in `.gitleaksignore`. `JWT_SIGNING_SECRET` only in env/Fly secrets. `packages/config/src/verify-env.ts` validates required env vars.
 
 **Gap:** `devBootstrap.ts` and `mockData.ts` contain no real secrets — mock data only.
 

@@ -9,7 +9,7 @@
 
 | Seam | Provider | Source / endpoint | Status |
 |------|----------|-------------------|--------|
-| **LLM** (chat/completions only) | OpenRouter | `***REDACTED***` in `.env`; rotation chain Nemotron→Qwen→DeepSeek→Gemma→Mistral via `scripts/openrouter-implement.ts` | ✅ smoke-tested on Linux 2026-06-17 (nemotron-3-super-120b:free responded) |
+| **LLM** (chat/completions only) | OpenRouter | `OPENROUTER_API_KEY` in `.env`; rotation chain Nemotron→Qwen→DeepSeek→Gemma→Mistral via `scripts/openrouter-implement.ts` | ✅ smoke-tested on Linux 2026-06-17 (nemotron-3-super-120b:free responded) |
 | **Embeddings** (LOCAL only — never OpenRouter) | local Ollama | `http://127.0.0.1:11434` (`/api/embed`, OpenAI-compat `/v1/embeddings`) | ✅ live 2026-06-17, dim 1024 verified |
 
 **Lock-in rule:** vectors are bound to the embedding model. Changing the model = full re-index of every corpus (Repowise / Airweave / Mem0 separately). Pin the tag + dimension below; never mix models across the pipe. A "hybrid" (provider for index, local for query) does NOT work — incompatible vectors.
@@ -39,7 +39,7 @@
 - **MCP server verified end-to-end** over stdio JSON-RPC: 10 tools live (`get_answer, get_context, get_dead_code, get_health, get_overview, list_repos, get_risk, search_codebase, get_symbol, get_why`). `get_overview` + `search_codebase` return real data.
 - **Embeddings seam proven LOCAL & consistent:** index embedding = 14 local `/api/embed` calls to Ollama; query embedding (CLI semantic + MCP `search_codebase`) = local calls; **zero OpenRouter embed calls**. Semantic search returns ranked hits.
 - **Embedder wiring (the critical seam):**
-  - `repowise` reads **`.repowise/.env`** (NOT the app `.env`) → holds `***REDACTED***` + `OLLAMA_EMBEDDING_MODEL=qwen3-embedding:0.6b` + `OLLAMA_BASE_URL` + `REPOWISE_EMBEDDER=ollama`. Gitignored.
+  - `repowise` reads **`.repowise/.env`** (NOT the app `.env`) → holds `OPENROUTER_API_KEY` + `OLLAMA_EMBEDDING_MODEL=qwen3-embedding:0.6b` + `OLLAMA_BASE_URL` + `REPOWISE_EMBEDDER=ollama`. Gitignored.
   - **Auto-detect would silently pick OpenRouter for embeddings** (key present) → a locality violation. Forced via `--embedder ollama` (CLI) and `REPOWISE_EMBEDDER=ollama` (env). MCP server reads `REPOWISE_EMBEDDER` from `os.environ` (`_server.py:50`) → injected via **`env` block in project `.mcp.json`**.
   - ollama embedder default model is `embeddinggemma` (not pulled) → unset = silent **MockEmbedder** fallback. Pinned to `qwen3-embedding:0.6b` everywhere.
   - repowise default LLM is paid `claude-sonnet-4.6` → overridden to free model.
@@ -51,7 +51,7 @@
 ## Browse/extract (dev/ops research seam) — browser-use chosen over Hyperbrowser
 - **Decision:** browser-use (MIT) is the browse/extract tool; **Hyperbrowser dropped from the queue** (the duplicate — pick one). browser-use's actual consumer (Open Deep Research / ODR) is **not in this repo yet**, so the ODR-MCP wiring + a live ODR research-run are **deferred until ODR lands**.
 - **Form:** **on-demand MCP server, NOT self-hosted** — registered in project `.mcp.json` as `browser-use` via `uvx browser-use[cli] --mcp` (pulled + run only when an MCP client connects, then exits; nothing persistent, nothing always-on — I4). **Self-host lib, never the cloud plan** (cloud trains on input without opt-out). Telemetry forced off.
-- **LLM (BYOK):** LLM-backed tools (`browser_extract_content`, `retry_with_browser_use_agent`) need OpenRouter at launch: `OPENAI_API_KEY=$***REDACTED***` + `OPENAI_BASE_URL=https://openrouter.ai/api/v1` (not committed — supplied in the launch env). Pure browse tools (`browser_navigate`, `browser_get_html`, `browser_get_state`, …) need no LLM.
+- **LLM (BYOK):** LLM-backed tools (`browser_extract_content`, `retry_with_browser_use_agent`) need OpenRouter at launch: `OPENAI_API_KEY=$OPENROUTER_API_KEY` + `OPENAI_BASE_URL=https://openrouter.ai/api/v1` (not committed — supplied in the launch env). Pure browse tools (`browser_navigate`, `browser_get_html`, `browser_get_state`, …) need no LLM.
 - **Verified:** MCP server enumerated 16 browse/extract tools over stdio JSON-RPC (`browser_navigate, browser_click, browser_type, browser_get_state, browser_extract_content, browser_get_html, browser_screenshot, browser_scroll, …, retry_with_browser_use_agent`). A live browse run was intentionally **not hosted** (no persistent install).
 
 ## Subagents (dev) — 3 hand-picked from agency-agents (MIT)

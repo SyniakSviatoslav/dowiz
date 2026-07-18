@@ -159,11 +159,11 @@ Also flagged for completeness (out of RLS scope): the **`pgboss`** job-queue sch
 - **Fix:** validate channel against `^[A-Za-z0-9_]+$`; use `pg_notify($1,$2)` with bound params for the payload.
 
 ### R11 · `message-bus.ts` session pool has no pinned connection string · **LOW** · CONFIRMED
-- `message-bus.ts:7,33` — `createSessionPool()` calls `new Pool()` with **no opts** (the retired `@deliveryos/db` factory used `***REDACTED***`). node-postgres falls back to libpq env (`PGUSER`/`PGHOST`/`PGPASSWORD`), so the configured `***REDACTED***` is bypassed and the bus connects as whatever `PGUSER`/OS user resolves to — possibly a superuser on a misconfigured host. `loadEnv` is imported (`:2`) but unused. Blast radius limited: the bus only issues LISTEN/NOTIFY/UNLISTEN and reads no tenant rows.
-- **Fix:** pass `{ connectionString: env.***REDACTED*** }` explicitly.
+- `message-bus.ts:7,33` — `createSessionPool()` calls `new Pool()` with **no opts** (the retired `@deliveryos/db` factory used `DATABASE_URL_SESSION`). node-postgres falls back to libpq env (`PGUSER`/`PGHOST`/`PGPASSWORD`), so the configured `DATABASE_URL_SESSION` is bypassed and the bus connects as whatever `PGUSER`/OS user resolves to — possibly a superuser on a misconfigured host. `loadEnv` is imported (`:2`) but unused. Blast radius limited: the bus only issues LISTEN/NOTIFY/UNLISTEN and reads no tenant rows.
+- **Fix:** pass `{ connectionString: env.DATABASE_URL_SESSION }` explicitly.
 
 ### R12 · "De-privileged" operational role can't serve its workload → likely still BYPASSRLS in prod · **MEDIUM** · SUSPECTED (config-dependent)
-- `1790000000015:33` grants `deliveryos_operational_user` **SELECT-only**, but `attic/apps-api/src/plugins`/`queue-provider` run pg-boss on `***REDACTED***`, which needs INSERT/UPDATE/DELETE on the `pgboss` schema. A NOBYPASSRLS SELECT-only role cannot serve pg-boss, so `***REDACTED***` in practice must still point at a BYPASSRLS/superuser role — the de-privilege migration is inert.
+- `1790000000015:33` grants `deliveryos_operational_user` **SELECT-only**, but `attic/apps-api/src/plugins`/`queue-provider` run pg-boss on `DATABASE_URL_OPERATIONAL`, which needs INSERT/UPDATE/DELETE on the `pgboss` schema. A NOBYPASSRLS SELECT-only role cannot serve pg-boss, so `DATABASE_URL_OPERATIONAL` in practice must still point at a BYPASSRLS/superuser role — the de-privilege migration is inert.
 - **Fix:** grant the operational role exactly the DML it needs (or split read/write pools), repoint the env var, and assert `rolbypassrls = false` on the connected role at boot.
 
 ### R13 · No service-role/admin key in client code · CLEAN · CONFIRMED

@@ -8,7 +8,7 @@
 | # | Issue | Commit | Root Cause | Category | TS Catch? | Test Catch? |
 |---|---|---|---|---|---|---|
 | 1 | Missing `locale` in PUT notification target schema | `63e32c5` | Zod schema didn't include `locale` despite DB having the column | **API/Schema gap** | No | Yes |
-| 2 | pg-boss connected to wrong pool (session vs operational) | `d5eef9c` | Hardcoded `***REDACTED***` instead of `***REDACTED***` | **Topology** | No | Yes |
+| 2 | pg-boss connected to wrong pool (session vs operational) | `d5eef9c` | Hardcoded `DATABASE_URL_SESSION` instead of `DATABASE_URL_OPERATIONAL` | **Topology** | No | Yes |
 | 3 | pg-boss defaulted to `public` schema | `19fd31b` | No explicit `schema` option passed to PgBoss constructor | **Security** | No | Yes |
 | 4 | Runtime role had DDL privileges on `pgboss` schema | `19fd31b` | pg-boss `migrate: true` auto-creates tables; role had CREATE on public | **Security** | No | Yes |
 | 5 | Worker callback signature wrong for pg-boss v10 | `19fd31b` | v10 changed `work()` to pass `Job[]` array instead of single `Job` | **Library API drift** | Partial | Yes |

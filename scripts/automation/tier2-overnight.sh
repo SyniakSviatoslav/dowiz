@@ -16,7 +16,7 @@
 #                        once exceeded (default: 1.00)                          [A5 budget]
 #   TIER2_CLONE_URL    what to clone (default: origin's URL, else local repo)   [A6]
 #   TIER2_CLONE_REF    branch/ref to audit (default: main)                      [A6]
-#   ***REDACTED*** + TELEGRAM_OPS_CHAT_ID   → posts the report              [A9]
+#   TELEGRAM_BOT_TOKEN + TELEGRAM_OPS_CHAT_ID   → posts the report              [A9]
 #   OTEL_EXPORTER_OTLP_ENDPOINT                 → enables OTel trace            [A9]
 set -euo pipefail
 
@@ -87,7 +87,7 @@ SUMMARY+=$'\n\n'"— night total: \$$SPENT_FMT (cap \$$NIGHT_CAP)"
 { echo "— night total: \$$SPENT_FMT (cap \$$NIGHT_CAP)"; echo; } | tee -a "$LOG"
 
 # A9: ship the aggregated morning report to Telegram-ops (best-effort).
-if [ -n "${***REDACTED***:-}" ] && [ -n "${TELEGRAM_OPS_CHAT_ID:-}" ]; then
+if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_OPS_CHAT_ID:-}" ]; then
   "$AUTO/notify.sh" "$SUMMARY" || true
 fi
 

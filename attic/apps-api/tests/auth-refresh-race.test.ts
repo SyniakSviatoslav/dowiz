@@ -20,12 +20,12 @@ const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
 Object.assign(process.env, {
   NODE_ENV: 'test',
   APP_BASE_URL: 'https://x.test',
-  ***REDACTED***: 'postgres://u:p@localhost:5432/d',
-  ***REDACTED***: 'postgres://u:p@localhost:5432/d',
-  ***REDACTED***: 'postgres://u:p@localhost:5432/d',
+  DATABASE_URL_OPERATIONAL: 'postgres://u:p@localhost:5432/d',
+  DATABASE_URL_SESSION: 'postgres://u:p@localhost:5432/d',
+  DATABASE_URL_MIGRATIONS: 'postgres://u:p@localhost:5432/d',
   REDIS_URL: 'redis://localhost:6379',
-  ***REDACTED***: privateKey, ***REDACTED***: publicKey, JWT_KID: 'test',
-  ***REDACTED***: 'x', ***REDACTED***: 'x',
+  JWT_PRIVATE_KEY: privateKey, JWT_PUBLIC_KEY: publicKey, JWT_KID: 'test',
+  GOOGLE_CLIENT_ID: 'x', GOOGLE_CLIENT_SECRET: 'x',
   VAPID_PUBLIC_KEY: 'x', VAPID_PRIVATE_KEY: 'x', IP_HASH_SALT: 'x',
 });
 

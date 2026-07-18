@@ -150,7 +150,7 @@ In GitHub repo settings → Secrets:
 - `AUDIT_BASE_URL` = `https://dowiz.fly.dev`
 - `AUDIT_MENU_URL` = `https://dowiz.fly.dev/s/demo`
 - `AUDIT_TEST_TENANT` = `demo`
-- `OPS_***REDACTED***` = (from BotFather)
+- `OPS_TELEGRAM_BOT_TOKEN` = (from BotFather)
 - `OPS_TELEGRAM_CHAT_ID` = (ops channel ID)
 - `FLY_API_TOKEN` = (already exists for deploy)
 

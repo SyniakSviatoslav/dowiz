@@ -3,7 +3,7 @@ import { loadEnv } from '@deliveryos/config';
 
 async function run() {
   const env = loadEnv();
-  const boss = new PgBoss({ connectionString: env.***REDACTED*** });
+  const boss = new PgBoss({ connectionString: env.DATABASE_URL_SESSION });
   boss.on('error', console.error);
   await boss.start();
   const id = await boss.send('spike-queue', { test: true });

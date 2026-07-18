@@ -24,7 +24,7 @@
   ("Identical behavior under today's BYPASSRLS"); `reconciliation.ts:168` ("today's BYPASSRLS");
   `order-timeout-sweep.ts:68-70` ("Identical behavior under today's BYPASSRLS"). The remediation plan itself
   admits the operational pool was never switched: `proposed-migrations.sql:26-28` — role created `NOBYPASSRLS`
-  "with a note to switch ***REDACTED*** to it. But the hot path WRITES through the operational pool".
+  "with a note to switch DATABASE_URL_OPERATIONAL to it. But the hot path WRITES through the operational pool".
 - **Drift:** The gate that is the operator's named red-line is documented as *live/proven* (MEMORY.md) but is
   **not actually flipped in prod**. The two repos' "truth" disagree: memory says done, audit + code say not done.
 

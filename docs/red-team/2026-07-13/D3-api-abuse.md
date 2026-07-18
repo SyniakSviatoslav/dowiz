@@ -97,13 +97,13 @@ Verdict: **prod is not wide open, but the test-account credential is a full-owne
 - **Fix:** key the order limiter on `Fly-Client-IP` (server-observed), not on a client-supplied body field. Keep an *additional* per-phone soft cap, but never let a body field be the sole/first key. Consider a proof-of-work or captcha on anonymous order-create.
 
 ### F4 — 🟡 LOW–MEDIUM: Anonymous Telegram webhook on staging; weak webhook auth design
-- **Endpoint:** `POST /webhook/telegram/${***REDACTED***}` (`routes/telegram-webhook.ts:36`).
+- **Endpoint:** `POST /webhook/telegram/${TELEGRAM_BOT_SECRET}` (`routes/telegram-webhook.ts:36`).
 - **Type:** Missing/weak webhook authentication (OWASP API2/API8).
 - **Reproduction (observed live):**
   ```bash
   curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' \
     -d '{"update_id":1}' https://dowiz-staging.fly.dev/webhook/telegram/
-  # -> 200   (staging: ***REDACTED*** is empty, route mounts at /webhook/telegram/, NO validation)
+  # -> 200   (staging: TELEGRAM_BOT_SECRET is empty, route mounts at /webhook/telegram/, NO validation)
   curl ... https://dowiz.fly.dev/webhook/telegram/    # -> 404  (prod: secret set, empty path does not exist)
   ```
 - **Design weaknesses (code):**

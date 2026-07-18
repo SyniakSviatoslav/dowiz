@@ -93,10 +93,10 @@ function detectProvider(model: string): LlmProvider {
   if (process.env.OPENCODE_ZEN_API_KEY) return 'zen';
   if (process.env.GROQ_API_KEY) return 'groq';
   if (process.env.OPENAI_API_KEY) return 'openai';
-  // OpenRouter is the configured provider in prod (***REDACTED***). It is OpenAI-wire
+  // OpenRouter is the configured provider in prod (OPENROUTER_API_KEY). It is OpenAI-wire
   // compatible, so it reuses the chat/completions shape. Without this branch the key was
   // ignored and import silently degraded to the heuristic structurer.
-  if (process.env.***REDACTED***) return 'openrouter';
+  if (process.env.OPENROUTER_API_KEY) return 'openrouter';
   // An explicit ollama endpoint/model means "ollama configured" → honour it
   // (and surface its failure). With nothing configured at all, fall back to the
   // heuristic structurer instead of an ollama endpoint that will never answer.
@@ -169,7 +169,7 @@ async function callLlm(provider: LlmProvider, prompt: string, model: string, tim
 
     } else if (provider === 'openrouter') {
       // OpenRouter — OpenAI-wire compatible aggregator. Same chat/completions shape.
-      const apiKey = process.env.***REDACTED*** || '';
+      const apiKey = process.env.OPENROUTER_API_KEY || '';
       const endpoint = process.env.OPENROUTER_ENDPOINT || 'https://openrouter.ai/api/v1/chat/completions';
       const res = await fetch(endpoint, {
         method: 'POST',

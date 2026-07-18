@@ -31,7 +31,7 @@ jobs:
           MENU_URL: ${{ secrets.AUDIT_MENU_URL }}
           SITE_URL: ${{ secrets.AUDIT_SITE_URL }}
           TEST_TENANT: ${{ secrets.AUDIT_TEST_TENANT || 'demo' }}
-          ***REDACTED***: ${{ secrets.OPS_***REDACTED*** }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.OPS_TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.OPS_TELEGRAM_CHAT_ID }}
           AUDIT_AGENT_ENABLED: 'true'
 

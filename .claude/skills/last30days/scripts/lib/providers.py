@@ -274,7 +274,7 @@ def resolve_runtime(config: dict[str, Any], depth: str) -> tuple[schema.Provider
             provider_name = "openai"
         elif xai_key:
             provider_name = "xai"
-        elif config.get("***REDACTED***"):
+        elif config.get("OPENROUTER_API_KEY"):
             provider_name = "openrouter"
         else:
             return schema.ProviderRuntime(
@@ -327,9 +327,9 @@ def resolve_runtime(config: dict[str, Any], depth: str) -> tuple[schema.Provider
         return runtime, XAIClient(xai_key)
 
     if provider_name == "openrouter":
-        openrouter_key = config.get("***REDACTED***")
+        openrouter_key = config.get("OPENROUTER_API_KEY")
         if not openrouter_key:
-            raise RuntimeError("OpenRouter selected but ***REDACTED*** is not configured.")
+            raise RuntimeError("OpenRouter selected but OPENROUTER_API_KEY is not configured.")
         runtime = schema.ProviderRuntime(
             reasoning_provider="openrouter",
             planner_model=planner_model,

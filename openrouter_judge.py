@@ -18,7 +18,7 @@ class OpenRouterJudge(DeepEvalBaseLLM):
         self.model = model or os.environ.get("DEEPEVAL_JUDGE_MODEL", "openai/gpt-5.1")
         self.client = OpenAI(
             base_url="https://openrouter.ai/api/v1",
-            api_key=os.environ["***REDACTED***"],
+            api_key=os.environ["OPENROUTER_API_KEY"],
         )
 
     def load_model(self):

@@ -14,7 +14,7 @@
 ### BR-1 · B-SEC / B-FAIL — `service-role`-припущення хибне: FORCE RLS на audit/targets може повністю зламати диспетчер
 **Вектор:** B-SEC (RLS), B-FAIL (каскад на весь notification-flow).
 **Знахідка.** Proposal §5.1/§8/§5.2 фундаментально спирається на твердження: *"Воркер пише під service-role (поза RLS) — FORCE не ламає запис"*. Це **неправда за фактом коду**:
-- Operational pool конектиться як `deliveryos_api_user` (`.env:4` → `***REDACTED***=...deliveryos_api_user...`), а НЕ `service_role`, НЕ `postgres`. Ніде в коді нема `SET ROLE service_role`.
+- Operational pool конектиться як `deliveryos_api_user` (`.env:4` → `DATABASE_URL_OPERATIONAL=...deliveryos_api_user...`), а НЕ `service_role`, НЕ `postgres`. Ніде в коді нема `SET ROLE service_role`.
 - `handleTelegramSend`/`handleDispatch` (`apps/api/src/notifications/workers/index.ts`) пишуть audit і SELECT-ять `owner_notification_targets` **без** `set_config('app.current_tenant')` і без membership-context (на відміну від order-actions, що роблять `set_config`). Зараз це працює ЛИШЕ тому, що targets має `ENABLE` без `FORCE` → policy не застосовується до власника таблиці.
 - Єдине, що рятує — `ALTER ROLE deliveryos_api_user BYPASSRLS` у `1780691681296_ops-location-alerts-policy.ts:8`. Але воно загорнуте в `DO … EXCEPTION WHEN OTHERS THEN -- Ignore if not allowed`. На Supabase pooler `ALTER ROLE … BYPASSRLS` потребує суперюзера; якщо платформа його не дала — **виняток мовчки проковтнувся, і роль НЕ має BYPASSRLS.**
 

@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 
 async function run() {
   const env = loadEnv();
-  const boss = new PgBoss({ connectionString: env.***REDACTED*** });
+  const boss = new PgBoss({ connectionString: env.DATABASE_URL_SESSION });
   await boss.start();
   const manualId = randomUUID();
   console.log('Trying manual ID:', manualId);

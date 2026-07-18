@@ -47,7 +47,7 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     const redirectUri = `${env.APP_BASE_URL}/api/auth/google/callback`;
     const googleAuthUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-    googleAuthUrl.searchParams.set('client_id', env.***REDACTED***);
+    googleAuthUrl.searchParams.set('client_id', env.GOOGLE_CLIENT_ID);
     googleAuthUrl.searchParams.set('redirect_uri', redirectUri);
     googleAuthUrl.searchParams.set('response_type', 'code');
     googleAuthUrl.searchParams.set('scope', 'openid email profile');
@@ -85,8 +85,8 @@ export default async function authRoutes(fastify: FastifyInstance) {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
-        client_id: env.***REDACTED***,
-        client_secret: env.***REDACTED***,
+        client_id: env.GOOGLE_CLIENT_ID,
+        client_secret: env.GOOGLE_CLIENT_SECRET,
         code,
         code_verifier: codeVerifier,
         redirect_uri: redirectUri,

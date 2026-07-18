@@ -10,7 +10,7 @@ async function verify() {
     process.exit(1);
   }
 
-  if (!env.***REDACTED*** || !env.***REDACTED***) {
+  if (!env.DATABASE_URL_OPERATIONAL || !env.DATABASE_URL_SESSION) {
     console.error('Error: Please fill DATABASE_URL_* in .env');
     process.exit(1);
   }

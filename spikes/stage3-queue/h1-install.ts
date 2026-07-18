@@ -3,10 +3,10 @@ import { loadEnv } from '@deliveryos/config';
 
 async function run() {
   const env = loadEnv();
-  console.log('Connecting to ***REDACTED*** (5432) for pg-boss install...');
+  console.log('Connecting to DATABASE_URL_SESSION (5432) for pg-boss install...');
 
   const boss = new PgBoss({
-    connectionString: env.***REDACTED***,
+    connectionString: env.DATABASE_URL_SESSION,
     max: 3, // keep small
   });
 

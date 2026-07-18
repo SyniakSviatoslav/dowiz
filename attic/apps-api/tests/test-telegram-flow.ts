@@ -6,7 +6,7 @@ import { signAuthToken } from '@deliveryos/platform';
 const env = loadEnv();
 
 const API_BASE = 'http://127.0.0.1:3003';
-const BOT_SECRET = env.***REDACTED*** || 'webhook-test-secret';
+const BOT_SECRET = env.TELEGRAM_BOT_SECRET || 'webhook-test-secret';
 const WEBHOOK_URL = `${API_BASE}/webhook/telegram/${BOT_SECRET}`;
 
 interface TestResult {

@@ -13,7 +13,7 @@ test('telegram webhook storefront + pref routing (DB integration)', { skip: url 
   // Flags + token must be set BEFORE the plugin module loads (it reads them at import).
   process.env.TG_STOREFRONT_ACTION = 'true';
   process.env.TG_CATEGORY_GATING = 'true';
-  process.env.***REDACTED*** = 'test-token';
+  process.env.TELEGRAM_BOT_TOKEN = 'test-token';
 
   // Mock the Telegram Bot API so answerCallbackQuery/sendMessage resolve instantly
   // (the handler answers the callback BEFORE the mutation, so this must succeed).

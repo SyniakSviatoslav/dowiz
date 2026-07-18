@@ -21,8 +21,8 @@ export class PgBossQueueProvider implements QueueProvider {
     const env = loadEnv();
     // CRITICAL: pg-boss uses session-mode connection (port 5432) for DDL + LISTEN/NOTIFY
     // Transaction pooler (port 6543) blocks both. Server.ts constructs the URL with port 5432.
-    const dbUrl = connectionString || env.***REDACTED***;
-    console.log('[PgBoss] Using database URL:', dbUrl === env.***REDACTED*** ? '***REDACTED***' : 'provided or fallback');
+    const dbUrl = connectionString || env.DATABASE_URL_OPERATIONAL;
+    console.log('[PgBoss] Using database URL:', dbUrl === env.DATABASE_URL_OPERATIONAL ? 'DATABASE_URL_OPERATIONAL' : 'provided or fallback');
     this.boss = new PgBoss({
       connectionString: dbUrl,
       max: 4,

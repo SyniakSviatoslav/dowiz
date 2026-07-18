@@ -102,7 +102,7 @@
       "domain": "rls-tenant-isolation",
       "severity": "advisory",
       "invariant": "Operational pool should not connect as superuser (bypasses RLS)",
-      "evidence": "AGENTS.md §9 item 3: operational pool connects as postgres superuser. packages/db/src/index.ts uses ***REDACTED*** env var.",
+      "evidence": "AGENTS.md §9 item 3: operational pool connects as postgres superuser. packages/db/src/index.ts uses DATABASE_URL_OPERATIONAL env var.",
       "detail": "The operational pool uses superuser (postgres) connection which inherently BYPASSRLS regardless of FORCE RLS. Only the session pool respects tenant isolation. Known config issue — flagged but not resolved.",
       "fix": "Create dedicated non-superuser role (deliveryos_operational_user) with NOBYPASSRLS for the operational pool. Or restrict operational pool to non-tenant operations only.",
       "action": "Advisory — config issue"

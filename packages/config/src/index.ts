@@ -4,15 +4,15 @@ const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]),
   PORT: z.coerce.number().int().positive().default(8080),
   APP_BASE_URL: z.string().url(),
-  ***REDACTED***: z.string().url(),   // transaction pooler :6543
-  ***REDACTED***: z.string().url(),       // session pooler :5432
-  ***REDACTED***: z.string().url(),    // session pooler :5432
+  DATABASE_URL_OPERATIONAL: z.string().url(),   // transaction pooler :6543
+  DATABASE_URL_SESSION: z.string().url(),       // session pooler :5432
+  DATABASE_URL_MIGRATIONS: z.string().url(),    // session pooler :5432
   REDIS_URL: z.string().url(),                  // upstash, pub/sub only
-  ***REDACTED***: z.string().min(1),
-  ***REDACTED***: z.string().min(1),
+  JWT_PRIVATE_KEY: z.string().min(1),
+  JWT_PUBLIC_KEY: z.string().min(1),
   JWT_KID: z.string().min(1),
-  ***REDACTED***: z.string().min(1),
-  ***REDACTED***: z.string().min(1),
+  GOOGLE_CLIENT_ID: z.string().min(1),
+  GOOGLE_CLIENT_SECRET: z.string().min(1),
   // Google OAuth is launch-gated OFF by default: when 'false' BOTH the FE button
   // (VITE_GOOGLE_OAUTH_ENABLED) and the backend /api/auth/google routes are closed, so
   // "hidden" actually means "disabled" (not just a hidden-but-reachable auth path).
@@ -38,8 +38,8 @@ const EnvSchema = z.object({
   JWT_DEV_KID: z.string().optional(),
   JWT_DEV_PRIVATE_KEY: z.string().optional(),
   JWT_DEV_PUBLIC_KEY: z.string().optional(),
-  ***REDACTED***: z.string().optional(),
-  ***REDACTED***: z.string().optional(),
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_BOT_SECRET: z.string().optional(),
   TELEGRAM_BOT_USERNAME: z.string().optional(),
   // WhatsApp/Baileys channel removed (P0-2, ADR-p0-privacy-hardening).
   // Phone OTP verification — globally disabled until a real SMS gateway is wired
@@ -54,7 +54,7 @@ const EnvSchema = z.object({
   // Menu-import LLM (ai-ocr-parser). OpenRouter is OpenAI-wire compatible; when its key is
   // set it serves PDF/image menu extraction. Without any provider the parser falls back to a
   // zero-dependency heuristic structurer. All optional — read via process.env in the parser.
-  ***REDACTED***: z.string().optional(),
+  OPENROUTER_API_KEY: z.string().optional(),
   OPENROUTER_MODEL: z.string().optional(), // default 'openai/gpt-4o-mini'
   OPENROUTER_ENDPOINT: z.string().optional(),
   // OpenCode Zen — OpenAI-wire compatible gateway with free models. Preferred over OpenRouter

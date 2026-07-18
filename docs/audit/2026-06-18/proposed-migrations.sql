@@ -24,15 +24,15 @@ ALTER TABLE courier_payouts ADD COLUMN IF NOT EXISTS paid_at timestamptz;
 -- ----------------------------------------------------------------------------
 -- Migration 1790000000015 created `deliveryos_operational_user` with LOGIN
 -- NOBYPASSRLS and granted SELECT ONLY ("operational queries are read-only"),
--- with a note to switch ***REDACTED*** to it. But the hot path WRITES
+-- with a note to switch DATABASE_URL_OPERATIONAL to it. But the hot path WRITES
 -- through the operational pool (POST /orders, status transitions, courier
 -- assignment), and createOperationalPool() actively destroys any connection
--- authenticating as `postgres`. So the role ***REDACTED*** actually
+-- authenticating as `postgres`. So the role DATABASE_URL_OPERATIONAL actually
 -- uses today is some OTHER, write-capable, non-postgres role that is NOT defined
 -- by these migrations — i.e. its privileges are unmanaged/out-of-band.
 --
 -- STEP 1 (no SQL): confirm the real role:
---     SELECT current_user;   -- run on a connection from ***REDACTED***
+--     SELECT current_user;   -- run on a connection from DATABASE_URL_OPERATIONAL
 -- and inspect its grants:
 --     \du   and   SELECT * FROM information_schema.role_table_grants
 --                 WHERE grantee = '<that role>' LIMIT 50;

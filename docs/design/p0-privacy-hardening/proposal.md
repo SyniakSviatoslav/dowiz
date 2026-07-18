@@ -128,7 +128,7 @@ RLS/tenant: guard query runs after `set_config('app.current_tenant', …)` (`shi
 - dep `@whiskeysockets/baileys` (`apps/api/package.json:31`) + lockfile entries.
 - adapter file `apps/api/src/notifications/channels/whatsapp.ts` and its import + conditional registration (`server.ts:77, :338-340`).
 - `renderWhatsAppMessage` (`render.ts:47-71`).
-- env `WHATSAPP_ENABLED`, `***REDACTED***` from `packages/config/src/index.ts:23-24` + `.env.example`.
+- env `WHATSAPP_ENABLED`, `WHATSAPP_AUTH_DIR` from `packages/config/src/index.ts:23-24` + `.env.example`.
 - the `'whatsapp'` literal from the `NotificationTarget.channel` union (`provider.ts:3` — narrow to `'telegram'|'push'`) and the `channel IN ('telegram','whatsapp')` query in the Telegram worker (`workers/index.ts:320`) → narrow to `channel IN ('telegram')`.
 - the dispatcher `register('whatsapp', …)` call (`server.ts:338-340`) so the runtime adapter map never holds a whatsapp provider.
 

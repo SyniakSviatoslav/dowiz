@@ -7,7 +7,7 @@
  *   pnpm backup:restore --list                                   # List recent snapshots
  *
  * Environment variables required:
- *   ***REDACTED***       — target database (restore destination)
+ *   DATABASE_URL_MIGRATIONS       — target database (restore destination)
  *   BACKUP_ENCRYPTION_KEY         — 32-byte base64 key for decryption
  *   R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
  */

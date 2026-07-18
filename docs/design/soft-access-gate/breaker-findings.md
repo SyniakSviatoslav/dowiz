@@ -187,7 +187,7 @@ tenant.
 
 ### B7 [MED] B-SEC / B-OPS · Resend secret absence is graceful, but a present-but-invalid key + free-tier cap have no surfaced signal
 
-§7 adds `RESEND_API_KEY` as `.optional()` (mirrors `***REDACTED***`,
+§7 adds `RESEND_API_KEY` as `.optional()` (mirrors `TELEGRAM_BOT_TOKEN`,
 `packages/config/src/index.ts:19`) — verified Resend/WAITLIST are **not yet** in the
 env schema (grep: zero hits). Absence → email leg no-ops. Fine.
 

@@ -38,15 +38,15 @@ def search(
     Args:
         query: Search topic
         date_range: (from_date, to_date) as YYYY-MM-DD strings
-        config: Must contain ***REDACTED***
+        config: Must contain OPENROUTER_API_KEY
         deep: Use Deep Research model (~$0.90/query) instead of Sonar Pro
 
     Returns:
         Tuple of (items list, artifact dict).
     """
-    api_key = config.get("***REDACTED***")
+    api_key = config.get("OPENROUTER_API_KEY")
     if not api_key:
-        _log("No ***REDACTED*** configured, skipping")
+        _log("No OPENROUTER_API_KEY configured, skipping")
         return [], {}
 
     from_date, to_date = date_range

@@ -7,8 +7,8 @@ import { LlmReasoner } from '../driver/reasoners.ts';
 // Phase B — ONE authentic discovery round. Each persona is driven by the LlmReasoner (real
 // reasoning, free-tier model chain) against the LIVE service; friction → findings. Shares one
 // Song ledger so the 333 tokens/hr cap is cumulative across the round (CapReached stops it).
-// Requires ***REDACTED***. Round/persona set via env (a subset here — NOT a saturation round).
-//   ***REDACTED***=… VITE_BASE_URL=https://dowiz-staging.fly.dev \
+// Requires OPENROUTER_API_KEY. Round/persona set via env (a subset here — NOT a saturation round).
+//   OPENROUTER_API_KEY=… VITE_BASE_URL=https://dowiz-staging.fly.dev \
 //   DOS_PERSONAS=client-first-timer-impatient,client-price-skeptic DOS_ROUND=1 \
 //   pnpm exec playwright test rsi-round --project=desktop --reporter=list --timeout=600000
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';

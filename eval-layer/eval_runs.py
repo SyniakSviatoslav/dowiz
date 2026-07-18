@@ -2,7 +2,7 @@
 eval_runs.py — Load agent-run records → evaluate via DeepEval → write deepeval-result.json.
 
 Usage:
-    export ***REDACTED***=sk-or-...
+    export OPENROUTER_API_KEY=sk-or-...
     export DEEPEVAL_JUDGE_MODEL=openai/gpt-4o
     python eval_runs.py runs.json
 

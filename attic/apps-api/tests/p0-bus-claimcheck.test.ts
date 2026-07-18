@@ -11,9 +11,9 @@ const DB_URL = process.env.SAG_TEST_DB_URL
 function ensureEnv() {
   const d: Record<string, string> = {
     NODE_ENV: 'test', APP_BASE_URL: 'http://localhost:3000',
-    ***REDACTED***: DB_URL, ***REDACTED***: DB_URL, ***REDACTED***: DB_URL,
-    REDIS_URL: 'redis://localhost:6379', ***REDACTED***: 'x', ***REDACTED***: 'x', JWT_KID: 'x',
-    ***REDACTED***: 'x', ***REDACTED***: 'x', VAPID_PUBLIC_KEY: 'x', VAPID_PRIVATE_KEY: 'x', IP_HASH_SALT: 'x',
+    DATABASE_URL_OPERATIONAL: DB_URL, DATABASE_URL_SESSION: DB_URL, DATABASE_URL_MIGRATIONS: DB_URL,
+    REDIS_URL: 'redis://localhost:6379', JWT_PRIVATE_KEY: 'x', JWT_PUBLIC_KEY: 'x', JWT_KID: 'x',
+    GOOGLE_CLIENT_ID: 'x', GOOGLE_CLIENT_SECRET: 'x', VAPID_PUBLIC_KEY: 'x', VAPID_PRIVATE_KEY: 'x', IP_HASH_SALT: 'x',
   };
   for (const [k, v] of Object.entries(d)) if (!process.env[k]) process.env[k] = v;
 }

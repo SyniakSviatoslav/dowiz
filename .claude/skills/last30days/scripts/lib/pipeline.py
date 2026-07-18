@@ -120,7 +120,7 @@ def available_sources(config: dict[str, Any], requested_sources: list[str] | Non
         available.append("grounding")
     # Perplexity Sonar: opt-in additive source via INCLUDE_SOURCES=perplexity
     include_sources = (config.get("INCLUDE_SOURCES") or "").lower().split(",")
-    if config.get("***REDACTED***") and (
+    if config.get("OPENROUTER_API_KEY") and (
         "perplexity" in include_sources or (requested_sources and "perplexity" in requested_sources)
     ):
         available.append("perplexity")
@@ -155,7 +155,7 @@ def diagnose(config: dict[str, Any], requested_sources: list[str] | None = None)
         "google": bool(google_key),
         "openai": bool(config.get("OPENAI_API_KEY")) and config.get("OPENAI_AUTH_STATUS") == env.AUTH_STATUS_OK,
         "xai": bool(config.get("XAI_API_KEY")),
-        "openrouter": bool(config.get("***REDACTED***")),
+        "openrouter": bool(config.get("OPENROUTER_API_KEY")),
     }
     return {
         "providers": providers_status,

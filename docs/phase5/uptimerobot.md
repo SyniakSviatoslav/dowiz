@@ -77,7 +77,7 @@ Three monitors covering critical platform paths. Alerts route to Telegram + emai
 1. Create UptimeRobot account (ops@dowiz.org)
 2. Create Telegram bot integration: [UptimeRobot Telegram Setup](https://uptimerobot.com/integrations/#telegram)
 3. Add contacts:
-   - Telegram: bot token from `***REDACTED***`
+   - Telegram: bot token from `TELEGRAM_BOT_TOKEN`
    - Email: ops@dowiz.org
 4. Create each monitor per the tables above
 5. Verify: manually trigger alert by stopping API → confirm Telegram notification arrives within 60s

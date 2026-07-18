@@ -30,7 +30,7 @@ ENV=prod BASE_URL=https://app.dowiz.org pnpm watchdog
 | `MENU_URL` | No | Menu SSR URL for cache probes |
 | `SITE_URL` | No | Static site URL |
 | `TEST_TENANT` | No | Tenant slug (default: `demo`) |
-| `***REDACTED***` | No | For ops alerts |
+| `TELEGRAM_BOT_TOKEN` | No | For ops alerts |
 | `TELEGRAM_CHAT_ID` | No | For ops alerts |
 | `AUDIT_AGENT_ENABLED` | No | Kill-switch (default: `true`) |
 

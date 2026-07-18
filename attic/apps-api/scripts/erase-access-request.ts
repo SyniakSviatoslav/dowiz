@@ -21,7 +21,7 @@ async function main() {
   }
 
   const env = loadEnv();
-  const url = env.***REDACTED***;
+  const url = env.DATABASE_URL_OPERATIONAL;
   // Local/non-TLS DBs reject an ssl handshake; Supabase poolers require one.
   const local = /localhost|127\.0\.0\.1|sslmode=disable/.test(url);
   const pool = new Pool({

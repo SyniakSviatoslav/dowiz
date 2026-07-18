@@ -10,7 +10,7 @@
 Two heads, both about **prod blast radius on `main`**:
 
 1. **Auto-deploy pipeline is a single unguarded lever.** A push to `main` runs `pnpm migrate:up` **directly against the prod DB** and then `flyctl deploy` — with **no approval gate, no automated rollback, no concurrency guard**, and the deploy step imports an **unpinned third-party action pinned to a moving branch** (`superfly/flyctl-actions/setup-flyctl@master`) that holds `FLY_API_TOKEN`. One bad migration or one compromised upstream action = prod outage / prod takeover at 3am.
-2. **Secrets hygiene: reachable history is clean and live keys were rotated, but the incident is not closed.** 10 unreachable/orphaned git blobs still carry (rotated) `***REDACTED***` / `COURIER_PII_ENCRYPTION_KEY` / RSA private keys. The memory-tracked remote scrub/force-push is an **OPEN gate**, so those objects almost certainly still live on GitHub, retrievable by SHA even though `git log` cannot see them. The secrets gate (`gitleaks detect`) scans reachable refs only — it structurally cannot see them and reports "clean."
+2. **Secrets hygiene: reachable history is clean and live keys were rotated, but the incident is not closed.** 10 unreachable/orphaned git blobs still carry (rotated) `JWT_PRIVATE_KEY` / `COURIER_PII_ENCRYPTION_KEY` / RSA private keys. The memory-tracked remote scrub/force-push is an **OPEN gate**, so those objects almost certainly still live on GitHub, retrievable by SHA even though `git log` cannot see them. The secrets gate (`gitleaks detect`) scans reachable refs only — it structurally cannot see them and reports "clean."
 
 ---
 
@@ -26,11 +26,11 @@ Evidence:
   `src/screens/14-admin-branding.html:310` (initial commit `76856da9` + polish commits `84b95d66`, `991a486d`) holds `value="sk_live_dS8f…"` inside a **disabled `<input>`**. Length = **18 chars total** (~10 after `sk_live_`); a real Stripe secret key is ~107 chars. **Definitively fabricated placeholder**, not a functional credential. It is allowlisted in `.gitleaks.toml` (`src/screens/`) and `.gitleaksignore:3`.
 - **The gitleaks run reports 49 "leaks" — all noise, none committed.** All 49 are in **untracked, gitignored** local files: `.venv-paddle/**` (Python lib test fixtures — PyCrypto/PIL test keys), `.env.test`, `.secrets.local`. gitleaks scans the working tree; none are in history.
 - **The incident residue: 10 orphaned/unreachable blobs still carry rotated key material.**
-  `git fsck --no-reflogs --unreachable` → 1875 unreachable blobs; **10** contain `BEGIN RSA PRIVATE KEY` / `COURIER_PII_ENCRYPTION_KEY=` / `***REDACTED***=` (e.g. blob `4505d018…`, `git rev-list --all --objects | grep` count = **0** → unreachable from every ref, from a scrubbed `export …` secrets file).
-  **Are they still live?** Hash-compared the orphaned `COURIER_PII_ENCRYPTION_KEY`, `***REDACTED***`, `***REDACTED***` against the current live `.env`: **0 / 0 / 0 matches → rotated.** So the exposed material is STALE.
+  `git fsck --no-reflogs --unreachable` → 1875 unreachable blobs; **10** contain `BEGIN RSA PRIVATE KEY` / `COURIER_PII_ENCRYPTION_KEY=` / `JWT_PRIVATE_KEY=` (e.g. blob `4505d018…`, `git rev-list --all --objects | grep` count = **0** → unreachable from every ref, from a scrubbed `export …` secrets file).
+  **Are they still live?** Hash-compared the orphaned `COURIER_PII_ENCRYPTION_KEY`, `TELEGRAM_BOT_TOKEN`, `GOOGLE_CLIENT_SECRET` against the current live `.env`: **0 / 0 / 0 matches → rotated.** So the exposed material is STALE.
 
 **Residual risk (why this is not "closed"):**
-(a) Only 3 secret classes were sampled — a **full rotation audit of every secret in the 10 blobs** (DB passwords, ***REDACTED***, OpenRouter key, VAPID) is required to prove none is still valid.
+(a) Only 3 secret classes were sampled — a **full rotation audit of every secret in the 10 blobs** (DB passwords, JWT_SIGNING_SECRET, OpenRouter key, VAPID) is required to prove none is still valid.
 (b) The remote scrub/force-push is an OPEN gate → the same unreachable objects are almost certainly still fetchable via the GitHub API by SHA (GitHub retains unreachable commits ~indefinitely without a support-driven GC).
 (c) `open-source per ADR-020` is a stated goal — publishing a repo whose object store contains recoverable private keys is a hard blocker.
 
@@ -43,13 +43,13 @@ Evidence:
 ### F1 — Orphaned git objects retain rotated private keys; remote scrub is an OPEN gate
 - **Severity:** HIGH
 - **Location:** local `.git` object store (blob `4505d018…` + 9 others); GitHub remote (unverified from here)
-- **Evidence:** `git fsck --unreachable` → 10 blobs carrying `***REDACTED***=` / `COURIER_PII_ENCRYPTION_KEY=` / `-----BEGIN RSA PRIVATE KEY-----`; reachable-from-refs = 0; live-`.env` hash match = 0/0/0 (rotated).
+- **Evidence:** `git fsck --unreachable` → 10 blobs carrying `JWT_PRIVATE_KEY=` / `COURIER_PII_ENCRYPTION_KEY=` / `-----BEGIN RSA PRIVATE KEY-----`; reachable-from-refs = 0; live-`.env` hash match = 0/0/0 (rotated).
 - **Failure/exploit:** Rival clones the repo (or hits the GitHub commit/blob API by SHA) and harvests key material + secret **names/formats**; if any un-sampled secret was not actually rotated, it is directly usable. Invisible to `git log` and to the refs-scanning gate → false sense of "clean."
 - **Fix:** Complete BFG/`filter-repo` scrub + force-push all refs; request GitHub support GC of unreachable objects; run a full rotation audit across all 10 blobs; add a dangling-object scan to the secrets gate.
 
 ### F2 — Prod auto-deploy + prod DB migration on push-to-`main`, no approval / rollback / concurrency
 - **Severity:** HIGH
-- **Location:** `.github/workflows/ci.yml:127-153` (`deploy` job, `if: github.ref == 'refs/heads/main'` → `pnpm migrate:up` with `secrets.***REDACTED***`, then `flyctl deploy --remote-only`). Fly also re-runs migrations via `attic/fly.toml` `release_command = "dist/migrate/index.cjs"`.
+- **Location:** `.github/workflows/ci.yml:127-153` (`deploy` job, `if: github.ref == 'refs/heads/main'` → `pnpm migrate:up` with `secrets.DATABASE_URL_MIGRATIONS`, then `flyctl deploy --remote-only`). Fly also re-runs migrations via `attic/fly.toml` `release_command = "dist/migrate/index.cjs"`.
 - **Evidence:** cited lines; no GitHub `environment:`/protection rule, no `concurrency:` group, no backup-before-migrate step.
 - **Failure/exploit:** A forward-only node-pg-migrate migration is applied to prod **before** the app deploys; a bad/destructive migration corrupts prod schema with no gated approval and no automated `down`. Two rapid merges → overlapping migration/deploy race. 3am pager with manual recovery only.
 - **Fix:** GitHub Environments approval gate on `deploy`; expand-contract migrations + dry-run; `concurrency` group; automated pre-migrate backup snapshot.
@@ -71,8 +71,8 @@ Evidence:
 ### F5 — Secrets gate's default-secret scan no longer covers the server code
 - **Severity:** MEDIUM
 - **Location:** `scripts/verify-secrets.ts:67` `findFiles(path.join(ROOT, 'apps'), …)`
-- **Evidence:** On `feat/decentralized-pq-protocol` the API moved to `attic/apps-api/` (`apps/` now contains only `web`). Check #3 (hardcoded `***REDACTED***`/`***REDACTED***`/`VAPID_PRIVATE_KEY` defaults) scans only `apps/` → the server source is unscanned.
-- **Failure/exploit:** A `process.env.***REDACTED*** || '<hardcoded default>'` in the server ships without the gate noticing.
+- **Evidence:** On `feat/decentralized-pq-protocol` the API moved to `attic/apps-api/` (`apps/` now contains only `web`). Check #3 (hardcoded `JWT_PRIVATE_KEY`/`TELEGRAM_BOT_TOKEN`/`VAPID_PRIVATE_KEY` defaults) scans only `apps/` → the server source is unscanned.
+- **Failure/exploit:** A `process.env.JWT_PRIVATE_KEY || '<hardcoded default>'` in the server ships without the gate noticing.
 - **Fix:** Point the scan at the actual server source root / the tree the deploy artifact is built from.
 
 ### F6 — Container runs as root; unpinned base; runtime-stage unpinned `npm install` with install scripts
@@ -92,7 +92,7 @@ Evidence:
 ### F8 — Live local secret files are world-readable / world-writable
 - **Severity:** MEDIUM
 - **Location:** `/root/dowiz/.env` mode `-rw-rw-rw-` (0666); `.env.test`, `.secrets.local` 0644
-- **Evidence:** `ls -la`. `.env` holds live `***REDACTED***`, `***REDACTED***`, `***REDACTED***`, `COURIER_PII_ENCRYPTION_KEY`, `***REDACTED***`, `IP_HASH_SALT`.
+- **Evidence:** `ls -la`. `.env` holds live `JWT_PRIVATE_KEY`, `TELEGRAM_BOT_TOKEN`, `GOOGLE_CLIENT_SECRET`, `COURIER_PII_ENCRYPTION_KEY`, `OPENROUTER_API_KEY`, `IP_HASH_SALT`.
 - **Failure/exploit:** Any other local user or a compromised non-root process reads the live secrets; `.env` is world-**writable** → an attacker can also rewrite `APP_BASE_URL`/`JWT_*` to hijack signing/redirects.
 - **Fix:** `chmod 600` on all secret files; move to a secrets manager / Fly secrets only.
 

@@ -2,7 +2,7 @@
 
 Per-finding disposition for `breaker-findings.md` + `counsel-opinion.md`. Grounded in the
 verified role topology:
-- **Writer = `postgres`** (***REDACTED*** = `postgres.<proj>`) — table **owner**, subject
+- **Writer = `postgres`** (DATABASE_URL_SESSION = `postgres.<proj>`) — table **owner**, subject
   to FORCE RLS, needs **no** grants. Owner-write RLS works via `set_config('app.user_id',…)` →
   `app_member_location_ids()` → `tenant_isolation`.
 - **Read pool = `deliveryos_api_user`** — **BYPASSRLS** (`1780691681296:8`), NOLOGIN custom role.

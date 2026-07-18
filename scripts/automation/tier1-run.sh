@@ -10,7 +10,7 @@
 # Env (optional):
 #   TIER1_MODEL        model alias (default: claude-haiku-4-5-20251001)  [A5 cheap tier]
 #   TIER1_MAX_TURNS    agent-loop cap (default: 12)                       [A5 budget]
-#   ***REDACTED*** + TELEGRAM_OPS_CHAT_ID   → posts the report        [A9]
+#   TELEGRAM_BOT_TOKEN + TELEGRAM_OPS_CHAT_ID   → posts the report        [A9]
 #   OTEL_EXPORTER_OTLP_ENDPOINT                 → enables OTel trace      [A9]
 set -euo pipefail
 
@@ -42,6 +42,6 @@ REPORT="$(printf '%s' "$OUT" | node -e "let d='';process.stdin.on('data',c=>d+=c
 { echo "===== $NAME @ $TS ====="; echo "$REPORT"; echo; } | tee -a "$LOG"
 
 # A9: ship to Telegram-ops if configured (best-effort, never fail the run).
-if [ -n "${***REDACTED***:-}" ] && [ -n "${TELEGRAM_OPS_CHAT_ID:-}" ]; then
+if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_OPS_CHAT_ID:-}" ]; then
   "$ROOT/scripts/automation/notify.sh" "🛰️ tier1/$NAME @ $TS"$'\n'"$REPORT" || true
 fi

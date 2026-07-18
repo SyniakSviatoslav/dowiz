@@ -77,7 +77,7 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
   `);
 
   // Forward-compat: the aspirational operational role (migration 015) gets explicit DML
-  // (incl. DELETE for day-one erasure) if ***REDACTED*** is ever flipped to it.
+  // (incl. DELETE for day-one erasure) if DATABASE_URL_OPERATIONAL is ever flipped to it.
   pgm.sql(`
     DO $$
     BEGIN

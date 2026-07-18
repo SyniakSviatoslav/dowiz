@@ -2,7 +2,7 @@ const { readFileSync, existsSync } = require('fs');
 const { Pool } = require('pg');
 
 const pool = new Pool({
-  connectionString: process.env.***REDACTED*** || process.env.DATABASE_URL,
+  connectionString: process.env.DATABASE_URL_SESSION || process.env.DATABASE_URL,
 });
 
 async function run() {

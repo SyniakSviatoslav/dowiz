@@ -17,9 +17,9 @@ async function probe(label: string, url: string) {
   }
 }
 
-const opUrl = process.env.***REDACTED***!;
-const sessUrl = process.env.***REDACTED***!;
-const migUrl = process.env.***REDACTED***!;
+const opUrl = process.env.DATABASE_URL_OPERATIONAL!;
+const sessUrl = process.env.DATABASE_URL_SESSION!;
+const migUrl = process.env.DATABASE_URL_MIGRATIONS!;
 
 // pg-boss constructed URL: operational URL with port 5432
 const bossUrl = new URL(opUrl);

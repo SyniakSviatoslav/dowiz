@@ -28,12 +28,12 @@ DeliveryOS uses PostgreSQL connection pools against the Supabase database. Since
 
 | Client / Component | Connection String | Pool Size (`max`) | Purpose / Notes |
 | :--- | :--- | :--- | :--- |
-| `@deliveryos/api` (hot path) | `***REDACTED***` (6543) | **8** | Fast, short-lived CRUD, courier dispatch, shift management. |
-| `@deliveryos/api` (session pool) | `***REDACTED***` (5432) | **3** | PII decryption reads, export, WebSocket room management. |
-| `pg-boss` Worker | `***REDACTED***` (5432) | **3** | Background jobs: courier dispatch, stale check, GPS purge, settlement generation, Telegram notifications. |
-| Backup Worker | `***REDACTED***` (5432) | **2** (`BACKUP_POOL_SIZE`) | Backup dump encryption, manifest generation, restore dry-run. |
-| Settlement Worker | `***REDACTED***` (6543) | **shared with API** | Settlement cron uses operational pool for payout generation. |
-| CLI / Migrations | `***REDACTED***` (5432) | **1** | Transient connection for `node-pg-migrate`. |
+| `@deliveryos/api` (hot path) | `DATABASE_URL_OPERATIONAL` (6543) | **8** | Fast, short-lived CRUD, courier dispatch, shift management. |
+| `@deliveryos/api` (session pool) | `DATABASE_URL_SESSION` (5432) | **3** | PII decryption reads, export, WebSocket room management. |
+| `pg-boss` Worker | `DATABASE_URL_SESSION` (5432) | **3** | Background jobs: courier dispatch, stale check, GPS purge, settlement generation, Telegram notifications. |
+| Backup Worker | `DATABASE_URL_MIGRATIONS` (5432) | **2** (`BACKUP_POOL_SIZE`) | Backup dump encryption, manifest generation, restore dry-run. |
+| Settlement Worker | `DATABASE_URL_OPERATIONAL` (6543) | **shared with API** | Settlement cron uses operational pool for payout generation. |
+| CLI / Migrations | `DATABASE_URL_MIGRATIONS` (5432) | **1** | Transient connection for `node-pg-migrate`. |
 
 ## 2. Phase 3 Pool Usage Details
 
@@ -49,7 +49,7 @@ DeliveryOS uses PostgreSQL connection pools against the Supabase database. Since
 - Settlement audit log inserts — operational pool
 
 ### Backup-Specific Queries
-- `pg_dump` runs via separate process (no pool), connects via `***REDACTED***`
+- `pg_dump` runs via separate process (no pool), connects via `DATABASE_URL_MIGRATIONS`
 - Manifest row count queries — backup pool (session)
 - Metadata/audit log updates — operational pool
 

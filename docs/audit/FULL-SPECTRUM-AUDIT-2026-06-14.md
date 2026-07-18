@@ -29,9 +29,9 @@
 | | |
 |---|---|
 | **Symptom** | `POST /auth/mock`, `POST /auth/local/login`, `POST /orders` all return 500 with `correlationId: "unknown"` |
-| **Root cause** | 2 compounding bugs: (1) `packages/platform/src/auth/jwt.ts:6` calls `loadEnv()` at module scope — crashes on import if `***REDACTED***` missing; (2) `.env.example:8` documents `***REDACTED***` (HS256) but code at `packages/config/src/index.ts:11-12` requires `***REDACTED***` + `***REDACTED***` (RS256). Fly.io likely has the old env var name. |
+| **Root cause** | 2 compounding bugs: (1) `packages/platform/src/auth/jwt.ts:6` calls `loadEnv()` at module scope — crashes on import if `JWT_PRIVATE_KEY` missing; (2) `.env.example:8` documents `JWT_SIGNING_SECRET` (HS256) but code at `packages/config/src/index.ts:11-12` requires `JWT_PRIVATE_KEY` + `JWT_PUBLIC_KEY` (RS256). Fly.io likely has the old env var name. |
 | **Impact** | Every authenticated flow is broken — owner dashboard, courier app, customer order history, all admin screens |
-| **Fix** | (a) `flyctl secrets set ***REDACTED***=... ***REDACTED***=...`; (b) Make `loadEnv()` lazy in jwt.ts; (c) Update `.env.example` |
+| **Fix** | (a) `flyctl secrets set JWT_PRIVATE_KEY=... JWT_PUBLIC_KEY=...`; (b) Make `loadEnv()` lazy in jwt.ts; (c) Update `.env.example` |
 | **Evidence** | `apps/api/src/server.ts:687,800` — `signAuthToken()` called without try/catch; `jwt.ts:6` — module-scope env |
 
 ### B2. SSR menu returns SPA shell — Preact renderer never implemented

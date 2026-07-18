@@ -11,7 +11,7 @@ Usage:
     judge = OpenRouterJudge(model="openai/gpt-4o")
     # or via env:
     #   DEEPEVAL_JUDGE_MODEL="openai/gpt-4o"
-    #   ***REDACTED***="sk-or-..."
+    #   OPENROUTER_API_KEY="sk-or-..."
     #   OPENAI_BASE_URL="https://openrouter.ai/api/v1"
 """
 
@@ -37,12 +37,12 @@ class OpenRouterJudge:
             or os.environ.get("DEEPEVAL_JUDGE_MODEL")
             or "openai/gpt-4o"
         )
-        self.api_key = os.environ.get("***REDACTED***") or os.environ.get("OPENAI_API_KEY")
+        self.api_key = os.environ.get("OPENROUTER_API_KEY") or os.environ.get("OPENAI_API_KEY")
         self.base_url = os.environ.get("OPENAI_BASE_URL") or self.DEFAULT_BASE_URL
 
         if not self.api_key:
             raise ValueError(
-                "OpenRouter judge needs ***REDACTED*** (or OPENAI_API_KEY) set"
+                "OpenRouter judge needs OPENROUTER_API_KEY (or OPENAI_API_KEY) set"
             )
 
         self._client = OpenAI(

@@ -530,7 +530,7 @@ pg-boss under the migration connection and creates the one queue + its partition
 
 ```ts
 // 1790000000042_access-request-notify-queue.ts  (mirrors 1790000000011's pattern)
-const MIGRATION_DB_URL = process.env.***REDACTED*** || process.env.***REDACTED***;
+const MIGRATION_DB_URL = process.env.DATABASE_URL_MIGRATIONS || process.env.DATABASE_URL_SESSION;
 export async function up(pgm) {
   pgm.noTransaction();
   await pgm.db.query('COMMIT');                       // make prior pgboss schema visible
@@ -867,7 +867,7 @@ Closed by:
   `requestId`.
 - Secrets `WAITLIST_NOTIFY_EMAIL`, `RESEND_API_KEY` added to the Zod env schema in
   `packages/config/src/index.ts` as `.optional()` (so absence disables the email leg
-  gracefully, like `***REDACTED***`), and supplied via Fly secrets — never in repo.
+  gracefully, like `TELEGRAM_BOT_TOKEN`), and supplied via Fly secrets — never in repo.
 
 ### Lawful basis = explicit consent (STOP-2, human decision)
 - **Basis: consent (withdrawable).** No row without server-validated `consent === true`;

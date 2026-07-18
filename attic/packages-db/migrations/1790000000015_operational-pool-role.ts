@@ -7,7 +7,7 @@ import type { MigrationBuilder } from 'node-pg-migrate';
 //   2. Grants only the DML privileges needed for operational queries
 //   3. Revokes CREATE on public schema (defense-in-depth)
 //
-// After deploying, update ***REDACTED*** in .env / Fly secrets
+// After deploying, update DATABASE_URL_OPERATIONAL in .env / Fly secrets
 // to use this role instead of 'postgres'.
 
 export async function up(pgm: MigrationBuilder): Promise<void> {

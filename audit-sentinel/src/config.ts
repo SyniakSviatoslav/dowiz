@@ -6,7 +6,7 @@ const envSchema = z.object({
   MENU_URL: z.string().url().optional(),
   SITE_URL: z.string().url().optional(),
   TEST_TENANT: z.string().default('demo'),
-  ***REDACTED***: z.string().optional(),
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
   TELEGRAM_CHAT_ID: z.string().optional(),
   GITHUB_TOKEN: z.string().optional(),
   GITHUB_REPO: z.string().optional(),

@@ -119,13 +119,13 @@ export default async function healthRoutes(
     const redisResult = await withTimeout(opts.messageBus.checkHealth(), 'messageBus');
 
     // ── 4. Telegram (Degraded) ─────────────────────────────────────
-    const telegramEnabled = !!process.env.***REDACTED***;
+    const telegramEnabled = !!process.env.TELEGRAM_BOT_TOKEN;
     let telegramResult: HealthCheckBase = { status: 'ok' };
     if (telegramEnabled) {
       telegramResult = await withTimeout(
         (async () => {
           const resp = await fetch(
-            `https://api.telegram.org/bot${process.env.***REDACTED***}/getMe`,
+            `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/getMe`,
             { signal: AbortSignal.timeout(5000) },
           );
           if (!resp.ok) throw new Error(`Telegram API getMe returned ${resp.status}`);

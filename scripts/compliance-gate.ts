@@ -78,9 +78,9 @@ if (existsSync(join(ROOT, migDir))) {
 // A new integration shows up as a new external-service env var in packages/config.
 const config = read('packages/config/src/index.ts');
 const SERVICE_ENV = [
-  'RESEND_API_KEY', '***REDACTED***', 'SENTRY_DSN', 'GROQ_API_KEY', 'OPENAI_API_KEY',
-  '***REDACTED***', 'OPENCODE_ZEN_API_KEY',
-  'REDIS_URL', 'ROUTING_BASE_URL', 'R2_ENDPOINT', 'VAPID_PUBLIC_KEY', '***REDACTED***',
+  'RESEND_API_KEY', 'TELEGRAM_BOT_TOKEN', 'SENTRY_DSN', 'GROQ_API_KEY', 'OPENAI_API_KEY',
+  'OPENROUTER_API_KEY', 'OPENCODE_ZEN_API_KEY',
+  'REDIS_URL', 'ROUTING_BASE_URL', 'R2_ENDPOINT', 'VAPID_PUBLIC_KEY', 'DATABASE_URL_OPERATIONAL',
 ];
 for (const env of SERVICE_ENV) {
   if (new RegExp(`\\b${env}\\b`).test(config) && !new RegExp(`\\b${env.replace(/_(API_KEY|DSN|URL|ENDPOINT|TOKEN|BASE_URL|PUBLIC_KEY|OPERATIONAL)$/, '')}`, 'i').test(subprocessors) && !subprocessors.includes(env.split('_')[0])) {

@@ -166,7 +166,7 @@ written invalidated **zero** tokens. The "reuses existing check, no new sign log
 
 Mint dev/mock tokens under a **separate dev keypair + dev kid**, with three concrete changes:
 - **C.1 — Signer (kid AND key together — R2 B-CONSIST fix):** the original C.1 moved only the
-  *kid* into the protected header but left `getPrivateKey()` hardcoded to `env.***REDACTED***`, so a
+  *kid* into the protected header but left `getPrivateKey()` hardcoded to `env.JWT_PRIVATE_KEY`, so a
   "dev-kid" token would still be **signed by the prod key** — the staging dev-verifier (dev public key)
   would then reject it on signature, and the proof obligation could never pass. **Resolved:** the signer
   takes an optional `signingKey` alongside the kid, and the two move as a pair —

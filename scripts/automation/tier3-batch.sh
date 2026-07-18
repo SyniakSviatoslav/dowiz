@@ -20,7 +20,7 @@
 #                        (default: 1.00)                                         [A5]
 #   TIER3_CLONE_URL      what to clone (default: origin's URL, else local repo)   [A6]
 #   TIER3_CLONE_REF      branch/ref to sweep (default: main)                      [A6]
-#   ***REDACTED*** + TELEGRAM_OPS_CHAT_ID   → posts the summary               [A9]
+#   TELEGRAM_BOT_TOKEN + TELEGRAM_OPS_CHAT_ID   → posts the summary               [A9]
 #   OTEL_EXPORTER_OTLP_ENDPOINT                 → enables OTel trace              [A9]
 set -euo pipefail
 
@@ -158,7 +158,7 @@ fi
 SUMMARY+=$'\n'"$PROPOSAL_NOTE"$'\n'"— batch total: \$$SPENT_FMT (cap \$$CAP), $PASSED passed of ${#TARGETS[@]}"
 { echo "$PROPOSAL_NOTE"; echo "— batch total: \$$SPENT_FMT (cap \$$CAP), $PASSED passed of ${#TARGETS[@]}"; echo; } | tee -a "$LOG"
 
-if [ -n "${***REDACTED***:-}" ] && [ -n "${TELEGRAM_OPS_CHAT_ID:-}" ]; then
+if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_OPS_CHAT_ID:-}" ]; then
   "$AUTO/notify.sh" "$SUMMARY" || true
 fi
 # A2/A8: NEVER merges. Output is a branch/patch/draft-PR proposal a human must approve.

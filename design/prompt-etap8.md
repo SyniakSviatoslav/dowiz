@@ -19,7 +19,7 @@
 ## ІНВАРІАНТИ (з Phase 0 — діють далі, не повторюються в DoD)
 ESM; TS strict; Zod `.strict()` на кожному вході; параметризовані запити (нуль SQL-конкату); rate-limit на мутуючих; RLS (`SET LOCAL app.user_id` + `FORCE`); status-guarded переходи; N-safe (broadcast лише через MessageBus); **без cookies** (localStorage); `crypto.randomUUID()`; **гроші integer ALL** + `CHECK(>=0)`; секрети лише в `.env`/Fly; `kid` у JWT; `var(--brand-*)` замість хардкоду кольору. **Governance (нове):** нуль PII у будь-яку ШІ-модель; ШІ — лише контент меню.
 
-**Дисципліна міграцій (з Етапу 2):** forward-only; застосовану міграцію **ніколи не редагувати**; деструктив — окремим файлом; усі нижче — `CREATE`. Мова — TS через `tsx`; для enum/RLS/policy/функцій — `pgm.sql()` (білдер їх погано покриває). Інструмент: node-pg-migrate через `***REDACTED***`.
+**Дисципліна міграцій (з Етапу 2):** forward-only; застосовану міграцію **ніколи не редагувати**; деструктив — окремим файлом; усі нижче — `CREATE`. Мова — TS через `tsx`; для enum/RLS/policy/функцій — `pgm.sql()` (білдер їх погано покриває). Інструмент: node-pg-migrate через `DATABASE_URL_MIGRATIONS`.
 
 **Пул-параметри** — підтверджені Phase 0 (з `docs/connection-budget.md`), не вгадані.
 

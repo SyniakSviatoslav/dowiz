@@ -12,10 +12,10 @@ const DB_URL = process.env.SAG_TEST_DB_URL
 function ensureEnv() {
   const d: Record<string, string> = {
     NODE_ENV: 'test', APP_BASE_URL: 'http://localhost:3000',
-    ***REDACTED***: DB_URL, ***REDACTED***: DB_URL, ***REDACTED***: DB_URL,
+    DATABASE_URL_OPERATIONAL: DB_URL, DATABASE_URL_SESSION: DB_URL, DATABASE_URL_MIGRATIONS: DB_URL,
     REDIS_URL: 'redis://localhost:6379',
-    ***REDACTED***: 'test-priv', ***REDACTED***: 'test-pub', JWT_KID: 'test',
-    ***REDACTED***: 'test', ***REDACTED***: 'test',
+    JWT_PRIVATE_KEY: 'test-priv', JWT_PUBLIC_KEY: 'test-pub', JWT_KID: 'test',
+    GOOGLE_CLIENT_ID: 'test', GOOGLE_CLIENT_SECRET: 'test',
     VAPID_PUBLIC_KEY: 'test', VAPID_PRIVATE_KEY: 'test', IP_HASH_SALT: 'test',
     WAITLIST_NOTIFY_EMAIL: 'ops@example.com', // read at module load by the notify worker
   };

@@ -5,9 +5,9 @@ async function run() {
   const env = loadEnv();
   const queueName = 'spike-queue-3';
 
-  const bossProducer = new PgBoss({ connectionString: env.***REDACTED***, max: 2 });
-  const bossWorker1 = new PgBoss({ connectionString: env.***REDACTED***, max: 2 });
-  const bossWorker2 = new PgBoss({ connectionString: env.***REDACTED***, max: 2 });
+  const bossProducer = new PgBoss({ connectionString: env.DATABASE_URL_SESSION, max: 2 });
+  const bossWorker1 = new PgBoss({ connectionString: env.DATABASE_URL_SESSION, max: 2 });
+  const bossWorker2 = new PgBoss({ connectionString: env.DATABASE_URL_SESSION, max: 2 });
 
   await bossProducer.start();
   await bossWorker1.start();

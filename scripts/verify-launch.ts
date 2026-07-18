@@ -44,7 +44,7 @@ async function main() {
   const host = `http://127.0.0.1:${env.PORT || 8080}`;
 
   // ── 1. Supabase tier (Free accepted for pilot) ──────────────────
-  const dbUrl = env.***REDACTED*** || '';
+  const dbUrl = env.DATABASE_URL_MIGRATIONS || '';
   if (dbUrl.includes('supabase') || dbUrl.includes('pooler')) {
     // Check if it looks like Free or Pro
     // Pro tier typically has different connection string pattern

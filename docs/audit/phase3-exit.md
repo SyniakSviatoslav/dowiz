@@ -25,7 +25,7 @@ All **5 critical blockers** from the initial audit have been fixed. The codebase
 
 | # | Blocker | Status | Fix Applied |
 |---|---------|--------|-------------|
-| B1 | HS256 instead of RS256 (Item 77) | ✅ FIXED | `packages/platform/src/auth/jwt.ts:19` — changed to RS256 with `***REDACTED***`/`***REDACTED***` env vars. `alg=none` rejected by jose. HMAC confusion prevented by explicit `algorithms: ['RS256']`. |
+| B1 | HS256 instead of RS256 (Item 77) | ✅ FIXED | `packages/platform/src/auth/jwt.ts:19` — changed to RS256 with `JWT_PRIVATE_KEY`/`JWT_PUBLIC_KEY` env vars. `alg=none` rejected by jose. HMAC confusion prevented by explicit `algorithms: ['RS256']`. |
 | B2 | SQL injection risks (Item 71) | ✅ FIXED | `manifest.ts:48` — quoted identifiers `"${t}"`. `courier-cron.ts:49` — parameterized interval via `$1::interval`. |
 | B3 | PII leak + detector (Item 76) | ✅ FIXED | `owner/settlements.ts:100` — removed `o.customer_id` from query. `pii-leak-detector.ts` — upgraded to scan JSON payloads recursively, detect PII values (phones, emails, addresses). |
 | B4 | No FORCE RLS (Items 14/54) | ✅ FIXED | Migration 0051 adds `FORCE ROW LEVEL SECURITY` to 10 Phase 3 tenant tables. |

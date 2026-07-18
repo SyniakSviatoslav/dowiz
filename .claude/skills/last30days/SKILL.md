@@ -18,7 +18,7 @@ metadata:
         - SCRAPECREATORS_API_KEY
         - OPENAI_API_KEY
         - XAI_API_KEY
-        - ***REDACTED***
+        - OPENROUTER_API_KEY
         - PARALLEL_API_KEY
         - BRAVE_API_KEY
         - APIFY_API_TOKEN
@@ -333,7 +333,7 @@ Common patterns:
 - If SCRAPECREATORS_API_KEY is set: add TikTok, Instagram, Threads (suppress any of these via EXCLUDE_SOURCES)
 - If SCRAPECREATORS_API_KEY is set and the user explicitly requested pinterest for this query (e.g. via `--search=pinterest`): add Pinterest
 - If BSKY_HANDLE and BSKY_APP_PASSWORD are set: add Bluesky
-- If ***REDACTED*** is set and INCLUDE_SOURCES contains perplexity: add Perplexity
+- If OPENROUTER_API_KEY is set and INCLUDE_SOURCES contains perplexity: add Perplexity
 - If EXCLUDE_SOURCES is set (comma-separated, case-insensitive): drop any matching source from the list above before displaying
 
 Then display (use "and more" if 5+ sources, otherwise list all with Oxford comma):
@@ -664,7 +664,7 @@ Topic A (the main topic, first in the vs-string) uses outer `--x-handle`, `--x-r
 
 **Why --competitors-plan over --competitors-list:** without per-entity handles/subs, peer sub-runs run with deterministic single-word planner queries and produce visibly thinner evidence than the main topic. The Resolved Entities block in stdout makes the gap visible — dashes for a peer = you skipped its Step 0.55.
 
-**Engine-internal auto-resolve (headless fallback):** if the engine detects BRAVE_API_KEY / EXA_API_KEY / SERPER_API_KEY / PARALLEL_API_KEY / ***REDACTED***, it runs its own per-entity `resolve.auto_resolve()` before each sub-run. The hosting-model path does NOT need those keys — you are the WebSearch. The engine's auto-resolve is the cron/CI fallback for when no reasoning model is driving.
+**Engine-internal auto-resolve (headless fallback):** if the engine detects BRAVE_API_KEY / EXA_API_KEY / SERPER_API_KEY / PARALLEL_API_KEY / OPENROUTER_API_KEY, it runs its own per-entity `resolve.auto_resolve()` before each sub-run. The hosting-model path does NOT need those keys — you are the WebSearch. The engine's auto-resolve is the cron/CI fallback for when no reasoning model is driving.
 
 **Output:** one `{slug}-raw.md` per entity in `--save-dir` plus the merged comparison on stdout. Synthesis contract identical to the vs-mode protocol above.
 

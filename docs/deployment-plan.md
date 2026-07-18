@@ -10,9 +10,9 @@
 1. Створіть новий проєкт на Supabase.
 2. Перейдіть до налаштувань Database та увімкніть Connection Pooling (Supavisor).
 3. Отримайте три варіанти рядків підключення (Connection Strings):
-   - **Transaction Pooler (порт 6543):** Для `***REDACTED***`. Максимум 8 з'єднань (operational budget).
-   - **Session Pooler (порт 5432):** Для `***REDACTED***`. Максимум 3 з'єднання.
-   - **Direct Connection:** Для `***REDACTED***`. Використовується лише під час CI/CD або ручного запуску міграцій.
+   - **Transaction Pooler (порт 6543):** Для `DATABASE_URL_OPERATIONAL`. Максимум 8 з'єднань (operational budget).
+   - **Session Pooler (порт 5432):** Для `DATABASE_URL_SESSION`. Максимум 3 з'єднання.
+   - **Direct Connection:** Для `DATABASE_URL_MIGRATIONS`. Використовується лише під час CI/CD або ручного запуску міграцій.
 4. **Безпека:** Створіть окрему роль у PostgreSQL для операційного пулу (щоб не використовувати `postgres` superuser, який обходить RLS). RLS (Row Level Security) базується на змінних сесії (наприклад, `SET LOCAL app.current_tenant`).
 5. Запустіть міграції для ініціалізації схеми:
    ```bash
@@ -41,13 +41,13 @@ Supabase Free не має керованих бекапів (PITR), тому R2 
 3. Встановіть необхідні секрети:
    ```bash
    fly secrets set \
-     ***REDACTED***="<string>" \
-     ***REDACTED***="<string>" \
-     ***REDACTED***="<string>" \
-     ***REDACTED***="<secret_key_rs256_or_hs256>" \
+     DATABASE_URL_OPERATIONAL="<string>" \
+     DATABASE_URL_SESSION="<string>" \
+     DATABASE_URL_MIGRATIONS="<string>" \
+     JWT_SIGNING_SECRET="<secret_key_rs256_or_hs256>" \
      JWT_KID="v1" \
-     ***REDACTED***="<google_oauth_client_id>" \
-     ***REDACTED***="<google_oauth_secret>" \
+     GOOGLE_CLIENT_ID="<google_oauth_client_id>" \
+     GOOGLE_CLIENT_SECRET="<google_oauth_secret>" \
      APP_BASE_URL="https://api.dowiz.org" \
      R2_ACCESS_KEY_ID="<key>" \
      R2_SECRET_ACCESS_KEY="<secret>" \

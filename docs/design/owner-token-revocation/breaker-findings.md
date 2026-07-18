@@ -281,7 +281,7 @@ that is the C1 shape. **But P-d does not re-introduce C1**, for a decisive reaso
   exactly nothing. If the operational pool runtime credential is NOBYPASSRLS, these helper queries are *already*
   status-and-tenant-gated by RLS (and any "owner sees rows" behaviour today proves the GUC/credential path already
   admits them); if the runtime credential is still the superuser/`postgres` (BYPASSRLS — the migration note at
-  `1790000000015:9-11` says the cutover is a manual `***REDACTED***` change), then RLS is bypassed and P-d's
+  `1790000000015:9-11` says the cutover is a manual `DATABASE_URL_OPERATIONAL` change), then RLS is bypassed and P-d's
   literal predicate becomes the **actual** status enforcement. **Either way P-d adds no new failure mode** — it does not
   ENABLE/FORCE any RLS (unlike the rejected rev-1 R1 on `users`), it adds no `users` read, and it cannot lock out an
   owner that the existing identical-shape query doesn't already serve. This is the structural reason the pivot's C1

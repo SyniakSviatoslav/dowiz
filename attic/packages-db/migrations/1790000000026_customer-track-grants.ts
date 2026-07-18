@@ -9,7 +9,7 @@ import type { MigrationBuilder } from 'node-pg-migrate';
 //      /api/customer/track/exchange, which JOINs grant -> orders -> customers and
 //      reissues the standard 7-day customer JWT (issueCustomerToken).
 //
-// GRANTS — the landmine. The operational pool (***REDACTED***) performs
+// GRANTS — the landmine. The operational pool (DATABASE_URL_OPERATIONAL) performs
 // both the mint INSERT and the exchange use_count++ UPDATE. Migration 015's
 // SELECT-only lockdown for deliveryos_operational_user is aspirational and not the
 // live role (order INSERTs succeed today, so the deployed role holds DML). Rather
@@ -67,7 +67,7 @@ export async function up(pgm: MigrationBuilder): Promise<void> {
   `);
 
   // Forward-compat: the aspirational operational role (migration 015) needs DML
-  // here too if ***REDACTED*** is ever flipped to it.
+  // here too if DATABASE_URL_OPERATIONAL is ever flipped to it.
   pgm.sql(`
     DO $$
     BEGIN

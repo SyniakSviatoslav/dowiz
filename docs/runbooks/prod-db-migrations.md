@@ -15,14 +15,14 @@ bootstrapped out-of-band) and appends `sslmode=no-verify` when the URL has no ss
 (Supabase poolers require TLS).
 
 ## Prerequisite (verify ONCE before relying on it)
-The prod app (`dowiz`) must have the **`***REDACTED***`** secret set (session
+The prod app (`dowiz`) must have the **`DATABASE_URL_MIGRATIONS`** secret set (session
 pooler / port 5432, the DDL role). If absent, `release_command` exits 1 and the deploy
 aborts. Check / set:
 
 ```
-flyctl secrets list -a dowiz | grep ***REDACTED***
+flyctl secrets list -a dowiz | grep DATABASE_URL_MIGRATIONS
 # if missing:
-flyctl secrets set ***REDACTED***="postgres://postgres:<pw>@<host>:5432/postgres" -a dowiz
+flyctl secrets set DATABASE_URL_MIGRATIONS="postgres://postgres:<pw>@<host>:5432/postgres" -a dowiz
 ```
 (Same for `dowiz-staging` — its secret already exists.) Setting a secret triggers a deploy;
 that deploy will itself run the release_command.
@@ -44,15 +44,15 @@ Only needed if you deploy without the release_command, or to pre-migrate. From a
 with repo access:
 ```
 # 1. Proxy to the prod DB is NOT needed — use the prod session-pooler URL directly.
-export ***REDACTED***="$(grep ^***REDACTED***= .env | cut -d= -f2-)?sslmode=no-verify"
+export DATABASE_URL_MIGRATIONS="$(grep ^DATABASE_URL_MIGRATIONS= .env | cut -d= -f2-)?sslmode=no-verify"
 # 2. Apply pending migrations (no-check-order: prod baseline gaps).
-node_modules/.bin/node-pg-migrate up -d ***REDACTED*** -j ts \
+node_modules/.bin/node-pg-migrate up -d DATABASE_URL_MIGRATIONS -j ts \
   -m packages/db/migrations --tsx --tsconfig tsconfig.migrations.json --no-check-order
 ```
 If node-pg-migrate errors that a platform migration "is preceding already run …", baseline
 it (verify the object exists on prod first), then re-run with `--no-check-order`:
 ```
-psql "$***REDACTED***" -c \
+psql "$DATABASE_URL_MIGRATIONS" -c \
   "INSERT INTO pgmigrations(name,run_on) VALUES ('1780310044711_create-supabase-roles', now()), ('1790000000011_pgboss-bootstrap-schema', now()) ON CONFLICT DO NOTHING;"
 ```
 

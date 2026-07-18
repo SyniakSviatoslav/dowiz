@@ -725,8 +725,8 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
 
   // Generic helper to call any Telegram Bot API method
   async function callTelegramApi(method: string, body: Record<string, any>): Promise<any> {
-    const botToken = process.env.***REDACTED***;
-    if (!botToken) throw new Error('***REDACTED*** not configured');
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) throw new Error('TELEGRAM_BOT_TOKEN not configured');
     const response = await fetch(`https://api.telegram.org/bot${botToken}/${method}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -740,9 +740,9 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
 
   // Helper to send a message via Telegram Bot API
   async function sendMessage(chatId: string | number, text: string): Promise<void> {
-    const botToken = process.env.***REDACTED***;
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) {
-      throw new Error('***REDACTED*** not configured');
+      throw new Error('TELEGRAM_BOT_TOKEN not configured');
     }
 
     const apiBase = `https://api.telegram.org/bot${botToken}`;
@@ -770,9 +770,9 @@ export default (async function telegramWebhookRoutes(fastify, opts) {
     url?: string; 
     cache_time?: number 
   }): Promise<void> {
-    const botToken = process.env.***REDACTED***;
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) {
-      throw new Error('***REDACTED*** not configured');
+      throw new Error('TELEGRAM_BOT_TOKEN not configured');
     }
 
     const apiBase = `https://api.telegram.org/bot${botToken}`;

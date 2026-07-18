@@ -10,7 +10,7 @@ The live empirical probe could **not** be executed from this sandbox: no `flyctl
 
 ## Evidence (three independent, convergent lines)
 
-1. **Supabase `postgres` is not a superuser.** Managed Supabase strips `SUPERUSER` from the `postgres` role (the role behind `***REDACTED***`, user `postgres.elxukhxvuycnftqwaghg`).
+1. **Supabase `postgres` is not a superuser.** Managed Supabase strips `SUPERUSER` from the `postgres` role (the role behind `DATABASE_URL_MIGRATIONS`, user `postgres.elxukhxvuycnftqwaghg`).
 2. **PostgreSQL 16 attribute-grant rule.** A `CREATEROLE` role may confer `BYPASSRLS` on a new/existing role **only if it itself holds `BYPASSRLS`**. Supabase `postgres` holds `CREATEROLE`/`CREATEDB` but **not** `BYPASSRLS` → `CREATE ROLE deliveryos_notif_worker … BYPASSRLS` (and `ALTER ROLE … BYPASSRLS`) executed as the migrations role fails with `permission denied to create role with bypassrls` (or the ALTER equivalent).
 3. **Repo proof — the platform already rejected this exact grant.** `packages/db/migrations/1780691681296_ops-location-alerts-policy.ts` runs `ALTER ROLE deliveryos_api_user BYPASSRLS` wrapped in `EXCEPTION WHEN OTHERS THEN -- Ignore if not allowed`. The council's **BR-1** independently verified (against live behaviour) that `deliveryos_api_user` does **not** effectively bypass RLS — i.e. that ALTER **silently failed in prod**. A swallowed-failure migration is only written because the author already observed the platform refusing the grant. This is the BR-1 anti-pattern itself, and it is direct evidence the migrations role cannot confer `BYPASSRLS`.
 

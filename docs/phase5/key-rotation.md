@@ -9,8 +9,8 @@
    openssl rsa -in jwt-v2-private.pem -pubout -out jwt-v2-public.pem
    ```
 2. Add to env:
-   - `***REDACTED***=v2` (new private key PEM)
-   - `***REDACTED***=v1+v2` (both public keys concatenated or referenced)
+   - `JWT_PRIVATE_KEY=v2` (new private key PEM)
+   - `JWT_PUBLIC_KEY=v1+v2` (both public keys concatenated or referenced)
    - `JWT_KID=v2`
 3. Deploy. New tokens signed with `kid=v2`.
 4. Old tokens with `kid=v1` still validate (v1 public key in set).
@@ -22,7 +22,7 @@
 
 ### Emergency rotation (compromise)
 1. Generate new key pair immediately.
-2. Deploy new `***REDACTED***` + `***REDACTED***` + `JWT_KID`.
+2. Deploy new `JWT_PRIVATE_KEY` + `JWT_PUBLIC_KEY` + `JWT_KID`.
 3. All existing sessions invalidated — force re-login.
 4. Rotate VAPID, Telegram, R2 keys as well if compromise is broad.
 
@@ -34,7 +34,7 @@
 ## Telegram Bot Token
 1. Revoke old token in BotFather.
 2. Generate new token.
-3. Update `***REDACTED***` in env.
+3. Update `TELEGRAM_BOT_TOKEN` in env.
 4. Deploy. Users need to re-connect via `/start`.
 
 ## R2 / S3 Keys

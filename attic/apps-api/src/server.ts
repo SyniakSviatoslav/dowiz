@@ -254,7 +254,7 @@ async function main() {
   // Dedicated backup pool to avoid starving operational queries
   const { Pool } = pg;
   const backupPool = new Pool({
-    connectionString: env.***REDACTED***,
+    connectionString: env.DATABASE_URL_MIGRATIONS,
     max: env.BACKUP_POOL_SIZE || 2
   });
 
@@ -271,7 +271,7 @@ async function main() {
   console.log('[API] MessageBus connected with session pool for LISTEN/NOTIFY support');
   
   // CRITICAL: pg-boss uses operational pool (has DDL permissions to create queue tables)
-  // pg-boss will be instantiated below with explicit ***REDACTED***
+  // pg-boss will be instantiated below with explicit DATABASE_URL_OPERATIONAL
   
   // CRITICAL: Ensure MessageBus is fully connected before registering subscriptions
   // Add a small delay to ensure LISTEN commands are processed
@@ -282,7 +282,7 @@ async function main() {
   // CRITICAL: pg-boss uses session-mode connection (port 5432) for LISTEN/NOTIFY.
   // Transaction pooler (port 6543) blocks LISTEN/NOTIFY. Session port is required.
   // Construct session URL: same as operational but port 5432
-  const opUrl = new URL(env.***REDACTED***);
+  const opUrl = new URL(env.DATABASE_URL_OPERATIONAL);
   opUrl.port = '5432';
   const queue = new PgBossQueueProvider(opUrl.toString());
   await queue.start();
@@ -332,7 +332,7 @@ async function main() {
   const translation = new LibreTranslateProvider();
 
   // Notification Providers
-  const telegramAdapter = new TelegramAdapter(env.***REDACTED*** || '');
+  const telegramAdapter = new TelegramAdapter(env.TELEGRAM_BOT_TOKEN || '');
   const notifyDispatcher = new NotificationDispatcher();
   notifyDispatcher.register('telegram', telegramAdapter);
   // P0-2 (ADR-p0-privacy-hardening): WhatsApp/Baileys channel removed — it streamed
@@ -640,7 +640,7 @@ const retryPolicy = new RetryPolicy();
 fastify.register(telegramWebhookRoutes, {
   db: pool,
   queue: queue.boss,
-  telegramBotSecret: env.***REDACTED*** || '',
+  telegramBotSecret: env.TELEGRAM_BOT_SECRET || '',
   messageBus
 });
 

@@ -17,11 +17,11 @@ async function run() {
   for (let i = 0; i < 8; i++) opClients.push(await opPool.connect());
   
   // 3. Start pg-boss (max 3)
-  const boss = new PgBoss({ connectionString: env.***REDACTED***, max: 3 });
+  const boss = new PgBoss({ connectionString: env.DATABASE_URL_SESSION, max: 3 });
   await boss.start();
   
   // 4. Run transient migration-like connection
-  const migrationClient = new pg.Client({ connectionString: env.***REDACTED*** });
+  const migrationClient = new pg.Client({ connectionString: env.DATABASE_URL_SESSION });
   await migrationClient.connect();
   
   // Now we have 3 + 8 + 3 + 1 = 15 max connections, but let's measure backend connections.

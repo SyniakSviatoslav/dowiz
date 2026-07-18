@@ -10,13 +10,13 @@
  *   npx tsx scripts/openrouter-implement.ts --task "..."
  *
  * Env:
- *   ***REDACTED***       (required)
+ *   OPENROUTER_API_KEY       (required)
  *   OPENROUTER_MODEL         (optional, overrides primary model)
  *   OPENROUTER_MODEL_FALLBACKS (optional, comma-separated list, overrides built-in fallbacks)
  *   OPENROUTER_MAX_TOKENS    (optional, default: 8192)
  */
 
-const API_KEY = process.env.***REDACTED***;
+const API_KEY = process.env.OPENROUTER_API_KEY;
 const MAX_TOKENS = Number(process.env.OPENROUTER_MAX_TOKENS ?? 8192);
 
 // Free models in priority order — tried sequentially on rate-limit / error
@@ -39,7 +39,7 @@ function buildModelChain(): string[] {
 }
 
 if (!API_KEY) {
-  process.stderr.write('[openrouter-implement] ***REDACTED*** is not set\n');
+  process.stderr.write('[openrouter-implement] OPENROUTER_API_KEY is not set\n');
   process.exit(1);
 }
 

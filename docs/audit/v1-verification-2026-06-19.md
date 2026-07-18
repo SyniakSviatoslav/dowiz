@@ -110,7 +110,7 @@ checkout-OTP UI, storefront test-data clutter, and the `'open'/'active'` storefr
   Fix: track the per-room handler and `unsubscribe` on room delete. (Lifecycle itself is correct; this is
   a delivery-layer defect — reliability/memory.)
 
-- **P1-SECRET · Weak `***REDACTED***`** (`12345…`, 32 chars low-entropy) in `.env`. Confirm whether
+- **P1-SECRET · Weak `JWT_SIGNING_SECRET`** (`12345…`, 32 chars low-entropy) in `.env`. Confirm whether
   any HS256 path still uses it; rotate to 256-bit random. Ensure prod uses Fly secrets, not the file.
 - **P1-SITEMAP · `sitemap.xml` returns 500 on prod.** Broken route (`routes/public/seo.ts`); fix or
   disable. Hurts SEO and looks broken to crawlers.

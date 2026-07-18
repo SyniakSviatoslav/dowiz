@@ -1,5 +1,5 @@
 import pg from 'pg';
-const PROD = new pg.Client({ connectionString: process.env.***REDACTED***, ssl: { rejectUnauthorized: false } });
+const PROD = new pg.Client({ connectionString: process.env.DATABASE_URL_SESSION, ssl: { rejectUnauthorized: false } });
 const STG  = new pg.Client({ connectionString: process.env.STAGING_DB_URL });
 await PROD.connect(); await STG.connect();
 

@@ -44,7 +44,7 @@ If primary DB is lost:
 3. **Set environment variables** on the restore machine:
    - `BACKUP_ENCRYPTION_KEY` (same key as when backup was created)
    - `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`
-   - `***REDACTED***` pointing to the new instance
+   - `DATABASE_URL_MIGRATIONS` pointing to the new instance
 4. **Restore from latest snapshot**:
    ```bash
    # List snapshots to find the latest completed one
@@ -58,7 +58,7 @@ If primary DB is lost:
    ```bash
    # Download and decrypt manually
    # Then run:
-   pg_restore -d "$***REDACTED***" --clean --if-exists --no-owner --no-acl <decrypted_dump>
+   pg_restore -d "$DATABASE_URL_MIGRATIONS" --clean --if-exists --no-owner --no-acl <decrypted_dump>
    ```
 5. **Verify application connectivity** (≤ 30 min).
 6. **Update DNS/Wiring** to point API servers to the new database instance.

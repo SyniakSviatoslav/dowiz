@@ -254,7 +254,7 @@ def build_parser() -> argparse.ArgumentParser:
                         choices=["auto", "brave", "exa", "serper", "parallel", "none"],
                         help="Web search backend (default: auto, tries Brave then Exa then Serper then Parallel)")
     parser.add_argument("--deep-research", action="store_true",
-                        help="Use Perplexity Deep Research (~$0.90/query) for in-depth analysis. Requires ***REDACTED***.")
+                        help="Use Perplexity Deep Research (~$0.90/query) for in-depth analysis. Requires OPENROUTER_API_KEY.")
     parser.add_argument("--plan", help="JSON query plan (skips internal LLM planner). Can be a JSON string or a file path.")
     parser.add_argument("--save-suffix", help="Suffix for saved output filename (e.g., 'gemini' → kanye-west-raw-gemini.md)")
     parser.add_argument("--subreddits", help="Comma-separated subreddit names to search (e.g., SaaS,Entrepreneur)")
@@ -693,8 +693,8 @@ def main() -> int:
 
         # --deep-research: auto-enable perplexity source and set deep flag
         if args.deep_research:
-            if not config.get("***REDACTED***"):
-                print("Error: --deep-research requires ***REDACTED***", file=sys.stderr)
+            if not config.get("OPENROUTER_API_KEY"):
+                print("Error: --deep-research requires OPENROUTER_API_KEY", file=sys.stderr)
                 sys.exit(1)
             config["_deep_research"] = True
             # Auto-enable perplexity in INCLUDE_SOURCES
@@ -787,7 +787,7 @@ def main() -> int:
                         "\n"
                         "HEADLESS / CRON PATH (no hosting model available): set "
                         "BRAVE_API_KEY / EXA_API_KEY / SERPER_API_KEY / PARALLEL_API_KEY / "
-                        "***REDACTED*** and re-run.\n"
+                        "OPENROUTER_API_KEY and re-run.\n"
                         "\n"
                         "MINIMUM ESCAPE HATCH: pass --competitors-list 'A,B,C' to skip "
                         "discovery. Without --competitors-plan, peer sub-runs fall back to "

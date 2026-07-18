@@ -67,18 +67,18 @@ git log -p --all -- '.env*' | grep -E '^[+-]' | sed -E 's/(=|:).*/\1 <VALUE-REDA
 Credential-shaped keys are discoverable in history (committed in a `.env*`-class file):
 
 ```
-***REDACTED***= <VALUE-REDACTED>
-***REDACTED***= <VALUE-REDACTED>
-***REDACTED***=    <VALUE-REDACTED>
-***REDACTED***=        <VALUE-REDACTED>
-***REDACTED***=    <VALUE-REDACTED>
-***REDACTED***=         <VALUE-REDACTED>
-***REDACTED***=          <VALUE-REDACTED>
-***REDACTED***=      <VALUE-REDACTED>
-***REDACTED***=     <VALUE-REDACTED>
-***REDACTED***=      <VALUE-REDACTED>
-***REDACTED***=     <VALUE-REDACTED>
-***REDACTED***=       <VALUE-REDACTED>
+DATABASE_URL_MIGRATIONS= <VALUE-REDACTED>
+DATABASE_URL_OPERATIONAL= <VALUE-REDACTED>
+DATABASE_URL_SESSION=    <VALUE-REDACTED>
+GOOGLE_CLIENT_ID=        <VALUE-REDACTED>
+GOOGLE_CLIENT_SECRET=    <VALUE-REDACTED>
+JWT_PRIVATE_KEY=         <VALUE-REDACTED>
+JWT_PUBLIC_KEY=          <VALUE-REDACTED>
+JWT_SIGNING_SECRET=      <VALUE-REDACTED>
+TELEGRAM_BOT_SECRET=     <VALUE-REDACTED>
+TELEGRAM_BOT_TOKEN=      <VALUE-REDACTED>
+TEST_OWNER_PASSWORD=     <VALUE-REDACTED>
+WHATSAPP_AUTH_DIR=       <VALUE-REDACTED>
 ```
 
 The only `.env*` path ever added to the tree is `.env.example` (a template), but the keys

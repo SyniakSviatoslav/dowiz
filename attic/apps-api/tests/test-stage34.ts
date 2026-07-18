@@ -85,11 +85,11 @@ await test('H2: Secrets and key management', async (t) => {
       const lines = content.split('\n');
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
-        if (line.includes('process.env.***REDACTED***') && line.includes('||') && !line.includes('process.env.***REDACTED*** || \"\"')) {
-          violations.push(`${file}:${i + 1}: ***REDACTED*** has fallback default`);
+        if (line.includes('process.env.JWT_PRIVATE_KEY') && line.includes('||') && !line.includes('process.env.JWT_PRIVATE_KEY || \"\"')) {
+          violations.push(`${file}:${i + 1}: JWT_PRIVATE_KEY has fallback default`);
         }
-        if (line.includes('process.env.***REDACTED***') && line.includes('||') && !line.includes('process.env.***REDACTED*** || \"\"')) {
-          violations.push(`${file}:${i + 1}: ***REDACTED*** has fallback default`);
+        if (line.includes('process.env.JWT_PUBLIC_KEY') && line.includes('||') && !line.includes('process.env.JWT_PUBLIC_KEY || \"\"')) {
+          violations.push(`${file}:${i + 1}: JWT_PUBLIC_KEY has fallback default`);
         }
       }
     }

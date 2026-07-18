@@ -85,13 +85,13 @@ hard Phase-2 failure under the new "explicit grants" design.** One CRITICAL, one
 everything else verified clean.
 
 ### Grounding (live `.env` + migrations, this round)
-- `***REDACTED***` = **`deliveryos_api_user`** (`.env:4`, transaction pooler :6543). This
+- `DATABASE_URL_OPERATIONAL` = **`deliveryos_api_user`** (`.env:4`, transaction pooler :6543). This
   is `fastify.db` / `server.db` — **the pool every route handler uses for both reads AND writes**
   (`auth.ts:126` does `UPDATE … via fastify.db`; `public/menu.ts:16` does
   `server.db.query('SELECT read_public_menu…')`).
-- `***REDACTED***` and `***REDACTED***` = **`postgres`** (`.env:5-6`, :5432). `postgres`
+- `DATABASE_URL_SESSION` and `DATABASE_URL_MIGRATIONS` = **`postgres`** (`.env:5-6`, :5432). `postgres`
   is used only for LISTEN/NOTIFY (MessageBus), pg-boss, migrations, and backup `pg_dump`
-  (`workers/backup/index.ts:95` → `***REDACTED***`). It is **NOT** in any request path.
+  (`workers/backup/index.ts:95` → `DATABASE_URL_MIGRATIONS`). It is **NOT** in any request path.
 - `db/src/index.ts:28-34` guardrail **FATAL-rejects** the operational pool if it ever connects as
   `postgres` — so the runtime writer is *contractually never* the table owner.
 - `deliveryos_api_user` is `BYPASSRLS` (`1780691681296:8`) but is **never** an owner and has **no**
@@ -141,7 +141,7 @@ asymmetric defect, not an over-grant.
   service_role` is thus **load-bearing and correct** — it removes the one PostgREST role that would
   otherwise still see `product_media`. The round-1 cross-tenant *read* leak is genuinely closed.
 - **REVOKE-from-service_role does NOT break backup/migration.** Backup `pg_dump` and migrations run
-  as `postgres` (`***REDACTED***`, the owner), never `service_role`. No legitimate path
+  as `postgres` (`DATABASE_URL_MIGRATIONS`, the owner), never `service_role`. No legitimate path
   uses `service_role` (ADR-006: custom Fastify pooler, not PostgREST). REVOKE is inert to ops.
 - **H2 idempotency — HOLDS, including the post-CREATE-TABLE/pre-grant crash edge.** A retry after a
   crash between `CREATE TABLE` and the grant block re-enters the *same* migration transaction from

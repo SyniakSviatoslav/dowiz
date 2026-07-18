@@ -22,7 +22,7 @@ Switch models via `OPENROUTER_MODEL` env var.
 
 Add to your `.env` (never commit):
 ```
-***REDACTED***=sk-or-v1-...
+OPENROUTER_API_KEY=sk-or-v1-...
 ```
 
 Get a key at https://openrouter.ai/keys (free tier available, no credit card required).
@@ -105,7 +105,7 @@ Never ask the model to produce multiple files in one call — parsing becomes fr
 
 | Var | Default | Description |
 |-----|---------|-------------|
-| `***REDACTED***` | *(required)* | Your OpenRouter key |
+| `OPENROUTER_API_KEY` | *(required)* | Your OpenRouter key |
 | `OPENROUTER_MODEL` | `nvidia/nemotron-3-super-120b-a12b:free` | Model to use |
 | `OPENROUTER_MAX_TOKENS` | `8192` | Max output tokens |
 

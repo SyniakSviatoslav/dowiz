@@ -42,7 +42,7 @@ import PgBoss from 'pg-boss';
  */
 
 const MIGRATION_DB_URL =
-  process.env.***REDACTED*** || process.env.***REDACTED***;
+  process.env.DATABASE_URL_MIGRATIONS || process.env.DATABASE_URL_SESSION;
 
 /**
  * Source of truth: packages/shared-types/src/queue-names.ts (QUEUE_NAMES).
@@ -90,7 +90,7 @@ const APP_QUEUES: readonly string[] = [
 export async function up(pgm: MigrationBuilder): Promise<void> {
   if (!MIGRATION_DB_URL) {
     throw new Error(
-      'pgboss-bootstrap: ***REDACTED*** (or ***REDACTED***) must be set'
+      'pgboss-bootstrap: DATABASE_URL_MIGRATIONS (or DATABASE_URL_SESSION) must be set'
     );
   }
 

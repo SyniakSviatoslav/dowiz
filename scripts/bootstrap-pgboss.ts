@@ -1,7 +1,7 @@
 /**
  * NX-2 bootstrap: Pre-create pg-boss tables under admin/migrate role.
  *
- * Runs pg-boss with migrate:true (default) using ***REDACTED***
+ * Runs pg-boss with migrate:true (default) using DATABASE_URL_MIGRATIONS
  * (admin role with DDL privileges). After this script completes,
  * production pg-boss instances can start with migrate:false.
  *
@@ -13,10 +13,10 @@ import { loadEnv } from '@deliveryos/config';
 
 async function bootstrap() {
   const env = loadEnv();
-  const adminUrl = env.***REDACTED***;
+  const adminUrl = env.DATABASE_URL_MIGRATIONS;
 
   if (!adminUrl) {
-    console.error('***REDACTED*** not set — cannot bootstrap pg-boss');
+    console.error('DATABASE_URL_MIGRATIONS not set — cannot bootstrap pg-boss');
     process.exit(1);
   }
 

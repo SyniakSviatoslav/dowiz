@@ -8,7 +8,7 @@ import { ScriptedReasoner, clientOrderSmokePlan } from '../driver/reasoners.ts';
 // Checkpoint-A plumbing smoke: the driver drives the LIVE storefront via observe→reason
 // (scripted, NOT discovery)→Song-wrapped act, producing a transcript + Song verses + a trace,
 // within the 333 tokens/hr cap. Proves the harness end-to-end. Authentic LLM discovery
-// (LlmReasoner / Phase B) is gated on ***REDACTED*** and is NOT exercised here.
+// (LlmReasoner / Phase B) is gated on OPENROUTER_API_KEY and is NOT exercised here.
 // Run: VITE_BASE_URL=https://dowiz-staging.fly.dev pnpm exec playwright test driver-smoke --project=desktop --reporter=list
 const BASE = process.env.VITE_BASE_URL || 'https://dowiz-staging.fly.dev';
 

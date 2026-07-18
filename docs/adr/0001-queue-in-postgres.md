@@ -4,7 +4,7 @@
 The v3.1 architecture bets on using the same Supabase PostgreSQL database for the background worker queue via `pg-boss`, rather than provisioning a separate Redis/BullMQ cluster. This spike validates the four riskiest assumptions of this bet against a real Supabase Free Tier project to inform a GO/PIVOT decision.
 
 ## Executed Spike
-All spike tests were executed in `spikes/stage3-queue/` against the Supabase backend using the `***REDACTED***` (port 5432) and `***REDACTED***` (port 6543) via `pg-boss` (v10).
+All spike tests were executed in `spikes/stage3-queue/` against the Supabase backend using the `DATABASE_URL_SESSION` (port 5432) and `DATABASE_URL_OPERATIONAL` (port 6543) via `pg-boss` (v10).
 
 ### H1 — Install
 **Result:** Passed ✅
@@ -39,9 +39,9 @@ All spike tests were executed in `spikes/stage3-queue/` against the Supabase bac
 All four hypotheses have been confirmed. The `pg-boss` solution operates natively and reliably within the Supabase Free Tier limits, provided the connection budget is strictly adhered to. 
 
 ## Confirmed Parameters for Stage 4-5
-- **Operational Pool (`***REDACTED***` - 6543):** Max `8`
-- **Session Pool (`***REDACTED***` - 5432):** Max `3`
-- **`pg-boss` Worker (`***REDACTED***` - 5432):** Max `3`
+- **Operational Pool (`DATABASE_URL_OPERATIONAL` - 6543):** Max `8`
+- **Session Pool (`DATABASE_URL_SESSION` - 5432):** Max `3`
+- **`pg-boss` Worker (`DATABASE_URL_SESSION` - 5432):** Max `3`
 - **Total Peak Active Connections:** `14` (Leaves room for transient DB migrations).
 
 ## PIVOT / Fallback Options

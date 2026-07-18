@@ -26,7 +26,7 @@ import PgBoss from 'pg-boss';
  * as the pgboss owner). Any other error still aborts the migration.
  */
 const MIGRATION_DB_URL =
-  process.env.***REDACTED*** || process.env.***REDACTED***;
+  process.env.DATABASE_URL_MIGRATIONS || process.env.DATABASE_URL_SESSION;
 
 const NEW_QUEUES: readonly string[] = [
   'access-request.notify',           // per-row operator email
@@ -42,7 +42,7 @@ function isInsufficientPrivilege(err: unknown): boolean {
 export async function up(pgm: MigrationBuilder): Promise<void> {
   if (!MIGRATION_DB_URL) {
     throw new Error(
-      'access-request-notify-queue: ***REDACTED*** (or ***REDACTED***) must be set'
+      'access-request-notify-queue: DATABASE_URL_MIGRATIONS (or DATABASE_URL_SESSION) must be set'
     );
   }
 

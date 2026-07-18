@@ -22,7 +22,7 @@ seed), and smallest attack surface for a 1-operator deployment (dowiz today).
 ### Concrete shape
 - **Root of trust:** a single operator-held key pair (ML-DSA-65, reuses `dowiz-pq`
   `feat/pq-crypto-tier1` — 178 tests, KAT bit-exact). Stored in the operator's secret
-  store (`.env` `***REDACTED***`-class isolation), never in repo.
+  store (`.env` `JWT_SIGNING_SECRET`-class isolation), never in repo.
 - **node_id derivation (ADR-0007):** `node_id = H(pq_pub ‖ classical_pub)` over SPKI
   encodings. Recomputed-from-both-pubkeys MUST match (RED gate when implemented).
 - **Genesis loader (prod):** reads a *frozen* anchor-set from config/disk (not inline

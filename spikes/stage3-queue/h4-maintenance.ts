@@ -17,7 +17,7 @@ async function run() {
 
   console.log('Connecting to pg-boss...');
   const boss = new PgBoss({
-    connectionString: env.***REDACTED***,
+    connectionString: env.DATABASE_URL_SESSION,
     max: 3,
   });
 

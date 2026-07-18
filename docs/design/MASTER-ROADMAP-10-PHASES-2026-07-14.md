@@ -97,7 +97,7 @@ exercise in self-improvement-log.md.**
 ### P10 — Open-source readiness (ADR-020, gated) — OPEN (gap audit delivered)
 AGPLv3 + TM + DCO. Wave delivered `docs/design/P10-OSS-READINESS-AUDIT.md` (flag-only):
 **real gaps** — LICENSE is Apache-2.0 (roadmap mandates AGPLv3+TM+DCO); secrets recoverable
-from git history (DATABASE_URL in 9 diff-hunks, ***REDACTED*** across 47 commits) →
+from git history (DATABASE_URL in 9 diff-hunks, GOOGLE_CLIENT_SECRET across 47 commits) →
 scrub force-push is a HARD blocker; DCO trailers essentially absent; no CONTRIBUTING/NOTICE.
 Gated on secrets scrub + EUTM. SECURITY INCIDENT (creds in git history) rotated; REMOTE
 scrub force-push = open gate → HARD blocker for prod push.
