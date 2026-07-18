@@ -78,7 +78,9 @@ impl BumpArena {
         let size = len
             .checked_mul(std::mem::size_of::<T>())
             .expect("BumpArena: element count overflows usize");
-        let end = start.checked_add(size).expect("BumpArena: region size overflows usize");
+        let end = start
+            .checked_add(size)
+            .expect("BumpArena: region size overflows usize");
 
         // SAFETY: `buf` is exclusively owned via `UnsafeCell`; `&self` proves no other
         // reference to the region is currently handed out that aliases `start..end`, because the
@@ -200,7 +202,11 @@ mod tests {
         // A 8-byte-aligned type must land on an 8-byte boundary even after the u8 alloc.
         let f: &mut [f64] = a.alloc_slice(1).unwrap();
         let f_addr = f.as_ptr() as usize;
-        assert_eq!(f_addr % std::mem::align_of::<f64>(), 0, "f64 slice must be aligned");
+        assert_eq!(
+            f_addr % std::mem::align_of::<f64>(),
+            0,
+            "f64 slice must be aligned"
+        );
     }
 
     #[test]
