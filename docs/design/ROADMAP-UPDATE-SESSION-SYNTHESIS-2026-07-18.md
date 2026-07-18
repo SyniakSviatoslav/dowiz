@@ -78,13 +78,28 @@ W4 product write-path gated on NOBYPASSRLS. No Layer gap.
 
 ### 1.2 Verification / red-team CRITICALs — all repos, with live-status
 
-The bebop2 cross-repo master synthesis referenced by the corpus
-(`/root/bebop2-verify-redteam/...CROSS-REPO-VERIFICATION-MASTER-SYNTHESIS.md`) is **not physically
-present** in any checked worktree this pass (the `/root/bebop2-verify-redteam` worktree does not exist;
-the `research/bebop2-verify-redteam-2026-07-17` branch in `bebop-repo` does not carry it). Flagged, not
-fabricated — the four *present* per-repo docs below are the authority used here; the bebop2 findings
-(11 HIGH: unauthenticated revocation + a dormant safety gate) survive only as the methodology cross-refs
-inside the four present docs.
+**Update (2026-07-18, post-regeneration).** The prior pass of this document found the bebop2 cross-repo
+master synthesis genuinely missing — confirmed via git archaeology (empty reflog, `fsck --unreachable`,
+`rev-list --objects --all` all came up empty) as a real, permanent loss: the original
+`/root/bebop2-verify-redteam` worktree vanished and its branch ref never advanced past its base commit,
+because the work was never pushed to a remote. It has since been **regenerated from scratch** (fresh
+re-audit, not reconstructed from memory) and is now real, reviewed, and pushed:
+`/root/bebop2-verify-redteam/docs/verification-2026-07-17/CROSS-REPO-VERIFICATION-MASTER-SYNTHESIS.md`
+(branch `research/bebop2-verify-redteam-2026-07-17`, pushed to `openbebop`, remote HEAD `310cf33`,
+verified via `git ls-remote`). The bebop2-side corpus is now V1-V9 + a per-repo `VERIFICATION-MASTER-SYNTHESIS.md`,
+adversarially self-reviewed (two independent internal review passes caught and the author corrected: a
+wrong file path on V2, an inflated "byte-for-byte" wording, a mis-attributed money-law citation on the
+cross-repo Pattern-1 counter-example, and — the most consequential correction — **V7 (mobile compile-target
+failure) was downgraded from HIGH to LOW-MEDIUM**: no plan actually claims native Android/iOS reach, and
+the `compile_error!` on non-wasm32 targets is the *prescribed* fail-closed remediation behavior from
+REMEDIATION-BLUEPRINT §3B, not a defect). New: V8 (replay-ledger eviction reopens a replay window) and V9
+(a genuine positive finding — the PQ A-from-CBD remediation is real, backed by committed NIST ACVP
+vectors). **The "11 HIGH" figure from the pre-regeneration pass is now stale** — re-tally against the live
+V1-V9 docs before citing a count.
+
+The four *other* per-repo docs (dowiz, agentic-mesh, spectral-evolution, hermes) remain the authority for
+their own repos as before; this update only concerns the bebop2/openbebop leg and the cross-repo
+synthesis that aggregates all five.
 
 **dowiz kernel (V1 + V3, pinned at `4956faca3`, still-live on main unless noted):**
 
@@ -416,9 +431,10 @@ reachable in ≤2 hops (the index's own maintenance rule):**
 
 ## 7. Honesty notes
 
-- The bebop2 `CROSS-REPO-VERIFICATION-MASTER-SYNTHESIS.md` referenced throughout the corpus is **not
-  physically present** in any checked worktree this pass — flagged, not fabricated; the four present
-  per-repo verification docs are the authority used.
+- **Superseded (2026-07-18):** the bebop2 `CROSS-REPO-VERIFICATION-MASTER-SYNTHESIS.md`, flagged in the
+  original pass of this document as not physically present anywhere, was a genuine, permanent loss
+  (confirmed via git archaeology, not a hasty guess) and has since been regenerated fresh, adversarially
+  self-reviewed, and pushed — see §1.2.
 - Test count for `main @ 87da9ccd4` was **not re-run** here (no build in this doc pass) — stated as stale,
   not guessed.
 - The corpus was found **partly self-consistent**: the fail-operational round-1 §6 and round-2 already
