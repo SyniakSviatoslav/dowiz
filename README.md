@@ -1,8 +1,12 @@
 # dowiz
 
-> Sovereign, post-quantum delivery infrastructure — a deterministic Rust/WASM
-> kernel and a store-and-forward mesh protocol. **DeliveryOS** is the reference
-> application built on top of it, not the other way around.
+> A decentralized mesh-hub delivery platform — no platform tariffs on
+> participation, no behavioral scoring or profiling of any participant
+> (enforced in CI, not just promised), and network-level anonymity as an
+> active, concretely-scoped roadmap item (Tor/onion access — see below), not
+> a slogan. Built on a deterministic Rust/WASM kernel and a store-and-forward
+> mesh protocol. **DeliveryOS** is the reference application built on top of
+> it, not the other way around.
 
 **Status: pre-1.0 / experimental.** The kernel math is deterministic and
 self-verifying; the surrounding product surface is not yet a production GA.
@@ -206,6 +210,34 @@ work, verification tooling) is tracked under `docs/design/`, anchored by
 under active pre-1.0 hardening — the post-quantum crypto and mesh layers in
 particular are still being reviewed and tightened. Please report security issues
 privately (see `SECURITY.md`).
+
+A few specific directions worth knowing about, each honestly labeled by its real
+status today:
+
+- **Network-level anonymity via Tor/onion access** — a concretely scoped
+  blueprint (`docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P53-tor-onion-integration.md`),
+  not yet built. It hides a client's or a small venue's network identity/location
+  to reach the service — the same class of technology SecureDrop and similar
+  privacy-critical services use — without touching the capability-cert auth
+  layer at all: anonymity at the network layer is never a substitute for the
+  authentication layer.
+- **Spectral graph methods** — already real and load-bearing in specific,
+  narrow places today (`kernel/src/spectral.rs`: PageRank-style ranking, Markov
+  spectral-gap analysis, graph-Laplacian mode work), with active research into
+  where else in the stack (CPU and GPU) the same eigenvector machinery
+  genuinely earns its cost rather than being applied for its own sake.
+- **A living-memory retrieval layer** — a real, multi-layer (trigram + BM25 +
+  planned semantic) design exists, but it is explicitly a blueprint today: its
+  only current driver in the tree is inert. Treat this as a research direction,
+  not a shipped capability, until this note is updated.
+- **A closed-loop self-improvement process** — this project's own development
+  process uses a Markov-attractor-based feedback loop over its own tooling
+  outcomes to catch drift; it's real infrastructure for how the project is
+  built, not (yet) a feature exposed to platform users.
+- **Quantum-sourced entropy** — cryptographic key material is already seeded
+  from a real quantum random number source rather than a weaker PRNG alone;
+  extending genuine quantum-noise injection further into the stack is an open
+  research thread, not a finished claim.
 
 ---
 
