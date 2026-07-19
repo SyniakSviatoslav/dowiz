@@ -152,6 +152,20 @@ pub fn shake256_xof(seed: &[u8; 32], i: u8, j: u8, len: usize) -> Vec<u8> {
     out
 }
 
+/// SHA3-256 (rate 136, pad 0x06). Squeezes 32 bytes.
+pub fn sha3_256(input: &[u8]) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    sponge(136, 0x06, input, &mut out);
+    out
+}
+
+/// SHA3-512 (rate 72, pad 0x06). Squeezes 64 bytes.
+pub fn sha3_512(input: &[u8]) -> [u8; 64] {
+    let mut out = [0u8; 64];
+    sponge(72, 0x06, input, &mut out);
+    out
+}
+
 /// G(X) = SHAKE256(X, 64) (FIPS 203 §2).
 pub fn xof_g(input: &[u8]) -> [u8; 64] {
     let mut out = [0u8; 64];
@@ -189,6 +203,20 @@ pub fn prf(s: &[u8; 32], b: u8, len: usize) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Parse a hex string literal into a fixed array (test helper).
+    fn hex<const L: usize>(s: &str) -> [u8; L] {
+        let s = s.trim();
+        assert_eq!(s.len(), L * 2, "hex length mismatch");
+        let mut out = [0u8; L];
+        let bytes = s.as_bytes();
+        for i in 0..L {
+            let hi = (bytes[2 * i] as char).to_digit(16).unwrap();
+            let lo = (bytes[2 * i + 1] as char).to_digit(16).unwrap();
+            out[i] = ((hi << 4) | lo) as u8;
+        }
+        out
+    }
 
     // FIPS 202 known-answer tests (empty-string anchors are unambiguous).
     // SHAKE256("") = 46b9dd2b0ba88d13233b3feb743eeb243fcd52ea62b81b82b50c27646ed5762f
@@ -232,6 +260,22 @@ mod tests {
                 0x11, 0x4d, 0x8d, 0xb4, 0x45, 0x30, 0xf8, 0xf1, 0xe1, 0xee, 0x4f, 0x94, 0xea, 0x37,
                 0xe7, 0x8b, 0x57, 0x39
             ]
+        );
+    }
+
+    // SHA3 KAT (FIPS 202) — anchors the newly-added SHA3-256/512; the old KEM
+    // only used SHAKE, so a SHA3 bug would have been invisible until now.
+    #[test]
+    fn kem_debug_sha3_kat() {
+        let s3_256_empty = sha3_256(&[]);
+        assert_eq!(
+            s3_256_empty,
+            hex::<32>("a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a")
+        );
+        let s3_512_empty = sha3_512(&[]);
+        assert_eq!(
+            s3_512_empty,
+            hex::<64>("a69f73cca23a9ac5c8b567dc185a756e97c982164fe25859e0d1dcc1475c80a615b2123af1f5f94c11e3e9402c3ac558f500199d95b6d3e301758586281dcd26")
         );
     }
 }

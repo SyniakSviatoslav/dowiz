@@ -36,7 +36,12 @@ pub fn hybrid_keygen(x_seed: &[u8; 32], kem_seed: &[u8; 32]) -> HybridKeypair {
     sk[31] |= 64;
     let base = [9u8; 32]; // curve25519 generator u-coordinate
     let x_pk = x25519(&sk, &base);
-    let (kem_pk, kem_sk) = kem::keygen_internal(kem_seed);
+    // ML-KEM-768 KeyGen_internal takes the FIPS-203 two-seed (d, z) FO pair. We
+    // derive z from a deterministic transform of kem_seed so the deterministic
+    // test path stays reproducible; production callers should supply an
+    // independent z (P91.1 reconciled the one-seed keygen to (d, z)).
+    let kem_z = crate::pq::keccak::xof_h(kem_seed);
+    let (kem_pk, kem_sk) = kem::keygen_internal(kem_seed, &kem_z);
     HybridKeypair {
         x_pk,
         x_sk: sk,
