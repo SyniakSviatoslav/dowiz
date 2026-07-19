@@ -166,16 +166,16 @@ jobs:
           fetch-depth: 0
       - name: Pre-fetch crates offline (no network in CI — see P01 §2.1)
         run: cargo fetch --manifest-path kernel/Cargo.toml
-      - name: Run kernel criterion benches + compare against committed baseline
+      - name: Run kernel criterion benches + fail-closed A/B regression gate
         run: |
           cd kernel
-          python3 benches/bench_track.py --threshold 10
-      - name: Upload bench history on regression (trend artifact, no commit-back loop)
+          python3 benches/bench_track.py --ci --threshold 10
+      - name: Upload bench trend on regression (trend artifact, no commit-back loop)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: bench-history
-          path: kernel/benches/BENCH_HISTORY.md
+          name: bench-trend
+          path: kernel/benches/bench_trend.json
           if-no-files-found: warn
 
   # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
