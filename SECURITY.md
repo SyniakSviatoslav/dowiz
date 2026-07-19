@@ -1,6 +1,6 @@
 # Security Policy
 
-{{BRAND}} (dowiz / DeliveryOS) is sovereign delivery infrastructure built on a
+dowiz is sovereign delivery infrastructure built on a
 deterministic Rust/WASM kernel and a post-quantum mesh protocol. Its safety model
 is **fail-closed by design**, not by policy:
 
@@ -24,7 +24,7 @@ findings get priority and a fast, public fix.
 
 ## Safety model
 
-{{BRAND}} is fail-closed by design: the kernel red-line gate (money / auth / RLS /
+dowiz is fail-closed by design: the kernel red-line gate (money / auth / RLS /
 migrations) denies unsafe capability by default, not by policy. Red-line or
 kernel-gate bypass findings get priority and a fast public fix.
 
