@@ -200,6 +200,79 @@ pub fn is_flagged(subscribed: &[AbuseBlocklist], actor: &[u8; 32]) -> Option<Rep
     None
 }
 
+/// P74 (M2/M3) operator subscription surface — the kernel-local production caller
+/// that ties [`SignedBlocklist::sign`] (publisher side) and [`is_flagged`]
+/// (subscriber side) together. A subscribing operator holds a set of *verified*
+/// lists and asks advisory abuse questions over them.
+///
+/// A list is only admitted to the subscribed set after its RequireBoth hybrid
+/// signature verifies against the publisher's advertised keys ([`subscribe`]);
+/// a forged/reordered/truncated list is refused and never enters the set. Queries
+/// ([`flagged_reason`]) run [`is_flagged`] over ONLY the verified set — the return
+/// type `Option<ReportReason>` is compile-level proof this surface can never emit a
+/// score, count, or ranking (§16.26/§16.59). It is advisory-only: it surfaces a
+/// reason to the operator and takes no action.
+///
+/// [`subscribe`]: BlocklistSubscriptions::subscribe
+/// [`flagged_reason`]: BlocklistSubscriptions::flagged_reason
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct BlocklistSubscriptions {
+    /// Verified, advisory lists this operator subscribes to.
+    verified: Vec<AbuseBlocklist>,
+}
+
+impl BlocklistSubscriptions {
+    /// A fresh, empty subscription set.
+    pub fn new() -> Self {
+        Self {
+            verified: Vec::new(),
+        }
+    }
+
+    /// The publisher side: an operator signs its own `AbuseBlocklist` for
+    /// distribution. Thin wrapper over [`SignedBlocklist::sign`] naming it as the
+    /// operator-facing publish action.
+    pub fn publish<V: SignatureVerifier>(
+        list: AbuseBlocklist,
+        verifier: &V,
+        classical_secret: &[u8; 32],
+        pq_secret: &[u8; 32],
+    ) -> SignedBlocklist {
+        SignedBlocklist::sign(list, verifier, classical_secret, pq_secret)
+    }
+
+    /// The subscriber side: admit a signed list into the subscribed set IFF its
+    /// hybrid signature verifies against the publisher's advertised keys. Returns
+    /// `true` if admitted, `false` if the signature (or canonical bytes) did not
+    /// verify — a forged/reordered/truncated list never enters the set.
+    pub fn subscribe<V: SignatureVerifier>(
+        &mut self,
+        signed: SignedBlocklist,
+        verifier: &V,
+        publisher_classical_pub: &[u8; 32],
+        publisher_pq_pub: &[u8],
+    ) -> bool {
+        if signed.verify(verifier, publisher_classical_pub, publisher_pq_pub) {
+            self.verified.push(signed.list);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Advisory lookup over the verified subscribed set. Delegates to [`is_flagged`]
+    /// — returns the reason an actor was flagged on any subscribed, verified list,
+    /// or `None`. No score, count, or ordering (compile-level via the return type).
+    pub fn flagged_reason(&self, actor: &[u8; 32]) -> Option<ReportReason> {
+        is_flagged(&self.verified, actor)
+    }
+
+    /// Number of verified lists in the subscribed set (test/observability aid).
+    pub fn subscribed_len(&self) -> usize {
+        self.verified.len()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -260,6 +260,24 @@ pub fn decide_report(ev: &MeshEvent) -> Result<(), ReportRejected> {
     Ok(())
 }
 
+/// P74 (M1/M3) production caller — commit an abuse-report `MeshEvent` to a hub's
+/// event log with [`decide_report`] wired as the validate-before-persist Law pole
+/// of [`EventLog::commit_after_decide`]. This is the ONE kernel-local production
+/// path that rides reports on the existing content-addressed log: a malformed or
+/// quality-smuggled payload is Law-rejected and NOTHING persists; a well-formed
+/// report is appended idempotently (a replay of the same content is a `Duplicate`
+/// no-op and never re-runs the Law).
+///
+/// Before this, `decide_report` was only ever invoked from unit tests — this
+/// closes the P74 wiring so the hub moderation surface actually gates commits.
+pub fn commit_report<S: crate::event_log::EventStore>(
+    log: &mut crate::event_log::EventLog<S>,
+    ev: MeshEvent,
+) -> Result<crate::event_log::AppendOutcome, crate::event_log::CommitError> {
+    let (outcome, _decision) = log.commit_after_decide(ev, |e| decide_report(e))?;
+    Ok(outcome)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
