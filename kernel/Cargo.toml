@@ -211,11 +211,14 @@ name = "mesh_verify"
 harness = false
 required-features = ["pq"]
 
-# NOTE: the contended multi-threaded Mutex benches for token_bucket/budget/admission
-# ALREADY EXIST on branch `perf/contention-bench-2026-07-18` (kernel/benches/contention.rs,
-# see SYNTHESIS-WAVE3-CLOSEOUT-2026-07-18 §2). P80 cites them and does NOT re-specify;
-# merging that branch discharges this sub-item. Only the mislabeled "CAS" comment in
-# `criterion::bench_token_bucket` is corrected here (the TokenBucket is a Mutex, not CAS).
+# Contended multi-threaded benchmarks for the three Mutex sites flagged
+# NEEDS-CONTENDED-BENCH-FIRST by docs/research/OPUS-PERF-KERNEL-AUDIT-2026-07-18.md
+# (token_bucket A1, budget A2, admission seen-set A3). N∈{1,2,4,8} threads hammer one
+# shared object; each candidate atomic/lock-free impl is measured against the Mutex.
+[[bench]]
+name = "contention"
+harness = false
+
 
 # NOTE: the W5 counting-allocator integration test (tests/arena_counting_allocs.rs)
 # is not yet wired — the counting global-allocator feature exists (`count-allocs`,
