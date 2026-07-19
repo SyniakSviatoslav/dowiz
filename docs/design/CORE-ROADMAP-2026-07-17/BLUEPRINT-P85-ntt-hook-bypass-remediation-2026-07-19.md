@@ -272,6 +272,14 @@ the `128⁻¹ = 3303 mod 3329` inverse scaling in `ntt_inv_kem`; and the *proper
 proves (bit-identity to schoolbook) vs the property it does **not** prove (FIPS-203 wire interop — the
 KEM stores coefficient-domain, §0.4 / research §1.1).
 
+**Also — separate from functional bit-identity — timing** (META-GAP-AUDIT-2026-07-19.md G5): the
+reviewer must check `basemul_kem`/`ntt_kem`/`ntt_inv_kem` for any branch or memory-access pattern
+conditioned on secret KEM coefficient values, and confirm the arithmetic is constant-time across the
+same secret-dependent inputs in both the NTT path and the schoolbook `poly_mul` comparison path — the
+exhaustive proof establishes functional equivalence only and is silent on timing/side-channel
+equivalence. This line is part of what Q3's `reviewed-by` pointer
+(`BLUEPRINT-Q-SERIES-VERIFICATION-OBSERVABILITY-2026-07-19.md` §Q3) must cite going forward.
+
 ---
 
 ## 4. Remediation steps — each a spec → check → GREEN, with the adversarial cases named (standard §2 items 2, 3, 5)
@@ -377,7 +385,7 @@ never a default drift.
 |---|---|---|
 | D1 | G1–G3 run green on the `986646a` tree | each script exits 0 with its ✓ line; a follow-up commit (if any fix needed) itself passes the hooks |
 | D2 | G4 is green **except** the pre-existing C3 sub-gate, which is explicitly routed to OD-3 | `law-hooks.mjs` output; C3 RED is attributed to `ci-no-ungated-keygen.sh`, not the NTT diff |
-| D3 | **(Path A)** `.review/` holds a reviewer AND overlap attestation for the NTT diff, each a distinct agent ≠ builder, non-empty, adversarial | `three-model-review.sh` accepts a hook-respecting commit; findings target the §3 surfaces, not a test restatement |
+| D3 | **(Path A)** `.review/` holds a reviewer AND overlap attestation for the NTT diff, each a distinct agent ≠ builder, non-empty, adversarial | `three-model-review.sh` accepts a hook-respecting commit; findings target the §3 surfaces, not a test restatement; §3 surfaces now include no-secret-dependent-branch/timing on `basemul_kem`/`ntt_kem`/`ntt_inv_kem` — a functional-only bit-identity finding does not satisfy D3 |
 | D3′ | **(Path B, if chosen)** `docs/design/ESCALATIONS.md` holds an explicit operator retroactive sign-off for `986646a` | grep `986646a` in `ESCALATIONS.md` returns the signed entry |
 | D4 | the bypass + resolution are in the bebop regression/escalation ledger + REGRESSION-LEDGER | ledger row for `986646a` exists |
 | D5 | the D-9 wire-in trigger's "P85 complete" precondition flips true; master-ledger P85 row → CLOSED | D-9 trigger text updated; P85 row cites the attestation/sign-off |

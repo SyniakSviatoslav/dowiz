@@ -410,6 +410,13 @@ CPU path and **no `channel_registry` symbol is reachable**; a build where the We
 depends on the registry, or where a `PackedFormat` is assumed renderable on WebGL2 without confirmation,
 = **NOT done**.
 
+D-WEBGL2 is documentation of the existing WebGPU-only scope, not an unblock of the P38 §4.2 (OD-11)
+build gate — P86's build legs still do not start until the operator takes OD-11 (§2.3, §9); this DoD
+row is checkable against today's tree (registry does not exist, so it is vacuously satisfied) and
+becomes load-bearing once P86 ships. At that point it is exactly the kind of claim Q1's checklist
+(`BLUEPRINT-Q-SERIES-VERIFICATION-OBSERVABILITY-2026-07-19.md` §Q1-b) will require a `verified-by`
+evidence pointer for — noted here, not re-specified.
+
 ---
 
 ## 5. The lifecycle in full (the design the operator asked for — item 2)

@@ -300,6 +300,12 @@ composes the field correctly via the CPU path with **no compute-atomics dependen
 whose settle/render correctness on WebGL2 **depends on** the GPU mask plane, or that makes texel-skip a
 *requirement* rather than a WebGPU-only optimization, = **NOT done**.
 
+D-WEBGL2 is documentation of the existing WebGPU-only scope, not an unblock of the P38 §4.2
+(OD-11 / OD-P87-1, §13) build gate — the GPU leg still does not start until the operator takes it.
+It is also exactly the kind of claim Q1's checklist
+(`BLUEPRINT-Q-SERIES-VERIFICATION-OBSERVABILITY-2026-07-19.md` §Q1-b) will require a `verified-by`
+evidence pointer for once P87 ships — noted here, not re-specified.
+
 ---
 
 ## 5. The precision ladder P87 fixes in canon (standard §2 item 16, the single-owner contract)
