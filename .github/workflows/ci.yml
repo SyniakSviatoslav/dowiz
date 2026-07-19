@@ -401,3 +401,52 @@ jobs:
       - run: cargo test --manifest-path dowiz/mesh-adapter/Cargo.toml
       # Firewall red-proof (W-6): a build that MUST fail, §3.6:
       - run: bash dowiz/mesh-adapter/proofs/firewall-red.sh bebop-repo
+
+  # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
+  # ITEM 14 (space-grade roadmap §B / §G.8): structural compiler-bump trigger.
+  # The compiler is a pinned, audited input (rust-toolchain.toml `channel`).
+  # This job ALWAYS runs (so it is safe to mark as a required status check —
+  # a `paths:`-filtered workflow would deadlock non-bump PRs, §3.1). Its
+  # enforcement branch fires ONLY when the pinned `channel` value changed vs the
+  # comparison base; a bump then REQUIRES docs/audits/toolchain/spot-check-<new>.md
+  # in the same diff (introducing the pin itself counts as <absent> -> 1.96.1).
+  # Design + red→green proof: docs/design/BLUEPRINT-ITEM-14-toolchain-pin-2026-07-19.md §3.
+  toolchain-bump-gate:
+    name: toolchain-bump gate (spot-check artifact required on bump)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect channel bump; require spot-check artifact
+        run: |
+          set -euo pipefail
+          FILE=rust-toolchain.toml
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin "${{ github.base_ref }}"
+            BASE=$(git merge-base "origin/${{ github.base_ref }}" HEAD)
+          else
+            BASE="${{ github.event.before }}"
+            case "$BASE" in
+              0000000000000000000000000000000000000000|"") BASE=$(git rev-parse HEAD~1 2>/dev/null || echo "") ;;
+            esac
+          fi
+          head_channel=$(grep -oP '^channel\s*=\s*"\K[^"]+' "$FILE")
+          base_channel=""
+          if [ -n "$BASE" ] && git cat-file -e "$BASE:$FILE" 2>/dev/null; then
+            base_channel=$(git show "$BASE:$FILE" | grep -oP '^channel\s*=\s*"\K[^"]+' || true)
+          fi
+          if [ "$head_channel" = "$base_channel" ]; then
+            echo "no toolchain bump ($head_channel unchanged) — gate vacuously green"
+            exit 0
+          fi
+          echo "TOOLCHAIN BUMP DETECTED: '${base_channel:-<absent>}' -> '$head_channel'"
+          ART="docs/audits/toolchain/spot-check-$head_channel.md"
+          [ -f "$ART" ] || { echo "::error::bump to $head_channel without $ART"; exit 1; }
+          grep -q "$head_channel" "$ART" \
+            || { echo "::error::$ART does not name $head_channel"; exit 1; }
+          grep -q '^## Assembly spot-check' "$ART" \
+            || { echo "::error::$ART missing '## Assembly spot-check'"; exit 1; }
+          grep -q '^## Full-suite re-run' "$ART" \
+            || { echo "::error::$ART missing '## Full-suite re-run'"; exit 1; }
+          echo "bump to $head_channel accompanied by $ART — gate green"
