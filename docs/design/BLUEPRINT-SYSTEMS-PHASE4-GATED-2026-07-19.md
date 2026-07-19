@@ -21,10 +21,17 @@ breaker primitive and its five signals, which every component below plugs into) 
 **Status legend.** Everything here is **PROPOSED**: designed, not built, and — by definition of
 the gate — **unmeasured**. Phase 4 has produced zero measurements; do not borrow confidence from
 Blueprint A's grounded claims. Where this doc cites a *built* precedent (`field_physics.rs`,
-`TokenBucket::release`, the `research-verifier` pattern) that fact is grounded, but every Phase-4
-*application* of it is PROPOSED until measured. **🧭 OPERATOR VISION** marks ideas originating in
-the operator's own brainstorm, not external literature — carried as design intent, not silently
-absorbed as generic architecture.
+`TokenBucket::try_acquire`, the `research-verifier` pattern) that fact is grounded, but every
+Phase-4 *application* of it is PROPOSED until measured. **Correction (this review pass, 2026-07-19):**
+this precedent was cited elsewhere in this arc as `TokenBucket::release` — re-verified against
+`bebop-repo/bebop2/proto-wire/src/transport_policy.rs` and no `release` method exists; the struct
+only exposes `new` and `try_acquire` (refill-then-consume, atomic). Corrected throughout this doc;
+the same stale name was flagged as persisting in the sibling synthesis/roadmap docs and Blueprint A
+at the time this section was written — a same-day follow-up pass (2026-07-19) corrected all of
+those too, so no `TokenBucket::release` citation remains anywhere in this arc. **🧭 OPERATOR
+VISION** marks ideas
+originating in the operator's own brainstorm, not external literature — carried as design intent,
+not silently absorbed as generic architecture.
 
 ---
 
@@ -43,11 +50,14 @@ too expensive, no measured precedent of beating graph-Laplacian/flow methods on 
 UI-motion, and blur — proven, not analogous: Gaussian blur ≡ heat equation `e^{−tL}`
 (Synthesis I §2, citing Chung 2007). The precedent is already built in the sibling bebop-repo:
 the discretized wave equation `MÜ + ΓU̇ + c²LU = S` at `crates/bebop/src/field_physics.rs:334`
-(`pub fn step_wave`, verified live 2026-07-19). `TokenBucket::release`
-(`bebop-repo/bebop2/proto-wire/src/transport_policy.rs`) is already a discretized conservation-law
-flow primitive: inflow − outflow = Δstored, the same continuity equation `∂ρ/∂t + ∇·(ρv) = 0`
-underlying every fluid PDE, applied to a scalar reservoir. **The operator already has the
-operator.** Phase 4 wires it into swarm routing.
+(`pub fn step_wave`, verified live 2026-07-19). `TokenBucket::try_acquire`
+(`bebop-repo/bebop2/proto-wire/src/transport_policy.rs`, re-verified 2026-07-19 — the struct's only
+methods are `new` and `try_acquire`; `release` does not exist in the current tree and is a stale
+name carried over from earlier drafts in this arc) is already a discretized conservation-law flow
+primitive: inflow (time-based refill, computed inline on each `try_acquire` call) − outflow
+(consumption) = Δstored, the same continuity equation `∂ρ/∂t + ∇·(ρv) = 0` underlying every fluid
+PDE, applied to a scalar reservoir. **The operator already has the operator.** Phase 4 wires it
+into swarm routing.
 
 Two buildable, measurable sub-components (both PROPOSED):
 
@@ -83,6 +93,36 @@ just a topology change. The Laplacian's `topology_hash` must therefore be one of
 inputs *before* routing goes live, and Little's-Law backpressure must feed the same spool the
 Phase-2 telemetry pipeline drains. Ship routing before the breaker watches the topology and you
 have an unauditable data plane wrapped around an auditable control plane — exactly inverted.
+
+**Definition of done (PROPOSED, falsifiable — for a future engineer picking this up post-`G3`).**
+- *Backpressure:* over a measured window of ≥1000 spool ticks, report fitted `λ`, `μ`, and the
+  residual of `L = λW` (Little's Law) against directly-measured `L` and `W` — a number, not "it
+  looks stable." Trip threshold on `Δstored` is the one fit from that residual's distribution, not
+  chosen by feel. PROPOSED: no such run exists yet.
+- *Laplacian routing:* `diffuse()`'s output for a fixed `(L, in, t)` triple is bit-reproducible
+  across repeated calls (a `detreduce`-style determinism check on the routing math itself, reusing
+  Blueprint A's §4 discipline); and, once `topology_hash` is a monitored breaker input, a topology
+  change and a compromised-agent drift spike are distinguishable in the audit log with 0 recorded
+  conflations over a red-team run that includes both cases deliberately. PROPOSED: unmeasured.
+- Neither sub-component is "done" on "compiles" or "looks deterministic" — done means the falsifiable
+  number above is recorded in this doc's future revision, per the arc's own house rule.
+
+**Suggested build order within §A (smallest first, PROPOSED).** (1) `Reservoir` + Little's-Law
+check on the existing telemetry spool drainer (`tools/telemetry/lib.sh`) — no embedding, no new
+infra, reuses a spool that already exists; cheapest possible Phase-4 experiment. (2) `topology_hash`
+wiring as a monitored breaker input — must land *before* any live traffic touches `diffuse()`, per
+the "why gated" paragraph above; this is a Phase-4-internal ordering constraint, not optional
+sequencing. (3) `FieldRouter`/`diffuse()` itself, gated on (2) being live.
+
+**Cross-Phase-4 dependencies (not just Phase 1–3).** §A's `topology_hash`-as-monitored-input is a
+precedent every other Phase-4 sub-section that perturbs baselines should reuse rather than
+reinvent: §D's HRW re-placement (below) also perturbs behavioral-drift/disagreement baselines for
+the same underlying reason (membership/topology change ≠ compromise) — §A and §D should share one
+"expected-topology-change" audit-event shape so the breaker doesn't have to learn two different
+vocabularies for the same class of benign perturbation. §E's audit-probability calibration (below)
+reads the same drift/disagreement baselines §A can perturb, so §E's calibration run should not
+start until §A's `topology_hash` gating has been live long enough to stop contaminating those
+baselines — an explicit ordering point, not a suggestion.
 
 ---
 
@@ -121,6 +161,33 @@ which the operator's control-theory framing explicitly rejects (measurement must
 deterministic response, not a report). The canary false-negative rate must also be part of the
 Phase-3 red-team corpus (roadmap §3) so its threshold is *fit from attacks*, not guessed.
 
+**Definition of done (PROPOSED, falsifiable).**
+- *Thought injection:* over ≥1000 canary-injection trials, report the false-negative rate (canaries
+  missed) with a confidence interval — the same "a number, not a vibe" bar Synthesis I sets
+  elsewhere. Zero canaries recorded is not "done," it is "not yet run."
+- *Mirror-CoT observer:* `observer.provider != agent.provider` is asserted, not assumed (a config
+  check that fails loudly if both handles resolve to the same provider — decorrelation is the
+  whole point per Synthesis I §1.5, and a same-provider pair silently defeats it); and `disagreement`
+  scored by the mirror pair must show measured precision/recall against a labeled corpus of known
+  injected-vs-clean CoT traces (reuse the Phase-3 red-team corpus, roadmap §3), not just "the
+  observer ran and produced a number."
+- PROPOSED throughout: no trial has been run.
+
+**Suggested build order within §B (smallest first, PROPOSED).** (1) The canary-injection +
+detection harness first — self-contained, can be validated against synthetic ground truth without
+needing a second live model at all (inject a known fact, grep the trace for it). (2) Only then wire
+a real `MirrorPair` with an actual decorrelated second provider and measure `disagreement` on live
+CoT traces — this is the heavier, infra-dependent half.
+
+**Cross-Phase-4 dependencies (not just Phase 1–3).** §B's `disagreement` output is not a novel
+signal slot — it fills the same `disagreement: f32` field Blueprint A's `SignalVector` already
+reserves for shadow-execution pairs (Blueprint A §2.1); §B is an *additional producer* for that
+field, not a new signal path, so its wiring must not silently create a second disagreement channel
+the breaker doesn't know about. §E's Bayesian reputation (below) explicitly folds "cross-agent
+voting" into its telemetry feed — §E's calibration is only as good as whichever `disagreement`
+producer(s) feed it, so §E cannot be meaningfully calibrated until §B's own false-negative rate is
+measured and known-good; treat §E as depending on §B directly, not merely on Phase 1–3.
+
 ---
 
 ## §C — Swarm / Agent Mechanics ("Boson" architecture)
@@ -154,9 +221,10 @@ external literature. Synthesis I §1.5 lists them all PROPOSED.
   importing etcd/Consul/Kubernetes (standing no-K8s decision). Detailed in §D.
 - **Genesis bootstrap.** The first node holds a root token, delegates outward, then
   **self-relinquishes** it. Genesis is a startup role, not a permanent hierarchy.
-- **Break-glass recovery — the sanctioned god-function. 🧭 OPERATOR VISION.** Shamir's Secret
-  Sharing (`k`-of-`n`) reconstruction of a master recovery key + optional time-lock + immutable
-  audit trail, implemented as **one deliberate monolithic "god function"** — the single explicit
+- **Break-glass recovery — the sanctioned god-function. 🧭 OPERATOR VISION** (RAW-PROMPT Part 2,
+  item 12, verbatim: Shamir's Secret Sharing k-of-n for a master recovery key, Emergency Mode
+  overriding current Stewards, full immutable audit trail, optional time-lock). Implemented as
+  **one deliberate monolithic "god function"** — the single explicit
   exception to the twelve-anti-patterns rule elsewhere in this system. The justification is
   inversion: god-functions are normally banned because they *sprawl* accidental complexity; this
   one is the opposite by construction — **one entry point, one audit surface, zero composition
@@ -195,11 +263,58 @@ count** signal (Synthesis I §1.1) must already be monitoring. Concretely: a com
 that reissues capability tokens is **undetectable** unless the constraint-graph predicate gate is
 already counting and rejecting its anomalous writes — so Steward election cannot exist before the
 gate watches the write path. `Role-Mismatch` events must route into the Phase-2 audit ring-buffer
-(schema: `agent_id, role, node_id, timestamp, drift_score, context_snapshot`) or context-switch
-violations vanish. And the break-glass god-function overrides live Stewards — it is the highest-
+— **schema correction, re-read against Blueprint A's current text:** the field list
+`agent_id, role, node_id, timestamp, drift_score, context_snapshot` is the operator's original
+RAW-PROMPT sketch (Part 2, item 14), not what Blueprint A actually built. Blueprint A's live
+`AuditEvent` (`kernel/src/breaker/audit.rs` §2.4) is `seq, prev_hash, ts_millis, agent_id, kind,
+signal, state_from, state_to, self_hash`, hash-chained, with `kind: AuditKind` needing a new
+`RoleMismatch` variant added at Phase-4 unlock and the `role`/`drift_score`/`context_snapshot`
+content folding into the embedded `signal: SignalVector` + a widened `AuditKind` payload — or
+`Role-Mismatch` events have nowhere accurate to land. And the break-glass god-function overrides live
+Stewards — it is the highest-
 blast-radius action in the system, so it must sit behind the *already-built, already-tested*
 `KILLED` human gate; building break-glass before that gate exists is building the master key
 before the lock.
+
+**Definition of done (PROPOSED, falsifiable — §C is a grab-bag, so per-mechanism, not one number).**
+- *Capability tokens:* a negative compile-test (`trybuild`-style) proving `Token<Signing>` fails to
+  compile where `Token<Ui>` is required, plus a unit test asserting `Drop` on `ScopedCtx` revokes
+  the token and wipes scratch state in 100% of N constructed-then-dropped trials.
+- *Role triad + bounded delegation:* a property test fuzzing delegation depth/TTL — 0 successful
+  chains exceed the configured depth bound or outlive their TTL across N generated cases; 0
+  successful cycles.
+- *Orphan-on-supervisor-death:* across N simulated supervisor-expiry trials, 0 subordinate tokens
+  renew post-expiry (measured, not asserted).
+- *Steward reissue / election:* covered by §D's lease/fencing definition of done below — §C's
+  Steward bullets have no independent measurement, they inherit §D's.
+- *Break-glass:* standard Shamir k-of-n test vectors reconstruct correctly, **and** an integration
+  test proves the function cannot execute unless Blueprint A's `human_gate_required` flag is set
+  and manually cleared — i.e., the gate is proven load-bearing, not just present.
+- *Auditor / shadow execution (anti-Goodhart):* a controlled comparison — the same agent's measured
+  behavior under a fixed-Auditor regime vs. a random/shadow regime — must show the performance gap
+  the design exists to close (if there is no measured gap between the two regimes, the anti-Goodhart
+  claim is unfalsified, not disproven, and should be reported as such, not assumed).
+- *Context-switch / Role-Mismatch:* fuzz N low-to-high-domain reuse attempts; `Role-Mismatch` fires
+  and lands an audit-ring entry in 100% of them (this is testable the moment the schema fix above is
+  wired, no other Phase-4 sub-section required).
+- All of the above: PROPOSED, zero measurements exist yet.
+
+**Suggested build order within §C (smallest first, PROPOSED).** (1) Capability-token type system +
+`Drop`-based revocation — purely local, no distributed dependency, smallest buildable piece. (2)
+Role triad + delegation depth/TTL bound — still local. (3) Context-switch / Role-Mismatch escalation
+— needs the breaker + corrected audit-ring schema from Phase 1–3 (already a Phase-1–3 dependency per
+§F), but no other Phase-4 sub-section. (4) Orphan-on-supervisor-death + Steward reissue — **blocked
+on §D's Lease/fencing primitive existing first** (see cross-dependency below), so this cannot move
+before (3) of §D. (5) Auditor/shadow execution — needs ≥2 live boson agents actually doing dual
+execution, the heaviest infra lift in this list. (6) Break-glass god-function — deliberately last:
+highest blast radius, meant to be touched rarely and reviewed hardest, and it is the one place this
+doc explicitly forbids "build it because it's easy" reasoning (§F: "master key before the lock").
+
+**Cross-Phase-4 dependencies (not just Phase 1–3).** §C's own text says Steward is "detailed in
+§D" — that is not decorative cross-referencing, it is a real build-order constraint: §C's
+orphan-on-supervisor-death and Steward-reissue mechanics have no lease/fencing-token primitive to
+reissue *against* until §D lands its `Lease`/`renew_or_expire` machinery. Concretely: §D before
+§C-(4), not the reverse, even though both are textually presented as parallel sub-sections.
 
 ---
 
@@ -232,6 +347,30 @@ already live. HRW re-placement moves keys between shards — which perturbs **be
 **cross-agent disagreement** baselines — so shard membership must be a monitored input before
 placement is dynamic, or every rebalance looks like an attack.
 
+**Definition of done (PROPOSED, falsifiable).**
+- *HRW placement:* (a) determinism — the same `(key, members)` input yields the same `owner` across
+  N repeated calls, property-tested; (b) minimal movement — over N simulated membership-change
+  events, measured key-movement ratio is statistically consistent with the `1/n` bound, reported
+  against a naive hash-ring baseline for comparison, not asserted.
+- *Lease / fencing:* over N simulated split-brain trials (two Stewards issued a lease for the same
+  domain), the stale-fenced writer's write is rejected in 100% of trials — a number, not "the logic
+  looks right."
+- PROPOSED: neither has been run.
+
+**Suggested build order within §D (smallest first, PROPOSED).** (1) `owner()` HRW function — pure,
+no distributed runtime needed, unit-testable in complete isolation; smallest buildable piece in this
+entire blueprint. (2) `Lease` struct + `renew_or_expire()` against a simulated kernel-log sequence —
+still no real multi-node setup required. (3) Only then an actual multi-node (or multi-process
+simulated) split-brain integration test.
+
+**Cross-Phase-4 dependencies (not just Phase 1–3).** §D's `Lease`/fencing primitive is a hard
+prerequisite for §C's Steward-dependent mechanics (orphan-on-supervisor-death, Steward reissue) —
+see §C's cross-dependency note above; build §D's lease machinery before attempting to test those §C
+bullets. Separately, §D's HRW re-placement and §A's Laplacian topology changes are the same class of
+"benign perturbation that must not look like an attack" — per §A's cross-dependency note, these two
+should share one audit-event vocabulary rather than each defining its own, or the breaker ends up
+with two undocumented exemption paths instead of one understood one.
+
 ---
 
 ## §E — Bayesian Reputation + Probabilistic / Random Auditing
@@ -263,14 +402,45 @@ scrutiny — exactly the echo-chamber failure the design forbids. The `FLOOR > 0
 must be validated against the Phase-3 red-team corpus, or "random audit" degrades to "no audit
 for trusted nodes."
 
+**Definition of done (PROPOSED, falsifiable).**
+- *Reputation update:* a monotonicity property test — after N simulated bad actions, `r.mean()`
+  decreases monotonically and `audit_probability(r)` increases monotonically; after N simulated good
+  actions, the reverse. Cheap, pure-function, no distributed infra needed.
+- *`FLOOR > 0`:* a compile-time or property-test assertion that `audit_probability` never returns
+  exactly 0 regardless of `r.mean()` — the literal falsification target for "echo chamber."
+- *Tier calibration:* tier transitions (`Warning → QuarantineReadOnly → KillAndReplace`) must
+  reproduce the *same* FP/FN rates Blueprint A's own `θ_open`/`θ_kill` were fit to at `G3` — §E is
+  explicitly forbidden from inventing its own thresholds (per the "why gated" paragraph); the
+  measurement here is "reputation-weighted trips match un-weighted breaker trips on the same
+  red-team corpus, modulo the reputation weighting itself," not a new number from scratch.
+- PROPOSED throughout: no run exists yet.
+
+**Suggested build order within §E (smallest first, PROPOSED).** (1) `Reputation` struct +
+`audit_probability()` as pure functions — no dependency on any other Phase-4 sub-section, smallest
+piece, unit-testable alone. (2) Wire reputation as a **read-only weighting overlay** on top of
+already-passing Blueprint A breaker signals, and prove by property test that reputation alone never
+triggers a state transition without an underlying breaker score — i.e., §E cannot become a second,
+undocumented trip authority. (3) Only then connect to real multi-agent telemetry.
+
+**Cross-Phase-4 dependencies (not just Phase 1–3).** §E is structurally the *last* Phase-4
+sub-section to reach real calibration, not merely the last one written. Its pure-function core,
+(1)-(2) above, has no Phase-4-internal dependency and could be built early. But its actual
+calibration needs live telemetry from every other sub-section: confidence-gap and disagreement from
+§B's mirror-CoT, constraint-violations from §C's capability-token and §D's Steward/lease writes, and
+drift baselines that §A's Laplacian routing and §D's HRW re-placement both perturb. Concretely: §E's
+data structure can be built first; §E's *calibration* must be built last, after §A, §B, §C, and §D
+all have real signals flowing — calibrating against synthetic/absent telemetry would smuggle false
+confidence into the one component whose entire job is refusing to trust anything by default.
+
 ---
 
 ## §F — Dependency List: which Phase-1/2 breaker signals each Phase-4 component requires
 
-> ⛔ **This table is what makes the gate real rather than arbitrary.** Each Phase-4 component is a
-> *consumer* of a Blueprint-A breaker signal (Synthesis I §1.1) or audit primitive. Until that
-> signal is built **and** measured-armed at `G3`, the consumer has nothing to plug into — so the
-> ordering is a hard data dependency, not a policy preference.
+> ⛔ **BLOCKED until `G3`, same as every section above — this table is what makes that gate real
+> rather than arbitrary.** PROPOSED, unmeasured. Each Phase-4 component is a *consumer* of a
+> Blueprint-A breaker signal (Synthesis I §1.1) or audit primitive. Until that signal is built
+> **and** measured-armed at `G3`, the consumer has nothing to plug into — so the ordering is a hard
+> data dependency, not a policy preference.
 
 | Phase-4 component | Depends on (Blueprint A / Synthesis I §1.1) | Failure if built before the gate |
 |---|---|---|
@@ -280,7 +450,7 @@ for trusted nodes."
 | §B Thought injection | Confidence gap; Phase-3 red-team corpus (canary FN-rate threshold) | Canary threshold guessed, not fit from attacks |
 | §C Capability tokens / delegation | Constraint-violation count on the World-Model write path | Anomalous token writes uncounted — unforgeable in name only |
 | §C Steward reissue | Constraint-violation count + audit ring-buffer | Compromised Steward reissuing tokens is undetectable |
-| §C Context-switch / Role-Mismatch | Audit ring-buffer schema (`agent_id, role, node_id, timestamp, drift_score, context_snapshot`) | `Role-Mismatch` events have nowhere to land — violations vanish |
+| §C Context-switch / Role-Mismatch | Audit ring-buffer (`kernel/src/breaker/audit.rs` `AuditEvent`: `seq, prev_hash, ts_millis, agent_id, kind, signal, state_from, state_to, self_hash` — needs a new `AuditKind::RoleMismatch` variant at Phase-4 unlock; see §C body for the schema-drift note) | `Role-Mismatch` events have nowhere to land — violations vanish |
 | §C Break-glass god-function | **`KILLED`-state human gate** (Synthesis I §1.4), unfiltered log ship | Highest-blast-radius action with no tested human gate — master key before the lock |
 | §D HRW sharding | Behavioral-drift + disagreement baselines (membership as monitored input) | Every rebalance reads as an attack; baselines corrupt |
 | §D Steward lease / fencing | Constraint-violation count over the event-sourced kernel log | Split-brain (stale fence accepted) uncaught |

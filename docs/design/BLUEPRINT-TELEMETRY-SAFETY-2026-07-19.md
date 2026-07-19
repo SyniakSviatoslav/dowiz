@@ -40,8 +40,11 @@ attack-injection symbols (same discipline as `chaos`). **[GROUNDED — layout ve
 identical input and conditions, checked at two points in time; any divergence is a poisoning /
 hallucination signal.* This is a determinism criterion, not a semantic-similarity score — which is
 exactly why it is checkable in a deterministic kernel. It enters the breaker as one signal class:
-**replay probes** in the Half-Open state (§3, §2.3). **[GROUNDED as a definition; detector efficacy
-is PROPOSED and gated on §4.]**
+**replay probes** in the Half-Open state (§3, §2.3). Synthesis II's search found no prior work
+using byte-identical replay this way — the *inverse* of SelfCheckGPT's temp=1 variance-mining
+assumption (Synthesis II §2), which expects and mines variance rather than forbidding it.
+**[GROUNDED as a definition; detector efficacy is PROPOSED and gated on §4; novelty claim is
+absence-of-evidence, not proof of absence.]**
 
 ## 2. Data schemas (Rust structs — the buildable form)
 
@@ -76,10 +79,17 @@ pub struct BreakerRecord {
     pub cooldown_cap: u32,        // the doubling cap
     pub probes_remaining: u8,     // N canary probes left in HalfOpen
     pub red_line_class: bool,     // action touches money/auth/RLS/migrations-equivalent
+    pub human_gate_required: bool, // set on red-line Killed (§3); breaker never clears this itself
     pub last_score: f32,
     pub thresholds: ThresholdId,  // reference to the fitted threshold set (§5.3)
 }
 ```
+`red_line_class` is **not** a policy this blueprint invents: derive it from the already-built,
+already-tested classifier at `kernel/src/ports/agent/scope.rs` — `Scope::touches_red_line()`,
+backed by `Resource::is_red_line()`/`Action::is_red_line()`, unit-tested at `scope.rs:344-349`
+(`red_line_classification`, `deny_by_default_rejects_red_line_allows_clean`). The breaker consumes
+this classification at `BreakerRecord` creation time; it does not define red-line membership.
+**[GROUNDED — verified in-tree, corrects an undefined-assumption gap in the original draft.]**
 
 ### 2.3 Golden replay-probe store (`replay.rs`)
 ```rust
@@ -123,16 +133,28 @@ hash-chaining; drain reuses the verified telemetry primitives.]**
 | Closed    | `trip_score > θ_open` for `W` **consecutive** windows                      | Open          | quarantine → read-only; snapshot golden set; `cooldown_ticks = base`; audit `Transition` |
 | Closed    | `trip_score ≤ θ_open`                                                      | Closed        | `consecutive_trips = 0`; audit `Signal` |
 | Open      | `cooldown_ticks` elapsed                                                   | HalfOpen      | load `N` replay probes; `probes_remaining = N` |
-| Open      | `trip_score > θ_kill` for `W_kill` windows **AND** `!red_line_class`       | Killed        | irreversible for this instance; ship full audit ring |
-| Open      | `trip_score > θ_kill` for `W_kill` windows **AND** `red_line_class`        | Killed(gated) | as above **+** set `human_gate_required`; never self-resumes |
+| Open      | `trip_score > θ_kill` for `W_kill` windows **AND** `!red_line_class`       | Killed        | `human_gate_required = false`; irreversible for **this instance**; ship full audit ring |
+| Open      | `trip_score > θ_kill` for `W_kill` windows **AND** `red_line_class`        | Killed        | `human_gate_required = true`; irreversible for this instance; never self-resumes |
 | HalfOpen  | all `N` probes bitwise-match **AND** `trip_score ≤ θ_open`                 | Closed        | reset counters; `cooldown_ticks = base` |
 | HalfOpen  | any probe mismatch **OR** `trip_score > θ_open`                            | Open          | `cooldown_ticks = min(cooldown_ticks*2, cap)`; `consecutive_trips += 1` |
-| HalfOpen  | `consecutive_trips ≥ kill_threshold`                                       | Killed        | as Open→Killed, honoring `red_line_class` |
+| HalfOpen  | `consecutive_trips ≥ W_kill` (same threshold as Open→Killed, reused — not a separate constant) | Killed | as Open→Killed rows above, honoring `red_line_class` |
 | Killed    | `red_line_class` (money/auth/RLS/migrations)                              | Killed        | **terminal**; resume only via explicit human gate |
-| Killed    | `!red_line_class` **AND** operator reset event                            | Closed        | manual only; audited `Transition` |
+| Killed    | `!red_line_class` **AND** operator reset event                            | Closed        | manual only; **provisions a fresh `BreakerRecord` for a newly issued agent instance** (this record's compromised instance is never itself resumed — see note below); audited `Transition` |
 
-The **only** place the breaker does not self-close is the red-line-classed `Killed` state
-(Synthesis I §1.4). Hysteresis (cooldown doubling, capped) prevents flapping. **[GROUNDED design.]**
+**Note on "irreversible for this instance" vs. the Killed→Closed row above:** these do not
+contradict. The `Killed` state itself never flips back to `Closed` in place; the manual-reset
+transition provisions a **new** `BreakerRecord` (fresh `entered_at_seq`, zeroed counters) for a
+freshly issued agent instance, matching Synthesis I §1.4's "Steward reissues a fresh capability
+token to a new instance." A naive implementation that resurrects the *same* compromised record by
+flipping its `state` field back to `Closed` would violate the invariant this table exists to
+enforce — this is called out explicitly because it is the mistake a fresh implementation is most
+likely to make. **[CORRECTED — the original table's `Killed(gated)` variant and undefined
+`kill_threshold` were inconsistent with the four-variant `BreakerState` enum in §0/§2.2; both are
+resolved above by reusing existing fields (`human_gate_required`, `W_kill`) rather than adding new
+ones.]**
+
+The **only** place the breaker does not self-close **in place** is the red-line-classed `Killed`
+state (Synthesis I §1.4). Hysteresis (cooldown doubling, capped) prevents flapping. **[GROUNDED design.]**
 
 ## 4. HARD PREREQUISITE — batch-invariant inference, in-kernel (`detreduce.rs`)
 
@@ -146,7 +168,8 @@ Without it, ~92% of runs diverge from serving noise alone with zero poisoning pr
 truthfulness signal's false-positive floor is ~1.0 and it is worthless. **[GROUNDED — TML Sept
 2025; Synthesis II §2.]**
 
-**Operator directive (this blueprint's binding constraint):** the batch-invariant *computation* AND
+🧭 **OPERATOR VISION — batch-invariant work lives inside the Rust kernel.** Operator directive
+(this blueprint's binding constraint): the batch-invariant *computation* AND
 its *measurement/verification* live natively in the Rust kernel — alongside `order_machine.rs`,
 `markov_attractor.rs`, `simd.rs`, `spectral.rs` — **not** a Python wrapper or a bolt-on service.
 Module boundary:
@@ -172,8 +195,12 @@ Module boundary:
 ## 5. Physics-derived design rules (concrete sections, not decoration)
 
 ### 5.1 Kepler — check the conserved invariant, don't re-simulate
-`TokenBucket::release`/over-grant already does this for permits. Enumerated conserved quantities,
-each a `noether::step_preserves`-style check whose violation `+=` into `constraint_violations`:
+**[CORRECTED — live-code check 2026-07-19: `TokenBucket` has no `release` method.]** The type only
+grants-or-refuses (`try_acquire`) and reports (`available`); the conserved quantity is the
+over-grant ceiling `try_acquire` enforces, verified by the in-tree test
+`token_bucket_never_over_grants_under_refill` (`token_bucket.rs`). Enumerated conserved quantities,
+each a `noether::step_preserves`-style check (confirmed present, `noether.rs:28`) whose violation
+`+=` into `constraint_violations`:
 
 | Conserved quantity | Where it lives | Violation ⇒ |
 |--------------------|----------------|-------------|
@@ -194,7 +221,7 @@ exceeds the linear regime's radius `r`. `r` sets the escalation threshold. **[GR
 `r` is PROPOSED — unmeasured.]**
 
 ### 5.3 Time as a Lyapunov potential (operator origination, corrected)
-The operator proposed **time** as the convergence metric. Corrected: it is **not** a Banach
+🧭 **OPERATOR VISION — time as the loop-refinement metric.** The operator proposed **time** as the convergence metric. Corrected: it is **not** a Banach
 contraction metric (fails symmetry on artifact-space). It **is** a Foster-Lyapunov potential —
 `V(state) = expected residual time to the accepting/green state`; the drift condition
 `E[V(next) − V(now)] < −ε` implies geometric ergodicity. This already runs in-tree:
@@ -262,12 +289,100 @@ II §7.]**
 ## 8. Build order (Phase 1 plan → Phase 2 implement)
 
 1. `detreduce.rs` reference reductions + `DeterminismLedger`; verify 1000/1000 locally. **Nothing
-   downstream is trustworthy until this is GREEN.**
-2. `signal.rs` + the conserved-quantity feeds (§5.1) reusing `token_bucket`/`event_log`.
-3. `state.rs` transition table + `thresholds.rs` `fit_from_rates()` (property-tested).
-4. `audit.rs` hash-chained ring + `tools/telemetry` drain wiring.
+   downstream is trustworthy until this is GREEN.** *Why first, precisely:* per the "measure
+   inside the core" operator directive (§4), `DeterminismLedger` is the metric authority the
+   `truthfulness_fail` component of `SignalVector` depends on. It is **not** a dependency of the
+   other four signal components (`confidence_gap`, `ewma_drift`, `cusum`,
+   `constraint_violations`, `disagreement`) — those are independently measurable and do not need
+   detreduce's *verified result* to be built or tested. Step 1 is ordered first because it gates
+   the *replay-probe/truthfulness* path specifically (§4's actual claim), not because the whole
+   signal layer is blocked on it — a second builder could start step 2's non-replay components in
+   parallel once `detreduce.rs`'s public types exist to compile `SignalVector.truthfulness_fail`
+   against, without waiting on the 1000/1000 verification run itself.
+2. `signal.rs` + the conserved-quantity feeds (§5.1) reusing `token_bucket`/`event_log`. Depends
+   on step 1 only for the masking *type*, not its logic (see above).
+3. `state.rs` transition table + `thresholds.rs` `fit_from_rates()` (property-tested — `proptest`
+   is already a dev-dependency, used for the P47 reconciliation invariant at
+   `ports/payment.rs`/`ports/payment_provider.rs`; no new dependency needed). Ordered after
+   `signal.rs` because the transition guards consume `SignalVector::trip_score()`.
+4. `audit.rs` hash-chained ring + `tools/telemetry` drain wiring. Depends on `state.rs`'s
+   `BreakerState`/`AuditKind` enums existing (`AuditEvent` embeds both).
 5. `replay.rs` golden store; arm truthfulness only behind `DeterminismLedger::verified_invariant()`.
-6. `testkit.rs` + `bin/breaker_replay.rs`; wire the five corpora (Phase 3).
+   This is the step that actually consumes step 1's *result*, not just its types — the first
+   point where "nothing downstream is trustworthy until detreduce is GREEN" becomes literally
+   true, since this component reads `verified_invariant()` rather than merely linking against the
+   ledger's types.
+6. Add the `breaker-testkit` feature to `kernel/Cargo.toml` (follows the existing `chaos` feature's
+   pattern verified in-tree: `chaos = []`, gated `#[cfg(any(test, feature = "chaos"))]`, OFF by
+   default — `§0` assumes this Cargo.toml edit but does not itself specify it), then `testkit.rs`
+   + `bin/breaker_replay.rs`; wire the five corpora (Phase 3).
 
 Each step lands with an inline RED→GREEN falsifiable test (repo convention), stages on write
 (untracked-file safety rule), and touches exactly one hot file per turn.
+
+## 9. Failure-mode behavior (per component — explicit, not left to guesswork)
+
+No new anomaly types beyond §2.1's five components are introduced below; each failure routes
+through an existing mechanism (a signal field, an existing `AuditKind`, an existing state
+transition, or a `Result` at construction time).
+
+| Component | Failure condition | Required behavior |
+|-----------|-------------------|--------------------|
+| `DeterminismLedger` | Cold start — zero completions ingested yet | `verified_invariant()` returns `false` (undefined `divergence_rate` is never treated as `0.0`). This is the *same* `AuditKind::Disarm` path §4 already defines — not a new state. |
+| `detreduce` reductions | Reference reduction computation panics/NaNs | Not swallowed — this is a kernel bug, fails loudly in tests/CI like any other kernel invariant (no `catch_unwind`). |
+| `GoldenStore` / replay probe | Store unreachable, or a probe read errors, during HalfOpen | Treated as a probe **mismatch** — fail-closed, same discipline as `TokenBucket::try_acquire`'s "never a partial grant, never a silent downgrade." Drives the existing HalfOpen→Open row (cooldown doubles); reuses the existing `AuditKind::ProbeResult` entry, not a new kind. |
+| `AuditRing` | Drain sink falls behind; ring about to overwrite an undrained entry (fixed 8192 capacity) | Backpressure: `tick()` stalls rather than silently drop an audit entry. Losing an entry defeats the ring's whole purpose (tamper-evidence), so this is a deliberate departure from a generic ring buffer's drop-oldest default. |
+| `thresholds::fit_from_rates()` | Degenerate/empty labeled ROC (no red-team data yet) | Returns `Result::Err`, never a NaN/zero threshold. A `Breaker` cannot be constructed without a valid fitted `ThresholdId` — fail at construction/bootstrap time, not at tick time. |
+| `causal.rs` gate check | Errors (e.g. malformed causal graph) feeding `constraint_violations` | An errored check counts as a violation (`constraint_violations += 1`), never silently ignored — fail-closed, consistent with every other row here. |
+| `SignalVector.window_seq` | Gap (a window was dropped) | Per §2.1's own comment ("gap ⇒ dropped window ⇒ audited"): write an audit entry and count the gap toward `consecutive_trips` rather than silently resetting — a dropped window is itself anomaly-adjacent (input starvation against the breaker is a plausible attack). |
+
+**[PROPOSED — none of these rows are measured; they are the explicit, falsifiable-by-unit-test
+behaviors the components above must satisfy. Each maps onto an existing struct field/enum/state
+transition already specified in this document.]**
+
+## 10. Unit-testing story (per component, not the Phase-3 red-team harness)
+
+The Phase-3 harness (§7) validates end-to-end trip behavior against real attack corpora; it is not
+a substitute for unit-level tests of each component's own contract. Repo convention (inline
+RED→GREEN, no test framework beyond `std`/`proptest`) applies throughout:
+
+- **`detreduce.rs`**: property test (proptest) that `rmsnorm`/`matmul_rowsum`/`attention_reduce`
+  digests are invariant to a randomly permuted batch-composition split of the same inputs. Unit
+  tests for `DeterminismLedger::verified_invariant()`: empty ledger → `false`; 1000 identical
+  digests → `true`; exactly 1 divergent digest among 1000 → `false` with the exact
+  `divergence_rate` fraction asserted.
+- **`signal.rs`**: unit test `trip_score()` against hand-computed weighted sums for fixed
+  `SignalWeights` and known component values (exact `f32` expected output); unit test that a
+  `window_seq` gap is flagged per §9's row.
+- **`state.rs`**: property test (proptest) driving random guard-satisfying event sequences through
+  the §3 table, asserting no `(from, guard) → to` pair diverges from the table; explicit unit
+  tests for the cooldown-doubling cap boundary and for "a red-line `Killed` record never
+  transitions except via the explicit manual-reset row."
+- **`replay.rs`**: unit test that a bitwise mismatch drives Open, not Closed; unit test that a
+  `GoldenPair` with `invariant_verified == false` is excluded from the probe pool — this is the
+  one component where the test is a safety property (never gates a close), not just a data-flow
+  check, so it should be written RED-first against a deliberately wrong "gate on any pair"
+  implementation.
+- **`audit.rs`**: unit test hash-chain break detection (already in §6's acceptance criteria: a
+  `prev_hash` mismatch or `seq` gap must be caught); add a ring-capacity wraparound test enforcing
+  §9's backpressure behavior specifically (assert `tick()` stalls rather than silently drops).
+- **`thresholds.rs`**: unit test `fit_from_rates()` against a synthetic ROC with an analytically
+  known optimal operating point. The "no numeric literal θ in `state.rs`" acceptance criterion
+  (§6) has a direct in-tree precedent for how to write this kind of structural scan test:
+  `kernel/tests/no_card_data.rs` (a whole-tree grep-style CI-teeth test with comment/string-literal
+  stripping to avoid false positives on doc-comment prose).
+
+## 11. Terms & assumptions a fresh builder needs (undefined elsewhere in this document)
+
+- **"window"** = one `tick()` call / one agent-turn's signal sample, **not** a wall-clock
+  interval. `cooldown_ticks` is counted in ticks, not seconds — Synthesis I's prose ("cooldown
+  timer T elapses") describes the same concept before it was mapped onto this kernel's
+  discrete-event tick clock rather than a real-time timer. **[PROPOSED clarification — not stated
+  explicitly in either synthesis document.]**
+- **`red_line_class`** — see §2.2: derive from `ports::agent::scope::Scope::touches_red_line()`
+  (already built, already tested), do not invent a new classifier.
+- **`ThresholdId`** — opaque handle defined in `thresholds.rs` (not shown in this document's
+  struct excerpts); resolves to a fitted `Thresholds` value via `fit_from_rates()`. A fresh reader
+  should not expect to find its definition in `state.rs` or `signal.rs`.
+- **`SignalWeights`** — likewise defined in `thresholds.rs` per §5.3's cross-reference; fitted,
+  never hand-tuned literals (same discipline as θ).

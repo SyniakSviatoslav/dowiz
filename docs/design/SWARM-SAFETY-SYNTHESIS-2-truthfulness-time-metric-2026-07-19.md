@@ -142,7 +142,7 @@ geometrically. **[PROPOSED — the estimator is defined; no q̂ has been measure
   central force because it is angular-momentum conservation — a symmetry statement, letting
   trajectory correctness be checked without integrating the equations of motion. Rule: wherever a
   swarm state transition has a conserved quantity, check the invariant, never re-simulate. One
-  instance already landed: `TokenBucket::release` is a conservation law for permits (Synthesis I).
+  instance already landed: `TokenBucket::try_acquire`'s refill-then-consume ceiling is a conservation law for permits (Synthesis I; corrected from an earlier `::release` mis-citation during the 2026-07-19 review pass — no such method exists).
   The audit action is to enumerate the others — message in/out counts, event-log monotone
   sequence, budget totals — and feed violations into the existing constraint-violation signal.
   **[GROUNDED principle; enumeration PROPOSED.]**

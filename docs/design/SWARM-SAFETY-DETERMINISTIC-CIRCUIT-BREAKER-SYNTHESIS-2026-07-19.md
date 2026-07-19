@@ -152,7 +152,7 @@ name, three times over, in memory arcs this session inherited:
 - **`spectral-energy-flow-status-2026-07-16`** already landed E1 (Laplacian sign-parity proof)
   and E2 (a measured Wilson lower-bound of 0.7575 on a 12-query oracle, not an estimate) at
   commit `6bd181a02`.
-- **`agentic-mesh-protocol-status-2026-07-17`** already has `TokenBucket::release` and
+- **`agentic-mesh-protocol-status-2026-07-17`** already has `TokenBucket` (`new`/`try_acquire`) and
   `AgentBridge` landed (`f30189262`) — a token-bucket is, literally, a discretized
   conservation-law flow model (inflow − outflow = Δ stored, the same continuity equation
   `∂ρ/∂t + ∇·(ρv) = 0` underlying every fluid PDE, just applied to a scalar reservoir instead of
