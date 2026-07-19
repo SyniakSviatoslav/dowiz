@@ -262,23 +262,34 @@ jobs:
             >/dev/null || true
 
   # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
-  # Roadmap items 1+13 (SPACE-GRADE-KERNEL-EXECUTION-ROADMAP-2026-07-19 §B/§G.7):
-  # the kernel default no-dev dependency tree must be a subset of
-  # kernel/ZERO-DEP-ALLOWLIST.txt, the allowlist may only shrink vs origin/main,
-  # the verdict is computed with networking disabled (unshare -n), and
-  # kernel/Cargo.lock must be byte-identical after the check (item 13 / §10-P6).
-  # SCOPE: dowiz-kernel default no-dev build ONLY — workspace-wide gating is item 31.
+  # Roadmap items 1+13 + item 31 (SPACE-GRADE-KERNEL-EXECUTION-ROADMAP-2026-07-19 §B/§C/§G.7):
+  # for EACH crate in scripts/zero-dep-crates.txt, its default no-dev dependency tree must be a
+  # subset of <crate>/ZERO-DEP-ALLOWLIST.txt, each allowlist may only shrink vs origin/main, the
+  # verdict is computed with networking disabled (unshare -n), and each <crate>/Cargo.lock must be
+  # byte-identical after the check (item 13 / §10-P6). One job, one loop — cargo tree is
+  # metadata-only, the whole roster runs in seconds. EXCLUSIONS (item 31 §2.5): agent-governance-wasm
+  # (absolute-path bebop dep, CI-unresolvable) and mesh-adapter (dual-checkout — gated in its own job).
   zero-dep-gate:
-    name: kernel zero-dep gate (items 1+13)
+    name: per-crate zero-dep gate (items 1+13+31)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0          # needed for the origin/main allowlist comparison
-      - name: Pre-fetch crate metadata (networked, before the offline gate)
-        run: cargo fetch --locked --manifest-path kernel/Cargo.toml
-      - name: Zero-dep gate (offline, no-network namespace)
-        run: sudo -E env "PATH=$PATH" unshare -n bash scripts/zero-dep-gate.sh
+          fetch-depth: 0          # needed for the origin/main allowlist comparison (Gate B)
+      - name: Pre-fetch crate metadata for the whole roster (networked, before the offline gate)
+        run: |
+          grep -vE '^\s*(#|$)' scripts/zero-dep-crates.txt | while read -r c; do
+            echo "== fetch $c =="
+            cargo fetch --locked --manifest-path "$c/Cargo.toml"
+          done
+      - name: Zero-dep gate (offline, no-network namespace) — looped over the roster
+        run: |
+          sudo -E env "PATH=$PATH" unshare -n bash -c '
+            set -euo pipefail
+            grep -vE "^[[:space:]]*(#|$)" scripts/zero-dep-crates.txt | while read -r c; do
+              bash scripts/zero-dep-gate.sh "$c" </dev/null
+            done
+          '
 
   # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
   # P01 §2.5 (BLUEPRINT-P01): a new dependency without a DECART report / marker => RED.
@@ -401,6 +412,15 @@ jobs:
       - run: cargo test --manifest-path dowiz/mesh-adapter/Cargo.toml
       # Firewall red-proof (W-6): a build that MUST fail, §3.6:
       - run: bash dowiz/mesh-adapter/proofs/firewall-red.sh bebop-repo
+      # item 31 §2.5: the per-crate zero-dep gate for mesh-adapter rides THIS dual-checkout job —
+      # its relative ../../bebop-repo path deps resolve only in this layout, so it is excluded from
+      # the roster loop. Its external set is empty (path deps only); the gate freezes that floor.
+      # cwd = dowiz/ so scripts/ + the origin/main (Gate B) comparison resolve from the dowiz tree.
+      - name: Zero-dep gate (mesh-adapter)
+        working-directory: dowiz
+        run: |
+          cargo fetch --locked --manifest-path mesh-adapter/Cargo.toml
+          bash scripts/zero-dep-gate.sh mesh-adapter </dev/null
 
   # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
   # ITEM 14 (space-grade roadmap §B / §G.8): structural compiler-bump trigger.
