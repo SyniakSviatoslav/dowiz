@@ -137,10 +137,10 @@ fn red_span_close_never_deadlocks() {
             let _ = std::fs::create_dir_all(&dir);
             let _guard = dowiz_kernel::span_metrics::init_scoped(Some(dir.clone()));
 
-            // A synthetic instrumented span exercised through the subscriber exactly the
-            // way `place_order_priced` is (`.entered()` → on_enter → on_close).
+            // A synthetic instrumented span exercised through the observer exactly the way
+            // `place_order_priced` is (`.entered()` → guard drop → on_span_close).
             fn synthetic_span() {
-                let _s = tracing::info_span!("p83_synthetic").entered();
+                let _s = dowiz_kernel::fdr::info_span!("p83_synthetic").entered();
                 // trivial work
                 let _ = 1 + 1;
             }

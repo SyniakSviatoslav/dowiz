@@ -82,12 +82,13 @@ pub mod wallet;
 pub mod hub_provisioning;
 /// BLUEPRINT-P83 — kernel production observability (SYNTHESIS PERFORMANCE AUDIT 2026-07-18
 /// §3.3-C4). Feature-gated (`telemetry`) so the SHIPPING binary carries zero observability
-/// symbols and is behavior-/perf-neutral. Two layers: (1) a ZERO NEW DEP `SpanMetricsLayer`
-/// that consumes the spans over the 8 verified hot functions and writes log-bucket latency
-/// histograms to `metric.jsonl`; (2) the `load1/nproc >= 4` breach branch → system-wide
-/// `perf record -a -g -F 99` (+ `alert.jsonl`), with `pprof` a feature-gated no-op fallback.
-/// Never called from the core decide/fold/money path; the kernel only EMITS spans, which are
-/// inert without a subscriber installed via `telemetry::init`.
+/// symbols and is behavior-/perf-neutral. Two layers: (1) a ZERO NEW DEP `SpanMetricsObserver`
+/// (a kernel-owned `fdr::SpanObserver` — the retired `tracing_subscriber::Layer` hook's
+/// replacement) that consumes the spans over the 8 verified hot functions and writes
+/// log-bucket latency histograms to `metric.jsonl`; (2) the `load1/nproc >= 4` breach branch
+/// → system-wide `perf record -a -g -F 99` (+ `alert.jsonl`), with `pprof` a feature-gated
+/// no-op fallback. Never called from the core decide/fold/money path; the kernel only EMITS
+/// spans, which are inert without an observer installed via `span_metrics::init`.
 #[cfg(feature = "telemetry")]
 pub mod span_metrics;
 /// BLUEPRINT-P68 — hub supervisor: update + backup. A/B-slot atomic-flip auto-update with a
@@ -385,27 +386,33 @@ mod tests {
     }
 }
 
-/// Install a `tracing-subscriber` with `RUST_LOG` env-filter.
-/// Dev/CLI only — never called from the wasm cdylib (no stdio there).
+/// Install the kernel FDR sink (roadmap items 4+29 — replaces the retired
+/// `tracing-subscriber` `init_tracing`). Level is read from `DOWIZ_LOG` (level-only grammar
+/// `error|warn|info|debug|trace`, default `info` — mirrors the old `EnvFilter::new("info")`
+/// fallback). Dev/CLI only — never called from the wasm cdylib (no stdio there); had ZERO
+/// production callers under `tracing` and keeps that shape.
+///
+/// Name kept as `init_tracing` for source-compat with the one test that calls it; the body
+/// no longer touches `tracing`.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn init_tracing() {
-    // ── P83 Layer-1 auto-init (BLUEPRINT P83 §4.2) ────────────────────────────
-    // When `DOWIZ_SPAN_METRICS=1`, install the zero-dep `SpanMetricsLayer` instead
-    // of the printing `fmt` layer. This is the gap-closer: the three already-placed
-    // spans (+ five wrapped by `span_metrics::instrument`) are otherwise aggregated
-    // by nothing. The branch is `#[cfg(feature = "telemetry")]`, so the DEFAULT and
-    // wasm builds are byte-identical (D2: the production cdylib never sees this code).
+    // ── P83 Layer-1 auto-init ──────────────────────────────────────────────────
+    // When `DOWIZ_SPAN_METRICS=1`, install the zero-dep `SpanMetricsObserver` (via the
+    // kernel-owned `fdr` observer) so the 8 verified spans stream to `metric.jsonl`. The
+    // branch is `#[cfg(feature = "telemetry")]`, so the DEFAULT and wasm builds never see
+    // it (D2: the production cdylib is observability-silent).
     #[cfg(feature = "telemetry")]
     {
-        if std::env::var("DOWIZ_SPAN_METRICS").as_deref() == Ok("1") {
-            if crate::span_metrics::init(None).is_ok() {
-                return;
-            }
-            // init() only fails if a global subscriber is ALREADY installed (e.g. a
-            // test harness). Fall through to the fmt layer so tracing still works.
+        if std::env::var("DOWIZ_SPAN_METRICS").as_deref() == Ok("1")
+            && crate::span_metrics::init(None).is_ok()
+        {
+            return;
         }
+        // init() only fails if a global observer is ALREADY installed (e.g. a test
+        // harness). Fall through to the stderr sink below.
     }
-    use tracing_subscriber::EnvFilter;
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
+    // Default: an stderr FDR sink (deterministic NDJSON events; no span rows to stderr, no
+    // ring — so no `metric.jsonl` is written on this path). Best-effort (a second call is a
+    // no-op, like the incumbent global subscriber).
+    let _ = crate::fdr::init(crate::fdr::FdrConfig::default());
 }

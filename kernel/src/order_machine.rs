@@ -158,13 +158,13 @@ pub fn fold_transitions(
     steps: &[OrderStatus],
 ) -> Result<OrderStatus, (TransitionError, OrderStatus)> {
     let _span =
-        tracing::info_span!("fold_transitions", start = ?start, n_steps = steps.len()).entered();
+        crate::fdr::info_span!("fold_transitions", start = ?start, n_steps = steps.len()).entered();
     let mut cur = start;
     for &next in steps {
         assert_transition(cur, next).map_err(|e| (e, cur))?;
         cur = next;
     }
-    tracing::debug!(final_status = ?cur, "order transition fold complete");
+    crate::fdr::debug!(final_status = ?cur, "order transition fold complete");
     Ok(cur)
 }
 
