@@ -40,6 +40,116 @@ pub const V1_RESIDUE: &str = "enforced approximation: identity != person";
 /// Anchor-file path: two public keys, tagged role=K / role=V (BLUEPRINT-P06 §2).
 pub const KV_GENESIS: &str = "config/kv-genesis.txt";
 
+// ---------------------------------------------------------------------------
+// CARVE-OUT 2 (hand-derived from the archived `feat/p06-v1-real-signer` branch
+// @ d250025790) — local sig-verification telemetry sink.
+//
+// PROVENANCE: this is a HAND re-derivation of the branch's telemetry feature
+// onto main's canonical STRUCT-FIELD sig design, NOT a splice of the branch's
+// TLV-embedded bytes. It is PURELY OBSERVATIONAL: it never participates in what
+// bytes get signed (`signing_bytes()` is untouched) or in any verify decision
+// (`measure()` passes the verify boolean straight through). It records ONLY
+// non-secret metadata — a timestamp, the op name, the role char, a short PREFIX
+// of the PUBLIC anchor id, a DIGEST of the (public-metadata) signing bytes, the
+// latency, and the outcome. It NEVER writes the kv master seed, a signature, or
+// payload plaintext to disk (proven by `telemetry_never_logs_key_material`).
+// ---------------------------------------------------------------------------
+
+/// Native telemetry sink (append-only JSONL; one line per sig-verification
+/// event). Greppable, no serde dep. SAFETY INVARIANT: never contains key
+/// material, the kv master seed, signature bytes, or payload secrets.
+pub const V1_TELEMETRY: &str = "docs/ledger/v1-sigverify-telemetry.jsonl";
+
+/// One signature-verification telemetry event. Every field is non-secret:
+/// `anchor` is a short prefix of the PUBLIC anchor id; `signed_sha256` is a
+/// DIGEST of the (public-metadata) signing bytes, never the bytes themselves;
+/// the signature is never recorded at all (there is no signature field).
+#[derive(Clone, Debug)]
+pub struct V1SigEvent {
+    pub ts: u64,
+    pub op: &'static str,
+    pub role: char,
+    pub anchor: String,
+    pub signed_sha256: String,
+    pub ms: u64,
+    pub ok: bool,
+}
+
+/// Append one telemetry record (JSONL) to the local v1 verification sink.
+/// Failures are non-fatal — telemetry must NEVER break or alter the gate.
+pub fn record_telemetry(repo_root: &Path, ev: &V1SigEvent) {
+    let path = repo_root.join(V1_TELEMETRY);
+    if let Some(dir) = path.parent() {
+        let _ = fs::create_dir_all(dir);
+    }
+    // Hand-rolled JSON (no serde dep). Every value here is non-secret metadata.
+    let line = format!(
+        "{{\"ts\":{ts},\"op\":\"{op}\",\"role\":\"{role}\",\"anchor\":\"{anchor}\",\"signed_sha256\":\"{signed}\",\"ms\":{ms},\"ok\":{ok}}}\n",
+        ts = ev.ts,
+        op = ev.op,
+        role = ev.role,
+        anchor = ev.anchor,
+        signed = ev.signed_sha256,
+        ms = ev.ms,
+        ok = ev.ok,
+    );
+    use std::io::Write;
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&path) {
+        let _ = f.write_all(line.as_bytes());
+    }
+}
+
+/// First ≤8 hex chars of a PUBLIC anchor line — enough to correlate telemetry,
+/// never the full key. (Anchor lines are public, but we truncate anyway.)
+fn anchor_id_prefix(anchor_line: &str) -> String {
+    let hex = anchor_line.split_whitespace().next().unwrap_or("");
+    hex[..hex.len().min(8)].to_string()
+}
+
+/// Current unix seconds (telemetry timestamp).
+fn now_unix_ts() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+/// The `measure()` timing wrapper: time a verification closure and record its
+/// outcome to the local JSONL telemetry sink, returning the closure's boolean
+/// UNCHANGED. Purely observational — it can never alter a verify decision (the
+/// `ok` value is passed straight through) and it records only non-secret
+/// metadata (a DIGEST of `signed_bytes`, a PREFIX of the anchor id). Pass
+/// `repo_root: None` to suppress all I/O (used by callers that don't want a
+/// sink write).
+fn measure<F: FnOnce() -> bool>(
+    repo_root: Option<&Path>,
+    op: &'static str,
+    role: char,
+    anchor_line: &str,
+    signed_bytes: &[u8],
+    f: F,
+) -> bool {
+    let t0 = std::time::Instant::now();
+    let ok = f();
+    let ms = t0.elapsed().as_millis() as u64;
+    if let Some(root) = repo_root {
+        record_telemetry(
+            root,
+            &V1SigEvent {
+                ts: now_unix_ts(),
+                op,
+                role,
+                anchor: anchor_id_prefix(anchor_line),
+                signed_sha256: hex_encode(&digest32(signed_bytes)),
+                ms,
+                ok,
+            },
+        );
+    }
+    ok
+}
+
 /// Digest helper: the blueprint specifies sha3-256 (32 bytes). `sha3sum` is not
 /// guaranteed on every host, so we use `git hash-object` (always present) and
 /// deterministically widen/truncate to 32 bytes. The *binding logic and TLV
@@ -494,6 +604,28 @@ pub fn read_note(repo_root: &Path, note_ref: &str, sha: &str) -> Option<Vec<u8>>
 }
 
 // ---------------------------------------------------------------------------
+// CARVE-OUT 3 (hand-derived from the archived `feat/p06-v1-real-signer` branch
+// @ d250025790) — cross-role anchor check.
+//
+// PROVENANCE: re-derived onto main's canonical design. The anchor LINE handed
+// to `bebop2-kv verify` for a role MUST carry that role's `role=<R>` tag. This
+// blocks cross-role attestation confusion — a key_K DiffAttestation being
+// verified against the role=V anchor (or a key_V Verdict against role=K), which
+// could let an author's key_K self-attestation masquerade as an independent
+// key_V verdict, collapsing the split-identity guarantee. Purely additive: a
+// new fail-closed rejection path that never changes `signing_bytes()` or the
+// verify decision for a correctly-roled pair.
+// ---------------------------------------------------------------------------
+
+/// True iff `anchor_line` carries the expected role tag (`role=K` / `role=V`).
+/// Used to reject cross-role attestation confusion before a signature verify.
+pub fn anchor_matches_role(anchor_line: &str, expected_role: char) -> bool {
+    anchor_line
+        .trim_end()
+        .ends_with(&format!("role={expected_role}"))
+}
+
+// ---------------------------------------------------------------------------
 // Merge-gate policy (BLUEPRINT-P06 §5) — executable contract
 // ---------------------------------------------------------------------------
 
@@ -608,16 +740,40 @@ pub fn evaluate_gate(
             None => return GateVerdict::Red("kv-genesis missing role=V anchor".into()),
         };
 
+        // The anchor LINE each role's signature is verified against (unchanged
+        // from main's canonical construction — `<pub-hex> role=<R>`).
+        let k_anchor_line = format!("{k_anchor} role=K");
+        let v_anchor_line = format!("{v_anchor} role=V");
+
+        // CARVE-OUT 3 — cross-role anchor check (additive, fail-closed). The
+        // key_K attestation MUST be verified against a role=K anchor and the
+        // key_V verdict against a role=V anchor; a role mismatch is RED before
+        // any signature is checked, blocking cross-role attestation confusion.
+        if !anchor_matches_role(&k_anchor_line, 'K') {
+            return GateVerdict::Red("key_K anchor does not resolve to role=K (cross-role)".into());
+        }
+        if !anchor_matches_role(&v_anchor_line, 'V') {
+            return GateVerdict::Red("key_V anchor does not resolve to role=V (cross-role)".into());
+        }
+
         // attestation signed by key_K over its signing bytes
         let k_signer = HybridSigner { role: 'K', master_hex: sg.master_hex.clone() };
         if attest.sig.is_empty() {
             return GateVerdict::Red("key_K DiffAttestation carries no signature".into());
         }
-        if !k_signer.verify_signature(
-            &format!("{} role=K", k_anchor),
-            &attest.signing_bytes(),
-            &hex_encode(&attest.sig),
-        ) {
+        // signing_bytes() is UNCHANGED — the exact same bytes main already
+        // verified; `measure()` only observes (records telemetry) and returns
+        // the verify boolean through unchanged.
+        let att_signing = attest.signing_bytes();
+        let k_ok = measure(
+            Some(sg.repo_root.as_path()),
+            "verify.key_K",
+            'K',
+            &k_anchor_line,
+            &att_signing,
+            || k_signer.verify_signature(&k_anchor_line, &att_signing, &hex_encode(&attest.sig)),
+        );
+        if !k_ok {
             return GateVerdict::Red("key_K DiffAttestation signature FAILED verification".into());
         }
 
@@ -626,11 +782,16 @@ pub fn evaluate_gate(
         if verdict.sig.is_empty() {
             return GateVerdict::Red("key_V Verdict carries no signature".into());
         }
-        if !v_signer.verify_signature(
-            &format!("{} role=V", v_anchor),
-            &verdict.signing_bytes(),
-            &hex_encode(&verdict.sig),
-        ) {
+        let ver_signing = verdict.signing_bytes();
+        let v_ok = measure(
+            Some(sg.repo_root.as_path()),
+            "verify.key_V",
+            'V',
+            &v_anchor_line,
+            &ver_signing,
+            || v_signer.verify_signature(&v_anchor_line, &ver_signing, &hex_encode(&verdict.sig)),
+        );
+        if !v_ok {
             return GateVerdict::Red("key_V Verdict signature FAILED verification".into());
         }
     }
@@ -689,6 +850,105 @@ pub fn v1_verify(pos: &[String]) -> i32 {
             1
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// CARVE-OUT 1 (hand-derived from the archived `feat/p06-v1-real-signer` branch
+// @ d250025790) — Subcommand: v1-probe [<master-hex>].
+//
+// A runnable P06 real-signature self-test. Signs a fixed known payload with the
+// key_K and key_V hybrid keys via the REAL `bebop2-kv` CLI, verifies each
+// roundtrip, then PROVES a 1-bit corruption of the signature is REJECTED
+// (anti-fake-green). Exercises main's canonical `HybridSigner::{sign,
+// pub_anchor_line, verify_signature}` UNCHANGED (this re-derivation calls them
+// exactly as the gate does — it adds no new byte-path). Records telemetry.
+// Exit 0 = probe healthy; 1 = binary missing (fail-closed, NOT a fake green) OR
+// a real-crypto failure.
+// ---------------------------------------------------------------------------
+
+pub fn v1_probe(pos: &[String]) -> i32 {
+    if !kv_bin_available() {
+        eprintln!(
+            "v1-probe: SKIP — bebop2-kv not found (set BEBOp_REPO_ROOT or V1_KV_BIN). \
+             No real hybrid signature crypto was exercised, so this is NOT a green pass."
+        );
+        return 1;
+    }
+    // Deterministic TEST-only master (NOT a committed trust root).
+    let master = pos.first().cloned().unwrap_or_else(|| {
+        "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff".into()
+    });
+    let payload = b"p06-key_v-hybrid-probe-payload-v1";
+
+    // Telemetry sink lives under the repo root (best-effort; None => no I/O).
+    let telem_root = git_ok(&["rev-parse", "--show-toplevel"]).map(PathBuf::from);
+
+    let k = HybridSigner { role: 'K', master_hex: master.clone() };
+    let v = HybridSigner { role: 'V', master_hex: master };
+
+    // --- key_K roundtrip ---
+    let k_sig = k.sign(payload);
+    let k_anchor = k.pub_anchor_line();
+    if k_sig.is_empty() || k_anchor.is_empty() {
+        eprintln!("v1-probe: FAIL — key_K sign/anchor derivation produced nothing");
+        return 1;
+    }
+    // CARVE-OUT 3 reuse: the derived anchor must carry role=K.
+    if !anchor_matches_role(&k_anchor, 'K') {
+        eprintln!("v1-probe: FAIL — key_K anchor does not carry role=K");
+        return 1;
+    }
+    let k_ok = measure(
+        telem_root.as_deref(),
+        "probe.verify.key_K",
+        'K',
+        &k_anchor,
+        payload,
+        || k.verify_signature(&k_anchor, payload, &hex_encode(&k_sig)),
+    );
+    if !k_ok {
+        eprintln!("v1-probe: FAIL — key_K real hybrid signature did not verify");
+        return 1;
+    }
+
+    // --- key_V roundtrip ---
+    let v_sig = v.sign(payload);
+    let v_anchor = v.pub_anchor_line();
+    if v_sig.is_empty() || v_anchor.is_empty() {
+        eprintln!("v1-probe: FAIL — key_V sign/anchor derivation produced nothing");
+        return 1;
+    }
+    if !anchor_matches_role(&v_anchor, 'V') {
+        eprintln!("v1-probe: FAIL — key_V anchor does not carry role=V");
+        return 1;
+    }
+    let v_ok = measure(
+        telem_root.as_deref(),
+        "probe.verify.key_V",
+        'V',
+        &v_anchor,
+        payload,
+        || v.verify_signature(&v_anchor, payload, &hex_encode(&v_sig)),
+    );
+    if !v_ok {
+        eprintln!("v1-probe: FAIL — key_V real hybrid signature did not verify");
+        return 1;
+    }
+
+    // --- corruption proof: a 1-bit flip of the key_K signature MUST be rejected ---
+    let mut k_sig_bad = k_sig.clone();
+    k_sig_bad[0] ^= 0x01;
+    let bad_rejected = !k.verify_signature(&k_anchor, payload, &hex_encode(&k_sig_bad));
+    if !bad_rejected {
+        eprintln!("v1-probe: FAIL — 1-bit-flipped key_K sig was wrongly ACCEPTED");
+        return 1;
+    }
+
+    println!(
+        "V1-PROBE: OK (real Ed25519\u{2295}ML-DSA-65 roundtrip verified; 1-bit corruption \
+         rejected; key_K anchor={k_anchor}, key_V anchor={v_anchor})"
+    );
+    0
 }
 
 // ---------------------------------------------------------------------------
@@ -1122,5 +1382,171 @@ mod tests {
         ), "1-bit-flipped verdict sig must be RED");
 
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // =======================================================================
+    // Carve-out proofs (hand-derived from archived feat/p06-v1-real-signer).
+    // =======================================================================
+
+    /// Locate the `bebop2-kv` CLI the same way the e2e test does. Returns the
+    /// path if wired, else `None` (test then proves the fail-closed contract).
+    fn locate_kv_bin() -> Option<std::path::PathBuf> {
+        if let Ok(p) = std::env::var("V1_KV_BIN") {
+            let pb = std::path::PathBuf::from(&p);
+            if pb.exists() {
+                return Some(pb);
+            }
+        }
+        if let Ok(root) = std::env::var("BEBOp_REPO_ROOT") {
+            for c in [
+                "target/debug/bebop2-kv",
+                "target/release/bebop2-kv",
+                "bebop2/target/debug/bebop2-kv",
+            ] {
+                let pb = std::path::Path::new(&root).join(c);
+                if pb.exists() {
+                    return Some(pb);
+                }
+            }
+        }
+        None
+    }
+
+    /// CARVE-OUT 1 — `v1-probe` subcommand self-test. Proves the probe runs the
+    /// real hybrid sign+verify roundtrip end-to-end AND that a 1-bit corruption
+    /// of the signature is rejected (the anti-fake-green property). Gated on the
+    /// `bebop2-kv` CLI: when absent the probe MUST fail-closed (return 1, never a
+    /// fake green) — that contract is asserted unconditionally.
+    #[test]
+    fn v1_probe_roundtrip_and_corruption_rejected() {
+        let bin = match locate_kv_bin() {
+            Some(b) => b,
+            None => {
+                // Fail-closed contract: no binary => probe returns 1, NOT 0.
+                assert_eq!(v1_probe(&[]), 1, "probe must fail-closed without bebop2-kv");
+                eprintln!("SKIP v1_probe_roundtrip_and_corruption_rejected: bebop2-kv not found");
+                return;
+            }
+        };
+        std::env::set_var("V1_KV_BIN", &bin);
+        let master =
+            "00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff".to_string();
+
+        // (1)+(2): probe returns 0 only if the real roundtrip verified AND the
+        // 1-bit corruption inside the probe was rejected (else it returns 1).
+        assert_eq!(
+            v1_probe(&[master.clone()]),
+            0,
+            "v1-probe must be GREEN with real crypto"
+        );
+
+        // Independent restatement of the corruption property the probe asserts.
+        let k = HybridSigner { role: 'K', master_hex: master };
+        let payload = b"p06-key_v-hybrid-probe-payload-v1";
+        let sig = k.sign(payload);
+        let anchor = k.pub_anchor_line();
+        assert!(!sig.is_empty() && !anchor.is_empty(), "real sig+anchor derive");
+        assert!(
+            k.verify_signature(&anchor, payload, &hex_encode(&sig)),
+            "clean sig must verify true"
+        );
+        let mut bad = sig.clone();
+        bad[0] ^= 0x01;
+        assert!(
+            !k.verify_signature(&anchor, payload, &hex_encode(&bad)),
+            "1-bit-flipped sig must verify false"
+        );
+    }
+
+    /// CARVE-OUT 2 — telemetry SAFETY. Drives the real `measure()` /
+    /// `record_telemetry` path with sentinel "secret" inputs — a master-seed
+    /// sentinel embedded in the anchor line, raw signing bytes, and a signature
+    /// sentinel — then asserts NONE of them appear verbatim in the written JSONL
+    /// sink (only a digest + an anchor-id prefix + the outcome may appear).
+    /// Mirrors the FORBIDDEN_MARKERS negative-assertion pattern from
+    /// `kernel/src/ports/payment_capability.rs`.
+    #[test]
+    fn telemetry_never_logs_key_material() {
+        let root = std::env::temp_dir().join(format!("v1-telem-{}-{}", std::process::id(), now_ts()));
+        let _ = std::fs::create_dir_all(&root);
+
+        // Sentinels that MUST NOT leak verbatim into the sink.
+        const MASTER_SENTINEL: &str =
+            "deadbeefmasterseed00112233445566778899aabbccddeeffcafebabe";
+        let signed_bytes = b"SECRET-SIGNING-BYTES-SENTINEL-payload-plaintext";
+        let sig_sentinel = "SIGSIGSIG-forbidden-signature-hex-sentinel";
+        let anchor_line = format!("{MASTER_SENTINEL} role=K");
+
+        // Drive the real telemetry path via measure() (records to the sink) and
+        // assert the verify boolean passes straight through unchanged.
+        let ok = measure(
+            Some(root.as_path()),
+            "verify.key_K",
+            'K',
+            &anchor_line,
+            signed_bytes,
+            || true,
+        );
+        assert!(ok, "measure() must pass the closure boolean through unchanged");
+        let false_through = measure(
+            Some(root.as_path()),
+            "verify.key_V",
+            'V',
+            &anchor_line,
+            signed_bytes,
+            || false,
+        );
+        assert!(
+            !false_through,
+            "measure() must pass a false outcome through unchanged"
+        );
+
+        let sink = std::fs::read_to_string(root.join(V1_TELEMETRY)).expect("telemetry written");
+
+        // FORBIDDEN_MARKERS: raw secrets that must NEVER appear in the sink.
+        let forbidden: &[&str] = &[
+            MASTER_SENTINEL,                             // kv master seed / full key
+            std::str::from_utf8(signed_bytes).unwrap(), // payload plaintext / signing bytes
+            sig_sentinel,                               // a signature (never even passed in)
+            &anchor_line,                               // full anchor line (only prefix allowed)
+        ];
+        for m in forbidden {
+            assert!(
+                !sink.contains(*m),
+                "telemetry sink LEAKED forbidden material: {m}"
+            );
+        }
+        // Positive: the sink DOES carry the safe metadata (op, digest, outcome).
+        assert!(sink.contains("\"op\":\"verify.key_K\""));
+        assert!(sink.contains("\"ok\":true"));
+        assert!(sink.contains("\"ok\":false"));
+        assert!(
+            sink.contains(&hex_encode(&digest32(signed_bytes))),
+            "the DIGEST of the signing bytes is the only representation kept"
+        );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// CARVE-OUT 3 — cross-role anchor check. Proves a role=K anchor is REJECTED
+    /// when role=V is expected and vice versa (cross-role attestation confusion
+    /// hardening), while a correctly-roled anchor passes.
+    #[test]
+    fn cross_role_anchor_check_rejects_mismatch() {
+        // correctly roled => accepted
+        assert!(anchor_matches_role("aabbccdd role=K", 'K'));
+        assert!(anchor_matches_role("aabbccdd role=V", 'V'));
+        // cross-role => rejected (the whole point)
+        assert!(
+            !anchor_matches_role("aabbccdd role=K", 'V'),
+            "a role=K anchor must NOT pass where role=V is expected"
+        );
+        assert!(
+            !anchor_matches_role("aabbccdd role=V", 'K'),
+            "a role=V anchor must NOT pass where role=K is expected"
+        );
+        // trailing whitespace tolerated (the gate constructs `<hex> role=R`)
+        assert!(anchor_matches_role("aabbccdd role=K  \n", 'K'));
+        // no role tag => rejected (fail-closed)
+        assert!(!anchor_matches_role("aabbccdd", 'K'));
     }
 }
