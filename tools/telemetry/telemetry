@@ -80,8 +80,36 @@ case "$cmd" in
     fi
     log_event bench "name=kernel_metrics" "note=$(printf '%s' "$probe_out" | _jesc)" >/dev/null
     printf 'kernel: %s\n' "$probe_out" ;;
+  kernel-spans)
+    # P83 Layer-1 fold (BLUEPRINT P83 §4.3). Run an instrumented kernel TARGET under
+    # DOWIZ_SPAN_METRICS=1 with a pinned metrics dir, then fold every emitted
+    # metric.jsonl span row into a `kind=kernel_span` metric event that the EXISTING
+    # metric.jsonl reader parses (byte-compatible: kind=<x> + double-serialized sample).
+    # Usage: telemetry kernel-spans <target-cmd> [args...]
+    #   e.g. telemetry kernel-spans ./target/release/lm --bench-order 1000
+    # The target must call `dowiz_kernel::init_tracing()` (or `span_metrics::init`)
+    # under DOWIZ_SPAN_METRICS=1; it then writes metric.jsonl into the dir we export.
+    target="${1:?kernel-spans requires a target command}"; shift || true
+    KDIR="$(mktemp -d "${TMPDIR:-/tmp}/kernelspans.XXXXXX")"
+    # Export so the kernel layer (init reads DOWIZ_SPAN_METRICS_DIR) writes here.
+    DOWIZ_SPAN_METRICS=1 DOWIZ_SPAN_METRICS_DIR="$KDIR" "$target" "$@"
+    rc=$?
+    mj="$KDIR/metric.jsonl"
+    if [ -f "$mj" ]; then
+      # Fold each span row into a parseable kind=kernel_span metric event.
+      while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        fn="$(printf '%s' "$line" | python3 -c 'import json,sys;d=json.loads(sys.stdin.read());print(d.get("span",""))' 2>/dev/null)"
+        [ -z "$fn" ] && continue
+        log_event metric "kind=kernel_span" "fn=$fn" "sample=$(printf '%s' "$line" | _jesc)" >/dev/null
+        printf 'kernel-spans: folded fn=%s\n' "$fn"
+      done < "$mj"
+    else
+      echo "kernel-spans: no metric.jsonl produced by target (did it enable DOWIZ_SPAN_METRICS=1?)" >&2
+    fi
+    rm -rf "$KDIR"
+    exit "$rc" ;;
   monitor)
-    # Real-time resource + friction loop. Samples host every ${1:-15}s, emits a `metric`
     # event, and raises a 🔥 friction alert when a bottleneck crosses a threshold:
     #   disk_pct >= 90  (the Hetzner box chronically pins 91% — the dominant friction)
     #   load1/nproc  >= 4 (CPU saturation)

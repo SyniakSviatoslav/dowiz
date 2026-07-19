@@ -52,6 +52,11 @@ pub use obs::{SpanMetricsLayer, SpanMetrics};
 /// this; it only emits spans, which are inert without a subscriber.
 pub fn init(dir: Option<std::path::PathBuf>) -> Result<(), ()> {
     use tracing_subscriber::prelude::*;
+    // Allow the caller (or the `telemetry kernel-spans` subcommand) to pin where
+    // `metric.jsonl` / `alert.jsonl` land via `DOWIZ_SPAN_METRICS_DIR`. When `dir`
+    // is None and the env is unset, the writer is best-effort-disabled (no file is
+    // opened), so a bare `init(None)` never surprises the caller with disk writes.
+    let dir = dir.or_else(|| std::env::var_os("DOWIZ_SPAN_METRICS_DIR").map(std::path::PathBuf::from));
     let layer = SpanMetricsLayer::new(dir);
     let registry = tracing_subscriber::Registry::default().with(layer);
     tracing::subscriber::set_global_default(registry).map_err(|_| ())
@@ -62,6 +67,21 @@ pub fn init(dir: Option<std::path::PathBuf>) -> Result<(), ()> {
 #[cfg(feature = "telemetry")]
 pub fn check_load_breach(dir: Option<std::path::PathBuf>) -> breach::BreachAction {
     breach::check_load_breach(dir)
+}
+
+/// Install the P83 Layer-1 subscriber as a **scoped** default (via `with_default`),
+/// returning a guard that reverts on drop. Unlike `init` (which sets the process-global
+/// default and fails if one is already installed), this works inside any test that may
+/// already have a global subscriber — the span metrics layer is active only for the
+/// duration of the returned guard. Used by the P83 wiring tests.
+#[cfg(feature = "telemetry")]
+pub fn init_scoped(
+    dir: Option<std::path::PathBuf>,
+) -> tracing::subscriber::DefaultGuard {
+    use tracing_subscriber::prelude::*;
+    let layer = SpanMetricsLayer::new(dir);
+    let registry = tracing_subscriber::Registry::default().with(layer);
+    tracing::subscriber::set_default(registry)
 }
 
 #[cfg(test)]
