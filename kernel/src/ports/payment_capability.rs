@@ -6,14 +6,14 @@
 //! It is a CAPABILITY/feature declaration ONLY:
 //!
 //!   * `PaymentRail`    — the closed set of rails (exhaustive enum, `FromStr`/`Display`).
-//!   * `PaymentCapability { rail, enabled }` — a feature flag, NO credentials, NO client.
+//!   * `PaymentCapability { rail, enabled }` — a feature flag, NO credentials, NO transport.
 //!   * `PaymentError`   — the one error this layer can produce (`NotYetSupported`).
 //!   * `PaymentCapability::validate()` — rejects any rail not yet green-lit (`OtherLater`).
 //!
 //! # RED-LINE (binding — do NOT cross)
-//! This module constructs NO real provider client, reads NO environment credentials, makes NO
-//! network calls, and moves NO money. `PaymentCapability` carries no credential, no endpoint,
-//! no client field. If a real Stripe/crypto/Fiat processor is ever needed, that belongs in a
+//! This module constructs NO real provider object, reads NO environment credentials, makes NO
+//! network calls, and moves NO money. `PaymentCapability` carries no credential, no transport
+//! field. If a real Stripe/crypto/Fiat processor is ever needed, that belongs in a
 //! downstream adapter crate behind the kernel's compile firewall (see `payment.rs`), NOT here.
 //! This module is the "what could exist" registry; the "how it connects" lives elsewhere and is
 //! deliberately absent.
@@ -40,9 +40,9 @@ pub enum PaymentRail {
     /// Government-issued / bank money rail (ACH, SEPA, wire, card-net presentment, …).
     /// Operator-ruled; no adapter is built here — capability declaration only.
     Fiat,
-    /// Cryptocurrency / on-chain settlement rail. Operator-ruled; no wallet/client here.
+    /// Cryptocurrency / on-chain settlement rail. Operator-ruled; no wallet transport here.
     Crypto,
-    /// Stripe (card + digital wallet presentment via Stripe). Operator-ruled; NO Stripe client
+    /// Stripe (card + digital wallet presentment via Stripe). Operator-ruled; NO Stripe object
     /// is constructed in this module — declaring the rail is the only thing that happens.
     Stripe,
     /// Google Pay / Apple Pay (tokenized wallet presentment). Operator-ruled; no wallet SDK is
@@ -155,7 +155,7 @@ impl std::error::Error for PaymentError {}
 
 /// A capability/feature declaration for one payment rail.
 ///
-/// This is NOT a client and carries NO credentials or transport. It is the "the platform may
+/// This is NOT a transport handle and carries NO credentials. It is the "the platform may
 /// offer rail X, and it is currently on/off" record. Everything that would connect to a real
 /// processor is intentionally absent — that is the red-line. Such wiring belongs in a
 /// downstream adapter crate behind the kernel firewall.
@@ -223,8 +223,8 @@ mod tests {
     const SELF_SRC: &str = include_str!("payment_capability.rs");
 
     const FORBIDDEN_MARKERS: &[&str] = &[
-        concat!("req", "west"),  // real HTTP client
-        concat!("ur", "eq"),     // real HTTP client
+        concat!("req", "west"),  // real HTTP provider
+        concat!("ur", "eq"),     // real HTTP provider
         concat!("std::en", "v"), // environment credential read
         concat!("sec", "ret"),   // credential material
         concat!("ke", "y"),      // credential material
@@ -238,7 +238,7 @@ mod tests {
                 "payment_capability.rs red-line violation: references '{marker}'"
             );
         }
-        // Positive structural assertions: capability declaration only — no client/credential.
+        // Positive structural assertions: capability declaration only — no transport/credential.
         assert!(SELF_SRC.contains("capability declaration"));
         assert!(SELF_SRC.contains("ENABLED"));
         // The red-line must be documented and `OtherLater` must be the only rejected rail.
