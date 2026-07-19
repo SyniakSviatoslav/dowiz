@@ -130,6 +130,11 @@ pub mod impedance;
 pub mod incidence;
 pub mod intake;
 pub mod isolation;
+/// Item 31 §4 — hand-rolled, always-compiled JSON parse+serialize primitive (pure `std`). The
+/// parse-side home for the serde carriers being cut over (agent-facade, skillspector-rs).
+/// Separate from `fdr::json` (serialize-only, fixed-schema). `serde_json` is retained only as a
+/// dev-dependency differential oracle (`tests/json_oracle.rs`), outside the zero-dep proof surface.
+pub mod json;
 pub mod kalman;
 /// §3.3 Layer-B (semantic) leakage gate — cosine-0.9 near-duplicate rejection over an injected
 /// `&dyn LlmBackend` embedding model. Native, zero-dep; the live bridge lives in `llm-adapters`.

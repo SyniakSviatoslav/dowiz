@@ -177,6 +177,11 @@ thunderdome = { version = "0.6", optional = true }
 [dev-dependencies]
 # Benchmarking harness for real latency/throughput telemetry on the hot paths.
 criterion = "0.5"
+# Item 31 §4: differential oracle for the hand-rolled `kernel::json` parser/serializer. DEV-ONLY —
+# it sits OUTSIDE the `-e no-dev` zero-dep proof surface, so the kernel's empty allowlist stays
+# empty (`cargo tree -e no-dev` excludes dev-deps). Used only by tests/json_oracle.rs to assert
+# kernel::json parses/round-trips a real carrier corpus identically to the incumbent serde_json.
+serde_json = "1"
 # PQ KAT test macro expansion (dsa_acvp_tests.rs) — dev-only, not in any build path.
 paste = "1.0"
 # Property-test harness for the P47 reconciliation invariant (B3) — arbitrary order
