@@ -75,6 +75,16 @@ pub mod wallet;
 /// P59 `capability_cert` + P70 `owner_surface`. No card data, no network endpoint in the default
 /// build (grep-gate `no_endpoint_dependency`).
 pub mod hub_provisioning;
+/// BLUEPRINT-P83 — kernel production observability (SYNTHESIS PERFORMANCE AUDIT 2026-07-18
+/// §3.3-C4). Feature-gated (`telemetry`) so the SHIPPING binary carries zero observability
+/// symbols and is behavior-/perf-neutral. Two layers: (1) a ZERO NEW DEP `SpanMetricsLayer`
+/// that consumes the spans over the 8 verified hot functions and writes log-bucket latency
+/// histograms to `metric.jsonl`; (2) the `load1/nproc >= 4` breach branch → system-wide
+/// `perf record -a -g -F 99` (+ `alert.jsonl`), with `pprof` a feature-gated no-op fallback.
+/// Never called from the core decide/fold/money path; the kernel only EMITS spans, which are
+/// inert without a subscriber installed via `telemetry::init`.
+#[cfg(feature = "telemetry")]
+pub mod span_metrics;
 /// BLUEPRINT-P68 — hub supervisor: update + backup. A/B-slot atomic-flip auto-update with a
 /// real-code-path health gate, owner-triggered rollback, mandatory age-snapshot-before-promote,
 /// and a sovereign encrypted backup envelope (X25519 → SHAKE256 → AES-256-GCM STREAM). Gated
