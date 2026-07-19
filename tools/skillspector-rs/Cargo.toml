@@ -13,8 +13,14 @@ edition = "2021"
 # static_runner.run_static_patterns 1:1.
 [dependencies]
 regex = "1"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# serde + serde_json REMOVED (roadmap item 31 §4.4 Phase-A cutover): the JSON-RPC serve-mode parse
+# and the findings/summary OUTPUT now go through the kernel-owned `dowiz_kernel::json` primitive
+# (differentially proven vs serde_json — kernel/tests/json_oracle.rs). dowiz-kernel's DEFAULT build
+# is zero-external-dep, so this adds NO transitive crates; `cargo tree -e no-dev` drops the whole
+# serde subtree (serde/serde_json/serde_core/serde_derive/proc-macro2/quote/syn/unicode-ident/itoa/
+# zmij) and this crate's allowlist shrinks to the regex subtree only.
+# NOTE: `regex` remains a separate named rewrite candidate (synthesis §25) — out of item-31 scope.
+dowiz-kernel = { path = "../../kernel" }
 
 [[bin]]
 name = "skillspector-rs"
