@@ -384,6 +384,22 @@ mod tests {
 /// Dev/CLI only — never called from the wasm cdylib (no stdio there).
 #[cfg(not(target_arch = "wasm32"))]
 pub fn init_tracing() {
+    // ── P83 Layer-1 auto-init (BLUEPRINT P83 §4.2) ────────────────────────────
+    // When `DOWIZ_SPAN_METRICS=1`, install the zero-dep `SpanMetricsLayer` instead
+    // of the printing `fmt` layer. This is the gap-closer: the three already-placed
+    // spans (+ five wrapped by `span_metrics::instrument`) are otherwise aggregated
+    // by nothing. The branch is `#[cfg(feature = "telemetry")]`, so the DEFAULT and
+    // wasm builds are byte-identical (D2: the production cdylib never sees this code).
+    #[cfg(feature = "telemetry")]
+    {
+        if std::env::var("DOWIZ_SPAN_METRICS").as_deref() == Ok("1") {
+            if crate::span_metrics::init(None).is_ok() {
+                return;
+            }
+            // init() only fails if a global subscriber is ALREADY installed (e.g. a
+            // test harness). Fall through to the fmt layer so tracing still works.
+        }
+    }
     use tracing_subscriber::EnvFilter;
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
