@@ -2902,3 +2902,29 @@ closes its absence from *this* roadmap and from GROUND-TRUTH.
   **eigenvector solve R-LM/FE-12 needed now exists in-kernel** (`spectral::eigh`/`topk_symmetric`,
   commit `03ac0fefe`, Phase-28) — only the thin `coords_2d/coords_3d` wrapper remains (see
   `equations-knowledge-base-2026-07-19/SYNTHESIS-2026-07-19.md` §2 Item 3 for the wrapper spec).
+
+## 21. SelfAdaptator key_V-gate routing — proposal registration (2026-07-19)
+
+Appended after §20, same append-only rule. **Registration only — this is NOT an authorization to
+build.** Full plan: `equations-knowledge-base-2026-07-19/BLUEPRINT-2026-07-19.md` §2 (worktree
+`research/equations-thermo-eigenvector-2026-07-19`, commit `c64241e7c`).
+
+- **What exists today (verified live, not assumed):** `SelfAdaptator` (`kernel/src/evals.rs:791-798`)
+  drives a real kernel knob (`KalmanFilter::set_q_scaler`) via `propose_step` (`:825`) →
+  `apply_step` (`:870`), gated **only** by a noether Lyapunov drift check (`drift >
+  self.noether_tol`, `:856`). A grep of the whole file for `key_V`/`key_K` returns zero hits — the
+  auto-apply path has no independent-verdict precondition today.
+- **The proposal:** route `apply_step`'s call site through the already-landed key_V split-identity
+  verifier — `tools/ci-truth/src/v1.rs::evaluate_gate` (`:664`), which requires both a key_K
+  `DiffAttestation` and a key_V `Verdict` and rejects `key_K == key_V` self-certification
+  (`:672,675,688`) — so a self-modification step can no longer self-certify on the Lyapunov check
+  alone. P06 (the key_V HybridSigner this depends on) is CLOSED (`58987d79d`), so this is newly
+  buildable; it was not buildable before 2026-07-18.
+- **Why this is registered as PROPOSAL, not queued work:** it modifies a currently-firing
+  self-modification path. Per the standing "never bypass human-gated decisions" rule and the
+  H4-proposal-only precedent already set for this arc, three questions need an explicit operator
+  ruling before any code changes — verdict freshness (per-step vs. session-cached), verdict source
+  (who/what produces the key_V verdict for a runtime auto-apply, as opposed to CI's human/pipeline
+  source), and fail-closed default on a missing/stale verdict (block, matching `evaluate_gate`'s
+  existing RED-on-absent pattern, vs. degrade to noether-only). See BLUEPRINT §2 for the full
+  reasoning behind each question.
