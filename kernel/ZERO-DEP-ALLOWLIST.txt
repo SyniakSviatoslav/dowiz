@@ -5,29 +5,17 @@
 # the same reviewed diff — that edit IS the explicit exception record.
 # Rationale + retirement plan: docs/design/SPACE-GRADE-KERNEL-ARCHITECTURE-SYNTHESIS-2026-07-19.md §0.1.
 #
-# --- 3 direct offenders (retirement: item 4 kills the tracing pair, item 5 kills regex) ---
+# 2026-07-19 (roadmap items 4+29): the `tracing` + `tracing-subscriber` pair was RETIRED
+# (kernel now owns src/fdr/). That dropped these 19 crates from the default no-dev tree:
+#   tracing tracing-subscriber tracing-attributes tracing-core tracing-log
+#   proc-macro2 quote syn unicode-ident matchers nu-ansi-term sharded-slab thread_local
+#   cfg-if lazy_static log once_cell pin-project-lite smallvec
+# The default tree is now exactly 6 crates (kernel + regex's subtree); allowlist = 5 external.
+#
+# --- 1 direct offender remaining (retirement: item 5 kills regex) ---
 regex
-tracing
-tracing-subscriber
-# --- transitive closure of the above (locked by kernel/Cargo.lock) ---
+# --- transitive closure of regex (locked by kernel/Cargo.lock) ---
 aho-corasick
-cfg-if
-lazy_static
-log
-matchers
 memchr
-nu-ansi-term
-once_cell
-pin-project-lite
-proc-macro2
-quote
 regex-automata
 regex-syntax
-sharded-slab
-smallvec
-syn
-thread_local
-tracing-attributes
-tracing-core
-tracing-log
-unicode-ident
