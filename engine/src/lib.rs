@@ -16,6 +16,14 @@ mod bridge;
 // field_frame is exposed publicly: the browser renders the kernel-computed
 // field via `field_frame::compose` (zero TS). No compute lives in the wasm crate.
 pub mod field_frame;
+// P88 — atomicity-by-default policy + deterministic fixed-point reduction spec.
+// BLUEPRINT: docs/design/CORE-ROADMAP-2026-07-17/
+//             BLUEPRINT-P88-atomicity-by-default-physics-gpu-2026-07-19.md
+// Always-compiled (no `gpu` feature exists yet) so its RED→GREEN gates run on
+// the default build; P86/P87 inherit §4.1/§4.2/§4.4 from this module. The
+// shader legs (D2, shader edits) WAIT on the operator-owned P38 §4.2 GPU-compute
+// decision — this module contains ZERO WGSL/GPU code.
+pub mod gpu_atomicity;
 // BLUEPRINT-E1 energy-gate + sign-pin at the kernel↔engine seam. TEST-ONLY:
 // it changes no runtime contract (test-side reference oracle, never on the
 // FieldFrame::step hot path), so it compiles only under `cfg(test)`.
