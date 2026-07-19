@@ -2785,3 +2785,85 @@ wasm-binding logic onto the canvas substrate rather than growing the DOM path fu
 `research/*-verify-redteam-*` branches (162-228 ahead / 0-2 behind). Reconciliation against
 `main` (which now carries the full §16-§18 axis) is tracked as separate operational work, not
 folded into this roadmap section — see the isolated reconciliation branch this same pass.
+
+---
+
+## 19. Perf, physics and mesh research wave — status-ledger registration (2026-07-19)
+
+Appended after §18, same append-only rule. The 2026-07-18→19 session ran ~20 dispatched Opus
+investigations + 5 synthesis/blueprint passes over the kernel/engine performance surface, the
+bebop2 mesh auth layer, and two product levers (ETA, living memory), then consolidated the
+whole day into **one status ledger** rather than N scattered docs. Per the standing research-only
+directive, this wave wrote **zero product code** — the deliverable is a dependency-ordered plan
+(18 blueprints still to write, 4 already fully blueprinted, 12 closed scans) plus a small set of
+**already-existing local-only code artifacts** produced in the surrounding session, all unpushed
+and several process-blocked (§19.3). This section is the index; the ledger, the meta-gap audit,
+and the 22 `BLUEPRINT-P{75-96}` files are the source — not duplicated here.
+
+**Source of truth (do not re-derive from this entry):**
+[`CORE-ROADMAP-2026-07-17/MASTER-STATUS-LEDGER-2026-07-19.md`](CORE-ROADMAP-2026-07-17/MASTER-STATUS-LEDGER-2026-07-19.md)
+— §1 one-glance status table (every item, status vocabulary, source cites), §3 the merged
+dependency sequence, §5 the 15 outstanding operator decisions. Adversarial coverage check:
+[`CORE-ROADMAP-2026-07-17/META-GAP-AUDIT-2026-07-19.md`](CORE-ROADMAP-2026-07-17/META-GAP-AUDIT-2026-07-19.md)
+(4 HIGH + 13 hygiene findings against 8 dimensions). Cross-cutting QA governance:
+[`CORE-ROADMAP-2026-07-17/BLUEPRINT-Q-SERIES-VERIFICATION-OBSERVABILITY-2026-07-19.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-Q-SERIES-VERIFICATION-OBSERVABILITY-2026-07-19.md).
+All three already carry index rows in [CORE-ROADMAP-INDEX §10](CORE-ROADMAP-INDEX.md).
+
+### 19.1 What the wave covered — four clusters + a positive-negative closed set
+
+| Cluster | Items | One-line |
+|---|---|---|
+| **Mesh auth-layer refactor** | **M1**, **P92**, **P93**, **P94** | Real RFC-5705 exporter binding (M1 — an open red-team correctness item on the live path), verify-once channel-bound fast-path (P92, fully blueprinted, GO-with-conditions + measure-first NO-GO gate), store-and-forward transcript-binding + replay-window (P93), in-memory `ScopeMask` bitmask (P94, wire form untouched) |
+| **Performance tiers** | **P75–P91** | P75 CI bench-gate re-architecture (owns the baseline schema everything else benches into) · algorithmic fixes (P77/P78/P79) · large mechanical bench-coverage expansion (P80/P81/P82/P83) · physics/GPU bets (P86–P89, several operator/P38-gated) · crypto process+spec integrity (P85 NTT red-line remediation, P91 KEM ring correction) · P90 contention-bench registration. P84 reserved (operator-gated, unproposed) |
+| **Product levers** | **P95**, **P96** | Living-memory BM25 persistence + incremental update (P95, verdict HOLD/NO-GO absent a real repeated caller — latent hazard only) · wire live Kalman/EMA courier speed into ETA (P96, small/isolated/non-red-line, byte-for-byte static fallback) |
+| **Q-series governance** | **Q1–Q4** | Cross-cutting Q-namespace (deliberately not P-numbered — governance, not feature) ensuring each P-item's own stated DoD is actually met as it builds: Q1 claim-verification (`DONE-VERIFIED` status), Q2 feature telemetry (extends the closed `LogEvent` enum), Q3 review gate (mostly already exists), Q4 interface verification (reuses P38 render-floor + Playwright) |
+
+Twelve scans **closed with no code** — five *validated the existing design under adversarial
+scrutiny* (money/payment tri-state, crypto trust-boundary, core consolidation, batch posture,
+corpus tokenization) and five/seven found *no target for a real technique exists here, often by
+standing policy* (BitNet, QKD, fraud scoring, bit-slicing, energy-currency; each with a named
+reopening trigger). These honest negatives are load-bearing deliverables — see ledger §2 for the
+two-kinds-of-closed distinction (do not re-litigate a NO-TARGET item as "never investigated").
+
+### 19.2 Dependency-ordered execution sequence (high level — full table in ledger §3)
+
+Two largely **independent lanes** that parallelize fully: the **dowiz kernel/engine perf lane**
+(P75, P77, P79–P81, P83, P87–P89, P90-merge, P91) never touches bebop2, and the **bebop mesh +
+perf lane** (P85, P76, P78, P82, M1, P93, P92, P94, D-9) never touches the dowiz kernel. Only two
+soft cross-edges exist (P75's bench schema is cited by P82; P82's `HybridGate::check` lane is the
+natural substrate for P92's measure-first D-BENCH gate) — neither is a hard block.
+
+- **bebop lane gate-0 (freeze-breaker):** **P85** (NTT `--no-verify` red-line remediation) **+ C3
+  ungated-keygen resolution** must precede the *entire* bebop lane — until both close, the hooks
+  freeze **all** hook-respecting bebop commits, M1/P93/P92/P94 included. This is a real shared
+  gate the mesh plan alone did not surface.
+- **mesh cluster order:** **M1** (exporter fix, own reviewed commit + mandatory independent
+  adversarial review) → **P93** (transcript+replay on the shared `signed_frame.rs` surface) →
+  **P92** (opt-in fast-path; run D-BENCH — NO-GO if presence volume doesn't clear the threshold) →
+  **P94** (its value is *created* by the fast-path, so it sequences after).
+- **dowiz lane priority:** **P75** first — the perf gate everything else writes baselines into —
+  then the small algorithmic fixes and the large bench-coverage expansion; P86/P87 wait on the
+  operator-owned P38 §4.2 GPU decision; P89 is the falsifiable spectral-vs-DCT bet.
+
+Highest-leverage single items: **P75** (dowiz) and **P85+C3** (bebop), then **M1**. P92/P94/
+P86/P87 are correctly late — opt-in, gated, or awaiting an operator ruling not yet taken.
+
+### 19.3 Current real state — all LOCAL/UNPUSHED; three pre-existing code artifacts
+
+Everything in this wave is **local, unpushed planning**. Push-state re-verified 2026-07-19 01:00:
+dowiz `origin/main` sits at `4b30c9b4c` with the **entire local main line above it unpushed**
+(the P57–P74 merge wave). The three code artifacts below were produced in the surrounding session
+(not by this planning wave) and are *registered*, not re-implemented, by the ledger:
+
+| ID | Artifact | Commit / location | Status |
+|---|---|---|---|
+| **I1 / NTT** | bebop2 ML-KEM-768 incomplete-NTT (exhaustively proven, 0/65,536 mismatches; **NOT wired**) | `986646a`, unpushed on bebop local `perf/bus-contention-2026-07-18` | **DONE-LOCAL-UNPUSHED-CODE · PROCESS-RED** — committed `--no-verify` past 5 gates incl. the mandatory 3-model review; a *blocked* item, not a completed one, until **P85** closes |
+| **I2 / Arena** | thunderdome → `kernel/src/slot_arena.rs` behind off-default `slot-arena` feature | `a857cd71a`, unpushed (in the local dowiz main line above `4b30c9b4c`) | **DONE-LOCAL-UNPUSHED-CODE** — operator override of the research "no adoption" verdict, logged in the divergence ledger; zero default-build cost; push decision open (OD-4) |
+| **I3 / Contention** | contended benches + budget CAS + `token_bucket` clock hoist (637 kernel tests green on branch) | `8c865805b` + `8256dbffb`, unpushed on dowiz local `perf/contention-bench-2026-07-18` | **DONE-LOCAL-UNPUSHED-CODE** — registered by **P90**; merge/push + GCRA-swap decisions open (OD-1/OD-2) |
+
+A separate documentation-integrity note (ledger §0): 15 of this session's research/design docs
+were briefly disk-lost to worktree/merge churn while untracked and recovered verbatim from
+subagent transcripts — 4 design docs restored to this directory, 11 `docs/research/` docs staged
+in scratchpad pending an operator/lead restore (OD-15). The **critical path is operator rulings,
+not more design**: ledger §5 lists all 15 (gate-0 C3, P85 closure path, the push decisions, the
+P38 §4.2 GPU call, the two P93 privacy/broadcast forks, the P92 D-BENCH proceed gate).
