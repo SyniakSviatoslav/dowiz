@@ -8,6 +8,13 @@ description = "dowiz deterministic core: order-state machine (decide/fold Law) +
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+# Declare the `kani` cfg (injected by `cargo kani` only under bounded-model-checking;
+# item 7). This is a LINT config, not a dependency — `cargo tree -e no-dev` is unaffected
+# and the zero-dep gate stays green — it merely silences the `unexpected_cfgs` warning on
+# the `#[cfg(kani)]` proof modules in normal builds.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+
 [features]
 # `std` (default) enables runtime CPU-feature detection for the FMA eigensolver
 # kernel. Disable (`--no-default-features`) for a no-std embedding: the solver's

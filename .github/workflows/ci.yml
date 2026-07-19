@@ -510,3 +510,45 @@ jobs:
             esac
           fi
           bash scripts/hardening-gate.sh "$BASE" HEAD
+
+  # ITEM 7 (space-grade roadmap §C / SYNTHESIS §7): the Kani bounded-model-checker gate.
+  # SEPARATE job from hardening-gate (blueprint §6.1): Kani is a NETWORK-installed toolchain
+  # (its own rustc + CBMC, `cargo install kani-verifier && cargo kani setup`) with minutes-scale
+  # proof times — folding it into the fast `--locked --offline` hardening-gate would break that
+  # gate's offline determinism and per-PR bite. Runs the `mode=kani` rows of the SHARED manifest
+  # (docs/audits/hardening/HOT-PATHS.tsv) via scripts/kani-gate.sh: every verdict is a live
+  # `cargo kani` run + the parsed "N successfully verified harnesses" asserted >= the manifest
+  # min (a filter matching ZERO harnesses is RED — the anti-forgery core). Includes the
+  # planted-fault self-test (kernel/src/kani_selftest.rs): a deliberate i32 overflow annotated
+  # #[kani::should_panic] that verifies SUCCESSFUL only because the fault IS caught — proving the
+  # gate detects real bugs, not passing vacuously. ZERO-DEP stays mechanically true: all harnesses
+  # are behind #[cfg(kani)]; the `kani` API crate is injected by `cargo kani` only under cfg(kani),
+  # so NOTHING is added to Cargo.toml/Cargo.lock (`cargo tree -e no-dev` unchanged; items 1/13/31).
+  # Design + RED-path demonstration: docs/design/BLUEPRINT-ITEM-07-kani-wiring-2026-07-19.md §6.5.
+  kani-gate:
+    name: kani proof gate (item 7, bounded model checking)
+    runs-on: ubuntu-latest
+    env:
+      KANI_VERSION: "0.67.0"   # pinned; CBMC verdicts are deterministic per version, only runtime varies
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Cache Kani toolchain (~/.kani bundle) + cargo bins
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.kani
+            ~/.cargo/bin/cargo-kani
+            ~/.cargo/bin/kani
+          key: kani-${{ env.KANI_VERSION }}-${{ runner.os }}
+      - name: Install Kani (network toolchain — same class as rustup; offline discipline governs crate deps, not toolchains)
+        run: |
+          set -euo pipefail
+          if ! command -v cargo-kani >/dev/null 2>&1; then
+            cargo install kani-verifier --locked --version "${KANI_VERSION}"
+          fi
+          cargo kani setup   # idempotent — no-op when the pinned bundle is already present (cache hit)
+          cargo kani --version
+      - name: Run the kani-gate (mode=kani manifest rows + planted-fault self-test)
+        run: bash scripts/kani-gate.sh
