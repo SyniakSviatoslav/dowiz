@@ -469,9 +469,10 @@ mod tests {
     // ══ REGEX-CRATE DIFFERENTIAL (removed in commit 3/3 with the crate) ═══════
     // The pre-cutover parity proof: the hand-rolled matcher is bit-identical to
     // the live `regex` crate over the module's newline-free ASCII domain. These
-    // four tests are the ONLY remaining `regex::` references in the kernel; they
-    // are deleted in the same commit that removes `regex = "1"`, after which the
-    // naive-reference differential + frozen golden above carry the guarantee.
+    // tests (plus the one oracle in `tests.rs`) are the last `regex::` uses in
+    // the kernel; they are deleted in the same commit that removes `regex = "1"`,
+    // after which the naive-reference differential + frozen golden carry the
+    // guarantee.
 
     #[test]
     fn parity_vs_regex_crate_battery_over_fixture() {
@@ -506,26 +507,30 @@ mod tests {
     }
 
     #[test]
-    fn parity_vs_regex_crate_seam_query_pattern_equals_query_regex() {
-        // Whole-seam parity: query_pattern doc-id vectors == query_regex
-        // doc-id vectors for every battery pattern, over fixture + synthetic.
+    fn parity_vs_regex_crate_seam_query_pattern_matches_regex_oracle() {
+        // Whole-seam parity: query_pattern doc-id vectors == a brute-force
+        // linear regex-crate oracle, for every battery pattern, over fixture +
+        // synthetic (proves trigram narrowing never drops a true regex match).
         let idx_f = TrigramIndex::new(FIXTURE);
         let corpus = synthetic_corpus(2000);
         let docs: Vec<&str> = corpus.iter().map(|s| s.as_str()).collect();
         let idx_s = TrigramIndex::new(&docs);
         for p in BATTERY {
-            assert_eq!(
-                idx_f.query_pattern(p).unwrap(),
-                idx_f.query_regex(p).unwrap(),
-                "fixture pattern {:?}",
-                p
-            );
-            assert_eq!(
-                idx_s.query_pattern(p).unwrap(),
-                idx_s.query_regex(p).unwrap(),
-                "synthetic pattern {:?}",
-                p
-            );
+            let re = regex::Regex::new(p).unwrap();
+            let oracle_f: Vec<u32> = FIXTURE
+                .iter()
+                .enumerate()
+                .filter(|(_, d)| re.is_match(d))
+                .map(|(i, _)| i as u32)
+                .collect();
+            assert_eq!(idx_f.query_pattern(p).unwrap(), oracle_f, "fixture pattern {:?}", p);
+            let oracle_s: Vec<u32> = docs
+                .iter()
+                .enumerate()
+                .filter(|(_, d)| re.is_match(d))
+                .map(|(i, _)| i as u32)
+                .collect();
+            assert_eq!(idx_s.query_pattern(p).unwrap(), oracle_s, "synthetic pattern {:?}", p);
         }
     }
 

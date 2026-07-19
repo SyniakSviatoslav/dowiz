@@ -84,11 +84,13 @@ fn verify_filters_overbroad_candidates_no_false_positives() {
 }
 
 #[test]
-fn regex_query_exact_and_zero_false_positives() {
+fn pattern_query_exact_and_zero_false_positives() {
     let idx = build();
-    // Pattern with a literal trigram run → candidate reduction + regex verify.
+    // Pattern with a literal trigram run → candidate reduction + matcher verify.
     let pat = r"note-.*-recall";
-    let got = idx.query_regex(pat).expect("valid regex");
+    let got = idx.query_pattern(pat).expect("valid pattern");
+    // Incumbent oracle: the retired `regex` crate (still present this commit).
+    // Replaced by a frozen golden in commit 3/3 when the crate is removed.
     let re = regex::Regex::new(pat).unwrap();
     let oracle: Vec<u32> = FIXTURE
         .iter()
