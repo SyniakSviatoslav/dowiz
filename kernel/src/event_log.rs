@@ -504,6 +504,26 @@ impl<S: EventStore> EventLog<S> {
     }
 }
 
+/// Kernel-local production caller for the audit-hash-chain verifier (P-H W-H4).
+///
+/// `verify_chain` (the content-addressed mesh event log verifier) had ZERO
+/// production callers — only module tests exercised it. This is the real
+/// wiring: a persisted/replayed audit log is verified (genesis reachable,
+/// every `prev` links, no fork, no cycle) BEFORE it is trusted, per the P-H
+/// mandate "no chain ⇒ no mesh". Returns the trusted head content-id on
+/// success so a caller can pin a trusted tip.
+///
+/// The `verify_chain` fail-closed contract is preserved: a broken chain yields
+/// `Err(ChainDefect)` and is NOT trusted.
+pub fn verify_chain_before_trust<S: EventStore>(
+    log: &EventLog<S>,
+) -> Result<[u8; 32], ChainDefect> {
+    log.verify_chain()?;
+    log.store
+        .tip()
+        .ok_or(ChainDefect::BrokenPrev { at: [0u8; 32] })
+}
+
 /// P-H W-H4 — the typed defect a [`EventLog::verify_chain`] walk can surface.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChainDefect {
