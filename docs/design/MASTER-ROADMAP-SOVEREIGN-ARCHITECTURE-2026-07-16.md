@@ -533,12 +533,16 @@ doc's own claims, several of which turned out to be false or stale at the source
 - Two source units are deliberately split in half across two phases, each half explicit at both
   ends (intentional, NOT double-counting): **MESH-09** (BPv7 half → P34; iroh half → P34B) and
   **P21** (executor half → P40; mode/degradation half → P41).
-- Units with NO absorbing phase found (open audit items — deliberately NOT invented into scope
-  here): **MESH-14** (resolve-contradictions + RED-suite + status-from-live-test CI-lint —
-  mesh-real's 14th unit, confirmed present in `mesh-real/BLUEPRINTS-MESH-REAL.md` but unnamed by
-  any §10.5 draft) and **IP-21**; additionally **IP-01..07/09/17/18** are asserted by §10.5.5's
-  absorption ledger to be PROTOCOL/AGENT/CORE scope, but only IP-08 is explicitly absorbed
-  (→ P42). Disposition of these belongs to a P33b-style follow-up audit, not to this assembly.
+- Units with NO absorbing phase found (open audit items) — **RESOLVED 2026-07-19**, see
+  `GAP-A1-DISPOSITION-AUDIT-2026-07-19.md` for full reasoning: **MESH-14** needs one small
+  docs+CI-lint blueprint (its live-test-citation rule folds into the Q1 claim-verification
+  checkpoint rather than duplicating it). Of the IP-* set: **IP-01/02/03/04/05/07** are already
+  covered or already satisfied by P40/P42 (cross-reference-only fix, no new blueprint); **IP-06**
+  (`QualityGovernor`) is a genuine future-blueprint candidate, deferred until engine rendering
+  work is next active (nothing to degrade from yet — no live GPU pipeline); **IP-09** overlaps
+  today's P95 living-memory work, redirect there; **IP-17/IP-18** correctly stay operator-gated
+  (crypto red-line, by their own text — not actioned without explicit sign-off); **IP-21** is
+  verification scaffolding, inherently downstream of the items it aggregates.
 
 ### 10.1 The Ecosystem-Component axis — a THIRD lens
 
