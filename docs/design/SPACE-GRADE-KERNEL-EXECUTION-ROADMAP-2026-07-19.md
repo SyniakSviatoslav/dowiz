@@ -122,6 +122,18 @@ test coverage.
   tree⊆allowlist, monotonic-shrink, `Cargo.lock` sha256) + `zero-dep-gate` CI job under `unshare -n`;
   all §G.7 clauses red-proven; `01acd673e` on `exec/space-grade-tier0-2026-07-19`. See §G.7 for detail.
 - **Item 14** — `rust-toolchain.toml` pin + structural compiler-bump trigger. Independent, parallel.
+  **✅ DONE 2026-07-19** (commit `bb1e9e8dc`, `exec/space-grade-tier0-2026-07-19`) — root
+  `rust-toolchain.toml` pins `channel="1.96.1"` (exact, verified = dev-box toolchain; no pin existed
+  pre-change, CI floated on runner stable); `toolchain-bump-gate` job added to `ci.yml` (always-runs,
+  required-check safe, enforcement fires only on a `channel`-value change and then requires
+  `docs/audits/toolchain/spot-check-<new>.md` w/ both mandated headings in the same diff — pin's own
+  intro = `<absent>→1.96.1`, so it carries the baseline `spot-check-1.96.1.md`). Baseline artifact is
+  HONEST: real source-level constant-time audit of all 6 pq surfaces (flags the pre-existing,
+  compiler-independent variable-time `!=` FO tag-compares in `kem.rs`/`hybrid.rs`, owed to P91.2),
+  assembly audit PARTIAL with the full per-branch taint proof DEFERRED to Tier 2 item 7 (Kani) — no
+  fabricated clean claim. Proofs: kernel `cargo test` 902/0/3, engine 117/0, gate logic 6/6 +
+  end-to-end `git show BASE:$FILE` extraction test (maps 1:1 onto §G.8). Owed (G5): flip the gate to
+  a required status check in branch protection (server-side).
 - **Item 25 (procedure doc first) — ✅ DONE (2026-07-19).** The slot-arena/qrng standing procedure
   is codified and independently re-verified in
   [`PROCEDURE-DEPENDENCY-REPLACEMENT-STANDING-2026-07-19.md`](PROCEDURE-DEPENDENCY-REPLACEMENT-STANDING-2026-07-19.md)
@@ -225,7 +237,12 @@ test coverage.
    Committed `01acd673e`, pushed to `exec/space-grade-tier0-2026-07-19`. Blueprint:
    `BLUEPRINT-ITEMS-01-13-ci-zero-dep-gate-2026-07-19.md`. Scope held to `dowiz-kernel` (item 31 = Tier 2).
 8. **Item 14** — Proof: a toolchain-bump diff without the spot-check artifact fails CI; a non-bump
-   diff never triggers the job.
+   diff never triggers the job. **✅ DONE 2026-07-19** (`bb1e9e8dc`) — proof discharged: gate logic
+   unit-tested 6/6 (non-bump → vacuous-green exit 0; bump-without-artifact → RED exit 1;
+   bump-with-artifact → GREEN; malformed-artifact → RED; `<absent>→1.96.1` with/without baseline)
+   plus an end-to-end `git show BASE:$FILE` extraction test against the real committed pin. Live
+   GH-Actions run of the introduction PR is the `<absent>→1.96.1` end-to-end green; G5 (required-check
+   registration) still owed server-side.
 9. **Item 25 (procedure doc)** — then **Items 4+29 (+JsonWriter)** — Proofs: `cargo tree` drops 13+
    crates, log output byte-compatible, post-mortem readback test (kill -9, restart, recover); event
    schema shows energy/hardware fields as first-class, RAPL-less host shows named absence not silent
