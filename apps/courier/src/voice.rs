@@ -33,6 +33,7 @@ pub struct AudioParams {
 }
 
 /// P64 `RawInput::VoicePhrase` (P64:119) — a recognized utterance.
+// NOTE: `confidence: f64` ⇒ derives `PartialEq` only (f64 is not `Eq`).
 #[derive(Debug, Clone, PartialEq)]
 pub struct VoicePhrase {
     pub transcript: String,
