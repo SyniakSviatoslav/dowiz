@@ -165,6 +165,130 @@ pub fn eta_seconds(remaining_m: f64, total_m: f64, baseline_s: f64) -> f64 {
     (remaining_m / speed).max(0.0)
 }
 
+// ── P96 (BLUEPRINT-P96 §3): adaptive ETA from the courier's live ground speed ──
+// The static `eta_seconds` above is the load-bearing fallback. P96 routes the
+// courier's *live smoothed* ground speed into the speed term *only when it is
+// trustworthy*; otherwise it delegates to `eta_seconds` byte-for-byte. The set
+// of named constants below is the entire trust policy — no magic numbers.
+
+/// Minimum ping count before the smoothed live speed is trusted over the
+/// planned baseline. Cold-start guard: a new courier/order rides the plan pace
+/// until the EMA has warmed. One or two pings is not a pace.
+pub const ETA_MIN_PINGS: u32 = 3;
+
+/// Minimum trustworthy *average* speed (m/s). Below this the smoothed
+/// observation is treated as "courier stopped / GPS noise" and the ETA falls
+/// back to the planned baseline rather than exploding toward `f64::INFINITY`.
+/// 0.3 m/s ≈ 1.1 km/h — far slower than a walk ⇒ not "in transit".
+pub const ETA_SPEED_MIN: f64 = 0.3;
+
+/// Maximum plausible courier *average* speed (m/s) ≈ 108 km/h. Above this the
+/// observation is a GPS glitch, not a real pace, and the ETA falls back to the
+/// baseline.
+pub const ETA_SPEED_MAX: f64 = 30.0;
+
+/// EMA smoothing factor for the observed ground-speed stream (same shape as
+/// `ema_next`'s alpha). 0.3 ⇒ ~10-ping memory: rejects single-ping GPS spikes,
+/// still tracks a real traffic change.
+pub const ETA_SPEED_ALPHA: f64 = 0.3;
+
+/// Adaptive ETA. Uses the courier's smoothed observed ground speed **iff** the
+/// live signal is warm (enough accepted pings) and in-band (finite, inside the
+/// sane speed band); otherwise falls back to the EXACT existing static-baseline
+/// `eta_seconds` behaviour.
+///
+/// `live_speed_mps = Some((smoothed_v_mps, accepted_ping_count))`; `None` means
+/// no live signal yet (cold / order just placed / courier hasn't moved).
+///
+/// INVARIANT (bounded degradation, BLUEPRINT-P96 §6 D2): when the live signal is
+/// absent, cold, non-finite, or out of `[ETA_SPEED_MIN, ETA_SPEED_MAX]`, this
+/// returns *exactly* `eta_seconds(remaining_m, total_m, baseline_s)` — never
+/// worse, never `∞` beyond what the static path does. When the live path fires,
+/// `v ∈ [ETA_SPEED_MIN, ETA_SPEED_MAX]` bounds the ETA to a finite, positive
+/// range, so it can never return `∞` either.
+pub fn eta_seconds_adaptive(
+    remaining_m: f64,
+    total_m: f64,
+    baseline_s: f64,
+    live_speed_mps: Option<(f64, u32)>,
+) -> f64 {
+    if remaining_m <= 0.0 {
+        return 0.0;
+    }
+    if let Some((v, n)) = live_speed_mps {
+        if n >= ETA_MIN_PINGS && v.is_finite() && v >= ETA_SPEED_MIN && v <= ETA_SPEED_MAX {
+            // v is bounded ⇒ ETA bounded, never ∞. This is the only divergence
+            // from the static baseline, and it is strictly an *improvement* when
+            // the courier's real pace differs from the plan.
+            return (remaining_m / v).max(0.0);
+        }
+    }
+    eta_seconds(remaining_m, total_m, baseline_s) // fallback: byte-for-byte current behaviour
+}
+
+/// Owner of the per-order EMA state for the live ground-speed signal. This is
+/// the small piece of *caller-owned* state P96 threads into
+/// `eta_seconds_adaptive` — it does NOT live in the pure math layer (`geo.rs`
+/// stays a library of pure functions). The pin-folding surface that already
+/// owns the accepted GPS ping stream instantiates one of these per order and
+/// feeds it `v_mps` (the per-ping ground speed already computed in
+/// `apps/courier/src/types.rs`). It is a pure, deterministic, no-IO primitive so
+/// the ping-folder can be exercised by machine-checkable kernel tests (M3).
+///
+/// `route_version`'s `reset` lets a re-route cold-start cleanly: stale speed
+/// from a previous route/order can never leak across the boundary (I4).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CourierSpeedEma {
+    /// Smoothed ground speed (m/s), seeded 0.0 (cold).
+    v_hat: f64,
+    /// Count of accepted in-order pings, seeded 0.
+    pings: u32,
+    /// Last route version seen — bumping it resets the smoother (re-route).
+    route_version: u64,
+}
+
+impl CourierSpeedEma {
+    /// A cold, empty smoother for a brand-new order.
+    pub fn new() -> Self {
+        CourierSpeedEma {
+            v_hat: 0.0,
+            pings: 0,
+            route_version: 0,
+        }
+    }
+
+    /// Current (v_hat, pings) tuple, ready to hand to `eta_seconds_adaptive`.
+    pub fn observed(&self) -> Option<(f64, u32)> {
+        Some((self.v_hat, self.pings))
+    }
+
+    /// Feed one accepted (in-order) ping's `v_mps` (f32 on the wire, promoted to
+    /// f64). Applies the EMA step and increments the accepted-ping count. A
+    /// `route_version` bump resets the smoother so a re-route cold-starts on the
+    /// baseline instead of leaking the previous leg's pace.
+    pub fn accept_ping(&mut self, v_mps: f64, route_version: u64) {
+        if route_version != self.route_version {
+            self.v_hat = 0.0;
+            self.pings = 0;
+            self.route_version = route_version;
+        }
+        self.v_hat = ema_next(self.v_hat, v_mps, ETA_SPEED_ALPHA);
+        self.pings = self.pings.saturating_add(1);
+    }
+
+    /// Explicit reset (new order / explicit re-route). `Some((0.0, 0))` next.
+    pub fn reset(&mut self) {
+        self.v_hat = 0.0;
+        self.pings = 0;
+    }
+}
+
+impl Default for CourierSpeedEma {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// True when the next ping timestamp is strictly older than the last seen one
 /// (out-of-order rejection). `None` last-seen means "first ping, always accept".
 /// Matches `isOutOfOrder`.
@@ -557,5 +681,157 @@ mod tests {
                 "generated organ diverged from hand-written law at ({p},{s},{a})"
             );
         }
+    }
+
+    // ── P96 (BLUEPRINT-P96 §4/§6/§8): adaptive ETA from live courier speed ──
+
+    // D1 — warm + in-band live speed fires; ETA uses live pace, NOT the static
+    // planned pace. v=3.0, n=5, remaining=1000 ⇒ 1000/3 ≈ 333.33 s (not 200 s).
+    #[test]
+    fn p96_adaptive_uses_live_speed_when_warm() {
+        let remaining = 1000.0;
+        let total = 2000.0;
+        let baseline = 400.0;
+        let static_eta = eta_seconds(remaining, total, baseline); // 200 s
+        let a = eta_seconds_adaptive(remaining, total, baseline, Some((3.0, 5)));
+        assert!(
+            (a - 1000.0 / 3.0).abs() < 1e-9,
+            "adaptive must use live speed 3 m/s ⇒ 333.33s, got {a}"
+        );
+        assert!(
+            (a - static_eta).abs() > 1e-6,
+            "adaptive must DIVERGE from the static 200s baseline when warm"
+        );
+    }
+
+    // D1/D2 — cold (None) and cold-but-present (pings < ETA_MIN_PINGS) fall back
+    // byte-for-byte to the static `eta_seconds`.
+    #[test]
+    fn p96_adaptive_falls_back_when_cold() {
+        let (remaining, total, baseline) = (1000.0, 2000.0, 400.0);
+        let static_eta = eta_seconds(remaining, total, baseline);
+        let none = eta_seconds_adaptive(remaining, total, baseline, None);
+        assert!(
+            (none - static_eta).abs() < 1e-12,
+            "None must equal static baseline byte-for-byte, got {none} vs {static_eta}"
+        );
+        let sparse = eta_seconds_adaptive(remaining, total, baseline, Some((8.0, 2)));
+        assert!(
+            (sparse - static_eta).abs() < 1e-12,
+            "pings<ETA_MIN_PINGS must equal static baseline, got {sparse} vs {static_eta}"
+        );
+    }
+
+    // D2 — stopped courier (v below ETA_SPEED_MIN) or n=1 falls back to baseline,
+    // never ∞.
+    #[test]
+    fn p96_adaptive_falls_back_when_stopped() {
+        let (remaining, total, baseline) = (1000.0, 2000.0, 400.0);
+        let static_eta = eta_seconds(remaining, total, baseline);
+        let stopped = eta_seconds_adaptive(remaining, total, baseline, Some((0.1, 9)));
+        assert!(
+            (stopped - static_eta).abs() < 1e-12,
+            "v below floor must fall back to baseline (not ∞), got {stopped}"
+        );
+        let one_ping = eta_seconds_adaptive(remaining, total, baseline, Some((9.0, 1)));
+        assert!(
+            (one_ping - static_eta).abs() < 1e-12,
+            "n=1 must fall back to baseline, got {one_ping}"
+        );
+    }
+
+    // D2 — bounded-degradation invariant (§6.1). For a sweep of edge cases the
+    // adaptive ETA is ALWAYS finite & non-negative, and in every wild (absent /
+    // cold / out-of-band) case it equals the static baseline byte-for-byte. The
+    // only divergence is the in-band live path, which is bounded by the speed
+    // band [ETA_SPEED_MIN, ETA_SPEED_MAX] ⇒ finite, never ∞.
+    #[test]
+    fn p96_bounded_degradation() {
+        let (remaining, total, baseline) = (1000.0, 2000.0, 400.0);
+        let static_eta = eta_seconds(remaining, total, baseline);
+
+        // (observed, expect_in_band) — in-band ⇒ uses remaining/v; wild ⇒ == static.
+        let cases: &[(Option<(f64, u32)>, bool)] = &[
+            (None, false),                     // absent
+            (Some((8.0, 2)), false),           // n < MIN_PINGS
+            (Some((0.1, 9)), false),           // v below floor
+            (Some((500.0, 9)), false),         // v above ceiling
+            (Some((f64::INFINITY, 9)), false), // non-finite
+            (Some((3.0, 5)), true),            // in-band normal
+            (Some((9.0, 5)), true),            // in-band faster
+            (Some((0.3, 5)), true),            // exactly the floor
+            (Some((30.0, 5)), true),           // exactly the ceiling
+        ];
+
+        for &(obs, in_band) in cases {
+            let a = eta_seconds_adaptive(remaining, total, baseline, obs);
+            // Never ∞, never negative (the load-bearing safety property).
+            assert!(a.is_finite(), "adaptive must never be ∞, case {obs:?}");
+            assert!(a >= 0.0, "adaptive must never be negative, case {obs:?}");
+
+            if in_band {
+                let (v, _) = obs.unwrap();
+                assert!(
+                    (a - remaining / v).abs() < 1e-12,
+                    "in-band case must use live speed {v}, got {a}"
+                );
+            } else {
+                assert!(
+                    (a - static_eta).abs() < 1e-12,
+                    "wild case must equal static baseline byte-for-byte, got {a} vs {static_eta}"
+                );
+            }
+        }
+
+        // Tiny remaining, no baseline fallback (5 m/s path) — still finite & >=0.
+        let fb = eta_seconds_adaptive(0.5, 0.0, 0.0, Some((500.0, 9)));
+        assert!(
+            fb.is_finite() && fb >= 0.0,
+            "no-baseline wild case finite, got {fb}"
+        );
+    }
+
+    // M3 — the EMA step rejects a single-ping GPS spike: the spike is attenuated
+    // (not tracked) and the smoother recovers to the true pace afterwards.
+    #[test]
+    fn speed_ema_rejects_single_spike() {
+        let mut ema = CourierSpeedEma::new();
+        let rv = 0u64;
+        for _ in 0..3 {
+            ema.accept_ping(8.0, rv); // warm on a true 8 m/s pace
+        }
+        ema.accept_ping(40.0, rv); // one GPS glitch
+        let after_spike = ema.observed().unwrap().0;
+        assert!(
+            after_spike < 20.0,
+            "single 40 m/s spike must be heavily attenuated, got {after_spike}"
+        );
+        for _ in 0..60 {
+            ema.accept_ping(8.0, rv); // back to true pace
+        }
+        let recovered = ema.observed().unwrap().0;
+        assert!(
+            (recovered - 8.0).abs() < 1e-3,
+            "smoother must recover to the true 8 m/s pace, got {recovered}"
+        );
+    }
+
+    // M3 — a route_version bump resets the smoother so a re-route cold-starts on
+    // the baseline; stale speed never leaks across the boundary (I4).
+    #[test]
+    fn speed_ema_resets_on_route_version_change() {
+        let mut ema = CourierSpeedEma::new();
+        ema.accept_ping(5.0, 0);
+        ema.accept_ping(5.0, 0);
+        ema.accept_ping(5.0, 0);
+        assert_eq!(ema.observed().unwrap().1, 3); // warmed
+                                                  // Re-route: bump route_version.
+        ema.accept_ping(9.0, 1);
+        let (v, n) = ema.observed().unwrap();
+        assert_eq!(n, 1, "route_version bump must reset the ping count");
+        assert!(
+            (v - 9.0 * crate::geo::ETA_SPEED_ALPHA).abs() < 1e-12,
+            "post-reset smoother must start from the new sample, got {v}"
+        );
     }
 }
