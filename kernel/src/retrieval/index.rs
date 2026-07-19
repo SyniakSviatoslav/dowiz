@@ -183,4 +183,27 @@ impl TrigramIndex {
     pub fn candidate_count_regex(&self, pattern: &str) -> usize {
         self.candidates(&literal_trigrams(pattern)).len()
     }
+
+    /// Restricted-pattern query (item 5 replacement for `query_regex`).
+    /// Candidates are narrowed by literal trigrams extracted from the *pattern*,
+    /// then each candidate is verified by the kernel-owned `Pattern` matcher
+    /// ({literal, `.`, `.*`}, unanchored contains-match ⇒ 0 false positives).
+    /// Falls back to scanning all docs when the pattern yields no literal
+    /// trigrams. Unsupported metacharacters are rejected (typed `PatternError`,
+    /// never a silent wrong answer) — degrade-closed.
+    pub fn query_pattern(&self, pattern: &str) -> Result<Vec<u32>, super::pattern::PatternError> {
+        let compiled = super::pattern::Pattern::compile(pattern)?;
+        let cand = self.candidates(&literal_trigrams(pattern));
+        Ok(cand
+            .into_iter()
+            .filter(|&d| compiled.is_match(&self.docs[d as usize]))
+            .collect())
+    }
+
+    /// Raw candidate count for a restricted pattern (literal-run extraction).
+    /// Name-only successor to `candidate_count_regex` — identical logic (never
+    /// touched the regex crate).
+    pub fn candidate_count_pattern(&self, pattern: &str) -> usize {
+        self.candidates(&literal_trigrams(pattern)).len()
+    }
 }
