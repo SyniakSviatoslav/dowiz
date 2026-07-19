@@ -125,7 +125,7 @@ test coverage.
 
 ---
 
-## G. Recommended First Execution Batch — hand to Opus now, in this order
+## G. Garden of Eden — Recommended First Execution Batch, hand to Opus now, in this order
 
 1. **Item 2** — Proof: a cited line constructing the durable store in production, or a filed defect;
    plus the §10/P4 check on `Result`-typed `insert`.
