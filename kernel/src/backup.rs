@@ -54,6 +54,14 @@ pub trait BlockStore {
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
+    /// Remove a block by `id`, if present. Returns the evicted bytes when a
+    /// block was actually removed. Default impl returns `None` (a store that
+    /// does not support removal is logically unbounded and MUST bound itself
+    /// elsewhere). `MemStore`/`FileBlockStore` provide real impls so the
+    /// response cache (HARNESS §3.2 / audit A3) can evict LRU when over cap.
+    fn remove(&mut self, _id: &Hash) -> Option<Vec<u8>> {
+        None
+    }
 }
 
 /// In-memory content-addressed store (for tests / single-node local-first use).
@@ -89,6 +97,9 @@ impl BlockStore for MemStore {
     }
     fn len(&self) -> usize {
         self.map.len()
+    }
+    fn remove(&mut self, id: &Hash) -> Option<Vec<u8>> {
+        self.map.remove(id)
     }
 }
 
@@ -248,6 +259,13 @@ impl BlockStore for FileBlockStore {
 
     fn len(&self) -> usize {
         self.cache.len()
+    }
+    fn remove(&mut self, id: &Hash) -> Option<Vec<u8>> {
+        let path = self.block_path(id);
+        if path.exists() {
+            let _ = fs::remove_file(&path);
+        }
+        self.cache.remove(id)
     }
 }
 

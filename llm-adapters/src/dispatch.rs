@@ -12,6 +12,7 @@
 
 use dowiz_kernel::ports::llm::{ChatRequest, ChatResponse, LlmBackend, LlmError};
 use dowiz_kernel::token_bucket::TokenBucket;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
 use std::thread;
@@ -21,6 +22,9 @@ use std::thread;
 pub enum DispatchError {
     /// Budget exhausted — degrade-closed, the caller must handle (don't retry-silently).
     BudgetExceeded,
+    /// All worker slots busy — the concurrency cap (HARNESS audit A4, degrade-closed).
+    /// Refused immediately rather than queued-and-downgraded; the caller retries/backs off.
+    Busy,
     /// The backend itself failed (health/chat error surfaced through).
     Backend(LlmError),
 }
@@ -55,7 +59,56 @@ pub struct TrackRecord {
 pub struct Dispatcher<B: LlmBackend + Send + Sync + 'static> {
     backend: Arc<B>,
     bucket: Arc<TokenBucket>,
-    workers: usize,
+    /// Concurrency cap (HARNESS audit A4): at most `workers` calls may be
+    /// in-flight at once. `try_acquire` refuses immediately when exhausted
+    /// (degrade-closed `Busy`), so the bound is actually enforced — it is no
+    /// longer dead config.
+    slots: Arc<WorkerSlots>,
+}
+
+/// A minimal std-only counting semaphore (no tokio): `cap` permits, non-blocking
+/// `try_acquire` returns a RAII `SlotGuard` whose `Drop` releases the permit. Used by
+/// `Dispatcher` to bound in-flight calls (HARNESS audit A4) — the guard is moved into the
+/// worker thread so in-flight count ≤ `cap` for the job's duration.
+struct WorkerSlots {
+    cap: usize,
+    in_flight: AtomicUsize,
+}
+
+impl WorkerSlots {
+    fn new(cap: usize) -> Self {
+        WorkerSlots {
+            cap: cap.max(1),
+            in_flight: AtomicUsize::new(0),
+        }
+    }
+    /// Acquire a slot if one is free; otherwise `None` (caller refuses with `Busy`).
+    fn try_acquire(self: &Arc<Self>) -> Option<SlotGuard> {
+        let mut cur = self.in_flight.load(Ordering::SeqCst);
+        loop {
+            if cur >= self.cap {
+                return None;
+            }
+            match self
+                .in_flight
+                .compare_exchange_weak(cur, cur + 1, Ordering::SeqCst, Ordering::SeqCst)
+            {
+                Ok(_) => return Some(SlotGuard { slots: Arc::clone(self) }),
+                Err(c) => cur = c,
+            }
+        }
+    }
+}
+
+/// RAII permit for a `WorkerSlots` slot; released on drop.
+struct SlotGuard {
+    slots: Arc<WorkerSlots>,
+}
+
+impl Drop for SlotGuard {
+    fn drop(&mut self) {
+        self.slots.in_flight.fetch_sub(1, Ordering::SeqCst);
+    }
 }
 
 impl<B: LlmBackend + Send + Sync + 'static> Dispatcher<B> {
@@ -65,26 +118,32 @@ impl<B: LlmBackend + Send + Sync + 'static> Dispatcher<B> {
         Dispatcher {
             backend: Arc::new(backend),
             bucket: Arc::new(TokenBucket::new(capacity as f64, refill_rate)),
-            workers: workers.max(1),
+            slots: Arc::new(WorkerSlots::new(workers)),
         }
     }
 
     /// Dispatch one chat request. Returns the response, or a typed `DispatchError`.
-    /// Spawns a worker thread (cheap; the pool size bounds how many run concurrently). A real
-    /// deployment would keep a persistent pool, but a fresh-thread-per-job bounded by N in-flight
-    /// channels achieves the same back-pressure with zero tokio.
+    ///
+    /// Concurrency is bounded by `WorkerSlots` of `workers` permits (HARNESS audit
+    /// A4): `try_acquire` refuses immediately with `Busy` when all slots are in
+    /// flight, so the cap is enforced rather than dead config. The acquired guard
+    /// is moved into the worker thread and released when the job finishes, keeping
+    /// in-flight count ≤ `workers`. Budget is checked inside the job
+    /// (`TokenBucket` bounds volume over time; the slots bound concurrency).
     pub fn dispatch(&self, req: ChatRequest) -> Result<ChatResponse, DispatchError> {
+        // A4: enforce the concurrency cap — refuse (degrade-closed) when full.
+        let guard = match self.slots.try_acquire() {
+            Some(g) => g,
+            None => return Err(DispatchError::Busy),
+        };
         let (tx, rx) = channel::<Result<ChatResponse, DispatchError>>();
         let backend = Arc::clone(&self.backend);
         let bucket = Arc::clone(&self.bucket);
         let cost = (req.max_tokens as f64).max(1.0); // budget in approx-output units; degrade-closed.
 
-        // Bound in-flight jobs: block the caller until a slot frees (visible back-pressure).
-        // Simplest correct form: spawn, but cap via a semaphore-style count is overkill here —
-        // the mpsc below naturally bounds because we recv before returning. For true N-parallel we
-        // would keep N persistent workers; for the adapter's purpose (bounded, typed refusal) a
-        // single-spawn + bucket check is sufficient and dead-simple.
+        // Hold the slot for the job's duration so in-flight is bounded at `workers`.
         thread::spawn(move || {
+            let _guard = guard; // dropped at end of this closure ⇒ slot freed
             let result = if bucket.try_acquire(cost) {
                 let t0 = std::time::Instant::now();
                 let r = backend.chat(&req).map_err(DispatchError::Backend);
@@ -112,7 +171,7 @@ impl<B: LlmBackend + Send + Sync + 'static> Dispatcher<B> {
             };
             let _ = tx.send(result);
         });
-        rx.recv().map_err(|_| DispatchError::BudgetExceeded)?
+        rx.recv().map_err(|_| DispatchError::Backend(LlmError::Unavailable))?
     }
 
     /// A clone of the shared backend handle (for cache-fronted embed/rerank paths that bypass the
@@ -281,5 +340,82 @@ mod tests {
             0.0,
         );
         let _: Arc<FakeBackend> = d.backend.clone();
+    }
+
+    /// HARNESS audit A4 — the `workers` concurrency cap is now ENFORCED, not dead config.
+    ///
+    /// With `workers = 1` and a slow backend, firing many dispatches concurrently must keep
+    /// in-flight ≤ 1 AND refuse the overflow with a typed `Busy` (degrade-closed) rather than
+    /// spawning unbounded threads or silently queuing.
+    struct SlowBackend {
+        in_flight: Arc<AtomicUsize>,
+        max_in_flight: Arc<AtomicUsize>,
+    }
+    impl LlmBackend for SlowBackend {
+        fn id(&self) -> &str { "slow" }
+        fn caps(&self) -> Caps {
+            Caps { chat: true, embed: false, rerank: false, tool_calling: false }
+        }
+        fn chat(&self, _req: &ChatRequest) -> Result<ChatResponse, LlmError> {
+            let cur = self.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+            // track max in-flight via a CAS loop
+            let mut m = self.max_in_flight.load(Ordering::SeqCst);
+            while cur > m && self.max_in_flight.compare_exchange(m, cur, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+                m = self.max_in_flight.load(Ordering::SeqCst);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(30));
+            self.in_flight.fetch_sub(1, Ordering::SeqCst);
+            Ok(ChatResponse {
+                content: "ok".into(),
+                usage: Usage { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+                tool_calls: Vec::new(),
+            })
+        }
+        fn embed(&self, _req: &EmbedRequest) -> Result<EmbedResponse, LlmError> { Err(LlmError::Unsupported) }
+        fn rerank(&self, _req: &RerankRequest) -> Result<RerankResponse, LlmError> { Err(LlmError::Unsupported) }
+        fn health(&self) -> Result<(), LlmError> { Ok(()) }
+    }
+
+    #[test]
+    fn concurrency_cap_enforced_degrade_closed() {
+        let in_flight = Arc::new(AtomicUsize::new(0));
+        let max_in_flight = Arc::new(AtomicUsize::new(0));
+        // workers=1 ⇒ at most ONE in-flight call at a time.
+        let d = Arc::new(Dispatcher::new(
+            SlowBackend {
+                in_flight: Arc::clone(&in_flight),
+                max_in_flight: Arc::clone(&max_in_flight),
+            },
+            1,
+            1_000_000,
+            0.0,
+        ));
+        let workers = 1u64;
+
+        // Fire 8 dispatches concurrently from separate threads.
+        let mut handles = Vec::new();
+        let busy_count = Arc::new(AtomicUsize::new(0));
+        for _ in 0..8 {
+            let d = Arc::clone(&d);
+            let bc = Arc::clone(&busy_count);
+            handles.push(std::thread::spawn(move || match d.dispatch(req()) {
+                Err(DispatchError::Busy) => {
+                    bc.fetch_add(1, Ordering::SeqCst);
+                }
+                Ok(_) => {}
+                Err(other) => panic!("unexpected dispatch error: {:?}", other),
+            }));
+        }
+        for h in handles { let _ = h.join(); }
+
+        let max_seen = max_in_flight.load(Ordering::SeqCst);
+        assert!(
+            max_seen <= workers as usize,
+            "in-flight ({}) must be ≤ workers ({})", max_seen, workers
+        );
+        assert!(
+            busy_count.load(Ordering::SeqCst) >= 1,
+            "overflow must be refused with Busy (degrade-closed)"
+        );
     }
 }
