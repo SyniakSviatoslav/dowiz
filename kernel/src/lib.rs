@@ -64,6 +64,22 @@ pub mod domain;
 /// `NLegPlan` / `VendorLeg` / `RefundRequest` with P62 vendor-partitioned
 /// `charge_legs` / `kitchen_tickets`. Pure Rust, no DOM, no float on money.
 pub mod foodcourt;
+/// BLUEPRINT-P66 — offline data wallet + single-writer LWW drafts + Signal-style QR transfer
+/// (self-custody, no dowiz account, query-before-replay reconnect). Pure client-side logic;
+/// `transfer` reuses the `pq` crypto primitives (x25519 / shake256 / aes-gcm) gated under `pq`.
+/// Structural grep-gates: `no_card_data_in_wallet` + `no_break_glass_in_wallet` (§4.1 / §4.7).
+pub mod wallet;
+/// BLUEPRINT-P67 — hub provisioning & claim: provider-agnostic (generic over `TunnelProvider` +
+/// `VpsProvider`), in-module mock adapters + Wave-0 real adapters behind `p67-adapters`. Reuses
+/// P59 `capability_cert` + P70 `owner_surface`. No card data, no network endpoint in the default
+/// build (grep-gate `no_endpoint_dependency`).
+pub mod hub_provisioning;
+/// BLUEPRINT-P68 — hub supervisor: update + backup. A/B-slot atomic-flip auto-update with a
+/// real-code-path health gate, owner-triggered rollback, mandatory age-snapshot-before-promote,
+/// and a sovereign encrypted backup envelope (X25519 → SHAKE256 → AES-256-GCM STREAM). Gated
+/// behind `pq` because the envelope genuinely needs AES-256-GCM + X25519.
+#[cfg(feature = "pq")]
+pub mod hub_supervisor;
 /// P04 product-math: Disjoint-Set Union (union-find) + Kruskal MST — the single
 /// canonical DSU/MST primitive. `cgraph::c_components` delegates here; Phase 9
 /// mesh-heal + Phase 13 partition-tolerant delivery consume it directly.
