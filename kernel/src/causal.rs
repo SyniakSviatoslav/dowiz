@@ -963,6 +963,80 @@ pub struct Joint {
     joint: Vec<f64>,
 }
 
+/// Row-major contiguous sample matrix: one allocation for the whole batch.
+///
+/// Row `r`, column `c` lives at `data[r * n_cols + c]`. This is the minimal
+/// `usize` analog of `mat.rs`'s contiguous layout, replacing the
+/// `&[Vec<usize>]` (array-of-structs) sample container on the causal hot path
+/// (`from_samples` / `empirical_identify_conditional` / `infer_cards`). A single
+/// flat buffer removes the per-row heap allocation and the pointer-chase the
+/// benched `empirical_identify/20k` loops were paying. Behavior is identical:
+/// the values and the `(row, col)` indexing are unchanged.
+pub struct Samples {
+    /// Number of columns (variables) per complete assignment row.
+    pub n_cols: usize,
+    /// Flat buffer; `len == n_rows * n_cols`.
+    pub data: Vec<usize>,
+}
+
+impl Samples {
+    /// A zeroed `n_rows × n_cols` sample matrix.
+    #[inline]
+    pub fn with_rows(n_rows: usize, n_cols: usize) -> Self {
+        Self {
+            n_cols,
+            data: vec![0usize; n_rows * n_cols],
+        }
+    }
+
+    /// Build from ragged-free rows (each exactly `n_cols` long). Fail-closed on
+    /// a ragged row — mirrors `from_samples`'s existing length gate.
+    pub fn from_rows(rows: &[Vec<usize>]) -> Result<Self, String> {
+        if rows.is_empty() {
+            return Err("Samples::from_rows: no rows supplied".into());
+        }
+        let n_cols = rows[0].len();
+        for r in rows {
+            if r.len() != n_cols {
+                return Err(format!(
+                    "Samples::from_rows: ragged row length {} != {}",
+                    r.len(),
+                    n_cols
+                ));
+            }
+        }
+        let mut data = Vec::with_capacity(rows.len() * n_cols);
+        for r in rows {
+            data.extend_from_slice(r);
+        }
+        Ok(Self { n_cols, data })
+    }
+
+    /// Number of complete assignment rows.
+    #[inline]
+    pub fn n_rows(&self) -> usize {
+        if self.n_cols == 0 {
+            0
+        } else {
+            self.data.len() / self.n_cols
+        }
+    }
+
+    /// One complete assignment row `r` (a `&[usize]` of length `n_cols`).
+    #[inline]
+    pub fn row(&self, r: usize) -> &[usize] {
+        let s = r * self.n_cols;
+        &self.data[s..s + self.n_cols]
+    }
+
+    /// Append one complete assignment row. Panics on a length mismatch (the
+    /// ragged-row case is rejected earlier, at `from_rows` / `from_samples`).
+    pub fn push_row(&mut self, row: &[usize]) {
+        assert_eq!(row.len(), self.n_cols, "Samples::push_row: length mismatch");
+        self.data.extend_from_slice(row);
+    }
+}
+
 impl Joint {
     /// `joint.len()` must equal Π `cards`. Rejects malformed shapes.
     pub fn new(cards: Vec<usize>, joint: Vec<f64>) -> Result<Self, String> {
@@ -1053,12 +1127,13 @@ impl Joint {
     /// Build an empirical joint from `samples` observed assignments. Each row is
     /// a complete assignment `v_i ∈ [0, cards[i])`; counts are normalized to sum
     /// to 1. Fail-closed on any structural / trust-boundary violation.
-    pub fn from_samples(cards: Vec<usize>, samples: &[Vec<usize>]) -> Result<Self, String> {
+    pub fn from_samples(cards: Vec<usize>, samples: &Samples) -> Result<Self, String> {
         let expected: usize = cards.iter().product();
-        if samples.is_empty() {
+        if samples.n_rows() == 0 {
             return Err("from_samples: no samples supplied".into());
         }
-        for row in samples {
+        for r in 0..samples.n_rows() {
+            let row = samples.row(r);
             if row.len() != cards.len() {
                 return Err(format!(
                     "from_samples: assignment length {} != {} nodes",
@@ -1076,7 +1151,8 @@ impl Joint {
             }
         }
         let mut counts = vec![0u64; expected];
-        for row in samples {
+        for r in 0..samples.n_rows() {
+            let row = samples.row(r);
             counts[Self::encode_static(&cards, row)] += 1;
         }
         let total: u64 = counts.iter().sum();
@@ -1252,7 +1328,7 @@ pub fn evaluate_id(
 /// * `seed` — drives the (deterministic) empirical-joint construction is not
 ///   needed here, but is threaded through to allow reproducible downstream MC.
 pub fn empirical_identify(
-    samples: &[Vec<usize>],
+    samples: &Samples,
     y: &[usize],
     x_vals: &[(usize, usize)],
     g: &CGraph,
@@ -1304,18 +1380,20 @@ pub fn confounded() -> (Vec<f64>, Vec<f64>, Vec<f64>) {
 /// Draw `n` samples from the *exact* back-door joint `P(X,Z,Y)` (see [`confounded`])
 /// using a deterministic seedable RNG. Returns raw sample rows (each `[x, z, y]`),
 /// the empirical input to [`empirical_identify`]. Deterministic given `(n, seed)`.
-pub fn sample_backdoor(n: usize, seed: u64) -> Vec<Vec<usize>> {
+pub fn sample_backdoor(n: usize, seed: u64) -> Samples {
     let (p_y_xz, p_z, p_xz) = confounded();
     let mut rng = crate::rng::Rng::new(seed, 1);
-    let mut rows = Vec::with_capacity(n);
-    for _ in 0..n {
+    let mut rows = Samples::with_rows(n, 3);
+    for r in 0..n {
         let z = rng.sample_categorical(&p_z);
         let z_marg = p_z[z];
         let px_given_z = [p_xz[0 * 2 + z] / z_marg, p_xz[1 * 2 + z] / z_marg];
         let x = rng.sample_categorical(&px_given_z);
         let p_y1 = p_y_xz[x * 2 + z];
         let y = if rng.next_f64() < p_y1 as f64 { 1 } else { 0 };
-        rows.push(vec![x, z, y]);
+        rows.data[r * 3] = x;
+        rows.data[r * 3 + 1] = z;
+        rows.data[r * 3 + 2] = y;
     }
     rows
 }
@@ -1323,7 +1401,7 @@ pub fn sample_backdoor(n: usize, seed: u64) -> Vec<Vec<usize>> {
 /// Conditional variant: `P(y | do(x), z)` via the general [`idc`] algorithm. If
 /// the conditional effect is not identified, returns `Err` (fail-closed).
 pub fn empirical_identify_conditional(
-    samples: &[Vec<usize>],
+    samples: &Samples,
     y: &[usize],
     x_vals: &[(usize, usize)],
     z: &[usize],
@@ -1363,18 +1441,20 @@ pub fn empirical_identify_conditional(
 }
 
 /// Infer node arities from a sample set: `cards[i] = 1 + max_i over all rows`.
-fn infer_cards(samples: &[Vec<usize>]) -> Result<Vec<usize>, String> {
-    if samples.is_empty() {
+fn infer_cards(samples: &Samples) -> Result<Vec<usize>, String> {
+    if samples.n_rows() == 0 {
         return Err("infer_cards: no samples".into());
     }
-    let n = samples[0].len();
-    for row in samples {
+    let n = samples.n_cols;
+    for r in 0..samples.n_rows() {
+        let row = samples.row(r);
         if row.len() != n {
             return Err("infer_cards: ragged sample rows (inconsistent dimensionality)".into());
         }
     }
     let mut cards = vec![0usize; n];
-    for row in samples {
+    for r in 0..samples.n_rows() {
+        let row = samples.row(r);
         for (i, &v) in row.iter().enumerate() {
             if v + 1 > cards[i] {
                 cards[i] = v + 1;
@@ -2193,11 +2273,11 @@ mod tests {
     /// Simulate `n` draws from the *exact* back-door joint
     /// P(X,Z,Y)=P(X|Z)P(Z)P(Y|X,Z) (the `confounded()` fixture) using a fixed-seed
     /// deterministic RNG. Returns the raw sample rows (each row = [x, z, y]).
-    fn simulate_backdoor_samples(n: usize, seed: u64) -> Vec<Vec<usize>> {
+    fn simulate_backdoor_samples(n: usize, seed: u64) -> Samples {
         let (p_y_xz, p_z, p_xz) = confounded();
         let mut rng = crate::rng::Rng::new(seed, 1);
-        let mut rows = Vec::with_capacity(n);
-        for _ in 0..n {
+        let mut rows = Samples::with_rows(n, 3);
+        for r in 0..n {
             // Draw Z from P(Z).
             let z = rng.sample_categorical(&p_z);
             // Draw X from P(X|Z) = P(X,Z)/P(Z).
@@ -2207,7 +2287,9 @@ mod tests {
             // Draw Y from P(Y=1|X,Z).
             let p_y1 = p_y_xz[x * 2 + z];
             let y = if rng.next_f64() < p_y1 as f64 { 1 } else { 0 };
-            rows.push(vec![x, z, y]);
+            rows.data[r * 3] = x;
+            rows.data[r * 3 + 1] = z;
+            rows.data[r * 3 + 2] = y;
         }
         rows
     }
