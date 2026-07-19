@@ -235,6 +235,14 @@ required-features = ["pq"]
 name = "contention"
 harness = false
 
+# Item 26 (space-grade exec roadmap §C) — batching MEASUREMENT scaffold. Measures
+# three existing paths (event-log commit fsync, FDR ring, decision import) to
+# establish the baselines the batching-research pass requires. Adds NO production
+# code; touches only the public API. See docs/design/AUDIT-ITEM-26-*.
+[[bench]]
+name = "batching"
+harness = false
+
 
 # NOTE: the W5 counting-allocator integration test (tests/arena_counting_allocs.rs)
 # is not yet wired — the counting global-allocator feature exists (`count-allocs`,
