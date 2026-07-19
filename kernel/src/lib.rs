@@ -184,6 +184,14 @@ pub mod agent;
 /// asserts the harness is reachably compiled under `cargo test` / `--features chaos`.
 #[cfg(any(test, feature = "chaos"))]
 pub mod chaos;
+/// `ct_gate` — the zero-dep dudect-style constant-time gate (roadmap item 6). A Welch t-test over
+/// interleaved timing samples with a **planted-leak self-test** (SYNTHESIS §4 item 2 / §10-P7): a
+/// deliberately variable-time comparator must be rejected by the same machinery that accepts the
+/// constant-time `ct_eq`, or the gate is RED. `#[cfg(any(test, feature = "ct-gate"))]` — the whole
+/// timing harness compiles to nothing in a shipping build ("CI-time harness, not linked"). Run by
+/// `scripts/hardening-gate.sh` step E in release: `cargo test --release ... ct_gate -- --ignored`.
+#[cfg(any(test, feature = "ct-gate"))]
+pub mod ct_gate;
 /// External capability ports (the seams where the kernel meets the outside world without importing
 /// it) — currently the `LlmBackend` pluggable LLM backend trait (zero HTTP/serde; the concrete
 /// `llm-adapters` crate implements it).
