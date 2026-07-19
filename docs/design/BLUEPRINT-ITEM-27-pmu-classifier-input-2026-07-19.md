@@ -110,7 +110,8 @@ exec branch at `6605166cd`). No `libc`, no `perf-event` crate. What remains:
   `exclude_kernel = 1, exclude_hv = 1`, then `read(2)` on the returned fd yields the u64 count;
   `ioctl` `PERF_EVENT_IOC_{RESET,ENABLE}` to bracket. Estimated ~150–200 LOC including the
   errno→`Absence` mapping. Feasible, but see §5 — it will return a named absence on the current
-  production host.
+  dev/self-management host (a cloud KVM guest — NOT the arc's deploy target; phrasing corrected
+  2026-07-19, consistency audit §1.4).
 - **`_rdpmc` — rejected as an independent path.** It #GP-faults (SIGSEGV) from userspace unless
   either (a) executed inside a `perf_event_open`+mmap self-monitoring setup with
   `/sys/bus/event_source/devices/cpu/rdpmc >= 1` (this host: `1` — mmap-scoped only), or
@@ -233,11 +234,17 @@ verbatim into `fdr/pmu.rs`'s module doc.
 | `/proc/cpuinfo` | `hypervisor` flag; AMD EPYC-Milan (KVM guest); `perfctr_core` advertised | A vPMU is nominally advertised, but unreachable at paranoid=4. Docker's default seccomp profile additionally filters `perf_event_open`. |
 | `/proc/self/stat` minflt/majflt, `/proc/self/status` ctxt switches, `tsc`/`rdtscp` flags | all present/readable | **Tier A flows real data today, zero permissions.** |
 
-**Plain statement:** on the actual deploy target, every Tier-B hardware counter will read
-`{"unavailable":"permission_denied"}` today. This item still lands honestly — that is precisely
-what the named-absence pattern is for: a truthful, greppable, per-reason signal instead of a
+**Plain statement (corrected 2026-07-19 — consistency audit §1.4; the original conflated the dev
+box with the deploy target):** on the *current dev/self-management host* — an AMD EPYC-Milan KVM
+cloud guest (`hypervisor` flag, empty powercap) — every Tier-B hardware counter reads
+`{"unavailable":"permission_denied"}` today. **This host is NOT the arc's deploy target.** On the
+actual target — local, offline-first consumer hardware — the availability picture typically
+*inverts*: RAPL (`/sys/class/powercap/intel-rapl`) usually EXISTS on consumer Intel/AMD Linux
+boxes, and `perf_event_paranoid` is normally 2 (the mainline default), not 4, so Tier B is often
+reachable there. The named-absence design itself is deployment-agnostic and unchanged: it covers
+the hosts where RAPL/PMU are absent with a truthful, greppable, per-reason signal instead of a
 fabricated zero or a crash — and Tier A (rdtsc deltas, fault counts, context switches) delivers
-real hardware-adjacent input immediately. If real IPC/cache-miss data is ever wanted, the two
+real hardware-adjacent input on every host immediately. If real IPC/cache-miss data is ever wanted, the two
 levers are `sysctl kernel.perf_event_paranoid=2` or granting `CAP_PERFMON` (kernel ≥5.8) to the
 kernel's process — both host-level changes, therefore **NEEDS-OPERATOR-DECISION**, recorded here
 in the `slot_arena.rs` evidence-then-ruling format and NOT assumed by this design.
