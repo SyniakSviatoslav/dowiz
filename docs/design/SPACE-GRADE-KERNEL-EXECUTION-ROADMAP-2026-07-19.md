@@ -502,3 +502,125 @@ Planning only — no item below starts before the operator dispatches it.
 **Dependency graph, one line:** 33 ∥ 34 → 35 → {36 ∥ 37 ∥ 38} → 39 → 40 → 42 → 43 → 44, with
 41 branching off 35 and merging before 42; item 9 (breaker) composes with 40's fail path when
 it exists but gates nothing here.
+
+---
+
+## I. Items 45–49 — Whole-System Determinism & AI-Optional Arc (appended 2026-07-19, third wave)
+
+**Source:** `CRASH-CONSISTENCY-FORMAL-VERIFICATION-GUARDIAN-SYNTHESIS-2026-07-19.md` (Fable
+synthesis) over `RESEARCH-CRASH-CONSISTENCY-FORMAL-VERIFICATION-GUARDIAN-2026-07-19.md` (Opus
+grounding, 11 findings) and
+`RAW-PROMPT-5-crash-consistency-formal-verification-fail-fast-guardian-2026-07-19.md` (verbatim
+dialogue). **Governing directive, recorded:** *"вона має 100% передбачуваною, математично
+детермінованою із запобіжниками. Окрім цього уся система повинна здатна працювати без AI"* —
+(a) whole-system determinism + safeguards, broader than the items-33–44 AI subsystem; (b)
+AI-optional as a preserved architectural INVARIANT (GROUNDED already-true today: `attention.rs`
+"the kernel stays non-AI"; `order_machine`/`decision`/`hydra` import zero AI modules). Ground
+truth honored throughout: the kill-9 mechanism IS a Sequential Append-only Log (not pointer-swap,
+not hybrid); Kani/TLA+ remain planned-only (items 7/10/11, unchanged); Coq/Lean-class full
+formal verification is OUT OF SCOPE per the synthesis §5 proportionality ruling (BITE/runtime-
+verification primary — where the source dialogue's own self-correction landed). Same standing
+laws as §H: zero new external crates, §4 hardening checklist via item 6's machinery, item-25
+procedure for any dependency question. Planning only — no item starts before the operator
+dispatches it.
+
+- **Item 45 — `ai-optional-gate`: AI-optional as an enforced compile-time invariant (Tier-0/1-
+  class, zero prerequisites, READY NOW — asserts today's truth, gains teeth when items 33–44
+  land).** Structural law amended into the §H arc: the inference subsystem lands behind a
+  **non-default cargo feature** (e.g. `inference`) — the exact `pq`/`slot-arena` surface-control
+  pattern already in the kernel. New CI job (zero-dep-gate/toolchain-bump-gate precedent shape):
+  (a) default-features build (AI absent) must compile AND pass the FULL kernel test suite; (b) a
+  dependency-direction check — no core decision module (`order_machine`, `decision/`, `hydra`,
+  `event_log`, `markov`, `spectral`, `fdr`) may reference the AI module paths outside the feature
+  gate (AI depends on core, never core on AI). Explicitly NOT built: runtime kill-switch service,
+  dual-binary pipeline, AI-health monitor (over-design guard; the runtime half is item 47's
+  `None` path). **Proof:** a planted core→AI import (or a planted default-features AI reference)
+  demonstrably turns the gate RED before the gate counts as landed (P7); the default-features
+  full suite runs green inside the job; the feature-gate law is recorded in §H's header and the
+  AI module's own doc when it lands.
+- **Item 46 — float-determinism containment, evidence-scoped (READY NOW; composes with item 14's
+  closed bump gate).** NOT a kernel-wide f64→fixed rewrite — rejected as disproportionate
+  (synthesis §2.3: the one real float-nondeterminism bug ever shipped was libm `sin`/`cos` ULP
+  drift, fixed by the Q30 CORDIC, `REGRESSION-LEDGER.md` row 25; basic IEEE-754 arithmetic is
+  bit-deterministic for a fixed binary on the pinned 1.96.1 toolchain). Scope: (i) inventory
+  every libm-transcendental call site (`sin`/`cos`/`exp`/`ln`/`powf`; `sqrt` exempt —
+  correctly-rounded) in the deterministic kernel plane (`spectral.rs`, `markov.rs`,
+  `token_bucket.rs`, `attention.rs`), disposition each as migrate-to-CORDIC-class or
+  pin-under-golden; (ii) every value feeding a cross-version/cross-host comparison surface
+  (golden signatures, oracle pins, `wire_code()`s, `DRIFT_BAND`-class constants) must be either
+  integer-domain or covered by a golden test. **Re-execution mechanism (verified precise): the
+  toolchain-bump gate itself only requires a `spot-check-<new>.md` artifact on a `channel` bump;
+  the golden tests are actually re-run under the new compiler by the always-on full-suite
+  `cargo test` job (pinned via `rust-toolchain.toml`) plus item 6's `hardening-gate` unconditional
+  oracle re-run** — so a compiler-induced float divergence turns the bump PR RED, never a silent
+  ship (once this item adds the missing golden coverage); (iii) the full fixed-point
+  conversion is parked as an explicitly-flagged-LARGE item with named reopening triggers: a
+  reproduced cross-version golden divergence in basic float arithmetic, or a multi-ISA deployment
+  requirement. **Proof:** the inventory doc with per-site disposition and zero unclassified
+  transcendental sites; the new golden float surfaces sit in the always-on full-suite /
+  `hardening-gate` oracle set (a deliberately perturbed golden value turns CI RED under the pinned
+  toolchain — red-proven), and a `channel` bump is additionally gated on the `spot-check-<new>.md`
+  `## Full-suite re-run` artifact; the parked rewrite + triggers recorded in the doc and the
+  relevant module docs.
+- **Item 47 — Guardian: semantic advice gate + deterministic-primary path (spec after item 35;
+  full wiring after item 42; EXTENDS item 9, cross-references item 40 — no competing breaker, no
+  fold-in).** The kernel's decision seam takes `Option<Proposal>` — advice is DATA; `None`
+  (AI absent/crashed/rejected) is a first-class tested input, and the deterministic path is the
+  total function (the "fallback" IS the system — AI-optional expressed in the type system).
+  Admission is parse-don't-validate: `admit(Proposal, &Invariants) -> Result<ValidatedProposal,
+  Rejection>` with `ValidatedProposal` constructible only through `admit`
+  (illegal-state-unrepresentable, the item-9 `Result<Permit, Tripped>` standard); invariants
+  written as checkable equations (the `Result.velocity < MAX_SAFE_SPEED` class). Static
+  procedures are NAMED pure functions, statically dispatched, `match`-based (the `order_machine`
+  style), every loop statically bounded (`0..MAX_N`, item-42-style source-structure assertion;
+  WCET tooling explicitly out of scope). Distinct from item 40 by plane: 40 rejects corrupted
+  BITS (hardware-fault evidence), 47 rejects well-formed-but-unsafe MEANING; both hard-fail
+  observable. Every `Rejection` emits an FDR event; when item 9 lands, repeated rejections route
+  through the breaker (same composition clause as item 40 — design does NOT gate on item 9).
+  Named precedent to extend, never fork: `decision/import.rs::import_unit`'s
+  verify-before-persist replay gate — the same shape at import granularity. **Proof:** the
+  invariant spec doc with every law as a checkable equation; planted-invalid-advice red→green
+  (the gate demonstrably rejects — P7); the `None`-path test proving bit-identical output vs the
+  deterministic baseline; exhaustive enumeration where the advice domain is enumerable +
+  oracle/differential corpus otherwise + a proptest sweep (the item-5 regex-parity testing
+  stack, reused not reinvented); the source-structure bounded-loop assertion green.
+- **Item 48 — FDR blind-spot closure: panic forensics + liveness heartbeat (after items 4+29 —
+  satisfied; READY once the FDR branch merges).** The kill-9 test proves recovery AFTER process
+  death; it is structurally blind to (a) a panicking process that writes nothing before dying
+  and (b) a HUNG process that never dies (no PostMortem is ever emitted — the one failure class
+  FDR cannot see; the k3 span-metrics self-deadlock, root-caused+fixed `67851b2f3`, is the
+  in-repo precedent). Two narrow closures, both BITE-shaped: **(a)** `std::panic::set_hook`
+  emitting ONE fsynced `Alarm` FDR record (message + location; `Alarm` already fsyncs) — a panic
+  hook, NOT a `#[panic_handler]` (`std` kernel; the bare-metal construct does not apply);
+  register/stack core-dumps explicitly not pursued. **(b)** a periodic `Heartbeat` `Kind`
+  variant (closed-enum growth) carrying seq + progress counters; liveness JUDGMENT and restart
+  authority stay OUTSIDE the kernel (systemd `WatchdogSec` / deployment layer;
+  `hub_supervisor`'s crash-loop detection is the deploy-granularity precedent) — a missed
+  heartbeat converts a hang into the kill-9 crash class the system already provably survives.
+  The kernel carries NO self-kill/self-restart logic (`Kernel_Init`-over-`Kernel_Recover`,
+  KISS). **Proof:** a test child that panics yields a recovered `Alarm` record carrying the
+  panic site (red→green: without the hook, nothing is recovered); a test child that deliberately
+  hangs (loop + no heartbeat) is flagged by the external liveness check WHILE producing no
+  PostMortem — demonstrating exactly the gap closed; all other FDR records byte-identical
+  (optional-field discipline, item-27 precedent); clean-shutdown emits a final heartbeat and no
+  false alarm.
+- **Item 49 — event-log replay-bound measurement + Hybrid/LSM park (after item 2's wiring fix
+  lands — currently gated: no production composition root constructs the durable store).** The
+  raw prompt's Hybrid (WAL + periodic snapshot) recommendation, dispositioned per surface: for
+  the FDR ring it is REJECTED permanently (replay bounded by construction at 2×1 MiB segments);
+  for the durable `EventLog` (genuinely unbounded hash-chain replay; `hub_supervisor`'s
+  `StateSnapshot` is an update-rollback epoch pointer, NOT replay-speedup) it is PARKED behind
+  measurement — measuring an unwired store would optimize an unreachable path. Once wired:
+  measure startup replay time vs event count (item-26 measurement-only discipline: real numbers,
+  no code landed), state a replay budget, and record the parked snapshot design with its named
+  reopening trigger (measured replay exceeding budget at realistic event volume). Carried-forward
+  correctness note if ever built: data-file fsync strictly BEFORE pointer swap (the dialogue's
+  caveat, endorsed; consistent with `ring.rs`'s kill-9-vs-power-loss separation). **Proof:** a
+  dated measurement doc (replay µs at N ∈ {1e3, 1e4, 1e5} events, methodology stated); the
+  budget + trigger recorded; zero snapshot code landed (scope law, item-26 precedent); the FDR
+  permanent-rejection rationale recorded in `fdr/ring.rs`'s module doc when next touched.
+
+**Dependency graph, one line:** 45 ∥ 46 ∥ 48 ready now (48 pending the FDR branch merge);
+47 spec after 35, full wiring after 42, composes with item 9's breaker when it exists;
+49 strictly after item 2's wiring-gap fix. No item here gates any §H item; item 45's feature-gate
+law binds §H's build items when they land.
