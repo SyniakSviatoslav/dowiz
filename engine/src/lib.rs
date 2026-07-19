@@ -13,9 +13,9 @@
 //!   is plain `f32` arrays so it is).
 
 mod bridge;
-// field_frame is exposed publicly: the browser renders the kernel-computed
-// field via `field_frame::compose` (zero TS). No compute lives in the wasm crate.
+mod engine_loop;    // P64 §3.1 — ONE code path: InputRouter::tick wired into the run loop
 pub mod field_frame;
+pub mod field_modal; // P89 §3/§12 — engine consumer of kernel field_eigenmodes (NeumannGrid/field_eigenmodes_a/modal_advance)
 // P88 — atomicity-by-default policy + deterministic fixed-point reduction spec.
 // BLUEPRINT: docs/design/CORE-ROADMAP-2026-07-17/
 //             BLUEPRINT-P88-atomicity-by-default-physics-gpu-2026-07-19.md
@@ -60,10 +60,12 @@ pub mod voice;
 // EditState bounds, composing-refused) live here and are tested now.
 #[cfg(feature = "a11y_native")]
 pub mod a11y_native;
-mod widget_store;
+pub mod widget_store;
 mod zerocopy;
 
 pub use bridge::{FrameProfiler, VertexBridge};
+pub use engine_loop::EngineLoop;
+pub use field_modal::FieldModal;
 pub use loop_::{FixedTimestep, DT_STABLE, MAX_FRAME, MAX_SUBSTEPS};
 pub use money_guard::{interpolate, FieldValue, Money, TweenGuard};
 pub use motion::{heat_kernel_delay, Spring};
