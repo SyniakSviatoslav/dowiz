@@ -1,0 +1,12 @@
+# mesh-adapter/Cargo.toml  (NEW — the P34 dependency edge, DoD-1)
+[package]
+name = "dowiz-mesh-adapter"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "P34 wiring: dowiz-kernel as the consumer/driver of the bebop2 delivery protocol (delivery-domain kernel-rlib spine + proto-cap vocabulary/matcher/claims). Test-first adapter; no HTTP, no transport, no storage."
+
+[dependencies]
+dowiz-kernel = { path = "../kernel", default-features = false, features = ["std"] }
+bebop-delivery-domain = { path = "../../bebop-repo/bebop2/delivery-domain", features = ["kernel-rlib"] }
+bebop-proto-cap = { path = "../../bebop-repo/bebop2/proto-cap" }
