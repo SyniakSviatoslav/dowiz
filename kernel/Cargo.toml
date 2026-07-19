@@ -83,6 +83,14 @@ slot-arena = ["dep:thunderdome"]
 # only if a future dep actually pulls rsa into the kernel graph. Upgrade trigger:
 # `cargo tree -i rsa` shows a real path OR a patched rsa release ships.
 
+# `p67-adapters` — OPT-IN closed Wave-0 infra adapters (CloudflareTunnel /
+# HetznerVps) for BLUEPRINT P67 hub-provisioning. OFF by default so the
+# canonical kernel stays pure-`std` and provider-agnostic; the default lib
+# build compiles ONLY the provider-agnostic `hub_provisioning` module + its
+# in-module mock adapters (no Cloudflare / Hetzner / network symbols). The real
+# bindings ride this flag behind `#[cfg(feature = "p67-adapters")]`.
+p67-adapters = []
+
 [dependencies]
 # WASM bindings — only compiled under the `wasm` feature (see
 # `#[cfg(feature = "wasm")] pub mod wasm;` in lib.rs). The kernel is pure Rust
