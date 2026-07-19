@@ -157,6 +157,37 @@ consumers. Recorded so nobody "unifies" them without re-reading this rationale.
    `[[bench]]` in `proto-wire/Cargo.toml`.
 4. **The `<group>/<n>` bench-ids** for the proto-crate surface, in **P75's** schema (cited, never
    redefined).
+5. **A NEW bebop-repo CI bench job** for the per-frame `proto-cap`/`proto-wire` criterion baselines —
+   authored in **bebop2's OWN `.github/workflows/`** — modeled on P75's kernel `bench-regression`
+   same-runner A/B job (P75 §5) but running
+   `cd bebop2 && cargo bench -p bebop-proto-cap -p bebop-proto-wire --bench criterion --
+   --save-baseline {base,pr}` and gating with `native-trackers compare` against each crate's
+   `baseline.json`. Plus the committed `bebop2/proto-cap/benches/baseline.json` +
+   `bebop2/proto-wire/benches/baseline.json`. **This is new work P82 now owns explicitly — it is NOT
+   something P75 already provides.** Ground truth: P75's *running* gate lives in **dowiz's**
+   `.github/workflows/ci.yml` and benches the dowiz **kernel only** (P75 §2.2/§5); bebop's own `ci.yml`
+   has **zero** bench jobs today (§0.1). Without this job the proto-crate baselines are **recorded but
+   never gated**, D4 (below) is unsatisfiable, and P82's per-frame "continuous-gate" value proposition
+   is structurally broken.
+   - **⚠ CROSS-REPO COMPLEXITY FLAG (the part that makes this materially harder than P81's engine job).**
+     bebop2 is a **separate git repository** (`/root/bebop-repo`, pushed to the `openbebop` remote —
+     memory `cross-branch-todo-map-2026-07-10.md`), so this job **cannot** be a second job inside
+     dowiz's `ci.yml`; it must be authored in **bebop's own `.github/workflows/`**. But P75's gate
+     machinery — the `native-trackers compare` binary, the `GateExit` contract, the `<group>/<n>` +
+     `baseline.json` v2 schema — currently lives **only in `/root/dowiz`** (`tools/telemetry/
+     native-trackers`, §2.2). So P82 must additionally specify **how the bebop CI runner obtains that
+     machinery**: either (a) vendor/publish the released `native-trackers` binary into the bebop repo,
+     or (b) a **cross-repo multi-checkout** of the sibling dowiz `tools/telemetry/native-trackers` at a
+     known path — the *same* sibling-checkout topology P76 needs for its `kernel-rlib` leg (flagged as
+     META-GAP-AUDIT finding **G10**). P82 must pin one of these as an explicit environmental
+     prerequisite of its bebop bench job; it does **not** re-implement the gate.
+   - The `core` `verify_lane.rs` numbers stay **measured-not-gated** by design (§1.2, one-shot D-9/P92
+     inputs) and therefore need **no** CI job — only the per-frame `proto-cap`/`proto-wire` criterion
+     baselines require this new bebop gate.
+
+   This item corrects `META-GAP-AUDIT-2026-07-19.md` finding **G3** ("no blueprint owns creating the
+   bebop-repo CI bench job; P82's is cross-repo"), rather than the prior silent assumption that "the P75
+   gate" — which lives in dowiz and benches only the kernel — would somehow run the bebop crates.
 
 ### 2.2 P82 does NOT own (anti-scope)
 
@@ -174,9 +205,13 @@ consumers. Recorded so nobody "unifies" them without re-reading this rationale.
 
 ### 2.3 Dependencies (named by artifact — standard §2 item 7)
 
-**Hard inputs:** **P75** (schema + working gate, for the proto-cap/proto-wire criterion baselines);
-**bebop gate-0** = **P85** closed + **C3** ruled (OD-3/OD-6) — unfreezes bebop commits; **P76**
-landed (Wave-1) and **P78** landed (Wave-2, sequenced before P82).
+**Hard inputs:** **P75** — for its **`<group>/<n>` + `baseline.json` v2 schema and the reusable
+`native-trackers compare` gate binary + `GateExit` contract**, *not* for a ready-made bebop CI job
+(P75's running gate is dowiz-kernel-only and lives in dowiz's repo, §2.2/§5). The **cross-repo bebop
+`bench-regression` job is P82's own deliverable** (§2.1.5), including specifying how bebop CI reaches
+P75's machinery (the G10 sibling-checkout/vendored-binary topology). **bebop gate-0** = **P85** closed +
+**C3** ruled (OD-3/OD-6) — unfreezes bebop commits; **P76** landed (Wave-1) and **P78** landed (Wave-2,
+sequenced before P82).
 **Feeds:** **D-9/OD-9** (KEM bench → NTT wire-in decision) and **P92 D-BENCH** (`gate` group →
 fast-path measure-first NO-GO). Neither is a hard block *on* P82 — P82 produces the data; the gates
 are decided downstream.
@@ -304,7 +339,7 @@ an injected slowdown does not surface; "GREEN" = measured + (for the criterion g
 | D1 | `verify_lane.rs` prints stable sign/KEM/AEAD/sha3/x25519 numbers | run the binary → every §3 `core` id prints; `kem_decaps` is non-trivial and stable |
 | D2 | `proto-cap/benches/criterion.rs` exists and all `gate/*` ids land in P75's `baseline.json` | `bench_track.py`/P75 lists them; a missing id fails the coverage assertion |
 | D3 | `proto-wire/benches/criterion.rs` exists and all `codec/*` ids land in the schema | same |
-| D4 | an injected 2× slowdown in `HybridGate::check`'s verify trips the P75 gate RED | inject a redundant `verify_pq`, run gate → RED; revert → GREEN (proves real signal) |
+| D4 | an injected 2× slowdown in `HybridGate::check`'s verify trips the **bebop-repo** `bench-regression` CI job (the cross-repo gate P82 authors in §2.1.5, in bebop2's OWN `.github/workflows/`, modeled on P75's job) RED, and clean HEAD → GREEN | inject a redundant `verify_pq`, run the **bebop** bench job → RED; revert → GREEN (proves real signal). **NB (per META-GAP-AUDIT G3):** P75's running gate is dowiz-kernel-only and lives in the dowiz repo, so this DoD is satisfiable **only because P82 now owns authoring the equivalent cross-repo bebop CI job** (§2.1.5) — reusing P75's `native-trackers compare` binary + exit contract (made reachable to bebop CI per the §2.1.5 cross-repo topology), **not** assuming a P75 gate already benches bebop. |
 | D5 | the KEM bench answers "is decaps hot?" with a number the D-9 decision can cite | `kem_decaps` cost is recorded in the pass's output + referenced from OD-9 |
 | D6 | anti-cheat siblings pass (each benched call is real work) | `kem_roundtrips`, `gate_rejects_forged_frame`, `codec_roundtrips` GREEN |
 | D7 | every bench uses seeded deterministic inputs; no OS entropy, no wall-clock, no network | grep the benches for `from_os_rng`/`SystemTime`/socket → empty; `BENCH_SEED` drives all keys |
@@ -418,6 +453,15 @@ an injected slowdown does not surface; "GREEN" = measured + (for the criterion g
 - **NEW** `bebop2/proto-wire/benches/criterion.rs` — group `codec` (§4.3).
 - **EDIT** `bebop2/proto-cap/Cargo.toml` + `bebop2/proto-wire/Cargo.toml` — `criterion` dev-dep +
   `[[bench]] harness = false` (§4.4). No `[dependencies]` change.
+- **NEW** `bebop2/proto-cap/benches/baseline.json` + `bebop2/proto-wire/benches/baseline.json` — the
+  per-crate v2 manifests (P75 §3.2) holding the §3 `gate`/`codec` bench-ids; committed so the bebop
+  gate has something to compare against.
+- **NEW** a bebop-repo CI bench job in **bebop2's OWN `.github/workflows/`** (§2.1.5) — the cross-repo
+  `bench-regression` gate for the proto-cap/proto-wire criterion baselines, modeled on P75's kernel
+  job. **Cross-repo prerequisite:** pin how the bebop runner obtains P75's `native-trackers` binary +
+  schema (vendor the released binary, or a sibling-checkout of dowiz `tools/telemetry/native-trackers`
+  — the G10 topology). Closes META-GAP-AUDIT G3 for bebop. The `core` `verify_lane.rs` numbers stay
+  measured-not-gated (§1.2) and need no CI job.
 - **DO NOT TOUCH** any bebop2 product `src/*` (bench-only; NTT wire-in is D-9, `MerkleDigest`/`hub_ring`
   are P78).
 
@@ -430,8 +474,13 @@ an injected slowdown does not surface; "GREEN" = measured + (for the criterion g
 3. Write the two criterion siblings copying `kernel/benches/criterion.rs`'s structure; seed all keys
    from `BENCH_SEED`; `black_box` inputs/outputs; add the §4 anti-cheat sibling tests.
 4. Wire the four manifest lines; `cargo bench -p bebop-proto-cap -p bebop-proto-wire` emits every
-   `<group>/<n>` id.
-5. Prove D4 (injected slowdown → gate RED) and D-CLEAN (`cargo tree -e no-dev` unchanged).
+   `<group>/<n>` id; commit the two proto-crate `baseline.json` files.
+5. **Author the cross-repo bebop `bench-regression` CI job** in bebop2's OWN `.github/workflows/`
+   (§2.1.5), modeled on P75's kernel job but pointed at the proto crates + their `baseline.json` — this
+   is P82's own deliverable, not something P75 provides (P75's gate lives in dowiz and benches only the
+   kernel). First pin how the bebop runner reaches P75's `native-trackers` binary/schema (vendored
+   binary or the G10 sibling-checkout topology). Then prove D4 (injected slowdown → the **bebop** gate
+   RED; revert → GREEN) and D-CLEAN (`cargo tree -e no-dev` unchanged).
 6. Add a `docs/regressions/REGRESSION-LEDGER.md` row: "bebop mesh crypto/auth/codec bench coverage
    established (P82); `gate`/`codec` gated, KEM/sign/AEAD measured."
 7. Hand `gate/chain_1` to P92 (D-BENCH input) and `kem_decaps` to OD-9. Anti-scope: do **not** wire an
