@@ -346,3 +346,29 @@ jobs:
             exit 1
           fi
           echo "OK: agent-loop firewall intact (no direct dowiz-kernel dependency)"
+
+  # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
+  # P34 (BLUEPRINT-P34-mesh-kernel-wiring.md §3.1c): the cross-repo anti-rot
+  # ratchet. Gates BOTH directions of the dowiz<->bebop feature build:
+  #  - REVERSE edge (the one that rotted, E0004): bebop-delivery-domain --features kernel-rlib
+  #  - FORWARD edge (DoD-1): dowiz-mesh-adapter cargo test
+  #  - W-6 firewall red-proof: a build that MUST fail if proto-wire links the kernel
+  # Sibling checkout layout mirrors /root so relative path deps resolve
+  # (adapter ../../bebop-repo/..., delivery-domain ../../../dowiz/kernel).
+  mesh-adapter:
+    name: mesh-adapter (P34 dowiz<->bebop wiring, kernel-rlib gate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: dowiz }
+      - uses: actions/checkout@v4
+        with:
+          repository: SyniakSviatoslav/OpenBebop
+          ref: 986646a35258ced76752510625511f37a6367a77   # = OPENBEBOP_CI_PIN; bump = reviewed commit
+          path: bebop-repo
+      # Gate the REVERSE edge (the one that rotted, §0 row 12):
+      - run: cargo test --manifest-path bebop-repo/Cargo.toml -p bebop-delivery-domain --features kernel-rlib
+      # Gate the FORWARD edge (DoD-1) + the whole P34 suite:
+      - run: cargo test --manifest-path dowiz/mesh-adapter/Cargo.toml
+      # Firewall red-proof (W-6): a build that MUST fail, §3.6:
+      - run: bash dowiz/mesh-adapter/proofs/firewall-red.sh bebop-repo
