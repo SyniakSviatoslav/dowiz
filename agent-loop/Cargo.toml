@@ -27,3 +27,10 @@ path = "src/lib.rs"
 [[bin]]
 name = "agent-loop"
 path = "src/main.rs"
+
+# P40 DECART-B sibling service: runs the bounded AgentLoop behind a localhost
+# HTTP surface that native-spa-server proxies /api/agent to. Keeps the heavy
+# llm-adapters dep in THIS process (SPA binary stays zero-OCI).
+[[bin]]
+name = "agent-loop-service"
+path = "src/service_main.rs"
