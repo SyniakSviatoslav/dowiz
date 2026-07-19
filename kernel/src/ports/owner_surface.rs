@@ -239,6 +239,24 @@ impl From<CatalogError> for OwnerSurfaceError {
     }
 }
 
+impl From<crate::capability_cert::CertError> for OwnerSurfaceError {
+    fn from(e: crate::capability_cert::CertError) -> Self {
+        use crate::capability_cert::CertError as C;
+        match e {
+            C::Revoked => OwnerSurfaceError::Revoked,
+            C::UnknownIssuer => OwnerSurfaceError::UnknownIssuer,
+            C::Expired => OwnerSurfaceError::Expired,
+            C::ScopeViolation | C::MaxDepthExceeded => OwnerSurfaceError::ScopeViolation,
+            // Bad/absent signature legs, unknown suites, node-id mis-binds, and
+            // failed suite negotiation are all "this cert does not cryptographically
+            // check out" at the owner boundary → BadSignature.
+            C::BadSignature | C::UnknownSuite | C::NodeIdMismatch | C::NoCommonSuite => {
+                OwnerSurfaceError::BadSignature
+            }
+        }
+    }
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Owner-cap-cert signature helper (classical RefSigner — same scheme as P59's
 // in-tree reference signer). The owner root's classical key signs; the hub verifies
@@ -821,6 +839,34 @@ pub fn verify_hub<V: SignatureVerifier>(
         return Err(OwnerSurfaceError::ScopeViolation);
     }
     Ok(())
+}
+
+/// P59 wiring — anchor-rooted, hybrid-signed capability-cert **chain** verification
+/// on the owner-surface claim/request path. Where `verify_hub`/`verify_courier`
+/// check a SINGLE owner→hub `Delegation` link with classical-only signature checks,
+/// this is the full P59 trust decision an owner client makes when a party presents a
+/// capability backed by a self-signed hybrid root + a delegation chain: the root
+/// must be an enrolled anchor, every link's RequireBoth (Ed25519 ⊕ ML-DSA-65)
+/// signature must verify, revocation/expiry/attenuation/depth all hold, and the tail
+/// must bind the presented `cap`. It is kernel-local (no network, no dowiz, no mesh)
+/// — the owner device is the relying party.
+///
+/// This is the production caller for `capability_cert::verify_chain_hybrid` on the
+/// dowiz side (P59 promised anchor-rooted hybrid chain verification on the
+/// claim/request loop; before this, only tests called it). A forged/expired/revoked
+/// chain, an unenrolled root, or a scope-escalating link is refused typed.
+#[allow(clippy::too_many_arguments)]
+pub fn verify_claim_cap_chain<V: SignatureVerifier>(
+    v: &V,
+    roster: &crate::ports::agent::cap::AnchorRoster,
+    rev_store: &crate::capability_cert::RevocationStore,
+    root: &crate::capability_cert::SelfSignedRoot,
+    chain: &[crate::capability_cert::CertDelegation],
+    cap: &crate::ports::agent::cap::Capability,
+    now: u64,
+) -> Result<(), OwnerSurfaceError> {
+    crate::capability_cert::verify_chain_hybrid(v, roster, rev_store, root, chain, cap, now)
+        .map_err(OwnerSurfaceError::from)
 }
 
 /// Client-side merge of N hubs' order folds on the owner's device. Takes ONLY local
