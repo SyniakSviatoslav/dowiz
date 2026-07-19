@@ -4,8 +4,9 @@
 > against the 20-point contract in `CORE-ROADMAP-STANDARD-2026-07-17.md` §2. Research source:
 > `docs/research/OPUS-KEM-RING-BUG-INVESTIGATION-2026-07-18.md` (recovered — see MASTER-STATUS-LEDGER
 > §0); scoped in `SYNTHESIS-WAVE3-CLOSEOUT-2026-07-18.md` §3. Port source:
-> `/root/bebop-crypt/bebop2/core/src/pq_kem.rs` (correct, un-quarantined) and/or the P85-quarantined
-> NTT in `/root/bebop-repo`. Format precedent: `BLUEPRINT-P92-MESH-HOTSTREAM-FASTPATH-2026-07-18.md`,
+> `/root/bebop-crypt/bebop2/core/src/pq_kem.rs` @ commit `f38f2c5` (correct, un-quarantined; provenance
+> pinned §0.5) and/or the P85-quarantined NTT in `/root/bebop-repo`. Format precedent:
+> `BLUEPRINT-P92-MESH-HOTSTREAM-FASTPATH-2026-07-18.md`,
 > `BLUEPRINT-P59-capability-cert-chain.md`.
 >
 > **One sentence:** dowiz's own `kernel/src/pq/kem.rs` is **not ML-KEM-768 / FIPS-203** — it implements
@@ -135,6 +136,25 @@ This tree is the stable, KAT-gated reference. The *incomplete-NTT* variant (`pol
 proven 0/65 536 basis-pair mismatches) is the **separate** `/root/bebop-repo` `986646a` work — which is
 **P85-process-quarantined** (`--no-verify` bypass). The distinction is load-bearing for §5.
 
+**Port-source provenance pin (closes audit G4's second half — matching P85's `986646a` discipline, §3 of
+that blueprint; verified live this pass):**
+- **Repo:** `/root/bebop-crypt` — a git repo, accessible in-environment, working tree clean (`git status`
+  → nothing to commit). Remotes: `origin` → `git@github.com:SyniakSviatoslav/bebop.git`, `openbebop` →
+  `git@github.com:SyniakSviatoslav/OpenBebop.git`.
+- **Commit:** **`f38f2c5`** (full `f38f2c57db3e2aa8e04849b4b4df99ec5446de2e`) —
+  `chore: clean-slate publish — remediated keep-set (fresh history)`, 2026-07-14. `git log --follow --
+  bebop2/core/src/pq_kem.rs` shows this is the **only** commit that has ever touched the file in this
+  repo's (deliberately squashed) history, and `git rev-list --count f38f2c5` = 1 — it is the **root**
+  commit of the whole repo, so there is no parent to diff against; inspect the exact introducing content
+  via `git show f38f2c5:bebop2/core/src/pq_kem.rs` (the P85-style `NTT_DIFF` convention does not apply to
+  a root commit). Reachable from `openbebop/main` and three other remote branches (`git branch -r
+  --contains f38f2c5`) — pushed, not a fragile local-only tip.
+- **Pin format (matching P85 §3's named-constant convention):**
+  `PORT_SOURCE_COMMIT_BEBOP_CRYPT = f38f2c5` (`bebop2/core/src/pq_kem.rs`, `/root/bebop-crypt`).
+- This pin is exactly the evidence Q1's "Conformance / provenance" checklist row requires before D3 can
+  reach `DONE-VERIFIED` (`BLUEPRINT-Q-SERIES-VERIFICATION-OBSERVABILITY-2026-07-19.md` §Q1-b: *"the
+  vectors must exist and be pinned before the DoD can be checked"*).
+
 ---
 
 ## 1. Prior-art map — adopt, don't invent (standard §2 item 19)
@@ -173,8 +193,10 @@ proven 0/65 536 basis-pair mismatches) is the **separate** `/root/bebop-repo` `9
 ### 2.3 Dependencies (named by artifact — standard §2 item 7)
 **Hard inputs:** `kernel/src/pq/kem.rs` (the fix target); `kernel/src/pq/{hybrid,volume}.rs` (downstream
 consumers — must keep compiling); `kernel/src/pq/kat/acvp/` (the KAT dir — needs a *new* KEM vector
-file); the port source `/root/bebop-crypt/bebop2/core/src/pq_kem.rs` (schoolbook) and/or
-`/root/bebop-repo` `986646a` (NTT, P85-gated). **External input:** NIST ACVP ML-KEM-768 vectors (§9).
+file, sourced + pinned per §4.3 P91.2.0(a) — a tracked prerequisite, not assumed-available); the port
+source `/root/bebop-crypt/bebop2/core/src/pq_kem.rs` @ commit `f38f2c5` (schoolbook, provenance §0.5)
+and/or `/root/bebop-repo` `986646a` (NTT, P85-gated). **External input:** NIST ACVP ML-KEM-768 vectors
+(§9).
 **Depends on:** operator ruling on P91.0 early execution (OD-5); **P85** *only if the NTT-port option is
 chosen* (§5). **Blocks:** any future wiring of `pq::volume` (P2/D4).
 
@@ -224,7 +246,9 @@ pub const CT_LEN: usize = 32 * (DU * K + DV);   // = 1088 — WAS K*384 + 384 = 
 ```
 
 **Falsifier tests (named for the DoD, §9):** `kem_negacyclic_wrap` (`x²⁵⁵·x == −1` in the ring),
-`kem_acvp_encaps_decaps_byte_exact` (vs the new ACVP file), `kem_eta1_is_two`, `kem_ct_len_is_1088`.
+`kem_acvp_encaps_decaps_byte_exact` (vs the new ACVP file), `kem_eta1_is_two`, `kem_ct_len_is_1088`,
+`kem_decaps_constant_time_dudect` (Welch-t timing gate on decaps — audit G5, §8.2 item 6; **not**
+satisfied by any of the functional KATs above, see D-CT §9).
 
 ---
 
@@ -287,6 +311,10 @@ pub const CT_LEN: usize = 32 * (DU * K + DV);   // = 1088 — WAS K*384 + 384 = 
     file header / commit message, matching P85's `986646a` discipline (the audit flagged this vector set
     as having "no NIST URL, version tag, or generation script"). RustCrypto `ml-kem/tests` mirrors this
     same NIST export and is an acceptable cross-check, but `usnistgov/ACVP-Server` is the source of truth.
+    This vector-provenance pin, together with the §0.5 port-source commit pin, is exactly the evidence
+    Q1's "Conformance / provenance" checklist row requires
+    (`BLUEPRINT-Q-SERIES-VERIFICATION-OBSERVABILITY-2026-07-19.md` §Q1-b) before D3 can reach
+    `DONE-VERIFIED`.
   - **(b) Build a KEM ACVP loader/harness — model it on the existing ML-DSA one.** The pattern already
     exists and MUST be reused, not reinvented: `kernel/src/pq/dsa/dsa_acvp_tests.rs` (`OnceLock`-cached
     parse, `KAT_DIR = concat!(env!("CARGO_MANIFEST_DIR"), "/src/pq/kat/acvp/")`, `serde`/`serde_json`
@@ -323,7 +351,7 @@ different gating:
 
 | Port source | Location (verified this pass) | Speed | P85-gated? | Recommendation |
 |---|---|---|---|---|
-| **Schoolbook negacyclic `poly_mul`** | `/root/bebop-crypt/bebop2/core/src/pq_kem.rs:296` — stable, KAT-gated, **un-quarantined** | O(n²) | **No** | **PRIMARY** — correctness-first (ponytail: simplest correct thing), decouples the fix from the P85 freeze |
+| **Schoolbook negacyclic `poly_mul`** | `/root/bebop-crypt/bebop2/core/src/pq_kem.rs:296` @ commit `f38f2c5` (§0.5) — stable, KAT-gated, **un-quarantined** | O(n²) | **No** | **PRIMARY** — correctness-first (ponytail: simplest correct thing), decouples the fix from the P85 freeze |
 | **Incomplete NTT `poly_mul_ntt`** | `/root/bebop-repo` `986646a` — exhaustively proven 0/65 536 but committed `--no-verify` | O(n log n) | **Yes** | **Optional speed follow-up** — only after P85 closes; building on a quarantined crypto artifact would compound A4 |
 
 ### 5.1 Recommendation (correctness-first, then speed)
@@ -425,6 +453,21 @@ enforce). Mandate: **produce a concrete discrepancy or a proof of correctness**,
 4. **Decryption-failure sanity** — confirm the corrected noise (η1=2) yields the spec's decryption-
    failure regime, not the η1=3 distribution.
 5. **No live-path leakage** — confirm `volume.rs` is still un-wired and the signature seam is untouched.
+6. **Constant-time / no secret-dependent branch (audit G5 — distinct from items 1-5, which are all
+   functional).** The concrete decaps timing-leak sites named by the audit: the **FO re-encryption**
+   inside decaps (re-running K-PKE.Encrypt on the decrypted message and comparing to the received
+   ciphertext), the **implicit-rejection** branch (the constant-time select between the real shared
+   secret and the pseudorandom rejection value — never an `if`/early-return keyed on the comparison
+   result), and the **mod-q reductions** in `poly_mul`/byte-decode (any operation whose timing depends on
+   a secret coefficient's *value* rather than only on public shape). The reviewer must inspect each for
+   secret-dependent branches or variable-time arithmetic and file a dudect-style statistical timing
+   argument (fixed-vs-random decaps inputs, Welch `|t|` threshold) — **reuse the repo's own existing
+   dudect pattern** (`bebop2/core/src/sign.rs` C4b gate, `|t| < 4.5` for `mod_l`, `/root/bebop-crypt`) as
+   prior art rather than inventing a new statistical-timing harness. **This is the audit's own explicit
+   instruction: do not close P91 on functional KATs alone** — items 1-5 and D3's ACVP byte-exactness
+   prove the KEM is *correct*; they say nothing about whether decaps is *constant-time*, and a
+   functionally-correct, timing-leaky decaps is still a FAIL of this item (tracked separately as D-CT,
+   §9 — not folded into D3/D4).
 
 ### 8.3 Gate outcome (falsifiable)
 - **PASS** = written attestation that ACVP byte-exactness holds, each §8.2 check was *attempted with a
@@ -444,14 +487,19 @@ enforce). Mandate: **produce a concrete discrepancy or a proof of correctness**,
 | D2 | parameters are ML-KEM-768-correct | `kem_eta1_is_two`, `kem_ct_len_is_1088`, `kem_two_seed_keygen_matches_fips` — RED today, GREEN after |
 | D3 | the KEM is byte-exact vs real NIST ACVP ML-KEM-768 vectors | `kem_acvp_encaps_decaps_byte_exact` against the NEW `kat/acvp/kem-encap-decap.json` — RED against the old ring, GREEN after the fix (the discriminating gate) |
 | D4 | the fix is proven by *external* evidence + independent review, not self-consistency | §8.3 PASS attestation under `docs/reflections/` (D-REVIEW); "its own tests pass" is explicitly inadmissible |
+| D-CT | decaps has no secret-dependent branch/timing on FO re-encryption, implicit rejection, or mod-q reduction (audit G5) — **D1-D3's functional KATs do NOT discharge this row** | §8.2 item 6 attestation (`kem_decaps_constant_time_dudect` / equivalent Welch-t argument) filed alongside D-REVIEW; RED if D1-D4 are all green but D-CT is unaddressed |
 | D5 | `volume.rs` remains un-wired until all the above are green | the `pq` feature stays default-off; no dependent crate enables it; the do-not-wire marker present (§7.4) |
-| D-PORT | the port source is chosen and its gating recorded | schoolbook (`/root/bebop-crypt`, not P85-gated) OR NTT (`/root/bebop-repo`, P85-gated) — the choice + gate written into the commit/PR (§5) |
+| D-PORT | the port source is chosen and its gating recorded | schoolbook (`/root/bebop-crypt` @ `f38f2c5`, not P85-gated) OR NTT (`/root/bebop-repo` `986646a`, P85-gated) — the choice + gate + commit pin written into the commit/PR (§5, §0.5) |
 | D-BUILD | `cargo test --features pq` fully green incl. all new REDs now GREEN; default build (452 tests) unaffected; no dep added | `cargo test` (default) + `cargo test --features pq` |
 | D-NOREG | the signature seam / cert / money paths are provably untouched | grep-confirm no edit to `dsa.rs`/`capability_cert.rs`/`payment.rs`; their tests stay green |
 
-**DoD honesty:** D3 + D4 are the spine — external ACVP conformance and independent review. D0 is the
-separable near-zero-risk item shippable ahead of everything else (OD-5). D-PORT records the §5 refinement
-so the P85-gating is a deliberate, visible choice.
+**DoD honesty:** D3 + D4 are the functional spine — external ACVP conformance and independent review.
+**D-CT is a separate, non-optional spine item (audit G5), not subsumed by D3/D4** — byte-exactness proves
+correctness, not constant-time; a KEM can pass D3 and still leak secrets through decaps timing, so D-CT
+must be independently attested before P91 is closed. D0 is the separable near-zero-risk item shippable
+ahead of everything else (OD-5). D-PORT records the §5 refinement so the P85-gating is a deliberate,
+visible choice, and now also carries the `f38f2c5` provenance pin (§0.5, closes audit G4's port-source
+half).
 
 ---
 
@@ -476,9 +524,11 @@ metrics of P83, not a P91-specific hook.
 
 - **Hazard-safety as math (item 6):** the unsafe state — *a non-ML-KEM scheme wired to real at-rest data
   while believed FIPS-203* — is made unreachable by (i) the do-not-wire invariant + the P91.0 marker/
-  grep-gate (a false FIPS claim is a CI failure), and (ii) the ACVP gate (the module cannot *become*
-  wired-and-trusted without external byte-exact conformance). Argued from the gate/flow structure, not a
-  prose assurance.
+  grep-gate (a false FIPS claim is a CI failure), (ii) the ACVP gate (the module cannot *become*
+  wired-and-trusted without external byte-exact conformance), and (iii) the D-CT constant-time gate
+  (audit G5) — a functionally-correct-but-timing-leaky decaps must not become "trusted" either;
+  functional byte-exactness is explicitly inadmissible evidence for *that* hazard (§8.2 item 6). Argued
+  from the gate/flow structure, not a prose assurance.
 - **Schemas & scaling axis (item 8):** the KEM wire schema is **fixed-size** (ek/dk/ct are constant-
   length per ML-KEM-768: ct 1088 after the fix). It does not scale with nodes/events — it is a per-
   operation fixed record. The only "scaling" is calls/sec once wired, bounded by whatever P2/D4 volume
@@ -566,8 +616,11 @@ metrics of P83, not a P91-specific hook.
   option gates on).
 - `MASTER-STATUS-LEDGER-2026-07-19.md` (P91 row; OD-5/OD-6; §3 wave-3 sequence).
 - `CORE-ROADMAP-STANDARD-2026-07-17.md` §2 (the 20-point contract).
-- Port source: `/root/bebop-crypt/bebop2/core/src/pq_kem.rs` (correct, un-quarantined — schoolbook);
-  `/root/bebop-repo` `986646a` (NTT, P85-quarantined).
+- Port source: `/root/bebop-crypt/bebop2/core/src/pq_kem.rs` @ commit `f38f2c5` (correct, un-quarantined
+  — schoolbook; provenance pinned §0.5, closes audit G4's port-source-anchoring half); `/root/bebop-repo`
+  `986646a` (NTT, P85-quarantined).
+- `BLUEPRINT-Q-SERIES-VERIFICATION-OBSERVABILITY-2026-07-19.md` §Q1-b (the "Conformance / provenance"
+  claim-shape this blueprint's §0.5/§4.3(a) pins now discharge).
 - Memory: `crypto-safe-first-pass-2026-07-14.md` (B4/SSR-2020 — the review discipline §8),
   `verified-by-math-2026-07-07.md` (ship-RED), `rust-native-bare-metal-decision-2026-07-14.md`
   (reuse-first / DECART for any dep change), `never-bypass-human-gates-2026-06-29.md` (OD-5 is the
@@ -591,8 +644,12 @@ metrics of P83, not a P91-specific hook.
    freeze, defuses the trap, and its grep-gate keeps the false claim from returning. This can land ahead
    of everything else.
 2. **Choose the port source (§5, D-PORT).** Default: schoolbook negacyclic `poly_mul` from
-   `/root/bebop-crypt` — correctness-first, **not** P85-gated. Only choose the NTT (`/root/bebop-repo`)
-   if P85 has closed, and record the gate in the PR.
+   `/root/bebop-crypt` @ commit `f38f2c5` (§0.5) — correctness-first, **not** P85-gated. Only choose the
+   NTT (`/root/bebop-repo` `986646a`) if P85 has closed, and record the gate in the PR.
+2a. **Vector + harness prerequisite (P91.2.0, §4.3) must land before step 3.** Source + pin the real
+   NIST ACVP ML-KEM-768 vectors (provenance: `usnistgov/ACVP-Server` commit SHA, §4.3(a)) and build the
+   KEM ACVP loader harness modeled on `dsa_acvp_tests.rs` (§4.3(b)) — this is a named prerequisite of
+   P91.2, not something D3 can assume exists.
 3. **Ship RED first (P91.2).** Add the real NIST ACVP ML-KEM-768 vectors + `kem_acvp_encaps_decaps_byte_exact`
    and `kem_negacyclic_wrap` as RED tests against the *current* code — confirm they FAIL (proving they
    are real and discriminating) before touching the ring.
@@ -600,9 +657,13 @@ metrics of P83, not a P91-specific hook.
    two-seed keygen. Re-derive the `hybrid`/`volume` KATs from the corrected code. Turn the RED tests
    GREEN; `cargo test --features pq` fully green; default build (452) unaffected.
 5. **Route the §8 independent review** — a decorrelated reviewer must run the ACVP vectors + attempt each
-   §8.2 discrepancy and file the PASS attestation under `docs/reflections/` (D-REVIEW). "Its own tests
-   pass" is inadmissible.
+   §8.2 discrepancy (including item 6, constant-time on FO re-encryption/implicit-rejection/mod-q
+   reduction — audit G5) and file the PASS attestation under `docs/reflections/` (D-REVIEW). "Its own
+   tests pass" is inadmissible, and **passing D3's functional ACVP KATs does not by itself satisfy D-CT**
+   — the constant-time attestation is a separate, required artifact.
 6. **Register the regression** — add `kem_negacyclic_wrap` + the ACVP byte-exact test to
    `docs/regressions/REGRESSION-LEDGER.md` (item 17).
-7. **Anti-scope:** never wire `volume.rs` before D3+D4 green; never touch the signature seam; never
-   re-derive the ring from scratch; never let the module claim FIPS-203 until ACVP byte-exactness holds.
+7. **Anti-scope:** never wire `volume.rs` before D1-D5 (incl. D-CT) green; never touch the signature
+   seam; never re-derive the ring from scratch; never let the module claim FIPS-203 until ACVP
+   byte-exactness holds; never treat functional-KAT-green as a substitute for the D-CT constant-time
+   attestation.

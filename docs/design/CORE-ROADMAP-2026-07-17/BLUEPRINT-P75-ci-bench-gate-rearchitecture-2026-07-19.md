@@ -188,8 +188,15 @@ Each row is a real, standard construction and exactly how P75 uses it — and wh
 - **The golden state-digest / behavioural regression gate** — that is the *state* analogue (R7 §5,
   D-1, reserved P84, operator-gated OD-7). P75 is the *timing/perf* gate only; the two are siblings,
   not the same job.
-- **The engine/bebop `[[bench]]` wiring** for their own new targets — P81/P82 add those; P75 only
-  fixes the kernel gate and defines the schema they conform to.
+- **The engine/bebop `[[bench]]` wiring AND their own per-crate/per-repo CI gate job** — P81 owns a
+  NEW `bench-regression-engine` job in dowiz's `ci.yml` (P81 §2.1 item 5); P82 owns a NEW cross-repo
+  `bench-regression` job authored in bebop2's own `.github/workflows/` (P82 §2.1 item 5). P75 only
+  fixes the kernel gate and defines the schema + reusable `native-trackers compare`/`GateExit`
+  contract both jobs wire into unchanged — P75 itself never runs the engine or bebop crates. This
+  split (each consumer wires its own gate, rather than broadening P75's own M1 scope past kernel) is
+  the chosen fix for `META-GAP-AUDIT-2026-07-19.md` finding **G3**; it is also what lets Q1's
+  benchmark-number claim-shape (`BLUEPRINT-Q-SERIES-VERIFICATION-OBSERVABILITY-2026-07-19.md` Q1-b)
+  discharge P81 D3 / P82 D4 against a real running gate instead of dead-ending.
 - **Any operator-gated crypto/money bench decision** — none here; P75 touches CI tooling, not a
   red-line surface.
 

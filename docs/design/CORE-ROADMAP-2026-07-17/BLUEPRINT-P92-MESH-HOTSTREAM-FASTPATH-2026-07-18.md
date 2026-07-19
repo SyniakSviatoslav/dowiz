@@ -672,6 +672,13 @@ model. Mandate: **produce a working forgery/bypass or a proof of its impossibili
 6. **KEM/binding tamper** — get a spliced/tampered KEM exchange to install a working session key.
 7. **Key-compromise escalation** — from a leaked session key, reach anything beyond one session's
    presence frames (disprove §7.3).
+8. **Timing on the tag comparison** — `recv_fastpath`'s AEAD-decrypt (`core/src/aead.rs:1`, §4.4 M4:
+   "AEAD-decrypt with `key_recv`; on tag fail → reject") is currently *assumed* constant-time, not
+   verified. Attempt a timing-differential probe between a near-miss and a far-miss forged tag on an
+   installed session, and confirm no early-return/short-circuit on partial tag match and no
+   secret-dependent branch in the compare (META-GAP-AUDIT-2026-07-19.md G5). This line is part of
+   what Q3's `reviewed-by` pointer (`BLUEPRINT-Q-SERIES-VERIFICATION-OBSERVABILITY-2026-07-19.md`
+   §Q3) must cite going forward.
 
 ### 8.3 Gate outcome (falsifiable)
 - **PASS** = written attestation that each attack in 8.2 was *attempted with a concrete input*, each was
@@ -695,7 +702,7 @@ model. Mandate: **produce a working forgery/bypass or a proof of its impossibili
 | D7 | a revoked peer is torn down within ≤ `FASTPATH_REVOCATION_TICK_SECS` (tick) and immediately on merge | `red_revoked_peer_torn_down_on_tick`, `red_revoked_peer_torn_down_on_merge`, `red_stale_trust_window_is_bounded` (M6) |
 | D8 | fast-path reaches ONLY the presence sink; allow-list excludes all red-line/store-and-forward scopes | `red_fastpath_never_reaches_ledger`, `red_allow_list_excludes_redline_and_sf`, `red_presence_record_not_evidence` (M7) |
 | D9 | `BreachAlarm`/`OperatorKill`/`PolicyUpdate`/store-and-forward frames are NEVER fast-pathed | assertion tests: each such scope/kind bypasses promotion and stays on the full gate |
-| D-REVIEW | **independent adversarial-review attestation exists and PASSES** | §8.3 artifact under `docs/reflections/`; FAIL ⇒ blueprint RED |
+| D-REVIEW | **independent adversarial-review attestation exists and PASSES**, including §8.2 item 8 (constant-time AEAD tag comparison in `recv_fastpath`/`core/src/aead.rs`) | §8.3 artifact under `docs/reflections/`; FAIL ⇒ blueprint RED; an attestation silent on item 8 is incomplete |
 | D-BENCH | measured presence-ping saving clears `FASTPATH_BENEFIT_THRESHOLD`, else the phase is NO-GO | §10.3 benchmark output |
 | D-BUILD | both crates build & full `cargo test` green incl. all new REDs now GREEN, no dep added | `cargo test -p bebop-proto-wire -p bebop-proto-cap` |
 | D-NOREG | the existing full-signed path + breach bypass tests stay green (no regression) | `quic_p2p_breach_no_hub_no_roster`, `wss_rejects_cross_channel_replay`, `RequireBoth` wire tests |

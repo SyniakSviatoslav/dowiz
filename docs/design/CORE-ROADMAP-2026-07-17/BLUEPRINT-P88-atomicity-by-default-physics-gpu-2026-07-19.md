@@ -347,6 +347,12 @@ to run the CPU physics with **no compute-atomics dependency reachable**. Any phy
 that passes only under the WebGPU compute path, or a build that makes the field step *require* compute
 atomics (unreachable on WebGL2), = **NOT done** regardless of WebGPU-rung green totals.
 
+D-WEBGL2 is documentation of the option-(i) scope commitment (§4.7), not an unblock of the P38 §4.2
+(OD-11 / OD-P88-1, §11) build gate — P88's *shader* legs still do not start until the operator takes
+it; only the policy text + CPU reference are deliverable now (§6 note). It is also exactly the kind of
+claim Q1's checklist (`BLUEPRINT-Q-SERIES-VERIFICATION-OBSERVABILITY-2026-07-19.md` §Q1-b) will
+require a `verified-by` evidence pointer for once P88 ships — noted here, not re-specified.
+
 ---
 
 ## 5. AI/system-hazard safety, grounded in math (standard §2 item 6)
