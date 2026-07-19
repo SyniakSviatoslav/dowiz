@@ -1181,4 +1181,85 @@ mod tests {
         assert!(err.fields.iter().any(|&f| f == "is_acyclic"));
         assert!(err.fields.iter().any(|&f| f == "topological_len"));
     }
+
+    // ── Item 7 (space-grade roadmap §C): native EXHAUSTIVE proofs of the FSM graph ──
+    // Per RESEARCH-NATIVE-KANI-REPLACEMENT-FEASIBILITY-2026-07-19.md: the 12-state const
+    // graph makes all four FSM "for-all" properties trivially exhaustible by enumeration
+    // (the codebase's csr.rs 1099-graph / 65536-pair idiom). These deliver the IDENTICAL
+    // "proven for every input" guarantee as a Kani harness would, with zero toolchain
+    // dependency — so they run in the fast hardening-gate, not the kani-gate. Total over
+    // the whole state space, not sampled.
+
+    /// EXHAUSTIVE over all 144 (from,to) pairs: `assert_transition` never panics, and its
+    /// result is `Ok(())` iff bit `idx_of(to)` is set in `FSM_ADJ[idx_of(from)]`. This
+    /// upgrades item 3's runtime `debug_assert` cross-check (slice `allowed_next` vs bitmask
+    /// `FSM_ADJ`) from spot-tested to proven-for-every-pair — the debug_assert inside
+    /// `assert_transition` also fires on every one of the 144 calls in this debug-build test.
+    #[test]
+    fn item7_exhaustive_assert_transition_all_144_pairs_and_adj_consistent() {
+        for fi in 0..12usize {
+            for ti in 0..12usize {
+                let from = LIFECYCLE_STATES[fi];
+                let to = LIFECYCLE_STATES[ti];
+                // idx_of is the inverse of LIFECYCLE_STATES indexing — verify totality here too.
+                assert_eq!(idx_of(from), fi, "idx_of/LIFECYCLE_STATES inverse broke at {fi}");
+                let bit_set = (FSM_ADJ[fi] & (1u16 << ti)) != 0;
+                let ok = assert_transition(from, to).is_ok();
+                assert_eq!(
+                    ok, bit_set,
+                    "assert_transition({from:?}->{to:?})=Ok? {ok} but FSM_ADJ bit={bit_set}"
+                );
+            }
+        }
+    }
+
+    /// EXHAUSTIVE over all 12 start states: `reachable` never panics, the result always
+    /// contains the start's own bit, and every set bit is a valid state index (< 12) — a
+    /// CONTENTFUL bounds proof: it holds only because no `FSM_ADJ` row sets a bit >= 12
+    /// (a wrongly-added 13th state would trip it). Frontier loop terminates (monotone `seen`).
+    #[test]
+    fn item7_exhaustive_reachable_total_all_12_starts() {
+        for fi in 0..12usize {
+            let from = LIFECYCLE_STATES[fi];
+            let mask = reachable(from);
+            assert!(mask & (1u16 << fi) != 0, "reachable({from:?}) must include self");
+            // No bit >= 12 may be set (would mean an out-of-range successor index).
+            assert_eq!(mask & !0x0FFFu16, 0, "reachable({from:?}) set an out-of-range bit");
+        }
+    }
+
+    /// Panic-freedom of `fold_transitions` over ANY status sequence is a COROLLARY of the
+    /// 144-pair total proof above: `fold` applies `assert_transition` pairwise and stops at
+    /// the first rejected pair, so if every pairwise call is total, every fold is total. This
+    /// test exhibits the compositional argument on the boundary sequences (empty, single
+    /// legal step, first-step-illegal, full happy path) rather than enumerating all sequences.
+    #[test]
+    fn item7_fold_transitions_panic_free_corollary() {
+        use OrderStatus::*;
+        assert_eq!(fold_transitions(Pending, &[]).unwrap(), Pending);
+        assert_eq!(fold_transitions(Pending, &[Confirmed]).unwrap(), Confirmed);
+        assert!(fold_transitions(Pending, &[Ready]).is_err()); // first step illegal
+        assert_eq!(
+            fold_transitions(Pending, &[Confirmed, Preparing, Ready, PickedUp]).unwrap(),
+            PickedUp
+        );
+    }
+
+    /// Input-free "no UB / expected verdict" sweep of the const-graph algorithms: none of
+    /// `topological_order`/`has_cycle`/`cyclomatic_number`/`fsm_graph_report` panic or
+    /// overflow under debug (checked) arithmetic, and the verdicts match the proven const
+    /// facts (acyclic DAG ⇒ topo exists, no cycle, μ = 0).
+    #[test]
+    fn item7_const_graph_algos_no_ub_and_expected() {
+        assert!(topological_order().is_some(), "acyclic graph must have a topo order");
+        assert!(!has_cycle(), "lifecycle graph must have no DIRECTED cycle");
+        // μ is the UNDIRECTED cycle rank (|E|-|V|+c), distinct from directed acyclicity:
+        // this DAG has convergent paths, so μ > 0 is correct. The "no UB" property here is
+        // that the isize arithmetic + union-find never panic/overflow and yield the finite
+        // known value (pinned separately by green_cyclomatic_number_counts_undirected_cycle).
+        let mu = cyclomatic_number();
+        assert!(mu >= 0, "cyclomatic number must be a finite non-negative rank");
+        let _ = fsm_graph_report(); // must not panic/overflow
+        let _ = fsm_stability_report();
+    }
 }

@@ -104,6 +104,10 @@ pub mod landing;
 pub mod dsu;
 /// MESH-06 — per-node content-addressed event-log (local-first + sync).
 pub mod event_log;
+/// Item 7 (space-grade roadmap §C): planted-fault self-test for the kani-gate.
+/// Compiled ONLY under `cfg(kani)` — zero footprint in every normal build.
+#[cfg(kani)]
+mod kani_selftest;
 /// RW-06 — geo / route kinematics (pure-logic port from geo-anim.ts + delivery-zone.ts). Kernel authority.
 pub mod geo;
 /// Harmonic centrality H(v)=Σ 1/d(u,v) — the shared graph-ranking primitive the

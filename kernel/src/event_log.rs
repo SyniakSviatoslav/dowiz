@@ -24,83 +24,89 @@
 
 use std::collections::HashSet;
 
+// Keccak-f[1600] round constants (FIPS 202). Lifted to module scope (was nested inside
+// `sha3_256`) so the item-7 Kani cross-copy equivalence proof can reach this permutation;
+// the `event_log::tests` SHA3 KAT pins that this lift preserves behavior byte-for-byte.
+pub(crate) const KECCAK_RC: [u64; 24] = [
+    0x0000000000000001,
+    0x0000000000008082,
+    0x800000000000808a,
+    0x8000000080008000,
+    0x000000000000808b,
+    0x0000000080000001,
+    0x8000000080008081,
+    0x8000000000008009,
+    0x000000000000008a,
+    0x0000000000000088,
+    0x0000000080008009,
+    0x000000008000000a,
+    0x000000008000808b,
+    0x800000000000008b,
+    0x8000000000008089,
+    0x8000000000008003,
+    0x8000000000008002,
+    0x8000000000000080,
+    0x000000000000800a,
+    0x800000008000000a,
+    0x8000000080008081,
+    0x8000000000008080,
+    0x0000000080000001,
+    0x8000000080008008,
+];
+// Rho rotation offsets r[x][y] (2D formulation — "copy B").
+pub(crate) const KECCAK_R: [[u32; 5]; 5] = [
+    [0, 36, 3, 41, 18],
+    [1, 44, 10, 45, 2],
+    [62, 6, 43, 15, 61],
+    [28, 55, 25, 21, 56],
+    [27, 20, 39, 8, 14],
+];
+
+/// Keccak-f[1600] permutation — "copy B" (the `dest_x/dest_y` π/ρ formulation).
+/// `pub(crate)` + lifted to module scope purely so the item-7 cross-copy equivalence
+/// harness (`pq::keccak::kani_proofs::proof_keccak_copies_equivalent`) can call it.
+/// Behavior is byte-identical to the previously-nested version (KATs pin the lift).
+pub(crate) fn keccak_f(s: &mut [u64; 25]) {
+    for r in 0..24 {
+        // θ (theta)
+        let mut c = [0u64; 5];
+        for x in 0..5 {
+            c[x] = s[x] ^ s[x + 5] ^ s[x + 10] ^ s[x + 15] ^ s[x + 20];
+        }
+        let mut d = [0u64; 5];
+        for x in 0..5 {
+            d[x] = c[(x + 4) % 5] ^ c[(x + 1) % 5].rotate_left(1);
+        }
+        for x in 0..5 {
+            for y in 0..5 {
+                s[x + 5 * y] ^= d[x];
+            }
+        }
+        // ρ + π
+        let mut b = [0u64; 25];
+        for x in 0..5 {
+            for y in 0..5 {
+                let dest_x = y;
+                let dest_y = (2 * x + 3 * y) % 5;
+                b[dest_x + 5 * dest_y] = s[x + 5 * y].rotate_left(KECCAK_R[x][y]);
+            }
+        }
+        // χ (chi)
+        for x in 0..5 {
+            for y in 0..5 {
+                let idx = x + 5 * y;
+                s[idx] = b[idx] ^ ((!b[((x + 1) % 5) + 5 * y]) & b[((x + 2) % 5) + 5 * y]);
+            }
+        }
+        // ι (iota)
+        s[0] ^= KECCAK_RC[r];
+    }
+}
+
 /// Deterministic SHA3-256 (FIPS 202) — pure Rust, no external dependency, so the
 /// kernel stays offline-buildable and dependency-free. Used to content-address
 /// events (collision resistance needed for idempotency, not just a hash map).
 pub fn sha3_256(input: &[u8]) -> [u8; 32] {
-    // Keccak-f[1600] round constants (FIPS 202).
-    const RC: [u64; 24] = [
-        0x0000000000000001,
-        0x0000000000008082,
-        0x800000000000808a,
-        0x8000000080008000,
-        0x000000000000808b,
-        0x0000000080000001,
-        0x8000000080008081,
-        0x8000000000008009,
-        0x000000000000008a,
-        0x0000000000000088,
-        0x0000000080008009,
-        0x000000008000000a,
-        0x000000008000808b,
-        0x800000000000008b,
-        0x8000000000008089,
-        0x8000000000008003,
-        0x8000000000008002,
-        0x8000000000000080,
-        0x000000000000800a,
-        0x800000008000000a,
-        0x8000000080008081,
-        0x8000000000008080,
-        0x0000000080000001,
-        0x8000000080008008,
-    ];
-    // Rho rotation offsets r[x][y].
-    const R: [[u32; 5]; 5] = [
-        [0, 36, 3, 41, 18],
-        [1, 44, 10, 45, 2],
-        [62, 6, 43, 15, 61],
-        [28, 55, 25, 21, 56],
-        [27, 20, 39, 8, 14],
-    ];
-
-    fn keccak_f(s: &mut [u64; 25]) {
-        for r in 0..24 {
-            // θ (theta)
-            let mut c = [0u64; 5];
-            for x in 0..5 {
-                c[x] = s[x] ^ s[x + 5] ^ s[x + 10] ^ s[x + 15] ^ s[x + 20];
-            }
-            let mut d = [0u64; 5];
-            for x in 0..5 {
-                d[x] = c[(x + 4) % 5] ^ c[(x + 1) % 5].rotate_left(1);
-            }
-            for x in 0..5 {
-                for y in 0..5 {
-                    s[x + 5 * y] ^= d[x];
-                }
-            }
-            // ρ + π
-            let mut b = [0u64; 25];
-            for x in 0..5 {
-                for y in 0..5 {
-                    let dest_x = y;
-                    let dest_y = (2 * x + 3 * y) % 5;
-                    b[dest_x + 5 * dest_y] = s[x + 5 * y].rotate_left(R[x][y]);
-                }
-            }
-            // χ (chi)
-            for x in 0..5 {
-                for y in 0..5 {
-                    let idx = x + 5 * y;
-                    s[idx] = b[idx] ^ ((!b[((x + 1) % 5) + 5 * y]) & b[((x + 2) % 5) + 5 * y]);
-                }
-            }
-            // ι (iota)
-            s[0] ^= RC[r];
-        }
-    }
-
     const RATE: usize = 136; // SHA3-256 rate in bytes.
     let mut msg = input.to_vec();
     msg.push(0x06); // domain padding for SHA-3
