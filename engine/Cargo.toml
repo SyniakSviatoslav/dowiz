@@ -74,4 +74,13 @@ text = ["dep:cosmic-text"]
 voice = []
 
 [dev-dependencies]
+# Benchmarking harness (P81 — engine crate's FIRST bench). Mirrors the kernel
+# crate's dev-dep pin (criterion 0.5.1, cached offline). Benchmarks only — never
+# linked into a production build path. The `<group>/<n>` bench-id convention is
+# owned by P75 (P81/P80/P82 cite it) and consumed by kernel/benches/bench_track.py.
+criterion = "0.5"
+
+[[bench]]
+name = "criterion"
+harness = false
 
