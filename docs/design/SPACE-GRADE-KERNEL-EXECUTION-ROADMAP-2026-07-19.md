@@ -39,6 +39,13 @@ test coverage.
 - **Item 2** — `FileEventStore` wiring verification. Dual check: (a) is the durable store constructed
   anywhere, (b) has the `Result`-typed `insert` fix landed since 07-16 (§10/P4 — "a wired store that
   swallows IO is arguably worse than an unwired one"). Highest consequence-per-cost in the roadmap.
+  **✅ RESOLVED-AS-DEFECT-FILED 2026-07-19** (re-verified adversarially against live `HEAD`): **(b) PASSES**
+  (typed `StoreError` propagation confirmed, fix `4dec04218`, regression test `hydra.rs:1188-1218`);
+  **(a) FAILS** — no production composition root constructs the durable store (all 6 `FileEventStore::open`
+  sites are test-only; no binary builds a durable `Hydra`/`EventLog`). Defect filed:
+  [`BLUEPRINT-P-FILE-EVENT-STORE-WIRING-GAP-2026-07-19.md`](BLUEPRINT-P-FILE-EVENT-STORE-WIRING-GAP-2026-07-19.md)
+  (verification: [`BLUEPRINT-ITEM-02-file-event-store-verification-2026-07-19.md`](BLUEPRINT-ITEM-02-file-event-store-verification-2026-07-19.md)).
+  Fix scoped there as a follow-up Tier-1 build item (§B territory) — NOT built (Tier-0 read-only audit).
 - **Item 3** — `order_machine` const-adjacency + `idx_of` dedup. Golden signature and 1e-12 oracle
   already cover it.
 - **Item 30** — state-machine proliferation audit (`capability_cert.rs`, `hub_provisioning.rs`,
@@ -128,7 +135,8 @@ test coverage.
 ## G. Garden of Eden — Recommended First Execution Batch, hand to Opus now, in this order
 
 1. **Item 2** — Proof: a cited line constructing the durable store in production, or a filed defect;
-   plus the §10/P4 check on `Result`-typed `insert`.
+   plus the §10/P4 check on `Result`-typed `insert`. **✅ DONE 2026-07-19 — defect filed** (no production
+   construction site exists; (b) `Result`-typed insert confirmed): `BLUEPRINT-P-FILE-EVENT-STORE-WIRING-GAP-2026-07-19.md`.
 2. **Item 30** — Proof: a table, one row per module, citing file:line for shared-vs-independent
    state-machine logic; every independent one gets a collapse-or-parity-pin ticket.
 3. **Items 15, 16, 19, 17** (read-only audits, any order) — Proofs verbatim from the source: single
