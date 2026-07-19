@@ -15,6 +15,9 @@
 //! `FraudAuth` output is `FraudVerdict { NotAnomalous | Escalate }` — an auto-block verdict is
 //! unrepresentable by construction (§2.1, §7).
 
+/// The import-time verify-before-persist gate (BLUEPRINT-P-F §4.2, rung-2).
+pub mod import;
+
 use std::collections::HashMap;
 use std::fmt::Debug;
 
@@ -37,6 +40,21 @@ pub enum DomainTag {
     FraudAuth,
     MenuInventory,
     Harness,
+}
+
+impl DomainTag {
+    /// Stable, typed string for telemetry (native `metrics::LogEvent` lane, D8).
+    /// NOT a capability grant — just the closed discriminant rendered as text.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            DomainTag::Dispatch => "Dispatch",
+            DomainTag::EtaGeo => "EtaGeo",
+            DomainTag::Pricing => "Pricing",
+            DomainTag::FraudAuth => "FraudAuth",
+            DomainTag::MenuInventory => "MenuInventory",
+            DomainTag::Harness => "Harness",
+        }
+    }
 }
 
 /// Identity of a question shape: sha3-256 over (DomainTag discriminant ‖ canonical input/output
