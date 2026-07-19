@@ -27,9 +27,9 @@ use std::collections::HashMap;
 use crate::event_log::sha3_256;
 use crate::geo;
 use crate::kalman::KalmanFilter;
-use crate::vendor::VendorId;
 use crate::order_machine::OrderStatus;
 use crate::rng::Rng;
+use crate::vendor::VendorId;
 
 // ── domain-separation tags (16 bytes each, pinned) ──────────────────────────────
 /// Signing domain for the grant commitment (separate from every other kernel domain).
@@ -197,10 +197,16 @@ impl TrackingView {
         route: &[(f64, f64)],
         eta_baseline_s: f64,
         kalman_surprise: f64,
+        observed_speed_mps: Option<(f64, u32)>,
     ) -> Self {
         let prog = geo::progress_along_route(route, courier);
         let total_m = geo::polyline_length_meters(route);
-        let eta = geo::eta_seconds(prog.remaining_m, total_m, eta_baseline_s);
+        let eta = geo::eta_seconds_adaptive(
+            prog.remaining_m,
+            total_m,
+            eta_baseline_s,
+            observed_speed_mps,
+        );
         TrackingView {
             order_id,
             status,
@@ -223,6 +229,7 @@ impl TrackingView {
         route: &[(f64, f64)],
         eta_baseline_s: f64,
         kalman: &KalmanFilter,
+        observed_speed_mps: Option<(f64, u32)>,
     ) -> Self {
         Self::from_positions(
             order_id,
@@ -231,6 +238,7 @@ impl TrackingView {
             route,
             eta_baseline_s,
             kalman.last_surprise(),
+            observed_speed_mps,
         )
     }
 }
@@ -314,6 +322,7 @@ impl TrackingAuthority {
         route: &[(f64, f64)],
         eta_baseline_s: f64,
         kalman_surprise: f64,
+        observed_speed_mps: Option<(f64, u32)>,
     ) -> Result<TrackingView, GrantError> {
         grant.verify(now_tick)?;
         if grant.order_id != requested_order_id {
@@ -326,6 +335,7 @@ impl TrackingAuthority {
             route,
             eta_baseline_s,
             kalman_surprise,
+            observed_speed_mps,
         ))
     }
 }
@@ -389,6 +399,7 @@ mod tests {
             &route,
             600.0,
             0.0,
+            None,
         )
         .expect("tracking view for own order");
         assert_eq!(view.order_id, order.id);
@@ -489,6 +500,7 @@ mod tests {
             &route,
             600.0,
             0.0,
+            None,
         );
         assert_eq!(
             res,
@@ -540,6 +552,7 @@ mod tests {
             &route,
             600.0,
             0.0,
+            None,
         );
         assert_eq!(
             leak,
@@ -556,6 +569,7 @@ mod tests {
             &route,
             600.0,
             0.0,
+            None,
         );
         assert_eq!(leak2, Err(GrantError::OrderMismatch));
 
@@ -569,6 +583,7 @@ mod tests {
             &route,
             600.0,
             0.0,
+            None,
         )
         .expect("same-order tracking succeeds");
         assert_eq!(ok.order_id, "ORD-A");
@@ -637,11 +652,101 @@ mod tests {
             &route,
             600.0,
             &kf,
+            None,
         );
         assert_eq!(view.order_id, "ORD-K");
         // The view's novelty equals the filter's last surprise (math reuse, no copy).
         assert!((view.kalman_surprise - kf.last_surprise()).abs() < 1e-12);
         assert!(view.remaining_m >= 0.0);
+    }
+
+    // ── P96 (M2): threading `observed_speed_mps` through the port ────────────
+    // D3 — `None` reproduces the legacy ETA byte-for-byte (fallback path).
+    #[test]
+    fn tracking_view_none_matches_legacy() {
+        let mut rng = Rng::new(0xBEA0_BEEF, 1);
+        let grant =
+            TrackingAuthority::mint_grant("ORD-P96-LEG", &mut rng, 0, DEFAULT_GRANT_LIFETIME_TICKS);
+        let route = vec![(50.45, 30.52), (50.46, 30.53)];
+        // Legacy view via the OLD pure function.
+        let legacy = geo::eta_seconds(
+            geo::progress_along_route(&route, (50.455, 30.525)).remaining_m,
+            geo::polyline_length_meters(&route),
+            600.0,
+        );
+        // Port view with observed_speed_mps = None must match.
+        let view = TrackingAuthority::tracking_view(
+            &grant,
+            "ORD-P96-LEG",
+            10,
+            OrderStatus::InDelivery,
+            (50.455, 30.525),
+            &route,
+            600.0,
+            0.0,
+            None,
+        )
+        .expect("tracking view");
+        assert!(
+            (view.eta_seconds - legacy).abs() < 1e-12,
+            "None must reproduce legacy eta_seconds byte-for-byte, got {} vs {}",
+            view.eta_seconds,
+            legacy
+        );
+    }
+
+    // D3 — warm live speed beats the baseline gap: when planned pace (5 m/s
+    // fallback, no baseline) ≠ live pace, the warm observed speed is used.
+    #[test]
+    fn tracking_view_warm_speed_beats_baseline_gap() {
+        let mut rng = Rng::new(0xBEEF_BEF0, 1);
+        let grant = TrackingAuthority::mint_grant(
+            "ORD-P96-WARM",
+            &mut rng,
+            0,
+            DEFAULT_GRANT_LIFETIME_TICKS,
+        );
+        let route = vec![(50.45, 30.52), (50.46, 30.53)];
+        let pos = (50.455, 30.525);
+        let remaining = geo::progress_along_route(&route, pos).remaining_m;
+
+        // Baseline (no baseline_s ⇒ 5 m/s fallback).
+        let baseline = geo::eta_seconds(remaining, geo::polyline_length_meters(&route), 0.0);
+        // Live speed 2 m/s, warm (5 pings) ⇒ slower than plan ⇒ larger ETA.
+        let warm = geo::eta_seconds_adaptive(
+            remaining,
+            geo::polyline_length_meters(&route),
+            0.0,
+            Some((2.0, 5)),
+        );
+        assert!(
+            (warm - remaining / 2.0).abs() < 1e-9,
+            "warm ETA must use 2 m/s live pace, got {warm}"
+        );
+        assert!(
+            warm > baseline,
+            "slower live pace must yield a LARGER (more honest) ETA than the 5 m/s plan"
+        );
+
+        // Same through the port:
+        let view = TrackingAuthority::tracking_view(
+            &grant,
+            "ORD-P96-WARM",
+            10,
+            OrderStatus::InDelivery,
+            pos,
+            &route,
+            0.0,
+            0.0,
+            Some((2.0, 5)),
+        )
+        .expect("tracking view");
+        assert!(
+            (view.eta_seconds - warm).abs() < 1e-12,
+            "port must forward the warm observed speed, got {} vs {}",
+            view.eta_seconds,
+            warm
+        );
     }
 
     // ── B2 HONEST RED: real notification reaching the channel is P43's send ────
