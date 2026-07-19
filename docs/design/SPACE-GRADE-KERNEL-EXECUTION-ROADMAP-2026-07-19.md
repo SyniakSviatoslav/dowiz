@@ -223,7 +223,44 @@ test coverage.
 - **Item 8** — GCRA decision package. **Ruling: ADOPT (§0 above).** Differential oracle + Kani
   interleaving check now execute toward a real swap, not just an evidence package.
 - **Item 31 (enactment half)** — per-crate allowlist CI gate + shared kernel-side JSON-parse
-  primitive for the seven serde carriers + manifest-recorded rulings. Depends on items 1 and 25.
+  primitive for the serde carriers + manifest-recorded rulings. Depends on items 1 and 25.
+  **✅ DONE 2026-07-19 — real CI config + kernel module landed** on `exec/space-grade-tier0-2026-07-19`
+  (`ae2da4a9d` gate → `dd6876a73` json+oracle → `c64ca923b` cutover). **Four blueprint claims
+  independently re-verified, TWO corrected:**
+  - **Workspace = 26 crates** (not the synthesis's 20; the six `tools/telemetry/*` were missed) —
+    confirmed. **12 already zero-external-dep** by default.
+  - **Gate**: `scripts/zero-dep-gate.sh` parametrized `[<crate-dir>]` (no-arg = kernel,
+    backward-compatible); path-dep filter generalized to `grep -v ' (/'` (verified against real
+    `cargo tree --prefix none` — root + every path dep render with an abs path in parens). Added
+    `scripts/zero-dep-crates.txt` (24-crate roster) + `<crate>/ZERO-DEP-ALLOWLIST.txt` × 25 (12 empty
+    floors, 13 frozen closures with item-25 ruling headers). CI `zero-dep-gate` job loops the roster
+    under one `unshare -n`; **mesh-adapter** gate rides its existing dual-checkout job (relative bebop
+    path); **agent-governance-wasm EXCLUDED** (absolute-path `/root/bebop-repo` dep — CI-unresolvable,
+    filed as its own portability defect). **Proof**: full roster GREEN 24/24 (5×); Gate A RED on an
+    injected unlisted dep (`cfg-if`→`tools/eqc-rs`), GREEN on revert; Gate C lockfile-hash stable.
+    (Also regenerated 10 downstream `Cargo.lock`, removals-only — pruning the regex/tracing closure the
+    kernel dropped in items 4/5/29 so `--locked` resolves.) A subtle CI-poison bug was root-caused +
+    fixed: any FAILING `git origin/main:<untracked-path>` access corrupts cargo's next `rustc -` target
+    probe in a shared `.git`; Gate B now probes with a no-pathspec `git ls-tree`.
+  - **Serde carriers = NINE** (not seven: + `rust-spool`, + `topics`) — confirmed.
+  - **JSON primitive — HONEST SCOPE-DOWN**: built `kernel::json` (always-compiled, pure-std, bounded
+    recursive-descent RFC 8259 parser + serializer, degrade-closed), SEPARATE from `fdr::json`
+    (serialize-only). `serde_json` kept as a **dev-dep differential oracle** (outside the `-e no-dev`
+    surface → kernel allowlist stays empty). Oracle: 50-item real-carrier corpus (all 50 agree, 31
+    accept / 19 reject, 31 round-trip) + a 2000-case proptest fuzz over the carriers' real number/
+    string/nesting distribution. **Phase-A cutover of the carriers that BOTH shrink the tree AND are
+    a sound cutover: `agent-facade` (11→0 ext deps) + `skillspector-rs` (15→5).** Serde carriers
+    **9 → 7** (a real decrease). **Correction to the blueprint's projected 3rd (wasm)**: verified NOT
+    Phase-A — its `a11y_build_mirror` site (de)serializes the SHARED `dowiz-engine` `SemanticScene`/
+    `A11yTree` through engine's `serde` feature; cutting it would couple `kernel::json` to engine's
+    schema. **wasm deferred to Phase-B**, reopening trigger: engine exposes a serde-free codec.
+    `native-spa-server`/`llm-adapters`/`async-spool` deferred — **verified via `cargo tree -i
+    serde_json` that removing the direct dep shrinks NOTHING** (axum's default `json` + ureq's `json`
+    feature retain `serde_json`); reopen only if those framework json features go optional.
+  - **`rust-spool` deletion — DEFERRED (corrects the blueprint's "referenced by nothing")**:
+    independent grep found `tools/telemetry/lib.sh:37` hardcodes + `tg_spool_ensure` LAUNCHES
+    `rust-spool/target/release/telemetry-spool` as the LIVE Telegram telemetry drainer. Deleting it
+    would break the live pipeline. Retire only after `async-spool` is deployed + `lib.sh` cut over.
 - **Item 26** — batching research pass. Zero prerequisites; scheduled low-priority, measurement-only.
   **✅ DONE 2026-07-19** — real measurements landed:
   [`AUDIT-ITEM-26-batching-measurements-2026-07-19.md`](AUDIT-ITEM-26-batching-measurements-2026-07-19.md).
@@ -624,3 +661,116 @@ dispatches it.
 47 spec after 35, full wiring after 42, composes with item 9's breaker when it exists;
 49 strictly after item 2's wiring-gap fix. No item here gates any §H item; item 45's feature-gate
 law binds §H's build items when they land.
+
+## J. Items 50–53 — Validity (K3 Admission) & Proportionate Open-Source Hardening Arc (appended 2026-07-19, fourth wave)
+
+**Source:** `KLEENE-TRUTHFULNESS-VALIDITY-SYNTHESIS-2026-07-19.md` (Fable synthesis) over
+`RESEARCH-KLEENE-TRUTHFULNESS-OPENSOURCE-HARDENING-2026-07-19.md` (Opus grounding) and
+`RAW-PROMPT-6-…-kleene-unknown` + `RAW-PROMPT-7-…-sentinel-shadow-mode` (one combined verbatim
+dialogue). **Terminology RULING, binding from here on (synthesis §1):** "Truthfulness" =
+byte-reproducibility, exclusively the swarm-safety arc's property, NOT a term of this roadmap;
+the RAW-PROMPT-6 content-based concept is renamed **"Validity" (derivational validity)** — a
+proposal is valid iff its supplied reasoning/evidence path checks against the stated
+axioms/invariants; incomplete evidence downgrades to Undecidable, never to assumed-valid.
+**Dispositions recorded here, NO item numbers burned (synthesis §§2.3/2.5, Part 3):** the
+Sentinel per-read live-struct `integrity_hash` is **REJECTED as disproportionate** for this
+deployment target (commodity ECC cloud hardware — the "space-grade" framing is aspirational
+discipline, not literal cosmic-ray exposure; the justified instance already IS item 40's
+per-layer weight checksum) with named reopening triggers: non-ECC/edge deployment, a real
+FDR-evidenced in-memory-corruption incident, or a long-lived mutable safety-critical struct
+with no at-rest backing. Kani-for-K3 is item-7 target-list growth, not a new item. proptest
+stays strictly dev-only (zero-dep-gate law). **Operator-facing repository-state flag (Part 4):
+items 1–49's actual CODE (all Tier 1, item 6's gate + `ct_gate.rs`, the FDR module, fixes from
+items 16/30/31) still lives ONLY on the unmerged `exec/space-grade-tier0-2026-07-19` branch —
+`main` has documents only.** Items below that touch FDR or item 47 inherit that merge as a
+prerequisite. Same standing laws as §§H–I: zero new external crates, item-6 hardening machinery,
+item-25 procedure for any dependency question. Planning only — no item starts before the
+operator dispatches it.
+
+- **Item 50 — K3 admission-verdict extension + Validity terminology binding (spec-level
+  amendment to item 47 — same gating: spec after 35, wiring after 42; EXTENDS item 47's
+  `admit`, never a parallel type).** The public seam stays exactly item 47's
+  `admit(Proposal, &Invariants) -> Result<ValidatedProposal, Rejection>` — Kleene-False and
+  Kleene-Unknown MUST be behaviorally identical at the seam (advice unused, deterministic path
+  taken), so no third control-flow arm exists for "Unknown" to be handled leniently through.
+  `Rejection` gains a two-class cause, `RejectionClass::{Refuted, Undecidable}`: Refuted = a
+  named invariant/inference rule demonstrably violated (K3 False); Undecidable = evidence
+  chain incomplete/absent/over-budget (K3 Unknown — RAW-6's Evidence-based Unknown adopted
+  verbatim: model confidence/logits are NEVER an input to `admit`). The literal
+  `#[repr(u8)] enum TruthState { False=0, True=1, Unknown=2 }` lands as an INTERNAL combinator
+  type of the admission module: each sub-check returns `TruthState`; the strong-Kleene fold
+  governs (any False short-circuits to Refuted — `False & Unknown = False`; else any Unknown
+  folds to Undecidable — `True & Unknown = Unknown`; all True admits). `None` ≠ `Unknown`:
+  the seam's `Option<Proposal>` None (advice absent, items 45/47) and Undecidable (advice
+  present but unevaluable) both take the deterministic path but log as distinct facts. The
+  class rides item 47's existing per-`Rejection` FDR event so item 9's breaker and item 51 can
+  weight Refuted vs Undecidable differently. **Proof:** exhaustive truth-table tests — all 9
+  cases per binary operator + 3 for NOT, the full state space enumerated literally (RAW-7's
+  own exhaustive-beats-random point; NO new proptest use); planted incomplete-evidence
+  proposal demonstrably lands `Undecidable` and planted rule-violation lands `Refuted`
+  (red→green, P7); the item-47 `None`-path bit-identity test still green with the extension in
+  place; the K3 fold joins item 7's Kani target list (recorded there, executed under item 7).
+- **Item 51 — shadow-mode divergence telemetry at the decision seam (after item 47's wiring +
+  item 50; FDR branch merge prerequisite — genuinely NEW pattern, full design in synthesis
+  §2.4).** No second execution lane: item 47's deterministic decision D is already total and
+  always computed, so on `Some(proposal)` the comparison is nearly free. New FDR
+  `Kind::ShadowDivergence` variant (closed-enum growth — item-48 `Heartbeat` precedent)
+  carrying decision-site id, Admitted/`RejectionClass`, agreement bit, and short DIGESTS of D
+  and the proposed action (never full payloads; records without the surface stay
+  byte-identical — item-27 optional-field discipline). Emission policy: every disagreement and
+  every Admitted-but-differs logged; Undecidable-while-D-decides at a bounded rate (the
+  "model adds nothing on this domain" signal); agreement SAMPLED at a low fixed rate for the
+  base-rate denominator — bounded emission preserves the FDR ring's replay-bounded-by-
+  construction property (item 49's rationale). Advisory by definition AND by test: no build
+  fails, no decision changes, no breaker trips on a shadow event alone (aggregated
+  Refuted-class counts still reach item 9 via item 47's own rejection events — shadow mode
+  adds observation, never authority). Distinct from every existing differential in-tree: those
+  all fail/reject on disagreement (`decision/import.rs` ReplayDisagreement rejects;
+  pq/spool/spine differentials are tests); nearest advisory kin is `metrics.rs`'s
+  merge-plane anomaly flag — different plane, cited not extended. **Proof:** deterministic
+  output bit-identical with shadow logging on vs off (item-47 `None`-path test pattern
+  reused); a planted disagreeing proposal yields exactly one recovered `ShadowDivergence`
+  record with correct class + digests (red→green through the real FDR ring); emission-rate
+  bound asserted under a flood of planted disagreements; all non-shadow FDR records
+  byte-identical before/after.
+- **Item 52 — `miri-gate`: targeted UB detection over the real unsafe surface (independent —
+  zero prerequisites on items 47/50/51; dispatchable now).** GROUNDED baseline: Miri runs
+  nowhere (aspirational doc-comments only; `ROADMAP-LIVE-STATUS-2026-07-18.md:24` "component
+  absent this toolchain"); kernel unsafe = 21 blocks, concentrated in `simd.rs` (6),
+  `arena.rs` (6), `messenger.rs` (3), `householder.rs` (3), `slot_arena.rs`/`chaos.rs`/
+  `bounded_drainer.rs` (1 each); `pq/` has ZERO unsafe (the raw prompt's crypto guess was
+  wrong). Scope: ONE CI job running `cargo miri test` filtered to the unsafe-bearing modules —
+  the arena/slot_arena/messenger/bounded_drainer/chaos raw-pointer logic where UB actually
+  hides — NOT miri-everything. Honest limitation, recorded in the gate's own doc: `core::arch`
+  AVX2 intrinsic bodies are largely unsupported under Miri; the house runtime-detection +
+  scalar-fallback pattern means the interpreted run exercises the scalar paths of
+  `simd.rs`/`householder.rs`, and intrinsic-body coverage stays with the items-37/39
+  differential oracles + item 7 — a green `miri-gate` is never read as "SIMD is Miri-clean"
+  (exact intrinsic support confirmed empirically on first run, not asserted). Toolchain: Miri
+  needs a nightly component; the BUILD pin (item 14, 1.96.1) is untouched — the job pins its
+  own analysis nightly, recorded in the workflow + `docs/audits/toolchain/`, bumps recorded
+  not floating. **Proof:** a planted UB self-test (out-of-bounds / use-after-free behind a
+  test-only cfg) demonstrably turns the gate RED before it counts as landed (P7); clean run
+  green; a filter matching zero tests is RED (item-6 anti-forgery clause reused); build
+  toolchain pin byte-unchanged.
+- **Item 53 — `lint-gate`: clippy + fmt (+ miri-required promotion) contribution gates (LOW
+  priority, LAST in this arc, blocks nothing — sequenced behind 50–52 by explicit RULING).**
+  GROUNDED: none of the triad exists in CI (zero clippy/fmt/miri workflow hits; real gates
+  today = cargo-test, dco-check `ci.yml:210-226`, decart-dep-lint, v5c-reexec, gitleaks,
+  supply-chain, bench-regression); AND open-sourcing is NOT imminent — ADR-0020 Accepted but
+  public-flip + EUTM are operator-gated and unauthorized — so the raw prompt's "any PR is an
+  attack vector" urgency presumes a contribution surface that is not authorized to exist yet.
+  Scope when dispatched: one cheap job — `cargo clippy --deny warnings` + `cargo fmt --check`
+  (both components ALREADY pinned by item 14's `rust-toolchain.toml`
+  `components=[rustfmt,clippy]`); miri-required = promoting item 52's job to a required check,
+  no new machinery. Inherits item 14's owed G5 caveat: advisory until marked required in
+  branch protection (server-side). **Named escalation trigger:** operator authorization of
+  public-flip preparation (ADR-0020's gate) promotes this item to a pre-flip BLOCKER alongside
+  the ADR-recommended all-origin-refs gitleaks sweep; until then it stays last. **Proof:** a
+  planted clippy warning and a planted fmt divergence each turn the job RED (P7); clean tree
+  green; the escalation trigger recorded here and in the job's comment header.
+
+**Dependency graph, one line:** 50 rides item 47's gates (spec after 35, wiring after 42);
+51 after {47-wiring + 50} + the FDR/exec branch merge; 52 independent, dispatchable now;
+53 last by ruling, trigger-promoted on public-flip authorization. Nothing here gates any
+§H/§I item; item 50 amends item 47's spec in place (one admission gate, never two).
