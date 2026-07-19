@@ -50,6 +50,9 @@ pub const ROUTE_HEALTH: &str = "/healthz";
 pub const ROUTE_ORDER_PLACE: &str = "/api/order";
 pub const ROUTE_ORDER_READ: &str = "/api/order/{id}";
 pub const ROUTE_ORDER_ADVANCE: &str = "/api/order/{id}/advance";
+/// P40 W-a: the agent turn route. Proxied (DECART-B) to a sibling `agent-loop`
+/// service; this crate stays zero-OCI (no `agent-loop`/`llm-adapters` dep).
+pub const ROUTE_AGENT: &str = "/api/agent";
 
 /// Capability-certificate header (base64 of a serialized `SignedFrame`).
 pub const CAP_HEADER: &str = "x-dowiz-cap";
@@ -87,6 +90,24 @@ pub struct AdvanceBody {
     /// Kernel vocabulary (e.g. "CONFIRMED"). Relayed verbatim; the kernel rejects
     /// illegal edges.
     pub next_status: String,
+}
+
+/// P40 W-a request body for one agent turn. The agent has NO money tool, so the
+/// prompt must never carry an instruction the kernel would act on — this shell
+/// only forwards the bytes to the sibling agent service (thin proxy).
+#[derive(Deserialize)]
+pub struct AgentRequest {
+    pub prompt: String,
+}
+
+/// P40 W-a response: the sibling service's typed `LoopOutcome`, relayed verbatim.
+/// `outcome` is one of "answer" | "unavailable" | "cap_exceeded" |
+/// "tool_calling_unsupported". NO money vocabulary appears here (P54 firewall).
+#[derive(Serialize, Deserialize)]
+pub struct AgentResponse {
+    pub outcome: String,
+    pub text: Option<String>,
+    pub log: Vec<String>,
 }
 
 /// Volatile, event-sourced order record. State is ALWAYS fold-derived: it holds
@@ -141,6 +162,7 @@ pub enum ApiReject {
     Malformed,    // 400 — body fails serde before any kernel call
     TooLarge,     // 413 — > MAX_BODY_BYTES
     Replayed,     // 409 — duplicate frame digest inside the window
+    Upstream(String), // 502 — sibling agent service unreachable / bad reply (P40)
 }
 
 impl ApiReject {
@@ -153,6 +175,7 @@ impl ApiReject {
             ApiReject::Malformed => StatusCode::BAD_REQUEST,
             ApiReject::TooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             ApiReject::Replayed => StatusCode::CONFLICT,
+            ApiReject::Upstream(_) => StatusCode::BAD_GATEWAY,
         }
     }
     fn body(&self) -> String {
@@ -164,6 +187,7 @@ impl ApiReject {
             ApiReject::Malformed => "malformed request body".into(),
             ApiReject::TooLarge => "payload too large".into(),
             ApiReject::Replayed => "replayed request frame".into(),
+            ApiReject::Upstream(m) => format!("agent service unavailable: {m}"),
         }
     }
 }
@@ -289,6 +313,11 @@ fn route_scope(route: &'static str) -> Option<(Resource, Action)> {
         ROUTE_ORDER_PLACE => Some((Resource::Order, Action::CreateOrder)),
         ROUTE_ORDER_READ => Some((Resource::Order, Action::Read)),
         ROUTE_ORDER_ADVANCE => Some((Resource::Order, Action::CreateOrder)),
+        // P40 W-b: the agent turn reuses the SAME cap gate. It reads order status
+        // via the agent's one read-only tool, so it requires (Order, Read) — the
+        // identical grant the order READ route uses. No new capability schema, no
+        // second auth path.
+        ROUTE_AGENT => Some((Resource::Order, Action::Read)),
         _ => None,
     }
 }
@@ -301,6 +330,11 @@ pub struct ApiState {
     pub seen: Mutex<std::collections::VecDeque<[u8; 32]>>,
     /// API concurrency bulkhead counter.
     pub inflight: AtomicI64,
+    /// P40 DECART-B: localhost `host:port` of the sibling `agent-loop` service the
+    /// `/api/agent` route proxies to. `None` disables the route (503) — the SPA
+    /// stays zero-OCI and never links the agent crate. Defaults to the service's
+    /// documented port (`127.0.0.1:8771`).
+    pub agent_upstream: Option<String>,
 }
 
 impl ApiState {
@@ -310,7 +344,15 @@ impl ApiState {
             caps,
             seen: Mutex::new(std::collections::VecDeque::with_capacity(SEEN_DIGEST_RING)),
             inflight: AtomicI64::new(0),
+            agent_upstream: Some("127.0.0.1:8771".to_string()),
         }
+    }
+
+    /// Override the sibling agent-loop service upstream (host:port). Used by the
+    /// integration test to point the proxy at a scripted localhost double.
+    pub fn with_agent_upstream(mut self, upstream: Option<String>) -> Self {
+        self.agent_upstream = upstream;
+        self
     }
 
     /// Build the default (production-shaped) API state. The capability verifier
@@ -444,6 +486,9 @@ fn matched_route(req: &Request) -> &'static str {
     if method == axum::http::Method::POST && path == ROUTE_ORDER_PLACE {
         return ROUTE_ORDER_PLACE;
     }
+    if method == axum::http::Method::POST && path == ROUTE_AGENT {
+        return ROUTE_AGENT;
+    }
     if method == axum::http::Method::GET && path.starts_with("/api/order/") && path.ends_with("/advance") == false {
         // /api/order/{id} — but guard against the advance suffix.
         return ROUTE_ORDER_READ;
@@ -515,6 +560,79 @@ async fn healthz_handler() -> &'static str {
     "ok"
 }
 
+/// `POST /api/agent` — P40 W-a/W-b THIN PROXY (DECART-B). The cap middleware has
+/// ALREADY run `verify_chain` (same gate as the order API — no second auth path)
+/// before this handler; here we only forward the prompt to the sibling
+/// `agent-loop` service and relay its typed `AgentResponse`. This shell owns NO
+/// agent/FSM/money logic — it never links `agent-loop`/`llm-adapters` (the SPA
+/// binary stays zero-OCI). The bound (`MAX_AGENT_ITERATIONS` + `TokenBucket`)
+/// lives entirely in the sibling process.
+async fn agent_handler(
+    State(state): State<Arc<ApiState>>,
+    bytes: Bytes,
+) -> Result<(StatusCode, [(header::HeaderName, &'static str); 1], String), ApiReject> {
+    // Validate the body shape (thin: prompt-only) before forwarding.
+    let _req: AgentRequest = serde_json::from_slice(&bytes).map_err(|_| ApiReject::Malformed)?;
+    let upstream = state
+        .agent_upstream
+        .clone()
+        .ok_or_else(|| ApiReject::Upstream("agent route disabled".into()))?;
+
+    // Forward the RAW body to the sibling service over localhost and relay its
+    // reply verbatim. Blocking std TcpStream on a spawn-blocking thread so the
+    // async runtime is never blocked (no new HTTP-client dependency).
+    let body_vec = bytes.to_vec();
+    let reply = tokio::task::spawn_blocking(move || forward_to_agent(&upstream, &body_vec))
+        .await
+        .map_err(|e| ApiReject::Upstream(format!("proxy task: {e}")))?
+        .map_err(ApiReject::Upstream)?;
+
+    // Validate it is a typed AgentResponse (fail-closed on a garbage upstream).
+    let _typed: AgentResponse =
+        serde_json::from_str(&reply).map_err(|_| ApiReject::Upstream("bad agent reply".into()))?;
+
+    Ok((
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/json")],
+        reply,
+    ))
+}
+
+/// Forward the agent request body to the sibling service and return its JSON body.
+/// Std-only HTTP/1.1 over `TcpStream` — no reqwest/hyper client added to the SPA.
+fn forward_to_agent(upstream: &str, body: &[u8]) -> Result<String, String> {
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+    use std::time::Duration;
+
+    let mut stream = TcpStream::connect(upstream).map_err(|e| format!("connect {upstream}: {e}"))?;
+    stream
+        .set_read_timeout(Some(Duration::from_secs(30)))
+        .ok();
+    stream
+        .set_write_timeout(Some(Duration::from_secs(30)))
+        .ok();
+    let req = format!(
+        "POST /agent HTTP/1.1\r\nHost: {upstream}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+        body.len()
+    );
+    stream
+        .write_all(req.as_bytes())
+        .map_err(|e| format!("write head: {e}"))?;
+    stream.write_all(body).map_err(|e| format!("write body: {e}"))?;
+    stream.flush().ok();
+
+    let mut buf = Vec::new();
+    stream
+        .read_to_end(&mut buf)
+        .map_err(|e| format!("read: {e}"))?;
+    let text = String::from_utf8_lossy(&buf);
+    match text.split_once("\r\n\r\n") {
+        Some((_, body)) => Ok(body.to_string()),
+        None => Err("malformed upstream response".into()),
+    }
+}
+
 /// The one permitted shallow read: pull the `id` field out of a kernel order
 /// JSON. No other field is touched. If the kernel shape ever changes this fails
 /// closed (returns an error) rather than guessing.
@@ -551,6 +669,7 @@ pub fn build_api_router(state: Arc<ApiState>) -> Router {
         .route(ROUTE_ORDER_PLACE, post(place_order_handler))
         .route(ROUTE_ORDER_READ, get(read_order_handler))
         .route(ROUTE_ORDER_ADVANCE, post(advance_order_handler))
+        .route(ROUTE_AGENT, post(agent_handler))
         .route(ROUTE_HEALTH, get(healthz_handler))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
