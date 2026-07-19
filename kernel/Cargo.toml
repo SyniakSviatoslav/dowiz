@@ -147,7 +147,7 @@ proptest = "1.11"
 name = "criterion"
 harness = false
 
-# NOTE: the W5 counting-allocator integration test (tests/arena_counting_allocs.rs)
+# NOTE: the W5 counting-allocator
 # is not yet wired — the counting global-allocator feature exists (`count-allocs`,
 # line 35) but the dedicated target's source was never committed. The allocation
 # ceiling is instead falsified by the in-lib `arena_path_uses_fewer_heap_allocs_than_heap`

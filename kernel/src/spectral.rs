@@ -277,7 +277,9 @@ pub fn topk_symmetric(
     // Hotelling-deflated spmv: out = A·x − Σ_m (λ_m v_mᵀ x) v_m.
     // The deflated components are stored in (eigenvalue, eigenvector) pairs.
     let mut evals: Vec<f64> = Vec::with_capacity(kk);
-    let mut evecs: Vec<Vec<f64>> = Vec::with_capacity(kk);
+    // Contiguous k·n eigenvector buffer (mat.rs layout): eigenvector m is
+    // `&evecs[m*n .. (m+1)*n]`. One allocation instead of k heap rows.
+    let mut evecs: Vec<f64> = Vec::with_capacity(kk * n);
     let mut x = vec![0.0f64; n];
     let mut ax = vec![0.0f64; n];
     let mut tmp = vec![0.0f64; n];
@@ -303,7 +305,8 @@ pub fn topk_symmetric(
         }
         // orthogonalize the START against already-found eigenvectors so the
         // power method converges to the NEXT one (Hotelling deflation seed).
-        for v in evecs.iter() {
+        for m in 0..evals.len() {
+            let v = &evecs[m * n..(m + 1) * n];
             let mut proj = 0.0;
             for i in 0..n {
                 proj += v[i] * x[i];
@@ -316,7 +319,8 @@ pub fn topk_symmetric(
         for _ in 0..iters {
             a.spmv(&x, &mut ax);
             // deflate already-found eigenpairs: ax ← ax − Σ_m (v_mᵀ ax) v_m
-            for v in evecs.iter() {
+            for m in 0..evals.len() {
+                let v = &evecs[m * n..(m + 1) * n];
                 let mut proj = 0.0;
                 for i in 0..n {
                     proj += v[i] * ax[i];
@@ -341,7 +345,8 @@ pub fn topk_symmetric(
         // Rayleigh quotient on the deflated space: λ = xᵀ (A x) with A x
         // orthogonalized to found pairs. Recompute deflated ax once more.
         a.spmv(&x, &mut tmp);
-        for v in evecs.iter() {
+        for m in 0..evals.len() {
+            let v = &evecs[m * n..(m + 1) * n];
             let mut proj = 0.0;
             for i in 0..n {
                 proj += v[i] * tmp[i];
@@ -355,7 +360,8 @@ pub fn topk_symmetric(
             lambda += x[i] * tmp[i];
         }
         // final orthogonalize + normalize of x for storage
-        for v in evecs.iter() {
+        for m in 0..evals.len() {
+            let v = &evecs[m * n..(m + 1) * n];
             let mut proj = 0.0;
             for i in 0..n {
                 proj += v[i] * x[i];
@@ -391,13 +397,20 @@ pub fn topk_symmetric(
             }
         }
         evals.push(lambda);
-        evecs.push(x.clone());
+        // Append the converged eigenvector into the contiguous buffer (no extra
+        // heap row — the previous `evecs.push(x.clone())` allocated a k-th Vec).
+        evecs.extend_from_slice(&x);
     }
     // descending |λ|: sort pairs by |value|.
-    let mut order: Vec<usize> = (0..evecs.len()).collect();
+    let mut order: Vec<usize> = (0..evals.len()).collect();
     order.sort_by(|&p, &q| evals[q].abs().total_cmp(&evals[p].abs()));
     let sorted_vals: Vec<f64> = order.iter().map(|&i| evals[i]).collect();
-    let sorted_vecs: Vec<Vec<f64>> = order.iter().map(|&i| evecs[i].clone()).collect();
+    // Reorder eigenvectors within the flat buffer (copy rows, no k-clone rebuild)
+    // and re-slice into the `Vec<Vec<f64>>` the public `Decomp` type expects.
+    let sorted_vecs: Vec<Vec<f64>> = order
+        .iter()
+        .map(|&i| evecs[i * n..(i + 1) * n].to_vec())
+        .collect();
     (sorted_vecs, sorted_vals)
 }
 
@@ -418,7 +431,10 @@ pub fn topk_symmetric_in(
     debug_assert!(n > 0, "topk_symmetric_in: empty matrix");
     let kk = k.min(n);
     let mut evals: Vec<f64> = Vec::with_capacity(kk);
-    let mut evecs: Vec<Vec<f64>> = Vec::with_capacity(kk);
+    // Contiguous k·n eigenvector buffer (mat.rs layout); eigenvector m is
+    // `&evecs[m*n .. (m+1)*n]`. The arena serves only the per-iteration scratch
+    // (x/ax/tmp); the returned basis flattens into this one owned buffer.
+    let mut evecs: Vec<f64> = Vec::with_capacity(kk * n);
     let x: &mut [f64] = arena.alloc_slice(n)?;
     let ax: &mut [f64] = arena.alloc_slice(n)?;
     let tmp: &mut [f64] = arena.alloc_slice(n)?;
@@ -437,7 +453,8 @@ pub fn topk_symmetric_in(
         for i in 0..n {
             x[i] /= norm;
         }
-        for v in evecs.iter() {
+        for m in 0..evals.len() {
+            let v = &evecs[m * n..(m + 1) * n];
             let mut proj = 0.0;
             for i in 0..n {
                 proj += v[i] * x[i];
@@ -448,7 +465,8 @@ pub fn topk_symmetric_in(
         }
         for _ in 0..iters {
             a.spmv(x, ax);
-            for v in evecs.iter() {
+            for m in 0..evals.len() {
+                let v = &evecs[m * n..(m + 1) * n];
                 let mut proj = 0.0;
                 for i in 0..n {
                     proj += v[i] * ax[i];
@@ -470,7 +488,8 @@ pub fn topk_symmetric_in(
             }
         }
         a.spmv(x, tmp);
-        for v in evecs.iter() {
+        for m in 0..evals.len() {
+            let v = &evecs[m * n..(m + 1) * n];
             let mut proj = 0.0;
             for i in 0..n {
                 proj += v[i] * tmp[i];
@@ -483,7 +502,8 @@ pub fn topk_symmetric_in(
         for i in 0..n {
             lambda += x[i] * tmp[i];
         }
-        for v in evecs.iter() {
+        for m in 0..evals.len() {
+            let v = &evecs[m * n..(m + 1) * n];
             let mut proj = 0.0;
             for i in 0..n {
                 proj += v[i] * x[i];
@@ -517,16 +537,21 @@ pub fn topk_symmetric_in(
             }
         }
         evals.push(lambda);
-        // Copy the converged eigenvector out of the arena loan into an owned Vec
-        // (arena memory cannot outlive the loan); this is the only owned heap
-        // allocation introduced by the arena variant, and it is unavoidable
-        // (the Decomp must be returned).
-        evecs.push(x.to_vec());
+        // Copy the converged eigenvector into the contiguous owned buffer. The
+        // arena loan `x` cannot outlive the function, so the basis must be
+        // returned in an owned buffer — but a single flat `Vec<f64>`, not k heap
+        // rows (the previous `evecs.push(x.to_vec())`).
+        evecs.extend_from_slice(x);
     }
-    let mut order: Vec<usize> = (0..evecs.len()).collect();
+    let mut order: Vec<usize> = (0..evals.len()).collect();
     order.sort_by(|&p, &q| evals[q].abs().partial_cmp(&evals[p].abs()).unwrap());
     let sorted_vals: Vec<f64> = order.iter().map(|&i| evals[i]).collect();
-    let sorted_vecs: Vec<Vec<f64>> = order.iter().map(|&i| evecs[i].clone()).collect();
+    // Reorder eigenvectors within the flat buffer (copy rows, no k-clone rebuild)
+    // and re-slice into the `Vec<Vec<f64>>` the public `Decomp` type expects.
+    let sorted_vecs: Vec<Vec<f64>> = order
+        .iter()
+        .map(|&i| evecs[i * n..(i + 1) * n].to_vec())
+        .collect();
     Some((sorted_vecs, sorted_vals))
 }
 
