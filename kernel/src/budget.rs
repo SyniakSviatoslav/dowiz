@@ -15,8 +15,17 @@
 //! push spend past the `monthly_ceiling`, the port **refuses** (`Err(BudgetExceeded)`)
 //! and records NO spend — safe, cost-bounded — rather than degrade-open (proceed and
 //! leak cost). The same rule lives in the reusable [`ComputeBudget`] primitive.
+//!
+//! Atomicity (2026-07-18, contended-bench evidence): the spend accumulator is a
+//! LOCK-FREE `AtomicU64` (bit-cast `f64`) CAS loop, not a `Mutex<f64>`. The contended
+//! benchmark `kernel/benches/contention.rs::contended_budget` measured the atomic path
+//! at ~2× the Mutex single-threaded and ~1.28× at 2–4 threads (tie at 8-way saturation,
+//! where both bounce the same hot cache line) — a clean win in the realistic low-
+//! contention regime with SIMPLER code (no lock, no poison recovery). Degrade-closed is
+//! preserved exactly: the ceiling is re-checked on every CAS retry, so it can never
+//! overshoot, and the check-then-debit is now a single atomic op (no check-then-act race).
 
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// A submitted job's opaque handle (returned by a `JobPort` on success).
 ///
@@ -76,15 +85,18 @@ pub trait JobPort {
     fn teardown(&self, handle: &JobHandle);
 }
 
-/// P11 §1 — reusable compute-budget accumulator (single-owner, degrade-closed).
+/// P11 §1 — reusable compute-budget accumulator (lock-free, degrade-closed).
 ///
 /// Tracks a spend accumulator against a fixed `ceiling`. [`ComputeBudget::debit`]
 /// refuses (returns `false`, records nothing) when the debit would push spend past
-/// the ceiling — the same load-bearing "degrade-closed" contract the
-/// `BudgetedJobPort` applies per-submit. This is the reusable, non-threaded half;
-/// `BudgetedJobPort` wraps an instance in a `Mutex` for the threaded port surface.
+/// the ceiling — the load-bearing "degrade-closed" contract the `BudgetedJobPort`
+/// applies per-submit. The accumulator is a lock-free `AtomicU64` (the `f64` spend
+/// bit-cast), so `debit` takes `&self` and is safe to share across threads directly —
+/// `BudgetedJobPort` holds it inline, no `Mutex` (see the contended-bench note in the
+/// module header).
 pub struct ComputeBudget {
-    spent: f64,
+    /// `f64` spend accumulator, bit-cast into an `AtomicU64` for a lock-free CAS loop.
+    spent_bits: AtomicU64,
     ceiling: f64,
 }
 
@@ -92,14 +104,14 @@ impl ComputeBudget {
     /// Create an empty accumulator with the given `ceiling`.
     pub fn new(ceiling: f64) -> Self {
         ComputeBudget {
-            spent: 0.0,
+            spent_bits: AtomicU64::new(0.0f64.to_bits()),
             ceiling,
         }
     }
 
     /// Current spend accumulator.
     pub fn spent(&self) -> f64 {
-        self.spent
+        f64::from_bits(self.spent_bits.load(Ordering::Relaxed))
     }
 
     /// Budget ceiling.
@@ -110,12 +122,33 @@ impl ComputeBudget {
     /// Degrade-closed debit: returns `true` and advances `spent` iff
     /// `spent + amount <= ceiling`. If the debit would exceed the ceiling, returns
     /// `false` and records **no** spend (the caller must refuse, never leak cost).
-    pub fn debit(&mut self, amount: f64) -> bool {
-        if self.spent + amount > self.ceiling {
-            false
-        } else {
-            self.spent += amount;
-            true
+    ///
+    /// Lock-free CAS loop: the ceiling is re-checked on EVERY retry against the
+    /// freshly-observed `spent`, so a concurrent debit can never race two grants past
+    /// the ceiling (the exact over-grant falsifier `budget_atomic_never_over_grants`
+    /// pins). A non-finite or negative `amount` is refused (defense-in-depth: a NaN
+    /// makes `spent + NaN > ceiling` false, which would otherwise poison the
+    /// accumulator; a negative amount would roll spend backwards).
+    pub fn debit(&self, amount: f64) -> bool {
+        if !amount.is_finite() || amount < 0.0 {
+            return false;
+        }
+        let mut cur = self.spent_bits.load(Ordering::Relaxed);
+        loop {
+            let spent = f64::from_bits(cur);
+            if spent + amount > self.ceiling {
+                return false;
+            }
+            let next = (spent + amount).to_bits();
+            match self.spent_bits.compare_exchange_weak(
+                cur,
+                next,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => return true,
+                Err(actual) => cur = actual,
+            }
         }
     }
 }
@@ -130,7 +163,7 @@ impl ComputeBudget {
 /// for the attempted submit.
 pub struct BudgetedJobPort<P: JobPort> {
     inner: P,
-    budget: Mutex<ComputeBudget>,
+    budget: ComputeBudget,
 }
 
 impl<P: JobPort> BudgetedJobPort<P> {
@@ -138,39 +171,29 @@ impl<P: JobPort> BudgetedJobPort<P> {
     pub fn new(inner: P, monthly_ceiling: f64) -> Self {
         BudgetedJobPort {
             inner,
-            budget: Mutex::new(ComputeBudget::new(monthly_ceiling)),
+            budget: ComputeBudget::new(monthly_ceiling),
         }
     }
 
     /// Current spend accumulator (read-only view for telemetry/tests).
     pub fn spent(&self) -> f64 {
-        self.budget
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .spent()
+        self.budget.spent()
     }
 }
 
 impl<P: JobPort> JobPort for BudgetedJobPort<P> {
     fn submit(&self, job: &Job) -> Result<JobHandle, JobError> {
-        // V1 #5 (ROUND-2 GAP-AUDIT): a NaN or negative `estimate` must be refused,
-        // not debited. A NaN makes `spent + NaN > ceiling` evaluate false → it would
-        // be debited as a poisoned non-finite spend (degrade-OPEN, the exact failure
-        // the doc warns about). A negative estimate would roll spend backwards. Both
-        // are malformed input → refuse before any debit (degrade-CLOSED).
-        if !job.estimate.is_finite() || job.estimate < 0.0 {
+        // Degrade-closed gate as a SINGLE lock-free atomic op: `debit` both checks the
+        // ceiling and records the spend, so there is no check-then-act race between the
+        // ceiling test and the debit (the old `Mutex`-held two-step). It refuses a NaN/
+        // infinite/negative estimate (V1 #5 — a NaN would otherwise poison the
+        // accumulator degrade-OPEN; a negative estimate would roll spend backwards) AND
+        // any debit that would exceed the ceiling, recording NO spend on refusal.
+        if !self.budget.debit(job.estimate) {
             return Err(JobError::BudgetExceeded);
         }
-        // Degrade-closed gate: refuse BEFORE any spend is recorded when the
-        // projected total would exceed the ceiling.
-        {
-            let mut b = self.budget.lock().unwrap_or_else(|e| e.into_inner());
-            if b.spent() + job.estimate > b.ceiling() {
-                return Err(JobError::BudgetExceeded);
-            }
-            // Within budget → debit, then forward to the inner port.
-            b.debit(job.estimate);
-        }
+        // Within budget → estimate reserved; forward to the inner port. The inner port's
+        // own failure (e.g. offline Err) does not un-debit — the budget was reserved.
         self.inner.submit(job)
     }
 
@@ -214,7 +237,7 @@ mod tests {
     /// ceiling is reached; the next debit is refused AND spend does not advance.
     #[test]
     fn budget_degrade_closes() {
-        let mut cb = ComputeBudget::new(10.0);
+        let cb = ComputeBudget::new(10.0);
         assert!(cb.debit(3.0)); // spent = 3
         assert!(cb.debit(3.0)); // spent = 6
         assert!(cb.debit(3.0)); // spent = 9 (still <= 10)
@@ -315,5 +338,61 @@ mod tests {
             matches!(res, Err(JobError::Offline(_))),
             "offline port must return Err(Offline), never a fake Ok"
         );
+    }
+
+    /// (d) ATOMICITY falsifier (2026-07-18): the lock-free CAS `debit` must NEVER let
+    /// concurrent threads race two grants past the ceiling. N threads each hammer
+    /// `debit(1.0)` against a ceiling of `GRANTS`; EXACTLY `GRANTS` debits may succeed
+    /// and final spend must equal `GRANTS` — no over-grant, no lost debit. This is the
+    /// concurrency proof the old single-threaded tests could not give.
+    #[test]
+    fn budget_atomic_never_over_grants() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        const GRANTS: usize = 10_000;
+        let budget = Arc::new(ComputeBudget::new(GRANTS as f64));
+        let successes = Arc::new(AtomicUsize::new(0));
+
+        std::thread::scope(|s| {
+            for _ in 0..8 {
+                let budget = Arc::clone(&budget);
+                let successes = Arc::clone(&successes);
+                s.spawn(move || {
+                    // Each thread attempts far more debits than the ceiling allows.
+                    for _ in 0..GRANTS {
+                        if budget.debit(1.0) {
+                            successes.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                });
+            }
+        });
+
+        assert_eq!(
+            successes.load(Ordering::Relaxed),
+            GRANTS,
+            "exactly ceiling-many debits may succeed under concurrency (no over-grant, no lost debit)"
+        );
+        assert_eq!(
+            budget.spent(),
+            GRANTS as f64,
+            "final spend must equal the ceiling exactly — CAS lost no update and overshot none"
+        );
+        // One more debit past the exhausted ceiling is refused (degrade-closed holds).
+        assert!(!budget.debit(1.0), "exhausted budget refuses further debit");
+    }
+
+    /// (e) ComputeBudget::debit itself refuses non-finite / negative amounts (the guard
+    /// now lives in the primitive, not only in `BudgetedJobPort::submit`).
+    #[test]
+    fn compute_budget_debit_refuses_non_finite_and_negative() {
+        let cb = ComputeBudget::new(10.0);
+        assert!(!cb.debit(f64::NAN), "NaN debit refused");
+        assert!(!cb.debit(f64::INFINITY), "inf debit refused");
+        assert!(!cb.debit(-1.0), "negative debit refused");
+        assert_eq!(cb.spent(), 0.0, "no refused debit moved spend");
+        assert!(cb.debit(4.0), "a valid debit still works");
+        assert_eq!(cb.spent(), 4.0);
     }
 }
