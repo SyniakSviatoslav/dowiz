@@ -4,7 +4,6 @@
 //! and cheap to hash/compare. Living-memory note names are ASCII, so byte
 //! trigrams are exact.
 
-use regex::Regex;
 use std::collections::HashMap;
 
 /// A 3-byte key. `[u8;3]` is `Copy` + `Hash` + `Ord` ⇒ deterministic map keys.
@@ -24,8 +23,9 @@ pub fn trigrams(s: &str) -> Vec<Trigram> {
     out
 }
 
-/// Extract candidate trigrams from a *regex pattern* by pulling literal runs of
-/// length ≥ 3. Metacharacters (`* + ? ( ) [ ] { } | ^ $ . \`) end a run, so only
+/// Extract candidate trigrams from a *restricted wildcard pattern* by pulling
+/// literal runs of length ≥ 3. Metacharacters (`* + ? ( ) [ ] { } | ^ $ . \`)
+/// end a run (a conservative superset — any meta byte terminates a run), so only
 /// guaranteed-literal bytes become index keys. A doc must contain ALL returned
 /// trigrams to possibly match ⇒ the candidate set is a safe superset of the
 /// true matches (verify prunes the rest → 0 false positives).
@@ -160,31 +160,13 @@ impl TrigramIndex {
             .collect()
     }
 
-    /// Regex query. Candidates are narrowed by literal trigrams extracted from
-    /// the *pattern*, then each candidate is verified by a compiled `Regex`
-    /// (`is_match` = exact ⇒ 0 false positives). Falls back to scanning all
-    /// docs when the pattern yields no literal trigrams.
-    pub fn query_regex(&self, pattern: &str) -> Result<Vec<u32>, regex::Error> {
-        let cand = self.candidates(&literal_trigrams(pattern));
-        let re = Regex::new(pattern)?;
-        Ok(cand
-            .into_iter()
-            .filter(|&d| re.is_match(&self.docs[d as usize]))
-            .collect())
-    }
-
     /// Raw candidate count for a literal needle — used by the benchmark to
     /// measure reduction vs a full linear scan (candidate == corpus size).
     pub fn candidate_count_literal(&self, needle: &str) -> usize {
         self.candidates(&trigrams(needle)).len()
     }
 
-    /// Raw candidate count for a regex pattern (literal-run extraction).
-    pub fn candidate_count_regex(&self, pattern: &str) -> usize {
-        self.candidates(&literal_trigrams(pattern)).len()
-    }
-
-    /// Restricted-pattern query (item 5 replacement for `query_regex`).
+    /// Restricted-pattern query (item 5 replacement for the retired `query_regex`).
     /// Candidates are narrowed by literal trigrams extracted from the *pattern*,
     /// then each candidate is verified by the kernel-owned `Pattern` matcher
     /// ({literal, `.`, `.*`}, unanchored contains-match ⇒ 0 false positives).
