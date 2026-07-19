@@ -1,7 +1,8 @@
-# {{BRAND}}
+# dowiz
 
 > Sovereign, post-quantum delivery infrastructure — a deterministic Rust/WASM
-> kernel and mesh protocol; DeliveryOS is the proof-of-concept riding on top.
+> kernel and mesh protocol. **DeliveryOS** is the reference application built
+> on top of it, not the other way around.
 
 **Status: pre-1.0 / experimental.** The kernel math is deterministic and
 self-verifying; the surrounding product surface is not yet a production GA. No
@@ -9,12 +10,76 @@ fabricated maturity claims — see the verification gates in `docs/design/`.
 
 ## What it is
 
+Most delivery/logistics platforms are built around a central server that owns
+your order history, your location trail, and (usually) a "trust score" it
+computes about you behind closed doors. dowiz starts from a different premise:
+the parts of the system that actually have to be authoritative — money,
+order state, identity — are pinned down in a small, deterministic Rust
+kernel that anyone can audit and run themselves, offline if they want to.
+Everything else (the courier mesh, the UI, the reference app) is built as a
+consenting layer on top of that kernel, not the other way around.
+
 - **Deterministic kernel** (`kernel/`) — the sole math authority for order
   lifecycle, money reversal, and compensation. Offline-first, no mandatory cloud
-  dependency.
+  dependency, exact integer arithmetic for money (no float drift, ever).
 - **Mesh protocol** (`bebop2/`) — post-quantum capability-auth + proof-of-delivery
   over consenting hubs; JS/TS **never** re-implements kernel math.
+- **Physics-based rendering** (`engine/`) — no DOM. UI state (recall, decay,
+  layout, motion) is driven by a damped-wave field simulation on `wgpu`,
+  with a synthetic accessibility layer instead of real DOM elements.
 - **DeliveryOS** — the reference hub/application demonstrating the protocol.
+
+## Main concepts
+
+**The kernel is the only authority.** Order state and money movement live in
+one deterministic Rust module with exact `i64` arithmetic and fail-closed
+red-line gates — money, auth, RLS, and migrations are denied by default unless
+explicitly proven safe. No service anywhere else in the stack is allowed to
+re-derive or override what the kernel says happened.
+
+**Couriers going offline is a first-class case, not an edge case.** The mesh
+protocol is built on delay-tolerant networking (a real Bundle Protocol v7
+implementation) specifically because a courier's phone losing signal is the
+normal case for a delivery network, not a failure mode to paper over. Messages
+are authored offline, signed, and carried by whichever device reaches a peer
+next — which is why every message carries its own proof of authenticity
+instead of relying on a live, continuously-connected session.
+
+**Trust is a signed capability, never a score.** dowiz's mesh explicitly
+rejects courier/node reputation systems — there is no rating, ranking, or
+trust score computed about any participant anywhere in the protocol. Access is
+granted by cryptographically signed capability certificates issued by an
+anchor, not earned or lost through a behavior score a black box maintains
+about you.
+
+**Hybrid, not a bet on one algorithm.** Every signature in the system is
+double-signed — classical Ed25519 *and* post-quantum ML-DSA-65 — so a break in
+either scheme alone doesn't compromise the system. This is deliberate
+defense-in-depth, not a pure post-quantum wager.
+
+## What's genuinely novel here
+
+- **A type-level guarantee that animation code can never touch money.** The
+  rendering engine has a dedicated boundary type (`FieldValue`) and a runtime
+  guard that make it a compile-time/runtime error for any UI tweening or
+  interpolation logic to operate on a monetary value — the two domains are
+  structurally incapable of touching, not just conventionally kept apart.
+- **One physics operator, many UI concerns.** The design direction for the
+  rendering engine is to drive recall, decay, layout, and motion off a single
+  damped-wave field equation rather than separate ad-hoc animation systems for
+  each — see `docs/design/` for the field-UI research; this is an active
+  design line, not a finished claim.
+- **DTN-first mesh, not store-and-forward bolted on.** Delay-tolerant
+  networking (offline authoring, signed bundles, exactly-once delivery on
+  reconnect) is the mesh's default operating mode, not a fallback path.
+- **Capability certs instead of reputation, by explicit rule.** No node or
+  courier is ever scored, ranked, or rated anywhere in the protocol — this is
+  an enforced design rule, not an omission.
+- **"Verified, not claimed" as an engineering discipline.** Every fix in this
+  repo's history is expected to land with a RED→GREEN test proving the bug
+  existed and is now closed, and every performance claim is expected to carry
+  a real benchmark number — not asserted, measured. The audit log below is an
+  example of that discipline in practice, not a marketing section.
 
 ## Quickstart
 
@@ -33,6 +98,9 @@ cd web && wasm-pack build   # (see web/README.md)
   ML-DSA-65, XChaCha20-Poly1305) — no placeholders.
 - Fail-closed by design: the kernel red-line gate denies money / auth / RLS /
   migrations by default.
+- Active hardening in progress on the post-quantum crypto stack — see
+  `docs/design/` for the current state; nothing unresolved here is exposed as
+  a production claim above.
 
 ## Governance & legal
 
@@ -48,10 +116,11 @@ See `CITATION.cff`.
 
 ---
 
-## Current verified state (2026-07-18)
+## Current verified state (as of 2026-07-18)
 
 The kernel is the math authority and it is **exercised, not claimed**. Latest
-green suites (this tree, default features):
+green suites recorded at that date (this tree, default features) — treat as
+of that date, not re-asserted as of today without re-running:
 
 - `kernel/` — **632 passed, 0 failed** (`cargo test --lib`).
 - `engine/` — **63 passed, 0 failed** (incl. the cross-crate Laplacian
@@ -85,8 +154,14 @@ error-enum consistency, `tracing`-vs-`println` practice, backup e2e drill,
 roadmap critical-path consistency, stale CI docs — are recorded in the audit
 synthesis scorecard and dispositioned there; they are not silently "fixed".
 
+### Roadmap
+
+The active research/blueprint pipeline (mesh auth-layer hardening,
+performance work, verification tooling) is tracked in
+`docs/design/MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md` §19, with
+the detailed dependency-ordered status in
+`docs/design/CORE-ROADMAP-2026-07-17/MASTER-STATUS-LEDGER-2026-07-19.md`.
+
 ---
 
-*Brand name is a `{{BRAND}}` placeholder pending the O16 decision
-(dowiz vs DeliveryOS). This README does not assert a public-flip "go"; the flip
-is an explicit, separate operator action.*
+> нахуя мені система, що працює проти мене
