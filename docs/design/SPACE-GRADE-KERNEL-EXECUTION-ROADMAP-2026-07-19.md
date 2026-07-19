@@ -145,10 +145,21 @@ test coverage.
   item-25 fix):** the `qrng` feature is undeclared in `kernel/Cargo.toml`, so the QRNG provider
   (incl. its sanctioned `master_seed()`) is dead code that never compiles — a
   standing-rule-vs-reality inconsistency filed in the procedure doc §3.
-- **Items 4 + 29 combined, with the §1.2 `JsonWriter` absorbed in the same change** — the hand-rolled
-  logger/FDR tier-(b) buffer with the energy/hardware field set first-class in the schema from day
-  one. Both bundlings are the source document's own explicit mandate (§21, §10/P2). The largest
-  Tier-1 item; the keystone of the tier.
+- **Items 4 + 29 combined, with the §1.2 `JsonWriter` absorbed in the same change — ✅ DONE
+  (2026-07-19).** The hand-rolled logger/FDR tier-(b) buffer with the energy/hardware field set
+  first-class in the schema from day one. Both bundlings are the source document's own explicit
+  mandate (§21, §10/P2). The largest Tier-1 item; the keystone of the tier. Landed as three isolated
+  commits on `exec/space-grade-tier0-2026-07-19` (`f04142f89` build → `4f4872a54` flip →
+  `eb350464e` remove): `kernel/src/fdr/` (json/schema/ring/macros/mod) coexisted, then the 13 call
+  sites + `SpanMetricsLayer`→`SpanMetricsObserver` (a kernel `fdr::SpanObserver`) flipped, then
+  `tracing`/`tracing-subscriber` removed. Proofs discharged: `cargo tree -e no-dev` 25→6 crates (**19
+  dropped**, exceeds ≥13); `metric.jsonl` + markov CLI JSON byte-identical before/after (golden-pinned);
+  kill-9→restart→recover test (real child SIGKILLed, 300/300 events recovered + PostMortem emitted);
+  `hw` first-class with `joules_uj` reporting `unavailable:no_rapl_interface` (named absence) on this
+  RAPL-less host; duplicate `mldsa_verify` wrapper deduped; wasm32 cdylib green (`Instant` gated off
+  wasm); full kernel suite 938 passed / 0 failed; `scripts/zero-dep-gate.sh` GREEN (5 external crates,
+  allowlist shrunk by 19). Ruling recorded in `fdr/mod.rs` doc + `kernel/Cargo.toml` + the blueprint
+  ([`BLUEPRINT-ITEMS-04-29-logger-fdr-rewrite-2026-07-19.md`](BLUEPRINT-ITEMS-04-29-logger-fdr-rewrite-2026-07-19.md)).
 - **Item 5** — retire `regex`, after the logger exists. Ruling recorded per item 25's procedure.
 
 ## C. Tier 2 — process/verification layer. Parallelizable.
@@ -243,10 +254,12 @@ test coverage.
    plus an end-to-end `git show BASE:$FILE` extraction test against the real committed pin. Live
    GH-Actions run of the introduction PR is the `<absent>→1.96.1` end-to-end green; G5 (required-check
    registration) still owed server-side.
-9. **Item 25 (procedure doc)** — then **Items 4+29 (+JsonWriter)** — Proofs: `cargo tree` drops 13+
-   crates, log output byte-compatible, post-mortem readback test (kill -9, restart, recover); event
-   schema shows energy/hardware fields as first-class, RAPL-less host shows named absence not silent
-   omission.
+9. **Item 25 (procedure doc)** — then **Items 4+29 (+JsonWriter)** — **✅ DONE 2026-07-19**
+   (`f04142f89`, `4f4872a54`, `eb350464e`). All proofs discharged: `cargo tree -e no-dev` 25→6
+   (19 dropped ≥13); `metric.jsonl` + markov CLI JSON byte-compatible; post-mortem readback test
+   (kill -9, restart, recover — 300/300 events + PostMortem); event schema `hw` first-class,
+   RAPL-less host shows `unavailable:no_rapl_interface` (named absence, not silent omission);
+   `zero-dep-gate.sh` GREEN; wasm32 green; 938 tests pass.
 10. **Item 5** — Proof: `cargo tree` shows zero external crates; existing parsing tests green.
 
 Everything in this batch is now unblocked — no operator ruling stands between it and execution.
