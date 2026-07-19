@@ -7,8 +7,9 @@ use dowiz_kernel::cgraph::CGraph;
 use dowiz_kernel::money::Currency;
 use dowiz_kernel::retrieval::ppr::Ppr;
 use dowiz_kernel::retrieval::recall::PrimaryRecall;
+use dowiz_kernel::retrieval::spine::{build_map, tag_index, Frontmatter, SpineIndex};
 use dowiz_kernel::spectral_cache::{canonical_content_address, slem_cached, DecompCache};
-use dowiz_kernel::money::Currency;
+use dowiz_kernel::spool::Spool;
 use dowiz_kernel::token_bucket::TokenBucket;
 use dowiz_kernel::vendor::VendorId;
 use dowiz_kernel::{
@@ -283,6 +284,93 @@ fn bench_field_eigen(c: &mut Criterion) {
     group.finish();
 }
 
+/// P77 B1 — the FIFO drain hot path. Append `n` records, then claim+ack all `n`
+/// in strict FIFO order (the real `bounded_drainer` shape). On the OLD
+/// `Vec`+`remove(0)` impl this is O(N²) (a shifting remove per ack); on the new
+/// `VecDeque`+claim-cursor impl it is O(N). The per-`n` slope is the proof.
+fn bench_spool_drain(c: &mut Criterion) {
+    for &n in &[16usize, 64, 256, 1024] {
+        let bench_id = format!("spool_drain/{n}");
+        c.bench_function(&bench_id, |b| {
+            b.iter(|| {
+                let mut spool = Spool::new(n + 1);
+                for i in 0..n {
+                    spool.append(&format!("rec-{i}")).expect("within capacity");
+                }
+                // Strict FIFO claim+ack drain — the documented outbox shape.
+                while let Some(rec) = spool.claim_next() {
+                    assert!(spool.ack(rec.id), "ack of claimed id must succeed");
+                }
+                black_box(spool.is_empty())
+            })
+        });
+    }
+}
+
+/// P77 B2 — knowledge-spine build + lookup cost. Build an `n`-doc overlapping-tag
+/// corpus (the corpus that grows unbounded per session), then exercise the
+/// hot lookups: `related` on a high-degree id and `lookup_by_id` × n. On the OLD
+/// `Vec::contains`/O(docs)-scan impl the aggregate is O(N²); on the new
+/// `HashSet`/`HashMap` impl it is O(N).
+fn bench_spine_build(c: &mut Criterion) {
+    let pool = [
+        "rust", "ml", "crypto", "wasm", "graph", "net", "pki", "fsm", "db", "ui",
+    ];
+    for &n in &[16usize, 64, 256, 1024] {
+        // Materialize a deterministic overlapping-tag corpus of size `n`.
+        let docs: Vec<(String, String, Vec<String>, String)> = (0..n as u32)
+            .map(|i| {
+                let id = format!("doc-{i:04}");
+                let tags: Vec<String> = (0..4)
+                    .map(|k| pool[((i as usize * 3 + k) % pool.len())].to_string())
+                    .collect();
+                (
+                    id.clone(),
+                    format!("Title {i}"),
+                    tags,
+                    format!("docs/{id}.md"),
+                )
+            })
+            .collect();
+        let bench_id = format!("spine_build/{n}");
+        c.bench_function(&bench_id, |b| {
+            b.iter(|| {
+                let idx = SpineIndex::build(docs.clone());
+                // High-degree target: doc-0000 shares tags with many docs.
+                let rel = idx.related("doc-0000");
+                let _look = (0..n)
+                    .map(|i| idx.lookup_by_id(&format!("doc-{i:04}")))
+                    .count();
+                let _map = build_map(&docs);
+                black_box((rel.len(), _look, _map.len()))
+            })
+        });
+        // `tag_index` build cost (the `backlinks` input) — also O(N²)-ish old.
+        let fm_docs: Vec<(String, Frontmatter)> = (0..n as u32)
+            .map(|i| {
+                let mut fm = Frontmatter::new();
+                let tags: Vec<String> = (0..4)
+                    .map(|k| pool[((i as usize * 3 + k) % pool.len())].to_string())
+                    .collect();
+                fm.insert("tags".into(), tags.join(", "));
+                (format!("doc-{i:04}"), fm)
+            })
+            .collect();
+        let bench_id = format!("spine_build/tag_index_{n}");
+        c.bench_function(&bench_id, |b| {
+            b.iter(|| {
+                let idx = tag_index(
+                    &fm_docs
+                        .iter()
+                        .map(|(id, fm)| (id.clone(), fm))
+                        .collect::<Vec<_>>(),
+                );
+                black_box(idx.len())
+            })
+        });
+    }
+}
+
 criterion_group!(
     benches,
     bench_place_order,
@@ -295,6 +383,8 @@ criterion_group!(
     bench_ppr,
     bench_retrieval_recall,
     bench_attention,
-    bench_field_eigen
+    bench_field_eigen,
+    bench_spool_drain,
+    bench_spine_build
 );
 criterion_main!(benches);

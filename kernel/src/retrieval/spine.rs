@@ -10,7 +10,7 @@
 //! corpus frontmatter that the BM25/trigram layers can later fuse with. Pure
 //! `std`, no new deps.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// A parsed frontmatter block: flat key → value (both trimmed).
 pub type Frontmatter = HashMap<String, String>;
@@ -208,16 +208,21 @@ pub fn tag_index(docs: &[(String, &Frontmatter)]) -> HashMap<String, Vec<String>
 /// P2 — Docs that share ≥1 tag with `id`, sorted ascending, excluding `id` itself.
 /// Cross-references are derived from the `tag_index` buckets that contain `id`.
 pub fn backlinks(id: &str, index: &HashMap<String, Vec<String>>) -> Vec<String> {
-    let mut related: Vec<String> = Vec::new();
+    // P77 B2: a `HashSet` accumulator replaces the O(R) `Vec::contains` dedup
+    // (`:215` in the old impl) so accumulation is O(R) total, not O(R²). Membership
+    // of `id` in a sorted bucket uses `binary_search` (O(log R)) — buckets are
+    // sorted+deduped in `tag_index`/`build`. Result set+order is identical.
+    let mut seen: HashSet<String> = HashSet::new();
     for bucket in index.values() {
-        if bucket.iter().any(|d| d == id) {
+        if bucket.binary_search(&id.to_string()).is_ok() {
             for other in bucket {
-                if other != id && !related.contains(other) {
-                    related.push(other.clone());
+                if other != id {
+                    seen.insert(other.clone());
                 }
             }
         }
     }
+    let mut related: Vec<String> = seen.into_iter().collect();
     related.sort();
     related
 }
@@ -229,16 +234,23 @@ pub fn backlinks(id: &str, index: &HashMap<String, Vec<String>>) -> Vec<String> 
 /// deterministically; docs with no tag fall under `## (untagged)`. A top
 /// `# Knowledge Map` header precedes the sections. Stable, no trailing-ws drift.
 pub fn build_map(docs: &[(String, String, Vec<String>, String)]) -> String {
-    // Bucket doc indices by first tag.
+    // P77 B2: a `HashMap<tag, group-index>` replaces the O(distinct-tags) linear
+    // `groups.iter_mut().find` inside the per-doc loop (`:239` old), so grouping
+    // is O(docs) total instead of O(docs · distinct-tags). Final sort order is
+    // unchanged → byte-identical MAP.md output.
     let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
+    let mut group_of: HashMap<String, usize> = HashMap::new();
     for (i, (_, _, tags, _)) in docs.iter().enumerate() {
         let tag = tags
             .first()
             .cloned()
             .unwrap_or_else(|| "(untagged)".to_string());
-        match groups.iter_mut().find(|(t, _)| *t == tag) {
-            Some((_, ids)) => ids.push(i),
-            None => groups.push((tag, vec![i])),
+        match group_of.get(&tag) {
+            Some(&g) => groups[g].1.push(i),
+            None => {
+                group_of.insert(tag.clone(), groups.len());
+                groups.push((tag, vec![i]));
+            }
         }
     }
     groups.sort_by(|a, b| a.0.cmp(&b.0));
@@ -266,6 +278,10 @@ pub fn build_map(docs: &[(String, String, Vec<String>, String)]) -> String {
 pub struct SpineIndex {
     docs: Vec<(String, String, Vec<String>, String)>,
     tag_index: HashMap<String, Vec<String>>,
+    /// id → position in `docs`, built once in `SpineIndex::build`. Turns
+    /// `lookup_by_id`/`related`'s O(docs) `docs.iter().find/any` into O(1). Ids
+    /// are unique (doc comment on `lookup_by_id`). (P77 B2.)
+    id_index: HashMap<String, usize>,
 }
 
 impl SpineIndex {
@@ -276,7 +292,9 @@ impl SpineIndex {
     /// for every access path.
     pub fn build(docs: Vec<(String, String, Vec<String>, String)>) -> SpineIndex {
         let mut tag_index: HashMap<String, Vec<String>> = HashMap::new();
-        for (id, _, tags, _) in &docs {
+        let mut id_index: HashMap<String, usize> = HashMap::with_capacity(docs.len());
+        for (pos, (id, _, tags, _)) in docs.iter().enumerate() {
+            id_index.insert(id.clone(), pos);
             for tag in tags {
                 tag_index
                     .entry(tag.to_lowercase())
@@ -288,13 +306,17 @@ impl SpineIndex {
             bucket.sort();
             bucket.dedup();
         }
-        SpineIndex { docs, tag_index }
+        SpineIndex {
+            docs,
+            tag_index,
+            id_index,
+        }
     }
 
     /// P4 — Lookup by exact id. Ids are unique, so this returns a single-element
     /// `Vec` when found, empty otherwise (uniform `Vec<String>` return shape).
     pub fn lookup_by_id(&self, id: &str) -> Vec<String> {
-        if self.docs.iter().any(|(i, _, _, _)| i == id) {
+        if self.id_index.contains_key(id) {
             vec![id.to_string()]
         } else {
             Vec::new()
@@ -313,20 +335,24 @@ impl SpineIndex {
     /// P4 — `related(id)` == backlinks: every doc sharing ≥1 tag with `id`,
     /// sorted, excluding `id`. Pure over the in-memory tag index.
     pub fn related(&self, id: &str) -> Vec<String> {
-        let my_tags: Vec<String> = match self.docs.iter().find(|(i, _, _, _)| i == id) {
-            Some((_, _, tags, _)) => tags.iter().map(|t| t.to_lowercase()).collect(),
+        let my_tags: Vec<String> = match self.id_index.get(id) {
+            Some(&pos) => self.docs[pos].2.iter().map(|t| t.to_lowercase()).collect(),
             None => return Vec::new(),
         };
-        let mut out: Vec<String> = Vec::new();
+        // P77 B2: `HashSet` accumulator replaces the O(R) `!out.contains(other)`
+        // dedup (`:325` old) so accumulation is O(R) total, not O(R²). The result
+        // set+order is identical (sorted ascending, self excluded).
+        let mut seen: HashSet<String> = HashSet::new();
         for tag in &my_tags {
             if let Some(bucket) = self.tag_index.get(tag) {
                 for other in bucket {
-                    if other != id && !out.contains(other) {
-                        out.push(other.clone());
+                    if other != id {
+                        seen.insert(other.clone());
                     }
                 }
             }
         }
+        let mut out: Vec<String> = seen.into_iter().collect();
         out.sort();
         out
     }
@@ -642,5 +668,202 @@ mod tests {
             Vec::<String>::new(),
             "isolated doc has no related"
         );
+    }
+
+    // ===== P77 B2 differential / adversarial tests =====
+
+    /// Reference re-implementations of the OLD O(R²)/O(docs) semantics, used as
+    /// the byte-identical oracle for the HashSet/HashMap rewrite.
+    fn ref_backlinks(id: &str, index: &HashMap<String, Vec<String>>) -> Vec<String> {
+        let mut related: Vec<String> = Vec::new();
+        for bucket in index.values() {
+            if bucket.iter().any(|d| d == id) {
+                for other in bucket {
+                    if other != id && !related.contains(other) {
+                        related.push(other.clone());
+                    }
+                }
+            }
+        }
+        related.sort();
+        related
+    }
+
+    fn ref_related(idx: &SpineIndex, id: &str) -> Vec<String> {
+        let my_tags: Vec<String> = match idx.docs.iter().find(|(i, _, _, _)| i == id) {
+            Some((_, _, tags, _)) => tags.iter().map(|t| t.to_lowercase()).collect(),
+            None => return Vec::new(),
+        };
+        let mut out: Vec<String> = Vec::new();
+        for tag in &my_tags {
+            if let Some(bucket) = idx.tag_index.get(tag) {
+                for other in bucket {
+                    if other != id && !out.contains(other) {
+                        out.push(other.clone());
+                    }
+                }
+            }
+        }
+        out.sort();
+        out
+    }
+
+    // GREEN (P77 B2-D-EQUIV): `backlinks`/`related`/`lookup_by_id`/`build_map`
+    // must return byte-identical results to the OLD impl on a fixed corpus.
+    #[test]
+    fn spine_equiv_reference() {
+        // Build a corpus where several docs share many tags (high dedup pressure).
+        let tags_pool = ["rust", "ml", "crypto", "wasm", "graph", "net", "pki", "fsm"];
+        let mut docs: Vec<(String, String, Vec<String>, String)> = Vec::new();
+        for i in 0..256u32 {
+            let id = format!("doc-{i:03}");
+            // Each doc gets 3 overlapping tags selected deterministically.
+            let t: Vec<String> = (0..3)
+                .map(|k| tags_pool[((i as usize + k * 7) % tags_pool.len())].to_string())
+                .collect();
+            docs.push((id.clone(), format!("Title {i}"), t, format!("docs/{id}.md")));
+        }
+        // Two copies in different insertion orders → HashMap iteration order must
+        // NOT leak into output (the final sort() is the only thing that binds it).
+        let mut docs_shuffled = docs.clone();
+        docs_shuffled.rotate_left(137);
+
+        let idx_a = SpineIndex::build(docs.clone());
+        let idx_b = SpineIndex::build(docs_shuffled.clone());
+
+        // Build the OLD-style `tag_index` input (id → Frontmatter) for the
+        // `backlinks` equivalence cross-check. `docs` carries raw `Vec<String>`
+        // tags; `tag_index`/`backlinks` expect `&Frontmatter`, so synthesize it.
+        let mut fm_docs: Vec<(String, Frontmatter)> = Vec::new();
+        for (id, _, tags, _) in &docs {
+            let mut fm = Frontmatter::new();
+            fm.insert("tags".into(), tags.join(", "));
+            fm_docs.push((id.clone(), fm));
+        }
+        let tag_a = tag_index(
+            &fm_docs
+                .iter()
+                .map(|(id, fm)| (id.clone(), fm))
+                .collect::<Vec<_>>(),
+        );
+        for target in ["doc-001", "doc-128", "doc-255"] {
+            // build_map output identical across both orderings
+            assert_eq!(
+                build_map(&docs),
+                build_map(&docs_shuffled),
+                "build_map byte-identical across insertion order"
+            );
+            // related output identical to BOTH the other-ordering index and the ref
+            assert_eq!(
+                idx_a.related(target),
+                idx_b.related(target),
+                "related stable across insertion order"
+            );
+            assert_eq!(
+                idx_a.related(target),
+                ref_related(&idx_a, target),
+                "related matches OLD impl"
+            );
+            assert_eq!(
+                idx_a.lookup_by_id(target),
+                vec![target.to_string()],
+                "lookup_by_id found"
+            );
+        }
+        assert_eq!(idx_a.lookup_by_id("nope"), Vec::<String>::new());
+        // backlinks over the old-style index must match the ref
+        let tgt = "doc-010";
+        let bl = backlinks(tgt, &tag_a);
+        assert_eq!(bl, ref_backlinks(tgt, &tag_a), "backlinks matches OLD impl");
+        // self never in result, fully sorted
+        assert!(!bl.contains(&tgt.to_string()));
+        assert!(bl.windows(2).all(|w| w[0] <= w[1]));
+    }
+
+    // GREEN (P77 B2): a doc sharing the SAME other doc across multiple tags
+    // appears exactly once (HashSet dedup == old `!contains`).
+    #[test]
+    fn spine_duplicate_backlinks_deduped() {
+        let mut fm_a = Frontmatter::new();
+        fm_a.insert("tags".into(), "rust, ml".into());
+        let mut fm_x = Frontmatter::new();
+        fm_x.insert("tags".into(), "rust, ml".into()); // x shares BOTH tags with a
+        let docs = vec![("a".to_string(), &fm_a), ("x".to_string(), &fm_x)];
+        let idx = tag_index(&docs);
+        let bl = backlinks("a", &idx);
+        assert_eq!(bl, vec!["x".to_string()], "shared doc appears exactly once");
+        let idx2 = SpineIndex::build(vec![
+            (
+                "a".to_string(),
+                "A".into(),
+                vec!["rust".into(), "ml".into()],
+                "a.md".into(),
+            ),
+            (
+                "x".to_string(),
+                "X".into(),
+                vec!["rust".into(), "ml".into()],
+                "x.md".into(),
+            ),
+        ]);
+        assert_eq!(idx2.related("a"), vec!["x".to_string()]);
+    }
+
+    // GREEN (P77 B2): a doc tagged identically to itself never appears in its own set.
+    #[test]
+    fn spine_self_reference_excluded() {
+        let docs = vec![(
+            "lonely".to_string(),
+            "Lonely".into(),
+            vec!["solo".into()],
+            "lonely.md".into(),
+        )];
+        let idx = SpineIndex::build(docs);
+        assert_eq!(idx.related("lonely"), Vec::<String>::new());
+        let fm = {
+            let mut m = Frontmatter::new();
+            m.insert("tags".into(), "solo".into());
+            m
+        };
+        let idx2 = tag_index(&[("lonely".to_string(), &fm)]);
+        assert_eq!(backlinks("lonely", &idx2), Vec::<String>::new());
+    }
+
+    // GREEN (P77 B2): large corpus in two insertion orders → byte-identical
+    // backlinks/related/build_map (HashMap order must not leak).
+    #[test]
+    fn spine_large_corpus_order_stable() {
+        let mut docs: Vec<(String, String, Vec<String>, String)> = Vec::new();
+        let pool = ["r", "m", "c", "w", "g", "n", "p", "f", "s", "t"];
+        for i in 0..1024u32 {
+            let id = format!("d{i:04}");
+            let t: Vec<String> = (0..4)
+                .map(|k| pool[((i as usize * 3 + k) % pool.len())].to_string())
+                .collect();
+            docs.push((id.clone(), format!("T{i}"), t, format!("{id}.md")));
+        }
+        let mut shuf = docs.clone();
+        shuf.reverse();
+        // build_map takes a borrow, so call it before `SpineIndex::build` moves `shuf`.
+        let map_shuf = build_map(&shuf);
+        let idx_a = SpineIndex::build(docs.clone());
+        let idx_b = SpineIndex::build(shuf);
+        for target in ["d0000", "d0512", "d1023"] {
+            assert_eq!(idx_a.related(target), idx_b.related(target));
+        }
+        assert_eq!(build_map(&docs), map_shuf);
+    }
+
+    // GREEN (P77 B2): empty / isolated edge behavior unchanged.
+    #[test]
+    fn spine_empty_and_isolated() {
+        assert_eq!(backlinks("x", &HashMap::new()), Vec::<String>::new());
+        let idx = SpineIndex::build(vec![(
+            "alone".to_string(),
+            "Alone".into(),
+            vec!["unique-tag".into()],
+            "alone.md".into(),
+        )]);
+        assert_eq!(idx.related("alone"), Vec::<String>::new());
     }
 }
