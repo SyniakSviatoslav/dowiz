@@ -112,7 +112,7 @@ test coverage.
   Keccak-f[1600]** (`event_log.rs:67` vs `pq/keccak.rs:156`) — dedup ticket owed to item 25, filed
   not fixed. Enactment half (Tier 2) allowlists rusqlite+sha2.
 
-## B. Tier 1 — foundational builds. READY, in this internal order.
+## B. Tier 1 — foundational builds. ✅ COMPLETE (2026-07-19) — all items DONE; the kernel's default no-dev build has ZERO external crates.
 
 - **Items 1 + 13 combined** — the CI zero-dep gate, born deterministic:
   `cargo tree -e no-dev --locked --offline` + lockfile-hash assertion, 3-crate allowlist shrinking
@@ -160,7 +160,35 @@ test coverage.
   wasm); full kernel suite 938 passed / 0 failed; `scripts/zero-dep-gate.sh` GREEN (5 external crates,
   allowlist shrunk by 19). Ruling recorded in `fdr/mod.rs` doc + `kernel/Cargo.toml` + the blueprint
   ([`BLUEPRINT-ITEMS-04-29-logger-fdr-rewrite-2026-07-19.md`](BLUEPRINT-ITEMS-04-29-logger-fdr-rewrite-2026-07-19.md)).
-- **Item 5** — retire `regex`, after the logger exists. Ruling recorded per item 25's procedure.
+- **Item 5 — retire `regex`, after the logger exists. ✅ DONE (2026-07-19) — CLOSES ALL OF TIER 1.**
+  The kernel's last external crate. Its entire production surface was one function
+  (`TrigramIndex::query_regex`) with **zero production callers** (re-verified by full-workspace
+  grep across `kernel/ engine/ apps/ tools/ agent-loop/ agent-adapters/`); the only pattern ever
+  compiled anywhere was `note-.*-recall`. Ruling per item 25's procedure = terminal state (a)
+  removed outright, replaced by a kernel-owned restricted matcher for the used subset
+  ({literal, `.`, `.*`}, unanchored contains-match, greedy leftmost segment placement — no
+  backtracking exists ⇒ no pathological blowup), with typed rejection (`PatternError::UnsupportedMeta`)
+  of every other metacharacter (degrade-closed). Landed as three isolated commits on
+  `exec/space-grade-tier0-2026-07-19` (`18152ef84` build → `c6b5d2176` flip → `6605166cd` remove):
+  `kernel/src/retrieval/pattern.rs` + `query_pattern` coexisted, then the seam flipped, then
+  `regex = "1"` was removed. Proofs discharged: parity proven BEFORE cutover — differential vs the
+  live `regex` crate over the 20-doc FIXTURE + 2000-doc synthetic corpus + a proptest sweep (random
+  subset patterns × ASCII docs), all bit-identical; a permanent independent naive recursive
+  reference matcher + a frozen golden (`query_pattern("note-.*-recall") == vec![7]`) carry the
+  guarantee post-removal; rejection tests assert typed errors with byte positions.
+  `cargo tree --manifest-path kernel/Cargo.toml -e no-dev --locked --offline` = **`dowiz-kernel`
+  root ONLY, ZERO external crates** (regex's whole subtree — regex, regex-automata, regex-syntax,
+  aho-corasick, memchr — dropped; regex survives only as a `criterion` dev-dep transitive in
+  `Cargo.lock`, outside the no-dev proof surface). `ZERO-DEP-ALLOWLIST.txt` shrunk 5 → 0;
+  `scripts/zero-dep-gate.sh` GREEN "0 external crates" (also fixed a latent gate abort at the true
+  zero-dep end state — its filter greps returned exit 1 when they filtered every line out, aborting
+  under `set -euo pipefail`; now `|| true`-guarded, gate A/B/C semantics unchanged). Full kernel
+  suite green (925 lib unit tests / 0 failed / 3 ignored, +22 integration). Ruling recorded in
+  `pattern.rs` module doc + `kernel/Cargo.toml` tombstone + allowlist header + `fdr/mod.rs` +
+  `lib.rs`/`retrieval/mod.rs`, and the blueprint
+  ([`BLUEPRINT-ITEM-05-regex-retirement-2026-07-19.md`](BLUEPRINT-ITEM-05-regex-retirement-2026-07-19.md)).
+  **With this, every §B Tier-1 item (1+13, 14, 25, 4+29, 5) is DONE: the kernel's default build has
+  genuinely zero external dependencies.**
 
 ## C. Tier 2 — process/verification layer. Parallelizable.
 
@@ -260,6 +288,12 @@ test coverage.
    (kill -9, restart, recover — 300/300 events + PostMortem); event schema `hw` first-class,
    RAPL-less host shows `unavailable:no_rapl_interface` (named absence, not silent omission);
    `zero-dep-gate.sh` GREEN; wasm32 green; 938 tests pass.
-10. **Item 5** — Proof: `cargo tree` shows zero external crates; existing parsing tests green.
+10. **Item 5** — **✅ DONE 2026-07-19** (`18152ef84`, `c6b5d2176`, `6605166cd`). Proofs discharged:
+    `cargo tree --manifest-path kernel/Cargo.toml -e no-dev --locked --offline` = `dowiz-kernel`
+    root ONLY (**0 external crates**); pre-cutover parity of the kernel-owned {literal, `.`, `.*`}
+    matcher vs the live `regex` crate (20-doc + 2000-doc + proptest, bit-identical) + permanent
+    independent naive-reference differential + frozen golden; `zero-dep-gate.sh` GREEN "0 external
+    crates" (empty allowlist; latent zero-state gate abort fixed); existing parsing tests green
+    (925 lib unit / 0 failed). **This closes ALL of Tier 1.**
 
 Everything in this batch is now unblocked — no operator ruling stands between it and execution.
