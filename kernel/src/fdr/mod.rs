@@ -46,6 +46,7 @@
 //!   (`metric.jsonl` / `alert.jsonl` / the markov CLI JSON), all golden-pinned.
 
 pub mod json;
+pub mod pmu;
 pub mod schema;
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -270,6 +271,17 @@ fn emit_span_close(name: &'static str, dur_us: u64) {
     sink::emit_span_close(name, dur_us);
 }
 
+/// Emit ONE `Event`-kind FDR record carrying a classifier verdict string plus the
+/// window-bracketed [`pmu::PmuStamp`] companion delta (roadmap item 27, classifier-input
+/// half). No-op unless a sink is installed — so callers may bracket-and-emit
+/// unconditionally at zero default cost; the record materializes only where FDR is enabled.
+/// The classifier (`markov::analyze_detailed` / `spectral::classify_drift`) is unchanged:
+/// the PMU data rides ALONGSIDE the verdict on the same record, never as a classifier input.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn emit_verdict_pmu(name: &'static str, verdict: &str, pmu: pmu::PmuStamp) {
+    sink::emit_verdict(name, verdict, pmu);
+}
+
 // ── Sink + init (non-wasm) ──────────────────────────────────────────────────────────
 
 /// Configuration for [`init`].
@@ -370,6 +382,36 @@ mod sink {
             StampPolicy::Cheap,
             fields.to_vec(),
         );
+        let line = ev.to_json();
+        if s.stderr {
+            let _ = writeln!(std::io::stderr(), "{line}");
+        }
+        if let Some(r) = &s.ring {
+            if let Ok(mut r) = r.lock() {
+                let _ = r.append(&ev);
+            }
+        }
+    }
+
+    /// Emit a verdict + PMU companion record (roadmap item 27). Verdict-emission points are
+    /// low-frequency, so this uses a FULL hw stamp like span-close; the PMU stamp is attached
+    /// verbatim (it was already sampled by the caller's bracket). NEVER called from inside a
+    /// classifier — only from the verdict emission site (`bin/markov_attractor`).
+    pub fn emit_verdict(name: &'static str, verdict: &str, pmu: super::pmu::PmuStamp) {
+        let s = match SINK.get() {
+            Some(s) => s,
+            None => return,
+        };
+        let seq = next_seq(s);
+        let mut ev = FdrEvent::stamp(
+            seq,
+            Level::Info,
+            Kind::Event,
+            name.to_string(),
+            StampPolicy::Full,
+            vec![("verdict", verdict.to_string())],
+        );
+        ev.pmu = Some(pmu);
         let line = ev.to_json();
         if s.stderr {
             let _ = writeln!(std::io::stderr(), "{line}");
