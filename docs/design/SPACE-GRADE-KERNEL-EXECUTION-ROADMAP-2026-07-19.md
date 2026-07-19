@@ -118,6 +118,9 @@ test coverage.
   `cargo tree -e no-dev --locked --offline` + lockfile-hash assertion, 3-crate allowlist shrinking
   monotonically. **[new ordering choice — bundling]**: item 13 hardens item 1's own mechanism;
   building it nondeterministic first is two passes over one CI job.
+  **✅ DONE (2026-07-19)** — `kernel/ZERO-DEP-ALLOWLIST.txt` + `scripts/zero-dep-gate.sh` (3 gates:
+  tree⊆allowlist, monotonic-shrink, `Cargo.lock` sha256) + `zero-dep-gate` CI job under `unshare -n`;
+  all §G.7 clauses red-proven; `01acd673e` on `exec/space-grade-tier0-2026-07-19`. See §G.7 for detail.
 - **Item 14** — `rust-toolchain.toml` pin + structural compiler-bump trigger. Independent, parallel.
 - **Item 25 (procedure doc first) — ✅ DONE (2026-07-19).** The slot-arena/qrng standing procedure
   is codified and independently re-verified in
@@ -213,6 +216,14 @@ test coverage.
    epsilon; `cargo tree` unchanged.
 7. **Items 1+13** — Proof: CI fails on any new dependency, allowlist shrinks monotonically; gate
    verdict identical with networking disabled, lockfile hash unchanged.
+   **✅ DONE 2026-07-19** — baseline re-verified (`cargo tree -e no-dev --locked --offline` = exactly
+   24 external crates, matches the blueprint). Landed `kernel/ZERO-DEP-ALLOWLIST.txt` (24 names),
+   `scripts/zero-dep-gate.sh` (Gate A tree⊆allowlist / Gate B `comm -13` monotonic-shrink vs
+   `origin/main` / Gate C `Cargo.lock` sha256 stable), and the `zero-dep-gate` CI job running under
+   `unshare -n`. All four §G.7 clauses red-proven: Gate A RED on a throwaway `libc` dep, Gate B RED on
+   a grown allowlist + GREEN on a shrink, `unshare -r -n`/`unshare -n` identical 24-crate verdict.
+   Committed `01acd673e`, pushed to `exec/space-grade-tier0-2026-07-19`. Blueprint:
+   `BLUEPRINT-ITEMS-01-13-ci-zero-dep-gate-2026-07-19.md`. Scope held to `dowiz-kernel` (item 31 = Tier 2).
 8. **Item 14** — Proof: a toolchain-bump diff without the spot-check artifact fails CI; a non-bump
    diff never triggers the job.
 9. **Item 25 (procedure doc)** — then **Items 4+29 (+JsonWriter)** — Proofs: `cargo tree` drops 13+
