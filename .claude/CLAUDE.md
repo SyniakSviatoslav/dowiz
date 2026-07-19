@@ -31,6 +31,24 @@
 - **No output of code unless requested**: Use edit tools silently. Keep chat focused on intent and decisions, not diffs.
 - **Non-interactive flags**: Always pass `--yes`, `--non-interactive`, etc. for automation-context commands. Never assume a human can respond to a prompt.
 
+## Untracked-File Safety Rule (operator directive 2026-07-19, incident-driven)
+
+> Root cause: on 2026-07-19, 15 subagent-written research/design docs were deleted from disk
+> between 22:17-00:47 while still untracked — wiped by an unrelated concurrent process (`git
+> clean`/`checkout`/similar) operating in the same shared working directory. Recovered verbatim
+> from subagent transcripts; no data actually lost, but the vulnerability window was real.
+> - **Stage on write**: any doc/file a subagent produces in a shared (non-worktree) working
+>   directory MUST be `git add`ed immediately after writing, before further tool calls — staging
+>   (not committing) is enough to make a file immune to `git clean` and most `checkout`/`stash`
+>   sweeps, and it is a pure local index operation: no commit, no branch change, no push.
+> - **Prefer isolated worktrees for concurrent work**: when multiple agents/swarms may touch the
+>   same shared directory around the same time, default to a dedicated `git worktree` per
+>   concurrent lane rather than the shared tree — this was already the rule for red-line branch
+>   work; this incident shows plain research-doc writes need the same discipline.
+> - **On discovering missing expected output**: before assuming failure, check subagent
+>   transcripts (`journal.jsonl` / `agent-<id>.jsonl` in the task transcript dir) for the verbatim
+>   final content — it is very likely recoverable even if the file itself is gone.
+
 ## Mandatory Proof Rule — SUSPENDED (operator directive 2026-07-15)
 
 > All governance gates / red-line friction / mandatory-proof requirements are REMOVED for
