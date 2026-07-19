@@ -262,6 +262,25 @@ jobs:
             >/dev/null || true
 
   # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
+  # Roadmap items 1+13 (SPACE-GRADE-KERNEL-EXECUTION-ROADMAP-2026-07-19 §B/§G.7):
+  # the kernel default no-dev dependency tree must be a subset of
+  # kernel/ZERO-DEP-ALLOWLIST.txt, the allowlist may only shrink vs origin/main,
+  # the verdict is computed with networking disabled (unshare -n), and
+  # kernel/Cargo.lock must be byte-identical after the check (item 13 / §10-P6).
+  # SCOPE: dowiz-kernel default no-dev build ONLY — workspace-wide gating is item 31.
+  zero-dep-gate:
+    name: kernel zero-dep gate (items 1+13)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # needed for the origin/main allowlist comparison
+      - name: Pre-fetch crate metadata (networked, before the offline gate)
+        run: cargo fetch --locked --manifest-path kernel/Cargo.toml
+      - name: Zero-dep gate (offline, no-network namespace)
+        run: sudo -E env "PATH=$PATH" unshare -n bash scripts/zero-dep-gate.sh
+
+  # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
   # P01 §2.5 (BLUEPRINT-P01): a new dependency without a DECART report / marker => RED.
   decart-dep-lint:
     name: decart dependency lint
