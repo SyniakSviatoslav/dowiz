@@ -105,6 +105,22 @@ pub enum LogEvent {
     ClaimLatency(ClaimLatencyRecord),
     ClaimLatencyAnomaly(AnomalyFlag),
     Bench(BenchRecord),
+    /// Layer-F (BLUEPRINT-P-F §4.2 import gate) decision-unit import outcome.
+    /// Native telemetry for `units_live{domain}` / `escalation_rate{domain}` /
+    /// `import_rejects{reason}` (D8) — emitted through THIS lane, never a parallel
+    /// channel (AGENTS.md native-telemetry rule).
+    DecisionImport(DecisionImportRecord),
+}
+
+/// Outcome of one `import_unit` attempt (BLUEPRINT-P-F §4.2 + D8 telemetry).
+#[derive(Debug, Clone, PartialEq)]
+pub struct DecisionImportRecord {
+    /// Closed `DomainTag` discriminant, rendered as text (not a capability grant).
+    pub domain: String,
+    /// `true` = unit admitted Live (after replay); `false` = rejected.
+    pub ok: bool,
+    /// Present iff `ok == false`; one of the `ImportReject` reason names.
+    pub reason: Option<String>,
 }
 
 // ── deterministic line format ───────────────────────────────────────────────
@@ -119,6 +135,9 @@ pub enum LogEvent {
 //   ClaimLatency(C):  C|<commit>|<diff_lines>|<delta_seconds>
 //   ClaimLatencyAnomaly(A): A|<commit>|<diff_lines>|<delta_seconds>
 //   Bench(B):         B|<bench>|<wall_ms>
+//   DecisionImport(DI): DI|<domain>|<ok>|<reason?>
+//                     <ok> = "1" | "0"
+//                     <reason> = "-" (ok) or the ImportReject reason name (rejected)
 //
 // Determinism: identical records produce byte-identical lines (fixed order, no
 // map iteration, no locale-formatted numbers).
@@ -154,6 +173,14 @@ impl LogEvent {
             }
             LogEvent::Bench(b) => {
                 format!("B|{}|{}", b.bench, b.wall_ms)
+            }
+            LogEvent::DecisionImport(r) => {
+                let ok = if r.ok { "1" } else { "0" };
+                let reason = match &r.reason {
+                    None => "-".to_string(),
+                    Some(s) => s.clone(),
+                };
+                format!("DI|{}|{}|{}", r.domain, ok, reason)
             }
         }
     }
@@ -279,6 +306,29 @@ impl LogEvent {
                 Ok(LogEvent::Bench(BenchRecord {
                     bench: parts[1].to_string(),
                     wall_ms,
+                }))
+            }
+            "DI" => {
+                if parts.len() != 4 {
+                    return Err(format!(
+                        "DecisionImport: expected 4 fields, got {}",
+                        parts.len()
+                    ));
+                }
+                let ok = match parts[2] {
+                    "1" => true,
+                    "0" => false,
+                    other => return Err(format!("DecisionImport: bad ok flag {:?}", other)),
+                };
+                let reason = if parts[3] == "-" {
+                    None
+                } else {
+                    Some(parts[3].to_string())
+                };
+                Ok(LogEvent::DecisionImport(DecisionImportRecord {
+                    domain: parts[1].to_string(),
+                    ok,
+                    reason,
                 }))
             }
             other => Err(format!("unknown LogEvent variant tag {other:?}")),
