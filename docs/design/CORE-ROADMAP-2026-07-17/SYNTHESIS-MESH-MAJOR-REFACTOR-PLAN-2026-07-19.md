@@ -44,9 +44,9 @@ wildcard ReceiverID).
 | Unit | Name | State | Path it protects | Blueprint |
 |---|---|---|---|---|
 | **M1** | Real RFC-5705/9266 exporter: capture + set-on-send + **enforce-on-recv** | **Independent prerequisite bug** (red-team F3/M1, STILL OPEN). Spec already written inside P92 §4.1/§6 as its own landable unit. | The **live-channel** full-signed path (defeats MITM/relay-splice). | P92 §4.1 (M1) — already specced; **no separate file needed**, but must land as its own reviewed commit. |
-| **P93** | **Transcript-Binding + Replay-Window for the Store-and-Forward Path** (NEW) | **PROPOSED — scope sketch in §4 here**; full 20-point blueprint is a follow-up Opus pass. | The **channel-less / detached** per-message store-and-forward + gossip path (defeats cross-node replay C3). | *to be written* — `BLUEPRINT-P93-transcript-binding-replay-window.md` |
+| **P93** | **Transcript-Binding + Replay-Window for the Store-and-Forward Path** (NEW) | **WRITTEN 2026-07-19** — full 20-point blueprint, D-93-A (privacy fork) and D-93-C (broadcast) both resolved, not deferred. | The **channel-less / detached** per-message store-and-forward + gossip path (defeats cross-node replay C3). | `BLUEPRINT-P93-transcript-binding-replay-window-2026-07-19.md` |
 | **P92** | Mesh hot-stream fast-path (verify-once + channel-bound PQ session MAC) | **FULLY BLUEPRINTED** (S3). GO-WITH-CONDITIONS + measure-first. | The **live continuously-online same-scope** presence stream (narrow optimization). | [`BLUEPRINT-P92-…-2026-07-18.md`](BLUEPRINT-P92-MESH-HOTSTREAM-FASTPATH-2026-07-18.md) — **do not re-derive; reference.** |
-| **P94** | **Scope/Effect Bitmask Representation** (NEW) | **PROPOSED — scope sketch in §5 here**; full blueprint is a follow-up Opus pass. | The per-frame authz decision layer (in-memory only). | *to be written* — `BLUEPRINT-P94-scope-effect-bitmask.md` |
+| **P94** | **Scope/Effect Bitmask Representation** (NEW) | **WRITTEN 2026-07-19** — full 20-point blueprint, sequenced after P92, TLV wire form confirmed unchanged. | The per-frame authz decision layer (in-memory only). | `BLUEPRINT-P94-scope-effect-bitmask-2026-07-19.md` |
 
 ---
 
