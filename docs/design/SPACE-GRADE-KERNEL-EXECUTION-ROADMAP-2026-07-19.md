@@ -59,11 +59,33 @@ test coverage.
 - **Item 22 (verification half only)** — read `mesh.rs`, classify real-port vs stub. The ruling is
   now recorded (§0 above: reimplement), so this verification informs HOW MUCH of `mesh.rs` is
   reusable scaffolding versus needs building from scratch, not whether to proceed.
+  **✅ VERIFICATION COMPLETE 2026-07-19** — proof filed
+  [`AUDIT-ITEM-22-mesh-classification-final-2026-07-19.md`](AUDIT-ITEM-22-mesh-classification-final-2026-07-19.md)
+  (classification table, one row per public symbol, file:line + caller-or-NONE + verdict; blueprint
+  independently re-verified and CONFIRMED). Finding: `mesh.rs` (387 lines, `#[cfg(feature="pq")]`,
+  `pq` NOT default) is a real, tested ML-DSA-65 signed-log primitive with **ZERO production kernel
+  callers** — `MeshLog`/`MlDsaSigner`/`Signer` bench-only, `SignedEntry`/`MeshError`/`HubTransport`
+  uncalled, protocol layer absent; even `mesh-adapter` bypasses it (bebop path-deps, no `pq`).
+  **Scoping handoff to item 23 (gated strictly after — NOT started here):** it is **"mostly stub
+  above the log layer"** — reuse `SignedEntry`/`MeshLog`/`MlDsaSigner` + the `HubTransport` seam
+  as-is (keep, don't rewrite), but sync/consensus/capability/gossip start near-scratch; gossip
+  admission must extend `decision/import_unit()`, never fork a parallel importer (synthesis §17(b)).
 - **Item 18 (narrowed)** — the Laplacian parity pin: dense `laplacian()` ↔ `csr.rs:552
   laplacian_spmv`, plus a `step_wave` reconciliation note. **[new ordering choice]** — promoted from
   mid-roadmap to Tier 0 because §26(d) shrank it to one parity test against an oracle already in-tree.
 - **Item 31 (investigative half)** — `rusqlite` usage read + reclassification; pin the
   `cosmic-text = "*"` wildcard; verify `sha2`-vs-kernel-keccak on the body digest.
+  **✅ INVESTIGATIVE HALF COMPLETE 2026-07-19** — findings filed
+  [`AUDIT-ITEM-31-dependency-findings-2026-07-19.md`](AUDIT-ITEM-31-dependency-findings-2026-07-19.md)
+  (blueprint independently re-verified). **(a) rusqlite** → KEEP-and-contain (cat-2 foreign format,
+  Hermes `state.db` only, no default build path) — docs-only ruling. **(b) cosmic-text `*`** →
+  DEFECT CONFIRMED + FIXED: pinned to already-resolved `0.19.0` (`engine/Cargo.toml:30`), lockfile
+  unchanged, `cargo check --features text` green, committed `c2d0f306a` on
+  `exec/space-grade-tier0-2026-07-19`. **(c) sha2 vs keccak** → NOT a defect, KEEP `sha2`; blueprint
+  CORRECTED (`pub mod pq` is `#[cfg(feature="pq")]`-gated, not "already linked" — the swap would
+  pull `aes-gcm`+`curve25519-dalek`, a net dep increase). Bonus flag confirmed: **dual in-kernel
+  Keccak-f[1600]** (`event_log.rs:67` vs `pq/keccak.rs:156`) — dedup ticket owed to item 25, filed
+  not fixed. Enactment half (Tier 2) allowlists rusqlite+sha2.
 
 ## B. Tier 1 — foundational builds. READY, in this internal order.
 
@@ -145,7 +167,10 @@ test coverage.
    classified with RC-4 as first three entries.
 4. **Item 22 (verification half)** — Proof: the classification cited by file:line — typed boundary
    plus real kernel caller, or no-caller finding filed. Now feeds directly into reimplementation
-   scoping (§0 ruling), not a decision package.
+   scoping (§0 ruling), not a decision package. **✅ DONE 2026-07-19** —
+   [`AUDIT-ITEM-22-mesh-classification-final-2026-07-19.md`](AUDIT-ITEM-22-mesh-classification-final-2026-07-19.md):
+   no-caller finding filed (zero production callers; `MeshLog`/`MlDsaSigner`/`Signer` bench-only,
+   `SignedEntry`/`MeshError`/`HubTransport` uncalled). "Mostly stub above the log layer" — see §A.
 5. **Item 3** — Proof: zero heap allocations under a counting allocator test; one `idx_of`
    definition; golden signature and 1e-12 oracle both green.
 6. **Item 18 (narrowed)** — Proof: a parity test computing Lu via dense `laplacian()` and via
