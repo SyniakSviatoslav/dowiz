@@ -243,7 +243,7 @@ by its Q2-b path counter + (when the surface exists) a render check. RED = a ren
 
 | Q | Item | Falsifier (RED unless proven) |
 |---|---|---|
-| **Q1** | claim-verification checkpoint | ledger carries `DONE-VERIFIED` + `verified-by`; an item at `DONE-VERIFIED` with an unresolvable/absent evidence pointer is caught (P56 `StaleGround` or reviewer) → RED; every landed P75–P96 item carries a filled `verified-by` |
+| **Q1** | claim-verification checkpoint | ledger carries `DONE-VERIFIED` + `verified-by`; an item at `DONE-VERIFIED` with an unresolvable/absent evidence pointer is caught (P56 `StaleGround` or reviewer) → RED; every landed P75–P96 item carries a filled `verified-by`. **Also consumes MESH-14 part 5** (gap-audit "CLOSED-claim must cite a live test" rule — see `mesh-real/BLUEPRINT-MESH-14-DISPOSITION-2026-07-19.md`; not a second CI-lint, one mechanism) |
 | **Q2** | feature telemetry | each built P-item emits its named signal as a `LogEvent` variant / P83 span (asserted present in the JSONL sink); G14 `kernel_span` consumer exists and trips on planted p99 inflation; G15 P96 path counter present; no bespoke logging path |
 | **Q3** | review checkpoint | every red-line P-item (P85/P91/P92/P93) carries a `reviewed-by` pointer to a real `docs/reflections/` D-REVIEW attestation before `DONE-VERIFIED`; no new CI job/file invented |
 | **Q4** | interface verification | P86/P87/P88 carry the P38 WebGL2/CPU-floor DoD line (G2); P96 render-unchanged discharged via Q2-b; no new UI tooling |
