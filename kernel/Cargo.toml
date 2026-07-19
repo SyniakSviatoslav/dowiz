@@ -93,12 +93,13 @@ p67-adapters = []
 # `telemetry` — P83 kernel production observability (BLUEPRINT P83 / SYNTHESIS
 # PERFORMANCE AUDIT §3.3-C4). OFF by default so the shipping binary carries NO
 # observability symbols or filesystem-writer code paths. Behind this flag, the
-# `tracing` spans already placed over the 8 verified hot functions are consumed
-# by a ZERO NEW DEP `SpanMetricsLayer` (reuses the already-linked `tracing` +
-# `tracing-subscriber`) that writes hand-rolled log-bucket latency histograms to
-# `metric.jsonl`, and the Layer-2 `load1/nproc >= 4` breach branch triggers a
-# system-wide `perf record -a -g -F 99` (alert.jsonl). Std-only writer; no
-# serde/network/RNG. The default (shipping) build is behavior- and perf-neutral.
+# `fdr::` spans already placed over the 8 verified hot functions are consumed by a
+# ZERO-DEP `SpanMetricsObserver` (a kernel-owned `fdr::SpanObserver` — the retired
+# `tracing_subscriber::Layer`'s replacement, roadmap items 4+29) that writes
+# hand-rolled log-bucket latency histograms to `metric.jsonl`, and the Layer-2
+# `load1/nproc >= 4` breach branch triggers a system-wide `perf record -a -g -F 99`
+# (alert.jsonl). Std-only writer; no serde/network/RNG. The default (shipping) build
+# is behavior- and perf-neutral.
 telemetry = []
 # `pprof` — P83 Layer-2 fallback ONLY (SYNTHESIS §3.3-C4: "`pprof` only as
 # feature-gated fallback"). Activated when the system-wide `perf` invocation is
@@ -129,14 +130,19 @@ tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 # PQ subsystem deps — OPTIONAL, only linked under the `pq` feature.
 aes-gcm = { version = "0.10.3", features = ["std"], optional = true }
 curve25519-dalek = { version = "4", optional = true }
-# Structured telemetry: spans/events over the hot paths (order fold, place_order).
-# Gated to non-wasm so the wasm cdylib stays lean; native/rlib tests get full traces.
-tracing = "0.1"
+# RETIRED (roadmap items 4+29, dependency-replacement procedure — verdict (a) removed
+# outright): `tracing = "0.1"` + `tracing-subscriber = "0.3"` were deleted here. The kernel
+# now owns its logger/flight-data-recorder (`src/fdr/`); spans/events bind to `fdr::`, the
+# P83 layer is a kernel `fdr::SpanObserver`, and `init_tracing`→`fdr::init`. Removal dropped
+# 19 transitive crates (25→6 in the default no-dev tree). INVARIANT + verification one-liner:
+#   cargo tree --manifest-path kernel/Cargo.toml -e no-dev --locked --offline | grep -c tracing  → 0
+# Ruling: src/fdr/mod.rs module doc (steps 1–5,9,10) +
+# docs/design/BLUEPRINT-ITEMS-04-29-logger-fdr-rewrite-2026-07-19.md. Reopen trigger: a real
+# requirement to export kernel telemetry to an external tracing/OpenTelemetry collector.
 # L0 exact-search verify step (trigram inverted-index narrows candidates,
 # regex verifies each — deterministic, 0 false positives). Blueprint M1/W1-3.
+# (regex is item 5's retirement target — strictly after this change, roadmap §B.)
 regex = "1"
-# Pretty env-filter subscriber for `init_tracing()` (shipped; dev/CLI only, never called from wasm).
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # GPU render backend (P38 O18a) — ONLY compiled under the `gpu` feature so the
 # default kernel carries zero GPU symbols (feature-additive; guard-restorable).
 wgpu = { version = "30.0.0", optional = true }
