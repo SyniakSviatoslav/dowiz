@@ -222,7 +222,18 @@ pub fn roots(coeffs: &[f64]) -> Vec<Complex> {
 /// captures complex conjugate pairs (e.g. the μ≈−1 period-2 cycle). The legacy
 /// O(n⁴) Faddeev-LeVerrier + Durand-Kerner path is retained as a fallback for
 /// n > 32 and as the parity oracle in `householder::tests`.
+/// Test-only instrumentation for the item-16 single-computation proof: counts
+/// entries into `eigenvalues` on the current thread. `thread_local` ⇒ correct
+/// under the parallel test harness (each test thread owns its own counter);
+/// compiled out entirely in non-test builds (`#[cfg(test)]`).
+#[cfg(test)]
+thread_local! {
+    static EIGEN_CALLS: std::cell::Cell<u32> = std::cell::Cell::new(0);
+}
+
 pub fn eigenvalues(a: &[Vec<f64>]) -> Vec<Complex> {
+    #[cfg(test)]
+    EIGEN_CALLS.with(|c| c.set(c.get() + 1));
     let n = a.len();
     if n <= 32 {
         let mut buf = vec![0.0f64; n * n];
@@ -608,7 +619,10 @@ pub fn graph_energy(adj: &[Vec<f64>]) -> f64 {
 /// One-shot spectral profile of a graph's adjacency matrix — the full
 /// vectorless signature the kernel exposes: stability (ρ), mixing (|λ₂|,
 /// gap), connectivity (λ₂-Laplacian), activity (energy), and drift class.
-/// Single eigenvalue pass; all downstream quantities derived from the spectrum.
+/// EXACTLY two eigenvalue passes: one over the adjacency matrix (feeding ρ,
+/// |λ₂|, gap, energy, AND the drift class) and one over its Laplacian (the
+/// Fiedler value) — two distinct operators, neither spectrum computed twice.
+/// Pinned by `graph_spectrum_computes_adjacency_spectrum_once`.
 pub struct GraphSpectrum {
     pub spectral_radius: f64, // ρ = max|λ|  (stability)
     pub slem: f64,            // |λ₂|          (mixing rate)
@@ -635,7 +649,11 @@ pub fn graph_spectrum(adj: &[Vec<f64>]) -> GraphSpectrum {
         spectral_gap: 1.0 - slem_v,
         fiedler,
         energy,
-        drift: classify_drift(adj),
+        // Item-16 collapse: derive drift from the adjacency `rho` already
+        // computed above, NOT a fresh `classify_drift(adj)` → `eigenvalues(adj)`
+        // third pass. `classify_drift_with_rho` keeps the same fail-closed
+        // guards, so the value is byte-identical to the old `classify_drift(adj)`.
+        drift: classify_drift_with_rho(adj, rho),
     }
 }
 
@@ -701,36 +719,39 @@ impl DriftClass {
 /// hysteresis derivation. Was function-local `BAND` in `classify_drift`.
 pub const DRIFT_BAND: f64 = 1e-6;
 
-pub fn classify_drift(a: &[Vec<f64>]) -> DriftClass {
-    // FAIL-CLOSED (BLUEPRINT-P-B §4.2 / gap-audit round-2): any non-finite entry
-    // (NaN poison, ±inf overflow) means the rebuilt operator is ill-formed.
-    // Retaining it would snapshot divergent dynamics, so it MUST classify as
-    // Unstable and be rejected by `RetainedBase::admit`. The old code let NaN
-    // slip through `f64::max` into `Resonant` (a silent admit) — fixed here.
+/// FAIL-CLOSED input guards shared by [`classify_drift`] and the single-pass
+/// [`classify_drift_with_rho`]. Returns `false` (⇒ the caller classifies
+/// `Unstable`) for any ill-formed operator, BEFORE any indexing happens:
+///   * non-finite entry (NaN poison / ±inf overflow) — the pre-fix code let NaN
+///     slip through `f64::max` into `Resonant` (a silent admit); fixed here.
+///     (BLUEPRINT-P-B §4.2 / gap-audit round-2.)
+///   * ragged rows (index-leak / jagged-matrix OOB): a short row would let
+///     `Mat::from_vecvec` stride past its bound on `get(i,j)` → out-of-bounds
+///     read or a release-path panic. Rejected before any indexing.
+///   * unbuildable operator (secondary defense): `from_vecvec_checked` Err.
+/// Extracting these keeps BOTH drift entry points on one guard implementation —
+/// they can never diverge (item-16 single-computation collapse).
+fn drift_guards_ok(a: &[Vec<f64>]) -> bool {
     for row in a {
         for &x in row {
             if !x.is_finite() {
-                return DriftClass::Unstable;
+                return false;
             }
         }
     }
-    // FAIL-CLOSED (root-cause: index-leak / jagged-matrix OOB). A ragged
-    // operator (rows of unequal length) would let `Mat::from_vecvec` stride
-    // past a short row's bound on `get(i,j)` → out-of-bounds read of a
-    // neighbouring element (silent corruption) or a release-path panic.
-    // Reject ragged input as Unstable before any indexing happens.
     let width = a.first().map_or(0, |r| r.len());
     for row in a {
         if row.len() != width {
-            return DriftClass::Unstable;
+            return false;
         }
     }
-    // Secondary defense: if the operator cannot even be built (ragged / non-finite),
-    // `from_vecvec_checked` returns Err — treat as Unstable.
-    if crate::mat::Mat::from_vecvec_checked(a).is_err() {
-        return DriftClass::Unstable;
-    }
-    let rho = spectral_radius(a);
+    crate::mat::Mat::from_vecvec_checked(a).is_ok()
+}
+
+/// The ρ-vs-unit-circle band decision, factored so [`classify_drift`] and
+/// [`classify_drift_with_rho`] share one classification rule (item-16 collapse).
+#[inline]
+fn drift_band(rho: f64) -> DriftClass {
     if rho < 1.0 - DRIFT_BAND {
         DriftClass::Damped
     } else if rho > 1.0 + DRIFT_BAND {
@@ -740,6 +761,29 @@ pub fn classify_drift(a: &[Vec<f64>]) -> DriftClass {
     }
 }
 
+pub fn classify_drift(a: &[Vec<f64>]) -> DriftClass {
+    if !drift_guards_ok(a) {
+        return DriftClass::Unstable;
+    }
+    drift_band(spectral_radius(a))
+}
+
+/// Single-pass drift classification for callers that ALREADY hold ρ (e.g.
+/// [`graph_spectrum`], which computes the adjacency spectrum once). Applies the
+/// identical fail-closed guards as [`classify_drift`] — non-finite / ragged /
+/// unbuildable ⇒ `Unstable` — but takes the caller's already-computed spectral
+/// radius instead of recomputing `eigenvalues(a)`. For any finite, well-formed
+/// operator `rho == spectral_radius(a)` (both = max|λ|), so the result is
+/// byte-identical to `classify_drift(a)`; for ill-formed input the guard fires
+/// first and `rho` is never read. This removes the redundant THIRD eigenvalue
+/// pass `graph_spectrum` used to make via its `classify_drift(adj)` call.
+fn classify_drift_with_rho(a: &[Vec<f64>], rho: f64) -> DriftClass {
+    if !drift_guards_ok(a) {
+        return DriftClass::Unstable;
+    }
+    drift_band(rho)
+}
+
 /// One-line human-readable spectral report for a graph adjacency matrix — the
 /// vectorless "at-a-glance" signature. Combines the four structural invariants
 /// the kernel already computes:
@@ -747,19 +791,21 @@ pub fn classify_drift(a: &[Vec<f64>]) -> DriftClass {
 ///   * spectral_radius ρ = max|λ|          (Perron–Frobenius stability)
 ///   * fiedler         λ₂(L)               (algebraic connectivity)
 ///   * drift ∈ {Damped|Resonant|Unstable} (ρ vs the unit circle)
-/// No embedding, no I/O, single pass over the spectrum via the reused helpers.
+/// No embedding, no I/O. Every field is read from ONE [`graph_spectrum`] profile
+/// (two eigenvalue passes: adjacency + Laplacian) instead of the four
+/// independent passes the pre-item-16 body made (`classify_drift` +
+/// `graph_energy` + `spectral_radius` + `algebraic_connectivity`). Pinned by
+/// `graph_energy_report_computes_spectrum_once`.
 pub fn graph_energy_report(adj: &[Vec<f64>]) -> String {
-    let drift = match classify_drift(adj) {
+    let s = graph_spectrum(adj);
+    let drift = match s.drift {
         DriftClass::Damped => "Damped",
         DriftClass::Resonant => "Resonant",
         DriftClass::Unstable => "Unstable",
     };
     format!(
         "energy={:.6} spectral_radius={:.6} fiedler={:.6} drift={}",
-        graph_energy(adj),
-        spectral_radius(adj),
-        algebraic_connectivity(adj),
-        drift,
+        s.energy, s.spectral_radius, s.fiedler, drift,
     )
 }
 
@@ -797,6 +843,75 @@ mod tests {
         assert_eq!(DriftClass::Damped.wire_code(), 0);
         assert_eq!(DriftClass::Resonant.wire_code(), 1);
         assert_eq!(DriftClass::Unstable.wire_code(), 2);
+    }
+
+    // ── ITEM 16 PROOF (single-computation collapse): the one-shot profile must
+    //    make EXACTLY two eigenvalue passes — one over the adjacency matrix
+    //    (feeding ρ, |λ₂|, gap, energy AND drift) and one over its Laplacian
+    //    (Fiedler) — never recomputing the adjacency spectrum. Before the
+    //    collapse, `drift: classify_drift(adj)` forced a THIRD `eigenvalues(adj)`
+    //    pass; a regression to any per-functional recompute pushes this past 2.
+    //    This directly proves "one computation, many functionals" — not mere
+    //    value agreement. `EIGEN_CALLS` is a thread-local, so the count is
+    //    unaffected by other tests running in parallel on other threads. ──
+    #[test]
+    fn graph_spectrum_computes_adjacency_spectrum_once() {
+        let k3 = vec![
+            vec![0.0, 1.0, 1.0],
+            vec![1.0, 0.0, 1.0],
+            vec![1.0, 1.0, 0.0],
+        ];
+        EIGEN_CALLS.with(|c| c.set(0));
+        let _ = graph_spectrum(&k3);
+        let calls = EIGEN_CALLS.with(|c| c.get());
+        assert_eq!(
+            calls, 2,
+            "graph_spectrum must compute eigenvalues exactly twice (adjacency + \
+             Laplacian); got {calls} — a 3rd pass means a functional is \
+             recomputing the adjacency spectrum"
+        );
+    }
+
+    // ── ITEM 16 PROOF (report path): `graph_energy_report` derives every field
+    //    from ONE `graph_spectrum` profile — exactly two eigenvalue passes. The
+    //    pre-collapse body made FOUR (classify_drift + graph_energy +
+    //    spectral_radius + algebraic_connectivity). ──
+    #[test]
+    fn graph_energy_report_computes_spectrum_once() {
+        let k3 = vec![
+            vec![0.0, 1.0, 1.0],
+            vec![1.0, 0.0, 1.0],
+            vec![1.0, 1.0, 0.0],
+        ];
+        EIGEN_CALLS.with(|c| c.set(0));
+        let _ = graph_energy_report(&k3);
+        let calls = EIGEN_CALLS.with(|c| c.get());
+        assert_eq!(
+            calls, 2,
+            "graph_energy_report must derive all fields from one graph_spectrum \
+             (2 passes); got {calls}"
+        );
+    }
+
+    // ── ITEM 16 (consistency): the single-computation profile must still agree
+    //    with each standalone functional on the SAME finite input — the collapse
+    //    changed HOW MANY times the spectrum is computed, never the values.
+    //    (energy differs only at ULP scale: sorted-descending vs index-order
+    //    summation of the same |λ| set — well within 1e-12.) ──
+    #[test]
+    fn graph_spectrum_fields_match_standalone_functionals() {
+        let p3 = vec![
+            vec![0.0, 1.0, 0.0],
+            vec![1.0, 0.0, 1.0],
+            vec![0.0, 1.0, 0.0],
+        ];
+        let s = graph_spectrum(&p3);
+        assert!(approx(s.spectral_radius, spectral_radius(&p3), 1e-12));
+        assert!(approx(s.slem, slem(&p3), 1e-12));
+        assert!(approx(s.spectral_gap, spectral_gap(&p3), 1e-12));
+        assert!(approx(s.fiedler, algebraic_connectivity(&p3), 1e-12));
+        assert!(approx(s.energy, graph_energy(&p3), 1e-12));
+        assert_eq!(s.drift, classify_drift(&p3));
     }
 
     // ── FAIL-CLOSED (gap-audit round-2): NaN/±inf in the operator MUST NOT be

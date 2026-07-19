@@ -592,4 +592,116 @@ mod tests {
             assert_ne!(k_t, k_recv, "tamper not detected at seed {s}");
         }
     }
+
+    // ── Item 7 (space-grade roadmap §C): native EXHAUSTIVE ML-KEM ring arithmetic ──
+    // Per RESEARCH-NATIVE-KANI-REPLACEMENT-FEASIBILITY-2026-07-19.md §2: every ML-KEM
+    // arithmetic contract is either a bounded-domain exhaustion (the csr.rs/65536-pair
+    // idiom) or a modulo-by-positive-Q inspection — the identical "for all inputs"
+    // guarantee as a Kani harness, zero toolchain dependency, in the fast hardening-gate.
+
+    /// `red` total, over the i64 edge cases (i64::MIN — the only true overflow risk since
+    /// `%` never overflows on a positive divisor — plus ±Q boundaries, 0, and a dense
+    /// sweep): result ∈ [0, Q) and ≡ x (mod Q), never panics. Universality over all 2^64
+    /// i64 is a 3-line inspection (`x % Q` total for Q>0; the `r<0` fixup lands in [1,Q));
+    /// this pins the edges that inspection reasons about.
+    #[test]
+    fn item7_red_total_edges_and_sweep() {
+        let check = |x: i64| {
+            let r = red(x);
+            assert!(r >= 0 && r < Q, "red({x}) = {r} not in [0,Q)");
+            // ≡ x (mod Q): (r - x) divisible by Q, computed in i128 to avoid overflow.
+            assert_eq!((r as i128 - x as i128).rem_euclid(Q as i128), 0, "red({x}) wrong residue");
+        };
+        check(i64::MIN);
+        check(i64::MAX);
+        check(0);
+        for k in -5i64..=5 {
+            check(k * Q as i64);
+            check(k * Q as i64 + 1);
+            check(k * Q as i64 - 1);
+        }
+        // Dense sweep across a multi-period window straddling zero.
+        let mut x = -200_000i64;
+        while x <= 200_000 {
+            check(x);
+            x += 1;
+        }
+    }
+
+    /// EXHAUSTIVE over all coefficient pairs (a, b) ∈ [0, Q)² (~1.1e7): the `poly_add`/
+    /// `poly_sub` per-element body `red(a ± b)` never overflows i32 and yields a value in
+    /// [0, Q) congruent to a ± b. This is the 65536-pair idiom, slightly larger.
+    #[test]
+    fn item7_exhaustive_poly_addsub_body() {
+        for a in 0..Q {
+            for b in 0..Q {
+                let s = red(a + b);
+                assert!(s >= 0 && s < Q);
+                assert_eq!(s, (a + b) % Q);
+                let d = red(a - b);
+                assert!(d >= 0 && d < Q);
+                assert_eq!(d, ((a - b) % Q + Q) % Q);
+            }
+        }
+    }
+
+    /// EXHAUSTIVE poly_mul BODY LEMMA (NOT a full-function proof — the 65,536-iteration
+    /// induction is documented; the machine proves the step). The body's behavior depends
+    /// only on (r_val, term) ∈ [0, Q)² (~1.1e7), since `term = (ai·bj) % Q` is the sole
+    /// path ai,bj feed. Both the in-range accumulate branch and the negacyclic-wrap branch
+    /// (kem.rs:108-116) preserve the loop invariant `r[k] ∈ [0, Q)` with no i64 overflow.
+    /// The `ai·bj` product itself is ≤ (Q-1)² ≈ 1.1e7 « i64::MAX (checked on the corners).
+    #[test]
+    fn item7_exhaustive_poly_mul_body_lemma() {
+        // Product cannot overflow i64 anywhere in the domain (corner check).
+        let maxprod = (Q as i64 - 1) * (Q as i64 - 1);
+        assert!(maxprod < i64::MAX && maxprod < (1i64 << 62));
+        for r_val in 0..Q {
+            for term in 0..Q {
+                // in-range branch: r[idx] = (r_val + term) % Q
+                let add = ((r_val as i64 + term as i64) % Q as i64) as i32;
+                assert!(add >= 0 && add < Q);
+                // negacyclic-wrap branch: r[idx2] = (r_val - term) % Q, then += Q if < 0
+                let mut sub = ((r_val as i64 - term as i64) % Q as i64) as i32;
+                if sub < 0 {
+                    sub += Q;
+                }
+                assert!(sub >= 0 && sub < Q, "wrap branch left {sub} outside [0,Q)");
+            }
+        }
+    }
+
+    /// EXHAUSTIVE over x ∈ [0, Q) × the deployed widths d ∈ {1, 4, 10, 12} (~13.3k):
+    /// `compress`/`decompress` are panic-/overflow-free with in-range outputs.
+    #[test]
+    fn item7_exhaustive_compress_decompress_bounds() {
+        for &d in &[1usize, 4, 10, 12] {
+            let bound = 1i32 << d;
+            for x in 0..Q {
+                let c = compress(d, x);
+                assert!(c >= 0 && c < bound, "compress({d},{x}) = {c} out of [0,2^d)");
+                let dec = decompress(d, c);
+                assert!(dec >= 0 && dec < Q, "decompress({d},{c}) = {dec} out of [0,Q)");
+            }
+        }
+    }
+
+    /// `byte_encode`/`byte_decode` round-trip at the deployed widths with correctly-sized
+    /// buffers: index arithmetic stays in bounds (the genuine OOB risk class on
+    /// deserialization), and decode inverts encode within the domain. Widths, not byte
+    /// values, drive the indices (research §2), so exhausting the widths suffices.
+    #[test]
+    fn item7_byte_codec_bounds_and_roundtrip() {
+        for &d in &[1usize, 4, 10, 12] {
+            let mut poly = [0i32; N];
+            for (i, c) in poly.iter_mut().enumerate() {
+                *c = ((i * 7 + 3) as i32) % (1 << d); // in-domain sample coefficients
+            }
+            let mut buf = vec![0u8; 32 * d]; // exactly N*d bits
+            byte_encode(d, &poly, &mut buf); // must not OOB
+            let mut back = [0i32; N];
+            byte_decode(d, &buf, &mut back); // must not OOB
+            assert_eq!(poly, back, "byte codec round-trip broke at d={d}");
+        }
+    }
 }

@@ -11,7 +11,8 @@
 mod engine;
 mod rules;
 
-use engine::{scan_paths, Finding, ScanSummary};
+use dowiz_kernel::json::Value;
+use engine::scan_paths;
 use std::io::{BufRead, Write};
 use std::process::exit;
 
@@ -47,11 +48,15 @@ fn usage() {
 
 fn run_scan(paths: &[String]) {
     let (findings, summary) = scan_paths(paths);
-    let out = serde_json::json!({
-        "findings": findings,
-        "summary": summary,
-    });
-    println!("{}", serde_json::to_string_pretty(&out).unwrap());
+    let out = Value::Object(vec![
+        (
+            "findings".into(),
+            Value::Array(findings.iter().map(|f| f.to_value()).collect()),
+        ),
+        ("summary".into(), summary.to_value()),
+    ]);
+    // Compact (was serde_json::to_string_pretty) — still valid RFC 8259, consumer-parseable.
+    println!("{}", out.to_string());
 }
 
 fn run_serve() {
@@ -71,25 +76,44 @@ fn run_serve() {
     }
 }
 
+// Item 31 §4.4 Phase-A cutover: JSON-RPC frames are parsed + built with the kernel-owned
+// `dowiz_kernel::json` primitive (bounded, degrade-closed, differentially proven vs serde_json)
+// instead of `serde_json`. Local dev tooling; malformed input degrades to a JSON-RPC parse error.
 fn handle_rpc(line: &str) -> String {
-    let v: serde_json::Value = match serde_json::from_str(line) {
+    let obj = |kvs: Vec<(String, Value)>| Value::Object(kvs);
+    let v = match dowiz_kernel::json::parse(line) {
         Ok(v) => v,
         Err(_) => {
-            return serde_json::to_string(&serde_json::json!({
-                "jsonrpc": "2.0", "id": null,
-                "error": {"code": -32700, "message": "parse error"}
-            }))
-            .unwrap()
+            return obj(vec![
+                ("jsonrpc".into(), "2.0".into()),
+                ("id".into(), Value::Null),
+                (
+                    "error".into(),
+                    obj(vec![
+                        ("code".into(), Value::from(-32700i64)),
+                        ("message".into(), "parse error".into()),
+                    ]),
+                ),
+            ])
+            .to_string()
         }
     };
-    let id = v.get("id").cloned().unwrap_or(serde_json::Value::Null);
+    let id = v.get("id").cloned().unwrap_or(Value::Null);
     let method = v.get("method").and_then(|m| m.as_str()).unwrap_or("");
-    let params = v.get("params").cloned().unwrap_or(serde_json::Value::Null);
+    let params = v.get("params").cloned().unwrap_or(Value::Null);
     match method {
-        "health" => serde_json::to_string(&serde_json::json!({
-            "jsonrpc": "2.0", "id": id, "result": {"status": "ok", "rules": rules::RULES.len()}
-        }))
-        .unwrap(),
+        "health" => obj(vec![
+            ("jsonrpc".into(), "2.0".into()),
+            ("id".into(), id),
+            (
+                "result".into(),
+                obj(vec![
+                    ("status".into(), "ok".into()),
+                    ("rules".into(), Value::from(rules::RULES.len())),
+                ]),
+            ),
+        ])
+        .to_string(),
         "scan" => {
             let paths = params
                 .get("paths")
@@ -97,16 +121,34 @@ fn handle_rpc(line: &str) -> String {
                 .map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect::<Vec<_>>())
                 .unwrap_or_default();
             let (findings, summary) = scan_paths(&paths);
-            serde_json::to_string(&serde_json::json!({
-                "jsonrpc": "2.0", "id": id, "result": {"findings": findings, "summary": summary}
-            }))
-            .unwrap()
+            obj(vec![
+                ("jsonrpc".into(), "2.0".into()),
+                ("id".into(), id),
+                (
+                    "result".into(),
+                    obj(vec![
+                        (
+                            "findings".into(),
+                            Value::Array(findings.iter().map(|f| f.to_value()).collect()),
+                        ),
+                        ("summary".into(), summary.to_value()),
+                    ]),
+                ),
+            ])
+            .to_string()
         }
-        _ => serde_json::to_string(&serde_json::json!({
-            "jsonrpc": "2.0", "id": id,
-            "error": {"code": -32601, "message": "method not found"}
-        }))
-        .unwrap(),
+        _ => obj(vec![
+            ("jsonrpc".into(), "2.0".into()),
+            ("id".into(), id),
+            (
+                "error".into(),
+                obj(vec![
+                    ("code".into(), Value::from(-32601i64)),
+                    ("message".into(), "method not found".into()),
+                ]),
+            ),
+        ])
+        .to_string(),
     }
 }
 

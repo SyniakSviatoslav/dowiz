@@ -10,8 +10,10 @@ description = "P40 agent facade — the ONLY crate in the agent lane that import
 
 [dependencies]
 dowiz-kernel = { path = "../kernel" }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# serde + serde_json REMOVED (roadmap item 31 §4.4 Phase-A cutover): the one parse site
+# (ReadOrderStatusTool::parse_arg) now uses the kernel-owned `dowiz_kernel::json` primitive
+# (differentially proven vs serde_json — kernel/tests/json_oracle.rs). `cargo tree -e no-dev`
+# no longer carries serde/serde_json; this crate's ZERO-DEP-ALLOWLIST.txt shrinks accordingly.
 
 [lib]
 name = "agent_facade"

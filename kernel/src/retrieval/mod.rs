@@ -1,7 +1,8 @@
 //! retrieval/ — internal-retrieval layers (vectorless, deterministic).
 //!
 //! Two complementary layers over the same 20-doc living-memory corpus:
-//!   * L0 (M1) exact byte+regex search — sibling subagent (W1-3):
+//!   * L0 (M1) exact byte+pattern search (restricted {literal, `.`, `.*`}
+//!     wildcard subset; `regex` retired item 5) — sibling subagent (W1-3):
 //!       - `fixtures` — the frozen 20-doc corpus + synthetic generator;
 //!       - `index`    — deterministic trigram inverted index + exact verify;
 //!       - `tests`    — RED→GREEN exact-match / 0-false-positive suite.
@@ -23,6 +24,9 @@ pub mod diffusion;
 pub mod fixtures;
 /// L0 deterministic trigram inverted index + exact verify (W1-3).
 pub mod index;
+/// L0 kernel-owned restricted wildcard matcher ({literal, `.`, `.*`}) — the
+/// regex-retirement replacement for the `query_regex` verify step (item 5).
+pub mod pattern;
 /// M4/W4-1 — native std-only content-addressed living-memory store (default)
 /// + feature-gated `pgrust` SQL adapter boundary (OFF by default).
 pub mod memory_store;

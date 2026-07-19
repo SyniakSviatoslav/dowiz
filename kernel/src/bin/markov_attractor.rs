@@ -9,7 +9,16 @@
 //! Usage:
 //!   cat events.txt | markov_attractor        # one token per line on stdin
 //!   markov_attractor --selftest               # parity self-check vs known verdicts
+//!
+//! PMU companion (roadmap item 27, classifier-input half): the `analyze_detailed` call is
+//! window-bracketed with a before/after [`PmuStation`] snapshot, and the verdict + PMU delta
+//! are logged as ONE FDR record (`name: "markov_verdict"`) via `fdr::emit_verdict_pmu`. The
+//! stdout JSON contract above is UNCHANGED (the FDR record goes to the ring/stderr, never
+//! stdout), and `analyze_detailed` stays a pure function — the PMU data rides alongside the
+//! verdict, it is not a classifier input. Durable capture is opt-in via `DOWIZ_FDR_DIR`; with
+//! no sink installed the emit is a zero-cost no-op, so `check.sh`'s behavior is unchanged.
 
+use dowiz_kernel::fdr::pmu::PmuStation;
 use dowiz_kernel::markov::{analyze_detailed, Verdict};
 use std::io::Read;
 use std::process::exit;
@@ -32,7 +41,23 @@ fn main() {
         .map(|l| l.trim())
         .filter(|l| !l.is_empty())
         .collect();
-    let r = analyze_detailed(&toks);
+
+    // Opt-in durable FDR capture (roadmap item 27). Default: no sink ⇒ the emit below is a
+    // no-op and check.sh sees the identical stdout with zero extra cost.
+    if let Ok(dir) = std::env::var("DOWIZ_FDR_DIR") {
+        if !dir.is_empty() {
+            let _ = dowiz_kernel::fdr::init(dowiz_kernel::fdr::FdrConfig {
+                stderr: false,
+                ring_dir: Some(std::path::PathBuf::from(dir)),
+                ..Default::default()
+            });
+        }
+    }
+
+    // Window-bracket the classification with a before/after PMU snapshot. `analyze_detailed`
+    // is called exactly as before (inside the closure); the delta rides alongside the verdict.
+    let station = PmuStation::new();
+    let (r, pmu_delta) = station.bracket(|| analyze_detailed(&toks));
 
     // Hand-rolled JSON — matches the Python key order exactly (kernel is serde-free).
     let eigs_json: Vec<String> = r
@@ -69,22 +94,18 @@ fn main() {
         eigs_json.join(", "),
         stat_json.join(", ")
     );
+
+    // Companion FDR record: the verdict string + the window's PMU delta, on ONE record.
+    // No-op unless a sink was installed above (DOWIZ_FDR_DIR); never touches stdout.
+    dowiz_kernel::fdr::emit_verdict_pmu("markov_verdict", r.verdict_str(), pmu_delta);
 }
 
-/// Minimal JSON string escape (handles the quotes/backslashes the reason text uses).
+/// Minimal JSON string escape — now the single `fdr::json` authority (roadmap items 4+29
+/// absorbed the two coexisting escapers into one). Byte-identical to the deleted local
+/// `esc()` body (same match arms, same capacity); golden-pinned in `fdr::json` tests and by
+/// this CLI's own `--selftest` output being unchanged.
 fn esc(s: &str) -> String {
-    let mut o = String::with_capacity(s.len() + 2);
-    for c in s.chars() {
-        match c {
-            '"' => o.push_str("\\\""),
-            '\\' => o.push_str("\\\\"),
-            '\n' => o.push_str("\\n"),
-            '\r' => o.push_str("\\r"),
-            '\t' => o.push_str("\\t"),
-            _ => o.push(c),
-        }
-    }
-    o
+    dowiz_kernel::fdr::json::escape(s)
 }
 
 /// RED→GREEN self-check: the Python's headline verdicts must hold in the kernel.

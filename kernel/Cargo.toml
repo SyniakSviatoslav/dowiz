@@ -8,6 +8,13 @@ description = "dowiz deterministic core: order-state machine (decide/fold Law) +
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+# Declare the `kani` cfg (injected by `cargo kani` only under bounded-model-checking;
+# item 7). This is a LINT config, not a dependency — `cargo tree -e no-dev` is unaffected
+# and the zero-dep gate stays green — it merely silences the `unexpected_cfgs` warning on
+# the `#[cfg(kani)]` proof modules in normal builds.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+
 [features]
 # `std` (default) enables runtime CPU-feature detection for the FMA eigensolver
 # kernel. Disable (`--no-default-features`) for a no-std embedding: the solver's
@@ -35,6 +42,14 @@ wasm = ["json-api", "dep:wasm-bindgen", "dep:serde_yaml"]
 # `chaos` module is `#[cfg(any(test, feature = "chaos"))]`); a release build
 # compiles the injection machinery to `()`, unrepresentable-at-the-boundary.
 chaos = []
+# `ct-gate` — the zero-dep dudect-style constant-time timing gate (roadmap item 6,
+# `src/ct_gate.rs`). OFF by default so a shipping binary carries NO timing-harness
+# symbols ("CI-time harness, not linked", SYNTHESIS §4 item 2). The module is
+# `#[cfg(any(test, feature = "ct-gate"))]`, so `cargo test` sees it regardless; the
+# feature exists so the harness can also be compiled into a dedicated non-test build.
+# Pure `std` (Instant + Welford), pulls no external crate. Its planted-leak self-test
+# runs in release via `scripts/hardening-gate.sh` (§10-P7: the verifier proves it can reject).
+ct-gate = []
 # `count-allocs` — installs a counting global allocator (W5 DoD §8.2) that
 # measures HEAP allocations around a code region, so the criterion A/B's
 # "≤ 8 heap allocations on the arena path" assertion is INSTRUMENTED rather
@@ -93,12 +108,13 @@ p67-adapters = []
 # `telemetry` — P83 kernel production observability (BLUEPRINT P83 / SYNTHESIS
 # PERFORMANCE AUDIT §3.3-C4). OFF by default so the shipping binary carries NO
 # observability symbols or filesystem-writer code paths. Behind this flag, the
-# `tracing` spans already placed over the 8 verified hot functions are consumed
-# by a ZERO NEW DEP `SpanMetricsLayer` (reuses the already-linked `tracing` +
-# `tracing-subscriber`) that writes hand-rolled log-bucket latency histograms to
-# `metric.jsonl`, and the Layer-2 `load1/nproc >= 4` breach branch triggers a
-# system-wide `perf record -a -g -F 99` (alert.jsonl). Std-only writer; no
-# serde/network/RNG. The default (shipping) build is behavior- and perf-neutral.
+# `fdr::` spans already placed over the 8 verified hot functions are consumed by a
+# ZERO-DEP `SpanMetricsObserver` (a kernel-owned `fdr::SpanObserver` — the retired
+# `tracing_subscriber::Layer`'s replacement, roadmap items 4+29) that writes
+# hand-rolled log-bucket latency histograms to `metric.jsonl`, and the Layer-2
+# `load1/nproc >= 4` breach branch triggers a system-wide `perf record -a -g -F 99`
+# (alert.jsonl). Std-only writer; no serde/network/RNG. The default (shipping) build
+# is behavior- and perf-neutral.
 telemetry = []
 # `pprof` — P83 Layer-2 fallback ONLY (SYNTHESIS §3.3-C4: "`pprof` only as
 # feature-gated fallback"). Activated when the system-wide `perf` invocation is
@@ -129,14 +145,29 @@ tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 # PQ subsystem deps — OPTIONAL, only linked under the `pq` feature.
 aes-gcm = { version = "0.10.3", features = ["std"], optional = true }
 curve25519-dalek = { version = "4", optional = true }
-# Structured telemetry: spans/events over the hot paths (order fold, place_order).
-# Gated to non-wasm so the wasm cdylib stays lean; native/rlib tests get full traces.
-tracing = "0.1"
-# L0 exact-search verify step (trigram inverted-index narrows candidates,
-# regex verifies each — deterministic, 0 false positives). Blueprint M1/W1-3.
-regex = "1"
-# Pretty env-filter subscriber for `init_tracing()` (shipped; dev/CLI only, never called from wasm).
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# RETIRED (roadmap items 4+29, dependency-replacement procedure — verdict (a) removed
+# outright): `tracing = "0.1"` + `tracing-subscriber = "0.3"` were deleted here. The kernel
+# now owns its logger/flight-data-recorder (`src/fdr/`); spans/events bind to `fdr::`, the
+# P83 layer is a kernel `fdr::SpanObserver`, and `init_tracing`→`fdr::init`. Removal dropped
+# 19 transitive crates (25→6 in the default no-dev tree). INVARIANT + verification one-liner:
+#   cargo tree --manifest-path kernel/Cargo.toml -e no-dev --locked --offline | grep -c tracing  → 0
+# Ruling: src/fdr/mod.rs module doc (steps 1–5,9,10) +
+# docs/design/BLUEPRINT-ITEMS-04-29-logger-fdr-rewrite-2026-07-19.md. Reopen trigger: a real
+# requirement to export kernel telemetry to an external tracing/OpenTelemetry collector.
+# RETIRED (roadmap item 5, dependency-replacement procedure — verdict (a) removed
+# outright): `regex = "1"` was deleted here. The L0 exact-search verify step now uses
+# the kernel-owned restricted wildcard matcher (`src/retrieval/pattern.rs`, subset
+# {literal, `.`, `.*`}, typed rejection of every other metacharacter). The one
+# production seam (`TrigramIndex::query_regex`) had ZERO production callers; the only
+# pattern ever compiled anywhere was `note-.*-recall`. Removal drops regex's whole
+# subtree — the kernel's LAST 5 external no-dev crates (regex, regex-automata,
+# regex-syntax, aho-corasick, memchr) → the default no-dev tree is now ZERO external
+# crates. INVARIANT + verification one-liner:
+#   cargo tree --manifest-path kernel/Cargo.toml -e no-dev --locked --offline --prefix none \
+#     | awk '{print $1}' | sort -u | grep -vc '^dowiz-kernel$'   → 0
+# Ruling: src/retrieval/pattern.rs module doc (steps 1–5,9,10) +
+# docs/design/BLUEPRINT-ITEM-05-regex-retirement-2026-07-19.md. Reopen trigger: a real
+# production caller needing pattern features beyond {literal, `.`, `.*`}.
 # GPU render backend (P38 O18a) — ONLY compiled under the `gpu` feature so the
 # default kernel carries zero GPU symbols (feature-additive; guard-restorable).
 wgpu = { version = "30.0.0", optional = true }
@@ -153,6 +184,11 @@ thunderdome = { version = "0.6", optional = true }
 [dev-dependencies]
 # Benchmarking harness for real latency/throughput telemetry on the hot paths.
 criterion = "0.5"
+# Item 31 §4: differential oracle for the hand-rolled `kernel::json` parser/serializer. DEV-ONLY —
+# it sits OUTSIDE the `-e no-dev` zero-dep proof surface, so the kernel's empty allowlist stays
+# empty (`cargo tree -e no-dev` excludes dev-deps). Used only by tests/json_oracle.rs to assert
+# kernel::json parses/round-trips a real carrier corpus identically to the incumbent serde_json.
+serde_json = "1"
 # PQ KAT test macro expansion (dsa_acvp_tests.rs) — dev-only, not in any build path.
 paste = "1.0"
 # Property-test harness for the P47 reconciliation invariant (B3) — arbitrary order
@@ -219,6 +255,14 @@ required-features = ["pq"]
 name = "contention"
 harness = false
 
+# Item 26 (space-grade exec roadmap §C) — batching MEASUREMENT scaffold. Measures
+# three existing paths (event-log commit fsync, FDR ring, decision import) to
+# establish the baselines the batching-research pass requires. Adds NO production
+# code; touches only the public API. See docs/design/AUDIT-ITEM-26-*.
+[[bench]]
+name = "batching"
+harness = false
+
 
 # NOTE: the W5 counting-allocator integration test (tests/arena_counting_allocs.rs)
 # is not yet wired — the counting global-allocator feature exists (`count-allocs`,
@@ -243,6 +287,13 @@ path = "src/bin/lm.rs"
 [[bin]]
 name = "markov_attractor"
 path = "src/bin/markov_attractor.rs"
+
+# FDR durable-ring test/ops tool (roadmap items 4+29). Dual-mode (write / write-clean /
+# recover); the kill-9 recovery integration test (tests/fdr_kill9.rs) spawns it as a real
+# child process and SIGKILLs it. Pure std, links dowiz_kernel — zero external deps.
+[[bin]]
+name = "fdr_recorder"
+path = "src/bin/fdr_recorder.rs"
 
 [profile.release]
 opt-level = 3

@@ -1,0 +1,25 @@
+# Zero-dep allowlist for the dowiz-kernel DEFAULT no-dev build (roadmap items 1+13).
+# INVARIANT: this file may only SHRINK. CI compares HEAD against origin/main and
+# fails if any name present here is absent there (= growth). The ONLY sanctioned
+# growth path is editing the `zero-dep-gate` job in .github/workflows/ci.yml in
+# the same reviewed diff — that edit IS the explicit exception record.
+# Rationale + retirement plan: docs/design/SPACE-GRADE-KERNEL-ARCHITECTURE-SYNTHESIS-2026-07-19.md §0.1.
+#
+# 2026-07-19 (roadmap items 4+29): the `tracing` + `tracing-subscriber` pair was RETIRED
+# (kernel now owns src/fdr/). That dropped these 19 crates from the default no-dev tree:
+#   tracing tracing-subscriber tracing-attributes tracing-core tracing-log
+#   proc-macro2 quote syn unicode-ident matchers nu-ansi-term sharded-slab thread_local
+#   cfg-if lazy_static log once_cell pin-project-lite smallvec
+# That left exactly 5 external crates (regex's subtree).
+#
+# 2026-07-19 (roadmap item 5 — FINAL shrink `{regex}` → `{}`): `regex` was RETIRED (kernel
+# now owns src/retrieval/pattern.rs, the restricted {literal, `.`, `.*`} matcher). That
+# dropped the last 5 external crates from the default no-dev tree:
+#   regex regex-automata regex-syntax aho-corasick memchr
+# The default no-dev tree is now the `dowiz-kernel` root ONLY — ZERO external crates.
+# This closes ALL of Tier 1 of the space-grade execution roadmap: the kernel's default
+# build has genuinely zero external dependencies.
+#
+# The allowlist below this line is therefore EMPTY (0 external crates allowed). Gate A is
+# vacuously green on an empty actual tree; Gate B (shrink-only) stays satisfied.
+# --- no external crates permitted in the default no-dev build ---

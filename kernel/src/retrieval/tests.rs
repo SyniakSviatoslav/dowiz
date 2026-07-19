@@ -84,22 +84,21 @@ fn verify_filters_overbroad_candidates_no_false_positives() {
 }
 
 #[test]
-fn regex_query_exact_and_zero_false_positives() {
+fn pattern_query_exact_and_zero_false_positives() {
     let idx = build();
-    // Pattern with a literal trigram run → candidate reduction + regex verify.
+    // Pattern with a literal trigram run → candidate reduction + matcher verify.
     let pat = r"note-.*-recall";
-    let got = idx.query_regex(pat).expect("valid regex");
-    let re = regex::Regex::new(pat).unwrap();
-    let oracle: Vec<u32> = FIXTURE
-        .iter()
-        .enumerate()
-        .filter(|(_, d)| re.is_match(d))
-        .map(|(i, _)| i as u32)
-        .collect();
-    assert_eq!(got, oracle);
+    let got = idx.query_pattern(pat).expect("valid pattern");
+    // Frozen golden: the retired `regex` crate matched exactly doc 7 for this
+    // pattern; that verdict is preserved here as a literal (the `regex`
+    // differential that produced it lives in `pattern.rs` pre-removal history +
+    // the naive-reference cross-check). See item-5 ruling.
     assert_eq!(got, vec![7]); // note-heat-kernel-recall.md
+    // 0 false positives: every returned doc really matches the pattern, verified
+    // by the kernel-owned matcher (an independent recompile of the same pattern).
+    let compiled = super::pattern::Pattern::compile(pat).unwrap();
     for &d in &got {
-        assert!(re.is_match(FIXTURE[d as usize]));
+        assert!(compiled.is_match(FIXTURE[d as usize]));
     }
 }
 

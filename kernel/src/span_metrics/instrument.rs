@@ -1,11 +1,10 @@
 //! telemetry/instrument.rs — P83 Layer 1 span wrappers for the 8 verified functions.
 //!
 //! SYNTHESIS PERFORMANCE AUDIT 2026-07-18 §3.3-C4 names exactly eight functions to
-//! instrument with production span metrics. Three already carry `tracing` spans in
-//! the kernel source (`place_order`, `place_order_priced`, `fold_transitions`); this
-//! module adds the remaining five as thin `#[instrument(...)]`-style wrappers so the
-//! `SpanMetricsLayer` (obs.rs) can measure them without touching the functions'
-//! bodies or their red-line logic:
+//! instrument with production span metrics. Three already carry spans in the kernel source
+//! (`place_order`, `place_order_priced`, `fold_transitions`); this module adds the
+//! remaining five as thin wrappers so the `SpanMetricsObserver` (obs.rs) can measure them
+//! without touching the functions' bodies or their red-line logic:
 //!
 //!   * `route`              — `crate::router::route`                          (always)
 //!   * `commit_after_decide`— `crate::event_log::EventLog::commit_after_decide`(always)
@@ -16,19 +15,20 @@
 //! Explicitly EXCLUDED (SYNTHESIS §6-E18): `assert_transition`'s inner loop is NOT
 //! instrumented — the `fold_transitions` span + Layer-2 sampler cover it.
 //!
-//! The wrappers are `#[cfg(feature = "telemetry")]` so the shipping binary pays zero
-//! cost: with the feature OFF, callers use the real functions directly; with it ON,
-//! the `obs` layer's `init` registers a subscriber that records these spans to
-//! `metric.jsonl`. The wrappers exist so the spans are NAMED and discoverable even if
-//! a caller does not otherwise enter them — they forward 1:1 to the underlying function
-//! and add only a `tracing` span (zero logic change, zero money/FSM surface touched).
-
-#[cfg(feature = "telemetry")]
-use tracing::instrument;
+//! Cutover note (roadmap items 4+29): the `#[tracing::instrument]` attribute is retired —
+//! each wrapper now opens the span EXPLICITLY as its first body line
+//! (`let _g = crate::fdr::info_span!("<name>").entered();`). This deletes the last consumer
+//! of `tracing-attributes` (and with it the `proc-macro2`/`quote`/`syn` toolchain that only
+//! ever served these 6 one-line wrappers). The `mldsa_verify` wrapper that used to be
+//! DUPLICATED here and in `mldsa.rs` is now the single surviving copy (`mldsa.rs` deleted).
+//!
+//! The wrappers are `#[cfg(feature = "telemetry")]` so the shipping binary pays zero cost:
+//! with the feature OFF, callers use the real functions directly; with it ON, `obs`'s
+//! `init` installs the observer that records these spans to `metric.jsonl`. The wrappers
+//! forward 1:1 to the underlying function (zero logic change, zero money/FSM surface).
 
 /// Wrapper: `router::route` — CSR Dijkstra/A* shortest path.
 #[cfg(feature = "telemetry")]
-#[instrument(name = "route", skip_all, level = "info")]
 pub fn route(
     g: &crate::router::RoadGraph,
     src: usize,
@@ -36,12 +36,12 @@ pub fn route(
     heuristic: bool,
     shortcuts: &[crate::router::Shortcut],
 ) -> Option<(Vec<usize>, f64)> {
+    let _g = crate::fdr::info_span!("route").entered();
     crate::router::route(g, src, dst, heuristic, shortcuts)
 }
 
 /// Wrapper: `EventLog::commit_after_decide` — decide-before-commit law pole.
 #[cfg(feature = "telemetry")]
-#[instrument(name = "commit_after_decide", skip_all, level = "info")]
 pub fn commit_after_decide<S, D, T, E>(
     log: &mut crate::event_log::EventLog<S>,
     ev: crate::event_log::MeshEvent,
@@ -52,23 +52,23 @@ where
     D: FnOnce(&crate::event_log::MeshEvent) -> Result<T, E>,
     E: std::fmt::Display,
 {
+    let _g = crate::fdr::info_span!("commit_after_decide").entered();
     log.commit_after_decide(ev, decide)
 }
 
 /// Wrapper: `ports::payment::decide_settlement` — courier settlement decision.
 #[cfg(feature = "telemetry")]
-#[instrument(name = "decide_settlement", skip_all, level = "info")]
 pub fn decide_settlement<V: crate::ports::agent::SignatureVerifier>(
     state: &crate::ports::payment::SettlementState,
     att: &crate::ports::payment::CashAttestation,
     auth: &crate::ports::payment::SettlementAuth<'_, V>,
 ) -> crate::ports::payment::SettlementOutcome {
+    let _g = crate::fdr::info_span!("decide_settlement").entered();
     crate::ports::payment::decide_settlement(state, att, auth)
 }
 
 /// Wrapper: `ports::agent::cap::verify_chain` — capability chain verification.
 #[cfg(feature = "telemetry")]
-#[instrument(name = "cap_verify_chain", skip_all, level = "info")]
 pub fn verify_chain<V: crate::ports::agent::SignatureVerifier>(
     verifier: &V,
     roster: &crate::ports::agent::AnchorRoster,
@@ -76,16 +76,19 @@ pub fn verify_chain<V: crate::ports::agent::SignatureVerifier>(
     cap: &crate::ports::agent::Capability,
     now: u64,
 ) -> Result<(), crate::ports::agent::ChainError> {
+    let _g = crate::fdr::info_span!("cap_verify_chain").entered();
     crate::ports::agent::cap::verify_chain(verifier, roster, chain, cap, now)
 }
 
-/// Wrapper: `pq::dsa::verify` (ML-DSA-65 signature verify) — behind `pq` only.
+/// Wrapper: `pq::dsa::verify` (ML-DSA-65 signature verify) — behind `pq` only. This is the
+/// SINGLE surviving `mldsa_verify` wrapper (the duplicate `mldsa.rs` was deleted in the
+/// items-4+29 cutover).
 #[cfg(all(feature = "telemetry", feature = "pq"))]
-#[instrument(name = "mldsa_verify", skip_all, level = "info")]
 pub fn mldsa_verify(
     pk: &crate::pq::dsa::MlDsa65Pk,
     msg: &[u8],
     sig: &crate::pq::dsa::MlDsa65Sig,
 ) -> bool {
+    let _g = crate::fdr::info_span!("mldsa_verify").entered();
     crate::pq::dsa::verify(pk, msg, sig)
 }

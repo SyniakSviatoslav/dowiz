@@ -1,0 +1,53 @@
+# HOT-PATHS.tsv — machine-read manifest for the hardening-gate + kani-gate CI jobs (roadmap items 6 & 7).
+# Parser: scripts/hardening-gate.sh (mode=lib/dudect) and scripts/kani-gate.sh (mode=kani), both awk -F tab.
+# Read CHECKLIST.md for the standing law.
+#
+# @ZONE lines designate an algorithmic hot ZONE (path prefix). A diff that touches a file
+# under a zone with NO data row below = RED (new algorithmic code must register itself).
+#
+# Data columns (tab-separated):
+#   path_prefix  features  filter  min_tests  mode  checklist  gap
+#   path_prefix : changed file matches this row iff its path starts with path_prefix
+#   features    : cargo features for the test/proof run ("-" = default)
+#   filter      : SINGLE-token filter. mode=lib/dudect → cargo test filter (module path);
+#                 mode=kani → cargo kani --harness <filter> (substring of the harness path).
+#                 Multi-token filters match ZERO tests, so every row uses one substring.
+#   min_tests   : mode=lib/dudect → gate asserts (parsed "N passed") >= min_tests.
+#                 mode=kani → asserts (parsed "N successfully verified harnesses") >= min_tests.
+#                 A floor. Zero-match = RED (deleting/renaming a test/harness cannot stay green).
+#                 min_tests=0 on a kani row = placeholder obligation (diff-visible warning, no floor
+#                 yet) — used for a future item's harness that does not exist on this branch yet.
+#   mode        : lib    = cargo test --lib [--features F] <filter>
+#                 dudect = cargo test --release --lib <filter> -- --ignored (timing self-test)
+#                 kani   = cargo kani [--features F] --harness <filter>   (RUN BY kani-gate.sh,
+#                          SKIPPED by hardening-gate.sh — separate job: network toolchain + minutes)
+#   checklist   : which items are PRESENT (1=oracle 2=dudect 3=dbg 4=asm 5=kani-formal-proof)
+#   gap         : ledgered missing/deferred coverage, owner-tagged; "-" = none
+#
+@ZONE	kernel/src/pq/
+@ZONE	kernel/src/order_machine.rs
+@ZONE	kernel/src/householder.rs
+@ZONE	kernel/src/spectral.rs
+@ZONE	kernel/src/token_bucket.rs
+@ZONE	kernel/src/event_log.rs
+@ZONE	kernel/src/retrieval/pattern.rs
+@ZONE	kernel/src/fdr/json.rs
+@ZONE	kernel/src/ct_gate.rs
+kernel/src/pq/dsa	pq	pq::dsa::	74	lib	1,5	item7-RESOLVED:native-exhaustive-caddq/power2round/decompose/chknorm-abs;arithmetic-contracts-machine-checked-in-kani-gate
+kernel/src/pq/kat	pq	pq::dsa::	74	lib	1	ACVP-vectors-feed-the-pq::dsa::-row
+kernel/src/pq/keccak.rs	pq	pq::keccak::	5	lib	1,5	N/A(corpus-oracle):item3;item7:sponge-boundary-native+cross-copy-equivalence-in-kani-gate
+kernel/src/event_log.rs	-	event_log::tests::sha3	2	lib	1,5	item7-RESOLVED:keccak-copy-B-lifted+proof_keccak_copies_equivalent(Kani)-supersedes-2-KAT
+kernel/src/pq/x25519.rs	pq	pq::x25519::	3	lib	1	N/A(corpus-oracle):item3
+kernel/src/pq/kem.rs	pq	pq::kem::	13	lib	1,5	MISSING(P91.2):ACVP-vectors;KNOWN-RED(P91.2):FO-tag-compare-not-CT;item7:native-exhaustive-red/addsub/polymul-body/compress/codec
+kernel/src/pq/hybrid.rs	pq	pq::hybrid::	4	lib	1	KNOWN-RED(P91.2):confirm-tag-compare-not-CT
+kernel/src/order_machine.rs	-	order_machine::	29	lib	1,3,5	exhaustive-12-state-FSM;item3=FSM_ADJ-cross-check;item7:native-exhaustive-144-pairs/reachable/fold/graph-no-UB
+kernel/src/householder.rs	-	householder::	14	lib	1,3	item3=Vieta-trace/det-cross-check
+kernel/src/spectral.rs	-	spectral::	33	lib	1	N/A(corpus-oracle):item3
+kernel/src/token_bucket.rs	-	token_bucket_	3	lib	1	MISSING(item-8):GCRA-atomic-vs-mutex-differential-oracle+item3
+kernel/src/retrieval/pattern.rs	-	retrieval::	58	lib	1	NOTE:regex-ref-removed-for-zero-dep;corpus-oracle-only(item5)
+kernel/src/fdr/json.rs	-	fdr::	16	lib	1	golden-escape-byte-for-byte-oracle(item4)
+kernel/src/ct_gate.rs	-	ct_gate	1	dudect	2	dudect-harness+planted-leak-selftest(item2);ct_eq-primitive
+kernel/src/pq/keccak.rs	pq	pq::keccak::kani_proofs	2	kani	5	item7-KEYSTONE-equivalence:ENFORCED-rung=native-index-map(tests::item7_keccak_copies_equivalence_index_map)+proof_rotl_contract;STRONG-full-state-form=kani_proofs_strong::proof_keccak_copies_equivalent(CORRECT-but-EXCEEDED-25min-CI-budget-2026-07-19,nightly-only §3.1-ladder);gate-runs=rotl+keccak_f_total
+kernel/src/pq/dsa.rs	pq	pq::dsa::kani_proofs	4	kani	5	item7:montgomery_reduce+reduce32-contracts+ntt/invntt-butterfly-lemma;full-ntt-CAPPED-at-lemma+documented-8-layer-induction(§3.3-ladder)
+kernel/src/kani_selftest.rs	-	proof_selftest_planted_overflow	1	kani	5	item7:planted-i32-overflow-should_panic-selftest;RED-path-demo-recorded-in-PR(§6.5)
+kernel/src/token_bucket.rs	-	proof_gcra	0	kani	5	MISSING(item-8):GCRA-Kani-obligation-per-BLUEPRINT-ITEM-07-§5(pure-gcra_decide(now_ns,tat_ns,cost_ns,burst_ns)->Option<u64>+INTEGER-nanos-not-f64);min=0-until-item8-lands-harness

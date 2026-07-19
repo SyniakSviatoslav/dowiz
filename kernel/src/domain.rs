@@ -172,7 +172,7 @@ pub fn place_order(
     channel: Option<String>,
     cash_pay_with: Option<String>,
 ) -> Result<Order, TransitionError> {
-    let _span = tracing::info_span!(
+    let _span = crate::fdr::info_span!(
         "place_order",
         id = %id,
         n_items = items.len(),
@@ -180,7 +180,7 @@ pub fn place_order(
     )
     .entered();
     let subtotal = Order::compute_subtotal(&items).map_err(TransitionError::Invalid)?;
-    tracing::debug!(subtotal_cents = subtotal, "order subtotal computed");
+    crate::fdr::debug!(subtotal_cents = subtotal, "order subtotal computed");
     Ok(Order {
         id,
         customer_id,
@@ -216,7 +216,7 @@ pub fn place_order_priced(
     cash_pay_with: Option<String>,
     catalog: &PriceCatalog,
 ) -> Result<Order, TransitionError> {
-    let _span = tracing::info_span!(
+    let _span = crate::fdr::info_span!(
         "place_order_priced",
         id = %id,
         n_items = items.len(),
@@ -236,7 +236,7 @@ pub fn place_order_priced(
         it.unit_price = trusted;
     }
     let subtotal = Order::compute_subtotal(&items).map_err(TransitionError::Invalid)?;
-    tracing::debug!(
+    crate::fdr::debug!(
         subtotal_cents = subtotal,
         "order subtotal (catalog-authoritative)"
     );
