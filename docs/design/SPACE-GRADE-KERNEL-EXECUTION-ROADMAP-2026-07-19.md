@@ -49,7 +49,12 @@ test coverage.
 - **Item 3** — `order_machine` const-adjacency + `idx_of` dedup. Golden signature and 1e-12 oracle
   already cover it.
 - **Item 30** — state-machine proliferation audit (`capability_cert.rs`, `hub_provisioning.rs`,
-  `hub_supervisor.rs`, `hydra.rs`). Read-only table.
+  `hub_supervisor.rs`, `hydra.rs`). Read-only table. **✅ CLOSED 2026-07-19** —
+  `AUDIT-ITEM-30-state-machine-final-2026-07-19.md`: all 4 modules INDEPENDENT (0 shared with the
+  FSM proof kit), 4 PARITY-PIN tickets (I30-T1..T4, 0 collapses forced). **1 confirmed silent
+  defect** (I30-D1, `resume()` owner-zeroing) fixed with a red→green guard on
+  `exec/space-grade-tier0-2026-07-19` (`707848dfd`); the in-session "2 confirmed silent defects"
+  phrase confirmed UNSOURCED.
 - **Item 15** — eigen-surface entry-point + parity-scope verification. Read-only; defect filed only
   if found.
 - **Item 16** — `GraphSpectrum` single-spectrum audit. Read-only unless a P2 defect forces collapse.
@@ -161,6 +166,8 @@ test coverage.
    construction site exists; (b) `Result`-typed insert confirmed): `BLUEPRINT-P-FILE-EVENT-STORE-WIRING-GAP-2026-07-19.md`.
 2. **Item 30** — Proof: a table, one row per module, citing file:line for shared-vs-independent
    state-machine logic; every independent one gets a collapse-or-parity-pin ticket.
+   **✅ DONE** — proof table + 4 parity-pin tickets in `AUDIT-ITEM-30-state-machine-final-2026-07-19.md`;
+   1 confirmed defect (`resume()` owner-zeroing) fixed (`707848dfd`).
 3. **Items 15, 16, 19, 17** (read-only audits, any order) — Proofs verbatim from the source: single
    backend + named parity test cited by file:line or P2 defect filed; one eigenvalue computation
    feeding all functionals; shared backend cited or defect filed; every public `engine` item
