@@ -119,9 +119,17 @@ test coverage.
   monotonically. **[new ordering choice — bundling]**: item 13 hardens item 1's own mechanism;
   building it nondeterministic first is two passes over one CI job.
 - **Item 14** — `rust-toolchain.toml` pin + structural compiler-bump trigger. Independent, parallel.
-- **Item 25 (procedure doc first)** — codify the slot-arena/qrng standing procedure in one short doc
-  **before** executing items 4/5, since §18(a) requires `tracing`/`regex` be re-audited "under this
-  exact procedure, not a bespoke one."
+- **Item 25 (procedure doc first) — ✅ DONE (2026-07-19).** The slot-arena/qrng standing procedure
+  is codified and independently re-verified in
+  [`PROCEDURE-DEPENDENCY-REPLACEMENT-STANDING-2026-07-19.md`](PROCEDURE-DEPENDENCY-REPLACEMENT-STANDING-2026-07-19.md)
+  — all citations checked against live HEAD, both precedents (slot-arena override, QRNG
+  never-replace) confirmed. **This doc is now BINDING**: Items 4+29 (`tracing`/`tracing-subscriber`
+  logger/FDR rewrite, incl. the `telemetry` `SpanMetricsLayer` consumer) and Item 5 (`regex`
+  retirement) MUST run its numbered 10-step ruling per crate before cutover (§18(a)'s "under this
+  exact procedure, not a bespoke one"). **Re-verification finding (new scope, owed ticket, not an
+  item-25 fix):** the `qrng` feature is undeclared in `kernel/Cargo.toml`, so the QRNG provider
+  (incl. its sanctioned `master_seed()`) is dead code that never compiles — a
+  standing-rule-vs-reality inconsistency filed in the procedure doc §3.
 - **Items 4 + 29 combined, with the §1.2 `JsonWriter` absorbed in the same change** — the hand-rolled
   logger/FDR tier-(b) buffer with the energy/hardware field set first-class in the schema from day
   one. Both bundlings are the source document's own explicit mandate (§21, §10/P2). The largest
