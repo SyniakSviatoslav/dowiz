@@ -849,19 +849,19 @@ impl<T: TunnelProvider, V: VpsProvider> PoolManager<T, V> {
         hub: HubId,
     ) -> Result<ServerId, ProvisionError> {
         let slot = self.slots.get_mut(&hub).ok_or(ProvisionError::NotFound)?;
-        let snap = match &slot.state {
-            PoolSlotState::Suspended { state_snapshot, .. } => state_snapshot.clone(),
+        // Capture BOTH the snapshot and the real owner before the state is
+        // overwritten — resume must preserve the pre-suspension owner (§16.57
+        // ownership continuity), never zero it.
+        let (snap, owner) = match &slot.state {
+            PoolSlotState::Suspended {
+                state_snapshot,
+                owner,
+            } => (state_snapshot.clone(), *owner),
             _ => return Err(ProvisionError::Unauthorized),
         };
         let server = self.vps.resume_from(&snap, &self.spec)?;
         slot.server = server.clone();
-        slot.state = PoolSlotState::Claimed {
-            owner: OwnerId([0u8; 32]),
-        };
-        // Restore the real owner id carried by the snapshot.
-        if let PoolSlotState::Suspended { owner, .. } = &self.slots[&hub].state {
-            self.slots.get_mut(&hub).unwrap().state = PoolSlotState::Claimed { owner: *owner };
-        }
+        slot.state = PoolSlotState::Claimed { owner };
         Ok(server)
     }
 }
@@ -1623,6 +1623,46 @@ mod tests {
         // Resume → returns with prior state.
         let _ = pm.resume(&v, hub).unwrap();
         assert!(matches!(pm.slots[&hub].state, PoolSlotState::Claimed { .. }));
+    }
+
+    #[test]
+    fn red_resume_preserves_owner_not_zeroed() {
+        // Roadmap item 30 / §4b regression guard: resume() MUST restore the real
+        // pre-suspension owner, never zero it. A resumed hub carrying
+        // OwnerId([0u8;32]) is a silent capability loss — owned by nobody / a
+        // forgeable null id, violating §16.57 no-reclaim ownership continuity.
+        let v = RefSigner;
+        let tunnel = MockTunnel::with_count(0);
+        let vps = MockVps::new();
+        let mut pm: PoolManager<MockTunnel, MockVps> = PoolManager::new(
+            tunnel,
+            vps,
+            [1u8; 32],
+            [2u8; 32],
+            ImageRef("snap".into()),
+            ServerSpec {
+                server_type: "cx11".into(),
+                location: "hel1".into(),
+            },
+        );
+        let hub = pm.refill(&v, &Clock::new(0), 1).unwrap()[0];
+        let owner = Party::new(&v, 9);
+        let owner_root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 99999);
+        let clock = Clock::new(10);
+        pm.claim(&v, &clock, hub, owner.cls_pub, &owner.cls_seed, &owner.pq_seed, &owner_root, None, None)
+            .unwrap();
+        let expected_owner = OwnerId(owner_root.node_id.0);
+        // Sanity: the real owner is a non-zero id.
+        assert_ne!(expected_owner, OwnerId([0u8; 32]));
+        let _ = pm.suspend(&v, hub).unwrap();
+        let _ = pm.resume(&v, hub).unwrap();
+        // The resumed hub MUST carry the real pre-suspension owner, not a zeroed id.
+        match &pm.slots[&hub].state {
+            PoolSlotState::Claimed { owner: o } => {
+                assert_eq!(*o, expected_owner, "resume() zeroed the owner id");
+            }
+            other => panic!("expected Claimed after resume, got {:?}", other),
+        }
     }
 
     #[test]
