@@ -201,8 +201,45 @@ test coverage.
 - **Item 31 (enactment half)** — per-crate allowlist CI gate + shared kernel-side JSON-parse
   primitive for the seven serde carriers + manifest-recorded rulings. Depends on items 1 and 25.
 - **Item 26** — batching research pass. Zero prerequisites; scheduled low-priority, measurement-only.
-- **Item 27 (classifier-input half)** — PMU counters feeding `Verdict`/`DriftClass`. The
-  autonomic-response half moves to Tier 4 per the source's own routing requirement.
+  **✅ DONE 2026-07-19** — real measurements landed:
+  [`AUDIT-ITEM-26-batching-measurements-2026-07-19.md`](AUDIT-ITEM-26-batching-measurements-2026-07-19.md).
+  Inventory re-verified (all §1 citations accurate). M1 event-log commit: p50 637 µs / p99 1343 µs /
+  1,513 ev/s, **exactly 1 fsync+open+close per event** (strace) — group-commit worth **~53×** at
+  batch-64 but changes the crash contract ⇒ *operator-gated opt-in, not a default*. M2 FDR ring:
+  normal 2.56 µs vs alarm-fsync 571 µs (~148×); 1 MiB→4 MiB cap buys only ~11% ⇒ **KEEP AS-IS**
+  (design already amortizes fsync over a segment; baseline now on record). M3 `import_unit`:
+  0.87 µs p50 / ~0.6 ns-per-case marginal ⇒ **measured DON'T-BATCH**. M4 skipped per its own gate
+  (allocation is noise). **PMU unavailable** (`perf_event_paranoid=4`, no `perf`) — wall-clock +
+  `strace -c` fallback, no fabricated counters. No batching code landed (scope law held).
+  Scaffolding (bench + `#[ignore]` probe) on `exec/space-grade-tier0-2026-07-19`.
+- **Item 27 (classifier-input half)** — ✅ **DONE** (`03887462a`, branch
+  `exec/space-grade-tier0-2026-07-19`). PMU counters now ride alongside every `Verdict`/`DriftClass`
+  emission as an FDR companion, WITHOUT touching either classifier. New `kernel/src/fdr/pmu.rs`:
+  `PmuStamp` (all `Reading<u64>`), a sibling of `HwStamp` on the same `Reading<T>`/`Absence`
+  machinery. **Tier A** (`rdtsc` + `/proc/self/stat` minflt/majflt/nswap + `/proc/self/status`
+  ctxt-switches) reads real data with zero permissions. **Tier B** (instructions/cycles/
+  cache-misses/branch-misses) via a hand-rolled zero-dep `perf_event_open(2)` raw syscall (`asm!`),
+  every failure mode degrading to a named `Absence` (new `NoPmuInterface` variant; EPERM/EACCES →
+  `PermissionDenied`) — never a fabricated 0, never a panic. Wired via `PmuStation::bracket`: the
+  `markov_attractor` bin window-brackets `analyze_detailed` and logs ONE `markov_verdict` `FdrEvent`
+  carrying `verdict_str()` + the PMU delta on the SAME record (optional `pmu` field, absent
+  elsewhere so all other FDR records stay byte-identical). `analyze_detailed`/`classify_drift` stay
+  pure (P6 preserved). Diagnostic-grade; NO CI gate keyed to any PMU value. 6 `fdr::pmu` unit tests
+  + 1 end-to-end integration test (spawns the real bin, recovers the real FDR ring) green; full
+  kernel suite 955 passed / 0 failed.
+  - **Independent-verification correction to §C/line 212's "PMU unavailable" premise:** the
+    self-management agent process runs as **root with `CAP_PERFMON`/`CAP_SYS_ADMIN`**, which
+    **bypasses `perf_event_paranoid=4` entirely** — so Tier B `perf_event_open` actually SUCCEEDS in
+    that context and returns real hardware counters (measured live: IPC ≈ 3.7, instructions/cycles/
+    cache-miss/branch-miss all real, hardware-plausible). A genuinely *unprivileged* process on this
+    host would still see `permission_denied`; that named-absence path is proven deterministically
+    (errno-table + forced-absence serialization tests) rather than relying on the live privilege
+    level. **Operator note (informational, non-blocking):** for the unprivileged production path,
+    `sysctl kernel.perf_event_paranoid=2` OR granting `CAP_PERFMON` (kernel ≥5.8) to the kernel's
+    process would unlock Tier B's real IPC/cache-miss data there too — a host-level knob, flagged
+    here for awareness, no decision required for this half to stand.
+  - The autonomic-**response** half stays routed to Tier 4 (below) per the source's own requirement —
+    gated on item 9 (breaker) + item 21 (gain-scheduling); untouched here.
 
 ## D. Tier 3 — THE PIVOT.
 
