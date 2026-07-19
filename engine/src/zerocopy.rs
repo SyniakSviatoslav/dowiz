@@ -19,7 +19,7 @@
 //! one upload. That is the leverage the plan identifies (§E0 / §Plan-4).
 
 /// Floats packed per particle in the flat buffer.
-/// SoA-record layout: `[x, y, vx, vy, life]` contiguous per particle (stride 5).
+/// AoS-record layout (interleaved per particle): `[x, y, vx, vy, life]` contiguous per particle (stride 5).
 pub const FLOATS_PER_PARTICLE: usize = 5;
 
 /// Flat, packed per-particle record buffer (`[x,y,vx,vy,life] * N`).
