@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: "{{BRAND}}: Sovereign, Post-Quantum Delivery Infrastructure — a Deterministic Rust/WASM Kernel and Mesh Protocol"
+title: "dowiz: Sovereign, Post-Quantum Delivery Infrastructure — a Deterministic Rust/WASM Kernel and Mesh Protocol"
 message: "If you use this software or its components (deterministic kernel, money-reversal FSM, post-quantum mesh protocol, ML-DSA-65 proof-of-delivery), please cite it."
 type: software
 authors:
