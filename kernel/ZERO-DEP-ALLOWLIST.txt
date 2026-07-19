@@ -1,0 +1,33 @@
+# Zero-dep allowlist for the dowiz-kernel DEFAULT no-dev build (roadmap items 1+13).
+# INVARIANT: this file may only SHRINK. CI compares HEAD against origin/main and
+# fails if any name present here is absent there (= growth). The ONLY sanctioned
+# growth path is editing the `zero-dep-gate` job in .github/workflows/ci.yml in
+# the same reviewed diff — that edit IS the explicit exception record.
+# Rationale + retirement plan: docs/design/SPACE-GRADE-KERNEL-ARCHITECTURE-SYNTHESIS-2026-07-19.md §0.1.
+#
+# --- 3 direct offenders (retirement: item 4 kills the tracing pair, item 5 kills regex) ---
+regex
+tracing
+tracing-subscriber
+# --- transitive closure of the above (locked by kernel/Cargo.lock) ---
+aho-corasick
+cfg-if
+lazy_static
+log
+matchers
+memchr
+nu-ansi-term
+once_cell
+pin-project-lite
+proc-macro2
+quote
+regex-automata
+regex-syntax
+sharded-slab
+smallvec
+syn
+thread_local
+tracing-attributes
+tracing-core
+tracing-log
+unicode-ident
