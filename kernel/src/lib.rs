@@ -255,6 +255,13 @@ pub mod spectral_cache;
 /// graph. New module; does not touch `spectral_cache`, `csr`, `householder`, or
 /// `spectral`'s existing code.
 pub mod spectral_laplacian;
+/// P89 — field eigenmodes via the kernel's existing spectral infrastructure
+/// (`spectral.rs` / `spectral_laplacian.rs` consumed, never modified). Builds the
+/// field modal basis from the graph Laplacian eigen-decomposition and reconciles
+/// the sign/domain with the field stencil's `−(D−A)` operator. The 3-path
+/// (modal / DCT / stencil) verdict bench lives in `kernel/benches/criterion.rs`
+/// under the `field_eigen/` group and is reported in `docs/p89-verdict.md`.
+pub mod field_eigenmodes;
 /// Self-improvement loop: recurring-pattern surface over the tool-outcome
 /// token stream (W19 — consumes `trigram` into the loop's telemetry path).
 pub mod telemetry;

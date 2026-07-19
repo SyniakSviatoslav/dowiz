@@ -5,10 +5,12 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use dowiz_kernel::absorbing;
 use dowiz_kernel::attention;
 use dowiz_kernel::cgraph::CGraph;
+use dowiz_kernel::money::Currency;
 use dowiz_kernel::retrieval::ppr::Ppr;
 use dowiz_kernel::retrieval::recall::PrimaryRecall;
 use dowiz_kernel::spectral_cache::{canonical_content_address, slem_cached, DecompCache};
 use dowiz_kernel::token_bucket::TokenBucket;
+use dowiz_kernel::vendor::VendorId;
 use dowiz_kernel::{
     empirical_identify, fold_transitions, place_order, sample_backdoor, OrderItem, OrderStatus,
 };
@@ -248,6 +250,52 @@ fn bench_attention(c: &mut Criterion) {
     });
 }
 
+/// P89 — field-eigenmode 3-path verdict bench (group `field_eigen`, P75
+/// `<group>/<n>` convention). Compares the per-frame cost of the three modal
+/// reconstruction paths on the same seeded smooth field:
+///   * `field_eigen/modal_<grid>_r<r>`  — path A: spectral.rs eigensolve basis, r-mode reconstruct
+///   * `field_eigen/dct_<grid>_r<r>`     — path B: analytic DCT basis, r-mode reconstruct
+///   * `field_eigen/stencil_<grid>`      — path C: reference stencil step (the authority)
+/// The full measured table (error + cost) is written to
+/// `docs/p89-verdict.md` by `field_eigenmodes::tests::p89_verdict_numbers`; this
+/// bench supplies the gated timing ids the P75 gate consumes. CPU-only.
+fn bench_field_eigen(c: &mut Criterion) {
+    use dowiz_kernel::field_eigenmodes::{
+        field_eigenmodes_a, field_eigenmodes_b, modal_reconstruct, NeumannGrid, seeded_smooth_field,
+        stencil_step,
+    };
+    let grids: &[(usize, usize, &str)] = &[(4, 4, "4x4"), (5, 5, "5x5"), (4, 8, "4x8")];
+    let rs: &[usize] = &[4, 8, 12];
+    let mut group = c.benchmark_group("field_eigen");
+    for &(w, h, tag) in grids {
+        let grid = NeumannGrid::full(w, h);
+        let n = grid.n();
+        let u = seeded_smooth_field(&grid, 0x1234_5678_9ABC_DEF0);
+        let dt = 0.05;
+        let (basis_a, _) = field_eigenmodes_a(&grid, n);
+        let (basis_b, _) = field_eigenmodes_b(&grid);
+        let u_step = stencil_step(&grid, &u, dt);
+        for &r in rs {
+            // Path A — modal basis r-mode reconstruction.
+            let id = format!("modal_{tag}_r{r}");
+            group.bench_with_input(&id, &r, |b, &r| {
+                b.iter(|| black_box(modal_reconstruct(&basis_a, &u_step, r)))
+            });
+            // Path B — DCT basis r-mode reconstruction (same math, different basis).
+            let id = format!("dct_{tag}_r{r}");
+            group.bench_with_input(&id, &r, |b, &r| {
+                b.iter(|| black_box(modal_reconstruct(&basis_b, &u_step, r)))
+            });
+        }
+        // Path C — stencil step (the authority / full-field evolution).
+        let id = format!("stencil_{tag}");
+        group.bench_with_input(&id, &dt, |b, &dt| {
+            b.iter(|| black_box(stencil_step(&grid, &u, dt)))
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_place_order,
@@ -260,6 +308,7 @@ criterion_group!(
     bench_ppr,
     bench_absorbing,
     bench_retrieval_recall,
-    bench_attention
+    bench_attention,
+    bench_field_eigen
 );
 criterion_main!(benches);
