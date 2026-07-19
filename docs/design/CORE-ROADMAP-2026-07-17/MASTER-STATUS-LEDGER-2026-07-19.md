@@ -8,6 +8,24 @@
 > row cites its source; re-litigating a CLOSED row requires new evidence overturning the cited
 > record.
 
+> **STATUS UPDATE (2026-07-19, later same day — audit recheck).** §4's "follow-up Opus
+> blueprint-writing pass" happened (all 18 `BLUEPRINT-P75..P94` files now exist on disk),
+> and implementation followed for a subset. Verified via `git merge-base --is-ancestor
+> <branch> main` + `git log --grep`: **P75, P77, P79, P80, P81, P83, P88, P89, P91, P96 are
+> now MERGED to main**, so §1's table status of **SKETCH-ONLY-NEEDS-FULL-BLUEPRINT** for
+> those 10 rows is superseded (kept below as the honest historical snapshot, not corrected
+> in place — see each branch `feat/p<N>-*` / merge commit for the real disposition). Note
+> P91 in particular: the implemented fix (`fb47a48a5`) ported the schoolbook negacyclic ring
+> (NOT the P85-quarantined NTT) and the final `BLUEPRINT-P91` explicitly narrowed §3's blanket
+> "P91.1 gated on P85" to only the *optional NTT-speed* sub-path — the correctness fix itself
+> was never P85-gated, so no red-line was bypassed.
+> Confirmed **still genuinely open** (no branch, no merge, matches this ledger's status): M1,
+> P76, P78, P82, P84, P85/C3 (bebop-side), P86, P87, P90's operator rulings (OD-1/2/4), P92,
+> P93, P94, P95. Of these, **P95** (living-memory BM25 persistence) is dowiz-side, not
+> bebop-gated, not GPU-gated — a real open item that `GROUND-TRUTH-2026-07-19-FINAL.md`'s
+> 4-item "not-done" summary does not name. OD-15 (restore the 11 recovered `docs/research/`
+> files) is DONE — all 11 are back on disk.
+
 ---
 
 ## 0. Provenance & file-state note (READ FIRST — some source files were lost from disk and recovered)

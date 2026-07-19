@@ -93,8 +93,12 @@ proposals are DATA on a **single-axis, enumerable, bounded lattice** over the re
 (`StackBuilder`, `ChatRequest`, model-per-`TaskClass` allowlist); validation re-runs the frozen
 mint-log-pinned metamorphic suite and tags `recommend`/`flag-regression` — a human applies, never the
 loop. Phase B (auto-apply) is RC-2 self-certification unless validation is re-executed by an
-independent identity, so it hard-depends on P06 `key_V` (zero code hits outside docs, cross-repo,
-blocked on C4b) and is not designed. The sharpest finding: the blueprint's own live re-read **killed
+independent identity, so it hard-depends on P06 `key_V` (**corrected 2026-07-19: no longer zero
+code hits — key_V's `HybridSigner` closed `58987d79d` 2026-07-18, real bebop2-kv sign/verify + TLV
+sig field, survived the later merge wave; the named precondition is now met**). Phase B remains
+not-designed and un-started (no `HarnessConfig`/self-harness-loop code exists anywhere in-tree as
+of this correction) — closing the blocker makes Phase B startable, it does not make it started;
+re-verify key_V's live state before resuming. The sharpest finding: the blueprint's own live re-read **killed
 a knob the research sketch had invented** — there is no retry policy anywhere in the harness
 (`dispatch.rs` is degrade-closed, `quirks.rs` holds only wire-correctness deltas), so the lattice
 excludes it; meanwhile `track_record.jsonl` already flows from every real dispatcher call, giving the
@@ -170,9 +174,10 @@ mutate the same file concurrently; keep shared registration for the lead), the h
   tolerance is exactly what E2 §5 says makes E3's accept/reject "statistically grounded." That is a
   soft quality edge, not a hard dependency; building E3 first with the hand-tuned tol is legal, just
   worse.
-- **E3 Phase B is NOT sequenced.** It is blocked on P06 `key_V` (independent re-execution: zero code
-  hits outside docs, cross-repo bebop2 PQ substrate, itself blocked on C4b). No date; no design
-  beyond the named precondition (E3 §2 Phase B, §5).
+- **E3 Phase B is NOT sequenced.** It was blocked on P06 `key_V` independent re-execution; that
+  precondition closed `58987d79d` (2026-07-18) — see the §3 correction above. Still no date, no
+  design, and no code beyond the named precondition; the block is dissolved but nothing has picked
+  the work up yet.
 
 ---
 

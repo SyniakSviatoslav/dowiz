@@ -293,11 +293,17 @@ distinction that makes it survive Batch 4's rejections:
   author-hub's own GREEN is never the certificate — this is **explicitly the SAME shape as P06
   key_V** (`HERMETIC-ARCHITECTURE-PRINCIPLES.md:196-204`): author ≠ verifier, independent
   re-execution before trust.
-- **P06 dependency, staged honestly** (SOVEREIGN §8.12): the **unsigned local-replay gate builds
-  now** (it needs no signer — the replay itself is the evidence). The **signed import-verdict
-  form** — a hub attesting "I replayed this and it passed" so third hubs can skip re-replay —
-  plugs into P06's `Signer` slot and is **blocked until key_V lands** (P06 remains the standing
-  multi-arc blocker; this phase adds its 4th consumer, it does not fork a signer).
+- **P06 dependency — corrected 2026-07-19, key_V has landed:** the **unsigned local-replay gate
+  builds now** (it needs no signer — the replay itself is the evidence; landed `1e1a7db09` as
+  `kernel/src/decision/import.rs`). The **signed import-verdict form** — a hub attesting "I
+  replayed this and it passed" so third hubs can skip re-replay — plugs into P06's `Signer` slot;
+  that slot is **no longer blocked**: P06 key_V's `HybridSigner` closed `58987d79d` (2026-07-18,
+  real bebop2-kv sign/verify + TLV sig field) and survived the later merge wave (`5a97e1f6f`,
+  `dc8d3d234`). The signed form is therefore **not-yet-built, not excluded** — a legitimate
+  follow-up scope item once prioritized, not a standing blocker. (Prior text here read "blocked
+  until key_V lands, P06 remains the standing multi-arc blocker" — stale as of this correction;
+  verify current key_V/HybridSigner state before citing this section as fact, this doc-corpus
+  moves fast.)
 - **Red-line overlay:** `money_gated` units (all of Pricing) additionally require the operator
   activation event even after a green replay (§6.3 A6) — a wrong compiled money rule is worse
   than a slow LLM (fast, confident, invisible — P29 §2.6's named risk, doubled for money).
@@ -474,8 +480,11 @@ money-gate (Pricing never auto-adopts). Each references this blueprint by path.
    `OllamaAdapter` with `TaskClass::Code`; emits unit source + tests + provenance + instance set
    into the import gate. D7 firewall re-check.
 6. Bench + telemetry counters (D8). Do NOT build the STARK prover (§5 triggers unmet — its
-   absence is part of done). Do NOT build the signed import-verdict (P06-blocked).
-   Do NOT activate any Pricing unit (operator gate, docket R-4).
+   absence is part of done). Do NOT build the signed import-verdict yet — **not P06-blocked
+   any more** (key_V closed `58987d79d`, see §4.2 correction above); simply not yet scheduled,
+   a real candidate for the next Layer-F increment once prioritized, not excluded scope.
+   Do NOT activate any Pricing unit (operator gate, docket R-4, standing red-line — unaffected
+   by the P06 correction).
    Acceptance = D1–D8 green + A1–A6 green + RF-1..3 filed.
 
 ## §11. Hermetic principles honored (contract item 20)
