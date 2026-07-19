@@ -1,7 +1,8 @@
 //! retrieval/ — internal-retrieval layers (vectorless, deterministic).
 //!
 //! Two complementary layers over the same 20-doc living-memory corpus:
-//!   * L0 (M1) exact byte+regex search — sibling subagent (W1-3):
+//!   * L0 (M1) exact byte+pattern search (restricted {literal, `.`, `.*`}
+//!     wildcard subset; `regex` retired item 5) — sibling subagent (W1-3):
 //!       - `fixtures` — the frozen 20-doc corpus + synthetic generator;
 //!       - `index`    — deterministic trigram inverted index + exact verify;
 //!       - `tests`    — RED→GREEN exact-match / 0-false-positive suite.

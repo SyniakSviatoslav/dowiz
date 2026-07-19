@@ -242,8 +242,10 @@ pub mod ports;
 /// only; the kernel remains the bit-deterministic state authority). Compiles to
 /// NOTHING without the `gpu` feature; behind it, a REAL headless wgpu bring-up.
 pub mod render;
-/// M1 / L0 exact byte+regex search (vectorless) — deterministic trigram
-/// inverted index + exact verify. NEW module; does not touch kernel authority.
+/// M1 / L0 exact byte+pattern search (vectorless) — deterministic trigram
+/// inverted index + exact verify over a restricted {literal, `.`, `.*`} wildcard
+/// subset (kernel-owned matcher; `regex` retired, item 5). Does not touch kernel
+/// authority.
 pub mod retrieval;
 /// P04 product-math: CSR-native Dijkstra / A* shortest path + Contraction-
 /// Hierarchy shortcuts + OSM road-graph ingestion. Ported from bebop

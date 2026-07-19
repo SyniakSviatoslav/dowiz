@@ -466,91 +466,14 @@ mod tests {
         }
     }
 
-    // ══ REGEX-CRATE DIFFERENTIAL (removed in commit 3/3 with the crate) ═══════
-    // The pre-cutover parity proof: the hand-rolled matcher is bit-identical to
-    // the live `regex` crate over the module's newline-free ASCII domain. These
-    // tests (plus the one oracle in `tests.rs`) are the last `regex::` uses in
-    // the kernel; they are deleted in the same commit that removes `regex = "1"`,
-    // after which the naive-reference differential + frozen golden carry the
-    // guarantee.
-
-    #[test]
-    fn parity_vs_regex_crate_battery_over_fixture() {
-        let mut pairs = 0u64;
-        for p in BATTERY {
-            let compiled = Pattern::compile(p).unwrap();
-            let re = regex::Regex::new(p).unwrap();
-            for d in FIXTURE {
-                assert_eq!(
-                    compiled.is_match(d),
-                    re.is_match(d),
-                    "pattern={:?} doc={:?}",
-                    p,
-                    d
-                );
-                pairs += 1;
-            }
-        }
-        assert_eq!(pairs, BATTERY.len() as u64 * FIXTURE.len() as u64);
-    }
-
-    #[test]
-    fn parity_vs_regex_crate_battery_over_synthetic_2000() {
-        let corpus = synthetic_corpus(2000);
-        for p in BATTERY {
-            let compiled = Pattern::compile(p).unwrap();
-            let re = regex::Regex::new(p).unwrap();
-            for d in &corpus {
-                assert_eq!(compiled.is_match(d), re.is_match(d), "pattern={:?}", p);
-            }
-        }
-    }
-
-    #[test]
-    fn parity_vs_regex_crate_seam_query_pattern_matches_regex_oracle() {
-        // Whole-seam parity: query_pattern doc-id vectors == a brute-force
-        // linear regex-crate oracle, for every battery pattern, over fixture +
-        // synthetic (proves trigram narrowing never drops a true regex match).
-        let idx_f = TrigramIndex::new(FIXTURE);
-        let corpus = synthetic_corpus(2000);
-        let docs: Vec<&str> = corpus.iter().map(|s| s.as_str()).collect();
-        let idx_s = TrigramIndex::new(&docs);
-        for p in BATTERY {
-            let re = regex::Regex::new(p).unwrap();
-            let oracle_f: Vec<u32> = FIXTURE
-                .iter()
-                .enumerate()
-                .filter(|(_, d)| re.is_match(d))
-                .map(|(i, _)| i as u32)
-                .collect();
-            assert_eq!(idx_f.query_pattern(p).unwrap(), oracle_f, "fixture pattern {:?}", p);
-            let oracle_s: Vec<u32> = docs
-                .iter()
-                .enumerate()
-                .filter(|(_, d)| re.is_match(d))
-                .map(|(i, _)| i as u32)
-                .collect();
-            assert_eq!(idx_s.query_pattern(p).unwrap(), oracle_s, "synthetic pattern {:?}", p);
-        }
-    }
+    // ── Post-removal differential: hand-rolled vs the independent naive
+    //    reference (proptest). Before commit 3/3 an identical battery ran against
+    //    the live `regex` crate (bit-identical over the newline-free ASCII
+    //    domain); that oracle retired WITH the crate, its verdicts preserved by
+    //    the frozen golden above. Two independent implementations must agree
+    //    forever.
 
     proptest::proptest! {
-        /// Property-based differential vs the live `regex` crate: random subset
-        /// patterns × random newline-free ASCII docs must agree bit-for-bit.
-        #[test]
-        fn prop_parity_vs_regex_crate(
-            pat in subset_pattern_strategy(),
-            doc in "[a-z0-9-]{0,40}",
-        ) {
-            let compiled = Pattern::compile(&pat).unwrap();
-            let re = regex::Regex::new(&pat).unwrap();
-            proptest::prop_assert_eq!(
-                compiled.is_match(&doc),
-                re.is_match(&doc),
-                "pattern={:?} doc={:?}", pat, doc
-            );
-        }
-
         /// Property-based differential vs the independent naive reference — the
         /// permanent post-removal cross-check (kept when the regex block is cut).
         #[test]
@@ -566,8 +489,8 @@ mod tests {
 
     /// Strategy for a valid subset pattern: 0..=6 tokens, each a single literal
     /// char from `[a-z0-9-]`, `.`, or `.*`. Never emits a bare `*` or any
-    /// unsupported metacharacter, so `Pattern::compile` and `regex::Regex::new`
-    /// both always succeed and interpret only `.`/`.*` specially.
+    /// unsupported metacharacter, so `Pattern::compile` always succeeds and only
+    /// `.`/`.*` are interpreted specially.
     fn subset_pattern_strategy() -> impl proptest::strategy::Strategy<Value = String> {
         use proptest::prelude::*;
         prop::collection::vec(
