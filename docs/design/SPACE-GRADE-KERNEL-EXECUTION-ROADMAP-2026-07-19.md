@@ -662,7 +662,7 @@ dispatches it.
 49 strictly after item 2's wiring-gap fix. No item here gates any §H item; item 45's feature-gate
 law binds §H's build items when they land.
 
-## J. Items 50–53 — Validity (K3 Admission) & Proportionate Open-Source Hardening Arc (appended 2026-07-19, fourth wave)
+## J. Items 50–54 — Validity (K3 Admission), Live-Struct Sentinel & Proportionate Open-Source Hardening Arc (appended 2026-07-19, fourth wave)
 
 **Source:** `KLEENE-TRUTHFULNESS-VALIDITY-SYNTHESIS-2026-07-19.md` (Fable synthesis) over
 `RESEARCH-KLEENE-TRUTHFULNESS-OPENSOURCE-HARDENING-2026-07-19.md` (Opus grounding) and
@@ -672,14 +672,19 @@ byte-reproducibility, exclusively the swarm-safety arc's property, NOT a term of
 the RAW-PROMPT-6 content-based concept is renamed **"Validity" (derivational validity)** — a
 proposal is valid iff its supplied reasoning/evidence path checks against the stated
 axioms/invariants; incomplete evidence downgrades to Undecidable, never to assumed-valid.
-**Dispositions recorded here, NO item numbers burned (synthesis §§2.3/2.5, Part 3):** the
-Sentinel per-read live-struct `integrity_hash` is **REJECTED as disproportionate** for this
-deployment target (commodity ECC cloud hardware — the "space-grade" framing is aspirational
-discipline, not literal cosmic-ray exposure; the justified instance already IS item 40's
-per-layer weight checksum) with named reopening triggers: non-ECC/edge deployment, a real
-FDR-evidenced in-memory-corruption incident, or a long-lived mutable safety-critical struct
-with no at-rest backing. Kani-for-K3 is item-7 target-list growth, not a new item. proptest
-stays strictly dev-only (zero-dep-gate law). **Operator-facing repository-state flag (Part 4):
+**Dispositions recorded here (synthesis §§2.3/2.5, Part 3):** the Sentinel read-time integrity
+check for critical LIVE in-memory structs is **ADOPTED as item 54**, proportionately scoped —
+an earlier draft of this pass rejected it on a "commodity ECC cloud hardware" argument that the
+operator **reversed on 2026-07-19** on two grounds: (i) genuine space-grade engineering quality
+is the standard for this arc regardless of substrate, and (ii) the deployment premise was
+factually wrong — the target is **local, offline-first, consumer-grade hardware, which typically
+LACKS ECC**, so the in-memory bit-flip fault class is *higher* not negligible, strengthening the
+mechanism's justification. Item 54 reuses the in-kernel CRC32 (zero new primitive), checks at
+transition points (not per-field-read), and is scoped to the live mutable authority structs item
+40's read-only weight checksum structurally does NOT cover (item 47's `Invariants` table, item 21
+gain-schedule, live inference config) — genuine overlap with item 40 is a boundary, not a reason
+to skip. Kani-for-K3 is item-7 target-list growth, not a new item. proptest stays strictly
+dev-only (zero-dep-gate law). **Operator-facing repository-state flag (Part 4):
 items 1–49's actual CODE (all Tier 1, item 6's gate + `ct_gate.rs`, the FDR module, fixes from
 items 16/30/31) still lives ONLY on the unmerged `exec/space-grade-tier0-2026-07-19` branch —
 `main` has documents only.** Items below that touch FDR or item 47 inherit that merge as a
@@ -736,16 +741,22 @@ operator dispatches it.
 - **Item 52 — `miri-gate`: targeted UB detection over the real unsafe surface (independent —
   zero prerequisites on items 47/50/51; dispatchable now).** GROUNDED baseline: Miri runs
   nowhere (aspirational doc-comments only; `ROADMAP-LIVE-STATUS-2026-07-18.md:24` "component
-  absent this toolchain"); kernel unsafe = 21 blocks, concentrated in `simd.rs` (6),
-  `arena.rs` (6), `messenger.rs` (3), `householder.rs` (3), `slot_arena.rs`/`chaos.rs`/
-  `bounded_drainer.rs` (1 each); `pq/` has ZERO unsafe (the raw prompt's crypto guess was
-  wrong). Scope: ONE CI job running `cargo miri test` filtered to the unsafe-bearing modules —
-  the arena/slot_arena/messenger/bounded_drainer/chaos raw-pointer logic where UB actually
-  hides — NOT miri-everything. Honest limitation, recorded in the gate's own doc: `core::arch`
-  AVX2 intrinsic bodies are largely unsupported under Miri; the house runtime-detection +
+  absent this toolchain"). **Inventory corrected by independent re-verification 2026-07-19 (the
+  research/RAW figure was wrong):** the real unsafe surface is **19 blocks in only 4 modules** —
+  `arena.rs` (6), `simd.rs` (5), `fdr/pmu.rs` (5 — `_rdtsc`/raw-`syscall5` FFI, exec-branch only,
+  joins post-FDR-merge), `householder.rs` (3). `messenger.rs`/`slot_arena.rs`/`chaos.rs`/
+  `bounded_drainer.rs` contain **ZERO real unsafe** — every `unsafe` token in them is a *comment*
+  (`slot_arena.rs`'s doc-comment literally says "No `unsafe` in this wrapper"); the old "21 blocks /
+  7 modules" list counted those comment mentions and omitted `fdr/pmu.rs`. `pq/` has ZERO unsafe
+  (the raw prompt's crypto guess was wrong). Scope: ONE CI job running `cargo miri test` filtered to
+  the genuinely unsafe-bearing modules — `arena.rs`'s bump-allocator raw-pointer logic (where UB
+  actually hides) plus the scalar paths of `simd.rs`/`householder.rs`; NOT the four unsafe-free
+  wrappers (filtering them matches zero unsafe — theater), NOT miri-everything. Honest limitation,
+  recorded in the gate's own doc: `core::arch` AVX2 intrinsic bodies AND `fdr/pmu.rs`'s
+  `_rdtsc`/syscall FFI are largely unsupported under Miri; the house runtime-detection +
   scalar-fallback pattern means the interpreted run exercises the scalar paths of
-  `simd.rs`/`householder.rs`, and intrinsic-body coverage stays with the items-37/39
-  differential oracles + item 7 — a green `miri-gate` is never read as "SIMD is Miri-clean"
+  `simd.rs`/`householder.rs`, and intrinsic/syscall-body coverage stays with the items-37/39
+  differential oracles + item 7 — a green `miri-gate` is never read as "SIMD/PMU is Miri-clean"
   (exact intrinsic support confirmed empirically on first run, not asserted). Toolchain: Miri
   needs a nightly component; the BUILD pin (item 14, 1.96.1) is untouched — the job pins its
   own analysis nightly, recorded in the workflow + `docs/audits/toolchain/`, bumps recorded
@@ -769,8 +780,41 @@ operator dispatches it.
   the ADR-recommended all-origin-refs gitleaks sweep; until then it stays last. **Proof:** a
   planted clippy warning and a planted fmt divergence each turn the job RED (P7); clean tree
   green; the escalation trigger recorded here and in the job's comment header.
+- **Item 54 — Sentinel: read-time integrity check for critical LIVE in-memory structs (after
+  {item 47 wiring (post-42) + item 50} + the FDR branch merge; registry enumeration startable
+  now; full design in synthesis §2.3 — operator-reversed 2026-07-19 from an earlier draft
+  rejection).** Deployment premise, corrected and load-bearing: the target is **local,
+  offline-first, consumer-grade hardware that typically LACKS ECC**, so a single-/multi-bit
+  in-memory flip is a real fault class — NOT a cloud/ECC context, and the "space-grade" standard
+  binds regardless of substrate. GROUNDED baseline: the live-struct read-time pattern is genuinely
+  absent (all existing integrity machinery is AT-REST — `backup` CAS, `event_log` chain-walk, FDR
+  ring CRC32). Proportionate on three axes: **(scope)** only structs that are long-lived AND a
+  money/safety/decision authority input AND lack at-rest backing qualify — the enumerable registry
+  is item 47's `Invariants` table (a flipped bound silently mis-certifies *every* `admit`), item 21
+  gain-schedule/decision-config, and the live inference config (distinct from item 40's read-only
+  weights); transient scratch and already-at-rest-verified state are excluded. **(primitive)**
+  REUSES the in-kernel CRC32 already built for the FDR module (P2 — no second CRC, no new
+  algorithm, no external crate; CRC32 not crypto — the threat is a hardware fault, not an in-memory
+  adversary). **(frequency)** checked at defined transition points (once per authority-use, e.g.
+  per `admit` over the `Invariants`; recompute-and-store on the rare centralized mutation) — NOT
+  per-field-read, so the hot-path tax and the missed-re-hash false-trip surface are both bounded;
+  an immutable-after-init struct is a pure read-time check with zero re-hash burden. On mismatch:
+  ONE fsynced FDR `Alarm` (hardware-fault evidence, item-40 semantics) + fail-closed deterministic
+  path (a corrupted `Invariants` table REFUSES admission), composing with item 47's `Rejection`
+  seam and item 9's `Result<Permit, Tripped>` when it lands (does NOT gate on item 9). Distinct
+  from item 40 by plane: 40 guards read-only static WEIGHTS, 54 guards live MUTABLE authority
+  structs — complementary surfaces, one shared CRC. **Proof:** a planted single-bit corruption of a
+  registered struct (behind a test-only cfg raw-pointer flip, mirroring item 40's planted-fault
+  test) demonstrably trips the Safe-State path and writes the `Alarm` (red→green, P7); an
+  uncorrupted run is checksum-silent; mutate-then-read passes (re-hash correctness); CI re-executes
+  the planted fault; the critical-struct registry is enumerated with per-struct justification (why
+  critical, why no at-rest backing); `cargo tree -e no-dev` byte-unchanged (existing CRC32 reused,
+  zero new dependency and zero new algorithm — max-nativeness law).
 
 **Dependency graph, one line:** 50 rides item 47's gates (spec after 35, wiring after 42);
-51 after {47-wiring + 50} + the FDR/exec branch merge; 52 independent, dispatchable now;
-53 last by ruling, trigger-promoted on public-flip authorization. Nothing here gates any
-§H/§I item; item 50 amends item 47's spec in place (one admission gate, never two).
+51 after {47-wiring + 50} + the FDR/exec branch merge; 52 independent (on-`main` targets
+`arena`/`simd`/`householder` dispatchable now, `fdr/pmu` folds in post-FDR-merge); 53 last by
+ruling, trigger-promoted on public-flip authorization; 54 parallel with 51 (same {47-wiring + 50}
++ FDR-merge prerequisite; registry enumeration startable now). Nothing here gates any §H/§I item;
+items 50 and 54 amend/extend item 47's surface in place (one admission gate, one shared integrity
+primitive, never a fork).
