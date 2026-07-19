@@ -377,6 +377,39 @@ and do not start until P38 §4.2 (OD-11).
   result is a PASS; a regression would flag an accidental O(n) path.
 - **Falsifier:** the bench emits `lease_free_churn` numbers; a > O(1) trend fails the perf gate.
 
+### 4.5 WebGL2 / CPU-floor fallback — the registry is WebGPU-compute-scoped (FE-16 floor)
+
+P38's FE-16 fallback ladder is **WebGPU → WebGL2 → CPU `compose_field`** (§0.6;
+`BLUEPRINT-P38-webgpu-render-engine.md` §3.6, §12.3) — a courier's mid-tier phone may reach only the
+WebGL2 rung, which has **no compute shaders and no atomics** (core WebGL2 / GLES 3.0). The channel/pair
+registry (§3) is CPU-side bookkeeping for **multi-channel GPU field state** — a structure that exists
+**only** on the WebGPU compute path gated by P38 §4.2 (OD-11). Two consequences, stated plainly
+(closing META-GAP-AUDIT-2026-07-19 §1 G2 for P86):
+
+1. **On the WebGL2 and CPU floors there is no multi-channel GPU field state to register.** The field
+   runs as today's single-plane CPU `FieldFrame` / `compose_field` (the P38 §3.1 authority path),
+   presented by a WebGL2 fragment-raster textured quad (or canvas2d `putImageData` on the CPU floor).
+   The whole registry is `#[cfg(all(slot-arena, gpu))]` and simply **does not participate** on these
+   rungs — the feature **does not apply and falls back to the existing CPU path**; it is **not**
+   re-implemented in a non-generational or non-atomic WebGL2 form. There is no ABA hazard to defend
+   because there is no channel pool on WebGL2/CPU. This is **option (i)** of the audit's G2 choice: the
+   compute consumer is WebGPU-only and the WebGL2 floor never runs it.
+2. **`R32Uint` (and `Rgba32F`/`Rg32F`) renderability is a WebGPU-compute concern, not a WebGL2-floor
+   one.** The audit flagged whether `R32Uint` is renderable on the WebGL2/mobile floor; since the
+   registry never runs on WebGL2, the concern is resolved **by scope** — the packed formats are touched
+   only by the WebGPU compute shaders (post-OD-11). The build-time re-derivation (§0.5, D-DERIVE) must
+   still confirm each `PackedFormat` is a supported storage/render format **on the target WebGPU
+   device** (fail-closed on an unsupported format, per §3's `PackedFormat` "unknown REJECTED" note),
+   and confirm the WebGL2 fallback presents the field through the existing single-plane path — never
+   requiring a packed integer texture to render the fallback.
+
+**DoD addition — the FE-16 floor line (P38 §12.3 standing gate), previously absent (audit G2):**
+**D-WEBGL2** — the field renders **CORRECT on the WebGL2 and CPU floors with the registry absent.**
+Falsifier: with `navigator.gpu` forced undefined (P38 §3.6 degrade pattern) the field composes via the
+CPU path and **no `channel_registry` symbol is reachable**; a build where the WebGL2/CPU fallback
+depends on the registry, or where a `PackedFormat` is assumed renderable on WebGL2 without confirmation,
+= **NOT done**.
+
 ---
 
 ## 5. The lifecycle in full (the design the operator asked for — item 2)
@@ -412,6 +445,7 @@ and do not start until P38 §4.2 (OD-11).
 | D6 | lease/free churn is O(1); documented, not a throughput claim | `lease_free_churn` bench (M4) |
 | D-GATE | the whole unit is `#[cfg(all(slot-arena, gpu))]`; default build byte-unchanged | `cargo build` (default) diff-clean; `cargo test --features slot-arena,gpu` green |
 | D-DERIVE | the channel/format taxonomy was re-derived against the live P38 design, not copied from §3's illustrative set | a build-time note in the registry citing the then-current P38 field-state spec (§0.5, §9) |
+| D-WEBGL2 | the field renders CORRECT on the WebGL2 + CPU floors with the registry absent (WebGPU-compute-only; those rungs fall back to the single-plane CPU path) — §4.5 | forced-`navigator.gpu=undefined` composes via the CPU path, no `channel_registry` symbol reachable, no packed format assumed renderable on WebGL2 (P38 §12.3 floor line) |
 
 ---
 

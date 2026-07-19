@@ -304,6 +304,49 @@ The **CPU kernel domain** stays evidence-gated: **E4** (kernel `SeqCst→Relaxed
 specific CPU sites (per E12's bench-first rule), it **cannot** dissolve the GPU-domain default. The
 money/oracle red-line (§2.2) is outside both — no P88 mechanism touches it.
 
+### 4.7 WebGL2 / CPU-floor fallback — the atomicity rule is WebGPU-compute-scoped (FE-16 floor)
+
+P38's FE-16 fallback ladder is **WebGPU → WebGL2 → CPU `compose_field`** (`BLUEPRINT-P38-webgpu-render-engine.md`
+§3.6, §12.3); a courier's mid-tier phone may reach only the WebGL2 rung. The atomicity-by-default rule
+(§4.1) governs exactly one thing: **concurrent shared writes across GPU *compute* invocations** —
+WGSL `var<storage, read_write>` / `var<workgroup>`, `atomicAdd`, `workgroupBarrier`, two-level
+workgroup reductions. That concurrency **exists only on the WebGPU compute path**. Core WebGL2
+(GLES 3.0) has **no compute shaders and no compute atomics at all**, and the CPU floor is
+single-threaded. So the rule is **WebGPU-compute-only by construction**, and P88 states this plainly
+rather than leaving it ambiguous (closing the META-GAP-AUDIT-2026-07-19 §1 G2 finding):
+
+- **On the WebGPU rung (post-OD-11):** the full policy applies — atomic-by-default, the fixed-point
+  deterministic reduction (§4.4), the `// SINGLE-WRITER:` structural exemption (§4.3).
+- **On the WebGL2 and CPU-floor rungs:** the field step **and** the energy/Lyapunov reduction run on
+  the **existing single-threaded CPU path** (`FieldFrame::step`, the `field_energy` fold — §0.1/§0.2),
+  where there is **exactly one writer and zero cross-invocation concurrency**. Therefore **atomicity is
+  moot** on these rungs: there is no shared-write site to make atomic, and the reduction is a plain
+  sequential fold whose result is fixed by evaluation order. WebGL2 is used here only for
+  *fragment-shader presentation* of the CPU-computed frame (or canvas2d `putImageData` on the CPU
+  floor); it never runs the physics compute.
+
+This is **option (i)** of the audit's G2 choice, taken explicitly and by name: **the compute legs are
+WebGPU-only, and the WebGL2 floor never runs them — the CPU path handles the physics on that rung,
+where no concurrent writer exists.** The alternative — a WebGL2-specific fragment multi-pass
+(log-depth) reduction, option (ii) — is deliberately **NOT** adopted: the CPU fold is already the
+bit-exact authority (P38 §3.1) and simpler, and standing up a second reduction implementation on
+WebGL2 would add a redundant surface with its own determinism burden for zero benefit (the WebGL2 rung
+is not asked to be the physics authority).
+
+**Determinism corollary:** the CPU fold is sequential (fixed summation order) and thus already
+run-to-run deterministic **without** fixed-point — the fixed-point machinery (§4.4, `FIXED_POINT_SHIFT`)
+is an artifact of GPU-compute completion-order nondeterminism and is needed **only** on the WebGPU
+compute rung. The CPU reduction is precisely the oracle the WebGPU reduction is measured against
+(`red_reduction_matches_cpu_oracle`, §4.4).
+
+**DoD addition — the FE-16 floor line (P38 §12.3 standing gate), previously absent (audit G2):**
+**D-WEBGL2** — physics/field behavior is verified **CORRECT on the WebGL2 and CPU floors, not only on
+WebGPU.** Falsifier: `compose_returns_deterministic_frame` + `allocfree_step_byte_identical` (the CPU
+floor) stay green; and a forced-`navigator.gpu = undefined` degrade path (P38 §3.6 pattern) is asserted
+to run the CPU physics with **no compute-atomics dependency reachable**. Any physics-correctness claim
+that passes only under the WebGPU compute path, or a build that makes the field step *require* compute
+atomics (unreachable on WebGL2), = **NOT done** regardless of WebGPU-rung green totals.
+
 ---
 
 ## 5. AI/system-hazard safety, grounded in math (standard §2 item 6)
@@ -342,6 +385,7 @@ Reachability is argued from associativity + the honesty split + CI gates — no 
 | D7 | a contention/throughput microbench accompanies each atomic site (documents cost) | §7 bench output present in `docs/regressions/REGRESSION-LEDGER.md` |
 | D-POLICY | the policy text + domain boundary are recorded and cited by P86/P87 as their inherited rule | this document referenced from P86/P87 §2.3 |
 | D-NOREG | the CPU field oracle stays bit-identical (no policy change touches `compose()`) | `compose_returns_deterministic_frame`, `allocfree_step_byte_identical` stay green |
+| D-WEBGL2 | field/reduction behavior is CORRECT on the WebGL2 + CPU floors (the atomicity rule is WebGPU-compute-only; those rungs run the single-threaded CPU path where atomicity is moot) — §4.7 | CPU-floor oracle green + forced-`navigator.gpu=undefined` runs the CPU physics with no compute-atomics dependency reachable (P38 §12.3 floor line) |
 
 **Note (write-first):** D-POLICY, D1, and the *spec* for D3–D6 are deliverable **now** (CPU-side
 reference + checklist). D2 and the *shader* legs of D3–D7 activate when P38 §4.2 is taken.

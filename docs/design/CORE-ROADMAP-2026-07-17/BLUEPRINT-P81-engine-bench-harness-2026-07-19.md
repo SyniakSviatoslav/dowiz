@@ -134,6 +134,22 @@ opt-in, cached, and identical to the kernel's existing posture.
    (never a new convention).
 4. **A doc-comment revisit-threshold** on each sweep group (the growth-tripwire discipline S1 applies
    to `ppr`/`absorbing`/`money_ledger`): the size at which the curve would demand an algorithmic look.
+5. **A NEW engine-crate CI bench job** (`bench-regression-engine`) in `.github/workflows/ci.yml`,
+   modeled verbatim on P75's kernel `bench-regression` same-runner A/B job (P75 §5) but with
+   `cd engine && cargo bench --bench criterion -- --save-baseline {base,pr}` as the A/B run and
+   `native-trackers compare base pr --manifest engine/benches/baseline.json` (the per-crate v2
+   manifest, P75 §3.2) as the gate step. Plus the committed `engine/benches/baseline.json` file itself.
+   **This is new work P81 now owns explicitly — it is NOT something P75 already provides.** Ground
+   truth (verified this pass): P75's *running* CI gate is **kernel-only** (P75 §5 runs
+   `cd kernel && cargo bench`; P75 §2.2 states plainly *"the engine/bebop `[[bench]]` wiring for their
+   own new targets — P81/P82 add those; P75 only fixes the kernel gate and defines the schema they
+   conform to"*). So without this second job, P81's ~15 engine baselines are **recorded but never
+   gated**, and D3 (below) is unsatisfiable. P81 **reuses** P75's `native-trackers compare` binary +
+   `GateExit` exit-code contract + same-runner A/B shape **unchanged** — it adds only the second job
+   pointing at the engine crate and its own `baseline.json`; it does **not** re-invent, fork, or widen
+   the gate machinery (that stays P75's single-owner contract, §2.2). This item corrects
+   `META-GAP-AUDIT-2026-07-19.md` finding **G3** ("no blueprint owns creating the engine-crate CI bench
+   job"), rather than the prior silent assumption that P75's kernel gate would somehow run the engine.
 
 ### 2.2 P81 does NOT own (anti-scope — prevents collision & scope-creep)
 
@@ -152,8 +168,12 @@ opt-in, cached, and identical to the kernel's existing posture.
 
 ### 2.3 Dependencies (named by artifact — standard §2 item 7)
 
-**Hard input:** **P75** (working CI gate + `<group>/<n>` schema + `baseline.json` writer). Without it
-the baselines are recorded but ungated.
+**Hard input:** **P75** — but for the **`<group>/<n>` schema, the `baseline.json` v2 format, and the
+reusable `native-trackers compare` gate binary + `GateExit` contract**, *not* for a ready-made engine
+CI job. P75's running gate benches the kernel only (P75 §2.2/§5); the **engine `bench-regression-engine`
+job is P81's own deliverable** (§2.1.5). Without both P75's schema/binary **and** P81's engine job, the
+engine baselines are recorded but ungated. (This split corrects META-GAP-AUDIT G3, which flagged the
+prior assumption that "the P75 gate" would run the engine crate.)
 **Soft/none:** independent of P77/P79/P80/P82/P83 (disjoint files/crates — parallel-safe within Wave
 W2 per S1 §5). **Substrate-for:** P87 (2-bit companion-mask) and P89 (field eigenmodes) name P81's
 `field_frame`/`scene` benches as their measured before/after gate (MASTER-STATUS-LEDGER §1 P81 row) —
@@ -304,7 +324,7 @@ bench that does not actually exercise the hot path is the bench equivalent of a 
 |---|---|---|
 | D1 | `engine/benches/criterion.rs` exists; `cargo bench -p dowiz-engine` builds and runs all groups | the bench binary compiles under `harness = false`; run emits every `<group>/<n>` id in §3 |
 | D2 | all §3 bench-ids are present in P75's `baseline.json` | `bench_track.py`/P75 gate lists them; a missing id fails the coverage assertion |
-| D3 | an injected 2× slowdown in `FieldFrame::step` trips the P75 gate RED | inject `for _ in 0..2 { laplacian_into(...) }`, run the gate → RED; revert → GREEN (proves the gate has real signal, not `\|\| true`) |
+| D3 | an injected 2× slowdown in `FieldFrame::step` trips the **`bench-regression-engine`** CI job (the engine-crate gate P81 wires in §2.1.5, modeled on P75's job) RED, and clean HEAD → GREEN | inject `for _ in 0..2 { laplacian_into(...) }`, run the **engine** bench job → RED; revert → GREEN (proves the engine gate has real signal, not `\|\| true`). **NB (per META-GAP-AUDIT G3):** the CI gate P75 ships is dowiz-kernel-only, so this DoD is satisfiable **only because P81 now owns wiring the engine CI job** (§2.1.5) — it reuses P75's `native-trackers compare` + exit contract but does **not** assume P75's gate already benches the engine crate. |
 | D4 | the default engine lib build stays zero-external-crate | **D-CLEAN:** `cargo tree -e no-dev -p dowiz-engine` shows only `dowiz-kernel` (no criterion leak) |
 | D5 | every bench uses seeded deterministic inputs; no RNG-from-entropy, no wall-clock, no live daemon | grep the bench for `thread_rng`/`SystemTime`/network → empty; `FIXTURE_SEED` drives all buffers |
 | D6 | anti-cheat sibling tests pass (each benched call does real work) | `bench_actually_steps`, `frame_rgba_len_is_wxhx4`, `scene_render_scales_with_shapes`, `spring_step_omega_monotone`, `apply_field_touches_all_nnz` all GREEN |
@@ -409,6 +429,12 @@ bench that does not actually exercise the hot path is the bench equivalent of a 
 - **EDIT** `engine/Cargo.toml` — add `criterion = "0.5"` to `[dev-dependencies]` + a
   `[[bench]] name = "criterion" harness = false` stanza. **No other manifest change; no `[dependencies]`
   change (offline-clean invariant).**
+- **NEW** `engine/benches/baseline.json` — the per-crate v2 manifest (P75 §3.2) holding the §3 engine
+  bench-ids; committed, so the engine gate has something to compare against.
+- **EDIT** `.github/workflows/ci.yml` — add the **`bench-regression-engine`** job (§2.1.5): a second
+  same-runner A/B job modeled on P75's kernel `bench-regression`, running the engine `cargo bench` and
+  `native-trackers compare … --manifest engine/benches/baseline.json`. **Reuses P75's binary + exit
+  contract; does not fork the gate machinery.** (Closes META-GAP-AUDIT G3 for the engine crate.)
 - **DO NOT TOUCH** any `engine/src/*.rs` product file (bench-only; the `bridge.rs:121` alloc-hoist and
   `frame_rgba` pooling are explicitly deferred to evidence-gated follow-ups).
 
@@ -419,8 +445,11 @@ bench that does not actually exercise the hot path is the bench equivalent of a 
 3. Seed every input from `FIXTURE_SEED`; `black_box` inputs and outputs; add the §4 anti-cheat sibling
    `#[test]`s.
 4. Wire the two `engine/Cargo.toml` lines; run `cargo bench -p dowiz-engine` and confirm every
-   `<group>/<n>` id emits.
-5. Prove D3: inject a 2× slowdown into `FieldFrame::step`, run P75's gate → RED; revert → GREEN.
+   `<group>/<n>` id emits; commit `engine/benches/baseline.json` with those ids.
+5. **Wire the `bench-regression-engine` CI job** (§2.1.5) into `.github/workflows/ci.yml`, modeled on
+   P75's kernel `bench-regression` job but pointed at the engine crate + `engine/benches/baseline.json`
+   — this is P81's own deliverable, not something P75 provides (P75's gate is kernel-only). Then prove
+   D3: inject a 2× slowdown into `FieldFrame::step`, run the **engine** job → RED; revert → GREEN.
 6. Prove D-CLEAN: `cargo tree -e no-dev -p dowiz-engine` shows only `dowiz-kernel`.
 7. Add a `docs/regressions/REGRESSION-LEDGER.md` row: "engine bench coverage established (P81);
    `field_step`/`compose`/`apply_field`/`present_money` now gated."
