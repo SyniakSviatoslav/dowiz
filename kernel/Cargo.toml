@@ -90,6 +90,23 @@ slot-arena = ["dep:thunderdome"]
 # in-module mock adapters (no Cloudflare / Hetzner / network symbols). The real
 # bindings ride this flag behind `#[cfg(feature = "p67-adapters")]`.
 p67-adapters = []
+# `telemetry` — P83 kernel production observability (BLUEPRINT P83 / SYNTHESIS
+# PERFORMANCE AUDIT §3.3-C4). OFF by default so the shipping binary carries NO
+# observability symbols or filesystem-writer code paths. Behind this flag, the
+# `tracing` spans already placed over the 8 verified hot functions are consumed
+# by a ZERO NEW DEP `SpanMetricsLayer` (reuses the already-linked `tracing` +
+# `tracing-subscriber`) that writes hand-rolled log-bucket latency histograms to
+# `metric.jsonl`, and the Layer-2 `load1/nproc >= 4` breach branch triggers a
+# system-wide `perf record -a -g -F 99` (alert.jsonl). Std-only writer; no
+# serde/network/RNG. The default (shipping) build is behavior- and perf-neutral.
+telemetry = []
+# `pprof` — P83 Layer-2 fallback ONLY (SYNTHESIS §3.3-C4: "`pprof` only as
+# feature-gated fallback"). Activated when the system-wide `perf` invocation is
+# unavailable (no perms / not Linux). OFF by default; it is a SAFE no-op fallback
+# (writes a marker alert.jsonl row, never shells out, never hangs, never needs
+# root). It does NOT pull any external crate into the graph — the fallback is
+# pure `std`. Gated so its symbols never reach the shipping binary.
+pprof = []
 
 [dependencies]
 # WASM bindings — only compiled under the `wasm` feature (see
