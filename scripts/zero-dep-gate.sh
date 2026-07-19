@@ -17,11 +17,16 @@ DOC=docs/design/SPACE-GRADE-KERNEL-ARCHITECTURE-SYNTHESIS-2026-07-19.md
 # (13) lockfile hash BEFORE — the gate must not mutate resolution state
 h0=$(sha256sum kernel/Cargo.lock | cut -d' ' -f1)
 
-# (1) actual tree: default features, no dev edges, locked, offline, names only
+# (1) actual tree: default features, no dev edges, locked, offline, names only.
+# NOTE: cargo tree stays in its own pipeline so a resolution failure (e.g. --locked
+# mismatch) is still loud under pipefail; the root-package/blank filtering is a
+# separate step whose greps are `|| true`-guarded so the ZERO-dep end state (item 5:
+# every line filtered out ⇒ grep exit 1) reports an empty set instead of aborting.
 cargo tree --manifest-path kernel/Cargo.toml -e no-dev --locked --offline --prefix none \
-  | awk '{print $1}' | sort -u | grep -v '^dowiz-kernel$' | grep -v '^$' > /tmp/zdg-actual.txt
+  | awk '{print $1}' | sort -u > /tmp/zdg-tree.txt
+grep -vxE 'dowiz-kernel|' /tmp/zdg-tree.txt > /tmp/zdg-actual.txt || true
 
-grep -vE '^\s*(#|$)' "$ALLOW" | sort -u > /tmp/zdg-allow.txt
+{ grep -vE '^\s*(#|$)' "$ALLOW" || true; } | sort -u > /tmp/zdg-allow.txt
 
 # GATE A — any dependency not in the allowlist ⇒ RED (fails on any new dependency)
 new=$(comm -23 /tmp/zdg-actual.txt /tmp/zdg-allow.txt)

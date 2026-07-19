@@ -139,10 +139,20 @@ curve25519-dalek = { version = "4", optional = true }
 # Ruling: src/fdr/mod.rs module doc (steps 1–5,9,10) +
 # docs/design/BLUEPRINT-ITEMS-04-29-logger-fdr-rewrite-2026-07-19.md. Reopen trigger: a real
 # requirement to export kernel telemetry to an external tracing/OpenTelemetry collector.
-# L0 exact-search verify step (trigram inverted-index narrows candidates,
-# regex verifies each — deterministic, 0 false positives). Blueprint M1/W1-3.
-# (regex is item 5's retirement target — strictly after this change, roadmap §B.)
-regex = "1"
+# RETIRED (roadmap item 5, dependency-replacement procedure — verdict (a) removed
+# outright): `regex = "1"` was deleted here. The L0 exact-search verify step now uses
+# the kernel-owned restricted wildcard matcher (`src/retrieval/pattern.rs`, subset
+# {literal, `.`, `.*`}, typed rejection of every other metacharacter). The one
+# production seam (`TrigramIndex::query_regex`) had ZERO production callers; the only
+# pattern ever compiled anywhere was `note-.*-recall`. Removal drops regex's whole
+# subtree — the kernel's LAST 5 external no-dev crates (regex, regex-automata,
+# regex-syntax, aho-corasick, memchr) → the default no-dev tree is now ZERO external
+# crates. INVARIANT + verification one-liner:
+#   cargo tree --manifest-path kernel/Cargo.toml -e no-dev --locked --offline --prefix none \
+#     | awk '{print $1}' | sort -u | grep -vc '^dowiz-kernel$'   → 0
+# Ruling: src/retrieval/pattern.rs module doc (steps 1–5,9,10) +
+# docs/design/BLUEPRINT-ITEM-05-regex-retirement-2026-07-19.md. Reopen trigger: a real
+# production caller needing pattern features beyond {literal, `.`, `.*`}.
 # GPU render backend (P38 O18a) — ONLY compiled under the `gpu` feature so the
 # default kernel carries zero GPU symbols (feature-additive; guard-restorable).
 wgpu = { version = "30.0.0", optional = true }

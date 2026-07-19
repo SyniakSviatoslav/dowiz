@@ -523,7 +523,6 @@ dependencies = [
  "paste",
  "pollster",
  "proptest",
- "regex",
  "serde",
  "serde_json",
  "serde_yaml",

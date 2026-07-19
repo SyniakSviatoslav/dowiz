@@ -9,7 +9,9 @@
 //!
 //! 1. **Trigger:** the zero-dependency push (synthesis §0.1; roadmap §B items 4+29). The
 //!    item-1 CI gate's allowlist must shrink `{regex, tracing, tracing-subscriber}` →
-//!    `{regex}` in this change.
+//!    `{regex}` in this change. (Item 5 later closed that last survivor: `{regex}` → `{}`
+//!    via the kernel-owned `retrieval::pattern` matcher — the kernel's default no-dev tree
+//!    is now ZERO external crates.)
 //! 2. **Sweep:** the entire `tracing` surface was ~14 API lines across 7 `kernel/` files
 //!    (nothing in `engine/`, `apps/`, `tools/`); 8 span names; `init_tracing` had ZERO
 //!    production callers; no `info!`/`warn!`/`error!` ever used; `env-filter`'s grammar
