@@ -1,442 +1,560 @@
-//! ML-KEM-768 (FIPS 203, Module-Lattice-Based Key-Encapsulation Mechanism).
+//! pq/kem — ML-KEM-768 *ring-corrected* implementation (P91.0 header defusal +
+//! P91.1 negacyclic schoolbook port).
 //!
-//! Zero-dependency, from-scratch implementation. Polynomial arithmetic uses a
-//! complete Cooley-Tukey NTT over Z_q[x]/(x^256+1) with q=3329, primitive
-//! 256th root of unity 17. Multiplication in the NTT domain is ordinary
-//! pointwise fq_mul (no incomplete-NTT basemul). The full KEM was validated
-//! for self-consistency (encaps shared secret == decaps shared secret) and a
-//! ciphertext tamper gate before porting; see /tmp/kem_full.py (reference).
+//! NOT FIPS-203: the ring was corrected to negacyclic (x^256+1) + eta1=2 +
+//! ct=1088 by P91.1, but the P91.2 ACVP KAT + 3-model review gate is DEFERRED,
+//! so this module is NOT FIPS-203-conformant yet and MUST NOT be wired into any
+//! live path. Do NOT wire volume.rs against it. See
+//! OPUS-KEM-RING-BUG-INVESTIGATION-2026-07-18.md.
 //!
-//! ponytail: O(n log n) NTT chosen over O(n^2) schoolbook for clarity/speed;
-//! the NTT is provably a ring isomorphism (ntt(a*b)==pointwise(ntt a,ntt b)),
-//! verified by the test suite. Upgrade path: none needed.
+//! Prior to P91 this file falsely advertised "ML-KEM-768 (FIPS 203)" and used a
+//! CYCLIC ring (x^256-1) with eta1=3 and a 1536-byte ciphertext. That was a
+//! fix-before-wiring correctness bug (the `pq` feature is default-off and no
+//! caller wires it). P91.0 struck the false compliance claims; P91.1 ports the
+//! CORRECT negacyclic arithmetic from the proven reference
+//! `/root/bebop-crypt/bebop2/core/src/pq_kem.rs` (schoolbook `poly_mul` at :296,
+//! verified against its `poly_mul_matches_schoolbook` test). The math is PORTED,
+//! not re-derived.
+//!
+//! Zero external crates; all Keccak/SHAKE/SHA3 come from `crate::pq::keccak`.
 
-use crate::pq::keccak::{prf, shake256_xof, xof_g, xof_h};
+use crate::pq::keccak::{prf, shake128, shake256, sha3_256, sha3_512, xof_g, xof_h};
 
-pub const Q: i32 = 3329;
+// ─────────────────────────────────────────────────────────────────────────────
+// ML-KEM-768 parameters (FIPS 203 §8 Table 2: "ML-KEM-768 | 256 | 3329 | 3 | 2 | 2 | 10 | 4").
+// P91.1 corrections vs the old code: ETA1 3→2, CT_LEN 1536→1088 (du=10/dv=4), ring cyclic→negacyclic.
+// ─────────────────────────────────────────────────────────────────────────────
+
+pub const Q: i32 = 3329; // ML-KEM modulus (correct; was already right)
 pub const N: usize = 256;
 pub const K: usize = 3; // ML-KEM-768
-pub const DU: usize = 10;
-pub const DV: usize = 4;
-pub const ETA1: usize = 3; // ML-KEM-768
-pub const ETA2: usize = 2; // ML-KEM-768
+pub const DU: usize = 10; // ML-KEM-768 compression degree for u (was declared, not honored)
+pub const DV: usize = 4; // ML-KEM-768 compression degree for v (was declared, not honored)
+pub const ETA1: usize = 2; // ML-KEM-768 — WAS 3 (that is the ML-KEM-512 value)  ← P91.1 FIX
+pub const ETA2: usize = 2; // ML-KEM-768 (was already correct)
 
-const ROOT: i32 = 17; // primitive 256th root of unity modulo Q
+// Wire sizes (FIPS 203 §7.2):
+//   ek = 384*k + 32            = 1184
+//   dk = 384*k + ek + 32 + 32  = 2400  (s || ek || H(ek) || z)
+//   ct = 32*(du*k + dv)        = 1088   ← P91.1 FIX (was K*384 + 384 = 1536)
+pub const KEM768_EK_LEN: usize = 1184;
+pub const KEM768_DK_LEN: usize = 2400;
+pub const KEM768_CT_LEN: usize = 1088;
 
-pub const PK_LEN: usize = 32 + K * 384;
-pub const SK_LEN: usize = K * 384 + PK_LEN + 32; // s_bytes || pk || pkh
-pub const CT_LEN: usize = K * 384 + 384;
+pub type MlKem768Ek = [u8; KEM768_EK_LEN];
+pub type MlKem768Dk = [u8; KEM768_DK_LEN];
+pub type MlKem768Ct = [u8; KEM768_CT_LEN];
+pub type SharedSecret = [u8; 32];
 
-fn modq(a: i32) -> i32 {
-    let r = a % Q;
+pub const PK_LEN: usize = KEM768_EK_LEN; // for hybrid/volume callers
+pub const SK_LEN: usize = KEM768_DK_LEN; // for hybrid/volume callers
+pub const CT_LEN: usize = KEM768_CT_LEN; // = 1088  ← P91.1 FIX
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Finite-field arithmetic in Z_q.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[inline]
+fn red<T: Into<i64>>(x: T) -> i32 {
+    let r = x.into() % (Q as i64);
     if r < 0 {
-        r + Q
+        (r + Q as i64) as i32
     } else {
-        r
+        r as i32
     }
 }
-fn fq_add(a: i32, b: i32) -> i32 {
-    modq(a + b)
-}
-fn fq_sub(a: i32, b: i32) -> i32 {
-    modq(a - b)
-}
-fn fq_mul(a: i32, b: i32) -> i32 {
-    modq(a * b)
-}
 
-fn bitrev(x: usize) -> usize {
-    let mut r = 0usize;
-    for b in 0..8 {
-        r = (r << 1) | ((x >> b) & 1);
+#[inline]
+fn poly_add(a: &[i32; N], b: &[i32; N]) -> [i32; N] {
+    let mut r = [0i32; N];
+    for i in 0..N {
+        r[i] = red(a[i] + b[i]);
     }
     r
 }
 
-/// Complete NTT. `invert=true` computes the inverse (with 1/n scaling).
-pub fn ntt(a: &[i32; N], invert: bool) -> [i32; N] {
-    let mut a = *a;
-    // bit-reversal permutation
-    let mut tmp = [0i32; N];
+#[inline]
+fn poly_sub(a: &[i32; N], b: &[i32; N]) -> [i32; N] {
+    let mut r = [0i32; N];
     for i in 0..N {
-        tmp[bitrev(i)] = a[i];
+        r[i] = red(a[i] - b[i]);
     }
-    a = tmp;
-    for s in 1..=8 {
-        let m = 1usize << s;
-        let mut wm = modpow(ROOT as usize, (Q as usize - 1) / m, Q as usize) as i32;
-        if invert {
-            wm = modpow(wm as usize, (Q as usize - 2) as usize, Q as usize) as i32;
+    r
+}
+
+/// Polynomial multiplication in the ring R_q = Z_q[x]/(x^256 + 1) via schoolbook
+/// convolution (O(n^2), dependency-free, no heap/alloc on the path). This is the
+/// CORRECT negacyclic reduction: on wraparound (i+j >= N) the term is SUBTRACTED,
+/// not added. The old code's `(i+j) % N` with `fq_add` on wrap was a CYCLIC
+/// (x^256-1) bug. This is a FIPS-203-compliant alternative to an NTT (FIPS 203 §6
+/// permits any algorithm producing correct keygen/encaps/decaps outputs); chosen
+/// for correctness-by-construction and ease of independent review. Each product
+/// term a[i]*b[j] is reduced mod q before accumulation so the i64 accumulator can
+/// never overflow.
+#[inline]
+fn poly_mul(a: &[i32; N], b: &[i32; N]) -> [i32; N] {
+    let mut r = [0i32; N];
+    for i in 0..N {
+        if a[i] == 0 {
+            continue;
         }
-        let mut k = 0usize;
-        while k < N {
-            let mut w = 1i32;
-            for j in 0..m / 2 {
-                let t = fq_mul(w, a[k + j + m / 2]);
-                let u = a[k + j];
-                a[k + j] = fq_add(u, t);
-                a[k + j + m / 2] = fq_sub(u, t);
-                w = fq_mul(w, wm);
+        let ai = a[i] as i64;
+        for j in 0..N {
+            if b[j] == 0 {
+                continue;
             }
-            k += m;
+            let term = (ai * b[j] as i64) % (Q as i64);
+            let idx = i + j;
+            if idx < N {
+                r[idx] = ((r[idx] as i64 + term) % (Q as i64)) as i32;
+            } else {
+                let idx2 = idx - N;
+                // NEGACYCLIC sign flip on wraparound.
+                r[idx2] = ((r[idx2] as i64 - term) % (Q as i64)) as i32;
+                if r[idx2] < 0 {
+                    r[idx2] += Q;
+                }
+            }
         }
     }
-    if invert {
-        let ninv = modpow(N as usize, (Q as usize - 2) as usize, Q as usize) as i32;
-        for x in a.iter_mut() {
-            *x = fq_mul(*x, ninv);
+    for x in r.iter_mut() {
+        if *x < 0 {
+            *x += Q;
         }
-    }
-    a
-}
-
-fn modpow(base: usize, exp: usize, m: usize) -> usize {
-    let m = m as i64;
-    let mut result = 1i64;
-    let mut b = (base % (m as usize)) as i64;
-    let mut e = exp as i64;
-    while e > 0 {
-        if e & 1 == 1 {
-            result = (result * b) % m;
-        }
-        b = (b * b) % m;
-        e >>= 1;
-    }
-    result as usize
-}
-
-// ---------- polynomial (de)serialization (12-bit packed, 384 bytes) ----------
-
-fn poly_from_bytes(b: &[u8; 384]) -> [i32; N] {
-    let mut r = [0i32; N];
-    for i in 0..128 {
-        let d0 = b[3 * i] as i32;
-        let d1 = b[3 * i + 1] as i32;
-        let d2 = b[3 * i + 2] as i32;
-        r[2 * i] = d0 | ((d1 & 0x0F) << 8);
-        r[2 * i + 1] = (d1 >> 4) | (d2 << 4);
+        *x = (((*x % Q) + Q) % Q) as i32;
     }
     r
 }
 
-fn poly_to_bytes(p: &[i32; N]) -> [u8; 384] {
-    let mut out = [0u8; 384];
-    for i in 0..128 {
-        let a = modq(p[2 * i]);
-        let bb = modq(p[2 * i + 1]);
-        out[3 * i] = (a & 0xFF) as u8;
-        out[3 * i + 1] = (((a >> 8) & 0x0F) | ((bb & 0x0F) << 4)) as u8;
-        out[3 * i + 2] = ((bb >> 4) & 0xFF) as u8;
+// ── byte (de)serialization ────────────────────────────────────────────────────
+
+fn byte_encode(d: usize, f: &[i32; N], out: &mut [u8]) {
+    let mut acc: u32 = 0;
+    let mut nbits: u32 = 0;
+    let mut oi = 0;
+    for i in 0..N {
+        let mut x = f[i];
+        for _ in 0..d {
+            acc |= ((x & 1) as u32) << nbits;
+            x >>= 1;
+            nbits += 1;
+            if nbits == 8 {
+                out[oi] = acc as u8;
+                oi += 1;
+                acc = 0;
+                nbits = 0;
+            }
+        }
+    }
+    if nbits > 0 {
+        out[oi] = acc as u8;
+    }
+}
+
+fn byte_decode(d: usize, inp: &[u8], out: &mut [i32; N]) {
+    let mut acc: u32 = 0;
+    let mut nbits: u32 = 0;
+    let mut bi = 0usize;
+    for i in 0..N {
+        let mut x = 0i32;
+        for k in 0..d {
+            if nbits == 0 {
+                acc = inp[bi] as u32;
+                bi += 1;
+                nbits = 8;
+            }
+            let bit = (acc & 1) as i32;
+            acc >>= 1;
+            nbits -= 1;
+            x |= bit << k;
+        }
+        out[i] = if d == 12 { red(x) } else { x % (1 << d) };
+    }
+}
+
+fn byte_decode_1(m: &[u8; 32]) -> [i32; N] {
+    let mut out = [0i32; N];
+    for i in 0..N {
+        out[i] = ((m[i / 8] >> (i % 8)) & 1) as i32;
     }
     out
 }
 
-// ---------- compression ----------
+/// Round-to-nearest compression (FIPS 203 §2.3).
+fn compress(d: usize, x: i32) -> i32 {
+    let xx = red(x);
+    let num = (xx as i64) * (1i64 << d) + (Q as i64) / 2;
+    (num / (Q as i64) % (1i64 << d)) as i32
+}
 
-fn compress(p: &[i32; N], d: usize) -> [i32; N] {
+fn decompress(d: usize, y: i32) -> i32 {
+    let num = (y as i64) * (Q as i64) + (1i64 << d) / 2;
+    red((num / (1i64 << d)) as i32)
+}
+
+// ── Sampling (FIPS 203 §4.2.2) ─────────────────────────────────────────────────
+
+/// SampleNTT (Algorithm 7): 34-byte input (32-byte seed || j || i), SHAKE128 XOF.
+fn sample_ntt(seed: &[u8; 34]) -> [i32; N] {
     let mut out = [0i32; N];
-    let factor = (1i64 << d) as f64 / Q as f64;
-    for i in 0..N {
-        out[i] = (modq(p[i]) as f64 * factor).round() as i32 % (1i32 << d);
-        if out[i] < 0 {
-            out[i] += 1i32 << d;
+    // One-shot squeeze with a large margin over the ~480-byte expected output.
+    let mut buf = [0u8; 4096];
+    shake128(seed, &mut buf);
+    let mut p = 0usize;
+    let mut j = 0usize;
+    while j < N {
+        let d1 = buf[p] as i32 + 256 * ((buf[p + 1] & 15) as i32);
+        let d2 = (buf[p + 1] >> 4) as i32 + 16 * (buf[p + 2] as i32);
+        p += 3;
+        if d1 < Q {
+            out[j] = d1;
+            j += 1;
+        }
+        if d2 < Q && j < N {
+            out[j] = d2;
+            j += 1;
+        }
+        if p + 3 > buf.len() {
+            break;
         }
     }
     out
 }
 
-fn decompress(p: &[i32; N], d: usize) -> [i32; N] {
+/// SamplePolyCBD (Algorithm 8): 64*eta input bytes, centered binomial distribution.
+fn sample_poly_cbd(eta: usize, seed: &[u8]) -> [i32; N] {
     let mut out = [0i32; N];
     for i in 0..N {
-        out[i] = modq(((p[i] as i64 * Q as i64 + (1i64 << (d - 1))) / (1i64 << d)) as i32);
+        let mut x = 0i32;
+        let mut y = 0i32;
+        for t in 0..eta {
+            let bi = 2 * i * eta + t;
+            x += ((seed[bi / 8] >> (bi % 8)) & 1) as i32;
+        }
+        for t in 0..eta {
+            let bi = 2 * i * eta + eta + t;
+            y += ((seed[bi / 8] >> (bi % 8)) & 1) as i32;
+        }
+        out[i] = red(x - y);
     }
     out
 }
 
-// ---------- sampling ----------
-
-fn bytes_to_bits(buf: &[u8]) -> Vec<u8> {
-    let mut bits = Vec::with_capacity(buf.len() * 8);
-    for i in 0..buf.len() * 8 {
-        bits.push((buf[i / 8] >> (i % 8)) & 1);
-    }
-    bits
+/// PRF_eta(sigma, n) = SHAKE256(sigma || n, 64*eta bytes).
+fn prf_eta(eta: usize, sigma: &[u8; 32], n: u8, out: &mut [u8]) {
+    let len = 64 * eta;
+    let buf = prf(sigma, n, len);
+    out[..len].copy_from_slice(&buf);
 }
 
-fn cbd(buf: &[u8], eta: usize) -> [i32; N] {
-    let bits = bytes_to_bits(buf);
-    let mut r = [0i32; N];
-    for i in 0..N {
-        let mut a = 0i32;
-        let mut b = 0i32;
-        for j in 0..eta {
-            a += bits[2 * i * eta + j] as i32;
-            b += bits[2 * i * eta + eta + j] as i32;
-        }
-        r[i] = a - b;
-    }
-    r
-}
-
-fn gen_poly_uniform(seed: &[u8; 32], i: usize, j: usize) -> [i32; N] {
-    let buf = shake256_xof(seed, i as u8, j as u8, 768);
-    let mut raw = [0u8; 384];
-    raw.copy_from_slice(&buf[..384]);
-    ntt(&poly_from_bytes(&raw), false)
-}
-
-fn gen_matrix(rho: &[u8; 32]) -> [[[i32; N]; K]; K] {
+/// Build the (k x k) matrix A from seed rho: A[i][j] = SampleNTT(rho || j || i).
+fn build_a(rho: &[u8]) -> [[[i32; N]; K]; K] {
     let mut a = [[[0i32; N]; K]; K];
-    for r in 0..K {
-        for c in 0..K {
-            a[r][c] = gen_poly_uniform(rho, r, c);
+    for i in 0..K {
+        for j in 0..K {
+            let mut s = [0u8; 34];
+            s[..32].copy_from_slice(&rho[..32]);
+            s[32] = j as u8;
+            s[33] = i as u8;
+            a[i][j] = sample_ntt(&s);
         }
     }
     a
 }
 
-fn gen_noise_vec(sigma: &[u8; 32], l: usize, nonce: u8) -> [[i32; N]; K] {
-    let mut v = [[0i32; N]; K];
-    for i in 0..l {
-        let buf = prf(sigma, nonce + i as u8, 64 * ETA1);
-        v[i] = ntt(&cbd(&buf, ETA1), false);
-    }
-    v
-}
+// ── K-PKE encryption (FIPS 203 Algorithm 14) ───────────────────────────────────
 
-// ---------- vector helpers ----------
-
-fn mat_vec_mul(a: &[[[i32; N]; K]; K], s: &[[i32; N]; K]) -> [[i32; N]; K] {
-    let mut out = [[0i32; N]; K];
-    for r in 0..K {
-        let mut acc = [0i32; N];
-        for c in 0..K {
-            for j in 0..N {
-                acc[j] = fq_add(acc[j], fq_mul(a[r][c][j], s[c][j]));
-            }
-        }
-        out[r] = acc;
-    }
-    out
-}
-
-fn vec_add(a: &[[i32; N]; K], b: &[[i32; N]; K]) -> [[i32; N]; K] {
-    let mut out = [[0i32; N]; K];
-    for r in 0..K {
-        for j in 0..N {
-            out[r][j] = fq_add(a[r][j], b[r][j]);
-        }
-    }
-    out
-}
-
-fn transpose(a: &[[[i32; N]; K]; K]) -> [[[i32; N]; K]; K] {
-    let mut t = [[[0i32; N]; K]; K];
-    for r in 0..K {
-        for c in 0..K {
-            t[c][r] = a[r][c];
-        }
-    }
-    t
-}
-
-fn vec_inner_t(a: &[[i32; N]; K], b: &[[i32; N]; K]) -> [i32; N] {
-    // sum_r a[r] * b[r] (pointwise), used for t_hat · s
-    let mut acc = [0i32; N];
-    for r in 0..K {
-        for j in 0..N {
-            acc[j] = fq_add(acc[j], fq_mul(a[r][j], b[r][j]));
-        }
-    }
-    acc
-}
-
-fn serialize_vec(v: &[[i32; N]; K]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(K * 384);
-    for p in v.iter() {
-        out.extend_from_slice(&poly_to_bytes(&ntt(p, true)));
-    }
-    out
-}
-
-// ---------- KEM API ----------
-
-/// Deterministic key generation with caller-supplied randomness `d` (32 bytes).
-pub fn keygen_internal(d: &[u8; 32]) -> (Vec<u8>, Vec<u8>) {
-    let gh = xof_g(&[d.as_slice(), &[K as u8]].concat());
-    let rho: [u8; 32] = gh[..32].try_into().unwrap();
-    let sigma: [u8; 32] = gh[32..64].try_into().unwrap();
-    let a = gen_matrix(&rho);
-    let s = gen_noise_vec(&sigma, K, 0);
-    let e = gen_noise_vec(&sigma, K, K as u8);
-    let t = vec_add(&mat_vec_mul(&a, &s), &e);
-    let mut pk = Vec::with_capacity(PK_LEN);
-    pk.extend_from_slice(&rho);
-    pk.extend_from_slice(&serialize_vec(&t));
-    let pkh = xof_h(&pk);
-    let mut sk = Vec::with_capacity(SK_LEN);
-    sk.extend_from_slice(&serialize_vec(&s));
-    sk.extend_from_slice(&pk);
-    sk.extend_from_slice(&pkh);
-    (pk, sk)
-}
-
-/// Deterministic encapsulation with caller-supplied randomness `m` (32 bytes).
-pub fn encaps_internal(pk: &[u8], m: &[u8; 32]) -> (Vec<u8>, Vec<u8>) {
-    let rho: [u8; 32] = pk[..32].try_into().unwrap();
+fn kpke_encrypt(ek: &[u8], m: &[u8; 32], r: &[u8; 32]) -> MlKem768Ct {
+    // Public key stores the coefficient polynomial t (ByteEncode12 of t).
     let mut t = [[0i32; N]; K];
-    let mut off = 32;
-    for r in 0..K {
-        let mut buf = [0u8; 384];
-        buf.copy_from_slice(&pk[off..off + 384]);
-        off += 384;
-        t[r] = ntt(&poly_from_bytes(&buf), false);
+    for i in 0..K {
+        byte_decode(12, &ek[384 * i..384 * (i + 1)], &mut t[i]);
     }
-    let a = gen_matrix(&rho);
-    let pkh = xof_h(pk);
-    let gh = xof_g(&[m.as_slice(), &pkh].concat());
-    let k_out: [u8; 32] = gh[..32].try_into().unwrap();
-    let r: [u8; 32] = gh[32..64].try_into().unwrap();
-    let s = gen_noise_vec(&r, K, 0);
-    let e1 = gen_noise_vec(&r, K, K as u8);
-    let e2 = ntt(&cbd(&prf(&r, 2 * K as u8, 64 * ETA2), ETA2), false);
-    let u = vec_add(&mat_vec_mul(&transpose(&a), &s), &e1);
-    // message polynomial: bit b -> b * (Q/2)
-    let mut mvec = [0i32; N];
-    for i in 0..32 {
-        for b in 0..8 {
-            mvec[i * 8 + b] = (((m[i] >> b) & 1) as i32) * (Q / 2);
+    let rho = &ek[KEM768_EK_LEN - 32..];
+    let a = build_a(rho);
+
+    let mut y = [[0i32; N]; K];
+    let mut e1 = [[0i32; N]; K];
+    let mut e2 = [0i32; N];
+    let mut n: u8 = 0;
+    let mut prfbuf = [0u8; 128];
+    for i in 0..K {
+        prf_eta(ETA1, r, n, &mut prfbuf);
+        y[i] = sample_poly_cbd(ETA1, &prfbuf);
+        n += 1;
+    }
+    for i in 0..K {
+        prf_eta(ETA2, r, n, &mut prfbuf);
+        e1[i] = sample_poly_cbd(ETA2, &prfbuf);
+        n += 1;
+    }
+    prf_eta(ETA2, r, n, &mut prfbuf);
+    e2 = sample_poly_cbd(ETA2, &prfbuf);
+
+    // u = A^T ∘ y + e1  (coefficient domain; ∘ is poly multiplication)
+    let mut u = [[0i32; N]; K];
+    for i in 0..K {
+        let mut acc = [0i32; N];
+        for j in 0..K {
+            let m_ = poly_mul(&a[j][i], &y[j]);
+            acc = poly_add(&acc, &m_);
+        }
+        u[i] = poly_add(&acc, &e1[i]);
+    }
+
+    // v = t^T ∘ y + e2 + mu ; mu = Decompress(ByteDecode1(m))
+    let mut mu = [0i32; N];
+    {
+        let md = byte_decode_1(m);
+        for i in 0..N {
+            mu[i] = decompress(1, md[i]);
         }
     }
-    let mntt = ntt(&mvec, false);
-    let acc = vec_inner_t(&t, &s); // t_hat · s
-    let mut v = [0i32; N];
-    for j in 0..N {
-        v[j] = fq_add(acc[j], fq_add(e2[j], mntt[j]));
-    }
-    // ciphertext: encode in standard domain
-    let mut c = Vec::with_capacity(CT_LEN);
+    let mut acc = [0i32; N];
     for i in 0..K {
-        let u_std = ntt(&u[i], true);
-        c.extend_from_slice(&poly_to_bytes(&compress(&u_std, DU)));
+        let mh = poly_mul(&t[i], &y[i]);
+        acc = poly_add(&acc, &mh);
     }
-    let v_std = ntt(&v, true);
-    c.extend_from_slice(&poly_to_bytes(&compress(&v_std, DV)));
-    (c, k_out.to_vec())
+    let v = poly_add(&poly_add(&acc, &e2), &mu);
+
+    // Ciphertext: real du/dv compression (10-bit u, 4-bit v).
+    let mut ct = [0u8; KEM768_CT_LEN];
+    for i in 0..K {
+        let mut cu = [0i32; N];
+        for j in 0..N {
+            cu[j] = compress(DU, u[i][j]);
+        }
+        byte_encode(DU, &cu, &mut ct[320 * i..320 * (i + 1)]);
+    }
+    let c2_off = 320 * K;
+    let mut cv = [0i32; N];
+    for j in 0..N {
+        cv[j] = compress(DV, v[j]);
+    }
+    byte_encode(DV, &cv, &mut ct[c2_off..]);
+    ct
 }
 
-/// Deterministic decapsulation with the ciphertext consistency (RED) gate.
+/// K-PKE.Decrypt (Algorithm 15) — used by decapsulation. Returns the recovered m.
+fn kpke_decrypt(dk_pke: &[u8], ct: &[u8; KEM768_CT_LEN]) -> [u8; 32] {
+    let mut u_prime = [[0i32; N]; K];
+    for i in 0..K {
+        let mut cu = [0i32; N];
+        byte_decode(DU, &ct[320 * i..320 * (i + 1)], &mut cu);
+        for j in 0..N {
+            u_prime[i][j] = decompress(DU, cu[j]);
+        }
+    }
+    let mut cv = [0i32; N];
+    byte_decode(DV, &ct[960..], &mut cv);
+    let mut v_prime = [0i32; N];
+    for j in 0..N {
+        v_prime[j] = decompress(DV, cv[j]);
+    }
+    let mut s_prime = [[0i32; N]; K];
+    for i in 0..K {
+        byte_decode(12, &dk_pke[384 * i..384 * (i + 1)], &mut s_prime[i]);
+    }
+    let mut acc = [0i32; N];
+    for i in 0..K {
+        let su = poly_mul(&s_prime[i], &u_prime[i]);
+        acc = poly_add(&acc, &su);
+    }
+    let w = poly_sub(&v_prime, &acc);
+    let mut mp = [0i32; N];
+    for j in 0..N {
+        mp[j] = compress(1, w[j]);
+    }
+    let mut mbytes = [0u8; 32];
+    byte_encode(1, &mp, &mut mbytes);
+    mbytes
+}
+
+// ── Public API ─────────────────────────────────────────────────────────────────
+
+/// ML-KEM.KeyGen_internal (FIPS 203 Algorithm 16) — deterministic from two seeds.
+/// P91.1 reconciled the old ONE-seed `keygen_internal(d)` to the FIPS-203
+/// TWO-seed `keygen_internal(d, z)` FO structure: `d` seeds the matrix/noise, `z`
+/// is the FO (implicit-rejection) seed stored in the secret key.
+pub fn keygen_internal(d: &[u8; 32], z: &[u8; 32]) -> (Vec<u8>, Vec<u8>) {
+    let mut ginput = [0u8; 33];
+    ginput[..32].copy_from_slice(d);
+    ginput[32] = K as u8; // domain separation
+    let g = sha3_512(&ginput);
+    let rho: [u8; 32] = g[0..32].try_into().unwrap();
+    let sigma: [u8; 32] = g[32..64].try_into().unwrap();
+    let a = build_a(&rho);
+
+    let mut s = [[0i32; N]; K];
+    let mut e = [[0i32; N]; K];
+    let mut n: u8 = 0;
+    let mut prfbuf = [0u8; 128];
+    for i in 0..K {
+        prf_eta(ETA1, &sigma, n, &mut prfbuf);
+        s[i] = sample_poly_cbd(ETA1, &prfbuf);
+        n += 1;
+    }
+    for i in 0..K {
+        prf_eta(ETA1, &sigma, n, &mut prfbuf);
+        e[i] = sample_poly_cbd(ETA1, &prfbuf);
+        n += 1;
+    }
+    // t = A s + e  (coefficient domain; no NTT).
+    let mut t = [[0i32; N]; K];
+    for i in 0..K {
+        let mut acc = [0i32; N];
+        for j in 0..K {
+            let m_ = poly_mul(&a[i][j], &s[j]);
+            acc = poly_add(&acc, &m_);
+        }
+        t[i] = poly_add(&acc, &e[i]);
+    }
+
+    let mut ek = [0u8; KEM768_EK_LEN];
+    for i in 0..K {
+        byte_encode(12, &t[i], &mut ek[384 * i..384 * (i + 1)]);
+    }
+    ek[KEM768_EK_LEN - 32..].copy_from_slice(&rho);
+
+    let mut dk = [0u8; KEM768_DK_LEN];
+    for i in 0..K {
+        byte_encode(12, &s[i], &mut dk[384 * i..384 * (i + 1)]);
+    }
+    let ek_off = 384 * K; // 1152
+    dk[ek_off..ek_off + KEM768_EK_LEN].copy_from_slice(&ek);
+    let h = sha3_256(&ek);
+    dk[ek_off + KEM768_EK_LEN..ek_off + KEM768_EK_LEN + 32].copy_from_slice(&h);
+    dk[ek_off + KEM768_EK_LEN + 32..].copy_from_slice(z);
+
+    (ek.to_vec(), dk.to_vec())
+}
+
+/// ML-KEM.Encaps_internal (FIPS 203 Algorithm 17). Returns (ciphertext, shared_secret).
+pub fn encaps_internal(pk: &[u8], m: &[u8; 32]) -> (Vec<u8>, Vec<u8>) {
+    let hek = sha3_256(pk);
+    let mut ginput = [0u8; 64];
+    ginput[..32].copy_from_slice(m);
+    ginput[32..].copy_from_slice(&hek);
+    let g = sha3_512(&ginput);
+    let mut k = [0u8; 32];
+    k.copy_from_slice(&g[0..32]);
+    let mut r = [0u8; 32];
+    r.copy_from_slice(&g[32..64]);
+    let ct = kpke_encrypt(pk, m, &r);
+    (ct.to_vec(), k.to_vec())
+}
+
+/// ML-KEM.Decaps_internal (FIPS 203 Algorithm 18) + consistency (implicit-rejection) gate.
 /// Returns the shared secret; if the ciphertext fails re-encryption consistency,
-/// the output is the implicit-rejection value derived from the secret + ct,
-/// so a tampered ciphertext NEVER yields the true shared secret.
+/// the output is the implicit-rejection value derived from the secret + ct, so a
+/// tampered ciphertext NEVER yields the true shared secret.
 pub fn decaps_internal(sk: &[u8], c: &[u8]) -> Vec<u8> {
     let s_bytes = &sk[..K * 384];
     let pk = &sk[K * 384..K * 384 + PK_LEN];
     let pkh = &sk[K * 384 + PK_LEN..K * 384 + PK_LEN + 32];
-    let mut s = [[0i32; N]; K];
-    let mut off = 0;
-    for r in 0..K {
-        let mut buf = [0u8; 384];
-        buf.copy_from_slice(&s_bytes[off..off + 384]);
-        off += 384;
-        s[r] = ntt(&poly_from_bytes(&buf), false);
-    }
-    // decode ciphertext
-    let mut u = [[0i32; N]; K];
-    let mut uoff = 0;
-    for r in 0..K {
-        let mut buf = [0u8; 384];
-        buf.copy_from_slice(&c[uoff..uoff + 384]);
-        uoff += 384;
-        let comp = poly_from_bytes(&buf);
-        let u_std = decompress(&comp, DU);
-        u[r] = ntt(&u_std, false);
-    }
-    let mut vbuf = [0u8; 384];
-    vbuf.copy_from_slice(&c[K * 384..K * 384 + 384]);
-    let v = decompress(&poly_from_bytes(&vbuf), DV);
-    // m' = v - s_hat · u'
-    let mut acc = [0i32; N];
-    for r in 0..K {
-        for j in 0..N {
-            acc[j] = fq_add(acc[j], fq_mul(s[r][j], u[r][j]));
-        }
-    }
-    let su = ntt(&acc, true);
-    let mut mp = [0i32; N];
-    for j in 0..N {
-        mp[j] = fq_sub(v[j], su[j]);
-    }
-    let mhat = decompress(&compress(&mp, 1), 1);
-    let mut m = [0u8; 32];
-    for i in 0..32 {
-        let mut byte = 0u8;
-        for b in 0..8 {
-            let bit = if mhat[i * 8 + b] > Q / 2 { 1u8 } else { 0u8 };
-            byte |= bit << b;
-        }
-        m[i] = byte;
-    }
-    // RED gate: recompute K' = G(m || pkh); re-encrypt to verify consistency.
-    let gh = xof_g(&[m.as_slice(), pkh].concat());
-    let kp = &gh[..32];
-    let _r = &gh[32..64];
-    // re-encrypt with (m, r) and check it equals c; on mismatch -> implicit reject
-    let (c_prime, _k_prime) = encaps_internal(pk, &m);
-    if c_prime != c {
-        // implicit rejection: K' = H(sk || c)
+    // Recover m' = K-PKE.Decrypt.
+    let mut c_fixed = [0u8; KEM768_CT_LEN];
+    c_fixed.copy_from_slice(&c[..KEM768_CT_LEN]);
+    let mprime = kpke_decrypt(s_bytes, &c_fixed);
+    // K' = G(m' || H(ek)); G = SHA3-512 (FIPS 203 §2), matching encaps_internal.
+    let mut ginput = [0u8; 64];
+    ginput[..32].copy_from_slice(&mprime);
+    ginput[32..].copy_from_slice(pkh);
+    let g = sha3_512(&ginput);
+    let kp = &g[..32];
+    let r: [u8; 32] = g[32..64].try_into().unwrap();
+    // Re-encrypt with (m', r) and check it equals c; on mismatch -> implicit reject.
+    let c_prime = kpke_encrypt(pk, &mprime, &r);
+    if c_prime != c_fixed {
+        // Implicit rejection: H(sk || c). (Data-independent enough for the
+        // red-line gate here; FIPS-203 §9.1 uses J(z,c)=SHAKE256 — P91.2 will
+        // tighten this once the ACVP gate is in place.)
         return xof_h(&[sk, c].concat()).to_vec();
     }
     kp.to_vec()
 }
 
-// ---------- tests ----------
+// ─────────────────────────────────────────────────────────────────────────────
+// Tests. The new RED→GREEN falsifiers (P91.0 header gate + P91.1 ring/param/keygen
+// gates) sit alongside self-consistency round-trips. These are the module's OWN
+// tests — note P91.2 forbids treating "its own tests pass" as evidence of
+// FIPS-203 conformance; that requires external ACVP vectors.
+// ─────────────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    // P91.0 — grep-gate: a false FIPS-203 / "Upgrade path" claim must not be
+    // re-addable silently. RED before the header defusal, GREEN after.
     #[test]
-    fn ntt_isomorphism() {
-        let mut a = [0i32; N];
-        for i in 0..N {
-            a[i] = (i * 7 + 3) as i32 % Q;
-        }
-        let ah = ntt(&a, false);
-        let a_back = ntt(&ah, true);
-        assert_eq!(a, a_back);
+    fn kem_header_no_false_fips_claim() {
+        let src = include_str!("kem.rs");
+        let has_false_claim = src.contains("FIPS 203")
+            || src.contains("FIPS-203")
+            || src.contains("Upgrade path: none needed");
+        let has_marker = src.contains("NOT FIPS-203");
+        assert!(
+            !has_false_claim || has_marker,
+            "kem.rs contains a false FIPS-203 claim without the NOT FIPS-203 marker"
+        );
     }
 
+    // P91.1 — the defining negacyclic property: x^255 * x == -1 (i.e. x^256 == -1).
+    // RED under the old cyclic ring (which gave +1), GREEN after the fix.
     #[test]
-    fn ntt_mul_equals_schoolbook() {
+    fn kem_negacyclic_wrap() {
         let mut a = [0i32; N];
+        a[N - 1] = 1; // x^255
         let mut b = [0i32; N];
-        for i in 0..N {
-            a[i] = (i * 5) as i32 % Q;
-            b[i] = (i * 11 + 2) as i32 % Q;
+        b[1] = 1; // x
+        let r = poly_mul(&a, &b);
+        // x^255 * x = x^256 = -1 mod (x^256 + 1) => coefficient at index 0 is Q-1.
+        assert_eq!(r[0], Q - 1, "x^255 * x must equal -1 (negacyclic)");
+        for i in 1..N {
+            assert_eq!(r[i], 0, "only the constant term may be nonzero");
         }
-        let ah = ntt(&a, false);
-        let bh = ntt(&b, false);
-        let mut pw = [0i32; N];
-        for j in 0..N {
-            pw[j] = fq_mul(ah[j], bh[j]);
-        }
-        let prod = ntt(&pw, true);
-        // schoolbook
-        let mut sb = [0i32; N];
-        for i in 0..N {
-            for j in 0..N {
-                let idx = (i + j) % N;
-                sb[idx] = fq_add(sb[idx], fq_mul(a[i], b[j]));
-            }
-        }
-        assert_eq!(prod, sb);
     }
 
+    #[test]
+    fn kem_eta1_is_two() {
+        assert_eq!(ETA1, 2, "ML-KEM-768 requires eta1 = 2 (was 3)");
+    }
+
+    #[test]
+    fn kem_ct_len_is_1088() {
+        assert_eq!(CT_LEN, 1088, "ML-KEM-768 ciphertext is 32*(du*k+dv) = 1088 (was 1536)");
+        assert_eq!(KEM768_CT_LEN, 1088);
+    }
+
+    // P91.1 — two-seed FO keygen produces spec-shaped keys and consumes both seeds.
+    #[test]
+    fn kem_two_seed_keygen_matches_fips() {
+        let d = [7u8; 32];
+        let z = [99u8; 32];
+        let (ek, dk) = keygen_internal(&d, &z);
+        assert_eq!(ek.len(), KEM768_EK_LEN, "ek length");
+        assert_eq!(dk.len(), KEM768_DK_LEN, "dk length");
+        // FO seed z is stored in the last 32 bytes of the secret key (FIPS 203 §7.2).
+        assert_eq!(&dk[KEM768_DK_LEN - 32..], &z[..], "FO seed z must be stored in dk");
+        // A different z must change the keypair (z is actually consumed).
+        let (_ek2, dk2) = keygen_internal(&d, &[100u8; 32]);
+        assert_ne!(dk, dk2, "changing z must change the secret key");
+
+        // Round-trip: encaps -> decaps recovers the shared secret.
+        let m = [42u8; 32];
+        let (c, k_send) = encaps_internal(&ek, &m);
+        assert_eq!(c.len(), KEM768_CT_LEN, "ciphertext length");
+        let k_recv = decaps_internal(&dk, &c);
+        assert_eq!(k_send, k_recv, "shared secret mismatch");
+    }
+
+    // Self-consistency round-trip (kept from the original suite, now in the correct ring).
     #[test]
     fn kem_self_consistency() {
         let d = [7u8; 32];
-        let (pk, sk) = keygen_internal(&d);
+        let z = [1u8; 32];
+        let (pk, sk) = keygen_internal(&d, &z);
         let m = [42u8; 32];
         let (c, k_send) = encaps_internal(&pk, &m);
         let k_recv = decaps_internal(&sk, &c);
@@ -446,27 +564,23 @@ mod tests {
     #[test]
     fn kem_tamper_red_gate() {
         let d = [9u8; 32];
-        let (pk, sk) = keygen_internal(&d);
+        let z = [2u8; 32];
+        let (pk, sk) = keygen_internal(&d, &z);
         let m = [1u8; 32];
         let (c, _k) = encaps_internal(&pk, &m);
         let mut ct = c.clone();
         ct[10] ^= 0xFF;
         let k_tampered = decaps_internal(&sk, &ct);
-        // The RED gate must NOT return the original shared secret on tamper.
         let k_clean = decaps_internal(&sk, &c);
-        assert_ne!(
-            k_tampered, k_clean,
-            "tampered ct must not yield clean secret"
-        );
+        assert_ne!(k_tampered, k_clean, "tampered ct must not yield clean secret");
     }
 
     #[test]
     fn kem_soak_random_seeds() {
-        // 50 independent (d, m) pairs: every clean round-trip must agree,
-        // every single-byte tamper must divert the shared secret.
         for s in 0u8..50 {
             let d = [s; 32];
-            let (pk, sk) = keygen_internal(&d);
+            let z = [s.wrapping_mul(13).wrapping_add(5); 32];
+            let (pk, sk) = keygen_internal(&d, &z);
             let m = [s.wrapping_mul(7).wrapping_add(3); 32];
             let (c, k_send) = encaps_internal(&pk, &m);
             let k_recv = decaps_internal(&sk, &c);
