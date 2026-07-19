@@ -670,12 +670,14 @@ fn main() {
         "claim-latency-check" => claim_latency_check(pos),
         "v5c-reexec" => v5c_reexec(pos),
         "v1-verify" => v1::v1_verify(pos),
+        "v1-probe" => v1::v1_probe(pos),
         _ => {
-            eprintln!("ci-truth: usage: ci-truth <claim-latency|claim-latency-check|v5c-reexec|v1-verify> [args]");
+            eprintln!("ci-truth: usage: ci-truth <claim-latency|claim-latency-check|v5c-reexec|v1-verify|v1-probe> [args]");
             eprintln!("  claim-latency [<sha> | <base> <head> | <base>..<head>]   append V5-B ledger entries");
             eprintln!("  claim-latency-check                                      P08 §4 anomaly detector (advisory; exit 0) -> docs/ledger/claim-latency-anomalies.jsonl");
             eprintln!("  v5c-reexec [<base>] [<head>]                             independent re-exec (default origin/main HEAD)");
             eprintln!("  v1-verify [<sha>]                                        BLUEPRINT-P06 §5 merge-gate (default HEAD; exit 0 GREEN, 1 RED)");
+            eprintln!("  v1-probe [<master-hex>]                                  P06 real-signature self-test: signs+verifies a known payload via bebop2-kv, proves 1-bit corruption is rejected (exit 0 ok, 1 missing binary / crypto fail)");
             2
         }
     };
