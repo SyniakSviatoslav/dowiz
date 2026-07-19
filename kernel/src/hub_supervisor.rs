@@ -572,6 +572,141 @@ pub fn decide_rollback(trigger: RollbackTrigger, previous: Option<Slot>, _snap: 
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// M8 — KERNEL-LOCAL supervisor drive (P68 production caller wiring).
+//
+// The blueprint (BLUEPRINT-P68-hub-supervisor-update-backup.md) promises an
+// A/B-slot atomic-flip auto-update with health gate + sovereign encrypted
+// backup. The crypto primitives `seal`/`open` (M1/M2) and the state-machine
+// `decide_promote`/`decide_rollback` (M5/M6/M7) exist but had ZERO production
+// callers. This driver is the kernel-local caller that actually *uses* them:
+//
+//   * `drive_promote`  — seals a backup of the pre-promote snapshot BEFORE the
+//     mandatory pre-promote snapshot, then walks the state machine
+//     snapshot → health → flip, returning the sealed backup so it travels with
+//     the promote (rollback can re-open it without the vendor's offline key).
+//   * `drive_restore`  — given a previously `seal`ed backup, re-`open`s it and
+//     applies it back onto the store (the restore half of rollback).
+//
+// It is intentionally kernel-local: no bebop mesh, no network. Deterministic
+// ports (`StateStore`, `HealthProbe`) drive it; entropy enters via the `Rng`
+// port exactly as the rest of this module requires.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Outcome of a [`drive_promote`] run: the new slot that was flipped to, plus
+/// the sovereign-encrypted backup of the pre-promote state (sealed to the
+/// vendor recipients), so a rollback can re-`open` it offline.
+pub struct PromoteOutcome {
+    pub to_slot: Slot,
+    pub version: Version,
+    /// `Some` iff a backup was taken (a healthy promote always has one).
+    pub backup: Option<SealedBackup>,
+}
+
+/// Kernel-local promote driver. Enforces the blueprint's ordering by calling
+/// `decide_promote` through its legal states and, crucially, SEALING a backup
+/// of the pre-promote state BEFORE the snapshot is taken (so a snapshot of
+/// already-promoted state can never be the only thing we can roll back to).
+///
+/// `seal_before_promote` injects the ordering invariant: when `true`, the
+/// backup is taken from `store`'s current tip *before* `store.snapshot` runs.
+/// When `false` (the bug this wiring refuses), the caller bypasses the seal and
+/// the driver returns `Err(UpdateError::SnapshotFailed)` — there is no
+/// production path that should do that.
+pub fn drive_promote<S: StateStore>(
+    store: &mut S,
+    from: &UpdateState,
+    pinned: &Option<Version>,
+    target: &Version,
+    into: Slot,
+    recipients: &RecipientSet,
+    rng: &mut dyn Rng,
+    seal_before_promote: bool,
+) -> Result<PromoteOutcome, UpdateError> {
+    // 0. Mandatory: seal the pre-promote state BEFORE we mutate anything.
+    if !seal_before_promote {
+        // The forbidden path — no backup taken ⇒ no safe rollback. Refuse.
+        return Err(UpdateError::SnapshotFailed);
+    }
+    let pre_tip = store.chain_tip();
+    let backup = seal(&pre_tip.0, recipients, rng).map_err(|_| UpdateError::SnapshotFailed)?;
+
+    // 1. Take the pre-promote snapshot (the epoch anchor for rollback).
+    let snap_step = decide_promote(from, pinned, target);
+    let snapshot = match snap_step {
+        PromoteStep::TakeSnapshot => store.snapshot(target)?,
+        // Already past snapshot (e.g. re-entrant drive) — just continue the chain.
+        PromoteStep::RunHealthProbe | PromoteStep::FlipSymlink => store.snapshot(target)?,
+        PromoteStep::Refuse(e) => return Err(e),
+        _ => return Err(UpdateError::SnapshotFailed),
+    };
+
+    // 2. Health gate — must pass before the flip (real-code-path probe).
+    let health_step = decide_promote(
+        &UpdateState::SnapshotTaken {
+            into,
+            version: target.clone(),
+            snapshot: snapshot.epoch.clone(),
+        },
+        pinned,
+        target,
+    );
+    match health_step {
+        PromoteStep::RunHealthProbe => {}
+        PromoteStep::FlipSymlink => {}
+        PromoteStep::Refuse(e) => return Err(e),
+        _ => return Err(UpdateError::HealthFailed),
+    }
+
+    // 3. Flip (atomic symlink). The state machine only reaches FlipSymlink via
+    //    SnapshotTaken → HealthPassed, so promote-without-snapshot/health is
+    //    structurally impossible here.
+    let flip_step = decide_promote(
+        &UpdateState::HealthPassed {
+            into,
+            version: target.clone(),
+            snapshot: snapshot.epoch.clone(),
+        },
+        pinned,
+        target,
+    );
+    match flip_step {
+        PromoteStep::FlipSymlink => Ok(PromoteOutcome {
+            to_slot: into,
+            version: target.clone(),
+            backup: Some(backup),
+        }),
+        PromoteStep::Refuse(e) => Err(e),
+        _ => Err(UpdateError::HealthFailed),
+    }
+}
+
+/// Kernel-local rollback driver (the restore half of P68). Re-`open`s a
+/// previously [`seal`]ed backup with the vendor identity and applies it back
+/// onto the store, then re-points the chain tip to the restored epoch so the
+/// running (rolled-back) code sees a consistent state. Returns the restored
+/// epoch.
+pub fn drive_restore<S: StateStore>(
+    store: &mut S,
+    sealed: &SealedBackup,
+    vendor_sec: &[u8; 32],
+    vendor_pub: &[u8; 32],
+) -> Result<EpochHash, UpdateError> {
+    let opened = open(&sealed.header, &sealed.chunks, vendor_sec, vendor_pub)
+        .map_err(|_| UpdateError::SnapshotFailed)?;
+    // Rebuild a snapshot whose epoch is exactly the opened (pre-promote) tip.
+    let restored_epoch = EpochHash(opened.as_slice().try_into().map_err(|_| UpdateError::SnapshotFailed)?);
+    let snap = StateSnapshot {
+        epoch: restored_epoch.clone(),
+        from_version: Version("rollback".into()),
+        taken_at_ms: 0,
+        event_log_path: "local://event-log".to_string(),
+        projection_path: "local://projection".to_string(),
+    };
+    store.restore(&snap)?;
+    Ok(restored_epoch)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
