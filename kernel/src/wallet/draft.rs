@@ -12,6 +12,7 @@ use crate::event_log::sha3_256;
 use crate::money::{Currency, Money};
 use crate::ports::payment_provider::{IdempotencyKey, PaymentStatus};
 
+use crate::wallet::outbox::reconnect_draft;
 use crate::wallet::record::{Address, Contact, PaymentMethodRef, WalletRecord};
 /// Content id of the draft at creation (the draft's stable key).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -173,6 +174,39 @@ pub enum DraftFoldError {
     KeyRegenerated,
 }
 
+/// The kernel-local checkout caller for P66 (BLUEPRINT-P66-data-wallet-offline-drafts.md).
+///
+/// `create_draft` / `fold` had ZERO production callers. This is the real wiring:
+/// given a [`Cart`] snapshot and the autofilled wallet fields, build the
+/// single-writer LWW [`CheckoutDraft`] + its initial event log. The idempotency
+/// key is minted exactly once, here, never regenerated.
+///
+/// No money moves — this is the draft/state machine only, gated behind the
+/// existing payment law (P60). The returned `(CheckoutDraft, Vec<DraftEvent>)`
+/// is what the storefront persists and replays on reconnect.
+pub fn build_checkout_draft(
+    draft_id: DraftId,
+    order_id: &str,
+    cart: CartSnapshot,
+    wallet_fill: WalletFill,
+    wallet_id: &[u8; 32],
+    nonce: &[u8; 12],
+) -> (CheckoutDraft, Vec<DraftEvent>) {
+    create_draft(draft_id, order_id.to_string(), cart, wallet_fill, wallet_id, nonce)
+}
+
+/// Reconnect caller for a persisted checkout draft (P66 §16.52). Re-uses the
+/// existing [`reconnect_draft`] double-charge-prevention driver verbatim — this
+/// is the storefront-owned entry point that feeds it a draft recovered from the
+/// local cart. ALWAYS queries the hub by idem key before any resubmit.
+pub fn reconnect_checkout_draft<P: crate::ports::payment_provider::PaymentProvider>(
+    draft: &CheckoutDraft,
+    provider: &P,
+    plan: &crate::ports::payment_provider::NLegPlan,
+) -> crate::wallet::outbox::ReconnectOutcome {
+    reconnect_draft(&draft.state, &draft.idem_key, provider, plan)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -309,5 +343,117 @@ mod tests {
             key: mint_idem_key("order_13", &wallet_id(), &[0x22u8; 12]),
         });
         assert_eq!(fold(&log), Err(DraftFoldError::KeyRegenerated));
+    }
+
+    // ── TASK B (P66) ──────────────────────────────────────────────────────
+    // Prove `reconnect_checkout_draft` (the kernel-local draft-level caller) is
+    // WIRED to `outbox::reconnect_draft` — i.e. a recovered checkout draft
+    // reconnects via its idem-key through the double-charge-prevention path.
+    // RED was shown by temporarily removing `reconnect_checkout_draft` so this
+    // test failed to compile; GREEN after the caller is restored.
+    fn b_plan() -> crate::ports::payment_provider::NLegPlan {
+        crate::ports::payment_provider::NLegPlan {
+            order_id: "order_66".into(),
+            currency: Currency::Eur,
+            legs: vec![crate::ports::payment_provider::VendorLeg {
+                leg: crate::ports::payment_provider::LegId(1),
+                vendor_id: crate::ports::payment_provider::VendorId([9u8; 32]),
+                amount: crate::money::Money::new(1000, Currency::Eur),
+                dest_account: crate::ports::payment_provider::ProviderAccountRef("acct".into()),
+            }],
+        }
+    }
+
+    // A mock hub that ALREADY captured the intent (the dangerous case: socket
+    // dropped after capture, before the client saw the ack).
+    struct CapturedHub {
+        creates: std::cell::RefCell<usize>,
+    }
+    impl crate::ports::payment_provider::PaymentProvider for CapturedHub {
+        fn id(&self) -> &str {
+            "mock"
+        }
+        fn create_with_key(
+            &self,
+            _k: &crate::ports::payment_provider::IdempotencyKey,
+            _p: &crate::ports::payment_provider::NLegPlan,
+        ) -> Result<
+            crate::ports::payment_provider::ClientHandoff,
+            crate::ports::payment_provider::PayError,
+        > {
+            *self.creates.borrow_mut() += 1;
+            Ok(crate::ports::payment_provider::ClientHandoff::HostedRedirect {
+                checkout_url: "https://pay.example/checkout/order_66".into(),
+                session_token: [0u8; 32],
+                ttl_s: 900,
+            })
+        }
+        fn query_status_by_key(
+            &self,
+            _k: &crate::ports::payment_provider::IdempotencyKey,
+        ) -> Result<crate::ports::payment_provider::PaymentStatus, crate::ports::payment_provider::PayError>
+        {
+            Ok(crate::ports::payment_provider::PaymentStatus::Captured)
+        }
+        fn verify_webhook(
+            &self,
+            _raw: &[u8],
+            _headers: &crate::ports::payment_provider::WebhookHeaders,
+        ) -> Result<crate::ports::payment_provider::PaymentEvent, crate::ports::payment_provider::PayError>
+        {
+            unimplemented!()
+        }
+        fn capture_leg(
+            &self,
+            _leg: &crate::ports::payment_provider::LegId,
+            _handle: &crate::ports::payment_provider::ChargeHandle,
+        ) -> Result<(), crate::ports::payment_provider::PayError> {
+            Ok(())
+        }
+        fn void_leg(
+            &self,
+            _leg: &crate::ports::payment_provider::LegId,
+            _handle: &crate::ports::payment_provider::ChargeHandle,
+        ) -> Result<(), crate::ports::payment_provider::PayError> {
+            Ok(())
+        }
+        fn refund(
+            &self,
+            _req: &crate::ports::payment_provider::RefundRequest,
+        ) -> Result<(), crate::ports::payment_provider::PayError> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn reconnect_checkout_draft_wires_outbox_double_charge_prevention() {
+        // A recovered draft in PaymentInflight with a stable (never-regenerated) idem key.
+        let (mut draft, _log) = create_draft(
+            DraftId([7u8; 32]),
+            "order_66".into(),
+            cart(),
+            WalletFill::default(),
+            &wallet_id(),
+            &nonce(),
+        );
+        draft.state = DraftState::PaymentInflight; // socket dropped after capture, before ack
+
+        let hub = CapturedHub {
+            creates: std::cell::RefCell::new(0),
+        };
+
+        // The draft-level caller MUST delegate to outbox::reconnect_draft.
+        let outcome = super::reconnect_checkout_draft(&draft, &hub, &b_plan());
+
+        // Hub already captured ⇒ query-before-replay resolves to AlreadyLive, no resubmit.
+        assert_eq!(
+            outcome,
+            crate::wallet::outbox::ReconnectOutcome::AlreadyLive {
+                status: crate::ports::payment_provider::PaymentStatus::Captured
+            }
+        );
+        // THE TEETH: the caller is genuinely wired to the double-charge path —
+        // create_with_key is invoked ZERO times, so no second charge can occur.
+        assert_eq!(*hub.creates.borrow(), 0);
     }
 }

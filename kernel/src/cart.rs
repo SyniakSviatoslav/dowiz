@@ -85,6 +85,13 @@ impl Cart {
         self.lines.iter().map(|l| l.qty).sum()
     }
 
+    /// Borrow the current cart lines (read-only). Used by the P66 checkout path to
+    /// snapshot a cart into an off-device [`crate::wallet::draft::CartSnapshot`].
+    /// No money is moved here — only an immutable view of the current lines.
+    pub fn lines(&self) -> &[CartLine] {
+        &self.lines
+    }
+
     /// Price every line at the supplied unit price lookup (product_id → minor units).
     /// Returns priced lines + the integer subtotal (overflow-safe via checked mul/add).
     pub fn price<F>(&self, unit_price: F) -> Result<(Vec<PricedLine>, i64), String>
