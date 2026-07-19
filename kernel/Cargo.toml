@@ -244,6 +244,13 @@ path = "src/bin/lm.rs"
 name = "markov_attractor"
 path = "src/bin/markov_attractor.rs"
 
+# FDR durable-ring test/ops tool (roadmap items 4+29). Dual-mode (write / write-clean /
+# recover); the kill-9 recovery integration test (tests/fdr_kill9.rs) spawns it as a real
+# child process and SIGKILLs it. Pure std, links dowiz_kernel — zero external deps.
+[[bin]]
+name = "fdr_recorder"
+path = "src/bin/fdr_recorder.rs"
+
 [profile.release]
 opt-level = 3
 lto = true
