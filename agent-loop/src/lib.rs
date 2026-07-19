@@ -14,6 +14,9 @@ use agent_facade::{
 };
 use std::collections::BTreeMap;
 
+/// P40 DECART-B: the sibling HTTP service that `native-spa-server` proxies to.
+pub mod service;
+
 /// Hard iteration ceiling. 4 = one plan turn + one tool turn + one recovery
 /// turn + one answer turn. Raising it is a reviewed const change, not a knob.
 pub const MAX_AGENT_ITERATIONS: u8 = 4;
