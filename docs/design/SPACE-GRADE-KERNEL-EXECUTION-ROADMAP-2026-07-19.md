@@ -297,3 +297,147 @@ test coverage.
     (925 lib unit / 0 failed). **This closes ALL of Tier 1.**
 
 Everything in this batch is now unblocked — no operator ruling stands between it and execution.
+
+---
+
+## H. Items 33–44 — Deterministic AI Inference Arc (appended 2026-07-19, second wave)
+
+**Source:** `DETERMINISTIC-AI-INFERENCE-SYNTHESIS-2026-07-19.md` (grounding + five resolved
+decisions) and `RAW-PROMPT-4-deterministic-ai-inference-self-verifying-code-2026-07-19.md`
+(verbatim source dialogue). **Governing ruling, recorded:** *"безпека і передбачуваність понад
+швидкість"* (safety and predictability over speed) — applied in the synthesis §2 to resolve all
+five of the dialogue's open questions: **own-kernel zero-dep engine** (not TVM/Burn),
+**inference-only** (training stays edge/build-time), **embedded weights** (generated committed
+Rust static, `#[repr(align(64))]`, SHA3 init self-check, codesign; objcopy/link-section deferred
+with named trigger), **i8-symmetric per-tensor quantization** (integer domain end-to-end,
+`div_half_up` requantization), and **fold_transitions pinning moot pending re-measurement**
+(item 33; separate-core rejected on the `core_pinning.rs` DECART precedent). Same sorting rule
+as items 1–32: actual technical dependency, lowest first. **Standing law for the whole arc:**
+zero new external crates (the live empty `ZERO-DEP-ALLOWLIST.txt` gate makes violation a CI
+failure); every hot path ships under the §4 hardening checklist (item 6's machinery) — no
+parallel checklist; dependency questions, if any arise, follow item 25's BINDING procedure.
+Planning only — no item below starts before the operator dispatches it.
+
+- **Item 33 — bench ground-truth re-measurement (Tier-0-class, zero prerequisites, NOT
+  gated on item 34).** The raw prompt's telemetry numbers (+30% wire, 3.02x ML-DSA @N=64,
+  +16.6% `fold_transitions`, +14.3% `empirical_identify`, "123 passed" engine, MISSING
+  `fundamental_matrix_16`) match **no committed artifact in their claimed context** in either repo
+  (synthesis §1.2) — names real, numbers unverified. (Lone near-match, corrected on re-verify: the
+  figure "123 passed" *is* a real committed count, but for `bebop-proto-cap`
+  (`WAVE-CLOSEOUT-P57-P74-2026-07-19.md:36`, P65), NOT `engine` — engine is 112/116/117/121 across
+  committed docs, never 123; a cross-wired attribution, which strengthens the "real numbers from a
+  different session" reading rather than weakening it.) Run the full tracked bench set (all baseline.json keys, both
+  repos' perf branches reconciled) against committed baselines; confirm or refute each claimed
+  regression; close the `_cur.json` partial-run gap so MISSING→RED cannot be produced by an
+  incomplete run. **Proof:** a dated results doc with per-bench delta vs `baseline.json`; each
+  raw-prompt number explicitly CONFIRMED (with the reproducing command) or REFUTED; a full-key
+  run recorded with zero MISSING rows; any confirmed regression gets its own follow-up ticket
+  (static-data-layout-first per the Q2 resolution — item 3's const-adjacency is the named fix
+  shape; separate-core stays rejected).
+- **Item 34 — pilot workload selection + scope ruling (`RESOLVED 2026-07-19` — operator ruled;
+  gates items 35–44).** No model exists in-repo, so the arc must not start as an engine in search
+  of a workload. Candidate real-product surfaces were presented (synthesis §3: retrieval reranker
+  head, `Verdict`/`DriftClass` anomaly scorer, ETA-adjacent regressor — each KB–MB-scale,
+  bounded-domain). **Operator's ruling (recorded, CLOSED — not an open gate): SYNTHETIC/TOY PILOT
+  FIRST.** A small hand-built synthetic classifier — a toy MNIST-style or hand-authored pattern
+  classifier, weights hand-written or fit offline at KB scale, **zero product data, zero PII, zero
+  product risk** — that exercises the WHOLE determinism pipeline end-to-end (quantization → arena →
+  SIMD kernels → reference oracle → golden checksum → embedded weights) and proves it works BEFORE
+  any real product workload is attempted. Explicitly **NOT** a real-product classifier (the three
+  §3 surfaces are DEFERRED to a follow-on second pilot, itself gated on this toy pilot landing
+  green); **NOT** design-only/deferred (the toy pilot is *built*, it is the concrete vehicle for
+  items 35–44); and — restating the arc-wide non-goals — not an LLM, not training, not GPU.
+  **Scope consequence threaded to the downstream items:** the toy pilot's input plane is
+  **public/synthetic by construction** (no capability/crypto/secret-adjacent inputs, no
+  product/PII data anywhere in items 35–44), so item 43's constant-time gate takes its
+  cheap-but-optional branch for THIS pilot — the mandatory dudect branch and any PII/secret-plane
+  handling activate only for the deferred real-product pilots (item 43's named reopening trigger).
+  **Proof (ruling half — DONE):** this ruling recorded here and in synthesis §3. **Proof (spec
+  half — owed on dispatch):** a one-page spec fixing the toy classifier's bounded input domain D
+  (synthetic, enumerable or tightly bounded) and the output-tolerance guarantee the engine must
+  prove — the pure-function `f(x)=y` contract of the source dialogue's part 3.
+- **Item 35 — fixed-point number-format + rounding-law spec (after 34).** The Q5 ruling made
+  concrete: i8-symmetric weights, per-tensor scale (power-of-two shift preferred), i32
+  accumulators with per-layer proven no-overflow bounds, `div_half_up` requantization,
+  saturating-clamp semantics, refuse-never-fall-back on any unprovable bound. **Proof:** a spec
+  doc with every law as a checkable equation; the i8×i8 multiply-accumulate law exhaustively
+  proven over all 65 536 pairs (the house 65536-pair standard, literally); overflow-bound lemma
+  stated falsifiably per layer shape.
+- **Item 36 — eqc-rs indexed-summation IR extension, quantized-dot target (after 35; extends
+  the already-ruled item 32 IR work — one extension, two consumers, never two IRs).** Grow
+  `Expr` with the Σ-over-index construct needed by BOTH the Laplacian neighbor-sum (item 32)
+  and the quantized dot-product inner law; `emit_fixed_rust` learns the i32-accumulator Q-format
+  path. **Proof:** `emit_proof_program` harness green on an emitted quantized dot (compiled with
+  real rustc, self-asserted against the tree-walking evaluator); the fixed emitter demonstrably
+  refuses an inexpressible node; item 32's Laplacian consumer still green — one IR serves both.
+- **Item 37 — reference oracle implementation (after 35; parallel with 36).** The "Schoolbook"
+  of this arc: scalar, obviously-correct integer-domain matmul + activation set (i64/i128
+  shadow accumulation — std-only, no dependency), retained forever as the test-only
+  differential target, per the §4 checklist's oracle clause and the NTT schoolbook precedent.
+  **Proof:** exhaustive small-dimension cases + large randomized corpus, oracle vs
+  wide-accumulator shadow, zero divergence; the oracle module documented as permanent (never
+  deleted on optimization).
+- **Item 38 — static tensor workspace on the Arena (after 34; parallel with 35–37).** The
+  dialogue's part-5 shape on the existing `BumpArena` precedent: one preallocated workspace,
+  tensors as fixed offsets computed at build time from the pilot graph, zero mid-inference
+  allocation, zero-copy layer-to-layer reads. **Proof:** a counting-allocator test (item 3's
+  own proof machinery reused) shows zero heap allocations across a full inference; offsets are
+  `const`; a deliberately-overlapping layout fails to construct (illegal state unrepresentable,
+  §1.5 house standard).
+- **Item 39 — SIMD quantized kernels via `core::arch` (after 36+37+38).** AVX2
+  `_mm256_maddubs_epi16`/`_mm256_madd_epi16`-class integer paths, runtime-detected with the
+  scalar oracle as fallback — `simd.rs`/`householder.rs` house pattern. Named dividend of Q5:
+  integer arithmetic is associative, so within-row vectorization is *legal* here (unlike the
+  f64 lanes' across-rows-only rule) — but the chosen lane order is still fixed and documented,
+  and debug builds carry `debug_assert_eq!` against item 37's oracle (the `ring_mul` standard).
+  **Proof:** differential corpus vs oracle bit-exact on both paths; the §4 checklist artifacts
+  present and CI-re-executed; bench added to `baseline.json` so the bench-gate guards it.
+- **Item 40 — per-layer golden-checksum oracle + hard-fail (after 39).** Build-time golden
+  CRC32 per layer over pinned test vectors (reusing `fdr`'s hand-rolled CRC32 — P2, no second
+  CRC), runtime spot-check, hard-fail to safe state on mismatch — a checksum mismatch is
+  hardware/memory fault evidence, not a model error. Until item 9's breaker exists the fail is
+  a typed trap + FDR entry; when the breaker lands, it routes through `Result<Permit, Tripped>`
+  (composition named in synthesis §3 — design does NOT gate on item 9). **Proof:** a planted
+  single-bit corruption (weights AND activation, separately) demonstrably trips the fail path
+  and writes the FDR entry; an uncorrupted run is checksum-silent; CI re-executes the planted
+  fault (P7 — the verifier proves it can reject).
+- **Item 41 — embedded weight pipeline (after 35; parallel with 39–40).** The Q4 ruling made
+  real: generator emits committed `static WEIGHTS: [i8; N]` Rust source (eqc_gen precedent),
+  `#[repr(align(64))]` wrapper (first in-repo use — flagged as new surface), SHA3-256 golden-
+  hash self-check at init (reusing `event_log`'s Keccak), ML-DSA codesign via `pq/codesign.rs`
+  for update-blob shipping. The objcopy/`link_section` alternative is parked with its named
+  reopening trigger (weights > ~1–2 MB committed-source practicality, or measured build-time
+  regression) per item 25's procedure. **Proof:** init self-check demonstrably fails on a
+  tampered byte (red→green); alignment asserted by test; the parked alternative + trigger
+  recorded in the module doc (slot_arena format); zero-dep gate untouched.
+- **Item 42 — fixed-sequence scheduler (after 38+39+41).** The engine's spine: a `const`
+  function-pointer array / straight-line layer sequence, cyclomatic complexity 1, no dynamic
+  graph traversal, no hash-map dispatch — the whole model as one compiled call sequence.
+  **Proof:** a source-structure test asserts the sequence is `const` and branch-free at the
+  dispatch level; an assembly spot-check of the dispatch path filed under item 14's toolchain-
+  keyed audit format; end-to-end inference reproduces bit-identical outputs and (via item 40)
+  identical per-layer checksums across repeated runs and across native/wasm32.
+- **Item 43 — constant-time inference gate (after 42; scope decided by input-plane
+  classification first).** Classify the pilot's input plane per §10/P6 plane-ranking: if inputs
+  are secret-adjacent (anything fed from capability/crypto surfaces), the full dudect-style
+  gate with planted-leak self-test (the `ntt_ct_gate` template) is mandatory and ReLU-class
+  branches become mask/cmov per the dialogue's part 4; if provably public-plane, record that
+  ruling and ship the gate as cheap-but-optional. **For the item-34 synthetic/toy pilot the
+  classification is already settled — inputs are public/synthetic by construction, so this pilot
+  takes the cheap-but-optional branch; the mandatory dudect branch activates only for the deferred
+  real-product pilots (item 34's reopening trigger).** **Proof:** the plane classification recorded
+  with its reasoning; if gated — Welch |t| < 4.5 across input classes AND the planted leak
+  demonstrably caught; if not gated — the recorded ruling names the reopening trigger (any new
+  secret-adjacent consumer).
+- **Item 44 — arc-wide CI integration + retroactive checklist pass (after 40+42; final).**
+  The inference hot paths join item 6's designated-hot-path list; the §4 CI job re-executes
+  (never presence-checks) the oracle corpus, the planted-fault checksum test, and (if gated)
+  the dudect self-test; benches join the bench-gate baseline; the FDR carries per-inference
+  cycles + (where RAPL exists) joules per item 29's schema — a token-count-only cost report
+  fails review per §21. **Proof:** a deliberately artifact-less test diff touching an inference
+  hot path fails CI; the full suite green; `cargo tree -e no-dev` still resolves to the kernel
+  root alone — the arc lands with the allowlist still empty.
+
+**Dependency graph, one line:** 33 ∥ 34 → 35 → {36 ∥ 37 ∥ 38} → 39 → 40 → 42 → 43 → 44, with
+41 branching off 35 and merging before 42; item 9 (breaker) composes with 40's fail path when
+it exists but gates nothing here.
