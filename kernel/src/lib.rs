@@ -39,6 +39,7 @@ pub mod bounded_drainer;
 /// P11 §1 — compute budget accumulator (degrade-closed, zero-dep) + §4 Modal
 /// `JobPort` / `BudgetedJobPort` seam (offline-err default; real adapter deferred).
 pub mod budget;
+pub mod blocklist;
 /// RW-07 — cart state machine (consolidate 2 JS cart impls → kernel authority). Totals via money.
 pub mod cart;
 /// M1/M2 — trusted price catalog: the single kernel authority on line-item prices.
@@ -80,6 +81,7 @@ pub mod hub_provisioning;
 /// behind `pq` because the envelope genuinely needs AES-256-GCM + X25519.
 #[cfg(feature = "pq")]
 pub mod hub_supervisor;
+pub mod landing;
 /// P04 product-math: Disjoint-Set Union (union-find) + Kruskal MST — the single
 /// canonical DSU/MST primitive. `cgraph::c_components` delegates here; Phase 9
 /// mesh-heal + Phase 13 partition-tolerant delivery consume it directly.
@@ -123,6 +125,7 @@ pub mod leak_gate;
 /// `mesh.rs` header for the KAT-gated crypto rationale).
 #[cfg(feature = "pq")]
 pub mod mesh;
+pub mod moderation;
 /// P08 typed local-observability core — the pure-std, no-network, no-signing
 /// HALF: typed-metrics schema + closed `LogEvent` enum (§2/§3) and the
 /// claim-latency anomaly detector (§4). F40 ML-DSA signed envelope DEFERRED
