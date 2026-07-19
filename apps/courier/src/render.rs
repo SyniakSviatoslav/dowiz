@@ -24,7 +24,7 @@ pub struct CourierFrame {
 
 /// Compose the DUTY screen (K1) on the CPU floor. A rounded box = the duty
 /// toggle; an a11y `Button` carries its state. No money, no routing.
-pub fn compose_duty(shell: CourierShell, duty_on: bool) -> CourierFrame {
+pub fn compose_duty(_shell: CourierShell, duty_on: bool) -> CourierFrame {
     let mut scene = Scene::new().with_scale(0.5);
     scene.add(SdfShape::RoundedBox {
         bx: 0.0,
@@ -36,7 +36,7 @@ pub fn compose_duty(shell: CourierShell, duty_on: bool) -> CourierFrame {
     let field = scene.render_frame(64, 32);
 
     let mut sem = SemanticScene::default();
-    let mut btn = SemanticNode {
+    let btn = SemanticNode {
         id: 1,
         role: Role::Button,
         name: if duty_on { "Duty: ON" } else { "Duty: OFF" }.into(),
@@ -83,7 +83,7 @@ pub fn compose_run(run: &ActiveRun) -> CourierFrame {
     let field = scene.render_frame(96, 48);
 
     let mut sem = SemanticScene::default();
-    let mut marker = SemanticNode {
+    let marker = SemanticNode {
         id: 1,
         role: Role::Image,
         name: "You".into(),
@@ -127,7 +127,7 @@ pub fn compose_run(run: &ActiveRun) -> CourierFrame {
 /// R4 adversarial — an honest NO-TRACK state. When the `TrackFrame` is absent
 /// (island / no GPS), the run screen renders the order + a `Status` that says
 /// NO TRACK — never a stale marker presented as live.
-pub fn compose_run_no_track(run: &ActiveRun) -> CourierFrame {
+pub fn compose_run_no_track(_run: &ActiveRun) -> CourierFrame {
     let mut scene = Scene::new().with_scale(0.25);
     scene.add(SdfShape::RoundedBox {
         bx: 0.0,
@@ -198,8 +198,9 @@ pub fn floor_parity_courier_corpus(corpus: &[CourierFrame]) -> bool {
 
 /// R4 adversarial — the visual field intensity for an offer urgency (parity-
 /// pinned to `voice::offer_urgency().stake`, P2). Kept here so a11y/render and
-/// voice share ONE stake source.
-pub fn offer_field_intensity(stake: f64) -> f64 {
+/// voice share ONE stake source. `stake` must already be the canonical value
+/// from `voice::offer_field_intensity` (time-based); this only clamps it.
+pub fn field_intensity_from_stake(stake: f64) -> f64 {
     stake.clamp(0.0, 1.0)
 }
 
