@@ -71,20 +71,12 @@ fn main() {
     );
 }
 
-/// Minimal JSON string escape (handles the quotes/backslashes the reason text uses).
+/// Minimal JSON string escape — now the single `fdr::json` authority (roadmap items 4+29
+/// absorbed the two coexisting escapers into one). Byte-identical to the deleted local
+/// `esc()` body (same match arms, same capacity); golden-pinned in `fdr::json` tests and by
+/// this CLI's own `--selftest` output being unchanged.
 fn esc(s: &str) -> String {
-    let mut o = String::with_capacity(s.len() + 2);
-    for c in s.chars() {
-        match c {
-            '"' => o.push_str("\\\""),
-            '\\' => o.push_str("\\\\"),
-            '\n' => o.push_str("\\n"),
-            '\r' => o.push_str("\\r"),
-            '\t' => o.push_str("\\t"),
-            _ => o.push(c),
-        }
-    }
-    o
+    dowiz_kernel::fdr::json::escape(s)
 }
 
 /// RED→GREEN self-check: the Python's headline verdicts must hold in the kernel.
