@@ -34,6 +34,12 @@ pub enum Absence {
     /// Stamping was intentionally skipped for this record class (cost control — see
     /// [`StampPolicy::Cheap`]). First-class and truthful, not a silent omission.
     SamplingDisabled,
+    /// No usable PMU counter interface for this reading: `perf_event_open(2)` reported the
+    /// hardware/interface itself absent (ENOENT/ENODEV/EOPNOTSUPP), the syscall was filtered
+    /// (ENOSYS), or the build target has no zero-dep counter path. Distinct from
+    /// [`Absence::PermissionDenied`], which is `perf_event_paranoid`/`CAP_PERFMON` gating an
+    /// interface that DOES exist. Used by [`super::pmu::PmuStamp`] (roadmap item 27).
+    NoPmuInterface,
 }
 
 impl Absence {
@@ -45,6 +51,7 @@ impl Absence {
             Absence::PermissionDenied => "permission_denied",
             Absence::ReadError => "read_error",
             Absence::SamplingDisabled => "sampling_disabled",
+            Absence::NoPmuInterface => "no_pmu_interface",
         }
     }
 }
@@ -213,6 +220,12 @@ pub struct FdrEvent {
     pub kind: Kind,
     pub name: String,
     pub hw: HwStamp,
+    /// Optional per-classification-window PMU companion stamp (roadmap item 27). Present
+    /// ONLY on verdict-emission records that bracket a `Verdict`/`DriftClass` classification
+    /// (`super::pmu`); `None` — and therefore ABSENT from the serialized record, keeping all
+    /// other FDR records byte-identical — everywhere else. Lives on the P3 forensic plane,
+    /// excluded from every hash/signature/gate surface (see `pmu` module doc).
+    pub pmu: Option<super::pmu::PmuStamp>,
     pub fields: Vec<(&'static str, String)>,
 }
 
@@ -243,6 +256,7 @@ impl FdrEvent {
             kind,
             name,
             hw: HwStamp::sample(hw_policy),
+            pmu: None,
             fields,
         }
     }
@@ -257,6 +271,12 @@ impl FdrEvent {
             .field_str("kind", self.kind.as_str())
             .field_str("name", &self.name);
         let w = self.hw.write(w);
+        // `pmu` rides alongside `hw` ONLY on verdict-emission records; absent otherwise, so
+        // every other FDR record serializes byte-identically to before item 27.
+        let w = match self.pmu {
+            Some(p) => p.write(w),
+            None => w,
+        };
         let mut fobj = JsonWriter::obj();
         for (k, v) in &self.fields {
             fobj = fobj.field_str(k, v);
@@ -313,6 +333,7 @@ mod tests {
             kind: Kind::Event,
             name: "place_order".into(),
             hw: HwStamp::sample(StampPolicy::Cheap),
+            pmu: None,
             fields: vec![("subtotal_cents", "500".into())],
         };
         let j = ev.to_json();
