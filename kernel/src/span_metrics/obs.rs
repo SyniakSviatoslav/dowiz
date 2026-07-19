@@ -233,40 +233,64 @@ impl SpanMetricsLayer {
     }
 }
 
-/// Per-span enter timestamp, stashed in the span's extensions.
-struct EnterAt(Instant);
+/// Enter timestamp + span name of the *currently-entered* span on this thread, kept
+/// in thread-locals instead of in the span's `Extensions`.
+///
+/// WHY A THREAD-LOCAL (not `Extensions::insert`/`get`): `tracing::Span::entered()`
+/// takes the span's per-span `Extensions` **read** lock while it runs
+/// `Layer::on_enter`; calling `span.extensions_mut()` from inside `on_enter`/`on_close`
+/// then tries to take the SAME span's `Extensions` **write** lock → self-deadlock (the
+/// prior agent's code did exactly this and the test hung forever; confirmed via gdb:
+/// blocked in `sharded::extensions_mut` → `RwLock::write`). A thread-local avoids
+/// touching the registry's locks entirely during the callbacks. The immediately-entered
+/// span is always on the current thread, so a thread-local is correct for the
+/// single-thread entered case this layer measures.
+use std::cell::RefCell;
+
+thread_local! {
+    static ENTER_AT: RefCell<Option<Instant>> = const { RefCell::new(None) };
+    static CURRENT_SPAN_NAME: RefCell<Option<String>> = const { RefCell::new(None) };
+}
 
 impl<S> tracing_subscriber::Layer<S> for SpanMetricsLayer
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
-    fn on_new_span(&self, _attrs: &Attributes<'_>, id: &Id, ctx: Context<'_, S>) {
-        // Pre-allocate the extensions slot; the timestamp is filled on enter.
-        if let Some(span) = ctx.span(id) {
-            span.extensions_mut().insert(EnterAt(Instant::now()));
-        }
+    fn on_new_span(&self, _attrs: &Attributes<'_>, _id: &Id, _ctx: Context<'_, S>) {
+        // No per-span state is stamped here. `on_enter` records the real enter time
+        // (below); a span that is created but never entered simply has no enter
+        // timestamp, and is skipped on close (correct — it did no work).
     }
 
     fn on_enter(&self, id: &Id, ctx: Context<'_, S>) {
+        // Stamp the enter time for the currently-entered span (always on this thread),
+        // and remember its name so `on_close` can record under the right name WITHOUT
+        // re-locking the registry's per-span Extensions (see note above). `name()` reads
+        // only the span metadata (a `&'static` str) and does NOT take the per-span
+        // extensions lock, so it is deadlock-free here. Update-on-reenter keeps the
+        // latest enter stamp, so the measured duration is the final enter→close interval.
         if let Some(span) = ctx.span(id) {
-            span.extensions_mut().insert(EnterAt(Instant::now()));
+            let name = span.name().to_string();
+            ENTER_AT.with(|t| *t.borrow_mut() = Some(Instant::now()));
+            CURRENT_SPAN_NAME.with(|n| *n.borrow_mut() = Some(name));
         }
     }
 
-    fn on_close(&self, id: Id, ctx: Context<'_, S>) {
-        let span = match ctx.span(&id) {
-            Some(s) => s,
+    fn on_close(&self, _id: Id, _ctx: Context<'_, S>) {
+        let (t0, name) = {
+            let t0 = ENTER_AT.with(|t| t.borrow_mut().take());
+            let name = CURRENT_SPAN_NAME.with(|n| n.borrow_mut().take());
+            (t0, name)
+        };
+        let t0 = match t0 {
+            Some(t0) => t0,
+            None => return, // never entered (e.g. span created but not entered) → skip.
+        };
+        let name = match name {
+            Some(n) => n,
             None => return,
         };
-        let dur = {
-            let ext = span.extensions();
-            match ext.get::<EnterAt>() {
-                Some(EnterAt(t0)) => t0.elapsed(),
-                None => return, // never entered (e.g. span created but not entered) → skip.
-            }
-        };
-        let name = span.name().to_string();
-        let dur_us = dur.as_micros().min(u64::MAX as u128) as u64;
+        let dur_us = t0.elapsed().as_micros().min(u64::MAX as u128) as u64;
         self.metrics.record(&name, dur_us);
     }
 
