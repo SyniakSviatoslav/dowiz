@@ -2,9 +2,10 @@
 //! Run: `cargo bench -p dowiz-kernel` (or `cargo bench` from kernel/).
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use dowiz_kernel::absorbing;
 use dowiz_kernel::attention;
 use dowiz_kernel::cgraph::CGraph;
+use dowiz_kernel::money::Currency;
+use dowiz_kernel::vendor::VendorId;
 use dowiz_kernel::retrieval::ppr::Ppr;
 use dowiz_kernel::retrieval::recall::PrimaryRecall;
 use dowiz_kernel::spectral_cache::{canonical_content_address, slem_cached, DecompCache};
@@ -101,7 +102,12 @@ fn bench_empirical_identify(c: &mut Criterion) {
 }
 
 /// The F33 bounded-budget hot path: the Dispatcher calls `try_acquire` once per chat request.
-/// This bench isolates the atomic acquire cost (refill + CAS) from any network/harvest work.
+/// This bench isolates the SINGLE-THREADED acquire cost (refill + decrement) from any
+/// network/harvest work. NOTE: `TokenBucket` is a `std::sync::Mutex<Inner>` (NOT a CAS / lock-free
+/// atomic) — the critical section is a Mutex lock, which is what the over-grant invariant needs
+/// (refill+decrement must be atomic). Contended multi-threaded Mutex-vs-CAS numbers live in the
+/// separate `contended` bench group (see `kernel/benches/contention.rs`, branch
+/// `perf/contention-bench-2026-07-18`), which P80 cites rather than re-specifying.
 fn bench_token_bucket(c: &mut Criterion) {
     c.bench_function("token_bucket/try_acquire_permit", |b| {
         // A typical chat permit is its max_tokens (8). Capacity 64, refill 8/s keeps it satisfied.
@@ -209,24 +215,6 @@ fn bench_ppr(c: &mut Criterion) {
     });
 }
 
-/// Blind-spot coverage: absorbing Markov fundamental matrix is O(n^3) — used by
-/// agentic decision gating. Was UNBENCHED; regressions here are silent until a
-/// large state space is hit. Bench at a modest n to anchor the baseline.
-fn bench_absorbing(c: &mut Criterion) {
-    let n = 16usize;
-    // Q submatrix of transient-transition probabilities (row-stochastic-ish).
-    let mut q = vec![vec![0.0f64; n]; n];
-    for i in 0..n {
-        let j1 = (i + 1) % n;
-        let j3 = (i + 3) % n;
-        q[i][j1] = 0.6;
-        q[i][j3] = 0.4;
-    }
-    c.bench_function("absorbing/fundamental_matrix_16", |b| {
-        b.iter(|| black_box(absorbing::fundamental_matrix(&q)))
-    });
-}
-
 /// Blind-spot coverage: BM25+trigram fusion recall (W18 self-improvement loop).
 /// Previously UNBENCHED despite being on the living-knowledge read path.
 fn bench_retrieval_recall(c: &mut Criterion) {
@@ -258,7 +246,6 @@ criterion_group!(
     bench_spectral_cache_canonical_address,
     bench_graph_rebuild_rank,
     bench_ppr,
-    bench_absorbing,
     bench_retrieval_recall,
     bench_attention
 );

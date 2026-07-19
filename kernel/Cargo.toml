@@ -147,6 +147,59 @@ proptest = "1.11"
 name = "criterion"
 harness = false
 
+# P80 (S1 §3.3-C1 / SYNTHESIS-PERFORMANCE-AUDIT-2026-07-18) — kernel bench-coverage
+# expansion. Each entry is a focused bench group following the <group>/<n> bench-id
+# convention owned by P75 (P80 cites it, does NOT redefine). The `pq`-gated groups
+# carry `required-features = ["pq"]` so `cargo bench --no-run` compiles the default
+# build, and `cargo bench --no-run --features pq` compiles the PQ lanes.
+
+# Growth-tripwire ONLY (S1 §2 binding verdict): ledger_sum is NOT changed. Sweep n ∈
+# {2,8,64,256}; revisit threshold written in the bench's doc-comment.
+[[bench]]
+name = "money_ledger"
+harness = false
+
+# Spectral / linear-algebra surfaces (eigenvalues straddling n=32 QR↔Faddeev, matmul,
+# kalman, classify_drift, laplacian_spmv). Pure-std, no feature gate.
+[[bench]]
+name = "spectral_math"
+harness = false
+
+# Retrieval/geo surfaces (bm25 isolate, progress_along_route, harmonic_centrality).
+[[bench]]
+name = "retrieval_geo"
+harness = false
+
+# PPR growth sweep n ∈ {32,128,256} @ α=0.15 (R1 §4). Revisit threshold in doc-comment.
+[[bench]]
+name = "ppr"
+harness = false
+
+# Absorbing Markov fundamental matrix (relabel _16→_cyclic_16, add lifecycle_5 real DAG
+# path + dag_chain sweep, 2 doc fixes: true O(n⁴) not O(n³); no "agentic decision gating").
+[[bench]]
+name = "absorbing"
+harness = false
+
+# Entire kernel PQ lane (ML-DSA sign/verify, ML-KEM encaps/decaps, hybrid decaps,
+# SHAKE256/SHA3 size-swept). GATED behind `pq` (same discipline as the `pq` module).
+[[bench]]
+name = "kernel_crypto_pq"
+harness = false
+required-features = ["pq"]
+
+# Mesh signed-chain verification (ML-DSA, gated behind `pq` like `mesh` itself).
+[[bench]]
+name = "mesh_verify"
+harness = false
+required-features = ["pq"]
+
+# NOTE: the contended multi-threaded Mutex benches for token_bucket/budget/admission
+# ALREADY EXIST on branch `perf/contention-bench-2026-07-18` (kernel/benches/contention.rs,
+# see SYNTHESIS-WAVE3-CLOSEOUT-2026-07-18 §2). P80 cites them and does NOT re-specify;
+# merging that branch discharges this sub-item. Only the mislabeled "CAS" comment in
+# `criterion::bench_token_bucket` is corrected here (the TokenBucket is a Mutex, not CAS).
+
 # NOTE: the W5 counting-allocator integration test (tests/arena_counting_allocs.rs)
 # is not yet wired — the counting global-allocator feature exists (`count-allocs`,
 # line 35) but the dedicated target's source was never committed. The allocation
