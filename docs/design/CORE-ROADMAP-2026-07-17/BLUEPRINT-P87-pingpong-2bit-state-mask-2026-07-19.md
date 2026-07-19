@@ -268,6 +268,38 @@ impl StateMask {
 - **RED `red_source_cell_never_settles`:** a driven source cell keeps `Source` even at zero delta — it
   must never be skipped (it anchors the field). RED against a settle check that ignores the source set.
 
+### 4.5 WebGL2 / CPU-floor fallback — the GPU texel-skip leg is WebGPU-compute-scoped (FE-16 floor)
+
+P38's FE-16 fallback ladder is **WebGPU → WebGL2 → CPU `compose_field`** (§0.6;
+`BLUEPRINT-P38-webgpu-render-engine.md` §3.6, §12.3) — a courier's mid-tier phone may reach only the
+WebGL2 rung, which has **no compute shaders and no atomics** (core WebGL2 / GLES 3.0). P87 already
+splits a CPU-authority leg from a GPU leg (§4.1); this subsection makes the fallback rung explicit and
+carries the P38 §12.3 floor line the audit found missing (META-GAP-AUDIT-2026-07-19 §1 G2). The GPU
+leg — the `R32Uint` mask plane, texel-fetch/ROP skip, and the `invalid`-scatter set — is
+**WebGPU-compute-only**: the mask-update needs a compute shader, and the `invalid` scatter needs an
+atomic set. Neither exists on WebGL2. Plainly:
+
+- **WebGPU rung (post-OD-11):** the full mask plane runs — settle texel-skip + the shadow `invalid`
+  gate, its mask-update shader carrying P88's `// SINGLE-WRITER:` proof (shared ping-pong) or an atomic
+  set (the scatter, §4.2).
+- **WebGL2 and CPU-floor rungs:** the field runs on the **single-threaded CPU** `FieldFrame::step`
+  path (the P38 §3.1 authority), presented by a WebGL2 fragment-raster quad or canvas2d `putImageData`.
+  The **only** settle optimization available on these rungs is the **CPU-authority settle-skip leg
+  (§4.1)** — the conservative exact-zero-neighborhood bit-identical skip — and only **if it benched
+  positive** (the honestly-expected outcome is that it is cut, §6 D-BENCH). There is **no GPU
+  texel-skip and no atomic scatter on WebGL2**; the 2-bit mask is either a pure-CPU optimizer or
+  absent. This is **option (i)** of the audit's G2 choice: the compute leg is WebGPU-only and the
+  WebGL2 floor never runs it. Because the CPU writer is single-threaded, **atomicity (the `invalid`
+  scatter's atomic set) is moot on these rungs** — there is no concurrent writer.
+
+**DoD addition — the FE-16 floor line (P38 §12.3 standing gate), previously absent (audit G2):**
+**D-WEBGL2** — settle/mask behavior is verified **CORRECT on the WebGL2 and CPU floors**, not only on
+WebGPU. Falsifier: the CPU oracle stays bit-identical (D-NOREG) whether the mask is present as a
+pure-CPU optimizer or absent; and a forced-`navigator.gpu = undefined` degrade path (P38 §3.6 pattern)
+composes the field correctly via the CPU path with **no compute-atomics dependency reachable**. A build
+whose settle/render correctness on WebGL2 **depends on** the GPU mask plane, or that makes texel-skip a
+*requirement* rather than a WebGPU-only optimization, = **NOT done**.
+
 ---
 
 ## 5. The precision ladder P87 fixes in canon (standard §2 item 16, the single-owner contract)
@@ -295,6 +327,7 @@ different layers**. This table is P87's single-owner contract — no other docum
 | D4 | source cells never settle/skip | `red_source_cell_never_settles` |
 | **D-BENCH** | **a MEASURED frame-time/bandwidth win from mask-skip on large grids**, else the plane is CUT | §7 grid-sweep {128²,256²,512²} × settle {0%,50%,90%}; **if no win, cut the plane + log the negative result (§8-style)** |
 | D-NOREG | the float field oracle stays bit-identical (the mask never alters `U` or `compose()`) | `compose_returns_deterministic_frame`, `allocfree_step_byte_identical` stay green |
+| D-WEBGL2 | settle/mask behavior is CORRECT on the WebGL2 + CPU floors (the GPU texel-skip/scatter leg is WebGPU-compute-only; those rungs run the single-threaded CPU path, mask as pure-CPU optimizer or absent) — §4.5 | CPU oracle bit-identical with mask present-or-absent + forced-`navigator.gpu=undefined` composes via the CPU path with no compute-atomics dependency reachable (P38 §12.3 floor line) |
 
 **The measure-first gate is binding:** per the operator's standard, if D-BENCH shows no win the plane
 does **not** ship and the negative result is recorded — exactly as B4 walked back a shipped

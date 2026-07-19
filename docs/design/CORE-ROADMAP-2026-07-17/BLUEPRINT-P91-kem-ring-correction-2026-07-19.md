@@ -269,9 +269,41 @@ pub const CT_LEN: usize = 32 * (DU * K + DV);   // = 1088 — WAS K*384 + 384 = 
 
 ### 4.3 P91.2 — the ship-RED gate (ACVP KAT + review)
 
+- **P91.2.0 — vector-sourcing + KEM-loader build (REAL PREREQUISITE, NOT assumed-available
+  infrastructure).** The D3 conformance spine below presumes "real NIST ACVP ML-KEM-768 vectors" and a
+  test that loads them — **neither exists in-repo today** (§0.3: `kernel/src/pq/kat/acvp/` holds only the
+  three **ML-DSA** files `key-gen.json`/`sig-gen.json`/`sig-ver.json`; the loader `dsa/dsa_acvp_tests.rs`
+  is ML-DSA-shaped only). This sub-step **must be completed first** — it is a tracked prerequisite of
+  P91.2, not free infrastructure, and P91.2 cannot start until it lands:
+  - **(a) Source the real vectors (pin provenance — closes audit G4).** Acquire the official NIST vectors
+    from **`usnistgov/ACVP-Server`** (the authoritative ACVP generator repo), path
+    `gen-val/json-files/`, two directories confirmed to exist this pass:
+    **`ML-KEM-keyGen-FIPS203/`** and **`ML-KEM-encapDecap-FIPS203/`**. From each, take
+    `internalProjection.json` (the `isSample: true` export that carries the expected answers inline;
+    `prompt.json` = inputs only, `expectedResults.json` = answers only — the projection is the combined
+    file the existing ML-DSA loader already mirrors). Vendor them into
+    `kernel/src/pq/kat/acvp/kem-keygen.json` + `kem-encap-decap.json`, filtering to `parameterSet ==
+    "ML-KEM-768"`. **Pin the exact `usnistgov/ACVP-Server` commit SHA** the JSON was exported from in the
+    file header / commit message, matching P85's `986646a` discipline (the audit flagged this vector set
+    as having "no NIST URL, version tag, or generation script"). RustCrypto `ml-kem/tests` mirrors this
+    same NIST export and is an acceptable cross-check, but `usnistgov/ACVP-Server` is the source of truth.
+  - **(b) Build a KEM ACVP loader/harness — model it on the existing ML-DSA one.** The pattern already
+    exists and MUST be reused, not reinvented: `kernel/src/pq/dsa/dsa_acvp_tests.rs` (`OnceLock`-cached
+    parse, `KAT_DIR = concat!(env!("CARGO_MANIFEST_DIR"), "/src/pq/kat/acvp/")`, `serde`/`serde_json`
+    dev-deps, `hex()` decode, per-`tcId` `#[test]` via `paste::item!`, plus aggregate count guards). Add a
+    sibling `kernel/src/pq/kem/kem_acvp_tests.rs` with KEM-shaped structs — the ML-KEM ACVP schema differs
+    from ML-DSA: **keyGen** groups carry the two seeds `d`,`z` per test with expected `ek`,`dk`;
+    **encapDecap** groups carry a `function` field (`"encapsulation"`/`"decapsulation"`), where encaps
+    tests give `ek`,`m` → expected `c`,`k`, and decaps groups give a group-level `dk` with tests `c` →
+    expected `k`. Wire it into the `pq` module tree the same way `dsa_acvp_tests.rs` is.
+  - **(c) This is a prerequisite sub-task of P91.2, explicitly.** It is added to the §2.3 dependencies and
+    the §14 worker acceptance path (step 3 cannot "ship RED first" against vectors that do not yet exist).
+    Until P91.2.0 is done, D3's `kem_acvp_encaps_decaps_byte_exact` has nothing to load and the FIPS-203
+    conformance claim rests on vectors + a harness that are not in the tree.
+
 - **Spec:** add real NIST ACVP ML-KEM-768 encaps/decaps vectors to `kat/acvp/kem-encap-decap.json` and a
-  byte-exact test `kem_acvp_encaps_decaps_byte_exact`; add the `kem_negacyclic_wrap` KAT; require the §8
-  independent 3-model review attestation.
+  byte-exact test `kem_acvp_encaps_decaps_byte_exact` (loaded via the P91.2.0 harness); add the
+  `kem_negacyclic_wrap` KAT; require the §8 independent 3-model review attestation.
 - **RED-first discipline:** the ACVP test is written and committed **RED** (against the un-fixed code, it
   fails; that failing state is the proof the vectors are real and discriminating) *before* P91.1 lands —
   ship RED first, exactly as the bebop2 NTT work and `verified-by-math-2026-07-07` require.
