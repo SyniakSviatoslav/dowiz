@@ -85,6 +85,13 @@ else
       [ -z "$path" ] && continue
       if starts_with "$f" "$path"; then
         matched=1
+        if [ "$mode" = "kani" ]; then
+          # Kani rows are a separate toolchain (network install + minutes-scale) — the
+          # kani-gate job runs them (scripts/kani-gate.sh). Skipping here keeps this gate
+          # fast/offline/deterministic (item 6 §6.1 / item 7 blueprint §6.1).
+          echo "  ..  [row:$path] mode=kani → deferred to kani-gate ('$filter')"
+          continue
+        fi
         run_row "$features" "$filter" "$min" "$mode" "row:$path" || rc=1
       fi
     done < <(rows)
