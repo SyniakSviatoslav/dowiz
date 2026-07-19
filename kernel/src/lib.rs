@@ -61,6 +61,11 @@ pub mod core_pinning;
 /// (retrieval-blueprint v2 diffusion/recall primitive).
 pub mod csr;
 pub mod domain;
+/// `fdr` — the kernel's flight-data recorder: hand-rolled logger + durable post-mortem
+/// ring (roadmap items 4+29). The terminal state of the `tracing`/`tracing-subscriber`
+/// retirement. Compiled unconditionally (the hot-path spans in `domain`/`order_machine`
+/// bind to `fdr::info_span!`); its Instant/SystemTime stamps are gated off `wasm32`.
+pub mod fdr;
 /// BLUEPRINT-P72 — food-court N-leg checkout spine. Composes P60 `run_nleg_saga` /
 /// `NLegPlan` / `VendorLeg` / `RefundRequest` with P62 vendor-partitioned
 /// `charge_legs` / `kitchen_tickets`. Pure Rust, no DOM, no float on money.
