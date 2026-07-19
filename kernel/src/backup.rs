@@ -435,6 +435,28 @@ impl<S: BlockStore> BackupOrgan<S> {
     }
 }
 
+/// Kernel-local production caller for the Tier-B4 backup organ.
+///
+/// The `BackupOrgan` (content-addressed CDC + dedup + byte-identical
+/// restore) had ZERO production callers — only module tests used it. This
+/// is the real wiring: a hub-state snapshot is backed up (sealed into the
+/// content-addressed store as a manifest + deduped blocks) and later restored
+/// byte-for-byte (the P68 M4 local-rollback / pre-promote-snapshot cycle,
+/// which stores the state plaintext on the vendor's own box). It returns the
+/// dedup stats so a caller can observe that an unchanged re-snapshot adds no
+/// new physical blocks.
+///
+/// Fail-closed: a corrupt/missing snapshot restore yields `Err`, never
+/// partial or garbage bytes (the `RestoreError` contract is preserved).
+pub fn snapshot_and_restore_local<S: BlockStore>(
+    organ: &mut BackupOrgan<S>,
+    state: &[u8],
+) -> Result<(Vec<u8>, BackupStats), RestoreError> {
+    let (manifest, stats) = organ.backup(state);
+    let restored = organ.restore(&manifest)?;
+    Ok((restored, stats))
+}
+
 /// Why a restore failed (fail-closed: never returns partial/garbage bytes).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RestoreError {
