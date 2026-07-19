@@ -194,6 +194,30 @@ test coverage.
 
 - **Item 6** — §4 hardening checklist codified + CI enforcement, with §10/P7's correction built in:
   CI must re-execute oracles and dudect self-tests, never presence-check artifacts.
+  **✅ DONE 2026-07-19** (`ae4964e61`, branch `exec/space-grade-tier0-2026-07-19`). Real CI config +
+  a new dudect harness landed. Three deliverables: `docs/audits/hardening/CHECKLIST.md` (standing
+  law), `docs/audits/hardening/HOT-PATHS.tsv` (machine-read manifest — 14 rows seeded from the real
+  surfaces: pq/dsa+kat, pq/keccak, event_log Keccak-copy-B, pq/x25519, pq/kem, pq/hybrid,
+  order_machine FSM, householder+spectral eigen, token_bucket, retrieval/pattern, fdr/json, ct_gate),
+  and the `hardening-gate` CI job (`scripts/hardening-gate.sh`). The gate **re-executes, never
+  presence-checks** (§10/P7): every verdict is a live `cargo test` exit code + the PARSED `N passed`
+  count asserted `>= min_tests`; a filter matching **zero** tests is RED (anti-forgery core). **RED/
+  RED/GREEN proven with real output:** (a) a diff touching a hot ZONE with no manifest row → exit 1;
+  (b) a manifest row whose filter matches zero tests → exit 1; (c) my own commit's diff (touching 3
+  registered rows) → exit 0. **Independent-verification CORRECTION to the blueprint's premise:** the
+  cited pq KATs (ACVP/Keccak/x25519/KEM/hybrid) do **NOT** re-execute in the default `cargo-test` job
+  — `pq` is not a default feature, so `cargo test --offline` never compiles them; they were **dark in
+  CI**. The gate's unconditional oracle floor now runs them with `--features pq` every build, closing
+  that gap. **dudect (honest gap — built):** `kernel/src/ct_gate.rs`, a zero-dep Welch-t harness + a
+  reusable `ct_eq` constant-time primitive + a **planted-leak self-test** (variable-time `naive_eq`
+  detected at |t|≈300+, `ct_eq` |t|<1.3, separation >290×) run in release in the gate step. **item 3
+  (debug_assert differential):** wired for `order_machine::assert_transition` (slice-vs-`FSM_ADJ`
+  dual-representation) and `householder::eig2x2` (Vieta trace/det) as the pattern; corpus-oracle rows
+  carry `N/A(corpus-oracle)`. **Scoped vs deferred (ledgered in the manifest's own `gap` column):**
+  dudect crypto-surface coverage → items 7/8; `kem.rs`/`hybrid.rs` variable-time tag compares are
+  `KNOWN-RED(P91.2)` (NOT fixed here — the CT fix is the gate's first customer); `token_bucket` GCRA
+  differential oracle → item 8; item-4 exhaustive assembly → item 7 (Kani). Full kernel suite
+  **955/0/8** at the commit. Docs (this roadmap + CORE-ROADMAP-INDEX) pushed to `origin/main`.
 - **Item 7** — Kani wiring (Keccak, FSM graph algorithms, NTT arithmetic, GCRA transition — now
   applies to the adopted GCRA, §0 above).
 - **Item 8** — GCRA decision package. **Ruling: ADOPT (§0 above).** Differential oracle + Kani
