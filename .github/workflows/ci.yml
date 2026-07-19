@@ -97,10 +97,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Pre-fetch crates so the offline re-exec has its deps (no vendoring yet)
+      - name: Pre-fetch crates offline (per-crate cd; no workspace in dowiz)
         run: |
-          cargo fetch --manifest-path kernel/Cargo.toml
-          cargo fetch --manifest-path engine/Cargo.toml
+          cd kernel
+          cargo fetch
+          cd ../engine
+          cargo fetch
       - name: Re-execute the diff range in a clean independent worktree (RED|GREEN|SKIP)
         run: cargo run --offline --manifest-path tools/ci-truth/Cargo.toml -- v5c-reexec origin/main HEAD
 
@@ -131,13 +133,13 @@ jobs:
         with:
           fetch-depth: 0
       - name: Run kernel test suite (per-crate cd)
-        working-directory: kernel
         run: |
+          cd kernel
           cargo fetch
           cargo test --offline
       - name: Run engine test suite (per-crate cd)
-        working-directory: engine
         run: |
+          cd engine
           cargo fetch
           cargo test --offline
 
