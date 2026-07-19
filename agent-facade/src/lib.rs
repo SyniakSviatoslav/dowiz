@@ -79,9 +79,13 @@ impl<S: OrderStatusSource> ReadOrderStatusTool<S> {
 
     /// Parse `raw_arg` (the model's JSON, verbatim) into an `order_id` string.
     /// Never panics: malformed JSON / missing key ⇒ `ToolError::BadArg`.
+    ///
+    /// Item 31 §4.4 Phase-A cutover: parses with the kernel-owned `dowiz_kernel::json` primitive
+    /// (bounded, degrade-closed, differentially proven vs serde_json) instead of `serde_json`.
+    /// LLM-originated, bounded schema; a malformed arg is already fail-closed to `BadArg`.
     fn parse_arg(raw_arg: &str) -> Result<String, ToolError> {
-        let v: serde_json::Value =
-            serde_json::from_str(raw_arg).map_err(|_| ToolError::BadArg(raw_arg.to_string()))?;
+        let v = dowiz_kernel::json::parse(raw_arg)
+            .map_err(|_| ToolError::BadArg(raw_arg.to_string()))?;
         v.get("order_id")
             .and_then(|o| o.as_str())
             .map(|s| s.to_string())

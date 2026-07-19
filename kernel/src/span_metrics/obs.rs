@@ -1,41 +1,39 @@
 //! telemetry/obs.rs — P83 Layer 1: per-function production observability.
 //!
 //! BLUEPRINT P83 / SYNTHESIS PERFORMANCE AUDIT 2026-07-18 §3.3-C4 (the `C4` row).
-//! ZERO new dependencies — reuses the already-linked `tracing` (0.1) + `tracing-subscriber`
-//! (0.3) and the three `tracing` spans already placed over the verified hot functions
-//! (`place_order`, `place_order_priced`, `fold_transitions`). The remaining five of the
-//! eight verified functions (`route`, `commit_after_decide`, `decide_settlement`,
-//! `cap::verify_chain`, and `mldsa verify` behind `pq`) are wrapped by the Layer-1
-//! `#[instrument(...)]` macros (see `instrument.rs`), gated to this feature so the
-//! shipping build is perf-neutral.
+//! ZERO external dependencies — the span-timing *value* was always hand-rolled; only the
+//! *hook* used to be `tracing`-shaped. Roadmap items 4+29 retired the `tracing` pair, so
+//! the hook is now the kernel-owned `fdr::SpanObserver` trait (see `SpanMetricsObserver`
+//! below). Everything else — `LogBucket` histograms, `JsonlWriter`, the `metric.jsonl` row
+//! format, `normalized_load1()` — carries over UNCHANGED and byte-identical.
 //!
 //! What this module does:
-//!   * `SpanMetricsLayer` — a hand-rolled `tracing_subscriber` Layer that, on every
-//!     span `close`, records the wall-clock duration into a LOG-BUCKET histogram
-//!     (powers-of-two microsecond buckets — a no-allocation, deterministic summary).
-//!   * `metric.jsonl` — every `flush`/record of a span appends ONE JSON line to
-//!     `metric.jsonl` (NDJSON), std-only writer (no serde / network / RNG).
-//!   * `alert.jsonl` — the Layer-2 load breach artifact (see `breach.rs`); this module
-//!     owns the shared std-only NDJSON writer helper used by both layers.
+//!   * `SpanMetricsObserver` — implements `fdr::SpanObserver`; on every span close, records
+//!     the wall-clock duration into a LOG-BUCKET histogram (powers-of-two microsecond
+//!     buckets — a no-allocation, deterministic summary). Replaces the retired
+//!     `SpanMetricsLayer` (a `tracing_subscriber::Layer`), and with it the thread-local
+//!     deadlock workaround the Layer needed (no registry/Extensions locks exist to deadlock
+//!     on) AND the incumbent's outer-span-dropped-under-nesting bug — each `fdr::SpanGuard`
+//!     now owns its own start stamp, so nested spans are measured correctly.
+//!   * `metric.jsonl` — every recorded span appends ONE JSON line (NDJSON), std-only writer
+//!     (no serde / network / RNG). Span-name escaping routes through the single
+//!     `fdr::json::escape_into` authority (was `{:?}` — byte-identical for the 8 `[a-z_]`
+//!     span names; golden-pinned below).
+//!   * `alert.jsonl` — the Layer-2 load breach artifact (see `breach.rs`); this module owns
+//!     the shared std-only NDJSON writer helper used by both layers.
 //!
 //! Explicitly EXCLUDED (SYNTHESIS §6-E18): `assert_transition` inner loop is NOT
 //! instrumented — the `fold_transitions` span + the Layer-2 sampler cover it.
 //!
-//! Safety: the writer is BEST-EFFORT. A failed open/write never poisons the caller
-//! (the layer is observability, not a trust boundary). State is plain `std`; no `Rng`,
-//! no network, no `serde`.
+//! Safety: the writer is BEST-EFFORT. A failed open/write never poisons the caller (the
+//! observer is observability, not a trust boundary). State is plain `std`; no `Rng`, no
+//! network, no `serde`.
 
 use std::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
-use std::time::Instant;
-
-use tracing::span::{Attributes, Id, Record};
-use tracing::{Subscriber};
-use tracing_subscriber::layer::Context;
-use tracing_subscriber::registry::LookupSpan;
 
 /// Number of log-bucket histogram bins. Powers-of-two in microseconds, capped at
 /// `2^(NUM_BUCKETS-1)` µs (≈ 2.7 s) — anything slower lands in the overflow bin.
@@ -105,7 +103,9 @@ impl LogBucket {
         }
     }
 
-    /// Deterministic NDJSON row for `metric.jsonl`. Hand-rolled (no serde).
+    /// Deterministic NDJSON row for `metric.jsonl`. Hand-rolled (no serde). The span name
+    /// is escaped through the single `fdr::json` authority (was Rust `{:?}`) — byte-identical
+    /// for the 8 real `[a-z_]` span names (escaping never fires); golden-pinned in tests.
     pub fn to_jsonl(&self, span: &str) -> String {
         // Buckets emitted as a compact "i:count" map, lexicographically sorted by bin.
         let mut parts: Vec<String> = Vec::with_capacity(NUM_BUCKETS);
@@ -115,9 +115,11 @@ impl LogBucket {
             }
         }
         let hist = parts.join(",");
+        let mut span_json = String::with_capacity(span.len() + 2);
+        crate::fdr::json::quote_into(&mut span_json, span);
         format!(
-            "{{\"metric\":\"span_latency_us\",\"span\":{:?},\"count\":{},\"sum_us\":{},\"min_us\":{},\"max_us\":{},\"mean_us\":{:.3},\"hist\":[{}]}}\n",
-            span, self.count, self.sum_us, self.min_us, self.max_us, self.mean_us(), hist
+            "{{\"metric\":\"span_latency_us\",\"span\":{},\"count\":{},\"sum_us\":{},\"min_us\":{},\"max_us\":{},\"mean_us\":{:.3},\"hist\":[{}]}}\n",
+            span_json, self.count, self.sum_us, self.min_us, self.max_us, self.mean_us(), hist
         )
     }
 }
@@ -214,15 +216,16 @@ impl SpanMetrics {
     }
 }
 
-/// The `tracing_subscriber` Layer. Measures wall-clock span duration via `on_enter`/
-/// `on_close` and forwards it to the shared `SpanMetrics`.
-pub struct SpanMetricsLayer {
+/// The kernel-owned span observer (replaces the retired `tracing_subscriber` Layer). On
+/// every span close, folds the wall-clock duration into the shared `SpanMetrics`. Wired via
+/// `fdr::set_global_observer` / `fdr::set_scoped_observer` (see `span_metrics::init`).
+pub struct SpanMetricsObserver {
     metrics: SpanMetrics,
 }
 
-impl SpanMetricsLayer {
+impl SpanMetricsObserver {
     pub fn new(dir: Option<PathBuf>) -> Self {
-        SpanMetricsLayer {
+        SpanMetricsObserver {
             metrics: SpanMetrics::new(dir),
         }
     }
@@ -233,75 +236,11 @@ impl SpanMetricsLayer {
     }
 }
 
-/// Enter timestamp + span name of the *currently-entered* span on this thread, kept
-/// in thread-locals instead of in the span's `Extensions`.
-///
-/// WHY A THREAD-LOCAL (not `Extensions::insert`/`get`): `tracing::Span::entered()`
-/// takes the span's per-span `Extensions` **read** lock while it runs
-/// `Layer::on_enter`; calling `span.extensions_mut()` from inside `on_enter`/`on_close`
-/// then tries to take the SAME span's `Extensions` **write** lock → self-deadlock (the
-/// prior agent's code did exactly this and the test hung forever; confirmed via gdb:
-/// blocked in `sharded::extensions_mut` → `RwLock::write`). A thread-local avoids
-/// touching the registry's locks entirely during the callbacks. The immediately-entered
-/// span is always on the current thread, so a thread-local is correct for the
-/// single-thread entered case this layer measures.
-use std::cell::RefCell;
-
-thread_local! {
-    static ENTER_AT: RefCell<Option<Instant>> = const { RefCell::new(None) };
-    static CURRENT_SPAN_NAME: RefCell<Option<String>> = const { RefCell::new(None) };
+impl crate::fdr::SpanObserver for SpanMetricsObserver {
+    fn on_span_close(&self, name: &'static str, dur_us: u64) {
+        self.metrics.record(name, dur_us);
+    }
 }
-
-impl<S> tracing_subscriber::Layer<S> for SpanMetricsLayer
-where
-    S: Subscriber + for<'a> LookupSpan<'a>,
-{
-    fn on_new_span(&self, _attrs: &Attributes<'_>, _id: &Id, _ctx: Context<'_, S>) {
-        // No per-span state is stamped here. `on_enter` records the real enter time
-        // (below); a span that is created but never entered simply has no enter
-        // timestamp, and is skipped on close (correct — it did no work).
-    }
-
-    fn on_enter(&self, id: &Id, ctx: Context<'_, S>) {
-        // Stamp the enter time for the currently-entered span (always on this thread),
-        // and remember its name so `on_close` can record under the right name WITHOUT
-        // re-locking the registry's per-span Extensions (see note above). `name()` reads
-        // only the span metadata (a `&'static` str) and does NOT take the per-span
-        // extensions lock, so it is deadlock-free here. Update-on-reenter keeps the
-        // latest enter stamp, so the measured duration is the final enter→close interval.
-        if let Some(span) = ctx.span(id) {
-            let name = span.name().to_string();
-            ENTER_AT.with(|t| *t.borrow_mut() = Some(Instant::now()));
-            CURRENT_SPAN_NAME.with(|n| *n.borrow_mut() = Some(name));
-        }
-    }
-
-    fn on_close(&self, _id: Id, _ctx: Context<'_, S>) {
-        let (t0, name) = {
-            let t0 = ENTER_AT.with(|t| t.borrow_mut().take());
-            let name = CURRENT_SPAN_NAME.with(|n| n.borrow_mut().take());
-            (t0, name)
-        };
-        let t0 = match t0 {
-            Some(t0) => t0,
-            None => return, // never entered (e.g. span created but not entered) → skip.
-        };
-        let name = match name {
-            Some(n) => n,
-            None => return,
-        };
-        let dur_us = t0.elapsed().as_micros().min(u64::MAX as u128) as u64;
-        self.metrics.record(&name, dur_us);
-    }
-
-    // `on_record` — we do not read fields; span names are enough for the histogram.
-    fn on_record(&self, _id: &Id, _values: &Record<'_>, _ctx: Context<'_, S>) {}
-}
-
-/// Hidden-field probe helper (used by `init` + tests): the `record` path is reachable
-/// only when the `telemetry` feature is compiled, so this file is cfg-gated at the
-/// `mod telemetry` site in `lib.rs`. No-op shim kept OUT (the layer is never referenced
-/// in a non-telemetry build).
 
 /// Build a `metric.jsonl` row for an arbitrary synthetic sample (test/diagnostic only).
 pub fn diagnostic_row(span: &str, samples_us: &[u64]) -> String {
@@ -369,6 +308,20 @@ mod tests {
         assert!(row.contains("\"metric\":\"span_latency_us\""));
     }
 
+    /// GOLDEN byte-compat: the EXACT `metric.jsonl` row bytes for a fixed sample. This is
+    /// the items-4+29 proof that routing the span name through `fdr::json` (was `{:?}`)
+    /// changed NOTHING for a real `[a-z_]` span name. If this row ever changes, the
+    /// `tools/telemetry` / governance parsers break — so it is pinned to the byte.
+    #[test]
+    fn golden_metric_row_exact_bytes() {
+        // samples [1,2,4,8] → buckets 0,1,2,3; count 4; sum 15; min 1; max 8; mean 3.750.
+        let row = diagnostic_row("place_order", &[1, 2, 4, 8]);
+        assert_eq!(
+            row,
+            "{\"metric\":\"span_latency_us\",\"span\":\"place_order\",\"count\":4,\"sum_us\":15,\"min_us\":1,\"max_us\":8,\"mean_us\":3.750,\"hist\":[0:1,1:1,2:1,3:1]}\n"
+        );
+    }
+
     #[test]
     fn green_writer_disabled_is_noop() {
         let w = JsonlWriter::new(None);
@@ -400,6 +353,21 @@ mod tests {
         let contents = std::fs::read_to_string(&p).unwrap();
         assert!(contents.contains("\"span\":\"fold_transitions\""));
         assert!(contents.contains("\"count\":2"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The observer path (fdr::SpanObserver) records to metric.jsonl — proves the ported
+    /// hook is wired to the same histogram/writer chain as the direct `record` API.
+    #[test]
+    fn green_observer_records_span_close() {
+        use crate::fdr::SpanObserver;
+        let dir = std::env::temp_dir().join(format!("p83_obs_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let obs = SpanMetricsObserver::new(Some(dir.clone()));
+        obs.on_span_close("route", 33);
+        let p = dir.join(METRIC_JSONL);
+        let contents = std::fs::read_to_string(&p).unwrap();
+        assert!(contents.contains("\"span\":\"route\""));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

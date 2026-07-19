@@ -27,7 +27,7 @@ dowiz-kernel = { path = "../kernel", version = "0.1.0" }
 serde = { version = "1", optional = true, features = ["derive"] }
 
 # P57 Lane B (O18a only). Optional: the default build links NO cosmic-text.
-cosmic-text = { version = "*", optional = true }
+cosmic-text = { version = "0.19.0", optional = true }
 
 [features]
 # default = offline-clean. GPU/wasm glue is opt-in so CI never pulls a GPU/JS toolchain.

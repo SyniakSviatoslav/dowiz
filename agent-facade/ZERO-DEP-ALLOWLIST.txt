@@ -1,0 +1,11 @@
+# Zero-dep allowlist (roadmap item 31 — per-crate extension of items 1+13).
+# INVARIANT: this file may only SHRINK. CI (scripts/zero-dep-gate.sh <crate>) compares HEAD
+# against origin/main and fails if any name here is absent there (= growth).
+#
+# RULING: item 31 §4.4 Phase-A CUTOVER COMPLETE (2026-07-19). serde + serde_json were REMOVED —
+# the one parse site (ReadOrderStatusTool::parse_arg) now uses `dowiz_kernel::json` (differentially
+# proven vs serde_json, kernel/tests/json_oracle.rs). The default no-dev tree dropped its ENTIRE
+# external set (serde/serde_json/serde_core/serde_derive/proc-macro2/quote/syn/unicode-ident/itoa/
+# memchr/zmij — 11 crates → 0). This crate is now zero-external-dep by default; the gate freezes
+# that as a floor.
+# --- no external crates permitted in the default no-dev build ---

@@ -20,7 +20,11 @@ use std::time::Instant;
 /// lazily-captured process-start `Instant`.
 static MONO_EPOCH: OnceLock<Instant> = OnceLock::new();
 
-fn mono_now_ns() -> u128 {
+/// Monotonic ns since process start. `pub` so the `fdr` event schema (`fdr::schema`) can
+/// stamp its replay-ordering key through the SAME clock the P08 metrics use (one mono
+/// epoch per process). Uses `Instant::now()` — panics on `wasm32`, so callers on the FDR
+/// write path are all gated off wasm (no sink is ever installed there).
+pub fn mono_now_ns() -> u128 {
     let start = MONO_EPOCH.get_or_init(Instant::now);
     Instant::now().duration_since(*start).as_nanos()
 }

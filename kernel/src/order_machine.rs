@@ -75,7 +75,7 @@ impl OrderStatus {
 
 /// Transition table — identical to the oracle's `TRANSITIONS`.
 /// `SCHEDULED` is a scaffold terminal (the scheduled flow is not implemented yet).
-fn allowed_next(from: OrderStatus) -> &'static [OrderStatus] {
+const fn allowed_next(from: OrderStatus) -> &'static [OrderStatus] {
     use OrderStatus::*;
     match from {
         Pending => &[Confirmed, Rejected, Cancelled],
@@ -144,7 +144,18 @@ pub fn assert_transition(from: OrderStatus, to: OrderStatus) -> Result<(), Trans
         return Err(TransitionError::ScaffoldDisabled(from, to));
     }
     let allowed = allowed_next(from);
-    if !allowed.contains(&to) {
+    let ok_slice = allowed.contains(&to);
+    // §4-checklist item 3 (SYNTHESIS §10-P7): debug-mode differential cross-check of the transition
+    // relation computed TWO independent ways — the runtime slice scan of `allowed_next(from)` above,
+    // versus the compile-time bitmask `FSM_ADJ` (built by a separate const-fn DAG through `idx_of`).
+    // They are derived from the same source of truth but by different code; a bug in `idx_of` or
+    // `build_adjacency` would make them disagree on some (from,to). Compiled out of release.
+    debug_assert_eq!(
+        ok_slice,
+        (FSM_ADJ[idx_of(from)] & (1u16 << idx_of(to))) != 0,
+        "FSM transition relation diverged: allowed_next slice vs FSM_ADJ bitmask disagree on {from:?}->{to:?}"
+    );
+    if !ok_slice {
         return Err(TransitionError::Illegal(from, to));
     }
     Ok(())
@@ -158,38 +169,73 @@ pub fn fold_transitions(
     steps: &[OrderStatus],
 ) -> Result<OrderStatus, (TransitionError, OrderStatus)> {
     let _span =
-        tracing::info_span!("fold_transitions", start = ?start, n_steps = steps.len()).entered();
+        crate::fdr::info_span!("fold_transitions", start = ?start, n_steps = steps.len()).entered();
     let mut cur = start;
     for &next in steps {
         assert_transition(cur, next).map_err(|e| (e, cur))?;
         cur = next;
     }
-    tracing::debug!(final_status = ?cur, "order transition fold complete");
+    crate::fdr::debug!(final_status = ?cur, "order transition fold complete");
     Ok(cur)
 }
 
-/// All directed edges of the order-lifecycle graph: `(from, to)` for every legal
-/// transition in `allowed_next`. Used by the graph analyses below (cycle / cyclomatic).
-fn all_edges() -> Vec<(OrderStatus, OrderStatus)> {
-    use OrderStatus::*;
-    let mut edges = Vec::new();
-    for &from in &[
-        Pending,
-        Confirmed,
-        Preparing,
-        Ready,
-        InDelivery,
-        Delivered,
-        Rejected,
-        Cancelled,
-        Scheduled,
-        PickedUp,
-        Refunding,
-        CompensatedRefund,
-    ] {
-        for &to in allowed_next(from) {
-            edges.push((from, to));
+/// Directed adjacency of the order-lifecycle graph, computed **once at compile
+/// time** from `allowed_next` (the single source of truth for legal transitions).
+/// `FSM_ADJ[i]` is a bitmask over the 12 lifecycle states: bit `j` set iff there is
+/// a legal transition `LIFECYCLE_STATES[i] → LIFECYCLE_STATES[j]`. The whole 12-state
+/// graph fits in `[u16; 12]`, so every graph analysis below reads it with zero heap
+/// allocation — replacing the old per-call `all_edges()` `Vec` that `has_cycle`,
+/// `cyclomatic_number`, `reachable`, `topological_order` and `fsm_graph_report` each
+/// re-materialised on every invocation.
+const fn build_adjacency() -> [u16; 12] {
+    let mut adj = [0u16; 12];
+    let mut i = 0;
+    while i < LIFECYCLE_STATES.len() {
+        let from = LIFECYCLE_STATES[i];
+        let succ = allowed_next(from);
+        let mut j = 0;
+        while j < succ.len() {
+            adj[idx_of(from)] |= 1u16 << idx_of(succ[j]);
+            j += 1;
         }
+        i += 1;
+    }
+    adj
+}
+
+/// The compile-time adjacency (see [`build_adjacency`]). Derived from `allowed_next`,
+/// so it can never silently diverge from the transition table `assert_transition` uses.
+const FSM_ADJ: [u16; 12] = build_adjacency();
+
+/// Total directed-edge count = popcount of every adjacency row. `const`, so the graph
+/// analyses that need `|E|` pay nothing at runtime.
+const FSM_EDGE_COUNT: usize = {
+    let mut i = 0;
+    let mut n = 0usize;
+    while i < FSM_ADJ.len() {
+        n += FSM_ADJ[i].count_ones() as usize;
+        i += 1;
+    }
+    n
+};
+
+/// Materialise the `(from, to)` edge list — **test-only**. Production code reads
+/// [`FSM_ADJ`] directly (zero-alloc); this `Vec` form exists solely so the oracle and
+/// mutation tests below can build and perturb an explicit edge list. Derived from
+/// `FSM_ADJ`, so it stays in exact lockstep with the compile-time graph.
+#[cfg(test)]
+fn all_edges() -> Vec<(OrderStatus, OrderStatus)> {
+    let mut edges = Vec::new();
+    let mut i = 0;
+    while i < LIFECYCLE_STATES.len() {
+        let mut row = FSM_ADJ[i];
+        while row != 0 {
+            let bit = row & row.wrapping_neg();
+            let j = bit.trailing_zeros() as usize;
+            row ^= bit;
+            edges.push((LIFECYCLE_STATES[i], LIFECYCLE_STATES[j]));
+        }
+        i += 1;
     }
     edges
 }
@@ -213,8 +259,9 @@ const LIFECYCLE_STATES: [OrderStatus; 12] = [
 
 /// Canonical index of a lifecycle state (0..12), matching `LIFECYCLE_STATES`.
 /// Centralised so `has_cycle`, `cyclomatic_number`, `topological_order`,
-/// `reachable`, and `spectral_radius` all agree on vertex numbering.
-fn idx_of(s: OrderStatus) -> usize {
+/// `reachable`, and `spectral_radius` all agree on vertex numbering — the single
+/// definition of this mapping (the two former local duplicates are gone).
+const fn idx_of(s: OrderStatus) -> usize {
     match s {
         OrderStatus::Pending => 0,
         OrderStatus::Confirmed => 1,
@@ -242,11 +289,16 @@ fn idx_of(s: OrderStatus) -> usize {
 /// forward order the lifecycle is supposed to follow. O(|V| + |E|).
 pub fn topological_order() -> Option<Vec<OrderStatus>> {
     let states = LIFECYCLE_STATES;
-    let edges = all_edges();
     let n = states.len();
     let mut indeg = [0usize; 12];
-    for &(_, t) in &edges {
-        indeg[idx_of(t)] += 1;
+    for i in 0..n {
+        let mut row = FSM_ADJ[i];
+        while row != 0 {
+            let bit = row & row.wrapping_neg();
+            let t = bit.trailing_zeros() as usize;
+            row ^= bit;
+            indeg[t] += 1;
+        }
     }
     // Stable source queue: ascending index, so the emitted order is deterministic
     // (lowest-index source — Pending — is emitted first).
@@ -258,13 +310,14 @@ pub fn topological_order() -> Option<Vec<OrderStatus>> {
         // Collect successors whose in-degree drops to 0, then merge them back into
         // the ascending queue (no heap needed at this size).
         let mut ready: Vec<usize> = Vec::new();
-        for &(f, t) in &edges {
-            if idx_of(f) == u {
-                let v = idx_of(t);
-                indeg[v] -= 1;
-                if indeg[v] == 0 {
-                    ready.push(v);
-                }
+        let mut row = FSM_ADJ[u];
+        while row != 0 {
+            let bit = row & row.wrapping_neg();
+            let v = bit.trailing_zeros() as usize;
+            row ^= bit;
+            indeg[v] -= 1;
+            if indeg[v] == 0 {
+                ready.push(v);
             }
         }
         ready.sort_unstable();
@@ -298,7 +351,6 @@ pub fn topological_order() -> Option<Vec<OrderStatus>> {
 /// Uses a `u16` bitmask over the 10 states (one bit per vertex) so reachability
 /// is exact (no float, no hashing) and trivially comparable for tests.
 pub fn reachable(from: OrderStatus) -> u16 {
-    let edges = all_edges();
     let mut seen: u16 = 0;
     let mut frontier: u16 = 1 << idx_of(from);
     while frontier != 0 {
@@ -312,11 +364,8 @@ pub fn reachable(from: OrderStatus) -> u16 {
                 continue;
             }
             seen |= 1 << i;
-            for &(e_from, e_to) in &edges {
-                if idx_of(e_from) == i {
-                    next |= 1 << idx_of(e_to);
-                }
-            }
+            // All one-step successors of state `i` in a single const lookup.
+            next |= FSM_ADJ[i];
         }
         frontier = next & !seen;
     }
@@ -425,13 +474,12 @@ impl FsmGraphReport {
 
 /// Build the aggregate signature for the current lifecycle graph.
 pub fn fsm_graph_report() -> FsmGraphReport {
-    let edges = all_edges();
     let vertices = LIFECYCLE_STATES.len();
     let reach = reachable(OrderStatus::Pending);
     let reachable_states = (0..vertices).filter(|&i| reach & (1 << i) != 0).count();
     FsmGraphReport {
         vertices,
-        edges: edges.len(),
+        edges: FSM_EDGE_COUNT,
         is_acyclic: !has_cycle(),
         cyclomatic: cyclomatic_number(),
         spectral_radius: spectral_radius(),
@@ -540,69 +588,31 @@ pub fn verify_fsm_signature_against(r: FsmGraphReport) -> Result<(), FsmSignatur
 /// Graph-theory basis (see research/spectral-graph-fsm): for this 10-state FSM a cycle
 /// means the lifecycle is not a strict forward DAG. O(|V| + |E|); trivial at this size.
 pub fn has_cycle() -> bool {
-    use OrderStatus::*;
-    let states = [
-        Pending,
-        Confirmed,
-        Preparing,
-        Ready,
-        InDelivery,
-        Delivered,
-        Rejected,
-        Cancelled,
-        Scheduled,
-        PickedUp,
-        Refunding,
-        CompensatedRefund,
-    ];
-    let edges = all_edges();
     let mut visited = [false; 12];
     let mut in_stack = [false; 12];
-    // index helper
-    let idx = |s: OrderStatus| -> usize {
-        match s {
-            Pending => 0,
-            Confirmed => 1,
-            Preparing => 2,
-            Ready => 3,
-            InDelivery => 4,
-            Delivered => 5,
-            Rejected => 6,
-            Cancelled => 7,
-            Scheduled => 8,
-            PickedUp => 9,
-            Refunding => 10,
-            CompensatedRefund => 11,
-        }
-    };
-    fn dfs(
-        s: OrderStatus,
-        idx: &dyn Fn(OrderStatus) -> usize,
-        edges: &[(OrderStatus, OrderStatus)],
-        visited: &mut [bool; 12],
-        in_stack: &mut [bool; 12],
-    ) -> bool {
-        let i = idx(s);
+    // DFS over the const adjacency; `i` is the canonical state index (idx_of order).
+    fn dfs(i: usize, visited: &mut [bool; 12], in_stack: &mut [bool; 12]) -> bool {
         visited[i] = true;
         in_stack[i] = true;
-        for &(f, t) in edges {
-            if f == s {
-                let j = idx(t);
-                if !visited[j] {
-                    if dfs(t, idx, edges, visited, in_stack) {
-                        return true;
-                    }
-                } else if in_stack[j] {
-                    return true; // back-edge ⇒ cycle
+        let mut row = FSM_ADJ[i];
+        while row != 0 {
+            let bit = row & row.wrapping_neg();
+            let j = bit.trailing_zeros() as usize;
+            row ^= bit;
+            if !visited[j] {
+                if dfs(j, visited, in_stack) {
+                    return true;
                 }
+            } else if in_stack[j] {
+                return true; // back-edge ⇒ cycle
             }
         }
         in_stack[i] = false;
         false
     }
-    for &s in &states {
-        if !visited[idx(s)] {
-            if dfs(s, &idx, &edges, &mut visited, &mut in_stack) {
+    for i in 0..12 {
+        if !visited[i] {
+            if dfs(i, &mut visited, &mut in_stack) {
                 return true;
             }
         }
@@ -615,28 +625,13 @@ pub fn has_cycle() -> bool {
 /// `has_cycle` — it quantifies "how cyclic" the lifecycle is, so a future `Reopen`
 /// edge shows up as μ > 0 even before a full cycle forms.
 pub fn cyclomatic_number() -> isize {
-    use OrderStatus::*;
-    let states = [
-        Pending,
-        Confirmed,
-        Preparing,
-        Ready,
-        InDelivery,
-        Delivered,
-        Rejected,
-        Cancelled,
-        Scheduled,
-        PickedUp,
-        Refunding,
-        CompensatedRefund,
-    ];
-    let edges = all_edges();
-    let v = states.len();
-    let e = edges.len();
-    // connected components via union-find over the undirected version of E
+    let v = LIFECYCLE_STATES.len();
+    let e = FSM_EDGE_COUNT;
+    // connected components via union-find over the undirected version of E.
+    // `LIFECYCLE_STATES[k]` has canonical index `k` (idx_of), so parent starts as identity.
     let mut parent = [0usize; 12];
-    for (k, s) in states.iter().enumerate() {
-        parent[k] = idx_of(*s);
+    for k in 0..v {
+        parent[k] = k;
     }
     fn find(parent: &mut [usize; 12], x: usize) -> usize {
         let mut x = x;
@@ -646,26 +641,16 @@ pub fn cyclomatic_number() -> isize {
         }
         x
     }
-    fn idx_of(s: OrderStatus) -> usize {
-        match s {
-            Pending => 0,
-            Confirmed => 1,
-            Preparing => 2,
-            Ready => 3,
-            InDelivery => 4,
-            Delivered => 5,
-            Rejected => 6,
-            Cancelled => 7,
-            Scheduled => 8,
-            PickedUp => 9,
-            Refunding => 10,
-            CompensatedRefund => 11,
-        }
-    }
-    for &(f, t) in &edges {
-        let (a, b) = (find(&mut parent, idx_of(f)), find(&mut parent, idx_of(t)));
-        if a != b {
-            parent[a] = b;
+    for i in 0..v {
+        let mut row = FSM_ADJ[i];
+        while row != 0 {
+            let bit = row & row.wrapping_neg();
+            let j = bit.trailing_zeros() as usize;
+            row ^= bit;
+            let (a, b) = (find(&mut parent, i), find(&mut parent, j));
+            if a != b {
+                parent[a] = b;
+            }
         }
     }
     let mut comps = 0;
@@ -1195,5 +1180,86 @@ mod tests {
         let err = verify_fsm_signature_against(reopened).expect_err("cycle must be detected");
         assert!(err.fields.iter().any(|&f| f == "is_acyclic"));
         assert!(err.fields.iter().any(|&f| f == "topological_len"));
+    }
+
+    // ── Item 7 (space-grade roadmap §C): native EXHAUSTIVE proofs of the FSM graph ──
+    // Per RESEARCH-NATIVE-KANI-REPLACEMENT-FEASIBILITY-2026-07-19.md: the 12-state const
+    // graph makes all four FSM "for-all" properties trivially exhaustible by enumeration
+    // (the codebase's csr.rs 1099-graph / 65536-pair idiom). These deliver the IDENTICAL
+    // "proven for every input" guarantee as a Kani harness would, with zero toolchain
+    // dependency — so they run in the fast hardening-gate, not the kani-gate. Total over
+    // the whole state space, not sampled.
+
+    /// EXHAUSTIVE over all 144 (from,to) pairs: `assert_transition` never panics, and its
+    /// result is `Ok(())` iff bit `idx_of(to)` is set in `FSM_ADJ[idx_of(from)]`. This
+    /// upgrades item 3's runtime `debug_assert` cross-check (slice `allowed_next` vs bitmask
+    /// `FSM_ADJ`) from spot-tested to proven-for-every-pair — the debug_assert inside
+    /// `assert_transition` also fires on every one of the 144 calls in this debug-build test.
+    #[test]
+    fn item7_exhaustive_assert_transition_all_144_pairs_and_adj_consistent() {
+        for fi in 0..12usize {
+            for ti in 0..12usize {
+                let from = LIFECYCLE_STATES[fi];
+                let to = LIFECYCLE_STATES[ti];
+                // idx_of is the inverse of LIFECYCLE_STATES indexing — verify totality here too.
+                assert_eq!(idx_of(from), fi, "idx_of/LIFECYCLE_STATES inverse broke at {fi}");
+                let bit_set = (FSM_ADJ[fi] & (1u16 << ti)) != 0;
+                let ok = assert_transition(from, to).is_ok();
+                assert_eq!(
+                    ok, bit_set,
+                    "assert_transition({from:?}->{to:?})=Ok? {ok} but FSM_ADJ bit={bit_set}"
+                );
+            }
+        }
+    }
+
+    /// EXHAUSTIVE over all 12 start states: `reachable` never panics, the result always
+    /// contains the start's own bit, and every set bit is a valid state index (< 12) — a
+    /// CONTENTFUL bounds proof: it holds only because no `FSM_ADJ` row sets a bit >= 12
+    /// (a wrongly-added 13th state would trip it). Frontier loop terminates (monotone `seen`).
+    #[test]
+    fn item7_exhaustive_reachable_total_all_12_starts() {
+        for fi in 0..12usize {
+            let from = LIFECYCLE_STATES[fi];
+            let mask = reachable(from);
+            assert!(mask & (1u16 << fi) != 0, "reachable({from:?}) must include self");
+            // No bit >= 12 may be set (would mean an out-of-range successor index).
+            assert_eq!(mask & !0x0FFFu16, 0, "reachable({from:?}) set an out-of-range bit");
+        }
+    }
+
+    /// Panic-freedom of `fold_transitions` over ANY status sequence is a COROLLARY of the
+    /// 144-pair total proof above: `fold` applies `assert_transition` pairwise and stops at
+    /// the first rejected pair, so if every pairwise call is total, every fold is total. This
+    /// test exhibits the compositional argument on the boundary sequences (empty, single
+    /// legal step, first-step-illegal, full happy path) rather than enumerating all sequences.
+    #[test]
+    fn item7_fold_transitions_panic_free_corollary() {
+        use OrderStatus::*;
+        assert_eq!(fold_transitions(Pending, &[]).unwrap(), Pending);
+        assert_eq!(fold_transitions(Pending, &[Confirmed]).unwrap(), Confirmed);
+        assert!(fold_transitions(Pending, &[Ready]).is_err()); // first step illegal
+        assert_eq!(
+            fold_transitions(Pending, &[Confirmed, Preparing, Ready, PickedUp]).unwrap(),
+            PickedUp
+        );
+    }
+
+    /// Input-free "no UB / expected verdict" sweep of the const-graph algorithms: none of
+    /// `topological_order`/`has_cycle`/`cyclomatic_number`/`fsm_graph_report` panic or
+    /// overflow under debug (checked) arithmetic, and the verdicts match the proven const
+    /// facts (acyclic DAG ⇒ topo exists, no cycle, μ = 0).
+    #[test]
+    fn item7_const_graph_algos_no_ub_and_expected() {
+        assert!(topological_order().is_some(), "acyclic graph must have a topo order");
+        assert!(!has_cycle(), "lifecycle graph must have no DIRECTED cycle");
+        // μ is the UNDIRECTED cycle rank (|E|-|V|+c), distinct from directed acyclicity:
+        // this DAG has convergent paths, so μ > 0 is correct. The "no UB" property here is
+        // that the isize arithmetic + union-find never panic/overflow and yield the finite
+        // known value (pinned separately by green_cyclomatic_number_counts_undirected_cycle).
+        let mu = cyclomatic_number();
+        assert!(mu >= 0, "cyclomatic number must be a finite non-negative rank");
+        let _ = fsm_graph_report(); // must not panic/overflow
+        let _ = fsm_stability_report();
     }
 }

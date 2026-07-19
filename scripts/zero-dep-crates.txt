@@ -1,0 +1,40 @@
+# Roster for the per-crate zero-dep gate (roadmap item 31 — extends items 1+13).
+# One crate directory (relative to repo root) per line; `#` comments and blank lines ignored.
+# The `zero-dep-gate` CI job loops `scripts/zero-dep-gate.sh <crate>` over this roster, all
+# inside one `unshare -n` no-network namespace. Each crate has its own Cargo.lock and its own
+# <crate>/ZERO-DEP-ALLOWLIST.txt (shrink-only, CI-asserted).
+#
+# 12 of these are already zero-external-dep by default (empty allowlist = enforced floor);
+# the rest carry a frozen closure the serde-primitive work (item 31 §4) then shrinks.
+kernel
+engine
+wasm
+apps/courier
+agent-adapters
+agent-facade
+agent-loop
+llm-adapters
+tools/async-spool
+tools/ci-truth
+tools/deep-clean
+tools/eqc-rs
+tools/native-spa-server
+tools/nfc-pod-codec
+tools/nfc-pod-flipper
+tools/ops-alert
+tools/shell-spike
+tools/skillspector-rs
+tools/telemetry/hetzner-exporter
+tools/telemetry/native-ser
+tools/telemetry/native-trackers
+tools/telemetry/rust-spool
+tools/telemetry/swarm-proof
+tools/telemetry/topics
+#
+# EXCLUDED from this roster (item 31 §2.5) — recorded, not silent:
+#  - agent-governance-wasm : depends on bebop2-core by ABSOLUTE path (/root/bebop-repo/bebop2/core),
+#    unresolvable on any CI runner layout. Portability defect filed as its own follow-up; do NOT add
+#    here until the manifest uses a relative path.
+#  - mesh-adapter : relative ../../bebop-repo/... path deps resolve only in the dual-checkout layout
+#    the existing `mesh-adapter` CI job builds. Its zero-dep-gate invocation lives INSIDE that job
+#    (cwd dowiz/), not in this loop. Allowlist is empty (path deps only).

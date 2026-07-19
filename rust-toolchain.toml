@@ -1,0 +1,8 @@
+# Item 14 (space-grade roadmap §B / §G.8): the compiler is a pinned, audited input.
+# Bumping `channel` is a structural event: CI's toolchain-bump gate requires
+# docs/audits/toolchain/spot-check-<new-version>.md in the same diff. See
+# docs/design/BLUEPRINT-ITEM-14-toolchain-pin-2026-07-19.md.
+[toolchain]
+channel = "1.96.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
