@@ -19,7 +19,7 @@ All five open decision gates were presented and ruled on the same day:
 | Mesh integration approach | §17(d) / item 22 | **REIMPLEMENT IN DOWIZ, ZERO-DEP** — bebop's proven mesh-node/proto-wire/proto-cap serves as design reference/parity oracle only, not a linked dependency. The same ruling covers `agent-governance-wasm`'s `bebop2-core` path-dep and `mesh-adapter`'s sibling paths per §25's table. |
 | Optical/pixel context compression | §20(c) / item 28 | **PURSUE** — model-weight dependencies are ruled outside §0's compiled-Rust-crate scope; archival/display-plane content only, never the P0/P1 determinism planes (§10/P6). |
 | ARINC-653-style scheduler | item 11 | **PURSUE, design-only** — Phase 0 (design doc + TLC model), no code until the breaker (item 9) exists, per the source's own restriction. |
-| SIHFT triple-vote pilot | item 12 | **PURSUE, design-only for now** — needs the breaker + FDR to exist first regardless of the ruling; design/scoping work can start. |
+| SIHFT triple-vote pilot | item 12 | **PURSUE, design-only for now** — needs the breaker + FDR to exist first regardless of the ruling; design/scoping work can start. **Premise retro-corrected 2026-07-19 (consistency audit §§1.1–1.2, same treatment as item 54's §J correction):** the synthesis §6 valuation behind the original "optional" grading ("ECC-RAM Hetzner hosts ⇒ residual value modest") was the identical rejected cloud-ECC reasoning the operator reversed for Sentinel/item 54 — the actual target is local, offline-first, consumer-grade hardware typically WITHOUT ECC, so the compute-time SEU class is material. The ruling itself stands (design-only remains correct — the pilot needs items 9 + FDR); the design must be sized under the non-ECC premise and lands as **temporal TMR** per the item-12 re-scope in §E (audit-A finding + the OS-patterns temporal-TMR research MERGED into item 12 — one item, no new number). |
 | eqc indexed-summation IR extension | item 32 | **PURSUE** — extend eqc's `Expr` language to support the Laplacian's neighbor-sum operator, not just scalar control laws. |
 
 The Laplacian reimplement-vs-vendor fork (§14(d)) is **not a live gate** — §26(d)'s correction found
@@ -218,10 +218,62 @@ test coverage.
   `KNOWN-RED(P91.2)` (NOT fixed here — the CT fix is the gate's first customer); `token_bucket` GCRA
   differential oracle → item 8; item-4 exhaustive assembly → item 7 (Kani). Full kernel suite
   **955/0/8** at the commit. Docs (this roadmap + CORE-ROADMAP-INDEX) pushed to `origin/main`.
-- **Item 7** — Kani wiring (Keccak, FSM graph algorithms, NTT arithmetic, GCRA transition — now
-  applies to the adopted GCRA, §0 above).
+- **Item 7** — verification wiring for Keccak, FSM graph algorithms, NTT arithmetic, GCRA
+  transition (now applies to the adopted GCRA, §0 above). **RESCOPED 2026-07-19 (blueprint v2,
+  authority: `RESEARCH-NATIVE-KANI-REPLACEMENT-FEASIBILITY-2026-07-19.md` under item 25's binding
+  procedure):** 16/22 harnesses land as **native exhaustive `#[test]`s** in the existing
+  `csr.rs`/`order_machine.rs` idiom (identical all-inputs guarantee, zero new tooling, riding item
+  6's `hardening-gate` rows); **Kani narrows to 4 harnesses now** (`montgomery_reduce`, `ntt`,
+  `invntt`, Keccak cross-copy equivalence — the last dissolving entirely if the owed dual-Keccak
+  dedup ticket lands first) **+ 2 GCRA harnesses deferred to item 8**; 0/22 need a hand-rolled SAT
+  solver — Kani is CI-time tooling (item-25 terminal state (c), never linked, `cargo tree -e
+  no-dev` unaffected), so "replace Kani natively" was the wrong question and target-rescoping was
+  the right move. Item 7 no longer gates on Kani toolchain bootstrap: the 16 native targets land
+  whole even if `cargo kani setup` fails in CI. See
+  [`BLUEPRINT-ITEM-07-kani-wiring-2026-07-19.md`](BLUEPRINT-ITEM-07-kani-wiring-2026-07-19.md).
+  **✅ EXECUTED 2026-07-19 (mostly done; two honest ledgered limits) — real code + CI landed** on
+  `exec/space-grade-tier0-2026-07-19` (`df92f0c16` kernel proofs+native tests → `23f583b3e`
+  kani-gate CI). **Kani toolchain bootstrap SUCCEEDED in the exec environment** (`cargo-kani 0.67.0`,
+  its own `nightly-2025-11-21` rustc + CBMC/CaDiCaL; CI-time only, zero-dep gate mechanically
+  unaffected — all harnesses `#[cfg(kani)]`, nothing added to `Cargo.toml`/`Cargo.lock`,
+  `cargo tree -e no-dev` still 0). **7 Kani harnesses verified SUCCESSFUL via real `cargo kani`
+  runs:** `proof_rotl_contract`, `proof_keccak_f_total`, `proof_reduce32_contract`,
+  `proof_montgomery_reduce_contract` (overflow-free + range `[−Q,Q]` — Kani caught my first
+  assertion's open-interval error, the boundary is inclusive), `proof_ntt_butterfly_lemma`,
+  `proof_invntt_butterfly_lemma`, and the `proof_selftest_planted_overflow` planted-fault self-test
+  (SUCCESSFUL only because the seeded i32 overflow IS caught; RED-path demo verified — removing
+  `should_panic` → VERIFICATION FAILED). **15 native exhaustive `#[test]`s** (FSM ×4, dsa ×4, kem
+  ×5, keccak ×2) all pass; full kernel suite `--features pq` **1131/0/8** (was 1116). CI: separate
+  `kani-gate` job + `scripts/kani-gate.sh` + `HOT-PATHS.tsv` `mode=kani` rows + `hardening-gate.sh`
+  skip-with-notice. **TWO honest limits ledgered (NOT silently dropped):** (a) the STRONG full-state
+  Keccak cross-copy equivalence (2^1600) exceeded the 25-min CI budget (measured) — shipped the
+  §3.1 fallback rung: a native machine-checked index-map equivalence (ρ/π tables + round constants +
+  π destinations — the ONLY divergence) + `proof_rotl_contract`; the strong form is preserved in
+  `kani_proofs_strong`, runnable nightly. (b) The Montgomery congruence `r·2^32 ≡ a (mod Q)` is NOT
+  machine-checked (symbolic modulo over ±1.8e16 timed out >7 min in both i128 and i64 forms) — stays
+  covered by ACVP KATs; the harness proves the overflow/panic fault class the synthesis §7 names.
+  GCRA (2 harnesses) correctly deferred to item 8 — see item 8's inherited design requirements below.*
 - **Item 8** — GCRA decision package. **Ruling: ADOPT (§0 above).** Differential oracle + Kani
   interleaving check now execute toward a real swap, not just an evidence package.
+  **TWO DESIGN REQUIREMENTS INHERITED FROM ITEM 7 (executed 2026-07-19; authority:
+  `BLUEPRINT-ITEM-07-kani-wiring-2026-07-19.md` §5, enforced via the `token_bucket.rs proof_gcra`
+  `mode=kani` row in `HOT-PATHS.tsv`, `min=0` placeholder until this item lands the harness):**
+  1. **The GCRA transition MUST be a pure function** —
+     `fn gcra_decide(now_ns: u64, tat_ns: u64, cost_ns: u64, burst_ns: u64) -> Option<u64>`
+     (returns the new TAT on grant, `None` on deny). A pure fn is Kani-provable AND
+     differential-oracle-testable; the CAS-retry shell stays a thin loop around it. (This is why
+     the bench-local `GcraBucket`'s inlined f64 decision does not qualify as-is.)
+  2. **Integer nanoseconds, NOT f64, inside the transition** — the bench version computes
+     `limit = now as f64 + burst_nanos` and compares `new_tat as f64 > limit`; f64 in the decision
+     path is BOTH a CBMC cost-cliff AND a rounding-determinism hazard at large `now`. Any f64→u64
+     conversion happens ONCE at construction, never in the hot decision.
+  Item 7 also pre-specified the two harnesses item 8 must land (blueprint §5):
+  `proof_gcra_transition_contract` (single-step no-over-grant: `new_tat = max(tat,now)+cost` on
+  grant, `deny ⇔ max(tat,now)+cost > now+burst`, no overflow under the headroom assumes) and
+  `proof_gcra_two_step_interleaving` (two sequential applications conserve `cost₁+cost₂`, TAT
+  monotone — the strongest interleaving statement Kani can honestly make; the full concurrency
+  argument is item 8's differential oracle + the `compare_exchange` semantics, NOT Kani). When
+  item 8 adds these harnesses, bump the `proof_gcra` row's `min` from 0 to 2.
 - **Item 31 (enactment half)** — per-crate allowlist CI gate + shared kernel-side JSON-parse
   primitive for the serde carriers + manifest-recorded rulings. Depends on items 1 and 25.
   **✅ DONE 2026-07-19 — real CI config + kernel module landed** on `exec/space-grade-tier0-2026-07-19`
@@ -261,6 +313,15 @@ test coverage.
     independent grep found `tools/telemetry/lib.sh:37` hardcodes + `tg_spool_ensure` LAUNCHES
     `rust-spool/target/release/telemetry-spool` as the LIVE Telegram telemetry drainer. Deleting it
     would break the live pipeline. Retire only after `async-spool` is deployed + `lib.sh` cut over.
+  - **Dedup ticket owed — `kernel::json` vs `fdr::json` (filed 2026-07-19, consistency audit §3.2;
+    same format as the dual-Keccak ticket in §A item 31):** the honest scope-down above left the
+    kernel carrying TWO JSON-write/string-escaping surfaces (`kernel::json` parser+serializer,
+    `fdr::json` serialize-only) — the exact §10/P2 "second escaping primitive" failure shape the
+    synthesis itself named. BP-31E acknowledged it only parenthetically and added a round-trip
+    test, but unlike the dual-Keccak case no dedup-or-parity ticket was recorded. Ticket: either
+    consolidate `fdr::json`'s writer under `kernel::json::write`, or record a permanent escaper
+    parity pin + a one-escaper-implementation rule; verify escaper sharing in the exec-branch code
+    when it merges. Owed to item 25's ledger; filed, not fixed.
 - **Item 26** — batching research pass. Zero prerequisites; scheduled low-priority, measurement-only.
   **✅ DONE 2026-07-19** — real measurements landed:
   [`AUDIT-ITEM-26-batching-measurements-2026-07-19.md`](AUDIT-ITEM-26-batching-measurements-2026-07-19.md).
@@ -317,8 +378,23 @@ test coverage.
 - **Item 11** — ARINC-653 scheduler Phase 0 (design doc + TLC model only). **Ruling: PURSUE,
   design-only (§0 above)** — can start now as a design artifact; the model itself doesn't need the
   breaker to exist, only the eventual code does ("code comes only after the breaker exists").
-- **Item 12** — SIHFT triple-vote pilot. **Ruling: PURSUE, design-only for now (§0 above)** — the
-  pilot itself needs breaker + FDR; scoping/design work can start immediately.
+- **Item 12** — SIHFT pilot, **re-scoped 2026-07-19 as TEMPORAL TMR** (merged re-scope: the
+  consistency audit's premise correction §§1.1–1.2 + the OS-patterns research §3 name the same
+  underlying redundancy concept — one refined item, no new number). **Ruling: PURSUE, design-only
+  for now (§0 above, premise retro-corrected there)** — the pilot itself needs breaker + FDR;
+  scoping/design work can start immediately, sized under the **non-ECC local-hardware premise**.
+  Refined scope: **temporal** triple-run (2–3× sequential re-execution on one core over the same
+  inputs + a trivial-equality vote — spatial TMR is unavailable to a single-process kernel and
+  shared-silicon-correlated anyway, synthesis §6 caveat kept) over the 2–3 most critical µs-scale
+  pure functions only (money gate, event-id hash, FSM transition candidates); vote-mismatch →
+  item 9 breaker trip + FDR `Alarm`, never an SEU-immunity claim; honestly PARTIAL (permanent
+  faults and software bugs corrupt all runs identically; the voter is kept a trivial equality to
+  minimize its own exposure). Genuinely ADDITIVE over item 54: Sentinel guards struct bytes
+  at-rest/at-transition; temporal TMR guards the *evaluation itself* against compute-time
+  transient flips — complementary halves, named as such in both designs. Per the Kleene audit
+  (finding 6), the FDR entry carries `VoteOutcome::{Unanimous, SingleDissent(replica-id),
+  NoMajority}` — both non-unanimous classes trip identically (behavioral collapse kept, distinct
+  typed cause recorded; item-50 shape) — bake this into the design doc now at zero code cost.
 - **Item 27 (response half)** — after item 21.
 - **Item 32 (split)** — Laplacian half already lands with item 18 (Tier 0). **Ruling: PURSUE the IR
   extension (§0 above)** — this can start as its own eqc-rs capability work, independent of the
@@ -593,7 +669,12 @@ dispatches it.
   ship (once this item adds the missing golden coverage); (iii) the full fixed-point
   conversion is parked as an explicitly-flagged-LARGE item with named reopening triggers: a
   reproduced cross-version golden divergence in basic float arithmetic, or a multi-ISA deployment
-  requirement. **Proof:** the inventory doc with per-site disposition and zero unclassified
+  requirement. **Framing amendment (2026-07-19, consistency audit §1.5):** the local-first mesh
+  target means heterogeneous peer hardware whose peers replay each other's DecisionUnits
+  (`import_unit`'s replay-before-persist), so the multi-ISA reopening trigger must be evaluated
+  against *fleet heterogeneity* (incl. aarch64 consumer devices), not a single-host assumption —
+  scope (ii)'s cross-host comparison surfaces are the first line either way. **Proof:** the
+  inventory doc with per-site disposition and zero unclassified
   transcendental sites; the new golden float surfaces sit in the always-on full-suite /
   `hardening-gate` oracle set (a deliberately perturbed golden value turns CI RED under the pinned
   toolchain — red-proven), and a `channel` bump is additionally gated on the `spot-check-<new>.md`
@@ -722,7 +803,10 @@ operator dispatches it.
   `Kind::ShadowDivergence` variant (closed-enum growth — item-48 `Heartbeat` precedent)
   carrying decision-site id, Admitted/`RejectionClass`, agreement bit, and short DIGESTS of D
   and the proposed action (never full payloads; records without the surface stay
-  byte-identical — item-27 optional-field discipline). Emission policy: every disagreement and
+  byte-identical — item-27 optional-field discipline). **Digest primitive, named in-spec
+  (2026-07-19, consistency audit §3.3 — max-nativeness):** digest = the in-kernel CRC32
+  (hardware-fault plane, matching items 40/54) or truncated in-kernel SHA3-256 — never a new
+  algorithm, no third ad-hoc hash under deadline. Emission policy: every disagreement and
   every Admitted-but-differs logged; Undecidable-while-D-decides at a bounded rate (the
   "model adds nothing on this domain" signal); agreement SAMPLED at a low fixed rate for the
   base-rate denominator — bounded emission preserves the FDR ring's replay-bounded-by-
@@ -818,3 +902,534 @@ ruling, trigger-promoted on public-flip authorization; 54 parallel with 51 (same
 + FDR-merge prerequisite; registry enumeration startable now). Nothing here gates any §H/§I item;
 items 50 and 54 amend/extend item 47's surface in place (one admission gate, one shared integrity
 primitive, never a fork).
+
+## K. Items 55–72 — Consistency Retrofit, Pervasive-Telemetry & Digital-Twin Arc (appended 2026-07-19, fifth wave — master-synthesis pass)
+
+**Sources (six, merged by `MASTER-SYNTHESIS-CONSISTENCY-TELEMETRY-DIGITAL-TWIN-2026-07-19.md`):**
+`AUDIT-SPACE-GRADE-CONSISTENCY-DEPLOYMENT-NATIVENESS-2026-07-19.md` (corrections applied above:
+§0/§E item 12, item 7 annotation, item 31 `kernel::json` ticket, items 46/51 amendments, SYNTH
+§6/§9/§11 and BP-27 §5 retro-corrections), `AUDIT-BINARY-VS-KLEENE-LOGIC-2026-07-19.md` (8
+SHOULD-BE-3-VALUED findings / 27 keep-binary / 11 already-correct),
+`AUDIT-TELEMETRY-EVERYWHERE-AI-OPTIONAL-OS-2026-07-19.md` (13 gaps G1–G13 + the work-normalized
+cost ledger + the AI-optional P1–P5 proposals),
+`RESEARCH-OS-ARCHITECTURE-PATTERNS-ADOPTION-2026-07-19.md` (3 adoptions + 1 small gap; category
+mismatches ruled out), `RESEARCH-NATIVE-KANI-REPLACEMENT-FEASIBILITY-2026-07-19.md` (already
+enacted as item 7's v2 rescope — no new item here, consistency confirmed above), and
+`RESEARCH-RESOURCE-FOOTPRINT-ZERO-BLINDSPOT-RELATIONAL-TELEMETRY-2026-07-19.md` (threads 1–5:
+derived footprint views, zero-UN-NAMED-blind-spots, FDR relational linkage, the 10-step
+completeness procedure, the predictive-oracle principle + digital-twin split).
+
+**Standing laws, same as §§H–J:** zero new external crates (empty-allowlist gate), item-6
+hardening machinery (no parallel checklist), item-25 procedure for any dependency question,
+item-27 P3-plane law for every telemetry value (excluded from all hash/gate/replay surfaces).
+**New binding procedure for this arc:**
+[`PROCEDURE-TELEMETRY-COMPLETENESS-STANDING-2026-07-19.md`](PROCEDURE-TELEMETRY-COMPLETENESS-STANDING-2026-07-19.md)
+(item 57 ratifies it — the item-25 pattern). **Merged, not duplicated:** the temporal-TMR
+adoption is item 12's §E re-scope (above), NOT a new number; item 7's rescope is enacted in §C.
+**Named out-of-scope flags (recorded, not itemized):** audit-3 G10 (bebop-repo NTT wire-in has
+zero perf telemetry — a `cycles-per-op` decision with no data; belongs to the bebop repo's own
+lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the kernel arc).
+**Planning only — no item below starts before the operator dispatches it.**
+
+- **Item 55 — K3 verdict-class retrofit across roadmap verdict surfaces (spec-level amendments
+  in the item-50 shape; zero prerequisites, READY NOW — each amendment's code cost rides its
+  host item's own build).** Applies the Kleene audit's remaining spec findings (1, 3, 4, 7, 8;
+  finding 6 already applied in item 12's §E re-scope; findings 2/5 are item 56). The invariant
+  shape for every one: **behavioral collapse to the safe pole KEPT, distinct typed cause ADDED
+  to the record** — no third control-flow arm anywhere. (a) **Item 33:** per-number verdict
+  becomes `{Confirmed(cmd), Refuted(cmd), Unresolvable(cause)}` — a claimed delta smaller than
+  the bench's measured CI (the documented ±40% `fold_transitions` noise-bound vs +16.6% claim)
+  is `Unresolvable`, recorded with measured CI + claimed delta side-by-side and a
+  bench-stabilization ticket, never a manufactured CONFIRMED/REFUTED; MISSING→RED tracker
+  semantics unchanged. (b) **Items 7/10/11:** Kani/TLC result artifacts carry per-target
+  `{Proved, Refuted(cex), Undecidable(cause: bound/timeout/resource)}`; CI collapses
+  Refuted|Undecidable → RED identically, but the class rides the job artifact — an exhausted
+  bound needs a bound bump, a counterexample needs a code fix; conflating them mis-routes the
+  response. (c) **Item 9 (+21 inherits):** `Tripped` carries
+  `TripCause::{Exceeded(named-threshold), Unevaluable(Absence)}`, and the previously-unstated
+  input policy becomes law: a trip predicate evaluating a `Reading::Unavailable` input takes the
+  CONSERVATIVE pole (trip-eligible, never silently healthy), logged distinctly — the seam stays
+  two-armed. (d) **Item 43:** the classification law gains its unstated third case —
+  `Unclassifiable ⇒ treated as secret-adjacent` (mandatory dudect branch), recorded as its own
+  classification value so the fail-closed default is visible. (e) **Items 6/43 dudect:** the
+  recorded verdict becomes `{LeakFound, NoLeakAtSamples(n), Inconclusive(underpowered)}` with
+  sample/class counts recorded — a green run is citable as "no leak detected at power N," never
+  "CT proven"; Inconclusive ⇒ RED; the planted-leak positive control stays. (f) **Item 35
+  (consistency note, no new state):** emitter refusal carries `{BoundViolated, BoundUnprovable}`.
+  **Proof:** each host item's entry/blueprint text amended with the class enum + policy sentence
+  (this item is DONE when the amendments are recorded and each host item's own proof section
+  names the planted-class red→green obligation — e.g. item 33's results doc must contain at
+  least the capability to record an `Unresolvable` row; item 9's blueprint must state the
+  Unavailable-input policy before build).
+- **Item 56 — kernel classifier epistemic-basis retrofit: `markov::Verdict` fail-open record +
+  `spectral::DriftClass` conflated record (code; Kleene audit findings 2 + 5 — the only
+  fail-open-to-lenient instance found, and its fail-closed sibling).** Behavior and wire
+  contracts are KEPT in both cases; only the record gains a basis. **(a) markov (the headline):**
+  `analyze_detailed` maps window-too-short ⇒ `Healthy` (`markov.rs:110`) and
+  `markov_attractor.rs:36` maps analyzer-error ⇒ `"HEALTHY"` — Unknown emitted at the MOST
+  lenient pole, and item 27's FDR record carries only `verdict_str()` so "couldn't analyze" is
+  byte-identical to "measured healthy" in telemetry. Fail-open stays (advisory hook — no
+  evidence ⇒ no intervention is the right behavior); ADD a typed basis
+  (`Basis::{Measured, WindowTooShort, AnalyzerError}`) on `Report` — NOT a fourth `Verdict`
+  variant (CLI JSON is golden-pinned byte-identical) — and an optional basis field on
+  `emit_verdict_pmu`'s FDR record (item-27 optional-field discipline). Downstream law: items
+  9/21 must never count an unevaluated-Healthy window as health evidence. **(b) spectral:**
+  `classify_drift` collapses three cannot-evaluate causes (non-finite entries, ragged matrix,
+  checked-constructor Err) into `Unstable` — the fail-closed collapse is correct and stays, and
+  the pinned `wire_code` 0/1/2 makes a fourth variant wrong; ADD out-of-band provenance
+  (`DriftBasis::{Measured, IllFormedInput(cause)}` via the `classify_drift_with_rho` report path
+  / item-27-style optional FDR companion) so forensics can separate a genuinely diverging loop
+  from NaN-poisoned input. **Prereqs:** none for the pure-kernel halves (`markov.rs`/
+  `spectral.rs` live on main); the FDR-field halves join after the exec-branch FDR merge.
+  **Proof:** markov CLI JSON goldens byte-identical before/after (the pinned contract is the
+  regression test); a forced short-window run and a forced analyzer-error run each yield
+  `Healthy` + the correct distinct basis in the FDR record (red→green: today they are
+  byte-identical to measured-healthy); spectral: a NaN-poisoned matrix and a genuinely-divergent
+  matrix both classify `Unstable` with distinct recorded bases; `wire_code` round-trip test
+  untouched and green.
+- **Item 57 — telemetry-completeness standing procedure RATIFIED + HOT-PATHS accounting columns
+  (the enforcement spine of this arc; zero prerequisites — the procedure doc exists as of this
+  pass).** The item-25 pattern replayed: the 10-step (+3 cost-oracle steps) procedure in
+  `PROCEDURE-TELEMETRY-COMPLETENESS-STANDING-2026-07-19.md` becomes BINDING for every future
+  blueprint in this arc once the operator ratifies it. Mechanical half: extend
+  `docs/audits/hardening/HOT-PATHS.tsv` with an `eff` column — every hot-zone row must either
+  name its workload-kind/span or carry a ledgered `gap:` reason (the item-6 gate mechanism,
+  extended not replaced), and every function in a hot zone is classified
+  `INSTRUMENTED | CHEAP(SamplingDisabled) | EXCLUDED(reason)`. This is the honest form of the
+  operator's "enforced everywhere": **zero UN-NAMED blind spots** — 100% coverage of the
+  *accounting*, with the impossibility triangle (100% stamps ∧ zero cost ∧ deterministic replay)
+  stated rather than violated. Also rules on audit G9: the cheap-path FDR envelope (one relaxed
+  atomic load when disabled) is the always-compiled floor; heavy stamps stay feature-gated —
+  recorded as the standing posture. **Proof:** procedure doc cross-linked from
+  `docs/audits/hardening/CHECKLIST.md`; the extended gate goes RED on a hot-zone row carrying
+  neither an `eff` value nor a `gap:` reason (planted-row red→green, anti-forgery clause
+  reused); the G9 ruling recorded in the procedure doc + `fdr/mod.rs` when next touched.
+- **Item 58 — work-normalized cost ledger (after item 57 + the exec-branch FDR merge; audit-3
+  §1.3 design adopted).** On `SpanClose`-class FDR records for a named workload: emit
+  `(work: {kind, Δcount}, cost: HwStamp-delta ⊕ PmuStamp-delta)` — **pairs of raw u64, never
+  ratios** (the landed losslessness law; ratios are a consumer concern). Closed workload-kind
+  enum seeded from work units that already exist: `DecisionUnitsImported`, `FdrRecordsAppended`,
+  `TransitionsFolded`, `TokensGenerated`, `FramesRendered`, `EigensolvesCompleted`,
+  `SignaturesVerified`. Degradation ladder self-describing per field via `Reading<T>`: Tier E
+  (per-joule, RAPL hosts), Tier C (per-cycle/instruction, PMU hosts), Tier T (per-tick/wall —
+  the tier this dev host actually runs at, honest not aspirational); a cross-tier efficiency
+  comparison is structurally UNCOMPUTABLE (absent counters are absent), and on hosts where C and
+  T are both live, work/cycles vs work/ticks must agree within a stated band — a free self-test
+  of the counters. **Proof:** schema tests + named-absence serialization proof (the literal
+  `unavailable` reason greppable on this RAPL-less/paranoid host — procedure step 10's
+  red→green); the pair-not-ratio law asserted structurally (no ratio field exists in the
+  schema); the cross-tier consistency band test green where both tiers are live; first consumer
+  deployments = items 59–61.
+- **Item 59 — agent-turn timing closure (gaps G1+G2+G12 — the highest-leverage single gap:
+  tokens are already counted, wall-clock is one `Instant` pair away; after item 58).** (a) The
+  kernel LLM port (`ports/llm.rs`) `ChatResponse` gains a duration/TTFT surface (additive typed
+  field or timing companion — the port contract can currently not transport latency even where
+  adapters measure it); (b) `agent-loop`'s host binary times each turn (it bypasses the ONE
+  timed path, `Dispatcher`'s `ms`, by driving `OllamaAdapter` directly) and folds per-turn
+  Δwall + Δticks alongside the existing token counts into `track_record.jsonl`; (c) the kernel
+  agent executor (`kernel/src/agent/loop.rs`) records per-iteration timing at span granularity.
+  Workload-kind: `TokensGenerated`. **Proof:** a live loop run yields track-record entries
+  carrying both tokens and duration for the direct-adapter path (parity with the Dispatcher
+  path's existing `ms`); tokens/sec derivable consumer-side from one record's raw pair; an
+  LLM-absent turn records a named absence, never a fabricated 0; existing golden/track-record
+  consumers unbroken (additive-field discipline).
+- **Item 60 — engine frame-loop + voice instrumentation (gaps G3+G11; after item 58; engine
+  currently has ZERO `Instant::now` — grep-verified).** (a) `EngineLoop::frame()` measures
+  frame time against a NAMED frame-budget constant (one authority site + pin test — P3 rate
+  discipline); `FrameProfiler` gains time alongside its call counts; workload-kind
+  `FramesRendered`. (b) `voice.rs`: `WakeWordSpotter`/`AsrModel::feed` latency measured — the
+  module carries an explicit "battery lever" efficiency claim with zero measurement, and
+  `InferError::Timeout` exists with no timer feeding it; wire the timer. (c) All engine timing
+  must state its wasm leg per procedure step 9 (native `Instant` / wasm `performance.now`
+  import or named absence — coordinates with item 62's wasm clause, one design not two).
+  **Proof:** frame-time p50/p99 emitted under the telemetry feature with a budget-breach test
+  (planted slow frame flagged); `InferError::Timeout` demonstrably reachable from the real
+  timer (red→green — today it is dead); the budget constant pinned; wasm cdylib stays green.
+- **Item 61 — kernel runtime-counter closure: durability, subprocess, eigensolver, crypto spans
+  (gaps G5+G6+G7+G8; after item 58).** (a) `EventLog::append`/`FileEventStore::insert` gain
+  continuous counters (events + Δticks + fsync count) — item 26 measured 637 µs p50 once at
+  bench time, but the operator-gated 53× group-commit decision has NO ongoing data feed;
+  workload-kind `FdrRecordsAppended`/events. (b) `living_knowledge.rs` subprocess spawns record
+  duration + exit rusage (`wait4`) + an FDR record — a hung/expensive child is currently
+  invisible to FDR (adjacent to item 48's liveness class, composes with it). (c)
+  `spectral.rs`/`householder.rs` join the span roster — HOT-PATHS zones with no runtime spans;
+  workload-kind `EigensolvesCompleted` (cycles/eigensolve is the cleanest Tier-C efficiency
+  metric in the kernel). (d) Fix the `mldsa_verify` span double-gating (`telemetry` AND `pq`):
+  a `pq`-only production build currently has zero crypto latency telemetry — either the span
+  compiles under `pq` alone or the gap is ledgered in HOT-PATHS as an explicit `gap:` row (no
+  silent dark zone); workload-kind `SignaturesVerified`. **Proof:** counters recoverable from
+  the FDR ring after N appends in a test; child-process record carries real rusage (planted
+  slow child observable); eigensolver spans emit under load with HOT-PATHS `eff` rows filled;
+  the pq-only build either emits crypto spans or carries the ledgered gap row (gate-checked).
+- **Item 62 — FDR relational linkage: `span_id` + `parent_span_id: Reading<u64>` + the wasm
+  clock leg (gaps: doc-6 thread 3's decisive finding + G4; after the FDR merge; parallel with
+  item 58).** The FDR schema is FLAT/UNLINKED today — grep over `schema.rs` for
+  parent/trace/span/caller = zero hits; `seq` conveys temporal succession, never causal
+  parentage. Extend (never replace) the envelope on the P3 plane: `span_id: u64` (per-process
+  counter) + `parent_span_id: Reading<u64>` with `Unavailable(NoParent)` at a root — the
+  named-absence doctrine covering "this is a root," no magic 0, no missing key. Cross-process
+  edges (subprocess spawns, agent↔LLM boundary) seed the parent id across the boundary — OTel
+  propagation reduced to passing one u64. Cost honest: ~16 bytes + a counter increment, P3 so
+  it never touches determinism. The wasm leg (G4): `FdrEvent::stamp` is cfg'd off wasm because
+  `Instant` panics there — this item states the wasm-safe clock (`performance.now()` import) or
+  the named `Absence` reason for the 24 wasm pub fns; the FDR plan may no longer structurally
+  EXCLUDE the wasm surface silently. **Proof:** nested spans reconstruct a correct call tree
+  from a recovered ring (test walks parent links); root records carry the literal `NoParent`
+  reason (greppable); records on surfaces without linkage stay byte-identical (optional-field
+  discipline); the P3 grep proof (no span id feeds any hash/gate/replay surface) green; wasm
+  cdylib green with the stated clock or named absence.
+- **Item 63 — item-45 spec extension: AI-boundary disposition table + build-provenance record +
+  feature-matrix legs (audit-3 §2.3 P2/P4/P5 adopted; P3's reject-list endorsed as correct, not
+  deferral; spec-level now, teeth when item 45 lands; audit-3 P1 — "dispatch item 45 now, it is
+  READY-NOW and converts safe-by-convention into safe-by-gate before items 33–44 create real
+  risk" — is recorded here as an operator-dispatch recommendation).** (a) Disposition table over
+  the pre-existing surfaces item 45's spec is silent on: `{micrograd, online, attention, evals,
+  ports/llm, ports/agent, agent/, engine/voice.rs}` → each classified CORE-DETERMINISTIC
+  (`attention` — it is math, no learned weights), AI-EDGE (moves behind `inference` when it
+  lands — `micrograd`/`online` are the candidates; undefined = grandfathered leak), or
+  SANCTIONED-SEAM (trait-only always-compiled ports — the syscall-interface shape, named as
+  legal so the gate's grep can distinguish a seam from a violation); the gate's scope clause
+  extends to the engine's `voice`/`inference` firewall (currently outside it entirely). (b) One
+  startup `Kind::Event` FDR record naming the compiled feature set (`inference` on/off, `pq`,
+  `telemetry`, …) — forensics can tell an AI-absent binary from an AI-present one from the
+  flight recorder alone; pairs with item 48's heartbeat. (c) Feature-matrix CI legs: `default`
+  AND `default+inference` compile + full suite on every PR once the flag exists — the absent
+  leg stays green forever, not only at gate-landing. **Proof:** the table recorded in item 45's
+  spec + the named modules' docs; a planted core→AI-EDGE reference RED under the extended gate
+  (P7); the provenance record recovered from a real ring in a test; both matrix legs green in
+  CI when the flag exists.
+- **Item 64 — capability-secure declarative composition root (the strongest OS-pattern
+  adoption — the only one backed by a PROVEN defect: item 2's finding that NO production
+  composition root constructs the durable store; SUBSUMES the
+  `BLUEPRINT-P-FILE-EVENT-STORE-WIRING-GAP` Tier-1 fix; Tier-1-class build, dispatchable
+  now).** A declarative, dependency-ordered init for the host binaries replacing today's flat
+  ad-hoc `main()` wiring: (i) explicit init order derived from a declared module-dependency DAG,
+  validated by the EXISTING `order_machine` proof kit (`has_cycle`/`topological_order` reused
+  over module-init nodes — a cyclic init dependency is a caught startup error, not a runtime
+  surprise); (ii) each module declares the ports/capabilities it requires and FAILS CLOSED if
+  one is absent (generalizing `isolation/microvm.rs`'s refuse-the-adapter pattern from
+  deployment gating to module init); (iii) the root constructs the durable
+  `FileEventStore`/`EventLog` (closing item 2's defect at last), performs the FDR
+  recover-readback before normal operation begins (item 48's declared place to live), and is
+  the SOLE MINTER of item 65's in-process capability tokens (seL4's "init task holds all
+  capabilities and delegates," sized to one process). **Proof:** a cited line in a production
+  binary constructing the durable store — item 2's original proof condition, finally
+  dischargeable; a planted cyclic init declaration fails at startup with a typed error
+  (red→green); a module with an absent declared capability refuses init fail-closed (test);
+  a permuted declaration order yields the identical derived init sequence (order comes from the
+  DAG, not source order); kill-9 recovery test still green through the new root.
+- **Item 65 — typed in-process AI/agent capability boundary (extends item 45; tokens minted
+  ONLY by item 64's root; after items 64 + 45; the proportionate seL4 slice — ~70% was already
+  scoped by item 45 + the Wasmtime-fuel pattern, this is the new ~30%).** A zero-sized
+  unforgeable capability type (constructible only by the composition root) that the AI/agent
+  subsystem must present BY SIGNATURE to call a kernel port — `cap: &CoreWriteCapability` makes
+  authority-to-touch-the-deterministic-core illegal-state-unrepresentable at the call site;
+  strictly additive over item 45 (45 stops cross-references at compile time; this also stops
+  runtime authority a compiled-in-but-untrusted path might exercise). Reuses the existing
+  `capability_cert.rs` attenuation/scoping machinery internally — no new crypto, no new
+  dependency, no memory-capability system invented. Includes the OTP-slice companion: a uniform
+  per-port fail-closed containment property test (one failing/panicking adapter cannot escalate
+  past its own port boundary — asserted across every port, not left per-port convention;
+  composes with item 9's breaker as the containment receiver). **Proof:** a compile-fail test
+  proves a capability-requiring port method is uncallable from code never handed the token; the
+  token's only constructor site is the composition root (visibility + grep proof); the per-port
+  containment property test green across all `ports/` seams; `cargo tree -e no-dev`
+  byte-unchanged.
+- **Item 66 — periodic durable-log scrub (the one small journaling-FS gap; gated on item 64 —
+  scrubbing an unwired store is pointless; composes with item 54's integrity-alarm seam).**
+  ZFS-scrub slice only: an idle-cadence pass walking the durable EventLog + closed FDR
+  segments, re-verifying the EXISTING CRC32/SHA3 checksums to catch latent at-rest bit-rot
+  before a read needs the data (on non-ECC local storage, proportionate defense-in-depth); any
+  mismatch emits one FDR `Alarm` (hardware-fault evidence, item-40 semantics). No new
+  primitive, no new dependency; the scrub cadence is a NAMED constant with one authority site
+  (P3 rate discipline). **Proof:** a planted at-rest corruption in a closed segment is detected
+  by the next scrub pass and writes the `Alarm` (red→green, P7); an uncorrupted store scrubs
+  silent; cadence constant pinned; `cargo tree` unchanged (grep: existing CRC32/SHA3 only).
+- **Item 67 — cost-oracle classification backfill: COVERAGE-COMPLETE, PRECISION-HONEST (after
+  item 57; the named principle from doc 6 §5.2 made mechanical).** Literal "100% correct cost
+  prediction for any code" is undecidable (WCET reduces to halting); the honest achievable form
+  is 100% *classification* coverage: EVERY `HOT-PATHS.tsv` row (and every future row,
+  gate-enforced) carries a bucket — `ORACLE-EXACT` (input domain enumerated or cost provably
+  input-independent; evidence = the enumeration/CT proof), `ORACLE-BOUNDED` (fixed operation
+  schedule; evidence = the analytic `[min,max]` derivation), or `MEASURED-ONLY` (genuinely
+  dynamic/I/O/probabilistic; evidence = p50/p99/CI + methodology) — with a traceable evidence
+  pointer per row; *unclassified* is the one forbidden state. Seeded from doc 6 §5.5's
+  grounded sample (FSM 144-transition table → EXACT; `ct_eq` inherits EXACT from its dudect
+  proof — the CT property IS the cost-constancy property, free; `ntt`/`invntt`/`householder` →
+  BOUNDED via fixed schedules; `eigh` iterative QR + event-log fsync + subprocess/agent/AI →
+  MEASURED-ONLY, item 26's 637 µs distribution as the exemplar). Reuses the Kani-feasibility
+  B/C split as ready-made evidence (Bucket B → EXACT, Bucket C → BOUNDED); the kernel's hot
+  core is dominated by EXACT/BOUNDED with MEASURED-ONLY confined to I/O+subprocess+AI — the
+  backfill is tractable, not boil-the-ocean. **Proof:** zero unclassified rows in the extended
+  TSV; the gate goes RED on a new hot-zone row without a bucket (planted-row red→green); every
+  evidence pointer resolves to a real test name / derivation section / measurement doc
+  (spot-check re-executed, never presence-checked — P7).
+- **Item 68 — ORACLE-EXACT/BOUNDED cost capture as a correctness-proof byproduct (after item
+  67 + item 7's native exhaustive sweeps; doc 6 §5.3's decisive reuse).** The same structural
+  property that makes correctness exhaustively provable makes cost exactly knowable — so
+  capture it in the SAME pass, never a separate harness: (a) add Tier-A `rdtsc` cycle capture
+  (reusing `fdr/pmu.rs`'s reader) to item 7's Bucket-B exhaustive `#[test]` sweeps, folding to
+  a single constant/tight interval where control flow is input-independent (all the
+  straight-line crypto reductions) and to a complete per-input cost table otherwise; (b) derive
+  analytic `[min,max]` intervals for the Bucket-C fixed-schedule functions (8-layer/1024-
+  butterfly, 24 Keccak rounds — the WCET-decidable straight-line subclass, the butterfly-lemma
+  induction reused for cost); (c) MEASURED-ONLY surfaces report p50/p99/CI, never a fabricated
+  point estimate. **Honest caveat carried verbatim:** even ORACLE-EXACT yields measured cycles
+  with host noise — the claim is "input-dependence of cost fully characterized," absolute
+  cycles remain a per-host interval; precision-honest at the exact end too. **Proof:** a
+  generated cost table/constant per classified function with its stated noise interval,
+  recorded as evidence behind item 67's rows; an input-independence assertion for EXACT
+  functions (cost class identical across the swept domain); the P3 grep proof that no captured
+  cost value feeds any decision/gate surface.
+- **Item 69 — water/carbon as derived, constant-multiplied views of joules (small standalone;
+  after item 58; doc 6 thread 1 — the honest form of "atoms/molecules/water/air").** The
+  kernel needs NO new *measured* footprint field beyond `joules_uj` — "atoms/molecules
+  consumption" honestly IS silicon power draw, i.e. joules, and item 27's RAPL/PMU work already
+  is that mechanism. Build the consumer-side conversion table keyed on operator-supplied
+  `(region, deployment-class)` constants: `co2e = joules × grid-carbon-intensity` (gCO₂e/kWh),
+  `off-site water = joules × WUE-source` (L/kWh) — each a `Reading<T>` degrading to a named
+  absence when joules is absent OR the regional constant is unsupplied; **on-site water is a
+  PERMANENT named absence** on a local device (a facility cooling property software cannot
+  observe — fabricating litres is a standard violation, procedure step 4); adding raw
+  `water_ml`/`co2e` fields to `HwStamp` is likewise a violation. Lights up automatically on a
+  RAPL-capable deploy with zero schema change. **Proof:** derivation golden tests against
+  hand-computed values; on this RAPL-less host every derived view serializes the literal
+  `unavailable` reason (greppable — procedure step 10's red→green); the on-site-water absence
+  is unconditional by construction (no code path can produce a value); the SCI-rate
+  (ISO/IEC 21031) pairing note recorded for ratio consumers.
+- **Item 70 — state-mirroring digital twin, half (A) — REAL, NEAR-TERM (after items 67 + 68;
+  call matrix fed by item 62; doc 6 §5.7(A)).** NOT a new subsystem: the twin is the
+  COMPOSITION of three already-real/already-scoped pieces — (i) the per-function cost oracle
+  (item 67's buckets + item 68's tables/intervals/distributions); (ii) the aggregate call-graph
+  layer reusing `spectral.rs`/`markov.rs`/`csr.rs` AS-IS: ρ(A) of the frequency-weighted call
+  matrix decides whether total propagated cost converges (`c = (I−A)⁻¹·c_self` — the existing
+  `classify_drift` `Damped/Resonant/Unstable` enum applied to the call matrix, zero new
+  machinery), Laplacian diffusion for where cost concentrates (bottlenecks), `markov::analyze`
+  over discretized cost-tier tokens for resource-regime drift; (iii) the `eqc-rs` precedent
+  (equation → proven-faithful Rust mirror) as the template that "real behavior mirrored by real
+  math" already works here. **Forced-metaphor guard, binding (Anu/Ananke — carried exactly):**
+  the spectral machinery answers GRAPH-level questions only (convergence, flow, bottleneck,
+  drift); per-leaf cost comes from enumeration/interval ONLY — the twin must never present a
+  spectral quantity as an individual function's cycle count. Deliverable: given (action,
+  inputs) → its bucket + value/interval/distribution + evidence pointer, and (via ρ(A)) the
+  propagated aggregate answer. **Proof:** coverage-complete over every HOT-PATHS action (an
+  unclassifiable query returns the forbidden-state error, never a guess); a differential check
+  on ORACLE-EXACT functions (twin's stated cost class matches a fresh measurement within the
+  stated noise interval); ρ(A) verdict validated on a synthetic recursive call graph with known
+  divergence (red→green both directions); the forced-metaphor guard asserted structurally (no
+  per-leaf API derives from spectral values — reviewed + doc-ruled, grep-checkable naming).
+- **Item 71 — cost-aware eqc-rs rewrite-extraction (half (B′) — the ONE honestly-scoped
+  near-term step toward (B); independent of items 67–70; operator-gated whether to build at
+  all — offered as the smallest grounded step, not a commitment).** Give eqc-rs codegen a
+  cost-aware extraction over a SMALL, HAND-CURATED, FINITE set of provably-equivalent algebraic
+  rewrites — strength reduction (`a*2 → a+a`), factoring (`a*b + a*c → a*(b+c)`), constant
+  folding — choosing the cheaper form by lower op-count at codegen time, and REUSING the
+  existing `emit_proof_program` to prove the chosen form still equals the `Expr::eval`
+  reference. Equality-saturation's "extraction picks the cheapest equivalent" idea at toy scale:
+  **no e-graph, no SMT, no SAT, zero new dependency** — honestly "constant folding plus
+  strength reduction with a proof," NOT a superoptimizer, and it must never be described as
+  one. **Proof:** per rule, an emitted case where the cheaper form is demonstrably chosen with
+  its proof program green (compiled by real rustc, self-asserting); a no-rule-applies case
+  emits unchanged output byte-identical to today's; the op-count cost metric documented in the
+  eqc-rs README; the full eqc-rs suite green; `cargo tree` unchanged.
+- **Item 72 — auto-optimizing digital twin, half (B) — LONG-TERM ASPIRATION, EXPLICITLY NOT
+  PROMISED (named so the direction is on the roadmap without over-promising; doc 6 §5.7(B)).**
+  "Always finds a shorter/faster version of any action" is automated superoptimization — a
+  real, hard, active research field (STOKE stochastic search, Souper SMT synthesis, egg/egglog
+  equality saturation with cost-model extraction), and its machinery (exponential search
+  spaces, e-graph/SMT engines) is antithetical TODAY to a zero-dep deterministic kernel. This
+  item carries **no proof conditions and no schedule** — deliberately. Instead it records its
+  ENTRY CRITERIA, all three required before any work: (i) item 71 landed with measured wins
+  demonstrating extraction value on real kernel math; (ii) an explicit operator ruling
+  accepting the tooling/determinism cost for a bounded target domain; (iii) a fresh research
+  pass (this item is a pointer, not a plan). Until then: named direction, zero commitment —
+  the honest opposite of a fabricated roadmap promise.
+
+**Dependency graph, one line:** 55 ∥ 56 ∥ 57 ∥ 63 ∥ 64 ready now (56's and 58–62's FDR-field
+halves inherit the exec-branch FDR merge, same as §J's flag); 58 after 57; {59 ∥ 60 ∥ 61} after
+58; 62 parallel with 58 (both extend the envelope, coordinated in one schema change); 65 after
+{64 + 45}; 66 after 64; 67 after 57; 68 after {67 + item 7's native sweeps}; 69 after 58; 70
+after {67 + 68} with 62 feeding its call matrix; 71 independent + operator-gated; 72
+aspirational, entry-gated on {70, 71, operator ruling}. Temporal TMR = item 12 (§E, merged —
+no number here); item 7's rescope = §C (enacted, no number here). Nothing in §K gates any
+§§H–J item.
+
+## L. Items 73–78 — Governed Self-Evolution Arc: AI-Proposed Change Governance (self-healing + self-upgrading under an untouchable human gate) — appended 2026-07-19, sixth wave
+
+**Source:** operator directive (verbatim, three parts, recorded 2026-07-19): *"allowing & making
+possible for the ai to build & change internal os, but without touching the core & red lines/gates
+— but only with manual approvals/prompts/injections from the human operator with the same amount
+level of predictability/space quality/transparency/control/telemetry"*; *"track own health too, to
+make fixes, self-healing allowed, this should be a regenerative software based on safe
+conditions/gates/invariants/human operator decisions"*; *"so both self-healing and self-upgrading —
+only with the human operator decisions/approval and inability to change this or bypass the human
+gate & other red lines gates."* This is a PRODUCT capability of the dowiz kernel/OS itself, not a
+statement about this development session. It generalizes item 47's `Proposal → admit() →
+ValidatedProposal` pattern (runtime ADVICE plane) to the CODE/architecture plane, and composes
+with — never duplicates — items 45 (AI-optional gate), 50 (K3 admission), 64/65 (composition root
++ typed capability boundary), 62 (relational lineage), 67/68/70 (cost oracle), 75←eqc-rs
+(pre-verified generation precedent). **Same standing laws as §§H–K. Planning only — no item
+starts before the operator dispatches it.**
+
+**The one governing invariant (everything in §L is subordinate to item 73):** the human-approval
+gate, the red-line registry, and the verification machinery are themselves CORE — permanently
+outside the reach of the very pipeline they govern. No sequence of individually-plausible approved
+proposals may ever reach them. This is the corrigibility / tamper-proof-oversight problem from the
+AI-safety literature, addressed structurally, not by policy.
+
+- **Item 73 — the Gate-Root Invariant: the governance mechanism is structurally unmodifiable by
+  what it governs (FIRST and foundational; spec-level now, structural enforcement lands with
+  items 64/65 + 74; everything else in §L is subordinate to this holding).** Three structural
+  clauses, none of them "a rule someone follows": **(i) Root placement.** The red-line registry
+  (item 74) + the gate-enforcement code live at/behind item 64's composition root — the sole
+  capability minter. **No capability type granting write access to the root, the registry, or the
+  gate code EXISTS in the type system** — not "is never handed out": is unconstructible
+  (illegal-state-unrepresentable, the §1.5 house standard applied to the meta level). By
+  construction, nothing downstream of the root — including any AI-generated proposal however it
+  entered — can hold authority to touch the root itself (doc-4's seL4 "init task holds all
+  capabilities" pattern, completed: the root delegates everything EXCEPT authority over itself).
+  **(ii) Dependency-direction check, item-45 style.** A CI check (same planted-reference
+  red-proof discipline) asserts no module reachable from the proposal pipeline references any
+  gate/registry mutation surface — trivially checkable because no such mutation surface is
+  `pub`: the registry is static data + code with NO runtime mutation API at all. **(iii)
+  Out-of-band-only modification.** Changing the gate, the registry, or the verification logic
+  happens ONLY through the normal human engineering process (a human directly editing code,
+  review, the full CI gate suite) — NEVER through the proposal pipeline, even nominally, even
+  "with extra approvals": a proposal whose diff touches a red-line path is REFUSED at
+  classification time (step zero — before verification, before any human is asked; it is a
+  category error, not a reviewable request). No "beneficial change to the gate" exception
+  exists — that exception IS the corrigibility trap (a system able to modify its own safety
+  constraints can eventually remove them through individually-plausible steps). **Proof:** a
+  planted proposal targeting the gate/registry/red-line paths is refused with a typed red-line
+  rejection + FDR record, red→green (P7); a compile-fail test proves no gate-mutation
+  capability constructor exists; the dependency-direction CI check goes RED on a planted
+  pipeline→gate reference; the out-of-band-only law recorded in the registry's module doc +
+  `docs/audits/hardening/CHECKLIST.md`; item 74's registry carries this section's own machinery
+  as rows (the recursion recorded, not implied).
+- **Item 74 — the red-line/core registry: grounded machine-readable enumeration of what AI
+  proposals may NEVER touch (after item 73's spec; the safety-critical deliverable of this arc —
+  every row cited, zero hand-waving).** Format: a machine-read manifest in the `HOT-PATHS.tsv`
+  idiom (path-prefix zones → deterministic diff classification), each row carrying WHY + the
+  real source. Seed rows, grounded against this project's actual standing red-lines and this
+  roadmap's own proof machinery: **(1) Product red-lines** (standing rules, memory
+  `test-integrity-rules-2026-06-27` + the SELF-DEVELOPMENT charter's "red-lines
+  (money/auth/RLS/migrations/bulk) preserved even under full autonomy"): `money.rs`
+  (integer-only checked arithmetic), auth/capability surfaces, pgrust migrations, bulk-op
+  paths. **(2) Proven-FSM core:** `order_machine.rs` + its `GOLDEN_SIGNATURE` drift gate and
+  const-proof kit (`FSM_SPECTRAL_RADIUS`) — the kernel's exemplar proof surface. **(3) The
+  verification seam:** `decision/import.rs` `import_unit` replay-before-persist gate; item 47's
+  `admit`/`Invariants` + item 50's K3 fold when they land. **(4) The forensic truth surface:**
+  `event_log.rs` (SHA3 hash chain) + `kernel/src/fdr/` (ring, schema, CRC) — the evidence trail
+  must never be modifiable by the subject of the evidence (item 76 depends on this being
+  trustworthy). **(5) Crypto:** `pq/` (KAT-gated ML-DSA/ML-KEM/Keccak/x25519), `ct_gate.rs`,
+  `capability_cert.rs`. **(6) The proof machinery itself:** `scripts/zero-dep-gate.sh` + every
+  `ZERO-DEP-ALLOWLIST.txt`, `scripts/hardening-gate.sh` + `CHECKLIST.md`/`HOT-PATHS.tsv`,
+  `rust-toolchain.toml` + the bump gate, the miri/lint/ai-optional gates, the `ci.yml` gate
+  jobs. **(7) Safety machinery as it lands:** item 9's breaker, item 54's Sentinel, items
+  64/65's composition root + capability types. **(8) §L's own gate code + this registry**
+  (item 73's recursion, recorded as rows). Registry changes are themselves out-of-band-only
+  (item 73(iii)); row REMOVAL additionally requires an explicit operator ruling recorded in the
+  row's history (shrink is the dangerous direction — the allowlist monotonicity insight,
+  inverted). **Proof:** the registry exists with every row justified + cited; the diff
+  classifier maps a change-set → touched-red-line verdict deterministically (path-prefix
+  zones); one planted diff per row CLASS demonstrably refused (P7); the registry file is
+  itself in the registry (self-row test).
+- **Item 75 — the change-proposal pipeline: typed `ChangeProposal` → kernel-gate verification →
+  explicit human approval → recorded application (after items 73+74; extends item 47's grammar
+  to the code plane — same shape, different plane, no parallel admission concept).** An
+  AI-generated change (from items 33–44's inference subsystem or the agent surface) is DATA: a
+  typed `ChangeProposal` carrying the diff/artifact + its trigger + its claimed intent. Step
+  zero: item 74's classifier — a red-line touch is refused before anything else runs (73(iii)).
+  Verification: the kernel's OWN existing gates re-executed on the proposed state — zero-dep
+  gate, hardening-gate rows, full suite, miri where applicable, the item-44 CI discipline —
+  never a parallel/lighter checklist; a proposal failing any gate NEVER reaches a human
+  (machines filter, humans decide). Pre-verified generation is the preferred arrival shape:
+  the `eqc-rs` precedent (equation → generated Rust + `emit_proof_program` self-assertion)
+  means a proposal can arrive as a PROVEN artifact rather than raw untrusted code — reuse it,
+  don't invent a second generator discipline. Then the hard gate: **an explicit human "apply"
+  action is required for every application — no autonomous apply path exists** (structurally:
+  the apply function requires a human-approval token only the operator's out-of-band action
+  mints — the item-65 capability shape reused at the approval seam); absence of approval is a
+  permanent pending state that expires, silence is never consent. Admission grammar = items
+  47/50 verbatim: `admit(ChangeProposal, …) -> Result<VerifiedChangeProposal, Rejection>` with
+  `RejectionClass::{Refuted, Undecidable}` (+ the named red-line cause riding `Refuted`);
+  Kleene-Unknown collapses to the safe pole (not-applied), logged distinctly. **Proof:** a
+  planted valid proposal passes all gates and STOPS at pending-approval — a red-proof
+  demonstrates no code path applies it without the human token (unconstructible, compile-fail
+  test); a planted gate-failing proposal never surfaces for approval; a planted red-line
+  proposal is refused at step zero with the typed cause; approval/refusal/expiry each write
+  FDR records; the whole flow re-executed in CI, never presence-checked (P7).
+- **Item 76 — proposal lineage + cost-classified impact at the approval seam (after item 75;
+  consumes items 62 + 67/68; "the same amount of predictability/transparency/telemetry" made
+  mechanical).** Every proposal carries a full FDR-logged causal trail, linked by item 62's
+  `span_id`/`parent_span_id`: trigger (health verdict / operator prompt / upgrade candidate) →
+  generation → per-gate verification verdicts (item-55 class discipline: Proved/Refuted/
+  Undecidable recorded per gate) → human approval or rejection (operator identity + timestamp,
+  an FDR event) → application record. A proposal is a reconstructible causal TREE in the
+  flight recorder, end to end. AND the approval screen is never blind: the proposal's predicted
+  cost/impact goes through item 67's classification — `ORACLE-EXACT / ORACLE-BOUNDED /
+  MEASURED-ONLY` with evidence pointer (item 68's tables; item 70's aggregate propagation where
+  the change touches the call graph) — presented to the human BEFORE approval; an
+  unclassifiable impact is presented AS the forbidden/unclassified state (precision-honest),
+  never a fabricated estimate. **Proof:** an end-to-end test recovers the complete lineage tree
+  from a real recovered ring; the approval record demonstrably carries the impact class +
+  resolving evidence pointer; a proposal with unclassifiable impact shows the honest marker
+  (red→green vs a fabricated number); P3 law holds (no lineage value feeds any decision
+  surface — grep proof).
+- **Item 77 — self-healing specialization: health-classifier-triggered fix proposals (SAME
+  pipeline, one trigger class — explicitly NOT a lighter gate; after item 75; consumes item
+  56's basis retrofit).** **Grounded baseline — health tracking already exists; what's missing
+  is the consumer:** `markov::Verdict` (Healthy/LimitCycle/StrangeAttractor) is real and live
+  but OBSERVATIONAL-ONLY today — grep-verified 2026-07-19: no in-kernel consumer acts on it
+  (its only non-test consumer is its own `markov_attractor` bin emitting CLI JSON + the item-27
+  FDR companion record; the autonomic-response half is explicitly Tier-4-deferred behind items
+  9+21). `spectral::DriftClass` ALREADY has one real fail-closed consumer:
+  `RetainedBase::admit` (`spectral_cache.rs:267`) rejects `Unstable` input. So "track own
+  health" is mostly-already-done; this item adds the missing trigger-consumer, not a new
+  classifier. **The two kinds of self-healing, kept apart:** **(A) Process-level
+  restart-recovery stays AUTOMATIC** — crash → PostMortem → restart from last-good state is
+  already built and proven (items 45–49; the kill-9 test's 300/300 recovery with zero human
+  intervention): pure recovery, modifies no code/logic, already at space-grade rigor — no
+  approval gate applies, none is needed. **(B) Code/logic-level fix is the NEW capability and
+  takes the FULL item-75 pipeline:** a RECURRING adverse classification (e.g. `LimitCycle`/
+  `StrangeAttractor` on the same subsystem across ≥N consecutive windows — N a named constant,
+  P3 discipline) generates a `ChangeProposal` with the health evidence attached; it is then a
+  proposal like any other — verification gates, human approval, FDR lineage — *never*
+  autonomous, "it's just fixing a detected problem" is not an exception (operator's directive
+  is explicit). Trigger-evidence law inherits item 56: only `Basis::Measured` verdicts count —
+  an unevaluated-Healthy (or unevaluated-anything) window is never trigger evidence in either
+  direction. **Prior-art grounding:** this is the autonomic-computing MAPE-K loop (Kephart &
+  Chess, *The Vision of Autonomic Computing*, IEEE Computer 2003) — Monitor (FDR/HwStamp/PMU)
+  → Analyze (markov/spectral classifiers) → Plan (the proposal) → Execute over shared Knowledge
+  (FDR ring + HOT-PATHS + cost oracle + red-line registry) — with ONE deliberate, stated
+  deviation: **Execute is never autonomous for code-level change; the human operator IS the
+  Execute gate.** "Regenerative software" = this loop under those constraints, not a new
+  mechanism. **Proof:** a synthetic recurring-adverse verdict stream yields exactly ONE
+  proposal carrying the full health trail, which STOPS at pending-approval (the item-75
+  red-proof reused); a single adverse window does NOT trigger (threshold pinned); planted
+  unevaluated-basis windows are provably excluded from trigger evidence (red→green against
+  today's byte-identical records); recovery class (A) remains automatic and green (kill-9 test
+  unchanged).
+- **Item 78 — self-upgrading specialization: improvement proposals beyond fixes (SAME pipeline,
+  broader trigger class; after item 75; enriched by items 70/71 when they exist).** Trigger =
+  not a detected problem but a proposed improvement: cost-oracle-informed candidates (item 70's
+  twin identifying bottlenecks/regressions worth attacking), pre-proven rewrite candidates
+  (item 71's eqc-rs extraction arriving with its proof program), or operator-prompted upgrade
+  requests routed through the same typed shape. Upgrade proposals additionally carry a
+  before/after predicted-cost DELTA from the oracle (items 67/68; aggregate via 70) on the
+  approval screen. The gate is IDENTICAL — same verification, same human approval, same
+  lineage; and the item-73 law binds hardest here: an upgrade proposal touching a red-line path
+  is refused identically at step zero, with **no beneficial-change exception** — the
+  corrigibility trap is precisely a sequence of individually-beneficial-looking upgrades
+  reaching the gate. **Proof:** an eqc-rs-generated, pre-proven rewrite flows end-to-end to
+  pending-approval with its cost delta + proof-program result attached; a planted "beneficial"
+  proposal touching gate/registry paths is refused at step zero (item 73's red-proof
+  re-executed at this level); refused + approved + expired upgrade proposals all leave complete
+  FDR lineage.
+
+**Dependency graph, one line:** 73 (spec) first and governing; 74 after 73; 75 after {73 + 74}
+(structural halves of 73 land with 64/65); 76 after {75 + 62 + 67}; 77 ∥ 78 after 75 (77 also
+consumes 56; 78 enriched by 70/71 but not gated on them). §L consumes §K's machinery (56, 62,
+64/65, 67/68, 70/71) and item 47/50's grammar; it gates nothing outside itself. The AI that
+proposes remains behind item 45's `inference` gate and item 65's capability boundary at all
+times — §L grants a governed PROPOSAL channel, never authority.
