@@ -1,0 +1,127 @@
+[
+  {
+    "ts": 1784426144,
+    "base_ref": "HEAD",
+    "default_threshold_pct": 10.0,
+    "results": [
+      {
+        "id": "place_order/5_items",
+        "group": "place_order",
+        "head_ns": 77.852,
+        "base_ns": null,
+        "delta_pct": null,
+        "verdict": null,
+        "threshold_pct": 10.0
+      },
+      {
+        "id": "fold_transitions/5_hops",
+        "group": "fold_transitions",
+        "head_ns": 5.8415,
+        "base_ns": null,
+        "delta_pct": 8.737,
+        "verdict": "Performance has regressed.",
+        "threshold_pct": 10.0
+      }
+    ]
+  },
+  {
+    "ts": 1784426329,
+    "base_ref": "HEAD",
+    "default_threshold_pct": 10.0,
+    "results": [
+      {
+        "id": "place_order/5_items",
+        "group": "place_order",
+        "head_ns": 145.4,
+        "base_ns": null,
+        "delta_pct": null,
+        "verdict": "skipped (no baseline)",
+        "threshold_pct": 10.0
+      },
+      {
+        "id": "fold_transitions/5_hops",
+        "group": "fold_transitions",
+        "head_ns": 6.2837,
+        "base_ns": null,
+        "delta_pct": null,
+        "verdict": "skipped (no baseline)",
+        "threshold_pct": 10.0
+      }
+    ]
+  },
+  {
+    "ts": 1784426490,
+    "base_ref": "HEAD",
+    "default_threshold_pct": 10.0,
+    "results": [
+      {
+        "id": "place_order/5_items",
+        "group": "place_order",
+        "head_ns": 179.63,
+        "base_ns": null,
+        "delta_pct": null,
+        "verdict": "skipped (no baseline)",
+        "threshold_pct": 10.0
+      },
+      {
+        "id": "fold_transitions/5_hops",
+        "group": "fold_transitions",
+        "head_ns": 29.784,
+        "base_ns": null,
+        "delta_pct": null,
+        "verdict": "skipped (no baseline)",
+        "threshold_pct": 10.0
+      }
+    ]
+  },
+  {
+    "ts": 1784426669,
+    "base_ref": "HEAD",
+    "default_threshold_pct": 10.0,
+    "results": [
+      {
+        "id": "place_order/5_items",
+        "group": "place_order",
+        "head_ns": 198.62,
+        "base_ns": null,
+        "delta_pct": null,
+        "verdict": "skipped (no baseline)",
+        "threshold_pct": 10.0
+      },
+      {
+        "id": "fold_transitions/5_hops",
+        "group": "fold_transitions",
+        "head_ns": 16.408,
+        "base_ns": null,
+        "delta_pct": null,
+        "verdict": "skipped (no baseline)",
+        "threshold_pct": 10.0
+      }
+    ]
+  },
+  {
+    "ts": 1784426807,
+    "base_ref": "HEAD",
+    "default_threshold_pct": 10.0,
+    "results": [
+      {
+        "id": "place_order/5_items",
+        "group": "place_order",
+        "head_ns": 74.946,
+        "base_ns": null,
+        "delta_pct": null,
+        "verdict": "skipped (no baseline)",
+        "threshold_pct": 10.0
+      },
+      {
+        "id": "fold_transitions/5_hops",
+        "group": "fold_transitions",
+        "head_ns": 4.2674,
+        "base_ns": null,
+        "delta_pct": null,
+        "verdict": "skipped (no baseline)",
+        "threshold_pct": 10.0
+      }
+    ]
+  }
+]
