@@ -215,6 +215,21 @@ fn eig2x2(a: Complex, b: Complex, d: Complex, e: Complex) -> (Complex, Complex) 
     let sq = disc.sqrt();
     let r1 = tr.add(sq).mul(Complex::new(0.5, 0.0));
     let r2 = tr.sub(sq).mul(Complex::new(0.5, 0.0));
+    // §4-checklist item 3 (SYNTHESIS §10-P7): debug-mode differential cross-check against an
+    // INDEPENDENT per-call oracle — Vieta's formulas. The two roots of the 2×2 block must satisfy
+    // r1+r2 = trace (a+e) and r1·r2 = det (a·e − b·d), quantities computed by a different DAG than
+    // the discriminant path above. A bug in the closed-form solver (wrong sign, dropped term) breaks
+    // one of these; a correct solver satisfies both to float epsilon. Compiled out of release
+    // (`debug_assert!`), so continuous verification at zero production cost — the `ring_mul` standard.
+    debug_assert!(
+        {
+            let sum_err = r1.add(r2).sub(tr).abs();
+            let prod_err = r1.mul(r2).sub(det).abs();
+            let scale = 1.0 + tr.abs() + det.abs();
+            sum_err <= 1e-9 * scale && prod_err <= 1e-9 * scale
+        },
+        "eig2x2 violated Vieta: roots do not reconstruct trace/det of [[a,b],[d,e]]"
+    );
     (r1, r2)
 }
 

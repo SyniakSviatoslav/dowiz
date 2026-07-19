@@ -144,7 +144,18 @@ pub fn assert_transition(from: OrderStatus, to: OrderStatus) -> Result<(), Trans
         return Err(TransitionError::ScaffoldDisabled(from, to));
     }
     let allowed = allowed_next(from);
-    if !allowed.contains(&to) {
+    let ok_slice = allowed.contains(&to);
+    // §4-checklist item 3 (SYNTHESIS §10-P7): debug-mode differential cross-check of the transition
+    // relation computed TWO independent ways — the runtime slice scan of `allowed_next(from)` above,
+    // versus the compile-time bitmask `FSM_ADJ` (built by a separate const-fn DAG through `idx_of`).
+    // They are derived from the same source of truth but by different code; a bug in `idx_of` or
+    // `build_adjacency` would make them disagree on some (from,to). Compiled out of release.
+    debug_assert_eq!(
+        ok_slice,
+        (FSM_ADJ[idx_of(from)] & (1u16 << idx_of(to))) != 0,
+        "FSM transition relation diverged: allowed_next slice vs FSM_ADJ bitmask disagree on {from:?}->{to:?}"
+    );
+    if !ok_slice {
         return Err(TransitionError::Illegal(from, to));
     }
     Ok(())

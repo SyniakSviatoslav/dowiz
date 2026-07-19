@@ -35,6 +35,14 @@ wasm = ["json-api", "dep:wasm-bindgen", "dep:serde_yaml"]
 # `chaos` module is `#[cfg(any(test, feature = "chaos"))]`); a release build
 # compiles the injection machinery to `()`, unrepresentable-at-the-boundary.
 chaos = []
+# `ct-gate` — the zero-dep dudect-style constant-time timing gate (roadmap item 6,
+# `src/ct_gate.rs`). OFF by default so a shipping binary carries NO timing-harness
+# symbols ("CI-time harness, not linked", SYNTHESIS §4 item 2). The module is
+# `#[cfg(any(test, feature = "ct-gate"))]`, so `cargo test` sees it regardless; the
+# feature exists so the harness can also be compiled into a dedicated non-test build.
+# Pure `std` (Instant + Welford), pulls no external crate. Its planted-leak self-test
+# runs in release via `scripts/hardening-gate.sh` (§10-P7: the verifier proves it can reject).
+ct-gate = []
 # `count-allocs` — installs a counting global allocator (W5 DoD §8.2) that
 # measures HEAP allocations around a code region, so the criterion A/B's
 # "≤ 8 heap allocations on the arena path" assertion is INSTRUMENTED rather

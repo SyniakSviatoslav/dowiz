@@ -450,3 +450,43 @@ jobs:
           grep -q '^## Full-suite re-run' "$ART" \
             || { echo "::error::$ART missing '## Full-suite re-run'"; exit 1; }
           echo "bump to $head_channel accompanied by $ART — gate green"
+
+  # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
+  # ITEM 6 (space-grade roadmap §C / SYNTHESIS §4 + §10-P7): the hardening-checklist gate.
+  # ALWAYS runs (no `paths:` filter, so it is safe as a required status check — a filtered
+  # workflow would deadlock non-hot-path PRs, §3.1). The gate re-EXECUTES, never presence-checks
+  # (§10-P7): every verdict is a live `cargo test` exit code plus the PARSED "N passed" count
+  # asserted >= the manifest's min_tests. A filter matching ZERO tests is RED — the anti-forgery
+  # core. It (B) fails a diff touching a hot ZONE with no manifest row, (C) re-runs each touched
+  # row's oracle, (D) UNCONDITIONALLY re-runs every oracle row every build (a deleted oracle goes
+  # RED on the next run) — this notably re-executes the pq-gated ACVP/Keccak/x25519/KEM KATs, which
+  # the default `cargo test --offline` does NOT compile (pq is not a default feature), and
+  # (E) runs the dudect gate incl. its planted-leak self-test in release. Determinism (P6):
+  # every cargo call is --locked --offline; kernel/Cargo.lock hash asserted unchanged.
+  # Standing law: docs/audits/hardening/CHECKLIST.md; manifest: docs/audits/hardening/HOT-PATHS.tsv.
+  # Design + red→green proof: docs/design/BLUEPRINT-ITEM-06-hardening-checklist-ci-2026-07-19.md.
+  hardening-gate:
+    name: hardening checklist gate (item 6, re-execute not presence-check)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Pre-fetch crates offline (default + pq feature set for the oracle floor)
+        run: |
+          cd kernel
+          cargo fetch --locked
+          cargo fetch --locked --features pq
+      - name: Re-execute the §4 hardening checklist (diff-trigger + oracle floor + dudect)
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags origin "${{ github.base_ref }}"
+            BASE=$(git merge-base "origin/${{ github.base_ref }}" HEAD)
+          else
+            BASE="${{ github.event.before }}"
+            case "$BASE" in
+              0000000000000000000000000000000000000000|"") BASE=$(git rev-parse HEAD~1 2>/dev/null || echo HEAD) ;;
+            esac
+          fi
+          bash scripts/hardening-gate.sh "$BASE" HEAD
