@@ -53,15 +53,26 @@ the merge took main's CLOSED signer (HEAD) for `ci-truth/src/{main,v1}.rs`. **p0
 telemetry delta is DEFERRED** — re-port it as an additive module once desired, don't
 re-litigate the signer.
 
-## What is intentionally NOT on `main` (and why)
-- 25 junk/stale branches remain unmerged (`recover/*` empty stashes, `*-snapshot-*`,
-  `pq-crypto-tier1`, `kalman-organ`, `markov-attractor-signal`, `agent-capability-boost`,
-  `decentralized-pq-protocol`, `remove-legacy-thin-layer`, `rw-02/03`, `docs-research`).
-  Their value already landed on main via the waves; they are safe to delete. NOT deleted
-  under autopilot (operator-owned hygiene).
-- Operator-EXTERNAL actions (authorized 2026-07-19, pending execution): `git push
-  origin main`; GitHub public-flip (P18); secrets-scrub confirmation; bebop frozen-lane
-  (C3/P85) landing in the bebop repo.
+## Unmerged-branch final audit (2026-07-19, definitive)
+Re-checked every unmerged branch with `git log main..<branch>` (NOT `main...branch`, which
+falsely inflates via main's later files):
+- **22 branches fully contained in main** (main..branch empty) → redundant junk. Safe to delete:
+  all `recover/*` (except the 2 stash-* below), `*-snapshot-*`, `pq-crypto-tier1`, `kalman-organ`,
+  `markov-attractor-signal`, `agent-capability-boost`, `decentralized-pq-protocol`,
+  `remove-legacy-thin-layer`, `rw-02/03`.
+- **`docs-research-2026-07-19`** (9 commits) → PROVEN REDUNDANT: merge brought only 3 conflicted
+  files (README.md + Q-SERIES + SYNTHESIS blueprints); all 3 were the branch's STALE versions that
+  main already superseded via the P75–P96 waves. `git diff HEAD` after resolving = empty → no unique
+  content. Aborted (no empty merge).
+- **`recover/stash-1-2994e6c8`** (77 commits) + **`recover/stash-2-93919edd`** (40 commits) → unique
+  commits exist, BUT they are `git stash` recovery branches from the SUPERSEDED `feat/sovereign-core-
+  phase-zero` arc (dated 2026-07-06/07). Operator rule: NEVER auto-merge `recover/*`. Left unmerged;
+  operator decision.
+
+**Conclusion: zero actionable product/CI branches remain unmerged. Core roadmap is COMPLETE on
+`origin/main` (d8004a3c7). The only not-done items are operator-EXTERNAL: GitHub public-flip (P18),
+secrets-scrub, bebop frozen-lane (C3/P85) in the bebop repo, and cleanup of the 24 redundant local
+branches (deletion is operator hygiene, not required for roadmap completion).**
 
 ## Dashboard
 - Local `main` HEAD after wave: `5a97e1f6f` (p06 merge).
