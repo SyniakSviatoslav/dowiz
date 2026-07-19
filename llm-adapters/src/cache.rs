@@ -17,8 +17,73 @@ use dowiz_kernel::ports::llm::{
     RerankRequest, RerankResponse, Usage,
 };
 use serde_json::json;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex};
+
+/// Default upper bound on distinct cached responses (HARNESS audit A3). The unbounded
+/// `MemStore` this used to wrap is now bounded; pick a sane local-first default. A hub
+/// may choose a different cap via `with_capacity`.
+pub const DEFAULT_CACHE_CAP: usize = 1024;
+
+/// LRU-bounded wrapper over any `BlockStore` (HARNESS audit A3).
+///
+/// `put` evicts the least-recently-used entry when at `max_entries`; `touch` promotes a
+/// key to most-recent on a cache hit. This makes `CachingBackend` finite — the previous
+/// `Arc<Mutex<MemStore>>` retained every distinct prompt tuple for the process lifetime.
+struct BoundedStore<S: BlockStore> {
+    inner: S,
+    /// LRU order: front = oldest, back = most-recently used.
+    order: VecDeque<Hash>,
+    max_entries: usize,
+}
+
+impl<S: BlockStore> BoundedStore<S> {
+    fn new(inner: S, max_entries: usize) -> Self {
+        BoundedStore {
+            inner,
+            order: VecDeque::new(),
+            max_entries: max_entries.max(1),
+        }
+    }
+
+    /// Promote `id` to most-recent (called on a cache hit). No-op if absent.
+    fn touch(&mut self, id: &Hash) {
+        if self.inner.get(id).is_some() {
+            self.order.retain(|h| h != id);
+            self.order.push_back(*id);
+        }
+    }
+}
+
+impl<S: BlockStore> BlockStore for BoundedStore<S> {
+    fn put(&mut self, id: Hash, bytes: &[u8]) -> bool {
+        // Evict LRU when at capacity AND this is a genuinely new id.
+        if self.inner.get(&id).is_none() && self.order.len() >= self.max_entries {
+            if let Some(old) = self.order.pop_front() {
+                self.inner.remove(&old);
+            }
+        }
+        let is_new = self.inner.put(id, bytes);
+        if is_new {
+            self.order.retain(|h| h != &id);
+            self.order.push_back(id);
+        }
+        is_new
+    }
+    fn get(&self, id: &Hash) -> Option<&[u8]> {
+        self.inner.get(id)
+    }
+    fn get_owned(&self, id: &Hash) -> Option<Vec<u8>> {
+        self.inner.get_owned(id)
+    }
+    fn len(&self) -> usize {
+        self.inner.len()
+    }
+    fn remove(&mut self, id: &Hash) -> Option<Vec<u8>> {
+        self.order.retain(|h| h != id);
+        self.inner.remove(id)
+    }
+}
 
 /// A response cache over any `LlmBackend`. Generic over the store so tests can supply a
 /// call-counting `BlockStore` double (done-check: second identical call makes ZERO HTTP calls).
@@ -30,15 +95,16 @@ use std::sync::{Arc, Mutex};
 #[derive(Clone)]
 pub struct CachingBackend<B: LlmBackend, S: BlockStore> {
     inner: B,
-    store: Arc<Mutex<S>>,
+    store: Arc<Mutex<BoundedStore<S>>>,
 }
 
 impl<B: LlmBackend> CachingBackend<B, MemStore> {
-    /// Convenience: wrap with the in-memory `MemStore` (default for single-node/local-first).
+    /// Convenience: wrap with the in-memory `MemStore` (default for single-node/local-first),
+    /// bounded at [`DEFAULT_CACHE_CAP`].
     pub fn new(inner: B) -> Self {
         CachingBackend {
             inner,
-            store: Arc::new(Mutex::new(MemStore::new())),
+            store: Arc::new(Mutex::new(BoundedStore::new(MemStore::new(), DEFAULT_CACHE_CAP))),
         }
     }
 }
@@ -47,7 +113,15 @@ impl<B: LlmBackend, S: BlockStore> CachingBackend<B, S> {
     pub fn with_store(inner: B, store: S) -> Self {
         CachingBackend {
             inner,
-            store: Arc::new(Mutex::new(store)),
+            store: Arc::new(Mutex::new(BoundedStore::new(store, DEFAULT_CACHE_CAP))),
+        }
+    }
+
+    /// Wrap with an explicit entry cap (HARNESS audit A3 — finite cache).
+    pub fn with_capacity(inner: B, store: S, max_entries: usize) -> Self {
+        CachingBackend {
+            inner,
+            store: Arc::new(Mutex::new(BoundedStore::new(store, max_entries))),
         }
     }
 
@@ -107,15 +181,24 @@ impl<B: LlmBackend, S: BlockStore> LlmBackend for CachingBackend<B, S> {
     fn chat(&self, req: &ChatRequest) -> Result<ChatResponse, LlmError> {
         let key = Self::cache_key(req);
         if let Some(k) = key {
-            if let Some(bytes) = self.store.lock().unwrap().get(&k) {
-                if let Some(resp) = decode_response(bytes) {
+            // Peek (owned clone) + promote to MRU under one lock; decode outside the lock.
+            let hit = {
+                let mut g = self.store.lock().unwrap();
+                let bytes = g.get(&k).map(|b| b.to_vec());
+                if bytes.is_some() {
+                    g.touch(&k);
+                }
+                bytes
+            };
+            if let Some(bytes) = hit {
+                if let Some(resp) = decode_response(&bytes) {
                     return Ok(resp); // EXACT hit — zero upstream call.
                 }
             }
         }
         let resp = self.inner.chat(req)?;
         if let Some(k) = key {
-            // Idempotent put: storing the same id again is a no-op (cache-hit semantics, free).
+            // BoundedStore::put evicts LRU when at cap (HARNESS audit A3).
             let bytes = encode_response(&resp);
             self.store.lock().unwrap().put(k, &bytes);
         }
@@ -190,7 +273,7 @@ mod tests {
     use dowiz_kernel::backup::MemStore;
     use dowiz_kernel::ports::llm::{
         Caps, ChatRequest, ChatResponse, EmbedRequest, EmbedResponse, LlmBackend, LlmError,
-        RerankRequest, RerankResponse, TaskClass,
+        Message, RerankRequest, RerankResponse, TaskClass,
     };
     use std::cell::RefCell;
     use std::collections::BTreeMap;
@@ -335,6 +418,41 @@ mod tests {
             cached.inner.call_count(),
             2,
             "identical re-requests must each hit their own distinct cache partition"
+        );
+    }
+
+    /// HARNESS audit A3 — the cache is now BOUNDED: once `max_entries` distinct keys exist,
+    /// the least-recently-used is evicted, so a previously-cached (now-evicted) key misses and
+    /// re-calls upstream instead of being retained for the process lifetime.
+    #[test]
+    fn cache_is_bounded_lru_evicts() {
+        // cap = 2 distinct entries
+        let backend = CountingBackend::new();
+        let cached = CachingBackend::with_capacity(backend, MemStore::new(), 2);
+
+        // Three DISTINCT temperature=0 prompts → only the 2 most-recent survive.
+        let mut a = req(0.0);
+        a.messages = vec![Message { role: "user".into(), content: "A".into() }];
+        let mut b = req(0.0);
+        b.messages = vec![Message { role: "user".into(), content: "B".into() }];
+        let mut c = req(0.0);
+        c.messages = vec![Message { role: "user".into(), content: "C".into() }];
+
+        let _ = cached.chat(&a).unwrap();
+        let _ = cached.chat(&b).unwrap();
+        assert_eq!(cached.inner.call_count(), 2);
+        // Re-request A → still cached (it's one of the 2 most-recent). No new call.
+        let _ = cached.chat(&a).unwrap();
+        assert_eq!(cached.inner.call_count(), 2, "A still cached");
+        // Insert C → pushes the LRU (B) out (A was just touched, so B is oldest).
+        let _ = cached.chat(&c).unwrap();
+        assert_eq!(cached.inner.call_count(), 3, "C is a new entry");
+        // B was evicted → re-requesting B re-calls upstream.
+        let _ = cached.chat(&b).unwrap();
+        assert_eq!(
+            cached.inner.call_count(),
+            4,
+            "B was LRU-evicted and must miss (bounded cache)"
         );
     }
 }
