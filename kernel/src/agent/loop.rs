@@ -168,6 +168,15 @@ impl<R: SkillRegistry> AgentLoop<R> {
                 };
             }
 
+            // ITEM 59 — agent-turn timing closure (gap G12). Each loop iteration IS one
+            // agent turn; wrap it in the kernel's existing FDR span machinery so the
+            // turn's wall-clock duration (Δwall) is recorded as a `SpanClose` FDR record.
+            // This is the only timed path in the kernel; the executor previously bypassed
+            // it. The span is inert unless a span observer is installed, and takes NO
+            // clock on `wasm32` (where `Instant::now` would panic) — pure P3 telemetry,
+            // never a loop-control input (MANIFESTO C2: no clock in the decision path).
+            let _turn_span = crate::fdr::info_span!("agent_turn").entered();
+
             let step = reasoner.next(&ctx);
             match step {
                 AgentStep::Answer { text } => {
@@ -475,6 +484,56 @@ mod tests {
 
     // FAIL-CLOSED 3: a drained budget terminates the loop immediately as
     // AssistantUnavailable, with an empty log (no step ran).
+    // ITEM 59 — agent-turn timing closure (gap G12): the loop MUST emit a per-turn
+    // `agent_turn` `SpanClose` FDR record (the kernel's only timed path). This is the
+    // falsifiable RED→GREEN proof: install a scoped span observer, run the loop, and
+    // assert the observer received a span-close named exactly `agent_turn` — one per
+    // turn driven. Without the instrument this assertion fails (RED); with it, GREEN.
+    #[test]
+    fn agent_turn_emits_timing_span_close() {
+        use crate::fdr::SpanObserver;
+        use std::sync::atomic::{AtomicU64, Ordering};
+        use std::sync::Arc;
+
+        struct TurnObs {
+            span: &'static str,
+            hits: Arc<AtomicU64>,
+        }
+        impl SpanObserver for TurnObs {
+            fn on_span_close(&self, name: &'static str, _dur_us: u64) {
+                if name == self.span {
+                    self.hits.fetch_add(1, Ordering::Relaxed);
+                }
+            }
+        }
+
+        let hits = Arc::new(AtomicU64::new(0));
+        let _guard = crate::fdr::set_scoped_observer(Arc::new(TurnObs {
+            span: "agent_turn",
+            hits: hits.clone(),
+        }));
+
+        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let reg = build_registry(inv.clone());
+        let budget = TokenBucket::new(16.0, 1.0);
+        let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
+
+        // Two turns: one tool call, then a final answer.
+        let reasoner = scripted(vec![AgentStep::CallTool {
+            name: "read_order_status".to_string(),
+            raw_arg: "ord-7".to_string(),
+        }]);
+        let _outcome = loop_.run(&reasoner, "status of ord-7?");
+
+        // The loop drove exactly two turns (the tool call, then the default final
+        // answer), so exactly two `agent_turn` span-closes must have been recorded.
+        assert_eq!(
+            hits.load(Ordering::Relaxed),
+            2,
+            "agent loop must emit exactly one `agent_turn` span close per turn driven"
+        );
+    }
+
     #[test]
     fn budget_exhaustion_terminates_loop() {
         let inv = std::rc::Rc::new(Cell::new(0u32));
