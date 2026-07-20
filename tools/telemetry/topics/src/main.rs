@@ -454,6 +454,17 @@ fn fmt_us(us: u64) -> String {
     }
 }
 
+/// Truthful EXACT-value rendering at µs instrument granularity: a recorded 0
+/// means "completed in under a microsecond" — render that, never a bare "0µs"
+/// (sibling of `fmt_bound_us`, minus the "≤" since the value is exact).
+fn fmt_exact_us(us: u64) -> String {
+    if us == 0 {
+        "<1µs".to_string()
+    } else {
+        fmt_us(us)
+    }
+}
+
 /// `YYYY-MM-DD HH:MM UTC` from a unix timestamp (pure std — civil-from-days,
 /// Howard Hinnant's algorithm; no chrono).
 fn utc_datetime(ts: u64) -> String {
@@ -593,6 +604,16 @@ fn span_metrics_dir() -> PathBuf {
         .unwrap_or_else(|_| log_dir())
 }
 
+/// The CANARY span stream: `<root>/canary/metric.jsonl`, written by the scheduled
+/// `kernel/examples/canary_spans.rs` runner (real instrumented kernel calls, real
+/// wall-clock durations, synthetic inputs). A sibling FILE under the same root —
+/// never the live `<root>/metric.jsonl` — so canary samples are structurally
+/// incapable of blending into real-traffic numbers (the row format is golden-pinned
+/// and carries no source tag; the stream identity IS the tag).
+fn canary_metric_path() -> PathBuf {
+    span_metrics_dir().join("canary").join("metric.jsonl")
+}
+
 /// Last-row-per-span stats from `metric.jsonl` content (rows stream cumulatively, so
 /// the last row per span is its current state); `None` when no parseable rows exist
 /// (a truthful "no data yet", distinct from "not wired").
@@ -649,6 +670,67 @@ fn stddev_us(durs: &[u64]) -> Option<f64> {
     Some(var.sqrt())
 }
 
+// ── CANARY stream stats — EXACT, restart-safe (multi-run cumulative streams) ──
+//
+// The canary file accumulates many short scheduled runs, each restarting its
+// per-process histograms at `count==1`. A last-row-per-span read (the live-stream
+// semantics above) would therefore only see the LAST run. Canary stats instead
+// derive everything from `reconstruct_durations` — the exact per-sample Δsum_us
+// stream, which already handles restarts (`count==1` rows) and skips
+// un-attributable gaps — so n / p50 / p99 / jitter all cover the SAME sample set
+// across every run in the file. Percentiles here are EXACT nearest-rank values
+// over the reconstructed samples (not log-bucket upper bounds), hence rendered
+// without the "≤" bound marker. Whole-file rotation (canary_spans.rs) only ever
+// removes complete old files, so this reader never sees a torn stream.
+
+/// Per-action canary latency: exact values from reconstructed per-sample durations.
+struct CanaryLatency {
+    span: String,
+    n: usize,
+    p50_us: u64,
+    p99_us: u64,
+    jitter_stddev_us: Option<f64>,
+    layer1: bool,
+}
+
+/// Nearest-rank percentile over an ascending-sorted sample set (exact, not a bound).
+fn exact_percentile_us(sorted: &[u64], q: f64) -> Option<u64> {
+    if sorted.is_empty() {
+        return None;
+    }
+    let rank = ((q * sorted.len() as f64).ceil() as usize).clamp(1, sorted.len());
+    Some(sorted[rank - 1])
+}
+
+/// Exact per-action stats over a canary stream. Sorted by n desc (then name).
+fn canary_action_latency(txt: &str) -> Vec<CanaryLatency> {
+    let stats = match span_stats_from(txt) {
+        Some(s) => s,
+        None => return Vec::new(),
+    };
+    let mut out: Vec<CanaryLatency> = stats
+        .iter()
+        .filter_map(|s| {
+            let mut durs = reconstruct_durations(txt, &s.span);
+            if durs.is_empty() {
+                return None; // no attributable samples — honest absence, never a guess
+            }
+            let jitter = stddev_us(&durs);
+            durs.sort_unstable();
+            Some(CanaryLatency {
+                span: s.span.clone(),
+                n: durs.len(),
+                p50_us: exact_percentile_us(&durs, 0.50)?,
+                p99_us: exact_percentile_us(&durs, 0.99)?,
+                jitter_stddev_us: jitter,
+                layer1: INSTRUMENTED_ACTIONS.contains(&s.span.as_str()),
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| b.n.cmp(&a.n).then(a.span.cmp(&b.span)));
+    out
+}
+
 /// Computed latency summary for the dominant span (feeds both the message line and
 /// the persisted `resources-summary.jsonl` record).
 struct LatencySummary {
@@ -692,6 +774,31 @@ fn latency_line(summary: &Option<LatencySummary>) -> String {
                 if s.span_kinds == 1 { "" } else { "s" }
             )
         }
+    }
+}
+
+/// The LAT line with an HONEST source label. Live production spans always win;
+/// the canary is only surfaced when there is no live data, and is explicitly
+/// labeled as synthetic — canary timing must never read as user-facing latency.
+fn lat_source_line(live: &Option<LatencySummary>, canary: &[CanaryLatency]) -> String {
+    match (live, canary.first()) {
+        (Some(_), _) => format!("{} · [source: live]", latency_line(live)),
+        (None, Some(c)) => {
+            let jitter = match c.jitter_stddev_us {
+                Some(j) => format!("jitter(σ) {j:.1}µs"),
+                None => "jitter n/a (n<2)".to_string(),
+            };
+            format!(
+                "LAT   {} p50 {} · p99 {} · {jitter} · n={} ({} span kind{}) · [source: canary — synthetic probe, not user traffic]",
+                c.span,
+                fmt_exact_us(c.p50_us),
+                fmt_exact_us(c.p99_us),
+                c.n,
+                canary.len(),
+                if canary.len() == 1 { "" } else { "s" }
+            )
+        }
+        (None, None) => latency_line(&None),
     }
 }
 
@@ -831,7 +938,14 @@ fn build_resources_report() -> (String, serde_json::Value) {
     let metric_txt = fs::read_to_string(span_metrics_dir().join("metric.jsonl")).ok();
     let span_stats = metric_txt.as_deref().and_then(span_stats_from);
     let lat = metric_txt.as_deref().and_then(latency_summary);
-    let lat_line = latency_line(&lat);
+    // Canary stream (scheduled synthetic probe) — separate file, separate label;
+    // only shown when no live span data exists, and never as "live".
+    let canary_txt = fs::read_to_string(canary_metric_path()).ok();
+    let canary = canary_txt
+        .as_deref()
+        .map(canary_action_latency)
+        .unwrap_or_default();
+    let lat_line = lat_source_line(&lat, &canary);
 
     // Real utilization: two /proc/stat samples ~1s apart (a MEASURED value, also fed
     // to the power model below).
@@ -930,6 +1044,18 @@ fn build_resources_report() -> (String, serde_json::Value) {
             "p99_le_us": l.p99_le_us,
             "jitter_stddev_us": l.jitter_stddev_us,
             "span_kinds": l.span_kinds,
+            "source": "live",
+        })),
+        // Canary summary is a SEPARATE field — never written into "latency",
+        // so downstream history consumers cannot mistake probe timing for live.
+        "canary_latency": canary.first().map(|c| serde_json::json!({
+            "span": c.span,
+            "n": c.n,
+            "p50_us": c.p50_us,
+            "p99_us": c.p99_us,
+            "jitter_stddev_us": c.jitter_stddev_us,
+            "span_kinds": canary.len(),
+            "source": "canary",
         })),
     });
     (report, record)
@@ -987,6 +1113,13 @@ fn cmd_resources() -> i32 {
 // over the current span log (rows carry no timestamps, so a wall-clock window is
 // unrepresentable here; the per-run history in latency-summary.jsonl is what gives
 // the future anomaly layer its time axis).
+//
+// TWO sources, explicitly labeled, never blended (2026-07-20 canary wave):
+//   * LIVE   — `<root>/metric.jsonl`, real order traffic (none pre-launch).
+//   * CANARY — `<root>/canary/metric.jsonl`, the scheduled `canary_spans`
+//     synthetic probe: REAL instrumented kernel calls timed by the real
+//     observer, but NOT user traffic — its distribution must never be read
+//     as (or mixed into) user-facing latency.
 const LATENCY_TOPIC_ENV: &str = "TELEGRAM_TOPIC_ID_LATENCY";
 
 fn latency_topic() -> String {
@@ -1053,30 +1186,39 @@ fn per_action_latency(txt: &str) -> Vec<ActionLatency> {
 }
 
 /// Build the report body + structured per-run record from raw `metric.jsonl`
-/// content. Pure over its inputs so the exact message shape is testable;
-/// `cmd_latency` supplies the live reads.
+/// content — TWO streams, never conflated:
+///   * `live_txt`   — `<root>/metric.jsonl`, real order traffic (bucket-bound
+///     percentiles, "≤" semantics — the pre-existing live math, untouched).
+///   * `canary_txt` — `<root>/canary/metric.jsonl`, the scheduled synthetic
+///     probe (exact restart-safe percentiles via `canary_action_latency`).
+/// Each section carries an explicit source label; an action only lands in
+/// NO DATA when it has zero samples in BOTH streams. Pure over its inputs so
+/// the exact message shape is testable; `cmd_latency` supplies the live reads.
 fn latency_report_from(
-    metric_txt: Option<&str>,
-    source: &str,
+    live_txt: Option<&str>,
+    canary_txt: Option<&str>,
+    live_source: &str,
+    canary_source: &str,
     host: &str,
     ts: u64,
 ) -> (String, serde_json::Value) {
-    let measured = metric_txt.map(per_action_latency).unwrap_or_default();
+    let measured = live_txt.map(per_action_latency).unwrap_or_default();
+    let canary = canary_txt.map(canary_action_latency).unwrap_or_default();
     let no_data: Vec<&str> = INSTRUMENTED_ACTIONS
         .iter()
         .copied()
-        .filter(|a| !measured.iter().any(|m| m.span == *a))
+        .filter(|a| !measured.iter().any(|m| m.span == *a) && !canary.iter().any(|c| c.span == *a))
         .collect();
 
     let mut body = format!(
         "LATENCY · per-action span report ({host}) · {when}\n\
-         source {source} — cumulative over current span log\n",
+         live source {live_source} · canary source {canary_source}\n",
         when = utc_datetime(ts),
     );
 
-    body.push_str("\nMEASURED — real span data, one line per action\n");
+    body.push_str("\nMEASURED · LIVE — real production traffic, one line per action\n");
     if measured.is_empty() {
-        let why = if metric_txt.is_none() {
+        let why = if live_txt.is_none() {
             "metric.jsonl absent — span observer not initialized on this host yet"
         } else {
             "metric.jsonl has no parseable span rows yet"
@@ -1092,7 +1234,7 @@ fn latency_report_from(
                 None => "jitter n/a (n<2)".to_string(),
             };
             body.push_str(&format!(
-                "{:<w$}  p50 {} · p99 {} · {jitter} · n={}{}\n",
+                "{:<w$}  p50 {} · p99 {} · {jitter} · n={} · [source: live]{}\n",
                 m.span,
                 fmt_bound_us(m.p50_le_us),
                 fmt_bound_us(m.p99_le_us),
@@ -1106,9 +1248,41 @@ fn latency_report_from(
         }
     }
 
+    body.push_str(
+        "\nMEASURED · CANARY — synthetic scheduled probe (real kernel calls, real wall-clock; NOT user traffic)\n",
+    );
+    if canary.is_empty() {
+        let why = if canary_txt.is_none() {
+            "canary stream absent — canary cron not running on this host yet"
+        } else {
+            "canary stream has no attributable samples yet"
+        };
+        body.push_str(&format!("(none — {why})\n"));
+    } else {
+        let w = canary.iter().map(|c| c.span.len()).max().unwrap_or(0);
+        for c in &canary {
+            let jitter = match c.jitter_stddev_us {
+                Some(j) => format!("jitter(σ) {j:.1}µs"),
+                None => "jitter n/a (n<2)".to_string(),
+            };
+            body.push_str(&format!(
+                "{:<w$}  p50 {} · p99 {} · {jitter} · n={} · [source: canary]{}\n",
+                c.span,
+                fmt_exact_us(c.p50_us),
+                fmt_exact_us(c.p99_us),
+                c.n,
+                if c.layer1 {
+                    ""
+                } else {
+                    " · [non-Layer-1 span]"
+                },
+            ));
+        }
+    }
+
     if !no_data.is_empty() {
         body.push_str(
-            "\nNO DATA — instrumented, zero samples (honest absence, normal pre-launch)\n",
+            "\nNO DATA — instrumented, zero samples in BOTH live and canary (honest absence)\n",
         );
         for a in &no_data {
             body.push_str(&format!("{a}: no data in window\n"));
@@ -1117,12 +1291,15 @@ fn latency_report_from(
 
     // One structured record per run containing ALL actions — run-atomic, so the
     // future anomaly layer can diff consecutive runs without reassembly. Absent
-    // actions are named in `no_data`, never given fabricated zeros.
+    // actions are named in `no_data`, never given fabricated zeros. Live and
+    // canary actions live in SEPARATE arrays (each entry also self-describes its
+    // source) so no downstream consumer can conflate probe timing with user latency.
     let record = serde_json::json!({
         "kind": "latency_summary",
         "ts": ts,
         "host": host,
-        "source": if metric_txt.is_none() { serde_json::json!(null) } else { serde_json::json!(source) },
+        "source": if live_txt.is_none() { serde_json::json!(null) } else { serde_json::json!(live_source) },
+        "canary_source": if canary_txt.is_none() { serde_json::json!(null) } else { serde_json::json!(canary_source) },
         "actions": measured.iter().map(|m| serde_json::json!({
             "span": m.span,
             "n": m.n,
@@ -1130,6 +1307,16 @@ fn latency_report_from(
             "p99_le_us": m.p99_le_us,
             "jitter_stddev_us": m.jitter_stddev_us,
             "layer1": m.layer1,
+            "source": "live",
+        })).collect::<Vec<_>>(),
+        "canary_actions": canary.iter().map(|c| serde_json::json!({
+            "span": c.span,
+            "n": c.n,
+            "p50_us": c.p50_us,
+            "p99_us": c.p99_us,
+            "jitter_stddev_us": c.jitter_stddev_us,
+            "layer1": c.layer1,
+            "source": "canary",
         })).collect::<Vec<_>>(),
         "no_data": no_data,
     });
@@ -1150,7 +1337,9 @@ fn cmd_latency() -> i32 {
     // Terminal-first, same structural rule as `resources`: ALWAYS build and print
     // the full body to stdout, THEN send to Telegram only when credentials exist.
     let path = span_metrics_dir().join("metric.jsonl");
+    let canary_path = canary_metric_path();
     let metric_txt = fs::read_to_string(&path).ok();
+    let canary_txt = fs::read_to_string(&canary_path).ok();
     let host = Command::new("hostname")
         .arg("-s")
         .output()
@@ -1164,7 +1353,9 @@ fn cmd_latency() -> i32 {
         .unwrap_or(0);
     let (report, record) = latency_report_from(
         metric_txt.as_deref(),
+        canary_txt.as_deref(),
         &path.display().to_string(),
+        &canary_path.display().to_string(),
         &host,
         ts,
     );
@@ -1379,6 +1570,9 @@ mod resources_tests {
         assert_eq!(fmt_us(3), "3µs");
         assert_eq!(fmt_us(1_500), "1.5ms");
         assert_eq!(fmt_us(2_500_000), "2.50s");
+        // Exact values at µs instrument granularity: 0 = sub-microsecond, never "0µs".
+        assert_eq!(fmt_exact_us(0), "<1µs");
+        assert_eq!(fmt_exact_us(452), "452µs");
         // Civil-from-days: a known timestamp from this host (2026-07-20 20:33 UTC).
         assert_eq!(utc_datetime(1_784_579_591), "2026-07-20 20:33 UTC");
         assert_eq!(utc_datetime(0), "1970-01-01 00:00 UTC");
@@ -1419,12 +1613,23 @@ mod resources_tests {
 
     #[test]
     fn latency_report_measured_and_honest_no_data_sections() {
-        let (body, record) =
-            latency_report_from(Some(STREAM_TWO_ACTIONS), "/x/metric.jsonl", "h", 0);
+        let (body, record) = latency_report_from(
+            Some(STREAM_TWO_ACTIONS),
+            None,
+            "/x/metric.jsonl",
+            "/x/canary/metric.jsonl",
+            "h",
+            0,
+        );
         // Per-action MEASURED lines, distinct numbers per action.
         assert!(body.contains("MEASURED"), "{body}");
         assert!(body.contains("p50 ≤3µs · p99 ≤8µs"), "{body}");
         assert!(body.contains("p50 ≤63µs · p99 ≤70µs"), "{body}");
+        // Live lines carry the live source label.
+        assert!(body.contains("[source: live]"), "{body}");
+        // No canary stream ⇒ honest canary absence, no canary-labeled numbers.
+        assert!(body.contains("canary cron not running"), "{body}");
+        assert!(!body.contains("[source: canary]\n"), "{body}");
         // Every instrumented action with zero samples is named honestly.
         for a in [
             "route",
@@ -1452,7 +1657,14 @@ mod resources_tests {
 
     #[test]
     fn latency_report_absent_file_is_fully_honest() {
-        let (body, record) = latency_report_from(None, "/x/metric.jsonl", "h", 0);
+        let (body, record) = latency_report_from(
+            None,
+            None,
+            "/x/metric.jsonl",
+            "/x/canary/metric.jsonl",
+            "h",
+            0,
+        );
         assert!(body.contains("metric.jsonl absent"), "{body}");
         for a in INSTRUMENTED_ACTIONS {
             assert!(
@@ -1462,16 +1674,165 @@ mod resources_tests {
         }
         // No fabricated numbers anywhere: zero measured actions in the record.
         assert_eq!(record["actions"].as_array().unwrap().len(), 0);
+        assert_eq!(record["canary_actions"].as_array().unwrap().len(), 0);
         assert_eq!(record["no_data"].as_array().unwrap().len(), 8);
         assert!(record["source"].is_null());
+        assert!(record["canary_source"].is_null());
     }
 
     #[test]
     fn non_layer1_spans_are_reported_but_marked() {
         let txt = "{\"metric\":\"span_latency_us\",\"span\":\"eigenvalues\",\"count\":1,\"sum_us\":5,\"min_us\":5,\"max_us\":5,\"mean_us\":5.000,\"hist\":[2:1]}\n";
-        let (body, _) = latency_report_from(Some(txt), "/x/metric.jsonl", "h", 0);
+        let (body, _) = latency_report_from(
+            Some(txt),
+            None,
+            "/x/metric.jsonl",
+            "/x/canary/metric.jsonl",
+            "h",
+            0,
+        );
         assert!(body.contains("eigenvalues"), "{body}");
         assert!(body.contains("[non-Layer-1 span]"), "{body}");
+    }
+
+    // ── CANARY stream: exact restart-safe stats + labeling honesty ────────────
+
+    /// A canary file spanning TWO scheduled runs of the same span: run 1 records
+    /// [10, 20, 30], the process exits, run 2 starts a fresh histogram (count
+    /// resets to 1) and records [40, 50]. Exactly what repeated `canary_spans`
+    /// cron runs append. A last-row-per-span reader would see only n=2; the
+    /// canary math must see all 5 samples.
+    const CANARY_TWO_RUNS: &str = "\
+{\"metric\":\"span_latency_us\",\"span\":\"route\",\"count\":1,\"sum_us\":10,\"min_us\":10,\"max_us\":10,\"mean_us\":10.000,\"hist\":[3:1]}
+{\"metric\":\"span_latency_us\",\"span\":\"route\",\"count\":2,\"sum_us\":30,\"min_us\":10,\"max_us\":20,\"mean_us\":15.000,\"hist\":[3:1,4:1]}
+{\"metric\":\"span_latency_us\",\"span\":\"route\",\"count\":3,\"sum_us\":60,\"min_us\":10,\"max_us\":30,\"mean_us\":20.000,\"hist\":[3:1,4:2]}
+{\"metric\":\"span_latency_us\",\"span\":\"route\",\"count\":1,\"sum_us\":40,\"min_us\":40,\"max_us\":40,\"mean_us\":40.000,\"hist\":[5:1]}
+{\"metric\":\"span_latency_us\",\"span\":\"route\",\"count\":2,\"sum_us\":90,\"min_us\":40,\"max_us\":50,\"mean_us\":45.000,\"hist\":[5:2]}
+";
+
+    #[test]
+    fn canary_stats_are_exact_and_cover_all_runs_across_restarts() {
+        let acts = canary_action_latency(CANARY_TWO_RUNS);
+        assert_eq!(acts.len(), 1);
+        let c = &acts[0];
+        assert_eq!(c.span, "route");
+        // ALL 5 samples across both runs — not just the last run's 2.
+        assert_eq!(c.n, 5, "restart (count reset) must not drop earlier runs");
+        // Exact nearest-rank percentiles over [10,20,30,40,50]:
+        // p50 rank ceil(2.5)=3 → 30; p99 rank ceil(4.95)=5 → 50 (exact, not ≤bounds).
+        assert_eq!(c.p50_us, 30);
+        assert_eq!(c.p99_us, 50);
+        // σ of [10,20,30,40,50] = sqrt(1000/4) ≈ 15.81.
+        let j = c.jitter_stddev_us.unwrap();
+        assert!((j - 15.8114).abs() < 0.01, "σ ≈ 15.81, got {j}");
+        assert!(c.layer1);
+    }
+
+    #[test]
+    fn exact_percentiles_nearest_rank() {
+        assert_eq!(exact_percentile_us(&[], 0.5), None);
+        assert_eq!(exact_percentile_us(&[7], 0.5), Some(7));
+        assert_eq!(exact_percentile_us(&[7], 0.99), Some(7));
+        assert_eq!(exact_percentile_us(&[1, 2, 4, 8], 0.50), Some(2));
+        assert_eq!(exact_percentile_us(&[1, 2, 4, 8], 0.99), Some(8));
+    }
+
+    /// Rotation safety: `canary_spans` only ever rotates WHOLE files, so a fresh
+    /// post-rotation stream starts at count==1 (covered above). But even if a
+    /// reader ever met a head-truncated stream (first surviving row count>1),
+    /// the Δ-reconstruction must degrade to SKIPPING the unattributable boundary
+    /// sample — never corrupting subsequent deltas.
+    #[test]
+    fn head_truncated_stream_skips_boundary_never_corrupts() {
+        let txt = "\
+{\"metric\":\"span_latency_us\",\"span\":\"route\",\"count\":37,\"sum_us\":900,\"min_us\":1,\"max_us\":80,\"mean_us\":24.324,\"hist\":[4:37]}
+{\"metric\":\"span_latency_us\",\"span\":\"route\",\"count\":38,\"sum_us\":925,\"min_us\":1,\"max_us\":80,\"mean_us\":24.342,\"hist\":[4:38]}
+{\"metric\":\"span_latency_us\",\"span\":\"route\",\"count\":39,\"sum_us\":955,\"min_us\":1,\"max_us\":80,\"mean_us\":24.487,\"hist\":[4:39]}
+";
+        let d = reconstruct_durations(txt, "route");
+        assert_eq!(
+            d,
+            vec![25, 30],
+            "only exact Δs survive; the cut row is skipped"
+        );
+    }
+
+    #[test]
+    fn canary_only_report_labels_canary_and_never_claims_live() {
+        let (body, record) = latency_report_from(
+            None,
+            Some(CANARY_TWO_RUNS),
+            "/x/metric.jsonl",
+            "/x/canary/metric.jsonl",
+            "h",
+            0,
+        );
+        // Canary numbers appear ONLY under the canary section, labeled per line.
+        assert!(body.contains("MEASURED · CANARY"), "{body}");
+        assert!(body.contains("NOT user traffic"), "{body}");
+        assert!(body.contains("[source: canary]"), "{body}");
+        assert!(body.contains("p50 30µs · p99 50µs"), "{body}");
+        // The live section must stay an honest absence — no live-labeled numbers.
+        assert!(body.contains("metric.jsonl absent"), "{body}");
+        assert!(!body.contains("[source: live]"), "{body}");
+        // route has canary samples ⇒ NOT in no_data; the other 7 actions are.
+        assert!(!body.contains("route: no data in window"), "{body}");
+        assert_eq!(record["no_data"].as_array().unwrap().len(), 7);
+        // Record separation: live array empty, canary array self-describing.
+        assert_eq!(record["actions"].as_array().unwrap().len(), 0);
+        let ca = record["canary_actions"].as_array().unwrap();
+        assert_eq!(ca.len(), 1);
+        assert_eq!(ca[0]["source"], "canary");
+        assert_eq!(ca[0]["n"], 5);
+        assert_eq!(ca[0]["p99_us"], 50);
+        assert!(record["source"].is_null());
+        assert!(!record["canary_source"].is_null());
+    }
+
+    #[test]
+    fn live_and_canary_sections_stay_distinct_when_both_present() {
+        let (body, record) = latency_report_from(
+            Some(STREAM_TWO_ACTIONS),
+            Some(CANARY_TWO_RUNS),
+            "/x/metric.jsonl",
+            "/x/canary/metric.jsonl",
+            "h",
+            0,
+        );
+        // Live numbers under live label (bucket-bound "≤"), canary exact under canary.
+        assert!(
+            body.contains("p50 ≤3µs · p99 ≤8µs · jitter(σ) 3.1µs · n=4 · [source: live]"),
+            "{body}"
+        );
+        assert!(body.contains("p50 30µs · p99 50µs"), "{body}");
+        assert!(body.contains("[source: canary]"), "{body}");
+        assert_eq!(record["actions"].as_array().unwrap().len(), 2);
+        assert_eq!(record["canary_actions"].as_array().unwrap().len(), 1);
+        // no_data = 8 − {place_order, mldsa_verify (live)} − {route (canary)}.
+        assert_eq!(record["no_data"].as_array().unwrap().len(), 5);
+    }
+
+    #[test]
+    fn resources_lat_line_prefers_live_and_labels_canary_fallback() {
+        // Live present → live label, canary ignored on the LAT line.
+        let live = latency_summary(STREAM_4);
+        let canary = canary_action_latency(CANARY_TWO_RUNS);
+        let l = lat_source_line(&live, &canary);
+        assert!(l.contains("[source: live]"), "{l}");
+        assert!(!l.contains("canary"), "{l}");
+        // No live → canary fallback, explicitly synthetic-labeled, exact values.
+        let l = lat_source_line(&None, &canary);
+        assert!(
+            l.contains("route p50 30µs · p99 50µs") && l.contains("n=5"),
+            "{l}"
+        );
+        assert!(
+            l.contains("[source: canary — synthetic probe, not user traffic]"),
+            "{l}"
+        );
+        // Neither → the pre-existing honest absence line, unchanged.
+        let l = lat_source_line(&None, &[]);
+        assert!(l.contains("no span data collected yet"), "{l}");
     }
 
     #[test]
