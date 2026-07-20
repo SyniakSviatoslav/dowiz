@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# tools/ops-alert/span-p99 — Q2-G14 (BLUEPRINT-Q-SERIES 2026-07-19).
+#
+# Consumes P83's `metric.jsonl` kernel_span rows (the emit-only Layer-1 output that
+# G14 says has "no consumer") and computes a per-span p99 latency from the log-bucket
+# histogram P83 emits (bucket i covers [2^i, 2^(i+1)) µs; see kernel/src/span_metrics/obs.rs
+# `bucket_index`). When a span's recent p99 exceeds its baseline p99 by SPAN_P99_PCT,
+# fires S1 after SPAN_CONFIRM_RUNS consecutive breaches — the same noise-math as
+# bench-drift (median-of-N compresses host noise; confirm-runs filter flukes).
+#
+# This is the minimal G14 consumer: a rising span p99 now pages like a bench
+# regression instead of sitting unread in metric.jsonl. Pure std, no cargo/network
+# unless ALERT_SEND is set; reuses tools/telemetry/lib.sh tg_send like bench-drift.
+#
+# Mockable offline: METRIC_JSONL / SPAN_BASELINE / ALERT_SEND override.
+
+set -uo pipefail
+
+REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
+METRIC_JSONL="${METRIC_JSONL:-$REPO_ROOT/tools/telemetry/logs/metric.jsonl}"
+SPAN_BASELINE="${SPAN_BASELINE:-$REPO_ROOT/tools/ops-alert/span-p99-baseline.json}"
+SPAN_STATE="${SPAN_STATE:-/tmp/span-p99-state.json}"
+SPAN_CONFIRM_RUNS="${SPAN_CONFIRM_RUNS:-2}"
+SPAN_P99_PCT="${SPAN_P99_PCT:-25}"   # p99 inflation threshold vs baseline
+ALERT_SEND="${ALERT_SEND:-tools/telemetry/lib.sh tg_send OPS_ALERTS}"
+
+log() { echo "span-p99: $*" >&2; }
+
+# Extract the p99 (µs) for a span from its histogram buckets.
+# Buckets: "i:count" entries; bucket i covers [2^i, 2^(i+1)) µs.
+# p99 = smallest bucket upper-bound whose cumulative count >= 99% of total.
+span_p99_us() {  # reads "i:count,i:count,..." from stdin, echoes p99 µs (float)
+  local hist="$1"
+  # build associative-ish arrays via parallel lists
+  local -a idxs counts
+  local n=0 i c
+  while IFS=: read -r i c; do
+    [[ "$i" =~ ^[0-9]+$ && "$c" =~ ^[0-9]+$ ]] || continue
+    idxs[n]=$i; counts[n]=$c; n=$((n+1))
+  done < <(echo "$hist" | tr ',' '\n')
+  (( n == 0 )) && { echo 0; return; }
+  local total=0 k
+  for k in $(seq 0 $((n-1))); do total=$((total+counts[k])); done
+  (( total == 0 )) && { echo 0; return; }
+  local target=$(( (total*99 + 99) / 100 ))   # ceil(99% of total)
+  local cum=0
+  for k in $(seq 0 $((n-1))); do
+    cum=$((cum+counts[k]))
+    if (( cum >= target )); then
+      # bucket idxs[k] covers [2^idx, 2^(idx+1)); p99 ~ upper bound
+      awk -v b="${idxs[k]}" 'BEGIN{printf "%.0f", 2^(b+1)}'
+      return
+    fi
+  done
+  # fallback: max bucket upper bound
+  awk -v b="${idxs[$((n-1))]}" 'BEGIN{printf "%.0f", 2^(b+1)}'
+}
+
+# Pull the latest span rows (one JSON per line) for a given span name.
+latest_p99() {  # $1=span name -> echoes p99 µs of the most recent row for that span
+  [[ -f "$METRIC_JSONL" ]] || { echo 0; return; }
+  local span="$1"
+  local line
+  line=$(grep -E "\"metric\":\"span_latency_us\"|\"span\":\"$span\"" "$METRIC_JSONL" 2>/dev/null \
+         | grep -E "\"span\":\"$span\"" | tail -n 1)
+  [[ -z "$line" ]] && { echo 0; return; }
+  local hist; hist=$(echo "$line" | sed -E 's/.*"hist":\[([0-9:,]*)\].*/\1/')
+  span_p99_us "$hist"
+}
+
+baseline_for() {  # $1=span -> baseline p99 (from baseline json {"span":N})
+  [[ -f "$SPAN_BASELINE" ]] || { echo 0; return; }
+  tr -d '\n' < "$SPAN_BASELINE" \
+    | grep -oE "\"$1\"[[:space:]]*:[[:space:]]*[0-9.]+" \
+    | grep -oE '[0-9.]+' | head -1
+}
+
+bump_state() {  # $1=span $2=delta -> rewrites state, echoes new count
+  local id="$1" d="$2" cur=0
+  [[ -f "$SPAN_STATE" ]] && cur=$(grep -E "^$id " "$SPAN_STATE" | awk '{print $2}' | tail -1)
+  cur=$(( ${cur:-0} + d )); (( cur < 0 )) && cur=0
+  echo "$id $cur" >> "$SPAN_STATE"
+  echo "$cur"
+}
+
+main() {
+  [[ -f "$METRIC_JSONL" ]] || { log "no metric.jsonl yet — nothing to compare (green)"; exit 0; }
+  # discover span names present
+  local spans; spans=$(grep -oE '"span":"[a-z_]+"' "$METRIC_JSONL" 2>/dev/null | sed -E 's/"span":"([a-z_]+)"/\1/' | sort -u)
+  local alerted=0
+  for span in $spans; do
+    local base; base=$(baseline_for "$span")
+    [[ "$base" == "0" || -z "$base" ]] && { log "no baseline for span '$span' — skip"; continue; }
+    local p; p=$(latest_p99 "$span")
+    local thr; thr=$(awk -v b="$base" -v pct="$SPAN_P99_PCT" 'BEGIN{printf "%.0f", b*(1+pct/100)}')
+    local breach=0
+    awk -v p="$p" -v t="$thr" 'BEGIN{exit !(p>t)}' && breach=1
+    if (( breach )); then
+      local cnt; cnt=$(bump_state "$span" +1)
+      if (( cnt >= SPAN_CONFIRM_RUNS )); then
+        local pct; pct=$(awk -v p="$p" -v b="$base" 'BEGIN{printf "%.1f", (p-b)/b*100}')
+        log "S1: span '$span' p99=${p}µs > baseline ${base}µs (${pct}%> thr ${thr}) for $cnt consecutive reads"
+        $ALERT_SEND "🟠 S1 span-p99: span '$span' p99 ${p}µs +${pct}% vs baseline ${base}µs (${cnt} consecutive)" || true
+        alerted=1
+      fi
+    else
+      bump_state "$span" -1 >/dev/null
+    fi
+  done
+  exit $alerted
+}
+
+main "$@"

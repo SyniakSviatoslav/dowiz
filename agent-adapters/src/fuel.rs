@@ -226,14 +226,21 @@ mod tests {
         // then the 3rd acquire (needs 8, only 4 left) refused.
         assert_eq!(res, Err(FuelError::BudgetExceeded { consumed_units: 16 }));
         let calls_at_refusal = runner.set_fuel_calls();
-        assert_eq!(calls_at_refusal, 2, "fuel loaded exactly twice (the 2 grantable tranches)");
+        assert_eq!(
+            calls_at_refusal, 2,
+            "fuel loaded exactly twice (the 2 grantable tranches)"
+        );
         // The bucket is below a tranche now; a second run loads NO fuel at all — proving
         // the instance is never resumed at reduced rate after refusal.
         let runner2 = FuelTrancheRunner::new(1, 8);
         let mut guest2 = DeterministicFuelMeter::infinite();
         let res2 = runner2.run(&mut guest2, &bucket);
         assert_eq!(res2, Err(FuelError::BudgetExceeded { consumed_units: 0 }));
-        assert_eq!(runner2.set_fuel_calls(), 0, "NO fuel ever loaded once the bucket is exhausted");
+        assert_eq!(
+            runner2.set_fuel_calls(),
+            0,
+            "NO fuel ever loaded once the bucket is exhausted"
+        );
     }
 
     #[test]
@@ -242,7 +249,9 @@ mod tests {
         let bucket = TokenBucket::new(1_000_000 as f64, 0.0);
         let runner = FuelTrancheRunner::new(1000, 8); // 1 tranche = 8*1000 = 8000 fuel
         let mut guest = DeterministicFuelMeter::needs(10_000); // needs 2 tranches (8000 + 2000)
-        let units = runner.run(&mut guest, &bucket).expect("finite guest finishes");
+        let units = runner
+            .run(&mut guest, &bucket)
+            .expect("finite guest finishes");
         assert_eq!(units, 16, "consumed 2 prepaid tranches");
         assert_eq!(runner.set_fuel_calls(), 2);
     }
@@ -258,8 +267,15 @@ mod tests {
         let bucket = TokenBucket::new(24 as f64, 0.0); // 3 grantable tranches of 8
         let runner = FuelTrancheRunner::new(1000, 8);
         let res = runner.run(&mut meter, &bucket);
-        assert!(matches!(res, Err(FuelError::BudgetExceeded { .. })), "compute bomb terminated");
-        assert_eq!(runner.set_fuel_calls(), 3, "fuel loaded exactly the 3 grantable tranches");
+        assert!(
+            matches!(res, Err(FuelError::BudgetExceeded { .. })),
+            "compute bomb terminated"
+        );
+        assert_eq!(
+            runner.set_fuel_calls(),
+            3,
+            "fuel loaded exactly the 3 grantable tranches"
+        );
     }
 
     #[test]

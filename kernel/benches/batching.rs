@@ -275,6 +275,9 @@ fn m3_import_unit(c: &mut Criterion) {
                         |x| Decision::Answer(*x),
                         &cases,
                         ish,
+                        // Item 23 added the local/gossip source discriminant; this bench
+                        // measures the local re-import shape.
+                        dowiz_kernel::decision::import::Source::Local,
                         &reg,
                         &mut log,
                     );

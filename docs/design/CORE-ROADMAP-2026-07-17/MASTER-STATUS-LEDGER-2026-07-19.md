@@ -69,9 +69,21 @@ unpushed**; bebop `986646a` (NTT) sits unpushed at HEAD of local `perf/bus-conte
 
 Status vocabulary (fixed): **FULLY-BLUEPRINTED-NEEDS-REGISTRATION** ·
 **SKETCH-ONLY-NEEDS-FULL-BLUEPRINT** · **CLOSED-NO-ACTION-VALIDATED-DESIGN** ·
-**CLOSED-NO-ACTION-NO-TARGET** · **DONE-LOCAL-UNPUSHED-CODE** · **NEEDS-OPERATOR-DECISION**.
+**CLOSED-NO-ACTION-NO-TARGET** · **DONE-LOCAL-UNPUSHED-CODE** ·
+**DONE-VERIFIED** · **NEEDS-OPERATOR-DECISION**.
 
-| ID | Title | Status | One-line reason | Source doc(s) |
+> **`DONE-VERIFIED` (Q1, BLUEPRINT-Q-SERIES 2026-07-19):** distinct from
+> `DONE-LOCAL-UNPUSHED-CODE`. `DONE-LOCAL-UNPUSHED-CODE` means *code exists*;
+> `DONE-VERIFIED` means *code exists AND every DoD claim is checked off against a
+> resolvable `verified-by` evidence pointer* (commit SHA / `bench.jsonl` line hash /
+> `cargo test` node / `docs/reflections/` attestation / explicit `NOT-MET: <reason>`).
+> An item may sit at `DONE-LOCAL-UNPUSHED-CODE` with a half-filled checklist; it may
+> NOT reach `DONE-VERIFIED` with an unresolvable or absent pointer. The backstop
+> `tools/ops-alert/ledger-verify` (Q1-DoD-ii) FAILS RED on any `DONE-VERIFIED` row
+> whose `verified-by` does not resolve — the standing version of the P56 `StaleGround`
+> catch (P56 §4f.3 is design-only; this is its enforced equivalent).
+
+| ID | Title | Status | One-line reason | Source doc(s) | verified-by |
 |---|---|---|---|---|
 | **M1** | Real RFC-5705 exporter binding: capture + set-on-send + enforce-on-recv | **FULLY-BLUEPRINTED-NEEDS-REGISTRATION** | Full spec + RED tests already inside P92 §4.1/§6/§14 (no separate file needed); independent prerequisite bug (red-team F3/M1 STILL OPEN); gate-0 of the mesh cluster; 0 code | BLUEPRINT-P92 §4.1/§6; SYNTHESIS-MESH-MAJOR-REFACTOR §3 |
 | **P75** | CI bench-regression gate re-architecture (same-runner criterion A/B) | **SKETCH-ONLY-NEEDS-FULL-BLUEPRINT** | Scoped as a wave-W0 unit in the synthesis only — no `BLUEPRINT-P75` file exists; owns the bench-id/baseline schema P80–P82 cite | SYNTHESIS-PERFORMANCE-AUDIT §3.1-A1, §5 |
@@ -98,7 +110,7 @@ Status vocabulary (fixed): **FULLY-BLUEPRINTED-NEEDS-REGISTRATION** ·
 | **P96** | Wire live Kalman/EMA courier speed into ETA (replaces discarded-signal static baseline) | **FULLY-BLUEPRINTED-NEEDS-REGISTRATION** | Small, isolated, non-red-line — explicitly does NOT need the heavy review process the mesh/crypto blueprints need; new `eta_seconds_adaptive` falls back byte-for-byte to the existing static estimate when cold/out-of-band, bounded-degradation guaranteed by construction; respects (does not reopen) the standing TimesFM-for-ETA rejection | OPUS-HIGHERABSTRACTION-PRODUCT-SCAN; BLUEPRINT-P96 |
 | **I1/NTT** | bebop2 ML-KEM-768 incomplete NTT (`986646a`), exhaustively proven, NOT wired | **DONE-LOCAL-UNPUSHED-CODE · PROCESS-RED** | Technical GREEN (0/65,536 mismatches) but committed `--no-verify` past 5 gates incl. mandatory 3-model review — a *blocked* item, never a *completed* one, until P85 closes | OPUS-PERF-NTT-IMPLEMENTATION; SYNTHESIS-PHYSICS-PERFORMANCE-VISION §3 |
 | **I2/Arena** | thunderdome→`kernel/src/slot_arena.rs` behind off-default `slot-arena` feature (`a857cd71a`) | **DONE-LOCAL-UNPUSHED-CODE** | Operator override of the research "no adoption" verdict, logged in the divergence ledger; zero default-build cost; P86 designs the first consumer; push decision open (W3-4) | OPUS-PERF-ARENA-DEEPDIVE §6; SYNTHESIS-PHYSICS-PERFORMANCE-VISION §2 row 1 |
-| **I3/Contention** | Contended benches + budget CAS + clock hoist (`8c865805b`+`8256dbffb`, branch-only) | **DONE-LOCAL-UNPUSHED-CODE** | 637 kernel tests green on branch; discharges the R17 fold-in; registered by P90; merge/push decision open (W3-2) | OPUS-PERF-CONTENTION-BENCH-RESULTS (branch); SYNTHESIS-WAVE3-CLOSEOUT §2 |
+| **I3/Contention** | Contended benches + budget CAS + clock hoist (`8c865805b`+`8256dbffb`) | **DONE-VERIFIED** | MERGED to main (verified 2026-07-20: `git merge-base --is-ancestor` both SHAs = YES under `49f40b7f9`); `kernel/src/budget.rs` lock-free `AtomicU64` CAS + `token_bucket.rs` clock hoist present; `budget_atomic_never_over_grants` passes | OPUS-PERF-CONTENTION-BENCH-RESULTS; SYNTHESIS-WAVE3-CLOSEOUT §2 | `commit=49f40b7f9`; `test=kernel::budget_atomic_never_over_grants`; `bench=contention.rs` |
 | **R-TB** | Trust-boundary / closed-channel crypto-removal scan | **CLOSED-NO-ACTION-VALIDATED-DESIGN** | The principle is ALREADY applied everywhere valid (event_log = ordering-only; app↔pgrust = loopback+RLS, zero signing); the one signed wire (mesh) provably needs it (semi-trusted relay + live forgery PoCs); watch-item only: future same-host UDS IPC | OPUS-TRUST-BOUNDARY-CLOSED-CHANNEL-SCAN; SYNTHESIS-WAVE3-CLOSEOUT §5.2 |
 | **R-HS** | Handshake-once vs per-message signing | **CLOSED-NO-ACTION-VALIDATED-DESIGN** (spawned M1 + P92) | Per-message signing is structurally required for store-and-forward/gossip/breach (auth travels WITH the frame); the ONE legitimate narrow opportunity became P92; the exporter gap became M1 | OPUS-HANDSHAKE-ONCE-VS-PERMESSAGE |
 | **R-TRI** | Tri-state status modeling audit (money/payment/verification) | **CLOSED-NO-ACTION-VALIDATED-DESIGN** | No bool-collapse exists; `PaymentStatus::NoneYet`/`Option`/`Result<_,enum>` model "not-yet-known" correctly everywhere; leaf crypto `bool` is exactly right; positive validation record | OPUS-TRISTATE-STATUS-AUDIT |

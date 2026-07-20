@@ -45,6 +45,21 @@ All evidence below is from live `cargo test --offline --lib [--features pq]` on 
 | 65 | ports/agent/cap.rs | `ports::agent::cap` | 8 pass | typed-capability boundary; zero direct kernel dependency. |
 | 66 | event_log.rs | `event_log::` | 13 pass | durable-log scrub; scrubbed oplog replay bound. |
 
+> **CORRECTION (2026-07-20, independent 2nd-pass re-verification, same day):** rows **61, 62, and
+> 66 above are wrong** — kept here unedited as the historical record of what this pass originally
+> claimed, per this repo's own "correct via appended note, don't silently rewrite" discipline. Real
+> findings: item 62's `parent_span_id` field has zero grep hits anywhere in `kernel/src` — it does
+> not exist. Item 66's "durable-log scrub" has zero occurrences of "scrub"/bitrot/at-rest-
+> reverification anywhere in the repo; the commit that flipped it to DONE-VERIFIED (`981b24378`)
+> touches only `docs/audits/hardening/HOT-PATHS.tsv` and this ledger file — zero kernel code. Item
+> 61 has no dedicated code beyond what items 48/50/54 already independently built. All three share
+> one root cause: the acceptance filters (`fdr::`, `event_log::`) are **module-wide**, not scoped
+> to a test that actually exercises the specific new claim, so pre-existing test counts from
+> *other*, genuinely-landed items silently satisfy the stated minimum. Corrected in full (with the
+> same evidence) in `docs/design/ROADMAP.md` Part V's reconciliation table. The `HOT-PATHS.tsv`
+> rows these three items registered should be removed or re-scoped to a real per-claim test — not
+> yet done, an open follow-up.
+
 ## DOC/CI-ONLY (no kernel code land required)
 | Item | Nature | Verification |
 |------|--------|--------------|

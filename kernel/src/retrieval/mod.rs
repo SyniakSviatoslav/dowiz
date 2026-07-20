@@ -44,10 +44,10 @@ pub mod recall;
 /// as the lexical `LivingKnowledge` adapter. The (wasm-gated) `crate::living_knowledge`
 /// recall loop delegates here instead of the purged JS engine. This is a real
 /// (non-test) consumer of `living_knowledge` registered from `retrieval`.
-#[cfg(feature = "wasm")]
+#[cfg(all(feature = "wasm", not(target_arch = "wasm32")))]
 pub use crate::living_knowledge::LivingKnowledge as PrimaryRecallLivingKnowledge;
 /// Construct a `LivingKnowledge`-implementing PRIMARY recall source (wasm only).
-#[cfg(feature = "wasm")]
+#[cfg(all(feature = "wasm", not(target_arch = "wasm32")))]
 pub fn primary_recall_adapter() -> recall::PrimaryRecall {
     recall::PrimaryRecall::new()
 }

@@ -344,6 +344,13 @@ SEO page migration (stays SSR).
 ### DZ-12 — Cross-platform (WebGL2 fallback / native / AR panel)
 **Depends** FE-16 · **Est** L
 
+> **Registered as P97 (2026-07-20).** The AR-panel content below (the "Track 2" spatial-computing
+> readiness half of dowiz's AR/VR strategy) is now consolidated, alongside P38-rev §12.2, §17.5,
+> and the spatial-storefront-voice-hub synthesis's Lane B, into
+> [`BLUEPRINT-P97-ar-vr-spatial-interface-2026-07-20.md`](../BLUEPRINT-P97-ar-vr-spatial-interface-2026-07-20.md)
+> §3. This unit's text is preserved unaltered below (append-only) — P97 is the canonical
+> cross-reference for AR/VR going forward, not a duplicate.
+
 **TARGET:** WebGPU+WebGL2 fallback (requestAdapter success); native desktop (winit/wgpu); AR = field→off-screen
 texture→curved panel floating XR (`FieldPos.w`=panel-normal, ray→panel→FieldPos same as 2D pointer, money=pinned
 mono panel). Native OpenXR Quest first; WebXR-WebGPU коли XRGPUBinding lands. iOS embed wgpu native view; Android

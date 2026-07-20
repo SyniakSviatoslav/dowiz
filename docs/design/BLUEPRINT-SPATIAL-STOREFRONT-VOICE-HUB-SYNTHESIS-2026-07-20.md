@@ -86,6 +86,14 @@ Scope is deliberately narrow per D-A4: **single objects** — dishes, products �
 
 ## 4. Lane B — Display: the browser is the volumetric display; the projector is a second monitor
 
+> **Registered as P97 Track 1 (2026-07-20).** This lane's AR/display decisions (D-B1–D-B5) and
+> Phase 1/5 acceptance criteria are now consolidated, alongside DZ-12, P38-rev §12.2, and §17.5,
+> into [`BLUEPRINT-P97-ar-vr-spatial-interface-2026-07-20.md`](BLUEPRINT-P97-ar-vr-spatial-interface-2026-07-20.md)
+> §2 — the first-class roadmap item for dowiz's AR/VR strategy. This section is preserved as the
+> source research (append-only); P97 is the canonical, synthesized cross-reference going forward.
+> Lanes A/C/D/E of this document are unaffected and remain tracked under the existing
+> "product-surface wave" registration in `CORE-ROADMAP-INDEX.md` §7.
+
 ### 4.1 The taxonomy, stated without marketing
 
 P2's central service was demolishing the word "hologram" into four honest categories: (a) light-field displays (Looking Glass, $199–$1,500+) — real, but a screen you look *at*, not projectable; (b) swept-volume displays (Voxon VX2, ~$6,800) — real volumetric light in a small enclosed volume, showroom-grade pricing; (c) laser-plasma aerial voxels — lab-only, not purchasable; (d) Pepper's-ghost and spinning-LED "holo-fans" ($150–400) — the cheap retail illusion, front-arc-only, 2D, not volumetric. None of these is the customer-facing product (D-B4, D-B5).

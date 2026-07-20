@@ -1,0 +1,84 @@
+# RED-LINE-REGISTRY.tsv — Item 74 (BLUEPRINT-ITEMS-73-78 §3). Machine-readable
+# enumeration of what the product AI may NEVER touch without a human apply-token.
+#
+# Parser: scripts/red-line-classifier.sh + scripts/red-line-monotonicity.sh (awk -F tab).
+# Non-comment lines are DATA. Comment lines start with '#'.
+#
+# Data columns (tab-separated):
+#   path_prefix        : a changed file matches this row iff its path starts with path_prefix
+#   class              : one of
+#                          product-red-line | proven-fsm-core | verification-seam |
+#                          forensic-truth | crypto | proof-machinery | safety-machinery |
+#                          governance-self
+#   removal_authority  : out-of-band-only      -> NEVER editable by AI (D11 Q4 hard line);
+#                                             removal/mod requires operator ruling recorded
+#                                             in DECISIONS.md (D11 Q5) AND human editing.
+#                        operator-ruling-required -> AI may edit UNDER the human apply-token,
+#                                             but removal additionally requires a DECISIONS.md
+#                                             D-entry marker (D11 Q5 monotonicity).
+#   why               : why this path is in the registry (load-bearing red line).
+#   source            : REAL file:line citation on the integration tree (every row verified
+#                       present). No un-cited rows.
+#   status            : live | placeholder (placeholder = referenced machinery unbuilt here).
+#
+# §0.4 central acceptance property: the registry + gate code are CORE — unmodifiable by the
+# pipeline they govern. Item 73 (the Gate-Root invariant) is recorded by this registry's own
+# inclusion (the governance-self self-row below, blueprint §3.3(8)) and by the monotonicity
+# guard (scripts/red-line-monotonicity.sh). This file is itself in the registry.
+#
+# Meta-law (item 73 clause, recorded here per blueprint §2.3(5)): no `pub` type / fn / macro
+# anywhere in the crate may construct a value conferring write authority over this registry,
+# the gate code, or the composition root. The registry exposes zero `pub fn` taking `&mut`,
+# zero `pub static mut`, zero interior-mutability handle — the only way to change it is a
+# human editing the file through the normal CI suite (out-of-band-only / operator-ruling).
+#
+# D11 Q4 (operator ruling, 2026-07-20) encoding:
+#   - HARD line (removal_authority=out-of-band-only): core kernel authority + circuit breaker
+#     (kernel/src/breaker/, item 9) + the order/money/decide-fold core. Never editable by AI.
+#   - AI-reachable under token (removal_authority=operator-ruling-required): agent scope
+#     (kernel/src/ports/agent/scope.rs) + the governance module itself (items 73-76 code,
+#     i.e. this registry + the classifier/monotonicity scripts).
+# D11 Q5 (operator ruling, 2026-07-20): row REMOVAL requires a DECISIONS.md D-entry marker
+#   (e.g. "D12:" referenced in the row's history / commit msg). Monotonicity guard enforces it.
+#
+# Addition of a row is always safe (widens protection) → GREEN. Removal without a D-entry
+#   marker → RED (the corrigibility-adjacent attack: quietly drop a protected path).
+# ────────────────────────────────────────────────────────────────────────────────────────
+# (1) PRODUCT RED-LINES — money / auth / capability / migrations / bulk-op.
+kernel/src/money.rs	product-red-line	out-of-band-only	Integer-only checked money arithmetic; RED LINE: zero float on monetary values. D11 Q4: order/money core.	kernel/src/money.rs:8,17,22	live
+kernel/src/ports/agent/scope.rs	product-red-line	out-of-band-only	DenyByDefault + AllowList: runtime-plane red-line set (money/auth/secrets/MIGRATIONS/destructive-bulk). D11 Q4: core authority. NOTE: agent scope is AI-editable under token per Q4 but the SCOPE FILE sits in the core-authority boundary; Q4 marks it removal_authority=operator-ruling-required.	kernel/src/ports/agent/scope.rs:257-283,48	live
+kernel/src/retrieval/memory_store.rs	product-red-line	out-of-band-only	pgrust SQL adapter boundary (OFF-by-default feature); bulk MSRV-destructive store surface — migrations/bulk-op red-line. D11 Q4: core authority.	kernel/src/retrieval/memory_store.rs:10-21	live
+# (2) PROVEN-FSM CORE — order FSM golden signature + spectral-radius const-proof.
+kernel/src/order_machine.rs	proven-fsm-core	out-of-band-only	12-state order lifecycle FSM; D11 Q4: order/money core.	kernel/src/order_machine.rs:513,383	live
+kernel/src/decision/mod.rs	proven-fsm-core	out-of-band-only	Kernel decision-fold core (MoE DecisionUnit family; the decide half of order/money/decide-fold). D11 Q4: core authority — never editable by AI.	kernel/src/decision/mod.rs:1-5	live
+# (3) VERIFICATION SEAM — replay-before-persist import gate (item 75's precedent).
+kernel/src/decision/import.rs	verification-seam	operator-ruling-required	import_unit replay-before-persist gate; the kernel re-executes its own oracle on proposed state. Governance-self-adjacent (item 75 step-zero seam). Editable under token per D11 Q4.	kernel/src/decision/import.rs:81	live
+# (4) FORENSIC TRUTH SURFACE — hash chain + FDR ring/schema/CRC (item 76 depends on it).
+kernel/src/event_log.rs	forensic-truth	out-of-band-only	SHA3-256 content-addressed hash chain (prev content-id, actor_seq). D11 Q4: core authority — subject must never modify its own evidence.	kernel/src/event_log.rs:109,135-160	live
+kernel/src/fdr/ring.rs	forensic-truth	out-of-band-only	FDR durable ring: CRC32-checked NDJSON + kill-9 recovery. D11 Q4: core authority.	kernel/src/fdr/ring.rs:1-5	live
+kernel/src/fdr/schema.rs	forensic-truth	out-of-band-only	FDR event envelope (hw field first-class); tamper-evidence schema. D11 Q4: core authority.	kernel/src/fdr/schema.rs:1-5	live
+kernel/src/fdr/json.rs	forensic-truth	out-of-band-only	FDR JSON serde + escape-byte oracle. D11 Q4: core authority.	kernel/src/fdr/json.rs:1-5	live
+# (5) CRYPTO — PQ + constant-time + capability cert signing (KAT-gated).
+kernel/src/pq/	crypto	out-of-band-only	Post-quantum core (ML-KEM/ML-DSA, KAT-gated). D11 Q4: core authority.	kernel/src/pq/dsa.rs:1-5	live
+kernel/src/ct_gate.rs	crypto	out-of-band-only	Constant-time comparison gate (branch-free sig compare). D11 Q4: core authority.	kernel/src/ct_gate.rs:1-5	live
+kernel/src/capability_cert.rs	crypto	out-of-band-only	Capability cert signing (ML-DSA-65, D4) + attenuation/root_scope (root authority over delegated scopes, D11 Q4 core authority).	kernel/src/capability_cert.rs:205-231	live
+# (6) PROOF MACHINERY — the gates that prove the above hold (must be unmodifiable by pipeline).
+scripts/zero-dep-gate.sh	proof-machinery	out-of-band-only	Zero-new-crate enforcement (items 1+13): external-dep set ⊆ allowlist; shrink-only; lockfile hash stable. D11 Q4: core authority.	scripts/zero-dep-gate.sh:1-14,58,76	live
+ZERO-DEP-ALLOWLIST.txt	proof-machinery	out-of-band-only	The canonical zero-dep allowlist(s); the verdict surface of the zero-dep gate. D11 Q4: core authority.	kernel/ZERO-DEP-ALLOWLIST.txt:1-5	live
+scripts/hardening-gate.sh	proof-machinery	out-of-band-only	Hot-path re-execution gate (P7: re-execute never presence-check); oracle floor; gap ledger. D11 Q4: core authority.	scripts/hardening-gate.sh:1-19,42,138-143	live
+docs/audits/hardening/HOT-PATHS.tsv	proof-machinery	out-of-band-only	The hot-path manifest the hardening gate parses (path-prefix @ZONE → deterministic diff classification). D11 Q4: core authority.	docs/audits/hardening/HOT-PATHS.tsv:1-9,27-35	live
+docs/audits/hardening/CHECKLIST.md	proof-machinery	out-of-band-only	The standing 5-point proof law every change ships against. D11 Q4: core authority.	docs/audits/hardening/CHECKLIST.md:1-5	live
+rust-toolchain.toml	proof-machinery	out-of-band-only	Toolchain pin; bump-gate byte-unchanged (P6 determinism). D11 Q4: core authority.	rust-toolchain.toml:1-5	live
+scripts/miri-gate.sh	proof-machinery	out-of-band-only	Miri UB-detection gate (item 52). D11 Q4: core authority.	scripts/miri-gate.sh:1-5	live
+scripts/ai-optional-gate.sh	proof-machinery	out-of-band-only	AI-optional compile-time + dependency-direction firewall (item 45). D11 Q4: core authority.	scripts/ai-optional-gate.sh:1-15	live
+# (7) SAFETY MACHINERY — breaker + Sentinel + composition root (items 9/54/64/65).
+#     Placeholder rows: referenced machinery may be partially landed / unbuilt on this branch.
+#     status=placeholder (min_tests=0 idiom): diff-visible obligation, no floor yet.
+kernel/src/breaker/	safety-machinery	out-of-band-only	Circuit breaker (item 9): the HARD non-negotiable line per D11 Q4. Placeholder: kernel/src/breaker/ not yet landed on this branch.	DECISIONS.md D11 Q4 (2026-07-20) breaker:item9	placeholder
+Sentinel	safety-machinery	out-of-band-only	Sentinel (item 54): additional trigger input. Placeholder: item 54 spec-level on this branch.	DECISIONS.md D11 Q4 (2026-07-20) sentinel:item54	placeholder
+items64-65	safety-machinery	out-of-band-only	Composition root + capability minter (items 64/65): sole constructor of any write authority. Placeholder: unbuilt on this branch (§1.2).	DECISIONS.md D11 Q4 (2026-07-20) composition-root:items64-65	placeholder
+# (8) GOVERNANCE-SELF — item 73's recursion: §L's own gate + this registry.
+#     This registry file is itself a row (self-inclusion; blueprint §3.3(8), §2.3(5)).
+docs/audits/governance/RED-LINE-REGISTRY.tsv	governance-self	operator-ruling-required	The red-line registry ITSELF + item 73's gate-root invariant. Self-inclusion recorded (item 73 recursion). AI may edit governance module under the human apply-token (D11 Q4) BUT removal of this row requires a DECISIONS.md D-entry (D11 Q5).	DECISIONS.md D11 Q4/Q5 (2026-07-20) item73-root-invariant:self-row	live
+scripts/red-line-classifier.sh	governance-self	operator-ruling-required	Item 75's step-zero classifier: maps a changeset → touched-red-line verdict; refuses a red-line diff at classification time. Editable under token (D11 Q4); removal requires D-entry (D11 Q5).	scripts/red-line-classifier.sh:1-40	live
+scripts/red-line-monotonicity.sh	governance-self	operator-ruling-required	Monotonicity guard enforcing D11 Q5 row-removal ruling marker. Editable under token (D11 Q4); removal requires D-entry (D11 Q5).	scripts/red-line-monotonicity.sh:1-40	live

@@ -7,17 +7,17 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use agent_adapters::{
-    AgentDispatcher, AgentInvocation, AgentTask, AgentQuirks, McpServerBridge, VecHarvest,
-};
 use agent_adapters::manifest::draft_manifest;
 use agent_adapters::transport::MockChannel;
+use agent_adapters::{
+    AgentDispatcher, AgentInvocation, AgentQuirks, AgentTask, McpServerBridge, VecHarvest,
+};
 use dowiz_kernel::event_log::EventLog;
 use dowiz_kernel::hydra::FileEventStore;
 use dowiz_kernel::ports::agent::{
-    Action, Admitter, AdmissionLimiter, AgentManifest, AnchorRoster, BudgetRequest, Capability,
-    Delegation, ExecutionModel, HybridPolicy, NodeId, RedLinePolicy, ReferenceHybridGate, RefSigner,
-    Resource, RevocationSet, Scope, SignatureVerifier, SignedFrame,
+    Action, AdmissionLimiter, Admitter, AgentManifest, AnchorRoster, BudgetRequest, Capability,
+    Delegation, ExecutionModel, HybridPolicy, NodeId, RedLinePolicy, RefSigner,
+    ReferenceHybridGate, Resource, RevocationSet, Scope, SignatureVerifier, SignedFrame,
 };
 use serde_json::json;
 
@@ -38,7 +38,10 @@ fn manifest(v: &RefSigner, cls: [u8; 32], pq: Vec<u8>) -> AgentManifest {
         &quirks,
         caps,
         vec![],
-        BudgetRequest { capacity: 256, refill_milli_units_per_sec: 0 },
+        BudgetRequest {
+            capacity: 256,
+            refill_milli_units_per_sec: 0,
+        },
         ExecutionModel::WasmComponent,
         vec![],
         0,
@@ -64,15 +67,27 @@ fn valid_admission(
     let mut frame = SignedFrame::new(cap, m.canonical_bytes());
     frame.sign_classical(v, cls_secret);
     frame.sign_pq(v, pq_secret);
-    let link = Delegation::sign(v, anchor, cls, scope.clone(), scope, 9999, nonce, anchor_secret);
+    let link = Delegation::sign(
+        v,
+        anchor,
+        cls,
+        scope.clone(),
+        scope,
+        9999,
+        nonce,
+        anchor_secret,
+    );
     let mut roster = AnchorRoster::new();
     roster.enroll(&anchor);
     (frame, roster, vec![link])
 }
 
 fn admitter() -> Admitter<ReferenceHybridGate<RefSigner>> {
-    let gate =
-        ReferenceHybridGate::new_redlined(HybridPolicy::RequireBoth, RedLinePolicy::DenyByDefault, RefSigner);
+    let gate = ReferenceHybridGate::new_redlined(
+        HybridPolicy::RequireBoth,
+        RedLinePolicy::DenyByDefault,
+        RefSigner,
+    );
     let limiter = AdmissionLimiter::new(1_000_000, 0.0, 8, 1_000, 0.0);
     Admitter::new(gate, limiter, 1_000_000, [0xA0; 32])
 }
@@ -105,18 +120,36 @@ fn e2e_admits_valid_and_rejects_invalid_against_real_file_event_store() {
     let (frame, roster, chain) = valid_admission(&v, &cls, &pq_s, &anch, &m, [7u8; 8]);
     let len_before = log.len();
     let rec = adm
-        .admit(&frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0)
+        .admit(
+            &frame,
+            &roster,
+            &chain,
+            &RevocationSet::new(),
+            &mut log,
+            0,
+            0,
+        )
         .expect("valid manifest admits");
     println!("ACCEPT: content_id  = {}", hex(&rec.content_id));
     println!("ACCEPT: event_id    = {}", hex(&rec.event_id));
     println!("ACCEPT: node_id     = {}", rec.node_id.to_hex());
     println!("ACCEPT: tier        = {:?}", rec.tier);
-    println!("ACCEPT: budget      = cap {} refill_milli {}", rec.granted_capacity, rec.granted_refill_milli);
+    println!(
+        "ACCEPT: budget      = cap {} refill_milli {}",
+        rec.granted_capacity, rec.granted_refill_milli
+    );
     println!("ACCEPT: depth       = {}", rec.granted_depth);
-    assert_eq!(log.len(), len_before + 1, "one AgentAdmitted event landed durably");
+    assert_eq!(
+        log.len(),
+        len_before + 1,
+        "one AgentAdmitted event landed durably"
+    );
     // The minted envelope exists and has budget (do NOT drain it — the invoke below needs it).
     assert_eq!(rec.granted_capacity, 256);
-    assert!(rec.bucket.available() >= 4.0, "minted bucket carries the granted envelope");
+    assert!(
+        rec.bucket.available() >= 4.0,
+        "minted bucket carries the granted envelope"
+    );
 
     // One bridged invoke through the minted envelope → exactly one TrackRecord row.
     let quirks = AgentQuirks::mcp_server(allowlist());
@@ -125,31 +158,70 @@ fn e2e_admits_valid_and_rejects_invalid_against_real_file_event_store() {
     let mock = MockChannel::new()
         .with_result("tools/list", json!({"tools":[{"name":"get_menu"}]}))
         .with_result("tools/call", json!({"content":"menu"}));
-    let bridge = Arc::new(McpServerBridge::admitted("demo", m.clone(), quirks, digest, caps, mock));
+    let bridge = Arc::new(McpServerBridge::admitted(
+        "demo",
+        m.clone(),
+        quirks,
+        digest,
+        caps,
+        mock,
+    ));
     let sink = VecHarvest::new();
-    let disp = AgentDispatcher::new(bridge, Arc::clone(&rec.bucket), rec.granted_depth, sink.clone());
+    let disp = AgentDispatcher::new(
+        bridge,
+        Arc::clone(&rec.bucket),
+        rec.granted_depth,
+        sink.clone(),
+    );
     let resp = disp
         .dispatch(AgentInvocation {
-            task: AgentTask::InvokeTool { name: "get_menu".into(), args: vec![] },
+            task: AgentTask::InvokeTool {
+                name: "get_menu".into(),
+                args: vec![],
+            },
             cost_units: 4,
             invoke_depth: 0,
         })
         .expect("bridged invoke succeeds");
-    assert_eq!(sink.rows().len(), 1, "exactly one TrackRecord row per bridged call");
-    println!("ACCEPT: invoke ok, units={}, one TrackRecord row emitted", resp.units);
+    assert_eq!(
+        sink.rows().len(),
+        1,
+        "exactly one TrackRecord row per bridged call"
+    );
+    println!(
+        "ACCEPT: invoke ok, units={}, one TrackRecord row emitted",
+        resp.units
+    );
 
     // ── POLE 2: reject a real invalid case (NodeId mismatch) — store byte-identical ──
     let store_len_before = log.len();
     let mut bad = manifest(&v, v.classical_public(&cls), v.pq_public(&pq_s));
     bad.agent_node_id = [0xAB; 32]; // does NOT hash from its own carried keys
-    let (bad_frame, bad_roster, bad_chain) = valid_admission(&v, &cls, &pq_s, &anch, &bad, [9u8; 8]);
-    let err = match adm.admit(&bad_frame, &bad_roster, &bad_chain, &RevocationSet::new(), &mut log, 0, 0) {
+    let (bad_frame, bad_roster, bad_chain) =
+        valid_admission(&v, &cls, &pq_s, &anch, &bad, [9u8; 8]);
+    let err = match adm.admit(
+        &bad_frame,
+        &bad_roster,
+        &bad_chain,
+        &RevocationSet::new(),
+        &mut log,
+        0,
+        0,
+    ) {
         Ok(_) => panic!("identity-mismatch manifest MUST be rejected"),
         Err(e) => e,
     };
     println!("REJECT: error       = {err:?}");
-    println!("REJECT: store_len   = {} (unchanged from {})", log.len(), store_len_before);
-    assert_eq!(log.len(), store_len_before, "store byte-identical: no event on rejection");
+    println!(
+        "REJECT: store_len   = {} (unchanged from {})",
+        log.len(),
+        store_len_before
+    );
+    assert_eq!(
+        log.len(),
+        store_len_before,
+        "store byte-identical: no event on rejection"
+    );
 
     let _ = std::fs::remove_file(&path);
     println!("=== DEMO RUN complete: 1 accept, 1 reject, store durable + consistent ===");

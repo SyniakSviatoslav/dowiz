@@ -693,6 +693,14 @@ gate is tightened accordingly — `createElement` is permitted **only** inside `
 
 ### 12.2 AR/VR insurance constraints — four HARD requirements (not deferred, not Track-R)
 
+> **Registered as P97 Track 2 (2026-07-20).** This section remains the single source of truth for
+> the four constraints (append-only — nothing below is edited or moved); the constraints are now
+> also registered as part of the first-class roadmap item
+> [`BLUEPRINT-P97-ar-vr-spatial-interface-2026-07-20.md`](../BLUEPRINT-P97-ar-vr-spatial-interface-2026-07-20.md)
+> §3, alongside DZ-12's sequencing gate, §17.5's ruling, and the spatial-storefront-voice-hub
+> synthesis's Track-1 product-AR content. P97 cites this section by reference rather than
+> duplicating it.
+
 Per MASTER-ROADMAP §17.5 ("build in AR/VR / new-form-factor readiness **now**, not deferred")
 and SYNTHESIS §2/§5 (R1 §8), P38's render core carries four **structural** constraints as of this
 pass. These are cheap architectural insurance **paid now**; the actual OpenXR (native) / WebXR

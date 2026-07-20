@@ -126,7 +126,11 @@ fn read_http_request_body(stream: &mut TcpStream) -> std::io::Result<String> {
     }
     body.truncate(content_length.max(body.len().min(content_length)));
     // If content_length was 0 but a body arrived, keep what we have.
-    let take = if content_length == 0 { body.len() } else { content_length.min(body.len()) };
+    let take = if content_length == 0 {
+        body.len()
+    } else {
+        content_length.min(body.len())
+    };
     Ok(String::from_utf8_lossy(&body[..take]).into_owned())
 }
 
@@ -134,9 +138,7 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     if needle.is_empty() || haystack.len() < needle.len() {
         return None;
     }
-    haystack
-        .windows(needle.len())
-        .position(|w| w == needle)
+    haystack.windows(needle.len()).position(|w| w == needle)
 }
 
 /// Extract a JSON string field value by key from a small JSON object. Handles
@@ -147,7 +149,13 @@ fn extract_json_string_field(json: &str, key: &str) -> Option<String> {
     let needle = format!("\"{key}\"");
     let mut i = json.find(&needle)? + needle.len();
     // skip whitespace and ':'
-    while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\t' || bytes[i] == b':' || bytes[i] == b'\n' || bytes[i] == b'\r') {
+    while i < bytes.len()
+        && (bytes[i] == b' '
+            || bytes[i] == b'\t'
+            || bytes[i] == b':'
+            || bytes[i] == b'\n'
+            || bytes[i] == b'\r')
+    {
         i += 1;
     }
     if i >= bytes.len() || bytes[i] != b'"' {
@@ -201,7 +209,10 @@ fn json_escape(s: &str) -> String {
 /// Render one loop log entry to a human-readable line (event-driven, debug-friendly).
 fn log_entry_to_string(e: &LoopLogEntry) -> String {
     let ev = match &e.event {
-        LoopEventKind::ModelReply { content, total_tokens } => {
+        LoopEventKind::ModelReply {
+            content,
+            total_tokens,
+        } => {
             format!("model_reply tokens={total_tokens} content={content:?}")
         }
         LoopEventKind::ToolCallParsed { tool_name, raw_arg } => {

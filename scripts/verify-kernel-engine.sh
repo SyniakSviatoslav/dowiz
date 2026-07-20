@@ -14,8 +14,10 @@ echo "== dowiz engine: cargo test =="
 echo "   engine OK"
 
 echo "== kernel: wasm32 release build (the geo *_js surface must compile to wasm) =="
+# --lib only — the kernel's native CLI [[bin]]s (lm/markov_attractor/fdr_recorder) are
+# never meant to target wasm32; see build-kernel-wasm.sh for the same scoping.
 ( cd kernel && rustup target add wasm32-unknown-unknown >/dev/null 2>&1 || true \
-    && cargo build --target wasm32-unknown-unknown --release --quiet )
+    && cargo build --target wasm32-unknown-unknown --release --lib --quiet )
 echo "   wasm32 OK"
 
 echo "== fmt check (changed files must be formatted) =="

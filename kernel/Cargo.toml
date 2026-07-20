@@ -259,6 +259,26 @@ harness = false
 name = "absorbing"
 harness = false
 
+# Real span-metrics generators (P83): exercise instrumented hot paths under a live
+# SpanMetricsObserver. They import the `telemetry`-gated `span_metrics` module, so they
+# MUST declare required-features — without these rows the DEFAULT `cargo test` breaks
+# while compiling examples (found red 2026-07-20; the pq variant additionally needs `pq`).
+[[example]]
+name = "gen_real_spans"
+required-features = ["telemetry"]
+
+[[example]]
+name = "gen_real_spans_pq"
+required-features = ["telemetry", "pq"]
+
+# Periodic synthetic canary over all 8 P83 Layer-1 actions — writes a SEPARATE
+# `<root>/canary/metric.jsonl` stream (never the live `<root>/metric.jsonl`) with
+# bounded whole-file rotation, so scheduled runs can never blend into (or bloat)
+# real-traffic data. See examples/canary_spans.rs header for the design.
+[[example]]
+name = "canary_spans"
+required-features = ["telemetry", "pq"]
+
 # Entire kernel PQ lane (ML-DSA sign/verify, ML-KEM encaps/decaps, hybrid decaps,
 # SHAKE256/SHA3 size-swept). GATED behind `pq` (same discipline as the `pq` module).
 [[bench]]

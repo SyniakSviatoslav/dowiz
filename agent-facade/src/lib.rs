@@ -271,8 +271,12 @@ mod web_fetch_tests {
     fn rejects_non_http_schemes_before_any_fetch() {
         let tool = WebFetchTool::new();
         let granted = WebFetchTool::SPEC.scope;
-        for bad_url in ["file:///etc/passwd", "ftp://x/y", "javascript:alert(1)", "data:text/html,x"]
-        {
+        for bad_url in [
+            "file:///etc/passwd",
+            "ftp://x/y",
+            "javascript:alert(1)",
+            "data:text/html,x",
+        ] {
             let inv = ToolInvocation {
                 tool_name: "web_fetch".to_string(),
                 raw_arg: format!(r#"{{"url":"{bad_url}"}}"#),

@@ -21,11 +21,11 @@ use std::collections::BTreeMap;
 use bebop_delivery_domain::intake::{to_order_status, IntakeEdge};
 use bebop_delivery_domain::DeliveryStatus as WireStatus;
 use bebop_proto_cap::claim_machine::ClaimStatus;
+use bebop_proto_cap::event_dict::DeliveryStatus as VocabStatus;
 use bebop_proto_cap::event_dict::{
     CourierKey, DeliveryEvent, LedgerPayload, OrderPlacedPayload, StatusChangedPayload,
 };
 use bebop_proto_cap::scope::{Action, Resource, Scope};
-use bebop_proto_cap::event_dict::{DeliveryStatus as VocabStatus};
 
 /// Convert the event-vocabulary `DeliveryStatus` (proto-cap) into the wire
 /// `DeliveryStatus` (delivery-domain) used by `to_order_status`. The two enums
@@ -103,13 +103,8 @@ impl MeshHost {
     /// WIRE + LAW + MONEY gates in `bebop-delivery-domain` have ALREADY passed
     /// before a caller hands the payload here (this host is the money/state
     /// terminal, not the auth gate). Every arm is fail-closed.
-    pub fn apply_delivery_event(
-        &mut self,
-        scope: Scope,
-        payload: &[u8],
-    ) -> Result<(), HostFault> {
-        let event =
-            DeliveryEvent::decode(scope, payload).map_err(HostFault::Vocabulary)?;
+    pub fn apply_delivery_event(&mut self, scope: Scope, payload: &[u8]) -> Result<(), HostFault> {
+        let event = DeliveryEvent::decode(scope, payload).map_err(HostFault::Vocabulary)?;
         match event {
             DeliveryEvent::OrderPlaced(p) => self.apply_order_placed(p),
             DeliveryEvent::StatusChanged(p) => self.apply_status_changed(p),
@@ -165,7 +160,11 @@ impl MeshHost {
         // Claims are pure coordination records. We fold Offered -> Claimed on
         // first sight (a claim offer the host learns about is accepted as a
         // coordination fact; adversarial legality is enforced by W-3 tests).
-        let cur = self.claims.get(&order_id).copied().unwrap_or(ClaimStatus::Offered);
+        let cur = self
+            .claims
+            .get(&order_id)
+            .copied()
+            .unwrap_or(ClaimStatus::Offered);
         let next = match cur {
             ClaimStatus::Offered => ClaimStatus::Claimed,
             other => other, // already claimed/picked-up/released: idempotent
@@ -206,7 +205,9 @@ impl MeshHost {
 
 // Re-export the wire/kernels status maps so consumers (and tests) don't reach
 // into the delivery-domain crate directly for the parity sweep (W-2.4).
-pub use bebop_delivery_domain::intake::{from_order_status as wire_from_kernel, to_order_status as kernel_to_wire};
+pub use bebop_delivery_domain::intake::{
+    from_order_status as wire_from_kernel, to_order_status as kernel_to_wire,
+};
 
 /// Scope helper for the six delivery actions (W-2 / W-3 / W-5).
 pub fn scope_for(action: Action) -> Scope {
@@ -256,8 +257,11 @@ mod tests {
         assert_eq!(h.claim_status(7), Some(ClaimStatus::Claimed));
         // fold_transitions sanity (the Law the host relies on, proven here).
         assert_eq!(
-            fold_transitions(ClaimStatus::Offered, &[ClaimStatus::Claimed, ClaimStatus::PickedUp])
-                .unwrap(),
+            fold_transitions(
+                ClaimStatus::Offered,
+                &[ClaimStatus::Claimed, ClaimStatus::PickedUp]
+            )
+            .unwrap(),
             ClaimStatus::PickedUp
         );
     }
@@ -307,7 +311,10 @@ mod tests {
         };
         h.apply_delivery_event(place, &p.encode()).unwrap();
         let settle = Scope::single(Resource::Ledger, Action::SettlementRecorded);
-        let lp = LedgerPayload { order_id: 9, amount_i64: 1000 };
+        let lp = LedgerPayload {
+            order_id: 9,
+            amount_i64: 1000,
+        };
         h.apply_delivery_event(settle, &lp.encode()).unwrap();
         assert_eq!(h.ledger_balance(9), Some(1000));
     }

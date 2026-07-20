@@ -56,7 +56,11 @@ impl<C: RpcChannel> McpServerBridge<C> {
             .ok_or_else(|| AgentError::BadRequest("tools/list missing tools[]".into()))?;
         Ok(tools
             .iter()
-            .filter_map(|t| t.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+            .filter_map(|t| {
+                t.get("name")
+                    .and_then(|n| n.as_str())
+                    .map(|s| s.to_string())
+            })
             .collect())
     }
 
@@ -107,12 +111,12 @@ impl<C: RpcChannel> AgentBridge for McpServerBridge<C> {
                 self.transport
                     .call("tools/call", json!({ "name": name, "arguments": arg_val }))?
             }
-            AgentTask::ReadResource { uri } => {
-                self.transport.call("resources/read", json!({ "uri": uri }))?
-            }
-            AgentTask::RenderPrompt { name } => {
-                self.transport.call("prompts/get", json!({ "name": name }))?
-            }
+            AgentTask::ReadResource { uri } => self
+                .transport
+                .call("resources/read", json!({ "uri": uri }))?,
+            AgentTask::RenderPrompt { name } => self
+                .transport
+                .call("prompts/get", json!({ "name": name }))?,
         };
         let content = serde_json::to_vec(&result).unwrap_or_default();
         let units = (content.len() as u64).max(1);
@@ -120,7 +124,10 @@ impl<C: RpcChannel> AgentBridge for McpServerBridge<C> {
     }
 
     fn health(&self) -> Result<(), AgentError> {
-        self.transport.call("ping", json!({})).map(|_| ()).map_err(|_| AgentError::Unavailable)
+        self.transport
+            .call("ping", json!({}))
+            .map(|_| ())
+            .map_err(|_| AgentError::Unavailable)
     }
 }
 
@@ -157,7 +164,10 @@ mod tests {
             &quirks,
             caps,
             vec![],
-            BudgetRequest { capacity: 100, refill_milli_units_per_sec: 0 },
+            BudgetRequest {
+                capacity: 100,
+                refill_milli_units_per_sec: 0,
+            },
             ExecutionModel::WasmComponent,
             vec![],
             0,
@@ -172,7 +182,10 @@ mod tests {
 
     fn invoke_tool(name: &str) -> AgentInvocation {
         AgentInvocation {
-            task: AgentTask::InvokeTool { name: name.into(), args: vec![] },
+            task: AgentTask::InvokeTool {
+                name: name.into(),
+                args: vec![],
+            },
             cost_units: 1,
             invoke_depth: 0,
         }
@@ -184,13 +197,16 @@ mod tests {
             .with_result("tools/list", tools_list(&["get_menu", "read_order"]))
             .with_result("tools/call", json!({"content": "menu-bytes"}));
         let bridge = build_bridge(mock, &["get_menu", "read_order"]);
-        let resp = bridge.invoke(&invoke_tool("get_menu")).expect("allow-listed tool invokes");
+        let resp = bridge
+            .invoke(&invoke_tool("get_menu"))
+            .expect("allow-listed tool invokes");
         assert!(resp.units > 0);
     }
 
     #[test]
     fn unmapped_tool_is_refused() {
-        let mock = MockChannel::new().with_result("tools/list", tools_list(&["get_menu", "read_order"]));
+        let mock =
+            MockChannel::new().with_result("tools/list", tools_list(&["get_menu", "read_order"]));
         let bridge = build_bridge(mock, &["get_menu", "read_order"]);
         assert_eq!(
             bridge.invoke(&invoke_tool("rm_rf")),
@@ -209,9 +225,15 @@ mod tests {
         // Before drift: invoke succeeds.
         assert!(bridge.invoke(&invoke_tool("get_menu")).is_ok());
         // Server DROPS a tool after admission (listChanged / substitution).
-        bridge.transport.channel().set_result("tools/list", tools_list(&["get_menu"]));
+        bridge
+            .transport
+            .channel()
+            .set_result("tools/list", tools_list(&["get_menu"]));
         // Next invoke fails the digest check ⇒ refuse until re-admission.
-        assert_eq!(bridge.invoke(&invoke_tool("get_menu")), Err(AgentError::DigestDrift));
+        assert_eq!(
+            bridge.invoke(&invoke_tool("get_menu")),
+            Err(AgentError::DigestDrift)
+        );
     }
 
     #[test]
@@ -226,6 +248,9 @@ mod tests {
             Err(AgentError::ControlInversionRefused)
         );
         // A normal server request is fine.
-        assert_eq!(bridge.handle_server_request("notifications/progress"), Ok(()));
+        assert_eq!(
+            bridge.handle_server_request("notifications/progress"),
+            Ok(())
+        );
     }
 }

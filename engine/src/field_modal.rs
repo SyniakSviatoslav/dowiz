@@ -43,13 +43,19 @@ impl FieldModal {
         let n = grid.n();
         // INFO: engine consumers must never add kernel deps; `dowiz-kernel` is
         let flat_len: usize = basis.iter().map(|v| v.len()).sum();
-        FieldModal {
+        let mut fm = FieldModal {
             grid,
             basis,
             values,
             u: vec![0.0f64; n],
             energy_basis_flat: vec![0.0f64; flat_len.max(1)],
-        }
+        };
+        // Render ONCE at construction: the basis is immutable after this point
+        // (only `u` evolves), so the FE-07 flat buffer never changes. Rendering
+        // here (not per step) removes a per-frame O(k·n) alloc + copy from the
+        // step hot path.
+        fm.render_basis();
+        fm
     }
 
     /// Advance the field one modal step (P89 §3). Driven by the engine's
@@ -60,10 +66,11 @@ impl FieldModal {
         // GREEN: the engine consumes `modal_advance` (kernel eigen-math) to drive
         // `u`. No eigen-work is recomputed in the engine (P89 §12): the kernel
         // supplies `(basis, values)`; the engine only advances/renders.
+        // (The FE-07 flat basis buffer is rendered ONCE in `new()` — the basis
+        // is immutable, so re-rendering it per step was a pure per-frame
+        // O(k·n) alloc + copy with a bit-identical result.)
         let advanced = modal_advance(&self.basis, &self.values, &self.u, dt);
         self.u = advanced;
-        // Render the consumed basis into the flat eigen buffer (P89 §12).
-        self.render_basis();
     }
 
     /// Drive the modal advance explicitly (GREEN target). Returns the

@@ -113,14 +113,17 @@ fn agent_loop_service_boots_one_turn() {
     let addr = listener.local_addr().unwrap();
 
     // Serve exactly one connection on a background thread; capture the outcome.
-    let handle = std::thread::spawn(move || {
-        service::serve_one(&listener, &backend, &tool, granted)
-    });
+    let handle =
+        std::thread::spawn(move || service::serve_one(&listener, &backend, &tool, granted));
 
     // Give the accept loop a beat, then POST a scripted prompt with a wall budget.
     std::thread::sleep(Duration::from_millis(50));
     let start = Instant::now();
-    let resp_body = http_post(addr, "/agent", r#"{"prompt":"what is the status of ORD-42?"}"#);
+    let resp_body = http_post(
+        addr,
+        "/agent",
+        r#"{"prompt":"what is the status of ORD-42?"}"#,
+    );
     let elapsed = start.elapsed();
 
     // Bounded: one POST returns well within the wall-time budget (no hang).
@@ -140,7 +143,10 @@ fn agent_loop_service_boots_one_turn() {
     );
 
     // The service returned the same typed LoopOutcome (not a re-parse).
-    let outcome = handle.join().expect("service thread").expect("serve_one io");
+    let outcome = handle
+        .join()
+        .expect("service thread")
+        .expect("serve_one io");
     match outcome {
         LoopOutcome::Answer { text, .. } => assert!(text.contains("IN_DELIVERY")),
         other => panic!("expected Answer, got {other:?}"),
