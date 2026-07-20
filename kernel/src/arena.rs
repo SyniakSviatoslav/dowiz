@@ -63,10 +63,15 @@ impl BumpArena {
 
     /// Bump-allocate a zero-initialized slice of `len` elements of `T`.
     ///
-    /// Alignment: `offset` is rounded **up** to `align_of::<T>()` before the slice is placed,
-    /// so every returned slice is properly aligned regardless of prior allocations'
-    /// alignment. Returns `None` when the (fixed) region cannot satisfy the request —
-    /// degrade-closed, the caller falls back to a heap `Vec`.
+    /// Alignment: the actual pointer **address** (`buf.as_ptr() + offset`) is rounded **up**
+    /// to `align_of::<T>()` before the slice is placed — NOT the bare offset. The backing
+    /// store is a `Vec<u8>` whose base pointer is only guaranteed 1-aligned, so an aligned
+    /// *offset* does not imply an aligned *address*; rounding the address is what makes the
+    /// returned slice properly aligned regardless of the base pointer or prior allocations
+    /// (miri-gate finding, item 52: the offset-rounding version was UB —
+    /// `from_raw_parts_mut` with an unaligned `*mut T`). Returns `None` when the (fixed)
+    /// region cannot satisfy the request — degrade-closed, the caller falls back to a heap
+    /// `Vec`.
     ///
     /// # Soundness
     /// `T: Copy + Default` ⇒ no `Drop` obligations and a trivially-constructible value. The
@@ -74,13 +79,6 @@ impl BumpArena {
     /// from every other slice handed out by this arena.
     pub fn alloc_slice<T: Copy + Default>(&self, len: usize) -> Option<&mut [T]> {
         let alignment = std::mem::align_of::<T>();
-        let start = round_up(self.offset.get(), alignment);
-        let size = len
-            .checked_mul(std::mem::size_of::<T>())
-            .expect("BumpArena: element count overflows usize");
-        let end = start
-            .checked_add(size)
-            .expect("BumpArena: region size overflows usize");
 
         // SAFETY: `buf` is exclusively owned via `UnsafeCell`; `&self` proves no other
         // reference to the region is currently handed out that aliases `start..end`, because the
@@ -88,6 +86,24 @@ impl BumpArena {
         // every future allocation will live at a strictly higher one. `T: Copy + Default`
         // makes the transmuted region a well-formed value with no `Drop` hazard.
         let buf = unsafe { &mut *self.buf.get() };
+
+        // Align the ADDRESS, not the offset: `Vec<u8>`'s base pointer is only guaranteed
+        // 1-aligned, so `base + round_up(offset)` can still be misaligned for `T`. Round the
+        // absolute address up to `alignment` and convert back to an offset (UB caught by the
+        // item-52 miri row: unaligned `&mut [T]` out of `from_raw_parts_mut`).
+        let base_addr = buf.as_ptr() as usize;
+        let start = round_up(
+            base_addr
+                .checked_add(self.offset.get())
+                .expect("BumpArena: address computation overflows usize"),
+            alignment,
+        ) - base_addr;
+        let size = len
+            .checked_mul(std::mem::size_of::<T>())
+            .expect("BumpArena: element count overflows usize");
+        let end = start
+            .checked_add(size)
+            .expect("BumpArena: region size overflows usize");
         if end > buf.len() {
             return None; // degrade-closed: caller uses a heap Vec instead.
         }
