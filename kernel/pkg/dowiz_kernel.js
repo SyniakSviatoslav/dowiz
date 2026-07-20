@@ -1,3 +1,5 @@
+/* @ts-self-types="./dowiz_kernel.d.ts" */
+
 /**
  * Advance an order one step. `next_status` is the status name (e.g. "CONFIRMED").
  * Returns the updated order JSON, or a `JsValue` error string on an illegal
@@ -6,7 +8,7 @@
  * @param {string} next_status
  * @returns {string}
  */
-export function apply_event_js(order_json, next_status) {
+function apply_event_js(order_json, next_status) {
     let deferred4_0;
     let deferred4_1;
     try {
@@ -28,6 +30,7 @@ export function apply_event_js(order_json, next_status) {
         wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
 }
+exports.apply_event_js = apply_event_js;
 
 /**
  * Boot-time FSM drift gate (fail-closed) — mirrors [`crate::kernel_boot_verify_fsm`].
@@ -38,7 +41,7 @@ export function apply_event_js(order_json, next_status) {
  * to start the event bus. (Blueprint `spectral-graph-fsm` §4.)
  * @returns {string}
  */
-export function boot_verify_fsm_js() {
+function boot_verify_fsm_js() {
     let deferred2_0;
     let deferred2_1;
     try {
@@ -56,6 +59,7 @@ export function boot_verify_fsm_js() {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
+exports.boot_verify_fsm_js = boot_verify_fsm_js;
 
 /**
  * Ingest a batch of channel events and return aggregated attribution + anomaly
@@ -67,7 +71,7 @@ export function boot_verify_fsm_js() {
  * @param {string} events_json
  * @returns {string}
  */
-export function channel_ledger_js(events_json) {
+function channel_ledger_js(events_json) {
     let deferred3_0;
     let deferred3_1;
     try {
@@ -87,13 +91,14 @@ export function channel_ledger_js(events_json) {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
+exports.channel_ledger_js = channel_ledger_js;
 
 /**
  * @param {bigint} subtotal
  * @param {string} cfg_json
  * @returns {string}
  */
-export function estimate_order_total_js(subtotal, cfg_json) {
+function estimate_order_total_js(subtotal, cfg_json) {
     let deferred3_0;
     let deferred3_1;
     try {
@@ -113,11 +118,12 @@ export function estimate_order_total_js(subtotal, cfg_json) {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
+exports.estimate_order_total_js = estimate_order_total_js;
 
 /**
  * @returns {string}
  */
-export function fsm_graph_report_js() {
+function fsm_graph_report_js() {
     let deferred2_0;
     let deferred2_1;
     try {
@@ -135,6 +141,7 @@ export function fsm_graph_report_js() {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
+exports.fsm_graph_report_js = fsm_graph_report_js;
 
 /**
  * @param {number} a_lat
@@ -143,7 +150,7 @@ export function fsm_graph_report_js() {
  * @param {number} b_lng
  * @returns {string}
  */
-export function geo_bearing_js(a_lat, a_lng, b_lat, b_lng) {
+function geo_bearing_js(a_lat, a_lng, b_lat, b_lng) {
     let deferred2_0;
     let deferred2_1;
     try {
@@ -161,6 +168,7 @@ export function geo_bearing_js(a_lat, a_lng, b_lat, b_lng) {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
+exports.geo_bearing_js = geo_bearing_js;
 
 /**
  * @param {number} remaining_m
@@ -168,7 +176,7 @@ export function geo_bearing_js(a_lat, a_lng, b_lat, b_lng) {
  * @param {number} baseline_s
  * @returns {string}
  */
-export function geo_eta_js(remaining_m, total_m, baseline_s) {
+function geo_eta_js(remaining_m, total_m, baseline_s) {
     let deferred2_0;
     let deferred2_1;
     try {
@@ -186,6 +194,7 @@ export function geo_eta_js(remaining_m, total_m, baseline_s) {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
+exports.geo_eta_js = geo_eta_js;
 
 /**
  * @param {number} a_lat
@@ -194,7 +203,7 @@ export function geo_eta_js(remaining_m, total_m, baseline_s) {
  * @param {number} b_lng
  * @returns {string}
  */
-export function geo_haversine_js(a_lat, a_lng, b_lat, b_lng) {
+function geo_haversine_js(a_lat, a_lng, b_lat, b_lng) {
     let deferred2_0;
     let deferred2_1;
     try {
@@ -212,13 +221,14 @@ export function geo_haversine_js(a_lat, a_lng, b_lat, b_lng) {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
+exports.geo_haversine_js = geo_haversine_js;
 
 /**
  * @param {number} remaining_m
  * @param {number} threshold_m
  * @returns {string}
  */
-export function geo_is_arriving_js(remaining_m, threshold_m) {
+function geo_is_arriving_js(remaining_m, threshold_m) {
     let deferred2_0;
     let deferred2_1;
     try {
@@ -236,13 +246,14 @@ export function geo_is_arriving_js(remaining_m, threshold_m) {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
+exports.geo_is_arriving_js = geo_is_arriving_js;
 
 /**
  * @param {bigint} last_ts
  * @param {bigint} ts
  * @returns {string}
  */
-export function geo_is_out_of_order_js(last_ts, ts) {
+function geo_is_out_of_order_js(last_ts, ts) {
     let deferred2_0;
     let deferred2_1;
     try {
@@ -260,6 +271,7 @@ export function geo_is_out_of_order_js(last_ts, ts) {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
+exports.geo_is_out_of_order_js = geo_is_out_of_order_js;
 
 /**
  * @param {number} a_lat
@@ -269,7 +281,7 @@ export function geo_is_out_of_order_js(last_ts, ts) {
  * @param {number} t
  * @returns {string}
  */
-export function geo_lerp_js(a_lat, a_lng, b_lat, b_lng, t) {
+function geo_lerp_js(a_lat, a_lng, b_lat, b_lng, t) {
     let deferred2_0;
     let deferred2_1;
     try {
@@ -287,6 +299,7 @@ export function geo_lerp_js(a_lat, a_lng, b_lat, b_lng, t) {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
+exports.geo_lerp_js = geo_lerp_js;
 
 /**
  * @param {number} pt_lat
@@ -294,7 +307,7 @@ export function geo_lerp_js(a_lat, a_lng, b_lat, b_lng, t) {
  * @param {string} polygon_json
  * @returns {string}
  */
-export function geo_point_in_polygon_js(pt_lat, pt_lng, polygon_json) {
+function geo_point_in_polygon_js(pt_lat, pt_lng, polygon_json) {
     let deferred3_0;
     let deferred3_1;
     try {
@@ -314,6 +327,7 @@ export function geo_point_in_polygon_js(pt_lat, pt_lng, polygon_json) {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
+exports.geo_point_in_polygon_js = geo_point_in_polygon_js;
 
 /**
  * @param {string} poly_json
@@ -321,7 +335,7 @@ export function geo_point_in_polygon_js(pt_lat, pt_lng, polygon_json) {
  * @param {number} pos_lng
  * @returns {string}
  */
-export function geo_progress_flat_js(poly_json, pos_lat, pos_lng) {
+function geo_progress_flat_js(poly_json, pos_lat, pos_lng) {
     let deferred3_0;
     let deferred3_1;
     try {
@@ -341,6 +355,7 @@ export function geo_progress_flat_js(poly_json, pos_lat, pos_lng) {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
+exports.geo_progress_flat_js = geo_progress_flat_js;
 
 /**
  * @param {string} poly_json
@@ -348,7 +363,7 @@ export function geo_progress_flat_js(poly_json, pos_lat, pos_lng) {
  * @param {number} pos_lng
  * @returns {string}
  */
-export function geo_progress_js(poly_json, pos_lat, pos_lng) {
+function geo_progress_js(poly_json, pos_lat, pos_lng) {
     let deferred3_0;
     let deferred3_1;
     try {
@@ -368,6 +383,7 @@ export function geo_progress_js(poly_json, pos_lat, pos_lng) {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
+exports.geo_progress_js = geo_progress_js;
 
 /**
  * @param {string} prev_json
@@ -375,7 +391,7 @@ export function geo_progress_js(poly_json, pos_lat, pos_lng) {
  * @param {number} threshold_m
  * @returns {string}
  */
-export function geo_should_snap_js(prev_json, next_json, threshold_m) {
+function geo_should_snap_js(prev_json, next_json, threshold_m) {
     let deferred4_0;
     let deferred4_1;
     try {
@@ -397,6 +413,7 @@ export function geo_should_snap_js(prev_json, next_json, threshold_m) {
         wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
 }
+exports.geo_should_snap_js = geo_should_snap_js;
 
 /**
  * Harmonic centrality H(v)=Σ 1/d(u,v) for every node `0..n` of an undirected
@@ -408,7 +425,7 @@ export function geo_should_snap_js(prev_json, next_json, threshold_m) {
  * @param {string} edges_json
  * @returns {string}
  */
-export function harmonic_centrality_js(n, edges_json) {
+function harmonic_centrality_js(n, edges_json) {
     let deferred3_0;
     let deferred3_1;
     try {
@@ -428,6 +445,7 @@ export function harmonic_centrality_js(n, edges_json) {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
+exports.harmonic_centrality_js = harmonic_centrality_js;
 
 /**
  * Create a new `Pending` order from a JSON item list.
@@ -440,7 +458,7 @@ export function harmonic_centrality_js(n, edges_json) {
  * @param {string | null} [channel]
  * @returns {string}
  */
-export function place_order_js(customer_id, items_json, channel) {
+function place_order_js(customer_id, items_json, channel) {
     let deferred5_0;
     let deferred5_1;
     try {
@@ -464,6 +482,7 @@ export function place_order_js(customer_id, items_json, channel) {
         wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
 }
+exports.place_order_js = place_order_js;
 
 /**
  * Reduce a raw `(order_id, status, at_ms)` event stream to an anomaly count
@@ -472,7 +491,7 @@ export function place_order_js(customer_id, items_json, channel) {
  * @param {string} events_json
  * @returns {bigint}
  */
-export function reduce_anomalies_js(events_json) {
+function reduce_anomalies_js(events_json) {
     const ptr0 = passStringToWasm0(events_json, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
     const ret = wasm.reduce_anomalies_js(ptr0, len0);
@@ -481,13 +500,14 @@ export function reduce_anomalies_js(events_json) {
     }
     return BigInt.asUintN(64, ret[0]);
 }
+exports.reduce_anomalies_js = reduce_anomalies_js;
 
 /**
  * Algebraic connectivity (Fiedler λ₂) of a graph from its adjacency matrix.
  * @param {string} adjacency_json
  * @returns {string}
  */
-export function spectral_algebraic_connectivity_js(adjacency_json) {
+function spectral_algebraic_connectivity_js(adjacency_json) {
     let deferred3_0;
     let deferred3_1;
     try {
@@ -507,12 +527,13 @@ export function spectral_algebraic_connectivity_js(adjacency_json) {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
+exports.spectral_algebraic_connectivity_js = spectral_algebraic_connectivity_js;
 
 /**
  * @param {string} matrix_json
  * @returns {string}
  */
-export function spectral_classify_drift_js(matrix_json) {
+function spectral_classify_drift_js(matrix_json) {
     let deferred3_0;
     let deferred3_1;
     try {
@@ -532,12 +553,13 @@ export function spectral_classify_drift_js(matrix_json) {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
+exports.spectral_classify_drift_js = spectral_classify_drift_js;
 
 /**
  * @param {string} matrix_json
  * @returns {string}
  */
-export function spectral_eigenvalues_js(matrix_json) {
+function spectral_eigenvalues_js(matrix_json) {
     let deferred3_0;
     let deferred3_1;
     try {
@@ -557,12 +579,13 @@ export function spectral_eigenvalues_js(matrix_json) {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
+exports.spectral_eigenvalues_js = spectral_eigenvalues_js;
 
 /**
  * @param {string} matrix_json
  * @returns {string}
  */
-export function spectral_flat_js(matrix_json) {
+function spectral_flat_js(matrix_json) {
     let deferred3_0;
     let deferred3_1;
     try {
@@ -582,12 +605,13 @@ export function spectral_flat_js(matrix_json) {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
+exports.spectral_flat_js = spectral_flat_js;
 
 /**
  * @param {string} matrix_json
  * @returns {string}
  */
-export function spectral_gap_js(matrix_json) {
+function spectral_gap_js(matrix_json) {
     let deferred3_0;
     let deferred3_1;
     try {
@@ -607,12 +631,13 @@ export function spectral_gap_js(matrix_json) {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
+exports.spectral_gap_js = spectral_gap_js;
 
 /**
  * @param {string} matrix_json
  * @returns {string}
  */
-export function spectral_radius_js(matrix_json) {
+function spectral_radius_js(matrix_json) {
     let deferred3_0;
     let deferred3_1;
     try {
@@ -632,6 +657,7 @@ export function spectral_radius_js(matrix_json) {
         wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
     }
 }
+exports.spectral_radius_js = spectral_radius_js;
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
@@ -717,15 +743,7 @@ function takeFromExternrefTable0(idx) {
 
 let cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
 cachedTextDecoder.decode();
-const MAX_SAFARI_DECODE_BYTES = 2146435072;
-let numBytesDecoded = 0;
 function decodeText(ptr, len) {
-    numBytesDecoded += len;
-    if (numBytesDecoded >= MAX_SAFARI_DECODE_BYTES) {
-        cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
-        cachedTextDecoder.decode();
-        numBytesDecoded = len;
-    }
     return cachedTextDecoder.decode(getUint8ArrayMemory0().subarray(ptr, ptr + len));
 }
 
@@ -744,95 +762,9 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-let wasmModule, wasmInstance, wasm;
-function __wbg_finalize_init(instance, module) {
-    wasmInstance = instance;
-    wasm = instance.exports;
-    wasmModule = module;
-    cachedUint8ArrayMemory0 = null;
-    wasm.__wbindgen_start();
-    return wasm;
-}
-
-async function __wbg_load(module, imports) {
-    if (typeof Response === 'function' && module instanceof Response) {
-        if (typeof WebAssembly.instantiateStreaming === 'function') {
-            try {
-                return await WebAssembly.instantiateStreaming(module, imports);
-            } catch (e) {
-                const validResponse = module.ok && expectedResponseType(module.type);
-
-                if (validResponse && module.headers.get('Content-Type') !== 'application/wasm') {
-                    console.warn("`WebAssembly.instantiateStreaming` failed because your server does not serve Wasm with `application/wasm` MIME type. Falling back to `WebAssembly.instantiate` which is slower. Original error:\n", e);
-
-                } else { throw e; }
-            }
-        }
-
-        const bytes = await module.arrayBuffer();
-        return await WebAssembly.instantiate(bytes, imports);
-    } else {
-        const instance = await WebAssembly.instantiate(module, imports);
-
-        if (instance instanceof WebAssembly.Instance) {
-            return { instance, module };
-        } else {
-            return instance;
-        }
-    }
-
-    function expectedResponseType(type) {
-        switch (type) {
-            case 'basic': case 'cors': case 'default': return true;
-        }
-        return false;
-    }
-}
-
-function initSync(module) {
-    if (wasm !== undefined) return wasm;
-
-
-    if (module !== undefined) {
-        if (Object.getPrototypeOf(module) === Object.prototype) {
-            ({module} = module)
-        } else {
-            console.warn('using deprecated parameters for `initSync()`; pass a single object instead')
-        }
-    }
-
-    const imports = __wbg_get_imports();
-    if (!(module instanceof WebAssembly.Module)) {
-        module = new WebAssembly.Module(module);
-    }
-    const instance = new WebAssembly.Instance(module, imports);
-    return __wbg_finalize_init(instance, module);
-}
-
-async function __wbg_init(module_or_path) {
-    if (wasm !== undefined) return wasm;
-
-
-    if (module_or_path !== undefined) {
-        if (Object.getPrototypeOf(module_or_path) === Object.prototype) {
-            ({module_or_path} = module_or_path)
-        } else {
-            console.warn('using deprecated parameters for the initialization function; pass a single object instead')
-        }
-    }
-
-    if (module_or_path === undefined) {
-        module_or_path = new URL('dowiz_kernel_bg.wasm', import.meta.url);
-    }
-    const imports = __wbg_get_imports();
-
-    if (typeof module_or_path === 'string' || (typeof Request === 'function' && module_or_path instanceof Request) || (typeof URL === 'function' && module_or_path instanceof URL)) {
-        module_or_path = fetch(module_or_path);
-    }
-
-    const { instance, module } = await __wbg_load(await module_or_path, imports);
-
-    return __wbg_finalize_init(instance, module);
-}
-
-export { initSync, __wbg_init as default };
+const wasmPath = `${__dirname}/dowiz_kernel_bg.wasm`;
+const wasmBytes = require('fs').readFileSync(wasmPath);
+const wasmModule = new WebAssembly.Module(wasmBytes);
+let wasmInstance = new WebAssembly.Instance(wasmModule, __wbg_get_imports());
+let wasm = wasmInstance.exports;
+wasm.__wbindgen_start();
