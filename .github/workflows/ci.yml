@@ -511,6 +511,41 @@ jobs:
           fi
           bash scripts/hardening-gate.sh "$BASE" HEAD
 
+  # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
+  # ITEM 45 (space-grade roadmap §I): AI-optional as an enforced compile-time invariant.
+  # ALWAYS runs (no `paths:` filter, so it is safe as a required status check — a filtered
+  # workflow would deadlock non-AI PRs, §3.1). The gate (scripts/ai-optional-gate.sh) enforces
+  # the "whole system must run without AI" architectural invariant on TWO planes:
+  #   (A) BUILD plane — the default-features kernel build (AI absent) MUST compile AND pass the
+  #       FULL kernel test suite (re-execute, never presence-check — CHECKLIST §10-P7, same
+  #       discipline as zero-dep-gate / hardening-gate). The default build has the `inference`
+  #       feature OFF (items 33–44's deliverable, not yet landed), proving the canonical
+  #       order/money core is genuinely AI-free.
+  #   (B) DEPENDENCY-DIRECTION plane — the seven core decision modules (`order_machine`,
+  #       `decision/`, `hydra`, `event_log`, `markov`, `spectral`, `fdr`) must not reference the
+  #       reserved AI module path (`crate::inference`) outside `#[cfg(feature = "inference")]`.
+  #       AI depends on core; core NEVER depends on AI (the INTRA-kernel firewall — distinct
+  #       from the P40 inter-crate agent-loop firewall). The deterministic-math organs
+  #       (`attention`/`micrograd`/`online`) are explicitly excluded (non-AI per attention.rs:17–20).
+  #   (C) DEFAULT-GRAPH proof — `cargo tree -e no-dev` resolves AI-free (the arc lands with the
+  #       zero-dep allowlist still empty; same build-plane law as items 1+13/§H).
+  # Fail-closed (P7 anti-forgery): a planted `use crate::inference::…` in markov.rs turns the
+  # gate RED (both planes) before the gate counts as landed. Determinism (P6): every cargo call
+  # is --locked --offline; kernel/Cargo.lock hash asserted unchanged. No `inference` cargo
+  # feature is added by item 45 (over-design guard) — the law is recorded in §H's header and the
+  # blueprint. Design + red→green proof: docs/design/BLUEPRINT-ITEM-45-ai-optional-gate-2026-07-19.md.
+  ai-optional-gate:
+    name: ai-optional gate (item 45, AI-optional compile-time invariant)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Pre-fetch crates offline (default kernel graph)
+        run: cargo fetch --locked --manifest-path kernel/Cargo.toml
+      - name: Enforce the AI-optional compile-time invariant (build + dependency-direction + default-graph)
+        run: bash scripts/ai-optional-gate.sh kernel
+
   # ITEM 7 (space-grade roadmap §C / SYNTHESIS §7): the Kani bounded-model-checker gate.
   # SEPARATE job from hardening-gate (blueprint §6.1): Kani is a NETWORK-installed toolchain
   # (its own rustc + CBMC, `cargo install kani-verifier && cargo kani setup`) with minutes-scale
