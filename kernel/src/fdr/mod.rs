@@ -315,7 +315,71 @@ impl Default for FdrConfig {
 /// global subscriber). Never installed on `wasm32`.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn init(config: FdrConfig) -> Result<(), ()> {
-    sink::init(config)
+    let r = sink::init(config);
+    // Item 48 (closure a): install the panic hook on the FDR init path. Idempotent via the
+    // guard inside `install_panic_hook` (a second `init` is a no-op for the sink, so the
+    // hook is not re-chained). Harmless when no ring is configured (the Alarm append becomes
+    // a no-op — exactly like every other FDR emit).
+    install_panic_hook();
+    r
+}
+
+// ── Item 48: FDR blind-spot closure (panic forensics + liveness heartbeat) ──────────
+
+static PANIC_HOOK_INSTALLED: AtomicBool = AtomicBool::new(false);
+
+/// Item 48 (closure a): install a panic hook that emits ONE fsynced `Alarm` FDR record
+/// carrying the panic `message` + `location`, then CHAINS to any previous hook. Best-effort:
+/// errors are swallowed (like `emit_event`), so a panic-in-hook double-panic aborts — the OS
+/// retains whatever bytes reached the page cache. **NOT** a `#[panic_handler]` (this is a
+/// `std` kernel); uses `std::panic::set_hook`. Reuses the existing ring sink (which fsyncs
+/// `Alarm` at `ring.rs:134`), so closure (a) needs NO new durability code — just an emitter.
+/// Chains to the prior hook so a test harness's hook is not clobbered (blueprint §10
+/// DESIGN NOTE). Idempotent: a second call is a no-op (guards against `init` being invoked
+/// twice). Non-wasm only — matches the FDR write path (no sink is ever installed on wasm).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn install_panic_hook() {
+    if PANIC_HOOK_INSTALLED.swap(true, Ordering::Relaxed) {
+        return; // already installed.
+    }
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info: &std::panic::PanicInfo| {
+        // Build the forensic payload BEFORE touching the sink (keep the hook panic-safe /
+        // allocation-light). A re-panic here aborts — acceptable; the OS keeps the page-cache
+        // bytes from the first append attempt.
+        let message = match info.payload().downcast_ref::<&str>() {
+            Some(s) => (*s).to_string(),
+            None => match info.payload().downcast_ref::<String>() {
+                Some(s) => s.clone(),
+                None => "<non-string panic payload>".to_string(),
+            },
+        };
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "<unknown location>".to_string());
+        sink::emit_alarm(message, location);
+        // Chain to the previous hook (a harness-installed hook must not be clobbered).
+        prev(info);
+    }));
+}
+
+/// Item 48 (closure b): emit ONE `Heartbeat` FDR record carrying a monotonic `seq` + the
+/// caller-supplied `progress` counters. Cheap stamp policy (high-frequency; same rationale
+/// as `Event` at `mod.rs:375`). Emit-only — the EXTERNAL layer owns cadence + JUDGMENT
+/// (systemd `WatchdogSec` / `hub_supervisor`); the kernel NEVER runs a liveness timer and
+/// NEVER self-kills. No-op unless a ring sink is installed (matches every other FDR emit).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn emit_heartbeat(seq: u64, progress: &[(&'static str, String)]) {
+    sink::emit_heartbeat(seq, progress);
+}
+
+/// Item 48 (clean-shutdown interplay, blueprint §5 step 3): write the `CleanShutdown`
+/// marker so an external liveness check sees an orderly stop and raises NO false alarm.
+/// No-op when no ring sink is installed (matches every other FDR emit).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn clean_shutdown() {
+    sink::clean_shutdown();
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -446,6 +510,82 @@ mod sink {
             let _ = r.append(&ev);
         }
     }
+
+    /// Item 48 (closure a): emit ONE `Alarm`-kind FDR record carrying the panic `message`
+    /// + `location` into the ring sink. `Alarm` is fsynced by `FdrRing::append` (ring.rs:134)
+    /// so it is power-loss durable for free — the panic forensic evidence survives even a
+    /// crash before the process unwinds. Best-effort: errors are swallowed (like
+    /// `emit_event` at mod.rs:389-393), so a write failure never turns a panic into a
+    /// double-panic. No-op when no sink is installed (matches every other FDR emit).
+    pub fn emit_alarm(message: String, location: String) {
+        let s = match SINK.get() {
+            Some(s) => s,
+            None => return,
+        };
+        let seq = next_seq(s);
+        let ev = FdrEvent::stamp(
+            seq,
+            Level::Error,
+            Kind::Alarm,
+            "panic".to_string(),
+            StampPolicy::Full,
+            vec![
+                ("message", message),
+                ("location", location),
+            ],
+        );
+        if s.stderr {
+            let _ = writeln!(std::io::stderr(), "{}", ev.to_json());
+        }
+        if let Some(r) = &s.ring {
+            if let Ok(mut r) = r.lock() {
+                let _ = r.append(&ev); // Alarm ⇒ fsync inside append (ring.rs:134).
+            }
+        }
+    }
+
+    /// Item 48 (closure b): emit ONE `Heartbeat`-kind FDR record carrying a monotonic `seq`
+    /// + the caller-supplied `progress` counters. Cheap stamp policy (high-frequency; same
+    /// rationale as `Event`). The kernel provides ONLY the record + emit fn — cadence and
+    /// JUDGMENT live externally (systemd `WatchdogSec` / `hub_supervisor`). No-op when no
+    /// sink is installed (matches every other FDR emit).
+    pub fn emit_heartbeat(seq: u64, progress: &[(&'static str, String)]) {
+        let s = match SINK.get() {
+            Some(s) => s,
+            None => return,
+        };
+        let ev = FdrEvent::stamp(
+            seq,
+            Level::Info,
+            Kind::Heartbeat,
+            "heartbeat".to_string(),
+            StampPolicy::Cheap,
+            progress.to_vec(),
+        );
+        if s.stderr {
+            let _ = writeln!(std::io::stderr(), "{}", ev.to_json());
+        }
+        if let Some(r) = &s.ring {
+            if let Ok(mut r) = r.lock() {
+                let _ = r.append(&ev);
+            }
+        }
+    }
+
+    /// Item 48 (clean-shutdown interplay, blueprint §5 step 3): write the `CleanShutdown`
+    /// marker so an external liveness check sees an orderly stop and raises NO false alarm.
+    /// No-op when no ring sink is installed (matches every other FDR emit).
+    pub fn clean_shutdown() {
+        let s = match SINK.get() {
+            Some(s) => s,
+            None => return,
+        };
+        if let Some(r) = &s.ring {
+            if let Ok(mut r) = r.lock() {
+                let _ = r.clean_shutdown();
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -489,5 +629,39 @@ mod tests {
             let _s = SpanHandle::new("scoped_probe").entered();
         }
         assert_eq!(hits.load(Ordering::Relaxed), 1, "observer must see the span close");
+    }
+
+    // Item 48 (closure b): `emit_heartbeat` is a no-op when no FDR sink is installed (the
+    // `SINK.get()` early-return, matching every other emit). Guards the "zero cost, no crash"
+    // failure-mode in blueprint §6.
+    #[test]
+    fn emit_heartbeat_is_noop_without_sink() {
+        // No `fdr::init` → no sink. Must not panic and must not allocate the ring path.
+        emit_heartbeat(0, &[("tick", "0".to_string())]);
+    }
+
+    // Item 48 (closure a): the panic hook CHAINS to a prior hook rather than clobbering it
+    // (blueprint §10 DESIGN NOTE, §5 step 1). A harness-installed hook must still fire.
+    #[test]
+    fn panic_hook_chains_to_prior_hook() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static PRIOR_FIRED: AtomicBool = AtomicBool::new(false);
+        // Simulate a test harness's pre-existing hook.
+        std::panic::set_hook(Box::new(|_| {
+            PRIOR_FIRED.store(true, Ordering::SeqCst);
+        }));
+        // install_panic_hook takes+chains the prior hook, then sets its own.
+        install_panic_hook();
+        // Trigger a panic; BOTH the item-48 hook (emit, no sink → no-op) and the prior
+        // harness hook must run. We catch the abort via catch_unwind.
+        let _ = std::panic::catch_unwind(|| {
+            panic!("chained hook test");
+        });
+        assert!(
+            PRIOR_FIRED.load(Ordering::SeqCst),
+            "prior (harness) hook must still fire after install_panic_hook"
+        );
+        // Restore a default-ish hook (not strictly necessary; keeps test isolation sane).
+        let _ = std::panic::take_hook();
     }
 }

@@ -192,6 +192,13 @@ pub enum Kind {
     /// Written on orderly shutdown — its presence as the tail record marks a clean stop
     /// (its ABSENCE at recovery time ⇒ dirty stop ⇒ post-mortem, blueprint §4.4).
     CleanShutdown,
+    /// Item 48 (FDR blind-spot closure, closure b). Periodic liveness heartbeat emitted by
+    /// the HOST loop — the kernel provides ONLY the record type + emit fn (`emit_heartbeat`);
+    /// cadence and JUDGMENT live in the deployment layer (systemd `WatchdogSec` /
+    /// `hub_supervisor`). An external liveness check converts a *missed* heartbeat into the
+    /// already-survivable kill-9 crash class. Additive variant: every other record
+    /// serializes byte-identically (item-27 optional-field discipline).
+    Heartbeat,
 }
 
 impl Kind {
@@ -203,6 +210,7 @@ impl Kind {
             Kind::PostMortem => "post_mortem",
             Kind::Tuning => "tuning",
             Kind::CleanShutdown => "clean_shutdown",
+            Kind::Heartbeat => "heartbeat",
         }
     }
 }
@@ -340,5 +348,55 @@ mod tests {
         assert!(j.starts_with("{\"seq\":7,\"ts_unix_ns\":1,\"mono_ns\":2,"));
         assert!(j.contains("\"level\":\"info\",\"kind\":\"event\",\"name\":\"place_order\""));
         assert!(j.contains("\"fields\":{\"subtotal_cents\":\"500\"}"));
+    }
+
+    // Item 48 (closure b): the `Heartbeat` variant serializes to a byte-stable record and is
+    // additive — every non-heartbeat record is unaffected (the item-27 byte-identity proof
+    // is asserted separately in `fdr::mod` against an `Event` of identical shape).
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn heartbeat_record_serializes_with_heartbeat_kind_and_progress() {
+        let ev = FdrEvent {
+            seq: 3,
+            ts_unix_ns: 1,
+            mono_ns: 2,
+            level: Level::Info,
+            kind: Kind::Heartbeat,
+            name: "heartbeat".into(),
+            hw: HwStamp::sample(StampPolicy::Cheap),
+            pmu: None,
+            fields: vec![("tick", "3".into())],
+        };
+        let j = ev.to_json();
+        assert!(j.contains("\"kind\":\"heartbeat\""), "must serialize as heartbeat: {j}");
+        assert!(j.contains("\"name\":\"heartbeat\""), "name carries heartbeat: {j}");
+        assert!(j.contains("\"fields\":{\"tick\":\"3\"}"), "progress counters present: {j}");
+        // Stable, deterministic envelope order — the same shape an `Event` would take.
+        assert!(j.starts_with("{\"seq\":3,\"ts_unix_ns\":1,\"mono_ns\":2,"));
+    }
+
+    // Item 48 byte-identity (item 27): an `Event` record's JSON must be byte-identical to
+    // what it would have been before the `Heartbeat` variant was added. The `Kind` enum grew
+    // but `Kind::as_str(Kind::Event)` and the `to_json` field order are unchanged, so the
+    // serialized bytes are identical. We pin the exact string.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn event_byte_identity_preserved_after_heartbeat_variant_added() {
+        let ev = FdrEvent {
+            seq: 7,
+            ts_unix_ns: 1,
+            mono_ns: 2,
+            level: Level::Info,
+            kind: Kind::Event,
+            name: "place_order".into(),
+            hw: HwStamp::sample(StampPolicy::Cheap),
+            pmu: None,
+            fields: vec![("subtotal_cents", "500".into())],
+        };
+        // Captured golden string — MUST NOT change after the Heartbeat variant is added.
+        assert_eq!(
+            ev.to_json(),
+            "{\"seq\":7,\"ts_unix_ns\":1,\"mono_ns\":2,\"level\":\"info\",\"kind\":\"event\",\"name\":\"place_order\",\"hw\":{\"cpu_ticks\":{\"unavailable\":\"sampling_disabled\"},\"rss_kb\":{\"unavailable\":\"sampling_disabled\"},\"joules_uj\":{\"unavailable\":\"sampling_disabled\"}},\"fields\":{\"subtotal_cents\":\"500\"}}"
+        );
     }
 }
