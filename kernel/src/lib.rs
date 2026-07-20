@@ -138,6 +138,12 @@ pub mod leak_gate;
 /// `mesh.rs` header for the KAT-gated crypto rationale).
 #[cfg(feature = "pq")]
 pub mod mesh;
+/// Item 5 — MESH-07 parity: native, zero-dep pull anti-entropy + Merkle
+/// digest reconciliation over `event_log`'s `EventStore`/`MeshEvent`. Design
+/// reference only (not a dependency) on bebop2's `proto-wire/sync_pull.rs`
+/// per the 2026-07-19 zero-dep mesh ruling — see module header for the split
+/// with `crate::mesh`'s signing and `mesh-adapter`'s transport anti-scope.
+pub mod mesh_replication;
 /// P08 typed local-observability core — the pure-std, no-network, no-signing
 /// HALF: typed-metrics schema + closed `LogEvent` enum (§2/§3) and the
 /// claim-latency anomaly detector (§4). F40 ML-DSA signed envelope DEFERRED

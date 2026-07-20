@@ -208,6 +208,15 @@ pub trait EventStore {
     fn tip(&self) -> Option<[u8; 32]>;
     /// Advance the chain tip to `id`.
     fn set_tip(&mut self, id: [u8; 32]);
+    /// All persisted content-ids (item 26/replication: the enumeration a
+    /// Merkle digest or a pull/ingest reconciliation walks). Default is empty
+    /// — a store that cannot enumerate degrades closed (never fabricates a
+    /// member it cannot prove it holds) rather than erroring; callers that
+    /// need real enumeration use an override like [`MemEventStore`]'s or
+    /// [`crate::hydra::FileEventStore`]'s.
+    fn ids(&self) -> Vec<[u8; 32]> {
+        Vec::new()
+    }
 }
 
 /// In-memory [`EventStore`] — the offline pgrust stand-in (see module `innovate:`).
@@ -251,6 +260,9 @@ impl EventStore for MemEventStore {
     }
     fn set_tip(&mut self, id: [u8; 32]) {
         self.tip = Some(id);
+    }
+    fn ids(&self) -> Vec<[u8; 32]> {
+        self.by_id.iter().copied().collect()
     }
 }
 
