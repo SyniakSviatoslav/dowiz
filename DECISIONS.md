@@ -327,4 +327,84 @@ document's own stated recommendation (lower-stakes implementation detail, not es
 
 - **FLAG for override:** recorded under the same operator-ruling authority as D8/D10/D11/D12/D13.
   The operator MAY override, narrow, or reverse any item here at any time; these are recorded
+
+---
+
+## D14. Operator decision-ratification batch (2026-07-20)
+
+Source of truth for the consolidated queue in `docs/design/OPERATOR-DECISION-REGISTRY-2026-07-20.md`.
+Ratified by operator in one pass. RED-LINE items (C1–C5, OD-3, OD-7, OD-8) carry a *high-level*
+ruling here; each concrete code change STILL gets per-change confirmation before commit (autonomy gate).
+
+### Tier A — Launch decisions (gate first real order M1)
+- **C1 — Ordering surface: STOREFRONT + custom app.** Build the web storefront (P69) AND a custom
+  app client; Telegram-first is NOT the primary channel. (Diverges from the synthesis's Telegram-first
+  suggestion — operator chose storefront+custom app.)
+- **C2 — Roster/provider/currency → DEPLOY CONFIG.** Move trusted-anchor roster, payment provider,
+  and currency out of compile time into deployment configuration; add a real enrollment path so a
+  production server does not boot rejecting every request.
+- **C3 — Durability spine (default accepted):** wired persistence + versioned format + off-node
+  encrypted snapshot reserved. `Mutex<HashMap>` is not launch-grade.
+- **C4 — Payment rail: cash-on-delivery AND Stripe.** Real `StripeAdapter` (vendor=Stripe, geography
+  operator-set, fee model = Stripe's) for card; cash-on-delivery as a pilot path. Red-line: provider
+  wiring per-change-confirmed.
+- **C5 — Courier delivery client: YES.** Ship a minimal installable courier `[[bin]]` for the pilot.
+
+### Tier B — P75–P96 wave
+- **OD-1 (GCRA swap): KEEP DEFAULT — not shipped.** Mutex+clock-hoist stands.
+- **OD-2 (contention bench push): KEEP DEFAULT — stays local.**
+- **OD-3 (bebop C3 ungated-keygen): RESOLVE.** Operator rules to resolve the ungated-keygen red
+  state (do not leave the bus patch as a frozen file). Concretely: the bebop C3 freeze is lifted by
+  this ruling; the bus patch may be applied as landed-work, not re-implemented. (bebop-side action.)
+- **OD-4 (push unpushed main + slot_arena): PUSH.** Push the local main line above origin/main
+  (incl. P57–P74, `a857cd71a` slot_arena) AND the slot_arena commit. Action: verify main green, then
+  push. NOT yet executed this pass — green-verification gate must pass first (no fake-green).
+- **OD-5 (P91.0 false-FIPS header): FIX.** Remove the false FIPS-203 claim from `kem.rs` header
+  (comment-only, ahead of P91.1). Red-line: per-change-confirmed.
+- **OD-6 (P85 closure): RETROACTIVE SIGN-OFF.** Close P85 via recorded retroactive sign-off (the
+  `--no-verify` NTT gate remediation is accepted with a recorded rationale), not a fresh 3-model review.
+- **OD-7 (D-1 golden digest gate): YES — propose P84.** Register P84 (golden state-digest regression
+  gate). Red-line (money/FSM). Per-change-confirmed.
+- **OD-8 (D-2 reputation.rs): DELETE.** Remove `reputation.rs` (courier-scoring red-line divergence).
+  Red-line. Per-change-confirmed.
+- **OD-9 (pq_kem NTT wire-in): WIRE.** Triple-gate now satisfiable (OD-6 retroactive sign-off + OD-3
+  resolved + P82 bench required first). Wire after P82 bench evidence lands.
+- **OD-10 (PPR determinism relaxation): RELAX.** Standing default REJECTED is reversed — relax PPR
+  determinism (operator ruling; recorded so it is a deliberate decision, not silent adoption).
+- **OD-11 (GPU field-state): START.** Begin P86/P87 build (P38 §4.2 GPU decision taken).
+- **OD-12 (D-93-A privacy): RECORD BOTH.** Blueprint records both plaintext ReceiverID and blinded
+  tag options; no default taken.
+- **OD-13 (D-93-C broadcast): PER-RECIPIENT SIGNED COPIES.** Not wildcard-sentinel defer.
+- **OD-14 (P92 proceed): AGREE.** Run D-BENCH measure-first gate; arrange mandatory independent
+  adversarial review for M1 + fast-path; NO-GO if bench doesn't clear.
+- **OD-15 (restore 11 research docs): AGREE.** Restore+commit the 11 recovered `docs/research/` files
+  from the scratchpad `recovered/` dir.
+
+### Tier C — Sovereign-architecture O-series
+- **O1 (D5/D8 / D-series renumber): ACCEPT DEFAULT** (BLUEPRINT-P02 diff).
+- **O3 (F44 dispute/escrow): STAKED SCHELLING VOTING.** (Not a courier-scoring mechanism — distinct
+  from M12; a staked, game-theoretic arbiter for dispute/escrow only.)
+- **O4 (F48 merge semantics): AGREE** (content-address-only for money/order; CRDT fenced out of those,
+  open for knowledge-wiki).
+- **O5 (D2/iroh): USE EXISTING IF iroh MISSING.** Canon claims iroh exists; it does not — amend canon
+  to "quinn primary + named unlock trigger" until iroh actually lands.
+- **O7 (E1/F41 hub-ring): NO-SPOF (consistent-hash).** Ratify the consistent-hash reading; literal
+  star-hub is rejected (contradicts M7).
+- **O9 (V1-B verifier isolation): DELEGATED TO ENGINEER.** (fresh worktree vs machine vs model family —
+  operator defers the call to the implementing engineer's judgment.)
+- **O19 (I-FINAL proof home): DOWIZ tools/eqc.** The proof lives in dowiz `tools/eqc`, not bebop.
+- **O18a (graphics-unlock): AGREE** — stays external/environment-gated.
+- **O18b (model-weights-unlock): GO.** Approve llama.cpp CPU-tier GGUF fetch + local server (GREEN on
+  host); requires a DECART report + this go, not an external trigger.
+- **O8 (F10 sub-hub recursion depth): DELEGATED TO ENGINEER** (numeric value).
+
+### Tier D — parked red-line (operator: "fix, save the decisions")
+- **D-money (money-leg settlement scope): DECIDED — bounded-scope pilot.** Settlement leg is scoped to
+  the single-hub pilot surface only (no cross-hub auto-settlement in v1); the red-line money surface
+  stays deny-by-default. Concrete adapter per-change-confirmed.
+- **D-fuel (Wasmtime fuel policy): DECIDED — fuel IS the gas, kept enforce-on.** Wasmtime fuel metering
+  remains the enforced compute-cap (no relaxation); document the per-call fuel budget as config.
+- **D-batch (53× event-log batching): DECIDED — batch the 53× hot path.** Event-log batching of the
+  53× path is approved where determinism permits (per-event commit retained for saga-critical legs);
+  batching gate is DoD-tested.
   rulings, not locks.
