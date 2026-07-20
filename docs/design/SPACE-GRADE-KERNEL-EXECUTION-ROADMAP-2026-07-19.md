@@ -334,6 +334,16 @@ test coverage.
   (allocation is noise). **PMU unavailable** (`perf_event_paranoid=4`, no `perf`) — wall-clock +
   `strace -c` fallback, no fabricated counters. No batching code landed (scope law held).
   Scaffolding (bench + `#[ignore]` probe) on `exec/space-grade-tier0-2026-07-19`.
+  **UPDATE 2026-07-20 — M1 opt-in group-commit code now LANDED** (`85022e49d`, `main`):
+  `FileEventStore::with_batch_size(n)` / `flush_pending()` / `DurabilityCounters::pending_unsynced`.
+  Default `batch_size = 1` is byte-for-byte the pre-existing per-event `sync_all` cadence — the
+  ~53× win only applies when a caller explicitly opts in, and `n > 1` is a documented
+  acknowledged-before-durable tradeoff (up to n−1 events lost on crash before their batch syncs),
+  never silent (panics if set after a write is already pending). Also folds in the fd-reuse half
+  this doc separately called "contract-neutral" — the handle is now cached lazily across inserts
+  instead of reopened per event. 4 new tests + the existing 21 hydra tests green (25/25); 1046/1046
+  kernel lib. No caller has opted in yet (still `batch_size = 1` everywhere in this repo) — this is
+  the mechanism landing, not a default-behavior change.
 - **Item 27 (classifier-input half)** — ✅ **DONE** (`03887462a`, branch
   `exec/space-grade-tier0-2026-07-19`). PMU counters now ride alongside every `Verdict`/`DriftClass`
   emission as an FDR companion, WITHOUT touching either classifier. New `kernel/src/fdr/pmu.rs`:
@@ -1505,3 +1515,37 @@ consumes 56; 78 enriched by 70/71 but not gated on them). §L consumes §K's mac
 64/65, 67/68, 70/71) and item 47/50's grammar; it gates nothing outside itself. The AI that
 proposes remains behind item 45's `inference` gate and item 65's capability boundary at all
 times — §L grants a governed PROPOSAL channel, never authority.
+
+## M. Cross-mesh data replication — MESH-07 parity (landed 2026-07-20, out-of-band of §A–L's
+numbering; tracked here so it is not lost)
+
+Not one of the original 78 items — this was raised by
+[`DOWIZ-STRATEGIC-REGRET-MINIMIZATION-SYNTHESIS-2026-07-20.md`](DOWIZ-STRATEGIC-REGRET-MINIMIZATION-SYNTHESIS-2026-07-20.md)
+§5 ("decide the durability spine... replication reserved") and §3.G ("full cross-mesh backup —
+a single-node pilot with an off-node encrypted snapshot is an acceptable interim"). The operator
+overrode the synthesis's own suggested deferral: **"Build real replication now"** — explicitly
+rejecting the interim single-node option (which is what
+[`BLUEPRINT-P68-hub-supervisor-update-backup.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P68-hub-supervisor-update-backup.md)
+already specs: one hub, one client-side-encrypted blob, one offsite bucket — explicitly
+node-local, never over mesh transport).
+
+**✅ DONE 2026-07-20** (`307c3ead5`, `main`) — `kernel/src/mesh_replication.rs`: native, zero-dep
+reimplementation of bebop2's MESH-07 (`proto-wire/src/sync_pull.rs` — design reference only, per
+§0's zero-dep mesh ruling, not a linked dependency). `MerkleLog` (sorted-leaf pair-hash digest),
+`PullRequest`/`pull`/`ingest` (per-actor-watermark anti-entropy pull, G-Set CvRDT merge over
+content-addressed ids), `reconcile()` (one full pull+ingest round). `EventStore` gained `ids()`
+(default empty — degrades closed), overridden for `MemEventStore` and `hydra::FileEventStore`.
+11 tests prove the MESH-07 RED-test criterion verbatim — two nodes diverge offline, reconnect,
+pull, land on an identical folded event set — for both the in-memory store and disk-backed
+`FileEventStore`, independent of which side initiates first. 1057/1057 kernel lib tests green.
+
+**What this is not (deliberately):** transport (how bytes actually move node-to-node) and
+signature verification are explicitly out of scope, matching `mesh-adapter/src/lib.rs`'s own
+anti-scope ("no transport, no storage") and `event_log::EventLog`'s own doc ("the network layer
+never re-runs decide — it only verifies signatures"). This is the pure, synchronous,
+`std`-only reconciliation ALGORITHM — proven correct against any two `EventStore`s, in-process
+here, over a real socket/QUIC transport later (a separate port, consistent with this crate's
+existing ports/adapters split; async I/O has no place in the kernel's deterministic core per
+MANIFESTO C2). Wiring a live transport, and layering `crate::mesh`'s ML-DSA-65 signing on top
+of ingested events before they reach `ingest()`, remain open follow-on work — not claimed done
+here.
