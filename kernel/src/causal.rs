@@ -1387,6 +1387,9 @@ pub fn sample_backdoor(n: usize, seed: u64) -> Samples {
     for r in 0..n {
         let z = rng.sample_categorical(&p_z);
         let z_marg = p_z[z];
+        // `[x * 2 + z]` written symmetrically for x = 0, 1 to document the x-major
+        // layout of `p_xz`; clippy sees `0 * 2` as an erasing op, but it is deliberate.
+        #[allow(clippy::erasing_op, clippy::identity_op)]
         let px_given_z = [p_xz[0 * 2 + z] / z_marg, p_xz[1 * 2 + z] / z_marg];
         let x = rng.sample_categorical(&px_given_z);
         let p_y1 = p_y_xz[x * 2 + z];
@@ -2173,10 +2176,13 @@ mod tests {
                 let p_xz_xz = p_xz[x * n_z + z]; // P(X=x,Z=z)
                 let base = x + z * n_x; // stride_x=1, stride_z=n_x
                 let stride_y = n_x * n_z;
-                // Y=0
-                j[base + 0 * stride_y] = (1.0 - p_y1) * p_xz_xz;
-                // Y=1
-                j[base + 1 * stride_y] = p_y1 * p_xz_xz;
+                // Y=0 / Y=1 planes — symmetric `y * stride_y` form kept deliberately
+                // (clippy reads `0 * stride_y` as an erasing op).
+                #[allow(clippy::erasing_op, clippy::identity_op)]
+                {
+                    j[base + 0 * stride_y] = (1.0 - p_y1) * p_xz_xz;
+                    j[base + 1 * stride_y] = p_y1 * p_xz_xz;
+                }
             }
         }
         j
@@ -2234,8 +2240,12 @@ mod tests {
                 let p = |y: usize| if y == 1 { p_y1 } else { 1.0 - p_y1 };
                 let base = x + m * n_x;
                 let stride_y = n_x * n_m;
-                j[base + 0 * stride_y] = pmx[x * n_m + m] * p(0) * px[x];
-                j[base + 1 * stride_y] = pmx[x * n_m + m] * p(1) * px[x];
+                // Symmetric `y * stride_y` planes — deliberate (see backdoor joint above).
+                #[allow(clippy::erasing_op, clippy::identity_op)]
+                {
+                    j[base + 0 * stride_y] = pmx[x * n_m + m] * p(0) * px[x];
+                    j[base + 1 * stride_y] = pmx[x * n_m + m] * p(1) * px[x];
+                }
             }
         }
         let joint = Joint::new(cards, j).unwrap();
@@ -2282,6 +2292,8 @@ mod tests {
             let z = rng.sample_categorical(&p_z);
             // Draw X from P(X|Z) = P(X,Z)/P(Z).
             let z_marg = p_z[z];
+            // Symmetric `[x * 2 + z]` indexing — deliberate (see `sample_backdoor`).
+            #[allow(clippy::erasing_op, clippy::identity_op)]
             let px_given_z = [p_xz[0 * 2 + z] / z_marg, p_xz[1 * 2 + z] / z_marg];
             let x = rng.sample_categorical(&px_given_z);
             // Draw Y from P(Y=1|X,Z).

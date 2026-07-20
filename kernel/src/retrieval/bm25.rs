@@ -566,6 +566,9 @@ mod tests {
     /// Closed-form BM25 single-term contribution for a 1-doc corpus (df=1,
     /// dl=f, avgdl=f) with k1=1.5, b=0 — isolates pure tf saturation without
     /// length normalization interfering. idf with N=1,n_t=1 → ln(1+0.5/1.5)=ln(1.333).
+    // `1.0 - 1.0` spells out `N - n_t` for the N=1, n_t=1 corpus (clippy::eq_op
+    // fires on the folded constants, but the didactic form is the point).
+    #[allow(clippy::eq_op)]
     fn score_at_tf(f: u32) -> f64 {
         let k1 = 1.5;
         let idf = (((1.0f64 - 1.0) + 0.5) / (1.0 + 0.5) + 1.0).ln();
