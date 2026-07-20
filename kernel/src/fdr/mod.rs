@@ -52,6 +52,18 @@ pub mod schema;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ring;
 
+/// Handle type for the optional durable FDR ring mirror used by callers (`breaker`,
+/// `inference::golden`) that want an `Option<Mutex<RingHandle>>` / `Option<&mut RingHandle>`
+/// field or parameter regardless of target. Real `ring::FdrRing` off wasm32; on wasm32
+/// (no real filesystem — `ring` is never compiled there, see the `ring` module doc) this is
+/// an uninhabited stand-in — an empty enum has no values, so nothing on wasm32 can ever
+/// construct one, meaning any `Option<RingHandle>` is provably always `None` there. This
+/// keeps caller struct/fn signatures identical across targets instead of forking them.
+#[cfg(not(target_arch = "wasm32"))]
+pub type RingHandle = ring::FdrRing;
+#[cfg(target_arch = "wasm32")]
+pub enum RingHandle {}
+
 // ── CRC32 (IEEE 802.3, reflected) — hand-rolled, table-on-first-use ──────────────────
 // ALWAYS COMPILED (NOT wasm-gated). Item 54's live-struct Sentinel runs on the kernel
 // decision plane that compiles to wasm32 (CLAUDE.md: "kernel … compiles to WASM"), so the

@@ -88,7 +88,7 @@ pub struct AuditChain {
     events: Vec<AuditEvent>,
     tip_hash: [u8; 32],
     /// Optional durable FDR ring mirror (Tier-1). `None` ⇒ audit-only in memory.
-    ring: Option<std::sync::Mutex<crate::fdr::ring::FdrRing>>,
+    ring: Option<std::sync::Mutex<crate::fdr::RingHandle>>,
     agent_id: [u8; 16],
 }
 
@@ -96,7 +96,7 @@ impl AuditChain {
     /// Create a fresh chain (genesis tip_hash = zero).
     pub fn new(
         agent_id: [u8; 16],
-        ring: Option<std::sync::Mutex<crate::fdr::ring::FdrRing>>,
+        ring: Option<std::sync::Mutex<crate::fdr::RingHandle>>,
     ) -> Self {
         AuditChain {
             events: Vec::new(),
@@ -145,6 +145,10 @@ impl AuditChain {
             self_hash,
         };
 
+        // `RingHandle`/`FdrEvent::stamp` are both native-only (see `fdr::RingHandle` doc);
+        // `self.ring` is provably always `None` on wasm32 since nothing there can
+        // construct a `RingHandle` value.
+        #[cfg(not(target_arch = "wasm32"))]
         if let Some(ring) = &self.ring {
             // Mirror as a Kind::Alarm FDR record (the breaker's trips are alarms).
             let fdr_ev = crate::fdr::schema::FdrEvent::stamp(

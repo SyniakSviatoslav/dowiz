@@ -276,8 +276,11 @@ pub mod evals;
 pub mod field_eigenmodes;
 /// Living-knowledge retrieval — ADAPTER to the (separately-branched) JS engine.
 /// serde-dependent (JSON bridge protocol) → gated behind `wasm` to keep the
-/// native rlib build serde-free. Not part of the order/money core.
-#[cfg(feature = "wasm")]
+/// native rlib build serde-free. Not part of the order/money core. ALSO excluded on
+/// `wasm32` itself (`not(target_arch = "wasm32")`): the adapter spawns a real OS
+/// subprocess (`std::process::Command`/`wait4`), which is not a wasm capability — the
+/// module's own doc already calls this "unreachable... on wasm32"; this makes that true.
+#[cfg(all(feature = "wasm", not(target_arch = "wasm32")))]
 pub mod living_knowledge;
 #[cfg(feature = "wasm")]
 pub mod loops;
