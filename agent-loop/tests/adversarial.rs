@@ -357,8 +357,16 @@ fn firewall_no_direct_kernel_dependency() {
         !stdout.contains("dowiz-kernel"),
         "agent-loop must NOT directly depend on dowiz-kernel (firewall breach):\n{stdout}"
     );
+    // Integration tests run with cwd = the crate root (agent-loop/), so the
+    // source dir is `src/`, NOT `agent-loop/src/` — the old path silently
+    // grepped a nonexistent directory and passed vacuously (RED-proven
+    // 2026-07-20 by planting a `dowiz_kernel` token that the old leg missed).
+    assert!(
+        std::path::Path::new("src").is_dir(),
+        "firewall grep leg must run from the crate root (src/ not found)"
+    );
     let grep = std::process::Command::new("sh")
-        .args(["-c", "grep -rn 'dowiz_kernel' agent-loop/src/ || true"])
+        .args(["-c", "grep -rn 'dowiz_kernel' src/ || true"])
         .output()
         .unwrap();
     let gstdout = String::from_utf8_lossy(&grep.stdout);
