@@ -115,6 +115,12 @@ pub mod kalman;
 /// Compiled ONLY under `cfg(kani)` — zero footprint in every normal build.
 #[cfg(kani)]
 mod kani_selftest;
+/// Item 52 (space-grade roadmap §J): planted-fault self-test for the `miri-gate`.
+/// Compiled under `cfg(test)` (so a plain `cargo test` proves it compiles and runs
+/// the no-op native branch — zero footprint in any non-test/shipping build) AND
+/// under `cfg(miri)` (where the planted-UB branch executes and Miri must flag it).
+#[cfg(any(test, miri))]
+mod miri_selftest;
 pub mod landing;
 /// §3.3 Layer-B (semantic) leakage gate — cosine-0.9 near-duplicate rejection over an injected
 /// `&dyn LlmBackend` embedding model. Native, zero-dep; the live bridge lives in `llm-adapters`.
