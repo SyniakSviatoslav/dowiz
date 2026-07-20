@@ -1211,7 +1211,7 @@ One-line ledger:
 **Absorbs:** S5
 **Status:** PLANNED (zero hits repo-wide — genuinely not started)
 **Role & responsibility:** Machine-checked proofs for the invariants the repo already treats as red-lines: money-integer arithmetic, tax organs, fold determinism. Converts "VERIFIED-BY-MATH" from a discipline into an artifact.
-**Blueprint:** none — needs one before build. First deliverable IS the blueprint (candidate-invariant inventory + tool choice kani-vs-z3 with a falsifiable comparison per the tech-selection rule).
+**Blueprint:** none — needs one before build. First deliverable IS the blueprint (candidate-invariant inventory + tool choice kani-vs-z3 with a falsifiable comparison per the tech-selection rule). **Adjacent-but-not-a-substitute (checked 2026-07-20):** `kernel/src/kani_selftest.rs` + space-grade item 7 (`BLUEPRINT-ITEM-07-kani-wiring-2026-07-19.md`) already wired real Kani proofs — but for Keccak/FSM-graph/NTT-arithmetic/GCRA specifically, NOT for this item's named targets (money-integer arithmetic, tax organs). Do not assume item 7 already covers P31d — the candidate-invariant inventory this item still needs is a different list; item 7 is prior art on tooling choice, not a completed superset.
 **DoD:**
 1. A blueprint doc exists naming ≥5 candidate invariants ranked by (red-line severity × proof cheapness), with tool selection justified by an honest comparison, not appeal to authority.
 2. At least one proof harness lands and runs in CI (e.g. kani proof that `apply_tax_exclusive_int`/`apply_tax_inclusive_int` never overflow/never go negative for the documented input domain).
@@ -1539,9 +1539,18 @@ One-line ledger:
 
 ##### P42 — MCP port + agent-as-capability boundary
 **Absorbs:** IP-08 (MCP-server + agent-as-capability port — 0% built, no code found under this name)
-**Status:** PLANNED
+**Status:** PARTIAL — this line is stale (written 2026-07-16, before the blueprint pass); corrected
+2026-07-20. A real blueprint exists (`CORE-ROADMAP-2026-07-17/BLUEPRINT-P42-mcp-agent-skills.md`,
+2026-07-18) AND real code landed the same day it was written — `kernel/src/ports/mcp.rs` (488
+lines) + `kernel/src/ports/tool.rs` (383 lines), commits `575a75a20`/`09b2c7edd`, per that
+blueprint's own status-correction header. Design-vs-implementation reconciliation not re-done here.
 **Role & responsibility:** Give P40's tools a standard exterior: the agent calls tools via MCP, and each tool is a capability-scoped port — never a direct kernel import. This mirrors PROTOCOL's KernelFacade compilation-firewall pattern on the AGENT side: the same architectural move, applied to tool-calls. Deliberately lighter than P40/P41 — it is follow-on work that standardizes a pattern only after P40/P41 have proven it on one tool.
-**Blueprint:** no existing blueprint, first design pass needed here. Reference-adjacent code exists — `agent-adapters/mcp.rs` — but it serves PROTOCOL's mesh `AgentBridge` (foreign-agent admission), not this port; study its conventions, do not repurpose it or couple to it.
+**Blueprint:** `CORE-ROADMAP-2026-07-17/BLUEPRINT-P42-mcp-agent-skills.md` (2026-07-18 — the "no
+existing blueprint" claim below is the ORIGINAL 2026-07-16 text, kept for provenance but now
+stale; see the Status correction above). Reference-adjacent code exists — `agent-adapters/mcp.rs`
+— but it serves PROTOCOL's mesh `AgentBridge` (foreign-agent admission), not this port; study its
+conventions, do not repurpose it or couple to it. *(Original 2026-07-16 text: "no existing
+blueprint, first design pass needed here.")*
 **DoD:**
 1. P40's read-order-status tool is additionally callable through an MCP server endpoint, same behavior, one test.
 2. Capability scoping is enforced fail-closed: a tool invocation outside the granted capability scope is refused with a typed error, proven by one negative test.
@@ -1959,7 +1968,10 @@ absorbing units: P04's landed in-kernel router (`kernel/src/router.rs` — Dijks
 concern), P04's never-landed `route_js` wasm line (0 grep hits in `wasm/src/lib.rs`, verified
 2026-07-18), P49's DoD-4 tracking-view supply side, and the gaussian-splatting arc's Stage-1
 pin-drop (supplied, not re-litigated).
-**Status:** PLANNED
+**Status:** PLANNED (blueprint ON DISK — this §12 text predates the blueprint pass and never got
+the link back; fixed 2026-07-20).
+**Blueprint:** `CORE-ROADMAP-2026-07-17/BLUEPRINT-P51-open-map-routing.md` (also cited correctly
+in the §10.2 P31–P56 summary table — only this detailed section was missing the link).
 **Role & responsibility:** Operator directive (2026-07-18, verbatim intent): OpenStreetMap
 with pin-drop + route tracking, or better a physics-render of the route/map from satellite
 data — hard constraints non-paid, non-vendor-lock-in. The blueprint's cited 2026 research
@@ -2041,7 +2053,10 @@ executed by nobody: P38b is customer-facing by its own §10.5.3 text), the MVP a
 candidates, max)`'s `candidates` has no producer; grep for shift/on_duty/availability across
 delivery-domain + proto-cap: zero hits, re-verified 2026-07-18), and M10 (the P48-DoD-4 ↔
 P23-P2 courier-invite handoff seam, "implied by both DoDs and named by neither").
-**Status:** PLANNED
+**Status:** PLANNED (blueprint ON DISK — this §13 text predates the blueprint pass and never got
+the link back; fixed 2026-07-20; see also `ROADMAP.md` §15.4 G1 for the P52-vs-P71 disposition).
+**Blueprint:** `CORE-ROADMAP-2026-07-17/BLUEPRINT-P52-courier-working-surface.md` (also cited
+correctly in the §10.2 P31–P56 summary table — only this detailed section was missing the link).
 **Role & responsibility:** The courier's own working surface — the third leg of the one
 physics-render pattern (customer = P38b Sea & Sheet, owner = P48 hub, courier = P52), on the
 SAME P38a substrate under the P48 rendering ruling (WebGPU, no DOM exemption) — for the actor
@@ -2121,7 +2136,10 @@ activated. Otherwise genuinely new; it extends seams rather than absorbing units
 `build_router`/headers-middleware extension point (`tools/native-spa-server/src/lib.rs:93-106`,
 verified live 2026-07-18), the `deploy/` operator-run systemd tier (pgrust precedent), and
 P52 K6's QR handoff (shared encoder).
-**Status:** PLANNED
+**Status:** PLANNED (blueprint ON DISK — this §14 text predates the blueprint pass and never got
+the link back; fixed 2026-07-20).
+**Blueprint:** `CORE-ROADMAP-2026-07-17/BLUEPRINT-P53-tor-onion-integration.md` (also cited
+correctly in the §10.2 P31–P56 summary table — only this detailed section was missing the link).
 **Role & responsibility:** Operator directive (2026-07-18, verbatim): "можливість tor, onion
 інтеграції і взаємодії — зручної" — a CONVENIENT Tor/onion access tier, standard privacy
 networking (the BBC/ProPublica/SecureDrop pattern: clients reach the hub without exposing
