@@ -27,4 +27,5 @@
 
 pub mod fixed;
 pub mod oracle;
+pub mod spec;
 pub mod workspace;
