@@ -162,6 +162,22 @@ impl KnowledgeSpine {
         record
     }
 
+    /// Reconstruct a spine from a previously-persisted, ordered record list
+    /// (e.g. loaded from disk by a caller like `bin/spine_snapshot.rs`) and
+    /// verify it BEFORE accepting — fail-closed: a tampered, reordered, or
+    /// corrupt record list is refused, never silently loaded as if it were
+    /// trustworthy. This is the load-side half of tamper evidence: `append`
+    /// proves a chain built THIS run is internally consistent; `from_persisted`
+    /// is what proves a chain read back from disk on a LATER run still is.
+    pub fn from_persisted(records: Vec<SpineRecord>) -> Result<Self, ()> {
+        let spine = Self { records };
+        if spine.verify_chain() {
+            Ok(spine)
+        } else {
+            Err(())
+        }
+    }
+
     /// Borrow the full ordered chain.
     pub fn records(&self) -> &[SpineRecord] {
         &self.records
@@ -320,5 +336,46 @@ mod tests {
             assert_eq!(RecordKind::from_discriminant(k.discriminant()), Some(k));
         }
         assert_eq!(RecordKind::from_discriminant(9), None);
+    }
+
+    #[test]
+    fn from_persisted_accepts_a_valid_round_tripped_chain() {
+        // RED->GREEN: build a chain, "persist" it (clone the record Vec —
+        // stands in for a real save-to-disk round trip), reload via
+        // from_persisted, and confirm it's accepted and content-identical.
+        let mut spine = KnowledgeSpine::new();
+        spine.append(pending("doc-1", RecordKind::Memory, b"design doc snapshot"));
+        spine.append(pending("doc-2", RecordKind::Memory, b"second doc snapshot"));
+        let persisted: Vec<SpineRecord> = spine.records().to_vec();
+
+        let reloaded = KnowledgeSpine::from_persisted(persisted).expect("valid chain must load");
+        assert_eq!(reloaded.len(), 2);
+        assert!(reloaded.verify_chain());
+        assert_eq!(reloaded.get(0).unwrap().id, "doc-1");
+        assert_eq!(reloaded.get(1).unwrap().id, "doc-2");
+    }
+
+    #[test]
+    fn from_persisted_refuses_a_tampered_chain() {
+        // RED->GREEN: this is the actual tamper-evidence-across-restarts proof —
+        // corrupt one persisted record's payload_hash (simulating an edited-
+        // on-disk chain file) and confirm the loader refuses it outright,
+        // rather than silently accepting a broken chain.
+        let mut spine = KnowledgeSpine::new();
+        spine.append(pending("doc-1", RecordKind::Memory, b"design doc snapshot"));
+        spine.append(pending("doc-2", RecordKind::Memory, b"second doc snapshot"));
+        let mut persisted: Vec<SpineRecord> = spine.records().to_vec();
+        persisted[0].payload_hash[0] ^= 0xFF; // simulate a tampered/corrupted file
+
+        assert!(
+            KnowledgeSpine::from_persisted(persisted).is_err(),
+            "a tampered persisted chain must be refused, not silently loaded"
+        );
+    }
+
+    #[test]
+    fn from_persisted_accepts_empty_vec() {
+        let reloaded = KnowledgeSpine::from_persisted(Vec::new()).expect("empty chain is valid");
+        assert!(reloaded.is_empty());
     }
 }
