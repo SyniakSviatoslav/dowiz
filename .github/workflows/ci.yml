@@ -552,3 +552,38 @@ jobs:
           cargo kani --version
       - name: Run the kani-gate (mode=kani manifest rows + planted-fault self-test)
         run: bash scripts/kani-gate.sh
+
+  # ### SCOPE RULE BANNER (verbatim — see cargo-test job header above)
+  # ITEM 53 (space-grade roadmap §J / BLUEPRINT-ITEM-53-lint-gate-2026-07-19.md): the
+  # clippy + rustfmt contribution gate ("lint-gate"). Per-crate only — there is NO
+  # workspace in dowiz (CLAUDE.md "Build model — CRITICAL"), so the gate `cd`s into
+  # each crate dir and runs `cargo fmt --check` + `cargo clippy --all-targets --
+  # --deny warnings` there. It NEVER invokes cargo at the repo root (the documented
+  # false-green trap: with no workspace, a root cargo call pulls the wrong target graph
+  # and can mask failures as exit-0). The crate roster is listed EXPLICITLY in
+  # scripts/lint-gate.sh (mirrors scripts/zero-dep-crates.txt + the same two exclusions:
+  # agent-governance-wasm absolute-path bebop2 dep, and mesh-adapter dual-checkout dep).
+  # rustfmt + clippy are already pinned in rust-toolchain.toml:7 — no install step.
+  # Design + RED-path demonstration: BLUEPRINT-ITEM-53 §4/§5.
+  #
+  # ADVISORY until required (item 53 §3.5, inherits item 14): this job is advisory until
+  # marked a required status check in branch protection (server-side, G5-owed). A merged
+  # workflow alone does NOT enforce it.
+  #
+  # ESCALATION TRIGGER (item 53 §7.1): the moment the operator authorizes public-flip
+  # *preparation* (ADR-0020's gate), item 53 jumps the queue to a pre-flip BLOCKER.
+  # Until that trigger fires, LOW is the grounded priority.
+  #
+  # miri-required (item 53 §3.4): promoting item-52's `miri-gate` to a required status
+  # check is a SERVER-SIDE branch-protection setting, NOT a workflow edit — a workflow
+  # file cannot mark itself required. This job is item 53's only workflow contribution;
+  # the "required" half is the same owed G5 step §7.2 names.
+  lint-gate:
+    name: lint gate (clippy + fmt per crate, item 53)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pin toolchain (rustfmt + clippy already in rust-toolchain.toml components)
+        run: rustup show   # no install: components are pinned by the repo toolchain file
+      - name: Run the lint-gate (per-crate fmt --check + clippy --deny warnings)
+        run: bash scripts/lint-gate.sh
