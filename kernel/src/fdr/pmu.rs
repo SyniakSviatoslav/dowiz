@@ -674,4 +674,44 @@ mod tests {
             )),
         }
     }
+
+    #[test]
+    fn drift_class_lane_bracket_preserves_verdict_and_records_pmu_delta() {
+        // Blueprint §4.3 — DriftClass lane: bracket a REAL `classify_drift` call the same
+        // way a verdict-emission point would. The `DriftClass` verdict must be EXACTLY what
+        // the pure function returns (bracketing must not change it — the classifier stays
+        // byte-identical pure), and the PMU delta records a real, monotone rdtsc advance
+        // across the window. This exercises the DriftClass emission path that the existing
+        // Verdict-lane tests do not cover, proving the companion-record design works for
+        // both classifiers.
+        use crate::spectral::{classify_drift, DriftClass};
+        // A well-formed operator with spectral radius < 1 ⇒ Damped (fail-closed guards pass).
+        let op: Vec<Vec<f64>> = vec![vec![0.5, 0.0], vec![0.0, 0.3]];
+        let station = PmuStation::new();
+        let (drift, delta) = station.bracket(|| classify_drift(&op));
+        // Purity: identical to the un-bracketed call.
+        assert_eq!(drift, classify_drift(&op));
+        assert_eq!(drift, DriftClass::Damped);
+        // The window's rdtsc delta is a real (nonzero, on any real classification) count.
+        assert!(
+            matches!(delta.tsc_cycles, Reading::Value(v) if v > 0),
+            "drift-lane bracket must record a real tsc delta: {:?}",
+            delta.tsc_cycles
+        );
+        // The Tier-B delta is a Value on this privileged host (perf_event_open bypasses
+        // paranoid under CAP_PERFMON) or a named absence on a gated host — either is correct.
+        // If it is a Value, it must be hardware-plausible (>0 instructions retired doing the
+        // classification), never a fabricated 0.
+        match delta.hw_instructions {
+            Reading::Value(v) => {
+                assert!(
+                    v > 0,
+                    "drift-lane bracketed instruction delta must be > 0 if readable: {v}"
+                );
+            }
+            Reading::Unavailable(a) => {
+                assert!(matches!(a, Absence::PermissionDenied | Absence::NoPmuInterface))
+            }
+        }
+    }
 }
