@@ -110,7 +110,11 @@ pub fn classify(input: &[i8; N]) -> usize {
 /// Is `x` within the bounded synthetic domain `D = [Q_MIN, Q_MAX]^N`?
 #[inline]
 pub fn is_in_domain(x: &[i8; N]) -> bool {
-    x.iter().all(|&v| v >= Q_MIN && v <= Q_MAX)
+    // `Q_MAX == i8::MAX`, so the upper bound is vacuous today — but the range form
+    // (same as the weight check below) keeps the domain definition `D = [Q_MIN, Q_MAX]^N`
+    // load-bearing if the item-35 bounds ever tighten. `Q_MIN == -127` genuinely
+    // excludes the `-128` code (restricted-symmetric).
+    x.iter().all(|&v| (Q_MIN..=Q_MAX).contains(&v))
 }
 
 /// Total weight-bytes for the embedded-weight pipeline (item 41) — KB-scale proof.
@@ -201,13 +205,9 @@ mod tests {
             let mut x = [0i8; N];
             for v in x.iter_mut() {
                 let r = (rng >> 3) as i8;
-                *v = if r > Q_MAX {
-                    Q_MAX
-                } else if r < Q_MIN {
-                    Q_MIN
-                } else {
-                    r
-                };
+                // Clamp into D. Only the lower bound is live today (`Q_MAX == i8::MAX`),
+                // but `clamp` keeps the domain definition explicit.
+                *v = r.clamp(Q_MIN, Q_MAX);
                 rng = rng
                     .wrapping_mul(6364136223846793005)
                     .wrapping_add(1442695040888963407);

@@ -77,6 +77,11 @@ impl BumpArena {
     /// `T: Copy + Default` ⇒ no `Drop` obligations and a trivially-constructible value. The
     /// returned `&mut [T]` borrows `&self`, and the monotone `offset` guarantees disjointness
     /// from every other slice handed out by this arena.
+    // `&self -> &mut [T]` is the point of a bump arena (interior mutability via
+    // `UnsafeCell`; disjointness argued in the Soundness section above, alignment
+    // UB covered by the item-52 miri row) — the same shape every arena crate
+    // (e.g. bumpalo) allows this lint for.
+    #[allow(clippy::mut_from_ref)]
     pub fn alloc_slice<T: Copy + Default>(&self, len: usize) -> Option<&mut [T]> {
         let alignment = std::mem::align_of::<T>();
 
@@ -192,9 +197,10 @@ mod tests {
         let a = BumpArena::with_capacity(1024);
         let s: &mut [f64] = a.alloc_slice(4).expect("fits");
         assert_eq!(s, &[0.0, 0.0, 0.0, 0.0]);
-        // Mutating the loan is visible.
-        s[1] = 3.14;
-        assert_eq!(s[1], 3.14);
+        // Mutating the loan is visible. (2.5, not 3.14 — clippy::approx_constant
+        // reads 3.14 as a sloppy π; any value works, this one is exact in f64.)
+        s[1] = 2.5;
+        assert_eq!(s[1], 2.5);
     }
 
     #[test]
