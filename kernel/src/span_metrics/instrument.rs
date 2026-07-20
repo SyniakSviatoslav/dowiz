@@ -80,10 +80,23 @@ pub fn verify_chain<V: crate::ports::agent::SignatureVerifier>(
     crate::ports::agent::cap::verify_chain(verifier, roster, chain, cap, now)
 }
 
-/// Wrapper: `pq::dsa::verify` (ML-DSA-65 signature verify) — behind `pq` only. This is the
-/// SINGLE surviving `mldsa_verify` wrapper (the duplicate `mldsa.rs` was deleted in the
-/// items-4+29 cutover).
-#[cfg(all(feature = "telemetry", feature = "pq"))]
+/// Wrapper: `pq::dsa::verify` (ML-DSA-65 signature verify).
+///
+/// Item 61 (blueprint §3(d), resolution (i)): this wrapper previously carried a
+/// `#[cfg(all(feature = "telemetry", feature = "pq"))]` double-gate, so a `pq`-only
+/// production build (crypto ON, telemetry OFF) emitted ZERO crypto-latency telemetry —
+/// a silent dark zone on the signature-verify path (gap G8). Fix: compile under `pq`
+/// ALONE (the span handle is zero-cost to construct; `info_span!` takes no clock and
+/// never allocates). The ring-record *emission* stays behind the cheap runtime
+/// `SINK_ACTIVE` load (`fdr::emit_span_close` early-returns when no sink is installed),
+/// so a `pq`-only build still pays only that one relaxed atomic load — closing the dark
+/// zone with near-zero cost.
+///
+/// The span brackets the whole verify and does NOT branch on the verify result mid-call
+/// (it forwards 1:1 to `pq::dsa::verify`), so it adds no timing side-channel (item 61
+/// §4.2 / §7 accepted risk). This is the SINGLE surviving `mldsa_verify` wrapper (the
+/// duplicate `mldsa.rs` was deleted in the items-4+29 cutover).
+#[cfg(feature = "pq")]
 pub fn mldsa_verify(
     pk: &crate::pq::dsa::MlDsa65Pk,
     msg: &[u8],

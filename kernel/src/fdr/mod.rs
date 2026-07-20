@@ -338,6 +338,36 @@ pub fn emit_verdict_pmu(name: &'static str, verdict: &str, pmu: pmu::PmuStamp) {
     sink::emit_verdict(name, verdict, pmu);
 }
 
+/// Emit a subprocess-reap record to the FDR ring (item 61, gap G6). Carries the REAL
+/// measured wall duration + `wait4` rusage — never a fabricated 0. The record is P3-plane
+/// telemetry (named `subprocess_bridge`); it is recoverable from the FDR ring after the
+/// call (the red→green oracle reads it back). No-op unless a ring sink is installed.
+///
+/// NOTE (blueprint ambiguity resolution): the blueprint asks this to emit an item-58
+/// `(work: FdrRecordsAppended …⊕ SignaturesVerified)` workload-kind pair. Item 58's
+/// `WorkloadKind`/`Work`/`work`-field FDR schema is NOT present in this worktree (grep
+/// confirmed), so item 61 cannot write it without forging the schema. Instead we emit the
+/// same recoverable, greppable `subprocess_bridge` ring record under item 61's own name,
+/// ledger-named absent via a `gap:` row in `HOT-PATHS.tsv` (item 57's zero-un-named-blind-
+/// spots law). When item 58 lands, this becomes a `WorkloadKind::…` `SpanClose` pair — the
+/// fields below are exactly the raw-`u64` pair the schema wants.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn emit_subprocess_record(
+    cmd: &str,
+    success: bool,
+    wall_us: u64,
+    utime_us: Option<u64>,
+    stime_us: Option<u64>,
+    maxrss_kb: Option<u64>,
+) {
+    #[cfg(not(target_arch = "wasm32"))]
+    sink::emit_subprocess_record(cmd, success, wall_us, utime_us, stime_us, maxrss_kb);
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (cmd, success, wall_us, utime_us, stime_us, maxrss_kb);
+    }
+}
+
 // ── Sink + init (non-wasm) ──────────────────────────────────────────────────────────
 
 /// Configuration for [`init`].
@@ -540,6 +570,60 @@ mod sink {
             if let Ok(mut r) = r.lock() {
                 let _ = r.append(&ev);
             }
+        }
+    }
+
+    /// Item 61 (gap G6): emit a `subprocess_bridge` FDR record carrying the REAL measured
+    /// wall duration + `wait4` rusage (user/sys time, maxrss). The rusage fields are
+    /// `Option<u64>` so a non-Linux/non-x86_64 host emits a *named* absence (the field key
+    /// is present with `null`), never a fabricated `0`. The record is P3-plane telemetry and
+    /// lives on the FDR ring (recoverable by the item-61 oracle). No-op unless a ring sink
+    /// is installed.
+    pub fn emit_subprocess_record(
+        cmd: &str,
+        success: bool,
+        wall_us: u64,
+        utime_us: Option<u64>,
+        stime_us: Option<u64>,
+        maxrss_kb: Option<u64>,
+    ) {
+        let s = match SINK.get() {
+            Some(s) => s,
+            None => return,
+        };
+        let r = match &s.ring {
+            Some(r) => r,
+            None => return, // no ring ⇒ no durable record (skip silently).
+        };
+        let seq = next_seq(s);
+        // Subprocess reaps are low-frequency, so a FULL hw stamp (ring/event-style).
+        let mut fields: Vec<(&'static str, String)> = vec![
+            ("cmd", cmd.to_string()),
+            ("success", success.to_string()),
+            ("wall_us", wall_us.to_string()),
+            (
+                "utime_us",
+                utime_us.map(|v| v.to_string()).unwrap_or_else(|| "null".into()),
+            ),
+            (
+                "stime_us",
+                stime_us.map(|v| v.to_string()).unwrap_or_else(|| "null".into()),
+            ),
+            (
+                "maxrss_kb",
+                maxrss_kb.map(|v| v.to_string()).unwrap_or_else(|| "null".into()),
+            ),
+        ];
+        let ev = FdrEvent::stamp(
+            seq,
+            Level::Info,
+            Kind::SpanClose,
+            "subprocess_bridge".to_string(),
+            StampPolicy::Full,
+            fields.drain(..).collect(),
+        );
+        if let Ok(mut r) = r.lock() {
+            let _ = r.append(&ev);
         }
     }
 
