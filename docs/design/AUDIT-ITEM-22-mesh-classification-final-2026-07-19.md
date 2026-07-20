@@ -21,12 +21,12 @@ blueprint). Result: all confirmed.
 | Blueprint claim | Independent check | Result |
 |---|---|---|
 | `mesh.rs` is 387 lines | `wc -l kernel/src/mesh.rs` → 387 | ✅ CONFIRMED |
-| Registered at `lib.rs:137`, gated at `lib.rs:136` | Read `lib.rs:136-137`: `#[cfg(feature = "pq")]` / `pub mod mesh;` | ✅ CONFIRMED |
+| Registered at `lib.rs:152`, gated at `lib.rs:151` | Read `lib.rs:151-152`: `#[cfg(feature = "pq")]` / `pub mod mesh;` (doc comment block `lib.rs:146-150`) | ✅ CONFIRMED (line numbers refreshed to live `HEAD` — file grew since the blueprint was written; verdicts unchanged) |
 | `pq` is NOT a default feature | Read `Cargo.toml:15` `default = ["std"]`; `pq` defined `Cargo.toml:56` | ✅ CONFIRMED — a default build does not compile this module |
 | Real crypto: ML-DSA-65 + SHA3-256, no new crypto | `mesh.rs:27` `use crate::event_log::sha3_256;` · `mesh.rs:28` `use crate::pq::dsa::{keygen, sign, verify, …}` | ✅ CONFIRMED — reuses the KAT-gated FIPS-204 primitive |
 | 5 in-module red/green tests | `mesh.rs:280-386`: `valid_chain_is_accepted`, `tampered_payload_is_rejected`, `broken_prev_link_is_rejected`, `hub_transport_impl_supplied_by_test`, `genesis_must_be_root` | ✅ CONFIRMED (5 tests present in source; not re-executed — see §5 note) |
 | Whole-repo grep `dowiz_kernel::mesh` hits only the bench | `grep -rn "dowiz_kernel::mesh\|kernel::mesh\|crate::mesh" --include="*.rs" .` → **single hit** `kernel/benches/mesh_verify.rs:9` | ✅ CONFIRMED |
-| Zero prod callers for `SignedEntry`/`MeshError`/`HubTransport` | per-symbol grep excluding `mesh.rs` → only doc mentions at `lib.rs:132` | ✅ CONFIRMED |
+| Zero prod callers for `SignedEntry`/`MeshError`/`HubTransport` | per-symbol grep excluding `mesh.rs` → only doc mentions at `lib.rs:146-150` (the `pub mod mesh;` declaration is `lib.rs:152`) | ✅ CONFIRMED (line numbers refreshed to live `HEAD`) |
 | `MeshLog`/`MlDsaSigner`/`Signer` appear ONLY in the bench | per-symbol grep → only `kernel/benches/mesh_verify.rs` | ✅ CONFIRMED |
 | No `kernel/tests/` test exercises mesh | `ls kernel/tests/ \| grep -i mesh` → empty | ✅ CONFIRMED (see §2 — the `verify_chain_wire.rs` false-positive was ruled out) |
 | No protocol layer (sync/consensus/capability) in dowiz | no `proto-wire`/`proto-cap`/`mesh-node` dirs in-repo | ✅ CONFIRMED (`mesh-adapter` exists but is NOT that — see §4) |
