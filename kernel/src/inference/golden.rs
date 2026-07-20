@@ -36,7 +36,7 @@
 //! stated so the mechanism is not over-claimed as full runtime integrity.
 
 use crate::fdr::crc32;
-use crate::fdr::ring;
+use crate::fdr::RingHandle;
 use crate::inference::oracle::{oracle_matmul_i8, oracle_requantize, oracle_relu_i32};
 use crate::inference::spec::{B1, B2, SCALE1, SCALE2, W1, W2};
 use crate::inference::workspace::{C, H, N};
@@ -189,8 +189,12 @@ fn compute_goldens() -> ([u32; 4], [u32; 4], [u32; 4]) {
 /// never reaches this fn — is silent). The test/standalone path also writes the SAME typed
 /// Alarm record directly to an owned ring so the entry is recoverable/verifiable without
 /// racing the process-global `OnceLock` sink.
-fn fault(layer: Layer, ring: Option<&mut ring::FdrRing>) -> Result<(), ChecksumFault> {
+fn fault(layer: Layer, ring: Option<&mut RingHandle>) -> Result<(), ChecksumFault> {
     crate::fdr::emit_alarm("checksum_fault", &format!("layer={}", layer.as_str()));
+    // `RingHandle`/`FdrEvent::stamp` are both native-only (no filesystem, no clock on
+    // wasm32 — see `fdr::RingHandle`/`FdrEvent::stamp` docs); `ring` is provably always
+    // `None` on wasm32 since nothing there can construct a `RingHandle` value.
+    #[cfg(not(target_arch = "wasm32"))]
     if let Some(r) = ring {
         let ev = crate::fdr::schema::FdrEvent::stamp(
             0,
@@ -203,6 +207,8 @@ fn fault(layer: Layer, ring: Option<&mut ring::FdrRing>) -> Result<(), ChecksumF
         let _ = r.append(&ev);
         let _ = r.sync();
     }
+    #[cfg(target_arch = "wasm32")]
+    let _ = ring;
     Err(ChecksumFault { layer })
 }
 
@@ -215,7 +221,7 @@ fn check_vector(
     input: &[i8; N],
     hidden_override: Option<&[i8; H]>,
     wk: &Weights,
-    ring: Option<&mut ring::FdrRing>,
+    ring: Option<&mut RingHandle>,
 ) -> Result<(), ChecksumFault> {
     let out = compute_layers(input, hidden_override, wk);
     // First-mismatch ordering: L1 → Hidden → Logits. Any mismatch is a fault.
@@ -237,7 +243,7 @@ fn check_vector(
 fn self_check_core(
     wk: &Weights,
     activation_override: Option<&[i8; H]>,
-    ring: &mut Option<ring::FdrRing>,
+    ring: &mut Option<RingHandle>,
 ) -> Result<(), ChecksumFault> {
     for (idx, v) in PINNED_VECTORS.iter().enumerate() {
         let ov = if idx == 0 { activation_override } else { None };
@@ -273,7 +279,7 @@ pub fn self_check_all_with_activation_fault(hidden_override: &[i8; H]) -> Result
 /// the same binary). The production path is [`self_check_all`] (global sink); this exists so
 /// the planted-fault proofs can assert the FDR entry deterministically.
 pub fn self_check_all_into_ring(
-    ring: ring::FdrRing,
+    ring: RingHandle,
     wk: &Weights,
     activation_override: Option<&[i8; H]>,
 ) -> Result<(), ChecksumFault> {

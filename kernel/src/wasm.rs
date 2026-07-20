@@ -47,8 +47,9 @@ use wasm_bindgen::prelude::*;
 use crate::analytics::{reduce_anomalies, ChannelEvent, ChannelLedger};
 use crate::domain::{apply_event, place_order, Order, OrderItem};
 use crate::harmonic::harmonic_centrality;
-use crate::money::{estimate_order_total, FeeConfig, OrderTotalConfig};
+use crate::money::{estimate_order_total, Currency, FeeConfig, OrderTotalConfig};
 use crate::order_machine::{fsm_graph_report, OrderStatus, TransitionError};
+use crate::vendor::VendorId;
 use crate::spectral::{
     algebraic_connectivity, classify_drift, eigenvalues, spectral_gap, spectral_radius, DriftClass,
 };
@@ -131,6 +132,33 @@ struct LedgerOut {
 // `json-api` feature) so the wasm JS surface AND the native HTTP adapter share
 // ONE JSON authority. The wrappers below (`place_order_js` / `apply_event_js`)
 // now call `crate::json_api::*` directly. Do NOT re-inline order logic here.
+//
+// `item_to_domain`/`item_from_domain` stayed local (restored here — the "MOVED
+// verbatim" refactor dropped these two without leaving a working reference,
+// breaking every `--features wasm` build since; see `json_api.rs`'s copy,
+// which these mirror field-for-field): `wasm.rs`'s own `ItemInput`/`ItemOut`
+// wire structs are nominally distinct types from `json_api`'s, so importing
+// the `json_api` functions directly does not type-check against them.
+
+fn item_to_domain(i: ItemInput) -> OrderItem {
+    OrderItem {
+        product_id: i.product_id,
+        modifier_ids: i.modifier_ids,
+        quantity: i.quantity,
+        unit_price: i.unit_price,
+        vendor_id: VendorId(0),
+        currency: Currency::All,
+    }
+}
+
+fn item_from_domain(i: &OrderItem) -> ItemOut {
+    ItemOut {
+        product_id: i.product_id.clone(),
+        modifier_ids: i.modifier_ids.clone(),
+        quantity: i.quantity,
+        unit_price: i.unit_price,
+    }
+}
 
 fn order_from_in(o: OrderIn) -> Result<Order, String> {
     let status = OrderStatus::from_str(&o.status)
