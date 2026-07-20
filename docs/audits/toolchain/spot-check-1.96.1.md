@@ -37,6 +37,7 @@ at audit time — none had moved):
 | Keccak-f[1600] (copy B, until item 25 dedup) | `kernel/src/event_log.rs` (`fn keccak_f`, ~L67) | hand-rolled permutation |
 | x25519 scalar-mult ladder | `kernel/src/pq/x25519.rs` | **delegated** to `curve25519-dalek` |
 | hybrid combine / confirm-tag compare | `kernel/src/pq/hybrid.rs` | hand-rolled `combine()` + tag check |
+| ML-DSA-65 gossip signature-compare (mesh) | `kernel/src/mesh.rs` (`SignedEntry::sig_eq_ct`, item 24) | branch-free `ct_eq` over the carried signature on the gossip-admission path |
 
 ### Source-level constant-time findings (real, performed)
 
@@ -67,6 +68,15 @@ at audit time — none had moved):
   `MontgomeryPoint(u).mul_clamped(k)` from `curve25519-dalek`, an externally-audited constant-time
   implementation. The constant-time property here is inherited from a vetted dependency, not
   hand-rolled; the compiler bump does not change which crate is linked.
+- **`mesh.rs` — gossip signature-compare is branch-free (item 24, new).** `SignedEntry::sig_eq_ct`
+  (mesh.rs, item-24 hardening sweep) compares a received signature against the on-record signature
+  using the kernel's reusable `ct_eq` (`ct_gate.rs`) — a branch-free XOR-accumulate over the full
+  fixed-length signature with no early exit, exactly the constant-time primitive the dudect gate
+  already proved GREEN for the FO-tag-compare precedent. The production verifier `verify_sig` itself
+  reuses the KAT-gated `pq::dsa::verify` (no new crypto, item 22). ✅ at source level; the
+  `mesh_dudect::mesh_sig_compare_dudect` self-test (run in release by `hardening-gate.sh` step E)
+  confirms `ct_eq` keeps |t| well under the dudect cutoff and that a planted variable-time comparator
+  is rejected with |t| ≥ 4.5.
 
 ### Assembly-level check actually run (partial)
 
