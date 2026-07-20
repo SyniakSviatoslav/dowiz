@@ -884,7 +884,6 @@ mod tests {
     #[cfg(feature = "telemetry")]
     #[test]
     fn telemetry_observer_records_emitted_span_close() {
-        use crate::fdr::SpanObserver;
         use crate::span_metrics::obs::SpanMetricsObserver;
         let dir = std::env::temp_dir().join(format!("p83_emitspan_{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
