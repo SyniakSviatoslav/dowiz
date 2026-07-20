@@ -340,6 +340,16 @@ pub mod verify_retrieval;
 /// wasm.rs); native rlib builds exclude it and pull no wasm-bindgen/serde.
 #[cfg(feature = "wasm")]
 pub mod wasm;
+/// BLUEPRINT-ITEM-28 — optical/pixel archival compression. Feature-gated (`optical`)
+/// so the canonical order/money core stays pure-`std` and dependency-free. The
+/// `OpticalCompressed` type is structurally prevented from reaching ANY
+/// hash/signature/idempotency surface (the §1.5 plane-boundary unrepresentability
+/// standard) — it is accepted ONLY by the archival-tier persistence API (item 20).
+/// The DeepSeek-OCR model lives at a RUNTIME SEAM (local GGUF) OUTSIDE the Cargo
+/// graph, mirroring `pq/entropy.rs`'s opt-in network provider. Absent local
+/// weights, the codec returns `Err(OpticalError::ModelUnavailable)`.
+#[cfg(feature = "optical")]
+pub mod optical;
 
 /// `json-api` — the JSON string boundary shared by the wasm JS surface AND the
 /// native HTTP adapter (P37 `native-spa-server`). Compiled ONLY under the

@@ -47,6 +47,8 @@ kernel/src/token_bucket.rs	-	token_bucket_	3	lib	1	MISSING(item-8):GCRA-atomic-v
 kernel/src/retrieval/pattern.rs	-	retrieval::	58	lib	1	NOTE:regex-ref-removed-for-zero-dep;corpus-oracle-only(item5)
 kernel/src/fdr/json.rs	-	fdr::	16	lib	1	golden-escape-byte-for-byte-oracle(item4)
 kernel/src/ct_gate.rs	-	ct_gate	1	dudect	2	dudect-harness+planted-leak-selftest(item2);ct_eq-primitive
+@ZONE	kernel/src/optical.rs
+kernel/src/optical.rs	optical	optical::	1	lib	5	measured-lossy-oracle:model-weights-absent-locally;ceil:local-GGUF
 kernel/src/pq/keccak.rs	pq	pq::keccak::kani_proofs	2	kani	5	item7-KEYSTONE-equivalence:ENFORCED-rung=native-index-map(tests::item7_keccak_copies_equivalence_index_map)+proof_rotl_contract;STRONG-full-state-form=kani_proofs_strong::proof_keccak_copies_equivalent(CORRECT-but-EXCEEDED-25min-CI-budget-2026-07-19,nightly-only §3.1-ladder);gate-runs=rotl+keccak_f_total
 kernel/src/pq/dsa.rs	pq	pq::dsa::kani_proofs	4	kani	5	item7:montgomery_reduce+reduce32-contracts+ntt/invntt-butterfly-lemma;full-ntt-CAPPED-at-lemma+documented-8-layer-induction(§3.3-ladder)
 kernel/src/kani_selftest.rs	-	proof_selftest_planted_overflow	1	kani	5	item7:planted-i32-overflow-should_panic-selftest;RED-path-demo-recorded-in-PR(§6.5)
