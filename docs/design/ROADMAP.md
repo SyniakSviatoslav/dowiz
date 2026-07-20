@@ -254,6 +254,7 @@ separate — that's ~50 individual files, not itself a competing top-level roadm
 | If you're looking for... | Read |
 |---|---|
 | "What happened and when" (this doc, Part I) | `ROADMAP.md` §0–§11 (here) |
+| What to build next, in what order, citing the real blueprint for each | `ROADMAP.md` §15 (here) |
 | Full P-number ↔ blueprint-file cross-reference, every arc, every layer | `CORE-ROADMAP-INDEX.md` |
 | One phase/item's full design detail | Its own file under `CORE-ROADMAP-2026-07-17/` or the ~50 space-grade `BLUEPRINT-ITEM-*` files |
 | Red-line/architecture decisions with full rationale | `DECISIONS.md` (D0–D14) |
@@ -264,6 +265,8 @@ separate — that's ~50 individual files, not itself a competing top-level roadm
 | The 78-item space-grade track, full detail | Part V below (this file) |
 | Blueprint-coverage / landed-status audits | `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md` (this pass) → `-2026-07-19.md` (prior pass) — kept standalone, these are audit reports, not roadmaps |
 | Anything else with "ROADMAP"/"GROUND-TRUTH"/"MASTER" in the name | It's gone — deleted 2026-07-20, content is in this file or was genuinely dead. `git log --all --diff-filter=D -- 'docs/design/<name>.md'` recovers it if ever needed. |
+
+---
 
 ---
 
@@ -349,6 +352,86 @@ Fixed directly in `CORE-ROADMAP-INDEX.md` §9 (see that file for the actual new 
 actually exploited," "is there a breach-disclosure obligation") that was never affirmatively
 answered — only mooted by the code's deletion. Flagged here for operator awareness; not resolved
 by this pass, which is documentation-only.
+
+
+## 15. Full build-out execution plan (2026-07-20, planning-only, zero code)
+
+> **Status: PLAN. No implementation in this section — that is deliberate.** Operator directive:
+> "plans & blueprints first for the roadmap, include them in ROADMAP.md — only after that Opus for
+> implementing them based on proper specs, plans & blueprints for ALL roadmap items & plans,
+> design, etc." Scope decisions locked in the same exchange: build as much of the roadmap as
+> possible this session (not just a fix/polish pass), prioritized toward one concrete outcome — a
+> food-court owner can place and track one real order end to end — because that is both the
+> release gate (no public tag until this works) and the thing the operator wants to hand-test
+> personally. Everything below cites an EXISTING blueprint rather than re-deriving specs that
+> already exist (per this corpus's own no-duplicate-authorship discipline) — this section's job is
+> sequencing and gap-flagging, not re-planning what's already planned.
+
+### 15.1 Why a sequencing pass was needed at all
+
+The audits earlier today (§13/§14) already confirmed something important: **almost nothing here
+is unplanned.** Every phase below already has a real, DoD-shaped blueprint file. What was missing
+was (a) a single ordering across four independent waves that all claim priority, and (b) an honest
+flag on the handful of places where a blueprint's own claimed status turned out to be stale
+(§13) or where two blueprints appear to overlap in scope without an explicit disposition (found
+during this pass, listed in 15.4). Those are real planning gaps; this section closes them.
+
+### 15.2 Phase 0 — MVP critical path (build this first; this is the release gate)
+
+The minimal slice for "an owner creates a menu, a customer places one order, the owner sees it,
+a courier delivers it, everyone gets notified, cash changes hands on delivery." Every piece below
+either already exists (cite the evidence) or has a real blueprint (cite the file) — nothing here
+needs new planning, only sequenced building.
+
+| # | Piece | Status entering this plan | Blueprint / evidence | Build note |
+|---|---|---|---|---|
+| 0.1 | Kernel order FSM + money law | **LANDED, most mature part of the stack** | `kernel/src/order_machine.rs`, `money.rs` — core of the whole system, thousands of tests | No work needed |
+| 0.2 | HTTP order surface | **LANDED** (§13 correction: the roadmap's own "0%/PLANNED" claim was stale) | `kernel/src/json_api.rs` + `tools/native-spa-server/src/api.rs`, commit `68d5c2874` — real `/api/order`, `/api/order/{id}`, `/api/order/{id}/advance` routes | Confirm still boots cleanly (an in-flight test-sweep agent is checking this right now — §15.5 notes to fold its result in before building starts) |
+| 0.3 | Payment: cash-on-delivery rail | **LANDED** | `kernel/src/ports/payment.rs` (`PaymentPort`+`CashAttestation`+reconciliation), `kernel/tests/firewall_p47.rs`, commits `e6367ae73`/`de56a27d6` | Use this rail for the MVP — no PSP integration needed; matches D12 §4-D's own market framing and avoids the payment-adapter-residual blueprint's real complexity (Phase 0 doesn't need it) |
+| 0.4 | Owner surface (menu management, order visibility) | **PLANNED** — rulings landed (WebGPU no-DOM exemption, hub model), build-out open | `CORE-ROADMAP-2026-07-17/BLUEPRINT-P70-owner-surface.md` (supersedes P48's CRUD-admin half per `kernel/src/ports/owner_surface.rs`'s own header comment — confirmed this session) | **Build this.** Owner needs a real menu-entry + order-queue view — this is the one genuinely new UI surface the MVP can't skip |
+| 0.5 | Customer surface (browse, checkout) | **PLANNED**, blueprint is explicitly "M1 critical path" | `CORE-ROADMAP-2026-07-17/BLUEPRINT-P69-customer-storefront-checkout.md` | **Build this.** Pair with 0.4 — both ride the same intent-interface architecture (0.6) |
+| 0.6 | UI architecture both 0.4/0.5 render through | **Built, tested, wired into the production loop — never connected to real content** | `engine/src/intent.rs` + `compose_ui.rs` (P64), `docs/design/BLUEPRINT-INTENT-INTERFACE-ONE-SCREEN-2026-07-20.md` Stage A ("wire two already-tested endpoints together, ~zero technical risk, 6 falsifiable RED→GREEN acceptance criteria already given") | **Build Stage A first** — it's the substrate 0.4/0.5 render through, and the blueprint already rates it near-zero risk |
+| 0.7 | Order intake channel (how a customer's order reaches the kernel) | **PLANNED**, Phase 1 = "build first," self-serve, free | `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P48-INTAKE-omnichannel-order-intake-2026-07-20.md` Phase 1 (Telegram + Website) | For MVP: the **website path only** (0.5's own storefront → 0.2's `/api/order`) — the blueprint's own Phase 1 already scopes Telegram+Website together, but website has zero deniable/review gates and this environment already has `cloudflared` running (checked live), so Telegram bot intake is a plausible Phase-0-adjacent add, not a hard requirement. Recommendation: ship website-only for Phase 0, Telegram intake in Phase 1 (15.3) |
+| 0.8 | Courier assignment + delivery flow | **STATUS CONFLICT FOUND THIS PASS — see 15.4-G1, resolve before building** | Two candidate blueprints found: `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P52-courier-working-surface.md` (P52, explicitly flagged "MVP-blocking: P50's gate cannot go green without it") and `BLUEPRINT-P71-courier-surface.md` (P71, Wave W3) | **Do not build until 15.4-G1 is resolved** — building the wrong one wastes the highest-risk piece of Phase 0 |
+| 0.9 | Outbound order notifications (owner/courier/customer) | **Mostly built** — outbound-only send fabric already exists | `kernel/src/messenger.rs` (deep-link builders), `kernel/src/ports/notification.rs` (`Notifier` fan-out) | Wire existing sends to the new order-lifecycle events; small glue, not new design |
+| 0.10 | First-order validation gate | **PARTIAL** — audit half done, gate open | `CORE-ROADMAP-2026-07-17/P50-COMPLIANCE-AUDIT.md`, commits `568ff51c4`/`788cbee5a`; depends on 0.3/0.4/0.8 (P47/P48/P34/P37/P38) | Closes naturally once 0.1–0.9 land — not separate new work |
+
+**Explicitly deferred out of Phase 0** (real, planned, just not on the critical path for one order):
+live map/routing (P51 — a customer can track by order-status text without a live map for v1),
+food-court multi-vendor N-leg checkout (P72 — single-vendor first), the payment-adapter-residual
+crate (real PSP integration — cash rail suffices for Phase 0), hub provisioning/claim automation
+(P67 — the operator can provision the one test hub by hand for now), data wallet/offline drafts
+(P66), dispatch orchestrator (P65 — direct courier assignment suffices at MVP scale).
+
+### 15.3 Phase 1+ — continued build-out, priority order (after Phase 0 is green)
+
+Everything else in the roadmap that's still PLAN, sequenced by dependency and leverage. Each row
+cites its existing blueprint — no new specs written here.
+
+1. **Telegram order intake** (`BLUEPRINT-P48-INTAKE...` Phase 1's Telegram half, deferred from 0.7) — cheapest next win, self-serve, free, zero deniable gates.
+2. **Telegram ops-hub build-out Phases 2–5** (`docs/design/BLUEPRINT-TELEGRAM-OPS-HUB-REMAINING-BUILD-ORDER-2026-07-20.md`) — CI/CD digest, S0/S1 mirror-rule formalization, LOGS topic, KERNEL/MESH+MEMORY/DOCS topics. Pure ops-observability, zero product risk, already 5 DoD-bearing phases specified.
+3. **Local-model wiring Phase 1** (`BLUEPRINT-LOCAL-MODEL-WIRING-TESTING-USAGE-2026-07-20.md`) — closing the `AiMode`→`compose.rs` gap. Small, already scoped, unblocks any future AI-assist feature honestly (fail-closed today).
+4. **Intent-interface Stages B/C** (`BLUEPRINT-INTENT-INTERFACE-ONE-SCREEN-2026-07-20.md`) — gated on named operator decisions already recorded there (wgpu network-grant timing, native-companion-app ever) — do not build until those are re-confirmed live, not just recalled from the blueprint.
+5. **Payment-adapter residual** (`BLUEPRINT-P60-payment-adapter-residual-2026-07-20.md`) — real PSP integration once Phase 0's cash rail has proven the order flow works; Phase 0 of that blueprint (PSP diligence) can start in parallel with anything above since it's pure research.
+6. **Omnichannel intake Phases 1.5–3** (SimpleX, WhatsApp) — after Telegram (step 1) proves the pipeline; WhatsApp specifically requires the named Business-Verification shepherding decision from that blueprint's own D1.
+7. **Map/routing (P51)**, **dispatch orchestrator (P65)**, **data wallet (P66)**, **hub provisioning automation (P67)**, **food-court N-leg checkout (P72)** — the Phase-0-deferred items, roughly in this order (each blueprint already exists under `CORE-ROADMAP-2026-07-17/`).
+8. **Product-surface wave remainder**: offline resilience Phase A (Service-Worker+IndexedDB, already D14-ratified), media/comms build-out (`Media` capability resource + manifest layer over the already-80%-there `chunker.rs`/`backup.rs`), spatial-storefront-voice-hub build phases.
+9. **Space-grade items 34–44** (toy-pilot-arc, already IN-PROGRESS per the Part V reconciliation table — 35/36/38 done, 34/37/39–44 remain) and **items 62–72** (telemetry/cost-ledger/digital-twin retrofits, mostly landed per Part V's reconciliation, a few gaps remain per that table).
+10. **Space-grade items 73–78** (Governed Self-Evolution) — D11 has already ruled the full apply-token design; this is the one place a fresh operator "go" is explicitly required before ANY code lands (D11: "does not authorize dispatching items 73-78 to code" — a separate decision from everything else in this plan).
+
+### 15.4 Gaps found while sequencing (resolve before implementation starts)
+
+- **G1 — P52 vs. P71, courier surface: unresolved overlap.** `P52` ("Courier working surface: shift, claims, run, PoD, earnings") is flagged in the roadmap's own text as MVP-blocking. `P71` ("courier surface," Wave W3) exists as a separate blueprint file with no recorded disposition against P52 — unlike P70, which explicitly documents "supersede/extend split against the existing P48." No such note exists for P52/P71. **Before building 0.8, an Opus implementation pass must first read both blueprint files and either (a) confirm they're the same scope under two names (build once, retire one blueprint) or (b) confirm a genuine split (e.g., P52 = shift/claim/PoD mechanics, P71 = the rendered UI surface) and build both in the right order.** Do not guess this from titles alone.
+- **G2 — Phase 0.2's exact current endpoint completeness is pending live verification.** A test-sweep agent is checking whether `native-spa-server` actually boots and serves real responses right now (§15.5) — fold that result in before starting 0.4/0.5, since the owner/customer UI has nothing to render against if the order API isn't actually reachable.
+- **G3 — no genuinely unplanned work found.** Every other item in this section already has a real DoD-bearing blueprint. This plan's job was sequencing + the two gaps above, not authoring new specs.
+
+### 15.5 Execution discipline for the Opus implementation pass
+
+- **Work in isolated `git worktree`s, never the shared `/root/dowiz` checkout.** Confirmed necessary twice today — a concurrent autonomous process actively mutates that checkout, including at least one local-only divergent reset discovered this session (see the git-collision handling embedded in this document's own commit history for the pattern to follow: fetch, isolated worktree off `origin/main`, verify fast-forward, push, never force).
+- **Verify-before-build, every time.** Multiple items in this very plan (P37, P28's `CacheGraph`, P26's `MemoryBudget`) turned out to have stale claimed-status this session — always re-check against live code before assuming a blueprint's "LANDED"/"PLANNED" marker is still accurate.
+- **RED→GREEN, per this repo's standing culture** — every implemented item ships a test proving the gap existed before and is closed after, not narrative.
+- **Stop and ask when a real decision is needed** — G1 above is the clearest current example; the intent-interface Stage B/C gates and the WhatsApp D1 shepherding decision are two more already named in their own blueprints. Do not resolve these by guessing.
+- **Fold in the 5 in-flight test-sweep agents' findings** (kernel, engine/wasm, agent-lane, tools/apps, web/browser) before starting Phase 0 build work — they may surface bugs in exactly the surfaces (native-spa-server, the intent/compose_ui wiring) this plan depends on being solid.
 
 ---
 
