@@ -190,3 +190,48 @@ exists yet against them.
   ruling.
 - **FLAG for override:** recorded under the same operator-ruling authority as D10. The operator MAY
   override any clause here at any time; this is a recorded ruling, not a lock.
+
+## D12. DeliveryOS launch blockers §4-A–D — the four operator decisions from SYNTHESIS-LAUNCH-BLOCKERS (2026-07-20)
+
+Rules the four operator-only decisions flagged in
+`docs/design/CORE-ROADMAP-2026-07-17/SYNTHESIS-LAUNCH-BLOCKERS-2026-07-18.md` §4. All four block
+blueprint-writing for their named surfaces; nothing here reopens any other closed ruling in that
+document (§0.2's two rulings, or any §16/§17 decision it cites).
+
+- **§4-A — Card-capture surface (web + desktop): Path A — scoped provider-iframe overlay.** One
+  narrow, documented DOM exception at the card moment only, keeping the user inside the immersive
+  wgpu canvas experience for the rest of the flow. Mobile stays Path B (native provider SDK sheet,
+  zero DOM) as the source doc already recommended — unaffected by this ruling.
+  **Real architectural consequence, not a side detail:** per the source doc's X3 dependency table,
+  choosing Path A **forces the desktop shell to host a live webview** (Tauri) for the card moment —
+  it rules out the alternative the doc flagged as "cleaner" (pure `winit`+`wgpu`+AccessKit with no
+  webview at all). P39-rev (app shell/installability) must record Tauri-with-webview as the
+  desktop shell decision, not present it as still-open pending the P63 spike; P63's shell spike
+  narrows to *validating* the Tauri-webview approach, not choosing between it and a webview-free
+  alternative.
+- **§4-B — Self-custody severity: absolute, both surfaces, no exceptions.**
+  (i) Backup break-glass: **no `dowiz_break_glass_pubkey` in any backup recipient set, ever.**
+  dowiz cannot read backup plaintext by construction — a vendor who loses their key loses every
+  backup for that hub. (ii) Owner-root loss: **no recovery path.** A lost owner root eventually
+  strands its hub fleet as certs expire under the short-TTL revocation mechanism; this is accepted
+  as the cost of (i)'s guarantee applied consistently, not a separate looser policy for keys that
+  happen to gate more blast radius. One philosophy, both surfaces — exactly the consistency the
+  source doc asked for. P59's revocation section and P68's backup-recipient section must both cite
+  this ruling; neither may introduce a recovery mechanism independently.
+- **§4-C — Abandoned-claimed-hub power-down: no suspension, every claimed hub stays hot
+  indefinitely.** A long-inactive claimed hub is NOT suspended/compute-released — it remains fully
+  provisioned and running for as long as it is claimed, consistent with §16.57's "stays the
+  vendor's forever" read the most literal way. **Real cost consequence, not a side detail:** the
+  warm-pool is net-consumed with zero recycling from inactive hubs; P67's pool-economics section
+  must size the pool (and its refill cadence) assuming claimed capacity never returns to the pool,
+  not assuming a suspend-and-reclaim offset.
+- **§4-D — Food-court Wave-0 market scope: Albania / EU**, matching `PRODUCT.md`'s existing primary
+  market (Albania + EN/UK speakers). P72's per-vendor provider-account onboarding and provider
+  matrix are scoped to providers that support per-vendor split/connect charges in EUR/ALL — not a
+  global-from-day-one matrix. §16.20's requirement that the *architecture* stay market-agnostic is
+  unaffected; this only scopes where the *feature* is proven first.
+- **Unblocked by this ruling:** blueprint-writing may now proceed for P39-rev, P59, P60 (client
+  leg), P63, P67, P68, P69, P72 — all four were named blockers in the source doc's swarm-dispatch
+  summary (§5 "Before W1 writing starts, raise §4-A–D with the operator").
+- **FLAG for override:** recorded under the same operator-ruling authority as D8/D10/D11. The
+  operator MAY override any clause here at any time; this is a recorded ruling, not a lock.
