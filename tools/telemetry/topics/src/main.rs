@@ -432,6 +432,17 @@ fn fmt_bytes(b: u64) -> String {
     }
 }
 
+/// Truthful log-bucket upper-bound rendering: durations are recorded at µs
+/// granularity, so an upper bound of 0 means "completed in under a microsecond" —
+/// render that, not a weird "≤0µs".
+fn fmt_bound_us(us: u64) -> String {
+    if us == 0 {
+        "<1µs".to_string()
+    } else {
+        format!("≤{}", fmt_us(us))
+    }
+}
+
 /// Human microseconds: µs below 1ms, then ms, then s.
 fn fmt_us(us: u64) -> String {
     if us < 1_000 {
@@ -671,20 +682,11 @@ fn latency_line(summary: &Option<LatencySummary>) -> String {
                 Some(j) => format!("jitter(σ) {:.1}µs", j),
                 None => "jitter n/a (n<2)".to_string(),
             };
-            // Durations are recorded at µs granularity, so an upper bound of 0 means
-            // "completed in under a microsecond" — render that, not a weird "≤0µs".
-            let bound = |us: u64| {
-                if us == 0 {
-                    "<1µs".to_string()
-                } else {
-                    format!("≤{}", fmt_us(us))
-                }
-            };
             format!(
                 "LAT   {} p50 {} · p99 {} · {jitter} · n={} ({} span kind{})",
                 s.span,
-                bound(s.p50_le_us),
-                bound(s.p99_le_us),
+                fmt_bound_us(s.p50_le_us),
+                fmt_bound_us(s.p99_le_us),
                 s.n,
                 s.span_kinds,
                 if s.span_kinds == 1 { "" } else { "s" }
@@ -972,12 +974,230 @@ fn cmd_resources() -> i32 {
     }
 }
 
+// ── latency: per-action span latency report (P83 Layer-1) -> LATENCY topic ────
+//
+// Dedicated cron report breaking latency down BY INSTRUMENTED ACTION — unlike the
+// aggregate `LAT` line in `resources`, which only summarizes the dominant span.
+// Reads the same `metric.jsonl` source (span_metrics_dir(), same env convention),
+// reuses the same hand-rolled row parser (rows are NOT valid JSON — `hist` is a
+// compact `bin:count` list) and the same truthful log-bucket percentile math.
+//
+// Named-absence discipline: every instrumented action with zero samples renders
+// `<action>: no data in window` — never a fabricated number. Counts are cumulative
+// over the current span log (rows carry no timestamps, so a wall-clock window is
+// unrepresentable here; the per-run history in latency-summary.jsonl is what gives
+// the future anomaly layer its time axis).
+const LATENCY_TOPIC_ENV: &str = "TELEGRAM_TOPIC_ID_LATENCY";
+
+fn latency_topic() -> String {
+    env::var(LATENCY_TOPIC_ENV).unwrap_or_else(|_| resources_topic())
+}
+
+/// P83 Layer-1 instrumented action names EXACTLY as they appear in `metric.jsonl`,
+/// verified against the live tree (grep `info_span!(` in kernel/src):
+///   * native spans: `place_order` (domain.rs:176), `place_order_priced`
+///     (domain.rs:220), `fold_transitions` (order_machine.rs:172)
+///   * `telemetry`-gated wrappers (span_metrics/instrument.rs): `route`,
+///     `commit_after_decide`, `decide_settlement`, `cap_verify_chain`
+///     — NOTE: the cap-chain wrapper emits `cap_verify_chain` (underscores),
+///     not the function path `cap::verify_chain`.
+///   * `pq`-gated wrapper: `mldsa_verify`
+/// Other kernel spans exist (`eigenvalues`, `eigenvalues_contig`, `agent_turn`) but
+/// are not Layer-1 actions; when present in the log they are still reported, marked.
+const INSTRUMENTED_ACTIONS: [&str; 8] = [
+    "place_order",
+    "place_order_priced",
+    "fold_transitions",
+    "route",
+    "commit_after_decide",
+    "decide_settlement",
+    "cap_verify_chain",
+    "mldsa_verify",
+];
+
+/// Per-action computed latency (feeds both the message and the history record).
+struct ActionLatency {
+    span: String,
+    n: u64,
+    p50_le_us: u64,
+    p99_le_us: u64,
+    /// Exact sample stddev of reconstructed per-sample durations; `None` when n<2.
+    jitter_stddev_us: Option<f64>,
+    /// Part of the P83 Layer-1 instrumented set above.
+    layer1: bool,
+}
+
+/// Every span present in the log, each with its own percentiles/jitter — grouped
+/// by action, never collapsed into one aggregate. Sorted by sample count desc
+/// (then name) so the hottest action leads the report.
+fn per_action_latency(txt: &str) -> Vec<ActionLatency> {
+    let stats = match span_stats_from(txt) {
+        Some(s) => s,
+        None => return Vec::new(),
+    };
+    let mut out: Vec<ActionLatency> = stats
+        .iter()
+        .filter_map(|s| {
+            Some(ActionLatency {
+                span: s.span.clone(),
+                n: s.count,
+                p50_le_us: hist_percentile_upper_us(s, 0.50)?,
+                p99_le_us: hist_percentile_upper_us(s, 0.99)?,
+                jitter_stddev_us: stddev_us(&reconstruct_durations(txt, &s.span)),
+                layer1: INSTRUMENTED_ACTIONS.contains(&s.span.as_str()),
+            })
+        })
+        .collect();
+    out.sort_by(|a, b| b.n.cmp(&a.n).then(a.span.cmp(&b.span)));
+    out
+}
+
+/// Build the report body + structured per-run record from raw `metric.jsonl`
+/// content. Pure over its inputs so the exact message shape is testable;
+/// `cmd_latency` supplies the live reads.
+fn latency_report_from(
+    metric_txt: Option<&str>,
+    source: &str,
+    host: &str,
+    ts: u64,
+) -> (String, serde_json::Value) {
+    let measured = metric_txt.map(per_action_latency).unwrap_or_default();
+    let no_data: Vec<&str> = INSTRUMENTED_ACTIONS
+        .iter()
+        .copied()
+        .filter(|a| !measured.iter().any(|m| m.span == *a))
+        .collect();
+
+    let mut body = format!(
+        "LATENCY · per-action span report ({host}) · {when}\n\
+         source {source} — cumulative over current span log\n",
+        when = utc_datetime(ts),
+    );
+
+    body.push_str("\nMEASURED — real span data, one line per action\n");
+    if measured.is_empty() {
+        let why = if metric_txt.is_none() {
+            "metric.jsonl absent — span observer not initialized on this host yet"
+        } else {
+            "metric.jsonl has no parseable span rows yet"
+        };
+        body.push_str(&format!(
+            "(none — {why}; awaiting live traffic, normal pre-launch)\n"
+        ));
+    } else {
+        let w = measured.iter().map(|m| m.span.len()).max().unwrap_or(0);
+        for m in &measured {
+            let jitter = match m.jitter_stddev_us {
+                Some(j) => format!("jitter(σ) {j:.1}µs"),
+                None => "jitter n/a (n<2)".to_string(),
+            };
+            body.push_str(&format!(
+                "{:<w$}  p50 {} · p99 {} · {jitter} · n={}{}\n",
+                m.span,
+                fmt_bound_us(m.p50_le_us),
+                fmt_bound_us(m.p99_le_us),
+                m.n,
+                if m.layer1 {
+                    ""
+                } else {
+                    " · [non-Layer-1 span]"
+                },
+            ));
+        }
+    }
+
+    if !no_data.is_empty() {
+        body.push_str(
+            "\nNO DATA — instrumented, zero samples (honest absence, normal pre-launch)\n",
+        );
+        for a in &no_data {
+            body.push_str(&format!("{a}: no data in window\n"));
+        }
+    }
+
+    // One structured record per run containing ALL actions — run-atomic, so the
+    // future anomaly layer can diff consecutive runs without reassembly. Absent
+    // actions are named in `no_data`, never given fabricated zeros.
+    let record = serde_json::json!({
+        "kind": "latency_summary",
+        "ts": ts,
+        "host": host,
+        "source": if metric_txt.is_none() { serde_json::json!(null) } else { serde_json::json!(source) },
+        "actions": measured.iter().map(|m| serde_json::json!({
+            "span": m.span,
+            "n": m.n,
+            "p50_le_us": m.p50_le_us,
+            "p99_le_us": m.p99_le_us,
+            "jitter_stddev_us": m.jitter_stddev_us,
+            "layer1": m.layer1,
+        })).collect::<Vec<_>>(),
+        "no_data": no_data,
+    });
+    (body, record)
+}
+
+/// Append one per-run record to `<log_dir>/latency-summary.jsonl` — sibling of
+/// `resources-summary.jsonl`, same directory convention.
+fn append_latency_summary(record: &serde_json::Value) {
+    use std::io::Write;
+    let p = log_dir().join("latency-summary.jsonl");
+    if let Ok(mut f) = fs::OpenOptions::new().create(true).append(true).open(&p) {
+        let _ = writeln!(f, "{record}");
+    }
+}
+
+fn cmd_latency() -> i32 {
+    // Terminal-first, same structural rule as `resources`: ALWAYS build and print
+    // the full body to stdout, THEN send to Telegram only when credentials exist.
+    let path = span_metrics_dir().join("metric.jsonl");
+    let metric_txt = fs::read_to_string(&path).ok();
+    let host = Command::new("hostname")
+        .arg("-s")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "host".to_string());
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let (report, record) = latency_report_from(
+        metric_txt.as_deref(),
+        &path.display().to_string(),
+        &host,
+        ts,
+    );
+    println!("{report}");
+    append_latency_summary(&record);
+
+    let topic = latency_topic();
+    match Tg::from_env(&topic) {
+        Some(tg) => {
+            if tg.send(&report) {
+                eprintln!("topics latency: posted to topic {topic}");
+                0
+            } else {
+                eprintln!("topics latency: send failed");
+                1
+            }
+        }
+        None => {
+            eprintln!(
+                "topics latency: TELEGRAM_BOT_TOKEN/CHAT_ID not set — printed to stdout only, nothing sent."
+            );
+            0
+        }
+    }
+}
+
 fn usage() -> i32 {
     eprintln!("usage: topics <subcommand> [interval_s]");
     eprintln!("  git-watch [60]     post new commits (dowiz+openbebop) -> topic 292");
     eprintln!("  plans             aggregate DOD+git+roadmap -> topic 291");
     eprintln!("  bench-watch [120]  poll entropy/eval -> topic 294");
     eprintln!("  resources          one-shot host resource pulse -> RESOURCES topic (§TELEGRAM-OPS-OBSERVABILITY-CHANNEL-DESIGN-2026-07-20.md)");
+    eprintln!("  latency            one-shot per-action span latency report (P83 Layer-1) -> LATENCY topic");
     2
 }
 
@@ -993,6 +1213,7 @@ fn main() {
         "plans" => cmd_plans(),
         "bench-watch" => cmd_bench_watch(iv),
         "resources" => cmd_resources(),
+        "latency" => cmd_latency(),
         _ => usage(),
     };
     std::process::exit(rc);
@@ -1161,6 +1382,96 @@ mod resources_tests {
         // Civil-from-days: a known timestamp from this host (2026-07-20 20:33 UTC).
         assert_eq!(utc_datetime(1_784_579_591), "2026-07-20 20:33 UTC");
         assert_eq!(utc_datetime(0), "1970-01-01 00:00 UTC");
+    }
+
+    /// Two-action cumulative stream: place_order samples [1,2,4,8] interleaved with
+    /// mldsa_verify samples [60,70] — exactly the shape `SpanMetrics::record` emits
+    /// (one cumulative row per span close). Distinct actions MUST stay distinct.
+    const STREAM_TWO_ACTIONS: &str = "\
+{\"metric\":\"span_latency_us\",\"span\":\"place_order\",\"count\":1,\"sum_us\":1,\"min_us\":1,\"max_us\":1,\"mean_us\":1.000,\"hist\":[0:1]}
+{\"metric\":\"span_latency_us\",\"span\":\"mldsa_verify\",\"count\":1,\"sum_us\":60,\"min_us\":60,\"max_us\":60,\"mean_us\":60.000,\"hist\":[5:1]}
+{\"metric\":\"span_latency_us\",\"span\":\"place_order\",\"count\":2,\"sum_us\":3,\"min_us\":1,\"max_us\":2,\"mean_us\":1.500,\"hist\":[0:1,1:1]}
+{\"metric\":\"span_latency_us\",\"span\":\"place_order\",\"count\":3,\"sum_us\":7,\"min_us\":1,\"max_us\":4,\"mean_us\":2.333,\"hist\":[0:1,1:1,2:1]}
+{\"metric\":\"span_latency_us\",\"span\":\"mldsa_verify\",\"count\":2,\"sum_us\":130,\"min_us\":60,\"max_us\":70,\"mean_us\":65.000,\"hist\":[5:1,6:1]}
+{\"metric\":\"span_latency_us\",\"span\":\"place_order\",\"count\":4,\"sum_us\":15,\"min_us\":1,\"max_us\":8,\"mean_us\":3.750,\"hist\":[0:1,1:1,2:1,3:1]}
+";
+
+    #[test]
+    fn per_action_latency_groups_by_action_not_one_aggregate() {
+        let acts = per_action_latency(STREAM_TWO_ACTIONS);
+        assert_eq!(acts.len(), 2, "two distinct actions must yield two entries");
+        // Sorted by n desc: place_order (4) leads mldsa_verify (2).
+        assert_eq!(acts[0].span, "place_order");
+        assert_eq!((acts[0].n, acts[0].p50_le_us, acts[0].p99_le_us), (4, 3, 8));
+        assert_eq!(acts[1].span, "mldsa_verify");
+        // mldsa samples [60,70]: p50 rank 1 → bucket 5 (upper 63); p99 rank 2 →
+        // bucket 6 (upper 127, clamped to exact max 70).
+        assert_eq!(
+            (acts[1].n, acts[1].p50_le_us, acts[1].p99_le_us),
+            (2, 63, 70)
+        );
+        // Jitter is computed PER ACTION from that action's own reconstructed
+        // durations — mldsa's σ of [60,70] is 7.07, untouched by place_order rows.
+        let j = acts[1].jitter_stddev_us.unwrap();
+        assert!((j - 7.0711).abs() < 0.01, "σ of [60,70] ≈ 7.0711, got {j}");
+        assert!(acts[0].layer1 && acts[1].layer1);
+    }
+
+    #[test]
+    fn latency_report_measured_and_honest_no_data_sections() {
+        let (body, record) =
+            latency_report_from(Some(STREAM_TWO_ACTIONS), "/x/metric.jsonl", "h", 0);
+        // Per-action MEASURED lines, distinct numbers per action.
+        assert!(body.contains("MEASURED"), "{body}");
+        assert!(body.contains("p50 ≤3µs · p99 ≤8µs"), "{body}");
+        assert!(body.contains("p50 ≤63µs · p99 ≤70µs"), "{body}");
+        // Every instrumented action with zero samples is named honestly.
+        for a in [
+            "route",
+            "commit_after_decide",
+            "decide_settlement",
+            "cap_verify_chain",
+            "fold_transitions",
+            "place_order_priced",
+        ] {
+            assert!(
+                body.contains(&format!("{a}: no data in window")),
+                "missing honest-absence line for {a}\n{body}"
+            );
+        }
+        // Actions WITH data never appear in the no-data section.
+        assert!(!body.contains("place_order: no data"), "{body}");
+        assert!(!body.contains("mldsa_verify: no data"), "{body}");
+        // Structured record: all measured actions + the absent set, parseable.
+        assert_eq!(record["kind"], "latency_summary");
+        assert_eq!(record["actions"].as_array().unwrap().len(), 2);
+        assert_eq!(record["no_data"].as_array().unwrap().len(), 6);
+        assert_eq!(record["actions"][0]["span"], "place_order");
+        assert_eq!(record["actions"][0]["p99_le_us"], 8);
+    }
+
+    #[test]
+    fn latency_report_absent_file_is_fully_honest() {
+        let (body, record) = latency_report_from(None, "/x/metric.jsonl", "h", 0);
+        assert!(body.contains("metric.jsonl absent"), "{body}");
+        for a in INSTRUMENTED_ACTIONS {
+            assert!(
+                body.contains(&format!("{a}: no data in window")),
+                "missing {a}\n{body}"
+            );
+        }
+        // No fabricated numbers anywhere: zero measured actions in the record.
+        assert_eq!(record["actions"].as_array().unwrap().len(), 0);
+        assert_eq!(record["no_data"].as_array().unwrap().len(), 8);
+        assert!(record["source"].is_null());
+    }
+
+    #[test]
+    fn non_layer1_spans_are_reported_but_marked() {
+        let txt = "{\"metric\":\"span_latency_us\",\"span\":\"eigenvalues\",\"count\":1,\"sum_us\":5,\"min_us\":5,\"max_us\":5,\"mean_us\":5.000,\"hist\":[2:1]}\n";
+        let (body, _) = latency_report_from(Some(txt), "/x/metric.jsonl", "h", 0);
+        assert!(body.contains("eigenvalues"), "{body}");
+        assert!(body.contains("[non-Layer-1 span]"), "{body}");
     }
 
     #[test]
