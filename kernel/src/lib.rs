@@ -20,11 +20,6 @@ pub mod analytics;
 /// P11 §7 — CorePinning trait seam (Trait-as-Port): pluggable CPU-core-affinity
 /// port with a zero-cost `NoOpCorePinning` default (NUMA crate DECART-deferred).
 pub mod arena;
-/// BLUEPRINT-P-B §4.3 (item #7) — drift-gated spectral snapshot store + reconcile. The
-/// consumer of `RetainedBase::admit`: retains admitted tiles, persists their source `Csr`,
-/// and `reconcile()` re-runs `classify_drift` on each retained raw dynamics to catch
-/// post-admit divergence. Pure-std; no money / red-line types.
-pub mod snapshot;
 /// C-tier "attention lens": scaled dot-product attention as one learned-affinity
 /// diffusion step — same f(L) family as markov PPR / heat-kernel.
 pub mod attention;
@@ -174,6 +169,11 @@ pub mod simd;
 /// (docs/research/OPUS-PERF-ARENA-DEEPDIVE-2026-07-18.md).
 #[cfg(feature = "slot-arena")]
 pub mod slot_arena;
+/// BLUEPRINT-P-B §4.3 (item #7) — drift-gated spectral snapshot store + reconcile. The
+/// consumer of `RetainedBase::admit`: retains admitted tiles, persists their source `Csr`,
+/// and `reconcile()` re-runs `classify_drift` on each retained raw dynamics to catch
+/// post-admit divergence. Pure-std; no money / red-line types.
+pub mod snapshot;
 /// BLUEPRINT-P83 — kernel production observability (SYNTHESIS PERFORMANCE AUDIT 2026-07-18
 /// §3.3-C4). Feature-gated (`telemetry`) so the SHIPPING binary carries zero observability
 /// symbols and is behavior-/perf-neutral. Two layers: (1) a ZERO NEW DEP `SpanMetricsObserver`
@@ -212,6 +212,9 @@ pub mod wallet;
 /// firewall and the `token_bucket` degrade-closed budget. No tool runs without a
 /// verified capability; unknown tools rejected; budget exhaustion terminates the loop.
 pub mod agent;
+/// C2 — DEPLOY CONFIG (roster + provider selection + default currency) is load-bearing
+/// deployment input, not compiled-in. Std-only, serde-free.
+pub mod deploy_config;
 /// External capability ports (the seams where the kernel meets the outside world without importing
 /// it) — currently the `LlmBackend` pluggable LLM backend trait (zero HTTP/serde; the concrete
 /// `llm-adapters` crate implements it).
@@ -253,12 +256,6 @@ pub mod determinism;
 /// Each fn is emitted by `tools/eqc-rs/src/bin/gen_kernel_organs.rs`; verify
 /// against the hand-written law with a bit-parity `#[test]`.
 pub mod eqc_gen;
-/// §H toy-pilot inference arc (BLUEPRINT-ITEM-34/35/37/38/39/40/41/42/43/44) — a
-/// quantized, constant-time-gated, golden-checksum-guarded toy neural-network
-/// classifier. Always compiled (so the `None`-path / reject-path is always
-/// tested — item 47); the PQ codesign half of the weight pipeline rides behind
-/// the `pq` feature. No new dependencies; integer-domain only.
-pub mod inference;
 /// E1 — verifiable-cognition benchmark generator: metamorphic MR items with
 /// kernel-primitive oracles, deterministic mint-log leakage gate, and
 /// calibration metrics (ECE/Brier/AURC). Pure-offline, zero-dep.
@@ -274,6 +271,12 @@ pub mod evals;
 /// (modal / DCT / stencil) verdict bench lives in `kernel/benches/criterion.rs`
 /// under the `field_eigen/` group and is reported in `docs/p89-verdict.md`.
 pub mod field_eigenmodes;
+/// §H toy-pilot inference arc (BLUEPRINT-ITEM-34/35/37/38/39/40/41/42/43/44) — a
+/// quantized, constant-time-gated, golden-checksum-guarded toy neural-network
+/// classifier. Always compiled (so the `None`-path / reject-path is always
+/// tested — item 47); the PQ codesign half of the weight pipeline rides behind
+/// the `pq` feature. No new dependencies; integer-domain only.
+pub mod inference;
 /// Living-knowledge retrieval — ADAPTER to the (separately-branched) JS engine.
 /// serde-dependent (JSON bridge protocol) → gated behind `wasm` to keep the
 /// native rlib build serde-free. Not part of the order/money core. ALSO excluded on
@@ -300,6 +303,16 @@ pub mod noether;
 /// B3 — deterministic offline-on-node online learner (LinearSGD ridge +
 /// ScalarAdam), the self-adaptation substrate (E3). Local-first: no network.
 pub mod online;
+/// BLUEPRINT-ITEM-28 — optical/pixel archival compression. Feature-gated (`optical`)
+/// so the canonical order/money core stays pure-`std` and dependency-free. The
+/// `OpticalCompressed` type is structurally prevented from reaching ANY
+/// hash/signature/idempotency surface (the §1.5 plane-boundary unrepresentability
+/// standard) — it is accepted ONLY by the archival-tier persistence API (item 20).
+/// The DeepSeek-OCR model lives at a RUNTIME SEAM (local GGUF) OUTSIDE the Cargo
+/// graph, mirroring `pq/entropy.rs`'s opt-in network provider. Absent local
+/// weights, the codec returns `Err(OpticalError::ModelUnavailable)`.
+#[cfg(feature = "optical")]
+pub mod optical;
 pub mod order_machine;
 pub mod ports;
 /// P40 `ToolResource::WebFetch` — native, pure-`std` readable-text extraction
@@ -357,16 +370,6 @@ pub mod verify_retrieval;
 /// wasm.rs); native rlib builds exclude it and pull no wasm-bindgen/serde.
 #[cfg(feature = "wasm")]
 pub mod wasm;
-/// BLUEPRINT-ITEM-28 — optical/pixel archival compression. Feature-gated (`optical`)
-/// so the canonical order/money core stays pure-`std` and dependency-free. The
-/// `OpticalCompressed` type is structurally prevented from reaching ANY
-/// hash/signature/idempotency surface (the §1.5 plane-boundary unrepresentability
-/// standard) — it is accepted ONLY by the archival-tier persistence API (item 20).
-/// The DeepSeek-OCR model lives at a RUNTIME SEAM (local GGUF) OUTSIDE the Cargo
-/// graph, mirroring `pq/entropy.rs`'s opt-in network provider. Absent local
-/// weights, the codec returns `Err(OpticalError::ModelUnavailable)`.
-#[cfg(feature = "optical")]
-pub mod optical;
 
 /// `json-api` — the JSON string boundary shared by the wasm JS surface AND the
 /// native HTTP adapter (P37 `native-spa-server`). Compiled ONLY under the
