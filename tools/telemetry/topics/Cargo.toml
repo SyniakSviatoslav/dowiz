@@ -13,7 +13,10 @@ serde_json = "1"
 # (fdr::pmu — hand-rolled perf_event_open(2), default kernel build, no features).
 # The kernel's default feature set pulls ZERO external crates, so this adds no
 # new third-party code to the dependency graph.
-dowiz-kernel = { path = "../../../kernel" }
+# `kernel-mesh` subcommand reads the pq-gated `mesh` module (dowiz_kernel::mesh::MeshLog),
+# so this crate opts into the `pq` feature. All other subcommands (resources/latency/logs/
+# memory-docs) use the default zero-dep kernel build.
+dowiz-kernel = { path = "../../../kernel", features = ["pq"] }
 
 [[bin]]
 name = "topics"
