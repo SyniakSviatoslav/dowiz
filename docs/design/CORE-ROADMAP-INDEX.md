@@ -270,6 +270,23 @@ summaries (Absorbs/Status/Role/DoD/Anti-scope/Depends-blocks) in the same templa
 
 ---
 
+## 11. New phases P97–P98 — AR/VR consolidation + audio design layer (2026-07-20)
+
+A completeness audit of `ROADMAP.md`/this index found two real gaps: AR content real but scattered
+across four places with no first-class item number (DZ-12, P38-rev §12.2, the §17.5 ruling, and
+the spatial-storefront-voice-hub synthesis's Lane B), and audio/sound design consisting of exactly
+one accessibility ruling-bullet (§16.50) plus one already-built partial instance (P64's friction
+audio channel). Both close this pass with genuinely free P-numbers — verified: every `P\d+`
+reference across `docs/design/` confirms P01–P96 are all claimed (P84 deliberately reserved), and
+P99/P100 only ever appear as latency-percentile notation, never as roadmap item numbers.
+
+| Phase / doc | Component | Blueprint | One-line note |
+|---|---|---|---|
+| P97 | DELIVERY/CORE | [BLUEPRINT-P97-ar-vr-spatial-interface-2026-07-20.md](BLUEPRINT-P97-ar-vr-spatial-interface-2026-07-20.md) | Consolidation, not a new build: reconciles two different "AR" concepts the four scattered sources conflated under one name — near-term browser product-AR (`<model-viewer>`→AR Quick Look/Scene Viewer, zero render-engine involvement, ships without any wgpu work) as Track 1, vs. long-term XR-headset spatial-panel readiness (P38 §12.2's four structural render-core constraints + DZ-12's OpenXR-Quest-first/WebXR-deferred sequencing) as Track 2. Native camera-AR compositing stays triaged into 3 buckets (already-shipping / deferred-on-an-unmade-decision / reusable-non-AR-techniques) per the intent-interface synthesis's own disposition, not re-decided here. DZ-12, P38-rev §12.2, §17.5, and the spatial-storefront-voice-hub synthesis's Lane B all now carry an append-only pointer to this doc |
+| P98 | DELIVERY/CORE | [BLUEPRINT-P98-audio-sound-design-2026-07-20.md](BLUEPRINT-P98-audio-sound-design-2026-07-20.md) | Greenfield but code-grounded: extends P64's already-proven friction-only `AudioParams` pattern (derive audio from the same field data the visual channel already animates from) to the rest of the DZ-04 (`OrderStatus`)/DZ-05 (event vocab) visual-signal surface, with an exhaustive-`match` compile-time parity proof rather than a manually-maintained checklist. Explicitly declines to build the separately-triaged whole-field ambient sonification idea (`BLUEPRINT-INTENT-INTERFACE-ONE-SCREEN-2026-07-20.md` §6 — real prior art, already ruled speculative/non-load-bearing/deferred by the operator; not re-opened here for want of new evidence). No new TTS: OS screen readers already speak P58's `role=Status`/`role=Alert` mirror text for free, and conversational-agent TTS is already owned by the voice-hub arc's Phase 4/6 (Kokoro-82M) — both cross-referenced, neither duplicated |
+
+---
+
 *Maintenance rule (from BLUEPRINT-P-I §8): new planning doc ⇒ one new row here, Layer chosen by
 which numeric-phase cluster it serves. DoD checks D1–D5 in BLUEPRINT-P-I §5 are the drift alarms.
 Index built 2026-07-17 on `feat/p19-growth-engine` (HEAD `b64a2c1c6`). **Refreshed 2026-07-18** in

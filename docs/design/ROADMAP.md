@@ -31,9 +31,10 @@ narrative; the standalone file no longer exists on disk).
 - Kernel tests: **1137 passed / 0 failed / 8 ignored** (default features); **1310 passed / 0
   failed / 9 ignored** (`--features pq`).
 - Engine tests: **128 passed / 0 failed**.
-- Blueprint coverage: effectively complete — every P01–P96 either has a file or is P84
-  (deliberately reserved); the space-grade track's 78 items are covered by Part V + ~50 per-item
-  blueprint files. See `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md` for the full delta audit.
+- Blueprint coverage: effectively complete — every P01–P98 either has a file or is P84
+  (deliberately reserved); P97/P98 added this pass (§16) closing the AR/VR and audio consolidation
+  gaps; the space-grade track's 78 items are covered by Part V + ~50 per-item blueprint files. See
+  `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md` for the full delta audit (predates P97/P98).
 - Open/pending work: tracked live in §11 below, not scattered across other docs.
 
 ## 1. Origin (2026-05-31 → 2026-07-10)
@@ -225,7 +226,7 @@ The single busiest day in the project's history. In rough order:
 ## 10. The space-grade 78-item track — how it relates to everything above
 
 Part V below (the space-grade 78-item roadmap) is a **deliberately separate track** from the
-P01–P96 CORE roadmap — zero-external-dependency, maximum-kernel-authority,
+P01–P98 CORE roadmap — zero-external-dependency, maximum-kernel-authority,
 100%-determinism-where-possible hardening work, not product features. It is NOT a competing
 roadmap; think of it as a fourth axis alongside Layer A–I / P-series / space-grade, all converging
 on the same `main`. Status as of today: the large majority of items 1–61 have landed real code or
@@ -475,6 +476,28 @@ cites its existing blueprint — no new specs written here.
   shepherding decision are two more already named in their own blueprints. Do not resolve these by
   guessing.
 - **Fold in the 5 in-flight test-sweep agents' findings** (kernel, engine/wasm, agent-lane, tools/apps, web/browser) before starting Phase 0 build work — they may surface bugs in exactly the surfaces (native-spa-server, the intent/compose_ui wiring) this plan depends on being solid.
+
+---
+
+## 16. AR/VR consolidation + audio design layer — P97/P98 registered (2026-07-20)
+
+A completeness audit found two real gaps in this roadmap and `CORE-ROADMAP-INDEX.md`: AR had real
+content (DZ-12, P38-rev §12.2, §17.5's ruling, and the spatial-storefront-voice-hub synthesis's
+Lane B) scattered across four places with no first-class item number, and audio/sound had exactly
+one accessibility ruling-bullet (§16.50) and no design beyond P64's one already-built instance
+(the friction gesture's audio channel). Both are closed this pass with genuinely free P-numbers
+(verified: `grep` across `docs/design/` for every `P\d+` reference confirms P01–P96 are all
+claimed — P84 deliberately reserved per §0/§10.1 — and P99/P100 appear only as latency-percentile
+notation, never as roadmap item numbers; P97/P98 were free).
+
+| P-number | Domain | Name | Status | Blueprint | One-line finding |
+|---|---|---|---|---|---|
+| **P97** | DELIVERY/CORE | AR/VR spatial interface (consolidation) | PLANNED (blueprint ON DISK; zero code — a synthesis of four already-existing designs, not a new build) | [`BLUEPRINT-P97-ar-vr-spatial-interface-2026-07-20.md`](BLUEPRINT-P97-ar-vr-spatial-interface-2026-07-20.md) | Two genuinely different "AR" concepts hid under one name across the four sources — near-term browser product-AR (`<model-viewer>`→Quick Look/Scene Viewer, ships without touching the render engine at all) vs. long-term XR-headset readiness (four structural constraints already owned by P38 §12.2). Reconciled as Track 1 / Track 2 of one item rather than forced into a single mechanism; native camera-AR compositing stays triaged-and-deferred behind an unmade product decision |
+| **P98** | DELIVERY/CORE | Audio & sound design layer | PLANNED (blueprint ON DISK; zero code — greenfield, but every design choice cites existing code/rulings) | [`BLUEPRINT-P98-audio-sound-design-2026-07-20.md`](BLUEPRINT-P98-audio-sound-design-2026-07-20.md) | Extends P64's proven friction-only audio-parity pattern (derive `AudioParams` from the same field data the visual channel already animates from) to the rest of the DZ-04/DZ-05 visual-signal vocabulary; explicitly declines to build the separately-triaged whole-field ambient sonification idea (`BLUEPRINT-INTENT-INTERFACE-ONE-SCREEN-2026-07-20.md` §6) — real prior art, already ruled speculative/non-load-bearing/deferred, not re-opened here for want of new evidence. TTS is deliberately NOT built here: OS screen readers already speak P58's mirror text, and conversational-agent TTS is already owned by the voice-hub arc's Phase 4/6 |
+
+Both blueprints point back to (and are pointed at from) the sources they consolidate — see each
+blueprint's own §9/§10 registration section for the exact list of source-doc pointers added this
+pass. Also registered in `CORE-ROADMAP-INDEX.md` §11.
 
 ---
 
