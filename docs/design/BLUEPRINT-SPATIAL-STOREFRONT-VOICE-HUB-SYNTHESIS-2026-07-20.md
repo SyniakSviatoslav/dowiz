@@ -261,18 +261,71 @@ Ordering principle, derived from the research's own cost/maturity findings: **sh
 
 ---
 
-## 9. Open decisions for the operator
+## 9. Open decisions — RULED 2026-07-20
 
-These are deliberately **not** decided by this synthesis.
+All eight were put to the operator directly and resolved. Recorded here as rulings (override-able,
+not locks, matching the DECISIONS.md D-series convention); D2/D5 additionally open real follow-on
+scope, noted under each.
 
-- **O1 — Hardware posture.** Does dowiz *recommend* (docs), *certify* (tested-with list), or *bundle* consumer hardware — specifically a $200–400 short-throw/pico projector for Phase 5, and optionally a Looking Glass ($199+) as showroom marketing (D-B4)? dowiz has never been a hardware vendor; each step up that ladder adds support surface. Phase 5's software is identical under all three answers, so this can be decided late — but bundling would need lead time.
-- **O2 — The SMPL question, binary.** Fund a Meshcapade commercial license against a concrete future surface (stylized avatars / try-on, D-H4), or drop the human-capture cluster entirely? Default in this document: **drop**; nothing in Phases 1–6 depends on it.
-- **O3 — The `web/` JS precedent.** Ratify vendoring `<model-viewer>` as a pinned static render-only asset (first JS component added since the 2026-07-15 JS drop), or mandate the zero-JS path (iOS Quick Look links + Android intent flow) at the cost of a less uniform cross-platform UX? Phase 1 is written to survive either ruling.
-- **O4 — Asset-format pipeline ownership.** USDZ (iOS) vs. GLB (Android) duality (§3.3): accept the per-platform degraded state indefinitely, require owners to supply both, or invest in a conversion step (which would need its own tooling evaluation — none was researched in these passes, so none is proposed here)?
-- **O5 — Streaming transport change (D-V6).** Approve modifying `llm-adapters/src/transport.rs` from hardcoded `"stream": false` to sync streaming — a real change to a load-bearing adapter that also affects non-voice consumers — or confine voice v1 to non-streaming latency (worse spoken UX, zero transport risk)?
-- **O6 — The proactive-alert allowlist v1.** Which FSM event classes are speak-worthy by default? This is a product-judgment call (the fatigue literature says fewer is safer), and per the standing rule that operator sets direction, the initial set is the operator's to name.
-- **O7 — Courier liveness/auth (D-H3).** Pursue a one-time consented verification capability at all? If yes, it is a *new* scoped research task for a purpose-built tool (P3: the three researched models are the wrong instruments), with GDPR/biometric handling as a first-class requirement — not an add-on to any phase here.
-- **O8 — Voice-data retention.** The pipeline is fully local, but should the hub retain *anything* — audio never; transcripts as agent events, or nothing beyond the resulting `ChatRequest`? Local-first narrows but does not answer this; it touches the privacy posture and is the operator's call before Phase 4 ships.
+- **O1 — Hardware posture: RULED — certify a tested-with list.** dowiz tests specific
+  projector/display models and publishes a "known good" list for Phase 5 (and, if pursued, a
+  Looking Glass unit for showroom marketing, D-B4). Real but bounded support/QA burden; no
+  inventory or reseller commitment.
+- **O2 — SMPL question: RULED — drop entirely.** No Meshcapade commercial license purchased; no
+  build phase for the human-capture cluster (Lane E stays a rejection ledger, §7). Confirms the
+  synthesis's own default.
+- **O3 — `web/` JS precedent: RULED — vendor `<model-viewer>` as a pinned static asset.** Phase 1
+  gets the uniform cross-platform AR UX. This is now the first JS component in `web/` since the
+  2026-07-15 drop, ratified explicitly — still zero-npm, zero-build-step, render-only.
+- **O4 — Asset-format pipeline: RULED — invest in a conversion step.** dowiz builds/adopts a
+  USDZ↔glTF conversion tool rather than accepting the degraded per-platform state or pushing
+  dual-capture onto owners. **Real new scope**, deliberately not researched by any of the five
+  passes — this needs its own tooling evaluation (candidate landscape: Apple's own `usdzconvert` /
+  USD toolchain, `gltf-transform`, Blender's Python API as a batch-conversion backend) before
+  Phase 1 can close. Tracked as follow-on work, not yet scoped.
+- **O5 — Streaming transport (D-V6): SUPERSEDED — folded into the concurrency-architecture
+  redesign below,** not decided as a narrow "approve/defer" item. See D13.
+- **O6 — Proactive-alert allowlist: RULED — mirror the existing classical warning/alert set.**
+  Whatever already exists as a visual/text notification (owner_surface alerts, ops-alert classes,
+  order-FSM-derived warnings) becomes *optionally also spoken*, per-class toggleable and
+  configurable, **off by default**. Phase 6 does not invent a new alert taxonomy — it adds a voice
+  output channel to the one that already exists. Concretely identifying "the existing classical
+  warning/alert set" (which port(s)/module(s) own it today) is Phase 6 discovery work, not decided
+  here.
+- **O7 — Courier liveness/auth: RULED — not now.** No scoped research task opened; revisit only if
+  a real, observed onboarding-fraud/identity problem appears.
+- **O8 — Voice-data retention: RULED — local-first, with retention adopted for the local LLM
+  agent's own use.** Not the most minimal option (nothing beyond the `ChatRequest`) and not a
+  separate audit-only event log — voice transcripts persist **because** the local agent should be
+  able to draw on them as context/memory, connecting this directly to Lane C's retrieval work
+  (§5, Phase 2/3): a voice interaction's transcript is exactly the kind of small-stable-corpus
+  content the dense-retrieval index and the compacted-context preload (D-C1/D-C3) are built to
+  hold. Concrete retention format/lifecycle (how long, what gets embedded vs. discarded) is Phase
+  4 design detail, not decided here — the ruling fixes the *purpose* (agent memory, not audit),
+  not the mechanics.
+
+## 9a. D13 — Concurrency-architecture redesign (supersedes O5's narrow framing)
+
+**Status: research in progress, 2026-07-20. No architecture decided yet.** Reviewing O5, the
+operator confirmed D-V1's synchronous, thread-based voice pipeline as valuable, then separately
+stated tokio/async adoption is "a must across the system" — directly in tension with the
+2026-07-15 no-tokio mandate this whole blueprint's C3 constraint (and `llm-adapters`, `agent-loop`,
+`ToolPort`) were built under. Asked to resolve the apparent contradiction explicitly, the operator
+chose to **reverse the mandate**, explicitly acknowledging this "breaks the compile-firewall's
+current sync guarantees and needs its own dedicated redesign pass" — recorded as a directional-only
+ruling, **DECISIONS.md D13**, with no migration designed or implemented.
+
+Before any redesign, the operator widened the question further: **"not just this, but also native
+concurrency & exokernel[-]resistant architecture, research more about this & interesting old
+experiments with e2e principles."** This is not a request to pick tokio vs. no-tokio — it is a
+request to survey the actual concurrency-architecture design space (native/thread-per-core/
+io_uring-direct/structured-concurrency/actor-model alternatives to a full async runtime, and
+exokernel-style minimal-abstraction resource management) and apply the end-to-end principle
+(Saltzer/Reed/Clark 1984) as a design lens for where responsibilities belong in dowiz's stack,
+before committing to any specific mechanism. Two Opus research passes are running now; a synthesis
+combining them with D13 and D-V1 (§6.1) follows once they land, and **only that synthesis, not
+this section, is the actual redesign** — this blueprint's §6 (voice architecture) stands as written
+until the redesign explicitly revises it.
 
 ---
 
