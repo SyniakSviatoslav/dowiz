@@ -936,6 +936,31 @@ pub struct FileEventStore {
     /// Count of `sync_all` calls issued (the `FileEventStore` `insert` is the only
     /// issuer — `MemEventStore` is in-memory and issues none).
     fsync_calls: u64,
+    /// Cached write handle, opened LAZILY on the first successful `insert` —
+    /// never at construction. `open()` must keep tolerating a not-yet-existing
+    /// file/parent (H1 §4 criterion 4, tested: `file_store_open_failure_surfaces_not_swallowed`
+    /// asserts an open failure surfaces via `insert`'s `Err`, not construction).
+    /// Reused on every later insert — removes the redundant per-event
+    /// open+close syscalls the item-26 audit measured (`strace`: 1 open + 1
+    /// write + 1 close per event, only the fsync is load-bearing). This half
+    /// is contract-neutral: it changes zero durability semantics, only removes
+    /// redundant syscalls around the same barrier.
+    handle: Option<File>,
+    /// Item 26 group-commit: `sync_all` fires every `batch_size` inserts
+    /// instead of every one. **OFF by default** (`batch_size = 1` — today's
+    /// exact per-event-fsync behavior, byte-for-byte unchanged: with
+    /// `batch_size = 1`, `pending_since_sync` reaches the threshold on every
+    /// single insert, so the barrier fires every time, exactly as before).
+    /// Opt in via [`FileEventStore::with_batch_size`] — never a silent default
+    /// change, per the item-26 audit's own recommendation
+    /// (`AUDIT-ITEM-26-batching-measurements-2026-07-19.md` §1: "file a design
+    /// proposal for an *opt-in* group-commit mode... do NOT silently change
+    /// the default"). Measured throughput at `batch_size = 64`: ~53x (1,513 →
+    /// ~93,000 events/s) — see the same audit.
+    batch_size: usize,
+    /// Writes since the last `sync_all` — the current unsynced batch. Always
+    /// 0 immediately after `insert` returns when `batch_size == 1`.
+    pending_since_sync: usize,
 }
 
 impl FileEventStore {
@@ -975,7 +1000,48 @@ impl FileEventStore {
             count,
             events_appended: 0,
             fsync_calls: 0,
+            handle: None,
+            batch_size: 1,
+            pending_since_sync: 0,
         })
+    }
+
+    /// Opt in to group-commit: `sync_all` fires every `n` inserts instead of
+    /// every one. `n = 1` (the default) is today's exact per-event durability,
+    /// unchanged. `n > 1` is a REAL durability-contract change — see the
+    /// struct-level doc and the module's crash-consistency discussion: up to
+    /// `n - 1` acknowledged (`insert` returned `Ok`) events can be lost on a
+    /// crash before their batch's `sync_all` fires. Panics if called after any
+    /// insert has already buffered an unsynced write, so the barrier cadence
+    /// can never change silently mid-stream.
+    pub fn with_batch_size(mut self, n: usize) -> Self {
+        assert!(n >= 1, "batch_size must be >= 1");
+        assert_eq!(
+            self.pending_since_sync, 0,
+            "with_batch_size must be set before any insert (or right after a flush_pending)"
+        );
+        self.batch_size = n;
+        self
+    }
+
+    /// Force a durability barrier now, flushing whatever group-commit has
+    /// buffered. Callers doing a graceful shutdown with `batch_size > 1` MUST
+    /// call this before exiting — relying on `Drop` is NOT safe (`Drop` cannot
+    /// propagate an `fsync` error, and the kernel never swallows one silently).
+    /// A no-op returning `Ok(())` if nothing is pending (including the
+    /// `batch_size == 1` case, where nothing is ever left pending).
+    pub fn flush_pending(&mut self) -> Result<(), StoreError> {
+        if self.pending_since_sync == 0 {
+            return Ok(());
+        }
+        let f = self
+            .handle
+            .as_mut()
+            .expect("pending_since_sync > 0 implies handle is Some (set on first write)");
+        f.sync_all().map_err(|e| StoreError::Sync(e.to_string()))?;
+        self.fsync_calls += 1;
+        self.pending_since_sync = 0;
+        Ok(())
     }
 
     /// Item 61 (gap G5): live durability counters — the number of events durably
@@ -985,6 +1051,7 @@ impl FileEventStore {
         DurabilityCounters {
             events_appended: self.events_appended,
             fsync_calls: self.fsync_calls,
+            pending_unsynced: self.pending_since_sync as u64,
         }
     }
 }
@@ -997,6 +1064,10 @@ pub struct DurabilityCounters {
     pub events_appended: u64,
     /// Number of `sync_all` durability barriers issued so far.
     pub fsync_calls: u64,
+    /// Item 26 group-commit: events written and index-acknowledged but not yet
+    /// covered by a `sync_all` — the live risk window a crash right now would
+    /// lose. Always 0 with the default `batch_size = 1`.
+    pub pending_unsynced: u64,
 }
 
 /// Minimal hand-rolled JSON parse for the 4 MeshEvent fields (std-only, no
@@ -1083,26 +1154,55 @@ impl EventStore for FileEventStore {
         );
         // Each IO step now propagates a typed StoreError instead of `let _ =`
         // swallowing it — an open failure no longer falls through silently.
-        let mut f = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.path)
-            .map_err(|e| StoreError::Open(e.to_string()))?;
+        // The handle is opened LAZILY (only on the first insert that reaches
+        // here) and cached thereafter — construction (`open()`) keeps
+        // tolerating a not-yet-existing file/parent; only an insert can ever
+        // surface `StoreError::Open` (H1 §4 criterion 4, unchanged).
+        if self.handle.is_none() {
+            let f = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&self.path)
+                .map_err(|e| StoreError::Open(e.to_string()))?;
+            self.handle = Some(f);
+        }
+        let f = self
+            .handle
+            .as_mut()
+            .expect("handle is Some — just set above or cached from a prior insert");
         f.write_all(line.as_bytes())
             .map_err(|e| StoreError::Write(e.to_string()))?;
         f.flush().map_err(|e| StoreError::Flush(e.to_string()))?;
-        f.sync_all().map_err(|e| StoreError::Sync(e.to_string()))?;
-        // Order is load-bearing (H1 §2.2): the in-memory index advances ONLY
-        // after sync_all succeeds — in-memory state never claims an event the
-        // disk does not hold.
+
+        // Item 26 group-commit: fsync every `batch_size` inserts. With the
+        // default `batch_size = 1` this fires on EVERY insert — byte-for-byte
+        // the same barrier cadence as before this change.
+        self.pending_since_sync += 1;
+        if self.pending_since_sync >= self.batch_size {
+            f.sync_all().map_err(|e| StoreError::Sync(e.to_string()))?;
+            self.fsync_calls += 1;
+            self.pending_since_sync = 0;
+        }
+        // Order is load-bearing (H1 §2.2): the in-memory index advances only
+        // after the WRITE succeeds (always true at this point — every `?`
+        // above already returned). With `batch_size = 1` this is exactly
+        // equivalent to "after sync_all succeeds" (today's invariant,
+        // unchanged, since the sync above always fires in that case). With
+        // `batch_size > 1` this is the explicit, documented acknowledged-
+        // before-durable tradeoff `with_batch_size`'s doc names: the index
+        // (and therefore this method's own idempotent-duplicate check, the
+        // `contains_key` guard at the top) reflects WRITTEN state, which may
+        // not yet be FSYNCED when the batch hasn't closed — necessary so a
+        // duplicate insert() within the same unsynced batch is still detected
+        // as a no-op rather than double-written to the file.
         self.by_id.insert(id, ev);
         self.tip = Some(id);
         self.count += 1;
-        // Item 61 (gap G5): the durability counters advance ONLY after the
-        // `sync_all` barrier succeeded — they can never gate the barrier (any
-        // prior `?` short-circuit returns before reaching here). P3 telemetry.
+        // Item 61 (gap G5): the durability counters advance alongside the
+        // index — `events_appended` counts writes (matches `count`/`by_id`);
+        // `fsync_calls` only increments when the barrier above actually fired.
+        // P3 telemetry; never gates the barrier itself.
         self.events_appended += 1;
-        self.fsync_calls += 1;
         Ok(())
     }
     fn get(&self, id: &[u8; 32]) -> Option<MeshEvent> {
@@ -1289,6 +1389,128 @@ mod file_store_tests {
         assert_eq!(c.events_appended, 3, "three events appended → counter = 3");
         assert_eq!(c.fsync_calls, 3, "each insert fsyncs → fsync counter = 3");
         assert_eq!(s.len(), 3, "index count matches appended counter");
+
+        let _ = fs::remove_file(&path);
+    }
+
+    /// Item 26 group-commit — `with_batch_size(3)` defers `sync_all` until the
+    /// 3rd insert closes the batch. Proves the barrier cadence actually
+    /// changes (not just that the fields exist): 2 inserts leave `fsync_calls`
+    /// at 0 and `pending_unsynced` at 2; the 3rd insert fires the barrier.
+    #[test]
+    fn with_batch_size_defers_fsync_until_batch_closes() {
+        let path = tmp_path("item26-batch3");
+        let mut s = FileEventStore::open(&path).unwrap().with_batch_size(3);
+
+        let mk = |seq: u8| MeshEvent {
+            prev: [0u8; 32],
+            actor_pubkey: [11u8; 32],
+            actor_seq: seq as u64,
+            payload: vec![seq],
+        };
+
+        s.insert(mk(1).event_id(), mk(1)).expect("insert 1");
+        let c = s.durability_counters();
+        assert_eq!(c.fsync_calls, 0, "batch not closed yet — no sync_all");
+        assert_eq!(c.pending_unsynced, 1);
+
+        s.insert(mk(2).event_id(), mk(2)).expect("insert 2");
+        let c = s.durability_counters();
+        assert_eq!(c.fsync_calls, 0, "still short of batch_size=3");
+        assert_eq!(c.pending_unsynced, 2);
+
+        s.insert(mk(3).event_id(), mk(3))
+            .expect("insert 3 closes batch");
+        let c = s.durability_counters();
+        assert_eq!(c.fsync_calls, 1, "3rd insert closes the batch → 1 sync_all");
+        assert_eq!(c.pending_unsynced, 0, "pending resets after the barrier");
+        assert_eq!(c.events_appended, 3);
+        assert_eq!(s.len(), 3, "all 3 events index-visible despite 1 fsync");
+
+        let _ = fs::remove_file(&path);
+    }
+
+    /// Item 26 — `flush_pending` forces the durability barrier early (before
+    /// the batch naturally closes) and is a no-op when nothing is buffered.
+    #[test]
+    fn flush_pending_forces_barrier_and_is_noop_when_empty() {
+        let path = tmp_path("item26-flush");
+        let mut s = FileEventStore::open(&path).unwrap().with_batch_size(10);
+
+        // No writes yet — flush_pending must be a true no-op.
+        s.flush_pending().expect("no-op flush ok");
+        assert_eq!(s.durability_counters().fsync_calls, 0);
+
+        let ev = MeshEvent {
+            prev: [0u8; 32],
+            actor_pubkey: [12u8; 32],
+            actor_seq: 1,
+            payload: b"partial-batch".to_vec(),
+        };
+        let id = ev.event_id();
+        s.insert(id, ev).expect("insert 1 of 10");
+        assert_eq!(s.durability_counters().pending_unsynced, 1);
+        assert_eq!(s.durability_counters().fsync_calls, 0);
+
+        s.flush_pending().expect("forced flush");
+        let c = s.durability_counters();
+        assert_eq!(c.fsync_calls, 1, "flush_pending forced a sync_all");
+        assert_eq!(c.pending_unsynced, 0);
+
+        // Reopen: the flushed event must have actually survived to disk.
+        let s2 = FileEventStore::open(&path).unwrap();
+        assert!(
+            s2.contains(&id),
+            "flush_pending durably persisted the event"
+        );
+
+        let _ = fs::remove_file(&path);
+    }
+
+    /// Item 26 — `with_batch_size` panics if called after a write is already
+    /// buffered, so the barrier cadence can never change silently mid-stream.
+    #[test]
+    #[should_panic(expected = "with_batch_size must be set before any insert")]
+    fn with_batch_size_panics_if_a_write_is_already_pending() {
+        let path = tmp_path("item26-panic");
+        let mut s = FileEventStore::open(&path).unwrap().with_batch_size(5);
+        let ev = MeshEvent {
+            prev: [0u8; 32],
+            actor_pubkey: [13u8; 32],
+            actor_seq: 1,
+            payload: b"x".to_vec(),
+        };
+        s.insert(ev.event_id(), ev)
+            .expect("insert leaves 1 pending");
+        let _ = s.with_batch_size(2); // must panic — pending_since_sync != 0
+    }
+
+    /// Item 26 — `batch_size = 1` (the default) is byte-for-byte the old
+    /// per-event-fsync cadence: every insert closes its own batch of 1.
+    #[test]
+    fn default_batch_size_one_fsyncs_every_insert() {
+        let path = tmp_path("item26-default");
+        let mut s = FileEventStore::open(&path).unwrap(); // no with_batch_size call
+
+        let mk = |seq: u8| MeshEvent {
+            prev: [0u8; 32],
+            actor_pubkey: [14u8; 32],
+            actor_seq: seq as u64,
+            payload: vec![seq],
+        };
+        for seq in 1..=4u8 {
+            let ev = mk(seq);
+            s.insert(ev.event_id(), ev).expect("insert");
+            let c = s.durability_counters();
+            assert_eq!(
+                c.pending_unsynced, 0,
+                "batch_size=1 never leaves anything pending"
+            );
+            assert_eq!(
+                c.fsync_calls, seq as u64,
+                "every insert fires its own sync_all"
+            );
+        }
 
         let _ = fs::remove_file(&path);
     }
