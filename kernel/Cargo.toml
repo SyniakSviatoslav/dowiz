@@ -130,6 +130,19 @@ breaker-testkit = []
 # pure `std`. Gated so its symbols never reach the shipping binary.
 pprof = []
 
+# `optical` — BLUEPRINT-ITEM-28 optical/pixel archival compression. OFF by default
+# so the canonical order/money core stays pure-`std` and dependency-free. Behind
+# this flag, `kernel/src/optical.rs` compiles a ZERO-DEP type `OpticalCompressed`
+# (wraps compressed bytes) that is structurally prevented from reaching ANY
+# hash/signature/idempotency surface (the §1.5 plane-boundary unrepresentability
+# standard) — it is accepted ONLY by the archival-tier persistence API (item 20).
+# The DeepSeek-OCR model lives at a RUNTIME SEAM (local GGUF), OUTSIDE the Cargo
+# graph, mirroring `pq/entropy.rs`'s opt-in network provider: no new crate, no
+# compiled-in model. Absent local weights, the codec returns
+# `Err(OpticalError::ModelUnavailable)`. `cargo tree -e no-dev` is therefore
+# unaffected — this is a feature GATE, not a dependency.
+optical = []
+
 [dependencies]
 # WASM bindings — only compiled under the `wasm` feature (see
 # `#[cfg(feature = "wasm")] pub mod wasm;` in lib.rs). The kernel is pure Rust
