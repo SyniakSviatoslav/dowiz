@@ -1,8 +1,13 @@
-# BLUEPRINT P97 — Local & Mobile Model Selection + CPU-Only Serving Topology (2026-07-20)
+# BLUEPRINT P101 — Local & Mobile Model Selection + CPU-Only Serving Topology (2026-07-20)
 
 **Status: BLUEPRINT / PLAN — no code written, nothing built, no model pulled.**
 **Date:** 2026-07-20
 **Component:** AGENT (mobile half also feeds DELIVERY P52/P71)
+**Numbering note:** drafted as P97; renumbered same-day after a concurrent docs pass claimed
+P97/P98 (AR/VR + audio). **P99/P100 are deliberately skipped, permanently:** both strings are
+corpus-wide latency-*percentile* notation (this document's own §4.5 records "P99 wall-clock"),
+and an item number that greps into percentile hits is exactly the lexical-collision class the
+P-D→Layer-D rename ruling exists to prevent. Hence **P101**.
 **Source of facts:** the completed operator-commissioned deep-research pass on (1) small
 VLM/agentic models for a mobile courier app, (2) multi-model CPU-only serving topology, and
 (3) CPU-only fine-tuning feasibility — synthesized here against the live tree and against
@@ -18,7 +23,7 @@ complementary, not competing. That blueprint owns the *wiring* (AiMode compositi
 golden tool-calling suite, configurable `TaskClass`→model map) and deliberately left three
 questions out of scope: **which** models (it took the four resident ones as given), whether a
 **multi-model topology** on the actual box is worth designing, and whether the **training
-deferral** survives contact with real CPU-training research. P97 answers those three. Its §1
+deferral** survives contact with real CPU-training research. P101 answers those three. Its §1
 locked decisions are locked here too and restated in §7 — nothing below reopens them.
 
 ## 0. Scope honesty
@@ -75,12 +80,12 @@ generic essay — each verified today):
   `AsrModel` — "Sibling of the kernel `LlmBackend` for a different modality" — with a
   whisper-vs-Moonshine bake-off already mandated by the spatial-storefront synthesis (A4.4:
   numbers recorded on hub hardware, vendor claims "reproduced or not reproduced"). It shares
-  this box's RAM and memory bandwidth, so §4's budget counts it even though P97 doesn't design it.
+  this box's RAM and memory bandwidth, so §4's budget counts it even though P101 doesn't design it.
 
 **And the honest statement about vision:** there is **no VLM call site anywhere in the tree
 today**. The PoD settlement artifact (`DeliveryClaim`, bebop2 `pod.rs`) has **no photo field**
 and settles on k-of-n hub signatures — vision output is structurally incapable of gating
-settlement, and P97 keeps it that way (§7). The mobile VLM pick is forward-provisioning for
+settlement, and P101 keeps it that way (§7). The mobile VLM pick is forward-provisioning for
 P52 K4's capture-assist UX (photo sanity/framing help, receipt & menu OCR, label reading), not
 a wired consumer.
 
@@ -175,7 +180,7 @@ at distribution time:
 
 The mobile app necessarily runs its model **in-process** (there is no Ollama daemon on a
 courier's phone). That does *not* touch the wiring blueprint's §1 lock — that lock scopes
-`llm-adapters`/kernel on the hub, and P97 keeps it verbatim (§7). The mobile discipline is
+`llm-adapters`/kernel on the hub, and P101 keeps it verbatim (§7). The mobile discipline is
 the **`AsrModel` precedent** from `engine/src/voice.rs`, applied to vision: a small
 `VlmModel`-style port (typed errors mirroring `LlmError`/`InferError`, offline fixture stub
 satisfying the contract with no model present), with the concrete llama.cpp/GGUF-backed
@@ -257,14 +262,14 @@ The research's distinction, applied to dowiz's actual lanes:
 
 - **ROUTING (decide before generation — RouteLLM-class).** dowiz already has the degenerate
   form: `TaskClass` static routing in `ollama.rs::route_model`, becoming configurable via the
-  wiring blueprint's Phase 3. P97 extends the *mapping*, not the machinery: CS-4/CS-5 route to
+  wiring blueprint's Phase 3. P101 extends the *mapping*, not the machinery: CS-4/CS-5 route to
   Tier S; CS-1 routes to Tier G; CS-2 to Tier C. Mechanism: per-request `model_id` override
   (already passes through verbatim today) from the intake/comms call sites — **no new
   `TaskClass` variant, no kernel enum change** in v1; a `Classify` variant is only justified
   if classification call sites multiply (named trigger, not built). **Learned routing is
   explicitly rejected here**: RouteLLM trains its router on preference data dowiz does not
   have, and the HK-05/HK-09 arc already owns real-time model routing — the wiring blueprint's
-  §7 non-duplication ruling stands verbatim. P97's routing is static-by-task, full stop.
+  §7 non-duplication ruling stands verbatim. P101's routing is static-by-task, full stop.
 - **CASCADING (escalate on insufficient quality — FrugalGPT/AutoMix-class).** Adopted on
   **exactly one lane: CS-4 intake assist**, because it is the only lane with a *deterministic*
   sufficiency oracle: the assisted output either re-parses through the pure `IntentParser`
@@ -278,7 +283,7 @@ The research's distinction, applied to dowiz's actual lanes:
   design *is* its quality control.
 - **Speculative decoding** — noted as distinct from routing (research), single-model-family
   draft-and-verify. Not designed here; Ollama-internal if it ever applies. Out of scope.
-- Since P48-INTAKE is itself PLAN, the cascade lands **with** that build; P97's deliverable is
+- Since P48-INTAKE is itself PLAN, the cascade lands **with** that build; P101's deliverable is
   this contract plus the fixture spec (§6 Phase C), so the intake build consumes a settled
   design instead of re-deriving one.
 
@@ -348,8 +353,8 @@ answering it kills the question permanently instead of leaving it to be re-litig
 
 ## 6. Phasing — RED→GREEN per phase, consistent with the wiring blueprint's build order
 
-Ordering note: P97 consumes the wiring blueprint's Phase 1 (AiMode composition switch) and
-Phase 3 (configurable model map) as its config substrate; nothing in P97 blocks them.
+Ordering note: P101 consumes the wiring blueprint's Phase 1 (AiMode composition switch) and
+Phase 3 (configurable model map) as its config substrate; nothing in P101 blocks them.
 
 - **Phase A — mobile suite + license ruling.** RED: no vision scenario suite exists (trivially
   true — no VLM anything exists). GREEN: §3.5 suite exists with self-falsification proven
@@ -373,7 +378,7 @@ Phase 3 (configurable model map) as its config substrate; nothing in P97 blocks 
   no in-process inference in the hub agent lane; 2-worker dispatch and single-backend-per-
   deployment stand. (Mobile in-process inference is a different binary and follows §3.4's
   port discipline — it never enters `llm-adapters` or the kernel.)
-- No learned/real-time router — HK-05/HK-09 owns that arc; P97 is static task routing + one
+- No learned/real-time router — HK-05/HK-09 owns that arc; P101 is static task routing + one
   deterministic cascade, recorded as beneath that arc's threshold by design.
 - No LLM-as-judge anywhere: not in the mobile suite, not as a cascade arbiter, not in CI.
 - No vision output in settlement authority, ever: `DeliveryClaim` keeps no photo field; VLM
