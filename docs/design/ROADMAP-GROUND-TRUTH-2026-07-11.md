@@ -1,5 +1,11 @@
 # ROADMAP + GROUND TRUTH — dowiz (product) & bebop (protocol) — 2026-07-11
 
+> **⚠ SUPERSEDED (2026-07-20)** — by [`ROADMAP.md`](ROADMAP.md), the current chronological master
+> roadmap. This is the oldest roadmap doc in the corpus and never carried its own supersession
+> banner despite being superseded by `ROADMAP-GROUND-TRUTH-2026-07-14.md` on 2026-07-14, which was
+> itself superseded on 2026-07-17 — found and fixed by `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md`.
+> Kept for historical/audit-trail purposes only; do NOT plan against this document.
+>
 > Canonical roadmap. Written and PUSHED to remote before any code runs (operator rule 2026-07-11:
 > memory-first + push-plans-first + ground-truth-outranks-plans). The brief this derives from spans
 > BOTH repos: bebop/bebop2 = protocol, dowiz = product. This doc is the single source of truth for

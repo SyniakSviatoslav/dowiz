@@ -1,5 +1,11 @@
 # GROUND TRUTH — dowiz repository state (2026-07-17, live `git`)
 
+> **⚠ SUPERSEDED (2026-07-20)** — by [`ROADMAP.md`](ROADMAP.md) §0 (live status) and
+> [`GROUND-TRUTH-2026-07-19-FINAL.md`](GROUND-TRUTH-2026-07-19-FINAL.md) (the intermediate
+> re-baseline). This doc never carried its own supersession banner despite being two re-baselines
+> out of date — found and fixed by `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md`. Kept for
+> historical/audit-trail purposes only; do NOT re-derive current state from it.
+>
 > Single source of truth. Captured live via `git`, NOT from memory or older docs.
 > Supersedes any earlier "wave plan" / roadmap status that contradicts this.
 > Re-verify with `git` before trusting any pasted "verified" status.
