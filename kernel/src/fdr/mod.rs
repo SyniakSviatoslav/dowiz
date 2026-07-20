@@ -872,4 +872,37 @@ mod tests {
         // Restore a default-ish hook (not strictly necessary; keeps test isolation sane).
         let _ = std::panic::take_hook();
     }
+
+    // Items 57/58 (span-metric accounting): proves a span ENTERED via `fdr::info_span!`
+    // actually EMITS its close through the `telemetry`-feature `SpanMetricsObserver`
+    // (the P83 Layer-1 observer, a kernel-owned `fdr::SpanObserver`) to `metric.jsonl`.
+    // This is the work-normalized-efficiency proof for the FDR/spectral/householder span
+    // zones: with the observer scoped in, a real span drop routes to the telemetry writer.
+    // Gated `#[cfg(feature = "telemetry")]` so the shipping/`--lib` (no-telemetry) build
+    // stays untouched and the default gate stays green; run it with
+    // `cargo test --offline --lib --features telemetry fdr::`.
+    #[cfg(feature = "telemetry")]
+    #[test]
+    fn telemetry_observer_records_emitted_span_close() {
+        use crate::fdr::SpanObserver;
+        use crate::span_metrics::obs::SpanMetricsObserver;
+        let dir = std::env::temp_dir().join(format!("p83_emitspan_{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        // Scope the P83 telemetry observer onto THIS thread (reverts on guard drop).
+        let _guard = crate::fdr::set_scoped_observer(std::sync::Arc::new(
+            SpanMetricsObserver::new(Some(dir.clone())),
+        ));
+        // Enter a real span; its `Drop` must take a timing (observer is active) and route
+        // the close through the telemetry observer.
+        {
+            let _g = crate::fdr::info_span!("eigenvalues").entered();
+        }
+        let p = dir.join(crate::span_metrics::obs::METRIC_JSONL);
+        let contents = std::fs::read_to_string(&p).expect("metric.jsonl must be written by the telemetry observer");
+        assert!(
+            contents.contains("\"span\":\"eigenvalues\""),
+            "telemetry observer must record the span close emitted by fdr::info_span!"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
