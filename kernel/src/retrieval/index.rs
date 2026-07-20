@@ -109,9 +109,37 @@ impl TrigramIndex {
         }
     }
 
+    /// Incremental `add_document` (P95 §3.2) — append ONE doc's trigrams to the
+    /// inverted postings, appending the doc text and keeping each posting list
+    /// sorted+unique. doc-id = current `len()` (monotonic, decoupled from filename,
+    /// P95 §3.5). Byte-identical to `new` over the same ingestion sequence: postings
+    /// are built per-doc then sorted+dedup'd, same as the constructor.
+    pub fn add_document(&mut self, doc: &str) -> u32 {
+        let id = self.docs.len() as u32;
+        let mut seen = trigrams(doc);
+        seen.sort_unstable();
+        seen.dedup();
+        for t in seen {
+            let post = self.postings.entry(t).or_default();
+            post.push(id);
+        }
+        for v in self.postings.values_mut() {
+            v.sort_unstable();
+            v.dedup();
+        }
+        self.docs.push(doc.to_string());
+        id
+    }
+
     /// Number of documents in the corpus.
     pub fn len(&self) -> usize {
         self.docs.len()
+    }
+
+    /// Read-only access to the stored document strings (used by persistence to
+    /// re-serialize the corpus deterministically, P95 §3.1).
+    pub fn docs(&self) -> impl Iterator<Item = &str> {
+        self.docs.iter().map(|s| s.as_str())
     }
 
     /// Number of distinct trigrams indexed (the literal-keyed posting count).
