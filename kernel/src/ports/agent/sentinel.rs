@@ -120,7 +120,10 @@ impl Corruption {
 /// On `wasm32` no FDR sink is ever installed, so `fdr::emit_alarm` is inert there — but the
 /// caller's deny path still fires (the decision-plane CRC check runs on wasm).
 pub fn safe_state_on_corruption(c: &Corruption) {
-    let detail = format!("expected_crc={:08x} actual_crc={:08x}", c.expected, c.actual);
+    let detail = format!(
+        "expected_crc={:08x} actual_crc={:08x}",
+        c.expected, c.actual
+    );
     fdr::emit_alarm(c.target_name(), &detail);
 }
 
@@ -186,7 +189,9 @@ mod tests {
         // NOTE: corruption is injected via the test-only `corrupt_anchor_bit` on the struct
         // (mirroring item 40's planted-fault test). The Sentinel's detection is what we prove.
         r.corrupt_anchor_bit();
-        let c = r.verify().expect_err("planted corruption must trip verify()");
+        let c = r
+            .verify()
+            .expect_err("planted corruption must trip verify()");
         assert_eq!(c.target, SentinelTarget::AnchorRoster);
         assert_ne!(c.expected, c.actual);
 
@@ -253,13 +258,7 @@ mod tests {
             9999,
         );
         let mut rev = RevocationSet::new();
-        let res = verify_chain(
-            v,
-            &roster,
-            &[],
-            &cap,
-            0,
-        );
+        let res = verify_chain(v, &roster, &[], &cap, 0);
         assert_eq!(res, Err(ChainError::IntegrityFault));
         let _ = &mut rev;
     }
@@ -281,10 +280,14 @@ mod tests {
         let roster = AnchorRoster::new();
         let mut rev = RevocationSet::new();
         // Clean authority structs must verify with NO detected corruption (no alarm path).
-        assert!(verify_candidate(Some(&roster), None).is_ok(),
-            "clean AnchorRoster must not trip the Sentinel");
-        assert!(verify_candidate(None, Some(&rev)).is_ok(),
-            "clean RevocationSet must not trip the Sentinel");
+        assert!(
+            verify_candidate(Some(&roster), None).is_ok(),
+            "clean AnchorRoster must not trip the Sentinel"
+        );
+        assert!(
+            verify_candidate(None, Some(&rev)).is_ok(),
+            "clean RevocationSet must not trip the Sentinel"
+        );
 
         // And a clean verify_chain over the clean roster must NOT return IntegrityFault
         // (the alarm-triggering branch) — it returns UnknownIssuer only because no chain root.
@@ -332,7 +335,10 @@ mod tests {
         );
         // Detection: the corrupted roster no longer verifies its own CRC.
         roster.corrupt_anchor_bit();
-        assert!(roster.verify().is_err(), "corrupted roster must fail IntegrityChecked::verify");
+        assert!(
+            roster.verify().is_err(),
+            "corrupted roster must fail IntegrityChecked::verify"
+        );
         // Deny-closed: verify_chain refuses with IntegrityFault (the alarm-triggering branch).
         let res = verify_chain(&s, &roster, &[], &cap, 0);
         assert_eq!(res, Err(ChainError::IntegrityFault));

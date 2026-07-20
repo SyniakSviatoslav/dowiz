@@ -266,9 +266,7 @@ pub fn extract(html: &str) -> String {
             let is_close = i + 1 < bytes.len() && bytes[i + 1] == b'/';
             let tag_start = if is_close { i + 2 } else { i + 1 };
             let mut j = tag_start;
-            while j < bytes.len()
-                && (bytes[j] as char).is_ascii_alphanumeric()
-            {
+            while j < bytes.len() && (bytes[j] as char).is_ascii_alphanumeric() {
                 j += 1;
             }
             if j == tag_start {

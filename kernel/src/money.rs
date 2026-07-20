@@ -577,8 +577,8 @@ mod tests {
             // The law (apply_tax) refuses denom ≤ 0; the generated organs must
             // refuse the same — both directions, so a future authority flip to
             // the generated organ cannot silently change red-line behavior.
-            (1000, -2.0, false),    // red negative effective rate ⇒ Err
-            (1000, -2.0, true),     // red negative effective rate (inclusive) ⇒ Err
+            (1000, -2.0, false), // red negative effective rate ⇒ Err
+            (1000, -2.0, true),  // red negative effective rate (inclusive) ⇒ Err
         ];
         for &(sub, rate, incl) in MONEY_TAX_FIXTURES {
             // Same boundary conversion as apply_tax (money.rs:275).

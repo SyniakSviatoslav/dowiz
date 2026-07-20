@@ -235,7 +235,9 @@ mod tests {
                 assert!(
                     fdr == exp_fdr,
                     "FDR event must match item-21's for {:?}/{:?} under band {:?}",
-                    ic, iv, band
+                    ic,
+                    iv,
+                    band
                 );
                 // The band only ever changes the class via promotion; it never mints a
                 // rate outside item-21's law.
@@ -286,8 +288,14 @@ mod tests {
         let current = BoundedRate::from_f64(50.0);
         let (na, fa) = respond(DriftClass::Resonant, Verdict::Healthy, band_a, current);
         let (nb, fb) = respond(DriftClass::Resonant, Verdict::Healthy, band_b, current);
-        assert_eq!(na, nb, "same band ⇒ identical adjustment regardless of raw counter");
-        assert!(fa == fb, "same band ⇒ identical FDR event regardless of raw counter");
+        assert_eq!(
+            na, nb,
+            "same band ⇒ identical adjustment regardless of raw counter"
+        );
+        assert!(
+            fa == fb,
+            "same band ⇒ identical FDR event regardless of raw counter"
+        );
     }
 
     #[test]
@@ -307,14 +315,26 @@ mod tests {
         let current = BoundedRate::from_f64(50.0);
 
         // Quantized (correct) path: identical across the two raw values.
-        let (qa, _) = respond(DriftClass::Resonant, Verdict::Healthy, band(Reading::Value(raw_a)), current);
-        let (qb, _) = respond(DriftClass::Resonant, Verdict::Healthy, band(Reading::Value(raw_b)), current);
+        let (qa, _) = respond(
+            DriftClass::Resonant,
+            Verdict::Healthy,
+            band(Reading::Value(raw_a)),
+            current,
+        );
+        let (qb, _) = respond(
+            DriftClass::Resonant,
+            Verdict::Healthy,
+            band(Reading::Value(raw_b)),
+            current,
+        );
         assert_eq!(qa, qb, "quantized path must be replay-safe (P6)");
 
         // Raw-float (forbidden) path: the two raw values produce DIFFERENT
         // adjustments — i.e. it FAILS replay-equality.
-        let (ra, _) = respond_with_raw_cache_miss(DriftClass::Resonant, Verdict::Healthy, raw_a, current);
-        let (rb, _) = respond_with_raw_cache_miss(DriftClass::Resonant, Verdict::Healthy, raw_b, current);
+        let (ra, _) =
+            respond_with_raw_cache_miss(DriftClass::Resonant, Verdict::Healthy, raw_a, current);
+        let (rb, _) =
+            respond_with_raw_cache_miss(DriftClass::Resonant, Verdict::Healthy, raw_b, current);
         assert_ne!(
             ra, rb,
             "raw PMU float MUST break replay-equality — this is why we quantize (P6 guard)"
@@ -350,11 +370,22 @@ mod tests {
             PmuBand::Storm,
             BoundedRate::from_f64(50.0),
         );
-        assert_eq!(next.get(), 40.0, "must use item-21's Unstable table value (0.8)");
-        assert!(!fdr.route_to_breaker, "non-extreme must NOT route to breaker");
+        assert_eq!(
+            next.get(),
+            40.0,
+            "must use item-21's Unstable table value (0.8)"
+        );
+        assert!(
+            !fdr.route_to_breaker,
+            "non-extreme must NOT route to breaker"
+        );
         assert_eq!(fdr.tag, "unstable_healthy");
         // Item 21's seam (schedule) is what produced this — no separate PMU law.
-        let (ref_next, ref_fdr) = schedule(DriftClass::Unstable, Verdict::Healthy, BoundedRate::from_f64(50.0));
+        let (ref_next, ref_fdr) = schedule(
+            DriftClass::Unstable,
+            Verdict::Healthy,
+            BoundedRate::from_f64(50.0),
+        );
         assert_eq!(next, ref_next);
         assert!(fdr == ref_fdr);
     }
@@ -395,7 +426,10 @@ mod tests {
             PmuBand::Calm,
             BoundedRate::from_f64(50.0),
         );
-        assert!(!base_fdr.route_to_breaker, "without PMU storm this is non-extreme");
+        assert!(
+            !base_fdr.route_to_breaker,
+            "without PMU storm this is non-extreme"
+        );
         assert_eq!(base_next.get(), 42.5, "Resonant table value (0.85)");
 
         let mut b = Breaker::new([3u8; 16], tid());
@@ -419,7 +453,12 @@ mod tests {
     fn pmu_absence_is_fail_safe_to_item21_as_is() {
         // When the PMU counter is unreadable (gated host), the band degrades to Calm
         // and the response equals item-21-as-is (no PMU contribution).
-        assert_eq!(band(Reading::Unavailable(crate::fdr::schema::Absence::PermissionDenied)), PmuBand::Calm);
+        assert_eq!(
+            band(Reading::Unavailable(
+                crate::fdr::schema::Absence::PermissionDenied
+            )),
+            PmuBand::Calm
+        );
         let current = BoundedRate::from_f64(50.0);
         for (class, verdict) in all_combos() {
             let (next, fdr) = respond(class, verdict, PmuBand::Calm, current);
@@ -439,7 +478,11 @@ mod tests {
         // `band` is the sole place a raw counter is read. Both are deterministic and
         // quantized; the breaker is reached ONLY through item 21's `schedule_into_breaker`
         // seam (no new TripCause / tick entry point invented here).
-        let (c, v) = informed_classification(DriftClass::Resonant, Verdict::StrangeAttractor, PmuBand::Storm);
+        let (c, v) = informed_classification(
+            DriftClass::Resonant,
+            Verdict::StrangeAttractor,
+            PmuBand::Storm,
+        );
         assert_eq!(c, DriftClass::Unstable);
         // The extreme route uses item 21's seam with item 9's existing TripCause.
         let mut b = Breaker::new([4u8; 16], tid());

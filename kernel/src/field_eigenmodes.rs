@@ -75,7 +75,11 @@ impl NeumannGrid {
     /// Build a grid with an explicit domain mask.
     pub fn masked(w: usize, h: usize, mask: Vec<bool>) -> Self {
         debug_assert_eq!(mask.len(), w * h);
-        Self { w, h, mask: Some(mask) }
+        Self {
+            w,
+            h,
+            mask: Some(mask),
+        }
     }
 
     /// Number of active (non-masked) nodes.
@@ -160,8 +164,10 @@ impl NeumannGrid {
         let mut pairs: Vec<(usize, usize, f64)> = Vec::with_capacity(n);
         for p in 0..w {
             for q in 0..h {
-                let lam = 2.0 * (2.0 - (std::f64::consts::PI * p as f64 / w as f64).cos()
-                    - (std::f64::consts::PI * q as f64 / h as f64).cos());
+                let lam = 2.0
+                    * (2.0
+                        - (std::f64::consts::PI * p as f64 / w as f64).cos()
+                        - (std::f64::consts::PI * q as f64 / h as f64).cos());
                 pairs.push((p, q, lam));
             }
         }
@@ -597,8 +603,10 @@ mod tests {
         let mut target = Vec::new();
         for p in 0..4usize {
             for q in 0..4usize {
-                let lg = 2.0 * (2.0 - (std::f64::consts::PI * p as f64 / 4.0).cos()
-                    - (std::f64::consts::PI * q as f64 / 4.0).cos());
+                let lg = 2.0
+                    * (2.0
+                        - (std::f64::consts::PI * p as f64 / 4.0).cos()
+                        - (std::f64::consts::PI * q as f64 / 4.0).cos());
                 target.push(lg);
             }
         }
@@ -607,14 +615,14 @@ mod tests {
         got.sort_by(|a, b| a.total_cmp(b));
         assert_eq!(got.len(), target.len());
         for (g, t) in got.iter().zip(target.iter()) {
-            assert!(
-                (g - t).abs() < 1e-6,
-                "eigenvalue {g} != analytic {t}"
-            );
+            assert!((g - t).abs() < 1e-6, "eigenvalue {g} != analytic {t}");
         }
         // Field eigenvalues are the graph's own (shared operator L = D−A): ≥ 0.
         for &vf in &graph_vals {
-            assert!(vf >= -1e-9, "field/graph eigenvalue must be ≥ 0 (shared L=D−A): {vf}");
+            assert!(
+                vf >= -1e-9,
+                "field/graph eigenvalue must be ≥ 0 (shared L=D−A): {vf}"
+            );
         }
     }
 
@@ -653,17 +661,23 @@ mod tests {
         let dt = 0.05;
         let u_step = stencil_step(&grid, &u0, dt);
         let r = 12usize; // ≤ ~16, the designed-home budget
-        // Project the stencil truth onto r modes.
+                         // Project the stencil truth onto r modes.
         let truth_r = modal_reconstruct(&basis, &u_step, r);
         // Modal Euler advance of u0, then truncate to r modes.
         let u_modal_full = modal_euler_advance(&basis, &vals, &u0, dt);
         let u_modal_r = modal_reconstruct(&basis, &u_modal_full, r);
         let rms = rms_error(&u_modal_r, &truth_r);
-        assert!(rms < 1e-9, "truncated modal advance inconsistent with stencil project: {rms}");
+        assert!(
+            rms < 1e-9,
+            "truncated modal advance inconsistent with stencil project: {rms}"
+        );
         // r-mode reconstruction must capture real signal (better than zero).
         let full_err = rms_error(&truth_r, &u_step);
         let zero_err = rms_error(&vec![0.0; n], &u_step);
-        assert!(full_err < zero_err, "truncated reconstruction worse than zero — subspace bug");
+        assert!(
+            full_err < zero_err,
+            "truncated reconstruction worse than zero — subspace bug"
+        );
     }
 
     // ── Determinism: byte-identical eigenmodes across calls ──────────────────
@@ -676,11 +690,19 @@ mod tests {
         for (va, vb) in a.0.iter().zip(b.0.iter()) {
             assert_eq!(va.len(), vb.len());
             for (x, y) in va.iter().zip(vb.iter()) {
-                assert_eq!(x.to_bits(), y.to_bits(), "eigenvector not byte-deterministic");
+                assert_eq!(
+                    x.to_bits(),
+                    y.to_bits(),
+                    "eigenvector not byte-deterministic"
+                );
             }
         }
         for (x, y) in a.1.iter().zip(b.1.iter()) {
-            assert_eq!(x.to_bits(), y.to_bits(), "eigenvalue not byte-deterministic");
+            assert_eq!(
+                x.to_bits(),
+                y.to_bits(),
+                "eigenvalue not byte-deterministic"
+            );
         }
     }
 
@@ -715,7 +737,10 @@ mod tests {
             for b in 0..n {
                 let dot: f64 = (0..n).map(|i| basis[a][i] * basis[b][i]).sum();
                 let want = if a == b { 1.0 } else { 0.0 };
-                assert!((dot - want).abs() < 1e-6, "orthonormality violated at ({a},{b})");
+                assert!(
+                    (dot - want).abs() < 1e-6,
+                    "orthonormality violated at ({a},{b})"
+                );
             }
         }
         let lap = crate::spectral::laplacian(&csr.to_adjacency());

@@ -45,9 +45,9 @@ pub enum PostQueryAction {
 // Pure decision on the hub-returned status (P60's — never self-certified).
 pub fn decide_post_query(status: &PaymentStatus) -> PostQueryAction {
     match status {
-        PaymentStatus::Captured
-        | PaymentStatus::Authorized
-        | PaymentStatus::IntentCreated => PostQueryAction::ShowSuccessClearDraft,
+        PaymentStatus::Captured | PaymentStatus::Authorized | PaymentStatus::IntentCreated => {
+            PostQueryAction::ShowSuccessClearDraft
+        }
         PaymentStatus::NoneYet | PaymentStatus::Failed(_) => PostQueryAction::ResubmitSameKey,
         // A voided/refunded intent is terminal: show that outcome and clear — do not resubmit.
         PaymentStatus::Voided | PaymentStatus::Refunded => PostQueryAction::ShowSuccessClearDraft,
@@ -113,7 +113,7 @@ mod tests {
     use super::*;
     use crate::money::Currency;
     use crate::ports::payment_provider::{
-        FailReason, IdemLedger, NLegPlan, ProviderHandles, VendorLeg, LegId, VendorId,
+        FailReason, IdemLedger, LegId, NLegPlan, ProviderHandles, VendorId, VendorLeg,
     };
 
     fn plan() -> NLegPlan {
@@ -153,8 +153,10 @@ mod tests {
             &self,
             key: &IdempotencyKey,
             p: &NLegPlan,
-        ) -> Result<crate::ports::payment_provider::ClientHandoff, crate::ports::payment_provider::PayError>
-        {
+        ) -> Result<
+            crate::ports::payment_provider::ClientHandoff,
+            crate::ports::payment_provider::PayError,
+        > {
             *self.creates.borrow_mut() += 1;
             if self.captured {
                 // Model: the hub captured between send and ack (the dangerous case).
@@ -163,11 +165,13 @@ mod tests {
                     .set_status(*key, PaymentStatus::Captured);
             }
             let _ = p;
-            Ok(crate::ports::payment_provider::ClientHandoff::HostedRedirect {
-                checkout_url: "https://pay.example/checkout/order_42".into(),
-                session_token: [0u8; 32],
-                ttl_s: 900,
-            })
+            Ok(
+                crate::ports::payment_provider::ClientHandoff::HostedRedirect {
+                    checkout_url: "https://pay.example/checkout/order_42".into(),
+                    session_token: [0u8; 32],
+                    ttl_s: 900,
+                },
+            )
         }
         fn query_status_by_key(
             &self,
@@ -186,8 +190,10 @@ mod tests {
             &self,
             _raw: &[u8],
             _headers: &crate::ports::payment_provider::WebhookHeaders,
-        ) -> Result<crate::ports::payment_provider::PaymentEvent, crate::ports::payment_provider::PayError>
-        {
+        ) -> Result<
+            crate::ports::payment_provider::PaymentEvent,
+            crate::ports::payment_provider::PayError,
+        > {
             unimplemented!()
         }
         fn capture_leg(
@@ -219,13 +225,13 @@ mod tests {
         // On reconnect: query FIRST, Captured => zero resubmit.
         let key = IdempotencyKey([0x42u8; 32]);
         let provider = MockProvider::new(true); // hub already captured
-        let outcome = reconnect_draft(
-            &DraftState::PaymentInflight,
-            &key,
-            &provider,
-            &plan(),
+        let outcome = reconnect_draft(&DraftState::PaymentInflight, &key, &provider, &plan());
+        assert_eq!(
+            outcome,
+            ReconnectOutcome::AlreadyLive {
+                status: PaymentStatus::Captured
+            }
         );
-        assert_eq!(outcome, ReconnectOutcome::AlreadyLive { status: PaymentStatus::Captured });
         // THE TEETH: create_with_key called ZERO times — no second charge.
         assert_eq!(*provider.creates.borrow(), 0);
     }
@@ -245,14 +251,13 @@ mod tests {
         // Hub never saw the intent => safe to resubmit with the SAME key (idempotent replay).
         let key = IdempotencyKey([0x44u8; 32]);
         let provider = MockProvider::new(false);
-        let outcome = reconnect_draft(
-            &DraftState::PaymentInflight,
-            &key,
-            &provider,
-            &plan(),
-        );
+        let outcome = reconnect_draft(&DraftState::PaymentInflight, &key, &provider, &plan());
         assert_eq!(outcome, ReconnectOutcome::ResubmittedSameKey);
-        assert_eq!(*provider.creates.borrow(), 1, "exactly one resubmit with the same key");
+        assert_eq!(
+            *provider.creates.borrow(),
+            1,
+            "exactly one resubmit with the same key"
+        );
     }
 
     #[test]
@@ -260,21 +265,61 @@ mod tests {
         // Model a failed intent (declined) => resubmit same key.
         struct FailedProvider;
         impl PaymentProvider for FailedProvider {
-            fn id(&self) -> &str { "failed" }
-            fn create_with_key(&self, _k: &IdempotencyKey, _p: &NLegPlan)
-                -> Result<crate::ports::payment_provider::ClientHandoff, crate::ports::payment_provider::PayError>
-            { Ok(crate::ports::payment_provider::ClientHandoff::HostedRedirect { checkout_url: "x".into(), session_token: [0;32], ttl_s: 1 }) }
-            fn query_status_by_key(&self, _k: &IdempotencyKey)
-                -> Result<PaymentStatus, crate::ports::payment_provider::PayError>
-            { Ok(PaymentStatus::Failed(FailReason::Declined)) }
-            fn verify_webhook(&self, _r: &[u8], _h: &crate::ports::payment_provider::WebhookHeaders)
-                -> Result<crate::ports::payment_provider::PaymentEvent, crate::ports::payment_provider::PayError> { unimplemented!() }
-            fn capture_leg(&self, _l: &LegId, _h: &crate::ports::payment_provider::ChargeHandle)
-                -> Result<(), crate::ports::payment_provider::PayError> { Ok(()) }
-            fn void_leg(&self, _l: &LegId, _h: &crate::ports::payment_provider::ChargeHandle)
-                -> Result<(), crate::ports::payment_provider::PayError> { Ok(()) }
-            fn refund(&self, _r: &crate::ports::payment_provider::RefundRequest)
-                -> Result<(), crate::ports::payment_provider::PayError> { Ok(()) }
+            fn id(&self) -> &str {
+                "failed"
+            }
+            fn create_with_key(
+                &self,
+                _k: &IdempotencyKey,
+                _p: &NLegPlan,
+            ) -> Result<
+                crate::ports::payment_provider::ClientHandoff,
+                crate::ports::payment_provider::PayError,
+            > {
+                Ok(
+                    crate::ports::payment_provider::ClientHandoff::HostedRedirect {
+                        checkout_url: "x".into(),
+                        session_token: [0; 32],
+                        ttl_s: 1,
+                    },
+                )
+            }
+            fn query_status_by_key(
+                &self,
+                _k: &IdempotencyKey,
+            ) -> Result<PaymentStatus, crate::ports::payment_provider::PayError> {
+                Ok(PaymentStatus::Failed(FailReason::Declined))
+            }
+            fn verify_webhook(
+                &self,
+                _r: &[u8],
+                _h: &crate::ports::payment_provider::WebhookHeaders,
+            ) -> Result<
+                crate::ports::payment_provider::PaymentEvent,
+                crate::ports::payment_provider::PayError,
+            > {
+                unimplemented!()
+            }
+            fn capture_leg(
+                &self,
+                _l: &LegId,
+                _h: &crate::ports::payment_provider::ChargeHandle,
+            ) -> Result<(), crate::ports::payment_provider::PayError> {
+                Ok(())
+            }
+            fn void_leg(
+                &self,
+                _l: &LegId,
+                _h: &crate::ports::payment_provider::ChargeHandle,
+            ) -> Result<(), crate::ports::payment_provider::PayError> {
+                Ok(())
+            }
+            fn refund(
+                &self,
+                _r: &crate::ports::payment_provider::RefundRequest,
+            ) -> Result<(), crate::ports::payment_provider::PayError> {
+                Ok(())
+            }
         }
         let key = IdempotencyKey([0x45u8; 32]);
         let outcome = reconnect_draft(&DraftState::PaymentInflight, &key, &FailedProvider, &plan());
@@ -290,11 +335,29 @@ mod tests {
     #[test]
     fn decide_post_query_terminal_no_resubmit() {
         // Voided/Refunded => do NOT resubmit (show outcome, clear).
-        assert_eq!(decide_post_query(&PaymentStatus::Voided), PostQueryAction::ShowSuccessClearDraft);
-        assert_eq!(decide_post_query(&PaymentStatus::Refunded), PostQueryAction::ShowSuccessClearDraft);
-        assert_eq!(decide_post_query(&PaymentStatus::Captured), PostQueryAction::ShowSuccessClearDraft);
-        assert_eq!(decide_post_query(&PaymentStatus::Authorized), PostQueryAction::ShowSuccessClearDraft);
-        assert_eq!(decide_post_query(&PaymentStatus::IntentCreated), PostQueryAction::ShowSuccessClearDraft);
-        assert_eq!(decide_post_query(&PaymentStatus::NoneYet), PostQueryAction::ResubmitSameKey);
+        assert_eq!(
+            decide_post_query(&PaymentStatus::Voided),
+            PostQueryAction::ShowSuccessClearDraft
+        );
+        assert_eq!(
+            decide_post_query(&PaymentStatus::Refunded),
+            PostQueryAction::ShowSuccessClearDraft
+        );
+        assert_eq!(
+            decide_post_query(&PaymentStatus::Captured),
+            PostQueryAction::ShowSuccessClearDraft
+        );
+        assert_eq!(
+            decide_post_query(&PaymentStatus::Authorized),
+            PostQueryAction::ShowSuccessClearDraft
+        );
+        assert_eq!(
+            decide_post_query(&PaymentStatus::IntentCreated),
+            PostQueryAction::ShowSuccessClearDraft
+        );
+        assert_eq!(
+            decide_post_query(&PaymentStatus::NoneYet),
+            PostQueryAction::ResubmitSameKey
+        );
     }
 }

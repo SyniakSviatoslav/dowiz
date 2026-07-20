@@ -126,42 +126,74 @@ pub const LAW_TABLE: [(DriftClass, Verdict, Adjustment); 9] = [
     (
         DriftClass::Damped,
         Verdict::Healthy,
-        Adjustment { mult: 1.0, tag: "damped_healthy", route_to_breaker: false },
+        Adjustment {
+            mult: 1.0,
+            tag: "damped_healthy",
+            route_to_breaker: false,
+        },
     ),
     (
         DriftClass::Damped,
         Verdict::LimitCycle,
-        Adjustment { mult: 1.0, tag: "damped_limit_cycle", route_to_breaker: false },
+        Adjustment {
+            mult: 1.0,
+            tag: "damped_limit_cycle",
+            route_to_breaker: false,
+        },
     ),
     (
         DriftClass::Damped,
         Verdict::StrangeAttractor,
-        Adjustment { mult: 0.95, tag: "damped_strange", route_to_breaker: false },
+        Adjustment {
+            mult: 0.95,
+            tag: "damped_strange",
+            route_to_breaker: false,
+        },
     ),
     (
         DriftClass::Resonant,
         Verdict::Healthy,
-        Adjustment { mult: 0.95, tag: "resonant_healthy", route_to_breaker: false },
+        Adjustment {
+            mult: 0.95,
+            tag: "resonant_healthy",
+            route_to_breaker: false,
+        },
     ),
     (
         DriftClass::Resonant,
         Verdict::LimitCycle,
-        Adjustment { mult: 0.9, tag: "resonant_limit_cycle", route_to_breaker: false },
+        Adjustment {
+            mult: 0.9,
+            tag: "resonant_limit_cycle",
+            route_to_breaker: false,
+        },
     ),
     (
         DriftClass::Resonant,
         Verdict::StrangeAttractor,
-        Adjustment { mult: 0.85, tag: "resonant_strange", route_to_breaker: false },
+        Adjustment {
+            mult: 0.85,
+            tag: "resonant_strange",
+            route_to_breaker: false,
+        },
     ),
     (
         DriftClass::Unstable,
         Verdict::Healthy,
-        Adjustment { mult: 0.8, tag: "unstable_healthy", route_to_breaker: false },
+        Adjustment {
+            mult: 0.8,
+            tag: "unstable_healthy",
+            route_to_breaker: false,
+        },
     ),
     (
         DriftClass::Unstable,
         Verdict::LimitCycle,
-        Adjustment { mult: 0.6, tag: "unstable_limit_cycle", route_to_breaker: false },
+        Adjustment {
+            mult: 0.6,
+            tag: "unstable_limit_cycle",
+            route_to_breaker: false,
+        },
     ),
     (
         DriftClass::Unstable,
@@ -228,7 +260,11 @@ impl FdrAdjustment {
 /// identical `(BoundedRate, FdrAdjustment)` sequence. `debug_assert!`s the output
 /// is within `[MIN, MAX]` (cross-checking the newtype's clamp against an
 /// independent bound check) on every call.
-pub fn schedule(class: DriftClass, verdict: Verdict, current: BoundedRate) -> (BoundedRate, FdrAdjustment) {
+pub fn schedule(
+    class: DriftClass,
+    verdict: Verdict,
+    current: BoundedRate,
+) -> (BoundedRate, FdrAdjustment) {
     // The law table is exhaustive over the 9 (DriftClass × Verdict) combos, so
     // this `unwrap` is total by construction; the exhaustive oracle test asserts it.
     let row = LAW_TABLE
@@ -380,7 +416,11 @@ mod tests {
                 "rate mismatch for {:?}/{:?}",
                 class, verdict
             );
-            assert_eq!(fdr.tag, row.2.tag, "tag mismatch for {:?}/{:?}", class, verdict);
+            assert_eq!(
+                fdr.tag, row.2.tag,
+                "tag mismatch for {:?}/{:?}",
+                class, verdict
+            );
             assert_eq!(
                 fdr.route_to_breaker, row.2.route_to_breaker,
                 "route flag mismatch for {:?}/{:?}",

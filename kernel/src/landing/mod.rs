@@ -60,8 +60,8 @@ pub const CLAIM_BUCKET_REFILL: f64 = 0.2; // ≈ one claim / 5 s — degrade-clo
 
 // Re-export the shared claim-service types so callers import from `landing::*`.
 pub use claim_client::{
-    ClaimClient, ClaimError, ClaimOutcome, ClaimRequest, ClaimServicePort, ClaimedHub, ChallengeToken,
-    HubId, InterestAck, InterestSubmission, MockClaimService,
+    ChallengeToken, ClaimClient, ClaimError, ClaimOutcome, ClaimRequest, ClaimServicePort,
+    ClaimedHub, HubId, InterestAck, InterestSubmission, MockClaimService,
 };
 pub use form::{FormError, FormField, SignupForm};
 pub use journey::{ClaimJourney, JourneyEvent, LandingStep};

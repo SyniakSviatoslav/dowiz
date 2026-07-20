@@ -302,10 +302,16 @@ mod tests {
         // This host has no RAPL interface (blueprint §3.2 / verified empty
         // /sys/class/powercap). The field must be PRESENT with a named reason.
         let r = read_joules_uj();
-        assert!(r.is_unavailable(), "expected RAPL-less host to report Unavailable");
+        assert!(
+            r.is_unavailable(),
+            "expected RAPL-less host to report Unavailable"
+        );
         let w = r.write_field(JsonWriter::obj(), "joules_uj").finish();
         // Greppable named absence — key present, reason spelled out (§G.9 proof).
-        assert!(w.contains("\"joules_uj\":{\"unavailable\":"), "field must be present: {w}");
+        assert!(
+            w.contains("\"joules_uj\":{\"unavailable\":"),
+            "field must be present: {w}"
+        );
         assert!(w.contains("unavailable"), "reason must be greppable: {w}");
     }
 
@@ -368,9 +374,18 @@ mod tests {
             fields: vec![("tick", "3".into())],
         };
         let j = ev.to_json();
-        assert!(j.contains("\"kind\":\"heartbeat\""), "must serialize as heartbeat: {j}");
-        assert!(j.contains("\"name\":\"heartbeat\""), "name carries heartbeat: {j}");
-        assert!(j.contains("\"fields\":{\"tick\":\"3\"}"), "progress counters present: {j}");
+        assert!(
+            j.contains("\"kind\":\"heartbeat\""),
+            "must serialize as heartbeat: {j}"
+        );
+        assert!(
+            j.contains("\"name\":\"heartbeat\""),
+            "name carries heartbeat: {j}"
+        );
+        assert!(
+            j.contains("\"fields\":{\"tick\":\"3\"}"),
+            "progress counters present: {j}"
+        );
         // Stable, deterministic envelope order — the same shape an `Event` would take.
         assert!(j.starts_with("{\"seq\":3,\"ts_unix_ns\":1,\"mono_ns\":2,"));
     }

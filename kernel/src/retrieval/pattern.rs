@@ -346,7 +346,11 @@ mod tests {
                 other => panic!("pattern {:?} must be rejected, got {:?}", pat, other),
             }
             // The reference tokenizer rejects the same inputs identically.
-            assert!(naive_tokenize(pat).is_err(), "reference must reject {:?}", pat);
+            assert!(
+                naive_tokenize(pat).is_err(),
+                "reference must reject {:?}",
+                pat
+            );
         }
         // The seam surfaces the same typed error.
         let idx = TrigramIndex::new(FIXTURE);
@@ -359,7 +363,11 @@ mod tests {
     #[test]
     fn supported_subset_always_compiles() {
         for p in BATTERY {
-            assert!(Pattern::compile(p).is_ok(), "battery pattern {:?} must compile", p);
+            assert!(
+                Pattern::compile(p).is_ok(),
+                "battery pattern {:?} must compile",
+                p
+            );
         }
     }
 
@@ -422,7 +430,10 @@ mod tests {
             assert_eq!(hr, nv, "pattern={:?} doc={:?}", pat, doc);
             checked += 1;
         }
-        assert!(checked > 3000, "sweep must exercise most iterations (got {checked})");
+        assert!(
+            checked > 3000,
+            "sweep must exercise most iterations (got {checked})"
+        );
     }
 
     // ── Frozen golden: the incumbent's verdict on the historical pattern ──────

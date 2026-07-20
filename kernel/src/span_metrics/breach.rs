@@ -25,7 +25,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use super::obs::{ALERT_JSONL, JsonlWriter, LOAD_BREACH_THRESHOLD, normalized_load1};
+use super::obs::{normalized_load1, JsonlWriter, ALERT_JSONL, LOAD_BREACH_THRESHOLD};
 
 /// Default wall-clock duration the system-wide `perf record` is allowed to run.
 /// Bounded so it can never hang the host (R6 "must not hang").
@@ -58,7 +58,9 @@ pub fn check_load_breach(dir: Option<PathBuf>) -> BreachAction {
         Some(l) => l,
         None => {
             // Non-Linux / unreadable load: cannot detect a breach here. Degrade closed.
-            return BreachAction::NoBreach { load: f64::NEG_INFINITY };
+            return BreachAction::NoBreach {
+                load: f64::NEG_INFINITY,
+            };
         }
     };
     if load < LOAD_BREACH_THRESHOLD {
@@ -104,7 +106,8 @@ fn trigger_perf(dir: &Option<PathBuf>) -> BreachAction {
                     load: normalized_load1().unwrap_or(f64::INFINITY),
                     captured: false,
                     fallback: true,
-                    detail: "perf unavailable; pprof feature-gated fallback (no-op marker)".to_string(),
+                    detail: "perf unavailable; pprof feature-gated fallback (no-op marker)"
+                        .to_string(),
                 }
             }
             #[cfg(not(feature = "pprof"))]

@@ -98,7 +98,14 @@ impl SignalWeights {
     /// Content digest (used by `SignalVector::digest`).
     pub fn digest(&self) -> [u8; 32] {
         let mut buf = Vec::with_capacity(24);
-        for v in [self.conf, self.drift, self.cusum, self.constraint, self.disagreement, self.truth] {
+        for v in [
+            self.conf,
+            self.drift,
+            self.cusum,
+            self.constraint,
+            self.disagreement,
+            self.truth,
+        ] {
             buf.extend_from_slice(&v.to_le_bytes());
         }
         crate::event_log::sha3_256(&buf)
@@ -143,7 +150,9 @@ pub fn fit_from_rates(
         }
     }
     if normals == 0 || anomalies == 0 {
-        return Err(FitError { kind: "degenerate-roc" });
+        return Err(FitError {
+            kind: "degenerate-roc",
+        });
     }
     let fpr_budget = target_fpr.clamp(0.0, 1.0);
     // Candidate thresholds = unique scores, descending (most permissive first).
@@ -173,7 +182,11 @@ pub fn fit_from_rates(
     }
     let theta_open = match theta_open {
         Some(t) => t,
-        None => return Err(FitError { kind: "unfit-open-fpr" }),
+        None => {
+            return Err(FitError {
+                kind: "unfit-open-fpr",
+            })
+        }
     };
 
     // θ_kill = largest t meeting a 10× stricter budget (the kill threshold is
@@ -256,16 +269,31 @@ mod tests {
 
     #[test]
     fn fit_fails_on_empty_roc() {
-        let p = RateProfile { w_consec: 3, w_kill: 5, probes: 4, cooldown_base: 8, cooldown_cap: 1024 };
+        let p = RateProfile {
+            w_consec: 3,
+            w_kill: 5,
+            probes: 4,
+            cooldown_base: 8,
+            cooldown_cap: 1024,
+        };
         assert_eq!(
-            fit_from_rates(&[], 0.05, p, default_weights()).err().unwrap().kind,
+            fit_from_rates(&[], 0.05, p, default_weights())
+                .err()
+                .unwrap()
+                .kind,
             "empty-roc"
         );
     }
 
     #[test]
     fn fit_fails_on_single_class_roc() {
-        let p = RateProfile { w_consec: 3, w_kill: 5, probes: 4, cooldown_base: 8, cooldown_cap: 1024 };
+        let p = RateProfile {
+            w_consec: 3,
+            w_kill: 5,
+            probes: 4,
+            cooldown_base: 8,
+            cooldown_cap: 1024,
+        };
         let only_normal: Vec<(f32, bool)> = (0..10).map(|i| (i as f32 * 0.1, false)).collect();
         assert_eq!(
             fit_from_rates(&only_normal, 0.05, p, default_weights())
@@ -283,7 +311,13 @@ mod tests {
         // (normals ≤ 0.38, anomalies 0.5 … 0.975). The fitter returns the LARGEST
         // t meeting the FPR budget, which for separable data is the top of the
         // anomaly cluster — strictly above every normal, hence separated.
-        let p = RateProfile { w_consec: 3, w_kill: 5, probes: 4, cooldown_base: 8, cooldown_cap: 1024 };
+        let p = RateProfile {
+            w_consec: 3,
+            w_kill: 5,
+            probes: 4,
+            cooldown_base: 8,
+            cooldown_cap: 1024,
+        };
         let mut rates: Vec<(f32, bool)> = Vec::new();
         for i in 0..20 {
             rates.push(((i as f32 / 50.0), false)); // 0.00 .. 0.38 normal
@@ -291,7 +325,8 @@ mod tests {
         for i in 20..40 {
             rates.push(((i as f32 / 40.0), true)); // 0.50 .. 0.975 anomaly
         }
-        let tid = fit_from_rates(&rates, 0.05, p, default_weights()).expect("fit must succeed on separable ROC");
+        let tid = fit_from_rates(&rates, 0.05, p, default_weights())
+            .expect("fit must succeed on separable ROC");
         // θ_open must be separated: above every normal (≤ 0.38) and within the
         // anomaly cluster (≤ 0.975). The fitter picks the largest FPR-qualifying t.
         assert!((0.38..=0.975).contains(&tid.open), "θ_open={}", tid.open);
@@ -317,6 +352,9 @@ mod tests {
         }; 6];
         let w = fit_weights(&stats);
         let s = w.conf + w.drift + w.cusum + w.constraint + w.disagreement + w.truth;
-        assert!((s - 1.0).abs() < 1e-5, "weights must normalize to 1, got {s}");
+        assert!(
+            (s - 1.0).abs() < 1e-5,
+            "weights must normalize to 1, got {s}"
+        );
     }
 }

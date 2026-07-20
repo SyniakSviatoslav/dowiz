@@ -188,11 +188,21 @@ fn read_proc_ctxt_switches() -> (Reading<u64>, Reading<u64>) {
     let mut nonvol: Reading<u64> = Reading::Unavailable(Absence::ReadError);
     for line in status.lines() {
         if let Some(rest) = line.strip_prefix("voluntary_ctxt_switches:") {
-            if let Some(v) = rest.trim().split_whitespace().next().and_then(|s| s.parse().ok()) {
+            if let Some(v) = rest
+                .trim()
+                .split_whitespace()
+                .next()
+                .and_then(|s| s.parse().ok())
+            {
                 vol = Reading::Value(v);
             }
         } else if let Some(rest) = line.strip_prefix("nonvoluntary_ctxt_switches:") {
-            if let Some(v) = rest.trim().split_whitespace().next().and_then(|s| s.parse().ok()) {
+            if let Some(v) = rest
+                .trim()
+                .split_whitespace()
+                .next()
+                .and_then(|s| s.parse().ok())
+            {
                 nonvol = Reading::Value(v);
             }
         }
@@ -271,7 +281,7 @@ unsafe fn syscall5(n: i64, a1: i64, a2: i64, a3: i64, a4: i64, a5: i64) -> i64 {
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn errno_absence(ret: i64) -> Absence {
     match -ret {
-        1 | 13 => Absence::PermissionDenied,      // EPERM / EACCES — perf_event_paranoid
+        1 | 13 => Absence::PermissionDenied, // EPERM / EACCES — perf_event_paranoid
         2 | 19 | 38 | 95 => Absence::NoPmuInterface, // ENOENT/ENODEV/ENOSYS/EOPNOTSUPP
         _ => Absence::ReadError,
     }
@@ -331,16 +341,7 @@ fn perf_read(fd: &PerfFd) -> Reading<u64> {
     const SYS_READ: i64 = 0;
     let mut val: u64 = 0;
     // SAFETY: read(2) into an 8-byte owned stack slot; `count = 8`.
-    let n = unsafe {
-        syscall5(
-            SYS_READ,
-            fd.0 as i64,
-            &mut val as *mut u64 as i64,
-            8,
-            0,
-            0,
-        )
-    };
+    let n = unsafe { syscall5(SYS_READ, fd.0 as i64, &mut val as *mut u64 as i64, 8, 0, 0) };
     if n == 8 {
         Reading::Value(val)
     } else if n < 0 {
@@ -451,9 +452,18 @@ mod tests {
         }
 
         let (minflt, majflt, nswap) = read_proc_stat_faults();
-        assert!(!minflt.is_unavailable(), "minflt must be a real Value: {minflt:?}");
-        assert!(!majflt.is_unavailable(), "majflt must be a real Value: {majflt:?}");
-        assert!(!nswap.is_unavailable(), "nswap must parse (a truthful 0): {nswap:?}");
+        assert!(
+            !minflt.is_unavailable(),
+            "minflt must be a real Value: {minflt:?}"
+        );
+        assert!(
+            !majflt.is_unavailable(),
+            "majflt must be a real Value: {majflt:?}"
+        );
+        assert!(
+            !nswap.is_unavailable(),
+            "nswap must parse (a truthful 0): {nswap:?}"
+        );
         // A live process always has taken minor faults.
         assert!(
             matches!(minflt, Reading::Value(v) if v > 0),
@@ -461,8 +471,14 @@ mod tests {
         );
 
         let (vol, nonvol) = read_proc_ctxt_switches();
-        assert!(!vol.is_unavailable(), "vol ctxt switches must parse: {vol:?}");
-        assert!(!nonvol.is_unavailable(), "nonvol ctxt switches must parse: {nonvol:?}");
+        assert!(
+            !vol.is_unavailable(),
+            "vol ctxt switches must parse: {vol:?}"
+        );
+        assert!(
+            !nonvol.is_unavailable(),
+            "nonvol ctxt switches must parse: {nonvol:?}"
+        );
     }
 
     #[test]
@@ -508,7 +524,10 @@ mod tests {
     #[test]
     fn stamp_always_serializes_every_field_named_absence_not_missing_key() {
         let station = PmuStation::new();
-        let json = station.sample().write(super::super::json::JsonWriter::obj()).finish();
+        let json = station
+            .sample()
+            .write(super::super::json::JsonWriter::obj())
+            .finish();
         // Every field key present (value or {"unavailable":...}).
         for key in [
             "tsc_cycles",
@@ -522,7 +541,10 @@ mod tests {
             "hw_cache_misses",
             "hw_branch_misses",
         ] {
-            assert!(json.contains(&format!("\"{key}\":")), "missing key {key} in {json}");
+            assert!(
+                json.contains(&format!("\"{key}\":")),
+                "missing key {key} in {json}"
+            );
         }
     }
 
@@ -536,12 +558,24 @@ mod tests {
     #[test]
     fn errno_maps_to_named_absence_and_serializes() {
         assert_eq!(errno_absence(-1), Absence::PermissionDenied, "EPERM");
-        assert_eq!(errno_absence(-13), Absence::PermissionDenied, "EACCES (paranoid gate)");
+        assert_eq!(
+            errno_absence(-13),
+            Absence::PermissionDenied,
+            "EACCES (paranoid gate)"
+        );
         assert_eq!(errno_absence(-2), Absence::NoPmuInterface, "ENOENT");
         assert_eq!(errno_absence(-19), Absence::NoPmuInterface, "ENODEV");
-        assert_eq!(errno_absence(-38), Absence::NoPmuInterface, "ENOSYS (seccomp)");
+        assert_eq!(
+            errno_absence(-38),
+            Absence::NoPmuInterface,
+            "ENOSYS (seccomp)"
+        );
         assert_eq!(errno_absence(-95), Absence::NoPmuInterface, "EOPNOTSUPP");
-        assert_eq!(errno_absence(-22), Absence::ReadError, "EINVAL → generic ReadError");
+        assert_eq!(
+            errno_absence(-22),
+            Absence::ReadError,
+            "EINVAL → generic ReadError"
+        );
 
         // A stamp whose Tier-B fields were blocked must serialize named absences.
         let blocked = PmuStamp {
@@ -556,7 +590,9 @@ mod tests {
             hw_cache_misses: Reading::Unavailable(Absence::PermissionDenied),
             hw_branch_misses: Reading::Unavailable(Absence::PermissionDenied),
         };
-        let json = blocked.write(super::super::json::JsonWriter::obj()).finish();
+        let json = blocked
+            .write(super::super::json::JsonWriter::obj())
+            .finish();
         assert!(
             json.contains("\"hw_instructions\":{\"unavailable\":\"permission_denied\"}"),
             "blocked Tier B must be a greppable named absence: {json}"
@@ -609,7 +645,10 @@ mod tests {
         let station = PmuStation::new();
         let (report, delta) = station.bracket(|| analyze_detailed(&toks));
         // Purity: identical to the un-bracketed call.
-        assert_eq!(report.report.verdict, analyze_detailed(&toks).report.verdict);
+        assert_eq!(
+            report.report.verdict,
+            analyze_detailed(&toks).report.verdict
+        );
         assert_eq!(report.report.verdict, Verdict::Healthy);
         // The window's rdtsc delta is a real (nonzero, on any real classification) count.
         assert!(
@@ -623,7 +662,10 @@ mod tests {
         // classification), never a fabricated 0.
         match delta.hw_instructions {
             Reading::Value(v) => {
-                assert!(v > 0, "bracketed instruction delta must be > 0 if readable: {v}");
+                assert!(
+                    v > 0,
+                    "bracketed instruction delta must be > 0 if readable: {v}"
+                );
                 eprintln!("BRACKET_TIER_B_DELTA hw_instructions = {v}");
             }
             Reading::Unavailable(a) => assert!(matches!(

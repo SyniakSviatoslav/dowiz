@@ -1183,8 +1183,15 @@ mod tests {
         let half = 1i32 << (D - 1); // 2^{D-1}
         for a in 0..Q {
             let (a1, a0) = power2round(a);
-            assert_eq!(a1 * (1 << D) + a0, a, "power2round({a}) does not reconstruct");
-            assert!(a0 > -half && a0 <= half, "power2round({a}) a0={a0} out of range");
+            assert_eq!(
+                a1 * (1 << D) + a0,
+                a,
+                "power2round({a}) does not reconstruct"
+            );
+            assert!(
+                a0 > -half && a0 <= half,
+                "power2round({a}) a0={a0} out of range"
+            );
         }
     }
 
@@ -1295,7 +1302,7 @@ mod kani_proofs {
         let t = montgomery_reduce(prod); // |t| < Q (proven above)
         let y_new = x - t; // ntt.rs:210
         let x_new = x + t; // ntt.rs:211
-        // Growth invariant: |x'|,|y'| < (k+1)·Q, and (implicitly, via Kani) no i32 overflow.
+                           // Growth invariant: |x'|,|y'| < (k+1)·Q, and (implicitly, via Kani) no i32 overflow.
         let kp1q = ((k + 1) * Q as i64) as i32;
         assert!((x_new as i64).abs() < kp1q as i64);
         assert!((y_new as i64).abs() < kp1q as i64);

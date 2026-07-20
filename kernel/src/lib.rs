@@ -52,12 +52,6 @@ pub mod core_pinning;
 /// Deterministic CSR graph + synchronous Jacobi personalized-PageRank
 /// (retrieval-blueprint v2 diffusion/recall primitive).
 pub mod csr;
-/// ITEM 32 (Part A, acceptance #2): the eqc-emitted Laplacian as a THIRD parity
-/// leg against `spectral::laplacian` (dense) + `Csr::laplacian_spmv`. Gated to
-/// `#[cfg(test)]` so the SHIPPING lib build carries NO `eqc_rs` symbols / dep
-/// (eqc-rs is a DEV-dependency only — keeps `cargo tree -e no-dev` clean).
-#[cfg(test)]
-pub mod laplacian_eqc_parity;
 pub mod domain;
 /// P04 product-math: Disjoint-Set Union (union-find) + Kruskal MST — the single
 /// canonical DSU/MST primitive. `cgraph::c_components` delegates here; Phase 9
@@ -121,13 +115,13 @@ pub mod kalman;
 /// Compiled ONLY under `cfg(kani)` — zero footprint in every normal build.
 #[cfg(kani)]
 mod kani_selftest;
-/// Item 52 (space-grade roadmap §J): planted-fault self-test for the `miri-gate`.
-/// Compiled under `cfg(test)` (so a plain `cargo test` proves it compiles and runs
-/// the no-op native branch — zero footprint in any non-test/shipping build) AND
-/// under `cfg(miri)` (where the planted-UB branch executes and Miri must flag it).
-#[cfg(any(test, miri))]
-mod miri_selftest;
 pub mod landing;
+/// ITEM 32 (Part A, acceptance #2): the eqc-emitted Laplacian as a THIRD parity
+/// leg against `spectral::laplacian` (dense) + `Csr::laplacian_spmv`. Gated to
+/// `#[cfg(test)]` so the SHIPPING lib build carries NO `eqc_rs` symbols / dep
+/// (eqc-rs is a DEV-dependency only — keeps `cargo tree -e no-dev` clean).
+#[cfg(test)]
+pub mod laplacian_eqc_parity;
 /// §3.3 Layer-B (semantic) leakage gate — cosine-0.9 near-duplicate rejection over an injected
 /// `&dyn LlmBackend` embedding model. Native, zero-dep; the live bridge lives in `llm-adapters`.
 pub mod leak_gate;
@@ -149,6 +143,12 @@ pub mod mesh_replication;
 /// claim-latency anomaly detector (§4). F40 ML-DSA signed envelope DEFERRED
 /// pending bebop2 C4b — see `metrics.rs` header. Fail-closed local sink.
 pub mod metrics;
+/// Item 52 (space-grade roadmap §J): planted-fault self-test for the `miri-gate`.
+/// Compiled under `cfg(test)` (so a plain `cargo test` proves it compiles and runs
+/// the no-op native branch — zero footprint in any non-test/shipping build) AND
+/// under `cfg(miri)` (where the planted-UB branch executes and Miri must flag it).
+#[cfg(any(test, miri))]
+mod miri_selftest;
 pub mod moderation;
 /// P9 wave: deterministic seedable PRNG (SplitMix64 → PCG64), zero-dep,
 /// reproducible Monte-Carlo for the empirical causal joint.
@@ -364,12 +364,6 @@ pub use causal::{
     empirical_identify, frontdoor_adjust, frontdoor_criterion, identify_causal_effect,
     instrumental_adjust, sample_backdoor, CausalEffect, HedgeWitness, IdFormula, IdResult,
 };
-/// Item 9 (space-grade roadmap §D "THE PIVOT") — the deterministic
-/// fault-containment circuit breaker. The `Result<Permit, Tripped>` gate is the
-/// single admission decision; alarm receiver `Breaker::on_commit_error` consumes
-/// `CommitError::Store`. Golden-signature-pinned cyclic FSM, shares the Tier-1 FDR
-/// ring for audit, zero new dependencies (pure `std`).
-pub mod breaker;
 /// Item 21 (space-grade roadmap §E): the deterministic bounded gain-scheduling
 /// layer. Subscribes to `markov::Verdict`/`spectral::DriftClass`, holds an explicit
 /// {classified-state → bounded adjustment} law table (the pilot: `token_bucket`
@@ -384,6 +378,12 @@ pub mod autonomic;
 /// guard) — never a raw counter in the control-law arithmetic. Diagnostic-grade;
 /// no CI gate keys on any PMU value.
 pub mod autonomic_pmu;
+/// Item 9 (space-grade roadmap §D "THE PIVOT") — the deterministic
+/// fault-containment circuit breaker. The `Result<Permit, Tripped>` gate is the
+/// single admission decision; alarm receiver `Breaker::on_commit_error` consumes
+/// `CommitError::Store`. Golden-signature-pinned cyclic FSM, shares the Tier-1 FDR
+/// ring for audit, zero new dependencies (pure `std`).
+pub mod breaker;
 /// Item 12 (space-grade roadmap §E) — temporal triple-modular-redundancy (SIHFT)
 /// pilot. Re-runs 2–3 named µs-scale pure functions and votes with a trivial `==`;
 /// a non-unanimous outcome trips the item-9 breaker (`TripCause::VoteMismatch`) +

@@ -10,7 +10,9 @@
 
 use crate::breaker::audit::{AuditChain, AuditEvent, AuditKind};
 use crate::breaker::signal::SignalVector;
-use crate::breaker::state::{manual_reset, BreakerRecord, BreakerState, ManualResetProof, StepOutcome};
+use crate::breaker::state::{
+    manual_reset, BreakerRecord, BreakerState, ManualResetProof, StepOutcome,
+};
 use crate::breaker::thresholds::ThresholdId;
 
 /// A single attack-corpus row (Phase-3 pushes real rows here; item-9 leaves it
@@ -35,7 +37,11 @@ impl Harness {
     pub fn new(agent_id: [u8; 16], tid: ThresholdId) -> Self {
         let rec = crate::breaker::state::new_record(agent_id, 0, tid);
         let audit = AuditChain::new(agent_id, None);
-        Harness { rec, audit, window: 0 }
+        Harness {
+            rec,
+            audit,
+            window: 0,
+        }
     }
 
     /// Step the breaker one window with the given signal (the `drive` seam).

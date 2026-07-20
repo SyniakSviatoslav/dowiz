@@ -210,7 +210,9 @@ impl std::fmt::Display for CatalogError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CatalogError::NegativePrice => write!(f, "negative price rejected"),
-            CatalogError::CrossCurrency => write!(f, "cross-currency line rejected (one order = one currency)"),
+            CatalogError::CrossCurrency => {
+                write!(f, "cross-currency line rejected (one order = one currency)")
+            }
             CatalogError::CrossVendor => write!(f, "cross-vendor component rejected"),
             CatalogError::Overflow => write!(f, "price/amount overflow"),
             CatalogError::UnknownLeaf(l) => write!(f, "unknown leaf {l:?}"),
@@ -802,10 +804,13 @@ pub fn charge_legs(order: &Order) -> Result<Vec<ChargeLeg>, CatalogError> {
                 .ok_or(CatalogError::Overflow)?,
             cur,
         );
-        let entry = by_vendor.entry(item.vendor_id).or_insert_with(|| {
-            (Money::new(0, cur), 0)
-        });
-        entry.0 = entry.0.checked_add(line).map_err(|_| CatalogError::Overflow)?;
+        let entry = by_vendor
+            .entry(item.vendor_id)
+            .or_insert_with(|| (Money::new(0, cur), 0));
+        entry.0 = entry
+            .0
+            .checked_add(line)
+            .map_err(|_| CatalogError::Overflow)?;
         entry.1 += 1;
     }
     let cur = currency.unwrap_or(Currency::All);

@@ -12,10 +12,13 @@
 //!
 //! Compiled only under the `pq` feature (the primitives it reuses are gated there).
 
-use aes_gcm::{aead::{Aead, KeyInit}, Aes256Gcm, Nonce};
 use crate::pq::keccak::shake256;
 use crate::pq::x25519::x25519;
 use crate::wallet::record::WalletRecord;
+use aes_gcm::{
+    aead::{Aead, KeyInit},
+    Aes256Gcm, Nonce,
+};
 
 /// Signal's ~1–2 min link-code window (R4 §6.1).
 pub const TRANSFER_QR_TTL_S: u32 = 120;
@@ -226,13 +229,18 @@ pub fn source_scanned(peer: TransferInit, src_kp: EphemeralKeypair) -> TransferS
 /// gate. `RejectTransfer` ⇒ `Failed(UserRejected)`. No other command leaves `ScannedInit`.
 pub fn source_confirm(state: TransferState, cmd: TransferCmd) -> TransferState {
     match (state, cmd) {
-        (TransferState::ScannedInit { peer, kp, fingerprint }, TransferCmd::ConfirmTransfer) => {
-            TransferState::AwaitingConfirmation {
+        (
+            TransferState::ScannedInit {
                 peer,
                 kp,
                 fingerprint,
-            }
-        }
+            },
+            TransferCmd::ConfirmTransfer,
+        ) => TransferState::AwaitingConfirmation {
+            peer,
+            kp,
+            fingerprint,
+        },
         (TransferState::ScannedInit { .. }, TransferCmd::RejectTransfer) => {
             TransferState::Failed(TransferError::UserRejected)
         }
@@ -248,9 +256,11 @@ pub fn source_seal(
     wallet: &WalletRecord,
 ) -> Result<SealedWallet, TransferError> {
     match state {
-        TransferState::AwaitingConfirmation { peer, kp, fingerprint: _ } => {
-            seal(wallet, &kp, &peer.new_device_pub, peer.nonce)
-        }
+        TransferState::AwaitingConfirmation {
+            peer,
+            kp,
+            fingerprint: _,
+        } => seal(wallet, &kp, &peer.new_device_pub, peer.nonce),
         _ => Err(TransferError::QrDecodeFailed),
     }
 }

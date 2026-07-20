@@ -18,7 +18,7 @@
 //!
 //! Zero external crates; all Keccak/SHAKE/SHA3 come from `crate::pq::keccak`.
 
-use crate::pq::keccak::{prf, shake128, shake256, sha3_256, sha3_512, xof_g, xof_h};
+use crate::pq::keccak::{prf, sha3_256, sha3_512, shake128, shake256, xof_g, xof_h};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ML-KEM-768 parameters (FIPS 203 §8 Table 2: "ML-KEM-768 | 256 | 3329 | 3 | 2 | 2 | 10 | 4").
@@ -523,7 +523,10 @@ mod tests {
 
     #[test]
     fn kem_ct_len_is_1088() {
-        assert_eq!(CT_LEN, 1088, "ML-KEM-768 ciphertext is 32*(du*k+dv) = 1088 (was 1536)");
+        assert_eq!(
+            CT_LEN, 1088,
+            "ML-KEM-768 ciphertext is 32*(du*k+dv) = 1088 (was 1536)"
+        );
         assert_eq!(KEM768_CT_LEN, 1088);
     }
 
@@ -536,7 +539,11 @@ mod tests {
         assert_eq!(ek.len(), KEM768_EK_LEN, "ek length");
         assert_eq!(dk.len(), KEM768_DK_LEN, "dk length");
         // FO seed z is stored in the last 32 bytes of the secret key (FIPS 203 §7.2).
-        assert_eq!(&dk[KEM768_DK_LEN - 32..], &z[..], "FO seed z must be stored in dk");
+        assert_eq!(
+            &dk[KEM768_DK_LEN - 32..],
+            &z[..],
+            "FO seed z must be stored in dk"
+        );
         // A different z must change the keypair (z is actually consumed).
         let (_ek2, dk2) = keygen_internal(&d, &[100u8; 32]);
         assert_ne!(dk, dk2, "changing z must change the secret key");
@@ -572,7 +579,10 @@ mod tests {
         ct[10] ^= 0xFF;
         let k_tampered = decaps_internal(&sk, &ct);
         let k_clean = decaps_internal(&sk, &c);
-        assert_ne!(k_tampered, k_clean, "tampered ct must not yield clean secret");
+        assert_ne!(
+            k_tampered, k_clean,
+            "tampered ct must not yield clean secret"
+        );
     }
 
     #[test]
@@ -610,7 +620,11 @@ mod tests {
             let r = red(x);
             assert!(r >= 0 && r < Q, "red({x}) = {r} not in [0,Q)");
             // ≡ x (mod Q): (r - x) divisible by Q, computed in i128 to avoid overflow.
-            assert_eq!((r as i128 - x as i128).rem_euclid(Q as i128), 0, "red({x}) wrong residue");
+            assert_eq!(
+                (r as i128 - x as i128).rem_euclid(Q as i128),
+                0,
+                "red({x}) wrong residue"
+            );
         };
         check(i64::MIN);
         check(i64::MAX);
@@ -679,9 +693,15 @@ mod tests {
             let bound = 1i32 << d;
             for x in 0..Q {
                 let c = compress(d, x);
-                assert!(c >= 0 && c < bound, "compress({d},{x}) = {c} out of [0,2^d)");
+                assert!(
+                    c >= 0 && c < bound,
+                    "compress({d},{x}) = {c} out of [0,2^d)"
+                );
                 let dec = decompress(d, c);
-                assert!(dec >= 0 && dec < Q, "decompress({d},{c}) = {dec} out of [0,Q)");
+                assert!(
+                    dec >= 0 && dec < Q,
+                    "decompress({d},{c}) = {dec} out of [0,Q)"
+                );
             }
         }
     }

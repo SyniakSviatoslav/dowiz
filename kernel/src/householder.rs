@@ -898,15 +898,9 @@ mod tests {
         assert_eq!(got.len(), want.len(), "spectrum length mismatch");
         // sort both by (re, im) for comparison
         let mut g = got.clone();
-        g.sort_by(|x, y| {
-            x.re.total_cmp(&y.re)
-                .then(x.im.total_cmp(&y.im))
-        });
+        g.sort_by(|x, y| x.re.total_cmp(&y.re).then(x.im.total_cmp(&y.im)));
         let mut w = want.clone();
-        w.sort_by(|x, y| {
-            x.re.total_cmp(&y.re)
-                .then(x.im.total_cmp(&y.im))
-        });
+        w.sort_by(|x, y| x.re.total_cmp(&y.re).then(x.im.total_cmp(&y.im)));
         for (i, (x, y)) in g.iter().zip(w.iter()).enumerate() {
             assert!(
                 cclose(*x, *y, tol),
@@ -1072,10 +1066,7 @@ mod tests {
                 }
             }
             let mut e = eigenvalues_contig(&mut buf, n);
-            e.sort_by(|x, y| {
-                x.re.total_cmp(&y.re)
-                    .then(x.im.total_cmp(&y.im))
-            });
+            e.sort_by(|x, y| x.re.total_cmp(&y.re).then(x.im.total_cmp(&y.im)));
             e.iter().map(|z| (z.re.to_bits(), z.im.to_bits())).collect()
         }
 

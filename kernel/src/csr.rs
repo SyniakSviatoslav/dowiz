@@ -1243,7 +1243,9 @@ mod tests {
     /// against which the matrix-free `laplacian_spmv` is pinned.
     fn dense_matvec(m: &[Vec<f64>], x: &[f64]) -> Vec<f64> {
         let n = m.len();
-        (0..n).map(|i| (0..n).map(|j| m[i][j] * x[j]).sum()).collect()
+        (0..n)
+            .map(|i| (0..n).map(|j| m[i][j] * x[j]).sum())
+            .collect()
     }
 
     /// Assert dense `laplacian()`·x == `laplacian_spmv(Unnormalized)` for one
@@ -1276,9 +1278,14 @@ mod tests {
     /// so a bug that only shows up for a non-constant field cannot hide.
     fn nontrivial_field(n: usize) -> Vec<f64> {
         let pat = [0.3f64, -0.7, 1.1, -0.25, 0.85, -0.4, 0.6];
-        let x: Vec<f64> = (0..n).map(|i| pat[i % pat.len()] + 0.13 * i as f64).collect();
+        let x: Vec<f64> = (0..n)
+            .map(|i| pat[i % pat.len()] + 0.13 * i as f64)
+            .collect();
         if n >= 2 {
-            assert!(x.iter().any(|&v| v != x[0]), "test field must be non-constant");
+            assert!(
+                x.iter().any(|&v| v != x[0]),
+                "test field must be non-constant"
+            );
         }
         x
     }
@@ -1296,8 +1303,9 @@ mod tests {
     fn laplacian_dense_vs_spmv_parity_exhaustive_small() {
         let mut graphs_tested = 0usize;
         for n in 1..=5usize {
-            let pairs: Vec<(usize, usize)> =
-                (0..n).flat_map(|i| ((i + 1)..n).map(move |j| (i, j))).collect();
+            let pairs: Vec<(usize, usize)> = (0..n)
+                .flat_map(|i| ((i + 1)..n).map(move |j| (i, j)))
+                .collect();
             let m = pairs.len(); // number of possible undirected edges
             let x = nontrivial_field(n);
             for mask in 0..(1u32 << m) {
@@ -1312,7 +1320,11 @@ mod tests {
                 graphs_tested += 1;
             }
         }
-        assert_eq!(graphs_tested, 1 + 2 + 8 + 64 + 1024, "exhaustive graph count");
+        assert_eq!(
+            graphs_tested,
+            1 + 2 + 8 + 64 + 1024,
+            "exhaustive graph count"
+        );
     }
 
     // ── ITEM 18 (1b) CURATED small graphs: disconnected components, self-loops
@@ -1459,7 +1471,11 @@ mod tests {
         g.laplacian_spmv(&x, &mut y_rw, LaplacianKind::RandomWalk);
         let want_rw = [1.0, -0.5, 0.0, 0.0];
         for i in 0..4 {
-            assert!(close(y_rw[i], want_rw[i], 1e-12), "RandomWalk y{i} = {}", y_rw[i]);
+            assert!(
+                close(y_rw[i], want_rw[i], 1e-12),
+                "RandomWalk y{i} = {}",
+                y_rw[i]
+            );
         }
 
         // Symmetric Normalized L = I − D⁻¹ᐟ²AD⁻¹ᐟ², hand-computed for x = e₀:
@@ -1470,7 +1486,11 @@ mod tests {
         g.laplacian_spmv(&x, &mut y_n, LaplacianKind::Normalized);
         let want_n = [1.0, -(2.0f64).sqrt().recip(), 0.0, 0.0];
         for i in 0..4 {
-            assert!(close(y_n[i], want_n[i], 1e-12), "Normalized y{i} = {}", y_n[i]);
+            assert!(
+                close(y_n[i], want_n[i], 1e-12),
+                "Normalized y{i} = {}",
+                y_n[i]
+            );
         }
 
         // The three kinds genuinely DIFFER on this non-regular graph (else the

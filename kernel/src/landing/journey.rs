@@ -11,7 +11,7 @@
 
 use super::form::SignupForm;
 use super::{
-    ClaimError, ClaimedHub, ClaimOutcome, ClaimRequest, ClaimServicePort, HubId, InterestAck,
+    ClaimError, ClaimOutcome, ClaimRequest, ClaimServicePort, ClaimedHub, HubId, InterestAck,
     InterestSubmission,
 };
 
@@ -30,10 +30,7 @@ pub enum ClaimJourney {
     /// InterestRegistered — SLOW PATH: pool-empty / out-of-pool → operator notified.
     InterestRegistered(InterestAck),
     /// Failed — transport/challenge failure ONLY (recoverable, retryable).
-    Failed {
-        form: SignupForm,
-        error: ClaimError,
-    },
+    Failed { form: SignupForm, error: ClaimError },
 }
 
 /// The events the journey folds. One source feeds render AND a11y mirror (X1).
@@ -132,10 +129,7 @@ impl ClaimJourney {
             }
             (ClaimJourney::Submitting(_), JourneyEvent::TransportFailed(e)) => {
                 let f = self.form().cloned().unwrap_or_default();
-                ClaimJourney::Failed {
-                    form: f,
-                    error: e,
-                }
+                ClaimJourney::Failed { form: f, error: e }
             }
             _ => self.clone(),
         }

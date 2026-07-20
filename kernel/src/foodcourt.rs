@@ -321,11 +321,14 @@ mod tests {
     // ── M1 (i) — single-currency EUR checkout, 3 vendors ⇒ NLegPlan with 3 legs ──
     #[test]
     fn derive_plan_eur_three_vendors() {
-        let order = mk_order("ORD-FC-1".into(), [
+        let order = mk_order(
+            "ORD-FC-1".into(),
+            [
                 item("taco", 2, 500, 1, Currency::Eur),
                 item("soda", 3, 200, 2, Currency::Eur),
                 item("fries", 1, 400, 3, Currency::Eur),
-            ]);
+            ],
+        );
         let accts = accounts(&[(1, "acct_v1"), (2, "acct_v2"), (3, "acct_v3")]);
         let plan = derive_nleg_plan(&order, &accts).expect("plan derives");
         assert_eq!(plan.currency, Currency::Eur);
@@ -335,8 +338,14 @@ mod tests {
         assert_eq!(plan.legs[1].leg, LegId(2));
         assert_eq!(plan.legs[2].leg, LegId(3));
         // Each leg routed to its own ProviderAccountRef.
-        assert_eq!(plan.legs[0].dest_account, ProviderAccountRef("acct_v1".into()));
-        assert_eq!(plan.legs[2].dest_account, ProviderAccountRef("acct_v3".into()));
+        assert_eq!(
+            plan.legs[0].dest_account,
+            ProviderAccountRef("acct_v1".into())
+        );
+        assert_eq!(
+            plan.legs[2].dest_account,
+            ProviderAccountRef("acct_v3".into())
+        );
         // Vendor 2's captured amount = 3 * 200 = 600 EUR.
         assert_eq!(plan.legs[1].amount, Money::new(600, Currency::Eur));
     }
@@ -344,10 +353,13 @@ mod tests {
     // ── M1 (ii) — cross-currency cart ⇒ CrossCurrencyCart (fail-closed) ─────────
     #[test]
     fn cross_currency_cart_refused() {
-        let order = mk_order("ORD-X".into(), [
+        let order = mk_order(
+            "ORD-X".into(),
+            [
                 item("taco", 1, 500, 1, Currency::Eur),
                 item("soda", 1, 200, 2, Currency::Usd), // second currency
-            ]);
+            ],
+        );
         let accts = accounts(&[(1, "a1"), (2, "a2")]);
         match derive_nleg_plan(&order, &accts) {
             Err(FoodCourtError::LegDerivation(_)) => {}
@@ -358,10 +370,13 @@ mod tests {
     // ── M1 (iii) — a vendor not Connected ⇒ VendorNotPayable (fail-closed) ───────
     #[test]
     fn unconnected_vendor_refused() {
-        let order = mk_order("ORD-U".into(), [
+        let order = mk_order(
+            "ORD-U".into(),
+            [
                 item("taco", 1, 500, 1, Currency::Eur),
                 item("soda", 1, 200, 2, Currency::Eur), // vendor 2 has no account
-            ]);
+            ],
+        );
         // Only vendor 1 is Connected; vendor 2 is absent.
         let accts = accounts(&[(1, "acct_v1")]);
         match derive_nleg_plan(&order, &accts) {
@@ -395,11 +410,14 @@ mod tests {
     // ── M1 (v) — determinism: derive twice ⇒ byte-identical plan ────────────────
     #[test]
     fn derive_plan_is_deterministic() {
-        let order = mk_order("ORD-D".into(), [
+        let order = mk_order(
+            "ORD-D".into(),
+            [
                 item("b", 1, 200, 2, Currency::Eur),
                 item("a", 2, 500, 1, Currency::Eur),
                 item("c", 1, 400, 3, Currency::Eur),
-            ]);
+            ],
+        );
         let accts = accounts(&[(1, "a1"), (2, "a2"), (3, "a3")]);
         let p1 = derive_nleg_plan(&order, &accts).unwrap();
         let p2 = derive_nleg_plan(&order, &accts).unwrap();
@@ -409,13 +427,20 @@ mod tests {
     // ── M1 (vi) — currency is NOT hardcoded: a non-EUR order derives in its currency
     #[test]
     fn currency_not_hardcoded() {
-        let order = mk_order("ORD-USD".into(), [
+        let order = mk_order(
+            "ORD-USD".into(),
+            [
                 item("taco", 1, 500, 1, Currency::Usd),
                 item("soda", 2, 200, 2, Currency::Usd),
-            ]);
+            ],
+        );
         let accts = accounts(&[(1, "a1"), (2, "a2")]);
         let plan = derive_nleg_plan(&order, &accts).unwrap();
-        assert_eq!(plan.currency, Currency::Usd, "plan follows the order currency");
+        assert_eq!(
+            plan.currency,
+            Currency::Usd,
+            "plan follows the order currency"
+        );
         assert_eq!(plan.legs[0].amount, Money::new(500, Currency::Usd));
         assert_eq!(plan.legs[1].amount, Money::new(400, Currency::Usd));
     }
@@ -423,26 +448,40 @@ mod tests {
     // ── M3 — P62 §4.5 KDS fan-out: nothing dropped, nothing duplicated ──────────
     #[test]
     fn kds_fanout_preserves_all_lines() {
-        let order = mk_order("ORD-K".into(), [
+        let order = mk_order(
+            "ORD-K".into(),
+            [
                 item("taco", 1, 500, 1, Currency::Eur),
                 item("soda", 1, 200, 2, Currency::Eur),
                 item("fries", 1, 400, 1, Currency::Eur), // 2nd item for vendor 1
-            ]);
+            ],
+        );
         let tickets = kds_route(&order);
         let total_lines: usize = tickets.values().map(|v| v.len()).sum();
-        assert_eq!(total_lines, order.items.len(), "every line routed to exactly one KDS ticket");
+        assert_eq!(
+            total_lines,
+            order.items.len(),
+            "every line routed to exactly one KDS ticket"
+        );
         assert_eq!(tickets.len(), 2, "two vendors ⇒ two tickets");
-        assert_eq!(tickets[&VendorId(1)].len(), 2, "vendor 1 gets both of its lines");
+        assert_eq!(
+            tickets[&VendorId(1)].len(),
+            2,
+            "vendor 1 gets both of its lines"
+        );
     }
 
     // ── M4 (i) — refund routes to ONLY that vendor's ChargeHandle ───────────────
     #[test]
     fn refund_one_vendor_leaves_others_untouched() {
-        let order = mk_order("ORD-R".into(), [
+        let order = mk_order(
+            "ORD-R".into(),
+            [
                 item("taco", 1, 500, 1, Currency::Eur),
                 item("soda", 1, 200, 2, Currency::Eur),
                 item("fries", 1, 400, 3, Currency::Eur),
-            ]);
+            ],
+        );
         let accts = accounts(&[(1, "a1"), (2, "a2"), (3, "a3")]);
         let plan = derive_nleg_plan(&order, &accts).unwrap();
         // Refund vendor 2 only.
@@ -463,10 +502,13 @@ mod tests {
     // ── M4 (ii) — over-refund a vendor ⇒ OverRefund (typed reject) ──────────────
     #[test]
     fn over_refund_rejected() {
-        let order = mk_order("ORD-OR".into(), [
+        let order = mk_order(
+            "ORD-OR".into(),
+            [
                 item("taco", 1, 500, 1, Currency::Eur),
                 item("soda", 1, 200, 2, Currency::Eur),
-            ]);
+            ],
+        );
         let accts = accounts(&[(1, "a1"), (2, "a2")]);
         let plan = derive_nleg_plan(&order, &accts).unwrap();
         // Vendor 2 captured 200; try to refund 999.
@@ -521,7 +563,10 @@ mod tests {
             ],
         };
         let auth = vec![(LegId(1), Ok(())), (LegId(2), Ok(()))];
-        let capture = vec![(LegId(1), CaptureOutcome::Captured), (LegId(2), CaptureOutcome::Captured)];
+        let capture = vec![
+            (LegId(1), CaptureOutcome::Captured),
+            (LegId(2), CaptureOutcome::Captured),
+        ];
         let (events, outcome) = run_nleg_saga(&plan.order_id, &auth, &capture);
         assert_eq!(outcome, NLegOutcome::Committed);
         assert_nleg_atomicity(&events, &outcome); // must not panic
@@ -548,19 +593,25 @@ mod tests {
                 },
             ],
         };
-        let auth = vec![
-            (LegId(1), Ok(())),
-            (LegId(2), Err(FailReason::Declined)),
-        ];
+        let auth = vec![(LegId(1), Ok(())), (LegId(2), Err(FailReason::Declined))];
         let capture: Vec<(LegId, CaptureOutcome)> = vec![]; // capture never runs
         let (events, outcome) = run_nleg_saga(&plan.order_id, &auth, &capture);
-        assert_eq!(outcome, NLegOutcome::Aborted { void_set: vec![LegId(1)] });
+        assert_eq!(
+            outcome,
+            NLegOutcome::Aborted {
+                void_set: vec![LegId(1)]
+            }
+        );
         assert!(
-            events.iter().any(|e| matches!(e, NLegEvent::LegVoided { leg: LegId(1) })),
+            events
+                .iter()
+                .any(|e| matches!(e, NLegEvent::LegVoided { leg: LegId(1) })),
             "the authorized vendor leg must be voided"
         );
         assert!(
-            !events.iter().any(|e| matches!(e, NLegEvent::LegCaptured { .. })),
+            !events
+                .iter()
+                .any(|e| matches!(e, NLegEvent::LegCaptured { .. })),
             "no money moved on abort"
         );
         assert_nleg_atomicity(&events, &outcome);
@@ -606,11 +657,14 @@ mod tests {
     #[test]
     fn all_legs_refunded_predicate() {
         let plan = derive_nleg_plan(
-            &mk_order("ORD-P".into(), [
+            &mk_order(
+                "ORD-P".into(),
+                [
                     item("taco", 1, 500, 1, Currency::Eur),
                     item("soda", 1, 200, 2, Currency::Eur),
                     item("fries", 1, 400, 3, Currency::Eur),
-                ]),
+                ],
+            ),
             &accounts(&[(1, "a1"), (2, "a2"), (3, "a3")]),
         )
         .unwrap();
@@ -632,10 +686,13 @@ mod tests {
         use crate::ports::payment_provider::NoOpPaymentAdapter;
         let provider = NoOpPaymentAdapter::new();
         let plan = derive_nleg_plan(
-            &mk_order("ORD-AUD".into(), [
+            &mk_order(
+                "ORD-AUD".into(),
+                [
                     item("taco", 1, 500, 1, Currency::Eur),
                     item("soda", 1, 200, 2, Currency::Eur),
-                ]),
+                ],
+            ),
             &accounts(&[(1, "a1"), (2, "a2")]),
         )
         .unwrap();
@@ -647,7 +704,10 @@ mod tests {
             Money::new(200, Currency::Eur),
             RefundReason::DisputeResolution,
         );
-        assert!(r.is_ok(), "per-vendor refund executes via the provider port");
+        assert!(
+            r.is_ok(),
+            "per-vendor refund executes via the provider port"
+        );
         // The audit invariant: a refund request for vendor 2 is bound to ch_2 only.
         let req = refund_vendor_leg(
             &plan,

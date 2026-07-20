@@ -94,7 +94,10 @@ pub struct AuditChain {
 
 impl AuditChain {
     /// Create a fresh chain (genesis tip_hash = zero).
-    pub fn new(agent_id: [u8; 16], ring: Option<std::sync::Mutex<crate::fdr::ring::FdrRing>>) -> Self {
+    pub fn new(
+        agent_id: [u8; 16],
+        ring: Option<std::sync::Mutex<crate::fdr::ring::FdrRing>>,
+    ) -> Self {
         AuditChain {
             events: Vec::new(),
             tip_hash: [0u8; 32],
@@ -176,7 +179,10 @@ impl AuditChain {
         let mut expected_prev: [u8; 32] = [0u8; 32];
         for (i, ev) in self.events.iter().enumerate() {
             if ev.seq != i as u64 {
-                return Err(ChainDefect::SeqGap { at: ev.seq, expected: i as u64 });
+                return Err(ChainDefect::SeqGap {
+                    at: ev.seq,
+                    expected: i as u64,
+                });
             }
             if ev.prev_hash != expected_prev {
                 return Err(ChainDefect::HashBreak {
@@ -186,8 +192,14 @@ impl AuditChain {
                 });
             }
             // Recompute self_hash independently and compare.
-            let recomputed =
-                compute_self_hash(&ev.prev_hash, ev.seq, ev.kind, ev.state_from, ev.state_to, ev.score);
+            let recomputed = compute_self_hash(
+                &ev.prev_hash,
+                ev.seq,
+                ev.kind,
+                ev.state_from,
+                ev.state_to,
+                ev.score,
+            );
             if recomputed != ev.self_hash {
                 return Err(ChainDefect::SelfHashMismatch { at: ev.seq });
             }
@@ -218,9 +230,18 @@ pub enum AuditError {
 /// A tamper / loss detected while verifying the audit chain.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChainDefect {
-    SeqGap { at: u64, expected: u64 },
-    HashBreak { at: u64, expected: [u8; 32], got: [u8; 32] },
-    SelfHashMismatch { at: u64 },
+    SeqGap {
+        at: u64,
+        expected: u64,
+    },
+    HashBreak {
+        at: u64,
+        expected: [u8; 32],
+        got: [u8; 32],
+    },
+    SelfHashMismatch {
+        at: u64,
+    },
     TipMismatch,
 }
 
@@ -240,12 +261,30 @@ mod tests {
     #[test]
     fn chain_verifies_when_intact() {
         let mut c = AuditChain::new([1u8; 16], None);
-        c.append(AuditKind::Signal, BreakerState::Closed, BreakerState::Closed, 0.0, 0)
-            .unwrap();
-        c.append(AuditKind::Transition, BreakerState::Closed, BreakerState::Open, 1.0, 1)
-            .unwrap();
-        c.append(AuditKind::Kill, BreakerState::Open, BreakerState::Killed, 2.0, 2)
-            .unwrap();
+        c.append(
+            AuditKind::Signal,
+            BreakerState::Closed,
+            BreakerState::Closed,
+            0.0,
+            0,
+        )
+        .unwrap();
+        c.append(
+            AuditKind::Transition,
+            BreakerState::Closed,
+            BreakerState::Open,
+            1.0,
+            1,
+        )
+        .unwrap();
+        c.append(
+            AuditKind::Kill,
+            BreakerState::Open,
+            BreakerState::Killed,
+            2.0,
+            2,
+        )
+        .unwrap();
         assert_eq!(c.len(), 3);
         assert!(c.verify_chain().is_ok(), "intact chain must verify");
     }
@@ -253,22 +292,49 @@ mod tests {
     #[test]
     fn chain_breaks_on_tampered_prev_hash() {
         let mut c = AuditChain::new([1u8; 16], None);
-        c.append(AuditKind::Signal, BreakerState::Closed, BreakerState::Closed, 0.0, 0)
-            .unwrap();
-        c.append(AuditKind::Transition, BreakerState::Closed, BreakerState::Open, 1.0, 1)
-            .unwrap();
+        c.append(
+            AuditKind::Signal,
+            BreakerState::Closed,
+            BreakerState::Closed,
+            0.0,
+            0,
+        )
+        .unwrap();
+        c.append(
+            AuditKind::Transition,
+            BreakerState::Closed,
+            BreakerState::Open,
+            1.0,
+            1,
+        )
+        .unwrap();
         // Tamper: smash event[1].prev_hash so it no longer equals event[0].self_hash.
         c.events[1].prev_hash = [9u8; 32];
-        assert!(matches!(c.verify_chain(), Err(ChainDefect::HashBreak { .. })));
+        assert!(matches!(
+            c.verify_chain(),
+            Err(ChainDefect::HashBreak { .. })
+        ));
     }
 
     #[test]
     fn chain_breaks_on_seq_gap() {
         let mut c = AuditChain::new([1u8; 16], None);
-        c.append(AuditKind::Signal, BreakerState::Closed, BreakerState::Closed, 0.0, 0)
-            .unwrap();
-        c.append(AuditKind::Transition, BreakerState::Closed, BreakerState::Open, 1.0, 1)
-            .unwrap();
+        c.append(
+            AuditKind::Signal,
+            BreakerState::Closed,
+            BreakerState::Closed,
+            0.0,
+            0,
+        )
+        .unwrap();
+        c.append(
+            AuditKind::Transition,
+            BreakerState::Closed,
+            BreakerState::Open,
+            1.0,
+            1,
+        )
+        .unwrap();
         // Tamper: reorder / gap by bumping event[1].seq.
         c.events[1].seq = 5;
         assert!(matches!(c.verify_chain(), Err(ChainDefect::SeqGap { .. })));
@@ -298,13 +364,28 @@ mod tests {
         );
         let mut c = AuditChain::new([1u8; 16], Some(ring));
         // First append: segment A is open writable → commits (len 1).
-        let ok = c.append(AuditKind::Signal, BreakerState::Closed, BreakerState::Closed, 0.0, 0);
+        let ok = c.append(
+            AuditKind::Signal,
+            BreakerState::Closed,
+            BreakerState::Closed,
+            0.0,
+            0,
+        );
         assert!(ok.is_ok(), "first append must commit");
         assert_eq!(c.len(), 1, "first append must be recorded");
         // Second append: forces switch() to seg B (/dev/full) → ENOSPC → RingWrite;
         // the row must NOT be committed (len stays 1).
-        let r = c.append(AuditKind::Signal, BreakerState::Closed, BreakerState::Closed, 0.0, 1);
-        assert!(matches!(r, Err(AuditError::RingWrite)), "backpressure must stall, not drop");
+        let r = c.append(
+            AuditKind::Signal,
+            BreakerState::Closed,
+            BreakerState::Closed,
+            0.0,
+            1,
+        );
+        assert!(
+            matches!(r, Err(AuditError::RingWrite)),
+            "backpressure must stall, not drop"
+        );
         assert_eq!(c.len(), 1, "stalled append must not be committed");
         let _ = std::fs::remove_dir_all(&dir);
     }

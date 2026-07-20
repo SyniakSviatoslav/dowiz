@@ -244,9 +244,9 @@ unsafe fn syscall5(n: i64, a1: i64, a2: i64, a3: i64, a4: i64, a5: i64) -> i64 {
 #[repr(C)]
 #[derive(Default)]
 struct Rusage {
-    ru_utime: [i64; 2],  // seconds, microseconds
-    ru_stime: [i64; 2],  // seconds, microseconds
-    ru_maxrss: i64,      // kB
+    ru_utime: [i64; 2], // seconds, microseconds
+    ru_stime: [i64; 2], // seconds, microseconds
+    ru_maxrss: i64,     // kB
     ru_ixrss: i64,
     ru_idrss: i64,
     ru_isrss: i64,

@@ -1202,7 +1202,11 @@ mod tests {
                 let from = LIFECYCLE_STATES[fi];
                 let to = LIFECYCLE_STATES[ti];
                 // idx_of is the inverse of LIFECYCLE_STATES indexing — verify totality here too.
-                assert_eq!(idx_of(from), fi, "idx_of/LIFECYCLE_STATES inverse broke at {fi}");
+                assert_eq!(
+                    idx_of(from),
+                    fi,
+                    "idx_of/LIFECYCLE_STATES inverse broke at {fi}"
+                );
                 let bit_set = (FSM_ADJ[fi] & (1u16 << ti)) != 0;
                 let ok = assert_transition(from, to).is_ok();
                 assert_eq!(
@@ -1222,9 +1226,16 @@ mod tests {
         for fi in 0..12usize {
             let from = LIFECYCLE_STATES[fi];
             let mask = reachable(from);
-            assert!(mask & (1u16 << fi) != 0, "reachable({from:?}) must include self");
+            assert!(
+                mask & (1u16 << fi) != 0,
+                "reachable({from:?}) must include self"
+            );
             // No bit >= 12 may be set (would mean an out-of-range successor index).
-            assert_eq!(mask & !0x0FFFu16, 0, "reachable({from:?}) set an out-of-range bit");
+            assert_eq!(
+                mask & !0x0FFFu16,
+                0,
+                "reachable({from:?}) set an out-of-range bit"
+            );
         }
     }
 
@@ -1251,14 +1262,20 @@ mod tests {
     /// facts (acyclic DAG ⇒ topo exists, no cycle, μ = 0).
     #[test]
     fn item7_const_graph_algos_no_ub_and_expected() {
-        assert!(topological_order().is_some(), "acyclic graph must have a topo order");
+        assert!(
+            topological_order().is_some(),
+            "acyclic graph must have a topo order"
+        );
         assert!(!has_cycle(), "lifecycle graph must have no DIRECTED cycle");
         // μ is the UNDIRECTED cycle rank (|E|-|V|+c), distinct from directed acyclicity:
         // this DAG has convergent paths, so μ > 0 is correct. The "no UB" property here is
         // that the isize arithmetic + union-find never panic/overflow and yield the finite
         // known value (pinned separately by green_cyclomatic_number_counts_undirected_cycle).
         let mu = cyclomatic_number();
-        assert!(mu >= 0, "cyclomatic number must be a finite non-negative rank");
+        assert!(
+            mu >= 0,
+            "cyclomatic number must be a finite non-negative rank"
+        );
         let _ = fsm_graph_report(); // must not panic/overflow
         let _ = fsm_stability_report();
     }

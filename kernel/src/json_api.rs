@@ -479,7 +479,10 @@ mod landing_bot_pack_tests {
         // The load-bearing anti-scope: NO catalog/restaurant schema on dowiz.org.
         assert!(
             !types.iter().any(|t| {
-                matches!(t.as_str(), "Restaurant" | "Menu" | "MenuItem" | "FoodEstablishment")
+                matches!(
+                    t.as_str(),
+                    "Restaurant" | "Menu" | "MenuItem" | "FoodEstablishment"
+                )
             }),
             "dowiz.org JSON-LD must NOT be a Restaurant/Menu schema: {types:?}"
         );
@@ -516,7 +519,10 @@ mod landing_bot_pack_tests {
     #[test]
     fn llms_txt_is_secondary() {
         let pack = build_landing_bot_pack("https://dowiz.org", crate::landing::HUB_SOURCE_URL);
-        assert!(!pack.landing_jsonld.is_empty(), "JSON-LD must be present (load-bearing)");
+        assert!(
+            !pack.landing_jsonld.is_empty(),
+            "JSON-LD must be present (load-bearing)"
+        );
         // llms.txt MAY legitimately be empty; the pack is still complete.
         let empty_llms = LandingBotPack {
             llms_txt: String::new(),

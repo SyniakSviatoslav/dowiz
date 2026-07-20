@@ -85,10 +85,7 @@ impl GoldenStore {
     /// The usable probe pool: ONLY pairs captured while the invariant was verified.
     /// Quarantined pairs (invariant_verified == false) are never returned.
     pub fn probe_pool(&self) -> Vec<&GoldenPair> {
-        self.pairs
-            .iter()
-            .filter(|p| p.invariant_verified)
-            .collect()
+        self.pairs.iter().filter(|p| p.invariant_verified).collect()
     }
 
     /// Whether truthfulness probing is armed (requires detreduce verification).
@@ -138,7 +135,10 @@ mod tests {
         // invariant_verified==false MUST NOT enter the probe pool.
         let mut store = GoldenStore::new();
         store.add(GoldenPair::new(b"in", b"cond", b"out", 0, false));
-        assert!(store.probe_pool().is_empty(), "quarantined pair must be excluded");
+        assert!(
+            store.probe_pool().is_empty(),
+            "quarantined pair must be excluded"
+        );
     }
 
     #[test]

@@ -152,7 +152,10 @@ mod tests {
         //   (Lu)_0 = 1·(1−2) + 1·(1−3) = −1 + −2 = −3.
         let edges = vec![(1i8, 2i8), (1i8, 3i8)]; // (w_01, u_1), (w_02, u_2)
         let got = eqc_laplacian_node(&edges, 1i8);
-        assert_eq!(got, -3i32, "eqc Laplacian node-0 must equal hand-computed −3");
+        assert_eq!(
+            got, -3i32,
+            "eqc Laplacian node-0 must equal hand-computed −3"
+        );
 
         // Also prove the emitted Rust source carries the canonical i32-accumulator
         // IndexSum loop (trip count baked at build time, every step checked).
@@ -199,8 +202,9 @@ mod tests {
     fn laplacian_eqc_dense_spmv_parity_exhaustive_small() {
         let mut graphs = 0usize;
         for n in 1..=5usize {
-            let pairs: Vec<(usize, usize)> =
-                (0..n).flat_map(|i| ((i + 1)..n).map(move |j| (i, j))).collect();
+            let pairs: Vec<(usize, usize)> = (0..n)
+                .flat_map(|i| ((i + 1)..n).map(move |j| (i, j)))
+                .collect();
             let m = pairs.len();
             // Non-constant integer field (avoids trivial all-equal collapse).
             let u: Vec<i8> = (0..n)
@@ -255,11 +259,7 @@ mod tests {
             vec![0i8, 0, 1, 1, 0],
         ];
         // Weighted + self-loop (A_11 = 2) — proves self-loop cancellation.
-        let weighted_selfloop = vec![
-            vec![0i8, 2, 0],
-            vec![3i8, 2, 1],
-            vec![0i8, 0, 0],
-        ];
+        let weighted_selfloop = vec![vec![0i8, 2, 0], vec![3i8, 2, 1], vec![0i8, 0, 0]];
         for adj in [&path, &star, &k4, &disconnected, &weighted_selfloop] {
             let n = adj.len();
             let u: Vec<i8> = (0..n)

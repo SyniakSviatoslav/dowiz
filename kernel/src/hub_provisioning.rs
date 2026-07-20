@@ -158,7 +158,10 @@ pub enum PoolSlotState {
     Claimed { owner: OwnerId },
     /// §4-C: compute released, state kept, re-wakeable. Still owned, still NOT in
     /// the claimable pool.
-    Suspended { owner: OwnerId, state_snapshot: ImageRef },
+    Suspended {
+        owner: OwnerId,
+        state_snapshot: ImageRef,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -196,11 +199,7 @@ pub enum ProvisionError {
 pub trait TunnelProvider {
     fn create_tunnel(&self, hub: &HubId) -> Result<TunnelId, ProvisionError>;
     fn fetch_token(&self, t: &TunnelId) -> Result<TunnelToken, ProvisionError>;
-    fn configure_ingress(
-        &self,
-        t: &TunnelId,
-        cfg: &IngressConfig,
-    ) -> Result<(), ProvisionError>;
+    fn configure_ingress(&self, t: &TunnelId, cfg: &IngressConfig) -> Result<(), ProvisionError>;
     fn route_dns(&self, host: &Hostname, t: &TunnelId) -> Result<(), ProvisionError>;
     fn destroy_tunnel(&self, t: &TunnelId) -> Result<(), ProvisionError>;
     /// The 1,000-cap gauge. Cheap; polled by the cap-alert loop (§5.4).
@@ -492,8 +491,7 @@ impl Heartbeat {
         pq_pub: &[u8],
     ) -> bool {
         let msg = Self::canonical(self.hub_id, self.tick);
-        self.sig
-            .verify(verifier, classical_pub, pq_pub, &msg)
+        self.sig.verify(verifier, classical_pub, pq_pub, &msg)
     }
 }
 
@@ -767,10 +765,7 @@ impl<T: TunnelProvider, V: VpsProvider> PoolManager<T, V> {
         dowiz_pq_seed: Option<&[u8; 32]>,
     ) -> Result<ClaimReceipt, ProvisionError> {
         let start = clock.now();
-        let slot = self
-            .slots
-            .get_mut(&hub)
-            .ok_or(ProvisionError::NotFound)?;
+        let slot = self.slots.get_mut(&hub).ok_or(ProvisionError::NotFound)?;
         // Only a Warm slot is claimable; Claimed/Suspended/Provisioning are not.
         if !matches!(slot.state, PoolSlotState::Warm) {
             return Err(ProvisionError::Unauthorized);
@@ -965,11 +960,7 @@ impl TunnelProvider for MockTunnel {
         self.call_order.borrow_mut().push("token".into());
         Ok(TunnelToken::new("eyJ.mock"))
     }
-    fn configure_ingress(
-        &self,
-        _t: &TunnelId,
-        _cfg: &IngressConfig,
-    ) -> Result<(), ProvisionError> {
+    fn configure_ingress(&self, _t: &TunnelId, _cfg: &IngressConfig) -> Result<(), ProvisionError> {
         self.call_order.borrow_mut().push("ingress".into());
         Ok(())
     }
@@ -1110,7 +1101,11 @@ mod adapters {
         fn suspend_preserving(&self, _s: &ServerId) -> Result<ImageRef, ProvisionError> {
             Err(ProvisionError::Unauthorized)
         }
-        fn resume_from(&self, _img: &ImageRef, _spec: &ServerSpec) -> Result<ServerId, ProvisionError> {
+        fn resume_from(
+            &self,
+            _img: &ImageRef,
+            _spec: &ServerSpec,
+        ) -> Result<ServerId, ProvisionError> {
             Err(ProvisionError::Unauthorized)
         }
         fn destroy(&self, _s: &ServerId) -> Result<(), ProvisionError> {
@@ -1314,12 +1309,32 @@ mod tests {
         let owner = Party::new(&v, 9);
         let owner_root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 99999);
         let clock = Clock::new(10);
-        pm.claim(&v, &clock, hub, owner.cls_pub, &owner.cls_seed, &owner.pq_seed, &owner_root, None, None)
-            .unwrap();
+        pm.claim(
+            &v,
+            &clock,
+            hub,
+            owner.cls_pub,
+            &owner.cls_seed,
+            &owner.pq_seed,
+            &owner_root,
+            None,
+            None,
+        )
+        .unwrap();
         // A claimed hub is NOT counted as warm (it cannot be re-claimed).
         assert_eq!(pm.warm_depth(), 0);
         // Attempting to claim a non-Warm slot is rejected.
-        let r2 = pm.claim(&v, &clock, hub, owner.cls_pub, &owner.cls_seed, &owner.pq_seed, &owner_root, None, None);
+        let r2 = pm.claim(
+            &v,
+            &clock,
+            hub,
+            owner.cls_pub,
+            &owner.cls_seed,
+            &owner.pq_seed,
+            &owner_root,
+            None,
+            None,
+        );
         assert_eq!(r2, Err(ProvisionError::Unauthorized));
     }
 
@@ -1359,8 +1374,18 @@ mod tests {
         let owner = Party::new(&v, 9);
         let owner_root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 99999);
         let clock = Clock::new(10);
-        pm.claim(&v, &clock, hub, owner.cls_pub, &owner.cls_seed, &owner.pq_seed, &owner_root, None, None)
-            .unwrap();
+        pm.claim(
+            &v,
+            &clock,
+            hub,
+            owner.cls_pub,
+            &owner.cls_seed,
+            &owner.pq_seed,
+            &owner_root,
+            None,
+            None,
+        )
+        .unwrap();
         // Remove the owner enrollment + any co-sign → the hub's OWN self-root still
         // verifies under RequireBoth with NO dowiz/owner dependency (P59 §4.4).
         let hub_root = &pm.slots[&hub].hub_root;
@@ -1390,7 +1415,17 @@ mod tests {
         let owner_root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 99999);
         let clock = Clock::new(10);
         let receipt = pm
-            .claim(&v, &clock, hub, owner.cls_pub, &owner.cls_seed, &owner.pq_seed, &owner_root, None, None)
+            .claim(
+                &v,
+                &clock,
+                hub,
+                owner.cls_pub,
+                &owner.cls_seed,
+                &owner.pq_seed,
+                &owner_root,
+                None,
+                None,
+            )
             .unwrap();
         // The child's may_delegate is false → a following link is forbidden.
         assert!(!receipt.child_cert.may_delegate);
@@ -1430,9 +1465,18 @@ mod tests {
         // The first link's issuer is owner (enrolled), but the second link follows a
         // non-delegable link → MaxDepthExceeded.
         let res = crate::capability_cert::verify_chain_hybrid(
-            &v, &roster, &store, &owner_root, &chain, &cap, 0,
+            &v,
+            &roster,
+            &store,
+            &owner_root,
+            &chain,
+            &cap,
+            0,
         );
-        assert_eq!(res, Err(crate::capability_cert::CertError::MaxDepthExceeded));
+        assert_eq!(
+            res,
+            Err(crate::capability_cert::CertError::MaxDepthExceeded)
+        );
     }
 
     #[test]
@@ -1460,7 +1504,17 @@ mod tests {
         let root_b = SelfSignedRoot::mint(&v, &owner_b.cls_seed, &owner_b.pq_seed, scope(), 99999);
         let clock = Clock::new(10);
         // Claim under A succeeds.
-        let r_a = pm.claim(&v, &clock, hub, owner_a.cls_pub, &owner_a.cls_seed, &owner_a.pq_seed, &root_a, None, None);
+        let r_a = pm.claim(
+            &v,
+            &clock,
+            hub,
+            owner_a.cls_pub,
+            &owner_a.cls_seed,
+            &owner_a.pq_seed,
+            &root_a,
+            None,
+            None,
+        );
         assert!(r_a.is_ok());
         // Owner B tries to present root A's pubkey but signed under B's secret → the
         // hub's enrolled anchor is A, and B's signature won't verify against A's key.
@@ -1494,7 +1548,13 @@ mod tests {
         );
         let store = crate::capability_cert::RevocationStore::new();
         let res = crate::capability_cert::verify_chain_hybrid(
-            &v, &roster, &store, &root_a, &[forged], &cap, 0,
+            &v,
+            &roster,
+            &store,
+            &root_a,
+            &[forged],
+            &cap,
+            0,
         );
         // B signed under B's key but claims A as issuer → the sig does not verify
         // against A's enrolled key → BadSignature (the forgery is rejected).
@@ -1582,10 +1642,7 @@ mod tests {
         let last = entries.len() - 1;
         entries.swap(0, last);
         pm.mut_log.entries = entries;
-        assert_eq!(
-            pm.mut_log.verify_chain(&v),
-            Err(CertError::ScopeViolation)
-        );
+        assert_eq!(pm.mut_log.verify_chain(&v), Err(CertError::ScopeViolation));
     }
 
     // ════════════ M6 — suspend-preserving + still owned + 2nd-account rollover ════════════
@@ -1610,8 +1667,18 @@ mod tests {
         let owner = Party::new(&v, 9);
         let owner_root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 99999);
         let clock = Clock::new(10);
-        pm.claim(&v, &clock, hub, owner.cls_pub, &owner.cls_seed, &owner.pq_seed, &owner_root, None, None)
-            .unwrap();
+        pm.claim(
+            &v,
+            &clock,
+            hub,
+            owner.cls_pub,
+            &owner.cls_seed,
+            &owner.pq_seed,
+            &owner_root,
+            None,
+            None,
+        )
+        .unwrap();
         // Suspend: state snapshot exists, compute released.
         let snap = pm.suspend(&v, hub).unwrap();
         assert!(pm.vps.suspended.borrow().values().any(|s| *s == snap));
@@ -1622,7 +1689,10 @@ mod tests {
         ));
         // Resume → returns with prior state.
         let _ = pm.resume(&v, hub).unwrap();
-        assert!(matches!(pm.slots[&hub].state, PoolSlotState::Claimed { .. }));
+        assert!(matches!(
+            pm.slots[&hub].state,
+            PoolSlotState::Claimed { .. }
+        ));
     }
 
     #[test]
@@ -1649,8 +1719,18 @@ mod tests {
         let owner = Party::new(&v, 9);
         let owner_root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 99999);
         let clock = Clock::new(10);
-        pm.claim(&v, &clock, hub, owner.cls_pub, &owner.cls_seed, &owner.pq_seed, &owner_root, None, None)
-            .unwrap();
+        pm.claim(
+            &v,
+            &clock,
+            hub,
+            owner.cls_pub,
+            &owner.cls_seed,
+            &owner.pq_seed,
+            &owner_root,
+            None,
+            None,
+        )
+        .unwrap();
         let expected_owner = OwnerId(owner_root.node_id.0);
         // Sanity: the real owner is a non-zero id.
         assert_ne!(expected_owner, OwnerId([0u8; 32]));
@@ -1685,8 +1765,18 @@ mod tests {
         let owner = Party::new(&v, 9);
         let owner_root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 99999);
         let clock = Clock::new(10);
-        pm.claim(&v, &clock, hub, owner.cls_pub, &owner.cls_seed, &owner.pq_seed, &owner_root, None, None)
-            .unwrap();
+        pm.claim(
+            &v,
+            &clock,
+            hub,
+            owner.cls_pub,
+            &owner.cls_seed,
+            &owner.pq_seed,
+            &owner_root,
+            None,
+            None,
+        )
+        .unwrap();
         let _ = pm.suspend(&v, hub).unwrap();
         // Not in the claimable pool.
         assert_eq!(pm.warm_depth(), 0);
@@ -1779,7 +1869,9 @@ mod tests {
         });
         let (check, flag) = check_tunnel_cap(&tunnel, &mut pool).unwrap();
         match check {
-            CapCheck::Warn { began_second_account } => {
+            CapCheck::Warn {
+                began_second_account,
+            } => {
                 assert!(began_second_account);
                 // A second account was provisioned (config append, no code change).
                 assert_eq!(pool.accounts.len(), 2);

@@ -25,13 +25,13 @@
 //! crate beyond what `pq` already vendors. The identifier-absence scan below
 //! asserts the forbidden tokens are absent from this source.
 
+use crate::event_log::{sha3_256, AppendOutcome, EventLog, EventStore, MemEventStore, MeshEvent};
+use crate::pq::keccak::shake256;
+use crate::pq::x25519::x25519;
 use aes_gcm::{
     aead::{Aead, KeyInit},
     Aes256Gcm, Nonce,
 };
-use crate::event_log::{sha3_256, AppendOutcome, EventLog, EventStore, MemEventStore, MeshEvent};
-use crate::pq::keccak::shake256;
-use crate::pq::x25519::x25519;
 
 // ═══════════════════════════════════════════════════════════════════════════
 // M1 — sovereign encrypted backup envelope (X25519 → SHAKE256 → AES-256-GCM
@@ -179,7 +179,11 @@ const X25519_BASEPOINT: [u8; 32] = [9u8; 32];
 
 /// Seal `state` to the vendor `recipients` set. Draws a random file key from `rng`,
 /// wraps it per recipient, then STREAM-encrypts the payload under the file key.
-pub fn seal(state: &[u8], recipients: &RecipientSet, rng: &mut dyn Rng) -> Result<SealedBackup, BackupError> {
+pub fn seal(
+    state: &[u8],
+    recipients: &RecipientSet,
+    rng: &mut dyn Rng,
+) -> Result<SealedBackup, BackupError> {
     if recipients.is_empty() {
         return Err(BackupError::NoRecipients);
     }
@@ -260,7 +264,10 @@ pub fn open(
         let shared = x25519(vendor_sec, &stanza.ephemeral_pub);
         let wrap_key = derive_wrap_key(&shared, &stanza.ephemeral_pub, vendor_pub);
         let cipher = Aes256Gcm::new_from_slice(&wrap_key).map_err(|_| BackupError::AeadInvalid)?;
-        if let Ok(wrapped) = cipher.decrypt(Nonce::from_slice(&stanza.nonce), stanza.wrapped_file_key.as_slice()) {
+        if let Ok(wrapped) = cipher.decrypt(
+            Nonce::from_slice(&stanza.nonce),
+            stanza.wrapped_file_key.as_slice(),
+        ) {
             if wrapped.len() == AEAD_KEY_LEN {
                 let mut fk = [0u8; AEAD_KEY_LEN];
                 fk.copy_from_slice(&wrapped);
@@ -294,7 +301,10 @@ fn stream_decrypt(chunks: &[Vec<u8>], file_key: &[u8; 32]) -> Result<Vec<u8>, Ba
         if is_last {
             // Try MORE first; if it opens, the stream ended without a FINAL ⇒ truncation.
             let nonce_more = stream_nonce(j as u64, STREAM_MORE);
-            if cipher.decrypt(Nonce::from_slice(&nonce_more), ct.as_slice()).is_ok() {
+            if cipher
+                .decrypt(Nonce::from_slice(&nonce_more), ct.as_slice())
+                .is_ok()
+            {
                 return Err(BackupError::Truncated);
             }
             let nonce_final = stream_nonce(j as u64, STREAM_FINAL);
@@ -565,7 +575,11 @@ pub enum RollbackStep {
 
 /// Code AND state both roll back: flip the slot AND restore the pre-promote
 /// snapshot (R5 risk #1). Refuses when there is no previous slot to return to.
-pub fn decide_rollback(trigger: RollbackTrigger, previous: Option<Slot>, _snap: &StateSnapshot) -> RollbackStep {
+pub fn decide_rollback(
+    trigger: RollbackTrigger,
+    previous: Option<Slot>,
+    _snap: &StateSnapshot,
+) -> RollbackStep {
     match previous {
         None => RollbackStep::Refuse(UpdateError::NoPreviousSlot),
         Some(_) => RollbackStep::FlipToPrevious, // driver then executes RestoreSnapshot + Restart
@@ -695,7 +709,12 @@ pub fn drive_restore<S: StateStore>(
     let opened = open(&sealed.header, &sealed.chunks, vendor_sec, vendor_pub)
         .map_err(|_| UpdateError::SnapshotFailed)?;
     // Rebuild a snapshot whose epoch is exactly the opened (pre-promote) tip.
-    let restored_epoch = EpochHash(opened.as_slice().try_into().map_err(|_| UpdateError::SnapshotFailed)?);
+    let restored_epoch = EpochHash(
+        opened
+            .as_slice()
+            .try_into()
+            .map_err(|_| UpdateError::SnapshotFailed)?,
+    );
     let snap = StateSnapshot {
         epoch: restored_epoch.clone(),
         from_version: Version("rollback".into()),
@@ -783,7 +802,10 @@ mod tests {
         sealed.chunks[idx][10] ^= 0xff;
         let (vsec, _) = vendor_keypair(0x44);
         let res = open(&sealed.header, &sealed.chunks, &vsec, &pubk);
-        assert!(matches!(res, Err(BackupError::AeadInvalid)), "tamper must fail, got {res:?}");
+        assert!(
+            matches!(res, Err(BackupError::AeadInvalid)),
+            "tamper must fail, got {res:?}"
+        );
     }
 
     #[test]
@@ -797,7 +819,10 @@ mod tests {
         sealed.chunks.pop();
         let (vsec, _) = vendor_keypair(0x55);
         let res = open(&sealed.header, &sealed.chunks, &vsec, &pubk);
-        assert!(matches!(res, Err(BackupError::Truncated)), "truncation must fail, got {res:?}");
+        assert!(
+            matches!(res, Err(BackupError::Truncated)),
+            "truncation must fail, got {res:?}"
+        );
     }
 
     #[test]
@@ -813,7 +838,10 @@ mod tests {
             let (vsec, _) = vendor_keypair(0x66);
             let res = open(&sealed.header, &sealed.chunks, &vsec, &pubk);
             assert!(
-                matches!(res, Err(BackupError::AeadInvalid) | Err(BackupError::ChunkReorder)),
+                matches!(
+                    res,
+                    Err(BackupError::AeadInvalid) | Err(BackupError::ChunkReorder)
+                ),
                 "reorder must fail, got {res:?}"
             );
         }
@@ -831,7 +859,10 @@ mod tests {
         let (vsec, _) = vendor_keypair(0x77);
         let res = open(&sealed.header, &sealed.chunks, &vsec, &pubk);
         assert!(
-            matches!(res, Err(BackupError::ChunkReorder) | Err(BackupError::AeadInvalid)),
+            matches!(
+                res,
+                Err(BackupError::ChunkReorder) | Err(BackupError::AeadInvalid)
+            ),
             "extension must fail, got {res:?}"
         );
     }
@@ -846,7 +877,10 @@ mod tests {
         // A DIFFERENT identity (a "dowiz" key, say) tries to open → no matching stanza.
         let (intruder_sec, intruder_pub) = vendor_keypair(0x99);
         let res = open(&sealed.header, &sealed.chunks, &intruder_sec, &intruder_pub);
-        assert!(matches!(res, Err(BackupError::AeadInvalid)), "non-recipient must fail, got {res:?}");
+        assert!(
+            matches!(res, Err(BackupError::AeadInvalid)),
+            "non-recipient must fail, got {res:?}"
+        );
     }
 
     // ── M2: §4-B no-dowiz-recipient firewall ───────────────────────────────────
@@ -856,7 +890,10 @@ mod tests {
     // red-guard self-reference trap that would make a "clean" module fail).
     const FIREWALL_MARKER: &str = "// ── M2: §4-B no-dowiz-recipient firewall";
     fn firewall_src() -> &'static str {
-        let full = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/hub_supervisor.rs"));
+        let full = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/hub_supervisor.rs"
+        ));
         // SAFETY: the marker is present once, right above this firewall. If it were
         // somehow absent we would rather fail the build loudly than scan the test code.
         match full.split_once(FIREWALL_MARKER) {
@@ -917,7 +954,10 @@ mod tests {
         // (c) a dowiz identity cannot open it.
         let (dowiz_sec, dowiz_pub) = vendor_keypair(0xbb);
         let res = open(&sealed.header, &sealed.chunks, &dowiz_sec, &dowiz_pub);
-        assert!(matches!(res, Err(BackupError::AeadInvalid)), "dowiz must not decrypt");
+        assert!(
+            matches!(res, Err(BackupError::AeadInvalid)),
+            "dowiz must not decrypt"
+        );
     }
 
     // ── helpers for M4/M5/M6/M7 ────────────────────────────────────────────────
@@ -1001,7 +1041,10 @@ mod tests {
         let tip = store.chain_tip();
         assert_ne!(tip, EpochHash([0u8; 32]));
         let snap = store.snapshot(&Version("1.0.0".into())).expect("snapshot");
-        assert_eq!(snap.epoch, tip, "snapshot epoch must equal the chain tip at capture");
+        assert_eq!(
+            snap.epoch, tip,
+            "snapshot epoch must equal the chain tip at capture"
+        );
     }
 
     #[test]
@@ -1016,7 +1059,10 @@ mod tests {
         assert_ne!(store.chain_tip(), e1, "state should have advanced");
         // Restore back to the pre-promote epoch.
         let landed = store.restore(&snap).expect("restore");
-        assert_eq!(landed, e1, "restore must land exactly at the pre-promote epoch");
+        assert_eq!(
+            landed, e1,
+            "restore must land exactly at the pre-promote epoch"
+        );
         assert_eq!(store.chain_tip(), e1);
         assert!(store.restore_was_called());
     }
@@ -1025,15 +1071,23 @@ mod tests {
 
     #[test]
     fn fetch_stages_into_idle_slot() {
-        let mut fs = MockSlotFs { current: Slot::A, renames: 0 };
+        let mut fs = MockSlotFs {
+            current: Slot::A,
+            renames: 0,
+        };
         let src = MockReleaseSource {
             latest_version: Version("2.0.0".into()),
             fetched_into: std::cell::Cell::new(None),
         };
         // current is A → idle slot is B.
-        src.fetch_verified(&Version("2.0.0".into()), Slot::B).unwrap();
+        src.fetch_verified(&Version("2.0.0".into()), Slot::B)
+            .unwrap();
         assert_eq!(src.fetched_into.get(), Some(Slot::B));
-        assert_ne!(src.fetched_into.get(), Some(fs.current), "must stage into the IDLE slot, not the live one");
+        assert_ne!(
+            src.fetched_into.get(),
+            Some(fs.current),
+            "must stage into the IDLE slot, not the live one"
+        );
     }
 
     #[test]
@@ -1046,12 +1100,18 @@ mod tests {
             version: Version("3.0.0".into()),
         };
         let step = decide_promote(&st, &pinned, &target);
-        assert!(matches!(step, PromoteStep::Refuse(UpdateError::PinnedVersion)));
+        assert!(matches!(
+            step,
+            PromoteStep::Refuse(UpdateError::PinnedVersion)
+        ));
     }
 
     #[test]
     fn flip_is_single_rename() {
-        let mut fs = MockSlotFs { current: Slot::A, renames: 0 };
+        let mut fs = MockSlotFs {
+            current: Slot::A,
+            renames: 0,
+        };
         // The supervisor decides to flip to B, then executes ONE rename.
         let step = decide_promote(
             &UpdateState::HealthPassed {
@@ -1187,12 +1247,16 @@ mod tests {
         assert_eq!(snap.epoch, e1);
 
         // Update to v2: fetch into idle slot B, a FORWARD migration runs (state advances).
-        let mut fs = MockSlotFs { current: Slot::A, renames: 0 };
+        let mut fs = MockSlotFs {
+            current: Slot::A,
+            renames: 0,
+        };
         let src = MockReleaseSource {
             latest_version: Version("2.0.0".into()),
             fetched_into: std::cell::Cell::new(None),
         };
-        src.fetch_verified(&Version("2.0.0".into()), Slot::B).unwrap();
+        src.fetch_verified(&Version("2.0.0".into()), Slot::B)
+            .unwrap();
         store.append_event(b"v2-migration"); // forward migration mutates state
         let e2 = store.chain_tip();
         assert_ne!(e2, e1, "v2 migration advanced the epoch");
@@ -1231,13 +1295,19 @@ mod tests {
             restart_count: CRASH_LOOP_MAX_RESTARTS + 1,
             restarts: 0,
         };
-        assert!(ctl.restart_count_since(0) > CRASH_LOOP_MAX_RESTARTS, "crash-loop detected");
+        assert!(
+            ctl.restart_count_since(0) > CRASH_LOOP_MAX_RESTARTS,
+            "crash-loop detected"
+        );
         let rb = decide_rollback(RollbackTrigger::CrashLoop, fs.previous(), &snap);
         assert_eq!(rb, RollbackStep::FlipToPrevious);
         // Execute the full rollback sequence (the supervisor driver does this).
         fs.flip_current(fs.previous().unwrap()).unwrap(); // back to v1 slot
         let landed = store.restore(&snap).expect("rollback restore"); // state back to E1
-        assert_eq!(landed, e1, "rollback must restore state to the pre-promote epoch");
+        assert_eq!(
+            landed, e1,
+            "rollback must restore state to the pre-promote epoch"
+        );
         assert_eq!(store.chain_tip(), e1);
         // Running code is v1 against E1 state — a compatible pair.
         assert_eq!(fs.current(), Slot::A, "rollback flips back to the v1 slot");
@@ -1265,7 +1335,10 @@ mod tests {
             // skip store.restore(&snap)
             store.chain_tip()
         };
-        assert_ne!(code_only_tip, e1, "code-only rollback would leave tip at v2-migrated epoch (corruption)");
+        assert_ne!(
+            code_only_tip, e1,
+            "code-only rollback would leave tip at v2-migrated epoch (corruption)"
+        );
         // The correct path restores:
         let _ = store.restore(&snap).unwrap();
         assert_eq!(store.chain_tip(), e1);
@@ -1282,6 +1355,9 @@ mod tests {
             projection_path: String::new(),
         };
         let rb = decide_rollback(RollbackTrigger::OwnerRequested, None, &snap);
-        assert!(matches!(rb, RollbackStep::Refuse(UpdateError::NoPreviousSlot)));
+        assert!(matches!(
+            rb,
+            RollbackStep::Refuse(UpdateError::NoPreviousSlot)
+        ));
     }
 }

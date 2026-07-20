@@ -243,9 +243,7 @@ impl Journey {
 
         let next = match (&self.step, intent) {
             (JourneyStep::Storefront, JourneyIntent::Browse) => Some(JourneyStep::Menu),
-            (JourneyStep::Menu, JourneyIntent::Open(leaf)) => {
-                Some(JourneyStep::Detail { leaf })
-            }
+            (JourneyStep::Menu, JourneyIntent::Open(leaf)) => Some(JourneyStep::Detail { leaf }),
             (JourneyStep::Menu, JourneyIntent::AddToCart) => {
                 // Adding from the menu list also moves to the cart.
                 if self.cart.is_empty() {
@@ -305,11 +303,7 @@ impl Journey {
     /// Add a catalog leaf to the cart at unit price resolved from the trusted catalog (P62 X7).
     /// Returns `Err` if the leaf is unknown to this journey's catalog (fail-closed — never a
     /// caller-supplied price). Sold-out leaves are priced but their add is refused (§4.2).
-    pub fn add_leaf(
-        &mut self,
-        product_id: &str,
-        qty: i64,
-    ) -> Result<(), String> {
+    pub fn add_leaf(&mut self, product_id: &str, qty: i64) -> Result<(), String> {
         let leaf = self
             .catalog
             .get(product_id)
@@ -322,12 +316,9 @@ impl Journey {
             .add(product_id, "", qty)
             .map_err(|e| e.to_string())?;
         // price() re-prices at the catalog unit so the cart total is authoritative.
-        let _ = self.cart.price(|p| {
-            self.catalog
-                .get(p)
-                .map(|l| l.price.minor)
-                .unwrap_or(unit)
-        });
+        let _ = self
+            .cart
+            .price(|p| self.catalog.get(p).map(|l| l.price.minor).unwrap_or(unit));
         Ok(())
     }
 
@@ -478,11 +469,11 @@ mod tests {
         j.add_leaf("burrito", 1).unwrap();
         j.add_leaf("taco", 2).unwrap();
         assert_eq!(j.advance(JourneyIntent::AddToCart, true), JourneyStep::Cart);
+        assert_eq!(j.cart_subtotal().unwrap(), Money::new(1850, Currency::All));
         assert_eq!(
-            j.cart_subtotal().unwrap(),
-            Money::new(1850, Currency::All)
+            j.advance(JourneyIntent::Checkout, true),
+            JourneyStep::Payment
         );
-        assert_eq!(j.advance(JourneyIntent::Checkout, true), JourneyStep::Payment);
     }
 
     // GREEN (§5.1/M5): a fresh storefront opens at Storefront with the hub Online.
@@ -511,10 +502,15 @@ mod tests {
         s.add_leaf("taco", 1).unwrap();
         s.advance(JourneyIntent::AddToCart, true);
         // Choose Delivery with no address → refused; stays in Fulfillment.
-        s.advance(JourneyIntent::ChooseFulfillment(FulfillmentChoice::Delivery), false);
+        s.advance(
+            JourneyIntent::ChooseFulfillment(FulfillmentChoice::Delivery),
+            false,
+        );
         assert!(matches!(
             s.step(),
-            JourneyStep::Fulfillment { choice: FulfillmentChoice::Delivery }
+            JourneyStep::Fulfillment {
+                choice: FulfillmentChoice::Delivery
+            }
         ));
         let p = s.advance(JourneyIntent::Checkout, false);
         assert!(matches!(p, JourneyStep::Fulfillment { .. }));
@@ -529,7 +525,10 @@ mod tests {
         s2.advance(JourneyIntent::Browse, false);
         s2.add_leaf("taco", 1).unwrap();
         s2.advance(JourneyIntent::AddToCart, true);
-        s2.advance(JourneyIntent::ChooseFulfillment(FulfillmentChoice::Pickup), false);
+        s2.advance(
+            JourneyIntent::ChooseFulfillment(FulfillmentChoice::Pickup),
+            false,
+        );
         let p2 = s2.advance(JourneyIntent::Checkout, false);
         assert_eq!(p2, JourneyStep::Payment);
     }
@@ -541,7 +540,11 @@ mod tests {
         let mut s = Journey::new(StorefrontSlug("/s/hub".into()));
         // Storefront -> Checkout directly (skipping Browse/Cart) is illegal.
         let p = s.advance(JourneyIntent::Checkout, true);
-        assert_eq!(p, JourneyStep::Storefront, "cannot skip to Payment from Storefront");
+        assert_eq!(
+            p,
+            JourneyStep::Storefront,
+            "cannot skip to Payment from Storefront"
+        );
     }
 
     // GREEN (R1 §3 + §4.2/F3): suspend produces an OPAQUE handoff; the journey does NOT
@@ -576,7 +579,12 @@ mod tests {
         s.suspend(handoff(), suspend_state());
 
         // Authorized webhook → stay Suspended.
-        let step = s.resume(ReturnSignal::Poll, PaymentStatus::Authorized, HubStatus::Online, 1);
+        let step = s.resume(
+            ReturnSignal::Poll,
+            PaymentStatus::Authorized,
+            HubStatus::Online,
+            1,
+        );
         assert!(matches!(step, JourneyStep::Suspended(_)));
 
         // Captured webhook → Placed (the Inciting beat).
@@ -586,7 +594,12 @@ mod tests {
             HubStatus::Online,
             1,
         );
-        assert!(matches!(step, JourneyStep::Placed { status: PaymentStatus::Captured }));
+        assert!(matches!(
+            step,
+            JourneyStep::Placed {
+                status: PaymentStatus::Captured
+            }
+        ));
     }
 
     // RED→GREEN (R1 §3/§4.4): a FAILED webhook returns to the resume step (Payment),
@@ -603,7 +616,11 @@ mod tests {
             HubStatus::Online,
             1,
         );
-        assert_eq!(step, JourneyStep::Payment, "failure must re-surface at Payment");
+        assert_eq!(
+            step,
+            JourneyStep::Payment,
+            "failure must re-surface at Payment"
+        );
     }
 
     // GREEN (§4.5 adversarial): a wrong/forged deep-link token is refused and the
@@ -616,12 +633,18 @@ mod tests {
         s.suspend(handoff(), suspend_state());
 
         let step = s.resume(
-            ReturnSignal::DeepLink { session_token: OTHER_TOKEN },
+            ReturnSignal::DeepLink {
+                session_token: OTHER_TOKEN,
+            },
             PaymentStatus::Captured,
             HubStatus::Online,
             1,
         );
-        assert_eq!(step, JourneyStep::Payment, "forged token must not reach Placed");
+        assert_eq!(
+            step,
+            JourneyStep::Payment,
+            "forged token must not reach Placed"
+        );
     }
 
     // GREEN (§4.5 adversarial): a stale (ttl-elapsed) return is refused; the journey
@@ -639,7 +662,11 @@ mod tests {
             HubStatus::Online,
             suspend_state().ttl_deadline_unix_s + 1,
         );
-        assert_eq!(step, JourneyStep::Payment, "stale return must not reach Placed");
+        assert_eq!(
+            step,
+            JourneyStep::Payment,
+            "stale return must not reach Placed"
+        );
     }
 
     // GREEN (§7 honest hub status): a customer can be told the hub is Offline and cannot

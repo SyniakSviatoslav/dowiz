@@ -58,9 +58,8 @@ pub fn init(dir: Option<std::path::PathBuf>) -> Result<(), ()> {
     // `metric.jsonl` / `alert.jsonl` land via `DOWIZ_SPAN_METRICS_DIR`. When `dir` is None
     // and the env is unset, the writer is best-effort-disabled (no file is opened), so a
     // bare `init(None)` never surprises the caller with disk writes.
-    let dir = dir.or_else(|| {
-        std::env::var_os("DOWIZ_SPAN_METRICS_DIR").map(std::path::PathBuf::from)
-    });
+    let dir =
+        dir.or_else(|| std::env::var_os("DOWIZ_SPAN_METRICS_DIR").map(std::path::PathBuf::from));
     let obs = std::sync::Arc::new(SpanMetricsObserver::new(dir));
     crate::fdr::set_global_observer(obs)
 }
