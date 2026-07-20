@@ -368,16 +368,20 @@ test coverage.
 - **Item 9** — build `kernel/src/breaker/` from Blueprint A under the §1.5/§10-P4 standard (typed
   `Result<Permit, Tripped>`, unconstructible tripped-but-permitting state, `CommitError` alarms
   routed in). **The pivot point of the entire roadmap** — items 11, 12, 21, 27(response), and 32
-  (control-law half) all sit behind it. Best entered after item 2's finding and Tier 1's FDR.
+  (control-law half) all sit behind it. Best entered after item 2's finding and Tier 1's FDR. See
+  [`BLUEPRINT-ITEM-09-breaker-2026-07-19.md`](BLUEPRINT-ITEM-09-breaker-2026-07-19.md).
 - **Item 10** — TLA+ spec of decision-import + order FSM. No structural dependency on the breaker;
-  same-tier verification of the same state-machine family, runs in parallel with item 9.
+  same-tier verification of the same state-machine family, runs in parallel with item 9. See
+  [`BLUEPRINT-ITEM-10-tlaplus-decision-fsm-2026-07-19.md`](BLUEPRINT-ITEM-10-tlaplus-decision-fsm-2026-07-19.md).
 
 ## E. Tier 4 — gated on the breaker.
 
-- **Item 21** — autonomic gain-scheduling module. Explicit stated dependency: strictly after item 9.
+- **Item 21** — autonomic gain-scheduling module. Explicit stated dependency: strictly after item 9. See
+  [`BLUEPRINT-ITEM-21-autonomic-gain-scheduling-2026-07-19.md`](BLUEPRINT-ITEM-21-autonomic-gain-scheduling-2026-07-19.md).
 - **Item 11** — ARINC-653 scheduler Phase 0 (design doc + TLC model only). **Ruling: PURSUE,
   design-only (§0 above)** — can start now as a design artifact; the model itself doesn't need the
-  breaker to exist, only the eventual code does ("code comes only after the breaker exists").
+  breaker to exist, only the eventual code does ("code comes only after the breaker exists"). See
+  [`BLUEPRINT-ITEM-11-arinc653-scheduler-phase0-2026-07-19.md`](BLUEPRINT-ITEM-11-arinc653-scheduler-phase0-2026-07-19.md).
 - **Item 12** — SIHFT pilot, **re-scoped 2026-07-19 as TEMPORAL TMR** (merged re-scope: the
   consistency audit's premise correction §§1.1–1.2 + the OS-patterns research §3 name the same
   underlying redundancy concept — one refined item, no new number). **Ruling: PURSUE, design-only
@@ -394,24 +398,33 @@ test coverage.
   transient flips — complementary halves, named as such in both designs. Per the Kleene audit
   (finding 6), the FDR entry carries `VoteOutcome::{Unanimous, SingleDissent(replica-id),
   NoMajority}` — both non-unanimous classes trip identically (behavioral collapse kept, distinct
-  typed cause recorded; item-50 shape) — bake this into the design doc now at zero code cost.
-- **Item 27 (response half)** — after item 21.
+  typed cause recorded; item-50 shape) — bake this into the design doc now at zero code cost. See
+  [`BLUEPRINT-ITEM-12-temporal-tmr-2026-07-19.md`](BLUEPRINT-ITEM-12-temporal-tmr-2026-07-19.md).
+- **Item 27 (response half)** — after item 21. See
+  [`BLUEPRINT-ITEM-27-response-half-2026-07-19.md`](BLUEPRINT-ITEM-27-response-half-2026-07-19.md).
 - **Item 32 (split)** — Laplacian half already lands with item 18 (Tier 0). **Ruling: PURSUE the IR
   extension (§0 above)** — this can start as its own eqc-rs capability work, independent of the
-  breaker; only the §16 pilot-control-law half needs items 9 + 21.
+  breaker; only the §16 pilot-control-law half needs items 9 + 21. See
+  [`BLUEPRINT-ITEM-32-eqc-ir-extension-2026-07-19.md`](BLUEPRINT-ITEM-32-eqc-ir-extension-2026-07-19.md).
 
 ## F. Parallel lanes
 
 - **Spectral/physics lane:** item 18 (Tier 0, narrowed) → item 32's Laplacian half (also Tier 0/now).
   eqc IR extension (item 32, ruled PURSUE) runs alongside, independent.
 - **Living-memory lane:** item 19 (audit) → **item 20** (P95 persistence — genuinely open,
-  externally ungated, READY now) → **item 28** (optical compression — **ruled PURSUE**, pilot scoped
+  externally ungated, READY now; see
+  [`BLUEPRINT-ITEM-20-living-memory-persistence-2026-07-19.md`](BLUEPRINT-ITEM-20-living-memory-persistence-2026-07-19.md))
+  → **item 28** (optical compression — **ruled PURSUE**, pilot scoped
   to the archival plane only, sequenced after item 20 since it consumes the same durability
-  machinery).
+  machinery; see
+  [`BLUEPRINT-ITEM-28-optical-compression-2026-07-19.md`](BLUEPRINT-ITEM-28-optical-compression-2026-07-19.md)).
 - **Mesh/gossip lane:** **item 22** (verification, READY) → reimplementation work (per the §0 ruling,
   not a vendor integration) → **item 23** (explicit stated dependency: after item 22 — preserved
-  exactly; extends `import_unit()`, no parallel importer) → **item 24** (crypto surfaces under §4 —
-  depends on item 6's re-executing CI machinery and item 14's trigger).
+  exactly; extends `import_unit()`, no parallel importer; see
+  [`BLUEPRINT-ITEM-23-gossip-import-extensions-2026-07-19.md`](BLUEPRINT-ITEM-23-gossip-import-extensions-2026-07-19.md))
+  → **item 24** (crypto surfaces under §4 —
+  depends on item 6's re-executing CI machinery and item 14's trigger; see
+  [`BLUEPRINT-ITEM-24-mesh-crypto-hardening-2026-07-19.md`](BLUEPRINT-ITEM-24-mesh-crypto-hardening-2026-07-19.md)).
 
 ---
 
@@ -507,7 +520,8 @@ Planning only — no item below starts before the operator dispatches it.
   raw-prompt number explicitly CONFIRMED (with the reproducing command) or REFUTED; a full-key
   run recorded with zero MISSING rows; any confirmed regression gets its own follow-up ticket
   (static-data-layout-first per the Q2 resolution — item 3's const-adjacency is the named fix
-  shape; separate-core stays rejected).
+  shape; separate-core stays rejected). See
+  [`BLUEPRINT-ITEM-33-bench-remeasurement-2026-07-19.md`](BLUEPRINT-ITEM-33-bench-remeasurement-2026-07-19.md).
 - **Item 34 — pilot workload selection + scope ruling (`RESOLVED 2026-07-19` — operator ruled;
   gates items 35–44).** No model exists in-repo, so the arc must not start as an engine in search
   of a workload. Candidate real-product surfaces were presented (synthesis §3: retrieval reranker
@@ -529,35 +543,40 @@ Planning only — no item below starts before the operator dispatches it.
   **Proof (ruling half — DONE):** this ruling recorded here and in synthesis §3. **Proof (spec
   half — owed on dispatch):** a one-page spec fixing the toy classifier's bounded input domain D
   (synthetic, enumerable or tightly bounded) and the output-tolerance guarantee the engine must
-  prove — the pure-function `f(x)=y` contract of the source dialogue's part 3.
+  prove — the pure-function `f(x)=y` contract of the source dialogue's part 3. See
+  [`BLUEPRINT-ITEM-34-toy-pilot-spec-2026-07-19.md`](BLUEPRINT-ITEM-34-toy-pilot-spec-2026-07-19.md).
 - **Item 35 — fixed-point number-format + rounding-law spec (after 34).** The Q5 ruling made
   concrete: i8-symmetric weights, per-tensor scale (power-of-two shift preferred), i32
   accumulators with per-layer proven no-overflow bounds, `div_half_up` requantization,
   saturating-clamp semantics, refuse-never-fall-back on any unprovable bound. **Proof:** a spec
   doc with every law as a checkable equation; the i8×i8 multiply-accumulate law exhaustively
   proven over all 65 536 pairs (the house 65536-pair standard, literally); overflow-bound lemma
-  stated falsifiably per layer shape.
+  stated falsifiably per layer shape. See
+  [`BLUEPRINT-ITEM-35-fixed-point-rounding-spec-2026-07-19.md`](BLUEPRINT-ITEM-35-fixed-point-rounding-spec-2026-07-19.md).
 - **Item 36 — eqc-rs indexed-summation IR extension, quantized-dot target (after 35; extends
   the already-ruled item 32 IR work — one extension, two consumers, never two IRs).** Grow
   `Expr` with the Σ-over-index construct needed by BOTH the Laplacian neighbor-sum (item 32)
   and the quantized dot-product inner law; `emit_fixed_rust` learns the i32-accumulator Q-format
   path. **Proof:** `emit_proof_program` harness green on an emitted quantized dot (compiled with
   real rustc, self-asserted against the tree-walking evaluator); the fixed emitter demonstrably
-  refuses an inexpressible node; item 32's Laplacian consumer still green — one IR serves both.
+  refuses an inexpressible node; item 32's Laplacian consumer still green — one IR serves both. See
+  [`BLUEPRINT-ITEM-36-eqc-indexed-summation-ir-2026-07-19.md`](BLUEPRINT-ITEM-36-eqc-indexed-summation-ir-2026-07-19.md).
 - **Item 37 — reference oracle implementation (after 35; parallel with 36).** The "Schoolbook"
   of this arc: scalar, obviously-correct integer-domain matmul + activation set (i64/i128
   shadow accumulation — std-only, no dependency), retained forever as the test-only
   differential target, per the §4 checklist's oracle clause and the NTT schoolbook precedent.
   **Proof:** exhaustive small-dimension cases + large randomized corpus, oracle vs
   wide-accumulator shadow, zero divergence; the oracle module documented as permanent (never
-  deleted on optimization).
+  deleted on optimization). See
+  [`BLUEPRINT-ITEM-37-reference-oracle-2026-07-19.md`](BLUEPRINT-ITEM-37-reference-oracle-2026-07-19.md).
 - **Item 38 — static tensor workspace on the Arena (after 34; parallel with 35–37).** The
   dialogue's part-5 shape on the existing `BumpArena` precedent: one preallocated workspace,
   tensors as fixed offsets computed at build time from the pilot graph, zero mid-inference
   allocation, zero-copy layer-to-layer reads. **Proof:** a counting-allocator test (item 3's
   own proof machinery reused) shows zero heap allocations across a full inference; offsets are
   `const`; a deliberately-overlapping layout fails to construct (illegal state unrepresentable,
-  §1.5 house standard).
+  §1.5 house standard). See
+  [`BLUEPRINT-ITEM-38-tensor-arena-workspace-2026-07-19.md`](BLUEPRINT-ITEM-38-tensor-arena-workspace-2026-07-19.md).
 - **Item 39 — SIMD quantized kernels via `core::arch` (after 36+37+38).** AVX2
   `_mm256_maddubs_epi16`/`_mm256_madd_epi16`-class integer paths, runtime-detected with the
   scalar oracle as fallback — `simd.rs`/`householder.rs` house pattern. Named dividend of Q5:
@@ -565,7 +584,8 @@ Planning only — no item below starts before the operator dispatches it.
   f64 lanes' across-rows-only rule) — but the chosen lane order is still fixed and documented,
   and debug builds carry `debug_assert_eq!` against item 37's oracle (the `ring_mul` standard).
   **Proof:** differential corpus vs oracle bit-exact on both paths; the §4 checklist artifacts
-  present and CI-re-executed; bench added to `baseline.json` so the bench-gate guards it.
+  present and CI-re-executed; bench added to `baseline.json` so the bench-gate guards it. See
+  [`BLUEPRINT-ITEM-39-40-simd-kernels-golden-checksum-2026-07-19.md`](BLUEPRINT-ITEM-39-40-simd-kernels-golden-checksum-2026-07-19.md).
 - **Item 40 — per-layer golden-checksum oracle + hard-fail (after 39).** Build-time golden
   CRC32 per layer over pinned test vectors (reusing `fdr`'s hand-rolled CRC32 — P2, no second
   CRC), runtime spot-check, hard-fail to safe state on mismatch — a checksum mismatch is
@@ -574,7 +594,8 @@ Planning only — no item below starts before the operator dispatches it.
   (composition named in synthesis §3 — design does NOT gate on item 9). **Proof:** a planted
   single-bit corruption (weights AND activation, separately) demonstrably trips the fail path
   and writes the FDR entry; an uncorrupted run is checksum-silent; CI re-executes the planted
-  fault (P7 — the verifier proves it can reject).
+  fault (P7 — the verifier proves it can reject). See
+  [`BLUEPRINT-ITEM-39-40-simd-kernels-golden-checksum-2026-07-19.md`](BLUEPRINT-ITEM-39-40-simd-kernels-golden-checksum-2026-07-19.md).
 - **Item 41 — embedded weight pipeline (after 35; parallel with 39–40).** The Q4 ruling made
   real: generator emits committed `static WEIGHTS: [i8; N]` Rust source (eqc_gen precedent),
   `#[repr(align(64))]` wrapper (first in-repo use — flagged as new surface), SHA3-256 golden-
@@ -583,14 +604,16 @@ Planning only — no item below starts before the operator dispatches it.
   reopening trigger (weights > ~1–2 MB committed-source practicality, or measured build-time
   regression) per item 25's procedure. **Proof:** init self-check demonstrably fails on a
   tampered byte (red→green); alignment asserted by test; the parked alternative + trigger
-  recorded in the module doc (slot_arena format); zero-dep gate untouched.
+  recorded in the module doc (slot_arena format); zero-dep gate untouched. See
+  [`BLUEPRINT-ITEM-41-embedded-weight-pipeline-2026-07-19.md`](BLUEPRINT-ITEM-41-embedded-weight-pipeline-2026-07-19.md).
 - **Item 42 — fixed-sequence scheduler (after 38+39+41).** The engine's spine: a `const`
   function-pointer array / straight-line layer sequence, cyclomatic complexity 1, no dynamic
   graph traversal, no hash-map dispatch — the whole model as one compiled call sequence.
   **Proof:** a source-structure test asserts the sequence is `const` and branch-free at the
   dispatch level; an assembly spot-check of the dispatch path filed under item 14's toolchain-
   keyed audit format; end-to-end inference reproduces bit-identical outputs and (via item 40)
-  identical per-layer checksums across repeated runs and across native/wasm32.
+  identical per-layer checksums across repeated runs and across native/wasm32. See
+  [`BLUEPRINT-ITEM-42-fixed-sequence-scheduler-2026-07-19.md`](BLUEPRINT-ITEM-42-fixed-sequence-scheduler-2026-07-19.md).
 - **Item 43 — constant-time inference gate (after 42; scope decided by input-plane
   classification first).** Classify the pilot's input plane per §10/P6 plane-ranking: if inputs
   are secret-adjacent (anything fed from capability/crypto surfaces), the full dudect-style
@@ -602,7 +625,8 @@ Planning only — no item below starts before the operator dispatches it.
   real-product pilots (item 34's reopening trigger).** **Proof:** the plane classification recorded
   with its reasoning; if gated — Welch |t| < 4.5 across input classes AND the planted leak
   demonstrably caught; if not gated — the recorded ruling names the reopening trigger (any new
-  secret-adjacent consumer).
+  secret-adjacent consumer). See
+  [`BLUEPRINT-ITEM-43-constant-time-inference-gate-2026-07-19.md`](BLUEPRINT-ITEM-43-constant-time-inference-gate-2026-07-19.md).
 - **Item 44 — arc-wide CI integration + retroactive checklist pass (after 40+42; final).**
   The inference hot paths join item 6's designated-hot-path list; the §4 CI job re-executes
   (never presence-checks) the oracle corpus, the planted-fault checksum test, and (if gated)
@@ -610,7 +634,8 @@ Planning only — no item below starts before the operator dispatches it.
   cycles + (where RAPL exists) joules per item 29's schema — a token-count-only cost report
   fails review per §21. **Proof:** a deliberately artifact-less test diff touching an inference
   hot path fails CI; the full suite green; `cargo tree -e no-dev` still resolves to the kernel
-  root alone — the arc lands with the allowlist still empty.
+  root alone — the arc lands with the allowlist still empty. See
+  [`BLUEPRINT-ITEM-44-arc-ci-integration-2026-07-19.md`](BLUEPRINT-ITEM-44-arc-ci-integration-2026-07-19.md).
 
 **Dependency graph, one line:** 33 ∥ 34 → 35 → {36 ∥ 37 ∥ 38} → 39 → 40 → 42 → 43 → 44, with
 41 branching off 35 and merging before 42; item 9 (breaker) composes with 40's fail path when
@@ -650,7 +675,8 @@ dispatches it.
   `None` path). **Proof:** a planted core→AI import (or a planted default-features AI reference)
   demonstrably turns the gate RED before the gate counts as landed (P7); the default-features
   full suite runs green inside the job; the feature-gate law is recorded in §H's header and the
-  AI module's own doc when it lands.
+  AI module's own doc when it lands. See
+  [`BLUEPRINT-ITEM-45-ai-optional-gate-2026-07-19.md`](BLUEPRINT-ITEM-45-ai-optional-gate-2026-07-19.md).
 - **Item 46 — float-determinism containment, evidence-scoped (READY NOW; composes with item 14's
   closed bump gate).** NOT a kernel-wide f64→fixed rewrite — rejected as disproportionate
   (synthesis §2.3: the one real float-nondeterminism bug ever shipped was libm `sin`/`cos` ULP
@@ -679,7 +705,8 @@ dispatches it.
   `hardening-gate` oracle set (a deliberately perturbed golden value turns CI RED under the pinned
   toolchain — red-proven), and a `channel` bump is additionally gated on the `spot-check-<new>.md`
   `## Full-suite re-run` artifact; the parked rewrite + triggers recorded in the doc and the
-  relevant module docs.
+  relevant module docs. See
+  [`BLUEPRINT-ITEM-46-float-determinism-containment-2026-07-19.md`](BLUEPRINT-ITEM-46-float-determinism-containment-2026-07-19.md).
 - **Item 47 — Guardian: semantic advice gate + deterministic-primary path (spec after item 35;
   full wiring after item 42; EXTENDS item 9, cross-references item 40 — no competing breaker, no
   fold-in).** The kernel's decision seam takes `Option<Proposal>` — advice is DATA; `None`
@@ -701,7 +728,8 @@ dispatches it.
   (the gate demonstrably rejects — P7); the `None`-path test proving bit-identical output vs the
   deterministic baseline; exhaustive enumeration where the advice domain is enumerable +
   oracle/differential corpus otherwise + a proptest sweep (the item-5 regex-parity testing
-  stack, reused not reinvented); the source-structure bounded-loop assertion green.
+  stack, reused not reinvented); the source-structure bounded-loop assertion green. See
+  [`BLUEPRINT-ITEM-47-guardian-semantic-advice-gate-2026-07-19.md`](BLUEPRINT-ITEM-47-guardian-semantic-advice-gate-2026-07-19.md).
 - **Item 48 — FDR blind-spot closure: panic forensics + liveness heartbeat (after items 4+29 —
   satisfied; READY once the FDR branch merges).** The kill-9 test proves recovery AFTER process
   death; it is structurally blind to (a) a panicking process that writes nothing before dying
@@ -721,7 +749,8 @@ dispatches it.
   hangs (loop + no heartbeat) is flagged by the external liveness check WHILE producing no
   PostMortem — demonstrating exactly the gap closed; all other FDR records byte-identical
   (optional-field discipline, item-27 precedent); clean-shutdown emits a final heartbeat and no
-  false alarm.
+  false alarm. See
+  [`BLUEPRINT-ITEM-48-fdr-blind-spot-closure-2026-07-19.md`](BLUEPRINT-ITEM-48-fdr-blind-spot-closure-2026-07-19.md).
 - **Item 49 — event-log replay-bound measurement + Hybrid/LSM park (after item 2's wiring fix
   lands — currently gated: no production composition root constructs the durable store).** The
   raw prompt's Hybrid (WAL + periodic snapshot) recommendation, dispositioned per surface: for
@@ -736,7 +765,8 @@ dispatches it.
   caveat, endorsed; consistent with `ring.rs`'s kill-9-vs-power-loss separation). **Proof:** a
   dated measurement doc (replay µs at N ∈ {1e3, 1e4, 1e5} events, methodology stated); the
   budget + trigger recorded; zero snapshot code landed (scope law, item-26 precedent); the FDR
-  permanent-rejection rationale recorded in `fdr/ring.rs`'s module doc when next touched.
+  permanent-rejection rationale recorded in `fdr/ring.rs`'s module doc when next touched. See
+  [`BLUEPRINT-ITEM-49-event-log-replay-bound-measurement-2026-07-19.md`](BLUEPRINT-ITEM-49-event-log-replay-bound-measurement-2026-07-19.md).
 
 **Dependency graph, one line:** 45 ∥ 46 ∥ 48 ready now (48 pending the FDR branch merge);
 47 spec after 35, full wiring after 42, composes with item 9's breaker when it exists;
@@ -795,7 +825,8 @@ operator dispatches it.
   own exhaustive-beats-random point; NO new proptest use); planted incomplete-evidence
   proposal demonstrably lands `Undecidable` and planted rule-violation lands `Refuted`
   (red→green, P7); the item-47 `None`-path bit-identity test still green with the extension in
-  place; the K3 fold joins item 7's Kani target list (recorded there, executed under item 7).
+  place; the K3 fold joins item 7's Kani target list (recorded there, executed under item 7). See
+  [`BLUEPRINT-ITEM-50-k3-admission-validity-2026-07-19.md`](BLUEPRINT-ITEM-50-k3-admission-validity-2026-07-19.md).
 - **Item 51 — shadow-mode divergence telemetry at the decision seam (after item 47's wiring +
   item 50; FDR branch merge prerequisite — genuinely NEW pattern, full design in synthesis
   §2.4).** No second execution lane: item 47's deterministic decision D is already total and
@@ -821,7 +852,8 @@ operator dispatches it.
   reused); a planted disagreeing proposal yields exactly one recovered `ShadowDivergence`
   record with correct class + digests (red→green through the real FDR ring); emission-rate
   bound asserted under a flood of planted disagreements; all non-shadow FDR records
-  byte-identical before/after.
+  byte-identical before/after. See
+  [`BLUEPRINT-ITEM-51-shadow-mode-divergence-telemetry-2026-07-19.md`](BLUEPRINT-ITEM-51-shadow-mode-divergence-telemetry-2026-07-19.md).
 - **Item 52 — `miri-gate`: targeted UB detection over the real unsafe surface (independent —
   zero prerequisites on items 47/50/51; dispatchable now).** GROUNDED baseline: Miri runs
   nowhere (aspirational doc-comments only; `ROADMAP-LIVE-STATUS-2026-07-18.md:24` "component
@@ -847,7 +879,8 @@ operator dispatches it.
   not floating. **Proof:** a planted UB self-test (out-of-bounds / use-after-free behind a
   test-only cfg) demonstrably turns the gate RED before it counts as landed (P7); clean run
   green; a filter matching zero tests is RED (item-6 anti-forgery clause reused); build
-  toolchain pin byte-unchanged.
+  toolchain pin byte-unchanged. See
+  [`BLUEPRINT-ITEM-52-miri-gate-2026-07-19.md`](BLUEPRINT-ITEM-52-miri-gate-2026-07-19.md).
 - **Item 53 — `lint-gate`: clippy + fmt (+ miri-required promotion) contribution gates (LOW
   priority, LAST in this arc, blocks nothing — sequenced behind 50–52 by explicit RULING).**
   GROUNDED: none of the triad exists in CI (zero clippy/fmt/miri workflow hits; real gates
@@ -863,7 +896,8 @@ operator dispatches it.
   public-flip preparation (ADR-0020's gate) promotes this item to a pre-flip BLOCKER alongside
   the ADR-recommended all-origin-refs gitleaks sweep; until then it stays last. **Proof:** a
   planted clippy warning and a planted fmt divergence each turn the job RED (P7); clean tree
-  green; the escalation trigger recorded here and in the job's comment header.
+  green; the escalation trigger recorded here and in the job's comment header. See
+  [`BLUEPRINT-ITEM-53-lint-gate-2026-07-19.md`](BLUEPRINT-ITEM-53-lint-gate-2026-07-19.md).
 - **Item 54 — Sentinel: read-time integrity check for critical LIVE in-memory structs (after
   {item 47 wiring (post-42) + item 50} + the FDR branch merge; registry enumeration startable
   now; full design in synthesis §2.3 — operator-reversed 2026-07-19 from an earlier draft
@@ -893,7 +927,8 @@ operator dispatches it.
   uncorrupted run is checksum-silent; mutate-then-read passes (re-hash correctness); CI re-executes
   the planted fault; the critical-struct registry is enumerated with per-struct justification (why
   critical, why no at-rest backing); `cargo tree -e no-dev` byte-unchanged (existing CRC32 reused,
-  zero new dependency and zero new algorithm — max-nativeness law).
+  zero new dependency and zero new algorithm — max-nativeness law). See
+  [`BLUEPRINT-ITEM-54-sentinel-live-struct-integrity-2026-07-19.md`](BLUEPRINT-ITEM-54-sentinel-live-struct-integrity-2026-07-19.md).
 
 **Dependency graph, one line:** 50 rides item 47's gates (spec after 35, wiring after 42);
 51 after {47-wiring + 50} + the FDR/exec branch merge; 52 independent (on-`main` targets
@@ -960,7 +995,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   (this item is DONE when the amendments are recorded and each host item's own proof section
   names the planted-class red→green obligation — e.g. item 33's results doc must contain at
   least the capability to record an `Unresolvable` row; item 9's blueprint must state the
-  Unavailable-input policy before build).
+  Unavailable-input policy before build). See
+  [`BLUEPRINT-ITEM-55-k3-verdict-class-retrofit-2026-07-19.md`](BLUEPRINT-ITEM-55-k3-verdict-class-retrofit-2026-07-19.md).
 - **Item 56 — kernel classifier epistemic-basis retrofit: `markov::Verdict` fail-open record +
   `spectral::DriftClass` conflated record (code; Kleene audit findings 2 + 5 — the only
   fail-open-to-lenient instance found, and its fail-closed sibling).** Behavior and wire
@@ -986,7 +1022,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   `Healthy` + the correct distinct basis in the FDR record (red→green: today they are
   byte-identical to measured-healthy); spectral: a NaN-poisoned matrix and a genuinely-divergent
   matrix both classify `Unstable` with distinct recorded bases; `wire_code` round-trip test
-  untouched and green.
+  untouched and green. See
+  [`BLUEPRINT-ITEM-56-classifier-epistemic-basis-retrofit-2026-07-19.md`](BLUEPRINT-ITEM-56-classifier-epistemic-basis-retrofit-2026-07-19.md).
 - **Item 57 — telemetry-completeness standing procedure RATIFIED + HOT-PATHS accounting columns
   (the enforcement spine of this arc; zero prerequisites — the procedure doc exists as of this
   pass).** The item-25 pattern replayed: the 10-step (+3 cost-oracle steps) procedure in
@@ -1003,7 +1040,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   recorded as the standing posture. **Proof:** procedure doc cross-linked from
   `docs/audits/hardening/CHECKLIST.md`; the extended gate goes RED on a hot-zone row carrying
   neither an `eff` value nor a `gap:` reason (planted-row red→green, anti-forgery clause
-  reused); the G9 ruling recorded in the procedure doc + `fdr/mod.rs` when next touched.
+  reused); the G9 ruling recorded in the procedure doc + `fdr/mod.rs` when next touched. See
+  [`BLUEPRINT-ITEMS-57-58-telemetry-completeness-cost-ledger-2026-07-19.md`](BLUEPRINT-ITEMS-57-58-telemetry-completeness-cost-ledger-2026-07-19.md).
 - **Item 58 — work-normalized cost ledger (after item 57 + the exec-branch FDR merge; audit-3
   §1.3 design adopted).** On `SpanClose`-class FDR records for a named workload: emit
   `(work: {kind, Δcount}, cost: HwStamp-delta ⊕ PmuStamp-delta)` — **pairs of raw u64, never
@@ -1019,7 +1057,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   `unavailable` reason greppable on this RAPL-less/paranoid host — procedure step 10's
   red→green); the pair-not-ratio law asserted structurally (no ratio field exists in the
   schema); the cross-tier consistency band test green where both tiers are live; first consumer
-  deployments = items 59–61.
+  deployments = items 59–61. See
+  [`BLUEPRINT-ITEMS-57-58-telemetry-completeness-cost-ledger-2026-07-19.md`](BLUEPRINT-ITEMS-57-58-telemetry-completeness-cost-ledger-2026-07-19.md).
 - **Item 59 — agent-turn timing closure (gaps G1+G2+G12 — the highest-leverage single gap:
   tokens are already counted, wall-clock is one `Instant` pair away; after item 58).** (a) The
   kernel LLM port (`ports/llm.rs`) `ChatResponse` gains a duration/TTFT surface (additive typed
@@ -1032,7 +1071,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   carrying both tokens and duration for the direct-adapter path (parity with the Dispatcher
   path's existing `ms`); tokens/sec derivable consumer-side from one record's raw pair; an
   LLM-absent turn records a named absence, never a fabricated 0; existing golden/track-record
-  consumers unbroken (additive-field discipline).
+  consumers unbroken (additive-field discipline). See
+  [`BLUEPRINT-ITEM-59-agent-turn-timing-closure-2026-07-19.md`](BLUEPRINT-ITEM-59-agent-turn-timing-closure-2026-07-19.md).
 - **Item 60 — engine frame-loop + voice instrumentation (gaps G3+G11; after item 58; engine
   currently has ZERO `Instant::now` — grep-verified).** (a) `EngineLoop::frame()` measures
   frame time against a NAMED frame-budget constant (one authority site + pin test — P3 rate
@@ -1044,7 +1084,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   import or named absence — coordinates with item 62's wasm clause, one design not two).
   **Proof:** frame-time p50/p99 emitted under the telemetry feature with a budget-breach test
   (planted slow frame flagged); `InferError::Timeout` demonstrably reachable from the real
-  timer (red→green — today it is dead); the budget constant pinned; wasm cdylib stays green.
+  timer (red→green — today it is dead); the budget constant pinned; wasm cdylib stays green. See
+  [`BLUEPRINT-ITEM-60-engine-frame-voice-instrumentation-2026-07-19.md`](BLUEPRINT-ITEM-60-engine-frame-voice-instrumentation-2026-07-19.md).
 - **Item 61 — kernel runtime-counter closure: durability, subprocess, eigensolver, crypto spans
   (gaps G5+G6+G7+G8; after item 58).** (a) `EventLog::append`/`FileEventStore::insert` gain
   continuous counters (events + Δticks + fsync count) — item 26 measured 637 µs p50 once at
@@ -1060,7 +1101,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   silent dark zone); workload-kind `SignaturesVerified`. **Proof:** counters recoverable from
   the FDR ring after N appends in a test; child-process record carries real rusage (planted
   slow child observable); eigensolver spans emit under load with HOT-PATHS `eff` rows filled;
-  the pq-only build either emits crypto spans or carries the ledgered gap row (gate-checked).
+  the pq-only build either emits crypto spans or carries the ledgered gap row (gate-checked). See
+  [`BLUEPRINT-ITEM-61-kernel-runtime-counter-closure-2026-07-19.md`](BLUEPRINT-ITEM-61-kernel-runtime-counter-closure-2026-07-19.md).
 - **Item 62 — FDR relational linkage: `span_id` + `parent_span_id: Reading<u64>` + the wasm
   clock leg (gaps: doc-6 thread 3's decisive finding + G4; after the FDR merge; parallel with
   item 58).** The FDR schema is FLAT/UNLINKED today — grep over `schema.rs` for
@@ -1077,7 +1119,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   from a recovered ring (test walks parent links); root records carry the literal `NoParent`
   reason (greppable); records on surfaces without linkage stay byte-identical (optional-field
   discipline); the P3 grep proof (no span id feeds any hash/gate/replay surface) green; wasm
-  cdylib green with the stated clock or named absence.
+  cdylib green with the stated clock or named absence. See
+  [`BLUEPRINT-ITEM-62-fdr-relational-linkage-2026-07-19.md`](BLUEPRINT-ITEM-62-fdr-relational-linkage-2026-07-19.md).
 - **Item 63 — item-45 spec extension: AI-boundary disposition table + build-provenance record +
   feature-matrix legs (audit-3 §2.3 P2/P4/P5 adopted; P3's reject-list endorsed as correct, not
   deferral; spec-level now, teeth when item 45 lands; audit-3 P1 — "dispatch item 45 now, it is
@@ -1097,7 +1140,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   leg stays green forever, not only at gate-landing. **Proof:** the table recorded in item 45's
   spec + the named modules' docs; a planted core→AI-EDGE reference RED under the extended gate
   (P7); the provenance record recovered from a real ring in a test; both matrix legs green in
-  CI when the flag exists.
+  CI when the flag exists. See
+  [`BLUEPRINT-ITEM-63-ai-boundary-disposition-2026-07-19.md`](BLUEPRINT-ITEM-63-ai-boundary-disposition-2026-07-19.md).
 - **Item 64 — capability-secure declarative composition root (the strongest OS-pattern
   adoption — the only one backed by a PROVEN defect: item 2's finding that NO production
   composition root constructs the durable store; SUBSUMES the
@@ -1117,7 +1161,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   dischargeable; a planted cyclic init declaration fails at startup with a typed error
   (red→green); a module with an absent declared capability refuses init fail-closed (test);
   a permuted declaration order yields the identical derived init sequence (order comes from the
-  DAG, not source order); kill-9 recovery test still green through the new root.
+  DAG, not source order); kill-9 recovery test still green through the new root. See
+  [`BLUEPRINT-ITEM-64-composition-root-2026-07-19.md`](BLUEPRINT-ITEM-64-composition-root-2026-07-19.md).
 - **Item 65 — typed in-process AI/agent capability boundary (extends item 45; tokens minted
   ONLY by item 64's root; after items 64 + 45; the proportionate seL4 slice — ~70% was already
   scoped by item 45 + the Wasmtime-fuel pattern, this is the new ~30%).** A zero-sized
@@ -1134,7 +1179,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   proves a capability-requiring port method is uncallable from code never handed the token; the
   token's only constructor site is the composition root (visibility + grep proof); the per-port
   containment property test green across all `ports/` seams; `cargo tree -e no-dev`
-  byte-unchanged.
+  byte-unchanged. See
+  [`BLUEPRINT-ITEM-65-typed-capability-boundary-2026-07-19.md`](BLUEPRINT-ITEM-65-typed-capability-boundary-2026-07-19.md).
 - **Item 66 — periodic durable-log scrub (the one small journaling-FS gap; gated on item 64 —
   scrubbing an unwired store is pointless; composes with item 54's integrity-alarm seam).**
   ZFS-scrub slice only: an idle-cadence pass walking the durable EventLog + closed FDR
@@ -1144,7 +1190,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   primitive, no new dependency; the scrub cadence is a NAMED constant with one authority site
   (P3 rate discipline). **Proof:** a planted at-rest corruption in a closed segment is detected
   by the next scrub pass and writes the `Alarm` (red→green, P7); an uncorrupted store scrubs
-  silent; cadence constant pinned; `cargo tree` unchanged (grep: existing CRC32/SHA3 only).
+  silent; cadence constant pinned; `cargo tree` unchanged (grep: existing CRC32/SHA3 only). See
+  [`BLUEPRINT-ITEM-66-durable-log-scrub-2026-07-19.md`](BLUEPRINT-ITEM-66-durable-log-scrub-2026-07-19.md).
 - **Item 67 — cost-oracle classification backfill: COVERAGE-COMPLETE, PRECISION-HONEST (after
   item 57; the named principle from doc 6 §5.2 made mechanical).** Literal "100% correct cost
   prediction for any code" is undecidable (WCET reduces to halting); the honest achievable form
@@ -1163,7 +1210,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   backfill is tractable, not boil-the-ocean. **Proof:** zero unclassified rows in the extended
   TSV; the gate goes RED on a new hot-zone row without a bucket (planted-row red→green); every
   evidence pointer resolves to a real test name / derivation section / measurement doc
-  (spot-check re-executed, never presence-checked — P7).
+  (spot-check re-executed, never presence-checked — P7). See
+  [`BLUEPRINT-ITEM-67-68-69-cost-oracle-2026-07-19.md`](BLUEPRINT-ITEM-67-68-69-cost-oracle-2026-07-19.md).
 - **Item 68 — ORACLE-EXACT/BOUNDED cost capture as a correctness-proof byproduct (after item
   67 + item 7's native exhaustive sweeps; doc 6 §5.3's decisive reuse).** The same structural
   property that makes correctness exhaustively provable makes cost exactly knowable — so
@@ -1180,7 +1228,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   generated cost table/constant per classified function with its stated noise interval,
   recorded as evidence behind item 67's rows; an input-independence assertion for EXACT
   functions (cost class identical across the swept domain); the P3 grep proof that no captured
-  cost value feeds any decision/gate surface.
+  cost value feeds any decision/gate surface. See
+  [`BLUEPRINT-ITEM-67-68-69-cost-oracle-2026-07-19.md`](BLUEPRINT-ITEM-67-68-69-cost-oracle-2026-07-19.md).
 - **Item 69 — water/carbon as derived, constant-multiplied views of joules (small standalone;
   after item 58; doc 6 thread 1 — the honest form of "atoms/molecules/water/air").** The
   kernel needs NO new *measured* footprint field beyond `joules_uj` — "atoms/molecules
@@ -1196,7 +1245,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   hand-computed values; on this RAPL-less host every derived view serializes the literal
   `unavailable` reason (greppable — procedure step 10's red→green); the on-site-water absence
   is unconditional by construction (no code path can produce a value); the SCI-rate
-  (ISO/IEC 21031) pairing note recorded for ratio consumers.
+  (ISO/IEC 21031) pairing note recorded for ratio consumers. See
+  [`BLUEPRINT-ITEM-67-68-69-cost-oracle-2026-07-19.md`](BLUEPRINT-ITEM-67-68-69-cost-oracle-2026-07-19.md).
 - **Item 70 — state-mirroring digital twin, half (A) — REAL, NEAR-TERM (after items 67 + 68;
   call matrix fed by item 62; doc 6 §5.7(A)).** NOT a new subsystem: the twin is the
   COMPOSITION of three already-real/already-scoped pieces — (i) the per-function cost oracle
@@ -1217,7 +1267,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   on ORACLE-EXACT functions (twin's stated cost class matches a fresh measurement within the
   stated noise interval); ρ(A) verdict validated on a synthetic recursive call graph with known
   divergence (red→green both directions); the forced-metaphor guard asserted structurally (no
-  per-leaf API derives from spectral values — reviewed + doc-ruled, grep-checkable naming).
+  per-leaf API derives from spectral values — reviewed + doc-ruled, grep-checkable naming). See
+  [`BLUEPRINT-ITEM-70-71-72-digital-twin-2026-07-19.md`](BLUEPRINT-ITEM-70-71-72-digital-twin-2026-07-19.md).
 - **Item 71 — cost-aware eqc-rs rewrite-extraction (half (B′) — the ONE honestly-scoped
   near-term step toward (B); independent of items 67–70; operator-gated whether to build at
   all — offered as the smallest grounded step, not a commitment).** Give eqc-rs codegen a
@@ -1231,7 +1282,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   one. **Proof:** per rule, an emitted case where the cheaper form is demonstrably chosen with
   its proof program green (compiled by real rustc, self-asserting); a no-rule-applies case
   emits unchanged output byte-identical to today's; the op-count cost metric documented in the
-  eqc-rs README; the full eqc-rs suite green; `cargo tree` unchanged.
+  eqc-rs README; the full eqc-rs suite green; `cargo tree` unchanged. See
+  [`BLUEPRINT-ITEM-70-71-72-digital-twin-2026-07-19.md`](BLUEPRINT-ITEM-70-71-72-digital-twin-2026-07-19.md).
 - **Item 72 — auto-optimizing digital twin, half (B) — LONG-TERM ASPIRATION, EXPLICITLY NOT
   PROMISED (named so the direction is on the roadmap without over-promising; doc 6 §5.7(B)).**
   "Always finds a shorter/faster version of any action" is automated superoptimization — a
@@ -1243,7 +1295,8 @@ lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the
   demonstrating extraction value on real kernel math; (ii) an explicit operator ruling
   accepting the tooling/determinism cost for a bounded target domain; (iii) a fresh research
   pass (this item is a pointer, not a plan). Until then: named direction, zero commitment —
-  the honest opposite of a fabricated roadmap promise.
+  the honest opposite of a fabricated roadmap promise. See
+  [`BLUEPRINT-ITEM-70-71-72-digital-twin-2026-07-19.md`](BLUEPRINT-ITEM-70-71-72-digital-twin-2026-07-19.md).
 
 **Dependency graph, one line:** 55 ∥ 56 ∥ 57 ∥ 63 ∥ 64 ready now (56's and 58–62's FDR-field
 halves inherit the exec-branch FDR merge, same as §J's flag); 58 after 57; {59 ∥ 60 ∥ 61} after
@@ -1305,7 +1358,8 @@ AI-safety literature, addressed structurally, not by policy.
   capability constructor exists; the dependency-direction CI check goes RED on a planted
   pipeline→gate reference; the out-of-band-only law recorded in the registry's module doc +
   `docs/audits/hardening/CHECKLIST.md`; item 74's registry carries this section's own machinery
-  as rows (the recursion recorded, not implied).
+  as rows (the recursion recorded, not implied). See
+  [`BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md`](BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md).
 - **Item 74 — the red-line/core registry: grounded machine-readable enumeration of what AI
   proposals may NEVER touch (after item 73's spec; the safety-critical deliverable of this arc —
   every row cited, zero hand-waving).** Format: a machine-read manifest in the `HOT-PATHS.tsv`
@@ -1333,7 +1387,8 @@ AI-safety literature, addressed structurally, not by policy.
   inverted). **Proof:** the registry exists with every row justified + cited; the diff
   classifier maps a change-set → touched-red-line verdict deterministically (path-prefix
   zones); one planted diff per row CLASS demonstrably refused (P7); the registry file is
-  itself in the registry (self-row test).
+  itself in the registry (self-row test). See
+  [`BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md`](BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md).
 - **Item 75 — the change-proposal pipeline: typed `ChangeProposal` → kernel-gate verification →
   explicit human approval → recorded application (after items 73+74; extends item 47's grammar
   to the code plane — same shape, different plane, no parallel admission concept).** An
@@ -1358,7 +1413,8 @@ AI-safety literature, addressed structurally, not by policy.
   demonstrates no code path applies it without the human token (unconstructible, compile-fail
   test); a planted gate-failing proposal never surfaces for approval; a planted red-line
   proposal is refused at step zero with the typed cause; approval/refusal/expiry each write
-  FDR records; the whole flow re-executed in CI, never presence-checked (P7).
+  FDR records; the whole flow re-executed in CI, never presence-checked (P7). See
+  [`BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md`](BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md).
 - **Item 76 — proposal lineage + cost-classified impact at the approval seam (after item 75;
   consumes items 62 + 67/68; "the same amount of predictability/transparency/telemetry" made
   mechanical).** Every proposal carries a full FDR-logged causal trail, linked by item 62's
@@ -1375,7 +1431,8 @@ AI-safety literature, addressed structurally, not by policy.
   from a real recovered ring; the approval record demonstrably carries the impact class +
   resolving evidence pointer; a proposal with unclassifiable impact shows the honest marker
   (red→green vs a fabricated number); P3 law holds (no lineage value feeds any decision
-  surface — grep proof).
+  surface — grep proof). See
+  [`BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md`](BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md).
 - **Item 77 — self-healing specialization: health-classifier-triggered fix proposals (SAME
   pipeline, one trigger class — explicitly NOT a lighter gate; after item 75; consumes item
   56's basis retrofit).** **Grounded baseline — health tracking already exists; what's missing
@@ -1409,7 +1466,8 @@ AI-safety literature, addressed structurally, not by policy.
   red-proof reused); a single adverse window does NOT trigger (threshold pinned); planted
   unevaluated-basis windows are provably excluded from trigger evidence (red→green against
   today's byte-identical records); recovery class (A) remains automatic and green (kill-9 test
-  unchanged).
+  unchanged). See
+  [`BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md`](BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md).
 - **Item 78 — self-upgrading specialization: improvement proposals beyond fixes (SAME pipeline,
   broader trigger class; after item 75; enriched by items 70/71 when they exist).** Trigger =
   not a detected problem but a proposed improvement: cost-oracle-informed candidates (item 70's
@@ -1425,7 +1483,8 @@ AI-safety literature, addressed structurally, not by policy.
   pending-approval with its cost delta + proof-program result attached; a planted "beneficial"
   proposal touching gate/registry paths is refused at step zero (item 73's red-proof
   re-executed at this level); refused + approved + expired upgrade proposals all leave complete
-  FDR lineage.
+  FDR lineage. See
+  [`BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md`](BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md).
 
 **Dependency graph, one line:** 73 (spec) first and governing; 74 after 73; 75 after {73 + 74}
 (structural halves of 73 land with 64/65); 76 after {75 + 62 + 67}; 77 ∥ 78 after 75 (77 also
