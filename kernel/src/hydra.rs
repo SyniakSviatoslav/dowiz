@@ -1217,6 +1217,9 @@ impl EventStore for FileEventStore {
     fn set_tip(&mut self, id: [u8; 32]) {
         self.tip = Some(id);
     }
+    fn ids(&self) -> Vec<[u8; 32]> {
+        self.by_id.keys().copied().collect()
+    }
 }
 
 #[cfg(test)]
@@ -1513,5 +1516,51 @@ mod file_store_tests {
         }
 
         let _ = fs::remove_file(&path);
+    }
+
+    /// Item 5 (cross-mesh replication) — `mesh_replication::reconcile` is
+    /// generic over `EventStore`, not just `MemEventStore`; prove it converges
+    /// two independent, disk-backed `FileEventStore`s the same way. This is
+    /// the closest this crate gets to a real 2-node scenario without an
+    /// actual transport: two separate files (durable, `std::fs`-only) stand
+    /// in for two separate nodes.
+    #[test]
+    fn file_stores_reconcile_to_identical_folded_state() {
+        use crate::mesh_replication::{reconcile, MerkleLog};
+
+        let path_a = tmp_path("item5-node-a");
+        let path_b = tmp_path("item5-node-b");
+        let mut node_a = FileEventStore::open(&path_a).unwrap();
+        let mut node_b = FileEventStore::open(&path_b).unwrap();
+
+        let a_ev = MeshEvent {
+            prev: [0u8; 32],
+            actor_pubkey: [21u8; 32],
+            actor_seq: 1,
+            payload: b"node-a-authored".to_vec(),
+        };
+        node_a.insert(a_ev.event_id(), a_ev).unwrap();
+
+        let b_ev = MeshEvent {
+            prev: [0u8; 32],
+            actor_pubkey: [22u8; 32],
+            actor_seq: 1,
+            payload: b"node-b-authored".to_vec(),
+        };
+        node_b.insert(b_ev.event_id(), b_ev).unwrap();
+
+        reconcile(&mut node_a, &node_b).expect("A pulls from B");
+        reconcile(&mut node_b, &node_a).expect("B pulls from A");
+
+        assert_eq!(
+            MerkleLog::from_store(&node_a).root(),
+            MerkleLog::from_store(&node_b).root(),
+            "two disk-backed nodes converge to the same Merkle root"
+        );
+        assert_eq!(node_a.len(), 2);
+        assert_eq!(node_b.len(), 2);
+
+        let _ = fs::remove_file(&path_a);
+        let _ = fs::remove_file(&path_b);
     }
 }
