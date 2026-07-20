@@ -378,6 +378,10 @@ fn qr_step(c: &mut [[Complex; 32]; 32], m: usize, sigma: Complex) {
 /// Asserts n ≤ 32 (the stack-only fast path). Larger n must use the legacy
 /// Faddeev path in `spectral.rs`.
 pub fn eigenvalues_contig(a: &mut [f64], n: usize) -> Vec<Complex> {
+    // Item 61 (gap G7): the dense N≤32 eigensolve worker span. Workload-kind
+    // `EigensolvesCompleted` (item 58 schema, absent in this worktree — see HOT-PATHS.tsv
+    // gap: row). P3-plane; zero cost with no FDR sink/observer installed.
+    let _g = crate::fdr::info_span!("eigenvalues_contig").entered();
     debug_assert!(n <= 32);
     debug_assert!(a.len() >= n * n);
     reduce_hessenberg(a, n, None);

@@ -116,6 +116,12 @@ p67-adapters = []
 # (alert.jsonl). Std-only writer; no serde/network/RNG. The default (shipping) build
 # is behavior- and perf-neutral.
 telemetry = []
+# `breaker-testkit` — Phase-3 red-team harness seam for the circuit breaker
+# (item-9, BLUEPRINT-ITEM-09-breaker). OFF by default (same discipline as `chaos`)
+# so the shipping binary carries NO attack-injection symbols; the whole
+# `breaker::testkit` (drive/inject/snapshot/audit_drain) compiles to `()` outside
+# tests / this feature. No runtime dependency added — pure `std`.
+breaker-testkit = []
 # `pprof` — P83 Layer-2 fallback ONLY (SYNTHESIS §3.3-C4: "`pprof` only as
 # feature-gated fallback"). Activated when the system-wide `perf` invocation is
 # unavailable (no perms / not Linux). OFF by default; it is a SAFE no-op fallback
@@ -195,6 +201,12 @@ paste = "1.0"
 # sequences folded vs. settlement totals, exact-i64 equality. Cached offline (1.11.0),
 # dev-only, never linked into a production build path.
 proptest = "1.11"
+# ITEM 32 (Part A) — DEV-ONLY dep for the kernel-side Laplacian parity test that
+# pins the eqc-rs `IndexSum`-emitted Laplacian (the third representation, item 36's
+# shared IR) against dense `laplacian()` + `laplacian_spmv`. Sits OUTSIDE the
+# `-e no-dev` zero-dep proof surface (eqc-rs itself is an exemplary zero-dep crate
+# with an empty `[dependencies]`), so the shipping kernel build stays clean.
+eqc-rs = { path = "../tools/eqc-rs" }
 
 [[bench]]
 name = "criterion"

@@ -52,6 +52,62 @@ pub mod schema;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ring;
 
+// ── CRC32 (IEEE 802.3, reflected) — hand-rolled, table-on-first-use ──────────────────
+// ALWAYS COMPILED (NOT wasm-gated). Item 54's live-struct Sentinel runs on the kernel
+// decision plane that compiles to wasm32 (CLAUDE.md: "kernel … compiles to WASM"), so the
+// shared CRC32 primitive must be callable from a wasm-compiled path. Lifted here from the
+// wasm-gated `fdr::ring` (blueprint §3.2) — a behavior-preserving move; the KAT
+// `ring::crc32_matches_known_vector` stays green. One implementation shared by FDR ring
+// (at-rest per-line CRC), item 40 (weights), and item 54 (live-struct Sentinel).
+static CRC_TABLE: OnceLock<[u32; 256]> = OnceLock::new();
+
+fn crc_table() -> &'static [u32; 256] {
+    CRC_TABLE.get_or_init(|| {
+        let mut t = [0u32; 256];
+        let mut i = 0usize;
+        while i < 256 {
+            let mut c = i as u32;
+            let mut k = 0;
+            while k < 8 {
+                c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+                k += 1;
+            }
+            t[i] = c;
+            i += 1;
+        }
+        t
+    })
+}
+
+/// CRC32 (IEEE, reflected, `0xFFFFFFFF` init/final-xor) over `data`. Shared by FDR ring
+/// (at-rest per-line CRC), item 40 (read-only weights), and item 54 (live-struct
+/// Sentinel). One implementation, always compiled.
+pub fn crc32(data: &[u8]) -> u32 {
+    let t = crc_table();
+    let mut crc = 0xFFFF_FFFFu32;
+    for &b in data {
+        crc = t[((crc ^ b as u32) & 0xFF) as usize] ^ (crc >> 8);
+    }
+    crc ^ 0xFFFF_FFFF
+}
+
+/// Emit ONE `Alarm` FDR record (the fault-evidence kind; fsynced on append by the durable
+/// ring — power-loss durable, `ring.rs:134`). No-op unless an FDR sink is installed, so
+/// callers may call unconditionally; the record materializes only where FDR is enabled.
+/// `struct_name` names the corrupted live struct (item 54 Safe-State evidence); `detail`
+/// carries the fault reason. Item 54's fail-closed path is the value — the record is the
+/// forensic side-effect.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn emit_alarm(struct_name: &str, detail: &str) {
+    sink::emit_alarm(struct_name, detail);
+}
+
+/// On `wasm32` no FDR sink is ever installed, so alarm emission is inert. Item 54's
+/// decision-plane CRC check STILL runs on wasm (it is the fail-closed path that matters);
+/// only the durable record is skipped there.
+#[cfg(target_arch = "wasm32")]
+pub fn emit_alarm(_struct_name: &str, _detail: &str) {}
+
 mod macros; // hoists `fdr_*` to crate root via #[macro_export]; re-exported below.
 
 // Re-export the macros under the `fdr::` path (both `crate::fdr::info_span!` internally
@@ -271,6 +327,18 @@ fn emit_span_close(name: &'static str, dur_us: u64) {
     sink::emit_span_close(name, dur_us);
 }
 
+/// Emit ONE `Tuning`-kind FDR record carrying an autonomic gain-scheduling
+/// adjustment (roadmap item 21). No-op unless a sink is installed — so callers
+/// may emit unconditionally at zero default cost; the record materializes only
+/// where FDR is enabled. The `Kind::Tuning` variant is reserved for this use
+/// (schema.rs:211).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn emit_tuning(name: &'static str, fields: &[(&'static str, String)]) {
+    sink::emit_tuning(name, fields);
+}
+#[cfg(target_arch = "wasm32")]
+pub fn emit_tuning(_name: &'static str, _fields: &[(&'static str, String)]) {}
+
 /// Emit ONE `Event`-kind FDR record carrying a classifier verdict string plus the
 /// window-bracketed [`pmu::PmuStamp`] companion delta (roadmap item 27, classifier-input
 /// half). No-op unless a sink is installed — so callers may bracket-and-emit
@@ -280,6 +348,36 @@ fn emit_span_close(name: &'static str, dur_us: u64) {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn emit_verdict_pmu(name: &'static str, verdict: &str, pmu: pmu::PmuStamp) {
     sink::emit_verdict(name, verdict, pmu);
+}
+
+/// Emit a subprocess-reap record to the FDR ring (item 61, gap G6). Carries the REAL
+/// measured wall duration + `wait4` rusage — never a fabricated 0. The record is P3-plane
+/// telemetry (named `subprocess_bridge`); it is recoverable from the FDR ring after the
+/// call (the red→green oracle reads it back). No-op unless a ring sink is installed.
+///
+/// NOTE (blueprint ambiguity resolution): the blueprint asks this to emit an item-58
+/// `(work: FdrRecordsAppended …⊕ SignaturesVerified)` workload-kind pair. Item 58's
+/// `WorkloadKind`/`Work`/`work`-field FDR schema is NOT present in this worktree (grep
+/// confirmed), so item 61 cannot write it without forging the schema. Instead we emit the
+/// same recoverable, greppable `subprocess_bridge` ring record under item 61's own name,
+/// ledger-named absent via a `gap:` row in `HOT-PATHS.tsv` (item 57's zero-un-named-blind-
+/// spots law). When item 58 lands, this becomes a `WorkloadKind::…` `SpanClose` pair — the
+/// fields below are exactly the raw-`u64` pair the schema wants.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn emit_subprocess_record(
+    cmd: &str,
+    success: bool,
+    wall_us: u64,
+    utime_us: Option<u64>,
+    stime_us: Option<u64>,
+    maxrss_kb: Option<u64>,
+) {
+    #[cfg(not(target_arch = "wasm32"))]
+    sink::emit_subprocess_record(cmd, success, wall_us, utime_us, stime_us, maxrss_kb);
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (cmd, success, wall_us, utime_us, stime_us, maxrss_kb);
+    }
 }
 
 // ── Sink + init (non-wasm) ──────────────────────────────────────────────────────────
@@ -315,7 +413,71 @@ impl Default for FdrConfig {
 /// global subscriber). Never installed on `wasm32`.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn init(config: FdrConfig) -> Result<(), ()> {
-    sink::init(config)
+    let r = sink::init(config);
+    // Item 48 (closure a): install the panic hook on the FDR init path. Idempotent via the
+    // guard inside `install_panic_hook` (a second `init` is a no-op for the sink, so the
+    // hook is not re-chained). Harmless when no ring is configured (the Alarm append becomes
+    // a no-op — exactly like every other FDR emit).
+    install_panic_hook();
+    r
+}
+
+// ── Item 48: FDR blind-spot closure (panic forensics + liveness heartbeat) ──────────
+
+static PANIC_HOOK_INSTALLED: AtomicBool = AtomicBool::new(false);
+
+/// Item 48 (closure a): install a panic hook that emits ONE fsynced `Alarm` FDR record
+/// carrying the panic `message` + `location`, then CHAINS to any previous hook. Best-effort:
+/// errors are swallowed (like `emit_event`), so a panic-in-hook double-panic aborts — the OS
+/// retains whatever bytes reached the page cache. **NOT** a `#[panic_handler]` (this is a
+/// `std` kernel); uses `std::panic::set_hook`. Reuses the existing ring sink (which fsyncs
+/// `Alarm` at `ring.rs:134`), so closure (a) needs NO new durability code — just an emitter.
+/// Chains to the prior hook so a test harness's hook is not clobbered (blueprint §10
+/// DESIGN NOTE). Idempotent: a second call is a no-op (guards against `init` being invoked
+/// twice). Non-wasm only — matches the FDR write path (no sink is ever installed on wasm).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn install_panic_hook() {
+    if PANIC_HOOK_INSTALLED.swap(true, Ordering::Relaxed) {
+        return; // already installed.
+    }
+    let prev = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info: &std::panic::PanicInfo| {
+        // Build the forensic payload BEFORE touching the sink (keep the hook panic-safe /
+        // allocation-light). A re-panic here aborts — acceptable; the OS keeps the page-cache
+        // bytes from the first append attempt.
+        let message = match info.payload().downcast_ref::<&str>() {
+            Some(s) => (*s).to_string(),
+            None => match info.payload().downcast_ref::<String>() {
+                Some(s) => s.clone(),
+                None => "<non-string panic payload>".to_string(),
+            },
+        };
+        let location = info
+            .location()
+            .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
+            .unwrap_or_else(|| "<unknown location>".to_string());
+        sink::emit_panic_alarm(message, location);
+        // Chain to the previous hook (a harness-installed hook must not be clobbered).
+        prev(info);
+    }));
+}
+
+/// Item 48 (closure b): emit ONE `Heartbeat` FDR record carrying a monotonic `seq` + the
+/// caller-supplied `progress` counters. Cheap stamp policy (high-frequency; same rationale
+/// as `Event` at `mod.rs:375`). Emit-only — the EXTERNAL layer owns cadence + JUDGMENT
+/// (systemd `WatchdogSec` / `hub_supervisor`); the kernel NEVER runs a liveness timer and
+/// NEVER self-kills. No-op unless a ring sink is installed (matches every other FDR emit).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn emit_heartbeat(seq: u64, progress: &[(&'static str, String)]) {
+    sink::emit_heartbeat(seq, progress);
+}
+
+/// Item 48 (clean-shutdown interplay, blueprint §5 step 3): write the `CleanShutdown`
+/// marker so an external liveness check sees an orderly stop and raises NO false alarm.
+/// No-op when no ring sink is installed (matches every other FDR emit).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn clean_shutdown() {
+    sink::clean_shutdown();
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -423,6 +585,60 @@ mod sink {
         }
     }
 
+    /// Item 61 (gap G6): emit a `subprocess_bridge` FDR record carrying the REAL measured
+    /// wall duration + `wait4` rusage (user/sys time, maxrss). The rusage fields are
+    /// `Option<u64>` so a non-Linux/non-x86_64 host emits a *named* absence (the field key
+    /// is present with `null`), never a fabricated `0`. The record is P3-plane telemetry and
+    /// lives on the FDR ring (recoverable by the item-61 oracle). No-op unless a ring sink
+    /// is installed.
+    pub fn emit_subprocess_record(
+        cmd: &str,
+        success: bool,
+        wall_us: u64,
+        utime_us: Option<u64>,
+        stime_us: Option<u64>,
+        maxrss_kb: Option<u64>,
+    ) {
+        let s = match SINK.get() {
+            Some(s) => s,
+            None => return,
+        };
+        let r = match &s.ring {
+            Some(r) => r,
+            None => return, // no ring ⇒ no durable record (skip silently).
+        };
+        let seq = next_seq(s);
+        // Subprocess reaps are low-frequency, so a FULL hw stamp (ring/event-style).
+        let mut fields: Vec<(&'static str, String)> = vec![
+            ("cmd", cmd.to_string()),
+            ("success", success.to_string()),
+            ("wall_us", wall_us.to_string()),
+            (
+                "utime_us",
+                utime_us.map(|v| v.to_string()).unwrap_or_else(|| "null".into()),
+            ),
+            (
+                "stime_us",
+                stime_us.map(|v| v.to_string()).unwrap_or_else(|| "null".into()),
+            ),
+            (
+                "maxrss_kb",
+                maxrss_kb.map(|v| v.to_string()).unwrap_or_else(|| "null".into()),
+            ),
+        ];
+        let ev = FdrEvent::stamp(
+            seq,
+            Level::Info,
+            Kind::SpanClose,
+            "subprocess_bridge".to_string(),
+            StampPolicy::Full,
+            fields.drain(..).collect(),
+        );
+        if let Ok(mut r) = r.lock() {
+            let _ = r.append(&ev);
+        }
+    }
+
     pub fn emit_span_close(name: &'static str, dur_us: u64) {
         let s = match SINK.get() {
             Some(s) => s,
@@ -444,6 +660,138 @@ mod sink {
         );
         if let Ok(mut r) = r.lock() {
             let _ = r.append(&ev);
+        }
+    }
+
+    /// Item 48 (closure a): emit ONE `Alarm`-kind FDR record carrying the panic `message`
+    /// + `location` into the ring sink. `Alarm` is fsynced by `FdrRing::append` (ring.rs:134)
+    /// so it is power-loss durable for free — the panic forensic evidence survives even a
+    /// crash before the process unwinds. Best-effort: errors are swallowed (like
+    /// `emit_event` at mod.rs:389-393), so a write failure never turns a panic into a
+    /// double-panic. No-op when no sink is installed (matches every other FDR emit).
+    pub fn emit_panic_alarm(message: String, location: String) {
+        let s = match SINK.get() {
+            Some(s) => s,
+            None => return,
+        };
+        let seq = next_seq(s);
+        let ev = FdrEvent::stamp(
+            seq,
+            Level::Error,
+            Kind::Alarm,
+            "panic".to_string(),
+            StampPolicy::Full,
+            vec![("message", message), ("location", location)],
+        );
+        if s.stderr {
+            let _ = writeln!(std::io::stderr(), "{}", ev.to_json());
+        }
+        if let Some(r) = &s.ring {
+            if let Ok(mut r) = r.lock() {
+                let _ = r.append(&ev); // Alarm ⇒ fsync inside append (ring.rs:134).
+            }
+        }
+    }
+
+    /// Item 54 Safe-State fault evidence: emit ONE `Alarm` FDR record naming a corrupted
+    /// live struct (`name`) with the fault `detail`, fsynced via the durable ring (the ring
+    /// fsyncs on `Kind::Alarm`, `ring.rs:134` — power-loss durable). This is the sink-side
+    /// impl the `fdr::emit_alarm` facade (mod.rs:101) delegates to. No-op when no sink/ring
+    /// is installed.
+    pub fn emit_alarm(name: &str, detail: &str) {
+        let s = match SINK.get() {
+            Some(s) => s,
+            None => return,
+        };
+        let seq = next_seq(s);
+        // Alarms carry a FULL hw stamp (alarm-class, blueprint §4.2) for forensic value.
+        let ev = FdrEvent::stamp(
+            seq,
+            Level::Error,
+            Kind::Alarm,
+            name.to_string(),
+            StampPolicy::Full,
+            vec![("detail", detail.to_string())],
+        );
+        let line = ev.to_json();
+        if s.stderr {
+            let _ = writeln!(std::io::stderr(), "{line}");
+        }
+        if let Some(r) = &s.ring {
+            if let Ok(mut r) = r.lock() {
+                let _ = r.append(&ev);
+            }
+        }
+    }
+
+    /// Item 48 (closure b): emit ONE `Heartbeat`-kind FDR record carrying a monotonic `seq`
+    /// + the caller-supplied `progress` counters. Cheap stamp policy (high-frequency; same
+    /// rationale as `Event`). The kernel provides ONLY the record + emit fn — cadence and
+    /// JUDGMENT live externally (systemd `WatchdogSec` / `hub_supervisor`). No-op when no
+    /// sink is installed (matches every other FDR emit).
+    /// Item 21 (roadmap §E): emit ONE `Tuning`-kind FDR record carrying an
+    /// autonomic gain-scheduling adjustment. Cheap stamp policy (high-frequency
+    /// self-tuning events). No-op when no sink is installed (matches every other
+    /// FDR emit).
+    pub fn emit_tuning(name: &'static str, fields: &[(&'static str, String)]) {
+        let s = match SINK.get() {
+            Some(s) => s,
+            None => return,
+        };
+        let seq = next_seq(s);
+        let ev = FdrEvent::stamp(
+            seq,
+            Level::Info,
+            Kind::Tuning,
+            name.to_string(),
+            StampPolicy::Cheap,
+            fields.to_vec(),
+        );
+        if s.stderr {
+            let _ = writeln!(std::io::stderr(), "{}", ev.to_json());
+        }
+        if let Some(r) = &s.ring {
+            if let Ok(mut r) = r.lock() {
+                let _ = r.append(&ev);
+            }
+        }
+    }
+
+    pub fn emit_heartbeat(seq: u64, progress: &[(&'static str, String)]) {
+        let s = match SINK.get() {
+            Some(s) => s,
+            None => return,
+        };
+        let ev = FdrEvent::stamp(
+            seq,
+            Level::Info,
+            Kind::Heartbeat,
+            "heartbeat".to_string(),
+            StampPolicy::Cheap,
+            progress.to_vec(),
+        );
+        if s.stderr {
+            let _ = writeln!(std::io::stderr(), "{}", ev.to_json());
+        }
+        if let Some(r) = &s.ring {
+            if let Ok(mut r) = r.lock() {
+                let _ = r.append(&ev);
+            }
+        }
+    }
+
+    /// Item 48 (clean-shutdown interplay, blueprint §5 step 3): write the `CleanShutdown`
+    /// marker so an external liveness check sees an orderly stop and raises NO false alarm.
+    /// No-op when no ring sink is installed (matches every other FDR emit).
+    pub fn clean_shutdown() {
+        let s = match SINK.get() {
+            Some(s) => s,
+            None => return,
+        };
+        if let Some(r) = &s.ring {
+            if let Ok(mut r) = r.lock() {
+                let _ = r.clean_shutdown();
+            }
         }
     }
 }
@@ -489,5 +837,39 @@ mod tests {
             let _s = SpanHandle::new("scoped_probe").entered();
         }
         assert_eq!(hits.load(Ordering::Relaxed), 1, "observer must see the span close");
+    }
+
+    // Item 48 (closure b): `emit_heartbeat` is a no-op when no FDR sink is installed (the
+    // `SINK.get()` early-return, matching every other emit). Guards the "zero cost, no crash"
+    // failure-mode in blueprint §6.
+    #[test]
+    fn emit_heartbeat_is_noop_without_sink() {
+        // No `fdr::init` → no sink. Must not panic and must not allocate the ring path.
+        emit_heartbeat(0, &[("tick", "0".to_string())]);
+    }
+
+    // Item 48 (closure a): the panic hook CHAINS to a prior hook rather than clobbering it
+    // (blueprint §10 DESIGN NOTE, §5 step 1). A harness-installed hook must still fire.
+    #[test]
+    fn panic_hook_chains_to_prior_hook() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static PRIOR_FIRED: AtomicBool = AtomicBool::new(false);
+        // Simulate a test harness's pre-existing hook.
+        std::panic::set_hook(Box::new(|_| {
+            PRIOR_FIRED.store(true, Ordering::SeqCst);
+        }));
+        // install_panic_hook takes+chains the prior hook, then sets its own.
+        install_panic_hook();
+        // Trigger a panic; BOTH the item-48 hook (emit, no sink → no-op) and the prior
+        // harness hook must run. We catch the abort via catch_unwind.
+        let _ = std::panic::catch_unwind(|| {
+            panic!("chained hook test");
+        });
+        assert!(
+            PRIOR_FIRED.load(Ordering::SeqCst),
+            "prior (harness) hook must still fire after install_panic_hook"
+        );
+        // Restore a default-ish hook (not strictly necessary; keeps test isolation sane).
+        let _ = std::panic::take_hook();
     }
 }

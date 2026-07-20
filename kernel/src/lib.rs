@@ -20,14 +20,6 @@ pub mod analytics;
 /// P11 §7 — CorePinning trait seam (Trait-as-Port): pluggable CPU-core-affinity
 /// port with a zero-cost `NoOpCorePinning` default (NUMA crate DECART-deferred).
 pub mod arena;
-/// OPT-IN generational-index slot arena — per-element sibling to `arena::BumpArena`.
-/// Thin dowiz wrapper over `thunderdome::Arena`: stable `Copy` handles whose stale
-/// (removed-then-recycled) form is a safe `None` (ABA / stale-index unrepresentable).
-/// Behind `slot-arena` so the default build pulls zero extra crates. Forward-looking
-/// infra landed per operator override of the deep-dive's "no adoption yet" verdict
-/// (docs/research/OPUS-PERF-ARENA-DEEPDIVE-2026-07-18.md).
-#[cfg(feature = "slot-arena")]
-pub mod slot_arena;
 /// C-tier "attention lens": scaled dot-product attention as one learned-affinity
 /// diffusion step — same f(L) family as markov PPR / heat-kernel.
 pub mod attention;
@@ -35,11 +27,11 @@ pub mod attention;
 /// unique blocks by sha3_256 id → restore byte-identically from a manifest.
 /// Dedups across small edits; fail-closed restore. Pure-Rust, no new deps.
 pub mod backup;
+pub mod blocklist;
 pub mod bounded_drainer;
 /// P11 §1 — compute budget accumulator (degrade-closed, zero-dep) + §4 Modal
 /// `JobPort` / `BudgetedJobPort` seam (offline-err default; real adapter deferred).
 pub mod budget;
-pub mod blocklist;
 /// RW-07 — cart state machine (consolidate 2 JS cart impls → kernel authority). Totals via money.
 pub mod cart;
 /// M1/M2 — trusted price catalog: the single kernel authority on line-item prices.
@@ -60,7 +52,19 @@ pub mod core_pinning;
 /// Deterministic CSR graph + synchronous Jacobi personalized-PageRank
 /// (retrieval-blueprint v2 diffusion/recall primitive).
 pub mod csr;
+/// ITEM 32 (Part A, acceptance #2): the eqc-emitted Laplacian as a THIRD parity
+/// leg against `spectral::laplacian` (dense) + `Csr::laplacian_spmv`. Gated to
+/// `#[cfg(test)]` so the SHIPPING lib build carries NO `eqc_rs` symbols / dep
+/// (eqc-rs is a DEV-dependency only — keeps `cargo tree -e no-dev` clean).
+#[cfg(test)]
+pub mod laplacian_eqc_parity;
 pub mod domain;
+/// P04 product-math: Disjoint-Set Union (union-find) + Kruskal MST — the single
+/// canonical DSU/MST primitive. `cgraph::c_components` delegates here; Phase 9
+/// mesh-heal + Phase 13 partition-tolerant delivery consume it directly.
+pub mod dsu;
+/// MESH-06 — per-node content-addressed event-log (local-first + sync).
+pub mod event_log;
 /// `fdr` — the kernel's flight-data recorder: hand-rolled logger + durable post-mortem
 /// ring (roadmap items 4+29). The terminal state of the `tracing`/`tracing-subscriber`
 /// retirement. Compiled unconditionally (the hot-path spans in `domain`/`order_machine`
@@ -70,44 +74,6 @@ pub mod fdr;
 /// `NLegPlan` / `VendorLeg` / `RefundRequest` with P62 vendor-partitioned
 /// `charge_legs` / `kitchen_tickets`. Pure Rust, no DOM, no float on money.
 pub mod foodcourt;
-/// BLUEPRINT-P66 — offline data wallet + single-writer LWW drafts + Signal-style QR transfer
-/// (self-custody, no dowiz account, query-before-replay reconnect). Pure client-side logic;
-/// `transfer` reuses the `pq` crypto primitives (x25519 / shake256 / aes-gcm) gated under `pq`.
-/// Structural grep-gates: `no_card_data_in_wallet` + `no_break_glass_in_wallet` (§4.1 / §4.7).
-pub mod wallet;
-/// BLUEPRINT-P67 — hub provisioning & claim: provider-agnostic (generic over `TunnelProvider` +
-/// `VpsProvider`), in-module mock adapters + Wave-0 real adapters behind `p67-adapters`. Reuses
-/// P59 `capability_cert` + P70 `owner_surface`. No card data, no network endpoint in the default
-/// build (grep-gate `no_endpoint_dependency`).
-pub mod hub_provisioning;
-/// BLUEPRINT-P83 — kernel production observability (SYNTHESIS PERFORMANCE AUDIT 2026-07-18
-/// §3.3-C4). Feature-gated (`telemetry`) so the SHIPPING binary carries zero observability
-/// symbols and is behavior-/perf-neutral. Two layers: (1) a ZERO NEW DEP `SpanMetricsObserver`
-/// (a kernel-owned `fdr::SpanObserver` — the retired `tracing_subscriber::Layer` hook's
-/// replacement) that consumes the spans over the 8 verified hot functions and writes
-/// log-bucket latency histograms to `metric.jsonl`; (2) the `load1/nproc >= 4` breach branch
-/// → system-wide `perf record -a -g -F 99` (+ `alert.jsonl`), with `pprof` a feature-gated
-/// no-op fallback. Never called from the core decide/fold/money path; the kernel only EMITS
-/// spans, which are inert without an observer installed via `span_metrics::init`.
-#[cfg(feature = "telemetry")]
-pub mod span_metrics;
-/// BLUEPRINT-P68 — hub supervisor: update + backup. A/B-slot atomic-flip auto-update with a
-/// real-code-path health gate, owner-triggered rollback, mandatory age-snapshot-before-promote,
-/// and a sovereign encrypted backup envelope (X25519 → SHAKE256 → AES-256-GCM STREAM). Gated
-/// behind `pq` because the envelope genuinely needs AES-256-GCM + X25519.
-#[cfg(feature = "pq")]
-pub mod hub_supervisor;
-pub mod landing;
-/// P04 product-math: Disjoint-Set Union (union-find) + Kruskal MST — the single
-/// canonical DSU/MST primitive. `cgraph::c_components` delegates here; Phase 9
-/// mesh-heal + Phase 13 partition-tolerant delivery consume it directly.
-pub mod dsu;
-/// MESH-06 — per-node content-addressed event-log (local-first + sync).
-pub mod event_log;
-/// Item 7 (space-grade roadmap §C): planted-fault self-test for the kani-gate.
-/// Compiled ONLY under `cfg(kani)` — zero footprint in every normal build.
-#[cfg(kani)]
-mod kani_selftest;
 /// RW-06 — geo / route kinematics (pure-logic port from geo-anim.ts + delivery-zone.ts). Kernel authority.
 pub mod geo;
 /// Harmonic centrality H(v)=Σ 1/d(u,v) — the shared graph-ranking primitive the
@@ -121,6 +87,17 @@ pub mod harmonic;
 /// product). Replaces the O(n⁴) Faddeev-LeVerrier path as the default for the
 /// dense operators this kernel diagonalizes.
 pub mod householder;
+/// BLUEPRINT-P67 — hub provisioning & claim: provider-agnostic (generic over `TunnelProvider` +
+/// `VpsProvider`), in-module mock adapters + Wave-0 real adapters behind `p67-adapters`. Reuses
+/// P59 `capability_cert` + P70 `owner_surface`. No card data, no network endpoint in the default
+/// build (grep-gate `no_endpoint_dependency`).
+pub mod hub_provisioning;
+/// BLUEPRINT-P68 — hub supervisor: update + backup. A/B-slot atomic-flip auto-update with a
+/// real-code-path health gate, owner-triggered rollback, mandatory age-snapshot-before-promote,
+/// and a sovereign encrypted backup envelope (X25519 → SHAKE256 → AES-256-GCM STREAM). Gated
+/// behind `pq` because the envelope genuinely needs AES-256-GCM + X25519.
+#[cfg(feature = "pq")]
+pub mod hub_supervisor;
 /// Воля АНУ — the hidden source of the self-evolving living organism. Single
 /// kernel-internal entry point for closed-loop self-evolution (G7 source-hiding).
 pub mod hydra;
@@ -140,6 +117,17 @@ pub mod isolation;
 /// dev-dependency differential oracle (`tests/json_oracle.rs`), outside the zero-dep proof surface.
 pub mod json;
 pub mod kalman;
+/// Item 7 (space-grade roadmap §C): planted-fault self-test for the kani-gate.
+/// Compiled ONLY under `cfg(kani)` — zero footprint in every normal build.
+#[cfg(kani)]
+mod kani_selftest;
+/// Item 52 (space-grade roadmap §J): planted-fault self-test for the `miri-gate`.
+/// Compiled under `cfg(test)` (so a plain `cargo test` proves it compiles and runs
+/// the no-op native branch — zero footprint in any non-test/shipping build) AND
+/// under `cfg(miri)` (where the planted-UB branch executes and Miri must flag it).
+#[cfg(any(test, miri))]
+mod miri_selftest;
+pub mod landing;
 /// §3.3 Layer-B (semantic) leakage gate — cosine-0.9 near-duplicate rejection over an injected
 /// `&dyn LlmBackend` embedding model. Native, zero-dep; the live bridge lives in `llm-adapters`.
 pub mod leak_gate;
@@ -150,12 +138,12 @@ pub mod leak_gate;
 /// `mesh.rs` header for the KAT-gated crypto rationale).
 #[cfg(feature = "pq")]
 pub mod mesh;
-pub mod moderation;
 /// P08 typed local-observability core — the pure-std, no-network, no-signing
 /// HALF: typed-metrics schema + closed `LogEvent` enum (§2/§3) and the
 /// claim-latency anomaly detector (§4). F40 ML-DSA signed envelope DEFERRED
 /// pending bebop2 C4b — see `metrics.rs` header. Fail-closed local sink.
 pub mod metrics;
+pub mod moderation;
 /// P9 wave: deterministic seedable PRNG (SplitMix64 → PCG64), zero-dep,
 /// reproducible Monte-Carlo for the empirical causal joint.
 pub mod rng;
@@ -164,6 +152,25 @@ pub mod rng;
 /// scalar op order → bit-identical to `softmax_scalar` / `attention::softmax`.
 /// AVX2 fast path with a scalar fallback (mirrors `householder.rs` runtime gate).
 pub mod simd;
+/// OPT-IN generational-index slot arena — per-element sibling to `arena::BumpArena`.
+/// Thin dowiz wrapper over `thunderdome::Arena`: stable `Copy` handles whose stale
+/// (removed-then-recycled) form is a safe `None` (ABA / stale-index unrepresentable).
+/// Behind `slot-arena` so the default build pulls zero extra crates. Forward-looking
+/// infra landed per operator override of the deep-dive's "no adoption yet" verdict
+/// (docs/research/OPUS-PERF-ARENA-DEEPDIVE-2026-07-18.md).
+#[cfg(feature = "slot-arena")]
+pub mod slot_arena;
+/// BLUEPRINT-P83 — kernel production observability (SYNTHESIS PERFORMANCE AUDIT 2026-07-18
+/// §3.3-C4). Feature-gated (`telemetry`) so the SHIPPING binary carries zero observability
+/// symbols and is behavior-/perf-neutral. Two layers: (1) a ZERO NEW DEP `SpanMetricsObserver`
+/// (a kernel-owned `fdr::SpanObserver` — the retired `tracing_subscriber::Layer` hook's
+/// replacement) that consumes the spans over the 8 verified hot functions and writes
+/// log-bucket latency histograms to `metric.jsonl`; (2) the `load1/nproc >= 4` breach branch
+/// → system-wide `perf record -a -g -F 99` (+ `alert.jsonl`), with `pprof` a feature-gated
+/// no-op fallback. Never called from the core decide/fold/money path; the kernel only EMITS
+/// spans, which are inert without an observer installed via `span_metrics::init`.
+#[cfg(feature = "telemetry")]
+pub mod span_metrics;
 /// W2-7 — event-sourced, tamper-evident hash-chain knowledge spine
 /// (Memory/Identity/Intent). Append-only record log; `verify_chain()` re-walks
 /// the chain to detect any mutation. Pure-std (reuses `event_log::sha3_256`).
@@ -178,6 +185,11 @@ pub mod spool;
 /// Zero-dep leaf (sibling of `rng`/`money`/`noether`); every layer depends on it
 /// downward so a reported scalar can carry the check that would refute it.
 pub mod stats;
+/// BLUEPRINT-P66 — offline data wallet + single-writer LWW drafts + Signal-style QR transfer
+/// (self-custody, no dowiz account, query-before-replay reconnect). Pure client-side logic;
+/// `transfer` reuses the `pq` crypto primitives (x25519 / shake256 / aes-gcm) gated under `pq`.
+/// Structural grep-gates: `no_card_data_in_wallet` + `no_break_glass_in_wallet` (§4.1 / §4.7).
+pub mod wallet;
 // `loops` (BP-20 orchestration card parsing) depends on serde / serde_yaml →
 // compiled only under the `wasm` feature so a native rlib build stays serde-free.
 // NOT part of the canonical order/money core (decide/order_machine/domain/money).
@@ -186,6 +198,16 @@ pub mod stats;
 /// firewall and the `token_bucket` degrade-closed budget. No tool runs without a
 /// verified capability; unknown tools rejected; budget exhaustion terminates the loop.
 pub mod agent;
+/// External capability ports (the seams where the kernel meets the outside world without importing
+/// it) — currently the `LlmBackend` pluggable LLM backend trait (zero HTTP/serde; the concrete
+/// `llm-adapters` crate implements it).
+/// BLUEPRINT-P59 — capability-cert chain & crypto-agility: a biscuit-style, hybrid-signed
+/// (`Ed25519 ⊕ ML-DSA-65` via the `SignatureVerifier` seam), algorithm-agile cert chain —
+/// self-signed hub/owner roots, owner→hub single-hop delegation, suite negotiation +
+/// downgrade binding, overlap rotation, and owner-signed gossip-able revocation blobs.
+/// Default-built (rides the default `RefSigner` seam so it verifies under `RequireBoth` even
+/// without the `pq` feature; production injects real bebop2 crypto at the seam).
+pub mod capability_cert;
 /// Deterministic, zero-dependency fault-injection harness (P-H W-H1). The whole
 /// module is `#[cfg(any(test, feature = "chaos"))]`; in a release build it
 /// compiles to `()`, so no chaos symbol reaches a production artifact. This
@@ -201,21 +223,18 @@ pub mod chaos;
 /// `scripts/hardening-gate.sh` step E in release: `cargo test --release ... ct_gate -- --ignored`.
 #[cfg(any(test, feature = "ct-gate"))]
 pub mod ct_gate;
-/// External capability ports (the seams where the kernel meets the outside world without importing
-/// it) — currently the `LlmBackend` pluggable LLM backend trait (zero HTTP/serde; the concrete
-/// `llm-adapters` crate implements it).
-/// BLUEPRINT-P59 — capability-cert chain & crypto-agility: a biscuit-style, hybrid-signed
-/// (`Ed25519 ⊕ ML-DSA-65` via the `SignatureVerifier` seam), algorithm-agile cert chain —
-/// self-signed hub/owner roots, owner→hub single-hop delegation, suite negotiation +
-/// downgrade binding, overlap rotation, and owner-signed gossip-able revocation blobs.
-/// Default-built (rides the default `RefSigner` seam so it verifies under `RequireBoth` even
-/// without the `pq` feature; production injects real bebop2 crypto at the seam).
-pub mod capability_cert;
 /// BLUEPRINT-P-F (Layer F) — MoE mesh DecisionUnit family: closed `DomainTag` capability routing
 /// (NO-COURIER-SCORING), `DecisionUnit` family type (pure `decide()`, Escalate first-class),
 /// FraudAuth escalate-only output, and the Pricing operator-activation money-gate. Kernel-only,
 /// zero network/serde. See `decision/mod.rs` header for the firewall + red-line rationale.
 pub mod decision;
+/// Reverse-engineering loop #R1 — Markov attractor detector (ASCENDed from markov_attractor.py);
+/// reuses `spectral` as its eigen-core, killing the dual-authority hazard.
+/// Item 46 — float-determinism containment goldens (ADR-046: pin-under-golden).
+/// Pins the exact IEEE-754 bit pattern of every in-plane transcendental float
+/// site under the pinned toolchain; a libm ULP drift turns the always-on
+/// `cargo test` suite RED. See `docs/audits/determinism/FLOAT-SITES-2026-07-19.md`.
+pub mod determinism;
 /// A2 (BLUEPRINT-P-A §3.1) — generated kernel "organs" committed from eqc-rs.
 /// Each fn is emitted by `tools/eqc-rs/src/bin/gen_kernel_organs.rs`; verify
 /// against the hand-written law with a bit-parity `#[test]`.
@@ -228,6 +247,13 @@ pub mod eqc_gen;
 /// (decide/order_machine/domain/money).
 #[cfg(feature = "wasm")]
 pub mod evals;
+/// P89 — field eigenmodes via the kernel's existing spectral infrastructure
+/// (`spectral.rs` / `spectral_laplacian.rs` consumed, never modified). Builds the
+/// field modal basis from the graph Laplacian eigen-decomposition and reconciles
+/// the sign/domain with the field stencil's `−(D−A)` operator. The 3-path
+/// (modal / DCT / stencil) verdict bench lives in `kernel/benches/criterion.rs`
+/// under the `field_eigen/` group and is reported in `docs/p89-verdict.md`.
+pub mod field_eigenmodes;
 /// Living-knowledge retrieval — ADAPTER to the (separately-branched) JS engine.
 /// serde-dependent (JSON bridge protocol) → gated behind `wasm` to keep the
 /// native rlib build serde-free. Not part of the order/money core.
@@ -235,8 +261,6 @@ pub mod evals;
 pub mod living_knowledge;
 #[cfg(feature = "wasm")]
 pub mod loops;
-/// Reverse-engineering loop #R1 — Markov attractor detector (ASCENDed from markov_attractor.py);
-/// reuses `spectral` as its eigen-core, killing the dual-authority hazard.
 pub mod markov;
 /// Contiguous row-major matrix helper — the single backing store / matmul impl
 /// the spectral + absorbing subsystems route through (DOD/SIMD prep).
@@ -280,13 +304,6 @@ pub mod spectral_cache;
 /// graph. New module; does not touch `spectral_cache`, `csr`, `householder`, or
 /// `spectral`'s existing code.
 pub mod spectral_laplacian;
-/// P89 — field eigenmodes via the kernel's existing spectral infrastructure
-/// (`spectral.rs` / `spectral_laplacian.rs` consumed, never modified). Builds the
-/// field modal basis from the graph Laplacian eigen-decomposition and reconciles
-/// the sign/domain with the field stencil's `−(D−A)` operator. The 3-path
-/// (modal / DCT / stencil) verdict bench lives in `kernel/benches/criterion.rs`
-/// under the `field_eigen/` group and is reported in `docs/p89-verdict.md`.
-pub mod field_eigenmodes;
 /// Self-improvement loop: recurring-pattern surface over the tool-outcome
 /// token stream (W19 — consumes `trigram` into the loop's telemetry path).
 pub mod telemetry;
@@ -301,12 +318,12 @@ pub mod trigram;
 /// records. NO egress / signing change; GPU is typed-absent (`Option`) until
 /// hardware exists. Pure-std (default build has no serde).
 pub mod typed_metrics;
-/// C1 — verify-failure → retrieval-trigger: a claim check that, on failure,
-/// emits a bounded structured re-verify request (the "verify then learn" loop).
-pub mod verify_retrieval;
 /// P62 / M1 — the intra-hub vendor partition identity (`VendorId`). The fan-out
 /// key for `catalog::validate_tree` / `domain::charge_legs` / `domain::kitchen_tickets`.
 pub mod vendor;
+/// C1 — verify-failure → retrieval-trigger: a claim check that, on failure,
+/// emits a bounded structured re-verify request (the "verify then learn" loop).
+pub mod verify_retrieval;
 /// WASM/JS bindings — the only place the kernel touches the browser boundary.
 /// Compiled ONLY under the `wasm` feature (see `#![cfg(feature = "wasm")]` in
 /// wasm.rs); native rlib builds exclude it and pull no wasm-bindgen/serde.
@@ -336,6 +353,32 @@ pub use causal::{
     empirical_identify, frontdoor_adjust, frontdoor_criterion, identify_causal_effect,
     instrumental_adjust, sample_backdoor, CausalEffect, HedgeWitness, IdFormula, IdResult,
 };
+/// Item 9 (space-grade roadmap §D "THE PIVOT") — the deterministic
+/// fault-containment circuit breaker. The `Result<Permit, Tripped>` gate is the
+/// single admission decision; alarm receiver `Breaker::on_commit_error` consumes
+/// `CommitError::Store`. Golden-signature-pinned cyclic FSM, shares the Tier-1 FDR
+/// ring for audit, zero new dependencies (pure `std`).
+pub mod breaker;
+/// Item 21 (space-grade roadmap §E): the deterministic bounded gain-scheduling
+/// layer. Subscribes to `markov::Verdict`/`spectral::DriftClass`, holds an explicit
+/// {classified-state → bounded adjustment} law table (the pilot: `token_bucket`
+/// refill rate), makes out-of-bound rates unconstructible, and logs every
+/// adjustment to the Tier-1 FDR as a first-class `Tuning` event. Composes with
+/// (never replaces) the item-9 breaker for extreme-end responses.
+pub mod autonomic;
+/// Item 27 (space-grade roadmap §E, response half) — PMU-**informed** response
+/// routing. Wiring-only: routes a PMU-informed `(DriftClass, Verdict)` through
+/// item 21's bounded-control-law path and item 9's breaker seam. The PMU signal
+/// enters ONLY as a quantized [`crate::autonomic_pmu::PmuBand`] (P6 determinism
+/// guard) — never a raw counter in the control-law arithmetic. Diagnostic-grade;
+/// no CI gate keys on any PMU value.
+pub mod autonomic_pmu;
+/// Item 12 (space-grade roadmap §E) — temporal triple-modular-redundancy (SIHFT)
+/// pilot. Re-runs 2–3 named µs-scale pure functions and votes with a trivial `==`;
+/// a non-unanimous outcome trips the item-9 breaker (`TripCause::VoteMismatch`) +
+/// writes a Tier-1 FDR `Alarm`. **PARTIAL** (catches transient compute flips only;
+/// no SEU-immunity claim — see the module's honest-limits doc). Zero new deps.
+pub mod temporal_tmr;
 pub use csr::{precision_at_k, recall_at_k, Csr};
 pub use domain::{apply_event, compute_order_total, place_order, Order, OrderItem};
 #[cfg(feature = "wasm")]

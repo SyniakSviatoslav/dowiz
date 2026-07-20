@@ -13,7 +13,13 @@
 //!   is plain `f32` arrays so it is).
 
 mod bridge;
+mod clock;         // Item 60 — shared wasm-safe monotonic clock (one design w/ item 62)
 mod engine_loop;    // P64 §3.1 — ONE code path: InputRouter::tick wired into the run loop
+// Item 60 (gaps G3 + G11) — the item-58-shaped `(work, cost)` cost pair
+// (FramesRendered / AsrFeeds). Feature-gated: empty on the default build, so the
+// default engine stays offline-clean; only the heavy telemetry emission turns on.
+#[cfg(feature = "telemetry")]
+pub mod cost;
 pub mod field_frame;
 pub mod field_modal; // P89 §3/§12 — engine consumer of kernel field_eigenmodes (NeumannGrid/field_eigenmodes_a/modal_advance)
 // P88 — atomicity-by-default policy + deterministic fixed-point reduction spec.

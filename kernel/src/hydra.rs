@@ -925,6 +925,17 @@ pub struct FileEventStore {
     by_id: HashMap<[u8; 32], MeshEvent>,
     tip: Option<[u8; 32]>,
     count: usize,
+    /// Item 61 (gap G5): durability continuous counters — running totals the
+    /// group-commit decision can read as a *live* data feed (replacing the one-time
+    /// ~637 µs bench number). `events_appended` counts every durable commit (the
+    /// `sync_all` path reached); `fsync_calls` counts the `sync_all` calls actually
+    /// issued. Both are P3-plane only — they NEVER gate the durability barrier in
+    /// `insert` (the `?` short-circuits before any decision logic) and feed no
+    /// hash/gate/replay surface (grep-firewall proof, blueprint §4).
+    events_appended: u64,
+    /// Count of `sync_all` calls issued (the `FileEventStore` `insert` is the only
+    /// issuer — `MemEventStore` is in-memory and issues none).
+    fsync_calls: u64,
 }
 
 impl FileEventStore {
@@ -962,8 +973,30 @@ impl FileEventStore {
             by_id,
             tip,
             count,
+            events_appended: 0,
+            fsync_calls: 0,
         })
     }
+
+    /// Item 61 (gap G5): live durability counters — the number of events durably
+    /// committed and the number of `sync_all` calls issued so far. Readable without
+    /// touching the durability barrier; P3 telemetry only.
+    pub fn durability_counters(&self) -> DurabilityCounters {
+        DurabilityCounters {
+            events_appended: self.events_appended,
+            fsync_calls: self.fsync_calls,
+        }
+    }
+}
+
+/// Item 61 (gap G5): live durability counters (P3 telemetry). Named fields so callers
+/// read intent, never tuple-position guessing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DurabilityCounters {
+    /// Number of events durably committed (appended + fsynced) so far.
+    pub events_appended: u64,
+    /// Number of `sync_all` durability barriers issued so far.
+    pub fsync_calls: u64,
 }
 
 /// Minimal hand-rolled JSON parse for the 4 MeshEvent fields (std-only, no
@@ -1065,6 +1098,11 @@ impl EventStore for FileEventStore {
         self.by_id.insert(id, ev);
         self.tip = Some(id);
         self.count += 1;
+        // Item 61 (gap G5): the durability counters advance ONLY after the
+        // `sync_all` barrier succeeded — they can never gate the barrier (any
+        // prior `?` short-circuit returns before reaching here). P3 telemetry.
+        self.events_appended += 1;
+        self.fsync_calls += 1;
         Ok(())
     }
     fn get(&self, id: &[u8; 32]) -> Option<MeshEvent> {
@@ -1221,5 +1259,37 @@ mod file_store_tests {
         assert!(!s.contains(&id), "by_id must not advance on open failure");
         assert!(s.tip().is_none(), "tip must not advance on open failure");
         assert_eq!(s.len(), 0, "count must not advance on open failure");
+    }
+
+    /// Item 61 (gap G5) — durability continuous counters. Each `insert` that lands an
+    /// event ALSO bumps `events_appended`; the trailing `sync_all` bumps `fsync_calls`.
+    /// We assert BOTH: the counters move AND — critically — the index count is consistent
+    /// with `events_appended` (the counter never lies about what was durably written).
+    /// The counters are P3-plane telemetry: they never gate the `sync_all` durability
+    /// barrier (green testing of the existing no-silent-failure invariants still holds).
+    #[test]
+    fn durability_counters_advance_on_append_and_fsync() {
+        let path = tmp_path("item61-counters");
+        let mut s = FileEventStore::open(&path).unwrap();
+        assert_eq!(s.durability_counters().events_appended, 0);
+        assert_eq!(s.durability_counters().fsync_calls, 0);
+
+        let mk = |seq: u8| MeshEvent {
+            prev: [0u8; 32],
+            actor_pubkey: [9u8; 32],
+            actor_seq: seq as u64,
+            payload: vec![seq],
+        };
+        for seq in 1..=3u8 {
+            let ev = mk(seq);
+            let id = ev.event_id();
+            s.insert(id, ev).expect("append+fsync");
+        }
+        let c = s.durability_counters();
+        assert_eq!(c.events_appended, 3, "three events appended → counter = 3");
+        assert_eq!(c.fsync_calls, 3, "each insert fsyncs → fsync counter = 3");
+        assert_eq!(s.len(), 3, "index count matches appended counter");
+
+        let _ = fs::remove_file(&path);
     }
 }
