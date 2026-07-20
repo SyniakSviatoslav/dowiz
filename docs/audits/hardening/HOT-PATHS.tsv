@@ -70,3 +70,7 @@ kernel/src/simd.rs	-	simd::	8	miri	1	item52:miri-exercises-scalar-fallback-path(
 kernel/src/householder.rs	-	householder::	14	miri	1	item52:miri-exercises-scalar/dot-path(FMA-intrinsic-body-uninterpreted-by-Miri);dot_fma_matches_scalar+13 more
 kernel/src/fdr/pmu.rs	-	NOT-FILTERED	0	miri	1	item52-DOCUMENTED-NOT-MIRI-REACHABLE:_rdtsc+raw-syscall-asm!-outside-Miri;covered-by-items-37-39-7;DO-NOT-ADD-TO-FILTER(asm-would-error-under-miri)
 kernel/src/miri_selftest.rs	-	miri_selftest::	UB	miri	1	item52:planted-OOB-read-must-be-caught-by-Miri(RED-if-uncaught);native-cargo-test-runs-no-op-branch-proving-compilation;cfg(any(test,miri))
+@ZONE	kernel/src/ct_gate.rs
+kernel/src/ct_gate.rs	-	ct_gate	1	dudect	2	dudect-harness+planted-leak-selftest(item2);ct_eq-primitive
+kernel/src/mesh.rs	pq	mesh::	7	lib	1,3	item24:oracle(mesh_oracle::oracle_verify_sig)+debug-differential(debug_assert_eq! in verify_sig);reuses-KAT-gated-pq::dsa::verify;cap/consensus-surfaces-swept-by-item-23(blueprint-§6)
+kernel/src/mesh.rs	pq	mesh_dudect	1	dudect	2	item24:ct_eq-branch-free-sig-compare;planted-leak-self-test(mesh_sig_compare_dudect);asm-spot-check-keyed-to-item14-toolchain-bump
