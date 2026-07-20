@@ -1209,9 +1209,9 @@ One-line ledger:
 
 ###### P31d — Verification ladder (z3/kani proofs)
 **Absorbs:** S5
-**Status:** PLANNED (zero hits repo-wide — genuinely not started)
+**Status:** PLANNED — code not started (its blueprint is now ON DISK as of 2026-07-20; zero implementation hits repo-wide)
 **Role & responsibility:** Machine-checked proofs for the invariants the repo already treats as red-lines: money-integer arithmetic, tax organs, fold determinism. Converts "VERIFIED-BY-MATH" from a discipline into an artifact.
-**Blueprint:** none — needs one before build. First deliverable IS the blueprint (candidate-invariant inventory + tool choice kani-vs-z3 with a falsifiable comparison per the tech-selection rule). **Adjacent-but-not-a-substitute (checked 2026-07-20):** `kernel/src/kani_selftest.rs` + space-grade item 7 (`BLUEPRINT-ITEM-07-kani-wiring-2026-07-19.md`) already wired real Kani proofs — but for Keccak/FSM-graph/NTT-arithmetic/GCRA specifically, NOT for this item's named targets (money-integer arithmetic, tax organs). Do not assume item 7 already covers P31d — the candidate-invariant inventory this item still needs is a different list; item 7 is prior art on tooling choice, not a completed superset.
+**Blueprint:** [`BLUEPRINT-P31d-verification-ladder-kani-money-organs-2026-07-20.md`](BLUEPRINT-P31d-verification-ladder-kani-money-organs-2026-07-20.md) (2026-07-20 — the first-deliverable blueprint this flag called for: a ranked ≥5-candidate-invariant inventory, an honest kani-vs-z3 comparison landing on Kani, and one proof harness over the `eqc_gen` integer tax organs fully specified against live code + the item-7 kani-gate). **Adjacent-but-not-a-substitute (checked 2026-07-20):** `kernel/src/kani_selftest.rs` + space-grade item 7 (`BLUEPRINT-ITEM-07-kani-wiring-2026-07-19.md`) already wired real Kani proofs — but for Keccak/FSM-graph/NTT-arithmetic/GCRA specifically, NOT for this item's named targets (money-integer arithmetic, tax organs). Do not assume item 7 already covers P31d — the candidate-invariant inventory this item still needs is a different list; item 7 is prior art on tooling choice, not a completed superset.
 **DoD:**
 1. A blueprint doc exists naming ≥5 candidate invariants ranked by (red-line severity × proof cheapness), with tool selection justified by an honest comparison, not appeal to authority.
 2. At least one proof harness lands and runs in CI (e.g. kani proof that `apply_tax_exclusive_int`/`apply_tax_inclusive_int` never overflow/never go negative for the documented input domain).
@@ -1280,9 +1280,9 @@ One-line ledger:
 
 ###### P32d — Cross-model critic
 **Absorbs:** the cross-model critic from hydraulic-loop-v2's original 7 math corrections (load-bearing, never assigned a BP number)
-**Status:** PLANNED (not built — no multi-model-voting code found anywhere)
+**Status:** PLANNED — code not built (its design-note blueprint is now ON DISK as of 2026-07-20; no multi-model-voting code found anywhere)
 **Role & responsibility:** A decorrelated multi-model check on control-loop decisions — the mechanism behind the arc's math-correction discipline, and the one named item from the 7 corrections with no code at all. Distinct from the harness-level review agents (those review diffs; this critiques loop outputs).
-**Blueprint:** none — needs a short design note first: what gets critiqued (which loop outputs), decorrelation requirement (different model/provider, per the research-verifier precedent), and advisory-only posture (signals, never gates — GROUND-TRUTH-over-PROXY rule).
+**Blueprint:** [`BLUEPRINT-P32d-cross-model-critic-2026-07-20.md`](BLUEPRINT-P32d-cross-model-critic-2026-07-20.md) (2026-07-20 — the short design note this flag called for: critiques `markov::Verdict` as the concrete loop output, requires two decorrelated `(provider, model)` judges per the research-verifier precedent, advisory-only / never-gates per GROUND-TRUTH-over-PROXY).
 **DoD:**
 1. Design note exists specifying critic inputs (≥1 concrete loop output type), decorrelation constraint, and advisory-only integration point.
 2. Minimal implementation: one loop output critiqued by ≥2 decorrelated judges with disagreement surfaced as a signal (logged/ledgered), not a gate.
