@@ -44,6 +44,10 @@ fn main() {
 
     // Opt-in durable FDR capture (roadmap item 27). Default: no sink ⇒ the emit below is a
     // no-op and check.sh sees the identical stdout with zero extra cost.
+    // `fdr::init`/`FdrConfig` are native-only (see fdr/mod.rs cfg gates) — this bin is a
+    // native CLI and is never meant to build for wasm32, but `cargo build --target
+    // wasm32-unknown-unknown` still compiles every `[[bin]]` in the crate by default.
+    #[cfg(not(target_arch = "wasm32"))]
     if let Ok(dir) = std::env::var("DOWIZ_FDR_DIR") {
         if !dir.is_empty() {
             let _ = dowiz_kernel::fdr::init(dowiz_kernel::fdr::FdrConfig {
@@ -57,6 +61,7 @@ fn main() {
     // Window-bracket the classification with a before/after PMU snapshot. `analyze_detailed`
     // is called exactly as before (inside the closure); the delta rides alongside the verdict.
     let station = PmuStation::new();
+    #[cfg_attr(target_arch = "wasm32", allow(unused_variables))]
     let (r, pmu_delta) = station.bracket(|| analyze_detailed(&toks));
 
     // Hand-rolled JSON — matches the Python key order exactly (kernel is serde-free).
@@ -97,6 +102,8 @@ fn main() {
 
     // Companion FDR record: the verdict string + the window's PMU delta, on ONE record.
     // No-op unless a sink was installed above (DOWIZ_FDR_DIR); never touches stdout.
+    // `emit_verdict_pmu` is native-only — see cfg note above.
+    #[cfg(not(target_arch = "wasm32"))]
     dowiz_kernel::fdr::emit_verdict_pmu("markov_verdict", r.verdict_str(), pmu_delta);
 }
 
