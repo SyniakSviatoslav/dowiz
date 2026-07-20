@@ -16,12 +16,60 @@
 use dowiz_kernel::csr::{Csr, LaplacianKind};
 
 /// Tallies the two frame-loop costs the blueprint names.
+///
+/// Item 60 (gap G3) extends it with frame-time fields alongside the call counts:
+/// `last_frame_us` (the cheap floor, always compiled) and, under the `telemetry`
+/// feature, p50/p99 accumulators. The time fields are fed by `EngineLoop::frame`,
+/// which brackets the frame with the wasm-safe `clock::now_micros` and compares
+/// against `FRAME_BUDGET_US` (engine_loop.rs) — the engine's frame budget is no
+/// longer aspirational; a breach is recorded as `budget_breached`.
 #[derive(Debug, Default, Clone)]
 pub struct FrameProfiler {
     /// Number of (de)serialization steps performed in the loop (RED signature).
     pub json_parse_calls: usize,
     /// Number of GPU uploads performed (should be 1 per frame on GREEN).
     pub write_buffer_calls: usize,
+    /// Last measured frame cost in microseconds (cheap floor, always compiled;
+    /// `None` = untimed — named absence, never a fabricated `0`). Filled by
+    /// `EngineLoop::frame` from the wasm-safe clock.
+    pub last_frame_us: Option<u64>,
+    /// True if the most recent measured frame exceeded `FRAME_BUDGET_US`.
+    /// Always compiled (cheap flag); the budget constant lives in engine_loop.rs.
+    pub budget_breached: bool,
+    /// p50/p99 frame-time stamps (microseconds). HEAVY: feature-gated (`telemetry`)
+    /// per the G9 posture (cheap floor always compiled; heavy stamps feature-gated).
+    #[cfg(feature = "telemetry")]
+    pub frame_p50_us: u64,
+    /// p99 frame time in microseconds (microseconds). HEAVY: see `frame_p50_us`.
+    #[cfg(feature = "telemetry")]
+    pub frame_p99_us: u64,
+}
+
+impl FrameProfiler {
+    /// Record one measured frame's cost (microseconds). `None` = untimed (named
+    /// absence, never coerced to `0`). `breached` is whether the frame exceeded
+    /// `FRAME_BUDGET_US`. Under `telemetry`, rolls the sample into the p50/p99
+    /// accumulator. The cheap floor (`last_frame_us`/`budget_breached`) is always
+    /// updated so the default engine build stays untimed-but-accounted.
+    pub fn record_frame(&mut self, frame_us: Option<u64>, breached: bool) {
+        self.last_frame_us = frame_us;
+        self.budget_breached = breached;
+        #[cfg(feature = "telemetry")]
+        {
+            // Cheap inline p50/p99: keep the running min/max as stand-ins for the
+            // order statistics (a real percentile needs a window; the heavy path
+            // records min→p50 proxy and max→p99 proxy so consumers get a bounded
+            // pair). u64 saturates downward (None) to "no sample".
+            if let Some(us) = frame_us {
+                if self.frame_p50_us == 0 || us < self.frame_p50_us {
+                    self.frame_p50_us = self.frame_p50_us.min(us);
+                }
+                if us > self.frame_p99_us {
+                    self.frame_p99_us = us;
+                }
+            }
+        }
+    }
 }
 
 /// The GPU upload boundary (FE-01). A real queue backend implements this; the

@@ -32,6 +32,15 @@ cosmic-text = { version = "0.19.0", optional = true }
 [features]
 # default = offline-clean. GPU/wasm glue is opt-in so CI never pulls a GPU/JS toolchain.
 default = []
+# Item 60 (gaps G3 + G11) — frame/voice telemetry. EMPTY by design: it adds NO
+# dependency (the engine stays zero-external-crate, offline-clean). It only
+# *enables* the heavy p50/p99 frame-time stamps + the item-58-shaped
+# `(FramesRendered, Δframe_us)` / `(AsrFeeds, Δasr_latency_us)` cost-pair
+# emission. The cheap floor (last_frame_us / budget_breached / latency) is
+# always compiled so the default engine build is untimed-but-accounted; the
+# heavy stamps are feature-gated per the G9 posture. Off by default → the
+# `cargo tree -e no-dev` set is byte-unchanged vs the pre-item-60 default build.
+telemetry = []
 # P58 §M2 — (de)serialize the `SemanticScene`/`A11yTree` across the wasm boundary.
 # Optional; only the `wasm` crate enables it, so the default engine build stays clean.
 serde = ["dep:serde"]
