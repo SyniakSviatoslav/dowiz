@@ -212,6 +212,21 @@ The single busiest day in the project's history. In rough order:
   — residual scope is the out-of-kernel adapter crate + webhook infra + PSP selection);
   omnichannel order-intake (P48-INTAKE, builds the inbound mirror of P43); local-model wiring
   (smallest scope — locks in the existing sync HTTP-client architecture, closes one wiring gap).
+- **P97 — local/mobile model selection + CPU-only serving topology — PLAN, 1 doc** (same day,
+  follow-on synthesis of the operator-commissioned model-selection research; the wiring
+  blueprint's deliberately-unanswered "which models / what topology / does the training
+  deferral hold" questions). Mobile courier VLM: LFM2.5-VL-450M primary vs SmolVLM-256M
+  Apache-2.0 fallback, with the **LFM Open License $10M-revenue-cap flagged as a named
+  operator decision (O-1)** — the capable option is not open-source, the permissive option has
+  no demonstrated agentic ability. Server: Ollama-native residency (no new infra), static
+  `TaskClass` routing + exactly one deterministic cascade (intake-assist, `IntentParser` as
+  oracle), 5-cell measured concurrency matrix before anything ships (memory *bandwidth*, not
+  core count, is the honest ceiling on the 4-physical-core box). Training: **P54 deferral
+  HOLDS, strengthened** — the box's AMX absence was live-verified, killing the only
+  vendor-backed CPU-training path; optional bounded CPU-LoRA wall-clock probe offered with a
+  falsifiable ≤24h criterion. Blueprint:
+  `CORE-ROADMAP-2026-07-17/BLUEPRINT-P97-local-mobile-model-selection-topology-2026-07-20.md`,
+  registered in §10.2 (Part II) and `CORE-ROADMAP-INDEX.md` §10.
 - **The delta gap-audit + first-pass consolidation.** Fixed 4 orphaned/under-linked docs, 1
   dangling link, 2 stale status cells, 1 mislabel in `CORE-ROADMAP-INDEX.md`; annotated (not
   silently fixed) that space-grade items 45/73/74 have real standalone CI-gate scripts not yet
@@ -249,6 +264,10 @@ separate — that's ~50 individual files, not itself a competing top-level roadm
 - `payment-adapters` crate, `intake-adapters` crate, and the `AiMode`→`compose.rs` wiring gap: all
   three named concretely in the remaining-queue wave's blueprints — the wiring gap has since
   started landing on the `swave/integrate` branch (see §9), not yet merged to `main`.
+- P97 (local/mobile model selection + serving topology): **blueprint on disk, zero code, zero
+  models pulled.** Three operator decisions open (its §8): O-1 LFM-license ruling (blocks any
+  LFM weight shipping), O-2 Tier-S bake-off pair, O-3 optional CPU-LoRA probe. Phase B (the
+  measured concurrency matrix on the live box) is startable immediately and gates the topology.
 
 ## 12. What every filename means now, at a glance
 
@@ -1084,7 +1103,7 @@ something is live). **P34 is the single most important next action across the en
 roadmap** — bigger leverage than any other phase, because it converts ~70% of already-built,
 already-tested protocol code from stranded to load-bearing.
 
-#### 10.2 Full P31–P53 index (swarm fast-lookup; sub-letter detail lives in §10.5, P47–P53 full sections in §11–§14)
+#### 10.2 Full P31–P53 index (swarm fast-lookup; sub-letter detail lives in §10.5, P47–P53 full sections in §11–§14; P54–P56 appended 2026-07-18, P97 appended 2026-07-20)
 
 > Extended P47–P53 on 2026-07-18 by the consolidation/consistency pass §11's note anticipated
 > ("a later consolidation pass reconciles that table" — this is that pass). Same-day swarm
@@ -1118,6 +1137,7 @@ already-tested protocol code from stranded to load-bearing.
 | P54 | AGENT | LLM/agent behavioral verification: adversarial probes, money-trust fence, fine-tuning gate | PLANNED (blueprint ON DISK; fine-tuning explicitly DEFERRED, zero LoRA/QLoRA built) | none — new phase, consumes P21/P40/P41/P42 | P21 (backend), P40 (AgentReasoner seam), P56 (storage/scheduling substrate) | none downstream; strengthens P54→P56 alerting only |
 | P55 | PROTOCOL/CORE | Protocol/ecosystem testing: regression taxonomy, proptest/mutation, chaos-injection | PLANNED (blueprint ON DISK; proptest confirmed already-live dev-dep, 400-case suite) | none — new phase, extends P24/P27/P36 | P27 (CircuitBreaker), P24 (flight-recorder spans), P56 (storage/scheduling) | none downstream; feeds P36/P34 regression coverage |
 | P56 | ECOSYSTEM/OPS | Verification-harness shared infrastructure: storage, scheduling, meta-verification | PLANNED (blueprint ON DISK; 4 meta-detectors designed, `hetzner:dowiz/test-results/` sync policy) | none — new phase, shared substrate for P54+P55 | P25 (admission control, extended not forked), P45 (alerting, extended not forked), disk-cleanup pass (local storage now unblocked) | P54, P55 (both consume this as their storage/scheduling substrate) |
+| P97 | AGENT (mobile half feeds DELIVERY P52/P71) | Local & mobile model selection + CPU-only serving topology: mobile courier VLM pick (LFM2.5-VL-450M primary w/ LFM-license O-1 ruling required, SmolVLM-256M Apache-2.0 fallback), Ollama-native E/S/G/C residency plan + static TaskClass routing + ONE deterministic intake-assist cascade, P54 training-deferral reaffirmed (AMX absence live-verified) + optional CPU-LoRA wall-clock probe | PLANNED (blueprint ON DISK, [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P97-local-mobile-model-selection-topology-2026-07-20.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P97-local-mobile-model-selection-topology-2026-07-20.md); zero code, zero models pulled; Phase B measurement startable immediately) | none — new phase; synthesizes the 2026-07-20 model-selection research pass | local-model-wiring blueprint Phases 1+3 (config substrate), P48-INTAKE (cascade caller), P52/P71 (mobile surface timeline), operator ruling O-1 (LFM license) | nothing downstream hard; feeds P52/P71 capture-assist UX and P48-INTAKE assist lane |
 
 #### 10.3 Cross-cutting invariants (binding across components; each stated once)
 
