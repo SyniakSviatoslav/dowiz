@@ -2873,7 +2873,10 @@ Three closes, all within the §16.35/§16.40 generative-UI cluster:
   equations render identically wherever wgpu runs. Consistent with this repo's own
   verified-by-math culture ([[verified-by-math-2026-07-07]]), this is recorded as a claimed
   benefit to validate during the Tier-3 build (real devices, real platforms), not asserted as
-  already true.
+  already true. **Registered as P98 (2026-07-20):** P64 already builds the friction-only instance
+  of this requirement; the full audio-parity design extending it to every other visual signal
+  (order status, event feedback) is
+  [`BLUEPRINT-P98-audio-sound-design-2026-07-20.md`](BLUEPRINT-P98-audio-sound-design-2026-07-20.md).
 - **Voice is one of several equal-standing intent channels** (voice + touch/gesture on canvas),
   not a primary channel that others merely supplement — the user picks whichever channel fits
   the moment (quiet vs. hands-busy environments, e.g. a courier mid-ride).
@@ -3097,6 +3100,12 @@ Three closes:
   interfaces; this ruling means that extension is designed for now, not left as a theoretical
   future compatibility claim. Adds real scope to the already-large §16.30/§16.35 UI research
   program — named honestly, consistent with how §16.40's schedule-risk acceptance was recorded.
+  **Registered as P97 (2026-07-20):** this ruling, together with DZ-12
+  (`docs/design/dowiz-interfaces/BLUEPRINTS-DOWIZ-INTERFACES.md`), P38-rev §12.2
+  (`CORE-ROADMAP-2026-07-17/BLUEPRINT-P38-webgpu-render-engine.md`), and the
+  spatial-storefront-voice-hub synthesis's Lane B, is consolidated into
+  [`BLUEPRINT-P97-ar-vr-spatial-interface-2026-07-20.md`](BLUEPRINT-P97-ar-vr-spatial-interface-2026-07-20.md)
+  — the first-class item this ruling's "readiness now" scope now lives under.
 - **Regulatory compliance (food safety, courier labor/gig-economy law, payment regulation)
   stays permanently the vendor's/venue's responsibility** (Recommended, confirmed) — coherent
   with dowiz's protocol-not-operator stance throughout this roadmap (§16.3 couriers, §16.29
