@@ -16,3 +16,11 @@ NEXT-TIME: Before CREATE OR REPLACE of an existing DB function: grep EVERY migra
            first definition is current.
 LINK:      packages/db/migrations/1790000000055_read-public-menu-primary-media.ts ; commit d7daa1be
 ---
+
+DISPOSITION (librarian, 2026-07-20): archived without re-distilling. The lesson this reflection
+produced (docs/lessons/2026-06-22-read-public-menu-redefine.md, TRIGGER
+`packages/db/migrations/**read*public*menu**`) was PRUNED this run — `packages/db/**` no longer
+exists (legacy thin-layer removal, REGRESSION-LEDGER row #21, 2026-07-13; root CLAUDE.md
+"drop js"). The TRIGGER glob can never match again. No successor lesson: the underlying DB
+migration mechanism this fix targeted was deleted wholesale, not superseded by an equivalent
+Rust-kernel path.

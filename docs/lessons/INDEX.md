@@ -11,7 +11,9 @@ error signature. file is repo-relative.
 
 | TRIGGER | file |
 |---------|------|
-| apps/api/src/routes/auth/** | docs/lessons/2026-06-22-inline-vs-plugin-local-login.md |
-| packages/db/migrations/**read*public*menu** | docs/lessons/2026-06-22-read-public-menu-redefine.md |
-| packages/ui/src/theme/**.css | docs/lessons/2026-06-23-css-comment-star-slash.md |
-| e2e/tests/behavioural-invariants.spec.ts | docs/lessons/2026-06-23-contrast-gate-skip-images.md |
+
+<!-- Empty as of 2026-07-20: all 4 prior rows (apps/api/**, packages/db/**, packages/ui/**,
+     e2e/tests/behavioural-invariants.spec.ts) pruned by weekly librarian curation — their
+     TRIGGER paths were deleted wholesale by the legacy-thin-layer removal (REGRESSION-LEDGER
+     row #21, 2026-07-13; see root CLAUDE.md "drop js"). See
+     docs/reflections/ARCHIVE/2026-06-22-read-public-menu-stale-base.reflection.md for detail. -->
