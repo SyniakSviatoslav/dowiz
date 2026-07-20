@@ -108,6 +108,12 @@ pub mod event_log;
 /// Compiled ONLY under `cfg(kani)` — zero footprint in every normal build.
 #[cfg(kani)]
 mod kani_selftest;
+/// Item 52 (space-grade roadmap §J): planted-fault self-test for the `miri-gate`.
+/// Compiled under `cfg(test)` (so a plain `cargo test` proves it compiles and runs
+/// the no-op native branch — zero footprint in any non-test/shipping build) AND
+/// under `cfg(miri)` (where the planted-UB branch executes and Miri must flag it).
+#[cfg(any(test, miri))]
+mod miri_selftest;
 /// RW-06 — geo / route kinematics (pure-logic port from geo-anim.ts + delivery-zone.ts). Kernel authority.
 pub mod geo;
 /// Harmonic centrality H(v)=Σ 1/d(u,v) — the shared graph-ranking primitive the
