@@ -418,19 +418,62 @@ cites its existing blueprint — no new specs written here.
 8. **Product-surface wave remainder**: offline resilience Phase A (Service-Worker+IndexedDB, already D14-ratified), media/comms build-out (`Media` capability resource + manifest layer over the already-80%-there `chunker.rs`/`backup.rs`), spatial-storefront-voice-hub build phases.
 9. **Space-grade items 34–44** (toy-pilot-arc, already IN-PROGRESS per the Part V reconciliation table — 35/36/38 done, 34/37/39–44 remain) and **items 62–72** (telemetry/cost-ledger/digital-twin retrofits, mostly landed per Part V's reconciliation, a few gaps remain per that table).
 10. **Space-grade items 73–78** (Governed Self-Evolution) — D11 has already ruled the full apply-token design; this is the one place a fresh operator "go" is explicitly required before ANY code lands (D11: "does not authorize dispatching items 73-78 to code" — a separate decision from everything else in this plan).
+11. **Predictive RESOURCES telemetry + anomaly stability signals** (operator-requested 2026-07-20,
+    [`BLUEPRINT-PREDICTIVE-RESOURCES-TELEMETRY-2026-07-20.md`](BLUEPRINT-PREDICTIVE-RESOURCES-TELEMETRY-2026-07-20.md))
+    — real-time prediction over the `resources-summary.jsonl` history (p50/p99/jitter/watts/CO2e/
+    CPU/mem/disk) via `kernel::kalman` + a generalized `kernel::markov` regime detector (the exact
+    `tools/loop-signals/` detector shape, reused not reinvented) + graph-Laplacian cross-metric
+    coherence via `kernel::spectral`; spikes surfaced as a new `resources-stability-alert.jsonl`,
+    narrated by `llm-adapters` only when an alert fires, degrading closed to a template otherwise.
+    Prerequisite schema fix inside the blueprint (§3.1): `mem_pct`/`disk_pct`/`load1_norm`/net
+    throughput are computed every `topics resources` run today and silently discarded, never
+    persisted — must be added to the JSON record before any of those three can be predicted.
+12. **mesh-adapter / bebop-repo cross-repo type drift** (found + real-build-confirmed 2026-07-20,
+    [`BLUEPRINT-MESH-ADAPTER-BEBOP-CROSSREPO-DRIFT-2026-07-20.md`](BLUEPRINT-MESH-ADAPTER-BEBOP-CROSSREPO-DRIFT-2026-07-20.md))
+    — `bebop-delivery-domain` (companion `bebop-repo`) does not compile against the current
+    `dowiz-kernel` (`OrderItem` gained `vendor_id`/`currency`, `OrderStatus` gained
+    `Refunding`/`CompensatedRefund`; live `cargo check --features kernel-rlib` reproduces 2
+    concrete errors across 5 call sites). **⚠ Needs an explicit operator decision before any code
+    lands** — the blueprint fully specifies both a cross-repo PR path and a dowiz-side vendored-fork
+    stopgap, but does not choose between them.
+13. **`native-spa-server` listener-wide DoS hardening** (follow-up to `00436dedc`'s per-connection
+    fix, [`BLUEPRINT-NATIVE-SPA-SERVER-LISTENER-HARDENING-2026-07-20.md`](BLUEPRINT-NATIVE-SPA-SERVER-LISTENER-HARDENING-2026-07-20.md))
+    — a global `tokio::sync::Semaphore` connection cap + a per-IP `kernel::token_bucket`-based rate
+    limiter, both fail-closed and both defense-in-depth alongside the existing `MAX_INFLIGHT_API`/
+    `MAX_BODY_BYTES` layers (neither of which covers accept-time exhaustion). Not gated on anything
+    above; independently buildable whenever picked up.
 
 ### 15.4 Gaps found while sequencing (resolve before implementation starts)
 
-- **G1 — P52 vs. P71, courier surface: unresolved overlap.** `P52` ("Courier working surface: shift, claims, run, PoD, earnings") is flagged in the roadmap's own text as MVP-blocking. `P71` ("courier surface," Wave W3) exists as a separate blueprint file with no recorded disposition against P52 — unlike P70, which explicitly documents "supersede/extend split against the existing P48." No such note exists for P52/P71. **Before building 0.8, an Opus implementation pass must first read both blueprint files and either (a) confirm they're the same scope under two names (build once, retire one blueprint) or (b) confirm a genuine split (e.g., P52 = shift/claim/PoD mechanics, P71 = the rendered UI surface) and build both in the right order.** Do not guess this from titles alone.
+- **G1 — P52 vs. P71, courier surface: RESOLVED (2026-07-20 audit) — was a linking gap, not a missing disposition.** A real split already exists and was already recorded, just not linked from here. **P52** (`BLUEPRINT-P52-courier-working-surface.md`) is the kernel-side fold/law/capture design — K1 availability/duty, K2 claim inbox, K3 delivery-run relay, K4 PoD capture, K5 earnings fold, K6 invite/enrollment, K7 cash attestation, K8 conversation pane; its own text is explicit that it is "NOT a fourth rendering technology" and "NOT voice/turn-by-turn." **P71** (`BLUEPRINT-P71-courier-surface.md`) is titled "P52-rev" in its own text — the rendered, voice-primary, dispatch-wired courier app. P71 §1 is itself a full disposition note: it preserves K1/K4-K8 unchanged and supersedes exactly 3 named things from P52 (the 60s surface-owned offer-timeout → P65's 30s hub-owned deadline authority; the "NOT voice" anti-scope → voice-primary via P64; the CPU-stub render deferral → a real full-wgpu render), plus adds the actual `apps/courier` build. This disposition is also independently recorded at `ROADMAP.md:3196` (§18.3, dated 2026-07-18 — two days before this §15/G1 text was written, which is why the "no recorded disposition" claim above was itself stale the moment it was written). **Build order: P52's kernel-side folds first, then P71's render layer on top — do not retire either file (same keep-both precedent as P70/P48).**
 - **G2 — Phase 0.2's exact current endpoint completeness is pending live verification.** A test-sweep agent is checking whether `native-spa-server` actually boots and serves real responses right now (§15.5) — fold that result in before starting 0.4/0.5, since the owner/customer UI has nothing to render against if the order API isn't actually reachable.
 - **G3 — no genuinely unplanned work found.** Every other item in this section already has a real DoD-bearing blueprint. This plan's job was sequencing + the two gaps above, not authoring new specs.
+- **G4 — space-grade item 3's third proof clause was silently uncovered — CLOSED this pass with a
+  real blueprint.** The roadmap-wide gap audit (2026-07-20, successor to
+  `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md`) found item 3 ("`order_machine` const-adjacency")
+  was the one genuine gap across all 78 space-grade items — its "zero heap allocations under a
+  counting allocator test" clause had no test and no dedicated blueprint, only incidental mentions
+  inside items 6/7. See [`BLUEPRINT-ITEM-03-order-machine-zero-alloc-proof-2026-07-20.md`](BLUEPRINT-ITEM-03-order-machine-zero-alloc-proof-2026-07-20.md).
+- **G5 — `wasm-bindgen` version pin: accepted external constraint, not a design gap.** The
+  `wasm-bindgen` version in `kernel/Cargo.toml`/`wasm/`'s manifests is pinned to whatever `wgpu`
+  requires for the WebGPU render engine (P38) and cannot be independently downgraded without
+  breaking that dependency chain. This is a genuine upstream constraint, not something this
+  codebase's own architecture can decouple — no blueprint is warranted unless a real decoupling
+  path (e.g. wgpu dropping its wasm-bindgen version floor, or the render engine moving off wgpu
+  entirely — not proposed here, no evidence either is imminent) is found in a future pass.
+  Recorded here plainly so it is never mistaken for an unaddressed "PLANNED" item.
 
 ### 15.5 Execution discipline for the Opus implementation pass
 
 - **Work in isolated `git worktree`s, never the shared `/root/dowiz` checkout.** Confirmed necessary twice today — a concurrent autonomous process actively mutates that checkout, including at least one local-only divergent reset discovered this session (see the git-collision handling embedded in this document's own commit history for the pattern to follow: fetch, isolated worktree off `origin/main`, verify fast-forward, push, never force).
 - **Verify-before-build, every time.** Multiple items in this very plan (P37, P28's `CacheGraph`, P26's `MemoryBudget`) turned out to have stale claimed-status this session — always re-check against live code before assuming a blueprint's "LANDED"/"PLANNED" marker is still accurate.
 - **RED→GREEN, per this repo's standing culture** — every implemented item ships a test proving the gap existed before and is closed after, not narrative.
-- **Stop and ask when a real decision is needed** — G1 above is the clearest current example; the intent-interface Stage B/C gates and the WhatsApp D1 shepherding decision are two more already named in their own blueprints. Do not resolve these by guessing.
+- **Stop and ask when a real decision is needed** — G1 above is now resolved (was a linking gap,
+  not a missing decision), but item 12's mesh-adapter/bebop-repo cross-repo drift (§15.3) is a live
+  current example of the same discipline: the blueprint fully specifies both remediation paths but
+  deliberately does not choose; the intent-interface Stage B/C gates and the WhatsApp D1
+  shepherding decision are two more already named in their own blueprints. Do not resolve these by
+  guessing.
 - **Fold in the 5 in-flight test-sweep agents' findings** (kernel, engine/wasm, agent-lane, tools/apps, web/browser) before starting Phase 0 build work — they may surface bugs in exactly the surfaces (native-spa-server, the intent/compose_ui wiring) this plan depends on being solid.
 
 ---
@@ -3773,7 +3816,11 @@ test coverage.
   (verification: [`BLUEPRINT-ITEM-02-file-event-store-verification-2026-07-19.md`](BLUEPRINT-ITEM-02-file-event-store-verification-2026-07-19.md)).
   Fix scoped there as a follow-up Tier-1 build item (§B territory) — NOT built (Tier-0 read-only audit).
 - **Item 3** — `order_machine` const-adjacency + `idx_of` dedup. Golden signature and 1e-12 oracle
-  already cover it.
+  already cover 2 of the 3 stated proof clauses (verified live 2026-07-20: one `idx_of` definition,
+  golden-signature + 1e-12-oracle tests both green). **The third clause — "zero heap allocations
+  under a counting allocator test" — was never actually built** (zero `count-allocs`/
+  `counting_alloc` references in `order_machine.rs`, confirmed by grep); real blueprint now exists:
+  [`BLUEPRINT-ITEM-03-order-machine-zero-alloc-proof-2026-07-20.md`](BLUEPRINT-ITEM-03-order-machine-zero-alloc-proof-2026-07-20.md).
 - **Item 30** — state-machine proliferation audit (`capability_cert.rs`, `hub_provisioning.rs`,
   `hub_supervisor.rs`, `hydra.rs`). Read-only table. **✅ CLOSED 2026-07-19** —
   [`AUDIT-ITEM-30-state-machine-final-2026-07-19.md`](AUDIT-ITEM-30-state-machine-final-2026-07-19.md)
