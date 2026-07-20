@@ -89,6 +89,7 @@ kernel/src/miri_selftest.rs	-	miri_selftest::	UB	miri	1	item52:planted-OOB-read-
 @ZONE	kernel/src/agent/
 @ZONE	kernel/src/ports/agent/cap.rs
 @ZONE	kernel/src/event_log.rs
+@ZONE	kernel/src/temporal_tmr.rs
 kernel/src/breaker.rs	-	breaker::	34	lib	1,3,5	item9:ONE-gate-admit-Permit;breaker-trip/close/halfopen-exhaustive;Result<Permit,Tripped>-anti-forge
 kernel/src/autonomic.rs	-	autonomic::	7	lib	1	item21:gain-schedule-exhaustive-9-LawTable;no-classification-drives-rate-outside-stable-band;telemetry-emit
 kernel/src/mesh.rs	pq	mesh::	8	lib	1,5	item22:wired-vs-stub-classification(ML-DSA-65-signed-hash-chain);item23:gossip-import-extensions-adversarial;item24:mesh_crypto-KAT-gated
@@ -100,3 +101,4 @@ kernel/src/agent/	-	agent::	52	lib	1	item59:agent-turn-timing-closure(Instant-fr
 kernel/src/ports/agent/cap.rs	-	ports::agent::cap	8	lib	1	item65:typed-capability-boundary-zero-direct-kernel-dependency
 kernel/src/event_log.rs	-	event_log::	13	lib	1	item66:durable-log-scrub(scrubbed-oplog-replay-bound);item2/49-wiring-gap-dependent
 kernel/src/token_bucket.rs	-	proof_gcra	2	kani	5	item8-CLOSED:both-GCRA-Kani-harnesses-VERIFIED-2026-07-20(proof_gcra_transition_contract+proof_gcra_two_step_interleaving;0-failures-each=totals-2);obligation-from-BLUEPRINT-ITEM-07-§5-discharged
+kernel/src/temporal_tmr.rs	-	temporal_tmr::	6	lib	1,3	item12:temporal-TMR-pilot;oracle-deterministic-f-Unanimous;both-non-unanimous-classes-trip-breaker(SingleDissent+NoMajority);fault-injection-seeded-mismatch-caught-falsifiable;debug-differential-tally-cross-check(item3);applied-to-event_log::MeshEvent::event_id+money::apply_tax-only-NOT-kernel-wide;honest-PARTIAL-no-SEU-immunity(stuck-bit+software-bug+shared-silicon-NOT-caught);zero-new-dep;wires-TripCause::VoteMismatch+Kind::Alarm;floor-re-measured-6-on-main-2026-07-20(branch-row-claimed-8,chk-claimed-kani-none-exists)
