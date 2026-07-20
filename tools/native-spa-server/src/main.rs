@@ -11,7 +11,10 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-use native_spa_server::{api::ApiState, build_router, resolve_root, DEFAULT_PORT, DEFAULT_ROOT};
+use native_spa_server::{
+    api::ApiState, build_router, resolve_root, serve_with_timeout, DEFAULT_HEADER_READ_TIMEOUT,
+    DEFAULT_PORT, DEFAULT_ROOT,
+};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -55,9 +58,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         (None, None) => {
             let listener = tokio::net::TcpListener::bind(&addr).await?;
-            eprintln!("[native-spa-server] HTTP/1.1 listening on http://{addr} (root={root})",
-                addr = addr, root = root.display());
-            axum::serve(listener, router).await?;
+            eprintln!("[native-spa-server] HTTP/1.1 listening on http://{addr} (root={root}), \
+                header-read-timeout={t:?}",
+                addr = addr, root = root.display(), t = DEFAULT_HEADER_READ_TIMEOUT);
+            serve_with_timeout(listener, router, DEFAULT_HEADER_READ_TIMEOUT).await?;
         }
         (Some(_), None) | (None, Some(_)) => {
             eprintln!("[native-spa-server] ERROR: --tls-cert and --tls-key must be set together");

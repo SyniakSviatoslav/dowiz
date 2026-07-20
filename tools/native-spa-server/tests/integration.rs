@@ -163,7 +163,12 @@ fn spawn_server(api: &Arc<ApiState>) -> (SocketAddr, std::thread::JoinHandle<()>
             let addr = listener.local_addr().unwrap();
             let _ = tx.send(addr);
             let router: Router = build_router(&root, api);
-            let _ = axum::serve(listener, router).await;
+            let _ = native_spa_server::serve_with_timeout(
+                listener,
+                router,
+                native_spa_server::DEFAULT_HEADER_READ_TIMEOUT,
+            )
+            .await;
         });
     });
     let addr = rx
@@ -560,4 +565,75 @@ fn w37_offline_parity_no_server() {
     // Illegal edge over the offline path is also refused (kernel law, no server).
     let bad = json_api::apply_event_logic(&placed, "DELIVERED");
     assert!(bad.is_err(), "offline illegal edge must be refused");
+}
+
+// ── R15: header-read timeout (slowloris mitigation) ─────────────────────────
+
+/// RED before the fix: bare `axum::serve` has no header-read timeout at all — a
+/// client that opens a connection and sends only a partial request line is held
+/// open indefinitely, tying up a socket (and, at scale, the `MAX_INFLIGHT_API`
+/// bulkhead) for as long as the attacker wants. GREEN after: `serve_with_timeout`
+/// (now the real code path — see `spawn_server` above) disconnects a client that
+/// hasn't finished sending headers within the configured window. Uses a short
+/// 1s timeout (via a dedicated listener, not `spawn_server`'s 10s default) so the
+/// test itself stays fast while proving the exact mechanism production uses.
+#[test]
+fn r15_header_read_timeout_closes_stalled_connection() {
+    let root = web_root().clone();
+    let api = default_api();
+    let (tx, rx) = std::sync::mpsc::channel::<SocketAddr>();
+
+    let _handle = std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().expect("tokio runtime");
+        rt.block_on(async move {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                .await
+                .expect("bind ephemeral");
+            let addr = listener.local_addr().unwrap();
+            let _ = tx.send(addr);
+            let router: Router = build_router(&root, api);
+            let _ = native_spa_server::serve_with_timeout(
+                listener,
+                router,
+                Duration::from_secs(1),
+            )
+            .await;
+        });
+    });
+    let addr = rx
+        .recv_timeout(Duration::from_secs(5))
+        .expect("server should bind and report addr");
+    std::thread::sleep(Duration::from_millis(150));
+
+    let mut stream = TcpStream::connect(addr).expect("connect");
+    // Send an incomplete request line — never send the terminating "\r\n\r\n", so
+    // the server is left waiting for the rest of the headers forever unless the
+    // timeout fires.
+    stream
+        .write_all(b"GET /healthz HTTP/1.1\r\nHost: x\r\n")
+        .expect("partial write");
+
+    // Poll read: before the fix this blocks/returns WouldBlock until our own
+    // deadline below expires (proving the hang); after the fix, the server closes
+    // the connection once its 1s header-read timeout fires, so `read` returns
+    // Ok(0) (EOF) or a reset error well before our generous 4s outer deadline.
+    stream
+        .set_read_timeout(Some(Duration::from_secs(4)))
+        .expect("set read timeout");
+    let mut buf = [0u8; 16];
+    let started = std::time::Instant::now();
+    let result = stream.read(&mut buf);
+    let elapsed = started.elapsed();
+
+    match result {
+        Ok(0) => {}                    // EOF — server closed the connection. Expected.
+        Err(_) => {}                   // Reset/refused — also an acceptable closure signal.
+        Ok(n) => panic!("expected connection close, got {n} bytes of data"),
+    }
+    assert!(
+        elapsed < Duration::from_secs(4),
+        "connection was not closed by the header-read timeout within the outer deadline \
+         (elapsed={elapsed:?}) — the server is hanging on a stalled client exactly like the \
+         pre-fix slowloris-vulnerable behavior"
+    );
 }
