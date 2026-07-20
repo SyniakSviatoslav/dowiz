@@ -3,7 +3,7 @@ name = "agent-loop"
 version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-or-later"
-description = "P40 AgentLoop executor — bounded plan→act→observe over a tool-calling LLM backend. Imports ONLY agent-facade (no direct dowiz-kernel dependency — compile firewall)."
+description = "P40 AgentLoop executor — bounded plan→act→observe over a tool-calling LLM backend. Imports only agent-facade + llm-adapters; NO direct dowiz-kernel edge (compile firewall)."
 
 # Standalone crate at repo root (sibling to kernel/), NOT a workspace member.
 
