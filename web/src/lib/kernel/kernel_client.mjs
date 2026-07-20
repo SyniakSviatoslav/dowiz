@@ -1,8 +1,20 @@
 // Self-contained kernel wasm runtime — NO npm deps, NO `import 'wbg'`.
-// Runtime block copied verbatim from in-repo wasm/demo/pkg/dowiz_wasm.js
-// (wasm-bindgen 0.2.95, same CLI the kernel pins). Loads the kernel wasm in
-// Node AND browser. The kernel owns ALL geo/spectral/FSM math; this shell only
+// Runtime block re-synced verbatim against the CURRENT generated
+// kernel/pkg-web/dowiz_kernel.js (wasm-bindgen 0.2.126 — the version the
+// kernel's Cargo.lock actually pins; a stale 0.2.95 copy here broke every
+// call with "Import #0 module=./dowiz_kernel_bg.js: module is not an object
+// or function", since 0.2.126 renamed the import module key `wbg` →
+// `./dowiz_kernel_bg.js`, the externref table export `__wbindgen_export_0` →
+// `__wbindgen_externrefs`, and — for `Result<String, _>` returns — moved the
+// isErr flag from tuple index 2 to index 3). Loads the kernel wasm in Node
+// AND browser. The kernel owns ALL geo/spectral/FSM math; this shell only
 // calls the wasm exports and decodes their multivalue returns. Zero re-impl.
+//
+// CAUTION: this is a hand-maintained copy of wasm-bindgen-generated glue, not
+// a stable public ABI — re-sync it against the freshly generated
+// kernel/pkg-web/dowiz_kernel.js after any `wasm-bindgen` CLI/crate version
+// bump or wasm.rs surface change (new/changed `#[wasm_bindgen]` fn can shift
+// the auto-numbered cast intrinsics wasm-bindgen emits).
 let wasm;
 const cachedTextDecoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
 let cachedUint8ArrayMemory0 = null;
@@ -23,20 +35,24 @@ function passStringToWasm0(arg) {
   return [ptr, buf.length];
 }
 function getImports() {
-  const imports = {};
-  imports.wbg = {};
-  imports.wbg.__wbindgen_string_new = function (arg0, arg1) { return getStringFromWasm0(arg0, arg1); };
-  imports.wbg.__wbindgen_throw = function (arg0, arg1) { throw new Error(getStringFromWasm0(arg0, arg1)); };
-  imports.wbg.__wbindgen_init_externref_table = function () {
-    const table = wasm.__wbindgen_export_0;
-    const offset = table.grow(4);
-    table.set(0, undefined);
-    table.set(offset + 0, undefined);
-    table.set(offset + 1, null);
-    table.set(offset + 2, true);
-    table.set(offset + 3, false);
+  // wasm-bindgen 0.2.126 imports by module-path key (matching the generated
+  // glue's own filename), not the old fixed `"wbg"` key.
+  const import0 = {
+    // "Cast intrinsic for `Ref(String) -> Externref`" (wasm-bindgen's name for
+    // this one, per the current generated glue) — same job the old
+    // `__wbindgen_string_new` did.
+    __wbindgen_cast_0000000000000001: function (arg0, arg1) { return getStringFromWasm0(arg0, arg1); },
+    __wbindgen_init_externref_table: function () {
+      const table = wasm.__wbindgen_externrefs;
+      const offset = table.grow(4);
+      table.set(0, undefined);
+      table.set(offset + 0, undefined);
+      table.set(offset + 1, null);
+      table.set(offset + 2, true);
+      table.set(offset + 3, false);
+    },
   };
-  return imports;
+  return { './dowiz_kernel_bg.js': import0 };
 }
 // Bind the kernel wasm. `bytes` is a Uint8Array (Node: readFileSync; browser: fetch+arrayBuffer).
 export async function bindKernel(bytes) {
@@ -45,11 +61,16 @@ export async function bindKernel(bytes) {
   wasm.__wbindgen_start();
   return wasm;
 }
-// Decode a multivalue shim return [ptr, len, isErr, ext] → fail-closed {ok:false} or {ok:true, value}.
-// Used by every export that returns Result<String, JsValue>.
+// Decode a multivalue shim return [ptr, len, externrefIdx, isErr] → fail-closed
+// {ok:false} or {ok:true, value}. Used by every export that returns
+// Result<String, JsValue>. (isErr lives at index 3, not 2, under wasm-bindgen
+// 0.2.126 — see the file-header note.)
 function decodeRet(ret) {
-  const isErr = ret[2];
-  if (isErr) return { ok: false, err: 'kernel rejected' };
+  const isErr = ret[3];
+  if (isErr) {
+    try { wasm.__externref_table_dealloc(ret[2]); } catch {}
+    return { ok: false, err: 'kernel rejected' };
+  }
   const s = getStringFromWasm0(ret[0], ret[1]);
   try { wasm.__wbindgen_free(ret[0], ret[1], 1); } catch {}
   return { ok: true, value: s };
