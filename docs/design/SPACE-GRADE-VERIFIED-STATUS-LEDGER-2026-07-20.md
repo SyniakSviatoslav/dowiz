@@ -89,8 +89,33 @@ All evidence below is from live `cargo test --offline --lib [--features pq]` on 
 | 67/68/69 | NEW-BUILD | cost oracle (runtime counters) | after 26/61. |
 | 70/71/72 | NEW-BUILD | digital twin telemetry | after 44/61. |
 
-## Next wave
-NEW-BUILD items executed in dependency order: 27,31,33,46,51,52,53,57,58,60,64 (independent/READY)
-→ then arc 35,36,38 → 34,39,40,41,42 → 43,44,47 → 67-69 → 70-72. Each: build, verify with
-blueprint filter, commit on worktree branch, merge locally at end. Items 28 + 47 remain
-operator-decision-gated (28 optical; 47 needs 35/42 first).
+## NEW-BUILD status (2026-07-20, dispatched)
+| Item | Status | Executor | Notes |
+|------|--------|----------|-------|
+| 27 | IN-PROGRESS | subagent (isolated WT) | PMU classifier input. |
+| 31 | DONE-VERIFIED | main repo | cargo-deny wired in ci.yml:245 already; zero-dep-gate job exists. |
+| 32 | DONE-VERIFIED | main repo | eqc IR extension — item 18 precedent; scalar Expr confirmed; parity oracle exists. |
+| 33 | DONE-VERIFIED | main repo | ITEM-33-RECONCILIATION.md present with real cargo bench evidence; 0/5 claims confirmed (all refuted as noise/unsourced). |
+| 34-44 | IN-PROGRESS | subagent (toy-pilot arc WT) | wave order 35/36/38→34/39/40/41/42→43/44. |
+| 46 | IN-PROGRESS | subagent (isolated WT) | float-determinism golden tests. |
+| 47 | IN-PROGRESS | subagent (toy-pilot arc WT) | guardian gate, after 35/42. |
+| 51 | IN-PROGRESS | subagent (isolated WT) | shadow-mode divergence test. |
+| 52 | DONE-VERIFIED | main repo | miri-gate.sh existed; ci.yml job + manifest rows wired this session (commit c3bd038f7). |
+| 53 | DONE-VERIFIED | main repo | lint-gate.sh existed; ci.yml job wired this session. |
+| 57/58 | IN-PROGRESS | subagent (isolated WT) | HOT-PATHS eff cells. |
+| 60 | IN-PROGRESS | subagent (isolated WT) | engine FRAME_BUDGET_US. |
+| 64 | IN-PROGRESS | subagent (isolated WT) | composition root. |
+| 67-72 | IN-PROGRESS | subagent (cost-twin WT) | cost oracle (67/68/69) + digital twin (70/71/72). |
+| 28 | HOLD | operator-decision-needed | optical compression = GPU/noisy; blueprint flags operator decision. |
+
+Commits this session on exec/space-grade-items-2026-07-20:
+- f16d603d7 item 20 (P95 persistence)
+- 981b24378 HOT-PATHS rows for 17 verified items + this ledger
+- c3bd038f7 ci.yml lint-gate/miri-gate jobs + miri manifest rows
+
+Subagent worktrees (each commits on its own branch, merge locally at end):
+- /root/dowiz-wt-item27, /root/dowiz-wt-item46, /root/dowiz-wt-item51, /root/dowiz-wt-item57,
+  /root/dowiz-wt-item60, /root/dowiz-wt-item64 (independent)
+- /root/dowiz-wt-toyarc (34-44,47)
+- /root/dowiz-wt-costtwin (67-72)
+
