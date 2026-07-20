@@ -9,6 +9,7 @@ edition = "2021"
 [dependencies]
 ureq = { version = "2", features = ["json"] }
 serde_json = "1"
+dowiz-kernel = { path = "../../../kernel", features = ["pq"] }
 
 [[bin]]
 name = "topics"
