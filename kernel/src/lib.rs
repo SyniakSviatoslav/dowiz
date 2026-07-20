@@ -248,6 +248,12 @@ pub mod determinism;
 /// Each fn is emitted by `tools/eqc-rs/src/bin/gen_kernel_organs.rs`; verify
 /// against the hand-written law with a bit-parity `#[test]`.
 pub mod eqc_gen;
+/// §H toy-pilot inference arc (BLUEPRINT-ITEM-34/35/37/38/39/40/41/42/43/44) — a
+/// quantized, constant-time-gated, golden-checksum-guarded toy neural-network
+/// classifier. Always compiled (so the `None`-path / reject-path is always
+/// tested — item 47); the PQ codesign half of the weight pipeline rides behind
+/// the `pq` feature. No new dependencies; integer-domain only.
+pub mod inference;
 /// E1 — verifiable-cognition benchmark generator: metamorphic MR items with
 /// kernel-primitive oracles, deterministic mint-log leakage gate, and
 /// calibration metrics (ECE/Brier/AURC). Pure-offline, zero-dep.
