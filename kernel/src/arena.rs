@@ -263,7 +263,7 @@ mod tests {
 // assumed (see DoD §8.3 #5).
 // ─────────────────────────────────────────────────────────────────────────────
 #[cfg(all(feature = "count-allocs", not(target_arch = "wasm32")))]
-mod counting_alloc {
+pub mod counting_alloc {
     use std::alloc::{GlobalAlloc, Layout, System};
     use std::cell::Cell;
     use std::sync::atomic::{AtomicUsize, Ordering};

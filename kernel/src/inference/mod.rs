@@ -26,3 +26,4 @@
 //! cross-target proof). No new dependencies. Build model: `cargo test --offline --lib`.
 
 pub mod fixed;
+pub mod workspace;
