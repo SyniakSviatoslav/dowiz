@@ -38,38 +38,13 @@ const SEG_B: &str = "fdr.b.jsonl";
 /// segments, so the forensic evidence survives the recovery step).
 pub const POSTMORTEM_LOG: &str = "fdr.postmortem.jsonl";
 
-// ── CRC32 (IEEE 802.3, reflected) — hand-rolled, table-on-first-use ──────────────────
-// ~25 lines, well inside the in-kernel hand-rolled-primitive class (cf. Keccak-f[1600]).
-use std::sync::OnceLock;
-static CRC_TABLE: OnceLock<[u32; 256]> = OnceLock::new();
+// CRC32 is now the SINGLE shared implementation lifted to always-compiled `fdr::crc32`
+// (blueprint §3.2 / item 54) — shared by FDR ring (at-rest per-line CRC), item 40
+// (weights), and item 54 (live-struct Sentinel). Re-exported here for call-site
+// compatibility with the prior `fdr::ring::crc32` path. ONE implementation; the KAT
+// `crc32_matches_known_vector` below stays green.
+pub use super::crc32;
 
-fn crc_table() -> &'static [u32; 256] {
-    CRC_TABLE.get_or_init(|| {
-        let mut t = [0u32; 256];
-        let mut i = 0usize;
-        while i < 256 {
-            let mut c = i as u32;
-            let mut k = 0;
-            while k < 8 {
-                c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
-                k += 1;
-            }
-            t[i] = c;
-            i += 1;
-        }
-        t
-    })
-}
-
-/// CRC32 (IEEE, reflected, `0xFFFFFFFF` init/final-xor) over `data`.
-pub fn crc32(data: &[u8]) -> u32 {
-    let t = crc_table();
-    let mut crc = 0xFFFF_FFFFu32;
-    for &b in data {
-        crc = t[((crc ^ b as u32) & 0xFF) as usize] ^ (crc >> 8);
-    }
-    crc ^ 0xFFFF_FFFF
-}
 
 /// The durable writer. One active segment at a time; switches to the other (truncating
 /// it) at the cap. Fresh session: opens `fdr.a.jsonl` truncated. Use [`recover`] BEFORE

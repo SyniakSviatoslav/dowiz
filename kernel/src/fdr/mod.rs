@@ -52,6 +52,62 @@ pub mod schema;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod ring;
 
+// ── CRC32 (IEEE 802.3, reflected) — hand-rolled, table-on-first-use ──────────────────
+// ALWAYS COMPILED (NOT wasm-gated). Item 54's live-struct Sentinel runs on the kernel
+// decision plane that compiles to wasm32 (CLAUDE.md: "kernel … compiles to WASM"), so the
+// shared CRC32 primitive must be callable from a wasm-compiled path. Lifted here from the
+// wasm-gated `fdr::ring` (blueprint §3.2) — a behavior-preserving move; the KAT
+// `ring::crc32_matches_known_vector` stays green. One implementation shared by FDR ring
+// (at-rest per-line CRC), item 40 (weights), and item 54 (live-struct Sentinel).
+static CRC_TABLE: OnceLock<[u32; 256]> = OnceLock::new();
+
+fn crc_table() -> &'static [u32; 256] {
+    CRC_TABLE.get_or_init(|| {
+        let mut t = [0u32; 256];
+        let mut i = 0usize;
+        while i < 256 {
+            let mut c = i as u32;
+            let mut k = 0;
+            while k < 8 {
+                c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+                k += 1;
+            }
+            t[i] = c;
+            i += 1;
+        }
+        t
+    })
+}
+
+/// CRC32 (IEEE, reflected, `0xFFFFFFFF` init/final-xor) over `data`. Shared by FDR ring
+/// (at-rest per-line CRC), item 40 (read-only weights), and item 54 (live-struct
+/// Sentinel). One implementation, always compiled.
+pub fn crc32(data: &[u8]) -> u32 {
+    let t = crc_table();
+    let mut crc = 0xFFFF_FFFFu32;
+    for &b in data {
+        crc = t[((crc ^ b as u32) & 0xFF) as usize] ^ (crc >> 8);
+    }
+    crc ^ 0xFFFF_FFFF
+}
+
+/// Emit ONE `Alarm` FDR record (the fault-evidence kind; fsynced on append by the durable
+/// ring — power-loss durable, `ring.rs:134`). No-op unless an FDR sink is installed, so
+/// callers may call unconditionally; the record materializes only where FDR is enabled.
+/// `struct_name` names the corrupted live struct (item 54 Safe-State evidence); `detail`
+/// carries the fault reason. Item 54's fail-closed path is the value — the record is the
+/// forensic side-effect.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn emit_alarm(struct_name: &str, detail: &str) {
+    sink::emit_alarm(struct_name, detail);
+}
+
+/// On `wasm32` no FDR sink is ever installed, so alarm emission is inert. Item 54's
+/// decision-plane CRC check STILL runs on wasm (it is the fail-closed path that matters);
+/// only the durable record is skipped there.
+#[cfg(target_arch = "wasm32")]
+pub fn emit_alarm(_struct_name: &str, _detail: &str) {}
+
 mod macros; // hoists `fdr_*` to crate root via #[macro_export]; re-exported below.
 
 // Re-export the macros under the `fdr::` path (both `crate::fdr::info_span!` internally
@@ -358,7 +414,7 @@ pub fn install_panic_hook() {
             .location()
             .map(|l| format!("{}:{}:{}", l.file(), l.line(), l.column()))
             .unwrap_or_else(|| "<unknown location>".to_string());
-        sink::emit_alarm(message, location);
+        sink::emit_panic_alarm(message, location);
         // Chain to the previous hook (a harness-installed hook must not be clobbered).
         prev(info);
     }));
@@ -517,7 +573,7 @@ mod sink {
     /// crash before the process unwinds. Best-effort: errors are swallowed (like
     /// `emit_event` at mod.rs:389-393), so a write failure never turns a panic into a
     /// double-panic. No-op when no sink is installed (matches every other FDR emit).
-    pub fn emit_alarm(message: String, location: String) {
+    pub fn emit_panic_alarm(message: String, location: String) {
         let s = match SINK.get() {
             Some(s) => s,
             None => return,
@@ -529,10 +585,7 @@ mod sink {
             Kind::Alarm,
             "panic".to_string(),
             StampPolicy::Full,
-            vec![
-                ("message", message),
-                ("location", location),
-            ],
+            vec![("message", message), ("location", location)],
         );
         if s.stderr {
             let _ = writeln!(std::io::stderr(), "{}", ev.to_json());
@@ -540,6 +593,37 @@ mod sink {
         if let Some(r) = &s.ring {
             if let Ok(mut r) = r.lock() {
                 let _ = r.append(&ev); // Alarm ⇒ fsync inside append (ring.rs:134).
+            }
+        }
+    }
+
+    /// Item 54 Safe-State fault evidence: emit ONE `Alarm` FDR record naming a corrupted
+    /// live struct (`name`) with the fault `detail`, fsynced via the durable ring (the ring
+    /// fsyncs on `Kind::Alarm`, `ring.rs:134` — power-loss durable). This is the sink-side
+    /// impl the `fdr::emit_alarm` facade (mod.rs:101) delegates to. No-op when no sink/ring
+    /// is installed.
+    pub fn emit_alarm(name: &str, detail: &str) {
+        let s = match SINK.get() {
+            Some(s) => s,
+            None => return,
+        };
+        let seq = next_seq(s);
+        // Alarms carry a FULL hw stamp (alarm-class, blueprint §4.2) for forensic value.
+        let ev = FdrEvent::stamp(
+            seq,
+            Level::Error,
+            Kind::Alarm,
+            name.to_string(),
+            StampPolicy::Full,
+            vec![("detail", detail.to_string())],
+        );
+        let line = ev.to_json();
+        if s.stderr {
+            let _ = writeln!(std::io::stderr(), "{line}");
+        }
+        if let Some(r) = &s.ring {
+            if let Ok(mut r) = r.lock() {
+                let _ = r.append(&ev);
             }
         }
     }
