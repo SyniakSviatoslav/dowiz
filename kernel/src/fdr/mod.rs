@@ -484,6 +484,55 @@ pub fn clean_shutdown() {
     sink::clean_shutdown();
 }
 
+// ── Item 51: shadow-mode divergence telemetry ───────────────────────────────────
+//
+// ADVISORY, non-gating. On every decision where AI advice was present, the kernel
+// records whether the proposed action AGREED with the deterministic decision D — digests
+// ONLY (never full payloads), via one `Kind::ShadowDivergence` FDR record. The variant is
+// WRITE-ONLY: no code path EVER reads a `ShadowDivergence` record to change a decision or
+// trip a gate, so the telemetry cannot alter D. The bite-identical-D proof
+// (`decision/mod.rs::shadow_mode_does_not_alter_decision`) pins that contract.
+//
+// Digest primitive: truncated SHA3-256 (wasm-safe, no wasm lift required — see blueprint
+// §7.1). A single `emit_shadow_divergence` call is the whole hook; it is a no-op unless an
+// FDR sink is installed, inheriting the FDR module's zero-default-cost posture.
+
+/// Truncated (8-byte) SHA3-256 digest, rendered as a lowercase hex string. Was-safe: uses
+/// `crate::event_log::sha3_256` (pure Rust, no wasm-gated primitive). Used by item 51's
+/// `d_digest` / `act_digest` fields — a minimal statistic, never the full payload.
+pub fn shadow_digest(data: &[u8]) -> String {
+    let h = crate::event_log::sha3_256(data);
+    let mut s = String::with_capacity(16);
+    for b in &h[..8] {
+        s.push_str(&format!("{b:02x}"));
+    }
+    s
+}
+
+/// Emit ONE advisory `ShadowDivergence` FDR record. No-op unless a sink is installed — so
+/// callers may emit unconditionally at zero default cost; the record materializes only where
+/// FDR is enabled. `agree` is the verdict of `proposal.action == D`; `d_digest`/`act_digest`
+/// are truncated SHA3-256 digests of D and the proposed action (payloads are NEVER logged).
+#[cfg(not(target_arch = "wasm32"))]
+pub fn emit_shadow_divergence(
+    site: &'static str,
+    verdict: &str,
+    agree: bool,
+    d_digest: &str,
+    act_digest: &str,
+) {
+    sink::emit_shadow_divergence(site, verdict, agree, d_digest, act_digest);
+}
+#[cfg(target_arch = "wasm32")]
+pub fn emit_shadow_divergence(
+    _site: &'static str,
+    _verdict: &str,
+    _agree: bool,
+    _d_digest: &str,
+    _act_digest: &str,
+) {
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 mod sink {
     use super::schema::{FdrEvent, Kind, StampPolicy};
@@ -801,6 +850,48 @@ mod sink {
         if let Some(r) = &s.ring {
             if let Ok(mut r) = r.lock() {
                 let _ = r.clean_shutdown();
+            }
+        }
+    }
+
+    /// Item 51 (shadow-mode divergence telemetry): emit ONE advisory
+    /// `ShadowDivergence`-kind FDR record carrying the decision-site id, the verdict class,
+    /// the agree bit, and truncated digests of D and the proposed action. ADVISORY only:
+    /// nothing here consumes the record to change a decision — it is pure write-only
+    /// telemetry. No-op when no sink is installed (matches every other FDR emit).
+    pub fn emit_shadow_divergence(
+        site: &'static str,
+        verdict: &str,
+        agree: bool,
+        d_digest: &str,
+        act_digest: &str,
+    ) {
+        let s = match SINK.get() {
+            Some(s) => s,
+            None => return,
+        };
+        let seq = next_seq(s);
+        // Shadow-divergence records are high-frequency and advisory → CHEAP hw stamp
+        // (blueprint §4.2 cost control, same rationale as `Event`/`Tuning`).
+        let ev = FdrEvent::stamp(
+            seq,
+            Level::Info,
+            Kind::ShadowDivergence,
+            site.to_string(),
+            StampPolicy::Cheap,
+            vec![
+                ("verdict", verdict.to_string()),
+                ("agree", if agree { "1" } else { "0" }.to_string()),
+                ("d_digest", d_digest.to_string()),
+                ("act_digest", act_digest.to_string()),
+            ],
+        );
+        if s.stderr {
+            let _ = writeln!(std::io::stderr(), "{}", ev.to_json());
+        }
+        if let Some(r) = &s.ring {
+            if let Ok(mut r) = r.lock() {
+                let _ = r.append(&ev);
             }
         }
     }
