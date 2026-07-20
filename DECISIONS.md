@@ -238,6 +238,15 @@ document (§0.2's two rulings, or any §16/§17 decision it cites).
 
 ## D13. Async/tokio adoption across the agent lane — DIRECTIONAL RULING, migration NOT scoped (operator, 2026-07-20)
 
+> **Scoping pass delivered, pending operator confirmation:**
+> [`CONCURRENCY-ARCHITECTURE-SYNTHESIS-2026-07-20.md`](docs/design/CONCURRENCY-ARCHITECTURE-SYNTHESIS-2026-07-20.md)
+> resolves this directional ruling into a per-surface recommendation, informed by two Opus research
+> passes (native-concurrency/exokernel-inspired architecture; the end-to-end principle). Its §10
+> lists 5 explicit confirmation questions — several recommendations are narrower than a literal
+> "adopt tokio broadly" reading (e.g. `ToolPort`/`agent-loop`/kernel ports stay synchronous
+> permanently; tokio's designated entry path is the not-yet-built `mesh-adapter` networking layer,
+> evidence-gated). **Not yet implemented; not yet re-confirmed.**
+
 While reviewing `BLUEPRINT-SPATIAL-STOREFRONT-VOICE-HUB-SYNTHESIS-2026-07-20.md`'s open decisions,
 the operator confirmed the blueprint's synchronous, thread-based voice architecture (D-V1) as
 valuable, then separately stated tokio/async adoption is "a must across the system." Asked to
