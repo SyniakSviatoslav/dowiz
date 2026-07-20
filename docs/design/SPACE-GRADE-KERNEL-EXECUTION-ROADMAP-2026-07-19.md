@@ -700,6 +700,10 @@ dispatches it.
   full suite runs green inside the job; the feature-gate law is recorded in §H's header and the
   AI module's own doc when it lands. See
   [`BLUEPRINT-ITEM-45-ai-optional-gate-2026-07-19.md`](BLUEPRINT-ITEM-45-ai-optional-gate-2026-07-19.md).
+  **Status correction (2026-07-20, `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md`):** `scripts/ai-optional-gate.sh`
+  exists on `main` (169 lines, real logic, landed via `cb00706b1`) but is **not referenced in any
+  `.github/workflows/*.yml` job** — the "New CI job" described above is written but not yet live.
+  Script-exists ≠ gate-live; do not read this item as CI-enforced until the workflow wiring lands.
 - **Item 46 — float-determinism containment, evidence-scoped (READY NOW; composes with item 14's
   closed bump gate).** NOT a kernel-wide f64→fixed rewrite — rejected as disproportionate
   (synthesis §2.3: the one real float-nondeterminism bug ever shipped was libm `sin`/`cos` ULP
@@ -1383,6 +1387,9 @@ AI-safety literature, addressed structurally, not by policy.
   `docs/audits/hardening/CHECKLIST.md`; item 74's registry carries this section's own machinery
   as rows (the recursion recorded, not implied). See
   [`BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md`](BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md).
+  **Status correction (2026-07-20, `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md`):** `scripts/gate-root-invariant.sh`
+  exists on `main` (real logic, landed via `cb00706b1`) but is **not wired into any CI workflow** —
+  clause (ii)'s "CI check" is written but not yet live.
 - **Item 74 — the red-line/core registry: grounded machine-readable enumeration of what AI
   proposals may NEVER touch (after item 73's spec; the safety-critical deliverable of this arc —
   every row cited, zero hand-waving).** Format: a machine-read manifest in the `HOT-PATHS.tsv`
@@ -1412,6 +1419,10 @@ AI-safety literature, addressed structurally, not by policy.
   zones); one planted diff per row CLASS demonstrably refused (P7); the registry file is
   itself in the registry (self-row test). See
   [`BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md`](BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md).
+  **Status correction (2026-07-20, `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md`):** `scripts/red-line-classifier.sh`,
+  `scripts/red-line-monotonicity.sh`, and `scripts/verify-item-74.sh` all exist on `main` (real
+  logic, landed via `cb00706b1`) but **none are wired into any CI workflow** — the diff-classifier
+  proof above is written but not yet a live gate.
 - **Item 75 — the change-proposal pipeline: typed `ChangeProposal` → kernel-gate verification →
   explicit human approval → recorded application (after items 73+74; extends item 47's grammar
   to the code plane — same shape, different plane, no parallel admission concept).** An
