@@ -20,28 +20,37 @@
 
 use crate::cache::{CachingBackend, NoCache};
 use crate::dispatch::{DispatchError, Dispatcher};
+use crate::managed::ManagedApiAdapter;
 use crate::ollama::OllamaAdapter;
 use dowiz_kernel::backup::MemStore;
 use dowiz_kernel::ports::llm::{
-    Caps, ChatRequest, ChatResponse, EmbedRequest, EmbedResponse, LlmBackend, LlmError,
-    RerankRequest, RerankResponse,
+    AiMode, BackendConfig, Caps, ChatRequest, ChatResponse, ConfigError, EmbedRequest,
+    EmbedResponse, LlmBackend, LlmError, RerankRequest, RerankResponse,
 };
 use std::sync::Arc;
 
 /// Default Ollama base URL (the daemon already running on this host).
 pub const DEFAULT_OLLAMA_BASE: &str = "http://127.0.0.1:11434";
 
-/// A fully-wired harness over a concrete store `S` (`MemStore` = caching on, `NoCache` = off).
+/// A fully-wired harness over a concrete backend `B` and store `S`
+/// (`MemStore` = caching on, `NoCache` = off).
 ///
 /// Chat goes through the bounded `Dispatcher` (token budget + typed `BudgetExceeded` refusal,
 /// H1 EV harvest); embed/rerank go through the same cache-fronted backend directly (embed caching
 /// powers the semantic-leak gate; the dispatcher's per-call budget does not apply to embeddings).
-pub struct Harness<S: dowiz_kernel::backup::BlockStore + Send + Sync + 'static> {
-    dispatcher: Dispatcher<CachingBackend<OllamaAdapter, S>>,
-    backend: Arc<CachingBackend<OllamaAdapter, S>>,
+///
+/// Made generic over `B: LlmBackend` so production composition can select the backend at runtime
+/// from [`BackendConfig`] (blueprint §2.2) — `OllamaAdapter` (LocalOffline) or the managed
+/// `OpenAiCompatTransport` (Connected) — while the existing `StackBuilder` fluent API stays
+/// Ollama-only for tests/embedders that want explicit control.
+pub struct Harness<B: LlmBackend + Send + Sync + 'static, S: dowiz_kernel::backup::BlockStore + Send + Sync + 'static> {
+    dispatcher: Dispatcher<CachingBackend<B, S>>,
+    backend: Arc<CachingBackend<B, S>>,
 }
 
-impl<S: dowiz_kernel::backup::BlockStore + Send + Sync + 'static> Harness<S> {
+impl<B: LlmBackend + Send + Sync + 'static, S: dowiz_kernel::backup::BlockStore + Send + Sync + 'static>
+    Harness<B, S>
+{
     /// Dispatch a chat request through the bounded dispatcher (budget + EV harvest).
     pub fn chat(&self, req: ChatRequest) -> Result<ChatResponse, DispatchError> {
         self.dispatcher.dispatch(req)
@@ -66,6 +75,88 @@ impl<S: dowiz_kernel::backup::BlockStore + Send + Sync + 'static> Harness<S> {
     pub fn caps(&self) -> Caps {
         self.backend.caps()
     }
+
+    /// Backend id (cache-key/telemetry provenance).
+    pub fn backend_id(&self) -> &str {
+        self.backend.id()
+    }
+}
+
+/// A ready, fully-wired LLM surface produced by [`StackBuilder::from_config`].
+///
+/// The two live modes construct different concrete backends (LocalOffline →
+/// `OllamaAdapter`; Connected → `ManagedApiAdapter` over `OpenAiCompatTransport`), but both
+/// present the same `chat`/`embed`/`rerank`/`health`/`caps` surface. Callers match on `Ready`
+/// and dispatch against the inner harness without naming the concrete backend type.
+pub enum Stack {
+    /// Local Ollama (loopback) backend.
+    Local(Harness<OllamaAdapter, MemStore>),
+    /// Managed/remote OpenAI-compatible backend (Connected mode).
+    Managed(Harness<ManagedApiAdapter, MemStore>),
+}
+
+impl Stack {
+    /// Dispatch a chat request through the bounded dispatcher.
+    pub fn chat(&self, req: ChatRequest) -> Result<ChatResponse, DispatchError> {
+        match self {
+            Stack::Local(h) => h.chat(req),
+            Stack::Managed(h) => h.chat(req),
+        }
+    }
+
+    /// Embed through the cache-fronted backend.
+    pub fn embed(&self, req: &EmbedRequest) -> Result<EmbedResponse, LlmError> {
+        match self {
+            Stack::Local(h) => h.embed(req),
+            Stack::Managed(h) => h.embed(req),
+        }
+    }
+
+    /// Rerank through the backend (Ollama → `Err(Unsupported)` fail-closed).
+    pub fn rerank(&self, req: &RerankRequest) -> Result<RerankResponse, LlmError> {
+        match self {
+            Stack::Local(h) => h.rerank(req),
+            Stack::Managed(h) => h.rerank(req),
+        }
+    }
+
+    /// Degrade-closed health passthrough.
+    pub fn health(&self) -> Result<(), LlmError> {
+        match self {
+            Stack::Local(h) => h.health(),
+            Stack::Managed(h) => h.health(),
+        }
+    }
+
+    /// Capability surface of the wired backend.
+    pub fn caps(&self) -> Caps {
+        match self {
+            Stack::Local(h) => h.caps(),
+            Stack::Managed(h) => h.caps(),
+        }
+    }
+
+    /// Backend id (cache-key/telemetry provenance).
+    pub fn backend_id(&self) -> &str {
+        match self {
+            Stack::Local(h) => h.backend_id(),
+            Stack::Managed(h) => h.backend_id(),
+        }
+    }
+}
+
+/// Composition result of [`StackBuilder::from_config`].
+///
+/// `Disabled` is **feature absence, not failure**: for `AiMode::Off` no adapter, transport, or
+/// thread pool is constructed, and callers treat the agent surface as absent — every LLM-backed
+/// feature degrades closed rather than surfacing errors at call time. Only the deliberate `Off`
+/// state is silent-by-design; every other misconfiguration surfaces as a typed [`ConfigError`]
+/// returned from `from_config` (blueprint §2.2).
+pub enum Composed {
+    /// No backend is constructed. The agent surface is absent by design.
+    Disabled,
+    /// A backend was successfully wired and is ready to serve requests.
+    Ready(Stack),
 }
 
 /// Config-driven builder for the harness stack (M5: backend choice is config, not a fork).
@@ -124,7 +215,7 @@ impl StackBuilder {
     fn build_with<S: dowiz_kernel::backup::BlockStore + Send + Sync + Clone + 'static>(
         self,
         store: S,
-    ) -> Harness<S> {
+    ) -> Harness<OllamaAdapter, S> {
         let ollama = OllamaAdapter::new(&self.base);
         let backend = Arc::new(CachingBackend::with_store(ollama, store));
         // `Dispatcher::new` Arcs the backend again; both handles share the SAME cache store
@@ -142,20 +233,83 @@ impl StackBuilder {
     }
 
     /// Build with the in-memory cache enabled.
-    pub fn build_cached(self) -> Harness<MemStore> {
+    pub fn build_cached(self) -> Harness<OllamaAdapter, MemStore> {
         self.build_with(MemStore::new())
     }
 
     /// Build with caching disabled (every call reaches the backend).
-    pub fn build_uncached(self) -> Harness<NoCache> {
+    pub fn build_uncached(self) -> Harness<OllamaAdapter, NoCache> {
         self.build_with(NoCache)
+    }
+
+    /// Compose a harness from resolved [`BackendConfig`] (blueprint §2.2 — `AiMode` becomes the
+    /// real composition switch).
+    ///
+    /// Returns a typed [`Composed`]:
+    /// - `AiMode::Off` ⇒ `Composed::Disabled` — **no** adapter/transport/pool is constructed.
+    ///   This is feature absence, not failure; callers degrade closed.
+    /// - `AiMode::LocalOffline` ⇒ `Composed::Ready(Stack::Local(Harness<OllamaAdapter>))`, fed the
+    ///   loopback-verified `cfg.base_url`. The loopback pin is enforced upstream by
+    ///   `BackendConfig`; composition never re-validates or widens.
+    /// - `AiMode::Connected` ⇒ `Composed::Ready(Stack::Managed(Harness<ManagedApiAdapter>))`
+    ///   wired with `Quirks::managed_api(api_key)` over `cfg.base_url`.
+    ///
+    /// `BackendConfig` is already fail-closed (it refuses partial `Connected` config and non-loopback
+    /// `LocalOffline` in `from_env`), so resolution errors (`NonLoopbackLocal` / `MissingBaseUrl` /
+    /// `MissingApiKey` / `UnknownMode`) surface before `from_config` ever runs — misconfiguration is
+    /// loud and early. `from_config` itself only adds a guard that `Connected` carries its key.
+    ///
+    /// The caller normally resolves `cfg` via `BackendConfig::from_env()`; tests use the injected
+    /// `from_env_get` and pass the resolved `&BackendConfig` directly, no global env mutation.
+    pub fn from_config(&self, cfg: &BackendConfig) -> Result<Composed, ConfigError> {
+        match cfg.mode {
+            // No backend — feature absence, degrade closed. Nothing is constructed.
+            AiMode::Off => Ok(Composed::Disabled),
+
+            // Local loopback Ollama. Loopback already enforced by BackendConfig::from_env; we
+            // trust `cfg.base_url` verbatim (never re-validate, never widen).
+            AiMode::LocalOffline => {
+                let ollama = OllamaAdapter::new(&cfg.base_url);
+                let backend = Arc::new(CachingBackend::with_store(ollama, MemStore::new()));
+                let dispatcher = Dispatcher::new(
+                    (*backend).clone(),
+                    self.workers,
+                    self.capacity,
+                    self.refill_rate,
+                );
+                Ok(Composed::Ready(Stack::Local(Harness {
+                    dispatcher,
+                    backend,
+                })))
+            }
+
+            // Connected managed/remote backend. api_key already loaded from file by
+            // BackendConfig::from_env (never placed in process env).
+            AiMode::Connected => {
+                let key = cfg.api_key.clone().ok_or(ConfigError::MissingApiKey)?;
+                let managed = ManagedApiAdapter::new(cfg.base_url.clone(), &key);
+                let backend = Arc::new(CachingBackend::with_store(managed, MemStore::new()));
+                let dispatcher = Dispatcher::new(
+                    (*backend).clone(),
+                    self.workers,
+                    self.capacity,
+                    self.refill_rate,
+                );
+                Ok(Composed::Ready(Stack::Managed(Harness {
+                    dispatcher,
+                    backend,
+                })))
+            }
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dowiz_kernel::ports::llm::{Message, TaskClass};
+    use dowiz_kernel::ports::llm::{
+        AiMode, BackendConfig, ConfigError, Message, TaskClass,
+    };
 
     fn chat_req(model: &str, text: &str) -> ChatRequest {
         ChatRequest {
@@ -175,7 +329,7 @@ mod tests {
     fn assert_send_sync<T: Send + Sync>() {}
     #[test]
     fn harness_stack_is_send_sync() {
-        assert_send_sync::<Harness<MemStore>>();
+        assert_send_sync::<Harness<OllamaAdapter, MemStore>>();
     }
 
     // Live: build the default stack, run one chat — exercises ollama → cache → dispatcher end-to-end.
@@ -218,5 +372,180 @@ mod tests {
             768,
             "nomic-embed-text returns 768-d vectors"
         );
+    }
+
+    // ── Phase 1: `AiMode` becomes the real composition switch (BLUEPRINT §2.2 / §8) ──
+    // Deterministic logic tests — no global env mutation (uses a temp key file for the
+    // Connected path). Hidden behind the `cfg(test)` module so they share the crate's deps.
+
+    /// Inject an environment reader backed by a fixed map (mirrors the kernel's `from_env_get`).
+    fn env<'a>(map: &'a [(&'a str, &'a str)]) -> impl Fn(&str) -> Option<String> + 'a {
+        move |k: &str| map.iter().find(|(key, _)| *key == k).map(|(_, v)| v.to_string())
+    }
+
+    /// Write a temp key file for the Connected happy-path; returns its path. Caller removes it.
+    fn temp_key_file(contents: &str) -> std::path::PathBuf {
+        // Unique per call (counter) so parallel/concurrent tests never clobber each other's file.
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, Ordering::SeqCst);
+        let p = std::env::temp_dir().join(format!(
+            "swave_lmw_p1_key_{}_{}.txt",
+            std::process::id(),
+            n
+        ));
+        std::fs::write(&p, contents).unwrap();
+        p
+    }
+
+    // (1) Off (and unset DOWIZ_AI_MODE) composes to Disabled: NO adapter/transport/pool is built.
+    //     Matching on `Composed::Disabled` is the proof nothing was constructed.
+    #[test]
+    fn from_config_off_is_disabled_feature_absent() {
+        // unset env ⇒ Off by the fail-closed default.
+        let cfg = BackendConfig::from_env_get(env(&[])).expect("unset env ⇒ Off");
+        assert_eq!(cfg.mode, AiMode::Off);
+        let composed = StackBuilder::default().from_config(&cfg).expect("Off composes");
+        assert!(
+            matches!(composed, Composed::Disabled),
+            "Off must compose to Composed::Disabled (no backend constructed)"
+        );
+
+        // explicit "off" string is also Disabled.
+        let cfg_off = BackendConfig::from_env_get(env(&[("DOWIZ_AI_MODE", "off")])).unwrap();
+        assert_eq!(cfg_off.mode, AiMode::Off);
+        assert!(
+            matches!(
+                StackBuilder::default().from_config(&cfg_off).unwrap(),
+                Composed::Disabled
+            ),
+            "explicit off ⇒ Disabled"
+        );
+    }
+
+    // (2) Non-loopback LocalOffline never reaches composition: `from_env_get` returns
+    //     `ConfigError::NonLoopbackLocal`, and a test asserts no adapter type is ever constructed
+    //     on that path (the error short-circuits before any `OllamaAdapter`/`from_config` call).
+    #[test]
+    fn from_config_local_non_loopback_refused_no_adapter() {
+        // A "local" mode pointing at a public host is a lie the type refuses.
+        let err = BackendConfig::from_env_get(env(&[
+            ("DOWIZ_AI_MODE", "local"),
+            ("DOWIZ_LLM_BASE_URL", "https://example.com:11434"),
+        ]))
+        .expect_err("non-loopback local must be refused");
+        assert_eq!(
+            err,
+            ConfigError::NonLoopbackLocal("https://example.com:11434".to_string()),
+            "non-loopback local ⇒ typed NonLoopbackLocal"
+        );
+        // Because the error is raised in resolution, `from_config` is never even called — no
+        // adapter/transport is constructed. Assert the resolver short-circuits (no Ok path exists).
+        match err {
+            ConfigError::NonLoopbackLocal(_) => { /* expected: composition never ran */ }
+            other => panic!("expected NonLoopbackLocal, got {:?}", other),
+        }
+    }
+
+    // (3) LocalOffline with default/loopback base composes to Ready wrapping the Ollama
+    //     constructor with the config's base URL — assert the stack's backend id/base, not
+    //     live traffic.
+    #[test]
+    fn from_config_local_loopback_ready_with_correct_base() {
+        // default local (no explicit base) ⇒ loopback pin.
+        let cfg =
+            BackendConfig::from_env_get(env(&[("DOWIZ_AI_MODE", "local")])).expect("local parses");
+        assert_eq!(cfg.mode, AiMode::LocalOffline);
+        let composed = StackBuilder::default().from_config(&cfg).expect("local composes");
+        match composed {
+            Composed::Ready(Stack::Local(h)) => {
+                // The wired backend must be the Ollama adapter at the resolved loopback base.
+                assert_eq!(h.backend_id(), "ollama", "Local mode wires OllamaAdapter");
+                assert_eq!(
+                    cfg.base_url, "http://127.0.0.1:11434",
+                    "default local base is loopback"
+                );
+            }
+            other => panic!("expected Ready(Stack::Local), got {:?}", matches!(&other, Composed::Disabled)),
+        }
+
+        // explicit loopback base is honored verbatim.
+        let cfg2 = BackendConfig::from_env_get(env(&[
+            ("DOWIZ_AI_MODE", "local"),
+            ("DOWIZ_LLM_BASE_URL", "http://localhost:11434"),
+        ]))
+        .expect("local+localhost parses");
+        let composed2 = StackBuilder::default().from_config(&cfg2).expect("local composes");
+        match composed2 {
+            Composed::Ready(Stack::Local(h)) => {
+                assert_eq!(h.backend_id(), "ollama");
+                assert_eq!(cfg2.base_url, "http://localhost:11434");
+            }
+            _ => panic!("expected Ready(Stack::Local) for explicit loopback base"),
+        }
+    }
+
+    // (4) Connected with COMPLETE config composes to Ready on the OpenAiCompatTransport +
+    //     Quirks::managed_api path; partial config (MissingBaseUrl / MissingApiKey) is a typed
+    //     composition-time refusal (raised by resolution, propagated through from_config).
+    #[test]
+    fn from_config_connected_complete_ready_managed_path() {
+        let key_path = temp_key_file("  sk-managed-abc123\n  ");
+        let cfg = BackendConfig::from_env_get(env(&[
+            ("DOWIZ_AI_MODE", "connected"),
+            ("DOWIZ_LLM_BASE_URL", "https://api.managed.example/v1"),
+            ("DOWIZ_LLM_API_KEY_FILE", key_path.to_str().unwrap()),
+        ]))
+        .expect("fully-specified connected parses");
+        assert_eq!(cfg.mode, AiMode::Connected);
+        let composed = StackBuilder::default().from_config(&cfg).expect("connected composes");
+        match composed {
+            Composed::Ready(Stack::Managed(h)) => {
+                assert_eq!(
+                    h.backend_id(),
+                    "openai-compat",
+                    "Connected mode wires OpenAiCompatTransport"
+                );
+            }
+            _ => panic!("expected Ready(Stack::Managed) for complete connected config"),
+        }
+        let _ = std::fs::remove_file(&key_path);
+    }
+
+    // (4b) Partial Connected config is a typed refusal: missing base url ⇒ MissingBaseUrl, and
+    //      the composition path is never reached (no adapter constructed).
+    #[test]
+    fn from_config_connected_missing_base_url_refused() {
+        let key_path = temp_key_file("sk-managed-xyz");
+        let err = BackendConfig::from_env_get(env(&[
+            ("DOWIZ_AI_MODE", "connected"),
+            ("DOWIZ_LLM_API_KEY_FILE", key_path.to_str().unwrap()),
+        ]))
+        .expect_err("connected without base url must be refused");
+        assert_eq!(
+            err,
+            ConfigError::MissingBaseUrl,
+            "connected without base url ⇒ MissingBaseUrl (never a local fallback)"
+        );
+        // The refusal is raised in resolution; from_config is never called on this path.
+        assert!(matches!(err, ConfigError::MissingBaseUrl));
+        let _ = std::fs::remove_file(&key_path);
+    }
+
+    // (4c) Partial Connected config: base url present but key file absent ⇒ MissingApiKey refusal,
+    //      no adapter constructed.
+    #[test]
+    fn from_config_connected_missing_api_key_refused() {
+        let err = BackendConfig::from_env_get(env(&[
+            ("DOWIZ_AI_MODE", "connected"),
+            ("DOWIZ_LLM_BASE_URL", "https://api.managed.example/v1"),
+        ]))
+        .expect_err("connected without key file must be refused");
+        assert_eq!(
+            err,
+            ConfigError::MissingApiKey,
+            "connected without key file ⇒ MissingApiKey"
+        );
+        assert!(matches!(err, ConfigError::MissingApiKey));
     }
 }
