@@ -106,7 +106,7 @@ All evidence below is from live `cargo test --offline --lib [--features pq]` on 
 | 60 | DONE-VERIFIED | subagent (WT exec/item60-d397d54db080) | already at HEAD (cb00706b1); independent re-check: 122 passed (engine --lib) + FRAME_BUDGET_US pin. |
 | 64 | DONE-VERIFIED | subagent (WT exec/item64-*) | commit 7f8c23b2a5; independent re-check: 5 passed. |
 | 67-72 | IN-PROGRESS | subagent (cost-twin WT) | cost oracle (67/68/69) + digital twin (70/71/72). |
-| 28 | IN-PROGRESS | subagent (isolated WT) | operator RULED IN (2026-07-20): archival-plane-only; model weights = runtime seam (pq/entropy.rs precedent), zero-dep spirit preserved. Phase A doc + Phase B optical.rs behind `optical` feature + §1.5 plane-boundary unrepresentability test. |
+| 28 | DONE-VERIFIED | subagent (WT exec/item28-optical) | Phase A doc + optical.rs behind `optical` feature; commit in WT; independent re-check: 3 passed (optical.rs:225 headline); zero-dep gate holds (0 ext crates). |
 
 Commits this session on exec/space-grade-items-2026-07-20:
 - f16d603d7 item 20 (P95 persistence)
