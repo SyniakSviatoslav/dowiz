@@ -1,11 +1,11 @@
 ---
 id: KS-BLUEPRINT
 title: Consolidated Knowledge Spine — SDD + Plans + Docs + Memory (graph + vector)
-status: proposed            # proposed | active | done | superseded | archived
+status: done                # proposed | active | done | superseded | archived — corrected 2026-07-20: kernel/src/bin/spine_snapshot.rs confirmed landed on main, this frontmatter was stale (work outran its own doc)
 type: blueprint             # constitution | spec | change | adr | blueprint | roadmap | steering | reflection | lesson | regression | memory | report
 owner: SyniakSviatoslav
 created: 2026-07-14
-updated: 2026-07-14
+updated: 2026-07-20
 supersedes: []
 superseded_by: null
 links:

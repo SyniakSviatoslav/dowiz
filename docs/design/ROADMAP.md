@@ -267,6 +267,91 @@ separate — that's ~50 individual files, not itself a competing top-level roadm
 
 ---
 
+## 13. Verified-status corrections, P-series (2nd-pass audit, 2026-07-20, same day)
+
+Following the full merge, the operator asked for a fresh, evidence-based (not doc-trusted) sweep
+of every P-number's actual landed-status. Three parallel passes ran: P01–P96, space-grade 1–78
+(corrections folded into Part V directly, see its reconciliation table + the 2nd-pass correction
+block after it — items 61/62/66 were found *wrongly marked done* there), and a full
+`docs/design/` reachability sweep (§14 below). This section carries the P-series findings; nothing
+below duplicates what a prior audit already confirmed accurate — only genuine corrections and
+newly-confirmed unresolved items are listed.
+
+**Corrections — a live doc's claimed status did not match `main`'s real content:**
+
+| P-number | Doc claimed | Verified reality | Evidence |
+|---|---|---|---|
+| **P37** | PLANNED (0% — "no dynamic HTTP server exists in-repo") | **LANDED.** Biggest single stale claim found in the sweep. | Commit `68d5c2874` landed `kernel/src/json_api.rs` + `tools/native-spa-server/src/api.rs` with `/api/order`, `/api/order/{id}`, `/api/order/{id}/advance` genuinely registered in the served binary's router. |
+| **P04** | "Nothing has landed yet; `kernel/src/router.rs` and `kernel/src/dsu.rs` do not exist" (blueprint's own completion appendix) | **LANDED.** Both files exist. | Commit `86b1558fa`; doc never updated after the landing. |
+| **P95** | Blueprint's own VERDICT: "HOLD — ready design, do NOT build yet," gated on precondition P95-C1 (a real caller must exist first); companion doc reaffirms "NO-GO if unmet." | **Built anyway** (`f16d603d7`, 2026-07-20), with no on-record confirmation the gate was re-checked or an explicit operator override was given. Feature itself is real/tested/on `main` — this is a **process/governance finding, not a code-quality one**: the documented gate appears to have been bypassed, not honored. `CORE-ROADMAP-INDEX.md` §9 still reads "P95 HOLD/NO-GO," now one day stale vs. the actual merge. | Flagged for operator awareness, not silently resolved either direction. |
+| **P65** | Presented with equal LANDED weight alongside P66/P67/P68 in the WAVE-CLOSEOUT doc. | **Overstated.** Cited commit `bae2134` sits only on an unmerged bebop-repo branch (`feat/p65-dispatch-orchestrator`), not that repo's own `main`. Built, not merged. | bebop-repo branch state, checked directly. |
+| **P28** | `CacheGraph` (`llm-adapters/src/cache_graph.rs`) described as built (operator-directed override of P26's rejects, "planned forward"). | **Does not exist.** Zero `.rs` hits anywhere in the repo for `cache_graph` or `CacheGraph`. | Repo-wide grep, zero matches. |
+| **P26** | Two headline "ADOPTED" claims: `kernel/src/memory_budget.rs`/`MemoryBudget`, and `retrieval/ppr.rs` delegating to CSR. | **Neither holds.** `memory_budget.rs` doesn't exist at all; `ppr.rs` is still dense, not CSR-delegated. The one real fix in this phase (`llm-adapters/src/cache.rs::BoundedStore`) is entry-bounded, not byte-bounded as the doc describes. | Direct file/grep check. |
+| **P48** | Single cell: "PLANNED — build-out open." | **Flattens two different realities.** The messenger-intake half (H1-H4) genuinely is 0% built (the doc's own ground-truth table already says so honestly). But P48's original CRUD-admin scope has since landed — under a *different* phase number: `kernel/src/ports/owner_surface.rs`'s own comments state it "supersedes P48 B1/B2/B3" — that's really P70's delivery, not left open under P48. | `kernel/src/ports/owner_surface.rs` header comments. |
+| **P62** | WAVE-CLOSEOUT cites commit `422b45c95`. | **Typo, cosmetic only.** Not a valid git object — one hex digit off. Real commit is `422b45e95`. Code and its 19 tests are real and green regardless. | `git cat-file` lookup. |
+| **P91** | "MERGED to main" (blanket). | **True for P91.0/P91.1 only** (ring-arithmetic fix, real). P91.2 (NIST ACVP KAT + constant-time tag-compare) remains open — `docs/audits/hardening/HOT-PATHS.tsv` itself carries `MISSING`/`KNOWN-RED` flags on `kem.rs`/`hybrid.rs`. The blanket phrasing overstates completeness. | `HOT-PATHS.tsv`'s own flags. |
+
+**Confirmed accurate:** roughly 85 of 95 checkable P-numbers (all except P84, which is
+deliberately reserved by design) had their claimed status directly verified against real
+files/tests/commits — the large majority of the roadmap's own status claims hold up.
+
+**Genuinely unresolved (honest, not guessed):**
+- **P29** — the specific "shape C1 model-tier routing, 30-case fixture" pilot named in this
+  document could not be located as a distinct artifact from this repo (general `DecisionUnit`/
+  `Stale` infra exists; the named pilot doesn't show up in a targeted grep) — may exist on an
+  unmerged branch not checked.
+- **P03, P09, P10, P36, P65 (bebop side), P76, P78, P82, P85 (bebop portion), P92, P93, P94** —
+  each blueprint states its own files live in the separate `/root/bebop-repo` (OpenBebop)
+  repository, not in `dowiz`. Structurally unverifiable from this repo alone; not claimed either
+  way here.
+
+## 14. Reachability gaps found in `CORE-ROADMAP-INDEX.md` (2nd-pass sweep, 2026-07-20)
+
+A full sweep of the remaining `docs/design/` + `docs/research/` corpus (~557 files, beyond the
+P-series and space-grade tracks already covered above and in Part V) found **no missing
+blueprints** — every real, proposed piece of work already has a real, DoD-shaped document
+somewhere. What it found instead: `CORE-ROADMAP-INDEX.md`'s own stated guarantee ("every planning
+document reachable in ≤2 hops") is false for a real, bounded set of still-substantive documents.
+Fixed directly in `CORE-ROADMAP-INDEX.md` §9 (see that file for the actual new rows/links):
+
+- **3 arc directories cited as MEMORY-only, despite having real on-disk blueprints** —
+  `integration-ports/` (IP-01..21), `ecosystem-strategy/` (EC-01..20), `ops-reliability/`
+  (OPS-01..22) — each has a real `BLUEPRINTS-*.md` with per-unit Мета/Межа/Форма/RED-контракт
+  structure, unlike their 7 sibling arcs which already got direct links. Now linked directly.
+- **`realtime-change-intelligence-2026-07-17/`** — the most load-bearing orphan found: live,
+  post-JS-drop, cited by two docs `ROADMAP.md` itself already links (`BLUEPRINT-CACHE-REFERENCE-
+  GRAPH-TENSOR-ARENA`, `BLUEPRINT-FAULT-ISOLATION-DECENTRALIZED-ARCHITECTURE`), but never itself
+  linked — 3 hops instead of 2. Now linked directly.
+- **`hermes-kernel-rewrite-2026-07-15/`, `organism-status-2026-07-15/`,
+  `tech-synthesis-2026-07-15/`** — each 3 hops instead of 2; one landed deliverable traced back to
+  the first (`kernel/src/harmonic.rs`'s own doc comment confirms the port). Now linked directly.
+- **A named subset of standalone docs** with real, non-superseded content and no path in at all:
+  `AUTONOMOUS-ORGANISM-SYNTHESIS-2026-07-14.md`, the `BLUEPRINT-W17/W19/W20/W22-*.md` mini-wave
+  (siblings W18/W21 already had partial linkage — this is link-hygiene, not undone work; the prior
+  2026-07-19 audit already confirmed all of W17–W22 shipped/green), `launch-design-brief.md`,
+  `spectral-graph-fsm.md` (self-labels "Roadmap item," genuinely grounded in `order_machine.rs`),
+  `SWARM-QUANT-BLUEPRINT-2026-07-15.md`, `SYSTEMS-GPU-ML-KERNEL-SYNTHESIS-2026-07-16.md`,
+  `WEB3-SYNTHESIS-INVISIBLE-AGENTIC-LOCAL-INFRA-2026-07-17.md`. Now linked directly.
+- **In `docs/research/`**: `BLUEPRINT-W13-pgrust-adapter.md`, `BLUEPRINT-W14-mesh-discovery-
+  gossip.md`, and 3 of 6 `AUDIT-2026-07-18-*` council critiques (ARCHITECT/HERZOG/TORVALDS — their
+  sibling FEYNMAN critique was already linked, oddly leaving these three out). Now linked directly.
+- **`KNOWLEDGE-SPINE-BLUEPRINT-2026-07-14.md`** — its own frontmatter still reads `status:
+  proposed`, but `kernel/src/bin/spine_snapshot.rs` confirms it's actually landed on `main` — the
+  opposite-direction staleness (work outran its own doc). Corrected in that file directly.
+
+**Correctly excluded, verified not a gap:** 8 Triadic-Council closed-loop directories
+(`cinematic-product-media/`, `dev-login-backdoor-hardening/`, `fee-courier-seed/`,
+`golive-remediation/`, `owner-token-revocation/`, `p0-privacy-hardening/`, `soft-access-gate/`,
+`telegram-notifications-actions/`) all govern TypeScript/JS code deleted wholesale in the
+2026-07-15 "drop js" commit — correctly unreachable, indexing them would be actively wrong.
+**One governance-hygiene note, not a code gap:** `dev-login-backdoor-hardening/` and
+`p0-privacy-hardening/` each carry a `NEEDS-HUMAN-DECISION` item ("was the dev-login backdoor
+actually exploited," "is there a breach-disclosure obligation") that was never affirmatively
+answered — only mooted by the code's deletion. Flagged here for operator awareness; not resolved
+by this pass, which is documentation-only.
+
+---
+
 *Maintained going forward: every future dated wave gets one new §-numbered entry appended after
 §9 (or a new top-level Part if it's substantial enough to warrant its own detail section), never a
 new competing top-level doc. If you're about to create a new `MASTER-*`/`ROADMAP-*`/
@@ -3525,20 +3610,35 @@ branches (deletion is operator hygiene, not required for roadmap completion).**
 | 57–58 | (spec-only in prose) | **DONE-VERIFIED** | commits `8765757ee`+`912e13af1`; telemetry re-check 1 passed |
 | 59 | (spec-only in prose) | **DONE-VERIFIED** | `agent::loop`, 52 pass; Instant-based, wasm-safe |
 | 60 | (spec-only in prose) | **DONE-VERIFIED** | already at HEAD (`cb00706b1`); engine re-check 122 passed; `FRAME_BUDGET_US` pinned |
-| 61 | (spec-only in prose) | **DONE-VERIFIED** | `fdr::`, 26 pass; runtime-counter spans recoverable |
-| 62 | (spec-only in prose) | **DONE-VERIFIED** | `fdr::`, 26 pass; `parent_span_id` relational linkage, grep-proven off hash/gate |
+| 61 | (spec-only in prose) | **CORRECTED 2026-07-20 (2nd pass): NOT-BUILT, mismarked** | No dedicated runtime-counter-closure code exists beyond items 48/50/54 (already independently landed). The `fdr::` acceptance filter (min=26) is module-wide and passes only because those *other* items already push the module's test count past 26 — the filter never exercised anything specific to item 61's own claim. Ledger row and this table both need re-flagging as NEW-BUILD/GATED, not DONE-VERIFIED. |
+| 62 | (spec-only in prose) | **CORRECTED 2026-07-20 (2nd pass): NOT-BUILT, mismarked** | `parent_span_id` has **zero** grep hits anywhere in `kernel/src` — the claimed relational-linkage field does not exist in code. Same module-wide-filter root cause as item 61 (`fdr::` passes on unrelated pre-existing tests). |
 | 63 | (spec-only in prose) | **DONE-VERIFIED** | `agent::`, 52 pass; core-never-depends-on-AI firewall test green |
 | 64 | (spec-only in prose) | **DONE-VERIFIED** | commit `7f8c23b2a5`; re-check 5 passed |
 | 65 | (spec-only in prose) | **DONE-VERIFIED** | `ports::agent::cap`, 8 pass; zero direct kernel dependency |
-| 66 | (spec-only in prose) | **DONE-VERIFIED** | `event_log::`, 13 pass; scrubbed oplog replay bound |
+| 66 | (spec-only in prose) | **CORRECTED 2026-07-20 (2nd pass): NOT-BUILT, mismarked** | Zero occurrence of "scrub"/bitrot/at-rest-reverification anywhere in `kernel/src` or the repo — no durable-log-scrub feature exists. The commit that flipped this to DONE-VERIFIED (`981b24378`) touches **only** `docs/audits/hardening/HOT-PATHS.tsv` and the ledger doc itself — zero kernel code. Same module-wide-filter root cause (`event_log::` passes on 13 pre-existing, unrelated tests). |
 | 67–69 | (spec-only in prose) | **DONE-VERIFIED** | commits `ca7c00fe8`/`b11b42a24`/`42523e508`; cost_oracle 6 / footprint 5 passed |
 | 70–71 | (spec-only in prose) | **DONE-VERIFIED** | commit `ce1a74ada`; digital_twin 8 passed |
 | 72 | (spec-only in prose) | **DONE-VERIFIED** (folds under the 70–72 digital-twin close) | same worktree, `exec/cost-twin-arc` |
 | 73–74 | this merge's own correction below applies | scripts real, **not CI-wired** | unchanged, this session's earlier finding stands |
 
+**2nd-pass correction (2026-07-20, same day, independent re-verification):** items **61, 62, and
+66 above were themselves wrongly marked DONE-VERIFIED** by the first reconciliation pass, because
+that pass trusted `SPACE-GRADE-VERIFIED-STATUS-LEDGER-2026-07-20.md`'s own rows without
+re-deriving them from code. All three share one root cause: their acceptance filters (`fdr::`,
+`event_log::`) are **module-wide** rather than scoped to a test that actually exercises the new
+claim, so pre-existing test counts from *other*, genuinely-landed items (48/50/54 for `fdr::`)
+silently satisfy the stated minimum. `docs/design/SPACE-GRADE-VERIFIED-STATUS-LEDGER-2026-07-20.md`
+carries the same error at its own item 61/62/66 rows and has NOT yet been corrected there (it is
+kept standalone as a historical evidentiary record — see the correction note appended to that
+file instead of a silent rewrite). The `HOT-PATHS.tsv` rows these three items registered should be
+removed or re-scoped to a real per-claim test — not yet done, flagged as an open follow-up, not
+actioned in this documentation-only pass.
+
 **Reading rule going forward:** when this table and the prose below ever disagree again, the table
 in the ledger it cites (or a newer dated reconciliation appended above this one) wins — that is
-this whole document's own D8-style "newest wins" precedence rule, applied to itself.
+this whole document's own D8-style "newest wins" precedence rule, applied to itself. This 2nd-pass
+correction block is itself now the newest word on items 61/62/66 — it wins over both the table
+rows above it and the ledger file.
 
 ---
 ## Execution Roadmap — Space-Grade Kernel Synthesis, Items 1–32, Dependency-Ordered
@@ -3593,11 +3693,14 @@ test coverage.
   already cover it.
 - **Item 30** — state-machine proliferation audit (`capability_cert.rs`, `hub_provisioning.rs`,
   `hub_supervisor.rs`, `hydra.rs`). Read-only table. **✅ CLOSED 2026-07-19** —
-  `AUDIT-ITEM-30-state-machine-final-2026-07-19.md`: all 4 modules INDEPENDENT (0 shared with the
-  FSM proof kit), 4 PARITY-PIN tickets (I30-T1..T4, 0 collapses forced). **1 confirmed silent
-  defect** (I30-D1, `resume()` owner-zeroing) fixed with a red→green guard on
-  `exec/space-grade-tier0-2026-07-19` (`707848dfd`); the in-session "2 confirmed silent defects"
-  phrase confirmed UNSOURCED.
+  [`AUDIT-ITEM-30-state-machine-final-2026-07-19.md`](AUDIT-ITEM-30-state-machine-final-2026-07-19.md)
+  (+ [`BLUEPRINT-ITEM-30-state-machine-audit-2026-07-19.md`](BLUEPRINT-ITEM-30-state-machine-audit-2026-07-19.md),
+  previously unlinked from this citation — found + fixed 2026-07-20): all 4 modules INDEPENDENT (0
+  shared with the FSM proof kit), 4 PARITY-PIN tickets (I30-T1..T4, 0 collapses forced). **1
+  confirmed silent defect** (I30-D1, `resume()` owner-zeroing) fixed with a red→green guard on
+  `exec/space-grade-tier0-2026-07-19` (`707848dfd`, independently re-verified 2026-07-20 as a real
+  ancestor of `main` matching this claim); the in-session "2 confirmed silent defects" phrase
+  confirmed UNSOURCED.
 - **Item 15** — eigen-surface entry-point + parity-scope verification. Read-only; defect filed only
   if found. **✅ AUDITED 2026-07-19** — single eigen-surface HOLDS (`spectral.rs:225 eigenvalues` →
   `householder::eigenvalues_contig`, no `lowrank.rs`); gap = R3 parity is values + dominant-residual
@@ -3661,10 +3764,16 @@ test coverage.
   `cargo tree -e no-dev --locked --offline` + lockfile-hash assertion, 3-crate allowlist shrinking
   monotonically. **[new ordering choice — bundling]**: item 13 hardens item 1's own mechanism;
   building it nondeterministic first is two passes over one CI job.
+  See [`BLUEPRINT-ITEMS-01-13-ci-zero-dep-gate-2026-07-19.md`](BLUEPRINT-ITEMS-01-13-ci-zero-dep-gate-2026-07-19.md)
+  (previously cited only as an internal "§G.7" cross-reference, never linked — found + fixed
+  2026-07-20).
   **✅ DONE (2026-07-19)** — `kernel/ZERO-DEP-ALLOWLIST.txt` + `scripts/zero-dep-gate.sh` (3 gates:
   tree⊆allowlist, monotonic-shrink, `Cargo.lock` sha256) + `zero-dep-gate` CI job under `unshare -n`;
   all §G.7 clauses red-proven; `01acd673e` on `exec/space-grade-tier0-2026-07-19`. See §G.7 for detail.
 - **Item 14** — `rust-toolchain.toml` pin + structural compiler-bump trigger. Independent, parallel.
+  See [`BLUEPRINT-ITEM-14-toolchain-pin-2026-07-19.md`](BLUEPRINT-ITEM-14-toolchain-pin-2026-07-19.md)
+  (previously unlinked from this bullet, though `rust-toolchain.toml`'s own header comment already
+  cites it — found + fixed 2026-07-20).
   **✅ DONE 2026-07-19** (commit `bb1e9e8dc`, `exec/space-grade-tier0-2026-07-19`) — root
   `rust-toolchain.toml` pins `channel="1.96.1"` (exact, verified = dev-box toolchain; no pin existed
   pre-change, CI floated on runner stable); `toolchain-bump-gate` job added to `ci.yml` (always-runs,
@@ -3737,6 +3846,8 @@ test coverage.
 
 - **Item 6** — §4 hardening checklist codified + CI enforcement, with §10/P7's correction built in:
   CI must re-execute oracles and dudect self-tests, never presence-check artifacts.
+  See [`BLUEPRINT-ITEM-06-hardening-checklist-ci-2026-07-19.md`](BLUEPRINT-ITEM-06-hardening-checklist-ci-2026-07-19.md)
+  (previously unlinked from this bullet — found + fixed 2026-07-20).
   **✅ DONE 2026-07-19** (`ae4964e61`, branch `exec/space-grade-tier0-2026-07-19`). Real CI config +
   a new dudect harness landed. Three deliverables: `docs/audits/hardening/CHECKLIST.md` (standing
   law), `docs/audits/hardening/HOT-PATHS.tsv` (machine-read manifest — 14 rows seeded from the real
@@ -3798,6 +3909,8 @@ test coverage.
   GCRA (2 harnesses) correctly deferred to item 8 — see item 8's inherited design requirements below.*
 - **Item 8** — GCRA decision package. **Ruling: ADOPT (§0 above).** Differential oracle + Kani
   interleaving check now execute toward a real swap, not just an evidence package.
+  See [`BLUEPRINT-ITEM-08-gcra-swap-2026-07-19.md`](BLUEPRINT-ITEM-08-gcra-swap-2026-07-19.md)
+  (previously unlinked from this bullet — found + fixed 2026-07-20).
   **TWO DESIGN REQUIREMENTS INHERITED FROM ITEM 7 (executed 2026-07-19; authority:
   `BLUEPRINT-ITEM-07-kani-wiring-2026-07-19.md` §5, enforced via the `token_bucket.rs proof_gcra`
   `mode=kani` row in `HOT-PATHS.tsv`, `min=0` placeholder until this item lands the harness):**
@@ -3819,6 +3932,9 @@ test coverage.
   item 8 adds these harnesses, bump the `proof_gcra` row's `min` from 0 to 2.
 - **Item 31 (enactment half)** — per-crate allowlist CI gate + shared kernel-side JSON-parse
   primitive for the serde carriers + manifest-recorded rulings. Depends on items 1 and 25.
+  See [`BLUEPRINT-ITEM-31-enactment-per-crate-gate-2026-07-19.md`](BLUEPRINT-ITEM-31-enactment-per-crate-gate-2026-07-19.md)
+  (its sibling investigative half correctly links `AUDIT-ITEM-31-dependency-findings...`; this half
+  was unlinked — found + fixed 2026-07-20).
   **✅ DONE 2026-07-19 — real CI config + kernel module landed** on `exec/space-grade-tier0-2026-07-19`
   (`ae2da4a9d` gate → `dd6876a73` json+oracle → `c64ca923b` cutover). **Four blueprint claims
   independently re-verified, TWO corrected:**
@@ -3888,7 +4004,10 @@ test coverage.
   kernel lib. No caller has opted in yet (still `batch_size = 1` everywhere in this repo) — this is
   the mechanism landing, not a default-behavior change.
 - **Item 27 (classifier-input half)** — ✅ **DONE** (`03887462a`, branch
-  `exec/space-grade-tier0-2026-07-19`). PMU counters now ride alongside every `Verdict`/`DriftClass`
+  `exec/space-grade-tier0-2026-07-19`). See
+  [`BLUEPRINT-ITEM-27-pmu-classifier-input-2026-07-19.md`](BLUEPRINT-ITEM-27-pmu-classifier-input-2026-07-19.md)
+  (the response half correctly links its own file; this half was unlinked — found + fixed
+  2026-07-20). PMU counters now ride alongside every `Verdict`/`DriftClass`
   emission as an FDR companion, WITHOUT touching either classifier. New `kernel/src/fdr/pmu.rs`:
   `PmuStamp` (all `Reading<u64>`), a sibling of `HwStamp` on the same `Reading<T>`/`Absence`
   machinery. **Tier A** (`rdtsc` + `/proc/self/stat` minflt/majflt/nswap + `/proc/self/status`
