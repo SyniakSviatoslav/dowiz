@@ -103,7 +103,7 @@ All evidence below is from live `cargo test --offline --lib [--features pq]` on 
 | 57/58 | DONE-VERIFIED | subagent (WT exec/item57-927ae634) | commits 8765757ee+912e13af1; independent re-check (telemetry): 1 passed. |
 | 60 | DONE-VERIFIED | subagent (WT exec/item60-d397d54db080) | already at HEAD (cb00706b1); independent re-check: 122 passed (engine --lib) + FRAME_BUDGET_US pin. |
 | 64 | DONE-VERIFIED | subagent (WT exec/item64-*) | commit 7f8c23b2a5; independent re-check: 5 passed. |
-| 67-72 | IN-PROGRESS | subagent (cost-twin WT) | cost oracle (67/68/69) + digital twin (70/71/72); cost_oracle.rs/digital_twin.rs/footprint.rs staged in WT. |
+| 67-72 | DONE-VERIFIED | subagent (WT exec/cost-twin-arc) | items67-69 cost-oracle/footprint (commits ca7c00fe8,b11b42a24,42523e508); items70-71 digital-twin (ce1a74ada). Independent re-check: cost_oracle 6 / digital_twin 8 / footprint 5 passed; zero-dep gate holds; P3 firewall clean. |
 | 28 | DONE-VERIFIED | subagent (WT exec/item28-optical) | Phase A doc + optical.rs behind `optical` feature; commit in WT; independent re-check: 3 passed (optical.rs:225 headline); zero-dep gate holds (0 ext crates). |
 
 Commits this session on exec/space-grade-items-2026-07-20:
