@@ -20,12 +20,20 @@
 //! `mcp.rs`; P40 owns `agent/loop.rs` and imports `ToolPort` from here.
 
 /// Closed resource enum. A tool target not listed here is UNREPRESENTABLE.
-/// P40/P42 ship exactly one variant. Money/auth/RLS/migration resources are never
-/// added (red-line — see `mcp.rs`'s reachability argument).
+/// Money/auth/RLS/migration resources are never added (red-line — see `mcp.rs`'s
+/// reachability argument).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ToolResource {
     /// Read the lifecycle status of an order (the P40/P42 tool).
     OrderStatus,
+    /// Fetch a URL's content and extract its readable text (native, read-only,
+    /// zero JS execution). The HTTP fetch lives in the concrete `agent-facade`
+    /// impl (this crate stays network-free — see the module firewall doc above);
+    /// the readable-text extraction itself is `crate::readability`, pure `std`.
+    /// Interactive/JS-driven browsing is deliberately NOT this tool and is never
+    /// reimplemented in-kernel — that class of capability stays an external tool
+    /// behind its own port, same posture as the declared-but-empty GPU seam.
+    WebFetch,
 }
 
 /// Closed action enum. `Read` is the ONLY variant in P40/P42 — a mutating tool
@@ -62,6 +70,9 @@ impl ToolScope {
         match (self.resource, self.action) {
             (ToolResource::OrderStatus, ToolAction::Read) => {
                 Scope::single(Resource::Order, Action::Read)
+            }
+            (ToolResource::WebFetch, ToolAction::Read) => {
+                Scope::single(Resource::Web, Action::Read)
             }
         }
     }

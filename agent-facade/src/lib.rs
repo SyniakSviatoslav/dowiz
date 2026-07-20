@@ -112,3 +112,209 @@ impl<S: OrderStatusSource> ToolPort for ReadOrderStatusTool<S> {
         })
     }
 }
+
+// ─────────────────────────── WebFetchTool (P40 native browsing, R&D lane) ──────
+//
+// The concrete `ToolResource::WebFetch` implementation. OFF by default (the
+// `web-fetch` Cargo feature, see Cargo.toml) — the network fetch (`ureq`) and
+// the readable-text extraction (`dowiz_kernel::readability`, always compiled,
+// pure `std`) both live here, never in the kernel, per the module firewall
+// (`ports::tool`'s doc comment: "ZERO network / HTTP / JSON / serde" in the
+// kernel; the concrete impl + framing live in downstream crates).
+//
+// Explicitly NOT interactive/JS-driven browsing — that class of capability
+// stays an external tool behind its own port (e.g. `agent-browser`), never
+// reimplemented here or in-kernel. See the native-agentic-browsing research
+// this tool's scope is drawn directly from.
+#[cfg(feature = "web-fetch")]
+pub struct WebFetchTool {
+    agent: ureq::Agent,
+}
+
+#[cfg(feature = "web-fetch")]
+impl Default for WebFetchTool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "web-fetch")]
+impl WebFetchTool {
+    /// Hard cap on response body bytes read — a page over this is truncated at
+    /// the byte boundary before UTF-8 decode, never buffered unbounded. Sized
+    /// generously for real article pages while refusing to let one fetch
+    /// exhaust memory (the same degrade-closed-cap discipline as the kernel's
+    /// `MAX_CHANNEL_EVENTS`/`MAX_HARMONIC_NODES` fixes).
+    const MAX_BODY_BYTES: u64 = 8 * 1024 * 1024;
+    /// Per-request timeout — a hung remote server must not hang the agent turn.
+    const TIMEOUT_S: u64 = 10;
+
+    pub const SPEC: ToolSpec = ToolSpec {
+        name: "web_fetch",
+        description: "Fetch a URL (http/https only) and return its readable text \
+                      content, with navigation/ads/boilerplate stripped. Read-only; \
+                      does not execute JavaScript or render the page — static \
+                      server-rendered content only.",
+        arg_name: "url",
+        scope: ToolScope {
+            resource: ToolResource::WebFetch,
+            action: ToolAction::Read,
+        },
+    };
+
+    pub fn new() -> Self {
+        let agent = ureq::AgentBuilder::new()
+            .timeout(std::time::Duration::from_secs(Self::TIMEOUT_S))
+            .build();
+        WebFetchTool { agent }
+    }
+
+    fn parse_arg(raw_arg: &str) -> Result<String, ToolError> {
+        let v = dowiz_kernel::json::parse(raw_arg)
+            .map_err(|_| ToolError::BadArg(raw_arg.to_string()))?;
+        v.get("url")
+            .and_then(|o| o.as_str())
+            .map(|s| s.to_string())
+            .ok_or_else(|| ToolError::BadArg(raw_arg.to_string()))
+    }
+
+    /// Scheme allowlist — only `http`/`https`. Refuses `file://`, `ftp://`, and
+    /// anything else BEFORE the request is ever made (the SSRF/local-file-read
+    /// class of mistake is unrepresentable at the arg-validation step, not
+    /// merely discouraged). Full SSRF hardening (blocking private/link-local
+    /// IP ranges the DNS name resolves to) is NOT done here — named limitation,
+    /// not a silent gap: this tool is R&D-lane and network-egress-bounded by
+    /// its caller's deployment, the same posture `llm-adapters` already takes.
+    fn validate_url(url: &str) -> Result<(), ToolError> {
+        if url.starts_with("http://") || url.starts_with("https://") {
+            Ok(())
+        } else {
+            Err(ToolError::BadArg(format!(
+                "unsupported URL scheme (only http/https): {url}"
+            )))
+        }
+    }
+}
+
+#[cfg(feature = "web-fetch")]
+impl ToolPort for WebFetchTool {
+    fn spec(&self) -> &ToolSpec {
+        &Self::SPEC
+    }
+
+    fn invoke(&self, granted: ToolScope, inv: &ToolInvocation) -> Result<ToolOutput, ToolError> {
+        // Fail-closed scope check FIRST — no network call happens on a denied grant.
+        if granted != Self::SPEC.scope {
+            return Err(ToolError::ScopeDenied);
+        }
+        let url = Self::parse_arg(&inv.raw_arg)?;
+        Self::validate_url(&url)?;
+
+        let response = self
+            .agent
+            .get(&url)
+            .call()
+            .map_err(|_| ToolError::Unavailable)?;
+
+        let mut body = Vec::new();
+        {
+            use std::io::Read as _;
+            response
+                .into_reader()
+                .take(Self::MAX_BODY_BYTES)
+                .read_to_end(&mut body)
+                .map_err(|_| ToolError::Unavailable)?;
+        }
+        // Fail-open on non-UTF-8: lossy-decode rather than refuse the whole
+        // fetch over a handful of bad bytes (real pages are near-universally
+        // UTF-8; a strict reject here would be a worse failure mode than a
+        // few replacement characters in boilerplate that gets scored out
+        // anyway).
+        let html = String::from_utf8_lossy(&body);
+
+        let text = dowiz_kernel::readability::extract(&html);
+        Ok(ToolOutput { content: text })
+    }
+}
+
+#[cfg(all(test, feature = "web-fetch"))]
+mod web_fetch_tests {
+    use super::*;
+
+    // No test here makes a real network call — CI must never depend on live
+    // internet access. What IS verified without network: the fail-closed scope
+    // check runs before any I/O, URL-scheme validation refuses non-http(s)
+    // before any I/O, and arg parsing rejects malformed input before any I/O.
+    // An end-to-end fetch-against-a-local-mock-server test is a named follow-up,
+    // not silently skipped — see the tool's module doc.
+
+    #[test]
+    fn scope_denial_never_touches_network() {
+        let tool = WebFetchTool::new();
+        let wrong_scope = ToolScope {
+            resource: ToolResource::OrderStatus, // NOT WebFetch
+            action: ToolAction::Read,
+        };
+        let inv = ToolInvocation {
+            tool_name: "web_fetch".to_string(),
+            raw_arg: r#"{"url":"https://example.com"}"#.to_string(),
+        };
+        // If this ever reached the network it would hang/error differently in
+        // a sandboxed CI runner; ScopeDenied must come back immediately.
+        assert!(matches!(
+            tool.invoke(wrong_scope, &inv),
+            Err(ToolError::ScopeDenied)
+        ));
+    }
+
+    #[test]
+    fn rejects_non_http_schemes_before_any_fetch() {
+        let tool = WebFetchTool::new();
+        let granted = WebFetchTool::SPEC.scope;
+        for bad_url in ["file:///etc/passwd", "ftp://x/y", "javascript:alert(1)", "data:text/html,x"]
+        {
+            let inv = ToolInvocation {
+                tool_name: "web_fetch".to_string(),
+                raw_arg: format!(r#"{{"url":"{bad_url}"}}"#),
+            };
+            match tool.invoke(granted, &inv) {
+                Err(ToolError::BadArg(_)) => {}
+                other => panic!("expected BadArg for {bad_url}, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn rejects_malformed_json_arg() {
+        let tool = WebFetchTool::new();
+        let granted = WebFetchTool::SPEC.scope;
+        let inv = ToolInvocation {
+            tool_name: "web_fetch".to_string(),
+            raw_arg: "not json at all".to_string(),
+        };
+        assert!(matches!(
+            tool.invoke(granted, &inv),
+            Err(ToolError::BadArg(_))
+        ));
+    }
+
+    #[test]
+    fn rejects_missing_url_field() {
+        let tool = WebFetchTool::new();
+        let granted = WebFetchTool::SPEC.scope;
+        let inv = ToolInvocation {
+            tool_name: "web_fetch".to_string(),
+            raw_arg: r#"{"not_url":"https://example.com"}"#.to_string(),
+        };
+        assert!(matches!(
+            tool.invoke(granted, &inv),
+            Err(ToolError::BadArg(_))
+        ));
+    }
+
+    #[test]
+    fn spec_scope_is_webfetch_read_only() {
+        assert_eq!(WebFetchTool::SPEC.scope.resource, ToolResource::WebFetch);
+        assert_eq!(WebFetchTool::SPEC.scope.action, ToolAction::Read);
+    }
+}
