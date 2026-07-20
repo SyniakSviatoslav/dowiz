@@ -20,6 +20,11 @@ pub mod analytics;
 /// P11 §7 — CorePinning trait seam (Trait-as-Port): pluggable CPU-core-affinity
 /// port with a zero-cost `NoOpCorePinning` default (NUMA crate DECART-deferred).
 pub mod arena;
+/// BLUEPRINT-P-B §4.3 (item #7) — drift-gated spectral snapshot store + reconcile. The
+/// consumer of `RetainedBase::admit`: retains admitted tiles, persists their source `Csr`,
+/// and `reconcile()` re-runs `classify_drift` on each retained raw dynamics to catch
+/// post-admit divergence. Pure-std; no money / red-line types.
+pub mod snapshot;
 /// C-tier "attention lens": scaled dot-product attention as one learned-affinity
 /// diffusion step — same f(L) family as markov PPR / heat-kernel.
 pub mod attention;
