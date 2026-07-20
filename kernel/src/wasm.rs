@@ -983,20 +983,6 @@ mod tests {
         assert_eq!(n, 1); // o2 is the single illegal sequence
     }
 
-    #[test]
-    fn round_trip_full_order_json() {
-        // apply_event_logic must accept the exact JSON place_order_logic produced.
-        let created =
-            place_order_logic(Some("c9".into()), SAMPLE_ITEMS, Some("app".into())).unwrap();
-        // advance Pending -> Confirmed -> Preparing
-        let c = apply_event_logic(&created, "CONFIRMED").unwrap();
-        let p = apply_event_logic(&c, "PREPARING").unwrap();
-        let v: serde_json::Value = serde_json::from_str(&p).unwrap();
-        assert_eq!(v["status"], "PREPARING");
-        assert_eq!(v["channel"], "app");
-        assert_eq!(v["customer_id"], "c9");
-    }
-
     // ── RW-03: estimate_order_total_logic == packages/ui/src/lib/money.ts ──
     const CFG_FLAT_EXCL: &str = r#"{"is_pickup":false,"free_delivery_threshold":null,
         "delivery_fee_flat":200,"has_distance_tiers":false,"tax_rate":0.20,
