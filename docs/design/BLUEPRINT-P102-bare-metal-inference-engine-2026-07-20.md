@@ -129,10 +129,13 @@ Two structural gifts of exactly this pair, worth naming because they shape the b
   more exotic LFM2 hybrid is attempted. The build order S-then-L is engineering sequencing,
   not a priority ranking — both ship, crosswired, per R-2.
 
-P101 §3.2 ranked these same two models as primary-vs-fallback for mobile. **R-2 supersedes
-that framing: both ship, concurrently, as one crosswired unit, on both surfaces** (mobile
-courier app and server engine). P101's scenario-suite discipline (§3.5 there) carries over
-unchanged — it now scores the pair *and* the crosswired composite, not a winner.
+P101 §3.2 originally ranked these same two models primary-vs-fallback for mobile; the R-2
+ruling was folded into P101 the same day (commit `a4358d3c2` — its §3.2 is now "the pair,
+not a ranked shortlist", its §4 residency targets the crosswired pair in place of
+`llama3.1:8b`, and its §8 records O-1 ruled and the Tier-S bake-off O-2 superseded). P102
+and the amended P101 therefore describe one consistent pair; what P102 adds is the *native
+zero-dependency engine* that runs it. P101's scenario-suite discipline (§3.5 there) carries
+over unchanged — it scores the pair and the crosswired composite, not a winner.
 
 ### 3.2 Crosswire dataflow — two modes, one deterministic comparator, zero LLM-judging
 
@@ -170,7 +173,7 @@ Call-site mapping (P101 §1's real call sites, not invented ones):
 | P52 K4 courier capture assist (PoD photo sanity, receipt/menu/label OCR) — mobile | **A** | S draft = instant framing/preview; L = field extraction + capture-tool call; comparator on extracted fields |
 | CS-4 intake assist (P48-INTAKE) | **B** | S perceives/normalizes, L extracts; the deterministic sufficiency oracle stays the pure `IntentParser` (P101 §4.4) — if the crosswired output still re-parses `Ambiguous`, the path is the existing human backstop. The crosswire *replaces* P101's S-then-G escalation rung inside the pair; the human backstop is unchanged |
 | CS-5 comms drafting (D14, opt-in human-gated) | **B** | Draft-conditioned; human gate unchanged |
-| CS-1 agent loop | gated | L is the tool-selection lane; **cut-over from `llama3.1:8b` only if the pair clears CS-1's golden-suite bar** (§6.1). BFCLv4 21.08 is "measurable, not reliable" — the suite decides, not this document |
+| CS-1 agent loop | gated | L is the tool-selection lane; **cut-over only if the pair clears CS-1's golden-suite bar** (§6.1) — against `llama3.1:8b` while that is still the lane's live model, or against the pair-via-Ollama once P101 Phase C has cut the lane over inside the Ollama era. BFCLv4 21.08 is "measurable, not reliable" — the suite decides, not this document |
 | CS-2 code lane, CS-3 embedding lane | out of pair | See §6.1 residuals — a 450M VLM is not a code model and neither model is an embedder; these lanes stay on the P101 topology until their own dispositions |
 
 ### 3.3 Scheduling — exactly two lanes on four cores, static by design
@@ -388,14 +391,20 @@ pair — see §6.4); the engine exposes seams, and **all policy lives in the cal
   P101's Ollama residency/routing/cascade remains the operating topology while Phases 0–5
   build. Each lane cuts over to the native engine **only** when the pair-under-native
   meets that lane's own suite bar (P101 §3.5 scenario suite; wiring §3.2 golden
-  tool-calling suite), scored against the lane's current Ollama-served model. A lane that
-  does not clear its bar stays on P101's topology and says so in the scorecard — capability
-  honesty is a *measurement*, not a veto on the build.
-- **Superseded within P101:** the §3.2 primary-vs-fallback framing (R-2: both ship,
-  crosswired) and the §4.4 S-then-G intake escalation *inside the pair* (Mode B + the
-  unchanged human backstop replace it). The O-1 ruling P101 §8.1 requested is **resolved**
-  (R-3, recorded in §3.1 here). P101 gets dated append-only annotations pointing here (done
-  in the same commit series as this file).
+  tool-calling suite), scored against the lane's current Ollama-served model. Once P101's
+  own Phase C lands (the pair served *via Ollama*), the comparison becomes **the same pair,
+  native engine vs Ollama** — a pure engine A/B with the model variable eliminated, the
+  cleanest possible cut-over evidence. A lane that does not clear its bar stays on P101's
+  topology and says so in the scorecard — capability honesty is a *measurement*, not a veto
+  on the build.
+- **Alignment with the amended P101 (`a4358d3c2`):** R-2 and R-3 are already folded into
+  P101 itself (pair-not-shortlist, O-1 ruled, O-2 bake-off superseded), so the two documents
+  agree by construction. The one remaining P101-vs-P102 delta is deliberate: P101 §4.4's
+  S-then-L escalation contract governs the *Ollama era* of the intake-assist lane; at that
+  lane's native cut-over, P102 §3.2 Mode B (draft-conditioned single pass) replaces the
+  escalation rung inside the pair, with the pure `IntentParser` sufficiency oracle and the
+  human backstop unchanged and binding in both eras. P101's amendment block carries the
+  cross-link here.
 - **Untouched by P102 and honestly named as residuals of "replace Ollama entirely":**
   - **E-1 (embedding lane, CS-3):** neither ruled model is an embedder;
     `nomic-embed-text`/`qwen3-embedding` (encoder-family) stay Ollama-served. Full Ollama
