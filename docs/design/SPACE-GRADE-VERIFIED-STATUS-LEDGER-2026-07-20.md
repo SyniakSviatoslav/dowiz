@@ -106,7 +106,7 @@ All evidence below is from live `cargo test --offline --lib [--features pq]` on 
 | 60 | IN-PROGRESS | subagent (isolated WT) | engine FRAME_BUDGET_US. |
 | 64 | IN-PROGRESS | subagent (isolated WT) | composition root. |
 | 67-72 | IN-PROGRESS | subagent (cost-twin WT) | cost oracle (67/68/69) + digital twin (70/71/72). |
-| 28 | HOLD | operator-decision-needed | optical compression = GPU/noisy; blueprint flags operator decision. |
+| 28 | IN-PROGRESS | subagent (isolated WT) | operator RULED IN (2026-07-20): archival-plane-only; model weights = runtime seam (pq/entropy.rs precedent), zero-dep spirit preserved. Phase A doc + Phase B optical.rs behind `optical` feature + §1.5 plane-boundary unrepresentability test. |
 
 Commits this session on exec/space-grade-items-2026-07-20:
 - f16d603d7 item 20 (P95 persistence)
