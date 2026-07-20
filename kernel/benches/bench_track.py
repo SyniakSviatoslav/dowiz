@@ -246,6 +246,164 @@ def is_regression(entry, threshold):
     return cmean >= threshold
 
 
+# --- key-set completeness gate (item 33: close the `_cur.json` partial-run gap)
+def write_cur_json(report):
+    """Persist the CURRENT run's measured means to `_cur.json` (git-ignored).
+
+    The completeness assertion below treats this file's key set as "what this
+    run actually measured". A complete run emits every compiled bench id; a
+    partial run leaves keys out, which must NOT masquerade as a regression.
+    """
+    cur = OrderedDict((bid, round(e["mean_ns"], 6))
+                      for bid, e in report.items())
+    with open(os.path.join(HERE, "_cur.json"), "w") as f:
+        json.dump(cur, f, indent=2)
+        f.write("\n")
+    return cur
+
+
+def classify_missing(baseline_ids, measured_ids, compiled_ids):
+    """Split baseline keys absent from the current run into two failure modes.
+
+    INCOMPLETE-RUN(k): k is missing but still compiled in the bench source ->
+        the run was truncated (a bench crashed / was skipped). Operator error
+        -> re-run the full set.
+    DELETED-BENCH(k): k is missing AND no longer compiled -> the bench was
+        genuinely removed. This is a real RED (a tracked hot path is gone).
+    """
+    missing = sorted(set(baseline_ids) - set(measured_ids))
+    incomplete = [k for k in missing if k in compiled_ids]
+    deleted = [k for k in missing if k not in compiled_ids]
+    return incomplete, deleted
+
+
+def check_key_completeness(baseline_ids, measured_ids, compiled_ids):
+    """Print the classification; return (incomplete_list, deleted_list).
+
+    Caller exit-code semantics: deleted -> RED (1); incomplete ->
+    INCOMPLETE-RUN (2, operator re-run); neither -> GREEN (0).
+    """
+    incomplete, deleted = classify_missing(
+        baseline_ids, measured_ids, compiled_ids)
+    if incomplete:
+        print("[bench_track] INCOMPLETE-RUN: keys present in source but "
+              "absent from this run (re-run the full bench set):",
+              file=sys.stderr)
+        for k in incomplete:
+            print(f"  INCOMPLETE-RUN({k})", file=sys.stderr)
+    if deleted:
+        print("[bench_track] DELETED-BENCH: baseline keys with no compiled "
+              "bench (real removal -> RED):", file=sys.stderr)
+        for k in deleted:
+            print(f"  DELETED-BENCH({k})", file=sys.stderr)
+    return incomplete, deleted
+
+
+def compiled_bench_ids():
+    """Return the set of bench ids the committed bench sources would emit.
+
+    Authoritative source is `cargo bench --list` per bench target (fast, no
+    measurement) — criterion prints every registered id as `<id>: benchmark`.
+    This is ground truth and immune to source-format churn (format! sweeps,
+    group-local ids, `bench_with_input`, `&[1usize, ...]` syntax). Falls back
+    to a static regex scan of `kernel/benches/*.rs` only if cargo is unusable.
+    """
+    ids = set()
+    targets = []
+    # Discover [[bench]] targets from Cargo.toml.
+    try:
+        toml = open(os.path.join(KERNEL_DIR, "Cargo.toml")).read()
+        in_bench = False
+        for line in toml.splitlines():
+            if re.match(r"^\s*\[\[bench\]\]\s*$", line):
+                in_bench = True
+                continue
+            if in_bench:
+                if re.match(r"^\s*\[", line):  # next table -> stop
+                    in_bench = False
+                    continue
+                m = re.match(r'^\s*name\s*=\s*"([^"]+)"', line)
+                if m and m.group(1) != "criterion":
+                    targets.append(m.group(1))
+                elif m:
+                    targets.insert(0, m.group(1))  # criterion first
+    except OSError:
+        pass
+    if not targets:
+        targets = ["criterion"]
+    # pq-gated targets need the feature.
+    pq_targets = {"mesh_verify"}
+    for tgt in targets:
+        cmd = ["cargo", "bench", "--bench", tgt, "--", "--list"]
+        if tgt in pq_targets:
+            cmd[2:2] = ["--features", "pq"]
+        try:
+            proc = subprocess.run(
+                cmd, cwd=KERNEL_DIR, capture_output=True, text=True,
+                timeout=300)
+        except (subprocess.SubprocessError, OSError):
+            proc = None
+        if proc is not None and proc.returncode == 0:
+            for line in proc.stdout.splitlines():
+                m = re.match(r"^(\S+):\s+benchmark", line.strip())
+                if m:
+                    ids.add(m.group(1))
+    if ids:
+        return ids
+    # Fallback: static regex scan of bench sources.
+    for path in glob.glob(os.path.join(HERE, "*.rs")):
+        try:
+            src = open(path).read()
+        except OSError:
+            continue
+        for m in re.finditer(
+                r'\.bench_function\(\s*"([A-Za-z_][A-Za-z0-9_]*(?:/[A-Za-z0-9_]+)?)"',
+                src):
+            ids.add(m.group(1))
+        for m in re.finditer(
+                r'\.bench_function\(\s*format!\(\s*"([A-Za-z_][A-Za-z0-9_]*)'
+                r'(?:/|_)?', src):
+            grp = m.group(1)
+            seg = src[m.start():m.start() + 400]
+            found = set()
+            for block in re.findall(r'&\s*\[(\d+(?:\s*,\s*\d+)*)\]', seg):
+                for n in re.findall(r'\d+', block):
+                    found.add(n)
+            if found:
+                for n in sorted(found):
+                    ids.add(f"{grp}/{n}")
+            else:
+                ids.add(grp)
+    return ids
+
+
+def check_keys(args):
+    """Standalone key-set-completeness assertion (item 33 tracker path).
+
+    Loads `_cur.json` (current run means) and `baseline.json` (authoritative
+    must-run list). A missing baseline key is INCOMPLETE-RUN if still compiled,
+    else DELETED-BENCH. GREEN only when every baseline key was measured.
+    """
+    cur_path = args.cur or os.path.join(HERE, "_cur.json")
+    if not os.path.isfile(cur_path):
+        print(f"[bench_track] ERROR: {cur_path} not found; run a full bench "
+              f"first (or pass --cur).", file=sys.stderr)
+        return 2
+    with open(cur_path) as f:
+        cur = json.load(f)
+    baseline = load_baseline()
+    compiled_ids = compiled_bench_ids()  # what the committed sources emit
+    incomplete, deleted = check_key_completeness(
+        set(baseline.keys()), set(cur.keys()), compiled_ids)
+    if deleted:
+        return 1
+    if incomplete:
+        return 2
+    print(f"[bench_track] GREEN: _cur.json covers all {len(baseline)} "
+          f"baseline keys ({len(cur)} measured).", file=sys.stderr)
+    return 0
+
+
 # --- threshold map (per-bench overrides) ------------------------------------
 def parse_threshold_map(spec):
     """`group1=8,group2=15` -> {group1:8.0, group2:15.0}."""
@@ -346,6 +504,11 @@ def run_ci(args):
     for bid, e in b_res.items():
         baseline[bid] = round(e["mean_ns"], 6)
     save_baseline(baseline)
+
+    # Emit the current run's measured means so the key-set-completeness gate
+    # (item 33) has a real artifact to assert against. A complete run writes
+    # every compiled id; a partial run drops keys -> INCOMPLETE-RUN.
+    cur = write_cur_json(b_res)
 
     # Evaluate regression using criterion's significance + per-bench threshold.
     regressions = []
@@ -586,6 +749,13 @@ def main() -> None:
                          "BENCH_TRACK_LOCAL_CRON=1")
     ap.add_argument("--list", action="store_true",
                     help="list committed bench ids + schema validity")
+    ap.add_argument("--check-keys", action="store_true",
+                    help="item 33 completeness gate: assert _cur.json covers "
+                         "every baseline.json key (INCOMPLETE-RUN vs "
+                         "DELETED-BENCH)")
+    ap.add_argument("--cur", default=None,
+                    help="path to _cur.json for --check-keys (default: "
+                         "benches/_cur.json)")
     ap.add_argument("--bench", default=None,
                     help="bench target name (default: criterion)")
     args = ap.parse_args()
@@ -596,6 +766,8 @@ def main() -> None:
         sys.exit(run_local_cron(args))
     if args.list:
         sys.exit(list_ids(args))
+    if args.check_keys:
+        sys.exit(check_keys(args))
     if args.ci:
         sys.exit(run_ci(args))
     # default: show committed baseline + explain the gate

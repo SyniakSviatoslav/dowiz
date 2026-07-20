@@ -140,3 +140,53 @@ these invariants — the invariants are non-negotiable; only their *machinery de
 - **Standing anti-scope (unchanged):** do NOT silently change `DEFAULT_MAX_PER_EPOCH` or write a real
   production genesis/anchor file without this ruling on record; do NOT build B/C speculatively; do NOT
   re-couple R-3 to P06 `key_V` (independent per the audit §3).
+
+## D11. Governed Self-Evolution (items 73-78) — apply-token, boundary & sequencing rulings (operator, 2026-07-20)
+
+Rules the 7 open governance questions filed in
+`docs/design/BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md` §9. Items 73-78 build the
+channel by which the product's own AI proposes changes to its own kernel — the single most
+red-line-adjacent capability in the space-grade roadmap. These are spec-plane rulings; no code
+exists yet against them.
+
+- **Q1 — apply-token holder:** each node's own operator, fully local. No delegated authority, no
+  mesh-wide root — matches D0 (decentralized/local-first/mesh) most literally. A given node's
+  self-change proposals are approved only by whoever runs that node.
+- **Q2 — what the apply-token physically is:** a **2-factor** design —
+  1. a `capability_cert` (ML-DSA-65) scoped to a new `apply:change-proposal` capability, reusing the
+     existing `AnchorRoster`/`capability_cert.rs` enrollment substrate (the enrolled key already
+     binds to a specific device — no separate device-id field needed);
+  2. a live, time-boxed rotating code, TOTP-shaped (RFC 6238 semantics — a code that changes every
+     ~30s off a shared secret + time) but HMAC'd with **SHA3-256** (the kernel's existing Keccak
+     module) instead of classical HMAC-SHA1, so the second factor stays PQ-consistent and adds zero
+     new hash primitives (one-escaper-implementation discipline, same rule as the kernel::json/
+     fdr::json dedup ticket).
+  Rationale: a stolen long-term signing key alone must not be sufficient; the rotating factor proves
+  live human presence at the moment of approval. **Open sub-question, deliberately NOT ruled here:**
+  the rotating-secret enrollment ceremony — defer to item 75/64's design.
+- **Q3 — Pending-approval TTL:** dynamic and operator-configurable per node, **default 24 hours**.
+  Not a fixed constant — item 75's `Pending` state must carry a configurable expiry, not a compiled-in
+  number.
+- **Q4 — the meta-governance boundary (item 74's registry, the AI's own safety perimeter):** the AI
+  MAY reach and edit `agent scope` (`kernel/src/ports/agent/scope.rs`) and the governance module
+  itself (items 73-76's own code) — self-evolution is allowed there, gated by the human apply-token
+  per D11's Q1/Q2. The ONLY hard, non-negotiable line is **core kernel authority + the circuit
+  breaker** (`kernel/src/breaker/`, item 9; the order/money/decide-fold core). Everything else is
+  configurable/customizable by the human operator, who may narrow the boundary further at any time —
+  the boundary itself is operator-drawn, never agent-drawn, per the blueprint's own Q4 framing.
+- **Q5 — red-line registry row-removal ruling format:** a `DECISIONS.md` D-entry (this file) — matches
+  existing precedent (D0-D10), keeps one canonical place for every red-line ruling, old and new. No
+  separate ruling-doc format or commit-trailer convention.
+- **Q6 — item 77 self-heal threshold:** **3 consecutive** adverse windows before a fix proposal may
+  be opened. Still just a proposal — Q1/Q2's apply-token is required regardless of threshold.
+- **Q7 — build sequencing:** item 77 (self-healing) before item 78 (self-upgrading), the roadmap's
+  original numeric order — **operator override of the blueprint's own recommendation** (the architect
+  suggested 78-before-77 to battle-test the human-gate on lower-urgency, operator-initiated changes
+  first). Recorded per D8 (newest/operator ruling outranks the design doc's suggestion).
+- **What this ruling does NOT do:** it does not authorize dispatching items 73-78 to code. Per the
+  blueprint's §10, the transition from spec to code for this arc remains its own explicit decision;
+  this D11 entry resolves the *content* of that future code's design, not the *go* to start writing
+  it. Item 75's `apply` seam specifically stays gated on items 64/65 (unbuilt) regardless of this
+  ruling.
+- **FLAG for override:** recorded under the same operator-ruling authority as D10. The operator MAY
+  override any clause here at any time; this is a recorded ruling, not a lock.

@@ -752,7 +752,14 @@ capability boundary at all times — **§L grants a governed PROPOSAL channel, n
 
 ---
 
-## 9. Operator-decision register — OPEN governance questions (NOT resolved here)
+## 9. Operator-decision register — RESOLVED 2026-07-20, see DECISIONS.md D11
+
+**All 7 questions below were ruled by the operator on 2026-07-20 — recorded verbatim in
+`DECISIONS.md` D11 ("Governed Self-Evolution (items 73-78) — apply-token, boundary & sequencing
+rulings"). Read D11 for the authoritative answer to each Q below; the original questions are kept
+here unedited as the historical record of what was asked.** This ruling resolves the *content* of
+items 73-78's design — it does NOT authorize dispatching them to code; per §10 below, that stays its
+own explicit decision, and item 75's `apply` seam stays gated on items 64/65 regardless.
 
 These are exactly the class the standing rule "**Never bypass human-gated decisions**" reserves for a
 human. I flag them; I do **not** answer them. Each must be operator-ruled **before the corresponding
@@ -792,6 +799,9 @@ item moves from spec to code**, not during.
      machinery is battle-tested on operator-initiated, lower-urgency changes before anything is
      *triggered by the system's own health signal* (Q7). Self-healing's urgency pressure is exactly where
      a "just this once, automatically" shortcut is most tempting — and most dangerous.
+     **OVERRIDDEN by D11 (2026-07-20): operator ruled item 77 before item 78, the roadmap's original
+     numeric order.** This recommendation is kept here as the record of what was suggested and
+     explicitly not taken — not a live instruction.
   3. **Q4 (the meta-governance boundary) must be operator-ratified before item 74's registry is
      authored**, because that boundary *is* the safety perimeter; an agent-drawn perimeter is a perimeter
      the agent could, in principle, have drawn to its own advantage.

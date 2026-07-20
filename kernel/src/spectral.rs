@@ -232,6 +232,12 @@ thread_local! {
 }
 
 pub fn eigenvalues(a: &[Vec<f64>]) -> Vec<Complex> {
+    // Item 61 (gap G7): eigensolve entry-point span. Workload-kind `EigensolvesCompleted`
+    // (item 58 schema, absent in this worktree — see HOT-PATHS.tsv gap: row). The span is a
+    // P3-plane FDR `span_close` record (or `SpanMetricsObserver` histogram), never a decision
+    // input. Zero cost when no FDR sink/observer is installed (`fdr::info_span!` takes no clock
+    // and never allocates until `.entered()` and only then under `span_active()`).
+    let _g = crate::fdr::info_span!("eigenvalues").entered();
     #[cfg(test)]
     EIGEN_CALLS.with(|c| c.set(c.get() + 1));
     let n = a.len();

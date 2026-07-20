@@ -26,6 +26,11 @@ pub mod admission;
 pub mod cap;
 pub mod manifest;
 pub mod scope;
+/// Item 54 — Sentinel: read-time integrity check for critical LIVE in-memory authority
+/// structs (`AnchorRoster` / `RevocationSet`). Declared after `cap`/`manifest`/`scope` so
+/// its `IntegrityChecked` impls (in `cap.rs`) and the call sites in `cap::verify_chain`
+/// resolve against the already-defined types.
+pub mod sentinel;
 
 pub use admission::{
     AdmissionError, AdmissionGate, AdmissionLimiter, AdmissionRecord, Admitter,

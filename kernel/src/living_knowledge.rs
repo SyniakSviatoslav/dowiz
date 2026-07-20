@@ -102,16 +102,66 @@ impl LivingKnowledge for SubprocessLivingKnowledge {
             stdin
                 .write_all(payload.as_bytes())
                 .map_err(|e| format!("living_knowledge: write request: {e}"))?;
+            // Drop stdin so the child sees EOF and begins producing output.
         }
 
-        let out = child
-            .wait_with_output()
-            .map_err(|e| format!("living_knowledge: wait bridge: {e}"))?;
-        if !out.status.success() {
+        // Item 61 (gap G6): reap the child via a hand-rolled `wait4(2)` raw syscall
+        // (zero-dep, native-only x86_64 Linux — the exact style as `fdr::pmu.rs`'s
+        // `perf_event_open`) so we capture REAL rusage (user/sys time, maxrss) and wall
+        // duration, instead of `wait_with_output` which yields only status + stdio. A
+        // hung/expensive child is now OBSERVABLE via the FDR record this emits
+        // (composes with item 48's liveness class — the record is the evidence a child
+        // ran long). Fail-closed behavior is UNCHANGED: any spawn/IO/reap error still
+        // returns `Err` (the `?` paths below), so retrieval never silently degrades to
+        // "empty results".
+        //
+        // The reaping is native-only: subprocess spawning is not a wasm capability, so on
+        // `wasm32` this whole adapter is unreachable (named absence per procedure step 9).
+        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        let reap = {
+            let t0 = std::time::Instant::now();
+            let (status, rusage) = wait4(child.id(), &mut child)?;
+            let wall_us = t0.elapsed().as_micros().min(u64::MAX as u128) as u64;
+            (status, rusage, wall_us)
+        };
+        #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+        let reap = {
+            let t0 = std::time::Instant::now();
+            let status = child
+                .wait()
+                .map_err(|e| format!("living_knowledge: wait bridge: {e}"))?;
+            let wall_us = t0.elapsed().as_micros().min(u64::MAX as u128) as u64;
+            // rusage unavailable on this platform — a named absence, never a fabricated 0.
+            let rusage = ChildRusage {
+                utime_us: None,
+                stime_us: None,
+                maxrss_kb: None,
+            };
+            (status, rusage, wall_us)
+        };
+        let (status, rusage, wall_us) = reap;
+
+        // Emit the FDR record (recoverable from the ring after the call). The record is
+        // P3-plane telemetry: it carries the REAL measured numbers — never a fabricated 0.
+        // No-op unless an FDR sink (with a ring) is installed.
+        crate::fdr::emit_subprocess_record(
+            self.bridge_cmd.as_str(),
+            status_success(status),
+            wall_us,
+            rusage.utime_us,
+            rusage.stime_us,
+            rusage.maxrss_kb,
+        );
+
+        // Read the child's captured stdio for parsing. We re-collect stdout/stderr
+        // regardless of reap path.
+        let out = collect_child_output(&mut child)
+            .map_err(|e| format!("living_knowledge: read bridge output: {e}"))?;
+        if !status_success(status) {
             let stderr = String::from_utf8_lossy(&out.stderr);
             return Err(format!(
                 "living_knowledge: bridge exited {}: {}",
-                out.status,
+                status,
                 stderr.lines().next().unwrap_or("<no stderr>")
             ));
         }
@@ -120,6 +170,182 @@ impl LivingKnowledge for SubprocessLivingKnowledge {
             .map_err(|e| format!("living_knowledge: parse response: {e}"))?;
         Ok(resp.results)
     }
+}
+
+/// Item 61 (gap G6): a reaped child's resource usage. On x86_64 Linux the values come
+/// from the real `wait4(2)` `rusage` struct; elsewhere they are a named absence.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+struct ChildRusage {
+    utime_us: Option<u64>,
+    stime_us: Option<u64>,
+    maxrss_kb: Option<u64>,
+}
+
+#[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+struct ChildRusage {
+    utime_us: Option<u64>,
+    stime_us: Option<u64>,
+    maxrss_kb: Option<u64>,
+}
+
+/// Exit status of a reaped child. Kept as a plain struct (not `std::process::ExitStatus`)
+/// because the `wait4` path decodes the raw `wstatus` directly and the fallback path wraps
+/// `std::process::ExitStatus`.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[derive(Clone, Copy)]
+struct ChildStatus {
+    raw: i32,
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+impl ChildStatus {
+    fn success(self) -> bool {
+        // WIFEXITED && WEXITSTATUS == 0
+        (self.raw & 0x7f) == 0 && ((self.raw >> 8) & 0xff) == 0
+    }
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn status_success(s: ChildStatus) -> bool {
+    s.success()
+}
+
+#[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+fn status_success(s: std::process::ExitStatus) -> bool {
+    s.success()
+}
+
+/// Raw 5-argument `syscall` (x86_64 Linux): number in `rax`, args in
+/// `rdi/rsi/rdx/r10/r8`, result in `rax`; the kernel clobbers `rcx` and `r11`. Returns the
+/// raw kernel result (negative = `-errno`). Mirrors `fdr::pmu::syscall5`.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[inline]
+unsafe fn syscall5(n: i64, a1: i64, a2: i64, a3: i64, a4: i64, a5: i64) -> i64 {
+    let ret: i64;
+    core::arch::asm!(
+        "syscall",
+        inlateout("rax") n => ret,
+        in("rdi") a1,
+        in("rsi") a2,
+        in("rdx") a3,
+        in("r10") a4,
+        in("r8") a5,
+        lateout("rcx") _,
+        lateout("r11") _,
+        options(nostack),
+    );
+    ret
+}
+
+/// `rusage` to the VER0 (72-byte on x86_64) ABI. Only the fields we read are meaningful;
+/// the rest are zero — the kernel fills what it needs and we read `ru_utime`/`ru_stime`/
+/// `ru_maxrss`.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[repr(C)]
+#[derive(Default)]
+struct Rusage {
+    ru_utime: [i64; 2],  // seconds, microseconds
+    ru_stime: [i64; 2],  // seconds, microseconds
+    ru_maxrss: i64,      // kB
+    ru_ixrss: i64,
+    ru_idrss: i64,
+    ru_isrss: i64,
+    ru_minflt: i64,
+    ru_majflt: i64,
+    ru_nswap: i64,
+    ru_inblock: i64,
+    ru_oublock: i64,
+    ru_msgsnd: i64,
+    ru_msgrcv: i64,
+    ru_nsignals: i64,
+    ru_nvcsw: i64,
+    ru_nivcsw: i64,
+}
+
+/// Item 61 (gap G6): reap a spawned child via `wait4(2)` (PID-shaped, RUSAGE_SELF=0) and
+/// return its decoded exit status plus the real `rusage`. Native-only (x86_64 Linux). A
+/// `rusage` of all-zero from the kernel would mean a genuinely-idle child, NOT a missing
+/// counter — but a planted SLOW child (busy-loop / sleeps) yields BIG utime/stime/wall,
+/// which is what the red→green test asserts (never a fabricated 0).
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn wait4(pid: u32, child: &mut std::process::Child) -> Result<(ChildStatus, ChildRusage), String> {
+    const SYS_WAIT4: i64 = 61;
+    let options: i64 = 0; // blocking wait
+    let mut ru: Rusage = Rusage::default();
+    // SAFETY: `&mut ru` is a live repr(C) buffer for the duration of the call; the kernel
+    // writes within the `rusage` layout. `child.id()` is the PID we wait on specifically
+    // (not any-child) so we reap exactly the bridge process we spawned.
+    let ret = unsafe {
+        syscall5(
+            SYS_WAIT4,
+            pid as i64,
+            &mut ru as *mut Rusage as i64,
+            options,
+            0,
+            0,
+        )
+    };
+    if ret < 0 {
+        // Reap defensively so we don't leak a zombie, then surface the error fail-closed.
+        let _ = child.wait();
+        return Err(format!("living_knowledge: wait4 failed (errno {-ret})"));
+    }
+    let utime_us = (ru.ru_utime[0] as u64)
+        .wrapping_mul(1_000_000)
+        .wrapping_add(ru.ru_utime[1] as u64);
+    let stime_us = (ru.ru_stime[0] as u64)
+        .wrapping_mul(1_000_000)
+        .wrapping_add(ru.ru_stime[1] as u64);
+    let maxrss_kb = if ru.ru_maxrss > 0 {
+        Some(ru.ru_maxrss as u64)
+    } else {
+        None
+    };
+    Ok((
+        ChildStatus { raw: ret as i32 },
+        ChildRusage {
+            utime_us: Some(utime_us),
+            stime_us: Some(stime_us),
+            maxrss_kb,
+        },
+    ))
+}
+
+/// Collect a child's captured stdout/stderr after reaping (used by both reaping paths).
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+fn collect_child_output(child: &mut std::process::Child) -> std::io::Result<ChildOutput> {
+    use std::io::Read;
+    let mut stdout = Vec::new();
+    if let Some(mut o) = child.stdout.take() {
+        o.read_to_end(&mut stdout)?;
+    }
+    let mut stderr = Vec::new();
+    if let Some(mut e) = child.stderr.take() {
+        e.read_to_end(&mut stderr)?;
+    }
+    Ok(ChildOutput { stdout, stderr })
+}
+
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+struct ChildOutput {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
+}
+
+#[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+fn collect_child_output(child: &mut std::process::Child) -> std::io::Result<ChildOutput> {
+    use std::io::Read;
+    let out = child.wait_with_output()?;
+    Ok(ChildOutput {
+        stdout: out.stdout,
+        stderr: out.stderr,
+    })
+}
+
+#[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+struct ChildOutput {
+    stdout: Vec<u8>,
+    stderr: Vec<u8>,
 }
 
 /// W18 — std-only PRIMARY recall delegation from `living_knowledge` into the

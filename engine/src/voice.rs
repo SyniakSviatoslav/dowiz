@@ -29,6 +29,8 @@
 use crate::friction::{FrictionSpec, Stake};
 use crate::intent::{InputSource, RawInput, SurfaceId};
 use crate::money_guard::Money;
+// Item 60 (gap G11) — wasm-safe clock, shared one design with the frame loop.
+use crate::clock;
 
 /// Locale tag (BCP-47-ish, minimal). Drives Moonshine-vs-Whisper selection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -125,6 +127,16 @@ pub enum InferError {
     Timeout,
     BudgetExceeded,
 }
+
+/// Wake-word spotter keyword match window / ASR budget (gap G11, item 60).
+///
+/// The battery-lever framing (wake gates ASR) is a battery-vs-latency tradeoff;
+/// this constant is the latency ceiling that makes `InferError::Timeout` fire.
+/// It is a product/UX decision (blueprint §7 [OPERATOR]); the wiring (dead
+/// variant → live timer) is the engineering deliverable. Pinned + single
+/// authority like `FRAME_BUDGET_US`. The real Moonshine stub streams in ~107 ms
+/// per its module doc, so 250 ms is a generous ceiling (operator-tunable).
+pub const ASR_TIMEOUT_US: u64 = 250_000;
 
 /// Tiny always-on wake-word spotter. The battery lever: full ASR runs ONLY after
 /// a wake fires. The stub matches a fixed keyword string against a provided
@@ -311,6 +323,11 @@ pub struct VoiceSource {
     woke: bool,
     /// Counter proving the battery lever: ASR feed must NOT run before wake.
     asr_feed_calls: u32,
+    /// Last measured ASR feed latency in microseconds (gap G11, item 60). `None`
+    /// = untimed (named absence, never a fabricated `0`); on wasm the clock
+    /// returns `None`. Fed by the wasm-safe `clock::now_micros` bracketing the
+    /// `AsrModel::feed` call.
+    asr_feed_us: Option<u64>,
 }
 
 impl VoiceSource {
@@ -328,6 +345,21 @@ impl VoiceSource {
             fixture_transcript: String::new(),
             woke: false,
             asr_feed_calls: 0,
+            asr_feed_us: None,
+        }
+    }
+
+    /// Test/spiking seam: build with an explicit ASR model (so a slow fake can be
+    /// injected to prove `InferError::Timeout` is reachable from the real timer).
+    pub fn with_asr(profile: VoiceProfile, wake_keyword: &'static str, asr: Box<dyn AsrModel>) -> Self {
+        VoiceSource {
+            wake: WakeWordSpotter::new(wake_keyword),
+            asr,
+            ring: AudioRing::new(4096),
+            fixture_transcript: String::new(),
+            woke: false,
+            asr_feed_calls: 0,
+            asr_feed_us: None,
         }
     }
 
@@ -348,6 +380,14 @@ impl VoiceSource {
         self.asr_feed_calls
     }
 
+    /// Item 60 (gap G11) — last measured ASR feed latency in microseconds, or
+    /// `None` when untimed (named absence — never a fabricated `0`). This is the
+    /// measured basis for the module's "battery lever" claim: feed-latency +
+    /// `asr_feed_calls()` = a real energy-proxy pair.
+    pub fn asr_feed_us(&self) -> Option<u64> {
+        self.asr_feed_us
+    }
+
     /// Drive one wake detection step. `mic_trigger` is `Some(keyword)` when the
     /// wake net spots the keyword this frame; `None` otherwise.
     pub fn detect_wake(&mut self, mic_trigger: Option<&str>) {
@@ -358,20 +398,55 @@ impl VoiceSource {
 
     /// Internal: run the ASR on the buffered PCM and return a final transcript if
     /// one arrived. Only callable after a wake (enforced — the battery lever).
-    fn stream_asr(&mut self) -> Option<String> {
+    ///
+    /// Item 60 (gap G11): the `AsrModel::feed` call is bracketed by the wasm-safe
+    /// `clock::now_micros`. If the measured feed latency exceeds `ASR_TIMEOUT_US`,
+    /// the call returns `Err(InferError::Timeout)` — making the previously-DEAD
+    /// `Timeout` variant reachable from a real timer (red→green). The measured
+    /// latency is stored in `asr_feed_us` (named absence `None` when untimed,
+    /// e.g. on wasm or when the clock is unavailable — never a fabricated `0`).
+    fn stream_asr(&mut self) -> Result<Option<String>, InferError> {
         if !self.woke {
-            return None; // battery lever: no ASR without wake → 0 feed calls
+            return Ok(None); // battery lever: no ASR without wake → 0 feed calls
         }
         self.asr_feed_calls += 1;
         let pcm = self.ring.drain();
+        let t0 = clock::now_micros();
         // The stub emits the fixture transcript as the finalized utterance.
-        let deltas = self.asr.feed(&pcm).ok()?;
-        for d in deltas {
-            if d.is_final {
-                return Some(d.text);
+        let deltas = self.asr.feed(&pcm)?;
+        let t1 = clock::now_micros();
+        let latency_us = match (t0, t1) {
+            (Some(a), Some(b)) => Some(b.saturating_sub(a)),
+            _ => None,
+        };
+        self.asr_feed_us = latency_us;
+        // Gap G11 (red→green): a real timer now drives `InferError::Timeout`.
+        if let Some(us) = latency_us {
+            if us > ASR_TIMEOUT_US {
+                return Err(InferError::Timeout);
             }
         }
-        None
+        for d in deltas {
+            if d.is_final {
+                return Ok(Some(d.text));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Drive one wake+ASR step and return a pollable raw input, mapping any ASR
+    /// error (including the new `InferError::Timeout`) to "no transcript this
+    /// tick" — voice is a perception channel; a timed-out feed is simply dropped,
+    /// never an error surfaced to the router.
+    pub fn poll_voice(&mut self) -> Option<RawInput> {
+        match self.stream_asr() {
+            Ok(Some(transcript)) if !transcript.is_empty() => Some(RawInput::VoicePhrase {
+                transcript,
+                confidence: 0.9,
+                is_final: true,
+            }),
+            _ => None,
+        }
     }
 }
 
@@ -379,16 +454,12 @@ impl InputSource for VoiceSource {
     /// Poll the voice source for the next raw input. Returns a `VoicePhrase`
     /// only after a wake AND a finalized transcript; the classifier resolves it.
     /// Voice NEVER emits a resolved `Intent` or a `CommitToken` directly.
+    ///
+    /// Item 60 (gap G11): a timed-out ASR feed (`InferError::Timeout`) is mapped
+    /// to "no transcript this tick" — the dead variant is now reachable but is a
+    /// perception-channel drop, never a router error.
     fn poll(&mut self) -> Option<RawInput> {
-        let transcript = self.stream_asr()?;
-        if transcript.is_empty() {
-            return None;
-        }
-        Some(RawInput::VoicePhrase {
-            transcript,
-            confidence: 0.9,
-            is_final: true,
-        })
+        self.poll_voice()
     }
 }
 
@@ -539,5 +610,67 @@ mod tests {
             classifier.classify(&raw, &ctx),
             Classification::Resolved(Intent::Navigate(NavTarget::Menu))
         );
+    }
+
+    // ── Item 60 (gap G11) ORACLE: `ASR_TIMEOUT_US` has ONE authority site and is
+    //    pinned (P3 rate discipline). 250_000 µs = 250 ms ceiling.
+    #[test]
+    fn asr_timeout_constant_is_pinned_authority() {
+        assert_eq!(ASR_TIMEOUT_US, 250_000, "ASR timeout ceiling pinned at 250 ms");
+    }
+
+    // ── Item 60 (gap G11) ORACLE (red→green): `InferError::Timeout` is now
+    //    REACHABLE FROM A REAL TIMER. A planted slow feed (a fake ASR that spins
+    //    past `ASR_TIMEOUT_US`) makes `stream_asr` return `Err(Timeout)` — today
+    //    the variant is dead/unreachable. The measured latency is recorded.
+    #[test]
+    fn planted_slow_feed_returns_timeout() {
+        use std::thread;
+        use std::time::Duration;
+
+        // A fake ASR whose `feed` spins past the timeout ceiling, then emits.
+        struct SlowAsr {
+            spun: bool,
+        }
+        impl AsrModel for SlowAsr {
+            fn id(&self) -> &str {
+                "slow-fake"
+            }
+            fn feed(&mut self, _pcm: &[i16]) -> Result<Vec<AsrDelta>, InferError> {
+                // Sleep well past the 250 ms ceiling so the real timer fires.
+                thread::sleep(Duration::from_millis(400));
+                self.spun = true;
+                Ok(vec![AsrDelta {
+                    text: "slow".into(),
+                    is_final: true,
+                }])
+            }
+            fn reset(&mut self) {
+                self.spun = false;
+            }
+            fn set_fixture(&mut self, _t: &str) {}
+        }
+
+        let mut src = VoiceSource::with_asr(VoiceProfile::default(), "hey dowiz", Box::new(SlowAsr { spun: false }));
+        src.detect_wake(Some("hey dowiz"));
+        let res = src.stream_asr();
+        assert_eq!(res, Err(InferError::Timeout), "a real timer must make Timeout reachable");
+        assert!(src.asr_feed_us().is_some(), "feed latency was measured");
+        assert!(src.asr_feed_us().unwrap() > ASR_TIMEOUT_US, "measured latency exceeded the ceiling");
+    }
+
+    // ── Item 60 (gap G11): a healthy (fast) feed is NOT timed out — the battery
+    //    lever's latency measurement stays honest and only trips on real slowness.
+    #[test]
+    fn fast_feed_not_timed_out() {
+        let mut src = VoiceSource::new(VoiceProfile::default(), "hey dowiz");
+        src.set_fixture("open menu");
+        src.detect_wake(Some("hey dowiz"));
+        src.feed_mic(0);
+        // The stub feed is instantaneous (well under ASR_TIMEOUT_US) on native; on
+        // wasm it is untimed (None) and also must NOT trip.
+        let res = src.stream_asr();
+        assert!(res.is_ok(), "a fast feed must not produce Timeout");
+        assert_eq!(res.unwrap(), Some("open menu".to_string()), "transcript still arrives");
     }
 }

@@ -99,6 +99,12 @@ pub enum AdmissionError {
     NonceRejected,
     /// Chain attenuation/tail-binding/effect-subset violated.
     ScopeViolation,
+    /// Item 54 Sentinel — a critical live authority struct (`AnchorRoster` /
+    /// `RevocationSet`) failed its read-time CRC integrity check. The admission is
+    /// REFUSED (fail-closed; deny-closed) and exactly one fsynced FDR `Alarm` has been
+    /// emitted naming the corrupted struct. A flipped trust-root key or revocation bit is
+    /// hardware-fault evidence; certify no agent.
+    SentinelTripped,
     /// The nonce ledger lock was poisoned.
     LockPoisoned,
     /// Recomputed `NodeId` (or frame↔manifest key mismatch) ≠ claimed identity.
@@ -121,6 +127,10 @@ fn map_chain_err(e: ChainError) -> AdmissionError {
         ChainError::BadSignature => AdmissionError::BadSignature,
         ChainError::Expired => AdmissionError::Expired,
         ChainError::ScopeViolation => AdmissionError::ScopeViolation,
+        // Item 54 Sentinel: a live-struct integrity fault refuses the admission
+        // (fail-closed; deny-closed). The FDR Alarm was already emitted inside
+        // `verify_chain` before this error propagated.
+        ChainError::IntegrityFault => AdmissionError::SentinelTripped,
     }
 }
 
@@ -196,6 +206,15 @@ impl<V: SignatureVerifier> AdmissionGate for ReferenceHybridGate<V> {
             return Err(AdmissionError::Expired);
         }
         let nonce = frame.capability.nonce;
+
+        // Item 54 Sentinel — read-time integrity check over the live `RevocationSet` at this
+        // authority-use transition point. `verify_chain` (step 2) already sentinels the
+        // `AnchorRoster`; here we cover the revocation set, whose corruption silently
+        // UN-revokes a revoked key. On mismatch: exactly one fsynced FDR `Alarm` then deny.
+        if let Err(c) = crate::ports::agent::sentinel::verify_candidate(None, Some(revocations)) {
+            crate::ports::agent::sentinel::safe_state_on_corruption(&c);
+            return Err(AdmissionError::SentinelTripped);
+        }
 
         // 2. authorization root-of-trust: anchor-rooted UCAN-subset chain.
         verify_chain(&self.verifier, roster, chain, &frame.capability, now)
