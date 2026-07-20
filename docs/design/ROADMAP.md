@@ -1443,9 +1443,9 @@ One-line ledger:
 
 ##### P37 — Minimal HTTP/API surface for orders
 **Absorbs:** RW-09 (thin-shell boundary codify — the wire adapter is the second shell over the same kernel, subject to the same rule). Unblocks P23-P3; supplies the wire half of P13. No FE/DZ units live here.
-**Status:** PLANNED (0% — the only axum server in the repo is static-file-only, zero dynamic routes)
+**Status:** ~~PLANNED (0% — the only axum server in the repo is static-file-only, zero dynamic routes)~~ — **LANDED (corrected 2026-07-20, verified against live code).** Commit `68d5c2874` ("feat(P37): W37-1..7 kernel json-api + native-spa-server HTTP order surface + adversarial cap set") shipped `kernel/src/json_api.rs` + `tools/native-spa-server/src/api.rs` with real dynamic order routes registered in the served binary's router — `POST /api/order` (place), `GET /api/order/{id}` (read), `POST /api/order/{id}/advance` (apply event) at `api.rs:669-671`, cap-gated. Matches §13's "biggest single stale claim" correction and §15.2 row 0.2. The Role/DoD text below predates the landing — read it as the original spec, now largely satisfied.
 **Role & responsibility:** The #1 literal blocker of the entire DELIVERY layer: expose delivery-domain's already-proven order lifecycle over a wire. This is explicitly a **thin** surface — just enough dynamic routes to place/advance/read an order — not a REST API design exercise; the order flow, state machine, and money math already exist and are tested, the server merely transports intents to `decide` and serves `fold`-derived state.
-**Blueprint:** No dedicated blueprint (deliberately — the scope is "thinnest possible adapter"). The two documents that name this exact gap and constrain it: `docs/design/sovereign-roadmap-2026-07-16/BLUEPRINT-P13-delivery-on-protocol.md` and `docs/design/BLUEPRINT-AUTH-DEVICE-2FA-2026-07-17.md` (whose P3 is blocked on this surface). Reuse them; do not write a REST spec.
+**Blueprint:** [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P37-order-http-surface.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P37-order-http-surface.md) (2026-07-18, 20-point — it extends this section's six-item DoD into named RED→GREEN tests; the "No dedicated blueprint (deliberately)" note that stood here predates it and is now stale). Also constrained by `docs/design/sovereign-roadmap-2026-07-16/BLUEPRINT-P13-delivery-on-protocol.md` and `docs/design/BLUEPRINT-AUTH-DEVICE-2FA-2026-07-17.md` (whose P3 is blocked on this surface). Reuse; do not write a REST spec.
 **DoD:**
 1. A dynamic HTTP server exists in-repo (extend `tools/native-spa-server` or a sibling crate) serving both the static `web/` assets and dynamic order routes from one binary. Falsifiable: `grep` finds ≥1 non-static route handler; the binary boots and answers a dynamic request.
 2. An integration test drives one full order lifecycle **over the wire** (place → accept → pickup → deliver) and asserts the final fold-derived state matches the same sequence run directly against delivery-domain. Red today (no server), green at close.
@@ -1512,9 +1512,9 @@ One-line ledger:
 
 ##### P40 — AgentLoop executor + tool-calling capability wiring
 **Absorbs:** P21 (resident-agent plane, executor half) · follow-on to the shipped harness-llm-backend arc (`feat/harness-llm-backend`, Ollama port Wave 0+1+consumer-wiring DONE)
-**Status:** PLANNED (its substrate is DONE — the gap is everything above it)
+**Status:** ~~PLANNED (its substrate is DONE — the gap is everything above it)~~ — **PARTIAL (corrected 2026-07-20, verified against live code).** The "`AgentLoop`/any executor has 0 grep hits anywhere in the repo" claim in the Role text below is stale: the 2026-07-18 swarm landed `kernel/src/agent/loop.rs` (`pub struct AgentLoop<R: SkillRegistry>` at :119, a fail-closed bounded executor) plus the `agent-loop/` crate (`service.rs`/`lib.rs`, adversarial tests) — commit `626236886` ("feat(kernel/agent): WAVE P40 AgentLoop executor + tool wiring (fail-closed)"), matching §10.2's already-corrected P40 cell. Design-vs-implementation reconciliation not re-done here.
 **Role & responsibility:** Build the plan→act→observe executor that turns the existing raw chat-completion backend into an agent that can DO things. Today `LlmBackend` is real and consumed (only by `llm-adapters/src/{dispatch,cache,compose,ollama}.rs` and its own tests/benches), but `AgentLoop`/any executor has **0 grep hits anywhere in the repo** — this is the single biggest gap in AGENT's scope: a chat backend with no callers connecting it to orders. P40 also defines the tool-port interface behind a KernelFacade-style compilation firewall and un-pins tool-calling at the capability level: `Caps.tool_calling` is HARD-PINNED `false` at `llm-adapters/src/ollama.rs:59` — it is not even wired at the flag level yet.
-**Blueprint:** `docs/design/harness-2026-07-16/HARNESS-LLM-BACKEND.md` covers the backend layer and already anticipates tool-calling — as a `Caps` probe ("Tool-calling/structured-output support differs per backend/model — a `Caps` probe, not assumed," §2.2 Quirks item 5) and as a `tools` field in the exact-match cache key (§3.2) — but contains **no loop design**. Build on that doc's port/adapter/firewall conventions; the loop itself needs a first design pass here.
+**Blueprint:** [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P40-agent-loop-tool-wiring.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P40-agent-loop-tool-wiring.md) (the loop / tool-port design) + [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P40-AGENT-EXECUTOR-PRODUCT-WIRING-2026-07-19.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P40-AGENT-EXECUTOR-PRODUCT-WIRING-2026-07-19.md) (the product-wiring follow-on) — **both exist on disk; the "the loop itself needs a first design pass here" note that stood here predates them and is now stale.** Backend layer: `docs/design/harness-2026-07-16/HARNESS-LLM-BACKEND.md` covers the backend and already anticipates tool-calling — as a `Caps` probe ("Tool-calling/structured-output support differs per backend/model — a `Caps` probe, not assumed," §2.2 Quirks item 5) and as a `tools` field in the exact-match cache key (§3.2) — but contains **no loop design**. Build on those docs' port/adapter/firewall conventions.
 **DoD:**
 1. A `ToolPort` trait exists in the kernel-ports layer (plain structs, no serde/HTTP, mirroring `llm.rs` conventions); the loop crate consumes tools ONLY through it — `cargo tree` shows the loop crate does not import `dowiz-kernel` directly (same firewall done-check the LLM blueprint already uses: kernel shows no HTTP client, no adapter crates).
 2. `Caps.tool_calling` is no longer hard-pinned `false` for Ollama — it is set by a live per-model probe, fail-closed (probe fails ⇒ `false`).
@@ -1602,7 +1602,7 @@ P22 is **confirmed 0% built** — no `SocialPoster` trait, no `TelegramAdapter`/
 **Absorbs:** EC-05; own-inference-beyond-Ollama, own-RAG, chunking, and gossip-flows-as-kernel-properties units of EC-03/04/06/08/12–15.
 **Status:** PLANNED (0 of 5 cache layers built)
 **Role & responsibility:** The ecosystem-strategy arc's flagged "only gap": five cache layers (embedding cache, Merkle re-index, prefix-disk tier, pipeline cache, semantic cache) plus eventual self-hosted inference/RAG scale-out. Verified current state: exactly **one** basic exact-match sha3-keyed cache exists (`llm-adapters/src/cache.rs`); none of the five planned layers, no own-RAG, no chunking pipeline.
-**Blueprint:** none — source arc: `/root/.claude/projects/-root-dowiz/memory/ecosystem-strategy-arc-2026-07-13.md`. Do not write one yet.
+**Blueprint:** [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P44-cache-layers-scaleout.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P44-cache-layers-scaleout.md) (2026-07-18 — **deliberately thin by design:** its real deliverable is the measurement methodology that must precede any cache layer, matching this section's "no layer ships without a number it improves" stance; the "Do not write one yet" note that stood here predates it, and the thin gate-defining doc that exists is consistent with it, not a violation of it). Source arc: `/root/.claude/projects/-root-dowiz/memory/ecosystem-strategy-arc-2026-07-13.md`.
 **DoD (deliberately minimal — this is optimization work for a service that does not yet exist):**
 1. A measured baseline exists (cache hit-rate + latency on real AGENT-loop traffic) *before* any layer is built — no layer ships without a number it improves.
 2. Each layer lands only with a benchmark showing net win over the existing sha3 exact-match cache; a layer that doesn't beat it gets deleted, not kept.
@@ -1620,7 +1620,7 @@ P22 is **confirmed 0% built** — no `SocialPoster` trait, no `TelegramAdapter`/
 
 **Superseded — resolve explicitly:** the arc's RLS-fix approach was "resurrect attic's 140 TS migrations." That path is **dead twice over**: (a) `attic/` is physically deleted, so the premise no longer exists; (b) it is **formally superseded** by `docs/design/BLUEPRINT-P-NATIVE-PGRUST-TENANT-REBUILD.md` (committed 2026-07-18), whose §0 states "NOT a TS/Supabase migration… the old attic/packages-db 140 migrations are quarantined and dropped; we do not revive them," and whose §5 DECART table formally rejects attic-revival in favor of a native Rust/sqlx adapter. **The native pgrust rebuild is current canon.** It is already registered in `CORE-ROADMAP-INDEX.md` §7 as a separate red-line track, gated on operator `/council` review — **cross-referenced here, not renumbered into P45.**
 
-**Blueprint:** `docs/ops/P8-SINGLE-PANE-SPEC.md` (monitoring, `[SPEC]`), `docs/design/BLUEPRINT-P-NATIVE-PGRUST-TENANT-REBUILD.md` (data layer, separate gated track). Reuse both; write nothing new until unblocked.
+**Blueprint:** [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P45-ops-security-monitoring.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P45-ops-security-monitoring.md) (2026-07-18, 20-point — the full deployment/monitoring/security-tracing blueprint for this exact phase, explicitly HARD-blocked on DELIVERY P37 per its own header; this section's Blueprint line previously cited only the two references below and omitted the dedicated doc). Also: `docs/ops/P8-SINGLE-PANE-SPEC.md` (monitoring, `[SPEC]`), `docs/design/BLUEPRINT-P-NATIVE-PGRUST-TENANT-REBUILD.md` (data layer, separate gated track). Reuse; write nothing new until unblocked.
 **DoD:**
 1. A deploy artifact exists and is reachable at a canonical prod URL (falsifies "no canonical prod target exists").
 2. The heartbeat dead-man's-switch is retargeted from the tunnel webhook to the live app's health endpoint, and a deliberately induced outage produces a Telegram alert within 10 minutes.
@@ -1633,7 +1633,7 @@ P22 is **confirmed 0% built** — no `SocialPoster` trait, no `TelegramAdapter`/
 **Absorbs:** EC-17 and the multi-product/marketplace remainder of the ecosystem-strategy arc, including "dowiz Local" (the planned second product intended to prove multi-product reuse — never shipped, zero grep hits in the repo).
 **Status:** PLANNED (0%)
 **Role & responsibility:** The ecosystem endgame: prove the CORE/INFRA/FLOWS decomposition by shipping a second product on the same kernel, then (and only then) generalize toward a marketplace. Nothing exists; nothing should, yet.
-**Blueprint:** none — source arc: `/root/.claude/projects/-root-dowiz/memory/ecosystem-strategy-arc-2026-07-13.md`. No blueprint until the gate below is met.
+**Blueprint:** [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P46-multi-product-platform.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P46-multi-product-platform.md) (2026-07-18 — the FURTHEST-FUTURE terminal node; the doc is deliberately almost entirely a **gate definition + reuse-measurement methodology** and explicitly does NOT design the second product, which honors the "no blueprint until the gate is met" intent that stood here by making the gate itself the blueprint's content). Source arc: `/root/.claude/projects/-root-dowiz/memory/ecosystem-strategy-arc-2026-07-13.md`.
 **DoD:**
 1. A second product ("dowiz Local" or successor) runs on the unmodified kernel with zero kernel forks — falsified by any product-specific patch to CORE.
 2. Reuse is measured, not asserted: the second product's non-kernel code line count is published against the first product's.
@@ -2241,6 +2241,7 @@ for the agent loop, grounded in the operator-supplied ML/CS glossary applied as 
 checklist: tokenization failure-mode probes (letter-counting, leading-space sensitivity,
 arithmetic inconsistency) mapped to concrete falsifiable tests; the glossary's own
 "signals against fine-tuning" criteria applied honestly to this project's real maturity.
+**Blueprint:** [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P54-llm-agent-verification-harness.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P54-llm-agent-verification-harness.md) (the 822-line "blueprint ON DISK" the Status line names — linked here so it is reachable, not merely asserted to exist).
 **DoD (summary):** a money-arithmetic-trust probe, two-pronged — (1) a *structural* always-green
 fence proving no money/tax tool exists in the agent's tool namespace at all
 (`MONEY_DECISION_CONSUMPTIONS_MAX=0`, proven in-process against `apply_tax()`), so a wrong
@@ -2275,6 +2276,7 @@ scheduled). Each RC gets a concrete native-Rust mechanism with a RED-first falsi
 against the real historical incident (a required-checks liveness ratchet, a checked-in
 feature-matrix coverage gate, a resolved-default security auditor over `cargo metadata`, a
 heartbeat ledger).
+**Blueprint:** [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P55-protocol-ecosystem-testing.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P55-protocol-ecosystem-testing.md) (the "blueprint ON DISK" the Status line names — linked here for reachability).
 **DoD (summary):** `proptest` — confirmed **already a live kernel dev-dependency** with a real
 400-case suite (`ports/payment.rs:644`) — extended to `order_machine::assert_transition`,
 `domain.rs::compute_order_total`, `claim_machine::assert_transition`, `matcher::assign` (all
@@ -2299,6 +2301,7 @@ regression coverage back into P34/P36.
 scheduling, cross-platform/multi-device test-dimension modeling, and (the hardest, most novel
 piece) **meta-verification**: checking that the tests/measurements themselves aren't reaching
 false conclusions, not merely checking their results.
+**Blueprint:** [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P56-verification-harness-infrastructure.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P56-verification-harness-infrastructure.md) (the "blueprint ON DISK" the Status line names — linked here for reachability).
 **DoD (summary):** four typed meta-verification detectors, each itself a registered probe with
 a mandatory known-RED canary — **FlakyProbe** (differing verdicts on an identical
 `(probe_id, probe_version, env_fingerprint, seed)` key, quantified via the kernel's own
