@@ -34,10 +34,28 @@
 //! and any Pricing activation (operator gate). All three are explicitly NOT built — their
 //! absence is part of done (§5 / D8).
 
-use crate::decision::{DecisionRegistry, DecisionUnit, DecisionUnitMeta, UnitState};
+use crate::decision::{merge_meta, DecisionRegistry, DecisionUnit, DecisionUnitMeta, UnitState};
 use crate::event_log::{sha3_256, EventLog, EventStore, MeshEvent};
 use crate::metrics::DecisionImportRecord;
 use std::fmt::Debug;
+
+/// The admission *source* of a unit entering the one import pipeline.
+///
+/// This is the ONLY extension item 23 adds to the import path: a gossip-sourced
+/// unit flows through the **same** six-check pipeline as a locally-imported one
+/// (synthesis §17(b) P2 Correspondence — "one admission mechanism, extended to a
+/// second source of input, never a second importer"). No parallel importer exists;
+/// grep confirms a single `import_unit` entry point. The source tag is plumbed
+/// through so callers (and the telemetry lane) know whether a unit was compiled
+/// locally or received from a peer, but it never forks the check logic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Source {
+    /// Unit compiled by this hub (the original local-import path).
+    Local,
+    /// Unit received from a gossip peer. Admitted through the *same* checks; the
+    /// peer's GREEN is never the certificate (check 4 applies identically).
+    Gossip,
+}
 
 /// Why an import was rejected. Every reachable variant maps to a real adversarial
 /// case (§6.3 A1–A6). `MoneyGateRequired` is retained for blueprint fidelity but not
@@ -74,6 +92,21 @@ pub type Instance<I, O> = (I, crate::decision::Decision<O>);
 /// `instance_set_hash`. `registry` is the local unit registry (epoch check); `log` is the
 /// one content-addressed event log (lineage-parent check + row append).
 ///
+/// `source` is the only item-23 addition: it declares whether the unit was compiled locally
+/// (`Source::Local`) or received from a gossip peer (`Source::Gossip`). **Both flow through
+/// the same six checks** — there is no second importer. The three gossip extensions are each
+/// a reuse of an existing check:
+///   - **epoch max-merge (ext of check 5):** a gossip unit's epoch is merged against the
+///     local Live epoch via the existing `merge_meta` (decision/mod.rs) *before* the
+///     no-downgrade check; an epoch-downgrade attempt via max-merge is rejected by the
+///     existing `EpochNotNewer`, never a new guard.
+///   - **key_V-shaped import replay (IS check 4):** a gossip unit gets the *same*
+///     independent-replay-against-local-oracle treatment — the peer's GREEN is never the
+///     certificate. No new replay path.
+///   - **lineage-in-one-log (IS check 6):** a gossip unit's `prev_content_id` must resolve
+///     in the one `EventLog`, same as a local import. A lineage-orphan is rejected by the
+///     existing `LineageParentMissing`.
+///
 /// On success returns the admitted `DecisionUnit` (state `Live`; `Pending` if money-gated)
 /// AND has appended a lineage row to `log`. On any reject, **nothing is persisted** to the
 /// log (degrade-closed) and a telemetry `DecisionImport{ok:false, reason}` record is returned
@@ -84,6 +117,7 @@ pub fn import_unit<I, O>(
     proc: impl Fn(&I) -> crate::decision::Decision<O> + Send + Sync + 'static,
     cases: &[Instance<I, O>],
     instance_set_hash: [u8; 32],
+    source: Source,
     registry: &DecisionRegistry,
     log: &mut EventLog<impl EventStore>,
 ) -> Result<(DecisionUnit<I, O>, DecisionImportRecord), (ImportReject, DecisionImportRecord)>
@@ -117,6 +151,8 @@ where
     }
 
     // 4. Independent replay — full instance set, author's GREEN never trusted (A1).
+    //    Applies IDENTICALLY to a gossip-sourced unit: the peer's claim is not the
+    //    certificate. This IS the key_V-shaped import replay extension (check 4).
     for (i, (input, expected)) in cases.iter().enumerate() {
         let got = proc(input);
         if got != *expected {
@@ -128,9 +164,27 @@ where
     }
 
     // 5. Epoch check — never downgrade an existing Live unit (A2).
+    //    EXTENSION (epoch max-merge): a gossip-received unit's epoch is merged against
+    //    the local Live epoch via the EXISTING `merge_meta` join-semilattice BEFORE the
+    //    no-downgrade check runs. The merge result feeds the existing check; an
+    //    epoch-downgrade attempt via max-merge is rejected by the existing
+    //    `EpochNotNewer`, never a new guard (synthesis §17(b): compose, don't violate).
+    let eff_epoch = if let Some(live) = registry.route_live(domain) {
+        let mut merged =
+            merge_meta(&meta, &live_unit_meta(live));
+        merged.epoch = merged.epoch.max(meta.epoch); // idempotent w.r.t. merge_meta result
+        merged.epoch
+    } else {
+        // No Live unit yet: the incoming epoch is authoritative; max-merge with the
+        // genesis (zero) meta is a no-op, so we just take it as-is.
+        meta.epoch
+    };
     if let Some(live) = registry.route_live(domain) {
-        if live_epoch(live) >= meta.epoch {
-            return Err((ImportReject::EpochNotNewer, telemetry(false, Some("EpochNotNewer"))));
+        if live_epoch(live) >= eff_epoch {
+            return Err((
+                ImportReject::EpochNotNewer,
+                telemetry(false, Some("EpochNotNewer")),
+            ));
         }
     }
 
@@ -178,6 +232,21 @@ fn live_epoch(unit: &crate::decision::AnyUnit) -> crate::decision::UnitEpoch {
     }
 }
 
+/// Read the full `DecisionUnitMeta` of a registered `AnyUnit` (used by the
+/// epoch max-merge extension: the incoming gossip meta is merged against the
+/// local Live meta via the existing `merge_meta` join-semilattice).
+fn live_unit_meta(unit: &crate::decision::AnyUnit) -> crate::decision::DecisionUnitMeta {
+    use crate::decision::AnyUnit;
+    match unit {
+        AnyUnit::Dispatch(u) => u.meta.clone(),
+        AnyUnit::EtaGeo(u) => u.meta.clone(),
+        AnyUnit::Pricing(u) => u.meta.clone(),
+        AnyUnit::FraudAuth(u) => u.meta.clone(),
+        AnyUnit::MenuInventory(u) => u.meta.clone(),
+        AnyUnit::Harness(u) => u.meta.clone(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -213,6 +282,7 @@ mod tests {
             |x| Decision::Answer(x * 10),
             cases,
             [7u8; 32],
+            Source::Local,
             &reg,
             &mut log,
         )
@@ -244,6 +314,7 @@ mod tests {
             |x| Decision::Answer(x * 10), // honest proc says 20, oracle expected 99
             cases,
             [7u8; 32],
+            Source::Local,
             &reg,
             &mut log,
         );
@@ -274,6 +345,7 @@ mod tests {
             |x| Decision::Answer(*x * 10),
             cases,
             [7u8; 32],
+            Source::Local,
             &reg,
             &mut log,
         );
@@ -296,6 +368,7 @@ mod tests {
             |x| Decision::Answer(*x * 10),
             cases,
             [7u8; 32],
+            Source::Local,
             &reg,
             &mut log,
         );
@@ -316,6 +389,7 @@ mod tests {
             |x| Decision::Answer(*x * 10),
             cases,
             [7u8; 32],
+            Source::Local,
             &reg,
             &mut log,
         );
@@ -335,9 +409,121 @@ mod tests {
             |x| Decision::Answer(*x * 10),
             cases,
             [7u8; 32],
+            Source::Local,
             &reg,
             &mut log,
         );
         assert!(matches!(res, Err((ImportReject::MalformedArtifact, _))));
+    }
+
+    // ── ITEM 23 (acceptance #1 + P2 Correspondence): a GOSSIP-sourced unit
+    //    flows through the SAME six checks as a local import. A clean gossip unit
+    //    is admitted Live with a lineage row, just like the local happy path. ──
+    #[test]
+    fn gossip_source_admitted_through_same_pipeline() {
+        let artifact = b"dispatch-v2-gossip";
+        let cases: &[(u8, Decision<u8>)] = &[(1, Decision::Answer(10)), (2, Decision::Answer(20))];
+        let meta = meta_for(DomainTag::Harness, 1, artifact, None);
+        let reg = DecisionRegistry::new();
+        let mut log = EventLog::new(MemEventStore::default());
+
+        let before = log_len(&log);
+        let (unit, rec) = import_unit(
+            meta,
+            artifact,
+            |x| Decision::Answer(x * 10),
+            cases,
+            [7u8; 32],
+            Source::Gossip, // the only difference from the local happy path
+            &reg,
+            &mut log,
+        )
+        .expect("gossip import must succeed through the same gate");
+        assert!(rec.ok);
+        assert_eq!(unit.state, UnitState::Live);
+        assert_eq!(log_len(&log), before + 1, "gossip admits via the one pipeline");
+    }
+
+    // ── ITEM 23 (acceptance #1): a gossip unit whose replay DISAGREES is
+    //    rejected with NOTHING PERSISTED — the same key_V check 4 the local
+    //    path uses. The peer's GREEN is never the certificate. ──
+    #[test]
+    fn gossip_replay_disagreement_rejected_nothing_persisted() {
+        let artifact = b"gossip-poison";
+        let cases: &[(u8, Decision<u8>)] = &[(1, Decision::Answer(10)), (2, Decision::Answer(99))];
+        let meta = meta_for(DomainTag::Harness, 1, artifact, None);
+        let reg = DecisionRegistry::new();
+        let mut log = EventLog::new(MemEventStore::default());
+
+        let before = log_len(&log);
+        let res = import_unit(
+            meta,
+            artifact,
+            |x| Decision::Answer(*x * 10), // honest proc says 20, peer oracle expected 99
+            cases,
+            [7u8; 32],
+            Source::Gossip,
+            &reg,
+            &mut log,
+        );
+        assert!(matches!(res, Err((ImportReject::ReplayDisagreement { case: 1 }, _))));
+        assert_eq!(log_len(&log), before, "nothing persisted on gossip reject (D3)");
+    }
+
+    // ── ITEM 23 (acceptance #1 + epoch max-merge ext of check 5): an
+    //    epoch-DOWNGRADE attempt via a gossip peer is rejected by the EXISTING
+    //    no-downgrade check (EpochNotNewer). The max-merge extends the check but
+    //    adds no new reject guard; a lower epoch still triggers EpochNotNewer. ──
+    #[test]
+    fn gossip_epoch_downgrade_via_maxmerge_rejected() {
+        let artifact = b"gossip-v0";
+        let cases: &[(u8, Decision<u8>)] = &[(1, Decision::Answer(10))];
+        let meta = meta_for(DomainTag::Harness, 1, artifact, None);
+        let mut reg = DecisionRegistry::new();
+        reg.register(crate::decision::AnyUnit::Harness(DecisionUnit::new(
+            DomainTag::Harness,
+            UnitEpoch(5),
+            |_x: &crate::decision::HarnessInput| {
+                Decision::Answer(crate::decision::HarnessOut { route_tier: 0 })
+            },
+        )));
+
+        let mut log = EventLog::new(MemEventStore::default());
+        let res = import_unit(
+            meta,
+            artifact,
+            |x| Decision::Answer(*x * 10),
+            cases,
+            [7u8; 32],
+            Source::Gossip,
+            &reg,
+            &mut log,
+        );
+        assert!(matches!(res, Err((ImportReject::EpochNotNewer, _))));
+    }
+
+    // ── ITEM 23 (acceptance #1 + lineage-in-one-log ext of check 6): a
+    //    gossip unit with an ORPHAN prev_content_id is rejected by the EXISTING
+    //    LineageParentMissing — same one EventLog, same check as local. ──
+    #[test]
+    fn gossip_orphan_lineage_rejected() {
+        let artifact = b"gossip-v2-with-prev";
+        let cases: &[(u8, Decision<u8>)] = &[(1, Decision::Answer(10))];
+        let prev = [42u8; 32]; // not in the log
+        let meta = meta_for(DomainTag::Harness, 2, artifact, Some(prev));
+        let reg = DecisionRegistry::new();
+        let mut log = EventLog::new(MemEventStore::default());
+
+        let res = import_unit(
+            meta,
+            artifact,
+            |x| Decision::Answer(*x * 10),
+            cases,
+            [7u8; 32],
+            Source::Gossip,
+            &reg,
+            &mut log,
+        );
+        assert!(matches!(res, Err((ImportReject::LineageParentMissing, _))));
     }
 }

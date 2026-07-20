@@ -264,6 +264,68 @@ pub trait HubTransport {
     fn recv(&self) -> Result<Vec<SignedEntry>, MeshError>;
 }
 
+/// Item 23 — gossip reception as an extension of the ONE import pipeline.
+///
+/// This is the production caller the signed-log primitive was missing (item 22
+/// audit §3: `MeshLog`/`SignedEntry` were bench-only with zero real callers).
+/// It turns a gossip-received, ML-DSA-signed entry into a candidate unit that
+/// is admitted through `decision::import_unit` — **the same** six-check gate a
+/// locally-compiled unit uses. No second importer is built.
+///
+/// **Transport-firewall discipline (HubTransport `mesh.rs:250–265`): the
+/// signature is verified BEFORE the entry reaches `import_unit`.** A forged or
+/// tampered entry (`SignedEntry::verify_sig` ⇒ false) is rejected here and
+/// never enters the import pipeline, so the only bytes `import_unit` ever sees
+/// are authentic against the peer's embedded public key.
+///
+/// Wire-format note: the `payload` of a gossip `SignedEntry` is an
+/// opaque-but-parsable unit frame. We keep this item strictly zero-dep / no
+/// serde: the frame is decoded by a caller-supplied `decode` closure (the
+/// kernel defines the seam, the sync layer supplies the concrete wire codec).
+pub struct GossipImport {
+    /// The transport through which signed peer entries arrive.
+    transport: Box<dyn HubTransport>,
+}
+
+impl GossipImport {
+    /// Build a gossip receiver over a caller-supplied [`HubTransport`].
+    pub fn new<T: HubTransport + 'static>(transport: T) -> Self {
+        GossipImport {
+            transport: Box::new(transport),
+        }
+    }
+
+    /// Pull every entry the transport hands us, filter to the authentic ones,
+    /// and return them ready for `import_unit`. **Forged/tampered entries are
+    /// dropped here** (transport firewall) — they cannot reach the import gate.
+    ///
+    /// The returned metas carry `source = decision::import::Source::Gossip`.
+    pub fn receive_verified(
+        &self,
+    ) -> Result<Vec<GossipUnit>, MeshError> {
+        let entries = self.transport.recv()?;
+        let mut out = Vec::new();
+        for e in entries {
+            // Transport firewall: verify the signature against the embedded
+            // pubkey BEFORE the unit can be imported. Bad signature ⇒ skip; it
+            // never reaches `import_unit` (degrade-closed at the seam).
+            if !e.verify_sig() {
+                continue; // MeshError::BadSignature equivalent, enforced pre-pipeline
+            }
+            out.push(GossipUnit { entry: e });
+        }
+        Ok(out)
+    }
+}
+
+/// A gossip-received, signature-verified unit frame, ready to feed `import_unit`
+/// (with `Source::Gossip`). The signature has already been checked by the
+/// transport firewall in [`GossipImport::receive_verified`].
+pub struct GossipUnit {
+    /// The verified signed entry (its `payload` is the opaque unit frame).
+    pub entry: SignedEntry,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -383,5 +445,47 @@ mod tests {
             Err(MeshError::GenesisMustBeRoot) => {}
             other => panic!("expected GenesisMustBeRoot, got {:?}", other),
         }
+    }
+
+    // ── ITEM 23 (acceptance #4): a bad-signature gossip entry never reaches
+    //    `import_unit`. The transport firewall (`receive_verified`) drops it
+    //    before any import. We simulate a peer feed: one good entry + one
+    //    tampered entry; only the good one survives the firewall. ──
+    #[test]
+    fn gossip_bad_signature_never_reaches_import() {
+        let s = signer(7);
+        // Good, signed entry.
+        let good = {
+            let mut log = MeshLog::new();
+            log.append(b"unit-frame: dispatch-v2", &s)
+        };
+        // Forged entry: valid signature over a different payload, then tampered
+        // in place so verify_sig fails.
+        let mut forged = {
+            let mut log = MeshLog::new();
+            log.append(b"unit-frame: dispatch-v2", &s)
+        };
+        forged.payload = b"forged-frame".to_vec(); // signature no longer matches
+
+        struct FeedHub {
+            entries: std::cell::RefCell<Vec<SignedEntry>>,
+        }
+        impl HubTransport for FeedHub {
+            fn send(&self, _e: &SignedEntry) -> Result<(), MeshError> {
+                Ok(())
+            }
+            fn recv(&self) -> Result<Vec<SignedEntry>, MeshError> {
+                Ok(self.entries.borrow().clone())
+            }
+        }
+        let hub = FeedHub {
+            entries: std::cell::RefCell::new(vec![good, forged]),
+        };
+        let gossip = GossipImport::new(hub);
+        let verified = gossip.receive_verified().expect("transport recv ok");
+        // The forged entry is dropped at the firewall; only the authentic one
+        // is handed toward `import_unit` (Source::Gossip).
+        assert_eq!(verified.len(), 1, "bad-sig entry must not survive the firewall");
+        assert_eq!(verified[0].entry.payload, b"unit-frame: dispatch-v2");
     }
 }

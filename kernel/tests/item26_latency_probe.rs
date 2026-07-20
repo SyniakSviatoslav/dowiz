@@ -16,6 +16,7 @@ use std::time::{Duration, Instant};
 
 use dowiz_kernel::decision::import::import_unit;
 use dowiz_kernel::decision::{Decision, DecisionRegistry, DecisionUnitMeta, DomainTag, UnitEpoch};
+use dowiz_kernel::decision::import::Source;
 use dowiz_kernel::event_log::{sha3_256, EventLog, MemEventStore, MeshEvent};
 use dowiz_kernel::fdr::ring::FdrRing;
 use dowiz_kernel::fdr::schema::{FdrEvent, Kind, StampPolicy};
@@ -193,7 +194,7 @@ fn m3_import_unit_percentiles() {
         let start = Instant::now();
         for _ in 0..N {
             let t = Instant::now();
-            let res = import_unit(meta.clone(), artifact, |x| Decision::Answer(*x), &cases, ish, &reg, &mut log);
+            let res = import_unit(meta.clone(), artifact, |x| Decision::Answer(*x), &cases, ish, Source::Local, &reg, &mut log);
             lat.push(t.elapsed().as_nanos() as u64);
             assert!(res.is_ok());
         }
