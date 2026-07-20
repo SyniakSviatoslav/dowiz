@@ -144,14 +144,21 @@ mod tests {
         let q = AgentQuirks::mcp_server(allowlist());
         let caps = q.caps_from_discovery(true, true, true, true);
         assert!(caps.invoke_tool && caps.read_resource && caps.render_prompt && caps.long_task);
-        assert!(!caps.delegate, "MCP has no delegation ⇒ delegate is always false");
+        assert!(
+            !caps.delegate,
+            "MCP has no delegation ⇒ delegate is always false"
+        );
     }
 
     #[test]
     fn unmapped_tool_is_fail_closed_drop() {
         let q = AgentQuirks::mcp_server(allowlist());
         assert_eq!(q.map_tool("get_menu"), Some((Resource::Menu, Action::Read)));
-        assert_eq!(q.map_tool("delete_everything"), None, "unmapped ⇒ fail-closed drop");
+        assert_eq!(
+            q.map_tool("delete_everything"),
+            None,
+            "unmapped ⇒ fail-closed drop"
+        );
     }
 
     #[test]
@@ -160,7 +167,10 @@ mod tests {
         let d1 = q.tool_map_digest(&["get_menu".into(), "read_order".into()]);
         // Server drops a tool ⇒ different digest.
         let d2 = q.tool_map_digest(&["get_menu".into()]);
-        assert_ne!(d1, d2, "changing the advertised tool set changes the digest");
+        assert_ne!(
+            d1, d2,
+            "changing the advertised tool set changes the digest"
+        );
         // Advertising an UNMAPPED tool does not change the digest (it is dropped).
         let d3 = q.tool_map_digest(&["get_menu".into(), "read_order".into(), "evil".into()]);
         assert_eq!(d1, d3, "unmapped tools do not enter the digest");

@@ -46,7 +46,11 @@ impl<C: RpcChannel> JsonRpcTransport<C> {
             serde_json::from_slice(&raw).map_err(|e| AgentError::BadRequest(e.to_string()))?;
         if let Some(err) = resp.get("error") {
             let code = err.get("code").and_then(|c| c.as_i64()).unwrap_or(0);
-            let msg = err.get("message").and_then(|m| m.as_str()).unwrap_or("").to_string();
+            let msg = err
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("")
+                .to_string();
             // JSON-RPC error → typed AgentError (a coarse, honest mapping).
             return Err(match code {
                 -32601 => AgentError::Unsupported, // method not found
@@ -90,21 +94,28 @@ impl MockChannel {
     }
     /// Register a canned `result` for `method`.
     pub fn with_result(self, method: &str, result: Value) -> Self {
-        self.inner.lock().unwrap().responses.insert(method.to_string(), result);
+        self.inner
+            .lock()
+            .unwrap()
+            .responses
+            .insert(method.to_string(), result);
         self
     }
     /// Register a canned JSON-RPC error object for `method`.
     pub fn with_error(self, method: &str, code: i64, message: &str) -> Self {
-        self.inner
-            .lock()
-            .unwrap()
-            .errors
-            .insert(method.to_string(), json!({ "code": code, "message": message }));
+        self.inner.lock().unwrap().errors.insert(
+            method.to_string(),
+            json!({ "code": code, "message": message }),
+        );
         self
     }
     /// Replace a method's canned result at runtime (e.g. the server changes its tool list).
     pub fn set_result(&self, method: &str, result: Value) {
-        self.inner.lock().unwrap().responses.insert(method.to_string(), result);
+        self.inner
+            .lock()
+            .unwrap()
+            .responses
+            .insert(method.to_string(), result);
     }
     /// The ordered method-call log.
     pub fn calls(&self) -> Vec<String> {
@@ -116,7 +127,11 @@ impl RpcChannel for MockChannel {
     fn request(&self, raw: &[u8]) -> Result<Vec<u8>, AgentError> {
         let req: Value =
             serde_json::from_slice(raw).map_err(|e| AgentError::BadRequest(e.to_string()))?;
-        let method = req.get("method").and_then(|m| m.as_str()).unwrap_or("").to_string();
+        let method = req
+            .get("method")
+            .and_then(|m| m.as_str())
+            .unwrap_or("")
+            .to_string();
         let id = req.get("id").cloned().unwrap_or(json!(0));
         let mut st = self.inner.lock().unwrap();
         st.calls.push(method.clone());
@@ -142,6 +157,9 @@ mod tests {
         let t = JsonRpcTransport::new(ch);
         assert_eq!(t.call("ping", json!({})).unwrap(), json!({"ok": true}));
         assert_eq!(t.call("secret", json!({})), Err(AgentError::Unsupported));
-        assert_eq!(t.channel().calls(), vec!["ping".to_string(), "secret".to_string()]);
+        assert_eq!(
+            t.channel().calls(),
+            vec!["ping".to_string(), "secret".to_string()]
+        );
     }
 }

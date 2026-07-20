@@ -89,11 +89,17 @@ impl WorkerSlots {
             if cur >= self.cap {
                 return None;
             }
-            match self
-                .in_flight
-                .compare_exchange_weak(cur, cur + 1, Ordering::SeqCst, Ordering::SeqCst)
-            {
-                Ok(_) => return Some(SlotGuard { slots: Arc::clone(self) }),
+            match self.in_flight.compare_exchange_weak(
+                cur,
+                cur + 1,
+                Ordering::SeqCst,
+                Ordering::SeqCst,
+            ) {
+                Ok(_) => {
+                    return Some(SlotGuard {
+                        slots: Arc::clone(self),
+                    })
+                }
                 Err(c) => cur = c,
             }
         }
@@ -171,7 +177,8 @@ impl<B: LlmBackend + Send + Sync + 'static> Dispatcher<B> {
             };
             let _ = tx.send(result);
         });
-        rx.recv().map_err(|_| DispatchError::Backend(LlmError::Unavailable))?
+        rx.recv()
+            .map_err(|_| DispatchError::Backend(LlmError::Unavailable))?
     }
 
     /// A clone of the shared backend handle (for cache-fronted embed/rerank paths that bypass the
@@ -352,28 +359,50 @@ mod tests {
         max_in_flight: Arc<AtomicUsize>,
     }
     impl LlmBackend for SlowBackend {
-        fn id(&self) -> &str { "slow" }
+        fn id(&self) -> &str {
+            "slow"
+        }
         fn caps(&self) -> Caps {
-            Caps { chat: true, embed: false, rerank: false, tool_calling: false }
+            Caps {
+                chat: true,
+                embed: false,
+                rerank: false,
+                tool_calling: false,
+            }
         }
         fn chat(&self, _req: &ChatRequest) -> Result<ChatResponse, LlmError> {
             let cur = self.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
             // track max in-flight via a CAS loop
             let mut m = self.max_in_flight.load(Ordering::SeqCst);
-            while cur > m && self.max_in_flight.compare_exchange(m, cur, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+            while cur > m
+                && self
+                    .max_in_flight
+                    .compare_exchange(m, cur, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_err()
+            {
                 m = self.max_in_flight.load(Ordering::SeqCst);
             }
             std::thread::sleep(std::time::Duration::from_millis(30));
             self.in_flight.fetch_sub(1, Ordering::SeqCst);
             Ok(ChatResponse {
                 content: "ok".into(),
-                usage: Usage { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+                usage: Usage {
+                    prompt_tokens: 1,
+                    completion_tokens: 1,
+                    total_tokens: 2,
+                },
                 tool_calls: Vec::new(),
             })
         }
-        fn embed(&self, _req: &EmbedRequest) -> Result<EmbedResponse, LlmError> { Err(LlmError::Unsupported) }
-        fn rerank(&self, _req: &RerankRequest) -> Result<RerankResponse, LlmError> { Err(LlmError::Unsupported) }
-        fn health(&self) -> Result<(), LlmError> { Ok(()) }
+        fn embed(&self, _req: &EmbedRequest) -> Result<EmbedResponse, LlmError> {
+            Err(LlmError::Unsupported)
+        }
+        fn rerank(&self, _req: &RerankRequest) -> Result<RerankResponse, LlmError> {
+            Err(LlmError::Unsupported)
+        }
+        fn health(&self) -> Result<(), LlmError> {
+            Ok(())
+        }
     }
 
     #[test]
@@ -406,12 +435,16 @@ mod tests {
                 Err(other) => panic!("unexpected dispatch error: {:?}", other),
             }));
         }
-        for h in handles { let _ = h.join(); }
+        for h in handles {
+            let _ = h.join();
+        }
 
         let max_seen = max_in_flight.load(Ordering::SeqCst);
         assert!(
             max_seen <= workers as usize,
-            "in-flight ({}) must be ≤ workers ({})", max_seen, workers
+            "in-flight ({}) must be ≤ workers ({})",
+            max_seen,
+            workers
         );
         assert!(
             busy_count.load(Ordering::SeqCst) >= 1,

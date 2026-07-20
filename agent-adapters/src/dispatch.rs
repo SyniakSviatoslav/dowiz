@@ -12,7 +12,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use dowiz_kernel::ports::agent::{AgentBridge, AgentError, AgentInvocation, AgentResponse, AgentTask, FUEL_PER_UNIT};
+use dowiz_kernel::ports::agent::{
+    AgentBridge, AgentError, AgentInvocation, AgentResponse, AgentTask, FUEL_PER_UNIT,
+};
 use dowiz_kernel::token_bucket::TokenBucket;
 
 use crate::fuel::{DeterministicFuelMeter, FuelError, FuelTrancheRunner};
@@ -294,7 +296,10 @@ mod tests {
             &self.id
         }
         fn caps(&self) -> AgentCaps {
-            AgentCaps { invoke_tool: true, ..Default::default() }
+            AgentCaps {
+                invoke_tool: true,
+                ..Default::default()
+            }
         }
         fn manifest(&self) -> &AgentManifest {
             &self.manifest
@@ -306,7 +311,10 @@ mod tests {
                     return Err(AgentError::Refused("boom".into()));
                 }
             }
-            Ok(AgentResponse { content: b"ok".to_vec(), units: 5 })
+            Ok(AgentResponse {
+                content: b"ok".to_vec(),
+                units: 5,
+            })
         }
         fn health(&self) -> Result<(), AgentError> {
             Ok(())
@@ -325,11 +333,17 @@ mod tests {
             agent_node_id: NodeId::from_keys(&pq, &cls).0,
             subject_key: cls,
             subject_key_pq: pq,
-            agent_caps: AgentCaps { invoke_tool: true, ..Default::default() },
+            agent_caps: AgentCaps {
+                invoke_tool: true,
+                ..Default::default()
+            },
             action_scopes: Scope::single(Resource::Menu, Action::Read),
             resource_needs: vec![],
             cost_denomination: CostDenomination::TokenBucketUnits,
-            budget_request: BudgetRequest { capacity: 10, refill_milli_units_per_sec: 0 },
+            budget_request: BudgetRequest {
+                capacity: 10,
+                refill_milli_units_per_sec: 0,
+            },
             validation_policy: ValidationPolicy::RequireBoth,
             execution_model: ExecutionModel::WasmComponent,
             config_axes: vec![],
@@ -351,7 +365,10 @@ mod tests {
 
     fn invoke(name: &str, cost: u64, depth: u8) -> AgentInvocation {
         AgentInvocation {
-            task: AgentTask::InvokeTool { name: name.into(), args: vec![] },
+            task: AgentTask::InvokeTool {
+                name: name.into(),
+                args: vec![],
+            },
             cost_units: cost,
             invoke_depth: depth,
         }
@@ -379,16 +396,29 @@ mod tests {
         ));
 
         let rows = sink.rows();
-        assert_eq!(rows.len(), 3, "exactly one row per call (success, error, refusal)");
+        assert_eq!(
+            rows.len(),
+            3,
+            "exactly one row per call (success, error, refusal)"
+        );
         assert!(rows[0].success && rows[0].total_tokens == 5);
         assert!(!rows[1].success, "backend error row recorded");
-        assert!(!rows[2].success && rows[2].total_tokens == 0, "budget refusal row recorded");
+        assert!(
+            !rows[2].success && rows[2].total_tokens == 0,
+            "budget refusal row recorded"
+        );
 
         // Mixed LLM+agent fold parses with zero schema errors.
         let llm_line = "{\"model\":\"ollama\",\"task\":\"chat\",\"success\":true,\"value\":0,\"cost\":42,\"backend\":\"ollama\",\"tokens\":42,\"ms\":10}";
-        assert!(decode_track_record(llm_line).is_some(), "LLM-shaped row folds");
+        assert!(
+            decode_track_record(llm_line).is_some(),
+            "LLM-shaped row folds"
+        );
         for r in &rows {
-            assert!(decode_track_record(r.to_jsonl().trim()).is_some(), "agent row folds");
+            assert!(
+                decode_track_record(r.to_jsonl().trim()).is_some(),
+                "agent row folds"
+            );
         }
     }
 
@@ -401,14 +431,20 @@ mod tests {
         let cache = Arc::new(AgentCache::new());
         let d = AgentDispatcher::new(b.clone(), bucket, 3, sink).with_cache(cache);
         let inv = || AgentInvocation {
-            task: AgentTask::ReadResource { uri: "res://menu".into() },
+            task: AgentTask::ReadResource {
+                uri: "res://menu".into(),
+            },
             cost_units: 3,
             invoke_depth: 0,
         };
         let r1 = d.dispatch(inv()).expect("first read hits backend");
         let r2 = d.dispatch(inv()).expect("second read served from cache");
         assert_eq!(r1.content, r2.content);
-        assert_eq!(b.calls(), 1, "second identical read is a cache hit (backend hit once)");
+        assert_eq!(
+            b.calls(),
+            1,
+            "second identical read is a cache hit (backend hit once)"
+        );
     }
 
     // ── §4 criterion 5 — F10 depth fires; delegate=false refused at depth 1 ──────
@@ -418,7 +454,10 @@ mod tests {
         let bucket = Arc::new(TokenBucket::new(1_000 as f64, 0.0));
         // granted_depth 0 (delegate=false): a depth-0 DIRECT call succeeds…
         let d0 = AgentDispatcher::new(bridge(None), bucket.clone(), 0, sink.clone());
-        assert!(d0.dispatch(invoke("good", 1, 0)).is_ok(), "direct call (depth 0) allowed");
+        assert!(
+            d0.dispatch(invoke("good", 1, 0)).is_ok(),
+            "direct call (depth 0) allowed"
+        );
         // …but a sub-agent link (depth 1) is refused.
         assert_eq!(
             d0.dispatch(invoke("good", 1, 1)),
@@ -427,7 +466,10 @@ mod tests {
         );
         // granted_depth 3: depth 3 allowed, depth 4 refused (deeper than the cap).
         let d3 = AgentDispatcher::new(bridge(None), bucket, 3, sink);
-        assert!(d3.dispatch(invoke("good", 1, 3)).is_ok(), "depth 3 within cap");
+        assert!(
+            d3.dispatch(invoke("good", 1, 3)).is_ok(),
+            "depth 3 within cap"
+        );
         assert_eq!(
             d3.dispatch(invoke("good", 1, 4)),
             Err(AgentDispatchError::DepthExceeded),

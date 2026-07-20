@@ -104,7 +104,10 @@ impl<B: LlmBackend> CachingBackend<B, MemStore> {
     pub fn new(inner: B) -> Self {
         CachingBackend {
             inner,
-            store: Arc::new(Mutex::new(BoundedStore::new(MemStore::new(), DEFAULT_CACHE_CAP))),
+            store: Arc::new(Mutex::new(BoundedStore::new(
+                MemStore::new(),
+                DEFAULT_CACHE_CAP,
+            ))),
         }
     }
 }
@@ -432,11 +435,20 @@ mod tests {
 
         // Three DISTINCT temperature=0 prompts → only the 2 most-recent survive.
         let mut a = req(0.0);
-        a.messages = vec![Message { role: "user".into(), content: "A".into() }];
+        a.messages = vec![Message {
+            role: "user".into(),
+            content: "A".into(),
+        }];
         let mut b = req(0.0);
-        b.messages = vec![Message { role: "user".into(), content: "B".into() }];
+        b.messages = vec![Message {
+            role: "user".into(),
+            content: "B".into(),
+        }];
         let mut c = req(0.0);
-        c.messages = vec![Message { role: "user".into(), content: "C".into() }];
+        c.messages = vec![Message {
+            role: "user".into(),
+            content: "C".into(),
+        }];
 
         let _ = cached.chat(&a).unwrap();
         let _ = cached.chat(&b).unwrap();
