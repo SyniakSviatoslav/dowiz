@@ -56,7 +56,9 @@ pub fn draft_manifest(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dowiz_kernel::ports::agent::{Action, RefSigner, Resource, SignatureVerifier, ML_DSA_65_PK_LEN};
+    use dowiz_kernel::ports::agent::{
+        Action, RefSigner, Resource, SignatureVerifier, ML_DSA_65_PK_LEN,
+    };
     use std::collections::BTreeMap;
 
     #[test]
@@ -74,7 +76,10 @@ mod tests {
             &quirks,
             caps,
             vec![],
-            BudgetRequest { capacity: 100, refill_milli_units_per_sec: 1000 },
+            BudgetRequest {
+                capacity: 100,
+                refill_milli_units_per_sec: 1000,
+            },
             ExecutionModel::WasmComponent,
             vec![],
             0,

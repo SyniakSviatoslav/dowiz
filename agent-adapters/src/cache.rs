@@ -51,7 +51,10 @@ impl AgentCache {
     /// Whether a task is cacheable: idempotent `read_resource` under `Exact`; tool
     /// invocations are `NoCache`.
     pub fn is_cacheable(task: &AgentTask) -> bool {
-        matches!(task, AgentTask::ReadResource { .. } | AgentTask::RenderPrompt { .. })
+        matches!(
+            task,
+            AgentTask::ReadResource { .. } | AgentTask::RenderPrompt { .. }
+        )
     }
 
     /// Canonical key for a cacheable request.
@@ -144,7 +147,11 @@ mod tests {
         let b = prov.provision(Some(7));
         let key = AgentCache::key(b"identical-canonical-request");
         a.put(key, b"answer".to_vec());
-        assert_eq!(b.get(&key), Some(b"answer".to_vec()), "operator co-scope ⇒ shared dedup");
+        assert_eq!(
+            b.get(&key),
+            Some(b"answer".to_vec()),
+            "operator co-scope ⇒ shared dedup"
+        );
         assert_eq!(b.hits(), 1);
     }
 
@@ -153,7 +160,11 @@ mod tests {
         // A manifest cannot even ENCODE a cache group: there is no cache-group config axis
         // (0x05 is unknown ⇒ decode error). Membership is operator config only. This is the
         // structural form of "a manifest that self-declares a shared group is refused."
-        assert_eq!(config_axis_domain(0x05), None, "no cache-group axis in the manifest lattice");
+        assert_eq!(
+            config_axis_domain(0x05),
+            None,
+            "no cache-group axis in the manifest lattice"
+        );
     }
 
     #[test]
@@ -162,6 +173,8 @@ mod tests {
             name: "x".into(),
             args: vec![]
         }));
-        assert!(AgentCache::is_cacheable(&AgentTask::ReadResource { uri: "u".into() }));
+        assert!(AgentCache::is_cacheable(&AgentTask::ReadResource {
+            uri: "u".into()
+        }));
     }
 }

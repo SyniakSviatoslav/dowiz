@@ -12,7 +12,12 @@ use dowiz_kernel::order_machine::OrderStatus;
 
 const NOW: u64 = 1_000_000;
 
-fn lifecycle(id: u64) -> Vec<(bebop_delivery_domain::DeliveryStatus, bebop_delivery_domain::DeliveryStatus)> {
+fn lifecycle(
+    id: u64,
+) -> Vec<(
+    bebop_delivery_domain::DeliveryStatus,
+    bebop_delivery_domain::DeliveryStatus,
+)> {
     use bebop_delivery_domain::DeliveryStatus::*;
     vec![
         (Pending, Confirmed),
@@ -21,9 +26,9 @@ fn lifecycle(id: u64) -> Vec<(bebop_delivery_domain::DeliveryStatus, bebop_deliv
         (Ready, InDelivery),
         (InDelivery, Delivered),
     ]
-        .into_iter()
-        .map(|(from, to)| (from, to))
-        .collect()
+    .into_iter()
+    .map(|(from, to)| (from, to))
+    .collect()
 }
 
 #[test]
@@ -53,7 +58,9 @@ fn solo_island_full_flow_from_dowiz_decider_with_money() {
     assert_eq!(order.status, OrderStatus::Delivered);
 
     // 4. Settlement leg: conservation probe holds, integer-exact.
-    order.post_earn(1, subtotal, dowiz_kernel::money::Currency::Eur).unwrap();
+    order
+        .post_earn(1, subtotal, dowiz_kernel::money::Currency::Eur)
+        .unwrap();
     assert_eq!(order.ledger_balance(), subtotal);
     assert_eq!(order.total, subtotal);
 }
@@ -82,9 +89,16 @@ fn adversarial_forged_skip_rejected_by_law() {
 
     // A VALIDLY signed frame with an ILLEGAL jump (Pending -> Delivered) must
     // be rejected by the LAW gate; the kernel order is untouched.
-    let bad = edge.emit(8, bebop_delivery_domain::DeliveryStatus::Pending, bebop_delivery_domain::DeliveryStatus::Delivered);
+    let bad = edge.emit(
+        8,
+        bebop_delivery_domain::DeliveryStatus::Pending,
+        bebop_delivery_domain::DeliveryStatus::Delivered,
+    );
     let res = recv.admit_and_fold(&bad, &order, NOW);
-    assert!(matches!(res, Err(FoldError::Gate(_))), "forged skip must be refused by Law");
+    assert!(
+        matches!(res, Err(FoldError::Gate(_))),
+        "forged skip must be refused by Law"
+    );
     assert_eq!(order.status, OrderStatus::Pending); // untouched
 }
 
@@ -109,7 +123,11 @@ fn adversarial_replay_rejected() {
 
     let edge = IntakeEdge::new(0x42);
     let mut recv = edge.receiver();
-    let frame = edge.emit(9, bebop_delivery_domain::DeliveryStatus::Pending, bebop_delivery_domain::DeliveryStatus::Confirmed);
+    let frame = edge.emit(
+        9,
+        bebop_delivery_domain::DeliveryStatus::Pending,
+        bebop_delivery_domain::DeliveryStatus::Confirmed,
+    );
     assert!(recv.admit_and_fold(&frame, &order, NOW).is_ok());
     // Second identical frame -> DOD replay set refuses it.
     let again = recv.admit_and_fold(&frame, &order, NOW);
@@ -137,7 +155,11 @@ fn adversarial_expired_frame_rejected() {
 
     let edge = IntakeEdge::new(0x42);
     let mut recv = edge.receiver();
-    let frame = edge.emit(10, bebop_delivery_domain::DeliveryStatus::Pending, bebop_delivery_domain::DeliveryStatus::Confirmed);
+    let frame = edge.emit(
+        10,
+        bebop_delivery_domain::DeliveryStatus::Pending,
+        bebop_delivery_domain::DeliveryStatus::Confirmed,
+    );
     // now far past the capability expiry (9_999_999_999) -> refused before any kernel touch.
     let res = recv.admit_and_fold(&frame, &order, 20_000_000_000);
     assert!(res.is_err(), "expired frame must be rejected");
