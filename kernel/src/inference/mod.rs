@@ -27,5 +27,6 @@
 
 pub mod fixed;
 pub mod oracle;
+pub mod simd_i8;
 pub mod spec;
 pub mod workspace;

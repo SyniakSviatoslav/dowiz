@@ -33,7 +33,8 @@
 @ZONE	kernel/src/retrieval/pattern.rs
 @ZONE	kernel/src/fdr/json.rs
 @ZONE	kernel/src/ct_gate.rs
-kernel/src/pq/dsa	pq	pq::dsa::	74	lib	1,5	item7-RESOLVED:native-exhaustive-caddq/power2round/decompose/chknorm-abs;arithmetic-contracts-machine-checked-in-kani-gate
+@ZONE	kernel/src/inference/simd_i8.rs
+kernel/src/inference/simd_i8.rs	-	inference::simd_i8::	6	lib	1,3	item39:NON-saturating-madd_epi16(architect-rec);item3=debug_assert-vs-oracle-per-call;item4(asm-spot-check)=follow-up-deferred;maddubs(saturating)-REFUSED
 kernel/src/pq/kat	pq	pq::dsa::	74	lib	1	ACVP-vectors-feed-the-pq::dsa::-row
 kernel/src/pq/keccak.rs	pq	pq::keccak::	5	lib	1,5	N/A(corpus-oracle):item3;item7:sponge-boundary-native+cross-copy-equivalence-in-kani-gate
 kernel/src/event_log.rs	-	event_log::tests::sha3	2	lib	1,5	item7-RESOLVED:keccak-copy-B-lifted+proof_keccak_copies_equivalent(Kani)-supersedes-2-KAT
