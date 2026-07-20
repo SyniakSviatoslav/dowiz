@@ -135,6 +135,67 @@ fn num_cpus() -> usize {
         .unwrap_or(1)
 }
 
+/// Absolute RAM usage `(used_bytes, total_bytes)` — the SAME `/proc/meminfo` read that
+/// backs `mem_pct` (used = MemTotal − MemAvailable), exposed absolutely so consumers can
+/// render "2.8 / 30.6 GiB" next to the percentage. `None` on read failure.
+pub fn mem_bytes() -> Option<(u64, u64)> {
+    let (total_kb, avail_kb) = meminfo()?;
+    Some((total_kb.saturating_sub(avail_kb) * 1024, total_kb * 1024))
+}
+
+/// Absolute root-filesystem usage `(used_bytes, total_bytes)` — the SAME statvfs-style
+/// read that backs `disk_pct`. `None` on read failure.
+pub fn disk_bytes() -> Option<(u64, u64)> {
+    let (bavail, blocks) = statvfs_root()?;
+    Some((blocks.saturating_sub(bavail), blocks))
+}
+
+/// Cumulative network I/O since boot: `(rx_bytes, tx_bytes)` summed across every
+/// non-loopback interface in `/proc/net/dev`. Counters, not rates — the consumer decides
+/// whether to show totals or diff two snapshots. `None` on read/parse failure (never a
+/// fabricated 0), same degrade-closed convention as the other gauges.
+#[cfg(target_os = "linux")]
+pub fn net_io_bytes() -> Option<(u64, u64)> {
+    let s = std::fs::read_to_string("/proc/net/dev").ok()?;
+    parse_net_dev(&s)
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn net_io_bytes() -> Option<(u64, u64)> {
+    None
+}
+
+/// Pure parser for `/proc/net/dev` content. Per-interface lines are `name: <16 counters>`
+/// where field 1 is rx_bytes and field 9 is tx_bytes; the two header lines carry no `:`
+/// (the `Inter-|`/`face |` banner) and are skipped naturally. `lo` is excluded — loopback
+/// traffic is not host network I/O.
+fn parse_net_dev(s: &str) -> Option<(u64, u64)> {
+    let mut rx = 0u64;
+    let mut tx = 0u64;
+    let mut seen = false;
+    for line in s.lines() {
+        let (name, rest) = match line.split_once(':') {
+            Some(x) => x,
+            None => continue,
+        };
+        if name.trim() == "lo" {
+            continue;
+        }
+        let fields: Vec<&str> = rest.split_whitespace().collect();
+        if fields.len() < 16 {
+            return None; // malformed row: refuse to report a partial sum
+        }
+        rx = rx.checked_add(fields[0].parse().ok()?)?;
+        tx = tx.checked_add(fields[8].parse().ok()?)?;
+        seen = true;
+    }
+    if seen {
+        Some((rx, tx))
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,5 +232,35 @@ mod tests {
         assert!(d.contains_key("disk_pct"));
         assert!(d.contains_key("load1"));
         assert!(d.contains_key("mem_pct"));
+    }
+
+    #[test]
+    fn parse_net_dev_sums_non_loopback_and_skips_lo() {
+        let fixture = "\
+Inter-|   Receive                                                |  Transmit
+ face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed
+    lo: 918392190 1670912    0    0    0     0          0         0 918392190 1670912    0    0    0     0       0          0
+  eth0: 1000       10    0    0    0     0          0         0 2000       20    0    0    0     0       0          0
+   wt0:  500        5    0    0    0     0          0         0  700        7    0    0    0     0       0          0
+";
+        // lo excluded; eth0 + wt0 summed: rx = 1000+500, tx = 2000+700.
+        assert_eq!(parse_net_dev(fixture), Some((1500, 2700)));
+    }
+
+    #[test]
+    fn parse_net_dev_refuses_malformed_rows() {
+        assert_eq!(parse_net_dev("eth0: 12 34\n"), None); // short row: no partial sum
+        assert_eq!(parse_net_dev("header only, no colon rows\n"), None); // nothing seen
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn net_io_bytes_reads_real_counters_on_linux() {
+        // A live Linux host with any non-loopback interface must produce a real reading.
+        let (rx, tx) = net_io_bytes().expect("/proc/net/dev readable on this host");
+        // Cumulative counters on a network-connected box are > 0 (a 0 here would mean
+        // the box has literally never sent a packet — worth failing loudly over).
+        assert!(rx > 0, "rx_bytes must be a positive accumulator, got {rx}");
+        assert!(tx > 0, "tx_bytes must be a positive accumulator, got {tx}");
     }
 }
