@@ -222,7 +222,8 @@ workspace, `cd infer && cargo test`):
 - Modules: `gguf` (parser/loader) · `tok` (tokenizers) · `kern` (compute kernels: scalar +
   AVX2) · `arch` (model graphs: `llama_family`, `siglip`, `lfm2`) · `kv` (ring-slab) ·
   `sample` (greedy/temp/top-p + hand-rolled seeded PCG32) · `sched` (two-lane runtime) ·
-  `xwire` (crosswire modes + comparator) · `ports` (kernel port impls).
+  `xwire` (crosswire modes + comparator) · `trace` (§4.7: `InferTrace`/`TraceSink`/replay +
+  `Ungated`/`OutputGate`) · `ports` (kernel port impls).
 
 ### 4.2 Loader — one-time static allocation, `BumpArena` reused as specified
 
@@ -323,6 +324,45 @@ The engine's correctness story copies the repo's two strongest precedents:
 - **Jitter:** p99/p50 inter-token latency ratio per lane recorded in every Phase 5+ run;
   the determinism dividend must be *visible* there vs the Ollama path or it is not claimed.
 
+### 4.7 Introspection and output-gating seam — audit-grade by construction
+
+A second reason the zero-dependency hand-written ruling matters beyond latency, in the
+operator's own framing: a vendor runtime (Ollama daemon, any hosted API) is fundamentally
+un-auditable from the caller's side — you receive generations, you cannot *check* the
+machine that produced them. A hand-written deterministic engine can expose the whole loop.
+This is a **generic engine capability** (first named consumer: the Hydra model-integration
+arc, which needs dowiz to check, filter, and control what Hydra does with this same model
+pair — see §6.4); the engine exposes seams, and **all policy lives in the caller's domain**:
+
+- **`TraceSink` (observability port).** Every inference call emits one typed `InferTrace`
+  record to a caller-supplied sink (trait object; default `NoopSink`): model id + **weights
+  digest** (sha3-256 content address, the wiring-blueprint §6 manifest primitive), full
+  input (messages verbatim; images as digest+dims, full pixel capture opt-in), seed, sampler
+  params, ISA path, thread partition, input/output **token IDs**, per-call timings
+  (first-token, tok/s), KV occupancy, and — for crosswired calls — S's `PerceptionDraft`,
+  L's output, and the comparator verdict. The engine performs no I/O itself (the sink
+  decides what to persist); nothing is observable *only* internally.
+- **Replayability is the audit property.** Because each ISA path is bit-deterministic
+  (§4.3), the tuple (weights digest, input, seed, ISA path, partition) in a trace
+  **re-executes to the identical token stream** — verification by re-execution, the same
+  epistemics as the CI `v5c-reexec` gate. A disputed generation is settled by replaying it,
+  not by trusting a log line. Phase 5 acceptance makes this falsifiable (a replay test that
+  must reproduce pinned traces bit-exactly, and must FAIL on a tampered trace fixture).
+- **`OutputGate` (gating seam).** A typed stage between "model produced an output" and
+  "caller acts on it": engine results come back as `Ungated<T>`, a wrapper that yields its
+  value only through `release(self, gate: &dyn OutputGate) -> Result<T, GateBlocked>`,
+  where the gate reviews `(&InferTrace, &T)` and returns `Allow` or `Block(reason)`. Acting
+  on un-reviewed output is therefore **structurally awkward by design** (the value is not
+  reachable without naming a gate), in the same unrepresentability spirit as the routing
+  enums omitting `Ord`. A deliberate `PassGate` unit exists for callers that genuinely want
+  raw output — explicit and greppable, never the silent default. Streaming granularity, v1:
+  tokens are *observable* per-emission via the sink; *gating* applies at the output
+  boundary (draft, tool call, completion) — per-token gating is a named later extension if
+  a consumer demonstrates the need.
+- **What the engine never does:** implement any filtering policy, content rule, or
+  Hydra-specific logic. What gets blocked and what triggers it is the caller's charter
+  (Hydra's own design is chartered and is not reconciled or modified here).
+
 ## 5. Port and composition seams (Phase 6 detail, named early so nothing drifts)
 
 - **Ports:** the engine implements the kernel's `LlmBackend` (`kernel/src/ports/llm.rs` —
@@ -380,6 +420,18 @@ and Phase 2 (golden suite) are **prerequisites** P102 consumes — nothing here 
 ruling ("gossip the compiled OUTPUT of inference, not the inference") is untouched — P102
 changes *how a hub runs its own inference*, not what crosses the mesh.
 
+### 6.4 Hydra model-integration arc (sibling blueprint, in flight)
+
+A parallel blueprint lane (`docs/hydra-model-integration-2026-07-20`) designs how Hydra
+(`kernel/src/hydra.rs`, the chartered self-defense/signaling system) uses this same
+two-model pair, with P102's engine as the native AI infrastructure that lets dowiz **check,
+filter, and control** Hydra's use of model output (operator's framing). The §4.7 seams
+(`TraceSink` observability + replay, `OutputGate` release path) are the generic mechanism
+that arc consumes; Hydra's policy — what is filtered, what triggers a block — lives entirely
+in that arc, per its standing charter (which this document does not reconcile or modify).
+Cross-link to the landed Hydra blueprint file: to be added when it merges; if this file
+still says so, check `git log` for that branch's landing commit.
+
 ## 7. Phased build plan — RED→GREEN, each phase measured before the next starts
 
 Honest scale statement up front: hand-writing a correct GGUF loader, two tokenizers, an
@@ -431,13 +483,21 @@ verified and useful, and no phase starts before the prior phase's GREEN is commi
     recorded; else the concurrent shape ships. Plus: comparator disagreement fixtures →
     typed refusal (never a silent pick); `CtxExhausted` fixture → typed error; RSS ceiling
     assertion; **p99/p50 jitter ≤ the Ollama-path equivalent for the same pair** (the
-    determinism dividend, made falsifiable or not claimed).
+    determinism dividend, made falsifiable or not claimed). §4.7 observability lands here:
+    every call in the matrix produces a complete `InferTrace` (field-completeness test,
+    weights digest matching the loaded arena); **replaying a committed trace reproduces its
+    token IDs bit-exactly, and a deliberately tampered trace fixture must FAIL the replay
+    check** — an auditor that cannot go red is not an auditor.
 - **Phase 6 — ports, composition, lane cut-overs.**
   - **GREEN:** port contract tests (including the no-model fixture stub); `AiMode` native
     arm fail-closed with default behavior bit-identical when unset; per-lane cut-over
     scorecards vs the Phase-0/P101 baselines with each lane's verdict recorded
     (cut-over / stays-Ollama); E-1 + CS-2 residual dispositions written down; Ollama
     decommission checklist exists and is gated on every cut-over lane soaking green.
+    §4.7 gating seam proven at the port surface: a fixture `OutputGate` that blocks a
+    pattern demonstrably prevents `Ungated::release` (typed `GateBlocked`, output value
+    unreachable); `PassGate` usage is greppable (a CI grep inventories its call sites, same
+    style as the no-courier-scoring gate) so raw-output consumers are always enumerable.
 - **Phase 7 — NEON port (aarch64) for the mobile half.** Same scalar reference, same KATs,
   same suites on ≥1 real device; rides the P52/P71 timeline; app-edge port discipline per
   P101 §3.4. (The pair-everywhere ruling R-2 is what makes this a port, not a second
@@ -461,6 +521,9 @@ verified and useful, and no phase starts before the prior phase's GREEN is commi
 - No kernel dependency additions; no code in `llm-adapters`; no change to the money/order
   process boundary.
 - No distributed inference (P-F physics ruling untouched).
+- No filtering/content policy inside the engine (§4.7 — the engine exposes the trace and
+  gate seams; every policy, including Hydra's, lives with the caller); no modification of
+  Hydra's chartered design.
 
 ## 9. Risks — owned, with mitigations (the build proceeds; these are managed, not debated)
 
@@ -483,6 +546,8 @@ verified and useful, and no phase starts before the prior phase's GREEN is commi
   R-1/R-2/R-3 — the in-process-inference end-state supersession of the wiring lock, the
   two-model crosswire, and the LFM license authorization — so the rulings live in the
   decisions ledger, not only in a blueprint header.
+- Pending cross-link: the Hydra model-integration blueprint (§6.4) — add the concrete file
+  link here once that sibling lane lands on `main`.
 
 ---
 
