@@ -328,7 +328,12 @@ fn wait4(pid: u32, child: &mut std::process::Child) -> Result<(ChildStatus, Chil
 }
 
 /// Collect a child's captured stdout/stderr after reaping (used by both reaping paths).
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+///
+/// One portable impl for both cfg arms: the child is ALREADY reaped by the time this is
+/// called (raw `wait4` on x86_64 Linux, `Child::wait` elsewhere), so we only drain the
+/// still-open pipe ends. The former non-linux variant called `child.wait_with_output()`,
+/// which (a) takes `Child` by value — E0507 behind `&mut`, the arm never compiled — and
+/// (b) would re-wait an already-reaped child.
 fn collect_child_output(child: &mut std::process::Child) -> std::io::Result<ChildOutput> {
     use std::io::Read;
     let mut stdout = Vec::new();
@@ -342,23 +347,6 @@ fn collect_child_output(child: &mut std::process::Child) -> std::io::Result<Chil
     Ok(ChildOutput { stdout, stderr })
 }
 
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-struct ChildOutput {
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-}
-
-#[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
-fn collect_child_output(child: &mut std::process::Child) -> std::io::Result<ChildOutput> {
-    use std::io::Read;
-    let out = child.wait_with_output()?;
-    Ok(ChildOutput {
-        stdout: out.stdout,
-        stderr: out.stderr,
-    })
-}
-
-#[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
 struct ChildOutput {
     stdout: Vec<u8>,
     stderr: Vec<u8>,
