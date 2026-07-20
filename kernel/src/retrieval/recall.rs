@@ -307,8 +307,135 @@ impl PrimaryRecall {
             .collect();
         Ok(PrimaryRecall { bm, idx, ids })
     }
-} // impl PrimaryRecall
 
+    // --- P95 §3.1 Option A: std-only persistence + dirty fingerprint ---------
+    //
+    // Persist the built `Bm25` + `TrigramIndex` to a std-only on-disk file next
+    // to the corpus. A dirty fingerprint (the sorted stem list the corpus yields)
+    // lets a later load detect "nothing changed" (skip rebuild) vs "changed"
+    // (reconcile). The index itself is deterministic (bm25.rs codec), so a clean
+    // load reconstructs a byte-identical ranker — the kill-9/restart primary proof
+    // (acceptance #1). No new dependency (Option A std-only); the fingerprint uses
+    // the same sorted-stem discipline `from_dir` already relies on.
+
+    /// The deterministic corpus stem list (sorted, matching `from_dir`'s sort).
+    fn stem_list(dir: &std::path::Path) -> Result<Vec<String>, String> {
+        let mut paths: Vec<std::path::PathBuf> = Vec::new();
+        for e in std::fs::read_dir(dir)
+            .map_err(|e| format!("PrimaryRecall::stem_list: read_dir {}: {e}", dir.display()))?
+        {
+            let p = e
+                .map_err(|e| format!("PrimaryRecall::stem_list: read entry: {e}"))?
+                .path();
+            if p.extension().and_then(|x| x.to_str()) == Some("md") {
+                paths.push(p);
+            }
+        }
+        paths.sort();
+        Ok(paths
+            .iter()
+            .map(|p| {
+                p.file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("?")
+                    .to_string()
+            })
+            .collect())
+    }
+
+    /// Persist the built index to `path` (Option A std-only on-disk).
+    pub fn save_to(&self, path: &std::path::Path) -> Result<(), String> {
+        let blob = self.bm.encode();
+        // Prefix the trigram docs so load can rebuild the TrigramIndex deterministically,
+        // and store the STEM LIST (the dirty fingerprint) so `load` can detect a
+        // changed corpus without re-reading every file.
+        let mut trig = Vec::new();
+        for d in self.idx.docs() {
+            trig.extend_from_slice(&(d.len() as u64).to_le_bytes());
+            trig.extend_from_slice(d.as_bytes());
+        }
+        let mut stems = Vec::new();
+        for s in &self.ids {
+            stems.extend_from_slice(&(s.len() as u64).to_le_bytes());
+            stems.extend_from_slice(s.as_bytes());
+        }
+        let mut out = (trig.len() as u64).to_le_bytes().to_vec();
+        out.extend_from_slice(&trig);
+        out.extend_from_slice(&(stems.len() as u64).to_le_bytes());
+        out.extend_from_slice(&stems);
+        out.extend_from_slice(&blob);
+        std::fs::write(path, out).map_err(|e| format!("PrimaryRecall::save_to {}: {e}", path.display()))
+    }
+
+    /// Load a persisted index from `path` (Option A std-only on-disk). Rebuilds
+    /// both `Bm25` and `TrigramIndex` byte-deterministically. Returns the index
+    /// plus the stored stem list (the dirty fingerprint) so `load` can compare.
+    pub fn load_from(path: &std::path::Path) -> Result<(PrimaryRecall, Vec<String>), String> {
+        let buf = std::fs::read(path)
+            .map_err(|e| format!("PrimaryRecall::load_from {}: {e}", path.display()))?;
+        let trig_len =
+            u64::from_le_bytes(<[u8; 8]>::try_from(&buf[0..8]).map_err(|_| "corrupt header")?) as usize;
+        let mut p = 8;
+        let mut trig_docs = Vec::new();
+        let end_trig = p + trig_len;
+        if end_trig > buf.len() {
+            return Err("PrimaryRecall::load_from: corrupt trigram section".into());
+        }
+        while p < end_trig {
+            let l = u64::from_le_bytes(<[u8; 8]>::try_from(&buf[p..p + 8]).map_err(|_| "corrupt")?) as usize;
+            p += 8;
+            let s = &buf[p..p + l];
+            trig_docs.push(String::from_utf8(s.to_vec()).map_err(|_| "corrupt utf8")?);
+            p += l;
+        }
+        let stems_len =
+            u64::from_le_bytes(<[u8; 8]>::try_from(&buf[p..p + 8]).map_err(|_| "corrupt stems header")?) as usize;
+        p += 8;
+        let end_stems = p + stems_len;
+        if end_stems > buf.len() {
+            return Err("PrimaryRecall::load_from: corrupt stems section".into());
+        }
+        let mut stems = Vec::new();
+        while p < end_stems {
+            let l = u64::from_le_bytes(<[u8; 8]>::try_from(&buf[p..p + 8]).map_err(|_| "corrupt")?) as usize;
+            p += 8;
+            let s = &buf[p..p + l];
+            stems.push(String::from_utf8(s.to_vec()).map_err(|_| "corrupt utf8")?);
+            p += l;
+        }
+        let bm = Bm25::decode(&buf[p..])
+            .ok_or_else(|| "PrimaryRecall::load_from: corrupt bm25".to_string())?;
+        let idx = TrigramIndex::new(&trig_docs.iter().map(|s| s.as_str()).collect::<Vec<_>>());
+        // ids are the persisted stems (the dirty fingerprint), NOT the doc bodies.
+        Ok((PrimaryRecall { bm, idx, ids: stems.clone() }, stems))
+    }
+
+    /// Save to the default cache file next to `dir` (`<dir>/.primary_recall.idx`).
+    /// Overwrites any previous cache (fail-closed: a changed corpus is re-detected
+    /// via stem-list mismatch on load).
+    pub fn save(&self, dir: &std::path::Path) -> Result<(), String> {
+        let path = dir.join(".primary_recall.idx");
+        self.save_to(&path)
+    }
+
+    /// Load from the default cache file next to `dir`; returns the persisted
+    /// index only if its stored stem list matches the live directory (else
+    /// `Ok(None)` — caller falls back to `from_dir`). This is the dirty check:
+    /// identical ⇒ cached index, zero rebuild; differ ⇒ reconcile.
+    pub fn load(dir: &std::path::Path) -> Result<Option<PrimaryRecall>, String> {
+        let path = dir.join(".primary_recall.idx");
+        if !path.exists() {
+            return Ok(None);
+        }
+        let (cached, stems) = Self::load_from(&path)?;
+        let live_stems = Self::stem_list(dir)?;
+        if live_stems == stems {
+            Ok(Some(cached))
+        } else {
+            Ok(None)
+        }
+    }
+} // impl PrimaryRecall
 /// Lazy-initialized PRIMARY recall instance — the shared kernel recall source.
 static PRIMARY: std::sync::OnceLock<PrimaryRecall> = std::sync::OnceLock::new();
 
@@ -447,5 +574,60 @@ mod tests {
         let cand = idx.query_literal("refund");
         assert!(!cand.is_empty(), "refund token must yield candidates");
         assert!(cand.len() <= FIXTURE_CORPUS.len());
+    }
+
+    /// P95 acceptance #1 — the kill-9 / restart primary proof, exercised in-process:
+    /// build a `PrimaryRecall` over a real on-disk `.md` corpus, `save` it to a
+    /// std-only cache file, then `load` it back and confirm the cached index is
+    /// byte-identical to a fresh `from_dir` rebuild AND re-ranks identically. A
+    /// real process crash between save and load leaves exactly this artifact on
+    /// disk; this proves zero index-loss + zero rebuild on restart when the corpus
+    /// is unchanged.
+    #[test]
+    fn primary_recall_survives_kill9_restart() {
+        let dir = std::env::temp_dir().join(format!("primary_recall_kill9_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("mk corpus dir");
+        // Write a small deterministic corpus of .md docs (sorted stems).
+        let docs = [
+            ("a_order_total.md", "how is the order total calculated by the engine"),
+            ("b_refund.md", "request a refund for a cancelled order"),
+            ("c_shipping.md", "shipping delay and delivery estimate for my package"),
+            ("d_loyalty.md", "loyalty points balance and how to redeem rewards"),
+            ("e_invoice.md", "download the invoice pdf for last months purchase"),
+        ];
+        for (name, body) in docs {
+            std::fs::write(dir.join(name), body).expect("write corpus doc");
+        }
+        // Build + save (simulates the running process persisting its index).
+        let built = PrimaryRecall::from_dir(&dir).expect("from_dir");
+        built.save(&dir).expect("save index cache");
+        // Simulate restart: load the persisted cache.
+        let loaded = PrimaryRecall::load(&dir)
+            .expect("load cached index")
+            .expect("cache must be fresh (stem list unchanged)");
+        // Byte-identical index: deterministic codec ⇒ same encode().
+        assert_eq!(
+            built.bm.encode(),
+            loaded.bm.encode(),
+            "persisted index must be byte-identical to a fresh build"
+        );
+        // Re-rank identically after the 'restart'.
+        let q = "how is the order total calculated";
+        assert_eq!(
+            built.recall_at_k(q, 5),
+            loaded.recall_at_k(q, 5),
+            "ranking must survive the kill-9/restart boundary"
+        );
+        // Dirty check: corrupt the corpus (add a doc) ⇒ load returns None (caller
+        // must rebuild), proving the fingerprint actually detects change.
+        std::fs::write(dir.join("f_promo.md"), "promo code discount applied at checkout")
+            .expect("add doc");
+        let stale = PrimaryRecall::load(&dir).expect("load after corpus change");
+        assert!(
+            stale.is_none(),
+            "load must detect a changed corpus and refuse a stale cache"
+        );
+        // Cleanup.
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

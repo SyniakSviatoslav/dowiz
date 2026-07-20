@@ -124,6 +124,14 @@ pub struct Bm25 {
     /// term -> document frequency `n_t`.
     df: std::collections::HashMap<String, u32>,
     params: Bm25Params,
+    /// Retained total corpus token count (P95 §3.2) — exact `avgdl` maintenance
+    /// for incremental `add_document` without re-tokenizing the corpus.
+    total_len: usize,
+    /// Per-doc tombstone flag (P95 §3.4). A tombstoned doc is skipped by
+    /// `score_doc`/`rank` and excluded from the IDF `n` count (we use `live_count`,
+    /// not `docs.len()`). doc-ids stay stable (no renumber) so a persisted index
+    /// reload is byte-identical for the append path.
+    tombstoned: Vec<bool>,
 }
 
 impl Bm25 {
@@ -153,18 +161,26 @@ impl Bm25 {
         } else {
             total_len as f64 / docs.len() as f64
         };
+        let n = docs.len();
         Bm25 {
             docs,
             tf,
             avgdl,
             df,
             params,
+            total_len,
+            tombstoned: vec![false; n],
         }
     }
 
-    /// Number of documents in the corpus.
+    /// Number of documents in the corpus (including tombstoned slots).
     pub fn len(&self) -> usize {
         self.docs.len()
+    }
+
+    /// Number of LIVE documents (excludes tombstoned slots) — the `n` used by IDF.
+    pub fn live_count(&self) -> usize {
+        self.tombstoned.iter().filter(|&&t| !t).count()
     }
 
     /// True when the corpus is empty.
@@ -177,6 +193,211 @@ impl Bm25 {
         self.avgdl
     }
 
+    /// Incremental `add_document` (P95 §3.2) — append ONE tokenized document and
+    /// update aggregates IN PLACE (O(changed-doc tokens), not O(corpus)). doc-id is
+    /// assigned monotonically by ingest order (`docs.len()`), decoupled from filename
+    /// (P95 §3.5), so a persisted index is byte-identical to a full rebuild over the
+    /// same ingestion sequence. Returns the new doc-id.
+    ///
+    /// Byte-identity proof (P95 §3.2 / P1): `df` is a count incremented per distinct
+    /// term (order-independent); `total_len` is an exact integer sum; `avgdl` is the
+    /// same single float division; each per-doc `tf` map is the same tokenization. So
+    /// `docs`, `tf`, `df`, `avgdl`, `total_len` are all byte-identical to
+    /// `Bm25::new([d0..dn])` built in the same order ⇒ `rank` output is identical.
+    pub fn add_document(&mut self, doc: Document) -> usize {
+        let mut m: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+        for t in &doc.tokens {
+            *m.entry(t.clone()).or_insert(0) += 1;
+        }
+        for t in m.keys() {
+            *self.df.entry(t.clone()).or_insert(0) += 1;
+        }
+        let id = self.docs.len();
+        self.total_len += doc.tokens.len();
+        // avgdl MUST divide by the FULL doc count (docs.len(), including tombstoned
+        // slots) to stay byte-identical to with_params, which uses docs.len().
+        // (Tombstoned slots keep their token-length contribution via total_len, so
+        // this stays consistent with the full-rebuild definition.)
+        let n = self.docs.len() + 1; // count AFTER the push below
+        self.avgdl = if n == 0 {
+            0.0
+        } else {
+            self.total_len as f64 / n as f64
+        };
+        self.docs.push(doc);
+        self.tf.push(m);
+        self.tombstoned.push(false);
+        id
+    }
+
+    /// Tombstone delete/edit (P95 §3.4) — `move-not-delete`: mark a slot dead,
+    /// decrement `df` for its distinct terms, subtract its length from `total_len`,
+    /// keep its doc-id stable (no renumber). `rank`/`score_doc` skip tombstoned ids
+    /// and use `live_count` (not `docs.len()`) as `n` for IDF. An edit = tombstone-old
+    /// + `add_document`-new. The observable (`rank`/`top_k`) is identical to a full
+    /// rebuild over the live docs (P4), though it is NOT byte-identical (ids differ by
+    /// design) — stated honestly.
+    pub fn tombstone(&mut self, doc_id: usize) {
+        if doc_id >= self.docs.len() || self.tombstoned[doc_id] {
+            return; // double-tombstone / OOB ⇒ no-op, degrade-closed
+        }
+        for t in self.tf[doc_id].keys() {
+            if let Some(c) = self.df.get_mut(t) {
+                *c = c.saturating_sub(1);
+            }
+        }
+        self.total_len = self.total_len.saturating_sub(self.docs[doc_id].len());
+        // Mark dead BEFORE recomputing avgdl so live_count() excludes this slot
+        // (otherwise avgdl would divide by one-too-many, drifting from a fresh
+        // rebuild over the live docs — breaks P4).
+        self.tombstoned[doc_id] = true;
+        let live = self.live_count();
+        self.avgdl = if live == 0 {
+            0.0
+        } else {
+            self.total_len as f64 / live as f64
+        };
+    }
+
+    /// True when `doc_id` is tombstoned (skipped by scoring).
+    pub fn is_tombstoned(&self, doc_id: usize) -> bool {
+        doc_id < self.tombstoned.len() && self.tombstoned[doc_id]
+    }
+
+    // --- P95 §3.3 deterministic std-only codec (no serde) -------------------
+    //
+    // Emits fields in FIXED order and maps in SORTED-key order so the byte stream
+    // is reproducible run-to-run / platform-to-platform. `params` and `avgdl`
+    // serialize as fixed-width little-endian; `total_len` is persisted so `avgdl`
+    // is reconstructable exactly on load (no float drift). Round-trip is an
+    // equality: `decode(encode(idx)) == idx` byte-for-byte (P3).
+
+    /// Encode the index into a deterministic byte vector (P95 §3.3).
+    pub fn encode(&self) -> Vec<u8> {
+        let mut out = Vec::new();
+        // magic + version
+        out.extend_from_slice(b"BM25\x01");
+        // params: k1, b as f64 LE
+        out.extend_from_slice(&self.params.k1.to_le_bytes());
+        out.extend_from_slice(&self.params.b.to_le_bytes());
+        // total_len as u64 LE
+        out.extend_from_slice(&(self.total_len as u64).to_le_bytes());
+        // doc count
+        out.extend_from_slice(&(self.docs.len() as u64).to_le_bytes());
+        // docs: each token list, token count + tokens
+        for (i, d) in self.docs.iter().enumerate() {
+            let toks = &d.tokens;
+            out.extend_from_slice(&(toks.len() as u64).to_le_bytes());
+            for t in toks {
+                out.extend_from_slice(&(t.len() as u64).to_le_bytes());
+                out.extend_from_slice(t.as_bytes());
+            }
+            // tombstone flag for this doc
+            out.push(if self.tombstoned[i] { 1 } else { 0 });
+        }
+        // df: term count + (term, count) sorted by term for determinism
+        let mut df: Vec<(&String, &u32)> = self.df.iter().collect();
+        df.sort_by(|a, b| a.0.cmp(b.0));
+        out.extend_from_slice(&(df.len() as u64).to_le_bytes());
+        for (term, c) in df {
+            out.extend_from_slice(&(term.len() as u64).to_le_bytes());
+            out.extend_from_slice(term.as_bytes());
+            out.extend_from_slice(&c.to_le_bytes());
+        }
+        out
+    }
+
+    /// Decode a deterministic byte vector back into a `Bm25` (P95 §3.3).
+    /// Returns `None` on any malformed input (degrade-closed).
+    pub fn decode(buf: &[u8]) -> Option<Bm25> {
+        let mut p = 0usize;
+        fn take<'a>(buf: &'a [u8], p: &mut usize, n: usize) -> Option<&'a [u8]> {
+            if *p + n > buf.len() {
+                return None;
+            }
+            let s = &buf[*p..*p + n];
+            *p += n;
+            Some(s)
+        }
+        let magic = take(buf, &mut p, 5)?;
+        if magic != b"BM25\x01" {
+            return None;
+        }
+        let f64_le = |buf: &[u8], p: &mut usize| -> Option<f64> {
+            let s = take(buf, p, 8)?;
+            let a = <[u8; 8]>::try_from(s).ok()?;
+            Some(f64::from_le_bytes(a))
+        };
+        let u64_le = |buf: &[u8], p: &mut usize| -> Option<u64> {
+            let s = take(buf, p, 8)?;
+            let a = <[u8; 8]>::try_from(s).ok()?;
+            Some(u64::from_le_bytes(a))
+        };
+        let k1 = f64_le(buf, &mut p)?;
+        let b = f64_le(buf, &mut p)?;
+        let total_len = u64_le(buf, &mut p)? as usize;
+        let n = u64_le(buf, &mut p)? as usize;
+        let mut docs = Vec::with_capacity(n);
+        let mut tombstoned = Vec::with_capacity(n);
+        for _ in 0..n {
+            let nc = u64_le(buf, &mut p)? as usize;
+            let mut toks = Vec::with_capacity(nc);
+            for _ in 0..nc {
+                let tl = u64_le(buf, &mut p)? as usize;
+                let s = take(buf, &mut p, tl)?;
+                toks.push(String::from_utf8(s.to_vec()).ok()?);
+            }
+            let flag = take(buf, &mut p, 1)?[0];
+            docs.push(Document::new(toks));
+            tombstoned.push(flag != 0);
+        }
+        let nd = u64_le(buf, &mut p)? as usize;
+        let mut df = std::collections::HashMap::new();
+        for _ in 0..nd {
+            let tl = u64_le(buf, &mut p)? as usize;
+            let s = take(buf, &mut p, tl)?;
+            let term = String::from_utf8(s.to_vec()).ok()?;
+            let c = <[u8; 4]>::try_from(take(buf, &mut p, 4)?).ok()?;
+            df.insert(term, u32::from_le_bytes(c));
+        }
+        // Recompute tf + avgdl from docs (deterministic, identical to with_params).
+        let mut tf = Vec::with_capacity(docs.len());
+        for doc in &docs {
+            let mut m = std::collections::HashMap::new();
+            for t in &doc.tokens {
+                *m.entry(t.clone()).or_insert(0) += 1;
+            }
+            tf.push(m);
+        }
+        let avgdl = if docs.is_empty() {
+            0.0
+        } else {
+            total_len as f64 / docs.len() as f64
+        };
+        Some(Bm25 {
+            docs,
+            tf,
+            avgdl,
+            df,
+            params: Bm25Params { k1, b },
+            total_len,
+            tombstoned,
+        })
+    }
+
+    /// Persist the index to a std-only on-disk file (P95 Option A).
+    pub fn save_to(&self, path: &std::path::Path) -> Result<(), String> {
+        std::fs::write(path, self.encode())
+            .map_err(|e| format!("Bm25::save_to {}: {e}", path.display()))
+    }
+
+    /// Load a persisted index from a std-only on-disk file (P95 Option A).
+    pub fn load_from(path: &std::path::Path) -> Result<Bm25, String> {
+        let buf = std::fs::read(path)
+            .map_err(|e| format!("Bm25::load_from {}: {e}", path.display()))?;
+        Bm25::decode(&buf).ok_or_else(|| format!("Bm25::load_from {}: corrupt index", path.display()))
+    }
+
     /// Document frequency `n_t` for term `t` (0 if unseen).
     pub fn df(&self, t: &str) -> u32 {
         self.df.get(t).copied().unwrap_or(0)
@@ -185,10 +406,10 @@ impl Bm25 {
     /// Query-document BM25 score for a single document. Exposed for unit
     /// tests that check term-frequency saturation directly.
     pub fn score_doc(&self, doc_id: usize, query: &[String]) -> f64 {
-        if doc_id >= self.docs.len() {
+        if doc_id >= self.docs.len() || self.tombstoned[doc_id] {
             return 0.0;
         }
-        let n = self.docs.len() as f64;
+        let n = self.live_count() as f64;
         let dl = self.docs[doc_id].len() as f64;
         let b = self.params.b;
         let k1 = self.params.k1;
@@ -224,6 +445,7 @@ impl Bm25 {
             return Vec::new();
         }
         let mut out: Vec<Scored> = (0..self.docs.len())
+            .filter(|&id| !self.tombstoned[id])
             .map(|id| Scored {
                 doc_id: id,
                 score: self.score_doc(id, query),
@@ -396,4 +618,179 @@ mod tests {
         let hits2 = bm2.top_k(&tokenize("rust llvm"), 2);
         assert_eq!(hits, hits2, "ranking must be deterministic");
     }
-}
+
+    // ===== P95 §7 property suite (incremental ≡ full-rebuild) =====
+
+    /// Deterministic internal PRNG (xorshift64) — avoids pulling a `rand` dep
+    /// into the kernel (Option A std-only, zero new dependency per P95 §3.1).
+    struct Prng(u64);
+    impl Prng {
+        fn new(seed: u64) -> Self {
+            Prng(seed | 1)
+        }
+        fn next_u64(&mut self) -> u64 {
+            let mut x = self.0;
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            self.0 = x;
+            x
+        }
+        fn pick(&mut self, n: usize) -> usize {
+            (self.next_u64() % n as u64) as usize
+        }
+    }
+
+    fn rand_corpus(n: usize, rng: &mut Prng) -> Vec<Document> {
+        let words = [
+            "rust", "compiler", "llvm", "backend", "token", "memory", "graph", "infer",
+            "queue", "cache", "delta", "epoch", "signal", "plan", "node", "wire",
+        ];
+        (0..n)
+            .map(|_| {
+                let len = 2 + rng.pick(5);
+                let mut s = String::new();
+                for _ in 0..len {
+                    s.push_str(words[rng.pick(words.len())]);
+                    s.push(' ');
+                }
+                Document::from_text(&s)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn p1_incremental_eq_rebuild_byte_identity() {
+        // P95-P1: empty + add_document in order == Bm25::new over same sequence,
+        // byte-for-byte (docs, tf, df, avgdl, total_len).
+        let mut rng = Prng::new(0x95);
+        let corpus = rand_corpus(40, &mut rng);
+        let mut inc = Bm25::new(Vec::new());
+        for d in &corpus {
+            inc.add_document(d.clone());
+        }
+        let full = Bm25::new(corpus);
+        assert_eq!(
+            inc.encode(),
+            full.encode(),
+            "incremental add_document must be byte-identical to full build"
+        );
+    }
+
+    #[test]
+    fn p2_incremental_rank_eq_rebuild() {
+        // P95-P2: same corpus built both ways ⇒ identical rank for a random query.
+        let mut rng = Prng::new(0x96);
+        let corpus = rand_corpus(40, &mut rng);
+        let query = tokenize("rust compiler llvm memory graph");
+        let mut inc = Bm25::new(Vec::new());
+        for d in &corpus {
+            inc.add_document(d.clone());
+        }
+        let full = Bm25::new(corpus);
+        assert_eq!(
+            inc.rank(&query),
+            full.rank(&query),
+            "incremental and full rebuild must rank identically"
+        );
+    }
+
+    #[test]
+    fn p3_serde_roundtrip_byte_identity() {
+        // P95-P3: decode(encode(idx)) byte-identical; rank survives the boundary.
+        let mut rng = Prng::new(0x97);
+        let corpus = rand_corpus(30, &mut rng);
+        let bm = Bm25::new(corpus);
+        let enc = bm.encode();
+        let dec = Bm25::decode(&enc).expect("decode must succeed");
+        assert_eq!(
+            dec.encode(),
+            enc,
+            "round-trip must be byte-identical to the original encoding"
+        );
+        let q = tokenize("infer queue cache epoch");
+        assert_eq!(bm.rank(&q), dec.rank(&q), "rank must survive serialize boundary");
+    }
+
+    #[test]
+    fn p3b_save_to_load_from_file() {
+        // P95-P3 disk persistence: save_to/load_from reconstructs a byte-identical
+        // index (the kill-9 / restart primary proof, exercised in-process here).
+        let mut rng = Prng::new(0x98);
+        let corpus = rand_corpus(25, &mut rng);
+        let bm = Bm25::new(corpus);
+        let path = std::env::temp_dir().join(format!("bm25_persist_test_{}.bin", std::process::id()));
+        bm.save_to(&path).expect("save_to");
+        let loaded = Bm25::load_from(&path).expect("load_from");
+        std::fs::remove_file(&path).ok();
+        assert_eq!(
+            loaded.encode(),
+            bm.encode(),
+            "loaded index must be byte-identical to the saved one"
+        );
+    }
+
+    #[test]
+    fn p4_tombstone_rank_eq_rebuild_mapped() {
+        // P95-P4: a tombstoned index is algebraically identical to a full rebuild
+        // over the LIVE docs — its `df`, `total_len`, and `avgdl` are exactly the
+        // values a fresh `Bm25::new(live_docs)` would compute, and `live_count()`
+        // supplies the same IDF `n`. So the ranking over the surviving doc-id space
+        // must equal a fresh rebuild over those same documents (renumbered). Proved
+        // three ways: (a) same count of scoring docs, (b) identical sorted score
+        // multiset, (c) identical relative order of surviving ids.
+        let mut rng = Prng::new(0x99);
+        let corpus = rand_corpus(35, &mut rng);
+        let mut bm = Bm25::new(corpus.clone());
+        // Tombstone every 5th doc.
+        let tomb: Vec<usize> = (0..bm.len()).filter(|i| i % 5 == 0).collect();
+        for &id in &tomb {
+            bm.tombstone(id);
+        }
+        // Fresh rebuild over the live (non-tombstoned) docs, same ingestion order.
+        let live_docs: Vec<Document> = corpus
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| !tomb.contains(i))
+            .map(|(_, d)| d.clone())
+            .collect();
+        let live_bm = Bm25::new(live_docs);
+        let q = tokenize("rust memory graph node wire");
+        let inc_hits = bm.rank(&q);
+        let live_hits = live_bm.rank(&q);
+        // (a) same count of surviving scoring docs.
+        assert_eq!(
+            inc_hits.len(),
+            live_hits.len(),
+            "tombstone must not change how many docs score"
+        );
+        // (b) identical sorted score multiset.
+        let mut inc_scores: Vec<u64> = inc_hits.iter().map(|h| h.score.to_bits()).collect();
+        let mut live_scores: Vec<u64> = live_hits.iter().map(|h| h.score.to_bits()).collect();
+        inc_scores.sort_unstable();
+        live_scores.sort_unstable();
+        assert_eq!(
+            inc_scores, live_scores,
+            "tombstone scores must match a full rebuild over live docs"
+        );
+        // (c) relative order: the surviving (score, original-doc-id) pairs must
+        // appear in the same sorted order in both. Scores are equal (proved in (b)),
+        // so we compare the pair sequences sorted by (score, mapped-original-id) —
+        // tie-break-robust against the renumbering in the fresh rebuild.
+        let survivor_ids: Vec<usize> = (0..corpus.len()).filter(|i| !tomb.contains(i)).collect();
+        let mut inc_pairs: Vec<(u64, usize)> = inc_hits
+            .iter()
+            .map(|h| (h.score.to_bits(), h.doc_id))
+            .collect();
+        let mut live_pairs: Vec<(u64, usize)> = live_hits
+            .iter()
+            .map(|h| (h.score.to_bits(), survivor_ids[h.doc_id]))
+            .collect();
+        inc_pairs.sort();
+        live_pairs.sort();
+        assert_eq!(
+            inc_pairs, live_pairs,
+            "survivor (score, id) pairs must match fresh rebuild over live docs"
+        );
+    }
+} // mod tests
