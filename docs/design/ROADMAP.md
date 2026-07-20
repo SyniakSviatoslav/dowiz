@@ -37,9 +37,11 @@ narrative; the standalone file no longer exists on disk).
   P-D→Layer-D lexical-collision ruling); P97/P98 added this pass (§16) closing the AR/VR and
   audio consolidation gaps; P101 (local/mobile model selection + serving topology) added the
   same day (§9); P102 (bare-metal zero-dep inference engine, two-model crosswire — operator
-  rulings R-1/R-2/R-3) added the same day (§9); the space-grade track's 78 items are covered
-  by Part V + ~50 per-item blueprint files. See `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md`
-  for the full delta audit (predates P97/P98/P101/P102).
+  rulings R-1/R-2/R-3) added the same day (§9); P103 (Hydra × model pair + native AI-infra
+  supervisor, osmosis/oscillator) added the same day (§9); the space-grade track's 78 items
+  are covered by Part V + ~50 per-item blueprint files. See
+  `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md` for the full delta audit (predates
+  P97/P98/P101/P102/P103).
 - Open/pending work: tracked live in §11 below, not scattered across other docs.
 
 ## 1. Origin (2026-05-31 → 2026-07-10)
@@ -259,6 +261,30 @@ The single busiest day in the project's history. In rough order:
   Blueprint: `BLUEPRINT-P102-bare-metal-inference-engine-2026-07-20.md`, registered in §10.2
   (Part II) and `CORE-ROADMAP-INDEX.md` §10; P101 carries dated append-only supersession
   annotations (§3.2/§4.4/§8 there).
+- **P103 — Hydra × locked model pair + native AI-infra supervisor — PLAN, 1 doc** (same day,
+  latest; drafted as P102, renumbered after the concurrent bare-metal pass above claimed
+  P102 — same precedent as P97→P101. Executes the four-part 2026-07-20 operator directive:
+  Hydra uses LFM2.5-VL-450M +
+  SmolVLM-256M crosswired; a native AI-infra layer checks/filters/controls that usage;
+  mechanism = osmosis + oscillator while Hydra stays fully autonomous). Hydra half:
+  dual-witness self-defense perception (2-of-2 agreement for any positive claim,
+  disagreement → Unknown) + post-breach owner-digest signaling, all through Hydra's existing
+  public surface — **zero `hydra.rs` edits, charter verbatim** (closure=NEVER,
+  kill-switch-only, intervention-lifts all unchanged; no reconciliation with items 73-78,
+  per standing ruling). Supervisor half: deterministic dowiz-authored membrane (schema/
+  vocabulary/provenance hard gates) + gradient-driven osmotic flow (reuses
+  `csr.rs:330` `personalized_pagerank`) + heartbeat oscillator tapping the existing
+  `DriftClass`/`INTEGRITY_BAND` spectral gate — filters the model channel only, never gates
+  Hydra itself (structural AC: kernel has zero supervisor dependency). "Trained on them"
+  ruled conservatively: drift-gated coupling evolution now (the mechanism `hydra.rs`
+  actually has) + mechanically-labeled corpus accumulation with fine-tuning strictly behind
+  P54's TRIGGER-FINETUNE (P101 §5 AMX facts referenced). L1/Round-4 transparency tension
+  recorded dated (supervised-opacity operator-directed for Hydra's lane; BDH-for-L1 arc
+  untouched). The supervisor's H1-H4 hook contract maps onto P102's §4.7 seams
+  (`InferTrace`/`TraceSink`, `Ungated`/`OutputGate`, weights-digest + seed replay) — the
+  engine exposes the seams, all policy lives in this supervisor. Blueprint:
+  `CORE-ROADMAP-2026-07-17/BLUEPRINT-P103-hydra-model-pair-supervised-integration-2026-07-20.md`,
+  registered in §10.2 (Part II) and `CORE-ROADMAP-INDEX.md` §10.
 - **The delta gap-audit + first-pass consolidation.** Fixed 4 orphaned/under-linked docs, 1
   dangling link, 2 stale status cells, 1 mislabel in `CORE-ROADMAP-INDEX.md`; annotated (not
   silently fixed) that space-grade items 45/73/74 have real standalone CI-gate scripts not yet
@@ -309,6 +335,15 @@ separate — that's ~50 individual files, not itself a competing top-level roadm
   pair) is startable immediately and touches no dependency or serving path. Named residuals
   of full Ollama retirement: E-1 (embedding lane) and CS-2 (code lane) — tracked in its §6.1.
   Recommended follow-up: a DECISIONS.md entry recording R-1/R-2/R-3 (its §10).
+- P103 (Hydra × model pair + native AI-infra supervisor): **blueprint on disk, zero code,
+  `hydra.rs` untouched.** Both sibling blueprints landed the same day and are cross-linked:
+  the P102 bare-metal engine (its §4.7 `InferTrace`/`TraceSink` + `Ungated`/`OutputGate`
+  seams are the supervisor H1-H4 hook contract's implementation home; policy stays in the
+  supervisor per P102's own "engine implements no policy" rule) and the P101 amendment (the
+  crosswired-pair ruling P103's dual-witness arbitration consumes). Phase 1 (supervisor
+  skeleton + structural AC-2/AC-11 guards) buildable engine-agnostic on interim Ollama;
+  coupling ratchets frozen until P102's weights-digest/seed replay attestation exists
+  (P103 §4.8).
 
 ## 12. What every filename means now, at a glance
 
@@ -1144,7 +1179,7 @@ something is live). **P34 is the single most important next action across the en
 roadmap** — bigger leverage than any other phase, because it converts ~70% of already-built,
 already-tested protocol code from stranded to load-bearing.
 
-#### 10.2 Full P31–P53 index (swarm fast-lookup; sub-letter detail lives in §10.5, P47–P53 full sections in §11–§14; P54–P56 appended 2026-07-18, P101–P102 appended 2026-07-20)
+#### 10.2 Full P31–P53 index (swarm fast-lookup; sub-letter detail lives in §10.5, P47–P53 full sections in §11–§14; P54–P56 appended 2026-07-18, P101–P103 appended 2026-07-20)
 
 > Extended P47–P53 on 2026-07-18 by the consolidation/consistency pass §11's note anticipated
 > ("a later consolidation pass reconciles that table" — this is that pass). Same-day swarm
@@ -1180,6 +1215,7 @@ already-tested protocol code from stranded to load-bearing.
 | P56 | ECOSYSTEM/OPS | Verification-harness shared infrastructure: storage, scheduling, meta-verification | PLANNED (blueprint ON DISK; 4 meta-detectors designed, `hetzner:dowiz/test-results/` sync policy) | none — new phase, shared substrate for P54+P55 | P25 (admission control, extended not forked), P45 (alerting, extended not forked), disk-cleanup pass (local storage now unblocked) | P54, P55 (both consume this as their storage/scheduling substrate) |
 | P101 (P99/P100 skipped — latency-percentile lexical collision) | AGENT (mobile half feeds DELIVERY P52/P71) | Local & mobile model selection + CPU-only serving topology: **exactly 2 named models, operator-decided, not an abstract tier system** — LFM2.5-VL-450M + SmolVLM-256M-Instruct run concurrently/crosswired (not primary/fallback), same pair for mobile courier pick AND server topology; O-1 (LFM Open License $10M-revenue-cap) RULED — operator "clear to ship", term recorded not erased; static TaskClass routing + ONE deterministic intake-assist cascade over the named pair; P54 training-deferral reaffirmed (AMX absence live-verified) + optional CPU-LoRA wall-clock probe | PLANNED (blueprint ON DISK, [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P101-local-mobile-model-selection-topology-2026-07-20.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P101-local-mobile-model-selection-topology-2026-07-20.md); zero code, zero models pulled; Phase B measurement startable immediately) | none — new phase; synthesizes the 2026-07-20 model-selection research pass + same-day operator model-count/crosswiring correction | local-model-wiring blueprint Phases 1+3 (config substrate), P48-INTAKE (cascade caller), P52/P71 (mobile surface timeline) | nothing downstream hard; feeds P52/P71 capture-assist UX and P48-INTAKE assist lane |
 | P102 | AGENT/CORE (mobile half feeds DELIVERY P52/P71) | Bare-metal zero-dependency native inference engine — two-model real-time crosswire (operator rulings R-1/R-2/R-3, final): hand-written Rust GGUF loader + AVX2 `std::arch` kernels (Zen3 box: AVX2/FMA, no AVX-512/AMX) + static ring-slab KV (PagedAttention skipped, named multi-tenant reopen trigger) + zero-alloc tokenizers/sampler + two-lane scheduler for exactly **LFM2.5-VL-450M ("L", agentic) ∥ SmolVLM-256M-Instruct ("S", fast perception)**, crosswired (Mode A preview+verify with deterministic comparator, Mode B draft-conditioned), one pair for mobile AND server; PQ-style KAT gating (dev-time-oracle token pins per ISA path); introspection `TraceSink` + typed output-gating seam (policy stays caller-side — Hydra is the first named consumer) | PLANNED (blueprint ON DISK, [`BLUEPRINT-P102-bare-metal-inference-engine-2026-07-20.md`](BLUEPRINT-P102-bare-metal-inference-engine-2026-07-20.md); zero code, no crate, no model pulled; Phase 0 startable immediately) | none — new phase; executes the 2026-07-20 R-1/R-2/R-3 rulings over the same research pass P101 synthesized | dowiz-kernel port types only (LlmBackend + VlmModel-style port); wiring-blueprint Phase 1 (`AiMode` seam) + Phase 2 (golden suite) as gates; P101 Phase A/B baselines; kernel arena/count-allocs/core_pinning/HugePageHint reuse | long-term replacement of the Ollama serving path lane-by-lane (per-lane measured cut-over gates); E-1 embed + CS-2 code residuals named in §6.1; feeds P52/P71 (Phase 7 NEON port) and the Hydra model-integration blueprint (its native-AI-infra substrate) |
+| P103 (drafted as P102; renumbered same day after the concurrent bare-metal pass claimed P102 — P97→P101 precedent) | CORE (Hydra consumer-side seam, zero `hydra.rs` edits) + AGENT edge (supervisor + inference adapter) | Hydra × locked model pair (LFM2.5-VL-450M + SmolVLM-256M crosswired) + native AI-infra supervisor: dual-witness self-defense perception (2-of-2 agreement, disagreement→Unknown) + breach-digest signaling through Hydra's existing public surface; supervisor = osmotic membrane (reuses `csr.rs` `personalized_pagerank`) + heartbeat oscillator (taps the existing `DriftClass`/`INTEGRITY_BAND` gate) — checks/filters/controls the model channel, never gates Hydra itself; "trained on them" ruled conservatively (drift-gated coupling evolution now, fine-tuning behind TRIGGER-FINETUNE) | PLANNED (blueprint ON DISK, [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P103-hydra-model-pair-supervised-integration-2026-07-20.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P103-hydra-model-pair-supervised-integration-2026-07-20.md); zero code; both siblings landed same day and are cross-linked) | none — new phase; executes the 2026-07-20 four-part operator directive (Hydra uses the pair; native AI infra checks/filters/controls; osmosis+oscillator mechanism) | P101 (model-pair facts + O-1 resolution, as amended), P102 bare-metal engine (§4.7 `InferTrace`/`TraceSink` + `Ungated`/`OutputGate` seams = the H1-H4 hook contract's implementation home; interim Ollama allowed with coupling ratchet frozen) | nothing downstream hard; supervisor I/O log feeds the TRIGGER-FINETUNE corpus; adds Phase-B cell B-6 to P101's measurement matrix |
 
 #### 10.3 Cross-cutting invariants (binding across components; each stated once)
 
