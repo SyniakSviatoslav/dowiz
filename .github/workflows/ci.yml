@@ -552,3 +552,43 @@ jobs:
           cargo kani --version
       - name: Run the kani-gate (mode=kani manifest rows + planted-fault self-test)
         run: bash scripts/kani-gate.sh
+
+  # ITEM 53 (space-grade roadmap §J / BLUEPRINT-ITEM-53-lint-gate-2026-07-19.md): per-crate
+  # clippy + rustfmt contribution gate. NO workspace in dowiz — the script `cd`s into each
+  # crate and runs `cargo fmt --check && cargo clippy --all-targets -- --deny warnings`.
+  # Advisory until marked a required status check (server-side, item-14 G5). The script already
+  # exists at scripts/lint-gate.sh; this job invokes it.
+  lint-gate:
+    name: lint gate (item 53, clippy + fmt per-crate)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Pre-fetch crates offline
+        run: |
+          for c in kernel engine llm-adapters agent-adapters; do
+            [ -d "$c" ] && ( cd "$c" && cargo fetch --locked )
+          done
+      - name: Run the lint-gate (clippy --deny warnings + fmt --check, per crate)
+        run: bash scripts/lint-gate.sh
+
+  # ITEM 52 (space-grade roadmap §J / BLUEPRINT-ITEM-52-miri-gate-2026-07-19.md): targeted Miri
+  # UB-interpreter gate over the REAL unsafe surface (arena bump allocator, simd/householder
+  # scalar paths). Separate from hardening-gate/kani-gate because Miri needs a nightly toolchain
+  # (network-installed, minutes-scale). The script scripts/miri-gate.sh reads the SHARED manifest
+  # `mode=miri` rows; this job invokes it.
+  miri-gate:
+    name: miri gate (item 52, UB detection over real unsafe surface)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install Miri (nightly toolchain component)
+        run: |
+          set -euo pipefail
+          rustup toolchain install nightly --component miri
+          rustup run nightly cargo miri setup
+      - name: Run the miri-gate (mode=miri manifest rows + planted-UB self-test)
+        run: bash scripts/miri-gate.sh
