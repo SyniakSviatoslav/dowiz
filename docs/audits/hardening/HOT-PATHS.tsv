@@ -33,6 +33,7 @@
 @ZONE	kernel/src/retrieval/pattern.rs
 @ZONE	kernel/src/fdr/json.rs
 @ZONE	kernel/src/ct_gate.rs
+@ZONE	kernel/src/mesh.rs
 kernel/src/pq/dsa	pq	pq::dsa::	74	lib	1,5	item7-RESOLVED:native-exhaustive-caddq/power2round/decompose/chknorm-abs;arithmetic-contracts-machine-checked-in-kani-gate
 kernel/src/pq/kat	pq	pq::dsa::	74	lib	1	ACVP-vectors-feed-the-pq::dsa::-row
 kernel/src/pq/keccak.rs	pq	pq::keccak::	5	lib	1,5	N/A(corpus-oracle):item3;item7:sponge-boundary-native+cross-copy-equivalence-in-kani-gate
@@ -47,6 +48,8 @@ kernel/src/token_bucket.rs	-	token_bucket_	7	lib	1	item8-DONE(2026-07-19):propte
 kernel/src/retrieval/pattern.rs	-	retrieval::	58	lib	1	NOTE:regex-ref-removed-for-zero-dep;corpus-oracle-only(item5)
 kernel/src/fdr/json.rs	-	fdr::	16	lib	1	golden-escape-byte-for-byte-oracle(item4)
 kernel/src/ct_gate.rs	-	ct_gate	1	dudect	2	dudect-harness+planted-leak-selftest(item2);ct_eq-primitive
+kernel/src/mesh.rs	pq	mesh::	7	lib	1,3	item24:oracle(mesh_oracle::oracle_verify_sig)+debug-differential(debug_assert_eq! in verify_sig);reuses-KAT-gated-pq::dsa::verify;cap/consensus-surfaces-swept-by-item-23(blueprint-§6)
+kernel/src/mesh.rs	pq	mesh_dudect	1	dudect	2	item24:ct_eq-branch-free-sig-compare;planted-leak-self-test(mesh_sig_compare_dudect);asm-spot-check-keyed-to-item14-toolchain-bump
 kernel/src/pq/keccak.rs	pq	pq::keccak::kani_proofs	2	kani	5	item7-KEYSTONE-equivalence:ENFORCED-rung=native-index-map(tests::item7_keccak_copies_equivalence_index_map)+proof_rotl_contract;STRONG-full-state-form=kani_proofs_strong::proof_keccak_copies_equivalent(CORRECT-but-EXCEEDED-25min-CI-budget-2026-07-19,nightly-only §3.1-ladder);gate-runs=rotl+keccak_f_total
 kernel/src/pq/dsa.rs	pq	pq::dsa::kani_proofs	4	kani	5	item7:montgomery_reduce+reduce32-contracts+ntt/invntt-butterfly-lemma;full-ntt-CAPPED-at-lemma+documented-8-layer-induction(§3.3-ladder)
 kernel/src/kani_selftest.rs	-	proof_selftest_planted_overflow	1	kani	5	item7:planted-i32-overflow-should_panic-selftest;RED-path-demo-recorded-in-PR(§6.5)
