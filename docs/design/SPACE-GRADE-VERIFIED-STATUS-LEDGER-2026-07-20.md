@@ -92,20 +92,18 @@ All evidence below is from live `cargo test --offline --lib [--features pq]` on 
 ## NEW-BUILD status (2026-07-20, dispatched)
 | Item | Status | Executor | Notes |
 |------|--------|----------|-------|
-| 27 | IN-PROGRESS | subagent (isolated WT) | PMU classifier input. |
+| 27 | DONE-VERIFIED | subagent (WT exec/item27-1637606) | commit 07057e2ee; independent re-check: 1 passed. |
 | 31 | DONE-VERIFIED | main repo | cargo-deny wired in ci.yml:245 already; zero-dep-gate job exists. |
 | 32 | DONE-VERIFIED | main repo | eqc IR extension — item 18 precedent; scalar Expr confirmed; parity oracle exists. |
 | 33 | DONE-VERIFIED | main repo | ITEM-33-RECONCILIATION.md present with real cargo bench evidence; 0/5 claims confirmed (all refuted as noise/unsourced). |
-| 34-44 | IN-PROGRESS | subagent (toy-pilot arc WT) | wave order 35/36/38→34/39/40/41/42→43/44. |
-| 46 | IN-PROGRESS | subagent (isolated WT) | float-determinism golden tests. |
-| 47 | IN-PROGRESS | subagent (toy-pilot arc WT) | guardian gate, after 35/42. |
-| 27 | DONE-VERIFIED | subagent (WT exec/item27-1637606) | commit 07057e2ee; independent re-check: 1 passed. |
+| 34-44 | IN-PROGRESS | subagent (WT exec/toy-pilot-arc) | 35+36+38 DONE (38 SIGSEGV root-caused+fixed, full suite 1069 green). Re-dispatched to finish 34/37/39/40/41/42/43/44. |
 | 46 | DONE-VERIFIED | subagent (WT exec/item46-*) | determinism goldens already at HEAD; subagent added inventory doc (commit 0a3dfa05e); independent re-check: 13 passed. |
+| 47 | IN-PROGRESS | subagent (WT exec/toy-pilot-arc) | guardian gate, after 35/42. |
 | 51 | DONE-VERIFIED | subagent (WT exec/item51-330bf5e32b24) | commit be1b985c1; independent re-check: 5 passed. |
 | 57/58 | DONE-VERIFIED | subagent (WT exec/item57-927ae634) | commits 8765757ee+912e13af1; independent re-check (telemetry): 1 passed. |
 | 60 | DONE-VERIFIED | subagent (WT exec/item60-d397d54db080) | already at HEAD (cb00706b1); independent re-check: 122 passed (engine --lib) + FRAME_BUDGET_US pin. |
 | 64 | DONE-VERIFIED | subagent (WT exec/item64-*) | commit 7f8c23b2a5; independent re-check: 5 passed. |
-| 67-72 | IN-PROGRESS | subagent (cost-twin WT) | cost oracle (67/68/69) + digital twin (70/71/72). |
+| 67-72 | IN-PROGRESS | subagent (cost-twin WT) | cost oracle (67/68/69) + digital twin (70/71/72); cost_oracle.rs/digital_twin.rs/footprint.rs staged in WT. |
 | 28 | DONE-VERIFIED | subagent (WT exec/item28-optical) | Phase A doc + optical.rs behind `optical` feature; commit in WT; independent re-check: 3 passed (optical.rs:225 headline); zero-dep gate holds (0 ext crates). |
 
 Commits this session on exec/space-grade-items-2026-07-20:
