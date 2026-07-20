@@ -2871,3 +2871,60 @@ subagent transcripts — 4 design docs restored to this directory, 11 `docs/rese
 in scratchpad pending an operator/lead restore (OD-15). The **critical path is operator rulings,
 not more design**: ledger §5 lists all 15 (gate-0 C3, P85 closure path, the push decisions, the
 P38 §4.2 GPU call, the two P93 privacy/broadcast forks, the P92 D-BENCH proceed gate).
+
+## 20. Living-interface arc — status-ledger registration (2026-07-19)
+
+Appended after §19, same append-only rule. Registers the `docs/design/living-interface-2026-07-16/`
+arc (GPU neural-field render + sonification + 3-D living-memory viz + GPU-less dev/CI + brand→GPU
+pipeline). **Source of truth (do not re-derive): `living-interface-2026-07-16/LIVING-INTERFACE-ROADMAP.md`**
+(12-phase plan) + its six execution blueprints (`BLUEPRINT-P00/P01/P02/P06/P07/P08`,
+`G11-FAST-PATH-CONSOLIDATED.md`). Already index-rowed in
+[CORE-ROADMAP-INDEX.md](CORE-ROADMAP-INDEX.md) §Layer-G and
+[ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-19.md](ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-19.md); this row
+closes its absence from *this* roadmap and from GROUND-TRUTH.
+
+- **Relationship to phases:** the arc's *engine substrate* (FE-01..17 / RW-01..12 / DZ-01..12) is
+  **already owned by DELIVERY P38a/P38b** (§10.5.3) — this arc adds nothing to that. Its four
+  *new* designs are: **R-VENDOR** (brand→GPU token pipeline; folds into P38a's FE-05 table),
+  **R-DEV** (Lavapipe GPU-less CI + the CSP `'wasm-unsafe-eval'` fix), and the two
+  **off-G11-critical-path growth-substrate deliverables** — **R-SON sonification** (`BLUEPRINT-P07`,
+  a Rust/wasm DSP AudioWorklet, "never load-bearing") and **R-LM living-memory viz**
+  (`BLUEPRINT-P08`, owner-only 3-D diagnostic of the hub's own memory graph). Per the arc's own §8
+  operator ruling, P07/P08 stay **off** the first-real-order path.
+- **Status: BLUEPRINT-ONLY (0% code).** Verified 2026-07-19: no `engine/src/gpu.rs`, no `.wgsl`,
+  no AudioWorklet/`audio` crate, no `spectral_embedding` coords helper, no `brand-resolve`/
+  `field-math` crate, no root workspace.
+- **Two blockers the blueprints cite have since DISSOLVED (register, don't re-plan):** (1) the
+  **W21 wgpu-uncached offline ceiling is broken** — the O18a graphics-unlock was granted; `wgpu
+  30.0.0` is now in `kernel/Cargo.lock` and `kernel/src/render/gpu.rs` is a real headless
+  `Instance→Device` bring-up (P38 O18a). The **engine** still carries the stale empty `gpu = []`
+  stub, so W21 is now "consume the available crate in `engine/`", not "wait for network". (2) the
+  **eigenvector solve R-LM/FE-12 needed now exists in-kernel** (`spectral::eigh`/`topk_symmetric`,
+  commit `03ac0fefe`, Phase-28) — only the thin `coords_2d/coords_3d` wrapper remains (see
+  `equations-knowledge-base-2026-07-19/SYNTHESIS-2026-07-19.md` §2 Item 3 for the wrapper spec).
+
+## 21. SelfAdaptator key_V-gate routing — proposal registration (2026-07-19)
+
+Appended after §20, same append-only rule. **Registration only — this is NOT an authorization to
+build.** Full plan: `equations-knowledge-base-2026-07-19/BLUEPRINT-2026-07-19.md` §2 (worktree
+`research/equations-thermo-eigenvector-2026-07-19`, commit `c64241e7c`).
+
+- **What exists today (verified live, not assumed):** `SelfAdaptator` (`kernel/src/evals.rs:791-798`)
+  drives a real kernel knob (`KalmanFilter::set_q_scaler`) via `propose_step` (`:825`) →
+  `apply_step` (`:870`), gated **only** by a noether Lyapunov drift check (`drift >
+  self.noether_tol`, `:856`). A grep of the whole file for `key_V`/`key_K` returns zero hits — the
+  auto-apply path has no independent-verdict precondition today.
+- **The proposal:** route `apply_step`'s call site through the already-landed key_V split-identity
+  verifier — `tools/ci-truth/src/v1.rs::evaluate_gate` (`:664`), which requires both a key_K
+  `DiffAttestation` and a key_V `Verdict` and rejects `key_K == key_V` self-certification
+  (`:672,675,688`) — so a self-modification step can no longer self-certify on the Lyapunov check
+  alone. P06 (the key_V HybridSigner this depends on) is CLOSED (`58987d79d`), so this is newly
+  buildable; it was not buildable before 2026-07-18.
+- **Why this is registered as PROPOSAL, not queued work:** it modifies a currently-firing
+  self-modification path. Per the standing "never bypass human-gated decisions" rule and the
+  H4-proposal-only precedent already set for this arc, three questions need an explicit operator
+  ruling before any code changes — verdict freshness (per-step vs. session-cached), verdict source
+  (who/what produces the key_V verdict for a runtime auto-apply, as opposed to CI's human/pipeline
+  source), and fail-closed default on a missing/stale verdict (block, matching `evaluate_gate`'s
+  existing RED-on-absent pattern, vs. degrade to noether-only). See BLUEPRINT §2 for the full
+  reasoning behind each question.
