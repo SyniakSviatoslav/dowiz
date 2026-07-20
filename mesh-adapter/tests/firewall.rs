@@ -58,7 +58,10 @@ fn bebop_contains_kernel_pkg() -> bool {
 #[test]
 fn proto_wire_port_excludes_kernel() {
     // bebop-proto-wire must not pull the kernel into the bebop workspace at all.
-    assert!(!bebop_contains_kernel_pkg(), "bebop workspace must not contain dowiz-kernel");
+    assert!(
+        !bebop_contains_kernel_pkg(),
+        "bebop workspace must not contain dowiz-kernel"
+    );
 }
 
 #[test]

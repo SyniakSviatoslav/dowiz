@@ -11,8 +11,8 @@ use bebop_proto_cap::event_dict::{
     StatusChangedPayload,
 };
 use bebop_proto_cap::scope::{Action, Resource, Scope};
-use dowiz_mesh_adapter::vocab_to_wire;
 use dowiz_kernel::order_machine::assert_transition;
+use dowiz_mesh_adapter::vocab_to_wire;
 
 const WIRE_STATES: [DeliveryStatus; 9] = [
     DeliveryStatus::Pending,
@@ -67,8 +67,11 @@ fn decode_dispatch_selects_correct_variant() {
         dst: "C".into(),
     };
     assert!(matches!(
-        DeliveryEvent::decode(Scope::single(Resource::Order, Action::OrderPlaced), &op.encode())
-            .unwrap(),
+        DeliveryEvent::decode(
+            Scope::single(Resource::Order, Action::OrderPlaced),
+            &op.encode()
+        )
+        .unwrap(),
         DeliveryEvent::OrderPlaced(_)
     ));
 
@@ -92,8 +95,11 @@ fn decode_dispatch_selects_correct_variant() {
         courier: [0u8; 32],
     };
     assert!(matches!(
-        DeliveryEvent::decode(Scope::single(Resource::Claim, Action::ClaimOffered), &cp.encode())
-            .unwrap(),
+        DeliveryEvent::decode(
+            Scope::single(Resource::Claim, Action::ClaimOffered),
+            &cp.encode()
+        )
+        .unwrap(),
         DeliveryEvent::Claim(_)
     ));
 
@@ -114,7 +120,10 @@ fn decode_dispatch_selects_correct_variant() {
 #[test]
 fn status_map_is_identity_on_wire_side() {
     for d in WIRE_STATES {
-        assert_eq!(from_order_status(to_order_status(vocab_to_wire(d))), Some(vocab_to_wire(d)));
+        assert_eq!(
+            from_order_status(to_order_status(vocab_to_wire(d))),
+            Some(vocab_to_wire(d))
+        );
     }
 }
 

@@ -28,6 +28,11 @@ unmaintained = "none"
 multiple-versions = "warn"
 # Wildcard dependencies are non-reproducible; hard-fail.
 wildcards = "deny"
+# In-tree `path = "..."` deps (e.g. kernel's dev-only `eqc-rs`, item 32) carry no
+# version req, which cargo-deny counts as a wildcard — but a path dep is pinned by
+# this repo's own tree, so it IS reproducible. Allow path wildcards only; registry
+# wildcards (`version = "*"`) still hard-fail above.
+allow-wildcard-paths = true
 
 [licenses]
 version = 2

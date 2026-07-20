@@ -206,7 +206,7 @@ silently "fixed."
 
 The active research/blueprint pipeline (mesh auth-layer hardening, performance
 work, verification tooling) is tracked under `docs/design/`, anchored by
-`docs/design/MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md`. The project is
+`docs/design/ROADMAP.md` (the chronological master roadmap — start there). The project is
 under active pre-1.0 hardening — the post-quantum crypto and mesh layers in
 particular are still being reviewed and tightened. Please report security issues
 privately (see `SECURITY.md`).

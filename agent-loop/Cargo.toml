@@ -3,15 +3,19 @@ name = "agent-loop"
 version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-or-later"
-description = "P40 AgentLoop executor — bounded plan→act→observe over a tool-calling LLM backend. Imports ONLY agent-facade (no direct dowiz-kernel dependency — compile firewall)."
+description = "P40 AgentLoop executor — bounded plan→act→observe over a tool-calling LLM backend. Imports only agent-facade + llm-adapters; NO direct dowiz-kernel edge (compile firewall)."
 
 # Standalone crate at repo root (sibling to kernel/), NOT a workspace member.
 
 [dependencies]
 # Firewall: agent-loop depends on `agent-facade` (the only allowed kernel port) and
 # `llm-adapters` (which implements `LlmBackend` and re-exports agent-facade types).
-# It must NEVER list `dowiz-kernel` directly — the committed firewall test in
-# tests/firewall.rs greps Cargo.toml for that and fails the build if present.
+# It must NEVER list `dowiz-kernel` directly — the committed firewall test
+# `firewall_no_direct_kernel_dependency` in tests/adversarial.rs (P40, not the
+# stale `tests/firewall.rs` name referenced in older docs) asserts this: it greps
+# the crate's source for `dowiz_kernel` and fails the build if present, and the
+# `firewall-agent-loop` CI job greps THIS Cargo.toml for a direct `dowiz-kernel`
+# edge. Corrected 2026-07-20 (item 45 executor) per BLUEPRINT-ITEM-45 stale-citation flag.
 agent-facade = { path = "../agent-facade" }
 llm-adapters = { path = "../llm-adapters" }
 

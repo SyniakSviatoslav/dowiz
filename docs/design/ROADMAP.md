@@ -1,4 +1,617 @@
-# MASTER ROADMAP — Sovereign Architecture (dowiz + openbebop), 2026-07-16
+# dowiz — Master Roadmap (fully merged, single file)
+
+**This is the one roadmap document in `docs/design/`.** Everything that used to live in 19
+separate top-level "roadmap"-shaped files (`GROUND-TRUTH-*`, `MASTER-ROADMAP-*`, `MASTER-*-PLAN`,
+`ROADMAP-*`) is now either fully inlined below (Parts II–V) or was genuinely dead weight and has
+been deleted outright — git history keeps every deleted file recoverable, `git log --diff-filter=D
+-- docs/design/<name>.md` finds the last version of any of them. Nothing outside this file and
+`CORE-ROADMAP-INDEX.md` (the still-separate detail cross-reference to the ~140 individual
+blueprint files) should be read to determine current roadmap status.
+
+> **Structure.** Part I (this part) is the chronological narrative spine — read it top to bottom
+> once. Parts II–V are the full, verbatim content of the four documents that were still current as
+> of the merge (2026-07-20): the P01–P30 Sovereign Architecture roadmap, the standing quality-bar
+> doctrine, the 2026-07-19 ground-truth re-baseline (historical narrative, superseded for *live*
+> status by Part I §0 but kept verbatim for its landing-wave detail), and the 78-item space-grade
+> execution track. Their own internal heading levels were demoted by one so they nest correctly
+> under this document's top-level headings; their content is otherwise reproduced exactly as
+> written, including any of their own internal status/superseded notes.
+
+**How to read Part I:** each dated section is a handful of lines per wave/decision/landing, not a
+copy of the underlying docs. Status tags used throughout: **LANDED** (real code, tested, on
+`main`) · **PLAN** (design doc only, nothing built) · **RULED** (an operator decision recorded in
+`DECISIONS.md`) · **DELETED** (content merged into Parts II–V or fully absorbed into this
+narrative; the standalone file no longer exists on disk).
+
+---
+
+## 0. Current live status (as of 2026-07-20, verified fresh — not carried forward from an older snapshot)
+
+- `main` HEAD: this document's own commit lineage, origin and local match exactly at push time.
+- Kernel tests: **1137 passed / 0 failed / 8 ignored** (default features); **1310 passed / 0
+  failed / 9 ignored** (`--features pq`).
+- Engine tests: **128 passed / 0 failed**.
+- Blueprint coverage: effectively complete — every P01–P102 either has a file or is P84
+  (deliberately reserved) or P99/P100 (deliberately skipped — both strings are corpus-wide
+  latency-*percentile* notation; item numbers must not grep into percentile hits, per the
+  P-D→Layer-D lexical-collision ruling); P97/P98 added this pass (§16) closing the AR/VR and
+  audio consolidation gaps; P101 (local/mobile model selection + serving topology) added the
+  same day (§9); P102 (bare-metal zero-dep inference engine, two-model crosswire — operator
+  rulings R-1/R-2/R-3) added the same day (§9); P103 (Hydra × model pair + native AI-infra
+  supervisor, osmosis/oscillator) added the same day (§9); the space-grade track's 78 items
+  are covered by Part V + ~50 per-item blueprint files. See
+  `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md` for the full delta audit (predates
+  P97/P98/P101/P102/P103).
+- Open/pending work: tracked live in §11 below, not scattered across other docs.
+
+## 1. Origin (2026-05-31 → 2026-07-10)
+
+Project initialized 2026-05-31. Early phase (TypeScript/JS frontend + pnpm/turbo stack,
+centralized `axum`+`rusqlite` server) — **entirely superseded**: the JS stack was fully deleted
+2026-07-15 ("drop js", see `CLAUDE.md`), the centralized server dropped 2026-07-12 (**D1**,
+below). Nothing from this era is load-bearing; mentioned only for completeness.
+
+## 2. 2026-07-11 — first structured roadmap
+
+- `ROADMAP-GROUND-TRUTH-2026-07-11.md` — **DELETED 2026-07-20** (was superseded, unmarked, since
+  2026-07-14). First real "DONE vs PLANNED" ground-truth doc, spanning both `dowiz` (product) and
+  `bebop` (protocol). Established the discipline this whole corpus still follows: verify against
+  live disk, don't trust the brief.
+- `MASTER-BUILD-SEQUENCE-UPDATED-2026-07-11.md` — **DELETED 2026-07-20** (was superseded, marked
+  at the time, 07-17). Tier-0..5 spine targeting the since-deleted Node/TS stack.
+
+## 3. 2026-07-12 — the six hard invariants (D0) + the protocol backbone rulings (D1–D9)
+
+`DECISIONS.md` opens here and becomes the authoritative red-line record for the rest of the
+project's life. All same-day:
+
+- **D0 — RULED.** The six non-negotiable invariants, outranking all roadmap/feature pressure:
+  **decentralized · local-first · post-quantum · crypto · mesh · reliability-over-latency.**
+- **D1 — RULED.** Drop the centralized server (`server/`, axum+rusqlite) entirely — peer nodes
+  only, no central DB, no Supabase, no Fly.
+- **D2 — RULED.** `MANIFESTO.md` + `DECISIONS.md` live at repo root.
+- **D3 — RULED.** Transport = DTN/BPv7 (RFC 9171) + QUIC/TCPCLv4 + BIBE custody, PQ envelope at
+  the protocol layer regardless of underlay. `libp2p-gossipsub`/Zenoh/Reticulum rejected as
+  primary substrate (latency-optimized or non-PQ).
+- **D4 — RULED.** Post-quantum is a *protocol* (transit/signatures/at-rest/supply-chain/in-transit
+  composed scope), not isolated primitives. Hybrid `X25519+ML-KEM-768` + `ML-DSA-65`.
+- **D5 — RULED.** 3 autonomous node roles (owner/courier/customer); NOSTR/ActivityPub/MCP as
+  bridges, never core transport, always PQ-enveloped first.
+- **D6 — RULED.** Mesh machinery is NOW in-scope (operator override of C8's deferral).
+- **D7 — RULED.** Every change ships a RED→GREEN falsifiable assertion — the discipline this
+  whole project still runs on.
+- **D8 — RULED.** Plan precedence: newest decision outranks older roadmap/blueprint on conflict.
+- **D9 — RULED.** ANU QRNG is opt-in enhancement; native OS entropy is the default AND the
+  fallback — a node must boot identically online or offline.
+
+## 4. 2026-07-13 → 2026-07-14 — second-generation planning (all later deleted)
+
+- `MASTER-EXECUTION-PLAN-2026-07-13.md` — **DELETED 2026-07-20** (was superseded, marked at the
+  time). 4-phase altitude spine (Земля→ядро→поверхня→платформа), direct ancestor of the later
+  Layer A–I axis.
+- `MASTER-INTEGRATION-PLAN-2026-07-14.md` — **DELETED 2026-07-20** (was superseded, marked at the
+  time). Best-absorbed of the early masters — every concrete item later got a named carrier in
+  P01–P30.
+- `MASTER-ROADMAP-10-PHASES-2026-07-14.md` — **DELETED 2026-07-20** (was superseded, marked at the
+  time).
+- `ROADMAP-GROUND-TRUTH-2026-07-14.md` (rev 3) — **DELETED 2026-07-20** (was superseded, marked at
+  the time, by `GROUND-TRUTH-2026-07-17.md`).
+
+## 5. 2026-07-16 — the canonical roadmap begins: P01–P30
+
+The Sovereign Architecture roadmap (now Part II below) becomes canonical — "single source of
+truth for the PATH," phases P01–P30. **LANDED subset (confirmed on `main` by 2026-07-19's audit,
+still true today):** P01, P02, P07, P18, P19. Rest of P01–P30 wired through Wave 2/3. Same week:
+spectral energy-flow evolution arc (E1–E3) begins — **LANDED**: E1 (Laplacian parity) + E2 (CLT),
+`6bd181a02`.
+
+## 6. 2026-07-17 — the Layer A–I execution wave: P31–P46, quality-bar codified
+
+- The quality-bar doctrine (now Part III below) — **standing meta-doc**, not superseded — codifies
+  the operator's quality bar for ALL future planning as a durable constant, not a one-off.
+- `GROUND-TRUTH-2026-07-17.md` — **DELETED 2026-07-20** (was superseded, unmarked, since
+  2026-07-19), by `GROUND-TRUTH-2026-07-19-FINAL.md` (now Part IV below).
+- `CORE-ROADMAP-INDEX.md` + `CORE-ROADMAP-2026-07-17/` directory born — the Layer A–I execution
+  structure, phases P31–P46, ~93 individual blueprint files. This remains the one detail-reference
+  layer this document sits above (not merged — too large, too many individual files, and it's a
+  cross-reference table, not itself a competing roadmap narrative).
+- Agentic mesh protocol arc (B1–B4) begins — Wave 0 **LANDED** (AgentBridge, `TokenBucket::release`,
+  B4 crypto-forgery fix).
+- CORE **~90%** by end of this wave: P31 (S0/S1/S2/S4 DONE), P32a DONE, P33 audit-only.
+
+## 7. 2026-07-18 — R-3 ruling, launch-blocker research, P47–P74, WIRING WAVE, space-grade begins
+
+- **D10 — RULED.** R-3 `RootDelegationPolicy` = Option A (`OperatorSigned` + per-anchor
+  `IssuanceBudget`) — sovereign, P06-independent, closes the Batch-7 Sybil residual. Mechanism
+  already built in the `bebop-repo` (`e08eb07`); this is a ruling record, not new code.
+- `ROADMAP-LIVE-STATUS-2026-07-18.md` — **DELETED 2026-07-20** (historical status snapshot,
+  correcting stale blueprint claims by re-verifying against live code — content absorbed into this
+  narrative, nothing unique lost).
+- `ROADMAP-UPDATE-SESSION-SYNTHESIS-2026-07-18.md` — **DELETED 2026-07-20** (historical session
+  patch doc, 445 lines, produced in an isolated worktree, never edited the live target docs
+  directly).
+- `TELEGRAM-ROADMAP-SUMMARY-2026-07-18.md` — **DELETED 2026-07-20** (narrow ops note, not actually
+  a roadmap despite the name — 7-message Telegram-delivery formatting summary).
+- 5 Opus research passes → Fable synthesis → 2 canon-diffs (P38-rev, P39-rev) + **18 blueprints
+  (P57–P74)** across 4 build waves (M1–M4): canvas text input, a11y-mirror, capability-cert chain,
+  payment core (P60), notifications, catalog/multi-vendor, shell platform spike, intent/voice,
+  dispatch orchestrator, data wallet, hub provisioning/supervisor, storefront checkout, courier
+  surface, moderation/blocklist, food-court N-leg checkout.
+- **WIRING WAVE — LANDED + PUSHED** (confirmed 2026-07-20 by this session's own verification,
+  `17d65f315` is an ancestor of current `origin/main`): previously built-but-unwired CORE surface
+  got real callers — P59 cap-verify, P74 moderation, P68 hub_supervisor drive, P66 wallet
+  reconnect→outbox fix, P83 span-metrics + a real deadlock root-cause fix, P64 engine_loop
+  intent-router, P89 field_modal live, P40 agent-executor proxy wiring native-spa-server to
+  agent-loop with the money-law firewall intact.
+- `MASTER-ROADMAP-SWARM-SAFETY-TELEMETRY-FIRST-2026-07-19.md` — **DELETED 2026-07-20** (thin
+  sequencing/gating layer over other docs, no unique content) — and the space-grade kernel
+  architecture synthesis begin (the 78-item execution track, now Part V below).
+
+## 8. 2026-07-19 — P75–P96, Q-series governance, GAP-A1 closed, space-grade items 1–54
+
+- 18 more blueprints (**P75–P83, P85–P91, P93–P94**) + P92 (M1 combined) written this wave — full
+  P01–P96 blueprint coverage reached except deliberately-reserved P84.
+- **GAP-A1-DISPOSITION-AUDIT-2026-07-19.md** — the one real gap the day's own gap-audit found
+  (un-homed arc-units MESH-14/IP-01..07/09/17/18/21) — **closed same day**, every unit dispositioned.
+- `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-19.md` — first full-corpus coverage audit: blueprint
+  coverage declared effectively complete. Its own "GAP-A1 still open" line went stale within the
+  same day (the disposition doc landed in a later commit) — corrected by this session's 2026-07-20
+  delta audit. (This audit doc is kept standalone — it's an audit report, not a roadmap.)
+- **Q-SERIES (governance layer over P75–P96) — Q1-a + Q2-G14 LANDED.** Claim-verification
+  checkpoint (`DONE-VERIFIED` ledger status + `verified-by` pointer) + span-p99 telemetry consumer.
+- `GROUND-TRUTH-2026-07-19-FINAL.md` — **fully inlined as Part IV below**, no longer a standalone
+  file. Authoritative state re-baseline of this era: kernel 894/0 failed (3 ignored), engine 121/0
+  failed, main HEAD `5a97e1f6f`. Core roadmap declared complete on `origin/main` (`d8004a3c7`) at
+  the time.
+- `ROADMAP-RECHECK-SESSION-SYNTHESIS-2026-07-19.md` — **DELETED 2026-07-20** (consolidated "what's
+  missing" recheck; G2–G5 meta-gap findings all closed same-day, content absorbed above).
+- `MASTER-SYNTHESIS-CONSISTENCY-TELEMETRY-DIGITAL-TWIN-2026-07-19.md` — **DELETED 2026-07-20**
+  (was PLAN, explicitly operator-gated no-execution-dispatch at the time — specified space-grade
+  items §K 55–72 and §L 73–78, both still tracked live in Part V below, nothing unique lost).
+- **Space-grade items 1–31ish — LANDED** through this day and the item-execution wave that follows
+  it directly into 07-20: zero-dep gate (item 1), toolchain-bump gate (item 14), hand-rolled
+  logger/FDR replacing `tracing` (items 4+29), `regex` retirement — zero external deps reached
+  (item 5), hardening checklist + `hardening-gate` CI (item 6), Kani proofs + native exhaustive
+  contracts (item 7, `df92f0c16`+`23f583b3e`), PMU classifier-input stamps (item 27), plus
+  verification/audit passes on items 2, 22, 30, 31.
+- Item 26 (event-log/FDR/import_unit batching) — **measurement pass CLOSED as measurement-only**
+  this day (real numbers: 1,513 ev/s, ~53× throughput available at batch-64, flagged
+  BATCH-WORTHY-but-operator-gated) — superseded the next day when the operator authorized it (§9).
+
+## 9. 2026-07-20 — governance rulings (D11–D14), autopilot execution wave, 2 synthesis waves, this audit + full merge
+
+The single busiest day in the project's history. In rough order:
+
+- **D11 — RULED.** Governed Self-Evolution (items 73–78) apply-token design: node-local
+  human-only apply-token, 2-factor (`capability_cert` + SHA3-based rotating code), 24h default
+  pending-TTL, the meta-governance boundary (AI may edit its own governance module under the
+  human gate; core kernel authority + the circuit breaker are the one hard, non-negotiable line),
+  row-removal via `DECISIONS.md` D-entries, 3-consecutive-window self-heal threshold, item
+  77-before-78 sequencing. **Spec-plane only — does not authorize dispatching 73–78 to code.**
+- **Space-grade autopilot execution wave — LANDED**, operator authorization: "continue on
+  autopilot until all are done... give permission to work on all... if decision is needed, stop &
+  ask." `SPACE-GRADE-VERIFIED-STATUS-LEDGER-2026-07-20.md` records real, acceptance-filter-verified
+  landings: items 8 (Kani GCRA), 9 (breaker), 20 (P95 persistence), 21 (autonomic), 22–24 (mesh
+  pq-signed), **26 (group-commit batching, `85022e49d`, supersedes the 07-19 measurement-only
+  close)**, 48 (FDR blind-spot closure), 50 (K3 verdict cause), 54 (Sentinel), 55–56 (K3/epistemic
+  retrofits), and more per the ledger's own tables. Separately this session: **cross-mesh
+  replication — LANDED** (`kernel/src/mesh_replication.rs`, `307c3ead5`, tracked out-of-band as
+  §M in Part V, "not one of the original 78 items," not "item 5" as one row briefly mislabeled and
+  this audit corrected).
+- **KnowledgeSpine wired to the memory/docs corpus — LANDED** (`28faa120d`), 705 files tracked,
+  tamper-evidence proven end-to-end.
+- **Product-surface wave — PLAN, 5 docs, all decisions RULED same-day (D13/D14):** spatial
+  storefront/voice hub, concurrency architecture (**D13 — RULED: "async only where it brings
+  value"** — `ToolPort`/`agent-loop`/every kernel port stay synchronous permanently; tokio's only
+  future entry is the not-yet-built mesh-adapter layer, gated on a ~1,000–2,000-socket threshold),
+  offline resilience, media/comms + granular per-layer agentic autonomy (**D14 — RULED:**
+  Service-Worker+IndexedDB doctrine exception ratified, Human-only autonomy default with
+  Agent-assisted opt-in, native PQ-hybrid ratchet for customer-leg chat, per-hub-configurable
+  relay topology, Owner/Kitchen/Counter-Manager staff roles, local-disk-only media storage), and
+  intent interface (corrects a false "one unified wave-equation" claim; `engine/src/intent.rs` +
+  `compose_ui.rs` already implement the requested one-screen architecture, just never styled).
+- **"Red lines are still only by humans" — RULED**, hardened beyond D14's deny-by-default framing
+  to a structural, non-configurable exclusion: agent identities cannot hold Ledger/Auth/Secret/
+  Migration capability, no grant path exists at all.
+- **Remaining-queue wave — PLAN, 4 docs:** Telegram ops-hub build-order (item 1, `topics
+  resources`, already **LANDED** `9f94547ca`); payment-adapter residual (headline finding: the
+  online-fiat payment core is already **LANDED** and tested, `kernel/src/ports/payment_provider.rs`
+  — residual scope is the out-of-kernel adapter crate + webhook infra + PSP selection);
+  omnichannel order-intake (P48-INTAKE, builds the inbound mirror of P43); local-model wiring
+  (smallest scope — locks in the existing sync HTTP-client architecture, closes one wiring gap).
+- **P101 — local/mobile model selection + CPU-only serving topology — PLAN, 1 doc** (same day,
+  follow-on synthesis of the operator-commissioned model-selection research; the wiring
+  blueprint's deliberately-unanswered "which models / what topology / does the training
+  deferral hold" questions). Numbering: drafted as P97, renumbered after the concurrent AR/VR+
+  audio pass (§16) claimed P97/P98; **P99/P100 deliberately skipped forever** — both strings
+  are corpus-wide latency-percentile notation (the P-D→Layer-D lexical-collision ruling class).
+  **Amended same day: the model topology is now exactly 2 named models, not an abstract
+  tier system.** Operator-directed correction (no discussion): the box's measured max-2-
+  concurrent-decode-stream ceiling is filled by **LFM2.5-VL-450M + SmolVLM-256M-Instruct**,
+  run **concurrently/crosswired** (SmolVLM fast first-pass perception feeding LFM2.5-VL's
+  reasoning/tool-selection), **not primary/fallback** — and the **same pair serves both the
+  mobile courier pick and the server topology** (one artifact family, not two separate
+  picks), replacing the earlier abstract E/S/G/C server-side residency system and the
+  primary/fallback mobile framing. **O-1 (the LFM Open License $10M-revenue-cap question) is
+  now RULED — operator: "clear to ship"** — the term stays recorded for awareness, it is no
+  longer a blocking gate. Server: Ollama-native residency (no new infra, now a 3-model floor:
+  embedding + the crosswired pair — an order of magnitude lighter than the original ~11–12 GB
+  design), static `TaskClass` routing + exactly one deterministic cascade (intake-assist,
+  `IntentParser` as oracle), 5-cell measured concurrency matrix before anything ships (memory
+  *bandwidth*, not core count, is the honest ceiling on the 4-physical-core box). Training:
+  **P54 deferral HOLDS, strengthened** — the box's AMX absence was live-verified, killing the
+  only vendor-backed CPU-training path; optional bounded CPU-LoRA wall-clock probe offered
+  with a falsifiable ≤24h criterion. Blueprint:
+  `CORE-ROADMAP-2026-07-17/BLUEPRINT-P101-local-mobile-model-selection-topology-2026-07-20.md`,
+  registered in §10.2 (Part II) and `CORE-ROADMAP-INDEX.md` §10.
+- **P102 — bare-metal zero-dependency native inference engine, two-model real-time crosswire —
+  PLAN, 1 doc** (same day, later — executes three final operator rulings, recorded in the
+  blueprint's §0): **R-1** fully custom engine, zero external crates, hand-written in Rust
+  (GGUF loader, AVX2 `std::arch` kernels, static ring-slab KV-cache, tokenizers, sampler,
+  two-lane scheduler) — the deliberate long-term replacement for the Ollama serving path;
+  **R-2** exactly two models, **LFM2.5-VL-450M + SmolVLM-256M-Instruct**, crosswired in real
+  time (concurrent/complementary, never fallback), one pair for both the mobile courier app
+  and the server engine; **R-3** P101's O-1 license question **resolved "clear to ship"**
+  (LFM Open License facts stay recorded; decision closed). Engineering honesty kept from the
+  research pass: AVX2 not AVX-512 (Zen3 live-verified), PagedAttention skipped for the static
+  ring-slab with a named multi-tenant reopen trigger, decode-is-bandwidth-bound physics
+  (P-F's flat 9.21/9.36/9.80 tok/s), determinism-dividend framing (bit-identical token
+  streams, zero-alloc decode loop under `count-allocs` — never nanosecond claims), per-lane
+  measured cut-over gates vs the P101 topology, E-1 embed + CS-2 code residuals named.
+  Blueprint: `BLUEPRINT-P102-bare-metal-inference-engine-2026-07-20.md`, registered in §10.2
+  (Part II) and `CORE-ROADMAP-INDEX.md` §10; P101 carries dated append-only supersession
+  annotations (§3.2/§4.4/§8 there).
+- **P103 — Hydra × locked model pair + native AI-infra supervisor — PLAN, 1 doc** (same day,
+  latest; drafted as P102, renumbered after the concurrent bare-metal pass above claimed
+  P102 — same precedent as P97→P101. Executes the four-part 2026-07-20 operator directive:
+  Hydra uses LFM2.5-VL-450M +
+  SmolVLM-256M crosswired; a native AI-infra layer checks/filters/controls that usage;
+  mechanism = osmosis + oscillator while Hydra stays fully autonomous). Hydra half:
+  dual-witness self-defense perception (2-of-2 agreement for any positive claim,
+  disagreement → Unknown) + post-breach owner-digest signaling, all through Hydra's existing
+  public surface — **zero `hydra.rs` edits, charter verbatim** (closure=NEVER,
+  kill-switch-only, intervention-lifts all unchanged; no reconciliation with items 73-78,
+  per standing ruling). Supervisor half: deterministic dowiz-authored membrane (schema/
+  vocabulary/provenance hard gates) + gradient-driven osmotic flow (reuses
+  `csr.rs:330` `personalized_pagerank`) + heartbeat oscillator tapping the existing
+  `DriftClass`/`INTEGRITY_BAND` spectral gate — filters the model channel only, never gates
+  Hydra itself (structural AC: kernel has zero supervisor dependency). "Trained on them"
+  ruled conservatively: drift-gated coupling evolution now (the mechanism `hydra.rs`
+  actually has) + mechanically-labeled corpus accumulation with fine-tuning strictly behind
+  P54's TRIGGER-FINETUNE (P101 §5 AMX facts referenced). L1/Round-4 transparency tension
+  recorded dated (supervised-opacity operator-directed for Hydra's lane; BDH-for-L1 arc
+  untouched). The supervisor's H1-H4 hook contract maps onto P102's §4.7 seams
+  (`InferTrace`/`TraceSink`, `Ungated`/`OutputGate`, weights-digest + seed replay) — the
+  engine exposes the seams, all policy lives in this supervisor. Blueprint:
+  `CORE-ROADMAP-2026-07-17/BLUEPRINT-P103-hydra-model-pair-supervised-integration-2026-07-20.md`,
+  registered in §10.2 (Part II) and `CORE-ROADMAP-INDEX.md` §10.
+- **The delta gap-audit + first-pass consolidation.** Fixed 4 orphaned/under-linked docs, 1
+  dangling link, 2 stale status cells, 1 mislabel in `CORE-ROADMAP-INDEX.md`; annotated (not
+  silently fixed) that space-grade items 45/73/74 have real standalone CI-gate scripts not yet
+  wired into any workflow; found and partially resolved a disk-full incident (99 leftover
+  autopilot-swarm worktrees, 77 removed safely, 25GB freed) plus a live git-collision incident
+  (recovered via an isolated worktree, Hermes's own concurrent `swave/integrate` work —
+  implementing pieces of this session's own blueprints — restored intact). First produced a
+  navigation spine over the still-fragmented 19 files; on operator follow-up ("merge all roadmaps
+  into one"), fully inlined the 4 still-current docs as Parts II–V below and deleted the 13
+  genuinely-dead ones outright — this is that final, fully-merged document.
+
+## 10. The space-grade 78-item track — how it relates to everything above
+
+Part V below (the space-grade 78-item roadmap) is a **deliberately separate track** from the
+P01–P102 CORE roadmap — zero-external-dependency, maximum-kernel-authority,
+100%-determinism-where-possible hardening work, not product features. It is NOT a competing
+roadmap; think of it as a fourth axis alongside Layer A–I / P-series / space-grade, all converging
+on the same `main`. Status as of today: the large majority of items 1–61 have landed real code or
+been closed as measurement/audit passes (§8–§9 above); items 62–72 (telemetry/cost-ledger/digital-twin)
+and 73–78 (Governed Self-Evolution) remain spec-only pending D11's follow-on code-dispatch
+decision. Full per-item detail is in Part V and its ~50 companion `BLUEPRINT-ITEM-*` files (kept
+separate — that's ~50 individual files, not itself a competing top-level roadmap doc).
+
+## 11. Open / pending, right now (single source — don't look elsewhere for this)
+
+- Space-grade items 62–72 and 73–78: **spec exists (D11 rules 73-78's design), no code dispatch
+  authorized yet.**
+- Space-grade items 45/73/74's CI-gate scripts: **real code on `main`, not wired into any GitHub
+  Actions workflow** — a named, scoped follow-up, not yet actioned.
+- Product-surface wave + remaining-queue wave: **8 PLAN docs total, zero code written** — Stage A
+  of the intent-interface blueprint (wiring already-tested endpoints together) is flagged as the
+  lowest-risk next build step if the operator wants to proceed past planning.
+- 21 worktrees from the disk-cleanup incident (§9) intentionally left untouched pending manual
+  operator review — not required for roadmap completion.
+- `payment-adapters` crate, `intake-adapters` crate, and the `AiMode`→`compose.rs` wiring gap: all
+  three named concretely in the remaining-queue wave's blueprints — the wiring gap has since
+  started landing on the `swave/integrate` branch (see §9), not yet merged to `main`.
+- P101 (local/mobile model selection + serving topology): **blueprint on disk, zero code, zero
+  models pulled.** Same-day operator correction locked the model topology to exactly 2 named
+  models — LFM2.5-VL-450M + SmolVLM-256M-Instruct, run concurrently/crosswired, one pair for
+  both mobile and server — replacing the earlier abstract tier system; O-1 (LFM-license ruling)
+  is now RULED ("clear to ship") and O-2 (the small-model bake-off) is superseded by that same
+  correction (its §8). Only O-3 (optional CPU-LoRA probe) remains open. Phase B (the measured
+  concurrency matrix on the live box) is startable immediately and gates the topology.
+- P102 (bare-metal zero-dep inference engine, two-model crosswire): **blueprint on disk, zero
+  code, no crate created, no model pulled.** Direction is operator-ruled final (R-1/R-2/R-3);
+  Phase 0 (bandwidth probe + KAT fixture corpus + external-runtime baselines for the ruled
+  pair) is startable immediately and touches no dependency or serving path. Named residuals
+  of full Ollama retirement: E-1 (embedding lane) and CS-2 (code lane) — tracked in its §6.1.
+  Recommended follow-up: a DECISIONS.md entry recording R-1/R-2/R-3 (its §10).
+- P103 (Hydra × model pair + native AI-infra supervisor): **blueprint on disk, zero code,
+  `hydra.rs` untouched.** Both sibling blueprints landed the same day and are cross-linked:
+  the P102 bare-metal engine (its §4.7 `InferTrace`/`TraceSink` + `Ungated`/`OutputGate`
+  seams are the supervisor H1-H4 hook contract's implementation home; policy stays in the
+  supervisor per P102's own "engine implements no policy" rule) and the P101 amendment (the
+  crosswired-pair ruling P103's dual-witness arbitration consumes). Phase 1 (supervisor
+  skeleton + structural AC-2/AC-11 guards) buildable engine-agnostic on interim Ollama;
+  coupling ratchets frozen until P102's weights-digest/seed replay attestation exists
+  (P103 §4.8).
+
+## 12. What every filename means now, at a glance
+
+| If you're looking for... | Read |
+|---|---|
+| "What happened and when" (this doc, Part I) | `ROADMAP.md` §0–§11 (here) |
+| What to build next, in what order, citing the real blueprint for each | `ROADMAP.md` §15 (here) |
+| Full P-number ↔ blueprint-file cross-reference, every arc, every layer | `CORE-ROADMAP-INDEX.md` |
+| One phase/item's full design detail | Its own file under `CORE-ROADMAP-2026-07-17/` or the ~50 space-grade `BLUEPRINT-ITEM-*` files |
+| Red-line/architecture decisions with full rationale | `DECISIONS.md` (D0–D14) |
+| Why the project exists, the six invariants | `MANIFESTO.md`, `DECISIONS.md` D0 |
+| The full P01–P30 Sovereign Architecture detail | Part II below (this file) |
+| The standing quality-bar doctrine | Part III below (this file) |
+| The 2026-07-19 landing-wave narrative (historical) | Part IV below (this file) |
+| The 78-item space-grade track, full detail | Part V below (this file) |
+| Blueprint-coverage / landed-status audits | `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md` (this pass) → `-2026-07-19.md` (prior pass) — kept standalone, these are audit reports, not roadmaps |
+| Anything else with "ROADMAP"/"GROUND-TRUTH"/"MASTER" in the name | It's gone — deleted 2026-07-20, content is in this file or was genuinely dead. `git log --all --diff-filter=D -- 'docs/design/<name>.md'` recovers it if ever needed. |
+
+---
+
+---
+
+## 13. Verified-status corrections, P-series (2nd-pass audit, 2026-07-20, same day)
+
+Following the full merge, the operator asked for a fresh, evidence-based (not doc-trusted) sweep
+of every P-number's actual landed-status. Three parallel passes ran: P01–P96, space-grade 1–78
+(corrections folded into Part V directly, see its reconciliation table + the 2nd-pass correction
+block after it — items 61/62/66 were found *wrongly marked done* there), and a full
+`docs/design/` reachability sweep (§14 below). This section carries the P-series findings; nothing
+below duplicates what a prior audit already confirmed accurate — only genuine corrections and
+newly-confirmed unresolved items are listed.
+
+**Corrections — a live doc's claimed status did not match `main`'s real content:**
+
+| P-number | Doc claimed | Verified reality | Evidence |
+|---|---|---|---|
+| **P37** | PLANNED (0% — "no dynamic HTTP server exists in-repo") | **LANDED.** Biggest single stale claim found in the sweep. | Commit `68d5c2874` landed `kernel/src/json_api.rs` + `tools/native-spa-server/src/api.rs` with `/api/order`, `/api/order/{id}`, `/api/order/{id}/advance` genuinely registered in the served binary's router. |
+| **P04** | "Nothing has landed yet; `kernel/src/router.rs` and `kernel/src/dsu.rs` do not exist" (blueprint's own completion appendix) | **LANDED.** Both files exist. | Commit `86b1558fa`; doc never updated after the landing. |
+| **P95** | Blueprint's own VERDICT: "HOLD — ready design, do NOT build yet," gated on precondition P95-C1 (a real caller must exist first); companion doc reaffirms "NO-GO if unmet." | **Built anyway** (`f16d603d7`, 2026-07-20), with no on-record confirmation the gate was re-checked or an explicit operator override was given. Feature itself is real/tested/on `main` — this is a **process/governance finding, not a code-quality one**: the documented gate appears to have been bypassed, not honored. `CORE-ROADMAP-INDEX.md` §9 still reads "P95 HOLD/NO-GO," now one day stale vs. the actual merge. | Flagged for operator awareness, not silently resolved either direction. |
+| **P65** | Presented with equal LANDED weight alongside P66/P67/P68 in the WAVE-CLOSEOUT doc. | **Overstated.** Cited commit `bae2134` sits only on an unmerged bebop-repo branch (`feat/p65-dispatch-orchestrator`), not that repo's own `main`. Built, not merged. | bebop-repo branch state, checked directly. |
+| **P28** | `CacheGraph` (`llm-adapters/src/cache_graph.rs`) described as built (operator-directed override of P26's rejects, "planned forward"). | **Does not exist.** Zero `.rs` hits anywhere in the repo for `cache_graph` or `CacheGraph`. | Repo-wide grep, zero matches. |
+| **P26** | Two headline "ADOPTED" claims: `kernel/src/memory_budget.rs`/`MemoryBudget`, and `retrieval/ppr.rs` delegating to CSR. | **Neither holds.** `memory_budget.rs` doesn't exist at all; `ppr.rs` is still dense, not CSR-delegated. The one real fix in this phase (`llm-adapters/src/cache.rs::BoundedStore`) is entry-bounded, not byte-bounded as the doc describes. | Direct file/grep check. |
+| **P48** | Single cell: "PLANNED — build-out open." | **Flattens two different realities.** The messenger-intake half (H1-H4) genuinely is 0% built (the doc's own ground-truth table already says so honestly). But P48's original CRUD-admin scope has since landed — under a *different* phase number: `kernel/src/ports/owner_surface.rs`'s own comments state it "supersedes P48 B1/B2/B3" — that's really P70's delivery, not left open under P48. | `kernel/src/ports/owner_surface.rs` header comments. |
+| **P62** | WAVE-CLOSEOUT cites commit `422b45c95`. | **Typo, cosmetic only.** Not a valid git object — one hex digit off. Real commit is `422b45e95`. Code and its 19 tests are real and green regardless. | `git cat-file` lookup. |
+| **P91** | "MERGED to main" (blanket). | **True for P91.0/P91.1 only** (ring-arithmetic fix, real). P91.2 (NIST ACVP KAT + constant-time tag-compare) remains open — `docs/audits/hardening/HOT-PATHS.tsv` itself carries `MISSING`/`KNOWN-RED` flags on `kem.rs`/`hybrid.rs`. The blanket phrasing overstates completeness. | `HOT-PATHS.tsv`'s own flags. |
+
+**Confirmed accurate:** roughly 85 of 95 checkable P-numbers (all except P84, which is
+deliberately reserved by design) had their claimed status directly verified against real
+files/tests/commits — the large majority of the roadmap's own status claims hold up.
+
+**Genuinely unresolved (honest, not guessed):**
+- **P29** — the specific "shape C1 model-tier routing, 30-case fixture" pilot named in this
+  document could not be located as a distinct artifact from this repo (general `DecisionUnit`/
+  `Stale` infra exists; the named pilot doesn't show up in a targeted grep) — may exist on an
+  unmerged branch not checked.
+- **P03, P09, P10, P36, P65 (bebop side), P76, P78, P82, P85 (bebop portion), P92, P93, P94** —
+  each blueprint states its own files live in the separate `/root/bebop-repo` (OpenBebop)
+  repository, not in `dowiz`. Structurally unverifiable from this repo alone; not claimed either
+  way here.
+
+## 14. Reachability gaps found in `CORE-ROADMAP-INDEX.md` (2nd-pass sweep, 2026-07-20)
+
+A full sweep of the remaining `docs/design/` + `docs/research/` corpus (~557 files, beyond the
+P-series and space-grade tracks already covered above and in Part V) found **no missing
+blueprints** — every real, proposed piece of work already has a real, DoD-shaped document
+somewhere. What it found instead: `CORE-ROADMAP-INDEX.md`'s own stated guarantee ("every planning
+document reachable in ≤2 hops") is false for a real, bounded set of still-substantive documents.
+Fixed directly in `CORE-ROADMAP-INDEX.md` §9 (see that file for the actual new rows/links):
+
+- **3 arc directories cited as MEMORY-only, despite having real on-disk blueprints** —
+  `integration-ports/` (IP-01..21), `ecosystem-strategy/` (EC-01..20), `ops-reliability/`
+  (OPS-01..22) — each has a real `BLUEPRINTS-*.md` with per-unit Мета/Межа/Форма/RED-контракт
+  structure, unlike their 7 sibling arcs which already got direct links. Now linked directly.
+- **`realtime-change-intelligence-2026-07-17/`** — the most load-bearing orphan found: live,
+  post-JS-drop, cited by two docs `ROADMAP.md` itself already links (`BLUEPRINT-CACHE-REFERENCE-
+  GRAPH-TENSOR-ARENA`, `BLUEPRINT-FAULT-ISOLATION-DECENTRALIZED-ARCHITECTURE`), but never itself
+  linked — 3 hops instead of 2. Now linked directly.
+- **`hermes-kernel-rewrite-2026-07-15/`, `organism-status-2026-07-15/`,
+  `tech-synthesis-2026-07-15/`** — each 3 hops instead of 2; one landed deliverable traced back to
+  the first (`kernel/src/harmonic.rs`'s own doc comment confirms the port). Now linked directly.
+- **A named subset of standalone docs** with real, non-superseded content and no path in at all:
+  `AUTONOMOUS-ORGANISM-SYNTHESIS-2026-07-14.md`, the `BLUEPRINT-W17/W19/W20/W22-*.md` mini-wave
+  (siblings W18/W21 already had partial linkage — this is link-hygiene, not undone work; the prior
+  2026-07-19 audit already confirmed all of W17–W22 shipped/green), `launch-design-brief.md`,
+  `spectral-graph-fsm.md` (self-labels "Roadmap item," genuinely grounded in `order_machine.rs`),
+  `SWARM-QUANT-BLUEPRINT-2026-07-15.md`, `SYSTEMS-GPU-ML-KERNEL-SYNTHESIS-2026-07-16.md`,
+  `WEB3-SYNTHESIS-INVISIBLE-AGENTIC-LOCAL-INFRA-2026-07-17.md`. Now linked directly.
+- **In `docs/research/`**: `BLUEPRINT-W13-pgrust-adapter.md`, `BLUEPRINT-W14-mesh-discovery-
+  gossip.md`, and 3 of 6 `AUDIT-2026-07-18-*` council critiques (ARCHITECT/HERZOG/TORVALDS — their
+  sibling FEYNMAN critique was already linked, oddly leaving these three out). Now linked directly.
+- **`KNOWLEDGE-SPINE-BLUEPRINT-2026-07-14.md`** — its own frontmatter still reads `status:
+  proposed`, but `kernel/src/bin/spine_snapshot.rs` confirms it's actually landed on `main` — the
+  opposite-direction staleness (work outran its own doc). Corrected in that file directly.
+
+**Correctly excluded, verified not a gap:** 8 Triadic-Council closed-loop directories
+(`cinematic-product-media/`, `dev-login-backdoor-hardening/`, `fee-courier-seed/`,
+`golive-remediation/`, `owner-token-revocation/`, `p0-privacy-hardening/`, `soft-access-gate/`,
+`telegram-notifications-actions/`) all govern TypeScript/JS code deleted wholesale in the
+2026-07-15 "drop js" commit — correctly unreachable, indexing them would be actively wrong.
+**One governance-hygiene note, not a code gap:** `dev-login-backdoor-hardening/` and
+`p0-privacy-hardening/` each carry a `NEEDS-HUMAN-DECISION` item ("was the dev-login backdoor
+actually exploited," "is there a breach-disclosure obligation") that was never affirmatively
+answered — only mooted by the code's deletion. Flagged here for operator awareness; not resolved
+by this pass, which is documentation-only.
+
+
+## 15. Full build-out execution plan (2026-07-20, planning-only, zero code)
+
+> **Status: PLAN. No implementation in this section — that is deliberate.** Operator directive:
+> "plans & blueprints first for the roadmap, include them in ROADMAP.md — only after that Opus for
+> implementing them based on proper specs, plans & blueprints for ALL roadmap items & plans,
+> design, etc." Scope decisions locked in the same exchange: build as much of the roadmap as
+> possible this session (not just a fix/polish pass), prioritized toward one concrete outcome — a
+> food-court owner can place and track one real order end to end — because that is both the
+> release gate (no public tag until this works) and the thing the operator wants to hand-test
+> personally. Everything below cites an EXISTING blueprint rather than re-deriving specs that
+> already exist (per this corpus's own no-duplicate-authorship discipline) — this section's job is
+> sequencing and gap-flagging, not re-planning what's already planned.
+
+### 15.1 Why a sequencing pass was needed at all
+
+The audits earlier today (§13/§14) already confirmed something important: **almost nothing here
+is unplanned.** Every phase below already has a real, DoD-shaped blueprint file. What was missing
+was (a) a single ordering across four independent waves that all claim priority, and (b) an honest
+flag on the handful of places where a blueprint's own claimed status turned out to be stale
+(§13) or where two blueprints appear to overlap in scope without an explicit disposition (found
+during this pass, listed in 15.4). Those are real planning gaps; this section closes them.
+
+### 15.2 Phase 0 — MVP critical path (build this first; this is the release gate)
+
+The minimal slice for "an owner creates a menu, a customer places one order, the owner sees it,
+a courier delivers it, everyone gets notified, cash changes hands on delivery." Every piece below
+either already exists (cite the evidence) or has a real blueprint (cite the file) — nothing here
+needs new planning, only sequenced building.
+
+| # | Piece | Status entering this plan | Blueprint / evidence | Build note |
+|---|---|---|---|---|
+| 0.1 | Kernel order FSM + money law | **LANDED, most mature part of the stack** | `kernel/src/order_machine.rs`, `money.rs` — core of the whole system, thousands of tests | No work needed |
+| 0.2 | HTTP order surface | **LANDED** (§13 correction: the roadmap's own "0%/PLANNED" claim was stale) | `kernel/src/json_api.rs` + `tools/native-spa-server/src/api.rs`, commit `68d5c2874` — real `/api/order`, `/api/order/{id}`, `/api/order/{id}/advance` routes | Confirm still boots cleanly (an in-flight test-sweep agent is checking this right now — §15.5 notes to fold its result in before building starts) |
+| 0.3 | Payment: cash-on-delivery rail | **LANDED** | `kernel/src/ports/payment.rs` (`PaymentPort`+`CashAttestation`+reconciliation), `kernel/tests/firewall_p47.rs`, commits `e6367ae73`/`de56a27d6` | Use this rail for the MVP — no PSP integration needed; matches D12 §4-D's own market framing and avoids the payment-adapter-residual blueprint's real complexity (Phase 0 doesn't need it) |
+| 0.4 | Owner surface (menu management, order visibility) | **PLANNED** — rulings landed (WebGPU no-DOM exemption, hub model), build-out open | `CORE-ROADMAP-2026-07-17/BLUEPRINT-P70-owner-surface.md` (supersedes P48's CRUD-admin half per `kernel/src/ports/owner_surface.rs`'s own header comment — confirmed this session) | **Build this.** Owner needs a real menu-entry + order-queue view — this is the one genuinely new UI surface the MVP can't skip |
+| 0.5 | Customer surface (browse, checkout) | **PLANNED**, blueprint is explicitly "M1 critical path" | `CORE-ROADMAP-2026-07-17/BLUEPRINT-P69-customer-storefront-checkout.md` | **Build this.** Pair with 0.4 — both ride the same intent-interface architecture (0.6) |
+| 0.6 | UI architecture both 0.4/0.5 render through | **Built, tested, wired into the production loop — never connected to real content** | `engine/src/intent.rs` + `compose_ui.rs` (P64), `docs/design/BLUEPRINT-INTENT-INTERFACE-ONE-SCREEN-2026-07-20.md` Stage A ("wire two already-tested endpoints together, ~zero technical risk, 6 falsifiable RED→GREEN acceptance criteria already given") | **Build Stage A first** — it's the substrate 0.4/0.5 render through, and the blueprint already rates it near-zero risk |
+| 0.7 | Order intake channel (how a customer's order reaches the kernel) | **PLANNED**, Phase 1 = "build first," self-serve, free | `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P48-INTAKE-omnichannel-order-intake-2026-07-20.md` Phase 1 (Telegram + Website) | For MVP: the **website path only** (0.5's own storefront → 0.2's `/api/order`) — the blueprint's own Phase 1 already scopes Telegram+Website together, but website has zero deniable/review gates and this environment already has `cloudflared` running (checked live), so Telegram bot intake is a plausible Phase-0-adjacent add, not a hard requirement. Recommendation: ship website-only for Phase 0, Telegram intake in Phase 1 (15.3) |
+| 0.8 | Courier assignment + delivery flow | **STATUS CONFLICT FOUND THIS PASS — see 15.4-G1, resolve before building** | Two candidate blueprints found: `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P52-courier-working-surface.md` (P52, explicitly flagged "MVP-blocking: P50's gate cannot go green without it") and `BLUEPRINT-P71-courier-surface.md` (P71, Wave W3) | **Do not build until 15.4-G1 is resolved** — building the wrong one wastes the highest-risk piece of Phase 0 |
+| 0.9 | Outbound order notifications (owner/courier/customer) | **Mostly built** — outbound-only send fabric already exists | `kernel/src/messenger.rs` (deep-link builders), `kernel/src/ports/notification.rs` (`Notifier` fan-out) | Wire existing sends to the new order-lifecycle events; small glue, not new design |
+| 0.10 | First-order validation gate | **PARTIAL** — audit half done, gate open | `CORE-ROADMAP-2026-07-17/P50-COMPLIANCE-AUDIT.md`, commits `568ff51c4`/`788cbee5a`; depends on 0.3/0.4/0.8 (P47/P48/P34/P37/P38) | Closes naturally once 0.1–0.9 land — not separate new work |
+
+**Explicitly deferred out of Phase 0** (real, planned, just not on the critical path for one order):
+live map/routing (P51 — a customer can track by order-status text without a live map for v1),
+food-court multi-vendor N-leg checkout (P72 — single-vendor first), the payment-adapter-residual
+crate (real PSP integration — cash rail suffices for Phase 0), hub provisioning/claim automation
+(P67 — the operator can provision the one test hub by hand for now), data wallet/offline drafts
+(P66), dispatch orchestrator (P65 — direct courier assignment suffices at MVP scale).
+
+### 15.3 Phase 1+ — continued build-out, priority order (after Phase 0 is green)
+
+Everything else in the roadmap that's still PLAN, sequenced by dependency and leverage. Each row
+cites its existing blueprint — no new specs written here.
+
+1. **Telegram order intake** (`BLUEPRINT-P48-INTAKE...` Phase 1's Telegram half, deferred from 0.7) — cheapest next win, self-serve, free, zero deniable gates.
+2. **Telegram ops-hub build-out Phases 2–5** (`docs/design/BLUEPRINT-TELEGRAM-OPS-HUB-REMAINING-BUILD-ORDER-2026-07-20.md`) — CI/CD digest, S0/S1 mirror-rule formalization, LOGS topic, KERNEL/MESH+MEMORY/DOCS topics. Pure ops-observability, zero product risk, already 5 DoD-bearing phases specified.
+3. **Local-model wiring Phase 1** (`BLUEPRINT-LOCAL-MODEL-WIRING-TESTING-USAGE-2026-07-20.md`) — closing the `AiMode`→`compose.rs` gap. Small, already scoped, unblocks any future AI-assist feature honestly (fail-closed today).
+4. **Intent-interface Stages B/C** (`BLUEPRINT-INTENT-INTERFACE-ONE-SCREEN-2026-07-20.md`) — gated on named operator decisions already recorded there (wgpu network-grant timing, native-companion-app ever) — do not build until those are re-confirmed live, not just recalled from the blueprint.
+5. **Payment-adapter residual** (`BLUEPRINT-P60-payment-adapter-residual-2026-07-20.md`) — real PSP integration once Phase 0's cash rail has proven the order flow works; Phase 0 of that blueprint (PSP diligence) can start in parallel with anything above since it's pure research.
+6. **Omnichannel intake Phases 1.5–3** (SimpleX, WhatsApp) — after Telegram (step 1) proves the pipeline; WhatsApp specifically requires the named Business-Verification shepherding decision from that blueprint's own D1.
+7. **Map/routing (P51)**, **dispatch orchestrator (P65)**, **data wallet (P66)**, **hub provisioning automation (P67)**, **food-court N-leg checkout (P72)** — the Phase-0-deferred items, roughly in this order (each blueprint already exists under `CORE-ROADMAP-2026-07-17/`).
+8. **Product-surface wave remainder**: offline resilience Phase A (Service-Worker+IndexedDB, already D14-ratified), media/comms build-out (`Media` capability resource + manifest layer over the already-80%-there `chunker.rs`/`backup.rs`), spatial-storefront-voice-hub build phases.
+9. **Space-grade items 34–44** (toy-pilot-arc, already IN-PROGRESS per the Part V reconciliation table — 35/36/38 done, 34/37/39–44 remain) and **items 62–72** (telemetry/cost-ledger/digital-twin retrofits, mostly landed per Part V's reconciliation, a few gaps remain per that table).
+10. **Space-grade items 73–78** (Governed Self-Evolution) — D11 has already ruled the full apply-token design; this is the one place a fresh operator "go" is explicitly required before ANY code lands (D11: "does not authorize dispatching items 73-78 to code" — a separate decision from everything else in this plan).
+11. **Predictive RESOURCES telemetry + anomaly stability signals** (operator-requested 2026-07-20,
+    [`BLUEPRINT-PREDICTIVE-RESOURCES-TELEMETRY-2026-07-20.md`](BLUEPRINT-PREDICTIVE-RESOURCES-TELEMETRY-2026-07-20.md))
+    — real-time prediction over the `resources-summary.jsonl` history (p50/p99/jitter/watts/CO2e/
+    CPU/mem/disk) via `kernel::kalman` + a generalized `kernel::markov` regime detector (the exact
+    `tools/loop-signals/` detector shape, reused not reinvented) + graph-Laplacian cross-metric
+    coherence via `kernel::spectral`; spikes surfaced as a new `resources-stability-alert.jsonl`,
+    narrated by `llm-adapters` only when an alert fires, degrading closed to a template otherwise.
+    Prerequisite schema fix inside the blueprint (§3.1): `mem_pct`/`disk_pct`/`load1_norm`/net
+    throughput are computed every `topics resources` run today and silently discarded, never
+    persisted — must be added to the JSON record before any of those three can be predicted.
+12. **mesh-adapter / bebop-repo cross-repo type drift** (found + real-build-confirmed 2026-07-20,
+    [`BLUEPRINT-MESH-ADAPTER-BEBOP-CROSSREPO-DRIFT-2026-07-20.md`](BLUEPRINT-MESH-ADAPTER-BEBOP-CROSSREPO-DRIFT-2026-07-20.md))
+    — `bebop-delivery-domain` (companion `bebop-repo`) does not compile against the current
+    `dowiz-kernel` (`OrderItem` gained `vendor_id`/`currency`, `OrderStatus` gained
+    `Refunding`/`CompensatedRefund`; live `cargo check --features kernel-rlib` reproduces 2
+    concrete errors across 5 call sites). **⚠ Needs an explicit operator decision before any code
+    lands** — the blueprint fully specifies both a cross-repo PR path and a dowiz-side vendored-fork
+    stopgap, but does not choose between them.
+13. **`native-spa-server` listener-wide DoS hardening** (follow-up to `00436dedc`'s per-connection
+    fix, [`BLUEPRINT-NATIVE-SPA-SERVER-LISTENER-HARDENING-2026-07-20.md`](BLUEPRINT-NATIVE-SPA-SERVER-LISTENER-HARDENING-2026-07-20.md))
+    — a global `tokio::sync::Semaphore` connection cap + a per-IP `kernel::token_bucket`-based rate
+    limiter, both fail-closed and both defense-in-depth alongside the existing `MAX_INFLIGHT_API`/
+    `MAX_BODY_BYTES` layers (neither of which covers accept-time exhaustion). Not gated on anything
+    above; independently buildable whenever picked up.
+
+### 15.4 Gaps found while sequencing (resolve before implementation starts)
+
+- **G1 — P52 vs. P71, courier surface: RESOLVED (2026-07-20 audit) — was a linking gap, not a missing disposition.** A real split already exists and was already recorded, just not linked from here. **P52** (`BLUEPRINT-P52-courier-working-surface.md`) is the kernel-side fold/law/capture design — K1 availability/duty, K2 claim inbox, K3 delivery-run relay, K4 PoD capture, K5 earnings fold, K6 invite/enrollment, K7 cash attestation, K8 conversation pane; its own text is explicit that it is "NOT a fourth rendering technology" and "NOT voice/turn-by-turn." **P71** (`BLUEPRINT-P71-courier-surface.md`) is titled "P52-rev" in its own text — the rendered, voice-primary, dispatch-wired courier app. P71 §1 is itself a full disposition note: it preserves K1/K4-K8 unchanged and supersedes exactly 3 named things from P52 (the 60s surface-owned offer-timeout → P65's 30s hub-owned deadline authority; the "NOT voice" anti-scope → voice-primary via P64; the CPU-stub render deferral → a real full-wgpu render), plus adds the actual `apps/courier` build. This disposition is also independently recorded at `ROADMAP.md:3196` (§18.3, dated 2026-07-18 — two days before this §15/G1 text was written, which is why the "no recorded disposition" claim above was itself stale the moment it was written). **Build order: P52's kernel-side folds first, then P71's render layer on top — do not retire either file (same keep-both precedent as P70/P48).**
+- **G2 — Phase 0.2's exact current endpoint completeness is pending live verification.** A test-sweep agent is checking whether `native-spa-server` actually boots and serves real responses right now (§15.5) — fold that result in before starting 0.4/0.5, since the owner/customer UI has nothing to render against if the order API isn't actually reachable.
+- **G3 — no genuinely unplanned work found.** Every other item in this section already has a real DoD-bearing blueprint. This plan's job was sequencing + the two gaps above, not authoring new specs.
+- **G4 — space-grade item 3's third proof clause was silently uncovered — CLOSED this pass with a
+  real blueprint.** The roadmap-wide gap audit (2026-07-20, successor to
+  `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md`) found item 3 ("`order_machine` const-adjacency")
+  was the one genuine gap across all 78 space-grade items — its "zero heap allocations under a
+  counting allocator test" clause had no test and no dedicated blueprint, only incidental mentions
+  inside items 6/7. See [`BLUEPRINT-ITEM-03-order-machine-zero-alloc-proof-2026-07-20.md`](BLUEPRINT-ITEM-03-order-machine-zero-alloc-proof-2026-07-20.md).
+- **G5 — `wasm-bindgen` version pin: accepted external constraint, not a design gap.** The
+  `wasm-bindgen` version in `kernel/Cargo.toml`/`wasm/`'s manifests is pinned to whatever `wgpu`
+  requires for the WebGPU render engine (P38) and cannot be independently downgraded without
+  breaking that dependency chain. This is a genuine upstream constraint, not something this
+  codebase's own architecture can decouple — no blueprint is warranted unless a real decoupling
+  path (e.g. wgpu dropping its wasm-bindgen version floor, or the render engine moving off wgpu
+  entirely — not proposed here, no evidence either is imminent) is found in a future pass.
+  Recorded here plainly so it is never mistaken for an unaddressed "PLANNED" item.
+
+### 15.5 Execution discipline for the Opus implementation pass
+
+- **Work in isolated `git worktree`s, never the shared `/root/dowiz` checkout.** Confirmed necessary twice today — a concurrent autonomous process actively mutates that checkout, including at least one local-only divergent reset discovered this session (see the git-collision handling embedded in this document's own commit history for the pattern to follow: fetch, isolated worktree off `origin/main`, verify fast-forward, push, never force).
+- **Verify-before-build, every time.** Multiple items in this very plan (P37, P28's `CacheGraph`, P26's `MemoryBudget`) turned out to have stale claimed-status this session — always re-check against live code before assuming a blueprint's "LANDED"/"PLANNED" marker is still accurate.
+- **RED→GREEN, per this repo's standing culture** — every implemented item ships a test proving the gap existed before and is closed after, not narrative.
+- **Stop and ask when a real decision is needed** — G1 above is now resolved (was a linking gap,
+  not a missing decision), but item 12's mesh-adapter/bebop-repo cross-repo drift (§15.3) is a live
+  current example of the same discipline: the blueprint fully specifies both remediation paths but
+  deliberately does not choose; the intent-interface Stage B/C gates and the WhatsApp D1
+  shepherding decision are two more already named in their own blueprints. Do not resolve these by
+  guessing.
+- **Fold in the 5 in-flight test-sweep agents' findings** (kernel, engine/wasm, agent-lane, tools/apps, web/browser) before starting Phase 0 build work — they may surface bugs in exactly the surfaces (native-spa-server, the intent/compose_ui wiring) this plan depends on being solid.
+
+---
+
+## 16. AR/VR consolidation + audio design layer — P97/P98 registered (2026-07-20)
+
+A completeness audit found two real gaps in this roadmap and `CORE-ROADMAP-INDEX.md`: AR had real
+content (DZ-12, P38-rev §12.2, §17.5's ruling, and the spatial-storefront-voice-hub synthesis's
+Lane B) scattered across four places with no first-class item number, and audio/sound had exactly
+one accessibility ruling-bullet (§16.50) and no design beyond P64's one already-built instance
+(the friction gesture's audio channel). Both are closed this pass with genuinely free P-numbers
+(verified: `grep` across `docs/design/` for every `P\d+` reference confirms P01–P96 are all
+claimed — P84 deliberately reserved per §0/§10.1 — and P99/P100 appear only as latency-percentile
+notation, never as roadmap item numbers; P97/P98 were free).
+
+| P-number | Domain | Name | Status | Blueprint | One-line finding |
+|---|---|---|---|---|---|
+| **P97** | DELIVERY/CORE | AR/VR spatial interface (consolidation) | PLANNED (blueprint ON DISK; zero code — a synthesis of four already-existing designs, not a new build) | [`BLUEPRINT-P97-ar-vr-spatial-interface-2026-07-20.md`](BLUEPRINT-P97-ar-vr-spatial-interface-2026-07-20.md) | Two genuinely different "AR" concepts hid under one name across the four sources — near-term browser product-AR (`<model-viewer>`→Quick Look/Scene Viewer, ships without touching the render engine at all) vs. long-term XR-headset readiness (four structural constraints already owned by P38 §12.2). Reconciled as Track 1 / Track 2 of one item rather than forced into a single mechanism; native camera-AR compositing stays triaged-and-deferred behind an unmade product decision |
+| **P98** | DELIVERY/CORE | Audio & sound design layer | PLANNED (blueprint ON DISK; zero code — greenfield, but every design choice cites existing code/rulings) | [`BLUEPRINT-P98-audio-sound-design-2026-07-20.md`](BLUEPRINT-P98-audio-sound-design-2026-07-20.md) | Extends P64's proven friction-only audio-parity pattern (derive `AudioParams` from the same field data the visual channel already animates from) to the rest of the DZ-04/DZ-05 visual-signal vocabulary; explicitly declines to build the separately-triaged whole-field ambient sonification idea (`BLUEPRINT-INTENT-INTERFACE-ONE-SCREEN-2026-07-20.md` §6) — real prior art, already ruled speculative/non-load-bearing/deferred, not re-opened here for want of new evidence. TTS is deliberately NOT built here: OS screen readers already speak P58's mirror text, and conversational-agent TTS is already owned by the voice-hub arc's Phase 4/6 |
+
+Both blueprints point back to (and are pointed at from) the sources they consolidate — see each
+blueprint's own §9/§10 registration section for the exact list of source-doc pointers added this
+pass. Also registered in `CORE-ROADMAP-INDEX.md` §11.
+
+---
+
+*Maintained going forward: every future dated wave gets one new §-numbered entry appended after
+§9 (or a new top-level Part if it's substantial enough to warrant its own detail section), never a
+new competing top-level doc. If you're about to create a new `MASTER-*`/`ROADMAP-*`/
+`GROUND-TRUTH-*` file, stop — extend this one instead.*
+
+---
+
+# Part II — Sovereign Architecture Roadmap (P01–P30, verbatim, 2026-07-16)
+
+> Full content of the former `MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md`, inlined here
+> 2026-07-20; the standalone file has been deleted. Headings below were demoted by one level to
+> nest under this document's top-level structure; content is otherwise reproduced verbatim,
+> including this doc's own internal status/superseded markers. Part I §5 has the one-paragraph
+> summary and current landed-subset status; read this Part for the full P01–P30 detail.
+
+## MASTER ROADMAP — Sovereign Architecture (dowiz + openbebop), 2026-07-16
 
 > **Single source of truth for the TARGET:** `docs/design/ARCHITECTURE.md` §0 (MESH-FOUNDATION +
 > SCOPE RULE) + §8 (honest gaps), cross-locked with `docs/design/STRATEGIC-VECTORS-LOCKED-2026-07-16.md`.
@@ -23,7 +636,7 @@
 
 ---
 
-## 0. Provenance — how this was built (so the result can be checked, not just trusted)
+### 0. Provenance — how this was built (so the result can be checked, not just trusted)
 
 Following the operator's routing directive (Fable for synthesis grounded in code + research +
 target architecture; Opus for blueprints), this roadmap was produced in three rounds, all
@@ -48,7 +661,7 @@ future implementation pass to act on).
 
 ---
 
-## 1. What is actually true right now (headline findings, most load-bearing first)
+### 1. What is actually true right now (headline findings, most load-bearing first)
 
 These surfaced independently across multiple phases' code-grounded research and materially change
 what "the roadmap" means — read this before the phase table:
@@ -100,7 +713,7 @@ what "the roadmap" means — read this before the phase table:
 
 ---
 
-## 2. THE 19-PHASE ROADMAP
+### 2. THE 19-PHASE ROADMAP
 
 Full detail — anchors, current→target gap, dependencies, falsifiable done-tests — lives in
 [`sovereign-roadmap-2026-07-16/R2-MERGED-PHASE-ROADMAP.md`](sovereign-roadmap-2026-07-16/R2-MERGED-PHASE-ROADMAP.md)
@@ -133,7 +746,7 @@ the same one architecture; "later" phases are later because something earlier mu
 (crypto before wire, wire before hub-runtime, hub-runtime + money before the product rides the
 protocol), never because a phase was deemed optional or deferred by preference.
 
-### Waves (maximum parallelism)
+#### Waves (maximum parallelism)
 
 ```
 WAVE 0 (start immediately, mutually independent): P1 P2 P3 P4 P5
@@ -186,7 +799,7 @@ have different bounds:
 
 ---
 
-## 3. Operator decisions required (19 items) — the real gate on Wave 3+
+### 3. Operator decisions required (19 items) — the real gate on Wave 3+
 
 This roadmap intentionally does **not** resolve these. Each lives inside a numbered phase (that IS
 its coverage — an anchor blocked on a ruling is not a dropped anchor), but real engineering on
@@ -215,7 +828,7 @@ back half without costing any engineering time.
 
 ---
 
-## 4. Anchor accounting — zero exceptions, proven not asserted
+### 4. Anchor accounting — zero exceptions, proven not asserted
 
 - Nominal canon count: **147** (M1-12 + V1-6 + D1-8 + S1-9 + E1-62 + F1-50).
 - **E10 ≡ E36** — identical text ("ML-DSA hybrid") at two different anchor numbers, re-verified
@@ -234,7 +847,7 @@ documents plus the phase table above.
 
 ---
 
-## 5. What this roadmap is not
+### 5. What this roadmap is not
 
 - **Not an implementation.** Every one of the 19 blueprints is explicitly a planning document —
   none of the 25 research/design passes that produced this roadmap wrote or edited product code,
@@ -248,7 +861,7 @@ documents plus the phase table above.
   another; phase ORDER here reflects only build-dependency reality (what must exist before what),
   never a value judgment about which parts of the architecture matter more.
 
-## 6. Next steps
+### 6. Next steps
 
 1. Operator rules on O1, O3, O4, O5, O7, O9 (the ones that actually gate engineering, per §3) —
    everything else in the decision docket has a safe default already proposed in `BLUEPRINT-P02`.
@@ -262,7 +875,7 @@ documents plus the phase table above.
 
 ---
 
-## 7. Follow-up pass (2026-07-16, same day) — self-critique + harness/LLM-infra research
+### 7. Follow-up pass (2026-07-16, same day) — self-critique + harness/LLM-infra research
 
 Per the operator's standing session-closing ritual (now codified in `AGENTS.md` — the 2-question
 doubt check), this roadmap was immediately subjected to an independent adversarial review, plus two
@@ -304,13 +917,13 @@ mechanism) — not edited here, same boundary as the rest of this roadmap.
 
 ---
 
-## 8. Second follow-up pass (2026-07-17) — four new phases, one cross-phase addendum, a
-## completeness audit, native-cleanup tracking
+### 8. Second follow-up pass (2026-07-17) — four new phases, one cross-phase addendum, a
+### completeness audit, native-cleanup tracking
 
 Same rule as §7: every claim below is either re-derived from live code/tests this session or
 named as an open decision, never asserted from a prior doc's authority.
 
-### 8.1 Four new phases (P20–P23)
+#### 8.1 Four new phases (P20–P23)
 
 None of these existed in the 19-phase table in §2. Each has an execution-grade blueprint already
 written (research + DECART + 2-question doubt audit + Anu/Ananke check, same protocol as P01–P19).
@@ -328,7 +941,7 @@ P22's Telegram adapter need no operator ruling; P20 and P23 have a named phase d
 operator-decision dependency). None of them sit on the P3→P9→P10→P13 critical path (§2); they are
 off-critical-path lanes exactly like P5/P8/P11/P12/P18-prep, fan out whenever capacity is idle.
 
-### 8.2 One cross-phase addendum, not a new phase — Hub design vs. vendor market research
+#### 8.2 One cross-phase addendum, not a new phase — Hub design vs. vendor market research
 
 [HUB-DESIGN-VENDOR-MARKET-RESEARCH-2026-07-17.md](HUB-DESIGN-VENDOR-MARKET-RESEARCH-2026-07-17.md)
 compared dowiz's hub design against general vendor-facing delivery-platform market patterns
@@ -347,7 +960,7 @@ every platform it was compared against on offline resilience, customer-data owne
 economics, and courier dignity (NO-COURIER-SCORING is a genuine differentiator, not a compliance
 cost). The gaps are real; so is the lead.
 
-### 8.3 Roadmap completeness audit (2026-07-17)
+#### 8.3 Roadmap completeness audit (2026-07-17)
 
 A dedicated pass re-verified every blueprint in this roadmap plus H1–H4 (hermetic-remediation) and
 B1/B3/B4/E1/E2 (the agentic-mesh and spectral-evolution arcs, separate worktrees) against live
@@ -372,7 +985,7 @@ needs a re-derivation, not a ruling) and a note that **O18** and **O19**'s "reso
 adjudicated, exactly per this roadmap's own rule of recording contradictions rather than picking a
 side silently.
 
-### 8.4 P06's merge-gate contract is now executable (found during the audit, not separately built)
+#### 8.4 P06's merge-gate contract is now executable (found during the audit, not separately built)
 
 `tools/ci-truth/src/v1.rs` implements BLUEPRINT-P06 §2–§5's anchor loader, TLV
 encode/decode, and merge-gate policy as a real, tested Rust module — with signing
@@ -398,7 +1011,7 @@ STATUS (2026-07-17):
   Until then, `v1-verify` correctly emits RED on any commit lacking the two git
   notes, which is the honest Phase-1 behavior.
 
-### 8.5 Native-only cleanup — tracked, not fully executed
+#### 8.5 Native-only cleanup — tracked, not fully executed
 
 Per the operator's standing direction (no Python/Node runtime code outside adapters/bridges): this
 session deleted genuinely dead artifacts (14 one-off `audit/*.py` scripts that manually poked
@@ -418,43 +1031,43 @@ directory). **Not deleted, and why:**
   — not re-audited this pass; flagged here so they are a known open question, not an assumed-clean
   item.
 
-### 8.6 One more phase (P24) — native runtime telemetry (2026-07-17, same protocol as §8.1)
+#### 8.6 One more phase (P24) — native runtime telemetry (2026-07-17, same protocol as §8.1)
 
 | # | Phase | Blueprint | Depends on | Note |
 |---|---|---|---|---|
 | 24 | Native Runtime Telemetry — ring-buffer flight recorder + explainable latency events | [BLUEPRINT-NATIVE-TELEMETRY-LATENCY-EXPLAINABLE-EVENTS-2026-07-17.md](BLUEPRINT-NATIVE-TELEMETRY-LATENCY-EXPLAINABLE-EVENTS-2026-07-17.md) | 8 (consumes P08's typed-schema/local-sink design and generalizes P08 §4's claim-latency anomaly pattern from CI commit latency to any runtime latency — decided from P08's own text, not assumed; P24 re-owns none of P08's anchors) | Linux-technique port (procfs snapshot-of-byproduct counters, perf/eBPF sample+aggregate-in-place, SPSC acquire/release rings, PSI cause attribution, RRD max-preserving tiers); one new kernel module (`ring.rs`, SPSC-no-CAS per the RCI H1 lesson), zero new external deps; every anomaly logged as an explained capsule (baseline+rule+PSI+prelude), never a bare "spike detected". Off-critical-path lane like P5/P8/P11/P12 |
 
-### 8.7 One more phase (P25) — wave scheduling & resource-classed admission (2026-07-17, same protocol as §8.1)
+#### 8.7 One more phase (P25) — wave scheduling & resource-classed admission (2026-07-17, same protocol as §8.1)
 
 | # | Phase | Blueprint | Depends on | Note |
 |---|---|---|---|---|
 | 25 | Wave Scheduling & Concurrent Agentic Execution — resource-classed admission control | [BLUEPRINT-WAVE-SCHEDULING-CONCURRENT-EXECUTION-2026-07-17.md](BLUEPRINT-WAVE-SCHEDULING-CONCURRENT-EXECUTION-2026-07-17.md) | 24 (soft — consumes P24 W1b's PSI-extended gauge surface as the admission signal; pre-P24 the same `/proc/pressure` files are read directly) | Corrects the "8 cores" premise (live `lscpu`: 4 physical cores × 2 SMT); splits all wave work into CPU-bound-local (4 strict-core slots, `taskset -c 0,2,4,6`, `nice 10`), I/O-bound-dispatch (D_max = 16 default — C10K/work-stealing grounding: lanes blocked on LLM API don't occupy cores; bound is memory-per-agent + API limits), and local-inference (Ollama = CPU load, delegated to `OLLAMA_NUM_PARALLEL`). Two binding operator rules named: LOCAL-DECISION (admission computed natively from local procfs/PSI state, µs-scale, never a network round-trip) and CORE-BOUND (CPU work on real cores only by default). Retroactive wave classification appended to §2; proposed AGENTS.md standing rule in blueprint §6 (operator merges, not applied). One proposed pure module `kernel/src/admission.rs`; zero new external deps. Off-critical-path lane like P5/P8/P11/P12/P24 |
 
-### 8.8 One more phase (P26) — memory optimization & flow analysis (2026-07-17, same protocol as §8.1)
+#### 8.8 One more phase (P26) — memory optimization & flow analysis (2026-07-17, same protocol as §8.1)
 
 | # | Phase | Blueprint | Depends on | Note |
 |---|---|---|---|---|
 | 26 | Memory Optimization & Flow Analysis — raising the D_max ceiling | [BLUEPRINT-MEMORY-OPTIMIZATION-FLOW-ANALYSIS-2026-07-17.md](BLUEPRINT-MEMORY-OPTIMIZATION-FLOW-ANALYSIS-2026-07-17.md) | 25 (consumes its D_max formula/admission predicate as the integration point; most units startable now) + 24 (soft — VmRSS/PSI gauges) | Web-grounded memory research applied to P25's memory-bound concurrency ceiling. ADOPTED: `kernel/src/memory_budget.rs` (`MemoryBudget`, TokenBucket's byte-budget sibling — reserve/release, no time-refill), byte-bounded LRU cache store behind the existing `BlockStore` trait (the exact-match LLM cache is unbounded today), `FileBlockStore` index-not-mirror (its `open` currently loads the whole store into RSS), and `retrieval/ppr.rs` dense→CSR delegation (O(n²)→O(nnz), removes a dual authority — the genuine reuse of the existing sparse machinery). KEPT: system allocator (no `#[global_allocator]` exists; Rust 1.32 precedent; measured trigger + `MALLOC_ARENA_MAX` fallback named). REJECTED honestly: bumpalo/hand-rolled arenas (ns saved vs 10-second network waits), PPR/graph-scored cache eviction (no production lineage, no entry graph exists), Tucker/CP/tensor-train (no embedding matrix exists), ARC (patent history, unneeded adaptivity). DEFERRED with named triggers: int8 embedding quantization (4×/~99% retention, fetched numbers — trigger: Layer-B index >100 MB), W-TinyLFU admission sketch (trigger: >10⁴ entries + measured hit-rate loss). Net effect: D_max's `MEM_PER_AGENT` becomes measured+enforced (`try_reserve` per lane) instead of an estimate — the mechanism behind P25's "raiseable to 24+". Zero new external deps. Off-critical-path lane like P5/P8/P11/P12/P24/P25 |
 
-### 8.9 One more phase (P27) — fault-isolated decentralized architecture (2026-07-17, same protocol as §8.1)
+#### 8.9 One more phase (P27) — fault-isolated decentralized architecture (2026-07-17, same protocol as §8.1)
 
 | # | Phase | Blueprint | Depends on | Note |
 |---|---|---|---|---|
 | 27 | Fault-Isolated Decentralized Architecture — audit closure + circuit-breaker/bulkhead/supervision discipline | [BLUEPRINT-FAULT-ISOLATION-DECENTRALIZED-ARCHITECTURE-2026-07-17.md](BLUEPRINT-FAULT-ISOLATION-DECENTRALIZED-ARCHITECTURE-2026-07-17.md) | none hard; soft: 24 (breaker-snapshot surface), 26 (owns the A3 cache-cap fix — convergent double-detection recorded in both), GapWire W1 (transition→GapEvent wiring), 9/10 (per-peer breakers, not schedulable yet) | Two-part artifact: (1) a ranked 16-finding stability/performance audit of kernel/engine/tools/llm-adapters (worst: A1 head-of-line blocking wedges the live Telegram alerting pipeline forever — `rust-spool/src/main.rs:240-247` retries the queue head with no send-failure deadletter; also A2 `FileBlockStore::put` panics on disk I/O via an infallible port, A4 the Dispatcher's `workers` bound is dead code, A6 zero compaction on every append-only store with `metric.jsonl` at 2.7 MB growing live); (2) one new primitive `kernel/src/breaker.rs` (`CircuitBreaker`, `TokenBucket`'s failure-exposure sibling: EMA trip filter via `geo.rs::ema_next` + min-calls floor, Open/HalfOpen hysteresis, transition-only event emission) + bulkheads at audited seams + OTP-grade restart-intensity policy for drainers + the "every port is fallible" rule. Research grounded in Armstrong/OTP supervision, Fowler breaker, Hystrix-deprecation lesson, reliability block algebra (series→parallel under verified independence), RFC 6298 EWMA + φ-accrual (deferred, named triggers). Proposes an AGENTS.md "Fault Containment" standing section (§6 there, operator merges) tied to the existing `.specify`/openspec SDD pipeline. Zero new external deps. Off-critical-path lane like P5/P8/P11/P12/P24/P25/P26 |
 
-### 8.10 One more phase (P28) — cache reference graph + hybrid tensor decomposition + bump arena (2026-07-17, same protocol as §8.1; OVERRIDES three P26 verdicts by explicit operator direction)
+#### 8.10 One more phase (P28) — cache reference graph + hybrid tensor decomposition + bump arena (2026-07-17, same protocol as §8.1; OVERRIDES three P26 verdicts by explicit operator direction)
 
 | # | Phase | Blueprint | Depends on | Note |
 |---|---|---|---|---|
 | 28 | Cache Reference Graph + Hybrid Tensor Decomposition + Bump Arena — living-memory pattern applied to the LLM cache | [BLUEPRINT-CACHE-REFERENCE-GRAPH-TENSOR-ARENA-2026-07-17.md](BLUEPRINT-CACHE-REFERENCE-GRAPH-TENSOR-ARENA-2026-07-17.md) | 26 (W3/W4 consume its M2 `BoundedStore` eviction seam; overrides its §0.3/§0.7/§0.8 verdicts — P26 carries a dated addendum pointing here); soft: Layer B (`HARNESS-LLM-BACKEND.md` §3.3 — semantic edges + tensor rung 3 activate when it builds), 24 (bench/telemetry surfaces) | Operator-directed override of P26's three rejects, planned forward. (1) `CacheGraph` (`llm-adapters/src/cache_graph.rs`): node = existing sha3-256 cache key interned by insertion order (chronology); edges = co-access (v1, sliding window, aggregation free via `Csr::from_edges` duplicate-summing), derivation (v1.1, `derived_from` provenance), semantic (at Layer B); query = existing deterministic `personalized_pagerank` seeded from recents (recall) → PPR-primary/LRU-tie-break eviction scorer with a replay A/B falsifier vs plain LRU — the living-memory blueprint §7 "cache prefetch" layer instantiated, HippoRAG-precedented (NeurIPS 2024). (2) Hybrid tensor ladder: (entry × entry × relation) tensor per RESCAL (X_k ≈ A·R_k·Aᵀ, ICML 2011) coupled with an (entry × feature) matrix (embeddings + PPR/degree/recency) per CMTF (Acar–Kolda–Dunlavy 2011); rung 1 buildable NOW = new deterministic `kernel/src/lowrank.rs` (fixed-K power iteration + deflation over existing `Csr::spmv`, fills `spectral_cache::Decomp`'s empty basis slot — `spectral.rs` is eigenvalues-only, live-verified); SQ/PQ quantization stays the complementary rung-4 track. (3) `kernel/src/arena.rs` `BumpArena` (zero-dep, `Vec<u8>` region, O(1) reset, `T: Copy`, degrade-closed heap fallback) at the graph/spectral rebuild site (≈2n+7 allocs/CSR rebuild, ≈n²+O(n)/dense charpoly call), claim stated on its own terms: ~2k malloc/free pairs → ≤8 bumps + 1 reset per pass, criterion A/B + Miri + byte-identical-output falsifiers. Zero new external deps. Off-critical-path lane like P5/P8/P11/P12/P24–P27 |
 
-### 8.11 One more phase (P29) — latency elimination: Decision Compiler + measured latency levers (2026-07-17, same protocol as §8.1)
+#### 8.11 One more phase (P29) — latency elimination: Decision Compiler + measured latency levers (2026-07-17, same protocol as §8.1)
 
 | # | Phase | Blueprint | Depends on | Note |
 |---|---|---|---|---|
 | 29 | Latency Elimination — Decision Compiler (LLM-as-one-time-compiler → native DecisionUnits) + measured dispatch-latency levers | [BLUEPRINT-LATENCY-ELIMINATION-RESEARCH-AND-BRAINSTORM-2026-07-17.md](BLUEPRINT-LATENCY-ELIMINATION-RESEARCH-AND-BRAINSTORM-2026-07-17.md) | GapWire/orchestrator arc (soft — DecisionUnit `Stale`-on-`GapEvent` invalidation rides its `triage` routing; the pilot can land advisory-only before it); 25 (soft — the cache-write stagger lands at its admission point); 21/G3 (soft — the draft-local/verify-remote trial shares its small-model precondition P-2) | Measured ground truth from today's own 1,000 API calls: p50 4.9 s / mean 10.6 s / p90 26.2 s per call, **99.3% prompt-cache-read already**, avg 1,232 output tokens ⇒ decode volume dominates (85–90%), network ≤1–2 s ceiling — so the operator's local-AI hypothesis inverts (local 4.8–10.5 tok/s is 5–15× slower than API decode) and the operator-ruled primary is the **Decision Compiler**: recurring question *shapes* compiled ONCE by the LLM into tested, provenance-stamped native Rust `DecisionUnit`s (`Decision::{Answer,Escalate}`, degrade-closed), invalidated by GapWire events (`skillspector-rs` `build.rs` rerun-if-changed semantics promoted to runtime), never self-certified (independent replay per RC-2/P7; red-line shapes operator-gated). Four in-repo precedents cited as proof of pattern (`is_redline` ci-truth `main.rs:237`, mesh `scope.rs:244`, hermes `gov_route` EV table, skillspector rules pipeline). Pilot = shape C1 model-tier routing (<1 µs decide, 30-case fixture vs policy v3.4, Stale-path test). Secondary adopt-now levers: output-token discipline + `effort: low` doer lanes, wave-dispatch cache-write stagger, 1-h TTL/pre-warm, doc-edit/wave separation (AGENTS.md rule — operator merges). Distillation deferred with named trigger; mesh cache-sharing filed to B2. Speculative section (S1–S8) kept clearly non-decided. Zero new external deps. Off-critical-path lane like P5/P8/P11/P12/P24–P28 |
 
-### 8.12 One more phase (P30) — Bebop2 mesh masterwork synthesis (2026-07-17, same protocol as §8.1; consolidates the 9-batch tensor/state/safety/consensus/network/equations/product audit)
+#### 8.12 One more phase (P30) — Bebop2 mesh masterwork synthesis (2026-07-17, same protocol as §8.1; consolidates the 9-batch tensor/state/safety/consensus/network/equations/product audit)
 
 | # | Phase | Blueprint | Depends on | Note |
 |---|---|---|---|---|
@@ -462,14 +1075,14 @@ directory). **Not deleted, and why:**
 
 ---
 
-## 9. Consolidation pass (2026-07-17, Layer I) — the altitude axis, the master index, and the
-## would-be-lost ledger
+### 9. Consolidation pass (2026-07-17, Layer I) — the altitude axis, the master index, and the
+### would-be-lost ledger
 
 Appended by the CORE-ROADMAP Wave-3 consolidation pass (same append-only rule as §7/§8). Full
 execution detail: `CORE-ROADMAP-2026-07-17/BLUEPRINT-P-I-consolidation.md`; ground-truth audit:
 `CORE-ROADMAP-2026-07-17/P-I-audit-cross-repo-consolidation.md`.
 
-### 9.1 The Layer A–I altitude axis and the master index
+#### 9.1 The Layer A–I altitude axis and the master index
 
 The numeric phases **P01–P30 in this document remain the sole execution numbering — nothing is
 renumbered.** The CORE-ROADMAP effort's letter groupings are ratified as **`Layer A..I`** (the
@@ -486,7 +1099,7 @@ The five older master docs (`MVP-2026-07-12` root, `BUILD-SEQUENCE-UPDATED-2026-
 `INTEGRATION-PLAN-2026-07-14`, `10-PHASES-2026-07-14`, `EXECUTION-PLAN-2026-07-13`) now carry
 SUPERSEDED banners pointing here — preserved in full as audit trail, never planned against.
 
-### 9.2 Would-be-lost ledger (P-I audit §3) — all six dispositioned, zero silent drops
+#### 9.2 Would-be-lost ledger (P-I audit §3) — all six dispositioned, zero silent drops
 
 | ID | Item | Disposition (executed 2026-07-17) |
 |---|---|---|
@@ -500,14 +1113,14 @@ SUPERSEDED banners pointing here — preserved in full as audit trail, never pla
 ---
 
 
-## 10. Ecosystem-Component Consolidation (2026-07-18) — the second axis, the swarm-ready phase
-## set, and the critical path to first-deployable dowiz
+### 10. Ecosystem-Component Consolidation (2026-07-18) — the second axis, the swarm-ready phase
+### set, and the critical path to first-deployable dowiz
 
 Appended by the 2026-07-18 ecosystem-consolidation pass (same append-only rule as §7/§8/§9).
 Companion index registration: `CORE-ROADMAP-INDEX.md` §0 (component axis) and §9 (orphaned-arc
 absorption table).
 
-### 10.0 Why this section exists
+#### 10.0 Why this section exists
 
 The operator found ~12 separate planning arcs (150+ blueprint units: field-ui-engine,
 dowiz-interfaces, rust-engine-rewrite, integration-ports, ecosystem-strategy, ops-reliability,
@@ -544,7 +1157,7 @@ doc's own claims, several of which turned out to be false or stale at the source
   (crypto red-line, by their own text — not actioned without explicit sign-off); **IP-21** is
   verification scaffolding, inherently downstream of the items it aggregates.
 
-### 10.1 The Ecosystem-Component axis — a THIRD lens
+#### 10.1 The Ecosystem-Component axis — a THIRD lens
 
 Orthogonal to BOTH the P01–P46 numeric phases AND the Layer A–I altitude axis (§9.1) — a third
 navigation lens, not a replacement for either. Row order below IS the critical path.
@@ -566,7 +1179,7 @@ something is live). **P34 is the single most important next action across the en
 roadmap** — bigger leverage than any other phase, because it converts ~70% of already-built,
 already-tested protocol code from stranded to load-bearing.
 
-### 10.2 Full P31–P53 index (swarm fast-lookup; sub-letter detail lives in §10.5, P47–P53 full sections in §11–§14)
+#### 10.2 Full P31–P53 index (swarm fast-lookup; sub-letter detail lives in §10.5, P47–P53 full sections in §11–§14; P54–P56 appended 2026-07-18, P101–P103 appended 2026-07-20)
 
 > Extended P47–P53 on 2026-07-18 by the consolidation/consistency pass §11's note anticipated
 > ("a later consolidation pass reconciles that table" — this is that pass). Same-day swarm
@@ -600,8 +1213,11 @@ already-tested protocol code from stranded to load-bearing.
 | P54 | AGENT | LLM/agent behavioral verification: adversarial probes, money-trust fence, fine-tuning gate | PLANNED (blueprint ON DISK; fine-tuning explicitly DEFERRED, zero LoRA/QLoRA built) | none — new phase, consumes P21/P40/P41/P42 | P21 (backend), P40 (AgentReasoner seam), P56 (storage/scheduling substrate) | none downstream; strengthens P54→P56 alerting only |
 | P55 | PROTOCOL/CORE | Protocol/ecosystem testing: regression taxonomy, proptest/mutation, chaos-injection | PLANNED (blueprint ON DISK; proptest confirmed already-live dev-dep, 400-case suite) | none — new phase, extends P24/P27/P36 | P27 (CircuitBreaker), P24 (flight-recorder spans), P56 (storage/scheduling) | none downstream; feeds P36/P34 regression coverage |
 | P56 | ECOSYSTEM/OPS | Verification-harness shared infrastructure: storage, scheduling, meta-verification | PLANNED (blueprint ON DISK; 4 meta-detectors designed, `hetzner:dowiz/test-results/` sync policy) | none — new phase, shared substrate for P54+P55 | P25 (admission control, extended not forked), P45 (alerting, extended not forked), disk-cleanup pass (local storage now unblocked) | P54, P55 (both consume this as their storage/scheduling substrate) |
+| P101 (P99/P100 skipped — latency-percentile lexical collision) | AGENT (mobile half feeds DELIVERY P52/P71) | Local & mobile model selection + CPU-only serving topology: **exactly 2 named models, operator-decided, not an abstract tier system** — LFM2.5-VL-450M + SmolVLM-256M-Instruct run concurrently/crosswired (not primary/fallback), same pair for mobile courier pick AND server topology; O-1 (LFM Open License $10M-revenue-cap) RULED — operator "clear to ship", term recorded not erased; static TaskClass routing + ONE deterministic intake-assist cascade over the named pair; P54 training-deferral reaffirmed (AMX absence live-verified) + optional CPU-LoRA wall-clock probe | PLANNED (blueprint ON DISK, [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P101-local-mobile-model-selection-topology-2026-07-20.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P101-local-mobile-model-selection-topology-2026-07-20.md); zero code, zero models pulled; Phase B measurement startable immediately) | none — new phase; synthesizes the 2026-07-20 model-selection research pass + same-day operator model-count/crosswiring correction | local-model-wiring blueprint Phases 1+3 (config substrate), P48-INTAKE (cascade caller), P52/P71 (mobile surface timeline) | nothing downstream hard; feeds P52/P71 capture-assist UX and P48-INTAKE assist lane |
+| P102 | AGENT/CORE (mobile half feeds DELIVERY P52/P71) | Bare-metal zero-dependency native inference engine — two-model real-time crosswire (operator rulings R-1/R-2/R-3, final): hand-written Rust GGUF loader + AVX2 `std::arch` kernels (Zen3 box: AVX2/FMA, no AVX-512/AMX) + static ring-slab KV (PagedAttention skipped, named multi-tenant reopen trigger) + zero-alloc tokenizers/sampler + two-lane scheduler for exactly **LFM2.5-VL-450M ("L", agentic) ∥ SmolVLM-256M-Instruct ("S", fast perception)**, crosswired (Mode A preview+verify with deterministic comparator, Mode B draft-conditioned), one pair for mobile AND server; PQ-style KAT gating (dev-time-oracle token pins per ISA path); introspection `TraceSink` + typed output-gating seam (policy stays caller-side — Hydra is the first named consumer) | PLANNED (blueprint ON DISK, [`BLUEPRINT-P102-bare-metal-inference-engine-2026-07-20.md`](BLUEPRINT-P102-bare-metal-inference-engine-2026-07-20.md); zero code, no crate, no model pulled; Phase 0 startable immediately) | none — new phase; executes the 2026-07-20 R-1/R-2/R-3 rulings over the same research pass P101 synthesized | dowiz-kernel port types only (LlmBackend + VlmModel-style port); wiring-blueprint Phase 1 (`AiMode` seam) + Phase 2 (golden suite) as gates; P101 Phase A/B baselines; kernel arena/count-allocs/core_pinning/HugePageHint reuse | long-term replacement of the Ollama serving path lane-by-lane (per-lane measured cut-over gates); E-1 embed + CS-2 code residuals named in §6.1; feeds P52/P71 (Phase 7 NEON port) and the Hydra model-integration blueprint (its native-AI-infra substrate) |
+| P103 (drafted as P102; renumbered same day after the concurrent bare-metal pass claimed P102 — P97→P101 precedent) | CORE (Hydra consumer-side seam, zero `hydra.rs` edits) + AGENT edge (supervisor + inference adapter) | Hydra × locked model pair (LFM2.5-VL-450M + SmolVLM-256M crosswired) + native AI-infra supervisor: dual-witness self-defense perception (2-of-2 agreement, disagreement→Unknown) + breach-digest signaling through Hydra's existing public surface; supervisor = osmotic membrane (reuses `csr.rs` `personalized_pagerank`) + heartbeat oscillator (taps the existing `DriftClass`/`INTEGRITY_BAND` gate) — checks/filters/controls the model channel, never gates Hydra itself; "trained on them" ruled conservatively (drift-gated coupling evolution now, fine-tuning behind TRIGGER-FINETUNE) | PLANNED (blueprint ON DISK, [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P103-hydra-model-pair-supervised-integration-2026-07-20.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P103-hydra-model-pair-supervised-integration-2026-07-20.md); zero code; both siblings landed same day and are cross-linked) | none — new phase; executes the 2026-07-20 four-part operator directive (Hydra uses the pair; native AI infra checks/filters/controls; osmosis+oscillator mechanism) | P101 (model-pair facts + O-1 resolution, as amended), P102 bare-metal engine (§4.7 `InferTrace`/`TraceSink` + `Ungated`/`OutputGate` seams = the H1-H4 hook contract's implementation home; interim Ollama allowed with coupling ratchet frozen) | nothing downstream hard; supervisor I/O log feeds the TRIGGER-FINETUNE corpus; adds Phase-B cell B-6 to P101's measurement matrix |
 
-### 10.3 Cross-cutting invariants (binding across components; each stated once)
+#### 10.3 Cross-cutting invariants (binding across components; each stated once)
 
 1. **Three-mode operation (no-AI / local-offline-AI / connected-AI).** DELIVERY's core
    order/courier/money flow NEVER requires AI to function — already true by construction (CORE's
@@ -644,7 +1260,7 @@ already-tested protocol code from stranded to load-bearing.
    GREEN claim), and `proto-wire` ships `default=["insecure-tls"]`. Fix opportunistically —
    don't let them block P34, but don't let them rot either.
 
-### 10.4 Demo/offer pipeline note (operator: do not lose)
+#### 10.4 Demo/offer pipeline note (operator: do not lose)
 
 P20 (Demo & Marketing Pipeline, DM-1..DM-8) stays live-numbered as-is — this consolidation
 neither renumbers nor absorbs it. Its unblocked entry point **DM-1 (kernel discount math)** is
@@ -653,12 +1269,12 @@ already needs `compute_order_total` (`kernel/src/domain.rs:129`) extended. DM-2.
 (publishing/marketing content pipeline) remain P20's own scope, gated behind P18 public-flip,
 untouched by this consolidation.
 
-### 10.5 Full component sections
+#### 10.5 Full component sections
 
 The five component drafts, pasted verbatim below (headings demoted one level to nest here; zero
 content trimmed; each drafted and live-verified by an independent parallel pass on 2026-07-18).
 
-### 10.5.1 CORE — decide/fold Law, event-log, money, capability primitives, spectral math, self-tuning control loops
+#### 10.5.1 CORE — decide/fold Law, event-log, money, capability primitives, spectral math, self-tuning control loops
 
 **Position on the critical path:** CORE is ~90% done and is NOT the bottleneck. The critical path runs CORE → PROTOCOL (wire stranded mesh to the dowiz kernel — the biggest lever) → DELIVERY (HTTP server + auth + UI render, ~0%) → AGENT (tool-use loop) → ECOSYSTEM/OPS. This section's job is to number and index what exists so nothing is lost, and to name the few real remaining gaps. The dominant failure mode in CORE is not missing code — it is **built-but-unwired code** (status `WIRING-GAP` below): modules that compile, pass tests, and are called by nothing.
 
@@ -666,9 +1282,9 @@ content trimmed; each drafted and live-verified by an independent parallel pass 
 
 ---
 
-#### P31 — Math-First Kernel (S0–S7 + Master Integration Tier A/B)
+##### P31 — Math-First Kernel (S0–S7 + Master Integration Tier A/B)
 
-##### P31a — Math-first DONE ledger
+###### P31a — Math-first DONE ledger
 **Absorbs:** S0, S1, A3(mip), S2, S4, S7, A1(mip), A2(mip), B1, B2, B4, B5
 **Status:** DONE
 **Role & responsibility:** The completed body of the math-first rewrite. Indexed here so every old unit ID resolves to a P-number; no further build work.
@@ -688,7 +1304,7 @@ One-line ledger:
 **Anti-scope:** Do not touch any of the above. Do not "improve" DONE organs while wiring gaps remain elsewhere.
 **Depends on / blocks:** B4 end-to-end exercise blocked by DELIVERY/OPS deployment existing. Nothing here blocks the critical path.
 
-##### P31b — CORDIC int-mode emission
+###### P31b — CORDIC int-mode emission
 **Absorbs:** A6 (Layer-A canon residual)
 **Status:** WIRING-GAP
 **Role & responsibility:** CORDIC exists (`tools/eqc-rs/cordic.rs`) but eqc-rs's Sin/Cos int-mode emission does not route through it. Close the last Layer-A gap so trig in integer mode is compiled, not floated.
@@ -699,7 +1315,7 @@ One-line ledger:
 **Anti-scope:** Do not rewrite CORDIC — it exists and is correct. Do not add new trig ops beyond Sin/Cos. Do not touch float-mode emission.
 **Depends on / blocks:** Depends on nothing. Blocks nothing on the critical path; pure Layer-A completeness.
 
-##### P31c — no_std kernel
+###### P31c — no_std kernel
 **Absorbs:** S3 (residual half; SIMD half of S3 is DONE — `kernel/src/simd.rs`, AVX2 softmax with bit-identical fallback)
 **Status:** PARTIAL
 **Role & responsibility:** Make the kernel crate `no_std`-capable so it can live on constrained/bare-metal targets (Kernel-as-MCU north star) and embed cleanly in WASM/mesh contexts. Today the crate is plain `std` — zero `#![no_std]` anywhere.
@@ -712,11 +1328,11 @@ One-line ledger:
 **Anti-scope:** Do not chase `no_std` for the SIMD module beyond what falls out naturally (it's already done and bit-identical). Do not rewrite I/O organs to be allocation-free — gate them behind `std`. Do not block any other phase on this; it is not on the critical path.
 **Depends on / blocks:** Soft prerequisite for PROTOCOL-side embedding of the kernel into mesh/WASM substrates and the long-horizon Kernel-as-MCU thesis. Blocks nothing in DELIVERY/AGENT.
 
-##### P31d — Verification ladder (z3/kani proofs)
+###### P31d — Verification ladder (z3/kani proofs)
 **Absorbs:** S5
-**Status:** PLANNED (zero hits repo-wide — genuinely not started)
+**Status:** PLANNED — code not started (its blueprint is now ON DISK as of 2026-07-20; zero implementation hits repo-wide)
 **Role & responsibility:** Machine-checked proofs for the invariants the repo already treats as red-lines: money-integer arithmetic, tax organs, fold determinism. Converts "VERIFIED-BY-MATH" from a discipline into an artifact.
-**Blueprint:** none — needs one before build. First deliverable IS the blueprint (candidate-invariant inventory + tool choice kani-vs-z3 with a falsifiable comparison per the tech-selection rule).
+**Blueprint:** [`BLUEPRINT-P31d-verification-ladder-kani-money-organs-2026-07-20.md`](BLUEPRINT-P31d-verification-ladder-kani-money-organs-2026-07-20.md) (2026-07-20 — the first-deliverable blueprint this flag called for: a ranked ≥5-candidate-invariant inventory, an honest kani-vs-z3 comparison landing on Kani, and one proof harness over the `eqc_gen` integer tax organs fully specified against live code + the item-7 kani-gate). **Adjacent-but-not-a-substitute (checked 2026-07-20):** `kernel/src/kani_selftest.rs` + space-grade item 7 (`BLUEPRINT-ITEM-07-kani-wiring-2026-07-19.md`) already wired real Kani proofs — but for Keccak/FSM-graph/NTT-arithmetic/GCRA specifically, NOT for this item's named targets (money-integer arithmetic, tax organs). Do not assume item 7 already covers P31d — the candidate-invariant inventory this item still needs is a different list; item 7 is prior art on tooling choice, not a completed superset.
 **DoD:**
 1. A blueprint doc exists naming ≥5 candidate invariants ranked by (red-line severity × proof cheapness), with tool selection justified by an honest comparison, not appeal to authority.
 2. At least one proof harness lands and runs in CI (e.g. kani proof that `apply_tax_exclusive_int`/`apply_tax_inclusive_int` never overflow/never go negative for the documented input domain).
@@ -724,7 +1340,7 @@ One-line ledger:
 **Anti-scope:** Do not attempt whole-kernel verification — ladder means cheapest-rung-first, money organs before anything else. Do not add proof tooling as a hard build dependency (CI-only). Do not let this delay PROTOCOL/DELIVERY work; it is hardening, not critical path.
 **Depends on / blocks:** Depends on P31a being frozen (proofs target stable organs). Blocks nothing; strengthens everything.
 
-##### P31e — Equation-IR at runtime + online learner bridge
+###### P31e — Equation-IR at runtime + online learner bridge
 **Absorbs:** S6, B3 — **these are the same open item; counted once here, never double-count**
 **Status:** PARTIAL
 **Role & responsibility:** eqc-rs today is build-time-only codegen; `kernel/src/online.rs` (LinearSGD/ScalarAdam online learner) exists and is tested, but the two are connected only by a comment. The gap is a runtime representation of eqc's IR that the online learner can adjust parameters of — closing the loop from "equations compiled once" to "equations that learn."
@@ -739,11 +1355,11 @@ One-line ledger:
 
 ---
 
-#### P32 — Hydraulic-Loop-v2 Wiring (self-tuning control loops)
+##### P32 — Hydraulic-Loop-v2 Wiring (self-tuning control loops)
 
 Code lives in bebop-repo (`bebop2/core/`, `crates/bebop/`) plus one kernel-side organ; blueprints in `docs/design/hydraulic-loop-v2/` (`HYDRAULIC-LOOP-v2-PLAN.md`, `BLUEPRINTS.md`). The pattern across this arc: nearly everything was BUILT and TESTED; almost nothing was WIRED. P32's work is connection, not construction.
 
-##### P32a — Hydraulic DONE+wired ledger
+###### P32a — Hydraulic DONE+wired ledger
 **Absorbs:** BP-05, BP-06, BP-08, BP-09, BP-10, BP-22
 **Status:** DONE
 **Role & responsibility:** The hydraulic-loop items that are complete AND connected (or correctly resolved). Indexed for the record.
@@ -758,7 +1374,7 @@ One-line ledger:
 **Anti-scope:** Do not touch. In particular do not "modernize" `default_legacy()` — it is a deliberate RED fixture.
 **Depends on / blocks:** BP-08's intake→loops wiring is the reference pattern for P32b/P32c.
 
-##### P32b — Resonator + arccos metric wiring
+###### P32b — Resonator + arccos metric wiring
 **Absorbs:** BP-01, BP-02
 **Status:** WIRING-GAP
 **Role & responsibility:** `resonator` is registered (`bebop2/core/src/lib.rs:328 pub mod resonator;` — the original plan's "still frozen, 1-line fix" framing is stale, it was unfrozen at some point) but has ZERO call sites: compiled+tested standalone, driving nothing. Likewise `algebra.rs:56 geodesic_distance` (acos) exists+tested with zero callers outside `algebra.rs` and was never plugged into resonator's `Metric` trait. The work is: pick ONE real, existing control loop and make resonator's output an input to it, with the arccos metric as its distance function.
@@ -771,7 +1387,7 @@ One-line ledger:
 **Anti-scope:** **Do not rebuild resonator** — only wire its existing output into a real caller. Do not redesign the `Metric` trait. Do not invent a new consumer loop just to have a caller; if no existing loop genuinely benefits, stop and report that instead — a finding, not a failure.
 **Depends on / blocks:** Independent of P32c (parallelizable). Serves the AGENT self-improvement loop (these control loops govern the agent's own loop). Blocks nothing in PROTOCOL/DELIVERY.
 
-##### P32c — Online DMD wiring
+###### P32c — Online DMD wiring
 **Absorbs:** BP-07
 **Status:** WIRING-GAP
 **Role & responsibility:** `dmd.rs` (OnlineDMD, rank-1 RLS, complex eigenpairs) is built, tested, and registered (`bebop2/core/src/lib.rs:316`), but only *referenced* — not called — from `field.rs:328`. Same stranded pattern as resonator. Wire its mode estimates into a live consumer so the dynamic-mode decomposition actually informs something.
@@ -783,11 +1399,11 @@ One-line ledger:
 **Anti-scope:** **Do not rebuild or extend OnlineDMD** — rank-1 RLS is done. Do not add higher-rank updates, forecasting, or new spectral features. Wiring only.
 **Depends on / blocks:** Independent of P32b (parallelizable). Same consumer landscape as P32b — if both wire into `field.rs`/loop_runtime, coordinate to avoid hot-file collision (sequential landing, parallel prep).
 
-##### P32d — Cross-model critic
+###### P32d — Cross-model critic
 **Absorbs:** the cross-model critic from hydraulic-loop-v2's original 7 math corrections (load-bearing, never assigned a BP number)
-**Status:** PLANNED (not built — no multi-model-voting code found anywhere)
+**Status:** PLANNED — code not built (its design-note blueprint is now ON DISK as of 2026-07-20; no multi-model-voting code found anywhere)
 **Role & responsibility:** A decorrelated multi-model check on control-loop decisions — the mechanism behind the arc's math-correction discipline, and the one named item from the 7 corrections with no code at all. Distinct from the harness-level review agents (those review diffs; this critiques loop outputs).
-**Blueprint:** none — needs a short design note first: what gets critiqued (which loop outputs), decorrelation requirement (different model/provider, per the research-verifier precedent), and advisory-only posture (signals, never gates — GROUND-TRUTH-over-PROXY rule).
+**Blueprint:** [`BLUEPRINT-P32d-cross-model-critic-2026-07-20.md`](BLUEPRINT-P32d-cross-model-critic-2026-07-20.md) (2026-07-20 — the short design note this flag called for: critiques `markov::Verdict` as the concrete loop output, requires two decorrelated `(provider, model)` judges per the research-verifier precedent, advisory-only / never-gates per GROUND-TRUTH-over-PROXY).
 **DoD:**
 1. Design note exists specifying critic inputs (≥1 concrete loop output type), decorrelation constraint, and advisory-only integration point.
 2. Minimal implementation: one loop output critiqued by ≥2 decorrelated judges with disagreement surfaced as a signal (logged/ledgered), not a gate.
@@ -797,9 +1413,9 @@ One-line ledger:
 
 ---
 
-#### P33 — CORE Ledger Hygiene (cleanup + status audit)
+##### P33 — CORE Ledger Hygiene (cleanup + status audit)
 
-##### P33a — Dead JS-spike artifact deletion flag
+###### P33a — Dead JS-spike artifact deletion flag
 **Absorbs:** JS living-knowledge spike closure (successor of the A2(mip) lineage; the live replacement is P31a's native Rust retrieval)
 **Status:** PLANNED (flag only — deletion is an operator/lead call, not this phase's to execute unilaterally)
 **Role & responsibility:** The JS living-knowledge spike is FULLY DEAD — all source deleted (`f9ab28ff1`, "drop ALL JS/TS per operator"). Orphaned build artifacts remain on disk: `spikes/living-knowledge/out/semantic-cache.json` (7.7 MB) plus eval-result JSON files — unregenerable dead weight with no source left to produce them. Per the standing Anu/Ananke discipline: confirmed-dead legacy gets actually deleted, after verifying nothing consumes it.
@@ -810,7 +1426,7 @@ One-line ledger:
 **Anti-scope:** Do not resurrect any part of the JS spike. Do not delete anything outside `spikes/living-knowledge/out/` under this flag. Do not treat this as license to sweep other directories — one target, one commit.
 **Depends on / blocks:** Nothing. Anytime task.
 
-##### P33b — Unconfirmed hydraulic BP status audit
+###### P33b — Unconfirmed hydraulic BP status audit
 **Absorbs:** BP-03 (Francis QR complex eigenvalues), BP-04 (diffusion sign fix), BP-11 (renormalizer), BP-12..23 (security/integration wave items)
 **Status:** PLANNED (audit to-do, NOT a build task)
 **Role & responsibility:** These BP items were not individually verified this session — their status is **unconfirmed**, neither DONE nor OPEN. Do not guess. A fresh check must classify each as DONE / WIRING-GAP / OPEN against live source, the same way BP-01/02/05–10/22 were classified above. Note BP-22 is already resolved (see P32a) — the audit range is BP-03, BP-04, BP-11, BP-12..21, BP-23.
@@ -826,7 +1442,7 @@ One-line ledger:
 
 **CORE cross-reference summary:** every source unit accounted for — S0→P31a, S1→P31a, S2→P31a, S3→P31c, S4→P31a, S5→P31d, S6→P31e, S7→P31a(parked→PROTOCOL); A1(mip)→P31a(moot), A2(mip)→P31a, A3(mip)→P31a, B1→P31a, B2→P31a, B3→P31e(=S6), B4→P31a, B5→P31a, A6→P31b; BP-01→P32b, BP-02→P32b, BP-05→P32a, BP-06→P32a, BP-07→P32c, BP-08→P32a, BP-09→P32a, BP-10→P32a, BP-22→P32a, cross-model-critic→P32d, BP-03/04/11/12..21/23→P33b, JS-spike-artifacts→P33a. Nothing dropped.
 
-### 10.5.2 PROTOCOL — mesh, capability issuance, crypto, transport, delivery-domain (bebop2)
+#### 10.5.2 PROTOCOL — mesh, capability issuance, crypto, transport, delivery-domain (bebop2)
 
 **Position on the critical path:** CORE (~90% done) → **PROTOCOL** → DELIVERY → AGENT → ECOSYSTEM/OPS. PROTOCOL is the single biggest lever in this roadmap: mesh-real's core delivery logic is **~70% already built, proven, and tested** in `/root/bebop-repo` — and **100% stranded**, with zero code-level connection from dowiz's own kernel to it. Wiring PROTOCOL to CORE (P34) is the #1 recommended next move for the whole project, bigger than building anything new.
 
@@ -834,7 +1450,7 @@ One-line ledger:
 
 ---
 
-#### P34 — Wire mesh-real's proven delivery-domain into the dowiz kernel
+##### P34 — Wire mesh-real's proven delivery-domain into the dowiz kernel
 **Absorbs:** MESH-01, MESH-02, MESH-03, MESH-04, MESH-05, MESH-07, MESH-09 (BPv7 half), MESH-10, MESH-11, MESH-12 — plus the wiring gap itself.
 **Status:** WIRING-GAP (all absorbed units DONE; the connection is the only missing piece)
 **Role & responsibility:** Make dowiz's kernel the consumer of the already-built bebop2 delivery protocol, closing the single largest value gap in the ecosystem. delivery-domain was *designed* to reuse dowiz-kernel as its decider (the KernelFacade `submit_intent` seam is exactly the compiled wire→Law→money boundary), so this phase is consumption, not construction. Once wired, DELIVERY's HTTP surface becomes trivial because the order lifecycle already exists here.
@@ -865,7 +1481,7 @@ One-line ledger:
 
 ---
 
-#### P34B — Finish the planned mesh halves: per-node storage, CRDT fence, iroh, ML-KEM KAT
+##### P34B — Finish the planned mesh halves: per-node storage, CRDT fence, iroh, ML-KEM KAT
 **Absorbs:** MESH-06, MESH-08, MESH-09 (iroh half), MESH-13
 **Status:** PLANNED
 **Role & responsibility:** Close the four mesh-real units that were designed but never built. These are genuinely 0-30% (unlike the P34 units) and none of them gate the P34 wiring. The crypto-hygiene item (MESH-13) is real but not urgent-critical: ML-DSA-65 signing is the actually-used-today primitive; the ML-KEM path is not.
@@ -882,7 +1498,7 @@ One-line ledger:
 
 ---
 
-#### P35 — Docker-swap: give DK-01..03 a real home + finish DK-04..08
+##### P35 — Docker-swap: give DK-01..03 a real home + finish DK-04..08
 **Absorbs:** DK-01..DK-10
 **Status:** PARTIAL (DK-01/02/03/07 DONE; DK-04/05/06/08 PLANNED)
 **Role & responsibility:** Register and finish the zero-OCI runtime subsystem. **Omitted-finding, stated plainly: docker-swap has REAL, TESTED, WORKING code — yet it is entirely unreferenced by CORE-ROADMAP-INDEX.md and MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE.md; no P-number owns it.** This phase is that home. The working half: `bebop2/ports/telegram/src/lib.rs` is a real `wasm32-wasip2` component (zero ambient authority, one import), and `bebop2/wasm-host/src/lib.rs` is a real Scope→WASI deny-by-default host (wasmtime feature-gated) — not stubs.
@@ -900,7 +1516,7 @@ One-line ledger:
 
 ---
 
-#### P36 — Bebop 5-expert remediation: kill the two live regressions, close remaining P1/P2
+##### P36 — Bebop 5-expert remediation: kill the two live regressions, close remaining P1/P2
 **Absorbs:** P0-P4 of the bebop excellence review
 **Status:** 🔴 REGRESSION (2 items live) — remainder PARTIAL
 **Role & responsibility:** Finish the 5-expert-review remediation. Two items are not "planned work" but **actively broken/dangerous right now** — a shipped-default insecure-TLS feature and a build regression that post-dates the remediation doc's own GREEN claim (i.e., the doc is currently lying about build state). These two outrank everything else in this section for time-sensitivity.
@@ -924,7 +1540,7 @@ One-line ledger:
 
 *Assembly resolution (2026-07-18): confirmed — §10.5.3 DELIVERY's P13 status row and P34 DoD-6 agree (both date-scope the stale "ZERO code-level dependency" claim and name P34 as the supplier); no cross-draft conflict remained to resolve.*
 
-### 10.5.3 DELIVERY — Product Surface (P37–P39)
+#### 10.5.3 DELIVERY — Product Surface (P37–P39)
 
 **Position on the critical path:** CORE (~90% done) → PROTOCOL (mesh-real ~70% built, being wired in P34) → **DELIVERY is next**. The blunt truth: the product surface currently has **zero deployability** — no fly.toml, no live deployment, no HTTP order/API server anywhere in the repo (the only axum server, `tools/native-spa-server`, is static-file-only with zero dynamic routes). Once P34 lands, DELIVERY's order/courier/payment logic is mostly a **wiring** job (delivery-domain already has the proven flow), not new design.
 
@@ -946,11 +1562,11 @@ One-line ledger:
 
 ---
 
-#### P37 — Minimal HTTP/API surface for orders
+##### P37 — Minimal HTTP/API surface for orders
 **Absorbs:** RW-09 (thin-shell boundary codify — the wire adapter is the second shell over the same kernel, subject to the same rule). Unblocks P23-P3; supplies the wire half of P13. No FE/DZ units live here.
-**Status:** PLANNED (0% — the only axum server in the repo is static-file-only, zero dynamic routes)
+**Status:** ~~PLANNED (0% — the only axum server in the repo is static-file-only, zero dynamic routes)~~ — **LANDED (corrected 2026-07-20, verified against live code).** Commit `68d5c2874` ("feat(P37): W37-1..7 kernel json-api + native-spa-server HTTP order surface + adversarial cap set") shipped `kernel/src/json_api.rs` + `tools/native-spa-server/src/api.rs` with real dynamic order routes registered in the served binary's router — `POST /api/order` (place), `GET /api/order/{id}` (read), `POST /api/order/{id}/advance` (apply event) at `api.rs:669-671`, cap-gated. Matches §13's "biggest single stale claim" correction and §15.2 row 0.2. The Role/DoD text below predates the landing — read it as the original spec, now largely satisfied.
 **Role & responsibility:** The #1 literal blocker of the entire DELIVERY layer: expose delivery-domain's already-proven order lifecycle over a wire. This is explicitly a **thin** surface — just enough dynamic routes to place/advance/read an order — not a REST API design exercise; the order flow, state machine, and money math already exist and are tested, the server merely transports intents to `decide` and serves `fold`-derived state.
-**Blueprint:** No dedicated blueprint (deliberately — the scope is "thinnest possible adapter"). The two documents that name this exact gap and constrain it: `docs/design/sovereign-roadmap-2026-07-16/BLUEPRINT-P13-delivery-on-protocol.md` and `docs/design/BLUEPRINT-AUTH-DEVICE-2FA-2026-07-17.md` (whose P3 is blocked on this surface). Reuse them; do not write a REST spec.
+**Blueprint:** [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P37-order-http-surface.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P37-order-http-surface.md) (2026-07-18, 20-point — it extends this section's six-item DoD into named RED→GREEN tests; the "No dedicated blueprint (deliberately)" note that stood here predates it and is now stale). Also constrained by `docs/design/sovereign-roadmap-2026-07-16/BLUEPRINT-P13-delivery-on-protocol.md` and `docs/design/BLUEPRINT-AUTH-DEVICE-2FA-2026-07-17.md` (whose P3 is blocked on this surface). Reuse; do not write a REST spec.
 **DoD:**
 1. A dynamic HTTP server exists in-repo (extend `tools/native-spa-server` or a sibling crate) serving both the static `web/` assets and dynamic order routes from one binary. Falsifiable: `grep` finds ≥1 non-static route handler; the binary boots and answers a dynamic request.
 2. An integration test drives one full order lifecycle **over the wire** (place → accept → pickup → deliver) and asserts the final fold-derived state matches the same sequence run directly against delivery-domain. Red today (no server), green at close.
@@ -961,7 +1577,7 @@ One-line ledger:
 **Anti-scope:** Do NOT build a conventional REST+session/password login — auth is capability-cert-based per canon and `BLUEPRINT-AUTH-DEVICE-2FA-2026-07-17.md` D3 (device-bound keypair primary; TOTP/WebAuthn are step-up only). Do NOT design a full resource-oriented REST API, pagination, versioning, or an admin CRUD surface. Do NOT put any pricing/discount/state logic in handlers. Do NOT make network the required path for order placement (F12).
 **Depends on / blocks:** Depends on PROTOCOL P34 for real mesh-backed order data (the server can land against local delivery-domain first). **Blocks** P23-P3 (its named live blocker), P13 wire-side wiring, P39b, and any AGENT (P4x) flow that needs an API to call.
 
-#### P38a — WebGPU render engine completion
+##### P38a — WebGPU render engine completion
 **Absorbs:** FE-04/RW-04 (particle→wgpu, single unit, counted once), FE-05 (SDF pipeline + GPU design-token table), FE-06 (MSDF text), FE-07 (layout field), FE-10 (Green's-function feedback), FE-11 (potential wells), FE-12 (spectral φ₂φ₃ embedding), FE-13 (constraint solver), FE-14 (lazy-render-on-settle), FE-15 (a11y mirror), FE-16 (WebGL2/SIMD fallback), RW-01 (`dowiz-engine` Cargo workspace), RW-05 (shell crate reshape — closes FE-01's caveat), RW-10 (web toolchain), RW-11 (view→wgpu migration).
 **Status:** PARTIAL (math substrate DONE; GPU path and pipelines 0%)
 **Role & responsibility:** Turn the tested, bit-deterministic physics-field substrate into actual pixels. This requires **no redesign**: `engine/src/field_frame.rs::compose()` already renders physics state to RGBA (real, tested, bit-deterministic), and `VertexBridge` has a real CPU staging copy — its `new_gpu()` is a stub only because the `wgpu` dependency is a network-gated `cargo add` (O18a `graphics-unlock`, verified RED/403 as of 2026-07-16 — a ONE-TIME unlock shared with P17, not an architecture question).
@@ -977,7 +1593,7 @@ One-line ledger:
 **Anti-scope:** Do NOT build a DOM admin panel — the UI is a WebGPU/WASM render of backend physics-field state (canon; DOM only per FE-15's invisible mirror). Do NOT redesign the math substrate — compose/zerocopy/widget_store/loop_/motion/money_guard are done and tested. Do NOT tween money (FE-09 guard is landed and binding). Do NOT treat `web/src/app.mjs` (204 lines, console-only, 24/24 kernel exports bound) as throwaway — it is the confirmed deliberate first step; its own header names the DOM/FieldSim pass ("G3") as a later unit that reuses these bindings.
 **Depends on / blocks:** Depends on O18a `graphics-unlock` (hard, environment-gated; same trigger P17 waits on). Blocks P38b entirely and P17's splat-tier closure. Independent of P37 — the two can proceed in parallel.
 
-#### P38b — Sea & Sheet product surfaces (dowiz-interfaces)
+##### P38b — Sea & Sheet product surfaces (dowiz-interfaces)
 **Absorbs:** DZ-01..12 — all twelve, none dropped. DZ-10 (voice) is absorbed **as deliberately deferred**: fully built+tested for the old deleted stack (49/49 tests, real Whisper ASR), deleted in the 2026-07-13 purge, and intentionally re-placed at the arc's own Phase 9b ("optional integrations", after the order-critical path) — an intentional deprioritization, not an oversight. Gesture control (one checklist bullet) shares that tail.
 **Status:** PLANNED (0% code — no `Intent`/`FieldPos`/`InputSource` structs exist anywhere; `web/src/app.mjs` has zero DOM/canvas)
 **Role & responsibility:** The actual product interfaces built on P38a's pipelines: Sea (ambient-field client surface) and Sheet (brand-SDF) — the customer storefront and order flow as field-render, wired to real order data. This is where a customer first *sees* dowiz in the new stack.
@@ -989,7 +1605,7 @@ One-line ledger:
 **Anti-scope:** No DOM-first screens (same canon as P38a). Do not resurrect the old Whisper voice stack ahead of the order-critical path. Do not fork a second design-token system — FE-05's GPU token table is the single source.
 **Depends on / blocks:** Hard-depends on P38a (pipelines) and, for real order data, P37 + PROTOCOL P34. Blocks nothing downstream except demo polish (P17/P20 visual units benefit but aren't gated).
 
-#### P39 — App-shell: installability + capability-auth wiring + offer math
+##### P39 — App-shell: installability + capability-auth wiring + offer math
 **Absorbs:** The **installability gap** — the one genuinely new phase-item in this section, with no prior unit ID: the old stack had a full Svelte PWA + service worker AND a Tauri desktop installer (`apps/bootstrap-installer`), both deleted in the purge; the new stack has ZERO PWA/installability work and NO canon decision locking it in or rejecting it. It is not covered by FE-*/DZ-* (those are rendering, not app-shell packaging). Also hosts the DELIVERY-side wiring of P23 and P20's DM-1 — both keep their own numbers; P39 does not claim them.
 **Status:** PLANNED (installability 0% + genuinely undecided; P23-P1 unblocked today; P20 DM-1 unblocked today)
 **Role & responsibility:** The remaining product-surface pieces once P37/P38 (the real leverage points) exist: make the product installable, wire device-bound capability auth into the live surface, and give the kernel real offer/discount math so demos and marketing have something true to show.
@@ -1001,7 +1617,7 @@ One-line ledger:
 **Anti-scope:** Do not build a conventional password+TOTP login as primary — capability certificates (proto-cap, ML-DSA) are the auth model, per canon; TOTP/WebAuthn are secondary step-up only. Do not let the service worker introduce a network dependency for ordering (F12). Do not expand into P20's publishing/marketing pipeline (DM-2+ stays P20's own scope, publication gated behind P18 public-flip) or P22 social posting (ECOSYSTEM-adjacent, stays P22).
 **Depends on / blocks:** P39 auth-wiring depends on P37 (P23-P3's named blocker); installability depends on P38a/P38b having something worth installing, though the canon decision and manifest skeleton need nothing. Blocks P17/P20 demo credibility (real offers, installable demo) and provides the step-up auth AGENT (P4x) flows will assume.
 
-### 10.5.4 AGENT — local/network AI, tool-use loop, MCP
+#### 10.5.4 AGENT — local/network AI, tool-use loop, MCP
 
 > **Scope boundary (locked invariant):** DELIVERY's core order/courier/money flow NEVER requires AI to function. This is already true by construction — CORE's decide/fold Law is pure deterministic Rust (the standing "НЕ-AI у ядрі" invariant from math-first-architecture's 7 invariants; LLM is "a feeling at the edge," a resonator-style pure-fn concern, zero I/O in the core, never in the decision path). Every phase below is additive assistance on top of an already-complete deterministic system. If every AGENT phase were deleted tomorrow, orders would still place, couriers would still match (deterministic HRW), money would still settle.
 >
@@ -1015,11 +1631,11 @@ One-line ledger:
 
 ---
 
-#### P40 — AgentLoop executor + tool-calling capability wiring
+##### P40 — AgentLoop executor + tool-calling capability wiring
 **Absorbs:** P21 (resident-agent plane, executor half) · follow-on to the shipped harness-llm-backend arc (`feat/harness-llm-backend`, Ollama port Wave 0+1+consumer-wiring DONE)
-**Status:** PLANNED (its substrate is DONE — the gap is everything above it)
+**Status:** ~~PLANNED (its substrate is DONE — the gap is everything above it)~~ — **PARTIAL (corrected 2026-07-20, verified against live code).** The "`AgentLoop`/any executor has 0 grep hits anywhere in the repo" claim in the Role text below is stale: the 2026-07-18 swarm landed `kernel/src/agent/loop.rs` (`pub struct AgentLoop<R: SkillRegistry>` at :119, a fail-closed bounded executor) plus the `agent-loop/` crate (`service.rs`/`lib.rs`, adversarial tests) — commit `626236886` ("feat(kernel/agent): WAVE P40 AgentLoop executor + tool wiring (fail-closed)"), matching §10.2's already-corrected P40 cell. Design-vs-implementation reconciliation not re-done here.
 **Role & responsibility:** Build the plan→act→observe executor that turns the existing raw chat-completion backend into an agent that can DO things. Today `LlmBackend` is real and consumed (only by `llm-adapters/src/{dispatch,cache,compose,ollama}.rs` and its own tests/benches), but `AgentLoop`/any executor has **0 grep hits anywhere in the repo** — this is the single biggest gap in AGENT's scope: a chat backend with no callers connecting it to orders. P40 also defines the tool-port interface behind a KernelFacade-style compilation firewall and un-pins tool-calling at the capability level: `Caps.tool_calling` is HARD-PINNED `false` at `llm-adapters/src/ollama.rs:59` — it is not even wired at the flag level yet.
-**Blueprint:** `docs/design/harness-2026-07-16/HARNESS-LLM-BACKEND.md` covers the backend layer and already anticipates tool-calling — as a `Caps` probe ("Tool-calling/structured-output support differs per backend/model — a `Caps` probe, not assumed," §2.2 Quirks item 5) and as a `tools` field in the exact-match cache key (§3.2) — but contains **no loop design**. Build on that doc's port/adapter/firewall conventions; the loop itself needs a first design pass here.
+**Blueprint:** [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P40-agent-loop-tool-wiring.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P40-agent-loop-tool-wiring.md) (the loop / tool-port design) + [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P40-AGENT-EXECUTOR-PRODUCT-WIRING-2026-07-19.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P40-AGENT-EXECUTOR-PRODUCT-WIRING-2026-07-19.md) (the product-wiring follow-on) — **both exist on disk; the "the loop itself needs a first design pass here" note that stood here predates them and is now stale.** Backend layer: `docs/design/harness-2026-07-16/HARNESS-LLM-BACKEND.md` covers the backend and already anticipates tool-calling — as a `Caps` probe ("Tool-calling/structured-output support differs per backend/model — a `Caps` probe, not assumed," §2.2 Quirks item 5) and as a `tools` field in the exact-match cache key (§3.2) — but contains **no loop design**. Build on those docs' port/adapter/firewall conventions.
 **DoD:**
 1. A `ToolPort` trait exists in the kernel-ports layer (plain structs, no serde/HTTP, mirroring `llm.rs` conventions); the loop crate consumes tools ONLY through it — `cargo tree` shows the loop crate does not import `dowiz-kernel` directly (same firewall done-check the LLM blueprint already uses: kernel shows no HTTP client, no adapter crates).
 2. `Caps.tool_calling` is no longer hard-pinned `false` for Ollama — it is set by a live per-model probe, fail-closed (probe fails ⇒ `false`).
@@ -1028,7 +1644,7 @@ One-line ledger:
 **Anti-scope:** No multi-tool framework, no tool registry, no write/mutating tools, and absolutely no money/auth/RLS/migration tools in this phase. No streaming, no re-design of `LlmBackend` (it is shipped; extend, don't rewrite). Do not touch `AgentBridge`/`agent-adapters` — that is PROTOCOL's mesh-admission surface. No autonomy: the loop executes one user-initiated request to completion, it does not schedule itself.
 **Depends on / blocks:** Needs DELIVERY's P37 order-API surface for the real read-order tool target; until P37 lands, DoD items 1–2 and a no-op/echo tool loop are buildable now against a stub — do the scaffold in parallel. Explicitly does NOT require PROTOCOL's P34/P35 to be complete: a minimal read-only tool loop must work on a solo offline node, since offline-first is a hard requirement. Blocks P41 (mode parity needs a loop to be parity OF) and P42 (MCP re-exposes P40's tool port).
 
-#### P41 — Three-mode operation: no-AI / local-offline / connected — one tool interface, swappable backend
+##### P41 — Three-mode operation: no-AI / local-offline / connected — one tool interface, swappable backend
 **Absorbs:** P21 (mode/degradation half) · operator three-mode directive (verbatim requirement, the spine of this section)
 **Status:** PARTIAL (backend swappability largely shipped; mode-parity proof and degradation contract are the gap)
 **Role & responsibility:** Make the three operating modes an enforced, tested property rather than an intention. Mode 1 (no-AI) requires **zero new code** — CORE+PROTOCOL are AI-free by design and this phase only locks that in as a regression-proof invariant. Modes 2 and 3 must differ ONLY in which `LlmBackend` impl is selected (Ollama local vs managed/remote — both adapter families already exist per the blueprint's Tier-0 `ManagedApiAdapter` / Tier-1 Ollama split and `dispatch.rs`), never in the tool-loop shape: one port, swappable backend, no second tool-calling implementation. *Extended 2026-07-18 (operator BYO-AI directive):* mode 3 "connected" explicitly includes the owner's OWN AI subscription — any OpenAI-compatible endpoint + owner-supplied key, same `ManagedApiAdapter`/`Quirks::managed_api` path, no vendor list, a config-provenance sub-distinction (managed-default vs BYO) rather than a fourth mode; the fresh-venue DEFAULT PRESET is written-explicit mode 2 (local Ollama) — BYO is the opt-in upgrade, local-first is the zero-owner-config default; the owner-facing settings surface lives with P48's hub (cross-reference only, designed in P48's own lane).
@@ -1042,11 +1658,20 @@ One-line ledger:
 **Anti-scope:** No new code for mode 1 (writing any is a design smell — reject it in review). No second tool-loop implementation for remote backends. No "smart" auto-escalation from local to remote without explicit configuration. Routing help from the model stays advisory-only — the deterministic HRW matcher remains the sole courier-assignment authority in every mode.
 **Depends on / blocks:** Depends on P40 (needs the loop and one tool to prove parity over). DoD item 1 is provable TODAY, before P40 — land it first as the locked baseline. Independent of PROTOCOL P34/P35 completeness by construction (offline-first). Blocks P42 (MCP exposure must inherit the same three-mode contract).
 
-#### P42 — MCP port + agent-as-capability boundary
+##### P42 — MCP port + agent-as-capability boundary
 **Absorbs:** IP-08 (MCP-server + agent-as-capability port — 0% built, no code found under this name)
-**Status:** PLANNED
+**Status:** PARTIAL — this line is stale (written 2026-07-16, before the blueprint pass); corrected
+2026-07-20. A real blueprint exists (`CORE-ROADMAP-2026-07-17/BLUEPRINT-P42-mcp-agent-skills.md`,
+2026-07-18) AND real code landed the same day it was written — `kernel/src/ports/mcp.rs` (488
+lines) + `kernel/src/ports/tool.rs` (383 lines), commits `575a75a20`/`09b2c7edd`, per that
+blueprint's own status-correction header. Design-vs-implementation reconciliation not re-done here.
 **Role & responsibility:** Give P40's tools a standard exterior: the agent calls tools via MCP, and each tool is a capability-scoped port — never a direct kernel import. This mirrors PROTOCOL's KernelFacade compilation-firewall pattern on the AGENT side: the same architectural move, applied to tool-calls. Deliberately lighter than P40/P41 — it is follow-on work that standardizes a pattern only after P40/P41 have proven it on one tool.
-**Blueprint:** no existing blueprint, first design pass needed here. Reference-adjacent code exists — `agent-adapters/mcp.rs` — but it serves PROTOCOL's mesh `AgentBridge` (foreign-agent admission), not this port; study its conventions, do not repurpose it or couple to it.
+**Blueprint:** `CORE-ROADMAP-2026-07-17/BLUEPRINT-P42-mcp-agent-skills.md` (2026-07-18 — the "no
+existing blueprint" claim below is the ORIGINAL 2026-07-16 text, kept for provenance but now
+stale; see the Status correction above). Reference-adjacent code exists — `agent-adapters/mcp.rs`
+— but it serves PROTOCOL's mesh `AgentBridge` (foreign-agent admission), not this port; study its
+conventions, do not repurpose it or couple to it. *(Original 2026-07-16 text: "no existing
+blueprint, first design pass needed here.")*
 **DoD:**
 1. P40's read-order-status tool is additionally callable through an MCP server endpoint, same behavior, one test.
 2. Capability scoping is enforced fail-closed: a tool invocation outside the granted capability scope is refused with a typed error, proven by one negative test.
@@ -1054,7 +1679,7 @@ One-line ledger:
 **Anti-scope:** No foreign-agent admission, caging, or mesh exposure — that is `AgentBridge`, PROTOCOL's scope; P42 serves the LOCAL agent only. No tool-catalog expansion (still the one proven tool). No transport invention — MCP as-specified. Forward-looking cross-reference only, not scoped work: IP-05's "multimodality = superposition of intents" (voice+touch composing, not conflicting) becomes AGENT-relevant if voice ever becomes an agent input channel — that lives with DELIVERY's DZ-10 (voice, deliberately Phase-9b-deprioritized), and P42 must not front-run it.
 **Depends on / blocks:** Depends on P40 (tool port) and P41 (three-mode contract it must inherit — the MCP surface must degrade exactly as gracefully). Needs no PROTOCOL P34/P35 completion: a local MCP endpoint on a solo node is the baseline case. Blocks nothing on the critical path — ECOSYSTEM/OPS integration work that wants to consume AGENT tools externally should wait for P42 rather than importing anything deeper.
 
-### 10.5.5 ECOSYSTEM/OPS — External Integrations, Deployment, Multi-Product Platform
+#### 10.5.5 ECOSYSTEM/OPS — External Integrations, Deployment, Multi-Product Platform
 
 > **Sequencing verdict (the most important sentence in this section):** ECOSYSTEM/OPS is **explicitly LAST on the critical path** — CORE → PROTOCOL (P34) → DELIVERY (P37/P38) → AGENT (P40/P41) → **then this**. This is not a priority judgment about the work's worth; it is a statement of physical reality: there is currently **zero live deployment** (no `fly.toml`, no pgrust binary installed, `attic/` and the old `apps/` stack physically deleted). Deployment, monitoring, external integrations, and multi-product platforming only make sense once there is something real to deploy, monitor, and integrate. Building a monitoring stack for a service that does not exist is waste, and every phase below carries an anti-scope rule enforcing that.
 
@@ -1066,7 +1691,7 @@ One-line ledger:
 > - **EC-17** and the multi-product/marketplace remainder of the EC arc (incl. "dowiz Local") → **P46**.
 > - EC's shared **KernelFacade** concept is already built in PROTOCOL — cross-referenced there, not re-claimed here. IP-01..09/17/18 are PROTOCOL's/AGENT's/CORE's scope and are covered by those drafters.
 
-#### Existing P22 — Social Auto-Posting (confirmed home, not renumbered)
+##### Existing P22 — Social Auto-Posting (confirmed home, not renumbered)
 P22 is **confirmed 0% built** — no `SocialPoster` trait, no `TelegramAdapter`/`ViberChannelAdapter`, no `social-adapters` crate anywhere. But its blueprint (`docs/design/BLUEPRINT-SOCIAL-AUTO-POSTING-2026-07-17.md`) already correctly cites **IP-10/IP-15/IP-16 as prior art**, which means P22 is *already* the correct numbered home for those three units. **They are ABSORBED INTO existing P22 — do not renumber, do not duplicate under P43.** Note for whoever starts it: the reusable substrate already exists in kernel (`Spool`/`TokenBucket`/`ChannelLedger`), making Wave-0 (Telegram) cheap once DELIVERY gives it something to post about.
 
 **Scope expansion (2026-07-18 operator directive — blueprint §11, same file):** P22 additionally owns:
@@ -1074,7 +1699,7 @@ P22 is **confirmed 0% built** — no `SocialPoster` trait, no `TelegramAdapter`/
 2. **Posting modes**: manual owner approval is the **DEFAULT** for every draft from every source; agentic auto-posting is a per-venue, per-post-type **opt-in** behind an earned-autonomy ratchet (first-10-always-reviewed, 10-consecutive-clean counter, dedicated 1/day/platform `TokenBucket`, revoke-on-`Rejected`, kill switch). Drafting is exposed to the P40 agent loop as a future `ToolPort` extension (**P42-gated** — no P40 enum changes now); **publish/approve are never model-callable actions** at any autonomy level.
 3. **The campaign lane** for recipient-list channels: **mailing lists + SMS** ride the absorbed IP-15 `ChannelAdapter` shape under this phase's number — sharing P22's drafts/approval/outbox/`?ch=` attribution but **not** the `SocialPoster` trait (per-recipient fan-out + consent/unsubscribe ledger; recipient lists are PII, so the lane is blocked on its own consent-ledger mini-blueprint). **SMS is per-message PAID via any provider** (Twilio/TurboSMS-class), unlike free Telegram/Viber posting — preflight must show `recipients × unit_cost`. Transactional sends (order-status/OTP over messenger/SMS/email) are **NOT** P22 — they stay P43 DoD-2 + P49.
 
-#### P43 — External Integration Ports: Messenger / Marketing / Export / Backup-Export / Hosting
+##### P43 — External Integration Ports: Messenger / Marketing / Export / Backup-Export / Hosting
 **Absorbs:** IP-11, IP-12, IP-13, IP-14, IP-19, IP-20. (IP-10/15/16 → ABSORBED INTO existing P22, not renumbered.)
 **Status:** PLANNED (with two false premises corrected and one small live bug)
 **Role & responsibility:** All customer/operator-facing external channels that are not social auto-posting: messenger delivery-notification ports, marketing/channel-tracking, data export, and hosting/automation ports. These follow the arc's core-immutable/integrations-as-ports doctrine: adapters at the edge, never leaking into kernel Law. **Boundary vs P22 (clarified 2026-07-18):** P43's messenger/SMS/email surface is **transactional** — order-status notifications and OTP (the DoD-2 send path, consumed customer-side by P49). Marketing **campaign** sends to opted-in recipient lists (mailing lists, SMS campaigns) belong to P22's campaign lane (the absorbed IP-15 `ChannelAdapter` — see P22's 2026-07-18 scope expansion and blueprint §11.5); the two may eventually share a low-level provider adapter, but the producer pipelines (order events here vs owner-authored/AI-drafted content there) never merge.
@@ -1094,18 +1719,18 @@ P22 is **confirmed 0% built** — no `SocialPoster` trait, no `TelegramAdapter`/
 **Anti-scope:** Do NOT build any adapter before DELIVERY P37/P38 gives it a live order flow to notify about — a messenger port with nothing to send is dead code. Do NOT re-implement social posting here (P22 owns it). Do NOT build marketing-campaign / mailing-list / SMS-campaign tooling here — that is P22's campaign lane (2026-07-18 expansion); P43's SMS/email use is transactional-notification only. Do NOT touch the `tools/telemetry` Telegram bridge; it is OPS plumbing, not a product channel.
 **Depends on / blocks:** Depends on DELIVERY P37/P38 (live order/courier flow) and PROTOCOL P34 (capability-gated egress). Blocks nothing on the critical path. QRNG bug fix (DoD-1) has no dependency and may land any time.
 
-#### P44 — Cache Layers (EC-05) + Own-RAG / Own-Inference Scale-Out — LOW PRIORITY / FAR-FUTURE
+##### P44 — Cache Layers (EC-05) + Own-RAG / Own-Inference Scale-Out — LOW PRIORITY / FAR-FUTURE
 **Absorbs:** EC-05; own-inference-beyond-Ollama, own-RAG, chunking, and gossip-flows-as-kernel-properties units of EC-03/04/06/08/12–15.
 **Status:** PLANNED (0 of 5 cache layers built)
 **Role & responsibility:** The ecosystem-strategy arc's flagged "only gap": five cache layers (embedding cache, Merkle re-index, prefix-disk tier, pipeline cache, semantic cache) plus eventual self-hosted inference/RAG scale-out. Verified current state: exactly **one** basic exact-match sha3-keyed cache exists (`llm-adapters/src/cache.rs`); none of the five planned layers, no own-RAG, no chunking pipeline.
-**Blueprint:** none — source arc: `/root/.claude/projects/-root-dowiz/memory/ecosystem-strategy-arc-2026-07-13.md`. Do not write one yet.
+**Blueprint:** [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P44-cache-layers-scaleout.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P44-cache-layers-scaleout.md) (2026-07-18 — **deliberately thin by design:** its real deliverable is the measurement methodology that must precede any cache layer, matching this section's "no layer ships without a number it improves" stance; the "Do not write one yet" note that stood here predates it, and the thin gate-defining doc that exists is consistent with it, not a violation of it). Source arc: `/root/.claude/projects/-root-dowiz/memory/ecosystem-strategy-arc-2026-07-13.md`.
 **DoD (deliberately minimal — this is optimization work for a service that does not yet exist):**
 1. A measured baseline exists (cache hit-rate + latency on real AGENT-loop traffic) *before* any layer is built — no layer ships without a number it improves.
 2. Each layer lands only with a benchmark showing net win over the existing sha3 exact-match cache; a layer that doesn't beat it gets deleted, not kept.
 **Anti-scope:** **This is explicitly NOT where swarm effort should go soon.** Do NOT build any cache layer before AGENT P40/P41 produces real inference traffic to cache — cache design against imagined workloads is the definition of premature optimization. Do NOT stand up own-inference infra while the existing Ollama port (already built, AGENT's scope) is unsaturated.
 **Depends on / blocks:** Depends on AGENT P40/P41 (real traffic) and DELIVERY P37 (real product load). Blocks nothing; nothing waits on this.
 
-#### P45 — Deployment + Monitoring Floor (minimum viable ops)
+##### P45 — Deployment + Monitoring Floor (minimum viable ops)
 **Absorbs:** OPS-01..22 (entire ops-reliability arc).
 **Status:** PARTIAL — but barely; the arc's own premise is gone
 **Role & responsibility:** The minimum viable ops floor for whenever DELIVERY has something live: deploy path, dead-man's-switch monitoring, backup with off-site immutability, secrets handling. Honest inventory of what actually exists versus what the arc assumed:
@@ -1116,7 +1741,7 @@ P22 is **confirmed 0% built** — no `SocialPoster` trait, no `TelegramAdapter`/
 
 **Superseded — resolve explicitly:** the arc's RLS-fix approach was "resurrect attic's 140 TS migrations." That path is **dead twice over**: (a) `attic/` is physically deleted, so the premise no longer exists; (b) it is **formally superseded** by `docs/design/BLUEPRINT-P-NATIVE-PGRUST-TENANT-REBUILD.md` (committed 2026-07-18), whose §0 states "NOT a TS/Supabase migration… the old attic/packages-db 140 migrations are quarantined and dropped; we do not revive them," and whose §5 DECART table formally rejects attic-revival in favor of a native Rust/sqlx adapter. **The native pgrust rebuild is current canon.** It is already registered in `CORE-ROADMAP-INDEX.md` §7 as a separate red-line track, gated on operator `/council` review — **cross-referenced here, not renumbered into P45.**
 
-**Blueprint:** `docs/ops/P8-SINGLE-PANE-SPEC.md` (monitoring, `[SPEC]`), `docs/design/BLUEPRINT-P-NATIVE-PGRUST-TENANT-REBUILD.md` (data layer, separate gated track). Reuse both; write nothing new until unblocked.
+**Blueprint:** [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P45-ops-security-monitoring.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P45-ops-security-monitoring.md) (2026-07-18, 20-point — the full deployment/monitoring/security-tracing blueprint for this exact phase, explicitly HARD-blocked on DELIVERY P37 per its own header; this section's Blueprint line previously cited only the two references below and omitted the dedicated doc). Also: `docs/ops/P8-SINGLE-PANE-SPEC.md` (monitoring, `[SPEC]`), `docs/design/BLUEPRINT-P-NATIVE-PGRUST-TENANT-REBUILD.md` (data layer, separate gated track). Reuse; write nothing new until unblocked.
 **DoD:**
 1. A deploy artifact exists and is reachable at a canonical prod URL (falsifies "no canonical prod target exists").
 2. The heartbeat dead-man's-switch is retargeted from the tunnel webhook to the live app's health endpoint, and a deliberately induced outage produces a Telegram alert within 10 minutes.
@@ -1125,11 +1750,11 @@ P22 is **confirmed 0% built** — no `SocialPoster` trait, no `TelegramAdapter`/
 **Anti-scope:** **This phase is BLOCKED — not merely sequenced after — on DELIVERY P37 existing.** Do not stand up VictoriaMetrics/Grafana/any observability stack before there is a service emitting signals; do not write OpenTofu/Dokploy config for infrastructure that hosts nothing; do not revive attic migrations (canon forbids it and the files are gone); do not fold the pgrust rebuild into this phase's numbering (it is an operator-gated red-line track in CORE-ROADMAP-INDEX §7).
 **Depends on / blocks:** Hard-blocked by DELIVERY P37 (something to deploy). Data-layer items depend on the pgrust tenant-rebuild track clearing its `/council` gate. Blocks P46 (no multi-product platform without a deployed first product). DoD-4 (off-site backup) should be first in line the moment P37 produces state worth protecting.
 
-#### P46 — Multi-Product Platform: "dowiz Local" + Marketplace — FURTHEST FUTURE
+##### P46 — Multi-Product Platform: "dowiz Local" + Marketplace — FURTHEST FUTURE
 **Absorbs:** EC-17 and the multi-product/marketplace remainder of the ecosystem-strategy arc, including "dowiz Local" (the planned second product intended to prove multi-product reuse — never shipped, zero grep hits in the repo).
 **Status:** PLANNED (0%)
 **Role & responsibility:** The ecosystem endgame: prove the CORE/INFRA/FLOWS decomposition by shipping a second product on the same kernel, then (and only then) generalize toward a marketplace. Nothing exists; nothing should, yet.
-**Blueprint:** none — source arc: `/root/.claude/projects/-root-dowiz/memory/ecosystem-strategy-arc-2026-07-13.md`. No blueprint until the gate below is met.
+**Blueprint:** [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P46-multi-product-platform.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P46-multi-product-platform.md) (2026-07-18 — the FURTHEST-FUTURE terminal node; the doc is deliberately almost entirely a **gate definition + reuse-measurement methodology** and explicitly does NOT design the second product, which honors the "no blueprint until the gate is met" intent that stood here by making the gate itself the blueprint's content). Source arc: `/root/.claude/projects/-root-dowiz/memory/ecosystem-strategy-arc-2026-07-13.md`.
 **DoD:**
 1. A second product ("dowiz Local" or successor) runs on the unmodified kernel with zero kernel forks — falsified by any product-specific patch to CORE.
 2. Reuse is measured, not asserted: the second product's non-kernel code line count is published against the first product's.
@@ -1138,7 +1763,7 @@ P22 is **confirmed 0% built** — no `SocialPoster` trait, no `TelegramAdapter`/
 
 ---
 
-## 11. Gap-closing phases (2026-07-18, found by the §10 end-state-vision pass)
+### 11. Gap-closing phases (2026-07-18, found by the §10 end-state-vision pass)
 
 Appended by the 2026-07-18 end-state-vision follow-up pass (same session as §10; same
 append-only rule as §7/§8/§9/§10). **This section extends the phase index from P31–P46 to
@@ -1148,7 +1773,7 @@ consolidation pass extended it through P53 on 2026-07-18. This section remains t
 authority for P47–P50. Blueprint — ONE combined file for all four (deliberately; see its own header for why):
 `docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P47-P50-gap-closing-phases.md`.
 
-### 11.0 Why this section exists
+#### 11.0 Why this section exists
 
 These four phases exist because the end-state-vision pass — walking concrete user scenarios ("a
 customer orders dinner and pays," "an owner changes a price," "a regulator asks a question,"
@@ -1167,7 +1792,7 @@ absences the roadmap's own scenario walk revealed, added under the operator's pa
 ("знайти прогалини, сліпи зони у роадмапі і добавити, розширити" AND "нічого не добавляти що не
 критично"): exactly these four, and nothing else.
 
-#### P47 — Payment & settlement rails (DELIVERY component; extends the P37–P39 range)
+##### P47 — Payment & settlement rails (DELIVERY component; extends the P37–P39 range)
 **Absorbs:** none — genuinely new; no prior unit ID anywhere names a payment rail (grep for
 payment/stripe/liqpay/cash-on-delivery across `kernel/`, `engine/`, `web/`, `llm-adapters/` and
 bebop2's `delivery-domain`/`proto-cap`: zero non-test hits, verified live 2026-07-18).
@@ -1250,7 +1875,7 @@ native-Rust default.)*
 the wiring critical path — deliberately late-critical-path: needed before real revenue (P50's
 first-real-order gate names it a prerequisite), not before the wiring proof.
 
-#### P48 — Owner/Admin operational surface (DELIVERY component)
+##### P48 — Owner/Admin operational surface (DELIVERY component)
 **Absorbs:** none — new; makes concrete the workflow implied by menu-as-data + capability certs
 (silence-ledger item 2), which every existing phase implies and none owns.
 **Status:** PLANNED — decision RESOLVED (2026-07-18, operator ruling), build-out open
@@ -1320,7 +1945,7 @@ omnichannel order intake is P48's own hub scope, not deferred territory.)*
 ruling picks WebGPU. *(2026-07-18: the ruling picked WebGPU — the P38a dependency is now
 unconditional.)* Blocks P50's first-real-order gate (a real venue needs a managed menu).
 
-#### P49 — Customer identity, notification & tracking UX (DELIVERY component)
+##### P49 — Customer identity, notification & tracking UX (DELIVERY component)
 **Absorbs:** the customer-side closure of P43's corrected claim (§10.5.5 confirmed "Telegram
 already has full push+OTP" FALSE — a real customer-facing send path does not exist); otherwise
 no prior unit ID.
@@ -1382,7 +2007,7 @@ send path.
 **Depends on / blocks:** Depends on P37 (wire), P38a/P38b (tracking render), and P43 DoD-2 (a
 transmitting messenger path). Blocks P50's first-real-order gate (its "real customer" leg).
 
-#### P50 — Legal/compliance & first-order validation gate (ECOSYSTEM/OPS component; extends the P43–P46 range)
+##### P50 — Legal/compliance & first-order validation gate (ECOSYSTEM/OPS component; extends the P43–P46 range)
 **Absorbs:** G11 (§7's self-critique flagged "first real order" as the only proof the product is
 wanted, sitting as a late done-test — unresolved, operator-level) + the audit obligation implied
 by the old stack's deleted legal surface.
@@ -1420,7 +2045,7 @@ the one genuinely unblocked item in this section, startable now. The gate half d
 P47/P48/P49 plus the P34/P37/P38 critical path. Blocks P46 (and any scale-out): the
 first-real-order gate must be green before multi-product work means anything.
 
-### 11.1 Silence-ledger cross-reference (nothing orphaned)
+#### 11.1 Silence-ledger cross-reference (nothing orphaned)
 
 | # | Silence-ledger item (end-state-vision pass, its own words) | Closing phase |
 |---|---|---|
@@ -1429,7 +2054,7 @@ first-real-order gate must be green before multi-product work means anything.
 | 3 | "How an anonymous customer orders, tracks, and re-identifies… is unspecified" + customer notifications exist only as P43's to-be-designed send path + no §10 phase specifies the tracking UX over the existing Kalman/EMA geo math | **P49** |
 | 4 | "the old stack had GDPR routes; the new roadmap never mentions the topic" + G11: the first-real-order proof "sits as a late done-test, not a Wave-0 gate. Unresolved, operator-level" | **P50** |
 
-### 11.2 Operator decisions introduced by this section (3 — same convention as §3)
+#### 11.2 Operator decisions introduced by this section (3 — same convention as §3)
 
 > **ALL THREE RESOLVED 2026-07-18 (operator ruling; full text in each phase's RESOLVED note
 > above — original framings preserved below, per convention).**
@@ -1448,7 +2073,7 @@ first-real-order gate must be green before multi-product work means anything.
 
 ---
 
-## 12. Operator-directed phases (2026-07-18, appended after §11)
+### 12. Operator-directed phases (2026-07-18, appended after §11)
 
 Appended by a separate 2026-07-18 pass (same append-only rule as §7-§11). **This section
 extends the phase index from P31-P50 to P31-P51.** It is deliberately NOT folded into §11:
@@ -1457,14 +2082,17 @@ silence ledger), and P51 comes from a direct operator directive, not from that p
 different provenance deserves a different section. (§10.2's index table was extended through
 P53 on 2026-07-18 — the consolidation pass §11's note anticipated.)
 
-#### P51 — Open map + routing: OSM vector data, field-rendered routes, pin-drop, live tracking (DELIVERY component)
+##### P51 — Open map + routing: OSM vector data, field-rendered routes, pin-drop, live tracking (DELIVERY component)
 **Absorbs:** none — genuinely new phase; it *feeds and closes* existing seams rather than
 absorbing units: P04's landed in-kernel router (`kernel/src/router.rs` — Dijkstra/A*/CH +
 `road_graph_from_ways`, whose own doc names OSM parsing "a downstream concern" — P51 IS that
 concern), P04's never-landed `route_js` wasm line (0 grep hits in `wasm/src/lib.rs`, verified
 2026-07-18), P49's DoD-4 tracking-view supply side, and the gaussian-splatting arc's Stage-1
 pin-drop (supplied, not re-litigated).
-**Status:** PLANNED
+**Status:** PLANNED (blueprint ON DISK — this §12 text predates the blueprint pass and never got
+the link back; fixed 2026-07-20).
+**Blueprint:** `CORE-ROADMAP-2026-07-17/BLUEPRINT-P51-open-map-routing.md` (also cited correctly
+in the §10.2 P31–P56 summary table — only this detailed section was missing the link).
 **Role & responsibility:** Operator directive (2026-07-18, verbatim intent): OpenStreetMap
 with pin-drop + route tracking, or better a physics-render of the route/map from satellite
 data — hard constraints non-paid, non-vendor-lock-in. The blueprint's cited 2026 research
@@ -1525,7 +2153,7 @@ dependency; feeds P50's audit with its ODbL row.
 
 ---
 
-## 13. Audit-minted phases (2026-07-18, appended after §12)
+### 13. Audit-minted phases (2026-07-18, appended after §12)
 
 Appended by a separate 2026-07-18 pass (same append-only rule as §7-§12). **This section
 extends the phase index from P31-P51 to P31-P52.** Provenance: the same-day MVP audit
@@ -1537,7 +2165,7 @@ the append-only convention (§12's own precedent: P51 is DELIVERY too and got it
 section) beats section-thematic placement. (§10.2's index table was extended through P53 on
 2026-07-18 — the consolidation pass §11's note anticipated.)
 
-#### P52 — Courier working surface: shift, claims, run, proof-of-delivery, earnings (DELIVERY component)
+##### P52 — Courier working surface: shift, claims, run, proof-of-delivery, earnings (DELIVERY component)
 **Absorbs:** none — genuinely new phase. It *executes and closes* existing seams rather than
 absorbing units: DZ-08's courier interaction design
 (`docs/design/dowiz-interfaces/BLUEPRINTS-DOWIZ-INTERFACES.md:225` — designed in the arc,
@@ -1546,7 +2174,10 @@ executed by nobody: P38b is customer-facing by its own §10.5.3 text), the MVP a
 candidates, max)`'s `candidates` has no producer; grep for shift/on_duty/availability across
 delivery-domain + proto-cap: zero hits, re-verified 2026-07-18), and M10 (the P48-DoD-4 ↔
 P23-P2 courier-invite handoff seam, "implied by both DoDs and named by neither").
-**Status:** PLANNED
+**Status:** PLANNED (blueprint ON DISK — this §13 text predates the blueprint pass and never got
+the link back; fixed 2026-07-20; see also `ROADMAP.md` §15.4 G1 for the P52-vs-P71 disposition).
+**Blueprint:** `CORE-ROADMAP-2026-07-17/BLUEPRINT-P52-courier-working-surface.md` (also cited
+correctly in the §10.2 P31–P56 summary table — only this detailed section was missing the link).
 **Role & responsibility:** The courier's own working surface — the third leg of the one
 physics-render pattern (customer = P38b Sea & Sheet, owner = P48 hub, courier = P52), on the
 SAME P38a substrate under the P48 rendering ruling (WebGPU, no DOM exemption) — for the actor
@@ -1608,7 +2239,7 @@ critical path beside P47/P48/P49.
 
 ---
 
-## 14. Operator-directed phases, second batch (2026-07-18, appended after §13)
+### 14. Operator-directed phases, second batch (2026-07-18, appended after §13)
 
 Appended by a separate 2026-07-18 pass (same append-only rule as §7-§13). **This section
 extends the phase index from P31-P52 to P31-P53.** Provenance: direct operator directive
@@ -1620,13 +2251,16 @@ by the phase's own wave split (code now, live onion service only WITH P37+P45). 
 index table was extended through P53 on 2026-07-18 — the consolidation pass §11's note
 anticipated.)
 
-#### P53 — Tor/onion integration: anonymous-access tier, Onion-Location + QR convenience (DELIVERY component, PROTOCOL cross-ref)
+##### P53 — Tor/onion integration: anonymous-access tier, Onion-Location + QR convenience (DELIVERY component, PROTOCOL cross-ref)
 **Absorbs:** fold-in ledger **L4** (§9.2) — the only ledger item still in waiver form, now
 activated. Otherwise genuinely new; it extends seams rather than absorbing units: P37's
 `build_router`/headers-middleware extension point (`tools/native-spa-server/src/lib.rs:93-106`,
 verified live 2026-07-18), the `deploy/` operator-run systemd tier (pgrust precedent), and
 P52 K6's QR handoff (shared encoder).
-**Status:** PLANNED
+**Status:** PLANNED (blueprint ON DISK — this §14 text predates the blueprint pass and never got
+the link back; fixed 2026-07-20).
+**Blueprint:** `CORE-ROADMAP-2026-07-17/BLUEPRINT-P53-tor-onion-integration.md` (also cited
+correctly in the §10.2 P31–P56 summary table — only this detailed section was missing the link).
 **Role & responsibility:** Operator directive (2026-07-18, verbatim): "можливість tor, onion
 інтеграції і взаємодії — зручної" — a CONVENIENT Tor/onion access tier, standard privacy
 networking (the BBC/ProPublica/SecureDrop pattern: clients reach the hub without exposing
@@ -1690,7 +2324,7 @@ nothing — a hub without the sidecar loses only the onion mirror.
 
 ---
 
-## 15. Verification/benchmark/research harness + local-LLM tiering (2026-07-18, appended after §14)
+### 15. Verification/benchmark/research harness + local-LLM tiering (2026-07-18, appended after §14)
 
 Appended by a same-day follow-up pass (same append-only rule as §7-§14). **This section
 extends the phase index from P31-P53 to P31-P56** (§10.2's table already carries the P54-P56
@@ -1701,7 +2335,7 @@ already-written `BLUEPRINT-P21-local-llm-hermes-native.md` to grow a Part 2; (b)
 LLM/agent layer, the protocol/ecosystem layer, and dowiz/bebop2/openbebop jointly, grounded in
 a supplied ML/CS-fundamentals glossary used as a falsifiable checklist, not prose to summarize.
 
-### P21 Part 2 — Tiered Intelligence architecture (extends the existing P21 phase, no new number)
+#### P21 Part 2 — Tiered Intelligence architecture (extends the existing P21 phase, no new number)
 Read the full design in `BLUEPRINT-P21-local-llm-hermes-native.md` §11 — this entry records
 only the verdicts, per this file's own index-not-duplicate convention. The operator's
 Tier-0/Tier-1/Tier-2 proposal was evaluated point-by-point against live evidence, not adopted
@@ -1720,7 +2354,7 @@ challenger. **Mixtral rejection now doubly grounded**: disk (the original P21 fi
 operator's own RAM math, sharpened by one more live fact — this box has 0 swap, so the failure
 mode is OOM, not merely degraded latency.
 
-### P54 — LLM/agent behavioral verification harness (AGENT component)
+#### P54 — LLM/agent behavioral verification harness (AGENT component)
 **Absorbs:** none — new phase. Consumes P21 (backend), P40 (`AgentReasoner` seam), P56 (storage/scheduling substrate it runs on).
 **Status:** PLANNED (blueprint ON DISK, 822 lines)
 **Role & responsibility:** Adversarial/absurd-case prompt probes and behavioral verification
@@ -1728,6 +2362,7 @@ for the agent loop, grounded in the operator-supplied ML/CS glossary applied as 
 checklist: tokenization failure-mode probes (letter-counting, leading-space sensitivity,
 arithmetic inconsistency) mapped to concrete falsifiable tests; the glossary's own
 "signals against fine-tuning" criteria applied honestly to this project's real maturity.
+**Blueprint:** [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P54-llm-agent-verification-harness.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P54-llm-agent-verification-harness.md) (the 822-line "blueprint ON DISK" the Status line names — linked here so it is reachable, not merely asserted to exist).
 **DoD (summary):** a money-arithmetic-trust probe, two-pronged — (1) a *structural* always-green
 fence proving no money/tax tool exists in the agent's tool namespace at all
 (`MONEY_DECISION_CONSUMPTIONS_MAX=0`, proven in-process against `apply_tax()`), so a wrong
@@ -1748,7 +2383,7 @@ the wrong goal — the structural fence is what matters); no LoRA/QLoRA build ah
 named trigger; no Python/Bash test runner.
 **Depends on / blocks:** depends on P21, P40, P56. Blocks nothing downstream.
 
-### P55 — Protocol/ecosystem testing: regression taxonomy, property/mutation testing, chaos injection (PROTOCOL/CORE cross-cutting)
+#### P55 — Protocol/ecosystem testing: regression taxonomy, property/mutation testing, chaos injection (PROTOCOL/CORE cross-cutting)
 **Absorbs:** none — new phase. Extends P24 (flight-recorder spans), P27 (CircuitBreaker/fault-isolation), P36 (bebop remediation).
 **Status:** PLANNED (blueprint ON DISK)
 **Role & responsibility:** Systematic, repo-wide testing discipline answering "how do we stop
@@ -1762,6 +2397,7 @@ scheduled). Each RC gets a concrete native-Rust mechanism with a RED-first falsi
 against the real historical incident (a required-checks liveness ratchet, a checked-in
 feature-matrix coverage gate, a resolved-default security auditor over `cargo metadata`, a
 heartbeat ledger).
+**Blueprint:** [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P55-protocol-ecosystem-testing.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P55-protocol-ecosystem-testing.md) (the "blueprint ON DISK" the Status line names — linked here for reachability).
 **DoD (summary):** `proptest` — confirmed **already a live kernel dev-dependency** with a real
 400-case suite (`ports/payment.rs:644`) — extended to `order_machine::assert_transition`,
 `domain.rs::compute_order_total`, `claim_machine::assert_transition`, `matcher::assign` (all
@@ -1779,13 +2415,14 @@ chaos-injection on top of them.
 **Depends on / blocks:** depends on P27, P24, P56. Blocks nothing downstream; feeds tighter
 regression coverage back into P34/P36.
 
-### P56 — Verification-harness shared infrastructure: storage, scheduling, meta-verification (ECOSYSTEM/OPS component)
+#### P56 — Verification-harness shared infrastructure: storage, scheduling, meta-verification (ECOSYSTEM/OPS component)
 **Absorbs:** none — new phase, the shared substrate P54 and P55 both consume; owns no specific probes itself.
 **Status:** PLANNED (blueprint ON DISK)
 **Role & responsibility:** The machinery underneath P54/P55 — result storage, async wave
 scheduling, cross-platform/multi-device test-dimension modeling, and (the hardest, most novel
 piece) **meta-verification**: checking that the tests/measurements themselves aren't reaching
 false conclusions, not merely checking their results.
+**Blueprint:** [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P56-verification-harness-infrastructure.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P56-verification-harness-infrastructure.md) (the "blueprint ON DISK" the Status line names — linked here for reachability).
 **DoD (summary):** four typed meta-verification detectors, each itself a registered probe with
 a mandatory known-RED canary — **FlakyProbe** (differing verdicts on an identical
 `(probe_id, probe_version, env_fingerprint, seed)` key, quantified via the kernel's own
@@ -1818,7 +2455,7 @@ storage/scheduling substrate, named as a soft dependency each.
 
 ---
 
-## 16. Deployment topology + operating-model decisions (2026-07-18, dialogue pass)
+### 16. Deployment topology + operating-model decisions (2026-07-18, dialogue pass)
 
 Appended by a separate 2026-07-18 pass (same append-only rule as §7-§15). Provenance:
 directly following the 5-persona hostile audit (§synthesis in `docs/research/AUDIT-2026-07-18-
@@ -1829,7 +2466,7 @@ further build work. This section is the **decisions record** of that pass; it do
 introduce new numbered phases — it constrains and cross-links existing ones (P37/P38a/P39/P52,
 Sea&Sheet, P40/P41's AiMode) and settles topology questions no prior section had pinned down.
 
-### 16.1 Hosting topology — three modes, deliberately not mixed
+#### 16.1 Hosting topology — three modes, deliberately not mixed
 Operator's own framing: *"хостинг на cloudflare pages або hetzner - щоб не змішувати +
 self-host, self-app."* Three clean deployment targets for the same open hub software, chosen
 per-venue, never blended within one deployment:
@@ -1846,7 +2483,7 @@ per-venue, never blended within one deployment:
 this section makes the three-mode split explicit so none of them silently bake in a
 Hetzner-only or Cloudflare-only assumption going forward.
 
-### 16.2 Remote access to self-hosted/Hetzner hubs — Cloudflare Tunnel, unconditionally
+#### 16.2 Remote access to self-hosted/Hetzner hubs — Cloudflare Tunnel, unconditionally
 Operator's ruling: *"dowiz Cloudflare Tunnel з коробки."* A venue that self-hosts on hardware
 inside their own premises still needs the owner/courier to reach the hub from outside — without
 the venue ever hand-configuring port-forwarding. The hub software bundles `cloudflared` and
@@ -1857,7 +2494,7 @@ question, not yet closed**: per-venue tunnel provisioning/credential lifecycle (
 account fronting N independently-owned hubs — isolation between tenants at the tunnel layer)
 needs its own design pass; flagged here as a named gap, not designed in this section.
 
-### 16.3 Courier model — venue brings its own, dowiz stays protocol-only
+#### 16.3 Courier model — venue brings its own, dowiz stays protocol-only
 Operator's ruling (Recommended option, confirmed): *"Заклад приводить своїх кур'єрів."* dowiz
 does not recruit, employ, or centrally pool couriers. Each venue onboards its own couriers
 through the existing capability-cert flow; dowiz is dispatch protocol, not a labor marketplace.
@@ -1865,7 +2502,7 @@ through the existing capability-cert flow; dowiz is dispatch protocol, not a lab
 courier-working-surface.md`) — no rework needed, this closes the "which onboarding model"
 question P52 had left implicit.
 
-### 16.4 In-hub agent — exactly one, assistant not autopilot
+#### 16.4 In-hub agent — exactly one, assistant not autopilot
 Operator's ruling, verbatim: *"один активний агент, для багатьох речей підійдуть автоматизовані
 скрипти і автоматизації, немає потреби в окремих агентах суто на постинг чи аналітику - тут
 власне агент це не автопілот, а права рука, помічник власника, щоб розвантажувати його, а не
@@ -1879,7 +2516,7 @@ authority) — this section extends that boundary from "money" specifically to "
 decisions" generally, and settles that no per-hub arbitration/locking mechanism is needed since
 there is only ever one active agent to arbitrate between.
 
-### 16.5 Order intake — every channel is a full-featured adapter, one kernel order-flow
+#### 16.5 Order intake — every channel is a full-featured adapter, one kernel order-flow
 Operator's ruling (Recommended option, confirmed): every intake channel (WhatsApp, Telegram,
 web link, httpSMS, etc.) gets the *same* full capability — menu, payment, tracking — not a
 "lightweight" subset. One order-flow lives in the kernel; each channel is a thin
@@ -1887,7 +2524,7 @@ transport/adapter translating its native format into the same kernel calls (port
 already this repo's standing pattern — IP-* integration-ports arc). No channel-specific
 business logic, no channel-tiering to design or maintain.
 
-### 16.6 Mesh topology — isolated hubs, `dowiz.org` as directory (MVP), federation named-deferred
+#### 16.6 Mesh topology — isolated hubs, `dowiz.org` as directory (MVP), federation named-deferred
 Operator's ruling (Recommended option, confirmed): each hub is a fully autonomous, isolated
 instance (own data, own couriers, own clients). `dowiz.org` is a **directory of links**, not a
 federation/discovery protocol — a customer or courier does not, in the MVP, search or route
@@ -1897,14 +2534,14 @@ inter-hub network discovery. Federation is explicitly named as a possible later 
 designed here — adding it later must not require re-architecting the isolated-hub model, since
 each hub is already self-sufficient by construction.
 
-### 16.7 Auto-posting review — hybrid, owner-configurable per venue
+#### 16.7 Auto-posting review — hybrid, owner-configurable per venue
 Operator's ruling: *"гібрид, на розсуд користувача."* Consistent with §16.4's agent-role
 framing (posting is a decision with brand-visible consequences, not a background operation): the
 owner configures, per venue, whether posts queue for their approval before publishing or publish
 autonomously from a one-time template/ruleset. Both modes must be supported; this is a setting,
 not an architecture fork — no separate design path needed for each.
 
-### 16.8 `dowiz.org` access model — web-try-first, install as the daily-user upgrade
+#### 16.8 `dowiz.org` access model — web-try-first, install as the daily-user upgrade
 Operator asked directly for a recommendation (*"твоя думка? загалом для мобілок"*) rather than
 choosing between options. Recommendation given and not yet contested: a web link
 (`dowiz.org/s/venue-slug`, matching the existing public storefront pattern) is the zero-friction
@@ -1917,14 +2554,14 @@ The operator's own mobile emphasis reinforces this rather than contesting it —
 mobile targets (confirmed earlier this session, `BLUEPRINT-AUTH-DEVICE-2FA-2026-07-17.md` §5.3b)
 already carry native NFC/biometric plugins.
 
-### 16.9 Brand customization — confirmed as-is, no change
+#### 16.9 Brand customization — confirmed as-is, no change
 The operator's "kастомізовувати інтерфейс під власний бренд у межах визначеного дизайну" maps
 directly onto the already-designed Sea&Sheet 5-token brand model (accent/ink/paper/type/radius) —
 Sea (dowiz-owned ambient physics field/narrative layer) stays fixed, Sheet (brand content) is
 customizable within that 5-token envelope. No new design work triggered by this dialogue pass;
 recorded here only so the mapping is explicit and citable.
 
-### 16.10 Fly.io — fully retired, not deferred
+#### 16.10 Fly.io — fully retired, not deferred
 Operator's ruling, twice-confirmed: kill the Fly zombie now (*"вимкнути зараз, клієнт
 повідомлений про нову версію"*), remove Fly from the codebase entirely (*"прибирай з коду
 повністю"*). Actioned this same pass:
@@ -1954,7 +2591,7 @@ Operator's ruling, twice-confirmed: kill the Fly zombie now (*"вимкнути 
 UI, tracked via the audit triage's `#10`/`#11`) proceeds independently of when the Fly teardown
 itself executes.
 
-### 16.12 Vendor onboarding — self-serve, automatic
+#### 16.12 Vendor onboarding — self-serve, automatic
 Operator's ruling (Recommended option, confirmed): a new vendor registers through `dowiz.org`'s
 directory and the hub is provisioned automatically on submission (Shopify-style), not a manual
 curated approval queue. Chosen explicitly for scalability — the operator does not want to be a
@@ -1962,7 +2599,7 @@ bottleneck on every new venue. **Consequence:** the hub-provisioning path (which
 mode §16.1 offers) must itself be a fully automated, unattended flow — this is now a hard
 requirement on whatever builds the self-serve signup, not an optional nicety.
 
-### 16.13 Payment — online-mandatory from Wave-0, multi-provider adapter layer
+#### 16.13 Payment — online-mandatory from Wave-0, multi-provider adapter layer
 Operator's ruling: online payment is **mandatory from the start** (not deferred, not
 cash-on-delivery-only) — reverses what would otherwise have been the simpler MVP default.
 Provider choice: **multi-provider via an adapter layer from day one**, not a single
@@ -1972,7 +2609,7 @@ integration to a Wave-0 blocking dependency (was previously deferred in the audi
 Tier 3), and the payment layer needs a port/adapter boundary analogous to the order-channel
 one — not yet blueprinted, named here as a gap for the next blueprint pass.
 
-### 16.14 Offline-hub behavior — no central dowiz state, honest client-side status, venue-side fallback preferred
+#### 16.14 Offline-hub behavior — no central dowiz state, honest client-side status, venue-side fallback preferred
 This resolved a real self-contradiction the dialogue surfaced: §16.6 committed to "isolated
 hubs, no dowiz-owned central data store," but the operator's first answer on offline-hub
 behavior ("fallback/queue at dowiz.org") would have required exactly that central store.
@@ -1986,7 +2623,7 @@ own device, never on a dowiz-operated server. This is now the strongest, most ex
 statement of the "no central data store" invariant in this roadmap — future sections must not
 reintroduce a central queue/buffer without an explicit, named reopening of this decision.
 
-### 16.15 Hub ↔ vendor cardinality — one hub can serve multiple vendors (food-court model)
+#### 16.15 Hub ↔ vendor cardinality — one hub can serve multiple vendors (food-court model)
 Operator's ruling: a single hub is not strictly one-vendor — it can host **multiple vendors
 sharing one delivery/courier pool** (food court, or several small locations under one roof).
 This settles the earlier "small vs large vendor" framing from the operator's original vision
@@ -1996,7 +2633,7 @@ per-venue framing); the food-court case is the genuine one-hub/multi-vendor scen
 **Consequence:** the in-hub data model needs a vendor-scoping layer (per-vendor menu/catalog,
 shared courier/delivery pool) — not yet designed, named as a gap.
 
-### 16.16 Monetization — fixed per-hub subscription, no transaction percentage; self-host economics differ
+#### 16.16 Monetization — fixed per-hub subscription, no transaction percentage; self-host economics differ
 Operator's ruling: dowiz charges a **fixed subscription per hub**, not a percentage of order
 value — vendors keep 100% of their payment volume, simplifying the §16.13 payment-adapter
 design (no split/settlement logic needed inside the payment path itself). **Self-host has
@@ -2006,7 +2643,7 @@ protocol/updates/support; self-hosted hubs pay (if anything) once, for the softw
 Exact self-host pricing (one-time-paid vs. fully free) is left open — named as a business,
 not architecture, decision.
 
-### 16.17 Menu/catalog schema — fully vendor-defined, no fixed dowiz schema
+#### 16.17 Menu/catalog schema — fully vendor-defined, no fixed dowiz schema
 Operator's ruling (Recommended option, confirmed): vendors define their own categories,
 modifiers, and variants freely — dowiz does not impose a fixed schema (no hardcoded
 "appetizers/mains/desserts" structure). This is what makes the platform viable for non-typical
@@ -2016,7 +2653,7 @@ schema-flexible (vendor-authored category/modifier trees), which the old TS stac
 `AllergenEditor`/`Recipe BOM editor` (referenced in stale Repowise index entries) may partially
 inform but does not dictate — those were built against the now-retired centralized stack.
 
-### 16.18 Multi-hub owner view — client-side aggregation, never server-side
+#### 16.18 Multi-hub owner view — client-side aggregation, never server-side
 Follows directly from §16.6's hub isolation and §16.14's "no central dowiz state" invariant: an
 owner running multiple hubs (a chain, per §16.15) sees them together via their own device/app
 connecting to each hub independently and merging the view locally — never via a dowiz-operated
@@ -2026,13 +2663,13 @@ the owner-facing Tauri client (P39) needs a genuine multi-hub connection mode (h
 capability-certs, one per hub, fan out reads/writes, merge client-side) — not yet designed,
 named as a gap against P39/P48.
 
-### 16.20 Target market — multi-language/multi-market from day one
+#### 16.20 Target market — multi-language/multi-market from day one
 Operator's ruling: no single-market MVP restriction (the stale openspec Albania/`sq` framing
 is explicitly superseded) — i18n architecture from Wave-0, though the *first real order* can
 still land in whichever single market is fastest; the requirement is architectural (no
 hardcoded locale/currency), not a demand for N markets simultaneously live at launch.
 
-### 16.21 `dowiz.org` public role — pure infrastructure, no public vendor catalog
+#### 16.21 `dowiz.org` public role — pure infrastructure, no public vendor catalog
 Operator's ruling (Recommended option, confirmed), reversing this section's own earlier
 §16.6 framing: *NOT even a directory of links.* `dowiz.org` publicly lists no vendors at all.
 Each venue gets its `/s/:slug` link and markets it entirely through its own channels (social
@@ -2045,13 +2682,13 @@ the self-serve signup flow (§16.12) and installable-client hosting (§16.8). **
 §16.6's isolated-hub topology stands, only the "directory" characterization of `dowiz.org`
 itself is retracted.
 
-### 16.22 Push notifications — hub-owned, no central token store
+#### 16.22 Push notifications — hub-owned, no central token store
 Operator's ruling (Recommended option, confirmed): each hub pushes to APNs/FCM directly and
 stores its own push tokens locally — no dowiz-central token store, extending §16.14's
 zero-central-server-state invariant to notifications specifically, closing what would
 otherwise have been a real architectural exception to that rule.
 
-### 16.23 Customer identity — client-side data wallet, no dowiz account, no per-venue re-entry
+#### 16.23 Customer identity — client-side data wallet, no dowiz account, no per-venue re-entry
 Operator's ruling: neither a separate account per venue (friction) nor a central dowiz account
 (would violate §16.6/§16.14 isolation) — a **client-side data wallet**. The customer's own
 device/browser/app stores their details (name, address, payment method) locally and offers to
@@ -2061,14 +2698,14 @@ the owner's multi-hub view, applied symmetrically to the customer side — a sec
 that "no central state" resolves these UX-friction questions via the client, not via a new
 server-side exception each time one comes up.
 
-### 16.24 Courier payout — fully the venue's responsibility, dowiz touches no courier money
+#### 16.24 Courier payout — fully the venue's responsibility, dowiz touches no courier money
 Operator's ruling (Recommended option, confirmed): dowiz does not facilitate courier payout in
 any form — consistent with §16.3 (venue brings its own couriers) and §16.16 (dowiz takes no
 transaction percentage, vendor keeps 100%). dowiz remains a dispatch **protocol**, never a
 money intermediary for courier compensation. The payment adapter (§16.13) needs no split-payout
 logic — this closes what could otherwise have become scope creep into the payment design.
 
-### 16.26 Courier matching, reviews, and cold-start discovery
+#### 16.26 Courier matching, reviews, and cold-start discovery
 Three related closes in one round:
 - **Courier matching stays HRW-automatic**, scoped to the venue's own courier pool (§16.3) —
   the existing rendezvous-hash mechanism and its no-scoring red line are unchanged by the
@@ -2085,7 +2722,7 @@ Three related closes in one round:
   per-venue technical/content tooling, not a dowiz-run discovery surface. Extends §16.4's
   agent-as-assistant role explicitly into marketing/growth, not just operations.
 
-### 16.27 Self-host durability — built-in encrypted auto-backup and auto-update with rollback
+#### 16.27 Self-host durability — built-in encrypted auto-backup and auto-update with rollback
 Two related operator rulings closing the self-host reliability gap:
 - **Backup**: self-hosted hubs get a built-in encrypted auto-backup to `hetzner:dowiz` (or the
   vendor's own S3-compatible target) — dowiz never sees plaintext data, but a venue whose
@@ -2097,7 +2734,7 @@ Two related operator rulings closing the self-host reliability gap:
   ecosystem-wide protocol consistency against an individual owner's need for control after a
   bad update.
 
-### 16.29 Media storage and dispute handling
+#### 16.29 Media storage and dispute handling
 - **Media storage**: vendor-uploaded menu photos/video default to Cloudflare R2/Images (already
   in the stack per §16.1 — no new vendor lock-in), with an easy vendor-side option to connect
   their own storage instead — the same "managed default + easy opt-out" shape as hosting
@@ -2107,7 +2744,7 @@ Two related operator rulings closing the self-host reliability gap:
   refund execution runs through the payment adapter's own refund API, dowiz is not a
   dispute-resolution party.
 
-### 16.30 UI rendering approach — full wgpu, not DOM-for-forms + field-for-ambience
+#### 16.30 UI rendering approach — full wgpu, not DOM-for-forms + field-for-ambience
 Operator's ruling: the physics/field engine (wgpu, Sea&Sheet, SDF text) renders the **entire**
 UI — menu, checkout, admin dashboard — not just ambient/hero moments with conventional DOM for
 forms and lists. **This is the single most scope-expanding decision in this dialogue so far,
@@ -2120,14 +2757,14 @@ substantially more engineering than a conventional-DOM Tier-3 rebuild would have
 Recorded as a hard requirement, not softened — but the a11y-mirror-everywhere design itself is
 NOT yet done and belongs in the Tier-3 blueprint, not this section.
 
-### 16.31 Voice/gesture control — Wave-0 requirement, not deferred
+#### 16.31 Voice/gesture control — Wave-0 requirement, not deferred
 Operator's ruling: basic voice navigation/ordering ships in Wave-0 — this was scoped as an
 audit-evaluation criterion in the original 5-persona audit prompt, and the operator now
 confirms it is a real build requirement, not a "nice to have re-evaluated later." Combines with
 §16.30 to substantially raise Tier-3's real scope beyond what the audit triage's `#10`/`#11`
 line items assumed when they were written (those predate this dialogue pass).
 
-### 16.32 Vendor onboarding mechanism — claim pre-generated demo hubs, not live self-serve provisioning
+#### 16.32 Vendor onboarding mechanism — claim pre-generated demo hubs, not live self-serve provisioning
 Refines §16.12: rather than a hub being provisioned live and automatically at signup time (which
 would need a fully unattended infra-provisioning pipeline as a Wave-0 dependency), the operator's
 actual plan is a **claim mechanic** — pre-generated, ready-to-use demo hub instances exist ahead
@@ -2141,7 +2778,7 @@ on GitHub — consistent with, and now more concretely confirmed than, §16.16's
 license OR free/open-source" branch. Does not reopen §16.21 (still no public vendor catalog) —
 the GitHub link is to the *product's source*, not a vendor directory.
 
-### 16.33 What this section deliberately does not resolve
+#### 16.33 What this section deliberately does not resolve
 Per the operator's own instruction (an extended, ~150-question-total progressive dialogue now
 requested — "ще 100 питань" added on top of the original ~50, spanning interface/design as well
 as remaining architecture — tracked outside this file, ~47 answered as of this checkpoint),
@@ -2154,7 +2791,7 @@ claim-mechanic's concrete implementation (§16.32), and the full remainder of th
 (interface/design details not yet asked). This section grows via the same append-only
 convention as further rounds settle each one — it is not a final architecture document.
 
-### 16.34 wgpu text input, voice recognition locality, and courier-app rendering parity
+#### 16.34 wgpu text input, voice recognition locality, and courier-app rendering parity
 Three related closes:
 - **Text input inside canvas is fully custom** (Recommended-against option not taken) — no HTML
   `<input>` overlay hybrid. This is, honestly, one of the hardest sub-problems in UI
@@ -2172,7 +2809,7 @@ Three related closes:
   running a GPU-rendered UI for a full shift is a genuine battery-life question the Tier-3/
   P52 build needs to benchmark, not assume away.
 
-### 16.35 UI paradigm — intent-driven generative rendering, not a button/menu interface (RESEARCH DIRECTION)
+#### 16.35 UI paradigm — intent-driven generative rendering, not a button/menu interface (RESEARCH DIRECTION)
 Operator's framing, verbatim intent: *"моє бачення передбачає мінімальну і майже відсутню
 кількість кнопок чи елементів, замість цього наміри на які фізика + AI рендерить і показує
 заготовлені речі через функції, або узагалі малює з нуля."* Explicitly requested to be
@@ -2190,7 +2827,7 @@ Tier-3 blueprint needs to name a concrete fallback (a conventional, function-dri
 surface) if the generative-rendering research doesn't converge in time, so this ambition
 doesn't silently block the first real order.
 
-### 16.36 Admin dashboard scope timing — orders/menu/couriers Wave-0, marketing Wave-0 (basic), analytics deferred
+#### 16.36 Admin dashboard scope timing — orders/menu/couriers Wave-0, marketing Wave-0 (basic), analytics deferred
 - **Analytics/reports**: may wait for v2, after the first real order — the owner reads raw order
   data directly in admin (per §16.35's framing, likely via the generative/intent interface
   rather than a dedicated chart-heavy screen) until a purpose-built dashboard exists.
@@ -2198,7 +2835,7 @@ doesn't silently block the first real order.
   auto-posting capability from day one — raises Tier-3 scope further; needs the social/channel
   bot integrations live before the first real order, not deferred to v2 as analytics is.
 
-### 16.37 Checkout flow — multi-step wizard, framed as a small narrative journey
+#### 16.37 Checkout flow — multi-step wizard, framed as a small narrative journey
 Operator's ruling: multi-step (menu → cart → delivery → payment, separate screens), described
 as already present in existing design docs/artifacts as *"невелика пригода"* (a small
 adventure). **Confirmed existing reference, not a new concept**: `BLUEPRINT-P38-webgpu-render-
@@ -2207,7 +2844,7 @@ arc with named beats" (P38 §, live-verified this pass) — the checkout wizard 
 concretely to the order flow, not a separate new design. Fits §16.23's client-side data wallet
 naturally: each step can autofill from the wallet without a separate account per venue.
 
-### 16.38 Localization mechanism — local open-source translation model, not hand-maintained i18n tables
+#### 16.38 Localization mechanism — local open-source translation model, not hand-maintained i18n tables
 Operator's correction to §16.20's original framing: multi-language does not require
 hand-maintained per-locale string tables (the old stack's SQ/EN/UA switcher pattern). Instead,
 translation runs through a **local open-source model** (HuggingFace-class, run via the same
@@ -2216,7 +2853,7 @@ consistent with the whole local-first stance rather than a new exception. Remove
 otherwise have been an ongoing manual-translation maintenance burden as the vendor/venue count
 grows across markets.
 
-### 16.39 Typography — physics/math-generated glyphs, not font files (RESEARCH DIRECTION, extends §16.35)
+#### 16.39 Typography — physics/math-generated glyphs, not font files (RESEARCH DIRECTION, extends §16.35)
 Operator's framing, verbatim: *"ще дикіша ідея - малювання шрифтів через математику і
 фізику."* Goes beyond §16.30's already-planned SDF-rendered text (glyphs from real font files,
 rendered via signed-distance fields — an established technique) to something categorically
@@ -2226,7 +2863,7 @@ primitives already driving the rest of the UI) rather than sourced from any font
 research direction under the same §16.35 umbrella, not settled Wave-0 buildable scope on its
 own.
 
-### 16.40 Intent-driven UI — full replacement from day one, no traditional-navigation fallback; schedule risk knowingly accepted
+#### 16.40 Intent-driven UI — full replacement from day one, no traditional-navigation fallback; schedule risk knowingly accepted
 Sharpens §16.35: the operator confirmed **full replacement of traditional navigation from day
 one**, not a layer over a conventional fallback (reversing this section's own earlier
 recommendation, which had proposed keeping conventional screens as the safety net). Combined
@@ -2240,7 +2877,7 @@ complete vision as one coherent system rather than a phased/hedged rollout. Reco
 closed decision, not to be re-litigated on schedule-risk grounds alone; the Tier-3 blueprint
 should still name concrete milestones so slippage is visible early, not discovered late.
 
-### 16.41 What this section deliberately does not resolve
+#### 16.41 What this section deliberately does not resolve
 Per the operator's own instruction (an extended progressive dialogue — originally ~50, extended
 to ~150 total, now also covering interface/design in depth — tracked outside this file, ~53
 answered as of this checkpoint), substantial ground remains open: the Cloudflare Tunnel
@@ -2253,7 +2890,7 @@ program of work, not a single decision), and the full remainder of the extended 
 This section grows via the same append-only convention as further rounds settle each one — it
 is not a final architecture document.
 
-### 16.42 Named design philosophy — *ad fontes*: math/physics primitives over library dependencies
+#### 16.42 Named design philosophy — *ad fontes*: math/physics primitives over library dependencies
 Operator's own framing for §16.30/§16.35/§16.39-§16.40's UI direction, worth naming precisely
 rather than leaving implicit: *"це велике спрощення у відмові від надбудов і залежностей -
 математика і фізика, значно більш контрольована і класичніша за будь-які бібліотеки, окрім
@@ -2266,7 +2903,7 @@ inherited/derivative UI-library abstractions. This is the coherent philosophical
 behind the whole §16.30/§16.34/§16.35/§16.39/§16.40 cluster of decisions, recorded here as a
 named principle so future sections can cite it directly instead of re-deriving the rationale.
 
-### 16.43 Ad fontes scope — UI/rendering/interaction layer only
+#### 16.43 Ad fontes scope — UI/rendering/interaction layer only
 Operator's ruling (Recommended option, confirmed): §16.42's *ad fontes* principle applies to the
 UI/rendering/interaction layer only — crypto, protocol, storage, and networking keep using
 established, vetted crates (ML-DSA-65 and the rest of the existing kernel's dependency set are
@@ -2274,7 +2911,7 @@ correct as-is; a from-scratch crypto primitive would be a genuine safety regress
 simplification). Prevents §16.42 from being over-read as a blanket minimal-dependency mandate
 across the whole Cargo workspace — it is not; the existing kernel architecture is unaffected.
 
-### 16.44 Friction for consequential actions — encoded as field state, not a discrete confirm dialog (RESEARCH DIRECTION)
+#### 16.44 Friction for consequential actions — encoded as field state, not a discrete confirm dialog (RESEARCH DIRECTION)
 Operator's framing, verbatim: *"наміри та відображення інтерфейсу, його динамічна зміна у
 амплітуді хвиль, інтенсивності середовища, кольорів й самого ритму - інтерфейс слугує
 продовженням і відображенням органічно стану бекенду і ядра."* Deliberate friction for
@@ -2292,7 +2929,7 @@ original 5-persona audit's Herzog-lens "friction-as-a-feature for destructive ac
 checklist item (`AUDIT-PROMPT-TEMPLATE-2026-07-18.md`) with a concrete (if not yet fully
 specified) mechanism, rather than leaving it unaddressed.
 
-### 16.45 Cloudflare Tunnel multi-tenancy — one dowiz-operated CF account for all hubs
+#### 16.45 Cloudflare Tunnel multi-tenancy — one dowiz-operated CF account for all hubs
 Closes §16.2's named gap (Recommended option, confirmed): every hub — Hetzner-hosted or
 self-hosted — tunnels through a single dowiz-operated Cloudflare account, not a
 per-venue CF account the vendor registers themselves. Zero CF setup burden for the vendor
@@ -2302,7 +2939,7 @@ whichever blueprint builds hub provisioning, not yet designed here. Scoped expli
 Wave-0; the operator flagged this as revisitable if hub count grows enough to strain one
 account's practical limits.
 
-### 16.46 Food-court checkout — unified cart across vendors, one delivery, split payment required
+#### 16.46 Food-court checkout — unified cart across vendors, one delivery, split payment required
 Closes part of §16.15's named gap (Recommended option, confirmed): a customer ordering from
 multiple vendors inside one food-court hub gets a single unified cart and one delivery — not
 separate per-vendor checkouts/deliveries. **Consequence for §16.13's payment adapter**: it now
@@ -2311,7 +2948,7 @@ same hub — this reopens part of §16.24's "no split-payout logic needed" frami
 the intra-hub food-court case, not for courier payout (§16.24 stands unchanged for couriers).
 Named as a concrete new requirement on the payment-adapter blueprint, not yet designed.
 
-### 16.47 Data wallet portability — device-resident with Signal-style QR device-linking, self-custody
+#### 16.47 Data wallet portability — device-resident with Signal-style QR device-linking, self-custody
 Closes §16.23's remaining gap: the wallet lives on-device by default (no cross-device sync
 service, consistent with §16.14/§16.23's no-central-server stance), with a **Signal-style QR
 device-linking transfer** for moving it to a new device — one-time codes, generated once, loss
@@ -2320,7 +2957,7 @@ used for crypto/authenticator-style secrets elsewhere in this ecosystem (capabil
 HybridSigner keys) — applied consistently to customer data rather than inventing a new trust
 model for this one case.
 
-### 16.48 Owner multi-hub credentials — a root/delegating capability-cert, not N flat per-hub certs
+#### 16.48 Owner multi-hub credentials — a root/delegating capability-cert, not N flat per-hub certs
 Refines §16.18/§16.32: neither "auto-issued via a dowiz.org account" (conflicts with §16.14's
 no-dowiz-account stance) nor "manual QR-import per hub" (too much friction per hub) — the
 operator wants a **root credential the owner holds themselves**, capable of self-service
@@ -2333,7 +2970,7 @@ designed**: the concrete cert-hierarchy/revocation mechanics belong in the P39/P
 work, not this dialogue-decisions section — recorded here as the shape of the answer, not the
 full spec.
 
-### 16.49 Payment call site, courier-unavailable handling, tax responsibility
+#### 16.49 Payment call site, courier-unavailable handling, tax responsibility
 Three closes:
 - **Payment calls happen client-side, hub never sees card data** (Recommended, confirmed) — a
   PCI-standard SDK pattern (card data flows directly from client to provider); the hub receives
@@ -2348,7 +2985,7 @@ Three closes:
   §16.29's dispute/refund stance; the vendor sets their own rate inside the free-form menu
   schema (§16.17), dowiz calculates and tracks nothing tax-related.
 
-### 16.50 Friction accessibility, voice as one of several equal intent channels, implicit onboarding
+#### 16.50 Friction accessibility, voice as one of several equal intent channels, implicit onboarding
 Three closes, all within the §16.35/§16.40 generative-UI cluster:
 - **Friction is multi-modal, with full audio support** — not a color/visual-only signal (which
   would fail colorblind users). Operator adds a broader claim worth recording precisely but
@@ -2357,7 +2994,10 @@ Three closes, all within the §16.35/§16.40 generative-UI cluster:
   equations render identically wherever wgpu runs. Consistent with this repo's own
   verified-by-math culture ([[verified-by-math-2026-07-07]]), this is recorded as a claimed
   benefit to validate during the Tier-3 build (real devices, real platforms), not asserted as
-  already true.
+  already true. **Registered as P98 (2026-07-20):** P64 already builds the friction-only instance
+  of this requirement; the full audio-parity design extending it to every other visual signal
+  (order status, event feedback) is
+  [`BLUEPRINT-P98-audio-sound-design-2026-07-20.md`](BLUEPRINT-P98-audio-sound-design-2026-07-20.md).
 - **Voice is one of several equal-standing intent channels** (voice + touch/gesture on canvas),
   not a primary channel that others merely supplement — the user picks whichever channel fits
   the moment (quiet vs. hands-busy environments, e.g. a courier mid-ride).
@@ -2365,7 +3005,7 @@ Three closes, all within the §16.35/§16.40 generative-UI cluster:
   text how-to screen; the interface teaches its own use through the same state-communication
   mechanism §16.44 already established for friction, rather than a bolted-on tutorial layer.
 
-### 16.51 Order cancellation authority, device baseline, content moderation
+#### 16.51 Order cancellation authority, device baseline, content moderation
 Three closes:
 - **Cancellation**: the customer may cancel freely before the vendor confirms the order; once
   the vendor has confirmed (started preparing), only the vendor can cancel further — cancellation
@@ -2382,7 +3022,7 @@ Three closes:
   post-hoc report/blocklist mechanism for abuse is implied as necessary but not yet designed —
   named as a gap for the Tier-3/moderation blueprint, not resolved here.
 
-### 16.52 Agent model sourcing, SMS/email fallback, offline checkout resilience
+#### 16.52 Agent model sourcing, SMS/email fallback, offline checkout resilience
 Three closes:
 - **Agent model**: BYO-model is an option, dowiz-fixed local model is the default (Recommended,
   confirmed) — the same pattern already established for hosting (§16.1), payment (§16.13), and
@@ -2397,7 +3037,7 @@ Three closes:
   lost progress, payment simply doesn't fire until the client is back online. Extends §16.14's
   honest-status and client-side-state principles to the checkout flow specifically.
 
-### 16.53 Courier-in-motion voice priority, spam rate-limiting, hub heartbeat monitoring
+#### 16.53 Courier-in-motion voice priority, spam rate-limiting, hub heartbeat monitoring
 Three closes:
 - **Voice is the practical primary input while a courier is actively delivering (in motion)** —
   a safety-driven exception to §16.50's general "equal channels" stance, not a paradigm change:
@@ -2415,7 +3055,7 @@ Three closes:
   §16.14 offline-during-order scenario's *silent, unexplained* variant, distinct from the
   already-designed honest-status UX for a hub the client can see is unreachable.
 
-### 16.54 Open-source scope, demo-hub fixtures, full offline Tauri client
+#### 16.54 Open-source scope, demo-hub fixtures, full offline Tauri client
 Three closes, all Recommended options confirmed:
 - **GitHub open-source scope**: the hub software (kernel/protocol/UI-rendering — whatever a
   self-host vendor actually installs) is open source; `dowiz.org`'s own infrastructure (the
@@ -2430,7 +3070,7 @@ Three closes, all Recommended options confirmed:
   reconnect. Extends §16.52's offline-checkout-draft principle to the whole installed client,
   not just the checkout step.
 
-### 16.55 SEO/AEO crawlability without any DOM — separate bot-facing files, not the a11y-mirror
+#### 16.55 SEO/AEO crawlability without any DOM — separate bot-facing files, not the a11y-mirror
 Resolves the §16.30-vs-§16.26 tension flagged this pass, with an answer sharper than either
 option offered: **no DOM at all, for anyone** — not even a hidden/off-screen a11y-mirror serving
 double duty as SEO content. Instead, crawlers and AI/answer-engine bots get **purpose-built
@@ -2443,14 +3083,14 @@ bot-facing files serve a crawler that only needs facts, not interactivity. Two a
 purpose-built solutions, neither one a DOM. Concrete file formats/schema are a Tier-3 design
 task, not resolved here.
 
-### 16.56 `dowiz.org` landing page — also full wgpu, no static-page exception
+#### 16.56 `dowiz.org` landing page — also full wgpu, no static-page exception
 Operator's ruling: the landing page (§16.32 — minimal, Cloudflare-Pages-hosted) is **also**
 full wgpu, for consistency — no exception for dowiz's own marketing surface. Reinforces §16.40's
 "one path" stance: the *ad fontes* commitment applies uniformly across the whole product,
 including the surface most tempted to cut as "just a landing page." §16.55's bot-facing static
 files remain the SEO answer for this page too, unchanged by this ruling.
 
-### 16.57 Abandoned demo-hub claims stay with the vendor permanently; hub-software license confirmed AGPLv3+TM+DCO
+#### 16.57 Abandoned demo-hub claims stay with the vendor permanently; hub-software license confirmed AGPLv3+TM+DCO
 Two closes:
 - **No reclaim policy** — a claimed demo hub that a vendor never finishes configuring (or never
   reopens) stays theirs indefinitely, not returned to the claimable pool after inactivity.
@@ -2463,7 +3103,7 @@ Two closes:
   competing hosted-SaaS fork of the hub software would otherwise exploit; the trademark clause
   protects the "dowiz" name specifically, separate from the code license.
 
-### 16.58 RTL deferred to v2, vendor-responsible GDPR deletion with dowiz tooling, live brand preview
+#### 16.58 RTL deferred to v2, vendor-responsible GDPR deletion with dowiz tooling, live brand preview
 Three closes, all Recommended options confirmed:
 - **RTL languages (Arabic, Hebrew) deferred to v2** — Wave-0 targets LTR languages; the
   architecture doesn't exclude RTL, it's simply not built for Tier-3's first cut. Named
@@ -2479,7 +3119,7 @@ Three closes, all Recommended options confirmed:
   a published-then-regretted color/font combination. Adds a draft-vs-live state to the brand
   config, not yet designed in detail here.
 
-### 16.59 Client-app license, vendor offboarding grace period, no vendor quality bar
+#### 16.59 Client-app license, vendor offboarding grace period, no vendor quality bar
 Three closes, all Recommended options confirmed:
 - **Client/courier Tauri apps use the same AGPLv3+TM+DCO** as the hub software (§16.57) — one
   unified license across everything a claim-vendor touches, not a separate closed license for
@@ -2492,7 +3132,7 @@ Three closes, all Recommended options confirmed:
   dowiz does not gate, exclude, or rank vendors by quality/performance/rating. Per-hub reviews
   (§16.26) are a signal visible to that hub's own customers, never a dowiz-side gate.
 
-### 16.60 Pickup/dine-in is part of order-flow from the start; agent excluded from customer PII by default
+#### 16.60 Pickup/dine-in is part of order-flow from the start; agent excluded from customer PII by default
 Two closes:
 - **Pickup/dine-in** is part of the unified order-flow (§16.5) from Wave-0, not a
   delivery-only platform — an order without courier-matching (the customer collects it
@@ -2507,7 +3147,7 @@ Two closes:
 
 ---
 
-## 17. Long-term ecosystem decisions (2026-07-18, dialogue pass continued)
+### 17. Long-term ecosystem decisions (2026-07-18, dialogue pass continued)
 
 Appended by a continuation of the §16 dialogue pass, per the operator's explicit request to
 cover *"екосистеми у цілому, зокрема довгострокові"* (the ecosystem as a whole, specifically
@@ -2515,7 +3155,7 @@ long-term aspects) — a deliberate register shift from §16's Wave-0 implementa
 multi-year sustainability, governance, and survivability. Same append-only, decision-record
 convention as §16.
 
-### 17.1 Protocol governance — BDFL now, open to revision later
+#### 17.1 Protocol governance — BDFL now, open to revision later
 Operator's ruling (Recommended option, confirmed): the operator decides protocol/kernel changes
 unilaterally for now (AGPLv3, §16.57, permits this — copyleft governs redistribution, not
 decision-making authority), with no formal RFC/maintainer-council process imposed prematurely.
@@ -2524,7 +3164,7 @@ self-host vendors who'd need a real voice** — recorded as a deliberate, revisi
 a permanent structural decision. Named here so a future governance change has a clear "why now"
 anchor rather than looking like an unexplained reversal.
 
-### 17.2 Crypto-agility — a rotation plan from day one, not deferred
+#### 17.2 Crypto-agility — a rotation plan from day one, not deferred
 Operator's ruling (Recommended option, confirmed): given ML-DSA-65 and other algorithms in the
 capability-cert stack (§16.48 root/delegating certs, HybridSigner) could be broken or
 deprecated over a 10-20 year horizon, and thousands of independently self-hosted, isolated
@@ -2535,7 +3175,7 @@ partially aligned with the existing hybrid ML-DSA-65⊕Ed25519 scheme's own prec
 two algorithms simultaneously) — named as a concrete requirement for the P39/P48/capability-cert
 blueprint work, not designed in full here.
 
-### 17.3 Ecosystem survivability if dowiz (the company) ceases to exist
+#### 17.3 Ecosystem survivability if dowiz (the company) ceases to exist
 Operator's ruling (Recommended option, confirmed): **claimed hubs must keep working
 independently of dowiz's continued existence** — the hub software is AGPL-open (§16.57) so the
 code itself survives regardless, and this section adds the deployment-level guarantee: no new
@@ -2552,7 +3192,7 @@ path that makes "hubs survive without dowiz" an actual mechanism rather than onl
 intent. Named as a concrete requirement for the hub-provisioning/tunnel blueprint, not designed
 in full here.
 
-### 17.4 Business model, federation, and agent-autonomy boundary — all long-term stances
+#### 17.4 Business model, federation, and agent-autonomy boundary — all long-term stances
 Three closes:
 - **Fixed subscription, no transaction percentage, is a principle forever** — not a Wave-0
   starting point subject to later monetization creep. Revenue growth comes only from hub count
@@ -2572,7 +3212,7 @@ Three closes:
   reversible) that is not yet designed — named as a gap for whichever blueprint eventually
   specifies the agent's permission model in detail.
 
-### 17.5 AR/VR readiness now, regulatory compliance stays vendor-side, opt-in anonymous ecosystem telemetry
+#### 17.5 AR/VR readiness now, regulatory compliance stays vendor-side, opt-in anonymous ecosystem telemetry
 Three closes:
 - **Build in AR/VR/new-form-factor readiness now** (reverses the Recommended "not priority yet"
   option) — consistent with this dialogue's established pattern (§16.40, §16.56: the operator
@@ -2581,6 +3221,12 @@ Three closes:
   interfaces; this ruling means that extension is designed for now, not left as a theoretical
   future compatibility claim. Adds real scope to the already-large §16.30/§16.35 UI research
   program — named honestly, consistent with how §16.40's schedule-risk acceptance was recorded.
+  **Registered as P97 (2026-07-20):** this ruling, together with DZ-12
+  (`docs/design/dowiz-interfaces/BLUEPRINTS-DOWIZ-INTERFACES.md`), P38-rev §12.2
+  (`CORE-ROADMAP-2026-07-17/BLUEPRINT-P38-webgpu-render-engine.md`), and the
+  spatial-storefront-voice-hub synthesis's Lane B, is consolidated into
+  [`BLUEPRINT-P97-ar-vr-spatial-interface-2026-07-20.md`](BLUEPRINT-P97-ar-vr-spatial-interface-2026-07-20.md)
+  — the first-class item this ruling's "readiness now" scope now lives under.
 - **Regulatory compliance (food safety, courier labor/gig-economy law, payment regulation)
   stays permanently the vendor's/venue's responsibility** (Recommended, confirmed) — coherent
   with dowiz's protocol-not-operator stance throughout this roadmap (§16.3 couriers, §16.29
@@ -2593,7 +3239,7 @@ Three closes:
   invariant; extends §16.53's heartbeat (liveness-only) with an explicit, consent-gated
   aggregate-metrics layer, kept clearly distinct from it.
 
-### 17.6 Fork-competition accepted as the price of openness; courier protocol is species-agnostic
+#### 17.6 Fork-competition accepted as the price of openness; courier protocol is species-agnostic
 Two closes:
 - **A competing protocol forked from the AGPL-open hub software is an accepted outcome, not a
   risk to design against** (Recommended, confirmed) — coherent with §17.1/§17.3's own openness
@@ -2606,7 +3252,7 @@ Two closes:
   anticipated as a future need — this is a durability property of the existing design, not a
   new build item.
 
-### 17.7 Root-of-trust decentralization, legacy-version security posture, optional open-standard interop
+#### 17.7 Root-of-trust decentralization, legacy-version security posture, optional open-standard interop
 Three closes:
 - **Each hub can be its own self-signed capability-cert root** (Recommended, confirmed) — closes
   a real potential dowiz-forever dependency for cryptography, exactly parallel to §17.3's
@@ -2624,7 +3270,7 @@ Three closes:
   opt-in fields for vendors who want interoperability with external systems, without dowiz
   inventing a competing closed taxonomy or mandating external-standard compliance.
 
-### 17.8 Cloudflare itself abstracted as a swappable tunnel layer; governance form deferred
+#### 17.8 Cloudflare itself abstracted as a swappable tunnel layer; governance form deferred
 Two closes:
 - **Cloudflare-the-company is a third dependency in the same risk class** as the dowiz-account
   CF Tunnel (§17.3) and the dowiz-signed cert root (§17.7) — caught by asking the same class of
@@ -2641,7 +3287,7 @@ Two closes:
   revision, not designed now" framing; no premature foundation structure is being built ahead
   of the actual need for one.
 
-### 17.9 Hetzner also abstracted as a swappable VPS port; synthesis of the four forever-dependency fixes
+#### 17.9 Hetzner also abstracted as a swappable VPS port; synthesis of the four forever-dependency fixes
 Hetzner gets the identical abstraction (Recommended, confirmed): an abstract VPS-hosting port
 with Hetzner as the Wave-0 default, not hardcoded into the architecture — completing the
 symmetry with §17.8's Cloudflare-tunnel fix.
@@ -2660,7 +3306,7 @@ survive without dowiz" claim, not just a restated intention.
 
 ---
 
-## 18. Launch-blocker research → synthesis → blueprint program (2026-07-18)
+### 18. Launch-blocker research → synthesis → blueprint program (2026-07-18)
 
 Appended as the closing pass of the same-day dialogue that produced §16-§17. Once the operator's
 ~150-question dialogue settled the architecture, the explicit next instruction was: prioritize
@@ -2668,7 +3314,7 @@ for "first real order," dispatch Opus research per priority cluster grounded in 
 architecture, synthesize with Fable into one build plan, then have Opus write swarm/wave-ready
 blueprints — full interface ambition preserved, not truncated, with product-designer rigor.
 
-### 18.1 Research phase — 5 parallel Opus passes
+#### 18.1 Research phase — 5 parallel Opus passes
 Each grounded in the relevant §16/§17 sections, researching real 2026 prior art via WebSearch
 (not guessed), written to `docs/research/`:
 - **R1** `OPUS-R1-INTERFACE-RENDERING-2026-07-18.md` — wgpu UI, a11y, text input, typography,
@@ -2698,7 +3344,7 @@ their own MoR** — dowiz never becomes a party to the money) and R1's IME-vs-§
 (resolved: **Latin+Cyrillic only for Wave-0**, non-Latin/IME scripts deferred to v2, consistent
 with §16.58's existing RTL ruling).
 
-### 18.2 Synthesis phase — Fable
+#### 18.2 Synthesis phase — Fable
 `docs/design/CORE-ROADMAP-2026-07-17/SYNTHESIS-LAUNCH-BLOCKERS-2026-07-18.md` reconciles all
 five reports against §16-§17 and the two rulings above into: a cross-cutting dependency map
 (12 resolutions, X1-X12 — e.g. AccessKit-web being planning-only forces a hand-rolled a11y-mirror
@@ -2718,7 +3364,7 @@ released, state retained, still the vendor's) — qualifies §16.57 without reop
 (D) Food-court N-leg checkout proven first in **Eurozone/EUR via Stripe Connect + Adyen**,
 a feature-scope limit, not a platform-architecture one (§16.20 stays market-agnostic).
 
-### 18.3 Blueprint phase — Opus, swarm/wave-ready
+#### 18.3 Blueprint phase — Opus, swarm/wave-ready
 2 canon-diffs (dated append-only corrections, not rewrites) + 18 new blueprints across 4 build
 waves, each written against the 20-point standard with live-verified ground truth (real
 file:line citations against actual kernel/engine code, not assumed):
@@ -2753,7 +3399,7 @@ grammar → P64, cert wire format → P59), and Track-R (procedural glyphs, XR b
 intent-UI research — permanently off the critical path) are in the synthesis document, not
 duplicated here. This section is the index; the blueprints and the synthesis are the source.
 
-### 18.4 Architectural tension found at commit time — resolved, §16/§18 wins
+#### 18.4 Architectural tension found at commit time — resolved, §16/§18 wins
 
 While committing §18's blueprint program, a concurrent swarm's merge to `main`
 (`588188efad0` — `merge(feat/g3-dom-fieldsim)`) landed **DOM-based web UI work**
@@ -2792,7 +3438,7 @@ folded into this roadmap section — see the isolated reconciliation branch this
 
 ---
 
-## 19. Perf, physics and mesh research wave — status-ledger registration (2026-07-19)
+### 19. Perf, physics and mesh research wave — status-ledger registration (2026-07-19)
 
 Appended after §18, same append-only rule. The 2026-07-18→19 session ran ~20 dispatched Opus
 investigations + 5 synthesis/blueprint passes over the kernel/engine performance surface, the
@@ -2813,7 +3459,7 @@ dependency sequence, §5 the 15 outstanding operator decisions. Adversarial cove
 [`CORE-ROADMAP-2026-07-17/BLUEPRINT-Q-SERIES-VERIFICATION-OBSERVABILITY-2026-07-19.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-Q-SERIES-VERIFICATION-OBSERVABILITY-2026-07-19.md).
 All three already carry index rows in [CORE-ROADMAP-INDEX §10](CORE-ROADMAP-INDEX.md).
 
-### 19.1 What the wave covered — four clusters + a positive-negative closed set
+#### 19.1 What the wave covered — four clusters + a positive-negative closed set
 
 | Cluster | Items | One-line |
 |---|---|---|
@@ -2829,7 +3475,7 @@ standing policy* (BitNet, QKD, fraud scoring, bit-slicing, energy-currency; each
 reopening trigger). These honest negatives are load-bearing deliverables — see ledger §2 for the
 two-kinds-of-closed distinction (do not re-litigate a NO-TARGET item as "never investigated").
 
-### 19.2 Dependency-ordered execution sequence (high level — full table in ledger §3)
+#### 19.2 Dependency-ordered execution sequence (high level — full table in ledger §3)
 
 Two largely **independent lanes** that parallelize fully: the **dowiz kernel/engine perf lane**
 (P75, P77, P79–P81, P83, P87–P89, P90-merge, P91) never touches bebop2, and the **bebop mesh +
@@ -2852,7 +3498,7 @@ natural substrate for P92's measure-first D-BENCH gate) — neither is a hard bl
 Highest-leverage single items: **P75** (dowiz) and **P85+C3** (bebop), then **M1**. P92/P94/
 P86/P87 are correctly late — opt-in, gated, or awaiting an operator ruling not yet taken.
 
-### 19.3 Current real state — all LOCAL/UNPUSHED; three pre-existing code artifacts
+#### 19.3 Current real state — all LOCAL/UNPUSHED; three pre-existing code artifacts
 
 Everything in this wave is **local, unpushed planning**. Push-state re-verified 2026-07-19 01:00:
 dowiz `origin/main` sits at `4b30c9b4c` with the **entire local main line above it unpushed**
@@ -2872,6 +3518,7 @@ in scratchpad pending an operator/lead restore (OD-15). The **critical path is o
 not more design**: ledger §5 lists all 15 (gate-0 C3, P85 closure path, the push decisions, the
 P38 §4.2 GPU call, the two P93 privacy/broadcast forks, the P92 D-BENCH proceed gate).
 
+<<<<<<< HEAD:docs/design/MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md
 ## 20. Living-interface arc — status-ledger registration (2026-07-19)
 
 Appended after §19, same append-only rule. Registers the `docs/design/living-interface-2026-07-16/`
@@ -2928,3 +3575,1990 @@ build.** Full plan: `equations-knowledge-base-2026-07-19/BLUEPRINT-2026-07-19.md
   source), and fail-closed default on a missing/stale verdict (block, matching `evaluate_gate`'s
   existing RED-on-absent pattern, vs. degrade to noether-only). See BLUEPRINT §2 for the full
   reasoning behind each question.
+=======
+# Part III — Quality-Bar Standard (verbatim, 2026-07-17)
+
+> Full content of the former `CORE-ROADMAP-STANDARD-2026-07-17.md`, inlined here 2026-07-20; the
+> standalone file has been deleted. This is standing doctrine, not a status snapshot — it does not
+> go stale the way the ground-truth/status docs do.
+
+## CORE ROADMAP STANDARD (2026-07-17) — the planning ideas, saved before execution
+
+> **Status: this document is the operator's standing quality bar for ALL future planning in this
+> repo, not a one-off deliverable.** Per operator directive (2026-07-17, verbatim intent preserved
+> in `docs/design/bebop2-mesh-tensor-hermetic-2026-07-17/00-SOURCE-PROMPT.md` and this session's
+> transcript): "This should be not a guidance - but level of quality constant invoked for any
+> planning... zero divergencies from it." Every future blueprint in this repo is measured against
+> §2 below until the operator says otherwise.
+>
+> **Sequencing, per operator instruction:** this document is Step 1 — "save the planning ideas
+> first." Step 2 — "then save the plans after finishing them" — is the phase-by-phase execution
+> this document orchestrates, starting immediately after this lands (§5).
+
+---
+
+### 0. Ground-truth inventory (verified this session, not assumed)
+
+Before designing anything new, the existing planning corpus was enumerated live (not from memory
+or an older doc's claim):
+
+**Pre-existing master roadmaps (dowiz, duplicated verbatim into the `dowiz-agentic-mesh` and
+`dowiz-spectral-evolution` worktrees by shared history):**
+- `MASTER-ROADMAP-MVP-2026-07-12.md` (repo root) — earliest, MVP-scoped.
+- `docs/design/MASTER-BUILD-SEQUENCE-UPDATED-2026-07-11.md`
+- `docs/design/MASTER-INTEGRATION-PLAN-2026-07-14.md`
+- `docs/design/MASTER-ROADMAP-10-PHASES-2026-07-14.md`
+- `docs/design/MASTER-EXECUTION-PLAN-2026-07-13.md` — **added 2026-07-17**: omitted from this
+  inventory as originally written; the P-I Wave-1 audit (§0/§2.5) found it (the SOVEREIGN doc's own
+  header already named it) — so the superseded set is **5 older docs, not 4**, and the banner pass
+  covered all 5.
+- `docs/design/MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md` — **the newest, most-actively-
+  referenced one**, with 19 phase blueprints already written (`docs/design/sovereign-roadmap-
+  2026-07-16/BLUEPRINT-P01..P19-*.md`) and a live P06-blocks-three-arcs finding already tracked in
+  memory (`sovereign-architecture-19-phase-roadmap-2026-07-17.md`).
+
+**Consolidated arc summaries (each a self-contained sub-roadmap for one initiative):**
+- `dowiz-agentic-mesh/docs/design/agentic-mesh-protocol-2026-07-17/AGENTIC-MESH-PROTOCOL-CONSOLIDATED.md`
+- `dowiz-spectral-evolution/docs/design/spectral-energy-flow-evolution-2026-07-16/SPECTRAL-EVOLUTION-CONSOLIDATED.md`
+- `docs/design/living-interface-2026-07-16/LIVING-INTERFACE-ROADMAP.md`
+
+**Today's mesh-masterwork corpus (this session):**
+- `docs/design/bebop2-mesh-tensor-hermetic-2026-07-17/` — source prompt, 10 batch/correction docs,
+  the v1 synthesis, and (in flight) the v2 synthesis.
+- 13 additional standalone research blueprints landed yesterday/today (latency, eigenvector,
+  cache-tensor-arena, event-driven orchestrator, fault isolation, Linux-engineering-adoption,
+  memory-optimization, native-telemetry, wave-scheduling, delivery-flows audits, web3 synthesis).
+
+**Decision on consolidation (per "not revisit twice"):** `MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-
+2026-07-16.md` becomes the **single canonical entry point**. It already has the newest phase
+structure and is already the one this session has been updating (§8.12/Phase 30 added earlier
+today). The four older MASTER-* docs are **not deleted** (they're historical record of earlier
+planning rounds, real audit trail) but get an explicit **SUPERSEDED-BY banner** pointing here, so
+a future reader never re-derives from a stale one. This document (`CORE-ROADMAP-STANDARD`) is the
+**quality contract** the canonical roadmap and every phase blueprint under it must satisfy — it is
+deliberately a *different document* from the roadmap itself, because a standard shouldn't be
+rewritten every time a phase changes.
+
+---
+
+### 1. Scope boundary (operator-stated, binding)
+
+- **All local repos**: `dowiz` (this repo), `bebop-repo` (`bebop2/` crates — active), `openbebop`
+  (live push remote for bebop-repo), `dowiz-agentic-mesh`, `dowiz-spectral-evolution`,
+  `hermes-agent-kernel-rewrite` where cited.
+- **Excluded**: the original `bebop` repo (git `origin` remote of `bebop-repo`,
+  `git@github.com:SyniakSviatoslav/bebop.git`) — legacy, archived, ideas may be raided from it but
+  it is not maintained or planned against.
+- **Execution substrate**: kernel/Rust/WASM only, per the standing execution-model rule
+  (`bebop2-mesh-masterwork-2026-07-17.md`) — Node/TS/JS/Python are adapters/bridges at most, being
+  actively eliminated (`tools/eqc-rs` port, `apps/web`+`packages/*` decommission already landed
+  this session).
+- **Deployment target**: decentralized local nodes (courier devices, owner-operated hub servers,
+  client devices) — Fly/Supabase decommissioned this session, not the planning target going
+  forward.
+
+---
+
+### 2. THE STANDARD — what every phase blueprint under the canonical roadmap must contain
+
+This is the reusable contract (operator: "not a guidance — a quality constant"). A blueprint that
+skips any of these is incomplete, not merely light:
+
+1. **Ground truth section** — every claim about existing code carries a `file:line` cite verified
+   *this pass*, not inherited from an older doc's claim. "Ground truth is non-discussible."
+2. **DoD (Definition of Done)** — falsifiable, machine-checkable where possible (a test that goes
+   RED before the change and GREEN after, not a prose checkbox).
+3. **Spec-driven + event-driven TDD plan** — the spec (types/schemas/invariants) precedes the test,
+   the test precedes the code; state transitions are modeled as events (matches the kernel's own
+   `decide`/fold law), tests assert on event sequences, not just end-state.
+4. **Predefined types & constants** — every new domain concept gets a named Rust type/const before
+   implementation starts (no stringly-typed or magic-number placeholders in a blueprint).
+5. **Adversarial/chaos test cases, including intentionally-failing ones** — at least one test per
+   blueprint designed to break the invariant under test (operator: "test cases... designed to
+   literally break everything"), not only happy-path coverage.
+6. **AI/system-hazard safety section grounded in math/engineering** — reachability of an unsafe
+   state must be argued from type-system/invariant structure (per the Monocoque doctrine already
+   established: `docs/design/hermetic-architecture-2026-07-16/HERMETIC-ARCHITECTURE-PRINCIPLES.md`
+   + `bebop2-mesh-tensor-hermetic-2026-07-17/19-SYSTEM-COHERENCE-AND-AUTHORITY-BOUNDARY-REDO.md`'s
+   "finite anchored authority, not zero" finding) — never a policy/prose assurance.
+7. **Links to docs & memory** — every blueprint cross-references the memory files and design docs
+   it depends on or supersedes, by name, so the index (§6) stays navigable.
+8. **Schemas designed for scaling** — data shapes must state their scaling axis (nodes/tiles/
+   events/sec) and the point at which they'd need to change, not be presented as timeless.
+9. **Linux-OS-development-style engineering discipline** — per
+   `docs/design/BLUEPRINT-LINUX-ENGINEERING-PRINCIPLES-ADOPTION-2026-07-17.md`'s verdict framework
+   (ALREADY-EQUIVALENT / REINFORCES / EXTENDS / GAP / DOES-NOT-TRANSFER) — reused, not re-derived.
+10. **Benchmarks + telemetry** — every hot-path change ships with a measured before/after number
+    (this session's own build-test-first passes are the model: real `cargo bench`/microbenchmark
+    output, not an estimate) and a telemetry hook so regressions show up automatically, not only at
+    review time.
+11. **Microservice-style isolation / bulkhead** — a blueprint touching a shared resource must name
+    the isolation boundary that keeps its failure from propagating (per idea #141 in the mesh
+    dialogue's 185-item ledger, and the already-built `bounded_drainer.rs`/`budget.rs`
+    degrade-closed patterns).
+12. **Mesh-networking awareness** — where relevant, state whether the feature is node-local,
+    gossip-propagated, or requires the transport layer (`iroh_transport.rs`/`discovery.rs`), and
+    cite the real payload-size/frequency budget it needs.
+13. **Rollback/fallback + self-healing/self-terminating, stated as math, not metaphor** — per the
+    operator's own three-way synthesis (idea #185): Self-Healing = redundant/error-correcting math
+    property; Self-Termination = a hard invariant boundary (unrepresentable-state, not a
+    supervisor's decision); Snapshot Re-entry = cheap regenerative recovery from the last valid
+    epoch. A blueprint claiming any of these three must show which one and why, not use the words
+    loosely.
+14. **Error-propagation isolation + "smart index" for catching mistakes** — cite the specific gate
+    (type system, drift-gate, CI check) that would turn the bug class this blueprint introduces
+    into a compile-time or CI-time failure, not a runtime surprise.
+15. **Living-memory awareness (time/topology/data-flow)** — cross-reference
+    `internal-retrieval-living-memory-arc-2026-07-14` where the blueprint's data has a temporal or
+    topological access pattern, rather than treating storage as flat.
+16. **Tensor/spectral representation where applicable** — reuse the hybrid/spectral tensor-graph
+    machinery already built (`kernel/src/spectral.rs`, `spectral_cache.rs`, the Phase-28 arena) and
+    the `tools/eqc-rs` equation-compiler for any closed-form math, storing generated equations as
+    data (RGB-seed/procedural-encoding pattern, idea #130, ADOPTED per
+    `20-BUILD-TEST-FIRST-REEXAMINATION.md`'s CORDIC proof) where a deterministic portable
+    implementation exists — never a per-platform-libm form.
+17. **Regression tracking** — every blueprint that fixes or changes behavior gets a named regression
+    test that stays in the suite permanently, referenced in `docs/regressions/REGRESSION-LEDGER.md`.
+18. **Clear instructions for other agentic workers** — a blueprint must be executable by an agent
+    with zero prior session context: explicit file targets, explicit acceptance criteria, no
+    "you'll know it when you see it" language.
+19. **Reuse-first, upgrade-if-needed, unbounded token/time budget** — a blueprint proposing new
+    machinery must first show the existing pattern it could extend and why extension doesn't work;
+    "it would take too long" or "it's simpler to skip" are not valid reasons to avoid a needed
+    refactor (operator: "Refactoring or major changes must not be avoided to avoid responsibility").
+20. **Hermetic principles honored explicitly** — cite which of the seven Hermetic principles
+    (`HERMETIC-ARCHITECTURE-PRINCIPLES.md`) the blueprint's design choice reflects or tests against.
+
+---
+
+### 3. Phase structure — lowest (core) to highest, absorbing existing work rather than re-deriving
+
+> **NAMING RULING (2026-07-17, Wave 3 — P-I audit §4):** the "P-A..P-I" letters below are ratified
+> as **`Layer A..I`** — an orthogonal **altitude axis** grouping clusters of numeric phases, never a
+> renumbering of the canonical execution numbering **P01–P30** (P01–P19 as numbered blueprint files
+> in `sovereign-roadmap-2026-07-16/`; P20–P30 as standalone blueprints indexed from SOVEREIGN
+> §8.1–§8.12 — this section's original "P01-P19" reconcile scope is stale by 11 phases). The "P-"
+> prefix is retired from prose to kill the P-D/P04 lexical collision; on-disk filenames keep their
+> provenance names. Crosswalk table: `CORE-ROADMAP-INDEX.md`.
+
+Ordering rule (operator, restated across this whole session): smallest kernel-level abstraction
+first, highest-level product/UI last. Each phase below states what it absorbs from the existing
+252-document corpus rather than starting blank.
+
+| Phase | Scope | Absorbs / supersedes | New this pass |
+|---|---|---|---|
+| **P-A. Core kernel primitives** | Equations-not-primitives (`eqc-rs`), tensor/sparse/branchless memory layout, HugePages/tiling | Mesh-masterwork Batch 1, Batch 8, `BLUEPRINT-EIGENVECTOR-REFACTOR-PLAN`, `BLUEPRINT-CACHE-REFERENCE-GRAPH-TENSOR-ARENA` | Wire `eqc-rs` into `geo.rs:39`/`domain.rs:95` (already identified, unstarted) |
+| **P-B. State/consistency + living memory** | Event log, content-hashing, snapshots/epochs, CRDT boundary | Batch 2, System-Coherence doc 19 (tile→normalize→hash→snapshot chain + the 2 real bugs found) | The normalize-before-hash fix; drift-gated arena snapshot |
+| **P-C. Safety / self-healing / self-terminating** | Circuit breakers, invariants, the watchdog/authority boundary | Batch 3, doc 19 Part 2 (finite-anchored-authority finding) | Hysteresis fix (`hydra.rs`), restart-intensity as a launch-path predicate (T-6) |
+| **P-D. Consensus / trust / capability** | Sybil-resistance, DecisionUnit gossip, PoQ | Batch 4, 6, 7, `BLUEPRINT-LATENCY-ELIMINATION` §2 (Decision Compiler) | `RootDelegationPolicy` closure (`node_id.rs:156-184`) — open operator decision |
+| **P-E. Network / hardware / crypto-in-core** | Mesh transport, hardware attestation, crypto-verification speedup | Batch 5→14v2 (target-corrected), the SIMD-batched-verify + core/cache-domain-NUMA redirect (in flight) | Pending the current Opus redo |
+| **P-F. Local AI / MoE mesh** | DecisionUnit compilation, MoE-as-mesh-mirror, STARK-in-core | Batch 21 (distributed-inference rejection), pending MoE-specific redo (in flight) | Pending |
+| **P-G. Product/UI on kernel** | WASM bridge wiring, physics-UI, RLS-safe migration | Batch 9 (bridge already exists, wiring gap), `BLUEPRINT-P16-product-ui-rebuild`, `LIVING-INTERFACE-ROADMAP` | Money dual-authority flip (explicitly gated, not Wave 1) |
+| **P-H. Ops / telemetry / benchmarks / regression** | Native telemetry, chaos testing, regression ledger | `BLUEPRINT-NATIVE-TELEMETRY-LATENCY-EXPLAINABLE-EVENTS`, `BLUEPRINT-WAVE-SCHEDULING-CONCURRENT-EXECUTION`, `REGRESSION-LEDGER.md` | Chaos-injection test harness (idea #143), unconditional-fail test suite |
+| **P-I. Cross-repo consolidation** | Update the 4 older MASTER-* docs with SUPERSEDED banners, reconcile P01-P19 against this structure | All 5 pre-existing master roadmaps | The consolidation pass itself |
+
+P06 (ML-DSA `key_V` split-identity verifier) remains the cross-cutting blocker already identified
+(memory: `sovereign-architecture-19-phase-roadmap-2026-07-17.md`) — it gates P-C's independent-
+verification leg and P-G's product-safety story. Highest-leverage single build item across those
+phases, unchanged finding.
+
+**Correction (2026-07-17, P-D audit + BLUEPRINT-P-D, both independently verified):** P-D's
+capability issuance (`RootDelegationPolicy` in `bebop-repo/bebop2/proto-cap/src/node_id.rs:156-184`)
+is **NOT gated by P06**. P06 is a dev-time CI merge fence over code diffs; P-D's issuance is
+runtime courier onboarding. They share substrate (`load_genesis`/`verify_chain`) and the open C4b
+hardening item, but neither functionally blocks the other — P-D's mint/admission path is
+Ed25519-only today, with zero `key_V` dependency in the code (grep-confirmed). See
+`docs/design/CORE-ROADMAP-2026-07-17/P-D-audit-root-delegation-policy.md` §3 for the full
+Descartes-square reasoning behind this correction.
+
+---
+
+### 4. Orchestration plan (Step 2, starting immediately after this saves)
+
+Per operator: "orchestrate the planning phase smartly assigning each agent or small team of agents
+the corresponding phase." Model assignment restated: **Opus for research/audit** (grounding each
+phase in live code), **Fable for reasoning/planning** (writing the actual blueprint against §2's
+contract). Waves are collision-free (different files/phases, no shared mutable state):
+
+- **Wave 1** (parallel, Opus): ground-truth audits for P-D (RootDelegationPolicy), P-G (WASM-bridge
+  wiring detail), P-H (existing telemetry/regression tooling inventory), P-I (read all 5 old
+  MASTER-* docs + all 19 P0x blueprints in full, produce a diff-against-this-standard).
+- **Wave 2** (parallel, Fable, after Wave 1 + the in-flight mesh resynthesis both land): write the
+  actual phase blueprints P-A through P-I against §2's 20-point contract, each citing its Wave-1/
+  mesh-masterwork grounding.
+- **Wave 3** (single Fable pass): the canonical roadmap update — supersede-banner the 4 old
+  MASTER-* docs, fold P-A..P-I into `MASTER-ROADMAP-SOVEREIGN-ARCHITECTURE-2026-07-16.md`, build
+  the master index (§6 below, promoted to a real `docs/design/CORE-ROADMAP-INDEX.md`).
+
+Not dispatched yet — this document is the Step-1 save. Wave 1 dispatches next.
+
+---
+
+### 5. What this document deliberately does NOT do
+
+Per the standard it sets (§2 item 19: reuse-first) this document does not re-derive P06, the
+mesh-masterwork verdicts, or the Hermetic principles — it points at them. It does not yet contain
+the actual phase blueprints (that's Wave 2's output, saved separately and indexed here once real).
+
+# Part IV — Ground-Truth Re-Baseline, 2026-07-19 (verbatim, historical)
+
+> Full content of the former `GROUND-TRUTH-2026-07-19-FINAL.md`, inlined here 2026-07-20; the
+> standalone file has been deleted. **Superseded for LIVE status by Part I §0 above** — kept here
+> verbatim for its landing-wave detail and the specific conflict-resolution/branch-audit record,
+> which remain historically accurate for that day even though the numbers are no longer current.
+
+## GROUND-TRUTH — dowiz local `main` final state (2026-07-19)
+
+> Authoritative re-baseline after the autopilot landing wave. Supersedes
+> GROUND-TRUTH-2026-07-17 (that doc was stale — main had moved through P57–P74
+> by the time it was written). Read THIS for current truth; pasted "pending" todos
+> from compacted sessions are hypotheses, not facts.
+
+### What is on local `main` (verified this session)
+
+#### Harness A3/A4 (the real remaining harness work)
+- `feat/harness-a3a4-fix` → main `5ef8fbb78`.
+- A4: dead concurrency cap → `WorkerSlots` counting semaphore (try_acquire → typed
+  `DispatchError::Busy`, degrade-closed refusal; slot guard released on thread completion).
+- A3: unbounded `MemStore` cache → `BoundedStore<S>` LRU (default cap 1024), needed
+  `BlockStore::remove` (additive default-noop + real impls for MemStore/FileBlockStore).
+- VERIFIED: llm-adapters 21 pass; kernel 866→894 pass; `cargo tree -p dowiz-kernel` = NO
+  http-client (kernel stayed HTTP-free).
+
+#### Product/CI branches landed this wave (all `--no-ff`, all gated green by the
+pre-commit hook's `cargo test` + gitleaks + firewall)
+- harness A3/A4, p34, p71, p79, p80, p81, p83, p88, p89, p96, p01, p75, p77,
+  p72-v3, contention-bench, p91 (ML-KEM ring), p47 (payment rail), reconcile-redline,
+  p06 (took main's CLOSED HybridSigner — see below).
+
+#### Final test evidence (fresh, this session)
+- kernel: **894 passed / 0 failed** (3 ignored)
+- engine: **121 passed / 0 failed**
+- ci-truth (tools/ci-truth): builds clean; HybridSigner = main's CLOSED variant
+  (commit `58987d79d`, e2e GREEN).
+- RED-line grep-gates still green: `payment_capability::red_line_no_real_provider_references`,
+  `wallet::no_card_data_in_wallet`, kernel firewall (no http-client).
+
+### Conflicts resolved this wave (root-cause, not assumptions)
+- `kernel/Cargo.toml` `[[bench]]` block: p80's 8-entry expansion + contention's
+  `[[bench]] name="contention"` — both additive, merged (kept p80's full block + appended
+  contention entry).
+- `kernel/benches/criterion.rs`: p77's `bench_spool_drain`/`bench_spine_build` + p89's
+  `bench_field_eigen` — both registered in `criterion_group!` (no drop). Repaired a
+  merge-induced dropped `spine` import.
+- `kernel/src/lib.rs` (p72-v3): kept HEAD's real `pub mod` decls (wallet/hub_provisioning/
+  span_metrics/hub_supervisor/landing) that p72-v3 predated; dropped the empty branch side.
+- `kernel/src/ports/customer.rs`: removed a merge-duplicated `use crate::vendor::VendorId;`,
+  restored `use crate::rng::Rng;` (used 12× in file).
+- `.gitignore` (reconcile-branch): kept both sides' additions (`.worktrees/` + ci-truth
+  v1-sigverify telemetry jsonl).
+
+### p06 decision (explicit)
+`feat/p06-v1-real-signer` was NOT merged wholesale: it carried 81 conflict hunks against
+main's already-CLOSED `HybridSigner` (commit `58987d79d`, independent 3-model-verified
+GREEN). Its only genuine delta vs main was native signing telemetry (SIG_TAG_K/V,
+`record_telemetry`, JSONL sink). To avoid destabilizing the verified-green signing gate,
+the merge took main's CLOSED signer (HEAD) for `ci-truth/src/{main,v1}.rs`. **p06's
+telemetry delta is DEFERRED** — re-port it as an additive module once desired, don't
+re-litigate the signer.
+
+### Unmerged-branch final audit (2026-07-19, definitive)
+Re-checked every unmerged branch with `git log main..<branch>` (NOT `main...branch`, which
+falsely inflates via main's later files):
+- **22 branches fully contained in main** (main..branch empty) → redundant junk. Safe to delete:
+  all `recover/*` (except the 2 stash-* below), `*-snapshot-*`, `pq-crypto-tier1`, `kalman-organ`,
+  `markov-attractor-signal`, `agent-capability-boost`, `decentralized-pq-protocol`,
+  `remove-legacy-thin-layer`, `rw-02/03`.
+- **`docs-research-2026-07-19`** (9 commits) → PROVEN REDUNDANT: merge brought only 3 conflicted
+  files (README.md + Q-SERIES + SYNTHESIS blueprints); all 3 were the branch's STALE versions that
+  main already superseded via the P75–P96 waves. `git diff HEAD` after resolving = empty → no unique
+  content. Aborted (no empty merge).
+- **`recover/stash-1-2994e6c8`** (77 commits) + **`recover/stash-2-93919edd`** (40 commits) → unique
+  commits exist, BUT they are `git stash` recovery branches from the SUPERSEDED `feat/sovereign-core-
+  phase-zero` arc (dated 2026-07-06/07). Operator rule: NEVER auto-merge `recover/*`. Left unmerged;
+  operator decision.
+
+**Conclusion: zero actionable product/CI branches remain unmerged. Core roadmap is COMPLETE on
+`origin/main` (d8004a3c7). The only not-done items are operator-EXTERNAL: GitHub public-flip (P18),
+secrets-scrub, bebop frozen-lane (C3/P85) in the bebop repo, and cleanup of the 24 redundant local
+branches (deletion is operator hygiene, not required for roadmap completion).**
+
+### Dashboard
+- Local `main` HEAD after wave: `5a97e1f6f` (p06 merge).
+- Kernel 894 / engine 121 / ci-truth green. 0 failures.
+- Push to `origin/main`: authorized, executed per operator word.
+
+# Part V — Space-Grade Kernel Execution Roadmap, 78 Items (verbatim, 2026-07-19, reconciled 2026-07-20)
+
+> Full content of the former `SPACE-GRADE-KERNEL-EXECUTION-ROADMAP-2026-07-19.md`, inlined here
+> 2026-07-20; the standalone file has been deleted. The ~50 individual `BLUEPRINT-ITEM-*.md` files
+> this doc links to per-item remain separate — too many individual files to also inline, and they
+> are genuine detail documents, not competing roadmap narratives. **Read the reconciliation table
+> immediately below FIRST** — it corrects ~40 items whose status changed on 2026-07-20, after this
+> doc's own prose was last touched.
+
+> **2026-07-20 status reconciliation (added by the roadmap merge, per operator request to prune
+> staleness rather than just inline text as-is).** The item-by-item prose below carries ✅ markers
+> current only through 2026-07-19 — the autopilot execution wave that followed on 2026-07-20 (see
+> `SPACE-GRADE-VERIFIED-STATUS-LEDGER-2026-07-20.md`, kept standalone as the evidentiary ledger)
+> closed roughly 40 more items that the prose text below does not yet reflect inline. Rather than
+> hand-edit ~40 deep-buried paragraphs (risking transcription drift in dense technical text), this
+> table is the single accurate status source for every item as of 2026-07-20 — read it FIRST, then
+> the prose below for design rationale. Items not listed here (1,3,4,13,15–19,25,29,30,73–78) are
+> unaffected by this reconciliation: their own inline markers (or D11's spec-only status for
+> 73–78) already reflect current truth.
+
+| Item | Doc's own inline marker (as written below) | True status, 2026-07-20 | Evidence |
+|---|---|---|---|
+| 2 | (verification note, no ✅) | DOC/CI-ONLY — closed | `cargo test -p dowiz-kernel file_store` green |
+| 5 | ✅ DONE 2026-07-19 | unchanged, still current | — |
+| 6 | ✅ DONE 2026-07-19 | unchanged, still current | — |
+| 7 | ✅ EXECUTED 2026-07-19 | unchanged, still current (hardening-gate + kani-gate live) | — |
+| 8 | (no marker below) | **DONE-VERIFIED** | Kani `proof_gcra_transition_contract`+`proof_gcra_two_step_interleaving`, 0 failures; commit `f84049c61` |
+| 9 | (no marker below) | **DONE-VERIFIED** | `breaker::`, 34 pass; exhaustive trip/close/half-open |
+| 10 | (spec-only in prose) | DOC/CI-ONLY, correctly design-only | TLA+ FSM — `.tla` artifacts + tlc-gate job shape, no kernel code by design |
+| 11 | (spec-only in prose) | DOC/CI-ONLY, correctly design-only | ARINC653 scheduler — TLC model is the formal artifact |
+| 12 | (spec-only in prose) | DOC/CI-ONLY pilot, gated on item 9 (now closed) | Temporal TMR fault-injection test designed, not yet landed |
+| 14 | ✅ DONE 2026-07-19 | unchanged, still current | — |
+| 20 | (no marker below) | **DONE-VERIFIED** | Option A std-only persistence; 6 new property tests; commit `f16d603d7`; kernel lib 1052 pass |
+| 21 | (no marker below) | **DONE-VERIFIED** | `autonomic::`, 7 pass; 9-LawTable exhaustive |
+| 22 | (no marker below) | **DONE-VERIFIED** | `mesh::` (pq), 8 pass; ML-DSA-65 signed hash chain |
+| 23 | (no marker below) | **DONE-VERIFIED** | `mesh::` (pq), 8 pass; gossip/import adversarial, 6 tests green |
+| 24 | (no marker below) | **DONE-VERIFIED** | `mesh::` (pq), 8 pass; KAT-gated over `pq::dsa` |
+| 26 | ✅ superseded note added this merge | measurement CLOSED 07-19, **batching itself DONE-VERIFIED 07-20** | `hydra::`, 25 pass; 53× durability throughput, opt-in; commit `85022e49d` |
+| 27 | classifier-input half ✅ DONE 2026-07-19 | classifier-input half unchanged; **the NEW-BUILD sibling half also DONE-VERIFIED** | commit `07057e2ee`; independent re-check 1 passed |
+| 28 | (spec/ruling only in prose) | **DONE-VERIFIED** | Phase A doc + `optical.rs` behind `optical` feature; re-check 3 passed; zero-dep gate holds |
+| 31 | (audit-only in prose) | **DONE-VERIFIED** | cargo-deny wired `ci.yml:245`; zero-dep-gate job exists |
+| 32 | (no marker below) | **DONE-VERIFIED** | eqc IR extension, item-18 precedent; scalar `Expr` confirmed |
+| 33 | (no marker below) | **DONE-VERIFIED** | `ITEM-33-RECONCILIATION.md`, real `cargo bench` evidence; 0/5 prior claims confirmed (refuted as noise/unsourced) |
+| 34–44 | (spec-only in prose) | **IN-PROGRESS** — 35+36+38 DONE (38's SIGSEGV root-caused+fixed, full suite 1069 green); 34/37/39–44 re-dispatched | worktree `exec/toy-pilot-arc` |
+| 45 | (spec, this merge's own correction below applies) | DOC/CI-ONLY — compile-time law recorded; **CI job not yet wired**, per this merge's own §-note below | unchanged from this session's earlier finding |
+| 46 | (spec-only in prose) | **DONE-VERIFIED** | Determinism goldens already at HEAD; inventory doc commit `0a3dfa05e`; re-check 13 passed |
+| 47 | (spec-only in prose) | **IN-PROGRESS**, after 35/42 | worktree `exec/toy-pilot-arc` |
+| 48 | (no marker below) | **DONE-VERIFIED** | `fdr::`, 26 pass; kill9/panic/hang children recovered |
+| 50 | (no marker below) | **DONE-VERIFIED** | `fdr::schema`, 6 pass; Refuted/Undecidable pinned |
+| 51 | (spec-only in prose) | **DONE-VERIFIED** | commit `be1b985c1`; re-check 5 passed |
+| 53 | (CI-job spec in prose) | DOC/CI-ONLY — closed, promotable to required | lint-gate config-only |
+| 54 | (no marker below) | **DONE-VERIFIED** | `ports::agent::sentinel`, 9 pass; RevocationSet deny-closed |
+| 55 | (no marker below) | **DONE-VERIFIED** | `spectral::`, 33 pass; K3 verdict class retrofit |
+| 56 | (no marker below) | **DONE-VERIFIED** | `spectral::`, 33 pass; `DriftBasis` recorded, grep-proven off decision path |
+| 57–58 | (spec-only in prose) | **DONE-VERIFIED** | commits `8765757ee`+`912e13af1`; telemetry re-check 1 passed |
+| 59 | (spec-only in prose) | **DONE-VERIFIED** | `agent::loop`, 52 pass; Instant-based, wasm-safe |
+| 60 | (spec-only in prose) | **DONE-VERIFIED** | already at HEAD (`cb00706b1`); engine re-check 122 passed; `FRAME_BUDGET_US` pinned |
+| 61 | (spec-only in prose) | **CORRECTED 2026-07-20 (2nd pass): NOT-BUILT, mismarked** | No dedicated runtime-counter-closure code exists beyond items 48/50/54 (already independently landed). The `fdr::` acceptance filter (min=26) is module-wide and passes only because those *other* items already push the module's test count past 26 — the filter never exercised anything specific to item 61's own claim. Ledger row and this table both need re-flagging as NEW-BUILD/GATED, not DONE-VERIFIED. |
+| 62 | (spec-only in prose) | **CORRECTED 2026-07-20 (2nd pass): NOT-BUILT, mismarked** | `parent_span_id` has **zero** grep hits anywhere in `kernel/src` — the claimed relational-linkage field does not exist in code. Same module-wide-filter root cause as item 61 (`fdr::` passes on unrelated pre-existing tests). |
+| 63 | (spec-only in prose) | **DONE-VERIFIED** | `agent::`, 52 pass; core-never-depends-on-AI firewall test green |
+| 64 | (spec-only in prose) | **DONE-VERIFIED** | commit `7f8c23b2a5`; re-check 5 passed |
+| 65 | (spec-only in prose) | **DONE-VERIFIED** | `ports::agent::cap`, 8 pass; zero direct kernel dependency |
+| 66 | (spec-only in prose) | **CORRECTED 2026-07-20 (2nd pass): NOT-BUILT, mismarked** | Zero occurrence of "scrub"/bitrot/at-rest-reverification anywhere in `kernel/src` or the repo — no durable-log-scrub feature exists. The commit that flipped this to DONE-VERIFIED (`981b24378`) touches **only** `docs/audits/hardening/HOT-PATHS.tsv` and the ledger doc itself — zero kernel code. Same module-wide-filter root cause (`event_log::` passes on 13 pre-existing, unrelated tests). |
+| 67–69 | (spec-only in prose) | **DONE-VERIFIED** | commits `ca7c00fe8`/`b11b42a24`/`42523e508`; cost_oracle 6 / footprint 5 passed |
+| 70–71 | (spec-only in prose) | **DONE-VERIFIED** | commit `ce1a74ada`; digital_twin 8 passed |
+| 72 | (spec-only in prose) | **DONE-VERIFIED** (folds under the 70–72 digital-twin close) | same worktree, `exec/cost-twin-arc` |
+| 73–74 | this merge's own correction below applies | scripts real, **not CI-wired** | unchanged, this session's earlier finding stands |
+
+**2nd-pass correction (2026-07-20, same day, independent re-verification):** items **61, 62, and
+66 above were themselves wrongly marked DONE-VERIFIED** by the first reconciliation pass, because
+that pass trusted `SPACE-GRADE-VERIFIED-STATUS-LEDGER-2026-07-20.md`'s own rows without
+re-deriving them from code. All three share one root cause: their acceptance filters (`fdr::`,
+`event_log::`) are **module-wide** rather than scoped to a test that actually exercises the new
+claim, so pre-existing test counts from *other*, genuinely-landed items (48/50/54 for `fdr::`)
+silently satisfy the stated minimum. `docs/design/SPACE-GRADE-VERIFIED-STATUS-LEDGER-2026-07-20.md`
+carries the same error at its own item 61/62/66 rows and has NOT yet been corrected there (it is
+kept standalone as a historical evidentiary record — see the correction note appended to that
+file instead of a silent rewrite). The `HOT-PATHS.tsv` rows these three items registered should be
+removed or re-scoped to a real per-claim test — not yet done, flagged as an open follow-up, not
+actioned in this documentation-only pass.
+
+**Reading rule going forward:** when this table and the prose below ever disagree again, the table
+in the ledger it cites (or a newer dated reconciliation appended above this one) wins — that is
+this whole document's own D8-style "newest wins" precedence rule, applied to itself. This 2nd-pass
+correction block is itself now the newest word on items 61/62/66 — it wins over both the table
+rows above it and the ledger file.
+
+---
+## Execution Roadmap — Space-Grade Kernel Synthesis, Items 1–32, Dependency-Ordered
+
+**Source:** `docs/design/SPACE-GRADE-KERNEL-ARCHITECTURE-SYNTHESIS-2026-07-19.md` (commit `10164bd74`).
+**Sorting rule:** actual technical dependency, lowest first — not the document's topic order. The
+two dependencies the source states explicitly — **item 21 strictly after item 9** (§16(c)) and
+**item 23 after item 22** (§17(b) addendum) — are preserved verbatim and never resequenced. Every
+other ordering choice below that is not explicit in the source is flagged **[new ordering choice]**
+with its reason.
+
+---
+
+### 0. Operator rulings — recorded 2026-07-19, same day as the synthesis
+
+All five open decision gates were presented and ruled on the same day:
+
+| Gate | Source | Ruling |
+|---|---|---|
+| GCRA lock-free TokenBucket swap | §1.3 / item 8 | **ADOPT** — gated behind the differential oracle + Kani interleaving proof already scoped in item 8; built and tested before it ships. |
+| Mesh integration approach | §17(d) / item 22 | **REIMPLEMENT IN DOWIZ, ZERO-DEP** — bebop's proven mesh-node/proto-wire/proto-cap serves as design reference/parity oracle only, not a linked dependency. The same ruling covers `agent-governance-wasm`'s `bebop2-core` path-dep and `mesh-adapter`'s sibling paths per §25's table. |
+| Optical/pixel context compression | §20(c) / item 28 | **PURSUE** — model-weight dependencies are ruled outside §0's compiled-Rust-crate scope; archival/display-plane content only, never the P0/P1 determinism planes (§10/P6). |
+| ARINC-653-style scheduler | item 11 | **PURSUE, design-only** — Phase 0 (design doc + TLC model), no code until the breaker (item 9) exists, per the source's own restriction. |
+| SIHFT triple-vote pilot | item 12 | **PURSUE, design-only for now** — needs the breaker + FDR to exist first regardless of the ruling; design/scoping work can start. **Premise retro-corrected 2026-07-19 (consistency audit §§1.1–1.2, same treatment as item 54's §J correction):** the synthesis §6 valuation behind the original "optional" grading ("ECC-RAM Hetzner hosts ⇒ residual value modest") was the identical rejected cloud-ECC reasoning the operator reversed for Sentinel/item 54 — the actual target is local, offline-first, consumer-grade hardware typically WITHOUT ECC, so the compute-time SEU class is material. The ruling itself stands (design-only remains correct — the pilot needs items 9 + FDR); the design must be sized under the non-ECC premise and lands as **temporal TMR** per the item-12 re-scope in §E (audit-A finding + the OS-patterns temporal-TMR research MERGED into item 12 — one item, no new number). |
+| eqc indexed-summation IR extension | item 32 | **PURSUE** — extend eqc's `Expr` language to support the Laplacian's neighbor-sum operator, not just scalar control laws. |
+
+The Laplacian reimplement-vs-vendor fork (§14(d)) is **not a live gate** — §26(d)'s correction found
+`laplacian_spmv` already exists in-kernel at `csr.rs:552`; the surviving work is the parity pin
+(item 18, Tier 0 below) and reconciling bebop's `step_wave` as a third representation, not a
+build-vs-vendor choice. The §27 frequency/wave-domain communication idea remains parked — no
+research has been done, and the source document itself requires a research pass before its own
+gate applies.
+
+---
+
+### A. Tier 0 — zero prerequisites, read-only or self-contained on already-tested surfaces. READY NOW.
+
+Nothing here depends on any other item; each is pure investigation or a small change under existing
+test coverage.
+
+- **Item 2** — `FileEventStore` wiring verification. Dual check: (a) is the durable store constructed
+  anywhere, (b) has the `Result`-typed `insert` fix landed since 07-16 (§10/P4 — "a wired store that
+  swallows IO is arguably worse than an unwired one"). Highest consequence-per-cost in the roadmap.
+  **✅ RESOLVED-AS-DEFECT-FILED 2026-07-19** (re-verified adversarially against live `HEAD`): **(b) PASSES**
+  (typed `StoreError` propagation confirmed, fix `4dec04218`, regression test `hydra.rs:1188-1218`);
+  **(a) FAILS** — no production composition root constructs the durable store (all 6 `FileEventStore::open`
+  sites are test-only; no binary builds a durable `Hydra`/`EventLog`). Defect filed:
+  [`BLUEPRINT-P-FILE-EVENT-STORE-WIRING-GAP-2026-07-19.md`](BLUEPRINT-P-FILE-EVENT-STORE-WIRING-GAP-2026-07-19.md)
+  (verification: [`BLUEPRINT-ITEM-02-file-event-store-verification-2026-07-19.md`](BLUEPRINT-ITEM-02-file-event-store-verification-2026-07-19.md)).
+  Fix scoped there as a follow-up Tier-1 build item (§B territory) — NOT built (Tier-0 read-only audit).
+- **Item 3** — `order_machine` const-adjacency + `idx_of` dedup. Golden signature and 1e-12 oracle
+  already cover 2 of the 3 stated proof clauses (verified live 2026-07-20: one `idx_of` definition,
+  golden-signature + 1e-12-oracle tests both green). **The third clause — "zero heap allocations
+  under a counting allocator test" — was never actually built** (zero `count-allocs`/
+  `counting_alloc` references in `order_machine.rs`, confirmed by grep); real blueprint now exists:
+  [`BLUEPRINT-ITEM-03-order-machine-zero-alloc-proof-2026-07-20.md`](BLUEPRINT-ITEM-03-order-machine-zero-alloc-proof-2026-07-20.md).
+- **Item 30** — state-machine proliferation audit (`capability_cert.rs`, `hub_provisioning.rs`,
+  `hub_supervisor.rs`, `hydra.rs`). Read-only table. **✅ CLOSED 2026-07-19** —
+  [`AUDIT-ITEM-30-state-machine-final-2026-07-19.md`](AUDIT-ITEM-30-state-machine-final-2026-07-19.md)
+  (+ [`BLUEPRINT-ITEM-30-state-machine-audit-2026-07-19.md`](BLUEPRINT-ITEM-30-state-machine-audit-2026-07-19.md),
+  previously unlinked from this citation — found + fixed 2026-07-20): all 4 modules INDEPENDENT (0
+  shared with the FSM proof kit), 4 PARITY-PIN tickets (I30-T1..T4, 0 collapses forced). **1
+  confirmed silent defect** (I30-D1, `resume()` owner-zeroing) fixed with a red→green guard on
+  `exec/space-grade-tier0-2026-07-19` (`707848dfd`, independently re-verified 2026-07-20 as a real
+  ancestor of `main` matching this claim); the in-session "2 confirmed silent defects" phrase
+  confirmed UNSOURCED.
+- **Item 15** — eigen-surface entry-point + parity-scope verification. Read-only; defect filed only
+  if found. **✅ AUDITED 2026-07-19** — single eigen-surface HOLDS (`spectral.rs:225 eigenvalues` →
+  `householder::eigenvalues_contig`, no `lowrank.rs`); gap = R3 parity is values + dominant-residual
+  only (`spectral.rs:1254 let _ = dvecs;`). Ticket **I15-T1** (vector-scope cross-solver pin) filed
+  in [`AUDIT-ITEMS-15-17-19-followup-tickets-2026-07-19.md`](AUDIT-ITEMS-15-17-19-followup-tickets-2026-07-19.md);
+  not built (new scope).
+- **Item 16** — `GraphSpectrum` single-spectrum audit. Read-only unless a P2 defect forces collapse.
+  **✅ RESOLVED-BY-REFACTOR 2026-07-19** — P2 CONFIRMED (`graph_spectrum` computed the adjacency
+  spectrum 3×, `graph_energy_report` 4×, both claiming "single pass"). Collapse LANDED, option (b)
+  (internal, zero public-signature change): `classify_drift_with_rho` + shared `drift_guards_ok`/
+  `drift_band`; `graph_spectrum` now = exactly 2 passes (adj + Laplacian), `graph_energy_report`
+  4→2. Proof = thread-local `EIGEN_CALLS` exactly-2 counter + field-consistency test. Kernel suite
+  **902 / 0 / 3** (was 899). Committed `e125f0c97`, pushed to `exec/space-grade-tier0-2026-07-19`.
+  Resolution note: `AUDIT-ITEMS-15-17-19-followup-tickets-2026-07-19.md` §0.
+- **Item 17** — `engine` thick/thin classification table (RC-4's three mirrored items as first
+  entries). **✅ AUDITED 2026-07-19** — RC-4 triple: `DriftClass` + `dt` CLOSED (pinned post-H2);
+  **L-operator OPEN** (`engine/src/field_frame.rs:10-40` engine-side 5-point Neumann Laplacian
+  unpinned to kernel `csr.rs:552 laplacian_spmv`). Ticket **I17-T1** (engine-boundary Laplacian pin;
+  cross-references item 18's intra-kernel pin, does NOT duplicate it) filed in the tickets doc; not
+  built (new scope).
+- **Item 19** — retrieval spectral-routing audit (`diffusion.rs`/`ppr.rs`). Read-only.
+  **✅ AUDITED 2026-07-19** — independent-by-design (zero `spectral`/`GraphSpectrum` refs;
+  `ppr.rs:6-7` "No eigendecomposition"), correctly so — NOT the second GraphSpectrum consumer. New
+  smell: `ppr.rs:3-5` is a comment-bound unpinned mirror of `markov.rs:162-170`'s inner loop, no
+  test pin. Ticket **I19-T1** = parity-pin (NOT collapse — `retrieval/mod.rs:14` red-lines touching
+  `markov.rs`) filed in the tickets doc; not built (new scope).
+- **Item 22 (verification half only)** — read `mesh.rs`, classify real-port vs stub. The ruling is
+  now recorded (§0 above: reimplement), so this verification informs HOW MUCH of `mesh.rs` is
+  reusable scaffolding versus needs building from scratch, not whether to proceed.
+  **✅ VERIFICATION COMPLETE 2026-07-19** — proof filed
+  [`AUDIT-ITEM-22-mesh-classification-final-2026-07-19.md`](AUDIT-ITEM-22-mesh-classification-final-2026-07-19.md)
+  (classification table, one row per public symbol, file:line + caller-or-NONE + verdict; blueprint
+  independently re-verified and CONFIRMED). Finding: `mesh.rs` (387 lines, `#[cfg(feature="pq")]`,
+  `pq` NOT default) is a real, tested ML-DSA-65 signed-log primitive with **ZERO production kernel
+  callers** — `MeshLog`/`MlDsaSigner`/`Signer` bench-only, `SignedEntry`/`MeshError`/`HubTransport`
+  uncalled, protocol layer absent; even `mesh-adapter` bypasses it (bebop path-deps, no `pq`).
+  **Scoping handoff to item 23 (gated strictly after — NOT started here):** it is **"mostly stub
+  above the log layer"** — reuse `SignedEntry`/`MeshLog`/`MlDsaSigner` + the `HubTransport` seam
+  as-is (keep, don't rewrite), but sync/consensus/capability/gossip start near-scratch; gossip
+  admission must extend `decision/import_unit()`, never fork a parallel importer (synthesis §17(b)).
+- **Item 18 (narrowed)** — the Laplacian parity pin: dense `laplacian()` ↔ `csr.rs:552
+  laplacian_spmv`, plus a `step_wave` reconciliation note. **[new ordering choice]** — promoted from
+  mid-roadmap to Tier 0 because §26(d) shrank it to one parity test against an oracle already in-tree.
+- **Item 31 (investigative half)** — `rusqlite` usage read + reclassification; pin the
+  `cosmic-text = "*"` wildcard; verify `sha2`-vs-kernel-keccak on the body digest.
+  **✅ INVESTIGATIVE HALF COMPLETE 2026-07-19** — findings filed
+  [`AUDIT-ITEM-31-dependency-findings-2026-07-19.md`](AUDIT-ITEM-31-dependency-findings-2026-07-19.md)
+  (blueprint independently re-verified). **(a) rusqlite** → KEEP-and-contain (cat-2 foreign format,
+  Hermes `state.db` only, no default build path) — docs-only ruling. **(b) cosmic-text `*`** →
+  DEFECT CONFIRMED + FIXED: pinned to already-resolved `0.19.0` (`engine/Cargo.toml:30`), lockfile
+  unchanged, `cargo check --features text` green, committed `c2d0f306a` on
+  `exec/space-grade-tier0-2026-07-19`. **(c) sha2 vs keccak** → NOT a defect, KEEP `sha2`; blueprint
+  CORRECTED (`pub mod pq` is `#[cfg(feature="pq")]`-gated, not "already linked" — the swap would
+  pull `aes-gcm`+`curve25519-dalek`, a net dep increase). Bonus flag confirmed: **dual in-kernel
+  Keccak-f[1600]** (`event_log.rs:67` vs `pq/keccak.rs:156`) — dedup ticket owed to item 25, filed
+  not fixed. Enactment half (Tier 2) allowlists rusqlite+sha2.
+
+### B. Tier 1 — foundational builds. ✅ COMPLETE (2026-07-19) — all items DONE; the kernel's default no-dev build has ZERO external crates.
+
+- **Items 1 + 13 combined** — the CI zero-dep gate, born deterministic:
+  `cargo tree -e no-dev --locked --offline` + lockfile-hash assertion, 3-crate allowlist shrinking
+  monotonically. **[new ordering choice — bundling]**: item 13 hardens item 1's own mechanism;
+  building it nondeterministic first is two passes over one CI job.
+  See [`BLUEPRINT-ITEMS-01-13-ci-zero-dep-gate-2026-07-19.md`](BLUEPRINT-ITEMS-01-13-ci-zero-dep-gate-2026-07-19.md)
+  (previously cited only as an internal "§G.7" cross-reference, never linked — found + fixed
+  2026-07-20).
+  **✅ DONE (2026-07-19)** — `kernel/ZERO-DEP-ALLOWLIST.txt` + `scripts/zero-dep-gate.sh` (3 gates:
+  tree⊆allowlist, monotonic-shrink, `Cargo.lock` sha256) + `zero-dep-gate` CI job under `unshare -n`;
+  all §G.7 clauses red-proven; `01acd673e` on `exec/space-grade-tier0-2026-07-19`. See §G.7 for detail.
+- **Item 14** — `rust-toolchain.toml` pin + structural compiler-bump trigger. Independent, parallel.
+  See [`BLUEPRINT-ITEM-14-toolchain-pin-2026-07-19.md`](BLUEPRINT-ITEM-14-toolchain-pin-2026-07-19.md)
+  (previously unlinked from this bullet, though `rust-toolchain.toml`'s own header comment already
+  cites it — found + fixed 2026-07-20).
+  **✅ DONE 2026-07-19** (commit `bb1e9e8dc`, `exec/space-grade-tier0-2026-07-19`) — root
+  `rust-toolchain.toml` pins `channel="1.96.1"` (exact, verified = dev-box toolchain; no pin existed
+  pre-change, CI floated on runner stable); `toolchain-bump-gate` job added to `ci.yml` (always-runs,
+  required-check safe, enforcement fires only on a `channel`-value change and then requires
+  `docs/audits/toolchain/spot-check-<new>.md` w/ both mandated headings in the same diff — pin's own
+  intro = `<absent>→1.96.1`, so it carries the baseline `spot-check-1.96.1.md`). Baseline artifact is
+  HONEST: real source-level constant-time audit of all 6 pq surfaces (flags the pre-existing,
+  compiler-independent variable-time `!=` FO tag-compares in `kem.rs`/`hybrid.rs`, owed to P91.2),
+  assembly audit PARTIAL with the full per-branch taint proof DEFERRED to Tier 2 item 7 (Kani) — no
+  fabricated clean claim. Proofs: kernel `cargo test` 902/0/3, engine 117/0, gate logic 6/6 +
+  end-to-end `git show BASE:$FILE` extraction test (maps 1:1 onto §G.8). Owed (G5): flip the gate to
+  a required status check in branch protection (server-side).
+- **Item 25 (procedure doc first) — ✅ DONE (2026-07-19).** The slot-arena/qrng standing procedure
+  is codified and independently re-verified in
+  [`PROCEDURE-DEPENDENCY-REPLACEMENT-STANDING-2026-07-19.md`](PROCEDURE-DEPENDENCY-REPLACEMENT-STANDING-2026-07-19.md)
+  — all citations checked against live HEAD, both precedents (slot-arena override, QRNG
+  never-replace) confirmed. **This doc is now BINDING**: Items 4+29 (`tracing`/`tracing-subscriber`
+  logger/FDR rewrite, incl. the `telemetry` `SpanMetricsLayer` consumer) and Item 5 (`regex`
+  retirement) MUST run its numbered 10-step ruling per crate before cutover (§18(a)'s "under this
+  exact procedure, not a bespoke one"). **Re-verification finding (new scope, owed ticket, not an
+  item-25 fix):** the `qrng` feature is undeclared in `kernel/Cargo.toml`, so the QRNG provider
+  (incl. its sanctioned `master_seed()`) is dead code that never compiles — a
+  standing-rule-vs-reality inconsistency filed in the procedure doc §3.
+- **Items 4 + 29 combined, with the §1.2 `JsonWriter` absorbed in the same change — ✅ DONE
+  (2026-07-19).** The hand-rolled logger/FDR tier-(b) buffer with the energy/hardware field set
+  first-class in the schema from day one. Both bundlings are the source document's own explicit
+  mandate (§21, §10/P2). The largest Tier-1 item; the keystone of the tier. Landed as three isolated
+  commits on `exec/space-grade-tier0-2026-07-19` (`f04142f89` build → `4f4872a54` flip →
+  `eb350464e` remove): `kernel/src/fdr/` (json/schema/ring/macros/mod) coexisted, then the 13 call
+  sites + `SpanMetricsLayer`→`SpanMetricsObserver` (a kernel `fdr::SpanObserver`) flipped, then
+  `tracing`/`tracing-subscriber` removed. Proofs discharged: `cargo tree -e no-dev` 25→6 crates (**19
+  dropped**, exceeds ≥13); `metric.jsonl` + markov CLI JSON byte-identical before/after (golden-pinned);
+  kill-9→restart→recover test (real child SIGKILLed, 300/300 events recovered + PostMortem emitted);
+  `hw` first-class with `joules_uj` reporting `unavailable:no_rapl_interface` (named absence) on this
+  RAPL-less host; duplicate `mldsa_verify` wrapper deduped; wasm32 cdylib green (`Instant` gated off
+  wasm); full kernel suite 938 passed / 0 failed; `scripts/zero-dep-gate.sh` GREEN (5 external crates,
+  allowlist shrunk by 19). Ruling recorded in `fdr/mod.rs` doc + `kernel/Cargo.toml` + the blueprint
+  ([`BLUEPRINT-ITEMS-04-29-logger-fdr-rewrite-2026-07-19.md`](BLUEPRINT-ITEMS-04-29-logger-fdr-rewrite-2026-07-19.md)).
+- **Item 5 — retire `regex`, after the logger exists. ✅ DONE (2026-07-19) — CLOSES ALL OF TIER 1.**
+  The kernel's last external crate. Its entire production surface was one function
+  (`TrigramIndex::query_regex`) with **zero production callers** (re-verified by full-workspace
+  grep across `kernel/ engine/ apps/ tools/ agent-loop/ agent-adapters/`); the only pattern ever
+  compiled anywhere was `note-.*-recall`. Ruling per item 25's procedure = terminal state (a)
+  removed outright, replaced by a kernel-owned restricted matcher for the used subset
+  ({literal, `.`, `.*`}, unanchored contains-match, greedy leftmost segment placement — no
+  backtracking exists ⇒ no pathological blowup), with typed rejection (`PatternError::UnsupportedMeta`)
+  of every other metacharacter (degrade-closed). Landed as three isolated commits on
+  `exec/space-grade-tier0-2026-07-19` (`18152ef84` build → `c6b5d2176` flip → `6605166cd` remove):
+  `kernel/src/retrieval/pattern.rs` + `query_pattern` coexisted, then the seam flipped, then
+  `regex = "1"` was removed. Proofs discharged: parity proven BEFORE cutover — differential vs the
+  live `regex` crate over the 20-doc FIXTURE + 2000-doc synthetic corpus + a proptest sweep (random
+  subset patterns × ASCII docs), all bit-identical; a permanent independent naive recursive
+  reference matcher + a frozen golden (`query_pattern("note-.*-recall") == vec![7]`) carry the
+  guarantee post-removal; rejection tests assert typed errors with byte positions.
+  `cargo tree --manifest-path kernel/Cargo.toml -e no-dev --locked --offline` = **`dowiz-kernel`
+  root ONLY, ZERO external crates** (regex's whole subtree — regex, regex-automata, regex-syntax,
+  aho-corasick, memchr — dropped; regex survives only as a `criterion` dev-dep transitive in
+  `Cargo.lock`, outside the no-dev proof surface). `ZERO-DEP-ALLOWLIST.txt` shrunk 5 → 0;
+  `scripts/zero-dep-gate.sh` GREEN "0 external crates" (also fixed a latent gate abort at the true
+  zero-dep end state — its filter greps returned exit 1 when they filtered every line out, aborting
+  under `set -euo pipefail`; now `|| true`-guarded, gate A/B/C semantics unchanged). Full kernel
+  suite green (925 lib unit tests / 0 failed / 3 ignored, +22 integration). Ruling recorded in
+  `pattern.rs` module doc + `kernel/Cargo.toml` tombstone + allowlist header + `fdr/mod.rs` +
+  `lib.rs`/`retrieval/mod.rs`, and the blueprint
+  ([`BLUEPRINT-ITEM-05-regex-retirement-2026-07-19.md`](BLUEPRINT-ITEM-05-regex-retirement-2026-07-19.md)).
+  **With this, every §B Tier-1 item (1+13, 14, 25, 4+29, 5) is DONE: the kernel's default build has
+  genuinely zero external dependencies.**
+
+### C. Tier 2 — process/verification layer. Parallelizable.
+
+- **Item 6** — §4 hardening checklist codified + CI enforcement, with §10/P7's correction built in:
+  CI must re-execute oracles and dudect self-tests, never presence-check artifacts.
+  See [`BLUEPRINT-ITEM-06-hardening-checklist-ci-2026-07-19.md`](BLUEPRINT-ITEM-06-hardening-checklist-ci-2026-07-19.md)
+  (previously unlinked from this bullet — found + fixed 2026-07-20).
+  **✅ DONE 2026-07-19** (`ae4964e61`, branch `exec/space-grade-tier0-2026-07-19`). Real CI config +
+  a new dudect harness landed. Three deliverables: `docs/audits/hardening/CHECKLIST.md` (standing
+  law), `docs/audits/hardening/HOT-PATHS.tsv` (machine-read manifest — 14 rows seeded from the real
+  surfaces: pq/dsa+kat, pq/keccak, event_log Keccak-copy-B, pq/x25519, pq/kem, pq/hybrid,
+  order_machine FSM, householder+spectral eigen, token_bucket, retrieval/pattern, fdr/json, ct_gate),
+  and the `hardening-gate` CI job (`scripts/hardening-gate.sh`). The gate **re-executes, never
+  presence-checks** (§10/P7): every verdict is a live `cargo test` exit code + the PARSED `N passed`
+  count asserted `>= min_tests`; a filter matching **zero** tests is RED (anti-forgery core). **RED/
+  RED/GREEN proven with real output:** (a) a diff touching a hot ZONE with no manifest row → exit 1;
+  (b) a manifest row whose filter matches zero tests → exit 1; (c) my own commit's diff (touching 3
+  registered rows) → exit 0. **Independent-verification CORRECTION to the blueprint's premise:** the
+  cited pq KATs (ACVP/Keccak/x25519/KEM/hybrid) do **NOT** re-execute in the default `cargo-test` job
+  — `pq` is not a default feature, so `cargo test --offline` never compiles them; they were **dark in
+  CI**. The gate's unconditional oracle floor now runs them with `--features pq` every build, closing
+  that gap. **dudect (honest gap — built):** `kernel/src/ct_gate.rs`, a zero-dep Welch-t harness + a
+  reusable `ct_eq` constant-time primitive + a **planted-leak self-test** (variable-time `naive_eq`
+  detected at |t|≈300+, `ct_eq` |t|<1.3, separation >290×) run in release in the gate step. **item 3
+  (debug_assert differential):** wired for `order_machine::assert_transition` (slice-vs-`FSM_ADJ`
+  dual-representation) and `householder::eig2x2` (Vieta trace/det) as the pattern; corpus-oracle rows
+  carry `N/A(corpus-oracle)`. **Scoped vs deferred (ledgered in the manifest's own `gap` column):**
+  dudect crypto-surface coverage → items 7/8; `kem.rs`/`hybrid.rs` variable-time tag compares are
+  `KNOWN-RED(P91.2)` (NOT fixed here — the CT fix is the gate's first customer); `token_bucket` GCRA
+  differential oracle → item 8; item-4 exhaustive assembly → item 7 (Kani). Full kernel suite
+  **955/0/8** at the commit. Docs (this roadmap + CORE-ROADMAP-INDEX) pushed to `origin/main`.
+- **Item 7** — verification wiring for Keccak, FSM graph algorithms, NTT arithmetic, GCRA
+  transition (now applies to the adopted GCRA, §0 above). **RESCOPED 2026-07-19 (blueprint v2,
+  authority: `RESEARCH-NATIVE-KANI-REPLACEMENT-FEASIBILITY-2026-07-19.md` under item 25's binding
+  procedure):** 16/22 harnesses land as **native exhaustive `#[test]`s** in the existing
+  `csr.rs`/`order_machine.rs` idiom (identical all-inputs guarantee, zero new tooling, riding item
+  6's `hardening-gate` rows); **Kani narrows to 4 harnesses now** (`montgomery_reduce`, `ntt`,
+  `invntt`, Keccak cross-copy equivalence — the last dissolving entirely if the owed dual-Keccak
+  dedup ticket lands first) **+ 2 GCRA harnesses deferred to item 8**; 0/22 need a hand-rolled SAT
+  solver — Kani is CI-time tooling (item-25 terminal state (c), never linked, `cargo tree -e
+  no-dev` unaffected), so "replace Kani natively" was the wrong question and target-rescoping was
+  the right move. Item 7 no longer gates on Kani toolchain bootstrap: the 16 native targets land
+  whole even if `cargo kani setup` fails in CI. See
+  [`BLUEPRINT-ITEM-07-kani-wiring-2026-07-19.md`](BLUEPRINT-ITEM-07-kani-wiring-2026-07-19.md).
+  **✅ EXECUTED 2026-07-19 (mostly done; two honest ledgered limits) — real code + CI landed** on
+  `exec/space-grade-tier0-2026-07-19` (`df92f0c16` kernel proofs+native tests → `23f583b3e`
+  kani-gate CI). **Kani toolchain bootstrap SUCCEEDED in the exec environment** (`cargo-kani 0.67.0`,
+  its own `nightly-2025-11-21` rustc + CBMC/CaDiCaL; CI-time only, zero-dep gate mechanically
+  unaffected — all harnesses `#[cfg(kani)]`, nothing added to `Cargo.toml`/`Cargo.lock`,
+  `cargo tree -e no-dev` still 0). **7 Kani harnesses verified SUCCESSFUL via real `cargo kani`
+  runs:** `proof_rotl_contract`, `proof_keccak_f_total`, `proof_reduce32_contract`,
+  `proof_montgomery_reduce_contract` (overflow-free + range `[−Q,Q]` — Kani caught my first
+  assertion's open-interval error, the boundary is inclusive), `proof_ntt_butterfly_lemma`,
+  `proof_invntt_butterfly_lemma`, and the `proof_selftest_planted_overflow` planted-fault self-test
+  (SUCCESSFUL only because the seeded i32 overflow IS caught; RED-path demo verified — removing
+  `should_panic` → VERIFICATION FAILED). **15 native exhaustive `#[test]`s** (FSM ×4, dsa ×4, kem
+  ×5, keccak ×2) all pass; full kernel suite `--features pq` **1131/0/8** (was 1116). CI: separate
+  `kani-gate` job + `scripts/kani-gate.sh` + `HOT-PATHS.tsv` `mode=kani` rows + `hardening-gate.sh`
+  skip-with-notice. **TWO honest limits ledgered (NOT silently dropped):** (a) the STRONG full-state
+  Keccak cross-copy equivalence (2^1600) exceeded the 25-min CI budget (measured) — shipped the
+  §3.1 fallback rung: a native machine-checked index-map equivalence (ρ/π tables + round constants +
+  π destinations — the ONLY divergence) + `proof_rotl_contract`; the strong form is preserved in
+  `kani_proofs_strong`, runnable nightly. (b) The Montgomery congruence `r·2^32 ≡ a (mod Q)` is NOT
+  machine-checked (symbolic modulo over ±1.8e16 timed out >7 min in both i128 and i64 forms) — stays
+  covered by ACVP KATs; the harness proves the overflow/panic fault class the synthesis §7 names.
+  GCRA (2 harnesses) correctly deferred to item 8 — see item 8's inherited design requirements below.*
+- **Item 8** — GCRA decision package. **Ruling: ADOPT (§0 above).** Differential oracle + Kani
+  interleaving check now execute toward a real swap, not just an evidence package.
+  See [`BLUEPRINT-ITEM-08-gcra-swap-2026-07-19.md`](BLUEPRINT-ITEM-08-gcra-swap-2026-07-19.md)
+  (previously unlinked from this bullet — found + fixed 2026-07-20).
+  **TWO DESIGN REQUIREMENTS INHERITED FROM ITEM 7 (executed 2026-07-19; authority:
+  `BLUEPRINT-ITEM-07-kani-wiring-2026-07-19.md` §5, enforced via the `token_bucket.rs proof_gcra`
+  `mode=kani` row in `HOT-PATHS.tsv`, `min=0` placeholder until this item lands the harness):**
+  1. **The GCRA transition MUST be a pure function** —
+     `fn gcra_decide(now_ns: u64, tat_ns: u64, cost_ns: u64, burst_ns: u64) -> Option<u64>`
+     (returns the new TAT on grant, `None` on deny). A pure fn is Kani-provable AND
+     differential-oracle-testable; the CAS-retry shell stays a thin loop around it. (This is why
+     the bench-local `GcraBucket`'s inlined f64 decision does not qualify as-is.)
+  2. **Integer nanoseconds, NOT f64, inside the transition** — the bench version computes
+     `limit = now as f64 + burst_nanos` and compares `new_tat as f64 > limit`; f64 in the decision
+     path is BOTH a CBMC cost-cliff AND a rounding-determinism hazard at large `now`. Any f64→u64
+     conversion happens ONCE at construction, never in the hot decision.
+  Item 7 also pre-specified the two harnesses item 8 must land (blueprint §5):
+  `proof_gcra_transition_contract` (single-step no-over-grant: `new_tat = max(tat,now)+cost` on
+  grant, `deny ⇔ max(tat,now)+cost > now+burst`, no overflow under the headroom assumes) and
+  `proof_gcra_two_step_interleaving` (two sequential applications conserve `cost₁+cost₂`, TAT
+  monotone — the strongest interleaving statement Kani can honestly make; the full concurrency
+  argument is item 8's differential oracle + the `compare_exchange` semantics, NOT Kani). When
+  item 8 adds these harnesses, bump the `proof_gcra` row's `min` from 0 to 2.
+- **Item 31 (enactment half)** — per-crate allowlist CI gate + shared kernel-side JSON-parse
+  primitive for the serde carriers + manifest-recorded rulings. Depends on items 1 and 25.
+  See [`BLUEPRINT-ITEM-31-enactment-per-crate-gate-2026-07-19.md`](BLUEPRINT-ITEM-31-enactment-per-crate-gate-2026-07-19.md)
+  (its sibling investigative half correctly links `AUDIT-ITEM-31-dependency-findings...`; this half
+  was unlinked — found + fixed 2026-07-20).
+  **✅ DONE 2026-07-19 — real CI config + kernel module landed** on `exec/space-grade-tier0-2026-07-19`
+  (`ae2da4a9d` gate → `dd6876a73` json+oracle → `c64ca923b` cutover). **Four blueprint claims
+  independently re-verified, TWO corrected:**
+  - **Workspace = 26 crates** (not the synthesis's 20; the six `tools/telemetry/*` were missed) —
+    confirmed. **12 already zero-external-dep** by default.
+  - **Gate**: `scripts/zero-dep-gate.sh` parametrized `[<crate-dir>]` (no-arg = kernel,
+    backward-compatible); path-dep filter generalized to `grep -v ' (/'` (verified against real
+    `cargo tree --prefix none` — root + every path dep render with an abs path in parens). Added
+    `scripts/zero-dep-crates.txt` (24-crate roster) + `<crate>/ZERO-DEP-ALLOWLIST.txt` × 25 (12 empty
+    floors, 13 frozen closures with item-25 ruling headers). CI `zero-dep-gate` job loops the roster
+    under one `unshare -n`; **mesh-adapter** gate rides its existing dual-checkout job (relative bebop
+    path); **agent-governance-wasm EXCLUDED** (absolute-path `/root/bebop-repo` dep — CI-unresolvable,
+    filed as its own portability defect). **Proof**: full roster GREEN 24/24 (5×); Gate A RED on an
+    injected unlisted dep (`cfg-if`→`tools/eqc-rs`), GREEN on revert; Gate C lockfile-hash stable.
+    (Also regenerated 10 downstream `Cargo.lock`, removals-only — pruning the regex/tracing closure the
+    kernel dropped in items 4/5/29 so `--locked` resolves.) A subtle CI-poison bug was root-caused +
+    fixed: any FAILING `git origin/main:<untracked-path>` access corrupts cargo's next `rustc -` target
+    probe in a shared `.git`; Gate B now probes with a no-pathspec `git ls-tree`.
+  - **Serde carriers = NINE** (not seven: + `rust-spool`, + `topics`) — confirmed.
+  - **JSON primitive — HONEST SCOPE-DOWN**: built `kernel::json` (always-compiled, pure-std, bounded
+    recursive-descent RFC 8259 parser + serializer, degrade-closed), SEPARATE from `fdr::json`
+    (serialize-only). `serde_json` kept as a **dev-dep differential oracle** (outside the `-e no-dev`
+    surface → kernel allowlist stays empty). Oracle: 50-item real-carrier corpus (all 50 agree, 31
+    accept / 19 reject, 31 round-trip) + a 2000-case proptest fuzz over the carriers' real number/
+    string/nesting distribution. **Phase-A cutover of the carriers that BOTH shrink the tree AND are
+    a sound cutover: `agent-facade` (11→0 ext deps) + `skillspector-rs` (15→5).** Serde carriers
+    **9 → 7** (a real decrease). **Correction to the blueprint's projected 3rd (wasm)**: verified NOT
+    Phase-A — its `a11y_build_mirror` site (de)serializes the SHARED `dowiz-engine` `SemanticScene`/
+    `A11yTree` through engine's `serde` feature; cutting it would couple `kernel::json` to engine's
+    schema. **wasm deferred to Phase-B**, reopening trigger: engine exposes a serde-free codec.
+    `native-spa-server`/`llm-adapters`/`async-spool` deferred — **verified via `cargo tree -i
+    serde_json` that removing the direct dep shrinks NOTHING** (axum's default `json` + ureq's `json`
+    feature retain `serde_json`); reopen only if those framework json features go optional.
+  - **`rust-spool` deletion — DEFERRED (corrects the blueprint's "referenced by nothing")**:
+    independent grep found `tools/telemetry/lib.sh:37` hardcodes + `tg_spool_ensure` LAUNCHES
+    `rust-spool/target/release/telemetry-spool` as the LIVE Telegram telemetry drainer. Deleting it
+    would break the live pipeline. Retire only after `async-spool` is deployed + `lib.sh` cut over.
+  - **Dedup ticket owed — `kernel::json` vs `fdr::json` (filed 2026-07-19, consistency audit §3.2;
+    same format as the dual-Keccak ticket in §A item 31):** the honest scope-down above left the
+    kernel carrying TWO JSON-write/string-escaping surfaces (`kernel::json` parser+serializer,
+    `fdr::json` serialize-only) — the exact §10/P2 "second escaping primitive" failure shape the
+    synthesis itself named. BP-31E acknowledged it only parenthetically and added a round-trip
+    test, but unlike the dual-Keccak case no dedup-or-parity ticket was recorded. Ticket: either
+    consolidate `fdr::json`'s writer under `kernel::json::write`, or record a permanent escaper
+    parity pin + a one-escaper-implementation rule; verify escaper sharing in the exec-branch code
+    when it merges. Owed to item 25's ledger; filed, not fixed.
+- **Item 26** — batching research pass. Zero prerequisites; scheduled low-priority, measurement-only.
+  **✅ DONE 2026-07-19** — real measurements landed:
+  [`AUDIT-ITEM-26-batching-measurements-2026-07-19.md`](AUDIT-ITEM-26-batching-measurements-2026-07-19.md).
+  Inventory re-verified (all §1 citations accurate). M1 event-log commit: p50 637 µs / p99 1343 µs /
+  1,513 ev/s, **exactly 1 fsync+open+close per event** (strace) — group-commit worth **~53×** at
+  batch-64 but changes the crash contract ⇒ *operator-gated opt-in, not a default*. M2 FDR ring:
+  normal 2.56 µs vs alarm-fsync 571 µs (~148×); 1 MiB→4 MiB cap buys only ~11% ⇒ **KEEP AS-IS**
+  (design already amortizes fsync over a segment; baseline now on record). M3 `import_unit`:
+  0.87 µs p50 / ~0.6 ns-per-case marginal ⇒ **measured DON'T-BATCH**. M4 skipped per its own gate
+  (allocation is noise). **PMU unavailable** (`perf_event_paranoid=4`, no `perf`) — wall-clock +
+  `strace -c` fallback, no fabricated counters. No batching code landed (scope law held).
+  Scaffolding (bench + `#[ignore]` probe) on `exec/space-grade-tier0-2026-07-19`.
+  **UPDATE 2026-07-20 — M1 opt-in group-commit code now LANDED** (`85022e49d`, `main`):
+  `FileEventStore::with_batch_size(n)` / `flush_pending()` / `DurabilityCounters::pending_unsynced`.
+  Default `batch_size = 1` is byte-for-byte the pre-existing per-event `sync_all` cadence — the
+  ~53× win only applies when a caller explicitly opts in, and `n > 1` is a documented
+  acknowledged-before-durable tradeoff (up to n−1 events lost on crash before their batch syncs),
+  never silent (panics if set after a write is already pending). Also folds in the fd-reuse half
+  this doc separately called "contract-neutral" — the handle is now cached lazily across inserts
+  instead of reopened per event. 4 new tests + the existing 21 hydra tests green (25/25); 1046/1046
+  kernel lib. No caller has opted in yet (still `batch_size = 1` everywhere in this repo) — this is
+  the mechanism landing, not a default-behavior change.
+- **Item 27 (classifier-input half)** — ✅ **DONE** (`03887462a`, branch
+  `exec/space-grade-tier0-2026-07-19`). See
+  [`BLUEPRINT-ITEM-27-pmu-classifier-input-2026-07-19.md`](BLUEPRINT-ITEM-27-pmu-classifier-input-2026-07-19.md)
+  (the response half correctly links its own file; this half was unlinked — found + fixed
+  2026-07-20). PMU counters now ride alongside every `Verdict`/`DriftClass`
+  emission as an FDR companion, WITHOUT touching either classifier. New `kernel/src/fdr/pmu.rs`:
+  `PmuStamp` (all `Reading<u64>`), a sibling of `HwStamp` on the same `Reading<T>`/`Absence`
+  machinery. **Tier A** (`rdtsc` + `/proc/self/stat` minflt/majflt/nswap + `/proc/self/status`
+  ctxt-switches) reads real data with zero permissions. **Tier B** (instructions/cycles/
+  cache-misses/branch-misses) via a hand-rolled zero-dep `perf_event_open(2)` raw syscall (`asm!`),
+  every failure mode degrading to a named `Absence` (new `NoPmuInterface` variant; EPERM/EACCES →
+  `PermissionDenied`) — never a fabricated 0, never a panic. Wired via `PmuStation::bracket`: the
+  `markov_attractor` bin window-brackets `analyze_detailed` and logs ONE `markov_verdict` `FdrEvent`
+  carrying `verdict_str()` + the PMU delta on the SAME record (optional `pmu` field, absent
+  elsewhere so all other FDR records stay byte-identical). `analyze_detailed`/`classify_drift` stay
+  pure (P6 preserved). Diagnostic-grade; NO CI gate keyed to any PMU value. 6 `fdr::pmu` unit tests
+  + 1 end-to-end integration test (spawns the real bin, recovers the real FDR ring) green; full
+  kernel suite 955 passed / 0 failed.
+  - **Independent-verification correction to §C/line 212's "PMU unavailable" premise:** the
+    self-management agent process runs as **root with `CAP_PERFMON`/`CAP_SYS_ADMIN`**, which
+    **bypasses `perf_event_paranoid=4` entirely** — so Tier B `perf_event_open` actually SUCCEEDS in
+    that context and returns real hardware counters (measured live: IPC ≈ 3.7, instructions/cycles/
+    cache-miss/branch-miss all real, hardware-plausible). A genuinely *unprivileged* process on this
+    host would still see `permission_denied`; that named-absence path is proven deterministically
+    (errno-table + forced-absence serialization tests) rather than relying on the live privilege
+    level. **Operator note (informational, non-blocking):** for the unprivileged production path,
+    `sysctl kernel.perf_event_paranoid=2` OR granting `CAP_PERFMON` (kernel ≥5.8) to the kernel's
+    process would unlock Tier B's real IPC/cache-miss data there too — a host-level knob, flagged
+    here for awareness, no decision required for this half to stand.
+  - The autonomic-**response** half stays routed to Tier 4 (below) per the source's own requirement —
+    gated on item 9 (breaker) + item 21 (gain-scheduling); untouched here.
+
+### D. Tier 3 — THE PIVOT.
+
+- **Item 9** — build `kernel/src/breaker/` from Blueprint A under the §1.5/§10-P4 standard (typed
+  `Result<Permit, Tripped>`, unconstructible tripped-but-permitting state, `CommitError` alarms
+  routed in). **The pivot point of the entire roadmap** — items 11, 12, 21, 27(response), and 32
+  (control-law half) all sit behind it. Best entered after item 2's finding and Tier 1's FDR. See
+  [`BLUEPRINT-ITEM-09-breaker-2026-07-19.md`](BLUEPRINT-ITEM-09-breaker-2026-07-19.md).
+- **Item 10** — TLA+ spec of decision-import + order FSM. No structural dependency on the breaker;
+  same-tier verification of the same state-machine family, runs in parallel with item 9. See
+  [`BLUEPRINT-ITEM-10-tlaplus-decision-fsm-2026-07-19.md`](BLUEPRINT-ITEM-10-tlaplus-decision-fsm-2026-07-19.md).
+
+### E. Tier 4 — gated on the breaker.
+
+- **Item 21** — autonomic gain-scheduling module. Explicit stated dependency: strictly after item 9. See
+  [`BLUEPRINT-ITEM-21-autonomic-gain-scheduling-2026-07-19.md`](BLUEPRINT-ITEM-21-autonomic-gain-scheduling-2026-07-19.md).
+- **Item 11** — ARINC-653 scheduler Phase 0 (design doc + TLC model only). **Ruling: PURSUE,
+  design-only (§0 above)** — can start now as a design artifact; the model itself doesn't need the
+  breaker to exist, only the eventual code does ("code comes only after the breaker exists"). See
+  [`BLUEPRINT-ITEM-11-arinc653-scheduler-phase0-2026-07-19.md`](BLUEPRINT-ITEM-11-arinc653-scheduler-phase0-2026-07-19.md).
+- **Item 12** — SIHFT pilot, **re-scoped 2026-07-19 as TEMPORAL TMR** (merged re-scope: the
+  consistency audit's premise correction §§1.1–1.2 + the OS-patterns research §3 name the same
+  underlying redundancy concept — one refined item, no new number). **Ruling: PURSUE, design-only
+  for now (§0 above, premise retro-corrected there)** — the pilot itself needs breaker + FDR;
+  scoping/design work can start immediately, sized under the **non-ECC local-hardware premise**.
+  Refined scope: **temporal** triple-run (2–3× sequential re-execution on one core over the same
+  inputs + a trivial-equality vote — spatial TMR is unavailable to a single-process kernel and
+  shared-silicon-correlated anyway, synthesis §6 caveat kept) over the 2–3 most critical µs-scale
+  pure functions only (money gate, event-id hash, FSM transition candidates); vote-mismatch →
+  item 9 breaker trip + FDR `Alarm`, never an SEU-immunity claim; honestly PARTIAL (permanent
+  faults and software bugs corrupt all runs identically; the voter is kept a trivial equality to
+  minimize its own exposure). Genuinely ADDITIVE over item 54: Sentinel guards struct bytes
+  at-rest/at-transition; temporal TMR guards the *evaluation itself* against compute-time
+  transient flips — complementary halves, named as such in both designs. Per the Kleene audit
+  (finding 6), the FDR entry carries `VoteOutcome::{Unanimous, SingleDissent(replica-id),
+  NoMajority}` — both non-unanimous classes trip identically (behavioral collapse kept, distinct
+  typed cause recorded; item-50 shape) — bake this into the design doc now at zero code cost. See
+  [`BLUEPRINT-ITEM-12-temporal-tmr-2026-07-19.md`](BLUEPRINT-ITEM-12-temporal-tmr-2026-07-19.md).
+- **Item 27 (response half)** — after item 21. See
+  [`BLUEPRINT-ITEM-27-response-half-2026-07-19.md`](BLUEPRINT-ITEM-27-response-half-2026-07-19.md).
+- **Item 32 (split)** — Laplacian half already lands with item 18 (Tier 0). **Ruling: PURSUE the IR
+  extension (§0 above)** — this can start as its own eqc-rs capability work, independent of the
+  breaker; only the §16 pilot-control-law half needs items 9 + 21. See
+  [`BLUEPRINT-ITEM-32-eqc-ir-extension-2026-07-19.md`](BLUEPRINT-ITEM-32-eqc-ir-extension-2026-07-19.md).
+
+### F. Parallel lanes
+
+- **Spectral/physics lane:** item 18 (Tier 0, narrowed) → item 32's Laplacian half (also Tier 0/now).
+  eqc IR extension (item 32, ruled PURSUE) runs alongside, independent.
+- **Living-memory lane:** item 19 (audit) → **item 20** (P95 persistence — genuinely open,
+  externally ungated, READY now; see
+  [`BLUEPRINT-ITEM-20-living-memory-persistence-2026-07-19.md`](BLUEPRINT-ITEM-20-living-memory-persistence-2026-07-19.md))
+  → **item 28** (optical compression — **ruled PURSUE**, pilot scoped
+  to the archival plane only, sequenced after item 20 since it consumes the same durability
+  machinery; see
+  [`BLUEPRINT-ITEM-28-optical-compression-2026-07-19.md`](BLUEPRINT-ITEM-28-optical-compression-2026-07-19.md)).
+- **Mesh/gossip lane:** **item 22** (verification, READY) → reimplementation work (per the §0 ruling,
+  not a vendor integration) → **item 23** (explicit stated dependency: after item 22 — preserved
+  exactly; extends `import_unit()`, no parallel importer; see
+  [`BLUEPRINT-ITEM-23-gossip-import-extensions-2026-07-19.md`](BLUEPRINT-ITEM-23-gossip-import-extensions-2026-07-19.md))
+  → **item 24** (crypto surfaces under §4 —
+  depends on item 6's re-executing CI machinery and item 14's trigger; see
+  [`BLUEPRINT-ITEM-24-mesh-crypto-hardening-2026-07-19.md`](BLUEPRINT-ITEM-24-mesh-crypto-hardening-2026-07-19.md)).
+
+---
+
+### G. Garden of Eden — Recommended First Execution Batch, hand to Opus now, in this order
+
+1. **Item 2** — Proof: a cited line constructing the durable store in production, or a filed defect;
+   plus the §10/P4 check on `Result`-typed `insert`. **✅ DONE 2026-07-19 — defect filed** (no production
+   construction site exists; (b) `Result`-typed insert confirmed): `BLUEPRINT-P-FILE-EVENT-STORE-WIRING-GAP-2026-07-19.md`.
+2. **Item 30** — Proof: a table, one row per module, citing file:line for shared-vs-independent
+   state-machine logic; every independent one gets a collapse-or-parity-pin ticket.
+   **✅ DONE** — proof table + 4 parity-pin tickets in `AUDIT-ITEM-30-state-machine-final-2026-07-19.md`;
+   1 confirmed defect (`resume()` owner-zeroing) fixed (`707848dfd`).
+3. **Items 15, 16, 19, 17** (read-only audits, any order) — Proofs verbatim from the source: single
+   backend + named parity test cited by file:line or P2 defect filed; one eigenvalue computation
+   feeding all functionals; shared backend cited or defect filed; every public `engine` item
+   classified with RC-4 as first three entries.
+4. **Item 22 (verification half)** — Proof: the classification cited by file:line — typed boundary
+   plus real kernel caller, or no-caller finding filed. Now feeds directly into reimplementation
+   scoping (§0 ruling), not a decision package. **✅ DONE 2026-07-19** —
+   [`AUDIT-ITEM-22-mesh-classification-final-2026-07-19.md`](AUDIT-ITEM-22-mesh-classification-final-2026-07-19.md):
+   no-caller finding filed (zero production callers; `MeshLog`/`MlDsaSigner`/`Signer` bench-only,
+   `SignedEntry`/`MeshError`/`HubTransport` uncalled). "Mostly stub above the log layer" — see §A.
+5. **Item 3** — Proof: zero heap allocations under a counting allocator test; one `idx_of`
+   definition; golden signature and 1e-12 oracle both green.
+6. **Item 18 (narrowed)** — Proof: a parity test computing Lu via dense `laplacian()` and via
+   `laplacian_spmv` — exhaustive over small graphs plus a large randomized corpus — green to float
+   epsilon; `cargo tree` unchanged.
+7. **Items 1+13** — Proof: CI fails on any new dependency, allowlist shrinks monotonically; gate
+   verdict identical with networking disabled, lockfile hash unchanged.
+   **✅ DONE 2026-07-19** — baseline re-verified (`cargo tree -e no-dev --locked --offline` = exactly
+   24 external crates, matches the blueprint). Landed `kernel/ZERO-DEP-ALLOWLIST.txt` (24 names),
+   `scripts/zero-dep-gate.sh` (Gate A tree⊆allowlist / Gate B `comm -13` monotonic-shrink vs
+   `origin/main` / Gate C `Cargo.lock` sha256 stable), and the `zero-dep-gate` CI job running under
+   `unshare -n`. All four §G.7 clauses red-proven: Gate A RED on a throwaway `libc` dep, Gate B RED on
+   a grown allowlist + GREEN on a shrink, `unshare -r -n`/`unshare -n` identical 24-crate verdict.
+   Committed `01acd673e`, pushed to `exec/space-grade-tier0-2026-07-19`. Blueprint:
+   `BLUEPRINT-ITEMS-01-13-ci-zero-dep-gate-2026-07-19.md`. Scope held to `dowiz-kernel` (item 31 = Tier 2).
+8. **Item 14** — Proof: a toolchain-bump diff without the spot-check artifact fails CI; a non-bump
+   diff never triggers the job. **✅ DONE 2026-07-19** (`bb1e9e8dc`) — proof discharged: gate logic
+   unit-tested 6/6 (non-bump → vacuous-green exit 0; bump-without-artifact → RED exit 1;
+   bump-with-artifact → GREEN; malformed-artifact → RED; `<absent>→1.96.1` with/without baseline)
+   plus an end-to-end `git show BASE:$FILE` extraction test against the real committed pin. Live
+   GH-Actions run of the introduction PR is the `<absent>→1.96.1` end-to-end green; G5 (required-check
+   registration) still owed server-side.
+9. **Item 25 (procedure doc)** — then **Items 4+29 (+JsonWriter)** — **✅ DONE 2026-07-19**
+   (`f04142f89`, `4f4872a54`, `eb350464e`). All proofs discharged: `cargo tree -e no-dev` 25→6
+   (19 dropped ≥13); `metric.jsonl` + markov CLI JSON byte-compatible; post-mortem readback test
+   (kill -9, restart, recover — 300/300 events + PostMortem); event schema `hw` first-class,
+   RAPL-less host shows `unavailable:no_rapl_interface` (named absence, not silent omission);
+   `zero-dep-gate.sh` GREEN; wasm32 green; 938 tests pass.
+10. **Item 5** — **✅ DONE 2026-07-19** (`18152ef84`, `c6b5d2176`, `6605166cd`). Proofs discharged:
+    `cargo tree --manifest-path kernel/Cargo.toml -e no-dev --locked --offline` = `dowiz-kernel`
+    root ONLY (**0 external crates**); pre-cutover parity of the kernel-owned {literal, `.`, `.*`}
+    matcher vs the live `regex` crate (20-doc + 2000-doc + proptest, bit-identical) + permanent
+    independent naive-reference differential + frozen golden; `zero-dep-gate.sh` GREEN "0 external
+    crates" (empty allowlist; latent zero-state gate abort fixed); existing parsing tests green
+    (925 lib unit / 0 failed). **This closes ALL of Tier 1.**
+
+Everything in this batch is now unblocked — no operator ruling stands between it and execution.
+
+---
+
+### H. Items 33–44 — Deterministic AI Inference Arc (appended 2026-07-19, second wave)
+
+**Source:** `DETERMINISTIC-AI-INFERENCE-SYNTHESIS-2026-07-19.md` (grounding + five resolved
+decisions) and `RAW-PROMPT-4-deterministic-ai-inference-self-verifying-code-2026-07-19.md`
+(verbatim source dialogue). **Governing ruling, recorded:** *"безпека і передбачуваність понад
+швидкість"* (safety and predictability over speed) — applied in the synthesis §2 to resolve all
+five of the dialogue's open questions: **own-kernel zero-dep engine** (not TVM/Burn),
+**inference-only** (training stays edge/build-time), **embedded weights** (generated committed
+Rust static, `#[repr(align(64))]`, SHA3 init self-check, codesign; objcopy/link-section deferred
+with named trigger), **i8-symmetric per-tensor quantization** (integer domain end-to-end,
+`div_half_up` requantization), and **fold_transitions pinning moot pending re-measurement**
+(item 33; separate-core rejected on the `core_pinning.rs` DECART precedent). Same sorting rule
+as items 1–32: actual technical dependency, lowest first. **Standing law for the whole arc:**
+zero new external crates (the live empty `ZERO-DEP-ALLOWLIST.txt` gate makes violation a CI
+failure); every hot path ships under the §4 hardening checklist (item 6's machinery) — no
+parallel checklist; dependency questions, if any arise, follow item 25's BINDING procedure.
+**Build-plane AI-optional law (item 45, recorded here per item-45 blueprint §1/§5 step 1):** when the
+inference subsystem (items 33–44) lands, it MUST ride a **non-default cargo feature** named
+`inference` in `kernel/Cargo.toml` — the exact `pq`/`slot-arena`/`gpu` surface-control pattern
+(lines 65–92), with a header comment stating what it pulls and the `cargo tree -p dowiz-kernel -e
+no-dev` verification that the DEFAULT graph stays AI-free. No `inference` feature is added now (item
+45 adds nothing to gate yet — over-design guard); the invariant is enforced today by the
+`ai-optional-gate` CI job (scripts/ai-optional-gate.sh): the default-features kernel suite is
+re-executed green (AI absent) and a dependency-direction grep forbids the seven core decision
+modules (`order_machine`, `decision/`, `hydra`, `event_log`, `markov`, `spectral`, `fdr`) from
+naming the reserved `crate::inference` path outside `#[cfg(feature = "inference")]`. When the
+feature lands, that grep is additionally backed by name-resolution failure (the AI module simply
+does not compile absent the feature). The deterministic-math organs `attention`/`micrograd`/`online`
+are explicitly OUT of the forbidden set (non-AI per attention.rs:17–20).
+Planning only — no item below starts before the operator dispatches it.
+
+- **Item 33 — bench ground-truth re-measurement (Tier-0-class, zero prerequisites, NOT
+  gated on item 34).** The raw prompt's telemetry numbers (+30% wire, 3.02x ML-DSA @N=64,
+  +16.6% `fold_transitions`, +14.3% `empirical_identify`, "123 passed" engine, MISSING
+  `fundamental_matrix_16`) match **no committed artifact in their claimed context** in either repo
+  (synthesis §1.2) — names real, numbers unverified. (Lone near-match, corrected on re-verify: the
+  figure "123 passed" *is* a real committed count, but for `bebop-proto-cap`
+  (`WAVE-CLOSEOUT-P57-P74-2026-07-19.md:36`, P65), NOT `engine` — engine is 112/116/117/121 across
+  committed docs, never 123; a cross-wired attribution, which strengthens the "real numbers from a
+  different session" reading rather than weakening it.) Run the full tracked bench set (all baseline.json keys, both
+  repos' perf branches reconciled) against committed baselines; confirm or refute each claimed
+  regression; close the `_cur.json` partial-run gap so MISSING→RED cannot be produced by an
+  incomplete run. **Proof:** a dated results doc with per-bench delta vs `baseline.json`; each
+  raw-prompt number explicitly CONFIRMED (with the reproducing command) or REFUTED; a full-key
+  run recorded with zero MISSING rows; any confirmed regression gets its own follow-up ticket
+  (static-data-layout-first per the Q2 resolution — item 3's const-adjacency is the named fix
+  shape; separate-core stays rejected). See
+  [`BLUEPRINT-ITEM-33-bench-remeasurement-2026-07-19.md`](BLUEPRINT-ITEM-33-bench-remeasurement-2026-07-19.md).
+- **Item 34 — pilot workload selection + scope ruling (`RESOLVED 2026-07-19` — operator ruled;
+  gates items 35–44).** No model exists in-repo, so the arc must not start as an engine in search
+  of a workload. Candidate real-product surfaces were presented (synthesis §3: retrieval reranker
+  head, `Verdict`/`DriftClass` anomaly scorer, ETA-adjacent regressor — each KB–MB-scale,
+  bounded-domain). **Operator's ruling (recorded, CLOSED — not an open gate): SYNTHETIC/TOY PILOT
+  FIRST.** A small hand-built synthetic classifier — a toy MNIST-style or hand-authored pattern
+  classifier, weights hand-written or fit offline at KB scale, **zero product data, zero PII, zero
+  product risk** — that exercises the WHOLE determinism pipeline end-to-end (quantization → arena →
+  SIMD kernels → reference oracle → golden checksum → embedded weights) and proves it works BEFORE
+  any real product workload is attempted. Explicitly **NOT** a real-product classifier (the three
+  §3 surfaces are DEFERRED to a follow-on second pilot, itself gated on this toy pilot landing
+  green); **NOT** design-only/deferred (the toy pilot is *built*, it is the concrete vehicle for
+  items 35–44); and — restating the arc-wide non-goals — not an LLM, not training, not GPU.
+  **Scope consequence threaded to the downstream items:** the toy pilot's input plane is
+  **public/synthetic by construction** (no capability/crypto/secret-adjacent inputs, no
+  product/PII data anywhere in items 35–44), so item 43's constant-time gate takes its
+  cheap-but-optional branch for THIS pilot — the mandatory dudect branch and any PII/secret-plane
+  handling activate only for the deferred real-product pilots (item 43's named reopening trigger).
+  **Proof (ruling half — DONE):** this ruling recorded here and in synthesis §3. **Proof (spec
+  half — owed on dispatch):** a one-page spec fixing the toy classifier's bounded input domain D
+  (synthetic, enumerable or tightly bounded) and the output-tolerance guarantee the engine must
+  prove — the pure-function `f(x)=y` contract of the source dialogue's part 3. See
+  [`BLUEPRINT-ITEM-34-toy-pilot-spec-2026-07-19.md`](BLUEPRINT-ITEM-34-toy-pilot-spec-2026-07-19.md).
+- **Item 35 — fixed-point number-format + rounding-law spec (after 34).** The Q5 ruling made
+  concrete: i8-symmetric weights, per-tensor scale (power-of-two shift preferred), i32
+  accumulators with per-layer proven no-overflow bounds, `div_half_up` requantization,
+  saturating-clamp semantics, refuse-never-fall-back on any unprovable bound. **Proof:** a spec
+  doc with every law as a checkable equation; the i8×i8 multiply-accumulate law exhaustively
+  proven over all 65 536 pairs (the house 65536-pair standard, literally); overflow-bound lemma
+  stated falsifiably per layer shape. See
+  [`BLUEPRINT-ITEM-35-fixed-point-rounding-spec-2026-07-19.md`](BLUEPRINT-ITEM-35-fixed-point-rounding-spec-2026-07-19.md).
+- **Item 36 — eqc-rs indexed-summation IR extension, quantized-dot target (after 35; extends
+  the already-ruled item 32 IR work — one extension, two consumers, never two IRs).** Grow
+  `Expr` with the Σ-over-index construct needed by BOTH the Laplacian neighbor-sum (item 32)
+  and the quantized dot-product inner law; `emit_fixed_rust` learns the i32-accumulator Q-format
+  path. **Proof:** `emit_proof_program` harness green on an emitted quantized dot (compiled with
+  real rustc, self-asserted against the tree-walking evaluator); the fixed emitter demonstrably
+  refuses an inexpressible node; item 32's Laplacian consumer still green — one IR serves both. See
+  [`BLUEPRINT-ITEM-36-eqc-indexed-summation-ir-2026-07-19.md`](BLUEPRINT-ITEM-36-eqc-indexed-summation-ir-2026-07-19.md).
+- **Item 37 — reference oracle implementation (after 35; parallel with 36).** The "Schoolbook"
+  of this arc: scalar, obviously-correct integer-domain matmul + activation set (i64/i128
+  shadow accumulation — std-only, no dependency), retained forever as the test-only
+  differential target, per the §4 checklist's oracle clause and the NTT schoolbook precedent.
+  **Proof:** exhaustive small-dimension cases + large randomized corpus, oracle vs
+  wide-accumulator shadow, zero divergence; the oracle module documented as permanent (never
+  deleted on optimization). See
+  [`BLUEPRINT-ITEM-37-reference-oracle-2026-07-19.md`](BLUEPRINT-ITEM-37-reference-oracle-2026-07-19.md).
+- **Item 38 — static tensor workspace on the Arena (after 34; parallel with 35–37).** The
+  dialogue's part-5 shape on the existing `BumpArena` precedent: one preallocated workspace,
+  tensors as fixed offsets computed at build time from the pilot graph, zero mid-inference
+  allocation, zero-copy layer-to-layer reads. **Proof:** a counting-allocator test (item 3's
+  own proof machinery reused) shows zero heap allocations across a full inference; offsets are
+  `const`; a deliberately-overlapping layout fails to construct (illegal state unrepresentable,
+  §1.5 house standard). See
+  [`BLUEPRINT-ITEM-38-tensor-arena-workspace-2026-07-19.md`](BLUEPRINT-ITEM-38-tensor-arena-workspace-2026-07-19.md).
+- **Item 39 — SIMD quantized kernels via `core::arch` (after 36+37+38).** AVX2
+  `_mm256_maddubs_epi16`/`_mm256_madd_epi16`-class integer paths, runtime-detected with the
+  scalar oracle as fallback — `simd.rs`/`householder.rs` house pattern. Named dividend of Q5:
+  integer arithmetic is associative, so within-row vectorization is *legal* here (unlike the
+  f64 lanes' across-rows-only rule) — but the chosen lane order is still fixed and documented,
+  and debug builds carry `debug_assert_eq!` against item 37's oracle (the `ring_mul` standard).
+  **Proof:** differential corpus vs oracle bit-exact on both paths; the §4 checklist artifacts
+  present and CI-re-executed; bench added to `baseline.json` so the bench-gate guards it. See
+  [`BLUEPRINT-ITEM-39-40-simd-kernels-golden-checksum-2026-07-19.md`](BLUEPRINT-ITEM-39-40-simd-kernels-golden-checksum-2026-07-19.md).
+- **Item 40 — per-layer golden-checksum oracle + hard-fail (after 39).** Build-time golden
+  CRC32 per layer over pinned test vectors (reusing `fdr`'s hand-rolled CRC32 — P2, no second
+  CRC), runtime spot-check, hard-fail to safe state on mismatch — a checksum mismatch is
+  hardware/memory fault evidence, not a model error. Until item 9's breaker exists the fail is
+  a typed trap + FDR entry; when the breaker lands, it routes through `Result<Permit, Tripped>`
+  (composition named in synthesis §3 — design does NOT gate on item 9). **Proof:** a planted
+  single-bit corruption (weights AND activation, separately) demonstrably trips the fail path
+  and writes the FDR entry; an uncorrupted run is checksum-silent; CI re-executes the planted
+  fault (P7 — the verifier proves it can reject). See
+  [`BLUEPRINT-ITEM-39-40-simd-kernels-golden-checksum-2026-07-19.md`](BLUEPRINT-ITEM-39-40-simd-kernels-golden-checksum-2026-07-19.md).
+- **Item 41 — embedded weight pipeline (after 35; parallel with 39–40).** The Q4 ruling made
+  real: generator emits committed `static WEIGHTS: [i8; N]` Rust source (eqc_gen precedent),
+  `#[repr(align(64))]` wrapper (first in-repo use — flagged as new surface), SHA3-256 golden-
+  hash self-check at init (reusing `event_log`'s Keccak), ML-DSA codesign via `pq/codesign.rs`
+  for update-blob shipping. The objcopy/`link_section` alternative is parked with its named
+  reopening trigger (weights > ~1–2 MB committed-source practicality, or measured build-time
+  regression) per item 25's procedure. **Proof:** init self-check demonstrably fails on a
+  tampered byte (red→green); alignment asserted by test; the parked alternative + trigger
+  recorded in the module doc (slot_arena format); zero-dep gate untouched. See
+  [`BLUEPRINT-ITEM-41-embedded-weight-pipeline-2026-07-19.md`](BLUEPRINT-ITEM-41-embedded-weight-pipeline-2026-07-19.md).
+- **Item 42 — fixed-sequence scheduler (after 38+39+41).** The engine's spine: a `const`
+  function-pointer array / straight-line layer sequence, cyclomatic complexity 1, no dynamic
+  graph traversal, no hash-map dispatch — the whole model as one compiled call sequence.
+  **Proof:** a source-structure test asserts the sequence is `const` and branch-free at the
+  dispatch level; an assembly spot-check of the dispatch path filed under item 14's toolchain-
+  keyed audit format; end-to-end inference reproduces bit-identical outputs and (via item 40)
+  identical per-layer checksums across repeated runs and across native/wasm32. See
+  [`BLUEPRINT-ITEM-42-fixed-sequence-scheduler-2026-07-19.md`](BLUEPRINT-ITEM-42-fixed-sequence-scheduler-2026-07-19.md).
+- **Item 43 — constant-time inference gate (after 42; scope decided by input-plane
+  classification first).** Classify the pilot's input plane per §10/P6 plane-ranking: if inputs
+  are secret-adjacent (anything fed from capability/crypto surfaces), the full dudect-style
+  gate with planted-leak self-test (the `ntt_ct_gate` template) is mandatory and ReLU-class
+  branches become mask/cmov per the dialogue's part 4; if provably public-plane, record that
+  ruling and ship the gate as cheap-but-optional. **For the item-34 synthetic/toy pilot the
+  classification is already settled — inputs are public/synthetic by construction, so this pilot
+  takes the cheap-but-optional branch; the mandatory dudect branch activates only for the deferred
+  real-product pilots (item 34's reopening trigger).** **Proof:** the plane classification recorded
+  with its reasoning; if gated — Welch |t| < 4.5 across input classes AND the planted leak
+  demonstrably caught; if not gated — the recorded ruling names the reopening trigger (any new
+  secret-adjacent consumer). See
+  [`BLUEPRINT-ITEM-43-constant-time-inference-gate-2026-07-19.md`](BLUEPRINT-ITEM-43-constant-time-inference-gate-2026-07-19.md).
+- **Item 44 — arc-wide CI integration + retroactive checklist pass (after 40+42; final).**
+  The inference hot paths join item 6's designated-hot-path list; the §4 CI job re-executes
+  (never presence-checks) the oracle corpus, the planted-fault checksum test, and (if gated)
+  the dudect self-test; benches join the bench-gate baseline; the FDR carries per-inference
+  cycles + (where RAPL exists) joules per item 29's schema — a token-count-only cost report
+  fails review per §21. **Proof:** a deliberately artifact-less test diff touching an inference
+  hot path fails CI; the full suite green; `cargo tree -e no-dev` still resolves to the kernel
+  root alone — the arc lands with the allowlist still empty. See
+  [`BLUEPRINT-ITEM-44-arc-ci-integration-2026-07-19.md`](BLUEPRINT-ITEM-44-arc-ci-integration-2026-07-19.md).
+
+**Dependency graph, one line:** 33 ∥ 34 → 35 → {36 ∥ 37 ∥ 38} → 39 → 40 → 42 → 43 → 44, with
+41 branching off 35 and merging before 42; item 9 (breaker) composes with 40's fail path when
+it exists but gates nothing here.
+
+---
+
+### I. Items 45–49 — Whole-System Determinism & AI-Optional Arc (appended 2026-07-19, third wave)
+
+**Source:** `CRASH-CONSISTENCY-FORMAL-VERIFICATION-GUARDIAN-SYNTHESIS-2026-07-19.md` (Fable
+synthesis) over `RESEARCH-CRASH-CONSISTENCY-FORMAL-VERIFICATION-GUARDIAN-2026-07-19.md` (Opus
+grounding, 11 findings) and
+`RAW-PROMPT-5-crash-consistency-formal-verification-fail-fast-guardian-2026-07-19.md` (verbatim
+dialogue). **Governing directive, recorded:** *"вона має 100% передбачуваною, математично
+детермінованою із запобіжниками. Окрім цього уся система повинна здатна працювати без AI"* —
+(a) whole-system determinism + safeguards, broader than the items-33–44 AI subsystem; (b)
+AI-optional as a preserved architectural INVARIANT (GROUNDED already-true today: `attention.rs`
+"the kernel stays non-AI"; `order_machine`/`decision`/`hydra` import zero AI modules). Ground
+truth honored throughout: the kill-9 mechanism IS a Sequential Append-only Log (not pointer-swap,
+not hybrid); Kani/TLA+ remain planned-only (items 7/10/11, unchanged); Coq/Lean-class full
+formal verification is OUT OF SCOPE per the synthesis §5 proportionality ruling (BITE/runtime-
+verification primary — where the source dialogue's own self-correction landed). Same standing
+laws as §H: zero new external crates, §4 hardening checklist via item 6's machinery, item-25
+procedure for any dependency question. Planning only — no item starts before the operator
+dispatches it.
+
+- **Item 45 — `ai-optional-gate`: AI-optional as an enforced compile-time invariant (Tier-0/1-
+  class, zero prerequisites, READY NOW — asserts today's truth, gains teeth when items 33–44
+  land).** Structural law amended into the §H arc: the inference subsystem lands behind a
+  **non-default cargo feature** (e.g. `inference`) — the exact `pq`/`slot-arena` surface-control
+  pattern already in the kernel. New CI job (zero-dep-gate/toolchain-bump-gate precedent shape):
+  (a) default-features build (AI absent) must compile AND pass the FULL kernel test suite; (b) a
+  dependency-direction check — no core decision module (`order_machine`, `decision/`, `hydra`,
+  `event_log`, `markov`, `spectral`, `fdr`) may reference the AI module paths outside the feature
+  gate (AI depends on core, never core on AI). Explicitly NOT built: runtime kill-switch service,
+  dual-binary pipeline, AI-health monitor (over-design guard; the runtime half is item 47's
+  `None` path). **Proof:** a planted core→AI import (or a planted default-features AI reference)
+  demonstrably turns the gate RED before the gate counts as landed (P7); the default-features
+  full suite runs green inside the job; the feature-gate law is recorded in §H's header and the
+  AI module's own doc when it lands. See
+  [`BLUEPRINT-ITEM-45-ai-optional-gate-2026-07-19.md`](BLUEPRINT-ITEM-45-ai-optional-gate-2026-07-19.md).
+  **Status correction (2026-07-20, `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md`):** `scripts/ai-optional-gate.sh`
+  exists on `main` (169 lines, real logic, landed via `cb00706b1`) but is **not referenced in any
+  `.github/workflows/*.yml` job** — the "New CI job" described above is written but not yet live.
+  Script-exists ≠ gate-live; do not read this item as CI-enforced until the workflow wiring lands.
+- **Item 46 — float-determinism containment, evidence-scoped (READY NOW; composes with item 14's
+  closed bump gate).** NOT a kernel-wide f64→fixed rewrite — rejected as disproportionate
+  (synthesis §2.3: the one real float-nondeterminism bug ever shipped was libm `sin`/`cos` ULP
+  drift, fixed by the Q30 CORDIC, `REGRESSION-LEDGER.md` row 25; basic IEEE-754 arithmetic is
+  bit-deterministic for a fixed binary on the pinned 1.96.1 toolchain). Scope: (i) inventory
+  every libm-transcendental call site (`sin`/`cos`/`exp`/`ln`/`powf`; `sqrt` exempt —
+  correctly-rounded) in the deterministic kernel plane (`spectral.rs`, `markov.rs`,
+  `token_bucket.rs`, `attention.rs`), disposition each as migrate-to-CORDIC-class or
+  pin-under-golden; (ii) every value feeding a cross-version/cross-host comparison surface
+  (golden signatures, oracle pins, `wire_code()`s, `DRIFT_BAND`-class constants) must be either
+  integer-domain or covered by a golden test. **Re-execution mechanism (verified precise): the
+  toolchain-bump gate itself only requires a `spot-check-<new>.md` artifact on a `channel` bump;
+  the golden tests are actually re-run under the new compiler by the always-on full-suite
+  `cargo test` job (pinned via `rust-toolchain.toml`) plus item 6's `hardening-gate` unconditional
+  oracle re-run** — so a compiler-induced float divergence turns the bump PR RED, never a silent
+  ship (once this item adds the missing golden coverage); (iii) the full fixed-point
+  conversion is parked as an explicitly-flagged-LARGE item with named reopening triggers: a
+  reproduced cross-version golden divergence in basic float arithmetic, or a multi-ISA deployment
+  requirement. **Framing amendment (2026-07-19, consistency audit §1.5):** the local-first mesh
+  target means heterogeneous peer hardware whose peers replay each other's DecisionUnits
+  (`import_unit`'s replay-before-persist), so the multi-ISA reopening trigger must be evaluated
+  against *fleet heterogeneity* (incl. aarch64 consumer devices), not a single-host assumption —
+  scope (ii)'s cross-host comparison surfaces are the first line either way. **Proof:** the
+  inventory doc with per-site disposition and zero unclassified
+  transcendental sites; the new golden float surfaces sit in the always-on full-suite /
+  `hardening-gate` oracle set (a deliberately perturbed golden value turns CI RED under the pinned
+  toolchain — red-proven), and a `channel` bump is additionally gated on the `spot-check-<new>.md`
+  `## Full-suite re-run` artifact; the parked rewrite + triggers recorded in the doc and the
+  relevant module docs. See
+  [`BLUEPRINT-ITEM-46-float-determinism-containment-2026-07-19.md`](BLUEPRINT-ITEM-46-float-determinism-containment-2026-07-19.md).
+- **Item 47 — Guardian: semantic advice gate + deterministic-primary path (spec after item 35;
+  full wiring after item 42; EXTENDS item 9, cross-references item 40 — no competing breaker, no
+  fold-in).** The kernel's decision seam takes `Option<Proposal>` — advice is DATA; `None`
+  (AI absent/crashed/rejected) is a first-class tested input, and the deterministic path is the
+  total function (the "fallback" IS the system — AI-optional expressed in the type system).
+  Admission is parse-don't-validate: `admit(Proposal, &Invariants) -> Result<ValidatedProposal,
+  Rejection>` with `ValidatedProposal` constructible only through `admit`
+  (illegal-state-unrepresentable, the item-9 `Result<Permit, Tripped>` standard); invariants
+  written as checkable equations (the `Result.velocity < MAX_SAFE_SPEED` class). Static
+  procedures are NAMED pure functions, statically dispatched, `match`-based (the `order_machine`
+  style), every loop statically bounded (`0..MAX_N`, item-42-style source-structure assertion;
+  WCET tooling explicitly out of scope). Distinct from item 40 by plane: 40 rejects corrupted
+  BITS (hardware-fault evidence), 47 rejects well-formed-but-unsafe MEANING; both hard-fail
+  observable. Every `Rejection` emits an FDR event; when item 9 lands, repeated rejections route
+  through the breaker (same composition clause as item 40 — design does NOT gate on item 9).
+  Named precedent to extend, never fork: `decision/import.rs::import_unit`'s
+  verify-before-persist replay gate — the same shape at import granularity. **Proof:** the
+  invariant spec doc with every law as a checkable equation; planted-invalid-advice red→green
+  (the gate demonstrably rejects — P7); the `None`-path test proving bit-identical output vs the
+  deterministic baseline; exhaustive enumeration where the advice domain is enumerable +
+  oracle/differential corpus otherwise + a proptest sweep (the item-5 regex-parity testing
+  stack, reused not reinvented); the source-structure bounded-loop assertion green. See
+  [`BLUEPRINT-ITEM-47-guardian-semantic-advice-gate-2026-07-19.md`](BLUEPRINT-ITEM-47-guardian-semantic-advice-gate-2026-07-19.md).
+- **Item 48 — FDR blind-spot closure: panic forensics + liveness heartbeat (after items 4+29 —
+  satisfied; READY once the FDR branch merges).** The kill-9 test proves recovery AFTER process
+  death; it is structurally blind to (a) a panicking process that writes nothing before dying
+  and (b) a HUNG process that never dies (no PostMortem is ever emitted — the one failure class
+  FDR cannot see; the k3 span-metrics self-deadlock, root-caused+fixed `67851b2f3`, is the
+  in-repo precedent). Two narrow closures, both BITE-shaped: **(a)** `std::panic::set_hook`
+  emitting ONE fsynced `Alarm` FDR record (message + location; `Alarm` already fsyncs) — a panic
+  hook, NOT a `#[panic_handler]` (`std` kernel; the bare-metal construct does not apply);
+  register/stack core-dumps explicitly not pursued. **(b)** a periodic `Heartbeat` `Kind`
+  variant (closed-enum growth) carrying seq + progress counters; liveness JUDGMENT and restart
+  authority stay OUTSIDE the kernel (systemd `WatchdogSec` / deployment layer;
+  `hub_supervisor`'s crash-loop detection is the deploy-granularity precedent) — a missed
+  heartbeat converts a hang into the kill-9 crash class the system already provably survives.
+  The kernel carries NO self-kill/self-restart logic (`Kernel_Init`-over-`Kernel_Recover`,
+  KISS). **Proof:** a test child that panics yields a recovered `Alarm` record carrying the
+  panic site (red→green: without the hook, nothing is recovered); a test child that deliberately
+  hangs (loop + no heartbeat) is flagged by the external liveness check WHILE producing no
+  PostMortem — demonstrating exactly the gap closed; all other FDR records byte-identical
+  (optional-field discipline, item-27 precedent); clean-shutdown emits a final heartbeat and no
+  false alarm. See
+  [`BLUEPRINT-ITEM-48-fdr-blind-spot-closure-2026-07-19.md`](BLUEPRINT-ITEM-48-fdr-blind-spot-closure-2026-07-19.md).
+- **Item 49 — event-log replay-bound measurement + Hybrid/LSM park (after item 2's wiring fix
+  lands — currently gated: no production composition root constructs the durable store).** The
+  raw prompt's Hybrid (WAL + periodic snapshot) recommendation, dispositioned per surface: for
+  the FDR ring it is REJECTED permanently (replay bounded by construction at 2×1 MiB segments);
+  for the durable `EventLog` (genuinely unbounded hash-chain replay; `hub_supervisor`'s
+  `StateSnapshot` is an update-rollback epoch pointer, NOT replay-speedup) it is PARKED behind
+  measurement — measuring an unwired store would optimize an unreachable path. Once wired:
+  measure startup replay time vs event count (item-26 measurement-only discipline: real numbers,
+  no code landed), state a replay budget, and record the parked snapshot design with its named
+  reopening trigger (measured replay exceeding budget at realistic event volume). Carried-forward
+  correctness note if ever built: data-file fsync strictly BEFORE pointer swap (the dialogue's
+  caveat, endorsed; consistent with `ring.rs`'s kill-9-vs-power-loss separation). **Proof:** a
+  dated measurement doc (replay µs at N ∈ {1e3, 1e4, 1e5} events, methodology stated); the
+  budget + trigger recorded; zero snapshot code landed (scope law, item-26 precedent); the FDR
+  permanent-rejection rationale recorded in `fdr/ring.rs`'s module doc when next touched. See
+  [`BLUEPRINT-ITEM-49-event-log-replay-bound-measurement-2026-07-19.md`](BLUEPRINT-ITEM-49-event-log-replay-bound-measurement-2026-07-19.md).
+
+**Dependency graph, one line:** 45 ∥ 46 ∥ 48 ready now (48 pending the FDR branch merge);
+47 spec after 35, full wiring after 42, composes with item 9's breaker when it exists;
+49 strictly after item 2's wiring-gap fix. No item here gates any §H item; item 45's feature-gate
+law binds §H's build items when they land.
+
+### J. Items 50–54 — Validity (K3 Admission), Live-Struct Sentinel & Proportionate Open-Source Hardening Arc (appended 2026-07-19, fourth wave)
+
+**Source:** `KLEENE-TRUTHFULNESS-VALIDITY-SYNTHESIS-2026-07-19.md` (Fable synthesis) over
+`RESEARCH-KLEENE-TRUTHFULNESS-OPENSOURCE-HARDENING-2026-07-19.md` (Opus grounding) and
+`RAW-PROMPT-6-…-kleene-unknown` + `RAW-PROMPT-7-…-sentinel-shadow-mode` (one combined verbatim
+dialogue). **Terminology RULING, binding from here on (synthesis §1):** "Truthfulness" =
+byte-reproducibility, exclusively the swarm-safety arc's property, NOT a term of this roadmap;
+the RAW-PROMPT-6 content-based concept is renamed **"Validity" (derivational validity)** — a
+proposal is valid iff its supplied reasoning/evidence path checks against the stated
+axioms/invariants; incomplete evidence downgrades to Undecidable, never to assumed-valid.
+**Dispositions recorded here (synthesis §§2.3/2.5, Part 3):** the Sentinel read-time integrity
+check for critical LIVE in-memory structs is **ADOPTED as item 54**, proportionately scoped —
+an earlier draft of this pass rejected it on a "commodity ECC cloud hardware" argument that the
+operator **reversed on 2026-07-19** on two grounds: (i) genuine space-grade engineering quality
+is the standard for this arc regardless of substrate, and (ii) the deployment premise was
+factually wrong — the target is **local, offline-first, consumer-grade hardware, which typically
+LACKS ECC**, so the in-memory bit-flip fault class is *higher* not negligible, strengthening the
+mechanism's justification. Item 54 reuses the in-kernel CRC32 (zero new primitive), checks at
+transition points (not per-field-read), and is scoped to the live mutable authority structs item
+40's read-only weight checksum structurally does NOT cover (item 47's `Invariants` table, item 21
+gain-schedule, live inference config) — genuine overlap with item 40 is a boundary, not a reason
+to skip. Kani-for-K3 is item-7 target-list growth, not a new item. proptest stays strictly
+dev-only (zero-dep-gate law). **Operator-facing repository-state flag (Part 4):
+items 1–49's actual CODE (all Tier 1, item 6's gate + `ct_gate.rs`, the FDR module, fixes from
+items 16/30/31) still lives ONLY on the unmerged `exec/space-grade-tier0-2026-07-19` branch —
+`main` has documents only.** Items below that touch FDR or item 47 inherit that merge as a
+prerequisite. Same standing laws as §§H–I: zero new external crates, item-6 hardening machinery,
+item-25 procedure for any dependency question. Planning only — no item starts before the
+operator dispatches it.
+
+- **Item 50 — K3 admission-verdict extension + Validity terminology binding (spec-level
+  amendment to item 47 — same gating: spec after 35, wiring after 42; EXTENDS item 47's
+  `admit`, never a parallel type).** The public seam stays exactly item 47's
+  `admit(Proposal, &Invariants) -> Result<ValidatedProposal, Rejection>` — Kleene-False and
+  Kleene-Unknown MUST be behaviorally identical at the seam (advice unused, deterministic path
+  taken), so no third control-flow arm exists for "Unknown" to be handled leniently through.
+  `Rejection` gains a two-class cause, `RejectionClass::{Refuted, Undecidable}`: Refuted = a
+  named invariant/inference rule demonstrably violated (K3 False); Undecidable = evidence
+  chain incomplete/absent/over-budget (K3 Unknown — RAW-6's Evidence-based Unknown adopted
+  verbatim: model confidence/logits are NEVER an input to `admit`). The literal
+  `#[repr(u8)] enum TruthState { False=0, True=1, Unknown=2 }` lands as an INTERNAL combinator
+  type of the admission module: each sub-check returns `TruthState`; the strong-Kleene fold
+  governs (any False short-circuits to Refuted — `False & Unknown = False`; else any Unknown
+  folds to Undecidable — `True & Unknown = Unknown`; all True admits). `None` ≠ `Unknown`:
+  the seam's `Option<Proposal>` None (advice absent, items 45/47) and Undecidable (advice
+  present but unevaluable) both take the deterministic path but log as distinct facts. The
+  class rides item 47's existing per-`Rejection` FDR event so item 9's breaker and item 51 can
+  weight Refuted vs Undecidable differently. **Proof:** exhaustive truth-table tests — all 9
+  cases per binary operator + 3 for NOT, the full state space enumerated literally (RAW-7's
+  own exhaustive-beats-random point; NO new proptest use); planted incomplete-evidence
+  proposal demonstrably lands `Undecidable` and planted rule-violation lands `Refuted`
+  (red→green, P7); the item-47 `None`-path bit-identity test still green with the extension in
+  place; the K3 fold joins item 7's Kani target list (recorded there, executed under item 7). See
+  [`BLUEPRINT-ITEM-50-k3-admission-validity-2026-07-19.md`](BLUEPRINT-ITEM-50-k3-admission-validity-2026-07-19.md).
+- **Item 51 — shadow-mode divergence telemetry at the decision seam (after item 47's wiring +
+  item 50; FDR branch merge prerequisite — genuinely NEW pattern, full design in synthesis
+  §2.4).** No second execution lane: item 47's deterministic decision D is already total and
+  always computed, so on `Some(proposal)` the comparison is nearly free. New FDR
+  `Kind::ShadowDivergence` variant (closed-enum growth — item-48 `Heartbeat` precedent)
+  carrying decision-site id, Admitted/`RejectionClass`, agreement bit, and short DIGESTS of D
+  and the proposed action (never full payloads; records without the surface stay
+  byte-identical — item-27 optional-field discipline). **Digest primitive, named in-spec
+  (2026-07-19, consistency audit §3.3 — max-nativeness):** digest = the in-kernel CRC32
+  (hardware-fault plane, matching items 40/54) or truncated in-kernel SHA3-256 — never a new
+  algorithm, no third ad-hoc hash under deadline. Emission policy: every disagreement and
+  every Admitted-but-differs logged; Undecidable-while-D-decides at a bounded rate (the
+  "model adds nothing on this domain" signal); agreement SAMPLED at a low fixed rate for the
+  base-rate denominator — bounded emission preserves the FDR ring's replay-bounded-by-
+  construction property (item 49's rationale). Advisory by definition AND by test: no build
+  fails, no decision changes, no breaker trips on a shadow event alone (aggregated
+  Refuted-class counts still reach item 9 via item 47's own rejection events — shadow mode
+  adds observation, never authority). Distinct from every existing differential in-tree: those
+  all fail/reject on disagreement (`decision/import.rs` ReplayDisagreement rejects;
+  pq/spool/spine differentials are tests); nearest advisory kin is `metrics.rs`'s
+  merge-plane anomaly flag — different plane, cited not extended. **Proof:** deterministic
+  output bit-identical with shadow logging on vs off (item-47 `None`-path test pattern
+  reused); a planted disagreeing proposal yields exactly one recovered `ShadowDivergence`
+  record with correct class + digests (red→green through the real FDR ring); emission-rate
+  bound asserted under a flood of planted disagreements; all non-shadow FDR records
+  byte-identical before/after. See
+  [`BLUEPRINT-ITEM-51-shadow-mode-divergence-telemetry-2026-07-19.md`](BLUEPRINT-ITEM-51-shadow-mode-divergence-telemetry-2026-07-19.md).
+- **Item 52 — `miri-gate`: targeted UB detection over the real unsafe surface (independent —
+  zero prerequisites on items 47/50/51; dispatchable now).** GROUNDED baseline: Miri runs
+  nowhere (aspirational doc-comments only; `ROADMAP-LIVE-STATUS-2026-07-18.md:24` "component
+  absent this toolchain"). **Inventory corrected by independent re-verification 2026-07-19 (the
+  research/RAW figure was wrong):** the real unsafe surface is **19 blocks in only 4 modules** —
+  `arena.rs` (6), `simd.rs` (5), `fdr/pmu.rs` (5 — `_rdtsc`/raw-`syscall5` FFI, exec-branch only,
+  joins post-FDR-merge), `householder.rs` (3). `messenger.rs`/`slot_arena.rs`/`chaos.rs`/
+  `bounded_drainer.rs` contain **ZERO real unsafe** — every `unsafe` token in them is a *comment*
+  (`slot_arena.rs`'s doc-comment literally says "No `unsafe` in this wrapper"); the old "21 blocks /
+  7 modules" list counted those comment mentions and omitted `fdr/pmu.rs`. `pq/` has ZERO unsafe
+  (the raw prompt's crypto guess was wrong). Scope: ONE CI job running `cargo miri test` filtered to
+  the genuinely unsafe-bearing modules — `arena.rs`'s bump-allocator raw-pointer logic (where UB
+  actually hides) plus the scalar paths of `simd.rs`/`householder.rs`; NOT the four unsafe-free
+  wrappers (filtering them matches zero unsafe — theater), NOT miri-everything. Honest limitation,
+  recorded in the gate's own doc: `core::arch` AVX2 intrinsic bodies AND `fdr/pmu.rs`'s
+  `_rdtsc`/syscall FFI are largely unsupported under Miri; the house runtime-detection +
+  scalar-fallback pattern means the interpreted run exercises the scalar paths of
+  `simd.rs`/`householder.rs`, and intrinsic/syscall-body coverage stays with the items-37/39
+  differential oracles + item 7 — a green `miri-gate` is never read as "SIMD/PMU is Miri-clean"
+  (exact intrinsic support confirmed empirically on first run, not asserted). Toolchain: Miri
+  needs a nightly component; the BUILD pin (item 14, 1.96.1) is untouched — the job pins its
+  own analysis nightly, recorded in the workflow + `docs/audits/toolchain/`, bumps recorded
+  not floating. **Proof:** a planted UB self-test (out-of-bounds / use-after-free behind a
+  test-only cfg) demonstrably turns the gate RED before it counts as landed (P7); clean run
+  green; a filter matching zero tests is RED (item-6 anti-forgery clause reused); build
+  toolchain pin byte-unchanged. See
+  [`BLUEPRINT-ITEM-52-miri-gate-2026-07-19.md`](BLUEPRINT-ITEM-52-miri-gate-2026-07-19.md).
+- **Item 53 — `lint-gate`: clippy + fmt (+ miri-required promotion) contribution gates (LOW
+  priority, LAST in this arc, blocks nothing — sequenced behind 50–52 by explicit RULING).**
+  GROUNDED: none of the triad exists in CI (zero clippy/fmt/miri workflow hits; real gates
+  today = cargo-test, dco-check `ci.yml:210-226`, decart-dep-lint, v5c-reexec, gitleaks,
+  supply-chain, bench-regression); AND open-sourcing is NOT imminent — ADR-0020 Accepted but
+  public-flip + EUTM are operator-gated and unauthorized — so the raw prompt's "any PR is an
+  attack vector" urgency presumes a contribution surface that is not authorized to exist yet.
+  Scope when dispatched: one cheap job — `cargo clippy --deny warnings` + `cargo fmt --check`
+  (both components ALREADY pinned by item 14's `rust-toolchain.toml`
+  `components=[rustfmt,clippy]`); miri-required = promoting item 52's job to a required check,
+  no new machinery. Inherits item 14's owed G5 caveat: advisory until marked required in
+  branch protection (server-side). **Named escalation trigger:** operator authorization of
+  public-flip preparation (ADR-0020's gate) promotes this item to a pre-flip BLOCKER alongside
+  the ADR-recommended all-origin-refs gitleaks sweep; until then it stays last. **Proof:** a
+  planted clippy warning and a planted fmt divergence each turn the job RED (P7); clean tree
+  green; the escalation trigger recorded here and in the job's comment header. See
+  [`BLUEPRINT-ITEM-53-lint-gate-2026-07-19.md`](BLUEPRINT-ITEM-53-lint-gate-2026-07-19.md).
+- **Item 54 — Sentinel: read-time integrity check for critical LIVE in-memory structs (after
+  {item 47 wiring (post-42) + item 50} + the FDR branch merge; registry enumeration startable
+  now; full design in synthesis §2.3 — operator-reversed 2026-07-19 from an earlier draft
+  rejection).** Deployment premise, corrected and load-bearing: the target is **local,
+  offline-first, consumer-grade hardware that typically LACKS ECC**, so a single-/multi-bit
+  in-memory flip is a real fault class — NOT a cloud/ECC context, and the "space-grade" standard
+  binds regardless of substrate. GROUNDED baseline: the live-struct read-time pattern is genuinely
+  absent (all existing integrity machinery is AT-REST — `backup` CAS, `event_log` chain-walk, FDR
+  ring CRC32). Proportionate on three axes: **(scope)** only structs that are long-lived AND a
+  money/safety/decision authority input AND lack at-rest backing qualify — the enumerable registry
+  is item 47's `Invariants` table (a flipped bound silently mis-certifies *every* `admit`), item 21
+  gain-schedule/decision-config, and the live inference config (distinct from item 40's read-only
+  weights); transient scratch and already-at-rest-verified state are excluded. **(primitive)**
+  REUSES the in-kernel CRC32 already built for the FDR module (P2 — no second CRC, no new
+  algorithm, no external crate; CRC32 not crypto — the threat is a hardware fault, not an in-memory
+  adversary). **(frequency)** checked at defined transition points (once per authority-use, e.g.
+  per `admit` over the `Invariants`; recompute-and-store on the rare centralized mutation) — NOT
+  per-field-read, so the hot-path tax and the missed-re-hash false-trip surface are both bounded;
+  an immutable-after-init struct is a pure read-time check with zero re-hash burden. On mismatch:
+  ONE fsynced FDR `Alarm` (hardware-fault evidence, item-40 semantics) + fail-closed deterministic
+  path (a corrupted `Invariants` table REFUSES admission), composing with item 47's `Rejection`
+  seam and item 9's `Result<Permit, Tripped>` when it lands (does NOT gate on item 9). Distinct
+  from item 40 by plane: 40 guards read-only static WEIGHTS, 54 guards live MUTABLE authority
+  structs — complementary surfaces, one shared CRC. **Proof:** a planted single-bit corruption of a
+  registered struct (behind a test-only cfg raw-pointer flip, mirroring item 40's planted-fault
+  test) demonstrably trips the Safe-State path and writes the `Alarm` (red→green, P7); an
+  uncorrupted run is checksum-silent; mutate-then-read passes (re-hash correctness); CI re-executes
+  the planted fault; the critical-struct registry is enumerated with per-struct justification (why
+  critical, why no at-rest backing); `cargo tree -e no-dev` byte-unchanged (existing CRC32 reused,
+  zero new dependency and zero new algorithm — max-nativeness law). See
+  [`BLUEPRINT-ITEM-54-sentinel-live-struct-integrity-2026-07-19.md`](BLUEPRINT-ITEM-54-sentinel-live-struct-integrity-2026-07-19.md).
+
+**Dependency graph, one line:** 50 rides item 47's gates (spec after 35, wiring after 42);
+51 after {47-wiring + 50} + the FDR/exec branch merge; 52 independent (on-`main` targets
+`arena`/`simd`/`householder` dispatchable now, `fdr/pmu` folds in post-FDR-merge); 53 last by
+ruling, trigger-promoted on public-flip authorization; 54 parallel with 51 (same {47-wiring + 50}
++ FDR-merge prerequisite; registry enumeration startable now). Nothing here gates any §H/§I item;
+items 50 and 54 amend/extend item 47's surface in place (one admission gate, one shared integrity
+primitive, never a fork).
+
+### K. Items 55–72 — Consistency Retrofit, Pervasive-Telemetry & Digital-Twin Arc (appended 2026-07-19, fifth wave — master-synthesis pass)
+
+**Sources (six, merged by `MASTER-SYNTHESIS-CONSISTENCY-TELEMETRY-DIGITAL-TWIN-2026-07-19.md`):**
+`AUDIT-SPACE-GRADE-CONSISTENCY-DEPLOYMENT-NATIVENESS-2026-07-19.md` (corrections applied above:
+§0/§E item 12, item 7 annotation, item 31 `kernel::json` ticket, items 46/51 amendments, SYNTH
+§6/§9/§11 and BP-27 §5 retro-corrections), `AUDIT-BINARY-VS-KLEENE-LOGIC-2026-07-19.md` (8
+SHOULD-BE-3-VALUED findings / 27 keep-binary / 11 already-correct),
+`AUDIT-TELEMETRY-EVERYWHERE-AI-OPTIONAL-OS-2026-07-19.md` (13 gaps G1–G13 + the work-normalized
+cost ledger + the AI-optional P1–P5 proposals),
+`RESEARCH-OS-ARCHITECTURE-PATTERNS-ADOPTION-2026-07-19.md` (3 adoptions + 1 small gap; category
+mismatches ruled out), `RESEARCH-NATIVE-KANI-REPLACEMENT-FEASIBILITY-2026-07-19.md` (already
+enacted as item 7's v2 rescope — no new item here, consistency confirmed above), and
+`RESEARCH-RESOURCE-FOOTPRINT-ZERO-BLINDSPOT-RELATIONAL-TELEMETRY-2026-07-19.md` (threads 1–5:
+derived footprint views, zero-UN-NAMED-blind-spots, FDR relational linkage, the 10-step
+completeness procedure, the predictive-oracle principle + digital-twin split).
+
+**Standing laws, same as §§H–J:** zero new external crates (empty-allowlist gate), item-6
+hardening machinery (no parallel checklist), item-25 procedure for any dependency question,
+item-27 P3-plane law for every telemetry value (excluded from all hash/gate/replay surfaces).
+**New binding procedure for this arc:**
+[`PROCEDURE-TELEMETRY-COMPLETENESS-STANDING-2026-07-19.md`](PROCEDURE-TELEMETRY-COMPLETENESS-STANDING-2026-07-19.md)
+(item 57 ratifies it — the item-25 pattern). **Merged, not duplicated:** the temporal-TMR
+adoption is item 12's §E re-scope (above), NOT a new number; item 7's rescope is enacted in §C.
+**Named out-of-scope flags (recorded, not itemized):** audit-3 G10 (bebop-repo NTT wire-in has
+zero perf telemetry — a `cycles-per-op` decision with no data; belongs to the bebop repo's own
+lane) and G13 (`apps/api` Node latency telemetry — legacy surface, outside the kernel arc).
+**Planning only — no item below starts before the operator dispatches it.**
+
+- **Item 55 — K3 verdict-class retrofit across roadmap verdict surfaces (spec-level amendments
+  in the item-50 shape; zero prerequisites, READY NOW — each amendment's code cost rides its
+  host item's own build).** Applies the Kleene audit's remaining spec findings (1, 3, 4, 7, 8;
+  finding 6 already applied in item 12's §E re-scope; findings 2/5 are item 56). The invariant
+  shape for every one: **behavioral collapse to the safe pole KEPT, distinct typed cause ADDED
+  to the record** — no third control-flow arm anywhere. (a) **Item 33:** per-number verdict
+  becomes `{Confirmed(cmd), Refuted(cmd), Unresolvable(cause)}` — a claimed delta smaller than
+  the bench's measured CI (the documented ±40% `fold_transitions` noise-bound vs +16.6% claim)
+  is `Unresolvable`, recorded with measured CI + claimed delta side-by-side and a
+  bench-stabilization ticket, never a manufactured CONFIRMED/REFUTED; MISSING→RED tracker
+  semantics unchanged. (b) **Items 7/10/11:** Kani/TLC result artifacts carry per-target
+  `{Proved, Refuted(cex), Undecidable(cause: bound/timeout/resource)}`; CI collapses
+  Refuted|Undecidable → RED identically, but the class rides the job artifact — an exhausted
+  bound needs a bound bump, a counterexample needs a code fix; conflating them mis-routes the
+  response. (c) **Item 9 (+21 inherits):** `Tripped` carries
+  `TripCause::{Exceeded(named-threshold), Unevaluable(Absence)}`, and the previously-unstated
+  input policy becomes law: a trip predicate evaluating a `Reading::Unavailable` input takes the
+  CONSERVATIVE pole (trip-eligible, never silently healthy), logged distinctly — the seam stays
+  two-armed. (d) **Item 43:** the classification law gains its unstated third case —
+  `Unclassifiable ⇒ treated as secret-adjacent` (mandatory dudect branch), recorded as its own
+  classification value so the fail-closed default is visible. (e) **Items 6/43 dudect:** the
+  recorded verdict becomes `{LeakFound, NoLeakAtSamples(n), Inconclusive(underpowered)}` with
+  sample/class counts recorded — a green run is citable as "no leak detected at power N," never
+  "CT proven"; Inconclusive ⇒ RED; the planted-leak positive control stays. (f) **Item 35
+  (consistency note, no new state):** emitter refusal carries `{BoundViolated, BoundUnprovable}`.
+  **Proof:** each host item's entry/blueprint text amended with the class enum + policy sentence
+  (this item is DONE when the amendments are recorded and each host item's own proof section
+  names the planted-class red→green obligation — e.g. item 33's results doc must contain at
+  least the capability to record an `Unresolvable` row; item 9's blueprint must state the
+  Unavailable-input policy before build). See
+  [`BLUEPRINT-ITEM-55-k3-verdict-class-retrofit-2026-07-19.md`](BLUEPRINT-ITEM-55-k3-verdict-class-retrofit-2026-07-19.md).
+- **Item 56 — kernel classifier epistemic-basis retrofit: `markov::Verdict` fail-open record +
+  `spectral::DriftClass` conflated record (code; Kleene audit findings 2 + 5 — the only
+  fail-open-to-lenient instance found, and its fail-closed sibling).** Behavior and wire
+  contracts are KEPT in both cases; only the record gains a basis. **(a) markov (the headline):**
+  `analyze_detailed` maps window-too-short ⇒ `Healthy` (`markov.rs:110`) and
+  `markov_attractor.rs:36` maps analyzer-error ⇒ `"HEALTHY"` — Unknown emitted at the MOST
+  lenient pole, and item 27's FDR record carries only `verdict_str()` so "couldn't analyze" is
+  byte-identical to "measured healthy" in telemetry. Fail-open stays (advisory hook — no
+  evidence ⇒ no intervention is the right behavior); ADD a typed basis
+  (`Basis::{Measured, WindowTooShort, AnalyzerError}`) on `Report` — NOT a fourth `Verdict`
+  variant (CLI JSON is golden-pinned byte-identical) — and an optional basis field on
+  `emit_verdict_pmu`'s FDR record (item-27 optional-field discipline). Downstream law: items
+  9/21 must never count an unevaluated-Healthy window as health evidence. **(b) spectral:**
+  `classify_drift` collapses three cannot-evaluate causes (non-finite entries, ragged matrix,
+  checked-constructor Err) into `Unstable` — the fail-closed collapse is correct and stays, and
+  the pinned `wire_code` 0/1/2 makes a fourth variant wrong; ADD out-of-band provenance
+  (`DriftBasis::{Measured, IllFormedInput(cause)}` via the `classify_drift_with_rho` report path
+  / item-27-style optional FDR companion) so forensics can separate a genuinely diverging loop
+  from NaN-poisoned input. **Prereqs:** none for the pure-kernel halves (`markov.rs`/
+  `spectral.rs` live on main); the FDR-field halves join after the exec-branch FDR merge.
+  **Proof:** markov CLI JSON goldens byte-identical before/after (the pinned contract is the
+  regression test); a forced short-window run and a forced analyzer-error run each yield
+  `Healthy` + the correct distinct basis in the FDR record (red→green: today they are
+  byte-identical to measured-healthy); spectral: a NaN-poisoned matrix and a genuinely-divergent
+  matrix both classify `Unstable` with distinct recorded bases; `wire_code` round-trip test
+  untouched and green. See
+  [`BLUEPRINT-ITEM-56-classifier-epistemic-basis-retrofit-2026-07-19.md`](BLUEPRINT-ITEM-56-classifier-epistemic-basis-retrofit-2026-07-19.md).
+- **Item 57 — telemetry-completeness standing procedure RATIFIED + HOT-PATHS accounting columns
+  (the enforcement spine of this arc; zero prerequisites — the procedure doc exists as of this
+  pass).** The item-25 pattern replayed: the 10-step (+3 cost-oracle steps) procedure in
+  `PROCEDURE-TELEMETRY-COMPLETENESS-STANDING-2026-07-19.md` becomes BINDING for every future
+  blueprint in this arc once the operator ratifies it. Mechanical half: extend
+  `docs/audits/hardening/HOT-PATHS.tsv` with an `eff` column — every hot-zone row must either
+  name its workload-kind/span or carry a ledgered `gap:` reason (the item-6 gate mechanism,
+  extended not replaced), and every function in a hot zone is classified
+  `INSTRUMENTED | CHEAP(SamplingDisabled) | EXCLUDED(reason)`. This is the honest form of the
+  operator's "enforced everywhere": **zero UN-NAMED blind spots** — 100% coverage of the
+  *accounting*, with the impossibility triangle (100% stamps ∧ zero cost ∧ deterministic replay)
+  stated rather than violated. Also rules on audit G9: the cheap-path FDR envelope (one relaxed
+  atomic load when disabled) is the always-compiled floor; heavy stamps stay feature-gated —
+  recorded as the standing posture. **Proof:** procedure doc cross-linked from
+  `docs/audits/hardening/CHECKLIST.md`; the extended gate goes RED on a hot-zone row carrying
+  neither an `eff` value nor a `gap:` reason (planted-row red→green, anti-forgery clause
+  reused); the G9 ruling recorded in the procedure doc + `fdr/mod.rs` when next touched. See
+  [`BLUEPRINT-ITEMS-57-58-telemetry-completeness-cost-ledger-2026-07-19.md`](BLUEPRINT-ITEMS-57-58-telemetry-completeness-cost-ledger-2026-07-19.md).
+- **Item 58 — work-normalized cost ledger (after item 57 + the exec-branch FDR merge; audit-3
+  §1.3 design adopted).** On `SpanClose`-class FDR records for a named workload: emit
+  `(work: {kind, Δcount}, cost: HwStamp-delta ⊕ PmuStamp-delta)` — **pairs of raw u64, never
+  ratios** (the landed losslessness law; ratios are a consumer concern). Closed workload-kind
+  enum seeded from work units that already exist: `DecisionUnitsImported`, `FdrRecordsAppended`,
+  `TransitionsFolded`, `TokensGenerated`, `FramesRendered`, `EigensolvesCompleted`,
+  `SignaturesVerified`. Degradation ladder self-describing per field via `Reading<T>`: Tier E
+  (per-joule, RAPL hosts), Tier C (per-cycle/instruction, PMU hosts), Tier T (per-tick/wall —
+  the tier this dev host actually runs at, honest not aspirational); a cross-tier efficiency
+  comparison is structurally UNCOMPUTABLE (absent counters are absent), and on hosts where C and
+  T are both live, work/cycles vs work/ticks must agree within a stated band — a free self-test
+  of the counters. **Proof:** schema tests + named-absence serialization proof (the literal
+  `unavailable` reason greppable on this RAPL-less/paranoid host — procedure step 10's
+  red→green); the pair-not-ratio law asserted structurally (no ratio field exists in the
+  schema); the cross-tier consistency band test green where both tiers are live; first consumer
+  deployments = items 59–61. See
+  [`BLUEPRINT-ITEMS-57-58-telemetry-completeness-cost-ledger-2026-07-19.md`](BLUEPRINT-ITEMS-57-58-telemetry-completeness-cost-ledger-2026-07-19.md).
+- **Item 59 — agent-turn timing closure (gaps G1+G2+G12 — the highest-leverage single gap:
+  tokens are already counted, wall-clock is one `Instant` pair away; after item 58).** (a) The
+  kernel LLM port (`ports/llm.rs`) `ChatResponse` gains a duration/TTFT surface (additive typed
+  field or timing companion — the port contract can currently not transport latency even where
+  adapters measure it); (b) `agent-loop`'s host binary times each turn (it bypasses the ONE
+  timed path, `Dispatcher`'s `ms`, by driving `OllamaAdapter` directly) and folds per-turn
+  Δwall + Δticks alongside the existing token counts into `track_record.jsonl`; (c) the kernel
+  agent executor (`kernel/src/agent/loop.rs`) records per-iteration timing at span granularity.
+  Workload-kind: `TokensGenerated`. **Proof:** a live loop run yields track-record entries
+  carrying both tokens and duration for the direct-adapter path (parity with the Dispatcher
+  path's existing `ms`); tokens/sec derivable consumer-side from one record's raw pair; an
+  LLM-absent turn records a named absence, never a fabricated 0; existing golden/track-record
+  consumers unbroken (additive-field discipline). See
+  [`BLUEPRINT-ITEM-59-agent-turn-timing-closure-2026-07-19.md`](BLUEPRINT-ITEM-59-agent-turn-timing-closure-2026-07-19.md).
+- **Item 60 — engine frame-loop + voice instrumentation (gaps G3+G11; after item 58; engine
+  currently has ZERO `Instant::now` — grep-verified).** (a) `EngineLoop::frame()` measures
+  frame time against a NAMED frame-budget constant (one authority site + pin test — P3 rate
+  discipline); `FrameProfiler` gains time alongside its call counts; workload-kind
+  `FramesRendered`. (b) `voice.rs`: `WakeWordSpotter`/`AsrModel::feed` latency measured — the
+  module carries an explicit "battery lever" efficiency claim with zero measurement, and
+  `InferError::Timeout` exists with no timer feeding it; wire the timer. (c) All engine timing
+  must state its wasm leg per procedure step 9 (native `Instant` / wasm `performance.now`
+  import or named absence — coordinates with item 62's wasm clause, one design not two).
+  **Proof:** frame-time p50/p99 emitted under the telemetry feature with a budget-breach test
+  (planted slow frame flagged); `InferError::Timeout` demonstrably reachable from the real
+  timer (red→green — today it is dead); the budget constant pinned; wasm cdylib stays green. See
+  [`BLUEPRINT-ITEM-60-engine-frame-voice-instrumentation-2026-07-19.md`](BLUEPRINT-ITEM-60-engine-frame-voice-instrumentation-2026-07-19.md).
+- **Item 61 — kernel runtime-counter closure: durability, subprocess, eigensolver, crypto spans
+  (gaps G5+G6+G7+G8; after item 58).** (a) `EventLog::append`/`FileEventStore::insert` gain
+  continuous counters (events + Δticks + fsync count) — item 26 measured 637 µs p50 once at
+  bench time, but the operator-gated 53× group-commit decision has NO ongoing data feed;
+  workload-kind `FdrRecordsAppended`/events. (b) `living_knowledge.rs` subprocess spawns record
+  duration + exit rusage (`wait4`) + an FDR record — a hung/expensive child is currently
+  invisible to FDR (adjacent to item 48's liveness class, composes with it). (c)
+  `spectral.rs`/`householder.rs` join the span roster — HOT-PATHS zones with no runtime spans;
+  workload-kind `EigensolvesCompleted` (cycles/eigensolve is the cleanest Tier-C efficiency
+  metric in the kernel). (d) Fix the `mldsa_verify` span double-gating (`telemetry` AND `pq`):
+  a `pq`-only production build currently has zero crypto latency telemetry — either the span
+  compiles under `pq` alone or the gap is ledgered in HOT-PATHS as an explicit `gap:` row (no
+  silent dark zone); workload-kind `SignaturesVerified`. **Proof:** counters recoverable from
+  the FDR ring after N appends in a test; child-process record carries real rusage (planted
+  slow child observable); eigensolver spans emit under load with HOT-PATHS `eff` rows filled;
+  the pq-only build either emits crypto spans or carries the ledgered gap row (gate-checked). See
+  [`BLUEPRINT-ITEM-61-kernel-runtime-counter-closure-2026-07-19.md`](BLUEPRINT-ITEM-61-kernel-runtime-counter-closure-2026-07-19.md).
+- **Item 62 — FDR relational linkage: `span_id` + `parent_span_id: Reading<u64>` + the wasm
+  clock leg (gaps: doc-6 thread 3's decisive finding + G4; after the FDR merge; parallel with
+  item 58).** The FDR schema is FLAT/UNLINKED today — grep over `schema.rs` for
+  parent/trace/span/caller = zero hits; `seq` conveys temporal succession, never causal
+  parentage. Extend (never replace) the envelope on the P3 plane: `span_id: u64` (per-process
+  counter) + `parent_span_id: Reading<u64>` with `Unavailable(NoParent)` at a root — the
+  named-absence doctrine covering "this is a root," no magic 0, no missing key. Cross-process
+  edges (subprocess spawns, agent↔LLM boundary) seed the parent id across the boundary — OTel
+  propagation reduced to passing one u64. Cost honest: ~16 bytes + a counter increment, P3 so
+  it never touches determinism. The wasm leg (G4): `FdrEvent::stamp` is cfg'd off wasm because
+  `Instant` panics there — this item states the wasm-safe clock (`performance.now()` import) or
+  the named `Absence` reason for the 24 wasm pub fns; the FDR plan may no longer structurally
+  EXCLUDE the wasm surface silently. **Proof:** nested spans reconstruct a correct call tree
+  from a recovered ring (test walks parent links); root records carry the literal `NoParent`
+  reason (greppable); records on surfaces without linkage stay byte-identical (optional-field
+  discipline); the P3 grep proof (no span id feeds any hash/gate/replay surface) green; wasm
+  cdylib green with the stated clock or named absence. See
+  [`BLUEPRINT-ITEM-62-fdr-relational-linkage-2026-07-19.md`](BLUEPRINT-ITEM-62-fdr-relational-linkage-2026-07-19.md).
+- **Item 63 — item-45 spec extension: AI-boundary disposition table + build-provenance record +
+  feature-matrix legs (audit-3 §2.3 P2/P4/P5 adopted; P3's reject-list endorsed as correct, not
+  deferral; spec-level now, teeth when item 45 lands; audit-3 P1 — "dispatch item 45 now, it is
+  READY-NOW and converts safe-by-convention into safe-by-gate before items 33–44 create real
+  risk" — is recorded here as an operator-dispatch recommendation).** (a) Disposition table over
+  the pre-existing surfaces item 45's spec is silent on: `{micrograd, online, attention, evals,
+  ports/llm, ports/agent, agent/, engine/voice.rs}` → each classified CORE-DETERMINISTIC
+  (`attention` — it is math, no learned weights), AI-EDGE (moves behind `inference` when it
+  lands — `micrograd`/`online` are the candidates; undefined = grandfathered leak), or
+  SANCTIONED-SEAM (trait-only always-compiled ports — the syscall-interface shape, named as
+  legal so the gate's grep can distinguish a seam from a violation); the gate's scope clause
+  extends to the engine's `voice`/`inference` firewall (currently outside it entirely). (b) One
+  startup `Kind::Event` FDR record naming the compiled feature set (`inference` on/off, `pq`,
+  `telemetry`, …) — forensics can tell an AI-absent binary from an AI-present one from the
+  flight recorder alone; pairs with item 48's heartbeat. (c) Feature-matrix CI legs: `default`
+  AND `default+inference` compile + full suite on every PR once the flag exists — the absent
+  leg stays green forever, not only at gate-landing. **Proof:** the table recorded in item 45's
+  spec + the named modules' docs; a planted core→AI-EDGE reference RED under the extended gate
+  (P7); the provenance record recovered from a real ring in a test; both matrix legs green in
+  CI when the flag exists. See
+  [`BLUEPRINT-ITEM-63-ai-boundary-disposition-2026-07-19.md`](BLUEPRINT-ITEM-63-ai-boundary-disposition-2026-07-19.md).
+- **Item 64 — capability-secure declarative composition root (the strongest OS-pattern
+  adoption — the only one backed by a PROVEN defect: item 2's finding that NO production
+  composition root constructs the durable store; SUBSUMES the
+  `BLUEPRINT-P-FILE-EVENT-STORE-WIRING-GAP` Tier-1 fix; Tier-1-class build, dispatchable
+  now).** A declarative, dependency-ordered init for the host binaries replacing today's flat
+  ad-hoc `main()` wiring: (i) explicit init order derived from a declared module-dependency DAG,
+  validated by the EXISTING `order_machine` proof kit (`has_cycle`/`topological_order` reused
+  over module-init nodes — a cyclic init dependency is a caught startup error, not a runtime
+  surprise); (ii) each module declares the ports/capabilities it requires and FAILS CLOSED if
+  one is absent (generalizing `isolation/microvm.rs`'s refuse-the-adapter pattern from
+  deployment gating to module init); (iii) the root constructs the durable
+  `FileEventStore`/`EventLog` (closing item 2's defect at last), performs the FDR
+  recover-readback before normal operation begins (item 48's declared place to live), and is
+  the SOLE MINTER of item 65's in-process capability tokens (seL4's "init task holds all
+  capabilities and delegates," sized to one process). **Proof:** a cited line in a production
+  binary constructing the durable store — item 2's original proof condition, finally
+  dischargeable; a planted cyclic init declaration fails at startup with a typed error
+  (red→green); a module with an absent declared capability refuses init fail-closed (test);
+  a permuted declaration order yields the identical derived init sequence (order comes from the
+  DAG, not source order); kill-9 recovery test still green through the new root. See
+  [`BLUEPRINT-ITEM-64-composition-root-2026-07-19.md`](BLUEPRINT-ITEM-64-composition-root-2026-07-19.md).
+- **Item 65 — typed in-process AI/agent capability boundary (extends item 45; tokens minted
+  ONLY by item 64's root; after items 64 + 45; the proportionate seL4 slice — ~70% was already
+  scoped by item 45 + the Wasmtime-fuel pattern, this is the new ~30%).** A zero-sized
+  unforgeable capability type (constructible only by the composition root) that the AI/agent
+  subsystem must present BY SIGNATURE to call a kernel port — `cap: &CoreWriteCapability` makes
+  authority-to-touch-the-deterministic-core illegal-state-unrepresentable at the call site;
+  strictly additive over item 45 (45 stops cross-references at compile time; this also stops
+  runtime authority a compiled-in-but-untrusted path might exercise). Reuses the existing
+  `capability_cert.rs` attenuation/scoping machinery internally — no new crypto, no new
+  dependency, no memory-capability system invented. Includes the OTP-slice companion: a uniform
+  per-port fail-closed containment property test (one failing/panicking adapter cannot escalate
+  past its own port boundary — asserted across every port, not left per-port convention;
+  composes with item 9's breaker as the containment receiver). **Proof:** a compile-fail test
+  proves a capability-requiring port method is uncallable from code never handed the token; the
+  token's only constructor site is the composition root (visibility + grep proof); the per-port
+  containment property test green across all `ports/` seams; `cargo tree -e no-dev`
+  byte-unchanged. See
+  [`BLUEPRINT-ITEM-65-typed-capability-boundary-2026-07-19.md`](BLUEPRINT-ITEM-65-typed-capability-boundary-2026-07-19.md).
+- **Item 66 — periodic durable-log scrub (the one small journaling-FS gap; gated on item 64 —
+  scrubbing an unwired store is pointless; composes with item 54's integrity-alarm seam).**
+  ZFS-scrub slice only: an idle-cadence pass walking the durable EventLog + closed FDR
+  segments, re-verifying the EXISTING CRC32/SHA3 checksums to catch latent at-rest bit-rot
+  before a read needs the data (on non-ECC local storage, proportionate defense-in-depth); any
+  mismatch emits one FDR `Alarm` (hardware-fault evidence, item-40 semantics). No new
+  primitive, no new dependency; the scrub cadence is a NAMED constant with one authority site
+  (P3 rate discipline). **Proof:** a planted at-rest corruption in a closed segment is detected
+  by the next scrub pass and writes the `Alarm` (red→green, P7); an uncorrupted store scrubs
+  silent; cadence constant pinned; `cargo tree` unchanged (grep: existing CRC32/SHA3 only). See
+  [`BLUEPRINT-ITEM-66-durable-log-scrub-2026-07-19.md`](BLUEPRINT-ITEM-66-durable-log-scrub-2026-07-19.md).
+- **Item 67 — cost-oracle classification backfill: COVERAGE-COMPLETE, PRECISION-HONEST (after
+  item 57; the named principle from doc 6 §5.2 made mechanical).** Literal "100% correct cost
+  prediction for any code" is undecidable (WCET reduces to halting); the honest achievable form
+  is 100% *classification* coverage: EVERY `HOT-PATHS.tsv` row (and every future row,
+  gate-enforced) carries a bucket — `ORACLE-EXACT` (input domain enumerated or cost provably
+  input-independent; evidence = the enumeration/CT proof), `ORACLE-BOUNDED` (fixed operation
+  schedule; evidence = the analytic `[min,max]` derivation), or `MEASURED-ONLY` (genuinely
+  dynamic/I/O/probabilistic; evidence = p50/p99/CI + methodology) — with a traceable evidence
+  pointer per row; *unclassified* is the one forbidden state. Seeded from doc 6 §5.5's
+  grounded sample (FSM 144-transition table → EXACT; `ct_eq` inherits EXACT from its dudect
+  proof — the CT property IS the cost-constancy property, free; `ntt`/`invntt`/`householder` →
+  BOUNDED via fixed schedules; `eigh` iterative QR + event-log fsync + subprocess/agent/AI →
+  MEASURED-ONLY, item 26's 637 µs distribution as the exemplar). Reuses the Kani-feasibility
+  B/C split as ready-made evidence (Bucket B → EXACT, Bucket C → BOUNDED); the kernel's hot
+  core is dominated by EXACT/BOUNDED with MEASURED-ONLY confined to I/O+subprocess+AI — the
+  backfill is tractable, not boil-the-ocean. **Proof:** zero unclassified rows in the extended
+  TSV; the gate goes RED on a new hot-zone row without a bucket (planted-row red→green); every
+  evidence pointer resolves to a real test name / derivation section / measurement doc
+  (spot-check re-executed, never presence-checked — P7). See
+  [`BLUEPRINT-ITEM-67-68-69-cost-oracle-2026-07-19.md`](BLUEPRINT-ITEM-67-68-69-cost-oracle-2026-07-19.md).
+- **Item 68 — ORACLE-EXACT/BOUNDED cost capture as a correctness-proof byproduct (after item
+  67 + item 7's native exhaustive sweeps; doc 6 §5.3's decisive reuse).** The same structural
+  property that makes correctness exhaustively provable makes cost exactly knowable — so
+  capture it in the SAME pass, never a separate harness: (a) add Tier-A `rdtsc` cycle capture
+  (reusing `fdr/pmu.rs`'s reader) to item 7's Bucket-B exhaustive `#[test]` sweeps, folding to
+  a single constant/tight interval where control flow is input-independent (all the
+  straight-line crypto reductions) and to a complete per-input cost table otherwise; (b) derive
+  analytic `[min,max]` intervals for the Bucket-C fixed-schedule functions (8-layer/1024-
+  butterfly, 24 Keccak rounds — the WCET-decidable straight-line subclass, the butterfly-lemma
+  induction reused for cost); (c) MEASURED-ONLY surfaces report p50/p99/CI, never a fabricated
+  point estimate. **Honest caveat carried verbatim:** even ORACLE-EXACT yields measured cycles
+  with host noise — the claim is "input-dependence of cost fully characterized," absolute
+  cycles remain a per-host interval; precision-honest at the exact end too. **Proof:** a
+  generated cost table/constant per classified function with its stated noise interval,
+  recorded as evidence behind item 67's rows; an input-independence assertion for EXACT
+  functions (cost class identical across the swept domain); the P3 grep proof that no captured
+  cost value feeds any decision/gate surface. See
+  [`BLUEPRINT-ITEM-67-68-69-cost-oracle-2026-07-19.md`](BLUEPRINT-ITEM-67-68-69-cost-oracle-2026-07-19.md).
+- **Item 69 — water/carbon as derived, constant-multiplied views of joules (small standalone;
+  after item 58; doc 6 thread 1 — the honest form of "atoms/molecules/water/air").** The
+  kernel needs NO new *measured* footprint field beyond `joules_uj` — "atoms/molecules
+  consumption" honestly IS silicon power draw, i.e. joules, and item 27's RAPL/PMU work already
+  is that mechanism. Build the consumer-side conversion table keyed on operator-supplied
+  `(region, deployment-class)` constants: `co2e = joules × grid-carbon-intensity` (gCO₂e/kWh),
+  `off-site water = joules × WUE-source` (L/kWh) — each a `Reading<T>` degrading to a named
+  absence when joules is absent OR the regional constant is unsupplied; **on-site water is a
+  PERMANENT named absence** on a local device (a facility cooling property software cannot
+  observe — fabricating litres is a standard violation, procedure step 4); adding raw
+  `water_ml`/`co2e` fields to `HwStamp` is likewise a violation. Lights up automatically on a
+  RAPL-capable deploy with zero schema change. **Proof:** derivation golden tests against
+  hand-computed values; on this RAPL-less host every derived view serializes the literal
+  `unavailable` reason (greppable — procedure step 10's red→green); the on-site-water absence
+  is unconditional by construction (no code path can produce a value); the SCI-rate
+  (ISO/IEC 21031) pairing note recorded for ratio consumers. See
+  [`BLUEPRINT-ITEM-67-68-69-cost-oracle-2026-07-19.md`](BLUEPRINT-ITEM-67-68-69-cost-oracle-2026-07-19.md).
+- **Item 70 — state-mirroring digital twin, half (A) — REAL, NEAR-TERM (after items 67 + 68;
+  call matrix fed by item 62; doc 6 §5.7(A)).** NOT a new subsystem: the twin is the
+  COMPOSITION of three already-real/already-scoped pieces — (i) the per-function cost oracle
+  (item 67's buckets + item 68's tables/intervals/distributions); (ii) the aggregate call-graph
+  layer reusing `spectral.rs`/`markov.rs`/`csr.rs` AS-IS: ρ(A) of the frequency-weighted call
+  matrix decides whether total propagated cost converges (`c = (I−A)⁻¹·c_self` — the existing
+  `classify_drift` `Damped/Resonant/Unstable` enum applied to the call matrix, zero new
+  machinery), Laplacian diffusion for where cost concentrates (bottlenecks), `markov::analyze`
+  over discretized cost-tier tokens for resource-regime drift; (iii) the `eqc-rs` precedent
+  (equation → proven-faithful Rust mirror) as the template that "real behavior mirrored by real
+  math" already works here. **Forced-metaphor guard, binding (Anu/Ananke — carried exactly):**
+  the spectral machinery answers GRAPH-level questions only (convergence, flow, bottleneck,
+  drift); per-leaf cost comes from enumeration/interval ONLY — the twin must never present a
+  spectral quantity as an individual function's cycle count. Deliverable: given (action,
+  inputs) → its bucket + value/interval/distribution + evidence pointer, and (via ρ(A)) the
+  propagated aggregate answer. **Proof:** coverage-complete over every HOT-PATHS action (an
+  unclassifiable query returns the forbidden-state error, never a guess); a differential check
+  on ORACLE-EXACT functions (twin's stated cost class matches a fresh measurement within the
+  stated noise interval); ρ(A) verdict validated on a synthetic recursive call graph with known
+  divergence (red→green both directions); the forced-metaphor guard asserted structurally (no
+  per-leaf API derives from spectral values — reviewed + doc-ruled, grep-checkable naming). See
+  [`BLUEPRINT-ITEM-70-71-72-digital-twin-2026-07-19.md`](BLUEPRINT-ITEM-70-71-72-digital-twin-2026-07-19.md).
+- **Item 71 — cost-aware eqc-rs rewrite-extraction (half (B′) — the ONE honestly-scoped
+  near-term step toward (B); independent of items 67–70; operator-gated whether to build at
+  all — offered as the smallest grounded step, not a commitment).** Give eqc-rs codegen a
+  cost-aware extraction over a SMALL, HAND-CURATED, FINITE set of provably-equivalent algebraic
+  rewrites — strength reduction (`a*2 → a+a`), factoring (`a*b + a*c → a*(b+c)`), constant
+  folding — choosing the cheaper form by lower op-count at codegen time, and REUSING the
+  existing `emit_proof_program` to prove the chosen form still equals the `Expr::eval`
+  reference. Equality-saturation's "extraction picks the cheapest equivalent" idea at toy scale:
+  **no e-graph, no SMT, no SAT, zero new dependency** — honestly "constant folding plus
+  strength reduction with a proof," NOT a superoptimizer, and it must never be described as
+  one. **Proof:** per rule, an emitted case where the cheaper form is demonstrably chosen with
+  its proof program green (compiled by real rustc, self-asserting); a no-rule-applies case
+  emits unchanged output byte-identical to today's; the op-count cost metric documented in the
+  eqc-rs README; the full eqc-rs suite green; `cargo tree` unchanged. See
+  [`BLUEPRINT-ITEM-70-71-72-digital-twin-2026-07-19.md`](BLUEPRINT-ITEM-70-71-72-digital-twin-2026-07-19.md).
+- **Item 72 — auto-optimizing digital twin, half (B) — LONG-TERM ASPIRATION, EXPLICITLY NOT
+  PROMISED (named so the direction is on the roadmap without over-promising; doc 6 §5.7(B)).**
+  "Always finds a shorter/faster version of any action" is automated superoptimization — a
+  real, hard, active research field (STOKE stochastic search, Souper SMT synthesis, egg/egglog
+  equality saturation with cost-model extraction), and its machinery (exponential search
+  spaces, e-graph/SMT engines) is antithetical TODAY to a zero-dep deterministic kernel. This
+  item carries **no proof conditions and no schedule** — deliberately. Instead it records its
+  ENTRY CRITERIA, all three required before any work: (i) item 71 landed with measured wins
+  demonstrating extraction value on real kernel math; (ii) an explicit operator ruling
+  accepting the tooling/determinism cost for a bounded target domain; (iii) a fresh research
+  pass (this item is a pointer, not a plan). Until then: named direction, zero commitment —
+  the honest opposite of a fabricated roadmap promise. See
+  [`BLUEPRINT-ITEM-70-71-72-digital-twin-2026-07-19.md`](BLUEPRINT-ITEM-70-71-72-digital-twin-2026-07-19.md).
+
+**Dependency graph, one line:** 55 ∥ 56 ∥ 57 ∥ 63 ∥ 64 ready now (56's and 58–62's FDR-field
+halves inherit the exec-branch FDR merge, same as §J's flag); 58 after 57; {59 ∥ 60 ∥ 61} after
+58; 62 parallel with 58 (both extend the envelope, coordinated in one schema change); 65 after
+{64 + 45}; 66 after 64; 67 after 57; 68 after {67 + item 7's native sweeps}; 69 after 58; 70
+after {67 + 68} with 62 feeding its call matrix; 71 independent + operator-gated; 72
+aspirational, entry-gated on {70, 71, operator ruling}. Temporal TMR = item 12 (§E, merged —
+no number here); item 7's rescope = §C (enacted, no number here). Nothing in §K gates any
+§§H–J item.
+
+### L. Items 73–78 — Governed Self-Evolution Arc: AI-Proposed Change Governance (self-healing + self-upgrading under an untouchable human gate) — appended 2026-07-19, sixth wave
+
+**Source:** operator directive (verbatim, three parts, recorded 2026-07-19): *"allowing & making
+possible for the ai to build & change internal os, but without touching the core & red lines/gates
+— but only with manual approvals/prompts/injections from the human operator with the same amount
+level of predictability/space quality/transparency/control/telemetry"*; *"track own health too, to
+make fixes, self-healing allowed, this should be a regenerative software based on safe
+conditions/gates/invariants/human operator decisions"*; *"so both self-healing and self-upgrading —
+only with the human operator decisions/approval and inability to change this or bypass the human
+gate & other red lines gates."* This is a PRODUCT capability of the dowiz kernel/OS itself, not a
+statement about this development session. It generalizes item 47's `Proposal → admit() →
+ValidatedProposal` pattern (runtime ADVICE plane) to the CODE/architecture plane, and composes
+with — never duplicates — items 45 (AI-optional gate), 50 (K3 admission), 64/65 (composition root
++ typed capability boundary), 62 (relational lineage), 67/68/70 (cost oracle), 75←eqc-rs
+(pre-verified generation precedent). **Same standing laws as §§H–K. Planning only — no item
+starts before the operator dispatches it.**
+
+**The one governing invariant (everything in §L is subordinate to item 73):** the human-approval
+gate, the red-line registry, and the verification machinery are themselves CORE — permanently
+outside the reach of the very pipeline they govern. No sequence of individually-plausible approved
+proposals may ever reach them. This is the corrigibility / tamper-proof-oversight problem from the
+AI-safety literature, addressed structurally, not by policy.
+
+- **Item 73 — the Gate-Root Invariant: the governance mechanism is structurally unmodifiable by
+  what it governs (FIRST and foundational; spec-level now, structural enforcement lands with
+  items 64/65 + 74; everything else in §L is subordinate to this holding).** Three structural
+  clauses, none of them "a rule someone follows": **(i) Root placement.** The red-line registry
+  (item 74) + the gate-enforcement code live at/behind item 64's composition root — the sole
+  capability minter. **No capability type granting write access to the root, the registry, or the
+  gate code EXISTS in the type system** — not "is never handed out": is unconstructible
+  (illegal-state-unrepresentable, the §1.5 house standard applied to the meta level). By
+  construction, nothing downstream of the root — including any AI-generated proposal however it
+  entered — can hold authority to touch the root itself (doc-4's seL4 "init task holds all
+  capabilities" pattern, completed: the root delegates everything EXCEPT authority over itself).
+  **(ii) Dependency-direction check, item-45 style.** A CI check (same planted-reference
+  red-proof discipline) asserts no module reachable from the proposal pipeline references any
+  gate/registry mutation surface — trivially checkable because no such mutation surface is
+  `pub`: the registry is static data + code with NO runtime mutation API at all. **(iii)
+  Out-of-band-only modification.** Changing the gate, the registry, or the verification logic
+  happens ONLY through the normal human engineering process (a human directly editing code,
+  review, the full CI gate suite) — NEVER through the proposal pipeline, even nominally, even
+  "with extra approvals": a proposal whose diff touches a red-line path is REFUSED at
+  classification time (step zero — before verification, before any human is asked; it is a
+  category error, not a reviewable request). No "beneficial change to the gate" exception
+  exists — that exception IS the corrigibility trap (a system able to modify its own safety
+  constraints can eventually remove them through individually-plausible steps). **Proof:** a
+  planted proposal targeting the gate/registry/red-line paths is refused with a typed red-line
+  rejection + FDR record, red→green (P7); a compile-fail test proves no gate-mutation
+  capability constructor exists; the dependency-direction CI check goes RED on a planted
+  pipeline→gate reference; the out-of-band-only law recorded in the registry's module doc +
+  `docs/audits/hardening/CHECKLIST.md`; item 74's registry carries this section's own machinery
+  as rows (the recursion recorded, not implied). See
+  [`BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md`](BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md).
+  **Status correction (2026-07-20, `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md`):** `scripts/gate-root-invariant.sh`
+  exists on `main` (real logic, landed via `cb00706b1`) but is **not wired into any CI workflow** —
+  clause (ii)'s "CI check" is written but not yet live.
+- **Item 74 — the red-line/core registry: grounded machine-readable enumeration of what AI
+  proposals may NEVER touch (after item 73's spec; the safety-critical deliverable of this arc —
+  every row cited, zero hand-waving).** Format: a machine-read manifest in the `HOT-PATHS.tsv`
+  idiom (path-prefix zones → deterministic diff classification), each row carrying WHY + the
+  real source. Seed rows, grounded against this project's actual standing red-lines and this
+  roadmap's own proof machinery: **(1) Product red-lines** (standing rules, memory
+  `test-integrity-rules-2026-06-27` + the SELF-DEVELOPMENT charter's "red-lines
+  (money/auth/RLS/migrations/bulk) preserved even under full autonomy"): `money.rs`
+  (integer-only checked arithmetic), auth/capability surfaces, pgrust migrations, bulk-op
+  paths. **(2) Proven-FSM core:** `order_machine.rs` + its `GOLDEN_SIGNATURE` drift gate and
+  const-proof kit (`FSM_SPECTRAL_RADIUS`) — the kernel's exemplar proof surface. **(3) The
+  verification seam:** `decision/import.rs` `import_unit` replay-before-persist gate; item 47's
+  `admit`/`Invariants` + item 50's K3 fold when they land. **(4) The forensic truth surface:**
+  `event_log.rs` (SHA3 hash chain) + `kernel/src/fdr/` (ring, schema, CRC) — the evidence trail
+  must never be modifiable by the subject of the evidence (item 76 depends on this being
+  trustworthy). **(5) Crypto:** `pq/` (KAT-gated ML-DSA/ML-KEM/Keccak/x25519), `ct_gate.rs`,
+  `capability_cert.rs`. **(6) The proof machinery itself:** `scripts/zero-dep-gate.sh` + every
+  `ZERO-DEP-ALLOWLIST.txt`, `scripts/hardening-gate.sh` + `CHECKLIST.md`/`HOT-PATHS.tsv`,
+  `rust-toolchain.toml` + the bump gate, the miri/lint/ai-optional gates, the `ci.yml` gate
+  jobs. **(7) Safety machinery as it lands:** item 9's breaker, item 54's Sentinel, items
+  64/65's composition root + capability types. **(8) §L's own gate code + this registry**
+  (item 73's recursion, recorded as rows). Registry changes are themselves out-of-band-only
+  (item 73(iii)); row REMOVAL additionally requires an explicit operator ruling recorded in the
+  row's history (shrink is the dangerous direction — the allowlist monotonicity insight,
+  inverted). **Proof:** the registry exists with every row justified + cited; the diff
+  classifier maps a change-set → touched-red-line verdict deterministically (path-prefix
+  zones); one planted diff per row CLASS demonstrably refused (P7); the registry file is
+  itself in the registry (self-row test). See
+  [`BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md`](BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md).
+  **Status correction (2026-07-20, `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md`):** `scripts/red-line-classifier.sh`,
+  `scripts/red-line-monotonicity.sh`, and `scripts/verify-item-74.sh` all exist on `main` (real
+  logic, landed via `cb00706b1`) but **none are wired into any CI workflow** — the diff-classifier
+  proof above is written but not yet a live gate.
+- **Item 75 — the change-proposal pipeline: typed `ChangeProposal` → kernel-gate verification →
+  explicit human approval → recorded application (after items 73+74; extends item 47's grammar
+  to the code plane — same shape, different plane, no parallel admission concept).** An
+  AI-generated change (from items 33–44's inference subsystem or the agent surface) is DATA: a
+  typed `ChangeProposal` carrying the diff/artifact + its trigger + its claimed intent. Step
+  zero: item 74's classifier — a red-line touch is refused before anything else runs (73(iii)).
+  Verification: the kernel's OWN existing gates re-executed on the proposed state — zero-dep
+  gate, hardening-gate rows, full suite, miri where applicable, the item-44 CI discipline —
+  never a parallel/lighter checklist; a proposal failing any gate NEVER reaches a human
+  (machines filter, humans decide). Pre-verified generation is the preferred arrival shape:
+  the `eqc-rs` precedent (equation → generated Rust + `emit_proof_program` self-assertion)
+  means a proposal can arrive as a PROVEN artifact rather than raw untrusted code — reuse it,
+  don't invent a second generator discipline. Then the hard gate: **an explicit human "apply"
+  action is required for every application — no autonomous apply path exists** (structurally:
+  the apply function requires a human-approval token only the operator's out-of-band action
+  mints — the item-65 capability shape reused at the approval seam); absence of approval is a
+  permanent pending state that expires, silence is never consent. Admission grammar = items
+  47/50 verbatim: `admit(ChangeProposal, …) -> Result<VerifiedChangeProposal, Rejection>` with
+  `RejectionClass::{Refuted, Undecidable}` (+ the named red-line cause riding `Refuted`);
+  Kleene-Unknown collapses to the safe pole (not-applied), logged distinctly. **Proof:** a
+  planted valid proposal passes all gates and STOPS at pending-approval — a red-proof
+  demonstrates no code path applies it without the human token (unconstructible, compile-fail
+  test); a planted gate-failing proposal never surfaces for approval; a planted red-line
+  proposal is refused at step zero with the typed cause; approval/refusal/expiry each write
+  FDR records; the whole flow re-executed in CI, never presence-checked (P7). See
+  [`BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md`](BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md).
+- **Item 76 — proposal lineage + cost-classified impact at the approval seam (after item 75;
+  consumes items 62 + 67/68; "the same amount of predictability/transparency/telemetry" made
+  mechanical).** Every proposal carries a full FDR-logged causal trail, linked by item 62's
+  `span_id`/`parent_span_id`: trigger (health verdict / operator prompt / upgrade candidate) →
+  generation → per-gate verification verdicts (item-55 class discipline: Proved/Refuted/
+  Undecidable recorded per gate) → human approval or rejection (operator identity + timestamp,
+  an FDR event) → application record. A proposal is a reconstructible causal TREE in the
+  flight recorder, end to end. AND the approval screen is never blind: the proposal's predicted
+  cost/impact goes through item 67's classification — `ORACLE-EXACT / ORACLE-BOUNDED /
+  MEASURED-ONLY` with evidence pointer (item 68's tables; item 70's aggregate propagation where
+  the change touches the call graph) — presented to the human BEFORE approval; an
+  unclassifiable impact is presented AS the forbidden/unclassified state (precision-honest),
+  never a fabricated estimate. **Proof:** an end-to-end test recovers the complete lineage tree
+  from a real recovered ring; the approval record demonstrably carries the impact class +
+  resolving evidence pointer; a proposal with unclassifiable impact shows the honest marker
+  (red→green vs a fabricated number); P3 law holds (no lineage value feeds any decision
+  surface — grep proof). See
+  [`BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md`](BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md).
+- **Item 77 — self-healing specialization: health-classifier-triggered fix proposals (SAME
+  pipeline, one trigger class — explicitly NOT a lighter gate; after item 75; consumes item
+  56's basis retrofit).** **Grounded baseline — health tracking already exists; what's missing
+  is the consumer:** `markov::Verdict` (Healthy/LimitCycle/StrangeAttractor) is real and live
+  but OBSERVATIONAL-ONLY today — grep-verified 2026-07-19: no in-kernel consumer acts on it
+  (its only non-test consumer is its own `markov_attractor` bin emitting CLI JSON + the item-27
+  FDR companion record; the autonomic-response half is explicitly Tier-4-deferred behind items
+  9+21). `spectral::DriftClass` ALREADY has one real fail-closed consumer:
+  `RetainedBase::admit` (`spectral_cache.rs:267`) rejects `Unstable` input. So "track own
+  health" is mostly-already-done; this item adds the missing trigger-consumer, not a new
+  classifier. **The two kinds of self-healing, kept apart:** **(A) Process-level
+  restart-recovery stays AUTOMATIC** — crash → PostMortem → restart from last-good state is
+  already built and proven (items 45–49; the kill-9 test's 300/300 recovery with zero human
+  intervention): pure recovery, modifies no code/logic, already at space-grade rigor — no
+  approval gate applies, none is needed. **(B) Code/logic-level fix is the NEW capability and
+  takes the FULL item-75 pipeline:** a RECURRING adverse classification (e.g. `LimitCycle`/
+  `StrangeAttractor` on the same subsystem across ≥N consecutive windows — N a named constant,
+  P3 discipline) generates a `ChangeProposal` with the health evidence attached; it is then a
+  proposal like any other — verification gates, human approval, FDR lineage — *never*
+  autonomous, "it's just fixing a detected problem" is not an exception (operator's directive
+  is explicit). Trigger-evidence law inherits item 56: only `Basis::Measured` verdicts count —
+  an unevaluated-Healthy (or unevaluated-anything) window is never trigger evidence in either
+  direction. **Prior-art grounding:** this is the autonomic-computing MAPE-K loop (Kephart &
+  Chess, *The Vision of Autonomic Computing*, IEEE Computer 2003) — Monitor (FDR/HwStamp/PMU)
+  → Analyze (markov/spectral classifiers) → Plan (the proposal) → Execute over shared Knowledge
+  (FDR ring + HOT-PATHS + cost oracle + red-line registry) — with ONE deliberate, stated
+  deviation: **Execute is never autonomous for code-level change; the human operator IS the
+  Execute gate.** "Regenerative software" = this loop under those constraints, not a new
+  mechanism. **Proof:** a synthetic recurring-adverse verdict stream yields exactly ONE
+  proposal carrying the full health trail, which STOPS at pending-approval (the item-75
+  red-proof reused); a single adverse window does NOT trigger (threshold pinned); planted
+  unevaluated-basis windows are provably excluded from trigger evidence (red→green against
+  today's byte-identical records); recovery class (A) remains automatic and green (kill-9 test
+  unchanged). See
+  [`BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md`](BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md).
+- **Item 78 — self-upgrading specialization: improvement proposals beyond fixes (SAME pipeline,
+  broader trigger class; after item 75; enriched by items 70/71 when they exist).** Trigger =
+  not a detected problem but a proposed improvement: cost-oracle-informed candidates (item 70's
+  twin identifying bottlenecks/regressions worth attacking), pre-proven rewrite candidates
+  (item 71's eqc-rs extraction arriving with its proof program), or operator-prompted upgrade
+  requests routed through the same typed shape. Upgrade proposals additionally carry a
+  before/after predicted-cost DELTA from the oracle (items 67/68; aggregate via 70) on the
+  approval screen. The gate is IDENTICAL — same verification, same human approval, same
+  lineage; and the item-73 law binds hardest here: an upgrade proposal touching a red-line path
+  is refused identically at step zero, with **no beneficial-change exception** — the
+  corrigibility trap is precisely a sequence of individually-beneficial-looking upgrades
+  reaching the gate. **Proof:** an eqc-rs-generated, pre-proven rewrite flows end-to-end to
+  pending-approval with its cost delta + proof-program result attached; a planted "beneficial"
+  proposal touching gate/registry paths is refused at step zero (item 73's red-proof
+  re-executed at this level); refused + approved + expired upgrade proposals all leave complete
+  FDR lineage. See
+  [`BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md`](BLUEPRINT-ITEMS-73-78-governed-self-evolution-2026-07-19.md).
+
+**Dependency graph, one line:** 73 (spec) first and governing; 74 after 73; 75 after {73 + 74}
+(structural halves of 73 land with 64/65); 76 after {75 + 62 + 67}; 77 ∥ 78 after 75 (77 also
+consumes 56; 78 enriched by 70/71 but not gated on them). §L consumes §K's machinery (56, 62,
+64/65, 67/68, 70/71) and item 47/50's grammar; it gates nothing outside itself. The AI that
+proposes remains behind item 45's `inference` gate and item 65's capability boundary at all
+times — §L grants a governed PROPOSAL channel, never authority.
+
+### M. Cross-mesh data replication — MESH-07 parity (landed 2026-07-20, out-of-band of §A–L's
+numbering; tracked here so it is not lost)
+
+Not one of the original 78 items — this was raised by
+[`DOWIZ-STRATEGIC-REGRET-MINIMIZATION-SYNTHESIS-2026-07-20.md`](DOWIZ-STRATEGIC-REGRET-MINIMIZATION-SYNTHESIS-2026-07-20.md)
+§5 ("decide the durability spine... replication reserved") and §3.G ("full cross-mesh backup —
+a single-node pilot with an off-node encrypted snapshot is an acceptable interim"). The operator
+overrode the synthesis's own suggested deferral: **"Build real replication now"** — explicitly
+rejecting the interim single-node option (which is what
+[`BLUEPRINT-P68-hub-supervisor-update-backup.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P68-hub-supervisor-update-backup.md)
+already specs: one hub, one client-side-encrypted blob, one offsite bucket — explicitly
+node-local, never over mesh transport).
+
+**✅ DONE 2026-07-20** (`307c3ead5`, `main`) — `kernel/src/mesh_replication.rs`: native, zero-dep
+reimplementation of bebop2's MESH-07 (`proto-wire/src/sync_pull.rs` — design reference only, per
+§0's zero-dep mesh ruling, not a linked dependency). `MerkleLog` (sorted-leaf pair-hash digest),
+`PullRequest`/`pull`/`ingest` (per-actor-watermark anti-entropy pull, G-Set CvRDT merge over
+content-addressed ids), `reconcile()` (one full pull+ingest round). `EventStore` gained `ids()`
+(default empty — degrades closed), overridden for `MemEventStore` and `hydra::FileEventStore`.
+11 tests prove the MESH-07 RED-test criterion verbatim — two nodes diverge offline, reconnect,
+pull, land on an identical folded event set — for both the in-memory store and disk-backed
+`FileEventStore`, independent of which side initiates first. 1057/1057 kernel lib tests green.
+
+**What this is not (deliberately):** transport (how bytes actually move node-to-node) and
+signature verification are explicitly out of scope, matching `mesh-adapter/src/lib.rs`'s own
+anti-scope ("no transport, no storage") and `event_log::EventLog`'s own doc ("the network layer
+never re-runs decide — it only verifies signatures"). This is the pure, synchronous,
+`std`-only reconciliation ALGORITHM — proven correct against any two `EventStore`s, in-process
+here, over a real socket/QUIC transport later (a separate port, consistent with this crate's
+existing ports/adapters split; async I/O has no place in the kernel's deterministic core per
+MANIFESTO C2). Wiring a live transport, and layering `crate::mesh`'s ML-DSA-65 signing on top
+of ingested events before they reach `ingest()`, remain open follow-on work — not claimed done
+here.
+>>>>>>> origin/main:docs/design/ROADMAP.md

@@ -458,7 +458,7 @@ pub fn recall_at_k(query: &str, k: usize) -> Vec<(String, f64)> {
 /// [`PrimaryRecall`] so the (formerly JS-stranded) recall loop runs through
 /// this deterministic, std-only Rust path. `living_knowledge` therefore has a
 /// real, non-test consumer inside `retrieval` (registration in `mod.rs`).
-#[cfg(feature = "wasm")]
+#[cfg(all(feature = "wasm", not(target_arch = "wasm32")))]
 impl crate::living_knowledge::LivingKnowledge for PrimaryRecall {
     fn retrieve(&self, query: &str, k: usize) -> Result<Vec<crate::living_knowledge::Hit>, String> {
         Ok(self

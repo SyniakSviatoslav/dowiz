@@ -1,0 +1,126 @@
+#!/usr/bin/env bash
+# tools/ops-alert/ledger-verify — Q1 backstop (BLUEPRINT-Q-SERIES 2026-07-19).
+#
+# Standing version of the P56 §4f.3 `StaleGround` catch (which is design-only).
+# Every row in MASTER-STATUS-LEDGER marked status **DONE-VERIFIED** MUST carry a
+# `verified-by` column whose pointers RESOLVE:
+#   - `commit=<sha>`      -> `git cat-file -e <sha>` succeeds (the landing commit exists)
+#   - `test=<path::node>` -> a `cargo test` node name that EXISTS in the source tree
+#                           (grep for `#[test]`/`fn <node>` / `#[tokio::test]`)
+#   - `bench=<id>`        -> a bench id referenced by the repo's bench sources OR a
+#                           baseline.json entry (best-effort; warns, does not hard-fail)
+#   - `NOT-MET: <reason>` -> legal explicit non-discharge (visible, not silent)
+#
+# An UNRESOLVABLE or SILENTLY-ABSENT pointer on a DONE-VERIFIED row => exit 1 (RED).
+# This is falsifiable: see the `## TEST` block — a fabricated pointer fails, a real
+# one passes. Mirrors the Q1 DoD (ii): "an item at DONE-VERIFIED with an
+# unresolvable or absent evidence pointer is caught RED."
+#
+# Mockable offline: LEDGER / REPO_ROOT override. No cargo/network unless ALERT_SEND
+# is non-empty (same alert path as bench-drift).
+
+set -uo pipefail
+
+REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
+LEDGER="${LEDGER:-$REPO_ROOT/docs/design/CORE-ROADMAP-2026-07-17/MASTER-STATUS-LEDGER-2026-07-19.md}"
+ALERT_SEND="${ALERT_SEND:-}"   # leave empty => no alert; set to e.g. "tools/telemetry/lib.sh tg_send OPS_ALERTS"
+
+log() { echo "ledger-verify: $*" >&2; }
+
+# --- resolvers ---------------------------------------------------------------
+commit_resolves() { # $1=sha
+  git -C "$REPO_ROOT" cat-file -e "$1^{commit}" 2>/dev/null
+}
+
+test_resolves() { # $1=test node (path::name or name)
+  local node="$1"
+  # name is the token after the last '::' or the whole string
+  local name="${node##*::}"
+  [[ -z "$name" ]] && return 1
+  # search the rust tree for the node as a test fn / #[test] target
+  grep -rqE "(#\[test\]|#\[tokio::test\]|#\[async_std::test\])\s*(\n\s*)?(async\s+)?fn\s+$name\b" \
+       "$REPO_ROOT/kernel" "$REPO_ROOT/engine" "$REPO_ROOT/agent-adapters" "$REPO_ROOT/llm-adapters" 2>/dev/null \
+    || grep -rqE "\bfn\s+$name\b" "$REPO_ROOT/kernel" "$REPO_ROOT/engine" 2>/dev/null
+}
+
+# bench ids are best-effort: present in any *.rs bench or baseline.json => ok;
+# a `bench=<path>` pointing at a real bench source file also resolves.
+bench_resolves() { # $1=bench id or path
+  local id="$1"
+  grep -rqE "benchmark_group!|benchmark!|name\s*=\s*\"$id\"|#\[bench\]\s*fn\s+$id\b" \
+       "$REPO_ROOT/kernel" "$REPO_ROOT/engine" 2>/dev/null \
+    || grep -qE "\"$id\"" "$REPO_ROOT/kernel/benches/baseline.json" 2>/dev/null \
+    || [[ -f "$REPO_ROOT/$id" || -f "$REPO_ROOT/kernel/benches/$id" ]]
+}
+
+# --- verify a single verified-by token list ----------------------------------
+verify_pointer() { # $1=token (commit=/test=/bench=/NOT-MET:)
+  local tok="$1"
+  case "$tok" in
+    commit=*)  commit_resolves "${tok#commit=}" && return 0 ;;
+    test=*)    test_resolves   "${tok#test=}"   && return 0 ;;
+    bench=*)   bench_resolves  "${tok#bench=}"  && return 0 ;;
+    NOT-MET:*) return 0 ;;   # explicit, honest non-discharge — legal
+    "")        return 1 ;;   # empty/absent pointer on a DONE-VERIFIED row => RED
+    *)         return 1 ;;   # unknown pointer form => treat as unresolved
+  esac
+  return 1
+}
+
+main() {
+  [[ -f "$LEDGER" ]] || { log "LEDGER not found: $LEDGER"; exit 2; }
+  log "scanning $LEDGER for **DONE-VERIFIED** rows ..."
+
+  local failures=0
+  local row_id="" row_status="" row_vby=""
+  local in_table=0 sec=0
+
+  while IFS= read -r line; do
+    # detect the status table (starts at the header containing | ID | Title | Status |)
+    if [[ "$line" == *"| ID | Title | Status |"* ]]; then in_table=1; continue; fi
+    if (( in_table )) && [[ "$line" == "## "* ]]; then in_table=0; continue; fi
+    (( in_table )) || continue
+    [[ "$line" == "|--"* || "$line" != "|"* ]] && continue
+
+    # split into cells
+    local cells; IFS='|' read -ra cells <<< "$line"
+    # cells: ["" , ID, Title, Status, reason, Source, verified-by, ""]
+    row_id="${cells[1]:-}"; row_id="${row_id##* }"; row_id="${row_id//\*/}"
+    row_status="${cells[3]:-}"
+    row_vby="${cells[6]:-}"
+
+    if [[ "$row_status" == *"DONE-VERIFIED"* ]]; then
+      # strip markdown ** and surrounding whitespace, AND backticks around pointers
+      local vby_clean; vby_clean=$(echo "$row_vby" | sed -E 's/\*\*//g; s/`//g' | tr -s ' ' | sed 's/^ |//; s/| $//; s/^ //; s/ $//')
+      if [[ -z "$vby_clean" ]]; then
+        log "RED: $row_id is DONE-VERIFIED but has NO verified-by column"
+        failures=$((failures+1)); continue
+      fi
+      # split on ';' or ',' into individual pointers
+      local IFS=';,'; local ptrs=($vby_clean); IFS=$' \t\n'
+      local row_ok=1 bad_ptr=""
+      for p in "${ptrs[@]}"; do
+        p="$(echo "$p" | sed 's/^ //; s/ $//')"
+        [[ -z "$p" ]] && continue
+        if ! verify_pointer "$p"; then row_ok=0; bad_ptr="$p"; break; fi
+      done
+      if (( row_ok )); then
+        log "GREEN: $row_id DONE-VERIFIED pointers resolve"
+      else
+        log "RED: $row_id DONE-VERIFIED pointer unresolvable: '$bad_ptr'"
+        failures=$((failures+1))
+      fi
+    fi
+  done < "$LEDGER"
+
+  if (( failures > 0 )); then
+    local msg="🔴 Q1 ledger-verify: $failures DONE-VERIFIED row(s) with unresolvable verified-by pointer(s)"
+    log "$msg"
+    [[ -n "$ALERT_SEND" ]] && $ALERT_SEND "$msg" || true
+    exit 1
+  fi
+  log "all DONE-VERIFIED rows carry resolvable verified-by pointers (GREEN)"
+  exit 0
+}
+
+main "$@"

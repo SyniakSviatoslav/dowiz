@@ -109,7 +109,7 @@ impl Breaker {
     pub fn with_ring(
         agent_id: AgentId,
         tid: ThresholdId,
-        ring: std::sync::Mutex<crate::fdr::ring::FdrRing>,
+        ring: std::sync::Mutex<crate::fdr::RingHandle>,
     ) -> Self {
         let rec = new_record(agent_id, 0, tid);
         let audit = AuditChain::new(agent_id, Some(ring));

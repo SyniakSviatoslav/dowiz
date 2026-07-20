@@ -11,7 +11,7 @@
 
 use agent_facade::{FixtureOrders, ReadOrderStatusTool};
 use agent_loop::{AgentLoop, LoopEventKind, LoopLogEntry, LoopOutcome};
-use llm_adapters::{OllamaAdapter, TrackRecord, append_harvest};
+use llm_adapters::{append_harvest, OllamaAdapter, TrackRecord};
 
 fn main() {
     // Base URL from env (default: local Ollama daemon, already running on this host).
@@ -61,8 +61,18 @@ fn main() {
     // Emit the designed `dowiz_agent_*` metric IDs into the shared harvest ledger.
     // `task` is the metric ID gov_route folds by; `value` carries the measured count.
     emit("agent_loop", success, total_tokens, total_tokens as f64);
-    emit("dowiz_agent_iterations", success, iterations, iterations as f64);
-    emit("dowiz_agent_tool_calls", success, tool_calls, tool_calls as f64);
+    emit(
+        "dowiz_agent_iterations",
+        success,
+        iterations,
+        iterations as f64,
+    );
+    emit(
+        "dowiz_agent_tool_calls",
+        success,
+        tool_calls,
+        tool_calls as f64,
+    );
 
     println!(
         "\n[agent metrics] iterations={iterations} tool_calls={tool_calls} tokens={total_tokens} success={success}"
@@ -85,7 +95,9 @@ fn fold_log(
             LoopEventKind::ToolCallParsed { .. }
             | LoopEventKind::ToolResult { .. }
             | LoopEventKind::ToolFailed { .. } => *tool_calls += 1,
-            LoopEventKind::ModelReply { total_tokens: t, .. } => {
+            LoopEventKind::ModelReply {
+                total_tokens: t, ..
+            } => {
                 *total_tokens += *t as u64;
             }
             LoopEventKind::ToolCallMalformed { .. } => {}
@@ -100,8 +112,8 @@ fn emit(task: &str, success: bool, tokens: u64, cost: f64) {
         ms: 0,
         task: task.into(),
         success,
-        value: cost,        // EV numerator carries the measured count for agent metrics
-        cost,               // EV denominator mirrors tokens for local Ollama
+        value: cost, // EV numerator carries the measured count for agent metrics
+        cost,        // EV denominator mirrors tokens for local Ollama
     };
     append_harvest(&rec);
 }

@@ -8,7 +8,10 @@ import { fileURLToPath } from 'url';
 
 const ROOT = join(fileURLToPath(new URL('.', import.meta.url)), '..'); // web/
 const KERNEL_PKG = join(ROOT, '..', 'kernel', 'pkg-web');
-const PORT = process.env.PORT || 4173;
+// 8099 is the documented default (README.md, CLAUDE.md, root README.md all cite
+// `http://localhost:8099/web/index.html`) — restored after a prior rewrite of this
+// file silently changed it to 4173 without updating any of the three docs.
+const PORT = process.env.PORT || 8099;
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',

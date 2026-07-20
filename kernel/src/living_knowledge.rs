@@ -205,6 +205,22 @@ impl ChildStatus {
     }
 }
 
+/// Mirrors `std::process::ExitStatus`'s `Display` ("exit status: N" / "signal: N") so the
+/// bridge-exited error message reads identically on the raw-`wait4` path and the fallback
+/// `std::process` path.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+impl std::fmt::Display for ChildStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if (self.raw & 0x7f) == 0 {
+            // WIFEXITED → WEXITSTATUS
+            write!(f, "exit status: {}", (self.raw >> 8) & 0xff)
+        } else {
+            // WIFSIGNALED (or stopped) → WTERMSIG
+            write!(f, "signal: {}", self.raw & 0x7f)
+        }
+    }
+}
+
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn status_success(s: ChildStatus) -> bool {
     s.success()
@@ -288,7 +304,7 @@ fn wait4(pid: u32, child: &mut std::process::Child) -> Result<(ChildStatus, Chil
     if ret < 0 {
         // Reap defensively so we don't leak a zombie, then surface the error fail-closed.
         let _ = child.wait();
-        return Err(format!("living_knowledge: wait4 failed (errno {-ret})"));
+        return Err(format!("living_knowledge: wait4 failed (errno {})", -ret));
     }
     let utime_us = (ru.ru_utime[0] as u64)
         .wrapping_mul(1_000_000)
@@ -312,7 +328,12 @@ fn wait4(pid: u32, child: &mut std::process::Child) -> Result<(ChildStatus, Chil
 }
 
 /// Collect a child's captured stdout/stderr after reaping (used by both reaping paths).
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+///
+/// One portable impl for both cfg arms: the child is ALREADY reaped by the time this is
+/// called (raw `wait4` on x86_64 Linux, `Child::wait` elsewhere), so we only drain the
+/// still-open pipe ends. The former non-linux variant called `child.wait_with_output()`,
+/// which (a) takes `Child` by value — E0507 behind `&mut`, the arm never compiled — and
+/// (b) would re-wait an already-reaped child.
 fn collect_child_output(child: &mut std::process::Child) -> std::io::Result<ChildOutput> {
     use std::io::Read;
     let mut stdout = Vec::new();
@@ -326,23 +347,6 @@ fn collect_child_output(child: &mut std::process::Child) -> std::io::Result<Chil
     Ok(ChildOutput { stdout, stderr })
 }
 
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-struct ChildOutput {
-    stdout: Vec<u8>,
-    stderr: Vec<u8>,
-}
-
-#[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
-fn collect_child_output(child: &mut std::process::Child) -> std::io::Result<ChildOutput> {
-    use std::io::Read;
-    let out = child.wait_with_output()?;
-    Ok(ChildOutput {
-        stdout: out.stdout,
-        stderr: out.stderr,
-    })
-}
-
-#[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
 struct ChildOutput {
     stdout: Vec<u8>,
     stderr: Vec<u8>,

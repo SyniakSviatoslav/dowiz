@@ -19,7 +19,17 @@ PKG="$KERNEL_DIR/pkg"
 PKG_WEB="$KERNEL_DIR/pkg-web"
 
 echo "== build kernel wasm32 (release) =="
-cargo build --release --target wasm32-unknown-unknown --manifest-path "$KERNEL_DIR/Cargo.toml"
+# --lib only: wasm-bindgen below consumes the LIB wasm artifact exclusively. The kernel
+# also ships several native CLI [[bin]]s (lm/markov_attractor/fdr_recorder — real
+# filesystem/process tools, never meant to target wasm32); building them here would just
+# make an unrelated native-tool wasm32-compat regression block the web/ wasm surface.
+# --features wasm: the `#[wasm_bindgen]` entry points (kernel/src/wasm.rs, all 24 `_js`
+# exports web/ imports — order_js/geo_*/spectral_*/fsm_*) are gated behind the off-by-
+# default `wasm` feature (kernel/Cargo.toml). Without it this step still "succeeds" but
+# silently emits an EMPTY glue module with zero kernel exports — web/'s ESM imports of
+# named exports like `place_order_js` then fail at module-load time.
+cargo build --release --target wasm32-unknown-unknown --lib --features wasm \
+    --manifest-path "$KERNEL_DIR/Cargo.toml"
 WASM="$KERNEL_DIR/target/wasm32-unknown-unknown/release/dowiz_kernel.wasm"
 [ -f "$WASM" ] || { echo "FATAL: $WASM missing" >&2; exit 1; }
 

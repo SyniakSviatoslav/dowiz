@@ -36,11 +36,22 @@ fn determinism_across_calls_and_permutations() {
 fn input_sensitivity_teeth() {
     // order_id MUST bind the weight: a different id must re-rank for some fixture.
     let cands = vec![courier(10), courier(20), courier(30), courier(40)];
-    let o1 = bebop_proto_cap::matcher::Order { id: 1, src: "R".into(), dst: "C".into() };
-    let o2 = bebop_proto_cap::matcher::Order { id: 2, src: "R".into(), dst: "C".into() };
+    let o1 = bebop_proto_cap::matcher::Order {
+        id: 1,
+        src: "R".into(),
+        dst: "C".into(),
+    };
+    let o2 = bebop_proto_cap::matcher::Order {
+        id: 2,
+        src: "R".into(),
+        dst: "C".into(),
+    };
     let a = matcher::assign(&o1, &cands, cands.len());
     let b = matcher::assign(&o2, &cands, cands.len());
-    assert_ne!(a, b, "assignment must depend on the order id (weight binds it)");
+    assert_ne!(
+        a, b,
+        "assignment must depend on the order id (weight binds it)"
+    );
 }
 
 #[test]

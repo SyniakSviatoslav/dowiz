@@ -118,6 +118,52 @@ pub fn resolve_root(explicit: Option<PathBuf>) -> PathBuf {
     explicit.unwrap_or_else(|| PathBuf::from(DEFAULT_ROOT))
 }
 
+/// Default header-read timeout for plain HTTP/1.1 connections. A client that has not
+/// finished sending its request headers within this window is disconnected — the
+/// standard mitigation for a slowloris-style connection-exhaustion attack (a client
+/// opens a connection and trickles headers in slowly enough to never trigger a normal
+/// request timeout while occupying one of the [`api::MAX_INFLIGHT_API`] bulkhead slots
+/// or a bare listener socket indefinitely). Matches hyper-util's own documented default.
+pub const DEFAULT_HEADER_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+/// Serve `router` over plain HTTP/1.1 on an already-bound `listener`, with a bounded
+/// header-read timeout per connection. This is the timeout-hardened replacement for
+/// bare `axum::serve(listener, router)` (which has no header-read timeout at all —
+/// a partial-headers connection is held open indefinitely). Runs until the listener
+/// errors or the process is killed; each connection is handled on its own spawned task
+/// so one slow/malicious client cannot block others.
+pub async fn serve_with_timeout(
+    listener: tokio::net::TcpListener,
+    router: Router,
+    header_read_timeout: std::time::Duration,
+) -> std::io::Result<()> {
+    loop {
+        let (stream, _peer) = listener.accept().await?;
+        let router = router.clone();
+        tokio::spawn(async move {
+            let hyper_service = hyper_util::service::TowerToHyperService::new(router);
+            let mut builder =
+                hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
+            builder
+                .http1()
+                .timer(hyper_util::rt::TokioTimer::new())
+                .header_read_timeout(header_read_timeout);
+            if let Err(e) = builder
+                .serve_connection_with_upgrades(
+                    hyper_util::rt::TokioIo::new(stream),
+                    hyper_service,
+                )
+                .await
+            {
+                // A timed-out or reset connection surfaces here as an I/O error —
+                // this is the header-read timeout doing its job, not a bug; log at
+                // most, never propagate (one bad connection must not kill the server).
+                eprintln!("[native-spa-server] connection closed: {e}");
+            }
+        });
+    }
+}
+
 /// Build a 200 `index.html` response carrying the security headers. Used by the
 /// binary for an out-of-band `/healthz` liveness probe.
 pub fn health_response() -> Response {

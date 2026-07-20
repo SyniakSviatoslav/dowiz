@@ -12,7 +12,9 @@
 //!   hetzner-exporter --once          # compute + print one JSON snapshot, exit
 //!   hetzner-exporter --selftest      # verify gauges compute + JSON is valid
 
-use hetzner_exporter::{gauges_dict, gauges_native, GAUGE_SCHEMA};
+use hetzner_exporter::{
+    disk_bytes, gauges_dict, gauges_native, mem_bytes, net_io_bytes, GAUGE_SCHEMA,
+};
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -64,6 +66,30 @@ fn snapshot_json() -> String {
         }
         s.push_str(&format!("\"{}\":{}", k, d.get(*k).copied().unwrap_or(-1.0)));
         first = false;
+    }
+    // Absolute mem/disk + network I/O ride at the JSON edge like `ts` (not 0-100 gauges —
+    // they stay out of the canonical 3-f64 native wire). -1 = read failure, same
+    // error-sentinel convention as the gauges above. mem in MiB, disk in GiB (1024-based,
+    // matching what `free -m` / `df -h` show the operator).
+    match mem_bytes() {
+        Some((used, total)) => s.push_str(&format!(
+            ",\"mem_used_mb\":{},\"mem_total_mb\":{}",
+            used / (1 << 20),
+            total / (1 << 20)
+        )),
+        None => s.push_str(",\"mem_used_mb\":-1,\"mem_total_mb\":-1"),
+    }
+    match disk_bytes() {
+        Some((used, total)) => s.push_str(&format!(
+            ",\"disk_used_gb\":{:.1},\"disk_total_gb\":{:.1}",
+            used as f64 / (1u64 << 30) as f64,
+            total as f64 / (1u64 << 30) as f64
+        )),
+        None => s.push_str(",\"disk_used_gb\":-1,\"disk_total_gb\":-1"),
+    }
+    match net_io_bytes() {
+        Some((rx, tx)) => s.push_str(&format!(",\"net_rx_bytes\":{},\"net_tx_bytes\":{}", rx, tx)),
+        None => s.push_str(",\"net_rx_bytes\":-1,\"net_tx_bytes\":-1"),
     }
     s.push_str(&format!(",\"ts\":{}}}", ts));
     s
@@ -143,6 +169,10 @@ fn selftest() {
     assert!(json.starts_with('{') && json.ends_with('}'), "json shape");
     assert!(json.contains("disk_pct"), "has disk_pct");
     assert!(json.contains("mem_pct"), "has mem_pct");
+    assert!(json.contains("net_rx_bytes"), "has net_rx_bytes");
+    assert!(json.contains("net_tx_bytes"), "has net_tx_bytes");
+    assert!(json.contains("mem_used_mb"), "has mem_used_mb");
+    assert!(json.contains("disk_total_gb"), "has disk_total_gb");
     // native wire length is exactly 24 bytes (3 f64).
     let v = gauges_native();
     let mut b = Vec::with_capacity(24);

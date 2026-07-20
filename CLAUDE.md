@@ -136,6 +136,10 @@ bug existed and is closed; back performance claims with a measured benchmark num
   governance status). Complementary to this file, which covers *build + architecture*.
 - **`AGENTS.md`** — "innovating senior dev" mode + `/innovate-*` review commands.
 - **`DECISIONS.md`** / **`MANIFESTO.md`** — the authoritative red-line decisions and product thesis.
-- **`docs/design/`** — active roadmap/blueprints, anchored by `CORE-ROADMAP-INDEX.md` and the
-  `MASTER-ROADMAP-*` docs. Design corpus may describe speculative unifications flagged as research
+- **`docs/design/`** — active roadmap/blueprints. **Start at `docs/design/ROADMAP.md`** — the
+  chronological master roadmap and single canonical "what's the status" entry point (2026-07-20).
+  It sits above `CORE-ROADMAP-INDEX.md` (the detailed P-number/blueprint cross-reference table)
+  and the `MASTER-ROADMAP-*`/`GROUND-TRUTH-*` docs, several of which are now historical — see
+  `ROADMAP.md` §8 before trusting any doc whose name starts with `ROADMAP`/`MASTER`/`GROUND-TRUTH`.
+  Design corpus may describe speculative unifications flagged as research
   directions; trust the tree over the vision docs when they disagree.

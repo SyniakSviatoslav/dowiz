@@ -18,8 +18,7 @@ use std::net::TcpListener;
 const DEFAULT_AGENT_PORT: u16 = 8771;
 
 fn main() -> std::io::Result<()> {
-    let base_url =
-        std::env::var("OLLAMA_BASE").unwrap_or_else(|_| "http://127.0.0.1:11434".into());
+    let base_url = std::env::var("OLLAMA_BASE").unwrap_or_else(|_| "http://127.0.0.1:11434".into());
     let port: u16 = std::env::var("DOWIZ_AGENT_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
