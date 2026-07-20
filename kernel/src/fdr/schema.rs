@@ -40,6 +40,14 @@ pub enum Absence {
     /// [`Absence::PermissionDenied`], which is `perf_event_paranoid`/`CAP_PERFMON` gating an
     /// interface that DOES exist. Used by [`super::pmu::PmuStamp`] (roadmap item 27).
     NoPmuInterface,
+    /// Item 69 (water/carbon as derived views of joules): the operator-supplied regional
+    /// grid constant (gCO₂e/kWh or L/kWh) is absent, so the derived footprint cannot be
+    /// computed. Never a fabricated constant — the kernel ships with the constant absent.
+    NoRegionalConstant,
+    /// Item 69 (on-site water): facility cooling is not software-observable by a local
+    /// device, so on-site water is a PERMANENT named absence under every input. This variant
+    /// names that invariant (the derivation module NEVER produces an on-site-water value).
+    NotSoftwareObservable,
 }
 
 impl Absence {
@@ -52,6 +60,8 @@ impl Absence {
             Absence::ReadError => "read_error",
             Absence::SamplingDisabled => "sampling_disabled",
             Absence::NoPmuInterface => "no_pmu_interface",
+            Absence::NoRegionalConstant => "no_regional_constant",
+            Absence::NotSoftwareObservable => "not_software_observable",
         }
     }
 }
