@@ -222,16 +222,23 @@ The single busiest day in the project's history. In rough order:
   deferral hold" questions). Numbering: drafted as P97, renumbered after the concurrent AR/VR+
   audio pass (§16) claimed P97/P98; **P99/P100 deliberately skipped forever** — both strings
   are corpus-wide latency-percentile notation (the P-D→Layer-D lexical-collision ruling class).
-  Mobile courier VLM: LFM2.5-VL-450M primary vs SmolVLM-256M
-  Apache-2.0 fallback, with the **LFM Open License $10M-revenue-cap flagged as a named
-  operator decision (O-1)** — the capable option is not open-source, the permissive option has
-  no demonstrated agentic ability. Server: Ollama-native residency (no new infra), static
-  `TaskClass` routing + exactly one deterministic cascade (intake-assist, `IntentParser` as
-  oracle), 5-cell measured concurrency matrix before anything ships (memory *bandwidth*, not
-  core count, is the honest ceiling on the 4-physical-core box). Training: **P54 deferral
-  HOLDS, strengthened** — the box's AMX absence was live-verified, killing the only
-  vendor-backed CPU-training path; optional bounded CPU-LoRA wall-clock probe offered with a
-  falsifiable ≤24h criterion. Blueprint:
+  **Amended same day: the model topology is now exactly 2 named models, not an abstract
+  tier system.** Operator-directed correction (no discussion): the box's measured max-2-
+  concurrent-decode-stream ceiling is filled by **LFM2.5-VL-450M + SmolVLM-256M-Instruct**,
+  run **concurrently/crosswired** (SmolVLM fast first-pass perception feeding LFM2.5-VL's
+  reasoning/tool-selection), **not primary/fallback** — and the **same pair serves both the
+  mobile courier pick and the server topology** (one artifact family, not two separate
+  picks), replacing the earlier abstract E/S/G/C server-side residency system and the
+  primary/fallback mobile framing. **O-1 (the LFM Open License $10M-revenue-cap question) is
+  now RULED — operator: "clear to ship"** — the term stays recorded for awareness, it is no
+  longer a blocking gate. Server: Ollama-native residency (no new infra, now a 3-model floor:
+  embedding + the crosswired pair — an order of magnitude lighter than the original ~11–12 GB
+  design), static `TaskClass` routing + exactly one deterministic cascade (intake-assist,
+  `IntentParser` as oracle), 5-cell measured concurrency matrix before anything ships (memory
+  *bandwidth*, not core count, is the honest ceiling on the 4-physical-core box). Training:
+  **P54 deferral HOLDS, strengthened** — the box's AMX absence was live-verified, killing the
+  only vendor-backed CPU-training path; optional bounded CPU-LoRA wall-clock probe offered
+  with a falsifiable ≤24h criterion. Blueprint:
   `CORE-ROADMAP-2026-07-17/BLUEPRINT-P101-local-mobile-model-selection-topology-2026-07-20.md`,
   registered in §10.2 (Part II) and `CORE-ROADMAP-INDEX.md` §10.
 - **The delta gap-audit + first-pass consolidation.** Fixed 4 orphaned/under-linked docs, 1
@@ -272,9 +279,12 @@ separate — that's ~50 individual files, not itself a competing top-level roadm
   three named concretely in the remaining-queue wave's blueprints — the wiring gap has since
   started landing on the `swave/integrate` branch (see §9), not yet merged to `main`.
 - P101 (local/mobile model selection + serving topology): **blueprint on disk, zero code, zero
-  models pulled.** Three operator decisions open (its §8): O-1 LFM-license ruling (blocks any
-  LFM weight shipping), O-2 Tier-S bake-off pair, O-3 optional CPU-LoRA probe. Phase B (the
-  measured concurrency matrix on the live box) is startable immediately and gates the topology.
+  models pulled.** Same-day operator correction locked the model topology to exactly 2 named
+  models — LFM2.5-VL-450M + SmolVLM-256M-Instruct, run concurrently/crosswired, one pair for
+  both mobile and server — replacing the earlier abstract tier system; O-1 (LFM-license ruling)
+  is now RULED ("clear to ship") and O-2 (the small-model bake-off) is superseded by that same
+  correction (its §8). Only O-3 (optional CPU-LoRA probe) remains open. Phase B (the measured
+  concurrency matrix on the live box) is startable immediately and gates the topology.
 
 ## 12. What every filename means now, at a glance
 
@@ -1144,7 +1154,7 @@ already-tested protocol code from stranded to load-bearing.
 | P54 | AGENT | LLM/agent behavioral verification: adversarial probes, money-trust fence, fine-tuning gate | PLANNED (blueprint ON DISK; fine-tuning explicitly DEFERRED, zero LoRA/QLoRA built) | none — new phase, consumes P21/P40/P41/P42 | P21 (backend), P40 (AgentReasoner seam), P56 (storage/scheduling substrate) | none downstream; strengthens P54→P56 alerting only |
 | P55 | PROTOCOL/CORE | Protocol/ecosystem testing: regression taxonomy, proptest/mutation, chaos-injection | PLANNED (blueprint ON DISK; proptest confirmed already-live dev-dep, 400-case suite) | none — new phase, extends P24/P27/P36 | P27 (CircuitBreaker), P24 (flight-recorder spans), P56 (storage/scheduling) | none downstream; feeds P36/P34 regression coverage |
 | P56 | ECOSYSTEM/OPS | Verification-harness shared infrastructure: storage, scheduling, meta-verification | PLANNED (blueprint ON DISK; 4 meta-detectors designed, `hetzner:dowiz/test-results/` sync policy) | none — new phase, shared substrate for P54+P55 | P25 (admission control, extended not forked), P45 (alerting, extended not forked), disk-cleanup pass (local storage now unblocked) | P54, P55 (both consume this as their storage/scheduling substrate) |
-| P101 (P99/P100 skipped — latency-percentile lexical collision) | AGENT (mobile half feeds DELIVERY P52/P71) | Local & mobile model selection + CPU-only serving topology: mobile courier VLM pick (LFM2.5-VL-450M primary w/ LFM-license O-1 ruling required, SmolVLM-256M Apache-2.0 fallback), Ollama-native E/S/G/C residency plan + static TaskClass routing + ONE deterministic intake-assist cascade, P54 training-deferral reaffirmed (AMX absence live-verified) + optional CPU-LoRA wall-clock probe | PLANNED (blueprint ON DISK, [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P101-local-mobile-model-selection-topology-2026-07-20.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P101-local-mobile-model-selection-topology-2026-07-20.md); zero code, zero models pulled; Phase B measurement startable immediately) | none — new phase; synthesizes the 2026-07-20 model-selection research pass | local-model-wiring blueprint Phases 1+3 (config substrate), P48-INTAKE (cascade caller), P52/P71 (mobile surface timeline), operator ruling O-1 (LFM license) | nothing downstream hard; feeds P52/P71 capture-assist UX and P48-INTAKE assist lane |
+| P101 (P99/P100 skipped — latency-percentile lexical collision) | AGENT (mobile half feeds DELIVERY P52/P71) | Local & mobile model selection + CPU-only serving topology: **exactly 2 named models, operator-decided, not an abstract tier system** — LFM2.5-VL-450M + SmolVLM-256M-Instruct run concurrently/crosswired (not primary/fallback), same pair for mobile courier pick AND server topology; O-1 (LFM Open License $10M-revenue-cap) RULED — operator "clear to ship", term recorded not erased; static TaskClass routing + ONE deterministic intake-assist cascade over the named pair; P54 training-deferral reaffirmed (AMX absence live-verified) + optional CPU-LoRA wall-clock probe | PLANNED (blueprint ON DISK, [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P101-local-mobile-model-selection-topology-2026-07-20.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P101-local-mobile-model-selection-topology-2026-07-20.md); zero code, zero models pulled; Phase B measurement startable immediately) | none — new phase; synthesizes the 2026-07-20 model-selection research pass + same-day operator model-count/crosswiring correction | local-model-wiring blueprint Phases 1+3 (config substrate), P48-INTAKE (cascade caller), P52/P71 (mobile surface timeline) | nothing downstream hard; feeds P52/P71 capture-assist UX and P48-INTAKE assist lane |
 
 #### 10.3 Cross-cutting invariants (binding across components; each stated once)
 
