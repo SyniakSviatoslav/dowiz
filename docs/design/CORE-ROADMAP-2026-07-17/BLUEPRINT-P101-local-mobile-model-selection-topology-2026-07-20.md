@@ -35,6 +35,13 @@ empirical closure or says the gap stays open — it never papers over one.
 >    LFM2.5-VL-450M ships despite the LFM Open License's $10M-revenue-cap term. The term
 >    itself stays recorded, not erased (§3.3, §8) — per this repo's documentation
 >    discipline, decisions get recorded; it is simply no longer a blocking gate.
+>
+> Execution home for the pair's *native* engine — the same-day R-1 ruling's zero-dependency
+> bare-metal build that eventually replaces the Ollama serving path lane-by-lane, with this
+> document's Ollama-era topology staying near-term truth until each cut-over gate is green:
+> [`../BLUEPRINT-P102-bare-metal-inference-engine-2026-07-20.md`](../BLUEPRINT-P102-bare-metal-inference-engine-2026-07-20.md)
+> (its §3 designs the crosswire dataflow/scheduling in full; its §6.1 records the P101↔P102
+> sequencing and the E-1 embed / CS-2 code residuals).
 
 **Relationship to the local-model-wiring blueprint
 ([`BLUEPRINT-LOCAL-MODEL-WIRING-TESTING-USAGE-2026-07-20.md`](BLUEPRINT-LOCAL-MODEL-WIRING-TESTING-USAGE-2026-07-20.md)):**
@@ -413,6 +420,13 @@ The research's distinction, applied to dowiz's actual lanes, now with the operat
 - Since P48-INTAKE is itself PLAN, the cascade lands **with** that build; P101's deliverable is
   this contract plus the fixture spec (§6 Phase C), so the intake build consumes a settled
   design instead of re-deriving one.
+
+> **SUPERSEDED IN PART — 2026-07-20 (later, R-2):** once the P102 native pair serves the
+> intake-assist lane, the Tier-S→Tier-G escalation rung *inside the model pair* is replaced by
+> the P102 §3.2 Mode-B crosswire (S perception draft conditions L's extraction in one pass).
+> Everything deterministic here is unchanged and binding: the pure `IntentParser` remains the
+> sufficiency oracle, and the human-handling backstop remains the terminal rung. Until the
+> P102 Phase-6 cut-over gate for this lane is green, this section's cascade stands as written.
 
 ### 4.5 The measurement this whole section stands on (Phase B)
 
