@@ -332,11 +332,134 @@ fn cmd_bench_watch(iv: u64) -> i32 {
     }
 }
 
+// ── resources: hourly host/kernel resource+efficiency pulse -> RESOURCES topic ──
+//
+// TELEGRAM-OPS-OBSERVABILITY-CHANNEL-DESIGN-2026-07-20.md §3/§5, prioritized
+// build-order item 1 ("maximum operator value, zero roadmap dependency").
+// Named-absence everywhere (kernel::fdr::Reading<T> philosophy, §3's "never a
+// number that wasn't measured"): every unmeasured field renders
+// `[absent — <reason>]`, never a fabricated 0. Real fields wired here: disk/
+// mem/load from hetzner-exporter's /health, host cpu_ticks from /proc/stat.
+// Everything the design doc marks "needs a planned roadmap item first"
+// (efficiency/joules/CO2e/threaded traces/build-provenance/ttft) or
+// "structural gap" (GPU, mesh peer telemetry, network) stays absent by
+// design — this subcommand does not get ahead of the items that gate them.
+//
+// No RESOURCES topic exists yet (design doc §1: "new topics get IDs at
+// creation time") — set TELEGRAM_TOPIC_ID_RESOURCES once the operator creates
+// it; until then this falls back to the HERMES topic (267) so a dry run has
+// somewhere real to land rather than silently failing to find a topic.
+const RESOURCES_TOPIC_ENV: &str = "TELEGRAM_TOPIC_ID_RESOURCES";
+const RESOURCES_TOPIC_FALLBACK: &str = "267";
+
+fn resources_topic() -> String {
+    env::var(RESOURCES_TOPIC_ENV).unwrap_or_else(|_| RESOURCES_TOPIC_FALLBACK.to_string())
+}
+
+/// Host CPU aggregate tick count from `/proc/stat`'s leading `cpu ` line (sum
+/// of user+nice+system+idle+iowait+irq+softirq+steal — the same fields the
+/// kernel scheduler accounts). `None` if unreadable/unparseable (not Linux, or
+/// the line shape changed) — never a fabricated 0.
+fn host_cpu_ticks() -> Option<u64> {
+    let s = fs::read_to_string("/proc/stat").ok()?;
+    let line = s.lines().next()?;
+    if !line.starts_with("cpu ") {
+        return None;
+    }
+    let sum: u64 = line
+        .split_whitespace()
+        .skip(1)
+        .filter_map(|f| f.parse::<u64>().ok())
+        .sum();
+    Some(sum)
+}
+
+/// Best-effort fetch of hetzner-exporter's live `/health` JSON
+/// (disk_pct/load1/mem_pct/ts — see `tools/telemetry/hetzner-exporter/src/lib.rs`).
+/// `None` if the exporter isn't reachable (not running, wrong host) — the
+/// caller renders each gauge as a named absence rather than guessing.
+fn fetch_host_gauges() -> Option<serde_json::Value> {
+    let resp = ureq::get("http://127.0.0.1:9091/health")
+        .timeout(std::time::Duration::from_secs(2))
+        .call()
+        .ok()?;
+    resp.into_json::<serde_json::Value>().ok()
+}
+
+fn fmt_gauge(v: &Option<serde_json::Value>, key: &str) -> String {
+    match v.as_ref().and_then(|j| j.get(key).and_then(|x| x.as_f64())) {
+        Some(x) if x >= 0.0 => format!("{x:.1}"),
+        Some(_) => "[absent — exporter reported an error sentinel]".to_string(),
+        None => "[absent — hetzner-exporter unreachable at 127.0.0.1:9091]".to_string(),
+    }
+}
+
+fn cmd_resources() -> i32 {
+    let topic = resources_topic();
+    let tg = match Tg::from_env(&topic) {
+        Some(t) => t,
+        None => {
+            eprintln!("topics resources: TELEGRAM_BOT_TOKEN/CHAT_ID not set.");
+            return 2;
+        }
+    };
+
+    let gauges = fetch_host_gauges();
+    let disk = fmt_gauge(&gauges, "disk_pct");
+    let load1_norm = fmt_gauge(&gauges, "load1"); // already CPU-count-normalized, see hetzner-exporter
+    let mem = fmt_gauge(&gauges, "mem_pct");
+    let load_breach = gauges
+        .as_ref()
+        .and_then(|j| j.get("load1").and_then(|x| x.as_f64()))
+        .map(|l| if l > 4.0 { "BREACH" } else { "OK" })
+        .unwrap_or("[absent]");
+
+    let cpu_ticks = host_cpu_ticks()
+        .map(|t| t.to_string())
+        .unwrap_or_else(|| "[absent — /proc/stat unreadable]".to_string());
+
+    let host = Command::new("hostname")
+        .arg("-s")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "host".to_string());
+    let ts = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    let report = format!(
+        "RESOURCES dowiz-dev ({host}) ts={ts}\n\
+         CPU    load1(norm) {load1_norm} | breach>4.0 {load_breach} | cpu_ticks {cpu_ticks}\n\
+         \x20      IPC: [absent — PMU Tier B PermissionDenied (perf_event_open), item 27]\n\
+         MEM    host mem_pct {mem}\n\
+         DISK   {disk}\n\
+         NET    [absent — no network metric in hetzner-exporter; unplanned gap]\n\
+         GPU    [absent — zero GPU telemetry exists; declared-empty seam]\n\
+         PWR    joules: [absent — NoRaplInterface expected on Hetzner, unverified]\n\
+         CO2e   [not configured — NoRegionalConstant; item 69 + operator grid constant]\n\
+         \n\
+         EFFICIENCY [absent — item 58 Work-Normalized Cost Ledger NOT BUILT]\n\
+         LATENCY [absent — span_latency_us histogram reader not wired into `topics` yet]"
+    );
+
+    if tg.send(&report) {
+        eprintln!("topics resources: posted to topic {topic}");
+        0
+    } else {
+        eprintln!("topics resources: send failed");
+        1
+    }
+}
+
 fn usage() -> i32 {
     eprintln!("usage: topics <subcommand> [interval_s]");
     eprintln!("  git-watch [60]     post new commits (dowiz+openbebop) -> topic 292");
     eprintln!("  plans             aggregate DOD+git+roadmap -> topic 291");
     eprintln!("  bench-watch [120]  poll entropy/eval -> topic 294");
+    eprintln!("  resources          one-shot host resource pulse -> RESOURCES topic (§TELEGRAM-OPS-OBSERVABILITY-CHANNEL-DESIGN-2026-07-20.md)");
     2
 }
 
@@ -351,7 +474,71 @@ fn main() {
         "git-watch" => cmd_git_watch(iv),
         "plans" => cmd_plans(),
         "bench-watch" => cmd_bench_watch(iv),
+        "resources" => cmd_resources(),
         _ => usage(),
     };
     std::process::exit(rc);
+}
+
+#[cfg(test)]
+mod resources_tests {
+    use super::*;
+
+    #[test]
+    fn host_cpu_ticks_reads_a_positive_sum_on_linux() {
+        // /proc/stat is Linux-only; this crate ships for the ops box (Hetzner,
+        // Linux) so a None here would itself be a real, actionable finding —
+        // not something to special-case away in the test.
+        let t = host_cpu_ticks().expect("/proc/stat readable on this host");
+        assert!(t > 0, "cpu ticks must be a positive accumulator, got {t}");
+    }
+
+    #[test]
+    fn fmt_gauge_renders_a_present_positive_value() {
+        let v = Some(serde_json::json!({"disk_pct": 71.3}));
+        assert_eq!(fmt_gauge(&v, "disk_pct"), "71.3");
+    }
+
+    #[test]
+    fn fmt_gauge_names_absence_when_key_missing() {
+        let v = Some(serde_json::json!({"other_key": 1.0}));
+        let out = fmt_gauge(&v, "disk_pct");
+        assert!(
+            out.starts_with("[absent"),
+            "missing key must render a named absence, got {out:?}"
+        );
+    }
+
+    #[test]
+    fn fmt_gauge_names_absence_when_exporter_unreachable() {
+        let out = fmt_gauge(&None, "disk_pct");
+        assert!(
+            out.contains("unreachable"),
+            "None (no exporter response) must name the unreachable reason, got {out:?}"
+        );
+    }
+
+    #[test]
+    fn fmt_gauge_never_silently_renders_an_error_sentinel_as_a_real_number() {
+        // hetzner-exporter's own convention: -1.0 signals a computation error
+        // (see hetzner-exporter/src/lib.rs). Must never be printed as "-1.0".
+        let v = Some(serde_json::json!({"disk_pct": -1.0}));
+        let out = fmt_gauge(&v, "disk_pct");
+        assert!(
+            out.starts_with("[absent"),
+            "a -1.0 error sentinel must render as a named absence, not a number, got {out:?}"
+        );
+    }
+
+    #[test]
+    fn resources_topic_falls_back_then_honors_override() {
+        // One test, not two: both cases mutate the same process-global env
+        // var, and cargo test runs tests in parallel by default within one
+        // process — two separate tests touching it would be a real race.
+        env::remove_var(RESOURCES_TOPIC_ENV);
+        assert_eq!(resources_topic(), RESOURCES_TOPIC_FALLBACK);
+        env::set_var(RESOURCES_TOPIC_ENV, "999");
+        assert_eq!(resources_topic(), "999");
+        env::remove_var(RESOURCES_TOPIC_ENV);
+    }
 }
