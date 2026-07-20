@@ -205,6 +205,22 @@ impl ChildStatus {
     }
 }
 
+/// Mirrors `std::process::ExitStatus`'s `Display` ("exit status: N" / "signal: N") so the
+/// bridge-exited error message reads identically on the raw-`wait4` path and the fallback
+/// `std::process` path.
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+impl std::fmt::Display for ChildStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if (self.raw & 0x7f) == 0 {
+            // WIFEXITED → WEXITSTATUS
+            write!(f, "exit status: {}", (self.raw >> 8) & 0xff)
+        } else {
+            // WIFSIGNALED (or stopped) → WTERMSIG
+            write!(f, "signal: {}", self.raw & 0x7f)
+        }
+    }
+}
+
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 fn status_success(s: ChildStatus) -> bool {
     s.success()
@@ -288,7 +304,7 @@ fn wait4(pid: u32, child: &mut std::process::Child) -> Result<(ChildStatus, Chil
     if ret < 0 {
         // Reap defensively so we don't leak a zombie, then surface the error fail-closed.
         let _ = child.wait();
-        return Err(format!("living_knowledge: wait4 failed (errno {-ret})"));
+        return Err(format!("living_knowledge: wait4 failed (errno {})", -ret));
     }
     let utime_us = (ru.ru_utime[0] as u64)
         .wrapping_mul(1_000_000)
