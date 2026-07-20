@@ -31,14 +31,15 @@ narrative; the standalone file no longer exists on disk).
 - Kernel tests: **1137 passed / 0 failed / 8 ignored** (default features); **1310 passed / 0
   failed / 9 ignored** (`--features pq`).
 - Engine tests: **128 passed / 0 failed**.
-- Blueprint coverage: effectively complete — every P01–P101 either has a file or is P84
+- Blueprint coverage: effectively complete — every P01–P102 either has a file or is P84
   (deliberately reserved) or P99/P100 (deliberately skipped — both strings are corpus-wide
   latency-*percentile* notation; item numbers must not grep into percentile hits, per the
   P-D→Layer-D lexical-collision ruling); P97/P98 added this pass (§16) closing the AR/VR and
   audio consolidation gaps; P101 (local/mobile model selection + serving topology) added the
-  same day (§9); the space-grade track's 78 items are covered by Part V + ~50 per-item
-  blueprint files. See `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md` for the full delta audit
-  (predates P97/P98/P101).
+  same day (§9); P102 (bare-metal zero-dep inference engine, two-model crosswire — operator
+  rulings R-1/R-2/R-3) added the same day (§9); the space-grade track's 78 items are covered
+  by Part V + ~50 per-item blueprint files. See `ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md`
+  for the full delta audit (predates P97/P98/P101/P102).
 - Open/pending work: tracked live in §11 below, not scattered across other docs.
 
 ## 1. Origin (2026-05-31 → 2026-07-10)
@@ -241,6 +242,23 @@ The single busiest day in the project's history. In rough order:
   with a falsifiable ≤24h criterion. Blueprint:
   `CORE-ROADMAP-2026-07-17/BLUEPRINT-P101-local-mobile-model-selection-topology-2026-07-20.md`,
   registered in §10.2 (Part II) and `CORE-ROADMAP-INDEX.md` §10.
+- **P102 — bare-metal zero-dependency native inference engine, two-model real-time crosswire —
+  PLAN, 1 doc** (same day, later — executes three final operator rulings, recorded in the
+  blueprint's §0): **R-1** fully custom engine, zero external crates, hand-written in Rust
+  (GGUF loader, AVX2 `std::arch` kernels, static ring-slab KV-cache, tokenizers, sampler,
+  two-lane scheduler) — the deliberate long-term replacement for the Ollama serving path;
+  **R-2** exactly two models, **LFM2.5-VL-450M + SmolVLM-256M-Instruct**, crosswired in real
+  time (concurrent/complementary, never fallback), one pair for both the mobile courier app
+  and the server engine; **R-3** P101's O-1 license question **resolved "clear to ship"**
+  (LFM Open License facts stay recorded; decision closed). Engineering honesty kept from the
+  research pass: AVX2 not AVX-512 (Zen3 live-verified), PagedAttention skipped for the static
+  ring-slab with a named multi-tenant reopen trigger, decode-is-bandwidth-bound physics
+  (P-F's flat 9.21/9.36/9.80 tok/s), determinism-dividend framing (bit-identical token
+  streams, zero-alloc decode loop under `count-allocs` — never nanosecond claims), per-lane
+  measured cut-over gates vs the P101 topology, E-1 embed + CS-2 code residuals named.
+  Blueprint: `BLUEPRINT-P102-bare-metal-inference-engine-2026-07-20.md`, registered in §10.2
+  (Part II) and `CORE-ROADMAP-INDEX.md` §10; P101 carries dated append-only supersession
+  annotations (§3.2/§4.4/§8 there).
 - **The delta gap-audit + first-pass consolidation.** Fixed 4 orphaned/under-linked docs, 1
   dangling link, 2 stale status cells, 1 mislabel in `CORE-ROADMAP-INDEX.md`; annotated (not
   silently fixed) that space-grade items 45/73/74 have real standalone CI-gate scripts not yet
@@ -255,7 +273,7 @@ The single busiest day in the project's history. In rough order:
 ## 10. The space-grade 78-item track — how it relates to everything above
 
 Part V below (the space-grade 78-item roadmap) is a **deliberately separate track** from the
-P01–P101 CORE roadmap — zero-external-dependency, maximum-kernel-authority,
+P01–P102 CORE roadmap — zero-external-dependency, maximum-kernel-authority,
 100%-determinism-where-possible hardening work, not product features. It is NOT a competing
 roadmap; think of it as a fourth axis alongside Layer A–I / P-series / space-grade, all converging
 on the same `main`. Status as of today: the large majority of items 1–61 have landed real code or
@@ -285,6 +303,12 @@ separate — that's ~50 individual files, not itself a competing top-level roadm
   is now RULED ("clear to ship") and O-2 (the small-model bake-off) is superseded by that same
   correction (its §8). Only O-3 (optional CPU-LoRA probe) remains open. Phase B (the measured
   concurrency matrix on the live box) is startable immediately and gates the topology.
+- P102 (bare-metal zero-dep inference engine, two-model crosswire): **blueprint on disk, zero
+  code, no crate created, no model pulled.** Direction is operator-ruled final (R-1/R-2/R-3);
+  Phase 0 (bandwidth probe + KAT fixture corpus + external-runtime baselines for the ruled
+  pair) is startable immediately and touches no dependency or serving path. Named residuals
+  of full Ollama retirement: E-1 (embedding lane) and CS-2 (code lane) — tracked in its §6.1.
+  Recommended follow-up: a DECISIONS.md entry recording R-1/R-2/R-3 (its §10).
 
 ## 12. What every filename means now, at a glance
 
@@ -1120,7 +1144,7 @@ something is live). **P34 is the single most important next action across the en
 roadmap** — bigger leverage than any other phase, because it converts ~70% of already-built,
 already-tested protocol code from stranded to load-bearing.
 
-#### 10.2 Full P31–P53 index (swarm fast-lookup; sub-letter detail lives in §10.5, P47–P53 full sections in §11–§14; P54–P56 appended 2026-07-18, P101 appended 2026-07-20)
+#### 10.2 Full P31–P53 index (swarm fast-lookup; sub-letter detail lives in §10.5, P47–P53 full sections in §11–§14; P54–P56 appended 2026-07-18, P101–P102 appended 2026-07-20)
 
 > Extended P47–P53 on 2026-07-18 by the consolidation/consistency pass §11's note anticipated
 > ("a later consolidation pass reconciles that table" — this is that pass). Same-day swarm
@@ -1155,6 +1179,7 @@ already-tested protocol code from stranded to load-bearing.
 | P55 | PROTOCOL/CORE | Protocol/ecosystem testing: regression taxonomy, proptest/mutation, chaos-injection | PLANNED (blueprint ON DISK; proptest confirmed already-live dev-dep, 400-case suite) | none — new phase, extends P24/P27/P36 | P27 (CircuitBreaker), P24 (flight-recorder spans), P56 (storage/scheduling) | none downstream; feeds P36/P34 regression coverage |
 | P56 | ECOSYSTEM/OPS | Verification-harness shared infrastructure: storage, scheduling, meta-verification | PLANNED (blueprint ON DISK; 4 meta-detectors designed, `hetzner:dowiz/test-results/` sync policy) | none — new phase, shared substrate for P54+P55 | P25 (admission control, extended not forked), P45 (alerting, extended not forked), disk-cleanup pass (local storage now unblocked) | P54, P55 (both consume this as their storage/scheduling substrate) |
 | P101 (P99/P100 skipped — latency-percentile lexical collision) | AGENT (mobile half feeds DELIVERY P52/P71) | Local & mobile model selection + CPU-only serving topology: **exactly 2 named models, operator-decided, not an abstract tier system** — LFM2.5-VL-450M + SmolVLM-256M-Instruct run concurrently/crosswired (not primary/fallback), same pair for mobile courier pick AND server topology; O-1 (LFM Open License $10M-revenue-cap) RULED — operator "clear to ship", term recorded not erased; static TaskClass routing + ONE deterministic intake-assist cascade over the named pair; P54 training-deferral reaffirmed (AMX absence live-verified) + optional CPU-LoRA wall-clock probe | PLANNED (blueprint ON DISK, [`CORE-ROADMAP-2026-07-17/BLUEPRINT-P101-local-mobile-model-selection-topology-2026-07-20.md`](CORE-ROADMAP-2026-07-17/BLUEPRINT-P101-local-mobile-model-selection-topology-2026-07-20.md); zero code, zero models pulled; Phase B measurement startable immediately) | none — new phase; synthesizes the 2026-07-20 model-selection research pass + same-day operator model-count/crosswiring correction | local-model-wiring blueprint Phases 1+3 (config substrate), P48-INTAKE (cascade caller), P52/P71 (mobile surface timeline) | nothing downstream hard; feeds P52/P71 capture-assist UX and P48-INTAKE assist lane |
+| P102 | AGENT/CORE (mobile half feeds DELIVERY P52/P71) | Bare-metal zero-dependency native inference engine — two-model real-time crosswire (operator rulings R-1/R-2/R-3, final): hand-written Rust GGUF loader + AVX2 `std::arch` kernels (Zen3 box: AVX2/FMA, no AVX-512/AMX) + static ring-slab KV (PagedAttention skipped, named multi-tenant reopen trigger) + zero-alloc tokenizers/sampler + two-lane scheduler for exactly **LFM2.5-VL-450M ("L", agentic) ∥ SmolVLM-256M-Instruct ("S", fast perception)**, crosswired (Mode A preview+verify with deterministic comparator, Mode B draft-conditioned), one pair for mobile AND server; PQ-style KAT gating (dev-time-oracle token pins per ISA path); introspection `TraceSink` + typed output-gating seam (policy stays caller-side — Hydra is the first named consumer) | PLANNED (blueprint ON DISK, [`BLUEPRINT-P102-bare-metal-inference-engine-2026-07-20.md`](BLUEPRINT-P102-bare-metal-inference-engine-2026-07-20.md); zero code, no crate, no model pulled; Phase 0 startable immediately) | none — new phase; executes the 2026-07-20 R-1/R-2/R-3 rulings over the same research pass P101 synthesized | dowiz-kernel port types only (LlmBackend + VlmModel-style port); wiring-blueprint Phase 1 (`AiMode` seam) + Phase 2 (golden suite) as gates; P101 Phase A/B baselines; kernel arena/count-allocs/core_pinning/HugePageHint reuse | long-term replacement of the Ollama serving path lane-by-lane (per-lane measured cut-over gates); E-1 embed + CS-2 code residuals named in §6.1; feeds P52/P71 (Phase 7 NEON port) and the Hydra model-integration blueprint (its native-AI-infra substrate) |
 
 #### 10.3 Cross-cutting invariants (binding across components; each stated once)
 
