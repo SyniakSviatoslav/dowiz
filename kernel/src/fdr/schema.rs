@@ -199,6 +199,13 @@ pub enum Kind {
     /// already-survivable kill-9 crash class. Additive variant: every other record
     /// serializes byte-identically (item-27 optional-field discipline).
     Heartbeat,
+    /// Item 51 (shadow-mode divergence telemetry). ADVISORY, non-gating record: on every
+    /// decision where AI advice was present, logs whether the proposed action AGREED with
+    /// the kernel's deterministic decision D — digests only, never full payloads. The variant
+    /// is write-only from the kernel's perspective (no code path reads it to change a
+    /// decision), so the record is pure telemetry. Additive variant: every non-shadow FDR
+    /// record serializes byte-identically (item-27 optional-field discipline).
+    ShadowDivergence,
 }
 
 impl Kind {
@@ -211,6 +218,7 @@ impl Kind {
             Kind::Tuning => "tuning",
             Kind::CleanShutdown => "clean_shutdown",
             Kind::Heartbeat => "heartbeat",
+            Kind::ShadowDivergence => "shadow_divergence",
         }
     }
 }
