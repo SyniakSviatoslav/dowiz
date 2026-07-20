@@ -48,6 +48,9 @@ pub mod cgraph;
 /// B4 — deterministic content-defined chunker (Buzhash) for the native Rust
 /// backup organ: content-addressed blocks that dedup across small edits.
 pub mod chunker;
+/// Item 64 — capability-secure declarative composition root (production wiring of
+/// the durable store). The single NON-test site that constructs `FileEventStore`.
+pub mod compose;
 pub mod core_pinning;
 /// Deterministic CSR graph + synchronous Jacobi personalized-PageRank
 /// (retrieval-blueprint v2 diffusion/recall primitive).
