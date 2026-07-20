@@ -26,6 +26,7 @@
 //! cross-target proof). No new dependencies. Build model: `cargo test --offline --lib`.
 
 pub mod fixed;
+pub mod golden;
 pub mod oracle;
 pub mod simd_i8;
 pub mod spec;
