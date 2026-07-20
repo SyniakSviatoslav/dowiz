@@ -15,6 +15,7 @@
 
 use std::env;
 use std::fs;
+use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -1660,7 +1661,15 @@ fn main() {
         "latency" => cmd_latency(),
         _ => usage(),
     };
+    flush_stdout();
     std::process::exit(rc);
+}
+
+/// Flush stdout before process exit — `std::process::exit` does NOT run
+/// destructors, so a buffered `println!` (e.g. after a network `tg.send`)
+/// would be lost otherwise. Called by `main` right before `exit`.
+fn flush_stdout() {
+    let _ = std::io::stdout().flush();
 }
 
 #[cfg(test)]
