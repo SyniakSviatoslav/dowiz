@@ -1,13 +1,15 @@
-# BLUEPRINT P102 — Hydra × Locked Model Pair + the Native AI-Infra Supervisor (2026-07-20)
+# BLUEPRINT P103 — Hydra × Locked Model Pair + the Native AI-Infra Supervisor (2026-07-20)
 
 **Status: BLUEPRINT / PLAN — no code written, no model wired, `kernel/src/hydra.rs` untouched.**
 **Date:** 2026-07-20
 **Component:** CORE (Hydra consumer-side seam, zero edits to `hydra.rs` itself) + AGENT edge
 (supervisor + inference adapter).
-**Numbering:** P102 = next free after P101 (P99/P100 stay deliberately skipped forever —
-latency-percentile lexical-collision rule, see P101's numbering note). Two sibling passes were
-running concurrently at write time (§2.4); if one claims P102 first on `main`, this renumbers,
-same precedent as P97→P101.
+**Numbering:** P103 — drafted as P102 (next free after P101 at draft time; P99/P100 stay
+deliberately skipped forever — latency-percentile lexical-collision rule, see P101's
+numbering note). The concurrent bare-metal pass claimed P102 on `main` first
+(`../BLUEPRINT-P102-bare-metal-inference-engine-2026-07-20.md`), so this item renumbered to
+P103 at rebase time — same precedent as P97→P101. Every "P102" below refers to the
+bare-metal engine blueprint, not this document.
 
 ## 0. Directive provenance — four dated operator statements, recorded verbatim
 
@@ -86,10 +88,12 @@ claim checkable rather than rhetorical.
 OCRBench 684/1000; RefCOCO-M 81.28 grounding; day-one GGUF/llama.cpp) and
 **SmolVLM-256M-Instruct** (Apache-2.0, <1 GB, proven phone/llama.cpp deployments, no
 demonstrated tool-calling). License: O-1 **resolved** — operator ruled clear to ship
-(supersedes P101 §3.3's open status; P101's own text is amended by the concurrent
-`docs/p101-two-model-fix-2026-07-20` pass, §2.4). Pairing: **crosswired concurrent, NOT
-primary/fallback** — the exact crosswiring contract is owned by the sibling blueprints (§2.4);
-§3.2 records only the Hydra-specific use of that contract.
+(P101 was amended in place the same day, commit `a4358d3c2`: exactly 2 crosswired models
+replacing the E/S/G/C tier system, O-1 ruled, O-2 superseded). Pairing: **crosswired
+concurrent, NOT primary/fallback** — the exact crosswiring contract is owned by the P102
+engine blueprint (§2.4): its §3.2 defines the two modes and the deterministic comparator
+(`CrosswireOutcome::Corroborated` / `Disagreement`); this doc's §3.2 records only the
+Hydra-specific use of that contract.
 
 ### 2.3 The hardware (P101 §1, live-verified on the box)
 
@@ -99,17 +103,28 @@ CPU-training path (IPEX-LLM QLoRA) requires AMX and is therefore locally disprov
 wall-clock is genuinely unmeasured (P101 §5 + optional Phase D probe — referenced, not
 re-derived).
 
-### 2.4 Sibling passes (concurrent, unlanded at write time — cross-link seam)
+### 2.4 Sibling passes — LANDED same day, cross-linked (Phase 0 closed at rebase time)
 
-At write time `origin/main` = `a90243ac1` and two sibling branches existed at that same base
-with no commits yet: **`docs/bare-metal-inference-2026-07-20`** (the custom bare-metal
-inference engine — the "native AI infra" §4 builds on) and
-**`docs/p101-two-model-fix-2026-07-20`** (the P101 amendment recording the
-crosswired-concurrent pairing + O-1 resolution). **Phase 0 (§8) reconciles:** once they land,
-this document cross-links their exact file paths and adopts their contracts verbatim — the
-engine blueprint owns serving/hooks (this doc specifies only the *required* hook contract,
-§4.8), the P101 amendment owns the pair's crosswiring definition (this doc owns only its
-Hydra-specific application). Nothing from either is duplicated here.
+Drafted while two sibling passes ran concurrently from the same base (`a90243ac1`); both
+landed on `main` before this document did, and the cross-links below are now concrete:
+
+- **P102 — `../BLUEPRINT-P102-bare-metal-inference-engine-2026-07-20.md`** (the custom
+  bare-metal zero-dependency inference engine — the "native AI infra" §4 builds on). Its
+  §3.2 owns the crosswire dataflow (Mode A preview+verify / Mode B draft-conditioned, one
+  deterministic comparator, `CrosswireOutcome`); its **§4.7 introspection/output-gating seam
+  was designed with this arc as its first named consumer** (`InferTrace`/`TraceSink`,
+  `Ungated<T>`/`OutputGate`, weights digest, seed, bit-deterministic replay) and explicitly
+  leaves ALL policy to the caller — which is exactly this document's supervisor (§4.8 maps
+  the H1–H4 contract onto those seams).
+- **P101 amendment — landed as in-place dated edits to
+  `BLUEPRINT-P101-local-mobile-model-selection-topology-2026-07-20.md`** (commit
+  `a4358d3c2`): exactly 2 named crosswired models replace the abstract tier system; O-1
+  ruled "clear to ship"; O-2 superseded.
+
+Division of ownership stands as designed: the engine blueprint owns serving/hooks, P101 (as
+amended) owns model facts, this doc owns the Hydra application + supervisor semantics.
+Nothing from either is duplicated here. **Phase 0's residual (§8) is now only type-level
+adoption at build time**, not document reconciliation.
 
 ### 2.5 Reusable in-tree primitives for the osmosis/oscillator mechanism (verified today)
 
@@ -161,7 +176,7 @@ the mobile/server blueprints (different charter, different lane):
 
 ### 3.2 Crosswired-concurrent, mapped to self-defense: dual-witness perception
 
-The pair's crosswiring (both models run concurrently on the same input — sibling contract)
+The pair's crosswiring (both models run concurrently on the same input — P102 §3.2 contract)
 gets a self-defense-specific arbitration rule, enforced in the supervisor (§4.4 F2), never by
 model self-report:
 
@@ -260,8 +275,8 @@ Hydra's own liftable safeties. Consequences, stated explicitly:
 ### 4.2 Placement and data flow — membrane + heartbeat, never a checkpoint
 
 ```
-[LFM2.5-VL-450M]──┐   (both run concurrently — sibling crosswire contract)
-                  ├──► NATIVE INFERENCE ENGINE (sibling blueprint; hooks H1-H4)
+[LFM2.5-VL-450M]──┐   (both run concurrently — P102 §3.2 crosswire contract)
+                  ├──► NATIVE INFERENCE ENGINE (P102 blueprint; §4.7 seams = H1-H4)
 [SmolVLM-256M]────┘            │
                                ▼  raw output pair + attestation + meter (always logged, §4.3)
                 ╔════ SUPERVISOR = osmotic membrane + oscillator (this doc) ════╗
@@ -392,23 +407,35 @@ pure fold of its config+I/O log — fully replayable.
 
 The operator's stated point of the native infra is exactly this layer's power source: a
 hand-written, zero-external-dependency engine is inspectable and instrumentable in ways a
-vendor runtime is not. Required hook contract (the sibling engine blueprint implements or
-Phase 0 reconciles):
+vendor runtime is not. The required hook contract (H1–H4) was drafted before the P102 engine
+blueprint landed; P102's §4.7 seams turn out to implement it almost verbatim (P102 names
+this arc its first consumer, and its rule "the engine implements no policy; what gets
+blocked is the caller's charter" is exactly this supervisor's division of labor). Mapping,
+adopted:
 
-- **H1 — I/O capture:** raw input/output surfaces per call, pre-sampling logits optional.
-- **H2 — delivery-through-membrane:** the engine delivers output only into the supervisor's
-  capture+flow path (no in-process bypass around the membrane exists) — asynchronous handoff,
-  never a synchronous approval callback.
-- **H3 — determinism + attestation:** fixed-seed/temperature-0 modes; weights-file hash
-  reported per call — replayable inference, byte-identical on re-run.
-- **H4 — resource meter:** tokens/wall-clock/memory per call.
+- **H1 — I/O capture** ⇢ P102's `InferTrace` emitted per call to a caller-supplied
+  `TraceSink`: full input verbatim, images as digest+dims, input/output token IDs, and — for
+  crosswired calls — S's `PerceptionDraft`, L's output, and the comparator verdict. The
+  supervisor supplies the sink; the engine performs no I/O itself.
+- **H2 — delivery-through-membrane** ⇢ P102's `Ungated<T>`/`OutputGate`: engine results are
+  unreachable except through `release(gate)`, so acting on un-reviewed output is
+  structurally awkward by construction. The supervisor's membrane is the gate object;
+  the handoff stays asynchronous (gate review at flow time, never a synchronous approval
+  RPC back into the engine).
+- **H3 — determinism + attestation** ⇢ `InferTrace`'s weights digest (sha3-256 content
+  address) + seed + sampler params + ISA path: the tuple re-executes to the identical token
+  stream (P102's replay-is-the-audit-property), which is this doc's F6 provenance input and
+  AC-8's mechanism.
+- **H4 — resource meter** ⇢ `InferTrace` per-call timings (first-token, tok/s) + KV
+  occupancy.
 
-**Honest interim note:** until the sibling engine lands, Phase 1 may serve the pair via the
-existing Ollama daemon (P101 §4.1 substrate) with H1-equivalent capture only — functional but
-weaker (no attestation, no in-process H2, vendor-boundary introspection). Gated consequence,
-not hand-waved: **F6 cannot fully pass in interim mode, therefore coupling-weight ratchets
-(§3.4-ii) stay frozen until the native engine's H3 attestation exists** (AC-7). Perception
-and digests may run interim; evolution may not.
+**Honest interim note:** until the P102 engine is actually built (it is itself
+blueprint-only today), Phase 1 may serve the pair via the existing Ollama daemon (P101 §4.1
+substrate) with H1-equivalent capture only — functional but weaker (no attestation, no
+in-process H2, vendor-boundary introspection; P102 §4.7's own point about vendor runtimes).
+Gated consequence, not hand-waved: **F6 cannot fully pass in interim mode, therefore
+coupling-weight ratchets (§3.4-ii) stay frozen until the engine's H3 attestation exists**
+(AC-7). Perception and digests may run interim; evolution may not.
 
 ### 4.9 Relation to the kill-switch — explicit, per the ruling's own question
 
@@ -492,11 +519,12 @@ of the evidence stream is the point.
 
 ## 8. Phasing + acceptance criteria — falsifiable, mechanical, no LLM-judge anywhere
 
-- **Phase 0 — sibling reconciliation.** When `docs/bare-metal-inference-2026-07-20` and
-  `docs/p101-two-model-fix-2026-07-20` land on `main`: cross-link exact paths here, adopt the
-  engine's hook implementation of H1–H4 and the amendment's crosswiring contract verbatim.
-  Conflict rule: they win on serving/crosswiring definition; this doc wins on Hydra
-  application + supervisor semantics.
+- **Phase 0 — sibling reconciliation. CLOSED at rebase time (§2.4):** both siblings landed
+  the same day; cross-links are concrete (P102 engine §3.2 crosswire + §4.7 seams; P101
+  amended in place, `a4358d3c2`), and §4.8 adopts the H1–H4 ⇢ `InferTrace`/`OutputGate`
+  mapping. Residual, moved to build time: adopting the exact Rust types when the P102 engine
+  is actually implemented. Conflict rule stands: P102/P101 win on serving/crosswiring
+  definition; this doc wins on Hydra application + supervisor semantics.
 - **Phase 1 — supervisor skeleton (engine-agnostic; interim Ollama serving allowed).**
   Typed observation schema (`hydra_perception.rs`, pure std, fail-closed), supervisor I/O
   WORM log, membrane F1/F4, osmotic flow F2/F3, oscillator tick + heartbeat rows.
@@ -575,7 +603,8 @@ of the evidence stream is the point.
 ## 10. Open items
 
 1. **Physical constraints** — repo-wide gap, inherited, still owned by no one (§5.5).
-2. **Sibling cross-links** — Phase 0, pending their landing (§2.4).
+2. **Sibling cross-links** — closed (§2.4); residual is type-level adoption when the P102
+   engine is built.
 3. **P-A input taxonomy** — which observation sources a hub may legitimately watch (consent
    surface included) is finalized at Phase 1 with the operator's allowlist (§4.7), not
    assumed here.
@@ -586,5 +615,6 @@ of the evidence stream is the point.
 ---
 
 *End of blueprint. Both halves are design + plan; nothing is built. The load-bearing sequence
-is Phase 0 (sibling reconciliation) → Phase 1 (supervisor + AC-2's structural guard) →
-Phase 2 (drift-gated integration); Phases 3–4 ride the sibling engine's timeline.*
+is Phase 1 (supervisor + AC-2's structural guard, buildable now on interim Ollama) →
+Phase 2 (drift-gated integration); Phases 3–4 ride the P102 engine's build timeline
+(Phase 0 closed at rebase time, §2.4).*
