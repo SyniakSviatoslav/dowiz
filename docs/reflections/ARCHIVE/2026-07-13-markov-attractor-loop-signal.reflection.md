@@ -30,3 +30,16 @@ LINK:      tools/loop-signals/markov_attractor.py · tools/loop-signals/test_mar
            · .claude/hooks/loop-detector.sh (block "Markov attractor signal (advisory)")
            · REGRESSION-LEDGER row #18 PENDING (serious-gate human-gate; operator hand required)
 ---
+
+DISPOSITION (librarian, 2026-07-20): archived, no new lesson written — this reflection already
+terminated in a ratchet artifact (REGRESSION-LEDGER row #18, promoted same day as this
+reflection, commit a6a299b4) and the guardrail was not lost, only carried forward: the legacy
+thin-layer removal (row #21) ported `tools/loop-signals/markov_attractor.py` byte-for-byte into
+`kernel/src/markov.rs` + `kernel/src/bin/markov_attractor.rs`, which reproduce the Python's own
+12-case corpus as VbM parity tests (see that file's header). Note for the record: the ledger row
+itself shows no PENDING marker (it lists a real commit hash), so the "serious-gate human-gate"
+this reflection flagged as outstanding appears to have been cleared after filing — not verified
+further here, out of scope for this run. Separately: `.claude/hooks/loop-detector.sh`, the wiring
+point this reflection's detector fed, is currently a no-op stub (repo-wide hook disable,
+2026-07-15 operator directive) — the detector's logic is preserved and portable, but not
+presently invoked by any hook.
