@@ -60,7 +60,7 @@ kernel/src/pq/hybrid.rs	pq	pq::hybrid::	4	lib	1	KNOWN-RED(P91.2):confirm-tag-com
 kernel/src/order_machine.rs	-	order_machine::	29	lib	1,3,5	exhaustive-12-state-FSM;item3=FSM_ADJ-cross-check;item7:native-exhaustive-144-pairs/reachable/fold/graph-no-UB
 kernel/src/householder.rs	-	householder::	14	lib	1,3	item3=Vieta-trace/det-cross-check	INSTRUMENTED(span:eigenvalues_contig)
 kernel/src/spectral.rs	-	spectral::	33	lib	1	N/A(corpus-oracle):item3	INSTRUMENTED(span:eigenvalues)
-kernel/src/token_bucket.rs	-	token_bucket_	3	lib	1	MISSING(item-8):GCRA-atomic-vs-mutex-differential-oracle+item3
+kernel/src/token_bucket.rs	-	token_bucket_	8	lib	1	item8-DONE(2026-07-19):differential-oracle-vs-mutex-reference-model(token_bucket_gcra_matches_mutex_reference_positive_refill)+documented-scope-limit(token_bucket_gcra_diverges_from_zero_refill_budget:refill_rate<=0-NOT-a-drop-in,TokenBucket-stays-default-for-those-callers);item21:set_refill_rate(BoundedRate-typed)-added-over-grant-invariant-preserved(token_bucket_autonomic_rate_change_never_over_grants)
 kernel/src/retrieval/pattern.rs	-	retrieval::	64	lib	1	NOTE:regex-ref-removed-for-zero-dep;corpus-oracle-only(item5);item20:bm25-persistence-codec+incremental≡rebuild+roundtrip+tombstone≡rebuild+kill9-restart-proofs
 kernel/src/retrieval/bm25.rs	-	retrieval::bm25	6	lib	1	item20:P95-Option-A-std-only-persistence;bump-on-new-property;codec-deterministic+dirty-stem-fingerprint
 kernel/src/fdr/json.rs	-	fdr::	16	lib	1	golden-escape-byte-for-byte-oracle(item4)	INSTRUMENTED(span:fdr_span_close)
