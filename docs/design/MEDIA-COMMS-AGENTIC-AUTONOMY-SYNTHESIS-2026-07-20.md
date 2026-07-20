@@ -299,6 +299,15 @@ Sequencing vs sibling threads: M1–M3 and C1 are independent lanes after M1 lan
 
 ## 10. Open decisions for the operator (this document does not decide these)
 
+> **RULED 2026-07-20 — see `DECISIONS.md` D14.** Items 1 (relay: per-hub configurable), 2 (staff
+> roles: Owner/Kitchen/Counter-Manager as proposed), 3 (media storage: local-disk only, off-hub
+> backup/CDN is the hub owner's own responsibility — diverges from this section's own
+> recommendation, see D14 for the operator's stated reason), 5 (customer-leg encryption: native
+> PQ-hybrid ratchet, not the sidecar — diverges from §4.1's softer "operator decision" framing but
+> not from a stated recommendation, since §4.1 named both paths as honest), and 8 (shipped
+> autonomy default: Human-only, Agent-assisted as an opt-in flag) are ruled. Items 4, 6, 7 proceed
+> per this section's own stated recommendations (not escalated).
+
 1. **Relay topology for legs B/C.** Self-host an SMP relay per hub (verified feasible: single Haskell binary, in-memory, no deps, 1 GB VPS — but adds a Haskell operational component per hub), route through SimpleX's public relay infrastructure (zero ops, third-party dependency), or make it per-hub operator-configurable (most consistent with hub sovereignty, most surface to test). Recommendation withheld; the P43 E-h sidecar assumption (public relays) is the path of least resistance but the weakest sovereignty story.
 2. **Default staff-role vocabulary.** §5.2 proposes Owner/Kitchen/Counter-Manager as the v1 preset trio. Confirm, rename, or extend (e.g., is a distinct "Courier-dispatcher" preset needed at launch, or does Counter cover it?).
 3. **Media storage: local-disk-only vs off-hub backup vs CDN delivery.** `FileBlockStore` on hub disk is v1. `kernel/src/backup.rs`'s design intent already contemplates off-hub backup — should hub media be included in that stream (encrypted, content-addressed dedup makes it cheap), and is public menu-image delivery ever CDN-fronted (interacts with the sovereignty stance and with hash-ETag caching, which makes any dumb HTTP cache sufficient)?

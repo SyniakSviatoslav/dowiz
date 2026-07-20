@@ -238,14 +238,23 @@ document (§0.2's two rulings, or any §16/§17 decision it cites).
 
 ## D13. Async/tokio adoption across the agent lane — DIRECTIONAL RULING, migration NOT scoped (operator, 2026-07-20)
 
-> **Scoping pass delivered, pending operator confirmation:**
+> **Scoping pass CONFIRMED 2026-07-20** —
 > [`CONCURRENCY-ARCHITECTURE-SYNTHESIS-2026-07-20.md`](docs/design/CONCURRENCY-ARCHITECTURE-SYNTHESIS-2026-07-20.md)
 > resolves this directional ruling into a per-surface recommendation, informed by two Opus research
-> passes (native-concurrency/exokernel-inspired architecture; the end-to-end principle). Its §10
-> lists 5 explicit confirmation questions — several recommendations are narrower than a literal
-> "adopt tokio broadly" reading (e.g. `ToolPort`/`agent-loop`/kernel ports stay synchronous
-> permanently; tokio's designated entry path is the not-yet-built `mesh-adapter` networking layer,
-> evidence-gated). **Not yet implemented; not yet re-confirmed.**
+> passes (native-concurrency/exokernel-inspired architecture; the end-to-end principle). Operator
+> confirmed the narrower-than-literal-D13 scope explicitly, after asking "why not async everywhere
+> with concurrency intended?" and receiving the full reasoning (function-coloring cost for zero
+> interleaving benefit in a sequential agent-loop; the same-call-stack fail-closed `ToolPort` check
+> as a security property an inserted executor would weaken; `ToolPort` living inside the pure-std
+> kernel; nothing in dowiz today has the connection-count scale async's design point targets except
+> the not-yet-built mesh layer) — resolved as **"async only where it brings value."** Ruling:
+> `ToolPort`/`agent-loop`/every kernel port stays synchronous **permanently**; tokio's *only* entry
+> path is the not-yet-built `mesh-adapter` networking layer, gated on the doc's proposed
+> ~1,000–2,000 concurrent-peer-socket threshold (accepted as-is, not adjusted). The io_uring/
+> kernel-bypass prohibition (§4.2 of the synthesis) is treated as **binding** (recorded here, not
+> merely advisory) given it rests on real security evidence (io_uring's documented exploit history)
+> plus D0's reliability-over-latency invariant. Implementation still awaits the phased build order
+> in the synthesis's §7 — this entry authorizes the scope, not a specific PR.
 
 While reviewing `BLUEPRINT-SPATIAL-STOREFRONT-VOICE-HUB-SYNTHESIS-2026-07-20.md`'s open decisions,
 the operator confirmed the blueprint's synchronous, thread-based voice architecture (D-V1) as
@@ -278,3 +287,44 @@ compile-firewall's current sync guarantees and needs its own dedicated redesign 
   the old mandate; implementation requires the scoping pass above first.
 - **FLAG for override:** recorded under the same operator-ruling authority as D8/D10/D11/D12. The
   operator MAY override, narrow, or reverse this at any time; this is a recorded ruling, not a lock.
+
+## D14. Offline-resilience + media/comms/agentic-autonomy synthesis rulings (operator, 2026-07-20)
+
+Resolves the open-decision sections of
+[`OFFLINE-RESILIENCE-SYNTHESIS-2026-07-20.md`](docs/design/OFFLINE-RESILIENCE-SYNTHESIS-2026-07-20.md)
+§6 and
+[`MEDIA-COMMS-AGENTIC-AUTONOMY-SYNTHESIS-2026-07-20.md`](docs/design/MEDIA-COMMS-AGENTIC-AUTONOMY-SYNTHESIS-2026-07-20.md)
+§10. Each item below is the ruling; unlisted items from those sections proceed per the synthesis
+document's own stated recommendation (lower-stakes implementation detail, not escalated).
+
+- **Service Worker + IndexedDB doctrine exception — RATIFIED.** Joins `<model-viewer>` (the AR/
+  voice blueprint's O3 ruling) as the second sanctioned JS exception in `web/`, on the same
+  "shell/infrastructure, zero application logic, zero external deps" reasoning. Phase A of the
+  offline-resilience synthesis is unblocked.
+- **Agent autonomy shipped default — Human-only, with Agent-assisted as an opt-in feature flag.**
+  Not default-on; a hub owner turns Agent-assisted on if they want it. Matches the synthesis's own
+  "Human-only default, Agent-assisted offered at onboarding" recommendation.
+- **Customer-leg chat encryption (Leg B/C) — native PQ-hybrid double ratchet on dowiz's own
+  KAT-gated primitives**, not the `simplex-chat` CLI sidecar. Real, substantial new crypto-surface
+  work is accepted deliberately in exchange for full sovereignty (no non-Rust runtime component,
+  no dependency on SimpleX's implementation) — consistent with dowiz's existing X25519+ML-KEM-768
+  hybrid and the kernel's KAT-gated discipline (never a stubbed primitive). This gates Phase C2 of
+  the media/comms synthesis; the ratchet design itself is not yet specified — a follow-on blueprint
+  is required before C2 can start.
+- **Relay topology for legs B/C — per-hub operator-configurable.** Each hub owner chooses
+  self-hosted vs. third-party relay routing; no dowiz-wide default topology is imposed.
+- **Staff-role vocabulary — Owner / Kitchen / Counter-Manager**, exactly the synthesis's proposed
+  3-preset trio.
+- **Media storage locality — local hub disk only; off-hub backup/CDN is the hub owner's own
+  responsibility to connect, not a dowiz-provided default stream.** Diverges from the synthesis's
+  own recommendation (which proposed folding media into `backup.rs`'s existing off-hub-backup
+  design intent) — the operator's stated reason is to keep the dowiz-provided surface minimal and
+  put storage-redundancy choices in the hub owner's hands. `FileBlockStore` on local disk is the
+  complete v1 media storage story from dowiz's side; documentation should tell owners plainly that
+  local-disk media has no dowiz-side off-hub copy unless they connect one themselves.
+- **Async/tokio scope for the agent lane — see D13** (this session's same-day companion ruling):
+  confirmed narrower-than-literal, "async only where it brings value."
+
+- **FLAG for override:** recorded under the same operator-ruling authority as D8/D10/D11/D12/D13.
+  The operator MAY override, narrow, or reverse any item here at any time; these are recorded
+  rulings, not locks.

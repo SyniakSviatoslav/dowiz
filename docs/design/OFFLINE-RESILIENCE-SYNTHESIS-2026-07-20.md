@@ -165,6 +165,10 @@ Enumerate, in the UI's own copy, what works offline and what genuinely cannot: p
 
 ## 6. Operator decision points (blocking / non-blocking)
 
+> **RULED 2026-07-20 — see `DECISIONS.md` D14.** Item 1 (Service Worker + IndexedDB doctrine
+> exception) is ratified; Phase A is unblocked. Items 2–3 proceed per this section's own stated
+> recommendations (not escalated).
+
 1. **[Blocking Phase A] Service Worker + IndexedDB vs the "drop js" doctrine.** Recommendation in §A3: treat as infrastructure/shell code inside the exception class the AR/voice blueprint's O3 ruling opened with `<model-viewer>` (this candidate is *more* conservative: zero external deps, zero application logic, kernel remains sole math authority). **Needs explicit ratification; do not infer it.**
 2. **[Non-blocking, decide before B lands] Transport crate placement.** Recommendation in §B2: new standalone `mesh-transport/` crate, preserving `mesh-adapter`'s documented "no transport, no storage" anti-scope as written.
 3. **[Non-blocking] Sequencing.** Recommendation: Phase A first (small, user-visible, gated only on decision 1), B1 in parallel or after (runtime-agnostic, gated on nothing), B's N-peer daemon after the concurrency-architecture synthesis's §5.4 gate.
