@@ -27,15 +27,15 @@ mod graph;
 mod replay;
 mod signal;
 mod state;
-mod thresholds;
 #[cfg(any(test, feature = "breaker-testkit"))]
 mod testkit;
+mod thresholds;
 
 pub use audit::{AuditChain, AuditError, AuditEvent, AuditKind, ChainDefect};
 pub use graph::{
     breaker_graph_report, verify_breaker_signature, verify_breaker_signature_against,
-    BreakerGraphReport, BreakerSignatureDrift, BREAKER_ADJ, BREAKER_EDGES, BREAKER_GOLDEN_SIGNATURE,
-    BREAKER_STATES,
+    BreakerGraphReport, BreakerSignatureDrift, BREAKER_ADJ, BREAKER_EDGES,
+    BREAKER_GOLDEN_SIGNATURE, BREAKER_STATES,
 };
 pub use replay::{GoldenPair, GoldenStore};
 pub use signal::SignalVector;
@@ -43,7 +43,9 @@ pub use state::{
     manual_reset, new_record, step, BreakerRecord, BreakerState, ManualResetProof, StepOutcome,
     TripCause,
 };
-pub use thresholds::{fit_from_rates, fit_weights, RateProfile, SignalWeights, ThresholdId, Thresholds, FitError};
+pub use thresholds::{
+    fit_from_rates, fit_weights, FitError, RateProfile, SignalWeights, ThresholdId, Thresholds,
+};
 
 #[cfg(any(test, feature = "breaker-testkit"))]
 pub use testkit::{AttackCase, Harness};
@@ -123,9 +125,10 @@ impl Breaker {
     /// admitted or steady); [`Tripped`] otherwise. Never a per-call-site boolean.
     pub fn admit(&self, agent: AgentId, _class: RedLineClass) -> Result<Permit<'_>, Tripped> {
         match self.rec.state {
-            BreakerState::Closed | BreakerState::HalfOpen => {
-                Ok(Permit { _breaker: self, agent })
-            }
+            BreakerState::Closed | BreakerState::HalfOpen => Ok(Permit {
+                _breaker: self,
+                agent,
+            }),
             BreakerState::Open | BreakerState::Killed => Err(Tripped {
                 state: self.rec.state,
                 cause: if self.rec.state == BreakerState::Killed {
@@ -192,7 +195,9 @@ impl Breaker {
                 Some(_) if to == BreakerState::Killed => AuditKind::Kill,
                 _ => AuditKind::Transition,
             };
-            let _ = self.audit.append(kind, from, to, sig.trip_score(), self.window_seq);
+            let _ = self
+                .audit
+                .append(kind, from, to, sig.trip_score(), self.window_seq);
             if to == BreakerState::Killed {
                 // Terminal: write the red-line gate marker (if applicable) + kill.
                 let rlg = if self.rec.red_line_class {
@@ -201,7 +206,9 @@ impl Breaker {
                     None
                 };
                 if let Some(rlg) = rlg {
-                    let _ = self.audit.append(rlg, to, to, sig.trip_score(), self.window_seq);
+                    let _ = self
+                        .audit
+                        .append(rlg, to, to, sig.trip_score(), self.window_seq);
                 }
             }
         }
@@ -266,7 +273,13 @@ mod tests {
     use crate::breaker::thresholds::{default_weights, fit_from_rates, RateProfile};
 
     fn tid() -> ThresholdId {
-        let p = RateProfile { w_consec: 3, w_kill: 5, probes: 4, cooldown_base: 8, cooldown_cap: 1024 };
+        let p = RateProfile {
+            w_consec: 3,
+            w_kill: 5,
+            probes: 4,
+            cooldown_base: 8,
+            cooldown_cap: 1024,
+        };
         // Normalized [0,1] separable ROC (see state.rs::tid for the rationale): the
         // fitted θ_open must live in [0,1] to be reachable by the clamped trip_score.
         let mut rates: Vec<(f32, bool)> = Vec::new();
@@ -280,7 +293,14 @@ mod tests {
     }
 
     fn w() -> SignalWeights {
-        SignalWeights { conf: 1.0, drift: 0.0, cusum: 0.0, constraint: 0.0, disagreement: 0.0, truth: 0.0 }
+        SignalWeights {
+            conf: 1.0,
+            drift: 0.0,
+            cusum: 0.0,
+            constraint: 0.0,
+            disagreement: 0.0,
+            truth: 0.0,
+        }
     }
 
     fn sig(score: f32) -> SignalVector {
@@ -300,7 +320,9 @@ mod tests {
     fn admit_returns_permit_only_when_closed_or_halfopen() {
         let mut b = Breaker::new([1u8; 16], tid());
         // Closed ⇒ admit.
-        let p = b.admit([1u8; 16], RedLineClass::Clean).expect("closed admits");
+        let p = b
+            .admit([1u8; 16], RedLineClass::Clean)
+            .expect("closed admits");
         assert_eq!(p.agent(), [1u8; 16]);
         // Trip to Open.
         for _ in 0..tid().w_consec {
@@ -329,19 +351,27 @@ mod tests {
     fn alarm_routes_store_fault_not_rejected() {
         let mut b = Breaker::new([1u8; 16], tid());
         // A faulty store yields CommitError::Store ⇒ breaker observes a trip.
-        let store_err = crate::event_log::CommitError::Store(
-            crate::event_log::StoreError::Sync("disk full".to_string()),
-        );
+        let store_err = crate::event_log::CommitError::Store(crate::event_log::StoreError::Sync(
+            "disk full".to_string(),
+        ));
         b.on_commit_error(&store_err);
         // The breaker must now be in a tripped state (Open, via CommitStoreFault).
-        assert_eq!(b.current_state(), BreakerState::Open, "store fault must alarm into Open");
-        // A decide-rejected event yields CommitError::Rejected ⇒ breaker observes NOTHING.
-        let rej = crate::event_log::CommitError::Rejected(
-            crate::event_log::DecideRejected("law rejects".to_string()),
+        assert_eq!(
+            b.current_state(),
+            BreakerState::Open,
+            "store fault must alarm into Open"
         );
+        // A decide-rejected event yields CommitError::Rejected ⇒ breaker observes NOTHING.
+        let rej = crate::event_log::CommitError::Rejected(crate::event_log::DecideRejected(
+            "law rejects".to_string(),
+        ));
         let mut b2 = Breaker::new([2u8; 16], tid());
         b2.on_commit_error(&rej);
-        assert_eq!(b2.current_state(), BreakerState::Closed, "rejection must not alarm");
+        assert_eq!(
+            b2.current_state(),
+            BreakerState::Closed,
+            "rejection must not alarm"
+        );
     }
 
     #[test]
@@ -356,7 +386,13 @@ mod tests {
         for _ in 0..3 {
             b.tick(sig(0.0), None, false);
         }
-        assert!(b.verify_audit().is_ok(), "audit chain must remain verifiable");
-        assert!(b.audit_drain().len() > 0, "transitions must have been audited");
+        assert!(
+            b.verify_audit().is_ok(),
+            "audit chain must remain verifiable"
+        );
+        assert!(
+            b.audit_drain().len() > 0,
+            "transitions must have been audited"
+        );
     }
 }

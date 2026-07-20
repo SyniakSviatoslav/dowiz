@@ -327,8 +327,7 @@ pub fn place_order_js(
 /// transition (same status / illegal edge / scaffold disabled).
 #[wasm_bindgen]
 pub fn apply_event_js(order_json: String, next_status: String) -> Result<String, JsValue> {
-    crate::json_api::apply_event_logic(&order_json, &next_status)
-        .map_err(|e| JsValue::from_str(&e))
+    crate::json_api::apply_event_logic(&order_json, &next_status).map_err(|e| JsValue::from_str(&e))
 }
 
 /// Ingest a batch of channel events and return aggregated attribution + anomaly

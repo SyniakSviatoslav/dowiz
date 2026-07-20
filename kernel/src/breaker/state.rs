@@ -191,8 +191,7 @@ pub fn step(rec: BreakerRecord, sig: &SignalVector, external: Option<TripCause>)
                 // Score exceeded (or a probe mismatch signalled via external) ⇒ reopen.
                 next.state = BreakerState::Open;
                 // Cooldown DOUBLING, capped to avoid u32 overflow (item-9 §4.5a).
-                next.cooldown_ticks =
-                    checked_double_cap(rec.cooldown_ticks, next.cooldown_cap);
+                next.cooldown_ticks = checked_double_cap(rec.cooldown_ticks, next.cooldown_cap);
                 next.consecutive_trips = rec.consecutive_trips.saturating_add(1);
                 if trip.is_none() {
                     if matches!(external, Some(TripCause::ProbeMismatch)) {
@@ -248,9 +247,7 @@ pub fn cooldown_tick(rec: BreakerRecord) -> BreakerRecord {
 /// `checked_mul(2).map_or(cap, |v| v.min(cap))`. The native-exhaustive proof
 /// (`proof_cooldown_doubling_no_overflow`) asserts no reachable value overflows.
 pub fn checked_double_cap(cooldown_ticks: u32, cap: u32) -> u32 {
-    cooldown_ticks
-        .checked_mul(2)
-        .map_or(cap, |v| v.min(cap))
+    cooldown_ticks.checked_mul(2).map_or(cap, |v| v.min(cap))
 }
 
 /// **Manual reset for a non-red-line Killed record.** Provisions a FRESH
@@ -269,7 +266,9 @@ impl ManualResetProof {
     /// the only shipment is `#[cfg(any(test, feature = \"breaker-testkit\"))]`.
     #[cfg(any(test, feature = "breaker-testkit"))]
     pub fn test_proof() -> Self {
-        ManualResetProof { _seal: 0x9E37_79B9_7F4A_21C7 }
+        ManualResetProof {
+            _seal: 0x9E37_79B9_7F4A_21C7,
+        }
     }
 }
 
@@ -296,7 +295,13 @@ mod tests {
     use crate::breaker::thresholds::{default_weights, fit_from_rates, RateProfile};
 
     fn tid() -> ThresholdId {
-        let p = RateProfile { w_consec: 3, w_kill: 5, probes: 4, cooldown_base: 8, cooldown_cap: 1024 };
+        let p = RateProfile {
+            w_consec: 3,
+            w_kill: 5,
+            probes: 4,
+            cooldown_base: 8,
+            cooldown_cap: 1024,
+        };
         // Separable ROC in the NORMALIZED [0,1] domain that `trip_score` (a clamped
         // weighted-sum of sat()-normalized components) actually lives in. Normals
         // occupy [0.0, 0.4], anomalies [0.6, 1.0] — cleanly separable, ALL ≤ 1.0, so
@@ -330,7 +335,12 @@ mod tests {
 
     fn w() -> crate::breaker::thresholds::SignalWeights {
         crate::breaker::thresholds::SignalWeights {
-            conf: 1.0, drift: 0.0, cusum: 0.0, constraint: 0.0, disagreement: 0.0, truth: 0.0,
+            conf: 1.0,
+            drift: 0.0,
+            cusum: 0.0,
+            constraint: 0.0,
+            disagreement: 0.0,
+            truth: 0.0,
         }
     }
 
@@ -485,7 +495,18 @@ mod tests {
     #[test]
     fn cooldown_doubling_no_overflow() {
         // Native-exhaustive over u32: no reachable cooldown_ticks overflows.
-        for c in [0u32, 1, 2, 7, 100, 1023, 1024, u32::MAX / 2, u32::MAX - 1, u32::MAX] {
+        for c in [
+            0u32,
+            1,
+            2,
+            7,
+            100,
+            1023,
+            1024,
+            u32::MAX / 2,
+            u32::MAX - 1,
+            u32::MAX,
+        ] {
             let r = checked_double_cap(c, 1024);
             assert!(r <= 1024, "cooldown must clamp to cap, got {r} from {c}");
             if c <= 512 {

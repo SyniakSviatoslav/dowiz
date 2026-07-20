@@ -162,12 +162,18 @@ pub fn reachability(kind: TransportKind, ctx: PlatformContext) -> Reachability {
         TransportKind::WebPush => {
             use PlatformContext::*;
             match ctx {
-                IosSafariWeb => Reachability::Unreachable(UnreachableReason::IosSafariWebPushRequiresPwa),
+                IosSafariWeb => {
+                    Reachability::Unreachable(UnreachableReason::IosSafariWebPushRequiresPwa)
+                }
                 PushDenied => Reachability::Unreachable(UnreachableReason::PushDenied),
                 // VAPID web push works wherever a PWA / web context is installed.
-                IosPwaInstalled | AndroidWeb | DesktopWeb | NativeDesktop => Reachability::Reachable,
+                IosPwaInstalled | AndroidWeb | DesktopWeb | NativeDesktop => {
+                    Reachability::Reachable
+                }
                 // Native contexts do not register a web-push sub.
-                NativeIos | NativeAndroid => Reachability::Unreachable(UnreachableReason::NoTransportRegistered),
+                NativeIos | NativeAndroid => {
+                    Reachability::Unreachable(UnreachableReason::NoTransportRegistered)
+                }
             }
         }
         TransportKind::Apns => match ctx {
@@ -181,7 +187,9 @@ pub fn reachability(kind: TransportKind, ctx: PlatformContext) -> Reachability {
             _ => Reachability::Unreachable(UnreachableReason::NoTransportRegistered),
         },
         // ── Non-push fallback channels — reachable on every platform ──
-        TransportKind::Sms | TransportKind::Email | TransportKind::Messenger => Reachability::Reachable,
+        TransportKind::Sms | TransportKind::Email | TransportKind::Messenger => {
+            Reachability::Reachable
+        }
     }
 }
 
@@ -353,8 +361,13 @@ pub trait EmailPort {
 /// config setting `email.sender = vendor` switches every send's identity with no code change.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EmailSenderIdentity {
-    ManagedDefault { subdomain: String },
-    VendorDomain { domain: String, dkim_selector: String },
+    ManagedDefault {
+        subdomain: String,
+    },
+    VendorDomain {
+        domain: String,
+        dkim_selector: String,
+    },
 }
 
 impl EmailSenderIdentity {
@@ -423,7 +436,13 @@ impl<'a> Notifier<'a> {
         registry: &'a mut ChannelRegistry,
         tick: u64,
     ) -> Self {
-        Notifier { push, sms, email, registry, tick }
+        Notifier {
+            push,
+            sms,
+            email,
+            registry,
+            tick,
+        }
     }
 
     /// Fan out `msg` to the `ChannelSet` bound to `channel_ref`. Returns the per-transport fate.
@@ -500,7 +519,8 @@ impl<'a> Notifier<'a> {
                     } else if let Some(r) = retry_dead {
                         out.evicted.push((kind, r));
                     } else if retry_non_transient {
-                        out.transient_failures.push((kind, "non-transient during retry".into()));
+                        out.transient_failures
+                            .push((kind, "non-transient during retry".into()));
                     } else {
                         // Gave up after transient retries: token survives, recorded as transient.
                         out.transient_failures.push((kind, last));
@@ -512,7 +532,8 @@ impl<'a> Notifier<'a> {
                 }
                 Err(_) => {
                     // Config/Rejected/Unreachable (non-retryable, non-dead) — recorded, token kept.
-                    out.transient_failures.push((kind, "non-transient send failure".into()));
+                    out.transient_failures
+                        .push((kind, "non-transient send failure".into()));
                     retained.push(sub);
                 }
             }
@@ -523,10 +544,16 @@ impl<'a> Notifier<'a> {
         if let Some(e164) = &set.sms {
             match self.sms.send(e164, msg) {
                 Ok(_) => out.reached.push(TransportKind::Sms),
-                Err(NotifyError::Transient(why)) => out.transient_failures.push((TransportKind::Sms, why)),
+                Err(NotifyError::Transient(why)) => {
+                    out.transient_failures.push((TransportKind::Sms, why))
+                }
                 Err(NotifyError::DeadToken(why)) => out.evicted.push((TransportKind::Sms, why)),
-                Err(NotifyError::Unreachable(why)) => out.skipped_unreachable.push((TransportKind::Sms, why)),
-                Err(e) => out.transient_failures.push((TransportKind::Sms, format!("{e:?}"))),
+                Err(NotifyError::Unreachable(why)) => {
+                    out.skipped_unreachable.push((TransportKind::Sms, why))
+                }
+                Err(e) => out
+                    .transient_failures
+                    .push((TransportKind::Sms, format!("{e:?}"))),
             }
         }
 
@@ -534,10 +561,16 @@ impl<'a> Notifier<'a> {
         if let Some(email) = &set.email {
             match self.email.send(email, msg) {
                 Ok(_) => out.reached.push(TransportKind::Email),
-                Err(NotifyError::Transient(why)) => out.transient_failures.push((TransportKind::Email, why)),
+                Err(NotifyError::Transient(why)) => {
+                    out.transient_failures.push((TransportKind::Email, why))
+                }
                 Err(NotifyError::DeadToken(why)) => out.evicted.push((TransportKind::Email, why)),
-                Err(NotifyError::Unreachable(why)) => out.skipped_unreachable.push((TransportKind::Email, why)),
-                Err(e) => out.transient_failures.push((TransportKind::Email, format!("{e:?}"))),
+                Err(NotifyError::Unreachable(why)) => {
+                    out.skipped_unreachable.push((TransportKind::Email, why))
+                }
+                Err(e) => out
+                    .transient_failures
+                    .push((TransportKind::Email, format!("{e:?}"))),
             }
         }
 
@@ -607,7 +640,10 @@ mod tests {
             if let Some(e) = self.fail.get(&sub.endpoint) {
                 return Err(e.clone());
             }
-            Ok(Receipt { provider_id: format!("push:{}", sub.endpoint), at_tick: 0 })
+            Ok(Receipt {
+                provider_id: format!("push:{}", sub.endpoint),
+                at_tick: 0,
+            })
         }
     }
 
@@ -619,7 +655,10 @@ mod tests {
             if let Some(e) = &self.fail {
                 return Err(e.clone());
             }
-            Ok(Receipt { provider_id: format!("sms:{}", to.0), at_tick: 0 })
+            Ok(Receipt {
+                provider_id: format!("sms:{}", to.0),
+                at_tick: 0,
+            })
         }
     }
 
@@ -632,7 +671,10 @@ mod tests {
             if let Some(e) = &self.fail {
                 return Err(e.clone());
             }
-            Ok(Receipt { provider_id: format!("email:{}", to.0), at_tick: 0 })
+            Ok(Receipt {
+                provider_id: format!("email:{}", to.0),
+                at_tick: 0,
+            })
         }
         fn sender_identity(&self) -> EmailSenderIdentity {
             self.identity.clone()
@@ -641,7 +683,10 @@ mod tests {
 
     fn web_sub(endpoint: &str) -> PushSub {
         PushSub {
-            kind: PushKind::WebPush { p256dh: vec![1, 2, 3], auth: vec![4, 5, 6] },
+            kind: PushKind::WebPush {
+                p256dh: vec![1, 2, 3],
+                auth: vec![4, 5, 6],
+            },
             endpoint: endpoint.into(),
         }
     }
@@ -680,7 +725,10 @@ mod tests {
         assert!(reg.get("CH-A").is_some());
         // Terminal transition ⇒ unbind.
         let set = reg.get("CH-A").unwrap();
-        assert!(is_terminal_transition(OrderStatus::InDelivery, OrderStatus::Delivered));
+        assert!(is_terminal_transition(
+            OrderStatus::InDelivery,
+            OrderStatus::Delivered
+        ));
         // simulate terminal unbind at the hook:
         if is_terminal_transition(OrderStatus::InDelivery, OrderStatus::Delivered) {
             reg.unbind("CH-A");
@@ -689,13 +737,26 @@ mod tests {
         let terminal = OrderStatus::Delivered.is_terminal();
         assert!(terminal);
         reg.unbind("CH-A");
-        assert_eq!(reg.get("CH-A"), None, "terminal order's set is released (hub-local working set)");
+        assert_eq!(
+            reg.get("CH-A"),
+            None,
+            "terminal order's set is released (hub-local working set)"
+        );
     }
 
     #[test]
     fn bind_then_terminal_unbinds() {
         let mut reg = ChannelRegistry::new();
-        reg.bind("CH-T", ChannelSet { platform: PlatformContext::DesktopWeb, push: vec![], sms: None, email: None, messenger: vec![] });
+        reg.bind(
+            "CH-T",
+            ChannelSet {
+                platform: PlatformContext::DesktopWeb,
+                push: vec![],
+                sms: None,
+                email: None,
+                messenger: vec![],
+            },
+        );
         assert_eq!(reg.len(), 1);
         // Order reaches Delivered (terminal).
         assert!(OrderStatus::Delivered.is_terminal());
@@ -724,15 +785,27 @@ mod tests {
         };
         reg.bind("CH-A", set_a);
         reg.bind("CH-B", set_b);
-        let push = FakePush { fail: Default::default() };
+        let push = FakePush {
+            fail: Default::default(),
+        };
         let sms = FakeSms { fail: None };
-        let email = FakeEmail { identity: EmailSenderIdentity::managed_default("hub1"), fail: None };
+        let email = FakeEmail {
+            identity: EmailSenderIdentity::managed_default("hub1"),
+            fail: None,
+        };
         let msg = StatusMsg::for_status("CH-A", OrderStatus::Ready);
         let mut n = Notifier::new(&push, &sms, &email, &mut reg, 0);
         // Notifying CH-A must NOT touch CH-B's subs.
         let _ = n.notify("CH-A", &msg);
-        assert!(reg.get("CH-B").is_some(), "B's set is untouched by A's notify");
-        assert_eq!(reg.get("CH-B").unwrap().push.len(), 1, "B's sub survives A's fan-out");
+        assert!(
+            reg.get("CH-B").is_some(),
+            "B's set is untouched by A's notify"
+        );
+        assert_eq!(
+            reg.get("CH-B").unwrap().push.len(),
+            1,
+            "B's sub survives A's fan-out"
+        );
     }
 
     // ── M3: the X10 coverage invariant — the load-bearing proof ──
@@ -761,7 +834,11 @@ mod tests {
             email: None,
             messenger: vec![],
         };
-        assert_eq!(channel_coverage(&set), Ok(()), "SMS fallback makes it honest");
+        assert_eq!(
+            channel_coverage(&set),
+            Ok(()),
+            "SMS fallback makes it honest"
+        );
     }
 
     #[test]
@@ -774,13 +851,25 @@ mod tests {
             messenger: vec![],
         };
         assert_eq!(channel_coverage(&set), Err(NoReachableChannel));
-        let set2 = ChannelSet { platform: PlatformContext::PushDenied, push: vec![], sms: Some(E164("+1".into())), email: None, messenger: vec![] };
+        let set2 = ChannelSet {
+            platform: PlatformContext::PushDenied,
+            push: vec![],
+            sms: Some(E164("+1".into())),
+            email: None,
+            messenger: vec![],
+        };
         assert_eq!(channel_coverage(&set2), Ok(()));
     }
 
     #[test]
     fn empty_channelset_fails_closed() {
-        let set = ChannelSet { platform: PlatformContext::DesktopWeb, push: vec![], sms: None, email: None, messenger: vec![] };
+        let set = ChannelSet {
+            platform: PlatformContext::DesktopWeb,
+            push: vec![],
+            sms: None,
+            email: None,
+            messenger: vec![],
+        };
         assert_eq!(channel_coverage(&set), Err(NoReachableChannel));
     }
 
@@ -788,23 +877,44 @@ mod tests {
     fn native_ios_push_alone_is_reachable() {
         let set = ChannelSet {
             platform: PlatformContext::NativeIos,
-            push: vec![PushSub { kind: PushKind::Apns { device_token: vec![9] }, endpoint: String::new() }],
+            push: vec![PushSub {
+                kind: PushKind::Apns {
+                    device_token: vec![9],
+                },
+                endpoint: String::new(),
+            }],
             sms: None,
             email: None,
             messenger: vec![],
         };
-        assert_eq!(channel_coverage(&set), Ok(()), "installed-app APNs path must never be over-blocked");
+        assert_eq!(
+            channel_coverage(&set),
+            Ok(()),
+            "installed-app APNs path must never be over-blocked"
+        );
     }
 
     #[test]
     fn android_web_push_alone_is_reachable() {
-        let set = ChannelSet { platform: PlatformContext::AndroidWeb, push: vec![web_sub("ep")], sms: None, email: None, messenger: vec![] };
+        let set = ChannelSet {
+            platform: PlatformContext::AndroidWeb,
+            push: vec![web_sub("ep")],
+            sms: None,
+            email: None,
+            messenger: vec![],
+        };
         assert_eq!(channel_coverage(&set), Ok(()));
     }
 
     #[test]
     fn email_alone_is_reachable_any_platform() {
-        let set = ChannelSet { platform: PlatformContext::IosSafariWeb, push: vec![], sms: None, email: Some(EmailAddr("a@b.com".into())), messenger: vec![] };
+        let set = ChannelSet {
+            platform: PlatformContext::IosSafariWeb,
+            push: vec![],
+            sms: None,
+            email: Some(EmailAddr("a@b.com".into())),
+            messenger: vec![],
+        };
         assert_eq!(channel_coverage(&set), Ok(()));
     }
 
@@ -822,14 +932,27 @@ mod tests {
                 messenger: vec![],
             },
         );
-        let push = FakePush { fail: Default::default() };
+        let push = FakePush {
+            fail: Default::default(),
+        };
         let sms = FakeSms { fail: None };
-        let email = FakeEmail { identity: EmailSenderIdentity::managed_default("hub1"), fail: None };
+        let email = FakeEmail {
+            identity: EmailSenderIdentity::managed_default("hub1"),
+            fail: None,
+        };
         let msg = StatusMsg::for_status("CH-IOS", OrderStatus::Ready);
         let mut n = Notifier::new(&push, &sms, &email, &mut reg, 0);
         let out = n.notify("CH-IOS", &msg);
-        assert!(out.skipped_unreachable.iter().any(|(k, _)| *k == TransportKind::WebPush), "web push is skipped as unreachable");
-        assert!(out.reached.iter().any(|k| *k == TransportKind::Sms), "SMS still fires by availability");
+        assert!(
+            out.skipped_unreachable
+                .iter()
+                .any(|(k, _)| *k == TransportKind::WebPush),
+            "web push is skipped as unreachable"
+        );
+        assert!(
+            out.reached.iter().any(|k| *k == TransportKind::Sms),
+            "SMS still fires by availability"
+        );
     }
 
     // ── M4 adversarial: dead token evicted mid-batch; others still reached ──
@@ -847,18 +970,35 @@ mod tests {
             },
         );
         let mut fail = std::collections::HashMap::new();
-        fail.insert("ep-2".to_string(), NotifyError::DeadToken(DeadReason::WebPush410Gone));
+        fail.insert(
+            "ep-2".to_string(),
+            NotifyError::DeadToken(DeadReason::WebPush410Gone),
+        );
         let push = FakePush { fail };
         let sms = FakeSms { fail: None };
-        let email = FakeEmail { identity: EmailSenderIdentity::managed_default("hub1"), fail: None };
+        let email = FakeEmail {
+            identity: EmailSenderIdentity::managed_default("hub1"),
+            fail: None,
+        };
         let msg = StatusMsg::for_status("CH-D", OrderStatus::Ready);
         let mut n = Notifier::new(&push, &sms, &email, &mut reg, 0);
         let out = n.notify("CH-D", &msg);
         assert_eq!(out.evicted.len(), 1, "exactly the 410 sub is evicted");
         assert_eq!(out.evicted[0].0, TransportKind::WebPush);
         assert_eq!(out.evicted[0].1, DeadReason::WebPush410Gone);
-        assert_eq!(out.reached.iter().filter(|k| **k == TransportKind::WebPush).count(), 2, "other two still reached");
-        assert_eq!(reg.get("CH-D").unwrap().push.len(), 2, "registry now holds two subs");
+        assert_eq!(
+            out.reached
+                .iter()
+                .filter(|k| **k == TransportKind::WebPush)
+                .count(),
+            2,
+            "other two still reached"
+        );
+        assert_eq!(
+            reg.get("CH-D").unwrap().push.len(),
+            2,
+            "registry now holds two subs"
+        );
     }
 
     #[test]
@@ -875,16 +1015,29 @@ mod tests {
             },
         );
         let mut fail = std::collections::HashMap::new();
-        fail.insert("ep-flaky".to_string(), NotifyError::Transient("503 unavailable".into()));
+        fail.insert(
+            "ep-flaky".to_string(),
+            NotifyError::Transient("503 unavailable".into()),
+        );
         let push = FakePush { fail };
         let sms = FakeSms { fail: None };
-        let email = FakeEmail { identity: EmailSenderIdentity::managed_default("hub1"), fail: None };
+        let email = FakeEmail {
+            identity: EmailSenderIdentity::managed_default("hub1"),
+            fail: None,
+        };
         let msg = StatusMsg::for_status("CH-TX", OrderStatus::Ready);
         let mut n = Notifier::new(&push, &sms, &email, &mut reg, 0);
         let out = n.notify("CH-TX", &msg);
         assert!(out.evicted.is_empty(), "a 503 must NOT evict");
-        assert!(out.transient_failures.iter().any(|(k, _)| *k == TransportKind::WebPush));
-        assert_eq!(reg.get("CH-TX").unwrap().push.len(), 1, "token survives the blip");
+        assert!(out
+            .transient_failures
+            .iter()
+            .any(|(k, _)| *k == TransportKind::WebPush));
+        assert_eq!(
+            reg.get("CH-TX").unwrap().push.len(),
+            1,
+            "token survives the blip"
+        );
     }
 
     #[test]
@@ -900,14 +1053,25 @@ mod tests {
                 messenger: vec![],
             },
         );
-        let push = FakePush { fail: Default::default() };
+        let push = FakePush {
+            fail: Default::default(),
+        };
         let sms = FakeSms { fail: None };
-        let email = FakeEmail { identity: EmailSenderIdentity::managed_default("hub1"), fail: None };
+        let email = FakeEmail {
+            identity: EmailSenderIdentity::managed_default("hub1"),
+            fail: None,
+        };
         let msg = StatusMsg::for_status("CH-X", OrderStatus::Ready);
         let mut n = Notifier::new(&push, &sms, &email, &mut reg, 0);
         let out = n.notify("CH-X", &msg);
-        assert!(out.reached.is_empty(), "no default channel; fail-closed (mirrors customer.rs:603)");
-        assert!(out.skipped_unreachable.iter().any(|(k, _)| *k == TransportKind::WebPush));
+        assert!(
+            out.reached.is_empty(),
+            "no default channel; fail-closed (mirrors customer.rs:603)"
+        );
+        assert!(out
+            .skipped_unreachable
+            .iter()
+            .any(|(k, _)| *k == TransportKind::WebPush));
     }
 
     #[test]
@@ -915,16 +1079,32 @@ mod tests {
         let mut reg = ChannelRegistry::new();
         reg.bind(
             "CH-S",
-            ChannelSet { platform: PlatformContext::AndroidWeb, push: vec![], sms: Some(E164("+15550009".into())), email: None, messenger: vec![] },
+            ChannelSet {
+                platform: PlatformContext::AndroidWeb,
+                push: vec![],
+                sms: Some(E164("+15550009".into())),
+                email: None,
+                messenger: vec![],
+            },
         );
-        let sms = FakeSms { fail: Some(NotifyError::Transient("throttled".into())) };
-        let push = FakePush { fail: Default::default() };
-        let email = FakeEmail { identity: EmailSenderIdentity::managed_default("hub1"), fail: None };
+        let sms = FakeSms {
+            fail: Some(NotifyError::Transient("throttled".into())),
+        };
+        let push = FakePush {
+            fail: Default::default(),
+        };
+        let email = FakeEmail {
+            identity: EmailSenderIdentity::managed_default("hub1"),
+            fail: None,
+        };
         let msg = StatusMsg::for_status("CH-S", OrderStatus::Ready);
         let mut n = Notifier::new(&push, &sms, &email, &mut reg, 0);
         let out = n.notify("CH-S", &msg);
         assert!(out.evicted.is_empty());
-        assert!(out.transient_failures.iter().any(|(k, _)| *k == TransportKind::Sms));
+        assert!(out
+            .transient_failures
+            .iter()
+            .any(|(k, _)| *k == TransportKind::Sms));
     }
 
     // ── M5: order-machine hook delivers exactly to the bound channel (un-ignore b2) ──
@@ -943,9 +1123,14 @@ mod tests {
                 messenger: vec![],
             },
         );
-        let push = FakePush { fail: Default::default() };
+        let push = FakePush {
+            fail: Default::default(),
+        };
         let sms = FakeSms { fail: None };
-        let email = FakeEmail { identity: EmailSenderIdentity::managed_default("hub1"), fail: None };
+        let email = FakeEmail {
+            identity: EmailSenderIdentity::managed_default("hub1"),
+            fail: None,
+        };
         let msg = status_msg_for("CH-B2", OrderStatus::Delivered);
         let mut n = Notifier::new(&push, &sms, &email, &mut reg, 0);
         let out = n.notify("CH-B2", &msg);
@@ -965,7 +1150,10 @@ mod tests {
     fn notify_only_on_meaningful_transition() {
         // An illegal transition is rejected by assert_transition before any hook fires.
         let r = crate::order_machine::assert_transition(OrderStatus::Delivered, OrderStatus::Ready);
-        assert!(r.is_err(), "Delivered→Ready is not a valid edge; no notify must fire");
+        assert!(
+            r.is_err(),
+            "Delivered→Ready is not a valid edge; no notify must fire"
+        );
     }
 
     // ── M7: sender identity — managed default is default; vendor opt-out honored ──
@@ -974,17 +1162,33 @@ mod tests {
         let id = EmailSenderIdentity::managed_default("hub7");
         assert_eq!(
             id,
-            EmailSenderIdentity::ManagedDefault { subdomain: format!("hub7.{}", MANAGED_EMAIL_DOMAIN_ROOT) }
+            EmailSenderIdentity::ManagedDefault {
+                subdomain: format!("hub7.{}", MANAGED_EMAIL_DOMAIN_ROOT)
+            }
         );
         // A hub with no override reports the managed default.
-        let email = FakeEmail { identity: EmailSenderIdentity::managed_default("hub7"), fail: None };
-        assert_eq!(email.sender_identity(), EmailSenderIdentity::ManagedDefault { subdomain: format!("hub7.{}", MANAGED_EMAIL_DOMAIN_ROOT) });
+        let email = FakeEmail {
+            identity: EmailSenderIdentity::managed_default("hub7"),
+            fail: None,
+        };
+        assert_eq!(
+            email.sender_identity(),
+            EmailSenderIdentity::ManagedDefault {
+                subdomain: format!("hub7.{}", MANAGED_EMAIL_DOMAIN_ROOT)
+            }
+        );
     }
 
     #[test]
     fn vendor_optout_is_honored_not_stubbed() {
-        let vendor = EmailSenderIdentity::VendorDomain { domain: "shop.example.com".into(), dkim_selector: "sel3".into() };
-        let email = FakeEmail { identity: vendor.clone(), fail: None };
+        let vendor = EmailSenderIdentity::VendorDomain {
+            domain: "shop.example.com".into(),
+            dkim_selector: "sel3".into(),
+        };
+        let email = FakeEmail {
+            identity: vendor.clone(),
+            fail: None,
+        };
         // The override is actually observed by the adapter (not ignored).
         assert_eq!(email.sender_identity(), vendor);
     }
@@ -995,13 +1199,20 @@ mod tests {
         let k1 = vapid_key_id("hub-kyiv");
         let k2 = vapid_key_id("hub-kyiv");
         assert_eq!(k1, k2, "same hub signs under the same persisted key");
-        assert_ne!(vapid_key_id("hub-a"), vapid_key_id("hub-b"), "distinct hubs distinct keys");
+        assert_ne!(
+            vapid_key_id("hub-a"),
+            vapid_key_id("hub-b"),
+            "distinct hubs distinct keys"
+        );
     }
 
     #[test]
     fn apns_jwt_rotates_under_hour() {
         assert!(apns_jwt_valid(APNS_JWT_MAX_AGE_S - 1));
-        assert!(!apns_jwt_valid(APNS_JWT_MAX_AGE_S), "JWT at/over 3300s must rotate");
+        assert!(
+            !apns_jwt_valid(APNS_JWT_MAX_AGE_S),
+            "JWT at/over 3300s must rotate"
+        );
         assert!(!apns_jwt_valid(APNS_JWT_MAX_AGE_S + 10));
     }
 

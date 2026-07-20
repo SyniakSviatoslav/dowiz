@@ -30,10 +30,10 @@
 // is the operator's self-held credential; P70 only consumes its verify capability).
 
 use crate::catalog::{
-    resolve_line, validate_tree, Availability, CatalogError, CatalogNode, LeafId, LeafKind, NodeBody,
-    NodeId, PriceableLeaf, PriceComponent,
+    resolve_line, validate_tree, Availability, CatalogError, CatalogNode, LeafId, LeafKind,
+    NodeBody, NodeId, PriceComponent, PriceableLeaf,
 };
-use crate::vendor::VendorId;
+use crate::domain::{apply_event, place_order_priced, Order, OrderItem};
 use crate::event_log::sha3_256;
 use crate::money::{assert_non_negative, Currency, Money};
 use crate::order_machine::OrderStatus;
@@ -41,7 +41,7 @@ use crate::ports::agent::cap::{
     AnchorRoster, Delegation, RefSigner, RevocationSet, SignatureVerifier,
 };
 use crate::ports::agent::{Action, Resource, Scope};
-use crate::domain::{Order, OrderItem, apply_event, place_order_priced};
+use crate::vendor::VendorId;
 
 /// The fixed 5-token brand envelope (§16.9). NOT a font file, NOT free CSS —
 /// three packed-RGBA colors + two integer token indices. The WHOLE record is a
@@ -51,9 +51,9 @@ use crate::domain::{Order, OrderItem, apply_event, place_order_priced};
 /// makes the G4 a11y-parity test structural (P58 §M6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Sheet {
-    pub accent: u32, // packed RGBA
-    pub ink: u32,    // packed RGBA (foreground text/line)
-    pub paper: u32,  // packed RGBA (surface)
+    pub accent: u32,  // packed RGBA
+    pub ink: u32,     // packed RGBA (foreground text/line)
+    pub paper: u32,   // packed RGBA (surface)
     pub type_id: u16, // index into the fixed dowiz type-scale set (NOT a font upload)
     pub radius: u16,  // corner-radius token (fixed scale)
 }
@@ -317,7 +317,10 @@ pub fn fold_orders(orders: &[Order]) -> Vec<OrderLite> {
 fn is_terminal(s: OrderStatus) -> bool {
     matches!(
         s,
-        OrderStatus::Delivered | OrderStatus::Cancelled | OrderStatus::Rejected | OrderStatus::CompensatedRefund
+        OrderStatus::Delivered
+            | OrderStatus::Cancelled
+            | OrderStatus::Rejected
+            | OrderStatus::CompensatedRefund
     )
 }
 
@@ -370,8 +373,7 @@ pub fn apply_owner_order_intent<V: SignatureVerifier>(
         OwnerOrderAction::Cancel => cancel_target(order.status),
     };
     let target = target.ok_or(OwnerSurfaceError::IllegalTransition)?;
-    let updated = apply_event(&order.clone(), target)
-        .map_err(OwnerSurfaceError::Transition)?;
+    let updated = apply_event(&order.clone(), target).map_err(OwnerSurfaceError::Transition)?;
     Ok(updated.status)
 }
 /// `Cancelled`; from any post-confirm state it routes to the `Refunding` channel
@@ -444,7 +446,9 @@ pub fn parse_price_minor(s: &str) -> Result<i64, String> {
         }
         None => (normalized.as_str(), ""),
     };
-    let int_val: i64 = int_part.parse().map_err(|_| format!("rejected int: {t:?}"))?;
+    let int_val: i64 = int_part
+        .parse()
+        .map_err(|_| format!("rejected int: {t:?}"))?;
     // frac → 2-digit minor: "5"→50, "50"→50, ""→0.
     let frac_minor: i64 = match frac_part {
         "" => 0,
@@ -474,11 +478,13 @@ pub fn apply_menu_edit(
     price_str: &str,
     currency: Currency,
 ) -> Result<PriceableLeaf, OwnerSurfaceError> {
-    let minor = parse_price_minor(price_str).map_err(|_| OwnerSurfaceError::Catalog(CatalogError::NegativePrice))?;
+    let minor = parse_price_minor(price_str)
+        .map_err(|_| OwnerSurfaceError::Catalog(CatalogError::NegativePrice))?;
     let money = Money::new(minor, currency);
     // assert_non_negative gives the negative-price refusal its teeth (money red-line);
     // `PriceableLeaf::new` also refuses negative, so a "-5" string fails here.
-    assert_non_negative(money.minor).map_err(|_| OwnerSurfaceError::Catalog(CatalogError::NegativePrice))?;
+    assert_non_negative(money.minor)
+        .map_err(|_| OwnerSurfaceError::Catalog(CatalogError::NegativePrice))?;
     let leaf = PriceableLeaf::new(
         LeafId(node_id.0.clone()),
         vendor,
@@ -544,7 +550,16 @@ pub fn grant_courier<V: SignatureVerifier>(
     // Courier duty scope: deliver only. It deliberately EXCLUDES any Auth/Delegate
     // action so the child can never mint a grandchild (may_delegate=false by shape).
     let scope = Scope::single(Resource::Route, Action::Send);
-    Delegation::sign(v, owner_pk, courier_pk, scope.clone(), scope, expiry, nonce, owner_secret)
+    Delegation::sign(
+        v,
+        owner_pk,
+        courier_pk,
+        scope.clone(),
+        scope,
+        expiry,
+        nonce,
+        owner_secret,
+    )
 }
 
 /// Whether a granted scope permits re-delegation. The W1 `Action` set has no
@@ -742,7 +757,10 @@ impl ErasureLedger {
             // erasure by channel-address + linked order refs).
             return Err(ErasureError::UnknownCustomer);
         }
-        let key = (action.customer_ref.channel, action.customer_ref.peer.clone());
+        let key = (
+            action.customer_ref.channel,
+            action.customer_ref.peer.clone(),
+        );
         if self.erased.contains(&key) {
             return Err(ErasureError::AlreadyErased);
         }
@@ -806,7 +824,16 @@ pub fn owner_root_mint_hub<V: SignatureVerifier>(
     nonce: [u8; 8],
 ) -> HubConnection {
     let scope = Scope::single(Resource::Route, Action::Send);
-    let child = Delegation::sign(v, owner_pk, hub_pk, scope.clone(), scope, expiry, nonce, owner_secret);
+    let child = Delegation::sign(
+        v,
+        owner_pk,
+        hub_pk,
+        scope.clone(),
+        scope,
+        expiry,
+        nonce,
+        owner_secret,
+    );
     HubConnection {
         child_cert: child,
         endpoint,
@@ -873,7 +900,10 @@ pub fn verify_claim_cap_chain<V: SignatureVerifier>(
 /// data — there is no network type, no dowiz endpoint, no server. A hub that is
 /// `Offline` is skipped (its tile degrades alone, §16.14); the other N-1 tiles
 /// render fully.
-pub fn merge_hub_orders(view: &MultiHubView, per_hub: &[(usize, Vec<OrderLite>)]) -> Vec<OrderLite> {
+pub fn merge_hub_orders(
+    view: &MultiHubView,
+    per_hub: &[(usize, Vec<OrderLite>)],
+) -> Vec<OrderLite> {
     let mut merged: Vec<OrderLite> = Vec::new();
     for (idx, orders) in per_hub {
         // Skip a hub whose connection is Offline (honest per-hub status, §16.14).
@@ -896,7 +926,8 @@ pub fn revoke_hub(ledger: &mut CourierRevocationLedger, hub_pk: [u8; 32], seq: u
 
 /// Remove a revoked hub's connection from the view (the roll-up drops its tile).
 pub fn drop_revoked_hub(view: &mut MultiHubView, ledger: &CourierRevocationLedger) {
-    view.hubs.retain(|c| !ledger.is_revoked(&c.child_cert.subject));
+    view.hubs
+        .retain(|c| !ledger.is_revoked(&c.child_cert.subject));
 }
 
 #[cfg(test)]
@@ -1009,10 +1040,22 @@ mod tests {
         // CI grep gate (P48 §10.6): this module defines NO agent order authority.
         // The forbidden markers are assembled via `concat!` so the test body never
         // literally contains them (which would make the negation self-matching).
-        let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/ports/owner_surface.rs"));
-        assert!(!src.contains(concat!("enum ", "ToolAction")), "no agent ToolAction in P70 lane");
-        assert!(!src.contains(concat!("Autonomy", "Eligible")), "no autonomy-eligibility token in P70 lane");
-        assert!(!src.contains(concat!("fn agent_", "confirm")), "confirm is not agent-invocable");
+        let src = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/ports/owner_surface.rs"
+        ));
+        assert!(
+            !src.contains(concat!("enum ", "ToolAction")),
+            "no agent ToolAction in P70 lane"
+        );
+        assert!(
+            !src.contains(concat!("Autonomy", "Eligible")),
+            "no autonomy-eligibility token in P70 lane"
+        );
+        assert!(
+            !src.contains(concat!("fn agent_", "confirm")),
+            "confirm is not agent-invocable"
+        );
     }
 
     // ───────────────────────── G2 ─────────────────────────
@@ -1040,12 +1083,19 @@ mod tests {
         let vid = VendorId(1);
         let nodes = catalog_nodes(1, "leaf-a");
         // Edit the leaf price to "7.50" (750 minor) at save boundary.
-        let edited = apply_menu_edit(vid, &nodes, &NodeId("leaf-a".into()), "7.50", Currency::All).unwrap();
+        let edited =
+            apply_menu_edit(vid, &nodes, &NodeId("leaf-a".into()), "7.50", Currency::All).unwrap();
         assert_eq!(edited.price, Money::new(750, Currency::All));
         // The edited leaf carries the NEW price into the next order's fold.
         let order = place_order_with_menu_price(
             "ord-2",
-            &[("leaf-a".into(), LeafId("leaf-a".into()), vid, 1, Currency::All)],
+            &[(
+                "leaf-a".into(),
+                LeafId("leaf-a".into()),
+                vid,
+                1,
+                Currency::All,
+            )],
             &edited,
         )
         .unwrap();
@@ -1068,9 +1118,9 @@ mod tests {
         let r = apply_menu_edit(vid, &nodes, &NodeId("leaf-a".into()), "5.00", Currency::All);
         assert_eq!(
             r,
-            Err(OwnerSurfaceError::Catalog(CatalogError::LeafHasChildren(NodeId(
-                "leaf-a".into()
-            ))))
+            Err(OwnerSurfaceError::Catalog(CatalogError::LeafHasChildren(
+                NodeId("leaf-a".into())
+            )))
         );
     }
 
@@ -1090,8 +1140,17 @@ mod tests {
         let vid = VendorId(1);
         let nodes = catalog_nodes(1, "leaf-a");
         // A "-5" string parses to -500 minor, then PriceableLeaf::new refuses it.
-        let r = apply_menu_edit(vid, &nodes, &NodeId("leaf-a".into()), "-5.00", Currency::All);
-        assert_eq!(r, Err(OwnerSurfaceError::Catalog(CatalogError::NegativePrice)));
+        let r = apply_menu_edit(
+            vid,
+            &nodes,
+            &NodeId("leaf-a".into()),
+            "-5.00",
+            Currency::All,
+        );
+        assert_eq!(
+            r,
+            Err(OwnerSurfaceError::Catalog(CatalogError::NegativePrice))
+        );
     }
 
     #[test]
@@ -1108,7 +1167,10 @@ mod tests {
         .unwrap();
         let r = resolve_line(
             &base,
-            &[(VendorId(1), PriceComponent::Delta(Money::new(100, Currency::Eur)))],
+            &[(
+                VendorId(1),
+                PriceComponent::Delta(Money::new(100, Currency::Eur)),
+            )],
         );
         assert_eq!(r, Err(CatalogError::CrossCurrency));
         // P70 surfaces the same refusal.
@@ -1123,7 +1185,10 @@ mod tests {
     fn no_courier_scoring() {
         // CI grep gate (P48 §10.0): no score/rating/rank field exists on any
         // courier type in this lane.
-        let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/ports/owner_surface.rs"));
+        let src = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/ports/owner_surface.rs"
+        ));
         assert!(!src.contains(concat!("courier_", "score")));
         assert!(!src.contains(concat!("courier_", "rating")));
         assert!(!src.contains(concat!("courier_", "reputation")));
@@ -1222,24 +1287,37 @@ mod tests {
     // ───────────────────────── G5 ─────────────────────────
     #[test]
     fn g5_trigger_drafts_template_masterpost() {
-        let post = draft_master_post(&AutoPostTrigger::MenuItemAdded { leaf_id: LeafId("x".into()) });
+        let post = draft_master_post(&AutoPostTrigger::MenuItemAdded {
+            leaf_id: LeafId("x".into()),
+        });
         assert_eq!(post.source, DraftSource::Template);
         assert_eq!(post.status, DraftStatus::PendingReview);
         assert_eq!(post.ai_mode, AiMode::Off);
-        assert!(post.public, "public blast radius, not a per-recipient Notification");
+        assert!(
+            post.public,
+            "public blast radius, not a per-recipient Notification"
+        );
     }
 
     #[test]
     fn g5_publish_requires_owner_tap() {
-        let post = draft_master_post(&AutoPostTrigger::PromoAnnounced { text: "Half off!".into() });
+        let post = draft_master_post(&AutoPostTrigger::PromoAnnounced {
+            text: "Half off!".into(),
+        });
         // The pane never auto-publishes; the post stays PendingReview.
-        assert_eq!(publish_requires_owner_tap(&post), DraftStatus::PendingReview);
+        assert_eq!(
+            publish_requires_owner_tap(&post),
+            DraftStatus::PendingReview
+        );
     }
 
     #[test]
     fn g5_no_second_poster() {
         // Grep gate: this lane defines NO poster of its own (P22 owns posting).
-        let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/ports/owner_surface.rs"));
+        let src = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/ports/owner_surface.rs"
+        ));
         assert!(!src.contains(concat!("trait ", "SocialPoster")));
         assert!(!src.contains(concat!("struct ", "SocialPoster")));
         assert!(!src.contains(concat!("struct ", "ChannelAdapter")));
@@ -1251,7 +1329,9 @@ mod tests {
         // `Notification` holds ONE recipient; our MasterPost is a public blast with NO
         // per-recipient transactional shape. Assert the post carries no single-recipient
         // transport envelope (the unrepresentable bulk-through-P43 path).
-        let post = draft_master_post(&AutoPostTrigger::MenuItemAdded { leaf_id: LeafId("x".into()) });
+        let post = draft_master_post(&AutoPostTrigger::MenuItemAdded {
+            leaf_id: LeafId("x".into()),
+        });
         // There is no `recipient` field on MasterPost (would be the P43 shape).
         let _no_recipient_field: () = ();
         assert!(post.public);
@@ -1277,14 +1357,27 @@ mod tests {
         let mut ledger = ErasureLedger::new();
         ledger.register_key(ChannelKind::WhatsApp, "cust-1", vec![0xDE, 0xAD]);
         // Pre-erase: peer visible across folds; anonymized order-count untouched.
-        assert_eq!(ledger.redact_peer(ChannelKind::WhatsApp, "cust-1"), "cust-1");
+        assert_eq!(
+            ledger.redact_peer(ChannelKind::WhatsApp, "cust-1"),
+            "cust-1"
+        );
         assert!(ledger.key_alive(ChannelKind::WhatsApp, "cust-1"));
-        let action = erasure_action("cust-1", vec![1, 2, 3], sign_owner(&v, &sk, &owner_sig_msg("erasure", "cust-1")));
+        let action = erasure_action(
+            "cust-1",
+            vec![1, 2, 3],
+            sign_owner(&v, &sk, &owner_sig_msg("erasure", "cust-1")),
+        );
         let ev = ledger.erase(&v, &pk, &action, 1_700_000_000_000).unwrap();
         assert_eq!(ev.customer_ref.peer, "cust-1");
         // After erase: every PII-bearing fold returns [redacted]; key destroyed.
-        assert_eq!(ledger.redact_peer(ChannelKind::WhatsApp, "cust-1"), "[redacted]");
-        assert!(!ledger.key_alive(ChannelKind::WhatsApp, "cust-1"), "per-customer key destroyed");
+        assert_eq!(
+            ledger.redact_peer(ChannelKind::WhatsApp, "cust-1"),
+            "[redacted]"
+        );
+        assert!(
+            !ledger.key_alive(ChannelKind::WhatsApp, "cust-1"),
+            "per-customer key destroyed"
+        );
         // Anonymized order-count is unchanged (zero PII, out of erasure scope).
         assert_eq!(action.customer_ref.order_refs.len(), 3);
     }
@@ -1324,23 +1417,38 @@ mod tests {
         // events are NEVER modified by crypto-erasure).
         let prior_event = b"intake event for cust-1 (ciphertext stays in log)";
         let prior_hash = event_content_hash(prior_event);
-        let action = erasure_action("cust-1", vec![1], sign_owner(&v, &sk, &owner_sig_msg("erasure", "cust-1")));
+        let action = erasure_action(
+            "cust-1",
+            vec![1],
+            sign_owner(&v, &sk, &owner_sig_msg("erasure", "cust-1")),
+        );
         ledger.erase(&v, &pk, &action, 1_700_000_000_000).unwrap();
         // The prior event's content hash is byte-identical after erasure.
-        assert_eq!(event_content_hash(prior_event), prior_hash, "chain integrity preserved");
+        assert_eq!(
+            event_content_hash(prior_event),
+            prior_hash,
+            "chain integrity preserved"
+        );
     }
 
     #[test]
     fn g6_dowiz_blind() {
         // Grep gate: the erasure event egresses to NO dowiz endpoint. There is no
         // network field on ErasureEvent and no dowiz host string in the G6 code path.
-        let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/ports/owner_surface.rs"));
+        let src = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/ports/owner_surface.rs"
+        ));
         assert!(!src.contains(concat!(".", "dowiz", ".")));
         assert!(!src.contains(concat!("http", "://")));
         assert!(!src.contains(concat!("https", "://")));
         // ErasureEvent carries no endpoint/url — it cannot egress.
         let ev = ErasureEvent {
-            customer_ref: CustomerRef { channel: ChannelKind::Email, peer: "a@b.c".into(), order_refs: vec![1] },
+            customer_ref: CustomerRef {
+                channel: ChannelKind::Email,
+                peer: "a@b.c".into(),
+                order_refs: vec![1],
+            },
             at_unix_ms: 0,
         };
         let _no_endpoint: () = ();
@@ -1353,11 +1461,19 @@ mod tests {
         let (pk, sk) = owner_keys();
         let mut ledger = ErasureLedger::new();
         ledger.register_key(ChannelKind::WhatsApp, "cust-1", vec![0xBE, 0xEF]);
-        let action = erasure_action("cust-1", vec![1], sign_owner(&v, &sk, &owner_sig_msg("erasure", "cust-1")));
+        let action = erasure_action(
+            "cust-1",
+            vec![1],
+            sign_owner(&v, &sk, &owner_sig_msg("erasure", "cust-1")),
+        );
         ledger.erase(&v, &pk, &action, 1_700_000_000_000).unwrap();
         // Irreversible: a second erase of an already-erased customer → AlreadyErased
         // (idempotent; no un-erase path exists).
-        let again = erasure_action("cust-1", vec![1], sign_owner(&v, &sk, &owner_sig_msg("erasure", "cust-1")));
+        let again = erasure_action(
+            "cust-1",
+            vec![1],
+            sign_owner(&v, &sk, &owner_sig_msg("erasure", "cust-1")),
+        );
         assert_eq!(
             ledger.erase(&v, &pk, &again, 1_700_000_000_001),
             Err(ErasureError::AlreadyErased)
@@ -1371,10 +1487,21 @@ mod tests {
     fn g7_owner_root_mints_n_child_certs() {
         let v = verifier();
         let (opk, osk) = owner_keys();
-        let mut view = MultiHubView { root_pk: opk, hubs: vec![] };
+        let mut view = MultiHubView {
+            root_pk: opk,
+            hubs: vec![],
+        };
         for i in 0..3u8 {
             let hub_pk = [i; 32];
-            let conn = owner_root_mint_hub(&v, opk, &osk, hub_pk, format!("hub-{i}.local"), 9999, [i; 8]);
+            let conn = owner_root_mint_hub(
+                &v,
+                opk,
+                &osk,
+                hub_pk,
+                format!("hub-{i}.local"),
+                9999,
+                [i; 8],
+            );
             // Each hub verifies its cert with the owner-root pubkey only, no dowiz.
             let ledger = CourierRevocationLedger::new();
             assert_eq!(verify_hub(&v, &opk, &conn, 0, &ledger), Ok(()));
@@ -1387,23 +1514,58 @@ mod tests {
     fn g7_merge_is_client_side() {
         let v = verifier();
         let (opk, osk) = owner_keys();
-        let mut view = MultiHubView { root_pk: opk, hubs: vec![] };
+        let mut view = MultiHubView {
+            root_pk: opk,
+            hubs: vec![],
+        };
         // N hubs with dummy endpoints (no dowiz host anywhere).
         for i in 0..3u8 {
-            let conn = owner_root_mint_hub(&v, opk, &osk, [i; 32], format!("hub-{i}.local"), 9999, [i; 8]);
+            let conn = owner_root_mint_hub(
+                &v,
+                opk,
+                &osk,
+                [i; 32],
+                format!("hub-{i}.local"),
+                9999,
+                [i; 8],
+            );
             view.hubs.push(conn);
         }
         // Client-side merge: ONLY local data, no network type, no server field.
         let per_hub: Vec<(usize, Vec<OrderLite>)> = vec![
-            (0, vec![OrderLite { id: "h0a".into(), status: OrderStatus::Pending, total_minor: 1 }]),
-            (1, vec![OrderLite { id: "h1a".into(), status: OrderStatus::Confirmed, total_minor: 2 }]),
-            (2, vec![OrderLite { id: "h2a".into(), status: OrderStatus::Pending, total_minor: 3 }]),
+            (
+                0,
+                vec![OrderLite {
+                    id: "h0a".into(),
+                    status: OrderStatus::Pending,
+                    total_minor: 1,
+                }],
+            ),
+            (
+                1,
+                vec![OrderLite {
+                    id: "h1a".into(),
+                    status: OrderStatus::Confirmed,
+                    total_minor: 2,
+                }],
+            ),
+            (
+                2,
+                vec![OrderLite {
+                    id: "h2a".into(),
+                    status: OrderStatus::Pending,
+                    total_minor: 3,
+                }],
+            ),
         ];
         let merged = merge_hub_orders(&view, &per_hub);
         assert_eq!(merged.len(), 3);
         // `MultiHubView` has no server representation (grep gate §1.4-5).
         let _no_server: () = ();
-        let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/ports/owner_surface.rs"));
+        let src = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/ports/owner_surface.rs"
+        ));
         assert!(!src.contains(concat!("dowiz", "_endpoint")));
         assert!(!src.contains(concat!("Serv", "er")));
     }
@@ -1412,9 +1574,20 @@ mod tests {
     fn g7_revoke_drops_a_hub() {
         let v = verifier();
         let (opk, osk) = owner_keys();
-        let mut view = MultiHubView { root_pk: opk, hubs: vec![] };
+        let mut view = MultiHubView {
+            root_pk: opk,
+            hubs: vec![],
+        };
         let hub_pk = [5u8; 32];
-        view.hubs.push(owner_root_mint_hub(&v, opk, &osk, hub_pk, "hub-5.local".into(), 9999, [5u8; 8]));
+        view.hubs.push(owner_root_mint_hub(
+            &v,
+            opk,
+            &osk,
+            hub_pk,
+            "hub-5.local".into(),
+            9999,
+            [5u8; 8],
+        ));
         let mut ledger = CourierRevocationLedger::new();
         // Revoke the hub's child cert → the roll-up drops its tile (next request fails).
         revoke_hub(&mut ledger, hub_pk, 7);
@@ -1423,24 +1596,60 @@ mod tests {
             Err(OwnerSurfaceError::Revoked)
         );
         drop_revoked_hub(&mut view, &ledger);
-        assert!(view.hubs.is_empty(), "revoked hub tile dropped from roll-up");
+        assert!(
+            view.hubs.is_empty(),
+            "revoked hub tile dropped from roll-up"
+        );
     }
 
     #[test]
     fn g7_offline_hub_isolated() {
         let v = verifier();
         let (opk, osk) = owner_keys();
-        let mut view = MultiHubView { root_pk: opk, hubs: vec![] };
+        let mut view = MultiHubView {
+            root_pk: opk,
+            hubs: vec![],
+        };
         let online_pk = [1u8; 32];
         let offline_pk = [2u8; 32];
-        let mut online = owner_root_mint_hub(&v, opk, &osk, online_pk, "hub-1.local".into(), 9999, [1u8; 8]);
-        let mut offline = owner_root_mint_hub(&v, opk, &osk, offline_pk, "hub-2.local".into(), 9999, [2u8; 8]);
+        let mut online = owner_root_mint_hub(
+            &v,
+            opk,
+            &osk,
+            online_pk,
+            "hub-1.local".into(),
+            9999,
+            [1u8; 8],
+        );
+        let mut offline = owner_root_mint_hub(
+            &v,
+            opk,
+            &osk,
+            offline_pk,
+            "hub-2.local".into(),
+            9999,
+            [2u8; 8],
+        );
         offline.health = HubHealth::Offline; // honest per-hub status (§16.14)
         view.hubs.push(online);
         view.hubs.push(offline);
         let per_hub: Vec<(usize, Vec<OrderLite>)> = vec![
-            (0, vec![OrderLite { id: "on".into(), status: OrderStatus::Pending, total_minor: 1 }]),
-            (1, vec![OrderLite { id: "off".into(), status: OrderStatus::Pending, total_minor: 2 }]),
+            (
+                0,
+                vec![OrderLite {
+                    id: "on".into(),
+                    status: OrderStatus::Pending,
+                    total_minor: 1,
+                }],
+            ),
+            (
+                1,
+                vec![OrderLite {
+                    id: "off".into(),
+                    status: OrderStatus::Pending,
+                    total_minor: 2,
+                }],
+            ),
         ];
         let merged = merge_hub_orders(&view, &per_hub);
         // The offline hub's tile is skipped; the online hub's tile renders fully.

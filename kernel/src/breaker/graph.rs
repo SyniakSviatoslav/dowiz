@@ -264,7 +264,9 @@ pub fn verify_breaker_signature() -> Result<(), BreakerSignatureDrift> {
 
 /// Compare an arbitrary report (e.g. a mutated `BREAKER_EDGES`) against the
 /// golden fingerprint — the proven RED path.
-pub fn verify_breaker_signature_against(r: BreakerGraphReport) -> Result<(), BreakerSignatureDrift> {
+pub fn verify_breaker_signature_against(
+    r: BreakerGraphReport,
+) -> Result<(), BreakerSignatureDrift> {
     let g = BREAKER_GOLDEN_SIGNATURE;
     let mut fields: Vec<&'static str> = Vec::new();
     if r.vertices != g.vertices {

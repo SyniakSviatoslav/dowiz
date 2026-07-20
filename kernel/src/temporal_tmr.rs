@@ -84,9 +84,7 @@ where
 /// exact same logic the shipped path uses (no second implementation drift).
 fn classify_vote<T: PartialEq + Clone>(tally: Vec<T>) -> VoteOutcome<T> {
     match tally.len() {
-        0 | 1 => VoteOutcome::Unanimous(
-            tally.into_iter().next().expect("non-empty for len>=1"),
-        ),
+        0 | 1 => VoteOutcome::Unanimous(tally.into_iter().next().expect("non-empty for len>=1")),
         _ => {
             // Bucket by (first-seen-value, count, first-index). We only need to know
             // whether there is a strict majority / single dissent / all-different.
@@ -261,7 +259,13 @@ mod tests {
     // item 9 harness plumbing (minimal). `fit_from_rates` / `RateProfile` are
     // re-exported at `crate::breaker` (the `thresholds` submodule is private).
     fn tid() -> crate::breaker::ThresholdId {
-        let p = RateProfile { w_consec: 3, w_kill: 5, probes: 4, cooldown_base: 8, cooldown_cap: 1024 };
+        let p = RateProfile {
+            w_consec: 3,
+            w_kill: 5,
+            probes: 4,
+            cooldown_base: 8,
+            cooldown_cap: 1024,
+        };
         let mut rates: Vec<(f32, bool)> = Vec::new();
         for i in 0..20 {
             rates.push(((i as f32) / 50.0, false));
@@ -272,7 +276,12 @@ mod tests {
         // `default_weights` lives in the private `thresholds` submodule; replicate the
         // identical fitted-shaped value here (a `SignalWeights`, never a literal θ).
         let w = crate::breaker::SignalWeights {
-            conf: 1.0, drift: 1.0, cusum: 1.0, constraint: 1.0, disagreement: 1.0, truth: 1.0,
+            conf: 1.0,
+            drift: 1.0,
+            cusum: 1.0,
+            constraint: 1.0,
+            disagreement: 1.0,
+            truth: 1.0,
         };
         fit_from_rates(&rates, 0.05, p, w).unwrap()
     }
@@ -399,7 +408,11 @@ mod tests {
         // wrappers call, so the wrapper would trip identically).
         let tripped = wire_vote_mismatch("event_log::MeshEvent::event_id", &out, &mut b);
         assert!(tripped, "non-unanimous must trip");
-        assert_eq!(b.current_state(), BreakerState::Open, "breaker must be Open after trip");
+        assert_eq!(
+            b.current_state(),
+            BreakerState::Open,
+            "breaker must be Open after trip"
+        );
 
         // Fail-closed contract: a non-unanimous outcome must NEVER be handed back.
         // The applied wrapper `event_id_tmr` returns `Err` for every non-Unanimous
@@ -445,8 +458,14 @@ mod tests {
         let replica = (0..runs.len()).find(|&i| i != best_idx).unwrap_or(0);
         let independent = if counts.len() == 1 {
             VoteOutcome::Unanimous(runs[0])
-        } else if counts.iter().any(|(_, c)| *c as u32 * 2 > runs.len() as u32) {
-            VoteOutcome::SingleDissent { value: majority_value, replica: replica as u8 }
+        } else if counts
+            .iter()
+            .any(|(_, c)| *c as u32 * 2 > runs.len() as u32)
+        {
+            VoteOutcome::SingleDissent {
+                value: majority_value,
+                replica: replica as u8,
+            }
         } else {
             VoteOutcome::NoMajority
         };
@@ -462,7 +481,8 @@ mod tests {
         assert_eq!(id, ev.event_id());
 
         let mut b2 = breaker();
-        let tax = apply_tax_tmr(&mut b2, 3, 1000, 0.20, false).expect("clean tax must be Unanimous");
+        let tax =
+            apply_tax_tmr(&mut b2, 3, 1000, 0.20, false).expect("clean tax must be Unanimous");
         assert_eq!(tax, crate::money::apply_tax(1000, 0.20, false).unwrap());
         // Breaker stayed closed (no trip on clean input).
         assert_eq!(b.current_state(), BreakerState::Closed);

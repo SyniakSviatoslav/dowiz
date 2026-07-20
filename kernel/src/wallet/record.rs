@@ -214,7 +214,9 @@ pub fn deserialize(src: &str) -> Result<WalletRecord, WalletStoreError> {
         Ok(Value::Object(o)) => o,
         _ => return Err(WalletStoreError::Corrupt),
     };
-    let schema = obj.get_u16("schema_version").ok_or(WalletStoreError::Corrupt)?;
+    let schema = obj
+        .get_u16("schema_version")
+        .ok_or(WalletStoreError::Corrupt)?;
     if schema > WALLET_SCHEMA_VERSION {
         return Err(WalletStoreError::VersionTooNew(schema));
     }
@@ -607,7 +609,10 @@ mod tests {
         // Serialized form must NOT carry any card-data token (structural guarantee).
         let json = serialize(&rec);
         for tok in ["pan", "cvv", "card_number", "exp_month"] {
-            assert!(!json.to_lowercase().contains(tok), "wallet json leaked '{tok}'");
+            assert!(
+                !json.to_lowercase().contains(tok),
+                "wallet json leaked '{tok}'"
+            );
         }
     }
 
@@ -624,7 +629,10 @@ mod tests {
 
     #[test]
     fn corrupt_blob_is_typed_error_not_panic() {
-        assert_eq!(deserialize("{not valid json"), Err(WalletStoreError::Corrupt));
+        assert_eq!(
+            deserialize("{not valid json"),
+            Err(WalletStoreError::Corrupt)
+        );
         assert_eq!(deserialize(""), Err(WalletStoreError::Corrupt));
         assert_eq!(deserialize("42"), Err(WalletStoreError::Corrupt));
     }
@@ -661,9 +669,15 @@ mod tests {
         let contact_probe = Rc::new(RefCell::new(String::new()));
         let method_probe = Rc::new(RefCell::new(String::new()));
         let mut targets = AutofillTargets {
-            name: Some(Box::new(MockField { probe: name_probe.clone() })),
-            address: Some(Box::new(MockField { probe: addr_probe.clone() })),
-            contact: Some(Box::new(MockField { probe: contact_probe.clone() })),
+            name: Some(Box::new(MockField {
+                probe: name_probe.clone(),
+            })),
+            address: Some(Box::new(MockField {
+                probe: addr_probe.clone(),
+            })),
+            contact: Some(Box::new(MockField {
+                probe: contact_probe.clone(),
+            })),
             method: Some(Box::new(MockField {
                 probe: method_probe.clone(),
             })),

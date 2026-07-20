@@ -79,16 +79,27 @@ pub enum DraftState {
 /// Event-sourced saga (item 3 — tests assert on the sequence, not just end-state).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DraftEvent {
-    DraftCreated { draft_id: DraftId, order_id: String },
+    DraftCreated {
+        draft_id: DraftId,
+        order_id: String,
+    },
     /// Exactly once, at creation.
-    IdemKeyMinted { key: IdempotencyKey },
-    FieldFilled { field: FilledField },
+    IdemKeyMinted {
+        key: IdempotencyKey,
+    },
+    FieldFilled {
+        field: FilledField,
+    },
     /// Draft -> PaymentInflight (optimistic).
     PaymentSubmitted,
     /// From query_status_by_key.
-    StatusResolved { status: PaymentStatus },
+    StatusResolved {
+        status: PaymentStatus,
+    },
     /// Terminal: committed or user-abandoned.
-    DraftCleared { draft_id: DraftId },
+    DraftCleared {
+        draft_id: DraftId,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -135,10 +146,7 @@ pub fn create_draft(
         state: DraftState::Draft,
     };
     let events = vec![
-        DraftEvent::DraftCreated {
-            draft_id,
-            order_id,
-        },
+        DraftEvent::DraftCreated { draft_id, order_id },
         DraftEvent::IdemKeyMinted { key },
     ];
     (draft, events)
@@ -146,7 +154,9 @@ pub fn create_draft(
 
 /// The pure `decide` for the draft saga: fold the event log into the draft's observable state.
 /// Returns (state, minted_key, last_resolved_status). Fail-closed on a duplicate key mint.
-pub fn fold(events: &[DraftEvent]) -> Result<(DraftState, Option<IdempotencyKey>, Option<PaymentStatus>), DraftFoldError> {
+pub fn fold(
+    events: &[DraftEvent],
+) -> Result<(DraftState, Option<IdempotencyKey>, Option<PaymentStatus>), DraftFoldError> {
     let mut state = DraftState::Draft;
     let mut key: Option<IdempotencyKey> = None;
     let mut status: Option<PaymentStatus> = None;
@@ -192,7 +202,14 @@ pub fn build_checkout_draft(
     wallet_id: &[u8; 32],
     nonce: &[u8; 12],
 ) -> (CheckoutDraft, Vec<DraftEvent>) {
-    create_draft(draft_id, order_id.to_string(), cart, wallet_fill, wallet_id, nonce)
+    create_draft(
+        draft_id,
+        order_id.to_string(),
+        cart,
+        wallet_fill,
+        wallet_id,
+        nonce,
+    )
 }
 
 /// Reconnect caller for a persisted checkout draft (P66 §16.52). Re-uses the
@@ -277,7 +294,10 @@ mod tests {
         draft.state = DraftState::PaymentInflight;
         let (state, _, status) = fold(&log).unwrap();
         assert_eq!(state, DraftState::PaymentInflight);
-        assert_eq!(status, None, "no response folded yet — status still unknown");
+        assert_eq!(
+            status, None,
+            "no response folded yet — status still unknown"
+        );
     }
 
     #[test]
@@ -296,7 +316,11 @@ mod tests {
         // "restart": drop the in-memory draft, re-fold from the persisted log.
         let (state, key, _) = fold(&log).unwrap();
         assert_eq!(state, DraftState::PaymentInflight);
-        assert_eq!(key.unwrap(), key_before, "key identical after restart re-fold");
+        assert_eq!(
+            key.unwrap(),
+            key_before,
+            "key identical after restart re-fold"
+        );
     }
 
     #[test]
@@ -382,25 +406,31 @@ mod tests {
             crate::ports::payment_provider::PayError,
         > {
             *self.creates.borrow_mut() += 1;
-            Ok(crate::ports::payment_provider::ClientHandoff::HostedRedirect {
-                checkout_url: "https://pay.example/checkout/order_66".into(),
-                session_token: [0u8; 32],
-                ttl_s: 900,
-            })
+            Ok(
+                crate::ports::payment_provider::ClientHandoff::HostedRedirect {
+                    checkout_url: "https://pay.example/checkout/order_66".into(),
+                    session_token: [0u8; 32],
+                    ttl_s: 900,
+                },
+            )
         }
         fn query_status_by_key(
             &self,
             _k: &crate::ports::payment_provider::IdempotencyKey,
-        ) -> Result<crate::ports::payment_provider::PaymentStatus, crate::ports::payment_provider::PayError>
-        {
+        ) -> Result<
+            crate::ports::payment_provider::PaymentStatus,
+            crate::ports::payment_provider::PayError,
+        > {
             Ok(crate::ports::payment_provider::PaymentStatus::Captured)
         }
         fn verify_webhook(
             &self,
             _raw: &[u8],
             _headers: &crate::ports::payment_provider::WebhookHeaders,
-        ) -> Result<crate::ports::payment_provider::PaymentEvent, crate::ports::payment_provider::PayError>
-        {
+        ) -> Result<
+            crate::ports::payment_provider::PaymentEvent,
+            crate::ports::payment_provider::PayError,
+        > {
             unimplemented!()
         }
         fn capture_leg(

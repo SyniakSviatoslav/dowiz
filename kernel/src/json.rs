@@ -224,14 +224,23 @@ fn write_json_string(s: &str, out: &mut String) {
 /// Parse a JSON document. RFC 8259 with bounded depth + input length; degrade-closed.
 pub fn parse(input: &str) -> Result<Value, Error> {
     if input.len() > MAX_LEN {
-        return Err(Error { msg: "input exceeds MAX_LEN", pos: 0 });
+        return Err(Error {
+            msg: "input exceeds MAX_LEN",
+            pos: 0,
+        });
     }
-    let mut p = Parser { b: input.as_bytes(), i: 0 };
+    let mut p = Parser {
+        b: input.as_bytes(),
+        i: 0,
+    };
     p.ws();
     let v = p.value(0)?;
     p.ws();
     if p.i != p.b.len() {
-        return Err(Error { msg: "trailing characters after value", pos: p.i });
+        return Err(Error {
+            msg: "trailing characters after value",
+            pos: p.i,
+        });
     }
     Ok(v)
 }
@@ -260,7 +269,10 @@ impl<'a> Parser<'a> {
 
     fn value(&mut self, depth: usize) -> Result<Value, Error> {
         if depth > MAX_DEPTH {
-            return Err(Error { msg: "max nesting depth exceeded", pos: self.i });
+            return Err(Error {
+                msg: "max nesting depth exceeded",
+                pos: self.i,
+            });
         }
         match self.peek() {
             Some(b'{') => self.object(depth),
@@ -270,8 +282,14 @@ impl<'a> Parser<'a> {
             Some(b'f') => self.lit(b"false", Value::Bool(false)),
             Some(b'n') => self.lit(b"null", Value::Null),
             Some(c) if c == b'-' || c.is_ascii_digit() => self.number(),
-            Some(_) => Err(Error { msg: "unexpected character", pos: self.i }),
-            None => Err(Error { msg: "unexpected end of input", pos: self.i }),
+            Some(_) => Err(Error {
+                msg: "unexpected character",
+                pos: self.i,
+            }),
+            None => Err(Error {
+                msg: "unexpected end of input",
+                pos: self.i,
+            }),
         }
     }
 
@@ -280,7 +298,10 @@ impl<'a> Parser<'a> {
             self.i += kw.len();
             Ok(v)
         } else {
-            Err(Error { msg: "invalid literal", pos: self.i })
+            Err(Error {
+                msg: "invalid literal",
+                pos: self.i,
+            })
         }
     }
 
@@ -295,12 +316,18 @@ impl<'a> Parser<'a> {
         loop {
             self.ws();
             if self.peek() != Some(b'"') {
-                return Err(Error { msg: "expected object key string", pos: self.i });
+                return Err(Error {
+                    msg: "expected object key string",
+                    pos: self.i,
+                });
             }
             let key = self.string()?;
             self.ws();
             if self.peek() != Some(b':') {
-                return Err(Error { msg: "expected ':' after object key", pos: self.i });
+                return Err(Error {
+                    msg: "expected ':' after object key",
+                    pos: self.i,
+                });
             }
             self.i += 1;
             self.ws();
@@ -315,7 +342,12 @@ impl<'a> Parser<'a> {
                     self.i += 1;
                     return Ok(Value::Object(members));
                 }
-                _ => return Err(Error { msg: "expected ',' or '}' in object", pos: self.i }),
+                _ => {
+                    return Err(Error {
+                        msg: "expected ',' or '}' in object",
+                        pos: self.i,
+                    })
+                }
             }
         }
     }
@@ -341,7 +373,12 @@ impl<'a> Parser<'a> {
                     self.i += 1;
                     return Ok(Value::Array(items));
                 }
-                _ => return Err(Error { msg: "expected ',' or ']' in array", pos: self.i }),
+                _ => {
+                    return Err(Error {
+                        msg: "expected ',' or ']' in array",
+                        pos: self.i,
+                    })
+                }
             }
         }
     }
@@ -352,7 +389,12 @@ impl<'a> Parser<'a> {
         loop {
             let c = match self.peek() {
                 Some(c) => c,
-                None => return Err(Error { msg: "unterminated string", pos: self.i }),
+                None => {
+                    return Err(Error {
+                        msg: "unterminated string",
+                        pos: self.i,
+                    })
+                }
             };
             match c {
                 b'"' => {
@@ -361,7 +403,10 @@ impl<'a> Parser<'a> {
                 }
                 b'\\' => {
                     self.i += 1;
-                    let e = self.peek().ok_or(Error { msg: "unterminated escape", pos: self.i })?;
+                    let e = self.peek().ok_or(Error {
+                        msg: "unterminated escape",
+                        pos: self.i,
+                    })?;
                     match e {
                         b'"' => s.push('"'),
                         b'\\' => s.push('\\'),
@@ -377,39 +422,71 @@ impl<'a> Parser<'a> {
                             if (0xD800..=0xDBFF).contains(&cp) {
                                 // high surrogate — must be followed by \uDC00..=\uDFFF
                                 if self.peek() != Some(b'\\') {
-                                    return Err(Error { msg: "lone high surrogate", pos: self.i });
+                                    return Err(Error {
+                                        msg: "lone high surrogate",
+                                        pos: self.i,
+                                    });
                                 }
                                 self.i += 1;
                                 if self.peek() != Some(b'u') {
-                                    return Err(Error { msg: "lone high surrogate", pos: self.i });
+                                    return Err(Error {
+                                        msg: "lone high surrogate",
+                                        pos: self.i,
+                                    });
                                 }
                                 self.i += 1;
                                 let lo = self.hex4()?;
                                 if !(0xDC00..=0xDFFF).contains(&lo) {
-                                    return Err(Error { msg: "invalid low surrogate", pos: self.i });
+                                    return Err(Error {
+                                        msg: "invalid low surrogate",
+                                        pos: self.i,
+                                    });
                                 }
                                 let c = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
                                 match char::from_u32(c) {
                                     Some(ch) => s.push(ch),
-                                    None => return Err(Error { msg: "invalid surrogate pair", pos: self.i }),
+                                    None => {
+                                        return Err(Error {
+                                            msg: "invalid surrogate pair",
+                                            pos: self.i,
+                                        })
+                                    }
                                 }
                                 continue; // hex4 already advanced past the low surrogate digits
                             } else if (0xDC00..=0xDFFF).contains(&cp) {
-                                return Err(Error { msg: "lone low surrogate", pos: self.i });
+                                return Err(Error {
+                                    msg: "lone low surrogate",
+                                    pos: self.i,
+                                });
                             } else {
                                 match char::from_u32(cp) {
                                     Some(ch) => s.push(ch),
-                                    None => return Err(Error { msg: "invalid unicode escape", pos: self.i }),
+                                    None => {
+                                        return Err(Error {
+                                            msg: "invalid unicode escape",
+                                            pos: self.i,
+                                        })
+                                    }
                                 }
                             }
                             continue; // hex4 advanced past the 4 digits
                         }
-                        _ => return Err(Error { msg: "invalid escape character", pos: self.i }),
+                        _ => {
+                            return Err(Error {
+                                msg: "invalid escape character",
+                                pos: self.i,
+                            })
+                        }
                     }
                     self.i += 1;
                 }
                 // Raw control characters are not allowed unescaped in a JSON string.
-                0x00..=0x1F => return Err(Error { msg: "control character in string", pos: self.i }),
+                0x00..=0x1F => {
+                    return Err(Error {
+                        msg: "control character in string",
+                        pos: self.i,
+                    })
+                }
                 _ => {
                     // Copy one UTF-8 scalar (input is a valid &str, so byte boundaries are valid).
                     let start = self.i;
@@ -429,7 +506,10 @@ impl<'a> Parser<'a> {
 
     fn hex4(&mut self) -> Result<u32, Error> {
         if self.i + 4 > self.b.len() {
-            return Err(Error { msg: "truncated \\u escape", pos: self.i });
+            return Err(Error {
+                msg: "truncated \\u escape",
+                pos: self.i,
+            });
         }
         let mut v = 0u32;
         for _ in 0..4 {
@@ -438,7 +518,12 @@ impl<'a> Parser<'a> {
                 b'0'..=b'9' => (d - b'0') as u32,
                 b'a'..=b'f' => (d - b'a' + 10) as u32,
                 b'A'..=b'F' => (d - b'A' + 10) as u32,
-                _ => return Err(Error { msg: "invalid hex digit in \\u escape", pos: self.i }),
+                _ => {
+                    return Err(Error {
+                        msg: "invalid hex digit in \\u escape",
+                        pos: self.i,
+                    })
+                }
             };
             v = v * 16 + n;
             self.i += 1;
@@ -461,7 +546,12 @@ impl<'a> Parser<'a> {
                     self.i += 1;
                 }
             }
-            _ => return Err(Error { msg: "invalid number", pos: self.i }),
+            _ => {
+                return Err(Error {
+                    msg: "invalid number",
+                    pos: self.i,
+                })
+            }
         }
         let mut is_float = false;
         // fraction
@@ -469,7 +559,10 @@ impl<'a> Parser<'a> {
             is_float = true;
             self.i += 1;
             if !matches!(self.peek(), Some(d) if d.is_ascii_digit()) {
-                return Err(Error { msg: "digit expected after decimal point", pos: self.i });
+                return Err(Error {
+                    msg: "digit expected after decimal point",
+                    pos: self.i,
+                });
             }
             while matches!(self.peek(), Some(d) if d.is_ascii_digit()) {
                 self.i += 1;
@@ -483,7 +576,10 @@ impl<'a> Parser<'a> {
                 self.i += 1;
             }
             if !matches!(self.peek(), Some(d) if d.is_ascii_digit()) {
-                return Err(Error { msg: "digit expected in exponent", pos: self.i });
+                return Err(Error {
+                    msg: "digit expected in exponent",
+                    pos: self.i,
+                });
             }
             while matches!(self.peek(), Some(d) if d.is_ascii_digit()) {
                 self.i += 1;
@@ -505,7 +601,10 @@ impl<'a> Parser<'a> {
         }
         match text.parse::<f64>() {
             Ok(f) => Ok(Value::Float(f)),
-            Err(_) => Err(Error { msg: "number out of range", pos: start }),
+            Err(_) => Err(Error {
+                msg: "number out of range",
+                pos: start,
+            }),
         }
     }
 }

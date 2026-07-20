@@ -273,7 +273,11 @@ impl SelfSignedRoot {
 
     /// Verify the self-signature under RequireBoth, the TTL, and the node-id binding.
     /// A `DowizCoSign` is NEVER consulted here — it is strictly additive (M4).
-    pub fn verify_self<V: SignatureVerifier>(&self, verifier: &V, now: u64) -> Result<(), CertError> {
+    pub fn verify_self<V: SignatureVerifier>(
+        &self,
+        verifier: &V,
+        now: u64,
+    ) -> Result<(), CertError> {
         // TTL is load-bearing (§5).
         if self.not_after <= now {
             return Err(CertError::Expired);
@@ -287,9 +291,17 @@ impl SelfSignedRoot {
         if self.suite().is_none() {
             return Err(CertError::UnknownSuite);
         }
-        let msg =
-            Self::canonical_bytes(&self.classical_pub, &self.pq_pub, &self.root_scope, self.alg_suite, self.not_after);
-        if !self.self_sig.verify(verifier, &self.classical_pub, &self.pq_pub, &msg) {
+        let msg = Self::canonical_bytes(
+            &self.classical_pub,
+            &self.pq_pub,
+            &self.root_scope,
+            self.alg_suite,
+            self.not_after,
+        );
+        if !self
+            .self_sig
+            .verify(verifier, &self.classical_pub, &self.pq_pub, &msg)
+        {
             return Err(CertError::BadSignature);
         }
         Ok(())
@@ -335,7 +347,13 @@ impl DowizCoSign {
         root: &SelfSignedRoot,
     ) -> Self {
         let msg = Self::canonical(root);
-        let sig = HybridSig::sign(verifier, AlgSuite::MlDsa65Ed25519, dowiz_classical_seed, dowiz_pq_seed, &msg);
+        let sig = HybridSig::sign(
+            verifier,
+            AlgSuite::MlDsa65Ed25519,
+            dowiz_classical_seed,
+            dowiz_pq_seed,
+            &msg,
+        );
         DowizCoSign {
             over_node_id: root.node_id,
             sig,
@@ -355,7 +373,8 @@ impl DowizCoSign {
             return false;
         }
         let msg = Self::canonical(root);
-        self.sig.verify(verifier, dowiz_classical_pub, dowiz_pq_pub, &msg)
+        self.sig
+            .verify(verifier, dowiz_classical_pub, dowiz_pq_pub, &msg)
     }
 }
 
@@ -639,7 +658,13 @@ impl RevocationBlob {
             not_after,
             alg_suite,
         );
-        let sig = HybridSig::sign(verifier, alg_suite, issuer_classical_seed, issuer_pq_seed, &msg);
+        let sig = HybridSig::sign(
+            verifier,
+            alg_suite,
+            issuer_classical_seed,
+            issuer_pq_seed,
+            &msg,
+        );
         RevocationBlob {
             issuer_root: issuer_root.node_id,
             revoked_keys,
@@ -675,10 +700,12 @@ impl RevocationBlob {
             self.not_after,
             self.alg_suite,
         );
-        if !self
-            .sig
-            .verify(verifier, &issuer_root.classical_pub, &issuer_root.pq_pub, &msg)
-        {
+        if !self.sig.verify(
+            verifier,
+            &issuer_root.classical_pub,
+            &issuer_root.pq_pub,
+            &msg,
+        ) {
             return Err(CertError::BadSignature);
         }
         Ok(())
@@ -909,7 +936,11 @@ mod tests {
         let mut links = Vec::new();
         for i in 0..parties.len() - 1 {
             let (issuer, subject) = (&parties[i], &parties[i + 1]);
-            let issued_by = if i == 0 { root.classical_pub } else { issuer.cls_pub };
+            let issued_by = if i == 0 {
+                root.classical_pub
+            } else {
+                issuer.cls_pub
+            };
             let issued_by_pq = if i == 0 {
                 root.pq_pub.clone()
             } else {
@@ -944,10 +975,7 @@ mod tests {
         assert_eq!(AlgSuite::from_u16(0x0003), None);
         assert_eq!(AlgSuite::from_u16(0xFFFF), None);
         // The registered suite maps to the standardized OID.
-        assert_eq!(
-            AlgSuite::MlDsa65Ed25519.oid(),
-            "1.3.6.1.5.5.7.6.48"
-        );
+        assert_eq!(AlgSuite::MlDsa65Ed25519.oid(), "1.3.6.1.5.5.7.6.48");
     }
 
     #[test]
@@ -977,7 +1005,10 @@ mod tests {
         // The needle is assembled via `concat!` so this guard's own source line does not
         // self-match the `=> CONST` arm pattern it searches for.
         let needle = concat!("=> OID_MLDSA65", "_ED25519_SHA512");
-        let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/capability_cert.rs"));
+        let src = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/capability_cert.rs"
+        ));
         let arm_count = src.lines().filter(|l| l.contains(needle)).count();
         assert_eq!(arm_count, 1, "OID must be mapped in exactly one match arm");
     }
@@ -1072,14 +1103,16 @@ mod tests {
     fn red_block_reordering() {
         let v = RefSigner;
         let parties: Vec<Party> = (1u8..=5).map(|i| Party::new(&v, i)).collect();
-        let root = SelfSignedRoot::mint(&v, &parties[0].cls_seed, &parties[0].pq_seed, scope(), 9999);
+        let root =
+            SelfSignedRoot::mint(&v, &parties[0].cls_seed, &parties[0].pq_seed, scope(), 9999);
         let mut chain = linear_chain(&v, &parties.as_slice(), &root, true, 9999);
         // Swap the first two links → first link's issuer is no longer the root.
         chain.swap(0, 1);
         let mut roster = AnchorRoster::new();
         root.enroll(&mut roster);
         let last = &parties[parties.len() - 1];
-        let cap = Capability::new_hybrid(last.cls_pub, last.pq_pub.clone(), scope(), [9u8; 8], 9999);
+        let cap =
+            Capability::new_hybrid(last.cls_pub, last.pq_pub.clone(), scope(), [9u8; 8], 9999);
         let store = RevocationStore::new();
         assert_eq!(
             verify_chain_hybrid(&v, &roster, &store, &root, &chain, &cap, 0),
@@ -1091,14 +1124,16 @@ mod tests {
     fn red_chain_truncation() {
         let v = RefSigner;
         let parties: Vec<Party> = (1u8..=5).map(|i| Party::new(&v, i)).collect();
-        let root = SelfSignedRoot::mint(&v, &parties[0].cls_seed, &parties[0].pq_seed, scope(), 9999);
+        let root =
+            SelfSignedRoot::mint(&v, &parties[0].cls_seed, &parties[0].pq_seed, scope(), 9999);
         let chain = linear_chain(&v, &parties.as_slice(), &root, true, 9999);
         // Drop the tail so an intermediate becomes the tail; its subject != cap.subject_key.
         let truncated = &chain[..chain.len() - 1];
         let mut roster = AnchorRoster::new();
         root.enroll(&mut roster);
         let last = &parties[parties.len() - 1];
-        let cap = Capability::new_hybrid(last.cls_pub, last.pq_pub.clone(), scope(), [9u8; 8], 9999);
+        let cap =
+            Capability::new_hybrid(last.cls_pub, last.pq_pub.clone(), scope(), [9u8; 8], 9999);
         let store = RevocationStore::new();
         assert_eq!(
             verify_chain_hybrid(&v, &roster, &store, &root, truncated, &cap, 0),
@@ -1272,12 +1307,7 @@ mod tests {
         // forge it by signing over the root with a NON-dowiz seed.
         let bad = DowizCoSign::sign(&v, &owner.cls_seed, &owner.pq_seed, &root);
         // The bad co-sign must NOT verify against the real dowiz keys...
-        assert!(!bad.verify(
-            &v,
-            &dowiz.cls_pub,
-            &dowiz.pq_pub,
-            &root
-        ));
+        assert!(!bad.verify(&v, &dowiz.cls_pub, &dowiz.pq_pub, &root));
         // ...yet the root still verifies on its own merit (co-sign is additive-only).
         assert_eq!(root.verify_self(&v, 0), Ok(()));
     }
@@ -1359,8 +1389,13 @@ mod tests {
         );
         let mut roster = AnchorRoster::new();
         root.enroll(&mut roster);
-        let cap =
-            Capability::new_hybrid(grandchild.cls_pub, grandchild.pq_pub.clone(), scope(), [9u8; 8], 9999);
+        let cap = Capability::new_hybrid(
+            grandchild.cls_pub,
+            grandchild.pq_pub.clone(),
+            scope(),
+            [9u8; 8],
+            9999,
+        );
         let store = RevocationStore::new();
         assert_eq!(
             verify_chain_hybrid(&v, &roster, &store, &root, &[l1, l2], &cap, 0),
@@ -1467,7 +1502,8 @@ mod tests {
 
         // Simulate the first-frame signature: it is signed over the ORIGINAL transcript.
         let seed = [42u8; 32];
-        let frame_sig = HybridSig::sign(&v, AlgSuite::MlDsa65Ed25519, &seed, &seed, &transcript_orig);
+        let frame_sig =
+            HybridSig::sign(&v, AlgSuite::MlDsa65Ed25519, &seed, &seed, &transcript_orig);
         // It MUST NOT verify against the stripped transcript (downgrade detected).
         let pubk = v.classical_public(&seed);
         let pqk = v.pq_public(&seed);
@@ -1581,7 +1617,10 @@ mod tests {
             5,
             9999,
         );
-        assert_eq!(store.apply_blob(&blob5, &v, &root, 0), Ok(ApplyOutcome::Applied));
+        assert_eq!(
+            store.apply_blob(&blob5, &v, &root, 0),
+            Ok(ApplyOutcome::Applied)
+        );
         assert!(store.is_revoked_key(&hub.cls_pub));
 
         // A replayed seq=3 blob NOT containing K must be ignored (cannot un-revoke).
@@ -1607,7 +1646,10 @@ mod tests {
 
     #[test]
     fn no_breakglass_recovery_path_check() {
-        let src = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/capability_cert.rs"));
+        let src = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/capability_cert.rs"
+        ));
         let lower = src.to_lowercase();
         // The forbidden tokens are assembled via `concat!` so this guard's own literal
         // list does not self-match the very tokens it prohibits in production code.
@@ -1618,7 +1660,11 @@ mod tests {
             concat!("master", "_key"),
             concat!("back", "door"),
         ] {
-            assert!(!lower.contains(bad), "forbidden recovery-path token found: {}", bad);
+            assert!(
+                !lower.contains(bad),
+                "forbidden recovery-path token found: {}",
+                bad
+            );
         }
     }
 
@@ -1668,7 +1714,10 @@ mod tests {
             1,
             9999,
         );
-        assert_eq!(store.apply_blob(&blob, &v, &root, 0), Ok(ApplyOutcome::Applied));
+        assert_eq!(
+            store.apply_blob(&blob, &v, &root, 0),
+            Ok(ApplyOutcome::Applied)
+        );
         // Now the same chain is rejected (revoke).
         assert_eq!(
             verify_chain_hybrid(&v, &roster, &store, &root, &[link], &cap, 0),

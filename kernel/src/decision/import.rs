@@ -134,12 +134,18 @@ where
 
     // 1. Size check (transport fit, D6).
     if artifact.len() > crate::decision::MAX_UNIT_ARTIFACT_BYTES {
-        return Err((ImportReject::OversizeArtifact, telemetry(false, Some("OversizeArtifact"))));
+        return Err((
+            ImportReject::OversizeArtifact,
+            telemetry(false, Some("OversizeArtifact")),
+        ));
     }
 
     // 2. Integrity: artifact bytes must hash to the claimed content-id.
     if sha3_256(artifact) != meta.content_id {
-        return Err((ImportReject::MalformedArtifact, telemetry(false, Some("MalformedArtifact"))));
+        return Err((
+            ImportReject::MalformedArtifact,
+            telemetry(false, Some("MalformedArtifact")),
+        ));
     }
 
     // 3. Instance-set pin.
@@ -170,8 +176,7 @@ where
     //    epoch-downgrade attempt via max-merge is rejected by the existing
     //    `EpochNotNewer`, never a new guard (synthesis §17(b): compose, don't violate).
     let eff_epoch = if let Some(live) = registry.route_live(domain) {
-        let mut merged =
-            merge_meta(&meta, &live_unit_meta(live));
+        let mut merged = merge_meta(&meta, &live_unit_meta(live));
         merged.epoch = merged.epoch.max(meta.epoch); // idempotent w.r.t. merge_meta result
         merged.epoch
     } else {
@@ -254,7 +259,12 @@ mod tests {
     use crate::event_log::{EventLog, MemEventStore};
 
     /// Build a meta with a real content-id (sha3 of an artifact) so integrity passes.
-    fn meta_for(domain: DomainTag, epoch: u64, artifact: &[u8], prev: Option<[u8; 32]>) -> DecisionUnitMeta {
+    fn meta_for(
+        domain: DomainTag,
+        epoch: u64,
+        artifact: &[u8],
+        prev: Option<[u8; 32]>,
+    ) -> DecisionUnitMeta {
         let mut m = DecisionUnitMeta::new(domain, UnitEpoch(epoch));
         m.content_id = sha3_256(artifact);
         m.instance_set_hash = [7u8; 32];
@@ -291,7 +301,11 @@ mod tests {
 
         assert_eq!(unit.state, UnitState::Live);
         assert_eq!(unit.operator_activation, OperatorActivation::Activated);
-        assert_eq!(log_len(&log), before + 1, "exactly one lineage row appended");
+        assert_eq!(
+            log_len(&log),
+            before + 1,
+            "exactly one lineage row appended"
+        );
         assert!(matches!(unit.decide(&3u8), Decision::Answer(30)));
     }
 
@@ -335,7 +349,9 @@ mod tests {
         reg.register(crate::decision::AnyUnit::Harness(DecisionUnit::new(
             DomainTag::Harness,
             UnitEpoch(5),
-            |_x: &crate::decision::HarnessInput| Decision::Answer(crate::decision::HarnessOut { route_tier: 0 }),
+            |_x: &crate::decision::HarnessInput| {
+                Decision::Answer(crate::decision::HarnessOut { route_tier: 0 })
+            },
         )));
 
         let mut log = EventLog::new(MemEventStore::default());
@@ -441,7 +457,11 @@ mod tests {
         .expect("gossip import must succeed through the same gate");
         assert!(rec.ok);
         assert_eq!(unit.state, UnitState::Live);
-        assert_eq!(log_len(&log), before + 1, "gossip admits via the one pipeline");
+        assert_eq!(
+            log_len(&log),
+            before + 1,
+            "gossip admits via the one pipeline"
+        );
     }
 
     // ── ITEM 23 (acceptance #1): a gossip unit whose replay DISAGREES is
@@ -466,8 +486,15 @@ mod tests {
             &reg,
             &mut log,
         );
-        assert!(matches!(res, Err((ImportReject::ReplayDisagreement { case: 1 }, _))));
-        assert_eq!(log_len(&log), before, "nothing persisted on gossip reject (D3)");
+        assert!(matches!(
+            res,
+            Err((ImportReject::ReplayDisagreement { case: 1 }, _))
+        ));
+        assert_eq!(
+            log_len(&log),
+            before,
+            "nothing persisted on gossip reject (D3)"
+        );
     }
 
     // ── ITEM 23 (acceptance #1 + epoch max-merge ext of check 5): an

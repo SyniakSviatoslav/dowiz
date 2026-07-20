@@ -155,7 +155,9 @@ fn form_requires_contact_and_venue() {
 #[test]
 fn form_carries_field_values_into_request() {
     let f = form_with(true);
-    let req = f.clone().into_claim_request(ChallengeToken("edge-abc".into()));
+    let req = f
+        .clone()
+        .into_claim_request(ChallengeToken("edge-abc".into()));
     assert_eq!(req.contact, "owner@example.com");
     assert_eq!(req.venue_name, "The Sea Tavern");
     assert_eq!(req.challenge.0, "edge-abc");
@@ -270,7 +272,10 @@ fn claimed_handoff_forwards_cert_once() {
     match &claimed {
         ClaimJourney::Claimed(hub) => {
             assert_eq!(sink.calls, 1, "cert handed off exactly once");
-            assert_eq!(sink.last, hub.owner_root_cert.0, "exact cert bytes forwarded");
+            assert_eq!(
+                sink.last, hub.owner_root_cert.0,
+                "exact cert bytes forwarded"
+            );
         }
         other => panic!("expected Claimed, got {other:?}"),
     }
@@ -307,10 +312,7 @@ fn fixtures_not_ready_is_honest_state() {
     // Override via a bespoke service that returns a not-ready hub.
     struct NotReady;
     impl super::claim_client::ClaimServicePort for NotReady {
-        fn claim_warm_pool_hub(
-            &self,
-            _: ClaimRequest,
-        ) -> Result<ClaimOutcome, ClaimError> {
+        fn claim_warm_pool_hub(&self, _: ClaimRequest) -> Result<ClaimOutcome, ClaimError> {
             Ok(ClaimOutcome::Claimed(ClaimedHub {
                 hub_id: HubId("hub_nr".into()),
                 hub_url: "https://hub-nr.hubs.dowiz.org".into(),
@@ -318,11 +320,10 @@ fn fixtures_not_ready_is_honest_state() {
                 fixtures_ready: false,
             }))
         }
-        fn register_interest(
-            &self,
-            _: InterestSubmission,
-        ) -> Result<InterestAck, ClaimError> {
-            Ok(InterestAck { ack_id: "ack_x".into() })
+        fn register_interest(&self, _: InterestSubmission) -> Result<InterestAck, ClaimError> {
+            Ok(InterestAck {
+                ack_id: "ack_x".into(),
+            })
         }
     }
     let _ = not_ready;
@@ -332,7 +333,10 @@ fn fixtures_not_ready_is_honest_state() {
     let end = submitting.advance_with_service(&NotReady, &mut sink);
     match &end {
         ClaimJourney::Claimed(hub) => {
-            assert!(!hub.fixtures_ready, "not-ready hub must advertise fixtures_ready=false");
+            assert!(
+                !hub.fixtures_ready,
+                "not-ready hub must advertise fixtures_ready=false"
+            );
         }
         other => panic!("expected Claimed, got {other:?}"),
     }

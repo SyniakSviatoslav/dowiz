@@ -769,9 +769,7 @@ mod tests {
         std::fs::write(&blocked, b"not-a-dir").expect("plant blocking file");
         let _guard = scopeguard_remove_all(&tmp);
         // Must return false (failure signalled), NOT panic.
-        let ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            store.put(id, &block)
-        }));
+        let ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| store.put(id, &block)));
         match ok {
             Ok(ret) => assert!(!ret, "put must return false on I/O failure, not succeed"),
             Err(_) => panic!("FileBlockStore::put panicked on I/O error — TORVALDS-14 regression"),

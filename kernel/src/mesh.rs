@@ -341,9 +341,7 @@ impl GossipImport {
     /// dropped here** (transport firewall) — they cannot reach the import gate.
     ///
     /// The returned metas carry `source = decision::import::Source::Gossip`.
-    pub fn receive_verified(
-        &self,
-    ) -> Result<Vec<GossipUnit>, MeshError> {
+    pub fn receive_verified(&self) -> Result<Vec<GossipUnit>, MeshError> {
         let entries = self.transport.recv()?;
         let mut out = Vec::new();
         for e in entries {
@@ -664,7 +662,11 @@ mod tests {
         let verified = gossip.receive_verified().expect("transport recv ok");
         // The forged entry is dropped at the firewall; only the authentic one
         // is handed toward `import_unit` (Source::Gossip).
-        assert_eq!(verified.len(), 1, "bad-sig entry must not survive the firewall");
+        assert_eq!(
+            verified.len(),
+            1,
+            "bad-sig entry must not survive the firewall"
+        );
         assert_eq!(verified[0].entry.payload, b"unit-frame: dispatch-v2");
     }
 
@@ -739,6 +741,5 @@ mod tests {
         other_sig[0] ^= 0xff;
         assert!(!entry.sig_eq_ct(&other_sig));
         assert!(!crate::mesh::mesh_oracle::oracle_sig_eq(&entry, &other_sig));
-}
-
+    }
 }

@@ -10,8 +10,8 @@
 //!
 //! The client-side rate limit (X11) reuses `kernel/src/token_bucket.rs` (`CLAIM_BUCKET_CAPACITY`).
 
-use crate::token_bucket::TokenBucket;
 use super::{CLAIM_BUCKET_CAPACITY, CLAIM_BUCKET_REFILL};
+use crate::token_bucket::TokenBucket;
 
 /// An edge-verified anti-abuse token (X11 / R2 §7). Produced at the Cloudflare edge/challenge
 /// layer, NOT embedded in the wgpu canvas (same DOM tension as X3). Opaque to P73; the claim
@@ -33,7 +33,7 @@ pub trait ClaimServicePort {
 /// FAST PATH request body.
 #[derive(Clone, PartialEq, Debug)]
 pub struct ClaimRequest {
-    pub contact: String,   // SignupForm.contact (resolved from P57 TextField::value())
+    pub contact: String, // SignupForm.contact (resolved from P57 TextField::value())
     pub venue_name: String, // SignupForm.venue_name
     pub challenge: ChallengeToken, // edge-verified; the claim service re-verifies (§5.1)
 }
@@ -57,8 +57,8 @@ pub enum ClaimOutcome {
 /// What P67's service hands back on a successful claim (R3 §6.1 step 3 / §2.4).
 #[derive(Clone, PartialEq, Debug)]
 pub struct ClaimedHub {
-    pub hub_id: HubId,       // opaque id
-    pub hub_url: String,     // `hub-<id>.hubs.dowiz.org` (R3 §1.2) — where the vendor lands
+    pub hub_id: HubId,   // opaque id
+    pub hub_url: String, // `hub-<id>.hubs.dowiz.org` (R3 §1.2) — where the vendor lands
     /// The owner root capability-cert — FORMAT is **P59's** (biscuit-style hybrid-signed chain),
     /// CUSTODY is **P66's** wallet / **P70's** owner surface. P73 receives it OPAQUE, forwards it
     /// ONCE (journey M6), never parses/stores/mints it (§5.1 — the unforgeable-cert argument).
@@ -142,13 +142,19 @@ enum MockMode {
 
 impl MockClaimService {
     pub fn claimed() -> Self {
-        MockClaimService { mode: MockMode::Claimed }
+        MockClaimService {
+            mode: MockMode::Claimed,
+        }
     }
     pub fn pool_empty() -> Self {
-        MockClaimService { mode: MockMode::PoolEmpty }
+        MockClaimService {
+            mode: MockMode::PoolEmpty,
+        }
     }
     pub fn timeout() -> Self {
-        MockClaimService { mode: MockMode::Timeout }
+        MockClaimService {
+            mode: MockMode::Timeout,
+        }
     }
     pub fn empty_cert() -> Self {
         MockClaimService {

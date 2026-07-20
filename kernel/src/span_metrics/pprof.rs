@@ -11,7 +11,7 @@
 
 use std::path::PathBuf;
 
-use super::obs::{ALERT_JSONL, JsonlWriter};
+use super::obs::{JsonlWriter, ALERT_JSONL};
 
 /// Emit the pprof-fallback marker row into `alert.jsonl`. `dir = None` disables the file
 /// write but still returns the marker string (callers may log it).

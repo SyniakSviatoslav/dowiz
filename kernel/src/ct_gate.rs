@@ -188,7 +188,11 @@ mod tests {
             (b"\xff\x00\xff", b"\xff\x00\xfe"),
         ];
         for (a, b) in cases {
-            assert_eq!(ct_eq(a, b), naive_eq(a, b), "ct_eq disagrees on {a:?} vs {b:?}");
+            assert_eq!(
+                ct_eq(a, b),
+                naive_eq(a, b),
+                "ct_eq disagrees on {a:?} vs {b:?}"
+            );
         }
     }
 

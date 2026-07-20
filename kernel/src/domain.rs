@@ -18,12 +18,12 @@
 
 use crate::catalog::PriceCatalog;
 use crate::kalman::KalmanFilter;
-use crate::vendor::VendorId;
 use crate::money::{
     apply_tax, assert_non_negative, ledger_append, ledger_sum, reverse_transfer, Currency,
     EntryKind, LedgerEntry,
 };
 use crate::order_machine::{assert_transition, verify_fsm_signature, OrderStatus, TransitionError};
+use crate::vendor::VendorId;
 
 /// A line item on an order. Mirrors the oracle `OrderItemInput` / `OrderItemResponse`.
 /// `unit_price` is integer minor units at the moment of purchase (price snapshot).

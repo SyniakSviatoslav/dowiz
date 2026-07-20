@@ -306,7 +306,10 @@ mod tests {
     fn item7_keccak_copies_equivalence_index_map() {
         use crate::event_log::{KECCAK_R, KECCAK_RC};
         // (ι) round constants identical — the only per-round constant either copy uses.
-        assert_eq!(RC, KECCAK_RC, "iota round constants diverge between the two copies");
+        assert_eq!(
+            RC, KECCAK_RC,
+            "iota round constants diverge between the two copies"
+        );
         for x in 0..5usize {
             for y in 0..5usize {
                 // (ρ) rotation offset: copy A's flat RHO[x+5y] == copy B's 2D R[x][y].
@@ -380,7 +383,6 @@ mod kani_proofs {
     // `len`/`rate`, NOT byte values, so Keccak's input-independent control flow is fully
     // exercised by the existing KATs plus `tests::sponge_boundary_lengths_panic_free`
     // below (boundary lengths 0, rate-1, rate, rate+1, 2·rate). No Kani harness needed.
-
 }
 
 // The STRONG form of the keystone equivalence, kept in a SEPARATE module so the

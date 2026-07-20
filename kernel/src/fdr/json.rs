@@ -66,7 +66,10 @@ impl JsonWriter {
     pub fn obj() -> Self {
         let mut buf = String::new();
         buf.push('{');
-        JsonWriter { buf, started: false }
+        JsonWriter {
+            buf,
+            started: false,
+        }
     }
 
     fn key(&mut self, k: &str) {
@@ -146,17 +149,21 @@ mod tests {
             "HEALTHY",
             "analyzer error",
             "loop: edit→run_fail (k=3)",
-            "a\"b",              // quote
-            "a\\b",              // backslash
-            "line1\nline2",      // newline
-            "carriage\rreturn",  // CR
-            "tab\there",         // tab
+            "a\"b",             // quote
+            "a\\b",             // backslash
+            "line1\nline2",     // newline
+            "carriage\rreturn", // CR
+            "tab\there",        // tab
             "mix \"\\\n\r\t end",
             "unicode: café → ☕", // non-ascii passes through verbatim (both escapers agree)
             "",
         ];
         for s in corpus {
-            assert_eq!(escape(s), old_esc(s), "escape() diverged from old esc() for {s:?}");
+            assert_eq!(
+                escape(s),
+                old_esc(s),
+                "escape() diverged from old esc() for {s:?}"
+            );
         }
     }
 

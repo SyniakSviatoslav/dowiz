@@ -45,7 +45,6 @@ pub const POSTMORTEM_LOG: &str = "fdr.postmortem.jsonl";
 // `crc32_matches_known_vector` below stays green.
 pub use super::crc32;
 
-
 /// The durable writer. One active segment at a time; switches to the other (truncating
 /// it) at the cap. Fresh session: opens `fdr.a.jsonl` truncated. Use [`recover`] BEFORE
 /// constructing a writer if you need the prior session's records — the writer truncates.
@@ -272,8 +271,18 @@ pub fn emit_post_mortem(dir: &Path, rec: &Recovery) -> io::Result<()> {
         StampPolicy::Full,
         vec![
             ("recovered", rec.records.len().to_string()),
-            ("first_seq", rec.first_seq().map(|s| s.to_string()).unwrap_or_else(|| "none".into())),
-            ("last_seq", rec.last_seq().map(|s| s.to_string()).unwrap_or_else(|| "none".into())),
+            (
+                "first_seq",
+                rec.first_seq()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "none".into()),
+            ),
+            (
+                "last_seq",
+                rec.last_seq()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "none".into()),
+            ),
             ("torn_tail", rec.torn_tail.to_string()),
             ("crc_failures", rec.crc_failures.to_string()),
         ],
@@ -345,7 +354,14 @@ mod tests {
         {
             let mut ring = FdrRing::open(dir.clone(), DEFAULT_SEG_CAP).unwrap();
             let seq = ring.next_seq();
-            let ev = FdrEvent::stamp(seq, Level::Info, Kind::Event, "x".into(), StampPolicy::Cheap, vec![]);
+            let ev = FdrEvent::stamp(
+                seq,
+                Level::Info,
+                Kind::Event,
+                "x".into(),
+                StampPolicy::Cheap,
+                vec![],
+            );
             ring.append(&ev).unwrap();
             ring.clean_shutdown().unwrap();
         }
@@ -361,19 +377,33 @@ mod tests {
             let mut ring = FdrRing::open(dir.clone(), DEFAULT_SEG_CAP).unwrap();
             for i in 0..5 {
                 let seq = ring.next_seq();
-                let ev = FdrEvent::stamp(seq, Level::Info, Kind::Event, format!("r{i}"), StampPolicy::Cheap, vec![]);
+                let ev = FdrEvent::stamp(
+                    seq,
+                    Level::Info,
+                    Kind::Event,
+                    format!("r{i}"),
+                    StampPolicy::Cheap,
+                    vec![],
+                );
                 ring.append(&ev).unwrap();
             }
         }
         // Simulate a process dying mid-write: append a partial line with NO terminating
         // '\n' and a bogus/short CRC — exactly a torn last record.
         {
-            let mut f = OpenOptions::new().append(true).open(seg_path(&dir, 0)).unwrap();
-            f.write_all(b"{\"seq\":5,\"kind\":\"event\",\"name\":\"torn").unwrap();
+            let mut f = OpenOptions::new()
+                .append(true)
+                .open(seg_path(&dir, 0))
+                .unwrap();
+            f.write_all(b"{\"seq\":5,\"kind\":\"event\",\"name\":\"torn")
+                .unwrap();
         }
         let rec = recover(&dir);
         assert_eq!(rec.records.len(), 5, "the 5 complete records must survive");
-        assert_eq!(rec.torn_tail, 1, "the partial tail must be counted + dropped");
+        assert_eq!(
+            rec.torn_tail, 1,
+            "the partial tail must be counted + dropped"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -383,13 +413,24 @@ mod tests {
         {
             let mut ring = FdrRing::open(dir.clone(), DEFAULT_SEG_CAP).unwrap();
             let seq = ring.next_seq();
-            let ev = FdrEvent::stamp(seq, Level::Info, Kind::Event, "ok".into(), StampPolicy::Cheap, vec![]);
+            let ev = FdrEvent::stamp(
+                seq,
+                Level::Info,
+                Kind::Event,
+                "ok".into(),
+                StampPolicy::Cheap,
+                vec![],
+            );
             ring.append(&ev).unwrap();
         }
         // Append a COMPLETE line (has '\n') whose CRC is wrong.
         {
-            let mut f = OpenOptions::new().append(true).open(seg_path(&dir, 0)).unwrap();
-            f.write_all(b"{\"seq\":1,\"kind\":\"event\",\"name\":\"bad\"}|deadbeef\n").unwrap();
+            let mut f = OpenOptions::new()
+                .append(true)
+                .open(seg_path(&dir, 0))
+                .unwrap();
+            f.write_all(b"{\"seq\":1,\"kind\":\"event\",\"name\":\"bad\"}|deadbeef\n")
+                .unwrap();
         }
         let rec = recover(&dir);
         assert_eq!(rec.records.len(), 1, "only the CRC-valid record survives");
@@ -405,7 +446,14 @@ mod tests {
             let mut ring = FdrRing::open(dir.clone(), 512).unwrap();
             for i in 0..40 {
                 let seq = ring.next_seq();
-                let ev = FdrEvent::stamp(seq, Level::Info, Kind::Event, format!("s{i}"), StampPolicy::Cheap, vec![]);
+                let ev = FdrEvent::stamp(
+                    seq,
+                    Level::Info,
+                    Kind::Event,
+                    format!("s{i}"),
+                    StampPolicy::Cheap,
+                    vec![],
+                );
                 ring.append(&ev).unwrap();
             }
         }
@@ -415,7 +463,10 @@ mod tests {
         // strictly increasing seq, no torn/crc failures.
         assert!(rec.torn_tail == 0 && rec.crc_failures == 0);
         for w in rec.records.windows(2) {
-            assert!(w[0].seq < w[1].seq, "recovered seqs must be strictly increasing");
+            assert!(
+                w[0].seq < w[1].seq,
+                "recovered seqs must be strictly increasing"
+            );
         }
         let _ = std::fs::remove_dir_all(&dir);
     }

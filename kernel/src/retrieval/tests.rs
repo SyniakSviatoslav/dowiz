@@ -94,8 +94,8 @@ fn pattern_query_exact_and_zero_false_positives() {
     // differential that produced it lives in `pattern.rs` pre-removal history +
     // the naive-reference cross-check). See item-5 ruling.
     assert_eq!(got, vec![7]); // note-heat-kernel-recall.md
-    // 0 false positives: every returned doc really matches the pattern, verified
-    // by the kernel-owned matcher (an independent recompile of the same pattern).
+                              // 0 false positives: every returned doc really matches the pattern, verified
+                              // by the kernel-owned matcher (an independent recompile of the same pattern).
     let compiled = super::pattern::Pattern::compile(pat).unwrap();
     for &d in &got {
         assert!(compiled.is_match(FIXTURE[d as usize]));

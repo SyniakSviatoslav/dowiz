@@ -69,7 +69,11 @@ fn crc_table() -> &'static [u32; 256] {
             let mut c = i as u32;
             let mut k = 0;
             while k < 8 {
-                c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+                c = if c & 1 != 0 {
+                    0xEDB8_8320 ^ (c >> 1)
+                } else {
+                    c >> 1
+                };
                 k += 1;
             }
             t[i] = c;
@@ -615,15 +619,21 @@ mod sink {
             ("wall_us", wall_us.to_string()),
             (
                 "utime_us",
-                utime_us.map(|v| v.to_string()).unwrap_or_else(|| "null".into()),
+                utime_us
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "null".into()),
             ),
             (
                 "stime_us",
-                stime_us.map(|v| v.to_string()).unwrap_or_else(|| "null".into()),
+                stime_us
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "null".into()),
             ),
             (
                 "maxrss_kb",
-                maxrss_kb.map(|v| v.to_string()).unwrap_or_else(|| "null".into()),
+                maxrss_kb
+                    .map(|v| v.to_string())
+                    .unwrap_or_else(|| "null".into()),
             ),
         ];
         let ev = FdrEvent::stamp(
@@ -836,7 +846,11 @@ mod tests {
         {
             let _s = SpanHandle::new("scoped_probe").entered();
         }
-        assert_eq!(hits.load(Ordering::Relaxed), 1, "observer must see the span close");
+        assert_eq!(
+            hits.load(Ordering::Relaxed),
+            1,
+            "observer must see the span close"
+        );
     }
 
     // Item 48 (closure b): `emit_heartbeat` is a no-op when no FDR sink is installed (the

@@ -57,7 +57,9 @@ pub const ALERT_JSONL: &str = "alert.jsonl";
 pub fn normalized_load1() -> Option<f64> {
     let s = std::fs::read_to_string("/proc/loadavg").ok()?;
     let l1: f64 = s.split_whitespace().next()?.parse().ok()?;
-    let nproc = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+    let nproc = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
     Some(l1 / nproc as f64)
 }
 
