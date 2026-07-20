@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeliveryOS — System Health</title>
+  <link href="/dist/tabler/tabler-icons.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Serif+Display&family=Cormorant+Garamond:wght@400;600&family=Playfair+Display:wght@400;600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/admin/dashboard.js"></script>
+  <style>
+    :root {
+      --brand-bg:#0F172A;--brand-surface:#1E293B;--brand-raised:#263548;
+      --brand-text:#F1F5F9;--brand-muted:#94A3B8;--brand-border:#334155;
+      --brand-primary:#ea4f16;--brand-primary-hover:#ffa12e;
+      --brand-primary-light:rgba(234,79,22,0.12);--brand-accent:#2a2a2a;
+      --brand-surface-raised:#263548;--brand-text-muted:#94A3B8;
+      --brand-radius:12px;--brand-radius-sm:8px;--brand-radius-btn:78px;
+      --color-success:#059669;--color-warning:#D97706;--color-danger:#DC2626;--color-info:#2563EB;
+    }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--brand-bg); color:var(--brand-text); }
+    .check-card { background:var(--brand-surface); border:1px solid var(--brand-border); border-radius:10px; padding:14px 16px; transition:border-color 0.2s; }
+    .check-card:hover { border-color:var(--brand-primary); }
+    .badge-ok { background:var(--color-success);color:#fff; }
+    .badge-degraded { background:var(--color-warning);color:#fff; }
+    .badge-unhealthy { background:var(--color-danger);color:#fff; }
+    .badge-unknown { background:var(--brand-muted);color:#fff; }
+    .health-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
+    .health-dot.ok { background:var(--color-success); }
+    .health-dot.degraded { background:var(--color-warning); }
+    .health-dot.unhealthy { background:var(--color-danger); }
+    @media (max-width:640px) { .health-grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <button id="themeBtn" onclick="cycleTheme()" class="fixed top-4 right-4 z-50 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full cursor-pointer" style="background:var(--brand-surface);border:1px solid var(--brand-border);color:var(--brand-muted);">
+    <i class="ti ti-palette"></i><span id="themeLabel">Food Dark</span>
+  </button>
+
+  <div class="flex flex-col min-h-screen">
+    <header class="flex items-center justify-between px-6 py-3 border-b" style="border-color:var(--brand-border);background:var(--brand-surface);">
+      <div class="flex items-center gap-3">
+        <h1 class="text-lg font-bold">DeliveryOS</h1>
+        <span class="text-sm px-2 py-0.5 rounded-full" id="statusBadge" style="background:var(--brand-primary);color:#fff;">disconnected</span>
+      </div>
+      <div class="flex items-center gap-4 text-sm" style="color:var(--brand-muted);">
+        <a href="/admin/dashboard.html" class="hover:text-white">Dashboard</a>
+        <a href="/admin/orders.html" class="hover:text-white">Orders</a>
+        <a href="/admin/alerts.html" class="hover:text-white">Alerts</a>
+        <a href="/admin/signals.html" class="hover:text-white">Signals</a>
+        <a href="/admin/gdpr.html" class="hover:text-white">GDPR</a>
+        <a href="/admin/health.html" class="hover:text-white font-semibold" style="color:var(--brand-text);">Health</a>
+      </div>
+    </header>
+
+    <div class="flex-1 p-6 max-w-3xl mx-auto w-full">
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold">System Health</h2>
+          <p class="text-sm mt-0.5" style="color:var(--brand-muted);">Real-time operational status of all platform components.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-lg font-bold" id="overallStatus">—</span>
+          <button onclick="refreshHealth()" class="px-3 py-1.5 text-xs rounded-full cursor-pointer" style="background:var(--brand-surface);border:1px solid var(--brand-border);color:var(--brand-text);">
+            <i class="ti ti-refresh"></i> Refresh
+          </button>
+        </div>
+      </div>
+
+      <!-- Auto-refresh toggle -->
+      <div class="flex items-center gap-2 mb-4 text-sm" style="color:var(--brand-muted);">
+        <label class="flex items-center gap-1.5 cursor-pointer">
+          <input type="checkbox" id="autoRefresh" checked onchange="toggleAutoRefresh()" class="accent-current">
+          Auto-refresh (30s)
+        </label>
+      </div>
+
+      <!-- System checks -->
+      <div class="space-y-3" id="checksContainer">
+        <div class="text-center py-8" style="color:var(--brand-muted);">Loading health data...</div>
+      </div>
+
+      <!-- Worker details -->
+      <div class="mt-6">
+        <h3 class="text-lg font-semibold mb-3">Worker Status</h3>
+        <div class="space-y-2" id="workersContainer">
+          <div class="text-center py-4 text-sm" style="color:var(--brand-muted);">No worker data available.</div>
+        </div>
+      </div>
+
+      <!-- Timestamp -->
+      <div class="mt-6 text-xs text-center" style="color:var(--brand-muted);" id="lastUpdated"></div>
+    </div>
+  </div>
+
+  <script>
+    let autoRefreshTimer = null;
+
+    async function refreshHealth() {
+      try {
+        const res = await fetch('/health');
+        const data = await res.json();
+
+        const overallEl = document.getElementById('overallStatus');
+        overallEl.textContent = data.status;
+        overallEl.className = 'text-lg font-bold badge-' + data.status;
+
+        const badge = document.getElementById('statusBadge');
+        badge.textContent = data.status;
+        badge.style.background = data.status === 'healthy' ? 'var(--color-success)' :
+                                data.status === 'degraded' ? 'var(--color-warning)' : 'var(--color-danger)';
+
+        renderChecks(data.checks);
+        renderWorkers(data.checks.workers);
+        document.getElementById('lastUpdated').textContent = 'Last updated: ' + new Date(data.timestamp).toLocaleString();
+      } catch (err) {
+        document.getElementById('checksContainer').innerHTML =
+          '<div class="check-card text-center py-4" style="color:var(--color-danger);">Failed to fetch health data: ' + err.message + '</div>';
+      }
+    }
+
+    function renderChecks(checks) {
+      const container = document.getElementById('checksContainer');
+      const entries = Object.entries(checks).filter(([k]) => k !== 'workers');
+      if (entries.length === 0) {
+        container.innerHTML = '<div class="text-center py-4" style="color:var(--brand-muted);">No check data.</div>';
+        return;
+      }
+
+      container.innerHTML = entries.map(([name, check]) => {
+        const status = check.status || 'unknown';
+        const latency = check.latencyMs != null ? check.latencyMs + 'ms' : '—';
+        const detail = check.detail || '';
+        return `
+          <div class="check-card flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="health-dot ${status}"></span>
+              <div>
+                <div class="font-medium capitalize">${name}</div>
+                <div class="text-xs" style="color:var(--brand-muted);">
+                  ${latency}${detail ? ' &middot; ' + escapeHtml(detail) : ''}
+                </div>
+              </div>
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full badge-${status} capitalize">${status}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderWorkers(workersCheck) {
+      const container = document.getElementById('workersContainer');
+      if (!workersCheck || !workersCheck.entries || Object.keys(workersCheck.entries).length === 0) {
+        container.innerHTML = '<div class="text-center py-4 text-sm" style="color:var(--brand-muted);">No worker heartbeats received yet.</div>';
+        return;
+      }
+
+      const entries = workersCheck.entries;
+      container.innerHTML = Object.entries(entries).map(([workerId, w]) => {
+        const status = w.status || 'unknown';
+        const stale = w.staleSeconds != null ? w.staleSeconds + 's ago' : '—';
+        const jobName = w.jobName || '—';
+        return `
+          <div class="check-card flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="health-dot ${status}"></span>
+              <div>
+                <div class="font-medium">${escapeHtml(workerId)}</div>
+                <div class="text-xs" style="color:var(--brand-muted);">
+                  ${escapeHtml(jobName)} &middot; last beat ${stale}
+                </div>
+              </div>
+            </div>
+            <span class="text-xs px-2 py-0.5 rounded-full badge-${status} capitalize">${status}</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function toggleAutoRefresh() {
+      if (document.getElementById('autoRefresh').checked) {
+        autoRefreshTimer = setInterval(refreshHealth, 30000);
+      } else {
+        if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+      }
+    }
+
+    // Initial load
+    refreshHealth();
+    autoRefreshTimer = setInterval(refreshHealth, 30000);
+  </script>
+</body>
+</html>
