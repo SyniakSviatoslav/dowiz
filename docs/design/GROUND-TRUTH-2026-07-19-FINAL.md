@@ -74,6 +74,16 @@ falsely inflates via main's later files):
 secrets-scrub, bebop frozen-lane (C3/P85) in the bebop repo, and cleanup of the 24 redundant local
 branches (deletion is operator hygiene, not required for roadmap completion).**
 
+## Graphics/GPU state (added 2026-07-19)
+The **O18a graphics-unlock** landed — `wgpu 30.0.0` is now cached and in `kernel/Cargo.lock`;
+`kernel/src/render/gpu.rs` builds a real headless wgpu context under `feature="gpu"` (P38). The
+eigenvector solve landed too (`spectral::eigh`/`topk_symmetric`, `03ac0fefe`, Phase-28). **Still
+blueprint-only:** the `engine/` field-UI GPU render loop (engine `gpu = []` remains empty) and the
+entire `living-interface-2026-07-16/` arc (R-SON audio, R-LM viz, R-VENDOR brand→GPU) — see
+MASTER-ROADMAP §20 and `equations-knowledge-base-2026-07-19/SYNTHESIS-2026-07-19.md`. W21's "wgpu
+uncached" premise is obsolete. O18a (graphics network-gate) and P06 (key_V crypto) are two distinct
+operator decisions; both have landed, independently.
+
 ## Dashboard
 - Local `main` HEAD after wave: `5a97e1f6f` (p06 merge).
 - Kernel 894 / engine 121 / ci-truth green. 0 failures.
