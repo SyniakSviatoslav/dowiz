@@ -44,7 +44,8 @@ kernel/src/order_machine.rs	-	order_machine::	29	lib	1,3,5	exhaustive-12-state-F
 kernel/src/householder.rs	-	householder::	14	lib	1,3	item3=Vieta-trace/det-cross-check
 kernel/src/spectral.rs	-	spectral::	33	lib	1	N/A(corpus-oracle):item3
 kernel/src/token_bucket.rs	-	token_bucket_	3	lib	1	MISSING(item-8):GCRA-atomic-vs-mutex-differential-oracle+item3
-kernel/src/retrieval/pattern.rs	-	retrieval::	58	lib	1	NOTE:regex-ref-removed-for-zero-dep;corpus-oracle-only(item5)
+kernel/src/retrieval/pattern.rs	-	retrieval::	64	lib	1	NOTE:regex-ref-removed-for-zero-dep;corpus-oracle-only(item5);item20:bm25-persistence-codec+incremental≡rebuild+roundtrip+tombstone≡rebuild+kill9-restart-proofs
+kernel/src/retrieval/bm25.rs	-	retrieval::bm25	6	lib	1	item20:P95-Option-A-std-only-persistence;bump-on-new-property;codec-deterministic+dirty-stem-fingerprint
 kernel/src/fdr/json.rs	-	fdr::	16	lib	1	golden-escape-byte-for-byte-oracle(item4)
 kernel/src/ct_gate.rs	-	ct_gate	1	dudect	2	dudect-harness+planted-leak-selftest(item2);ct_eq-primitive
 kernel/src/pq/keccak.rs	pq	pq::keccak::kani_proofs	2	kani	5	item7-KEYSTONE-equivalence:ENFORCED-rung=native-index-map(tests::item7_keccak_copies_equivalence_index_map)+proof_rotl_contract;STRONG-full-state-form=kani_proofs_strong::proof_keccak_copies_equivalent(CORRECT-but-EXCEEDED-25min-CI-budget-2026-07-19,nightly-only §3.1-ladder);gate-runs=rotl+keccak_f_total
