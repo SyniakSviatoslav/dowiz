@@ -99,12 +99,12 @@ All evidence below is from live `cargo test --offline --lib [--features pq]` on 
 | 34-44 | IN-PROGRESS | subagent (toy-pilot arc WT) | wave order 35/36/38→34/39/40/41/42→43/44. |
 | 46 | IN-PROGRESS | subagent (isolated WT) | float-determinism golden tests. |
 | 47 | IN-PROGRESS | subagent (toy-pilot arc WT) | guardian gate, after 35/42. |
-| 51 | IN-PROGRESS | subagent (isolated WT) | shadow-mode divergence test. |
-| 52 | DONE-VERIFIED | main repo | miri-gate.sh existed; ci.yml job + manifest rows wired this session (commit c3bd038f7). |
-| 53 | DONE-VERIFIED | main repo | lint-gate.sh existed; ci.yml job wired this session. |
-| 57/58 | IN-PROGRESS | subagent (isolated WT) | HOT-PATHS eff cells. |
-| 60 | IN-PROGRESS | subagent (isolated WT) | engine FRAME_BUDGET_US. |
-| 64 | IN-PROGRESS | subagent (isolated WT) | composition root. |
+| 27 | DONE-VERIFIED | subagent (WT exec/item27-1637606) | commit 07057e2ee; independent re-check: 1 passed. |
+| 46 | DONE-VERIFIED | subagent (WT exec/item46-*) | determinism goldens already at HEAD; subagent added inventory doc (commit 0a3dfa05e); independent re-check: 13 passed. |
+| 51 | DONE-VERIFIED | subagent (WT exec/item51-330bf5e32b24) | commit be1b985c1; independent re-check: 5 passed. |
+| 57/58 | DONE-VERIFIED | subagent (WT exec/item57-927ae634) | commits 8765757ee+912e13af1; independent re-check (telemetry): 1 passed. |
+| 60 | DONE-VERIFIED | subagent (WT exec/item60-d397d54db080) | already at HEAD (cb00706b1); independent re-check: 122 passed (engine --lib) + FRAME_BUDGET_US pin. |
+| 64 | DONE-VERIFIED | subagent (WT exec/item64-*) | commit 7f8c23b2a5; independent re-check: 5 passed. |
 | 67-72 | IN-PROGRESS | subagent (cost-twin WT) | cost oracle (67/68/69) + digital twin (70/71/72). |
 | 28 | IN-PROGRESS | subagent (isolated WT) | operator RULED IN (2026-07-20): archival-plane-only; model weights = runtime seam (pq/entropy.rs precedent), zero-dep spirit preserved. Phase A doc + Phase B optical.rs behind `optical` feature + §1.5 plane-boundary unrepresentability test. |
 
