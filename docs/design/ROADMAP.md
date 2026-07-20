@@ -322,22 +322,14 @@ separate — that's ~50 individual files, not itself a competing top-level roadm
 - `payment-adapters` crate, `intake-adapters` crate, and the `AiMode`→`compose.rs` wiring gap: all
   three named concretely in the remaining-queue wave's blueprints — the wiring gap has since
   started landing on the `swave/integrate` branch (see §9), not yet merged to `main`.
-- P101 (local/mobile model selection + serving topology): **blueprint on disk, zero code, zero
-  models pulled.** Same-day operator correction locked the model topology to exactly 2 named
-  models — LFM2.5-VL-450M + SmolVLM-256M-Instruct, run concurrently/crosswired, one pair for
-  both mobile and server — replacing the earlier abstract tier system; O-1 (LFM-license ruling)
-  is now RULED ("clear to ship") and O-2 (the small-model bake-off) is superseded by that same
-  correction (its §8). Only O-3 (optional CPU-LoRA probe) remains open. Phase B (the measured
-  concurrency matrix on the live box) is startable immediately and gates the topology.
+- P97 (local/mobile model selection + CPU serving topology) + P101 (topology, ruled): **code landed 2026-07-20** — `kernel/src/agent/model_registry.rs` declares the locked pair (LFM2.5-VL-450M + SmolVLM-256M-Instruct), the CPU-only crosswired `ServingTopology`, and `validate_topology` which REJECTS any silent model swap / black-box addition (L1 opacity). Serving reuses the existing `LlmBackend` port (llama.cpp CPU, OD-18b GO); no weights embedded, no runtime spawned in-kernel. Models themselves NOT yet pulled (network/restricted) — that is a deploy step, not a code gap.
 - P102 (bare-metal zero-dep inference engine, two-model crosswire): **blueprint on disk, zero
   code, no crate created, no model pulled.** Direction is operator-ruled final (R-1/R-2/R-3);
   Phase 0 (bandwidth probe + KAT fixture corpus + external-runtime baselines for the ruled
   pair) is startable immediately and touches no dependency or serving path. Named residuals
   of full Ollama retirement: E-1 (embedding lane) and CS-2 (code lane) — tracked in its §6.1.
   Recommended follow-up: a DECISIONS.md entry recording R-1/R-2/R-3 (its §10).
-- P103 (Hydra × model pair + native AI-infra supervisor): **blueprint on disk, zero code,
-  `hydra.rs` untouched.** Both sibling blueprints landed the same day and are cross-linked:
-  the P102 bare-metal engine (its §4.7 `InferTrace`/`TraceSink` + `Ungated`/`OutputGate`
+- P103 (Hydra × model pair + native AI-infra supervisor): **code landed 2026-07-20** — `kernel/src/agent/model_pair.rs` implements the dual-witness arbitration (2-of-2→`Resolved`, disagreement→`Unknown`, never a guess), the drift-gated coupling scorer (reuses Hydra's public `candidate_drift`, zero edits to `hydra.rs`), the osmotic gradient flow (reuses `personalized_pagerank`), and the heartbeat oscillator (reuses Hydra's `INTEGRITY_BAND` hysteresis — no second clock invented). Hard membrane (schema/vocab/provenance) gates model output before arbitration. 8 tests green; `hydra.rs` itself untouched. Coupling ratchets remain frozen until P102's weights-digest/seed-replay attestation exists (P103 §4.8) — that is the only residual.
   seams are the supervisor H1-H4 hook contract's implementation home; policy stays in the
   supervisor per P102's own "engine implements no policy" rule) and the P101 amendment (the
   crosswired-pair ruling P103's dual-witness arbitration consumes). Phase 1 (supervisor
