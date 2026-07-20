@@ -373,23 +373,47 @@ impl Delegation {
 /// The frozen trust-anchor set (mirrors bebop2 `AnchorRoster`). Enrolled at genesis,
 /// then frozen. Mutators take `&mut` — the Poly-Network structural guard (SH-3 layer 3)
 /// depends on this: no capability-bearing input can obtain the `&mut` needed to mutate.
+///
+/// **Item 54 Sentinel:** the roster carries a stored CRC32 over its canonical (sorted)
+/// authority bytes (`snapshot_sorted`), recomputed-and-compared at each transition point
+/// via `IntegrityChecked::verify` (blueprint §2.4 / §3.3). Every `&mut` mutator
+/// (`enroll`/`remove`) re-hashes, so a missed re-hash site would manufacture a false
+/// trip — the re-hash burden is bounded to these central mutators. A flipped anchor key
+/// silently changes which roots authorize the entire capability chain, so a mismatch is a
+/// fail-closed fault (deny-closed). Qualifies under the 3-axis test (§2.4): (a) long-lived
+/// roster of trusted anchor keys; (b) security-decision authority; (c) live in memory, no
+/// per-use at-rest re-verify.
 #[derive(Debug, Clone, Default)]
 pub struct AnchorRoster {
     anchors: HashSet<[u8; 32]>,
+    /// Stored CRC32 over the canonical (sorted) authority bytes. `0` only at default
+    /// (empty) construction; always re-hashed by the mutators.
+    crc: u32,
 }
 
 impl AnchorRoster {
-    /// Empty roster (fail-closed: captures no authority).
+    /// Empty roster (fail-closed: captures no authority). The default CRC is the CRC of
+    /// the empty sorted snapshot.
     pub fn new() -> Self {
-        AnchorRoster::default()
+        let r = AnchorRoster::default();
+        // Compute the stored CRC for the empty set so a default roster verifies clean.
+        let mut r = r;
+        r.rehash();
+        r
+    }
+    /// Recompute + store the CRC over the canonical (sorted) authority bytes.
+    fn rehash(&mut self) {
+        self.crc = crc32_canonical_anchor(&self.snapshot_sorted());
     }
     /// Enroll an anchor. `&mut` — OUT-OF-BAND operator/genesis act only.
     pub fn enroll(&mut self, key: &[u8; 32]) {
         self.anchors.insert(*key);
+        self.rehash();
     }
     /// Remove an anchor. `&mut` — OUT-OF-BAND operator act only.
     pub fn remove(&mut self, key: &[u8; 32]) {
         self.anchors.remove(key);
+        self.rehash();
     }
     /// Whether `key` is an enrolled anchor.
     pub fn contains(&self, key: &[u8; 32]) -> bool {
@@ -405,27 +429,87 @@ impl AnchorRoster {
         v.sort_unstable();
         v
     }
+    /// TEST-ONLY corruption hook (mirrors item 40's planted-fault test): flip one bit of
+    /// an enrolled anchor key IN PLACE, leaving `crc` stale. This simulates a hardware
+    /// bit-flip on non-ECC consumer RAM and must trip `verify` (blueprint §4.1).
+    #[cfg(test)]
+    pub fn corrupt_anchor_bit(&mut self) {
+        if let Some(k) = self.anchors.iter().next().copied() {
+            let mut flipped = k;
+            flipped[0] ^= 0x01;
+            self.anchors.remove(&k);
+            self.anchors.insert(flipped);
+        }
+    }
+}
+
+impl crate::ports::agent::sentinel::IntegrityChecked for AnchorRoster {
+    fn checksum(&self) -> u32 {
+        crc32_canonical_anchor(&self.snapshot_sorted())
+    }
+    fn verify(&self) -> Result<(), crate::ports::agent::sentinel::Corruption> {
+        let actual = self.checksum();
+        if actual == self.crc {
+            Ok(())
+        } else {
+            Err(crate::ports::agent::sentinel::Corruption {
+                target: crate::ports::agent::sentinel::SentinelTarget::AnchorRoster,
+                expected: self.crc,
+                actual,
+            })
+        }
+    }
+}
+
+/// Canonical (sorted, order-independent) CRC32 over an anchor-key snapshot.
+fn crc32_canonical_anchor(snapshot: &[[u8; 32]]) -> u32 {
+    use crate::fdr::crc32;
+    let mut buf = Vec::with_capacity(snapshot.len() * 32);
+    for k in snapshot {
+        buf.extend_from_slice(k);
+    }
+    crc32(&buf)
 }
 
 /// An append-only revocation set (mirrors bebop2 `RevocationSet`).
+///
+/// **Item 54 Sentinel:** carries a stored CRC32 over its canonical (sorted) authority
+/// bytes (`snapshot_sorted` — both key and cap-hash sets), recomputed-and-compared via
+/// `IntegrityChecked::verify` at each transition point (§2.4 / §3.3). Every `&mut` mutator
+/// (`revoke_key`/`revoke_capability`/`merge`) re-hashes. A flipped revocation bit silently
+/// UN-revokes a revoked key → admits a revoked agent, so a mismatch is fail-closed
+/// (deny-closed). Qualifies under the 3-axis test (§2.4): (a) long-lived, grows via
+/// anti-entropy `merge`; (b) security-decision authority; (c) live, no per-use at-rest
+/// verify. Mutable — the merge/revoke path is the real re-hash site.
 #[derive(Debug, Clone, Default)]
 pub struct RevocationSet {
     revoked_keys: HashSet<[u8; 32]>,
     revoked_cap_hash: HashSet<[u8; 32]>,
+    /// Stored CRC32 over the canonical (sorted) authority bytes of both sets.
+    crc: u32,
 }
 
 impl RevocationSet {
-    /// Empty revocation set.
+    /// Empty revocation set. The default CRC is the CRC of the empty sorted snapshot.
     pub fn new() -> Self {
-        RevocationSet::default()
+        let mut r = RevocationSet::default();
+        r.rehash();
+        r
+    }
+    /// Recompute + store the CRC over the canonical (sorted) authority bytes.
+    fn rehash(&mut self) {
+        let (k, c) = self.snapshot_sorted();
+        self.crc = crc32_canonical_revocation(&k, &c);
     }
     /// Irreversibly revoke a subject key (or PQ-key id).
     pub fn revoke_key(&mut self, key: [u8; 32]) {
         self.revoked_keys.insert(key);
+        self.rehash();
     }
     /// Irreversibly revoke a single capability by its revocation hash.
     pub fn revoke_capability(&mut self, cap_hash: [u8; 32]) {
         self.revoked_cap_hash.insert(cap_hash);
+        self.rehash();
     }
     /// Whether `key` is revoked.
     pub fn is_revoked_key(&self, key: &[u8; 32]) -> bool {
@@ -440,6 +524,7 @@ impl RevocationSet {
         self.revoked_keys.extend(other.revoked_keys.iter().copied());
         self.revoked_cap_hash
             .extend(other.revoked_cap_hash.iter().copied());
+        self.rehash();
     }
     /// Drop an anchor from the enrolling roster (`&mut AnchorRoster`) — OUT-OF-BAND
     /// operator act; dropping a non-enrolled key is a no-op.
@@ -454,6 +539,50 @@ impl RevocationSet {
         c.sort_unstable();
         (k, c)
     }
+    /// TEST-ONLY corruption hook (mirrors item 40's planted-fault test): flip one bit of a
+    /// revoked key IN PLACE, leaving `crc` stale — must trip `verify`.
+    #[cfg(test)]
+    pub fn corrupt_revoked_key_bit(&mut self) {
+        if let Some(k) = self.revoked_keys.iter().next().copied() {
+            let mut flipped = k;
+            flipped[0] ^= 0x01;
+            self.revoked_keys.remove(&k);
+            self.revoked_keys.insert(flipped);
+        }
+    }
+}
+
+impl crate::ports::agent::sentinel::IntegrityChecked for RevocationSet {
+    fn checksum(&self) -> u32 {
+        let (k, c) = self.snapshot_sorted();
+        crc32_canonical_revocation(&k, &c)
+    }
+    fn verify(&self) -> Result<(), crate::ports::agent::sentinel::Corruption> {
+        let actual = self.checksum();
+        if actual == self.crc {
+            Ok(())
+        } else {
+            Err(crate::ports::agent::sentinel::Corruption {
+                target: crate::ports::agent::sentinel::SentinelTarget::RevocationSet,
+                expected: self.crc,
+                actual,
+            })
+        }
+    }
+}
+
+/// Canonical (sorted, order-independent) CRC32 over a revocation snapshot (keys then
+/// cap-hashes, concatenated).
+fn crc32_canonical_revocation(keys: &[[u8; 32]], caps: &[[u8; 32]]) -> u32 {
+    use crate::fdr::crc32;
+    let mut buf = Vec::with_capacity((keys.len() + caps.len()) * 32);
+    for k in keys {
+        buf.extend_from_slice(k);
+    }
+    for c in caps {
+        buf.extend_from_slice(c);
+    }
+    crc32(&buf)
 }
 
 /// Revocation hash of a capability: SHA3-256 over its canonical TLV bytes.
@@ -477,6 +606,11 @@ pub enum ChainError {
     Expired,
     /// Attenuation violated (escalation), tail mis-binding, or effect ⊄ tail scope.
     ScopeViolation,
+    /// Item 54 Sentinel — a critical live authority struct (`AnchorRoster` /
+    /// `RevocationSet`) failed its read-time CRC integrity check. A flipped trust-root key
+    /// or revocation bit is hardware-fault evidence; the verification is REFUSED (deny-
+    /// closed) after exactly one fsynced FDR `Alarm` names the corrupted struct.
+    IntegrityFault,
 }
 
 /// Anchor-rooted, UCAN-subset chain verification (mirrors bebop2 `verify_chain`): the
@@ -490,6 +624,17 @@ pub fn verify_chain<V: SignatureVerifier>(
     cap: &Capability,
     now: u64,
 ) -> Result<(), ChainError> {
+    // Item 54 Sentinel — read-time integrity check at the authority-use transition point.
+    // `verify_chain` takes the `AnchorRoster` (the trust-root set) but not the
+    // `RevocationSet` (revocation is checked downstream in the admission gate's `check`);
+    // we verify whichever live authority struct is in scope here. On mismatch, emit EXACTLY
+    // ONE fsynced FDR `Alarm` (naming the corrupted struct) and REFUSE the verification
+    // (deny-closed). A flipped trust-root key silently changes which roots authorize the
+    // whole chain — hardware-fault evidence ⇒ certify nothing.
+    if let Err(c) = super::sentinel::verify_candidate(Some(roster), None) {
+        super::sentinel::safe_state_on_corruption(&c);
+        return Err(ChainError::IntegrityFault);
+    }
     let root = chain.first().ok_or(ChainError::UnknownIssuer)?;
     if !roster.contains(&root.issued_by) {
         return Err(ChainError::UnknownIssuer);
