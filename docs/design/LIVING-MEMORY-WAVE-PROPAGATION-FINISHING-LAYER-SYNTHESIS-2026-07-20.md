@@ -115,6 +115,17 @@ applied to system logs").
 
 ## 2. The finishing-layer architecture (concrete, wired to existing components)
 
+> **[STALENESS NOTE, added on reconciliation pass]** L1 below is described as an external,
+> firewalled Ollama service (Gemma 3n/Qwen2.5-Omni) — the architecture as understood BEFORE later
+> rulings in this same session (§8.4: "explore agent framing"; §10.2/§10.3: "push for transparency
+> in L1 too," reframing L1 toward a from-scratch native BDH model). This section, §3(a)'s process-
+> boundary safety argument, and §3(d)'s compute-honesty numbers all describe that pre-pivot
+> baseline and have NOT been rewritten to reflect the pivot — doing so is real design work, not a
+> reconciliation-pass edit (a from-scratch native L1 changes the process-boundary firewall
+> argument materially, per report E's finding). Treat this section as the STARTING architecture
+> the pivot supersedes for L1 specifically; L2-L5 are unaffected by the pivot and still stand as
+> written. Resolving L1's actual architecture post-pivot is real follow-on work, not done here.
+
 Five layers, all strictly on the advisory side of MANIFESTO C1 except where noted.
 
 **L1 — Perception (R&D lane).** Gemma 3n served via Ollama through the existing `llm-adapters`
@@ -401,7 +412,7 @@ replication as its own threat class (METR's "rogue replication"/ARA threat model
 empirical work, Palisade and arXiv 2503.17378, showing LLM-driven self-replication is
 demonstrably achievable today). Critically: **Hydra's kill-switch guarantee breaks under
 spawning** — one event log has one kill-switch; N independent instances each need their own,
-silently turning "only kill-switch stops it" into "only N kill-switches stop it." The four
+silently turning "only kill-switch stops it" into "only N kill-switches stop it." The five
 conditions originally proposed as *beyond-73-78* safeguards are very likely still the right
 content for the operator's "gateways & protocols" — per-spawn capability token (never blanket),
 kernel-enforced max-instance quota, signed parent→child lineage so every instance stays
@@ -616,18 +627,29 @@ symbolic reasoning inside the neural net itself. That pairing is a real, buildab
 tensor arena," but neural-proposes/symbolic-decides, which is also precisely the L1→L2 gating
 shape already established in §2.
 
-### 8.4 A tension worth naming, not resolving
+### 8.4 [RESOLVED] The tension named, then ruled
 
 The accompanying dialogue frames this in AGI/agent language ("агент із абстрактним мисленням,"
 "когнітивний рушій") that sits in real tension with the philosophical framing supplied earlier in
 this same synthesis (§0): AI as TOOL not agent, explicit rejection of anthropomorphism, no
 self-preservation drive, hardware kill-switches for critical paths — and with MANIFESTO C1 ("No AI
-in protocol/runtime logic... AI only for R&D/back-office"). None of this is a reason to reject the
-cognitive-engine idea; it's a reason to be explicit about which framing governs it, the same way
-§3(a)/§6.3 already had to be explicit about Hydra vs. items 73-78. A "cognitive engine" that stays
-strictly R&D/back-office, advisory-only, and structurally incapable of self-directed action is a
-different (and much safer) thing to build than one framed as an autonomous reasoning agent — same
-underlying model, very different governance answer.
+in protocol/runtime logic... AI only for R&D/back-office"). This is exactly the kind of thing
+§3(a)/§6.3 already had to be explicit about for Hydra vs. items 73-78. A "cognitive engine" that
+stays strictly R&D/back-office, advisory-only, and structurally incapable of self-directed action
+is a different (and much safer) thing to build than one framed as an autonomous reasoning agent —
+same underlying model, very different governance answer.
+
+**Operator ruled (later the same session, asked directly as "which framing governs — strictly
+tool/R&D/back-office, or explore agent framing"): "Explore agent framing."** Not strictly
+tool/R&D-only. This does NOT override MANIFESTO C1 (the deterministic protocol/runtime core stays
+AI-free regardless) — it means the cognitive engine's own governance is not automatically capped
+at L1's original advisory-only framing, and instead reopens the same class of question §6.3 asked
+about self-spawning: what governance class does an agent-framed cognitive engine actually need
+(hybrid class? items 73-78? something else)? That question is not answered by this ruling alone —
+it is the next thing this component needs before real design work, same pattern as §6's L3
+treatment. This ruling is what licenses treating BDH-for-L1 (§10.2) as more than a firewalled
+experiment despite its cost, and downstream references to "the agent-framing ruling" in §10
+point here.
 
 ---
 
@@ -671,10 +693,18 @@ memory layer already tolerates concurrency."
 
 **[RESOLVED]** Operator ruled: **redesign for concurrent action** — a bounded-concurrent executor
 (capped pool of in-flight actions, combined budget), not just L1-only concurrency. This is now
-scoped as real new work on `agent-loop`'s core, not a future maybe: whoever builds it owes the same
-class of proof P40 already gave the sequential version (a termination argument, this time over a
-concurrent/bounded pool rather than a single bounded loop) before it ships — the bar doesn't lower
-just because the shape got harder.
+scoped as real new work on `agent-loop`'s core, not a future maybe — and per the paragraph just
+above, whoever builds it owes BOTH halves of the proof this section already named, not just one:
+(1) **a termination argument** over the concurrent/bounded pool (the same class of proof P40 gave
+the sequential version, generalized), and (2) **a capability-safety argument** — concurrent actions
+mean concurrent capability checks, and nothing here yet shows the design can't produce a TOCTOU
+race where two individually-in-scope concurrent actions jointly cross a `RedLinePolicy` boundary,
+or that it preserves the L4 invariant's (§6.5) dependency on a totally-ordered event-log append
+for `decide`/`fold`'s deterministic-replay property. **[RECONCILIATION-PASS NOTE]** a fresh
+critique of this doc found the original resolution above stated only the termination half and
+silently dropped the capability-safety half — restored here. Neither proof exists yet; this ruling
+authorizes the *design direction*, not a design that's already been checked against §6.2's P4 or
+§6.5's L4 boundary. Do not treat this as cleared for implementation until both halves are done.
 
 ---
 
@@ -722,7 +752,7 @@ A pretrained multimodal model (Qwen2.5-Omni, Gemma 3n, or a from-scratch BDH-sty
 construction, a **scaling-emergence** artifact — its capabilities come from training on external
 data, and its internal decision process is not inspectable the way `classify_drift` or `z-flow`
 are. That is unavoidable for the neural component specifically; no realistic local model avoids
-it. This sits in real tension with the "explore agent framing" ruling just made in §8.2 for the
+it. This sits in real tension with the "explore agent framing" ruling recorded in §8.4 for the
 same component — an opaque, externally-trained model, framed as more autonomous/agentic rather
 than a firewalled tool, is close to the exact pattern (train first, guardrail after) this
 instruction says to move away from.
@@ -764,14 +794,15 @@ bounded-concurrent executor):
 
 1. **Fully allowed** — no artificial capability ceiling; the constraint is on *shape*, not *scope*.
    This is what licenses pursuing BDH-for-L1 (§10.2) despite its cost, and "explore agent framing"
-   (§8) despite the earlier tool-not-agent caution — those are not walked back, they're now bounded
-   by 2-4 below instead.
+   (§8.4) despite the earlier tool-not-agent caution — those are not walked back, they're now
+   bounded by 2-4 below instead.
 2. **Transparent** — already this doc's running thread (§10.1): rule-derived, inspectable behavior,
    not black-box. Satisfied today by Hydra, the field equations, z-flow; the open bet for L1.
 3. **Safeguards** — the §6.2 P1-P5 criteria + shadow-then-ratchet tier, the §6.3 self-spawning
-   gateways (per-spawn token, max-instance quota, signed lineage, no transitive spawning), and
-   items 73-78's human-approval gate where those apply. Already substantially built as *proposals*
-   in this doc; this ruling confirms they're the right category of thing, not optional polish.
+   gateways (all five: per-spawn token, max-instance quota, signed lineage, no transitive
+   spawning, mesh-visible spawn events), and items 73-78's human-approval gate where those apply.
+   Already substantially built as *proposals* in this doc; this ruling confirms they're the right
+   category of thing, not optional polish.
 4. **Kill switch** — Hydra's existing charter ("closure = NEVER — only kill-switch stops it") is
    the working precedent; §5 item 12 already ruled the living-memory write path belongs at the same
    tier. This ruling extends the requirement to every mechanism in this doc, not just the two
@@ -790,3 +821,36 @@ bounded-concurrent executor):
 Practical effect on everything above: no mechanism in this doc (Hydra, z-flow, self-spawning, a
 future BDH-L1, the concurrent executor) is exempt from stating its answer to all four before it's
 built — "fully allowed" is not "unconstrained," it's "allowed once the shape is right."
+
+---
+
+## 11. [NEW, from reconciliation pass] Has the neurograph accreted too much responsibility?
+
+A fresh critique of this doc (part of the strategic regret-minimization audit,
+`docs/design/DOWIZ-STRATEGIC-REGRET-MINIMIZATION-SYNTHESIS-2026-07-20.md` report E) observed that
+by the end of this synthesis, "L3/neurograph" carries at least ten distinct responsibilities under
+one name: CAS storage substrate, append-only event log, filesystem view (spine⋈PPR), database view
+(BM25/trigram), a net-new in-kernel HNSW/embedding vector index (§5 item 5 — the single biggest
+addition to the kernel's default surface among all rulings here), Hebbian weight-learning graph
+(§6.4), the z-flow multi-resolution index-tiering mechanism (§7), CRDT-replicated mesh store (L5),
+self-spawning host (§6.3), a hardware-kill-switch write path (§5 item 12), and potential
+cognitive-model substrate (§8/§10). No section in this doc ever asked whether that's too much for
+one component — this section names the question rather than answering it, since it's a real
+design judgment, not something to guess at.
+
+The doc's own discipline argues against the accretion: §2's L4 explicitly separates advisory
+*dynamics* from authoritative *data* ("modal state is compressed dynamics, `BlockStore` snapshots
+are data; conflating them would be unsound") — a distinction the neurograph as currently sketched
+does NOT maintain, since advisory dials (`z`, weights, precision tiers) and authoritative content
+co-reside on the same node objects. This is a genuine open question, not resolved by this
+reconciliation pass:
+
+- **Split** the neurograph into its constituent responsibilities as separate, composable
+  components (e.g. durable CAS+log as one thing; replay-derivable advisory views — Hebbian
+  weights, z-flow tiers — as a clearly-separated second thing; distribution/governance/hardware as
+  cross-cutting concerns applied to both rather than folded into either), or
+- **Explicitly accept** the accretion as one component's scope, on the reasoning that it's all
+  "the same graph" and splitting it would just relocate the coupling rather than remove it, or
+- **Some other shape** not yet named.
+
+Left open for the operator, same as every other genuine design fork in this document.
