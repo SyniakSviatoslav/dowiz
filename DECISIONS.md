@@ -235,3 +235,37 @@ document (§0.2's two rulings, or any §16/§17 decision it cites).
   summary (§5 "Before W1 writing starts, raise §4-A–D with the operator").
 - **FLAG for override:** recorded under the same operator-ruling authority as D8/D10/D11. The
   operator MAY override any clause here at any time; this is a recorded ruling, not a lock.
+
+## D13. Async/tokio adoption across the agent lane — DIRECTIONAL RULING, migration NOT scoped (operator, 2026-07-20)
+
+While reviewing `BLUEPRINT-SPATIAL-STOREFRONT-VOICE-HUB-SYNTHESIS-2026-07-20.md`'s open decisions,
+the operator confirmed the blueprint's synchronous, thread-based voice architecture (D-V1) as
+valuable, then separately stated tokio/async adoption is "a must across the system." Asked to
+resolve the apparent contradiction explicitly (the existing 2026-07-15 mandate — "no tokio,
+per operator mandate" — is load-bearing in `llm-adapters`, `agent-loop`'s watchdog-thread design,
+and the `ToolPort` trait's synchronous `fn invoke`), the operator chose: **reverse the mandate —
+adopt tokio/async broadly across the agent lane**, explicitly acknowledging this "breaks the
+compile-firewall's current sync guarantees and needs its own dedicated redesign pass."
+
+- **This is a directional ruling, not a completed design.** No migration plan exists yet. The
+  2026-07-15 no-tokio mandate is superseded in principle; every place that currently documents it
+  as a constraint (`llm-adapters`' module docs, the blueprint's C3, this file if it names the old
+  mandate elsewhere) needs updating as the actual migration lands, not retroactively rewritten now
+  on the strength of a directional answer alone.
+- **Reconciling with the voice-sync confirmation (not actually contradictory once scoped):** the
+  operator's two statements are compatible if read as two different layers. Real-time audio
+  capture/VAD/STT/TTS is a hardware-driven constraint independent of this ruling — `cpal` (the
+  audio crate the voice research identified) is callback-based on a dedicated OS thread regardless
+  of what runtime the rest of the system uses; async inside a realtime audio callback is
+  discouraged industry-wide, not just under dowiz's old mandate. So D-V1's audio-thread design can
+  stand even after this reversal. What changes is the layer ABOVE the audio boundary — the LLM
+  transport (`llm-adapters/src/transport.rs`, today hardcoded `ureq` blocking HTTP), `agent-loop`'s
+  executor, and `ToolPort`'s trait signature — which this ruling opens to an async rewrite. The
+  next required step is a dedicated scoping pass that states explicitly, for each surface, whether
+  it goes async, and specifies exactly where the sync/async boundary sits (almost certainly at or
+  above the audio thread, never inside it) — **not assumed here.**
+- **NOT yet authorized by this entry alone:** any actual code change. This records the operator's
+  directional intent so it isn't lost or silently reversed by a future agent defaulting back to
+  the old mandate; implementation requires the scoping pass above first.
+- **FLAG for override:** recorded under the same operator-ruling authority as D8/D10/D11/D12. The
+  operator MAY override, narrow, or reverse this at any time; this is a recorded ruling, not a lock.
