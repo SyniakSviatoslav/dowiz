@@ -10,16 +10,31 @@
 # RULING: serde_json carrier (no serde) — parses Telegram API responses (dev tooling). item-31
 #   Phase-B DEFERRED: ZERO tree win — ureq `json` feature retains serde_json. Consolidation question:
 #   Telegram-only, overlaps async-spool — evaluated for deletion alongside rust-spool (item 31 §3).
+# RULING: dowiz-kernel path-dep (features=[pq]) — FDR/metrics/mesh telemetry source for the
+#   tg-ph4/tg-ph5 emitters. Pulls the PQ crypto closure (ring, curve25519-dalek, aes-gcm, …).
+#   item-31 + p.3.
 adler2
+aead
+aes
+aes-gcm
 base64
 cc
 cfg-if
+cipher
+cpufeatures
 crc32fast
+crypto-common
+ctr
+curve25519-dalek
+curve25519-dalek-derive
 displaydoc
+dowiz-kernel
 find-msvc-tools
 flate2
 form_urlencoded
+generic-array
 getrandom
+ghash
 icu_collections
 icu_locale_core
 icu_normalizer
@@ -29,6 +44,7 @@ icu_properties_data
 icu_provider
 idna
 idna_adapter
+inout
 itoa
 libc
 litemap
@@ -36,16 +52,22 @@ log
 memchr
 miniz_oxide
 once_cell
+opaque-debug
 percent-encoding
+polyval
 potential_utf
 proc-macro2
 quote
+rand_core
 ring
+rustc_version
 rustls
 rustls-pki-types
 rustls-webpki
+semver
 serde
 serde_core
+serde_derive
 serde_json
 shlex
 simd-adler32
@@ -55,11 +77,15 @@ subtle
 syn
 synstructure
 tinystr
+topics
+typenum
 unicode-ident
+universal-hash
 untrusted
 ureq
 url
 utf8_iter
+version_check
 webpki-roots
 writeable
 yoke
