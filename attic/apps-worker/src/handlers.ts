@@ -1,0 +1,82 @@
+import type { QueueProvider, MessageBus } from '@deliveryos/platform';
+import type { Pool } from 'pg';
+import { QUEUE_NAMES } from '@deliveryos/shared-types';
+
+// Channel names mirror apps/api/src/lib/registry.ts (orderChannel / dashboardChannel).
+const orderChannel = (id: string) => `order:${id}`;
+const dashboardChannel = (id: string) => `location:${id}:dashboard`;
+
+export function registerHandlers(queue: QueueProvider, pool: Pool, messageBus: MessageBus) {
+
+  queue.work('health-job', async (payload: Record<string, unknown>) => {
+    console.log(`[Worker] Processed health-job at ${new Date().toISOString()}`, payload);
+  });
+
+  queue.work(QUEUE_NAMES.ORDER_TIMEOUT, async (payload: Record<string, unknown>) => {
+    const { orderId } = payload;
+    if (!orderId || typeof orderId !== 'string') {
+      console.error('[Worker] order.timeout missing orderId in payload');
+      return;
+    }
+
+    console.log(`[Worker] Processing order.timeout for order ${orderId}`);
+
+    try {
+      const res = await pool.query(
+        `UPDATE orders SET status = 'CANCELLED', timeout_at = NULL
+         WHERE id = $1 AND status = 'PENDING'
+         RETURNING id, status, location_id`,
+        [orderId]
+      );
+
+      if (res.rowCount && res.rowCount > 0) {
+        console.log(`[Worker] Order ${orderId} auto-cancelled (timeout)`);
+        const locationId = res.rows[0].location_id;
+        const ts = new Date().toISOString();
+
+        // Audit trail (best-effort — never block the broadcast on it).
+        try {
+          await pool.query(
+            `INSERT INTO order_status_history (order_id, location_id, from_status, to_status, actor)
+             VALUES ($1, $2, 'PENDING', 'CANCELLED', 'system:timeout')`,
+            [orderId, locationId]
+          );
+        } catch (e) {
+          console.error(`[Worker] order.timeout history insert failed for ${orderId}:`, e);
+        }
+
+        // Cross-surface live update: the customer status page + owner dashboard
+        // must see the auto-cancel without a refresh (previously this handler was
+        // silent, so a timed-out order only flipped on the next page load).
+        await messageBus.publish(orderChannel(orderId), {
+          type: 'order.status', orderId, status: 'CANCELLED', locationId, timestamp: ts,
+        });
+        await messageBus.publish(dashboardChannel(locationId), {
+          type: 'order.status', data: { orderId, status: 'CANCELLED', statusUpdatedAt: ts },
+        });
+
+        // Close the notification gap: tell the owner the order auto-cancelled.
+        // Mirrors the order.created transactional-outbox emit (orders.ts:660). The
+        // order.timeout_cancelled event is fully wired downstream (event-registry,
+        // render, locales) — only this emit was missing. Keyed on the order id so
+        // both this per-order handler and the reconciliation sweep dedupe to one
+        // owner message via the NotificationWorker's in-process set + singletonKey.
+        const dedupKey = `order.timeout_cancelled:${orderId}:${locationId}`;
+        try {
+          await queue.enqueue(QUEUE_NAMES.NOTIFY_TELEGRAM_SEND, {
+            event: 'order.timeout_cancelled',
+            entity_id: orderId,
+            location_id: locationId,
+            dedupKey,
+          }, { singletonKey: dedupKey });
+        } catch (e) {
+          console.error(`[Worker] order.timeout_cancelled notify enqueue failed for ${orderId}:`, e);
+        }
+      } else {
+        console.log(`[Worker] Order ${orderId} already transitioned, timeout no-op`);
+      }
+    } catch (err) {
+      console.error(`[Worker] Error processing order.timeout for ${orderId}:`, err);
+    }
+  });
+}

@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeliveryOS — Fallback Settings</title>
+  <link href="/dist/tabler/tabler-icons.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Serif+Display&family=Cormorant+Garamond:wght@400;600&family=Playfair+Display:wght@400;600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/admin/dashboard.js"></script>
+  <style>
+    :root {
+      --brand-bg:#0F172A;--brand-surface:#1E293B;--brand-raised:#263548;
+      --brand-text:#F1F5F9;--brand-muted:#94A3B8;--brand-border:#334155;
+      --brand-primary:#ea4f16;--brand-primary-hover:#ffa12e;
+      --brand-primary-light:rgba(234,79,22,0.12);--brand-accent:#2a2a2a;
+      --brand-surface-raised:#263548;--brand-text-muted:#94A3B8;
+      --brand-radius:12px;--brand-radius-sm:8px;--brand-radius-btn:78px;
+      --color-success:#059669;--color-warning:#D97706;--color-danger:#DC2626;--color-info:#2563EB;
+    }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--brand-bg); color:var(--brand-text); }
+    .setting-card { background:var(--brand-surface); border:1px solid var(--brand-border); border-radius:12px; padding:20px; }
+    .setting-card:hover { border-color:var(--brand-primary); }
+    input[type="text"], input[type="number"] { background:var(--brand-bg); border:1px solid var(--brand-border); border-radius:8px; padding:8px 12px; color:var(--brand-text); width:100%; }
+    input[type="text"]:focus, input[type="number"]:focus { outline:2px solid var(--brand-primary); outline-offset:-1px; }
+    .toggle { position:relative; display:inline-block; width:44px; height:24px; }
+    .toggle input { opacity:0; width:0; height:0; }
+    .slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:var(--brand-border); border-radius:24px; transition:0.3s; }
+    .slider:before { content:""; position:absolute; height:18px; width:18px; left:3px; bottom:3px; background:#fff; border-radius:50%; transition:0.3s; }
+    .toggle input:checked + .slider { background:var(--brand-primary); }
+    .toggle input:checked + .slider:before { transform:translateX(20px); }
+    @media (max-width:640px) { .retention-display { font-size:48px; } }
+  </style>
+</head>
+<body>
+  <button id="themeBtn" onclick="cycleTheme()" class="fixed top-4 right-4 z-50 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-full cursor-pointer" style="background:var(--brand-surface);border:1px solid var(--brand-border);color:var(--brand-muted);">
+    <i class="ti ti-palette"></i><span id="themeLabel">Food Dark</span>
+  </button>
+
+  <div class="flex flex-col min-h-screen">
+    <header class="flex items-center justify-between px-6 py-3 border-b" style="border-color:var(--brand-border);background:var(--brand-surface);">
+      <div class="flex items-center gap-3">
+        <h1 class="text-lg font-bold">DeliveryOS</h1>
+        <span class="text-sm px-2 py-0.5 rounded-full" style="background:var(--brand-primary);color:#fff;" id="statusBadge">disconnected</span>
+      </div>
+      <div class="flex items-center gap-4 text-sm" style="color:var(--brand-muted);">
+        <a href="/admin/dashboard.html" class="hover:text-white">Dashboard</a>
+        <a href="/admin/orders.html" class="hover:text-white">Orders</a>
+        <a href="/admin/alerts.html" class="hover:text-white">Alerts</a>
+        <a href="/admin/settings-dwell.html" class="hover:text-white">Dwell</a>
+        <a href="/admin/settings-security.html" class="hover:text-white">Security</a>
+        <a href="/admin/settings-fallback.html" class="hover:text-white font-semibold" style="color:var(--brand-text);">Fallback</a>
+        <a href="/admin/gdpr.html" class="hover:text-white">GDPR</a>
+        <a href="/admin/settings-retention.html" class="hover:text-white">Retention</a>
+        <a href="/admin/health.html" class="hover:text-white">Health</a>
+      </div>
+    </header>
+
+    <div class="flex-1 p-6 max-w-2xl mx-auto w-full">
+      <nav class="text-xs mb-4" style="color:var(--brand-muted);">
+        <a href="/admin/dashboard.html" class="hover:text-white">Dashboard</a>
+        <span class="mx-1">/</span>
+        <a href="/admin/settings-security.html" class="hover:text-white">Settings</a>
+        <span class="mx-1">/</span>
+        <span>Fallback Phone</span>
+      </nav>
+
+      <h2 class="text-xl font-bold mb-1">Fallback Phone &amp; Degradation</h2>
+      <p class="text-sm mb-6" style="color:var(--brand-muted);">Configure what customers see when things go wrong — server errors, offline mode, or connection issues.</p>
+
+      <div id="loadingState" class="text-center py-16" style="color:var(--brand-muted);">Loading settings...</div>
+
+      <div id="settingsContent" class="hidden">
+        <!-- Fallback Phone -->
+        <div class="setting-card mb-4">
+          <div class="font-medium mb-1">Fallback Phone Number</div>
+          <p class="text-xs mb-3" style="color:var(--brand-muted);">Shown to customers when errors occur. Overrides the location's public phone.</p>
+          <input type="text" id="fallbackPhone" placeholder="+355 XX XXX XXXX" class="text-sm">
+        </div>
+
+        <!-- Toggles -->
+        <div class="setting-card mb-4">
+          <div class="font-medium mb-3">Display Rules</div>
+
+          <div class="flex items-center justify-between py-2">
+            <div>
+              <div class="text-sm">Show on server error</div>
+              <div class="text-xs" style="color:var(--brand-muted);">When order submission or a page request fails</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="showPhoneOnError" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+
+          <div class="flex items-center justify-between py-2 border-t" style="border-color:var(--brand-border);">
+            <div>
+              <div class="text-sm">Show when offline</div>
+              <div class="text-xs" style="color:var(--brand-muted);">When real-time connection drops and can't recover</div>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="showPhoneOnOffline" checked>
+              <span class="slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- WS Retry -->
+        <div class="setting-card mb-4">
+          <div class="font-medium mb-1">WebSocket Retry</div>
+          <p class="text-xs mb-3" style="color:var(--brand-muted);">How aggressively to retry real-time connection for the customer order status page.</p>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="text-xs" style="color:var(--brand-muted);">Max retries</label>
+              <input type="number" id="wsRetryMax" min="1" max="30" value="10" class="text-sm mt-1">
+            </div>
+            <div>
+              <label class="text-xs" style="color:var(--brand-muted);">Base interval (ms)</label>
+              <input type="number" id="wsRetryBaseMs" min="500" max="10000" step="100" value="2000" class="text-sm mt-1">
+            </div>
+          </div>
+        </div>
+
+        <!-- Save -->
+        <div class="flex items-center gap-3 mb-8">
+          <button onclick="saveSettings()" id="saveBtn" class="px-6 py-2 rounded-lg font-medium" style="background:var(--brand-primary);color:#fff;">Save Changes</button>
+          <span id="saveStatus" class="text-sm"></span>
+        </div>
+
+        <!-- Degradation status -->
+        <div class="setting-card">
+          <div class="font-medium mb-3">Current Degradation</div>
+          <div id="degradationStatus" style="color:var(--brand-muted);">
+            <span class="text-sm">Checking...</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PRESETS = {
+      "Food Dark": {"--brand-primary":"#ea4f16","--brand-primary-hover":"#ffa12e","--brand-primary-light":"rgba(234,79,22,0.12)","--brand-accent":"#2a2a2a","--brand-bg":"#121212","--brand-surface":"#1e1e1e","--brand-surface-raised":"#2a2a2a","--brand-text":"#ffffff","--brand-text-muted":"#a8a8a8","--brand-border":"#2c2c2c","--brand-radius":"12px","--brand-radius-sm":"8px","--brand-radius-btn":"78px"},
+      "Crimson Classic": {"--brand-primary":"#C1121F","--brand-primary-hover":"#9B0D17","--brand-primary-light":"#FFF0F1","--brand-accent":"#F5F0E8","--brand-bg":"#FFFFFF","--brand-surface":"#F8F9FA","--brand-surface-raised":"#F0F0F0","--brand-text":"#1A1A1A","--brand-text-muted":"#6B7280","--brand-border":"#E5E7EB","--brand-radius":"12px","--brand-radius-sm":"6px","--brand-radius-btn":"24px"},
+      "Ocean Fresh": {"--brand-primary":"#0D9488","--brand-primary-hover":"#0A7567","--brand-primary-light":"#F0FDFA","--brand-accent":"#F0F9F8","--brand-bg":"#FFFFFF","--brand-surface":"#F8FFFE","--brand-surface-raised":"#E0F7F5","--brand-text":"#134E4A","--brand-text-muted":"#6B7280","--brand-border":"#CCFBF1","--brand-radius":"24px","--brand-radius-sm":"12px","--brand-radius-btn":"32px"},
+      "Midnight Urban": {"--brand-primary":"#F97316","--brand-primary-hover":"#EA6A0A","--brand-primary-light":"rgba(249,115,22,0.10)","--brand-accent":"#1E1E1E","--brand-bg":"#111111","--brand-surface":"#1C1C1C","--brand-surface-raised":"#2a2a2a","--brand-text":"#F5F5F5","--brand-text-muted":"#9CA3AF","--brand-border":"#2D2D2D","--brand-radius":"4px","--brand-radius-sm":"2px","--brand-radius-btn":"4px"},
+      "Sage Garden": {"--brand-primary":"#4D7C0F","--brand-primary-hover":"#3F6812","--brand-primary-light":"#F7FEE7","--brand-accent":"#ECFCCB","--brand-bg":"#FFFFFF","--brand-surface":"#F7FEE7","--brand-surface-raised":"#E8F5E0","--brand-text":"#1A2E05","--brand-text-muted":"#6B7280","--brand-border":"#D9F99D","--brand-radius":"20px","--brand-radius-sm":"10px","--brand-radius-btn":"32px"},
+      "Royal Gold": {"--brand-primary":"#B45309","--brand-primary-hover":"#92400E","--brand-primary-light":"rgba(180,83,9,0.10)","--brand-accent":"#1C1400","--brand-bg":"#0D0900","--brand-surface":"#1A1200","--brand-surface-raised":"#2a2000","--brand-text":"#FEF3C7","--brand-text-muted":"#D97706","--brand-border":"#2D2000","--brand-radius":"2px","--brand-radius-sm":"1px","--brand-radius-btn":"2px"}
+    };
+    const PRESET_KEYS = Object.keys(PRESETS);
+    let currentPresetIdx = parseInt(localStorage.getItem('dos_theme_idx') || '0', 10);
+
+    function cycleTheme() {
+      currentPresetIdx = (currentPresetIdx + 1) % PRESET_KEYS.length;
+      localStorage.setItem('dos_theme_idx', String(currentPresetIdx));
+      applyTheme(PRESET_KEYS[currentPresetIdx]);
+    }
+
+    function applyTheme(name) {
+      const p = PRESETS[name];
+      const r = document.documentElement.style;
+      Object.entries(p).forEach(([k, v]) => r.setProperty(k, v));
+      document.getElementById('themeLabel').textContent = name;
+    }
+
+    applyTheme(PRESET_KEYS[currentPresetIdx]);
+
+    (async () => {
+      const token = getOwnerToken();
+      const locationId = getLocationId();
+      if (!token || !locationId) {
+        document.body.innerHTML = '<div class="flex items-center justify-center h-screen" style="color:var(--brand-muted);"><div class="text-center"><p class="text-lg mb-2">Not authenticated</p><p class="text-sm">Please <a href="/29-admin-login.html" class="underline">log in</a> first.</p></div></div>';
+        return;
+      }
+
+      let dirty = false;
+      const loadingState = document.getElementById('loadingState');
+      const settingsContent = document.getElementById('settingsContent');
+      const fallbackPhone = document.getElementById('fallbackPhone');
+      const showPhoneOnError = document.getElementById('showPhoneOnError');
+      const showPhoneOnOffline = document.getElementById('showPhoneOnOffline');
+      const wsRetryMax = document.getElementById('wsRetryMax');
+      const wsRetryBaseMs = document.getElementById('wsRetryBaseMs');
+      const saveBtn = document.getElementById('saveBtn');
+      const saveStatus = document.getElementById('saveStatus');
+      const degradationStatus = document.getElementById('degradationStatus');
+
+      function markDirty() {
+        dirty = true;
+        saveStatus.textContent = 'Unsaved changes';
+        saveStatus.style.color = 'var(--color-warning)';
+      }
+
+      [fallbackPhone, showPhoneOnError, showPhoneOnOffline, wsRetryMax, wsRetryBaseMs].forEach(el => {
+        el.addEventListener('input', markDirty);
+        el.addEventListener('change', markDirty);
+      });
+
+      async function loadSettings() {
+        try {
+          const res = await fetch(`/api/owner/locations/${locationId}/settings/fallback`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) throw new Error(`Failed: ${res.status}`);
+          const data = await res.json();
+          fallbackPhone.value = data.phone || '';
+          showPhoneOnError.checked = data.showPhoneOnError !== false;
+          showPhoneOnOffline.checked = data.showPhoneOnOffline !== false;
+          wsRetryMax.value = data.wsRetryMax || 10;
+          wsRetryBaseMs.value = data.wsRetryBaseMs || 2000;
+          dirty = false;
+          saveStatus.textContent = '';
+        } catch (e) {
+          console.warn('API unavailable:', e.message);
+        } finally {
+          loadingState.classList.add('hidden');
+          settingsContent.classList.remove('hidden');
+        }
+      }
+
+      async function loadDegradation() {
+        try {
+          const res = await fetch(`/api/owner/locations/${locationId}/degradation`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!res.ok) throw new Error(`Failed: ${res.status}`);
+          const data = await res.json();
+          const parts = [];
+          if (data.deadChannels && data.deadChannels.length > 0) {
+            parts.push(`<span style="color:var(--color-danger);">⚠ Dead channels: ${data.deadChannels.join(', ')}</span>`);
+          } else {
+            parts.push(`<span style="color:var(--color-success);">✓ All channels healthy</span>`);
+          }
+          if (data.fallbackPhone) {
+            parts.push(`Fallback phone: <strong>${data.fallbackPhone}</strong>`);
+          }
+          degradationStatus.innerHTML = parts.join('<br>');
+        } catch {
+          degradationStatus.innerHTML = '<span class="text-sm">Could not check degradation status.</span>';
+        }
+      }
+
+      window.saveSettings = async () => {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving...';
+        saveStatus.textContent = '';
+
+        try {
+          const body = {
+            phone: fallbackPhone.value.trim() || undefined,
+            showPhoneOnError: showPhoneOnError.checked,
+            showPhoneOnOffline: showPhoneOnOffline.checked,
+            wsRetryMax: parseInt(wsRetryMax.value, 10) || 10,
+            wsRetryBaseMs: parseInt(wsRetryBaseMs.value, 10) || 2000,
+          };
+          if (!body.phone) delete body.phone;
+
+          const res = await fetch(`/api/owner/locations/${locationId}/settings/fallback`, {
+            method: 'PUT',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          if (!res.ok) throw new Error(`Failed: ${res.status}`);
+          dirty = false;
+          saveStatus.textContent = 'Saved';
+          saveStatus.style.color = 'var(--color-success)';
+          setTimeout(() => { saveStatus.textContent = ''; }, 3000);
+          loadDegradation();
+        } catch (e) {
+          saveStatus.textContent = `Error: ${e.message}`;
+          saveStatus.style.color = 'var(--color-danger)';
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Save Changes';
+        }
+      };
+
+      window.addEventListener('beforeunload', (e) => {
+        if (dirty) { e.preventDefault(); e.returnValue = ''; }
+      });
+
+      const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      new DashboardWSClient({
+        url: `${wsProtocol}//${location.host}`,
+        token, locationId,
+        onStatusChange: (s) => {
+          const badge = document.getElementById('statusBadge');
+          if (badge) { badge.textContent = s; badge.style.background = s === 'subscribed' ? '#059669' : '#D97706'; }
+        },
+      });
+
+      await loadSettings();
+      await loadDegradation();
+    })();
+  </script>
+</body>
+</html>

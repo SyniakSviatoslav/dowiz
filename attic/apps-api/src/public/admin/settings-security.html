@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="sq">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeliveryOS — Security Settings</title>
+  <link href="/dist/tabler/tabler-icons.min.css" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="/admin/dashboard.js"></script>
+  <script src="/admin/push-utils.js"></script>
+  <meta name="vapid-public-key" content="<!-- INJECTED BY SERVER -->">
+  <style>
+    :root {
+      --brand-bg:#0F172A;--brand-surface:#1E293B;--brand-raised:#263548;
+      --brand-text:#F1F5F9;--brand-muted:#94A3B8;--brand-border:#334155;
+      --brand-primary:#ea4f16;--brand-primary-hover:#ffa12e;
+    }
+    body { font-family:'Inter',system-ui,sans-serif; background:var(--brand-bg); color:var(--brand-text); }
+    .setting-card { background:var(--brand-surface); border:1px solid var(--brand-border); border-radius:12px; padding:20px; }
+    .toggle-track { width:44px; height:24px; border-radius:12px; cursor:pointer; transition:background 0.2s; position:relative; }
+    .toggle-thumb { width:20px; height:20px; border-radius:50%; background:#fff; position:absolute; top:2px; left:2px; transition:left 0.2s; }
+    .toggle-track.active { background:var(--brand-primary); }
+    .toggle-track.active .toggle-thumb { left:22px; }
+    .toggle-track.inactive { background:var(--brand-border); }
+  </style>
+</head>
+<body>
+  <div class="flex flex-col min-h-screen">
+    <header class="flex items-center justify-between px-6 py-3 border-b" style="border-color:var(--brand-border);background:var(--brand-surface);">
+      <div class="flex items-center gap-3">
+        <h1 class="text-lg font-bold">DeliveryOS</h1>
+        <span class="text-sm px-2 py-0.5 rounded-full" style="background:var(--brand-primary);color:#fff;" id="statusBadge">disconnected</span>
+      </div>
+      <div class="flex items-center gap-4 text-sm" style="color:var(--brand-muted);">
+        <a href="/admin/dashboard.html" class="hover:text-white">Dashboard</a>
+        <a href="/admin/orders.html" class="hover:text-white">Orders</a>
+        <a href="/admin/alerts.html" class="hover:text-white">Alerts</a>
+        <a href="/admin/signals.html" class="hover:text-white">Signals</a>
+        <a href="/admin/settings-security.html" class="hover:text-white font-semibold" style="color:var(--brand-text);">Security</a>
+        <a href="/admin/health.html" class="hover:text-white">Health</a>
+      </div>
+    </header>
+
+    <div class="flex-1 p-6 max-w-2xl mx-auto w-full">
+      <h2 class="text-xl font-bold mb-1">Security Settings</h2>
+      <p class="text-sm mb-6" style="color:var(--brand-muted);">Configure anti-fraud protections for your location.</p>
+
+      <div id="settingsForm">
+        <div class="text-center py-16" style="color:var(--brand-muted);">Loading settings...</div>
+      </div>
+
+      <div id="otpSection" class="mt-6 hidden">
+        <div class="setting-card">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <div class="font-medium">Phone Verification (OTP)</div>
+              <div class="text-xs mt-0.5" style="color:var(--brand-muted);">
+                Requires customers to verify their phone via SMS code before ordering.
+                Disabled by default for zero friction.
+              </div>
+            </div>
+            <div class="toggle-track inactive" id="otpToggle" onclick="toggleOtp()">
+              <div class="toggle-thumb"></div>
+            </div>
+          </div>
+          <div id="otpWarning" class="hidden text-xs p-3 rounded-lg" style="background:#DC262620;border:1px solid #DC262640;">
+            <i class="ti ti-alert-triangle mr-1"></i>
+            Enabling OTP requires customers to verify their phone before ordering. This adds a verification step at checkout.
+          </div>
+          <button onclick="saveOtp()" id="saveOtpBtn" class="mt-4 px-6 py-2 rounded-lg font-medium hidden" style="background:var(--brand-primary);color:#fff;">Save OTP Setting</button>
+          <span id="otpStatus" class="text-sm ml-2"></span>
+        </div>
+      </div>
+
+      <!-- Push Notifications -->
+      <div class="mt-6">
+        <div class="setting-card">
+          <div class="flex items-center justify-between mb-2">
+            <div>
+              <div class="font-medium">Push Notifications</div>
+              <div class="text-xs mt-0.5" style="color:var(--brand-muted);">
+                Receive real-time push notifications for new orders. Best-effort delivery via browser push.
+              </div>
+            </div>
+            <div id="pushToggle" class="toggle-track inactive" onclick="togglePush()">
+              <div class="toggle-thumb"></div>
+            </div>
+          </div>
+          <div id="pushWarning" class="hidden text-xs p-3 rounded-lg mb-3" style="background:#DC262620;border:1px solid #DC262640;">
+            <i class="ti ti-alert-triangle mr-1"></i>
+            Push requires a compatible browser (Chrome/Edge/Firefox/Safari 16.4+ with PWA installed).
+            Telegram fallback always active.
+          </div>
+          <div class="flex items-center gap-3">
+            <button onclick="subscribePush()" id="subscribePushBtn" class="px-4 py-2 rounded-lg text-sm font-medium" style="background:var(--brand-primary);color:#fff;">Enable Push</button>
+            <button onclick="unsubscribePush()" id="unsubscribePushBtn" class="px-4 py-2 rounded-lg text-sm hidden" style="background:transparent;border:1px solid var(--brand-border);color:var(--brand-muted);">Disable</button>
+            <span id="pushStatus" class="text-xs" style="color:var(--brand-muted);"></span>
+          </div>
+          <div id="pushError" class="mt-2 text-xs hidden" style="color:#DC2626;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (async () => {
+    const token = getOwnerToken();
+    const locationId = getLocationId();
+    if (!token || !locationId) {
+      document.body.innerHTML = '<div class="flex items-center justify-center h-screen" style="color:var(--brand-muted);"><p>Not authenticated</p></div>';
+      return;
+    }
+
+    let requirePhoneOtp = false;
+    let otpChanged = false;
+
+    const otpToggle = document.getElementById('otpToggle');
+    const otpWarning = document.getElementById('otpWarning');
+    const saveOtpBtn = document.getElementById('saveOtpBtn');
+    const otpStatus = document.getElementById('otpStatus');
+
+    async function loadSettings() {
+      try {
+        const res = await fetch(`/api/owner/locations/${locationId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) throw new Error(`Failed: ${res.status}`);
+        const data = await res.json();
+        requirePhoneOtp = !!data.require_phone_otp;
+        updateOtpUI();
+        document.getElementById('otpSection').classList.remove('hidden');
+        document.getElementById('settingsForm').innerHTML = '';
+      } catch (e) {
+        document.getElementById('settingsForm').innerHTML = `<div class="text-center py-16" style="color:var(--status-active);">Error: ${e.message}</div>`;
+      }
+    }
+
+    function updateOtpUI() {
+      otpToggle.className = `toggle-track ${requirePhoneOtp ? 'active' : 'inactive'}`;
+      otpWarning.classList.toggle('hidden', !requirePhoneOtp);
+      saveOtpBtn.classList.toggle('hidden', !otpChanged);
+    }
+
+    window.toggleOtp = () => {
+      requirePhoneOtp = !requirePhoneOtp;
+      otpChanged = true;
+      updateOtpUI();
+      otpStatus.textContent = otpChanged ? 'Unsaved' : '';
+      otpStatus.style.color = 'var(--sig-low)';
+    };
+
+    window.saveOtp = async () => {
+      saveOtpBtn.disabled = true;
+      saveOtpBtn.textContent = 'Saving...';
+      try {
+        const res = await fetch(`/api/owner/locations/${locationId}`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ require_phone_otp: requirePhoneOtp }),
+        });
+        if (!res.ok) throw new Error(`Failed: ${res.status}`);
+        otpChanged = false;
+        otpStatus.textContent = 'Saved';
+        otpStatus.style.color = '#059669';
+        setTimeout(() => { otpStatus.textContent = ''; }, 3000);
+        updateOtpUI();
+      } catch (e) {
+        otpStatus.textContent = `Error: ${e.message}`;
+        otpStatus.style.color = '#DC2626';
+      } finally {
+        saveOtpBtn.disabled = false;
+        saveOtpBtn.textContent = 'Save OTP Setting';
+      }
+    };
+
+    const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    new DashboardWSClient({
+      url: `${wsProtocol}//${location.host}`,
+      token, locationId,
+      onStatusChange: (s) => {
+        const badge = document.getElementById('statusBadge');
+        if (badge) { badge.textContent = s; badge.style.background = s === 'subscribed' ? '#059669' : '#D97706'; }
+      },
+    });
+
+    // ─── Push subscription state ──────────────────────────────────────
+    let pushSubscribed = false;
+    const pushToggle = document.getElementById('pushToggle');
+    const pushWarning = document.getElementById('pushWarning');
+    const subscribeBtn = document.getElementById('subscribePushBtn');
+    const unsubscribeBtn = document.getElementById('unsubscribePushBtn');
+    const pushStatus = document.getElementById('pushStatus');
+
+    function updatePushUI() {
+      pushToggle.className = `toggle-track ${pushSubscribed ? 'active' : 'inactive'}`;
+      subscribeBtn.classList.toggle('hidden', pushSubscribed);
+      unsubscribeBtn.classList.toggle('hidden', !pushSubscribed);
+      pushWarning.classList.toggle('hidden', pushSubscribed);
+      pushStatus.textContent = pushSubscribed ? 'Push notifications active' : 'Push notifications off';
+    }
+
+    window.togglePush = () => {
+      if (pushSubscribed) {
+        unsubscribePush();
+      } else {
+        subscribePush();
+      }
+    };
+
+    window.subscribePush = async () => {
+      subscribeBtn.disabled = true;
+      subscribeBtn.textContent = 'Subscribing...';
+      const errEl = document.getElementById('pushError');
+      errEl.classList.add('hidden');
+      try {
+        const sub = await registerPushSubscription(token, locationId);
+        if (sub) {
+          pushSubscribed = true;
+          updatePushUI();
+        } else {
+          errEl.textContent = 'Push not supported by this browser or permission denied. Telegram fallback active.';
+          errEl.classList.remove('hidden');
+        }
+      } catch (e) {
+        errEl.textContent = 'Failed: ' + e.message;
+        errEl.classList.remove('hidden');
+      } finally {
+        subscribeBtn.disabled = false;
+        subscribeBtn.textContent = 'Enable Push';
+      }
+    };
+
+    window.unsubscribePush = async () => {
+      unsubscribeBtn.disabled = true;
+      const errEl = document.getElementById('pushError');
+      errEl.classList.add('hidden');
+      try {
+        await unregisterPushSubscription(token, locationId);
+        pushSubscribed = false;
+        updatePushUI();
+      } catch (e) {
+        errEl.textContent = 'Failed: ' + e.message;
+        errEl.classList.remove('hidden');
+      } finally {
+        unsubscribeBtn.disabled = false;
+      }
+    };
+
+    // Load current push state
+    try {
+      const state = await getPushState(token, locationId);
+      pushSubscribed = state.subscribed;
+      updatePushUI();
+    } catch { /* ignore */ }
+
+    await loadSettings();
+  })();
+  </script>
+</body>
+</html>
