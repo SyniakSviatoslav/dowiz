@@ -52,6 +52,13 @@ pub enum Resource {
     /// `(AgentBridge, InvokeAgent)` authorizes one delegated sub-agent invocation.
     /// Pinned `0x12` — see the CANON-DIFF note above.
     AgentBridge,
+    /// **NEW:** a native, read-only HTTP fetch + readable-text extraction (P40
+    /// `ToolResource::WebFetch`). Deliberately NOT red-line — read-only, no
+    /// network write, no interactive/JS execution (that stays an external tool
+    /// behind agent-browser, never reimplemented in-kernel — see
+    /// `docs/design/` native-agentic-browsing research). Pinned `0x13`, next
+    /// free byte after `AgentBridge = 0x12`.
+    Web,
 }
 
 impl Resource {
@@ -69,6 +76,7 @@ impl Resource {
             Resource::Secret => 0x10,
             Resource::Migration => 0x11,
             Resource::AgentBridge => 0x12,
+            Resource::Web => 0x13,
         }
     }
 
@@ -87,6 +95,7 @@ impl Resource {
             0x10 => Resource::Secret,
             0x11 => Resource::Migration,
             0x12 => Resource::AgentBridge,
+            0x13 => Resource::Web,
             _ => return None,
         })
     }

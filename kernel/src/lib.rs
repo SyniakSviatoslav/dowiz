@@ -279,6 +279,11 @@ pub mod noether;
 pub mod online;
 pub mod order_machine;
 pub mod ports;
+/// P40 `ToolResource::WebFetch` — native, pure-`std` readable-text extraction
+/// from raw HTML (the fetch itself stays in `agent-facade`, this crate remains
+/// network-free). Reimplements the core Mozilla-Readability mechanism natively;
+/// explicitly NOT a browser — zero JS execution, that stays an external tool.
+pub mod readability;
 /// P38 O18a — graphics unlock. Feature-gated GPU render backend (presentation
 /// only; the kernel remains the bit-deterministic state authority). Compiles to
 /// NOTHING without the `gpu` feature; behind it, a REAL headless wgpu bring-up.

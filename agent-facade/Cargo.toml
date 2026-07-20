@@ -14,6 +14,18 @@ dowiz-kernel = { path = "../kernel" }
 # (ReadOrderStatusTool::parse_arg) now uses the kernel-owned `dowiz_kernel::json` primitive
 # (differentially proven vs serde_json — kernel/tests/json_oracle.rs). `cargo tree -e no-dev`
 # no longer carries serde/serde_json; this crate's ZERO-DEP-ALLOWLIST.txt shrinks accordingly.
+# `ureq` — OPT-IN only, behind the `web-fetch` feature below. DECART: needed for
+# `WebFetchTool`'s HTTP GET (ToolResource::WebFetch); this crate's default build stays at
+# the frozen 0-external-crate floor (item 31 §4.4) — `cargo tree -e no-dev` (no --features)
+# must keep showing nothing here. Same version/feature-set as the already-vetted
+# `llm-adapters` usage (no tokio, tls+json features only) — no second HTTP-client choice
+# introduced into the repo.
+ureq = { version = "2", default-features = false, features = ["tls"], optional = true }
+
+[features]
+# OFF by default. Verify: `cargo tree -e no-dev` (no flags) stays at 0 external crates;
+# `cargo tree -e no-dev --features web-fetch` is the only path that pulls ureq.
+web-fetch = ["dep:ureq"]
 
 [lib]
 name = "agent_facade"
