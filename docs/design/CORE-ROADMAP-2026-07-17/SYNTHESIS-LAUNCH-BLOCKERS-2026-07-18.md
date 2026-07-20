@@ -338,7 +338,15 @@ Collected from all five reports' "riskiest unknowns," deduplicated, with the two
 removed (closed). Split honestly: **A–D need the operator** (product/business/red-line forks);
 **E–F are engineering** with proposed defaults, listed so nobody mistakes them for silent gaps.
 
-### Operator decisions (raise before blueprint-writing begins)
+> **A–D all CLOSED 2026-07-20 — see `DECISIONS.md` D12 for the authoritative ruling text.**
+> One-line summary, D12 is the source of truth: **A** = Path A (scoped provider-iframe overlay;
+> desktop shell is therefore Tauri-with-webview, not pure winit+wgpu). **B** = self-custody
+> absolute on both surfaces, no recovery path either for backups or a lost owner root. **C** = no
+> hub suspension — every claimed hub stays hot indefinitely (pool-economics must size for
+> zero-recycling). **D** = Albania/EU, matching `PRODUCT.md`'s existing primary market. W1
+> blueprint-writing (P39-rev, P59, P60, P63, P67, P68, P69, P72) is unblocked.
+
+### Operator decisions (raise before blueprint-writing begins) — historical record below, CLOSED
 
 **A. Card-capture surface per platform** (R2 §6.4 / risk #1 — the top item; coupled to the
 desktop shell per X3). Recommendation to present: **B (native provider SDK sheet) on Tauri
