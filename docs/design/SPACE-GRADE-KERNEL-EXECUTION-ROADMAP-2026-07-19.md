@@ -490,6 +490,19 @@ as items 1–32: actual technical dependency, lowest first. **Standing law for t
 zero new external crates (the live empty `ZERO-DEP-ALLOWLIST.txt` gate makes violation a CI
 failure); every hot path ships under the §4 hardening checklist (item 6's machinery) — no
 parallel checklist; dependency questions, if any arise, follow item 25's BINDING procedure.
+**Build-plane AI-optional law (item 45, recorded here per item-45 blueprint §1/§5 step 1):** when the
+inference subsystem (items 33–44) lands, it MUST ride a **non-default cargo feature** named
+`inference` in `kernel/Cargo.toml` — the exact `pq`/`slot-arena`/`gpu` surface-control pattern
+(lines 65–92), with a header comment stating what it pulls and the `cargo tree -p dowiz-kernel -e
+no-dev` verification that the DEFAULT graph stays AI-free. No `inference` feature is added now (item
+45 adds nothing to gate yet — over-design guard); the invariant is enforced today by the
+`ai-optional-gate` CI job (scripts/ai-optional-gate.sh): the default-features kernel suite is
+re-executed green (AI absent) and a dependency-direction grep forbids the seven core decision
+modules (`order_machine`, `decision/`, `hydra`, `event_log`, `markov`, `spectral`, `fdr`) from
+naming the reserved `crate::inference` path outside `#[cfg(feature = "inference")]`. When the
+feature lands, that grep is additionally backed by name-resolution failure (the AI module simply
+does not compile absent the feature). The deterministic-math organs `attention`/`micrograd`/`online`
+are explicitly OUT of the forbidden set (non-AI per attention.rs:17–20).
 Planning only — no item below starts before the operator dispatches it.
 
 - **Item 33 — bench ground-truth re-measurement (Tier-0-class, zero prerequisites, NOT
