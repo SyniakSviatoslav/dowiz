@@ -9,14 +9,16 @@
 pub mod cache;
 pub mod compose;
 pub mod dispatch;
+pub mod managed;
 pub mod ollama;
 pub mod quirks;
 pub mod telemetry;
 pub mod transport;
 
 pub use cache::{CachingBackend, NoCache};
-pub use compose::{Harness, StackBuilder, DEFAULT_OLLAMA_BASE};
+pub use compose::{Composed, Harness, Stack, StackBuilder, DEFAULT_OLLAMA_BASE};
 pub use dispatch::{DispatchError, Dispatcher, TrackRecord, append_harvest};
+pub use managed::ManagedApiAdapter;
 pub use ollama::{OllamaAdapter, OllamaQuirks};
 pub use quirks::Quirks;
 pub use transport::OpenAiCompatTransport;
