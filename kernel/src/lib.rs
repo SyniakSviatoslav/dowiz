@@ -445,6 +445,9 @@ pub mod github_patterns;
 /// navigation. Papers stored as 256D vectors in CSR matrix, O(1) nearest-neighbor
 /// via spectral decomposition. FanOut parallelism across tensor dimensions.
 pub mod tensor_parser;
+/// Spectral Parsing: O(n⁰) paper extraction. Raw OAI-PMH byte scanner (no XML DOM),
+/// tensor ASCII storage, spectral decomposition search, harmonic ranking.
+pub mod spectral_parser;
 /// Self-sovereign trading infrastructure — signed cryptographic intents
 /// for trustless, non-custodial, intermediary-free trading.
 pub mod trading_intent;
