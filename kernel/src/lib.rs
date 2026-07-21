@@ -713,3 +713,4 @@ pub fn init_tracing() {
 pub mod oracle;
 pub mod meta_miner;
 pub mod physics;
+pub mod trader;
