@@ -455,6 +455,9 @@ pub mod parametric_spectral;
 /// Академія Дмитра Євдокимова — quantized spectral library with P2P sync.
 /// Hash-only paper storage (32B/paper), bloom filter sync, snapshot serialization.
 pub mod academia;
+/// P2P distribution network: peers → parallel chunk download → merge.
+/// Аналогічна логіка рекурсивного пошуку, але для завантаження даних.
+pub mod academia_p2p;
 /// Self-sovereign trading infrastructure — signed cryptographic intents
 /// for trustless, non-custodial, intermediary-free trading.
 pub mod trading_intent;
