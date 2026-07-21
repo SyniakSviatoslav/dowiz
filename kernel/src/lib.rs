@@ -438,6 +438,9 @@ pub mod detection;
 /// Zone mapping (green→yellow→red→critical→forbidden), Hydra protection,
 /// blueprint generation, dynamic rewrite prediction.
 pub mod self_harness;
+/// Reverse-engineered parsing patterns from top GitHub repos (1,302 parsing tools,
+/// 461 top repos, 43M+ combined stars). Integrates Rust-native parsing insights.
+pub mod github_patterns;
 /// Self-sovereign trading infrastructure — signed cryptographic intents
 /// for trustless, non-custodial, intermediary-free trading.
 pub mod trading_intent;
