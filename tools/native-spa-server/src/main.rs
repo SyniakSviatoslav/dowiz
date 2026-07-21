@@ -12,7 +12,8 @@ use std::path::PathBuf;
 
 use clap::Parser;
 use native_spa_server::{
-    api::ApiState, build_router, resolve_root, serve_with_timeout, DEFAULT_HEADER_READ_TIMEOUT,
+    api::ApiState, build_router, resolve_root, serve_with_timeout,
+    webhook::WebhookState, DEFAULT_HEADER_READ_TIMEOUT,
     DEFAULT_PORT, DEFAULT_ROOT,
 };
 
@@ -49,7 +50,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
     let root = resolve_root(Some(cli.root.clone()));
     let api = ApiState::build_default();
-    let router = build_router(&root, api);
+    // Phase 1: single-hub webhook state. In production this would be loaded from
+    // hub config (the per-hub BotFather token → secret_token mapping).
+    let webhook_state = std::sync::Arc::new(WebhookState {
+        telegram: std::sync::Arc::new(
+            intake_adapters::telegram::TelegramAdapter::new(
+                std::env::var("DOWIZ_TELEGRAM_SECRET").unwrap_or_default(),
+            ),
+        ),
+    });
+    let router = build_router(&root, api, webhook_state);
     let addr = format!("{}:{}", cli.bind, cli.port);
 
     match (cli.tls_cert, cli.tls_key) {

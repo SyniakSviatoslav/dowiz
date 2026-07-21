@@ -25,6 +25,7 @@ use native_spa_server::api::{
     self, AnchorRoster, ApiState, EventStore, KernelCapVerifier, RevocationSet, ROUTE_AGENT,
 };
 use native_spa_server::build_router;
+use native_spa_server::webhook::WebhookState;
 use std::path::PathBuf;
 
 // ── raw HTTP client (std-only; mirrors integration.rs) ──────────────────────
@@ -177,7 +178,9 @@ fn spawn_server(api: &Arc<ApiState>) -> SocketAddr {
                 .expect("bind ephemeral");
             let addr = listener.local_addr().unwrap();
             let _ = tx.send(addr);
-            let router: Router = build_router(&root, api);
+            let router: Router = build_router(&root, api, Arc::new(WebhookState {
+                telegram: Arc::new(intake_adapters::telegram::TelegramAdapter::new("test".into())),
+            }));
             let _ = axum::serve(listener, router).await;
         });
     });
