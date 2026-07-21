@@ -710,3 +710,4 @@ pub fn init_tracing() {
     // no-op, like the incumbent global subscriber).
     let _ = crate::fdr::init(crate::fdr::FdrConfig::default());
 }
+pub mod oracle;
