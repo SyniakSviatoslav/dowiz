@@ -441,6 +441,10 @@ pub mod self_harness;
 /// Reverse-engineered parsing patterns from top GitHub repos (1,302 parsing tools,
 /// 461 top repos, 43M+ combined stars). Integrates Rust-native parsing insights.
 pub mod github_patterns;
+/// Thunder parsing: tensor-accelerated paper extraction with vector geometry
+/// navigation. Papers stored as 256D vectors in CSR matrix, O(1) nearest-neighbor
+/// via spectral decomposition. FanOut parallelism across tensor dimensions.
+pub mod tensor_parser;
 /// Self-sovereign trading infrastructure — signed cryptographic intents
 /// for trustless, non-custodial, intermediary-free trading.
 pub mod trading_intent;
