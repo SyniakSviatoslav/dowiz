@@ -711,3 +711,4 @@ pub fn init_tracing() {
     let _ = crate::fdr::init(crate::fdr::FdrConfig::default());
 }
 pub mod oracle;
+pub mod meta_miner;
