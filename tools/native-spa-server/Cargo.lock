@@ -610,6 +610,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "intake-adapters"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "dowiz-kernel",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "is_terminal_polyfill"
 version = "1.70.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -711,6 +721,7 @@ dependencies = [
  "dowiz-kernel",
  "flate2",
  "hyper-util",
+ "intake-adapters",
  "rustls-pemfile",
  "serde",
  "serde_json",

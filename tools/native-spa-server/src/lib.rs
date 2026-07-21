@@ -13,8 +13,11 @@
 //! Configuration is via CLI flags / env vars only — there are NO secret reads
 //! and no `.env` loading. NO-COURIER-SCORING guard is asserted below.
 
+use std::collections::HashMap;
+use std::net::IpAddr;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use axum::{
     extract::Request,
@@ -28,10 +31,22 @@ use tower_http::services::{ServeDir, ServeFile};
 /// The minimal HTTP order surface (P37 W37-2/3): cap-gated `/api/order*`.
 pub mod api;
 
+/// P48-INTAKE Phase 1 — `/webhook/*` route handlers (external signature gate,
+/// NOT capability-cert gated — separate trust boundary per §5.3).
+pub mod webhook;
+
 /// DEFAULT_ROOT mirrors the legacy nginx web root.
 pub const DEFAULT_ROOT: &str = "/usr/share/nginx/html";
 /// DEFAULT_PORT mirrors the nginx `listen 8080`.
 pub const DEFAULT_PORT: u16 = 8080;
+
+/// Hard cap on concurrently-accepted TCP connections (defense-in-depth, listener-wide).
+/// Sized well above `api::MAX_INFLIGHT_API` (64) to allow static-asset traffic headroom,
+/// but bounded so an accept-time flood cannot grow the task count without limit.
+/// Rationale: 512 covers a single browser's concurrent-connection ceiling (~6–8) across
+/// many users, with headroom for Keep-Alive reuse; a deliberate choice to leave room for
+/// the existing per-API bulkhead to be the tighter bound for /api/* traffic.
+pub const MAX_CONCURRENT_CONNECTIONS: usize = 512;
 
 /// EXACT security headers ported from `docker/nginx-default.conf` (lines 16-25).
 ///
@@ -97,7 +112,7 @@ fn insert_header(headers: &mut header::HeaderMap, name: &str, value: &str) {
 ///   (mirrors nginx `try_files $uri $uri/ /index.html`).
 /// * The cap-gated order API (P37) is merged on top — its middleware runs only
 ///   on the `/api/*` + `/healthz` routes, so static serving is byte-unchanged.
-pub fn build_router(root: impl AsRef<Path>, api: Arc<api::ApiState>) -> Router {
+pub fn build_router(root: impl AsRef<Path>, api: Arc<api::ApiState>, webhook_state: Arc<webhook::WebhookState>) -> Router {
     let root = root.as_ref().to_path_buf();
     let index = root.join("index.html");
     let serve_dir = ServeDir::new(&root)
@@ -109,6 +124,7 @@ pub fn build_router(root: impl AsRef<Path>, api: Arc<api::ApiState>) -> Router {
     Router::new()
         .fallback_service(serve_dir)
         .merge(api::build_api_router(api))
+        .merge(webhook::build_webhook_router(webhook_state))
         .layer(axum::middleware::from_fn(asset_cache_control))
         .layer(axum::middleware::from_fn(security_headers))
 }
@@ -126,21 +142,111 @@ pub fn resolve_root(explicit: Option<PathBuf>) -> PathBuf {
 /// or a bare listener socket indefinitely). Matches hyper-util's own documented default.
 pub const DEFAULT_HEADER_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
+/// Per-IP connection admission state. Each distinct source IP gets a
+/// [`dowiz_kernel::token_bucket::TokenBucket`] that admits at most `CAPACITY` burst
+/// connections with a sustained `REFILL_PER_SEC` rate. Idle entries are evicted by
+/// `sweep_locked` on every `admit` call to bound map growth from many distinct IPs
+/// (each of which DID complete a real TCP handshake, so IP spoofing at this layer is
+/// naturally constrained by the OS TCP stack).
+pub struct PerIpLimiter {
+    buckets: Mutex<HashMap<IpAddr, (dowiz_kernel::token_bucket::TokenBucket, Instant)>>,
+}
+
+impl PerIpLimiter {
+    /// Burst capacity per IP — generous for a real browser opening several asset
+    /// connections at once, tight against a single-source connection flood.
+    pub const CAPACITY: f64 = 8.0;
+    /// Sustained refill rate per IP (tokens/sec).
+    pub const REFILL_PER_SEC: f64 = 2.0;
+    /// Entries idle longer than this are evicted to bound map growth.
+    pub const IDLE_EVICT_AFTER: std::time::Duration = std::time::Duration::from_secs(300);
+
+    pub fn new() -> Self {
+        PerIpLimiter {
+            buckets: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Try to admit a connection from `ip`. Returns `true` if the per-IP budget
+    /// allows it, `false` if throttled (caller should drop the connection).
+    pub fn admit(&self, ip: IpAddr) -> bool {
+        let mut m = self.buckets.lock().unwrap();
+        self.sweep_locked(&mut m);
+        let (bucket, seen) = m.entry(ip).or_insert_with(|| {
+            (
+                dowiz_kernel::token_bucket::TokenBucket::new(Self::CAPACITY, Self::REFILL_PER_SEC),
+                Instant::now(),
+            )
+        });
+        *seen = Instant::now();
+        bucket.try_acquire(1.0)
+    }
+
+    /// Evict entries idle past `IDLE_EVICT_AFTER` — bounds map growth from many
+    /// distinct IPs. Called inside `admit` while the lock is already held.
+    fn sweep_locked(&self, m: &mut HashMap<IpAddr, (dowiz_kernel::token_bucket::TokenBucket, Instant)>) {
+        m.retain(|_, (_, seen)| seen.elapsed() < Self::IDLE_EVICT_AFTER);
+    }
+
+    /// Return the number of tracked IPs (for tests / diagnostics).
+    pub fn len(&self) -> usize {
+        self.buckets.lock().unwrap().len()
+    }
+}
+
 /// Serve `router` over plain HTTP/1.1 on an already-bound `listener`, with a bounded
-/// header-read timeout per connection. This is the timeout-hardened replacement for
-/// bare `axum::serve(listener, router)` (which has no header-read timeout at all —
-/// a partial-headers connection is held open indefinitely). Runs until the listener
-/// errors or the process is killed; each connection is handled on its own spawned task
-/// so one slow/malicious client cannot block others.
+/// header-read timeout per connection and listener-wide DoS defenses.
+///
+/// Two defense-in-depth layers guard the accept loop:
+/// 1. **Per-IP rate limiting** ([`PerIpLimiter`]) — a [`dowiz_kernel::token_bucket::TokenBucket`]
+///    per source IP admits at most `CAPACITY` burst / `REFILL_PER_SEC` sustained connections;
+///    checked first (cheapest, rejects a flood before touching the global cap).
+/// 2. **Global concurrent-connection cap** ([`MAX_CONCURRENT_CONNECTIONS`]) — a
+///    [`tokio::sync::Semaphore`] that fail-closes (drops the connection immediately, never
+///    blocks the accept loop) when the server is at capacity.
+///
+/// Both layers are defense-in-depth alongside the existing `api::MAX_INFLIGHT_API` bulkhead
+/// (which only sees connections that finish header parsing — a stalled mid-header connection
+/// never reaches it). Neither new layer replaces or interferes with the existing layers.
 pub async fn serve_with_timeout(
     listener: tokio::net::TcpListener,
     router: Router,
     header_read_timeout: std::time::Duration,
 ) -> std::io::Result<()> {
+    let conn_limit = std::sync::Arc::new(tokio::sync::Semaphore::new(MAX_CONCURRENT_CONNECTIONS));
+    let ip_limiter = std::sync::Arc::new(PerIpLimiter::new());
     loop {
-        let (stream, _peer) = listener.accept().await?;
+        let (stream, peer) = listener.accept().await?;
+        // Layer 1: per-IP admission — cheapest check, rejects a single-source flood
+        // before touching the global cap. A throttled connection is dropped immediately.
+        if !ip_limiter.admit(peer.ip()) {
+            eprintln!(
+                "[native-spa-server] per-IP connection budget ({}/{} burst, {}/s sustained) \
+                 exhausted for {peer}, dropping connection",
+                PerIpLimiter::CAPACITY as u64,
+                PerIpLimiter::CAPACITY as u64,
+                PerIpLimiter::REFILL_PER_SEC as u64,
+            );
+            continue;
+        }
+        // Layer 2: global cap — fail-CLOSED, not blocking: if the semaphore is
+        // saturated, drop this connection immediately (RST on stream-drop) rather
+        // than queueing it — queueing would just move the exhaustion from "tasks"
+        // to "an unbounded internal queue". The accept loop is NEVER blocked, so
+        // legitimate new connections are never stuck behind a saturated cap.
+        let permit = match conn_limit.clone().try_acquire_owned() {
+            Ok(p) => p,
+            Err(_) => {
+                eprintln!(
+                    "[native-spa-server] global connection cap ({MAX_CONCURRENT_CONNECTIONS}) \
+                     reached, dropping connection from {peer}"
+                );
+                continue;
+            }
+        };
         let router = router.clone();
         tokio::spawn(async move {
+            let _permit = permit; // held for the connection's lifetime, released on task exit
             let hyper_service = hyper_util::service::TowerToHyperService::new(router);
             let mut builder =
                 hyper_util::server::conn::auto::Builder::new(hyper_util::rt::TokioExecutor::new());
