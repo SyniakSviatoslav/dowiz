@@ -448,6 +448,10 @@ pub mod tensor_parser;
 /// Spectral Parsing: O(n⁰) paper extraction. Raw OAI-PMH byte scanner (no XML DOM),
 /// tensor ASCII storage, spectral decomposition search, harmonic ranking.
 pub mod spectral_parser;
+/// Parametric Surface Spectral Library: papers projected onto 2D parametric
+/// surface via top-2 eigenvectors. Each paper = SPIN at (u,v) on surface.
+/// Grid-based navigation: O(1) cell lookup, ~32MB for 1M papers.
+pub mod parametric_spectral;
 /// Self-sovereign trading infrastructure — signed cryptographic intents
 /// for trustless, non-custodial, intermediary-free trading.
 pub mod trading_intent;
