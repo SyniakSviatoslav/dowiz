@@ -7,6 +7,70 @@
 /// be gated without a repo retag. Bump on any such change.
 pub const KERNEL_PROTO_VERSION: &str = "2026.07.0";
 
+/// Kernel-wide tri-state: no boolean is ever just true/false.
+/// Every observable state carries True | False | Unknown.
+/// Unknown means "we don't know yet" — measurement pending, observation
+/// insufficient, or system just booted. Code that acts on Unknown must
+/// treat it as "not safe to assume either way" — fail-closed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TriState {
+    /// Confirmed positive / active / safe / stale / valid.
+    True,
+    /// Confirmed negative / inactive / unsafe / fresh / invalid.
+    False,
+    /// Unknown — observation pending or insufficient data.
+    /// Fail-closed: treat as "cannot confirm".
+    Unknown,
+}
+
+impl TriState {
+    pub fn is_true(&self) -> bool { *self == TriState::True }
+    pub fn is_false(&self) -> bool { *self == TriState::False }
+    pub fn is_unknown(&self) -> bool { *self == TriState::Unknown }
+    /// Resolve: True→true, False→false, Unknown→default.
+    pub fn resolve(&self, default: bool) -> bool {
+        match self {
+            TriState::True => true,
+            TriState::False => false,
+            TriState::Unknown => default,
+        }
+    }
+    /// Logical AND: True AND True = True, anything else = False.
+    pub fn and(self, other: TriState) -> TriState {
+        if self == TriState::True && other == TriState::True { TriState::True }
+        else if self == TriState::False || other == TriState::False { TriState::False }
+        else { TriState::Unknown }
+    }
+    /// Logical OR: False OR False = False, anything else = True.
+    pub fn or(self, other: TriState) -> TriState {
+        if self == TriState::True || other == TriState::True { TriState::True }
+        else if self == TriState::False && other == TriState::False { TriState::False }
+        else { TriState::Unknown }
+    }
+    /// Logical NOT: True→False, False→True, Unknown→Unknown.
+    pub fn not(self) -> TriState {
+        match self {
+            TriState::True => TriState::False,
+            TriState::False => TriState::True,
+            TriState::Unknown => TriState::Unknown,
+        }
+    }
+    /// From bool: true→True, false→False. Use when legacy code produces bool.
+    pub fn from_bool(v: bool) -> TriState {
+        if v { TriState::True } else { TriState::False }
+    }
+}
+
+impl std::fmt::Display for TriState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TriState::True => write!(f, "TRUE"),
+            TriState::False => write!(f, "FALSE"),
+            TriState::Unknown => write!(f, "UNKNOWN"),
+        }
+    }
+}
+
 /// OPT-IN post-quantum crypto core (ML-DSA-65 / ML-KEM-768 / X25519 / AES-GCM).
 /// KAT-gated byte-exact vs NIST ACVP vectors. Behind `pq` feature so the
 /// canonical order/money core stays serde-free. Mesh/transport identity seam.
@@ -326,6 +390,94 @@ pub mod predict;
 /// Decentralized mesh swarm coordinator — task decomposition via DSU, executor
 /// selection via harmonic ranking, dynamic adaptation via spectral/Markov prediction.
 pub mod swarm;
+/// Structural enforcement of the mandatory agent workflow sequence
+/// (research -> synthesis -> critique -> plan -> critique -> work -> verify -> critique -> commit).
+/// Typed state machine: phases complete in strict order, no skipping, no repeats.
+/// The kernel primitive that closes the "workflow gates are cultural" blind spot.
+pub mod workflow_gate;
+/// PLL-inspired clock stabilizer — transforms irregular kernel ticks, timestamps,
+/// and event intervals into stable, aligned output via phase-locked feedback control.
+/// Maps PLL components (phase detector, loop filter, VCO) to kernel equivalents
+/// (tick differ, EMA smoother, adaptive rate generator).
+pub mod clock_stabilizer;
+/// Kernel-native tool/skill/agent orchestrator — central hub for all action routing,
+/// parallel dispatch, health monitoring, load prediction, and audit trails. No grep,
+/// no scripts — everything through Rust structs and SHA3-256 verified state transitions.
+pub mod orchestrator;
+/// Kernel-native hex encode/decode primitive — single canonical implementation
+/// replacing 6+ redundant hand-rolled versions across the codebase.
+pub mod hex_util;
+/// Kernel-native reverse engineering — ELF parsing, x86_64 syscall extraction,
+/// behavior profiling, and binary analysis. All pure Rust, zero deps.
+pub mod reverse_engineer;
+/// Anti-detect browser configuration and zero-trace policy for parse operations.
+/// Pure data structures: kernel = no browser/network, this defines HOW to parse.
+pub mod agent_browser;
+/// PID-controlled dynamic agent spawn batching with prediction cache.
+/// Adjusts parallelism based on real-time latency measurements.
+pub mod dynamic_spawner;
+/// PID-controlled dynamic action batch execution with worker pool.
+/// Per-category latency prediction, work-stealing, and ASCII dashboard.
+pub mod dynamic_actions;
+/// Indexed parallel search across multiple search indexes (BM25, trigram, spectral).
+/// Weighted fusion, PID-controlled parallelism, search result caching.
+pub mod parallel_search;
+/// Apollo-11 inspired priority task scheduler with checkpoint/restart.
+/// Priority levels, overload shedding, dependency gating, PID concurrency.
+pub mod agc_scheduler;
+/// Book-to-skill native: on-demand knowledge extraction from documents.
+/// Frameworks, decision rules, anti-patterns, per-chapter loading.
+pub mod skill_extractor;
+/// PixelRAG native: visual tile indexing + IVF approximate nearest-neighbor search.
+/// Screenshot tile management, tile embedding coordination.
+pub mod visual_index;
+/// Supervision native: universal detection format + NMS/NMM + zone analysis.
+/// Model-agnostic detection container, polygon/line zone counting.
+pub mod detection;
+/// Self-harness with zone protection for safe project-wide rewrites.
+/// Zone mapping (green→yellow→red→critical→forbidden), Hydra protection,
+/// blueprint generation, dynamic rewrite prediction.
+pub mod self_harness;
+/// Self-sovereign trading infrastructure — signed cryptographic intents
+/// for trustless, non-custodial, intermediary-free trading.
+pub mod trading_intent;
+/// Trustless escrow + state channels — P2P settlements without centralized
+/// gateways, with off-chain balance updates and on-chain finality.
+pub mod trading_escrow;
+/// P2P direct delivery — no intermediaries, no central platform.
+/// Pure peer-to-peer delivery routing with cryptographic proof.
+pub mod p2p_delivery;
+/// Cooperation Protocol — atomic bridge between P2P trading and P2P delivery.
+/// Trade settlement triggers delivery; delivery confirmation releases funds.
+pub mod cooperation_protocol;
+/// Research paper knowledge extraction and pattern analysis engine.
+/// Pure data structures for ingesting, pattern-extracting, and cross-pattern
+/// analysis of research papers from arXiv / Semantic Scholar / OpenAlex.
+pub mod research;
+/// Compact ASCII library for research papers — content-addressed, deduplicated,
+/// non-ASCII stripped. Each paper stored as one line (unit-separator delimited).
+/// ~20MB for 100K papers vs ~200MB in JSON (10x compression).
+pub mod research_ascii;
+/// CPU core topology + cache hierarchy + clock source detection.
+/// Probes /proc/cpuinfo and /sys at init. All pure data after init.
+pub mod hw_profile;
+/// Deterministic time authority — stabilises raw clocks (kvm-clock/TSC/HPET)
+/// through a PLL corrector + PPMC predictor. Time never goes backwards.
+pub mod time_stabilizer;
+/// Weather + power grid load forecasting for clock drift prediction.
+/// Forecast feeds into TimeStabilizer's drift model.
+pub mod power_forecast;
+/// Per-call PQ ML-DSA-65 cryptographic signer for parse operations.
+/// Each parse call gets a fresh keypair; signature binds IP+timestamp+payload.
+/// Requires the `pq` feature for ML-DSA-65.
+#[cfg(feature = "pq")]
+pub mod crypto_signer;
+/// Proxy pool management, rotation strategies, and health tracking.
+/// Pure computation: kernel routes, external adapters connect.
+pub mod proxy_redirect;
+/// Reusable parallel execution pattern library (fan-out/fan-in, pipeline,
+/// work-stealing, dynamic batch). Patterns produce execution plans, not threads.
+pub mod parallel_patterns;
 pub mod ports;
 /// P40 `ToolResource::WebFetch` — native, pure-`std` readable-text extraction
 /// from raw HTML (the fetch itself stays in `agent-facade`, this crate remains

@@ -461,3 +461,131 @@ PATTERN-CATALOG/
 | Desktop Apps | electron, tauri, neutralinojs | DONE |
 | Package Managers | homebrew | DONE |
 | Total | **40+ tools analyzed** | **COMPLETE** |
+
+## Agent-Browse-Only Parse Architecture
+
+Kernel defines WHAT to parse; external adapters execute browser automation behind `AgentBrowserPort`.
+
+### Architecture Boundary
+```
+AgentBrowserPort (trait)   = kernel defines fetch/navigate/read/health_check
+NoOpBrowser                = default adapter (returns errors, zero browser)
+External adapters          = real Playwright/Chromium, behind the port
+```
+
+### Anti-Detect + Zero-Trace (data in kernel, no network I/O)
+- `AntiDetectConfig` — navigator profiles, WebGL fingerprinting, timezone override, WebRTC policy
+- `ZeroTracePolicy` — Maximum (strip everything) or Balanced (allow some persistence)
+- `ResourceSnapshot` — select_read_algorithm / select_navigate_algorithm / recommended_concurrency
+
+### Per-Call PQ Crypto Signatures
+- Each parse call gets a fresh ML-DSA-65 keypair via `sign_parse_call`
+- Signature binds: ip_hash || timestamp_us || payload_hash || nonce
+- `SignedParseChain` — append-only chain with monotonic timestamps + chain hash
+- Zero hashes rejected as semantic error before signature check
+
+### Proxy Pool + Rotation
+- `ProxyPool` — RoundRobin / WeightedRandom / GeoRouting / LeastLatency / Chain
+- EMA health tracking per endpoint (latency, success/failure)
+- `proxy_selection_seed` — deterministic seed from proxy hash
+
+### PID-Controlled Dynamic Concurrency (Orchestrator)
+- `PidController` — kp/ki/kd with anti-windup integral, produces recommended concurrency
+- `ScheduledTask` — PID-style monotonic task_id, priority, estimated_us, dependencies
+- `orchestrator.pid_update` / `pid_recommended_concurrency` / `effective_concurrency`
+- `observe_action` — feeds observation into PID feedback loop
+
+### Priority Scheduling
+- `Priority` — Background < Normal < Interactive < Parse < Critical
+- `enqueue_task` / `dequeue_ready` — priority-sorted, dependency-aware, FIFO within same priority
+- `queue_depth` / `queue_snapshot` — current queue state
+
+### Predictive ETA + Load Forecasting
+- `PredictiveEngine` — EMA-based per-category latency prediction with 95% CI
+- `predict_eta` — how long a specific task will take
+- `predict_schedule` — when N tasks will be complete (parallel slot simulation)
+- `ascii_dashboard_full` — live queue visualization
+
+### Parallel Execution Pattern Library
+- `FanOutPlan` — split work across N workers
+- `PipelinePlan` — chain stages with throughput estimates
+- `WorkStealingPlan` — imbalanced queue detection + steal pair
+- `DynamicBatchPlan` — PID-driven batch sizing
+- `select_pattern` — heuristic pattern selector from task characteristics
+- All produce execution plans (not threads) — kernel is pure computation
+
+## TriState — No Binary States Doctrine
+
+Every observable state in the kernel carries `True | False | Unknown`. No boolean is ever just true/false. The `TriState` enum (`lib.rs`) is the canonical 3-valued logic for all state fields.
+
+Rules:
+- `Unknown` = "we don't know yet" — boot, measurement pending, observation insufficient
+- Code that acts on `Unknown` must treat it as "not safe to assume" — fail-closed
+- `resolve(default)` maps True→true, False→false, Unknown→default
+- `and()` / `or()` / `not()` provide full 3-valued logic algebra
+- `from_bool(bool)` bridges legacy code
+
+Modules affected: `agent_browser` (10 fields), `self_harness` (methods), `agc_scheduler` (PhaseEntry.valid, return types), `orchestrator` (ActionRecord.success), `parallel_patterns` (3 fields), `detection`, `skill_extractor` (DepthMode), `proxy_redirect`, `dynamic_spawner` (SpawnCache.stale), `dynamic_actions` (WorkerState.idle, ActionCache.stale).
+
+## HwProfile — CPU Topology + Clock Source Detection
+
+`kernel::hw_profile` probes `/proc/cpuinfo` and `/sys/devices/system/cpu/` at init:
+- CPU: AMD EPYC-Milan virtualized, 4 cores / 8 threads (SMT 2:1), 2.2 GHz
+- L1d: 32K, L1i: 32K, L2: 512K/core, L3: 32M shared
+- Cache line: 64B, NUMA: 1 node
+- Clock: `kvm-clock` (KVM paravirtualized), TSC known_freq + invariant
+- All values default to 0/Unknown if probe fails (fail-closed)
+
+## TimeStabilizer — Deterministic Time Authority
+
+`kernel::time_stabilizer` produces monotonic, stabilised time from raw clock readings:
+- **PLL Corrector** — phase-locked loop smoothing drift (bandwidth = 1 Hz, locks ~1s at 50 Hz)
+- **PPMC Predictor** — Predicted Master Clock: forecast next N ticks with 95% CI
+- **Clock Source** — kvm-clock / TSC / HPET / ACPI_PM, each with known resolution + drift ppm
+- **Monotonicity** — output never decreases (raw backward ticks are clamped)
+- **Integration** — drift correction feeds into `ClockStabilizer::set_external_drift()`
+
+## PowerForecast — Weather + Grid Load + Thermal
+
+`kernel::power_forecast` predicts clock drift from thermal/grid/weather:
+- **ThermalObserver** — CPU package temperature trend (°C)
+- **GridObserver** — grid frequency deviation → oscillator drift (0.01 Hz ≈ 200 ppm)
+- **Drift composition** — thermal drift (10°C above 40°C ≈ 1 ppm) + grid drift
+- **Forecast confidence** — 85% with ≥12 samples, 30% cold start
+
+## ClockStabilizer — Drift Integration
+
+`clock_stabilizer.rs` extended with:
+- `external_drift_ns_per_s` — drift correction from PowerForecast + TimeStabilizer
+- `drift_confidence` — when >0.3, drift correction modulates filtered error
+- `set_external_drift(drift_ns_per_s, confidence)` — external update API
+- State serialization expanded: 64B → 80B (2 new f64 fields)
+
+## PowerForecast — Falkenstein, Germany
+
+Server location: Falkenstein, Saxony, Germany (50.26°N, 12.36°E, 565m)
+- Grid: ENTSO-E Continental Europe (50 Hz), DE bidding zone
+- ENTSO-E summer load: ~45-55 GW typical
+- Climate: Central European cool temperate, July mean ~16°C
+- Weather (2026-07-21): 16.2°C, 56% RH, 1021.8 hPa, SW wind 10.7 km/h
+- Baseline ambient for DC: 16°C (AMBIENT_BASELINE_MDEG = 16000)
+
+## LLM Fallback — Multi-Provider Chain
+
+`kernel::ports::llm_fallback` configures fallback across 9 free/open providers:
+
+| Priority | Provider | Cost | API Key | Type |
+|----------|----------|------|---------|------|
+| 0 | Ollama | free | no | local |
+| 0 | llama.cpp | free | no | local |
+| 0 | LocalAI | free | no | local |
+| 1 | Groq | free tier (30 RPM) | yes | cloud |
+| 1 | HuggingFace | $0.10/mo credits | yes | cloud |
+| 1 | DeepInfra | free startup credits | yes | cloud |
+| 1 | Fireworks | $1 free | yes | cloud |
+| 2 | vLLM | self-hosted | no | self |
+| 2 | TGI | self-hosted | no | self |
+
+Types: `ProviderKind`, `ProviderInstance`, `FallbackChain`, `FallbackAdapter`
+Strategies: PriorityOrder, FastestFirst, CheapestFirst, RoundRobin
+Auto-deprioritization after ≥3 consecutive failures; recovery on success.

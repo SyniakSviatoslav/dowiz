@@ -112,6 +112,14 @@ impl Usage {
 pub struct ChatResponse {
     pub content: String,
     pub usage: Usage,
+    /// Provenance (L1 opacity): the concrete `model_id` that produced this reply.
+    /// The kernel requires this to match a LOCKED model before the text can become
+    /// evidence — a backend that silently serves an unlocked model is refused
+    /// fail-closed (see `crate::agent::model_pair::from_port_response`). No opaque
+    /// "the model said" path exists without a provenance tag.
+    pub model_id: String,
+    /// Monotonic utterance id for replay/audit (L1: every reply is traceable).
+    pub utterance_id: u64,
     /// Tool calls the model returned this turn (OpenAI `message.tool_calls`).
     /// Empty when the model answered directly. Iterating on a single tool call is
     /// the loop's job; the kernel carries all of them verbatim, unparsed.
@@ -148,6 +156,8 @@ pub struct EmbedRequest {
 #[derive(Debug, Clone)]
 pub struct EmbedResponse {
     pub embedding: Vec<f32>,
+    /// Provenance (L1 opacity): which model produced the embedding.
+    pub model_id: String,
 }
 
 /// A rerank request (optional backend capability).
@@ -162,6 +172,8 @@ pub struct RerankRequest {
 #[derive(Debug, Clone)]
 pub struct RerankResponse {
     pub scores: Vec<f32>,
+    /// Provenance (L1 opacity): which model produced the ranking.
+    pub model_id: String,
 }
 
 /// Typed backend error. `health()` and any capability probe return a typed `Err` when the backend
