@@ -29,9 +29,7 @@
 use crate::ports::mcp::{
     GrantSet, McpPort, McpServeError, McpToolCall, McpToolListEntry, McpToolResult,
 };
-use crate::ports::tool::{
-    SkillRegistry, Surface, ToolInvocation, ToolOutput, ToolPort, ToolScope, ToolSpec,
-};
+use crate::ports::tool::{SkillRegistry, Surface};
 use crate::token_bucket::TokenBucket;
 
 /// Hard iteration ceiling. The loop executes at most this many model-driven steps;
@@ -105,6 +103,33 @@ pub enum AgentStep {
     CallTool { name: String, raw_arg: String },
     /// Emit a final answer and stop the loop.
     Answer { text: String },
+    /// Fan-out: dispatch N parallel sub-tasks, each with a name and argument.
+    /// The swarm coordinator claims these from the spool and runs them concurrently.
+    FanOut { tasks: Vec<SubTask> },
+    /// Merge: combine results from previously fan-out tasks into a single answer.
+    Merge { task_ids: Vec<usize>, strategy: MergeStrategy },
+}
+
+/// A sub-task dispatched by FanOut.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubTask {
+    /// Unique task id (assigned by the coordinator).
+    pub id: usize,
+    /// Tool or skill name to invoke.
+    pub name: String,
+    /// Raw argument payload.
+    pub raw_arg: String,
+}
+
+/// How Merge combines sub-task results.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MergeStrategy {
+    /// Concatenate all results in order.
+    Concat,
+    /// Pick the result with the highest confidence score.
+    BestFirst,
+    /// Vote: majority-wins on a categorical answer.
+    MajorityVote,
 }
 
 /// The reasoning seam — the "model". Plug a scripted fake in tests; a downstream
@@ -268,6 +293,34 @@ impl<R: SkillRegistry> AgentLoop<R> {
                         }
                     }
                 }
+                AgentStep::FanOut { tasks } => {
+                    // Fan-out: log each sub-task as a parsed call. The actual dispatch
+                    // is the swarm coordinator's responsibility — the loop only records
+                    // the intent. Each sub-task becomes a ToolCallParsed observation.
+                    for task in &tasks {
+                        log.push(LoopLogEntry {
+                            iteration,
+                            event: LoopEventKind::ToolCallParsed {
+                                tool_name: task.name.clone(),
+                                raw_arg: format!("[fanout:{}] {}", task.id, task.raw_arg),
+                            },
+                        });
+                    }
+                }
+                AgentStep::Merge { task_ids, strategy } => {
+                    // Merge: log the merge intent. The actual result combination
+                    // is the coordinator's responsibility — the loop records the signal.
+                    log.push(LoopLogEntry {
+                        iteration,
+                        event: LoopEventKind::ToolCallParsed {
+                            tool_name: "merge".to_string(),
+                            raw_arg: format!(
+                                "ids={:?} strategy={:?}",
+                                task_ids, strategy
+                            ),
+                        },
+                    });
+                }
             }
 
             // Re-bind the context for the next iteration (immutable borrow of `log`
@@ -286,7 +339,10 @@ impl<R: SkillRegistry> AgentLoop<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ports::tool::{StaticSkillRegistry, ToolAction, ToolError, ToolResource};
+    use crate::ports::tool::{
+        StaticSkillRegistry, ToolAction, ToolError, ToolInvocation, ToolOutput, ToolPort,
+        ToolResource, ToolScope, ToolSpec,
+    };
     use std::cell::{Cell, RefCell};
 
     // A spy tool: records invocation count so we can prove the fail-closed gate runs
