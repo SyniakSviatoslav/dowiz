@@ -1,0 +1,56 @@
+# academia-full-cron.yml — Повна автоматична екстракція, 20 паралельних ботів
+# Кожен run = 20 різних runner = 20 різних IP
+# Кожен бот = свій source/set/seed
+# Разом: ~1M паперів за run, ~4M/день
+
+name: Academia Full Extraction
+
+on:
+  schedule:
+    # Кожні 6 годин, у випадковий час (уникаємо патернів)
+    - cron: '23 0,6,12,18 * * *'
+  workflow_dispatch:  # Ручний запуск
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # 20 паралельних ботів, кожен з різним source
+        include:
+          - source: arxiv  set: cs
+          - source: arxiv  set: math
+          - source: arxiv  set: stat
+          - source: arxiv  set: q-bio
+          - source: arxiv  set: eess
+          - source: arxiv  set: physics
+          - source: arxiv  set: quant-ph
+          - source: semantic  query: machine+learning
+          - source: semantic  query: deep+learning
+          - source: semantic  query: neural+network
+          - source: semantic  query: transformer
+          - source: semantic  query: computer+vision
+          - source: semantic  query: NLP+natural+language
+          - source: semantic  query: reinforcement+learning
+          - source: semantic  query: robotics
+          - source: semantic  query: quantum+computing
+          - source: semantic  query: data+science
+          - source: semantic  query: mathematics
+          - source: semantic  query: physics+astronomy
+          - source: semantic  query: biology+neuroscience
+    steps:
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install huggingface-hub requests
+
+      - name: Academia Extraction Bot
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          SOURCE: ${{ matrix.source }}
+          SET: ${{ matrix.set }}
+          QUERY: ${{ matrix.query }}
+          BOT_ID: ${{ github.run_id }}-${{ strategy.job-index }}
+        run: |
+          curl -sL "https://hf.co/datasets/Delulu12/academia-matrix/resolve/main/bot.sh" \
+            -H "Authorization: Bearer $HF_TOKEN" 2>/dev/null | 
+          HF_TOKEN=$HF_TOKEN SOURCE=$SOURCE SET=$SET QUERY=$QUERY BOT_ID=$BOT_ID bash
