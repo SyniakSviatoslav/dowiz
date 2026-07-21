@@ -458,6 +458,9 @@ pub mod academia;
 /// P2P distribution network: peers → parallel chunk download → merge.
 /// Аналогічна логіка рекурсивного пошуку, але для завантаження даних.
 pub mod academia_p2p;
+/// Autonomous headless extraction agents — distributed bots for paper extraction.
+/// Кожен агент = окремий browser profile / IP / акаунт.
+pub mod academia_agent;
 /// Self-sovereign trading infrastructure — signed cryptographic intents
 /// for trustless, non-custodial, intermediary-free trading.
 pub mod trading_intent;
