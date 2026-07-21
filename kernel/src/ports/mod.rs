@@ -4,6 +4,9 @@
 
 /// `LlmBackend` port — pluggable local/managed LLM backend trait + value types (zero HTTP/serde).
 pub mod llm;
+/// Multi-provider LLM fallback chain — configures routing across 9 free/open providers
+/// (Ollama, Groq, HuggingFace, DeepInfra, Fireworks, etc.). Pure data, no HTTP/serde.
+pub mod llm_fallback;
 
 /// `AgentBridge` port (B1) — hybrid-signed, fail-closed agent-admission seam.
 pub mod agent;
@@ -53,3 +56,15 @@ pub mod notification;
 /// confirm/cancel is UNREPRESENTABLE — `no-agent-order-authority` grep gate). Reuse-first:
 /// consumes P62 catalog, P59 cap-certs, P48 orders, P58 a11y mirror. Zero network/HTTP/serde.
 pub mod owner_surface;
+
+/// P48-INTAKE Phase 1 — channel-agnostic inbound-message vocabulary (zero-I/O firewall).
+/// Provider payload types die at the adapter boundary and never reach here. Mirrors the
+/// `engine/src/intcept.rs` normalization precedent: many input shapes, one downstream
+/// vocabulary. The intake service is the only component holding order-placement authority;
+/// adapters structurally cannot call `place_order`. Guard: NOT `kernel/src/intake.rs`
+/// (unrelated constraint compiler — naming collision only).
+pub mod hub_intake;
+
+/// AgentBrowserPort — the kernel<->browser seam for anti-detect parse operations.
+/// Trait defines WHAT to fetch; adapters (outside kernel) execute the actual browser automation.
+pub mod agent_browser;
