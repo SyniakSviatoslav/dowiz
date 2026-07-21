@@ -212,9 +212,6 @@ pub mod wallet;
 /// firewall and the `token_bucket` degrade-closed budget. No tool runs without a
 /// verified capability; unknown tools rejected; budget exhaustion terminates the loop.
 pub mod agent;
-/// C2 — DEPLOY CONFIG (roster + provider selection + default currency) is load-bearing
-/// deployment input, not compiled-in. Std-only, serde-free.
-pub mod deploy_config;
 /// External capability ports (the seams where the kernel meets the outside world without importing
 /// it) — currently the `LlmBackend` pluggable LLM backend trait (zero HTTP/serde; the concrete
 /// `llm-adapters` crate implements it).
@@ -245,6 +242,9 @@ pub mod ct_gate;
 /// FraudAuth escalate-only output, and the Pricing operator-activation money-gate. Kernel-only,
 /// zero network/serde. See `decision/mod.rs` header for the firewall + red-line rationale.
 pub mod decision;
+/// C2 — DEPLOY CONFIG (roster + provider selection + default currency) is load-bearing
+/// deployment input, not compiled-in. Std-only, serde-free.
+pub mod deploy_config;
 /// Reverse-engineering loop #R1 — Markov attractor detector (ASCENDed from markov_attractor.py);
 /// reuses `spectral` as its eigen-core, killing the dual-authority hazard.
 /// Item 46 — float-determinism containment goldens (ADR-046: pin-under-golden).
@@ -314,6 +314,18 @@ pub mod online;
 #[cfg(feature = "optical")]
 pub mod optical;
 pub mod order_machine;
+/// Kernel-native structured data extraction (pure `std`). Replaces `awk`,
+/// `split('=')`, and `node -e JSON.parse` with deterministic, zero-dep parsers.
+pub mod parse;
+/// Unified memory search engine — indexed vector (BM25 + trigram) + spectral
+/// navigation (PPR) over structured documents. Replaces all `grep -rn` extraction.
+pub mod memory_search;
+/// Chronological-topological prediction engine — composes Markov, spectral,
+/// absorbing, Noether, and causal primitives into a single prediction API.
+pub mod predict;
+/// Decentralized mesh swarm coordinator — task decomposition via DSU, executor
+/// selection via harmonic ranking, dynamic adaptation via spectral/Markov prediction.
+pub mod swarm;
 pub mod ports;
 /// P40 `ToolResource::WebFetch` — native, pure-`std` readable-text extraction
 /// from raw HTML (the fetch itself stays in `agent-facade`, this crate remains
