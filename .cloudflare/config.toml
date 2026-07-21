@@ -1,0 +1,11 @@
+# Cloudflare API config for Academia Workers
+# Generated: 2026-07-21
+# Status: needs verification (token invalid on first attempt)
+
+[accounts]
+email = ""  # Set your Cloudflare email
+api_token = ""  # Set your Cloudflare API token
+
+[workers]
+name = "academia-mesh"
+routes = []

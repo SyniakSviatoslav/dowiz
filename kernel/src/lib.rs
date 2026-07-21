@@ -461,6 +461,10 @@ pub mod academia_p2p;
 /// Autonomous headless extraction agents — distributed bots for paper extraction.
 /// Кожен агент = окремий browser profile / IP / акаунт.
 pub mod academia_agent;
+/// PID-керований Cloudflare Workers пул — 10,000 динамічних Workers.
+/// Чим більше паперів залишилось, тим більше Workers спавниться.
+/// Неактивні Workers поступово видаляються.
+pub mod academia_cloud;
 /// Self-sovereign trading infrastructure — signed cryptographic intents
 /// for trustless, non-custodial, intermediary-free trading.
 pub mod trading_intent;
