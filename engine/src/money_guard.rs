@@ -61,9 +61,7 @@ impl TweenGuard {
         // Live guard: reject any fractional input. (An `f64` can be non-integral;
         // an `i64` parameter could not, which is why the prior guard was dead.)
         if (amount_minor.fract()).abs() > 1e-9 {
-            return Err(
-                "money must be presented as a decided integer, never interpolated".into(),
-            );
+            return Err("money must be presented as a decided integer, never interpolated".into());
         }
         Ok(amount_minor.round() as i64)
     }

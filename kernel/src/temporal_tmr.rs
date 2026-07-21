@@ -38,7 +38,7 @@
 //! * Applied ONLY to 2–3 named µs-scale pure functions (`event_log::MeshEvent::event_id`,
 //!   `money::apply_tax`) — NOT a kernel-wide wrapper.
 
-use crate::breaker::{Breaker, BreakerState, SignalVector, TripCause};
+use crate::breaker::{Breaker, SignalVector, TripCause};
 use crate::fdr;
 
 /// The outcome of a temporal-TMR vote over `n` sequential re-runs of `f`.
@@ -253,7 +253,7 @@ pub fn apply_tax_tmr(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::breaker::{fit_from_rates, RateProfile};
+    use crate::breaker::{fit_from_rates, BreakerState, RateProfile};
     use crate::event_log::MeshEvent;
 
     // item 9 harness plumbing (minimal). `fit_from_rates` / `RateProfile` are

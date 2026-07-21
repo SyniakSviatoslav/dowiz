@@ -7,12 +7,10 @@
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use dowiz_kernel::event_log::sha3_256;
-use dowiz_kernel::pq::dsa::{
-    keygen, sign, verify, MlDsa65Pk, MlDsa65Sk, RNDBYTES, SEEDBYTES,
-};
+use dowiz_kernel::pq::dsa::{keygen, sign, verify, MlDsa65Pk, MlDsa65Sk, RNDBYTES, SEEDBYTES};
 use dowiz_kernel::pq::hybrid::{hybrid_decaps, hybrid_encaps, hybrid_keygen, HybridKeypair};
-use dowiz_kernel::pq::kem;
 use dowiz_kernel::pq::keccak::shake256;
+use dowiz_kernel::pq::kem;
 
 fn kernel_crypto_pq(c: &mut Criterion) {
     let mut group = c.benchmark_group("kernel_crypto_pq");
@@ -23,9 +21,7 @@ fn kernel_crypto_pq(c: &mut Criterion) {
     let (pk, sk): (MlDsa65Pk, MlDsa65Sk) = keygen(&seed);
     let msg = b"dowiz mesh handshake payload";
     let sig = sign(&sk, msg, &rnd);
-    group.bench_function("dsa_sign", |b| {
-        b.iter(|| black_box(sign(&sk, msg, &rnd)))
-    });
+    group.bench_function("dsa_sign", |b| b.iter(|| black_box(sign(&sk, msg, &rnd))));
     group.bench_function("dsa_verify", |b| {
         b.iter(|| black_box(verify(&pk, msg, &sig)))
     });

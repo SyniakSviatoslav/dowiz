@@ -17,7 +17,7 @@ pub mod transport;
 
 pub use cache::{CachingBackend, NoCache};
 pub use compose::{Composed, Harness, Stack, StackBuilder, DEFAULT_OLLAMA_BASE};
-pub use dispatch::{DispatchError, Dispatcher, TrackRecord, append_harvest};
+pub use dispatch::{append_harvest, DispatchError, Dispatcher, TrackRecord};
 pub use managed::ManagedApiAdapter;
 pub use ollama::{OllamaAdapter, OllamaQuirks};
 pub use quirks::Quirks;

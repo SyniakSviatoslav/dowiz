@@ -36,9 +36,9 @@ use std::collections::HashMap;
 
 use crate::event_log::sha3_256;
 use crate::ports::agent::cap::{
-    revocation_hash, AnchorRoster, Capability, NodeId, RefSigner, RevocationSet, SignatureVerifier,
+    revocation_hash, AnchorRoster, Capability, NodeId, RevocationSet, SignatureVerifier,
 };
-use crate::ports::agent::scope::{Action, Resource, Scope};
+use crate::ports::agent::scope::Scope;
 
 // ── algorithm-suite registry (composite-sigs adoption) ──────────────────────────
 
@@ -896,6 +896,8 @@ pub fn verify_chain_hybrid<V: SignatureVerifier>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ports::agent::cap::RefSigner;
+    use crate::ports::agent::scope::{Action, Resource};
 
     // A test party with deterministic seeds + derived public keys.
     struct Party {

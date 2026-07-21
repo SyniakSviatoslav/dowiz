@@ -23,13 +23,9 @@
 
 use std::time::Duration;
 
-use criterion::{
-    black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput,
-};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
-use dowiz_kernel::decision::{
-    Decision, DecisionRegistry, DecisionUnitMeta, DomainTag, UnitEpoch,
-};
+use dowiz_kernel::decision::{Decision, DecisionRegistry, DecisionUnitMeta, DomainTag, UnitEpoch};
 use dowiz_kernel::event_log::{sha3_256, EventLog, MemEventStore, MeshEvent};
 use dowiz_kernel::fdr::ring::FdrRing;
 use dowiz_kernel::fdr::schema::{FdrEvent, Kind, StampPolicy};
@@ -39,11 +35,7 @@ use dowiz_kernel::hydra::FileEventStore;
 /// A unique scratch dir per bench process (block-backed ext4 in this env — the
 /// fsync numbers are real, not tmpfs no-ops).
 fn scratch(tag: &str) -> std::path::PathBuf {
-    let base = std::env::temp_dir().join(format!(
-        "dowiz-item26-{}-{}",
-        tag,
-        std::process::id()
-    ));
+    let base = std::env::temp_dir().join(format!("dowiz-item26-{}-{}", tag, std::process::id()));
     let _ = std::fs::create_dir_all(&base);
     base
 }
@@ -105,30 +97,26 @@ fn m1_fsync_amortization(c: &mut Criterion) {
     let dir = scratch("m1amort");
 
     for group_sz in [1u64, 4, 16, 64] {
-        group.bench_with_input(
-            BenchmarkId::from_parameter(group_sz),
-            &group_sz,
-            |b, &g| {
-                let path = dir.join(format!("amort-{g}.log"));
-                b.iter(|| {
-                    let mut f = std::fs::OpenOptions::new()
-                        .create(true)
-                        .write(true)
-                        .truncate(true)
-                        .open(&path)
-                        .expect("open");
-                    for i in 0..RECORDS {
-                        f.write_all(line).expect("write");
-                        if (i + 1) % g == 0 {
-                            f.sync_all().expect("fsync");
-                        }
+        group.bench_with_input(BenchmarkId::from_parameter(group_sz), &group_sz, |b, &g| {
+            let path = dir.join(format!("amort-{g}.log"));
+            b.iter(|| {
+                let mut f = std::fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(&path)
+                    .expect("open");
+                for i in 0..RECORDS {
+                    f.write_all(line).expect("write");
+                    if (i + 1) % g == 0 {
+                        f.sync_all().expect("fsync");
                     }
-                    // final barrier so every record is durable regardless of g
-                    f.sync_all().expect("fsync-tail");
-                    black_box(&f);
-                })
-            },
-        );
+                }
+                // final barrier so every record is durable regardless of g
+                f.sync_all().expect("fsync-tail");
+                black_box(&f);
+            })
+        });
     }
     group.finish();
     let _ = std::fs::remove_dir_all(&dir);
@@ -210,30 +198,25 @@ fn m2_fdr_ring(c: &mut Criterion) {
     sweep.warm_up_time(Duration::from_millis(500));
     sweep.throughput(Throughput::Elements(BURST));
     for cap in [256u64 * 1024, 1024 * 1024, 4 * 1024 * 1024] {
-        sweep.bench_with_input(
-            BenchmarkId::from_parameter(cap),
-            &cap,
-            |b, &cap| {
-                b.iter(|| {
-                    let mut ring =
-                        FdrRing::open(dir.join(format!("sweep-{cap}")), cap).expect("open");
-                    for i in 0..BURST {
-                        let seq = ring.next_seq();
-                        let _ = i;
-                        let ev = FdrEvent::stamp(
-                            seq,
-                            Level::Info,
-                            Kind::Event,
-                            "sweep".into(),
-                            StampPolicy::Cheap,
-                            vec![],
-                        );
-                        black_box(ring.append(&ev).expect("append"));
-                    }
-                    black_box(&ring);
-                })
-            },
-        );
+        sweep.bench_with_input(BenchmarkId::from_parameter(cap), &cap, |b, &cap| {
+            b.iter(|| {
+                let mut ring = FdrRing::open(dir.join(format!("sweep-{cap}")), cap).expect("open");
+                for i in 0..BURST {
+                    let seq = ring.next_seq();
+                    let _ = i;
+                    let ev = FdrEvent::stamp(
+                        seq,
+                        Level::Info,
+                        Kind::Event,
+                        "sweep".into(),
+                        StampPolicy::Cheap,
+                        vec![],
+                    );
+                    black_box(ring.append(&ev).expect("append"));
+                }
+                black_box(&ring);
+            })
+        });
     }
     sweep.finish();
     let _ = std::fs::remove_dir_all(&dir);
@@ -251,8 +234,9 @@ fn m3_import_unit(c: &mut Criterion) {
 
     for n_cases in [1usize, 8, 64] {
         // Identity replay set: proc(x)=x, expected==input (no u8 overflow at N=64).
-        let cases: Vec<(u8, Decision<u8>)> =
-            (0..n_cases).map(|i| (i as u8, Decision::Answer(i as u8))).collect();
+        let cases: Vec<(u8, Decision<u8>)> = (0..n_cases)
+            .map(|i| (i as u8, Decision::Answer(i as u8)))
+            .collect();
 
         let mut meta = DecisionUnitMeta::new(DomainTag::Harness, UnitEpoch(1));
         meta.content_id = sha3_256(artifact);
@@ -264,27 +248,23 @@ fn m3_import_unit(c: &mut Criterion) {
         // Prime once so the lineage row exists; subsequent appends are idempotent
         // Duplicate no-ops (contains-lookup cost only) — realistic re-import shape.
 
-        group.bench_with_input(
-            BenchmarkId::from_parameter(n_cases),
-            &n_cases,
-            |b, _| {
-                b.iter(|| {
-                    let res = dowiz_kernel::decision::import::import_unit(
-                        meta.clone(),
-                        artifact,
-                        |x| Decision::Answer(*x),
-                        &cases,
-                        ish,
-                        // Item 23 added the local/gossip source discriminant; this bench
-                        // measures the local re-import shape.
-                        dowiz_kernel::decision::import::Source::Local,
-                        &reg,
-                        &mut log,
-                    );
-                    black_box(res.is_ok())
-                })
-            },
-        );
+        group.bench_with_input(BenchmarkId::from_parameter(n_cases), &n_cases, |b, _| {
+            b.iter(|| {
+                let res = dowiz_kernel::decision::import::import_unit(
+                    meta.clone(),
+                    artifact,
+                    |x| Decision::Answer(*x),
+                    &cases,
+                    ish,
+                    // Item 23 added the local/gossip source discriminant; this bench
+                    // measures the local re-import shape.
+                    dowiz_kernel::decision::import::Source::Local,
+                    &reg,
+                    &mut log,
+                );
+                black_box(res.is_ok())
+            })
+        });
     }
     group.finish();
 }

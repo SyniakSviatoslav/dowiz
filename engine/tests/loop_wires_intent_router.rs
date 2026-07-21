@@ -37,7 +37,11 @@ fn fixedtimestep_frame_drives_router_tick_into_store() {
     widgets.size_h[7] = 2.0;
 
     let down_on_widget = RawInput::Pointer {
-        pos: dowiz_engine::text_input::FieldPos { u: 5.0, v: 5.0, w: 0.0 },
+        pos: dowiz_engine::text_input::FieldPos {
+            u: 5.0,
+            v: 5.0,
+            w: 0.0,
+        },
         phase: dowiz_engine::intent::PointerPhase::Down,
         vel: (0.0, 0.0),
     };

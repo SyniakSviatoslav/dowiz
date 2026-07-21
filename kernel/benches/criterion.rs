@@ -230,9 +230,15 @@ fn bench_retrieval_recall(c: &mut Criterion) {
 fn bench_attention(c: &mut Criterion) {
     let m = 8usize;
     let d = 8usize;
-    let q: Vec<Vec<f64>> = (0..m).map(|i| (0..d).map(|j| ((i + j) as f64) / (d as f64)).collect()).collect();
-    let k: Vec<Vec<f64>> = (0..m).map(|i| (0..d).map(|j| ((i * 2 + j) as f64) / (d as f64)).collect()).collect();
-    let v: Vec<Vec<f64>> = (0..m).map(|i| (0..d).map(|j| ((i + j * 3) as f64) / (d as f64)).collect()).collect();
+    let q: Vec<Vec<f64>> = (0..m)
+        .map(|i| (0..d).map(|j| ((i + j) as f64) / (d as f64)).collect())
+        .collect();
+    let k: Vec<Vec<f64>> = (0..m)
+        .map(|i| (0..d).map(|j| ((i * 2 + j) as f64) / (d as f64)).collect())
+        .collect();
+    let v: Vec<Vec<f64>> = (0..m)
+        .map(|i| (0..d).map(|j| ((i + j * 3) as f64) / (d as f64)).collect())
+        .collect();
     c.bench_function("attention/matmul_8x8", |b| {
         b.iter(|| black_box(attention::attention(&q, &k, &v)))
     });
@@ -249,8 +255,8 @@ fn bench_attention(c: &mut Criterion) {
 /// bench supplies the gated timing ids the P75 gate consumes. CPU-only.
 fn bench_field_eigen(c: &mut Criterion) {
     use dowiz_kernel::field_eigenmodes::{
-        field_eigenmodes_a, field_eigenmodes_b, modal_reconstruct, NeumannGrid, seeded_smooth_field,
-        stencil_step,
+        field_eigenmodes_a, field_eigenmodes_b, modal_reconstruct, seeded_smooth_field,
+        stencil_step, NeumannGrid,
     };
     let grids: &[(usize, usize, &str)] = &[(4, 4, "4x4"), (5, 5, "5x5"), (4, 8, "4x8")];
     let rs: &[usize] = &[4, 8, 12];

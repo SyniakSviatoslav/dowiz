@@ -212,14 +212,20 @@ mod tests {
         // Uniform over 4 outcomes ⇒ H = ln(4) ≈ 1.38629.
         let b = [0.25f64, 0.25, 0.25, 0.25];
         let h = entropy(&b);
-        assert!((h - 4.0 * 0.25 * 0.25f64.ln().abs()).abs() < 1e-9, "got {h}");
+        assert!(
+            (h - 4.0 * 0.25 * 0.25f64.ln().abs()).abs() < 1e-9,
+            "got {h}"
+        );
     }
 
     #[test]
     fn entropy_zero_mass_contributes_nothing() {
         let b = [1.0f64, 0.0, 0.0];
         let h = entropy(&b);
-        assert!(h.abs() < 1e-12, "degenerate belief has zero entropy, got {h}");
+        assert!(
+            h.abs() < 1e-12,
+            "degenerate belief has zero entropy, got {h}"
+        );
     }
 
     #[test]
@@ -253,11 +259,17 @@ mod eigensolver_parity {
         rows.iter().flatten().copied().collect()
     }
     fn sort_pairs(v: &mut [(f64, f64)]) {
-        v.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap().then(a.1.partial_cmp(&b.1).unwrap()));
+        v.sort_by(|a, b| {
+            a.0.partial_cmp(&b.0)
+                .unwrap()
+                .then(a.1.partial_cmp(&b.1).unwrap())
+        });
     }
     fn kernel_eigs(rows: &[Vec<f64>]) -> Vec<(f64, f64)> {
-        let mut v: Vec<(f64, f64)> =
-            dowiz_kernel::spectral::eigenvalues(rows).iter().map(|c| (c.re, c.im)).collect();
+        let mut v: Vec<(f64, f64)> = dowiz_kernel::spectral::eigenvalues(rows)
+            .iter()
+            .map(|c| (c.re, c.im))
+            .collect();
         sort_pairs(&mut v);
         v
     }
@@ -271,7 +283,11 @@ mod eigensolver_parity {
         v
     }
     fn assert_close(a: &[(f64, f64)], b: &[(f64, f64)], msg: &str) {
-        assert_eq!(a.len(), b.len(), "{msg}: eigenvalue COUNT differs {a:?} vs {b:?}");
+        assert_eq!(
+            a.len(),
+            b.len(),
+            "{msg}: eigenvalue COUNT differs {a:?} vs {b:?}"
+        );
         for (x, y) in a.iter().zip(b.iter()) {
             assert!(
                 (x.0 - y.0).abs() < TOL && (x.1 - y.1).abs() < TOL,
@@ -288,19 +304,47 @@ mod eigensolver_parity {
     #[test]
     fn fl_dk_matches_francis_qr_real_spectrum() {
         // diag(2,3,5) → {2,3,5}
-        let m = vec![vec![2.0, 0.0, 0.0], vec![0.0, 3.0, 0.0], vec![0.0, 0.0, 5.0]];
+        let m = vec![
+            vec![2.0, 0.0, 0.0],
+            vec![0.0, 3.0, 0.0],
+            vec![0.0, 0.0, 5.0],
+        ];
         assert_close(&kernel_eigs(&m), &bebop_eigs(&m), "diag: kernel↔bebop2");
-        assert_close(&kernel_eigs(&m), &analytic(vec![(2.0, 0.0), (3.0, 0.0), (5.0, 0.0)]), "diag: ↔analytic");
+        assert_close(
+            &kernel_eigs(&m),
+            &analytic(vec![(2.0, 0.0), (3.0, 0.0), (5.0, 0.0)]),
+            "diag: ↔analytic",
+        );
 
         // upper-triangular → eigenvalues are the diagonal {1,4,-3}
-        let m = vec![vec![1.0, 2.0, 0.0], vec![0.0, 4.0, 5.0], vec![0.0, 0.0, -3.0]];
-        assert_close(&kernel_eigs(&m), &bebop_eigs(&m), "triangular: kernel↔bebop2");
-        assert_close(&kernel_eigs(&m), &analytic(vec![(1.0, 0.0), (4.0, 0.0), (-3.0, 0.0)]), "triangular: ↔analytic");
+        let m = vec![
+            vec![1.0, 2.0, 0.0],
+            vec![0.0, 4.0, 5.0],
+            vec![0.0, 0.0, -3.0],
+        ];
+        assert_close(
+            &kernel_eigs(&m),
+            &bebop_eigs(&m),
+            "triangular: kernel↔bebop2",
+        );
+        assert_close(
+            &kernel_eigs(&m),
+            &analytic(vec![(1.0, 0.0), (4.0, 0.0), (-3.0, 0.0)]),
+            "triangular: ↔analytic",
+        );
 
         // companion [[0,-2],[1,-3]] → λ²+3λ+2 → {-1,-2}
         let m = vec![vec![0.0, -2.0], vec![1.0, -3.0]];
-        assert_close(&kernel_eigs(&m), &bebop_eigs(&m), "companion: kernel↔bebop2");
-        assert_close(&kernel_eigs(&m), &analytic(vec![(-1.0, 0.0), (-2.0, 0.0)]), "companion: ↔analytic");
+        assert_close(
+            &kernel_eigs(&m),
+            &bebop_eigs(&m),
+            "companion: kernel↔bebop2",
+        );
+        assert_close(
+            &kernel_eigs(&m),
+            &analytic(vec![(-1.0, 0.0), (-2.0, 0.0)]),
+            "companion: ↔analytic",
+        );
     }
 
     // GREEN: complex-conjugate spectrum — the case a symmetric-only solver gets WRONG.
@@ -309,7 +353,11 @@ mod eigensolver_parity {
     fn complex_conjugate_eigenvalues_agree() {
         let m = vec![vec![0.0, -1.0], vec![1.0, 0.0]];
         assert_close(&kernel_eigs(&m), &bebop_eigs(&m), "rotation: kernel↔bebop2");
-        assert_close(&kernel_eigs(&m), &analytic(vec![(0.0, -1.0), (0.0, 1.0)]), "rotation: ↔analytic");
+        assert_close(
+            &kernel_eigs(&m),
+            &analytic(vec![(0.0, -1.0), (0.0, 1.0)]),
+            "rotation: ↔analytic",
+        );
     }
 
     // GREEN: spectral radius (the scalar the wasm surface returns) — parity kernel FL+DK vs the
@@ -317,7 +365,14 @@ mod eigensolver_parity {
     #[test]
     fn spectral_radius_parity_kernel_vs_wasm_surface() {
         let fixtures: [(Vec<Vec<f64>>, f64); 3] = [
-            (vec![vec![2.0, 0.0, 0.0], vec![0.0, 3.0, 0.0], vec![0.0, 0.0, 5.0]], 5.0),
+            (
+                vec![
+                    vec![2.0, 0.0, 0.0],
+                    vec![0.0, 3.0, 0.0],
+                    vec![0.0, 0.0, 5.0],
+                ],
+                5.0,
+            ),
             (vec![vec![0.0, -2.0], vec![1.0, -3.0]], 2.0),
             (vec![vec![0.0, -1.0], vec![1.0, 0.0]], 1.0),
         ];

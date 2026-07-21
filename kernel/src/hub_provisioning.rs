@@ -31,7 +31,7 @@ use crate::capability_cert::{
     AlgSuite, CertDelegation, CertError, DowizCoSign, HybridSig, SelfSignedRoot,
 };
 use crate::event_log::sha3_256;
-use crate::metrics::{AnomalyFlag, HostId};
+use crate::metrics::AnomalyFlag;
 use crate::ports::agent::cap::{AnchorRoster, RefSigner, SignatureVerifier};
 use crate::ports::agent::scope::{Action, Resource, Scope};
 

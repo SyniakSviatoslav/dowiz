@@ -42,10 +42,10 @@
 //! notifications would be a false capability claim).
 
 use crate::ports::agent::{
-    verify_chain, AnchorRoster, Capability, ChainError, Delegation, RefSigner, SignatureVerifier,
+    verify_chain, AnchorRoster, Capability, Delegation, SignatureVerifier,
 };
 use crate::ports::tool::{
-    SkillCard, SkillRegistry, Surface, ToolAction, ToolError, ToolInvocation, ToolPort, ToolScope,
+    SkillCard, SkillRegistry, Surface, ToolError, ToolInvocation, ToolScope,
 };
 
 /// MCP protocol revision this port targets (2025-06-18). A spec value, not an
@@ -282,8 +282,9 @@ fn mcp_err_from_tool(e: ToolError) -> McpServeError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ports::agent::{ChainError, RefSigner};
     use crate::ports::agent::scope::{Action, Resource, Scope};
-    use crate::ports::tool::{StaticSkillRegistry, ToolResource, ToolSpec};
+    use crate::ports::tool::{StaticSkillRegistry, ToolAction, ToolPort, ToolResource, ToolSpec};
 
     // A spy source: records invocation count so we can prove the fail-closed gate
     // runs the tool body ZERO times on an unauthorized call.

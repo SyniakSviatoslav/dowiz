@@ -105,20 +105,20 @@ fn corpus() -> Vec<&'static str> {
         "[1,2,",
         r#"{"a":}"#,
         r#"{"a" 1}"#,
-        "01",       // leading zero
-        "1.",       // no digit after point
-        "1e",       // no exponent digits
-        ".5",       // no integer part
-        "+1",       // leading plus
-        "nul",      // truncated literal
+        "01",  // leading zero
+        "1.",  // no digit after point
+        "1e",  // no exponent digits
+        ".5",  // no integer part
+        "+1",  // leading plus
+        "nul", // truncated literal
         "trailing garbage",
         r#""unterminated"#,
         "[1,2]extra",
         r#"{"x":1}}"#,
-        "\"\u{01}\"", // raw control char inside string (byte 0x01)
+        "\"\u{01}\"",  // raw control char inside string (byte 0x01)
         r#""\uD800""#, // lone high surrogate
         r#""\uDC00""#, // lone low surrogate
-        r#""\x""#,      // invalid escape
+        r#""\x""#,     // invalid escape
     ]
 }
 
@@ -143,7 +143,10 @@ fn parse_parity_and_round_trip_over_corpus() {
                 both_ok += 1;
                 // (2) round-trip: kernel serialize → serde re-parse → equal
                 let reparsed = serde_json::from_str::<Sj>(&kv.to_string()).unwrap_or_else(|e| {
-                    panic!("kernel::json output not valid JSON for {src:?}: {e}\n  emitted: {}", kv.to_string())
+                    panic!(
+                        "kernel::json output not valid JSON for {src:?}: {e}\n  emitted: {}",
+                        kv.to_string()
+                    )
                 });
                 assert!(
                     equiv(kv, &reparsed),
@@ -156,9 +159,9 @@ fn parse_parity_and_round_trip_over_corpus() {
                 parse_agree += 1;
                 both_err += 1;
             }
-            (ka, sa) => panic!(
-                "ACCEPT/REJECT DISAGREEMENT on {src:?}\n  kernel: {ka:?}\n  serde:  {sa:?}"
-            ),
+            (ka, sa) => {
+                panic!("ACCEPT/REJECT DISAGREEMENT on {src:?}\n  kernel: {ka:?}\n  serde:  {sa:?}")
+            }
         }
     }
 
@@ -172,7 +175,10 @@ fn parse_parity_and_round_trip_over_corpus() {
         round_trips
     );
     assert!(both_ok >= 25, "corpus must exercise real accepted shapes");
-    assert!(both_err >= 15, "corpus must exercise real rejected shapes (degrade-closed parity)");
+    assert!(
+        both_err >= 15,
+        "corpus must exercise real rejected shapes (degrade-closed parity)"
+    );
 }
 
 // ---- (3) proptest differential fuzz: random bounded values survive kernel→serde round-trip ----
@@ -205,15 +211,16 @@ fn arb_json() -> impl Strategy<Value = Sj> {
         any::<i64>().prop_map(|i| Sj::Number(i.into())),
         realistic_float
             .prop_filter("finite", |f: &f64| f.is_finite())
-            .prop_map(|f| serde_json::Number::from_f64(f).map(Sj::Number).unwrap_or(Sj::Null)),
+            .prop_map(|f| serde_json::Number::from_f64(f)
+                .map(Sj::Number)
+                .unwrap_or(Sj::Null)),
         ".*".prop_map(Sj::String),
     ];
     leaf.prop_recursive(4, 32, 6, |inner| {
         prop_oneof![
             prop::collection::vec(inner.clone(), 0..6).prop_map(Sj::Array),
-            prop::collection::vec((".*", inner), 0..6).prop_map(|kvs| {
-                Sj::Object(kvs.into_iter().collect())
-            }),
+            prop::collection::vec((".*", inner), 0..6)
+                .prop_map(|kvs| { Sj::Object(kvs.into_iter().collect()) }),
         ]
     })
 }

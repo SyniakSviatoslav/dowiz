@@ -26,6 +26,7 @@
 //! Pure `std`, zero new dependencies.
 
 use crate::autonomic::{schedule, schedule_into_breaker, BoundedRate, FdrAdjustment, LAW_TABLE};
+#[allow(unused_imports)]
 use crate::breaker::{Breaker, TripCause};
 use crate::fdr::pmu::PmuStamp;
 use crate::fdr::schema::Reading;
@@ -168,7 +169,7 @@ pub fn respond_with_raw_cache_miss(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::breaker::{fit_from_rates, BreakerState, RateProfile, SignalWeights, ThresholdId};
+    use crate::breaker::{fit_from_rates, BreakerState, RateProfile, SignalWeights, ThresholdId, TripCause};
 
     /// Build a fitted `ThresholdId` for the breaker (mirrors `autonomic.rs`'s test
     /// harness — the breaker needs a fitted threshold, never a literal).

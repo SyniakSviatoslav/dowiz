@@ -500,11 +500,7 @@ mod tests {
     #[test]
     fn laplacian_sign_convention_matches_kernel() {
         // 3×3 field; center node (index 4) is interior with 4 real neighbours.
-        let u: Vec<f32> = vec![
-            1.0, 2.0, 3.0,
-            4.0, 5.0, 6.0,
-            7.0, 8.0, 9.0,
-        ];
+        let u: Vec<f32> = vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0];
         let w = 3;
         let h = 3;
         let engine_lap = laplacian(&u, w, h);

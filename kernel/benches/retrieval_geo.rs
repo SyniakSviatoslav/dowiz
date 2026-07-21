@@ -14,13 +14,15 @@ fn retrieval_geo(c: &mut Criterion) {
 
     // ── BM25 isolate: rank a 12-doc corpus (P77 fixture scale) ──
     let corpus: Vec<Document> = (0..12)
-        .map(|i| Document::from_text(&format!("doc {i} rust compiler optimization backend allocation register llvm codegen {i}")))
+        .map(|i| {
+            Document::from_text(&format!(
+                "doc {i} rust compiler optimization backend allocation register llvm codegen {i}"
+            ))
+        })
         .collect();
     let bm = Bm25::new(corpus);
     let query = tokenize("rust compiler optimization");
-    group.bench_function("bm25_rank_12", |b| {
-        b.iter(|| black_box(bm.rank(&query)))
-    });
+    group.bench_function("bm25_rank_12", |b| b.iter(|| black_box(bm.rank(&query))));
 
     // ── progress_along_route: project a point onto a 64-segment polyline ──
     let poly: Vec<(f64, f64)> = (0..64)

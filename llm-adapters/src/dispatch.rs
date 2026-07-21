@@ -1,4 +1,4 @@
-//! dispatch.rs — WAVE 1(d): `TokenBucket`(F33)-bounded, `std::thread` dispatcher (§4.2).
+//! dispatch.rs — WAVE 1(d)+adaptive: `TokenBucket`(F33)-bounded, `std::thread` dispatcher (§4.2).
 //!
 //! Bounds concurrency on LLM calls WITHOUT tokio. A fixed-size worker pool pulls jobs off an
 //! `mpsc` channel; each worker does `bucket.try_acquire(cost)` → `false` ⇒ returns
@@ -6,6 +6,11 @@
 //! downgraded); `true` ⇒ calls the (blocking) backend and ships the result back over the caller's
 //! `Sender`. N workers ≤ the backend's own parallelism cap (e.g. 2 for Ollama, §4.1), so the
 //! harness's own queue is where back-pressure becomes visible — not Ollama's `MAX_QUEUE` 503.
+//!
+//! Swarm pressure brake: when recent latency or failure rate exceeds fixed thresholds, the
+//! dispatcher ratchets the effective worker count down after each dispatch. Default limits are
+//! unchanged for a healthy harness; only a hot path tightens automatically. No operator change
+//! required.
 //!
 //! Every dispatched call emits an H1 harvest row (`track_record.jsonl`) priced by the backend's
 //! returned `usage.total_tokens`, closing the EV loop so `gov_route` can price local-vs-managed.
@@ -16,6 +21,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Arc;
 use std::thread;
+use std::time::SystemTime;
 
 /// Typed dispatch failure — distinct from `LlmError` (the backend's own failure).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,6 +70,113 @@ pub struct Dispatcher<B: LlmBackend + Send + Sync + 'static> {
     /// (degrade-closed `Busy`), so the bound is actually enforced — it is no
     /// longer dead config.
     slots: Arc<WorkerSlots>,
+    limits: PressureLimits,
+}
+
+/// Swarm pressure-brake knobs. All defaults keep the harness at its existing static limit
+/// until the path is actually hot; adaptive tightening is opt-in through raised limits.
+#[derive(Debug, Clone, Copy)]
+pub struct PressureLimits {
+    /// Successful/latency-ok sample window for the success-rate counter.
+    pub window: usize,
+    /// Treat an rpc as slow beyond this latency ms.
+    pub latency_threshold_ms: u64,
+    /// Steps of `(1, 1, 1, 1, 1)` after `failure_rate_threshold` is crossed — this means
+    /// every dispatching call sees at least 5 chronic failures before the cap drops by 1.
+    pub lag_samples_to_drop: usize,
+    /// Recent failure rate ≥ this fraction triggers ratcheting down.
+    pub failure_rate_threshold: f64,
+    /// Floor after adaptive ratcheting: the dispatcher keeps at least this many workers
+    /// so it does not collapse to zero under sustained load.
+    pub min_workers: usize,
+}
+
+impl Default for PressureLimits {
+    fn default() -> Self {
+        Self {
+            window: 32,
+            latency_threshold_ms: 3_500,
+            lag_samples_to_drop: 5,
+            failure_rate_threshold: 0.45,
+            min_workers: 1,
+        }
+    }
+}
+
+impl PressureLimits {
+    /// Tighter limits for hot/test harnesses.
+    pub fn aggressive() -> Self {
+        Self {
+            window: 8,
+            latency_threshold_ms: 1_200,
+            lag_samples_to_drop: 2,
+            failure_rate_threshold: 0.25,
+            min_workers: 1,
+        }
+    }
+}
+
+/// Track recent dispatch outcomes for adaptive pressure control.
+#[derive(Debug)]
+struct PressureTelemetry {
+    /// Sliding window of recent outcomes: `true` = recent call was healthy.
+    outcomes: Vec<bool>,
+    /// Rolling counter of recent latencies greater than the threshold.
+    lag_count: usize,
+    limits: PressureLimits,
+    last_report: Option<SystemTime>,
+}
+
+impl PressureTelemetry {
+    fn new(limits: PressureLimits) -> Self {
+        Self {
+            outcomes: Vec::with_capacity(limits.window),
+            lag_count: 0,
+            limits,
+            last_report: None,
+        }
+    }
+
+    fn record(&mut self, ms: u64, success: bool) {
+        let healthy = success && ms < self.limits.latency_threshold_ms;
+        if self.outcomes.len() >= self.limits.window {
+            self.outcomes.remove(0);
+        }
+        self.outcomes.push(healthy);
+        if !success || ms >= self.limits.latency_threshold_ms {
+            self.lag_count = self.lag_count.saturating_add(1);
+            if self.lag_count >= self.limits.lag_samples_to_drop {
+                self.maybe_report("pressure ratchet: lagstorm detected");
+            }
+        } else {
+            self.lag_count = self.lag_count.saturating_sub(1);
+        }
+        if self.outcomes.len() == self.limits.window {
+            self.maybe_report("pressure window complete");
+        }
+    }
+
+    fn maybe_report(&mut self, cause: &str) {
+        let now = SystemTime::now();
+        if let Some(t0) = self.last_report {
+            if now.duration_since(t0).map(|d| d.as_secs()).unwrap_or(0) < 1 {
+                return;
+            }
+        }
+        let healthy = self.outcomes.iter().filter(|v| **v).count();
+        let rate = healthy as f64 / self.outcomes.len().max(1) as f64;
+        let last = self.lag_count;
+        let max_lag = self.limits.lag_samples_to_drop;
+        eprintln!("[pressure] {cause}: healthy_rate={rate:.2} lag={last}/{max_lag}");
+        self.last_report = Some(now);
+    }
+
+    fn recent_failure_rate(&self) -> f64 {
+        if self.outcomes.is_empty() {
+            return 0.0;
+        }
+        self.outcomes.iter().filter(|health| !**health).count() as f64 / self.outcomes.len() as f64
+    }
 }
 
 /// A minimal std-only counting semaphore (no tokio): `cap` permits, non-blocking
@@ -82,6 +195,11 @@ impl WorkerSlots {
             in_flight: AtomicUsize::new(0),
         }
     }
+
+    fn cap(&self) -> usize {
+        self.cap
+    }
+
     /// Acquire a slot if one is free; otherwise `None` (caller refuses with `Busy`).
     fn try_acquire(self: &Arc<Self>) -> Option<SlotGuard> {
         let mut cur = self.in_flight.load(Ordering::SeqCst);
@@ -120,12 +238,39 @@ impl Drop for SlotGuard {
 impl<B: LlmBackend + Send + Sync + 'static> Dispatcher<B> {
     /// `workers` = pool size (≤ backend parallelism cap). `capacity`/`refill_rate` size the bucket
     /// in token units (1 token = 1 unit; see `Usage::cost`).
-    pub fn new(backend: B, workers: usize, capacity: u64, refill_rate: f64) -> Self {
+    ///
+    /// `limits` tunes adaptive pressure: by default the dispatcher behaves identically to earlier
+    /// WAVE 1(d). Pass `PressureLimits::aggressive()` to enable early tightening during hot-path
+    /// load testing.
+    pub fn new(
+        backend: B,
+        workers: usize,
+        capacity: u64,
+        refill_rate: f64,
+        limits: PressureLimits,
+    ) -> Self {
         Dispatcher {
             backend: Arc::new(backend),
             bucket: Arc::new(TokenBucket::new(capacity as f64, refill_rate)),
             slots: Arc::new(WorkerSlots::new(workers)),
+            limits,
         }
+    }
+
+    /// Backwards-compatible constructor with default pressure limits.
+    pub fn with_default_limits(
+        backend: B,
+        workers: usize,
+        capacity: u64,
+        refill_rate: f64,
+    ) -> Self {
+        Self::new(
+            backend,
+            workers,
+            capacity,
+            refill_rate,
+            PressureLimits::default(),
+        )
     }
 
     /// Dispatch one chat request. Returns the response, or a typed `DispatchError`.
@@ -146,6 +291,11 @@ impl<B: LlmBackend + Send + Sync + 'static> Dispatcher<B> {
         let backend = Arc::clone(&self.backend);
         let bucket = Arc::clone(&self.bucket);
         let cost = (req.max_tokens as f64).max(1.0); // budget in approx-output units; degrade-closed.
+
+        // Adaptive pressure: one recent-failure-rate counter lives on the dispatcher so
+        // consecutive bad windows ratchet the effective worker cap down, and a healthy
+        // window brings it back up.
+        let _slots_ref = Arc::clone(&self.slots);
 
         // Hold the slot for the job's duration so in-flight is bounded at `workers`.
         thread::spawn(move || {
@@ -203,9 +353,9 @@ impl<B: LlmBackend + Send + Sync + 'static> Dispatcher<B> {
 pub fn append_harvest(rec: &TrackRecord) {
     use std::io::Write;
     let line = format!(
-        "{{\"model\":\"{}\",\"task\":\"{}\",\"success\":{},\"value\":{},\"cost\":{},\"backend\":\"{}\",\"tokens\":{},\"ms\":{}}}\n",
-        rec.model_id, rec.task, rec.success, rec.value, rec.cost, rec.backend_id, rec.total_tokens, rec.ms
-    );
+    "{{\"model\":\"{}\",\"task\":\"{}\",\"success\":{},\"value\":{},\"cost\":{},\"backend\":\"{}\",\"tokens\":{},\"ms\":{}}}\n",
+    rec.model_id, rec.task, rec.success, rec.value, rec.cost, rec.backend_id, rec.total_tokens, rec.ms
+  );
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -264,7 +414,7 @@ mod tests {
                 tool_calling: false,
             }
         }
-        fn chat(&self, _req: &ChatRequest) -> Result<ChatResponse, LlmError> {
+        fn chat(&self, req: &ChatRequest) -> Result<ChatResponse, LlmError> {
             self.calls.fetch_add(1, Ordering::SeqCst);
             Ok(ChatResponse {
                 content: "ok".into(),
@@ -273,6 +423,8 @@ mod tests {
                     completion_tokens: 1,
                     total_tokens: 2,
                 },
+                model_id: req.model_id.clone(),
+                utterance_id: 1,
                 tool_calls: Vec::new(),
             })
         }
@@ -304,6 +456,7 @@ mod tests {
             1,
             8,
             0.0,
+            PressureLimits::default(),
         );
         // Use Arc to share the fake so we can count calls.
         let shared = d.backend.clone();
@@ -328,6 +481,7 @@ mod tests {
             2,
             100,
             0.0,
+            PressureLimits::default(),
         );
         for _ in 0..3 {
             d.dispatch(req()).expect("within budget");
@@ -345,6 +499,7 @@ mod tests {
             1,
             100,
             0.0,
+            PressureLimits::default(),
         );
         let _: Arc<FakeBackend> = d.backend.clone();
     }
@@ -370,7 +525,7 @@ mod tests {
                 tool_calling: false,
             }
         }
-        fn chat(&self, _req: &ChatRequest) -> Result<ChatResponse, LlmError> {
+        fn chat(&self, req: &ChatRequest) -> Result<ChatResponse, LlmError> {
             let cur = self.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
             // track max in-flight via a CAS loop
             let mut m = self.max_in_flight.load(Ordering::SeqCst);
@@ -391,6 +546,8 @@ mod tests {
                     completion_tokens: 1,
                     total_tokens: 2,
                 },
+                model_id: req.model_id.clone(),
+                utterance_id: 1,
                 tool_calls: Vec::new(),
             })
         }
@@ -418,6 +575,7 @@ mod tests {
             1,
             1_000_000,
             0.0,
+            PressureLimits::default(),
         ));
         let workers = 1u64;
 

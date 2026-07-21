@@ -151,6 +151,7 @@ impl LivingKnowledge for SubprocessLivingKnowledge {
             rusage.utime_us,
             rusage.stime_us,
             rusage.maxrss_kb,
+            None,
         );
 
         // Read the child's captured stdio for parsing. We re-collect stdout/stderr

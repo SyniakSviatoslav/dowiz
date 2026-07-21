@@ -19,7 +19,7 @@
 //! generator would let the floor regenerate itself.
 
 use crate::event_log::{CommitError, DecideRejected, EventLog, EventStore, MeshEvent, StoreError};
-use crate::ports::agent::command_filter::{CommandCatalog, CommandId, ExactCommand};
+use crate::ports::agent::command_filter::CommandCatalog;
 use crate::spectral::{classify_drift, spectral_radius, DriftClass};
 
 /// Max verify iterations per commit — bounded so intrinsic mutation cannot grow
@@ -168,7 +168,7 @@ impl BreachAlert {
     /// integrity check that makes suppression/forgery impossible (operator: the
     /// signal cannot be faked, hidden, or masked). Pure + std-only.
     pub fn witness_event_id(&self) -> [u8; 32] {
-        use crate::event_log::{sha3_256, MeshEvent};
+        use crate::event_log::MeshEvent;
         let mut p = Vec::with_capacity(40);
         p.extend_from_slice(&self.node_id);
         p.extend_from_slice(&self.group_size.to_le_bytes());
@@ -975,6 +975,7 @@ mod tests {
     /// command frame passes through and the mutation commits (Damped delta).
     #[test]
     fn hydra_command_filter_accepts_valid_command() {
+        use crate::ports::agent::command_filter::{CommandId, ExactCommand};
         let mut catalog = CommandCatalog::new();
         let nonce: u64 = 0x5566778899AABBCC;
         let key: [u8; 32] = *b"0123456789abcdef0123456789abcdef";
@@ -1034,6 +1035,7 @@ mod tests {
     /// yields Err (byte-exact match is the contract).
     #[test]
     fn hydra_command_filter_rejects_tampered_command_frame() {
+        use crate::ports::agent::command_filter::{CommandId, ExactCommand};
         let mut catalog = CommandCatalog::new();
         let mut wire = Vec::new();
         wire.push(CommandId::new(0x01).discriminant());

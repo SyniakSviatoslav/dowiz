@@ -5,6 +5,7 @@
 //! assertions would FAIL. GREEN: after the exact verify, matches equal a
 //! linear-scan oracle and false positives == 0.
 
+#[allow(unused_imports)]
 use super::fixtures::{synthetic_corpus, FIXTURE};
 use super::index::TrigramIndex;
 

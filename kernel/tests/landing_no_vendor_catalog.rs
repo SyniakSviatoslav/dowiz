@@ -80,7 +80,9 @@ fn strip_comments(src: &str) -> String {
 /// Collect every `.rs` file under `kernel/src/landing`.
 fn landing_src_files() -> Vec<String> {
     let mut out = Vec::new();
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join("landing");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("src")
+        .join("landing");
     let mut stack = vec![root];
     while let Some(dir) = stack.pop() {
         if let Ok(entries) = std::fs::read_dir(&dir) {

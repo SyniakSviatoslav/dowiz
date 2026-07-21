@@ -66,7 +66,14 @@ All evidence below is from live `cargo test --offline --lib [--features pq]` on 
 > byte-identical); `SPAN_SEQ` atomic minter + `SpanGuard` parent-child threading in `fdr/mod.rs`;
 > `emit_span_close` carries linkage. 4 new tests pass (root no_parent, child value, byte-identity,
 > span-tree reconstruction). Kernel 1152 pass. P3 grep proof green (no span_id in hash/gate/replay).
-> Items 61 and 66 remain NOT-BUILT (61 gated on item 58 WorkloadKind; 66 gated on item 64).
+> **UPDATE (2026-07-21):** Items 58/61 have been **built and verified** in this session.
+> `WorkloadKind` enum (closed, 7 variants, `as_str`+`from_str`) + `Work` struct
+> (`kind: WorkloadKind`, `delta_count: u64`) + optional `pub work: Option<Work>` on `FdrEvent`
+> (optional-field discipline — non-SpanClose records byte-identical). `SpanGuard` carries
+> `work: Option<Work>`; `emit_subprocess_record` accepts `work_kind` parameter.
+> 5 new tests pass (serialization, byte-identity, field ordering, roundtrip).
+> Kernel 1157 pass (1157+4 ignored). Items 59/60/61 now unblocked.
+> Item 66 remains NOT-BUILT (gated on item 64 composition root).
 
 ## DOC/CI-ONLY (no kernel code land required)
 | Item | Nature | Verification |

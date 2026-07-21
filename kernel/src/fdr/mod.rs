@@ -334,6 +334,7 @@ impl SpanHandle {
             t0,
             span_id,
             parent_span_id: self.parent_span_id,
+            work: None,
         }
     }
 }
@@ -346,6 +347,9 @@ pub struct SpanGuard {
     /// Item 62: the span's own id and its causal parent's id.
     span_id: u64,
     parent_span_id: Option<u64>,
+    /// Item 58: optional workload counter carried on SpanClose. `None` on non-work spans
+    /// (byte-identical to pre-item-58).
+    pub work: Option<schema::Work>,
 }
 
 impl Drop for SpanGuard {
@@ -354,7 +358,7 @@ impl Drop for SpanGuard {
         if let Some(t0) = self.t0 {
             let dur_us = t0.elapsed().as_micros().min(u64::MAX as u128) as u64;
             notify_observer(self.name, dur_us);
-            emit_span_close(self.name, dur_us, self.span_id, self.parent_span_id);
+            emit_span_close(self.name, dur_us, self.span_id, self.parent_span_id, self.work);
         }
         // On wasm32, `t0` is always `None` (see `entered`) and this Drop is inert.
         #[cfg(target_arch = "wasm32")]
@@ -379,8 +383,8 @@ pub fn emit_event(level: Level, msg: &str, fields: &[(&'static str, String)]) {
 /// Emit a span-close FDR record to the ring sink (spans do NOT go to stderr — they go to
 /// the observer's `metric.jsonl` and, when durable, the ring).
 #[cfg(not(target_arch = "wasm32"))]
-fn emit_span_close(name: &'static str, dur_us: u64, span_id: u64, parent_span_id: Option<u64>) {
-    sink::emit_span_close(name, dur_us, span_id, parent_span_id);
+fn emit_span_close(name: &'static str, dur_us: u64, span_id: u64, parent_span_id: Option<u64>, work: Option<schema::Work>) {
+    sink::emit_span_close(name, dur_us, span_id, parent_span_id, work);
 }
 
 /// Emit ONE `Tuning`-kind FDR record carrying an autonomic gain-scheduling
@@ -410,15 +414,6 @@ pub fn emit_verdict_pmu(name: &'static str, verdict: &str, pmu: pmu::PmuStamp) {
 /// measured wall duration + `wait4` rusage — never a fabricated 0. The record is P3-plane
 /// telemetry (named `subprocess_bridge`); it is recoverable from the FDR ring after the
 /// call (the red→green oracle reads it back). No-op unless a ring sink is installed.
-///
-/// NOTE (blueprint ambiguity resolution): the blueprint asks this to emit an item-58
-/// `(work: FdrRecordsAppended …⊕ SignaturesVerified)` workload-kind pair. Item 58's
-/// `WorkloadKind`/`Work`/`work`-field FDR schema is NOT present in this worktree (grep
-/// confirmed), so item 61 cannot write it without forging the schema. Instead we emit the
-/// same recoverable, greppable `subprocess_bridge` ring record under item 61's own name,
-/// ledger-named absent via a `gap:` row in `HOT-PATHS.tsv` (item 57's zero-un-named-blind-
-/// spots law). When item 58 lands, this becomes a `WorkloadKind::…` `SpanClose` pair — the
-/// fields below are exactly the raw-`u64` pair the schema wants.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn emit_subprocess_record(
     cmd: &str,
@@ -427,12 +422,13 @@ pub fn emit_subprocess_record(
     utime_us: Option<u64>,
     stime_us: Option<u64>,
     maxrss_kb: Option<u64>,
+    work_kind: Option<(schema::WorkloadKind, u64)>,
 ) {
     #[cfg(not(target_arch = "wasm32"))]
-    sink::emit_subprocess_record(cmd, success, wall_us, utime_us, stime_us, maxrss_kb);
+    sink::emit_subprocess_record(cmd, success, wall_us, utime_us, stime_us, maxrss_kb, work_kind);
     #[cfg(target_arch = "wasm32")]
     {
-        let _ = (cmd, success, wall_us, utime_us, stime_us, maxrss_kb);
+        let _ = (cmd, success, wall_us, utime_us, stime_us, maxrss_kb, work_kind);
     }
 }
 
@@ -703,6 +699,7 @@ mod sink {
         utime_us: Option<u64>,
         stime_us: Option<u64>,
         maxrss_kb: Option<u64>,
+        work_kind: Option<(super::schema::WorkloadKind, u64)>,
     ) {
         let s = match SINK.get() {
             Some(s) => s,
@@ -710,10 +707,9 @@ mod sink {
         };
         let r = match &s.ring {
             Some(r) => r,
-            None => return, // no ring ⇒ no durable record (skip silently).
+            None => return,
         };
         let seq = next_seq(s);
-        // Subprocess reaps are low-frequency, so a FULL hw stamp (ring/event-style).
         let mut fields: Vec<(&'static str, String)> = vec![
             ("cmd", cmd.to_string()),
             ("success", success.to_string()),
@@ -737,7 +733,7 @@ mod sink {
                     .unwrap_or_else(|| "null".into()),
             ),
         ];
-        let ev = FdrEvent::stamp(
+        let mut ev = FdrEvent::stamp(
             seq,
             Level::Info,
             Kind::SpanClose,
@@ -745,22 +741,26 @@ mod sink {
             StampPolicy::Full,
             fields.drain(..).collect(),
         );
+        ev.span_id = Some(super::next_span_id());
+        ev.parent_span_id = Some(super::schema::Reading::Unavailable(super::schema::Absence::NoParent));
+        if let Some((kind, count)) = work_kind {
+            ev.work = Some(super::schema::Work { kind, delta_count: count });
+        }
         if let Ok(mut r) = r.lock() {
             let _ = r.append(&ev);
         }
     }
 
-    pub fn emit_span_close(name: &'static str, dur_us: u64, span_id: u64, parent_span_id: Option<u64>) {
+    pub fn emit_span_close(name: &'static str, dur_us: u64, span_id: u64, parent_span_id: Option<u64>, work: Option<super::schema::Work>) {
         let s = match SINK.get() {
             Some(s) => s,
             None => return,
         };
         let r = match &s.ring {
             Some(r) => r,
-            None => return, // no ring ⇒ span close already handled by the observer only.
+            None => return,
         };
         let seq = next_seq(s);
-        // Span-close of the instrumented functions gets a FULL hw stamp (blueprint §4.2).
         let mut ev = FdrEvent::stamp(
             seq,
             Level::Info,
@@ -769,12 +769,12 @@ mod sink {
             StampPolicy::Full,
             vec![("dur_us", dur_us.to_string())],
         );
-        // Item 62: set relational linkage on the span-close record.
         ev.span_id = Some(span_id);
         ev.parent_span_id = Some(match parent_span_id {
             Some(pid) => super::schema::Reading::Value(pid),
             None => super::schema::Reading::Unavailable(super::schema::Absence::NoParent),
         });
+        ev.work = work;
         if let Ok(mut r) = r.lock() {
             let _ = r.append(&ev);
         }

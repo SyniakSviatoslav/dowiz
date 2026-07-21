@@ -96,7 +96,7 @@ impl OpenAiCompatTransport {
         }
 
         let raw = self.post("/v1/chat/completions", &body)?;
-        parse_chat(&raw)
+        parse_chat(&raw, &req.model_id)
     }
 
     /// Embedding → the adapter's `embeddings_path` (Ollama `/v1/embeddings`; vLLM same).
@@ -106,7 +106,7 @@ impl OpenAiCompatTransport {
         }
         let body = json!({ "model": req.model_id, "input": req.input });
         let raw = self.post(&self.quirks.embeddings_path, &body)?;
-        parse_embed(&raw)
+        parse_embed(&raw, &req.model_id)
     }
 
     /// Send a POST, returning the parsed JSON body. Translates HTTP/transport failures to `LlmError`.
@@ -183,8 +183,9 @@ impl OpenAiCompatTransport {
     }
 }
 
-/// Parse an OpenAI chat/completions response into `ChatResponse`.
-fn parse_chat(raw: &Value) -> Result<ChatResponse, LlmError> {
+/// Parse an OpenAI chat/completions response into `ChatResponse`. `model_id` is the
+/// provenance tag (L1 opacity) carried from the request onto the response.
+fn parse_chat(raw: &Value, model_id: &str) -> Result<ChatResponse, LlmError> {
     let content = raw
         .get("choices")
         .and_then(|c| c.get(0))
@@ -223,12 +224,15 @@ fn parse_chat(raw: &Value) -> Result<ChatResponse, LlmError> {
     Ok(ChatResponse {
         content,
         usage,
+        model_id: model_id.to_string(),
+        utterance_id: 1,
         tool_calls,
     })
 }
 
-/// Parse an OpenAI `/v1/embeddings` response (`data:[{embedding:[…]}]`).
-fn parse_embed(raw: &Value) -> Result<EmbedResponse, LlmError> {
+/// Parse an OpenAI `/v1/embeddings` response (`data:[{embedding:[…]}]`). `model_id` is the
+/// provenance tag (L1 opacity) carried from the request onto the response.
+fn parse_embed(raw: &Value, model_id: &str) -> Result<EmbedResponse, LlmError> {
     let arr = raw
         .get("data")
         .and_then(|d| d.get(0))
@@ -242,7 +246,10 @@ fn parse_embed(raw: &Value) -> Result<EmbedResponse, LlmError> {
     if embedding.is_empty() {
         return Err(LlmError::BadRequest("empty embedding vector".into()));
     }
-    Ok(EmbedResponse { embedding })
+    Ok(EmbedResponse {
+        embedding,
+        model_id: model_id.to_string(),
+    })
 }
 
 fn parse_usage(v: &Value) -> Usage {

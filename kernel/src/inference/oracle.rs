@@ -20,7 +20,7 @@
 //! shape — re-typed into the integer domain (i8 in, i32 accumulate, i128 shadow). Not a new
 //! algorithm, a re-typing of a proven shape.
 
-use crate::inference::fixed::{div_half_up, requantize_pow2, saturating_clamp};
+use crate::inference::fixed::requantize_pow2;
 use crate::inference::workspace::{C, H, N};
 
 /// Oracle integer-domain matmul: `C[m][n] = Σ_k A[m][k] * W[k][n]`.
@@ -220,6 +220,7 @@ mod tests {
     /// §5.3 — the oracle's requantize/relu/argmax ops are exact on known inputs.
     #[test]
     fn oracle_ops_exact() {
+        use crate::inference::fixed::{div_half_up, saturating_clamp};
         // relu
         assert_eq!(oracle_relu_i32(-5), 0);
         assert_eq!(oracle_relu_i32(0), 0);

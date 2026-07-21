@@ -27,12 +27,17 @@ fn unique_dir(tag: &str) -> PathBuf {
 
 fn field_i64(s: &str, key: &str) -> i64 {
     let pat = format!("\"{key}\":");
-    let i = s.find(&pat).unwrap_or_else(|| panic!("missing {key} in {s}")) + pat.len();
+    let i = s
+        .find(&pat)
+        .unwrap_or_else(|| panic!("missing {key} in {s}"))
+        + pat.len();
     let rest = &s[i..];
     let end = rest
         .find(|c: char| !(c.is_ascii_digit() || c == '-'))
         .unwrap_or(rest.len());
-    rest[..end].parse().unwrap_or_else(|_| panic!("bad {key} in {s}"))
+    rest[..end]
+        .parse()
+        .unwrap_or_else(|_| panic!("bad {key} in {s}"))
 }
 
 #[test]
@@ -86,7 +91,10 @@ fn kill9_recovers_all_events_and_emits_postmortem() {
         N - 1
     );
     assert!(torn <= 1, "at most one torn tail line expected, got {torn}");
-    assert_eq!(crc_failures, 0, "no CRC-valid record may be corrupted: {summary}");
+    assert_eq!(
+        crc_failures, 0,
+        "no CRC-valid record may be corrupted: {summary}"
+    );
     assert!(
         summary.contains("\"clean\":false"),
         "kill-9 must be recovered as a DIRTY stop: {summary}"
@@ -95,14 +103,23 @@ fn kill9_recovers_all_events_and_emits_postmortem() {
         summary.contains("\"postmortem_written\":true"),
         "a PostMortem record must be emitted naming the recovery: {summary}"
     );
-    assert!(recovered - 1 <= last_seq, "last_seq must cover the recovered range: {summary}");
+    assert!(
+        recovered - 1 <= last_seq,
+        "last_seq must cover the recovered range: {summary}"
+    );
 
     // 5. The PostMortem log exists and names the recovery.
     let pm = dir.join("fdr.postmortem.jsonl");
     assert!(pm.exists(), "fdr.postmortem.jsonl must exist");
     let pm_contents = std::fs::read_to_string(&pm).unwrap();
-    assert!(pm_contents.contains("\"kind\":\"post_mortem\""), "post-mortem record: {pm_contents}");
-    assert!(pm_contents.contains("\"recovered\":"), "post-mortem names the count");
+    assert!(
+        pm_contents.contains("\"kind\":\"post_mortem\""),
+        "post-mortem record: {pm_contents}"
+    );
+    assert!(
+        pm_contents.contains("\"recovered\":"),
+        "post-mortem names the count"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -127,7 +144,10 @@ fn clean_shutdown_is_recovered_as_clean_no_postmortem() {
         .output()
         .expect("run recover");
     let summary = String::from_utf8_lossy(&out.stdout);
-    assert!(summary.contains("\"clean\":true"), "orderly stop must recover clean: {summary}");
+    assert!(
+        summary.contains("\"clean\":true"),
+        "orderly stop must recover clean: {summary}"
+    );
     assert!(
         summary.contains("\"postmortem_written\":false"),
         "no post-mortem on a clean stop: {summary}"

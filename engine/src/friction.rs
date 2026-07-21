@@ -293,7 +293,9 @@ impl FrictionFsm {
             FrictionState::Idle => {
                 if aimed {
                     let progress = dt_ms.min(self.spec.field.hold_ms);
-                    self.state = FrictionState::Building { progress_ms: progress };
+                    self.state = FrictionState::Building {
+                        progress_ms: progress,
+                    };
                     self.emit_status();
                     self.maybe_emit_readback();
                     if progress >= self.spec.field.hold_ms {
@@ -390,7 +392,10 @@ mod tests {
     use super::*;
 
     fn stake(money: i64, rev: Reversibility) -> Stake {
-        Stake { money_minor: money, reversibility: rev }
+        Stake {
+            money_minor: money,
+            reversibility: rev,
+        }
     }
 
     // D6 — amplitude is log-monotone (strictly increasing with money),
@@ -482,7 +487,12 @@ mod tests {
         // Advance most of the way (but not to threshold).
         let hold = fsm.hold_ms();
         fsm.advance(true, hold - 50);
-        assert_eq!(fsm.state(), &FrictionState::Building { progress_ms: hold - 50 });
+        assert_eq!(
+            fsm.state(),
+            &FrictionState::Building {
+                progress_ms: hold - 50
+            }
+        );
         fsm.release();
         assert_eq!(fsm.state(), &FrictionState::Cancelled);
         assert!(fsm.commit_token().is_none());
@@ -543,7 +553,10 @@ mod tests {
     fn a11y_blind_path() {
         let spec = friction_spec(stake(5000, Reversibility::ReversibleWithCost));
         let hold = spec.audio.hold_ms; // parity-pinned to the visual hold
-        assert_eq!(hold, spec.field.hold_ms, "audio hold must equal visual hold (parity)");
+        assert_eq!(
+            hold, spec.field.hold_ms,
+            "audio hold must equal visual hold (parity)"
+        );
 
         let mut fsm = FrictionFsm::new(spec);
         let mut committed_at: Option<usize> = None;

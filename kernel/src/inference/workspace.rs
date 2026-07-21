@@ -20,7 +20,6 @@
 //! 5. The region is fixed-capacity and never grows (exhaustion is a build-time layout
 //!    error, not a runtime grow).
 
-use crate::arena::BumpArena;
 
 /// Tensor id — a compile-time-known index into the [`LAYOUT`] table.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,9 +70,18 @@ pub const LAYOUT: [TensorSlot; 3] = {
     let lg_off = round_up(hd_off + hidden_len);
     let _lg_end = round_up(lg_off + logits_len); // trailing alignment; total computed below
     [
-        TensorSlot { offset: in_off, len: input_len },
-        TensorSlot { offset: hd_off, len: hidden_len },
-        TensorSlot { offset: lg_off, len: logits_len },
+        TensorSlot {
+            offset: in_off,
+            len: input_len,
+        },
+        TensorSlot {
+            offset: hd_off,
+            len: hidden_len,
+        },
+        TensorSlot {
+            offset: lg_off,
+            len: logits_len,
+        },
     ]
 };
 
@@ -111,7 +119,10 @@ const fn has_overlap() -> bool {
 /// Build-time guard: a deliberately-overlapping `LAYOUT` fails to construct.
 /// This is `const`-evaluated; an overlap is a compile error, not a runtime panic —
 /// the illegal state is unrepresentable.
-const OVERLAP_OK: () = assert!(!has_overlap(), "TensorWorkspace: overlapping tensor layout is illegal (unrepresentable state)");
+const OVERLAP_OK: () = assert!(
+    !has_overlap(),
+    "TensorWorkspace: overlapping tensor layout is illegal (unrepresentable state)"
+);
 /// Silence the unused-const warning while keeping the const-eval guard live.
 #[allow(dead_code)]
 const fn _assert_layout() {
@@ -222,8 +233,14 @@ mod tests {
         // A hand-built colliding layout would trip `assert!(!has_overlap())`. We invoke the
         // same predicate on a colliding pair to demonstrate the unrepresentable guard.
         const BAD: [TensorSlot; 2] = [
-            TensorSlot { offset: 0, len: 128 },
-            TensorSlot { offset: 64, len: 128 }, // overlaps [0,128)
+            TensorSlot {
+                offset: 0,
+                len: 128,
+            },
+            TensorSlot {
+                offset: 64,
+                len: 128,
+            }, // overlaps [0,128)
         ];
         // Mirror the const guard: panic if any overlap.
         let mut i = 0;
@@ -246,7 +263,10 @@ mod tests {
     /// §5.3 (companion) — the REAL workspace layout has no overlap (const guard holds).
     #[test]
     fn real_layout_has_no_overlap() {
-        assert!(!has_overlap(), "the committed LAYOUT must be collision-free");
+        assert!(
+            !has_overlap(),
+            "the committed LAYOUT must be collision-free"
+        );
     }
 
     /// §5.1 — zero heap allocations DURING a full inference (the count-allocs proof).

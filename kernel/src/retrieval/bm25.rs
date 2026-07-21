@@ -393,9 +393,10 @@ impl Bm25 {
 
     /// Load a persisted index from a std-only on-disk file (P95 Option A).
     pub fn load_from(path: &std::path::Path) -> Result<Bm25, String> {
-        let buf = std::fs::read(path)
-            .map_err(|e| format!("Bm25::load_from {}: {e}", path.display()))?;
-        Bm25::decode(&buf).ok_or_else(|| format!("Bm25::load_from {}: corrupt index", path.display()))
+        let buf =
+            std::fs::read(path).map_err(|e| format!("Bm25::load_from {}: {e}", path.display()))?;
+        Bm25::decode(&buf)
+            .ok_or_else(|| format!("Bm25::load_from {}: corrupt index", path.display()))
     }
 
     /// Document frequency `n_t` for term `t` (0 if unseen).
@@ -646,8 +647,8 @@ mod tests {
 
     fn rand_corpus(n: usize, rng: &mut Prng) -> Vec<Document> {
         let words = [
-            "rust", "compiler", "llvm", "backend", "token", "memory", "graph", "infer",
-            "queue", "cache", "delta", "epoch", "signal", "plan", "node", "wire",
+            "rust", "compiler", "llvm", "backend", "token", "memory", "graph", "infer", "queue",
+            "cache", "delta", "epoch", "signal", "plan", "node", "wire",
         ];
         (0..n)
             .map(|_| {
@@ -712,7 +713,11 @@ mod tests {
             "round-trip must be byte-identical to the original encoding"
         );
         let q = tokenize("infer queue cache epoch");
-        assert_eq!(bm.rank(&q), dec.rank(&q), "rank must survive serialize boundary");
+        assert_eq!(
+            bm.rank(&q),
+            dec.rank(&q),
+            "rank must survive serialize boundary"
+        );
     }
 
     #[test]
@@ -722,7 +727,8 @@ mod tests {
         let mut rng = Prng::new(0x98);
         let corpus = rand_corpus(25, &mut rng);
         let bm = Bm25::new(corpus);
-        let path = std::env::temp_dir().join(format!("bm25_persist_test_{}.bin", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("bm25_persist_test_{}.bin", std::process::id()));
         bm.save_to(&path).expect("save_to");
         let loaded = Bm25::load_from(&path).expect("load_from");
         std::fs::remove_file(&path).ok();

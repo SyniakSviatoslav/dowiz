@@ -30,15 +30,15 @@
 // is the operator's self-held credential; P70 only consumes its verify capability).
 
 use crate::catalog::{
-    resolve_line, validate_tree, Availability, CatalogError, CatalogNode, LeafId, LeafKind,
-    NodeBody, NodeId, PriceComponent, PriceableLeaf,
+    validate_tree, Availability, CatalogError, CatalogNode, LeafId, LeafKind,
+    NodeId, PriceableLeaf,
 };
 use crate::domain::{apply_event, place_order_priced, Order, OrderItem};
 use crate::event_log::sha3_256;
 use crate::money::{assert_non_negative, Currency, Money};
 use crate::order_machine::OrderStatus;
 use crate::ports::agent::cap::{
-    AnchorRoster, Delegation, RefSigner, RevocationSet, SignatureVerifier,
+    Delegation, RevocationSet, SignatureVerifier,
 };
 use crate::ports::agent::{Action, Resource, Scope};
 use crate::vendor::VendorId;
@@ -933,6 +933,8 @@ pub fn drop_revoked_hub(view: &mut MultiHubView, ledger: &CourierRevocationLedge
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::catalog::{NodeBody, PriceComponent, resolve_line};
+    use crate::ports::agent::cap::{AnchorRoster, RefSigner};
 
     fn verifier() -> RefSigner {
         RefSigner

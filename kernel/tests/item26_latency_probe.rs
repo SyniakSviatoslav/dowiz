@@ -15,8 +15,8 @@ use std::io::Write;
 use std::time::{Duration, Instant};
 
 use dowiz_kernel::decision::import::import_unit;
-use dowiz_kernel::decision::{Decision, DecisionRegistry, DecisionUnitMeta, DomainTag, UnitEpoch};
 use dowiz_kernel::decision::import::Source;
+use dowiz_kernel::decision::{Decision, DecisionRegistry, DecisionUnitMeta, DomainTag, UnitEpoch};
 use dowiz_kernel::event_log::{sha3_256, EventLog, MemEventStore, MeshEvent};
 use dowiz_kernel::fdr::ring::FdrRing;
 use dowiz_kernel::fdr::schema::{FdrEvent, Kind, StampPolicy};
@@ -24,7 +24,8 @@ use dowiz_kernel::fdr::Level;
 use dowiz_kernel::hydra::FileEventStore;
 
 fn scratch(tag: &str) -> std::path::PathBuf {
-    let base = std::env::temp_dir().join(format!("dowiz-item26-probe-{tag}-{}", std::process::id()));
+    let base =
+        std::env::temp_dir().join(format!("dowiz-item26-probe-{tag}-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&base);
     base
 }
@@ -88,7 +89,9 @@ fn m1_fsync_amortization_curve() {
     let dir = scratch("m1amort");
     let line = b"{\"prev\":0,\"seq\":0,\"payload\":\"order-transition-approx-32-bytes\"}\n";
     const RECORDS: u64 = 20_000;
-    println!("--- M1 fsync amortization (bench-crate model of group-commit; {RECORDS} records) ---");
+    println!(
+        "--- M1 fsync amortization (bench-crate model of group-commit; {RECORDS} records) ---"
+    );
     for g in [1u64, 4, 16, 64] {
         let path = dir.join(format!("amort-{g}.log"));
         let mut f = std::fs::OpenOptions::new()
@@ -136,7 +139,14 @@ fn m2_fdr_ring_percentiles() {
         let start = Instant::now();
         for _ in 0..N {
             let seq = ring.next_seq();
-            let ev = FdrEvent::stamp(seq, Level::Info, Kind::Event, "n".into(), StampPolicy::Cheap, vec![("k", "v".to_string())]);
+            let ev = FdrEvent::stamp(
+                seq,
+                Level::Info,
+                Kind::Event,
+                "n".into(),
+                StampPolicy::Cheap,
+                vec![("k", "v".to_string())],
+            );
             let t = Instant::now();
             ring.append(&ev).unwrap();
             lat.push(t.elapsed().as_nanos() as u64);
@@ -151,7 +161,14 @@ fn m2_fdr_ring_percentiles() {
         let start = Instant::now();
         for _ in 0..N {
             let seq = ring.next_seq();
-            let ev = FdrEvent::stamp(seq, Level::Error, Kind::Alarm, "a".into(), StampPolicy::Cheap, vec![("k", "v".to_string())]);
+            let ev = FdrEvent::stamp(
+                seq,
+                Level::Error,
+                Kind::Alarm,
+                "a".into(),
+                StampPolicy::Cheap,
+                vec![("k", "v".to_string())],
+            );
             let t = Instant::now();
             ring.append(&ev).unwrap();
             lat.push(t.elapsed().as_nanos() as u64);
@@ -166,7 +183,14 @@ fn m2_fdr_ring_percentiles() {
         let start = Instant::now();
         for _ in 0..N {
             let seq = ring.next_seq();
-            let ev = FdrEvent::stamp(seq, Level::Info, Kind::Event, "s".into(), StampPolicy::Cheap, vec![]);
+            let ev = FdrEvent::stamp(
+                seq,
+                Level::Info,
+                Kind::Event,
+                "s".into(),
+                StampPolicy::Cheap,
+                vec![],
+            );
             let t = Instant::now();
             ring.append(&ev).unwrap();
             lat.push(t.elapsed().as_nanos() as u64);
@@ -183,7 +207,9 @@ fn m3_import_unit_percentiles() {
     let artifact = b"dispatch-v1-benchmark-artifact-bytes-for-item-26".as_slice();
     let ish = [7u8; 32];
     for n_cases in [1usize, 8, 64] {
-        let cases: Vec<(u8, Decision<u8>)> = (0..n_cases).map(|i| (i as u8, Decision::Answer(i as u8))).collect();
+        let cases: Vec<(u8, Decision<u8>)> = (0..n_cases)
+            .map(|i| (i as u8, Decision::Answer(i as u8)))
+            .collect();
         let mut meta = DecisionUnitMeta::new(DomainTag::Harness, UnitEpoch(1));
         meta.content_id = sha3_256(artifact);
         meta.instance_set_hash = ish;
@@ -194,7 +220,16 @@ fn m3_import_unit_percentiles() {
         let start = Instant::now();
         for _ in 0..N {
             let t = Instant::now();
-            let res = import_unit(meta.clone(), artifact, |x| Decision::Answer(*x), &cases, ish, Source::Local, &reg, &mut log);
+            let res = import_unit(
+                meta.clone(),
+                artifact,
+                |x| Decision::Answer(*x),
+                &cases,
+                ish,
+                Source::Local,
+                &reg,
+                &mut log,
+            );
             lat.push(t.elapsed().as_nanos() as u64);
             assert!(res.is_ok());
         }

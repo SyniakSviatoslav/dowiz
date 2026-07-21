@@ -33,7 +33,9 @@
 //! → AVX2 kernel; scalar-oracle fallback otherwise. No new dependency.
 
 use crate::inference::fixed::{check_overflow_bound, Q_MAX};
-use crate::inference::oracle::{oracle_argmax, oracle_matmul_i8, oracle_requantize, oracle_relu_i32};
+use crate::inference::oracle::{
+    oracle_argmax, oracle_matmul_i8, oracle_relu_i32, oracle_requantize,
+};
 use crate::inference::workspace::{C, H, N};
 
 /// Maximum `k` (reduction length) this module's column-gather buffer supports. The pilot's
@@ -105,7 +107,11 @@ unsafe fn dot_i8_avx2(a: *const i8, w: *const i8, k: usize) -> i32 {
 /// `debug_assert_eq!` against the scalar oracle on every call — the continuous differential
 /// leash (compiled out of release).
 pub fn dot_i8(a: &[i8], w: &[i8]) -> i32 {
-    assert_eq!(a.len(), w.len(), "dot_i8: activations and weights must align");
+    assert_eq!(
+        a.len(),
+        w.len(),
+        "dot_i8: activations and weights must align"
+    );
     #[cfg(all(target_arch = "x86_64", feature = "std"))]
     {
         if std::is_x86_feature_detected!("avx2") {
@@ -262,7 +268,10 @@ mod tests {
             }
             let got = dot_i8(&a, &w);
             let ref_scalar = scalar_dot(&a, &w);
-            assert_eq!(got, ref_scalar, "AVX2 dot diverged from scalar oracle at k={k}");
+            assert_eq!(
+                got, ref_scalar,
+                "AVX2 dot diverged from scalar oracle at k={k}"
+            );
         }
         // i8 boundary corpus: values at ±127/0 only — the saturation corner.
         for av in [-127i8, 0i8, 127i8] {
@@ -304,7 +313,10 @@ mod tests {
             }
             let got = matmul_i8(&a, &w, m, k, n).expect("shape fits i32");
             let oracle = oracle_matmul_i8(&a, &w, m, k, n).expect("shape fits i32");
-            assert_eq!(got, oracle, "AVX2 matmul diverged from oracle at {m}x{k}x{n}");
+            assert_eq!(
+                got, oracle,
+                "AVX2 matmul diverged from oracle at {m}x{k}x{n}"
+            );
         }
         // Pilot shapes explicitly (N=8→H=8→C=4).
         let input = [1i8, 2, 3, 4, 5, 6, 7, 8];
@@ -333,13 +345,22 @@ mod tests {
                 let raw = (lcg(&mut rng) & 0xFF) as i8;
                 // Bias toward small magnitudes (restricted-symmetric-ish), but keep the full
                 // range reachable occasionally.
-                *v = if raw > 100 { 100 } else if raw < -100 { -100 } else { raw };
+                *v = if raw > 100 {
+                    100
+                } else if raw < -100 {
+                    -100
+                } else {
+                    raw
+                };
             }
             let got = simd_i8_forward(&input, &W1, &B1, SCALE1, &W2, &B2, SCALE2);
             let oracle = crate::inference::oracle::oracle_forward(
                 &input, &W1, &B1, SCALE1, &W2, &B2, SCALE2,
             );
-            assert_eq!(got, oracle, "SIMD forward diverged from oracle at {input:?}");
+            assert_eq!(
+                got, oracle,
+                "SIMD forward diverged from oracle at {input:?}"
+            );
         }
         // Boundary inputs: all min, all max, all zero.
         for &fill in &[Q_MIN, 0i8, Q_MAX] {
@@ -368,8 +389,12 @@ mod tests {
         assert_eq!(simd_val, scalar_val);
         assert_eq!(simd_val, 127i32 * 127 * 16);
         // Negative products, mixed signs — associativity/non-saturation must hold.
-        let a2 = vec![-127i8, 127, -127, 127, -127, 127, -127, 127, 0, 0, 0, 0, 0, 0, 0, 0];
-        let w2 = vec![127i8, 127, -127, -127, 1, -1, 2, -2, 5, -5, 7, -7, 9, -9, 11, -11];
+        let a2 = vec![
+            -127i8, 127, -127, 127, -127, 127, -127, 127, 0, 0, 0, 0, 0, 0, 0, 0,
+        ];
+        let w2 = vec![
+            127i8, 127, -127, -127, 1, -1, 2, -2, 5, -5, 7, -7, 9, -9, 11, -11,
+        ];
         assert_eq!(dot_i8(&a2, &w2), scalar_dot(&a2, &w2));
     }
 
@@ -395,7 +420,11 @@ mod tests {
                 .zip(w.iter())
                 .map(|(&x, &y)| (x as i128) * (y as i128))
                 .sum();
-            assert_eq!(scalar_dot(&a, &w) as i128, wide, "scalar fallback diverged from i128");
+            assert_eq!(
+                scalar_dot(&a, &w) as i128,
+                wide,
+                "scalar fallback diverged from i128"
+            );
             // And the public entry (which may take AVX2 here) still equals the oracle scalar.
             assert_eq!(dot_i8(&a, &w), scalar_dot(&a, &w));
         }
@@ -410,7 +439,13 @@ mod tests {
             let mut input = [0i8; N];
             for v in input.iter_mut() {
                 let raw = (lcg(&mut rng) & 0xFF) as i8;
-                *v = if raw > 90 { 90 } else if raw < -90 { -90 } else { raw };
+                *v = if raw > 90 {
+                    90
+                } else if raw < -90 {
+                    -90
+                } else {
+                    raw
+                };
             }
             assert_eq!(
                 simd_i8_classify(&input),

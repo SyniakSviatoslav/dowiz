@@ -1,0 +1,105 @@
+[
+  {
+    "id": "order_status_basic",
+    "prompt": "What is the status of order abc-123-def?",
+    "tools_offered": ["read_order_status"],
+    "expect": {
+      "tool": "read_order_status",
+      "required_args": ["order_id"]
+    }
+  },
+  {
+    "id": "order_status_explicit_id",
+    "prompt": "Check the status of my order 550e8400-e29b-41d4-a716-446655440000",
+    "tools_offered": ["read_order_status"],
+    "expect": {
+      "tool": "read_order_status",
+      "required_args": ["order_id"]
+    }
+  },
+  {
+    "id": "order_status_delivery_context",
+    "prompt": "My courier says the delivery is late. Can you check order ORD-7891?",
+    "tools_offered": ["read_order_status"],
+    "expect": {
+      "tool": "read_order_status",
+      "required_args": ["order_id"]
+    }
+  },
+  {
+    "id": "web_fetch_basic",
+    "prompt": "Fetch the content of https://example.com and tell me what it says",
+    "tools_offered": ["web_fetch"],
+    "expect": {
+      "tool": "web_fetch",
+      "required_args": ["url"]
+    }
+  },
+  {
+    "id": "web_fetch_news",
+    "prompt": "Read the article at https://news.example.com/article-2026",
+    "tools_offered": ["web_fetch"],
+    "expect": {
+      "tool": "web_fetch",
+      "required_args": ["url"]
+    }
+  },
+  {
+    "id": "both_tools_order",
+    "prompt": "Check order ORD-111 and also fetch https://tracking.example.com/ORD-111",
+    "tools_offered": ["read_order_status", "web_fetch"],
+    "expect": {
+      "tool": "read_order_status",
+      "required_args": ["order_id"]
+    }
+  },
+  {
+    "id": "both_tools_web",
+    "prompt": "I need to look up order ORD-222 but first fetch https://docs.example.com/api to understand the API",
+    "tools_offered": ["read_order_status", "web_fetch"],
+    "expect": {
+      "tool": "web_fetch",
+      "required_args": ["url"]
+    }
+  },
+  {
+    "id": "no_tool_greeting",
+    "prompt": "Hello! How are you today?",
+    "tools_offered": ["read_order_status", "web_fetch"],
+    "expect": {
+      "tool": null
+    }
+  },
+  {
+    "id": "no_tool_weather",
+    "prompt": "What's the weather like in Tirana right now?",
+    "tools_offered": ["read_order_status", "web_fetch"],
+    "expect": {
+      "tool": null
+    }
+  },
+  {
+    "id": "no_tool_math",
+    "prompt": "What is 42 * 17?",
+    "tools_offered": ["read_order_status", "web_fetch"],
+    "expect": {
+      "tool": null
+    }
+  },
+  {
+    "id": "no_tool_opinion",
+    "prompt": "Do you think delivery apps are a good business idea?",
+    "tools_offered": ["read_order_status", "web_fetch"],
+    "expect": {
+      "tool": null
+    }
+  },
+  {
+    "id": "order_status_vague_no_id",
+    "prompt": "Check my order status",
+    "tools_offered": ["read_order_status"],
+    "expect": {
+      "tool": null
+    }
+  }
+]

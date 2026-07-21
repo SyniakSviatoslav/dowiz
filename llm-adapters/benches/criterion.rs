@@ -69,6 +69,8 @@ impl LlmBackend for FakeBackend {
                 completion_tokens: 2,
                 total_tokens: 6,
             },
+            model_id: "LFM2.5-VL-450M".into(),
+            utterance_id: 1,
             tool_calls: Vec::new(),
         })
     }

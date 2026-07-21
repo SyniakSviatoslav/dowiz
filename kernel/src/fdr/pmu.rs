@@ -710,7 +710,10 @@ mod tests {
                 );
             }
             Reading::Unavailable(a) => {
-                assert!(matches!(a, Absence::PermissionDenied | Absence::NoPmuInterface))
+                assert!(matches!(
+                    a,
+                    Absence::PermissionDenied | Absence::NoPmuInterface
+                ))
             }
         }
     }
