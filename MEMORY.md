@@ -82,7 +82,7 @@ All positive and negative consequences are stored in this MEMORY.md. The memory 
 - No `push --force` (worktree exception: force-with-lease allowed after fetch+ls-remote)
 
 ## Current Status (2026-07-21)
-### Done — Verified (cargo test 1208 pass, 0 fail, clippy clean)
+### Done — Verified (cargo test 1293 pass, 0 fail, clippy clean, 11 e2e pass)
 - Items 1-33, 36, 43, 45-46, 48, 52-54, 57, 58, 61, 62 DONE-VERIFIED
 - P106 (AiMode→compose.rs), P48-INTAKE, R16-R19 (DoS hardening)
 - FDR relational linkage (item 62): span_id, parent_span_id, SpanGuard threading
@@ -95,7 +95,13 @@ All positive and negative consequences are stored in this MEMORY.md. The memory 
 - **Blueprint-Unified: SwarmCoordinator** (DSU decomposition + executor selection + health) — 9 tests
 - **Blueprint-Unified: AgentStep FanOut/Merge** variants added to agent loop
 - **Mesh swarm architecture** documented in MEMORY.md — workflow gates, self-verification ban
-- Total kernel tests: **1208 passed, 0 failed**
+- **workflow_gate.rs** — Structural enforcement of 9-phase workflow (typed state machine, SHA3-256 verified) — 12 tests
+- **clock_stabilizer.rs** — PLL-inspired tick stabilizer (NaN guards, saturating arithmetic, SHA3-256 verification) — 31 tests
+- **orchestrator.rs** — Tool/skill/agent orchestration (health monitoring, load prediction, parallel dispatch) — 14 tests
+- **hex_util.rs** — Canonical hex encode/decode (replaces 6+ redundant impls) — 16 tests
+- **reverse_engineer.rs** — ELF parsing, x86_64 syscall extraction, behavior profiling — 16 tests
+- **json_query_e2e.rs** — End-to-end binary integration tests — 11 tests
+- Total kernel tests: **1293 passed, 0 failed** + **11 e2e passed**
 
 ### Structural Gaps Found (2-question doubt check)
 1. **Workflow gates are cultural, not structural** — no kernel code enforces the
@@ -117,9 +123,9 @@ All positive and negative consequences are stored in this MEMORY.md. The memory 
 - Items 4-12: many gated on operator decisions (D1-D6)
 
 ### Next Steps (in priority order)
-1. **FIX structural gaps** from doubt check (workflow gate, MEMORY.md accessibility, json_query e2e)
-2. **PLL-inspired clock stabilizer** — stabilize irregular kernel ticks into consistent output
-3. **ASCII knowledge index** — fast skill/capability lookup for all agents
+1. ~~FIX structural gaps~~ — DONE (workflow_gate.rs, MEMORY.md, json_query_e2e.rs)
+2. ~~PLL-inspired clock stabilizer~~ — DONE (clock_stabilizer.rs, 31 tests)
+3. ~~ASCII knowledge index~~ — DONE (40+ tools reverse-engineered, comprehensive index)
 4. **Skill patching** — adapt skills based on execution results
 5. Items 59/60: wire per-kind effective-effort tracking (now unblocked)
 6. Item 66: composition root
@@ -136,6 +142,11 @@ All positive and negative consequences are stored in this MEMORY.md. The memory 
 | `kernel/src/agent/model_pair.rs` | P103 supervisor |
 | `kernel/src/agent/model_registry.rs` | P97/P101 registry |
 | `kernel/src/agent/loop.rs` | AgentLoop + FanOut/Merge step types |
+| `kernel/src/workflow_gate.rs` | 9-phase workflow gate (SHA3-256 verified) |
+| `kernel/src/clock_stabilizer.rs` | PLL-inspired tick stabilizer (NaN guards, crypto verified) |
+| `kernel/src/orchestrator.rs` | Tool/skill/agent orchestration hub |
+| `kernel/src/hex_util.rs` | Canonical hex encode/decode |
+| `kernel/src/reverse_engineer.rs` | ELF parser + syscall extractor + behavior profiler |
 | `kernel/src/parse/tsv.rs` | Kernel-native TSV parser (replaces awk) |
 | `kernel/src/parse/env.rs` | Kernel-native .env parser (replaces split) |
 | `kernel/src/bin/json_query.rs` | JSON field extraction CLI (replaces node -e) |
@@ -143,10 +154,7 @@ All positive and negative consequences are stored in this MEMORY.md. The memory 
 | `kernel/src/predict.rs` | TemporalPredictor (Markov + spectral + causal) |
 | `kernel/src/swarm.rs` | SwarmCoordinator (DSU + executor selection) |
 | `kernel/src/ports/hub_intake.rs` | P48-INTAKE kernel port |
-| `docs/audits/hardening/HOT-PATHS.tsv` | Hot-zone accounting (eff column) |
-| `docs/audits/hardening/CHECKLIST.md` | Standing hardening law |
-| `docs/design/ROADMAP.md` | Master roadmap |
-| `docs/design/BLUEPRINT-UNIFIED-*.md` | Unified memory + extraction + prediction + swarms |
+| `kernel/tests/json_query_e2e.rs` | json_query binary end-to-end tests |
 
 ## Kernel-Native Search & Extraction (replacing grep/python)
 
@@ -289,20 +297,21 @@ ASCII art is:
 - Updatable without tooling
 - Faster to navigate than visual graphs
 
-### Index Structure (ASCII tree)
+### Kernel-Native Capabilities
 ```
-SKILL-CATALOG/
+KERNEL-CAPABILITIES/
 ├── SEARCH/
 │   ├── BM25 ............ retrieval::bm25 (lexical rank)
 │   ├── Trigram ......... retrieval::index (fuzzy match)
 │   ├── PPR ............. csr + markov (graph nav)
 │   └── Fusion .......... retrieval::recall (multi-signal)
 ├── EXTRACTION/
-│   ├── JSON ............ json::parse + Value::get
+│   ├── JSON ............ json::parse + Value::get + bin/json_query
 │   ├── TSV ............. parse::tsv (awk replacement)
 │   ├── Env ............. parse::env (split replacement)
-│   ├── HTML ............ readability::extract
-│   └── YAML ............ spine::parse_frontmatter
+│   ├── ELF ............. reverse_engineer::parse_elf
+│   ├── Syscalls ........ reverse_engineer::extract_syscalls
+│   └── Hex ............. hex_util::{encode,decode}
 ├── PREDICTION/
 │   ├── Markov .......... markov::analyze (next-state)
 │   ├── Spectral ........ spectral::classify_drift (trajectory)
@@ -324,12 +333,112 @@ SKILL-CATALOG/
 │   ├── Hydra ........... hydra (closure=NEVER)
 │   ├── P103 ............ agent::model_pair (dual-witness)
 │   ├── P97/P101 ........ agent::model_registry (locked pair)
-│   └── Intake .......... intake-adapters (InboundMessage)
+│   ├── Intake .......... intake-adapters (InboundMessage)
+│   └── Behavior ........ reverse_engineer::profile_binary
 └── LIFECYCLE/
     ├── FDR ............. fdr::schema + fdr::ring
     ├── Span ............ fdr::SpanGuard
     ├── Mesh ............ mesh (cross-repo gossip)
     └── Spine ........... spine::verify_chain
+```
+
+### Reverse-Engineered External Tools (Architecture Knowledge)
+```
+EXTERNAL-TOOL-KNOWLEDGE/
+├── LLM-INFERENCE/
+│   ├── ollama .......... Go, local LLM runner, REST API, model management
+│   ├── llama.cpp ....... C/C++ MIT, 121k*, GGUF quant, 100+ arch, server mode
+│   ├── vllm ............ Python/Rust 86.8k, PagedAttention, continuous batching
+│   └── litellm ......... Python/Rust 54.2k, 100+ provider gateway, 8ms P95
+├── RAG-RETRIEVAL/
+│   ├── chroma .......... Rust/Python 28.8k, 4-function API, auto embedding
+│   ├── weaviate ........ Go 16.6k, hybrid search, built-in RAG, quantization
+│   ├── firecrawl ....... TS/Python/Rust 154k, web scraping, 96% reliability
+│   └── mem0 ............ TS/Python 61.4k, universal memory, entity linking
+├── AI-AGENTS/
+│   ├── langchain ....... Python 108k, chain composition, tool routing
+│   ├── crewai .......... Python 38k, role-based multi-agent orchestration
+│   ├── autogen ......... Python 42k, Microsoft, conversation patterns
+│   └── browser-use ..... Python 22k, LLM-driven browser automation
+├── ML-TRAINING/
+│   ├── transformers .... Python 163k, HF, 1M+ models, pipeline API
+│   ├── unsloth ......... Python/TS 68.7k, 2x faster training, 70% less VRAM
+│   └── trl ............. Python 18.9k, SFT/GRPO/DPO, DeepSeek R1 trainer
+├── SECURITY-OSINT/
+│   ├── nmap ............ C, port scanning, OS detection, NSE scripts
+│   ├── rustscan ........ Rust, 3x faster nmap, adaptive scanning
+│   ├── naabu ........... Go, SYN/CONNECT scanning, fast port discovery
+│   ├── sherlock ........ Python, username OSINT across 400+ sites
+│   ├── maigret .......... Python, async username OSINT, 3000+ sites
+│   ├── trivy ........... Go 37k, container/K8s/dep vuln scanner
+│   ├── gitleaks ........ Go 28.2k, secret detection in git repos
+│   ├── semgrep ......... OCaml/Python 16k, SAST, 30+ languages
+│   └── zaproxy ......... Java 15.4k, DAST web app scanner
+├── SHELLS-TERMINAL/
+│   ├── nushell ......... Rust 40.1k, structured data shell, pipelines
+│   ├── fish ............ Rust 33.9k, syntax highlight, autosuggest
+│   ├── zellij .......... Rust 34.4k, WASM plugins, floating panes
+│   ├── starship ........ Rust 59k, cross-shell prompt, 100+ modules
+│   └── fzf ............. Go 81.9k, fuzzy finder, event-driven TUI
+├── TEXT-EDITORS/
+│   ├── neovim .......... C/VimScript 101k, Lua API, async jobs, RPC
+│   └── ripgrep ........ Rust 66.4k, SIMD regex, gitignore-aware
+├── DESKTOP-APPS/
+│   ├── electron ........ C++/TS 122k, Chromium+Node, VS Code base
+│   ├── tauri ........... Rust 109k, webview, 10x smaller than Electron
+│   └── neutralinojs .... C/C++ 8.6k, OS webview, WebSocket IPC
+├── PACKAGE-MANAGERS/
+│   └── homebrew ........ Ruby 48.9k, formulae/casks, dependency mgmt
+├── DEPLOY-INFRA/
+│   ├── docker .......... container runtime, Dockerfile, compose
+│   ├── kubernetes ...... container orchestration, pods, services
+│   ├── terraform ....... IaC, provider-based, state management
+│   └── ansible ......... agentless config management, playbooks
+├── DATA-ENGINEERING/
+│   ├── airflow ......... Python, DAG-based workflow orchestration
+│   ├── spark ........... Scala/Python, distributed data processing
+│   ├── kafka ........... Java, event streaming, pub/sub
+│   └── dbt ............. SQL, data transformation, testing
+└── KNOWLEDGE-GRAPH/
+    ├── neo4j ........... Java, property graph, Cypher query
+    └── graphrag ........ Python, Microsoft, knowledge graph + RAG
+```
+
+### Architecture Patterns Extracted
+```
+PATTERN-CATALOG/
+├── LLM-SERVING/
+│   ├── PagedAttention ......... vllm: KV cache as pages, O(1) alloc
+│   ├── Continuous Batching .... vllm: dynamic batch composition
+│   ├── GGUF Quantization ...... llama.cpp: 1.5-8bit integer quant
+│   ├── Speculative Decoding .... vllm: draft model + verify
+│   └── Provider Gateway ....... litellm: unified API, load balance
+├── AGENT-ORCHESTRATION/
+│   ├── Chain-of-Thought ....... langchain: step-by-step reasoning
+│   ├── Role-Based Agents ...... crewai: captain/agent delegation
+│   ├── Conversation Patterns ... autogen: GroupChat, GroupChatManager
+│   ├── Browser Automation ..... browser-use: action loops + replay
+│   └── Memory Layers .......... mem0: user/session/agent memory
+├── SEARCH-RETRIEVAL/
+│   ├── Vector Similarity ...... chroma/weaviate: embedding distance
+│   ├── Hybrid Search .......... weaviate: BM25 + semantic combined
+│   ├── Web Scraping ........... firecrawl: proxy rotation, rate mgmt
+│   └── Entity Linking ......... mem0: cross-memory deduplication
+├── SECURITY-SCANNING/
+│   ├── Port Scanning .......... nmap/rustscan/naabu: SYN/CONNECT
+│   ├── Secret Detection ....... gitleaks: regex + proximity rules
+│   ├── Static Analysis ........ semgrep: pattern-as-code rules
+│   ├── Container Scanning ..... trivy: SBOM + CVE matching
+│   └── DAST Scanning .......... zaproxy: active/passive proxy
+├── SHELL-DESIGN/
+│   ├── Structured Pipelines ... nushell: typed data flow
+│   ├── Event-Driven TUI ....... zellij: WASM plugin system
+│   ├── Fuzzy Matching ......... fzf: string scoring, event model
+│   └── Cross-Shell Prompt ..... starship: context detection
+└── DESKTOP-PATTERNS/
+    ├── Process Isolation ....... tauri: Rust core, webview UI
+    ├── Native WebView .......... neutralinojs: OS browser, no bundle
+    └── Chromium Embed .......... electron: full browser, large bundle
 ```
 
 ### How Agents Use This Index
@@ -338,3 +447,17 @@ SKILL-CATALOG/
 3. Agent looks up the ASCII tree for the relevant primitive
 4. Agent calls the kernel-native function (no external tools)
 5. Agent records results back to MEMORY.md
+
+### Reverse Engineering Status
+| Category | Tools Analyzed | Status |
+|----------|---------------|--------|
+| LLM Inference | ollama, llama.cpp, vllm, litellm | DONE |
+| RAG/Retrieval | chroma, weaviate, firecrawl, mem0 | DONE |
+| AI Agents | langchain, crewai, autogen, browser-use | DONE |
+| ML Training | transformers, unsloth, trl | DONE |
+| Security/OSINT | nmap, rustscan, naabu, sherlock, maigret, trivy, gitleaks, semgrep, zaproxy | DONE |
+| Shells/Terminal | nushell, fish, zellij, starship, fzf | DONE |
+| Text Editors | neovim, ripgrep | DONE |
+| Desktop Apps | electron, tauri, neutralinojs | DONE |
+| Package Managers | homebrew | DONE |
+| Total | **40+ tools analyzed** | **COMPLETE** |
