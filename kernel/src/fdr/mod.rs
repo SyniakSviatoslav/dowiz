@@ -134,7 +134,7 @@ pub use crate::{
 };
 
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 
 // ── Level ────────────────────────────────────────────────────────────────────────────
@@ -205,6 +205,20 @@ pub fn span_active() -> bool {
         || TL_OBSERVER.with(|o| o.borrow().is_some())
 }
 
+// ── Item 62: per-process span id minter ─────────────────────────────────────────────
+
+/// Item 62 (FDR relational linkage): per-process monotone span id counter. Mirrors the
+/// `next_seq` pattern (`sink::Sink.seq`). Each span gets a unique `u64` id; child spans
+/// record their parent's id as `parent_span_id` on the P3 forensic plane.
+static SPAN_SEQ: AtomicU64 = AtomicU64::new(0);
+
+/// Mint the next span id. Call once per span entry. Monotone, per-process, wraps at u64::MAX
+/// (not a concern — 2^64 spans at 1 GHz = 584 years).
+#[inline]
+pub fn next_span_id() -> u64 {
+    SPAN_SEQ.fetch_add(1, Ordering::Relaxed)
+}
+
 // ── Span observer (kernel-owned port of the tracing Layer hook) ─────────────────────
 
 /// The kernel-owned replacement for `tracing_subscriber::Layer`'s span hook. The P83
@@ -268,16 +282,35 @@ fn notify_observer(name: &'static str, dur_us: u64) {
 
 // ── Span handle / guard ─────────────────────────────────────────────────────────────
 
-/// A span handle produced by `fdr::info_span!`. Cheap (just a `&'static str`); does NO
-/// work until `.entered()`.
+/// A span handle produced by `fdr::info_span!`. Cheap (just a `&'static str` + optional
+/// parent id); does NO work until `.entered()`.
 pub struct SpanHandle {
     name: &'static str,
+    /// Item 62: the causal parent's span id, if known. `None` = root (the `Absence::NoParent`
+    /// default). Cross-process edges (subprocess spawns, agent↔LLM) seed this via
+    /// `SpanHandle::with_parent`.
+    parent_span_id: Option<u64>,
 }
 
 impl SpanHandle {
     #[inline]
     pub fn new(name: &'static str) -> Self {
-        SpanHandle { name }
+        SpanHandle {
+            name,
+            parent_span_id: None,
+        }
+    }
+
+    /// Item 62: construct a span handle with an explicit causal parent (cross-process
+    /// seeding). The parent's `span_id` was passed across the boundary (one `u64`), and
+    /// this child's root record will carry it as `parent_span_id: Value(parent_id)`
+    /// instead of `Absence::NoParent`.
+    #[inline]
+    pub fn with_parent(name: &'static str, parent_span_id: u64) -> Self {
+        SpanHandle {
+            name,
+            parent_span_id: Some(parent_span_id),
+        }
     }
 
     /// Enter the span, returning a guard whose `Drop` reports the elapsed wall-clock time.
@@ -294,9 +327,13 @@ impl SpanHandle {
         };
         #[cfg(target_arch = "wasm32")]
         let t0: Option<std::time::Instant> = None;
+        // Item 62: mint a fresh span_id for this span; the parent was provided (or None = root).
+        let span_id = next_span_id();
         SpanGuard {
             name: self.name,
             t0,
+            span_id,
+            parent_span_id: self.parent_span_id,
         }
     }
 }
@@ -306,6 +343,9 @@ impl SpanHandle {
 pub struct SpanGuard {
     name: &'static str,
     t0: Option<std::time::Instant>,
+    /// Item 62: the span's own id and its causal parent's id.
+    span_id: u64,
+    parent_span_id: Option<u64>,
 }
 
 impl Drop for SpanGuard {
@@ -314,7 +354,7 @@ impl Drop for SpanGuard {
         if let Some(t0) = self.t0 {
             let dur_us = t0.elapsed().as_micros().min(u64::MAX as u128) as u64;
             notify_observer(self.name, dur_us);
-            emit_span_close(self.name, dur_us);
+            emit_span_close(self.name, dur_us, self.span_id, self.parent_span_id);
         }
         // On wasm32, `t0` is always `None` (see `entered`) and this Drop is inert.
         #[cfg(target_arch = "wasm32")]
@@ -339,8 +379,8 @@ pub fn emit_event(level: Level, msg: &str, fields: &[(&'static str, String)]) {
 /// Emit a span-close FDR record to the ring sink (spans do NOT go to stderr — they go to
 /// the observer's `metric.jsonl` and, when durable, the ring).
 #[cfg(not(target_arch = "wasm32"))]
-fn emit_span_close(name: &'static str, dur_us: u64) {
-    sink::emit_span_close(name, dur_us);
+fn emit_span_close(name: &'static str, dur_us: u64, span_id: u64, parent_span_id: Option<u64>) {
+    sink::emit_span_close(name, dur_us, span_id, parent_span_id);
 }
 
 /// Emit ONE `Tuning`-kind FDR record carrying an autonomic gain-scheduling
@@ -710,7 +750,7 @@ mod sink {
         }
     }
 
-    pub fn emit_span_close(name: &'static str, dur_us: u64) {
+    pub fn emit_span_close(name: &'static str, dur_us: u64, span_id: u64, parent_span_id: Option<u64>) {
         let s = match SINK.get() {
             Some(s) => s,
             None => return,
@@ -721,7 +761,7 @@ mod sink {
         };
         let seq = next_seq(s);
         // Span-close of the instrumented functions gets a FULL hw stamp (blueprint §4.2).
-        let ev = FdrEvent::stamp(
+        let mut ev = FdrEvent::stamp(
             seq,
             Level::Info,
             Kind::SpanClose,
@@ -729,6 +769,12 @@ mod sink {
             StampPolicy::Full,
             vec![("dur_us", dur_us.to_string())],
         );
+        // Item 62: set relational linkage on the span-close record.
+        ev.span_id = Some(span_id);
+        ev.parent_span_id = Some(match parent_span_id {
+            Some(pid) => super::schema::Reading::Value(pid),
+            None => super::schema::Reading::Unavailable(super::schema::Absence::NoParent),
+        });
         if let Ok(mut r) = r.lock() {
             let _ = r.append(&ev);
         }
@@ -1014,7 +1060,8 @@ mod tests {
             let _g = crate::fdr::info_span!("eigenvalues").entered();
         }
         let p = dir.join(crate::span_metrics::obs::METRIC_JSONL);
-        let contents = std::fs::read_to_string(&p).expect("metric.jsonl must be written by the telemetry observer");
+        let contents = std::fs::read_to_string(&p)
+            .expect("metric.jsonl must be written by the telemetry observer");
         assert!(
             contents.contains("\"span\":\"eigenvalues\""),
             "telemetry observer must record the span close emitted by fdr::info_span!"
