@@ -364,7 +364,8 @@ impl PrimaryRecall {
         out.extend_from_slice(&(stems.len() as u64).to_le_bytes());
         out.extend_from_slice(&stems);
         out.extend_from_slice(&blob);
-        std::fs::write(path, out).map_err(|e| format!("PrimaryRecall::save_to {}: {e}", path.display()))
+        std::fs::write(path, out)
+            .map_err(|e| format!("PrimaryRecall::save_to {}: {e}", path.display()))
     }
 
     /// Load a persisted index from `path` (Option A std-only on-disk). Rebuilds
@@ -374,7 +375,8 @@ impl PrimaryRecall {
         let buf = std::fs::read(path)
             .map_err(|e| format!("PrimaryRecall::load_from {}: {e}", path.display()))?;
         let trig_len =
-            u64::from_le_bytes(<[u8; 8]>::try_from(&buf[0..8]).map_err(|_| "corrupt header")?) as usize;
+            u64::from_le_bytes(<[u8; 8]>::try_from(&buf[0..8]).map_err(|_| "corrupt header")?)
+                as usize;
         let mut p = 8;
         let mut trig_docs = Vec::new();
         let end_trig = p + trig_len;
@@ -382,14 +384,16 @@ impl PrimaryRecall {
             return Err("PrimaryRecall::load_from: corrupt trigram section".into());
         }
         while p < end_trig {
-            let l = u64::from_le_bytes(<[u8; 8]>::try_from(&buf[p..p + 8]).map_err(|_| "corrupt")?) as usize;
+            let l = u64::from_le_bytes(<[u8; 8]>::try_from(&buf[p..p + 8]).map_err(|_| "corrupt")?)
+                as usize;
             p += 8;
             let s = &buf[p..p + l];
             trig_docs.push(String::from_utf8(s.to_vec()).map_err(|_| "corrupt utf8")?);
             p += l;
         }
-        let stems_len =
-            u64::from_le_bytes(<[u8; 8]>::try_from(&buf[p..p + 8]).map_err(|_| "corrupt stems header")?) as usize;
+        let stems_len = u64::from_le_bytes(
+            <[u8; 8]>::try_from(&buf[p..p + 8]).map_err(|_| "corrupt stems header")?,
+        ) as usize;
         p += 8;
         let end_stems = p + stems_len;
         if end_stems > buf.len() {
@@ -397,7 +401,8 @@ impl PrimaryRecall {
         }
         let mut stems = Vec::new();
         while p < end_stems {
-            let l = u64::from_le_bytes(<[u8; 8]>::try_from(&buf[p..p + 8]).map_err(|_| "corrupt")?) as usize;
+            let l = u64::from_le_bytes(<[u8; 8]>::try_from(&buf[p..p + 8]).map_err(|_| "corrupt")?)
+                as usize;
             p += 8;
             let s = &buf[p..p + l];
             stems.push(String::from_utf8(s.to_vec()).map_err(|_| "corrupt utf8")?);
@@ -407,7 +412,14 @@ impl PrimaryRecall {
             .ok_or_else(|| "PrimaryRecall::load_from: corrupt bm25".to_string())?;
         let idx = TrigramIndex::new(&trig_docs.iter().map(|s| s.as_str()).collect::<Vec<_>>());
         // ids are the persisted stems (the dirty fingerprint), NOT the doc bodies.
-        Ok((PrimaryRecall { bm, idx, ids: stems.clone() }, stems))
+        Ok((
+            PrimaryRecall {
+                bm,
+                idx,
+                ids: stems.clone(),
+            },
+            stems,
+        ))
     }
 
     /// Save to the default cache file next to `dir` (`<dir>/.primary_recall.idx`).
@@ -589,11 +601,23 @@ mod tests {
         std::fs::create_dir_all(&dir).expect("mk corpus dir");
         // Write a small deterministic corpus of .md docs (sorted stems).
         let docs = [
-            ("a_order_total.md", "how is the order total calculated by the engine"),
+            (
+                "a_order_total.md",
+                "how is the order total calculated by the engine",
+            ),
             ("b_refund.md", "request a refund for a cancelled order"),
-            ("c_shipping.md", "shipping delay and delivery estimate for my package"),
-            ("d_loyalty.md", "loyalty points balance and how to redeem rewards"),
-            ("e_invoice.md", "download the invoice pdf for last months purchase"),
+            (
+                "c_shipping.md",
+                "shipping delay and delivery estimate for my package",
+            ),
+            (
+                "d_loyalty.md",
+                "loyalty points balance and how to redeem rewards",
+            ),
+            (
+                "e_invoice.md",
+                "download the invoice pdf for last months purchase",
+            ),
         ];
         for (name, body) in docs {
             std::fs::write(dir.join(name), body).expect("write corpus doc");
@@ -620,8 +644,11 @@ mod tests {
         );
         // Dirty check: corrupt the corpus (add a doc) ⇒ load returns None (caller
         // must rebuild), proving the fingerprint actually detects change.
-        std::fs::write(dir.join("f_promo.md"), "promo code discount applied at checkout")
-            .expect("add doc");
+        std::fs::write(
+            dir.join("f_promo.md"),
+            "promo code discount applied at checkout",
+        )
+        .expect("add doc");
         let stale = PrimaryRecall::load(&dir).expect("load after corpus change");
         assert!(
             stale.is_none(),

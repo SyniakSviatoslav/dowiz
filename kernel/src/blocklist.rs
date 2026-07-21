@@ -36,7 +36,7 @@
 
 use crate::capability_cert::{AlgSuite, HybridSig};
 use crate::moderation::ReportReason;
-use crate::ports::agent::cap::{RefSigner, SignatureVerifier};
+use crate::ports::agent::cap::SignatureVerifier;
 use std::fmt;
 
 /// Scaling axis: entry count K. Whole-list re-sign + re-fetch is O(K); beyond
@@ -277,6 +277,7 @@ impl BlocklistSubscriptions {
 mod tests {
     use super::*;
     use crate::moderation::ReportReason;
+    use crate::ports::agent::cap::RefSigner;
 
     fn pubs_of(cls_sk: [u8; 32], pq_sk: [u8; 32]) -> ([u8; 32], Vec<u8>) {
         let v = RefSigner;

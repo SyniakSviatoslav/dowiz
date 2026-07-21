@@ -12,7 +12,7 @@
 //! run. This is what makes the regression catchable in CI.
 
 use dowiz_kernel::{
-    catalog::PriceCatalog, domain::OrderItem, domain::place_order_priced, money::Currency,
+    catalog::PriceCatalog, domain::place_order_priced, domain::OrderItem, money::Currency,
     vendor::VendorId,
 };
 
@@ -61,9 +61,9 @@ where
     });
     match rx.recv_timeout(std::time::Duration::from_secs(secs)) {
         Ok(()) => handle.join().expect("worker panicked"),
-        Err(_) => panic!(
-            "probe did not finish within {secs}s — layer is unbounded/hung (regression)"
-        ),
+        Err(_) => {
+            panic!("probe did not finish within {secs}s — layer is unbounded/hung (regression)")
+        }
     }
 }
 
@@ -82,8 +82,7 @@ fn red_flag_on_place_order_priced_counts_1000() {
     #[cfg(feature = "telemetry")]
     {
         bounded(20, || {
-            let dir =
-                std::env::temp_dir().join(format!("p83_init_wire_{}", std::process::id()));
+            let dir = std::env::temp_dir().join(format!("p83_init_wire_{}", std::process::id()));
             let _ = std::fs::create_dir_all(&dir);
             // Mirror exactly what `init_tracing()` does under DOWIZ_SPAN_METRICS=1, but
             // scoped so it does not fight a global subscriber another test already set.
@@ -91,8 +90,8 @@ fn red_flag_on_place_order_priced_counts_1000() {
             const N: usize = 50;
             run_priced(N);
             let p = dir.join("metric.jsonl");
-            let contents = std::fs::read_to_string(&p)
-                .expect("metric.jsonl should exist under the layer");
+            let contents =
+                std::fs::read_to_string(&p).expect("metric.jsonl should exist under the layer");
             assert!(
                 contents.contains("\"span\":\"place_order_priced\""),
                 "expected a metric.jsonl row for place_order_priced under the span-metrics layer"
@@ -149,8 +148,8 @@ fn red_span_close_never_deadlocks() {
             }
 
             let p = dir.join("metric.jsonl");
-            let contents = std::fs::read_to_string(&p)
-                .expect("metric.jsonl should exist after closing spans");
+            let contents =
+                std::fs::read_to_string(&p).expect("metric.jsonl should exist after closing spans");
             assert!(
                 contents.contains("\"span\":\"p83_synthetic\""),
                 "synthetic span must be recorded by the layer (proves on_close ran)"
@@ -181,7 +180,10 @@ fn red_default_build_unchanged_no_metric_row() {
         Ok(s) => s.contains("\"span\":"),
         Err(_) => false,
     };
-    assert!(!has_row, "default (no-env) init_tracing must not emit span metrics");
+    assert!(
+        !has_row,
+        "default (no-env) init_tracing must not emit span metrics"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }

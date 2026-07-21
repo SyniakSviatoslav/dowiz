@@ -238,24 +238,109 @@ impl IntentClassifier {
     /// phrases are flagged so the classifier never defers them to the AI ranker.
     pub fn new() -> Self {
         let lexicon = vec![
-            LexiconEntry { keyword: "open menu", command: Some(CommandId::OpenMenu), nav: Some(NavTarget::Menu), consequential: false },
-            LexiconEntry { keyword: "menu", command: Some(CommandId::OpenMenu), nav: Some(NavTarget::Menu), consequential: false },
-            LexiconEntry { keyword: "open cart", command: Some(CommandId::OpenCart), nav: Some(NavTarget::Cart), consequential: false },
-            LexiconEntry { keyword: "cart", command: Some(CommandId::OpenCart), nav: Some(NavTarget::Cart), consequential: false },
-            LexiconEntry { keyword: "catalog", command: Some(CommandId::OpenCatalog), nav: Some(NavTarget::Catalog), consequential: false },
-            LexiconEntry { keyword: "open catalog", command: Some(CommandId::OpenCatalog), nav: Some(NavTarget::Catalog), consequential: false },
-            LexiconEntry { keyword: "checkout", command: Some(CommandId::GoCheckout), nav: Some(NavTarget::Checkout), consequential: true },
-            LexiconEntry { keyword: "go to checkout", command: Some(CommandId::GoCheckout), nav: Some(NavTarget::Checkout), consequential: true },
-            LexiconEntry { keyword: "owner dashboard", command: Some(CommandId::OpenOwnerDashboard), nav: Some(NavTarget::OwnerDashboard), consequential: false },
-            LexiconEntry { keyword: "courier board", command: Some(CommandId::OpenCourierBoard), nav: Some(NavTarget::CourierBoard), consequential: false },
+            LexiconEntry {
+                keyword: "open menu",
+                command: Some(CommandId::OpenMenu),
+                nav: Some(NavTarget::Menu),
+                consequential: false,
+            },
+            LexiconEntry {
+                keyword: "menu",
+                command: Some(CommandId::OpenMenu),
+                nav: Some(NavTarget::Menu),
+                consequential: false,
+            },
+            LexiconEntry {
+                keyword: "open cart",
+                command: Some(CommandId::OpenCart),
+                nav: Some(NavTarget::Cart),
+                consequential: false,
+            },
+            LexiconEntry {
+                keyword: "cart",
+                command: Some(CommandId::OpenCart),
+                nav: Some(NavTarget::Cart),
+                consequential: false,
+            },
+            LexiconEntry {
+                keyword: "catalog",
+                command: Some(CommandId::OpenCatalog),
+                nav: Some(NavTarget::Catalog),
+                consequential: false,
+            },
+            LexiconEntry {
+                keyword: "open catalog",
+                command: Some(CommandId::OpenCatalog),
+                nav: Some(NavTarget::Catalog),
+                consequential: false,
+            },
+            LexiconEntry {
+                keyword: "checkout",
+                command: Some(CommandId::GoCheckout),
+                nav: Some(NavTarget::Checkout),
+                consequential: true,
+            },
+            LexiconEntry {
+                keyword: "go to checkout",
+                command: Some(CommandId::GoCheckout),
+                nav: Some(NavTarget::Checkout),
+                consequential: true,
+            },
+            LexiconEntry {
+                keyword: "owner dashboard",
+                command: Some(CommandId::OpenOwnerDashboard),
+                nav: Some(NavTarget::OwnerDashboard),
+                consequential: false,
+            },
+            LexiconEntry {
+                keyword: "courier board",
+                command: Some(CommandId::OpenCourierBoard),
+                nav: Some(NavTarget::CourierBoard),
+                consequential: false,
+            },
             // Consequential commands — resolved directly, never ambiguous.
-            LexiconEntry { keyword: "accept order", command: Some(CommandId::AcceptOrder), nav: None, consequential: true },
-            LexiconEntry { keyword: "confirm order", command: Some(CommandId::ConfirmOrder), nav: None, consequential: true },
-            LexiconEntry { keyword: "confirm", command: Some(CommandId::ConfirmOrder), nav: None, consequential: true },
-            LexiconEntry { keyword: "cancel order", command: Some(CommandId::CancelOrder), nav: None, consequential: true },
-            LexiconEntry { keyword: "cancel", command: Some(CommandId::CancelOrder), nav: None, consequential: true },
-            LexiconEntry { keyword: "decline order", command: Some(CommandId::DeclineOrder), nav: None, consequential: true },
-            LexiconEntry { keyword: "decline", command: Some(CommandId::DeclineOrder), nav: None, consequential: true },
+            LexiconEntry {
+                keyword: "accept order",
+                command: Some(CommandId::AcceptOrder),
+                nav: None,
+                consequential: true,
+            },
+            LexiconEntry {
+                keyword: "confirm order",
+                command: Some(CommandId::ConfirmOrder),
+                nav: None,
+                consequential: true,
+            },
+            LexiconEntry {
+                keyword: "confirm",
+                command: Some(CommandId::ConfirmOrder),
+                nav: None,
+                consequential: true,
+            },
+            LexiconEntry {
+                keyword: "cancel order",
+                command: Some(CommandId::CancelOrder),
+                nav: None,
+                consequential: true,
+            },
+            LexiconEntry {
+                keyword: "cancel",
+                command: Some(CommandId::CancelOrder),
+                nav: None,
+                consequential: true,
+            },
+            LexiconEntry {
+                keyword: "decline order",
+                command: Some(CommandId::DeclineOrder),
+                nav: None,
+                consequential: true,
+            },
+            LexiconEntry {
+                keyword: "decline",
+                command: Some(CommandId::DeclineOrder),
+                nav: None,
+                consequential: true,
+            },
         ];
         // Keep longest-keyword-first so the longest-prefix match wins.
         IntentClassifier { lexicon }
@@ -266,9 +351,11 @@ impl IntentClassifier {
         match input {
             RawInput::Pointer { pos, phase, vel } => self.classify_pointer(*pos, *phase, *vel, ctx),
             RawInput::Key(key) => self.classify_key(*key),
-            RawInput::VoicePhrase { transcript, confidence, is_final } => {
-                self.classify_voice(transcript, *confidence, *is_final, ctx)
-            }
+            RawInput::VoicePhrase {
+                transcript,
+                confidence,
+                is_final,
+            } => self.classify_voice(transcript, *confidence, *is_final, ctx),
             RawInput::Gesture { origin, vector, .. } => self.classify_gesture(*origin, *vector),
         }
     }
@@ -323,7 +410,9 @@ impl IntentClassifier {
                 };
                 Classification::Resolved(Intent::Scrub(dx))
             }
-            KeyCode::Backspace | KeyCode::Char(_) => Classification::Rejected(RejectReason::NoTarget),
+            KeyCode::Backspace | KeyCode::Char(_) => {
+                Classification::Rejected(RejectReason::NoTarget)
+            }
         }
     }
 
@@ -356,7 +445,11 @@ impl IntentClassifier {
         let matches: Vec<&LexiconEntry> = self
             .lexicon
             .iter()
-            .filter(|e| phrase == e.keyword || phrase.starts_with(e.keyword) || e.keyword.starts_with(&phrase))
+            .filter(|e| {
+                phrase == e.keyword
+                    || phrase.starts_with(e.keyword)
+                    || e.keyword.starts_with(&phrase)
+            })
             .collect();
 
         if matches.is_empty() {
@@ -515,7 +608,11 @@ mod tests {
         let classifier = IntentClassifier::new();
 
         let down_on_widget = RawInput::Pointer {
-            pos: FieldPos { u: 5.0, v: 5.0, w: 0.0 },
+            pos: FieldPos {
+                u: 5.0,
+                v: 5.0,
+                w: 0.0,
+            },
             phase: PointerPhase::Down,
             vel: (0.0, 0.0),
         };
@@ -525,13 +622,21 @@ mod tests {
         );
 
         let down_empty = RawInput::Pointer {
-            pos: FieldPos { u: -40.0, v: -40.0, w: 0.0 },
+            pos: FieldPos {
+                u: -40.0,
+                v: -40.0,
+                w: 0.0,
+            },
             phase: PointerPhase::Down,
             vel: (0.0, 0.0),
         };
         assert_eq!(
             classifier.classify(&down_empty, &ctx),
-            Classification::Resolved(Intent::Point(FieldPos { u: -40.0, v: -40.0, w: 0.0 }))
+            Classification::Resolved(Intent::Point(FieldPos {
+                u: -40.0,
+                v: -40.0,
+                w: 0.0
+            }))
         );
 
         // Router round-trip: a source emitting the widget-down yields Select(7).
@@ -619,7 +724,10 @@ mod tests {
         };
         match classifier.classify(&open, &ctx) {
             Classification::Ambiguous(cands) => {
-                assert!(cands.iter().all(|c| !c.is_consequential()), "ambiguous set must be consequential-free");
+                assert!(
+                    cands.iter().all(|c| !c.is_consequential()),
+                    "ambiguous set must be consequential-free"
+                );
                 assert!(cands.len() >= 2);
             }
             other => panic!("expected Ambiguous, got {other:?}"),

@@ -238,6 +238,64 @@ impl Kind {
     }
 }
 
+/// Item 58: the closed set of workload kinds — the *what* a span produced. Each variant
+/// maps to a greppable snake_case string. `Copy` + `Clone` because workload metadata is
+/// small, fixed, and carried on hot paths.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum WorkloadKind {
+    DecisionUnitsImported,
+    FdrRecordsAppended,
+    TransitionsFolded,
+    TokensGenerated,
+    FramesRendered,
+    EigensolvesCompleted,
+    SignaturesVerified,
+}
+
+impl WorkloadKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            WorkloadKind::DecisionUnitsImported => "decision_units_imported",
+            WorkloadKind::FdrRecordsAppended => "fdr_records_appended",
+            WorkloadKind::TransitionsFolded => "transitions_folded",
+            WorkloadKind::TokensGenerated => "tokens_generated",
+            WorkloadKind::FramesRendered => "frames_rendered",
+            WorkloadKind::EigensolvesCompleted => "eigensolves_completed",
+            WorkloadKind::SignaturesVerified => "signatures_verified",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<WorkloadKind> {
+        match s {
+            "decision_units_imported" => Some(WorkloadKind::DecisionUnitsImported),
+            "fdr_records_appended" => Some(WorkloadKind::FdrRecordsAppended),
+            "transitions_folded" => Some(WorkloadKind::TransitionsFolded),
+            "tokens_generated" => Some(WorkloadKind::TokensGenerated),
+            "frames_rendered" => Some(WorkloadKind::FramesRendered),
+            "eigensolves_completed" => Some(WorkloadKind::EigensolvesCompleted),
+            "signatures_verified" => Some(WorkloadKind::SignaturesVerified),
+            _ => None,
+        }
+    }
+}
+
+/// Item 58: a workload counter — the *how much* a span produced. Carried on SpanClose
+/// records as `Some(Work)`; `None` on every other record class (byte-identical to pre-item-58).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Work {
+    pub kind: WorkloadKind,
+    pub delta_count: u64,
+}
+
+impl Work {
+    pub fn write(self, w: JsonWriter) -> JsonWriter {
+        let mut inner = JsonWriter::obj();
+        inner = inner.field_str("kind", self.kind.as_str());
+        inner = inner.field_u64("delta_count", self.delta_count);
+        w.field_raw("work", &inner.finish())
+    }
+}
+
 /// One FDR record. Fixed envelope; `hw` is first-class (never `Option`).
 #[derive(Clone, Debug)]
 pub struct FdrEvent {
@@ -269,6 +327,10 @@ pub struct FdrEvent {
     /// records (byte-identical to pre-item-62). Serialized only when `Some`, following the
     /// pmu optional-field discipline.
     pub parent_span_id: Option<Reading<u64>>,
+    /// Item 58: workload counter — what the span produced and how much. Present ONLY on
+    /// SpanClose records; `None` everywhere else. Serialized only when `Some`, following the
+    /// pmu optional-field discipline. Byte-identical to pre-item-58 when absent.
+    pub work: Option<Work>,
     pub fields: Vec<(&'static str, String)>,
 }
 
@@ -302,6 +364,7 @@ impl FdrEvent {
             pmu: None,
             span_id: None,
             parent_span_id: None,
+            work: None,
             fields,
         }
     }
@@ -333,6 +396,10 @@ impl FdrEvent {
         };
         let w = match self.parent_span_id {
             Some(reading) => reading.write_field(w, "parent_span_id"),
+            None => w,
+        };
+        let w = match self.work {
+            Some(work) => work.write(w),
             None => w,
         };
         let mut fobj = JsonWriter::obj();
@@ -400,6 +467,7 @@ mod tests {
             pmu: None,
             span_id: None,
             parent_span_id: None,
+            work: None,
             fields: vec![("subtotal_cents", "500".into())],
         };
         let j = ev.to_json();
@@ -428,6 +496,7 @@ mod tests {
             pmu: None,
             span_id: None,
             parent_span_id: None,
+            work: None,
             fields: vec![("tick", "3".into())],
         };
         let j = ev.to_json();
@@ -465,6 +534,7 @@ mod tests {
             pmu: None,
             span_id: None,
             parent_span_id: None,
+            work: None,
             fields: vec![("subtotal_cents", "500".into())],
         };
         // Captured golden string — MUST NOT change after the Heartbeat variant is added.
@@ -479,8 +549,6 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn span_close_root_serializes_no_parent_absence() {
-        // A root SpanClose record carries span_id + parent_span_id with
-        // Absence::NoParent — the named-absence doctrine (no magic 0).
         let ev = FdrEvent {
             seq: 10,
             ts_unix_ns: 100,
@@ -492,6 +560,7 @@ mod tests {
             pmu: None,
             span_id: Some(42),
             parent_span_id: Some(Reading::Unavailable(Absence::NoParent)),
+            work: None,
             fields: vec![("dur_us", "150".into())],
         };
         let j = ev.to_json();
@@ -514,7 +583,6 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn span_close_child_serializes_parent_span_id_as_value() {
-        // A child SpanClose record carries parent_span_id = Value(parent_id).
         let ev = FdrEvent {
             seq: 11,
             ts_unix_ns: 100,
@@ -526,6 +594,7 @@ mod tests {
             pmu: None,
             span_id: Some(43),
             parent_span_id: Some(Reading::Value(42)),
+            work: None,
             fields: vec![("dur_us", "80".into())],
         };
         let j = ev.to_json();
@@ -542,9 +611,6 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn event_record_byte_identity_preserved_after_item_62() {
-        // Non-span records (Event, Alarm, Heartbeat, etc.) must be byte-identical
-        // to pre-item-62. span_id: None + parent_span_id: None ⇒ fields absent from
-        // serialized output (the pmu-absence optional-field precedent).
         let ev = FdrEvent {
             seq: 7,
             ts_unix_ns: 1,
@@ -556,6 +622,7 @@ mod tests {
             pmu: None,
             span_id: None,
             parent_span_id: None,
+            work: None,
             fields: vec![("subtotal_cents", "500".into())],
         };
         // Golden string is UNCHANGED from the pre-item-62 test — no span fields present.
@@ -568,8 +635,6 @@ mod tests {
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn span_tree_reconstruction_from_recovered_ring() {
-        // Oracle test: build a parent→child span pair, serialize both, parse back,
-        // and reconstruct the call tree via parent_span_id links.
         let root = FdrEvent {
             seq: 1,
             ts_unix_ns: 1000,
@@ -581,6 +646,7 @@ mod tests {
             pmu: None,
             span_id: Some(100),
             parent_span_id: Some(Reading::Unavailable(Absence::NoParent)),
+            work: None,
             fields: vec![("dur_us", "500".into())],
         };
         let child = FdrEvent {
@@ -594,6 +660,7 @@ mod tests {
             pmu: None,
             span_id: Some(101),
             parent_span_id: Some(Reading::Value(100)),
+            work: None,
             fields: vec![("dur_us", "200".into())],
         };
         // Simulate "recovered ring" — a list of serialized records.
@@ -659,12 +726,117 @@ mod tests {
         let pos = json.find(pattern)?;
         let rest = &json[pos + pattern.len()..];
         if rest.starts_with('{') {
-            // Named absence — root record.
             None
         } else {
-            // Bare u64 value — child record.
             let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
             Some(rest[..end].parse().ok()?)
         }
+    }
+
+    // ── Item 58: WorkloadKind / Work tests ───────────────────────────────────────────
+
+    #[test]
+    fn workload_kind_serialization() {
+        assert_eq!(WorkloadKind::DecisionUnitsImported.as_str(), "decision_units_imported");
+        assert_eq!(WorkloadKind::FdrRecordsAppended.as_str(), "fdr_records_appended");
+        assert_eq!(WorkloadKind::TransitionsFolded.as_str(), "transitions_folded");
+        assert_eq!(WorkloadKind::TokensGenerated.as_str(), "tokens_generated");
+        assert_eq!(WorkloadKind::FramesRendered.as_str(), "frames_rendered");
+        assert_eq!(WorkloadKind::EigensolvesCompleted.as_str(), "eigensolves_completed");
+        assert_eq!(WorkloadKind::SignaturesVerified.as_str(), "signatures_verified");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn span_close_with_work_serializes_work() {
+        let ev = FdrEvent {
+            seq: 20,
+            ts_unix_ns: 200,
+            mono_ns: 300,
+            level: Level::Info,
+            kind: Kind::SpanClose,
+            name: "fdr_flush".into(),
+            hw: HwStamp::sample(StampPolicy::Cheap),
+            pmu: None,
+            span_id: Some(99),
+            parent_span_id: Some(Reading::Unavailable(Absence::NoParent)),
+            work: Some(Work { kind: WorkloadKind::FdrRecordsAppended, delta_count: 42 }),
+            fields: vec![("dur_us", "300".into())],
+        };
+        let j = ev.to_json();
+        assert!(
+            j.contains("\"work\":{\"kind\":\"fdr_records_appended\",\"delta_count\":42}"),
+            "work field must be serialized when Some: {j}"
+        );
+        let work_pos = j.find("\"work\"").unwrap();
+        let fields_pos = j.find("\"fields\"").unwrap();
+        assert!(work_pos < fields_pos, "work must precede fields: {j}");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn event_without_work_byte_identity() {
+        let ev = FdrEvent {
+            seq: 7,
+            ts_unix_ns: 1,
+            mono_ns: 2,
+            level: Level::Info,
+            kind: Kind::Event,
+            name: "place_order".into(),
+            hw: HwStamp::sample(StampPolicy::Cheap),
+            pmu: None,
+            span_id: None,
+            parent_span_id: None,
+            work: None,
+            fields: vec![("subtotal_cents", "500".into())],
+        };
+        assert_eq!(
+            ev.to_json(),
+            "{\"seq\":7,\"ts_unix_ns\":1,\"mono_ns\":2,\"level\":\"info\",\"kind\":\"event\",\"name\":\"place_order\",\"hw\":{\"cpu_ticks\":{\"unavailable\":\"sampling_disabled\"},\"rss_kb\":{\"unavailable\":\"sampling_disabled\"},\"joules_uj\":{\"unavailable\":\"sampling_disabled\"}},\"fields\":{\"subtotal_cents\":\"500\"}}"
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn work_field_position_is_before_fields() {
+        let ev = FdrEvent {
+            seq: 21,
+            ts_unix_ns: 200,
+            mono_ns: 300,
+            level: Level::Info,
+            kind: Kind::SpanClose,
+            name: "eigen".into(),
+            hw: HwStamp::sample(StampPolicy::Cheap),
+            pmu: None,
+            span_id: Some(10),
+            parent_span_id: Some(Reading::Value(9)),
+            work: Some(Work { kind: WorkloadKind::EigensolvesCompleted, delta_count: 7 }),
+            fields: vec![("dur_us", "100".into())],
+        };
+        let j = ev.to_json();
+        let span_pos = j.find("\"span_id\"").unwrap();
+        let pid_pos = j.find("\"parent_span_id\"").unwrap();
+        let work_pos = j.find("\"work\"").unwrap();
+        let fields_pos = j.find("\"fields\"").unwrap();
+        assert!(span_pos < pid_pos, "span_id before parent_span_id");
+        assert!(pid_pos < work_pos, "parent_span_id before work");
+        assert!(work_pos < fields_pos, "work before fields");
+    }
+
+    #[test]
+    fn workload_kind_roundtrip() {
+        for s in &[
+            "decision_units_imported",
+            "fdr_records_appended",
+            "transitions_folded",
+            "tokens_generated",
+            "frames_rendered",
+            "eigensolves_completed",
+            "signatures_verified",
+        ] {
+            let wk = WorkloadKind::from_str(s).expect(s);
+            assert_eq!(wk.as_str(), *s);
+        }
+        assert!(WorkloadKind::from_str("unknown").is_none());
     }
 }

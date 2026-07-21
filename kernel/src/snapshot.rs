@@ -38,7 +38,11 @@ pub struct SnapshotStore {
 impl SnapshotStore {
     /// New empty store with a scratch arena of `arena_bytes` (default 64 KiB if 0).
     pub fn new(arena_bytes: usize) -> Self {
-        let bytes = if arena_bytes == 0 { 64 * 1024 } else { arena_bytes };
+        let bytes = if arena_bytes == 0 {
+            64 * 1024
+        } else {
+            arena_bytes
+        };
         SnapshotStore {
             arena: BumpArena::with_capacity(bytes),
             entries: Vec::new(),
@@ -131,10 +135,7 @@ mod tests {
     #[test]
     fn reconcile_empty_store_is_green() {
         let store = SnapshotStore::new(0);
-        assert!(
-            store.reconcile().is_empty(),
-            "empty set is drift-coherent"
-        );
+        assert!(store.reconcile().is_empty(), "empty set is drift-coherent");
     }
 
     #[test]

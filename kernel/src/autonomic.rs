@@ -15,7 +15,7 @@
 //!
 //! Pure `std`, zero external dependencies.
 
-use crate::breaker::{Breaker, BreakerState, SignalVector, SignalWeights, TripCause};
+use crate::breaker::{Breaker, SignalVector, SignalWeights, TripCause};
 use crate::markov::Verdict;
 use crate::spectral::DriftClass;
 
@@ -342,7 +342,7 @@ pub fn schedule_into_breaker(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::breaker::{fit_from_rates, RateProfile, SignalWeights, ThresholdId};
+    use crate::breaker::{fit_from_rates, BreakerState, RateProfile, SignalWeights, ThresholdId};
 
     fn tid() -> ThresholdId {
         let p = RateProfile {

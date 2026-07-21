@@ -29,7 +29,7 @@
 //! only starves the model channel, never Hydra itself.
 
 use crate::csr::Csr;
-use crate::hydra::{candidate_drift, INTEGRITY_BAND, TopoEdge};
+use crate::hydra::{candidate_drift, TopoEdge, INTEGRITY_BAND};
 use crate::spectral::DriftClass;
 
 /// The two locked models. Index 0 = LFM2.5-VL-450M, index 1 = SmolVLM-256M-Instruct.
@@ -115,8 +115,16 @@ pub fn arbitrate(a: &ModelOutput, b: &ModelOutput) -> Verdict {
 /// witnesses the other). Used as the base for `candidate_drift`.
 pub fn pair_baseline() -> Vec<TopoEdge> {
     vec![
-        TopoEdge { from: MODEL_A, to: MODEL_B, weight: 1.0 },
-        TopoEdge { from: MODEL_B, to: MODEL_A, weight: 1.0 },
+        TopoEdge {
+            from: MODEL_A,
+            to: MODEL_B,
+            weight: 1.0,
+        },
+        TopoEdge {
+            from: MODEL_B,
+            to: MODEL_A,
+            weight: 1.0,
+        },
     ]
 }
 
@@ -169,12 +177,119 @@ pub fn osmotic_rank(attention_seed: &[f64; PAIR_NODES]) -> [f64; PAIR_NODES] {
     out
 }
 
+/// L1 PROVENANCE GATE — the ONLY compile-path from a port reply (`ports::llm::ChatResponse`)
+/// to an evidence-bearing `ModelOutput`. Fails closed: if the backend served an `model_id`
+/// that is NOT one of the locked pair (`validate_topology`), the reply is refused — no
+/// opaque "the model said" text can cross into the supervisor without a provenance tag that
+/// matches the operator-locked contract. This is the structural enforcement of "no black
+/// boxes, always": provenance must be present AND must match the lock, or the output is dropped.
+///
+/// `locked` is the slice from `model_registry::locked_pair()` (or `validate_topology(None)`'s
+/// source). `utterance_id` is taken from the response (already monotonic, set by the adapter).
+pub fn from_port_response(
+    resp: &crate::ports::llm::ChatResponse,
+    locked: &[crate::agent::model_registry::LockedModel],
+) -> Option<ModelOutput> {
+    // 1) provenance must name one of the locked models exactly.
+    let idx = locked.iter().position(|m| m.name == resp.model_id)?;
+    // 2) the response must carry a real utterance id (replay/audit).
+    if resp.utterance_id == 0 {
+        return None;
+    }
+    // 3) the text must survive the membrane (schema/vocab/provenance) before it can become
+    //    a claim — an opaque/unbounded blob is dropped here, never reaching `arbitrate`.
+    let value = ClaimValue::Assertion(resp.content.clone());
+    let out = ModelOutput {
+        model: locked[idx].id as usize,
+        value,
+        confidence: 0.0, // not used as evidence on its own; osmosis ranking only
+        utterance_id: resp.utterance_id,
+    };
+    membrane_admit(&out).cloned()
+}
+
+/// Convenience: enforce provenance against the canonical locked pair (P97/P101).
+pub fn from_port_response_locked(resp: &crate::ports::llm::ChatResponse) -> Option<ModelOutput> {
+    from_port_response(resp, &crate::agent::model_registry::locked_pair())
+}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::agent::model_registry::LockedModel;
+    use crate::ports::llm::ChatResponse;
+
+    fn port_reply(model_id: &str, content: &str, utterance_id: u64) -> ChatResponse {
+        ChatResponse {
+            content: content.into(),
+            usage: crate::ports::llm::Usage::default(),
+            model_id: model_id.into(),
+            utterance_id,
+            tool_calls: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn l1_gate_accepts_locked_model_reply() {
+        // A reply provenance-tagged with a LOCKED model id becomes a valid ModelOutput.
+        let r = port_reply("LFM2.5-VL-450M", "door_open", 7);
+        let out = from_port_response_locked(&r).expect("locked model must pass the gate");
+        assert_eq!(out.model, MODEL_A);
+        assert_eq!(out.utterance_id, 7);
+    }
+
+    #[test]
+    fn l1_gate_refuses_unlocked_black_box() {
+        // A backend that silently serves an unlocked model is refused fail-closed —
+        // the text never crosses into the supervisor, no matter how plausible.
+        let r = port_reply("Some-Other-Model-7B", "door_open", 7);
+        assert!(from_port_response_locked(&r).is_none());
+    }
+
+    #[test]
+    fn l1_gate_refuses_zero_utterance_id() {
+        // Replay/audit provenance is mandatory; a reply without an utterance id is dropped.
+        let r = port_reply("LFM2.5-VL-450M", "door_open", 0);
+        assert!(from_port_response_locked(&r).is_none());
+    }
+
+    #[test]
+    fn l1_gate_refuses_opaque_blob() {
+        // Even a locked-model reply with an unbounded blob is dropped by the membrane.
+        let r = port_reply("LFM2.5-VL-450M", &"x".repeat(5000), 7);
+        assert!(from_port_response_locked(&r).is_none());
+    }
+
+    #[test]
+    fn l1_gate_maps_model_name_to_index() {
+        // The second locked model maps to MODEL_B, not MODEL_A.
+        let locked = [
+            LockedModel {
+                id: 0,
+                name: "LFM2.5-VL-450M",
+                params_m: 450,
+                backend: crate::agent::model_registry::ServingBackend::CpuLlamaCpp,
+                provenance: "",
+            },
+            LockedModel {
+                id: 1,
+                name: "SmolVLM-256M-Instruct",
+                params_m: 256,
+                backend: crate::agent::model_registry::ServingBackend::CpuLlamaCpp,
+                provenance: "",
+            },
+        ];
+        let r = port_reply("SmolVLM-256M-Instruct", "door_open", 3);
+        let out = from_port_response(&r, &locked).expect("second locked model passes");
+        assert_eq!(out.model, MODEL_B);
+    }
 
     fn out(model: usize, val: ClaimValue, conf: f64, id: u64) -> ModelOutput {
-        ModelOutput { model, value: val, confidence: conf, utterance_id: id }
+        ModelOutput {
+            model,
+            value: val,
+            confidence: conf,
+            utterance_id: id,
+        }
     }
 
     #[test]
@@ -215,12 +330,20 @@ mod tests {
     fn drift_gate_rejects_divergent_coupling() {
         // Adding ANY extra weight to the already-fully-connected 2-cycle raises ρ>1
         // → Unstable → refused fail-closed. This is correct gate behavior.
-        let divergent = vec![TopoEdge { from: MODEL_A, to: MODEL_A, weight: 1e9 }];
+        let divergent = vec![TopoEdge {
+            from: MODEL_A,
+            to: MODEL_A,
+            weight: 1e9,
+        }];
         assert_eq!(score_coupling_delta(&divergent), DriftClass::Unstable);
         // A benign *coupling reduction* (negative delta lowering an edge below the
         // ρ=1 boundary) keeps the cycle bounded (Damped), not Unstable — the gate
         // permits relaxing the lock, only refuses tightening it.
-        let lowered = vec![TopoEdge { from: MODEL_A, to: MODEL_B, weight: -0.5 }];
+        let lowered = vec![TopoEdge {
+            from: MODEL_A,
+            to: MODEL_B,
+            weight: -0.5,
+        }];
         assert_ne!(score_coupling_delta(&lowered), DriftClass::Unstable);
     }
 

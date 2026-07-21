@@ -247,12 +247,15 @@ mod tests {
 
         // (b) The ONLY accessor routes bytes to the archival sink — and the bytes
         //     are consumed (moved) so they cannot be diverted afterward.
-        let blob = OpticalCompressed::from_compressed(b"vision-tokens".to_vec(), LOCALGGUF_CODEC_TAG);
+        let blob =
+            OpticalCompressed::from_compressed(b"vision-tokens".to_vec(), LOCALGGUF_CODEC_TAG);
         let mut archive = InMemoryArchive::default();
         let id = blob.archive_persist(|b| {
             // `b` is `ArchivalBlob` — the sole legal destination. Storing it on the
             // archival (coldest) tier is the only thing we can do with the bytes.
-            archive.persist_archival(b).expect("archival persist (item 20) succeeds")
+            archive
+                .persist_archival(b)
+                .expect("archival persist (item 20) succeeds")
         });
         assert!(id < u64::MAX, "archival id assigned; bytes never hashed");
 
@@ -291,8 +294,8 @@ mod tests {
             !event_log_src.contains("OpticalCompressed"),
             "event_log (determinism plane) must NOT reference OpticalCompressed"
         );
-        let spine_src = std::fs::read_to_string(format!("{manifest}/src/spine.rs"))
-            .unwrap_or_default();
+        let spine_src =
+            std::fs::read_to_string(format!("{manifest}/src/spine.rs")).unwrap_or_default();
         assert!(
             !spine_src.contains("OpticalCompressed"),
             "spine (hash-chain plane) must NOT reference OpticalCompressed"

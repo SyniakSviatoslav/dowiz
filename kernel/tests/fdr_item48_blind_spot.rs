@@ -34,17 +34,25 @@ fn unique_dir(tag: &str) -> PathBuf {
 
 fn field_i64(s: &str, key: &str) -> i64 {
     let pat = format!("\"{key}\":");
-    let i = s.find(&pat).unwrap_or_else(|| panic!("missing {key} in {s}")) + pat.len();
+    let i = s
+        .find(&pat)
+        .unwrap_or_else(|| panic!("missing {key} in {s}"))
+        + pat.len();
     let rest = &s[i..];
     let end = rest
         .find(|c: char| !(c.is_ascii_digit() || c == '-'))
         .unwrap_or(rest.len());
-    rest[..end].parse().unwrap_or_else(|_| panic!("bad {key} in {s}"))
+    rest[..end]
+        .parse()
+        .unwrap_or_else(|_| panic!("bad {key} in {s}"))
 }
 
 fn field_bool(s: &str, key: &str) -> bool {
     let pat = format!("\"{key}\":");
-    let i = s.find(&pat).unwrap_or_else(|| panic!("missing {key} in {s}")) + pat.len();
+    let i = s
+        .find(&pat)
+        .unwrap_or_else(|| panic!("missing {key} in {s}"))
+        + pat.len();
     let rest = &s[i..];
     match rest.trim_start().starts_with("true") {
         true => true,
@@ -164,7 +172,11 @@ fn panic_child_nohook_recovers_no_alarm_red() {
         !field_bool(&summary, "has_alarm"),
         "without the hook, NO Alarm must be recovered (the RED): {summary}"
     );
-    assert_eq!(field_i64(&summary, "alarm_count"), 0, "alarm_count must be 0: {summary}");
+    assert_eq!(
+        field_i64(&summary, "alarm_count"),
+        0,
+        "alarm_count must be 0: {summary}"
+    );
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -196,7 +208,10 @@ fn hang_child_flagged_by_flatlined_heartbeat_zero_postmortem() {
     let summary = run_recover_nopm(&dir);
     // The heartbeat seq must be exactly where it stopped (flatlined) — the hang signature.
     let last_hb = field_i64(&summary, "heartbeat_last_seq");
-    assert_eq!(last_hb, first_hb, "heartbeat seq must be flatlined: {summary}");
+    assert_eq!(
+        last_hb, first_hb,
+        "heartbeat seq must be flatlined: {summary}"
+    );
     // The hang produced NO PostMortem in the ring (it never restarted) and the recover
     // helper was told not to synthesize one — the exact gap this item closes.
     assert!(

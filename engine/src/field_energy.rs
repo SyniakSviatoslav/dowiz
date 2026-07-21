@@ -311,8 +311,14 @@ fn field_energy_is_monotone_nonincreasing() {
         x_final = update(&x_final);
     }
     let dissipated = potential(&x0) - potential(&x_final);
-    assert!(dissipated > 0.0, "energy must actually dissipate (drop > 0)");
-    assert!(dissipated.is_finite() && dissipated < 1e6, "dissipation bounded");
+    assert!(
+        dissipated > 0.0,
+        "energy must actually dissipate (drop > 0)"
+    );
+    assert!(
+        dissipated.is_finite() && dissipated < 1e6,
+        "dissipation bounded"
+    );
     assert!(
         (drift - dissipated).abs() <= 1e-6,
         "invariant_drift {drift} must equal total dissipation {dissipated}"
@@ -367,7 +373,10 @@ fn energy_gate_catches_anti_diffusion() {
         x = x_next;
         e_prev = e_next;
     }
-    assert!(found, "anti-diffusion must exhibit a finite energy increase");
+    assert!(
+        found,
+        "anti-diffusion must exhibit a finite energy increase"
+    );
 }
 
 /// (b) Negating Γ gives anti-damping (Γ=−0.2) — the sign-flipped damping the
@@ -407,8 +416,17 @@ fn dirichlet_energy_nonnegative_both_conventions() {
     let x: Vec<f64> = (0..w * h).map(|i| ((i % 7) as f64) - 3.0).collect();
     let un = dirichlet_energy(&x, &graph, LaplacianKind::Unnormalized);
     let nm = dirichlet_energy(&x, &graph, LaplacianKind::Normalized);
-    assert!(un >= -1e-12, "Unnormalized Dirichlet energy must be ≥0, got {un}");
-    assert!(nm >= -1e-12, "Normalized Dirichlet energy must be ≥0, got {nm}");
+    assert!(
+        un >= -1e-12,
+        "Unnormalized Dirichlet energy must be ≥0, got {un}"
+    );
+    assert!(
+        nm >= -1e-12,
+        "Normalized Dirichlet energy must be ≥0, got {nm}"
+    );
     // A non-constant field has strictly positive Dirichlet energy in both.
-    assert!(un > 1e-6 && nm > 1e-6, "non-constant field ⇒ strictly positive well");
+    assert!(
+        un > 1e-6 && nm > 1e-6,
+        "non-constant field ⇒ strictly positive well"
+    );
 }

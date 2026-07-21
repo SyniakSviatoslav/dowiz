@@ -84,7 +84,10 @@ impl HintPolicy {
     }
 
     fn familiarity_of(&self, key: HintIntent) -> Familiarity {
-        *self.familiarity.get(&key).unwrap_or(&Familiarity::default())
+        *self
+            .familiarity
+            .get(&key)
+            .unwrap_or(&Familiarity::default())
     }
 
     /// True iff the field is settled (no in-flight animation). The Composer asks

@@ -94,10 +94,7 @@ pub struct AuditChain {
 
 impl AuditChain {
     /// Create a fresh chain (genesis tip_hash = zero).
-    pub fn new(
-        agent_id: [u8; 16],
-        ring: Option<std::sync::Mutex<crate::fdr::RingHandle>>,
-    ) -> Self {
+    pub fn new(agent_id: [u8; 16], ring: Option<std::sync::Mutex<crate::fdr::RingHandle>>) -> Self {
         AuditChain {
             events: Vec::new(),
             tip_hash: [0u8; 32],

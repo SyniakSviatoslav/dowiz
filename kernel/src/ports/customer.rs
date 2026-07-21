@@ -29,7 +29,6 @@ use crate::geo;
 use crate::kalman::KalmanFilter;
 use crate::order_machine::OrderStatus;
 use crate::rng::Rng;
-use crate::vendor::VendorId;
 
 // ── domain-separation tags (16 bytes each, pinned) ──────────────────────────────
 /// Signing domain for the grant commitment (separate from every other kernel domain).
@@ -347,6 +346,7 @@ mod tests {
     use crate::kalman::KalmanFilter;
     use crate::money::Currency;
     use crate::order_machine::OrderStatus;
+    use crate::vendor::VendorId;
 
     // ── B1: anonymous place → later re-identify → track, no durable account ──
     #[test]

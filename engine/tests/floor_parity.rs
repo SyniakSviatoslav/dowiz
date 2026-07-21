@@ -49,9 +49,23 @@ fn parity_corpus() -> Vec<ParityScene> {
             name: "storefront_card",
             scene: {
                 let mut s = Scene::new().with_scale(0.5);
-                s.add(SdfShape::Box { bx: 0.0, by: 0.0, hx: 1000.0, hy: 1000.0 })
-                    .add(SdfShape::Circle { cx: 2.0, cy: 0.0, r: 6.0 })
-                    .add(SdfShape::Box { bx: -3.0, by: 4.0, hx: 1.0, hy: 1.0 });
+                s.add(SdfShape::Box {
+                    bx: 0.0,
+                    by: 0.0,
+                    hx: 1000.0,
+                    hy: 1000.0,
+                })
+                .add(SdfShape::Circle {
+                    cx: 2.0,
+                    cy: 0.0,
+                    r: 6.0,
+                })
+                .add(SdfShape::Box {
+                    bx: -3.0,
+                    by: 4.0,
+                    hx: 1.0,
+                    hy: 1.0,
+                });
                 s
             },
             w: 32,
@@ -61,8 +75,18 @@ fn parity_corpus() -> Vec<ParityScene> {
             name: "text_field",
             scene: {
                 let mut s = Scene::new().with_scale(0.5);
-                s.add(SdfShape::Box { bx: 0.0, by: 0.0, hx: 1000.0, hy: 1000.0 })
-                    .add(SdfShape::Box { bx: 0.0, by: 0.0, hx: 6.0, hy: 1.0 });
+                s.add(SdfShape::Box {
+                    bx: 0.0,
+                    by: 0.0,
+                    hx: 1000.0,
+                    hy: 1000.0,
+                })
+                .add(SdfShape::Box {
+                    bx: 0.0,
+                    by: 0.0,
+                    hx: 6.0,
+                    hy: 1.0,
+                });
                 s
             },
             w: 48,
@@ -72,9 +96,23 @@ fn parity_corpus() -> Vec<ParityScene> {
             name: "settled_map_placeholder",
             scene: {
                 let mut s = Scene::new().with_scale(0.5);
-                s.add(SdfShape::Box { bx: 0.0, by: 0.0, hx: 1000.0, hy: 1000.0 })
-                    .add(SdfShape::Circle { cx: 2.0, cy: -2.0, r: 4.0 })
-                    .add(SdfShape::Box { bx: -4.0, by: 3.0, hx: 2.0, hy: 2.0 });
+                s.add(SdfShape::Box {
+                    bx: 0.0,
+                    by: 0.0,
+                    hx: 1000.0,
+                    hy: 1000.0,
+                })
+                .add(SdfShape::Circle {
+                    cx: 2.0,
+                    cy: -2.0,
+                    r: 4.0,
+                })
+                .add(SdfShape::Box {
+                    bx: -4.0,
+                    by: 3.0,
+                    hx: 2.0,
+                    hy: 2.0,
+                });
                 s
             },
             w: 40,
@@ -144,8 +182,20 @@ fn perceptual_delta(rung_frame: &[u8], reference: &[u8]) -> f64 {
 #[test]
 fn floor_parity_oracle_is_bit_deterministic() {
     for s in &parity_corpus() {
-        let a = field_frame::compose(&s.scene, &FieldEquilibrium::default(), s.w, s.h, SPIKE_STEPS);
-        let b = field_frame::compose(&s.scene, &FieldEquilibrium::default(), s.w, s.h, SPIKE_STEPS);
+        let a = field_frame::compose(
+            &s.scene,
+            &FieldEquilibrium::default(),
+            s.w,
+            s.h,
+            SPIKE_STEPS,
+        );
+        let b = field_frame::compose(
+            &s.scene,
+            &FieldEquilibrium::default(),
+            s.w,
+            s.h,
+            SPIKE_STEPS,
+        );
         assert_eq!(a, b, "compose() oracle nondeterministic for {}", s.name);
     }
 }
@@ -153,14 +203,22 @@ fn floor_parity_oracle_is_bit_deterministic() {
 #[test]
 fn floor_parity_faithful_rung_passes() {
     for s in &parity_corpus() {
-        let reference = field_frame::compose(&s.scene, &FieldEquilibrium::default(), s.w, s.h, SPIKE_STEPS);
+        let reference = field_frame::compose(
+            &s.scene,
+            &FieldEquilibrium::default(),
+            s.w,
+            s.h,
+            SPIKE_STEPS,
+        );
         for rung in [Rung::Webgl2, Rung::Webgpu] {
             let frame = render_rung(rung, s, RungMode::Faithful);
             let delta = perceptual_delta(&frame, &reference);
             assert!(
                 delta <= PARITY_PERCEPTUAL_DELTA_MAX,
                 "{:?} rung must pass parity on {} (delta={})",
-                rung, s.name, delta
+                rung,
+                s.name,
+                delta
             );
         }
     }
@@ -169,13 +227,20 @@ fn floor_parity_faithful_rung_passes() {
 #[test]
 fn floor_parity_gate_catches_webgpu_only_effect() {
     for s in &parity_corpus() {
-        let reference = field_frame::compose(&s.scene, &FieldEquilibrium::default(), s.w, s.h, SPIKE_STEPS);
+        let reference = field_frame::compose(
+            &s.scene,
+            &FieldEquilibrium::default(),
+            s.w,
+            s.h,
+            SPIKE_STEPS,
+        );
         let frame = render_rung(Rung::Webgpu, s, RungMode::WebgpuOnlyEffect);
         let delta = perceptual_delta(&frame, &reference);
         assert!(
             delta > PARITY_PERCEPTUAL_DELTA_MAX,
             "WebGPU-only effect must RED the gate on {} (delta={})",
-            s.name, delta
+            s.name,
+            delta
         );
     }
 }
@@ -183,13 +248,20 @@ fn floor_parity_gate_catches_webgpu_only_effect() {
 #[test]
 fn floor_parity_gate_catches_blank_rung() {
     for s in &parity_corpus() {
-        let reference = field_frame::compose(&s.scene, &FieldEquilibrium::default(), s.w, s.h, SPIKE_STEPS);
+        let reference = field_frame::compose(
+            &s.scene,
+            &FieldEquilibrium::default(),
+            s.w,
+            s.h,
+            SPIKE_STEPS,
+        );
         let frame = render_rung(Rung::Webgl2, s, RungMode::Blank);
         let delta = perceptual_delta(&frame, &reference);
         assert!(
             delta > PARITY_PERCEPTUAL_DELTA_MAX,
             "blank rung must fail parity on {} (delta={})",
-            s.name, delta
+            s.name,
+            delta
         );
     }
 }

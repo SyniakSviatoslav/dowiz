@@ -77,10 +77,10 @@ impl DeployConfig {
                 let val = v.trim();
                 match key {
                     "default_currency" => {
-                        default_currency = Some(
-                            Currency::from_code(val)
-                                .ok_or_else(|| format!("line {lineno}: unknown currency `{val}`"))?,
-                        );
+                        default_currency =
+                            Some(Currency::from_code(val).ok_or_else(|| {
+                                format!("line {lineno}: unknown currency `{val}`")
+                            })?);
                     }
                     "active_providers" => {
                         active_providers = val
@@ -92,11 +92,9 @@ impl DeployConfig {
                     }
                     "node" if in_roster => {
                         // roster entry: `node = <64-hex> : <kind>`
-                        let (id_hex, kind_str) = val
-                            .split_once(':')
-                            .ok_or_else(|| {
-                                format!("line {lineno}: roster entry needs `<hex> : <kind>`")
-                            })?;
+                        let (id_hex, kind_str) = val.split_once(':').ok_or_else(|| {
+                            format!("line {lineno}: roster entry needs `<hex> : <kind>`")
+                        })?;
                         let id = parse_hex32(id_hex.trim())
                             .ok_or_else(|| format!("line {lineno}: bad 32-byte hex id"))?;
                         let kind = RosterKind::from_str(kind_str.trim())?;
@@ -109,7 +107,9 @@ impl DeployConfig {
                 }
             } else if in_roster {
                 // Defensive: a bare roster entry without `node =` prefix is malformed.
-                return Err(format!("line {lineno}: roster entry must be `node = <hex> : <kind>`"));
+                return Err(format!(
+                    "line {lineno}: roster entry must be `node = <hex> : <kind>`"
+                ));
             } else {
                 return Err(format!("line {lineno}: expected `key = value`"));
             }
@@ -131,9 +131,7 @@ impl DeployConfig {
 
     /// Is `id` enrolled as `kind` in the roster?
     pub fn roster_contains(&self, id: &[u8; 32], kind: RosterKind) -> bool {
-        self.roster
-            .iter()
-            .any(|e| &e.id == id && e.kind == kind)
+        self.roster.iter().any(|e| &e.id == id && e.kind == kind)
     }
 }
 
@@ -169,19 +167,18 @@ node = 00000000000000000000000000000000000000000000000000000000000000bb : vendor
         assert!(cfg.provider_active("stripe:eu"));
         assert!(cfg.provider_active("cash:cod"));
         assert_eq!(cfg.roster.len(), 2);
-        assert!(cfg.roster_contains(
-            &cfg.roster[0].id,
-            RosterKind::Courier
-        ));
+        assert!(cfg.roster_contains(&cfg.roster[0].id, RosterKind::Courier));
         assert!(cfg.roster_contains(&cfg.roster[1].id, RosterKind::Vendor));
     }
 
     #[test]
     fn currency_is_not_hardcoded_config_drives_it() {
         // Changing the config changes the currency — proves it is deployment-driven.
-        let us = DeployConfig::parse("default_currency = USD\nactive_providers = cash:cod\n").unwrap();
+        let us =
+            DeployConfig::parse("default_currency = USD\nactive_providers = cash:cod\n").unwrap();
         assert_eq!(us.default_currency, Currency::Usd);
-        let eu = DeployConfig::parse("default_currency = EUR\nactive_providers = cash:cod\n").unwrap();
+        let eu =
+            DeployConfig::parse("default_currency = EUR\nactive_providers = cash:cod\n").unwrap();
         assert_eq!(eu.default_currency, Currency::Eur);
     }
 

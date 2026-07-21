@@ -51,6 +51,8 @@ fn empty_reply() -> ChatResponse {
     ChatResponse {
         content: String::new(),
         usage: Usage::default(),
+        model_id: "LFM2.5-VL-450M".into(),
+        utterance_id: 1,
         tool_calls: vec![],
     }
 }
@@ -63,6 +65,8 @@ fn reply_with(content: &str, calls: Vec<ToolCallReq>) -> ChatResponse {
             completion_tokens: 5,
             total_tokens: 15,
         },
+        model_id: "LFM2.5-VL-450M".into(),
+        utterance_id: 1,
         tool_calls: calls,
     }
 }

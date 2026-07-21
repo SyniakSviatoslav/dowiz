@@ -3,6 +3,10 @@
 //! Implements `dowiz_kernel::ports::llm::LlmBackend`. Model routing by `TaskClass` (§2.2):
 //! Code→qwen2.5-coder:7b, General→llama3.1:8b, Embedding→nomic-embed-text (qwen3-embedding:0.6b
 //! as the higher-quality option). `:tag` ids pass through verbatim; `fp_ollama` sentinel is ignored.
+//!
+//! P106 §2.3: the `TaskClass → model_id` map is now configurable via [`ModelMap`] and env
+//! overrides (`DOWIZ_MODEL_CODE` / `DOWIZ_MODEL_GENERAL` / `DOWIZ_MODEL_EMBEDDING`). Unconfigured
+//! behavior is bit-identical to the prior hardcoded defaults.
 
 use std::collections::BTreeMap;
 use std::sync::Mutex;
@@ -15,6 +19,46 @@ use dowiz_kernel::ports::llm::{
 use crate::quirks::Quirks;
 use crate::transport::OpenAiCompatTransport;
 
+/// Default model ids — the hardcoded baseline that `ModelMap::default()` returns.
+/// These match the models physically resident on the production box.
+pub const DEFAULT_MODEL_CODE: &str = "qwen2.5-coder:7b";
+pub const DEFAULT_MODEL_GENERAL: &str = "llama3.1:8b";
+pub const DEFAULT_MODEL_EMBEDDING: &str = "nomic-embed-text";
+
+/// P106 §2.3 — configurable `TaskClass → model_id` map. Each field defaults to the
+/// hardcoded model id; env overrides (`DOWIZ_MODEL_CODE` / `DOWIZ_MODEL_GENERAL` /
+/// `DOWIZ_MODEL_EMBEDDING`) and `StackBuilder::model_for` both feed into this.
+///
+/// Behavior when unconfigured is bit-identical to the prior hardcoded routing — this
+/// struct is the *mechanism* for configurability, not a behavior change.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ModelMap {
+    pub code: String,
+    pub general: String,
+    pub embedding: String,
+}
+
+impl Default for ModelMap {
+    fn default() -> Self {
+        ModelMap {
+            code: DEFAULT_MODEL_CODE.to_string(),
+            general: DEFAULT_MODEL_GENERAL.to_string(),
+            embedding: DEFAULT_MODEL_EMBEDDING.to_string(),
+        }
+    }
+}
+
+impl ModelMap {
+    /// Resolve model id for a given `TaskClass`.
+    pub fn resolve(&self, class: TaskClass) -> &str {
+        match class {
+            TaskClass::Code => &self.code,
+            TaskClass::General => &self.general,
+            TaskClass::Embedding => &self.embedding,
+        }
+    }
+}
+
 /// The Ollama adapter. Construct with a base URL (default `http://127.0.0.1:11434`).
 #[derive(Clone)]
 pub struct OllamaAdapter {
@@ -24,6 +68,8 @@ pub struct OllamaAdapter {
     /// the daemon is down stays cheap and non-failing). A probe failure is recorded
     /// as `false` (fail-closed) — never a panic, never a stale `true`.
     toolkit: std::sync::Arc<Mutex<BTreeMap<String, bool>>>,
+    /// P106 §2.3 — configurable `TaskClass → model_id` routing.
+    model_map: ModelMap,
 }
 
 impl OllamaAdapter {
@@ -31,6 +77,16 @@ impl OllamaAdapter {
         OllamaAdapter {
             transport: OpenAiCompatTransport::new(base_url, Quirks::ollama()),
             toolkit: std::sync::Arc::new(Mutex::new(BTreeMap::new())),
+            model_map: ModelMap::default(),
+        }
+    }
+
+    /// Construct with a custom model map (P106 §2.3 — `StackBuilder::model_for` / env overrides).
+    pub fn with_model_map(base_url: &str, model_map: ModelMap) -> Self {
+        OllamaAdapter {
+            transport: OpenAiCompatTransport::new(base_url, Quirks::ollama()),
+            toolkit: std::sync::Arc::new(Mutex::new(BTreeMap::new())),
+            model_map,
         }
     }
 
@@ -40,17 +96,13 @@ impl OllamaAdapter {
     }
 
     /// Map `TaskClass` → concrete Ollama model id (within-adapter routing, distinct from Phase-5's
-    /// `gov_route` dev-tooling router). Embedding defaults to `nomic-embed-text`; the caller may
-    /// override `model_id` directly on the request for the higher-quality `qwen3-embedding:0.6b`.
+    /// `gov_route` dev-tooling router). Uses the configurable `ModelMap`; the caller may still
+    /// override `model_id` directly on the request for any ad-hoc model.
     fn route_model(&self, req: &ChatRequest) -> String {
         if !req.model_id.is_empty() {
             return req.model_id.clone();
         }
-        match req.task_class {
-            TaskClass::Code => "qwen2.5-coder:7b".to_string(),
-            TaskClass::General => "llama3.1:8b".to_string(),
-            TaskClass::Embedding => "nomic-embed-text".to_string(),
-        }
+        self.model_map.resolve(req.task_class).to_string()
     }
 
     /// Probe (and memoize) whether `model_id` supports tool calling, via Ollama's

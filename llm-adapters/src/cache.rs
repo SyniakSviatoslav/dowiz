@@ -219,7 +219,9 @@ impl<B: LlmBackend, S: BlockStore> LlmBackend for CachingBackend<B, S> {
 }
 
 /// Manual (de)serialization of `ChatResponse` — kept local so the kernel's `llm.rs` value types
-/// stay serde-free (zero-dep invariant). Format: two lines, content then `prompt|completion|total`.
+/// stay serde-free (zero-dep invariant). Format: three lines — content, then
+/// `prompt|completion|total`, then `model_id|utterance_id`. The provenance line is mandatory
+/// (L1 opacity): a cache hit must restore the real model tag, never fabricate one.
 fn encode_response(resp: &ChatResponse) -> Vec<u8> {
     let mut out = Vec::new();
     out.extend_from_slice(resp.content.as_bytes());
@@ -231,17 +233,30 @@ fn encode_response(resp: &ChatResponse) -> Vec<u8> {
         )
         .as_bytes(),
     );
+    out.push(b'\n');
+    out.extend_from_slice(format!("{}|{}", resp.model_id, resp.utterance_id).as_bytes());
     out
 }
 
 /// Inverse of `encode_response`. Returns `None` on any malformed row (degrade to miss, never panic).
+/// The provenance line MUST be present and well-formed — a decoded reply without a model tag is
+/// refused (L1: no provenance-less output can re-enter the supervisor from cache).
 fn decode_response(bytes: &[u8]) -> Option<ChatResponse> {
     let s = std::str::from_utf8(bytes).ok()?;
-    let (content, usage) = s.split_once('\n')?;
-    let mut parts = usage.split('|');
-    let prompt = parts.next()?.parse::<u32>().ok()?;
-    let completion = parts.next()?.parse::<u32>().ok()?;
-    let total = parts.next()?.parse::<u32>().ok()?;
+    let mut lines = s.splitn(3, '\n');
+    let content = lines.next()?;
+    let usage = lines.next()?;
+    let prov = lines.next()?;
+    let mut uparts = usage.split('|');
+    let prompt = uparts.next()?.parse::<u32>().ok()?;
+    let completion = uparts.next()?.parse::<u32>().ok()?;
+    let total = uparts.next()?.parse::<u32>().ok()?;
+    let mut pparts = prov.split('|');
+    let model_id = pparts.next()?.to_string();
+    let utterance_id = pparts.next()?.parse::<u64>().ok()?;
+    if model_id.is_empty() {
+        return None;
+    }
     Some(ChatResponse {
         content: content.to_string(),
         usage: Usage {
@@ -249,10 +264,11 @@ fn decode_response(bytes: &[u8]) -> Option<ChatResponse> {
             completion_tokens: completion,
             total_tokens: total,
         },
+        model_id,
+        utterance_id,
         tool_calls: Vec::new(),
     })
 }
-
 /// A no-op store: every `get` misses, every `put` is dropped. Used to compile-time-disable
 /// caching (M5 config: `StackBuilder::with_cache(false)`) without a separate code path.
 #[derive(Clone, Default)]
@@ -307,7 +323,7 @@ mod tests {
                 tool_calling: false,
             }
         }
-        fn chat(&self, _req: &ChatRequest) -> Result<ChatResponse, LlmError> {
+        fn chat(&self, req: &ChatRequest) -> Result<ChatResponse, LlmError> {
             *self.calls.borrow_mut() += 1;
             Ok(ChatResponse {
                 content: "cached-answer".into(),
@@ -316,6 +332,8 @@ mod tests {
                     completion_tokens: 2,
                     total_tokens: 5,
                 },
+                model_id: req.model_id.clone(),
+                utterance_id: 1,
                 tool_calls: Vec::new(),
             })
         }

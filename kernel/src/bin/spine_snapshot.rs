@@ -138,7 +138,10 @@ fn main() {
     }
 
     if let Err(e) = save_chain(&chain_path, spine.records()) {
-        eprintln!("spine_snapshot: failed to write {}: {e}", chain_path.display());
+        eprintln!(
+            "spine_snapshot: failed to write {}: {e}",
+            chain_path.display()
+        );
         exit(1);
     }
 
@@ -226,9 +229,7 @@ fn load_chain(path: &Path) -> Result<Vec<SpineRecord>, LoadError> {
             .get("record_hash")
             .and_then(|x| x.as_str())
             .and_then(decode_hex32)
-            .ok_or_else(|| {
-                LoadError::Malformed(format!("line {}: bad record_hash", lineno + 1))
-            })?;
+            .ok_or_else(|| LoadError::Malformed(format!("line {}: bad record_hash", lineno + 1)))?;
         records.push(SpineRecord {
             id,
             kind,
@@ -319,13 +320,21 @@ fn run_selftest() {
     // Pass 2: no changes — chain length must stay the same (no duplicate records).
     run_one_pass(&chain_path, &[tmp.clone()]);
     let records = load_chain(&chain_path).unwrap();
-    assert_eq!(records.len(), 2, "unchanged files must not append duplicate records");
+    assert_eq!(
+        records.len(),
+        2,
+        "unchanged files must not append duplicate records"
+    );
 
     // Pass 3: change file A — exactly one new record.
     std::fs::write(&file_a, "content A, revised").unwrap();
     run_one_pass(&chain_path, &[tmp.clone()]);
     let records = load_chain(&chain_path).unwrap();
-    assert_eq!(records.len(), 3, "a changed file must append exactly one new record");
+    assert_eq!(
+        records.len(),
+        3,
+        "a changed file must append exactly one new record"
+    );
     assert!(
         KnowledgeSpine::from_persisted(records.clone()).is_ok(),
         "pass 3 chain must still verify"
@@ -350,9 +359,7 @@ fn run_selftest() {
 }
 
 fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack
-        .windows(needle.len())
-        .position(|w| w == needle)
+    haystack.windows(needle.len()).position(|w| w == needle)
 }
 
 fn run_one_pass(chain_path: &Path, dirs: &[PathBuf]) {

@@ -11,7 +11,7 @@
 
 use super::form::SignupForm;
 use super::{
-    ClaimError, ClaimOutcome, ClaimRequest, ClaimServicePort, ClaimedHub, HubId, InterestAck,
+    ClaimError, ClaimOutcome, ClaimRequest, ClaimServicePort, ClaimedHub, InterestAck,
     InterestSubmission,
 };
 

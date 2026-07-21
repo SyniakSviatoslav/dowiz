@@ -7,7 +7,9 @@
 //! wiring the caller did not exist ⇒ the test fails to compile (RED). After
 //! wiring it compiles and passes (GREEN).
 
-use dowiz_kernel::event_log::{verify_chain_before_trust, ChainDefect, EventLog, MemEventStore, MeshEvent};
+use dowiz_kernel::event_log::{
+    verify_chain_before_trust, ChainDefect, EventLog, MemEventStore, MeshEvent,
+};
 
 fn genesis_event(payload: &[u8]) -> MeshEvent {
     MeshEvent {

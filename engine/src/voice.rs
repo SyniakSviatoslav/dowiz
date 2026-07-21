@@ -351,7 +351,11 @@ impl VoiceSource {
 
     /// Test/spiking seam: build with an explicit ASR model (so a slow fake can be
     /// injected to prove `InferError::Timeout` is reachable from the real timer).
-    pub fn with_asr(profile: VoiceProfile, wake_keyword: &'static str, asr: Box<dyn AsrModel>) -> Self {
+    pub fn with_asr(
+        profile: VoiceProfile,
+        wake_keyword: &'static str,
+        asr: Box<dyn AsrModel>,
+    ) -> Self {
         VoiceSource {
             wake: WakeWordSpotter::new(wake_keyword),
             asr,
@@ -467,7 +471,11 @@ impl InputSource for VoiceSource {
 /// command — proves the "voice never bypasses friction" invariant: a voice
 /// `ConfirmOrder` builds the SAME `FrictionSpec` a pointer tap would. Returns
 /// `None` for non-consequential intents (no friction needed).
-pub fn voice_friction_for(command: crate::intent::CommandId, amount: Money, reversibility: crate::friction::Reversibility) -> Option<FrictionSpec> {
+pub fn voice_friction_for(
+    command: crate::intent::CommandId,
+    amount: Money,
+    reversibility: crate::friction::Reversibility,
+) -> Option<FrictionSpec> {
     use crate::intent::Intent;
     if Intent::Command(command).is_consequential() {
         Some(crate::friction::friction_spec(Stake {
@@ -488,7 +496,9 @@ pub fn voice_surface() -> SurfaceId {
 mod tests {
     use super::*;
     use crate::friction::Reversibility;
-    use crate::intent::{Classification, CommandId, Intent, IntentClassifier, IntentContext, NavTarget, RejectReason};
+    use crate::intent::{
+        Classification, CommandId, Intent, IntentClassifier, IntentContext, NavTarget, RejectReason,
+    };
     use crate::WidgetStore;
 
     fn ctx_for(widgets: &WidgetStore) -> IntentContext<'_> {
@@ -519,9 +529,21 @@ mod tests {
         let ws = WidgetStore::new(2);
         let ctx = ctx_for(&ws);
         let classifier = IntentClassifier::new();
-        if let Some(RawInput::VoicePhrase { transcript, is_final, .. }) = raw {
+        if let Some(RawInput::VoicePhrase {
+            transcript,
+            is_final,
+            ..
+        }) = raw
+        {
             assert!(is_final);
-            match classifier.classify(&RawInput::VoicePhrase { transcript, confidence: 0.9, is_final }, &ctx) {
+            match classifier.classify(
+                &RawInput::VoicePhrase {
+                    transcript,
+                    confidence: 0.9,
+                    is_final,
+                },
+                &ctx,
+            ) {
                 Classification::Rejected(_) => {
                     // "accept order" is consequential → the classifier hard-rejects
                     // out of context (the AI must never auto-pick money). That is the
@@ -542,7 +564,11 @@ mod tests {
         for _ in 0..8 {
             assert!(src.poll().is_none());
         }
-        assert_eq!(src.asr_feed_calls(), 0, "wake gate: ASR feed must be 0 without a wake");
+        assert_eq!(
+            src.asr_feed_calls(),
+            0,
+            "wake gate: ASR feed must be 0 without a wake"
+        );
     }
 
     // D9 adversarial — Whisper fallback on an uncovered locale (uk).
@@ -588,7 +614,10 @@ mod tests {
             Money(5000),
             Reversibility::ReversibleWithCost,
         );
-        assert!(spec.is_some(), "voice ConfirmOrder must carry a FrictionSpec");
+        assert!(
+            spec.is_some(),
+            "voice ConfirmOrder must carry a FrictionSpec"
+        );
         // A non-consequential voice command (open menu) needs NO friction.
         let nav_spec = voice_friction_for(CommandId::OpenMenu, Money(0), Reversibility::Reversible);
         assert!(nav_spec.is_none());
@@ -616,7 +645,10 @@ mod tests {
     //    pinned (P3 rate discipline). 250_000 µs = 250 ms ceiling.
     #[test]
     fn asr_timeout_constant_is_pinned_authority() {
-        assert_eq!(ASR_TIMEOUT_US, 250_000, "ASR timeout ceiling pinned at 250 ms");
+        assert_eq!(
+            ASR_TIMEOUT_US, 250_000,
+            "ASR timeout ceiling pinned at 250 ms"
+        );
     }
 
     // ── Item 60 (gap G11) ORACLE (red→green): `InferError::Timeout` is now
@@ -651,12 +683,23 @@ mod tests {
             fn set_fixture(&mut self, _t: &str) {}
         }
 
-        let mut src = VoiceSource::with_asr(VoiceProfile::default(), "hey dowiz", Box::new(SlowAsr { spun: false }));
+        let mut src = VoiceSource::with_asr(
+            VoiceProfile::default(),
+            "hey dowiz",
+            Box::new(SlowAsr { spun: false }),
+        );
         src.detect_wake(Some("hey dowiz"));
         let res = src.stream_asr();
-        assert_eq!(res, Err(InferError::Timeout), "a real timer must make Timeout reachable");
+        assert_eq!(
+            res,
+            Err(InferError::Timeout),
+            "a real timer must make Timeout reachable"
+        );
         assert!(src.asr_feed_us().is_some(), "feed latency was measured");
-        assert!(src.asr_feed_us().unwrap() > ASR_TIMEOUT_US, "measured latency exceeded the ceiling");
+        assert!(
+            src.asr_feed_us().unwrap() > ASR_TIMEOUT_US,
+            "measured latency exceeded the ceiling"
+        );
     }
 
     // ── Item 60 (gap G11): a healthy (fast) feed is NOT timed out — the battery
@@ -671,6 +714,10 @@ mod tests {
         // wasm it is untimed (None) and also must NOT trip.
         let res = src.stream_asr();
         assert!(res.is_ok(), "a fast feed must not produce Timeout");
-        assert_eq!(res.unwrap(), Some("open menu".to_string()), "transcript still arrives");
+        assert_eq!(
+            res.unwrap(),
+            Some("open menu".to_string()),
+            "transcript still arrives"
+        );
     }
 }

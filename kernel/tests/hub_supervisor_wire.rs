@@ -10,8 +10,8 @@
 //! compiles and passes (GREEN).
 
 use dowiz_kernel::hub_supervisor::{
-    decide_promote, drive_promote, drive_restore, MemStateStore, PromoteStep,
-    RecipientPubKey, RecipientSet, SeededRng, Slot, StateStore, UpdateError, UpdateState, Version,
+    decide_promote, drive_promote, drive_restore, MemStateStore, PromoteStep, RecipientPubKey,
+    RecipientSet, SeededRng, Slot, StateStore, UpdateError, UpdateState, Version,
 };
 use dowiz_kernel::pq::x25519::x25519;
 

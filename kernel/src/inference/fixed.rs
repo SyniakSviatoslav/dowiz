@@ -94,7 +94,9 @@ pub fn mac_dot(a: &[i8], w: &[i8]) -> Result<i32, &'static str> {
     let mut acc: i32 = 0i32;
     for k in 0..a.len() {
         let prod = (a[k] as i32) * (w[k] as i32); // exact in i32 (i8·i8 ≤ 16129)
-        acc = acc.checked_add(prod).ok_or("mac_dot: i32 accumulator overflow")?;
+        acc = acc
+            .checked_add(prod)
+            .ok_or("mac_dot: i32 accumulator overflow")?;
     }
     Ok(acc)
 }
@@ -139,10 +141,7 @@ mod tests {
                 // (i8·i8 ≤ 16384), so no clamp is applied to the product itself — clamp
                 // only happens at quantize/requantize OUTPUT (law §3.1/§3.5), tested below.
                 let narrow: i32 = (a as i32) * (w as i32);
-                assert_eq!(
-                    narrow as i128, wide,
-                    "MAC product diverged at a={a}, w={w}"
-                );
+                assert_eq!(narrow as i128, wide, "MAC product diverged at a={a}, w={w}");
             }
         }
         assert_eq!(pairs, 65_536, "must exhaust the full i8×i8 product domain");
@@ -200,7 +199,10 @@ mod tests {
             let mine = div_half_up(sub * 1_000_000, 1_000_000);
             let theirs = crate::eqc_gen::apply_tax_exclusive_int(sub, 1_000_000)
                 .expect("eqc_gen half-up must succeed on b=1e6");
-            assert_eq!(mine, theirs, "div_half_up diverged from eqc_gen at sub={sub}");
+            assert_eq!(
+                mine, theirs,
+                "div_half_up diverged from eqc_gen at sub={sub}"
+            );
         }
     }
 
@@ -224,7 +226,7 @@ mod tests {
         // scale_shift = 1 ⇒ divide by 2 with half-up.
         assert_eq!(requantize_pow2(5, 1), 3); // (5+0)/2 → 3 (b even: b/2=1)
         assert_eq!(requantize_pow2(-5, 1), -2); // (-5+1)/2 = -2
-        // Saturation holds.
+                                                // Saturation holds.
         assert_eq!(requantize_pow2(10_000, 0), Q_MAX);
         assert_eq!(requantize_pow2(-10_000, 0), Q_MIN);
     }

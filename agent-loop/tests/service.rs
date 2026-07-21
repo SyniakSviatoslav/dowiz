@@ -53,6 +53,8 @@ impl LlmBackend for ScriptedBackend {
                 completion_tokens: 4,
                 total_tokens: 7,
             },
+            model_id: "LFM2.5-VL-450M".into(),
+            utterance_id: 1,
             tool_calls: Vec::new(),
         })
     }

@@ -849,6 +849,7 @@ mod shadow_telemetry_tests {
             pmu: None,
             span_id: None,
             parent_span_id: None,
+            work: None,
             fields: vec![("subtotal_cents", "500".into())],
         };
         // Captured golden string — MUST NOT change after the ShadowDivergence variant is added.

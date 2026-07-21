@@ -124,7 +124,9 @@ impl Composer {
         // Resolve which fragment(s) the intent maps to.
         let mut response = ComposedResponse {
             scene: Scene::new(),
-            field: FieldParams { source_amplitude: 0.1 },
+            field: FieldParams {
+                source_amplitude: 0.1,
+            },
             friction: None,
             mirror: crate::friction::MirrorPatch::default(),
         };
@@ -296,7 +298,13 @@ mod tests {
         assert_eq!(resp.scene.shape_count(), 1, "menu fragment = 1 rounded box");
         assert_eq!(
             resp.scene.shapes()[0],
-            SdfShape::RoundedBox { bx: 0.0, by: 0.0, hx: 4.0, hy: 3.0, r: 0.5 }
+            SdfShape::RoundedBox {
+                bx: 0.0,
+                by: 0.0,
+                hx: 4.0,
+                hy: 3.0,
+                r: 0.5
+            }
         );
         // Mirror names the menu region (P58 hook).
         assert!(resp

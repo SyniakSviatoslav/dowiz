@@ -31,5 +31,7 @@ fn main() {
             ok_count += 1;
         }
     }
-    eprintln!("gen_real_spans_pq: exercised mldsa_verify x{n} (ok={ok_count}) — real spans written");
+    eprintln!(
+        "gen_real_spans_pq: exercised mldsa_verify x{n} (ok={ok_count}) — real spans written"
+    );
 }

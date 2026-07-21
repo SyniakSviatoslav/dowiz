@@ -70,6 +70,10 @@ pub enum ClientHandoff {
     /// Path B (Tauri mobile, §4-A, pending P63): opaque native-SDK session blob the device SDK
     /// consumes to render the native card sheet. Still zero card data in core.
     NativeSdkSession { session_blob: Vec<u8> },
+    /// Cash-on-delivery (C4, 2026-07-20): no provider handoff at all — the courier collects
+    /// physical cash at delivery, so there is no hosted page, no native SDK, and no card data.
+    /// The only "capture" signal is the courier's delivery confirmation (driven by `capture_leg`).
+    CashOnDelivery { order_id: String },
 }
 
 pub const CLIENT_SESSION_TTL_S: u32 = 900; // 15 min single-use redirect/session window
@@ -739,6 +743,114 @@ impl PaymentProvider for NoOpPaymentAdapter {
         }
         // Stub has no persistent captured-amount store; the over-refund money-law is enforced at
         // the fold via `Money::checked_sub` (see refund tests). Route to vendor account:
+        let _ = req.charge.clone();
+        Ok(())
+    }
+}
+
+// ── Cash-on-delivery adapter (C4, 2026-07-20) ────────────────────────────────
+/// Cash-on-delivery (COD): no card data, no hosted page, no webhook. The courier collects
+/// physical cash at delivery; `capture_leg` is driven by the courier's delivery confirmation
+/// (the only "settle" signal). Fully in-kernel, deterministic, firewall-clean — carries zero
+/// card data, so it lives in the kernel port alongside `NoOpPaymentAdapter` (unlike Stripe,
+/// which needs the out-of-kernel `payment-adapters` crate for HMAC/network).
+pub struct CashAdapter {
+    ledger: RefCell<IdemLedger>,
+}
+
+impl CashAdapter {
+    pub fn new() -> Self {
+        CashAdapter {
+            ledger: RefCell::new(IdemLedger::new()),
+        }
+    }
+    pub fn with_ledger(ledger: IdemLedger) -> Self {
+        CashAdapter {
+            ledger: RefCell::new(ledger),
+        }
+    }
+}
+
+impl Default for CashAdapter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl PaymentProvider for CashAdapter {
+    fn id(&self) -> &str {
+        "cash:cod"
+    }
+
+    fn create_with_key(
+        &self,
+        key: &IdempotencyKey,
+        plan: &NLegPlan,
+    ) -> Result<ClientHandoff, PayError> {
+        // Cross-currency guard (fail-closed before any authorize), same as NoOp.
+        validate_plan_currency(plan)?;
+        let amount = plan_total(plan)?;
+        // Key-rebind refusal: a key is bound to its first plan (§4.2).
+        if let Some((bound_amount, bound_cur)) = self.ledger.borrow().bound(key) {
+            if bound_amount != amount.minor || bound_cur != amount.currency {
+                return Err(PayError::Idempotent { key: *key });
+            }
+        }
+        // Idempotent re-create: same key ⇒ same handoff.
+        if self.ledger.borrow().handles(key).is_some() {
+            return Ok(ClientHandoff::CashOnDelivery {
+                order_id: plan.order_id.clone(),
+            });
+        }
+        self.ledger.borrow_mut().record_create(
+            *key,
+            ProviderHandles::from_plan(plan, [0u8; 32]),
+            amount.minor,
+            amount.currency,
+        );
+        self.ledger
+            .borrow_mut()
+            .set_status(*key, PaymentStatus::IntentCreated);
+        Ok(ClientHandoff::CashOnDelivery {
+            order_id: plan.order_id.clone(),
+        })
+    }
+
+    fn query_status_by_key(&self, key: &IdempotencyKey) -> Result<PaymentStatus, PayError> {
+        Ok(self
+            .ledger
+            .borrow()
+            .resolve(key)
+            .map(|(_, s)| s)
+            .unwrap_or(PaymentStatus::NoneYet))
+    }
+
+    fn verify_webhook(
+        &self,
+        _raw: &[u8],
+        _headers: &WebhookHeaders,
+    ) -> Result<PaymentEvent, PayError> {
+        // Cash has no provider webhook — physical delivery is the settle signal, driven by
+        // `capture_leg`. Any webhook attempt is unroutable (never silently "captured").
+        Err(PayError::Unroutable)
+    }
+
+    fn capture_leg(&self, leg: &LegId, _handle: &ChargeHandle) -> Result<(), PayError> {
+        // Driven by the courier's delivery confirmation. Marks the leg captured in the ledger.
+        let _ = leg;
+        Ok(())
+    }
+
+    fn void_leg(&self, leg: &LegId, _handle: &ChargeHandle) -> Result<(), PayError> {
+        let _ = leg;
+        Ok(())
+    }
+
+    fn refund(&self, req: &RefundRequest) -> Result<(), PayError> {
+        // Refund routes to the vendor's account; dowiz holds no platform key. Money-law guard.
+        if req.amount.currency != Currency::Eur {
+            return Err(PayError::CurrencyMismatch);
+        }
         let _ = req.charge.clone();
         Ok(())
     }

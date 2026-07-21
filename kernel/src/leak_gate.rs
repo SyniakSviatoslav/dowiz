@@ -112,7 +112,10 @@ mod tests {
                 % self.dim;
             let mut v = vec![0.0f32; self.dim];
             v[h] = 1.0;
-            Ok(EmbedResponse { embedding: v })
+            Ok(EmbedResponse {
+                embedding: v,
+                model_id: req.model_id.clone(),
+            })
         }
         fn rerank(&self, _: &RerankRequest) -> Result<RerankResponse, LlmError> {
             Err(LlmError::Unsupported)

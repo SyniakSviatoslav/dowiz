@@ -52,7 +52,10 @@ fn markov_verdict_emits_pmu_companion_record_through_real_fdr_ring() {
         .expect("write tokens");
 
     let out = child.wait_with_output().expect("wait markov_attractor");
-    assert!(out.status.success(), "binary must exit 0 (Tier B absence is not a crash)");
+    assert!(
+        out.status.success(),
+        "binary must exit 0 (Tier B absence is not a crash)"
+    );
 
     // 1. stdout parity contract intact — a HEALTHY verdict on stdout, unchanged shape.
     let stdout = String::from_utf8_lossy(&out.stdout);
@@ -71,9 +74,15 @@ fn markov_verdict_emits_pmu_companion_record_through_real_fdr_ring() {
 
     let raw = &verdict_rec.raw;
     // Verdict string joined onto the record.
-    assert!(raw.contains("\"verdict\":\"HEALTHY\""), "verdict must be on the record: {raw}");
+    assert!(
+        raw.contains("\"verdict\":\"HEALTHY\""),
+        "verdict must be on the record: {raw}"
+    );
     // The PMU companion object is present with every field key.
-    assert!(raw.contains("\"pmu\":{"), "pmu companion object must be present: {raw}");
+    assert!(
+        raw.contains("\"pmu\":{"),
+        "pmu companion object must be present: {raw}"
+    );
     for key in [
         "tsc_cycles",
         "minflt",
@@ -86,18 +95,25 @@ fn markov_verdict_emits_pmu_companion_record_through_real_fdr_ring() {
         "hw_cache_misses",
         "hw_branch_misses",
     ] {
-        assert!(raw.contains(&format!("\"{key}\":")), "pmu field {key} must be present: {raw}");
+        assert!(
+            raw.contains(&format!("\"{key}\":")),
+            "pmu field {key} must be present: {raw}"
+        );
     }
     // Tier A recorded a real, nonzero rdtsc delta across the classification window
     // (proves the bracket ran and the counter advanced — not a stub 0).
     let tsc = extract_pmu_u64(raw, "tsc_cycles")
         .unwrap_or_else(|| panic!("tsc_cycles must be a real value, not an absence: {raw}"));
-    assert!(tsc > 0, "tsc_cycles delta must be nonzero across a real classification: {raw}");
+    assert!(
+        tsc > 0,
+        "tsc_cycles delta must be nonzero across a real classification: {raw}"
+    );
     // Tier B is EITHER a real value (this agent process runs as root/CAP_PERFMON, which
     // bypasses perf_event_paranoid=4 — perf_event_open succeeds and returns a real count)
     // OR a greppable named absence on a genuinely unprivileged host. Both are correct; what
     // must NEVER appear is a fabricated bare 0 with no reason. Assert one of the two shapes.
-    let tier_b_value = raw.contains("\"hw_instructions\":") && extract_pmu_u64(raw, "hw_instructions").is_some();
+    let tier_b_value =
+        raw.contains("\"hw_instructions\":") && extract_pmu_u64(raw, "hw_instructions").is_some();
     let tier_b_absence = raw.contains("\"hw_instructions\":{\"unavailable\":");
     assert!(
         tier_b_value || tier_b_absence,
@@ -118,6 +134,8 @@ fn extract_pmu_u64(line: &str, key: &str) -> Option<u64> {
     if !first.is_ascii_digit() {
         return None;
     }
-    let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+    let end = rest
+        .find(|c: char| !c.is_ascii_digit())
+        .unwrap_or(rest.len());
     rest[..end].parse().ok()
 }

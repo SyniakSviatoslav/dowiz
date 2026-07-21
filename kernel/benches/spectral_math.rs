@@ -19,7 +19,9 @@ fn dense_matrix(n: usize) -> Vec<Vec<f64>> {
     (0..n)
         .map(|i| {
             (0..n)
-                .map(|j| ((i * 13 + j * 7 + i * j) % 11) as f64 / 11.0 + if i == j { 1.0 } else { 0.0 })
+                .map(|j| {
+                    ((i * 13 + j * 7 + i * j) % 11) as f64 / 11.0 + if i == j { 1.0 } else { 0.0 }
+                })
                 .collect()
         })
         .collect()
@@ -46,30 +48,54 @@ fn spectral_math(c: &mut Criterion) {
     }
 
     // ── kalman predict / update (4-D constant-velocity model) ──
-    let p0 = Mat::from_vecvec(&vec![vec![1.0, 0.0, 0.0, 0.0], vec![0.0, 1.0, 0.0, 0.0],
-        vec![0.0, 0.0, 1.0, 0.0], vec![0.0, 0.0, 0.0, 1.0]]);
+    let p0 = Mat::from_vecvec(&vec![
+        vec![1.0, 0.0, 0.0, 0.0],
+        vec![0.0, 1.0, 0.0, 0.0],
+        vec![0.0, 0.0, 1.0, 0.0],
+        vec![0.0, 0.0, 0.0, 1.0],
+    ]);
     let f = Mat::from_vecvec(&vec![
-        vec![1.0, 0.0, 1.0, 0.0], vec![0.0, 1.0, 0.0, 1.0],
-        vec![0.0, 0.0, 1.0, 0.0], vec![0.0, 0.0, 0.0, 1.0]]);
-    let h = Mat::from_vecvec(&vec![
-        vec![1.0, 0.0, 0.0, 0.0], vec![0.0, 1.0, 0.0, 0.0]]);
-    let q = Mat::from_vecvec(&vec![vec![0.01, 0.0, 0.0, 0.0], vec![0.0, 0.01, 0.0, 0.0],
-        vec![0.0, 0.0, 0.01, 0.0], vec![0.0, 0.0, 0.0, 0.01]]);
+        vec![1.0, 0.0, 1.0, 0.0],
+        vec![0.0, 1.0, 0.0, 1.0],
+        vec![0.0, 0.0, 1.0, 0.0],
+        vec![0.0, 0.0, 0.0, 1.0],
+    ]);
+    let h = Mat::from_vecvec(&vec![vec![1.0, 0.0, 0.0, 0.0], vec![0.0, 1.0, 0.0, 0.0]]);
+    let q = Mat::from_vecvec(&vec![
+        vec![0.01, 0.0, 0.0, 0.0],
+        vec![0.0, 0.01, 0.0, 0.0],
+        vec![0.0, 0.0, 0.01, 0.0],
+        vec![0.0, 0.0, 0.0, 0.01],
+    ]);
     let r = Mat::from_vecvec(&vec![vec![1.0, 0.0], vec![0.0, 1.0]]);
     let mut kf = KalmanFilter::new(vec![0.0, 0.0, 0.0, 0.0], p0, f, h, q, r);
     group.bench_function("kalman_predict", |b| b.iter(|| kf.predict()));
     let z = [1.0f64, 2.0];
     group.bench_function("kalman_update", |b| {
         b.iter(|| {
-            let mut kf = KalmanFilter::new(vec![0.0, 0.0, 0.0, 0.0],
-                Mat::from_vecvec(&vec![vec![1.0,0.0,0.0,0.0],vec![0.0,1.0,0.0,0.0],
-                    vec![0.0,0.0,1.0,0.0],vec![0.0,0.0,0.0,1.0]]),
-                Mat::from_vecvec(&vec![vec![1.0,0.0,1.0,0.0],vec![0.0,1.0,0.0,1.0],
-                    vec![0.0,0.0,1.0,0.0],vec![0.0,0.0,0.0,1.0]]),
-                Mat::from_vecvec(&vec![vec![1.0,0.0,0.0,0.0],vec![0.0,1.0,0.0,0.0]]),
-                Mat::from_vecvec(&vec![vec![0.01,0.0,0.0,0.0],vec![0.0,0.01,0.0,0.0],
-                    vec![0.0,0.0,0.01,0.0],vec![0.0,0.0,0.0,0.01]]),
-                Mat::from_vecvec(&vec![vec![1.0,0.0],vec![0.0,1.0]]));
+            let mut kf = KalmanFilter::new(
+                vec![0.0, 0.0, 0.0, 0.0],
+                Mat::from_vecvec(&vec![
+                    vec![1.0, 0.0, 0.0, 0.0],
+                    vec![0.0, 1.0, 0.0, 0.0],
+                    vec![0.0, 0.0, 1.0, 0.0],
+                    vec![0.0, 0.0, 0.0, 1.0],
+                ]),
+                Mat::from_vecvec(&vec![
+                    vec![1.0, 0.0, 1.0, 0.0],
+                    vec![0.0, 1.0, 0.0, 1.0],
+                    vec![0.0, 0.0, 1.0, 0.0],
+                    vec![0.0, 0.0, 0.0, 1.0],
+                ]),
+                Mat::from_vecvec(&vec![vec![1.0, 0.0, 0.0, 0.0], vec![0.0, 1.0, 0.0, 0.0]]),
+                Mat::from_vecvec(&vec![
+                    vec![0.01, 0.0, 0.0, 0.0],
+                    vec![0.0, 0.01, 0.0, 0.0],
+                    vec![0.0, 0.0, 0.01, 0.0],
+                    vec![0.0, 0.0, 0.0, 0.01],
+                ]),
+                Mat::from_vecvec(&vec![vec![1.0, 0.0], vec![0.0, 1.0]]),
+            );
             black_box(kf.update(&z))
         })
     });

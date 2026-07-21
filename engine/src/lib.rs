@@ -13,22 +13,22 @@
 //!   is plain `f32` arrays so it is).
 
 mod bridge;
-mod clock;         // Item 60 — shared wasm-safe monotonic clock (one design w/ item 62)
-mod engine_loop;    // P64 §3.1 — ONE code path: InputRouter::tick wired into the run loop
-// Item 60 (gaps G3 + G11) — the item-58-shaped `(work, cost)` cost pair
-// (FramesRendered / AsrFeeds). Feature-gated: empty on the default build, so the
-// default engine stays offline-clean; only the heavy telemetry emission turns on.
+mod clock; // Item 60 — shared wasm-safe monotonic clock (one design w/ item 62)
+mod engine_loop; // P64 §3.1 — ONE code path: InputRouter::tick wired into the run loop
+                 // Item 60 (gaps G3 + G11) — the item-58-shaped `(work, cost)` cost pair
+                 // (FramesRendered / AsrFeeds). Feature-gated: empty on the default build, so the
+                 // default engine stays offline-clean; only the heavy telemetry emission turns on.
 #[cfg(feature = "telemetry")]
 pub mod cost;
 pub mod field_frame;
 pub mod field_modal; // P89 §3/§12 — engine consumer of kernel field_eigenmodes (NeumannGrid/field_eigenmodes_a/modal_advance)
-// P88 — atomicity-by-default policy + deterministic fixed-point reduction spec.
-// BLUEPRINT: docs/design/CORE-ROADMAP-2026-07-17/
-//             BLUEPRINT-P88-atomicity-by-default-physics-gpu-2026-07-19.md
-// Always-compiled (no `gpu` feature exists yet) so its RED→GREEN gates run on
-// the default build; P86/P87 inherit §4.1/§4.2/§4.4 from this module. The
-// shader legs (D2, shader edits) WAIT on the operator-owned P38 §4.2 GPU-compute
-// decision — this module contains ZERO WGSL/GPU code.
+                     // P88 — atomicity-by-default policy + deterministic fixed-point reduction spec.
+                     // BLUEPRINT: docs/design/CORE-ROADMAP-2026-07-17/
+                     //             BLUEPRINT-P88-atomicity-by-default-physics-gpu-2026-07-19.md
+                     // Always-compiled (no `gpu` feature exists yet) so its RED→GREEN gates run on
+                     // the default build; P86/P87 inherit §4.1/§4.2/§4.4 from this module. The
+                     // shader legs (D2, shader edits) WAIT on the operator-owned P38 §4.2 GPU-compute
+                     // decision — this module contains ZERO WGSL/GPU code.
 pub mod gpu_atomicity;
 // BLUEPRINT-E1 energy-gate + sign-pin at the kernel↔engine seam. TEST-ONLY:
 // it changes no runtime contract (test-side reference oracle, never on the
@@ -49,15 +49,15 @@ pub mod text_scope;
 pub mod semantics;
 // P64 M1/M2/M3/M7 — intent engine + UI composition + friction mapping + onboarding.
 // Core P64 runtime (native engine side). Offline-clean; always built.
-pub mod intent;        // Intent runtime (extends P38 §11.2 types); classifier; router
-pub mod compose_ui;    // FragmentRegistry + Composer (intent → Scene directive)
-pub mod friction;      // the §16.44 mapping, FrictionFsm, CommitToken (M3/M4)
-pub mod onboarding;    // HintPolicy (§3.7)
-// P64 M5 — voice: wake + Moonshine streaming + Whisper multilingual fallback.
-// Feature-gated (`voice`): the real ASR model crates are NOT in the cargo cache, so
-// default build compiles ZERO voice/ASR code. The offline stubs + gates (wake-gate
-// battery lever, locale fallback, friction-never-bypassed) are tested under the
-// feature. Offline-clean — no non-cached deps are added.
+pub mod compose_ui; // FragmentRegistry + Composer (intent → Scene directive)
+pub mod friction; // the §16.44 mapping, FrictionFsm, CommitToken (M3/M4)
+pub mod intent; // Intent runtime (extends P38 §11.2 types); classifier; router
+pub mod onboarding; // HintPolicy (§3.7)
+                    // P64 M5 — voice: wake + Moonshine streaming + Whisper multilingual fallback.
+                    // Feature-gated (`voice`): the real ASR model crates are NOT in the cargo cache, so
+                    // default build compiles ZERO voice/ASR code. The offline stubs + gates (wake-gate
+                    // battery lever, locale fallback, friction-never-bypassed) are tested under the
+                    // feature. Offline-clean — no non-cached deps are added.
 #[cfg(feature = "voice")]
 pub mod voice;
 // P58 — M4 native AccessKit adapter. Feature-gated (`a11y_native`): the real

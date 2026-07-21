@@ -211,7 +211,11 @@ mod tests {
         widgets.size_w[7] = 2.0;
         widgets.size_h[7] = 2.0;
         let down = RawInput::Pointer {
-            pos: crate::text_input::FieldPos { u: 5.0, v: 5.0, w: 0.0 },
+            pos: crate::text_input::FieldPos {
+                u: 5.0,
+                v: 5.0,
+                w: 0.0,
+            },
             phase: crate::intent::PointerPhase::Down,
             vel: (0.0, 0.0),
         };
@@ -301,7 +305,11 @@ mod tests {
     fn frame_still_routes_intent_into_store() {
         let mut loop_ = loop_with_select();
         loop_.frame(SurfaceId(0), InputProfile::Balanced);
-        assert_eq!(loop_.last_intents(), 1, "router::tick still emits the intent");
+        assert_eq!(
+            loop_.last_intents(),
+            1,
+            "router::tick still emits the intent"
+        );
         assert_eq!(loop_.hover_count(), 1, "Select(7) reached the store");
     }
 }

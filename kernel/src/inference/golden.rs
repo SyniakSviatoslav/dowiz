@@ -37,7 +37,7 @@
 
 use crate::fdr::crc32;
 use crate::fdr::RingHandle;
-use crate::inference::oracle::{oracle_matmul_i8, oracle_requantize, oracle_relu_i32};
+use crate::inference::oracle::{oracle_matmul_i8, oracle_relu_i32, oracle_requantize};
 use crate::inference::spec::{B1, B2, SCALE1, SCALE2, W1, W2};
 use crate::inference::workspace::{C, H, N};
 
@@ -268,7 +268,9 @@ pub fn self_check_all_with_weights(wk: &Weights) -> Result<(), ChecksumFault> {
 /// As [`self_check_all`] but corrupts the layer-1→layer-2 **activation** of pinned vector 0
 /// with `hidden_override` (planted single-bit activation-fault path). All other vectors use
 /// the oracle-computed hidden.
-pub fn self_check_all_with_activation_fault(hidden_override: &[i8; H]) -> Result<(), ChecksumFault> {
+pub fn self_check_all_with_activation_fault(
+    hidden_override: &[i8; H],
+) -> Result<(), ChecksumFault> {
     let wk = Weights::spec();
     self_check_core(&wk, Some(hidden_override), &mut None)
 }
@@ -298,7 +300,10 @@ mod tests {
     #[test]
     fn golden_crcs_are_recomputed_from_oracle() {
         let (l1, hidden, logits) = compute_goldens();
-        assert_eq!(l1, GOLDEN_L1, "GOLDEN_L1 must equal the recomputed oracle CRC");
+        assert_eq!(
+            l1, GOLDEN_L1,
+            "GOLDEN_L1 must equal the recomputed oracle CRC"
+        );
         assert_eq!(
             hidden, GOLDEN_HIDDEN,
             "GOLDEN_HIDDEN must equal the recomputed oracle CRC"
@@ -315,10 +320,10 @@ mod tests {
         use super::*;
         use crate::fdr::ring;
 
+        use std::cell::RefCell;
         /// A unique FDR ring for this test process. The fault's typed Alarm is written
         /// directly to it via [`self_check_all_into_ring`], so the entry is recoverable and
         use std::sync::atomic::{AtomicU64, Ordering};
-        use std::cell::RefCell;
         thread_local! {
             static TDIR: RefCell<Option<std::path::PathBuf>> = const { RefCell::new(None) };
         }
@@ -329,11 +334,8 @@ mod tests {
             } else {
                 static GLOBAL: AtomicU64 = AtomicU64::new(0);
                 let n = GLOBAL.fetch_add(1, Ordering::SeqCst);
-                let d = std::env::temp_dir().join(format!(
-                    "item40_fdr_{}_{}",
-                    std::process::id(),
-                    n
-                ));
+                let d =
+                    std::env::temp_dir().join(format!("item40_fdr_{}_{}", std::process::id(), n));
                 TDIR.with(|c| c.borrow_mut().replace(d.clone()));
                 d
             }

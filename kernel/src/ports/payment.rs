@@ -30,7 +30,7 @@ use std::collections::HashMap;
 
 use crate::event_log::sha3_256;
 use crate::ports::agent::cap::{
-    verify_chain, AnchorRoster, ChainError, Delegation, RevocationSet, SignatureVerifier,
+    verify_chain, AnchorRoster, Delegation, RevocationSet, SignatureVerifier,
 };
 // `Capability` is the *struct* (courier cert) re-exported at `ports::agent`,
 // distinct from the `cap` submodule above (M6 seam: reuse, don't re-declare).
@@ -949,6 +949,7 @@ mod tests {
     // sanity: verify_chain rejects the tampered link via the reused machinery directly.
     #[test]
     fn adv_reused_verify_chain_detects_tamper() {
+        use crate::ports::agent::cap::ChainError;
         let (auth, _) = good_auth(1_000);
         assert_eq!(
             verify_chain(auth.verifier, auth.roster, auth.chain, auth.cap, auth.now),
