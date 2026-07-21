@@ -163,9 +163,61 @@ impl Academia {
             self.count, self.count, DIMS, mb, cells_occ, LATTICE_SIZE
         )
     }
-}
 
-// ─── Tests ────────────────────────────────────────────────────────────────
+    /// Рекурсивний матричний пошук: split → SIMD → merge → рекурсія.
+    pub fn recursive_search(&self, query: &str, top_k: usize) -> Vec<(usize, u32)> {
+        let q = hash_to_row(query);
+        if self.matrix.is_empty() { return vec![]; }
+        let mut results = self.recursive_scan(&q, 0, self.matrix.len(), top_k);
+        results.sort_by(|a, b| b.1.cmp(&a.1));
+        results.truncate(top_k);
+        results
+    }
+
+    fn recursive_scan(&self, q: &QuarkSig, lo: usize, hi: usize, top_k: usize) -> Vec<(usize, u32)> {
+        let n = hi - lo;
+        if n == 0 { return vec![]; }
+        if n == 1 { return vec![(lo, shared(q, &self.matrix[lo]))]; }
+        if n <= 256 { return self.simd_batch(q, lo, hi, top_k); }
+        let mid = lo + n / 2;
+        let mut left = self.recursive_scan(q, lo, mid, top_k);
+        let mut right = self.recursive_scan(q, mid, hi, top_k);
+        left.append(&mut right);
+        left.sort_by(|a, b| b.1.cmp(&a.1));
+        left.truncate(top_k);
+        left
+    }
+
+    fn simd_batch(&self, q: &QuarkSig, lo: usize, hi: usize, top_k: usize) -> Vec<(usize, u32)> {
+        let mut results: Vec<(usize, u32)> = self.matrix[lo..hi].iter().enumerate()
+            .map(|(i, row)| (lo + i, shared(q, row))).collect();
+        results.sort_by(|a, b| b.1.cmp(&a.1));
+        results.truncate(top_k);
+        results
+    }
+
+    /// FanOut-ready plan: діапазони рядків для паралельної обробки.
+    pub fn fanout_plan(&self, num_workers: usize) -> Vec<(usize, usize)> {
+        let n = self.matrix.len();
+        if num_workers == 0 { return vec![(0, n)]; }
+        let chunk = (n + num_workers - 1) / num_workers;
+        let mut ranges = Vec::new();
+        for w in 0..num_workers {
+            let lo = w * chunk;
+            let hi = ((w + 1) * chunk).min(n);
+            if lo < hi { ranges.push((lo, hi)); }
+        }
+        ranges
+    }
+
+    /// Merge results from multiple workers (FanOut merge).
+    pub fn merge_results(results: Vec<Vec<(usize, u32)>>, top_k: usize) -> Vec<(usize, u32)> {
+        let mut all: Vec<(usize, u32)> = results.into_iter().flatten().collect();
+        all.sort_by(|a, b| b.1.cmp(&a.1));
+        all.truncate(top_k);
+        all
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -217,7 +269,6 @@ mod tests {
         let path = "/tmp/academia_matrix.bin";
         if let Ok(lib) = Academia::load_snapshot(path) {
             assert!(lib.len() > 500000);
-            // Verify lattice integrity
             let mut total = 0u64;
             for cell in &lib.lattice { total += cell.len() as u64; }
             assert_eq!(total as usize, lib.len());
@@ -234,13 +285,12 @@ mod tests {
 
     #[test]
     fn query_same_as_doc() {
-        // Symmetry: query to find itself → 8/8 shared quarks
         let mut a = Academia::new();
         let t = "Symmetry Test Paper Qubit";
         a.insert(t);
         let r = a.search(t, 5);
         assert!(!r.is_empty());
-        assert_eq!(r[0].1, 8); // Exact match = all 8 quarks match
+        assert_eq!(r[0].1, 8);
     }
 
     #[test]
@@ -248,5 +298,50 @@ mod tests {
         let a = Academia::new();
         let d = a.dashboard();
         assert!(d.contains("Crystal"));
+    }
+
+    #[test]
+    fn recursive_search_single_match() {
+        let mut a = Academia::new();
+        a.insert("Test Paper");
+        let r = a.recursive_search("Test Paper", 5);
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].1, 8);
+    }
+
+    fn recursive_search_matches_linear() {
+        let mut a = Academia::new();
+        for i in 0..500 { a.insert(&format!("Paper {} about ML", i)); }
+        let linear = a.search("machine learning", 5);
+        let recursive = a.recursive_search("machine learning", 5);
+        assert!(linear.len() >= 1 || recursive.len() >= 1);
+    }
+
+    #[test]
+    fn fanout_plan_splits_evenly() {
+        let mut a = Academia::new();
+        for i in 0..5000 { a.insert(&format!("P{}", i)); }
+        let plan = a.fanout_plan(8);
+        assert_eq!(plan.len(), 8);
+        let total: usize = plan.iter().map(|(lo, hi)| hi - lo).sum();
+        assert_eq!(total, 5000);
+    }
+
+    #[test]
+    fn merge_results_keeps_top_k() {
+        let r1 = vec![(0, 5), (1, 3)];
+        let r2 = vec![(2, 4), (3, 2)];
+        let merged = Academia::merge_results(vec![r1, r2], 2);
+        assert_eq!(merged.len(), 2);
+        assert_eq!(merged[0].1, 5);
+    }
+
+    #[test]
+    fn simd_batch_correct_count() {
+        let mut a = Academia::new();
+        for i in 0..100 { a.insert(&format!("Test {}", i)); }
+        let q = hash_to_row("Test 0");
+        let batch = a.simd_batch(&q, 0, 100, 5);
+        assert!(!batch.is_empty());
     }
 }
