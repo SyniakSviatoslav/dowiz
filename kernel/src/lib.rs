@@ -452,6 +452,9 @@ pub mod spectral_parser;
 /// surface via top-2 eigenvectors. Each paper = SPIN at (u,v) on surface.
 /// Grid-based navigation: O(1) cell lookup, ~32MB for 1M papers.
 pub mod parametric_spectral;
+/// Академія Дмитра Євдокимова — quantized spectral library with P2P sync.
+/// Hash-only paper storage (32B/paper), bloom filter sync, snapshot serialization.
+pub mod academia;
 /// Self-sovereign trading infrastructure — signed cryptographic intents
 /// for trustless, non-custodial, intermediary-free trading.
 pub mod trading_intent;
