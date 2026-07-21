@@ -24,6 +24,7 @@
 
 pub mod admission;
 pub mod cap;
+pub mod command_filter;
 pub mod manifest;
 pub mod scope;
 /// Item 54 — Sentinel: read-time integrity check for critical LIVE in-memory authority

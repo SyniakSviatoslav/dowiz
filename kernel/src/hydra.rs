@@ -19,6 +19,7 @@
 //! generator would let the floor regenerate itself.
 
 use crate::event_log::{CommitError, DecideRejected, EventLog, EventStore, MeshEvent, StoreError};
+use crate::ports::agent::command_filter::{CommandCatalog, CommandId, ExactCommand};
 use crate::spectral::{classify_drift, spectral_radius, DriftClass};
 
 /// Max verify iterations per commit — bounded so intrinsic mutation cannot grow
@@ -193,6 +194,13 @@ pub struct Hydra<S: EventStore> {
     /// Locked. Required to reach `healthy_checks` before a Locked→Live release.
     /// Reset to 0 on any trip or dead-band sample.
     healthy_streak: u32,
+    /// Operator-authored byte-exact command catalog that every mutation must pass
+    /// before it reaches the spectral/drift gate. An empty catalog is a valid
+    /// fail-closed posture ("no commands allowed").
+    catalog: CommandCatalog,
+    /// Optional MAC key for model-originated command authenticity. When bound,
+    /// every command carries a SHA3-256(k || ...) tag matched exactly here.
+    mac_key: Option<[u8; 32]>,
 }
 
 impl<S: EventStore> Hydra<S> {
@@ -205,7 +213,23 @@ impl<S: EventStore> Hydra<S> {
             base_edges,
             state: OrganismState::Live,
             healthy_streak: 0,
+            catalog: CommandCatalog::new(),
+            mac_key: None,
         }
+    }
+
+    /// Inject an exact command catalog into this organism. The catalog is checked
+    /// inside `commit`; a mismatch/malformed command is rejected before the spectral
+    /// gate runs (fail-closed).
+    pub fn with_catalog(mut self, catalog: CommandCatalog) -> Self {
+        self.catalog = catalog;
+        self
+    }
+
+    /// Bind a MAC key used to verify model-originated command authenticity.
+    pub fn with_mac_key(mut self, key: Option<[u8; 32]>) -> Self {
+        self.mac_key = key;
+        self
     }
 
     /// G9 — anti-tamper checkpoint. Re-derives the baseline spectrum and refuses
@@ -265,6 +289,50 @@ impl<S: EventStore> Hydra<S> {
     /// spectral baseline (G3) inside the drift gate. `decide` is the kernel Law
     /// (FSM decide/fold), unchanged. Bounded verify (G6): O(nodes²).
     pub fn commit<D, T, E>(
+        &mut self,
+        ev: MeshEvent,
+        delta: &[TopoEdge],
+        intervention: bool,
+        decide: D,
+    ) -> Result<(crate::event_log::AppendOutcome, Option<T>), CommitError>
+    where
+        D: FnOnce(&MeshEvent) -> Result<T, E>,
+        E: std::fmt::Display,
+    {
+        self.commit_inner(ev, delta, intervention, decide)
+    }
+
+    /// Closed-loop commit PLUS a mandatory upstream command filter. Rejected if
+    /// the bytes do not match the bound catalog + MAC. This is the new secure
+    /// ingress point; keep using `commit` only for local/cached seams.
+    pub fn commit_with_command<D, T, E>(
+        &mut self,
+        ev: MeshEvent,
+        delta: &[TopoEdge],
+        intervention: bool,
+        decide: D,
+        cmd_bytes: &[u8],
+    ) -> Result<(crate::event_log::AppendOutcome, Option<T>), CommitError>
+    where
+        D: FnOnce(&MeshEvent) -> Result<T, E>,
+        E: std::fmt::Display,
+    {
+        self.verify_command(Some(cmd_bytes))?;
+        self.commit_inner(ev, delta, intervention, decide)
+    }
+
+    #[inline]
+    fn verify_command(&self, cmd_bytes: Option<&[u8]>) -> Result<(), CommitError> {
+        if let Some(bytes) = cmd_bytes {
+            let err = CommitError::Rejected(DecideRejected("command filter: rejected".into()));
+            self.catalog
+                .verify(bytes, self.mac_key.as_ref())
+                .map_err(|_| err)?;
+        }
+        Ok(())
+    }
+
+    fn commit_inner<D, T, E>(
         &mut self,
         ev: MeshEvent,
         delta: &[TopoEdge],
@@ -900,6 +968,97 @@ mod tests {
             transitions <= 2,
             "integrity_check flapped {transitions} times (states={states:?}); \
              hysteresis band must bound Live<->Locked transitions to ≤ 2"
+        );
+    }
+
+    /// Command-verification layer: on a bound catalog, a fully-valid allowed
+    /// command frame passes through and the mutation commits (Damped delta).
+    #[test]
+    fn hydra_command_filter_accepts_valid_command() {
+        let mut catalog = CommandCatalog::new();
+        let nonce: u64 = 0x5566778899AABBCC;
+        let key: [u8; 32] = *b"0123456789abcdef0123456789abcdef";
+        let mac = CommandCatalog::mac(&key, CommandId::new(0x01), &[0xAB], nonce);
+        let mut wire = Vec::new();
+        wire.push(CommandId::new(0x01).discriminant());
+        wire.extend_from_slice(&1u16.to_le_bytes());
+        wire.push(0xAB);
+        wire.extend_from_slice(&nonce.to_le_bytes());
+        wire.extend_from_slice(&mac);
+        catalog.register(ExactCommand::new(CommandId::new(0x01), vec![0xAB]).with_mac(mac));
+        let h = Hydra::new(MemEventStore::new(), 3, base())
+            .with_catalog(catalog)
+            .with_mac_key(Some(key));
+        let mut locked = h;
+        let res = locked.commit_with_command(
+            ev(1, 1, b"mutate"),
+            &[TopoEdge {
+                from: 2,
+                to: 0,
+                weight: 0.3,
+            }],
+            false,
+            |_| Ok::<u64, String>(1),
+            &wire,
+        );
+        assert!(
+            matches!(
+                res,
+                Ok((crate::event_log::AppendOutcome::Committed(_), Some(1)))
+            ),
+            "valid command bytes must commit: {res:?}"
+        );
+    }
+
+    /// Command-verification layer: short/malformed bytes reject before the
+    /// spectral gate — fail-closed, no mutation enters.
+    #[test]
+    fn hydra_command_filter_rejects_malformed_command_frame() {
+        let catalog = CommandCatalog::new();
+        let h = Hydra::new(MemEventStore::new(), 3, base()).with_catalog(catalog);
+        let mut locked = h;
+        let res = locked.commit_with_command(
+            ev(1, 1, b"mutate"),
+            &[],
+            false,
+            |_| Ok::<u64, String>(1),
+            b"bad",
+        );
+        assert!(
+            matches!(res, Err(CommitError::Rejected(_))),
+            "malformed command frame rejected: {res:?}"
+        );
+    }
+
+    /// Command-verification layer: a single bit-flip in allowed length/payload
+    /// yields Err (byte-exact match is the contract).
+    #[test]
+    fn hydra_command_filter_rejects_tampered_command_frame() {
+        let mut catalog = CommandCatalog::new();
+        let mut wire = Vec::new();
+        wire.push(CommandId::new(0x01).discriminant());
+        wire.extend_from_slice(&1u16.to_le_bytes());
+        wire.push(0xAB);
+        let nonce: u64 = 0x5566778899AABBCC;
+        wire.extend_from_slice(&nonce.to_le_bytes());
+        let key: [u8; 32] = *b"0123456789abcdef0123456789abcdef";
+        let mac = CommandCatalog::mac(&key, CommandId::new(0x01), &[0xAB], nonce);
+        catalog.register(ExactCommand::new(CommandId::new(0x01), vec![0xAB]).with_mac(mac));
+        let h = Hydra::new(MemEventStore::new(), 3, base())
+            .with_catalog(catalog)
+            .with_mac_key(Some(key));
+        let mut locked = h;
+        wire[3] ^= 0x01; // payload bit-flip
+        let res = locked.commit_with_command(
+            ev(1, 1, b"mutate"),
+            &[],
+            false,
+            |_| Ok::<u64, String>(1),
+            &wire,
+        );
+        assert!(
+            matches!(res, Err(CommitError::Rejected(_))),
+            "tampered command bytes rejected: {res:?}"
         );
     }
 }
