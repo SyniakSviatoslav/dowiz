@@ -1,0 +1,20 @@
+name = "academia-mesh"
+main = "tools/academia_worker.js"
+compatibility_date = "2026-07-21"
+
+# 1000+ geo-розподілених workers
+# Кожен worker = різний регіон = різний IP
+workers_dev = true
+
+# R2 bucket for chunk storage
+[[r2_buckets]]
+binding = "ACADEMIA_BUCKET"
+bucket_name = "academia-matrix"
+
+[triggers]
+# Запуск кожні 6 годин
+crons = ["23 0,6,12,18 * * *"]
+
+[env.production]
+name = "academia-mesh-prod"
+routes = [{ pattern = "academia.syniak.dev/*", zone_id = "YOUR_ZONE" }]
