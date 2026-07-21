@@ -103,3 +103,6 @@ docs/formal/states/
 # The tool + spine.rs are committed; each environment generates its own local
 # chain by running spine_snapshot against its own corpus locations.
 docs/ledger/corpus-spine-chain.jsonl
+kernel/src/shadows.rs
+kernel/src/strat.rs
+kernel/src/trader.rs
