@@ -60,6 +60,14 @@ All evidence below is from live `cargo test --offline --lib [--features pq]` on 
 > rows these three items registered should be removed or re-scoped to a real per-claim test — not
 > yet done, an open follow-up.
 
+> **UPDATE (2026-07-21):** Item 62 has been **built and verified** in this session.
+> `Absence::NoParent` added to the closed enum; `span_id: Option<u64>` + `parent_span_id:
+> Option<Reading<u64>>` added to `FdrEvent` (optional-field discipline — non-span records
+> byte-identical); `SPAN_SEQ` atomic minter + `SpanGuard` parent-child threading in `fdr/mod.rs`;
+> `emit_span_close` carries linkage. 4 new tests pass (root no_parent, child value, byte-identity,
+> span-tree reconstruction). Kernel 1152 pass. P3 grep proof green (no span_id in hash/gate/replay).
+> Items 61 and 66 remain NOT-BUILT (61 gated on item 58 WorkloadKind; 66 gated on item 64).
+
 ## DOC/CI-ONLY (no kernel code land required)
 | Item | Nature | Verification |
 |------|--------|--------------|

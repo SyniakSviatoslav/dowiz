@@ -676,16 +676,34 @@ mod shadow_telemetry_tests {
     #[test]
     fn decision_is_bit_identical_with_shadow_on_or_off() {
         let cases: &[(HarnessInput, HarnessOut, HarnessOut)] = &[
-            (HarnessInput { job: 0 }, HarnessOut { route_tier: 0 }, HarnessOut { route_tier: 0 }),
-            (HarnessInput { job: 1 }, HarnessOut { route_tier: 2 }, HarnessOut { route_tier: 7 }),
-            (HarnessInput { job: 2 }, HarnessOut { route_tier: 4 }, HarnessOut { route_tier: 4 }),
-            (HarnessInput { job: 3 }, HarnessOut { route_tier: 1 }, HarnessOut { route_tier: 9 }),
+            (
+                HarnessInput { job: 0 },
+                HarnessOut { route_tier: 0 },
+                HarnessOut { route_tier: 0 },
+            ),
+            (
+                HarnessInput { job: 1 },
+                HarnessOut { route_tier: 2 },
+                HarnessOut { route_tier: 7 },
+            ),
+            (
+                HarnessInput { job: 2 },
+                HarnessOut { route_tier: 4 },
+                HarnessOut { route_tier: 4 },
+            ),
+            (
+                HarnessInput { job: 3 },
+                HarnessOut { route_tier: 1 },
+                HarnessOut { route_tier: 9 },
+            ),
         ];
 
         for (input, answer, proposal) in cases.iter() {
-            let unit = DecisionUnit::new(DomainTag::Harness, UnitEpoch(1), move |_in: &HarnessInput| {
-                Decision::Answer(answer.clone())
-            });
+            let unit = DecisionUnit::new(
+                DomainTag::Harness,
+                UnitEpoch(1),
+                move |_in: &HarnessInput| Decision::Answer(answer.clone()),
+            );
 
             // ── shadow OFF ──
             let d_off = unit.decide_with_shadow(input, Some(proposal), None);
@@ -735,7 +753,11 @@ mod shadow_telemetry_tests {
         drop(ring);
 
         let rec: Recovery = crate::fdr::ring::recover(&dir);
-        let shadow: Vec<_> = rec.records.iter().filter(|r| r.kind == "shadow_divergence").collect();
+        let shadow: Vec<_> = rec
+            .records
+            .iter()
+            .filter(|r| r.kind == "shadow_divergence")
+            .collect();
         assert_eq!(shadow.len(), 1, "exactly one ShadowDivergence record");
         let raw = &shadow[0].raw;
         // agree bit = 0 (disagree), verdict = admitted (D is an Answer).
@@ -749,7 +771,10 @@ mod shadow_telemetry_tests {
         );
         // Digests present, full payloads absent (no "route_tier":99 literal in the record).
         assert!(raw.contains("\"d_digest\":\""), "d_digest present: {raw}");
-        assert!(raw.contains("\"act_digest\":\""), "act_digest present: {raw}");
+        assert!(
+            raw.contains("\"act_digest\":\""),
+            "act_digest present: {raw}"
+        );
         assert!(
             !raw.contains("\"route_tier\":99"),
             "full proposal payload must NEVER be logged: {raw}"
@@ -781,12 +806,24 @@ mod shadow_telemetry_tests {
             let proposal = HarnessOut {
                 route_tier: if i % 2 == 0 { 3 } else { 77 },
             };
-            let d = unit.decide_with_shadow(&HarnessInput { job: i as u8 }, Some(&proposal), Some(&mut ring));
-            assert_eq!(d, Decision::Answer(HarnessOut { route_tier: 3 }), "D unchanged under flood");
+            let d = unit.decide_with_shadow(
+                &HarnessInput { job: i as u8 },
+                Some(&proposal),
+                Some(&mut ring),
+            );
+            assert_eq!(
+                d,
+                Decision::Answer(HarnessOut { route_tier: 3 }),
+                "D unchanged under flood"
+            );
         }
         drop(ring);
         let rec = crate::fdr::ring::recover(&dir);
-        let shadow: Vec<_> = rec.records.iter().filter(|r| r.kind == "shadow_divergence").collect();
+        let shadow: Vec<_> = rec
+            .records
+            .iter()
+            .filter(|r| r.kind == "shadow_divergence")
+            .collect();
         // One ShadowDivergence record per call (within ring capacity); none lost/corrupted.
         assert_eq!(shadow.len(), n, "one shadow record per decision call");
         assert_eq!(rec.crc_failures, 0);
@@ -810,6 +847,8 @@ mod shadow_telemetry_tests {
             name: "place_order".into(),
             hw: crate::fdr::schema::HwStamp::sample(crate::fdr::schema::StampPolicy::Cheap),
             pmu: None,
+            span_id: None,
+            parent_span_id: None,
             fields: vec![("subtotal_cents", "500".into())],
         };
         // Captured golden string — MUST NOT change after the ShadowDivergence variant is added.
@@ -828,7 +867,11 @@ mod shadow_telemetry_tests {
             Decision::Answer(HarnessOut { route_tier: 5 })
         });
         // ring = None ⇒ shadow OFF ⇒ pure decide(), no FDR write path touched.
-        let d = unit.decide_with_shadow(&HarnessInput { job: 2 }, Some(&HarnessOut { route_tier: 0 }), None);
+        let d = unit.decide_with_shadow(
+            &HarnessInput { job: 2 },
+            Some(&HarnessOut { route_tier: 0 }),
+            None,
+        );
         assert_eq!(d, Decision::Answer(HarnessOut { route_tier: 5 }));
     }
 }

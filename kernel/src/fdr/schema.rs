@@ -48,6 +48,10 @@ pub enum Absence {
     /// device, so on-site water is a PERMANENT named absence under every input. This variant
     /// names that invariant (the derivation module NEVER produces an on-site-water value).
     NotSoftwareObservable,
+    /// Item 62 (FDR relational linkage): this record is a root of a span tree — it has no
+    /// causal parent. Serialized as `"no_parent"`, greppable; never a magic `0` or a missing
+    /// key.
+    NoParent,
 }
 
 impl Absence {
@@ -62,6 +66,7 @@ impl Absence {
             Absence::NoPmuInterface => "no_pmu_interface",
             Absence::NoRegionalConstant => "no_regional_constant",
             Absence::NotSoftwareObservable => "not_software_observable",
+            Absence::NoParent => "no_parent",
         }
     }
 }
@@ -252,6 +257,18 @@ pub struct FdrEvent {
     /// other FDR records byte-identical — everywhere else. Lives on the P3 forensic plane,
     /// excluded from every hash/signature/gate surface (see `pmu` module doc).
     pub pmu: Option<super::pmu::PmuStamp>,
+    /// Item 62 (FDR relational linkage): per-process monotone span id. `Some` on span-tree
+    /// records (SpanClose); `None` on non-span records. Serialized only when present —
+    /// non-span records stay byte-identical to pre-item-62 (the pmu-absence precedent).
+    /// Never feeds a hash, signature, idempotency, or replay surface (P3 firewall, procedure
+    /// step 7).
+    pub span_id: Option<u64>,
+    /// Item 62 (FDR relational linkage): causal parent of this span. A root span carries
+    /// `Some(Reading::Unavailable(Absence::NoParent))` — the named-absence doctrine (no magic
+    /// `0`). A child carries `Some(Reading::Value(parent_span_id))`. `None` on non-span
+    /// records (byte-identical to pre-item-62). Serialized only when `Some`, following the
+    /// pmu optional-field discipline.
+    pub parent_span_id: Option<Reading<u64>>,
     pub fields: Vec<(&'static str, String)>,
 }
 
@@ -283,6 +300,8 @@ impl FdrEvent {
             name,
             hw: HwStamp::sample(hw_policy),
             pmu: None,
+            span_id: None,
+            parent_span_id: None,
             fields,
         }
     }
@@ -301,6 +320,19 @@ impl FdrEvent {
         // every other FDR record serializes byte-identically to before item 27.
         let w = match self.pmu {
             Some(p) => p.write(w),
+            None => w,
+        };
+        // Item 62 (FDR relational linkage): span_id and parent_span_id ride on span-tree records
+        // (SpanClose). Non-span records have `None` for both — serialized fields absent,
+        // byte-identical to pre-item-62 (the pmu-absence precedent). On span records, span_id
+        // is always present; parent_span_id is a `Reading` — root spans serialize as
+        // `"parent_span_id":{"unavailable":"no_parent"}`, children as `"parent_span_id":<u64>`.
+        let w = match self.span_id {
+            Some(id) => w.field_u64("span_id", id),
+            None => w,
+        };
+        let w = match self.parent_span_id {
+            Some(reading) => reading.write_field(w, "parent_span_id"),
             None => w,
         };
         let mut fobj = JsonWriter::obj();
@@ -366,12 +398,17 @@ mod tests {
             name: "place_order".into(),
             hw: HwStamp::sample(StampPolicy::Cheap),
             pmu: None,
+            span_id: None,
+            parent_span_id: None,
             fields: vec![("subtotal_cents", "500".into())],
         };
         let j = ev.to_json();
         assert!(j.starts_with("{\"seq\":7,\"ts_unix_ns\":1,\"mono_ns\":2,"));
         assert!(j.contains("\"level\":\"info\",\"kind\":\"event\",\"name\":\"place_order\""));
         assert!(j.contains("\"fields\":{\"subtotal_cents\":\"500\"}"));
+        // Item 62: non-span records must NOT contain span_id or parent_span_id.
+        assert!(!j.contains("\"span_id\""), "non-span must not carry span_id: {j}");
+        assert!(!j.contains("\"parent_span_id\""), "non-span must not carry parent_span_id: {j}");
     }
 
     // Item 48 (closure b): the `Heartbeat` variant serializes to a byte-stable record and is
@@ -389,6 +426,8 @@ mod tests {
             name: "heartbeat".into(),
             hw: HwStamp::sample(StampPolicy::Cheap),
             pmu: None,
+            span_id: None,
+            parent_span_id: None,
             fields: vec![("tick", "3".into())],
         };
         let j = ev.to_json();
@@ -424,6 +463,8 @@ mod tests {
             name: "place_order".into(),
             hw: HwStamp::sample(StampPolicy::Cheap),
             pmu: None,
+            span_id: None,
+            parent_span_id: None,
             fields: vec![("subtotal_cents", "500".into())],
         };
         // Captured golden string — MUST NOT change after the Heartbeat variant is added.
@@ -431,5 +472,199 @@ mod tests {
             ev.to_json(),
             "{\"seq\":7,\"ts_unix_ns\":1,\"mono_ns\":2,\"level\":\"info\",\"kind\":\"event\",\"name\":\"place_order\",\"hw\":{\"cpu_ticks\":{\"unavailable\":\"sampling_disabled\"},\"rss_kb\":{\"unavailable\":\"sampling_disabled\"},\"joules_uj\":{\"unavailable\":\"sampling_disabled\"}},\"fields\":{\"subtotal_cents\":\"500\"}}"
         );
+    }
+
+    // ── Item 62: FDR relational linkage tests ──────────────────────────────────────
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn span_close_root_serializes_no_parent_absence() {
+        // A root SpanClose record carries span_id + parent_span_id with
+        // Absence::NoParent — the named-absence doctrine (no magic 0).
+        let ev = FdrEvent {
+            seq: 10,
+            ts_unix_ns: 100,
+            mono_ns: 200,
+            level: Level::Info,
+            kind: Kind::SpanClose,
+            name: "test_span".into(),
+            hw: HwStamp::sample(StampPolicy::Cheap),
+            pmu: None,
+            span_id: Some(42),
+            parent_span_id: Some(Reading::Unavailable(Absence::NoParent)),
+            fields: vec![("dur_us", "150".into())],
+        };
+        let j = ev.to_json();
+        assert!(
+            j.contains("\"span_id\":42"),
+            "span_id must be present on span records: {j}"
+        );
+        assert!(
+            j.contains("\"parent_span_id\":{\"unavailable\":\"no_parent\"}"),
+            "root must carry no_parent named absence: {j}"
+        );
+        // Field order: span_id before parent_span_id, both before fields.
+        let sid_pos = j.find("\"span_id\"").unwrap();
+        let pid_pos = j.find("\"parent_span_id\"").unwrap();
+        let fields_pos = j.find("\"fields\"").unwrap();
+        assert!(sid_pos < pid_pos, "span_id must precede parent_span_id");
+        assert!(pid_pos < fields_pos, "parent_span_id must precede fields");
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn span_close_child_serializes_parent_span_id_as_value() {
+        // A child SpanClose record carries parent_span_id = Value(parent_id).
+        let ev = FdrEvent {
+            seq: 11,
+            ts_unix_ns: 100,
+            mono_ns: 200,
+            level: Level::Info,
+            kind: Kind::SpanClose,
+            name: "child_span".into(),
+            hw: HwStamp::sample(StampPolicy::Cheap),
+            pmu: None,
+            span_id: Some(43),
+            parent_span_id: Some(Reading::Value(42)),
+            fields: vec![("dur_us", "80".into())],
+        };
+        let j = ev.to_json();
+        assert!(
+            j.contains("\"span_id\":43"),
+            "child span_id must be present: {j}"
+        );
+        assert!(
+            j.contains("\"parent_span_id\":42"),
+            "child parent must be a bare value: {j}"
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn event_record_byte_identity_preserved_after_item_62() {
+        // Non-span records (Event, Alarm, Heartbeat, etc.) must be byte-identical
+        // to pre-item-62. span_id: None + parent_span_id: None ⇒ fields absent from
+        // serialized output (the pmu-absence optional-field precedent).
+        let ev = FdrEvent {
+            seq: 7,
+            ts_unix_ns: 1,
+            mono_ns: 2,
+            level: Level::Info,
+            kind: Kind::Event,
+            name: "place_order".into(),
+            hw: HwStamp::sample(StampPolicy::Cheap),
+            pmu: None,
+            span_id: None,
+            parent_span_id: None,
+            fields: vec![("subtotal_cents", "500".into())],
+        };
+        // Golden string is UNCHANGED from the pre-item-62 test — no span fields present.
+        assert_eq!(
+            ev.to_json(),
+            "{\"seq\":7,\"ts_unix_ns\":1,\"mono_ns\":2,\"level\":\"info\",\"kind\":\"event\",\"name\":\"place_order\",\"hw\":{\"cpu_ticks\":{\"unavailable\":\"sampling_disabled\"},\"rss_kb\":{\"unavailable\":\"sampling_disabled\"},\"joules_uj\":{\"unavailable\":\"sampling_disabled\"}},\"fields\":{\"subtotal_cents\":\"500\"}}"
+        );
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn span_tree_reconstruction_from_recovered_ring() {
+        // Oracle test: build a parent→child span pair, serialize both, parse back,
+        // and reconstruct the call tree via parent_span_id links.
+        let root = FdrEvent {
+            seq: 1,
+            ts_unix_ns: 1000,
+            mono_ns: 2000,
+            level: Level::Info,
+            kind: Kind::SpanClose,
+            name: "root_span".into(),
+            hw: HwStamp::sample(StampPolicy::Cheap),
+            pmu: None,
+            span_id: Some(100),
+            parent_span_id: Some(Reading::Unavailable(Absence::NoParent)),
+            fields: vec![("dur_us", "500".into())],
+        };
+        let child = FdrEvent {
+            seq: 2,
+            ts_unix_ns: 1100,
+            mono_ns: 2100,
+            level: Level::Info,
+            kind: Kind::SpanClose,
+            name: "child_span".into(),
+            hw: HwStamp::sample(StampPolicy::Cheap),
+            pmu: None,
+            span_id: Some(101),
+            parent_span_id: Some(Reading::Value(100)),
+            fields: vec![("dur_us", "200".into())],
+        };
+        // Simulate "recovered ring" — a list of serialized records.
+        let ring = vec![root.to_json(), child.to_json()];
+        // Reconstruct: parse span_id + parent_span_id from each record.
+        let mut by_id: std::collections::HashMap<u64, (String, Option<u64>)> =
+            std::collections::HashMap::new();
+        for line in &ring {
+            let sid = parse_field_u64(line, "span_id").expect("span_id must be present");
+            let pid = parse_parent_span_id(line);
+            let name = parse_field_str(line, "name")
+                .expect("name must be present")
+                .to_string();
+            by_id.insert(sid, (name, pid));
+        }
+        // Walk the tree: root has no parent, child has parent = root's span_id.
+        let root_entry = by_id.get(&100).expect("root must exist");
+        assert!(
+            root_entry.1.is_none(),
+            "root must have no parent (NoParent absence)"
+        );
+        let child_entry = by_id.get(&101).expect("child must exist");
+        assert_eq!(
+            child_entry.1,
+            Some(100),
+            "child's parent must be root (100)"
+        );
+        // Tree shape: root is parent of child.
+        let children_of_root: Vec<_> = by_id
+            .iter()
+            .filter(|(_, (_, pid))| *pid == Some(100))
+            .map(|(sid, (name, _))| (*sid, name.clone()))
+            .collect();
+        assert_eq!(children_of_root.len(), 1, "root must have exactly 1 child");
+        assert_eq!(children_of_root[0].0, 101);
+        assert_eq!(children_of_root[0].1, "child_span");
+    }
+
+    // ── Item 62 test helpers ───────────────────────────────────────────────────────
+
+    /// Parse a `"key":<number>` field from a JSON line (minimal, no serde).
+    fn parse_field_u64(json: &str, key: &str) -> Option<u64> {
+        let pattern = format!("\"{key}\":");
+        let pos = json.find(&pattern)?;
+        let rest = &json[pos + pattern.len()..];
+        let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+        rest[..end].parse().ok()
+    }
+
+    /// Parse `"name":"<string>"` from a JSON line.
+    fn parse_field_str<'a>(json: &'a str, key: &str) -> Option<&'a str> {
+        let pattern = format!("\"{key}\":\"");
+        let pos = json.find(&pattern)?;
+        let start = pos + pattern.len();
+        let end = json[start..].find('"')?;
+        Some(&json[start..start + end])
+    }
+
+    /// Parse `parent_span_id` — returns `Some(u64)` for a bare value,
+    /// `None` for `{"unavailable":"no_parent"}`.
+    fn parse_parent_span_id(json: &str) -> Option<u64> {
+        let pattern = "\"parent_span_id\":";
+        let pos = json.find(pattern)?;
+        let rest = &json[pos + pattern.len()..];
+        if rest.starts_with('{') {
+            // Named absence — root record.
+            None
+        } else {
+            // Bare u64 value — child record.
+            let end = rest.find(|c: char| !c.is_ascii_digit()).unwrap_or(rest.len());
+            Some(rest[..end].parse().ok()?)
+        }
     }
 }
