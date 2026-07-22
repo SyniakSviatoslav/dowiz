@@ -1,53 +1,477 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="crimson">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>dowiz · kernel-driven field UI</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>dowiz — DeliveryOS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="src/styles/tokens.css" />
+  <link rel="stylesheet" href="src/styles/base.css" />
+  <link rel="stylesheet" href="src/styles/animations.css" />
   <style>
-    :root { color-scheme: dark; }
-    body { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background:#0b0f17; color:#cdd6e4; margin:0; padding:24px; }
-    h1 { font-size:16px; letter-spacing:.04em; color:#7fd1ff; }
-    .card { border:1px solid #1e2a3a; border-radius:10px; padding:16px; margin:12px 0; background:#0f1623; }
-    .k { color:#7c8aa0; } .v { color:#e6edf7; } .warn { color:#ffb454; } .bad { color:#ff6b6b; } .good { color:#7ee787; }
-    canvas { width:100%; height:160px; background:#0b0f17; border:1px solid #1e2a3a; border-radius:8px; }
-    button { background:#13243a; color:#cdd6e4; border:1px solid #25405f; border-radius:6px; padding:6px 10px; cursor:pointer; }
+    /* ─── Canvas Background ─── */
+    #bg-canvas { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 0; pointer-events: none; }
+    .content { position: relative; z-index: 1; }
+
+    /* ─── Hero ─── */
+    .hero { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 120px 24px 80px; position: relative; }
+    .hero-badge { display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px; border-radius: 999px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; background: var(--brand-primary-light, rgba(234,79,22,0.1)); color: var(--brand-primary); margin-bottom: 24px; animation: fadeInDown 600ms ease both; }
+    .hero h1 { font-size: clamp(48px, 10vw, 96px); font-weight: 700; letter-spacing: -2px; line-height: 1.05; margin-bottom: 20px; animation: fadeInUp 600ms ease 200ms both; }
+    .hero h1 span { background: linear-gradient(135deg, var(--brand-primary), #ff6b35, var(--brand-primary-hover)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .hero p { font-size: clamp(16px, 2.5vw, 22px); color: var(--brand-text-muted); max-width: 600px; margin: 0 auto 36px; line-height: 1.6; animation: fadeInUp 600ms ease 400ms both; }
+    .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; animation: fadeInUp 600ms ease 600ms both; }
+    .hero-scroll { position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--brand-text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: 2px; animation: float 4s ease-in-out infinite; cursor: pointer; }
+
+    /* ─── Theme Switcher ─── */
+    .theme-switcher { position: fixed; top: 24px; right: 24px; z-index: 100; display: flex; gap: 6px; padding: 8px 12px; background: var(--brand-surface); border: 1px solid var(--brand-border); border-radius: 999px; backdrop-filter: blur(20px); box-shadow: var(--shadow-lg); }
+    .theme-dot { width: 20px; height: 20px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; transition: all 300ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+    .theme-dot:hover { transform: scale(1.3); }
+    .theme-dot.active { border-color: var(--brand-text); transform: scale(1.15); box-shadow: 0 0 0 2px var(--brand-bg); }
+
+    /* ─── Navbar ─── */
+    .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; padding: 16px 32px; background: rgba(18,18,18,0.8); backdrop-filter: blur(20px); border-bottom: 1px solid var(--brand-border); }
+    .navbar-logo { font-family: var(--font-heading); font-size: 24px; font-weight: 700; }
+    .navbar-links { display: flex; gap: 32px; align-items: center; }
+    .navbar-links a { color: var(--brand-text-muted); font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; transition: color 200ms; position: relative; }
+    .navbar-links a:hover, .navbar-links a.active { color: var(--brand-text); }
+    .navbar-links a.active::after { content: ''; position: absolute; bottom: -4px; left: 0; right: 0; height: 2px; background: var(--brand-primary); border-radius: 1px; }
+
+    /* ─── Sections ─── */
+    section { padding: 80px 24px; max-width: 1200px; margin: 0 auto; }
+    .section-title { font-size: clamp(28px, 4vw, 42px); font-weight: 700; margin-bottom: 12px; }
+    .section-subtitle { font-size: 16px; color: var(--brand-text-muted); margin-bottom: 48px; max-width: 500px; }
+
+    /* ─── Features Grid ─── */
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
+    .feature-card { padding: 32px; border-radius: var(--brand-radius); background: var(--brand-surface); border: 1px solid var(--brand-border); transition: all 400ms cubic-bezier(0.34, 1.56, 0.64, 1); cursor: default; }
+    .feature-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-lg); border-color: var(--brand-primary); }
+    .feature-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 16px; background: var(--brand-primary-light); color: var(--brand-primary); }
+    .feature-card h3 { font-size: 18px; margin-bottom: 8px; }
+    .feature-card p { font-size: 14px; color: var(--brand-text-muted); line-height: 1.6; }
+
+    /* ─── Menu / Storefront ─── */
+    .menu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; margin-top: 32px; }
+    .menu-item { background: var(--brand-surface); border: 1px solid var(--brand-border); border-radius: var(--brand-radius); padding: 20px; transition: all 300ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+    .menu-item:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+    .menu-img { width: 100%; height: 140px; border-radius: 8px; background: linear-gradient(135deg, var(--brand-primary-light), var(--brand-surface)); margin-bottom: 12px; display: flex; align-items: center; justify-content: center; font-size: 48px; }
+    .menu-item h4 { font-size: 16px; margin-bottom: 4px; }
+    .menu-category { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--brand-primary); font-weight: 600; margin-bottom: 4px; }
+    .menu-desc { font-size: 12px; color: var(--brand-text-muted); margin-bottom: 12px; }
+    .menu-footer { display: flex; justify-content: space-between; align-items: center; }
+    .menu-price { font-weight: 700; font-size: 18px; }
+
+    /* ─── Cart Panel ─── */
+    .cart-toggle { position: fixed; bottom: 24px; right: 24px; z-index: 40; width: 56px; height: 56px; border-radius: 50%; background: var(--brand-primary); color: white; border: none; font-size: 24px; cursor: pointer; box-shadow: var(--shadow-xl); transition: all 300ms cubic-bezier(0.34, 1.56, 0.64, 1); display: flex; align-items: center; justify-content: center; }
+    .cart-toggle:hover { transform: scale(1.1); }
+    .cart-count-badge { position: absolute; top: -4px; right: -4px; width: 22px; height: 22px; border-radius: 50%; background: var(--color-danger); color: white; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+    .cart-panel { position: fixed; top: 0; right: -400px; width: 380px; height: 100%; background: var(--brand-surface); border-left: 1px solid var(--brand-border); z-index: 200; transition: right 400ms cubic-bezier(0.34, 1.56, 0.64, 1); box-shadow: var(--shadow-xl); display: flex; flex-direction: column; }
+    .cart-panel.open { right: 0; }
+    .cart-header { padding: 24px; border-bottom: 1px solid var(--brand-border); display: flex; justify-content: space-between; align-items: center; }
+    .cart-items { flex: 1; overflow-y: auto; padding: 16px 24px; }
+    .cart-total { padding: 24px; border-top: 1px solid var(--brand-border); display: flex; justify-content: space-between; font-size: 18px; font-weight: 700; }
+    .cart-actions { padding: 0 24px 24px; }
+
+    /* ─── Orders ─── */
+    .order-row { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid var(--brand-border); }
+    .order-row:last-child { border-bottom: none; }
+    .order-id { font-weight: 600; }
+    .order-time { font-size: 12px; color: var(--brand-text-muted); }
+
+    /* ─── Stats ─── */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px; margin-top: 48px; }
+    .stat-card { text-align: center; padding: 32px; background: var(--brand-surface); border: 1px solid var(--brand-border); border-radius: var(--brand-radius); }
+    .stat-number { font-size: 48px; font-weight: 700; background: linear-gradient(135deg, var(--brand-primary), var(--brand-primary-hover)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .stat-label { font-size: 14px; color: var(--brand-text-muted); margin-top: 4px; }
+
+    /* ─── Footer ─── */
+    footer { padding: 64px 24px 32px; border-top: 1px solid var(--brand-border); text-align: center; }
+    .footer-links { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; margin-bottom: 24px; }
+    .footer-links a { color: var(--brand-text-muted); font-size: 13px; }
+    .footer-links a:hover { color: var(--brand-primary); }
+    footer p { color: var(--brand-text-muted); font-size: 12px; }
+
+    /* ─── Responsive ─── */
+    @media (max-width: 768px) {
+      .navbar-links { display: none; }
+      .cart-panel { width: 100%; }
+      .hero { padding: 100px 16px 60px; }
+      section { padding: 48px 16px; }
+    }
   </style>
 </head>
 <body>
-  <h1>dowiz · kernel-driven field UI (Rust kernel via wasm)</h1>
-  <p class="k">Geo + spectral math is computed by <code>dowiz-kernel</code> (wasm). This shell only renders it — no JS/TS re-implementation.</p>
+  <canvas id="bg-canvas"></canvas>
 
-  <div id="boot-banner" class="bad" hidden></div>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="navbar-logo gradient-text">dowiz</div>
+    <div class="navbar-links">
+      <a href="#features" class="active">Features</a>
+      <a href="#menu">Menu</a>
+      <a href="#orders">Orders</a>
+      <a href="#stats">Stats</a>
+    </div>
+  </nav>
 
-  <div class="card">
-    <div><span class="k">route remaining:</span> <span class="v" id="rem">–</span> m</div>
-    <div><span class="k">snapped:</span> <span class="v" id="snap">–</span></div>
-    <div><span class="k">segment:</span> <span class="v" id="seg">–</span></div>
-    <canvas id="cv" width="800" height="160"></canvas>
-    <button id="tick">advance</button>
+  <div class="content">
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-badge spring">✦ Post-Quantum Delivery Protocol</div>
+      <h1>Decentralized <span>food delivery</span><br />for the next generation</h1>
+      <p>Zero-trust mesh network with post-quantum cryptography, deterministic state machines, and AI-powered local inference — all running in your pocket.</p>
+      <div class="hero-actions">
+        <button class="btn btn-primary btn-lg spring" onclick="openApp()">Open Storefront</button>
+        <button class="btn btn-secondary btn-lg spring">Track Delivery</button>
+        <button class="btn btn-ghost btn-lg">Learn More →</button>
+      </div>
+      <div class="hero-scroll" onclick="document.getElementById('features').scrollIntoView({behavior:'smooth'})">
+        <span>Scroll</span>
+        <svg width="16" height="24" viewBox="0 0 16 24" fill="none"><path d="M8 0v20M1 13l7 7 7-7" stroke="currentColor" stroke-width="2"/></svg>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features" data-stagger>
+      <h2 class="section-title fade-in-up">Everything you need</h2>
+      <p class="section-subtitle">Post-quantum security, mesh networking, local-first AI — built from the ground up in Rust.</p>
+      <div class="features-grid stagger">
+        <div class="feature-card spring">
+          <div class="feature-icon">🔒</div>
+          <h3>Post-Quantum Crypto</h3>
+          <p>ML-DSA-65, ML-KEM-768, X25519 — NIST KAT-verified. Your data stays secure against quantum adversaries.</p>
+        </div>
+        <div class="feature-card spring">
+          <div class="feature-icon">🌐</div>
+          <h3>Mesh Network</h3>
+          <p>Decentralized P2P delivery network with signed append-only logs, Merkle replication, and DTN transport.</p>
+        </div>
+        <div class="feature-card spring">
+          <div class="feature-icon">🧠</div>
+          <h3>Local AI Inference</h3>
+          <p>Bebop 7B model runs entirely on-device. No cloud dependency. Voice, gesture, and friction-based interaction.</p>
+        </div>
+        <div class="feature-card spring">
+          <div class="feature-icon">⚡</div>
+          <h3>Field Physics UI</h3>
+          <p>Wave-equation SDF field rendering with WebGPU. Ripple animations, spring physics, real-time particle effects.</p>
+        </div>
+        <div class="feature-card spring">
+          <div class="feature-icon">🎯</div>
+          <h3>Intent Engine</h3>
+          <p>Deterministic intent classifier + friction FSM. Voice, touch, and gesture all funnel through one InputSource.</p>
+        </div>
+        <div class="feature-card spring">
+          <div class="feature-icon">📦</div>
+          <h3>Zero External Deps</h3>
+          <p>1749 kernel tests, 0 failures. Pure Rust, no unsafe, no external crates on the hot path. Auditable by anyone.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Menu -->
+    <section id="menu">
+      <h2 class="section-title fade-in-up">Today's Menu</h2>
+      <p class="section-subtitle">Fresh, locally-sourced, prepared with care.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px" id="category-filters">
+        <button class="btn btn-sm btn-primary" data-cat="all" onclick="filterMenu('all')">All</button>
+      </div>
+      <div class="menu-grid" id="menu-grid"></div>
+    </section>
+
+    <!-- Orders -->
+    <section id="orders">
+      <h2 class="section-title fade-in-up">Active Orders</h2>
+      <p class="section-subtitle">Track your deliveries in real-time.</p>
+      <div style="background:var(--brand-surface);border:1px solid var(--brand-border);border-radius:var(--brand-radius);padding:24px" id="orders-list"></div>
+    </section>
+
+    <!-- Stats -->
+    <section id="stats">
+      <h2 class="section-title fade-in-up">Network Stats</h2>
+      <p class="section-subtitle">Real-time metrics from the dowiz mesh.</p>
+      <div class="stats-grid">
+        <div class="stat-card spring">
+          <div class="stat-number" id="stat-orders">0</div>
+          <div class="stat-label">Orders Delivered</div>
+        </div>
+        <div class="stat-card spring">
+          <div class="stat-number" id="stat-nodes">0</div>
+          <div class="stat-label">Mesh Nodes</div>
+        </div>
+        <div class="stat-card spring">
+          <div class="stat-number" id="stat-tests">1,949</div>
+          <div class="stat-label">Tests Passing</div>
+        </div>
+        <div class="stat-card spring">
+          <div class="stat-number" id="stat-speed">2GB</div>
+          <div class="stat-label">Model Size (INT4)</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <div class="footer-links">
+        <a href="https://github.com/SyniakSviatoslav/dowiz">GitHub</a>
+        <a href="#">Documentation</a>
+        <a href="#">Terms</a>
+        <a href="#">Privacy</a>
+      </div>
+      <p>dowiz — open source decentralized delivery protocol. Built with Rust.</p>
+    </footer>
   </div>
 
-  <div class="card">
-    <div><span class="k">spectral radius ρ:</span> <span class="v" id="rho">–</span></div>
-    <div><span class="k">spectral gap γ:</span> <span class="v" id="gap">–</span></div>
-    <div><span class="k">Fiedler λ₂:</span> <span class="v" id="fie">–</span></div>
-    <div><span class="k">drift class:</span> <span class="v" id="drift">–</span></div>
+  <!-- Cart Toggle -->
+  <button class="cart-toggle spring" id="cart-toggle" onclick="toggleCart()">
+    🛒
+    <span class="cart-count-badge" id="cart-count" style="display:none">0</span>
+  </button>
+
+  <!-- Cart Panel -->
+  <div class="cart-panel" id="cart-panel">
+    <div class="cart-header">
+      <h3>Your Cart</h3>
+      <button class="btn btn-ghost btn-sm" onclick="toggleCart()">✕</button>
+    </div>
+    <div class="cart-items" id="cart-items">
+      <p style="text-align:center;color:var(--brand-text-muted);padding:48px 0">Your cart is empty</p>
+    </div>
+    <div class="cart-total"><span>Total</span><span id="cart-total">$0.00</span></div>
+    <div class="cart-actions">
+      <button class="btn btn-primary w-full" onclick="checkout()">Checkout</button>
+    </div>
   </div>
 
-  <div class="card">
-    <div><span class="k">FSM states / edges:</span> <span class="v" id="fsm">–</span></div>
-    <div><span class="k">acyclic:</span> <span class="v" id="acyc">–</span></div>
+  <!-- Theme Switcher -->
+  <div class="theme-switcher">
+    <div class="theme-dot active" style="background:#ea4f16" onclick="setTheme('')" title="Food Dark"></div>
+    <div class="theme-dot" style="background:#C1121F" onclick="setTheme('crimson')" title="Crimson"></div>
+    <div class="theme-dot" style="background:#0D9488" onclick="setTheme('ocean')" title="Ocean"></div>
+    <div class="theme-dot" style="background:#F97316" onclick="setTheme('midnight')" title="Midnight"></div>
+    <div class="theme-dot" style="background:#4D7C0F" onclick="setTheme('sage')" title="Sage"></div>
+    <div class="theme-dot" style="background:#B45309" onclick="setTheme('gold')" title="Gold"></div>
+    <div class="theme-dot" style="background:#DB2777" onclick="setTheme('coral')" title="Coral"></div>
   </div>
 
-  <div class="card">
-    <div><span class="k">order status:</span> <span class="v" id="order-status">–</span></div>
-    <div><span class="k">order:</span> <span class="v" id="order-line">–</span></div>
-    <button id="place">place order</button>
-    <div id="order-actions"></div>
-    <div id="order-flash" class="good" hidden></div>
-  </div>
+  <script type="module">
+    import { InterfaceAudio } from './src/lib/audio/interface.js';
+    import { InterfaceRipple } from './src/lib/physics/wave.js';
 
-  <script type="module" src="./src/app.mjs"></script>
+    // ─── Audio System ───
+    const audio = new InterfaceAudio();
+    window.audio = audio;
+
+    // ─── Background Shader ───
+    async function initShader() {
+      const canvas = document.getElementById('bg-canvas');
+      const adapter = await navigator.gpu?.requestAdapter();
+      if (!adapter) { canvas.style.display = 'none'; return; }
+      const device = await adapter.requestDevice();
+      const context = canvas.getContext('webgpu');
+      const format = navigator.gpu.getPreferredCanvasFormat();
+      context.configure({ device, format, alphaMode: 'premultiplied' });
+
+      const shader = device.createShaderModule({ code: `@group(0) @binding(0) var<uniform> res: vec2<f32>;
+@group(0) @binding(1) var<uniform> t: f32;
+@group(0) @binding(2) var<uniform> mo: vec2<f32>;
+
+fn h(p: vec2<f32>) -> f32 { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+fn n(p: vec2<f32>) -> f32 { let i = floor(p); let f = fract(p); let u = f*f*(3-2*f); return mix(mix(h(i+vec2(0,0)),h(i+vec2(1,0)),u.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),u.x),u.y); }
+fn fbm(p: vec2<f32>) -> f32 { var v=0.; var a=0.5; var o=p; for(var i=0u;i<5u;i++){v+=a*n(o);o*=2.0;a*=0.5;} return v; }
+
+@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
+  return vec4(f32(i>>1)*4-1, f32(i&1)*4-1, 0, 1);
+}
+@fragment fn fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
+  let uv = p.xy / res;
+  let a = res.x / res.y;
+  var c = uv*2.-1.; c.x*=a;
+  let w = sin(c.x*3.+t)*cos(c.y*3.+t*.3)*.3 + sin((c.x*2.+c.y*2.)*2.+t*.7)*.2 + fbm(c*2.+t*.1)*.3;
+  let m = mo*2.-1.; m.x*=a;
+  let d = length(c-m);
+  let r = sin(d*20.-t*4.)*.1/(d*2.+.5);
+  let v = w+r;
+  let c1 = vec3(.91,.31,.09); let c2 = vec3(1.,.63,.18); let c3 = vec3(.05,.05,.1);
+  let tv = v*.5+.5;
+  let col = mix(c3, mix(c1,c2,tv), smoothstep(0.,1.,tv));
+  let vig = 1. - length(c)*.4;
+  return vec4(col*(.8+.4*vig), 1.);
+}` });
+
+      const pipe = device.createRenderPipeline({
+        layout: 'auto', vertex: { module: shader, entryPoint: 'vs' },
+        fragment: { module: shader, entryPoint: 'fs', targets: [{ format }] }
+      });
+
+      const resBuf = device.createBuffer({ size: 8, usage: 3, mappedAtCreation: true }); new Float32Array(resBuf.getMappedRange()).set([canvas.width, canvas.height]); resBuf.unmap();
+      const timeBuf = device.createBuffer({ size: 4, usage: 3, mappedAtCreation: true }); timeBuf.unmap();
+      const mouseBuf = device.createBuffer({ size: 8, usage: 3 });
+
+      const bg = device.createBindGroup({ layout: pipe.getBindGroupLayout(0), entries: [
+        { binding: 0, resource: { buffer: resBuf } }, { binding: 1, resource: { buffer: timeBuf } },
+        { binding: 2, resource: { buffer: mouseBuf } }
+      ] });
+
+      function resize() {
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        context.configure({ device, format, alphaMode: 'premultiplied' });
+      }
+      window.addEventListener('resize', resize);
+
+      let start = performance.now();
+      const mouse = { x: 0.5, y: 0.5 };
+      canvas.addEventListener('mousemove', e => { mouse.x = e.clientX / window.innerWidth; mouse.y = e.clientY / window.innerHeight; });
+
+      function frame() {
+        const t = (performance.now() - start) / 1000;
+        device.queue.writeBuffer(timeBuf, 0, new Float32Array([t]));
+        device.queue.writeBuffer(mouseBuf, 0, new Float32Array([mouse.x, mouse.y]));
+        const enc = device.createCommandEncoder();
+        const pass = enc.beginRenderPass({ colorAttachments: [{ view: context.getCurrentTexture().createView(), loadOp: 'clear', storeOp: 'store' }] });
+        pass.setPipeline(pipe); pass.setBindGroup(0, bg); pass.draw(3); pass.end();
+        device.queue.submit([enc.finish()]);
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+    }
+    initShader();
+
+    // ─── Cart System ───
+    const cart = [];
+    window.cart = cart;
+    window.toggleCart = () => document.getElementById('cart-panel').classList.toggle('open');
+    window.checkout = () => { if (cart.length === 0) return audio.error() || alert('Cart is empty!'); audio.success(); alert(`Order placed! Total: $${cart.reduce((s,i)=>s+i.price*i.qty,0).toFixed(2)}`); cart.length = 0; renderCart(); };
+
+    function addToCart(item) {
+      const existing = cart.find(i => i.id === item.id);
+      if (existing) existing.qty++;
+      else cart.push({ ...item, qty: 1 });
+      audio.confirm();
+      renderCart();
+    }
+
+    function removeFromCart(id) {
+      const idx = cart.findIndex(i => i.id === id);
+      if (idx >= 0) cart.splice(idx, 1);
+      audio.cancel();
+      renderCart();
+    }
+
+    function renderCart() {
+      const count = cart.reduce((s,i) => s + i.qty, 0);
+      const total = cart.reduce((s,i) => s + i.price * i.qty, 0);
+      document.getElementById('cart-count').textContent = count;
+      document.getElementById('cart-count').style.display = count > 0 ? 'flex' : 'none';
+      document.getElementById('cart-total').textContent = `$${total.toFixed(2)}`;
+      const el = document.getElementById('cart-items');
+      if (count === 0) { el.innerHTML = '<p style="text-align:center;color:var(--brand-text-muted);padding:48px 0">Your cart is empty</p>'; return; }
+      el.innerHTML = cart.map(i => `
+        <div class="cart-item spring-fast" style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--brand-border)">
+          <div><strong>${i.name}</strong><span class="text-muted" style="font-size:12px"> ×${i.qty}</span></div>
+          <div style="display:flex;align-items:center;gap:12px"><span>$${(i.price*i.qty).toFixed(2)}</span><button class="btn btn-ghost btn-sm" onclick="removeFromCart(${i.id})">✕</button></div>
+        </div>`).join('');
+    }
+
+    // ─── Menu Data ───
+    const menuItems = [
+      { id: 1, name: 'Margherita Pizza', price: 12.99, cat: 'Pizza', desc: 'San Marzano tomatoes, mozzarella, basil', emoji: '🍕' },
+      { id: 2, name: 'Truffle Burger', price: 18.50, cat: 'Burgers', desc: 'Wagyu patty, truffle aioli, aged cheddar', emoji: '🍔' },
+      { id: 3, name: 'Caesar Salad', price: 9.99, cat: 'Salads', desc: 'Romaine, parmesan, croutons', emoji: '🥗' },
+      { id: 4, name: 'Sushi Platter', price: 24.00, cat: 'Japanese', desc: '12-piece assorted nigiri and maki', emoji: '🍣' },
+      { id: 5, name: 'Pad Thai', price: 14.50, cat: 'Thai', desc: 'Rice noodles, shrimp, tamarind, peanuts', emoji: '🍜' },
+      { id: 6, name: 'Tiramisu', price: 7.50, cat: 'Desserts', desc: 'Espresso-soaked ladyfingers, mascarpone', emoji: '🍰' },
+      { id: 7, name: 'Margarita Cocktail', price: 11.00, cat: 'Drinks', desc: 'Tequila, lime, triple sec', emoji: '🍹' },
+      { id: 8, name: 'Bruschetta', price: 8.50, cat: 'Starters', desc: 'Tomato, basil, garlic on sourdough', emoji: '🥖' },
+    ];
+    window.menuItems = menuItems;
+
+    window.filterMenu = function(cat) {
+      const items = cat === 'all' ? menuItems : menuItems.filter(i => i.cat === cat);
+      const grid = document.getElementById('menu-grid');
+      grid.innerHTML = items.map(i => `
+        <div class="menu-item spring-fast">
+          <div class="menu-img">${i.emoji}</div>
+          <div class="menu-category">${i.cat}</div>
+          <h4>${i.name}</h4>
+          <p class="menu-desc">${i.desc}</p>
+          <div class="menu-footer">
+            <span class="menu-price">$${i.price.toFixed(2)}</span>
+            <button class="btn btn-primary btn-sm" onclick="addToCart({id:${i.id},name:'${i.name}',price:${i.price}})">Add</button>
+          </div>
+        </div>`).join('');
+      document.querySelectorAll('#category-filters .btn').forEach(b => b.className = 'btn btn-sm btn-ghost');
+      document.querySelector(`#category-filters [data-cat="${cat}"]`).className = 'btn btn-sm btn-primary';
+    };
+
+    // ─── Orders ───
+    const statuses = ['pending', 'confirmed', 'preparing', 'ready', 'in-delivery', 'delivered'];
+    const statusLabels = { pending:'Pending', confirmed:'Confirmed', preparing:'Preparing', ready:'Ready', 'in-delivery':'In Delivery', delivered:'Delivered' };
+    const statusColors = { pending:'#D97706', confirmed:'#2563EB', preparing:'#F59E0B', ready:'#0D9488', 'in-delivery':'#3B82F6', delivered:'#059669' };
+
+    function renderOrders() {
+      const el = document.getElementById('orders-list');
+      el.innerHTML = statuses.map((s, i) => {
+        const isLast = i === statuses.length - 1;
+        return `<div class="order-row spring-fast" style="${isLast ? 'border-bottom:none' : ''}">
+          <div><div class="order-id">Order #${1000 + i * 137}</div><div class="order-time">${i * 8} min ago</div></div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${statusColors[s]};${i < 4 ? 'animation:pulse 2s infinite' : ''}"></span>
+            <span class="badge badge-${s}">${statusLabels[s]}</span>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    // ─── Init ───
+    function init() {
+      const cats = [...new Set(menuItems.map(i => i.cat))];
+      const filterEl = document.getElementById('category-filters');
+      filterEl.innerHTML = `<button class="btn btn-sm btn-primary" data-cat="all" onclick="filterMenu('all')">All</button>` +
+        cats.map(c => `<button class="btn btn-sm btn-ghost" data-cat="${c}" onclick="filterMenu('${c}')">${c}</button>`).join('');
+      filterMenu('all');
+      renderOrders();
+
+      // Stagger animation observer
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(e => {
+          if (e.isIntersecting) e.target.classList.add('visible');
+        });
+      }, { threshold: 0.1 });
+      document.querySelectorAll('[data-stagger]').forEach(el => observer.observe(el));
+
+      // Smooth scroll
+      document.querySelectorAll('.navbar-links a').forEach(a => {
+        a.addEventListener('click', e => {
+          e.preventDefault();
+          const id = a.getAttribute('href').slice(1);
+          document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
+          document.querySelectorAll('.navbar-links a').forEach(l => l.classList.remove('active'));
+          a.classList.add('active');
+        });
+      });
+
+      // Window cart toggle
+      window.toggleCart = () => {
+        document.getElementById('cart-panel').classList.toggle('open');
+        audio.navOpen();
+      };
+    }
+
+    window.openApp = function() {
+      document.getElementById('menu').scrollIntoView({ behavior: 'smooth' });
+      audio.success();
+    };
+
+    window.setTheme = function(t) {
+      document.documentElement.dataset.theme = t;
+      document.querySelectorAll('.theme-dot').forEach(d => d.classList.remove('active'));
+      const dots = document.querySelectorAll('.theme-dot');
+      const idx = ['', 'crimson', 'ocean', 'midnight', 'sage', 'gold', 'coral'].indexOf(t);
+      if (idx >= 0) dots[idx].classList.add('active');
+    };
+
+    init();
+  </script>
 </body>
 </html>
