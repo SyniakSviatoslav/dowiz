@@ -62,6 +62,7 @@ const App = {
     this.initAudio();
     this.render();
     this.bindEvents();
+    this.registerSw();
     this.renderSdfLoop();
   },
 
@@ -91,6 +92,12 @@ const App = {
         this.state._journey = j;
       }
     } catch {}
+  },
+
+  registerSw() {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
   },
 
   async loadMenu() {
