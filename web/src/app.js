@@ -3,6 +3,7 @@
 import { composeMenuScene, renderFrame, paintField, cartTotal } from './lib/compose/compose.mjs';
 import { sceneForRole } from './lib/compose/fragments.mjs';
 import { createJourney, Step } from './lib/compose/journey.mjs';
+import { createSonifier } from './lib/audio/sonify.mjs';
 
 const CV_ID = 'sdf-canvas';
 const API_BASE = '/api';
@@ -44,7 +45,7 @@ const App = {
       { date: '2026-07-19', amount: 3120, trips: 11 },
       { date: '2026-07-18', amount: 1890, trips: 6 },
     ],
-    _audioCtx: null,
+    _sonifier: null,
     _sdfCanvas: null,
     _sdfCtx: null,
     _neurons: null,
@@ -60,7 +61,7 @@ const App = {
     await this.loadMenu();
     this.createSdfCanvas();
     await this.initNeuralField();
-    this.initAudio();
+    this.state._sonifier = createSonifier();
     this.render();
     this.bindEvents();
     this.registerSw();
@@ -191,7 +192,18 @@ const App = {
       scene.add(new THREE.Points(geo, mat));
       const rsz = () => { const w = window.innerWidth, h = window.innerHeight; camera.aspect = w/h; camera.updateProjectionMatrix(); renderer.setSize(w, h); };
       window.addEventListener('resize', rsz); rsz();
-      canvas.addEventListener('click', () => this.sonifySpike(0.5));
+      canvas.addEventListener('click', () => {
+        if (this.state._sonifier && this.state._sonifier.ctx) {
+          const ctx = this.state._sonifier.ctx;
+          const f = [262, 294, 330, 392, 440][Math.floor(Math.random() * 5)];
+          const o = ctx.createOscillator(), g = ctx.createGain();
+          o.type = 'sine'; o.frequency.value = f;
+          g.gain.setValueAtTime(0.08, ctx.currentTime);
+          g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.06);
+          o.connect(g); g.connect(ctx.destination);
+          o.start(); o.stop(ctx.currentTime + 0.06);
+        }
+      });
       const start = performance.now();
       const frame = () => {
         const t = (performance.now()-start)/1000;
@@ -215,23 +227,22 @@ const App = {
     } catch { /* graceful fallback to no background */ }
   },
 
-  initAudio() {
-    try { const C = window.AudioContext || window.webkitAudioContext; if (C) this.state._audioCtx = new C(); } catch {}
+  sonify(event, money = false) {
+    if (this.state._sonifier) this.state._sonifier.sonify(event, money);
   },
 
-  playTone(freq, dur, type='sine', vol=0.15) {
-    if (!this.state._audioCtx) return;
-    const ctx = this.state._audioCtx, o = ctx.createOscillator(), g = ctx.createGain();
-    o.type = type; o.frequency.value = freq;
-    g.gain.setValueAtTime(vol, ctx.currentTime);
-    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+dur);
-    o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime+dur);
+  sonifySpike(r) {
+    const pent = [262, 294, 330, 392, 440, 524, 588, 660, 784, 880];
+    const f = pent[Math.floor(r * pent.length) % pent.length];
+    if (this.state._sonifier && this.state._sonifier.ctx) {
+      const ctx = this.state._sonifier.ctx;
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(Math.min(0.2, r * 0.5), ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.08);
+      o.connect(g); g.connect(ctx.destination); o.start(); o.stop(ctx.currentTime + 0.08);
+    }
   },
-
-  sonifySpike(r) { const pent = [262,294,330,392,440,524,588,660,784,880]; const f = pent[Math.floor(r*pent.length)%pent.length]; this.playTone(f, 0.08, 'sine', Math.min(0.2, r*0.5)); },
-  playConfirm() { this.playTone(523,0.1); setTimeout(()=>this.playTone(659,0.1),80); setTimeout(()=>this.playTone(784,0.15),160); },
-  playCancel() { this.playTone(330,0.15,'sawtooth'); },
-  playOrder() { this.playTone(600,0.08); setTimeout(()=>this.playTone(800,0.08),60); setTimeout(()=>this.playTone(1000,0.12),120); },
 
   render() {
     document.getElementById('app').innerHTML = this.renderLayout();
@@ -520,7 +531,7 @@ const App = {
     const idx = chain.indexOf(order.status);
     if (idx < 0 || idx >= chain.length - 1) return;
     order.status = chain[idx + 1];
-    this.playConfirm();
+    this.sonify('advanceOrder');
     if (order.status === 'ready') {
       this.state._courierTasks.push({
         id: 3000 + order.id,
@@ -611,9 +622,9 @@ const App = {
     this.state._shiftActive = !this.state._shiftActive;
     if (this.state._shiftActive) {
       this.state._shiftStart = Date.now();
-      this.playConfirm();
+      this.sonify('shiftStart');
     } else {
-      this.playCancel();
+      this.sonify('shiftEnd');
     }
     this.render();
     this.persist();
@@ -623,7 +634,7 @@ const App = {
     const task = this.state._courierTasks.find(t => t.id === id);
     if (!task || task.status !== 'assigned') return;
     task.status = 'picked-up';
-    this.playConfirm();
+    this.sonify('advanceOrder');
     this.renderCourier();
     this.persist();
   },
@@ -634,7 +645,7 @@ const App = {
     task.status = 'delivered';
     this.state._earningsToday += task.payout;
     this.state._deliveriesToday++;
-    this.playOrder();
+    this.sonify('deliver');
     this.render();
     this.persist();
   },
@@ -665,7 +676,7 @@ const App = {
     const existing = this.state.cart.find(i => i.id === id);
     if (existing) existing.qty++;
     else this.state.cart.push({ ...item, qty: 1 });
-    this.playConfirm();
+    this.sonify('addToCart');
     this.renderCart();
     this.toggleCart(true);
     this.persist();
@@ -673,7 +684,7 @@ const App = {
 
   removeFromCart(id) {
     this.state.cart = this.state.cart.filter(i => i.id !== id);
-    this.playCancel();
+    this.sonify('removeFromCart');
     this.renderCart();
     this.persist();
   },
@@ -722,7 +733,7 @@ const App = {
       return;
     }
     const total = this.state.cart.reduce((s,i) => s+i.price*i.qty, 0);
-    this.playOrder();
+    this.sonify('checkout');
     const address = this.state._deliveryAddress.trim();
     const phone = this.state._deliveryPhone.trim();
     const note = this.state._deliveryNote.trim();
@@ -800,6 +811,7 @@ const App = {
     document.querySelectorAll('.navbar-links a').forEach(a =>
       a.classList.toggle('active', a.dataset.page === page)
     );
+    this.sonify('navigate');
     this.persist();
   },
 
