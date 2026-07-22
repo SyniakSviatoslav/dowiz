@@ -797,6 +797,100 @@ impl QuantumMeasurement {
     }
 }
 
+// ─── Quantum Superposition ────────────────────────────────────────────────
+// Суперпозиція: система в багатьох станах/часах/позиціях одночасно.
+// |Ψ⟩ = Σ c_i |state_i⟩, де c_i — комплексні амплітуди.
+
+/// Базисний стан суперпозиції.
+#[derive(Debug, Clone)]
+pub struct BasisState {
+    pub label: String,
+    pub amplitude: Complex,
+    /// Часова координата цього стану (для time superposition).
+    pub time_offset: f64,
+    /// Просторова позиція (для spatial superposition).
+    pub position: Option<GeometricPoint>,
+}
+
+impl BasisState {
+    pub fn new(label: &str, amplitude: Complex) -> Self {
+        BasisState { label: label.to_string(), amplitude, time_offset: 0.0, position: None }
+    }
+}
+
+/// Квантова суперпозиція: система в багатьох станах одночасно.
+#[derive(Debug, Clone)]
+pub struct Superposition {
+    pub basis: Vec<BasisState>,
+}
+
+impl Superposition {
+    pub fn new() -> Self { Superposition { basis: Vec::new() } }
+
+    /// Додати базисний стан.
+    pub fn add(&mut self, state: BasisState) {
+        self.basis.push(state);
+    }
+
+    /// Ймовірність кожного стану (Born rule).
+    pub fn probabilities(&self) -> Vec<(String, f64)> {
+        let total: f64 = self.basis.iter().map(|bs| bs.amplitude.norm_sq()).sum();
+        let norm = if total > 0.0 { total } else { 1.0 };
+        self.basis.iter().map(|bs| (bs.label.clone(), bs.amplitude.norm_sq() / norm)).collect()
+    }
+
+    /// Суперпозиція часів: фрактал одночасно в кількох моментах.
+    pub fn time_superposition(times: &[(String, f64, Complex)]) -> Self {
+        let mut sp = Superposition::new();
+        for (label, time_offset, amp) in times {
+            let mut bs = BasisState::new(label, amp.clone());
+            bs.time_offset = *time_offset;
+            sp.add(bs);
+        }
+        sp
+    }
+
+    /// Суперпозиція позицій: фрактал одночасно в кількох місцях.
+    pub fn spatial_superposition(positions: &[(String, GeometricPoint, Complex)]) -> Self {
+        let mut sp = Superposition::new();
+        for (label, pos, amp) in positions {
+            let mut bs = BasisState::new(label, amp.clone());
+            bs.position = Some(*pos);
+            sp.add(bs);
+        }
+        sp
+    }
+
+    /// Виміряти: обрати один стан за Born rule (колапс хвильової функції).
+    pub fn measure(&self, seed: u64) -> Option<&BasisState> {
+        if self.basis.is_empty() { return None; }
+        let probs = self.probabilities();
+        let r = ((seed as f64 * 1.618033988749895).fract() + 0.5) % 1.0;
+        let mut cum = 0.0;
+        for (i, (_, p)) in probs.iter().enumerate() {
+            cum += p;
+            if r < cum { return Some(&self.basis[i]); }
+        }
+        Some(&self.basis[self.basis.len() - 1])
+    }
+
+    /// Інтерференція: сума амплітуд з урахуванням фаз (для time warp).
+    pub fn interfere(&self) -> Complex {
+        let mut result = Complex::zero();
+        for bs in &self.basis {
+            let phase = Complex::new((bs.time_offset * std::f64::consts::TAU).cos(), (bs.time_offset * std::f64::consts::TAU).sin());
+            result = result.add(&bs.amplitude.mul(&phase));
+        }
+        result
+    }
+
+    /// Середній час суперпозиції (зважений за ймовірністю).
+    pub fn expected_time(&self) -> f64 {
+        let probs = self.probabilities();
+        self.basis.iter().zip(&probs).map(|(bs, (_, p))| bs.time_offset * p).sum()
+    }
+}
+
 // ─── Spin Wave Communication ─────────────────────────────────────────────
 // Хвильова комунікація між кристальними фракталами.
 // Хвилі переносять спіни, спіни мають вектори та дельти.
@@ -2114,6 +2208,97 @@ impl StandardModel {
         assert_eq!(m.counts_1, 0);
     }
 
+    // ─── Superposition Tests ─────────────────────────────────────────────
+
+    #[test]
+    fn superposition_probabilities() {
+        let mut sp = Superposition::new();
+        sp.add(BasisState::new("|0>", Complex::new(1.0, 0.0)));
+        sp.add(BasisState::new("|1>", Complex::new(0.0, 1.0)));
+        let probs = sp.probabilities();
+        assert!((probs[0].1 - 0.5).abs() < 0.001);
+        assert!((probs[1].1 - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn superposition_time_travel() {
+        let times = vec![
+            ("past".into(), -1.0, Complex::new(0.5, 0.0)),
+            ("present".into(), 0.0, Complex::new(0.7, 0.0)),
+            ("future".into(), 1.0, Complex::new(0.5, 0.0)),
+        ];
+        let sp = Superposition::time_superposition(&times);
+        let expected = sp.expected_time();
+        assert!(expected > -0.5 && expected < 0.5);
+    }
+
+    #[test]
+    fn superposition_collapse() {
+        let mut sp = Superposition::new();
+        sp.add(BasisState::new("A", Complex::new(1.0, 0.0)));
+        let collapsed = sp.measure(42);
+        assert!(collapsed.is_some());
+        assert_eq!(collapsed.unwrap().label, "A");
+    }
+
+    #[test]
+    fn superposition_interference() {
+        let mut sp = Superposition::new();
+        sp.add(BasisState::new("early", Complex::new(1.0, 0.0)));
+        sp.add(BasisState::new("late", Complex::new(0.0, 1.0)));
+        let interference = sp.interfere();
+        assert!(interference.norm() > 0.0);
+    }
+
+    // ─── Time Warp Tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn local_time_dilation() {
+        let mut lt = LocalTime { proper_time: 0.0, coordinate_time: 0.0, potential: -0.4, dilation: 0.5 };
+        lt.tick(10.0);
+        assert!(lt.proper_time < lt.coordinate_time, "proper={} coord={}", lt.proper_time, lt.coordinate_time);
+        assert!(lt.warp_delta() > 0.0);
+    }
+
+    #[test]
+    fn gravitational_field_potential() {
+        let mut field = GravitationalField::new();
+        let origin = NdVector::zero(4);
+        field.add_mass(100.0, origin.clone());
+        let far = NdVector::new(vec![10.0, 0.0, 0.0, 0.0]);
+        let phi_far = field.potential_at(&far);
+        assert!(phi_far < 0.0);
+        let phi_origin = field.potential_at(&origin);
+        assert!(phi_origin > phi_far, "potential should be deeper (more negative) near mass: phi_origin={} phi_far={}", phi_origin, phi_far); // potential deeper near mass
+    }
+
+    #[test]
+    fn time_warp_add_node() {
+        let mut tw = TimeWarp::new();
+        tw.add_node(1.0, NdVector::zero(4));
+        tw.tick(1.0);
+        assert_eq!(tw.global_tick, 1);
+    }
+
+    #[test]
+    fn time_warp_two_nodes() {
+        let mut tw = TimeWarp::new();
+        tw.add_node(100.0, NdVector::zero(4));
+        tw.add_node(1.0, NdVector::new(vec![10.0, 0.0, 0.0, 0.0]));
+        for _ in 0..100 { tw.tick(1.0); }
+        let diff = tw.time_difference(0, 1);
+        assert!(diff > 0.0); // час біля маси тече повільніше
+    }
+
+    #[test]
+    fn quantum_time_shift_changes_qubit() {
+        let tw = TimeWarp::new();
+        let q = Qubit::zero();
+        // без нод немає зсуву
+        let q2 = tw.quantum_time_shift(&q, 0);
+        assert!((q2.prob_zero() - q.prob_zero()).abs() < 0.001);
+    }
+
     // ─── All 8 Integration Tests ─────────────────────────────────────────
 
     #[test]
@@ -2687,7 +2872,148 @@ impl LightCommunication {
     }
 }
 
+// ─── Time Warping: gravitational time dilation + local time flow ─────────
+// Час викривлюється гравітаційним потенціалом та квантовими ефектами.
+// dτ/dt = sqrt(1 - 2GM/rc²) — гравітаційне уповільнення часу.
+// Кожен фрактал має ЛОКАЛЬНИЙ час, який тече з різною швидкістю.
 
+/// Локальний час фрактала з гравітаційним уповільненням.
+#[derive(Debug, Clone)]
+pub struct LocalTime {
+    /// Власний час фрактала τ (tick).
+    pub proper_time: f64,
+    /// Координатний час t (глобальний tick).
+    pub coordinate_time: f64,
+    /// Гравітаційний потенціал Φ = -GM/r.
+    pub potential: f64,
+    /// Фактор уповільнення: dτ/dt = sqrt(1 + 2Φ/c²).
+    pub dilation: f64,
+}
+
+impl LocalTime {
+    pub fn new(potential: f64) -> Self {
+        let c = 299_792_458.0;
+        let dilation = (1.0 + 2.0 * potential / (c * c)).sqrt().max(0.1).min(1.0);
+        LocalTime { proper_time: 0.0, coordinate_time: 0.0, potential, dilation }
+    }
+
+    /// Тик локального часу: dt_global → dτ = dilation * dt_global.
+    pub fn tick(&mut self, dt_global: f64) {
+        self.coordinate_time += dt_global;
+        self.proper_time += self.dilation * dt_global;
+    }
+
+    /// Різниця між власним та координатним часом (дельта викривлення).
+    pub fn warp_delta(&self) -> f64 { self.coordinate_time - self.proper_time }
+}
+
+/// Гравітаційне поле: маси в точках простору створюють потенціал.
+#[derive(Debug)]
+pub struct GravitationalField {
+    /// Маси в точках (кожен фрактал має масу).
+    pub masses: Vec<f64>,
+    /// Позиції мас.
+    pub positions: Vec<NdVector>,
+    /// Гравітаційна стала (нормована).
+    pub g_const: f64,
+}
+
+impl GravitationalField {
+    pub fn new() -> Self { GravitationalField { masses: Vec::new(), positions: Vec::new(), g_const: 1.0 } }
+
+    /// Додати масу.
+    pub fn add_mass(&mut self, mass: f64, pos: NdVector) {
+        self.masses.push(mass);
+        self.positions.push(pos);
+    }
+
+    /// Потенціал у точці: Φ(x) = -G Σ m_i / |x - x_i|.
+    pub fn potential_at(&self, point: &NdVector) -> f64 {
+        let mut phi = 0.0;
+        for i in 0..self.masses.len() {
+            let dx: f64 = point.coords.iter().zip(&self.positions[i].coords)
+                .map(|(a, b)| (a - b).powi(2)).sum::<f64>().sqrt();
+            if dx > 1e-12 { phi -= self.g_const * self.masses[i] / dx; }
+        }
+        phi
+    }
+
+    /// Сила в точці: F = -∇Φ.
+    pub fn force_at(&self, point: &NdVector) -> NdVector {
+        let mut f = vec![0.0; point.coords.len()];
+        for i in 0..self.masses.len() {
+            let dx: Vec<f64> = point.coords.iter().zip(&self.positions[i].coords)
+                .map(|(a, b)| b - a).collect();
+            let r = dx.iter().map(|x| x.powi(2)).sum::<f64>().sqrt().max(1e-12);
+            let coeff = self.g_const * self.masses[i] / (r.powi(3));
+            for j in 0..f.len() {
+                f[j] += coeff * dx[j];
+            }
+        }
+        NdVector::new(f)
+    }
+}
+
+/// Викривлення часу: інтеграція гравітації + квантових ефектів.
+#[derive(Debug)]
+pub struct TimeWarp {
+    /// Локальний час кожного фрактала.
+    pub local_times: Vec<LocalTime>,
+    /// Гравітаційне поле.
+    pub field: GravitationalField,
+    /// Квантовий гамільтоніан для time evolution.
+    pub hamiltonian: Hamiltonian,
+    /// Глобальний час.
+    pub global_tick: u64,
+}
+
+impl TimeWarp {
+    pub fn new() -> Self {
+        TimeWarp { local_times: Vec::new(), field: GravitationalField::new(), hamiltonian: Hamiltonian::new(1.0, 0.0, 0.0), global_tick: 0 }
+    }
+
+    /// Додати фрактал з масою та позицією.
+    pub fn add_node(&mut self, mass: f64, pos: NdVector) {
+        let phi = self.field.potential_at(&pos);
+        self.local_times.push(LocalTime::new(phi));
+        self.field.add_mass(mass, pos);
+    }
+
+    /// Глобальний тик: всі фрактали відчувають різний плин часу.
+    pub fn tick(&mut self, dt: f64) {
+        self.global_tick += 1;
+        for (i, lt) in self.local_times.iter_mut().enumerate() {
+            // Оновити потенціал (позиції можуть змінюватись)
+            if i < self.field.positions.len() {
+                lt.potential = self.field.potential_at(&self.field.positions[i]);
+                let c = 299_792_458.0;
+                lt.dilation = (1.0 + 2.0 * lt.potential / (c * c)).sqrt().max(0.1).min(1.0);
+            }
+            lt.tick(dt);
+        }
+    }
+
+    /// Квантово-часовий зсув: застосувати гамільтоніан до кубіта.
+    pub fn quantum_time_shift(&self, qubit: &Qubit, node_idx: usize) -> Qubit {
+        if node_idx >= self.local_times.len() { return qubit.clone(); }
+        let warp = self.local_times[node_idx].warp_delta();
+        let dt = warp.max(0.001).min(1.0);
+        self.hamiltonian.evolve(qubit, dt)
+    }
+
+    /// Різниця часу між двома фракталами.
+    pub fn time_difference(&self, a: usize, b: usize) -> f64 {
+        if a >= self.local_times.len() || b >= self.local_times.len() { return 0.0; }
+        (self.local_times[a].proper_time - self.local_times[b].proper_time).abs()
+    }
+
+    pub fn dashboard(&self) -> String {
+        let max_warp = self.local_times.iter().map(|lt| lt.warp_delta()).fold(0.0, f64::max);
+        let min_dil = self.local_times.iter().map(|lt| lt.dilation).fold(1.0, f64::min);
+        format!("Time Warp (gravitational + quantum)\n  Nodes:     {}\n  Global:    {}\n  Max warp:  {:.6}\n  Min dil:   {:.6}",
+            self.local_times.len(), self.global_tick, max_warp, min_dil)
+    }
+}
 
 // ─── 1. Unified Navigator ───────────────────────────────────────────────
 // Fuses: spectral PPR + geometric geodesics + light cones + parametric surface.
