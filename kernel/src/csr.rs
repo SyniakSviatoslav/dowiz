@@ -396,7 +396,7 @@ impl Csr {
         }
         let total: usize = deg.iter().sum();
         // One flat `[(usize, f64)]` scratch, partitioned per row (arena).
-        let mut scratch: &mut [(usize, f64)] = match arena.alloc_slice(total) {
+        let scratch: &mut [(usize, f64)] = match arena.alloc_slice(total) {
             Some(s) => s,
             None => return Self::from_edges(n, edges),
         };

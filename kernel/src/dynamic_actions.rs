@@ -196,7 +196,7 @@ impl ActionCache {
         ActionCache { cached_plan_hash: [0u8; 32], cached_batch_size: 0, cached_total_actions: 0, cached_predicted_us: 0, cache_computed_us: 0, stale: TriState::Unknown, hits: 0, misses: 0 }
     }
 
-    pub fn is_valid(&self, total_actions: usize, avg_latency_us: f64, now_us: u64, ttl_us: u64) -> bool {
+    pub fn is_valid(&self, total_actions: usize, _avg_latency_us: f64, now_us: u64, ttl_us: u64) -> bool {
         self.stale == TriState::False
             && self.cached_total_actions == total_actions
             && now_us.saturating_sub(self.cache_computed_us) < ttl_us

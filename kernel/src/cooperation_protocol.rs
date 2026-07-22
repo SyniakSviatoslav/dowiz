@@ -20,8 +20,8 @@
 
 use crate::event_log::sha3_256;
 use crate::trading_intent::{Intent, IntentPool};
-use crate::trading_escrow::{EscrowOffer, EscrowState};
-use crate::p2p_delivery::{DeliveryListing, DeliveryProof, DeliveryState, GeoLocation, P2PDeliveryNetwork};
+use crate::trading_escrow::EscrowOffer;
+use crate::p2p_delivery::{DeliveryListing, DeliveryProof, P2PDeliveryNetwork};
 use crate::TriState;
 
 /// Maximum cooperation agreements.

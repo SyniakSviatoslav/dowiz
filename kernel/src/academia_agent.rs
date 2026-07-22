@@ -22,9 +22,7 @@
 //! - Всього: ~52 MB
 //! - Час: ~6 хв на сегмент (OAI-PMH)
 
-use crate::academia::Academia;
 use crate::academia_p2p::AcademiaMesh;
-use crate::event_log::sha3_256;
 use crate::TriState;
 
 /// Максимум агентів.

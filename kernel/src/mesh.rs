@@ -424,8 +424,8 @@ mod mesh_dudect {
     //! cannot forge"). Uses the kernel's existing `ct_gate` Welch-t machinery so the
     //! mesh surface reuses the SAME proven gate as the FO-tag-compare precedent.
 
-    use super::*;
-    use crate::ct_gate::{ct_eq, measure_leakage, T_THRESHOLD};
+    
+    
 
     /// PLANTED LEAK (test-only): the classic variable-time signature comparison —
     /// early-returns at the first differing byte, so its run-time leaks the position

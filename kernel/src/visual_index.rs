@@ -162,7 +162,7 @@ impl VisualIndex {
     }
 
     /// Search across all indexed documents.
-    pub fn search(&mut self, query_embedding: &[f32], top_k: usize, now_us: u64) -> Vec<(u64, f64)> {
+    pub fn search(&mut self, query_embedding: &[f32], top_k: usize, _now_us: u64) -> Vec<(u64, f64)> {
         let q_hash = crate::event_log::sha3_256(&query_embedding.iter().map(|f| f.to_le_bytes()).flatten().collect::<Vec<u8>>());
         if let Some(cached) = self.cache.get(&q_hash) {
             return cached.clone();

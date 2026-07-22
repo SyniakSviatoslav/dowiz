@@ -9,7 +9,6 @@
 //! - Fan-out × PID: parallel chapter extraction, PID controls concurrency
 
 use crate::orchestrator::PidController;
-use crate::TriState;
 
 /// Maximum chapters per skill.
 pub const MAX_CHAPTERS: usize = 128;
@@ -145,7 +144,7 @@ impl SkillExtractor {
     }
 
     /// Extract a skill from a document.
-    pub fn extract(&mut self, title: &str, chapters_raw: &[String], now_us: u64) -> ExtractedSkill {
+    pub fn extract(&mut self, title: &str, chapters_raw: &[String], _now_us: u64) -> ExtractedSkill {
         let doc_hash = crate::event_log::sha3_256(title.as_bytes());
 
         // Cache check.

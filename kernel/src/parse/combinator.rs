@@ -1,4 +1,3 @@
-use crate::TriState;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Input<'a> {

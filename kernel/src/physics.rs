@@ -15,7 +15,6 @@
 
 use crate::academia::Academia;
 use crate::orchestrator::PidController;
-use crate::TriState;
 use std::time::Instant;
 
 /// Універсальний прискорювач.
@@ -124,7 +123,7 @@ impl AcceleratedSystem {
         let t0 = Instant::now();
 
         // 1. Термодинаміка: квантування в фундаментальні частинки
-        let quantized: Vec<u64> = PhysicsEngine::quantize(batch);
+        let _quantized: Vec<u64> = PhysicsEngine::quantize(batch);
 
         // 2. Кристалографія: вставка в 8D гратку (FanOut)
         let chunk = (batch.len() + self.physics.fanout - 1) / self.physics.fanout;

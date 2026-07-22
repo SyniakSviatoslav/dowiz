@@ -9,7 +9,7 @@
 /// f64 variant — dynamics path (not bitwise-deterministic across targets on libm calls).
 #[inline(always)]
 pub fn ema_next_f64(prev: f64, sample: f64, alpha: f64) -> f64 {
-    (prev + (alpha * (sample + (-1.0f64 * prev))))
+    prev + (alpha * (sample + (-1.0f64 * prev)))
 }
 
 // ── A3 money-law shadow organs (BLUEPRINT-P-A §3.3) ─────────────────────────
@@ -30,12 +30,12 @@ pub fn ema_next_f64(prev: f64, sample: f64, alpha: f64) -> f64 {
 pub fn apply_tax_exclusive_int(sub: i64, rate_micro: i64) -> Result<i64, &'static str> {
     use std::convert::TryFrom;
     i64::try_from({
-        let b = (1000000i128);
+        let b = 1000000i128;
         if b == 0i128 {
             return Err("division by zero in DivHalfUp");
         }
         (((sub as i128)
-            .checked_mul((rate_micro as i128))
+            .checked_mul(rate_micro as i128)
             .ok_or("overflow in Prod")?)
             + b / 2)
             / b
@@ -57,13 +57,13 @@ pub fn apply_tax_inclusive_int(sub: i64, rate_micro: i64) -> Result<i64, &'stati
         return Ok(0);
     }
     i64::try_from(
-        ((sub as i128)
+        (sub as i128)
             .checked_add(
-                ((-1i128)
+                (-1i128)
                     .checked_mul({
-                        let b = ((1000000i128)
-                            .checked_add((rate_micro as i128))
-                            .ok_or("overflow in Sum")?);
+                        let b = (1000000i128)
+                            .checked_add(rate_micro as i128)
+                            .ok_or("overflow in Sum")?;
                         // FEYNMAN-10: the law (apply_tax) refuses an effective
                         // denominator ≤ 0 (negative/invalid rate). The generated
                         // organ must refuse the same — a negative `b` makes
@@ -75,14 +75,14 @@ pub fn apply_tax_inclusive_int(sub: i64, rate_micro: i64) -> Result<i64, &'stati
                             return Err("invalid (non-positive) tax denominator");
                         }
                         (((sub as i128)
-                            .checked_mul((1000000i128))
+                            .checked_mul(1000000i128)
                             .ok_or("overflow in Prod")?)
                             + b / 2)
                             / b
                     })
-                    .ok_or("overflow in Prod")?),
+                    .ok_or("overflow in Prod")?,
             )
-            .ok_or("overflow in Sum")?),
+            .ok_or("overflow in Sum")?,
     )
     .map_err(|_| "overflow: result exceeds i64")
 }

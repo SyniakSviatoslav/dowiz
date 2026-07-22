@@ -281,7 +281,7 @@ impl ParallelSearchEngine {
         let tasks = self.fan_out(query, index_kinds);
 
         // Execute per-index searches.
-        let mut per_index: Vec<Vec<IndexHit>> = tasks.iter().map(|task| {
+        let per_index: Vec<Vec<IndexHit>> = tasks.iter().map(|task| {
             let hits = search_fn(&task.query, &task.index_kind, task.max_results);
             // Normalize scores to 0..1.
             let max_raw = hits.iter().map(|h| h.raw_score).fold(0.0f64, f64::max);

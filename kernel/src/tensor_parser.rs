@@ -174,7 +174,7 @@ impl ThunderExtractor {
     /// Ingest papers via FanOut parallelism.
     pub fn ingest_parallel(&mut self, papers: Vec<PaperVector>, workers: usize) {
         let plan = FanOutPlan::plan(papers.len(), workers, 10, Priority::Normal);
-        for (worker, start, end) in plan.assignments() {
+        for (_worker, start, end) in plan.assignments() {
             for i in start..end {
                 if i < papers.len() {
                     if self.store.insert(papers[i].clone()) { self.papers_in += 1; }

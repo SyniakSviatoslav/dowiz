@@ -18,9 +18,8 @@
 //! Наприклад: "Transformer + Quantum Computing" → інсайт.
 
 use crate::academia::Academia;
-use crate::research::{ResearchEngine, Pattern, CrossPattern, KnowledgeDomain, PatternKind};
-use crate::github_patterns::{ParsingTech, ParserPattern};
-use crate::TriState;
+use crate::research::{ResearchEngine, CrossPattern, KnowledgeDomain};
+use crate::github_patterns::ParsingTech;
 use std::collections::HashMap;
 
 /// Максимум інсайтів.

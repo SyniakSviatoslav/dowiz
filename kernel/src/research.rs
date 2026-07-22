@@ -32,7 +32,7 @@
 //! Cross-patterns are discovered by co-occurrence analysis across papers.
 
 use crate::TriState;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 /// Maximum patterns in the library.
 pub const MAX_PATTERNS: usize = 10_000;
@@ -199,7 +199,7 @@ impl ResearchEngine {
     /// Patterns are discovered by co-occurrence of domain-specific keywords
     /// in titles and abstracts.
     pub fn extract_patterns(&mut self) -> Vec<Pattern> {
-        let mut discovered: Vec<Pattern> = Vec::new();
+        let _discovered: Vec<Pattern> = Vec::new();
 
         for paper in &self.papers {
             let text = format!("{} {}", paper.title, paper.abstract_text).to_lowercase();
