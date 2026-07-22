@@ -120,6 +120,9 @@ pub mod core_pinning;
 /// (retrieval-blueprint v2 diffusion/recall primitive).
 pub mod csr;
 pub mod domain;
+/// Foster-Lyapunov entropy budget, T-annealing, and BRANCH-dispersion detector
+/// for the hydra's closed-loop self-evolution control.
+pub mod entropy_budget;
 /// P04 product-math: Disjoint-Set Union (union-find) + Kruskal MST — the single
 /// canonical DSU/MST primitive. `cgraph::c_components` delegates here; Phase 9
 /// mesh-heal + Phase 13 partition-tolerant delivery consume it directly.
@@ -162,6 +165,8 @@ pub mod hub_supervisor;
 /// Воля АНУ — the hidden source of the self-evolving living organism. Single
 /// kernel-internal entry point for closed-loop self-evolution (G7 source-hiding).
 pub mod hydra;
+/// Fully-wired closed-loop self-evolution engine (Hydra + EntropyBudget + TAnnealing + Kalman + M9 + telemetry).
+pub mod hydra_closed_loop;
 /// C-tier "impedance lens": circuit/impedance as a resource framework — flow
 /// reflection coefficient + backpressure gate (ρ<1 with margin, not power-match).
 pub mod impedance;
