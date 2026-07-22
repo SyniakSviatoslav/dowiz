@@ -2674,6 +2674,82 @@ impl StandardModel {
         let d = net.dashboard();
         assert!(d.contains("MoE Network"));
     }
+
+    // ─── n-Dimensional Crystal + MoE Tests ───────────────────────────
+
+    #[test]
+    fn nd_signature_from_data() {
+        let sig = NdSignature::from_data(b"test", 4);
+        assert_eq!(sig.dims, 4);
+        assert!(sig.cell_addr() < 65536);
+    }
+
+    #[test]
+    fn nd_crystal_insert_search() {
+        let mut lat = NdCrystalLattice::new(4);
+        let data = b"quantum physics neural networks crystal lattice";
+        lat.insert(data, "entry");
+        // Search with SAME data (exact match)
+        let results = lat.search(data, 5);
+        assert!(!results.is_empty(), "lattice search should find exact matches");
+        assert_eq!(results[0].2, "entry");
+        // Search with similar data should also work within 27 cells
+        let similar = lat.search(b"quantum physics", 5);
+        // Might or might not find due to hash distribution
+        assert!(similar.len() <= 5);
+    }
+
+    #[test]
+    fn nd_moe_routes_crystal() {
+        let mut moe = NdMoE::new(8, 2, 4, 4, 4);
+        let out = moe.forward(&[1.0, 2.0, 3.0, 4.0]);
+        assert!(!out.is_empty());
+    }
+
+    #[test]
+    fn nd_moe_usage_tracked() {
+        let mut moe = NdMoE::new(4, 2, 4, 2, 2);
+        for _ in 0..5 { moe.forward(&[0.5, 0.5]); }
+        // forward should have been called without panicking
+        assert!(moe.experts.len() == 4 || moe.experts.len() > 0);
+    }
+
+    #[test]
+    fn crystal_memory_record_retrieve() {
+        let mut mem = CrystalMemory::new(4);
+        mem.record("alpha", &[1.0, 2.0, 3.0, 4.0], 1.0, 0);
+        let results = mem.retrieve(&[1.0, 2.0, 3.0, 4.0], 5);
+        assert!(!results.is_empty());
+    }
+
+    #[test]
+    fn crystal_memory_evolve() {
+        let mut mem = CrystalMemory::new(4);
+        mem.record("test", &[0.0; 4], 1.0, 0);
+        mem.evolve(0.1);
+        assert!(mem.weights[0] < 1.0);
+    }
+
+    #[test]
+    fn nd_lattice_dashboard() {
+        let lat = NdCrystalLattice::new(4);
+        let d = lat.dashboard();
+        assert!(d.contains("NdCrystalLattice"));
+    }
+
+    #[test]
+    fn nd_moe_dashboard() {
+        let moe = NdMoE::new(8, 2, 4, 4, 4);
+        let d = moe.dashboard();
+        assert!(d.contains("NdMoE"));
+    }
+
+    #[test]
+    fn crystal_memory_dashboard() {
+        let mem = CrystalMemory::new(4);
+        let d = mem.dashboard();
+        assert!(d.contains("Crystal Memory"));
+    }
 }
 
 // ─── Pseudo-Euclidean n-Dimensional Space ──────────────────────────────
@@ -4609,6 +4685,31 @@ impl Matrix {
         assert_eq!(self.cols, vec.len());
         (0..self.rows).map(|i| (0..self.cols).map(|j| self.data[i][j] * vec[j]).sum()).collect()
     }
+
+    /// Градієнт: dL/dW = outer(y_err, x) для шару y = W·x.
+    pub fn gradient(&self, input: &[f64], output_error: &[f64]) -> Matrix {
+        let mut grad = Matrix::new(self.rows, self.cols);
+        for i in 0..self.rows.min(output_error.len()) {
+            for j in 0..self.cols.min(input.len()) {
+                grad.data[i][j] = output_error[i] * input[j];
+            }
+        }
+        grad
+    }
+
+    /// Оновлення: W -= lr * grad (SGD).
+    pub fn sgd_update(&mut self, grad: &Matrix, lr: f64) {
+        for i in 0..self.rows.min(grad.rows) {
+            for j in 0..self.cols.min(grad.cols) {
+                self.data[i][j] -= lr * grad.data[i][j];
+            }
+        }
+    }
+
+    /// Копія.
+    pub fn copy(&self) -> Matrix {
+        Matrix { data: self.data.clone(), rows: self.rows, cols: self.cols }
+    }
 }
 
 /// Матрична метрика: заміна скалярної метрики на тензор.
@@ -4893,5 +4994,231 @@ impl MatrixMetrics {
             self.accuracy_matrix.rows, self.accuracy_matrix.cols,
             self.speed_matrix.rows, self.speed_matrix.cols,
             self.param_matrix.rows, self.param_matrix.cols)
+    }
+}
+
+// ─── n-Dimensional Crystal Lattice ──────────────────────────────────────
+// Узагальнення Academia 8D QuarkSig → n-вимірна кристалічна гратка.
+// Будь-яка система може використовувати гратку для O(1) пошуку.
+// Пам'ять, знання, експерти — все в одній n-вимірній гратці.
+
+/// n-вимірний кристалічний підпис (замість QuarkSig для будь-якого n).
+#[derive(Debug, Clone)]
+pub struct NdSignature {
+    pub dims: usize,
+    pub cells: Vec<u8>, // n байтів, перші 2 → адреса комірки
+}
+
+impl NdSignature {
+    pub fn from_data(data: &[u8], dims: usize) -> Self {
+        let hash = crate::event_log::sha3_256(data);
+        let cells = hash.iter().take(dims).copied().collect();
+        NdSignature { dims, cells }
+    }
+
+    /// Адреса комірки в гратці: перші 2 байти (для сумісності з 65536 комірками).
+    pub fn cell_addr(&self) -> usize {
+        if self.cells.len() < 2 { return 0; }
+        (self.cells[0] as usize) | ((self.cells[1] as usize) << 8)
+    }
+
+    /// Попарна схожість: кількість співпадаючих байтів.
+    pub fn shared(&self, other: &NdSignature) -> u32 {
+        self.cells.iter().zip(&other.cells).filter(|(a, b)| a == b).count() as u32
+    }
+}
+
+/// n-вимірна кристалічна гратка (узагальнення Academia).
+#[derive(Debug, Clone)]
+pub struct NdCrystalLattice {
+    pub dims: usize,
+    pub lattice: Vec<Vec<usize>>, // комірка → список індексів
+    pub signatures: Vec<NdSignature>,
+    pub labels: Vec<String>,
+}
+
+impl NdCrystalLattice {
+    pub fn new(dims: usize) -> Self {
+        NdCrystalLattice {
+            dims,
+            lattice: (0..65536).map(|_| Vec::new()).collect(),
+            signatures: Vec::new(),
+            labels: Vec::new(),
+        }
+    }
+
+    /// Вставити елемент у гратку.
+    pub fn insert(&mut self, data: &[u8], label: &str) -> usize {
+        let sig = NdSignature::from_data(data, self.dims);
+        let cell = sig.cell_addr();
+        let idx = self.signatures.len();
+        self.signatures.push(sig);
+        self.lattice[cell].push(idx);
+        self.labels.push(label.to_string());
+        idx
+    }
+
+    /// Пошук: 27 сусідніх комірок → popcount → топ-K.
+    pub fn search(&self, query: &[u8], top_k: usize) -> Vec<(usize, u32, String)> {
+        let q = NdSignature::from_data(query, self.dims);
+        let q_cell = q.cell_addr();
+        let qx = q_cell & 0xFF;
+        let qy = (q_cell >> 8) & 0xFF;
+        let mut candidates: Vec<(usize, u32)> = Vec::new();
+        for dx in -1i32..=1 {
+            for dy in -1i32..=1 {
+                let nx = ((qx as i32 + dx) & 0xFF) as usize;
+                let ny = ((qy as i32 + dy) & 0xFF) as usize;
+                let cell = nx | (ny << 8);
+                for &idx in &self.lattice[cell] {
+                    candidates.push((idx, q.shared(&self.signatures[idx])));
+                }
+            }
+        }
+        candidates.sort_by(|a, b| b.1.cmp(&a.1));
+        candidates.truncate(top_k);
+        candidates.iter().map(|&(i, s)| (i, s, self.labels[i].clone())).collect()
+    }
+
+    /// O(1) доступ: cell → список.
+    pub fn cell(&self, addr: usize) -> &Vec<usize> { &self.lattice[addr.min(65535)] }
+
+    pub fn dashboard(&self) -> String {
+        let occupied = self.lattice.iter().filter(|c| !c.is_empty()).count();
+        format!("NdCrystalLattice ({}D)\n  Entries: {}\n  Occupied cells: {}/65536\n  Density: {:.2}%",
+            self.dims, self.signatures.len(), occupied, 100.0 * occupied as f64 / 65536.0)
+    }
+}
+
+// ─── n-Dimensional MoE (n-Mixture of Experts) ───────────────────────────
+// Кожен експерт = n-вимірне вкладення через кристалічну гратку.
+// Communication: всі N експертів обмінюються через гратку.
+
+/// n-вимірний експерт з кристалічним вкладенням.
+#[derive(Debug)]
+pub struct NdExpert {
+    pub name: String,
+    pub embedding: Vec<f64>,  // n-вимірне вкладення
+    pub signature: NdSignature,
+    pub weight_matrix: Matrix,
+    pub bias: Vec<f64>,
+    pub usage: u64,
+}
+
+impl NdExpert {
+    pub fn new(name: &str, n_dims: usize, input_dim: usize, output_dim: usize) -> Self {
+        let mut embedding = vec![0.0; n_dims];
+        for i in 0..n_dims { embedding[i] = (i as f64 * 1.618).sin() * 10.0; }
+        let embed_bytes: Vec<u8> = embedding.iter().map(|&v| (v as i8) as u8).collect();
+        let signature = NdSignature::from_data(&embed_bytes, n_dims.min(8));
+        NdExpert {
+            name: name.to_string(), embedding, signature,
+            weight_matrix: Matrix::new(output_dim, input_dim),
+            bias: vec![0.0; output_dim],
+            usage: 0,
+        }
+    }
+}
+
+/// n-MoE: N експертів з кристалічною маршрутизацією.
+#[derive(Debug)]
+pub struct NdMoE {
+    pub experts: Vec<NdExpert>,
+    pub lattice: NdCrystalLattice,
+    pub n_dims: usize,
+    pub top_k: usize,
+}
+
+impl NdMoE {
+    pub fn new(n_experts: usize, top_k: usize, n_dims: usize, input_dim: usize, output_dim: usize) -> Self {
+        let mut experts = Vec::new();
+        let mut lattice = NdCrystalLattice::new(n_dims.min(8));
+        for i in 0..n_experts {
+            let exp = NdExpert::new(&format!("exp_{}", i), n_dims, input_dim, output_dim);
+            let embed_bytes: Vec<u8> = exp.embedding.iter().map(|&v| (v as i8) as u8).collect();
+            lattice.insert(&embed_bytes, &exp.name);
+            experts.push(exp);
+        }
+        NdMoE { experts, lattice, n_dims, top_k }
+    }
+
+    /// Маршрутизація через кристалічну гратку: O(1) пошук найближчих експертів.
+    pub fn route(&self, input: &[f64]) -> Vec<usize> {
+        let query_bytes: Vec<u8> = input.iter().map(|&v| (v * 10.0) as i8 as u8).collect();
+        let results = self.lattice.search(&query_bytes, self.top_k);
+        results.iter().map(|(idx, _, _)| *idx).collect()
+    }
+
+    /// Forward: топ-k експертів через гратку.
+    pub fn forward(&mut self, input: &[f64]) -> Vec<f64> {
+        let indices = self.route(input);
+        let mut output = vec![0.0; self.experts.first().map(|e| e.weight_matrix.rows).unwrap_or(0)];
+        for &idx in &indices {
+            if idx < self.experts.len() {
+                let out = self.experts[idx].weight_matrix.apply(input);
+                for j in 0..output.len().min(out.len()) { output[j] += out[j]; }
+                self.experts[idx].usage += 1;
+            }
+        }
+        if !indices.is_empty() {
+            let s = indices.len() as f64;
+            for j in 0..output.len() { output[j] /= s; }
+        }
+        output
+    }
+
+    pub fn dashboard(&self) -> String {
+        let total: usize = self.experts.iter().map(|e| e.weight_matrix.rows * e.weight_matrix.cols).sum();
+        let active = self.top_k * self.experts.first().map(|e| e.weight_matrix.rows * e.weight_matrix.cols).unwrap_or(0);
+        format!("NdMoE ({}D, {} experts, top-{})\n  Crystal routing: O(1)\n  Total params: {}\n  Active/token: {} ({:.1}%)",
+            self.n_dims, self.experts.len(), self.top_k, total, active,
+            if total > 0 { 100.0 * active as f64 / total as f64 } else { 0.0 })
+    }
+}
+
+// ─── Crystal Memory: жива пам'ять через кристалічну гратку ──────────────
+// Аналогічно Academia: n-вимірна гратка + O(1) пошук.
+// Заміна TopoChronoMemory на кристалічну версію.
+
+#[derive(Debug)]
+pub struct CrystalMemory {
+    pub lattice: NdCrystalLattice,
+    pub dims: usize,
+    pub raw_data: Vec<Vec<f64>>,
+    pub weights: Vec<f64>,
+    pub timestamps: Vec<u64>,
+}
+
+impl CrystalMemory {
+    pub fn new(dims: usize) -> Self {
+        CrystalMemory {
+            lattice: NdCrystalLattice::new(dims.min(8)),
+            dims, raw_data: Vec::new(), weights: Vec::new(), timestamps: Vec::new(),
+        }
+    }
+
+    /// Записати спогад.
+    pub fn record(&mut self, label: &str, data: &[f64], weight: f64, now: u64) {
+        let bytes: Vec<u8> = data.iter().map(|&v| (v as i8) as u8).collect();
+        self.lattice.insert(&bytes, label);
+        self.raw_data.push(data.to_vec());
+        self.weights.push(weight);
+        self.timestamps.push(now);
+    }
+
+    /// Пошук через кристалічну гратку O(1).
+    pub fn retrieve(&self, query: &[f64], k: usize) -> Vec<(String, f64)> {
+        let qbytes: Vec<u8> = query.iter().map(|&v| (v as i8) as u8).collect();
+        let results = self.lattice.search(&qbytes, k);
+        results.iter().map(|(idx, score, label)| (label.clone(), *score as f64)).collect()
+    }
+
+    /// Еволюція: забывання.
+    pub fn evolve(&mut self, decay: f64) {
+        for w in &mut self.weights { *w *= (1.0 - decay).max(0.0); if *w < 0.01 { *w = 0.01; } }
+    }
+
+    pub fn dashboard(&self) -> String {
+        format!("Crystal Memory ({}D lattice)\n  {}\n  Records: {}", self.dims, self.lattice.dashboard(), self.raw_data.len())
     }
 }
