@@ -266,11 +266,14 @@ const App = {
 
   renderLayout() {
     const count = this.state.cart.reduce((s,i) => s+i.qty, 0);
+    const activeOrders = this.state._orders.filter(o => o.status !== 'delivered').length;
     const navLinks = [
       { page: 'menu', label: 'Меню' },
-      { page: 'orders', label: 'Замовлення' },
+      { page: 'orders', label: `Замовлення${activeOrders ? ' (' + activeOrders + ')' : ''}` },
       { page: 'analytics', label: 'Аналітика' },
     ];
+    const roleNames = { customer: 'Клієнт', owner: 'Заклад', courier: 'Курʼєр' };
+    const roleEmoji = { customer: '👤', owner: '🏪', courier: '🛵' };
     return `
     <nav class="navbar">
       <div class="navbar-logo gradient-text spring">dowiz</div>
@@ -278,10 +281,11 @@ const App = {
         ${navLinks.map(l => `<a href="#" class="${this.state.page===l.page?'active':''}" data-page="${l.page}">${l.label}</a>`).join('')}
       </div>
       <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn btn-ghost btn-sm" onclick="App.setRole('customer')">👤</button>
-        <button class="btn btn-ghost btn-sm" onclick="App.setRole('owner')">🏪</button>
-        <button class="btn btn-ghost btn-sm" onclick="App.setRole('courier')">🛵</button>
-        <button class="btn btn-ghost btn-sm" onclick="App.toggleCart()">🛒 (${count})</button>
+        <span class="role-badge">${roleEmoji[this.state.role]} ${roleNames[this.state.role]}</span>
+        <button class="btn btn-ghost btn-sm" onclick="App.setRole('customer')" title="Клієнт">👤</button>
+        <button class="btn btn-ghost btn-sm" onclick="App.setRole('owner')" title="Заклад">🏪</button>
+        <button class="btn btn-ghost btn-sm" onclick="App.setRole('courier')" title="Курʼєр">🛵</button>
+        <button class="btn btn-ghost btn-sm" onclick="App.toggleCart()">🛒 ${count > 0 ? count : ''}</button>
         ${this.state._canInstall ? '<button class="btn btn-sm btn-primary" onclick="App.installApp()">⬇ Встановити</button>' : ''}
       </div>
     </nav>
