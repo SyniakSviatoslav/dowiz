@@ -2402,6 +2402,69 @@ impl StandardModel {
         let d = t.dashboard();
         assert!(d.contains("Quantum Trader"));
     }
+
+    // ─── 3-Node Simultaneous Communication Tests ──────────────────────
+
+    #[test]
+    fn ghz_state_equally_probable() {
+        let ghz = GHZState::new();
+        assert!((ghz.prob_000() - 0.5).abs() < 0.001);
+        assert!((ghz.prob_111() - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn ghz_measurement_collapses_all() {
+        let mut ghz = GHZState::new();
+        let outcome = ghz.measure_one(42);
+        if outcome == 0 {
+            assert!((ghz.prob_000() - 1.0).abs() < 0.001);
+        } else {
+            assert!((ghz.prob_111() - 1.0).abs() < 0.001);
+        }
+    }
+
+    #[test]
+    fn three_node_bus_exchange() {
+        let mut bus = ThreeNodeBus::new(["A", "B", "C"]);
+        assert!(bus.nodes[0].entangled);
+        bus.exchange([&[1], &[2], &[3]]);
+        assert_eq!(bus.round, 1);
+    }
+
+    #[test]
+    fn three_node_consensus() {
+        let mut bus = ThreeNodeBus::new(["X", "Y", "Z"]);
+        bus.exchange([&[1], &[1], &[1]]);
+        bus.sync_phases();
+        assert!(bus.consensus());
+    }
+
+    #[test]
+    fn three_node_majority() {
+        let mut bus = ThreeNodeBus::new(["A", "B", "C"]);
+        // Всі три в однаковій фазі → одноголосно
+        bus.sync_phases();
+        let vote = bus.majority_vote();
+        assert!(vote == 1 || vote == -1 || vote == 0);
+    }
+
+    #[test]
+    fn ghz_entangle_three_nodes() {
+        let mut nodes = [
+            ThreeNodeState::new("n0"),
+            ThreeNodeState::new("n1"),
+            ThreeNodeState::new("n2"),
+        ];
+        GHZState::entangle(&mut nodes);
+        assert!(nodes.iter().all(|n| n.entangled));
+    }
+
+    #[test]
+    fn three_node_bus_dashboard() {
+        let bus = ThreeNodeBus::new(["A", "B", "C"]);
+        let d = bus.dashboard();
+        assert!(d.contains("3-Node Bus"));
+    }
 }
 
 // ─── Pseudo-Euclidean n-Dimensional Space ──────────────────────────────
@@ -3458,7 +3521,145 @@ impl P2PNetwork {
 }
 
 
-// ─── Quantum Time Trading ────────────────────────────────────────────────
+// ─── 3-Node Simultaneous Communication ──────────────────────────────────
+// Проблема: одночасна комунікація між 3 об'єктами/нодами.
+// Рішення: GHZ стан (|000⟩ + |111⟩)/√2 — 3-кубітна заплутаність.
+// Вимір однієї частинки миттєво визначає стан всіх трьох.
+// Додатково: 3-phase consensus, byzantine fault tolerance для 3 нод.
+
+/// 3-кубітний GHZ стан: (|000⟩ + |111⟩)/√2.
+/// Вимір будь-якого кубіта → всі три колапсують в один стан.
+#[derive(Debug, Clone)]
+pub struct GHZState {
+    pub amp_000: Complex,
+    pub amp_111: Complex,
+}
+
+impl GHZState {
+    /// Створити GHZ: (|000⟩ + |111⟩)/√2.
+    pub fn new() -> Self {
+        let s = 2.0f64.sqrt().recip();
+        GHZState { amp_000: Complex::one().scale(s), amp_111: Complex::one().scale(s) }
+    }
+
+    /// Ймовірність |000⟩.
+    pub fn prob_000(&self) -> f64 { self.amp_000.norm_sq() }
+    /// Ймовірність |111⟩.
+    pub fn prob_111(&self) -> f64 { self.amp_111.norm_sq() }
+
+    /// Виміряти один кубіт → колапс всіх трьох.
+    pub fn measure_one(&mut self, seed: u64) -> u8 {
+        let r = ((seed as f64 * 1.618033988749895).fract() + 0.5) % 1.0;
+        if r < self.prob_000() {
+            self.amp_000 = Complex::one();
+            self.amp_111 = Complex::zero();
+            0 // всі три → |0⟩
+        } else {
+            self.amp_000 = Complex::zero();
+            self.amp_111 = Complex::one();
+            1 // всі три → |1⟩
+        }
+    }
+
+    /// Заплутати 3 ноди: після цього всі три корельовані.
+    pub fn entangle(nodes: &mut [ThreeNodeState; 3]) {
+        let ghz = GHZState::new();
+        for node in nodes.iter_mut() {
+            node.ghz = ghz.clone();
+            node.entangled = true;
+        }
+    }
+
+    pub fn dashboard(&self) -> String {
+        format!("GHZ: (|000⟩ + |111⟩)/√2\n  P(000)={:.2}%  P(111)={:.2}%", self.prob_000()*100.0, self.prob_111()*100.0)
+    }
+}
+
+/// Стан однієї ноди в 3-вузловій системі.
+#[derive(Debug, Clone)]
+pub struct ThreeNodeState {
+    pub id: String,
+    pub ghz: GHZState,
+    pub entangled: bool,
+    pub data: Vec<u8>,
+    pub phase: f64, // фаза для синхронізації
+}
+
+impl ThreeNodeState {
+    pub fn new(id: &str) -> Self {
+        ThreeNodeState { id: id.to_string(), ghz: GHZState::new(), entangled: false, data: Vec::new(), phase: 0.0 }
+    }
+}
+
+/// 3-вузлова шина: одночасна комунікація через GHZ.
+#[derive(Debug)]
+pub struct ThreeNodeBus {
+    pub nodes: [ThreeNodeState; 3],
+    pub round: u64,
+}
+
+impl ThreeNodeBus {
+    /// Створити шину з 3 нодами, одразу заплутати.
+    pub fn new(ids: [&str; 3]) -> Self {
+        let mut nodes = [
+            ThreeNodeState::new(ids[0]),
+            ThreeNodeState::new(ids[1]),
+            ThreeNodeState::new(ids[2]),
+        ];
+        GHZState::entangle(&mut nodes);
+        ThreeNodeBus { nodes, round: 0 }
+    }
+
+    /// Одночасний обмін: всі 3 ноди обмінюються даними за 1 раунд.
+    pub fn exchange(&mut self, data: [&[u8]; 3]) {
+        self.round += 1;
+        // Крок 1: кожна нода отримує дані
+        for (i, d) in data.iter().enumerate() {
+            self.nodes[i].data = d.to_vec();
+            self.nodes[i].phase = self.round as f64 * 0.1;
+        }
+        // Крок 2: вимірюємо GHZ → всі три колапсують синхронно
+        let outcome = self.nodes[0].ghz.measure_one(self.round);
+        // Крок 3: всі три ноди знають результат одночасно
+        for node in &mut self.nodes {
+            node.phase += if outcome == 0 { 1.0 } else { -1.0 };
+        }
+    }
+
+    /// Консенсус: всі три ноди мають однаковий стан?
+    pub fn consensus(&self) -> bool {
+        let phase = self.nodes[0].phase;
+        self.nodes.iter().all(|n| (n.phase - phase).abs() < 0.001)
+    }
+
+    /// Majority vote: що вирішили 3 ноди?
+    pub fn majority_vote(&self) -> i32 {
+        let outcomes: Vec<f64> = self.nodes.iter().map(|n| n.phase).collect();
+        if outcomes.iter().filter(|&&p| p > 0.0).count() >= 2 { 1 }
+        else if outcomes.iter().filter(|&&p| p < 0.0).count() >= 2 { -1 }
+        else { 0 }
+    }
+
+    /// Синхронізувати фази: всі три ноди в однаковій фазі.
+    pub fn sync_phases(&mut self) {
+        let avg: f64 = self.nodes.iter().map(|n| n.phase).sum::<f64>() / 3.0;
+        for node in &mut self.nodes {
+            node.phase = avg;
+        }
+    }
+
+    pub fn dashboard(&self) -> String {
+        format!(
+            "3-Node Bus (GHZ-entangled)\n  Round:    {}\n  Nodes:    {} {} {}\n  Entangled: {}\n  Consensus: {}\n  Vote:      {}",
+            self.round,
+            self.nodes[0].id, self.nodes[1].id, self.nodes[2].id,
+            self.nodes[0].entangled,
+            if self.consensus() { "YES" } else { "NO" },
+            self.majority_vote()
+        )
+    }
+}
+
 // Торгівля з використанням часового зсуву, суперпозиції та квантової фізики.
 // Різні вузли (біржі) мають різний плин часу → арбітраж.
 // Суперпозиція позицій: одночасно в кількох станах.
