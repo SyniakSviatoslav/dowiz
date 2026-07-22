@@ -3,6 +3,37 @@
 All notable changes to the dowiz kernel + product are documented here.
 Format: [Keep a Changelog](https://keepachangelog.com/) + CalVer `YYYY.MM.PATCH`.
 
+## [2026.07.3] — 2026-07-22
+
+### Added
+- Full UX flow audit and fix pass (25 friction points identified, 12 P0-P3 fixed)
+- 8-layer improvement: notifications, polling, mobile UX, transitions, role confirm, cart feedback, shift metrics, real analytics
+- Telemetry suite: oracle.mjs, markov.mjs, vitals.mjs, health.mjs, telegram.mjs
+- Markov Friction Predictor (4A): freeze detection at 4× expected time, inline hints
+- Invisible Assistant (4C): behavioral adaptation via state timing tracking
+- ETA display on order detail and courier tasks
+- Owner menu management: edit price, hide/show items, add new items
+- Address/phone validation with live field highlighting
+- Security: CSP meta tag, sanitize() helper, rateLimit() decorator
+- Accessibility: aria attributes, aria-live toast, role/tablist/tab nav
+- Keyboard shortcuts: k (courier), t (theme), r (reload)
+- Dynamic seed data: generateSeedOrders(), generateSeedTasks(), generateSeedHistory()
+- Error boundary in renderContent() with reload button
+- Battery optimization: pause Three.js + SDF loops on page hidden
+
+### Fixed
+- Checkout no longer claims success before API responds
+- Courier actions now sync _orders.status (pickup→in-delivery, deliver→done)
+- Owner order chain complete through delivered
+- Orders, courierTasks, earnings now persist across sessions
+- Earnings history populated from actual deliveries
+- Cart quantity +/- buttons added
+- Stale CONTEXT-INDEX.md and MEMORY-MAP.md rewritten
+- DeliveryOS-As-Built-Summary-v1.md archived
+- CONVENTIONS.md rewritten as plain text
+- Cart no longer auto-opens on every add
+- Analytics timeline uses real order data, not Math.random()
+
 ## [2026.07.0] — 2026-07-18
 
 ### Added
@@ -16,15 +47,3 @@ Format: [Keep a Changelog](https://keepachangelog.com/) + CalVer `YYYY.MM.PATCH`
 - Resource caps on untrusted-JSON `_js` entry points (Box::leak OOM, harmonic
   `n`, payload, log bounds).
 - `compute_order_total` / `apply_tax` overflow-safe (checked_add/checked_mul).
-
-### Fixed
-- Spectral `spectral_radius` NaN-fail-open (poisoned spectrum read as healthy).
-- P-A kernel parity: eig2x2 dedup, `spectral_radius`→proven const ρ=0,
-  normalize-before-hash canonical key, eqc-rs Asin/Atan2/DivHalfUp + integer
-  emission.
-- P-B `RetainedBase::admit` no longer silently defeated by a non-finite operator.
-
-### Verification
-- Kernel 539 tests green; engine 57; ci-truth 30.
-- bebop: Lyapunov NaN/PSD fail-closed (V1 #2), mesh replay-nonce + Sybil
-  `IssuanceBudget` cap, RefSigner secret-leak removed.

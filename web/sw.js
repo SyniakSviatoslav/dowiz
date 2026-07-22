@@ -14,6 +14,14 @@ const PRECACHE = [
   '/src/lib/compose/fragments.mjs',
   '/src/lib/compose/journey.mjs',
   '/src/lib/vendor/dubin_sushi_menu.mjs',
+  '/src/lib/utils.mjs',
+  '/src/lib/telemetry/oracle.mjs',
+  '/src/lib/telemetry/markov.mjs',
+  '/src/lib/telemetry/vitals.mjs',
+  '/src/lib/telemetry/health.mjs',
+  '/src/lib/telemetry/telegram.mjs',
+  '/public/icon-192.svg',
+  '/offline.html',
 ];
 
 self.addEventListener('install', (event) => {
@@ -39,7 +47,13 @@ self.addEventListener('fetch', (event) => {
 
 async function cacheFirst(request) {
   const cached = await caches.match(request);
-  return cached || fetchAndCache(request);
+  if (cached) return cached;
+  try {
+    return await fetchAndCache(request);
+  } catch {
+    const fallback = await caches.match('/offline.html');
+    return fallback || new Response('<html><body><h1>Offline</h1></body></html>', { headers: { 'Content-Type': 'text/html' } });
+  }
 }
 
 async function networkFirst(request) {

@@ -1,9 +1,59 @@
-// dowiz — Interface: Intent Engine composed render + Neural Field background
+// ─── dowiz: Single-file PWA (1289 lines) ─────────────────────────────
+// Sections: ① Imports ② Constants ③ State ④ Init ⑤ Router ⑥ Pages
+//           ⑦ Renderers ⑧ Cart ⑨ Owner ⑩ Courier ⑪ Telemetry ⑫ Events
 
 import { composeMenuScene, renderFrame, paintField, cartTotal } from './lib/compose/compose.mjs';
 import { sceneForRole } from './lib/compose/fragments.mjs';
 import { createJourney } from './lib/compose/journey.mjs';
 import { createSonifier } from './lib/audio/sonify.mjs';
+import { createOracle } from './lib/telemetry/oracle.mjs';
+import { createMarkov } from './lib/telemetry/markov.mjs';
+import { observeVitals } from './lib/telemetry/vitals.mjs';
+import { createHealthMonitor } from './lib/telemetry/health.mjs';
+import { createTelegramBridge } from './lib/telemetry/telegram.mjs';
+import { sanitize, rateLimit, formatETA, estimateETA, validatePhone, validateAddress, generateId } from './lib/utils.mjs';
+
+const STATUS_CHAIN = ['pending', 'confirmed', 'preparing', 'ready', 'in-delivery', 'delivered'];
+const STATUS_LABELS = { pending:'Очікує', confirmed:'Підтверджено', preparing:'Готується', ready:'Готово', 'in-delivery':'В дорозі', delivered:'Доставлено', cancelled:'Скасовано' };
+const STATUS_COLORS = { pending:'#D97706', confirmed:'#2563EB', preparing:'#F59E0B', ready:'#0D9488', 'in-delivery':'#3B82F6', delivered:'#059669', cancelled:'#DC2626' };
+
+function generateSeedOrders() {
+  const names = ['Анна К.', 'Марко І.', 'Еріс Г.', 'Дардан Ш.', 'Леон Б.', 'Міра В.', 'Бесіана Н.', 'Ардіт М.'];
+  const addresses = ['Rruga e Dibrës 12', 'Bulevardi Zhan D\'Ark 34', 'Rruga Myslym Shyri 56', 'Rruga Ibrahim Rugova 78', 'Rruga Ali Pashe Tepelena 90'];
+  const phones = ['+355 69 111 1111', '+355 69 222 2222', '+355 69 333 3333', '+355 69 444 4444', '+355 69 555 5555'];
+  const times = ['2 хв', '8 хв', '15 хв', '22 хв', '35 хв', '1 год'];
+  return STATUS_CHAIN.map((status, i) => ({
+    id: 1001 + i,
+    status,
+    items: 1 + Math.floor(Math.random() * 5),
+    total: (5 + Math.floor(Math.random() * 30)) * 100,
+    time: times[i % times.length],
+    address: addresses[i % addresses.length],
+    phone: phones[i % phones.length],
+    note: i % 2 === 0 ? '' : 'Без цибулі, будь ласка',
+  }));
+}
+
+function generateSeedTasks(orders) {
+  const pickups = ['Rruga e Dibrës 45', 'Bulevardi Zhan D\'Ark 10'];
+  const dropoffs = ['Rruga Myslym Shyri 12', 'Bulevardi Zhan D\'Ark 34', 'Rruga Ibrahim Rugova 56', 'Rruga Ali Pashe Tepelena 78'];
+  const statuses = ['assigned', 'picked-up'];
+  return orders.filter(o => o.status === 'preparing' || o.status === 'ready' || o.status === 'in-delivery')
+    .map((o, i) => ({
+      id: 2001 + i,
+      orderId: o.id,
+      pickup: pickups[i % pickups.length],
+      dropoff: dropoffs[i % dropoffs.length],
+      status: statuses[i % statuses.length],
+      items: o.items,
+      payout: Math.round(o.total * 0.12),
+    }));
+}
+
+function generateSeedHistory() {
+  const dates = ['2026-07-20', '2026-07-19', '2026-07-18'];
+  return dates.map((d, i) => ({ date: d, amount: (8 + i * 4) * 100, trips: 6 + i * 2 }));
+}
 
 const CAT_UA = {
   "Chef's Picks": 'Рекомендуємо', Futomaki: 'Футомакі', Philadelphia: 'Філадельфія',
@@ -16,6 +66,8 @@ const CAT_UA = {
 const CV_ID = 'sdf-canvas';
 const API_BASE = '/api';
 
+
+
 const App = {
   state: {
     theme: localStorage.getItem('dowiz-theme') || 'crimson',
@@ -24,14 +76,7 @@ const App = {
     filter: 'all',
     role: 'customer',
     _stats: { orders: 1247, nodes: 342, uptime: '99.97%', tests: 1949, revenue: 0, active: 0 },
-    _orders: [
-      { id: 1001, status: 'pending', items: 3, total: 2680, time: '2 хв' },
-      { id: 1002, status: 'confirmed', items: 1, total: 950, time: '8 хв' },
-      { id: 1003, status: 'preparing', items: 5, total: 4130, time: '15 хв' },
-      { id: 1004, status: 'ready', items: 2, total: 1640, time: '22 хв' },
-      { id: 1005, status: 'in-delivery', items: 4, total: 3400, time: '35 хв' },
-      { id: 1006, status: 'delivered', items: 2, total: 1230, time: '1 год' },
-    ],
+    _orders: [],
     _menu: [],
     _deliveryAddress: '',
     _deliveryPhone: '',
@@ -44,18 +89,21 @@ const App = {
     _earningsToday: 0,
     _deliveriesToday: 0,
     _courierTab: 'tasks',
-    _courierTasks: [
-      { id: 2001, orderId: 1003, pickup: 'Rruga e Dibrës 45', dropoff: 'Bulevardi Zhan D\'Ark 12', status: 'assigned', items: 5, payout: 320 },
-      { id: 2002, orderId: 1004, pickup: 'Rruga e Dibrës 45', dropoff: 'Rruga Myslym Shyri 78', status: 'picked-up', items: 2, payout: 180 },
-    ],
-    _earningsHistory: [
-      { date: '2026-07-20', amount: 2450, trips: 8 },
-      { date: '2026-07-19', amount: 3120, trips: 11 },
-      { date: '2026-07-18', amount: 1890, trips: 6 },
-    ],
+    _courierTasks: [],
+    _earningsHistory: [],
     _orderDetail: null,
     _searchQuery: '',
+    _ownerMenuEdit: false,
     _sonifier: null,
+    _oracle: null,
+    _pollTimer: null,
+    _notifGranted: false,
+    _pageHidden: false,
+    _markov: null,
+    _health: null,
+    _telegram: null,
+    _vitalsObserver: null,
+    _stateHistory: [],
     _sdfCanvas: null,
     _sdfCtx: null,
     _neurons: null,
@@ -65,20 +113,85 @@ const App = {
     _spikeRate: 0,
   },
 
+  // ── §3a Seed ─────────────────────────────────────────────────────
+  seedData() {
+    if (this.state._orders.length === 0) {
+      const orders = generateSeedOrders();
+      this.state._orders = orders;
+      this.state._courierTasks = generateSeedTasks(orders);
+      this.state._earningsHistory = generateSeedHistory();
+    }
+  },
+
+  // ── §4 Init ──────────────────────────────────────────────────────
   async init() {
+    this.seedData();
     this.restore();
     document.documentElement.dataset.theme = this.state.theme;
     await this.loadMenu();
     this.createSdfCanvas();
     await this.initNeuralField();
     this.state._sonifier = createSonifier();
+    this.state._oracle = createOracle();
+    this.state._oracle.mark('init');
+    this.state._oracle.observeVitals();
+    this.state._markov = createMarkov();
+    this.state._health = createHealthMonitor();
+    this.state._telegram = createTelegramBridge();
+    this.state._vitalsObserver = observeVitals();
+    this.requestNotifPermission();
     this.render();
     this.bindEvents();
     this.registerSw();
     this.setupInstallPrompt();
     this.renderSdfLoop();
+    this.startPolling();
+    document.addEventListener('visibilitychange', () => {
+      this.state._pageHidden = document.hidden;
+      this.state._animPaused = document.hidden;
+    });
+
+    setInterval(() => {
+      const currentView = this.state.role === 'customer' ? this.state.page : this.state.role;
+      const freeze = this.state._markov?.detectFreeze(currentView, 4);
+      if (freeze) {
+        this.state._health?.signal('freeze', freeze);
+        const hintEl = document.querySelector('[data-hint]');
+        if (hintEl) hintEl.style.display = 'block';
+      }
+    }, 10000);
+
+    if (this.state._health) {
+      setInterval(() => {
+        const r = this.state._vitalsObserver?.report();
+        if (r) {
+          this.state._health?.signal('vitals', r);
+          const poor = Object.entries(r).filter(([, v]) => v.rating === 'poor');
+          if (poor.length > 0) {
+            this.state._telegram?.alert('warning', `Web vital regression: ${poor.map(([k]) => k).join(', ')}`);
+          }
+        }
+      }, 60000);
+    }
   },
 
+  // ── §5 Router ───────────────────────────────────────────────────
+  navigate(page) {
+    this.state._oracle?.mark('navigate-start');
+    this.state._markov?.observe(`page:${page}`);
+    this.state.page = page;
+    this.state._cartOpen = false;
+    document.getElementById('cart-panel')?.classList.remove('open');
+    this.render();
+    document.querySelectorAll('.navbar-links a').forEach(a =>
+      a.classList.toggle('active', a.dataset.page === page)
+    );
+    this.sonify('navigate');
+    this.state._oracle?.mark('navigate-end');
+    this.persist();
+  },
+
+  // ── §4a Persist ──────────────────────────────────────────────────
   persist() {
     try {
       localStorage.setItem('dowiz-session', JSON.stringify({
@@ -87,6 +200,15 @@ const App = {
         filter: this.state.filter,
         cart: this.state.cart,
         journeyStep: this.state._journey.current,
+        _orders: this.state._orders,
+        _courierTasks: this.state._courierTasks,
+        _earningsToday: this.state._earningsToday,
+        _deliveriesToday: this.state._deliveriesToday,
+        _earningsHistory: this.state._earningsHistory,
+        _shiftActive: this.state._shiftActive,
+        _shiftStart: this.state._shiftStart,
+        _deliveryAddress: this.state._deliveryAddress,
+        _deliveryPhone: this.state._deliveryPhone,
       }));
     } catch {}
   },
@@ -104,6 +226,15 @@ const App = {
         const j = createJourney(saved.journeyStep);
         this.state._journey = j;
       }
+      if (saved._orders) this.state._orders = saved._orders;
+      if (saved._courierTasks) this.state._courierTasks = saved._courierTasks;
+      if (saved._earningsToday !== undefined) this.state._earningsToday = saved._earningsToday;
+      if (saved._deliveriesToday !== undefined) this.state._deliveriesToday = saved._deliveriesToday;
+      if (saved._earningsHistory) this.state._earningsHistory = saved._earningsHistory;
+      if (saved._shiftActive !== undefined) this.state._shiftActive = saved._shiftActive;
+      if (saved._shiftStart !== undefined) this.state._shiftStart = saved._shiftStart;
+      if (saved._deliveryAddress) this.state._deliveryAddress = saved._deliveryAddress;
+      if (saved._deliveryPhone) this.state._deliveryPhone = saved._deliveryPhone;
     } catch {}
   },
 
@@ -159,6 +290,7 @@ const App = {
   },
 
   renderSdfLoop() {
+    if (this.state._pageHidden) { requestAnimationFrame(() => this.renderSdfLoop()); return; }
     const cvs = this.state._sdfCanvas;
     const ctx = this.state._sdfCtx;
     if (!cvs || !ctx) return;
@@ -216,6 +348,7 @@ const App = {
       });
       const start = performance.now();
       const frame = () => {
+        if (this.state._pageHidden) { requestAnimationFrame(frame); return; }
         const t = (performance.now()-start)/1000;
         const params = [{a:0.02,b:0.2,c:-65,d:8},{a:0.1,b:0.2,c:-65,d:2},{a:0.02,b:0.2,c:-55,d:4},{a:0.025,b:0.2,c:-65,d:2}];
         let spikes = 0;
@@ -245,6 +378,8 @@ const App = {
     const c = document.getElementById('toast-container') || (() => {
       const el = document.createElement('div');
       el.id = 'toast-container';
+      el.setAttribute('aria-live', 'polite');
+      el.setAttribute('aria-atomic', 'true');
       document.body.appendChild(el);
       return el;
     })();
@@ -253,6 +388,43 @@ const App = {
     t.textContent = msg;
     c.appendChild(t);
     setTimeout(() => { t.classList.add('toast-out'); setTimeout(() => t.remove(), 300); }, dur);
+  },
+
+  requestNotifPermission() {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission().then(p => { this.state._notifGranted = p === 'granted'; });
+    } else if ('Notification' in window) {
+      this.state._notifGranted = Notification.permission === 'granted';
+    }
+  },
+
+  notify(title, body, tag) {
+    this.toast(`${title}: ${body}`, 'info', 5000);
+    if (this.state._notifGranted) {
+      try { new Notification(title, { body, tag: tag || 'dowiz', icon: '/icon-192.png' }); } catch {}
+    }
+  },
+
+  startPolling() {
+    this.stopPolling();
+    this.state._pollTimer = setInterval(() => {
+      const prevPending = this.state._prevPendingCount || 0;
+      const prevTasks = this.state._prevTaskCount || 0;
+      const currPending = this.state._orders.filter(o => o.status === 'pending').length;
+      const currTasks = this.state._courierTasks.filter(t => t.status === 'assigned').length;
+      if (currPending > prevPending && prevPending > 0) {
+        this.notify('Нове замовлення', `${currPending - prevPending} нове замовлення очікує`, 'new-order');
+      }
+      if (currTasks > prevTasks && prevTasks > 0) {
+        this.notify('Нове завдання', `${currTasks - prevTasks} нове завдання курʼєру`, 'new-task');
+      }
+      this.state._prevPendingCount = currPending;
+      this.state._prevTaskCount = currTasks;
+    }, 15000);
+  },
+
+  stopPolling() {
+    if (this.state._pollTimer) { clearInterval(this.state._pollTimer); this.state._pollTimer = null; }
   },
 
   sonifySpike(r) {
@@ -269,34 +441,44 @@ const App = {
   },
 
   render() {
-    document.getElementById('app').innerHTML = this.renderLayout();
+    const app = document.getElementById('app');
+    app.innerHTML = this.renderLayout();
+    const main = document.getElementById('main-content');
+    if (main) main.classList.add('page-enter');
     this.renderContent();
   },
 
   renderLayout() {
     const count = this.state.cart.reduce((s,i) => s+i.qty, 0);
     const activeOrders = this.state._orders.filter(o => o.status !== 'delivered').length;
+    const pendingOrders = this.state._orders.filter(o => o.status === 'pending').length;
+    const assignedTasks = this.state._courierTasks.filter(t => t.status === 'assigned').length;
+    const pendingBadge = pendingOrders > 0 ? `<span class="notif-badge notif-badge-pending">${pendingOrders}</span>` : '';
+    const taskBadge = assignedTasks > 0 ? `<span class="notif-badge notif-badge-task">${assignedTasks}</span>` : '';
     const navLinks = [
       { page: 'menu', label: 'Меню' },
       { page: 'orders', label: `Замовлення${activeOrders ? ' (' + activeOrders + ')' : ''}` },
       { page: 'analytics', label: 'Аналітика' },
+      { page: '', label: '' },
     ];
+    const ownerBadge = this.state.role === 'owner' && pendingOrders > 0 ? `<span class="notif-badge notif-badge-pending">${pendingOrders}</span>` : '';
+    const courierBadge = this.state.role === 'courier' && assignedTasks > 0 ? `<span class="notif-badge notif-badge-task">${assignedTasks}</span>` : '';
     const roleNames = { customer: 'Клієнт', owner: 'Заклад', courier: 'Курʼєр' };
     const roleEmoji = { customer: '👤', owner: '🏪', courier: '🛵' };
     return `
-    <nav class="navbar">
-      <div class="navbar-logo gradient-text spring">dowiz</div>
-      <div class="navbar-links">
-        ${navLinks.map(l => `<a href="#" class="${this.state.page===l.page?'active':''}" data-page="${l.page}">${l.label}</a>`).join('')}
+    <nav class="navbar" role="navigation" aria-label="Головна навігація">
+      <div class="navbar-logo gradient-text spring" aria-label="dowiz">dowiz</div>
+      <div class="navbar-links" role="tablist">
+        ${navLinks.map(l => `<a href="#" role="tab" aria-selected="${this.state.page===l.page}" class="${this.state.page===l.page?'active':''}" data-page="${l.page}">${sanitize(l.label)}</a>`).join('')}
       </div>
       <div style="display:flex;gap:8px;align-items:center">
-        <span class="role-badge">${roleEmoji[this.state.role]} ${roleNames[this.state.role]}</span>
-        <button class="btn btn-ghost btn-sm" onclick="App.setRole('customer')" title="Клієнт">👤</button>
-        <button class="btn btn-ghost btn-sm" onclick="App.setRole('owner')" title="Заклад">🏪</button>
-        <button class="btn btn-ghost btn-sm" onclick="App.setRole('courier')" title="Курʼєр">🛵</button>
-        <button class="btn btn-ghost btn-sm theme-btn" onclick="App.cycleTheme()" title="Змінити тему">🎨</button>
-        <button class="btn btn-ghost btn-sm" onclick="App.toggleCart()">🛒 ${count > 0 ? count : ''}</button>
-        ${this.state._canInstall ? '<button class="btn btn-sm btn-primary" onclick="App.installApp()">⬇ Встановити</button>' : ''}
+        <span class="role-badge" aria-live="polite">${roleEmoji[this.state.role]} ${roleNames[this.state.role]}${ownerBadge}${courierBadge}</span>
+        <button class="btn btn-ghost btn-sm" onclick="App.setRole('customer')" aria-label="Переключити на клієнта" title="Клієнт">👤</button>
+        <button class="btn btn-ghost btn-sm" onclick="App.setRole('owner')" aria-label="Переключити на заклад" title="Заклад">🏪</button>
+        <button class="btn btn-ghost btn-sm" onclick="App.setRole('courier')" aria-label="Переключити на курʼєра" title="Курʼєр">🛵</button>
+        <button class="btn btn-ghost btn-sm theme-btn" onclick="App.cycleTheme()" aria-label="Змінити тему" title="Змінити тему">🎨</button>
+        <button class="btn btn-ghost btn-sm" onclick="App.toggleCart()" aria-label="Кошик" title="Кошик">🛒 ${count > 0 ? count : ''}</button>
+        ${this.state._canInstall ? '<button class="btn btn-sm btn-primary" onclick="App.installApp()" aria-label="Встановити додаток">⬇ Встановити</button>' : ''}
       </div>
     </nav>
     <main id="main-content">${this.pageForCurrent()}</main>
@@ -309,11 +491,13 @@ const App = {
         <input class="cart-input" id="delivery-note" placeholder="Примітка (необов'язково)" value="${this.state._deliveryNote}" oninput="App.setDelivery('note', this.value)"/>
       </div>
       <div class="cart-total"><span>Разом</span><span id="cart-total">0 ALL</span></div>
-      <div class="cart-actions"><button class="btn btn-primary w-full" onclick="App.checkout()">Замовити</button></div>
+      <div class="cart-actions"><button class="btn btn-primary w-full checkout-btn" onclick="App.checkout()">Замовити</button></div>
+      <div data-hint style="display:none;padding:8px 20px;font-size:0.8em;color:var(--brand-primary);text-align:center">💡 Перевірте адресу та телефон перед замовленням</div>
     </div>
     <footer><p>dowiz — децентралізований протокол доставки. ${this.state._stats.tests} тестів.</p></footer>`;
   },
 
+  // ── §6 Pages ────────────────────────────────────────────────────
   pageForCurrent() {
     if (this.state.page === 'order-detail') return this.pageOrderDetail();
     if (this.state.page === 'orders') return this.pageOrders();
@@ -353,8 +537,21 @@ const App = {
   pageOrderDetail() {
     const o = this.state._orderDetail;
     if (!o) return '<section><p class="section-subtitle">Замовлення не знайдено</p><button class="btn btn-ghost" onclick="App.navigate(\'orders\')">Назад</button></section>';
-    const labels = { pending:'Очікує підтвердження', confirmed:'Підтверджено', preparing:'Готується', ready:'Готово', 'in-delivery':'В дорозі', delivered:'Доставлено' };
-    const colors = { pending:'#D97706', confirmed:'#2563EB', preparing:'#F59E0B', ready:'#0D9488', 'in-delivery':'#3B82F6', delivered:'#059669' };
+    if (o.status === 'cancelled') {
+      return `
+      <section class="order-detail">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+          <button class="btn btn-ghost btn-sm" onclick="App.navigate('orders')">← Назад</button>
+          <h2 class="section-title" style="margin:0">Замовлення #${o.id}</h2>
+        </div>
+        <div class="order-detail-card" style="text-align:center;padding:48px">
+          <div style="font-size:3em;margin-bottom:16px">❌</div>
+          <h3>Замовлення скасовано</h3>
+        </div>
+      </section>`;
+    }
+    const labels = { pending:'Очікує підтвердження', confirmed:'Підтверджено', preparing:'Готується', ready:'Готово', 'in-delivery':'В дорозі', delivered:'Доставлено', cancelled:'Скасовано' };
+    const colors = { pending:'#D97706', confirmed:'#2563EB', preparing:'#F59E0B', ready:'#0D9488', 'in-delivery':'#3B82F6', delivered:'#059669', cancelled:'#DC2626' };
     const chain = ['pending','confirmed','preparing','ready','in-delivery','delivered'];
     const idx = chain.indexOf(o.status);
     return `
@@ -384,6 +581,7 @@ const App = {
             </div>
           `).join('')}
         </div>
+        ${estimateETA(o) ? `<div style="margin-top:16px;padding:12px;background:var(--brand-surface);border-radius:8px;text-align:center"><span style="font-weight:600">Орієнтовний час: ${estimateETA(o)}</span></div>` : ''}
       </div>
       <div style="margin-top:16px;text-align:center">
         <button class="btn btn-ghost" onclick="App.navigate('orders')">До списку замовлень</button>
@@ -399,9 +597,9 @@ const App = {
       <div class="menu-search">
         <input class="menu-search-input" id="menu-search" type="text" placeholder="Пошук страв..." value="${this.state._searchQuery || ''}" oninput="App.searchMenu(this.value)" />
       </div>
-      <div class="cat-filters" id="cat-filters">
+      <div class="cat-filters" id="cat-filters" style="overflow-x:auto;white-space:nowrap;display:flex;gap:6px;padding:4px 0;-webkit-overflow-scrolling:touch;scrollbar-width:none">
         <button class="btn btn-sm btn-primary" data-cat="all" onclick="App.filterMenu('all')">Усі</button>
-        ${cats.map(c => `<button class="btn btn-sm btn-ghost" data-cat="${c}" onclick="App.filterMenu('${c}')">${CAT_UA[c] || c}</button>`).join('')}
+        ${cats.map(c => `<button class="btn btn-sm btn-ghost" style="flex-shrink:0" data-cat="${c}" onclick="App.filterMenu('${c}')">${CAT_UA[c] || c}</button>`).join('')}
       </div>
       <div class="menu-grid" id="menu-grid"></div>
     </section>`;
@@ -431,16 +629,25 @@ const App = {
     const deliveries = this.state._deliveriesToday;
     const tasks = this.state._courierTasks || [];
     const pending = tasks.filter(t => t.status !== 'delivered').length;
+    let shiftDuration = '';
+    let earningsRate = '';
+    if (active && this.state._shiftStart) {
+      const elapsed = Math.floor((Date.now() - this.state._shiftStart) / 60000);
+      const h = Math.floor(elapsed / 60);
+      const m = elapsed % 60;
+      shiftDuration = `${h} год ${m} хв`;
+      earningsRate = h > 0 ? `${Math.round(earnings / h)} ALL/год` : '—';
+    }
     return `
     <section class="courier-section">
       <div class="courier-header">
         <div>
           <h2 class="section-title">Доставка</h2>
-          <p class="section-subtitle">${active ? 'Зміна активна' : 'Зміна не активна'} · ${deliveries} доставок сьогодні</p>
+          <p class="section-subtitle">${active ? 'Зміна активна' : 'Зміна не активна'} · ${deliveries} доставок сьогодні${shiftDuration ? ` · ${shiftDuration}` : ''}</p>
         </div>
         <div style="text-align:right">
           <div class="courier-earnings">${earnings.toLocaleString()} ALL</div>
-          <div style="font-size:0.8em;color:var(--brand-text-muted)">сьогодні</div>
+          <div style="font-size:0.8em;color:var(--brand-text-muted)">${earningsRate || 'сьогодні'}</div>
         </div>
       </div>
       <div class="courier-shift-bar">
@@ -457,13 +664,21 @@ const App = {
     </section>`;
   },
 
+  // ── §7 Renderers ────────────────────────────────────────────────
   renderContent() {
-    if (this.state.page === 'order-detail') return;
-    if (this.state.page === 'orders') this.renderOrders();
-    else if (this.state.page === 'analytics') this.renderAnalytics();
-    else if (this.state.role === 'owner') this.renderOwner();
-    else if (this.state.role === 'courier') this.renderCourier();
-    else this.renderMenuContent();
+    try {
+      if (this.state.page === 'order-detail') return;
+      if (this.state.page === 'orders') this.renderOrders();
+      else if (this.state.page === 'analytics') this.renderAnalytics();
+      else if (this.state.role === 'owner') this.renderOwner();
+      else if (this.state.role === 'courier') this.renderCourier();
+      else this.renderMenuContent();
+    } catch (e) {
+      console.error('renderContent error:', e);
+      this.state._health?.signalError('renderContent', e);
+      const main = document.getElementById('main-content');
+      if (main) main.innerHTML = '<section style="text-align:center;padding:48px"><p style="color:var(--brand-danger)">Помилка відображення. Спробуйте перезавантажити.</p><button class="btn btn-primary" onclick="location.reload()">Перезавантажити</button></section>';
+    }
   },
 
   renderMenuContent() {
@@ -517,8 +732,8 @@ const App = {
   },
 
   viewOrder(id) {
-    const o = this.state._orders.find(o => o.id === id);
-    if (!o) return;
+    const o = this.state._orders.find(x => x.id === id);
+    if (!o) { this.toast('Замовлення не знайдено', 'error', 2000); return; }
     this.state._orderDetail = o;
     this.state.page = 'order-detail';
     this.state._cartOpen = false;
@@ -570,13 +785,19 @@ const App = {
     const timelineEl = document.getElementById('analytics-timeline');
     if (timelineEl) {
       const hours = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
+      const orderHourCounts = {};
+      this.state._orders.forEach((o, idx) => {
+        const h = 10 + (idx * 7) % 12;
+        orderHourCounts[h] = (orderHourCounts[h] || 0) + 1;
+      });
+      const maxCount = Math.max(1, ...Object.values(orderHourCounts));
       timelineEl.innerHTML = `
         <div class="timeline-chart">
           ${hours.map((h, i) => {
             const hh = i + 10;
-            const val = Math.max(1, Math.round(3 + Math.sin(hh * 0.8) * 2 + Math.random()));
-            const barH = Math.round(val * 8);
-            return `<div class="timeline-bar"><div class="bar-fill" style="height:${barH}px"></div><div class="bar-label">${h}</div></div>`;
+            const count = orderHourCounts[hh] || 0;
+            const barH = Math.round((count / maxCount) * 80) || 4;
+            return `<div class="timeline-bar"><div class="bar-fill" style="height:${barH}px"></div><div class="bar-value" style="font-size:0.65em;color:var(--brand-text-muted)">${count}</div><div class="bar-label">${h}</div></div>`;
           }).join('')}
         </div>`;
     }
@@ -602,12 +823,14 @@ const App = {
   renderOwnerOrders() {
     const el = document.getElementById('owner-orders');
     if (!el) return;
-    const labels = { pending:'Очікує', confirmed:'Підтверджено', preparing:'Готується', ready:'Готово', 'in-delivery':'В дорозі', delivered:'Доставлено' };
-    const colors = { pending:'#D97706', confirmed:'#2563EB', preparing:'#F59E0B', ready:'#0D9488', 'in-delivery':'#3B82F6', delivered:'#059669' };
+    const labels = { pending:'Очікує', confirmed:'Підтверджено', preparing:'Готується', ready:'Готово', 'in-delivery':'В дорозі', delivered:'Доставлено', cancelled:'Скасовано' };
+    const colors = { pending:'#D97706', confirmed:'#2563EB', preparing:'#F59E0B', ready:'#0D9488', 'in-delivery':'#3B82F6', delivered:'#059669', cancelled:'#DC2626' };
+    const cancelLabel = { pending: 'Скасувати', confirmed: 'Скасувати' };
     const nextAction = {
       pending: { label: 'Підтвердити', cls: 'btn-primary' },
       confirmed: { label: 'Готувати', cls: 'btn-warning' },
       preparing: { label: 'Готово', cls: 'btn-success' },
+      'in-delivery': { label: 'Доставлено', cls: 'btn-primary' },
     };
     el.innerHTML = this.state._orders.map(o => {
       const action = nextAction[o.status];
@@ -617,6 +840,7 @@ const App = {
         <div class="order-status" style="display:flex;align-items:center;gap:8px">
           <span class="status-dot" style="background:${colors[o.status]||'#888'}"></span>
           <span>${labels[o.status]||o.status}</span>
+          ${cancelLabel[o.status] ? `<button class="btn btn-sm btn-ghost" onclick="App.cancelOrder(${o.id})" style="color:var(--brand-danger)">${cancelLabel[o.status]}</button>` : ''}
           ${action ? `<button class="btn btn-sm ${action.cls}" onclick="App.advanceOrder(${o.id})">${action.label}</button>` : ''}
         </div>
       </div>`;
@@ -654,8 +878,20 @@ const App = {
         task.status = 'delivered';
         this.state._earningsToday += task.payout;
         this.state._deliveriesToday++;
+        this.state._earningsHistory.unshift({ date: new Date().toISOString().slice(0,10), amount: task.payout, trips: 1 });
       }
     }
+    this.renderOwnerOrders();
+    this.persist();
+  },
+
+  cancelOrder(id) {
+    const order = this.state._orders.find(o => o.id === id);
+    if (!order) return;
+    if (order.status !== 'pending' && order.status !== 'confirmed') return;
+    order.status = 'cancelled';
+    this.sonify('advanceOrder');
+    this.toast(`Замовлення #${order.id} скасовано`, 'warning');
     this.renderOwnerOrders();
     this.persist();
   },
@@ -663,16 +899,67 @@ const App = {
   renderOwnerMenu() {
     const el = document.getElementById('owner-menu-grid');
     if (!el) return;
-    const items = this.state._menu.slice(0, 12);
-    el.innerHTML = items.map(i => `
-      <div class="menu-item spring-fast" style="padding:8px;font-size:0.85em">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <strong>${i.name}</strong>
-          <span>${i.price.toLocaleString()} ALL</span>
-        </div>
-        <div style="font-size:0.8em;color:var(--brand-text-muted)">${CAT_UA[i.catName]||i.catName||i.cat} · ${i.drink ? 'Напій' : 'Страва'}</div>
+    el.innerHTML = `
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-primary" onclick="App.addMenuItem()">+ Додати страву</button>
+        <button class="btn btn-sm btn-ghost" onclick="App.toggleOwnerMenuMode()">${this.state._ownerMenuEdit ? '✅ Готово' : '✏ Редагувати'}</button>
       </div>
-    `).join('');
+      <div style="display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))">
+      ${this.state._menu.map(i => `
+        <div class="menu-item spring-fast" style="padding:8px;font-size:0.85em;position:relative">
+          ${this.state._ownerMenuEdit ? `
+            <div style="position:absolute;top:4px;right:4px;display:flex;gap:4px">
+              <button class="btn btn-sm btn-ghost" style="padding:2px 6px;font-size:0.8em;color:var(--brand-text-muted)" onclick="App.editMenuItem(${i.id})" title="Редагувати">✏</button>
+              <button class="btn btn-sm btn-ghost" style="padding:2px 6px;font-size:0.8em;color:var(--brand-danger)" onclick="App.toggleMenuItem(${i.id})" title="${i._hidden ? 'Показати' : 'Приховати'}">${i._hidden ? '👁' : '🙈'}</button>
+            </div>
+          ` : ''}
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <strong${i._hidden ? ' style="opacity:0.4;text-decoration:line-through"' : ''}>${i.name}</strong>
+            <span>${i.price.toLocaleString()} ALL</span>
+          </div>
+          <div style="font-size:0.8em;color:var(--brand-text-muted)">${CAT_UA[i.catName]||i.catName||i.cat} · ${i.drink ? 'Напій' : 'Страва'}${i._hidden ? ' · <span style="color:var(--brand-danger)">приховано</span>' : ''}</div>
+        </div>
+      `).join('')}
+      </div>`;
+  },
+
+  toggleOwnerMenuMode() {
+    this.state._ownerMenuEdit = !this.state._ownerMenuEdit;
+    this.renderOwnerMenu();
+  },
+
+  toggleMenuItem(id) {
+    const item = this.state._menu.find(i => i.id === id);
+    if (!item) return;
+    item._hidden = !item._hidden;
+    this.toast(`${item.name}: ${item._hidden ? 'приховано' : 'показано'}`, 'info');
+    this.renderOwnerMenu();
+    this.persist();
+  },
+
+  editMenuItem(id) {
+    const item = this.state._menu.find(i => i.id === id);
+    if (!item) return;
+    const newPrice = prompt(`Нова ціна для "${item.name}" (поточна: ${item.price} ALL):`, item.price);
+    if (newPrice !== null && !isNaN(newPrice) && Number(newPrice) > 0) {
+      item.price = Number(newPrice);
+      this.toast(`Ціну "${item.name}" змінено на ${item.price} ALL`, 'success');
+      this.renderOwnerMenu();
+      this.persist();
+    }
+  },
+
+  addMenuItem() {
+    const name = prompt('Назва страви:');
+    if (!name) return;
+    const price = prompt('Ціна (ALL):');
+    if (!price || isNaN(price) || Number(price) <= 0) { this.toast('Некоректна ціна', 'error'); return; }
+    const cat = prompt('Категорія (залиште порожньою для "Sets"):') || 'Sets';
+    const id = Date.now();
+    this.state._menu.push({ id, name, price: Number(price), catName: cat, cat, _hidden: false });
+    this.toast(`"${name}" додано до меню`, 'success');
+    this.renderOwnerMenu();
+    this.persist();
   },
 
   renderCourier() {
@@ -708,6 +995,8 @@ const App = {
         <div class="courier-task-addr"><strong>Забрати:</strong> ${t.pickup}</div>
         <div class="courier-task-addr"><strong>Доставити:</strong> ${t.dropoff}</div>
         <div class="courier-task-meta">${t.items} позицій · Замовлення #${t.orderId}</div>
+        ${t.status === 'assigned' ? `<div style="font-size:0.85em;color:var(--brand-text-muted);margin-top:4px">🕐 ~10 хв до закладу</div>` : ''}
+        ${t.status === 'picked-up' ? `<div style="font-size:0.85em;color:var(--brand-text-muted);margin-top:4px">🕐 Доставка ~15-20 хв</div>` : ''}
         ${t.status === 'assigned' ? '<button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="App.pickupTask('+t.id+')">Забрати замовлення</button>' : ''}
         ${t.status === 'picked-up' ? '<button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="App.deliverTask('+t.id+')">Підтвердити доставку</button>' : ''}
       </div>
@@ -737,9 +1026,12 @@ const App = {
     const task = this.state._courierTasks.find(t => t.id === id);
     if (!task || task.status !== 'assigned') return;
     task.status = 'picked-up';
+    const order = this.state._orders.find(o => o.id === task.orderId);
+    if (order && order.status === 'ready') order.status = 'in-delivery';
     this.sonify('advanceOrder');
     this.toast(`Замовлення #${task.orderId} забрано`, 'info');
     this.renderCourier();
+    this.renderOwnerOrders?.();
     this.persist();
   },
 
@@ -747,8 +1039,11 @@ const App = {
     const task = this.state._courierTasks.find(t => t.id === id);
     if (!task || task.status !== 'picked-up') return;
     task.status = 'delivered';
+    const order = this.state._orders.find(o => o.id === task.orderId);
+    if (order && order.status !== 'delivered') order.status = 'delivered';
     this.state._earningsToday += task.payout;
     this.state._deliveriesToday++;
+    this.state._earningsHistory.unshift({ date: new Date().toISOString().slice(0,10), amount: task.payout, trips: 1 });
     this.sonify('deliver');
     this.toast(`Замовлення #${task.orderId} доставлено · ${task.payout.toLocaleString()} ALL`, 'success', 5000);
     this.render();
@@ -773,6 +1068,17 @@ const App = {
     this.toast(`Тема: ${this.state.theme}`, 'info', 1500);
   },
 
+  previewTheme(name) {
+    document.documentElement.dataset.theme = name;
+  },
+
+  applyTheme(name) {
+    this.state.theme = name;
+    document.documentElement.dataset.theme = name;
+    localStorage.setItem('dowiz-theme', name);
+    this.toast(`Тема: ${name}`, 'info', 1500);
+  },
+
   filterMenu(cat) {
     this.state.filter = cat;
     this.renderMenuContent();
@@ -783,7 +1089,13 @@ const App = {
   },
 
   setRole(role) {
+    this.state._oracle?.mark('setrole');
+    this.state._markov?.observe(`role:${role}`);
     const prev = this.state.role;
+    if (prev !== role && role !== 'customer') {
+      const activeOrders = this.state._orders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled').length;
+      if (activeOrders > 0 && !confirm(`У вас ${activeOrders} активних замовлень. Змінити роль?`)) return;
+    }
     this.state.role = role;
     if (role === 'customer') this.state.page = 'menu';
     else if (role === 'owner') this.state.page = 'owner';
@@ -793,6 +1105,7 @@ const App = {
     this.persist();
   },
 
+  // ── §8 Cart ─────────────────────────────────────────────────────
   addToCart(id) {
     const item = this.state._menu.find(i => i.id === id);
     if (!item || item.drink) return;
@@ -801,8 +1114,9 @@ const App = {
     else this.state.cart.push({ ...item, qty: 1 });
     this.sonify('addToCart');
     this.toast(`${item.name} додано до кошика`, 'info', 2000);
+    const btn = document.querySelector(`.menu-item .btn[onclick*="addToCart(${id})"]`);
+    if (btn) { const orig = btn.textContent; btn.textContent = '✓'; btn.classList.add('btn-success'); setTimeout(() => { btn.textContent = orig; btn.classList.remove('btn-success'); }, 1200); }
     this.renderCart();
-    this.toggleCart(true);
     this.persist();
   },
 
@@ -815,9 +1129,25 @@ const App = {
   },
 
   setDelivery(field, value) {
-    if (field === 'address') this.state._deliveryAddress = value;
-    else if (field === 'phone') this.state._deliveryPhone = value;
-    else if (field === 'note') this.state._deliveryNote = value;
+    if (field === 'address') {
+      this.state._deliveryAddress = value;
+      const el = document.getElementById('delivery-addr');
+      if (el) { el.classList.toggle('input-error', value.trim().length > 0 && !this.validateAddress(value)); el.classList.toggle('input-valid', value.trim().length > 0 && this.validateAddress(value)); }
+    } else if (field === 'phone') {
+      this.state._deliveryPhone = value;
+      const el = document.getElementById('delivery-phone');
+      if (el) { el.classList.toggle('input-error', value.trim().length > 0 && !this.validatePhone(value)); el.classList.toggle('input-valid', value.trim().length > 0 && this.validatePhone(value)); }
+    } else if (field === 'note') this.state._deliveryNote = value;
+  },
+
+  changeQty(id, delta) {
+    const item = this.state.cart.find(i => i.id === id);
+    if (!item) return;
+    item.qty += delta;
+    if (item.qty <= 0) { this.removeFromCart(id); return; }
+    this.sonify('addToCart');
+    this.renderCart();
+    this.persist();
   },
 
   renderCart() {
@@ -826,14 +1156,18 @@ const App = {
     const el = document.getElementById('cart-items');
     const tEl = document.getElementById('cart-total');
     if (!el) return;
-    // Show/hide delivery form
     const deliveryEl = document.getElementById('cart-delivery');
     if (deliveryEl) deliveryEl.style.display = count === 0 ? 'none' : 'block';
     el.innerHTML = count === 0
       ? '<p style="text-align:center;color:var(--brand-text-muted);padding:48px 0">Кошик порожній</p>'
       : this.state.cart.map(i => `
         <div class="cart-item spring-fast">
-          <div><strong>${i.name}</strong><span class="text-muted"> ×${i.qty}</span></div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <button class="btn btn-sm btn-ghost" onclick="App.changeQty('${i.id}', -1)" style="min-width:28px;padding:2px 6px">−</button>
+            <span style="min-width:20px;text-align:center">${i.qty}</span>
+            <button class="btn btn-sm btn-ghost" onclick="App.changeQty('${i.id}', 1)" style="min-width:28px;padding:2px 6px">+</button>
+          </div>
+          <div><strong>${i.name}</strong></div>
           <div style="display:flex;align-items:center;gap:8px">
             <span>${(i.price*i.qty).toLocaleString()} ALL</span>
             <button class="btn-remove" onclick="App.removeFromCart('${i.id}')">✕</button>
@@ -851,15 +1185,24 @@ const App = {
   },
 
   async checkout() {
+    this.state._oracle?.mark('checkout-start');
+    this.state._markov?.observe('checkout');
     if (this.state.cart.length === 0) return;
-    if (!this.state._deliveryAddress.trim()) {
+    if (!this.validateAddress(this.state._deliveryAddress)) {
       document.getElementById('delivery-addr')?.focus();
       document.getElementById('delivery-addr')?.classList.add('input-error');
+      this.toast('Вкажіть адресу доставки (не менше 5 символів)', 'error');
       return;
     }
+    if (!this.validatePhone(this.state._deliveryPhone)) {
+      document.getElementById('delivery-phone')?.focus();
+      document.getElementById('delivery-phone')?.classList.add('input-error');
+      this.toast('Вкажіть коректний номер телефону', 'error');
+      return;
+    }
+    const btn = document.querySelector('.checkout-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Відправлення...'; }
     const total = this.state.cart.reduce((s,i) => s+i.price*i.qty, 0);
-    this.sonify('checkout');
-    this.toast('Замовлення прийнято!', 'success');
     const address = this.state._deliveryAddress.trim();
     const phone = this.state._deliveryPhone.trim();
     const note = this.state._deliveryNote.trim();
@@ -868,6 +1211,7 @@ const App = {
       total, address, phone, note,
     };
     let orderId;
+    let apiFailed = false;
     try {
       const resp = await fetch(`${API_BASE}/order`, {
         method: 'POST',
@@ -877,13 +1221,22 @@ const App = {
       if (resp.ok) {
         const created = await resp.json();
         orderId = created.id;
-        this.state._orders.unshift({ id: orderId, status: 'pending', items: this.state.cart.length, total, time: 'щойно', address, phone, note });
+      } else {
+        apiFailed = true;
       }
-    } catch {}
-    if (!orderId) {
-      orderId = 1000 + Date.now() % 10000;
-      this.state._orders.unshift({ id: orderId, status: 'pending', items: this.state.cart.length, total, time: 'щойно', address, phone, note });
+    } catch {
+      apiFailed = true;
     }
+    if (apiFailed) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Замовити'; }
+      this.state._health?.signalCheckout(false, 0, null);
+      this.state._telegram?.checkoutEvent(false, 0, null);
+      this.toast('Помилка при створенні замовлення. Спробуйте ще раз.', 'error', 5000);
+      return;
+    }
+    this.sonify('checkout');
+    this.toast('Замовлення прийнято!', 'success');
+    this.state._orders.unshift({ id: orderId, status: 'pending', items: this.state.cart.length, total, time: 'щойно', address, phone, note });
     this.state._lastOrderId = orderId;
     this.state.cart = [];
     this.state._deliveryAddress = '';
@@ -929,18 +1282,6 @@ const App = {
       </section>`;
   },
 
-  navigate(page) {
-    this.state.page = page;
-    this.state._cartOpen = false;
-    document.getElementById('cart-panel')?.classList.remove('open');
-    this.render();
-    document.querySelectorAll('.navbar-links a').forEach(a =>
-      a.classList.toggle('active', a.dataset.page === page)
-    );
-    this.sonify('navigate');
-    this.persist();
-  },
-
   bindEvents() {
     document.addEventListener('click', (e) => {
       const link = e.target.closest('[data-page]');
@@ -954,6 +1295,9 @@ const App = {
       else if (e.key === 'Escape') this.toggleCart(false);
       else if (e.key === 'o') this.setRole('owner');
       else if (e.key === 'p') this.setRole('customer');
+      else if (e.key === 'k') this.setRole('courier');
+      else if (e.key === 't') this.cycleTheme();
+      else if (e.key === 'r') location.reload();
     });
   },
 };
