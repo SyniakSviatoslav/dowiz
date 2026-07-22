@@ -1,0 +1,2863 @@
+{
+  "version": "20260712162831",
+  "items": [
+    {
+      "id": "item-01",
+      "name": "Sake Futomaki",
+      "image": "img/item-01-20260712162831.jpg",
+      "imageWebp": "img/item-01-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "chef",
+        "futomaki"
+      ],
+      "filters": [
+        "popular",
+        "salmon"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "salmon",
+            "cream cheese",
+            "cucumber",
+            "tobiko"
+          ],
+          "price": "900 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "лосось",
+            "крем-сир",
+            "огірок",
+            "тобіко"
+          ],
+          "price": "900 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "salmon",
+            "krem djathi",
+            "kastravec",
+            "tobiko"
+          ],
+          "price": "900 lek"
+        }
+      }
+    },
+    {
+      "id": "item-02",
+      "name": "Ebi Futomaki",
+      "image": "img/item-02-20260712162831.jpg",
+      "imageWebp": "img/item-02-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "chef",
+        "futomaki"
+      ],
+      "filters": [
+        "popular",
+        "shrimp"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "cream cheese",
+            "crab mix",
+            "shrimp",
+            "tobiko"
+          ],
+          "price": "850 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "крем-сир",
+            "краб-мікс",
+            "креветка",
+            "тобіко"
+          ],
+          "price": "850 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "krem djathi",
+            "miks gaforre",
+            "karkalec",
+            "tobiko"
+          ],
+          "price": "850 lek"
+        }
+      }
+    },
+    {
+      "id": "item-03",
+      "name": "Sake Furai Futomaki",
+      "image": "img/item-03-20260712162831.jpg",
+      "imageWebp": "img/item-03-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "futomaki"
+      ],
+      "filters": [
+        "salmon"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "cream cheese",
+            "tobiko",
+            "cucumber",
+            "grilled salmon"
+          ],
+          "price": "850 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "крем-сир",
+            "тобіко",
+            "огірок",
+            "лосось гриль"
+          ],
+          "price": "850 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "krem djathi",
+            "tobiko",
+            "kastravec",
+            "salmon i pjekur"
+          ],
+          "price": "850 lek"
+        }
+      }
+    },
+    {
+      "id": "item-04",
+      "name": "Philadelphia Classic",
+      "image": "img/item-04-20260712162831.jpg",
+      "imageWebp": "img/item-04-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "philadelphia"
+      ],
+      "filters": [
+        "salmon"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "cream cheese",
+            "cucumber",
+            "salmon"
+          ],
+          "price": "1100 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "крем-сир",
+            "огірок",
+            "лосось"
+          ],
+          "price": "1100 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "krem djathi",
+            "kastravec",
+            "salmon"
+          ],
+          "price": "1100 lek"
+        }
+      }
+    },
+    {
+      "id": "item-05",
+      "name": "Philadelphia Premium",
+      "image": "img/item-05-20260712162831.jpg",
+      "imageWebp": "img/item-05-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "chef",
+        "philadelphia",
+        "premium"
+      ],
+      "filters": [
+        "popular",
+        "salmon"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "cream cheese",
+            "cucumber",
+            "salmon"
+          ],
+          "price": "1400 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "крем-сир",
+            "огірок",
+            "лосось"
+          ],
+          "price": "1400 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "krem djathi",
+            "kastravec",
+            "salmon"
+          ],
+          "price": "1400 lek"
+        }
+      }
+    },
+    {
+      "id": "item-06",
+      "name": "Red Pearl",
+      "image": "img/item-06-20260712162831.jpg",
+      "imageWebp": "img/item-06-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "california"
+      ],
+      "filters": [
+        "salmon"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "tobiko",
+            "salmon",
+            "cucumber",
+            "spicy mayo"
+          ],
+          "price": "950 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "тобіко",
+            "лосось",
+            "огірок",
+            "спайсі майонез"
+          ],
+          "price": "950 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "tobiko",
+            "salmon",
+            "kastravec",
+            "majoneze pikante"
+          ],
+          "price": "950 lek"
+        }
+      }
+    },
+    {
+      "id": "item-07",
+      "name": "Red Pearl Premium",
+      "image": "img/item-07-20260712162831.jpg",
+      "imageWebp": "img/item-07-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "california",
+        "premium"
+      ],
+      "filters": [
+        "salmon"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "tobiko",
+            "salmon",
+            "cucumber",
+            "spicy mayo"
+          ],
+          "price": "1300 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "тобіко",
+            "лосось",
+            "огірок",
+            "спайсі майонез"
+          ],
+          "price": "1300 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "tobiko",
+            "salmon",
+            "kastravec",
+            "majoneze pikante"
+          ],
+          "price": "1300 lek"
+        }
+      }
+    },
+    {
+      "id": "item-08",
+      "name": "Sesame Sake",
+      "image": "img/item-08-20260712162831.jpg",
+      "imageWebp": "img/item-08-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "chef",
+        "philadelphia",
+        "california"
+      ],
+      "filters": [
+        "popular",
+        "salmon"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "cream cheese",
+            "salmon",
+            "cucumber",
+            "sesame",
+            "spicy mayo"
+          ],
+          "price": "850 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "крем-сир",
+            "лосось",
+            "огірок",
+            "кунжут",
+            "спайсі майонез"
+          ],
+          "price": "850 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "krem djathi",
+            "salmon",
+            "kastravec",
+            "susam",
+            "majoneze pikante"
+          ],
+          "price": "850 lek"
+        }
+      }
+    },
+    {
+      "id": "item-09",
+      "name": "Ebi Cream",
+      "image": "img/item-09-20260712162831.jpg",
+      "imageWebp": "img/item-09-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "philadelphia"
+      ],
+      "filters": [
+        "shrimp"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "cream cheese",
+            "avocado",
+            "cucumber",
+            "shrimp"
+          ],
+          "price": "900 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "крем-сир",
+            "авокадо",
+            "огірок",
+            "креветка"
+          ],
+          "price": "900 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "krem djathi",
+            "avokado",
+            "kastravec",
+            "karkalec"
+          ],
+          "price": "900 lek"
+        }
+      }
+    },
+    {
+      "id": "item-10",
+      "name": "Ebi Cream Premium",
+      "image": "img/item-10-20260712162831.jpg",
+      "imageWebp": "img/item-10-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "philadelphia",
+        "premium"
+      ],
+      "filters": [
+        "shrimp"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "cream cheese",
+            "avocado",
+            "cucumber",
+            "shrimp"
+          ],
+          "price": "1300 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "крем-сир",
+            "авокадо",
+            "огірок",
+            "креветка"
+          ],
+          "price": "1300 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "krem djathi",
+            "avokado",
+            "kastravec",
+            "karkalec"
+          ],
+          "price": "1300 lek"
+        }
+      }
+    },
+    {
+      "id": "item-11",
+      "name": "Coral Sake",
+      "image": "img/item-11-20260712162831.jpg",
+      "imageWebp": "img/item-11-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "california"
+      ],
+      "filters": [
+        "salmon"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "salmon",
+            "cucumber",
+            "avocado",
+            "tobiko"
+          ],
+          "price": "1100 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "лосось",
+            "огірок",
+            "авокадо",
+            "тобіко"
+          ],
+          "price": "1100 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "salmon",
+            "kastravec",
+            "avokado",
+            "tobiko"
+          ],
+          "price": "1100 lek"
+        }
+      }
+    },
+    {
+      "id": "item-12",
+      "name": "Coral Sake Premium",
+      "image": "img/item-12-20260712162831.jpg",
+      "imageWebp": "img/item-12-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "california",
+        "premium"
+      ],
+      "filters": [
+        "salmon"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "salmon",
+            "cucumber",
+            "avocado",
+            "tobiko"
+          ],
+          "price": "1400 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "лосось",
+            "огірок",
+            "авокадо",
+            "тобіко"
+          ],
+          "price": "1400 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "salmon",
+            "kastravec",
+            "avokado",
+            "tobiko"
+          ],
+          "price": "1400 lek"
+        }
+      }
+    },
+    {
+      "id": "item-13",
+      "name": "Smoky Sunset",
+      "image": "img/item-13-20260712162831.jpg",
+      "imageWebp": "img/item-13-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "california"
+      ],
+      "filters": [],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "grilled salmon",
+            "cucumber",
+            "avocado",
+            "sesame"
+          ],
+          "price": "850 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "лосось гриль",
+            "огірок",
+            "авокадо",
+            "кунжут"
+          ],
+          "price": "850 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "salmon i pjekur",
+            "kastravec",
+            "avokado",
+            "susam"
+          ],
+          "price": "850 lek"
+        }
+      }
+    },
+    {
+      "id": "item-14",
+      "name": "Maguro Sesame",
+      "image": "img/item-14-20260712162831.jpg",
+      "imageWebp": "img/item-14-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "california"
+      ],
+      "filters": [
+        "tuna"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "tuna",
+            "cucumber",
+            "avocado",
+            "sesame"
+          ],
+          "price": "850 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "тунець",
+            "огірок",
+            "авокадо",
+            "кунжут"
+          ],
+          "price": "850 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "ton",
+            "kastravec",
+            "avokado",
+            "susam"
+          ],
+          "price": "850 lek"
+        }
+      }
+    },
+    {
+      "id": "item-15",
+      "name": "Crunchy Ebi Sunset",
+      "image": "img/item-15-20260712162831.jpg",
+      "imageWebp": "img/item-15-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "california"
+      ],
+      "filters": [
+        "shrimp"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "Kewpie mayo",
+            "cucumber",
+            "avocado",
+            "sesame",
+            "panko shrimp"
+          ],
+          "price": "850 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "майонез Kewpie",
+            "огірок",
+            "авокадо",
+            "кунжут",
+            "креветка панко"
+          ],
+          "price": "850 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "majoneze Kewpie",
+            "kastravec",
+            "avokado",
+            "susam",
+            "karkalec panko"
+          ],
+          "price": "850 lek"
+        }
+      }
+    },
+    {
+      "id": "item-16",
+      "name": "California Classic",
+      "image": "img/item-16-20260712162831.jpg",
+      "imageWebp": "img/item-16-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "chef",
+        "california"
+      ],
+      "filters": [
+        "popular"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "crab mix",
+            "avocado",
+            "cucumber",
+            "tobiko",
+            "Kewpie mayo"
+          ],
+          "price": "950 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "краб-мікс",
+            "авокадо",
+            "огірок",
+            "тобіко",
+            "майонез Kewpie"
+          ],
+          "price": "950 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "miks gaforre",
+            "avokado",
+            "kastravec",
+            "tobiko",
+            "majoneze Kewpie"
+          ],
+          "price": "950 lek"
+        }
+      }
+    },
+    {
+      "id": "item-17",
+      "name": "California Premium",
+      "image": "img/item-17-20260712162831.jpg",
+      "imageWebp": "img/item-17-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "california",
+        "premium"
+      ],
+      "filters": [],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "crab mix",
+            "avocado",
+            "cucumber",
+            "tobiko",
+            "Kewpie mayo"
+          ],
+          "price": "1300 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "краб-мікс",
+            "авокадо",
+            "огірок",
+            "тобіко",
+            "майонез Kewpie"
+          ],
+          "price": "1300 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "miks gaforre",
+            "avokado",
+            "kastravec",
+            "tobiko",
+            "majoneze Kewpie"
+          ],
+          "price": "1300 lek"
+        }
+      }
+    },
+    {
+      "id": "item-18",
+      "name": "Maguro Pearl",
+      "image": "img/item-18-20260712162831.jpg",
+      "imageWebp": "img/item-18-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "california"
+      ],
+      "filters": [
+        "tuna"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "tuna",
+            "cucumber",
+            "tobiko",
+            "Kewpie mayo"
+          ],
+          "price": "950 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "тунець",
+            "огірок",
+            "тобіко",
+            "майонез Kewpie"
+          ],
+          "price": "950 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "ton",
+            "kastravec",
+            "tobiko",
+            "majoneze Kewpie"
+          ],
+          "price": "950 lek"
+        }
+      }
+    },
+    {
+      "id": "item-19",
+      "name": "Maguro Pearl Premium",
+      "image": "img/item-19-20260712162831.jpg",
+      "imageWebp": "img/item-19-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "california",
+        "premium"
+      ],
+      "filters": [
+        "tuna"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "tuna",
+            "cucumber",
+            "tobiko",
+            "Kewpie mayo"
+          ],
+          "price": "1300 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "тунець",
+            "огірок",
+            "тобіко",
+            "майонез Kewpie"
+          ],
+          "price": "1300 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "ton",
+            "kastravec",
+            "tobiko",
+            "majoneze Kewpie"
+          ],
+          "price": "1300 lek"
+        }
+      }
+    },
+    {
+      "id": "item-20",
+      "name": "Crispy Sunset",
+      "image": "img/item-20-20260712162831.jpg",
+      "imageWebp": "img/item-20-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "california"
+      ],
+      "filters": [
+        "shrimp"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "panko shrimp",
+            "cucumber",
+            "avocado",
+            "tobiko"
+          ],
+          "price": "900 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "креветка панко",
+            "огірок",
+            "авокадо",
+            "тобіко"
+          ],
+          "price": "900 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "karkalec panko",
+            "kastravec",
+            "avokado",
+            "tobiko"
+          ],
+          "price": "900 lek"
+        }
+      }
+    },
+    {
+      "id": "item-21",
+      "name": "Sake Sunset",
+      "image": "img/item-21-20260712162831.jpg",
+      "imageWebp": "img/item-21-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "chef",
+        "california"
+      ],
+      "filters": [
+        "popular",
+        "salmon"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "salmon",
+            "cucumber",
+            "avocado",
+            "sesame"
+          ],
+          "price": "950 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "лосось",
+            "огірок",
+            "авокадо",
+            "кунжут"
+          ],
+          "price": "950 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "salmon",
+            "kastravec",
+            "avokado",
+            "susam"
+          ],
+          "price": "950 lek"
+        }
+      }
+    },
+    {
+      "id": "item-22",
+      "name": "Sake Sunset Premium",
+      "image": "img/item-22-20260712162831.jpg",
+      "imageWebp": "img/item-22-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "california",
+        "premium"
+      ],
+      "filters": [
+        "salmon"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "salmon",
+            "cucumber",
+            "avocado",
+            "sesame"
+          ],
+          "price": "1300 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "лосось",
+            "огірок",
+            "авокадо",
+            "кунжут"
+          ],
+          "price": "1300 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "salmon",
+            "kastravec",
+            "avokado",
+            "susam"
+          ],
+          "price": "1300 lek"
+        }
+      }
+    },
+    {
+      "id": "item-23",
+      "name": "Truffle Sake premium",
+      "image": "img/item-23-20260712162831.jpg",
+      "imageWebp": "img/item-23-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "chef",
+        "signature",
+        "premium"
+      ],
+      "filters": [
+        "popular",
+        "salmon",
+        "shrimp"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "cream cheese",
+            "shrimp",
+            "avocado",
+            "tobiko",
+            "salmon",
+            "truffle sauce"
+          ],
+          "price": "1200 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "крем-сир",
+            "креветка",
+            "авокадо",
+            "тобіко",
+            "лосось",
+            "трюфельний соус"
+          ],
+          "price": "1200 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "krem djathi",
+            "karkalec",
+            "avokado",
+            "tobiko",
+            "salmon",
+            "salce tartufi"
+          ],
+          "price": "1200 lek"
+        }
+      }
+    },
+    {
+      "id": "item-24",
+      "name": "Hot Ebi",
+      "image": "img/item-24-20260712162831.jpg",
+      "imageWebp": "img/item-24-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "chef",
+        "hot"
+      ],
+      "filters": [
+        "hot",
+        "popular",
+        "shrimp"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "cream cheese",
+            "shrimp",
+            "crab mix",
+            "sweet chili"
+          ],
+          "price": "850 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "крем-сир",
+            "креветка",
+            "краб-мікс",
+            "солодкий чилі"
+          ],
+          "price": "850 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "krem djathi",
+            "karkalec",
+            "miks gaforre",
+            "chili i embel"
+          ],
+          "price": "850 lek"
+        }
+      }
+    },
+    {
+      "id": "item-25",
+      "name": "Hot Smoky Sake",
+      "image": "img/item-25-20260712162831.jpg",
+      "imageWebp": "img/item-25-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "hot"
+      ],
+      "filters": [
+        "hot",
+        "salmon"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "grilled salmon",
+            "cream cheese",
+            "avocado"
+          ],
+          "price": "850 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "лосось гриль",
+            "крем-сир",
+            "авокадо"
+          ],
+          "price": "850 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "salmon i pjekur",
+            "krem djathi",
+            "avokado"
+          ],
+          "price": "850 lek"
+        }
+      }
+    },
+    {
+      "id": "item-26",
+      "name": "Hot Maguro",
+      "image": "img/item-26-20260712162831.jpg",
+      "imageWebp": "img/item-26-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "hot"
+      ],
+      "filters": [
+        "hot",
+        "tuna"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "tuna",
+            "cream cheese",
+            "avocado"
+          ],
+          "price": "900 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "тунець",
+            "крем-сир",
+            "авокадо"
+          ],
+          "price": "900 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "ton",
+            "krem djathi",
+            "avokado"
+          ],
+          "price": "900 lek"
+        }
+      }
+    },
+    {
+      "id": "item-27",
+      "name": "Sweet Chili Tiger",
+      "image": "img/item-27-20260712162831.jpg",
+      "imageWebp": "img/item-27-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "signature"
+      ],
+      "filters": [
+        "salmon",
+        "shrimp"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "panko shrimp",
+            "crab mix",
+            "avocado",
+            "salmon",
+            "sweet chili",
+            "crispy onion"
+          ],
+          "price": "1200 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "креветка панко",
+            "краб-мікс",
+            "авокадо",
+            "лосось",
+            "солодкий чилі",
+            "хрустка цибуля"
+          ],
+          "price": "1200 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "karkalec panko",
+            "miks gaforre",
+            "avokado",
+            "salmon",
+            "chili i embel",
+            "qepe krokante"
+          ],
+          "price": "1200 lek"
+        }
+      }
+    },
+    {
+      "id": "item-28",
+      "name": "Sweet Chili Tiger Premium",
+      "image": "img/item-28-20260712162831.jpg",
+      "imageWebp": "img/item-28-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "signature",
+        "premium"
+      ],
+      "filters": [
+        "salmon",
+        "shrimp"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "panko shrimp",
+            "crab mix",
+            "avocado",
+            "salmon",
+            "sweet chili",
+            "crispy onion"
+          ],
+          "price": "1500 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "креветка панко",
+            "краб-мікс",
+            "авокадо",
+            "лосось",
+            "солодкий чилі",
+            "хрустка цибуля"
+          ],
+          "price": "1500 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "karkalec panko",
+            "miks gaforre",
+            "avokado",
+            "salmon",
+            "chili i embel",
+            "qepe krokante"
+          ],
+          "price": "1500 lek"
+        }
+      }
+    },
+    {
+      "id": "item-29",
+      "name": "Sake Volcano",
+      "image": "img/item-29-20260712162831.jpg",
+      "imageWebp": "img/item-29-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "volcano"
+      ],
+      "filters": [
+        "hot",
+        "salmon"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "tobiko",
+            "cream cheese",
+            "salmon mix"
+          ],
+          "price": "1300 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "тобіко",
+            "крем-сир",
+            "лососева суміш"
+          ],
+          "price": "1300 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "tobiko",
+            "krem djathi",
+            "miks salmoni"
+          ],
+          "price": "1300 lek"
+        }
+      }
+    },
+    {
+      "id": "item-30",
+      "name": "Ebi Volcano",
+      "image": "img/item-30-20260712162831.jpg",
+      "imageWebp": "img/item-30-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "volcano"
+      ],
+      "filters": [
+        "hot",
+        "shrimp"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "panko shrimp",
+            "cream cheese",
+            "cheese mix"
+          ],
+          "price": "1000 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "креветка панко",
+            "крем-сир",
+            "сирна суміш"
+          ],
+          "price": "1000 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "karkalec panko",
+            "krem djathi",
+            "miks djathi"
+          ],
+          "price": "1000 lek"
+        }
+      }
+    },
+    {
+      "id": "item-31",
+      "name": "Maki Salmon",
+      "image": "img/item-31-20260712162831.jpg",
+      "imageWebp": "img/item-31-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "maki"
+      ],
+      "filters": [
+        "salmon"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "salmon"
+          ],
+          "price": "600 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "лосось"
+          ],
+          "price": "600 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "salmon"
+          ],
+          "price": "600 lek"
+        }
+      }
+    },
+    {
+      "id": "item-32",
+      "name": "Maki Cream",
+      "image": "img/item-32-20260712162831.jpg",
+      "imageWebp": "img/item-32-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "maki"
+      ],
+      "filters": [],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "cream cheese"
+          ],
+          "price": "500 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "крем-сир"
+          ],
+          "price": "500 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "krem djathi"
+          ],
+          "price": "500 lek"
+        }
+      }
+    },
+    {
+      "id": "item-33",
+      "name": "Maki Shrimps",
+      "image": "img/item-33-20260712162831.jpg",
+      "imageWebp": "img/item-33-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "maki"
+      ],
+      "filters": [
+        "shrimp"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "shrimp"
+          ],
+          "price": "550 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "креветка"
+          ],
+          "price": "550 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "karkalec"
+          ],
+          "price": "550 lek"
+        }
+      }
+    },
+    {
+      "id": "item-34",
+      "name": "Maki Cucumber",
+      "image": "img/item-34-20260712162831.jpg",
+      "imageWebp": "img/item-34-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "maki"
+      ],
+      "filters": [],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "cucumber"
+          ],
+          "price": "500 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "огірок"
+          ],
+          "price": "500 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "kastravec"
+          ],
+          "price": "500 lek"
+        }
+      }
+    },
+    {
+      "id": "item-35",
+      "name": "Maki Tuna",
+      "image": "img/item-35-20260712162831.jpg",
+      "imageWebp": "img/item-35-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "maki"
+      ],
+      "filters": [
+        "tuna"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "tuna"
+          ],
+          "price": "600 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "тунець"
+          ],
+          "price": "600 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "ton"
+          ],
+          "price": "600 lek"
+        }
+      }
+    },
+    {
+      "id": "item-36",
+      "name": "Maki Surimi",
+      "image": "img/item-36-20260712162831.jpg",
+      "imageWebp": "img/item-36-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "maki"
+      ],
+      "filters": [],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "nori",
+            "surimi"
+          ],
+          "price": "550 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "норі",
+            "сурімі"
+          ],
+          "price": "550 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "nori",
+            "surimi"
+          ],
+          "price": "550 lek"
+        }
+      }
+    },
+    {
+      "id": "item-37",
+      "name": "Set Philadelphia",
+      "image": "img/item-37-20260712162831.jpg",
+      "imageWebp": "img/item-37-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "sets"
+      ],
+      "filters": [
+        "sets"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "Philadelphia Classic",
+            "Ebi Cream Classic",
+            "Sweet Chili Tiger",
+            "Maki Surimi",
+            "Sesame Sake"
+          ],
+          "price": "4300 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "Philadelphia Classic",
+            "Ebi Cream Classic",
+            "Sweet Chili Tiger",
+            "Maki Surimi",
+            "Sesame Sake"
+          ],
+          "price": "4300 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "Philadelphia Classic",
+            "Ebi Cream Classic",
+            "Sweet Chili Tiger",
+            "Maki Surimi",
+            "Sesame Sake"
+          ],
+          "price": "4300 lek"
+        }
+      }
+    },
+    {
+      "id": "item-38",
+      "name": "Set Premium",
+      "image": "img/item-38-20260712162831.jpg",
+      "imageWebp": "img/item-38-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "sets"
+      ],
+      "filters": [
+        "sets"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "Truffle Sake Premium",
+            "Philadelphia Premium",
+            "Ebi Cream Premium",
+            "California Premium",
+            "Maki Shrimps"
+          ],
+          "price": "5250 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "Truffle Sake Premium",
+            "Philadelphia Premium",
+            "Ebi Cream Premium",
+            "California Premium",
+            "Maki Shrimps"
+          ],
+          "price": "5250 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "Truffle Sake Premium",
+            "Philadelphia Premium",
+            "Ebi Cream Premium",
+            "California Premium",
+            "Maki Shrimps"
+          ],
+          "price": "5250 lek"
+        }
+      }
+    },
+    {
+      "id": "item-39",
+      "name": "Set 50/50",
+      "image": "img/item-39-20260712162831.jpg",
+      "imageWebp": "img/item-39-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "sets"
+      ],
+      "filters": [
+        "sets"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "Sake Futomaki 1/2",
+            "Ebi Futomaki 1/2",
+            "Coral Sake",
+            "Truffle Sake",
+            "Maki Salmon"
+          ],
+          "price": "3100 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "Sake Futomaki 1/2",
+            "Ebi Futomaki 1/2",
+            "Coral Sake",
+            "Truffle Sake",
+            "Maki Salmon"
+          ],
+          "price": "3100 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "Sake Futomaki 1/2",
+            "Ebi Futomaki 1/2",
+            "Coral Sake",
+            "Truffle Sake",
+            "Maki Salmon"
+          ],
+          "price": "3100 lek"
+        }
+      }
+    },
+    {
+      "id": "item-40",
+      "name": "Set 1",
+      "image": "img/item-40-20260712162831.jpg",
+      "imageWebp": "img/item-40-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "sets"
+      ],
+      "filters": [
+        "sets"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "Ebi Futomaki",
+            "Red Pearl",
+            "Hot Smoky Sake",
+            "Maki Salmon"
+          ],
+          "price": "2950 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "Ebi Futomaki",
+            "Red Pearl",
+            "Hot Smoky Sake",
+            "Maki Salmon"
+          ],
+          "price": "2950 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "Ebi Futomaki",
+            "Red Pearl",
+            "Hot Smoky Sake",
+            "Maki Salmon"
+          ],
+          "price": "2950 lek"
+        }
+      }
+    },
+    {
+      "id": "item-41",
+      "name": "Panko Shrimps",
+      "image": "img/item-41-20260712162831.jpg",
+      "imageWebp": "img/item-41-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "snacks"
+      ],
+      "filters": [
+        "shrimp"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "panko shrimp",
+            "sweet chili"
+          ],
+          "price": "800 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "креветка панко",
+            "солодкий чилі"
+          ],
+          "price": "800 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "karkalec panko",
+            "chili i embel"
+          ],
+          "price": "800 lek"
+        }
+      }
+    },
+    {
+      "id": "item-42",
+      "name": "Salmon Nigiri",
+      "image": "img/item-42-20260712162831.jpg",
+      "imageWebp": "img/item-42-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "nigiri"
+      ],
+      "filters": [
+        "salmon"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "salmon"
+          ],
+          "price": "250 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "лосось"
+          ],
+          "price": "250 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "salmon"
+          ],
+          "price": "250 lek"
+        }
+      }
+    },
+    {
+      "id": "item-43",
+      "name": "Tuna Nigiri",
+      "image": "img/item-43-20260712162831.jpg",
+      "imageWebp": "img/item-43-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "nigiri"
+      ],
+      "filters": [
+        "tuna"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "tuna"
+          ],
+          "price": "250 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "тунець"
+          ],
+          "price": "250 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "ton"
+          ],
+          "price": "250 lek"
+        }
+      }
+    },
+    {
+      "id": "item-44",
+      "name": "Shrimp Nigiri",
+      "image": "img/item-44-20260712162831.jpg",
+      "imageWebp": "img/item-44-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "nigiri"
+      ],
+      "filters": [
+        "shrimp"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "shrimp"
+          ],
+          "price": "250 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "креветка"
+          ],
+          "price": "250 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "karkalec"
+          ],
+          "price": "250 lek"
+        }
+      }
+    },
+    {
+      "id": "item-45",
+      "name": "Smoky Gouda",
+      "image": "img/item-45-20260712162831.jpg",
+      "imageWebp": "img/item-45-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "vegetarian"
+      ],
+      "filters": [
+        "vegetarian"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "cream cheese",
+            "cucumber",
+            "avocado",
+            "torched gouda",
+            "sweet chili",
+            "crispy onion"
+          ],
+          "price": "900 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "крем-сир",
+            "огірок",
+            "авокадо",
+            "обпалений сир гауда",
+            "солодкий чилі",
+            "хрустка цибуля"
+          ],
+          "price": "900 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "krem djathi",
+            "kastravec",
+            "avokado",
+            "gouda e djegur",
+            "chili i embel",
+            "qepe krokante"
+          ],
+          "price": "900 lek"
+        }
+      }
+    },
+    {
+      "id": "item-46",
+      "name": "Okinawa Fresh",
+      "image": "img/item-46-20260712162831.jpg",
+      "imageWebp": "img/item-46-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "vegetarian"
+      ],
+      "filters": [
+        "vegetarian"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "cream cheese",
+            "chuka",
+            "cucumber"
+          ],
+          "price": "850 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "крем-сир",
+            "чука",
+            "огірок"
+          ],
+          "price": "850 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "krem djathi",
+            "chuka",
+            "kastravec"
+          ],
+          "price": "850 lek"
+        }
+      }
+    },
+    {
+      "id": "item-47",
+      "name": "Tuna Salmon Roll",
+      "image": "img/item-47-20260712162831.jpg",
+      "imageWebp": "img/item-47-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "signature"
+      ],
+      "filters": [
+        "salmon",
+        "tuna"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "mango",
+            "cucumber",
+            "nori",
+            "cream cheese",
+            "sushi rice",
+            "tuna",
+            "salmon"
+          ],
+          "price": "1300 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "манго",
+            "огірок",
+            "норі",
+            "крем-сир",
+            "рис для суші",
+            "тунець",
+            "лосось"
+          ],
+          "price": "1300 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "mango",
+            "kastravec",
+            "nori",
+            "krem djathi",
+            "oriz sushi",
+            "ton",
+            "salmon"
+          ],
+          "price": "1300 lek"
+        }
+      }
+    },
+    {
+      "id": "item-48",
+      "name": "Tuna Bowl",
+      "image": "img/item-48-20260712162831.jpg",
+      "imageWebp": "img/item-48-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "bowls"
+      ],
+      "filters": [
+        "bowls",
+        "tuna"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "tuna",
+            "chuka",
+            "egg",
+            "cucumber",
+            "lemon-kimchi sauce",
+            "spicy mayo",
+            "sesame"
+          ],
+          "price": "850 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "тунець",
+            "чука",
+            "яйце",
+            "огірок",
+            "соус лимон-кімчі",
+            "спайсі майонез",
+            "кунжут"
+          ],
+          "price": "850 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "ton",
+            "chuka",
+            "veze",
+            "kastravec",
+            "salce limon-kimchi",
+            "majoneze pikante",
+            "susam"
+          ],
+          "price": "850 lek"
+        }
+      }
+    },
+    {
+      "id": "item-49",
+      "name": "Crab Mix Bowl",
+      "image": "img/item-49-20260712162831.jpg",
+      "imageWebp": "img/item-49-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "bowls"
+      ],
+      "filters": [
+        "bowls"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "crab mix",
+            "mango",
+            "cucumber",
+            "egg",
+            "lemon-kimchi sauce",
+            "spicy mayo",
+            "sesame"
+          ],
+          "price": "850 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "краб-мікс",
+            "манго",
+            "огірок",
+            "яйце",
+            "соус лимон-кімчі",
+            "спайсі майонез",
+            "кунжут"
+          ],
+          "price": "850 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "miks gaforre",
+            "mango",
+            "kastravec",
+            "veze",
+            "salce limon-kimchi",
+            "majoneze pikante",
+            "susam"
+          ],
+          "price": "850 lek"
+        }
+      }
+    },
+    {
+      "id": "item-50",
+      "name": "Salmon Bowl",
+      "image": "img/item-50-20260712162831.jpg",
+      "imageWebp": "img/item-50-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "chef",
+        "bowls"
+      ],
+      "filters": [
+        "bowls",
+        "popular",
+        "salmon"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "salmon",
+            "cucumber",
+            "avocado",
+            "egg",
+            "lemon-kimchi sauce",
+            "spicy mayo",
+            "sesame",
+            "caramelized onion"
+          ],
+          "price": "850 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "лосось",
+            "огірок",
+            "авокадо",
+            "яйце",
+            "соус лимон-кімчі",
+            "спайсі майонез",
+            "кунжут",
+            "карамелізована цибуля"
+          ],
+          "price": "850 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "salmon",
+            "kastravec",
+            "avokado",
+            "veze",
+            "salce limon-kimchi",
+            "majoneze pikante",
+            "susam",
+            "qepe e karamelizuar"
+          ],
+          "price": "850 lek"
+        }
+      }
+    },
+    {
+      "id": "item-51",
+      "name": "Shrimp Bowl",
+      "image": "img/item-51-20260712162831.jpg",
+      "imageWebp": "img/item-51-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "bowls"
+      ],
+      "filters": [
+        "bowls",
+        "shrimp"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "shrimp",
+            "cucumber",
+            "avocado",
+            "egg",
+            "lemon-kimchi sauce",
+            "sweet chili",
+            "spicy mayo",
+            "sesame",
+            "tobiko"
+          ],
+          "price": "850 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "креветка",
+            "огірок",
+            "авокадо",
+            "яйце",
+            "соус лимон-кімчі",
+            "солодкий чилі",
+            "спайсі майонез",
+            "кунжут",
+            "тобіко"
+          ],
+          "price": "850 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "karkalec",
+            "kastravec",
+            "avokado",
+            "veze",
+            "salce limon-kimchi",
+            "chili i embel",
+            "majoneze pikante",
+            "susam",
+            "tobiko"
+          ],
+          "price": "850 lek"
+        }
+      }
+    },
+    {
+      "id": "item-52",
+      "name": "Green Mango",
+      "image": "img/item-52-20260712162831.jpg",
+      "imageWebp": "img/item-52-20260712162831.webp",
+      "hasPhoto": false,
+      "categories": [
+        "vegetarian"
+      ],
+      "filters": [
+        "vegetarian"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [
+            "sushi rice",
+            "cream cheese",
+            "cucumber",
+            "mango",
+            "avocado"
+          ],
+          "price": "950 lek"
+        },
+        "uk": {
+          "ingredients": [
+            "рис для суші",
+            "крем-сир",
+            "огірок",
+            "манго",
+            "авокадо"
+          ],
+          "price": "950 лек"
+        },
+        "sq": {
+          "ingredients": [
+            "oriz sushi",
+            "krem djathi",
+            "kastravec",
+            "mango",
+            "avokado"
+          ],
+          "price": "950 lek"
+        }
+      }
+    },
+    {
+      "id": "item-53",
+      "name": "Basil Smash",
+      "image": "img/item-53-20260712162831.jpg",
+      "imageWebp": "img/item-53-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "cocktails"
+      ],
+      "filters": [
+        "drinks"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [],
+          "price": "Ask waiter"
+        },
+        "uk": {
+          "ingredients": [],
+          "price": "Запитайте в офіціанта"
+        },
+        "sq": {
+          "ingredients": [],
+          "price": "Pyesni kamarierin"
+        }
+      }
+    },
+    {
+      "id": "item-54",
+      "name": "Mohito Strawberry",
+      "image": "img/item-54-20260712162831.jpg",
+      "imageWebp": "img/item-54-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "cocktails"
+      ],
+      "filters": [
+        "drinks"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [],
+          "price": "Ask waiter"
+        },
+        "uk": {
+          "ingredients": [],
+          "price": "Запитайте в офіціанта"
+        },
+        "sq": {
+          "ingredients": [],
+          "price": "Pyesni kamarierin"
+        }
+      }
+    },
+    {
+      "id": "item-55",
+      "name": "Mohito",
+      "image": "img/item-55-20260712162831.jpg",
+      "imageWebp": "img/item-55-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "cocktails"
+      ],
+      "filters": [
+        "drinks"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [],
+          "price": "Ask waiter"
+        },
+        "uk": {
+          "ingredients": [],
+          "price": "Запитайте в офіціанта"
+        },
+        "sq": {
+          "ingredients": [],
+          "price": "Pyesni kamarierin"
+        }
+      }
+    },
+    {
+      "id": "item-56",
+      "name": "Margarita",
+      "image": "img/item-56-20260712162831.jpg",
+      "imageWebp": "img/item-56-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "cocktails"
+      ],
+      "filters": [
+        "drinks"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [],
+          "price": "Ask waiter"
+        },
+        "uk": {
+          "ingredients": [],
+          "price": "Запитайте в офіціанта"
+        },
+        "sq": {
+          "ingredients": [],
+          "price": "Pyesni kamarierin"
+        }
+      }
+    },
+    {
+      "id": "item-57",
+      "name": "Espresso Martini",
+      "image": "img/item-57-20260712162831.jpg",
+      "imageWebp": "img/item-57-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "cocktails"
+      ],
+      "filters": [
+        "drinks"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [],
+          "price": "Ask waiter"
+        },
+        "uk": {
+          "ingredients": [],
+          "price": "Запитайте в офіціанта"
+        },
+        "sq": {
+          "ingredients": [],
+          "price": "Pyesni kamarierin"
+        }
+      }
+    },
+    {
+      "id": "item-58",
+      "name": "Whiskey Sour",
+      "image": "img/item-58-20260712162831.jpg",
+      "imageWebp": "img/item-58-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "cocktails"
+      ],
+      "filters": [
+        "drinks"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [],
+          "price": "Ask waiter"
+        },
+        "uk": {
+          "ingredients": [],
+          "price": "Запитайте в офіціанта"
+        },
+        "sq": {
+          "ingredients": [],
+          "price": "Pyesni kamarierin"
+        }
+      }
+    },
+    {
+      "id": "item-59",
+      "name": "Hugo",
+      "image": "img/item-59-20260712162831.jpg",
+      "imageWebp": "img/item-59-20260712162831.webp",
+      "hasPhoto": true,
+      "categories": [
+        "cocktails"
+      ],
+      "filters": [
+        "drinks"
+      ],
+      "translations": {
+        "en": {
+          "ingredients": [],
+          "price": "Ask waiter"
+        },
+        "uk": {
+          "ingredients": [],
+          "price": "Запитайте в офіціанта"
+        },
+        "sq": {
+          "ingredients": [],
+          "price": "Pyesni kamarierin"
+        }
+      }
+    }
+  ],
+  "categories": [
+    {
+      "id": "chef",
+      "title": {
+        "en": "Chef's Picks",
+        "uk": "Вибір шефа",
+        "sq": "Zgjedhjet e shefit"
+      },
+      "description": {
+        "en": "Recommended rolls for first orders, sharing, and delivery.",
+        "uk": "Рекомендовані роли для першого замовлення, компанії та доставки.",
+        "sq": "Role të rekomanduara për porosinë e parë, ndarje dhe delivery."
+      }
+    },
+    {
+      "id": "cocktails",
+      "title": {
+        "en": "Cocktails",
+        "uk": "Коктейлі",
+        "sq": "Kokteje"
+      },
+      "description": {
+        "en": "Cocktails and draft beer are now available. Ask our waiters for the full bar menu.",
+        "uk": "Коктейлі та розливне пиво вже доступні. Запитуйте повне барне меню в офіціантів.",
+        "sq": "Kokteje dhe birre me krikell tani jane ne dispozicion. Pyesni kamarieret per menune e barit."
+      }
+    },
+    {
+      "id": "sets",
+      "title": {
+        "en": "Sets",
+        "uk": "Сети",
+        "sq": "Sete"
+      }
+    },
+    {
+      "id": "bowls",
+      "title": {
+        "en": "Bowls",
+        "uk": "Боули",
+        "sq": "Bowls"
+      }
+    },
+    {
+      "id": "nigiri",
+      "title": {
+        "en": "Nigiri",
+        "uk": "Нігірі",
+        "sq": "Nigiri"
+      }
+    },
+    {
+      "id": "philadelphia",
+      "title": {
+        "en": "Philadelphia",
+        "uk": "Філадельфія",
+        "sq": "Philadelphia"
+      }
+    },
+    {
+      "id": "california",
+      "title": {
+        "en": "California",
+        "uk": "Каліфорнія",
+        "sq": "California"
+      }
+    },
+    {
+      "id": "futomaki",
+      "title": {
+        "en": "Futomaki",
+        "uk": "Футомакі",
+        "sq": "Futomaki"
+      }
+    },
+    {
+      "id": "signature",
+      "title": {
+        "en": "Signature",
+        "uk": "Фірмові",
+        "sq": "Signature"
+      }
+    },
+    {
+      "id": "hot",
+      "title": {
+        "en": "Hot roll",
+        "uk": "Гарячі роли",
+        "sq": "Role të ngrohta"
+      }
+    },
+    {
+      "id": "volcano",
+      "title": {
+        "en": "Volcano",
+        "uk": "Volcano",
+        "sq": "Volcano"
+      }
+    },
+    {
+      "id": "vegetarian",
+      "title": {
+        "en": "Vegetarian Roll",
+        "uk": "Вегетаріанські роли",
+        "sq": "Role vegjetariane"
+      }
+    },
+    {
+      "id": "snacks",
+      "title": {
+        "en": "Snacks",
+        "uk": "Закуски",
+        "sq": "Snacks"
+      }
+    },
+    {
+      "id": "premium",
+      "title": {
+        "en": "Premium",
+        "uk": "Premium",
+        "sq": "Premium"
+      },
+      "description": {
+        "en": "Premium: Double Fish &amp; Fill",
+        "uk": "Premium: подвійна порція риби та начинки",
+        "sq": "Premium: peshk dhe mbushje dyfish"
+      }
+    },
+    {
+      "id": "maki",
+      "title": {
+        "en": "Maki",
+        "uk": "Макі",
+        "sq": "Maki"
+      }
+    }
+  ],
+  "filters": [
+    {
+      "id": "all",
+      "title": {
+        "en": "All",
+        "uk": "Усе",
+        "sq": "Të gjitha"
+      }
+    },
+    {
+      "id": "popular",
+      "title": {
+        "en": "Popular",
+        "uk": "Популярне",
+        "sq": "Popullore"
+      }
+    },
+    {
+      "id": "sets",
+      "title": {
+        "en": "Sets",
+        "uk": "Сети",
+        "sq": "Sete"
+      }
+    },
+    {
+      "id": "bowls",
+      "title": {
+        "en": "Bowls",
+        "uk": "Боули",
+        "sq": "Bowls"
+      }
+    },
+    {
+      "id": "salmon",
+      "title": {
+        "en": "Salmon",
+        "uk": "Лосось",
+        "sq": "Salmon"
+      }
+    },
+    {
+      "id": "shrimp",
+      "title": {
+        "en": "Shrimp",
+        "uk": "Креветка",
+        "sq": "Karkalec"
+      }
+    },
+    {
+      "id": "tuna",
+      "title": {
+        "en": "Tuna",
+        "uk": "Тунець",
+        "sq": "Ton"
+      }
+    },
+    {
+      "id": "hot",
+      "title": {
+        "en": "Hot",
+        "uk": "Гарячі",
+        "sq": "Të ngrohta"
+      }
+    },
+    {
+      "id": "vegetarian",
+      "title": {
+        "en": "Vegetarian",
+        "uk": "Вегетаріанські",
+        "sq": "Vegjetariane"
+      }
+    },
+    {
+      "id": "drinks",
+      "title": {
+        "en": "Drinks",
+        "uk": "Напої",
+        "sq": "Pije"
+      }
+    }
+  ]
+}

@@ -200,10 +200,10 @@ fn run_autonomous_loop(
     let mut cycles = 0usize;
 
     while cycles < max_cycles {
-        let i = cycles % base.len();
+        let base_edge = &mut base[cycles % base.len()];
         let delta = vec![TopoEdge {
-            from: base[i].from,
-            to: base[i].to,
+            from: base_edge.from,
+            to: base_edge.to,
             weight: (0.3 + (cycles as f64 % 5.0)).max(0.1),
         }];
 
