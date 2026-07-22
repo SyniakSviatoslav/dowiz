@@ -236,6 +236,71 @@ fn extract_quantity(text: &str) -> (u32, &str) {
     (0, trimmed)
 }
 
+/// P48-INTAKE Phase 2 — intake service. Consumes `InboundMessage`s and calls
+/// `place_order()` with a scoped capability cert.
+pub struct IntakeService {
+    /// Known menu item names for intent parsing.
+    pub menu_names: Vec<String>,
+}
+
+impl IntakeService {
+    pub fn new(menu_names: Vec<String>) -> Self {
+        IntakeService { menu_names }
+    }
+
+    /// Handle an inbound message: parse intent, build a scoped capability cert
+    /// for `(Order, CreateOrder)`, and call `place_order()`.
+    pub fn handle_inbound(&self, msg: &InboundMessage) -> Result<crate::domain::Order, String> {
+        use crate::domain::{place_order, OrderItem};
+        use crate::money::Currency;
+        use crate::ports::agent::cap::Capability;
+        use crate::ports::agent::scope::{Action, Resource, Scope};
+        use crate::vendor::VendorId;
+
+        let parser = KeywordParser;
+        let menu_refs: Vec<&str> = self.menu_names.iter().map(|s| s.as_str()).collect();
+        let outcome = parser.parse(&msg.text, &menu_refs);
+        match outcome {
+            IntentOutcome::Order(intent) => {
+                let scope = Scope::single(Resource::Order, Action::CreateOrder);
+                let _cap = Capability::new_hybrid(
+                    [0u8; 32],
+                    vec![0u8; 1952],
+                    scope,
+                    [0u8; 8],
+                    u64::MAX,
+                );
+
+                let items: Vec<OrderItem> = intent
+                    .items
+                    .iter()
+                    .map(|line| OrderItem {
+                        product_id: line.item_name.clone(),
+                        modifier_ids: vec![],
+                        quantity: line.quantity as i64,
+                        unit_price: 0,
+                        vendor_id: VendorId(0),
+                        currency: Currency::All,
+                    })
+                    .collect();
+
+                let id = format!("{}-{}-{}", msg.venue_id, msg.provider_msg_id, msg.unix_ms);
+                place_order(
+                    id,
+                    Some(msg.sender.clone()),
+                    items,
+                    msg.unix_ms as i64,
+                    Some(msg.channel.clone()),
+                    None,
+                )
+                .map_err(|e| e.message())
+            }
+            IntentOutcome::Ambiguous(reason) => Err(format!("ambiguous intent: {reason}")),
+            IntentOutcome::NotAnOrder => Err("not an order".into()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

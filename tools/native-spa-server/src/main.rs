@@ -58,6 +58,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 std::env::var("DOWIZ_TELEGRAM_SECRET").unwrap_or_default(),
             ),
         ),
+        intake: std::sync::Arc::new(
+            dowiz_kernel::ports::hub_intake::IntakeService::new(vec![]),
+        ),
     });
     let router = build_router(&root, api, webhook_state);
     let addr = format!("{}:{}", cli.bind, cli.port);
