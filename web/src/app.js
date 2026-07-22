@@ -28,6 +28,7 @@ const App = {
     _deliveryPhone: '',
     _deliveryNote: '',
     _lastOrderId: null,
+    _installPrompt: null,
     _journey: createJourney(),
     _shiftActive: false,
     _shiftStart: null,
@@ -63,6 +64,7 @@ const App = {
     this.render();
     this.bindEvents();
     this.registerSw();
+    this.setupInstallPrompt();
     this.renderSdfLoop();
   },
 
@@ -98,6 +100,25 @@ const App = {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
+  },
+
+  setupInstallPrompt() {
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      this.state._installPrompt = e;
+      this.state._canInstall = true;
+    });
+    window.addEventListener('appinstalled', () => {
+      this.state._installPrompt = null;
+      this.state._canInstall = false;
+    });
+  },
+
+  installApp() {
+    const prompt = this.state._installPrompt;
+    if (!prompt) return;
+    prompt.prompt();
+    prompt.userChoice.then(() => { this.state._installPrompt = null; this.state._canInstall = false; });
   },
 
   async loadMenu() {
@@ -234,7 +255,8 @@ const App = {
         <button class="btn btn-ghost btn-sm" onclick="App.setRole('customer')">👤</button>
         <button class="btn btn-ghost btn-sm" onclick="App.setRole('owner')">🏪</button>
         <button class="btn btn-ghost btn-sm" onclick="App.setRole('courier')">🛵</button>
-        <button class="btn btn-ghost btn-sm desktop-only" onclick="App.toggleCart()">🛒 (${count})</button>
+        <button class="btn btn-ghost btn-sm" onclick="App.toggleCart()">🛒 (${count})</button>
+        ${this.state._canInstall ? '<button class="btn btn-sm btn-primary" onclick="App.installApp()">⬇ Встановити</button>' : ''}
       </div>
     </nav>
     <main id="main-content">${this.pageForCurrent()}</main>
