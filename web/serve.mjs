@@ -39,7 +39,7 @@ function parseBody(req) {
 function apiRoutes(req, res) {
   if (req.method === 'POST' && req.url === '/api/order') {
     return parseBody(req).then(body => {
-      const order = { id: nextId++, status: 'pending', items: body.items || [], total: body.total || 0, createdAt: Date.now() };
+      const order = { id: nextId++, status: 'pending', items: body.items || [], total: body.total || 0, address: body.address || '', phone: body.phone || '', note: body.note || '', createdAt: Date.now() };
       orders.unshift(order);
       res.writeHead(201, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify(order));
