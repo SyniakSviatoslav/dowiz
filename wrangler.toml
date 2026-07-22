@@ -1,0 +1,8 @@
+name = "dowiz"
+pages_build_output_dir = "web"
+
+[env.production]
+pattern = "dowiz.org/*"
+
+[env.preview]
+pattern = "preview.dowiz.org/*"
