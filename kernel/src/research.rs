@@ -372,7 +372,7 @@ fn classify_domain(categories: &[String]) -> KnowledgeDomain {
 fn detect_patterns_in_text(text: &str, domain: KnowledgeDomain, paper_id: String) -> Vec<Pattern> {
     let mut patterns = Vec::new();
 
-    // Architecture patterns.
+    // Architecture patterns (ML + Systems).
     let arch_patterns = [
         ("Transformer", PatternKind::Architecture, "Self-attention based architecture"),
         ("Diffusion", PatternKind::Architecture, "Diffusion-based generative model"),
@@ -422,9 +422,41 @@ fn detect_patterns_in_text(text: &str, domain: KnowledgeDomain, paper_id: String
         ("Embedding", PatternKind::DataProcessing, "Embedding method"),
     ];
 
-    // Extract matches.
+    // System architecture patterns (dowiz codebase).
+    let sys_patterns = [
+        ("fractal", PatternKind::Architecture, "Fractal node: self-similar copy of entire system"),
+        ("spin wave", PatternKind::Architecture, "Spin wave communication via quantum states"),
+        ("wave bus", PatternKind::Architecture, "Bidirectional async socket queues for wave comm"),
+        ("light communication", PatternKind::Architecture, "Omnidirectional nD light front propagation"),
+        ("null geodesic", PatternKind::Architecture, "Light ray on null cone in O(p,q) spacetime"),
+        ("phase space", PatternKind::Architecture, "Non-Euclidean phase space with symplectic str"),
+        ("metric tensor", PatternKind::Architecture, "Riemannian/Pseudo-Riemannian metric g_ij"),
+        ("symplectic", PatternKind::Architecture, "Symplectic 2-form for Hamiltonian mechanics"),
+        ("split algebra", PatternKind::Architecture, "Split-complex/quat/octonion for light comm"),
+        ("standard model", PatternKind::Architecture, "SU(3)xSU(2)xU(1) particle physics"),
+        ("quark sig", PatternKind::Architecture, "8D crystal lattice QuarkSig signatures"),
+        ("pseudo-euclidean", PatternKind::Optimization, "O(p,q) metric with light cones and causality"),
+        ("topo-chrono memory", PatternKind::DataProcessing, "Topological-chronological parametric surface"),
+        ("parametric surface", PatternKind::DataProcessing, "S(u,v) surface in non-Euclidean space"),
+        ("unified navigator", PatternKind::Architecture, "Navigation fusing PPR+geodesic+light cones"),
+        ("prediction service", PatternKind::TrainingMethod, "Forward prediction + RTS retrospective"),
+        ("autonomous loop", PatternKind::TrainingMethod, "Observe-predict-decide-execute-learn cycle"),
+        ("memory pipeline", PatternKind::DataProcessing, "Memory consolidation pipeline"),
+        ("inference engine", PatternKind::TrainingMethod, "ML projection for trajectory extrapolation"),
+        ("p2p network", PatternKind::Architecture, "P2P fractal network with seed/peer mesh"),
+        ("academia mesh", PatternKind::Architecture, "P2P mesh for distributed 8D matrix chunks"),
+        ("research engine", PatternKind::DataProcessing, "Paper ingestion and pattern extraction"),
+        ("pattern oracle", PatternKind::TrainingMethod, "Pattern insight search and discovery"),
+        ("meta miner", PatternKind::TrainingMethod, "Self-improving knowledge mining"),
+        ("physics engine", PatternKind::Optimization, "PID-controlled parallel FanOut quantization"),
+        ("swarm coordinator", PatternKind::Architecture, "DSU decomposition and executor dispatch"),
+        ("reverse engineer", PatternKind::DataProcessing, "ELF parsing and behavior profiling"),
+        ("spine snapshot", PatternKind::DataProcessing, "Tamper-evident hash chain integrity"),
+    ];
+
+    // Extract matches — include sys_patterns.
     for (name, kind, desc) in arch_patterns.iter().chain(train_patterns.iter())
-        .chain(opt_patterns.iter()).chain(data_patterns.iter())
+        .chain(opt_patterns.iter()).chain(data_patterns.iter()).chain(sys_patterns.iter())
     {
         if text.contains(&name.to_lowercase()) {
             let hash = crate::event_log::sha3_256(name.as_bytes());

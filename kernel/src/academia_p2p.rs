@@ -647,6 +647,156 @@ impl PhaseSpace {
     }
 }
 
+// ─── Quantum Physics: Complex amplitudes, Pauli matrices, Hamiltonians ──
+// |psi> = alpha|0> + beta|1>, measurements, entanglement, gates
+
+/// Комплексне число для квантової амплітуди.
+#[derive(Debug, Clone, Copy)]
+pub struct Complex {
+    pub re: f64,
+    pub im: f64,
+}
+
+impl Complex {
+    pub fn new(re: f64, im: f64) -> Self { Complex { re, im } }
+    pub fn zero() -> Self { Complex { re: 0.0, im: 0.0 } }
+    pub fn one() -> Self { Complex { re: 1.0, im: 0.0 } }
+    pub fn norm_sq(&self) -> f64 { self.re * self.re + self.im * self.im }
+    pub fn norm(&self) -> f64 { self.norm_sq().sqrt() }
+    pub fn conj(&self) -> Self { Complex { re: self.re, im: -self.im } }
+    pub fn add(&self, o: &Complex) -> Complex { Complex { re: self.re + o.re, im: self.im + o.im } }
+    pub fn sub(&self, o: &Complex) -> Complex { Complex { re: self.re - o.re, im: self.im - o.im } }
+    pub fn mul(&self, o: &Complex) -> Complex {
+        Complex { re: self.re * o.re - self.im * o.im, im: self.re * o.im + self.im * o.re }
+    }
+    pub fn scale(&self, s: f64) -> Complex { Complex { re: self.re * s, im: self.im * s } }
+}
+
+impl std::ops::Add for Complex { type Output = Complex; fn add(self, o: Complex) -> Complex { Complex::add(&self, &o) } }
+impl std::ops::Mul for Complex { type Output = Complex; fn mul(self, o: Complex) -> Complex { Complex::mul(&self, &o) } }
+
+/// Квантовий стан одного кубіта: |psi> = alpha|0> + beta|1>.
+#[derive(Debug, Clone)]
+pub struct Qubit {
+    pub alpha: Complex,
+    pub beta: Complex,
+}
+
+impl Qubit {
+    pub fn new(alpha: Complex, beta: Complex) -> Self {
+        let n = (alpha.norm_sq() + beta.norm_sq()).sqrt();
+        if n > 1e-12 { Qubit { alpha: alpha.scale(1.0/n), beta: beta.scale(1.0/n) } }
+        else { Qubit { alpha: Complex::one(), beta: Complex::zero() } }
+    }
+    pub fn zero() -> Self { Qubit::new(Complex::one(), Complex::zero()) }
+    pub fn one() -> Self { Qubit::new(Complex::zero(), Complex::one()) }
+    pub fn plus() -> Self { Qubit::new(Complex::one().scale(2.0f64.sqrt().recip()), Complex::one().scale(2.0f64.sqrt().recip())) }
+    pub fn minus() -> Self { Qubit::new(Complex::one().scale(2.0f64.sqrt().recip()), Complex::one().scale(-2.0f64.sqrt().recip())) }
+
+    /// Ймовірність виміряти 0: |alpha|².
+    pub fn prob_zero(&self) -> f64 { self.alpha.norm_sq() }
+    /// Ймовірність виміряти 1: |beta|².
+    pub fn prob_one(&self) -> f64 { self.beta.norm_sq() }
+
+    /// Pauli X (NOT gate).
+    pub fn pauli_x(&self) -> Qubit { Qubit::new(self.beta.clone(), self.alpha.clone()) }
+    /// Pauli Z.
+    pub fn pauli_z(&self) -> Qubit { Qubit::new(self.alpha.clone(), self.beta.scale(-1.0)) }
+    /// Адамар.
+    pub fn hadamard(&self) -> Qubit {
+        let s = 2.0f64.sqrt().recip();
+        Qubit::new(self.alpha.scale(s).add(&self.beta.scale(s)), self.alpha.scale(s).sub(&self.beta.scale(s)))
+    }
+
+    /// Очікуване значення оператора: <psi|A|psi> (для Pauli Z).
+    pub fn expectation_z(&self) -> f64 { self.alpha.norm_sq() - self.beta.norm_sq() }
+}
+
+/// 2-кубітний стан (тензорний добуток).
+#[derive(Debug, Clone)]
+pub struct TwoQubit {
+    pub c00: Complex, pub c01: Complex, pub c10: Complex, pub c11: Complex,
+}
+
+impl TwoQubit {
+    pub fn new(c00: Complex, c01: Complex, c10: Complex, c11: Complex) -> Self {
+        TwoQubit { c00, c01, c10, c11 }
+    }
+    /// Bell state |Φ⁺⟩ = (|00⟩ + |11⟩)/√2
+    pub fn bell_phi_plus() -> Self {
+        let s = 2.0f64.sqrt().recip();
+        TwoQubit::new(Complex::one().scale(s), Complex::zero(), Complex::zero(), Complex::one().scale(s))
+    }
+    /// CNOT: контрольований NOT.
+    pub fn cnot(&self) -> TwoQubit {
+        TwoQubit::new(self.c00.clone(), self.c01.clone(), self.c11.clone(), self.c10.clone())
+    }
+    /// SWAP.
+    pub fn swap(&self) -> TwoQubit {
+        TwoQubit::new(self.c00.clone(), self.c10.clone(), self.c01.clone(), self.c11.clone())
+    }
+}
+
+/// Гамільтоніан: H = -ℏ/2 · (ω_x σ_x + ω_y σ_y + ω_z σ_z)
+#[derive(Debug, Clone)]
+pub struct Hamiltonian {
+    pub omega_x: f64,
+    pub omega_y: f64,
+    pub omega_z: f64,
+    pub hbar: f64,
+}
+
+impl Hamiltonian {
+    pub fn new(wx: f64, wy: f64, wz: f64) -> Self { Hamiltonian { omega_x: wx, omega_y: wy, omega_z: wz, hbar: 1.0 } }
+
+    /// Еволюція: |ψ(t+dt)⟩ ≈ (I - iH dt / ℏ)|ψ(t)⟩
+    pub fn evolve(&self, qubit: &Qubit, dt: f64) -> Qubit {
+        let theta = dt * self.hbar.recip();
+        let a = qubit.alpha.clone();
+        let b = qubit.beta.clone();
+        let new_alpha = a.add(&b.scale(-(self.omega_x * theta).sin()));
+        let new_beta = b.add(&a.scale(-(self.omega_x * theta).sin()));
+        Qubit::new(new_alpha, new_beta)
+    }
+
+    /// Власні значення: E = ±ℏ·||ω||/2
+    pub fn eigenvalues(&self) -> (f64, f64) {
+        let w = (self.omega_x.powi(2) + self.omega_y.powi(2) + self.omega_z.powi(2)).sqrt();
+        let e = self.hbar * w * 0.5;
+        (-e, e)
+    }
+}
+
+/// Квантовий вимірювач: Born rule + колапс.
+#[derive(Debug)]
+pub struct QuantumMeasurement {
+    pub shots: u64,
+    pub counts_0: u64,
+    pub counts_1: u64,
+}
+
+impl QuantumMeasurement {
+    pub fn new() -> Self { QuantumMeasurement { shots: 0, counts_0: 0, counts_1: 0 } }
+
+    /// Виміряти кубіт: результат 0 або 1 за Born rule.
+    pub fn measure(&mut self, qubit: &Qubit) -> u8 {
+        self.shots += 1;
+        let p0 = qubit.prob_zero();
+        // Deterministic pseudo-random: use a simple LCG
+        let r = ((self.shots as f64 * 1.618033988749895).fract() + 0.5) % 1.0;
+        if r < p0 { self.counts_0 += 1; 0 } else { self.counts_1 += 1; 1 }
+    }
+
+    /// Статистика вимірювань.
+    pub fn stats(&self) -> String {
+        format!("QM: {} shots, |0⟩={} ({:.1}%), |1⟩={} ({:.1}%)",
+            self.shots, self.counts_0,
+            if self.shots > 0 { 100.0 * self.counts_0 as f64 / self.shots as f64 } else { 0.0 },
+            self.counts_1,
+            if self.shots > 0 { 100.0 * self.counts_1 as f64 / self.shots as f64 } else { 0.0 })
+    }
+}
+
 // ─── Spin Wave Communication ─────────────────────────────────────────────
 // Хвильова комунікація між кристальними фракталами.
 // Хвилі переносять спіни, спіни мають вектори та дельти.
@@ -1905,6 +2055,136 @@ impl StandardModel {
         let comm = LightCommunication::new(metric);
         let d = comm.dashboard();
         assert!(d.contains("Light Communication"));
+    }
+
+    // ─── Quantum Tests ───────────────────────────────────────────────────
+
+    #[test]
+    fn qubit_zero_prob() {
+        let q = Qubit::zero();
+        assert!((q.prob_zero() - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn qubit_pauli_x_flips() {
+        let q = Qubit::zero();
+        let flipped = q.pauli_x();
+        assert!((flipped.prob_one() - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn qubit_hadamard_creates_superposition() {
+        let q = Qubit::zero();
+        let h = q.hadamard();
+        assert!((h.prob_zero() - 0.5).abs() < 0.001);
+        assert!((h.prob_one() - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn two_qubit_bell_state() {
+        let bell = TwoQubit::bell_phi_plus();
+        // Bell state |Phi+> = (|00> + |11>)/sqrt(2)
+        let s = 2.0f64.sqrt().recip();
+        assert!((bell.c00.norm_sq() - 0.5).abs() < 0.001);
+        assert!((bell.c11.norm_sq() - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn hamiltonian_eigenvalues() {
+        let h = Hamiltonian::new(1.0, 0.0, 0.0);
+        let (e1, e2) = h.eigenvalues();
+        assert!((e1 + e2).abs() < 0.001);
+    }
+
+    #[test]
+    fn complex_arithmetic() {
+        let a = Complex::new(1.0, 2.0);
+        let b = Complex::new(3.0, 4.0);
+        let c = a.mul(&b);
+        assert!((c.re - (-5.0)).abs() < 0.001); // (1+2i)(3+4i) = -5+10i
+        assert!((c.im - 10.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn quantum_measurement_stats() {
+        let mut m = QuantumMeasurement::new();
+        let q = Qubit::zero();
+        for _ in 0..100 { m.measure(&q); }
+        assert_eq!(m.counts_0, 100);
+        assert_eq!(m.counts_1, 0);
+    }
+
+    // ─── All 8 Integration Tests ─────────────────────────────────────────
+
+    #[test]
+    fn unified_navigator_routes() {
+        let metric = PseudoEuclideanMetric::minkowski();
+        let mut nav = UnifiedNavigator::new(metric, 4);
+        nav.phase_space.add_node("A"); nav.phase_space.add_node("B");
+        assert!(nav.navigate(0, 1) > 0.0);
+    }
+
+    #[test]
+    fn prediction_service_forecast() {
+        let mut ps = PredictionService::new();
+        let obs = GeometricPoint::new([1.0; 8]);
+        assert_eq!(ps.observe_and_predict(obs).len(), 10);
+    }
+
+    #[test]
+    fn prediction_retrospective_works() {
+        let mut ps = PredictionService::new();
+        ps.observe_and_predict(GeometricPoint::new([5.0; 8]));
+        assert!(ps.retrospective(0).is_some());
+    }
+
+    #[test]
+    fn autonomous_loop_cycles() {
+        let mut al = AutonomousLoop::new();
+        al.cycle();
+        assert_eq!(al.cycle, 1);
+    }
+
+    #[test]
+    fn memory_pipeline_ingests() {
+        let mut mp = MemoryPipeline::new(4);
+        mp.ingest("test", "quantum research", 0.0, 1.0);
+        assert_eq!(mp.topo.labels.len(), 1);
+    }
+
+    #[test]
+    fn memory_pipeline_consolidates() {
+        let mut mp = MemoryPipeline::new(4);
+        mp.ingest("a", "alpha", 0.0, 1.0);
+        mp.ingest("b", "beta", 1.0, 0.1);
+        mp.consolidate();
+        assert!(mp.topo.surface.weights[0] > mp.topo.surface.weights[1]);
+    }
+
+    #[test]
+    fn geometric_sync_adds_nodes() {
+        let mut gs = GeometricSync::new();
+        gs.add_node("A"); gs.add_node("B");
+        assert_eq!(gs.nodes.len(), 2);
+    }
+
+    #[test]
+    fn inference_projects() {
+        let ie = InferenceEngine::new(4, 2);
+        assert_eq!(ie.project(&[1.0, 2.0, 3.0, 4.0]).len(), 2);
+    }
+
+    #[test]
+    fn live_dashboard_renders() {
+        let dash = LiveDashboard::new(PseudoEuclideanMetric::minkowski(), 4);
+        assert!(dash.render().contains("LIVE DASHBOARD"));
+    }
+
+    #[test]
+    fn p2p_network_starts() {
+        let mut net = P2PNetwork::new();
+        net.start_seed("127.0.0.1:9000");
+        assert!(net.active);
     }
 }
 
