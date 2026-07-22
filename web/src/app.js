@@ -16,17 +16,65 @@ const App = {
       { id: 1006, status: 'delivered', items: 2, total: 1230, time: '1 год' },
     ],
     _menu: [
-      { id: 1, name: 'Маргарита', price: 850, cat: 'Піца', desc: 'Томатний соус, моцарела фіор ді латте, свіжий базилік', emoji: '\u{1F355}', prep: '15 хв' },
-      { id: 2, name: 'Пепероні', price: 950, cat: 'Піца', desc: 'Гостра салямі, моцарела, томатний соус, орегано', emoji: '\u{1F355}', prep: '15 хв' },
-      { id: 3, name: 'Чотири сири', price: 1050, cat: 'Піца', desc: 'Горгонзола, моцарела, пармезан, таледжо, трюфельний мед', emoji: '\u{1F9C0}', prep: '18 хв' },
-      { id: 4, name: 'Карбонара', price: 780, cat: 'Паста', desc: 'Спагеті, гуанчале, яєчний жовток, пекоріно романо', emoji: '\u{1F35D}', prep: '12 хв' },
-      { id: 5, name: 'Болоньєзе', price: 820, cat: 'Паста', desc: 'Спагеті, м\'ясний соус, пармезан, свіжа петрушка', emoji: '\u{1F35D}', prep: '14 хв' },
-      { id: 6, name: 'Цезар', price: 620, cat: 'Салати', desc: 'Ромен, курка гриль, пармезан, крутони, класичний соус', emoji: '\u{1F957}', prep: '8 хв' },
-      { id: 7, name: 'Грецький', price: 540, cat: 'Салати', desc: 'Помідори, огірок, фета, оливки, цибуля, орегано', emoji: '\u{1F957}', prep: '6 хв' },
-      { id: 8, name: 'Домашній лимонад', price: 320, cat: 'Напої', desc: 'Свіжий лимон, м\'ята, газована вода, тростинний цукор', emoji: '\u{1F9CB}', prep: '3 хв' },
-      { id: 9, name: 'Айран', price: 180, cat: 'Напої', desc: 'Кисломолочний напій, сіль, зелена цибуля', emoji: '\u{1F95B}', prep: '2 хв' },
-      { id: 10, name: 'Тірамісу', price: 450, cat: 'Десерти', desc: 'Кавові бісквіти, маскарпоне, какао, еспресо', emoji: '\u{1F370}', prep: '5 хв' },
-      { id: 11, name: 'Панна-котта', price: 380, cat: 'Десерти', desc: 'Вершковий десерт, ягідний соус, свіжа м\'ята', emoji: '\u{1F36B}', prep: '5 хв' },
+      { id: 1, name: 'Sake Futomaki', price: 900, cat: "Chef's Picks", desc: 'sushi rice, nori, salmon, cream cheese, cucumber, tobiko', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-01-20260712162831.webp', drink: false, prep: '—' },
+      { id: 2, name: 'Ebi Futomaki', price: 850, cat: "Chef's Picks", desc: 'sushi rice, nori, cream cheese, crab mix, shrimp, tobiko', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-02-20260712162831.webp', drink: false, prep: '—' },
+      { id: 3, name: 'Sake Furai Futomaki', price: 850, cat: 'Futomaki', desc: 'sushi rice, nori, cream cheese, tobiko, cucumber, grilled salmon', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-03-20260712162831.webp', drink: false, prep: '—' },
+      { id: 4, name: 'Philadelphia Classic', price: 1100, cat: 'Philadelphia', desc: 'sushi rice, nori, cream cheese, cucumber, salmon', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-04-20260712162831.webp', drink: false, prep: '—' },
+      { id: 5, name: 'Philadelphia Premium', price: 1400, cat: "Chef's Picks", desc: 'sushi rice, nori, cream cheese, cucumber, salmon', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-05-20260712162831.webp', drink: false, prep: '—' },
+      { id: 6, name: 'Red Pearl', price: 950, cat: 'California', desc: 'sushi rice, nori, tobiko, salmon, cucumber, spicy mayo', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-06-20260712162831.webp', drink: false, prep: '—' },
+      { id: 7, name: 'Red Pearl Premium', price: 1300, cat: 'California', desc: 'sushi rice, nori, tobiko, salmon, cucumber, spicy mayo', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-07-20260712162831.webp', drink: false, prep: '—' },
+      { id: 8, name: 'Sesame Sake', price: 850, cat: "Chef's Picks", desc: 'sushi rice, nori, cream cheese, salmon, cucumber, sesame, spicy mayo', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-08-20260712162831.webp', drink: false, prep: '—' },
+      { id: 9, name: 'Ebi Cream', price: 900, cat: 'Philadelphia', desc: 'sushi rice, nori, cream cheese, avocado, cucumber, shrimp', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-09-20260712162831.webp', drink: false, prep: '—' },
+      { id: 10, name: 'Ebi Cream Premium', price: 1300, cat: 'Philadelphia', desc: 'sushi rice, nori, cream cheese, avocado, cucumber, shrimp', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-10-20260712162831.webp', drink: false, prep: '—' },
+      { id: 11, name: 'Coral Sake', price: 1100, cat: 'California', desc: 'sushi rice, nori, salmon, cucumber, avocado, tobiko', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-11-20260712162831.webp', drink: false, prep: '—' },
+      { id: 12, name: 'Coral Sake Premium', price: 1400, cat: 'California', desc: 'sushi rice, nori, salmon, cucumber, avocado, tobiko', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-12-20260712162831.webp', drink: false, prep: '—' },
+      { id: 13, name: 'Smoky Sunset', price: 850, cat: 'California', desc: 'sushi rice, nori, grilled salmon, cucumber, avocado, sesame', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-13-20260712162831.webp', drink: false, prep: '—' },
+      { id: 14, name: 'Maguro Sesame', price: 850, cat: 'California', desc: 'sushi rice, nori, tuna, cucumber, avocado, sesame', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-14-20260712162831.webp', drink: false, prep: '—' },
+      { id: 15, name: 'Crunchy Ebi Sunset', price: 850, cat: 'California', desc: 'sushi rice, nori, Kewpie mayo, cucumber, avocado, sesame, panko shrimp', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-15-20260712162831.webp', drink: false, prep: '—' },
+      { id: 16, name: 'California Classic', price: 950, cat: "Chef's Picks", desc: 'sushi rice, nori, crab mix, avocado, cucumber, tobiko, Kewpie mayo', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-16-20260712162831.webp', drink: false, prep: '—' },
+      { id: 17, name: 'California Premium', price: 1300, cat: 'California', desc: 'sushi rice, nori, crab mix, avocado, cucumber, tobiko, Kewpie mayo', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-17-20260712162831.webp', drink: false, prep: '—' },
+      { id: 18, name: 'Maguro Pearl', price: 950, cat: 'California', desc: 'sushi rice, nori, tuna, cucumber, tobiko, Kewpie mayo', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-18-20260712162831.webp', drink: false, prep: '—' },
+      { id: 19, name: 'Maguro Pearl Premium', price: 1300, cat: 'California', desc: 'sushi rice, nori, tuna, cucumber, tobiko, Kewpie mayo', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-19-20260712162831.webp', drink: false, prep: '—' },
+      { id: 20, name: 'Crispy Sunset', price: 900, cat: 'California', desc: 'sushi rice, nori, panko shrimp, cucumber, avocado, tobiko', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-20-20260712162831.webp', drink: false, prep: '—' },
+      { id: 21, name: 'Sake Sunset', price: 950, cat: "Chef's Picks", desc: 'sushi rice, nori, salmon, cucumber, avocado, sesame', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-21-20260712162831.webp', drink: false, prep: '—' },
+      { id: 22, name: 'Sake Sunset Premium', price: 1300, cat: 'California', desc: 'sushi rice, nori, salmon, cucumber, avocado, sesame', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-22-20260712162831.webp', drink: false, prep: '—' },
+      { id: 23, name: 'Truffle Sake premium', price: 1200, cat: "Chef's Picks", desc: 'sushi rice, nori, cream cheese, shrimp, avocado, tobiko, salmon, truffle sauce', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-23-20260712162831.webp', drink: false, prep: '—' },
+      { id: 24, name: 'Hot Ebi', price: 850, cat: "Chef's Picks", desc: 'sushi rice, nori, cream cheese, shrimp, crab mix, sweet chili', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-24-20260712162831.webp', drink: false, prep: '—' },
+      { id: 25, name: 'Hot Smoky Sake', price: 850, cat: 'Hot roll', desc: 'sushi rice, nori, grilled salmon, cream cheese, avocado', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-25-20260712162831.webp', drink: false, prep: '—' },
+      { id: 26, name: 'Hot Maguro', price: 900, cat: 'Hot roll', desc: 'sushi rice, nori, tuna, cream cheese, avocado', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-26-20260712162831.webp', drink: false, prep: '—' },
+      { id: 27, name: 'Sweet Chili Tiger', price: 1200, cat: 'Signature', desc: 'sushi rice, nori, panko shrimp, crab mix, avocado, salmon, sweet chili, crispy onion', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-27-20260712162831.webp', drink: false, prep: '—' },
+      { id: 28, name: 'Sweet Chili Tiger Premium', price: 1500, cat: 'Signature', desc: 'sushi rice, nori, panko shrimp, crab mix, avocado, salmon, sweet chili, crispy onion', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-28-20260712162831.webp', drink: false, prep: '—' },
+      { id: 29, name: 'Sake Volcano', price: 1300, cat: 'Volcano', desc: 'sushi rice, nori, tobiko, cream cheese, salmon mix', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-29-20260712162831.webp', drink: false, prep: '—' },
+      { id: 30, name: 'Ebi Volcano', price: 1000, cat: 'Volcano', desc: 'sushi rice, nori, panko shrimp, cream cheese, cheese mix', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-30-20260712162831.webp', drink: false, prep: '—' },
+      { id: 31, name: 'Maki Salmon', price: 600, cat: 'Maki', desc: 'sushi rice, nori, salmon', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-31-20260712162831.webp', drink: false, prep: '—' },
+      { id: 32, name: 'Maki Cream', price: 500, cat: 'Maki', desc: 'sushi rice, nori, cream cheese', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-32-20260712162831.webp', drink: false, prep: '—' },
+      { id: 33, name: 'Maki Shrimps', price: 550, cat: 'Maki', desc: 'sushi rice, nori, shrimp', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-33-20260712162831.webp', drink: false, prep: '—' },
+      { id: 34, name: 'Maki Cucumber', price: 500, cat: 'Maki', desc: 'sushi rice, nori, cucumber', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-34-20260712162831.webp', drink: false, prep: '—' },
+      { id: 35, name: 'Maki Tuna', price: 600, cat: 'Maki', desc: 'sushi rice, nori, tuna', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-35-20260712162831.webp', drink: false, prep: '—' },
+      { id: 36, name: 'Maki Surimi', price: 550, cat: 'Maki', desc: 'sushi rice, nori, surimi', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-36-20260712162831.webp', drink: false, prep: '—' },
+      { id: 37, name: 'Set Philadelphia', price: 4300, cat: 'Sets', desc: 'Philadelphia Classic, Ebi Cream Classic, Sweet Chili Tiger, Maki Surimi, Sesame Sake', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-37-20260712162831.webp', drink: false, prep: '—' },
+      { id: 38, name: 'Set Premium', price: 5250, cat: 'Sets', desc: 'Truffle Sake Premium, Philadelphia Premium, Ebi Cream Premium, California Premium, Maki Shrimps', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-38-20260712162831.webp', drink: false, prep: '—' },
+      { id: 39, name: 'Set 50/50', price: 3100, cat: 'Sets', desc: 'Sake Futomaki 1/2, Ebi Futomaki 1/2, Coral Sake, Truffle Sake, Maki Salmon', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-39-20260712162831.webp', drink: false, prep: '—' },
+      { id: 40, name: 'Set 1', price: 2950, cat: 'Sets', desc: 'Ebi Futomaki, Red Pearl, Hot Smoky Sake, Maki Salmon', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-40-20260712162831.webp', drink: false, prep: '—' },
+      { id: 41, name: 'Panko Shrimps', price: 800, cat: 'Snacks', desc: 'panko shrimp, sweet chili', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-41-20260712162831.webp', drink: false, prep: '—' },
+      { id: 42, name: 'Salmon Nigiri', price: 250, cat: 'Nigiri', desc: 'sushi rice, salmon', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-42-20260712162831.webp', drink: false, prep: '—' },
+      { id: 43, name: 'Tuna Nigiri', price: 250, cat: 'Nigiri', desc: 'sushi rice, tuna', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-43-20260712162831.webp', drink: false, prep: '—' },
+      { id: 44, name: 'Shrimp Nigiri', price: 250, cat: 'Nigiri', desc: 'sushi rice, shrimp', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-44-20260712162831.webp', drink: false, prep: '—' },
+      { id: 45, name: 'Smoky Gouda', price: 900, cat: 'Vegetarian Roll', desc: 'sushi rice, cream cheese, cucumber, avocado, torched gouda, sweet chili, crispy onion', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-45-20260712162831.webp', drink: false, prep: '—' },
+      { id: 46, name: 'Okinawa Fresh', price: 850, cat: 'Vegetarian Roll', desc: 'sushi rice, cream cheese, chuka, cucumber', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-46-20260712162831.webp', drink: false, prep: '—' },
+      { id: 47, name: 'Tuna Salmon Roll', price: 1300, cat: 'Signature', desc: 'mango, cucumber, nori, cream cheese, sushi rice, tuna, salmon', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-47-20260712162831.webp', drink: false, prep: '—' },
+      { id: 48, name: 'Tuna Bowl', price: 850, cat: 'Bowls', desc: 'sushi rice, tuna, chuka, egg, cucumber, lemon-kimchi sauce, spicy mayo, sesame', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-48-20260712162831.webp', drink: false, prep: '—' },
+      { id: 49, name: 'Crab Mix Bowl', price: 850, cat: 'Bowls', desc: 'sushi rice, crab mix, mango, cucumber, egg, lemon-kimchi sauce, spicy mayo, sesame', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-49-20260712162831.webp', drink: false, prep: '—' },
+      { id: 50, name: 'Salmon Bowl', price: 850, cat: "Chef's Picks", desc: 'sushi rice, salmon, cucumber, avocado, egg, lemon-kimchi sauce, spicy mayo, sesame, caramelized onion', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-50-20260712162831.webp', drink: false, prep: '—' },
+      { id: 51, name: 'Shrimp Bowl', price: 850, cat: 'Bowls', desc: 'sushi rice, shrimp, cucumber, avocado, egg, lemon-kimchi sauce, sweet chili, spicy mayo, sesame, tobiko', emoji: '🍣', photo: 'https://sushi-durres-menu.netlify.app/img/item-51-20260712162831.webp', drink: false, prep: '—' },
+      { id: 52, name: 'Green Mango', price: 950, cat: 'Vegetarian Roll', desc: 'sushi rice, cream cheese, cucumber, mango, avocado', emoji: '🍣', photo: '', drink: false, prep: '—' },
+      { id: 53, name: 'Basil Smash', price: 0, cat: 'Cocktails', desc: 'Ask waiter', emoji: '🍸', photo: 'https://sushi-durres-menu.netlify.app/img/item-53-20260712162831.webp', drink: true, prep: '—' },
+      { id: 54, name: 'Mohito Strawberry', price: 0, cat: 'Cocktails', desc: 'Ask waiter', emoji: '🍸', photo: 'https://sushi-durres-menu.netlify.app/img/item-54-20260712162831.webp', drink: true, prep: '—' },
+      { id: 55, name: 'Mohito', price: 0, cat: 'Cocktails', desc: 'Ask waiter', emoji: '🍸', photo: 'https://sushi-durres-menu.netlify.app/img/item-55-20260712162831.webp', drink: true, prep: '—' },
+      { id: 56, name: 'Margarita', price: 0, cat: 'Cocktails', desc: 'Ask waiter', emoji: '🍸', photo: 'https://sushi-durres-menu.netlify.app/img/item-56-20260712162831.webp', drink: true, prep: '—' },
+      { id: 57, name: 'Espresso Martini', price: 0, cat: 'Cocktails', desc: 'Ask waiter', emoji: '🍸', photo: 'https://sushi-durres-menu.netlify.app/img/item-57-20260712162831.webp', drink: true, prep: '—' },
+      { id: 58, name: 'Whiskey Sour', price: 0, cat: 'Cocktails', desc: 'Ask waiter', emoji: '🍸', photo: 'https://sushi-durres-menu.netlify.app/img/item-58-20260712162831.webp', drink: true, prep: '—' },
+      { id: 59, name: 'Hugo', price: 0, cat: 'Cocktails', desc: 'Ask waiter', emoji: '🍸', photo: 'https://sushi-durres-menu.netlify.app/img/item-59-20260712162831.webp', drink: true, prep: '—' },
     ],
     _neurons: null,
     _audioCtx: null,
@@ -288,17 +336,25 @@ const App = {
     const items=this.state.filter==='all'?this.state._menu:this.state._menu.filter(i=>i.cat===this.state.filter);
     const grid=document.getElementById('menu-grid');
     if(!grid)return;
-    grid.innerHTML=items.map(i=>`
+    grid.innerHTML=items.map(i=>{
+      // S5 — food hero photo from the vendor CDN (engine/src/vendor_assets::food_photo_uri),
+      // with emoji fallback if the photo is missing or fails to load (onerror).
+      const hero = i.photo
+        ? `<img class="menu-img" src="${i.photo}" alt="${i.name}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';"/><div class="menu-img" style="display:none">${i.emoji}</div>`
+        : `<div class="menu-img">${i.emoji}</div>`;
+      const priceStr = i.drink ? 'Ask waiter' : `${i.price.toLocaleString()} ALL`;
+      return `
       <div class="menu-item spring-fast">
-        <div class="menu-img">${i.emoji}</div>
-        <div class="menu-cat">${i.cat} \u00B7 ${i.prep}</div>
+        ${hero}
+        <div class="menu-cat">${i.cat}</div>
         <h4>${i.name}</h4>
         <p class="menu-desc">${i.desc}</p>
         <div class="menu-footer">
-          <span class="menu-price">${i.price.toLocaleString()} ALL</span>
-          <button class="btn btn-primary btn-sm" onclick="App.addToCart(${i.id})">Додати</button>
+          <span class="menu-price">${priceStr}</span>
+          ${i.drink ? '' : `<button class="btn btn-primary btn-sm" onclick="App.addToCart(${i.id})">Додати</button>`}
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   },
 
   filterMenu(cat) {
