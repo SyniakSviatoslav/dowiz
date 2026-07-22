@@ -45,6 +45,7 @@ const App = {
       { date: '2026-07-19', amount: 3120, trips: 11 },
       { date: '2026-07-18', amount: 1890, trips: 6 },
     ],
+    _orderDetail: null,
     _sonifier: null,
     _sdfCanvas: null,
     _sdfCtx: null,
@@ -231,6 +232,20 @@ const App = {
     if (this.state._sonifier) this.state._sonifier.sonify(event, money);
   },
 
+  toast(msg, type = 'info', dur = 4000) {
+    const c = document.getElementById('toast-container') || (() => {
+      const el = document.createElement('div');
+      el.id = 'toast-container';
+      document.body.appendChild(el);
+      return el;
+    })();
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.textContent = msg;
+    c.appendChild(t);
+    setTimeout(() => { t.classList.add('toast-out'); setTimeout(() => t.remove(), 300); }, dur);
+  },
+
   sonifySpike(r) {
     const pent = [262, 294, 330, 392, 440, 524, 588, 660, 784, 880];
     const f = pent[Math.floor(r * pent.length) % pent.length];
@@ -286,6 +301,7 @@ const App = {
   },
 
   pageForCurrent() {
+    if (this.state.page === 'order-detail') return this.pageOrderDetail();
     if (this.state.page === 'orders') return this.pageOrders();
     if (this.state.page === 'analytics') return this.pageAnalytics();
     if (this.state.role === 'courier') return this.pageCourier();
@@ -316,6 +332,47 @@ const App = {
       <div style="margin-top:24px">
         <h3>Активність замовлень</h3>
         <div id="analytics-timeline"></div>
+      </div>
+    </section>`;
+  },
+
+  pageOrderDetail() {
+    const o = this.state._orderDetail;
+    if (!o) return '<section><p class="section-subtitle">Замовлення не знайдено</p><button class="btn btn-ghost" onclick="App.navigate(\'orders\')">Назад</button></section>';
+    const labels = { pending:'Очікує підтвердження', confirmed:'Підтверджено', preparing:'Готується', ready:'Готово', 'in-delivery':'В дорозі', delivered:'Доставлено' };
+    const colors = { pending:'#D97706', confirmed:'#2563EB', preparing:'#F59E0B', ready:'#0D9488', 'in-delivery':'#3B82F6', delivered:'#059669' };
+    const chain = ['pending','confirmed','preparing','ready','in-delivery','delivered'];
+    const idx = chain.indexOf(o.status);
+    return `
+    <section class="order-detail">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+        <button class="btn btn-ghost btn-sm" onclick="App.navigate('orders')">← Назад</button>
+        <h2 class="section-title" style="margin:0">Замовлення #${o.id}</h2>
+      </div>
+      <div class="order-detail-card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <span class="order-badge ${o.status}">${labels[o.status] || o.status}</span>
+          <span style="font-weight:700;font-size:1.3em">${o.total.toLocaleString()} ALL</span>
+        </div>
+        <div style="margin:16px 0;color:var(--brand-text-muted);font-size:0.9em">
+          <div>${o.items} позицій · ${o.time}</div>
+          <div>${o.address || ''}${o.phone ? ' · ' + o.phone : ''}</div>
+          ${o.note ? '<div>Примітка: ' + o.note + '</div>' : ''}
+        </div>
+        <div class="order-timeline">
+          ${chain.map((s, i) => `
+            <div class="timeline-step ${i <= idx ? 'active' : ''} ${i === idx ? 'current' : ''}">
+              <div class="timeline-dot" style="${i <= idx ? 'background:' + colors[s] : ''}"></div>
+              <div class="timeline-content">
+                <div class="timeline-label">${labels[s]}</div>
+                <div class="timeline-time">${i < idx ? '✓' : i === idx ? 'поточний' : ''}</div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div style="margin-top:16px;text-align:center">
+        <button class="btn btn-ghost" onclick="App.navigate('orders')">До списку замовлень</button>
       </div>
     </section>`;
   },
@@ -384,6 +441,7 @@ const App = {
   },
 
   renderContent() {
+    if (this.state.page === 'order-detail') return;
     if (this.state.page === 'orders') this.renderOrders();
     else if (this.state.page === 'analytics') this.renderAnalytics();
     else if (this.state.role === 'owner') this.renderOwner();
@@ -414,17 +472,37 @@ const App = {
   renderOrders() {
     const el = document.getElementById('orders-list');
     if (!el) return;
-    const items = this.state.cart.length > 0 ? this.state.cart : [];
-    if (items.length === 0) {
-      el.innerHTML = '<p style="text-align:center;padding:48px;color:var(--brand-text-muted)">Немає активних замовлень</p>';
+    const activeOrders = this.state._orders.filter(o => o.status !== 'delivered');
+    const pastOrders = this.state._orders.filter(o => o.status === 'delivered');
+    const labels = { pending:'Очікує', confirmed:'Підтверджено', preparing:'Готується', ready:'Готово', 'in-delivery':'В дорозі', delivered:'Доставлено' };
+    if (this.state._orders.length === 0 && this.state.cart.length === 0) {
+      el.innerHTML = '<p style="text-align:center;padding:48px;color:var(--brand-text-muted)">Немає замовлень</p>';
       return;
     }
-    el.innerHTML = this.state._orders.slice(0, 10).map(o => `
-      <div class="order-row spring-fast">
+    const renderOrder = o => `
+      <div class="order-row spring-fast" onclick="App.viewOrder(${o.id})" style="cursor:pointer">
         <div><div class="order-id">#${o.id}</div><div class="order-meta">${o.items} позицій · ${o.total.toLocaleString()} ALL</div></div>
-        <div class="order-status"><span class="order-badge ${o.status}">${o.status}</span></div>
-      </div>
-    `).join('');
+        <div class="order-status" style="display:flex;align-items:center;gap:8px">
+          <span class="order-badge ${o.status}">${labels[o.status] || o.status}</span>
+          <span style="color:var(--brand-text-muted);font-size:0.8em">›</span>
+        </div>
+      </div>`;
+    el.innerHTML = (activeOrders.length > 0
+      ? `<div style="font-size:0.8em;color:var(--brand-text-muted);margin-bottom:8px;padding:0 4px">Активні (${activeOrders.length})</div>
+         ${activeOrders.map(renderOrder).join('')}
+         ${pastOrders.length > 0 ? `<div style="font-size:0.8em;color:var(--brand-text-muted);margin:16px 0 8px;padding:0 4px">Історія (${pastOrders.length})</div>
+           ${pastOrders.slice(0, 5).map(renderOrder).join('')}` : ''}`
+      : this.state._orders.slice(0, 5).map(renderOrder).join(''));
+  },
+
+  viewOrder(id) {
+    const o = this.state._orders.find(o => o.id === id);
+    if (!o) return;
+    this.state._orderDetail = o;
+    this.state.page = 'order-detail';
+    this.state._cartOpen = false;
+    this.render();
+    this.persist();
   },
 
   renderAnalytics() {
@@ -532,6 +610,8 @@ const App = {
     if (idx < 0 || idx >= chain.length - 1) return;
     order.status = chain[idx + 1];
     this.sonify('advanceOrder');
+    const labels = { pending:'Очікує', confirmed:'Підтверджено', preparing:'Готується', ready:'Готово', 'in-delivery':'В дорозі', delivered:'Доставлено' };
+    this.toast(`Замовлення #${order.id}: ${labels[order.status]}`, 'success');
     if (order.status === 'ready') {
       this.state._courierTasks.push({
         id: 3000 + order.id,
@@ -623,8 +703,10 @@ const App = {
     if (this.state._shiftActive) {
       this.state._shiftStart = Date.now();
       this.sonify('shiftStart');
+    this.toast('Зміна розпочата', 'info');
     } else {
       this.sonify('shiftEnd');
+      this.toast('Зміна завершена', 'info');
     }
     this.render();
     this.persist();
@@ -635,6 +717,7 @@ const App = {
     if (!task || task.status !== 'assigned') return;
     task.status = 'picked-up';
     this.sonify('advanceOrder');
+    this.toast(`Замовлення #${task.orderId} забрано`, 'info');
     this.renderCourier();
     this.persist();
   },
@@ -646,6 +729,7 @@ const App = {
     this.state._earningsToday += task.payout;
     this.state._deliveriesToday++;
     this.sonify('deliver');
+    this.toast(`Замовлення #${task.orderId} доставлено · ${task.payout.toLocaleString()} ALL`, 'success', 5000);
     this.render();
     this.persist();
   },
@@ -677,6 +761,7 @@ const App = {
     if (existing) existing.qty++;
     else this.state.cart.push({ ...item, qty: 1 });
     this.sonify('addToCart');
+    this.toast(`${item.name} додано до кошика`, 'info', 2000);
     this.renderCart();
     this.toggleCart(true);
     this.persist();
@@ -685,6 +770,7 @@ const App = {
   removeFromCart(id) {
     this.state.cart = this.state.cart.filter(i => i.id !== id);
     this.sonify('removeFromCart');
+    this.toast('Видалено з кошика', 'info', 2000);
     this.renderCart();
     this.persist();
   },
@@ -734,6 +820,7 @@ const App = {
     }
     const total = this.state.cart.reduce((s,i) => s+i.price*i.qty, 0);
     this.sonify('checkout');
+    this.toast('Замовлення прийнято!', 'success');
     const address = this.state._deliveryAddress.trim();
     const phone = this.state._deliveryPhone.trim();
     const note = this.state._deliveryNote.trim();
