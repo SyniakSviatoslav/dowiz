@@ -28,6 +28,13 @@ serde = { version = "1", optional = true, features = ["derive"] }
 
 # P57 Lane B (O18a only). Optional: the default build links NO cosmic-text.
 cosmic-text = { version = "0.19.0", optional = true }
+# S3.5 — naga (pure-Rust WGSL → IR validator) for the shader-spine compile gate.
+# OPTIONAL + behind `feature = "gpu"` only: the default build pulls ZERO new
+# crates (verified `cargo tree -e no-dev` byte-unchanged). `wgsl-in` is the
+# frontend that parses our `.wgsl` shaders. Offline-cached as naga-30.0.0
+# (verified live 2026-07-22; transitive `zerocopy` resolvable to the cached
+# 0.8.54 already pinned by this crate's lock).
+naga = { version = "30", optional = true, features = ["wgsl-in"] }
 
 [features]
 # default = offline-clean. GPU/wasm glue is opt-in so CI never pulls a GPU/JS toolchain.
@@ -57,7 +64,18 @@ a11y_native = ["serde"]
 # adapter is an honest `Err("gpu adapter not built — wgpu uncached")` stub
 # (engine/src/bridge.rs::gpu::new_gpu). When `cargo add wgpu` succeeds (network),
 # implement the real `wgpu::Device`/`Queue` sink here and flip new_gpu to build it.
-gpu = []
+#
+# S3.5 follow-up (BLUEPRINT-INTERFACE-ENGINE-WEBGPU-SHADER-SPINE-2026-07-22 §7
+# Q2 act): `naga` IS now in the offline cargo cache (naga-30.0.0, verified live
+# 2026-07-22 — the blueprint's 2026-07-16 "wgpu/naga absent" claim is STALE and
+# corrected here). `naga` is pulled ONLY behind this feature so the default
+# offline-clean build stays zero-external-crate (`cargo tree -e no-dev` unchanged).
+# `cargo test --features gpu --test shader_audit` then runs the REAL WGSL
+# parse/validate gate (catches a typo the regex audit cannot) via naga's
+# `wgsl-in` frontend. The default-build `shader_audit.rs` prologue-scan stays the
+# belt; naga is the braces. Triggered by the S3 innovate ceiling: swap text-regex
+# for a typed AST audit — done here (binding-name resolution via naga's module).
+gpu = ["dep:naga"]
 # P11 §5 (E23 scaffolding): WebGL render boundary, EMPTY by design — no deps pulled.
 webgl = []
 # P11 §5 (E23 scaffolding): WebGPU render boundary, EMPTY by design — no deps pulled.

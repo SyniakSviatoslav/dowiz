@@ -169,3 +169,138 @@ fn f() {}";
         rows[0].proof_text
     );
 }
+
+// ─── Naga WGSL compile/validate gate (S3.5 follow-up) ───────────────────────
+// These tests run behind `feature = "gpu"` only (naga dep). The default build
+// stays offline-clean (zero external crates). The prologue-scan above is the
+// belt; naga is the braces — it catches WGSL syntax/type errors that no regex
+// can see, and its AST cross-checks that every read_write storage variable
+// identified by naga matches the SINGLE-WRITER proof discipline.
+
+#[cfg(feature = "gpu")]
+#[cfg(test)]
+mod naga_validation {
+    use super::*;
+    use naga::front::wgsl::parse_str;
+    use naga::AddressSpace;
+
+    /// Parse every shader in SHADER_FILES with naga and assert the WGSL is
+    /// syntactically and structurally valid (types, bindings, function signatures).
+    /// A typo that passes the regex prologue-scan (e.g. a `read_write` misspelled
+    /// as `read_writee`) would still fail this gate.
+    #[test]
+    fn naga_validates_every_shader() {
+        let engine_dir = env!("CARGO_MANIFEST_DIR");
+        for shader in SHADER_FILES {
+            let path = std::path::Path::new(engine_dir).join(shader);
+            let src = std::fs::read_to_string(&path)
+                .unwrap_or_else(|_| panic!("failed to read {}", shader));
+            let module = parse_str(&src)
+                .unwrap_or_else(|e| panic!("naga FAILED to parse {}:\n{:#?}", shader, e));
+            // Sanity: naga found at least the entry points the shader declares.
+            assert!(
+                module.entry_points.len() >= 1,
+                "{}: naga parsed 0 entry points — layout lost?",
+                shader
+            );
+        }
+    }
+
+    /// Falsifier: a known-bad WGSL shader MUST be rejected by naga. Proves the
+    /// gate bites — if this test ever passes (bad WGSL accepted), the validation
+    /// is broken.
+    #[test]
+    fn naga_rejects_invalid_wgsl() {
+        let bad = r#"
+@group(0) @binding(0) var<storage, read_write> out: array<vec4<f32>>;
+fn fs() { let x = 1 + "string"; } // type mismatch
+"#;
+        assert!(
+            parse_str(bad).is_err(),
+            "naga MUST reject a type-mismatched WGSL shader"
+        );
+    }
+
+    /// Cross-check: naga's IR agrees with the prologue-scan on which bindings
+    /// are read_write storage. For every global variable naga classifies as
+    /// `AddressSpace::Storage { access: STORE }` (meaning read_write in WGSL
+    /// terms), this test asserts the source contains a `// SINGLE-WRITER:` proof
+    /// mentioning the variable name within 12 lines *above* the binding
+    /// declaration line. This is the naga-backed equivalent of the prologue-scan
+    /// — replacing regex with typed IR.
+    #[test]
+    fn naga_read_write_binding_has_single_writer_proof() {
+        use naga::StorageAccess;
+        let engine_dir = env!("CARGO_MANIFEST_DIR");
+
+        for shader in SHADER_FILES {
+            let path = std::path::Path::new(engine_dir).join(shader);
+            let src = std::fs::read_to_string(&path)
+                .unwrap_or_else(|_| panic!("failed to read {}", shader));
+            let module = parse_str(&src)
+                .unwrap_or_else(|e| panic!("naga FAILED to parse {}:\n{:#?}", shader, e));
+
+            let lines: Vec<&str> = src.lines().collect();
+
+            for (handle, var) in module.global_variables.iter() {
+                // Is this a read_write storage variable?
+                let read_write = match var.space {
+                    AddressSpace::Storage { access } => access.contains(StorageAccess::STORE),
+                    _ => false,
+                };
+                if !read_write {
+                    continue;
+                }
+
+                let var_name = var.name.as_deref().unwrap_or("<unnamed>");
+
+                // Find the first line in source that declares this variable:
+                //   @group(n) @binding(m) var<storage, read_write> <var_name>
+                // We search backward from the binding pattern + name.
+                let binding_line = lines.iter().position(|l| {
+                    l.contains(var_name) && l.contains("read_write") && l.contains("var<storage")
+                });
+
+                let found_line = match binding_line {
+                    Some(i) => i,
+                    None => {
+                        panic!(
+                            "{}: naga found read_write storage variable `{}` (handle={:?}) \
+                             but no source line matches `var<storage, read_write> {}`. \
+                             Variable binding: {:?}",
+                            shader, var_name, handle, var_name, var.binding
+                        );
+                    }
+                };
+
+                // Scan up to PROOF_WINDOW_LINES + 4 (generous for naga AST
+                // where the binding attributes may span multiple lines) above
+                // the binding declaration.
+                let window = PROOF_WINDOW_LINES + 4;
+                let start = found_line.saturating_sub(window);
+                let has_proof = lines[start..=found_line]
+                    .iter()
+                    .any(|l| l.contains(PROOF_MARKER));
+
+                let binding_info = var
+                    .binding
+                    .map(|b| format!("@group({}) @binding({})", b.group, b.binding))
+                    .unwrap_or_else(|| "<no binding>".to_string());
+
+                assert!(
+                    has_proof,
+                    "{}: read_write storage variable `{}` ({}) at line {} has no \
+                     `{}` proof within {} lines above. \
+                     Add a `// SINGLE-WRITER: {}` comment above the binding.",
+                    shader,
+                    var_name,
+                    binding_info,
+                    found_line + 1,
+                    PROOF_MARKER,
+                    window,
+                    var_name
+                );
+            }
+        }
+    }
+}

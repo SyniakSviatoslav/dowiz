@@ -51,16 +51,15 @@ struct VSOut {
     return out;
 }
 
-fn role_palette(role: u32) -> (vec3<f32>, vec3<f32>, vec3<f32>) {
-    // Brand palette (Dubin & Sushi gold-on-dark) tinted per role.
-    // Customer: full gold; owner: cooler gold (analytics tint);
-    // courier: amber (motion/high-contrast for in-motion reading §16.53).
-    var base = vec3(0.027, 0.078, 0.110); // #07141c surface
-    var gold = vec3(0.831, 0.686, 0.216); // #d4af37 brand
-    var hi   = vec3(0.945, 0.835, 0.541); // #f1d58a gold-light
-    if (role == 1u) { gold = vec3(0.760, 0.700, 0.300); } // owner: cooler
-    if (role == 2u) { hi   = vec3(1.000, 0.600, 0.180); } // courier: amber
-    return (base, gold, hi);
+struct PaletteTrio { base: vec3<f32>, gold: vec3<f32>, hi: vec3<f32> }
+
+fn role_palette(role: u32) -> PaletteTrio {
+    var base = vec3(0.027, 0.078, 0.110);
+    var gold = vec3(0.831, 0.686, 0.216);
+    var hi   = vec3(0.945, 0.835, 0.541);
+    if (role == 1u) { gold = vec3(0.760, 0.700, 0.300); }
+    if (role == 2u) { hi   = vec3(1.000, 0.600, 0.180); }
+    return PaletteTrio(base, gold, hi);
 }
 
 @fragment fn fs(@builtin(position) pix: vec4<f32>) -> @location(0) vec4<f32> {
@@ -69,7 +68,10 @@ fn role_palette(role: u32) -> (vec3<f32>, vec3<f32>, vec3<f32>) {
     let idx = px.y * cols + px.x;
     let d = field[idx]; // signed distance (negative = inside)
 
-    let (base, gold, hi) = role_palette(u.role);
+    let pal = role_palette(u.role);
+    let base = pal.base;
+    let gold = pal.gold;
+    let hi = pal.hi;
 
     // Inside the union ⇒ fill with brand-tinted surface; outside ⇒ background
     // dimmed by distance (depth cue). The SDF is the SOLE geometry authority —
