@@ -1,0 +1,22 @@
+[package]
+name = "dowiz-node"
+version = "0.1.0"
+edition = "2021"
+description = "dowiz mesh node: concrete HubTransport over QUIC/TCP"
+
+[features]
+default = ["transport-quic"]
+transport-quic = ["dep:quinn", "dep:rustls"]
+transport-http = ["dep:ureq"]
+
+[dependencies]
+dowiz-kernel = { path = "../kernel", features = ["pq"] }
+quinn = { version = "0.11", optional = true }
+rustls = { version = "0.23", optional = true, default-features = false, features = ["ring"] }
+ureq = { version = "2", optional = true, default-features = false, features = ["tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lib]
+name = "dowiz_node"
+path = "src/lib.rs"
