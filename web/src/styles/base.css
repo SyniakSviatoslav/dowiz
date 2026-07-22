@@ -391,6 +391,8 @@ code, pre, kbd {
 }
 
 /* ── Nav active order count ── */
+.theme-btn { font-size: 1em; line-height: 1; }
+
 .navbar-links a .badge-count {
   display: inline-flex;
   align-items: center;

@@ -285,6 +285,7 @@ const App = {
         <button class="btn btn-ghost btn-sm" onclick="App.setRole('customer')" title="Клієнт">👤</button>
         <button class="btn btn-ghost btn-sm" onclick="App.setRole('owner')" title="Заклад">🏪</button>
         <button class="btn btn-ghost btn-sm" onclick="App.setRole('courier')" title="Курʼєр">🛵</button>
+        <button class="btn btn-ghost btn-sm theme-btn" onclick="App.cycleTheme()" title="Змінити тему">🎨</button>
         <button class="btn btn-ghost btn-sm" onclick="App.toggleCart()">🛒 ${count > 0 ? count : ''}</button>
         ${this.state._canInstall ? '<button class="btn btn-sm btn-primary" onclick="App.installApp()">⬇ Встановити</button>' : ''}
       </div>
@@ -736,6 +737,15 @@ const App = {
     this.toast(`Замовлення #${task.orderId} доставлено · ${task.payout.toLocaleString()} ALL`, 'success', 5000);
     this.render();
     this.persist();
+  },
+
+  cycleTheme() {
+    const themes = ['crimson', 'ocean', 'midnight', 'sage', 'gold', 'coral'];
+    const idx = themes.indexOf(this.state.theme);
+    this.state.theme = themes[(idx + 1) % themes.length];
+    document.documentElement.dataset.theme = this.state.theme;
+    localStorage.setItem('dowiz-theme', this.state.theme);
+    this.toast(`Тема: ${this.state.theme}`, 'info', 1500);
   },
 
   filterMenu(cat) {
