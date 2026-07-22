@@ -39,6 +39,7 @@ mod loop_;
 mod money_guard;
 mod motion;
 pub mod scene;
+pub mod screens; // P-screen — role-screen layouts (vendor-data-driven); backend pixel-verification authority
 mod sdf;
 pub mod text_input;
 pub mod text_scope;
@@ -49,6 +50,7 @@ pub mod text_scope;
 pub mod semantics;
 // P64 M1/M2/M3/M7 — intent engine + UI composition + friction mapping + onboarding.
 // Core P64 runtime (native engine side). Offline-clean; always built.
+pub mod checkout; // P6 real-checkout — vendor cart → kernel order FSM + friction CommitToken
 pub mod compose_ui; // FragmentRegistry + Composer (intent → Scene directive)
 pub mod friction; // the §16.44 mapping, FrictionFsm, CommitToken (M3/M4)
 pub mod intent; // Intent runtime (extends P38 §11.2 types); classifier; router
@@ -66,6 +68,9 @@ pub mod voice;
 // EditState bounds, composing-refused) live here and are tested now.
 #[cfg(feature = "a11y_native")]
 pub mod a11y_native;
+pub mod ranker_academia; // P-ranker-academia — Academy quark-ranker for Ambiguous intents (AI seam, never consequential)
+pub mod vendor; // P-vendor — real Dubin & Sushi menu (replaces Pizza Roma demo)
+pub mod vendor_assets; // P-vendor-asset — every vendor URI + brand palette + font faces
 pub mod widget_store;
 mod zerocopy;
 

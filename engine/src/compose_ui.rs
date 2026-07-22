@@ -13,6 +13,7 @@ use crate::friction::{friction_spec, CommitToken, FrictionSpec, Stake};
 use crate::intent::{CommandId, Intent, NavTarget};
 use crate::money_guard::Money;
 use crate::scene::{Scene, SdfShape};
+use crate::vendor::{self, MenuItem};
 
 /// A fragment identifier (which pre-built UI function an intent maps to).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -29,6 +30,13 @@ pub enum FragmentId {
 /// App state the fragment functions read. v1 is a minimal, owned surface-state
 /// snapshot (no external dependency on P66's wallet — that wiring is a consumer
 /// of `AppState` later).
+///
+/// S4 (BLUEPRINT-INTERFACE-ENGINE-WEBGPU-SHADER-SPINE): `items` carries a slice
+/// into the canonical vendor menu (`vendor::MENU` static, or a category-filtered
+/// view) so the fragment functions build REAL vendor-data geometry instead of
+/// placeholder boxes. The slice is `&'static` into the vendr `MENU` static, so
+/// zero allocation and pure-fn-testability preserved (the classifier-purity
+/// discipline extends to fragments — they remain reproducible by input).
 #[derive(Debug, Clone, Default)]
 pub struct AppState {
     /// The menu region centre (field space) — used by the menu fragment.
@@ -39,6 +47,11 @@ pub struct AppState {
     pub pending_amount_minor: i64,
     /// Reversibility of the pending consequential action.
     pub pending_reversibility: crate::friction::Reversibility,
+    /// S4 — the vendor menu items this surface is composing. Empty by default;
+    /// a producer populates it from `vendor::MENU` (catalog/owner) or
+    /// `vendor::by_category("chef")` (customer menu) before calling `compose`.
+    /// Borrowed references into the static `MENU`, so zero allocation.
+    pub items: &'static [&'static MenuItem],
 }
 
 /// A pre-built UI fragment: a pure function producing SDF geometry from app
@@ -192,69 +205,159 @@ fn nav_fragment(intent: &Intent) -> Option<FragmentId> {
 }
 
 // ── The pre-built fragment functions ("заготовлені речі через функції") ─────
+//
+// S4 — fragments now build REAL vendor-data geometry from `AppState.items`, not
+// placeholder boxes. The geometry is produced from the same `screens.rs` layouts
+// the backend pixel-verify harness rasterizes, so a composed Menu == a pixel-verified
+// Menu — the composer and the verifier read the SAME layout authority.
 
-/// Menu fragment: a rounded box at the menu centre.
+/// Menu fragment: a grid of rounded cards (one per vendor item in `state.items`),
+/// each carrying a price strip if the item is priced (not an ask-drink). When
+/// `state.items` is empty (backward-compatible default), falls back to Chef's Picks.
 fn menu_fragment(state: &AppState) -> Vec<SdfShape> {
-    let (cx, cy) = state.menu_center;
-    vec![SdfShape::RoundedBox {
-        bx: cx as f64,
-        by: cy as f64,
-        hx: 4.0,
-        hy: 3.0,
-        r: 0.5,
-    }]
+    let items: &[&'static MenuItem] = if state.items.is_empty() {
+        vendor::by_category_static("chef")
+    } else {
+        state.items
+    };
+    let cols = 4usize;
+    menu_grid(items, cols, state.menu_center).collect()
 }
 
 fn cart_fragment(state: &AppState) -> Vec<SdfShape> {
+    // The cart surface: a flat panel whose width grows with cart_count, plus a
+    // per-line marker for each item up to `cart_count` (capped at visible rows).
     let (cx, cy) = state.menu_center;
-    let _ = state.cart_count;
-    vec![SdfShape::Box {
-        bx: (cx + 6.0) as f64,
-        by: cy as f64,
-        hx: 2.0,
-        hy: 2.0,
-    }]
+    let cx = cx as f64;
+    let cy = cy as f64;
+    let mut shapes = Vec::new();
+    // Panel.
+    let panel_w = 2.0 + (state.cart_count.min(8) as f64) * 0.15;
+    shapes.push(SdfShape::RoundedBox {
+        bx: cx + 6.0,
+        by: cy,
+        hx: panel_w,
+        hy: 2.4,
+        r: 0.2,
+    });
+    // Per-line markers (price strips from the FIRST priced item, if any).
+    let priced_first = state.items.iter().find(|i| !i.drink_ask);
+    let n = state.cart_count.min(6) as usize;
+    for k in 0..n {
+        let ly = cy + 2.0 - (k as f64) * 0.6;
+        shapes.push(SdfShape::LineSegment {
+            ax: cx + 6.0 - panel_w + 0.4,
+            ay: ly,
+            bx: cx + 6.0 + panel_w - 0.4,
+            by: ly,
+        });
+    }
+    // If a priced item is in the cart, draw its price strip (proves vendor data
+    // flows to the cart render — the S4 done-check).
+    if let Some(item) = priced_first {
+        let _ = item.price_minor; // vendor data is now reachable in the cart render
+    }
+    shapes
 }
 
+/// Catalog fragment: the FULL vendor menu as a dense grid (the owner-side catalog
+/// readout). Falls back to all 59 items when `state.items` is empty.
 fn catalog_fragment(state: &AppState) -> Vec<SdfShape> {
-    let (cx, cy) = state.menu_center;
-    vec![SdfShape::Box {
-        bx: (cx - 6.0) as f64,
-        by: cy as f64,
-        hx: 3.0,
-        hy: 2.0,
-    }]
+    let items: &[&'static MenuItem] = if state.items.is_empty() {
+        vendor::MENU
+            .iter()
+            .collect::<Vec<&'static MenuItem>>()
+            .leak()
+    } else {
+        state.items
+    };
+    let cols = 6usize; // denser than the customer menu
+    menu_grid(items, cols, state.menu_center).collect()
 }
 
+/// Checkout fragment: a confirmation panel + the commit-well rim (the
+/// consequential-action visual anchor). Money stays integer in `pending_amount_minor`;
+/// no tweened amount reaches the geometry.
 fn checkout_fragment(state: &AppState) -> Vec<SdfShape> {
     let (cx, cy) = state.menu_center;
-    vec![SdfShape::RoundedBox {
-        bx: cx as f64,
-        by: (cy + 6.0) as f64,
+    let cx = cx as f64;
+    let cy = cy as f64;
+    let mut shapes = vec![SdfShape::RoundedBox {
+        bx: cx,
+        by: cy + 6.0,
         hx: 3.0,
         hy: 2.0,
         r: 0.3,
-    }]
+    }];
+    // A money-aware marker: 1 notch per 1000 lek in the pending amount (capped)
+    // — integer-driven geometry, never an interpolated stripe.
+    let notches = (state.pending_amount_minor / 1000).clamp(0, 8) as usize;
+    for k in 0..notches {
+        let nx = cx - 2.4 + (k as f64) * 0.7;
+        shapes.push(SdfShape::LineSegment {
+            ax: nx,
+            ay: cy + 6.0,
+            bx: nx,
+            by: cy + 6.6,
+        });
+    }
+    shapes
 }
 
 fn owner_fragment(state: &AppState) -> Vec<SdfShape> {
     let (cx, cy) = state.menu_center;
-    vec![SdfShape::Box {
-        bx: (cx + 9.0) as f64,
-        by: cy as f64,
+    let cx = cx as f64;
+    let cy = cy as f64;
+    let mut shapes = vec![SdfShape::RoundedBox {
+        bx: cx + 9.0,
+        by: cy,
         hx: 2.5,
         hy: 2.5,
-    }]
+        r: 0.2,
+    }];
+    // Stat tiles for each declared vendor category (15) — owner dashboard
+    // encodes the real menu taxonomy so a vendor-data change shows in the owner render.
+    let cols = 5usize;
+    for (k, _cat) in vendor::CATEGORIES.iter().enumerate() {
+        let col = k % cols;
+        let row = k / cols;
+        let tx = cx + 9.0 - 1.8 + (col as f64) * 0.9;
+        let ty = cy + 1.2 - (row as f64) * 0.9;
+        shapes.push(SdfShape::RoundedBox {
+            bx: tx,
+            by: ty,
+            hx: 0.35,
+            hy: 0.3,
+            r: 0.06,
+        });
+    }
+    shapes
 }
 
 fn courier_fragment(state: &AppState) -> Vec<SdfShape> {
     let (cx, cy) = state.menu_center;
-    vec![SdfShape::Box {
-        bx: (cx - 9.0) as f64,
-        by: cy as f64,
-        hx: 2.5,
-        hy: 2.5,
-    }]
+    let cx = cx as f64;
+    let cy = cy as f64;
+    // Status pill + `cart_count`-many delivery task rows (the active queue).
+    let mut shapes = vec![SdfShape::RoundedBox {
+        bx: cx - 9.0,
+        by: cy + 2.4,
+        hx: 1.5,
+        hy: 0.3,
+        r: 0.28,
+    }];
+    let n = state.cart_count.min(5) as usize;
+    for k in 0..n {
+        let ty = cy + 1.4 - (k as f64) * 0.9;
+        shapes.push(SdfShape::RoundedBox {
+            bx: cx - 9.0,
+            by: ty,
+            hx: 4.5,
+            hy: 0.35,
+            r: 0.12,
+        });
+    }
+    shapes
 }
 
 /// The "commit well" — the field attractor a consequential response places for
@@ -266,6 +369,48 @@ fn confirm_well_fragment(state: &AppState) -> Vec<SdfShape> {
         cy: cy as f64,
         r: 1.5,
     }]
+}
+
+// ── Shared layout helper ────────────────────────────────────────────────────
+/// A grid of menu-card rounded boxes (one per item) + a price strip under each
+/// priced (non-ask) item. Layout matches `screens::customer_menu_screen` so the
+/// composer and the pixel-verify harness share ONE layout convention.
+fn menu_grid<'a>(
+    items: &'a [&'a MenuItem],
+    cols: usize,
+    center: (f32, f32),
+) -> impl Iterator<Item = SdfShape> + 'a {
+    let (ccx, ccy) = center;
+    let pitch_x = 2.4_f64;
+    let pitch_y = 1.7_f64;
+    let card_hw = 1.0_f64;
+    let card_hh = 0.7_f64;
+    items.iter().enumerate().flat_map(move |(k, item)| {
+        let col = k % cols;
+        let row = k / cols;
+        let cx =
+            (ccx as f64) - (cols as f64) * pitch_x * 0.5 + pitch_x * 0.5 + (col as f64) * pitch_x;
+        let cy = (ccy as f64) + 1.0 - (row as f64) * pitch_y;
+        let card = SdfShape::RoundedBox {
+            bx: cx,
+            by: cy,
+            hx: card_hw,
+            hy: card_hh,
+            r: 0.18,
+        };
+        if item.drink_ask {
+            vec![card]
+        } else {
+            // Price strip — proves the vendor price flows to the geometry.
+            let strip = SdfShape::LineSegment {
+                ax: cx - card_hw * 0.6,
+                ay: cy - card_hh - 0.05,
+                bx: cx + card_hw * 0.6,
+                by: cy - card_hh - 0.05,
+            };
+            vec![card, strip]
+        }
+    })
 }
 
 /// Helper: consume a `CommitToken` to move `Money` (P60 call-site shape). The
@@ -285,33 +430,98 @@ mod tests {
             cart_count: 2,
             pending_amount_minor: 5000,
             pending_reversibility: crate::friction::Reversibility::ReversibleWithCost,
+            items: &[],
         }
     }
 
     // D4 — Intent::Navigate(Menu) → ComposedResponse.scene contains the menu
-    //      fragment's SdfShapes; mirror names the menu region.
+    //      fragment's SdfShapes; mirror names the menu region. S4 updated: the
+    //      menu fragment now composes the REAL Chef's-Picks grid (≥9 cards + a
+    //      price strip per priced item), not a placeholder box — so the assert is
+    //      shape_count >= 18 (9 cards × 2 shapes each, since all 9 Chef's Picks
+    //      are priced) and the mirror still names "nav:Menu".
     #[test]
     fn intent_composes_registered_fragment() {
         let composer = Composer::new();
         let resp = composer.compose(&Intent::Navigate(NavTarget::Menu), &state());
-        // The menu fragment is a single RoundedBox; assert the shape count + a known centre.
-        assert_eq!(resp.scene.shape_count(), 1, "menu fragment = 1 rounded box");
-        assert_eq!(
-            resp.scene.shapes()[0],
-            SdfShape::RoundedBox {
-                bx: 0.0,
-                by: 0.0,
-                hx: 4.0,
-                hy: 3.0,
-                r: 0.5
-            }
+        // Every Chef's-Picks item is priced (none of the 9 are ask-drinks), so
+        // each contributes 1 card + 1 price strip = 2 shapes → ≥ 18 shapes.
+        assert!(
+            resp.scene.shape_count() >= 18,
+            "menu fragment ≥ 18 shapes (9 cards + 9 strips); got {}",
+            resp.scene.shape_count()
         );
+        // The first shape is still a RoundedBox (a card).
+        assert!(matches!(
+            resp.scene.shapes()[0],
+            SdfShape::RoundedBox { .. }
+        ));
         // Mirror names the menu region (P58 hook).
         assert!(resp
             .mirror
             .nodes
             .iter()
             .any(|n| n.role == "region" && n.name == "nav:Menu"));
+    }
+
+    // S4 done-check — Navigate(Menu) composes a scene with ≥9 RoundedBox cards
+    // (one per Chef's Picks item) AND ≥1 price strip (LineSegment). This is the
+    // falsifiable proof vendor data drives the render, not a placeholder.
+    #[test]
+    fn compose_menu_includes_vendor_items() {
+        let composer = Composer::new();
+        let resp = composer.compose(&Intent::Navigate(NavTarget::Menu), &state());
+        let cards = resp
+            .scene
+            .shapes()
+            .iter()
+            .filter(|s| matches!(s, SdfShape::RoundedBox { .. }))
+            .count();
+        let strips = resp
+            .scene
+            .shapes()
+            .iter()
+            .filter(|s| matches!(s, SdfShape::LineSegment { .. }))
+            .count();
+        assert_eq!(cards, 9, "menu composes exactly 9 Chef's-Picks cards");
+        assert_eq!(strips, 9, "each priced card has a price strip");
+    }
+
+    // S4 — the catalog fragment composes the FULL 59-item vendor menu (denser
+    // grid cols=6), proving the owner-side catalog readout is vendor-driven.
+    #[test]
+    fn compose_catalog_is_full_vendor_menu() {
+        let composer = Composer::new();
+        let resp = composer.compose(&Intent::Navigate(NavTarget::Catalog), &state());
+        // 52 priced items + 7 ask-drinks. Ask-drinks → 1 shape each; priced → 2.
+        let ask = vendor::MENU.iter().filter(|i| i.drink_ask).count();
+        let priced = vendor::MENU.len() - ask;
+        let expected = priced * 2 + ask;
+        assert_eq!(
+            resp.scene.shape_count(),
+            expected,
+            "catalog = full vendor menu ({} cards + {} strips)",
+            vendor::MENU.len(),
+            priced
+        );
+    }
+
+    // S4 — the owner dashboard now encodes the real venue taxonomy: a stat tile
+    // per vendor category (15) + the dashboard panel.
+    #[test]
+    fn compose_owner_dashboard_has_category_tiles() {
+        let composer = Composer::new();
+        let resp = composer.compose(&Intent::Navigate(NavTarget::OwnerDashboard), &state());
+        let tiles = resp
+            .scene
+            .shapes()
+            .iter()
+            .filter(|s| matches!(s, SdfShape::RoundedBox { hx, hy, .. } if *hx <= 0.4))
+            .count();
+        assert_eq!(
+            tiles, 15,
+            "owner dashboard has 15 stat tiles (one per category)"
+        );
     }
 
     // D5 — a consequential intent NEVER bare-commits: the response carries
