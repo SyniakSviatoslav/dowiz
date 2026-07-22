@@ -24,6 +24,10 @@ const App = {
       { id: 1006, status: 'delivered', items: 2, total: 1230, time: '1 год' },
     ],
     _menu: [],
+    _deliveryAddress: '',
+    _deliveryPhone: '',
+    _deliveryNote: '',
+    _lastOrderId: null,
     _journey: createJourney(),
     _shiftActive: false,
     _shiftStart: null,
@@ -230,6 +234,11 @@ const App = {
     <div class="cart-panel" id="cart-panel">
       <div class="cart-header"><h3>Кошик</h3><button class="btn btn-ghost btn-sm" onclick="App.toggleCart()">✕</button></div>
       <div class="cart-items" id="cart-items"></div>
+      <div class="cart-delivery" id="cart-delivery">
+        <input class="cart-input" id="delivery-addr" placeholder="Адреса доставки" value="${this.state._deliveryAddress}" oninput="App.setDelivery('address', this.value)"/>
+        <input class="cart-input" id="delivery-phone" placeholder="Телефон" value="${this.state._deliveryPhone}" oninput="App.setDelivery('phone', this.value)"/>
+        <input class="cart-input" id="delivery-note" placeholder="Примітка (необов'язково)" value="${this.state._deliveryNote}" oninput="App.setDelivery('note', this.value)"/>
+      </div>
       <div class="cart-total"><span>Разом</span><span id="cart-total">0 ALL</span></div>
       <div class="cart-actions"><button class="btn btn-primary w-full" onclick="App.checkout()">Замовити</button></div>
     </div>
@@ -640,12 +649,21 @@ const App = {
     this.persist();
   },
 
+  setDelivery(field, value) {
+    if (field === 'address') this.state._deliveryAddress = value;
+    else if (field === 'phone') this.state._deliveryPhone = value;
+    else if (field === 'note') this.state._deliveryNote = value;
+  },
+
   renderCart() {
     const count = this.state.cart.reduce((s,i) => s+i.qty, 0);
     const total = this.state.cart.reduce((s,i) => s+i.price*i.qty, 0);
     const el = document.getElementById('cart-items');
     const tEl = document.getElementById('cart-total');
     if (!el) return;
+    // Show/hide delivery form
+    const deliveryEl = document.getElementById('cart-delivery');
+    if (deliveryEl) deliveryEl.style.display = count === 0 ? 'none' : 'block';
     el.innerHTML = count === 0
       ? '<p style="text-align:center;color:var(--brand-text-muted);padding:48px 0">Кошик порожній</p>'
       : this.state.cart.map(i => `
@@ -669,12 +687,21 @@ const App = {
 
   async checkout() {
     if (this.state.cart.length === 0) return;
+    if (!this.state._deliveryAddress.trim()) {
+      document.getElementById('delivery-addr')?.focus();
+      document.getElementById('delivery-addr')?.classList.add('input-error');
+      return;
+    }
     const total = this.state.cart.reduce((s,i) => s+i.price*i.qty, 0);
     this.playOrder();
+    const address = this.state._deliveryAddress.trim();
+    const phone = this.state._deliveryPhone.trim();
+    const note = this.state._deliveryNote.trim();
     const order = {
       items: this.state.cart.map(i => ({ itemId: i.id, name: i.name, price: i.price, qty: i.qty })),
-      total,
+      total, address, phone, note,
     };
+    let orderId;
     try {
       const resp = await fetch(`${API_BASE}/order`, {
         method: 'POST',
@@ -683,17 +710,57 @@ const App = {
       });
       if (resp.ok) {
         const created = await resp.json();
-        this.state._orders.unshift({ id: created.id || (1000+Date.now()%10000), status: 'pending', items: this.state.cart.length, total, time: 'щойно' });
+        orderId = created.id;
+        this.state._orders.unshift({ id: orderId, status: 'pending', items: this.state.cart.length, total, time: 'щойно', address, phone, note });
       }
-    } catch {
-      this.state._orders.unshift({ id: 1000+Date.now()%10000, status: 'pending', items: this.state.cart.length, total, time: 'щойно' });
+    } catch {}
+    if (!orderId) {
+      orderId = 1000 + Date.now() % 10000;
+      this.state._orders.unshift({ id: orderId, status: 'pending', items: this.state.cart.length, total, time: 'щойно', address, phone, note });
     }
+    this.state._lastOrderId = orderId;
     this.state.cart = [];
+    this.state._deliveryAddress = '';
+    this.state._deliveryPhone = '';
+    this.state._deliveryNote = '';
     this.renderCart();
     this.renderOwnerOrders?.();
     this.toggleCart(false);
+    this.showOrderConfirm(orderId);
     this.state._journey.advance();
     this.persist();
+  },
+
+  showOrderConfirm(orderId) {
+    const main = document.getElementById('main-content');
+    if (!main) return;
+    const order = this.state._orders.find(o => o.id === orderId);
+    if (!order) return;
+    const labels = { pending:'Очікує підтвердження', confirmed:'Підтверджено', preparing:'Готується', ready:'Готово', 'in-delivery':'В дорозі', delivered:'Доставлено' };
+    main.innerHTML = `
+      <section style="text-align:center;padding:48px 24px">
+        <div style="font-size:3em;margin-bottom:16px">✅</div>
+        <h2 class="section-title">Замовлення прийнято</h2>
+        <p class="section-subtitle">Номер замовлення: <strong>#${orderId}</strong></p>
+        <div class="order-confirm-card" style="max-width:400px;margin:24px auto;background:var(--brand-surface);border-radius:16px;padding:24px">
+          <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+            <span class="text-muted">Сума:</span>
+            <span style="font-weight:700">${order.total.toLocaleString()} ALL</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+            <span class="text-muted">Статус:</span>
+            <span class="order-badge pending">${labels[order.status]}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+            <span class="text-muted">Доставка:</span>
+            <span>${order.address}</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;justify-content:center">
+          <button class="btn btn-primary" onclick="App.navigate('orders')">Мої замовлення</button>
+          <button class="btn btn-ghost" onclick="App.navigate('menu')">Повернутись до меню</button>
+        </div>
+      </section>`;
   },
 
   navigate(page) {

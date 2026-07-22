@@ -275,6 +275,11 @@ code, pre, kbd {
 .btn-success:hover { background: #047857; }
 .btn-danger { background: #DC2626; color: #fff; border: none; }
 .btn-danger:hover { background: #B91C1C; }
+.cart-delivery { padding: 12px 16px; border-top: 1px solid var(--brand-border); display: flex; flex-direction: column; gap: 8px; }
+.cart-input { width: 100%; padding: 10px 12px; border: 1px solid var(--brand-border); border-radius: 8px; background: var(--brand-bg); color: var(--brand-text); font-size: 0.9em; }
+.cart-input:focus { outline: none; border-color: var(--brand-accent); }
+.cart-input.input-error { border-color: #DC2626; }
+.order-confirm-card { text-align: left; }
 
 @media (min-width: 768px) {
   .desktop\:flex { display: flex; }
