@@ -18,18 +18,35 @@ CI rejects commits without a valid `Signed-off-by`.
 
 ## Development setup
 
-dowiz is Rust-first (~270 `.rs` files). The former TypeScript/JS frontend and its pnpm/turbo
-stack were removed 2026-07-15 ("drop js") — there is no `pnpm install` step and no `apps/api`,
-`apps/web`, or `packages/` anymore. **There is no root `Cargo.toml` / cargo workspace** — each
-crate is standalone; you must `cd` into a crate directory before running cargo there.
+dowiz has two main parts:
 
-- Kernel (Rust/WASM, source of truth): `cd kernel && cargo test`
-- Engine (physics render engine): `cd engine && cargo test`
-- One-shot local gate before pushing: `bash scripts/verify-kernel-engine.sh`
-- Format/lint (run inside the crate dir): `cd kernel && cargo fmt --check && cargo clippy`
-- Zero-dependency web demo (renders only; all math in the kernel wasm): `cd web && npm run serve`
-- Adapter boundary: no crate outside `kernel/` re-implements kernel math; the kernel is
-  authoritative. See the root `CLAUDE.md` for the full crate map and build model.
+### Web PWA (JS, no build step)
+```bash
+cd web
+# Serve locally (any static file server)
+python3 -m http.server 8080
+# Or: npx serve .
+```
+- Single-file app: `web/src/app.js`
+- Styles: `web/src/styles/` (tokens.css, base.css, animations.css)
+- Kernel bridge: `web/src/lib/kernel/kernel_client.mjs`
+- Telemetry: `web/src/lib/telemetry/`
+- No bundler, no npm install needed
+- Open http://localhost:8080 in browser
+
+### Kernel (Rust → WASM)
+```bash
+cd kernel
+cargo test
+cargo fmt --check && cargo clippy
+```
+- Source of truth for geo/spectral/FSM math
+- Zero-dependency wasm boundary
+
+### Pre-submit checklist
+- `node --check web/src/app.js` (JS syntax)
+- `cd kernel && cargo test` (kernel green)
+- `bash scripts/verify-kernel-engine.sh` (full gate)
 
 ## Local-first / offline-first principle
 

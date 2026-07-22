@@ -1,8 +1,9 @@
-# DeliveryOS / Dowiz — As-Built Summary v1
+# DeliveryOS / Dowiz — ARCHIVED (superseded 2026-07-22)
 
-> **Audit date:** 2026-06-04 · **Auditor:** read-only code audit, 0 code changes  
-> **Version:** v1 · **Status:** DRAFT — pre-pilot readiness assessment  
-> **Tests:** 92 unique tests × 3 breakpoints = 276 total, ALL GREEN, 0 failures, 0 flaky
+> **Status:** ARCHIVED. This document described the Node/TS/Fastify monorepo that was
+> rewritten to a pure frontend + Rust/WASM kernel architecture in July 2026.
+> Do not use for build decisions. See `docs/design/CORE-ROADMAP-2026-07-17/` and
+> `web/src/app.js` for the current codebase.
 
 > 🔄 **UPDATE 2026-06-19 (v1 hardening):** §5/§6 below are superseded — see
 > [`docs/audit/v1-verification-2026-06-19.md`](./docs/audit/v1-verification-2026-06-19.md). Security

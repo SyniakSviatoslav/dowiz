@@ -298,6 +298,7 @@ code, pre, kbd {
 .cart-input { width: 100%; padding: 10px 12px; border: 1px solid var(--brand-border); border-radius: 8px; background: var(--brand-bg); color: var(--brand-text); font-size: 0.9em; }
 .cart-input:focus { outline: none; border-color: var(--brand-accent); }
 .cart-input.input-error { border-color: #DC2626; }
+.cart-input.input-valid { border-color: #059669; }
 .order-confirm-card { text-align: left; }
 
 /* ── Order Timeline ── */
@@ -406,6 +407,11 @@ code, pre, kbd {
   font-weight: 500;
   letter-spacing: 0.2px;
 }
+
+/* ── Notification badges ── */
+.notif-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px; font-size: 0.65em; padding: 0 5px; border-radius: 8px; margin-left: 4px; font-weight: 700; }
+.notif-badge-pending { background: var(--status-pending); color: white; }
+.notif-badge-task { background: var(--status-in-delivery); color: white; }
 
 /* ── Nav active order count ── */
 .theme-btn { font-size: 1em; line-height: 1; }

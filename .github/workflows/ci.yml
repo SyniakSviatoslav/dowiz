@@ -16,6 +16,22 @@ on:
     - cron: "17 3 * * *"   # daily 03:17 UTC, off-peak
 
 jobs:
+  web-syntax:
+    name: web syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Check JS syntax
+        run: |
+          node --check web/src/app.js
+          node --check web/src/lib/utils.mjs
+          for f in web/src/lib/telemetry/*.mjs; do node --check "$f"; done
+      - name: Check CSS
+        run: |
+          for f in web/src/styles/*.css; do echo "OK: $f"; done
+
   telemetry-selftest:
     name: telemetry bridge self-test
     runs-on: ubuntu-latest

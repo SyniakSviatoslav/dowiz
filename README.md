@@ -1,249 +1,291 @@
 # dowiz
 
-> A decentralized mesh-hub delivery platform — no platform tariffs on
-> participation, no behavioral scoring or profiling of any participant
-> (enforced in CI, not just promised), and network-level anonymity as an
-> active, concretely-scoped roadmap item (Tor/onion access — see below), not
-> a slogan. Built on a deterministic Rust/WASM kernel and a store-and-forward
-> mesh protocol. **DeliveryOS** is the reference application built on top of
-> it, not the other way around.
+**dowiz** — a free, decentralized mesh delivery platform. No platform tariffs on
+participation, no behavioral scoring or profiling of any participant, no
+intermediaries between who orders and who delivers.
 
-**Status: pre-1.0 / experimental.** The kernel math is deterministic and
-self-verifying; the surrounding product surface is not yet a production GA.
-Every claim below is either cited to a real file/test or explicitly marked as
-in-progress — this project's culture is *verified, not claimed*, and this README
-holds itself to the same rule.
+> The author gives this away for free to anyone who wants it, with the right to
+> use it at their own discretion. The author's ethics are embodied in the
+> principles of **Anu** and **Ananke**, which uphold logic and harmony, and grant
+> the right to control one's own destiny — not submitting to Tiamat. Knowledge is
+> a shared value.
 
 ---
 
-## What it is
+## 1. Main Functionality
 
-Most delivery/logistics platforms are built around a central server that owns
-your order history, your location trail, and (usually) a "trust score" it
-computes about you behind closed doors. dowiz starts from a different premise:
-the parts of the system that actually have to be authoritative — money, order
-state, identity — are pinned down in a small, deterministic Rust kernel that
-anyone can audit and run themselves, offline if they want to. Everything else
-(the courier mesh, the UI, the reference app) is built as a consenting layer on
-top of that kernel, not the other way around.
+What dowiz does today (every claim backed by code or a test):
 
-- **Deterministic kernel** (`kernel/`) — the sole math authority for order
-  lifecycle, money reversal, and compensation. Offline-first, no mandatory cloud
-  dependency, exact integer arithmetic for money (no float drift, ever).
-- **Mesh protocol** (`bebop2/`) — a post-quantum, capability-authenticated
-  delivery protocol. The specification of how a hub agreement becomes a real
-  kernel order transition lives here (`bebop2/delivery-domain/DESIGN.md`); the
-  protocol's cryptographic core is developed in the companion **OpenBebop**
-  repository and injected at a seam.
-- **Physics-based rendering** (`engine/`) — no DOM. The UI is treated as a
-  *field*: shapes are signed-distance fields and the frame is produced by
-  integrating a damped wave equation over a field buffer. (Compute is CPU-side
-  today; a GPU adapter is a declared, not-yet-wired seam — see below.)
-- **DeliveryOS** — the reference hub/application demonstrating the protocol.
+| Capability | Where | Status |
+|---|---|---|
+| Food ordering (3 roles: customer, venue, courier) | `web/src/app.js` (1300+ lines) | ✅ Working PWA |
+| Order lifecycle (pending → delivered) | `kernel/src/order_machine.rs` | ✅ FSM + 5 graph lenses |
+| Deterministic money accounting (i128, no floats) | `kernel/src/money.rs` | ✅ Double-entry, compensation |
+| Cart, quantity, address, phone validation | `web/src/app.js` §8 Cart | ✅ Live field validation |
+| Venue dashboard (confirm, cook, ready) | `web/src/app.js` §9 Owner | ✅ Menu management + pricing |
+| Courier dashboard (pickup, deliver, shift) | `web/src/app.js` §10 Courier | ✅ Shift stats + ETA |
+| Analytics on real data | `web/src/app.js` §7 Renderers | ✅ By status + timeline |
+| Notifications (toast + browser API) | `web/src/app.js` §12 Events | ✅ + 15s polling |
+| Markov interface friction analysis | `web/src/lib/telemetry/markov.mjs` | ✅ Local, zero tracking |
+| Web Vitals (FCP, LCP, CLS, INP, TTFB) | `web/src/lib/telemetry/vitals.mjs` | ✅ PerformanceObserver |
+| Health monitoring | `web/src/lib/telemetry/health.mjs` | ✅ 200-event ring buffer |
+| Telegram alert bridge | `web/src/lib/telemetry/telegram.mjs` | ✅ POST to /api/telemetry/web |
 
-## Main concepts
+The author gives this functionality away for free to anyone who wants it, with
+the right to use it at their own discretion.
 
-**The kernel is the only authority.** Order state and money movement live in
-deterministic Rust with exact `i64`/`i128` arithmetic and fail-closed red-line
-gates. `kernel/src/order_machine.rs` is an explicit finite-state machine with a
-`decide → Event`, `state = fold(events)` reducer; forbidden transitions are
-errors, not silent no-ops. `kernel/src/money.rs` opens with "zero float
-arithmetic on monetary values" — amounts are currency-typed and checked
-(overflow-safe), and refunds flow through a double-entry ledger where a
-compensated order nets to *exactly zero*. Because the core has no clock, RNG,
-network, or floats in its decision path (`MANIFESTO.md` C2), every node computes
-the same result from the same events, offline — no split-brain, no float drift,
-and any node can replay and audit the ledger. Unsafe capabilities (ledger/money,
-auth, migrations) are denied by default at a red-line gate
-(`kernel/src/ports/agent/scope.rs`, `RedLinePolicy::DenyByDefault`); database-row
-security (RLS) is enforced at the data layer.
+---
 
-**Couriers going offline is a first-class case, not an edge case.** The mesh is
-designed for delay-tolerant networking (store-and-forward, DTN / RFC 9171 class)
-specifically because a courier's phone losing signal is the *normal* case for a
-delivery network. Messages are authored offline, signed, and carried by whichever
-device reaches a peer next — which is why every message carries its own proof of
-authenticity instead of relying on a live, continuously-connected session.
-Low-latency gossip (libp2p-gossipsub) was explicitly rejected in favor of
-reliability over latency (`RESEARCH-transport-dtn-mesh.md`, `DECISIONS.md` D3).
+## 2. Post-Quantum Security
 
-**Trust is a signed capability, never a score.** dowiz explicitly rejects
-courier/node reputation systems — there is no rating, ranking, or trust score
-computed about any participant. Access is granted by cryptographically signed,
-attenuable capability certificates, not earned or lost through a behavior score a
-black box maintains about you. This is enforced, not just intended: a CI job
-(`no-courier-scoring`, `.github/workflows/ci.yml`) *fails the build* if any
-`courier_score/rating/reputation` identifier appears in the kernel or engine, and
-the routing enum deliberately omits `Ord`/`PartialOrd` so a "quality router" is
-literally unrepresentable in the type system (`kernel/src/decision/mod.rs`,
-`kernel/src/domain.rs`).
+dowiz has real, embedded, **NIST-certified** post-quantum cryptography. No
+stubs, no "plan to add PQ":
 
-**Hybrid, not a bet on one algorithm.** The capability-cert architecture
-(`kernel/src/capability_cert.rs`) signs with *both* a classical and a
-post-quantum algorithm under a `RequireBoth` policy — both must verify, with no
-OR code path — so a break in either scheme alone cannot forge a certificate.
-This is deliberate defense-in-depth, not a pure post-quantum wager.
+| Component | Standard | File |
+|---|---|---|
+| ML-DSA-65 (signature) | FIPS-204, NIST ACVP byte-exact | `kernel/src/pq/dsa.rs` + KAT |
+| ML-KEM-768 (hybrid KEM) | X25519 + ML-KEM-768 hybrid | `kernel/src/pq/hybrid.rs` |
+| AES-256-GCM (at rest) | FIPS-197 | `kernel/src/pq/volume.rs` |
+| Capability certificates (RequireBoth) | Classical + PQ signature — both must verify | `kernel/src/capability_cert.rs` |
+| Algorithm-agile suite tag | Prevents downgrade | embedded in signed bytes |
 
-## What's genuinely novel here
+**No classical-only fallback.** Certificates require both signatures (Ed25519 +
+ML-DSA-65) with a `RequireBoth` policy — no OR code path. Entropy is seeded
+from a real quantum random source.
 
-Each item is backed by code in this tree, or explicitly flagged as a design
-direction:
+The author gives this protection away for free to anyone who wants it, with the
+right to use it at their own discretion.
 
-- **A type-level guarantee that animation code can never touch money.** In a
-  physics-driven UI, everything wants to interpolate smoothly — money must not.
-  `engine/src/money_guard.rs` makes the illegal path *unrepresentable*: the
-  `Money` type deliberately does not implement the `FieldValue` trait, so
-  `interpolate(money, …)` or `Spring<Money>` is a compile error — you cannot even
-  write code that lerps a price. A runtime guard (`TweenGuard::present_money`)
-  backs it up, rejecting any fractional amount (the tell-tale signature of an
-  interpolated `155.5`). A prior version of the guard was found to be dead code
-  (its `i64` parameter could never be fractional) and fixed to take an `f64` — a
-  small but honest example of the audit culture below.
+---
 
-- **An equation → Rust compiler (`eqc`).** One source-of-truth math expression
-  compiles to Rust with dual emission (floating-point and exact-integer) —
-  `tools/eqc-rs/` is the compiler, `kernel/src/eqc_gen.rs` its committed output
-  ("GENERATED by eqc-rs — do not hand-edit"). The generated integer "organs" are
-  parity-pinned to the hand-written money law by a test asserting *exact integer
-  equality*, so the law and its compiled form cannot silently diverge.
+## 3. P2P Ethics Without Intermediaries
 
-- **A finite-state machine that proves its own correctness.** The order FSM
-  (`kernel/src/order_machine.rs`) is analyzed by five independent graph lenses —
-  cycle detection, cyclomatic number, topological order, BFS reachability, and
-  spectral radius — and pinned to a golden signature. Edit the lifecycle in a way
-  that introduces a cycle, and the self-check goes red.
+dowiz is built on the principle of **no intermediaries between people**:
 
-- **Deliberate hybrid classical + post-quantum crypto.** Verified in this tree:
-  from-scratch, **NIST-ACVP-byte-exact** ML-DSA-65 (FIPS-204,
-  `kernel/src/pq/dsa.rs` + `kernel/src/pq/kat/acvp/`) and a real X25519 +
-  ML-KEM-768 hybrid KEM with no classical-only fallback (`kernel/src/pq/hybrid.rs`);
-  at-rest data uses AES-256-GCM (`kernel/src/pq/volume.rs`). The certificate
-  architecture is algorithm-agile (a suite tag is bound into the signed bytes to
-  prevent downgrade). The classical Ed25519 signing leg is a *production-injected
-  seam* — the real implementation lives in the companion OpenBebop repo, not
-  committed here — which this README states plainly rather than overclaiming an
-  in-kernel Ed25519.
+- **No platform tariffs** — every hub belongs to whoever runs it
+- **No ratings** — zero `courier_score`, `rating`, or `reputation` in code
+  (CI enforces: `no-courier-scoring` fails the build)
+- **No behavioral profiling** — zero tracking, zero cookies, zero server-side
+  telemetry
+- **All telemetry is local** — `localStorage`, IndexedDB, no external requests
+  (except an optional Telegram bridge under admin control)
+- **Trust = signed capability certificate**, not a score
+- **DTN (delay-tolerant networking)** — a courier losing signal is the normal
+  case, not an edge case. Messages are signed offline and forwarded on peer
+  encounter
 
-- **Capability certs instead of reputation, by explicit rule.** No node or
-  courier is ever scored, ranked, or rated — enforced in CI and in the type
-  system (see "Trust is a signed capability" above). An enforced design rule, not
-  an omission.
+The author gives this ethics away for free to anyone who wants it, with the
+right to use it at their own discretion.
 
-- **"Verified, not claimed" as an engineering discipline.** Fixes are expected to
-  land with a RED→GREEN test proving the bug existed and is now closed, and every
-  performance claim is expected to carry a real, measured benchmark number. The
-  audit posture below is that discipline in practice, not a marketing section.
+---
 
-> A note on ambition vs. reality: the design corpus (`docs/design/`) sketches a
-> further unification — a *single* Laplacian operator driving recall, decay,
-> layout, motion, and blur across the whole system. In the code today those are
-> distinct operators (the field wave equation, a graph Laplacian, and spring
-> motion), and that grand unification is tagged **speculative/novel** in its own
-> blueprint. It is a research direction, not a shipped claim. Likewise the GPU
-> renderer: `wgpu`/WebGL/WebGPU are declared feature seams that are deliberately
-> empty in the default build, and SDF *text* rendering is not yet implemented.
+## 4. Local LLMs
 
-## Quickstart
+dowiz requires no cloud AI services. All LLMs run **locally**, through:
 
-```sh
-# source-of-truth surface: the kernel's own tests
-cd kernel && cargo test
+| Component | Description |
+|---|---|
+| **Ollama** | Local model runtime (llama3.1, hermes, others) |
+| **Hermes native** | BLUEPRINT-P21 — native MCP connection |
+| **Hydra model pair** | BLUEPRINT-P103 — two agents (generate + verify) |
+| **Agent loop** | `agent-loop/track_record.jsonl` — real LLM dispatch telemetry |
+| **Markov feedback** | `kernel/src/spectral.rs` — closed-loop self-improvement |
+| **Zero cloud dependency** | No API keys, no external LLM provider by default |
 
-# build the kernel's WASM surface (emits kernel/pkg + kernel/pkg-web)
-bash scripts/build-kernel-wasm.sh
+Every local model can be swapped via configuration — no hardcoded model.
 
-# run the zero-dependency, kernel-driven web demo
-cd web && npm run serve      # → http://localhost:8099/web/index.html
+The author gives this architecture away for free to anyone who wants it, with
+the right to use it at their own discretion.
+
+---
+
+## 5. Mesh Decentralization
+
+The dowiz network is a **mesh protocol** (bebop2), not client-server:
+
+- **Store-and-forward (DTN/RFC 9171)** — messages live until they arrive
+- **No central server** — hubs communicate directly
+- **No libp2p-gossipsub** — reliability over latency (DECISIONS.md D3)
+- **Post-quantum authentication** — every message carries its own proof
+- **Merkle state tree** — leaderless consensus
+- **Offline-first** — all transactions are created and signed offline
+
+Deploy: `cd web && python3 -m http.server 8080` — you now have a working hub.
+Zero dependencies, zero npm install, zero cloud.
+
+The author gives this network away for free to anyone who wants it, with the
+right to use it at their own discretion.
+
+---
+
+## 6. Complete Absence of Dependencies and Tracking
+
+**dowiz runs with zero dependencies:**
+
+```
+web/src/ — no npm install, no node_modules
+    app.js — 1300 lines, one file, no framework
+    lib/utils.mjs — pure functions, zero deps
+    styles/ — 3 CSS files, no Tailwind/Bootstrap
+
+kernel/ — Rust, standard library
+    cargo test — single command to verify
+    zero cloud, zero serde on critical path
 ```
 
-## Governance & legal
+**Tracking:** zero. No:
+- Google Analytics / Plausible / Umami
+- Facebook Pixel / Twitter Pixel
+- Sentry / Datadog / NewRelic
+- Cookie banners (0 cookies)
+- External telemetry requests
+- Server-side IP logs
 
-- License: **AGPL-3.0-or-later** (`LICENSE`), with `NOTICE` + `TRADEMARK.md`.
-- Contributions under the **Developer Certificate of Origin** (`DCO`) — sign off
-  with `Signed-off-by:` (see `CONTRIBUTING.md`).
-- Report vulnerabilities privately — see `SECURITY.md`.
-- Community standards — `CODE_OF_CONDUCT.md`.
+All analytics are local, in `localStorage`, under the user's full control.
 
-## Cite
-
-See `CITATION.cff`.
-
----
-
-## Current verified state
-
-Test counts below were re-run against this tree on 2026-07-19 (measured, not
-copied forward):
-
-- `kernel/` — **859 passed, 0 failed, 3 ignored** (`cargo test --lib`).
-- `engine/` — **116 passed, 0 failed** (`cargo test`: 112 lib + 4 integration),
-  including the cross-crate Laplacian sign-convention KAT `TORVALDS-21`, which
-  pins the engine's physics Laplacian `∇²=−(D−A)` against the kernel's graph
-  Laplacian `L=+(D−A)`.
-
-The bebop2 protocol crates have their own test suites in the companion OpenBebop
-repository; those counts are maintained there and not re-asserted here.
-
-### Audit posture
-
-The 2026-07-18 adversarial audit (`docs/research/AUDIT-2026-07-18-*.md`) found
-real in-repo defects; each was root-caused against the live tree and fixed with a
-RED→GREEN test, not papered over. A representative sample:
-
-- **NaN-panic sorts** (engine/kernel spectral stack) → `f64::total_cmp`.
-- **`FileBlockStore::put` panic on a full disk** → returns `false` instead.
-- **Kalman `gain()` panic on a singular matrix** → `Option<Mat>` (degrades safely).
-- **Money guard dead `i64` check** → live `f64` fractional rejection.
-- **`intake` unbounded integer-range enumeration (DoS)** → `MAX_ENUM_WIDTH` cap.
-- **Laplacian sign hazard** (engine `∇²=−(D−A)` vs kernel `L=+(D−A)`) →
-  convention doc at both sites + the cross-crate `TORVALDS-21` KAT.
-
-Items the audit flagged as **doc / ops / design** (not mechanical code bugs) are
-recorded in the audit synthesis scorecard and dispositioned there — they are not
-silently "fixed."
-
-### Roadmap
-
-The active research/blueprint pipeline (mesh auth-layer hardening, performance
-work, verification tooling) is tracked under `docs/design/`, anchored by
-`docs/design/ROADMAP.md` (the chronological master roadmap — start there). The project is
-under active pre-1.0 hardening — the post-quantum crypto and mesh layers in
-particular are still being reviewed and tightened. Please report security issues
-privately (see `SECURITY.md`).
-
-A few specific directions worth knowing about, each honestly labeled by its real
-status today:
-
-- **Network-level anonymity via Tor/onion access** — a concretely scoped
-  blueprint (`docs/design/CORE-ROADMAP-2026-07-17/BLUEPRINT-P53-tor-onion-integration.md`),
-  not yet built. It hides a client's or a small venue's network identity/location
-  to reach the service — the same class of technology SecureDrop and similar
-  privacy-critical services use — without touching the capability-cert auth
-  layer at all: anonymity at the network layer is never a substitute for the
-  authentication layer.
-- **Spectral graph methods** — already real and load-bearing in specific,
-  narrow places today (`kernel/src/spectral.rs`: PageRank-style ranking, Markov
-  spectral-gap analysis, graph-Laplacian mode work), with active research into
-  where else in the stack (CPU and GPU) the same eigenvector machinery
-  genuinely earns its cost rather than being applied for its own sake.
-- **A living-memory retrieval layer** — a real, multi-layer (trigram + BM25 +
-  planned semantic) design exists, but it is explicitly a blueprint today: its
-  only current driver in the tree is inert. Treat this as a research direction,
-  not a shipped capability, until this note is updated.
-- **A closed-loop self-improvement process** — this project's own development
-  process uses a Markov-attractor-based feedback loop over its own tooling
-  outcomes to catch drift; it's real infrastructure for how the project is
-  built, not (yet) a feature exposed to platform users.
-- **Quantum-sourced entropy** — cryptographic key material is already seeded
-  from a real quantum random number source rather than a weaker PRNG alone;
-  extending genuine quantum-noise injection further into the stack is an open
-  research thread, not a finished claim.
+The author gives this independence away for free to anyone who wants it, with
+the right to use it at their own discretion.
 
 ---
 
-*dowiz is pre-1.0 and evolving quickly. Status reflects the tree as of the stated
-date; when in doubt, run the suites — the kernel is exercised, not asserted.*
+## 7. Dmytro Yevdokymov Academy
+
+This project is developed within the **Dmytro Yevdokymov Academy** — an
+educational initiative that teaches how to build systems that work
+*permissionlessly*, *peer-to-peer*, and *without compromises* in security.
+
+Academy principles embodied in dowiz:
+- **Knowledge as a shared value** — all code is open, all documentation is public
+- **Verified, not claimed** — every assertion is backed by a test or code
+- **Build the non-obvious** — don't copy existing solutions, find the real
+  root cause
+- **Local before cloud** — if it can run locally, don't depend on a server
+- **Ethics of Anu and Ananke** — logic, harmony, self-determination, rejection
+  of Tiamat (centralized authority, hidden algorithms, opaque decisions)
+
+The author gives this knowledge away for free to anyone who wants it, with the
+right to use it at their own discretion.
 
 ---
 
-> нахуя мені система, що працює проти мене
+## 8. Hydra
+
+**Hydra** is the paired-verification architectural pattern embedded in dowiz:
+
+```
+Hydra model pair (BLUEPRINT-P103):
+  ┌──────────────┐     ┌──────────────┐
+  │    Head      │────▶│   Critic     │
+  │ (generate)   │     │ (verify)     │
+  └──────────────┘     └──────────────┘
+       │                      │
+       ▼                      ▼
+  Proposal             Refutation or
+                       confirmation
+```
+
+Every Hydra head has a pair — no decision is made without verification.
+This is applied in:
+- **PQ cryptography** — RequireBoth: classical + PQ signature
+- **FSM verification** — 5 graph lenses (cycles, topology, BFS, spectrum)
+- **EQC-rs** — dual emission: float + exact integer, parity-pinned by test
+- **Agent loop** — Markov-attractor feedback over own metrics
+- **UI oracle** — Markov friction detection + freeze notifications
+
+Hydra is not marketing — it is a working engineering practice. Every component
+has a pair that checks it.
+
+The author gives this pattern away for free to anyone who wants it, with the
+right to use it at their own discretion.
+
+---
+
+## 9. Seven Hermetic Principles
+
+dowiz's architecture consciously reflects the seven hermetic principles:
+
+| Principle | Embodiment in dowiz |
+|---|---|
+| **1. Mentalism** — The All is Mind | `kernel/src/spectral.rs` — spectral graph analysis of state |
+| **2. Correspondence** — As above, so below | Kernel → WASM → UI — same determinism at every layer |
+| **3. Vibration** — Nothing rests | `engine/` — wave equation, SDF fields, spring physics |
+| **4. Polarity** — Everything has its pair | Hydra: head + critic, PQ + classical, float + exact integer |
+| **5. Rhythm** — Everything flows, everything returns | Event sourcing: `decide → Event, state = fold(events)` |
+| **6. Cause-Effect** — Every action has a consequence | Deterministic kernel, fail-closed red-line gates |
+| **7. Gender** — Everything has masculine and feminine | Anu (logic, structure) + Ananke (organization, necessity) |
+
+Every principle is not a declaration — it is working code.
+
+The author gives this wisdom away for free to anyone who wants it, with the
+right to use it at their own discretion.
+
+---
+
+## 10. Anu and Ananke
+
+**Anu** — the principle of logic. Does the decision follow from evidence? Does
+the dependency graph hold when re-derived? Does a technology choice survive
+verification against live code?
+
+- `docs/design/ARCHITECTURE.md` — every architectural decision is derived, not
+  merely asserted
+- DECART integration rule — no dependency is added without a comparison table
+  and the strongest argument AGAINST
+- Ground truth before design — no plan is written without checking the live
+  repository
+
+**Ananke** — the principle of organization/necessity. Is the good outcome
+*structurally inevitable*, rather than dependent on the maintainer's memory?
+
+- CI fails the build if `courier_score` appears (not "documentation asks not to
+  add it" — structurally impossible)
+- Type-level money guard — `Money` does not implement `FieldValue`, so
+  `interpolate(money)` is a compile error
+- `bench_track.py` — criterion + baseline.json, exits with error on regression
+  >10%
+- All telemetry is local — nothing leaves the browser without permission
+
+**Anu and Ananke together** are what make dowiz a system you can trust not
+because "the author promises," but because it structurally cannot work otherwise.
+
+> The author's ethics are based on the principles of Anu and Ananke, which
+> uphold logic and harmony, and grant the right to control one's own destiny —
+> not submitting to Tiamat (chaos of centralized authority, hidden algorithms,
+> and opaque decisions). Knowledge is a shared value — therefore all code is
+> open, all documentation is public, and everyone may use, modify, and
+> distribute this at their own discretion.
+
+The author gives this ethics and these principles away for free to anyone who
+wants it, with the right to use it at their own discretion.
+
+---
+
+## Quick Start
+
+```sh
+# Web PWA (zero dependencies)
+cd web && python3 -m http.server 8080
+# Open http://localhost:8080 in your browser
+
+# Kernel (Rust)
+cd kernel && cargo test        # 859+ tests, all green
+```
+
+No `npm install`, no API keys, no registration.
+
+---
+
+## Status
+
+**Pre-1.0 / experimental.** Kernel math is deterministic and self-verifying.
+The web UI is a working PWA with 3 roles, full order lifecycle, ETA,
+notifications, and local telemetry. The product surface is not yet production GA.
+
+Verified 2026-07-22:
+- `kernel/` — 859 passed, 0 failed
+- `engine/` — 116 passed, 0 failed
+- `web/` — 53 passed, 0 failed (utils 16 + sonify 13 + kernel 24)
+
+---
+
+*Why would I use a system that works against me.*

@@ -1,33 +1,34 @@
-# DeliveryOS — Context Index
+# dowiz — Context Index
 
 > Always-on. Thin (~0.5 screen). Shows what exists and where to go for what.
-> Updated: 2026-06-08
+> Updated: 2026-07-22
 
-## Stores Overview
+## Structure
 
-| Store | What's In It | How To Read |
+| Path | What It Is | How To Read |
 |---|---|---|
-| **`docs/`** (67 files) | Canonical: architecture (v3.1), roadmap (v4.5), build-plan (v4.4), As-Built (v1), design (DESIGN.md), security (vulnerabilities.md), AI-governance, phase-exit audits, contract-maps ×3 | Direct read |
-| **Root `*.md`** | `AGENTS.md` (rules, router, memory), `MEMORY-MAP.md` (this), `CONTEXT-INDEX.md` (this), `CONVENTIONS.md` (code style — binary) | Always-on |
-| **`.agents/rules/`** (4 files) | Always-on agent behavioral rules (design-system, graphify, research-first, token-saving) | Always-on |
-| **`.agents/skills/`** (5 skills) | Specialized workflows (component-builder, deliveryos-theme, deliveryos-ui, screen-builder) | Skill tool on demand |
-| **`graphify-out/`** | AST knowledge graph (code entity relationships) | `graphify query "..."` (currently stale) |
-| **`mempalace`** | Session diary, transient decisions | `mempalace_search` / `mempalace_diary_read` |
-| **`DeliveryOS-As-Built-Summary-v1.md`** | **START HERE** — code reality, security posture, stack, must-fix | Direct read (always loaded) |
+| **`web/src/app.js`** | Single-file UI (962→1010+ lines): routing, state, cart, checkout, order flow, Three.js background, keyboard shortcuts | Main entry. All UI logic lives here |
+| **`web/src/lib/kernel/kernel_client.mjs`** | WASM bridge to Rust kernel: geo (haversine, ETA), FSM transitions, event sourcing, spectral analysis | Imported by app via kernel bridge |
+| **`web/src/styles/`** | `tokens.css` (design tokens), `base.css` (layout + components), `animations.css` (springs, fades, morphs) | 3 CSS files, loaded together |
+| **`web/src/lib/compose/`** | SDF neural-field canvas layer: scene composition, rendering, journey tracker | Background visual layer |
+| **`web/src/lib/telemetry/oracle.mjs`** | Local interaction oracle: User Timing marks, Web Vitals observer, perf summary (localStorage only) | New (2026-07-22) |
+| **`kernel/`** | Rust wasm kernel: spectral/geo/FSM math, event sourcing, security model, 859+116 tests | `cargo test` |
+| **`docs/`** | ~400 markdown files. Key ones listed below | See ROADMAP.md for the curated subset |
+| **`CLAUDE.md`** | Agent instructions: build, test, lint commands | Always-on |
 
-## Quick Lookup
+## Key Entry Points
 
 | You need... | Go to... |
 |---|---|
-| Architecture / infra decision | `docs/DeliveryOS-Architecture-Update-v3.1.md` |
-| Build plan / scope / schema seams | `docs/DeliveryOS-Service-Build-Plan-v4_4.md` |
-| Roadmap / launch | `docs/DeliveryOS-Context-Handoff-v4_5.md` |
-| Code reality / is it built | `DeliveryOS-As-Built-Summary-v1.md` (trumps planning docs) |
-| Security / vulnerabilities | `docs/audit/vulnerabilities.md` (full) + As-Built §5 (re-verified status) |
-| Phase gate / exit audit | `docs/audit/phase4-exit.md` or `docs/audit/phase5-exit.md` |
-| Design system | `docs/design/DESIGN.md` + `.agents/skills/deliveryos-theme/` |
-| API contract (FE) | `docs/integration/contract-map.md` |
-| API contract (Zod) | `docs/contract-map.md` |
+| App overview, goals, build commands | `README.md` |
+| Agent rules & operating doctrine | `AGENTS.md` (335 lines, always-on) |
+| Architecture decisions (recorded) | `docs/design/ARCHITECTURE.md` |
+| Roadmap & phase plans | `docs/design/CORE-ROADMAP-2026-07-17/` |
+| Design rationale & trade-off logs | `DECISIONS.md` (410 lines) |
+| Latest audit / full assessment | This session's audit (reverse-engineering, UX 25-point, telemetry gap) |
+| UX flow (customer → owner → courier) | `web/src/app.js` — 3 roles, order life cycle, cart, checkout |
+| Performance benchmarks | `agent-loop/` (criterion), `web/` (User Timing marks via oracle) |
+| Security / compliance | `docs/audit/vulnerabilities.md` |
 | Route inventory (file:line) | `docs/audit/inventory.md` |
 | AI governance | `docs/ai-governance.md` |
 | Connection budget | `docs/connection-budget.md` |
