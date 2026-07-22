@@ -1820,6 +1820,92 @@ impl StandardModel {
         let d = space.dashboard();
         assert!(d.contains("O(1,3)"));
     }
+
+    #[test]
+    fn split_complex_null() {
+        let sc = SplitAlgebra::split_complex(1.0, 1.0);
+        assert!(sc.is_null());
+        let sc2 = SplitAlgebra::split_complex(1.0, 0.5);
+        assert!(!sc2.is_null());
+    }
+
+    #[test]
+    fn split_quaternion_norm() {
+        let sq = SplitAlgebra::split_quaternion(1.0, 1.0, 1.0, 1.0);
+        assert!((sq.norm_sq() - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn split_octonion_norm() {
+        let so = SplitAlgebra::split_octonion([1.0; 8]);
+        assert!((so.norm_sq() - 0.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn split_algebra_multiplication() {
+        let a = SplitAlgebra::split_complex(2.0, 3.0);
+        let b = SplitAlgebra::split_complex(4.0, 5.0);
+        let c = a.mul(&b);
+        if let SplitAlgebra::SplitComplex { a, b } = c {
+            assert!((a - 23.0).abs() < 0.001);
+            assert!((b - 22.0).abs() < 0.001);
+        } else { panic!("wrong type"); }
+    }
+
+    #[test]
+    fn light_cone_points_generated() {
+        let sc = SplitAlgebra::split_complex(1.0, 0.0);
+        let points = sc.light_cone_points(8);
+        assert_eq!(points.len(), 8);
+    }
+
+    #[test]
+    fn null_geodesic_propagates() {
+        let origin = NdVector::new(vec![0.0, 0.0, 0.0, 0.0]);
+        let dir = NdVector::new(vec![1.0, 1.0, 0.0, 0.0]);
+        let mut ray = NullGeodesic::new(origin, dir);
+        ray.step(1.0);
+        assert!(ray.position.coords[0] > 0.0);
+    }
+
+    #[test]
+    fn light_front_expands() {
+        let metric = PseudoEuclideanMetric::minkowski();
+        let mut comm = LightCommunication::new(metric);
+        let from = NdVector::new(vec![0.0, 0.0, 0.0, 0.0]);
+        comm.emit(&from, 0, &[1, 2, 3]);
+        assert_eq!(comm.fronts.len(), 1);
+        comm.tick(1.0);
+        assert!(comm.fronts[0].radius > 0.0);
+    }
+
+    #[test]
+    fn light_reaches_point() {
+        let metric = PseudoEuclideanMetric::minkowski();
+        let mut comm = LightCommunication::new(metric);
+        let center = NdVector::new(vec![0.0, 0.0, 0.0, 0.0]);
+        let target = NdVector::new(vec![1.0, 1.0, 0.0, 0.0]); // dx=1.0
+        comm.emit(&center, 1, &[42]);
+        comm.tick(1.0);
+        let rx = comm.receive(&target);
+        assert!(!rx.is_empty(), "light should reach target after 1 tick");
+        assert_eq!(rx[0].1, vec![42]);
+    }
+
+    #[test]
+    fn spinor_from_quaternion() {
+        let sq = SplitAlgebra::split_quaternion(0.5, 0.5, 0.5, 0.5);
+        let spinor = LightCommunication::spinor_from_split_algebra(&sq);
+        assert!((spinor[0] - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn light_dashboard() {
+        let metric = PseudoEuclideanMetric::minkowski();
+        let comm = LightCommunication::new(metric);
+        let d = comm.dashboard();
+        assert!(d.contains("Light Communication"));
+    }
 }
 
 // ─── Pseudo-Euclidean n-Dimensional Space ──────────────────────────────
@@ -2070,3 +2156,254 @@ impl NdSpace {
         )
     }
 }
+
+// ─── Split Algebras + Null Geodesics + Light Communication ────────────
+// Розщеплені алгебри: split-complex (Cl(1,0)), split-quaternion (Cl(1,1)),
+// split-octonion (Cl(1,3)) = алгебра Дірака.
+// Нульові конуси в цих алгебрах = світло.
+// Спінори → електрони, кватерніони → SU(2), октоніони → SU(3).
+
+/// Розщеплена алгебра: split-complex (2D), split-quaternion (4D), split-octonion (8D).
+#[derive(Debug, Clone)]
+pub enum SplitAlgebra {
+    SplitComplex { a: f64, b: f64 },       // a + bj, j² = +1
+    SplitQuaternion { a: f64, b: f64, c: f64, d: f64 }, // a + bi + cj + dk
+    SplitOctonion { coords: [f64; 8] },    // 8D, O(4,4)
+}
+
+impl SplitAlgebra {
+    pub fn split_complex(a: f64, b: f64) -> Self { SplitAlgebra::SplitComplex { a, b } }
+    pub fn split_quaternion(a: f64, b: f64, c: f64, d: f64) -> Self { SplitAlgebra::SplitQuaternion { a, b, c, d } }
+    pub fn split_octonion(coords: [f64; 8]) -> Self { SplitAlgebra::SplitOctonion { coords } }
+
+    /// Норма в алгебрі: |x|² = x·x (сигнатура залежить від алгебри).
+    pub fn norm_sq(&self) -> f64 {
+        match self {
+            SplitAlgebra::SplitComplex { a, b } => a * a - b * b,
+            SplitAlgebra::SplitQuaternion { a, b, c, d } => a * a + b * b - c * c - d * d,
+            SplitAlgebra::SplitOctonion { coords } => {
+                coords[0..4].iter().map(|x| x * x).sum::<f64>() -
+                coords[4..8].iter().map(|x| x * x).sum::<f64>()
+            }
+        }
+    }
+
+    /// Нульовий вектор (світло): |x|² = 0.
+    pub fn is_null(&self) -> bool { self.norm_sq().abs() < 1e-12 }
+
+    /// Множення в алгебрі.
+    pub fn mul(&self, other: &SplitAlgebra) -> SplitAlgebra {
+        match (self, other) {
+            (SplitAlgebra::SplitComplex { a, b }, SplitAlgebra::SplitComplex { a: c, b: d }) => {
+                SplitAlgebra::SplitComplex { a: a * c + b * d, b: a * d + b * c }
+            }
+            (SplitAlgebra::SplitQuaternion { a, b, c, d }, SplitAlgebra::SplitQuaternion { a: e, b: f, c: g, d: h }) => {
+                SplitAlgebra::SplitQuaternion {
+                    a: a * e + b * f - c * g - d * h,
+                    b: a * f + b * e - c * h - d * g,
+                    c: a * g + b * h + c * e + d * f,
+                    d: a * h + b * g + c * f + d * e,
+                }
+            }
+            _ => self.clone(),
+        }
+    }
+
+    /// Породжує світловий конус у цій алгебрі.
+    pub fn light_cone_points(&self, n: usize) -> Vec<SplitAlgebra> {
+        let mut points = Vec::new();
+        for i in 0..n {
+            let theta = std::f64::consts::TAU * (i as f64) / (n as f64);
+            match self {
+                SplitAlgebra::SplitComplex { .. } => {
+                    // |a² - b²| = 0 → a = ±b → null rays на 45°
+                    points.push(SplitAlgebra::SplitComplex { a: theta.cos(), b: theta.cos() });
+                }
+                SplitAlgebra::SplitQuaternion { .. } => {
+                    // a² + b² = c² + d² — сфера S² в нульовому конусі
+                    let s = theta.sin() * 0.5f64.sqrt();
+                    points.push(SplitAlgebra::SplitQuaternion { a: theta.cos(), b: s, c: s, d: 0.0 });
+                }
+                SplitAlgebra::SplitOctonion { .. } => {
+                    let mut c = [0.0; 8];
+                    c[0] = theta.cos();
+                    for j in 1..4 { c[j] = theta.sin() / 3.0f64.sqrt(); }
+                    for j in 4..8 { c[j] = theta.sin() / 3.0f64.sqrt(); }
+                    points.push(SplitAlgebra::SplitOctonion { coords: c });
+                }
+            }
+        }
+        points
+    }
+}
+
+/// Нульова геодезична: світловий промінь у просторі-часі.
+#[derive(Debug, Clone)]
+pub struct NullGeodesic {
+    /// Початкова точка.
+    pub origin: NdVector,
+    /// Напрям (нульовий вектор).
+    pub direction: NdVector,
+    /// Швидкість світла (максимальна).
+    pub c: f64,
+    /// Поточне положення променя.
+    pub position: NdVector,
+    /// Час життя (кроки).
+    pub ttl: u32,
+}
+
+impl NullGeodesic {
+    pub fn new(origin: NdVector, direction: NdVector) -> Self {
+        NullGeodesic { origin: origin.clone(), direction: direction.clone(), c: 299_792_458.0, position: origin, ttl: 100 }
+    }
+
+    /// Крок уперед уздовж нульової геодезичної.
+    pub fn step(&mut self, dt: f64) {
+        let n = self.position.coords.len().min(self.direction.coords.len());
+        for i in 0..n {
+            self.position.coords[i] += self.c * dt * self.direction.coords[i];
+        }
+        self.ttl = self.ttl.saturating_sub(1);
+    }
+
+    /// Чи досягнув промінь ціль?
+    pub fn has_reached(&self, target: &NdVector, tol: f64) -> bool {
+        if self.position.coords.len() != target.coords.len() { return false; }
+        let d2: f64 = self.position.coords.iter().zip(&target.coords)
+            .map(|(a, b)| (a - b).powi(2)).sum();
+        d2 < tol * tol
+    }
+
+    /// Відстань до цілі в просторі-часі.
+    pub fn spacetime_interval_to(&self, target: &NdVector, p: usize) -> f64 {
+        let dx: Vec<f64> = self.position.coords.iter().zip(&target.coords)
+            .map(|(a, b)| a - b).collect();
+        let v = NdVector::new(dx);
+        v.norm_sq(p).abs().sqrt()
+    }
+}
+
+/// Фронт світлової хвилі (n-вимірна сфера, що розширюється).
+#[derive(Debug, Clone)]
+pub struct LightFront {
+    /// Центр випромінювання.
+    pub center: NdVector,
+    /// Поточний радіус (час × c).
+    pub radius: f64,
+    /// Швидкість світла.
+    pub c: f64,
+    /// Час життя.
+    pub ttl: u32,
+    /// ID відправника.
+    pub source: u64,
+    /// Дані, що несе світло.
+    pub data: Vec<u8>,
+}
+
+impl LightFront {
+    pub fn new(center: NdVector, c: f64, source: u64, data: Vec<u8>) -> Self {
+        LightFront { center, radius: 0.0, c, ttl: 100, source, data }
+    }
+
+    /// Розширити фронт на dt: R += c*dt (n-вимірна сфера).
+    pub fn expand(&mut self, dt: f64, n_dims: usize) -> Vec<NdVector> {
+        self.radius += self.c * dt;
+        self.ttl = self.ttl.saturating_sub(1);
+        // Згенерувати точки на (n-1)-сфері радіуса R
+        let n_points = (n_dims * 4).min(32);
+        let mut surface = Vec::new();
+        for i in 0..n_points {
+            let theta = std::f64::consts::TAU * (i as f64) / (n_points as f64);
+            let mut coords = vec![0.0; n_dims];
+            coords[0] = self.radius; // часова компонента
+            for j in 1..n_dims.min(4) {
+                let angle = theta + (j as f64) * 0.5;
+                coords[j] = self.radius * angle.sin() * 0.5 / (n_dims as f64).sqrt();
+            }
+            if n_dims > 4 {
+                let spread = self.radius / (n_dims as f64).sqrt();
+                for j in 4..n_dims {
+                    coords[j] = spread * (theta * (j as f64)).sin();
+                }
+            }
+            surface.push(NdVector::new(coords));
+        }
+        surface
+    }
+
+    /// Чи фронт досяг точки?
+    pub fn has_reached(&self, point: &NdVector) -> bool {
+        let dx: f64 = self.center.coords.iter().zip(&point.coords)
+            .skip(1).map(|(a, b)| (a - b).powi(2)).sum::<f64>().sqrt();
+        (dx - self.radius).abs() < 0.1 * self.c
+    }
+}
+
+/// Світлова комунікація: всенаправлена, n-вимірна.
+#[derive(Debug)]
+pub struct LightCommunication {
+    /// Всі активні світлові фронти.
+    pub fronts: Vec<LightFront>,
+    /// Метрика простору.
+    pub metric: PseudoEuclideanMetric,
+    /// Швидкість світла.
+    pub c: f64,
+    /// Розмірність простору.
+    pub n_dims: usize,
+}
+
+impl LightCommunication {
+    pub fn new(metric: PseudoEuclideanMetric) -> Self {
+        let n_dims = metric.p + metric.q;
+        LightCommunication { fronts: Vec::new(), metric, c: 1.0, n_dims }
+    }
+
+    /// Всенаправлене випромінювання світла з точки (n-вимірний спалах).
+    pub fn emit(&mut self, from: &NdVector, source: u64, data: &[u8]) -> u64 {
+        let front = LightFront::new(from.clone(), self.c, source, data.to_vec());
+        let id = self.fronts.len() as u64;
+        self.fronts.push(front);
+        id
+    }
+
+    /// Прийом: чи досяг світловий фронт точки?
+    pub fn receive(&mut self, point: &NdVector) -> Vec<(u64, Vec<u8>)> {
+        let mut received = Vec::new();
+        for front in &self.fronts {
+            if front.ttl > 0 && front.has_reached(point) {
+                received.push((front.source, front.data.clone()));
+            }
+        }
+        received
+    }
+
+    /// Симулювати поширення всіх фронтів.
+    pub fn tick(&mut self, dt: f64) -> Vec<u64> {
+        let mut expired = Vec::new();
+        for (i, front) in self.fronts.iter_mut().enumerate() {
+            if front.ttl > 0 {
+                front.expand(dt, self.n_dims);
+                if front.ttl == 0 { expired.push(i as u64); }
+            }
+        }
+        expired
+    }
+
+    /// Спінор з розщепленої алгебри (спін = split-quaternion).
+    pub fn spinor_from_split_algebra(alg: &SplitAlgebra) -> [f64; 4] {
+        match alg {
+            SplitAlgebra::SplitQuaternion { a, b, c, d } => [*a, *b, *c, *d],
+            _ => [1.0, 0.0, 0.0, 0.0],
+        }
+    }
+
+    pub fn dashboard(&self) -> String {
+        let active = self.fronts.iter().filter(|f| f.ttl > 0).count();
+        format!(
+            "Light Communication (omni, n={}, c={})\n  Active fronts: {}\n  Total emitted: {}\n  Metric:        O({},{})",
+            self.n_dims, self.c, active, self.fronts.len(), self.metric.p, self.metric.q
+        )
+    }
+}
+
+

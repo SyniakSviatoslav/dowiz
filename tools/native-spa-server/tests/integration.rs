@@ -187,10 +187,12 @@ fn default_api() -> Arc<ApiState> {
 /// Default webhook state (no hub configured — webhook tests that need a real
 /// adapter will construct their own).
 fn default_webhook() -> Arc<WebhookState> {
+    use dowiz_kernel::ports::hub_intake::IntakeService;
     use intake_adapters::telegram::TelegramAdapter;
     use native_spa_server::webhook::WebhookState;
     Arc::new(WebhookState {
         telegram: Arc::new(TelegramAdapter::new("test-secret".into())),
+        intake: Arc::new(IntakeService::new(vec!["sushi".into()])),
     })
 }
 

@@ -19,6 +19,7 @@ use axum::{
     Json, Router,
 };
 
+use dowiz_kernel::ports::hub_intake::IntakeService;
 use intake_adapters::{
     telegram::{TgUpdate, TelegramAdapter},
     IntakeError, IntakeWebhookHeaders,
@@ -29,6 +30,7 @@ use intake_adapters::{
 /// for Phase 1 we support a single hub for the test suite.
 pub struct WebhookState {
     pub telegram: Arc<TelegramAdapter>,
+    pub intake: Arc<IntakeService>,
 }
 
 /// Build the `/webhook/*` route family. This is merged into the main router
@@ -74,16 +76,9 @@ async fn telegram_webhook(
             StatusCode::OK.into_response()
         }
         Ok(messages) => {
-            // Phase 1: log the normalized message. In Phase 2 the intake
-            // service will receive these and call `place_order`.
             for msg in &messages {
-                eprintln!(
-                    "[webhook] telegram inbound: venue={} channel={} sender={} text={:?}",
-                    msg.venue_id, msg.channel, msg.sender, msg.text
-                );
+                let _ = state.intake.handle_inbound(msg);
             }
-            // Return the normalized messages as JSON for testing / debugging.
-            // In production this would be silently consumed by the intake service.
             (StatusCode::OK, Json(serde_json::json!({"ok": true, "messages": messages.len()})))
                 .into_response()
         }
