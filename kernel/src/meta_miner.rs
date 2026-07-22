@@ -17,7 +17,7 @@
 
 use crate::academia::Academia;
 use crate::oracle::{PatternOracle, Insight, InsightSource};
-use crate::research::{KnowledgeDomain, PatternKind};
+use crate::research::KnowledgeDomain;
 use crate::event_log::sha3_256;
 
 /// Кількість ітерацій самопокращення.
@@ -79,7 +79,7 @@ impl MetaMiner {
 
         // 1. Analyze: які патерни застосовні
         let applicable: Vec<&MetaPattern> = self.meta_patterns.iter()
-            .filter(|m| {
+            .filter(|_m| {
                 // Патерн застосовний, якщо він ще не використаний
                 self.iterations <= self.meta_patterns.len()
             }).collect();
@@ -116,7 +116,7 @@ impl MetaMiner {
         self.improvement_score = (self.improvement_score).min(10.0);
 
         // 4. Generate new insights from the improvement
-        let insight_hash = sha3_256(format!("meta_iter_{}", self.iterations).as_bytes());
+        let _insight_hash = sha3_256(format!("meta_iter_{}", self.iterations).as_bytes());
         self.oracle.insights.push(Insight {
             id: self.iterations as u64,
             title: format!("Meta-iteration {}: +{:.1}% improvement", self.iterations, self.improvement_score * 10.0),

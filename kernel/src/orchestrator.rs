@@ -804,7 +804,7 @@ impl Orchestrator {
             .history
             .iter()
             .filter(|r| r.success.is_true())
-            .map(|r| {
+            .map(|_r| {
                 // We don't store task_id in ActionRecord, so we approximate:
                 // a completed task's deps are considered satisfied.
                 0u64 // placeholder — real wiring stores task_id in ActionRecord

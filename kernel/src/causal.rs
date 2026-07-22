@@ -1185,7 +1185,7 @@ fn eval_formula(
 ) -> Result<Vec<f64>, String> {
     let n = joint.cards.len();
     // All nodes not in {query ∪ fixed} are summed out.
-    let mut fixed_set: std::collections::HashSet<usize> = fixed.iter().map(|&(k, _)| k).collect();
+    let fixed_set: std::collections::HashSet<usize> = fixed.iter().map(|&(k, _)| k).collect();
     let query_set: std::collections::HashSet<usize> = query.iter().copied().collect();
     let sum_nodes: Vec<usize> = (0..n)
         .filter(|i| !query_set.contains(i) && !fixed_set.contains(i))

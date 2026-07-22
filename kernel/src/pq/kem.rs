@@ -18,7 +18,7 @@
 //!
 //! Zero external crates; all Keccak/SHAKE/SHA3 come from `crate::pq::keccak`.
 
-use crate::pq::keccak::{prf, sha3_256, sha3_512, shake128, shake256, xof_g, xof_h};
+use crate::pq::keccak::{prf, sha3_256, sha3_512, shake128, xof_h};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ML-KEM-768 parameters (FIPS 203 §8 Table 2: "ML-KEM-768 | 256 | 3329 | 3 | 2 | 2 | 10 | 4").

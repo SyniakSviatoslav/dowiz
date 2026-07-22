@@ -9,7 +9,6 @@
 //! - Observer × State machine: zone counting tracks state transitions
 //! - Cache × PID: NMS results cached, PID adjusts processing batch size
 
-use crate::orchestrator::PidController;
 use crate::TriState;
 
 /// Maximum detections per frame.

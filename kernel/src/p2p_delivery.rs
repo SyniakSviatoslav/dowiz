@@ -17,7 +17,6 @@
 //! - Reputation system on P2P identities
 
 use crate::event_log::sha3_256;
-use crate::TriState;
 
 /// Maximum active deliveries.
 pub const MAX_DELIVERIES: usize = 10_000;
@@ -173,7 +172,7 @@ impl P2PDeliveryNetwork {
     }
 
     /// Find carriers near a pickup location.
-    pub fn find_nearby(&self, location: &GeoLocation, max_km: f64) -> Vec<&DeliveryListing> {
+    pub fn find_nearby(&self, location: &GeoLocation, _max_km: f64) -> Vec<&DeliveryListing> {
         self.listings.iter()
             .filter(|l| l.state == DeliveryState::Open && l.in_range(location))
             .collect()

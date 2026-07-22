@@ -205,7 +205,7 @@ impl SpanMetrics {
     /// Snapshot the current histograms as one `metric.jsonl` row per span (used by tests
     /// / explicit flush; the per-close path already streams rows). Returns rows written.
     pub fn flush(&self) -> usize {
-        let mut g = match self.inner.lock() {
+        let g = match self.inner.lock() {
             Ok(g) => g,
             Err(_) => return 0,
         };

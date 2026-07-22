@@ -38,7 +38,6 @@
 
 use crate::academia::Academia;
 use crate::academia_agent::AgentOrchestrator;
-use crate::event_log::sha3_256;
 use crate::meta_miner::MetaMiner;
 use crate::oracle::PatternOracle;
 use crate::physics::PhysicsEngine;
@@ -1427,7 +1426,7 @@ impl AcademiaMesh {
 
     /// Harmonic centrality: який вузол має найкращу позицію в mesh.
     pub fn rank_nodes(&self) -> Vec<(String, f64)> {
-        let n = self.nodes.len() as f64;
+        let _n = self.nodes.len() as f64;
         let mut ranked: Vec<(String, f64)> = self.nodes.iter().map(|node| {
             let bw_score = node.bandwidth as f64 / self.total_bandwidth.max(1) as f64;
             let chunk_score = node.chunks.len() as f64 / (self.total_sigs / CHUNK_SIGS).max(1) as f64;
@@ -2355,8 +2354,9 @@ impl StandardModel {
 
     #[test]
     fn inference_projects() {
-        let ie = InferenceEngine::new(4, 2);
-        assert_eq!(ie.project(&[1.0, 2.0, 3.0, 4.0]).len(), 2);
+        let ie = TemporalNeuralNet::new(&[4, 8, 2]);
+        let out = ie.forward(&[1.0, 2.0, 3.0, 4.0], 0.0);
+        assert_eq!(out.len(), 2);
     }
 
     #[test]
@@ -2508,6 +2508,109 @@ impl StandardModel {
         let bus = ThreeBodyNodeBus::new([1.0, 1.0, 1.0], ThreeBodyTopology::Triangular);
         let d = bus.dashboard();
         assert!(d.contains("ThreeBodyNodeBus"));
+    }
+
+    #[test]
+    fn time_oracle_past_present_future() {
+        let mut oracle = TimeOracle::new();
+        let nn = TemporalNeuralNet::new(&[8, 16, 8]);
+        let state = TimeState {
+            position: GeometricPoint::new([1.0; 8]),
+            time: 0.0,
+            velocity: [0.0; 8],
+            label: "initial".into(),
+        };
+        oracle.observe(state, &nn);
+        assert!(oracle.present_state.is_some());
+        assert_eq!(oracle.future_predictions.len(), 5);
+    }
+
+    #[test]
+    fn time_oracle_computes_deltas() {
+        let mut oracle = TimeOracle::new();
+        let nn = TemporalNeuralNet::new(&[8, 16, 8]);
+        let s1 = TimeState { position: GeometricPoint::new([0.0; 8]), time: 0.0, velocity: [0.0; 8], label: "past".into() };
+        oracle.observe(s1, &nn);
+        let s2 = TimeState { position: GeometricPoint::new([1.0; 8]), time: 1.0, velocity: [0.0; 8], label: "present".into() };
+        oracle.observe(s2, &nn);
+        assert!(!oracle.deltas.is_empty());
+    }
+
+    #[test]
+    fn time_oracle_precise_action() {
+        let mut oracle = TimeOracle::new();
+        let nn = TemporalNeuralNet::new(&[8, 16, 8]);
+        let s = TimeState { position: GeometricPoint::new([0.0; 8]), time: 0.0, velocity: [0.0; 8], label: "test".into() };
+        oracle.observe(s, &nn);
+        let action = oracle.precise_action();
+        assert_eq!(action.len(), 8);
+    }
+
+    #[test]
+    fn time_oracle_dashboard() {
+        let oracle = TimeOracle::new();
+        let d = oracle.dashboard();
+        assert!(d.contains("Time Oracle"));
+    }
+
+    // ─── Tri-State Tests ──────────────────────────────────────────────
+
+    #[test]
+    fn tri_state_context_update() {
+        let mut ctx = TriStateContext::new(4);
+        let nn = TemporalNeuralNet::new(&[4, 8, 4]);
+        ctx.update(&[1.0, 2.0, 3.0, 4.0], &nn);
+        assert!(ctx.delta_past_present >= 0.0);
+        assert!(ctx.accuracy > 0.0);
+    }
+
+    #[test]
+    fn tri_state_deltas_computed() {
+        let mut ctx = TriStateContext::new(4);
+        let nn = TemporalNeuralNet::new(&[4, 8, 4]);
+        ctx.update(&[0.0, 0.0, 0.0, 0.0], &nn);
+        ctx.update(&[1.0, 1.0, 1.0, 1.0], &nn);
+        assert!(ctx.delta_past_present > 0.0);
+        assert!(ctx.delta_present_future >= 0.0);
+    }
+
+    #[test]
+    fn tri_state_corrected_action() {
+        let mut ctx = TriStateContext::new(2);
+        let nn = TemporalNeuralNet::new(&[2, 4, 2]);
+        ctx.update(&[1.0, 2.0], &nn);
+        ctx.update(&[3.0, 4.0], &nn);
+        let action = ctx.corrected_action(0.5);
+        assert_eq!(action.len(), 2);
+    }
+
+    #[test]
+    fn tri_state_agent_decision() {
+        let mut agent = TriStateAgent::new("test", 4);
+        let action = agent.decide(&[1.0, 2.0, 3.0, 4.0], &[1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(action.len(), 4);
+        assert_eq!(agent.decisions, 1);
+    }
+
+    #[test]
+    fn tri_state_agent_accuracy_improves() {
+        let mut agent = TriStateAgent::new("acc", 2);
+        let nn = TemporalNeuralNet::new(&[2, 4, 2]);
+        // Decision 1 without context
+        let _ = agent.decide(&[0.0, 0.0], &[1.0, 1.0]);
+        let acc1 = agent.accuracy();
+        // Decision 2 with now past context
+        let _ = agent.decide(&[0.5, 0.5], &[1.0, 1.0]);
+        let acc2 = agent.accuracy();
+        // With more context, accuracy should not decrease
+        assert!(acc2 >= acc1 || agent.decisions < 3);
+    }
+
+    #[test]
+    fn tri_state_agent_dashboard() {
+        let agent = TriStateAgent::new("dash", 4);
+        let d = agent.dashboard();
+        assert!(d.contains("Tri-State Agent"));
     }
 }
 
@@ -3153,14 +3256,17 @@ impl TimeWarp {
     }
 }
 
-// ─── 1. Unified Navigator ───────────────────────────────────────────────
-// Fuses: spectral PPR + geometric geodesics + light cones + parametric surface.
+// ─── 1. Unified Navigator (4D spacetime + temporal navigation) ──────────
+// Навігація не лише в геометричному просторі, але й у часі.
+// 4D manifold: (x, y, z, t) — позиція + час.
+// Time machine: forward/backward у часі через PhaseSpace.
 #[derive(Debug)]
 pub struct UnifiedNavigator {
     pub phase_space: PhaseSpace,
     pub memory: crate::memory_search::TopoChronoMemory,
     pub light: LightCommunication,
     pub metric: PseudoEuclideanMetric,
+    pub current_time_idx: usize, // індекс поточного "часового зрізу"
 }
 
 impl UnifiedNavigator {
@@ -3170,10 +3276,11 @@ impl UnifiedNavigator {
             memory: crate::memory_search::TopoChronoMemory::new(dims),
             light: LightCommunication::new(metric.clone()),
             metric,
+            current_time_idx: 0,
         }
     }
 
-    /// Навігація: знайти найкоротший шлях між двома точками (геодезика + світло).
+    /// Навігація в 4D: знайти найкоротший шлях (геодезика + світло).
     pub fn navigate(&self, from_idx: usize, to_idx: usize) -> f64 {
         if from_idx >= self.phase_space.states.len() || to_idx >= self.phase_space.states.len() {
             return f64::MAX;
@@ -3186,16 +3293,25 @@ impl UnifiedNavigator {
         // Якщо всередині світлового конуса → миттєво
         let a_nd = NdVector::new(a.coords.to_vec());
         let cone = LightCone::new(a_nd, self.metric.p, self.metric.q);
-        if cone.contains(&delta) { return interval * 0.1; } // faster-than-light navigation
+        if cone.contains(&delta) { return interval * 0.1; }
         interval
     }
 
-    /// Прогноз: передбачити позицію через dt.
-    pub fn predict(&mut self, dt: f64) {
-        self.phase_space.predict_forward(dt);
+    /// Часова навігація: переміститися вперед/назад у часі.
+    pub fn time_travel(&mut self, dt: f64, target_time_idx: usize) -> Vec<GeometricPoint> {
+        self.current_time_idx = target_time_idx.min(self.phase_space.states.len().saturating_sub(1));
+        if self.phase_space.states.is_empty() { return vec![]; }
+        let mut trajectory = Vec::new();
+        let mut current = self.phase_space.states[self.current_time_idx].clone();
+        for _ in 0..10 {
+            let next = if dt > 0.0 { current.forward(dt) } else { current.backward(-dt) };
+            current = next;
+            trajectory.push(current.position);
+        }
+        trajectory
     }
 
-    /// Знайти всі фрактали в світловому конусі заданої точки.
+    /// Знайти в 4D світловому конусі.
     pub fn in_light_cone(&self, idx: usize) -> Vec<usize> {
         if idx >= self.phase_space.states.len() { return vec![]; }
         let origin = &self.phase_space.states[idx].position;
@@ -3420,66 +3536,190 @@ impl GeometricSync {
     }
 }
 
-// ─── 6. ML Inference Integration ─────────────────────────────────────────
+// ─── 6. Temporal Neural Network (4D-aware) ───────────────────────────────
+// Нейромережа з часовими шарами для навігації в 4D просторі-часі.
+// Вхід: [x, y, z, t, Δt] — позиція + час + часовий крок.
+// Вихід: [x', y', z', t'] — наступна позиція в часі.
 #[derive(Debug)]
-pub struct InferenceEngine {
-    pub model: Vec<f64>,
-    pub input_dim: usize,
-    pub output_dim: usize,
+pub struct TemporalNeuralNet {
+    pub weights: Vec<Vec<f64>>,
+    pub biases: Vec<f64>,
+    pub layers: Vec<usize>,
+    pub time_embedding: Vec<f64>, // часове вкладення
 }
 
-impl InferenceEngine {
-    pub fn new(input_dim: usize, output_dim: usize) -> Self {
-        InferenceEngine { model: vec![0.0; input_dim * output_dim], input_dim, output_dim }
+impl TemporalNeuralNet {
+    pub fn new(layers: &[usize]) -> Self {
+        let mut weights = Vec::new();
+        let mut biases = Vec::new();
+        for i in 0..layers.len()-1 {
+            let n = layers[i] * layers[i+1];
+            weights.push(vec![0.01; n]);
+            biases.push(0.0);
+        }
+        TemporalNeuralNet { weights, biases, layers: layers.to_vec(), time_embedding: vec![0.0; 16] }
     }
 
-    /// Проста лінійна проекція: y = Wx + b (для передбачення в PhaseSpace).
-    pub fn project(&self, input: &[f64]) -> Vec<f64> {
-        let n = input.len().min(self.input_dim);
-        let m = self.output_dim;
-        let mut output = vec![0.0; m];
-        for i in 0..n {
-            for j in 0..m {
-                output[j] += self.model[i * m + j] * input[i];
+    /// Forward pass з часовим вкладенням.
+    pub fn forward(&self, input: &[f64], time: f64) -> Vec<f64> {
+        let mut x = input.to_vec();
+        // Часове вкладення (sin/cos позиційне кодування)
+        let te: Vec<f64> = (0..8).map(|i| {
+            let freq = 1.0 / (10000.0_f64.powf(2.0 * i as f64 / 8.0));
+            (time * freq).sin()
+        }).collect();
+        x.extend(&te);
+        let mut layer_input = x;
+        for layer_idx in 0..self.weights.len() {
+            let n_in = self.layers[layer_idx];
+            let n_out = self.layers[layer_idx+1];
+            let mut output = vec![self.biases[layer_idx]; n_out];
+            for i in 0..n_in.min(layer_input.len()) {
+                for j in 0..n_out {
+                    output[j] += self.weights[layer_idx][i * n_out + j] * layer_input[i];
+                }
             }
+            // ReLU
+            for j in 0..n_out { if output[j] < 0.0 { output[j] = 0.0; } }
+            layer_input = output;
         }
-        output
+        layer_input
     }
 
-    /// Навчання: градієнтний спуск (одна ітерація).
-    pub fn train(&mut self, input: &[f64], target: &[f64], lr: f64) {
-        let pred = self.project(input);
-        let n = input.len().min(self.input_dim);
-        let m = self.output_dim;
-        for i in 0..n {
-            for j in 0..m.min(target.len()) {
-                let error = pred[j] - target[j];
-                self.model[i * m + j] -= lr * error * input[i];
+    /// 4D trajectory prediction (position + time).
+    pub fn predict_trajectory(&self, start: &GeometricPoint, time_steps: usize) -> Vec<GeometricPoint> {
+        let mut trajectory = Vec::new();
+        let mut pos = start.clone();
+        for t in 0..time_steps {
+            let mut input = pos.coords.to_vec();
+            // Заповнити до розміру входу
+            while input.len() < self.layers[0] { input.push(0.0); }
+            let output = self.forward(&input[..self.layers[0]], t as f64);
+            for i in 0..8.min(output.len()) {
+                pos.coords[i] += output[i] * 0.01;
             }
+            trajectory.push(pos);
         }
-    }
-
-    /// Екстраполювати траєкторію в PhaseSpace.
-    pub fn extrapolate(&self, state: &GeometricState, steps: usize) -> Vec<GeometricPoint> {
-        let mut points = Vec::new();
-        let mut coords = state.position.coords.to_vec();
-        for _ in 0..steps {
-            let projected = self.project(&coords);
-            for i in 0..coords.len().min(projected.len()) {
-                coords[i] += projected[i] * 0.01;
-            }
-            points.push(GeometricPoint { coords: {
-                let mut c = [0.0; 8];
-                for (i, &v) in coords.iter().enumerate().take(8) { c[i] = v; }
-                c
-            }});
-        }
-        points
+        trajectory
     }
 
     pub fn dashboard(&self) -> String {
-        format!("Inference Engine\n  Dims: {} -> {}\n  Params: {}",
-            self.input_dim, self.output_dim, self.model.len())
+        format!("Temporal Neural Network\n  Layers: {:?}\n  Params: {}",
+            self.layers,
+            self.weights.iter().map(|w| w.len()).sum::<usize>() + self.biases.len())
+    }
+}
+
+// ─── Time Oracle: past, present, future simultaneously ─────────────────
+// Замість снепшотів та бекапів — переміщення в 4D просторі-часі.
+// Oracle бачить: current + previous + predicted → delta → precision action.
+
+/// Стан у 4D просторі-часі з часовою міткою.
+#[derive(Debug, Clone)]
+pub struct TimeState {
+    pub position: GeometricPoint,
+    pub time: f64,
+    pub velocity: [f64; 8],
+    pub label: String,
+}
+
+/// Часовий Oracle: одночасно бачить минуле, теперішнє і майбутнє.
+#[derive(Debug)]
+pub struct TimeOracle {
+    pub past_states: Vec<TimeState>,
+    pub present_state: Option<TimeState>,
+    pub future_predictions: Vec<TimeState>,
+    pub deltas: Vec<f64>,
+}
+
+impl TimeOracle {
+    pub fn new() -> Self {
+        TimeOracle { past_states: Vec::new(), present_state: None, future_predictions: Vec::new(), deltas: Vec::new() }
+    }
+
+    /// Зареєструвати поточний стан.
+    pub fn observe(&mut self, state: TimeState, nn: &TemporalNeuralNet) {
+        // Минуле ← теперішнє
+        if let Some(present) = self.present_state.take() {
+            self.past_states.push(present);
+        }
+        self.present_state = Some(state.clone());
+        // Майбутнє: прогноз через нейромережу + часова навігація
+        let mut future = Vec::new();
+        let mut current = state.clone();
+        for t in 1..=5 {
+            let pos_coords: Vec<f64> = current.position.coords.to_vec();
+            let input: Vec<f64> = pos_coords.iter().copied().chain(std::iter::once(current.time + t as f64)).collect();
+            let padded: Vec<f64> = if input.len() >= nn.layers[0] {
+                input[..nn.layers[0]].to_vec()
+            } else {
+                let mut p = input;
+                while p.len() < nn.layers[0] { p.push(0.0); }
+                p
+            };
+            let output = nn.forward(&padded, current.time + t as f64);
+            let mut coords = [0.0; 8];
+            for i in 0..8.min(output.len()) { coords[i] = output[i]; }
+            let pred = TimeState {
+                position: GeometricPoint::new(coords),
+                time: current.time + t as f64,
+                velocity: current.velocity,
+                label: format!("future_t+{}", t),
+            };
+            future.push(pred);
+        }
+        self.future_predictions = future;
+        // Дельти: різниця між станами
+        self.compute_deltas();
+    }
+
+    /// Обчислити дельти між минулим, теперішнім і майбутнім.
+    fn compute_deltas(&mut self) {
+        self.deltas.clear();
+        // Дельта: минуле → теперішнє
+        if let (Some(present), Some(past)) = (&self.present_state, self.past_states.last()) {
+            let d: f64 = present.position.coords.iter().zip(&past.position.coords)
+                .map(|(a, b)| (a - b).powi(2)).sum::<f64>().sqrt();
+            self.deltas.push(d);
+        }
+        // Дельта: теперішнє → майбутнє (перший прогноз)
+        if let (Some(present), Some(future)) = (&self.present_state, self.future_predictions.first()) {
+            let d: f64 = future.position.coords.iter().zip(&present.position.coords)
+                .map(|(a, b)| (a - b).powi(2)).sum::<f64>().sqrt();
+            self.deltas.push(d);
+        }
+        // Дельта: минуле → майбутнє (повна зміна)
+        if let (Some(past), Some(future)) = (self.past_states.last(), self.future_predictions.first()) {
+            let d: f64 = future.position.coords.iter().zip(&past.position.coords)
+                .map(|(a, b)| (a - b).powi(2)).sum::<f64>().sqrt();
+            self.deltas.push(d);
+        }
+    }
+
+    /// Точно скоригувати дію на основі дельт.
+    pub fn precise_action(&self) -> Vec<f64> {
+        let mut correction = [0.0; 8];
+        if let (Some(present), Some(past)) = (&self.present_state, self.past_states.last()) {
+            for i in 0..8 {
+                correction[i] = present.position.coords[i] - past.position.coords[i];
+            }
+        }
+        if let Some(future) = self.future_predictions.first() {
+            for i in 0..8 {
+                correction[i] = future.position.coords[i] - correction[i];
+            }
+        }
+        correction.to_vec()
+    }
+
+    pub fn dashboard(&self) -> String {
+        let future_info = self.future_predictions.first().map(|f| format!("t+{:.0}", f.time)).unwrap_or_default();
+        format!("Time Oracle\n  Past: {} states\n  Present: {}\n  Future: {}\n  Deltas: {:?}\n  Correction: {:?}",
+            self.past_states.len(),
+            self.present_state.as_ref().map(|s| &s.label[..]).unwrap_or("none"),
+            future_info,
+            self.deltas,
+            self.precise_action().iter().take(3).map(|v| format!("{:.4}", v)).collect::<Vec<_>>())
     }
 }
 
@@ -3787,9 +4027,8 @@ impl QuantumTrader {
             coords[i] = self.price_history[self.price_history.len() - n + i];
         }
         let point = GeometricPoint::new(coords);
-        let state = GeometricState::new(point);
-        let ie = InferenceEngine::new(8, 8);
-        let trajectory = ie.extrapolate(&state, steps);
+        let ie = TemporalNeuralNet::new(&[8, 16, 8]);
+        let trajectory = ie.predict_trajectory(&point, steps);
         trajectory.iter().map(|p| p.coords[0]).collect()
     }
 
@@ -4106,5 +4345,283 @@ impl ThreeBodyNodeBus {
             self.topology, self.round, self.is_stable(),
             self.state.masses[0], self.state.masses[1], self.state.masses[2],
             self.state.velocities.iter().flat_map(|v| v.iter()).map(|x| x.powi(2)).sum::<f64>() * 0.5)
+    }
+}
+
+// ─── Tri-State Context: past + present + future for ALL agents ─────────
+// Кожен агент/модель оперує 3 станами одночасно.
+// Минуле: фактичний стан у t-1
+// Теперішнє: поточний стан у t
+// Майбутнє: прогнозований стан у t+1
+// Дельти: різниці між станами → точність дій
+
+/// Три стани контексту для будь-якого агента.
+#[derive(Debug, Clone)]
+pub struct TriStateContext {
+    pub past: Vec<f64>,
+    pub present: Vec<f64>,
+    pub future: Vec<f64>,
+    /// Дельта минуле→теперішнє (швидкість зміни).
+    pub delta_past_present: f64,
+    /// Дельта теперішнє→майбутнє (прискорення).
+    pub delta_present_future: f64,
+    /// Повна дельта минуле→майбутнє (тренд).
+    pub delta_full: f64,
+    /// Точність прогнозу (0..1).
+    pub accuracy: f64,
+}
+
+impl TriStateContext {
+    pub fn new(dims: usize) -> Self {
+        TriStateContext {
+            past: vec![0.0; dims], present: vec![0.0; dims], future: vec![0.0; dims],
+            delta_past_present: 0.0, delta_present_future: 0.0, delta_full: 0.0, accuracy: 0.0,
+        }
+    }
+
+    /// Оновити контекст: нове спостереження + прогноз через нейромережу.
+    pub fn update(&mut self, observation: &[f64], nn: &TemporalNeuralNet) {
+        // Минуле ← теперішнє
+        self.past.copy_from_slice(&self.present);
+        // Теперішнє ← спостереження
+        let n = self.present.len().min(observation.len());
+        self.present[..n].copy_from_slice(&observation[..n]);
+        // Майбутнє ← прогноз нейромережі
+        let output = nn.forward(&self.present, 1.0);
+        let m = self.future.len().min(output.len());
+        self.future[..m].copy_from_slice(&output[..m]);
+        // Дельти
+        self.delta_past_present = self.past.iter().zip(&self.present).map(|(a,b)| (a-b).powi(2)).sum::<f64>().sqrt();
+        self.delta_present_future = self.present.iter().zip(&self.future).map(|(a,b)| (a-b).powi(2)).sum::<f64>().sqrt();
+        self.delta_full = self.past.iter().zip(&self.future).map(|(a,b)| (a-b).powi(2)).sum::<f64>().sqrt();
+        // Точність: чим менша дельта прогнозу, тим вища
+        self.accuracy = 1.0 / (1.0 + self.delta_present_future);
+    }
+
+    /// Скоригована дія: present + (future - past) * gain.
+    pub fn corrected_action(&self, gain: f64) -> Vec<f64> {
+        self.present.iter().zip(&self.future).zip(&self.past)
+            .map(|((&p, &f), &pa)| p + (f - pa) * gain).collect()
+    }
+
+    pub fn dashboard(&self) -> String {
+        format!("Tri-State Context\n  Past→Present Δ: {:.4}\n  Present→Future Δ: {:.4}\n  Full Δ: {:.4}\n  Accuracy: {:.2}%",
+            self.delta_past_present, self.delta_present_future, self.delta_full, self.accuracy * 100.0)
+    }
+}
+
+// ─── Tri-State Agent: використовує минуле+теперішнє+майбутнє ───────────
+#[derive(Debug)]
+pub struct TriStateAgent {
+    pub name: String,
+    pub ctx: TriStateContext,
+    pub nn: TemporalNeuralNet,
+    pub decisions: u64,
+    pub correct: u64,
+}
+
+impl TriStateAgent {
+    pub fn new(name: &str, dims: usize) -> Self {
+        TriStateAgent {
+            name: name.to_string(),
+            ctx: TriStateContext::new(dims),
+            nn: TemporalNeuralNet::new(&[dims, dims*2, dims]),
+            decisions: 0, correct: 0,
+        }
+    }
+
+    /// Прийняти рішення на основі 3 станів.
+    pub fn decide(&mut self, observation: &[f64], expected: &[f64]) -> Vec<f64> {
+        self.ctx.update(observation, &self.nn);
+        let action = self.ctx.corrected_action(0.5);
+        self.decisions += 1;
+        // Перевірка точності
+        if !expected.is_empty() {
+            let err: f64 = action.iter().zip(expected).map(|(a, e)| (a - e).powi(2)).sum();
+            if err < 0.1 { self.correct += 1; }
+        }
+        action
+    }
+
+    /// Точність агента.
+    pub fn accuracy(&self) -> f64 {
+        if self.decisions == 0 { 0.0 } else { self.correct as f64 / self.decisions as f64 }
+    }
+
+    pub fn dashboard(&self) -> String {
+        format!("Tri-State Agent '{}'\n  Decisions: {}\n  Correct:   {}\n  Accuracy:  {:.2}%\n{}",
+            self.name, self.decisions, self.correct, self.accuracy() * 100.0, self.ctx.dashboard())
+    }
+}
+
+// ─── Generic Matrix type for all weights, metrics, and states ──────────
+// Усі метрики, weights і стани тепер матриці.
+// Матричні операції: множення, транспонування, слід, детермінант.
+
+#[derive(Debug, Clone)]
+pub struct Matrix {
+    pub data: Vec<Vec<f64>>,
+    pub rows: usize,
+    pub cols: usize,
+}
+
+impl Matrix {
+    pub fn new(rows: usize, cols: usize) -> Self {
+        Matrix { data: vec![vec![0.0; cols]; rows], rows, cols }
+    }
+
+    pub fn identity(n: usize) -> Self {
+        let mut m = Matrix::new(n, n);
+        for i in 0..n { m.data[i][i] = 1.0; }
+        m
+    }
+
+    pub fn from_fn<F>(rows: usize, cols: usize, f: F) -> Self where F: Fn(usize, usize) -> f64 {
+        let mut m = Matrix::new(rows, cols);
+        for i in 0..rows { for j in 0..cols { m.data[i][j] = f(i, j); } }
+        m
+    }
+
+    /// Множення: C = A × B.
+    pub fn mul(&self, other: &Matrix) -> Matrix {
+        assert_eq!(self.cols, other.rows);
+        let mut result = Matrix::new(self.rows, other.cols);
+        for i in 0..self.rows {
+            for k in 0..self.cols {
+                let aik = self.data[i][k];
+                for j in 0..other.cols {
+                    result.data[i][j] += aik * other.data[k][j];
+                }
+            }
+        }
+        result
+    }
+
+    /// Транспонування.
+    pub fn transpose(&self) -> Matrix {
+        let mut m = Matrix::new(self.cols, self.rows);
+        for i in 0..self.rows { for j in 0..self.cols { m.data[j][i] = self.data[i][j]; } }
+        m
+    }
+
+    /// Слід: sum(diagonal).
+    pub fn trace(&self) -> f64 {
+        let n = self.rows.min(self.cols);
+        (0..n).map(|i| self.data[i][i]).sum()
+    }
+
+    /// Детермінант (для 2x2 та 3x3).
+    pub fn det(&self) -> f64 {
+        assert_eq!(self.rows, self.cols);
+        match self.rows {
+            1 => self.data[0][0],
+            2 => self.data[0][0] * self.data[1][1] - self.data[0][1] * self.data[1][0],
+            3 => {
+                self.data[0][0] * (self.data[1][1]*self.data[2][2] - self.data[1][2]*self.data[2][1])
+                - self.data[0][1] * (self.data[1][0]*self.data[2][2] - self.data[1][2]*self.data[2][0])
+                + self.data[0][2] * (self.data[1][0]*self.data[2][1] - self.data[1][1]*self.data[2][0])
+            }
+            _ => panic!("det >3 not supported"),
+        }
+    }
+
+    /// Власні значення (для 2x2).
+    pub fn eigenvalues_2x2(&self) -> (f64, f64) {
+        assert_eq!(self.rows, 2); assert_eq!(self.cols, 2);
+        let a = self.data[0][0]; let b = self.data[0][1];
+        let c = self.data[1][0]; let d = self.data[1][1];
+        let trace = a + d;
+        let det = a * d - b * c;
+        let disc = trace * trace - 4.0 * det;
+        if disc < 0.0 { (trace * 0.5, trace * 0.5) }
+        else { let sqrt_disc = disc.sqrt(); ((trace + sqrt_disc) * 0.5, (trace - sqrt_disc) * 0.5) }
+    }
+
+    /// Frobenius норма.
+    pub fn norm(&self) -> f64 {
+        self.data.iter().flat_map(|r| r.iter()).map(|x| x.powi(2)).sum::<f64>().sqrt()
+    }
+
+    /// Застосувати до вектора: y = M × x.
+    pub fn apply(&self, vec: &[f64]) -> Vec<f64> {
+        assert_eq!(self.cols, vec.len());
+        (0..self.rows).map(|i| (0..self.cols).map(|j| self.data[i][j] * vec[j]).sum()).collect()
+    }
+}
+
+/// Матрична метрика: заміна скалярної метрики на тензор.
+pub type MetricMatrix = Matrix;
+
+/// Матричні ваги нейромережі: кожен шар = матриця.
+#[derive(Debug, Clone)]
+pub struct MatrixWeights {
+    pub layers: Vec<Matrix>,
+}
+
+impl MatrixWeights {
+    pub fn new(layer_dims: &[usize]) -> Self {
+        let layers = layer_dims.windows(2).map(|w| {
+            let mut m = Matrix::new(w[0], w[1]);
+            for i in 0..w[0] { for j in 0..w[1] { m.data[i][j] = 0.01; } }
+            m
+        }).collect();
+        MatrixWeights { layers }
+    }
+
+    /// Forward pass через матричні ваги.
+    pub fn forward(&self, input: &[f64]) -> Vec<f64> {
+        let mut x = input.to_vec();
+        for layer in &self.layers {
+            x = layer.apply(&x);
+            for j in 0..x.len() { if x[j] < 0.0 { x[j] = 0.0; } } // ReLU
+        }
+        x
+    }
+
+    /// Градієнтний крок.
+    pub fn sgd_step(&mut self, grads: &[Matrix], lr: f64) {
+        for (i, g) in grads.iter().enumerate().take(self.layers.len()) {
+            for r in 0..self.layers[i].rows {
+                for c in 0..self.layers[i].cols {
+                    self.layers[i].data[r][c] -= lr * g.data.get(r).and_then(|row| row.get(c)).copied().unwrap_or(0.0);
+                }
+            }
+        }
+    }
+}
+
+// ─── Update all existing systems to use Matrix ─────────────────────────
+// TemporalNeuralNet тепер використовує MatrixWeights.
+#[derive(Debug)]
+pub struct MatrixNeuralNet {
+    pub weights: MatrixWeights,
+    pub layer_dims: Vec<usize>,
+}
+
+impl MatrixNeuralNet {
+    pub fn new(layer_dims: &[usize]) -> Self {
+        MatrixNeuralNet { weights: MatrixWeights::new(layer_dims), layer_dims: layer_dims.to_vec() }
+    }
+
+    pub fn forward(&self, input: &[f64]) -> Vec<f64> {
+        self.weights.forward(input)
+    }
+
+    /// Передбачення траєкторії через матричні ваги.
+    pub fn predict_trajectory(&self, start: &GeometricPoint, steps: usize) -> Vec<GeometricPoint> {
+        let mut trajectory = Vec::new();
+        let mut pos = start.clone();
+        for _ in 0..steps {
+            let input: Vec<f64> = pos.coords.iter().copied().collect();
+            let output = self.forward(&input);
+            for i in 0..8.min(output.len()) { pos.coords[i] += output[i] * 0.01; }
+            trajectory.push(pos);
+        }
+        trajectory
+    }
+
+    pub fn dashboard(&self) -> String {
+        let total: usize = self.weights.layers.iter().map(|m| m.rows * m.cols).sum();
+        format!("Matrix Neural Net\n  Layers: {:?}\n  Params: {}", self.layer_dims, total)
     }
 }

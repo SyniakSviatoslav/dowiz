@@ -249,7 +249,7 @@ impl DynamicSpawner {
 
         // Cache check.
         if self.cache.is_valid(pending_tasks, self.metrics.active_agents, now_us, self.cache_ttl_us) {
-            let (count, reason) = self.cache.serve();
+            let (count, _reason) = self.cache.serve();
             return self.make_batch_cached(count, SpawnReason::Cached, now_us);
         }
         self.cache.invalidate();

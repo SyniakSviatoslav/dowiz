@@ -820,7 +820,7 @@ impl<T: TunnelProvider, V: VpsProvider> PoolManager<T, V> {
     /// running server. The hub stays owned; it is NOT returned to the pool.
     pub fn suspend<Vr: SignatureVerifier>(
         &mut self,
-        verifier: &Vr,
+        _verifier: &Vr,
         hub: HubId,
     ) -> Result<ImageRef, ProvisionError> {
         let slot = self.slots.get_mut(&hub).ok_or(ProvisionError::NotFound)?;
@@ -840,7 +840,7 @@ impl<T: TunnelProvider, V: VpsProvider> PoolManager<T, V> {
     /// Resume a suspended hub from its state snapshot (re-wakeable).
     pub fn resume<Vr: SignatureVerifier>(
         &mut self,
-        verifier: &Vr,
+        _verifier: &Vr,
         hub: HubId,
     ) -> Result<ServerId, ProvisionError> {
         let slot = self.slots.get_mut(&hub).ok_or(ProvisionError::NotFound)?;

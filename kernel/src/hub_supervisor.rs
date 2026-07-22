@@ -25,7 +25,7 @@
 //! crate beyond what `pq` already vendors. The identifier-absence scan below
 //! asserts the forbidden tokens are absent from this source.
 
-use crate::event_log::{sha3_256, AppendOutcome, EventLog, EventStore, MemEventStore, MeshEvent};
+use crate::event_log::{AppendOutcome, EventLog, EventStore, MemEventStore, MeshEvent};
 use crate::pq::keccak::shake256;
 use crate::pq::x25519::x25519;
 use aes_gcm::{
@@ -576,7 +576,7 @@ pub enum RollbackStep {
 /// Code AND state both roll back: flip the slot AND restore the pre-promote
 /// snapshot (R5 risk #1). Refuses when there is no previous slot to return to.
 pub fn decide_rollback(
-    trigger: RollbackTrigger,
+    _trigger: RollbackTrigger,
     previous: Option<Slot>,
     _snap: &StateSnapshot,
 ) -> RollbackStep {

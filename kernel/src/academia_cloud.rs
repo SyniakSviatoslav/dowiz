@@ -25,7 +25,6 @@
 use crate::dynamic_spawner::{DynamicSpawner, SpawnBatchConfig};
 use crate::orchestrator::PidController;
 use crate::parallel_patterns::FanOutPlan;
-use crate::TriState;
 
 /// Максимум Workers.
 pub const MAX_WORKERS: u32 = 100_000;

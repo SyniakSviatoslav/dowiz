@@ -117,7 +117,7 @@ pub fn import_unit<I, O>(
     proc: impl Fn(&I) -> crate::decision::Decision<O> + Send + Sync + 'static,
     cases: &[Instance<I, O>],
     instance_set_hash: [u8; 32],
-    source: Source,
+    _source: Source,
     registry: &DecisionRegistry,
     log: &mut EventLog<impl EventStore>,
 ) -> Result<(DecisionUnit<I, O>, DecisionImportRecord), (ImportReject, DecisionImportRecord)>

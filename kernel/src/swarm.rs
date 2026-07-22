@@ -172,7 +172,7 @@ pub struct SwarmCoordinator {
 impl SwarmCoordinator {
     /// Create a coordinator with the given executors.
     pub fn new(swarmlings: Vec<Swarmling>) -> Self {
-        let n = swarmlings.len();
+        let _n = swarmlings.len();
         SwarmCoordinator {
             swarmlings,
             dsu: Dsu::new(MAX_FANOUT),
@@ -233,7 +233,7 @@ impl SwarmCoordinator {
     }
 
     /// Dispatch a task to a specific executor. Returns false if budget is exhausted.
-    pub fn dispatch(&mut self, task: &TaskSpec, executor_id: usize) -> bool {
+    pub fn dispatch(&mut self, _task: &TaskSpec, executor_id: usize) -> bool {
         if let Some(exec) = self.swarmlings.iter_mut().find(|s| s.id == executor_id) {
             if exec.try_acquire(1.0) {
                 self.tasks_dispatched += 1;

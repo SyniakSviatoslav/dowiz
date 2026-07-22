@@ -93,7 +93,7 @@ impl MemorySearchEngine {
     /// transition matrix.
     pub fn new(document: &str) -> Self {
         let sections = Self::split_sections(document);
-        let n = sections.len();
+        let _n = sections.len();
 
         // Build BM25 index over section texts
         let docs: Vec<Document> = sections
@@ -659,7 +659,7 @@ impl TopoChronoMemory {
         }).collect();
         scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
         scores.truncate(k);
-        scores.iter().map(|&(i, s)| {
+        scores.iter().map(|&(i, _s)| {
             (self.labels[i].clone(), self.surface.u_coords[i], self.surface.v_coords[i])
         }).collect()
     }
