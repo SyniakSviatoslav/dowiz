@@ -1,98 +1,310 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="crimson">
+<html lang="uk">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>dowiz — Decentralized Delivery Protocol</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Serif+Display&family=JetBrains+Mono&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet"/>
-<link rel="stylesheet" href="src/styles/tokens.css"/>
-<link rel="stylesheet" href="src/styles/base.css"/>
-<link rel="stylesheet" href="src/styles/animations.css"/>
+<title>dowiz — Field Interface</title>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.172.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.172.0/examples/jsm/"
+  }
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
 <style>
-canvas#bg-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
-#app{position:relative;z-index:1;min-height:100vh}
-.hero{min-height:90vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:120px 24px 60px}
-.hero h1{font-size:clamp(40px,8vw,80px);font-weight:700;letter-spacing:-2px;line-height:1.05;margin-bottom:16px}
-.hero h1 span{background:linear-gradient(135deg,var(--brand-primary),#ff6b35,var(--brand-primary-hover));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.hero p{font-size:clamp(15px,2vw,20px);color:var(--brand-text-muted);max-width:560px;margin:0 auto 32px;line-height:1.6}
-.hero-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:999px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;background:rgba(234,79,22,.1);color:var(--brand-primary);margin-bottom:20px}
-.hero-actions{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
-section{padding:80px 24px;max-width:1200px;margin:0 auto}
-.section-title{font-size:clamp(26px,3.5vw,38px);font-weight:700;margin-bottom:8px}
-.section-subtitle{font-size:15px;color:var(--brand-text-muted);margin-bottom:40px;max-width:480px}
-.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:20px;margin-top:0}
-.feature-card{padding:28px;border-radius:var(--brand-radius);background:var(--brand-surface);border:1px solid var(--brand-border);transition:all .4s cubic-bezier(.34,1.56,.64,1);cursor:default}
-.feature-card:hover{transform:translateY(-4px);box-shadow:var(--shadow-lg);border-color:var(--brand-primary)}
-.feature-icon{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:14px;background:rgba(234,79,22,.1)}
-.feature-card h3{font-size:17px;margin-bottom:6px}
-.feature-card p{font-size:13px;color:var(--brand-text-muted);line-height:1.6}
-.cat-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
-.menu-section{padding-top:40px}
-.menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px}
-.menu-item{background:var(--brand-surface);border:1px solid var(--brand-border);border-radius:var(--brand-radius);padding:16px;transition:all .3s cubic-bezier(.34,1.56,.64,1)}
-.menu-item:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
-.menu-img{width:100%;height:120px;border-radius:6px;background:linear-gradient(135deg,rgba(234,79,22,.05),var(--brand-surface));margin-bottom:10px;display:flex;align-items:center;justify-content:center;font-size:40px}
-.menu-cat{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--brand-primary);font-weight:600;margin-bottom:3px}
-.menu-item h4{font-size:15px;margin-bottom:3px}
-.menu-desc{font-size:11px;color:var(--brand-text-muted);margin-bottom:10px;line-height:1.5}
-.menu-footer{display:flex;justify-content:space-between;align-items:center}
-.menu-price{font-weight:700;font-size:17px}
-.orders-card{background:var(--brand-surface);border:1px solid var(--brand-border);border-radius:var(--brand-radius);padding:20px}
-.order-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--brand-border)}
-.order-row:last-child{border-bottom:none}
-.order-id{font-weight:600;font-size:15px}
-.order-meta{font-size:12px;color:var(--brand-text-muted);margin-top:2px}
-.order-status{display:flex;align-items:center;gap:8px}
-.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
-.order-badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;text-transform:uppercase;letter-spacing:.5px}
-.order-badge.pending{background:#D97706;color:#fff}
-.order-badge.confirmed{background:#2563EB;color:#fff}
-.order-badge.preparing{background:#F59E0B;color:#000}
-.order-badge.ready{background:#0D9488;color:#fff}
-.order-badge.in-delivery{background:#3B82F6;color:#fff}
-.order-badge.delivered{background:#059669;color:#fff}
-.stats-grid,.test-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:20px;margin-top:32px}
-.stat-card,.test-card{text-align:center;padding:28px 16px;background:var(--brand-surface);border:1px solid var(--brand-border);border-radius:var(--brand-radius)}
-.stat-number,.test-value{font-size:clamp(28px,4vw,42px);font-weight:700;background:linear-gradient(135deg,var(--brand-primary),var(--brand-primary-hover));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.stat-label,.test-label{font-size:13px;color:var(--brand-text-muted);margin-top:4px}
-.navbar{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;justify-content:space-between;padding:14px 32px;background:rgba(18,18,18,.8);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--brand-border)}
-.navbar-logo{font-family:var(--font-heading);font-size:22px;font-weight:700}
-.navbar-links{display:flex;gap:28px}
-.navbar-links a{color:var(--brand-text-muted);font-size:12px;font-weight:500;text-transform:uppercase;letter-spacing:.5px;transition:color .2s;position:relative;cursor:pointer}
-.navbar-links a:hover,.navbar-links a.active{color:var(--brand-text)}
-.navbar-links a.active::after{content:'';position:absolute;bottom:-4px;left:0;right:0;height:2px;background:var(--brand-primary);border-radius:1px}
-.cart-panel{position:fixed;top:0;right:-400px;width:380px;height:100%;background:var(--brand-surface);border-left:1px solid var(--brand-border);z-index:200;transition:right .4s cubic-bezier(.34,1.56,.64,1);box-shadow:var(--shadow-xl);display:flex;flex-direction:column;overflow-y:auto}
-.cart-panel.open{right:0}
-.cart-header{padding:20px;border-bottom:1px solid var(--brand-border);display:flex;justify-content:space-between;align-items:center}
-.cart-items{flex:1;padding:12px 20px}
-.cart-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--brand-border)}
-.cart-total{padding:20px;border-top:1px solid var(--brand-border);display:flex;justify-content:space-between;font-size:17px;font-weight:700}
-.cart-actions{padding:0 20px 20px}
-.btn-remove{background:none;border:none;color:var(--color-danger);cursor:pointer;font-size:16px;padding:4px}
-.btn-remove:hover{transform:scale(1.2)}
-.theme-switcher{position:fixed;top:66px;right:24px;z-index:100;display:flex;gap:5px;padding:6px 10px;background:var(--brand-surface);border:1px solid var(--brand-border);border-radius:999px;backdrop-filter:blur(20px);box-shadow:var(--shadow-lg)}
-.theme-dot{width:18px;height:18px;border-radius:50%;border:2px solid transparent;cursor:pointer;transition:all .3s cubic-bezier(.34,1.56,.64,1)}
-.theme-dot:hover{transform:scale(1.3)}
-.theme-dot.active{border-color:var(--brand-text);transform:scale(1.1)}
-footer{padding:48px 24px 24px;text-align:center;border-top:1px solid var(--brand-border)}
-footer p{color:var(--brand-text-muted);font-size:12px}
-@media(max-width:768px){.navbar-links{display:none}.desktop-only{display:none!important}.cart-panel{width:100%}.hero{padding:100px 16px 40px}section{padding:40px 16px}}
-.gradient-text{background:linear-gradient(135deg,var(--brand-primary),var(--brand-primary-hover));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0a0f;font-family:'DM Sans',sans-serif;overflow:hidden;color:#fff;height:100vh;width:100vw}
+#field-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:0}
+/* ── Zero-DOM overlay: minimal chrome, everything else is SDF field ── */
+.chrome{position:fixed;z-index:10;pointer-events:none;font-family:'DM Serif Display',serif}
+.chrome *{pointer-events:auto}
+.logo{top:24px;left:24px;font-size:22px;color:rgba(255,255,255,.9)}
+.logo span{color:#C1121F}
+.status{top:24px;right:24px;display:flex;align-items:center;gap:8px;font-size:12px;color:rgba(255,255,255,.6)}
+.dot{width:6px;height:6px;border-radius:50%;background:#10B981;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.role-switch{bottom:32px;left:50%;transform:translateX(-50%);display:flex;gap:4px;background:rgba(255,255,255,.06);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:4px}
+.role-btn{background:none;border:none;color:rgba(255,255,255,.5);font-family:'DM Sans',sans-serif;font-size:12px;padding:8px 16px;border-radius:8px;cursor:pointer;transition:all .2s}
+.role-btn.active{background:rgba(193,18,31,.3);color:#fff}
+.hud{position:fixed;z-index:10;pointer-events:none;font-family:'DM Sans',sans-serif;font-size:11px;color:rgba(255,255,255,.4)}
+.hud-left{bottom:96px;left:24px;line-height:1.8}
+.hud-right{bottom:96px;right:24px;text-align:right;line-height:1.8}
+.hud-right span{color:rgba(255,255,255,.7)}
 </style>
 </head>
 <body>
-<canvas id="bg-canvas"></canvas>
-<div id="app"></div>
-<div class="theme-switcher">
-  <div class="theme-dot active" style="background:#ea4f16" onclick="App.setTheme('')" data-theme=""></div>
-  <div class="theme-dot" style="background:#C1121F" onclick="App.setTheme('crimson')" data-theme="crimson"></div>
-  <div class="theme-dot" style="background:#0D9488" onclick="App.setTheme('ocean')" data-theme="ocean"></div>
-  <div class="theme-dot" style="background:#F97316" onclick="App.setTheme('midnight')" data-theme="midnight"></div>
-  <div class="theme-dot" style="background:#4D7C0F" onclick="App.setTheme('sage')" data-theme="sage"></div>
-  <div class="theme-dot" style="background:#B45309" onclick="App.setTheme('gold')" data-theme="gold"></div>
-  <div class="theme-dot" style="background:#DB2777" onclick="App.setTheme('coral')" data-theme="coral"></div>
+<canvas id="field-canvas"></canvas>
+
+<div class="chrome logo">dowiz<span>.</span></div>
+<div class="chrome status"><span class="dot"></span>Field Active · 60 fps</div>
+
+<div class="chrome role-switch">
+  <button class="role-btn active" data-role="customer">Customer</button>
+  <button class="role-btn" data-role="owner">Owner</button>
+  <button class="role-btn" data-role="courier">Courier</button>
 </div>
-<script src="src/app.js"></script>
+
+<div class="hud hud-left" id="hud-left">
+  <div>Neurons: <span id="neuron-count">0</span></div>
+  <div>Spike rate: <span id="spike-rate">0</span> Hz</div>
+</div>
+<div class="hud hud-right" id="hud-right">
+  <div>Orders: <span id="order-count">0</span></div>
+  <div>Revenue: <span id="revenue">0</span></div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+// ─── Field State ───
+const state = {
+  role: 'customer',
+  neurons: [],
+  orders: JSON.parse(localStorage.getItem('dowiz-orders') || '[]'),
+  menu: [
+    { id: 1, name: 'Margherita', price: 850, cat: 'pizza', emoji: '\u{1F355}' },
+    { id: 2, name: 'Pepperoni', price: 950, cat: 'pizza', emoji: '\u{1F355}' },
+    { id: 3, name: 'Formaggi', price: 1050, cat: 'pizza', emoji: '\u{1F9C0}' },
+    { id: 4, name: 'Carbonara', price: 780, cat: 'pasta', emoji: '\u{1F35D}' },
+  ],
+  cart: [],
+  spikeCount: 0,
+  frameCount: 0
+};
+
+// ─── Three.js Neural Field ───
+const canvas = document.getElementById('field-canvas');
+
+const renderer = new THREE.WebGLRenderer({
+  canvas, alpha: false, antialias: true,
+  powerPreference: 'high-performance'
+});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a0f);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.set(0, 0, 4);
+
+// ── Izhikevich Neurons (2000) ──
+const N = 2000;
+const pos = new Float32Array(N * 3);
+const colors = new Float32Array(N * 3);
+const sizes = new Float32Array(N);
+const v = new Float32Array(N);
+const u = new Float32Array(N);
+
+const c1 = new THREE.Color('#C1121F');
+const c2 = new THREE.Color('#F97316');
+
+for (let i = 0; i < N; i++) {
+  const theta = Math.random() * Math.PI * 2;
+  const r = Math.random() * 2.2;
+  const phi = Math.random() * Math.PI - Math.PI / 2;
+  pos[i*3] = Math.cos(theta) * r * Math.cos(phi);
+  pos[i*3+1] = Math.sin(phi) * r * 0.8;
+  pos[i*3+2] = Math.sin(theta) * r * Math.cos(phi);
+  const mix = Math.random();
+  const c = c1.clone().lerp(c2, mix);
+  colors[i*3] = c.r; colors[i*3+1] = c.g; colors[i*3+2] = c.b;
+  sizes[i] = Math.random() * 0.06 + 0.02;
+  v[i] = -65 + Math.random() * 10;
+  u[i] = Math.random() * 10;
+}
+state.neurons = { pos, colors, sizes, v, u };
+
+const geo = new THREE.BufferGeometry();
+geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+
+const mat = new THREE.PointsMaterial({
+  size: 0.04, vertexColors: true, transparent: true, opacity: 0.9,
+  blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true
+});
+const particles = new THREE.Points(geo, mat);
+scene.add(particles);
+
+// ── Connection lines ──
+const linePositions = [];
+for (let i = 0; i < N; i++) {
+  for (let j = i + 1; j < N; j++) {
+    const dist = Math.sqrt(
+      (pos[i*3]-pos[j*3])**2 + (pos[i*3+1]-pos[j*3+1])**2 + (pos[i*3+2]-pos[j*3+2])**2
+    );
+    if (dist < 0.5 && Math.random() < 0.03) {
+      linePositions.push(pos[i*3], pos[i*3+1], pos[i*3+2]);
+      linePositions.push(pos[j*3], pos[j*3+1], pos[j*3+2]);
+    }
+  }
+}
+const lineGeo = new THREE.BufferGeometry();
+lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(linePositions, 3));
+const lineMat = new THREE.LineBasicMaterial({
+  color: 0xC1121F, transparent: true, opacity: 0.06, blending: THREE.AdditiveBlending
+});
+const lines = new THREE.LineSegments(lineGeo, lineMat);
+scene.add(lines);
+
+// ── Post-processing ──
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(
+  new THREE.Vector2(canvas.width, canvas.height), 0.4, 0.3, 0.85
+);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+// ── Audio ──
+let audioCtx = null;
+function sonify() {
+  if (!audioCtx) {
+    const C = window.AudioContext || window.webkitAudioContext;
+    if (!C) return;
+    audioCtx = new C();
+  }
+  const pentatonic = [262, 294, 330, 392, 440, 524, 588, 660];
+  const freq = pentatonic[Math.floor(Math.random() * pentatonic.length)];
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = 'sine';
+  o.frequency.value = freq;
+  g.gain.setValueAtTime(0.06, audioCtx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+  o.connect(g); g.connect(audioCtx.destination);
+  o.start(); o.stop(audioCtx.currentTime + 0.1);
+}
+
+// ── Mouse interaction ──
+const mouse = new THREE.Vector2(0, 0);
+canvas.addEventListener('mousemove', (e) => {
+  mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+});
+canvas.addEventListener('click', (e) => {
+  sonify();
+  // Add order on click
+  if (state.role === 'customer') {
+    const item = state.menu[Math.floor(Math.random() * state.menu.length)];
+    const qty = Math.floor(Math.random() * 3) + 1;
+    state.orders.push({
+      id: Date.now() % 100000, item: item.name, qty,
+      total: item.price * qty, date: new Date().toISOString()
+    });
+    localStorage.setItem('dowiz-orders', JSON.stringify(state.orders));
+    updateHUD();
+  }
+});
+
+// ── Resize ──
+function resize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  canvas.width = w; canvas.height = h;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  composer.setSize(w, h);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ── HUD update ──
+function updateHUD() {
+  const revenue = state.orders.reduce((s, o) => s + o.total, 0);
+  document.getElementById('neuron-count').textContent = N;
+  document.getElementById('spike-rate').textContent = (state.spikeCount / 60).toFixed(1);
+  document.getElementById('order-count').textContent = state.orders.length;
+  document.getElementById('revenue').textContent = revenue.toLocaleString() + ' ALL';
+}
+
+// ── Role switching ──
+document.querySelectorAll('.role-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    state.role = btn.dataset.role;
+    // Change field color based on role
+    const roleColors = {
+      customer: new THREE.Color('#C1121F'),
+      owner: new THREE.Color('#059669'),
+      courier: new THREE.Color('#2563EB')
+    };
+    const c = roleColors[state.role] || roleColors.customer;
+    bloom.strength = state.role === 'owner' ? 0.6 : 0.4;
+    mat.color.set(c);
+  });
+});
+
+// ── Animation loop ──
+const clock = new THREE.Clock();
+let spikeAccum = 0;
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.getElapsedTime();
+
+  // Izhikevich update
+  const p = pos, siz = sizes, vel = v, pot = u;
+  let spikes = 0;
+
+  for (let i = 0; i < N; i++) {
+    const mx = mouse.x * 1.8, my = mouse.y * 1.2;
+    const dx = p[i*3] - mx, dy = p[i*3+1] - my;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const mouseI = Math.exp(-dist * dist * 3) * 8;
+    const noise = (Math.sin(i * 12.9898 + t * 2.3) % 1) * 2 + 1;
+    const I = 4 + noise + mouseI;
+
+    vel[i] += dt * (0.04 * vel[i] * vel[i] + 5 * vel[i] + 140 - pot[i] + I);
+    pot[i] += dt * 0.02 * (0.2 * vel[i] - pot[i]);
+
+    if (vel[i] >= 30) {
+      vel[i] = -65; pot[i] += 8; spikes++;
+      siz[i] = 0.12;
+    } else {
+      siz[i] += (0.03 - siz[i]) * dt * 3;
+    }
+
+    // Gentle drift
+    p[i*3] += Math.sin(t * 0.08 + i * 0.01) * dt * 0.008;
+    p[i*3+1] += Math.cos(t * 0.08 + i * 0.01) * dt * 0.008;
+  }
+
+  state.spikeCount = spikes;
+  spikeAccum += spikes;
+
+  if (spikeAccum > 5) {
+    sonify();
+    spikeAccum = 0;
+  }
+
+  geo.attributes.position.needsUpdate = true;
+  geo.attributes.size.needsUpdate = true;
+
+  // Rotate
+  particles.rotation.y += dt * 0.015;
+  lines.rotation.y = particles.rotation.y;
+
+  // Pulse lines
+  lineMat.opacity = 0.03 + Math.sin(t * 0.8) * 0.03;
+
+  updateHUD();
+  composer.render();
+}
+
+animate();
+updateHUD();
+</script>
 </body>
 </html>
