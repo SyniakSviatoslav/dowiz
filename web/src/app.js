@@ -2,8 +2,16 @@
 
 import { composeMenuScene, renderFrame, paintField, cartTotal } from './lib/compose/compose.mjs';
 import { sceneForRole } from './lib/compose/fragments.mjs';
-import { createJourney, Step } from './lib/compose/journey.mjs';
+import { createJourney } from './lib/compose/journey.mjs';
 import { createSonifier } from './lib/audio/sonify.mjs';
+
+const CAT_UA = {
+  "Chef's Picks": 'Рекомендуємо', Futomaki: 'Футомакі', Philadelphia: 'Філадельфія',
+  California: 'Каліфорнія', 'Hot roll': 'Гарячі роли', Signature: 'Фірмові',
+  Volcano: 'Вулкан', Maki: 'Макі', Sets: 'Набори', Snacks: 'Закуски',
+  Nigiri: 'Нігірі', Bowls: 'Боули', 'Vegetarian Roll': 'Вегетаріанські',
+  Cocktails: 'Коктейлі', Premium: 'Преміум',
+};
 
 const CV_ID = 'sdf-canvas';
 const API_BASE = '/api';
@@ -393,7 +401,7 @@ const App = {
       </div>
       <div class="cat-filters" id="cat-filters">
         <button class="btn btn-sm btn-primary" data-cat="all" onclick="App.filterMenu('all')">Усі</button>
-        ${cats.map(c => `<button class="btn btn-sm btn-ghost" data-cat="${c}" onclick="App.filterMenu('${c}')">${c}</button>`).join('')}
+        ${cats.map(c => `<button class="btn btn-sm btn-ghost" data-cat="${c}" onclick="App.filterMenu('${c}')">${CAT_UA[c] || c}</button>`).join('')}
       </div>
       <div class="menu-grid" id="menu-grid"></div>
     </section>`;
@@ -471,11 +479,11 @@ const App = {
         ${i.photo
           ? `<img class="menu-img" src="${i.photo}" alt="${i.name}" loading="lazy" onerror="this.style.display='none';this.parentNode.querySelector('.emoji-fallback').style.display='flex';"/><div class="menu-img emoji-fallback" style="display:none">🍣</div>`
           : `<div class="menu-img">🍣</div>`}
-        <div class="menu-cat">${i.catName || i.cat}</div>
+        <div class="menu-cat">${CAT_UA[i.catName] || i.catName || i.cat}</div>
         <h4>${i.name}</h4>
         <p class="menu-desc">${i.ingredients || i.desc || ''}</p>
         <div class="menu-footer">
-          <span class="menu-price">${i.drink ? 'Ask waiter' : `${i.price.toLocaleString()} ALL`}</span>
+          <span class="menu-price">${i.drink ? 'Запитайте офіціанта' : `${i.price.toLocaleString()} ALL`}</span>
           ${i.drink ? '' : `<button class="btn btn-primary btn-sm" onclick="App.addToCart(${i.id})">Додати</button>`}
         </div>
       </div>
@@ -662,7 +670,7 @@ const App = {
           <strong>${i.name}</strong>
           <span>${i.price.toLocaleString()} ALL</span>
         </div>
-        <div style="font-size:0.8em;color:var(--brand-text-muted)">${i.catName||i.cat} · ${i.drink ? 'Напій' : 'Страва'}</div>
+        <div style="font-size:0.8em;color:var(--brand-text-muted)">${CAT_UA[i.catName]||i.catName||i.cat} · ${i.drink ? 'Напій' : 'Страва'}</div>
       </div>
     `).join('');
   },
