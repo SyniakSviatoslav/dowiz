@@ -60,8 +60,25 @@ tg_deliver() {
   if tg_spool_ensure 2>/dev/null; then
     tg_spool "$text" "$topic"
   else
-    tg_send "$text"
+    _tg_deliver_alerted "$text" "$topic"
   fi
+}
+
+_tg_deliver_alerted() {
+  local text="$1" topic="$2"
+  local resp rc
+  resp="$(tg_send "$text" "$topic" 2>&1)"; rc=$?
+  log_event alert "channel=telegram" "succ=$([ "$rc" -eq 0 ] && echo 1 || echo 0)" "resp=$(printf '%s' "$resp" | sed 's/^ //')" >/dev/null 2>&1 || true
+  [ "$rc" -eq 0 ] && return 0
+  # Transient recovery: bounded inexpensive retries for likely-temporary failures.
+  local attempt
+  for attempt in 1 2 3; do
+    sleep "$((2 ** attempt))"
+    resp="$(tg_send "$text" "$topic" 2>&1)"; rc=$?
+    log_event alert "channel=telegram" "succ=$([ "$rc" -eq 0 ] && echo 1 || echo 0)" "resp=$(printf '%s' "$resp" | sed 's/^ //')" "attempt=$attempt" >/dev/null 2>&1 || true
+    [ "$rc" -eq 0 ] && return 0
+  done
+  return "$rc"
 }
 
 # Append one structured event to a per-kind JSONL ledger.

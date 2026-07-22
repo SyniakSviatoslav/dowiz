@@ -1279,4 +1279,40 @@ mod tests {
         let _ = fsm_graph_report(); // must not panic/overflow
         let _ = fsm_stability_report();
     }
+
+    /// Item 3 clause 3 — measure heap allocations during a realistic FSM transition replay.
+    /// `count-allocs`-gated (see `crate::arena::counting_alloc`); a no-op type outside that
+    /// feature. Snapshots AFTER any one-time setup so only the transition-replay loop itself
+    /// is measured (same discipline as `inference::workspace::allocations_during_inference`).
+    #[cfg(all(feature = "count-allocs", not(target_arch = "wasm32")))]
+    #[test]
+    fn item3_fsm_replay_allocates_zero_heap_bytes() {
+        use crate::arena::counting_alloc;
+
+        // A realistic multi-step replay through the live lifecycle graph: every legal
+        // transition `assert_transition` will accept, back to back, exercising `FSM_ADJ`
+        // lookups + `idx_of` on both ends of each edge — NOT just one call.
+        let path = [
+            (OrderStatus::Pending, OrderStatus::Confirmed),
+            (OrderStatus::Confirmed, OrderStatus::Preparing),
+            (OrderStatus::Preparing, OrderStatus::Ready),
+            (OrderStatus::Ready, OrderStatus::InDelivery),
+            (OrderStatus::InDelivery, OrderStatus::Delivered),
+        ];
+
+        // Snapshot AFTER setup, BEFORE the measured region. Only the transition-replay
+        // loop itself is measured — `assert_transition` reads `FSM_ADJ[idx_of(from)]`
+        // (a const array indexed by a const fn), so it must allocate ZERO heap bytes.
+        counting_alloc::snapshot();
+        for (from, to) in path {
+            assert!(assert_transition(from, to).is_ok());
+        }
+        let allocs = counting_alloc::since_snapshot();
+
+        assert_eq!(
+            allocs, 0,
+            "order_machine's const-adjacency FSM path must allocate ZERO heap bytes per \
+             item 3's proof obligation (roadmap §G.5) — got {allocs} allocation(s)"
+        );
+    }
 }
