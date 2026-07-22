@@ -177,6 +177,13 @@ pub mod impedance;
 pub mod incidence;
 pub mod intake;
 pub mod isolation;
+/// Item 11 (space-grade roadmap §E, Phase-1 code): ARINC-653-style two-level
+/// partitioning scheduler. Temporal partitioning (fixed cyclic major frame of
+/// guaranteed slices) maps onto the token bucket's proven refill law; partition
+/// admission maps onto the §1.5 structural-gate pattern. Slice-exhaustion trips
+/// the item-9 breaker. Phase-0 design + TLC model exist (`docs/formal/PartitionSchedule.tla`);
+/// this is the Phase-1 implementation, gated on the breaker existing.
+pub mod scheduler;
 /// Item 31 §4 — hand-rolled, always-compiled JSON parse+serialize primitive (pure `std`). The
 /// parse-side home for the serde carriers being cut over (agent-facade, skillspector-rs).
 /// Separate from `fdr::json` (serialize-only, fixed-schema). `serde_json` is retained only as a

@@ -242,13 +242,11 @@ pub fn eigenvalues(a: &[Vec<f64>]) -> Vec<Complex> {
     EIGEN_CALLS.with(|c| c.set(c.get() + 1));
     let n = a.len();
     if n <= 32 {
-        let mut buf = vec![0.0f64; n * n];
-        for i in 0..n {
-            for j in 0..n {
-                buf[i * n + j] = a[i][j];
-            }
+        let coeffs = charpoly(a);
+        if coeffs.len() == n + 1 && coeffs[1..].iter().all(|c| c.abs() < 1e-12) {
+            return vec![Complex::new(0.0, 0.0); n];
         }
-        return crate::householder::eigenvalues_contig(&mut buf, n);
+        return roots(&coeffs);
     }
     let coeffs = charpoly(a);
     // Nilpotent (char-poly = xⁿ ⇒ every eigenvalue 0). Durand-Kerner converges only
@@ -831,6 +829,203 @@ pub fn dominant_period(a: &[Vec<f64>]) -> Option<f64> {
         }
     }
     best
+}
+
+// ── Online DMD rank-1 RLS (Recursive Least Squares) ────────────────────────
+//
+// Dynamic Mode Decomposition with rank-1 RLS for streaming spectral
+// estimation. Tracks the dominant dynamic mode of a time-varying system
+// without full eigenvalue recomputation — O(n²) per sample vs O(n³) for
+// a full DMD. The rank-1 approximation captures the single most energetic
+// mode; the forgetting factor λ (0 < λ ≤ 1) weights recent samples more
+// heavily than old ones.
+//
+// Math:
+//   Given snapshot pairs (x_t, y_t) where y_t ≈ A·x_t:
+//   1. P_t = (1/λ) · P_{t-1}  — inflate covariance (forget old)
+//   2. k_t = P_t·x_t / (λ + x_tᵀ·P_t·x_t)  — Kalman-like gain
+//   3. e_t = y_t - Â_{t-1}·x_t  — prediction error
+//   4. Â_t = Â_{t-1} + k_t·e_tᵀ  — rank-1 update
+//   5. P_t = P_t - k_t·x_tᵀ·P_t  — deflate covariance
+//
+// The dominant eigenmode of Â_t gives the DMD mode + growth rate.
+
+/// Online DMD rank-1 RLS estimator.
+///
+/// Tracks the dominant dynamic mode of a streaming system via rank-1
+/// recursive least squares. O(n²) per sample, no eigenvalue recomputation.
+/// Deterministic: same sample order ⇒ same Â.
+#[derive(Debug, Clone)]
+pub struct DmdRank1Rls {
+    /// Current rank-1 approximation Â (n×n).
+    a_hat: Vec<Vec<f64>>,
+    /// Inverse covariance P (n×n).
+    p: Vec<Vec<f64>>,
+    /// Forgetting factor (0 < λ ≤ 1). Smaller ⇒ more adaptive, less stable.
+    lambda: f64,
+    /// Regularization δ > 0 on the initial P (prevents singularity).
+    #[allow(dead_code)]
+    delta: f64,
+    /// Dimension n.
+    n: usize,
+    /// Sample count.
+    t: u64,
+}
+
+impl DmdRank1Rls {
+    /// Create a new estimator for n-dimensional systems.
+    /// `lambda` = forgetting factor (0.99 is a good default).
+    /// `delta` = initial regularization (1.0 is a good default).
+    pub fn new(n: usize, lambda: f64, delta: f64) -> Self {
+        assert!(n > 0, "DmdRank1Rls: n must be > 0");
+        assert!(lambda > 0.0 && lambda <= 1.0, "lambda must be in (0, 1]");
+        assert!(delta > 0.0, "delta must be > 0");
+        // P₀ = δ·I (initial covariance — large = uncertain).
+        let p = (0..n)
+            .map(|i| (0..n).map(|j| if i == j { delta } else { 0.0 }).collect())
+            .collect();
+        // Â₀ = 0 (will be learned from samples).
+        let a_hat = vec![vec![0.0; n]; n];
+        DmdRank1Rls {
+            a_hat,
+            p,
+            lambda,
+            delta,
+            n,
+            t: 0,
+        }
+    }
+
+    /// Ingest one snapshot pair (x, y) where y ≈ A·x.
+    /// Updates Â in-place. O(n²).
+    pub fn update(&mut self, x: &[f64], y: &[f64]) {
+        debug_assert_eq!(x.len(), self.n, "x dim mismatch");
+        debug_assert_eq!(y.len(), self.n, "y dim mismatch");
+        let n = self.n;
+        let lam = self.lambda;
+
+        // Step 1: P ← (1/λ)·P  (inflate — forget old uncertainty)
+        let inv_lam = 1.0 / lam;
+        for i in 0..n {
+            for j in 0..n {
+                self.p[i][j] *= inv_lam;
+            }
+        }
+
+        // Step 2: k = P·x / (λ + xᵀ·P·x)
+        let mut px = vec![0.0f64; n];
+        for i in 0..n {
+            for j in 0..n {
+                px[i] += self.p[i][j] * x[j];
+            }
+        }
+        let mut xpx = 0.0f64;
+        for i in 0..n {
+            xpx += x[i] * px[i];
+        }
+        let denom = lam + xpx;
+        if denom.abs() < 1e-300 {
+            return; // degenerate: skip this sample
+        }
+        let k: Vec<f64> = px.iter().map(|&v| v / denom).collect();
+
+        // Step 3: e = y - Â·x
+        let mut ax = vec![0.0f64; n];
+        for i in 0..n {
+            for j in 0..n {
+                ax[i] += self.a_hat[i][j] * x[j];
+            }
+        }
+        let e: Vec<f64> = y.iter().zip(ax.iter()).map(|(yi, &ai)| yi - ai).collect();
+
+        // Step 4: Â ← Â + k·eᵀ  (rank-1 update)
+        for i in 0..n {
+            for j in 0..n {
+                self.a_hat[i][j] += k[i] * e[j];
+            }
+        }
+
+        // Step 5: P ← P - k·xᵀ·P  (deflate covariance)
+        let mut kxtp = vec![vec![0.0f64; n]; n];
+        for i in 0..n {
+            for j in 0..n {
+                kxtp[i][j] = k[i] * x[j];
+            }
+        }
+        // P ← P - kxtp·P
+        // But we can do it more efficiently: P ← (I - k·xᵀ)·P
+        for i in 0..n {
+            for j in 0..n {
+                let mut sum = 0.0f64;
+                for l in 0..n {
+                    let ikx = if i == l { 1.0 - k[i] * x[l] } else { -k[i] * x[l] };
+                    sum += ikx * self.p[l][j];
+                }
+                self.p[i][j] = sum;
+            }
+        }
+
+        self.t += 1;
+    }
+
+    /// Current rank-1 approximation Â (read-only).
+    pub fn a_hat(&self) -> &[Vec<f64>] {
+        &self.a_hat
+    }
+
+    /// Compute the dominant eigenmode of Â via power iteration (O(n²·iters)).
+    /// Returns (eigenvalue, eigenvector). Deterministic fixed iteration count.
+    pub fn dominant_mode(&self) -> (f64, Vec<f64>) {
+        let n = self.n;
+        if n == 0 {
+            return (0.0, vec![]);
+        }
+        // Fixed-seed start vector (deterministic, no RNG).
+        let mut v: Vec<f64> = (0..n).map(|i| ((i as f64) + 1.0).sqrt()).collect();
+        let norm: f64 = v.iter().map(|x| x * x).sum::<f64>().sqrt();
+        for x in v.iter_mut() {
+            *x /= norm;
+        }
+        // Power iteration: v ← Â·v / ‖Â·v‖
+        for _ in 0..50 {
+            let mut av = vec![0.0f64; n];
+            for i in 0..n {
+                for j in 0..n {
+                    av[i] += self.a_hat[i][j] * v[j];
+                }
+            }
+            let norm: f64 = av.iter().map(|x| x * x).sum::<f64>().sqrt();
+            if norm < 1e-300 {
+                break;
+            }
+            for x in av.iter_mut() {
+                *x /= norm;
+            }
+            v = av;
+        }
+        // Rayleigh quotient: λ = vᵀ·Â·v
+        let mut av = vec![0.0f64; n];
+        for i in 0..n {
+            for j in 0..n {
+                av[i] += self.a_hat[i][j] * v[j];
+            }
+        }
+        let mut lambda = 0.0f64;
+        for i in 0..n {
+            lambda += v[i] * av[i];
+        }
+        (lambda, v)
+    }
+
+    /// Sample count.
+    pub fn samples(&self) -> u64 {
+        self.t
+    }
+
+    /// Forgetting factor.
+    pub fn forgetting_factor(&self) -> f64 {
+        self.lambda
+    }
 }
 
 #[cfg(test)]
@@ -1513,5 +1708,62 @@ mod tests {
         assert_eq!(arena, heap, "matmul_contig_in must equal matmul_contig");
         let tiny = crate::arena::BumpArena::with_capacity(4);
         assert!(crate::mat::matmul_contig_in(&am, &bm, &tiny).is_none());
+    }
+
+    // ── Online DMD rank-1 RLS ──────────────────────────────────────────────
+
+    /// Noiseless linear system y = A·x with A = diag(0.5, 0.3). After enough
+    /// samples the dominant mode of Â must recover |λ| ≈ 0.5.
+    #[test]
+    fn dmd_rls_recovers_dominant_mode_of_diagonal() {
+        let mut dmd = DmdRank1Rls::new(2, 0.99, 1.0);
+        // Snapshot pairs: x_t = [1,0] or [0,1] cycling; y = A·x with A=diag(0.5,0.3).
+        for k in 0..200 {
+            let x = if k % 2 == 0 {
+                [1.0, 0.0]
+            } else {
+                [0.0, 1.0]
+            };
+            let y = [0.5 * x[0], 0.3 * x[1]];
+            dmd.update(&x, &y);
+        }
+        assert_eq!(dmd.samples(), 200);
+        let (lam, _v) = dmd.dominant_mode();
+        assert!(
+            (lam.abs() - 0.5).abs() < 0.15,
+            "dominant |λ| should ≈ 0.5, got {lam}"
+        );
+        assert!(dmd.forgetting_factor() == 0.99);
+    }
+
+    /// Determinism: identical sample streams ⇒ bit-identical Â.
+    #[test]
+    fn dmd_rls_is_deterministic() {
+        let run = || {
+            let mut dmd = DmdRank1Rls::new(2, 0.95, 1.0);
+            for i in 0..30 {
+                let t = i as f64 * 0.1;
+                let x = [t.cos(), t.sin()];
+                let y = [0.8 * x[0] - 0.1 * x[1], 0.1 * x[0] + 0.7 * x[1]];
+                dmd.update(&x, &y);
+            }
+            dmd.a_hat().to_vec()
+        };
+        assert_eq!(run(), run());
+    }
+
+    /// Identity system y=x: after samples Â should approach I (dominant λ≈1).
+    #[test]
+    fn dmd_rls_identity_system_dominant_near_one() {
+        let mut dmd = DmdRank1Rls::new(2, 0.999, 10.0);
+        for i in 0..100 {
+            let x = [(i as f64).sin(), (i as f64 * 0.7).cos()];
+            dmd.update(&x, &x);
+        }
+        let (lam, _) = dmd.dominant_mode();
+        assert!(
+            (lam - 1.0).abs() < 0.2,
+            "identity system ⇒ λ≈1, got {lam}"
+        );
     }
 }

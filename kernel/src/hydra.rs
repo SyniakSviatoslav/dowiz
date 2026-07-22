@@ -390,6 +390,21 @@ impl<S: EventStore> Hydra<S> {
         &self.log
     }
 
+    /// M9 kill-switch: owner-initiated hard stop.
+    ///
+    /// Forces the organism to `Locked`, then raises a breach alarm to the
+    /// consensus hub. This is the ONLY way to stop a running organism per
+    /// operator directive §9.
+    pub fn kill(
+        &mut self,
+        node_id: [u8; 32],
+        group_size: usize,
+    ) -> Result<Option<crate::hydra::BreachAlert>, crate::event_log::StoreError> {
+        self.state = OrganismState::Locked;
+        self.healthy_streak = 0;
+        self.raise_breach_alarm(node_id, group_size)
+    }
+
     /// G9 — breach warning broadcast (operator: "одне взломане ядро = взлом усіх
     /// в хабі автоматично"). Raises an UNSIGNABLE-to-suppress alert to the whole
     /// opted-in consensus hub — NO per-event consent, NO fan-out bound, because
