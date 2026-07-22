@@ -1,0 +1,121 @@
+---
+import '../styles/tokens.css';
+import '../styles/base.css';
+import FieldSim from '../components/FieldSim.svelte';
+import Button from '../components/Button.svelte';
+import StatusBadge from '../components/StatusBadge.svelte';
+
+const themes = ['default', 'crimson', 'ocean', 'midnight', 'sage', 'gold', 'coral'];
+---
+
+<!DOCTYPE html>
+<html lang="en" data-theme="crimson">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>dowiz — DeliveryOS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=DM+Serif+Display:ital@0;1&family=JetBrains+Mono&family=Cormorant+Garamond&family=Playfair+Display&display=swap" rel="stylesheet" />
+  <style>
+    .hero { text-align: center; padding: 64px 24px; }
+    .hero h1 { font-size: var(--text-4xl); margin-bottom: 16px; }
+    .hero p { font-size: var(--text-lg); color: var(--brand-text-muted); max-width: 600px; margin: 0 auto 32px; }
+    .theme-grid { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin-bottom: 48px; }
+    .theme-swatch { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--brand-border); cursor: pointer; transition: transform 150ms; }
+    .theme-swatch:hover { transform: scale(1.2); }
+    .demo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    .demo-card { background: var(--brand-surface); border: 1px solid var(--brand-border); border-radius: var(--brand-radius); padding: 24px; }
+    .demo-card h3 { margin-bottom: 16px; font-size: var(--text-xl); }
+    .order-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid var(--brand-border); }
+    .order-row:last-child { border-bottom: none; }
+    .fieldsim-wrap { width: 100%; height: 400px; border-radius: var(--brand-radius); overflow: hidden; }
+    .fieldsim-wrap canvas { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div class="hero">
+    <h1>dowiz</h1>
+    <p>Decentralized post-quantum delivery protocol — interface experience</p>
+    <div class="theme-grid">
+      {themes.map(t => (
+        <div class="theme-swatch" style="background: var(--brand-primary)" data-theme-btn={t} title={t}></div>
+      ))}
+    </div>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+      <Button variant="primary" size="lg">Place Order</Button>
+      <Button variant="secondary" size="lg">Track Delivery</Button>
+      <Button variant="ghost" size="lg">Browse Menu</Button>
+      <Button variant="danger" size="lg">Cancel</Button>
+    </div>
+  </div>
+
+  <div class="demo-grid">
+    <div class="demo-card">
+      <h3>Orders</h3>
+      {['pending', 'confirmed', 'preparing', 'ready', 'in-delivery', 'delivered'].map(s => (
+        <div class="order-row">
+          <span>Order #{(1000 + Math.random() * 9000) | 0}</span>
+          <StatusBadge status={s} />
+        </div>
+      ))}
+    </div>
+
+    <div class="demo-card">
+      <h3>Wave Physics</h3>
+      <p class="text-muted" style="margin-bottom:12px">Touch/click to create ripples</p>
+      <div class="fieldsim-wrap">
+        <canvas id="wave-canvas" width="600" height="400"></canvas>
+      </div>
+    </div>
+
+    <div class="demo-card">
+      <h3>Inputs</h3>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <input class="input" placeholder="Default input" />
+        <input class="input" placeholder="Focused input" />
+        <input class="input error" placeholder="Error state" value="bad@email" />
+        <input class="input success" placeholder="Success state" value="good@email.com" />
+      </div>
+    </div>
+
+    <div class="demo-card">
+      <h3>Theme Preview</h3>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <span class="badge badge-pending">Pending</span>
+        <span class="badge badge-delivered">Delivered</span>
+      </div>
+      <label class="toggle">
+        <input type="checkbox" checked />
+        <span class="toggle-track"></span>
+        <span class="toggle-thumb"></span>
+      </label>
+      <span style="margin-left:8px">Notifications</span>
+    </div>
+  </div>
+
+  <FieldSim client:load />
+  <script>
+    import('/src/lib/physics/wave.js').then(({ InterfaceRipple }) => {
+      const canvas = document.getElementById('wave-canvas');
+      if (canvas) new InterfaceRipple(canvas).start();
+    });
+    import('/src/lib/audio/interface.js').then(({ InterfaceAudio }) => {
+      const audio = new InterfaceAudio();
+      document.querySelectorAll('.btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const txt = btn.textContent.trim();
+          if (txt.includes('Place') || txt.includes('Track')) audio.confirm();
+          else if (txt.includes('Cancel')) audio.cancel();
+          else audio.navSelect();
+        });
+      });
+    });
+    document.querySelectorAll('[data-theme-btn]').forEach(el => {
+      el.addEventListener('click', () => {
+        const t = el.dataset.themeBtn;
+        document.documentElement.dataset.theme = t === 'default' ? '' : t;
+      });
+    });
+  </script>
+</body>
+</html>

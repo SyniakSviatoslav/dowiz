@@ -1,0 +1,171 @@
+:root {
+  /* ── Brand Preset: Food Dark (default) ── */
+  --brand-primary: #ea4f16;
+  --brand-primary-hover: #ffa12e;
+  --brand-primary-light: #fff0e6;
+  --brand-bg: #121212;
+  --brand-surface: #1e1e1e;
+  --brand-surface-raised: #2a2a2a;
+  --brand-text: #ffffff;
+  --brand-text-muted: #a8a8a8;
+  --brand-border: #2c2c2c;
+  --brand-font-heading: 'DM Serif Display', 'Cormorant Garamond', 'Playfair Display', serif;
+  --brand-font-body: 'Inter', sans-serif;
+  --brand-radius: 12px;
+  --brand-radius-sm: 6px;
+  --brand-radius-btn: 24px;
+  --color-success: #059669;
+  --color-warning: #D97706;
+  --color-danger: #DC2626;
+  --color-info: #2563EB;
+
+  /* ── Status Colors ── */
+  --status-pending: #D97706;
+  --status-confirmed: #2563EB;
+  --status-preparing: #F59E0B;
+  --status-ready: #0D9488;
+  --status-in-delivery: #3B82F6;
+  --status-delivered: #059669;
+  --status-rejected: #DC2626;
+  --status-cancelled: #DC2626;
+  --status-scheduled: #7C3AED;
+  --status-picked-up: #0D9488;
+
+  /* ── Typography ── */
+  --font-heading: var(--brand-font-heading);
+  --font-body: var(--brand-font-body);
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+  --text-3xl: 36px;
+  --text-4xl: 48px;
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+
+  /* ── Spacing (4px base) ── */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ── Shadows ── */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 6px rgba(0,0,0,0.3);
+  --shadow-lg: 0 10px 15px rgba(0,0,0,0.3);
+  --shadow-xl: 0 20px 25px rgba(0,0,0,0.4);
+
+  /* ── Transitions ── */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
+  --transition-slow: 400ms ease;
+
+  /* ── Z-index ── */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-modal: 300;
+  --z-toast: 400;
+}
+
+/* ── Preset: Crimson Classic ── */
+[data-theme="crimson"], .theme-crimson {
+  --brand-primary: #C1121F;
+  --brand-primary-hover: #9B0D17;
+  --brand-primary-light: #FFF0F1;
+  --brand-bg: #FFFFFF;
+  --brand-surface: #F8F9FA;
+  --brand-surface-raised: #FFFFFF;
+  --brand-text: #1A1A1A;
+  --brand-text-muted: #6B7280;
+  --brand-border: #E5E7EB;
+}
+
+/* ── Preset: Ocean Fresh ── */
+[data-theme="ocean"], .theme-ocean {
+  --brand-primary: #0D9488;
+  --brand-primary-hover: #0F766E;
+  --brand-primary-light: #CCFBF1;
+  --brand-bg: #FFFFFF;
+  --brand-surface: #F8FFFE;
+  --brand-text: #134E4A;
+  --brand-text-muted: #6B7280;
+  --brand-border: #CCFBF1;
+  --brand-font-heading: 'Cormorant Garamond', serif;
+}
+
+/* ── Preset: Midnight Urban ── */
+[data-theme="midnight"], .theme-midnight {
+  --brand-primary: #F97316;
+  --brand-primary-hover: #EA580C;
+  --brand-primary-light: #FFF7ED;
+  --brand-bg: #0C0C0C;
+  --brand-surface: #1A1A1A;
+  --brand-text: #FAFAFA;
+  --brand-text-muted: #A3A3A3;
+  --brand-border: #262626;
+}
+
+/* ── Preset: Sage Garden ── */
+[data-theme="sage"], .theme-sage {
+  --brand-primary: #4D7C0F;
+  --brand-primary-hover: #3F6212;
+  --brand-primary-light: #F7FEE7;
+  --brand-bg: #FAFAF5;
+  --brand-surface: #F5F5F0;
+  --brand-text: #1A2E05;
+  --brand-text-muted: #6B7280;
+  --brand-border: #D9F99D;
+  --brand-font-heading: 'Playfair Display', serif;
+}
+
+/* ── Preset: Royal Gold ── */
+[data-theme="gold"], .theme-gold {
+  --brand-primary: #B45309;
+  --brand-primary-hover: #92400E;
+  --brand-primary-light: #FFFBEB;
+  --brand-bg: #0A0A0A;
+  --brand-surface: #1A1A1A;
+  --brand-text: #FEF3C7;
+  --brand-text-muted: #A8A29E;
+  --brand-border: #292524;
+}
+
+/* ── Preset: Coral Breeze ── */
+[data-theme="coral"], .theme-coral {
+  --brand-primary: #DB2777;
+  --brand-primary-hover: #BE185D;
+  --brand-primary-light: #FFF0F5;
+  --brand-bg: #FFFBFB;
+  --brand-surface: #FFF5F5;
+  --brand-text: #1A1A2E;
+  --brand-text-muted: #6B7280;
+  --brand-border: #FBCFE8;
+}
+
+/* ── Paper skin ── */
+[data-skin="paper"], .skin-paper {
+  --brand-font-heading: 'Yeseva One', 'Fraunces', serif;
+  --brand-radius: 4px;
+  --brand-radius-sm: 2px;
+  --brand-radius-btn: 4px;
+}
+
+/* ── Dark Mode Override ── */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --brand-bg: #0F172A;
+    --brand-surface: #1E293B;
+    --brand-surface-raised: #263548;
+    --brand-text: #F1F5F9;
+    --brand-text-muted: #94A3B8;
+    --brand-border: #334155;
+  }
+}
