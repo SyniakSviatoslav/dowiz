@@ -352,15 +352,58 @@ const App = {
     if (!el) return;
     const labels = { pending:'Очікує', confirmed:'Підтверджено', preparing:'Готується', ready:'Готово', 'in-delivery':'В дорозі', delivered:'Доставлено' };
     const colors = { pending:'#D97706', confirmed:'#2563EB', preparing:'#F59E0B', ready:'#0D9488', 'in-delivery':'#3B82F6', delivered:'#059669' };
-    el.innerHTML = this.state._orders.map(o => `
+    const nextAction = {
+      pending: { label: 'Підтвердити', cls: 'btn-primary' },
+      confirmed: { label: 'Готувати', cls: 'btn-warning' },
+      preparing: { label: 'Готово', cls: 'btn-success' },
+    };
+    el.innerHTML = this.state._orders.map(o => {
+      const action = nextAction[o.status];
+      return `
       <div class="order-row spring-fast">
-        <div><div class="order-id">#${o.id}</div><div class="order-meta">${o.items} позицій · ${o.total.toLocaleString()} ALL · ${o.time}</div></div>
-        <div class="order-status">
+        <div style="flex:1"><div class="order-id">#${o.id}</div><div class="order-meta">${o.items} позицій · ${o.total.toLocaleString()} ALL · ${o.time}</div></div>
+        <div class="order-status" style="display:flex;align-items:center;gap:8px">
           <span class="status-dot" style="background:${colors[o.status]||'#888'}"></span>
           <span>${labels[o.status]||o.status}</span>
+          ${action ? `<button class="btn btn-sm ${action.cls}" onclick="App.advanceOrder(${o.id})">${action.label}</button>` : ''}
         </div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
+  },
+
+  advanceOrder(id) {
+    const order = this.state._orders.find(o => o.id === id);
+    if (!order) return;
+    const chain = ['pending', 'confirmed', 'preparing', 'ready', 'in-delivery', 'delivered'];
+    const idx = chain.indexOf(order.status);
+    if (idx < 0 || idx >= chain.length - 1) return;
+    order.status = chain[idx + 1];
+    this.playConfirm();
+    if (order.status === 'ready') {
+      this.state._courierTasks.push({
+        id: 3000 + order.id,
+        orderId: order.id,
+        pickup: 'Rruga e Dibrës 45',
+        dropoff: 'Bulevardi Zhan D\'Ark ' + (12 + this.state._courierTasks.length * 10),
+        status: 'assigned',
+        items: order.items,
+        payout: Math.round(order.total * 0.12),
+      });
+    }
+    if (order.status === 'in-delivery') {
+      const task = this.state._courierTasks.find(t => t.orderId === order.id);
+      if (task && task.status === 'assigned') task.status = 'picked-up';
+    }
+    if (order.status === 'delivered') {
+      const task = this.state._courierTasks.find(t => t.orderId === order.id);
+      if (task && task.status !== 'delivered') {
+        task.status = 'delivered';
+        this.state._earningsToday += task.payout;
+        this.state._deliveriesToday++;
+      }
+    }
+    this.renderOwnerOrders();
+    this.persist();
   },
 
   renderOwnerMenu() {
