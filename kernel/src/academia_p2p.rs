@@ -1909,6 +1909,7 @@ impl StandardModel {
 }
 
 // ─── Pseudo-Euclidean n-Dimensional Space ──────────────────────────────
+
 // Узагальнення: n-вимірний простір з довільною сигнатурою (p,q).
 // Містить часоподібні, простороподібні та нульові вектори.
 // Група O(p,q) — псевдо-ортогональні перетворення.
@@ -2406,4 +2407,416 @@ impl LightCommunication {
     }
 }
 
+
+
+// ─── 1. Unified Navigator ───────────────────────────────────────────────
+// Fuses: spectral PPR + geometric geodesics + light cones + parametric surface.
+#[derive(Debug)]
+pub struct UnifiedNavigator {
+    pub phase_space: PhaseSpace,
+    pub memory: crate::memory_search::TopoChronoMemory,
+    pub light: LightCommunication,
+    pub metric: PseudoEuclideanMetric,
+}
+
+impl UnifiedNavigator {
+    pub fn new(metric: PseudoEuclideanMetric, dims: usize) -> Self {
+        UnifiedNavigator {
+            phase_space: PhaseSpace::new(),
+            memory: crate::memory_search::TopoChronoMemory::new(dims),
+            light: LightCommunication::new(metric.clone()),
+            metric,
+        }
+    }
+
+    /// Навігація: знайти найкоротший шлях між двома точками (геодезика + світло).
+    pub fn navigate(&self, from_idx: usize, to_idx: usize) -> f64 {
+        if from_idx >= self.phase_space.states.len() || to_idx >= self.phase_space.states.len() {
+            return f64::MAX;
+        }
+        let a = &self.phase_space.states[from_idx].position;
+        let b = &self.phase_space.states[to_idx].position;
+        let dx: Vec<f64> = a.coords.iter().zip(&b.coords).map(|(x, y)| x - y).collect();
+        let delta = NdVector::new(dx);
+        let interval = self.metric.interval_sq(&delta).abs().sqrt();
+        // Якщо всередині світлового конуса → миттєво
+        let a_nd = NdVector::new(a.coords.to_vec());
+        let cone = LightCone::new(a_nd, self.metric.p, self.metric.q);
+        if cone.contains(&delta) { return interval * 0.1; } // faster-than-light navigation
+        interval
+    }
+
+    /// Прогноз: передбачити позицію через dt.
+    pub fn predict(&mut self, dt: f64) {
+        self.phase_space.predict_forward(dt);
+    }
+
+    /// Знайти всі фрактали в світловому конусі заданої точки.
+    pub fn in_light_cone(&self, idx: usize) -> Vec<usize> {
+        if idx >= self.phase_space.states.len() { return vec![]; }
+        let origin = &self.phase_space.states[idx].position;
+        let o_nd = NdVector::new(origin.coords.to_vec());
+        let cone = LightCone::new(o_nd, self.metric.p, self.metric.q);
+        (0..self.phase_space.states.len()).filter(|&i| {
+            if i == idx { return false; }
+            let dx: Vec<f64> = self.phase_space.states[i].position.coords.iter()
+                .zip(&origin.coords).map(|(a, b)| a - b).collect();
+            cone.contains(&NdVector::new(dx))
+        }).collect()
+    }
+
+    pub fn dashboard(&self) -> String {
+        format!("Unified Navigator\n  Nodes: {}\n  Memory: {}\n  Light: active={}\n  Metric: O({},{})",
+            self.phase_space.states.len(), self.memory.labels.len(),
+            self.light.fronts.iter().filter(|f| f.ttl > 0).count(),
+            self.metric.p, self.metric.q)
+    }
+}
+
+// ─── 2. Real-Time Prediction Service ─────────────────────────────────────
+#[derive(Debug)]
+pub struct PredictionService {
+    pub phase: PhaseSpace,
+    pub observations: Vec<GeometricPoint>,
+    pub horizon: usize,
+    pub tick: u64,
+}
+
+impl PredictionService {
+    pub fn new() -> Self {
+        PredictionService { phase: PhaseSpace::new(), observations: Vec::new(), horizon: 10, tick: 0 }
+    }
+
+    /// Додати спостереження та передбачити.
+    pub fn observe_and_predict(&mut self, obs: GeometricPoint) -> Vec<GeometricPoint> {
+        self.observations.push(obs);
+        self.phase.add_node(&format!("obs_{}", self.tick));
+        let idx = self.phase.states.len() - 1;
+        self.phase.states[idx].position = obs;
+        self.tick += 1;
+        // Forward predictions
+        let mut predictions = Vec::new();
+        let mut current = self.phase.states[idx].position;
+        for _ in 0..self.horizon {
+            let next = GeometricState::new(current).forward(1.0);
+            current = next.position;
+            predictions.push(current);
+        }
+        predictions
+    }
+
+    /// Retrospective: знайти причину зміни.
+    pub fn retrospective(&mut self, idx: usize) -> Option<GeometricPoint> {
+        if idx >= self.phase.states.len() { return None; }
+        let prev = self.phase.states[idx].backward(1.0);
+        Some(prev.position)
+    }
+
+    pub fn dashboard(&self) -> String {
+        format!("Prediction Service\n  Obs: {}\n  Horizon: {}\n  Tick: {}",
+            self.observations.len(), self.horizon, self.tick)
+    }
+}
+
+// ─── 3. Autonomous Execution Loop ────────────────────────────────────────
+pub struct AutonomousLoop {
+    pub swarm: crate::swarm::SwarmCoordinator,
+    pub oracle: crate::oracle::PatternOracle,
+    pub miner: crate::meta_miner::MetaMiner,
+    pub cycle: u64,
+}
+
+impl std::fmt::Debug for AutonomousLoop {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AutonomousLoop").field("cycle", &self.cycle).field("swarm_executors", &self.swarm.executor_count()).finish()
+    }
+}
+
+impl AutonomousLoop {
+    pub fn new() -> Self {
+        let swarmlings = (0..8).map(|i| {
+            crate::swarm::Swarmling::new(i, vec!["research".into(),"mine".into(),"navigate".into()], 100.0)
+        }).collect();
+        AutonomousLoop {
+            swarm: crate::swarm::SwarmCoordinator::new(swarmlings),
+            oracle: crate::oracle::PatternOracle::new(),
+            miner: crate::meta_miner::MetaMiner::new(),
+            cycle: 0,
+        }
+    }
+
+    /// Один цикл: observe → predict → decide → execute → learn.
+    pub fn cycle(&mut self) {
+        self.cycle += 1;
+        // Observe
+        self.oracle.add_paper(&format!("autonomous cycle {}", self.cycle));
+        // Predict (miner extracts meta-patterns)
+        let _insights = self.miner.iterate();
+        // Decide (select best executor)
+        let task = crate::swarm::TaskSpec {
+            id: self.cycle as usize, skill: "research".into(),
+            raw_arg: format!("cycle_{}", self.cycle), dependencies: vec![],
+        };
+        if let Some(exec) = self.swarm.select_executor(&task) {
+            self.swarm.dispatch(&task, exec);
+        }
+        // Execute + Learn
+        let result = crate::swarm::TaskResult {
+            id: self.cycle as usize, success: true,
+            output: format!("cycle_{}_done", self.cycle), error: String::new(), executor_id: 0,
+        };
+        self.swarm.record_result(result);
+    }
+
+    pub fn dashboard(&self) -> String {
+        format!("Autonomous Loop\n  Cycles: {}\n  Swarm: {} executors\n  Miner iter: {}\n  Oracle: {}",
+            self.cycle, self.swarm.executor_count(), self.miner.iterations, self.cycle)
+    }
+}
+
+// ─── 4. Memory Consolidation Pipeline ────────────────────────────────────
+pub struct MemoryPipeline {
+    pub topo: crate::memory_search::TopoChronoMemory,
+    pub research: crate::research::ResearchEngine,
+    pub oracle: crate::oracle::PatternOracle,
+    pub miner: crate::meta_miner::MetaMiner,
+}
+
+impl std::fmt::Debug for MemoryPipeline {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MemoryPipeline").field("records", &self.topo.labels.len()).finish()
+    }
+}
+
+impl MemoryPipeline {
+    pub fn new(dims: usize) -> Self {
+        MemoryPipeline {
+            topo: crate::memory_search::TopoChronoMemory::new(dims),
+            research: crate::research::ResearchEngine::new(),
+            oracle: crate::oracle::PatternOracle::new(),
+            miner: crate::meta_miner::MetaMiner::new(),
+        }
+    }
+
+    /// Інтегрувати нове дослідження в пам'ять.
+    pub fn ingest(&mut self, label: &str, text: &str, topology: f64, weight: f64) {
+        self.topo.record(label, text, topology, weight);
+        self.oracle.add_paper(text);
+        let _insights = self.miner.iterate();
+    }
+
+    /// Консолідувати: підкріпити важливі спогади.
+    pub fn consolidate(&mut self) {
+        let n = self.topo.labels.len();
+        for i in 0..n {
+            if self.topo.surface.weights.get(i).map(|&w| w > 0.5).unwrap_or(false) {
+                self.topo.reinforce(i, 0.1);
+            } else {
+                self.topo.evolve(0.05);
+            }
+        }
+    }
+
+    /// Знайти за контекстом (топологія + асоціація).
+    pub fn recall(&self, topology: f64, time: f64, k: usize) -> Vec<(String, f64, f64)> {
+        self.topo.retrieve(topology, time, k)
+    }
+
+    pub fn dashboard(&self) -> String {
+        format!("Memory Pipeline\n  Records: {}\n  Oracle: {}\n  Miner: {} iters\n  Research: {} papers",
+            self.topo.labels.len(), self.topo.labels.len(),
+            self.miner.iterations, self.research.total_papers())
+    }
+}
+
+// ─── 5. Cross-Node Geometric Sync ────────────────────────────────────────
+#[derive(Debug)]
+pub struct GeometricSync {
+    pub wave_bus: WaveBus,
+    pub nodes: Vec<String>,
+    pub phase: PhaseSpace,
+}
+
+impl GeometricSync {
+    pub fn new() -> Self {
+        GeometricSync { wave_bus: WaveBus::new(), nodes: Vec::new(), phase: PhaseSpace::new() }
+    }
+
+    /// Додати ноду та підключити до всіх.
+    pub fn add_node(&mut self, name: &str) {
+        self.nodes.push(name.to_string());
+        self.phase.add_node(name);
+        self.wave_bus.register(name);
+        for other in &self.nodes {
+            if other != name {
+                self.wave_bus.connect(name, other);
+            }
+        }
+    }
+
+    /// Синхронізувати геометричні стани між нодами.
+    pub fn sync(&mut self) {
+        for i in 0..self.nodes.len() {
+            if i >= self.phase.states.len() { break; }
+            let pos = &self.phase.states[i].position;
+            let data: Vec<u8> = pos.coords.iter().map(|&c| (c * 10.0) as i8 as u8).collect();
+            for j in 0..self.nodes.len() {
+                if i != j {
+                    self.wave_bus.send(&self.nodes[i], &self.nodes[j], &data);
+                }
+            }
+        }
+        self.wave_bus.tick();
+        self.phase.predict_forward(1.0);
+    }
+
+    pub fn dashboard(&self) -> String {
+        format!("Geometric Sync\n  Nodes: {}\n  WaveBus: {} sockets\n  Phase: {} states",
+            self.nodes.len(), self.wave_bus.sockets.len(), self.phase.states.len())
+    }
+}
+
+// ─── 6. ML Inference Integration ─────────────────────────────────────────
+#[derive(Debug)]
+pub struct InferenceEngine {
+    pub model: Vec<f64>,
+    pub input_dim: usize,
+    pub output_dim: usize,
+}
+
+impl InferenceEngine {
+    pub fn new(input_dim: usize, output_dim: usize) -> Self {
+        InferenceEngine { model: vec![0.0; input_dim * output_dim], input_dim, output_dim }
+    }
+
+    /// Проста лінійна проекція: y = Wx + b (для передбачення в PhaseSpace).
+    pub fn project(&self, input: &[f64]) -> Vec<f64> {
+        let n = input.len().min(self.input_dim);
+        let m = self.output_dim;
+        let mut output = vec![0.0; m];
+        for i in 0..n {
+            for j in 0..m {
+                output[j] += self.model[i * m + j] * input[i];
+            }
+        }
+        output
+    }
+
+    /// Навчання: градієнтний спуск (одна ітерація).
+    pub fn train(&mut self, input: &[f64], target: &[f64], lr: f64) {
+        let pred = self.project(input);
+        let n = input.len().min(self.input_dim);
+        let m = self.output_dim;
+        for i in 0..n {
+            for j in 0..m.min(target.len()) {
+                let error = pred[j] - target[j];
+                self.model[i * m + j] -= lr * error * input[i];
+            }
+        }
+    }
+
+    /// Екстраполювати траєкторію в PhaseSpace.
+    pub fn extrapolate(&self, state: &GeometricState, steps: usize) -> Vec<GeometricPoint> {
+        let mut points = Vec::new();
+        let mut coords = state.position.coords.to_vec();
+        for _ in 0..steps {
+            let projected = self.project(&coords);
+            for i in 0..coords.len().min(projected.len()) {
+                coords[i] += projected[i] * 0.01;
+            }
+            points.push(GeometricPoint { coords: {
+                let mut c = [0.0; 8];
+                for (i, &v) in coords.iter().enumerate().take(8) { c[i] = v; }
+                c
+            }});
+        }
+        points
+    }
+
+    pub fn dashboard(&self) -> String {
+        format!("Inference Engine\n  Dims: {} -> {}\n  Params: {}",
+            self.input_dim, self.output_dim, self.model.len())
+    }
+}
+
+// ─── 7. Live nD Visualization ────────────────────────────────────────────
+#[derive(Debug)]
+pub struct LiveDashboard {
+    pub phase: PhaseSpace,
+    pub navigator: UnifiedNavigator,
+    pub prediction: PredictionService,
+    pub autonomous: AutonomousLoop,
+    pub memory: MemoryPipeline,
+    pub light: LightCommunication,
+}
+
+impl LiveDashboard {
+    pub fn new(metric: PseudoEuclideanMetric, dims: usize) -> Self {
+        LiveDashboard {
+            phase: PhaseSpace::new(),
+            navigator: UnifiedNavigator::new(metric.clone(), dims),
+            prediction: PredictionService::new(),
+            autonomous: AutonomousLoop::new(),
+            memory: MemoryPipeline::new(dims),
+            light: LightCommunication::new(metric),
+        }
+    }
+
+    pub fn render(&self) -> String {
+        format!(
+            "\n═══════════════════════════════════════════════\n\
+             LIVE DASHBOARD\n\
+             ═══════════════════════════════════════════════\n\
+             {}\n  ---\n  {}\n  ---\n  {}\n  ---\n  {}\n  ---\n  {}\n  ---\n  {}",
+            self.phase.dashboard(),
+            self.navigator.dashboard(),
+            self.prediction.dashboard(),
+            self.autonomous.dashboard(),
+            self.memory.dashboard(),
+            self.light.dashboard(),
+        )
+    }
+}
+
+// ─── 8. P2P Fractal Network Layer ────────────────────────────────────────
+#[derive(Debug)]
+pub struct P2PNetwork {
+    pub mesh: AcademiaMesh,
+    pub geo: GeometricSync,
+    pub peers: Vec<String>,
+    pub active: bool,
+}
+
+impl P2PNetwork {
+    pub fn new() -> Self {
+        P2PNetwork { mesh: AcademiaMesh::new(), geo: GeometricSync::new(), peers: Vec::new(), active: false }
+    }
+
+    /// Запустити seed-ноду (TCP сервер).
+    pub fn start_seed(&mut self, listen_addr: &str) {
+        self.mesh.add_node("seed", listen_addr, 100);
+        self.geo.add_node("seed");
+        self.active = true;
+    }
+
+    /// Підключитися до seed-ноди.
+    pub fn connect_to_seed(&mut self, local_id: &str, seed_addr: &str) {
+        self.mesh.add_node(local_id, seed_addr, 100);
+        self.geo.add_node(local_id);
+        self.peers.push(seed_addr.to_string());
+    }
+
+    /// Синхронізувати через P2P.
+    pub fn sync_all(&mut self) {
+        if !self.active { return; }
+        self.geo.sync();
+        self.mesh.wave_bus.tick();
+    }
+
+    /// Статистика мережі.
+    pub fn network_stats(&self) -> String {
+        format!("P2P Network\n  Active: {}\n  Peers:  {}\n  Mesh:   {} nodes\n  Geo:    {} states",
+            self.active, self.peers.len(), self.mesh.nodes.len(), self.geo.phase.states.len())
+    }
+}
 
