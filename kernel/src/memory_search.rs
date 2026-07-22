@@ -497,3 +497,284 @@ Skills selected from living memory.
         }
     }
 }
+
+// ─── Topological-Chronological Parametric Memory Surface ───────────────
+// Пам'ять як параметрична поверхня в неевклідовому просторі.
+// Топологія = зв'язки між спогадами, хронологія = час.
+// Поверхня S(u,v): u = топологічна координата, v = хронологічна.
+
+/// Параметрична поверхня в R^n: S(u,v) -> R^n.
+#[derive(Debug, Clone)]
+pub struct ParametricSurface {
+    /// Контрольні точки поверхні (кожна = спогад у R^n).
+    pub control_points: Vec<Vec<f64>>,
+    /// Топологічна координата u для кожної точки.
+    pub u_coords: Vec<f64>,
+    /// Хронологічна координата v для кожної точки.
+    pub v_coords: Vec<f64>,
+    /// Вага (важливість) кожної точки.
+    pub weights: Vec<f64>,
+    /// Час створення кожної точки.
+    pub timestamps: Vec<u64>,
+}
+
+impl ParametricSurface {
+    pub fn new() -> Self {
+        ParametricSurface {
+            control_points: Vec::new(), u_coords: Vec::new(), v_coords: Vec::new(),
+            weights: Vec::new(), timestamps: Vec::new(),
+        }
+    }
+
+    /// Додати точку на поверхню: топологія + хронологія + координати.
+    pub fn add_point(&mut self, coords: Vec<f64>, u: f64, v: f64, weight: f64, now: u64) {
+        self.control_points.push(coords);
+        self.u_coords.push(u);
+        self.v_coords.push(v);
+        self.weights.push(weight);
+        self.timestamps.push(now);
+    }
+
+    /// Інтерполяція поверхні: обчислити точку S(u,v).
+    pub fn evaluate(&self, u: f64, v: f64, dims: usize) -> Vec<f64> {
+        let n = self.control_points.len();
+        if n == 0 { return vec![0.0; dims]; }
+        let mut result = vec![0.0; dims];
+        let mut total_weight = 0.0;
+        // Зважена сума найближчих точок (гаусове ядро)
+        for i in 0..n {
+            let du = u - self.u_coords[i];
+            let dv = v - self.v_coords[i];
+            let dist2 = du * du + dv * dv;
+            if dist2 > 100.0 { continue; }
+            let w = self.weights[i] * (-dist2 * 0.5).exp();
+            total_weight += w;
+            for j in 0..dims.min(self.control_points[i].len()) {
+                result[j] += w * self.control_points[i][j];
+            }
+        }
+        if total_weight > 0.0 {
+            for j in 0..dims {
+                result[j] /= total_weight;
+            }
+        }
+        result
+    }
+
+    /// Геодезична відстань по поверхні (сума сегментів через найближчі точки).
+    pub fn geodesic_distance(&self, u1: f64, v1: f64, u2: f64, v2: f64) -> f64 {
+        let n = self.control_points.len();
+        if n < 2 { return ((u2 - u1).powi(2) + (v2 - v1).powi(2)).sqrt(); }
+        // Знайти найближчі точки до (u1,v1) та (u2,v2)
+        let mut dist = 0.0;
+        let mut prev_u = u1;
+        let mut prev_v = v1;
+        for _ in 0..3 { // 3 сегменти апроксимації геодезичної
+            let mut best = 0usize;
+            let mut best_d = f64::MAX;
+            for i in 0..n {
+                let d = (self.u_coords[i] - u2).powi(2) + (self.v_coords[i] - v2).powi(2);
+                if d < best_d { best_d = d; best = i; }
+            }
+            let nu = self.u_coords[best];
+            let nv = self.v_coords[best];
+            dist += ((nu - prev_u).powi(2) + (nv - prev_v).powi(2)).sqrt();
+            prev_u = nu; prev_v = nv;
+            if best_d < 0.1 { break; }
+        }
+        dist += ((u2 - prev_u).powi(2) + (v2 - prev_v).powi(2)).sqrt();
+        dist
+    }
+
+    /// Кривина Гауса в точці: K = (det(H) / (1 + grad²)²).
+    pub fn gaussian_curvature(&self, u: f64, v: f64, eps: f64) -> f64 {
+        let d = self.control_points[0].len();
+        let suu = self.evaluate(u + eps, v, d);
+        let su = self.evaluate(u - eps, v, d);
+        let sv = self.evaluate(u, v - eps, d);
+        let svv = self.evaluate(u, v + eps, d);
+        let s = self.evaluate(u, v, d);
+        let du: Vec<f64> = su.iter().zip(&s).map(|(a, b)| a - b).collect();
+        let dv: Vec<f64> = sv.iter().zip(&s).map(|(a, b)| a - b).collect();
+        let duu: Vec<f64> = suu.iter().zip(&su).map(|(a, b)| a - b).collect();
+        let dvv: Vec<f64> = svv.iter().zip(&sv).map(|(a, b)| a - b).collect();
+        let e_f64: f64 = du.iter().map(|x| x * x).sum();
+        let e = e_f64.sqrt();
+        let f_f64: f64 = du.iter().zip(&dv).map(|(a, b)| a * b).sum();
+        let g_f64: f64 = dv.iter().map(|x| x * x).sum();
+        let g = g_f64.sqrt();
+        let l_f64: f64 = duu.iter().map(|x| x * x).sum();
+        let l = l_f64.sqrt();
+        let m: f64 = 0.0;
+        let n_f64: f64 = dvv.iter().map(|x| x * x).sum();
+        let n = n_f64.sqrt();
+        let denom: f64 = e * g - f_f64 * f_f64;
+        let denom_abs: f64 = if denom < 0.0 { -denom } else { denom };
+        if denom_abs < 1e-12 { 0.0 } else { (l * n - m * m) / denom_abs }
+    }
+}
+
+/// Тополого-хронологічна пам'ять: поверхня в неевклідовому просторі.
+#[derive(Debug)]
+pub struct TopoChronoMemory {
+    /// Поверхня пам'яті.
+    pub surface: ParametricSurface,
+    /// Кількість вимірів простору.
+    pub dims: usize,
+    /// Метрика простору.
+    pub metric: crate::academia_p2p::MetricTensor,
+    /// Поточний час.
+    pub tick: u64,
+    /// Назви спогадів.
+    pub labels: Vec<String>,
+}
+
+impl TopoChronoMemory {
+    pub fn new(dims: usize) -> Self {
+        TopoChronoMemory {
+            surface: ParametricSurface::new(),
+            dims,
+            metric: crate::academia_p2p::MetricTensor::euclidean(),
+            tick: 0,
+            labels: Vec::new(),
+        }
+    }
+
+    /// Записати спогад: текст + топологічна вага.
+    pub fn record(&mut self, label: &str, text: &str, topology: f64, weight: f64) {
+        let hash = crate::event_log::sha3_256(text.as_bytes());
+        let coords: Vec<f64> = hash.iter().take(self.dims).map(|&b| b as f64 / 255.0 * 20.0 - 10.0).collect();
+        let chrono = self.tick as f64 / 100.0;
+        self.surface.add_point(coords, topology, chrono, weight, self.tick);
+        self.labels.push(label.to_string());
+        self.tick += 1;
+    }
+
+    /// Знайти спогади за топологічно-хронологічною близькістю.
+    pub fn retrieve(&self, topology: f64, time: f64, k: usize) -> Vec<(String, f64, f64)> {
+        let mut scores: Vec<(usize, f64)> = (0..self.surface.control_points.len()).map(|i| {
+            let du = topology - self.surface.u_coords[i];
+            let dv = time - self.surface.v_coords[i];
+            (i, (-(du * du + dv * dv) * 0.5).exp())
+        }).collect();
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scores.truncate(k);
+        scores.iter().map(|&(i, s)| {
+            (self.labels[i].clone(), self.surface.u_coords[i], self.surface.v_coords[i])
+        }).collect()
+    }
+
+    /// Асоціативний пошук: знайти спогади, пов'язані з даним.
+    pub fn associate(&self, idx: usize, k: usize) -> Vec<(String, f64)> {
+        if idx >= self.surface.control_points.len() { return vec![]; }
+        let u = self.surface.u_coords[idx];
+        let v = self.surface.v_coords[idx];
+        let mut dists: Vec<(usize, f64)> = (0..self.surface.control_points.len()).filter(|&i| i != idx).map(|i| {
+            let d = self.surface.geodesic_distance(u, v, self.surface.u_coords[i], self.surface.v_coords[i]);
+            (i, d)
+        }).collect();
+        dists.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        dists.truncate(k);
+        dists.iter().map(|&(i, d)| (self.labels[i].clone(), d)).collect()
+    }
+
+    /// Еволюція пам'яті: зміна ваг з часом (забування).
+    pub fn evolve(&mut self, decay_rate: f64) {
+        for w in &mut self.surface.weights {
+            *w *= (1.0 - decay_rate).max(0.0);
+            if *w < 0.01 { *w = 0.01; }
+        }
+        self.tick += 1;
+    }
+
+    /// Підкріплення: збільшити вагу спогаду (повторення).
+    pub fn reinforce(&mut self, idx: usize, amount: f64) {
+        if idx < self.surface.weights.len() {
+            self.surface.weights[idx] += amount;
+        }
+    }
+
+    pub fn dashboard(&self) -> String {
+        format!(
+            "TopoChrono Memory (Parametric Surface in R^{})\n  Records:  {}\n  Dims:     {}\n  Tick:     {}\n  Curvature: {:.6}",
+            self.dims, self.surface.control_points.len(), self.dims, self.tick,
+            if self.surface.control_points.len() > 3 {
+                self.surface.gaussian_curvature(0.0, 0.0, 0.1)
+            } else { 0.0 }
+        )
+    }
+}
+
+#[cfg(test)]
+mod topo_tests {
+    use super::*;
+
+    #[test]
+    fn surface_add_point() {
+        let mut s = ParametricSurface::new();
+        s.add_point(vec![1.0, 2.0], 0.0, 0.0, 1.0, 0);
+        assert_eq!(s.control_points.len(), 1);
+    }
+
+    #[test]
+    fn surface_evaluate_interpolates() {
+        let mut s = ParametricSurface::new();
+        s.add_point(vec![0.0], 0.0, 0.0, 1.0, 0);
+        s.add_point(vec![10.0], 1.0, 1.0, 1.0, 1);
+        let mid = s.evaluate(0.5, 0.5, 1);
+        assert!(mid[0] > 0.0 && mid[0] < 10.0);
+    }
+
+    #[test]
+    fn topo_chrono_record_retrieve() {
+        let mut mem = TopoChronoMemory::new(4);
+        mem.record("alpha", "first memory", 0.0, 1.0);
+        mem.record("beta", "second memory", 1.0, 1.0);
+        let results = mem.retrieve(0.0, 0.0, 2);
+        assert_eq!(results.len(), 2);
+    }
+
+    #[test]
+    fn topo_chrono_associate() {
+        let mut mem = TopoChronoMemory::new(4);
+        mem.record("A", "mem A", 0.0, 1.0);
+        mem.record("B", "mem B", 1.0, 1.0);
+        mem.record("C", "mem C", 2.0, 1.0);
+        let assoc = mem.associate(0, 2);
+        assert_eq!(assoc.len(), 2);
+    }
+
+    #[test]
+    fn topo_chrono_evolve_decay() {
+        let mut mem = TopoChronoMemory::new(4);
+        mem.record("test", "test memory", 0.0, 1.0);
+        let w0 = mem.surface.weights[0];
+        mem.evolve(0.1);
+        assert!(mem.surface.weights[0] < w0);
+    }
+
+    #[test]
+    fn topo_chrono_reinforce() {
+        let mut mem = TopoChronoMemory::new(4);
+        mem.record("test", "test memory", 0.0, 1.0);
+        let w0 = mem.surface.weights[0];
+        mem.reinforce(0, 0.5);
+        assert!(mem.surface.weights[0] > w0);
+    }
+
+    #[test]
+    fn topo_chrono_dashboard() {
+        let mem = TopoChronoMemory::new(4);
+        let d = mem.dashboard();
+        assert!(d.contains("TopoChrono"));
+    }
+
+    #[test]
+    fn surface_geodesic_distance() {
+        let mut s = ParametricSurface::new();
+        s.add_point(vec![0.0], 0.0, 0.0, 1.0, 0);
+        s.add_point(vec![10.0], 1.0, 1.0, 1.0, 1);
+        let d = s.geodesic_distance(0.0, 0.0, 1.0, 1.0);
+        assert!(d > 0.0);
+    }
+}

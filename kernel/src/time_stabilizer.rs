@@ -8,12 +8,12 @@
 //! - NUMA-local vs remote clock read latency
 //!
 //! Architecture:
-//! ```
+//! ```text
 //! RawClockSource (kvm-clock/HPET/TSC)
-//!   → DriftObserver (detects systematic drift vs reference)
-//!   → PLL Corrector (phase-locked loop, same family as clock_stabilizer)
-//!   → StableTime (deterministic output: ticks don't go backwards, monotonic)
-//!   → PMC Predictor (PMC = Predicted Master Clock: forecast + CI)
+//!   -> DriftObserver (detects systematic drift vs reference)
+//!   -> PLL Corrector (phase-locked loop, same family as clock_stabilizer)
+//!   -> StableTime (deterministic output: ticks don't go backwards, monotonic)
+//!   -> PMC Predictor (PMC = Predicted Master Clock: forecast + CI)
 //! ```
 //!
 //! Output: no time value ever decreases, all times are forecastable with
