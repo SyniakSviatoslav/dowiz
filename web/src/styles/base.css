@@ -375,6 +375,23 @@ code, pre, kbd {
 .order-id { font-weight: 600; font-size: 0.95em; }
 .order-meta { font-size: 0.8em; color: var(--brand-text-muted); margin-top: 2px; }
 
+/* ── Menu Search ── */
+.menu-search { margin-bottom: 12px; }
+.menu-search-input {
+  width: 100%;
+  padding: 10px 16px;
+  border: 1px solid var(--brand-border);
+  border-radius: var(--brand-radius-btn);
+  background: var(--brand-surface);
+  color: var(--brand-text);
+  font-size: 0.9em;
+  font-family: var(--font-body);
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+.menu-search-input:focus { border-color: var(--brand-primary); }
+.menu-search-input::placeholder { color: var(--brand-text-muted); }
+
 /* ── Role badge ── */
 .role-badge {
   display: inline-flex;

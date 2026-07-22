@@ -46,6 +46,7 @@ const App = {
       { date: '2026-07-18', amount: 1890, trips: 6 },
     ],
     _orderDetail: null,
+    _searchQuery: '',
     _sonifier: null,
     _sdfCanvas: null,
     _sdfCtx: null,
@@ -387,6 +388,9 @@ const App = {
     return `
     <section class="menu-section">
       <h2 class="section-title">Меню</h2>
+      <div class="menu-search">
+        <input class="menu-search-input" id="menu-search" type="text" placeholder="Пошук страв..." value="${this.state._searchQuery || ''}" oninput="App.searchMenu(this.value)" />
+      </div>
       <div class="cat-filters" id="cat-filters">
         <button class="btn btn-sm btn-primary" data-cat="all" onclick="App.filterMenu('all')">Усі</button>
         ${cats.map(c => `<button class="btn btn-sm btn-ghost" data-cat="${c}" onclick="App.filterMenu('${c}')">${c}</button>`).join('')}
@@ -455,7 +459,11 @@ const App = {
   },
 
   renderMenuContent() {
-    const items = this.state.filter === 'all' ? this.state._menu : this.state._menu.filter(i => (i.cat||i.catName)===this.state.filter);
+    let items = this.state.filter === 'all' ? this.state._menu : this.state._menu.filter(i => (i.cat||i.catName)===this.state.filter);
+    if (this.state._searchQuery) {
+      const q = this.state._searchQuery.toLowerCase();
+      items = items.filter(i => i.name.toLowerCase().includes(q) || (i.ingredients||i.desc||'').toLowerCase().includes(q));
+    }
     const grid = document.getElementById('menu-grid');
     if (!grid) return;
     grid.innerHTML = items.map(i => `
@@ -737,6 +745,15 @@ const App = {
     this.toast(`Замовлення #${task.orderId} доставлено · ${task.payout.toLocaleString()} ALL`, 'success', 5000);
     this.render();
     this.persist();
+  },
+
+  searchMenu(q) {
+    this.state._searchQuery = q;
+    this.state.filter = 'all';
+    this.renderMenuContent();
+    document.querySelectorAll('#cat-filters .btn').forEach(b =>
+      b.className = `btn btn-sm ${b.dataset.cat === 'all' ? 'btn-primary' : 'btn-ghost'}`
+    );
   },
 
   cycleTheme() {
