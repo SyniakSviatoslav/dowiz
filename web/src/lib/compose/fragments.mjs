@@ -70,11 +70,31 @@ export function ownerDashboardFragment(state) {
 
 export function courierBoardFragment(state) {
   const shapes = [];
-  const tasks = state._tasks || [];
+  const earnings = state._earningsToday || 0;
+  const deliveries = state._deliveriesToday || 0;
+  const shiftActive = state._shiftActive || false;
+  const tasks = state._courierTasks || [];
+
+  // Shift status indicator
+  if (shiftActive) {
+    shapes.push({ t: 'circ', cx: -2.5, cy: 1.5, r: 0.12 });
+  }
+
+  // Earnings badge
+  shapes.push({ t: 'rbox', bx: 0, by: 1.2, hx: 1.2, hy: 0.35, r: 0.1 });
+  shapes.push({ t: 'line', ax: -1.5, ay: 0.7, bx: 1.5, by: 0.7 });
+
+  // Task cards
   tasks.slice(0, 4).forEach((t, k) => {
-    const cy = 0.8 - k * 0.6;
-    shapes.push({ t: 'rbox', bx: 0, by: cy, hx: 2.5, hy: 0.25, r: 0.06 });
+    const cy = 0.3 - k * 0.55;
+    shapes.push({ t: 'rbox', bx: 0, by: cy, hx: 2.5, hy: 0.22, r: 0.05 });
+    if (t.status === 'picked-up') {
+      shapes.push({ t: 'circ', cx: 1.2, cy, r: 0.06 });
+    }
   });
+
+  // Bottom summary
+  shapes.push({ t: 'line', ax: -1.0, ay: -2.0, bx: 1.0, by: -2.0 });
   return shapes;
 }
 

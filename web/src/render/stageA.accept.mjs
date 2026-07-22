@@ -35,7 +35,7 @@ const check = (label, cond) => {
   const state = {
     cart: [{ id: 1, name: 'Test', price: 900, qty: 2 }, { id: 2, name: 'Test2', price: 500, qty: 1 }],
     filter: 'all', page: 'checkout', role: 'customer',
-    _menu: [], _stats: {}, _orders: [], _tasks: [],
+    _menu: [], _stats: {}, _orders: [], _courierTasks: [],
   };
   const checkout = checkoutFragment(state);
   check('A2.a checkout fragment produces shapes', checkout.length > 0);
@@ -50,14 +50,14 @@ const check = (label, cond) => {
   check('A2.d cartTotal is exact integer', Number.isInteger(total) && total === 2300);
 
   // Empty cart checkout still renders (empty state shape)
-  const empty = checkoutFragment({ cart: [], filter: 'all', page: 'checkout', role: 'customer', _menu: [], _stats: {}, _orders: [], _tasks: [] });
+  const empty = checkoutFragment({ cart: [], filter: 'all', page: 'checkout', role: 'customer', _menu: [], _stats: {}, _orders: [], _courierTasks: [] });
   check('A2.e empty checkout renders placeholder', empty.length >= 1);
 })();
 
 // ===== A3: Sea tells the truth — FieldParams per role/order-status =====
 (function testA3() {
   // Each role produces different fragment shapes: different geometry = different field.
-  const baseState = { cart: [], filter: 'all', page: 'menu', role: 'customer', _menu: [], _stats: {}, _orders: [], _tasks: [{ id: 1, addr: 'Rruga A' }, { id: 2, addr: 'Rruga B' }] };
+  const baseState = { cart: [], filter: 'all', page: 'menu', role: 'customer', _menu: [], _stats: {}, _orders: [], _courierTasks: [{ id: 1, addr: 'Rruga A' }, { id: 2, addr: 'Rruga B' }] };
   const menuShapes = sceneForRole({ ...baseState, page: 'menu', role: 'customer' });
   const ownerShapes = sceneForRole({ ...baseState, page: 'owner', role: 'owner' });
   const courierShapes = sceneForRole({ ...baseState, page: 'courier', role: 'courier' });
@@ -169,7 +169,7 @@ const check = (label, cond) => {
 // ===== A6: operator mark structural =====
 (function testA6() {
   // Role switching changes which fragment composes — structural, not cosmetic.
-  const state = { cart: [], filter: 'all', _menu: [], _stats: {}, _orders: [], _tasks: [] };
+  const state = { cart: [], filter: 'all', _menu: [], _stats: {}, _orders: [], _courierTasks: [] };
   const menuCustomer = sceneForRole({ ...state, page: 'menu', role: 'customer' });
   const menuOwner = sceneForRole({ ...state, page: 'owner', role: 'owner' });
   const menuCourier = sceneForRole({ ...state, page: 'courier', role: 'courier' });

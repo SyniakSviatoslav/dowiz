@@ -25,6 +25,20 @@ const App = {
     ],
     _menu: [],
     _journey: createJourney(),
+    _shiftActive: false,
+    _shiftStart: null,
+    _earningsToday: 0,
+    _deliveriesToday: 0,
+    _courierTab: 'tasks',
+    _courierTasks: [
+      { id: 2001, orderId: 1003, pickup: 'Rruga e Dibrës 45', dropoff: 'Bulevardi Zhan D\'Ark 12', status: 'assigned', items: 5, payout: 320 },
+      { id: 2002, orderId: 1004, pickup: 'Rruga e Dibrës 45', dropoff: 'Rruga Myslym Shyri 78', status: 'picked-up', items: 2, payout: 180 },
+    ],
+    _earningsHistory: [
+      { date: '2026-07-20', amount: 2450, trips: 8 },
+      { date: '2026-07-19', amount: 3120, trips: 11 },
+      { date: '2026-07-18', amount: 1890, trips: 6 },
+    ],
     _audioCtx: null,
     _sdfCanvas: null,
     _sdfCtx: null,
@@ -36,6 +50,7 @@ const App = {
   },
 
   async init() {
+    this.restore();
     document.documentElement.dataset.theme = this.state.theme;
     await this.loadMenu();
     this.createSdfCanvas();
@@ -44,6 +59,34 @@ const App = {
     this.render();
     this.bindEvents();
     this.renderSdfLoop();
+  },
+
+  persist() {
+    try {
+      localStorage.setItem('dowiz-session', JSON.stringify({
+        role: this.state.role,
+        page: this.state.page,
+        filter: this.state.filter,
+        cart: this.state.cart,
+        journeyStep: this.state._journey.current,
+      }));
+    } catch {}
+  },
+
+  restore() {
+    try {
+      const raw = localStorage.getItem('dowiz-session');
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved.role) this.state.role = saved.role;
+      if (saved.page) this.state.page = saved.page;
+      if (saved.filter) this.state.filter = saved.filter;
+      if (saved.cart) this.state.cart = saved.cart;
+      if (saved.journeyStep) {
+        const j = createJourney(saved.journeyStep);
+        this.state._journey = j;
+      }
+    } catch {}
   },
 
   async loadMenu() {
@@ -228,11 +271,36 @@ const App = {
   },
 
   pageCourier() {
+    const active = this.state._shiftActive;
+    const shiftLabel = active ? 'Завершити зміну' : 'Почати зміну';
+    const shiftClass = active ? 'btn-danger' : 'btn-primary';
+    const earnings = this.state._earningsToday;
+    const deliveries = this.state._deliveriesToday;
+    const tasks = this.state._courierTasks || [];
+    const pending = tasks.filter(t => t.status !== 'delivered').length;
     return `
-    <section>
-      <h2 class="section-title">Доставка</h2>
-      <p class="section-subtitle">Активні завдання та історія виконання.</p>
-      <div class="orders-card" id="courier-tasks"></div>
+    <section class="courier-section">
+      <div class="courier-header">
+        <div>
+          <h2 class="section-title">Доставка</h2>
+          <p class="section-subtitle">${active ? 'Зміна активна' : 'Зміна не активна'} · ${deliveries} доставок сьогодні</p>
+        </div>
+        <div style="text-align:right">
+          <div class="courier-earnings">${earnings.toLocaleString()} ALL</div>
+          <div style="font-size:0.8em;color:var(--brand-text-muted)">сьогодні</div>
+        </div>
+      </div>
+      <div class="courier-shift-bar">
+        <button class="btn btn-sm ${shiftClass}" onclick="App.toggleShift()">${shiftLabel}</button>
+        <span style="margin-left:12px;font-size:0.85em;color:var(--brand-text-muted)">
+          ${active ? `Активних завдань: ${pending}` : 'Увімкніть зміну для отримання завдань'}
+        </span>
+      </div>
+      <div class="courier-tabs">
+        <button class="btn btn-sm ${this.state._courierTab==='tasks'?'btn-primary':'btn-ghost'}" onclick="App.setCourierTab('tasks')">Завдання</button>
+        <button class="btn btn-sm ${this.state._courierTab==='history'?'btn-primary':'btn-ghost'}" onclick="App.setCourierTab('history')">Історія</button>
+      </div>
+      <div id="courier-content"></div>
     </section>`;
   },
 
@@ -311,14 +379,79 @@ const App = {
   },
 
   renderCourier() {
-    const el = document.getElementById('courier-tasks');
+    const el = document.getElementById('courier-content');
     if (!el) return;
-    el.innerHTML = this.state._orders.filter(o => o.status !== 'delivered').map(o => `
-      <div class="order-row spring-fast">
-        <div><div class="order-id">#${o.id}</div><div class="order-meta">${o.items} позицій · ${o.time}</div></div>
-        <div class="order-status"><span class="order-badge ${o.status}">${o.status}</span></div>
+    if (this.state._courierTab === 'history') {
+      const history = this.state._earningsHistory || [];
+      el.innerHTML = `
+        <div class="courier-history">
+          <h3>Історія змін</h3>
+          ${history.map(h => `
+            <div class="order-row spring-fast">
+              <div><div class="order-id">${h.date}</div><div class="order-meta">${h.trips} доставок</div></div>
+              <div class="order-status"><strong>${h.amount.toLocaleString()} ALL</strong></div>
+            </div>
+          `).join('')}
+          ${history.length === 0 ? '<p style="text-align:center;padding:24px;color:var(--brand-text-muted)">Історія порожня</p>' : ''}
+        </div>`;
+      return;
+    }
+    const tasks = this.state._courierTasks || [];
+    const labels = { assigned:'Призначено', 'picked-up':'Забрано', delivered:'Доставлено' };
+    if (tasks.length === 0) {
+      el.innerHTML = '<p style="text-align:center;padding:48px;color:var(--brand-text-muted)">Немає активних завдань</p>';
+      return;
+    }
+    el.innerHTML = tasks.map(t => `
+      <div class="courier-task spring-fast">
+        <div class="courier-task-header">
+          <span class="order-badge ${t.status}">${labels[t.status] || t.status}</span>
+          <span style="font-weight:700">${t.payout.toLocaleString()} ALL</span>
+        </div>
+        <div class="courier-task-addr"><strong>Забрати:</strong> ${t.pickup}</div>
+        <div class="courier-task-addr"><strong>Доставити:</strong> ${t.dropoff}</div>
+        <div class="courier-task-meta">${t.items} позицій · Замовлення #${t.orderId}</div>
+        ${t.status === 'assigned' ? '<button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="App.pickupTask('+t.id+')">Забрати замовлення</button>' : ''}
+        ${t.status === 'picked-up' ? '<button class="btn btn-sm btn-primary" style="margin-top:8px" onclick="App.deliverTask('+t.id+')">Підтвердити доставку</button>' : ''}
       </div>
     `).join('');
+  },
+
+  setCourierTab(tab) {
+    this.state._courierTab = tab;
+    this.renderCourier();
+  },
+
+  toggleShift() {
+    this.state._shiftActive = !this.state._shiftActive;
+    if (this.state._shiftActive) {
+      this.state._shiftStart = Date.now();
+      this.playConfirm();
+    } else {
+      this.playCancel();
+    }
+    this.render();
+    this.persist();
+  },
+
+  pickupTask(id) {
+    const task = this.state._courierTasks.find(t => t.id === id);
+    if (!task || task.status !== 'assigned') return;
+    task.status = 'picked-up';
+    this.playConfirm();
+    this.renderCourier();
+    this.persist();
+  },
+
+  deliverTask(id) {
+    const task = this.state._courierTasks.find(t => t.id === id);
+    if (!task || task.status !== 'picked-up') return;
+    task.status = 'delivered';
+    this.state._earningsToday += task.payout;
+    this.state._deliveriesToday++;
+    this.playOrder();
+    this.render();
+    this.persist();
   },
 
   filterMenu(cat) {
@@ -327,6 +460,7 @@ const App = {
     document.querySelectorAll('#cat-filters .btn').forEach(b =>
       b.className = `btn btn-sm ${b.dataset.cat===cat ? 'btn-primary' : 'btn-ghost'}`
     );
+    this.persist();
   },
 
   setRole(role) {
@@ -337,6 +471,7 @@ const App = {
     else if (role === 'courier') this.state.page = 'courier';
     this.render();
     this.state._journey.reset();
+    this.persist();
   },
 
   addToCart(id) {
@@ -348,12 +483,14 @@ const App = {
     this.playConfirm();
     this.renderCart();
     this.toggleCart(true);
+    this.persist();
   },
 
   removeFromCart(id) {
     this.state.cart = this.state.cart.filter(i => i.id !== id);
     this.playCancel();
     this.renderCart();
+    this.persist();
   },
 
   renderCart() {
@@ -409,6 +546,7 @@ const App = {
     this.renderOwnerOrders?.();
     this.toggleCart(false);
     this.state._journey.advance();
+    this.persist();
   },
 
   navigate(page) {
@@ -419,6 +557,7 @@ const App = {
     document.querySelectorAll('.navbar-links a').forEach(a =>
       a.classList.toggle('active', a.dataset.page === page)
     );
+    this.persist();
   },
 
   bindEvents() {
