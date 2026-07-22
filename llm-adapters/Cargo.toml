@@ -7,11 +7,15 @@ description = "LlmBackend adapters (Ollama/vLLM/managed-API) for dowiz — ureq-
 # Standalone crate at repo root (sibling to kernel/), NOT a workspace member.
 # Build with `cargo build` from this directory, matching how engine/ builds independently.
 
+[features]
+bebop = ["dep:bebop-model"]
+
 [dependencies]
 dowiz-kernel = { path = "../kernel" }
 ureq = { version = "2", default-features = false, features = ["tls", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+bebop-model = { path = "../../bebop-model", optional = true }
 
 [dev-dependencies]
 criterion = "0.5"

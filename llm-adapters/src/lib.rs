@@ -15,6 +15,9 @@ pub mod quirks;
 pub mod telemetry;
 pub mod transport;
 
+#[cfg(feature = "bebop")]
+pub mod bebop;
+
 pub use cache::{CachingBackend, NoCache};
 pub use compose::{Composed, Harness, Stack, StackBuilder, DEFAULT_OLLAMA_BASE};
 pub use dispatch::{append_harvest, DispatchError, Dispatcher, TrackRecord};
@@ -22,6 +25,9 @@ pub use managed::ManagedApiAdapter;
 pub use ollama::{OllamaAdapter, OllamaQuirks};
 pub use quirks::Quirks;
 pub use transport::OpenAiCompatTransport;
+
+#[cfg(feature = "bebop")]
+pub use bebop::BebopAdapter;
 
 /// Re-export the kernel's cache-policy type so callers pick it from one crate.
 pub use dowiz_kernel::ports::llm::CachePolicy;
