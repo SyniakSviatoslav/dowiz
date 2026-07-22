@@ -452,6 +452,16 @@ fn detect_patterns_in_text(text: &str, domain: KnowledgeDomain, paper_id: String
         ("swarm coordinator", PatternKind::Architecture, "DSU decomposition and executor dispatch"),
         ("reverse engineer", PatternKind::DataProcessing, "ELF parsing and behavior profiling"),
         ("spine snapshot", PatternKind::DataProcessing, "Tamper-evident hash chain integrity"),
+        // Three-body problem patterns
+        ("three-body", PatternKind::Architecture, "Three-body problem: chaotic dynamics of 3 interacting nodes"),
+        ("lagrange point", PatternKind::Optimization, "Stable equilibrium points for 3-node mesh configuration"),
+        ("figure-8 orbit", PatternKind::Architecture, "Periodic stable orbit for 3-node synchronization cycle"),
+        ("hierarchical three-body", PatternKind::Architecture, "Close binary + distant third: O(N log N) scaling"),
+        ("restricted three-body", PatternKind::Architecture, "Light node + two heavy nodes: client-server mesh"),
+        ("sitnikov problem", PatternKind::Architecture, "Vertical oscillation: mobile node between two bases"),
+        ("euler collinear", PatternKind::Architecture, "Collinear 3-node topology: daisy-chain communication"),
+        ("symplectic integration", PatternKind::Optimization, "Energy-preserving prediction for node state evolution"),
+        ("chaos synchronization", PatternKind::TrainingMethod, "Quantum entanglement stabilizes chaotic 3-node drift"),
     ];
 
     // Extract matches — include sys_patterns.
