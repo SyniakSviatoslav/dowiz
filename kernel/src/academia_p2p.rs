@@ -2612,6 +2612,68 @@ impl StandardModel {
         let d = agent.dashboard();
         assert!(d.contains("Tri-State Agent"));
     }
+
+    // ─── MoE Tests ────────────────────────────────────────────────────
+
+    #[test]
+    fn moe_layer_routes() {
+        let mut layer = MoELayer::new(8, 2, 4, 4);
+        let out = layer.forward(&[1.0, 2.0, 3.0, 4.0]);
+        assert_eq!(out.len(), 4);
+        let total_usage: u64 = layer.experts.iter().map(|e| e.usage_count).sum();
+        assert!(total_usage > 0);
+    }
+
+    #[test]
+    fn moe_network_forward() {
+        let mut net = MoENetwork::new(&[4, 8, 4], 4, 2);
+        let out = net.forward(&[1.0, 2.0, 3.0, 4.0]);
+        assert!(!out.is_empty(), "MoE forward should produce output");
+    }
+
+    #[test]
+    fn moe_usage_stats() {
+        let mut net = MoENetwork::new(&[4, 4, 4], 4, 1);
+        for _ in 0..10 { net.forward(&[0.5; 4]); }
+        let stats = net.usage_stats();
+        assert!(!stats.is_empty());
+    }
+
+    #[test]
+    fn llama_config_params() {
+        let cfg = LlamaConfig::llama_8b();
+        assert!(cfg.total_params() > 5_000_000_000);
+        assert!(cfg.total_params() < 6_000_000_000);
+    }
+
+    #[test]
+    fn llama_405b_scales() {
+        let cfg = LlamaConfig::llama_405b();
+        assert_eq!(cfg.n_layers, 126);
+    }
+
+    #[test]
+    fn matrix_metrics_compare() {
+        let mut mm = MatrixMetrics::new(2, 3);
+        mm.set_accuracy(0, &[0.85, 0.90, 0.88]); // before matrix
+        mm.set_accuracy(1, &[0.92, 0.95, 0.94]); // after matrix
+        let comparison = mm.compare("test", &[0.85, 0.90, 0.88], &[0.92, 0.95, 0.94]);
+        assert!(comparison.contains("+"));
+    }
+
+    #[test]
+    fn matrix_metrics_dashboard() {
+        let mm = MatrixMetrics::new(3, 4);
+        let d = mm.dashboard();
+        assert!(d.contains("Matrix Metrics"));
+    }
+
+    #[test]
+    fn moe_dashboard() {
+        let net = MoENetwork::new(&[4, 8, 4], 8, 2);
+        let d = net.dashboard();
+        assert!(d.contains("MoE Network"));
+    }
 }
 
 // ─── Pseudo-Euclidean n-Dimensional Space ──────────────────────────────
@@ -4623,5 +4685,213 @@ impl MatrixNeuralNet {
     pub fn dashboard(&self) -> String {
         let total: usize = self.weights.layers.iter().map(|m| m.rows * m.cols).sum();
         format!("Matrix Neural Net\n  Layers: {:?}\n  Params: {}", self.layer_dims, total)
+    }
+}
+
+// ─── MoE-style Matrix Architecture (Mixture of Experts) ──────────────────
+// За аналогією з GPT-4: 8 експертів × 220B, активні 1-2 на токен.
+// Тут: N експертів × матричні ваги, router обирає найкращих.
+
+/// Експерт: матричні ваги + bias.
+#[derive(Debug, Clone)]
+pub struct Expert {
+    pub name: String,
+    pub weights: Matrix,
+    pub bias: Vec<f64>,
+    pub usage_count: u64,
+}
+
+impl Expert {
+    pub fn new(name: &str, input_dim: usize, output_dim: usize) -> Self {
+        let mut w = Matrix::new(output_dim, input_dim);
+        for j in 0..output_dim { for i in 0..input_dim { w.data[j][i] = 0.01; } }
+        Expert { name: name.to_string(), weights: w, bias: vec![0.0; output_dim], usage_count: 0 }
+    }
+
+    pub fn forward(&self, input: &[f64]) -> Vec<f64> {
+        self.weights.apply(input)
+    }
+}
+
+/// Router: обирає топ-k експертів для кожного токена.
+#[derive(Debug)]
+pub struct MoERouter {
+    pub n_experts: usize,
+    pub top_k: usize,
+}
+
+impl MoERouter {
+    pub fn new(n_experts: usize, top_k: usize) -> Self {
+        MoERouter { n_experts, top_k }
+    }
+
+    /// Обрати топ-k експертів за схожістю входу.
+    pub fn route(&self, input: &[f64], experts: &[Expert]) -> Vec<usize> {
+        let mut scores: Vec<(usize, f64)> = experts.iter().enumerate().map(|(i, e)| {
+            let n = input.len().min(e.weights.rows);
+            let dot: f64 = input.iter().take(n).zip(e.weights.data.iter().map(|r| &r[0])).map(|(a, b)| a * b).sum();
+            (i, dot.abs())
+        }).collect();
+        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scores.truncate(self.top_k);
+        scores.iter().map(|(i, _)| *i).collect()
+    }
+}
+
+/// MoE Layer: N експертів + router.
+#[derive(Debug)]
+pub struct MoELayer {
+    pub experts: Vec<Expert>,
+    pub router: MoERouter,
+    pub input_dim: usize,
+    pub output_dim: usize,
+}
+
+impl MoELayer {
+    pub fn new(n_experts: usize, top_k: usize, input_dim: usize, output_dim: usize) -> Self {
+        let experts: Vec<Expert> = (0..n_experts).map(|i| {
+            Expert::new(&format!("expert_{}", i), input_dim, output_dim)
+        }).collect();
+        MoELayer { experts, router: MoERouter::new(n_experts, top_k), input_dim, output_dim }
+    }
+
+    /// Forward: активувати топ-k експертів.
+    pub fn forward(&mut self, input: &[f64]) -> Vec<f64> {
+        let indices = self.router.route(input, &self.experts);
+        let mut output = vec![0.0; self.output_dim];
+        for &idx in &indices {
+            let expert_out = self.experts[idx].forward(input);
+            for j in 0..self.output_dim.min(expert_out.len()) {
+                output[j] += expert_out[j];
+            }
+            self.experts[idx].usage_count += 1;
+        }
+        if !indices.is_empty() {
+            let scale = indices.len() as f64;
+            for j in 0..self.output_dim { output[j] /= scale; }
+        }
+        output
+    }
+}
+
+/// Повна MoE мережа (аналог GPT-4: 8 experts, top-2).
+#[derive(Debug)]
+pub struct MoENetwork {
+    pub layers: Vec<MoELayer>,
+    pub layer_dims: Vec<usize>,
+}
+
+impl MoENetwork {
+    pub fn new(layer_dims: &[usize], n_experts: usize, top_k: usize) -> Self {
+        let layers: Vec<MoELayer> = layer_dims.windows(2).map(|w| {
+            MoELayer::new(n_experts, top_k, w[0], w[1])
+        }).collect();
+        MoENetwork { layers, layer_dims: layer_dims.to_vec() }
+    }
+
+    pub fn forward(&mut self, input: &[f64]) -> Vec<f64> {
+        let mut x = input.to_vec();
+        for layer in &mut self.layers {
+            x = layer.forward(&x);
+            for j in 0..x.len() { if x[j] < 0.0 { x[j] = 0.0; } }
+        }
+        x
+    }
+
+    /// Статистика використання експертів.
+    pub fn usage_stats(&self) -> Vec<(String, u64)> {
+        self.layers.iter().flat_map(|l| l.experts.iter().map(|e| (e.name.clone(), e.usage_count))).collect()
+    }
+
+    pub fn dashboard(&self) -> String {
+        let total_params: usize = self.layers.iter().map(|l| {
+            l.experts.iter().map(|e| e.weights.rows * e.weights.cols + e.bias.len()).sum::<usize>()
+        }).sum();
+        let active_per_layer: usize = self.layers.iter().map(|l| l.router.top_k * l.experts[0].weights.cols * l.experts[0].weights.rows).sum();
+        format!("MoE Network ({} experts, top-{})\n  Layers:     {}\n  Total params: {}\n  Active/token: {}\n  Ratio:       {:.2}%",
+            self.layers.first().map(|l| l.experts.len()).unwrap_or(0),
+            self.layers.first().map(|l| l.router.top_k).unwrap_or(0),
+            self.layers.len(), total_params, active_per_layer,
+            if total_params > 0 { 100.0 * active_per_layer as f64 / total_params as f64 } else { 0.0 })
+    }
+}
+
+// ─── Llama 3.1-scale Hyperparameters ────────────────────────────────────
+#[derive(Debug, Clone)]
+pub struct LlamaConfig {
+    pub n_layers: usize,      // 32, 80, 126
+    pub hidden_size: usize,   // 4096, 8192, 16384
+    pub n_heads: usize,       // 32, 64, 128
+    pub n_kv_heads: usize,   // 8, 8, 16 (GQA)
+    pub vocab_size: usize,
+    pub max_seq_len: usize,   // 128K
+}
+
+impl LlamaConfig {
+    pub fn llama_8b() -> Self { LlamaConfig { n_layers: 32, hidden_size: 4096, n_heads: 32, n_kv_heads: 8, vocab_size: 128256, max_seq_len: 131072 } }
+    pub fn llama_70b() -> Self { LlamaConfig { n_layers: 80, hidden_size: 8192, n_heads: 64, n_kv_heads: 8, vocab_size: 128256, max_seq_len: 131072 } }
+    pub fn llama_405b() -> Self { LlamaConfig { n_layers: 126, hidden_size: 16384, n_heads: 128, n_kv_heads: 16, vocab_size: 128256, max_seq_len: 131072 } }
+
+    /// Параметри ембедингів: vocab_size × hidden_size.
+    pub fn embedding_params(&self) -> usize { self.vocab_size * self.hidden_size }
+    /// Параметри уваги: 4 × hidden_size² (QKV + output).
+    pub fn attention_params(&self) -> usize { 4 * self.hidden_size * self.hidden_size / (self.n_heads / self.n_kv_heads) }
+    /// Параметри FFN (3 × hidden_size² для SwiGLU).
+    pub fn ffn_params(&self) -> usize { 3 * self.hidden_size * self.hidden_size * 8 / 3 }
+    /// Всього параметрів.
+    pub fn total_params(&self) -> usize {
+        self.n_layers * (self.attention_params() + self.ffn_params()) + self.embedding_params()
+    }
+}
+
+// ─── Matrix-based Metric Collector ───────────────────────────────────────
+// Усі метрики тепер матриці: заміна скалярних показників.
+
+#[derive(Debug)]
+pub struct MatrixMetrics {
+    /// Матриця точності: rows=моделі, cols=метрики.
+    pub accuracy_matrix: Matrix,
+    /// Матриця швидкості: rows=операції, cols=часи.
+    pub speed_matrix: Matrix,
+    /// Матриця параметрів: rows=шари, cols=(params, active, ratio).
+    pub param_matrix: Matrix,
+    /// Назви моделей.
+    pub model_names: Vec<String>,
+}
+
+impl MatrixMetrics {
+    pub fn new(n_models: usize, n_metrics: usize) -> Self {
+        MatrixMetrics {
+            accuracy_matrix: Matrix::new(n_models, n_metrics),
+            speed_matrix: Matrix::new(10, 10),
+            param_matrix: Matrix::new(n_models, 3),
+            model_names: Vec::new(),
+        }
+    }
+
+    /// Оновити матрицю точності (модель → метрики).
+    pub fn set_accuracy(&mut self, model_idx: usize, metrics: &[f64]) {
+        for (j, &v) in metrics.iter().enumerate() {
+            if j < self.accuracy_matrix.cols {
+                self.accuracy_matrix.data[model_idx][j] = v;
+            }
+        }
+    }
+
+    /// Порівняння моделей: до і після матричної конверсії.
+    pub fn compare(&self, model_name: &str, before: &[f64], after: &[f64]) -> String {
+        let mut out = format!("Model: {}\n", model_name);
+        for (i, (b, a)) in before.iter().zip(after).enumerate() {
+            let improvement = (a - b) / b.abs().max(0.001) * 100.0;
+            out.push_str(&format!("  Metric {}: {:.4} → {:.4} ({:+.1}%)\n", i, b, a, improvement));
+        }
+        out
+    }
+
+    pub fn dashboard(&self) -> String {
+        format!("Matrix Metrics\n  Accuracy: {}×{}\n  Speed: {}×{}\n  Params: {}×{}",
+            self.accuracy_matrix.rows, self.accuracy_matrix.cols,
+            self.speed_matrix.rows, self.speed_matrix.cols,
+            self.param_matrix.rows, self.param_matrix.cols)
     }
 }
