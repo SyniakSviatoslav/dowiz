@@ -226,7 +226,7 @@ const App = {
         <button class="btn btn-ghost btn-sm desktop-only" onclick="App.toggleCart()">🛒 (${count})</button>
       </div>
     </nav>
-    <main id="main-content">${this.state.role === 'owner' ? this.pageOwner() : this.pageForRole()}</main>
+    <main id="main-content">${this.pageForCurrent()}</main>
     <div class="cart-panel" id="cart-panel">
       <div class="cart-header"><h3>Кошик</h3><button class="btn btn-ghost btn-sm" onclick="App.toggleCart()">✕</button></div>
       <div class="cart-items" id="cart-items"></div>
@@ -236,9 +236,39 @@ const App = {
     <footer><p>dowiz — децентралізований протокол доставки. ${this.state._stats.tests} тестів.</p></footer>`;
   },
 
-  pageForRole() {
+  pageForCurrent() {
+    if (this.state.page === 'orders') return this.pageOrders();
+    if (this.state.page === 'analytics') return this.pageAnalytics();
     if (this.state.role === 'courier') return this.pageCourier();
+    if (this.state.role === 'owner') return this.pageOwner();
     return this.pageMenu();
+  },
+
+  pageOrders() {
+    const count = this.state.cart.reduce((s,i) => s+i.qty, 0);
+    return `
+    <section>
+      <h2 class="section-title">Мої замовлення</h2>
+      <p class="section-subtitle">${count > 0 ? `У кошику ${count} позицій` : 'Кошик порожній'}</p>
+      <div class="orders-card" id="orders-list"></div>
+    </section>`;
+  },
+
+  pageAnalytics() {
+    const s = this.state._stats;
+    return `
+    <section class="owner-section">
+      <h2 class="section-title">Аналітика</h2>
+      <div class="stats-grid" id="analytics-stats"></div>
+      <div style="margin-top:24px">
+        <h3>Метрики системи</h3>
+        <div id="analytics-metrics"></div>
+      </div>
+      <div style="margin-top:24px">
+        <h3>Активність замовлень</h3>
+        <div id="analytics-timeline"></div>
+      </div>
+    </section>`;
   },
 
   pageMenu() {
@@ -305,7 +335,9 @@ const App = {
   },
 
   renderContent() {
-    if (this.state.role === 'owner') this.renderOwner();
+    if (this.state.page === 'orders') this.renderOrders();
+    else if (this.state.page === 'analytics') this.renderAnalytics();
+    else if (this.state.role === 'owner') this.renderOwner();
     else if (this.state.role === 'courier') this.renderCourier();
     else this.renderMenuContent();
   },
@@ -328,6 +360,78 @@ const App = {
         </div>
       </div>
     `).join('');
+  },
+
+  renderOrders() {
+    const el = document.getElementById('orders-list');
+    if (!el) return;
+    const items = this.state.cart.length > 0 ? this.state.cart : [];
+    if (items.length === 0) {
+      el.innerHTML = '<p style="text-align:center;padding:48px;color:var(--brand-text-muted)">Немає активних замовлень</p>';
+      return;
+    }
+    el.innerHTML = this.state._orders.slice(0, 10).map(o => `
+      <div class="order-row spring-fast">
+        <div><div class="order-id">#${o.id}</div><div class="order-meta">${o.items} позицій · ${o.total.toLocaleString()} ALL</div></div>
+        <div class="order-status"><span class="order-badge ${o.status}">${o.status}</span></div>
+      </div>
+    `).join('');
+  },
+
+  renderAnalytics() {
+    const s = this.state._stats;
+    const statsEl = document.getElementById('analytics-stats');
+    if (statsEl) {
+      const activeOrders = this.state._orders.filter(o => o.status !== 'delivered').length;
+      const totalRevenue = this.state._orders.reduce((sum, o) => sum + (o.total || 0), 0);
+      statsEl.innerHTML = [
+        { label: 'Всього замовлень', value: s.orders },
+        { label: 'Активних', value: activeOrders },
+        { label: 'Виручка', value: `${totalRevenue.toLocaleString()} ALL` },
+        { label: 'Тестів', value: s.tests },
+      ].map(t => `<div class="stat-card spring"><div class="stat-number">${t.value}</div><div class="stat-label">${t.label}</div></div>`).join('');
+    }
+    const metricsEl = document.getElementById('analytics-metrics');
+    if (metricsEl) {
+      const statusCounts = { pending:0, confirmed:0, preparing:0, ready:0, 'in-delivery':0, delivered:0 };
+      this.state._orders.forEach(o => { if (statusCounts[o.status] !== undefined) statusCounts[o.status]++; });
+      metricsEl.innerHTML = `
+        <div class="analytics-metrics-grid">
+          <div class="analytics-metric">
+            <div class="metric-label">Очікує</div>
+            <div class="metric-bar"><div class="metric-fill" style="width:${Math.round(statusCounts.pending / Math.max(1, this.state._orders.length) * 100)}%"></div></div>
+            <div class="metric-value">${statusCounts.pending}</div>
+          </div>
+          <div class="analytics-metric">
+            <div class="metric-label">Готується</div>
+            <div class="metric-bar"><div class="metric-fill preparing" style="width:${Math.round((statusCounts.confirmed + statusCounts.preparing) / Math.max(1, this.state._orders.length) * 100)}%"></div></div>
+            <div class="metric-value">${statusCounts.confirmed + statusCounts.preparing}</div>
+          </div>
+          <div class="analytics-metric">
+            <div class="metric-label">В дорозі</div>
+            <div class="metric-bar"><div class="metric-fill delivery" style="width:${Math.round((statusCounts.ready + statusCounts['in-delivery']) / Math.max(1, this.state._orders.length) * 100)}%"></div></div>
+            <div class="metric-value">${statusCounts.ready + statusCounts['in-delivery']}</div>
+          </div>
+          <div class="analytics-metric">
+            <div class="metric-label">Доставлено</div>
+            <div class="metric-bar"><div class="metric-fill delivered" style="width:${Math.round(statusCounts.delivered / Math.max(1, this.state._orders.length) * 100)}%"></div></div>
+            <div class="metric-value">${statusCounts.delivered}</div>
+          </div>
+        </div>`;
+    }
+    const timelineEl = document.getElementById('analytics-timeline');
+    if (timelineEl) {
+      const hours = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
+      timelineEl.innerHTML = `
+        <div class="timeline-chart">
+          ${hours.map((h, i) => {
+            const hh = i + 10;
+            const val = Math.max(1, Math.round(3 + Math.sin(hh * 0.8) * 2 + Math.random()));
+            const barH = Math.round(val * 8);
+            return `<div class="timeline-bar"><div class="bar-fill" style="height:${barH}px"></div><div class="bar-label">${h}</div></div>`;
+          }).join('')}
+        </div>`;
+    }
   },
 
   renderOwner() {
