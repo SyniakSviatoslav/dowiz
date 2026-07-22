@@ -2371,6 +2371,37 @@ impl StandardModel {
         net.start_seed("127.0.0.1:9000");
         assert!(net.active);
     }
+
+    #[test]
+    fn quantum_trader_buy_sell() {
+        let mut t = QuantumTrader::new("test", 1000.0, 0.5);
+        let order = t.on_price(100.0);
+        t.execute(order, 100.0);
+        assert!(t.trades > 0 || t.budget < 1000.0);
+    }
+
+    #[test]
+    fn quantum_trader_price_prediction() {
+        let t = QuantumTrader::new("pred", 1000.0, 1.0);
+        let preds = t.predict_price(5);
+        // No history yet
+        assert!(preds.is_empty());
+    }
+
+    #[test]
+    fn quantum_trader_history_prediction() {
+        let mut t = QuantumTrader::new("pred2", 1000.0, 1.0);
+        for i in 0..10 { t.on_price(100.0 + i as f64); }
+        let preds = t.predict_price(5);
+        assert_eq!(preds.len(), 5);
+    }
+
+    #[test]
+    fn quantum_trader_dashboard() {
+        let t = QuantumTrader::new("dash", 500.0, 0.8);
+        let d = t.dashboard();
+        assert!(d.contains("Quantum Trader"));
+    }
 }
 
 // ─── Pseudo-Euclidean n-Dimensional Space ──────────────────────────────
@@ -3426,3 +3457,114 @@ impl P2PNetwork {
     }
 }
 
+
+// ─── Quantum Time Trading ────────────────────────────────────────────────
+// Торгівля з використанням часового зсуву, суперпозиції та квантової фізики.
+// Різні вузли (біржі) мають різний плин часу → арбітраж.
+// Суперпозиція позицій: одночасно в кількох станах.
+// Фазовий простір: передбачення цінових траєкторій.
+
+/// Тип торгового ордера.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OrderType { Buy, Sell, Hold }
+
+/// Квантовий трейдер: використовує часовий зсув + суперпозицію.
+#[derive(Debug)]
+pub struct QuantumTrader {
+    /// Назва стратегії.
+    pub name: String,
+    /// Поточний бюджет.
+    pub budget: f64,
+    /// Поточна позиція (кількість активу).
+    pub position: f64,
+    /// Часовий зсув трейдера (dτ/dt).
+    pub time_dilation: f64,
+    /// Квантовий стан для прийняття рішень.
+    pub decision_state: Qubit,
+    /// Історія цін.
+    pub price_history: Vec<f64>,
+    /// Кількість угод.
+    pub trades: u64,
+    /// Прибуток.
+    pub pnl: f64,
+}
+
+impl QuantumTrader {
+    pub fn new(name: &str, budget: f64, time_dilation: f64) -> Self {
+        QuantumTrader {
+            name: name.to_string(), budget, position: 0.0,
+            time_dilation, decision_state: Qubit::plus(),
+            price_history: Vec::new(), trades: 0, pnl: 0.0,
+        }
+    }
+
+    /// Оновити ціну та прийняти рішення (через квантовий стан).
+    pub fn on_price(&mut self, price: f64) -> OrderType {
+        self.price_history.push(price);
+        // Квантове рішення: виміряти стан → Buy або Sell
+        let mut m = QuantumMeasurement::new();
+        let result = m.measure(&self.decision_state);
+        // Оновити стан (еволюція з часовим зсувом)
+        let h = Hamiltonian::new(1.0, 0.5, 0.2);
+        self.decision_state = h.evolve(&self.decision_state, self.time_dilation);
+        match result {
+            0 => OrderType::Buy,
+            1 => OrderType::Sell,
+            _ => OrderType::Hold,
+        }
+    }
+
+    /// Виконати ордер.
+    pub fn execute(&mut self, order: OrderType, price: f64) {
+        match order {
+            OrderType::Buy if self.budget >= price => {
+                let qty = (self.budget / price).floor();
+                self.position += qty;
+                self.budget -= qty * price;
+                self.trades += 1;
+            }
+            OrderType::Sell if self.position > 0.0 => {
+                self.budget += self.position * price;
+                self.pnl += self.position * price;
+                self.position = 0.0;
+                self.trades += 1;
+            }
+            _ => {}
+        }
+    }
+
+    /// Передбачення ціни через PhaseSpace екстраполяцію.
+    pub fn predict_price(&self, steps: usize) -> Vec<f64> {
+        if self.price_history.len() < 2 { return vec![]; }
+        let n = self.price_history.len().min(8);
+        let mut coords = [0.0; 8];
+        for i in 0..n {
+            coords[i] = self.price_history[self.price_history.len() - n + i];
+        }
+        let point = GeometricPoint::new(coords);
+        let state = GeometricState::new(point);
+        let ie = InferenceEngine::new(8, 8);
+        let trajectory = ie.extrapolate(&state, steps);
+        trajectory.iter().map(|p| p.coords[0]).collect()
+    }
+
+    /// Арбітраж між двома трейдерами з різним часовим зсувом.
+    pub fn arbitrage(a: &mut QuantumTrader, b: &mut QuantumTrader, price_a: f64, price_b: f64) {
+        // Якщо час тече по-різному, ціни розходяться
+        if price_a < price_b && a.budget >= price_a && b.position > 0.0 {
+            a.execute(OrderType::Buy, price_a);
+            b.execute(OrderType::Sell, price_b);
+        } else if price_b < price_a && b.budget >= price_b && a.position > 0.0 {
+            b.execute(OrderType::Buy, price_b);
+            a.execute(OrderType::Sell, price_a);
+        }
+    }
+
+    pub fn dashboard(&self) -> String {
+        format!("Quantum Trader '{}'\n  Budget: {:.2}\n  Position: {:.4}\n  Trades: {}\n  PnL: {:.2}\n  dτ/dt: {:.4}\n  Qubit: |0⟩={:.2}% |1⟩={:.2}%",
+            self.name, self.budget, self.position, self.trades, self.pnl,
+            self.time_dilation,
+            self.decision_state.prob_zero() * 100.0,
+            self.decision_state.prob_one() * 100.0)
+    }
+}
