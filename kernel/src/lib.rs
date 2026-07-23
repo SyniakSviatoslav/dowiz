@@ -519,6 +519,10 @@ pub mod visual_index;
 /// Supervision native: universal detection format + NMS/NMM + zone analysis.
 /// Model-agnostic detection container, polygon/line zone counting.
 pub mod detection;
+/// Automatic gap detection, enrichment, and correction for the prompt database.
+/// Monitors the enrichment engine: detects triggerless entries, low-count kinds,
+/// and empty text, then auto-heals via crystal-lattice synthesis and keyword extraction.
+pub mod self_heal;
 /// Self-harness with zone protection for safe project-wide rewrites.
 /// Zone mapping (green→yellow→red→critical→forbidden), Hydra protection,
 /// blueprint generation, dynamic rewrite prediction.
