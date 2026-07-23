@@ -63,6 +63,20 @@ pub const PREDICTOR_SIM_HIGH_LATENCY: f64 = 1000.0;
 pub const PREDICTOR_SIM_HIGH_ERROR: f64 = 0.5;
 pub const PREDICTOR_SIM_THROTTLE_LATENCY: f64 = 500.0;
 pub const PREDICTOR_SIM_THROTTLE_ERROR: f64 = 0.3;
+pub const CRYSTAL_SIMILARITY_WEIGHT: f64 = 0.5;
+pub const CRYSTAL_CONFIDENCE_WEIGHT: f64 = 0.2;
+pub const CRYSTAL_THROTTLE_THRESHOLD: f64 = 0.85;
+pub const CRYSTAL_FRICTION: f64 = 0.25;
+pub const CRYSTAL_ERROR_PROB: f64 = 0.08;
+pub const TREND_SLOPE_DENOM: f64 = 2.0;
+pub const TREND_MIN_SAMPLES: usize = 3;
+pub const TREND_CONFIDENCE_HIGH_DEPTH: usize = 10;
+pub const TREND_CONFIDENCE_HIGH: f64 = 0.5;
+pub const TREND_CONFIDENCE_MED: f64 = 0.3;
+pub const TREND_CONFIDENCE_LOW: f64 = 0.1;
+pub const TREND_FRICTION: f64 = 0.35;
+pub const TREND_ERROR_HIGH: f64 = 0.8;
+pub const TREND_ERROR_LOW_MUL: f64 = 0.12;
 
 // ─── SystemState ──────────────────────────────────────────────────────────
 
@@ -339,6 +353,18 @@ impl Predictor {
         }
     }
 
+    fn make_bid(
+        metric_idx: usize,
+        predicted_value: f64,
+        model: &'static str,
+        confidence: f64,
+        throttle: u8,
+        friction: f64,
+        error_prob: f64,
+    ) -> PredictionBid {
+        PredictionBid { metric_index: metric_idx, predicted_value, confidence, model, throttle, friction, error_prob }
+    }
+
     /// Predict consequences of an action on a specific metric.
     ///
     /// Returns a list of `PredictedOutcome` bids from each model,
@@ -364,15 +390,11 @@ impl Predictor {
             let predicted = (pid_output + current_val * 0.5).min(1.0);
             let confidence = if self.degraded { PREDICTOR_DEGRADED_CONFIDENCE } else { PREDICTOR_NORMAL_CONFIDENCE };
             let throttle = if predicted > PREDICTOR_THROTTLE_LOW { 1 } else if predicted > PREDICTOR_THROTTLE_HIGH { 2 } else { 0 };
-            bids.push(PredictionBid {
-                metric_index: metric_idx,
-                predicted_value: predicted,
-                confidence,
-                model: "pid",
-                throttle,
-                friction: predicted * PREDICTOR_BID_FRICTION_WEIGHT,
-                error_prob: if predicted > 0.9 { predicted * 0.5 } else { predicted * 0.1 },
-            });
+            let pid_error_prob = if predicted > 0.9 { predicted * 0.5 } else { predicted * 0.1 };
+            bids.push(Self::make_bid(
+                metric_idx, predicted, "pid", confidence, throttle,
+                predicted * PREDICTOR_BID_FRICTION_WEIGHT, pid_error_prob,
+            ));
         }
 
         // ── Model 2: Crystal memory bid ───────────────────────────────────
@@ -395,18 +417,13 @@ impl Predictor {
                     }
                 }
                 let crystal_pred = if count > 0 { sum / count as f64 } else { current_val };
-                let confidence = (similar.len() as f64 / self.config.k_similar as f64 * 0.5 + 0.2)
+                let confidence = (similar.len() as f64 / self.config.k_similar as f64 * CRYSTAL_SIMILARITY_WEIGHT + CRYSTAL_CONFIDENCE_WEIGHT)
                     .min(1.0);
-                let throttle = if crystal_pred > 0.85 { 1 } else { 0 };
-                bids.push(PredictionBid {
-                    metric_index: metric_idx,
-                    predicted_value: crystal_pred,
-                    confidence,
-                    model: "crystal",
-                    throttle,
-                    friction: crystal_pred * 0.25,
-                    error_prob: crystal_pred * 0.08,
-                });
+                let throttle = if crystal_pred > CRYSTAL_THROTTLE_THRESHOLD { 1 } else { 0 };
+                bids.push(Self::make_bid(
+                    metric_idx, crystal_pred, "crystal", confidence, throttle,
+                    crystal_pred * CRYSTAL_FRICTION, crystal_pred * CRYSTAL_ERROR_PROB,
+                ));
             }
         }
 
@@ -416,31 +433,26 @@ impl Predictor {
                 .filter_map(|s| s.metrics.get(metric_idx).copied())
                 .collect();
 
-            let trend_pred = if history_samples.len() >= 3 {
+            let trend_pred = if history_samples.len() >= TREND_MIN_SAMPLES {
                 let n = history_samples.len();
-                let recent = &history_samples[n - 3..];
-                // Simple linear extrapolation
-                let slope = (recent[2] - recent[0]) / 2.0;
+                let recent = &history_samples[n - TREND_MIN_SAMPLES..];
+                let slope = (recent[2] - recent[0]) / TREND_SLOPE_DENOM;
                 let extrap = recent[2] + slope;
                 extrap.clamp(0.0, 1.0)
             } else {
                 current_val
             };
 
-            let confidence = if history_samples.len() >= 10 { 0.5 }
-                else if history_samples.len() >= 3 { 0.3 }
-                else { 0.1 };
+            let confidence = if history_samples.len() >= TREND_CONFIDENCE_HIGH_DEPTH { TREND_CONFIDENCE_HIGH }
+                else if history_samples.len() >= TREND_MIN_SAMPLES { TREND_CONFIDENCE_MED }
+                else { TREND_CONFIDENCE_LOW };
 
             let throttle = if trend_pred > PREDICTOR_THROTTLE_LOW { 1 } else { 0 };
-            bids.push(PredictionBid {
-                metric_index: metric_idx,
-                predicted_value: trend_pred,
-                confidence,
-                model: "trend",
-                throttle,
-                friction: trend_pred * 0.35,
-                error_prob: if trend_pred > PREDICTOR_THROTTLE_HIGH { 0.8 } else { trend_pred * 0.12 },
-            });
+            let trend_error_prob = if trend_pred > PREDICTOR_THROTTLE_HIGH { TREND_ERROR_HIGH } else { trend_pred * TREND_ERROR_LOW_MUL };
+            bids.push(Self::make_bid(
+                metric_idx, trend_pred, "trend", confidence, throttle,
+                trend_pred * TREND_FRICTION, trend_error_prob,
+            ));
         }
 
         // ── Degraded mode: cap all model confidences ──────────────────────
