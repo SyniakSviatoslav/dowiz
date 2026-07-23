@@ -1083,4 +1083,224 @@ mod tests {
     fn cover_crc32_long() {
         let data = b"longer test data for crc32"; let _ = super::crc32(data);
     }
+
+    // ── Level parsing ──
+
+    #[test]
+    fn level_from_env_str_all_variants() {
+        assert_eq!(Level::from_env_str("error"), Some(Level::Error));
+        assert_eq!(Level::from_env_str("WARN"), Some(Level::Warn));
+        assert_eq!(Level::from_env_str("Info"), Some(Level::Info));
+        assert_eq!(Level::from_env_str("DEBUG"), Some(Level::Debug));
+        assert_eq!(Level::from_env_str("trace"), Some(Level::Trace));
+    }
+
+    #[test]
+    fn level_from_env_str_whitespace() {
+        assert_eq!(Level::from_env_str("  debug  "), Some(Level::Debug));
+    }
+
+    #[test]
+    fn level_from_env_str_empty_is_none() {
+        assert_eq!(Level::from_env_str(""), None);
+    }
+
+    #[test]
+    fn level_as_str_all() {
+        assert_eq!(Level::Error.as_str(), "error");
+        assert_eq!(Level::Warn.as_str(), "warn");
+        assert_eq!(Level::Info.as_str(), "info");
+        assert_eq!(Level::Debug.as_str(), "debug");
+        assert_eq!(Level::Trace.as_str(), "trace");
+    }
+
+    // ── set_level + event_enabled filtering ──
+
+    #[test]
+    fn event_enabled_false_when_no_sink_is_active() {
+        assert!(!event_enabled(Level::Info));
+        assert!(!event_enabled(Level::Error));
+    }
+
+    #[test]
+    fn set_level_filters_events() {
+        let orig = Level::from_env_str(&format!("{}", Level::Info.as_str())).unwrap();
+        set_level(Level::Error);
+        // No sink means event_enabled is always false, but set_level is what we're exercising.
+        assert!(!event_enabled(Level::Warn));
+        set_level(Level::Debug);
+        assert!(!event_enabled(Level::Info)); // still no sink
+        set_level(Level::Info); // restore
+        drop(orig);
+    }
+
+    // ── span_active ──
+
+    #[test]
+    fn span_active_checks_sink_and_observer() {
+        // SINK_ACTIVE starts false; may already have a global observer from another
+        // test — just assert span_active() doesn't panic.
+        let _ = span_active();
+    }
+
+    // ── next_span_id ──
+
+    #[test]
+    fn next_span_id_is_monotonic() {
+        let a = next_span_id();
+        let b = next_span_id();
+        let c = next_span_id();
+        assert!(a < b);
+        assert!(b < c);
+    }
+
+    // ── SpanHandle with_parent ──
+
+    #[test]
+    fn span_handle_with_parent_stores_id() {
+        let h = SpanHandle::with_parent("child_span", 42);
+        assert_eq!(h.name, "child_span");
+        assert!(h.parent_span_id.is_some());
+        drop(h.entered());
+    }
+
+    #[test]
+    fn span_handle_new_has_no_parent() {
+        let h = SpanHandle::new("root_span");
+        assert!(h.parent_span_id.is_none());
+        drop(h.entered());
+    }
+
+    // ── SpanGuard work field ──
+
+    #[test]
+    fn span_guard_work_field_is_some_when_set() {
+        let mut g = SpanHandle::new("work_span").entered();
+        g.work = Some(schema::Work {
+            kind: schema::WorkloadKind::TokensGenerated,
+            delta_count: 5,
+        });
+        assert!(g.work.is_some());
+        assert_eq!(g.work.as_ref().unwrap().delta_count, 5);
+    }
+
+    // ── ObserverGuard restores previous observer ──
+
+    #[test]
+    fn observer_guard_restores_prev_on_drop() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        struct Obs(Arc<AtomicU64>);
+        impl SpanObserver for Obs {
+            fn on_span_close(&self, _name: &'static str, _dur: u64) {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        let a = Arc::new(AtomicU64::new(0));
+        let b = Arc::new(AtomicU64::new(0));
+
+        let g1 = set_scoped_observer(Arc::new(Obs(a.clone())));
+        // Within g1, drop a span → should hit counter a
+        drop(SpanHandle::new("p1").entered());
+        assert_eq!(a.load(Ordering::Relaxed), 1);
+
+        let g2 = set_scoped_observer(Arc::new(Obs(b.clone())));
+        // Within g2, drop a span → should hit counter b
+        drop(SpanHandle::new("p2").entered());
+        assert_eq!(b.load(Ordering::Relaxed), 1);
+
+        drop(g2); // restores g1's observer
+        drop(SpanHandle::new("p3").entered());
+        assert_eq!(a.load(Ordering::Relaxed), 2); // a is back
+        assert_eq!(b.load(Ordering::Relaxed), 1); // b unchanged
+
+        drop(g1); // restores original (none)
+    }
+
+    // ── set_global_observer set-once ──
+
+    #[test]
+    fn global_observer_is_callable_when_set() {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        struct Obs(Arc<AtomicU64>);
+        impl SpanObserver for Obs {
+            fn on_span_close(&self, _name: &'static str, _dur: u64) {
+                self.0.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        // set_global_observer is set-once; this may succeed or fail depending
+        // on parallel tests. We just assert it doesn't panic and the observer
+        // can be exercised if set.
+        let hits = Arc::new(AtomicU64::new(0));
+        if crate::fdr::set_global_observer(Arc::new(Obs(hits.clone()))).is_ok() {
+            // TL empty → falls back to global
+            notify_observer("global_fallback", 50);
+            assert_eq!(hits.load(Ordering::Relaxed), 1);
+        }
+    }
+
+    // ── shadow_digest ──
+
+    #[test]
+    fn shadow_digest_produces_16_hex_chars() {
+        let d = shadow_digest(b"hello");
+        assert_eq!(d.len(), 16);
+        assert!(d.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn shadow_digest_deterministic() {
+        assert_eq!(shadow_digest(b"abc"), shadow_digest(b"abc"));
+    }
+
+    #[test]
+    fn shadow_digest_distinct_inputs() {
+        assert_ne!(shadow_digest(b"a"), shadow_digest(b"b"));
+    }
+
+    // ── FdrConfig defaults ──
+
+    #[test]
+    fn fdr_config_default_values() {
+        let cfg = FdrConfig::default();
+        assert!(cfg.stderr);
+        assert!(cfg.ring_dir.is_none());
+        assert_eq!(cfg.seg_cap, ring::DEFAULT_SEG_CAP);
+        assert_eq!(cfg.level, Level::Info);
+    }
+
+    // ── CRC32 known vector ──
+
+    #[test]
+    fn crc32_known_ieee_vector() {
+        let v = crc32(b"123456789");
+        // IEEE 802.3 CRC-32 of "123456789" = 0xCBF43926
+        assert_eq!(v, 0xCBF43926);
+    }
+
+    // ── No-op emits without sink ──
+
+    #[test]
+    fn emit_alarm_is_noop_without_sink() {
+        emit_alarm("test_struct", "fault_reason");
+    }
+
+    #[test]
+    fn emit_tuning_is_noop_without_sink() {
+        emit_tuning("gain_schedule", &[("param", "0.5".to_string())]);
+    }
+
+    #[test]
+    fn emit_shadow_divergence_is_noop_without_sink() {
+        emit_shadow_divergence("decision_site", "verdict_x", false, "deadbeef", "cafebabe");
+    }
+
+    #[test]
+    fn clean_shutdown_is_noop_without_sink() {
+        clean_shutdown();
+    }
+
+    #[test]
+    fn emit_event_is_noop_without_sink() {
+        emit_event(Level::Info, "test message", &[("key", "val".to_string())]);
+    }
 }

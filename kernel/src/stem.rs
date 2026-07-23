@@ -1691,4 +1691,78 @@ mod tests {
     fn cover_stem_ity() {
         let _ = super::stem("velocity");
     }
+
+    #[test]
+    fn stem_german_suffixes() {
+        let s = stem("Freiheitlichkeit");
+        assert!(s.len() < "Freiheitlichkeit".len());
+        assert!(!stem("Lesens").is_empty());
+    }
+
+    #[test]
+    fn stem_french_suffixes() {
+        assert!(stem("gouvernement").len() < "gouvernement".len());
+        assert!(stem("joliment").len() < "joliment".len());
+    }
+
+    #[test]
+    fn stem_spanish_suffixes() {
+        assert!(stem("comunicación").len() < "comunicación".len());
+        assert!(stem("hermosamente").len() < "hermosamente".len());
+    }
+
+    #[test]
+    fn stem_dutch_suffixes() {
+        assert!(stem("vriendschap").len() < "vriendschap".len());
+        assert!(stem("werkzaamheden").len() < "werkzaamheden".len());
+    }
+
+    #[test]
+    fn stem_romanian_suffixes() {
+        assert!(stem("documentului").len() < "documentului".len());
+        assert!(stem("cartilor").len() < "cartilor".len());
+    }
+
+    #[test]
+    fn stem_hungarian_suffixes() {
+        assert!(stem("házakban").len() < "házakban".len());
+        assert!(stem("embereknek").len() < "embereknek".len());
+    }
+
+    #[test]
+    fn stem_whitespace_padded() {
+        let s = stem("  running  ");
+        assert_eq!(s, "run");
+    }
+
+    #[test]
+    fn stem_numeric_only() {
+        let s = stem("12345");
+        assert_eq!(s, "12345");
+    }
+
+    #[test]
+    fn stem_special_characters_only() {
+        let s = stem("@#$%");
+        assert_eq!(s, "@#$%");
+    }
+
+    #[test]
+    fn stem_very_long_suffixed_word() {
+        let w = "unimaginativelyimaginativelyrunning";
+        let s = stem(w);
+        assert!(s.len() <= w.len());
+    }
+
+    #[test]
+    fn detect_mixed_script_cyrillic_latin() {
+        let lang = detect_language("привет hello");
+        assert!(matches!(lang, Language::Ru | Language::Uk));
+    }
+
+    #[test]
+    fn detect_latin_trumps_by_suffix() {
+        let lang = detect_language("dokumentumok házak");
+        assert_eq!(lang, Language::Hu);
+    }
 }

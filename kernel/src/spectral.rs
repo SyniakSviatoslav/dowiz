@@ -1823,4 +1823,107 @@ mod tests {
     fn cover_eigenvalues_diag() {
         let m = vec![vec![3.0, 0.0], vec![0.0, 5.0]]; let r = super::eigenvalues(&m); assert_eq!(r.len(), 2);
     }
+
+    // ── Edge case: zero matrix has all zero eigenvalues ──
+    #[test]
+    fn eigenvalues_zero_matrix_all_zero() {
+        let z = vec![vec![0.0; 3]; 3];
+        let eigs = eigenvalues(&z);
+        assert_eq!(eigs.len(), 3);
+        for e in &eigs {
+            assert!(e.abs() < 1e-9, "zero matrix eigenvalue: {:?}", e);
+        }
+    }
+
+    // ── Edge case: single-node matrix spectral profile ──
+    #[test]
+    fn spectral_profile_single_node() {
+        let s = graph_spectrum(&[vec![0.0]]);
+        assert!(approx(s.spectral_radius, 0.0, 1e-9));
+        assert!(approx(s.slem, 0.0, 1e-9));
+        assert!(approx(s.energy, 0.0, 1e-9));
+        assert!(approx(s.fiedler, 0.0, 1e-9));
+    }
+
+    // ── Edge case: spectrum of single-node non-zero matrix ──
+    #[test]
+    fn eigenvalues_single_node_negative() {
+        let m = vec![vec![-7.0]];
+        let eigs = eigenvalues(&m);
+        assert_eq!(eigs.len(), 1);
+        assert!(approx(eigs[0].re, -7.0, 1e-6));
+        assert!(approx(eigs[0].im, 0.0, 1e-9));
+    }
+
+    // ── Edge case: charpoly of negative eigenvalue matrix ──
+    #[test]
+    fn charpoly_single_negative() {
+        let c = charpoly(&[vec![-3.0]]);
+        assert_eq!(c.len(), 2);
+        assert!(approx(c[0], 1.0, 1e-9));
+        assert!(approx(c[1], 3.0, 1e-9)); // x + 3
+    }
+
+    // ── Edge case: roots of constant polynomial (deg 0) ──
+    #[test]
+    fn roots_constant_returns_empty() {
+        assert!(roots(&[1.0]).is_empty());
+    }
+
+    // ── Edge case: roots of linear polynomial ──
+    #[test]
+    fn roots_linear_returns_single_root() {
+        let r = roots(&[1.0, -4.0]);
+        assert_eq!(r.len(), 1);
+        assert!(approx(r[0].re, 4.0, 1e-6));
+    }
+
+    // ── Edge case: dense fully connected matrix (K4) ──
+    #[test]
+    fn eigenvalues_dense_fully_connected() {
+        let k4: Vec<Vec<f64>> = (0..4)
+            .map(|i| (0..4).map(|j| if i == j { 0.0 } else { 1.0 }).collect())
+            .collect();
+        let eigs = eigenvalues(&k4);
+        assert_eq!(eigs.len(), 4);
+        assert!(eigs.iter().any(|e| approx(e.re, 3.0, 1e-4)));
+        assert!(eigs.iter().any(|e| approx(e.re, -1.0, 1e-3)));
+    }
+
+    // ── Edge case: very sparse (nearly empty) matrix ──
+    #[test]
+    fn eigenvalues_very_sparse() {
+        let mut m = vec![vec![0.0; 4]; 4];
+        m[0][3] = 1.0;
+        let eigs = eigenvalues(&m);
+        assert_eq!(eigs.len(), 4);
+        // nilpotent-like: all eigenvalues ~0 for this upper-triangular-ish
+        for e in &eigs {
+            assert!(e.abs() < 1e-6, "sparse-nilpotent eigenvalue nonzero: {:?}", e);
+        }
+    }
+
+    // ── Edge case: dominant_period on non-oscillatory matrix ──
+    #[test]
+    fn dominant_period_no_oscillation() {
+        let damped = vec![vec![0.5, 0.0], vec![0.0, 0.3]];
+        assert!(dominant_period(&damped).is_none());
+    }
+
+    // ── Edge case: Laplacian of single-node graph ──
+    #[test]
+    fn laplacian_single_node_zero() {
+        let l = laplacian(&[vec![0.0]]);
+        assert!(approx(l[0][0], 0.0, 1e-9));
+    }
+
+    // ── Edge case: graph_energy_report on zero-matrix ──
+    #[test]
+    fn energy_report_zero_matrix() {
+        let z = vec![vec![0.0; 3]; 3];
+        let report = graph_energy_report(&z);
+        assert!(report.contains("energy=0.000000"));
+        assert!(report.contains("fiedler=0.000000"));
+        assert!(report.contains("drift=Damped"));
+    }
 }

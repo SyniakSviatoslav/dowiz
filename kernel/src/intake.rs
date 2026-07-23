@@ -808,4 +808,161 @@ mod tests {
     fn cover_admit_simple() {
         let spec = super::EtalonSpec { fields: vec![], rules: vec![], verify: String::from("true"), verify_fn: None, nonlinear: false }; let _ = super::admit(&spec);
     }
+
+    // ── Edge case: empty spec admits ──
+    #[test]
+    fn admit_empty_spec_produces_empty_witness() {
+        let spec = EtalonSpec { fields: vec![], rules: vec![], verify: "".into(), verify_fn: None, nonlinear: false };
+        let w = admit(&spec).expect("empty spec should admit");
+        assert!(w.values.is_empty());
+    }
+
+    // ── Edge case: single pinned field ──
+    #[test]
+    fn admit_single_pinned_trivial() {
+        let spec = EtalonSpec {
+            fields: vec![FieldSpec { name: "x".into(), pinned: Some(42), ..FieldSpec::new("x") }],
+            rules: vec![], verify: "".into(), verify_fn: None, nonlinear: false,
+        };
+        let w = admit(&spec).expect("pinned spec should admit");
+        assert_eq!(w.values.get("x"), Some(&42));
+    }
+
+    // ── Edge case: enum values outside range → unsat ──
+    #[test]
+    fn enum_outside_range_is_unsat() {
+        let spec = EtalonSpec {
+            fields: vec![FieldSpec {
+                name: "v".into(), min: Some(0), max: Some(5),
+                enum_values: Some(vec![10, 20]),
+                ..FieldSpec::new("v")
+            }],
+            rules: vec![], verify: "".into(), verify_fn: None, nonlinear: false,
+        };
+        match admit(&spec) {
+            Err(IntakeError::Unsatisfiable { rule_or_core, .. }) if rule_or_core == "empty_enum" => {}
+            other => panic!("expected empty_enum Unsatisfiable, got {:?}", other),
+        }
+    }
+
+    // ── Edge case: pinned value outside range → unsat ──
+    #[test]
+    fn pinned_outside_range_is_unsat() {
+        let spec = EtalonSpec {
+            fields: vec![FieldSpec {
+                name: "v".into(), min: Some(0), max: Some(5), pinned: Some(99),
+                ..FieldSpec::new("v")
+            }],
+            rules: vec![], verify: "".into(), verify_fn: None, nonlinear: false,
+        };
+        assert!(matches!(admit(&spec), Err(IntakeError::Unsatisfiable { .. })));
+    }
+
+    // ── Edge case: pinned at lower boundary → knife-edge ──
+    #[test]
+    fn knife_edge_detected_at_min() {
+        let spec = EtalonSpec {
+            fields: vec![FieldSpec {
+                name: "v".into(), min: Some(0), max: Some(10), pinned: Some(0),
+                ..FieldSpec::new("v")
+            }],
+            rules: vec![], verify: "".into(), verify_fn: None, nonlinear: false,
+        };
+        assert!(matches!(admit(&spec), Err(IntakeError::IllConditioned { kind: IllKind::KnifeEdge })));
+    }
+
+    // ── Edge case: verify_fn divergence triggers F3 ──
+    #[test]
+    fn verify_fn_divergence_is_non_reproducible() {
+        let spec = EtalonSpec {
+            fields: vec![FieldSpec { name: "x".into(), pinned: Some(1), ..FieldSpec::new("x") }],
+            rules: vec![], verify: "".into(),
+            verify_fn: Some(Box::new(|nuis: u64| nuis % 2 == 0)),
+            nonlinear: false,
+        };
+        assert!(matches!(admit(&spec), Err(IntakeError::NonReproducibleVerify { .. })));
+    }
+
+    // ── Edge case: multiple free fields under-determined ──
+    #[test]
+    fn multiple_free_fields_under_determined() {
+        let spec = EtalonSpec {
+            fields: vec![
+                FieldSpec { name: "a".into(), required: true, ..FieldSpec::new("a") },
+                FieldSpec { name: "b".into(), required: true, ..FieldSpec::new("b") },
+            ],
+            rules: vec![], verify: "".into(), verify_fn: None, nonlinear: false,
+        };
+        match admit(&spec) {
+            Err(IntakeError::UnderDetermined { dof, free_fields, .. }) => {
+                assert_eq!(dof, 2);
+                assert_eq!(free_fields.len(), 2);
+            }
+            other => panic!("expected UnderDetermined, got {:?}", other),
+        }
+    }
+
+    // ── Edge case: forbidden field excluded from witness ──
+    #[test]
+    fn forbidden_field_not_in_witness() {
+        let spec = EtalonSpec {
+            fields: vec![
+                FieldSpec { name: "a".into(), pinned: Some(7), ..FieldSpec::new("a") },
+                FieldSpec { name: "b".into(), forbidden: true, ..FieldSpec::new("b") },
+            ],
+            rules: vec![], verify: "".into(), verify_fn: None, nonlinear: false,
+        };
+        let w = admit(&spec).expect("should admit with forbidden field");
+        assert_eq!(w.values.get("a"), Some(&7));
+        assert!(w.values.get("b").is_none());
+    }
+
+    // ── Edge case: range at MAX_ENUM_WIDTH boundary ──
+    #[test]
+    fn range_at_enum_width_boundary() {
+        use super::MAX_ENUM_WIDTH;
+        let lo = 0i64;
+        let hi = MAX_ENUM_WIDTH;
+        let spec = EtalonSpec {
+            fields: vec![FieldSpec {
+                name: "v".into(), min: Some(lo), max: Some(hi), pinned: Some(1),
+                ..FieldSpec::new("v")
+            }],
+            rules: vec![], verify: "".into(), verify_fn: None, nonlinear: false,
+        };
+        let w = admit(&spec).expect("range at boundary should be materialized");
+        assert_eq!(w.values.get("v"), Some(&1));
+    }
+
+    // ── Edge case: AC-3 with Eq constraint on bounded fields ──
+    #[test]
+    fn ac3_eq_consistency() {
+        let spec = EtalonSpec {
+            fields: vec![
+                FieldSpec { name: "x".into(), min: Some(1), max: Some(3), ..FieldSpec::new("x") },
+                FieldSpec { name: "y".into(), min: Some(1), max: Some(3), ..FieldSpec::new("y") },
+            ],
+            rules: vec![RuleSpec { a: 0, b: 1, op: BinOp::Eq }],
+            verify: "".into(), verify_fn: None, nonlinear: false,
+        };
+        // Not under-determined because AC-3 narrows? No — AC-3 removes unsupported
+        // values but both {1,2,3} support Eq to each other, so domains stay {1,2,3}
+        // and dof > 0 ⇒ UnderDetermined.
+        assert!(matches!(admit(&spec), Err(IntakeError::UnderDetermined { .. })));
+    }
+
+    // ── Edge case: AC-3 with Gt removes values correctly ──
+    #[test]
+    fn ac3_gt_removes_unsupported() {
+        let spec = EtalonSpec {
+            fields: vec![
+                FieldSpec { name: "x".into(), min: Some(1), max: Some(3), ..FieldSpec::new("x") },
+                FieldSpec { name: "y".into(), min: Some(1), max: Some(1), ..FieldSpec::new("y") },
+            ],
+            rules: vec![RuleSpec { a: 0, b: 1, op: BinOp::Gt }],
+            verify: "".into(), verify_fn: None, nonlinear: false,
+        };
+        // x > y, y=1 ⇒ x ∈ {2,3} => 2 models ⇒ UnderDetermined
+        assert!(matches!(admit(&spec), Err(IntakeError::UnderDetermined { .. })));
+    }
 }

@@ -532,4 +532,84 @@ mod tests {
     fn cover_extract_body_only() {
         let r = super::extract("<body>Main content here.</body>"); assert!(!r.is_empty());
     }
+
+    // ── Edge case: empty input returns empty (already covered, but test the normalize path) ──
+    #[test]
+    fn extract_all_whitespace_html() {
+        assert_eq!(extract("\n\t  \r\n"), "");
+        assert_eq!(extract("<div>   </div>"), "");
+    }
+
+    // ── Edge case: single character ──
+    #[test]
+    fn extract_single_character() {
+        let r = extract("X");
+        assert_eq!(r, "X");
+    }
+
+    // ── Edge case: single character in candidate tag ──
+    #[test]
+    fn extract_single_char_in_tag() {
+        let r = extract("<p>X</p>");
+        assert_eq!(r, "X");
+    }
+
+    // ── Edge case: very long block (stress length bonus cap) ──
+    #[test]
+    fn extract_very_long_content() {
+        let body = "word ".repeat(5000);
+        let html = format!("<article>{}</article>", body);
+        let r = extract(&html);
+        assert!(r.len() > 1000);
+        assert!(r.contains("word"));
+    }
+
+    // ── Edge case: non-ASCII Unicode text ──
+    #[test]
+    fn extract_non_ascii_preserved() {
+        let html = "<p>Съешь ещё этих мягких булок, да выпей чаю! And, more, commas, here.</p>";
+        let r = extract(html);
+        assert!(r.contains("Съешь"));
+        assert!(r.contains("чаю"));
+    }
+
+    // ── Edge case: code block vs prose — code loses to longer prose ──
+    #[test]
+    fn code_block_loses_to_prose() {
+        let html = r#"
+            <div class="code"><p>fn main() { let x = vec![1,2,3]; }</p></div>
+            <div class="content">
+              <p>This article discusses the architecture of the system in detail,
+              with many sentences, and, of course, enough commas and length to
+              dominate the scoring over a short code snippet nearby.</p>
+            </div>
+        "#;
+        let r = extract(html);
+        assert!(r.contains("architecture"));
+        assert!(!r.contains("fn main"));
+    }
+
+    // ── Edge case: keyword_score positive/negative boundaries ──
+    #[test]
+    fn keyword_score_positive_keywords() {
+        assert!(keyword_score("article-body") > 0);
+        assert!(keyword_score("main-content") > 0);
+    }
+
+    #[test]
+    fn keyword_score_negative_keywords() {
+        assert!(keyword_score("nav-sidebar") < 0);
+        assert!(keyword_score("footer-ad") < 0);
+    }
+
+    // ── Edge case: unknown entity passthrough ──
+    #[test]
+    fn decode_entities_unknown_passthrough() {
+        let r = decode_entities("plain &foobar; text");
+        assert_eq!(r, "plain &foobar; text");
+    }
+    #[test]
+    fn decode_entities_no_ampersand() {
+        assert_eq!(decode_entities("no entities here"), "no entities here");
+    }
 }

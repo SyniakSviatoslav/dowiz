@@ -1120,4 +1120,184 @@ mod tests {
     fn cover_extract_syscalls_boundary() {
         let c = [0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90]; let p = extract_syscalls(&c, 100); assert!(p.is_empty());
     }
+
+    // ── read_* truncation branches ──
+
+    #[test]
+    fn read_u16_le_truncated() {
+        let e = read_u16_le(&[], 0);
+        assert!(matches!(e, Err(ElfError::Truncated { .. })));
+    }
+
+    #[test]
+    fn read_u32_le_truncated() {
+        let e = read_u32_le(&[0, 0, 0], 0);
+        assert!(matches!(e, Err(ElfError::Truncated { .. })));
+    }
+
+    #[test]
+    fn read_u64_le_truncated() {
+        let e = read_u64_le(&[0; 4], 0);
+        assert!(matches!(e, Err(ElfError::Truncated { .. })));
+    }
+
+    // ── read_cstring edge cases ──
+
+    #[test]
+    fn read_cstring_first_byte_null() {
+        let s = read_cstring(&[0, b'a', b'b'], 0);
+        assert_eq!(s, "");
+    }
+
+    #[test]
+    fn read_cstring_trailing_without_null() {
+        let s = read_cstring(b"hello", 0);
+        assert_eq!(s, "hello");
+    }
+
+    #[test]
+    fn read_cstring_mid_null() {
+        let s = read_cstring(b"ab\0cd", 0);
+        assert_eq!(s, "ab");
+    }
+
+    // ── ElfMachine::as_str full coverage ──
+
+    #[test]
+    fn elf_machine_as_str_all() {
+        assert_eq!(ElfMachine::X86_64.as_str(), "x86_64");
+        assert_eq!(ElfMachine::AArch64.as_str(), "aarch64");
+        assert_eq!(ElfMachine::Arm.as_str(), "arm");
+        assert_eq!(ElfMachine::I386.as_str(), "i386");
+        assert_eq!(ElfMachine::Unknown(42).as_str(), "unknown");
+    }
+
+    // ── BehaviorCategory::as_str remaining ──
+
+    #[test]
+    fn behavior_category_as_str_all() {
+        assert_eq!(BehaviorCategory::FileIO.as_str(), "file_io");
+        assert_eq!(BehaviorCategory::Network.as_str(), "network");
+        assert_eq!(BehaviorCategory::Process.as_str(), "process");
+        assert_eq!(BehaviorCategory::Memory.as_str(), "memory");
+        assert_eq!(BehaviorCategory::Crypto.as_str(), "crypto");
+        assert_eq!(BehaviorCategory::Database.as_str(), "database");
+        assert_eq!(BehaviorCategory::Shell.as_str(), "shell");
+        assert_eq!(BehaviorCategory::SystemInfo.as_str(), "system_info");
+        assert_eq!(BehaviorCategory::Unknown.as_str(), "unknown");
+    }
+
+    // ── ElfError Display ──
+
+    #[test]
+    fn elf_error_display_not_elf() {
+        assert_eq!(format!("{}", ElfError::NotElf), "not an ELF file");
+    }
+
+    #[test]
+    fn elf_error_display_unsupported_class() {
+        assert!(format!("{}", ElfError::UnsupportedClass(3)).contains("unsupported ELF class"));
+    }
+
+    #[test]
+    fn elf_error_display_unsupported_encoding() {
+        assert!(format!("{}", ElfError::UnsupportedEncoding(4)).contains("unsupported data encoding"));
+    }
+
+    #[test]
+    fn elf_error_display_truncated() {
+        let s = format!("{}", ElfError::Truncated { needed: 100, available: 30 });
+        assert!(s.contains("truncated"));
+        assert!(s.contains("100"));
+        assert!(s.contains("30"));
+    }
+
+    #[test]
+    fn elf_error_display_invalid_section() {
+        assert!(format!("{}", ElfError::InvalidSection(7)).contains("7"));
+    }
+
+    #[test]
+    fn elf_error_display_invalid_string_table() {
+        assert_eq!(format!("{}", ElfError::InvalidStringTable), "invalid string table");
+    }
+
+    // ── parse_elf: unsupported class/encoding ──
+
+    #[test]
+    fn parse_elf_unsupported_class_byte() {
+        let mut h = [0u8; 64];
+        h[..4].copy_from_slice(b"\x7fELF");
+        h[4] = 3; // bad class
+        h[5] = 1;
+        assert!(matches!(parse_elf(&h), Err(ElfError::UnsupportedClass(3))));
+    }
+
+    #[test]
+    fn parse_elf_unsupported_encoding_byte() {
+        let mut h = [0u8; 64];
+        h[..4].copy_from_slice(b"\x7fELF");
+        h[4] = 2;
+        h[5] = 3; // bad encoding
+        assert!(matches!(parse_elf(&h), Err(ElfError::UnsupportedEncoding(3))));
+    }
+
+    // ── Profile: risk-level branches (string-based only; syscall extraction is
+    //    gated by an innovate: ceiling — code_section is always &[] in profile_binary) ──
+
+    #[test]
+    fn profile_binary_shell_is_high() {
+        let mut e = parse_elf(&minimal_elf64()).unwrap();
+        e.strings.push("/bin/sh".into());
+        let p = profile_binary(&e, "t");
+        assert_eq!(p.risk, RiskLevel::High);
+    }
+
+    #[test]
+    fn profile_binary_three_behaviors_shell_is_high() {
+        let mut e = parse_elf(&minimal_elf64()).unwrap();
+        e.strings.push("aes_encrypt".into());
+        e.strings.push("postgres_connect".into());
+        e.strings.push("uname_info".into());
+        e.strings.push("/bin/sh".into());
+        let p = profile_binary(&e, "t");
+        // Shell present → 0.6 → High (overrides behavior count)
+        assert_eq!(p.risk, RiskLevel::High);
+    }
+
+    #[test]
+    fn profile_binary_zero_behaviors_is_low() {
+        let e = parse_elf(&minimal_elf64()).unwrap();
+        let p = profile_binary(&e, "t");
+        assert_eq!(p.risk, RiskLevel::Low);
+        assert!((p.risk_score - 0.2).abs() < 0.01);
+    }
+
+    // ── compute_profile_hash ──
+
+    #[test]
+    fn compute_profile_hash_non_zero() {
+        let elf = parse_elf(&minimal_elf64()).unwrap();
+        let p = profile_binary(&elf, "twice");
+        let h = compute_profile_hash(&p);
+        assert_ne!(h, [0u8; 32]);
+    }
+
+    // ── extract_syscalls: high-number filtering ──
+
+    #[test]
+    fn extract_syscalls_filters_above_332() {
+        let code = [0xb8, 0x50, 0x01, 0x00, 0x00, 0x0f, 0x05]; // 336 > 332
+        let p = extract_syscalls(&code, 0);
+        assert!(p.is_empty());
+    }
+
+    // ── extract_strings: trailing non-null-terminated run ──
+
+    #[test]
+    fn extract_strings_trailing_run_no_null() {
+        let data = b"hello_world_more_than_4";
+        let strings = extract_strings(data, 4);
+        assert_eq!(strings, vec!["hello_world_more_than_4"]);
+    }
 }

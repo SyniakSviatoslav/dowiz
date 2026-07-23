@@ -2582,5 +2582,91 @@ mod tests {
         let _ = super::instrumental_adjust(0.2, 0.8, 0.3, 0.7, 0.6, 0.4);
     }
 
+    #[test]
+    fn d_separated_disconnected_nodes() {
+        let g = vec![vec![], vec![]];
+        assert!(d_separated(&g, 0, 1, &[]).unwrap());
+    }
 
+    #[test]
+    fn d_separated_parent_index_oob() {
+        let g = vec![vec![3], vec![]];
+        assert!(d_separated(&g, 0, 1, &[]).is_err());
+    }
+
+    #[test]
+    fn d_separated_empty_graph() {
+        assert!(d_separated(&[], 0, 1, &[]).is_err());
+    }
+
+    #[test]
+    fn d_separated_conditioning_on_given_oob() {
+        let g = chain();
+        assert!(d_separated(&g, 0, 2, &[9]).is_err());
+    }
+
+    #[test]
+    fn identify_causal_effect_target_oob() {
+        let g = CGraph::new(vec![vec![]], vec![vec![]]).unwrap();
+        assert!(identify_causal_effect(&[5], &[0], &g).is_err());
+    }
+
+    #[test]
+    fn identify_causal_effect_x_y_overlap() {
+        let g = CGraph::new(vec![vec![], vec![0]], vec![vec![], vec![]]).unwrap();
+        assert!(identify_causal_effect(&[0], &[0], &g).is_err());
+    }
+
+    #[test]
+    fn identify_causal_effect_cyclic_graph() {
+        let g = CGraph::new(
+            vec![vec![1], vec![0]],
+            vec![vec![], vec![]],
+        );
+        assert!(g.is_err() || identify_causal_effect(&[0], &[1], &g.unwrap()).is_err());
+    }
+
+    #[test]
+    fn frontdoor_criterion_empty_mediator() {
+        let g = frontdoor_graph();
+        assert!(frontdoor_criterion(&g, 0, 2, &[]).is_err());
+    }
+
+    #[test]
+    fn frontdoor_criterion_mediator_contains_x() {
+        let g = frontdoor_graph();
+        assert!(frontdoor_criterion(&g, 0, 2, &[0]).is_err());
+    }
+
+    #[test]
+    fn descendant_closure_leaf_node() {
+        let children = vec![vec![1], vec![], vec![]];
+        let desc = descendant_closure(&children, 1, 3);
+        assert!(desc[1]);
+        assert!(!desc[0]);
+    }
+
+    #[test]
+    fn intersect_disjoint() {
+        let v = intersect(&[0, 1, 2], &[3, 4]);
+        assert!(v.is_empty());
+    }
+
+    #[test]
+    fn intersect_overlap() {
+        let v = intersect(&[0, 1, 2, 3], &[2, 3, 4]);
+        assert_eq!(v, vec![2, 3]);
+    }
+
+    #[test]
+    fn samples_from_rows_ragged() {
+        let r = Samples::from_rows(&[vec![0, 1], vec![2]]);
+        assert!(r.is_err());
+    }
+
+    #[test]
+    fn joint_new_mismatched_length() {
+        let r = Joint::new(vec![2, 2], vec![0.5]);
+        assert!(r.is_err());
+    }
 }

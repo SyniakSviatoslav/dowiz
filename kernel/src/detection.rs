@@ -354,4 +354,89 @@ mod tests {
     fn cover_bbox_iou_contain() {
         let a = super::BBox { x1: 0.0, y1: 0.0, x2: 10.0, y2: 10.0 }; let b = super::BBox { x1: 2.0, y1: 2.0, x2: 5.0, y2: 5.0 }; let i = super::bbox_iou(&a, &b); assert!(i > 0.0 && i < 1.0);
     }
+
+    #[test]
+    fn segments_intersect_parallel_no_overlap() {
+        let s = super::segments_intersect((0.0, 0.0), (10.0, 0.0), (0.0, 5.0), (10.0, 5.0));
+        assert!(s.is_false());
+    }
+
+    #[test]
+    fn segments_intersect_crossing() {
+        let s = super::segments_intersect((0.0, 0.0), (10.0, 10.0), (0.0, 10.0), (10.0, 0.0));
+        assert!(s.is_true());
+    }
+
+    #[test]
+    fn point_in_polygon_degenerate_fewer_than_3() {
+        let poly = vec![(0.0, 0.0), (1.0, 1.0)];
+        assert!(super::point_in_polygon(0.5, 0.5, &poly).is_false());
+    }
+
+    #[test]
+    fn point_in_polygon_triangle() {
+        let poly = vec![(0.0, 0.0), (10.0, 0.0), (5.0, 10.0)];
+        assert!(super::point_in_polygon(5.0, 5.0, &poly).is_true());
+        assert!(super::point_in_polygon(15.0, 15.0, &poly).is_false());
+    }
+
+    #[test]
+    fn nms_single_detection_unchanged() {
+        let mut det = Detections::new(100, 100);
+        det.detections.push(Detection { bbox: BBox::new(10.0, 10.0, 20.0, 20.0), confidence: 0.9, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
+        det.nms(0.5);
+        assert_eq!(det.len(), 1);
+    }
+
+    #[test]
+    fn nmm_different_class_no_merge() {
+        let mut det = Detections::new(100, 100);
+        det.detections.push(Detection { bbox: BBox::new(10.0, 10.0, 20.0, 20.0), confidence: 0.9, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
+        det.detections.push(Detection { bbox: BBox::new(11.0, 11.0, 21.0, 21.0), confidence: 0.8, class_id: 1, tracker_id: None, data: std::collections::HashMap::new() });
+        det.nmm(0.5);
+        assert_eq!(det.len(), 2);
+    }
+
+    #[test]
+    fn filter_class_removes_others() {
+        let mut det = Detections::new(100, 100);
+        det.detections.push(Detection { bbox: BBox::new(0.0, 0.0, 10.0, 10.0), confidence: 0.9, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
+        det.detections.push(Detection { bbox: BBox::new(0.0, 0.0, 10.0, 10.0), confidence: 0.8, class_id: 3, tracker_id: None, data: std::collections::HashMap::new() });
+        det.filter_class(0);
+        assert_eq!(det.len(), 1);
+        assert_eq!(det.detections[0].class_id, 0);
+    }
+
+    #[test]
+    fn is_empty_tristate() {
+        let det = Detections::new(100, 100);
+        assert!(!det.is_empty().is_false());
+        let mut det2 = Detections::new(100, 100);
+        det2.detections.push(Detection { bbox: BBox::new(0.0, 0.0, 10.0, 10.0), confidence: 0.5, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
+        assert!(det2.is_empty().is_false());
+    }
+
+    #[test]
+    fn bbox_center() {
+        let b = BBox::new(10.0, 20.0, 30.0, 40.0);
+        let (cx, cy) = b.center();
+        assert!((cx - 20.0).abs() < 0.001);
+        assert!((cy - 30.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn line_zone_empty_detections() {
+        let mut zone = LineZone::new((50.0, 0.0), (50.0, 100.0));
+        let det = Detections::new(100, 100);
+        let (in_c, out_c) = zone.update(&det);
+        assert_eq!(in_c, 0);
+        assert_eq!(out_c, 0);
+    }
+
+    #[test]
+    fn iou_zero_area_bboxes() {
+        let a = BBox::new(0.0, 0.0, 0.0, 0.0);
+        let b = BBox::new(0.0, 0.0, 0.0, 0.0);
+        assert_eq!(super::bbox_iou(&a, &b), 0.0);
+    }
 }
