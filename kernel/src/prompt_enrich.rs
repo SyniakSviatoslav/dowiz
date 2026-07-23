@@ -164,6 +164,52 @@ pub struct EnrichedResult {
     pub intent_confidence: f64,
 }
 
+/// A full enrichment report with all detected intents + applied prompts + skills.
+#[derive(Debug, Clone)]
+pub struct EnrichmentReport {
+    /// All detected intents with scores.
+    pub intents: Vec<(PromptKind, usize, f64)>,
+    /// Primary intent.
+    pub primary_intent: PromptKind,
+    /// Applied prompt enrichments.
+    pub prompts: Vec<PromptEntry>,
+    /// Applied skill names.
+    pub skills: Vec<String>,
+    /// How many prompts/skills matched.
+    pub total_prompts: usize,
+    pub total_skills: usize,
+}
+
+impl EnrichmentReport {
+    pub fn display(&self) -> String {
+        let mut out = String::with_capacity(1024);
+        out.push_str("─── ENRICHMENT ───\n");
+        out.push_str(&format!("  primary: {}\n", self.primary_intent.as_str()));
+        if !self.intents.is_empty() {
+            out.push_str("  intents:");
+            for (kind, count, score) in &self.intents {
+                out.push_str(&format!(" {}({}|{:.2})", kind.as_str(), count, score));
+            }
+            out.push('\n');
+        }
+        if !self.prompts.is_empty() {
+            out.push_str(&format!("  prompts ({}): ", self.prompts.len()));
+            for p in &self.prompts {
+                out.push_str(&format!("[{}] ", p.title));
+            }
+            out.push('\n');
+        }
+        if !self.skills.is_empty() {
+            out.push_str(&format!("  skills ({}): ", self.skills.len()));
+            for s in &self.skills {
+                out.push_str(&format!("[{}] ", s));
+            }
+            out.push('\n');
+        }
+        out
+    }
+}
+
 // ─── IntentKeywordMap ──────────────────────────────────────────────────────
 
 /// Maps keywords → PromptKind for intent detection.
@@ -237,6 +283,15 @@ fn build_intent_map() -> IntentMap {
 }
 
 fn detect_intent(text: &str) -> (PromptKind, f64) {
+    let intents = detect_all_intents(text);
+    if intents.is_empty() {
+        return (PromptKind::General, 0.0);
+    }
+    (intents[0].0, intents[0].2)
+}
+
+/// Detect ALL intents with scores — for batch enrichment.
+pub fn detect_all_intents(text: &str) -> Vec<(PromptKind, usize, f64)> {
     let lower = text.to_lowercase();
     let map = build_intent_map();
     let mut scores: HashMap<PromptKind, usize> = HashMap::new();
@@ -248,17 +303,15 @@ fn detect_intent(text: &str) -> (PromptKind, f64) {
     }
 
     if scores.is_empty() {
-        return (PromptKind::General, 0.0);
+        return vec![];
     }
 
     let total: usize = scores.values().sum();
-    let (best_kind, best_count) = scores.iter()
-        .max_by_key(|(_, c)| *c)
-        .map(|(k, c)| (*k, *c))
-        .unwrap_or((PromptKind::General, 0));
-
-    let confidence = if total > 0 { best_count as f64 / total.max(1) as f64 } else { 0.0 };
-    (best_kind, confidence)
+    let mut ranked: Vec<(PromptKind, usize, f64)> = scores.into_iter()
+        .map(|(k, c)| (k, c, if total > 0 { c as f64 / total as f64 } else { 0.0 }))
+        .collect();
+    ranked.sort_by(|a, b| b.1.cmp(&a.1));
+    ranked
 }
 
 // ─── PromptEnrichEngine ────────────────────────────────────────────────────
@@ -382,6 +435,67 @@ impl PromptEnrichEngine {
             matches,
             intent,
             intent_confidence: confidence,
+        }
+    }
+
+    /// Produce a full enrichment report — detects ALL intents, matches prompts
+    /// AND skills across them, builds a batch of applicable enrichments.
+    /// This is the primary API: call before any cognitive work.
+    pub fn enrich_report(&self, user_input: &str) -> EnrichmentReport {
+        let intents = detect_all_intents(user_input);
+        let primary = intents.first().map(|(k, _, _)| *k).unwrap_or(PromptKind::General);
+        let lower = user_input.to_lowercase();
+        let words: Vec<&str> = lower.split_whitespace().collect();
+
+        // Collect prompt matches across all detected intents (batch).
+        let mut candidates: Vec<(usize, u32)> = Vec::new();
+        let mut seen_intents = std::collections::HashSet::new();
+
+        for &(kind, _, _) in &intents {
+            if !seen_intents.insert(kind) { continue; }
+            if let Some(kind_matches) = self.kind_index.get(&kind) {
+                for &idx in kind_matches {
+                    let mut score = 3u32;
+                    let entry = &self.prompts[idx];
+                    for word in &words {
+                        if entry.trigger_keywords.iter().any(|k| k.contains(word) || word.contains(k.as_str())) {
+                            score += 2;
+                        }
+                    }
+                    candidates.push((idx, score));
+                }
+            }
+        }
+
+        // Dedup + sort.
+        candidates.sort_by(|a, b| b.1.cmp(&a.1));
+        let mut seen = std::collections::HashSet::new();
+        let mut prompts: Vec<PromptEntry> = Vec::new();
+        for (idx, _) in candidates {
+            if seen.insert(idx) && prompts.len() < MAX_ENRICH_RESULTS {
+                prompts.push(self.prompts[idx].clone());
+            }
+        }
+
+        // Collect skill names from matched prompts.
+        let mut skills: Vec<String> = Vec::new();
+        let mut seen_skills = std::collections::HashSet::new();
+        for p in &prompts {
+            if (p.kind == PromptKind::Skill || p.kind == PromptKind::Meta)
+                && seen_skills.insert(p.title.clone())
+            {
+                skills.push(p.title.clone());
+            }
+        }
+
+        let total_skills = skills.len();
+        EnrichmentReport {
+            intents,
+            primary_intent: primary,
+            prompts,
+            skills,
+            total_prompts: self.prompts.len(),
+            total_skills,
         }
     }
 
@@ -679,4 +793,57 @@ mod tests {
         assert_eq!(a.id, b.id);
         assert_eq!(a.quark_sig, b.quark_sig);
     }
+
+    #[test]
+    fn detect_all_intents_multiple() {
+        let intents = detect_all_intents("implement a new feature with tests and deploy the service");
+        assert!(!intents.is_empty());
+        let codes: Vec<PromptKind> = intents.iter().map(|(k, _, _)| *k).collect();
+        assert!(codes.contains(&PromptKind::Code));
+        assert!(codes.contains(&PromptKind::Test));
+        assert!(codes.contains(&PromptKind::System));
+    }
+
+    #[test]
+    fn enrich_report_batch() {
+        let mut engine = PromptEnrichEngine::new();
+        engine.ingest(seed_fabric_prompts());
+        engine.ingest(seed_opencode_prompts());
+        engine.ingest(seed_system_prompts());
+
+        let report = engine.enrich_report("audit the security system and summarize findings for the plan");
+        assert!(!report.intents.is_empty());
+        assert!(!report.prompts.is_empty());
+        // Should have >1 intent (security, summarize, plan).
+        let intent_kinds: Vec<PromptKind> = report.intents.iter().map(|(k, _, _)| *k).collect();
+        assert!(intent_kinds.len() >= 1);
+        // Display string works.
+        let disp = report.display();
+        assert!(disp.contains("ENRICHMENT"));
+        assert!(disp.contains("prompts"));
+    }
+
+    #[test]
+    fn enrichment_report_display_format() {
+        let report = EnrichmentReport {
+            intents: vec![(PromptKind::Code, 5, 0.5), (PromptKind::Test, 3, 0.3)],
+            primary_intent: PromptKind::Code,
+            prompts: vec![PromptEntry::new("test_prompt", "text", PromptKind::Code, &["test"], "src", "MIT")],
+            skills: vec!["test_skill".into()],
+            total_prompts: 1,
+            total_skills: 1,
+        };
+        let disp = report.display();
+        assert!(disp.contains("code"));
+        assert!(disp.contains("test_prompt"));
+        assert!(disp.contains("test_skill"));
+    }
+}
+
+/// Re-export for test access.
+fn seed_system_prompts() -> Vec<PromptEntry> {
+    vec![
+        PromptEntry::new("self_enrich", "self-improving enrichment engine", PromptKind::Meta, &["enrich","self-improve"], "system", "CC0"),
+        PromptEntry::new("skill_armory", "skill ingestion orchestration", PromptKind::Skill, &["armory","skill store"], "system", "CC0"),
+    ]
 }

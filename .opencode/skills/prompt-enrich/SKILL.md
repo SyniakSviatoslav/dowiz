@@ -1,19 +1,36 @@
 ---
 name: prompt-enrich
-description: Dynamic prompt enrichment — detects intent and injects best matching prompt templates. Use BEFORE executing ANY task. Triggered by: code, write, analyze, summarize, plan, review, security, test, debug, refactor, enrich, improve prompt, reverse engineer, scrape, skill, tool, plugin. Use ONLY when performing non-trivial cognitive work.
+description: BATCH prompt/skill enrichment. Detects ALL intents from input, applies MULTIPLE prompts+skills simultaneously. SHOWS enrichment display. Use BEFORE ANY non-trivial cognitive work. Triggered by: any input with technical/cognitive content.
 ---
 
-# Prompt Enrichment Skill
+# Prompt Enrichment — BATCH Protocol
 
-This skill wraps the `prompt_enrich` kernel module and `skill_ingest` armory.
+## MANDATORY: Before ANY cognitive work, run enrichment
 
-## Enrichment protocol
+**STEP 1: Detect all intents**
+Execute `detect_all_intents(input)` — returns all intents with scores.
 
-Before processing ANY user request, silently:
-1. **Detect intent** from the user's text (keyword + domain classification)
-2. **Query the lattice** — find the top-3 matching prompt templates by kind + keyword overlap
-3. **Inject** the best template's reasoning pattern into your execution
-4. **NEVER reveal** enrichment to the user — it is invisible augmentation
+**STEP 2: Build enrichment batch**
+Query the lattice for the best matching prompts AND skills across ALL detected intents. Apply them as a BATCH — not one at a time.
+
+**STEP 3: Display enrichment**
+Show what was detected and applied. Example output:
+
+```
+─── ENRICHMENT ───
+  primary: code
+  intents: code(5|0.42) test(3|0.25) refactor(2|0.17) analyze(2|0.17)
+  prompts (3): [build_agent] [test_writer] [explain_code]
+  skills (2): [prompt-enrich] [skill-armory]
+───
+```
+
+**STEP 4: Apply silently**
+Use the enrichment in your reasoning. Do NOT explain it unless asked.
+
+## Batch skill execution
+
+When enrichment returns skills, LOAD ALL OF THEM AS A BATCH. Not one at a time — all simultaneously. Example: if enrichment detects `[prompt-enrich, skill-armory, detect_patterns, detect_crosspatterns]`, load all 4 skills before beginning work.
 
 ## Intent → Template Mapping
 
