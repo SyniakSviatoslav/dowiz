@@ -128,6 +128,7 @@ impl<S: EventStore> HydraClosedLoop<S> {
         llm: Option<Box<dyn LlmBackend>>,
     ) -> Self {
         // 1-D Kalman filter tracking ρ(t): F=H=1, Q=0.01, R=1.0, x0=0, P0=1.
+        let lambda = crate::sanitize_f64(lambda);
         let kalman = KalmanFilter::scalar(KALMAN_RHO_X0, KALMAN_RHO_FH, KALMAN_RHO_FH, KALMAN_RHO_FH, KALMAN_RHO_Q, KALMAN_RHO_R);
         HydraClosedLoop {
             hydra: Hydra::new(store, nodes, base_edges.clone()),

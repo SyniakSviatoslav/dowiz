@@ -222,7 +222,7 @@ pub fn slem_cached(cache: &mut DecompCache, tile: &NormalizedTile) -> f64 {
         )
     });
     let mut mags: Vec<f64> = values.clone();
-    mags.sort_by(|x, y| y.partial_cmp(x).unwrap_or(core::cmp::Ordering::Equal));
+    crate::sort_by_f64_desc(&mut mags, |&m| m);
     if mags.len() > 1 {
         mags[1]
     } else {

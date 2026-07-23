@@ -170,7 +170,7 @@ impl SpectralIndex {
             // Fallback: cosine scan (O(n) — only used before training).
             let mut scores: Vec<(usize, f64)> = self.papers.iter().enumerate()
                 .map(|(i, p)| (i, query.cosine_sim(p))).collect();
-            scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+            crate::sort_by_f64_desc(&mut scores, |&(_, s)| s);
             scores.truncate(top_k);
             return scores;
         }
@@ -188,7 +188,7 @@ impl SpectralIndex {
                 (i, dot.max(0.0))
             }).collect();
 
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        crate::sort_by_f64_desc(&mut scores, |&(_, s)| s);
         scores.truncate(top_k);
         scores
     }

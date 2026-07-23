@@ -263,7 +263,7 @@ impl ParallelSearchEngine {
             FusedResult { doc_id, fused_score, index_scores: scores, contributing_indexes: contributing }
         }).collect();
 
-        results.sort_by(|a, b| b.fused_score.partial_cmp(&a.fused_score).unwrap_or(std::cmp::Ordering::Equal));
+        crate::sort_by_f64_desc(&mut results, |r| r.fused_score);
         results.truncate(top_k);
         results
     }

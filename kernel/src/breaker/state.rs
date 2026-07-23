@@ -294,13 +294,12 @@ pub fn manual_reset(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::breaker::testkit::{test_rate_profile, test_roc_bounds};
+    use crate::breaker::testkit::{test_rate_profile, test_roc_bounds, TRIP_EXCESS};
     use crate::breaker::thresholds::{default_weights, fit_from_rates};
 
-    /// Excess delta above θ_open / θ_kill that guarantees `trip_score` crosses the
-    /// trigger threshold (closed→Open / Open→Killed). Hardcoded as `0.5` because
+    /// threshold (closed→Open / Open→Killed). Hardcoded as `0.5` because
     /// the clamped [0,1] trip_score is always ≥ 1.0 at θ_open+0.5 when θ_open ≤ 0.5.
-    const TRIP_EXCESS: f32 = 0.5;
+    // NOTE: `TRIP_EXCESS` is shared in `crate::breaker::testkit`.
 
     fn tid() -> ThresholdId {
         let p = test_rate_profile();

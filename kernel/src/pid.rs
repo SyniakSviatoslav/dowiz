@@ -29,7 +29,13 @@ pub struct PidConfig {
 
 impl PidConfig {
     pub fn new(kp: f64, ki: f64, kd: f64, min: f64, max: f64) -> Self {
-        PidConfig { kp, ki, kd, min, max }
+        PidConfig {
+            kp: crate::sanitize_f64(kp),
+            ki: crate::sanitize_f64(ki),
+            kd: crate::sanitize_f64(kd),
+            min: crate::sanitize_f64(min),
+            max: crate::sanitize_f64(max),
+        }
     }
 
     /// Sanitize gains: clamp ki to non-negative, ensure min ≤ max.
@@ -317,6 +323,11 @@ pub struct PidArray {
 
 impl PidArray {
     pub fn new(n: usize, kp: f64, ki: f64, kd: f64, min: f64, max: f64) -> Self {
+        let kp = crate::sanitize_f64(kp);
+        let ki = crate::sanitize_f64(ki);
+        let kd = crate::sanitize_f64(kd);
+        let min = crate::sanitize_f64(min);
+        let max = crate::sanitize_f64(max);
         PidArray {
             n,
             kp,
@@ -346,6 +357,7 @@ impl PidArray {
         if idx >= self.n {
             return self.min;
         }
+        debug_assert!(idx < self.n, "PidArray::output: idx {} out of bounds (n={})", idx, self.n);
         self.outputs[idx]
     }
 

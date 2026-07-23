@@ -371,7 +371,7 @@ impl InverseSimulator {
 
         // Estimate bounds from top candidates
         let mut sorted: Vec<usize> = (0..self.n_candidates).collect();
-        sorted.sort_by(|&a, &b| costs[a].partial_cmp(&costs[b]).unwrap_or(std::cmp::Ordering::Equal));
+        crate::sort_by_f64_asc(&mut sorted, |&i| costs[i]);
 
         let top_n = INVERSE_TOP_N.min(self.n_candidates);
         let mut lower_bound = vec![f64::INFINITY; dims];

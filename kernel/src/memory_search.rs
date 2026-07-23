@@ -657,7 +657,7 @@ impl TopoChronoMemory {
             let dv = time - self.surface.v_coords[i];
             (i, (-(du * du + dv * dv) * 0.5).exp())
         }).collect();
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        crate::sort_by_f64_desc(&mut scores, |&(_, s)| s);
         scores.truncate(k);
         scores.iter().map(|&(i, _s)| {
             (self.labels[i].clone(), self.surface.u_coords[i], self.surface.v_coords[i])
@@ -673,7 +673,7 @@ impl TopoChronoMemory {
             let d = self.surface.geodesic_distance(u, v, self.surface.u_coords[i], self.surface.v_coords[i]);
             (i, d)
         }).collect();
-        dists.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        crate::sort_by_f64_asc(&mut dists, |&(_, s)| s);
         dists.truncate(k);
         dists.iter().map(|&(i, d)| (self.labels[i].clone(), d)).collect()
     }

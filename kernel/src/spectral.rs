@@ -559,7 +559,7 @@ pub fn topk_symmetric_in(
         evecs.extend_from_slice(x);
     }
     let mut order: Vec<usize> = (0..evals.len()).collect();
-    order.sort_by(|&p, &q| evals[q].abs().partial_cmp(&evals[p].abs()).unwrap());
+    crate::sort_by_f64_desc(&mut order, |&p| evals[p].abs());
     let sorted_vals: Vec<f64> = order.iter().map(|&i| evals[i]).collect();
     // Reorder eigenvectors within the flat buffer (copy rows, no k-clone rebuild)
     // and re-slice into the `Vec<Vec<f64>>` the public `Decomp` type expects.
@@ -589,7 +589,7 @@ pub fn spectral_radius(a: &[Vec<f64>]) -> f64 {
 /// SLEM — second-largest eigenvalue modulus |λ₂| (the mixing / convergence rate).
 pub fn slem(a: &[Vec<f64>]) -> f64 {
     let mut mags: Vec<f64> = eigenvalues(a).iter().map(|e| e.abs()).collect();
-    mags.sort_by(|x, y| y.partial_cmp(x).unwrap_or(core::cmp::Ordering::Equal));
+    crate::sort_by_f64_desc(&mut mags, |&m| m);
     if mags.len() > 1 {
         mags[1]
     } else {
@@ -639,12 +639,12 @@ pub struct GraphSpectrum {
 pub fn graph_spectrum(adj: &[Vec<f64>]) -> GraphSpectrum {
     let eigs = eigenvalues(adj);
     let mut mags: Vec<f64> = eigs.iter().map(|e| e.abs()).collect();
-    mags.sort_by(|x, y| y.partial_cmp(x).unwrap_or(core::cmp::Ordering::Equal));
+    crate::sort_by_f64_desc(&mut mags, |&m| m);
     let rho = mags.first().copied().unwrap_or(0.0);
     let slem_v = if mags.len() > 1 { mags[1] } else { 0.0 };
     let l = laplacian(adj);
     let mut re: Vec<f64> = eigenvalues(&l).iter().map(|e| e.re).collect();
-    re.sort_by(|x, y| x.partial_cmp(y).unwrap_or(core::cmp::Ordering::Equal));
+    crate::sort_by_f64_asc(&mut re, |&r| r);
     let fiedler = if re.len() > 1 { re[1] } else { 0.0 };
     let energy = mags.iter().sum();
     GraphSpectrum {
@@ -682,7 +682,7 @@ pub fn laplacian(adj: &[Vec<f64>]) -> Vec<Vec<f64>> {
 pub fn algebraic_connectivity(adj: &[Vec<f64>]) -> f64 {
     let l = laplacian(adj);
     let mut re: Vec<f64> = eigenvalues(&l).iter().map(|e| e.re).collect();
-    re.sort_by(|x, y| x.partial_cmp(y).unwrap_or(core::cmp::Ordering::Equal));
+    crate::sort_by_f64_asc(&mut re, |&r| r);
     if re.len() > 1 {
         re[1]
     } else {

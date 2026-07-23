@@ -88,7 +88,7 @@ impl IvfIndex {
         let mut cell_dists: Vec<(usize, f64)> = self.cells.iter().enumerate()
             .map(|(i, c)| (i, cosine_distance(query, &c.centroid)))
             .collect();
-        cell_dists.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        crate::sort_by_f64_asc(&mut cell_dists, |&(_, s)| s);
 
         // Search top 4 cells.
         let search_cells = cell_dists.iter().take(4);
@@ -98,7 +98,7 @@ impl IvfIndex {
             })
             .collect();
 
-        results.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        crate::sort_by_f64_asc(&mut results, |&(_, s)| s);
         results.truncate(top_k);
         results
     }

@@ -113,7 +113,7 @@ impl ResonanceDetector {
     /// Find the top-K dominant frequencies (peaks in the periodogram).
     pub fn peak_frequencies(&self, k: usize) -> Vec<(f64, f64)> {
         let mut pg = self.periodogram();
-        pg.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        crate::sort_by_f64_desc(&mut pg, |&(_, s)| s);
         pg.truncate(k);
         pg
     }

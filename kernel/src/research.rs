@@ -293,7 +293,7 @@ impl ResearchEngine {
         }
 
         // Sort by lift descending.
-        self.cross_patterns.sort_by(|a, b| b.lift.partial_cmp(&a.lift).unwrap_or(std::cmp::Ordering::Equal));
+        crate::sort_by_f64_desc(&mut self.cross_patterns, |p| p.lift);
     }
 
     /// Search papers by keyword.
@@ -713,7 +713,7 @@ impl RecursiveExtractor {
             let mut patterns: Vec<_> = self.engine.patterns.iter()
                 .filter(|p| p.confidence >= self.min_pattern_confidence)
                 .collect();
-            patterns.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+            crate::sort_by_f64_desc(&mut patterns, |p| p.confidence);
             patterns.truncate(self.queries_per_iteration);
 
             patterns.iter().map(|p| {

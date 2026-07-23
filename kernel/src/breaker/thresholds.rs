@@ -159,7 +159,7 @@ pub fn fit_from_rates(
     let fpr_budget = target_fpr.clamp(0.0, 1.0);
     // Candidate thresholds = unique scores, descending (most permissive first).
     let mut scores: Vec<f32> = rates.iter().map(|&(s, _)| s).collect();
-    scores.sort_by(|a, b| b.partial_cmp(a).unwrap_or(std::cmp::Ordering::Equal));
+    crate::sort_by_f64_desc(&mut scores, |&s| s as f64);
     scores.dedup();
 
     // FPR(t) = fraction of NORMAL samples with score >= t.

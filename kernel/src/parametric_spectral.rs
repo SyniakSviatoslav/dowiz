@@ -180,7 +180,7 @@ impl ParametricSurface {
             }
         }
 
-        candidates.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        crate::sort_by_f64_asc(&mut candidates, |&(_, s)| s as f64);
         candidates.truncate(top_k);
         candidates
     }

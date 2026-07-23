@@ -15,6 +15,11 @@ use crate::breaker::state::{
 };
 use crate::breaker::thresholds::ThresholdId;
 
+/// Excess delta above θ_open / θ_kill that guarantees `trip_score` crosses the
+/// trigger threshold (closed→Open / Open→Killed). Hardcoded as `0.5` because
+/// the clamped [0,1] trip_score is always ≥ 1.0 at θ_open+0.5 when θ_open ≤ 0.5.
+pub const TRIP_EXCESS: f32 = 0.5;
+
 #[cfg(test)]
 pub fn test_rate_profile() -> crate::breaker::thresholds::RateProfile {
     crate::breaker::thresholds::RateProfile {

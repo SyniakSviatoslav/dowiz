@@ -74,13 +74,13 @@ impl EntropyBudget {
     /// consecutive overruns before alarm (start with 5).
     pub fn new(lambda: f64, margin: f64, breach_window: u32) -> Self {
         EntropyBudget {
-            lambda,
+            lambda: crate::sanitize_f64(lambda),
             s: 0.0,
             rho: 0.0,
             v: 0.0,
             breach_streak: 0,
             breach_window,
-            margin,
+            margin: crate::sanitize_f64(margin),
             commits: 0,
         }
     }

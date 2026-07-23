@@ -1434,7 +1434,7 @@ impl AcademiaMesh {
             let centrality = bw_score * 0.35 + chunk_score * 0.45 + fractal_bonus * 0.2;
             (node.id.clone(), centrality)
         }).collect();
-        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        crate::sort_by_f64_desc(&mut ranked, |&(_, s)| s);
         ranked
     }
 
@@ -4833,7 +4833,7 @@ impl MoERouter {
             let dot: f64 = input.iter().take(n).zip(e.weights.data.iter().map(|r| &r[0])).map(|(a, b)| a * b).sum();
             (i, dot.abs())
         }).collect();
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        crate::sort_by_f64_desc(&mut scores, |&(_, s)| s);
         scores.truncate(self.top_k);
         scores.iter().map(|(i, _)| *i).collect()
     }

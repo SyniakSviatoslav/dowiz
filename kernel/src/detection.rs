@@ -92,7 +92,7 @@ impl Detections {
         let mut sorted: Vec<(usize, f32)> = self.detections.iter().enumerate()
             .map(|(i, d)| (i, d.confidence))
             .collect();
-        sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        crate::sort_by_f64_desc(&mut sorted, |&(_, s)| s as f64);
 
         let mut suppressed = vec![false; self.detections.len()];
         for (idx, _) in &sorted {

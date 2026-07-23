@@ -75,6 +75,7 @@ pub struct ThreePhaseVerifier {
 
 impl ThreePhaseVerifier {
     pub fn new(stabilization_threshold: u32) -> Self {
+        debug_assert!(stabilization_threshold > 0, "ThreePhaseVerifier::new: stabilization_threshold must be > 0");
         ThreePhaseVerifier {
             stabilization_threshold,
             consecutive_passes: 0,

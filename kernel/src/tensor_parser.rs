@@ -93,7 +93,7 @@ impl TensorStore {
         let mut scores: Vec<(usize, f64)> = self.papers.iter().enumerate()
             .map(|(i, p)| (i, query.cosine_similarity(p)))
             .collect();
-        scores.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        crate::sort_by_f64_desc(&mut scores, |&(_, s)| s);
         scores.truncate(top_k);
         scores
     }

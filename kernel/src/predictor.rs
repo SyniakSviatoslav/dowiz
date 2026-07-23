@@ -474,8 +474,7 @@ impl Predictor {
         }
 
         // ── Sort bids by confidence (highest first) ───────────────────────
-        bids.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence)
-            .unwrap_or(std::cmp::Ordering::Equal));
+        crate::sort_by_f64_desc(&mut bids, |b| b.confidence);
 
         // Convert to PredictedOutcome
         let outcomes: Vec<PredictedOutcome> = bids.into_iter()
@@ -764,8 +763,7 @@ impl EventSimulator {
         }
 
         // Sort by error probability ascending.
-        results.sort_by(|a, b| a.error_probability.partial_cmp(&b.error_probability)
-            .unwrap_or(std::cmp::Ordering::Equal));
+        crate::sort_by_f64_asc(&mut results, |r| r.error_probability);
 
         // Set alternative route: if primary has issues, suggest the next best.
         let needs_alternative = results.first()

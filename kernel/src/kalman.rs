@@ -187,12 +187,12 @@ impl KalmanFilter {
     /// (This is exactly what `ema_next` becomes a special case of.)
     pub fn scalar(x0: f64, p0: f64, f: f64, h: f64, q: f64, r: f64) -> Self {
         KalmanFilter::new(
-            vec![x0],
-            Mat::from_vecvec(&[vec![p0]]),
-            Mat::from_vecvec(&[vec![f]]),
-            Mat::from_vecvec(&[vec![h]]),
-            Mat::from_vecvec(&[vec![q]]),
-            Mat::from_vecvec(&[vec![r]]),
+            vec![crate::sanitize_f64(x0)],
+            Mat::from_vecvec(&[vec![crate::sanitize_f64(p0)]]),
+            Mat::from_vecvec(&[vec![crate::sanitize_f64(f)]]),
+            Mat::from_vecvec(&[vec![crate::sanitize_f64(h)]]),
+            Mat::from_vecvec(&[vec![crate::sanitize_f64(q)]]),
+            Mat::from_vecvec(&[vec![crate::sanitize_f64(r)]]),
         )
     }
 

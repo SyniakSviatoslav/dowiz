@@ -93,6 +93,9 @@ impl Breaker {
     /// [`fit_from_rates`]); a `Breaker` is therefore unconstructible without a
     /// valid fitted threshold set — failure surfaces at bootstrap, not at tick.
     pub fn new(agent_id: AgentId, tid: ThresholdId) -> Self {
+        debug_assert!(tid.open > 0.0, "Breaker::new: θ_open must be > 0");
+        debug_assert!(tid.kill >= tid.open, "Breaker::new: θ_open ({}) must be <= θ_kill ({})", tid.open, tid.kill);
+        debug_assert!(tid.cooldown_base <= tid.cooldown_cap, "Breaker::new: cooldown_base ({}) must be <= cooldown_cap ({})", tid.cooldown_base, tid.cooldown_cap);
         let rec = new_record(agent_id, 0, tid);
         let audit = AuditChain::new(agent_id, None);
         Breaker {
@@ -111,6 +114,9 @@ impl Breaker {
         tid: ThresholdId,
         ring: std::sync::Mutex<crate::fdr::RingHandle>,
     ) -> Self {
+        debug_assert!(tid.open > 0.0, "Breaker::with_ring: θ_open must be > 0");
+        debug_assert!(tid.kill >= tid.open, "Breaker::with_ring: θ_open ({}) must be <= θ_kill ({})", tid.open, tid.kill);
+        debug_assert!(tid.cooldown_base <= tid.cooldown_cap, "Breaker::with_ring: cooldown_base ({}) must be <= cooldown_cap ({})", tid.cooldown_base, tid.cooldown_cap);
         let rec = new_record(agent_id, 0, tid);
         let audit = AuditChain::new(agent_id, Some(ring));
         Breaker {
@@ -270,11 +276,8 @@ pub enum RedLineClass {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::breaker::testkit::{test_rate_profile, test_roc_bounds};
+    use crate::breaker::testkit::{test_rate_profile, test_roc_bounds, TRIP_EXCESS};
     use crate::breaker::thresholds::{default_weights, fit_from_rates};
-
-    /// Excess delta above θ_open guaranteeing trip_score ≥ 1.0 (see state.rs tests).
-    const TRIP_EXCESS: f32 = 0.5;
 
     fn tid() -> ThresholdId {
         let p = test_rate_profile();
