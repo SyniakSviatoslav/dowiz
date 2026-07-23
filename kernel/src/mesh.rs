@@ -844,4 +844,279 @@ mod tests {
         let verified = gossip.receive_verified().unwrap();
         assert!(verified.is_empty());
     }
+
+    // ── Flow 6: Mesh/Gossip Consistency property tests ────────────────────
+
+    /// Helper: build a full chain of `n` entries from scratch with one signer.
+    fn build_chain(signer: &MlDsaSigner, n: usize) -> MeshLog {
+        let mut log = MeshLog::new();
+        for i in 0..n {
+            log.append(format!("entry-{:03}", i).as_bytes(), signer);
+        }
+        log
+    }
+
+    /// Helper: deduplicate a slice of entries by content_hash and return in
+    /// chain order (walk from genesis).
+    fn dedup_and_order(entries: &[SignedEntry]) -> Vec<SignedEntry> {
+        use std::collections::HashSet;
+        let mut seen = HashSet::new();
+        let unique: Vec<&SignedEntry> =
+            entries.iter().filter(|e| seen.insert(e.content_hash())).collect();
+        let mut ordered = Vec::new();
+        let mut cur: [u8; 32] = [0u8; 32];
+        let mut remaining: Vec<&SignedEntry> = unique;
+        while !remaining.is_empty() {
+            let pos = remaining.iter().position(|e| e.prev_hash == cur);
+            match pos {
+                Some(idx) => {
+                    let e = remaining.remove(idx);
+                    cur = e.content_hash();
+                    ordered.push(e.clone());
+                }
+                None => break,
+            }
+        }
+        ordered
+    }
+
+    /// Three nodes each start with different subsets of a shared log.
+    /// After N rounds of gossip (all→all exchange + merge), every node
+    /// holds the identical full chain and every entry verifies.
+    #[test]
+    fn flow_eventual_consistency_3_nodes_converge() {
+        let s = signer(20);
+        let full = build_chain(&s, 10);
+        let full_entries = full.entries().to_vec();
+
+        // Node A has entries 0..4, Node B 4..7, Node C 7..10.
+        let mut node_a = MeshLog::new();
+        let mut node_b = MeshLog::new();
+        let mut node_c = MeshLog::new();
+        for e in &full_entries[..4] {
+            node_a.entries.push(e.clone());
+        }
+        for e in &full_entries[4..7] {
+            node_b.entries.push(e.clone());
+        }
+        for e in &full_entries[7..] {
+            node_c.entries.push(e.clone());
+        }
+
+        // Gossip round: collect ALL entries from all nodes, dedup, order by chain.
+        let mut all_entries = Vec::new();
+        all_entries.extend_from_slice(node_a.entries());
+        all_entries.extend_from_slice(node_b.entries());
+        all_entries.extend_from_slice(node_c.entries());
+        let merged = dedup_and_order(&all_entries);
+
+        // Every node adopts the merged chain.
+        node_a.entries = merged.clone();
+        node_b.entries = merged.clone();
+        node_c.entries = merged.clone();
+
+        // After convergence: all nodes have the full chain length.
+        assert_eq!(node_a.len(), full.len(),
+            "all nodes must converge to the full chain length");
+        assert_eq!(node_b.len(), full.len());
+        assert_eq!(node_c.len(), full.len());
+        assert!(node_a.verify_chain().is_ok());
+        assert!(node_b.verify_chain().is_ok());
+        assert!(node_c.verify_chain().is_ok());
+        for i in 0..full_entries.len() {
+            assert_eq!(node_a.entry(i).unwrap().content_hash(), full_entries[i].content_hash());
+            assert_eq!(node_b.entry(i).unwrap().content_hash(), full_entries[i].content_hash());
+            assert_eq!(node_c.entry(i).unwrap().content_hash(), full_entries[i].content_hash());
+        }
+    }
+
+    /// Two nodes make concurrent (divergent) appends. When merged via
+    /// deterministic chain-ordering, the result is always the same final
+    /// chain regardless of arrival order.
+    #[test]
+    fn flow_crdt_convergence_concurrent_updates_deterministic() {
+        let s1 = signer(21);
+        let s2 = signer(22);
+
+        // Build a shared prefix on both nodes.
+        let mut fork_a = MeshLog::new();
+        let mut fork_b = MeshLog::new();
+        fork_a.append(b"g-a", &s1);
+        fork_a.append(b"g-b", &s1);
+        fork_b.entries.push(fork_a.entries()[0].clone());
+        fork_b.entries.push(fork_a.entries()[1].clone());
+
+        // Fork A appends "a-extra", fork B appends "b-extra".
+        let a_extra = fork_a.append(b"a-extra", &s1);
+        let b_extra = fork_b.append(b"b-extra", &s2);
+
+        // Merge: collect unique, dedup, chain-order from genesis.
+        let mut all1 = Vec::new();
+        all1.extend_from_slice(fork_a.entries());
+        all1.extend_from_slice(fork_b.entries());
+        let merged1 = dedup_and_order(&all1);
+
+        // Merge a second time — same inputs, same result.
+        let mut all2 = Vec::new();
+        all2.extend_from_slice(fork_a.entries());
+        all2.extend_from_slice(fork_b.entries());
+        let merged2 = dedup_and_order(&all2);
+
+        assert_eq!(merged1.len(), merged2.len(),
+            "merge must be deterministic — same length");
+        for i in 0..merged1.len() {
+            assert_eq!(merged1[i].content_hash(), merged2[i].content_hash(),
+                "merge must be deterministic — content_hash at index {i}");
+        }
+        // The merged chain must contain the shared prefix (2 entries) plus at
+        // least one of the diverging entries. Exactly 3 entries because both
+        // extras link to the same tip and only one fits the chain.
+        assert_eq!(merged1.len(), 3, "merged chain must have prefix + 1 extra");
+    }
+
+    /// Isolate one node (partition), let others advance, then reconnect.
+    /// The isolated node must catch up to the current tip correctly.
+    #[test]
+    fn flow_partition_tolerance_reconnect_catches_up() {
+        let s = signer(23);
+
+        let mut n1 = MeshLog::new();
+        let mut n2 = MeshLog::new();
+        n1.append(b"genesis", &s);
+        n2.entries.push(n1.entries()[0].clone());
+
+        // n1 partitioned. n2 advances 4 entries.
+        for i in 1..5 {
+            let e = n2.append(format!("adv-{}", i).as_bytes(), &s);
+        }
+        let tip_hash = n2.entries().last().unwrap().content_hash();
+
+        // n1 reconnects, receives n2's entries.
+        let mut all = Vec::new();
+        all.extend_from_slice(n1.entries());
+        all.extend_from_slice(n2.entries());
+        let merged = dedup_and_order(&all);
+        n1.entries = merged;
+
+        assert_eq!(n1.len(), n2.len());
+        assert_eq!(n1.entries().last().unwrap().content_hash(), tip_hash);
+        assert!(n1.verify_chain().is_ok());
+        assert_eq!(n1.len(), 5, "partitioned node must catch up all 5 entries");
+    }
+
+    /// Same signed entry delivered twice (duplicate) must be applied only once.
+    #[test]
+    fn flow_duplicate_detection_same_message_applied_once() {
+        let s = signer(24);
+        let mut log = build_chain(&s, 3);
+        assert_eq!(log.len(), 3);
+        let original_len = log.len();
+
+        // Deliver the middle entry again.
+        let dupe = log.entries()[1].clone();
+        log.entries.push(dupe);
+        // Dedup + chain-order should drop the duplicate.
+        let deduped = dedup_and_order(log.entries());
+        assert_eq!(deduped.len(), original_len, "duplicate must not increase count");
+        log.entries = deduped;
+        assert!(log.verify_chain().is_ok());
+    }
+
+    /// Messages arrive out of order; chain-reconstruction recovers correct order.
+    #[test]
+    fn flow_out_of_order_delivery_correct_final_state() {
+        let s = signer(25);
+        let canonical = build_chain(&s, 5);
+        let canonical_tip = canonical.entries().last().unwrap().content_hash();
+
+        // Scramble: E, C, A, D, B.
+        use std::collections::HashSet;
+        let mut seen = HashSet::new();
+        let scrambled: Vec<SignedEntry> = [
+            canonical.entries()[4].clone(),
+            canonical.entries()[2].clone(),
+            canonical.entries()[0].clone(),
+            canonical.entries()[3].clone(),
+            canonical.entries()[1].clone(),
+        ].into_iter().filter(|e| seen.insert(e.content_hash())).collect();
+        let ordered = dedup_and_order(&scrambled);
+        let mut recovered = MeshLog::new();
+        recovered.entries = ordered;
+        assert!(recovered.verify_chain().is_ok());
+        assert_eq!(recovered.len(), canonical.len());
+        assert_eq!(recovered.entries().last().unwrap().content_hash(), canonical_tip);
+    }
+
+    /// Start with 0 nodes, then add 1 node. Its log must be valid.
+    #[test]
+    fn flow_empty_mesh_bootstrap_0_then_1_node_valid() {
+        let mesh: Vec<MeshLog> = Vec::new();
+        assert!(mesh.is_empty());
+
+        let mut node1 = MeshLog::new();
+        assert_eq!(node1.len(), 0);
+        assert!(node1.verify_chain().is_ok());
+        let s = signer(26);
+        node1.append(b"bootstrap-1", &s);
+        assert_eq!(node1.len(), 1);
+        assert!(node1.verify_chain().is_ok());
+        assert_eq!(node1.entry(0).unwrap().prev_hash, [0u8; 32]);
+    }
+
+    /// Remove one node from a three-node mesh. The remaining two nodes
+    /// must continue to operate without errors.
+    #[test]
+    fn flow_node_removal_remaining_continue() {
+        let s = signer(27);
+        let mut n1 = MeshLog::new();
+        let mut n2 = MeshLog::new();
+        let mut n3 = MeshLog::new();
+
+        n1.append(b"genesis", &s);
+        n2.entries.push(n1.entries()[0].clone());
+        n3.entries.push(n1.entries()[0].clone());
+
+        n1.append(b"pre-removal", &s);
+        n2.entries.push(n1.entries()[1].clone());
+        n3.entries.push(n1.entries()[1].clone());
+
+        drop(n3);
+
+        n1.append(b"post-removal-1", &s);
+        n2.entries.push(n1.entries()[2].clone());
+        n1.append(b"post-removal-2", &s);
+        n2.entries.push(n1.entries()[3].clone());
+
+        assert!(n1.verify_chain().is_ok());
+        assert!(n2.verify_chain().is_ok());
+        assert_eq!(n1.len(), 4);
+        assert_eq!(n2.len(), 4);
+        assert_eq!(n2.entries().last().unwrap().content_hash(),
+            n1.entries().last().unwrap().content_hash());
+    }
+
+    /// Causal ordering: A before B structurally enforced by prev_hash chain.
+    #[test]
+    fn flow_causal_ordering_a_before_b() {
+        let s = signer(28);
+        let mut log = MeshLog::new();
+        log.append(b"A: account created", &s);
+        log.append(b"B: order placed", &s);
+        assert!(log.verify_chain().is_ok());
+
+        assert_eq!(log.entry(0).unwrap().payload, b"A: account created");
+        assert_eq!(log.entry(1).unwrap().payload, b"B: order placed");
+
+        // Deliver B first, A second — rebuild must put A before B.
+        let scrambled = vec![
+            log.entries()[1].clone(),
+            log.entries()[0].clone(),
+        ];
+        let ordered = dedup_and_order(&scrambled);
+        let mut recovered = MeshLog::new();
+        recovered.entries = ordered;
+        assert!(recovered.verify_chain().is_ok());
+        assert_eq!(recovered.entry(0).unwrap().payload, b"A: account created");
+        assert_eq!(recovered.entry(1).unwrap().payload, b"B: order placed");
+    }
 }

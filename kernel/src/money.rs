@@ -851,4 +851,134 @@ mod tests {
         };
         assert!(ledger_append(ledger.clone(), dup).is_err());
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Property tests — Flow 1: Payment / Value Transfer invariants
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// prop-1: Roundtrip — create → credit → debit → balance == expected.
+    #[test]
+    fn prop_roundtrip_credit_debit_balance_equals_expected() {
+        let zero = Money::new(0, Currency::Eur);
+        let credit = Money::new(5000, Currency::Eur);
+        let debit = Money::new(-2000, Currency::Eur);
+        let step1 = zero.checked_add(credit).unwrap();
+        assert_eq!(step1.minor, 5000, "after credit, balance must be 5000");
+        let step2 = step1.checked_add(debit).unwrap();
+        assert_eq!(
+            step2,
+            Money::new(3000, Currency::Eur),
+            "credit 5000 then debit 2000 => balance 3000"
+        );
+        let step3 = step2.checked_add(Money::new(-3000, Currency::Eur)).unwrap();
+        assert_eq!(
+            step3,
+            Money::new(0, Currency::Eur),
+            "full debit to zero — balance must be exactly 0"
+        );
+    }
+
+    /// prop-2: Overflow guard — credit MAX then credit 1 ⇒ Err (NOT wrap).
+    #[test]
+    fn prop_overflow_guard_saturates_error_not_wrap() {
+        let max = Money::new(i64::MAX, Currency::All);
+        let one = Money::new(1, Currency::All);
+        assert!(
+            max.checked_add(one).is_err(),
+            "i64::MAX + 1 must return Err — never wrap to i64::MIN"
+        );
+        let min = Money::new(i64::MIN, Currency::All);
+        assert!(
+            min.checked_sub(one).is_err(),
+            "i64::MIN - 1 must return Err — never wrap"
+        );
+    }
+
+    /// prop-3: Cross-currency rejection — credit USD to EUR wallet ⇒ rejected.
+    #[test]
+    fn prop_cross_currency_credit_usd_to_eur_rejected() {
+        let eur = Money::new(1000, Currency::Eur);
+        let usd = Money::new(500, Currency::Usd);
+        assert!(
+            eur.checked_add(usd).is_err(),
+            "EUR + USD must be rejected — cross-currency never silently mixes"
+        );
+        assert!(
+            usd.checked_add(eur).is_err(),
+            "USD + EUR must be rejected symmetrically"
+        );
+    }
+
+    /// prop-4: Negative rejection — `assert_non_negative` refuses totals < 0.
+    #[test]
+    fn prop_negative_amount_rejected_by_non_negative_guard() {
+        assert!(
+            assert_non_negative(-1).is_err(),
+            "negative total -1 must be rejected"
+        );
+        assert!(
+            assert_non_negative(-1_000_000).is_err(),
+            "negative total -1000000 must be rejected"
+        );
+        assert!(assert_non_negative(0).is_ok(), "zero is non-negative");
+        assert!(assert_non_negative(1).is_ok(), "positive accepted");
+    }
+
+    /// prop-5: No double-spend — second reversal of same earn leg ⇒ rejected.
+    #[test]
+    fn prop_double_spend_same_earn_leg_second_reversal_rejected() {
+        let earn = LedgerEntry {
+            id: 10,
+            kind: EntryKind::Earn,
+            amount: Money::new(700, Currency::All),
+            reverses: None,
+        };
+        let ledger = ledger_append(Vec::new(), earn).unwrap();
+        let ledger = reverse_transfer(ledger, 10, 20).unwrap();
+        let result = reverse_transfer(ledger, 10, 30);
+        assert!(
+            result.is_err(),
+            "second reversal of the same earn leg must be rejected — no double-spend"
+        );
+    }
+
+    /// prop-6: Zero invariant — empty ledger sums to zero.
+    #[test]
+    fn prop_zero_invariant_empty_ledger_sums_to_zero() {
+        let empty: Vec<LedgerEntry> = Vec::new();
+        assert_eq!(ledger_sum(&empty), 0, "empty ledger must sum to 0");
+    }
+
+    /// prop-7: Idempotent credit — same entry id twice ⇒ rejected.
+    #[test]
+    fn prop_idempotent_credit_same_entry_id_twice_rejected() {
+        let e1 = LedgerEntry {
+            id: 1,
+            kind: EntryKind::Earn,
+            amount: Money::new(100, Currency::Eur),
+            reverses: None,
+        };
+        let ledger = ledger_append(Vec::new(), e1).unwrap();
+        let e2 = LedgerEntry {
+            id: 1,
+            kind: EntryKind::Earn,
+            amount: Money::new(100, Currency::Eur),
+            reverses: None,
+        };
+        assert!(
+            ledger_append(ledger, e2).is_err(),
+            "duplicate entry id must be rejected — idempotent credit"
+        );
+    }
+
+    /// prop-8: Deterministic equality — same minor+currency ⇒ equal.
+    #[test]
+    fn prop_deterministic_money_equality() {
+        let a = Money::new(42, Currency::Eur);
+        let b = Money::new(42, Currency::Eur);
+        assert_eq!(a, b, "same minor + same currency => equal");
+        assert_ne!(a, Money::new(42, Currency::Usd), "cross-currency => not equal");
+        assert_ne!(a, Money::new(43, Currency::Eur), "different amount => not equal");
+        assert_eq!(a, a, "Copy must preserve equality");
+    }
 }

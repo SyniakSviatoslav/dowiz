@@ -598,7 +598,7 @@ pub fn detect_all_intents(text: &str) -> Vec<(PromptKind, usize, f64)> {
     let mut ranked: Vec<(PromptKind, usize, f64)> = scores.into_iter()
         .map(|(k, c)| (k, c, if total > 0 { c as f64 / total as f64 } else { 0.0 }))
         .collect();
-    ranked.sort_by(|a, b| b.1.cmp(&a.1));
+    ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.as_str().cmp(b.0.as_str())));
     ranked
 }
 
@@ -1496,6 +1496,193 @@ mod tests {
         let deduped: Vec<String> = paths.iter().map(|p| p.join("/")).collect();
         let unique: std::collections::HashSet<_> = deduped.iter().collect();
         assert_eq!(deduped.len(), unique.len());
+    }
+
+    // ─── P4: Flow 4 property tests — enrichment determinism ───────────────────
+
+    #[test]
+    fn property_deterministic_enrichment() {
+        let mut engine = PromptEnrichEngine::new();
+        engine.ingest(seed_fabric_prompts());
+        engine.ingest(seed_opencode_prompts());
+        let input = "write a summary of the security audit and implement a fix for the bug";
+        let r1 = engine.enrich_report(input);
+        let r2 = engine.enrich_report(input);
+        let r3 = engine.enrich_report(input);
+        assert_eq!(r1.prompts.len(), r2.prompts.len());
+        assert_eq!(r2.prompts.len(), r3.prompts.len());
+        for i in 0..r1.prompts.len() {
+            assert_eq!(r1.prompts[i].title, r2.prompts[i].title,
+                "prompt {} title differs between run 1 and 2", i);
+            assert_eq!(r2.prompts[i].title, r3.prompts[i].title,
+                "prompt {} title differs between run 2 and 3", i);
+        }
+        assert_eq!(r1.intents, r2.intents);
+        assert_eq!(r2.intents, r3.intents);
+        assert_eq!(r1.primary_intent, r2.primary_intent);
+        assert_eq!(r2.primary_intent, r3.primary_intent);
+    }
+
+    #[test]
+    fn property_idempotent_enrichment() {
+        let mut engine = PromptEnrichEngine::new();
+        engine.ingest(seed_fabric_prompts());
+        engine.ingest(seed_opencode_prompts());
+        let input = "design a new database schema and plan the migration";
+        let r1 = engine.enrich_report(input);
+        let r2 = engine.enrich_report(input);
+        assert_eq!(r1.prompts.len(), r2.prompts.len());
+        assert_eq!(r1.intents, r2.intents);
+        for i in 0..r1.prompts.len() {
+            assert_eq!(r1.prompts[i].title, r2.prompts[i].title);
+        }
+    }
+
+    #[test]
+    fn property_eigen_vs_scalar_top_result_agreement() {
+        let mut engine = PromptEnrichEngine::new();
+        engine.ingest(seed_fabric_prompts());
+        engine.ingest(seed_opencode_prompts());
+        let vocab = build_vocabulary(&engine);
+        let input = "review this code for security vulnerabilities";
+        let scalar = engine.enrich_report(input);
+        let eigen_results = eigen_enrich_report(&engine, input, &vocab);
+        if !scalar.prompts.is_empty() && !eigen_results.is_empty() {
+            let top_eigen_title = &eigen_results[0].title;
+            let scalar_titles: Vec<&str> = scalar.prompts.iter().map(|p| p.title.as_str()).collect();
+            assert!(scalar_titles.contains(&top_eigen_title.as_str()),
+                "Top eigen result '{}' must appear in scalar results {:?}",
+                top_eigen_title, scalar_titles);
+        }
+    }
+
+    #[test]
+    fn property_empty_input_yields_no_enrichments() {
+        let mut engine = PromptEnrichEngine::new();
+        engine.ingest(seed_fabric_prompts());
+        engine.ingest(seed_opencode_prompts());
+        let report = engine.enrich_report("");
+        assert!(report.prompts.is_empty(), "Empty input must yield zero enrichment results");
+        // Also must not panic and must return General intent
+        assert_eq!(report.primary_intent, PromptKind::General);
+    }
+
+    #[test]
+    fn property_monotonic_scoring() {
+        let base = "implement a function";
+        let enhanced = "implement a function with tests and code review";
+        let base_intents = detect_all_intents(base);
+        let enhanced_intents = detect_all_intents(enhanced);
+        for (kind, base_count, _) in &base_intents {
+            let enhanced_count = enhanced_intents.iter()
+                .find(|(k, _, _)| k == kind)
+                .map(|(_, c, _)| *c)
+                .unwrap_or(0);
+            assert!(enhanced_count >= *base_count,
+                "Adding keywords must not decrease count for {:?}: {} -> {}",
+                kind, base_count, enhanced_count);
+        }
+    }
+
+    #[test]
+    fn property_vocabulary_stability() {
+        let mut engine = PromptEnrichEngine::new();
+        engine.ingest(seed_fabric_prompts());
+        engine.ingest(seed_opencode_prompts());
+        let v1 = build_vocabulary(&engine);
+        let v2 = build_vocabulary(&engine);
+        assert_eq!(v1, v2, "build_vocabulary must be deterministic");
+        // Verify sorted + deduped
+        assert!(v1.windows(2).all(|w| w[0] <= w[1]), "Vocabulary must be sorted");
+        let unique: std::collections::HashSet<_> = v1.iter().collect();
+        assert_eq!(unique.len(), v1.len(), "Vocabulary must be deduplicated");
+    }
+
+    #[test]
+    fn property_cross_kind_non_interference() {
+        let mut engine = PromptEnrichEngine::new();
+        engine.ingest(seed_fabric_prompts());
+        engine.ingest(seed_opencode_prompts());
+        let report = engine.enrich_report("implement a function that compiles and runs correctly");
+        // For a pure code query without security keywords, Security should not appear
+        // in the top 2 results unless it was matched by keyword overlap
+        let top_kinds: Vec<PromptKind> = report.prompts.iter().take(2).map(|p| p.kind).collect();
+        // If Security appears in top 2, assert it's NOT ranked FIRST (code should be)
+        if top_kinds.contains(&PromptKind::Security) {
+            let code_pos = report.prompts.iter().take(2).position(|p| p.kind == PromptKind::Code);
+            let sec_pos = report.prompts.iter().take(2).position(|p| p.kind == PromptKind::Security);
+            if let (Some(cp), Some(sp)) = (code_pos, sec_pos) {
+                assert!(cp <= sp,
+                    "Pure code query: Code must not rank after Security in top results (code_pos={}, sec_pos={})",
+                    cp, sp);
+            }
+        }
+    }
+
+    #[test]
+    fn property_intent_detection_determinism() {
+        let text = "implement a secure API with integration tests and deploy to production";
+        let i1 = detect_all_intents(text);
+        let i2 = detect_all_intents(text);
+        assert_eq!(i1, i2, "detect_all_intents must be deterministic");
+        // Also test detect_intent_tree
+        let t1 = detect_intent_tree(text);
+        let t2 = detect_intent_tree(text);
+        assert_eq!(t1, t2, "detect_intent_tree must be deterministic");
+    }
+
+    #[test]
+    fn property_pattern_inheritance_closure() {
+        let path = vec!["code".to_string(), "debug".to_string(), "compile".to_string()];
+        let patterns = inherit_patterns(&path);
+        let domain_map: &[(&str, usize)] = &[
+            ("code", 11), ("write", 11), ("refactor", 11), ("debug", 11), ("review", 11), ("test", 11),
+            ("security", 21), ("harden", 21),
+            ("system", 25), ("deploy", 25),
+            ("meta", 29), ("prompt-eng", 29), ("skill-design", 29),
+        ];
+        let always_idx: &[usize] = &[3, 4, 14, 15, 16, 17];
+        for p in &patterns {
+            let idx = PATTERN_TREE.iter().position(|n| n.name == p.name)
+                .expect("pattern must be in PATTERN_TREE");
+            let is_universal = idx <= 4;
+            let is_always = always_idx.contains(&idx);
+            let is_domain = path.iter().any(|seg| {
+                domain_map.iter().any(|(key, di)| {
+                    seg == *key && (idx == *di || PATTERN_TREE[*di].children.contains(&idx))
+                })
+            });
+            assert!(is_universal || is_always || is_domain,
+                "Pattern '{}' (idx {}) must be universal, always-included, or domain-matched for path {:?}",
+                p.name, idx, path);
+        }
+    }
+
+    #[test]
+    fn property_eigen_scalar_top3_overlap() {
+        let mut engine = PromptEnrichEngine::new();
+        engine.ingest(seed_fabric_prompts());
+        engine.ingest(seed_opencode_prompts());
+        let vocab = build_vocabulary(&engine);
+        // Use queries firmly in one domain so both rankers agree on top entries.
+        let queries = [
+            "implement code build function debug",
+            "review security audit hardening",
+        ];
+        for input in &queries {
+            let scalar = engine.enrich_report(input);
+            let eigen_results = eigen_enrich_report(&engine, input, &vocab);
+            let scalar_titles: std::collections::HashSet<&str> = scalar.prompts.iter()
+                .take(3).map(|p| p.title.as_str()).collect();
+            let eigen_titles: Vec<&str> = eigen_results.iter()
+                .take(3).map(|p| p.title.as_str()).collect();
+            let overlap = eigen_titles.iter().filter(|t| scalar_titles.contains(*t)).count();
+            if scalar.prompts.len() >= 3 && eigen_results.len() >= 3 {
+                assert!(overlap >= 2,
+                    "Query '{}': eigen top-3 {:?} and scalar top-3 {:?} must overlap by ≥2 (got {})",
+                    input, eigen_titles, scalar_titles, overlap);
+            }
+        }
     }
 }
 

@@ -1912,4 +1912,338 @@ mod tests {
             Err(CertError::MaxDepthExceeded)
         );
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Property tests — Flow 2: Admission / Capability Verification invariants
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// prop-adm-1: Empty cap list — empty delegation chain ⇒ rejected.
+    #[test]
+    fn prop_empty_capability_chain_rejected() {
+        let v = RefSigner;
+        let owner = Party::new(&v, 1);
+        let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        let mut roster = AnchorRoster::new();
+        root.enroll(&mut roster);
+        let cap = Capability::new_hybrid(
+            owner.cls_pub, owner.pq_pub.clone(), scope(), [9u8; 8], 9999,
+        );
+        let store = RevocationStore::new();
+        assert!(
+            verify_chain_hybrid(&v, &roster, &store, &root, &[], &cap, 0).is_err(),
+            "empty delegation chain must be rejected"
+        );
+    }
+
+    /// prop-adm-2: Expired cap — capability past expiry ⇒ rejected.
+    #[test]
+    fn prop_expired_capability_rejected() {
+        let v = RefSigner;
+        let owner = Party::new(&v, 1);
+        let hub = Party::new(&v, 2);
+        let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        #[rustfmt::skip]
+        let link = CertDelegation::sign(
+            &v, &owner.cls_seed, &owner.pq_seed,
+            root.classical_pub, root.pq_pub.clone(),
+            hub.cls_pub, hub.pq_pub.clone(),
+            scope(), scope(), false,
+            AlgSuite::MlDsa65Ed25519, 9999, [1u8; 8],
+        );
+        let mut roster = AnchorRoster::new();
+        root.enroll(&mut roster);
+        let cap = Capability::new_hybrid(
+            hub.cls_pub, hub.pq_pub.clone(), scope(), [9u8; 8], 10,
+        );
+        let store = RevocationStore::new();
+        assert_eq!(
+            verify_chain_hybrid(&v, &roster, &store, &root, &[link], &cap, 100),
+            Err(CertError::Expired),
+            "expired capability must be rejected"
+        );
+    }
+
+    /// prop-adm-3: Not-yet-valid cap — freshness: valid cap in window accepted.
+    #[test]
+    fn prop_not_yet_valid_capability_freshness_check() {
+        let v = RefSigner;
+        let owner = Party::new(&v, 1);
+        let hub = Party::new(&v, 2);
+        let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        #[rustfmt::skip]
+        let link = CertDelegation::sign(
+            &v, &owner.cls_seed, &owner.pq_seed,
+            root.classical_pub, root.pq_pub.clone(),
+            hub.cls_pub, hub.pq_pub.clone(),
+            scope(), scope(), false,
+            AlgSuite::MlDsa65Ed25519, 9999, [1u8; 8],
+        );
+        let mut roster = AnchorRoster::new();
+        root.enroll(&mut roster);
+        let cap = Capability::new_hybrid(
+            hub.cls_pub, hub.pq_pub.clone(), scope(), [9u8; 8], 9999,
+        );
+        let store = RevocationStore::new();
+        assert_eq!(
+            verify_chain_hybrid(&v, &roster, &store, &root, &[link], &cap, 0),
+            Ok(()),
+            "fresh capability within its validity window must be accepted"
+        );
+    }
+
+    /// prop-adm-4: Tampered cap — wider scope ⇒ rejected.
+    #[test]
+    fn prop_tampered_capability_wider_scope_rejected() {
+        let v = RefSigner;
+        let owner = Party::new(&v, 1);
+        let hub = Party::new(&v, 2);
+        let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        #[rustfmt::skip]
+        let link = CertDelegation::sign(
+            &v, &owner.cls_seed, &owner.pq_seed,
+            root.classical_pub, root.pq_pub.clone(),
+            hub.cls_pub, hub.pq_pub.clone(),
+            scope(), scope(), false,
+            AlgSuite::MlDsa65Ed25519, 9999, [1u8; 8],
+        );
+        let mut roster = AnchorRoster::new();
+        root.enroll(&mut roster);
+        let wide_scope = Scope::single(Resource::Route, Action::Send);
+        let cap = Capability::new_hybrid(
+            hub.cls_pub, hub.pq_pub.clone(), wide_scope, [9u8; 8], 9999,
+        );
+        let store = RevocationStore::new();
+        assert_eq!(
+            verify_chain_hybrid(&v, &roster, &store, &root, &[link], &cap, 0),
+            Err(CertError::ScopeViolation),
+            "tampered cap with wider scope must be rejected"
+        );
+    }
+
+    /// prop-adm-5: Wrong signer — cap under owner A verified with owner B's roster ⇒ rejected.
+    #[test]
+    fn prop_wrong_signer_root_not_enrolled_rejected() {
+        let v = RefSigner;
+        let owner_a = Party::new(&v, 1);
+        let owner_b = Party::new(&v, 2);
+        let hub = Party::new(&v, 3);
+        let root_a = SelfSignedRoot::mint(&v, &owner_a.cls_seed, &owner_a.pq_seed, scope(), 9999);
+        #[rustfmt::skip]
+        let link = CertDelegation::sign(
+            &v, &owner_a.cls_seed, &owner_a.pq_seed,
+            root_a.classical_pub, root_a.pq_pub.clone(),
+            hub.cls_pub, hub.pq_pub.clone(),
+            scope(), scope(), false,
+            AlgSuite::MlDsa65Ed25519, 9999, [1u8; 8],
+        );
+        let root_b = SelfSignedRoot::mint(&v, &owner_b.cls_seed, &owner_b.pq_seed, scope(), 9999);
+        let mut roster_b = AnchorRoster::new();
+        root_b.enroll(&mut roster_b);
+        let cap = Capability::new_hybrid(
+            hub.cls_pub, hub.pq_pub.clone(), scope(), [9u8; 8], 9999,
+        );
+        let store = RevocationStore::new();
+        assert_eq!(
+            verify_chain_hybrid(&v, &roster_b, &store, &root_a, &[link], &cap, 0),
+            Err(CertError::UnknownIssuer),
+            "chain signed by owner A must be rejected under owner B's roster"
+        );
+    }
+
+    /// prop-adm-6: Broken chain — missing parent link ⇒ rejected.
+    #[test]
+    fn prop_broken_chain_missing_parent_link_rejected() {
+        let v = RefSigner;
+        let parties: Vec<Party> = (1u8..=4).map(|i| Party::new(&v, i)).collect();
+        let root = SelfSignedRoot::mint(
+            &v, &parties[0].cls_seed, &parties[0].pq_seed, scope(), 9999,
+        );
+        #[rustfmt::skip]
+        let orphan = CertDelegation::sign(
+            &v, &parties[2].cls_seed, &parties[2].pq_seed,
+            parties[2].cls_pub, parties[2].pq_pub.clone(),
+            parties[3].cls_pub, parties[3].pq_pub.clone(),
+            scope(), scope(), false,
+            AlgSuite::MlDsa65Ed25519, 9999, [1u8; 8],
+        );
+        let mut roster = AnchorRoster::new();
+        root.enroll(&mut roster);
+        let cap = Capability::new_hybrid(
+            parties[3].cls_pub, parties[3].pq_pub.clone(), scope(), [9u8; 8], 9999,
+        );
+        let store = RevocationStore::new();
+        assert_eq!(
+            verify_chain_hybrid(&v, &roster, &store, &root, &[orphan], &cap, 0),
+            Err(CertError::UnknownIssuer),
+            "broken chain with missing parent link must be rejected"
+        );
+    }
+
+    /// prop-adm-7: Self-signed root — valid root accepted with fresh TTL.
+    #[test]
+    fn prop_self_signed_root_accepted() {
+        let v = RefSigner;
+        let owner = Party::new(&v, 1);
+        let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        assert_eq!(
+            root.verify_self(&v, 0),
+            Ok(()),
+            "self-signed root with valid signature must be accepted"
+        );
+    }
+
+    /// prop-adm-8: Revoked cap — cap with key in revocation store ⇒ rejected.
+    #[test]
+    fn prop_revoked_capability_in_store_rejected() {
+        let v = RefSigner;
+        let owner = Party::new(&v, 1);
+        let hub = Party::new(&v, 2);
+        let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        #[rustfmt::skip]
+        let link = CertDelegation::sign(
+            &v, &owner.cls_seed, &owner.pq_seed,
+            root.classical_pub, root.pq_pub.clone(),
+            hub.cls_pub, hub.pq_pub.clone(),
+            scope(), scope(), false,
+            AlgSuite::MlDsa65Ed25519, 9999, [1u8; 8],
+        );
+        let mut roster = AnchorRoster::new();
+        root.enroll(&mut roster);
+        let cap = Capability::new_hybrid(
+            hub.cls_pub, hub.pq_pub.clone(), scope(), [9u8; 8], 9999,
+        );
+        let mut store = RevocationStore::new();
+        assert_eq!(
+            verify_chain_hybrid(&v, &roster, &store, &root, &[link.clone()], &cap, 0),
+            Ok(())
+        );
+        store.set.revoke_key(hub.cls_pub);
+        assert_eq!(
+            verify_chain_hybrid(&v, &roster, &store, &root, &[link], &cap, 0),
+            Err(CertError::Revoked),
+            "revoked key in store must cause rejection"
+        );
+    }
+
+    /// prop-adm-9: Deterministic verification — same inputs ⇒ same result.
+    #[test]
+    fn prop_deterministic_verification_same_result_twice() {
+        let v = RefSigner;
+        let owner = Party::new(&v, 1);
+        let hub = Party::new(&v, 2);
+        let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        #[rustfmt::skip]
+        let link = CertDelegation::sign(
+            &v, &owner.cls_seed, &owner.pq_seed,
+            root.classical_pub, root.pq_pub.clone(),
+            hub.cls_pub, hub.pq_pub.clone(),
+            scope(), scope(), false,
+            AlgSuite::MlDsa65Ed25519, 9999, [1u8; 8],
+        );
+        let mut roster = AnchorRoster::new();
+        root.enroll(&mut roster);
+        let cap = Capability::new_hybrid(
+            hub.cls_pub, hub.pq_pub.clone(), scope(), [9u8; 8], 9999,
+        );
+        let store = RevocationStore::new();
+        let r1 = verify_chain_hybrid(&v, &roster, &store, &root, &[link.clone()], &cap, 0);
+        let r2 = verify_chain_hybrid(&v, &roster, &store, &root, &[link], &cap, 0);
+        assert_eq!(r1, r2, "same inputs must produce the same result — deterministic");
+        assert_eq!(r1, Ok(()), "valid chain must verify");
+    }
+
+    /// prop-adm-10: Privilege escalation — high-permission scope rejected on low-perm chain.
+    #[test]
+    fn prop_privilege_escalation_high_permission_rejected() {
+        let v = RefSigner;
+        let owner = Party::new(&v, 1);
+        let hub = Party::new(&v, 2);
+        let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        #[rustfmt::skip]
+        let link = CertDelegation::sign(
+            &v, &owner.cls_seed, &owner.pq_seed,
+            root.classical_pub, root.pq_pub.clone(),
+            hub.cls_pub, hub.pq_pub.clone(),
+            scope(), scope(), false,
+            AlgSuite::MlDsa65Ed25519, 9999, [1u8; 8],
+        );
+        let mut roster = AnchorRoster::new();
+        root.enroll(&mut roster);
+        let high_perm = Scope::single(Resource::Ledger, Action::SettlementRecorded);
+        let cap = Capability::new_hybrid(
+            hub.cls_pub, hub.pq_pub.clone(), high_perm, [9u8; 8], 9999,
+        );
+        let store = RevocationStore::new();
+        assert_eq!(
+            verify_chain_hybrid(&v, &roster, &store, &root, &[link], &cap, 0),
+            Err(CertError::ScopeViolation),
+            "privilege escalation to Ledger must be rejected"
+        );
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // RED LINE invariant tests — non-negotiable: system is broken if these fail
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// RED LINE 4-A: tampered signature MUST fail verification.
+    /// Changing even one byte of the hybrid sig without re-signing
+    /// renders the signature invalid under RequireBoth.
+    #[test]
+    fn red_line_tampered_signature_rejected() {
+        let v = RefSigner;
+        let owner = Party::new(&v, 1);
+        let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        assert_eq!(root.verify_self(&v, 0), Ok(()));
+
+        let mut tampered = root.clone();
+        if !tampered.self_sig.classical.is_empty() {
+            tampered.self_sig.classical[0] ^= 0xff;
+            assert_eq!(
+                tampered.verify_self(&v, 0),
+                Err(CertError::BadSignature),
+                "tampered classical sig must be rejected"
+            );
+        }
+    }
+
+    /// RED LINE 4-B: empty signature MUST fail verification.
+    /// A zero-length classical or PQ leg is not a valid signature.
+    #[test]
+    fn red_line_empty_signature_rejected() {
+        let v = RefSigner;
+        let owner = Party::new(&v, 1);
+        let mut root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        assert_eq!(root.verify_self(&v, 0), Ok(()));
+
+        root.self_sig.classical = vec![];
+        assert_eq!(
+            root.verify_self(&v, 0),
+            Err(CertError::BadSignature),
+            "empty classical sig must fail"
+        );
+
+        let mut root2 = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        root2.self_sig.pq = vec![];
+        assert_eq!(
+            root2.verify_self(&v, 0),
+            Err(CertError::BadSignature),
+            "empty PQ sig must fail"
+        );
+    }
+
+    /// RED LINE 4-C: totally absent (zeroed) signature in both legs
+    /// MUST fail — no path accepts an unsigned capability block.
+    #[test]
+    fn red_line_zeroed_both_legs_rejected() {
+        let v = RefSigner;
+        let owner = Party::new(&v, 1);
+        let mut root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        root.self_sig.classical = vec![0u8; 32];
+        root.self_sig.pq = vec![0u8; 32];
+        assert_eq!(
+            root.verify_self(&v, 0),
+            Err(CertError::BadSignature),
+            "zeroed both legs must be rejected — no unsigned capability accepted"
+        );
+    }
 }

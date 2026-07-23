@@ -1015,4 +1015,98 @@ mod tests {
         let c = a.mul(&b);
         assert_eq!(c.get(0, 0), Tri::True);
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // RED LINE invariant tests — non-negotiable: system is broken if these fail
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// RED LINE 5-A: deterministic — same Tri inputs always produce the same Tri output.
+    /// Both and, or, and not must be 100% deterministic (no hidden state, no RNG).
+    #[test]
+    fn red_line_deterministic_same_inputs_same_output() {
+        use std::collections::HashMap;
+
+        // Every combination of inputs must produce the same output every time.
+        let all: &[(Tri, Tri)] = &[
+            (Tri::True, Tri::True),
+            (Tri::True, Tri::False),
+            (Tri::True, Tri::Unknown),
+            (Tri::False, Tri::True),
+            (Tri::False, Tri::False),
+            (Tri::False, Tri::Unknown),
+            (Tri::Unknown, Tri::True),
+            (Tri::Unknown, Tri::False),
+            (Tri::Unknown, Tri::Unknown),
+        ];
+
+        // AND: run 100 times each, all must agree.
+        for (a, b) in all {
+            let expected = a.and(*b);
+            for _ in 0..100 {
+                assert_eq!(a.and(*b), expected,
+                    "AND({:?},{:?}) must be deterministic", a, b);
+            }
+        }
+
+        // OR: run 100 times each, all must agree.
+        for (a, b) in all {
+            let expected = a.or(*b);
+            for _ in 0..100 {
+                assert_eq!(a.or(*b), expected,
+                    "OR({:?},{:?}) must be deterministic", a, b);
+            }
+        }
+    }
+
+    /// RED LINE 5-B: NOT(NOT(x)) == x for all 3 values.
+    #[test]
+    fn red_line_not_not_x_equals_x() {
+        for x in &[Tri::True, Tri::False, Tri::Unknown] {
+            assert_eq!(x.not().not(), *x,
+                "NOT(NOT({:?})) must equal {:?}", x, x);
+        }
+
+        // NOT must also be its own inverse over all pairs: NOT(x) == NOT(y) => x == y.
+        for a in &[Tri::True, Tri::False, Tri::Unknown] {
+            for b in &[Tri::True, Tri::False, Tri::Unknown] {
+                if a != b {
+                    assert_ne!(a.not(), b.not(),
+                        "injective: distinct {:?} and {:?} must have distinct NOTs", a, b);
+                }
+            }
+        }
+    }
+
+    /// RED LINE 5-C: AND and OR are commutative and associative.
+    #[test]
+    fn red_line_and_or_commutative_associative() {
+        let all = &[Tri::True, Tri::False, Tri::Unknown];
+
+        // Commutativity: a AND b == b AND a, a OR b == b OR a.
+        for a in all {
+            for b in all {
+                assert_eq!(a.and(*b), b.and(*a),
+                    "AND must be commutative: {:?} AND {:?}", a, b);
+                assert_eq!(a.or(*b), b.or(*a),
+                    "OR must be commutative: {:?} OR {:?}", a, b);
+            }
+        }
+
+        // Associativity: (a AND b) AND c == a AND (b AND c).
+        for a in all {
+            for b in all {
+                for c in all {
+                    let left_and = a.and(*b).and(*c);
+                    let right_and = a.and(b.and(*c));
+                    assert_eq!(left_and, right_and,
+                        "AND must be associative: ({:?} AND {:?}) AND {:?}", a, b, c);
+
+                    let left_or = a.or(*b).or(*c);
+                    let right_or = a.or(b.or(*c));
+                    assert_eq!(left_or, right_or,
+                        "OR must be associative: ({:?} OR {:?}) OR {:?}", a, b, c);
+                }
+            }
+        }
+    }
 }

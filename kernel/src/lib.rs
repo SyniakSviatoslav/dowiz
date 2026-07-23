@@ -916,6 +916,38 @@ mod tests {
         assert_eq!(sanitize_f64(f64::NEG_INFINITY), 0.0, "-Inf must become 0.0");
     }
 
+    /// RED LINE 3: any f64 input → sanitize → output MUST be finite.
+    /// NaN → 0.0, Inf → 0.0, valid f64 → unchanged.
+    #[test]
+    fn red_line_sanitize_f64_output_always_finite() {
+        // Non-finite inputs must map to 0.0.
+        assert_eq!(sanitize_f64(f64::NAN), 0.0);
+        assert_eq!(sanitize_f64(f64::INFINITY), 0.0);
+        assert_eq!(sanitize_f64(f64::NEG_INFINITY), 0.0);
+
+        // Valid finite inputs must pass through unchanged.
+        let valid: &[f64] = &[0.0, 1.0, -1.0, f64::MAX, f64::MIN, 42.0, -0.5, 1e308, -1e-308];
+        for &v in valid {
+            let out = sanitize_f64(v);
+            assert!(out.is_finite(), "sanitize_f64({v:e}) = {out:e} must be finite");
+            assert_eq!(out, v, "sanitize_f64({v:e}) must preserve finite value, got {out:e}");
+        }
+
+        // Exhaustive: every sanitize_f64 output MUST be finite (no NaN, no Inf escape).
+        let boundary_cases = &[
+            f64::NAN, f64::INFINITY, f64::NEG_INFINITY,
+            f64::MAX, f64::MIN, f64::MIN_POSITIVE,
+            0.0, -0.0, 1.0, -1.0, std::f64::consts::PI, std::f64::consts::E,
+        ];
+        for &v in boundary_cases {
+            let out = sanitize_f64(v);
+            assert!(
+                out.is_finite(),
+                "RED LINE VIOLATION: sanitize_f64({v:e}) = {out:e} is NOT finite"
+            );
+        }
+    }
+
     #[test]
     fn sanitize_normalized_clamps() {
         assert_eq!(sanitize_normalized(0.5), 0.5);

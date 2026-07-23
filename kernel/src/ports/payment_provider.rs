@@ -30,7 +30,7 @@ use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 use crate::event_log::sha3_256;
-use crate::money::{Currency, Money};
+use crate::money::{assert_non_negative, Currency, Money};
 
 // ── value types (predefined, §3) ─────────────────────────────────────────────
 
@@ -1643,5 +1643,86 @@ mod tests {
             a.refund(&req),
             Err(PayError::CurrencyMismatch)
         ));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Property tests — Flow 1: Payment / Value Transfer invariants
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// prop-2a: No double-spend — same key with different plan ⇒ rejected.
+    #[test]
+    fn prop_double_spend_same_key_different_amount_rejected() {
+        let a = NoOpPaymentAdapter::new();
+        let key = IdempotencyKey(sha3_256(b"prop-ds-1"));
+        let _ = a.create_with_key(&key, &one_leg_plan("DS-1", 300)).unwrap();
+        let other = one_leg_plan("DS-1", 999);
+        assert!(
+            matches!(a.create_with_key(&key, &other), Err(PayError::Idempotent { .. })),
+            "same key with different plan must be rejected — key rebind is double-spend"
+        );
+    }
+
+    /// prop-7a: Idempotent credit — same key + same plan ⇒ same handoff, one intent.
+    #[test]
+    fn prop_idempotent_credit_same_key_same_plan_one_intent() {
+        let a = NoOpPaymentAdapter::new();
+        let key = IdempotencyKey(sha3_256(b"prop-idem-1"));
+        let plan = one_leg_plan("ID1", 600);
+        let h1 = a.create_with_key(&key, &plan).unwrap();
+        let h2 = a.create_with_key(&key, &plan).unwrap();
+        assert_eq!(h1, h2, "same key + plan => same handoff, not second charge");
+        assert_eq!(
+            a.query_status_by_key(&key).unwrap(),
+            PaymentStatus::IntentCreated
+        );
+    }
+
+    /// prop-4a: Negative debit — negative refund amount detectable at money-law level.
+    #[test]
+    fn prop_negative_debit_refund_rejected_by_money_law() {
+        let negative = Money::new(-100, Currency::Eur);
+        assert!(
+            negative.minor < 0,
+            "negative refund amount must be detected as invalid"
+        );
+        assert!(assert_non_negative(-1).is_err(), "non_negative guard rejects negatives");
+    }
+
+    /// prop-3a: Cross-currency plan rejected before any authorize call.
+    #[test]
+    fn prop_cross_currency_plan_rejected_before_authorize() {
+        let plan = NLegPlan {
+            order_id: "MIX".to_string(),
+            currency: Currency::Eur,
+            legs: vec![
+                VendorLeg {
+                    leg: LegId(1),
+                    vendor_id: VendorId([1u8; 32]),
+                    amount: Money::new(100, Currency::Eur),
+                    dest_account: ProviderAccountRef("eur_acct".into()),
+                },
+                VendorLeg {
+                    leg: LegId(2),
+                    vendor_id: VendorId([2u8; 32]),
+                    amount: Money::new(50, Currency::Usd),
+                    dest_account: ProviderAccountRef("usd_acct".into()),
+                },
+            ],
+        };
+        assert!(
+            matches!(validate_plan_currency(&plan), Err(PayError::CurrencyMismatch)),
+            "cross-currency plan must be rejected before authorize"
+        );
+    }
+
+    /// prop-6a: Zero invariant — empty IdemLedger resolves to None.
+    #[test]
+    fn prop_zero_invariant_empty_idem_ledger_yields_none() {
+        let ledger = IdemLedger::new();
+        let key = IdempotencyKey(sha3_256(b"nonexistent"));
+        assert!(
+            ledger.resolve(&key).is_none(),
+            "empty ledger must resolve to None, not a fabricated status"
+        );
     }
 }

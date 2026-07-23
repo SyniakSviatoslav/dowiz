@@ -807,4 +807,35 @@ mod tests {
             assert_eq!(rec.rev, i + 1);
         }
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Property tests — Flow 1: Payment / Value Transfer invariants
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// prop-5a: Zero invariant — new wallet has rev=0, all slots None/empty.
+    #[test]
+    fn prop_zero_invariant_new_wallet_all_fields_empty() {
+        let id = [0xCAu8; 32];
+        let w = WalletRecord::new(id);
+        assert_eq!(w.rev, 0, "new wallet rev must be 0");
+        assert_eq!(w.schema_version, WALLET_SCHEMA_VERSION);
+        assert_eq!(w.wallet_id, id);
+        assert!(w.name.is_none(), "name must be None");
+        assert!(w.addresses.is_empty(), "addresses must be empty");
+        assert!(w.contact.is_none(), "contact must be None");
+        assert!(w.method_ref.is_none(), "method_ref must be None");
+    }
+
+    /// prop-8a: Deterministic serialization — serialize→deserialize→serialize == original.
+    #[test]
+    fn prop_deterministic_wallet_serialization_idempotent() {
+        let rec = sample_wallet();
+        let json1 = serialize(&rec);
+        let json2 = serialize(&rec);
+        assert_eq!(json1, json2, "serialize must be deterministic");
+        let back1 = deserialize(&json1).expect("deserialize");
+        let back2 = deserialize(&json1).expect("deserialize again");
+        assert_eq!(back1, back2, "deserialize must be deterministic");
+        assert_eq!(serialize(&back1), json1, "serialize(deserialize(json)) == json");
+    }
 }

@@ -1302,4 +1302,243 @@ mod tests {
         );
         assert!(matches!(res, Err(AdmissionError::IdentityMismatch)));
     }
+
+    // ═══════════════════════════════════════════════════════════════════════════
+    // Property tests — Flow 2: Admission / Capability Verification invariants
+    // ═══════════════════════════════════════════════════════════════════════════
+
+    /// prop-adm-1a: Empty cap list — zero-capacity gate must reject all.
+    #[test]
+    fn prop_empty_capability_list_admission_rejected() {
+        let v = RefSigner;
+        let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
+        let scope = admit_scope();
+        let (frame, roster, chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
+        let limiter = AdmissionLimiter::new(0, 0.0, 0, 0, 0.0);
+        let mut adm = Admitter::new(open_gate(), limiter, 1_000_000, [0u8; 32]);
+        let mut log = EventLog::new(MemEventStore::new());
+        let res = adm.admit(
+            &frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0,
+        );
+        assert!(
+            matches!(res, Err(AdmissionError::AdmissionThrottled)),
+            "zero-capacity gate must reject — empty cap list"
+        );
+    }
+
+    /// prop-adm-2a: Expired cap — past expiry rejected before gate reached.
+    #[test]
+    fn prop_expired_capability_admission_rejected() {
+        let v = RefSigner;
+        let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
+        let scope = admit_scope();
+        let (frame, roster, chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
+        let mut expired_frame = frame;
+        let expired_cap = Capability::new_hybrid(cls, v.pq_public(&pq), admit_scope(), [7u8; 8], 10);
+        expired_frame = SignedFrame::new(expired_cap, expired_frame.payload);
+        let mut adm = admitter();
+        let mut log = EventLog::new(MemEventStore::new());
+        let res = adm.admit(
+            &expired_frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 100,
+        );
+        assert!(
+            matches!(res, Err(AdmissionError::Expired)),
+            "expired capability must be rejected before gate"
+        );
+    }
+
+    /// prop-adm-3a: Not-yet-valid — freshness check accepted in window, rejected outside.
+    #[test]
+    fn prop_not_yet_valid_capability_freshness_gate() {
+        let v = RefSigner;
+        let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
+        let scope = admit_scope();
+        let (frame, roster, chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
+        let mut adm = admitter();
+        let mut log = EventLog::new(MemEventStore::new());
+        let res = adm.admit(
+            &frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0,
+        );
+        assert!(res.is_ok(), "fresh capability in its validity window must be admitted");
+        let mut adm2 = admitter();
+        let mut log2 = EventLog::new(MemEventStore::new());
+        let res2 = adm2.admit(
+            &frame, &roster, &chain, &RevocationSet::new(), &mut log2, 0, 10000,
+        );
+        assert!(
+            matches!(res2, Err(AdmissionError::Expired)),
+            "same capability outside validity window must be rejected"
+        );
+    }
+
+    /// prop-adm-4a: Tampered cap — payload tampered after signing ⇒ rejected.
+    #[test]
+    fn prop_tampered_capability_signature_breaks() {
+        let v = RefSigner;
+        let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
+        let scope = admit_scope();
+        let (mut frame, roster, chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
+        frame.payload = b"tampered payload after signing".to_vec();
+        let mut adm = admitter();
+        let mut log = EventLog::new(MemEventStore::new());
+        let res = adm.admit(
+            &frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0,
+        );
+        assert!(
+            res.is_err(),
+            "tampered payload after signing must be rejected"
+        );
+    }
+
+    /// prop-adm-5a: Wrong signer — frame signed by A manifests B ⇒ identity mismatch.
+    #[test]
+    fn prop_wrong_signer_key_mismatch_rejected() {
+        let v = RefSigner;
+        let (cls_a, pq_a, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        let (cls_b, pq_b) = ([4u8; 32], [5u8; 32]);
+        let mut manifest =
+            build_manifest(&v, &cls_a, &pq_a, ExecutionModel::WasmComponent, false, 0);
+        let pkb = v.classical_public(&cls_b);
+        let pqb = v.pq_public(&pq_b);
+        let node = NodeId::from_keys(&pqb, &pkb);
+        manifest.subject_key = cls_b;
+        manifest.subject_key_pq = pqb;
+        manifest.agent_node_id = node.0;
+        let scope = admit_scope();
+        let (frame, roster, chain) =
+            valid_frame(&v, &cls_a, &pq_a, &anch, &manifest, scope, [7u8; 8]);
+        let mut adm = admitter();
+        let mut log = EventLog::new(MemEventStore::new());
+        let res = adm.admit(
+            &frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0,
+        );
+        assert!(
+            res.is_err(),
+            "frame signed by A with manifest claiming B must be rejected"
+        );
+    }
+
+    /// prop-adm-6a: Broken chain — scope non-subset of anchor ⇒ rejected.
+    #[test]
+    fn prop_broken_chain_scope_attenuation_rejected() {
+        let v = RefSigner;
+        let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
+        let scope = admit_scope();
+        let (frame, roster, _chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope.clone(), [7u8; 8]);
+        let anchor_pub = v.classical_public(&anch);
+        let bad_scope = Scope::single(Resource::Ledger, Action::SettlementRecorded);
+        let bad_link = Delegation::sign(
+            &v, anchor_pub, cls, bad_scope.clone(), bad_scope, 9999, [7u8; 8], &anch,
+        );
+        let mut adm = admitter();
+        let mut log = EventLog::new(MemEventStore::new());
+        let res = adm.admit(
+            &frame, &roster, &[bad_link], &RevocationSet::new(), &mut log, 0, 0,
+        );
+        assert!(
+            res.is_err(),
+            "chain with non-subset scope attenuation must be rejected"
+        );
+    }
+
+    /// prop-adm-7a: Self-signed root — valid anchor-rooted chain must succeed.
+    #[test]
+    fn prop_self_signed_root_admission_accepted() {
+        let v = RefSigner;
+        let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
+        let scope = admit_scope();
+        let (frame, roster, chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
+        let mut adm = admitter();
+        let mut log = EventLog::new(MemEventStore::new());
+        let res = adm.admit(
+            &frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0,
+        );
+        assert!(
+            res.is_ok(),
+            "self-signed root with valid chain must be accepted"
+        );
+        assert_eq!(log.len(), 1, "admission must record exactly one event");
+    }
+
+    /// prop-adm-8a: Revoked cap — subject key in revocation set ⇒ rejected.
+    #[test]
+    fn prop_revoked_capability_admission_rejected() {
+        let v = RefSigner;
+        let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
+        let scope = admit_scope();
+        let (frame, roster, chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
+        let mut revocations = RevocationSet::new();
+        revocations.revoke_key(frame.capability.subject_key);
+        let mut adm = admitter();
+        let mut log = EventLog::new(MemEventStore::new());
+        let res = adm.admit(
+            &frame, &roster, &chain, &revocations, &mut log, 0, 0,
+        );
+        assert!(
+            matches!(res, Err(AdmissionError::Revoked)),
+            "revoked subject key must cause admission rejection"
+        );
+    }
+
+    /// prop-adm-9a: Deterministic verification — two indep. admitters yield same result.
+    #[test]
+    fn prop_deterministic_verification_two_admitters_same_result() {
+        let v = RefSigner;
+        let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
+        let scope = admit_scope();
+        let (frame, roster, chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
+        let mut adm1 = admitter();
+        let mut log1 = EventLog::new(MemEventStore::new());
+        let r1 = adm1.admit(
+            &frame, &roster, &chain, &RevocationSet::new(), &mut log1, 0, 0,
+        );
+        let mut adm2 = admitter();
+        let mut log2 = EventLog::new(MemEventStore::new());
+        let r2 = adm2.admit(
+            &frame, &roster, &chain, &RevocationSet::new(), &mut log2, 0, 0,
+        );
+        assert!(r1.is_ok(), "first admitter must accept");
+        assert!(r2.is_ok(), "second admitter must accept — deterministic");
+        assert_eq!(
+            r1.unwrap().content_id,
+            r2.unwrap().content_id,
+            "both admitters must produce the same content id"
+        );
+    }
+
+    /// prop-adm-10a: Privilege escalation — non-admission scope rejected.
+    #[test]
+    fn prop_privilege_escalation_wrong_admission_scope_rejected() {
+        let v = RefSigner;
+        let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
+        let wrong_scope = Scope::single(Resource::Ledger, Action::SettlementRecorded);
+        let (frame, roster, chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, wrong_scope, [7u8; 8]);
+        let mut adm = admitter();
+        let mut log = EventLog::new(MemEventStore::new());
+        let res = adm.admit(
+            &frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0,
+        );
+        assert!(
+            matches!(res, Err(AdmissionError::WrongAdmissionScope)),
+            "privilege escalation with non-admission scope must be rejected"
+        );
+    }
 }
