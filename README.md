@@ -1236,6 +1236,8 @@ The author gives this API away for free to anyone who wants it.
 | Benchmarks | `benches/bench_track.py` | 7 benches ✓ |
 | Dudect | `scripts/verify-kernel-engine.sh` | Release only ✓ |
 | Warnings | `cargo test --lib 2>&1 | grep warning` | 0 ✓ |
+| Coverage | `cargo llvm-cov --lib --branch` | 71.68% ✓ |
+| Rustdoc | `cargo doc --no-deps --lib` | generated ✓ |
 
 ### Architecture Diagram (ASCII)
 ```

@@ -1,0 +1,21 @@
+--- src/entropy_budget.rs
++++ replace / with % in shannon_entropy
+@@ -32,17 +32,17 @@
+         return 0.0;
+     }
+     crate::sanitize_f64(
+         -weights
+             .iter()
+             .map(|&w| crate::sanitize_f64(w))
+             .filter(|&w| w > 0.0)
+             .map(|w| {
+-                let p = w / total;
++                let p = w % /* ~ changed by cargo-mutants ~ */ total;
+                 if p <= 0.0 { 0.0 } else { p * p.ln() }
+             })
+             .sum::<f64>()
+     )
+ }
+ 
+ /// Foster-Lyapunov supermartingale entropy budget.
+ ///

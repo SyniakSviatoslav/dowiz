@@ -1,0 +1,21 @@
+--- src/entropy_budget.rs
++++ delete - in shannon_entropy
+@@ -27,17 +27,17 @@
+ /// internally). Returns 0.0 for empty or single-element distributions.
+ /// Deterministic: same weights ⇒ same entropy.
+ pub fn shannon_entropy(weights: &[f64]) -> f64 {
+     let total: f64 = weights.iter().map(|&w| crate::sanitize_f64(w)).filter(|&w| w > 0.0).sum();
+     if total <= 0.0 || weights.len() <= 1 {
+         return 0.0;
+     }
+     crate::sanitize_f64(
+-        -weights
++         /* ~ changed by cargo-mutants ~ */weights
+             .iter()
+             .map(|&w| crate::sanitize_f64(w))
+             .filter(|&w| w > 0.0)
+             .map(|w| {
+                 let p = w / total;
+                 if p <= 0.0 { 0.0 } else { p * p.ln() }
+             })
+             .sum::<f64>()

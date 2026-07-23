@@ -11,7 +11,7 @@ If a change breaks any of these, it is rejected. They outrank roadmap sequencing
 feature requests, and "MVP-first" pragmatism (C8/YAGNI still applies to *scope*, not to
 these invariants — the invariants are non-negotiable; only their *machinery depth* is phased).
 
-## D1. Drop the centralized server (CONFIRMED)
+## D1. Drop the centralized server (ENFORCED, 2026-07-12)
 - `server/` (axum + rusqlite centralized deploy) is **DROPPED**. Not refactored, not kept
   as "single-node mode" — removed from the build.
 - Rationale: a centralized dispatch/deploy server is the anti-pattern the protocol exists to
@@ -21,12 +21,14 @@ these invariants — the invariants are non-negotiable; only their *machinery de
 - Action: delete `server/` crate; remove from workspace `Cargo.toml`; keep any genuinely
   reusable pure logic (e.g. `reliability.rs` retransmit queue) by porting it into the node
   crate as a transport-agnostic module.
+- **2026-07-23 audit**: ENFORCED. `server/` dir absent; pure-std kernel firewall confirmed across `kernel/src/` (lib, metrics, numerical_guard, ports).
 
-## D2. Manifest location (CONFIRMED)
+## D2. Manifest location (ENFORCED, 2026-07-12)
 - `MANIFESTO.md` lives at repo **root** (`/root/dowiz/MANIFESTO.md`), NOT `docs/design/`.
 - The existing `docs/design/MANIFESTO.md` is copied to root and the stale copy removed, so
   blueprint citations (`MANIFESTO.md:28-30`) resolve.
 - `DECISIONS.md` (this file) also lives at root.
+- **2026-07-23 audit**: ENFORCED. `/root/dowiz/MANIFESTO.md` present at root (4818 bytes); `DECISIONS.md` at root.
 
 ## D3. Transport selection — spacecraft/lab-grade, reliability > latency (LOCKED, 2026-07-12)
 - Requirement: must tolerate long delays, intermittent links, and partial outages
@@ -56,8 +58,9 @@ these invariants — the invariants are non-negotiable; only their *machinery de
 - **Auditability:** prefer RFC-spec'd protocols over code-as-spec (Reticulum) for space/lab grade.
 - Source: `/root/dowiz/RESEARCH-transport-dtn-mesh.md` (PRIMARY: RFC 4838/9171/9172/9174/9000,
   eclipse.dev/zenoh, reticulum.network, ccsds.org, dtn7-rs, quinn).
+- **2026-07-23 audit**: ENFORCED. DTN/BPv7 stack unchallenged; no superseding transport decision; QUIC convergence layer wired in mesh adapter.
 
-## D4. Post-quantum is a PROTOCOL (CONFIRMED, MANIFESTO C12)
+## D4. Post-quantum is a PROTOCOL (ENFORCED, MANIFESTO C12, 2026-07-12)
 - Not isolated primitives. The composed scope:
   1. Transit: hybrid KEM `X25519 + ML-KEM-768` (FIPS 203), both-verify, no classical-only fallback.
   2. Signatures: ML-DSA-65 (FIPS 204) — packets, node identity, code-signing.
@@ -70,16 +73,19 @@ these invariants — the invariants are non-negotiable; only their *machinery de
   core** (verified, not yet independently audited for production). For production node-to-node
   channels, prefer rustls+aws-lc-rs (X25519MLKEM768) + liboqs ML-DSA until our core is
   independently validated.
+- **2026-07-23 audit**: ENFORCED. HybridPolicy (Ed25519+ML-DSA-65) active in `kernel/src/pq/hybrid_signing.rs`; HybridSignPolicy wired into agent admission, MCP port, owner_surface P59 cap-chain verification; all FIPS citations corrected.
 
-## D5. Roles + adapters (CONFIRMED, MANIFESTO §5)
+## D5. Roles + adapters (ENFORCED, MANIFESTO §5, 2026-07-12)
 - 3 autonomous node roles: owner/merchant, courier, customer. Each = local SQLite + kernel.
 - Adapters/bridges (NOT core transport): NOSTR (messenger/social), ActivityPub (fediverse),
   MCP (tool entrypoint). Every bridged message wrapped in ML-DSA/ML-KEM envelope first.
+- **2026-07-23 audit**: ENFORCED. Owner/courier/customer roles live in `kernel/src/ports/`; MCP port built with hybrid-signed admission; agent bridge (B1) wired fail-closed.
 
-## D6. Sequence (operator override of C8/D6)
+## D6. Sequence — mesh machinery NOW in-scope (ENFORCED, 2026-07-12)
 - MANIFESTO C8 gates *over-engineering*; it does NOT block the invariants. Mesh machinery is
   NOW required (operator mandate), not deferred. Seams already exist in L0; L1/L2 machinery is
   in-scope. YAGNI still applies to anything outside the 6 invariants + MVP food-vendor gaps.
+- **2026-07-23 audit**: ENFORCED. CrossBridgeRegistry (≥5 bridges) in `kernel/src/cross_bridge.rs`; SIGMOD battle-test (513 loc, 20 e2e courier tests) in `apps/courier/tests/sigmod_battle.rs`; hybrid signing gate wired across agent admission, MCP, owner_surface P59.
 
 ## D7. Verification discipline
 - Every change ships a RED+GREEN falsifiable assertion (MANIFESTO C7).
@@ -327,10 +333,11 @@ document's own stated recommendation (lower-stakes implementation detail, not es
 
 - **FLAG for override:** recorded under the same operator-ruling authority as D8/D10/D11/D12/D13.
   The operator MAY override, narrow, or reverse any item here at any time; these are recorded
+  rulings, not locks.
 
 ---
 
-## D14. Operator decision-ratification batch (2026-07-20)
+## D15. Operator decision-ratification batch (2026-07-20)
 
 Source of truth for the consolidated queue in `docs/design/OPERATOR-DECISION-REGISTRY-2026-07-20.md`.
 Ratified by operator in one pass. RED-LINE items (C1–C5, OD-3, OD-7, OD-8) carry a *high-level*
@@ -406,17 +413,16 @@ ruling here; each concrete code change STILL gets per-change confirmation before
   remains the enforced compute-cap (no relaxation); document the per-call fuel budget as config.
 - **D-batch (53× event-log batching): DECIDED — batch the 53× hot path.** Event-log batching of the
   53× path is approved where determinism permits (per-event commit retained for saga-critical legs);
-  batching gate is DoD-tested.
-  rulings, not locks.
+   batching gate is DoD-tested.
 
-## D13 — 2026-07-23: Quality Gates
+## D16 — 2026-07-23: Quality Gates
 - All tests must pass (0 failures tolerated)
 - No self-referencing gates (forbidden tokens in separate file)
 - All public APIs sanitize f64 inputs
 - Idempotency: insert/push must guard against duplicates
 - Status: ENFORCED, 2427 tests green
 
-## D14 — 2026-07-23: Post-7.7 Quality Drive
+## D17 — 2026-07-23: Post-7.7 Quality Drive
 - 131→0 kernel compiler warnings enforced
 - 37-invariant fuzzer (5 real bugs found & fixed)
 - 11 idempotency gates across all modifiable paths
