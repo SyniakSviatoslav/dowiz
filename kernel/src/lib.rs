@@ -705,6 +705,10 @@ pub mod delta;
 /// step identifies upstream responsibility. Results surface on the
 /// interface as corrective recommendations.
 pub mod invert;
+/// Cross-kind pattern bridges — each research finding natively encoded.
+/// python(17 kinds), tool(14), llm(14), claude-code(12), security(11).
+/// Publisher diversity tracker: NVIDIA(9), anthropics(8), microsoft(8).
+pub mod cross_bridge;
 /// P08 — typed metrics pure core: `/proc/self` sampling (CPU/mem) + a
 /// deterministic, serde-free, parse-or-reject text schema for typed metric
 /// records. NO egress / signing change; GPU is typed-absent (`Option`) until
