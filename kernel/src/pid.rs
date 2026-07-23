@@ -157,7 +157,7 @@ pub struct PidController {
 
 impl PidController {
     pub fn new(kp: f64, ki: f64, kd: f64, min: f64, max: f64) -> Self {
-        let mut config = PidConfig::new(kp, ki, kd, min, max).sanitize();
+        let config = PidConfig::new(kp, ki, kd, min, max).sanitize();
         let max = config.max;
         PidController {
             config,
@@ -169,7 +169,7 @@ impl PidController {
 
     /// Compatibility constructor: uses hardcoded conservative gains (kp=0.8, ki=0.1, kd=0.3).
     pub fn new_min_max(min: usize, max: usize) -> Self {
-        let mut config = PidConfig::new(0.8, 0.1, 0.3, min as f64, max as f64).sanitize();
+        let config = PidConfig::new(0.8, 0.1, 0.3, min as f64, max as f64).sanitize();
         let max = config.max;
         PidController {
             config,

@@ -668,7 +668,7 @@ mod tests {
     #[test]
     fn tool_error_is_visible_observation() {
         let inv = std::rc::Rc::new(Cell::new(0u32));
-        let reg = build_registry(inv.clone());
+        let _reg = build_registry(inv.clone());
         // Make the spy fail with NotFound on its first (only) call.
         // Reach into the registry is not possible; instead craft a failing tool
         // directly via a second registry builder path.

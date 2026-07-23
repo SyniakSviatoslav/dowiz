@@ -262,8 +262,8 @@ mod tests {
 
     #[test]
     fn memory_store_deterministic() {
-        let mut a = InMemoryStore::new();
-        let mut b = InMemoryStore::new();
+        let a = InMemoryStore::new();
+        let b = InMemoryStore::new();
         // Different insertion order must NOT affect the content root.
         a.put("x", b"1").unwrap();
         a.put("y", b"2").unwrap();
@@ -275,7 +275,7 @@ mod tests {
             "same content ⇒ same root regardless of insertion order"
         );
         // A differing value must yield a differing root.
-        let mut c = InMemoryStore::new();
+        let c = InMemoryStore::new();
         c.put("x", b"1").unwrap();
         c.put("y", b"99").unwrap();
         assert_ne!(a.snapshot_root(), c.snapshot_root());

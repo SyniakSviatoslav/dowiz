@@ -368,7 +368,7 @@ mod tests {
         #[test]
         fn healthy_run_is_checksum_silent() {
             let _ = std::fs::remove_dir_all(dir());
-            let mut r = fresh_ring();
+            let r = fresh_ring();
             let res = self_check_all_into_ring(r, &Weights::spec(), None);
             assert!(res.is_ok(), "healthy run must not trip: {res:?}");
             assert_eq!(
@@ -395,7 +395,7 @@ mod tests {
         #[test]
         fn planted_weight_fault_hard_fails_and_writes_fdr() {
             let _ = std::fs::remove_dir_all(dir());
-            let mut r = fresh_ring();
+            let r = fresh_ring();
             // Single-bit corruption of one frozen weight (W1[0]: 2 → 3).
             let mut w1 = W1;
             w1[0] ^= 1;
@@ -428,7 +428,7 @@ mod tests {
         #[test]
         fn planted_activation_fault_hard_fails_and_writes_fdr() {
             let _ = std::fs::remove_dir_all(dir());
-            let mut r = fresh_ring();
+            let r = fresh_ring();
             // Single-bit activation corruption: vec 0's oracle hidden is all-zero; flip
             // bit 0 → 1. This is a corrupted *activation*, not a weight.
             let mut hidden = [0i8; H];

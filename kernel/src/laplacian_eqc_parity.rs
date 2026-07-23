@@ -27,7 +27,6 @@
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::csr::{Csr, LaplacianKind};
     use crate::spectral::laplacian as dense_laplacian;
     use eqc_rs::{Equation, Expr};

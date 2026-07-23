@@ -16,6 +16,7 @@ pub struct LastHealthyState {
     /// How many consecutive healthy observations before we update
     confirmation_threshold: u32,
     healthy_run: u32,
+    #[allow(dead_code)]
     max_kept: usize,
 }
 

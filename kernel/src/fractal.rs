@@ -15,7 +15,7 @@
 //!
 //! ZERO deps. Uses eigen for value representation.
 
-use crate::eigen::{Eigen, EigenDecomp, decompose};
+use crate::eigen::{EigenDecomp, decompose};
 
 /// A node in the N-fractal tree. Every node = self-similar copy of the whole.
 #[derive(Debug, Clone)]

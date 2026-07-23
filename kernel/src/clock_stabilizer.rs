@@ -730,7 +730,7 @@ mod tests {
 
     #[test]
     fn verifier_from_explicit_hash() {
-        let mut pll = ClockStabilizer::new(1000.0, 0.1);
+        let pll = ClockStabilizer::new(1000.0, 0.1);
         let hash = pll.state_hash();
         let verifier = StabilizerVerifier::from_hash(hash);
         assert!(verifier.verify(&pll).is_ok());

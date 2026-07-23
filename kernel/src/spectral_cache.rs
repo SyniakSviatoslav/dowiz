@@ -100,6 +100,7 @@ impl Default for DecompCache {
 /// [`NormalizedTile::content_address`]. This function survives because the
 /// adversarial test reconstructs the raw path inline (it does NOT call it), and
 /// `RetainedBase::admit` is the sole caller here that needs a raw digest.
+#[allow(dead_code)]
 fn matrix_content_address(a: &[Vec<f64>]) -> String {
     let mut h = FNV_OFFSET_64;
     for (i, row) in a.iter().enumerate() {

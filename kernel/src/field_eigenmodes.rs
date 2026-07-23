@@ -258,6 +258,7 @@ pub fn field_eigenmodes_b(grid: &NeumannGrid) -> Decomp {
 /// this is `u ← u + dt·L·u` — the engine's reference authority (path C).
 /// `u` is indexed over the ACTIVE nodes (length `grid.n()`).
 pub fn stencil_step(grid: &NeumannGrid, u: &[f64], dt: f64) -> Vec<f64> {
+    let dt = crate::sanitize_f64(dt);
     let csr = grid.adjacency();
     let n = csr.nrows();
     debug_assert_eq!(u.len(), n);
@@ -301,6 +302,7 @@ pub fn modal_reconstruct(basis: &[Vec<f64>], u: &[f64], r: usize) -> Vec<f64> {
 /// the field eigenvalues, so the smooth modes decay — the settle/impulse
 /// response FE-10 / G5 want. Returns the reconstructed field.
 pub fn modal_advance(basis: &[Vec<f64>], values: &[f64], u0: &[f64], t: f64) -> Vec<f64> {
+    let t = crate::sanitize_f64(t);
     let r = basis.len().min(values.len());
     let n = u0.len();
     let mut out = vec![0.0f64; n];
@@ -330,6 +332,7 @@ pub fn modal_advance(basis: &[Vec<f64>], values: &[f64], u0: &[f64], t: f64) -> 
 /// equivalence proof signature must be re-pinned. upgrade: when field simulation time-step
 /// exceeds 0.05 or negative eigenvalues appear.
 pub fn modal_euler_advance(basis: &[Vec<f64>], values: &[f64], u0: &[f64], dt: f64) -> Vec<f64> {
+    let dt = crate::sanitize_f64(dt);
     let r = basis.len().min(values.len());
     let n = u0.len();
     let mut out = vec![0.0f64; n];
@@ -525,9 +528,9 @@ pub fn measure_3path(grid: &NeumannGrid, r: usize, iters: u32) -> PathMetrics {
 
     // ---- Path C (stencil step — the authority) ----
     let t3 = std::time::Instant::now();
-    let mut c_step = vec![0.0f64; n];
+    let mut _c_step = vec![0.0f64; n];
     for _ in 0..iters {
-        c_step = stencil_step(grid, &u, dt);
+        _c_step = stencil_step(grid, &u, dt);
     }
     let c_perframe = t3.elapsed().as_micros() as f64 / iters as f64;
 

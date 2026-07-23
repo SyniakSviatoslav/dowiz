@@ -691,7 +691,7 @@ mod tests {
             vec![0.0, -1.0, 1.0],
         ];
         let (basis, values) = {
-            let mut buf = l.iter().flatten().copied().collect::<Vec<f64>>();
+            let _buf = l.iter().flatten().copied().collect::<Vec<f64>>();
             // rebuild compact row-major
             let mut b = vec![0.0f64; 9];
             for i in 0..3 {

@@ -174,7 +174,7 @@ mod tests {
     // outputs of the official demo are pinned here; our permutation must match.
     #[test]
     fn pcg_reference_stream() {
-        let mut r = Rng::new_reference();
+        let _r = Rng::new_reference();
         // Reference upper-32 of the first two outputs from the PCG demo
         // (pcg64_c32 output): 0x8b1d34c8, 0xac7cce74. We pin the full u64 by
         // reproducing the canonical sequence on a stream we fully control.

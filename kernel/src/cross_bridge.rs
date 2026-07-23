@@ -14,7 +14,7 @@
 //! ZERO deps. Uses enrichment engine's own data.
 
 use crate::prompt_enrich::PromptKind;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 
 /// A cross-kind bridge — connects two or more PromptKinds through shared triggers.
 #[derive(Debug, Clone)]

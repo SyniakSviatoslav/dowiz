@@ -15,6 +15,10 @@ pub mod entropy;
 pub mod envelope;
 pub mod fractal;
 pub mod hybrid;
+/// P59 and beyond: the canonical hybrid signing (Ed25519 + ML-DSA-65 + SLH-DSA stub).
+/// This is the ONE place RequireBoth hybrid signatures are produced and verified — every
+/// other module that needs hybrid signing MUST delegate here. See `HybridSigner`.
+pub mod hybrid_signing;
 pub mod keccak;
 pub mod kem;
 /// R-3 `RootDelegationPolicy` (Layer D): operator-signed root + at-most-one overlay hop;

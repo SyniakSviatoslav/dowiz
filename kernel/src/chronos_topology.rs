@@ -19,8 +19,8 @@
 //! ZERO deps. Uses trinary, trig, wave, chronos.
 
 use crate::trinary::{Tri, TriMatrix, Rgb, DeltaChain};
-use crate::trig::{Phase, Xyz, PhaseVector};
-use crate::wave::{Wave, InterferenceField, SpectralComponent, spectral_fingerprint};
+use crate::trig::Xyz;
+use crate::wave::{InterferenceField, spectral_fingerprint};
 
 /// A 4D point in chrono-topological space: (row, col, timestamp_ms, xyz).
 #[derive(Debug, Clone, Copy)]

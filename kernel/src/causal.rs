@@ -1657,9 +1657,9 @@ mod tests {
     // ── GREEN: the mediator M is actually used (not a pass-through) ──
     #[test]
     fn green_frontdoor_routes_through_mediator() {
-        let (pmx, mut pymx, px) = frontdoor_fixture();
+        let (pmx, _pymx, px) = frontdoor_fixture();
         // Flip the outcome-on-mediator map: M1 now BAD (0.2), M0 GOOD (0.7).
-        pymx = vec![
+        let pymx = vec![
             0.7, 0.2, // X=0: M=0, M=1
             0.7, 0.2, // X=1: M=0, M=1
         ];
@@ -1683,7 +1683,7 @@ mod tests {
     // ── GREEN: no X→M edge ⇒ no causal effect of X on Y ──
     #[test]
     fn green_frontdoor_no_x_to_m_means_no_effect() {
-        let mut pmx = vec![0.5, 0.5, 0.5, 0.5]; // P(M|X) constant
+        let pmx = vec![0.5, 0.5, 0.5, 0.5]; // P(M|X) constant
         let pymx = vec![0.2, 0.7, 0.2, 0.7];
         let px = vec![0.5, 0.5];
         let eff = frontdoor_adjust(&pmx, &pymx, &px, 2, 2).unwrap();

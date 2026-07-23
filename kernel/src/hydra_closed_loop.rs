@@ -105,6 +105,7 @@ pub struct HydraClosedLoop<S: EventStore> {
     /// Branch dispersion detector (zero-variance LLM signal guard).
     dispersion: BranchDispersion,
     /// Coupling constant λ for the Lyapunov function.
+    #[allow(dead_code)]
     lambda: f64,
     /// Copy of base_edges for topology reconstruction (Hydra doesn't expose nodes/edges).
     base_edges_copy: Vec<TopoEdge>,
@@ -436,14 +437,23 @@ fn parse_number_after(bytes: &[u8], start: usize) -> Option<f64> {
 mod tests {
     use super::*;
 
+    #[allow(dead_code)]
     const TEST_BATCH_SIZE: usize = 1;
+    #[allow(dead_code)]
     const TEST_LAMBDA_DECAY: f64 = 0.01;
+    #[allow(dead_code)]
     const TEST_ENTROPY_WINDOW: usize = 5;
+    #[allow(dead_code)]
     const TEST_ANNEAL_TEMP: f64 = 1.0;
+    #[allow(dead_code)]
     const TEST_ANNEAL_COOL: f64 = 100.0;
+    #[allow(dead_code)]
     const TEST_DISPERSION_WINDOW: usize = 10;
+    #[allow(dead_code)]
     const TEST_LLM_TEMP: f64 = 0.7;
+    #[allow(dead_code)]
     const TEST_LLM_TOP_P: f64 = 0.9;
+    #[allow(dead_code)]
     const TEST_LLM_MAX_TOKENS: u32 = 512;
 
     fn test_fixture() -> HydraClosedLoop<MemEventStore> {

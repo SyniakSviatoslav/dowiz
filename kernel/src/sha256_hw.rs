@@ -60,9 +60,19 @@ pub fn sha256_hw(data: &[u8]) -> [u8; 32] {
 #[allow(dead_code)]
 #[cfg(target_arch = "x86_64")]
 unsafe fn sha256_hw_ni(data: &[u8]) -> [u8; 32] {
-    // SHA-NI path — deactivated. Falls through to scalar.
-    let _ = data;
-    unimplemented!("SHA-NI fast path: needs inline asm to capture both XMM outputs")
+    // innovate: SHA-NI round function needs inline asm to capture both output
+    // registers (abef→XMM1, cdgh→XMM0). The current `_mm_sha256rnds2_epu32`
+    // intrinsic only returns XMM1 — it discards the XMM0 (cdgh) output which
+    // makes the standard SHA-NI pipeline unusable from safe/intrinsic Rust alone.
+    // Upgrade trigger: when `_mm_sha256rnds2_epu32` is fixed to return both
+    // registers, or when an `asm!`-based wrapper is harnessed and KAT-verified
+    // against the scalar path.
+    //
+    // For now: gracefully fall back to the scalar path. This function exists
+    // so the AES-NI preference compilation path can be activated in a single
+    // line once the asm harness is ready. It is NOT unreachable — it falls
+    // through to the KAT-verified scalar implementation rather than panicking.
+    sha256_scalar(data)
 }
 
 // ── Pure-Rust scalar fallback ──────────────────────────────────────────────

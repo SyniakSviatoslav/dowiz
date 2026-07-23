@@ -247,8 +247,8 @@ mod tests {
     #[test]
     fn three_phase_retry_on_anomalous_jump() {
         let mut v = ThreePhaseVerifier::new(3);
-        let prior = SystemState::new(1, vec![0.2; 8], "prior");
-        let jump = SystemState::new(2, vec![1.0; 8], "jump");
+        let _prior = SystemState::new(1, vec![0.2; 8], "prior");
+        let _jump = SystemState::new(2, vec![1.0; 8], "jump");
         // With threshold 1.0 and jump from 0.2 to 1.0 = 0.8, this should be
         // within bounds (MAX_JUMP = 1.0). To trip it, we need a larger jump.
         // Let's use 0.0 → 1.0 (jump=1.0 which equals MAX_JUMP, so passes)

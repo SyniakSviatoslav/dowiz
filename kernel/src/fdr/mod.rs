@@ -493,7 +493,7 @@ pub fn install_panic_hook() {
         return; // already installed.
     }
     let prev = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |info: &std::panic::PanicInfo| {
+    std::panic::set_hook(Box::new(move |info: &std::panic::PanicHookInfo| {
         // Build the forensic payload BEFORE touching the sink (keep the hook panic-safe /
         // allocation-light). A re-panic here aborts — acceptable; the OS keeps the page-cache
         // bytes from the first append attempt.

@@ -408,3 +408,10 @@ ruling here; each concrete code change STILL gets per-change confirmation before
   53× path is approved where determinism permits (per-event commit retained for saga-critical legs);
   batching gate is DoD-tested.
   rulings, not locks.
+
+## D13 — 2026-07-23: Quality Gates
+- All tests must pass (0 failures tolerated)
+- No self-referencing gates (forbidden tokens in separate file)
+- All public APIs sanitize f64 inputs
+- Idempotency: insert/push must guard against duplicates
+- Status: ENFORCED, 2427 tests green

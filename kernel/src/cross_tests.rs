@@ -10,12 +10,12 @@
 #[cfg(test)]
 mod tests {
     use crate::trinary::{Tri, TriMatrix, Rgb};
-    use crate::trig::{Phase, Xyz, PhaseVector};
-    use crate::eigen::{EigenDecomp, decompose, Eigen};
-    use crate::delta::{Delta, DeltaTracker, DeltaComparison, compare};
+    use crate::trig::{Phase, Xyz};
+    use crate::eigen::decompose;
+    use crate::delta::{Delta, DeltaComparison, compare};
     use crate::chronos::Chronos;
-    use crate::wave::{Wave, InterferenceField, spectral_fingerprint};
-    use crate::invert::{BackpropChain, backprop_from_deltas};
+    use crate::wave::spectral_fingerprint;
+    use crate::invert::backprop_from_deltas;
     use crate::cross_bridge::CrossBridgeRegistry;
     use crate::chronos_topology::TemporalTrinity;
     use std::collections::HashMap;
@@ -121,7 +121,7 @@ mod tests {
         tt.advance(m2);
 
         // Past-present delta
-        let (delta, changes) = tt.delta_past_present();
+        let (_delta, changes) = tt.delta_past_present();
         assert!(changes > 0, "must detect changes between states");
 
         // Predicted should exist

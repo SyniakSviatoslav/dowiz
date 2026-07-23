@@ -668,6 +668,7 @@ mod adversarial {
         );
         assert_eq!(acked, n, "all n records acked in total");
     }
+    #[allow(dead_code)]
     fn a5_sustained_disk_full_degrade_closed() {
         let mut log = EventLog::new(ChaosStore::new(
             MemEventStore::new(),

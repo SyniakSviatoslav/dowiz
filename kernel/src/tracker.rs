@@ -8,7 +8,6 @@
 //! - `ReverseReplay` — reconstruct past states from event history
 //! - `InverseSimulator` — given an observed outcome, infer probable input ranges
 
-use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 pub const DEFAULT_MAX_EVENTS_INITIAL: usize = 1024;
@@ -605,7 +604,7 @@ mod tests {
 
     #[test]
     fn telemetry_out_of_range_get() {
-        let mut tc = TelemetryCollector::new();
+        let tc = TelemetryCollector::new();
         assert_eq!(tc.get(999), 0, "out-of-range index must return 0");
     }
 
@@ -787,7 +786,7 @@ mod tests {
         rr.record(&vec![0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0], 200);
 
         // Current state: what might the prior (t=100) state have been?
-        let current = &[0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+        let _current = &[0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
         let est_prior = rr.estimate_at(100).unwrap();
         // Estimated prior should be close to the recorded state at t=100
         assert!((est_prior[0] - 0.2).abs() < 0.01,

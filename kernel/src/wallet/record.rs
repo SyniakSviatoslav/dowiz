@@ -278,6 +278,7 @@ pub fn deserialize(src: &str) -> Result<WalletRecord, WalletStoreError> {
 #[derive(Debug, Clone)]
 enum Value {
     Null,
+    #[allow(dead_code)]
     Bool(bool),
     Num(i64),
     String(String),
@@ -286,24 +287,28 @@ enum Value {
 }
 
 impl Value {
+    #[allow(dead_code)]
     fn get(&self, k: &str) -> Option<&Value> {
         match self {
             Value::Object(o) => o.get(k),
             _ => None,
         }
     }
+    #[allow(dead_code)]
     fn get_str(&self, k: &str) -> Option<&str> {
         match self.get(k) {
             Some(Value::String(s)) => Some(s),
             _ => None,
         }
     }
+    #[allow(dead_code)]
     fn get_u16(&self, k: &str) -> Option<u16> {
         match self.get(k) {
             Some(Value::Num(n)) => u16::try_from(*n).ok(),
             _ => None,
         }
     }
+    #[allow(dead_code)]
     fn get_u64(&self, k: &str) -> Option<u64> {
         match self.get(k) {
             Some(Value::Num(n)) => u64::try_from(*n).ok(),

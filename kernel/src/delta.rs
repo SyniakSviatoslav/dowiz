@@ -19,8 +19,8 @@
 //!
 //! ZERO deps. Uses eigen, trig, trinary.
 
-use crate::eigen::{Eigen, EigenDecomp, decompose};
-use crate::trig::{Phase, Xyz, PhaseVector};
+use crate::eigen::{EigenDecomp, decompose};
+use crate::trig::{Xyz, PhaseVector};
 
 // ─── Delta — the fundamental change primitive ─────────────────────────────
 

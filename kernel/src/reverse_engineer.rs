@@ -322,7 +322,7 @@ pub fn parse_elf(data: &[u8]) -> Result<ElfBinary, ElfError> {
     // Parse section headers.
     let mut sections = Vec::with_capacity(shnum);
     let mut symtab_section = None;
-    let mut strtab_section = None;
+    let mut _strtab_section = None;
 
     for i in 0..shnum {
         let sh_offset = shoff + i * shentsize;
@@ -375,7 +375,7 @@ pub fn parse_elf(data: &[u8]) -> Result<ElfBinary, ElfError> {
             symtab_section = Some(sections.len() - 1);
         }
         if sh_type == ShType::Strtab {
-            strtab_section = Some(sections.len() - 1);
+            _strtab_section = Some(sections.len() - 1);
         }
     }
 

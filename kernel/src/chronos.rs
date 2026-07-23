@@ -186,7 +186,7 @@ mod tests {
     #[test]
     fn chronos_snapshot_and_retrieve() {
         let mut c = Chronos::new(100);
-        let t0 = crate::now_ms();
+        let _t0 = crate::now_ms();
         c.snapshot(make_values(0.1, 0.2));
         thread::sleep(Duration::from_millis(10));
         c.snapshot(make_values(0.5, 0.8));

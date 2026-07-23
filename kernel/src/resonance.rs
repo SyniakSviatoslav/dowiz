@@ -85,6 +85,7 @@ impl ResonanceDetector {
 
     /// Run Goertzel filter at a specific normalized frequency.
     /// Returns the squared magnitude.
+    #[allow(unused_assignments)]
     fn goertzel(&self, target_freq: f64) -> f64 {
         let n = self.buffer.len();
         if n < 3 {
@@ -298,7 +299,7 @@ mod tests {
         det.feed(1.0);
         det.feed(2.0);
         assert_eq!(det.len(), 2);
-        let (freq, mag) = det.dominant_frequency().unwrap_or((0.0, 0.0));
+        let (_freq, mag) = det.dominant_frequency().unwrap_or((0.0, 0.0));
         assert_eq!(mag, 0.0, "buffer < 3 must return zero magnitude: {mag}");
         assert!(det.oscillation_strength().is_none(),
             "buffer < 3 must return None for oscillation");
@@ -379,7 +380,7 @@ mod tests {
         let mut det = ResonanceDetector::new(1000);
         // White noise injection (all random-like values)
         for i in 0..1000 {
-            let v = ((i as f64 * 7.0).sin() * 0.5 + (i as f64 * 13.0).cos() * 0.5);
+            let v = (i as f64 * 7.0).sin() * 0.5 + (i as f64 * 13.0).cos() * 0.5;
             det.feed(v);
         }
         let pg = det.periodogram();

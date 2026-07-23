@@ -1023,7 +1023,7 @@ mod tests {
             amount: Money::new(5000, Currency::Usd),
             reverses: None,
         };
-        let mut ledger = ledger_append(Vec::new(), earn).unwrap();
+        let ledger = ledger_append(Vec::new(), earn).unwrap();
         // Attempt a reversal of the WRONG amount (drift).
         let bad = LedgerEntry {
             id: 2,

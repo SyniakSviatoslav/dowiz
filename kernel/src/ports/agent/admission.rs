@@ -568,7 +568,7 @@ fn encode_admission_event(
 mod tests {
     use super::*;
     use crate::event_log::MemEventStore;
-    use crate::ports::agent::cap::{Capability, Delegation, RefSigner, ML_DSA_65_PK_LEN};
+    use crate::ports::agent::cap::{Capability, Delegation, RefSigner};
     use crate::ports::agent::manifest::{
         BudgetRequest, CostDenomination, ExecutionModel, QuirksProfile, ResourceNeed,
         ValidationPolicy,

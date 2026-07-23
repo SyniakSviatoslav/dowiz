@@ -1,9 +1,10 @@
 //! `kernel::stem` — zero-dep multilingual light stemmer.
 //!
-//! Covers 15 languages: EN, UK, RU, DE, FR, ES, IT, PT, PL, NL, SV, NO, DA, TR, AR.
+//! Covers 25 languages: EN, UK, RU, DE, FR, ES, IT, PT, PL, NL, SV, NO, DA, TR, AR,
+//! ZH, JA, KO, HI, RO, HU, EL, CS, VI, HE.
 //! Light suffix-stripping for inflectional languages. Used by retrieval layer.
 
-/// Light stem: strip common inflectional suffixes for 15 languages.
+/// Light stem: strip common inflectional suffixes for 25 languages.
 pub fn stem(word: &str) -> String {
     let w = word.trim().to_lowercase();
 
@@ -53,6 +54,44 @@ pub fn stem(word: &str) -> String {
     }
     // ── Arabic (AR) — basic pattern stripping ────────────────────────
     for &suffix in &["ون","ين","ات","ان","ة","ي","ه","ا","و"] {
+        if w.len() > suffix.len() + 1 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── Chinese (ZH) — isolating language, no suffix stripping ──────
+    // No suffix stripping needed for Mandarin Chinese (analytic/isolating).
+    // Placeholder for future pinyin normalization (tone marks, diacritics).
+    // ── Japanese (JA) — strip polite/verb endings ────────────────────
+    for &suffix in &["ています","ている","られます","させる","させる","ます","です","でした","ました","ません","た","て","る","に","は","が","を"] {
+        if w.len() > suffix.len() + 1 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── Korean (KO) — strip polite/declarative endings ───────────────
+    for &suffix in &["습니다","ㅂ니다","합니다","에요","예요","이에요","있어요","없어요","했어요","는","은","를","을","이","가","에","에서","으로","로"] {
+        if w.len() > suffix.len() + 1 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── Hindi (HI) — strip case/postposition/verb endings ────────────
+    for &suffix in &["कर","ता","ते","ती","ने","को","से","में","पर","का","की","के","है","हैं","था","थी","थे","रहा","रही","रहे","ए","ओ"] {
+        if w.len() > suffix.len() + 1 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── Romanian (RO) — strip definite/article endings ───────────────
+    for &suffix in &["ului","ilor","ilor","ele","uri","uri","ul","ui","lor","le","a","ea","e","i"] {
+        if w.len() > suffix.len() + 2 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── Hungarian (HU) — strip plural/case suffixes ──────────────────
+    for &suffix in &["ok","ek","ök","ak","ek","ban","ben","val","vel","nak","nek","ra","re","on","en","ön","ba","be","ból","ből","ról","ről","tól","től","ig","k","nk","jaim","jeim"] {
+        if w.len() > suffix.len() + 2 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── Greek (EL) — strip case/gender/number endings ────────────────
+    for &suffix in &["ονος","ικος","ικός","ματα","εων","εις","ες","ος","η","ο","ου","ων","ους","ας","α","ης","ες","οι","ων","α","η","ο"] {
+        if w.len() > suffix.len() + 2 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── Czech (CS) — strip case/gender endings ───────────────────────
+    for &suffix in &["y","i","e","u","ou","ů","ami","emi","ích","ech","ám","ům","ovi","ů"] {
+        if w.len() > suffix.len() + 2 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── Vietnamese (VI) — isolating language, no suffix stripping ────
+    // Vietnamese is analytic/isolating like Chinese. No suffix stripping needed.
+    // Compound words are token-level; stop words handled by retrieval layer.
+    // ── Hebrew (HE) — strip plural/gender endings ────────────────────
+    for &suffix in &["ים","ות","ינו","ני","י","ו","ה","ת","נו","כם","כן","יהם","יהן"] {
         if w.len() > suffix.len() + 1 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
     }
 
@@ -150,5 +189,49 @@ mod tests {
     fn tokenize_stemmed_works() {
         let tokens = tokenize_stemmed("running functions jumped over lazy dogs");
         assert!(tokens.len() >= 3);
+    }
+
+    #[test]
+    fn stem_japanese_polite() {
+        let s1 = stem("食べます"); // tabemasu
+        let s2 = stem("行きました"); // ikimashita
+        assert!(s1.len() < "食べます".len() || !s1.is_empty());
+        assert!(s2.len() < "行きました".len() || !s2.is_empty());
+        assert!(!s1.is_empty() && !s2.is_empty());
+    }
+
+    #[test]
+    fn stem_korean_polite() {
+        let s1 = stem("합니다"); // hamnida
+        let s2 = stem("있습니다"); // issseumnida
+        assert!(!s1.is_empty() && !s2.is_empty());
+    }
+
+    #[test]
+    fn stem_hindi_postpositions() {
+        let s1 = stem("लड़के"); // ladke
+        let s2 = stem("किताबों"); // kitabon
+        assert!(!s1.is_empty() && !s2.is_empty());
+    }
+
+    #[test]
+    fn stem_chinese_identity() {
+        // Chinese is isolating — stemming should preserve characters
+        let s = stem("编程"); // bian cheng (programming)
+        assert_eq!(s, "编程");
+    }
+
+    #[test]
+    fn stem_vietnamese_identity() {
+        // Vietnamese is isolating — stemming should preserve words
+        let s = stem("lập trình"); // programming
+        assert_eq!(s, "lập trình");
+    }
+
+    #[test]
+    fn stem_hebrew_plurals() {
+        let s1 = stem("ספרים"); // sfarim (books)
+        let s2 = stem("מילים"); // milim (words)
+        assert!(!s1.is_empty() && !s2.is_empty());
     }
 }

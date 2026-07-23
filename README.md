@@ -14,10 +14,43 @@ mesh is the default.
 > open, all documentation is public, and everyone may use, modify, and
 > distribute this at their own discretion.
 
+## Getting Started
+
+### Prerequisites
+- Rust 1.96+
+- Linux (AMD64) or WASM target
+
+### Build & Test
+```sh
+cd kernel && cargo test --lib     # 2144 tests
+cd engine && cargo test --lib     # 259 tests
+cd apps/courier && cargo test     # 24 tests
+```
+
+### Enrichment Engine
+```sh
+cd kernel
+cargo build --bin enrich --release
+target/release/enrich --load prompt_enrich_db.bin --query "your prompt" --verbose
+```
+
+### Architecture
+- `kernel/` — deterministic Rust/WASM authority (167 modules)
+- `engine/` — physics-based field-UI render engine
+- `apps/courier/` — courier surface (wgpu)
+- `agent-facade/`, `agent-loop/` — agent lane (compile firewall)
+
+### Key Innovations
+- First Rust 3-valued logic (trinary.rs)
+- First eigen-as-data-primitive (eigen.rs)
+- 4D chrono-topological navigation (chronos_topology.rs)
+- 13,880-entry enrichment database (prompt_enrich_db.jsonl)
+
 ---
 
 ## Table of Contents
 
+0. [Getting Started](#getting-started)
 1. [Main Functionality](#1-main-functionality)
 2. [Post-Quantum Security](#2-post-quantum-security)
 3. [P2P Ethics Without Intermediaries](#3-p2p-ethics-without-intermediaries)

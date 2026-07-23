@@ -144,7 +144,7 @@ mod tests {
     #[test]
     fn oracle_matmul_corpus_shadow_exact() {
         let mut rng: u64 = 0x9E3779B97F4A7C15;
-        let mut next = |rng: &mut u64| -> i8 {
+        let next = |rng: &mut u64| -> i8 {
             // xorshift64* → take low 8 bits, bias toward small magnitudes.
             *rng ^= *rng << 13;
             *rng ^= *rng >> 7;

@@ -37,7 +37,7 @@ use crate::pq::dsa::{keygen, sign, verify, MlDsa65Pk, MlDsa65Sig, MlDsa65Sk, RND
 // (`mesh_oracle`, the dudect self-test) and the `ct_eq` dependency compile only under
 // `test`/`ct-gate`, exactly like `ct_gate` itself — zero footprint in a shipping build.
 #[cfg(any(test, feature = "ct-gate"))]
-use crate::ct_gate::ct_eq;
+use crate::ct_gate::{ct_eq, measure_leakage, T_THRESHOLD};
 
 /// A single append-only, signed entry in the mesh log.
 ///
@@ -423,6 +423,8 @@ mod mesh_dudect {
     //! with the planted-leak self-test (SYNTHESIS §10/P7, the "verifier the author
     //! cannot forge"). Uses the kernel's existing `ct_gate` Welch-t machinery so the
     //! mesh surface reuses the SAME proven gate as the FO-tag-compare precedent.
+
+    use crate::ct_gate::{ct_eq, measure_leakage, T_THRESHOLD};
 
     
     

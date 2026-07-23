@@ -350,7 +350,7 @@ mod tests {
     fn closed_trips_open_after_w_consec() {
         let t = tid();
         let mut rec = new_record([1u8; 16], 0, t);
-        for i in 0..t.w_consec {
+        for _i in 0..t.w_consec {
             rec = step(rec, &sig(t.open + TRIP_EXCESS, w()), None).rec;
         }
         assert_eq!(rec.state, BreakerState::Open);

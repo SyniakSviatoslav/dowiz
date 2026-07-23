@@ -24,7 +24,7 @@ pub fn pid_stability_margin(kp: f64, ki: f64, kd: f64, dt: f64) -> (f64, f64) {
     for i in 0..=n {
         let omega = omega_min * (omega_max / omega_min).powf(i as f64 / n as f64);
         let (mag, phase) = pid_freq_response(kp, ki, kd, dt, omega);
-        let phase_deg = phase * 180.0 / PI;
+        let _phase_deg = phase * 180.0 / PI;
 
         // Gain margin: closest approach to -180° (Nyquist point)
         let phase_err = (phase + PI).abs();

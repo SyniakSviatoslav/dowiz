@@ -724,7 +724,7 @@ mod tests {
         );
         assert!(reg.get("CH-A").is_some());
         // Terminal transition ⇒ unbind.
-        let set = reg.get("CH-A").unwrap();
+        let _set = reg.get("CH-A").unwrap();
         assert!(is_terminal_transition(
             OrderStatus::InDelivery,
             OrderStatus::Delivered

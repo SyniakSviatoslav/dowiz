@@ -842,7 +842,7 @@ mod tests {
             amount: Money::new(100, Currency::All),
             reverses: None,
         };
-        let mut ledger = ledger_append(Vec::new(), earn).unwrap();
+        let ledger = ledger_append(Vec::new(), earn).unwrap();
         let dup = LedgerEntry {
             id: 1, // same id
             kind: EntryKind::Earn,

@@ -272,8 +272,6 @@ mod tests {
         assert_nleg_atomicity, run_nleg_saga, CaptureOutcome, FailReason, NLegEvent, NLegOutcome,
     };
     use crate::vendor::VendorId;
-    use std::collections::BTreeMap;
-
     fn item(product: &str, qty: i64, price: i64, vendor: u64, cur: Currency) -> OrderItem {
         OrderItem {
             product_id: product.into(),

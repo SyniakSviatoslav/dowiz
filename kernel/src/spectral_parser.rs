@@ -503,9 +503,9 @@ impl BulkSnapshot {
         let mut total = 0u64;
         for set in &sets {
             let token = String::new();
-            let mut page = 0u64;
+            let mut _page = 0u64;
             loop {
-                page += 1;
+                _page += 1;
                 let url = if token.is_empty() {
                     format!("https://oaipmh.arxiv.org/oai?verb=ListRecords&metadataPrefix=arXiv&set={}", set)
                 } else {
@@ -587,12 +587,12 @@ mod snapshot_tests {
     #[test]
     fn process_oai_pmh_returns_ok() {
         // Unit test — doesn't actually make HTTP calls.
-        let mut bs = BulkSnapshot::new(SnapshotSource::LocalGzip);
+        let mut _bs = BulkSnapshot::new(SnapshotSource::LocalGzip);
         let mut sp = SpectralParser::new();
         let xml = b"<record><title>Test</title><categories>cs.LG</categories><created>2024</created></record>";
         let n = sp.ingest_raw(xml);
-        bs.bytes_processed = xml.len() as u64;
-        bs.papers_extracted = n as u64;
+        _bs.bytes_processed = xml.len() as u64;
+        _bs.papers_extracted = n as u64;
         assert_eq!(n, 1);
     }
 }

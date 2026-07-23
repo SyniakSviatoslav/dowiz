@@ -90,6 +90,7 @@ impl EntropyBudget {
     /// `drift_weights` is the distribution over drift classes
     /// (e.g. [count_damped, count_resonant, count_unstable] as proportions).
     pub fn step(&mut self, drift_weights: &[f64], rho: f64) -> f64 {
+        let rho = crate::sanitize_f64(rho);
         let s = shannon_entropy(drift_weights);
         self.s = s;
         self.rho = rho;
@@ -157,7 +158,11 @@ impl TAnnealing {
     /// `t0` = initial temperature (start with 1.0 for full exploration),
     /// `tau` = annealing time constant in commits (start with 100).
     pub fn new(t0: f64, tau: f64) -> Self {
-        TAnnealing { t0, tau, k: 0 }
+        TAnnealing {
+            t0: crate::sanitize_f64(t0),
+            tau: crate::sanitize_f64(tau),
+            k: 0,
+        }
     }
 
     /// Current temperature T(k).
@@ -171,6 +176,7 @@ impl TAnnealing {
     /// reproducible across runs while still annealing.
     pub fn accept(&mut self, delta_e: f64) -> bool {
         self.k += 1;
+        let delta_e = crate::sanitize_f64(delta_e);
         let t = self.t0 / (1.0 + ((self.k - 1) as f64) / self.tau);
         // Accept if cost is negative (improvement) or below the annealing threshold.
         delta_e <= 0.0 || delta_e < t * 2.0_f64.ln()

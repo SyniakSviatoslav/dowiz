@@ -382,7 +382,7 @@ fn landing_real_claim_transport() {
     });
 
     // Simulate a claim request to the local mock via std::net.
-    let url = format!("http://127.0.0.1:{}/v1/claim", port);
+    let _url = format!("http://127.0.0.1:{}/v1/claim", port);
     let mut stream = std::net::TcpStream::connect(addr).expect("connect to mock");
     let request = format!("GET /v1/claim HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n");
     stream.write(request.as_bytes()).ok();

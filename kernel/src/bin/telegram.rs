@@ -1,7 +1,7 @@
 use std::io::Write;
 use std::path::PathBuf;
 use std::process;
-use std::time::Duration;
+
 
 /// Send a plain text message via the existing Telegram telemetry spool.
 /// Falls back to synchronous tg_send if spool is unavailable.
@@ -37,4 +37,19 @@ fn escape_json(s: &str) -> String {
 
 fn escape_sh(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"").replace('\'', "'\\''")
+}
+
+fn main() {
+    let msg = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| {
+            let mut buf = String::new();
+            std::io::stdin().read_line(&mut buf).ok();
+            buf.trim().to_string()
+        });
+    if msg.is_empty() {
+        eprintln!("usage: telegram <message>");
+        std::process::exit(1);
+    }
+    send(&msg);
 }

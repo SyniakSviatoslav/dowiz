@@ -1344,7 +1344,7 @@ mod tests {
 
     #[test]
     fn red_spec_mismatch_rejected() {
-        let v = RefSigner;
+        let _v = RefSigner;
         let vps = MockVps::with_spec_guard("cx11");
         let r = vps.create_from_image(
             &ImageRef("snap".into()),
@@ -1506,7 +1506,7 @@ mod tests {
         let owner_a = Party::new(&v, 9);
         let owner_b = Party::new(&v, 5);
         let root_a = SelfSignedRoot::mint(&v, &owner_a.cls_seed, &owner_a.pq_seed, scope(), 99999);
-        let root_b = SelfSignedRoot::mint(&v, &owner_b.cls_seed, &owner_b.pq_seed, scope(), 99999);
+        let _root_b = SelfSignedRoot::mint(&v, &owner_b.cls_seed, &owner_b.pq_seed, scope(), 99999);
         let clock = Clock::new(10);
         // Claim under A succeeds.
         let r_a = pm.claim(
@@ -1797,7 +1797,7 @@ mod tests {
 
     #[test]
     fn red_second_account_rollover_no_code_change() {
-        let v = RefSigner;
+        let _v = RefSigner;
         let tunnel = MockTunnel::with_count(CF_TUNNEL_CRIT_WATERMARK + 1); // > 950
         let mut pool = AccountPool::new();
         pool.accounts.push(CfAccount {
@@ -1865,7 +1865,7 @@ mod tests {
 
     #[test]
     fn red_tunnel_count_over_warn_alerts() {
-        let v = RefSigner;
+        let _v = RefSigner;
         let tunnel = MockTunnel::with_count(CF_TUNNEL_WARN_WATERMARK + 1); // 801
         let mut pool = AccountPool::new();
         pool.accounts.push(CfAccount {

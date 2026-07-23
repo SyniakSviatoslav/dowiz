@@ -416,7 +416,7 @@ mod tests {
                 edges.push(GraphEdge::new(i, j, 1.0));
             }
         }
-        let mut g = SpectralGraph::new(5, edges);
+        let g = SpectralGraph::new(5, edges);
         let cc = g.avg_clustering();
         assert!((cc - 1.0).abs() < 1e-10,
             "K5 must have clustering coefficient 1.0: {cc}");

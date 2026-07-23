@@ -15,10 +15,7 @@
 //!
 //! ZERO deps. Uses eigen, delta, trig, trinary.
 
-use crate::delta::{Delta, DeltaTracker, DeltaComparison};
-use crate::eigen::{Eigen, EigenDecomp, decompose};
-use crate::trig::{Phase, Xyz};
-use std::collections::VecDeque;
+use crate::delta::{Delta, DeltaComparison};
 
 // ─── BackpropNode — one step in the backward chain ─────────────────────────
 
@@ -136,7 +133,7 @@ pub trait Invertible {
     fn inverse(&self, output: &Self::Output) -> Self::Input;
 
     /// Verify invertibility: forward(inverse(output)) ≈ output.
-    fn verify(&self, output: &Self::Output, tolerance: f64) -> bool
+    fn verify(&self, output: &Self::Output, _tolerance: f64) -> bool
     where Self::Output: PartialEq + Clone
     {
         let input = self.inverse(output);

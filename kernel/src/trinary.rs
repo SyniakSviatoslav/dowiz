@@ -103,7 +103,6 @@ impl Tri {
             (Tri::True, Tri::Unknown) => Tri::Unknown, // True → Unknown = Unknown
             (Tri::Unknown, Tri::Unknown) => Tri::True, // Ł3: U→U = True (key difference)
             (Tri::Unknown, Tri::False) => Tri::Unknown, // Unknown → False = Unknown
-            _ => Tri::True,
         }
     }
 
@@ -117,7 +116,6 @@ impl Tri {
             (Tri::True, Tri::Unknown) => Tri::Unknown,
             (Tri::Unknown, Tri::Unknown) => Tri::Unknown, // K3: U→U = Unknown
             (Tri::Unknown, Tri::False) => Tri::Unknown,
-            _ => Tri::True,
         }
     }
 

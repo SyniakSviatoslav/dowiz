@@ -215,17 +215,17 @@ pub fn roots(coeffs: &[f64]) -> Vec<Complex> {
     rts
 }
 
-/// Eigenvalues of a general real matrix.
-///
-/// Fast path: for n ≤ 32 the matrix fits the stack-only Householder engine
-/// (`householder::eigenvalues_contig`) — O(n³), no heap, numerically armored,
-/// captures complex conjugate pairs (e.g. the μ≈−1 period-2 cycle). The legacy
-/// O(n⁴) Faddeev-LeVerrier + Durand-Kerner path is retained as a fallback for
-/// n > 32 and as the parity oracle in `householder::tests`.
-/// Test-only instrumentation for the item-16 single-computation proof: counts
-/// entries into `eigenvalues` on the current thread. `thread_local` ⇒ correct
-/// under the parallel test harness (each test thread owns its own counter);
-/// compiled out entirely in non-test builds (`#[cfg(test)]`).
+// Eigenvalues of a general real matrix.
+//
+// Fast path: for n ≤ 32 the matrix fits the stack-only Householder engine
+// (`householder::eigenvalues_contig`) — O(n³), no heap, numerically armored,
+// captures complex conjugate pairs (e.g. the μ≈−1 period-2 cycle). The legacy
+// O(n⁴) Faddeev-LeVerrier + Durand-Kerner path is retained as a fallback for
+// n > 32 and as the parity oracle in `householder::tests`.
+// Test-only instrumentation for the item-16 single-computation proof: counts
+// entries into `eigenvalues` on the current thread. `thread_local` ⇒ correct
+// under the parallel test harness (each test thread owns its own counter);
+// compiled out entirely in non-test builds (`#[cfg(test)]`).
 #[cfg(test)]
 thread_local! {
     static EIGEN_CALLS: std::cell::Cell<u32> = std::cell::Cell::new(0);

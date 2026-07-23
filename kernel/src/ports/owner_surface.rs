@@ -1199,7 +1199,7 @@ mod tests {
         let courier_pk = [9u8; 32];
         let cert = grant_courier(&v, opk, &osk, courier_pk, 9999, [1u8; 8]);
         // Hub verifies with owner-root pubkey ONLY, no network (red_owner_mints_child_offline).
-        let mut roster = AnchorRoster::new();
+        let roster = AnchorRoster::new();
         let revoked = RevocationSet::new();
         assert_eq!(verify_courier(&v, &opk, &cert, 0, &revoked), Ok(()));
         let _ = roster;
@@ -1608,7 +1608,7 @@ mod tests {
         };
         let online_pk = [1u8; 32];
         let offline_pk = [2u8; 32];
-        let mut online = owner_root_mint_hub(
+        let online = owner_root_mint_hub(
             &v,
             opk,
             &osk,

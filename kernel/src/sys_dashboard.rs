@@ -8,11 +8,9 @@
 
 use crate::trinary::{Tri, TriMatrix};
 use crate::fractal::ascii_matrix;
-use crate::eigen::EigenDecomp;
 use crate::delta::DeltaTracker;
 use crate::code_oracle::EtaOracle;
 use crate::trig::Xyz;
-use std::collections::HashMap;
 
 /// Complete system dashboard — one call, full state.
 pub fn render(

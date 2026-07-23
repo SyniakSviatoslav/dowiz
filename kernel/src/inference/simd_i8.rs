@@ -261,10 +261,10 @@ mod tests {
             let mut a = vec![0i8; k];
             let mut w = vec![0i8; k];
             for x in a.iter_mut() {
-                *x = ((lcg(&mut rng) & 0xFF) as i8);
+                *x = (lcg(&mut rng) & 0xFF) as i8;
             }
             for x in w.iter_mut() {
-                *x = ((lcg(&mut rng) & 0xFF) as i8);
+                *x = (lcg(&mut rng) & 0xFF) as i8;
             }
             let got = dot_i8(&a, &w);
             let ref_scalar = scalar_dot(&a, &w);
@@ -306,10 +306,10 @@ mod tests {
             let mut a = vec![0i8; m * k];
             let mut w = vec![0i8; k * n];
             for x in a.iter_mut() {
-                *x = ((lcg(&mut rng) & 0xFF) as i8);
+                *x = (lcg(&mut rng) & 0xFF) as i8;
             }
             for x in w.iter_mut() {
-                *x = ((lcg(&mut rng) & 0xFF) as i8);
+                *x = (lcg(&mut rng) & 0xFF) as i8;
             }
             let got = matmul_i8(&a, &w, m, k, n).expect("shape fits i32");
             let oracle = oracle_matmul_i8(&a, &w, m, k, n).expect("shape fits i32");
@@ -409,10 +409,10 @@ mod tests {
             let mut a = vec![0i8; k];
             let mut w = vec![0i8; k];
             for x in a.iter_mut() {
-                *x = ((lcg(&mut rng) & 0xFF) as i8);
+                *x = (lcg(&mut rng) & 0xFF) as i8;
             }
             for x in w.iter_mut() {
-                *x = ((lcg(&mut rng) & 0xFF) as i8);
+                *x = (lcg(&mut rng) & 0xFF) as i8;
             }
             // Independent i128 reference (widest accumulator).
             let wide: i128 = a

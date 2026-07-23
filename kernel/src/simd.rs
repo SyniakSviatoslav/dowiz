@@ -644,7 +644,7 @@ mod tests {
             return;
         }
         // Seeded RNG for deterministic couriers.
-        let mut make_rng = || {
+        let make_rng = || {
             let mut s = 0x1234_5678_9ABC_DEF0u64;
             move || -> f64 {
                 s = s

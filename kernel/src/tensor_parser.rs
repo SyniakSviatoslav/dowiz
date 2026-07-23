@@ -69,6 +69,7 @@ pub struct TensorStore {
     pub matrix: Vec<Vec<f64>>,
     pub papers: Vec<PaperVector>,
     hash_index: HashMap<[u8; 32], usize>,
+    #[allow(dead_code)]
     pid: PidController,
 }
 

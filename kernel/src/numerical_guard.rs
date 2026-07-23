@@ -173,7 +173,7 @@ fn power_iteration_sigma_min(a: &[Vec<f64>], max_iter: usize, tol: f64) -> f64 {
     for _ in 0..max_iter {
         let x = gaussian_solve(a, &v);
         mat_vec_mul_transpose(a, &x, &mut av);
-        let mut w = gaussian_solve(a, &av);
+        let w = gaussian_solve(a, &av);
         let new_lambda = norm(&w);
         if (new_lambda - lambda).abs() < tol * new_lambda.max(1e-12) {
             lambda = new_lambda;

@@ -157,7 +157,7 @@ impl Action {
     pub fn new(name: &str, magnitude: f64) -> Self {
         Action {
             name: name.to_string(),
-            magnitude,
+            magnitude: crate::sanitize_f64(magnitude),
             target_metrics: Vec::new(),
         }
     }
@@ -333,7 +333,7 @@ impl Predictor {
             return;
         }
 
-        let ts = state.timestamp_ms;
+        let _ts = state.timestamp_ms;
         let snapshot = StateSnapshot::new(state.id, state.metrics.clone(), &state.label);
 
         // Store in crystal lattice for future similarity search.
@@ -505,8 +505,8 @@ impl Predictor {
     /// for each. This is the main prediction entry point.
     pub fn predict_all(&self, action_name: &str) -> Vec<PredictedOutcome> {
         let mut all: Vec<PredictedOutcome> = Vec::new();
-        for (i, &name) in METRIC_NAMES.iter().enumerate() {
-            let mut outcomes = self.predict(name.to_string(), action_name.to_string());
+        for (_i, &name) in METRIC_NAMES.iter().enumerate() {
+            let outcomes = self.predict(name.to_string(), action_name.to_string());
             if let Some(best) = outcomes.into_iter().next() {
                 all.push(best);
             }
@@ -577,7 +577,7 @@ pub fn quick_predict(
 
 /// Predict ALL dimensions and return whether any is critical.
 pub fn quick_scan(metrics: Vec<f64>, action: &str) -> (Vec<PredictedOutcome>, bool) {
-    let outcomes = quick_predict(metrics.clone(), action, "cpu_load");
+    let _outcomes = quick_predict(metrics.clone(), action, "cpu_load");
     let all = {
         let mut pred = Predictor::new(PredictorConfig::default());
         pred.observe(SystemState::new(1, metrics, "scan"));
@@ -859,7 +859,7 @@ mod tests {
         let mut p = Predictor::new(PredictorConfig::default());
         for i in 0..10 {
             let m: Vec<f64> = (0..DEFAULT_N_METRICS)
-                .map(|j| ((i as f64 * 0.05 + j as f64 * 0.02) % 1.0))
+                .map(|j| (i as f64 * 0.05 + j as f64 * 0.02) % 1.0)
                 .collect();
             p.observe(SystemState::new(i, m, "history"));
         }
@@ -873,7 +873,7 @@ mod tests {
         let mut p = Predictor::new(PredictorConfig::default());
         for i in 0..20 {
             let m: Vec<f64> = (0..DEFAULT_N_METRICS)
-                .map(|j| ((i as f64 * 0.03 + j as f64 * 0.01) % 1.0))
+                .map(|j| (i as f64 * 0.03 + j as f64 * 0.01) % 1.0)
                 .collect();
             p.observe(SystemState::new(i, m, "train"));
         }
@@ -953,7 +953,7 @@ mod tests {
     #[test]
     fn quick_scan_detects_critical() {
         let metrics = vec![0.9, 0.8, 0.95, 0.1, 0.3, 0.7, 0.5, 0.2];
-        let (_all, critical) = quick_scan(metrics, "stress_test");
+        let (_all, _critical) = quick_scan(metrics, "stress_test");
         assert!(!_all.is_empty());
     }
 
@@ -1018,7 +1018,7 @@ mod tests {
         sim.add_route(EventRoute::new("slow_reliable", 200.0, 0.99).backup());
 
         let event = SystemEvent::new("critical.order", "fast_unreliable");
-        let (_primary, backup) = sim.best_route(&event);
+        let (_primary, _backup) = sim.best_route(&event);
         // The unreliable primary should trigger a backup suggestion
         // (may not always find one depending on warning logic)
     }
@@ -1071,7 +1071,7 @@ mod tests {
         let mut p = Predictor::new(PredictorConfig::default());
         for i in 0..200 {
             let m: Vec<f64> = (0..DEFAULT_N_METRICS)
-                .map(|j| if i % 2 == 0 { 0.95 } else { 0.05 })
+                .map(|_j| if i % 2 == 0 { 0.95 } else { 0.05 })
                 .collect();
             p.observe(SystemState::new(i as u64, m, "oscillate"));
         }

@@ -817,7 +817,7 @@ mod tests {
     // (4a) forged attestation — revoked courier cert → fail-closed reject.
     #[test]
     fn adv_forged_revoked_courier_rejected() {
-        let (mut auth, cert_ref) = good_auth(1_000);
+        let (auth, cert_ref) = good_auth(1_000);
         // Revoke the courier's subject key in the revocation set.
         auth.revocations.revoke_key(auth.courier_subject_key);
         let port = CashOnDeliveryPort;

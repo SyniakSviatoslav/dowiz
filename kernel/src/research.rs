@@ -886,7 +886,7 @@ mod recursive_tests {
         re.simulate();
         // The simulation caps each iter at 1000, but target is 500.
         // The extractor should stop planning when target is reached.
-        let total = re.engine.total_papers();
+        let _total = re.engine.total_papers();
         // The sim creates up to 1000 per iteration, but stops planning at target.
         assert!(re.iterations.len() >= 1);
     }

@@ -244,7 +244,7 @@ pub fn detect_intent_tree(text: &str) -> Vec<IntentPath> {
             if pnode.children.contains(&node_idx) {
                 path.insert(0, pnode.name.to_string());
                 // Check grandparent.
-                for (gpidx, gpnode) in INTENT_TREE.iter().enumerate() {
+                for (_gpidx, gpnode) in INTENT_TREE.iter().enumerate() {
                     if gpnode.children.contains(&pidx) {
                         path.insert(0, gpnode.name.to_string());
                         break;
@@ -490,17 +490,20 @@ fn build_intent_map() -> IntentMap {
     // Code
     for k in &["code", "implement", "build", "refactor", "compile", "debug", "bug",
         "function", "struct", "impl", "mod", "cargo", "rustc", "npm", "pip", "import",
-        "fix", "patch", "component", "module", "crate", "type", "trait", "enum"] {
+        "fix", "patch", "component", "module", "crate", "type", "trait", "enum",
+        "代码","编程","实现","コード","実装","プログラミング","코드","프로그래밍"] {
         m.insert(*k, PromptKind::Code);
     }
     // Write
     for k in &["write", "essay", "article", "document", "blog", "readme", "docs",
-        "prose", "paragraph", "author", "compose", "draft", "text"] {
+        "prose", "paragraph", "author", "compose", "draft", "text",
+        "写","写作","文档","書く","文書"] {
         m.insert(*k, PromptKind::Write);
     }
     // Analyze
     for k in &["analyze", "analysis", "evaluate", "assess", "audit", "claims",
-        "verify", "validate", "inspect", "examine", "investigate"] {
+        "verify", "validate", "inspect", "examine", "investigate",
+        "分析","调查","調査","解析"] {
         m.insert(*k, PromptKind::Analyze);
     }
     // Summarize
@@ -531,7 +534,8 @@ fn build_intent_map() -> IntentMap {
     }
     // Test
     for k in &["test", "spec", "assert", "mock", "stub", "fuzz", "coverage",
-        "unit test", "integration test", "e2e", "prove"] {
+        "unit test", "integration test", "e2e", "prove",
+        "测试","测试用例","テスト"] {
         m.insert(*k, PromptKind::Test);
     }
     // Security
@@ -546,8 +550,14 @@ fn build_intent_map() -> IntentMap {
         "внутрішній","внутренний","без залежностей","без зависимостей",
         "динамічний","динамический","енріч","энрич","нативно","нативно",
         "скрізь","везде","завжди","всегда","показувати","показывать",
-        "використовувати","использовать","система","система"] {
+        "використовувати","использовать","система","система",
+        "提示词","提示","工程","プロンプト"] {
         m.insert(*k, PromptKind::Meta);
+    }
+    // Debug
+    for k in &["debug", "fix bug", "troubleshoot", "root cause", "broken", "error",
+        "调试","修复"] {
+        m.insert(*k, PromptKind::Debug);
     }
     // Refactor
     for k in &["refactor", "clean up", "simplify", "dedup", "extract", "rename",

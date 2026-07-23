@@ -251,4 +251,98 @@ mod tests {
         assert!(no_routing_code(include_str!("surface.rs")));
         assert!(no_routing_code(include_str!("dispatch.rs")));
     }
+
+    // ── new tests ──
+
+    #[test]
+    fn types_are_correctly_sized() {
+        // Verify key types have expected sizes (no silent bloat).
+        assert_eq!(std::mem::size_of::<CourierShell>(), 1);
+        assert_eq!(std::mem::size_of::<GeoRef>(), 8);
+        assert_eq!(std::mem::size_of::<ZoneRef>(), 4);
+        assert_eq!(std::mem::size_of::<CourierKey>(), 32);
+        assert_eq!(std::mem::size_of::<DispatchInputKind>(), 1);
+        assert_eq!(std::mem::size_of::<AdvanceReason>(), 1);
+        assert_eq!(std::mem::size_of::<LiveOffer>(), 40);
+        assert_eq!(std::mem::size_of::<InputProfile>(), 1);
+        assert_eq!(std::mem::size_of::<AiMode>(), 1);
+        assert_eq!(std::mem::size_of::<HwClass>(), 1);
+    }
+
+    #[test]
+    fn dispatch_types_are_send_sync() {
+        // R6: dispatch types must be thread-safe for real P65 binding.
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<DispatchEvent>();
+        assert_send_sync::<DispatchInput>();
+        assert_send_sync::<DispatchSession>();
+        assert_send_sync::<SurfaceConsume>();
+        assert_send_sync::<DispatchInputFrame>();
+    }
+
+    #[test]
+    fn surface_idle_to_live_to_passed_transition() {
+        // Idle → Live (via Offered) → Passed (via Advanced/StaleAccept).
+        let mut surface = CourierSurface::new(ME);
+        surface.on_event(&DispatchEvent::Offered {
+            courier: ME,
+            deadline_ts: 200,
+        });
+        assert!(matches!(surface.state, SurfaceOfferState::Live { .. }));
+        surface.on_event(&DispatchEvent::StaleAccept { courier: ME });
+        assert!(matches!(surface.state, SurfaceOfferState::Passed { stale: true }));
+    }
+
+    #[test]
+    fn voice_profile_has_required_fields() {
+        // input_profile_for resolves correctly across state shapes.
+        let surface = CourierSurface::new(ME);
+        let state = CourierSurfaceState::from_surface(&surface, CourierShell::TauriMobile);
+        assert_eq!(state.shell, CourierShell::TauriMobile);
+        assert!(state.offer.is_none());
+        assert!(state.run.is_none());
+        // Idle → Balanced
+        assert_eq!(input_profile_for(&state), InputProfile::Balanced);
+        // In-transit run → CourierInMotion
+        let in_motion = CourierSurfaceState {
+            shell: CourierShell::TauriMobile,
+            offer: None,
+            run: Some(ActiveRun {
+                run_id: 1,
+                claim_id: 1,
+                order_id: 1,
+                in_transit: true,
+                track: None,
+            }),
+        };
+        assert_eq!(input_profile_for(&in_motion), InputProfile::CourierInMotion);
+    }
+
+    #[test]
+    fn battery_gate_refines_and_contradicts_edge_cases() {
+        // Refines = measured but not Confirms ⇒ Owed (nav-tier pending).
+        let v = VerdictRecord::Refines {
+            hw: HwClass::BudgetAndroid,
+            settle_saving_pct: 25.0,
+            note: "gotcha".into(),
+        };
+        assert_eq!(evaluate_battery_gate(&v), BatteryGate::Owed);
+
+        // Contradicts on real hw ⇒ Owed (fatally fails, can't assert).
+        let v = VerdictRecord::Contradicts {
+            hw: HwClass::BudgetAndroid,
+            reason: "shift < 4 h".into(),
+        };
+        assert_eq!(evaluate_battery_gate(&v), BatteryGate::Owed);
+
+        // Contradicts on Emulator ⇒ RejectedEmulator (still not a usable number).
+        let v = VerdictRecord::Contradicts {
+            hw: HwClass::Emulator,
+            reason: "nope".into(),
+        };
+        assert_eq!(evaluate_battery_gate(&v), BatteryGate::RejectedEmulator);
+
+        // Blocked is_measured = false ⇒ Owed.
+        assert!(!default_sp5_verdict().is_measured());
+    }
 }

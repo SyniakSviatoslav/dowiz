@@ -361,6 +361,7 @@ pub struct Orchestrator {
     /// Workflow gate for the current task.
     gate: WorkflowGate,
     /// Monotonic clock (microseconds since creation).
+    #[allow(dead_code)]
     start_us: u64,
     /// Subsystem health signals.
     health_signals: Vec<HealthSignal>,
@@ -1236,7 +1237,7 @@ mod tests {
 
     #[test]
     fn predictive_schedule_priority_sorted() {
-        let mut engine = PredictiveEngine::new();
+        let engine = PredictiveEngine::new();
         let tasks = vec![
             ScheduledTask {
                 task_id: 1,

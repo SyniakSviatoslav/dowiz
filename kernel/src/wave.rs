@@ -11,7 +11,7 @@
 //!
 //! ZERO deps. Uses kernel's existing spectral primitives.
 
-use crate::trig::{Phase, Xyz, PhaseVector};
+use crate::trig::Xyz;
 
 /// A spectral component — one frequency with amplitude and phase.
 #[derive(Debug, Clone, Copy)]
@@ -192,7 +192,7 @@ mod tests {
         let mut field = InterferenceField::new();
         let now = crate::now_ms();
         // Create a wave with very old timestamp (will be decayed)
-        let mut old_wave = Wave::simple("old", now - 100000, 1.0, 0.5, 0.5);
+        let old_wave = Wave::simple("old", now - 100000, 1.0, 0.5, 0.5);
         field.add_wave(old_wave);
         let pruned = field.prune_decayed(0.01);
         assert!(pruned >= 1);

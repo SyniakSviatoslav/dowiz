@@ -719,7 +719,7 @@ mod tests {
             let id = format!("doc-{i:03}");
             // Each doc gets 3 overlapping tags selected deterministically.
             let t: Vec<String> = (0..3)
-                .map(|k| tags_pool[((i as usize + k * 7) % tags_pool.len())].to_string())
+                .map(|k| tags_pool[(i as usize + k * 7) % tags_pool.len()].to_string())
                 .collect();
             docs.push((id.clone(), format!("Title {i}"), t, format!("docs/{id}.md")));
         }
@@ -838,7 +838,7 @@ mod tests {
         for i in 0..1024u32 {
             let id = format!("d{i:04}");
             let t: Vec<String> = (0..4)
-                .map(|k| pool[((i as usize * 3 + k) % pool.len())].to_string())
+                .map(|k| pool[(i as usize * 3 + k) % pool.len()].to_string())
                 .collect();
             docs.push((id.clone(), format!("T{i}"), t, format!("{id}.md")));
         }

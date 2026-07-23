@@ -243,7 +243,7 @@ mod tests {
     fn xyz_spherical_roundtrip() {
         // Spherical conversion is approximate due to acos precision
         let p = Xyz::new(0.5, -0.3, 0.8);
-        let (r, theta, phi) = p.to_spherical();
+        let (r, _theta, _phi) = p.to_spherical();
         // Roundtrip should be close enough for practical use
         assert!(r > 0.0);
         assert!((r - p.mag()).abs() < 1e-10);

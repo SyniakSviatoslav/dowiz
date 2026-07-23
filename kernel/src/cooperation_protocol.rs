@@ -128,6 +128,7 @@ pub struct CooperationEngine {
     pub agreements: Vec<CooperationAgreement>,
     pub trades: IntentPool,
     pub deliveries: P2PDeliveryNetwork,
+    #[allow(dead_code)]
     max_agreements: usize,
 }
 
@@ -252,7 +253,7 @@ mod tests {
         let mut engine = CooperationEngine::new();
         let intent = Intent::new(eth(), 1_000_000, usdc(), 1_000, OrderSide::Buy, "0xbob", 1, 1_000_000, 7);
         let delivery = DeliveryListing::new("0xalice", "item", paris(), paris(), 10.0, "ETH", 100, 1_000_000);
-        let id = engine.propose(intent, delivery).unwrap();
+        let _id = engine.propose(intent, delivery).unwrap();
         assert_eq!(engine.agreements.len(), 1);
     }
 

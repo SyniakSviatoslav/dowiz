@@ -31,6 +31,7 @@ use std::collections::HashSet;
 
 const DIMS: usize = 8;
 const LATTICE_SIZE: usize = 65536; // 2^16 (first 2 bytes as cell address)
+#[allow(dead_code)]
 const CELL_NEIGHBORS: &[(i32, i32)] = &[(-1,-1),(-1,0),(-1,1),(0,-1),(0,0),(0,1),(1,-1),(1,0),(1,1)];
 
 /// 8D кварковий підпис.
@@ -56,6 +57,7 @@ fn shared(a: &QuarkSig, b: &QuarkSig) -> u32 {
 }
 
 /// P2P bloom.
+#[allow(dead_code)]
 fn bloom_byte(sig: &QuarkSig) -> usize {
     (u64::from_le_bytes(*sig) as usize) % (1_000_000_000 / 64)
 }
@@ -68,6 +70,7 @@ pub struct Academia {
     /// Lattice: комірка → список індексів паперів.
     pub lattice: Vec<Vec<u32>>,
     count: usize,
+    #[allow(dead_code)]
     bloom: Vec<u64>,
 }
 
@@ -309,6 +312,7 @@ mod tests {
         assert_eq!(r[0].1, 8);
     }
 
+    #[allow(dead_code)]
     fn recursive_search_matches_linear() {
         let mut a = Academia::new();
         for i in 0..500 { a.insert(&format!("Paper {} about ML", i)); }

@@ -274,7 +274,7 @@ mod tests {
         }
         assert_eq!(c.len(), 2000);
         let q = StateSnapshot::new(9999, vec![8.0, 15.0, 20.0], "query");
-        let results = c.query(&q, 5);
+        let _results = c.query(&q, 5);
         // With 2000 items across 65536 cells, 441-cell neighborhood
         // should find items with reasonable probability.
         // We also check exact match is possible:

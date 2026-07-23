@@ -226,7 +226,9 @@ impl KalmanFilter {
         // innovation y = z − H·x  (the surprise signal — surfaced, not discarded)
         let hx = crate::mat::matmul_contig(&self.h, &col(&self.x));
         let hxv = uncol(&hx);
-        let y: Vec<f64> = z.iter().zip(hxv.iter()).map(|(zi, hxi)| zi - hxi).collect();
+        let y: Vec<f64> = z.iter().zip(hxv.iter())
+            .map(|(zi, hxi)| crate::sanitize_f64(*zi) - hxi)
+            .collect();
         // Cache the innovation so the eval layer can read novelty post-update.
         self.last_innovation = y.clone();
         let y_norm: f64 = y.iter().map(|v| v * v).sum::<f64>().sqrt();
@@ -282,6 +284,7 @@ impl KalmanFilter {
     /// in-place. `s` must be > 0 (a non-positive Q breaks PD-ness of the
     /// predict covariance).
     pub fn set_q_scaler(&mut self, s: f64) {
+        let s = crate::sanitize_f64(s);
         assert!(s > 0.0, "kalman: q_scaler must be > 0");
         // Q is private; rebuild by scaling the stored matrix.
         // SAFETY: `q` is an n×n PD matrix; scaling by s>0 keeps it PD.

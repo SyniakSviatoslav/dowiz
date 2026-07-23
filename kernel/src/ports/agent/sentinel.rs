@@ -239,7 +239,7 @@ mod tests {
         // End-to-end: a corrupted AnchorRoster refuses `verify_chain` with
         // `IntegrityFault` (deny-closed) — the admission-level fault propagation.
         use crate::ports::agent::cap::{
-            verify_chain, Capability, ChainError, HybridPolicy, RefSigner, SignatureVerifier,
+            verify_chain, Capability, ChainError, RefSigner, SignatureVerifier,
         };
         let s = RefSigner;
         let v = &s;
@@ -272,7 +272,7 @@ mod tests {
         // roster + revocation verify clean (no `Corruption`), which means `safe_state_on_corruption`
         // — the ONLY alarm emitter — is never reached. Zero corruption ⇒ zero alarms, by construction.
         use crate::ports::agent::cap::{
-            verify_chain, Capability, ChainError, HybridPolicy, RefSigner, SignatureVerifier,
+            verify_chain, Capability, ChainError, RefSigner, SignatureVerifier,
         };
         use crate::ports::agent::sentinel::{verify_candidate, SentinelTarget};
 
@@ -318,7 +318,7 @@ mod tests {
         // Here we assert the Sentinel's fail-closed CONTRACT at the unit boundary, which does
         // not depend on the process-global FDR ring (fdr::init is idempotent per process).
         use crate::ports::agent::cap::{
-            verify_chain, Capability, ChainError, HybridPolicy, RefSigner, SignatureVerifier,
+            verify_chain, Capability, ChainError, RefSigner, SignatureVerifier,
         };
         let s = RefSigner;
         let mut roster = AnchorRoster::new();
