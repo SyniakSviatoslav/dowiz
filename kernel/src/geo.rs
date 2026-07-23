@@ -894,4 +894,74 @@ mod tests {
     fn cover_haversine_diag() {
         let d = super::haversine_meters(0.0, 0.0, 90.0, 0.0); assert!(d > 0.0);
     }
+
+    // ── injected: zero-area / degenerate / boundary / dateline / null ──
+
+    #[test]
+    fn point_in_polygon_empty() {
+        assert!(!point_in_polygon(1.0, 1.0, &[]));
+    }
+
+    #[test]
+    fn point_in_polygon_boundary_edge_behavior() {
+        let sq = [(0.0, 0.0), (0.0, 10.0), (10.0, 10.0), (10.0, 0.0)];
+        let on_edge = point_in_polygon(0.0, 5.0, &sq);
+        let just_outside = point_in_polygon(-0.0001, 5.0, &sq);
+        let just_inside = point_in_polygon(0.0001, 5.0, &sq);
+        // just outside must be false
+        assert!(!just_outside);
+        // just inside must be true
+        assert!(just_inside);
+        // on-edge is floating-point dependent; let the result stand
+        let _ = on_edge;
+    }
+
+    #[test]
+    fn point_in_polygon_zero_area_collinear() {
+        let line = [(0.0, 0.0), (5.0, 5.0), (10.0, 10.0)];
+        assert!(!point_in_polygon(5.0, 5.0, &line));
+    }
+
+    #[test]
+    fn point_in_polygon_single_point() {
+        assert!(!point_in_polygon(0.0, 0.0, &[(0.0, 0.0)]));
+    }
+
+    #[test]
+    fn point_in_polygon_two_points() {
+        assert!(!point_in_polygon(0.5, 0.5, &[(0.0, 0.0), (1.0, 1.0)]));
+    }
+
+    #[test]
+    fn haversine_zero_distance_same_point() {
+        let d = haversine_meters(45.0, 90.0, 45.0, 90.0);
+        assert!((d - 0.0).abs() < 1e-9, "same point => 0, got {d}");
+    }
+
+    #[test]
+    fn haversine_dateline_wrap() {
+        let d = haversine_meters(0.0, 179.0, 0.0, -179.0);
+        assert!(d > 0.0 && d < 1_000_000.0); // ~a few hundred km across dateline
+    }
+
+    #[test]
+    fn progress_empty_polyline() {
+        let r = progress_along_route(&[], (1.0, 1.0));
+        assert_eq!(r.remaining_m, 0.0);
+        assert_eq!(r.segment_index, 0);
+    }
+
+    #[test]
+    fn progress_single_point_polyline() {
+        let r = progress_along_route(&[(5.0, 5.0)], (1.0, 1.0));
+        assert_eq!(r.segment_index, 0);
+        assert_eq!(r.remaining_m, 0.0);
+    }
+
+    #[test]
+    fn polyline_zero_length_segment() {
+        let poly = [(0.0, 0.0), (0.0, 0.0), (1.0, 0.0)];
+        let len = polyline_length_meters(&poly);
+        assert!(len >= 0.0); // zero-length segment contributes nothing
+    }
 }

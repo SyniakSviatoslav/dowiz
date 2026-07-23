@@ -1386,6 +1386,117 @@ mod tests {
         let decaying = tracker.decaying_keywords(2);
         assert!(!decaying.is_empty());
     }
+
+    // ── Injected coverage tests (empty input, intent edges, patterns, eigen, DB-empty) ──
+
+    #[test]
+    fn enrich_empty_prompt() {
+        let mut engine = PromptEnrichEngine::new();
+        engine.ingest(seed_fabric_prompts());
+        let result = engine.enrich("");
+        assert_eq!(result.intent, PromptKind::General);
+        assert_eq!(result.intent_confidence, 0.0);
+    }
+
+    #[test]
+    fn detect_all_intents_no_keywords_match() {
+        let intents = detect_all_intents("xyzzy qwerty blarg");
+        assert!(intents.is_empty());
+    }
+
+    #[test]
+    fn detect_all_intents_all_kinds_matched() {
+        let intents = detect_all_intents(
+            "implement code write document analyze security summarize review deploy test plan",
+        );
+        assert!(intents.len() >= 5);
+        let kinds: Vec<PromptKind> = intents.iter().map(|(k, _, _)| *k).collect();
+        assert!(kinds.contains(&PromptKind::Code));
+        assert!(kinds.contains(&PromptKind::Write));
+        assert!(kinds.contains(&PromptKind::Analyze));
+        assert!(kinds.contains(&PromptKind::Security));
+        assert!(kinds.contains(&PromptKind::Test));
+    }
+
+    #[test]
+    fn detect_intent_tree_leaf_node() {
+        let paths = detect_intent_tree("api client fetch request endpoint");
+        assert!(!paths.is_empty());
+        let all_names: Vec<&str> = paths.iter().flatten().map(|s| s.as_str()).collect();
+        assert!(all_names.contains(&"api-client"));
+    }
+
+    #[test]
+    fn detect_intent_tree_empty_text() {
+        let paths = detect_intent_tree("");
+        assert!(paths.is_empty());
+    }
+
+    #[test]
+    fn inherit_patterns_empty_path() {
+        let patterns = inherit_patterns(&vec![]);
+        assert_eq!(patterns.len(), 9);
+        assert!(patterns.iter().any(|p| p.name == "quality"));
+        assert!(patterns.iter().any(|p| p.name == "safety"));
+    }
+
+    #[test]
+    fn enrich_report_empty_db() {
+        let engine = PromptEnrichEngine::new();
+        let report = engine.enrich_report("implement a new feature with tests");
+        assert!(!report.intents.is_empty());
+        assert!(report.prompts.is_empty());
+        assert!(report.skills.is_empty());
+        assert_eq!(report.total_prompts, 0);
+    }
+
+    #[test]
+    fn keyword_index_lookup_miss() {
+        let mut engine = PromptEnrichEngine::new();
+        engine.ingest(seed_fabric_prompts());
+        let results = engine.search("nonexistent_keyword_xyzzy");
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn eigen_enrich_with_empty_vocabulary() {
+        let mut engine = PromptEnrichEngine::new();
+        engine.ingest(seed_fabric_prompts());
+        let vocab: Vec<String> = vec![];
+        let results = eigen_enrich_report(&engine, "write some code", &vocab);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn build_vocabulary_from_empty_engine() {
+        let engine = PromptEnrichEngine::new();
+        let vocab = build_vocabulary(&engine);
+        assert!(vocab.is_empty());
+    }
+
+    #[test]
+    fn enrichment_display_no_skills_no_paths() {
+        let report = EnrichmentReport {
+            intents: vec![],
+            intent_paths: vec![],
+            primary_intent: PromptKind::General,
+            prompts: vec![],
+            skills: vec![],
+            total_prompts: 0,
+            total_skills: 0,
+        };
+        let disp = report.display();
+        assert!(disp.contains("ENRICHMENT"));
+        assert!(disp.contains("general"));
+    }
+
+    #[test]
+    fn detect_intent_tree_dedup_identical_paths() {
+        let paths = detect_intent_tree("compile error in rust function fix bug");
+        let deduped: Vec<String> = paths.iter().map(|p| p.join("/")).collect();
+        let unique: std::collections::HashSet<_> = deduped.iter().collect();
+        assert_eq!(deduped.len(), unique.len());
+    }
 }
 
 /// Re-export for test access.

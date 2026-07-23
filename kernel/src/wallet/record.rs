@@ -713,4 +713,98 @@ mod tests {
             "absent slot must not fabricate"
         );
     }
+
+    // ── injected: empty / zero-rev / negative / dup-id / overflow / invalid-sig / empty-rec ──
+
+    #[test]
+    fn empty_wallet_all_slots_none() {
+        let rec = WalletRecord::new([0u8; 32]);
+        assert_eq!(rec.rev, 0);
+        assert!(rec.name.is_none());
+        assert!(rec.addresses.is_empty());
+        assert!(rec.contact.is_none());
+        assert!(rec.method_ref.is_none());
+    }
+
+    #[test]
+    fn zero_rev_operations() {
+        let mut rec = WalletRecord::new([255u8; 32]);
+        assert_eq!(rec.rev, 0);
+        rec.bump_rev(0);
+        assert_eq!(rec.rev, 1); // saturating_add bumps even from 0
+    }
+
+    #[test]
+    fn rev_overflow_saturating() {
+        let mut rec = WalletRecord {
+            schema_version: WALLET_SCHEMA_VERSION,
+            rev: u64::MAX,
+            updated_at_ms: 0,
+            wallet_id: [0x42u8; 32],
+            name: None,
+            addresses: vec![],
+            contact: None,
+            method_ref: None,
+        };
+        rec.bump_rev(1);
+        assert_eq!(rec.rev, u64::MAX); // saturating => stays at MAX
+    }
+
+    #[test]
+    fn empty_contact_with_none_fields() {
+        let rec = sample_wallet();
+        assert!(rec.contact.is_some());
+        // Contact with both None should still autofill to empty string
+        let c = Contact { email: None, phone_e164: None };
+        let mut rec2 = WalletRecord::new([9u8; 32]);
+        rec2.contact = Some(c);
+        let name_probe = Rc::new(RefCell::new(String::new()));
+        let contact_probe = Rc::new(RefCell::new(String::new()));
+        let mut targets = AutofillTargets {
+            name: Some(Box::new(MockField { probe: name_probe.clone() })),
+            address: None,
+            contact: Some(Box::new(MockField { probe: contact_probe.clone() })),
+            method: None,
+        };
+        autofill_into(&rec2, &mut targets);
+        assert_eq!(*contact_probe.borrow(), ""); // both None => empty default
+    }
+
+    #[test]
+    fn round_trip_with_all_nulls() {
+        let rec = WalletRecord::new([0xdeu8; 32]);
+        let json = serialize(&rec);
+        let back = deserialize(&json).expect("round-trip parse");
+        assert_eq!(rec, back);
+    }
+
+    #[test]
+    fn round_trip_multiple_addresses() {
+        let mut rec = WalletRecord::new([0xabu8; 32]);
+        rec.addresses = vec![
+            Address { label: "Home".into(), lines: vec!["1 Main St".into()], note: None },
+            Address { label: "Work".into(), lines: vec!["2 Office Rd".into(), "Floor 3".into()], note: Some("ring buzzer".into()) },
+        ];
+        rec.contact = Some(Contact { email: Some("a@b.com".into()), phone_e164: Some("+12345678901".into()) });
+        let json = serialize(&rec);
+        let back = deserialize(&json).expect("round-trip parse");
+        assert_eq!(rec, back);
+    }
+
+    #[test]
+    fn empty_autofill_targets_no_fields_present() {
+        let rec = sample_wallet();
+        let mut targets = AutofillTargets::default();
+        autofill_into(&rec, &mut targets);
+        // All None => all skipped, no panic
+    }
+
+    #[test]
+    fn rev_monotone_across_many_bumps() {
+        let mut rec = WalletRecord::new([7u8; 32]);
+        for i in 0..500 {
+            rec.bump_rev(i);
+            assert_eq!(rec.rev, i + 1);
+        }
+    }
 }

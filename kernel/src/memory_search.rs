@@ -496,6 +496,86 @@ Skills selected from living memory.
             assert!(r.trigram_score >= 0.0);
         }
     }
+
+    // ── injected: empty / single-char / no-match / all-match / large / missing / empty-corpus / dup ──
+
+    #[test]
+    fn search_empty_query_returns_empty_vec() {
+        let engine = MemorySearchEngine::new(TEST_DOC);
+        let results = engine.search("");
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn search_single_char_query() {
+        let engine = MemorySearchEngine::new(TEST_DOC);
+        let results = engine.search("a");
+        assert!(!results.is_empty());
+        for r in &results {
+            assert!(r.score >= 0.0 && r.score <= 1.0 + 1e-9);
+        }
+    }
+
+    #[test]
+    fn search_no_matches_returns_results_with_zero_bm25() {
+        let engine = MemorySearchEngine::new(TEST_DOC);
+        let results = engine.search("xyznonexistent12345");
+        // still returns all sections but scores are low/zero
+        assert_eq!(results.len(), 5);
+        let top = &results[0];
+        assert!(top.bm25_score < 1e-12);
+    }
+
+    #[test]
+    fn search_all_documents_match_common_term() {
+        let engine = MemorySearchEngine::new(TEST_DOC);
+        // "is" appears in most sections
+        let results = engine.search("is");
+        assert!(!results.is_empty());
+        let non_zero = results.iter().filter(|r| r.bm25_score > 0.0).count();
+        assert!(non_zero > 0);
+    }
+
+    #[test]
+    fn search_large_index_many_sections() {
+        let mut doc = String::new();
+        for i in 0..50 {
+            doc.push_str(&format!("## Section {i}\nContent for section {i}.\n"));
+        }
+        let engine = MemorySearchEngine::new(&doc);
+        assert_eq!(engine.section_count(), 50);
+        let results = engine.search("Section 25");
+        assert!(!results.is_empty());
+        assert_eq!(results[0].section_id, 25);
+    }
+
+    #[test]
+    fn search_term_not_in_any_document() {
+        let engine = MemorySearchEngine::new(TEST_DOC);
+        let results = engine.search("zzzznotpresent");
+        assert_eq!(results.len(), 5);
+        for r in &results {
+            assert!(r.bm25_score < 1e-12);
+            assert!(r.trigram_score < 1e-12);
+        }
+    }
+
+    #[test]
+    fn search_empty_document_corpus() {
+        let engine = MemorySearchEngine::new("");
+        assert_eq!(engine.section_count(), 0);
+        let results = engine.search("anything");
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn search_top_k_on_corpus_with_identical_headers() {
+        let doc = "## A\nsection one\n## A\nsection two\n## A\nsection three\n";
+        let engine = MemorySearchEngine::new(doc);
+        assert_eq!(engine.section_count(), 3);
+        let results = engine.search("section");
+        assert!(!results.is_empty());
+    }
 }
 
 // ─── Topological-Chronological Parametric Memory Surface ───────────────

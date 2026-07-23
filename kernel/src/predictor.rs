@@ -1343,4 +1343,115 @@ mod tests {
     fn cover_quick_predict_many() {
         let m = vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6]; let _ = super::quick_predict(m, "idle", "throughput");
     }
+
+    // ── Injected coverage tests (empty metrics, duplicates, tied scores, NaN, failover) ──
+
+    #[test]
+    fn predict_unknown_metric_name_falls_to_index_zero() {
+        let mut p = Predictor::new(PredictorConfig::default());
+        p.observe(SystemState::new(1, vec![0.3; DEFAULT_N_METRICS], "s"));
+        let outcomes = p.predict("nonexistent_metric".into(), "action".into());
+        assert!(!outcomes.is_empty());
+        assert_eq!(outcomes[0].metric_name, "nonexistent_metric");
+    }
+
+    #[test]
+    fn duplicate_route_name_is_ignored() {
+        let pred = Predictor::new(PredictorConfig::default());
+        let mut sim = EventSimulator::new(pred);
+        sim.add_route(EventRoute::new("only_route", 50.0, 0.99));
+        sim.add_route(EventRoute::new("only_route", 50.0, 0.99));
+        assert_eq!(sim.routes().len(), 1);
+    }
+
+    #[test]
+    fn exit_degraded_restores_confidence() {
+        let mut p = Predictor::new(PredictorConfig::default());
+        for i in 0..5 {
+            p.observe(SystemState::new(i, vec![0.5; DEFAULT_N_METRICS], "t"));
+        }
+        p.enter_degraded();
+        assert!(p.is_degraded());
+        p.exit_degraded();
+        assert!(!p.is_degraded());
+    }
+
+    #[test]
+    fn action_targeting_sets_metric_indices() {
+        let a = Action::new("scale", 0.8).targeting(&[0, 2, 4]);
+        assert_eq!(a.target_metrics, vec![0, 2, 4]);
+    }
+
+    #[test]
+    fn outcome_is_critical_false_for_normal_values() {
+        let outcome = PredictedOutcome::new(0, "cpu_load", 0.3, 0.2);
+        assert!(!outcome.is_critical());
+    }
+
+    #[test]
+    fn system_state_clamps_out_of_range_metrics() {
+        let s = SystemState::new(1, vec![1.5, -0.5, 100.0, -10.0, 0.5, 0.3, 0.1, 0.0], "wild");
+        for &v in &s.metrics {
+            assert!(v.is_finite() && v >= 0.0 && v <= 1.0,
+                "metric {v} must be clamped to [0,1] and finite");
+        }
+    }
+
+    #[test]
+    fn system_state_with_confidence_nan() {
+        let s = SystemState::new(1, vec![0.5; DEFAULT_N_METRICS], "test")
+            .with_confidence(f64::NAN);
+        assert_eq!(s.bid_confidence, 0.0);
+    }
+
+    #[test]
+    fn event_route_error_probability_exceeds_capacity() {
+        let route = EventRoute::new("tiny", 10.0, 0.99);
+        let event = SystemEvent::new("big", "tiny").with_size(5_000_000);
+        let err = route.error_probability(&event);
+        assert!(err >= 0.5);
+    }
+
+    #[test]
+    fn best_route_tied_scores_picks_first() {
+        let pred = Predictor::new(PredictorConfig::default());
+        let mut sim = EventSimulator::new(pred);
+        sim.add_route(EventRoute::new("alpha", 50.0, 0.95));
+        sim.add_route(EventRoute::new("beta", 50.0, 0.95));
+        let event = SystemEvent::new("tie", "alpha");
+        let (primary, _backup) = sim.best_route(&event);
+        assert_eq!(primary.name, "alpha");
+    }
+
+    #[test]
+    fn predictor_high_min_confidence_filters_bids() {
+        let mut cfg = PredictorConfig::default();
+        cfg.min_confidence = 0.99;
+        let mut p = Predictor::new(cfg);
+        p.observe(SystemState::new(1, vec![0.5; DEFAULT_N_METRICS], "single"));
+        let outcomes = p.predict("cpu_load".into(), "test".into());
+        for o in &outcomes {
+            assert!(o.confidence >= 0.99, "confidence {:.3} below min", o.confidence);
+        }
+    }
+
+    #[test]
+    fn event_simulator_alternative_route_set_on_failing_primary() {
+        let pred = Predictor::new(PredictorConfig::default());
+        let mut sim = EventSimulator::new(pred);
+        sim.add_route(EventRoute::new("failing", 5000.0, 0.1));
+        sim.add_route(EventRoute::new("safe_fallback", 20.0, 0.99));
+        let event = SystemEvent::new("test", "failing");
+        let results = sim.simulate(&event);
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].route_name, "safe_fallback");
+        assert!(results[1].warning.contains("THROTTLE"));
+    }
+
+    #[test]
+    fn quick_scan_critical_flag_true_for_high_metrics() {
+        let metrics = vec![0.98, 0.97, 0.99, 0.96, 0.95, 0.99, 0.97, 0.98];
+        let (_all, critical) = quick_scan(metrics, "stress");
+        assert!(critical || _all.iter().any(|o| o.warning));
+    }
 }

@@ -1016,4 +1016,127 @@ mod tests {
         };
         assert_eq!(select_pattern_extended(&ctx), PatternKindExtended::Adaptive);
     }
+
+    // ── Injected coverage tests (fan-out, pipeline, work-stealing, batch, adaptive) ──
+
+    #[test]
+    fn fan_out_single_element_many_workers() {
+        let plan = FanOutPlan::plan(1, 8, 100, Priority::Normal);
+        assert_eq!(plan.worker_count, 1);
+        let a = plan.assignments();
+        assert_eq!(a.len(), 1);
+        assert_eq!(a[0], (0, 0, 1));
+    }
+
+    #[test]
+    fn fan_out_exact_division() {
+        let plan = FanOutPlan::plan(12, 4, 100, Priority::Normal);
+        assert_eq!(plan.worker_count, 4);
+        let a = plan.assignments();
+        assert_eq!(a.len(), 4);
+        assert_eq!(a[0], (0, 0, 3));
+        assert_eq!(a[1], (1, 3, 6));
+        assert_eq!(a[2], (2, 6, 9));
+        assert_eq!(a[3], (3, 9, 12));
+    }
+
+    #[test]
+    fn work_stealing_empty_queues() {
+        let plan = WorkStealingPlan::plan(vec![], 100, 3);
+        assert_eq!(plan.total_items, 0);
+        assert_eq!(plan.worker_count, 1);
+        assert!(plan.should_steal().is_false());
+        assert!(plan.steal_pair().is_none());
+        assert_eq!(plan.estimated_total_us(), 0);
+    }
+
+    #[test]
+    fn work_stealing_single_worker_no_pair() {
+        let plan = WorkStealingPlan::plan(vec![10], 100, 3);
+        assert!(plan.steal_pair().is_none());
+        assert!(plan.should_steal().is_false());
+        assert_eq!(plan.estimated_total_us(), 1000);
+    }
+
+    #[test]
+    fn dynamic_batch_zero_pid_concurrency() {
+        let plan = DynamicBatchPlan::plan(100, 0, 50);
+        assert_eq!(plan.batch_size, 1);
+        assert_eq!(plan.batch_count, 100);
+        assert_eq!(plan.total_estimated_us, 5000);
+    }
+
+    #[test]
+    fn dynamic_batch_single_item() {
+        let plan = DynamicBatchPlan::plan(1, 1, 100);
+        assert_eq!(plan.batch_size, 4);
+        assert_eq!(plan.batch_count, 1);
+    }
+
+    #[test]
+    fn select_pattern_high_us_few_workers_falls_to_fanout() {
+        let ctx = PatternContext {
+            item_count: 100,
+            per_item_us: 2000,
+            concurrency: 2,
+            priority: Priority::Normal,
+            has_dependencies: TriState::False,
+        };
+        assert_eq!(select_pattern(&ctx), PatternKind::FanOutFanIn);
+    }
+
+    #[test]
+    fn select_pattern_boundary_item_count_not_less() {
+        let ctx = PatternContext {
+            item_count: 8,
+            per_item_us: 50,
+            concurrency: 4,
+            priority: Priority::Normal,
+            has_dependencies: TriState::False,
+        };
+        assert_eq!(select_pattern(&ctx), PatternKind::FanOutFanIn);
+    }
+
+    #[test]
+    fn adaptive_pattern_no_switch_on_zero_throughput() {
+        let mut ap = AdaptivePattern::new(
+            PatternKind::FanOutFanIn, PatternKind::WorkStealing, 50.0);
+        assert!(ap.update(0.0).is_false());
+        assert_eq!(ap.current, PatternKind::FanOutFanIn);
+        assert_eq!(ap.switch_count, 0);
+    }
+
+    #[test]
+    fn adaptive_pattern_switch_twice() {
+        let mut ap = AdaptivePattern::new(
+            PatternKind::FanOutFanIn, PatternKind::DynamicBatch, 100.0);
+        assert!(ap.update(50.0).is_true());
+        assert_eq!(ap.current, PatternKind::DynamicBatch);
+        assert_eq!(ap.switch_count, 1);
+        assert!(ap.update(50.0).is_true());
+        assert_eq!(ap.current, PatternKind::FanOutFanIn);
+        assert_eq!(ap.switch_count, 2);
+    }
+
+    #[test]
+    fn fan_out_pipeline_zero_workers() {
+        let plan = FanOutPipeline::plan(vec![100], 0, 10, Priority::Normal);
+        assert_eq!(plan.total_estimated_us, 0);
+        assert!(plan.assignments().is_empty());
+    }
+
+    #[test]
+    fn pipeline_stealing_single_stage_no_steal() {
+        let plan = PipelineWithStealing::plan(vec![500], 2, vec![5], 3);
+        assert!(plan.should_steal.is_false());
+        assert!(plan.steal_pair.is_none());
+    }
+
+    #[test]
+    fn batched_fan_out_single_worker_gets_all() {
+        let plan = BatchedFanOut::plan(100, &[200], 4.0, Priority::Normal);
+        assert_eq!(plan.worker_batches.len(), 1);
+        assert_eq!(plan.worker_batches[0], 100);
+        assert_eq!(plan.total_items, 100);
+    }
 }

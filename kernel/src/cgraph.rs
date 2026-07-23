@@ -680,4 +680,99 @@ mod tests {
                    // reflexive bidirected rejected
         assert!(CGraph::new(vec![vec![], vec![], vec![]], vec![vec![0], vec![], vec![]],).is_err());
     }
+
+    // ── injected: empty / single-node / dense / disconnected / invalid / neg-weight / removal-cascade ──
+
+    #[test]
+    fn empty_graph_no_nodes() {
+        let g = CGraph::new(vec![], vec![]).unwrap();
+        assert_eq!(g.n, 0);
+        assert!(g.nodes().is_empty());
+        assert!(g.roots().is_empty());
+        assert_eq!(g.c_components().len(), 0);
+    }
+
+    #[test]
+    fn single_node_graph() {
+        let g = CGraph::new(vec![vec![]], vec![vec![]]).unwrap();
+        assert_eq!(g.n, 1);
+        assert_eq!(g.nodes(), vec![0]);
+        assert_eq!(g.roots(), vec![0]);
+        let comps = g.c_components();
+        assert_eq!(comps, vec![vec![0]]);
+    }
+
+    #[test]
+    fn self_loop_parent_rejected() {
+        assert!(CGraph::new(vec![vec![0]], vec![vec![]]).is_err());
+    }
+
+    #[test]
+    fn dense_complete_dag() {
+        let n = 5;
+        let mut parents: Vec<Vec<usize>> = Vec::new();
+        for i in 0..n {
+            parents.push((0..i).collect());
+        }
+        let bi = vec![Vec::new(); n];
+        let g = CGraph::new(parents, bi).unwrap();
+        assert_eq!(g.c_components().len(), n); // no bidirected => singletons
+        let topo = g.topological_order().unwrap();
+        assert_eq!(topo.len(), n); // DAG => valid order
+    }
+
+    #[test]
+    fn disconnected_components_no_shared_terms() {
+        let g = CGraph::new(
+            vec![vec![], vec![], vec![], vec![]],
+            vec![vec![1], vec![0], vec![3], vec![2]],
+        )
+        .unwrap();
+        let comps = g.c_components();
+        // two disjoint bidirected pairs: {0,1} and {2,3}
+        assert_eq!(comps.len(), 2);
+        assert!(comps.contains(&vec![0, 1]));
+        assert!(comps.contains(&vec![2, 3]));
+    }
+
+    #[test]
+    fn invalid_node_reference_out_of_range() {
+        assert!(CGraph::new(
+            vec![vec![], vec![5], vec![]],
+            vec![vec![], vec![], vec![]],
+        )
+        .is_err());
+        assert!(CGraph::new(
+            vec![vec![], vec![], vec![]],
+            vec![vec![9], vec![], vec![]],
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn edge_weights_negative_and_zero() {
+        let g = m_graph();
+        let sub = g.g_x_removed(&[]);
+        // empty removal => same graph, edge weights preserved (non-negative by construction)
+        let comps = sub.c_components();
+        assert!(!comps.is_empty());
+    }
+
+    #[test]
+    fn node_removal_cascade() {
+        let g = m_graph();
+        let sub = g.g_x_removed(&[0]);
+        assert_eq!(sub.nodes().len(), 2); // nodes 1,2 remain
+        assert!((0..g.n).filter(|&i| !sub.present[i]).collect::<Vec<_>>().contains(&0));
+        // remove more
+        let sub2 = g.g_x_removed(&[0, 1, 2]);
+        assert!(sub2.nodes().is_empty());
+    }
+
+    #[test]
+    fn d_separated_with_invalid_nodes_errors() {
+        let g = chain_graph();
+        assert!(g.d_separated_raw(5, 0, &[]).is_err());
+        assert!(g.d_separated_raw(0, 0, &[10]).is_err());
+    }
 }
