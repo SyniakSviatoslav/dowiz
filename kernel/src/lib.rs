@@ -682,6 +682,10 @@ pub mod wave;
 /// Time navigation — timestamp-indexed snapshots, state history with
 /// integrity hashes, time-travel queries, delta between any two timestamps.
 pub mod chronos;
+/// Chrono-topological foundation — the root state substrate. Every module
+/// writes TriMatrix snapshots indexed by timestamp. Three views: PAST,
+/// PRESENT, PREDICTED. 4D navigation between states. Global drift tracking.
+pub mod chronos_topology;
 /// P08 — typed metrics pure core: `/proc/self` sampling (CPU/mem) + a
 /// deterministic, serde-free, parse-or-reject text schema for typed metric
 /// records. NO egress / signing change; GPU is typed-absent (`Option`) until
