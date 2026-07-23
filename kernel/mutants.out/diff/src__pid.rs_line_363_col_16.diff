@@ -1,0 +1,21 @@
+--- src/pid.rs
++++ replace >= with < in PidArray::output
+@@ -355,17 +355,17 @@
+         self.n == 0
+     }
+ 
+     pub fn config(&self) -> PidConfig {
+         PidConfig::new(self.kp, self.ki, self.kd, self.min, self.max)
+     }
+ 
+     pub fn output(&self, idx: usize) -> f64 {
+-        if idx >= self.n {
++        if idx < /* ~ changed by cargo-mutants ~ */ self.n {
+             return self.min;
+         }
+         debug_assert!(idx < self.n, "PidArray::output: idx {} out of bounds (n={})", idx, self.n);
+         self.outputs[idx]
+     }
+ 
+     pub fn outputs(&self) -> &[f64] {
+         &self.outputs

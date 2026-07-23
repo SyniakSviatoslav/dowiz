@@ -1,0 +1,21 @@
+--- src/pid.rs
++++ replace PidArray::is_empty -> bool with true
+@@ -347,17 +347,17 @@
+         }
+     }
+ 
+     pub fn len(&self) -> usize {
+         self.n
+     }
+ 
+     pub fn is_empty(&self) -> bool {
+-        self.n == 0
++        true /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     pub fn config(&self) -> PidConfig {
+         PidConfig::new(self.kp, self.ki, self.kd, self.min, self.max)
+     }
+ 
+     pub fn output(&self, idx: usize) -> f64 {
+         if idx >= self.n {

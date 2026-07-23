@@ -1,0 +1,33 @@
+--- src/pid.rs
++++ replace PidController::update -> f64 with 1.0
+@@ -201,29 +201,17 @@
+ 
+     pub fn kp(&self) -> f64 { self.config.kp }
+     pub fn ki(&self) -> f64 { self.config.ki }
+     pub fn kd(&self) -> f64 { self.config.kd }
+     pub fn min_concurrency(&self) -> f64 { self.config.min }
+     pub fn max_concurrency(&self) -> f64 { self.config.max }
+ 
+     pub fn update(&mut self, setpoint: f64, measurement: f64) -> f64 {
+-        self.output = pid_step_f64(
+-            setpoint,
+-            measurement,
+-            self.config.kp,
+-            self.config.ki,
+-            self.config.kd,
+-            self.config.min,
+-            self.config.max,
+-            &mut self.integral,
+-            &mut self.prev_error,
+-            self.output,
+-        );
+-        self.output
++        1.0 /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     pub fn recommended(&self) -> usize {
+         self.output.round().max(1.0) as usize
+     }
+ 
+     pub fn output(&self) -> f64 {
+         self.output

@@ -1,0 +1,21 @@
+--- src/pid.rs
++++ replace PidController32::output -> f32 with -1.0
+@@ -286,17 +286,17 @@
+         self.output
+     }
+ 
+     pub fn recommended(&self) -> usize {
+         self.output.round().max(1.0) as usize
+     }
+ 
+     pub fn output(&self) -> f32 {
+-        self.output
++        -1.0 /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     pub fn reset(&mut self) {
+         self.integral = 0.0;
+         self.prev_error = 0.0;
+     }
+ }
+ 

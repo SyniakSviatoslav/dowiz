@@ -117,4 +117,25 @@ mod tests {
         assert!(gm.is_finite());
         assert!(pm >= -360.0 && pm <= 360.0);
     }
+
+    #[test]
+    fn pure_pd_controller() {
+        let (gm, pm) = pid_stability_margin(0.0, 0.0, 0.5, 0.01);
+        assert!(gm.is_finite());
+        assert!(pm.is_finite());
+    }
+
+    #[test]
+    fn unstable_pid_high_gain() {
+        let (gm, pm) = pid_stability_margin(10.0, 5.0, 1.0, 0.1);
+        assert!(gm.is_finite());
+        assert!(pm.is_finite());
+    }
+
+    #[test]
+    fn pid_small_dt() {
+        let (gm, pm) = pid_stability_margin(1.0, 0.5, 0.1, 0.001);
+        assert!(gm > 0.0);
+        assert!(pm.is_finite());
+    }
 }

@@ -1,0 +1,22 @@
+--- src/pid.rs
++++ replace PidController::reset with ()
+@@ -225,18 +225,17 @@
+         self.output.round().max(1.0) as usize
+     }
+ 
+     pub fn output(&self) -> f64 {
+         self.output
+     }
+ 
+     pub fn reset(&mut self) {
+-        self.integral = 0.0;
+-        self.prev_error = 0.0;
++        () /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ /// Scalar PID controller (f32 / quantized precision).
+ ///
+ /// Same algorithm as `PidController` but uses f32 throughout.
+ /// ~2x memory savings and ~1.5-2x throughput on CPUs without FMA for f64.
+ #[derive(Debug, Clone)]

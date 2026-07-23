@@ -1,0 +1,37 @@
+--- src/pid.rs
++++ replace PidArray::update_batch -> &[f64] with Vec::leak(vec![-1.0])
+@@ -369,33 +369,17 @@
+ 
+     pub fn outputs(&self) -> &[f64] {
+         &self.outputs
+     }
+ 
+     /// Update all N channels with batch setpoints and measurements.
+     /// Returns a slice of N outputs.
+     pub fn update_batch(&mut self, setpoints: &[f64], measurements: &[f64]) -> &[f64] {
+-        assert_eq!(setpoints.len(), self.n);
+-        assert_eq!(measurements.len(), self.n);
+-        for i in 0..self.n {
+-            self.outputs[i] = pid_step_f64(
+-                setpoints[i],
+-                measurements[i],
+-                self.kp,
+-                self.ki,
+-                self.kd,
+-                self.min,
+-                self.max,
+-                &mut self.integrals[i],
+-                &mut self.prev_errors[i],
+-                self.outputs[i],
+-            );
+-        }
+-        &self.outputs
++        Vec::leak(vec![-1.0]) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Reset all channels' integral and derivative state.
+     pub fn reset_all(&mut self) {
+         for i in 0..self.n {
+             self.integrals[i] = 0.0;
+             self.prev_errors[i] = 0.0;
+         }

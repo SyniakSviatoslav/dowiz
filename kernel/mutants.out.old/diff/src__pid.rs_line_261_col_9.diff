@@ -1,0 +1,26 @@
+--- src/pid.rs
++++ replace PidController32::with_config -> Self with Default::default()
+@@ -253,22 +253,17 @@
+             config: PidConfig32::new(kp, ki, kd, min, max),
+             integral: 0.0,
+             prev_error: 0.0,
+             output: max,
+         }
+     }
+ 
+     pub fn with_config(config: PidConfig32) -> Self {
+-        PidController32 {
+-            config,
+-            integral: 0.0,
+-            prev_error: 0.0,
+-            output: config.max,
+-        }
++        Default::default() /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     pub fn config(&self) -> &PidConfig32 {
+         &self.config
+     }
+ 
+     pub fn update(&mut self, setpoint: f32, measurement: f32) -> f32 {
+         self.output = pid_step_f32(

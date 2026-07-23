@@ -219,8 +219,59 @@ mod tests {
         assert!(welch_t(&lo, &hi).abs() > 4.5);
     }
 
-    // ── the dudect gate self-test (timing; #[ignore] so it stays out of the noisy default suite —
-    //    the `hardening-gate` CI job runs it explicitly in release: `... ct_gate -- --ignored`) ──
+    // ── stats / welch-t edge cases ────────────────────────────────────────────
+
+    #[test]
+    fn stats_var_zero_for_single_sample() {
+        let mut s = Stats::default();
+        s.push(5.0);
+        assert!((s.var() - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn stats_var_positive_for_multiple_samples() {
+        let mut s = Stats::default();
+        s.push(1.0);
+        s.push(3.0);
+        assert!(s.var() > 0.0);
+    }
+
+    #[test]
+    fn welch_t_zero_for_small_samples() {
+        let mut a = Stats::default();
+        a.push(1.0);
+        let mut b = Stats::default();
+        b.push(2.0);
+        assert_eq!(welch_t(&a, &b), 0.0);
+    }
+
+    #[test]
+    fn welch_t_zero_for_zero_variance() {
+        let mut a = Stats::default();
+        a.push(5.0);
+        a.push(5.0);
+        let mut b = Stats::default();
+        b.push(5.0);
+        b.push(5.0);
+        assert_eq!(welch_t(&a, &b), 0.0);
+    }
+
+    #[test]
+    fn ct_eq_diff_len() {
+        assert!(!ct_eq(b"hello", b"hell"));
+    }
+
+    #[test]
+    fn ct_eq_same() {
+        assert!(ct_eq(b"abc", b"abc"));
+    }
+
+    #[test]
+    fn ct_eq_diff_same_len() {
+        assert!(!ct_eq(b"\x00\x01", b"\x00\x02"));
+    }
+
+    // ── the dudect gate self-test (timing) ──
 
     #[test]
     #[ignore = "timing self-test; run in release by scripts/hardening-gate.sh step E"]

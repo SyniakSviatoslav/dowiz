@@ -1,0 +1,24 @@
+src/pid.rs:205:44: replace PidController::min_concurrency -> f64 with -1.0
+src/pid.rs:206:44: replace PidController::max_concurrency -> f64 with 0.0
+src/pid.rs:206:44: replace PidController::max_concurrency -> f64 with -1.0
+src/pid.rs:205:44: replace PidController::min_concurrency -> f64 with 0.0
+src/pid.rs:205:44: replace PidController::min_concurrency -> f64 with 1.0
+src/pid.rs:206:44: replace PidController::max_concurrency -> f64 with 1.0
+src/pid.rs:209:9: replace PidController::update -> f64 with 1.0
+src/pid.rs:229:9: replace PidController::output -> f64 with 0.0
+src/pid.rs:225:9: replace PidController::recommended -> usize with 0
+src/pid.rs:209:9: replace PidController::update -> f64 with 0.0
+src/pid.rs:209:9: replace PidController::update -> f64 with -1.0
+src/pid.rs:225:9: replace PidController::recommended -> usize with 1
+src/pid.rs:229:9: replace PidController::output -> f64 with -1.0
+src/pid.rs:274:9: replace PidController32::update -> f32 with 0.0
+src/pid.rs:261:9: replace PidController32::with_config -> Self with Default::default()
+src/pid.rs:233:9: replace PidController::reset with ()
+src/pid.rs:229:9: replace PidController::output -> f64 with 1.0
+src/pid.rs:270:9: replace PidController32::config -> &PidConfig32 with Box::leak(Box::new(Default::default()))
+src/pid.rs:274:9: replace PidController32::update -> f32 with -1.0
+src/pid.rs:290:9: replace PidController32::recommended -> usize with 1
+src/pid.rs:294:9: replace PidController32::output -> f32 with 0.0
+src/pid.rs:290:9: replace PidController32::recommended -> usize with 0
+src/pid.rs:274:9: replace PidController32::update -> f32 with 1.0
+src/pid.rs:294:9: replace PidController32::output -> f32 with 1.0

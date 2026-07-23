@@ -1,17 +1,47 @@
 {
   "outcomes": [
     {
-      "scenario": "Baseline",
-      "summary": "Failure",
-      "log_path": "log/baseline.log",
-      "diff_path": null,
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:205:44: replace PidController::min_concurrency -> f64 with -1.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController::min_concurrency",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 205,
+                "column": 5
+              },
+              "end": {
+                "line": 205,
+                "column": 61
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 205,
+              "column": 44
+            },
+            "end": {
+              "line": 205,
+              "column": 59
+            }
+          },
+          "replacement": "-1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_205_col_44_002.log",
+      "diff_path": "diff/src__pid.rs_line_205_col_44_002.diff",
       "phase_results": [
         {
           "phase": "Build",
-          "duration": 43.801082708,
-          "process_status": {
-            "Failure": 101
-          },
+          "duration": 30.667114492,
+          "process_status": "Success",
           "argv": [
             "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
             "test",
@@ -19,17 +49,1549 @@
             "--verbose",
             "--package=dowiz-kernel@0.1.0"
           ]
+        },
+        {
+          "phase": "Test",
+          "duration": 16.544944299,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:206:44: replace PidController::max_concurrency -> f64 with 0.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController::max_concurrency",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 206,
+                "column": 5
+              },
+              "end": {
+                "line": 206,
+                "column": 61
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 206,
+              "column": 44
+            },
+            "end": {
+              "line": 206,
+              "column": 59
+            }
+          },
+          "replacement": "0.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_206_col_44.log",
+      "diff_path": "diff/src__pid.rs_line_206_col_44.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 30.657036596,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 16.691131495,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:206:44: replace PidController::max_concurrency -> f64 with -1.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController::max_concurrency",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 206,
+                "column": 5
+              },
+              "end": {
+                "line": 206,
+                "column": 61
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 206,
+              "column": 44
+            },
+            "end": {
+              "line": 206,
+              "column": 59
+            }
+          },
+          "replacement": "-1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_206_col_44_002.log",
+      "diff_path": "diff/src__pid.rs_line_206_col_44_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 30.537787692,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 17.167878752,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:205:44: replace PidController::min_concurrency -> f64 with 0.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController::min_concurrency",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 205,
+                "column": 5
+              },
+              "end": {
+                "line": 205,
+                "column": 61
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 205,
+              "column": 44
+            },
+            "end": {
+              "line": 205,
+              "column": 59
+            }
+          },
+          "replacement": "0.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_205_col_44.log",
+      "diff_path": "diff/src__pid.rs_line_205_col_44.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 15.60893573,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 32.954523352,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:205:44: replace PidController::min_concurrency -> f64 with 1.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController::min_concurrency",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 205,
+                "column": 5
+              },
+              "end": {
+                "line": 205,
+                "column": 61
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 205,
+              "column": 44
+            },
+            "end": {
+              "line": 205,
+              "column": 59
+            }
+          },
+          "replacement": "1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_205_col_44_001.log",
+      "diff_path": "diff/src__pid.rs_line_205_col_44_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 30.611790393,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 17.693457427,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:206:44: replace PidController::max_concurrency -> f64 with 1.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController::max_concurrency",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 206,
+                "column": 5
+              },
+              "end": {
+                "line": 206,
+                "column": 61
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 206,
+              "column": 44
+            },
+            "end": {
+              "line": 206,
+              "column": 59
+            }
+          },
+          "replacement": "1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_206_col_44_001.log",
+      "diff_path": "diff/src__pid.rs_line_206_col_44_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 30.535784491,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 17.845483139,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:209:9: replace PidController::update -> f64 with 1.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController::update",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 208,
+                "column": 5
+              },
+              "end": {
+                "line": 222,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 209,
+              "column": 9
+            },
+            "end": {
+              "line": 221,
+              "column": 20
+            }
+          },
+          "replacement": "1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_209_col_9_001.log",
+      "diff_path": "diff/src__pid.rs_line_209_col_9_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 29.95892157,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 16.947528946,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:229:9: replace PidController::output -> f64 with 0.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController::output",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 228,
+                "column": 5
+              },
+              "end": {
+                "line": 230,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 229,
+              "column": 9
+            },
+            "end": {
+              "line": 229,
+              "column": 20
+            }
+          },
+          "replacement": "0.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_229_col_9.log",
+      "diff_path": "diff/src__pid.rs_line_229_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 29.091061507,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 16.778281028,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:225:9: replace PidController::recommended -> usize with 0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController::recommended",
+            "return_type": "-> usize",
+            "span": {
+              "start": {
+                "line": 224,
+                "column": 5
+              },
+              "end": {
+                "line": 226,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 225,
+              "column": 9
+            },
+            "end": {
+              "line": 225,
+              "column": 46
+            }
+          },
+          "replacement": "0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_225_col_9.log",
+      "diff_path": "diff/src__pid.rs_line_225_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 29.292343534,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 17.527262429,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:209:9: replace PidController::update -> f64 with 0.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController::update",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 208,
+                "column": 5
+              },
+              "end": {
+                "line": 222,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 209,
+              "column": 9
+            },
+            "end": {
+              "line": 221,
+              "column": 20
+            }
+          },
+          "replacement": "0.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_209_col_9.log",
+      "diff_path": "diff/src__pid.rs_line_209_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 15.007407953,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 32.736525379,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:209:9: replace PidController::update -> f64 with -1.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController::update",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 208,
+                "column": 5
+              },
+              "end": {
+                "line": 222,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 209,
+              "column": 9
+            },
+            "end": {
+              "line": 221,
+              "column": 20
+            }
+          },
+          "replacement": "-1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_209_col_9_002.log",
+      "diff_path": "diff/src__pid.rs_line_209_col_9_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 29.652115188,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 17.639312733,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:225:9: replace PidController::recommended -> usize with 1",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController::recommended",
+            "return_type": "-> usize",
+            "span": {
+              "start": {
+                "line": 224,
+                "column": 5
+              },
+              "end": {
+                "line": 226,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 225,
+              "column": 9
+            },
+            "end": {
+              "line": 225,
+              "column": 46
+            }
+          },
+          "replacement": "1",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_225_col_9_001.log",
+      "diff_path": "diff/src__pid.rs_line_225_col_9_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 29.188503104,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 17.775970092,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:229:9: replace PidController::output -> f64 with -1.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController::output",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 228,
+                "column": 5
+              },
+              "end": {
+                "line": 230,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 229,
+              "column": 9
+            },
+            "end": {
+              "line": 229,
+              "column": 20
+            }
+          },
+          "replacement": "-1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_229_col_9_002.log",
+      "diff_path": "diff/src__pid.rs_line_229_col_9_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 7.044966057,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 32.672217757,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:274:9: replace PidController32::update -> f32 with 0.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController32::update",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 273,
+                "column": 5
+              },
+              "end": {
+                "line": 287,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 274,
+              "column": 9
+            },
+            "end": {
+              "line": 286,
+              "column": 20
+            }
+          },
+          "replacement": "0.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_274_col_9.log",
+      "diff_path": "diff/src__pid.rs_line_274_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 21.741804486,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 17.755814289,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:261:9: replace PidController32::with_config -> Self with Default::default()",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController32::with_config",
+            "return_type": "-> Self",
+            "span": {
+              "start": {
+                "line": 260,
+                "column": 5
+              },
+              "end": {
+                "line": 267,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 261,
+              "column": 9
+            },
+            "end": {
+              "line": 266,
+              "column": 10
+            }
+          },
+          "replacement": "Default::default()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_261_col_9.log",
+      "diff_path": "diff/src__pid.rs_line_261_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 21.94641818,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 18.081539579,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:233:9: replace PidController::reset with ()",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController::reset",
+            "return_type": "",
+            "span": {
+              "start": {
+                "line": 232,
+                "column": 5
+              },
+              "end": {
+                "line": 235,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 233,
+              "column": 9
+            },
+            "end": {
+              "line": 234,
+              "column": 31
+            }
+          },
+          "replacement": "()",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_233_col_9.log",
+      "diff_path": "diff/src__pid.rs_line_233_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 21.945393544,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 18.360309582,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:229:9: replace PidController::output -> f64 with 1.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController::output",
+            "return_type": "-> f64",
+            "span": {
+              "start": {
+                "line": 228,
+                "column": 5
+              },
+              "end": {
+                "line": 230,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 229,
+              "column": 9
+            },
+            "end": {
+              "line": 229,
+              "column": 20
+            }
+          },
+          "replacement": "1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_229_col_9_001.log",
+      "diff_path": "diff/src__pid.rs_line_229_col_9_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 7.041420713,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 34.01815547,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:270:9: replace PidController32::config -> &PidConfig32 with Box::leak(Box::new(Default::default()))",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController32::config",
+            "return_type": "-> &PidConfig32",
+            "span": {
+              "start": {
+                "line": 269,
+                "column": 5
+              },
+              "end": {
+                "line": 271,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 270,
+              "column": 9
+            },
+            "end": {
+              "line": 270,
+              "column": 21
+            }
+          },
+          "replacement": "Box::leak(Box::new(Default::default()))",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_270_col_9.log",
+      "diff_path": "diff/src__pid.rs_line_270_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 21.94430386,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 18.457565721,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:274:9: replace PidController32::update -> f32 with -1.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController32::update",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 273,
+                "column": 5
+              },
+              "end": {
+                "line": 287,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 274,
+              "column": 9
+            },
+            "end": {
+              "line": 286,
+              "column": 20
+            }
+          },
+          "replacement": "-1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_274_col_9_002.log",
+      "diff_path": "diff/src__pid.rs_line_274_col_9_002.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 31.385852514,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 16.549758209,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:290:9: replace PidController32::recommended -> usize with 1",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController32::recommended",
+            "return_type": "-> usize",
+            "span": {
+              "start": {
+                "line": 289,
+                "column": 5
+              },
+              "end": {
+                "line": 291,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 290,
+              "column": 9
+            },
+            "end": {
+              "line": 290,
+              "column": 46
+            }
+          },
+          "replacement": "1",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_290_col_9_001.log",
+      "diff_path": "diff/src__pid.rs_line_290_col_9_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 30.939304087,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 16.731539362,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:294:9: replace PidController32::output -> f32 with 0.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController32::output",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 293,
+                "column": 5
+              },
+              "end": {
+                "line": 295,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 294,
+              "column": 9
+            },
+            "end": {
+              "line": 294,
+              "column": 20
+            }
+          },
+          "replacement": "0.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_294_col_9.log",
+      "diff_path": "diff/src__pid.rs_line_294_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 30.907844963,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 17.448940918,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:290:9: replace PidController32::recommended -> usize with 0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController32::recommended",
+            "return_type": "-> usize",
+            "span": {
+              "start": {
+                "line": 289,
+                "column": 5
+              },
+              "end": {
+                "line": 291,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 290,
+              "column": 9
+            },
+            "end": {
+              "line": 290,
+              "column": 46
+            }
+          },
+          "replacement": "0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_290_col_9.log",
+      "diff_path": "diff/src__pid.rs_line_290_col_9.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 31.154325407,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 17.535320193,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:274:9: replace PidController32::update -> f32 with 1.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController32::update",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 273,
+                "column": 5
+              },
+              "end": {
+                "line": 287,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 274,
+              "column": 9
+            },
+            "end": {
+              "line": 286,
+              "column": 20
+            }
+          },
+          "replacement": "1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_274_col_9_001.log",
+      "diff_path": "diff/src__pid.rs_line_274_col_9_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 16.124963587,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 33.63054283,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": {
+        "Mutant": {
+          "name": "src/pid.rs:294:9: replace PidController32::output -> f32 with 1.0",
+          "package": "dowiz-kernel",
+          "file": "src/pid.rs",
+          "function": {
+            "function_name": "PidController32::output",
+            "return_type": "-> f32",
+            "span": {
+              "start": {
+                "line": 293,
+                "column": 5
+              },
+              "end": {
+                "line": 295,
+                "column": 6
+              }
+            }
+          },
+          "span": {
+            "start": {
+              "line": 294,
+              "column": 9
+            },
+            "end": {
+              "line": 294,
+              "column": 20
+            }
+          },
+          "replacement": "1.0",
+          "genre": "FnValue"
+        }
+      },
+      "summary": "CaughtMutant",
+      "log_path": "log/src__pid.rs_line_294_col_9_001.log",
+      "diff_path": "diff/src__pid.rs_line_294_col_9_001.diff",
+      "phase_results": [
+        {
+          "phase": "Build",
+          "duration": 30.867643188,
+          "process_status": "Success",
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--no-run",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0"
+          ]
+        },
+        {
+          "phase": "Test",
+          "duration": 17.601104718,
+          "process_status": {
+            "Failure": 101
+          },
+          "argv": [
+            "/root/.rustup/toolchains/1.96.1-x86_64-unknown-linux-gnu/bin/cargo",
+            "test",
+            "--verbose",
+            "--package=dowiz-kernel@0.1.0",
+            "--lib"
+          ]
         }
       ]
     }
   ],
-  "total_mutants": 0,
+  "total_mutants": 24,
   "missed": 0,
-  "caught": 0,
+  "caught": 24,
   "timeout": 0,
   "unviable": 0,
   "success": 0,
-  "start_time": "2026-07-23T18:31:35.66570845Z",
-  "end_time": "2026-07-23T18:32:19.723836389Z",
+  "start_time": "2026-07-23T20:20:45.930497966Z",
+  "end_time": null,
   "cargo_mutants_version": "27.1.0"
 }

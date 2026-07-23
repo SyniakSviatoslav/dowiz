@@ -1,0 +1,21 @@
+--- src/pid.rs
++++ replace PidController::recommended -> usize with 0
+@@ -217,17 +217,17 @@
+             &mut self.integral,
+             &mut self.prev_error,
+             self.output,
+         );
+         self.output
+     }
+ 
+     pub fn recommended(&self) -> usize {
+-        self.output.round().max(1.0) as usize
++        0 /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     pub fn output(&self) -> f64 {
+         self.output
+     }
+ 
+     pub fn reset(&mut self) {
+         self.integral = 0.0;

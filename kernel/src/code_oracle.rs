@@ -212,4 +212,35 @@ mod tests {
         assert!(d.contains("ETA ORACLE"));
         assert!(d.contains("history"));
     }
+
+    #[test]
+    fn oracle_predict_impact_without_similar_falls_back() {
+        let mut oracle = EtaOracle::new();
+        oracle.record(&["a.rs"], 100, 50, 15.0);
+        oracle.record(&["a.rs"], 200, 100, 30.0);
+        oracle.record(&["b.rs"], 50, 25, 8.0);
+        let impact = oracle.predict_impact(10, 500);
+        assert!(impact > 0.0);
+    }
+
+    #[test]
+    fn oracle_predict_impact_no_history() {
+        let oracle = EtaOracle::new();
+        let impact = oracle.predict_impact(5, 300);
+        assert!(impact > 0.0);
+    }
+
+    #[test]
+    fn change_record_total_lines() {
+        let rec = ChangeRecord::new(&["a.rs"], 100, 50, 15.0);
+        assert_eq!(rec.total_lines(), 150);
+    }
+
+    #[test]
+    fn eta_confidence_few_samples() {
+        let oracle = EtaOracle::new();
+        let (mean, std) = oracle.eta_confidence();
+        assert!((mean - 0.5).abs() < 1e-10);
+        assert!((std - 0.5).abs() < 1e-10);
+    }
 }

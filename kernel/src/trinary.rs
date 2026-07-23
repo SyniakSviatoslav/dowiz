@@ -862,4 +862,157 @@ mod tests {
         let recs = ledger.records();
         assert_eq!(recs[0].task, "kalman_predict");
     }
+
+    // ─── lukasiewicz edge cases ──────────────────────────────────────────
+
+    #[test]
+    fn lukasiewicz_true_implies_true_is_true() {
+        assert_eq!(Tri::True.imply_lukasiewicz(Tri::True), Tri::True);
+    }
+
+    #[test]
+    fn lukasiewicz_true_implies_unknown_is_unknown() {
+        assert_eq!(Tri::True.imply_lukasiewicz(Tri::Unknown), Tri::Unknown);
+    }
+
+    #[test]
+    fn lukasiewicz_unknown_implies_true_is_true() {
+        assert_eq!(Tri::Unknown.imply_lukasiewicz(Tri::True), Tri::True);
+    }
+
+    #[test]
+    fn lukasiewicz_unknown_implies_false_is_unknown() {
+        assert_eq!(Tri::Unknown.imply_lukasiewicz(Tri::False), Tri::Unknown);
+    }
+
+    // ─── kleene implication edge cases ───────────────────────────────────
+
+    #[test]
+    fn kleene_false_implies_true_is_true() {
+        assert_eq!(Tri::False.imply_kleene(Tri::True), Tri::True);
+    }
+
+    #[test]
+    fn kleene_false_implies_false_is_true() {
+        assert_eq!(Tri::False.imply_kleene(Tri::False), Tri::True);
+    }
+
+    #[test]
+    fn kleene_true_implies_true_is_true() {
+        assert_eq!(Tri::True.imply_kleene(Tri::True), Tri::True);
+    }
+
+    #[test]
+    fn kleene_true_implies_false_is_false() {
+        assert_eq!(Tri::True.imply_kleene(Tri::False), Tri::False);
+    }
+
+    #[test]
+    fn kleene_true_implies_unknown_is_unknown() {
+        assert_eq!(Tri::True.imply_kleene(Tri::Unknown), Tri::Unknown);
+    }
+
+    #[test]
+    fn kleene_unknown_implies_true_is_true() {
+        assert_eq!(Tri::Unknown.imply_kleene(Tri::True), Tri::True);
+    }
+
+    #[test]
+    fn kleene_unknown_implies_false_is_unknown() {
+        assert_eq!(Tri::Unknown.imply_kleene(Tri::False), Tri::Unknown);
+    }
+
+    // ─── from_match edge cases ───────────────────────────────────────────
+
+    #[test]
+    fn tri_from_match_needle_longer_than_haystack_is_false() {
+        assert_eq!(Tri::from_match("verylongword", "short"), Tri::False);
+    }
+
+    #[test]
+    fn tri_from_match_needle_not_in_haystack() {
+        assert_eq!(Tri::from_match("running", "run fast and win"), Tri::False);
+    }
+
+    // ─── from_u8 default ─────────────────────────────────────────────────
+
+    #[test]
+    fn tri_from_u8_out_of_range_is_unknown() {
+        assert_eq!(Tri::majority(&[Tri::True, Tri::True, Tri::True, Tri::True, Tri::True]), Tri::True);
+    }
+
+    // ─── kalman predict edge cases ───────────────────────────────────────
+
+    #[test]
+    fn kalman_predict_exact_threshold_gain() {
+        let mut present = TriMatrix::new(1, 1);
+        present.set(0, 0, Tri::True);
+        let mut past = TriMatrix::new(1, 1);
+        past.set(0, 0, Tri::False);
+        let pred = present.kalman_predict(&past, 0.5);
+        assert_eq!(pred.get(0, 0), Tri::False);
+    }
+
+    #[test]
+    fn kalman_predict_low_gain_conservative() {
+        let mut present = TriMatrix::new(1, 1);
+        present.set(0, 0, Tri::True);
+        let mut past = TriMatrix::new(1, 1);
+        past.set(0, 0, Tri::False);
+        let pred = present.kalman_predict(&past, 0.4);
+        assert_eq!(pred.get(0, 0), Tri::True);
+    }
+
+    // ─── majority edge cases ─────────────────────────────────────────────
+
+    #[test]
+    fn tri_majority_empty_is_unknown() {
+        assert_eq!(Tri::majority(&[]), Tri::Unknown);
+    }
+
+    #[test]
+    fn tri_majority_all_unknown_is_unknown() {
+        assert_eq!(Tri::majority(&[Tri::Unknown, Tri::Unknown, Tri::Unknown]), Tri::Unknown);
+    }
+
+    // ─── DeltaChain edge cases ──────────────────────────────────────────
+
+    #[test]
+    fn delta_chain_empty_is_stable() {
+        let dc = DeltaChain::new();
+        assert!(dc.is_stable(5, 0.5));
+        assert_eq!(dc.len(), 0);
+        assert_eq!(dc.total_drift(), 0.0);
+    }
+
+    // ─── dot edge cases ──────────────────────────────────────────────────
+
+    #[test]
+    fn dot_empty_matrix() {
+        let a = TriMatrix::new(0, 5);
+        let b = TriMatrix::new(0, 5);
+        assert!((a.dot(&b) - 0.0).abs() < 1e-10);
+    }
+
+    // ─── stability_index edge cases ──────────────────────────────────────
+
+    #[test]
+    fn stability_index_all_false() {
+        let mut m = TriMatrix::new(2, 2);
+        m.set(0, 0, Tri::False); m.set(0, 1, Tri::False);
+        m.set(1, 0, Tri::False); m.set(1, 1, Tri::False);
+        assert!((m.stability_index() - 0.0).abs() < 1e-10);
+    }
+
+    // ─── Tri mul edge case ──────────────────────────────────────────────
+
+    #[test]
+    fn tri_mul_false_dominates() {
+        let mut a = TriMatrix::new(1, 2);
+        a.set(0, 0, Tri::True); a.set(0, 1, Tri::False);
+        let mut b = TriMatrix::new(2, 1);
+        b.set(0, 0, Tri::True); b.set(1, 0, Tri::True);
+        let c = a.mul(&b);
+        assert_eq!(c.get(0, 0), Tri::True);
+    }
 }

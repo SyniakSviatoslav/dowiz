@@ -1,0 +1,21 @@
+--- src/pid.rs
++++ replace >= with < in PidArray::reset_channel
+@@ -399,17 +399,17 @@
+             self.integrals[i] = 0.0;
+             self.prev_errors[i] = 0.0;
+         }
+     }
+ 
+     /// Reset a single channel.
+     pub fn reset_channel(&mut self, idx: usize) {
+         debug_assert!(idx < self.n, "PidArray::reset_channel: idx {} out of bounds (n={})", idx, self.n);
+-        if idx >= self.n {
++        if idx < /* ~ changed by cargo-mutants ~ */ self.n {
+             return;
+         }
+         self.integrals[idx] = 0.0;
+         self.prev_errors[idx] = 0.0;
+     }
+ }
+ 
+ /// Batch PID update for N independent channels with a single shared config.

@@ -1,0 +1,22 @@
+--- src/pid.rs
++++ replace PidController32::reset with ()
+@@ -290,18 +290,17 @@
+         self.output.round().max(1.0) as usize
+     }
+ 
+     pub fn output(&self) -> f32 {
+         self.output
+     }
+ 
+     pub fn reset(&mut self) {
+-        self.integral = 0.0;
+-        self.prev_error = 0.0;
++        () /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ /// Vectorized N-channel PID (struct-of-arrays, f64).
+ ///
+ /// Processes N independent PID channels in parallel. When AVX2 is available,
+ /// 4 channels are updated per SIMD lane step; otherwise falls back to scalar
+ /// per-channel iteration. Bit-identical to running N independent

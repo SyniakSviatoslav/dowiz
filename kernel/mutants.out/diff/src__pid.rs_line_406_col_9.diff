@@ -1,0 +1,26 @@
+--- src/pid.rs
++++ replace PidArray::reset_channel with ()
+@@ -398,22 +398,17 @@
+         for i in 0..self.n {
+             self.integrals[i] = 0.0;
+             self.prev_errors[i] = 0.0;
+         }
+     }
+ 
+     /// Reset a single channel.
+     pub fn reset_channel(&mut self, idx: usize) {
+-        debug_assert!(idx < self.n, "PidArray::reset_channel: idx {} out of bounds (n={})", idx, self.n);
+-        if idx >= self.n {
+-            return;
+-        }
+-        self.integrals[idx] = 0.0;
+-        self.prev_errors[idx] = 0.0;
++        () /* ~ changed by cargo-mutants ~ */
+     }
+ }
+ 
+ /// Batch PID update for N independent channels with a single shared config.
+ ///
+ /// Convenience function: updates N scalar PID states in one call.
+ /// Each channel has independent integral/prev_error/output state.
+ /// `states` is a mutable vec of `(integral, prev_error, output)` triples.

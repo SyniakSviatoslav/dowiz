@@ -1,3 +1,0 @@
-src/entropy_budget.rs:30:84: replace > with >= in shannon_entropy
-src/entropy_budget.rs:31:21: replace || with && in shannon_entropy
-src/entropy_budget.rs:38:28: replace > with >= in shannon_entropy

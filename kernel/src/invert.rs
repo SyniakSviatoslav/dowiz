@@ -267,4 +267,59 @@ mod tests {
         assert!(art.contains("L0"));
         assert!(art.contains("node1"));
     }
+
+    #[test]
+    fn backprop_chain_zero_total_error() {
+        let v = vec![0.0];
+        let d = Delta::between(&v, 0, &v, 1);
+        let mut chain = BackpropChain::new(0.0);
+        chain.push_layer("zero", 0, d);
+        assert!((chain.nodes[0].responsibility - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn backprop_chain_single_node() {
+        let v = vec![0.0];
+        let d = Delta::between(&v, 0, &[5.0], 1);
+        let mut chain = BackpropChain::new(5.0);
+        chain.push_layer("only", 0, d);
+        chain.backprop(1.0);
+        assert_eq!(chain.root_cause.as_deref(), Some("only"));
+    }
+
+    #[test]
+    fn backprop_report_severity_levels() {
+        let small = backprop_from_deltas(&[], 0.5, 1.0);
+        assert_eq!(small.severity, DeltaComparison::Stable);
+
+        let v0 = vec![0.0]; let v1 = vec![5.0];
+        let d = Delta::between(&v0, 0, &v1, 1);
+        let medium = backprop_from_deltas(&[("a".into(), 0, d)], 0.1, 1.0);
+        assert_eq!(medium.severity, DeltaComparison::Oscillating);
+
+        let v2 = vec![0.0]; let v3 = vec![20.0];
+        let d2 = Delta::between(&v2, 0, &v3, 1);
+        let high = backprop_from_deltas(&[("b".into(), 0, d2)], 0.1, 1.0);
+        assert_eq!(high.severity, DeltaComparison::Growing);
+    }
+
+    #[test]
+    fn backprop_filtering_below_threshold() {
+        let v0 = vec![0.0]; let v1 = vec![0.01]; let v2 = vec![5.0];
+        let d_small = Delta::between(&v0, 0, &v1, 1);
+        let d_large = Delta::between(&v0, 0, &v2, 1);
+        let deltas = vec![("small".into(), 0, d_small), ("large".into(), 1, d_large)];
+        let report = backprop_from_deltas(&deltas, 1.0, 0.5);
+        let ids: Vec<&str> = report.chain.nodes.iter().map(|n| n.id.as_str()).collect();
+        assert!(!ids.contains(&"small"));
+        assert!(ids.contains(&"large"));
+    }
+
+    #[test]
+    fn backprop_node_improvement_zero_when_no_inverse() {
+        let v0 = vec![0.0]; let v1 = vec![1.0];
+        let d = Delta::between(&v0, 0, &v1, 1);
+        let node = BackpropNode::new("test", 0, d);
+        assert!((node.improvement() - 0.0).abs() < 1e-10);
+    }
 }

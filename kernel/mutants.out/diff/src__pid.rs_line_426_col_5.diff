@@ -1,0 +1,36 @@
+--- src/pid.rs
++++ replace batch_pid_update with ()
+@@ -418,32 +418,17 @@
+ /// Each channel has independent integral/prev_error/output state.
+ /// `states` is a mutable vec of `(integral, prev_error, output)` triples.
+ pub fn batch_pid_update(
+     states: &mut [(f64, f64, f64)],
+     config: &PidConfig,
+     setpoints: &[f64],
+     measurements: &[f64],
+ ) {
+-    assert_eq!(states.len(), setpoints.len());
+-    assert_eq!(states.len(), measurements.len());
+-    for (i, (integral, prev_error, output)) in states.iter_mut().enumerate() {
+-        *output = pid_step_f64(
+-            setpoints[i],
+-            measurements[i],
+-            config.kp,
+-            config.ki,
+-            config.kd,
+-            config.min,
+-            config.max,
+-            integral,
+-            prev_error,
+-            *output,
+-        );
+-    }
++    () /* ~ changed by cargo-mutants ~ */
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+ 
+     #[test]
+     fn pid_converges_to_setpoint() {

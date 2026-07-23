@@ -1,8 +1,8 @@
+#![cfg(feature = "pq")]
 /// bebop_session_crypto — end-to-end session crypto integration test.
 /// Tests: key agreement → session establishment → encrypt → decrypt → close.
 ///
 /// Run with: cargo test --test bebop_session_crypto --features "pq,ct-gate"
-#[cfg(feature = "pq")]
 
 use dowiz_kernel::bebop_bridge::{ChronosDtn, TriCap, HybridSignBridge};
 use dowiz_kernel::pq::hybrid::{HybridKeypair, hybrid_keygen, hybrid_encaps, hybrid_decaps};

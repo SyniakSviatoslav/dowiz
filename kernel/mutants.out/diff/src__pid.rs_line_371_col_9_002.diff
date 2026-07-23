@@ -1,0 +1,21 @@
+--- src/pid.rs
++++ replace PidArray::outputs -> &[f64] with Vec::leak(vec![1.0])
+@@ -363,17 +363,17 @@
+         if idx >= self.n {
+             return self.min;
+         }
+         debug_assert!(idx < self.n, "PidArray::output: idx {} out of bounds (n={})", idx, self.n);
+         self.outputs[idx]
+     }
+ 
+     pub fn outputs(&self) -> &[f64] {
+-        &self.outputs
++        Vec::leak(vec![1.0]) /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Update all N channels with batch setpoints and measurements.
+     /// Returns a slice of N outputs.
+     pub fn update_batch(&mut self, setpoints: &[f64], measurements: &[f64]) -> &[f64] {
+         assert_eq!(setpoints.len(), self.n);
+         assert_eq!(measurements.len(), self.n);
+         for i in 0..self.n {

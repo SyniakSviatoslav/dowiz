@@ -1,0 +1,21 @@
+--- src/pid.rs
++++ replace PidArray::len -> usize with 0
+@@ -343,17 +343,17 @@
+             max,
+             integrals: vec![0.0; n],
+             prev_errors: vec![0.0; n],
+             outputs: vec![max; n],
+         }
+     }
+ 
+     pub fn len(&self) -> usize {
+-        self.n
++        0 /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     pub fn is_empty(&self) -> bool {
+         self.n == 0
+     }
+ 
+     pub fn config(&self) -> PidConfig {
+         PidConfig::new(self.kp, self.ki, self.kd, self.min, self.max)

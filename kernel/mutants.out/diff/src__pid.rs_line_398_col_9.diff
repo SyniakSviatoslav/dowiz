@@ -1,0 +1,24 @@
+--- src/pid.rs
++++ replace PidArray::reset_all with ()
+@@ -390,20 +390,17 @@
+                 self.outputs[i],
+             );
+         }
+         &self.outputs
+     }
+ 
+     /// Reset all channels' integral and derivative state.
+     pub fn reset_all(&mut self) {
+-        for i in 0..self.n {
+-            self.integrals[i] = 0.0;
+-            self.prev_errors[i] = 0.0;
+-        }
++        () /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     /// Reset a single channel.
+     pub fn reset_channel(&mut self, idx: usize) {
+         debug_assert!(idx < self.n, "PidArray::reset_channel: idx {} out of bounds (n={})", idx, self.n);
+         if idx >= self.n {
+             return;
+         }

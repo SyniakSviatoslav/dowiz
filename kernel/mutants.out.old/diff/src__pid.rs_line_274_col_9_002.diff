@@ -1,0 +1,33 @@
+--- src/pid.rs
++++ replace PidController32::update -> f32 with -1.0
+@@ -266,29 +266,17 @@
+         }
+     }
+ 
+     pub fn config(&self) -> &PidConfig32 {
+         &self.config
+     }
+ 
+     pub fn update(&mut self, setpoint: f32, measurement: f32) -> f32 {
+-        self.output = pid_step_f32(
+-            setpoint,
+-            measurement,
+-            self.config.kp,
+-            self.config.ki,
+-            self.config.kd,
+-            self.config.min,
+-            self.config.max,
+-            &mut self.integral,
+-            &mut self.prev_error,
+-            self.output,
+-        );
+-        self.output
++        -1.0 /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     pub fn recommended(&self) -> usize {
+         self.output.round().max(1.0) as usize
+     }
+ 
+     pub fn output(&self) -> f32 {
+         self.output

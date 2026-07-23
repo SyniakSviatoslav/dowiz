@@ -1,0 +1,25 @@
+--- src/pid.rs
++++ replace PidArray::output -> f64 with 0.0
+@@ -355,21 +355,17 @@
+         self.n == 0
+     }
+ 
+     pub fn config(&self) -> PidConfig {
+         PidConfig::new(self.kp, self.ki, self.kd, self.min, self.max)
+     }
+ 
+     pub fn output(&self, idx: usize) -> f64 {
+-        if idx >= self.n {
+-            return self.min;
+-        }
+-        debug_assert!(idx < self.n, "PidArray::output: idx {} out of bounds (n={})", idx, self.n);
+-        self.outputs[idx]
++        0.0 /* ~ changed by cargo-mutants ~ */
+     }
+ 
+     pub fn outputs(&self) -> &[f64] {
+         &self.outputs
+     }
+ 
+     /// Update all N channels with batch setpoints and measurements.
+     /// Returns a slice of N outputs.

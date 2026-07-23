@@ -304,4 +304,139 @@ mod tests {
         assert_eq!(e.lambda, 0.0);
         assert!(e.vector.is_empty());
     }
+
+    // ─── zero-vector / near-zero ──────────────────────────────────────────
+
+    #[test]
+    fn eigen_normalized_zero_vector() {
+        let e = Eigen::new(3.0, vec![0.0, 0.0, 0.0]).normalized();
+        assert!(e.normalized);
+        assert!(e.vector.iter().all(|&x| x == 0.0));
+    }
+
+    #[test]
+    fn eigen_new_zero_vector_not_normalized() {
+        let e = Eigen::new(5.0, vec![0.0, 0.0]);
+        assert!(!e.normalized);
+    }
+
+    #[test]
+    fn eigen_new_unit_vector_is_normalized() {
+        let e = Eigen::new(1.0, vec![1.0, 0.0, 0.0]);
+        assert!(e.normalized);
+    }
+
+    #[test]
+    fn eigen_new_near_unit_vector_is_normalized() {
+        let v = vec![0.6, 0.8]; // norm = 1.0
+        let e = Eigen::new(2.0, v);
+        assert!(e.normalized);
+    }
+
+    #[test]
+    fn eigen_project_empty_target() {
+        let e = Eigen::new(2.0, vec![1.0, 2.0]);
+        assert!((e.project(&[]) - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn eigen_project_eigen_empty() {
+        let e1 = Eigen::new(2.0, vec![1.0, 2.0]);
+        let e2 = Eigen::new(3.0, vec![]);
+        assert!((e1.project_eigen(&e2) - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn eigen_cosine_sim_empty_vector() {
+        let e1 = Eigen::new(1.0, vec![]);
+        let e2 = Eigen::new(2.0, vec![1.0, 2.0]);
+        assert!((e1.cosine_sim(&e2) - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn eigen_is_stable_at_boundary() {
+        let e = Eigen::new(1.0, vec![1.0]);
+        assert!(e.is_stable());
+        assert!(!e.is_growing());
+    }
+
+    #[test]
+    fn eigen_is_stable_below_one() {
+        let e = Eigen::new(0.5, vec![1.0]);
+        assert!(e.is_stable());
+        assert!(!e.is_growing());
+    }
+
+    #[test]
+    fn eigen_is_growing_above_one() {
+        let e = Eigen::new(2.0, vec![1.0]);
+        assert!(e.is_growing());
+        assert!(!e.is_stable());
+    }
+
+    #[test]
+    fn eigen_from_bow_stem_match() {
+        let vocab: Vec<String> = vec!["running".into(), "sleeping".into()];
+        let kw: Vec<String> = vec!["run".into()];
+        let e = Eigen::from_bow(&kw, &vocab);
+        assert!(e.lambda > 0.0);
+    }
+
+    #[test]
+    fn eigen_from_bow_all_zero_counts() {
+        let vocab: Vec<String> = vec!["alpha".into(), "beta".into()];
+        let kw: Vec<String> = vec!["gamma".into()];
+        let e = Eigen::from_bow(&kw, &vocab);
+        assert_eq!(e.lambda, 0.0);
+    }
+
+    #[test]
+    fn eigen_decomp_dominant_none_for_empty() {
+        let d = EigenDecomp::new(vec![]);
+        assert!(d.dominant().is_none());
+    }
+
+    #[test]
+    fn eigen_decomp_dominant_some_for_nonempty() {
+        let v = vec![1.0, 0.5];
+        let d = decompose(&v, 2);
+        assert!(d.dominant().is_some());
+    }
+
+    #[test]
+    fn decompose_empty_input() {
+        let d = decompose(&[], 5);
+        assert!(d.pairs.is_empty());
+    }
+
+    #[test]
+    fn decompose_single_element() {
+        let d = decompose(&[42.0], 1);
+        assert_eq!(d.pairs.len(), 1);
+        assert!(d.pairs[0].mag() > 40.0);
+    }
+
+    #[test]
+    fn eigen_decomp_reconstruct_empty() {
+        let d = EigenDecomp::new(vec![]);
+        let r = d.reconstruct(5);
+        assert_eq!(r, vec![0.0; 5]);
+    }
+
+    #[test]
+    fn eigen_decomp_unstable_count() {
+        let pairs = vec![
+            Eigen::new(2.0, vec![1.0]),
+            Eigen::new(0.5, vec![0.0, 1.0]),
+            Eigen::new(1.5, vec![1.0, 0.0]),
+        ];
+        let d = EigenDecomp::new(pairs);
+        assert_eq!(d.unstable_count(), 2);
+    }
+
+    #[test]
+    fn eigen_mag_is_absolute() {
+        let e = Eigen::new(-3.0, vec![1.0]);
+        assert!((e.mag() - 3.0).abs() < 1e-10);
+    }
 }

@@ -444,4 +444,127 @@ mod tests {
         let (d, s) = orch.dispatch_wave();
         assert_eq!((d, s), (0, 0));
     }
+
+    // ─── snapshot cache eviction ──────────────────────────────────────────
+
+    #[test]
+    fn snapshot_cache_evicts_when_full() {
+        let mut cache = SnapshotCache::new(2);
+        for i in 0..3 {
+            let fp = TaskFingerprint {
+                task_id: format!("task{}", i),
+                file_hashes: vec![],
+                deps_hash: [i as u8; 32],
+            };
+            cache.store(TaskSnapshot {
+                fingerprint: fp,
+                result: Tri::True,
+                duration_ms: 100,
+                agent_class: AgentClass::Light,
+                timestamp: i as u64,
+            });
+        }
+        assert!(cache.check(&TaskFingerprint {
+            task_id: "task0".into(),
+            file_hashes: vec![],
+            deps_hash: [0u8; 32],
+        }).is_none());
+        assert!(cache.check(&TaskFingerprint {
+            task_id: "task1".into(),
+            file_hashes: vec![],
+            deps_hash: [1u8; 32],
+        }).is_some());
+        assert!(cache.check(&TaskFingerprint {
+            task_id: "task2".into(),
+            file_hashes: vec![],
+            deps_hash: [2u8; 32],
+        }).is_some());
+    }
+
+    #[test]
+    fn snapshot_cache_hit_rate_empty() {
+        let cache = SnapshotCache::new(10);
+        assert!((cache.hit_rate() - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn snapshot_cache_hit_rate_mixed() {
+        let mut cache = SnapshotCache::new(10);
+        cache.hits = 3;
+        cache.misses = 7;
+        assert!((cache.hit_rate() - 0.3).abs() < 1e-10);
+    }
+
+    // ─── oracle edge cases ────────────────────────────────────────────────
+
+    #[test]
+    fn oracle_predicts_light_for_unknown_task() {
+        let oracle = TaskOracle::new();
+        let (class, conf) = oracle.predict("xyzzy arbitrary unknown phrase");
+        assert_eq!(class, AgentClass::Light);
+        assert!((conf - 0.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn oracle_accuracy_empty_is_one() {
+        let oracle = TaskOracle::new();
+        assert!((oracle.accuracy() - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn oracle_accuracy_partial_correct() {
+        let mut oracle = TaskOracle::new();
+        oracle.record_outcome("read file", AgentClass::Light, AgentClass::Light);
+        oracle.record_outcome("build binary", AgentClass::Heavy, AgentClass::Heavy);
+        oracle.record_outcome("run tests", AgentClass::Heavy, AgentClass::Light);
+        let acc = oracle.accuracy();
+        assert!(acc > 0.5 && acc < 1.0);
+    }
+
+    #[test]
+    fn oracle_record_outcome_learns_light() {
+        let mut oracle = TaskOracle::new();
+        let (class_before, _) = oracle.predict("read documentation");
+        for _ in 0..50 {
+            oracle.record_outcome("read documentation", AgentClass::Light, AgentClass::Light);
+        }
+        let (class_after, _) = oracle.predict("read documentation");
+        assert_eq!(class_before, class_after);
+    }
+
+    // ─── wave orchestrator stats edge cases ───────────────────────────────
+
+    #[test]
+    fn wave_orchestrator_stats_empty() {
+        let orch = WaveOrchestrator::new();
+        let stats = orch.stats();
+        assert_eq!(stats.total_dispatched, 0);
+        assert_eq!(stats.total_skipped, 0);
+        assert_eq!(stats.pending, 0);
+        assert_eq!(stats.current_wave, 0);
+    }
+
+    #[test]
+    fn wave_orchestrator_skips_cached_tasks() {
+        let mut orch = WaveOrchestrator::new();
+        let fp = orch.fingerprint("t1");
+        orch.snapshot_cache.store(TaskSnapshot {
+            fingerprint: fp,
+            result: Tri::True,
+            duration_ms: 100,
+            agent_class: AgentClass::Light,
+            timestamp: crate::now_ms(),
+        });
+        orch.enqueue("t1", "read something");
+        let (d, s) = orch.dispatch_wave();
+        assert_eq!(d, 0);
+        assert_eq!(s, 1);
+    }
+
+    #[test]
+    fn agent_complete_out_of_range_saturates() {
+        let mut orch = WaveOrchestrator::new();
+        orch.agent_complete(999);
+        // should not panic
+    }
 }

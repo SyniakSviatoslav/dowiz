@@ -320,4 +320,162 @@ mod tests {
         let d4 = Delta::between(&[1.0], 3, &[-1.0], 4);
         assert!(is_oscillating(&[d1, d2, d3, d4], 3));
     }
+
+    // ─── oscillation edge cases ───────────────────────────────────────────
+
+    #[test]
+    fn oscillation_too_few_deltas() {
+        let v = vec![0.0];
+        let d1 = Delta::between(&v, 0, &[1.0], 1);
+        let d2 = Delta::between(&[1.0], 1, &[-1.0], 2);
+        assert!(!is_oscillating(&[d1, d2], 3));
+    }
+
+    #[test]
+    fn oscillation_non_alternating() {
+        let v = vec![0.0];
+        let d1 = Delta::between(&v, 0, &[1.0], 1);
+        let d2 = Delta::between(&[1.0], 1, &[2.0], 2);
+        let d3 = Delta::between(&[2.0], 2, &[3.0], 3);
+        let d4 = Delta::between(&[3.0], 3, &[4.0], 4);
+        assert!(!is_oscillating(&[d1, d2, d3, d4], 3));
+    }
+
+    #[test]
+    fn oscillation_two_flips_detected() {
+        let v = vec![0.0];
+        let d1 = Delta::between(&v, 0, &[1.0], 1);
+        let d2 = Delta::between(&[1.0], 1, &[-1.0], 2);
+        let d3 = Delta::between(&[-1.0], 2, &[1.0], 3);
+        let d4 = Delta::between(&[1.0], 3, &[2.0], 4);
+        assert!(!is_oscillating(&[d1, d2, d3, d4], 3));
+    }
+
+    // ─── Delta edge cases ─────────────────────────────────────────────────
+
+    #[test]
+    fn delta_zero_magnitude_direction() {
+        let v = vec![1.0, 2.0];
+        let d = Delta::between(&v, 0, &v, 1);
+        let dir = d.direction();
+        assert!((d.magnitude - 0.0).abs() < 1e-10);
+        assert!(dir.iter().all(|&x| x == 0.0));
+    }
+
+    #[test]
+    fn delta_project_zero_direction() {
+        let v0 = vec![1.0, 2.0];
+        let v1 = vec![3.0, 5.0];
+        let d = Delta::between(&v0, 0, &v1, 1);
+        let proj = d.project(&[0.0, 0.0]);
+        assert!((proj - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn delta_is_significant_below_threshold() {
+        let v0 = vec![0.0];
+        let v1 = vec![0.5];
+        let d = Delta::between(&v0, 0, &v1, 1);
+        assert!(!d.is_significant(1.0));
+    }
+
+    #[test]
+    fn delta_is_stable_below_rate() {
+        let v0 = vec![0.0];
+        let v1 = vec![0.1];
+        let d = Delta::between(&v0, 0, &v1, 1000);
+        assert!(d.is_stable(0.5));
+    }
+
+    #[test]
+    fn delta_is_unstable_above_rate() {
+        let v0 = vec![0.0];
+        let v1 = vec![100.0];
+        let d = Delta::between(&v0, 0, &v1, 1);
+        assert!(!d.is_stable(1.0));
+    }
+
+    // ─── EigenDelta edge cases ────────────────────────────────────────────
+
+    #[test]
+    fn eigen_delta_no_dominant() {
+        let d0 = EigenDecomp::new(vec![]);
+        let d1 = EigenDecomp::new(vec![]);
+        let ed = EigenDelta::between(&d0, &d1);
+        assert!((ed.spectral_distance - 0.0).abs() < 1e-10);
+        assert!(!ed.is_destabilizing());
+    }
+
+    #[test]
+    fn eigen_delta_stabilizing() {
+        let stable = decompose(&[0.5, 0.3], 2);
+        let unstable = decompose(&[1.5, 0.3], 2);
+        let ed = EigenDelta::between(&unstable, &stable);
+        assert!(ed.mode_count_delta < 0);
+        assert!(!ed.is_destabilizing());
+    }
+
+    #[test]
+    fn eigen_delta_not_significant() {
+        let a = decompose(&[0.5, 0.5], 2);
+        let b = decompose(&[0.51, 0.49], 2);
+        let ed = EigenDelta::between(&a, &b);
+        assert!(!ed.is_significant(10.0, 10.0));
+    }
+
+    // ─── PhaseDelta edge cases ────────────────────────────────────────────
+
+    #[test]
+    fn phase_delta_drift_rate_zero_for_small_dt() {
+        let a = PhaseVector::from_scalars(&[0.0, 0.0]);
+        let b = PhaseVector::from_scalars(&[1.0, 1.0]);
+        let pd = PhaseDelta::between_phases(&a, &b);
+        assert!((pd.drift_rate(0.5) - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn phase_delta_drift_rate_positive() {
+        let a = PhaseVector::from_scalars(&[0.0]);
+        let b = PhaseVector::from_scalars(&[std::f64::consts::PI]);
+        let pd = PhaseDelta::between_phases(&a, &b);
+        let rate = pd.drift_rate(1000.0);
+        assert!(rate > 0.0);
+    }
+
+    // ─── DeltaTracker edge cases ──────────────────────────────────────────
+
+    #[test]
+    fn delta_tracker_not_alarming_empty() {
+        let dt = DeltaTracker::new(5.0, 100.0);
+        assert!(!dt.is_alarming(5));
+    }
+
+    #[test]
+    fn delta_tracker_reset() {
+        let mut dt = DeltaTracker::new(5.0, 100.0);
+        dt.observe_transition(&[0.0], 0, &[10.0], 1);
+        assert!(dt.len() > 0);
+        dt.reset();
+        assert_eq!(dt.len(), 0);
+        assert!((dt.cumulative_drift - 0.0).abs() < 1e-10);
+        assert!((dt.max_rate - 0.0).abs() < 1e-10);
+    }
+
+    // ─── compare edge cases ───────────────────────────────────────────────
+
+    #[test]
+    fn compare_shrinking() {
+        let v0 = vec![10.0, 0.0];
+        let v1 = vec![0.0, 0.0];
+        assert_eq!(compare(&v0, 0, &v1, 1, 1.0), DeltaComparison::Shrinking);
+    }
+
+    #[test]
+    fn compare_oscillating() {
+        let v0 = vec![10.0, -10.0];
+        let v1 = vec![0.0, 0.0];
+        // magnitude > threshold, but sum of components is ~0 → Oscillating
+        let result = compare(&v0, 0, &v1, 1, 1.0);
+        assert_eq!(result, DeltaComparison::Oscillating);
+    }
 }
