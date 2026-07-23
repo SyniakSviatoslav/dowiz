@@ -673,6 +673,15 @@ pub mod stem;
 /// Tri maps to an RGB color; matrices of Tri values produce visual
 /// state bitmaps. Delta chains track system drift over time.
 pub mod trinary;
+/// Trigonometric phase-space primitives — cos/sin pairs replace booleans.
+/// Phase encoding on S¹, xyz 3D phase space, phase vectors with dot product.
+pub mod trig;
+/// Spectral wave propagation — states emit spectral fingerprints that
+/// propagate, interfere, and decay. InterferenceField = superposition.
+pub mod wave;
+/// Time navigation — timestamp-indexed snapshots, state history with
+/// integrity hashes, time-travel queries, delta between any two timestamps.
+pub mod chronos;
 /// P08 — typed metrics pure core: `/proc/self` sampling (CPU/mem) + a
 /// deterministic, serde-free, parse-or-reject text schema for typed metric
 /// records. NO egress / signing change; GPU is typed-absent (`Option`) until
