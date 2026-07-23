@@ -1,0 +1,653 @@
+============================================================================
+   DOWIZ SUBSYSTEMS AUDIT — Generated 2026-07-23
+   Project root: /root/dowiz
+============================================================================
+
+ TABLE OF CONTENTS
+   1. Engine         (15,525 lines,   40 source modules)
+   2. Kernel         (121,565 lines, ~155 source modules) — REFERENCE ONLY
+   3. Agent Lane     ( 5,374 lines,    4 crates)
+   4. Web            ( 6,131 lines,   36 source files)
+   5. Mesh Adapter   (   321 lines,    1 module)
+   6. WASM Bridges   ( 1,140 lines,    2 crates)
+   7. Courier App    ( 1,122 lines,    7 modules)
+    A. Dependency Graph (ascii art)
+    B. Test Matrix
+
+============================================================================
+1. ENGINE  (/root/dowiz/engine/src/)                               15,525 lines
+============================================================================
+
+  MODULE STRUCTURE (40 .rs files + 3 .wgsl shaders):
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ src/                                                             │
+  │ ├── lib.rs            (105 L)  — crate root, re-exports          │
+  │ ├── bridge.rs         (892 L)  — VertexBridge, GpuUploadSink,    │
+  │ │                                spectral module, geo module,      │
+  │ │                                GPU stub, RouteProgress          │
+  │ ├── field_frame.rs    (549 L)  — FieldFrame Laplacian timestepper │
+  │ ├── field_modal.rs    (137 L)  — modal decomposition glue         │
+  │ ├── field_energy.rs   (432 L)  — field energy dynamics            │
+  │ ├── engine_loop.rs    (545 L)  — main event loop (gossip,         │
+  │ │                                predictor, resilience)            │
+  │ ├── compose_ui.rs     (557 L)  — UI compositor                    │
+  │ ├── scene.rs          (309 L)  — SemanticScene, visual tree       │
+  │ ├── semantics.rs      (617 L)  — semantic node structures         │
+  │ ├── screens.rs        (477 L)  — screen/state management          │
+  │ ├── sdf.rs            (237 L)  — signed distance field primitives │
+  │ ├── friction.rs       (620 L)  — friction model / money law gate  │
+  │ ├── motion.rs         (177 L)  — motion/physics primitives        │
+  │ ├── approach.rs       (229 L)  — approach logic (geo path)        │
+  │ ├── checkout.rs       (231 L)  — checkout state machine            │
+  │ ├── clock.rs          (231 L)  — fixed-timestep accumulator       │
+  │ ├── loop_.rs          (167 L)  — inner loop dispatch              │
+  │ ├── intent.rs         (744 L)  — intent router                    │
+  │ ├── gpu_atomicity.rs  (333 L)  — GPU atomicity guarantees         │
+  │ ├── geo_map.rs        (434 L)  — geo visualisation                │
+  │ ├── route_cache.rs    (543 L)  — route/tile cache                 │
+  │ ├── oracle.rs         (387 L)  — oracle queries (courier EMA etc)│
+  │ ├── order_arc.rs      (368 L)  — order lifecycle arc              │
+  │ ├── vendor.rs         (806 L)  — vendor data model               │
+  │ ├── vendor_assets.rs  (342 L)  — vendor asset pipeline            │
+  │ ├── money_guard.rs    (137 L)  — money-law invariant guard        │
+  │ ├── cost.rs           ( 94 L)  — cost model                       │
+  │ ├── satellite.rs      (266 L)  — satellite overlay               │
+  │ ├── offline.rs        (577 L)  — offline capability               │
+  │ ├── onboarding.rs     (172 L)  — onboarding flow                   │
+  │ ├── widget_store.rs   (180 L)  — SoA DOD widget store              │
+  │ ├── zerocopy.rs       (320 L)  — zero-copy numeric bridge          │
+  │ ├── voice.rs          (723 L)  — voice/ASR contract               │
+  │ ├── hooks.rs          (207 L)  — engine hooks                      │
+  │ ├── mode.rs           (339 L)  — mode/state machine                │
+  │ ├── a11y_native.rs    (164 L)  — accessibility mirror              │
+  │ ├── ranker_academia.rs(195 L)  — academia ranker                   │
+  │ ├── environment.rs    (365 L)  — environment/config                │
+  │ ├── text_scope.rs     (160 L)  — text scope tracker                │
+  │ ├── text_input/               — text editing sub-module            │
+  │ │   ├── mod.rs         (29 L)                                      │
+  │ │   ├── field.rs     (1076 L)  — TextField (pure Rust, no deps)   │
+  │ │   └── cosmic_text.rs (65 L)  — cosmic-text shaping seam (gated) │
+  │ └── shaders/                   — WGSL shaders                      │
+  │     ├── glyph.wgsl                                              │
+  │     ├── map.wgsl                                                │
+  │     └── ui.wgsl                                                  │
+  └─────────────────────────────────────────────────────────────────┘
+
+  PHYSICS / GPU SURFACE:
+  - Laplacian field: `bridge.rs` (VertexBridge with `laplacian_spmv`),
+    `field_frame.rs` (timestepper), `field_modal.rs` (eigenmode decomposition),
+    `field_energy.rs` (field dynamics)
+  - Spectral: `bridge.rs::spectral` module (DriftClass classification)
+  - GPU: `bridge.rs::gpu` (HeadlessGpu stub, ERR until wgpu cached),
+    `gpu_atomicity.rs` (GPU memory-ordering proofs), 3 WGSL shaders
+  - Render: `compose_ui.rs`, `sdf.rs`, `scene.rs`, `screens.rs`, `semantics.rs`
+  - Particle: `bridge.rs::VertexBridge` (write_particle, SoA vertex view)
+
+  KERNEL PATH DEPENDENCIES (engine → dowiz_kernel):
+  - Cargo.toml: `dowiz-kernel = { path = "../kernel" }`
+  - Direct imports in 12 source files:
+    | File                 | Kernel modules used                              |
+    |----------------------|--------------------------------------------------|
+    | bridge.rs            | csr (Csr, LaplacianKind), spectral (DriftClass)  |
+    | field_frame.rs       | DT_STABLE (const)                                |
+    | field_modal.rs       | field_eigenmodes (NeumannGrid, modal_advance),   |
+    |                      | spectral_cache (Decomp)                          |
+    | engine_loop.rs       | gossip (GossipBus, GossipNode),                  |
+    |                      | predictor (Predictor), resilience                |
+    | checkout.rs          | domain (Order, OrderItem), money (Currency),     |
+    |                      | order_machine, vendor (VendorId)                 |
+    | approach.rs          | geo                                              |
+    | oracle.rs            | geo (CourierSpeedEma)                            |
+    | route_cache.rs       | geo (haversine_meters)                           |
+    | ranker_academia.rs   | academia (Academia)                              |
+    | compose_ui.rs        | (imports via bridge)                             |
+    | geo_map.rs           | (imports via bridge)                             |
+
+  TEST COUNT: 311 (#[test] occurrences in src/ + tests/)
+
+  Engine test files (5):
+    - tests/floor_parity.rs       — CPU-floor parity checks
+    - tests/loop_wires_intent_router.rs — loop→intent routing
+    - tests/p89_field_modal_wired.rs   — field modal wired test
+    - tests/pixel_verify.rs            — pixel-level rendering verify
+    - tests/shader_audit.rs            — WGSL shader compile gate (naga)
+
+  KEY TYPES:
+    - `VertexBridge`          — SoA vertex store, Laplacian field integrator
+    - `FieldFrame`            — fixed-timestep field accumulator
+    - `GpuUploadSink` (trait) — GPU upload seam
+    - `HeadlessGpu`           — GPU stub (Err until network grant)
+    - `FrameProfiler`         — frame telemetry
+    - `SemanticScene`         — serializable UI tree (A11y mirror)
+    - `TextField`             — text input editor (pure Rust, no deps)
+    - `RouteProgress`         — decoded courier tracking
+    - `CourierMarker`         — courier position/marker
+    - `MoneyGuard` / `TweenGuard` — money-law enforcement
+
+  PATTERNS / INVARIANTS:
+    - ZERO external crates in default build (offline-clean) — only `dowiz-kernel`
+      as a path dependency
+    - All optional features gated: `serde`, `gpu`(naga), `text`(cosmic-text),
+      `voice`, `a11y_native`, `telemetry`, `webgl`, `webgpu`, `splat`
+    - GPU is a display surface only; authoritative compute is CPU-side for
+      scalar==SIMD bit-identical reproducibility
+    - Deterministic timestepper in `clock.rs` (fixed-step accumulator)
+
+============================================================================
+2. KERNEL  (/root/dowiz/kernel/src/) — REFERENCE ONLY                 121,565 lines
+============================================================================
+
+  MODULE COUNT: ~155 .rs files
+  TEST COUNT: 2,355 (#[test] in src/) + 47 (#[test] in tests/) = ~2,402
+  Test files: 17 (tests/*.rs)
+
+  Highlighted modules (>1000 lines):
+    - academia_p2p.rs     5,224 L   (speculative, feature-gated)
+    - causal.rs           2,429 L   causal graph
+    - hub_provisioning.rs 1,954 L   hub provisioning
+    - hydra.rs            1,742 L   Hydra node
+    - spectral.rs         1,769 L   spectral graph algorithms
+    - csr.rs              1,615 L   compressed sparse row (Laplacian)
+    - ports/owner_surface.rs 1,680 L owner surface port
+    - ports/payment_provider.rs 1,504 L payment provider port
+    - orchestrator.rs     1,302 L   orchestrator
+    - order_machine.rs    1,318 L   order state machine
+    - predictor.rs        1,338 L   predictor
+    - evals.rs            1,389 L   evals
+    - hub_supervisor.rs   1,363 L   hub supervisor
+    - capability_cert.rs  1,729 L   capability certificates
+
+  ZERO external crates in default build (pure std, verified).
+  Feature-gated: wasm, json-api, pq, gpu, pgrust, chaos, ct-gate,
+    count-allocs, slot-arena, p67-adapters, telemetry, breaker-testkit,
+    pprof, speculative, optical
+
+============================================================================
+3. AGENT LANE  (4 crates, 5,374 lines total)                          5,374 lines
+============================================================================
+
+  ┌──────────────────────────────────────────────────────────────────┐
+  │                                                                    │
+  │   agent-loop ──→ agent-facade ──→ dowiz-kernel                    │
+  │        │              │                                            │
+  │        │              └──→ ureq (web-fetch, opt-in)               │
+  │        │                                                            │
+  │        └──→ llm-adapters ──→ dowiz-kernel (ports::llm, backup,    │
+  │                                 token_bucket)                       │
+  │                                                                    │
+  │   agent-adapters ──→ dowiz-kernel (for kernel port types)          │
+  │        │                                                            │
+  │        └──→ wasmtime (opt-in, wasmtime-fuel feature)              │
+  │                                                                    │
+  └──────────────────────────────────────────────────────────────────┘
+
+  3a. agent-facade  (/root/dowiz/agent-facade/)        324 lines, 1 module
+  ──────────────────────────────────────────────────────────────────────
+  Purpose: The ONLY crate in the agent lane that imports `dowiz_kernel`.
+  Re-exports the LLM + tool port surfaces. Owns concrete tools.
+
+  Type: lib (rlib)
+  Dependencies: dowiz-kernel (path), ureq (opt-in, web-fetch feature)
+
+  Key types:
+    - `OrderStatusSource` (trait)  — reads order status from kernel
+    - `FixtureOrders`              — in-memory test order source
+    - `ReadOrderStatusTool<S>`     — kernel-backed order status tool
+    - `WebFetchTool`               — HTTP fetch tool (behind web-fetch)
+    - Re-exports: `dowiz_kernel::ports::llm::*` types
+
+  Test count: 5 (#[test])
+
+  3b. agent-loop  (/root/dowiz/agent-loop/)            695 lines, 4 modules
+  ──────────────────────────────────────────────────────────────────────
+  Purpose: Bounded plan→act→observe executor over tool-calling LLM backend.
+  COMPILE FIREWALL: never imports `dowiz_kernel` directly.
+
+  Type: lib (rlib) + 2 bin (agent-loop, agent-loop-service)
+  Dependencies: agent-facade (path), llm-adapters (path)
+  Kernel dependency: NONE — CONFIRMED (grep returns 0 hits in src/)
+
+  Files:
+    - lib.rs        (273 L) — AgentLoop, LoopEventKind, LoopOutcome
+    - main.rs       (119 L) — CLI binary
+    - service.rs    (262 L) — HTTP service handler
+    - service_main.rs (41 L) — service binary entry point
+
+  Key types:
+    - `AgentLoop<'a>`           — main loop executor
+    - `LoopEventKind` (enum)    — event taxonomy
+    - `LoopOutcome` (enum)      — terminal outcomes
+    - `LoopLogEntry` (struct)   — per-event log
+
+  Test count: 8 (#[test])
+
+  3c. agent-adapters  (/root/dowiz/agent-adapters/)    1,686 lines, 8 modules
+  ──────────────────────────────────────────────────────────────────────
+  Purpose: AgentBridge adapters (MCP-server bridge, JSON-RPC 2.0, no tokio;
+  Wasmtime fuel behind feature). Manages tool dispatch, caching, transport.
+
+  Type: lib (rlib)
+  Dependencies: dowiz-kernel (path), serde, serde_json, wasmtime (opt-in)
+
+  Files:
+    - lib.rs       ( 41 L) — re-exports all submodules
+    - dispatch.rs  (479 L) — tool dispatch router
+    - mcp.rs       (256 L) — MCP JSON-RPC 2.0 protocol
+    - fuel.rs      (289 L) — fuel metering (wasmtime-fuel or in-crate)
+    - transport.rs (165 L) — transport abstraction
+    - quirks.rs    (178 L) — backend/model quirks
+    - cache.rs     (180 L) — tool response cache
+    - manifest.rs  ( 98 L) — tool manifest registry
+
+  Key types (re-exported submodules):
+    - `cache`  — tool response caching
+    - `dispatch` — tool dispatch router
+    - `fuel` — Wasmtime fuel meter (deterministic fallback if no wasmtime)
+    - `mcp` — MCP JSON-RPC 2.0 bridge
+    - `transport` — transport abstraction
+    - `quirks` — backend/model quirks handling
+    - `manifest` — tool manifest registry
+
+  Test count: 21 (#[test])
+
+  3d. llm-adapters  (/root/dowiz/llm-adapters/)        2,669 lines, 10 modules
+  ──────────────────────────────────────────────────────────────────────
+  Purpose: LlmBackend adapters (Ollama/vLLM/managed-API) — ureq-based,
+  no tokio. Caches responses using kernel backup store (sha3_256 keyed).
+
+  Type: lib (rlib)
+  Dependencies: dowiz-kernel (path), ureq, serde, serde_json,
+                bebop-model (opt-in, bebop feature)
+
+  Files:
+    - lib.rs        ( 33 L) — module re-exports
+    - compose.rs    (689 L) — prompt composition, tool-augmented messages
+    - dispatch.rs   (612 L) — backend dispatch, rate limiting (TokenBucket)
+    - cache.rs      (488 L) — LLM response cache (kernel BlockStore backend)
+    - transport.rs  (272 L) — HTTP transport (ureq)
+    - ollama.rs     (180 L) — Ollama backend adapter
+    - telemetry.rs  (141 L) — LLM telemetry/metrics
+    - bebop.rs      (103 L) — bebop-model adapter (opt-in)
+    - quirks.rs     ( 82 L) — backend quirks
+    - managed.rs    ( 69 L) — managed API backends (OpenAI/Anthropic etc.)
+
+  LLM Backend Adaptors:
+    1. Ollama    (ollama.rs, 180 L)     — local Ollama HTTP API
+    2. vLLM      (dispatch.rs)          — vLLM OpenAI-compatible endpoint
+    3. Managed   (managed.rs, 69 L)     — managed API surface
+
+  Key types:
+    - `LlmBackend` (trait, re-exported from kernel ports::llm)
+    - `LlmRouter`              — backend dispatch/routing
+    - `LlmCache`               — response cache with kernel BlockStore
+    - `OllamaBackend`          — Ollama-specific adapter
+    - `CachePolicy` (re-export)— response caching policy
+
+  Test count: 33 (#[test])
+
+  AGENT GOVERNANCE (WASM, admission, scope):
+  These primitives live in the kernel (`kernel/src/ports/agent/`):
+    - `admission.rs`    1,152 L  — agent admission gate
+    - `mod.rs`             149 L  — port module root
+    - `command_filter.rs` 179 L  — command filtering
+    - `sentinel.rs`       346 L  — sentinel/blocklist
+    - `scope.rs`          386 L  — tool scope enforcement
+    - `manifest.rs`       761 L  — capability manifest
+    - `cap.rs`            827 L  — capability verification
+    - `agent/loop.rs`     766 L  — kernel-side agent loop
+    - `agent/mod.rs`       35 L  — agent module root
+    - `agent/model_registry.rs` 143 L — model registry
+    - `agent/model_pair.rs`    372 L — model pair management
+  And `agent-governance-wasm` (see Section 6) bridges this to JS.
+
+  Agent-lane `agent-governance/` directory (TypeScript, non-crate):
+    - A separate directory at /root/dowiz/agent-governance/ (not a crate)
+
+============================================================================
+4. WEB  (/root/dowiz/web/)                                           6,131 lines
+============================================================================
+
+  STRUCTURE:
+  ┌──────────────────────────────────────────────────────────────────┐
+  │ web/                                                               │
+  │ ├── index.html                    — SPA entry point                │
+  │ ├── offline.html                  — offline bootstrap              │
+  │ ├── package.json                  — name: dowiz-field-ui           │
+  │ ├── serve.mjs                     — Node.js static server          │
+  │ ├── manifest.json                 — PWA manifest                   │
+  │ ├── sw.js                         — service worker                 │
+  │ ├── README.md, PLAN.md, SPEC.md   — design docs                   │
+  │ ├── public/                        │
+  │ │   └── icon-192.svg              — PWA icon                       │
+  │ └── src/                                                           │
+  │     ├── app.js      (1,306 L)     — main application (JS)          │
+  │     ├── app.mjs     (  455 L)     — app module                     │
+  │     ├── pages/                                                      │
+  │     │   ├── index.astro    (121 L)— Astro page                     │
+  │     │   └── fieldsim.astro ( 32 L)— field sim page                 │
+  │     ├── components/  (Svelte)                                      │
+  │     │   ├── Button.svelte       (29 L)                             │
+  │     │   ├── StatusBadge.svelte  (29 L)                             │
+  │     │   ├── FieldSim.svelte    (148 L)                             │
+  │     │   └── Storefront.svelte  (125 L)                             │
+  │     ├── styles/                                                     │
+  │     │   ├── base.css          (437 L)                              │
+  │     │   ├── tokens.css        (171 L)                              │
+  │     │   └── animations.css    (118 L)                              │
+  │     ├── lib/                                                        │
+  │     │   ├── compose/          — UI composition helpers              │
+  │     │   │   ├── compose.mjs    (152 L)                              │
+  │     │   │   ├── fragments.mjs  (119 L)                              │
+  │     │   │   └── journey.mjs     (51 L)                              │
+  │     │   ├── kernel/           — Kernel WASM glue                    │
+  │     │   │   ├── kernel_client.mjs (216 L) — WASM loader/binder      │
+  │     │   │   ├── contracts.mjs     (207 L) — kernel API contracts    │
+  │     │   │   └── kernel.test.mjs   (194 L) — kernel integration test │
+  │     │   ├── telemetry/        — observability                       │
+  │     │   │   ├── health.mjs     ( 55 L)                              │
+  │     │   │   ├── oracle.mjs    (104 L)                              │
+  │     │   │   ├── vitals.mjs     ( 72 L)                              │
+  │     │   │   ├── markov.mjs     ( 51 L)                              │
+  │     │   │   └── telegram.mjs   ( 45 L)                              │
+  │     │   ├── physics/                                                  │
+  │     │   │   └── wave.js       (140 L) — wave rendering             │
+  │     │   ├── audio/                                                     │
+  │     │   │   ├── interface.js   ( 73 L)                              │
+  │     │   │   ├── sonify.mjs     ( 68 L)                              │
+  │     │   │   └── sonify.test.mjs( 36 L)                              │
+  │     │   ├── fieldsim/                                                │
+  │     │   │   ├── buffer.mjs    (159 L) — GPU buffer management       │
+  │     │   │   ├── shader.mjs     ( 75 L) — shader compiler            │
+  │     │   │   ├── shader.wgsl           — WGSL compute shader          │
+  │     │   │   └── neural.wgsl           — neural WGSL shader           │
+  │     │   ├── vendor/                                                   │
+  │     │   │   └── dubin_sushi_menu.mjs (664 L) — vendor data          │
+  │     │   └── utils.mjs         ( 39 L)                               │
+  │     ├── render/              — rendering test harness                │
+  │     │   ├── fieldsim.smoke.mjs ( 92 L)                              │
+  │     │   ├── compose.smoke.mjs  ( 52 L)                              │
+  │     │   └── stageA.accept.mjs (203 L)                              │
+  │     ├── app.test.mjs         ( 44 L)                                │
+  │     ├── dom.render.test.mjs  (214 L)                               │
+  │     └── utils.test.mjs       ( 35 L)                                │
+  └──────────────────────────────────────────────────────────────────┘
+
+  RENDERING APPROACH:
+  - "Kernel-driven field UI — all geo/spectral/FSM math computed in the Rust
+    dowiz-kernel wasm. This shell only renders." (from package.json)
+  - Astro (static/server pages) + Svelte (interactive components)
+  - WGSL compute shaders for field simulation (lib/fieldsim/)
+  - No npm dependencies (NO package.json deps/dependencies field)
+  - Service worker for offline PWA boot
+
+  KERNEL WASM CONSUMPTION:
+  - `kernel_client.mjs` contains a hand-maintained, self-contained WASM runtime
+    that loads kernel wasm bytes via `WebAssembly.instantiate()`
+  - No npm deps; no `import 'wbg'`; no generated wasm-bindgen loader
+  - Re-synced against wasm-bindgen 0.2.126 output (import module key
+    `./dowiz_kernel_bg.js` instead of old `wbg`)
+  - Entry point: `bindKernel(bytes)` → returns wasm instance
+  - Public kernel functions called: WASM exports from `dowiz-kernel` (built as cdylib)
+
+  TEST INFRASTRUCTURE:
+  - Test scripts in package.json:
+    - `test`        — `node src/lib/kernel/kernel.test.mjs`
+    - `test:dom`    — `node src/dom.render.test.mjs`
+    - `test:sonify` — `node src/lib/audio/sonify.test.mjs`
+  - No Vitest/Jest/Playwright — pure Node.js test scripts
+  - 7 test files: kernel.test.mjs, dom.render.test.mjs, sonify.test.mjs,
+    app.test.mjs, utils.test.mjs, fieldsim.smoke.mjs, compose.smoke.mjs
+
+============================================================================
+5. MESH ADAPTER  (/root/dowiz/mesh-adapter/)                          321 lines
+============================================================================
+
+  MODULE: single-file crate (src/lib.rs, 321 lines)
+
+  Type: lib (rlib)
+  Dependencies:
+    - dowiz-kernel (path, default-features = false, features = ["std"])
+    - bebop-delivery-domain (path, features = ["kernel-rlib"])
+    - bebop-proto-cap (path)
+
+  HOW BEBOP2 PROTOCOL IS WIRED:
+  - Imports `bebop_delivery_domain::intake` (IntakeEdge, to_order_status)
+  - Imports `bebop_delivery_domain::DeliveryStatus` as WireStatus
+  - Imports `bebop_proto_cap::claim_machine::ClaimStatus`
+  - Imports `bebop_proto_cap::event_dict::{DeliveryStatus as VocabStatus, ...}`
+  - `vocab_to_wire()` converts proto-cap vocabulary status to wire format
+  - `MeshHost` is the node-local state machine driving the delivery spine
+    from dowiz's own kernel. It applies delivery events (scope + payload),
+    tracking order status, claim status, and ledger balance per wire ID.
+  - Exports `dowiz_kernel`-compatible order/status/ledger queries
+  - The host routes events: WIRE + LAW + MONEY gates pass BEFORE hitting
+    `apply_delivery_event`
+
+  PQ CRYPTO INTEGRATION:
+  - Uses `bebop_proto_cap::scope::{Action, Resource, Scope}` for event scoping
+  - Uses `bebop_proto_cap::claim_machine::fold_transitions` for claim lifecycle
+  - Constructs `bebop_proto_cap::event_dict::ClaimPayload` for claim events
+  - The kernel's `pq` module (ML-DSA/ML-KEM/X25519) is the underlying crypto
+    building block for signed delivery chains — mesh-adapter does not import
+    kernel::pq directly; it consumes it through bebop2's higher-level abstractions
+  - PQ primitives in kernel (feature-gated): pq/dsa.rs (1,337 L), pq/kem.rs (727 L),
+    pq/x25519.rs (63 L), pq/hybrid.rs (179 L), pq/keccak.rs (415 L),
+    pq/fractal.rs (124 L), pq/root_delegation.rs (192 L),
+    pq/codesign.rs (239 L), pq/envelope.rs (140 L), pq/entropy.rs (181 L),
+    pq/volume.rs (386 L)
+
+  KEY TYPES:
+    - `MeshHost`             — node-local delivery-spine driver
+    - `HostFault` (enum)     — error taxonomy
+    - `scope_for()`          — scope factory from Action
+    - `vocab_to_wire()`      — vocabulary→wire status conversion
+
+  Test count: 27 (#[test])
+  Test files: 0 separate test files (all tests inline in lib.rs)
+
+============================================================================
+6. WASM BRIDGES  (2 crates, 1,140 lines total)                       1,140 lines
+============================================================================
+
+  6a. wasm  (/root/dowiz/wasm/)                         754 lines, 1 module
+  ──────────────────────────────────────────────────────────────────────
+  Purpose: Physics-render wasm bridge — exposes engine field_frame.compose
+  RGBA + VertexBridge graph-Laplacian field to JS via wasm-bindgen.
+  "Zero TS math" — all field math computed in Rust.
+
+  Type: lib (cdylib + rlib)
+  Dependencies: wasm-bindgen (=0.2.95), dowiz-engine (serde feature),
+                dowiz-kernel (path), serde, serde_json
+
+  15 wasm_bindgen exports:
+    Function                             Description
+    ──────────────────────────────────────────────────────────────────
+    compose_field(circles,w,h,steps)→Vec<u8>  Field composition RGBA
+    vertex_field(count,edges)→Vec<f32>        Vertex/graph field
+    knowledge_map(docs_json)→String           Knowledge map from JSON docs
+    lookup_tag(tag,docs_json)→Vec<String>     Tag lookup
+    related_docs(id,docs_json)→Vec<String>    Related document search
+    text_new_js(field_id)→u32                New text field handle
+    text_apply_js(handle,cmd_json)→String    Apply edit command to text field
+    text_value_js(handle)→String             Get text field value
+    text_caret_js(handle)→String             Get text field caret position
+    text_glyph_runs_ptr(handle)→*const f32   Raw glyph run pointer (WASM memory)
+    text_glyph_runs_len(handle)→usize        Glyph run count
+    a11y_build_mirror(scene_json)→String     Accessibility tree JSON
+    a11y_role_aria_token(role)→String        ARIA role token translation
+
+  WASM features: default=[], text (for glyph runs, gated by engine `text` feature)
+
+  Test count: 15 (#[test])
+
+  6b. agent-governance-wasm  (/root/dowiz/agent-governance-wasm/)     386 lines, 1 module
+  ──────────────────────────────────────────────────────────────────────
+  Purpose: Phase-1 WASM binding — thin Rust/WASM host around bebop2-core
+  kernels, replacing deleted agent-governance TypeScript.
+
+  Type: lib (cdylib + rlib)
+  Dependencies: bebop2-core (path), wasm-bindgen (0.2)
+  Dev-dep: dowiz-kernel (path) — for A3 eigensolver parity cross-check
+
+  6 wasm_bindgen exports:
+    - `resonate(field, coeff) -> Vec<f64>`        — resonance computation
+    - `spectral_radius(a, n) -> f64`              — spectral radius
+    - `geodesic(a, b) -> f64`                     — geodesic distance
+    - `entropy(b) -> f64`                         — entropy
+    - `ledger_step(prev_hash, entry) -> Vec<u8>`  — ledger step hash
+
+  Test count: 11 (#[test])
+  Size/import count: 6 wasm_bindgen exports; imports from `dowiz_kernel`
+  (dev-only, for eigensolver parity test); imports from `bebop2_core` (path dep)
+
+============================================================================
+7. COURIER APP  (/root/dowiz/apps/courier/)                          1,122 lines
+============================================================================
+
+  STRUCTURE:
+  ┌──────────────────────────────────────────────────────────────────┐
+  │ apps/courier/                                                      │
+  │ ├── Cargo.toml              (26 L) — dowiz-courier, AGPL-3.0      │
+  │ ├── ZERO-DEP-ALLOWLIST.txt                                        │
+  │ └── src/                                                           │
+  │     ├── lib.rs              ( 38 L) — crate root, re-exports       │
+  │     ├── types.rs            (153 L) — shared contract types +      │
+  │     │                                spec §2 constants              │
+  │     ├── dispatch.rs         (190 L) — LOCAL MIRROR of P65 dispatch │
+  │     │                                events, DOES NOT import bebop2│
+  │     ├── surface.rs          (141 L) — CourierSurface state machine │
+  │     │                                (R2: offer mutator)            │
+  │     ├── voice.rs            (184 L) — P64 voice binding (R3)       │
+  │     ├── render.rs           (252 L) — P38a CPU-floor K-screen      │
+  │     │                                composition + P58 a11y mirror  │
+  │     └── battery.rs          (138 L) — P63 SP-5 battery gate (R5),  │
+  │                                      #[ignore] until SP-5 lands     │
+  └──────────────────────────────────────────────────────────────────┘
+
+  Type: lib (rlib)
+  Dependencies: dowiz-engine (path, default features — NO wgpu/serde)
+
+  Key types (re-exported via lib.rs):
+    - `types`     — CourierOffer, CourierTask, CourierStatus, etc.
+    - `dispatch`  — DispatchEvent, DispatchInput, DispatchSession mirrors
+    - `surface`   — CourierSurface state machine
+    - `voice`     — VoiceProfile, input_profile_for, offer_urgency
+    - `render`    — K1-K8 screen composition, floor-parity hook
+    - `battery`   — BatteryGate (ignored pending SP-5)
+
+  Notes:
+    - "Rust only. No DOM, no webview, no JS." (TS/NODE BAN)
+    - Consumes kernel-side folds / P65 dispatch events / P51 track frames /
+      P64 voice contract as *wire frames*, re-owns NONE of their logic
+    - Full-wgpu realization rides engine's `gpu`/`webgl` features
+    - Target directory exists with built artifacts (libdowiz_courier.rlib)
+      confirming compilation
+
+  Test count: 0 (#[test] — no tests defined yet)
+
+============================================================================
+A. DEPENDENCY GRAPH  (path dependencies only)
+============================================================================
+
+  ┌─────────────────────────────────────────────────────────────────────────┐
+  │                                                                          │
+  │  wasm ──────────────┐                                                    │
+  │   │                  │                                                   │
+  │   ├──→ dowiz-engine ─┼──→ dowiz-kernel                                   │
+  │   │       │          │        ▲                                          │
+  │   │       │          │        │                                          │
+  │   │       │          │    agent-facade ──→ agent-loop (firewall: NO     │
+  │   │       │          │                         direct kernel import)    │
+  │   │       │          │        │                    │                     │
+  │   │       │          │        │              llm-adapters ──→ kernel     │
+  │   │       │          │                                                  │
+  │   │  apps/courier ───┘      agent-adapters ──────────→ kernel            │
+  │   │                                                                      │
+  │   │  mesh-adapter ──────────→ kernel + bebop2 delivery-domain            │
+  │   │                                                                      │
+  │   │  agent-governance-wasm ──→ bebop2-core (dev-dep: kernel)             │
+  │                                                                          │
+  │  web ──→ [WASM loader] → kernel.wasm (cdylib, at runtime, not Cargo)    │
+  │                                                                          │
+  └─────────────────────────────────────────────────────────────────────────┘
+
+  Kernel depenency fan-in (crates that depend on dowiz-kernel):
+    1. engine              (path dep)
+    2. wasm                (path dep, via engine + direct)
+    3. agent-facade        (path dep)
+    4. llm-adapters        (path dep)
+    5. agent-adapters      (path dep)
+    6. mesh-adapter        (path dep)
+    7. agent-governance-wasm (dev-dep only)
+
+  Compile firewall confirmed:
+    - agent-loop: `grep dowiz_kernel` in src/ returns EXIT 1 (no matches)
+    - agent-loop Cargo.toml: `dowiz-kernel` only appears in comments (firewall
+      test description), NOT in [dependencies]
+
+============================================================================
+B. TEST MATRIX  (by subsystem)
+============================================================================
+
+  Subsystem               #[test] count   Source pattern
+  ─────────────────────────────────────────────────────────────────
+  kernel                    2,355+47       inline tests in 214 src files
+                                             + 17 test files in tests/
+  engine                      311           inline + 5 test files
+  llm-adapters                 33           inline + 1 test file (tests/*)
+  mesh-adapter                 27           inline (no separate test files)
+  agent-adapters               21           inline + 1 test file (tests/*)
+  wasm                         15           inline (no separate test files)
+  agent-governance-wasm        11           inline (no separate test files)
+  agent-loop                    8           inline (no separate test files)
+  agent-facade                  5           inline (no separate test files)
+  web                          ~7           standalone Node.js test scripts
+  courier                       0           none defined yet
+
+  TOTAL (Rust):            ~2,833
+
+============================================================================
+C. PATTERNS / INVARIANTS / IDEMPOTENCY NOTES
+============================================================================
+
+  1. ZERO-DEP DISCIPLINE: Both kernel and engine have verified zero-external-
+     crate default builds (`cargo tree -e no-dev` confirms). All external
+     crates are behind feature flags (serde, gpu, text, etc.), keeping default
+     build offline-clean.
+
+  2. COMPILE FIREWALL: agent-loop must never import kernel. Enforced by:
+     (a) source grep in adversarial test, (b) Cargo.toml grep in CI.
+     Confirmed clean.
+
+  3. CPU FLOOR IS AUTHORITATIVE: GPU is a display surface only. Authoritative
+     compute is CPU-side so scalar==SIMD is bit-identical across platforms.
+     Engine's `field_frame`, `clock`, `sdf` are pure CPU.
+
+  4. FEATURE-GATING DISCIPLINE: Every external dependency feature follows the
+     same pattern: declare the feature, gate the module behind
+     `#[cfg(feature = "...")]`, stub returns Err if feature absent. Applied
+     consistently across kernel, engine, agent-adapters, llm-adapters.
+
+  5. NO TOKIO IN DEFAULT BUILD: llm-adapters uses ureq (sync) for HTTP,
+     agent-adapters uses no tokio, kernel uses tokio only behind `pgrust`
+     feature. All default builds are sync/std-only.
+
+  6. WASM SURFACE PATTERN: Both wasm crates use `cdylib + rlib` crate-type,
+     allowing native `cargo test` and WASM `cargo build --target wasm32`.
+
+  7. COURIER IS PURE CONSUMER: apps/courier re-owns none of kernel/engine
+     logic. It consumes wire frames and mirrors P65 dispatch events locally.
+
+  8. NO WORKSPACE: All crates are standalone (sibling to kernel/), NOT
+     workspace members. Each has its own Cargo.lock.
+
+  9. RUNTIME WASM BINDING: web/ manually re-implements wasm-bindgen's glue
+     layer in `kernel_client.mjs` (no generated bindings in the repo), synced
+     against wasm-bindgen 0.2.126 output conventions.
+
+ 10. RUST-ONLY SURFACES: Both courier and engine are explicit: "No DOM, no
+     webview, no JS" / "no TS/JS runtime deps." TS/JS is the legacy oracle.
+
+============================================================================
+END OF REPORT
+============================================================================

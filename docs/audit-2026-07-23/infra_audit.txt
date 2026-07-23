@@ -1,0 +1,701 @@
+================================================================================
+  DOWIZ INFRASTRUCTURE AUDIT — 2026-07-23
+================================================================================
+
+================================================================================
+1. TOOLS (/root/dowiz/tools/)
+================================================================================
+
+1.1  EQC-RS (equation -> Rust compiler) — 1846 LoC
+  Path:         /root/dowiz/tools/eqc-rs/
+  Description:  Pure-Rust zero-dep rewrite of tools/eqc/eqc.py. ONE source-of-truth
+                math expression -> committed, hand-inspectable Rust.
+  Files:
+    src/lib.rs              (1362 lines) — core compiler
+    src/cordic.rs           (125 lines)  — CORDIC digest implementation
+    src/bin/demo.rs         — CLI demo binary
+    src/bin/gen_kernel_organs.rs — kernel organ generation
+    src/bin/cordic_probe.rs — CORDIC probe binary
+    tests/proof.rs          (296 lines)  — proof tests
+    tests/cordic_digest.rs  (63 lines)   — CORDIC digest tests
+  Tests:  2 test files, integrated into eqc-rs crate
+  Deps:   ZERO (pure Rust, zero dependencies)
+
+1.2  EQC (Python, legacy/retired) — 316 LoC
+  Path:         /root/dowiz/tools/eqc/
+  Files:        eqc.py (193 lines), demo.py (25 lines), test_eqc.py (98 lines)
+  Status:       RETIRED in favor of eqc-rs Rust rewrite
+
+1.3  CI-TRUTH (native CI re-execution verifier) — 2411 LoC
+  Path:         /root/dowiz/tools/ci-truth/
+  Description:  Native Rust CI truth-floor (zero-dep, pure std). Replaces bash-as-logic
+                scripts. Three subcommands:
+    claim-latency:     V5-B claim-latency ledger appender. Appends JSONL entries per
+                       new commit (sha, authored_ts, green_ts, delta_s, diff_loc).
+                       Idempotent.
+    claim-latency-check: P08 §4 anomaly detector. Flags implausibly-fast GREEN claims
+                         (falsifiable minimum-plausible verification time).
+    v5c-reexec:        V5-C independent re-execution verifier. When diff touches
+                       money.rs/order_machine.rs/event_log.rs/auth/otp/jwt, it re-runs
+                       kernel + engine tests in a clean independent git worktree.
+    v1-verify:         BLUEPRINT-P06 §5 merge-gate evaluator. Fetches refs/notes for
+                       v1-diff-attest and v1-verdict, validates policy.
+    v1-probe:          P06 real-signature self-test.
+  Files:        src/main.rs (859 lines), src/v1.rs (1552 lines)
+  Deps:         ZERO (pure std)
+  Tests:        18 unit tests embedded in main.rs (numstat, redline, count parsing,
+                JSON parsing, anomaly math, ledger parsing)
+
+1.4  NATIVE-SPA-SERVER (kernel json-api server) — 2764 LoC
+  Path:         /root/dowiz/tools/native-spa-server/
+  Description:  DK-04 native-Rust static SPA server (axum). Replaces the nginx container.
+                Serves static SPA directory over HTTP/1.1 (or HTTP/2 with TLS).
+                ZERO-OCI runtime artifact (final stage = scratch).
+  Files:
+    src/main.rs     (150 lines)  — CLI entrypoint (clap), TLS config
+    src/lib.rs      (282 lines)  — router builder, SPA fallback, security headers
+    src/api.rs      (769 lines)  — API routes, agent routing, capability-frame codec
+    src/webhook.rs  (111 lines)  — Telegram webhook verification
+    tests/agent_route.rs        (312 lines)  — agent routing tests
+    tests/integration.rs        (1012 lines) — integration tests
+    tests/money_law_firewall_grep.rs (128 lines) — money-law firewall tests
+  Deps:         axum, serde, base64, sha2, dowiz-kernel (json-api), tower-http,
+                tokio, rustls-pemfile, tokio-rustls, hyper-util, flate2, clap,
+                intake-adapters
+  Tests:        3 test files, RED-locked behavior (SPA fallback, cache headers,
+                security headers, compression)
+
+1.5  TELEMETRY (bash bridge + Rust subsystems) — 5 Rust crates + 4 bash scripts
+  Path:         /root/dowiz/tools/telemetry/
+
+  Rust Crates:
+    native-ser/       — Native serialization for telemetry protocol
+    native-trackers/  — Native metric trackers
+    rust-spool/       — Rust async spool backend
+    swarm-proof/      — Swarm proof verification
+    topics/           — Telemetry topic routing
+    hetzner-exporter/ — Hetzner infrastructure metrics exporter
+
+  Bash Bridge (704 total lines):
+    lib.sh              (270 lines) — Core telemetry library
+    governance.sh       (371 lines) — Governance telemetry
+    report.sh           (19 lines)  — Report generation
+    selftest-telemetry.sh (32 lines) — Self-test harness
+    topics.sh           (12 lines)  — Topic management
+    test_ser.py         — Python serialization tests
+
+  Architecture:  Bash scripts act as the bridge layer, calling into Rust binaries
+                 compiled from the 5 crates. Topics are routed through a hierarchical
+                 spool -> native-ser -> trackers pipeline. Swarm-proof verifies
+                 distributed proofs.
+
+  CI job:        "telemetry bridge self-test" runs selftest locally + Markov health
+                 signal smoke test.
+
+1.6  OTHER TOOLS
+
+  Missing (no longer exist):
+    bench_track.py       — NOT FOUND (may have been removed)
+    metrics.py           — NOT FOUND (may have been removed)
+    hydra_metrics_sender.sh — NOT FOUND (may have been removed)
+
+  Present Tools:
+    academia_bot.sh       (5384 lines) — Autonomous AI research bot
+    academia_worker.js    (2105 lines) — Cloudflare Worker for academia
+    academia_matrix_v1.bin (4.3MB)    — Research matrix data
+    upload_academia.py    (2895 lines) — Upload to academia platform
+    research-extract.sh   (4961 lines) — Research extraction pipeline
+    research-recursive.sh (12815 lines)— Recursive research crawler
+    health-gate.mjs       (5957 lines) — Health check gate
+    health-gate.test.mjs  (2753 lines) — Health gate tests
+    kernel-check.sh       (953 bytes)  — Kernel health check
+    verify-scope.sh       (1709 bytes) — Scope verification
+
+  Subdirectories (Rust crates):
+    deep-clean/       — Disk cleanup utility crate
+    async-spool/      — Async spool crate
+    nfc-pod-codec/    — NFC pod codec
+    nfc-pod-flipper/  — NFC pod flipper
+    ops-alert/        — Operations alerting crate
+    shell-spike/       — Shell spike testing
+    skillspector-rs/  — Rust skillspector bridge
+    skillspector/     — Python skillspector (langgraph-based agent skill analysis)
+    loop-signals/     — Markov attractor signals analysis + transcript events
+    eslint-plugin-local/ — Local ESLint plugin
+
+  Cloudflare:
+    wrangler.toml     — Cloudflare Workers config (academia_worker.js)
+    .wrangler/        — Wrangler state directory
+
+================================================================================
+2. CONFIG & DEPLOY
+================================================================================
+
+2.1  DEPLOYMENT TOPOLOGY
+
+  Runtime Stack:
+    ┌─────────────────────────────────┐
+    │  native-spa-server (axum/Rust)  │  ← DK-04: replaces nginx container
+    │  Port 8080, optional TLS/HTTP2  │
+    ├─────────────────────────────────┤
+    │  pgrust (native, systemd)       │  ← DK-05: replaces Docker postgres
+    │  Port 5432, RLS cross-tenant    │
+    ├─────────────────────────────────┤
+    │  Static SPA dist (/var/www)     │
+    └─────────────────────────────────┘
+
+  Key architecture principle: ZERO-OCI (DK-08). The runtime artifact is a single
+  static Rust binary on scratch. No container runtime (nginx, postgres containers
+  removed). pgrust runs as a native systemd-managed process.
+
+  systemd Units:
+    pgrust.service                 — Native pgrust process
+    native-spa-server.service      — Native SPA static server
+    deep-clean.service             — Disk cleanup
+    deep-clean.timer               — Periodic cleanup timer
+    deep-clean-audit.service       — Audit cleanup
+    deep-clean-audit.timer         — Periodic audit timer
+
+  Deploy Scripts:
+    deploy-symlink.sh   — Atomic release via symlink swap (one rename() syscall)
+    rollback.sh         — One-command rollback over SSH from a phone
+    check-no-docker.sh  — RED gate: asserts no container runtime in pgrust ExecStart
+
+2.2  ENVIRONMENT CONFIGS
+
+  .env               (4054 bytes) — Production secrets (locked down)
+  .env.example       (1312 bytes) — Template with 16 vars:
+    NODE_ENV, PORT, APP_BASE_URL, DATABASE_URL_OPERATIONAL,
+    DATABASE_URL_SESSION, DATABASE_URL_MIGRATIONS, REDIS_URL,
+    JWT_PRIVATE_KEY, JWT_PUBLIC_KEY, JWT_KID, GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET, TELEGRAM_BOT_TOKEN, TELEGRAM_BOT_SECRET,
+    TELEGRAM_BOT_USERNAME, WHATSAPP_ENABLED, WHATSAPP_AUTH_DIR,
+    IP_HASH_SALT
+  .env.test          (2679 bytes) — Test environment config
+  .env.localtest     (462 bytes)  — Local E2E test config (DB + Redis + auth)
+
+2.3  DOCKER / CONTAINER
+
+  Dockerfile (3035 bytes):
+    3-stage build:
+      Stage 1 (spa-builder):    node:22-slim — pnpm SPA build
+      Stage 2 (server-builder): rust:1 — compile native-spa-server
+      Stage 3 (DK-08 final):    scratch — binary + dist + CA certs ONLY
+    Key: ZERO-OCI runtime, no nginx base image.
+
+  docker-compose.dev.yml:
+    Services: ollama (local LLM, port 11434), libretranslate (port 5000)
+    Dev-only; NOT used in production (production is binary-only).
+
+  docker/nginx-default.conf:
+    LEGACY. nginx config that native-spa-server replaced. Preserved for reference.
+    SPA fallback, immutable /assets/ cache, security headers (nosniff, DENY frame).
+
+  docker/mkosi-rootfs.sh:
+    DK-08 rootfs builder. Builds a minimal HOST ROOTFS (not OCI app image) that
+    boots native-spa-server directly.
+
+  pgrust configs:
+    pgrust.toml — listen 127.0.0.1:5432, data_dir /var/lib/pgrust,
+                  RLS cross_tenant="deny" (CRITICAL: must never be "allow")
+    pgrust.env  — environment variables for systemd unit (no secrets committed)
+
+2.4  CLOUDFLARE / EDGE
+
+  wrangler.toml:
+    name = "dowiz"
+    pages_build_output_dir = "web"
+    Production pattern: "dowiz.org/*"
+    Preview pattern:    "preview.dowiz.org/*"
+
+2.5  CI PIPELINE (.github/workflows/ci.yml — 645 lines)
+
+  Triggers: push (main/*) + scheduled (daily for claim-latency check)
+
+  Jobs (21 total):
+    1. web-syntax           — JS + CSS syntax check
+    2. telemetry-selftest   — Telemetry bridge self-test (local, no secrets)
+    3. eqc-proofs           — Run eqc-rs cargo test (math proof verification)
+    4. claim-latency-ledger — V5-B appender, publishes JSONL artifact
+    5. v5c-reexec          — Independent re-execution in clean worktree (RED/GREEN/SKIP)
+    6. cargo-test           — Kernel + engine test suites (per-crate, offline)
+    7. bench-regression     — Kernel criterion benches + A/B regression gate
+    8. gitleaks             — Secret scan (history + working tree)
+    9. dco-check            — DCO sign-off check
+   10. supply-chain         — cargo audit + cargo deny + zero-OCI check
+   11. zero-dep-gate        — Per-crate zero-dependency gate (items 1+13+31)
+   12. decart-dep-lint      — Decart dependency lint
+   13. no-courier-scoring   — E58 no-courier-scoring check
+   14. no-pub-raw-matrix-hash — Spectral invariant grep gate (P-B §5)
+   15. fence-check          — Security fences (P45-W0 §4b.2)
+   16. regression-digest    — Regression digest drift (P45-W0 §4c.2)
+   17. firewall-agent-loop  — Agent-loop kernel firewall (P40)
+   18. mesh-adapter         — dowiz<->bebop wiring gate (P34)
+   19. toolchain-bump-gate  — Toolchain bump spot-check gate
+   20. hardening-gate       — Hardening checklist re-execution gate (item 6)
+   21. (additional)         — Various gates run on schedule
+
+================================================================================
+3. SCRIPTS (/root/dowiz/scripts/)
+================================================================================
+
+3.1  VERIFICATION SCRIPTS
+
+  verify-kernel-engine.sh    — Verified-by-Math regression gate. Fails closed on ANY
+                               test/build regression in kernel/engine crates.
+  verify-all.ts              — Composite pre-deploy verification: env -> db -> rls ->
+                               secrets -> lint -> typecheck -> migrations -> launch
+  verify-secrets.ts          — Verify secret completeness
+  verify-migrations.ts       — Check migration ordering, detect out-of-sequence files
+  verify-launch.ts           — Load env, verify app startup
+  verify-n2.ts               — Complex verification (DB + HTTP)
+  verify-stage9.ts           — Stage 9 verification (spawn-based)
+  verify-stage10.ts          — Stage 10 verification (spawn-based)
+  verify-connection-lifecycle.ts — Verify connection lifecycle
+  verify-courier-pins.mjs    — Dashboard live map pin verification
+  verify-pa-wave1.sh         — Re-run each P-A Wave-1 agent acceptance gate
+  verify-item-74.sh          — Item 74 acceptance harness
+
+3.2  GATE SCRIPTS (CI enforcement)
+
+  lint-gate.sh               — Per-crate clippy + rustfmt gate (item 53)
+  hardening-gate.sh          — Kernel hardening checklist CI enforcement (item 6)
+  miri-gate.sh               — Miri UB-interpreter CI gate (item 52)
+  kani-gate.sh               — Kani bounded-model-checker gate (item 7)
+  zero-dep-gate.sh           — Zero-dependency gate (items 1+13+31)
+  gate-root-invariant.sh     — Gate-Root Invariant CI leg (item 73)
+  ai-optional-gate.sh        — AI-optional gate (item 45)
+  compliance-gate.sh         — Compliance CI gate (P50 pre-commit)
+  decart-dep-lint.sh         — Decart dependency lint (P01 §2.5)
+  red-line-classifier.sh     — Red-line classifier (item 74)
+  red-line-monotonicity.sh   — Red-line monotonicity guard (item 74)
+  check-zero-oci.sh          — DK-08 supply-chain zero-OCI gate
+  build-kernel-wasm.sh       — Assemble kernel WASM surface for web frontend
+
+3.3  OPERATIONS SCRIPTS
+
+  backup-verify.ts           — Backup verification CLI
+  backup-list.ts             — List recent backups
+  backup-restore.ts          — Dry-run + full restore
+  backup-drill.ts            — Full backup DR drill
+  bootstrap-pgboss.ts        — Pre-create pg-boss tables
+  free-tier-watch.ts         — Free-tier usage monitoring
+  analyze-bottlenecks.py     — Repeat + time-bottleneck analysis from git history
+  run_academia_seed.sh       — Continuous academic seed server
+  start-local-llm.sh         — Start Ollama for local LLM (P103 model-pair supervisor)
+
+3.4  E2E / QA SCRIPTS
+
+  live-multi-courier-check.mjs — Live multi-courier real-time check
+  test-promo-create.js         — Promo creation test
+  check-auth-schema.js         — Auth schema check in server bundle
+  check-jwt.js                 — JWT fetch test
+  check-route.js               — Route existence check
+  openrouter-implement.ts      — OpenRouter implementation bridge
+  compliance-gate.ts           — Compliance/privacy invariant enforcement
+
+3.5  AUTOMATION
+
+  tier1-run.sh              — Tier 1 automation runner
+  tier2-overnight.sh        — Tier 2 overnight automation
+  prompts/sweeps/ts-ignore-to-expect-error.md — Code quality sweep
+  prompts/weekly-recap.md   — Weekly recap
+  prompts/ops-watch.md      — Operations watch
+
+================================================================================
+4. TESTING INFRASTRUCTURE
+================================================================================
+
+4.1  PLAYWRIGHT E2E TESTS — 139 spec files
+  Location:     /root/dowiz/e2e/tests/
+  Categories:
+    Admin:        dashboard, full-coverage, menu-manager, orders, promotions, supplies
+    Client:       cart, checkout, menu, order-stepper, status, status-live,
+                  modifier-display-type, venue-state, client-checkout-happy-path
+    Courier:      full-coverage, offer-timer, tasks
+    Flow:         30+ spec files covering UI flows (admin, client, courier, onboarding,
+                  order lifecycle, geo tracking, checkout, etc.)
+    Visual:       client-path, courier-path, owner-path (visual comparison)
+    Misc:         api-real, audit-fixes, behavioural-invariants, deploy-validation,
+                  driver-smoke, embed-mode, error-handling, maps, media-render,
+                  mobile-polish, notifications, onboarding, polish, seed, smoke,
+                  telegram, ui-improvements, ws-courier-assignment, etc.
+
+  Playwright Configs:
+    /root/dowiz/e2e/lifecycle-e2e/playwright.config.ts  — Lifecycle E2E config
+    /root/dowiz/.claude/agents/playwright-*.md            — Agent helpers
+
+4.2  LIFE-CYCLE E2E (critical path) — 317 LoC
+    auth.setup.ts, critical-lifecycle.spec.ts, playwright.config.ts
+    Support files: env.ts, helpers.ts, selectors.ts
+
+4.3  QA STAGING — 846 LoC across 10 files
+    01-storefront-checkout.mjs, 02-admin.mjs, 03-courier-crosscut.mjs
+    _harness.mjs (shared), multiple _probe_*.mjs (checkout probes)
+
+4.4  CHAOS TESTING — 109 LoC
+    bad-luck.mjs — Chaos/fault injection test with artifacts
+
+4.5  E2E PERSONAS — 24 JSON persona definitions
+    Client personas:    bad-network, edge-zone, embed-iframe, first-timer-impatient,
+                        keyboard-screenreader, low-tech-careful, price-skeptic,
+                        returning-reorder
+    Courier personas:   bad-gps, go-online-first-task, gps-denied,
+                        mid-delivery-backgrounding, scooter-outdoors
+    Owner personas:     branding-setup, crm-reveal-contact, friday-7pm-rush,
+                        ipad, mid-service-stoplist, new-onboarding, reconnect
+    Cross-role:         xrole-client-orders-owner-live,
+                        xrole-courier-moves-client-tracks,
+                        xrole-owner-branding-client-render
+
+4.6  AUDIT TESTS
+    e2e/audits/ — Audit-specific test specifications
+    e2e/findings/ — Round-based findings (round-1, round-2, round-3)
+      client-first-timer-impatient: F-21311, F-41412, F-74853, F-30841
+      client-price-skeptic: e2e transcript
+
+4.7  E2E ARTIFACTS
+    demo-builder-visual-{11 stores}.json — Visual demo store data
+    non-pixel-sweep.json — Non-pixel verification sweep
+
+================================================================================
+5. DOCUMENTATION (/root/dowiz/docs/)
+================================================================================
+
+5.1  TOTAL DOCUMENTS: 888 files across 36 subdirectories
+
+  Major categories:
+    design/             520 files — Design docs, blueprints, specs
+    research/           63 files  — Research papers and scans
+    red-team/           76 files  — Red team security analysis
+    audit/              40 files  — Audit specifications
+    adr/                19 files  — Architecture Decision Records
+    agents/             22 files  — Agent role definitions
+    phase4/             8 files   — Phase 4 planning docs
+    phase5/             20 files  — Phase 5 planning docs
+    operating-model/    15 files  — Operating model specifications
+    formal/             12 files  — Formal verification docs
+    harness/            11 files  — Test harness docs
+    ops/                6 files   — Operations runbooks
+    lessons/            5 files   — Lessons learned
+    notifications/      4 files   — Notification system docs
+    embed/              3 files   — Embed/widget integration
+    audits/             7 files   — (governance/toolchain/hardening/determinism)
+    Other:              branding, client, decisions, exits, finance, frontend,
+                        governance, integration, kernel-upgrade, ledger, reflections,
+                        regressions, runbooks, security, seo
+
+5.2  KEY DESIGN DOCS
+
+  ROADMAP:         /root/dowiz/docs/design/ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-19.md
+                   /root/dowiz/docs/design/ROADMAP-BLUEPRINT-GAP-AUDIT-2026-07-20.md
+                   /root/dowiz/docs/design/CORE-ROADMAP-2026-07-17/ (80+ blueprints)
+  ARCHITECTURE:    /root/dowiz/docs/phase4/architecture.md
+  DECISIONS:       /root/dowiz/docs/decisions/ (1 file)
+  MIGRATION:       /root/dowiz/docs/MIGRATION-PLAN.md
+  SYNTHESIS:       /root/dowiz/docs/research/SYNTHESIS.md
+  RESEARCH SYNTH:  /root/dowiz/docs/research/AUDIT-2026-07-18-SYNTHESIS-SCORECARD.md
+                   /root/dowiz/docs/research/COUNCIL-VERDICT.md
+
+5.3  BLUEPRINT COUNT
+
+  ~180 BLUEPRINT documents across the design/ tree, organized by:
+    - CORE-ROADMAP-2026-07-17/:  ~100 blueprints (P01 through P103 + Q/D/A/etc)
+    - sovereign-roadmap-2026-07-16/: 17 blueprints
+    - Individual ITEM blueprints: 50+ (ITEMS 01-72)
+    - Topical blueprints: MESH, AUTH, DNS, TELEMETRY, etc.
+    - Sub-project blueprints (hermetic-architecture, fail-operational, etc.)
+
+  3 research BLUEPRINTS: W13 (pgrust), W14 (mesh-discovery), W15 (wgpu-shell)
+
+================================================================================
+6. TOTAL SYSTEM METRICS
+================================================================================
+
+6.1  RUST LINES OF CODE
+
+  Total across ALL crates:           171,425 lines
+
+  Per-crate breakdown (major crates):
+    kernel/                        121,565  (71% of total — the monolith)
+    engine/                         15,525
+    llm-adapters/                    2,669
+    agent-adapters/                  1,686
+    apps/courier/                    1,096
+    agent-loop/                        695
+    intake-adapters/                   455
+    agent-governance-wasm/             386
+    agent-facade/                      324
+    mesh-adapter/                      321
+    node/                              145
+    wasm/                              754
+
+  Tool crates:
+    native-spa-server/               2,764
+    ci-truth/                        2,411
+    eqc-rs/                          1,846
+    telemetry (5 crates):            varies
+
+  Total Rust crates: 22 (core) + 13 (tools) = 35
+
+6.2  TEST COUNTS
+
+  Total test functions (Rust):       ~3,032 (sum of #[test] annotations)
+  Rust files with tests:             329 files
+  Playwright E2E specs:              139 spec files
+  Rust crate [dependencies] sections: 27
+
+6.3  CODE FILE COUNTS
+
+  Total code files (all languages):  1,416
+    (Rust .rs + TypeScript .ts/.tsx + JavaScript .js/.mjs + Python .py +
+     Shell .sh + TOML + JSON + YAML + CSS + HTML + SQL + GraphQL)
+
+  Package.json files:                8 (pnpm workspace)
+
+6.4  LANGUAGE DISTRIBUTION
+
+  Rust:       ~171,425 lines (dominant, ~95%+ of back-end)
+  TypeScript: E2E tests, scripts, front-end packages
+  JavaScript: E2E helpers, scripts
+  Python:     EQC (retired), academia, opentelemetry (skillspector venv)
+  Bash:       CI gates, deploy scripts, telemetry bridge
+  SQL:        Migrations, seed data
+
+================================================================================
+7. BEBOP PROTOCOL DEEP DIVE
+================================================================================
+
+7.1  LOCATION
+
+  /root/p34/bebop-repo/  (primary, 207 Rust files, 66,291 total LoC)
+  /root/bebop-wt-p03/    (mirror/working tree, identical structure)
+
+7.2  WORKSPACE STRUCTURE (Cargo.toml)
+
+  Workspace members:
+    rust-core/              — bebop-core: deterministic graph-PDE + VSA field core
+                              (WASM, dep-free, empty-import section)
+    crates/bebop/           — bebop: host agent (TUI + MCP + vault + governor)
+    bebop2/core/            — bebop2-core: from-scratch zero-dep PQ core (core+alloc)
+    bebop2/proto-wire/      — W: wire transport (iroh + WSS)
+    bebop2/proto-cap/       — A: per-frame signed capability (replaces JWT)
+    bebop2/proto-crypto/    — H: crypto ladder stub (Wycheproof->FIPS)
+    bebop2/delivery-domain/ — Layer-B decider-core adapter
+    bebop2/mesh-node/       — MESH runtime (Transport, bidir send/recv, DOD event gate)
+    ci/crdt-fence/          — CI lint: CRDT-merge dependency gate
+    bebop2/wasm-host/       — DK-03 wasmtime host (feature-gated)
+
+  Excluded from workspace (built standalone):
+    bebop2/ports/telegram/  — WASM-component port (wasip2, no_std)
+    bebop2/ports/github/    — External adapter port (std, networked)
+    attic/core-legacy/      — Deprecated ts-era guard kernel
+
+7.3  CRATE-BY-CRATE ANALYSIS
+
+  7.3.1  bebop2-core — 17,897 LoC, ZERO dependencies
+    The from-scratch zero-dep post-quantum core. Pure core+alloc. Empty-import WASM.
+    No vendors. Compiles offline (air-gapped).
+
+    Modules (functional areas):
+      PQ DSA (ML-DSA):       pq_dsa.rs (1486) — FIPS204 ML-DSA-65 implementation
+                               pq_dsa/acvp_tests.rs (349) — NIST ACVP vectors
+      PQ KEM (ML-KEM):       pq_kem.rs (1283) — ML-KEM-768
+      Signing:               sign.rs (1378) — Signature verification
+      X25519:                x25519.rs (597) — ECDH classic
+      AEAD:                  aead.rs (500) — XChaCha20-Poly1305
+      RNG:                   rng.rs (836) — CSRNG
+      Hash:                  hash.rs (450) — SHA3/SHAKE
+      KDF:                   kdf.rs (620) — Key derivation
+      FFT/Polynomial:        fft.rs (293) — NTT polynomial ops
+      Linear Algebra:        linalg.rs (265), algebra.rs (253)
+      Spectral Analysis:     lyapunov.rs (817), chebyshev.rs (304),
+                              kalman.rs (1509), dmd.rs (717)
+      Field/GF:              field.rs (906) — Galois field arithmetic
+      Keccak SIMD:           keccak_x4_avx2.rs (274) — AVX2 Keccak
+      Event Log:             event_log.rs (288), at_rest.rs (347)
+      Resonator:             resonator.rs (544) — Physical system modeling
+      Self-Modification:     self_mod.rs (313), self_mod_loop.rs (208)
+      Micrograd:             micrograd.rs (475) — Tiny autograd engine
+      VSA:                   vsa.rs (298) — Vector Symbolic Architecture
+      Energy:                energy.rs (130)
+      KAT:                   kat/ (3 files) — Known-Answer Tests
+
+    Tests: 225 #[test] functions
+    Benchmarks: verify_lane.rs
+    Profile: opt-level=3, lto, codegen-units=1
+
+  7.3.2  bebop-proto-cap (A — authorization) — 7,945 LoC
+    Per-frame signed capability replacing bearer JWT. Hybrid gate (Ed25519 + ML-DSA-65).
+
+    Modules:
+      hybrid_gate.rs   (721) — Hybrid classical+PQ signature enforcement
+      node_id.rs       (885) — Node identity
+      signed_frame.rs  (506) — Signed capability frame
+      scope.rs         (461) — Capability scope definition
+      entropy.rs       (486) — Entropy collection
+      roster.rs        (654) — Capability roster management
+      facade.rs        (574) — Public API facade
+      kv_signer.rs     (371) — Key/value signer
+      tlv.rs           (297) — Non-canonical TLV codec (replaces serde on signed path)
+      port.rs          (550) — Port abstraction
+      revocation.rs    (244) — Revocation support
+      event_dict.rs    (462) — Event dictionary
+      redline.rs       (309) — Red-line enforcement
+      claim_machine.rs (193) — Claim machine
+      capability.rs    (221) — Capability types
+      matcher.rs       (181) — Pattern matcher
+      bebop2-kv.rs     (133) — KV CLI binary
+      error.rs         (107) — Error types
+
+    Deps: bebop2-core (std + test_keygen), serde (transport framing only)
+    Tests: 119 #[test] functions
+
+  7.3.3  bebop-proto-wire (W — wire transport) — 7,356 LoC
+    iroh + WSS transport carrying signed proto-cap frames.
+
+    Deps: bebop-proto-cap, tokio, tokio-tungstenite, futures-util, serde,
+          serde_json, bebop2-core, quinn, rcgen, rustls, webpki-roots,
+          tokio-rustls, http
+    Tests: 47 #[test] functions
+    TLS: rustls (ring backend), NO openssl-sys (explicitly banned)
+
+  7.3.4  bebop-proto-crypto (H — crypto ladder) — 890 LoC
+    SCAFFOLD ONLY. Wycheproof->FIPS re-derivation placeholder + constant-time marker.
+    Dep-free. No production logic.
+
+    Modules:
+      pq_kem.rs         (735) — PQ KEM verification ladder
+      lib.rs            (85)  — Library root
+      error.rs          (24)  — Error types
+      constant_time.rs  (14)  — Constant-time marker
+      fips_regen.rs     (11)  — FIPS regeneration stub
+      wycheproof.rs     (11)  — Wycheproof stub
+      ladder.rs         (10)  — Ladder stub
+
+    Tests: 6 #[test] functions
+    Status: Intentionally dep-free scaffold. Design intent is to consume bebop2-core
+            primitives and layer a verification ladder. No production logic committed.
+
+  7.3.5  bebop-mesh-node (MESH runtime) — 1,996 LoC
+    Owns Transport, concurrent bidir send/recv, DOD event gate.
+
+    Modules:
+      boot.rs             (282) — Bootstrap
+      node.rs             (216) — Node runtime
+      hub_policy.rs       (451) — Hub policy enforcement
+      kill_switch.rs      (385) — Kill switch mechanism
+      breach.rs           (233) — Breach detection
+      hot_reload.rs       (91)  — Hot reload support
+      dod.rs              (151) — DOD (Defense-in-Depth) event gate
+      listener_reconcile.rs (75) — Listener reconciliation
+
+    Tests: 40 #[test] functions (including breach_integration.rs)
+
+  7.3.6  bebop-delivery-domain (Layer-B decider-core adapter) — 1,872 LoC
+    Delivery domain logic adapter. Feature-gated kernel-rlib integration.
+
+    Modules:
+      intake.rs         (507) — Order intake
+      lib.rs            (564) — Core library
+      finalization.rs   (252) — Order finalization
+      pod.rs            (358) — Pod management
+      hub_ring.rs       (191) — Hub ring topology
+
+    Tests: 34 #[test] functions
+
+  7.3.7  bebop-wasm-host — 297 LoC
+    DK-03 wasmtime host. Feature-gated (default OFF).
+
+  7.3.8  rust-core (bebop-core) — 1,665 LoC
+    Deterministic graph-PDE + VSA field core. WASM, dep-free.
+
+    Modules:
+      src/lib.rs        (1346) — Core library
+      eqc-proofs/        (5 files) — EQC mathematical proofs:
+        lambda_max_of_d, cheby_recur_weight, cosine_div, cheby_coeff_inner
+      tests/eqc_proofs_test.rs (86)
+
+    Tests: 27 #[test] functions
+
+  7.3.9  crates/bebop (legacy host agent) — 460 tests
+    TUI + MCP + vault + governor + field engines.
+    Bench: criterion.rs
+
+  7.3.10  ci/crdt-fence
+    CI lint tool that fails build if any order/money-adjacent crate transitively
+    depends on a CRDT-merge crate. Dev tool only, zero dep.
+
+7.4  CRYPTO PRIMITIVES (with line counts)
+
+  POST-QUANTUM:
+    ML-DSA-65 (FIPS204):    1,486 lines (pq_dsa.rs) + 349 lines (ACVP tests)
+    ML-KEM-768 (FIPS203):   1,283 lines (pq_kem.rs in bebop2-core)
+                            + 735 lines (pq_kem.rs in proto-crypto, scaffold)
+    PQ Hybrid Gate:         721 lines (hybrid_gate.rs in proto-cap)
+
+  CLASSICAL:
+    Ed25519/X25519:         597 lines (x25519.rs)
+    XChaCha20-Poly1305:     500 lines (aead.rs)
+    SHA3/SHAKE/Keccak:      450 lines (hash.rs) + 274 lines (AVX2 SIMD)
+    KDF (Argon2id etc.):    620 lines (kdf.rs)
+
+  MATH FOUNDATIONS:
+    Galois Field:           906 lines (field.rs)
+    NTT/FFT:                293 lines (fft.rs)
+    Linear Algebra:         265 lines (linalg.rs) + 253 lines (algebra.rs)
+    CSRNG:                  836 lines (rng.rs)
+    Signatures:             1,378 lines (sign.rs)
+    Lyapunov Analysis:      817 lines (lyapunov.rs)
+    Kalman Filter:          1,509 lines (kalman.rs)
+
+  TOTAL CRYPTO LINES: ~10,500+ across all crypto-critical modules
+
+7.5  TEST COVERAGE SUMMARY
+
+    bebop2-core:              225 tests
+    bebop-proto-cap:          119 tests
+    bebop-proto-wire:          47 tests
+    bebop-mesh-node:           40 tests
+    bebop-delivery-domain:     34 tests
+    rust-core:                 27 tests
+    bebop-proto-crypto:         6 tests
+    crates/bebop (legacy):    460 tests
+    CRDT fence:                29 tests
+    ─────────────────────────────────
+    TOTAL:                    987 tests
+
+7.6  WIRE FORMAT
+
+  Transport layer (proto-wire):
+    - iroh (UDP QUIC) + WSS (WebSocket over TLS) carriers
+    - TLS via rustls (ring backend), explicitly NO openssl-sys
+    - Plain ws:// for testing, wss:// via tokio-rustls for production
+    - Channel binding via SHA3-256 handshake transcript
+    - QUIC via quinn crate (Ring-based)
+
+  Capability layer (proto-cap):
+    - Per-frame signed capabilities (replaces JWT)
+    - Hybrid gate: Ed25519 (classical) + ML-DSA-65 (PQ), BOTH enforced
+    - TLV codec on signing path (NEVER serde for signing — serde is non-canonical)
+    - Scope-constrained with typed scope definitions
+    - Revocation support via roster + claim machine
+    - Signed frame envelope: TLV-encoded, SHA-256 body digest
+    - Capability frame transported as `x-dowiz-cap` HTTP header (base64)
+
+  Crypto verification ladder (proto-crypto):
+    - SCAFFOLD: Wycheproof -> FIPS re-derivation pipeline (not yet implemented)
+    - Constant-time marker for critical paths
+    - Intended to layer formal verification over bebop2-core primitives
+
+7.7  PROTOCOL LIBRARY LINES (W/A/H)
+
+  The protocol library lines (W/A/H) map to:
+    W (Wire):      7,356 lines (iroh + WSS, rustls-based TLS)
+    A (Auth/Cap):  7,945 lines (signed capabilities, hybrid gate)
+    H (Crypto):      890 lines (scaffold, Wycheproof->FIPS ladder)
+  TOTAL:          16,191 lines
+
+================================================================================
+END OF AUDIT
+================================================================================

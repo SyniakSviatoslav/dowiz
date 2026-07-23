@@ -1,0 +1,630 @@
+=====================================================================================
+            BEBOP2 PROTOCOL IMPLEMENTATION AUDIT REPORT
+=====================================================================================
+Date: 2026-07-23
+Source: /root/bebop-wt-p03/bebop2/  (39768 total lines of Rust)
+Dowiz cross-reference: /root/dowiz/ (171665 lines of Rust)
+=====================================================================================
+
+─────────────────────────────────────────────────────────────────────────────────────
+1. PROTOCOL SURFACE
+─────────────────────────────────────────────────────────────────────────────────────
+
+=== Crate Structure ===
+
+bebop2-core (16639 lines)  — crypto primitives + analytic kernel + event-sourcing
+proto-cap   (7888 lines)  — authorization (capabilities, delegation chains, hybrid gate)
+proto-wire  (6542 lines)  — wire transport (framing, envelope, handshake, carriers)
+proto-crypto (890 lines)  — crypto ladder (skeleton/wycheproof/FIPS regen)
+mesh-node   (1918 lines)  — runtime node (boot, kill switch, breach, hub policy)
+delivery-domain (1844)    — delivery ring (intake, finalization, hub ring)
+ports/github + ports/telegram  — external integration adapters
+wasm-host   — wasm runtime
+
+=== PUBLIC TYPES / STRUCTS (by crate) ===
+
+[bebop2-core — /root/bebop-wt-p03/bebop2/core/src/]
+  sign.rs:929     pub fn verify(pubkey, msg, sig) -> bool                       [Ed25519]
+  sign.rs:892     pub fn sign(seed, msg) -> [u8; 64]                            [Ed25519]
+  sign.rs:845     pub fn keygen(seed) -> (pk, sk)                               [gated]
+  sign.rs:864     pub fn keygen_from_entropy() -> Result<(pk, sk), ..>
+  sign.rs:980     pub struct VerifyReq<'a>
+  sign.rs:1000    pub fn verify_many(reqs) -> Vec<bool>
+  pq_dsa.rs:1073  pub struct MlDsa65Pk
+  pq_dsa.rs:1076  pub struct MlDsa65Sk
+  pq_dsa.rs:1079  pub struct MlDsa65Sig
+  pq_dsa.rs:980   pub fn verify_internal_bytes(pk, msg, sig) -> bool
+  pq_dsa.rs:1063  pub fn verify_internal_bytes_many(reqs) -> Vec<bool>
+  pq_dsa.rs:1098  pub fn keygen(seed) -> (MlDsa65Pk, MlDsa65Sk)                 [gated]
+  pq_dsa.rs:1111  pub fn keygen_derivable(seed) -> (MlDsa65Pk, MlDsa65Sk)
+  pq_dsa.rs:1148  pub fn keygen_from_entropy() -> Result<..>
+  pq_dsa.rs:1155  pub fn sign(sk, msg, rnd) -> MlDsa65Sig
+  pq_dsa.rs:1162  pub fn verify(pk, msg, sig) -> bool
+  pq_dsa.rs:783   pub fn keygen_bytes(seed) -> (Vec<u8>, Vec<u8>)
+  pq_dsa.rs:729   pub fn unpack_sig_bytes(sig) -> Option<(c, z, h)>
+  pq_dsa.rs:1135  pub fn derive_pq_seed(master) -> [u8; SEEDBYTES]
+  pq_kem.rs:252   pub type MlKem768Ek / MlKem768Dk / MlKem768Ct / SharedSecret
+  pq_kem.rs:228   pub fn shake128(data, out)
+  pq_kem.rs:234   pub fn shake256(data, out)
+  pq_kem.rs:734   pub fn keygen_internal(d, z) -> (ek, dk)
+  pq_kem.rs:798   pub fn keygen(rng) -> (ek, dk)
+  pq_kem.rs:810   pub fn keygen_from_entropy() -> Result<..>
+  pq_kem.rs:819   pub fn encaps_internal(ek, m) -> (ss, ct)
+  pq_kem.rs:838   pub fn encaps(rng, ek) -> (ss, ct)
+  pq_kem.rs:848   pub fn decaps(dk, ct) -> SharedSecret
+  x25519.rs:356   pub fn x25519(k, u) -> [u8; 32]
+  x25519.rs:439   pub fn keygen(seed) -> (pk, sk)
+  x25519.rs:446   pub fn encaps(pk, eph_seed) -> (ct, ss)
+  x25519.rs:453   pub fn decaps(sk, ct) -> [u8; 32]
+  aead.rs:211     pub fn poly1305_mac(msg, key) -> [u8; 16]
+  aead.rs:278     pub fn aead_xchacha20_poly1305_encrypt(key, nonce, aad, pt) -> (ct, tag)
+  aead.rs:300     pub fn aead_xchacha20_poly1305_decrypt(key, nonce, aad, ct, tag) -> Option<Vec<u8>>
+  hash.rs:148     pub fn sha512(msg) -> [u8; 64]
+  hash.rs:344     pub fn sha3_256(msg) -> [u8; 32]
+  hash.rs:352     pub fn sha3_512(msg) -> [u8; 64]
+  kdf.rs:476      pub fn argon2id(pw, salt, m_cost, t_cost, parallelism, out_len) -> Vec<u8>
+  rng.rs:136      pub struct ChaCha20Rng
+  rng.rs:482      pub struct EntropyRng
+  rng.rs:60       pub fn chacha20_block(key, counter, nonce) -> [u8; 64]
+  rng.rs:96       pub fn hchacha20(key, nonce) -> [u8; 32]
+  rng.rs:446      pub fn entropy_provider() -> &'static dyn Entropy
+  event_log.rs:59  pub struct EventLog<E>
+  at_rest.rs:91    pub struct AtRestStore<E>
+  anti_entropy.rs:35 pub fn digest(log) -> Vec<(u64, [u8; 32])>
+  key_v_verifier.rs:27 pub struct KeyVPublicKey
+  key_v_verifier.rs:57 pub struct Verdict<'a>
+  key_v_verifier.rs:159 pub fn verify_key_v_verdict(key_v, verdict_tlv, sig) -> bool
+  deliberate.rs:23  pub enum Role / Outcome / Conclusion
+  lib.rs:40       pub const MESH_WIRE_VERSION: &str
+
+  [host-only analytic:] field::LaplacianSpectrum, kalman::KalmanFilter/SpectralKalman,
+      chebyshev::Graph, dmd, fft, linalg, lyapunov, micrograd::Value/Mlp/Rng,
+      resonator, vsa, energy, active
+
+[proto-cap — /root/bebop-wt-p03/bebop2/proto-cap/src/]
+  capability.rs:45  pub struct Capability { subject_key, subject_key_pq, scope, nonce, expiry }
+  signed_frame.rs:78 pub struct SignedFrame { capability, payload, channel_binding,
+                          classical_sig, pq_sig, delegation_chain }
+  hybrid_gate.rs:25  pub enum HybridPolicy { RequireBoth, ClassicalUntilPqAudit }
+  hybrid_gate.rs:59  pub struct HybridGate { policy, redline, seen: Mutex<HashSet<[u8;8]>> }
+  scope.rs:19        pub enum Resource { Route, Order, Ledger, Presence }
+  scope.rs:26        pub enum Action { Send, CreateOrder, Append, SettlementRecorded, Read, ... }
+  scope.rs:39        pub struct Scope { resource, action }
+  roster.rs:37       pub struct AnchorRoster
+  roster.rs:68       pub struct Delegation { issuer, subject, subject_pq_key, scope, effect, ... }
+  roster.rs:129      pub fn verify_chain(roster, chain, cap, now) -> CapResult<()>
+  revocation.rs:37   pub struct RevocationSet
+  redline.rs:39      pub enum RedLinePolicy { DenyByDefault, AllowList }
+  tlv.rs:57          pub type TlvField
+  tlv.rs:81          pub fn tlv_signing_input(domain_tag, struct_tag, wire_version, fields) -> Vec<u8>
+  tlv.rs:123         pub fn canonical_sign(msg) -> [u8; 32]
+  entropy.rs:42      pub trait EntropySource
+  entropy.rs:70      pub struct EntropyRng
+  facade.rs:175      pub trait KernelFacade
+  facade.rs:306      pub enum Event
+  port.rs            pub struct ChannelAdapter / InboundPort / OutboundPort / NotificationPort
+  error.rs           pub enum CapError
+  event_dict.rs      pub struct EventDict
+  matcher.rs         pub struct Matcher
+  claim_machine.rs   pub struct ClaimMachine
+  node_id.rs         NodeId / Layer D issuance
+
+[proto-wire — /root/bebop-wt-p03/bebop2/proto-wire/src/]
+  envelope.rs:20     pub struct Envelope { version, trace: [u8;16], payload: Vec<u8> }
+  handshake.rs:35    pub struct Handshake { version, peer_id: Vec<u8> }
+  lib.rs:64          pub trait Transport { .. send/recv SignedFrame .. }
+  framing.rs:22      pub const MAX_ENVELOPE_BYTES
+  wire_codec.rs:31   pub fn encode_signed_frame(frame) -> WireResult<Vec<u8>>
+  wire_codec.rs:41   pub fn decode_signed_frame(bytes) -> WireResult<SignedFrame>
+  sync_pull.rs:52    pub struct SyncPull / Digest / ContentId
+  sync_pull.rs:338   pub fn verify(&self) -> Result<(), SyncReject>
+  discovery.rs       PeerDiscovery + Gossip
+  bpv7.rs            Bundle Protocol v7 (DTN)
+  frame_kind.rs      FrameKind registry
+  transport_policy.rs  TransportPolicy
+
+=== WIRE PROTOCOL FORMAT ===
+
+Layer  (carrier-agnostic, from outermost to innermost):
+
+  [ u32 LE length ][ Envelope JSON bytes ]
+                                 ^_______ payload: [ binary wire_codec(SignedFrame) ]
+
+  Envelope (serde_json, proto-wire/src/envelope.rs:20):
+    version: u8 = 1
+    trace: [u8; 16] (diagnostic correlation, not a score)
+    payload: Vec<u8> (binary TLV-signed frame)
+
+  SignedFrame (binary TLV, then serde_json for envelope — NOT signed over serde):
+    capability: Capability (canonical TLV signing input)
+    payload: Vec<u8> (opaque)
+    channel_binding: Option<[u8; 32]>
+    classical_sig: Option<Vec<u8>>  (Ed25519, 64 bytes)
+    pq_sig: Option<Vec<u8>>         (ML-DSA-65, 3309 bytes)
+    delegation_chain: Vec<Delegation>
+
+  Signing input (TLV, proto-cap/src/tlv.rs:81):
+    DOMAIN_TAG(16) || struct_tag(u8) || wire_version(u8) || field_count(u8)
+      [ per field: field_id(u8) || u32_le(len) || bytes(len) ]
+      [ optional channel_binding field ]
+
+  Framing bounds: MAX_ENVELOPE_BYTES = 1 MiB (proto-wire/src/framing.rs:22)
+
+=== CRYPTO PRIMITIVES ===
+
+  Classical:
+    Ed25519 (RFC 8032) — sign.rs, from-scratch GF(2^255-19), schoolbook 64-bit limbs
+    X25519 (RFC 7748) — x25519.rs, Montgomery ladder, constant-time
+    XChaCha20-Poly1305 (RFC 8439) — aead.rs
+    ChaCha20 (stream cipher + CSPRNG) — rng.rs
+    SHA-512 (FIPS 180-4) — hash.rs
+    Argon2id (KDF) — kdf.rs
+
+  Post-Quantum:
+    ML-DSA-65 (FIPS 204, Dilithium mode 3) — pq_dsa.rs
+    ML-KEM-768 (FIPS 203, correct modulus q=3329) — pq_kem.rs
+    SHAKE128/256 (FIPS 202, Keccak-f[1600]) — pq_kem.rs (shared sponge)
+
+  Hybrid:
+    Hybrid gate: Ed25519 ⊕ ML-DSA-65 (signed_frame.rs, hybrid_gate.rs)
+    Domain separation: SHAKE256(master || "bebop2/hybrid/ml-dsa-65/v1", 32) (pq_dsa.rs:1135)
+
+─────────────────────────────────────────────────────────────────────────────────────
+2. CROSS-PATTERNS WITH DOWIZ
+─────────────────────────────────────────────────────────────────────────────────────
+
+=== Shared Type/Module Names ===
+
+| Name                     | bebop2 path                     | dowiz path                    | Relation       |
+|--------------------------|----------------------------------|-------------------------------|----------------|
+| pq_dsa / dsa             | core/src/pq_dsa.rs              | kernel/src/pq/dsa.rs           | Identical port |
+| pq_kem / kem             | core/src/pq_kem.rs              | kernel/src/pq/kem.rs           | Diverged       |
+| keccak                   | core/src/pq_kem.rs (inline)     | kernel/src/pq/keccak.rs        | Duplicated     |
+| x25519                   | core/src/x25519.rs              | kernel/src/pq/x25519.rs        | Diverged       |
+| Shake128/Shake256        | (in pq_kem)                     | kernel/src/pq/keccak.rs        | Duplicated     |
+| envelope / SignedEnvelope | proto-wire/src/envelope.rs      | kernel/src/pq/envelope.rs      | Diverged       |
+| hybrid / HybridKeypair   | proto-cap/src/hybrid_gate.rs    | kernel/src/pq/hybrid.rs        | Diverged       |
+| entropy / EntropyRng     | core/src/rng.rs + proto-cap     | kernel/src/pq/entropy.rs        | Diverged       |
+| event_log / EventLog     | core/src/event_log.rs           | kernel/src/event_log.rs         | Independent    |
+| micrograd                | core/src/micrograd.rs           | kernel/src/micrograd.rs         | Independent    |
+| kalman                    | core/src/kalman.rs              | kernel/src/kalman.rs            | Independent    |
+
+=== Duplicated Crypto Code ===
+
+1. Keccak-f[1600] (FIPS 202 sponge):
+   - bebop2: core/src/pq_kem.rs (lines ~52-180, inline sha3/shake)
+   - dowiz:   kernel/src/pq/keccak.rs (415 lines, dedicated module)
+   - Status: Identical round constants (RC) and algorithm. bebop2's is embedded inside
+     pq_kem; dowiz's is a standalone module referenced by dsa, kem, envelope, hybrid.
+     Both reimplement the same FIPS 202 primitive with ~identical code. No shared crate.
+
+2. SHAKE128/SHAKE256:
+   - bebop2: core/src/pq_kem.rs:228-234, thin wrappers around inline keccak
+   - dowiz:   kernel/src/pq/keccak.rs: shake128/shake256 wrappers
+   - Status: Duplicated; each has its own Keccak state machine.
+
+3. ML-DSA-65 (FIPS 204):
+   - bebop2: core/src/pq_dsa.rs (1486 lines)
+   - dowiz:   kernel/src/pq/dsa.rs (1337 lines)
+   - Status: dowiz's dsa.rs header says "Ported from bebop2-core pq_dsa.rs 2026-07-12;
+     std instead of alloc, no rng-entropy fn." Same constants (N, Q, K, L, ETA, ...),
+     same NTT ZETAS table, same packing functions. The dowiz version is a direct port,
+     MINUS the AVX2 lanes, keccak_x4, keygen_from_entropy, derive_pq_seed, and
+     the C4b timing gates. The math is identical; the production hardening is bebop2-only.
+
+4. SHA-512 (classical hash for Ed25519):
+   - bebop2: core/src/hash.rs:148
+   - dowiz:  kernel/src/pq/ is PQ-only (no classical SHA-512)
+
+=== Shared Constants ===
+
+  N=256, Q=8380417, D=13, K=6, L=5, ETA=4 (ML-DSA-65 params)
+    — bebop2 core/src/pq_dsa.rs:32-44
+    — dowiz   kernel/src/pq/dsa.rs:33-44
+    — bit-exact match (both are FIPS 204 Table 2)
+
+  ML-KEM-768: Q=3329, N=256, K=3, DU=10, DV=4, ETA1=2, ETA2=2
+    — bebop2 core/src/pq_kem.rs (correct)
+    — dowiz   kernel/src/pq/kem.rs:28-34 (P91.1-fixed to match bebop2)
+
+  MESH_WIRE_VERSION = "2026.07.0"
+    — bebop2 core/src/lib.rs:40
+    — No direct dowiz match (dowiz uses git tags)
+
+  ENVELOPE_VERSION: u8 = 1
+    — bebop2 proto-wire/src/envelope.rs:15
+    — dowiz kernel/src/pq/envelope.rs uses separate ML-DSA-65 envelope (no JSON)
+
+=== Diverged Implementations (same name, different behavior) ===
+
+1. X25519:
+   bebop2: core/src/x25519.rs — from-scratch, zero-dep, GF(2^255-19) in u32 limbs,
+           Montgomery ladder, constant-time cswap, CT-sub-if-ge, no external crates.
+   dowiz:  kernel/src/pq/x25519.rs — delegates to `curve25519-dalek::MontgomeryPoint::mul_clamped`
+           (63 lines total; 17 lines of non-test code).
+   Behavior: byte-identical results (both RFC 7748 §6.1), radically different trust models.
+   bebop2 has upstream dep audit risk; dowiz has supply-chain risk from third-party crate.
+
+2. PQ Envelope:
+   bebop2: proto-wire/src/envelope.rs — serde_json wrapper with version+payload for transport.
+           Evelope is OUTER framing (pre-signature), NOT signing over serde.
+   dowiz:  kernel/src/pq/envelope.rs — PQ-signed envelope: payload || content_hash(SHAKE256) ||
+           ML-DSA-65 sig. Self-contained integrity at L1, no serde.
+   Behavior: Different layer. bebop2's Envelope is unsigned outer transport framing;
+   dowiz's SignedEnvelope is a self-contained PQ-signed integrity container.
+
+3. Hybrid:
+   bebop2: proto-cap/src/hybrid_gate.rs — authorization gate (Ed25519 + ML-DSA-65 signatures
+           on capability frames). Enforces RequireBoth/ClassicalUntilPqAudit. Delegation
+           chain + red-line gate + revocation + replay protection.
+   dowiz:  kernel/src/pq/hybrid.rs — hybrid KEM (X25519 + ML-KEM-768 for shared secrets).
+           Combines classical + PQ KEM into a single key-agreement.
+   Behavior: Different domain. bebop2 hybrid = signature hybrid (authorization).
+   dowiz hybrid = KEM hybrid (key agreement). Non-conflicting but different concerns.
+
+4. ML-KEM-768:
+   bebop2: core/src/pq_kem.rs (1283 lines) — FIPS 203-correct from-scratch impl.
+           NTT-domain, full KAT parity (schoolbook-vs-NTT), keygen_internal(d,z).
+   dowiz:  kernel/src/pq/kem.rs (727 lines) — P91.1-ring-corrected port.
+           Header says "NOT FIPS-203: P91.2 ACVP KAT + 3-model review DEFERRED".
+           Negacyclic ring fix ported from bebop2. Ciphertext size: 1088 (was 1536).
+   Behavior: dowiz was buggy (cyclic ring, wrong eta1=3, ct=1536) until P91.1
+   patched it with math FROM bebop2. bebop2 is the authoritative reference.
+
+5. Entropy / RNG:
+   bebop2: core/src/rng.rs — ChaCha20-based CSPRNG, platform entropy provider trait,
+           production `keygen_from_entropy()` that fails-closed.
+   dowiz:  kernel/src/pq/entropy.rs — separate entropy model, different API.
+
+─────────────────────────────────────────────────────────────────────────────────────
+3. PROTOCOL INVARIANTS
+─────────────────────────────────────────────────────────────────────────────────────
+
+=== Ordering Guarantees ===
+
+1. TLV field ordering (proto-cap/src/tlv.rs:81):
+   Fields MUST be presented in ascending field_id order. The codec SORTS defensively
+   by field_id at encode time (tlv.rs:89-90). Two identical logical inputs always
+   produce byte-identical signing input regardless of caller argument order.
+
+2. Verify-then-record (H2 fix, proto-cap/src/hybrid_gate.rs:188-206):
+   Nonce is INSERTED into the replay set ONLY after chain verification, classical
+   verify, PQ verify, revocation check, and red-line check ALL succeed. An
+   unauthenticated frame DOES NOT consume the nonce. Order:
+     a) expiry check (cheap pre-filter)
+     b) delegation chain verify (root-of-trust)
+     c) red-line gate (G5, after chain so nonce not burned)
+     d) revocation check (MESH-11)
+     e) classical signature verify
+     f) PQ signature verify (policy-dependent)
+     g) nonce insert (duplicate = replay reject)
+     h) prune seen set if > 1M entries
+
+3. Event-log hash chain (core/src/event_log.rs):
+   h_i = H(h_{i-1} || seq || payload). SHA3-256 spine. Every entry chains the prior
+   hash. The chain re-verifies on demand by recomputing from genesis. Append-only,
+   immutable ordering.
+
+=== Signature Verification Flow ===
+
+  1. SignedFrame::verify(gate, roster, revocations, now)
+       proto-cap/src/signed_frame.rs:258
+  2.   → HybridGate::check(frame, roster, chain, revocations, now)
+       proto-cap/src/hybrid_gate.rs:124
+  3.     → frame.capability.is_fresh(now)     [expiry]
+  4.     → verify_chain(roster, chain, cap, now)  [anchor root-of-trust]
+           roster.rs:129: root ∈ roster → links chain → sig per link →
+           narrow-only attenuation → tail.subject == cap.subject_key →
+           cap.scope ⊆ tail.effect
+  5.     → RedLineGate::check(scope, policy)  [if armed]
+  6.     → revocations.is_revoked_key / is_revoked_capability  [MESH-11]
+  7.     → frame.verify_classical()  [Ed25519 over TLV signing input + binding]
+  8.     → frame.verify_pq()  [ML-DSA-65 if RequireBoth, optional if ClassicalUntilPqAudit]
+  9.     → seen.insert(nonce)  [replay check; verify-then-record]
+
+  Each carrier (wss_transport, iroh_transport, stdio_transport) calls
+  gate.check() on recv (proto-wire/src/wss_transport.rs:616, etc).
+
+  Channel binding (F7): handshake transcript is SHA3-256'd, fed into the signing
+  domain (proto-wire/src/handshake.rs:29). Signature commits to channel hash.
+  Cross-channel replay is rejected (signed_frame.rs tests at line 424).
+
+=== Capability Chain Validation ===
+
+  Delegation (roster.rs:68): { issuer, issuer_pq_key, subject, subject_pq_key,
+    scope, effect: Scope, expiry, signature, pq_signature }
+
+  verify_chain (roster.rs:129):
+    - Root issuer MUST be in the AnchorRoster
+    - Each link: verify issuer → subject signature chain
+    - Scope attenuation: subject.scope ⊆ issuer.effect (narrow-only)
+    - Tail subject MUST equal the frame capability's subject_key
+    - Tail subject_pq_key MUST equal capability's subject_key_pq (F21 binding)
+    - Empty chain → UnknownIssuer (no self-issued bypass)
+    - Hybrid key identities enforced per link
+
+=== Bundle Integrity Checks ===
+
+  Envelope framing (proto-wire/src/framing.rs):
+    - Encode: [u32 LE length][Envelope JSON bytes]
+    - Decode: version must match ENVELOPE_VERSION (fail-closed on unknown)
+    - MAX_ENVELOPE_BYTES = 1 MiB cap (fail-closed on oversize)
+    - Partial frame returns Ok(None) (caller waits for more data)
+
+  wire_codec (proto-wire/src/wire_codec.rs): canonical binary codec for SignedFrame
+    (replaces prior serde_json serialization, per G1).
+
+─────────────────────────────────────────────────────────────────────────────────────
+4. SIZE & STRUCTURE
+─────────────────────────────────────────────────────────────────────────────────────
+
+=== Line Counts Per Module ===
+
+  CORE (16639 total):
+    pq_dsa.rs          1486   [ML-DSA-65, largest crypto file]
+    sign.rs            1378   [Ed25519, field arithmetic + KAT]
+    pq_kem.rs          1283   [ML-KEM-768 + Keccak sponge]
+    kalman.rs          1509   [host-only analytic]
+    rng.rs              836   [CSPRNG + entropy]
+    lyapunov.rs         817   [host-only analytic]
+    dmd.rs              717   [host-only analytic]
+    kdf.rs              620   [Argon2id]
+    x25519.rs           597   [X25519]
+    field.rs            906   [host-only analytic]
+    aead.rs             500   [XChaCha20-Poly1305]
+    resonator.rs        544   [host-only]
+    micrograd.rs        475   [host-only]
+    lib.rs              460   [module root]
+    hash.rs             450   [SHA-512 + SHA3]
+    at_rest.rs          347   [event-log store]
+    self_mod.rs         313   [host-only]
+    chebyshev.rs        304   [host-only]
+    vsa.rs              298   [host-only]
+    event_log.rs        288   [event-sourcing spine]
+    key_v_verifier.rs   283   [key_V split-identity]
+    keccak_x4_avx2.rs   274   [AVX2 keccak lane]
+    linalg.rs           265   [eigensolver]
+    fft.rs              293   [host-only]
+    deliberate.rs       254   [adversarial mirror]
+    algebra.rs          253   [host-only]
+    anti_entropy.rs     231   [pull-based sync]
+    self_mod_loop.rs    208   [host-only]
+    active.rs           210   [host-only]
+    energy.rs           130   [host-only]
+    speedometer.rs      110   [bench]
+
+  PROTO-CAP (7888 total):
+    roster.rs         1159   [delegation chain + anchor]
+    node_id.rs         947   [node identity]
+    hybrid_gate.rs     727   [hybrid authorization]
+    facade.rs          595   [kernel facade]
+    port.rs            551   [channel ports]
+    signed_frame.rs    506   [signed capability frame]
+    scope.rs           464   [Resource/Action/Scope]
+    entropy.rs         486   [entropy sources]
+    event_dict.rs      462   [event dictionary]
+    kv_signer.rs       371   [K/V split-identity signer]
+    redline.rs         309   [red-line gate]
+    tlv.rs             297   [TLV signing codec]
+    revocation.rs      244   [revocation set]
+    capability.rs      221   [Capability type]
+    claim_machine.rs   193   [claim machine]
+    matcher.rs         181   [matcher]
+    error.rs           114   [error types]
+    lib.rs              61   [module root]
+
+  PROTO-WIRE (6542 total):
+    wss_transport.rs  1700   [WebSocket secure transport]
+    sync_pull.rs      1181   [pull anti-entropy]
+    iroh_transport.rs  727   [QUIC/iroh transport]
+    bpv7.rs            611   [DTN bundle protocol v7]
+    stdio_transport.rs 579   [stdio carrier]
+    wire_codec.rs      525   [binary codec]
+    discovery.rs       440   [peer discovery]
+    handshake.rs        67   [channel-binding handshake]
+    framing.rs         118   [length-prefix framing]
+    envelope.rs         58   [carrier-neutral envelope]
+    transport_policy.rs 209  [transport policy]
+    frame_kind.rs       96   [frame kind registry]
+    lib.rs             140   [module root + Transport trait]
+    error.rs            91   [error types]
+
+  MESH-NODE (1918 total):
+    hub_policy.rs      451
+    kill_switch.rs     385
+    boot.rs            282
+    breach.rs          233
+    node.rs            216
+    dod.rs             151
+    hot_reload.rs       91
+    listener_reconcile.rs 75
+    lib.rs              34
+
+  DELIVERY-DOMAIN (1844 total):
+    lib.rs             558
+    intake.rs          485
+    pod.rs             358
+    finalization.rs    252
+    hub_ring.rs        191
+
+=== Module Dependency Graph ===
+
+  proto-crypto ──────────────────────────────────────────────┐
+    (standalone stub, re-exports from bebop2-core pq_kem)   │
+                                                             │
+  proto-cap ──────────────────────────────────────────────── │
+    depends: bebop2-core (sign, pq_dsa, hash, rng)          │
+             serde (for transport framing, NOT signing)     │
+    exports: Capability, SignedFrame, HybridGate, etc       │
+                                                             │
+  proto-wire ────────────────────────────────────────────────│
+    depends: bebop2-core (hash, aead, rng)                  │
+             bebop_proto_cap (SignedFrame, HybridGate, etc) │
+             serde_json, tokio-tungstenite (WSS only)      │
+    exports: Transport trait, Envelope, handshake, framing │
+                                                             │
+  delivery-domain ───────────────────────────────────────── │
+    depends: bebop_proto_cap (facade, SignedFrame)          │
+                                                             │
+  mesh-node ──────────────────────────────────────────────── │
+    depends: bebop2-core (sign, pq_dsa, event_log)          │
+             bebop_proto_cap (hybrid_gate, cap, scope)     │
+                                                             │
+  bebop2-core ────────────────────────────────────────────── │
+    standalone, no external crate dependencies               │
+    crypto: sign, pq_dsa, pq_kem, x25519, aead, hash, kdf  │
+    event: event_log, at_rest, anti_entropy, deliberate    │
+    host: kalman, lyapunov, field, chebyshev, fft, etc    │
+
+=== Test Coverage ===
+
+  Total test functions: 488 (across all crates)
+    core:        ~250 tests
+    proto-cap:   ~100 tests  
+    proto-wire:  ~60 tests
+    mesh-node:   ~30 tests
+    delivery-domain: ~20 tests
+    integration tests (tests/ dir): ~15 tests
+
+  Test count by key module:
+    kalman.rs: 18, pq_kem.rs: 16, lyapunov.rs: 15, field.rs: 15
+    node_id.rs: 14, sync_pull.rs: 13, rng.rs: 13, hybrid_gate.rs: 13
+    pq_dsa.rs: 12, lib.rs(core): 12, sign.rs: 10, signed_frame.rs: 10
+    roster.rs: 10, wire_codec.rs: 9, redline.rs: 8, pod.rs: 8
+    hash.rs: 8, claim_machine.rs: 8
+
+  Note: All Ed25519/ML-DSA-65 tests are RED+GREEN (falsifiable). Sign tests
+  include RFC 8032 §7.1 vectors. pq_dsa includes NIST ACVP vectors. pq_kem
+  uses dual-implementation parity (schoolbook vs NTT). AEAD uses independent
+  Python oracle cross-check. KAT vectors live in core/src/kat/.
+
+─────────────────────────────────────────────────────────────────────────────────────
+5. SECURITY SURFACE
+─────────────────────────────────────────────────────────────────────────────────────
+
+=== All Signature Verification Call Sites ===
+
+  Classical (Ed25519):
+    core/src/sign.rs:929          pub fn verify(pubkey, msg, sig) -> bool
+    proto-cap/src/signed_frame.rs:208  pub fn verify_classical()          [capability frame]
+    proto-cap/src/roster.rs:129        verify_chain()                    [delegation links]
+    proto-cap/src/hybrid_gate.rs:124   gate.check() → frame.verify_classical()
+    mesh-node/src/kill_switch.rs:221   KillVerifier::verify()            [kill orders]
+    mesh-node/src/breach.rs:100        breach::verify()                  [breach alerts]
+    delivery-domain/src/lib.rs:340     gate.check()                      [delivery intake]
+
+  Post-Quantum (ML-DSA-65):
+    core/src/pq_dsa.rs:980       verify_internal_bytes()              [FIPS 204 Alg 8]
+    core/src/pq_dsa.rs:1162      struct verify(pk, msg, sig) -> bool   [convenience]
+    proto-cap/src/signed_frame.rs:229  verify_pq()                      [PQ leg]
+    core/src/key_v_verifier.rs:165     verify_key_v_verdict()           [Key V]
+
+  Hybrid Gate (both legs):
+    proto-cap/src/hybrid_gate.rs:124  check() → verify_classical() + verify_pq()
+    proto-wire/src/wss_transport.rs:616   gate.check() on recv
+    proto-wire/src/iroh_transport.rs:395   gate.check() on recv
+    proto-wire/src/stdio_transport.rs:272  gate.check() on recv
+    delivery-domain/src/lib.rs:340         gate.check() on intake
+
+=== Places Where Keys Are Generated/Imported ===
+
+  Ed25519:
+    core/src/sign.rs:845       keygen(seed)                        [gated: test/dangerous/ceremony]
+    core/src/sign.rs:864       keygen_from_entropy()               [prod, fail-closed]
+    core/src/sign.rs:876       keygen_from_seed_infallible(seed)   [internal-only, not pub]
+
+  ML-DSA-65:
+    core/src/pq_dsa.rs:783     keygen_bytes(seed)                  [always pub]
+    core/src/pq_dsa.rs:1098    keygen(seed)                        [gated: test/dangerous/ceremony]
+    core/src/pq_dsa.rs:1111    keygen_derivable(seed)              [prod-safe, domain-separated]
+    core/src/pq_dsa.rs:1148    keygen_from_entropy()               [prod, fail-closed]
+
+  ML-KEM-768:
+    core/src/pq_kem.rs:734     keygen_internal(d, z)               [internal, 2-seed FO]
+    core/src/pq_kem.rs:798     keygen(rng)                         [prod, fill closure]
+    core/src/pq_kem.rs:810     keygen_from_entropy()               [prod, fail-closed]
+
+  X25519:
+    core/src/x25519.rs:439     keygen(seed)                        [deterministic]
+
+  Hybrid identity (C6):
+    core/src/pq_dsa.rs:1135    derive_pq_seed(master) -> [u8;32]   [domain-separated via SHAKE256]
+
+  Key generation gates:
+    - `dangerous_deterministic`: enables constant-seed keygen for tests ONLY.
+      Normal prod builds: `keygen()` does NOT exist.
+    - `ceremony`: operator keygen ceremony mode.
+    - All prod paths use `keygen_from_entropy()` or `keygen_derivable()`.
+
+=== Deterministic vs Random Nonces ===
+
+  Ed25519 signing (core/src/sign.rs:892):
+    Deterministic. Nonce r = SHA-512(seed[32..64] || msg), computed from the
+    secret key prefix and message. Per RFC 8032 §5.1.6. No external RNG.
+
+  ML-DSA-65 signing (core/src/pq_dsa.rs:835):
+    Capable of both modes via `rnd` parameter:
+    - rnd = [0u8; 32] → FIPS deterministic mode (FIPS 204 Alg 7, deterministic)
+    - rnd = fresh random → hedged / randomized
+    The caller controls which is used. In the hybrid signing path
+    (proto-wire/src/lib.rs:120-139), the PQ seed is derived from the master
+    seed via domain-separated SHAKE256, effectively deterministic but with
+    independent derivation.
+
+  ML-KEM-768 encaps (core/src/pq_kem.rs:838):
+    Random. Fresh m drawn from caller-supplied RNG. Reuse impossible by
+    construction (no state stored, each call draws new entropy).
+
+  ChaCha20Rng (core/src/rng.rs:136):
+    Seeded from OS entropy. After seeding, keystream is deterministic per
+    instantiation.
+
+=== Non-Constant-Time Comparisons ===
+
+  RESIDUAL in Ed25519 field arithmetic (core/src/sign.rs):
+    - `reduce_p()` (line 171): magnitude-dependent fold loop. LIMBS_GE_P uses
+      data-dependent comparison, and the loop condition `(r[4]|r[5]|r[6]) != 0
+      || r[3] >= 0x8000_0000_0000_0000` branches on the value of internal limbs.
+      This is on the SECRET scalar path (signing only; verify uses public data).
+    - `limbs_ge_p()` (line 189): data-dependent boolean chain.
+    - `powers2round`, `decompose` in pq_dsa: standard FIPS 204 reference code;
+      branch on coefficients (not constant-time). This is the reference's own
+      soft ceiling.
+
+  CONSTANT-TIME (verified):
+    - Ed25519 `scalar_mul` (sign.rs:821): branch-free double-and-add with
+      point_select. VERIFIED by C4 test (scalar_mul_op_count_is_constant,
+      sign.rs:1099): exactly 512 point_add calls for ANY scalar.
+    - Ed25519 `mod_l` (sign.rs:692): branch-free reduction on 64-byte buffer
+      with ct_select/ct_ge/ct_sub. VERIFIED by C4b dudect gate
+      (c4b_mod_l_timing_gate, sign.rs:1233): Welch |t| < 4.5 threshold.
+    - `fe_cselect` / `point_select` (sign.rs:779-798): branch-free select
+      using mask-based byte masking.
+    - X25519 Montgomery ladder (x25519.rs): FIXED 255 iterations, branch-free
+      cswap_fe. No early-out, no secret-bit branch.
+    - `ct_sub_if_ge` (x25519.rs:77): constant-time conditional subtract of p.
+    - `verify` (sign.rs:929): uses ONLY public scalars — non-constant-time
+      paths on the verify path are safe.
+
+  NOT constant-time (documented ceiling):
+    - sign.rs `reduce_p` fold loop: magnitude-dependent iterations on the
+      SECRET scalar path in `sign()`. The C4 comment (line 818) explicitly
+      calls this out as a remaining gap: "A fixed-width Barrett/Montgomery
+      rewrite of the FIELD reduction closes the remaining gap (tracked
+      separately from C4b)."
+
+  proto-crypto constant_time.rs (14 lines): DECLARES intent but contains
+    TODO markers — "The active assert harness is a TODO". No live gate.
+
+=====================================================================================
+                               SUMMARY
+=====================================================================================
+  Total lines:              39768 bebop2 + ~4100 dowiz PQ code
+  Crypto primitives:        7 (Ed25519, X25519, ML-DSA-65, ML-KEM-768, ChaCha20,
+                              Poly1305, SHA-512/SHA3)
+  Wire protocol layers:     4 (Envelope → SignedFrame → Capability → Payload)
+  Authorization chain:      UCAN-subset: Anchor → Delegation* → Capability
+  Test functions:           488 (falsifiable RED+GREEN)
+  Independent oracles:      3 (Python AEAD ref, NIST ACVP vectors, FIPS 202 KAT)
+  Known side-channel gap:   Field reduce_p (sign.rs:171) — documented, tracked
+=====================================================================================

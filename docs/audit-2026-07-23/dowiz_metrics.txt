@@ -1,0 +1,121 @@
+======================================================================
+DOWIZ KERNEL — QUANTITATIVE ANALYSIS
+Report generated: 2026-07-23T00:00:00Z
+======================================================================
+
+1. MODULE SIZES (top-level src/*.rs only — 80,055 total lines)
+   Files counted: all *.rs directly under kernel/src/
+
+   Lines  File
+   ------  -------------------------
+    5224   academia_p2p.rs
+    2429   causal.rs
+    1954   hub_provisioning.rs
+    1769   spectral.rs
+    1742   hydra.rs
+    1729   capability_cert.rs
+    1615   csr.rs
+    1389   evals.rs
+    1363   hub_supervisor.rs
+    1338   predictor.rs
+    1318   order_machine.rs
+    1302   orchestrator.rs
+    1261   wasm.rs
+    1183   prompt_enrich.rs
+    1078   householder.rs
+    1044   domain.rs
+    1023   reverse_engineer.rs
+    1019   parallel_patterns.rs
+    1015   lib.rs
+     980   event_log.rs
+     893   research.rs
+     854   money.rs
+     841   catalog.rs
+     837   geo.rs
+     832   field_eigenmodes.rs
+     818   tracker.rs
+     817   clock_stabilizer.rs
+     803   resilience.rs
+     801   intake.rs
+     789   backup.rs
+     780   memory_search.rs
+     745   pid.rs
+     745   mesh.rs
+     737   chaos.rs
+     721   foodcourt.rs
+     720   storefront.rs
+     714   simd.rs
+     713   spectral_cache.rs
+     690   token_bucket.rs
+     683   cgraph.rs
+     657   hydra_closed_loop.rs
+     627   online.rs
+     610   json.rs
+     598   spectral_parser.rs
+     590   dynamic_actions.rs
+     568   channel.rs
+     568   autonomic.rs
+     562   gossip.rs
+     555   dynamic_spawner.rs
+   (and ~104 smaller modules)
+
+
+2. TOTAL LINE COUNT (recursive, all .rs files in src/)
+   121,565 lines across 248 source files
+
+
+3. TEST SUITE
+   Test result: 1971 passed, 0 failed, 4 ignored (5.83 s)
+   #[test] attributes:   2,355
+   Coverage ratio:       ~0.84 test attrs per function (1971 tests / 2355 attrs)
+
+
+4. API SURFACE (symbol counts in src/*.rs)
+   pub fn           : 1,925
+   pub struct       :   504
+   pub trait        :    18
+   pub enum         :   143
+   pub const        :   202
+   Error enum types :    24
+
+
+5. MODULE DEPENDENCIES (top 10 most-imported kernel modules)
+   Count  Module
+   ------  ----------
+       39  event_log
+       22  TriState
+       19  ports
+       16  spectral
+       11  orchestrator
+       10  money
+       10  csr
+        7  vendor
+        6  domain
+        6  breaker
+
+
+6. CODE HYGIENE
+   unsafe keyword references  :  34 (total grep hits)
+   actual unsafe blocks/fn    :  17 (unsafe { }, unsafe fn, unsafe impl)
+   debug_assert!              :  67
+   TODO/FIXME/HACK/innovate:  :  12
+   Magic-number float literals: ~2,202 hits (broad match; many are in test code,
+                                 geometry initializers [0.0; N], or physics constants)
+   Modules declared in lib.rs : 153
+
+
+7. TOP HEAVIEST MODULES (lines, top-level)
+   academia_p2p.rs         5,224   (P2P networking / geometric topology)
+   causal.rs               2,429   (Causal reasoning)
+   hub_provisioning.rs     1,954   (Hub provisioning)
+   spectral.rs             1,769   (Spectral analysis)
+   hydra.rs                1,742   (Hydra execution engine)
+   capability_cert.rs      1,729   (Capability certificates)
+   csr.rs                  1,615   (CSR / sparse matrices)
+   evals.rs                1,389   (Evaluations)
+   hub_supervisor.rs       1,363   (Hub supervisor)
+   predictor.rs            1,338   (Prediction)
+
+
+======================================================================
+END OF REPORT
