@@ -709,6 +709,9 @@ pub mod invert;
 /// python(17 kinds), tool(14), llm(14), claude-code(12), security(11).
 /// Publisher diversity tracker: NVIDIA(9), anthropics(8), microsoft(8).
 pub mod cross_bridge;
+/// Bebop protocol bridge — trinary auth, eigen envelopes, wave mesh sync,
+/// chronos DTN store-forward. Wires the new paradigm into the protocol layer.
+pub mod bebop_bridge;
 /// P08 — typed metrics pure core: `/proc/self` sampling (CPU/mem) + a
 /// deterministic, serde-free, parse-or-reject text schema for typed metric
 /// records. NO egress / signing change; GPU is typed-absent (`Option`) until

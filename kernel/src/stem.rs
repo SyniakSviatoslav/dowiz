@@ -1,40 +1,59 @@
-//! `kernel::stem` — zero-dep multilingual (EN/UK/RU) light stemmer.
+//! `kernel::stem` — zero-dep multilingual light stemmer.
 //!
-//! The retrieval layer (`memory_search`, `retrieval/bm25`) uses exact token
-//! matching which breaks for heavily inflected languages. Ukrainian has 7 noun
-//! cases; `замовлення`/`замовленню`/`замовленням` are three different tokens
-//! in BM25, destroying recall. A light, deterministic suffix-stripping stemmer
-//! normalizes these to a common root so they match.
-//!
-//! ZERO external dependencies. Inspired by Snowball but stripped to essential
-//! suffix lists. Used by `memory_search` and `retrieval/spine` at tokenization time.
+//! Covers 15 languages: EN, UK, RU, DE, FR, ES, IT, PT, PL, NL, SV, NO, DA, TR, AR.
+//! Light suffix-stripping for inflectional languages. Used by retrieval layer.
 
-/// Light stem: strip common inflectional suffixes for EN/UK/RU.
+/// Light stem: strip common inflectional suffixes for 15 languages.
 pub fn stem(word: &str) -> String {
     let w = word.trim().to_lowercase();
 
-    // ── Ukrainian ────────────────────────────────────────────────────────
-    for &suffix in &[
-        "уватися","юватися","ювати","увати","ють","уть","тися","тиму","тиме",
-        "тимеш","тимуть","ла","ло","ли","в","ти","ть",
-        "ами","ями","ями","ами","ями","ою","ею","ість","ість","істю",
-        "істю","ями","ями","ами","ою","ею","ість",
-    ] {
-        if w.len() > suffix.len() + 2 && w.ends_with(suffix) {
-            return w[..w.len() - suffix.len()].to_string();
-        }
+    // ── Ukrainian ────────────────────────────────────────────────────
+    for &suffix in &["уватися","юватися","ювати","увати","ють","уть","тися","тиму","тиме","тимеш","тимуть","ла","ло","ли","в","ти","ть","ами","ями","ою","ею","ість"] {
+        if w.len() > suffix.len() + 2 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
     }
-
-    // ── Russian ──────────────────────────────────────────────────────────
-    for &suffix in &[
-        "оваться","еваться","иваться","ываться","овать","евать","ивать","ывать",
-        "ются","ется","ются","ться","ами","ями","ого","его","ому","ему",
-        "ыми","ими","ой","ей","ая","яя","ое","ее","ые","ие",
-        "ость","остей","остям","остями","остях",
-    ] {
-        if w.len() > suffix.len() + 2 && w.ends_with(suffix) {
-            return w[..w.len() - suffix.len()].to_string();
-        }
+    // ── Russian ──────────────────────────────────────────────────────
+    for &suffix in &["оваться","еваться","иваться","ываться","овать","евать","ивать","ывать","ются","ется","ться","ами","ями","ого","его","ому","ему","ыми","ими","ой","ей","ая","яя","ое","ее","ые","ие","ость"] {
+        if w.len() > suffix.len() + 2 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── German (DE) ──────────────────────────────────────────────────
+    for &suffix in &["ungen","heiten","keiten","schaft","ierung","tion","chen","lein","sten","ern","end","ung","heit","keit","isch","lich","ig","es","er","en","em","el","es","te","ten","test","tet"] {
+        if w.len() > suffix.len() + 2 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── French (FR) ──────────────────────────────────────────────────
+    for &suffix in &["issement","ablement","eraient","eraient","issions","eraient","erions","eraient","era","erai","erez","erons","eront","aient","aisse","ante","ment","tion","sion","euse","eux","aux","eaux","elle","ette","eurs","ance","ence","es","ez","er","ir","re","ons","ent","ais","ait"] {
+        if w.len() > suffix.len() + 2 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── Spanish (ES) ─────────────────────────────────────────────────
+    for &suffix in &["aciones","ecimientos","imientos","aciones","dores","doras","mente","miento","cion","sion","ista","ismo","idad","eza","ura","anza","encia","ible","able","ica","ico","oso","osa","ero","era","dor","dora","ito","ita","ote","ota","on","ona","azo","aza","ado","ada","ido","ida","ando","iendo","ar","er","ir","as","es","os","an","en","on"] {
+        if w.len() > suffix.len() + 2 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── Italian (IT) ─────────────────────────────────────────────────
+    for &suffix in &["azione","azioni","imento","imenti","mente","trice","tore","trici","tori","ista","isti","ismo","ita","ita","ezza","ura","abile","ibile","evole","oso","osa","osi","ose","ino","ina","etto","etta","one","oni","are","ere","ire","ato","ita","ite","uti","ute","ano","ono","ente","enti"] {
+        if w.len() > suffix.len() + 2 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── Portuguese (PT) ──────────────────────────────────────────────
+    for &suffix in &["acoes","icoes","mento","mente","idade","eza","ura","ancia","encia","avel","ivel","oso","osa","inho","inha","ao","oes","ado","ida","ando","endo","indo","ar","er","ir","ava","era","ira","ou","eu","iu","am","em","im","aram","eram","iram","asse","esse","isse"] {
+        if w.len() > suffix.len() + 2 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── Polish (PL) ──────────────────────────────────────────────────
+    for &suffix in &["ami","ach","owi","ego","emu","ymi","ymi","owie","owie","ach","ami","om","a","u","em","e","y","i","owie","ów","om","ami","ach"] {
+        if w.len() > suffix.len() + 2 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── Dutch (NL) ───────────────────────────────────────────────────
+    for &suffix in &["ingen","ingen","heden","heden","schap","atie","eren","eren","ende","ende","ige","ige","lijk","lijk","jes","jes","tje","tje","en","en","de","de","te","te","s","s"] {
+        if w.len() > suffix.len() + 2 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── Swedish/Norwegian/Danish ─────────────────────────────────────
+    for &suffix in &["ningar","igheter","igaste","ligaste","anden","anden","heter","heter","ning","ning","aste","aste","ande","ande","ende","ende","erne","erne","ens","ens","ets","ets","en","en","et","et","ar","ar","er","er","or","or","na","na","as","as","es","es"] {
+        if w.len() > suffix.len() + 2 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── Turkish (TR) ─────────────────────────────────────────────────
+    for &suffix in &["lar","ler","lar","ler","da","de","ta","te","dan","den","tan","ten","a","e","ya","ye","n","i","u","dır","dir","dur","dür","tır","tir","tur","tür","mış","miş","muş","müş","yor","acak","ecek","mek","mak","me","ma"] {
+        if w.len() > suffix.len() + 2 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
+    }
+    // ── Arabic (AR) — basic pattern stripping ────────────────────────
+    for &suffix in &["ون","ين","ات","ان","ة","ي","ه","ا","و"] {
+        if w.len() > suffix.len() + 1 && w.ends_with(suffix) { return w[..w.len()-suffix.len()].to_string(); }
     }
 
     // ── English ──────────────────────────────────────────────────────────
