@@ -93,6 +93,34 @@ impl Tri {
         if winners.len() == 1 { Tri::from_u8(winners[0] as u8) } else { Tri::Unknown }
     }
 
+    /// Łukasiewicz implication: U→U = True (differs from Kleene where U→U = U).
+    /// Implements Ł3: A→B = if A≤B then True else if A=True then B else Unknown.
+    pub fn imply_lukasiewicz(self, other: Tri) -> Tri {
+        match (self, other) {
+            (Tri::False, _) => Tri::True,       // False → anything = True
+            (_, Tri::True) => Tri::True,         // anything → True = True
+            (Tri::True, Tri::False) => Tri::False, // True → False = False
+            (Tri::True, Tri::Unknown) => Tri::Unknown, // True → Unknown = Unknown
+            (Tri::Unknown, Tri::Unknown) => Tri::True, // Ł3: U→U = True (key difference)
+            (Tri::Unknown, Tri::False) => Tri::Unknown, // Unknown → False = Unknown
+            _ => Tri::True,
+        }
+    }
+
+    /// Kleene implication: U→U = Unknown (classic strong logic of indeterminacy).
+    pub fn imply_kleene(self, other: Tri) -> Tri {
+        match (self, other) {
+            (Tri::False, _) => Tri::True,
+            (Tri::True, Tri::True) => Tri::True,
+            (Tri::Unknown, Tri::True) => Tri::True,
+            (Tri::True, Tri::False) => Tri::False,
+            (Tri::True, Tri::Unknown) => Tri::Unknown,
+            (Tri::Unknown, Tri::Unknown) => Tri::Unknown, // K3: U→U = Unknown
+            (Tri::Unknown, Tri::False) => Tri::Unknown,
+            _ => Tri::True,
+        }
+    }
+
     fn from_u8(v: u8) -> Tri {
         match v { 0 => Tri::True, 1 => Tri::False, _ => Tri::Unknown }
     }
@@ -486,6 +514,29 @@ mod tests {
         let b = Rgb(50, 30, 10);
         assert_eq!(a + b, Rgb(150, 180, 210));
         assert_eq!(a - b, Rgb(50, 120, 190));
+    }
+
+    #[test]
+    fn lukasiewicz_unknown_implies_unknown_is_true() {
+        // Ł3: U→U = True (key difference from Kleene K3)
+        assert_eq!(Tri::Unknown.imply_lukasiewicz(Tri::Unknown), Tri::True);
+    }
+
+    #[test]
+    fn kleene_unknown_implies_unknown_is_unknown() {
+        // K3: U→U = Unknown
+        assert_eq!(Tri::Unknown.imply_kleene(Tri::Unknown), Tri::Unknown);
+    }
+
+    #[test]
+    fn lukasiewicz_false_implies_anything_is_true() {
+        assert_eq!(Tri::False.imply_lukasiewicz(Tri::False), Tri::True);
+        assert_eq!(Tri::False.imply_lukasiewicz(Tri::Unknown), Tri::True);
+    }
+
+    #[test]
+    fn lukasiewicz_true_implies_false_is_false() {
+        assert_eq!(Tri::True.imply_lukasiewicz(Tri::False), Tri::False);
     }
 
     // ─── new TriMatrix ops ───
