@@ -108,7 +108,265 @@ impl PromptKind {
     }
 }
 
-// ─── PromptEntry ───────────────────────────────────────────────────────────
+// ─── Intent Tree — hierarchical sub-intent classification ──────────────────
+
+/// A node in the intent tree. Root intents (PromptKind) branch into sub-intents
+/// which themselves branch into deeper refinements (child → child-of-child).
+#[derive(Debug, Clone)]
+pub struct IntentNode {
+    pub name: &'static str,
+    pub kind: PromptKind,
+    pub keywords: &'static [&'static str],
+    /// Indices into the static INTENT_TREE flat list.
+    pub children: &'static [usize],
+}
+
+/// A path from root to leaf: ["code", "debug", "compile-error"].
+pub type IntentPath = Vec<String>;
+
+/// Compact static tree: flat list, children are indices.
+/// Built once at compile-time, queried at runtime.
+pub static INTENT_TREE: &[IntentNode] = &[
+    // ── Root nodes ───────────────────────────────────────────────────────
+    IntentNode { name: "code", kind: PromptKind::Code, keywords: &["code","implement","build","compile","function","struct","impl","mod","cargo","rustc","npm","pip","import","fix","patch","component","module","crate","type","trait","enum","api","endpoint","handler","route","service","async","await","concurrent"], children: &[1,2,3,4,5,6] },
+    IntentNode { name: "implement", kind: PromptKind::Code, keywords: &["implement","build","create","make","write","generate","scaffold","new","setup","init"], children: &[7,8,9,10,11] },
+    IntentNode { name: "debug", kind: PromptKind::Code, keywords: &["debug","fix","troubleshoot","root","cause","broken","error","panic","crash","bug","why","doesn","incorrect","wrong","unexpected"], children: &[12,13,14,15] },
+    IntentNode { name: "refactor", kind: PromptKind::Refactor, keywords: &["refactor","clean","up","simplify","dedup","extract","rename","restructure","reorganize","decouple","remove","dead","unused"], children: &[16,17,18,19] },
+    IntentNode { name: "review", kind: PromptKind::Review, keywords: &["review","audit","inspect","check","critique","feedback","pr","pull","request","code quality"], children: &[20,21,22,23] },
+    IntentNode { name: "test", kind: PromptKind::Test, keywords: &["test","spec","assert","mock","stub","fuzz","coverage","unit","integration","e2e","end","prove","regression","snapshot","golden"], children: &[24,25,26,27] },
+    IntentNode { name: "api-client", kind: PromptKind::Code, keywords: &["api","client","fetch","request","http","endpoint","rest","graphql","grpc","websocket"], children: &[] },
+    // ── implement children ────────────────────────────────────────────────
+    IntentNode { name: "struct", kind: PromptKind::Code, keywords: &["struct","data","model","entity","record","newtype","wrapper","builder","pattern"], children: &[] },
+    IntentNode { name: "function", kind: PromptKind::Code, keywords: &["function","fn","method","closure","handler","callback","algorithm","logic","flow"], children: &[] },
+    IntentNode { name: "module", kind: PromptKind::Code, keywords: &["module","mod","crate","library","package","workspace","project","layout","organize","split"], children: &[] },
+    IntentNode { name: "trait-impl", kind: PromptKind::Code, keywords: &["trait","impl","interface","abstract","generic","polymorph","derive","macro"], children: &[] },
+    IntentNode { name: "api", kind: PromptKind::Code, keywords: &["api","endpoint","route","handler","rest","crud","controller","resource","serialize","deserialize"], children: &[] },
+    // ── debug children ────────────────────────────────────────────────────
+    IntentNode { name: "compile", kind: PromptKind::Code, keywords: &["compil","type","error","borrow","lifetime","linker","cargo","build","fail","unresolved","undeclared"], children: &[] },
+    IntentNode { name: "runtime", kind: PromptKind::Code, keywords: &["panic","crash","segfault","null","deref","overflow","deadlock","race","leak","oom","timeout"], children: &[] },
+    IntentNode { name: "test-fail", kind: PromptKind::Test, keywords: &["test","fail","regression","assertion","mock","expect","red","broke"], children: &[] },
+    IntentNode { name: "logic", kind: PromptKind::Code, keywords: &["logic","wrong","incorrect","off","by","one","boundary","edge","case","condition","branch","off-by"], children: &[] },
+    // ── refactor children ─────────────────────────────────────────────────
+    IntentNode { name: "extract-helper", kind: PromptKind::Refactor, keywords: &["extract","helper","utility","shared","common","dedup","dry","duplicate","reuse","generic","macro"], children: &[] },
+    IntentNode { name: "rename", kind: PromptKind::Refactor, keywords: &["rename","naming","identifier","variable","consistency","style","convention","camel","snake"], children: &[] },
+    IntentNode { name: "restructure", kind: PromptKind::Refactor, keywords: &["restructure","reorganize","decouple","split","merge","flatten","nest","modular"], children: &[] },
+    IntentNode { name: "remove-dead", kind: PromptKind::Refactor, keywords: &["dead","unused","obsolete","deprecated","stale","legacy","remove","delete","purge","cleanup"], children: &[] },
+    // ── review children ───────────────────────────────────────────────────
+    IntentNode { name: "security", kind: PromptKind::Security, keywords: &["security","vuln","vulnerable","inject","xss","csrf","auth","authn","authz","crypto","secret","token","leak","expose"], children: &[] },
+    IntentNode { name: "perf", kind: PromptKind::Code, keywords: &["perf","performance","bottleneck","slow","optimize","benchmark","latency","throughput","memory","cpu","profile"], children: &[] },
+    IntentNode { name: "style", kind: PromptKind::Code, keywords: &["style","format","lint","clippy","convention","idiom","best","practice","pattern","clean","readable"], children: &[] },
+    IntentNode { name: "api-design", kind: PromptKind::Code, keywords: &["api","design","contract","interface","signature","public","export","breaking","compat","version"], children: &[] },
+    // ── test children ─────────────────────────────────────────────────────
+    IntentNode { name: "unit", kind: PromptKind::Test, keywords: &["unit","function","method","isolated","mock","stub","spy","assert"], children: &[] },
+    IntentNode { name: "integration", kind: PromptKind::Test, keywords: &["integration","e2e","end","to","system","scenario","workflow","browser","selenium","playwright"], children: &[] },
+    IntentNode { name: "fuzz", kind: PromptKind::Test, keywords: &["fuzz","property","random","chaos","monkey","mutation","quickcheck","proptest"], children: &[] },
+    IntentNode { name: "regression", kind: PromptKind::Test, keywords: &["regression","snapshot","golden","insta","baseline","reference","known","good"], children: &[] },
+    // ── More roots ────────────────────────────────────────────────────────
+    IntentNode { name: "write", kind: PromptKind::Write, keywords: &["write","essay","article","document","blog","readme","docs","prose","paragraph","author","compose","draft","text","copy","marketing","ad","content"], children: &[28,29,30,31] },
+    IntentNode { name: "docs", kind: PromptKind::Write, keywords: &["document","readme","api","docs","guide","tutorial","manual","reference","how","to","example"], children: &[] },
+    IntentNode { name: "essay", kind: PromptKind::Write, keywords: &["essay","article","blog","post","prose","narrative","story","piece","editorial"], children: &[] },
+    IntentNode { name: "copy", kind: PromptKind::Write, keywords: &["copy","marketing","ad","advertising","promo","landing","sales","pitch","tagline","slogan"], children: &[] },
+    IntentNode { name: "technical", kind: PromptKind::Write, keywords: &["technical","spec","rfc","proposal","architecture","decision","adr","white","paper"], children: &[] },
+    // ── Analyze ───────────────────────────────────────────────────────────
+    IntentNode { name: "analyze", kind: PromptKind::Analyze, keywords: &["analyze","analysis","evaluate","assess","audit","claims","verify","validate","inspect","examine","investigate","research"], children: &[32,33,34,35] },
+    IntentNode { name: "claims", kind: PromptKind::Analyze, keywords: &["claim","fact","check","verify","debunk","truth","evidence","cite","source","bias","logic","fallacy"], children: &[] },
+    IntentNode { name: "data", kind: PromptKind::Analyze, keywords: &["data","statistic","trend","correlation","analytics","metric","dashboard","chart","graph","insight"], children: &[] },
+    IntentNode { name: "codebase", kind: PromptKind::Analyze, keywords: &["codebase","architecture","dependency","module","graph","call","stack","trace","repo","project","structure"], children: &[] },
+    IntentNode { name: "invar", kind: PromptKind::Analyze, keywords: &["invariant","idempotent","guarantee","assert","enforce","constraint","precondition","postcondition","contract"], children: &[] },
+    // ── Summarize ─────────────────────────────────────────────────────────
+    IntentNode { name: "summarize", kind: PromptKind::Summarize, keywords: &["summarize","summary","tldr","brief","condense","recap","digest","synopsis","abridge","abstract","shorten","compress"], children: &[36,37,38] },
+    IntentNode { name: "article", kind: PromptKind::Summarize, keywords: &["article","paper","research","academic","journal","publication","preprint"], children: &[] },
+    IntentNode { name: "meeting", kind: PromptKind::Summarize, keywords: &["meeting","transcript","call","discussion","conversation","chat","minutes","notes"], children: &[] },
+    IntentNode { name: "tldr", kind: PromptKind::Summarize, keywords: &["tldr","short","one","line","sentence","quick","briefly","summary"], children: &[] },
+    // ── Extract ───────────────────────────────────────────────────────────
+    IntentNode { name: "extract", kind: PromptKind::Extract, keywords: &["extract","parse","scrape","pull","harvest","gather","collect","fetch","crawl","mine"], children: &[39,40,41] },
+    IntentNode { name: "structured", kind: PromptKind::Extract, keywords: &["structured","json","csv","xml","yaml","toml","table","schema","field","format","convert"], children: &[] },
+    IntentNode { name: "insights", kind: PromptKind::Extract, keywords: &["insight","key","point","takeaway","finding","lesson","learn","wisdom","quote","highlight"], children: &[] },
+    IntentNode { name: "reverse", kind: PromptKind::Extract, keywords: &["reverse","engineer","reproduce","replicate","clone","decompile","disassemble","port","migrate","convert"], children: &[] },
+    // ── Plan ──────────────────────────────────────────────────────────────
+    IntentNode { name: "plan", kind: PromptKind::Plan, keywords: &["plan","roadmap","blueprint","design","architecture","spec","proposal","phase","milestone","strategy"], children: &[42,43,44,45] },
+    IntentNode { name: "arch", kind: PromptKind::Plan, keywords: &["architecture","blueprint","design","doc","system","component","layer","tier","micro","mono","distributed"], children: &[] },
+    IntentNode { name: "roadmap", kind: PromptKind::Plan, keywords: &["roadmap","milestone","phase","timeline","quarter","release","version","epic","initiative"], children: &[] },
+    IntentNode { name: "sprint", kind: PromptKind::Plan, keywords: &["sprint","iteration","cycle","scrum","kanban","agile","backlog","story","task","ticket"], children: &[] },
+    IntentNode { name: "feature", kind: PromptKind::Plan, keywords: &["feature","spec","proposal","rfc","product","requirement","scope","mwp","mvp","poc"], children: &[] },
+    // ── System ────────────────────────────────────────────────────────────
+    IntentNode { name: "system", kind: PromptKind::System, keywords: &["deploy","ci","cd","docker","container","server","infra","kubernetes","aws","gcp","azure","terraform","ansible","systemd","service","pipeline","orchestrate","operate"], children: &[46,47,48,49] },
+    IntentNode { name: "deploy", kind: PromptKind::System, keywords: &["deploy","release","ship","publish","rollout","promote","staging","prod","canary","blue","green"], children: &[] },
+    IntentNode { name: "ci-cd", kind: PromptKind::System, keywords: &["ci","cd","pipeline","github","actions","jenkins","gitlab","circle","travis","build","runner"], children: &[] },
+    IntentNode { name: "infra", kind: PromptKind::System, keywords: &["infra","terraform","pulumi","kubernetes","k8s","docker","compose","helm","pod","node","cluster"], children: &[] },
+    IntentNode { name: "monitor", kind: PromptKind::System, keywords: &["monitor","alert","observe","telemetry","log","metric","trace","dashboard","promethe","grafana","datadog","sentry"], children: &[] },
+    // ── Security ──────────────────────────────────────────────────────────
+    IntentNode { name: "harden", kind: PromptKind::Security, keywords: &["harden","secure","lock","down","protect","defend","mitigate","prevent","safeguard"], children: &[50,51,52,53] },
+    IntentNode { name: "audit", kind: PromptKind::Security, keywords: &["audit","pentest","scan","assess","check","cve","owasp","nist","sast","dast"], children: &[] },
+    IntentNode { name: "crypto", kind: PromptKind::Security, keywords: &["crypto","encrypt","decrypt","hash","sign","verify","cert","tls","ssl","pgp","key","cipher"], children: &[] },
+    IntentNode { name: "compliance", kind: PromptKind::Security, keywords: &["compliance","gdpr","soc2","iso","hipaa","pci","regulation","policy","governance","risk"], children: &[] },
+    IntentNode { name: "exploit", kind: PromptKind::Security, keywords: &["exploit","attack","inject","xss","csrf","sqli","rce","lfi","bypass","hijack","spoof","phish"], children: &[] },
+    // ── Meta ──────────────────────────────────────────────────────────────
+    IntentNode { name: "prompt-eng", kind: PromptKind::Meta, keywords: &["prompt","engineer","improve","optimize","enrich","enhance","augment","rewrite","refine","structure","framework","template","better"], children: &[] },
+    IntentNode { name: "skill-design", kind: PromptKind::Skill, keywords: &["skill","plugin","tool","extension","agent","capability","mcp","server","adapter","connector","bridge","integration"], children: &[] },
+    IntentNode { name: "self-enrich", kind: PromptKind::Meta, keywords: &["enrich","self","improve","augment","enhance","upgrade","boost","amplify","level","up","meta"], children: &[] },
+    // ── Other roots ───────────────────────────────────────────────────────
+    IntentNode { name: "search", kind: PromptKind::Search, keywords: &["search","find","locate","look","grep","query","index","explore","discover","browse","navigate"], children: &[] },
+    IntentNode { name: "config", kind: PromptKind::Config, keywords: &["config","configure","setup","settings","option","param","tune","optimize","adjust","calibrate","env","dotenv","toml","yaml","json"], children: &[] },
+    IntentNode { name: "math", kind: PromptKind::Math, keywords: &["math","equation","proof","theorem","calculus","algebra","geometry","statistic","probability","optimization","simulation","model"], children: &[] },
+    IntentNode { name: "creative", kind: PromptKind::Creative, keywords: &["creative","story","dialogue","world","build","character","plot","narrative","fiction","poem","poetry","song","lyric","script","screenplay"], children: &[] },
+    IntentNode { name: "general", kind: PromptKind::General, keywords: &[""], children: &[] },
+];
+
+/// Detect the full tree path of intent: returns [[root, child?, grandchild?]]
+/// for each matched branch. Order: deepest match first.
+pub fn detect_intent_tree(text: &str) -> Vec<IntentPath> {
+    let lower = text.to_lowercase();
+    let mut matches: Vec<(usize, usize)> = Vec::new(); // (node_idx, keyword_hits)
+
+    for (idx, node) in INTENT_TREE.iter().enumerate() {
+        let mut hits = 0usize;
+        for kw in node.keywords {
+            if !kw.is_empty() && lower.contains(*kw) {
+                hits += 1;
+            }
+        }
+        if hits > 0 {
+            matches.push((idx, hits));
+        }
+    }
+
+    matches.sort_by(|a, b| b.1.cmp(&a.1));
+
+    // Build paths: for each match, walk up to root via parent index lookup.
+    let mut paths: Vec<IntentPath> = Vec::new();
+    for &(node_idx, _) in &matches {
+        let node = &INTENT_TREE[node_idx];
+        let mut path = vec![node.name.to_string()];
+
+        // Walk up: find parent by searching which node has this as child.
+        for (pidx, pnode) in INTENT_TREE.iter().enumerate() {
+            if pnode.children.contains(&node_idx) {
+                path.insert(0, pnode.name.to_string());
+                // Check grandparent.
+                for (gpidx, gpnode) in INTENT_TREE.iter().enumerate() {
+                    if gpnode.children.contains(&pidx) {
+                        path.insert(0, gpnode.name.to_string());
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        paths.push(path);
+    }
+
+    // Dedup by path content.
+    let mut seen = std::collections::HashSet::new();
+    paths.retain(|p| seen.insert(p.join("/")));
+    paths.truncate(7);
+    paths
+}
+
+// ─── Pattern Tree — universal → domain → sub-domain with inheritance ───────
+
+/// A node in the universal pattern taxonomy. Root patterns apply everywhere;
+/// children specialize for domains; grandchildren further refine.
+/// Each level inherits all patterns from its ancestors.
+#[derive(Debug, Clone)]
+pub struct PatternNode {
+    pub name: &'static str,
+    /// Pattern kind: what aspect of work this pattern governs.
+    pub category: &'static str,  // "quality", "safety", "process", "structure", "communication"
+    /// Core instruction (inherited by all children).
+    pub rule: &'static str,
+    pub children: &'static [usize],
+    /// Connected cross-patterns (links to other branches).
+    pub cross_links: &'static [usize],
+}
+
+/// Static pattern taxonomy. Universals (root) inherited by everything.
+pub static PATTERN_TREE: &[PatternNode] = &[
+    // ── UNIVERSALS (root, index 0-4) — inherited by ALL domains ───────────
+    PatternNode { name: "quality", category: "quality", rule: "Verify with real execution before claiming done. Never fake-green.", children: &[5,6], cross_links: &[11] },
+    PatternNode { name: "safety", category: "safety", rule: "Never commit secrets. Input validation at trust boundaries. Error handling prevents data loss.", children: &[7,8], cross_links: &[12,13] },
+    PatternNode { name: "minimal", category: "structure", rule: "Fewest correct files. Delete dead code. Minimal is good; correct-and-minimal is the bar.", children: &[9,10], cross_links: &[] },
+    PatternNode { name: "idempotency", category: "safety", rule: "Mutations must be safe to retry. Push/insert guarded by dedup. Counters guarded by version. State transitions guard against re-entry.", children: &[14,15], cross_links: &[1,16] },
+    PatternNode { name: "invariant", category: "quality", rule: "Structural guarantees must be asserted. Public API bounds-check inputs. Threshold ordering enforced. Index arithmetic guarded.", children: &[17,18], cross_links: &[0,14] },
+    // ── quality children ──────────────────────────────────────────────────
+    PatternNode { name: "test-first", category: "quality", rule: "Write test RED first, then code GREEN. Never delete tests without confirming they test dead code.", children: &[], cross_links: &[9] },
+    PatternNode { name: "evidence", category: "quality", rule: "Back claims with measured numbers. Benchmarks, not vibes. Falsifiable done-checks.", children: &[], cross_links: &[2] },
+    // ── safety children ───────────────────────────────────────────────────
+    PatternNode { name: "no-secrets", category: "safety", rule: "Never expose or log secrets. Never commit secrets. Scan for hardcoded credentials.", children: &[], cross_links: &[9] },
+    PatternNode { name: "fail-closed", category: "safety", rule: "Default deny. On error, refuse — don't fall through to default-allow. Auth failures are errors.", children: &[], cross_links: &[12] },
+    // ── minimal children ──────────────────────────────────────────────────
+    PatternNode { name: "dedup", category: "structure", rule: "Extract shared helpers. Eliminate copy-paste. Generic over duplicate. One source of truth.", children: &[], cross_links: &[3] },
+    PatternNode { name: "remove-dead", category: "structure", rule: "Delete unused code, dead flags, stale config. Remove before adding.", children: &[], cross_links: &[] },
+    // ── Cross-links: structure → process ──────────────────────────────────
+    // ── DOMAIN: code (index 11-16) — inherits universals 0-4 ──────────────
+    PatternNode { name: "code-core", category: "process", rule: "Follow repo conventions. Match existing patterns. Use existing primitives before adding deps.", children: &[12,13,19,20,21], cross_links: &[3] },
+    PatternNode { name: "code-security", category: "safety", rule: "Input validation on all public APIs. Sanitize f64: NaN→0.0. Bounds-check indices. No unsafe without SAFETY comment.", children: &[], cross_links: &[1,7] },
+    PatternNode { name: "code-crypto", category: "safety", rule: "Never fake crypto. Real KAT-gated primitives only. No classical fallback for PQ.", children: &[], cross_links: &[1] },
+    // ── idempotency children ──────────────────────────────────────────────
+    PatternNode { name: "push-dup-guard", category: "safety", rule: "Before push: check contains. Use HashSet or dedup guard. Replayed events must be no-ops.", children: &[], cross_links: &[3,16] },
+    PatternNode { name: "state-guard", category: "safety", rule: "State transitions: first check 'already in this state?' before advancing. FSM must be idempotent.", children: &[], cross_links: &[15] },
+    // ── invariant children ────────────────────────────────────────────────
+    PatternNode { name: "ordering", category: "quality", rule: "Thresholds must be strictly ordered. elevated<warning<critical<failed. Validate in constructor, assert in debug.", children: &[], cross_links: &[4] },
+    PatternNode { name: "bounds", category: "quality", rule: "Index arithmetic: debug_assert! bounds. Public fns: clamp or Option. Never silent OOB.", children: &[], cross_links: &[4,12] },
+    // ── code children ─────────────────────────────────────────────────────
+    PatternNode { name: "rust-idiom", category: "structure", rule: "Prefer std over external. Use Result, not panic. Use match, not if-let chains. Derive where possible.", children: &[], cross_links: &[2] },
+    PatternNode { name: "test-idiom", category: "quality", rule: "Tests: arrange/act/assert. RED→GREEN. One assertion concept per test. Test edge cases and error paths.", children: &[], cross_links: &[5] },
+    PatternNode { name: "refactor-idiom", category: "structure", rule: "Extract helper, don't inline. Name constants. Generic over duplicate. Delete dead before adding new.", children: &[], cross_links: &[9,10] },
+    // ── DOMAIN: security (index 22-26) — inherits universals 0-4 ──────────
+    PatternNode { name: "sec-core", category: "process", rule: "Threat-model first. Identify trust boundaries. Audit input paths. Defense in depth.", children: &[22,23,24], cross_links: &[1,12] },
+    PatternNode { name: "sec-audit", category: "quality", rule: "Audit: check for injection, auth bypass, data exposure, crypto misuse, dependency vulns.", children: &[], cross_links: &[0,6] },
+    PatternNode { name: "sec-harden", category: "safety", rule: "Harden: least privilege. Rate-limit. Timeout all external calls. Validate all inputs.", children: &[], cross_links: &[7,8] },
+    PatternNode { name: "sec-report", category: "communication", rule: "Security finding: Description, Risk, Recommendations, References, Summary. Severity: Critical/High/Medium/Low.", children: &[], cross_links: &[] },
+    // ── DOMAIN: system (index 27-30) — inherits universals 0-4 ────────────
+    PatternNode { name: "sys-core", category: "process", rule: "Infrastructure as code. Immutable deploys. Rollback path tested before rollout.", children: &[], cross_links: &[2] },
+    PatternNode { name: "sys-monitor", category: "quality", rule: "Every deployment has telemetry. Alerts fire on regression. Benchmarks gate before merge.", children: &[], cross_links: &[6] },
+    PatternNode { name: "sys-resilience", category: "safety", rule: "Circuit breaker on external calls. Timeout + retry with backoff. Failover tested regularly.", children: &[], cross_links: &[1,8] },
+    PatternNode { name: "sys-config", category: "structure", rule: "Config as code. Secrets from env, never committed. Feature flags off by default.", children: &[], cross_links: &[7,9] },
+    // ── DOMAIN: meta/prompt (index 31-34) — inherits universals 0-4 ───────
+    PatternNode { name: "prompt-core", category: "structure", rule: "Be specific. Use delimiters. Structured output. Conditional steps. Few-shot examples.", children: &[], cross_links: &[2] },
+    PatternNode { name: "prompt-reason", category: "quality", rule: "Chain of thought. Inner monologue. Self-ask. Verify before answering. Step-by-step reasoning.", children: &[], cross_links: &[6] },
+    PatternNode { name: "prompt-split", category: "process", rule: "Split complex tasks into subtasks. Intent classification → routing → execution. Summarize long docs piecewise.", children: &[], cross_links: &[0] },
+    PatternNode { name: "prompt-test", category: "quality", rule: "Test prompt changes systematically. Evaluations with golden answers. A/B compare. Measure before shipping.", children: &[], cross_links: &[5,6] },
+];
+
+/// Get all patterns that apply to a given intent path.
+/// Inherits from root (universal) → domain → sub-domain.
+pub fn inherit_patterns(path: &IntentPath) -> Vec<&'static PatternNode> {
+    let mut result: Vec<&PatternNode> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+
+    // Always include universals (indices 0-4).
+    for i in 0..=4 {
+        if seen.insert(i) { result.push(&PATTERN_TREE[i]); }
+    }
+
+    // Map intent root name → domain pattern index.
+    let domain_map: &[(&str, usize)] = &[
+        ("code", 11), ("write", 11), ("refactor", 11), ("debug", 11), ("review", 11), ("test", 11),
+        ("security", 21), ("harden", 21),
+        ("system", 25), ("deploy", 25),
+        ("meta", 29), ("prompt-eng", 29), ("skill-design", 29),
+    ];
+
+    for seg in path.iter() {
+        for (key, idx) in domain_map {
+            if seg == *key && seen.insert(*idx) {
+                result.push(&PATTERN_TREE[*idx]);
+                // Also add domain children.
+                for &child in PATTERN_TREE[*idx].children {
+                    if seen.insert(child) { result.push(&PATTERN_TREE[child]); }
+                }
+            }
+        }
+    }
+
+    // Always include idempotency and invariant patterns.
+    for i in [3, 4, 14, 15, 16, 17] {
+        if seen.insert(i) { result.push(&PATTERN_TREE[i]); }
+    }
+
+    result
+}
 
 /// A single prompt/skill/tool template, scraped and stored natively.
 #[derive(Debug, Clone)]
@@ -171,11 +429,12 @@ pub struct EnrichmentReport {
     pub intents: Vec<(PromptKind, usize, f64)>,
     /// Primary intent.
     pub primary_intent: PromptKind,
+    /// Tree paths found (e.g. ["code","debug","compile"]).
+    pub intent_paths: Vec<IntentPath>,
     /// Applied prompt enrichments.
     pub prompts: Vec<PromptEntry>,
     /// Applied skill names.
     pub skills: Vec<String>,
-    /// How many prompts/skills matched.
     pub total_prompts: usize,
     pub total_skills: usize,
 }
@@ -189,6 +448,13 @@ impl EnrichmentReport {
             out.push_str("  intents:");
             for (kind, count, score) in &self.intents {
                 out.push_str(&format!(" {}({}|{:.2})", kind.as_str(), count, score));
+            }
+            out.push('\n');
+        }
+        if !self.intent_paths.is_empty() {
+            out.push_str("  paths:");
+            for p in &self.intent_paths {
+                out.push_str(&format!(" [{}]", p.join(" → ")));
             }
             out.push('\n');
         }
@@ -443,6 +709,7 @@ impl PromptEnrichEngine {
     /// This is the primary API: call before any cognitive work.
     pub fn enrich_report(&self, user_input: &str) -> EnrichmentReport {
         let intents = detect_all_intents(user_input);
+        let intent_paths = detect_intent_tree(user_input);
         let primary = intents.first().map(|(k, _, _)| *k).unwrap_or(PromptKind::General);
         let lower = user_input.to_lowercase();
         let words: Vec<&str> = lower.split_whitespace().collect();
@@ -491,6 +758,7 @@ impl PromptEnrichEngine {
         let total_skills = skills.len();
         EnrichmentReport {
             intents,
+            intent_paths,
             primary_intent: primary,
             prompts,
             skills,
@@ -827,6 +1095,7 @@ mod tests {
     fn enrichment_report_display_format() {
         let report = EnrichmentReport {
             intents: vec![(PromptKind::Code, 5, 0.5), (PromptKind::Test, 3, 0.3)],
+            intent_paths: vec![vec!["code".into(), "debug".into(), "compile".into()]],
             primary_intent: PromptKind::Code,
             prompts: vec![PromptEntry::new("test_prompt", "text", PromptKind::Code, &["test"], "src", "MIT")],
             skills: vec!["test_skill".into()],
@@ -837,6 +1106,66 @@ mod tests {
         assert!(disp.contains("code"));
         assert!(disp.contains("test_prompt"));
         assert!(disp.contains("test_skill"));
+        assert!(disp.contains("paths"));
+        assert!(disp.contains("debug"));
+    }
+
+    #[test]
+    fn detect_intent_tree_code_debug() {
+        let paths = detect_intent_tree("fix the compilation error in this rust function");
+        assert!(!paths.is_empty());
+        // Should find a path containing "code" and "compile" (or "debug")
+        let all_names: Vec<&str> = paths.iter().flatten().map(|s| s.as_str()).collect();
+        assert!(all_names.iter().any(|n| *n == "code"));
+    }
+
+    #[test]
+    fn detect_intent_tree_security() {
+        let paths = detect_intent_tree("audit the authentication for security vulnerabilities in the XSS exploit");
+        assert!(!paths.is_empty());
+        let all_names: Vec<&str> = paths.iter().flatten().map(|s| s.as_str()).collect();
+        assert!(all_names.iter().any(|n| *n == "harden" || *n == "exploit" || *n == "security"));
+    }
+
+    #[test]
+    fn detect_intent_tree_multiple_branches() {
+        let paths = detect_intent_tree("implement a new API endpoint and write integration tests for it");
+        assert!(paths.len() >= 2);
+        let all_names: Vec<&str> = paths.iter().flatten().map(|s| s.as_str()).collect();
+        assert!(all_names.iter().any(|n| *n == "code" || *n == "api"));
+        assert!(all_names.iter().any(|n| *n == "test" || *n == "integration"));
+    }
+
+    #[test]
+    fn inherit_patterns_universal() {
+        let path = vec!["code".to_string(), "implement".to_string()];
+        let patterns = inherit_patterns(&path);
+        // Must include universals.
+        assert!(patterns.iter().any(|p| p.name == "quality"));
+        assert!(patterns.iter().any(|p| p.name == "safety"));
+        assert!(patterns.iter().any(|p| p.name == "minimal"));
+        assert!(patterns.iter().any(|p| p.name == "idempotency"));
+        assert!(patterns.iter().any(|p| p.name == "invariant"));
+    }
+
+    #[test]
+    fn inherit_patterns_domain_specific() {
+        let path = vec!["code".to_string(), "debug".to_string()];
+        let patterns = inherit_patterns(&path);
+        // Domain-specific code patterns.
+        assert!(patterns.iter().any(|p| p.name == "code-core"));
+        assert!(patterns.iter().any(|p| p.name == "code-security"));
+        // Idempotency children always included.
+        assert!(patterns.iter().any(|p| p.name == "push-dup-guard"));
+        assert!(patterns.iter().any(|p| p.name == "state-guard"));
+    }
+
+    #[test]
+    fn inherit_patterns_security() {
+        let path = vec!["harden".to_string(), "exploit".to_string()];
+        let patterns = inherit_patterns(&path);
+        assert!(patterns.iter().any(|p| p.name == "sec-core"));
+        assert!(patterns.iter().any(|p| p.name == "sec-harden"));
     }
 }
 
