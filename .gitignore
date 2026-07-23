@@ -106,3 +106,4 @@ docs/ledger/corpus-spine-chain.jsonl
 kernel/src/shadows.rs
 kernel/src/strat.rs
 kernel/src/trader.rs
+.secrets/
