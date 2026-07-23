@@ -715,6 +715,9 @@ pub mod bebop_bridge;
 /// Code change prediction oracle — learns from past commits to predict
 /// ETA, impact, and eigen shift for future changes. Uses chronos snapshots.
 pub mod code_oracle;
+/// System-wide ASCII dashboard — renders full system state as human-readable
+/// report. Uses all visualization primitives: trinary RGB, fractal, eigen, chronos.
+pub mod sys_dashboard;
 /// P08 — typed metrics pure core: `/proc/self` sampling (CPU/mem) + a
 /// deterministic, serde-free, parse-or-reject text schema for typed metric
 /// records. NO egress / signing change; GPU is typed-absent (`Option`) until
