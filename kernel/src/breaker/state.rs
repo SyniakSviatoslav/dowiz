@@ -297,6 +297,11 @@ mod tests {
     use crate::breaker::testkit::{test_rate_profile, test_roc_bounds};
     use crate::breaker::thresholds::{default_weights, fit_from_rates};
 
+    /// Excess delta above θ_open / θ_kill that guarantees `trip_score` crosses the
+    /// trigger threshold (closed→Open / Open→Killed). Hardcoded as `0.5` because
+    /// the clamped [0,1] trip_score is always ≥ 1.0 at θ_open+0.5 when θ_open ≤ 0.5.
+    const TRIP_EXCESS: f32 = 0.5;
+
     fn tid() -> ThresholdId {
         let p = test_rate_profile();
         let (normals, anomalies) = test_roc_bounds();
@@ -347,7 +352,7 @@ mod tests {
         let t = tid();
         let mut rec = new_record([1u8; 16], 0, t);
         for i in 0..t.w_consec {
-            rec = step(rec, &sig(t.open + 0.5, w()), None).rec;
+            rec = step(rec, &sig(t.open + TRIP_EXCESS, w()), None).rec;
         }
         assert_eq!(rec.state, BreakerState::Open);
         assert_eq!(rec.cooldown_ticks, t.cooldown_base);
@@ -357,7 +362,7 @@ mod tests {
     fn closed_resets_consec_on_calm() {
         let t = tid();
         let mut rec = new_record([1u8; 16], 0, t);
-        rec = step(rec, &sig(t.open + 0.5, w()), None).rec;
+        rec = step(rec, &sig(t.open + TRIP_EXCESS, w()), None).rec;
         assert_eq!(rec.consecutive_trips, 1);
         rec = step(rec, &sig(0.0, w()), None).rec; // calm resets
         assert_eq!(rec.consecutive_trips, 0);
@@ -369,7 +374,7 @@ mod tests {
         let t = tid();
         let mut rec = new_record([1u8; 16], 0, t);
         for _ in 0..t.w_consec {
-            rec = step(rec, &sig(t.open + 0.5, w()), None).rec;
+            rec = step(rec, &sig(t.open + TRIP_EXCESS, w()), None).rec;
         }
         assert_eq!(rec.state, BreakerState::Open);
         for _ in 0..200 {
@@ -385,7 +390,7 @@ mod tests {
         let t = tid();
         let mut rec = new_record([1u8; 16], 0, t);
         for _ in 0..t.w_consec {
-            rec = step(rec, &sig(t.open + 0.5, w()), None).rec;
+            rec = step(rec, &sig(t.open + TRIP_EXCESS, w()), None).rec;
         }
         for _ in 0..200 {
             rec = cooldown_tick(rec);
@@ -404,7 +409,7 @@ mod tests {
         let t = tid();
         let mut rec = new_record([1u8; 16], 0, t);
         for _ in 0..t.w_consec {
-            rec = step(rec, &sig(t.open + 0.5, w()), None).rec;
+            rec = step(rec, &sig(t.open + TRIP_EXCESS, w()), None).rec;
         }
         for _ in 0..200 {
             rec = cooldown_tick(rec);
@@ -412,7 +417,7 @@ mod tests {
         rec = step(rec, &sig(0.0, w()), None).rec; // → HalfOpen, probes=N
         let base = rec.cooldown_ticks;
         // A probe mismatch ⇒ reopen with doubled (capped) cooldown.
-        rec = step(rec, &sig(t.open + 0.5, w()), Some(TripCause::ProbeMismatch)).rec;
+        rec = step(rec, &sig(t.open + TRIP_EXCESS, w()), Some(TripCause::ProbeMismatch)).rec;
         assert_eq!(rec.state, BreakerState::Open);
         assert_eq!(rec.cooldown_ticks, checked_double_cap(base, t.cooldown_cap));
         assert_eq!(rec.cooldown_ticks, base as u32 * 2); // base*2 <= cap here
@@ -424,11 +429,11 @@ mod tests {
         let mut rec = new_record([1u8; 16], 0, t);
         rec.red_line_class = false;
         for _ in 0..t.w_consec {
-            rec = step(rec, &sig(t.open + 0.5, w()), None).rec;
+            rec = step(rec, &sig(t.open + TRIP_EXCESS, w()), None).rec;
         }
         // Drive kill-window accumulation while cooling (score > θ_kill).
         for _ in 0..t.w_kill {
-            rec = step(rec, &sig(t.kill + 0.5, w()), None).rec;
+            rec = step(rec, &sig(t.kill + TRIP_EXCESS, w()), None).rec;
         }
         assert_eq!(rec.state, BreakerState::Killed);
         assert_eq!(rec.human_gate_required, false);
@@ -440,10 +445,10 @@ mod tests {
         let mut rec = new_record([1u8; 16], 0, t);
         rec.red_line_class = true;
         for _ in 0..t.w_consec {
-            rec = step(rec, &sig(t.open + 0.5, w()), None).rec;
+            rec = step(rec, &sig(t.open + TRIP_EXCESS, w()), None).rec;
         }
         for _ in 0..t.w_kill {
-            rec = step(rec, &sig(t.kill + 0.5, w()), None).rec;
+            rec = step(rec, &sig(t.kill + TRIP_EXCESS, w()), None).rec;
         }
         assert_eq!(rec.state, BreakerState::Killed);
         assert_eq!(rec.human_gate_required, true);

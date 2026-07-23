@@ -771,6 +771,23 @@ pub fn now_ms() -> u64 {
         .as_millis() as u64
 }
 
+/// Sort descending by a `f64` key (NaN/Inf → end of order).
+///
+/// Replaces the repeated `sort_by(|a,b| b.K.partial_cmp(&a.K).unwrap_or(Equal))`
+/// pattern found in 17+ call sites across the kernel.
+pub fn sort_by_f64_desc<T, K>(items: &mut [T], key: K)
+where K: Fn(&T) -> f64
+{
+    items.sort_by(|a, b| key(b).partial_cmp(&key(a)).unwrap_or(std::cmp::Ordering::Equal));
+}
+
+/// Sort ascending by a `f64` key (NaN/Inf → end of order).
+pub fn sort_by_f64_asc<T, K>(items: &mut [T], key: K)
+where K: Fn(&T) -> f64
+{
+    items.sort_by(|a, b| key(a).partial_cmp(&key(b)).unwrap_or(std::cmp::Ordering::Equal));
+}
+
 /// Authoritative fixed-timestep for the field-sim/animation integrator.
 ///
 /// `dowiz-engine` (`engine/src/loop_.rs`) hardcodes the SAME value and its

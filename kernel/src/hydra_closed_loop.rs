@@ -35,6 +35,25 @@ use crate::spectral::{spectral_radius, DriftClass};
 use crate::event_log::{MeshEvent, MemEventStore, EventStore};
 use crate::ports::llm::{LlmBackend, ChatRequest, ChatResponse, TaskClass, CachePolicy};
 
+/// Kalman initial state x₀ for the 1-D filter tracking ρ(t).
+pub const KALMAN_RHO_X0: f64 = 0.0;
+/// Kalman state transition and measurement coefficient (F=H=1).
+pub const KALMAN_RHO_FH: f64 = 1.0;
+/// Kalman process noise Q.
+pub const KALMAN_RHO_Q: f64 = 0.01;
+/// Kalman measurement noise R.
+pub const KALMAN_RHO_R: f64 = 1.0;
+/// Entropy budget violation threshold.
+pub const ENTROPY_BUDGET_THRESHOLD: f64 = 0.01;
+/// Entropy budget sliding window.
+pub const ENTROPY_BUDGET_WINDOW: u32 = 5;
+/// Simulated annealing initial temperature.
+pub const ANNEAL_DEFAULT_TEMP: f64 = 1.0;
+/// Simulated annealing cooling rate.
+pub const ANNEAL_DEFAULT_COOL: f64 = 100.0;
+/// Branch dispersion default window size.
+pub const DISPERSION_DEFAULT_WINDOW: usize = 10;
+
 /// A mutation proposed by the LLM, parsed from the model's JSON output.
 /// The LLM emits these as `{"from":N,"to":M,"weight":W}` triples.
 #[derive(Debug, Clone)]
@@ -109,13 +128,13 @@ impl<S: EventStore> HydraClosedLoop<S> {
         llm: Option<Box<dyn LlmBackend>>,
     ) -> Self {
         // 1-D Kalman filter tracking ρ(t): F=H=1, Q=0.01, R=1.0, x0=0, P0=1.
-        let kalman = KalmanFilter::scalar(0.0, 1.0, 1.0, 1.0, 0.01, 1.0);
+        let kalman = KalmanFilter::scalar(KALMAN_RHO_X0, KALMAN_RHO_FH, KALMAN_RHO_FH, KALMAN_RHO_FH, KALMAN_RHO_Q, KALMAN_RHO_R);
         HydraClosedLoop {
             hydra: Hydra::new(store, nodes, base_edges.clone()),
-            budget: EntropyBudget::new(lambda, 0.01, 5),
-            annealing: TAnnealing::new(1.0, 100.0),
+            budget: EntropyBudget::new(lambda, ENTROPY_BUDGET_THRESHOLD, ENTROPY_BUDGET_WINDOW),
+            annealing: TAnnealing::new(ANNEAL_DEFAULT_TEMP, ANNEAL_DEFAULT_COOL),
             kalman,
-            dispersion: BranchDispersion::new(10),
+            dispersion: BranchDispersion::new(DISPERSION_DEFAULT_WINDOW),
             lambda,
             base_edges_copy: base_edges,
             nodes,

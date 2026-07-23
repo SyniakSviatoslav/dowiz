@@ -77,6 +77,10 @@ pub const TREND_CONFIDENCE_LOW: f64 = 0.1;
 pub const TREND_FRICTION: f64 = 0.35;
 pub const TREND_ERROR_HIGH: f64 = 0.8;
 pub const TREND_ERROR_LOW_MUL: f64 = 0.12;
+pub const PREDICTOR_PID_BLEND: f64 = 0.5;
+pub const PREDICTOR_PID_ERROR_THRESH: f64 = 0.9;
+pub const PREDICTOR_PID_ERROR_MUL_HIGH: f64 = 0.5;
+pub const PREDICTOR_PID_ERROR_MUL_LOW: f64 = 0.1;
 
 // ─── SystemState ──────────────────────────────────────────────────────────
 
@@ -321,7 +325,14 @@ impl Predictor {
     /// Observe a new system state.
     ///
     /// Stores it in the crystal lattice and history, updates PID dynamics.
+    /// Idempotent: calling with the same state.id multiple times is a no-op
+    /// (trend samples are not duplicated).
     pub fn observe(&mut self, state: SystemState) {
+        // Idempotency guard: skip if this state's ID was already observed.
+        if self.current_state.as_ref().map_or(false, |s| s.id == state.id) {
+            return;
+        }
+
         let ts = state.timestamp_ms;
         let snapshot = StateSnapshot::new(state.id, state.metrics.clone(), &state.label);
 
@@ -387,10 +398,10 @@ impl Predictor {
         {
             let pid_output = self.pid.output(metric_idx);
             // PID predicts where the metric is heading based on recent dynamics.
-            let predicted = (pid_output + current_val * 0.5).min(1.0);
+            let predicted = (pid_output + current_val * PREDICTOR_PID_BLEND).min(1.0);
             let confidence = if self.degraded { PREDICTOR_DEGRADED_CONFIDENCE } else { PREDICTOR_NORMAL_CONFIDENCE };
             let throttle = if predicted > PREDICTOR_THROTTLE_LOW { 1 } else if predicted > PREDICTOR_THROTTLE_HIGH { 2 } else { 0 };
-            let pid_error_prob = if predicted > 0.9 { predicted * 0.5 } else { predicted * 0.1 };
+            let pid_error_prob = if predicted > PREDICTOR_PID_ERROR_THRESH { predicted * PREDICTOR_PID_ERROR_MUL_HIGH } else { predicted * PREDICTOR_PID_ERROR_MUL_LOW };
             bids.push(Self::make_bid(
                 metric_idx, predicted, "pid", confidence, throttle,
                 predicted * PREDICTOR_BID_FRICTION_WEIGHT, pid_error_prob,
@@ -677,7 +688,9 @@ impl EventSimulator {
     }
 
     pub fn add_route(&mut self, route: EventRoute) {
-        self.routes.push(route);
+        if !self.routes.iter().any(|r| r.name == route.name) {
+            self.routes.push(route);
+        }
     }
 
     pub fn routes(&self) -> &[EventRoute] {

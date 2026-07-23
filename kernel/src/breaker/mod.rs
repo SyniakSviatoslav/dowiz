@@ -273,6 +273,9 @@ mod tests {
     use crate::breaker::testkit::{test_rate_profile, test_roc_bounds};
     use crate::breaker::thresholds::{default_weights, fit_from_rates};
 
+    /// Excess delta above θ_open guaranteeing trip_score ≥ 1.0 (see state.rs tests).
+    const TRIP_EXCESS: f32 = 0.5;
+
     fn tid() -> ThresholdId {
         let p = test_rate_profile();
         let (normals, anomalies) = test_roc_bounds();
@@ -322,7 +325,7 @@ mod tests {
         assert_eq!(p.agent(), [1u8; 16]);
         // Trip to Open.
         for _ in 0..tid().w_consec {
-            b.tick(sig(tid().open + 0.5), None, false);
+            b.tick(sig(tid().open + TRIP_EXCESS), None, false);
         }
         assert_eq!(b.current_state(), BreakerState::Open);
         assert!(matches!(b.admit([1u8; 16], RedLineClass::Clean), Err(_)));
@@ -334,7 +337,7 @@ mod tests {
         // assert the gate round-trips and that `Tripped` carries the cause.
         let mut b = Breaker::new([1u8; 16], tid());
         for _ in 0..tid().w_consec {
-            b.tick(sig(tid().open + 0.5), None, false);
+            b.tick(sig(tid().open + TRIP_EXCESS), None, false);
         }
         let tripped = match b.admit([1u8; 16], RedLineClass::Clean) {
             Ok(_) => panic!("expected Tripped, got a Permit"),
@@ -376,7 +379,7 @@ mod tests {
         // Three consecutive hot windows force the Closed→Open transition (audit rows
         // are written on transition / trip, not on steady-state calm windows).
         for _ in 0..3 {
-            b.tick(sig(tid().open + 0.5), None, false);
+            b.tick(sig(tid().open + TRIP_EXCESS), None, false);
         }
         // Then a few calm windows to exercise steady-state bookkeeping.
         for _ in 0..3 {

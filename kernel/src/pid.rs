@@ -385,6 +385,10 @@ impl PidArray {
 
     /// Reset a single channel.
     pub fn reset_channel(&mut self, idx: usize) {
+        debug_assert!(idx < self.n, "PidArray::reset_channel: idx {} out of bounds (n={})", idx, self.n);
+        if idx >= self.n {
+            return;
+        }
         self.integrals[idx] = 0.0;
         self.prev_errors[idx] = 0.0;
     }

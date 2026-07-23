@@ -110,7 +110,10 @@ impl GossipBus {
     pub fn subscribe(&mut self, topic: GossipTopic) -> SubscriberId {
         let id = self.next_id;
         self.next_id += 1;
-        self.subscribers.entry(topic).or_default().push(id);
+        let subs = self.subscribers.entry(topic).or_default();
+        if !subs.contains(&id) {
+            subs.push(id);
+        }
         self.queues.entry(id).or_default();
         id
     }
@@ -120,7 +123,10 @@ impl GossipBus {
         let id = self.next_id;
         self.next_id += 1;
         for &topic in topics {
-            self.subscribers.entry(topic).or_default().push(id);
+            let subs = self.subscribers.entry(topic).or_default();
+            if !subs.contains(&id) {
+                subs.push(id);
+            }
         }
         self.queues.entry(id).or_default();
         id

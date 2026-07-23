@@ -113,6 +113,49 @@ pub struct ResiliencePolicy {
     pub max_consecutive_failures: u32,
 }
 
+impl ResiliencePolicy {
+    /// Create a new policy with threshold ordering enforced.
+    ///
+    /// Panics (debug_assert) if thresholds are not strictly ordered:
+    /// elevated < warning < critical < failed. In release builds,
+    /// an out-of-order policy silently uses the thresholds as-is
+    /// (the `DegradationLevel::from_values` chain is monotone-safe).
+    pub fn new(
+        elevated_threshold: f64,
+        warning_threshold: f64,
+        critical_threshold: f64,
+        failed_threshold: f64,
+        strategy_elevated: FailoverStrategy,
+        strategy_warning: FailoverStrategy,
+        strategy_critical: FailoverStrategy,
+        strategy_failed: FailoverStrategy,
+        use_circuit_breaker: bool,
+        cooldown_ms: u64,
+        max_consecutive_failures: u32,
+    ) -> Self {
+        debug_assert!(
+            elevated_threshold < warning_threshold
+                && warning_threshold < critical_threshold
+                && critical_threshold < failed_threshold,
+            "ResiliencePolicy thresholds must be strictly ordered: elevated({}) < warning({}) < critical({}) < failed({})",
+            elevated_threshold, warning_threshold, critical_threshold, failed_threshold
+        );
+        ResiliencePolicy {
+            elevated_threshold: crate::sanitize_f64(elevated_threshold),
+            warning_threshold: crate::sanitize_f64(warning_threshold),
+            critical_threshold: crate::sanitize_f64(critical_threshold),
+            failed_threshold: crate::sanitize_f64(failed_threshold),
+            strategy_elevated,
+            strategy_warning,
+            strategy_critical,
+            strategy_failed,
+            use_circuit_breaker,
+            cooldown_ms,
+            max_consecutive_failures,
+        }
+    }
+}
+
 impl Default for ResiliencePolicy {
     fn default() -> Self {
         ResiliencePolicy {

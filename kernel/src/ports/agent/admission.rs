@@ -572,6 +572,10 @@ mod tests {
     };
     use std::sync::atomic::AtomicUsize;
 
+    fn admit_scope() -> Scope {
+        Scope::single(Resource::AgentBridge, Action::AdmitAgent)
+    }
+
     // ── test fixtures ──────────────────────────────────────────────────────────
 
     /// A verifier that counts `verify_classical` + `verify_pq` calls (shared counter),
@@ -698,7 +702,7 @@ mod tests {
         let v = RefSigner;
         let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
         let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
-        let scope = Scope::single(Resource::AgentBridge, Action::AdmitAgent);
+        let scope = admit_scope();
         let (mut frame, roster, chain) =
             valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
         // Corrupt one bit of the classical signature.
@@ -733,7 +737,7 @@ mod tests {
         let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
         let mut manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
         manifest.config_axes = vec![(0x7F, 0)]; // unknown axis id
-        let scope = Scope::single(Resource::AgentBridge, Action::AdmitAgent);
+        let scope = admit_scope();
         let (frame, roster, chain) = valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
 
         let mut adm = admitter();
@@ -762,7 +766,7 @@ mod tests {
         let v = RefSigner;
         let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
         let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::NativeProcess, false, 0);
-        let scope = Scope::single(Resource::AgentBridge, Action::AdmitAgent);
+        let scope = admit_scope();
         let (frame, roster, chain) = valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
 
         let mut adm = admitter();
@@ -789,7 +793,7 @@ mod tests {
         let mut manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
         // Break the identity: claim a node_id that does NOT hash from the carried keys.
         manifest.agent_node_id = [0xAB; 32];
-        let scope = Scope::single(Resource::AgentBridge, Action::AdmitAgent);
+        let scope = admit_scope();
         // Re-sign the frame over the tampered manifest so the signatures are VALID.
         let (frame, roster, chain) = valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
 
@@ -814,7 +818,7 @@ mod tests {
         let v = RefSigner;
         let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
         let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, true, 2);
-        let scope = Scope::single(Resource::AgentBridge, Action::AdmitAgent);
+        let scope = admit_scope();
         let (frame, roster, chain) = valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
 
         let mut adm = admitter();
@@ -846,7 +850,7 @@ mod tests {
         let v = RefSigner;
         let (cls, pq, anch) = ([4u8; 32], [5u8; 32], [6u8; 32]);
         let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 3);
-        let scope = Scope::single(Resource::AgentBridge, Action::AdmitAgent);
+        let scope = admit_scope();
         let (frame, roster, chain) = valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [8u8; 8]);
         let mut adm = admitter();
         let mut log = EventLog::new(MemEventStore::new());
@@ -870,7 +874,7 @@ mod tests {
         let v = RefSigner;
         let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
         let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
-        let scope = Scope::single(Resource::AgentBridge, Action::AdmitAgent);
+        let scope = admit_scope();
         let (frame, roster, chain) =
             valid_frame(&v, &cls, &pq, &anch, &manifest, scope.clone(), [7u8; 8]);
         let mut adm = admitter();
@@ -912,7 +916,7 @@ mod tests {
         let v = RefSigner;
         let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
         let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
-        let scope = Scope::single(Resource::AgentBridge, Action::AdmitAgent);
+        let scope = admit_scope();
         // Global ceiling = 3, no refill; shards disabled ⇒ only 3 frames reach the gate.
         let limiter = AdmissionLimiter::new(3, 0.0, 0, 0, 0.0);
         let mut adm = Admitter::new(open_gate(), limiter, 1_000_000, [0u8; 32]);
@@ -966,7 +970,7 @@ mod tests {
         let v = RefSigner;
         let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
         let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
-        let scope = Scope::single(Resource::AgentBridge, Action::AdmitAgent);
+        let scope = admit_scope();
         let (frame, roster, _chain) =
             valid_frame(&v, &cls, &pq, &anch, &manifest, scope.clone(), [7u8; 8]);
         // A chain longer than MAX_VERIFY_CHAIN_LINKS (16) — 17 links.
@@ -1128,7 +1132,7 @@ mod tests {
         let v = RefSigner;
         let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
         let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
-        let scope = Scope::single(Resource::AgentBridge, Action::AdmitAgent);
+        let scope = admit_scope();
         let (frame, roster, chain) = valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
         let revocations = RevocationSet::new();
         let mut adm = admitter();

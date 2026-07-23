@@ -162,7 +162,7 @@ fn run_autonomous_loop(
         return run_golden_probe();
     }
     let nodes: usize = 5;
-    let base = vec![
+    let mut base = vec![
         TopoEdge {
             from: 0,
             to: 1,
@@ -200,7 +200,8 @@ fn run_autonomous_loop(
     let mut cycles = 0usize;
 
     while cycles < max_cycles {
-        let base_edge = &mut base[cycles % base.len()];
+        let base_len = base.len();
+        let base_edge = &mut base[cycles % base_len];
         let delta = vec![TopoEdge {
             from: base_edge.from,
             to: base_edge.to,
