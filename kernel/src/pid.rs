@@ -70,7 +70,13 @@ pub struct PidConfig32 {
 
 impl PidConfig32 {
     pub fn new(kp: f32, ki: f32, kd: f32, min: f32, max: f32) -> Self {
-        PidConfig32 { kp, ki, kd, min, max }
+        PidConfig32 {
+            kp: crate::sanitize_f32(kp),
+            ki: crate::sanitize_f32(ki),
+            kd: crate::sanitize_f32(kd),
+            min: crate::sanitize_f32(min),
+            max: crate::sanitize_f32(max),
+        }
     }
 }
 

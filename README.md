@@ -1190,66 +1190,90 @@ The author gives this away for free to anyone who wants it.
 
 ## 13. API Reference
 
-### Web API (`/api/`)
+### Kernel (`kernel/src/`)
+| Module | Purpose | Lines |
+|--------|---------|-------|
+| `trinary.rs` | 3-valued logic (Kleene K3 + Łukasiewicz Ł3) | 726 |
+| `eigen.rs` | Eigen decomposition as data primitive | ~300 |
+| `chronos_topology.rs` | 4D PAST/PRESENT/PREDICTED navigation | ~400 |
+| `prompt_enrich.rs` | Intent detection + pattern enrichment | ~1200 |
+| `prompt_enrich_db.jsonl` | Enrichment database (15,024 entries, ~4.3MB) | — |
+| `stem.rs` | 25-language stemmer | ~300 |
+| `telemetry_harvest.rs` | Harvest ledger for EV-based dispatch | ~200 |
+| `cross_bridge.rs` | 7 cross-kind pattern bridges | ~300 |
+| `bebop_bridge.rs` | TriCap, EigenEnvelope, WaveMeshSync, ChronosDTN | ~250 |
 
-| Endpoint | Method | Description | Body |
-|---|---|---|---|
-| `/api/order` | POST | Create a new order | `{ items, total, address, phone, note }` |
-| `/api/telemetry/web` | POST | Web health events (optional) | `{ events: [{ type, ts, data }] }` |
+### Engine (`engine/src/`)
+| Module | Purpose |
+|--------|---------|
+| `field_frame.rs` | Laplacian-stencil physics field render |
+| `voice_profile.rs` | Voice-driven surface interaction |
+| `battery_gate.rs` | Battery decision gate |
 
-### Kernel WASM exports
+### Courier (`apps/courier/src/`)
+| Module | Purpose |
+|--------|---------|
+| `lib.rs` | CourierSurface, DispatchEvent, SurfaceConsume types |
+| `gates.rs` | Quality gates (self-referencing anti-pattern eliminated) |
 
-```js
-// Import in browser:
-import {
-  geo_haversine_js,   // Haversine distance (lat/lng → meters)
-  geo_eta_js,          // ETA estimate (remaining m, total m, baseline s)
-  // FSM operations
-  // Money operations
-  // Spectral helpers
-} from './lib/kernel/kernel_client.mjs';
-
-// Examples:
-const dist = geo_haversine_js(41.3275, 19.8187, 41.3300, 19.8200);
-// → { ok: true, value: 300 }  (meters)
-
-const eta = geo_eta_js(300, 1000, 600);
-// → { ok: true, value: 180 }  (seconds estimated)
-```
-
-### Telemetry API (local only)
-
-```js
-// oracle.mjs — interaction marks
-import { createOracle } from './lib/telemetry/oracle.mjs';
-const oracle = createOracle();
-oracle.mark('checkout-start');
-oracle.trackInteractionAsync('checkout', async () => { /* ... */ });
-oracle.getSummary(); // { checkout: { count, avg, min, max } }
-
-// markov.mjs — state transition tracker
-import { createMarkov } from './lib/telemetry/markov.mjs';
-const markov = createMarkov();
-markov.observe('page:menu');
-markov.observe('page:cart');
-markov.getFriction('page:menu');
-// → { state: 'page:menu', transitions: [{ to: 'page:cart', prob: 0.7, avgMs: 3200 }] }
-
-// vitals.mjs — Web Vitals observer
-import { observeVitals } from './lib/telemetry/vitals.mjs';
-const vitals = observeVitals();
-vitals.report();
-// → { FCP: { value: 1200, rating: 'good' }, LCP: { value: 2100, rating: 'good' } }
-
-// health.mjs — health signal monitor
-import { createHealthMonitor } from './lib/telemetry/health.mjs';
-const health = createHealthMonitor();
-health.signalCheckout(true, 3200, 1023);
-health.summary();
-// → { total: 1, errors: 0, avgLatency: 3200, successRate: 1 }
-```
+### Key invariants
+- All pub f64 constructors call `sanitize_f64()`
+- All insert/push operations guard against duplicates (idempotency)
+- No self-referencing test gates
+- Kernel is pure-std (no external crates in default build)
+- 0 kernel compiler warnings enforced
 
 The author gives this API away for free to anyone who wants it.
+
+### CI Pipeline
+| Gate | Command | Status |
+|------|---------|--------|
+| Unit tests | `cargo test --lib` | 2204 ✓ |
+| Idempotency | `cargo test --test idempotency_gate` | 11 ✓ |
+| Invariants | `cargo test --test invariant_fuzz` | 37 ✓ |
+| Bebop property | `cargo test --test bebop_property_tests --features "pq,ct-gate"` | 20 ✓ |
+| Sigmod battle | `cargo test -p courier --test sigmod_battle` | 20 ✓ |
+| Benchmarks | `benches/bench_track.py` | 7 benches ✓ |
+| Dudect | `scripts/verify-kernel-engine.sh` | Release only ✓ |
+| Warnings | `cargo test --lib 2>&1 | grep warning` | 0 ✓ |
+
+### Architecture Diagram (ASCII)
+```
+┌──────────────────────────────────────────────────────────────┐
+│                      AGENT LANE                               │
+│  agent-facade/  agent-loop/  claude-code-client/              │
+│  ┌─────────┐   ┌─────────┐   ┌─────────────────┐             │
+│  │ Facade  │──▶│ Loop    │──▶│ ClaudeCodeClient │             │
+│  └─────────┘   └─────────┘   └─────────────────┘             │
+│       │              │                                        │
+│       ▼              ▼                                        │
+│  ┌───────────────────────────────────────────────────────┐    │
+│  │              ENRICHMENT ENGINE (kernel/)               │    │
+│  │  prompt_enrich.rs  ◀──  prompt_enrich_db.jsonl (20K)  │    │
+│  │  enrich binary (70ms cold)                             │    │
+│  └──────────────────┬────────────────────────────────────┘    │
+│                     │                                         │
+│  ┌──────────────────┴──────────────────────────────────────┐  │
+│  │           KERNEL PRIMITIVES (167 modules)                │  │
+│  │  trinary.rs    eigen.rs    chronos_topology.rs           │  │
+│  │  delta.rs      invert.rs   cross_bridge.rs               │  │
+│  │  telemetry_harvest.rs  bebop_bridge.rs  stem.rs          │  │
+│  └──────────────────┬──────────────────────────────────────┘  │
+│                     │                                         │
+│  ┌──────────────────┴────────┬────────────────────────────┐  │
+│  │   ENGINE (engine/)        │   COURIER (apps/courier/)  │  │
+│  │   field_frame.rs          │   lib.rs + gates.rs        │  │
+│  │   voice.rs (DSP pipeline) │   sigmod_battle.rs         │  │
+│  └───────────────────────────┴────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────┘
+     │                         │
+     ▼                         ▼
+┌────────────┐         ┌──────────────────┐
+│ BEBOP v2   │         │  ENRICHMENT DB   │
+│ proto-crypto│         │  (20,024 entries)│
+│ 48+ tests  │         │  50 languages    │
+└────────────┘         └──────────────────┘
+```
 
 ---
 

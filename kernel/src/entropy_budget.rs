@@ -27,18 +27,21 @@
 /// internally). Returns 0.0 for empty or single-element distributions.
 /// Deterministic: same weights ⇒ same entropy.
 pub fn shannon_entropy(weights: &[f64]) -> f64 {
-    let total: f64 = weights.iter().filter(|&&w| w > 0.0).sum();
+    let total: f64 = weights.iter().map(|&w| crate::sanitize_f64(w)).filter(|&w| w > 0.0).sum();
     if total <= 0.0 || weights.len() <= 1 {
         return 0.0;
     }
-    -weights
-        .iter()
-        .filter(|&&w| w > 0.0)
-        .map(|&w| {
-            let p = w / total;
-            p * p.ln()
-        })
-        .sum::<f64>()
+    crate::sanitize_f64(
+        -weights
+            .iter()
+            .map(|&w| crate::sanitize_f64(w))
+            .filter(|&w| w > 0.0)
+            .map(|w| {
+                let p = w / total;
+                if p <= 0.0 { 0.0 } else { p * p.ln() }
+            })
+            .sum::<f64>()
+    )
 }
 
 /// Foster-Lyapunov supermartingale entropy budget.
@@ -91,11 +94,11 @@ impl EntropyBudget {
     /// (e.g. [count_damped, count_resonant, count_unstable] as proportions).
     pub fn step(&mut self, drift_weights: &[f64], rho: f64) -> f64 {
         let rho = crate::sanitize_f64(rho);
-        let s = shannon_entropy(drift_weights);
+        let s = crate::sanitize_f64(shannon_entropy(drift_weights));
         self.s = s;
         self.rho = rho;
-        let v = s + self.lambda * rho;
-        let delta = v - self.v;
+        let v = crate::sanitize_f64(s + self.lambda * rho);
+        let delta = crate::sanitize_f64(v - self.v);
         self.v = v;
         self.commits += 1;
         if delta > self.margin {
@@ -160,7 +163,7 @@ impl TAnnealing {
     pub fn new(t0: f64, tau: f64) -> Self {
         TAnnealing {
             t0: crate::sanitize_f64(t0),
-            tau: crate::sanitize_f64(tau),
+            tau: crate::sanitize_f64(tau).max(1e-12),
             k: 0,
         }
     }

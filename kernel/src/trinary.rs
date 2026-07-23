@@ -24,6 +24,8 @@
 
 use std::ops;
 
+use crate::telemetry_harvest::HarvestLedger;
+
 /// Three-valued logic value. Replaces `bool` in trinary-aware code paths.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
@@ -338,6 +340,35 @@ impl TriMatrix {
             };
         }
         m
+    }
+
+    /// Matrix multiplication with harvest telemetry recording.
+    pub fn mul_with_telemetry(
+        &self,
+        other: &TriMatrix,
+        ledger: &mut HarvestLedger,
+    ) -> TriMatrix {
+        let result = self.mul(other);
+        let success = result.stability_index() > 0.0;
+        let value = result.stability_index();
+        let cost = (self.rows * self.cols * other.cols) as f64;
+        ledger.record("trinary", "mat_mul", success, value, cost);
+        result
+    }
+
+    /// Kalman predict with harvest telemetry recording.
+    pub fn kalman_predict_with_telemetry(
+        &self,
+        prev: &TriMatrix,
+        gain: f64,
+        ledger: &mut HarvestLedger,
+    ) -> TriMatrix {
+        let result = self.kalman_predict(prev, gain);
+        let success = result.stability_index() > 0.0;
+        let value = result.stability_index();
+        let cost = self.data.len() as f64;
+        ledger.record("trinary", "kalman_predict", success, value, cost);
+        result
     }
 
     /// Human-readable diff report.
@@ -719,5 +750,37 @@ mod tests {
         let b = TriMatrix::new(3, 2);
         let report = a.debug_diff(&b);
         assert!(report.contains("dimension mismatch"));
+    }
+
+    #[test]
+    fn trinary_mul_with_telemetry_emits_record() {
+        use crate::telemetry_harvest::HarvestLedger;
+        let mut ledger = HarvestLedger::new(100);
+        let mut a = TriMatrix::new(2, 2);
+        a.set(0, 0, Tri::True); a.set(0, 1, Tri::False);
+        a.set(1, 0, Tri::Unknown); a.set(1, 1, Tri::True);
+        let mut b = TriMatrix::new(2, 2);
+        b.set(0, 0, Tri::True); b.set(0, 1, Tri::Unknown);
+        b.set(1, 0, Tri::False); b.set(1, 1, Tri::True);
+        let _ = a.mul_with_telemetry(&b, &mut ledger);
+        assert_eq!(ledger.len(), 1, "mul_with_telemetry must emit exactly 1 record");
+        let recs = ledger.records();
+        assert_eq!(recs[0].model, "trinary");
+        assert_eq!(recs[0].task, "mat_mul");
+        assert!(recs[0].success);
+    }
+
+    #[test]
+    fn trinary_kalman_with_telemetry_emits_record() {
+        use crate::telemetry_harvest::HarvestLedger;
+        let mut ledger = HarvestLedger::new(100);
+        let mut present = TriMatrix::new(1, 2);
+        present.set(0, 0, Tri::True); present.set(0, 1, Tri::False);
+        let mut past = TriMatrix::new(1, 2);
+        past.set(0, 0, Tri::True); past.set(0, 1, Tri::True);
+        let _ = present.kalman_predict_with_telemetry(&past, 0.2, &mut ledger);
+        assert_eq!(ledger.len(), 1, "kalman_predict_with_telemetry must emit exactly 1 record");
+        let recs = ledger.records();
+        assert_eq!(recs[0].task, "kalman_predict");
     }
 }

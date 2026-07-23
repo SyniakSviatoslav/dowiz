@@ -119,10 +119,10 @@ pub struct ResiliencePolicy {
 impl ResiliencePolicy {
     /// Create a new policy with threshold ordering enforced.
     ///
-    /// Panics (debug_assert) if thresholds are not strictly ordered:
-    /// elevated < warning < critical < failed. In release builds,
-    /// an out-of-order policy silently uses the thresholds as-is
-    /// (the `DegradationLevel::from_values` chain is monotone-safe).
+    /// If thresholds are not strictly ordered, they are auto-corrected:
+    /// each threshold is clamped to be strictly greater than the previous one
+    /// (with a small epsilon gap), so the `DegradationLevel::from_values` chain
+    /// remains monotone-safe in all build modes.
     pub fn new(
         elevated_threshold: f64,
         warning_threshold: f64,
@@ -136,18 +136,18 @@ impl ResiliencePolicy {
         cooldown_ms: u64,
         max_consecutive_failures: u32,
     ) -> Self {
-        debug_assert!(
-            elevated_threshold < warning_threshold
-                && warning_threshold < critical_threshold
-                && critical_threshold < failed_threshold,
-            "ResiliencePolicy thresholds must be strictly ordered: elevated({}) < warning({}) < critical({}) < failed({})",
-            elevated_threshold, warning_threshold, critical_threshold, failed_threshold
-        );
+        let mut e = crate::sanitize_f64(elevated_threshold);
+        let mut w = crate::sanitize_f64(warning_threshold);
+        let mut c = crate::sanitize_f64(critical_threshold);
+        let mut f = crate::sanitize_f64(failed_threshold);
+        if w <= e { w = e + 1e-9; }
+        if c <= w { c = w + 1e-9; }
+        if f <= c { f = c + 1e-9; }
         ResiliencePolicy {
-            elevated_threshold: crate::sanitize_f64(elevated_threshold),
-            warning_threshold: crate::sanitize_f64(warning_threshold),
-            critical_threshold: crate::sanitize_f64(critical_threshold),
-            failed_threshold: crate::sanitize_f64(failed_threshold),
+            elevated_threshold: e,
+            warning_threshold: w,
+            critical_threshold: c,
+            failed_threshold: f,
             strategy_elevated,
             strategy_warning,
             strategy_critical,

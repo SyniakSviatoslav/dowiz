@@ -195,4 +195,311 @@ mod tests {
             assert!(has_idempotency || has_invariant, "must find idempotency or invariant pattern");
         }
     }
+
+    // ─── CROSS-BRIDGE E2E: all 7 bridges exercised simultaneously ────────
+
+    /// 1: Python code → PythonKind patterns → SecurityKind patterns → verify cross-enrichment
+    #[test]
+    fn cross_bridge_full_pipeline_python_to_security() {
+        let reg = CrossBridgeRegistry::from_research();
+        use crate::prompt_enrich::PromptKind;
+
+        // Find the python bridge and security bridge
+        let py = reg.find_connection(PromptKind::Code, PromptKind::Security);
+        assert!(!py.is_empty(), "python code and security must be bridged");
+
+        // Simulate a Python security-audit prompt flowing through both bridges
+        let enrichment = crate::prompt_enrich::detect_all_intents(
+            "audit my Python crypto library for security vulnerabilities in pip packages"
+        );
+        assert!(enrichment.len() >= 1, "must detect intents for python+security prompt");
+        let kinds: Vec<PromptKind> = enrichment.iter().map(|(k, _, _)| *k).collect();
+        let has_code = kinds.contains(&PromptKind::Code);
+        let has_security = kinds.contains(&PromptKind::Security);
+        assert!(has_code || has_security,
+            "cross-bridge pipeline must detect code or security from python+security input, got {:?}", kinds);
+    }
+
+    /// 2: Tool invocation → ToolKind patterns → LLMKind patterns → verify
+    #[test]
+    fn cross_bridge_full_pipeline_tool_to_llm() {
+        let reg = CrossBridgeRegistry::from_research();
+        use crate::prompt_enrich::PromptKind;
+
+        let conns = reg.find_connection(PromptKind::Tool, PromptKind::Plugin);
+        assert!(!conns.is_empty(), "tool and plugin must be bridged");
+
+        let bridge = reg.strongest().unwrap();
+        assert!(bridge.kinds.contains(&PromptKind::Tool),
+            "strongest bridge must cover Tool kind");
+
+        let enrichment = crate::prompt_enrich::detect_all_intents(
+            "build a CLI tool that wraps the LLM inference API with plugin support"
+        );
+        assert!(enrichment.len() >= 1, "must detect intents for tool->llm pipeline");
+        let kinds: Vec<PromptKind> = enrichment.iter().map(|(k, _, _)| *k).collect();
+        assert!(
+            kinds.iter().any(|k| matches!(k, PromptKind::Tool | PromptKind::Plugin | PromptKind::Code)),
+            "tool->llm bridge must detect tool/plugin/code intent"
+        );
+    }
+
+    /// 3: Education question → EducationKind → MLKind → verify
+    #[test]
+    fn cross_bridge_full_pipeline_education_to_ml() {
+        let reg = CrossBridgeRegistry::from_research();
+        use crate::prompt_enrich::PromptKind;
+
+        let edu = reg.find_connection(PromptKind::Math, PromptKind::Tool);
+        assert!(!edu.is_empty(), "education-related math and tool must be bridged");
+
+        let enrichment = crate::prompt_enrich::detect_all_intents(
+            "create an educational tutorial on machine learning model training with examples"
+        );
+        assert!(enrichment.len() >= 1, "must detect intents for education->ml pipeline");
+        let kinds: Vec<PromptKind> = enrichment.iter().map(|(k, _, _)| *k).collect();
+        assert!(
+            kinds.iter().any(|k| matches!(k, PromptKind::Code | PromptKind::Write | PromptKind::General)),
+            "education->ml bridge must produce detectable intents, got {:?}", kinds
+        );
+    }
+
+    /// 4: Apply Tri::True/False/Unknown to bridge routing decisions
+    #[test]
+    fn cross_bridge_trinary_policy_on_bridge() {
+        let reg = CrossBridgeRegistry::from_research();
+        use crate::prompt_enrich::PromptKind;
+
+        let conns = reg.find_connection(PromptKind::Code, PromptKind::Security);
+        assert!(!conns.is_empty());
+
+        // Encode routing decisions as a TriMatrix
+        let mut routing = TriMatrix::new(3, 3);
+        routing.set(0, 0, Tri::True);    // python-universal: active
+        routing.set(0, 1, Tri::False);   // tool-cli-bridge: down
+        routing.set(0, 2, Tri::Unknown); // security-hardening: unknown
+
+        // True route is usable
+        assert_eq!(routing.get(0, 0), Tri::True);
+        // False route is blocked
+        assert_eq!(routing.get(0, 1), Tri::False);
+        // Unknown route needs observation
+        assert_eq!(routing.get(0, 2), Tri::Unknown);
+
+        let (t, f, u) = routing.counts();
+        assert_eq!(t + f + u, 9, "3x3 TriMatrix must have 9 entries");
+    }
+
+    /// 5: Eigen correlation between PythonKind and SecurityKind
+    #[test]
+    fn cross_bridge_eigen_correlation_between_bridges() {
+        let reg = CrossBridgeRegistry::from_research();
+        use crate::prompt_enrich::PromptKind;
+        use crate::eigen::{EigenDecomp, Eigen};
+
+        // Build eigen vectors from bridge strengths
+        let py_strength = reg.find_connection(PromptKind::Code, PromptKind::Math)
+            .iter().map(|b| b.strength as f64).sum::<f64>();
+        let sec_strength = reg.find_connection(PromptKind::Code, PromptKind::Security)
+            .iter().map(|b| b.strength as f64).sum::<f64>();
+
+        // Create eigen pairs from bridge strengths
+        let e1 = Eigen::new(py_strength / 10000.0, vec![1.0, 0.8]);
+        let e2 = Eigen::new(sec_strength / 10000.0, vec![0.9, 1.0]);
+
+        let decomp = EigenDecomp::new(vec![e1.clone(), e2.clone()]);
+        assert!(decomp.spectral_radius() > 0.0, "bridge eigen radii must be positive");
+
+        // Compute correlation via dot product of eigenvectors
+        let dot = e1.project(&e2.vector);
+        assert!(dot > 0.0, "python and security bridges must have positive eigen correlation");
+
+        // Both modes should be stable (strength ≤ 1000 → λ ≤ 1.0)
+        for pair in &decomp.pairs {
+            assert!(pair.is_stable(), "all bridge eigen modes must be stable");
+        }
+    }
+
+    /// 6: WaveMeshSync propagates across 3 bridges
+    #[test]
+    fn cross_bridge_wave_mesh_sync_across_bridges() {
+        use crate::wave::{InterferenceField, Wave};
+
+        // Create wave propagation across 3 bridges: python, tool, llm
+        let mut field = InterferenceField::new();
+        let now = crate::now_ms();
+
+        // Bridge 1: python-universal emits a wave
+        field.add_wave(Wave::simple("python-universal", now, 1.0, 0.8, 0.05));
+
+        // Bridge 2: tool-cli-bridge emits a wave
+        field.add_wave(Wave::simple("tool-cli-bridge", now, 2.0, 0.6, 0.03));
+
+        // Bridge 3: llm-ai-bridge emits a wave
+        field.add_wave(Wave::simple("llm-ai-bridge", now, 3.0, 0.7, 0.04));
+
+        // Verify all 3 bridges contributed active waves
+        assert_eq!(field.active_count(), 3, "all 3 bridges must have active waves");
+
+        let composite = field.composite();
+        assert!(composite >= -1.0 && composite <= 1.0, "wave interference must stay bounded");
+
+        // Verify spectral fingerprint from combined wave field
+        let fingerprint = spectral_fingerprint("bridge_mesh", composite.abs(), now);
+        assert_eq!(fingerprint.components.len(), 8, "spectral fingerprint must encode wave mesh");
+
+        // Xyz state from interference encodes the 3-bridge superposition
+        let xyz = field.xyz_state();
+        assert!(xyz.x.abs() <= 1.0 && xyz.y.abs() <= 1.0 && xyz.z.abs() <= 1.0,
+            "wave mesh xyz must stay in unit cube");
+    }
+
+    /// 7: ChronosDtn stores bridge frames and forwards after delay
+    #[test]
+    fn cross_bridge_chronos_dtn_store_forward() {
+        use crate::chronos::Chronos;
+        use crate::prompt_enrich::PromptKind;
+
+        let mut dt = Chronos::new(100);
+        let reg = CrossBridgeRegistry::from_research();
+
+        // Store bridge frames as snapshots at different logical timestamps
+        let mut frame0 = HashMap::new();
+        for (_i, bridge) in reg.bridges.iter().enumerate() {
+            frame0.insert(bridge.name.clone(), bridge.strength as f64);
+        }
+        let snap0 = dt.snapshot(frame0.clone());
+        let ts0 = snap0.timestamp_ms;
+
+        // Simulate DTN forward: store, wait, forward
+        std::thread::sleep(std::time::Duration::from_millis(5));
+
+        let mut frame1 = frame0.clone();
+        if let Some(v) = frame1.get_mut("python-universal") {
+            *v += 10.0; // strength increased after forwarding
+        }
+        let snap1 = dt.snapshot(frame1);
+        let ts1 = snap1.timestamp_ms;
+
+        // Verify store: both frames are retained
+        assert!(dt.len() >= 2, "chronos DTN must store both frames");
+
+        // Verify forward: delta between frames shows the change
+        let (_xyz_delta, dim_deltas) = dt.delta(ts0, ts1).unwrap_or_else(|| {
+            panic!("chronos DTN must find delta between stored frames at {ts0}→{ts1}")
+        });
+        assert!(dim_deltas.contains_key("python-universal"),
+            "DTN forward must propagate python-universal strength increase");
+
+        // Verify time window contains both frames
+        let window = dt.window(ts0, ts1);
+        assert!(window.len() >= 2, "DTN window must contain stored+forwarded frames");
+    }
+
+    /// 8: Register all 7 bridges, verify they're all reachable
+    #[test]
+    fn cross_bridge_publisher_registry_all_bridges() {
+        use crate::cross_bridge::PublisherRegistry;
+        use crate::prompt_enrich::PromptKind;
+
+        let reg = CrossBridgeRegistry::from_research();
+        let pr = PublisherRegistry::from_research();
+
+        // All 7 bridges present
+        let bridge_names: Vec<&str> = reg.bridges.iter().map(|b| b.name.as_str()).collect();
+        assert!(bridge_names.contains(&"python-universal"));
+        assert!(bridge_names.contains(&"tool-cli-bridge"));
+        assert!(bridge_names.contains(&"llm-ai-bridge"));
+        assert!(bridge_names.contains(&"claude-agent-hub"));
+        assert!(bridge_names.contains(&"security-hardening"));
+        assert!(bridge_names.contains(&"ml-datascience"));
+        assert!(bridge_names.contains(&"education-bridge"));
+        assert_eq!(reg.bridges.len(), 7, "all 7 bridges must be registered");
+
+        // Every publisher's kinds are covered by at least one bridge
+        let covered = reg.kinds_covered();
+        for p in &pr.publishers {
+            assert!(
+                p.kinds.iter().any(|k| covered.contains(k)),
+                "publisher {} must have at least 1 kind in bridge coverage", p.name
+            );
+        }
+
+        // Dashboard renders all bridges
+        let d = reg.dashboard();
+        assert!(d.contains("═══ CROSS-BRIDGE REGISTRY ═══"));
+        for name in &bridge_names {
+            assert!(d.contains(name), "dashboard must list bridge {}", name);
+        }
+    }
+
+    /// 9: Delta comparison between frame at t=0 and frame at t=100
+    #[test]
+    fn cross_bridge_delta_comparison_across_kinds() {
+        use crate::delta::{Delta, DeltaComparison, compare, EigenDelta};
+        use crate::eigen::decompose;
+
+        // Simulate kind strengths at two time points
+        let strengths_t0 = vec![0.5, 0.3, 0.8, 0.2, 0.6, 0.4, 0.7]; // 7 bridges
+        let strengths_t100 = vec![0.6, 0.4, 0.9, 0.3, 0.7, 0.5, 0.8];
+
+        // Delta between t=0 and t=100
+        let d = Delta::between(&strengths_t0, 0, &strengths_t100, 100);
+        assert!(d.magnitude > 0.0, "delta must capture change between t0 and t100");
+
+        let cmp = compare(&strengths_t0, 0, &strengths_t100, 100, 0.05);
+        assert_eq!(cmp, DeltaComparison::Growing, "bridge strengths must be growing over time");
+
+        // Eigen decomposition comparison
+        let d0 = decompose(&strengths_t0, 4);
+        let d1 = decompose(&strengths_t100, 4);
+        let _ed = EigenDelta::between(&d0, &d1);
+
+        // Delta tracker accumulates across kinds
+        let mut tracker = crate::delta::DeltaTracker::new(1.0, 0.1);
+        tracker.observe(d);
+        assert!(tracker.cumulative_drift > 0.0, "delta tracker must accumulate bridge drift");
+    }
+
+    /// 10: Fractal recursion across bridge chains, verify convergence
+    #[test]
+    fn cross_bridge_fractal_recursion_depth() {
+        use crate::fractal::{fractal_from_vec, FractalNode};
+
+        let reg = CrossBridgeRegistry::from_research();
+
+        // Build a fractal from bridge strengths (normalized to unit range)
+        let strengths: Vec<f64> = reg.bridges.iter()
+            .map(|b| b.strength as f64 / 10000.0)
+            .collect();
+        assert!(strengths.len() >= 7, "must have 7 bridge strengths for fractal");
+
+        // Build fractal at increasing depths
+        let depth1 = fractal_from_vec(&strengths, 1);
+        let depth2 = fractal_from_vec(&strengths, 2);
+
+        // Verify recursion: deeper fractal has more leaves
+        assert!(depth2.leaf_count() >= depth1.leaf_count(),
+            "deeper fractal must have >= leaf count (d1={}, d2={})",
+            depth1.leaf_count(), depth2.leaf_count());
+
+        // Verify convergence: spectral radius should be stable (≤ 1.0)
+        assert!(depth1.is_stable(), "fractal depth 1 must be stable");
+        assert!(depth2.is_stable(), "fractal depth 2 must be stable");
+
+        // Recursive recomputation: add child fractals and verify
+        let mut root = FractalNode::new("bridge-root", 0);
+        for (i, b) in reg.bridges.iter().enumerate() {
+            let leaf = FractalNode::leaf(&b.name, i + 1, vec![b.strength as f64 / 10000.0]);
+            root.add_child(leaf);
+        }
+        assert_eq!(root.children.len(), 7, "all 7 bridges must be fractal children");
+        assert!(root.radius() > 0.0, "bridge fractal root must have positive spectral radius");
+        assert!(root.radius() <= 1.0, "bridge fractal root must be stable (ρ ≤ 1)");
+
+        // ASCII rendering contains all bridges
+        let ascii = root.ascii().to_string();
+        assert!(ascii.contains("python-universal"), "fractal ASCII must show python-universal bridge");
+        assert!(ascii.contains("security-hardening"), "fractal ASCII must show security-hardening bridge");
+    }
 }

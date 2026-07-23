@@ -415,3 +415,17 @@ ruling here; each concrete code change STILL gets per-change confirmation before
 - All public APIs sanitize f64 inputs
 - Idempotency: insert/push must guard against duplicates
 - Status: ENFORCED, 2427 tests green
+
+## D14 — 2026-07-23: Post-7.7 Quality Drive
+- 131→0 kernel compiler warnings enforced
+- 37-invariant fuzzer (5 real bugs found & fixed)
+- 11 idempotency gates across all modifiable paths
+- Native telemetry harvest ledger (HarvestLedger + 21 probes)
+- All bebop proto-crypto stubs filled (ladder, ct, fips, wycheproof)
+- HybridPolicy canonical deduplication
+- 50-language stemmer with auto-detect (Unicode script + suffix scoring)
+- 20 bebop property tests (determinism, tamper, roundtrip, DTN, wave, TriCap)
+- SIGMOD battle-test (20 e2e courier tests)
+- Actual wgpu texture render+readback on VirtIO GPU
+- Voice DSP: FFT, MFCC, phoneme classification
+- Status: ENFORCED, 2637 tests green, 0 warnings, 0 blocked

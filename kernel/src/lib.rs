@@ -662,6 +662,10 @@ pub mod spectral_laplacian;
 /// Self-improvement loop: recurring-pattern surface over the tool-outcome
 /// token stream (W19 — consumes `trigram` into the loop's telemetry path).
 pub mod telemetry;
+/// Deterministic, zero-dep harvest ledger — gov_route-compatible telemetry
+/// records for every hot path. `HarvestLedger` is the EV-scoring ring buffer;
+/// every new capability MUST be probe-able through it.
+pub mod telemetry_harvest;
 /// F33 — deterministic compute-budget token bucket (monotonic-clock, atomic, degrade-closed).
 /// The `llm-adapters` `Dispatcher` reuses this to bound LLM-call concurrency.
 pub mod token_bucket;

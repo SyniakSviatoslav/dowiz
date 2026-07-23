@@ -3,6 +3,9 @@
   "attention/matmul_8x8": 1278,
   "empirical_identify/20k_samples": 112560,
   "empirical_identify/end_to_end_20k": 883950,
+  "enrich_lookup/intent_100ch": 0,
+  "enrich_lookup/load_db": 0,
+  "enrich_lookup/report": 0,
   "field_eigen/dct_4x4_r12": 144.85,
   "field_eigen/dct_4x4_r4": 111.93,
   "field_eigen/dct_4x4_r8": 117.44,
@@ -44,5 +47,9 @@
   "spool_drain/16": 942.02,
   "spool_drain/256": 17033,
   "spool_drain/64": 3937.5,
-  "token_bucket/try_acquire_permit": 51.924
+  "token_bucket/try_acquire_permit": 51.924,
+  "trinary_ops/and_9": 0,
+  "trinary_ops/not_3": 0,
+  "trinary_ops/or_9": 0,
+  "trinary_ops/rgb_roundtrip": 0
 }

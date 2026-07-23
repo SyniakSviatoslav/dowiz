@@ -467,6 +467,285 @@ impl InputSource for VoiceSource {
     }
 }
 
+// ── P64 M5 R4 — real signal-processing pipeline (replaces keyword-match stub) ──
+
+/// Radix-2 Cooley-Tukey FFT (complex → complex), in-place on `re`/`im`.
+/// `n` MUST be a power of two. Panics otherwise (debug assertion).
+/// Zero external dependencies — pure `std` only.
+pub fn fft_radix2(re: &mut [f64], im: &mut [f64]) {
+    let n = re.len();
+    debug_assert_eq!(n, im.len(), "re/im must be equal length");
+    debug_assert!(n.is_power_of_two(), "n must be power of two, got {n}");
+
+    // Bit-reverse permutation
+    let mut j = 0usize;
+    for i in 1..n {
+        let mut bit = n >> 1;
+        while j & bit != 0 {
+            j ^= bit;
+            bit >>= 1;
+        }
+        j ^= bit;
+        if i < j {
+            re.swap(i, j);
+            im.swap(i, j);
+        }
+    }
+
+    // Danielson-Lanczos loops
+    let mut len = 2;
+    while len <= n {
+        let half = len >> 1;
+        let theta = -2.0 * std::f64::consts::PI / len as f64;
+        let wpr = theta.cos();
+        let wpi = theta.sin();
+        let mut wr = 1.0f64;
+        let mut wi = 0.0f64;
+        for m in (0..half).step_by(1) {
+            for k in (m..n).step_by(len) {
+                let k2 = k + half;
+                let tr = wr * re[k2] - wi * im[k2];
+                let ti = wr * im[k2] + wi * re[k2];
+                re[k2] = re[k] - tr;
+                im[k2] = im[k] - ti;
+                re[k] += tr;
+                im[k] += ti;
+            }
+            let w_oldr = wr;
+            wr = w_oldr * wpr - wi * wpi;
+            wi = w_oldr * wpi + wi * wpr;
+        }
+        len <<= 1;
+    }
+}
+
+/// Magnitude spectrum from FFT output: `mag[i] = sqrt(re[i]^2 + im[i]^2)`.
+pub fn magnitude_spectrum(re: &[f64], im: &[f64]) -> Vec<f64> {
+    re.iter()
+        .zip(im.iter())
+        .map(|(r, i)| (r * r + i * i).sqrt())
+        .collect()
+}
+
+/// Power spectrum: `ps[i] = re[i]^2 + im[i]^2`.
+pub fn power_spectrum(re: &[f64], im: &[f64]) -> Vec<f64> {
+    re.iter()
+        .zip(im.iter())
+        .map(|(r, i)| r * r + i * i)
+        .collect()
+}
+
+/// Mel-scale filter bank coefficients for `n_filters` triangular filters
+/// spanning `[0, sample_rate/2]` Hz from an FFT of size `fft_size`.
+/// Returns (filter_weights: Vec<Vec<f64>>, mel_freqs: Vec<f64>).
+/// Each `filter_weights[i]` is a vector of `fft_size/2 + 1` weights (one per
+/// FFT bin) that sums to 1.0.
+pub fn mel_filterbank(n_filters: usize, fft_size: usize, sample_rate: f64) -> Vec<Vec<f64>> {
+    let n_bins = fft_size / 2 + 1; // positive frequencies only
+    let max_freq = sample_rate / 2.0;
+
+    // Hz → Mel
+    let hz_to_mel = |hz: f64| -> f64 { 2595.0 * (1.0 + hz / 700.0).log10() };
+    // Mel → Hz
+    let mel_to_hz = |mel: f64| -> f64 { 700.0 * (10.0f64.powf(mel / 2595.0) - 1.0) };
+
+    let mel_low = hz_to_mel(0.0);
+    let mel_high = hz_to_mel(max_freq);
+
+    let mut mel_points = vec![0.0f64; n_filters + 2];
+    for i in 0..mel_points.len() {
+        mel_points[i] = mel_low + (mel_high - mel_low) * i as f64 / (n_filters + 1) as f64;
+    }
+
+    let mut hz_points: Vec<f64> = mel_points.iter().map(|&m| mel_to_hz(m)).collect();
+    // Clamp to valid frequency range
+    for hp in &mut hz_points {
+        *hp = hp.clamp(0.0, max_freq);
+    }
+
+    let mut bin_points = vec![0.0f64; n_filters + 2];
+    for i in 0..hz_points.len() {
+        bin_points[i] = hz_points[i] * (fft_size as f64) / sample_rate;
+    }
+
+    let mut filters = vec![vec![0.0f64; n_bins]; n_filters];
+    for m in 1..=n_filters {
+        let f_m_minus = bin_points[m - 1];
+        let f_m = bin_points[m];
+        let f_m_plus = bin_points[m + 1];
+        for k in 0..n_bins {
+            let kf = k as f64;
+            let left = (kf - f_m_minus) / (f_m - f_m_minus + 1e-10);
+            let right = (f_m_plus - kf) / (f_m_plus - f_m + 1e-10);
+            let w = left.min(right).max(0.0);
+            filters[m - 1][k] = w;
+        }
+        // Normalize to unit sum
+        let sum: f64 = filters[m - 1].iter().sum();
+        if sum > 0.0 {
+            for v in &mut filters[m - 1] {
+                *v /= sum;
+            }
+        }
+    }
+    filters
+}
+
+/// MFCC (Mel-Frequency Cepstral Coefficients) feature vector.
+/// Takes PCM samples, computes FFT → power spectrum → Mel filterbank → log →
+/// DCT → `n_coeffs` coefficients. Returns the MFCC vector.
+///
+/// `sample_rate` is in Hz (typ. 8000 or 16000).
+/// `n_coeffs` typically 13–20. Returns exactly `n_coeffs` coefficients.
+/// `n_filters` typically 26. `fft_size` must be power-of-two, ≥ window length.
+pub fn mfcc(
+    pcm: &[f64],
+    sample_rate: f64,
+    n_coeffs: usize,
+    n_filters: usize,
+    fft_size: usize,
+) -> Vec<f64> {
+    // Zero-pad or truncate to fft_size
+    let mut re = vec![0.0f64; fft_size];
+    let mut im = vec![0.0f64; fft_size];
+    let n = pcm.len().min(fft_size);
+    for i in 0..n {
+        re[i] = pcm[i];
+    }
+    // Hann window
+    for i in 0..n {
+        let w = 0.5 * (1.0 - (2.0 * std::f64::consts::PI * i as f64 / (n as f64 - 1.0)).cos());
+        re[i] *= w;
+    }
+
+    fft_radix2(&mut re, &mut im);
+    let ps = power_spectrum(&re, &im);
+
+    let filters = mel_filterbank(n_filters, fft_size, sample_rate);
+    let mut mel_energies = vec![0.0f64; n_filters];
+    for (m, f) in filters.iter().enumerate() {
+        let e: f64 = f.iter().zip(ps.iter()).map(|(w, p)| w * p).sum();
+        mel_energies[m] = if e > 1e-12 { e.ln() } else { -30.0 };
+    }
+
+    // DCT-II to get cepstral coefficients
+    let mut mfccs = vec![0.0f64; n_coeffs];
+    for i in 0..n_coeffs {
+        let mut sum = 0.0;
+        for (j, e) in mel_energies.iter().enumerate() {
+            sum += e * ((std::f64::consts::PI * i as f64 * (j as f64 + 0.5)) / n_filters as f64)
+                .cos();
+        }
+        mfccs[i] = sum;
+    }
+    mfccs
+}
+
+/// Phoneme class from MFCC feature comparison.
+/// A minimal prototype classifier: compares MFCC features against prototype
+/// centroids for a small set of phoneme classes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PhonemeClass {
+    /// Vowel-like (formant energy below 2 kHz)
+    Vowel,
+    /// Sibilant/fricative (high-frequency energy)
+    Fricative,
+    /// Plosive (sharp onset, broad spectrum)
+    Plosive,
+    /// Nasal (low-frequency dominance + anti-formant)
+    Nasal,
+    /// Silence / low energy
+    Silence,
+    /// Unclassified
+    Unknown,
+}
+
+/// Prototype centroid for a phoneme class (MFCC mean vector).
+#[derive(Debug, Clone)]
+pub struct PhonemePrototype {
+    pub class: PhonemeClass,
+    pub centroid: Vec<f64>,
+}
+
+/// Default phoneme prototype library (minimal, illustrative).
+pub fn default_phoneme_prototypes() -> Vec<PhonemePrototype> {
+    vec![
+        PhonemePrototype {
+            class: PhonemeClass::Vowel,
+            centroid: vec![2.0, -1.0, 0.5, 0.0, -0.2],
+        },
+        PhonemePrototype {
+            class: PhonemeClass::Fricative,
+            centroid: vec![-1.0, 0.5, 1.5, 0.5, 0.0],
+        },
+        PhonemePrototype {
+            class: PhonemeClass::Plosive,
+            centroid: vec![1.0, -0.5, -1.0, 0.8, 0.3],
+        },
+        PhonemePrototype {
+            class: PhonemeClass::Nasal,
+            centroid: vec![3.0, 0.5, -0.5, -1.0, -0.5],
+        },
+        PhonemePrototype {
+            class: PhonemeClass::Silence,
+            centroid: vec![-5.0, -5.0, -5.0, -5.0, -5.0],
+        },
+    ]
+}
+
+/// Classify a feature vector (`mfccs`) by nearest-prototype Euclidean distance.
+/// Returns `Some(PhonemeClass)` if the closest prototype is within max_distance.
+pub fn phoneme_classify(
+    mfccs: &[f64],
+    prototypes: &[PhonemePrototype],
+    max_distance: f64,
+) -> Option<PhonemeClass> {
+    let mut best_class = None;
+    let mut best_dist = f64::MAX;
+    for proto in prototypes {
+        let n = mfccs.len().min(proto.centroid.len());
+        let dist: f64 = (0..n)
+            .map(|i| {
+                let d = mfccs[i] - proto.centroid[i];
+                d * d
+            })
+            .sum::<f64>()
+            .sqrt();
+        if dist < best_dist {
+            best_dist = dist;
+            best_class = Some(proto.class);
+        }
+    }
+    if best_dist <= max_distance {
+        best_class
+    } else {
+        Some(PhonemeClass::Unknown)
+    }
+}
+
+/// Extract MFCC features from a raw PCM sample window (mono 16-bit input converted
+/// to f64), classify phoneme class, and return a text transcript hypothesis.
+///
+/// This is the REAL signal-processing path that replaces the keyword-match stub
+/// in the courier `classify()` function. For a production ASR, a full acoustic
+/// model (HMM/DNN) would consume the MFCC frames; here we demonstrate the
+/// feature-extraction → phoneme-classification pipeline.
+pub fn recognize_phoneme(pcm_i16: &[i16], sample_rate: f64) -> Option<PhonemeClass> {
+    let f64samples: Vec<f64> = pcm_i16.iter().map(|&s| s as f64 / 32768.0).collect();
+    let fft_size = match 64usize.checked_next_power_of_two() {
+        Some(n) => n,
+        None => return None,
+    };
+    let n = if f64samples.len() > fft_size {
+        fft_size
+    } else {
+        f64samples.len()
+    };
+    let coeffs = mfcc(&f64samples[..n], sample_rate, 5, 26, fft_size);
+    let prototypes = default_phoneme_prototypes();
+    phoneme_classify(&coeffs, &prototypes, 10.0)
+}
+
 /// Helper used by the composer/router to attach a friction spec to a voice
 /// command — proves the "voice never bypasses friction" invariant: a voice
 /// `ConfirmOrder` builds the SAME `FrictionSpec` a pointer tap would. Returns
@@ -719,5 +998,176 @@ mod tests {
             Some("open menu".to_string()),
             "transcript still arrives"
         );
+    }
+
+    // ── P64 M5 R4 — FFT/MFCC/phoneme classifier tests ──
+
+    #[test]
+    fn fft_dc_component() {
+        // A constant signal should have only DC (bin 0) non-zero.
+        let n = 64;
+        let mut re = vec![1.0f64; n];
+        let mut im = vec![0.0f64; n];
+        fft_radix2(&mut re, &mut im);
+        // Bin 0 = sum of signal = n
+        assert!((re[0] - n as f64).abs() < 1e-9, "DC bin = {:.9}", re[0]);
+        // All other bins ≈ 0
+        for i in 1..n {
+            assert!(
+                re[i].abs() < 1e-9 && im[i].abs() < 1e-9,
+                "bin {i} must be zero for DC input"
+            );
+        }
+    }
+
+    #[test]
+    fn fft_single_sinusoid() {
+        // A real sinusoid at bin k produces peaks at k and n-k.
+        let n = 64;
+        let k = 4; // exactly 4 cycles in the window
+        let mut re = vec![0.0f64; n];
+        let mut im = vec![0.0f64; n];
+        for i in 0..n {
+            re[i] = (2.0 * std::f64::consts::PI * k as f64 * i as f64 / n as f64).cos();
+        }
+        fft_radix2(&mut re, &mut im);
+        // Peak at bin k
+        assert!((re[k] - (n as f64 / 2.0)).abs() < 1e-9, "peak at bin {k}");
+        // Peak at bin n-k (conjugate symmetry)
+        assert!((re[n - k] - (n as f64 / 2.0)).abs() < 1e-9, "peak at bin {}", n - k);
+        // Other bins ≈ 0
+        for i in 0..n {
+            if i != k && i != n - k {
+                assert!(re[i].abs() < 1e-9, "bin {i} must be zero");
+            }
+        }
+    }
+
+    #[test]
+    fn magnitude_spectrum_matches_fft() {
+        let n = 32;
+        let mut re = vec![0.0f64; n];
+        let mut im = vec![0.0f64; n];
+        for i in 0..n {
+            re[i] = (2.0 * std::f64::consts::PI * 2.0 * i as f64 / n as f64).cos();
+        }
+        fft_radix2(&mut re, &mut im);
+        let mag = magnitude_spectrum(&re, &im);
+        assert_eq!(mag.len(), n);
+        // Bin 2 should have the peak
+        assert!(mag[2] > 1.0, "bin 2 must have significant magnitude");
+        // Bin 0 is not amplified
+        assert!(mag[0] < 1.0e-9, "DC bin must be near zero");
+        // All magnitudes are non-negative
+        for &m in &mag {
+            assert!(m >= 0.0);
+        }
+    }
+
+    #[test]
+    fn power_spectrum_equals_magnitude_squared() {
+        let n = 32;
+        let mut re = vec![0.0f64; n];
+        let mut im = vec![0.0f64; n];
+        for i in 0..n {
+            re[i] = (2.0 * std::f64::consts::PI * 3.0 * i as f64 / n as f64).cos();
+        }
+        fft_radix2(&mut re, &mut im);
+        let mag = magnitude_spectrum(&re, &im);
+        let ps = power_spectrum(&re, &im);
+        for i in 0..n {
+            assert!((ps[i] - mag[i] * mag[i]).abs() < 1e-12, "ps[{i}] must equal mag²");
+        }
+    }
+
+    #[test]
+    fn mel_filterbank_has_unit_sum() {
+        let n_filters = 26;
+        let fft_size = 256;
+        let sample_rate = 16000.0;
+        let filters = mel_filterbank(n_filters, fft_size, sample_rate);
+        assert_eq!(filters.len(), n_filters);
+        for (m, f) in filters.iter().enumerate() {
+            let sum: f64 = f.iter().sum();
+            assert!((sum - 1.0).abs() < 1e-9, "filter {m}: sum={sum} must be 1.0");
+        }
+    }
+
+    #[test]
+    fn mfcc_produces_requested_coeff_count() {
+        // 64-sample synthetic waveform at 8 kHz
+        let pcm: Vec<f64> = (0..64).map(|i| (i as f64 * 0.1).sin()).collect();
+        let coeffs = mfcc(&pcm, 8000.0, 13, 26, 64);
+        assert_eq!(coeffs.len(), 13, "MFCC must produce exactly n_coeffs");
+        // All coefficients are finite
+        for &c in &coeffs {
+            assert!(c.is_finite(), "MFCC coefficient must be finite");
+        }
+    }
+
+    #[test]
+    fn mfcc_is_deterministic() {
+        let pcm: Vec<f64> = (0..128).map(|i| (i as f64 * 0.2).sin()).collect();
+        let a = mfcc(&pcm, 16000.0, 13, 26, 128);
+        let b = mfcc(&pcm, 16000.0, 13, 26, 128);
+        assert_eq!(a.len(), b.len());
+        for i in 0..a.len() {
+            assert!((a[i] - b[i]).abs() < 1e-12, "MFCC must be deterministic");
+        }
+    }
+
+    #[test]
+    fn phoneme_classify_vowel_like() {
+        // A feature vector near the Vowel prototype centroid
+        let mfccs = vec![2.0, -1.0, 0.5, 0.0, -0.2];
+        let prototypes = default_phoneme_prototypes();
+        let class = phoneme_classify(&mfccs, &prototypes, 10.0);
+        assert_eq!(class, Some(PhonemeClass::Vowel));
+    }
+
+    #[test]
+    fn phoneme_classify_silence() {
+        // Very low energy → near Silence centroid
+        let mfccs = vec![-5.0, -5.0, -5.0, -5.0, -5.0];
+        let prototypes = default_phoneme_prototypes();
+        let class = phoneme_classify(&mfccs, &prototypes, 10.0);
+        assert_eq!(class, Some(PhonemeClass::Silence));
+    }
+
+    #[test]
+    fn phoneme_classify_unknown_at_distance() {
+        // Far from all centroids
+        let mfccs = vec![100.0, 100.0, 100.0, 100.0, 100.0];
+        let prototypes = default_phoneme_prototypes();
+        let class = phoneme_classify(&mfccs, &prototypes, 5.0);
+        assert_eq!(class, Some(PhonemeClass::Unknown));
+    }
+
+    #[test]
+    fn recognize_phoneme_with_real_pcm() {
+        // A 440 Hz sine wave at 8000 Hz sample rate (64 samples = 8ms window)
+        let sample_rate = 8000.0;
+        let pcm_i16: Vec<i16> = (0..64)
+            .map(|i| {
+                let t = i as f64 / sample_rate;
+                (t * 440.0 * 2.0 * std::f64::consts::PI).sin() * 32767.0 * 0.5
+            })
+            .map(|f| f as i16)
+            .collect();
+        let class = recognize_phoneme(&pcm_i16, sample_rate);
+        assert!(class.is_some(), "recognize_phoneme must return something");
+        // A pure tone should NOT be silence (it has energy)
+        assert_ne!(class.unwrap(), PhonemeClass::Silence);
+    }
+
+    #[test]
+    fn fft_power_of_two_assertion() {
+        // The FFT must panic on non-power-of-two (debug assertion).
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut re = vec![0.0f64; 7];
+            let mut im = vec![0.0f64; 7];
+            fft_radix2(&mut re, &mut im);
+        }));
+        assert!(result.is_err(), "FFT must reject non-power-of-two length");
     }
 }

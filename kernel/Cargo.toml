@@ -231,6 +231,16 @@ eqc-rs = { path = "../tools/eqc-rs" }
 name = "criterion"
 harness = false
 
+# Mandatory native telemetry & benchmarks — trinary logic + enrichment lookup
+# (AGENTS.md rule: every change/wave ships WITH benchmarks).
+[[bench]]
+name = "trinary_ops"
+harness = false
+
+[[bench]]
+name = "enrich_lookup"
+harness = false
+
 # P80 (S1 §3.3-C1 / SYNTHESIS-PERFORMANCE-AUDIT-2026-07-18) — kernel bench-coverage
 # expansion. Each entry is a focused bench group following the <group>/<n> bench-id
 # convention owned by P75 (P80 cites it, does NOT redefine). The `pq`-gated groups

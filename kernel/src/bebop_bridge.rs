@@ -410,4 +410,87 @@ mod tests {
         let sig_b = bridge.sign_msg(&[72u8; 32], &[73u8; 32], msg);
         assert_ne!(sig_a, sig_b);
     }
+
+    #[test]
+    fn hybrid_bridge_rejects_untrusted_classical_only() {
+        let bridge = HybridSignBridge::new();
+        let verifier = RefSigner;
+        let cls_secret = [80u8; 32];
+        let pq_secret = [81u8; 32];
+        let cls_pub = verifier.classical_public(&cls_secret);
+        let pq_pub = verifier.pq_public(&pq_secret);
+        let msg = b"classical-only must be rejected";
+
+        let sig = bridge.sign_msg(&cls_secret, &pq_secret, msg);
+
+        // Classical-only (no PQ leg): strip the pq sig and verify — must fail.
+        let mut classical_only = sig.clone();
+        classical_only.pq = vec![0u8; 0];
+        assert!(!bridge.verify_msg(&cls_pub, &pq_pub, msg, &classical_only));
+
+        // PQ-only (no classical leg): strip classical sig — must fail.
+        let mut pq_only = sig;
+        pq_only.classical = vec![0u8; 0];
+        assert!(!bridge.verify_msg(&cls_pub, &pq_pub, msg, &pq_only));
+    }
+
+    #[test]
+    fn hybrid_bridge_sequential_verification_works() {
+        let bridge = HybridSignBridge::new();
+        let verifier = RefSigner;
+
+        for i in 0..5u8 {
+            let cls_secret = [i; 32];
+            let pq_secret = [i.wrapping_add(100); 32];
+            let cls_pub = verifier.classical_public(&cls_secret);
+            let pq_pub = verifier.pq_public(&pq_secret);
+            let msg = [i; 16];
+
+            let sig = bridge.sign_msg(&cls_secret, &pq_secret, &msg);
+            assert!(
+                bridge.verify_msg(&cls_pub, &pq_pub, &msg, &sig),
+                "frame {i} must verify"
+            );
+
+            // Tampered frame {i} must be rejected.
+            assert!(
+                !bridge.verify_msg(&cls_pub, &pq_pub, b"wrong", &sig),
+                "frame {i} tampered msg must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn hybrid_bridge_empty_capability_rejected() {
+        let bridge = HybridSignBridge::new();
+        let verifier = RefSigner;
+        let cls_secret = [90u8; 32];
+        let pq_secret = [91u8; 32];
+        let cls_pub = verifier.classical_public(&cls_secret);
+        let pq_pub = verifier.pq_public(&pq_secret);
+
+        // A legitimate sign for a non-empty payload.
+        let real_msg = b"real payload";
+        let sig = bridge.sign_msg(&cls_secret, &pq_secret, real_msg);
+
+        // The same signature must NOT verify against an empty payload.
+        assert!(
+            !bridge.verify_msg(&cls_pub, &pq_pub, b"", &sig),
+            "signature over real payload must not verify against empty capability"
+        );
+
+        // An empty-message signature must NOT verify against a non-empty payload.
+        let empty_sig = bridge.sign_msg(&cls_secret, &pq_secret, b"");
+        assert!(
+            !bridge.verify_msg(&cls_pub, &pq_pub, real_msg, &empty_sig),
+            "signature over empty capability must not verify against real payload"
+        );
+
+        // Empty PQ key verifies against nothing.
+        let empty_pq: [u8; 0] = [];
+        assert!(
+            !bridge.verify_msg(&cls_pub, &empty_pq, real_msg, &sig),
+            "empty PQ key must reject"
+        );
+    }
 }

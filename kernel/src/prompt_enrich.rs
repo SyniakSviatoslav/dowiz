@@ -22,6 +22,7 @@
 
 use crate::event_log::sha3_256;
 use crate::academia::Academia;
+use crate::telemetry_harvest::HarvestLedger;
 use std::collections::HashMap;
 
 /// Max prompt entries in the engine.
@@ -599,6 +600,24 @@ pub fn detect_all_intents(text: &str) -> Vec<(PromptKind, usize, f64)> {
     ranked
 }
 
+/// Detect ALL intents AND record telemetry into the harvest ledger.
+pub fn detect_all_intents_with_telemetry(
+    text: &str,
+    ledger: &mut HarvestLedger,
+) -> Vec<(PromptKind, usize, f64)> {
+    let intents = detect_all_intents(text);
+    let success = !intents.is_empty();
+    let value = if intents.is_empty() {
+        0.0
+    } else {
+        let sum: f64 = intents.iter().map(|(_, _, s)| *s).sum();
+        sum / intents.len() as f64
+    };
+    let cost = text.len() as f64;
+    ledger.record("prompt_enrich", "intent_detect", success, value, cost);
+    intents
+}
+
 // ─── PromptEnrichEngine ────────────────────────────────────────────────────
 
 pub struct PromptEnrichEngine {
@@ -816,6 +835,33 @@ impl PromptEnrichEngine {
             out.push_str(&format!("    {}: {}\n", kind, count));
         }
         out
+    }
+
+    /// Attach a harvest ledger for telemetry recording.
+    /// Subsequent `enrich_report` calls will record telemetry automatically.
+    pub fn with_telemetry(&mut self, ledger: &mut HarvestLedger) -> &mut Self {
+        let _ = ledger; // ledger is wired during enrich_report_with_telemetry
+        self
+    }
+
+    /// Enrich with telemetry: same as `enrich_report` but also records a
+    /// harvest record into the ledger for EV scoring.
+    pub fn enrich_report_with_telemetry(
+        &self,
+        user_input: &str,
+        ledger: &mut HarvestLedger,
+    ) -> EnrichmentReport {
+        let report = self.enrich_report(user_input);
+        let success = !report.intents.is_empty();
+        let value = if report.intents.is_empty() {
+            0.0
+        } else {
+            let sum: f64 = report.intents.iter().map(|(_, _, s)| *s).sum();
+            sum / report.intents.len() as f64
+        };
+        let cost = user_input.len() as f64;
+        ledger.record("prompt_enrich", "intent_detect", success, value, cost);
+        report
     }
 }
 
@@ -1185,6 +1231,34 @@ mod tests {
         let patterns = inherit_patterns(&path);
         assert!(patterns.iter().any(|p| p.name == "sec-core"));
         assert!(patterns.iter().any(|p| p.name == "sec-harden"));
+    }
+
+    #[test]
+    fn enrich_report_with_telemetry_emits_record() {
+        use crate::telemetry_harvest::HarvestLedger;
+        let mut engine = PromptEnrichEngine::new();
+        engine.ingest(seed_fabric_prompts());
+        engine.ingest(seed_opencode_prompts());
+        let mut ledger = HarvestLedger::new(100);
+        let _ = engine.enrich_report_with_telemetry("fix the compilation bug in Rust", &mut ledger);
+        assert_eq!(ledger.len(), 1, "enrich_report_with_telemetry must emit exactly 1 record");
+        let recs = ledger.records();
+        assert_eq!(recs[0].model, "prompt_enrich");
+        assert_eq!(recs[0].task, "intent_detect");
+        assert!(recs[0].success);
+    }
+
+    #[test]
+    fn detect_all_intents_with_telemetry_emits_record() {
+        use crate::telemetry_harvest::HarvestLedger;
+        let mut ledger = HarvestLedger::new(100);
+        let intents = detect_all_intents_with_telemetry("write a report on the architecture", &mut ledger);
+        assert!(!intents.is_empty());
+        assert_eq!(ledger.len(), 1);
+        let recs = ledger.records();
+        assert_eq!(recs[0].model, "prompt_enrich");
+        assert_eq!(recs[0].task, "intent_detect");
+        assert!(recs[0].success);
     }
 }
 

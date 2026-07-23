@@ -21,6 +21,7 @@ use dowiz_kernel::prompt_enrich::{
     seed_fabric_prompts, seed_opencode_prompts,
     detect_all_intents, detect_intent_tree, inherit_patterns, PATTERN_TREE,
 };
+use dowiz_kernel::telemetry_harvest::HarvestLedger;
 use dowiz_kernel::json;
 use std::io::{self, BufRead, Write};
 
@@ -115,6 +116,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("  {}", p.join(" → "));
             }
         }
+        let mut ledger = HarvestLedger::new(1000);
+        let success = !intents.is_empty();
+        let value = if intents.is_empty() { 0.0 } else {
+            let sum: f64 = intents.iter().map(|(_, _, s)| *s).sum();
+            sum / intents.len() as f64
+        };
+        ledger.record("enrich", "detect", success, value, query.len() as f64);
         return Ok(());
     }
 
@@ -135,6 +143,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Enrichment
     let report = engine.enrich_report(&query);
+
+    // Harvest telemetry: record enrichment operation for EV scoring
+    let mut ledger = HarvestLedger::new(1000);
+    let enrich_success = !report.intents.is_empty();
+    let enrich_value = if report.intents.is_empty() { 0.0 } else {
+        let sum: f64 = report.intents.iter().map(|(_, _, s)| *s).sum();
+        sum / report.intents.len() as f64
+    };
+    let enrich_cost = query.len() as f64;
+    ledger.record("enrich", "lookup", enrich_success, enrich_value, enrich_cost);
 
     match format {
         "json" => {

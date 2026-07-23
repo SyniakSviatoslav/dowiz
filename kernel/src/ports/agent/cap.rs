@@ -39,6 +39,10 @@ const REF_PQ_SIG: &[u8] = b"dowiz.ref.pq.sig";
 /// ML-DSA-65 public-key length (bytes) — B1 T=0x03 mandates this width.
 pub const ML_DSA_65_PK_LEN: usize = 1952;
 
+#[cfg(feature = "pq")]
+pub use crate::pq::hybrid_signing::HybridPolicy;
+
+#[cfg(not(feature = "pq"))]
 /// The hybrid-verification policy floor. Only [`HybridPolicy::RequireBoth`] exists in
 /// B1 — there is deliberately no classical-only variant (the unrelaxable floor, §2.1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
