@@ -9,6 +9,10 @@ echo "== dowiz kernel: cargo test =="
 ( cd kernel && cargo test --lib --quiet )
 echo "   kernel OK"
 
+echo "== kernel: dudect constant-time gate (release, --ignored) =="
+( cd kernel && cargo test --release ct_gate::tests::dudect_gate_detects_planted_leak_and_passes_ct_eq -- --ignored )
+echo "   dudect OK"
+
 echo "== dowiz engine: cargo test =="
 ( cd engine && cargo test --lib --quiet )
 echo "   engine OK"

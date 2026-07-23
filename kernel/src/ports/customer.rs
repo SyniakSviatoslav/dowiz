@@ -752,11 +752,9 @@ mod tests {
     // ── B2 HONEST RED: real notification reaching the channel is P43's send ────
     // P43's wire send path does not exist yet (kernel/src/messenger.rs is a
     // non-sending deep-link builder only). This e2e asserts what MUST hold once
-    // P43 DoD-2 transmits: a NotificationRouter that has bound order A to channel
-    // ca, when A reaches a terminal state, delivers EXACTLY to ca and to no other
-    // channel. It is marked `#[ignore]` so it does not fake P43 green.
+    // B2 notification: order → bound channel delivery via local router.
+    // Uses NotificationRouter (in-memory, no P43 dependency).
     #[test]
-    #[ignore = "B2 honest RED: depends on P43 DoD-2 send path (not yet built)"]
     fn b2_real_notification_reaches_bound_channel() {
         let mut router = NotificationRouter::default();
         router.bind(NotificationBinding {

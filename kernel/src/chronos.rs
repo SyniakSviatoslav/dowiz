@@ -202,16 +202,17 @@ mod tests {
     #[test]
     fn chronos_delta_between_timestamps() {
         let mut c = Chronos::new(100);
-        let ts1 = c.snapshot(make_values(0.0, 0.0)).timestamp_ms;
-        // different values at potentially same ms (depends on clock resolution)
-        let _ = c.snapshot(make_values(0.5, 0.5));
-        let ts2 = c.snapshot(make_values(1.0, 1.0)).timestamp_ms;
-        if ts1 != ts2 {
-            let (xyz_d, dims) = c.delta(ts1, ts2).unwrap();
-            assert!((dims["x"] - 1.0).abs() < 1e-10);
-            let _ = xyz_d;
-        }
-        assert_eq!(c.len(), 3);
+        // Use explicitly different timestamps to avoid ms-resolution flakiness
+        let ts0 = 1000u64;
+        let snap0 = Snapshot::new(ts0, make_values(0.0, 0.0));
+        let snap2 = Snapshot::new(ts0 + 500, make_values(1.0, 1.0));
+        // Manually insert with known timestamps
+        c.snapshots.push(snap0);
+        c.snapshots.push(Snapshot::new(ts0 + 200, make_values(0.5, 0.5)));
+        c.snapshots.push(snap2);
+        let (xyz_d, dims) = c.delta(ts0, ts0 + 500).unwrap();
+        assert!(xyz_d >= 0.0, "xyz_delta={xyz_d}");
+        assert!((dims["x"] - 1.0).abs() < 1e-10);
     }
 
     #[test]

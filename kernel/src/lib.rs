@@ -718,6 +718,10 @@ pub mod code_oracle;
 /// System-wide ASCII dashboard — renders full system state as human-readable
 /// report. Uses all visualization primitives: trinary RGB, fractal, eigen, chronos.
 pub mod sys_dashboard;
+/// Meta-tests (infrastructure self-check) + cross-tests (multi-module
+/// integration: trinary×eigen×chronos×delta×enrich full stack).
+#[cfg(test)]
+mod cross_tests;
 /// P08 — typed metrics pure core: `/proc/self` sampling (CPU/mem) + a
 /// deterministic, serde-free, parse-or-reject text schema for typed metric
 /// records. NO egress / signing change; GPU is typed-absent (`Option`) until
