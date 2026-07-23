@@ -668,6 +668,11 @@ pub mod trigram;
 /// inflected-language recall in BM25/trigram retrieval. Normalizes cases,
 /// conjugations, and plurals to a common root.
 pub mod stem;
+/// Three-valued logic + RGB/matrix encoding — trinary replaces binary
+/// everywhere: FSM states, auth decisions, enrichment scoring. Each
+/// Tri maps to an RGB color; matrices of Tri values produce visual
+/// state bitmaps. Delta chains track system drift over time.
+pub mod trinary;
 /// P08 — typed metrics pure core: `/proc/self` sampling (CPU/mem) + a
 /// deterministic, serde-free, parse-or-reject text schema for typed metric
 /// records. NO egress / signing change; GPU is typed-absent (`Option`) until

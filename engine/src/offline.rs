@@ -493,6 +493,7 @@ mod tests {
 
     #[test]
     fn offline_gossip_node_access() {
+        use dowiz_kernel::gossip::GossipBus;
         let mut queue = OfflineQueue::new(10);
         assert!(queue.gossip_node().is_none(),
             "gossip node must be None before attach");
