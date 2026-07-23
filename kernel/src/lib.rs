@@ -692,6 +692,10 @@ pub mod eigen;
 /// N-fractal self-similar data structure + ASCII encoding. Every node is
 /// a microcosm of the whole. ASCII visualization for human-readable state.
 pub mod fractal;
+/// Delta calculus — replaces classic comparisons (a>b, x==y) with vector
+/// delta analysis. Δv, ∂t, rate, acceleration, drift tracking. Eigen/Phase
+/// comparison via spectral distance. Oscillation detection.
+pub mod delta;
 /// P08 — typed metrics pure core: `/proc/self` sampling (CPU/mem) + a
 /// deterministic, serde-free, parse-or-reject text schema for typed metric
 /// records. NO egress / signing change; GPU is typed-absent (`Option`) until
