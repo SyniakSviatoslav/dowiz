@@ -158,8 +158,13 @@ mod tests {
         let all = results.lock().unwrap();
         let mut sorted = all.clone();
         sorted.sort();
-        for (a, b) in all.iter().zip(sorted.iter()) {
-            assert_eq!(a, b, "all threads combined must be strictly increasing");
+        // Monotonic: each value must be >= previous (same-ms is fine for concurrent threads)
+        for i in 1..all.len() {
+            assert!(all[i] >= all[i-1], "monotonic: thread-safe values must not decrease");
+        }
+        // Verify all values are valid (not zero unless clock is unset)
+        for &v in all.iter() {
+            assert!(v > 0, "monotonic_ms must return non-zero timestamps");
         }
     }
 
