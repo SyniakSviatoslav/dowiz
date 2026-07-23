@@ -177,6 +177,170 @@ pub fn bootstrap_interval(
     normal_interval(point, se_boot, z)
 }
 
+// ──── Welch's t-test ────────────────────────────────────────────────────────
+
+/// Welch's t-test for comparing two independent samples with possibly unequal
+/// variances. Returns `(t_statistic, two-tailed_p_value)`.
+///
+/// The t-statistic is `(mean_a − mean_b) / √(var_a/n_a + var_b/n_b)`, and the
+/// Welch-Satterthwaite degrees-of-freedom is used. p-value approximated via the
+/// standard-normal CDF (erf) — adequate when `n ≳ 30` combined; for very small
+/// samples prefer a bootstrap interval instead.
+///
+/// Returns `(0.0, 1.0)` when either sample has fewer than 2 elements (variance
+/// undefined).
+pub fn welch_t_test(a: &[f64], b: &[f64]) -> (f64, f64) {
+    let (na, nb) = (a.len(), b.len());
+    if na < 2 || nb < 2 {
+        return (0.0, 1.0);
+    }
+    let naf = na as f64;
+    let nbf = nb as f64;
+
+    let ma = a.iter().sum::<f64>() / naf;
+    let mb = b.iter().sum::<f64>() / nbf;
+
+    let va = a.iter().map(|x| (x - ma) * (x - ma)).sum::<f64>() / (naf - 1.0);
+    let vb = b.iter().map(|x| (x - mb) * (x - mb)).sum::<f64>() / (nbf - 1.0);
+
+    let se = (va / naf + vb / nbf).sqrt();
+    if se == 0.0 {
+        return (0.0, 1.0);
+    }
+    let t = (ma - mb) / se;
+
+    let num = (va / naf + vb / nbf) * (va / naf + vb / nbf);
+    let den = (va / naf) * (va / naf) / (naf - 1.0) + (vb / nbf) * (vb / nbf) / (nbf - 1.0);
+    let _df = if den > 0.0 { num / den } else { (na + nb - 2) as f64 };
+
+    let p = 2.0 * normal_sf(t.abs());
+    (t, p.clamp(0.0, 1.0))
+}
+
+// ──── Chi-squared test ───────────────────────────────────────────────────────
+
+/// Chi-squared test for categorical independence.
+///
+/// `observed` is a 2-D contingency table (rows × cols) of integer counts.
+/// Returns `(chi2_statistic, approximate_p_value, degrees_of_freedom)`.
+///
+/// The p-value uses a simple normal approximation: `√(2χ²) ∼ N(√(2df−1), 1)`
+/// (Fisher's transformation). Accurate at moderate df; for `df = 1` or very
+/// small tables prefer an exact test.
+///
+/// Returns `(0.0, 1.0, 0)` if the table is degenerate (fewer than 2 rows or
+/// cols, or total count zero).
+pub fn chi_squared(observed: &[Vec<u64>]) -> (f64, f64, usize) {
+    let r = observed.len();
+    if r < 2 {
+        return (0.0, 1.0, 0);
+    }
+    let c = observed[0].len();
+    if c < 2 {
+        return (0.0, 1.0, 0);
+    }
+    for row in observed.iter() {
+        if row.len() != c {
+            return (0.0, 1.0, 0);
+        }
+    }
+
+    let row_totals: Vec<f64> = observed
+        .iter()
+        .map(|row| row.iter().sum::<u64>() as f64)
+        .collect();
+    let col_totals: Vec<f64> = (0..c)
+        .map(|j| observed.iter().map(|row| row[j] as f64).sum())
+        .collect();
+    let total = row_totals.iter().sum::<f64>();
+    if total == 0.0 {
+        return (0.0, 1.0, 0);
+    }
+
+    let mut chi2 = 0.0f64;
+    for i in 0..r {
+        for j in 0..c {
+            let o = observed[i][j] as f64;
+            let e = row_totals[i] * col_totals[j] / total;
+            if e > 0.0 {
+                let diff = o - e;
+                chi2 += diff * diff / e;
+            }
+        }
+    }
+
+    let df = (r - 1) * (c - 1);
+    let p = chi2_sf_approx(chi2, df);
+    (chi2, p.clamp(0.0, 1.0), df)
+}
+
+// ──── Cohen's d ──────────────────────────────────────────────────────────────
+
+/// Cohen's d effect size (pooled standard deviation).
+///
+/// `d = (mean_a − mean_b) / s_pooled` where
+/// `s_pooled = √(((n_a−1)·s_a² + (n_b−1)·s_b²) / (n_a + n_b − 2))`.
+///
+/// Returns `0.0` when either sample has fewer than 2 elements or the pooled
+/// variance is zero.
+pub fn cohens_d(a: &[f64], b: &[f64]) -> f64 {
+    let na = a.len();
+    let nb = b.len();
+    if na < 2 || nb < 2 {
+        return 0.0;
+    }
+    let naf = na as f64;
+    let nbf = nb as f64;
+
+    let ma = a.iter().sum::<f64>() / naf;
+    let mb = b.iter().sum::<f64>() / nbf;
+
+    let va = a.iter().map(|x| (x - ma) * (x - ma)).sum::<f64>() / (naf - 1.0);
+    let vb = b.iter().map(|x| (x - mb) * (x - mb)).sum::<f64>() / (nbf - 1.0);
+
+    let pooled = ((naf - 1.0) * va + (nbf - 1.0) * vb) / (naf + nbf - 2.0);
+    let s = pooled.sqrt();
+    if s == 0.0 {
+        return 0.0;
+    }
+    (ma - mb) / s
+}
+
+// ──── p-value helpers (private) ──────────────────────────────────────────────
+
+/// Error-function approximation (Abramowitz & Stegun 7.1.26). Error < 1.5×10⁻⁷.
+fn erf(x: f64) -> f64 {
+    let sign = if x >= 0.0 { 1.0 } else { -1.0 };
+    let x = x.abs();
+    let p = 0.3275911;
+    let a1 = 0.254829592;
+    let a2 = -0.284496736;
+    let a3 = 1.421413741;
+    let a4 = -1.453152027;
+    let a5 = 1.061405429;
+    let t = 1.0 / (1.0 + p * x);
+    let y = 1.0 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * (-x * x).exp();
+    sign * y
+}
+
+/// Standard-normal survival function: `1 − Φ(x)`.
+fn normal_sf(x: f64) -> f64 {
+    0.5 * (1.0 - erf(x / core::f64::consts::SQRT_2))
+}
+
+/// Chi-squared survival-function approximation via Fisher: `√(2χ²) ∼ N(√(2df−1), 1)`.
+fn chi2_sf_approx(chi2: f64, df: usize) -> f64 {
+    if chi2 <= 0.0 {
+        return 1.0;
+    }
+    let df_f = df as f64;
+    if df_f < 1.0 {
+        return 1.0;
+    }
+    let z = (2.0 * chi2).sqrt() - (2.0 * df_f - 1.0).sqrt();
+    normal_sf(z)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -387,5 +551,131 @@ mod tests {
             reread,
             "fresh recompute must match re-read bytes"
         );
+    }
+
+    // ── welch_t_test ──────────────────────────────────────────────────────
+
+    /// Equal means ⇒ t ≈ 0 and p ≈ 1 (two-tailed).
+    #[test]
+    fn welch_equal_means_yields_high_p() {
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let b = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
+        let (t, p) = welch_t_test(&a, &b);
+        assert!(t.abs() < 1e-14, "t={t} should be near zero");
+        assert!(p > 0.99, "p={p} should be near 1 for identical samples, got p={p}");
+    }
+
+    /// Well-separated means ⇒ large |t| and small p (two-tailed).
+    #[test]
+    fn welch_separated_means_yields_low_p() {
+        let a = (0..50).map(|i| i as f64 * 0.1 + 5.0).collect::<Vec<f64>>();
+        let b = (0..50).map(|i| i as f64 * 0.1 + 15.0).collect::<Vec<f64>>();
+        let (t, p) = welch_t_test(&a, &b);
+        assert!(t.abs() > 20.0, "|t| should be large for offset samples, t={t}");
+        assert!(p < 1e-6, "p should be tiny for offset samples, p={p}");
+    }
+
+    /// Edge case: n < 2 ⇒ (0.0, 1.0).
+    #[test]
+    fn welch_edge_case_single_sample() {
+        assert_eq!(welch_t_test(&[1.0], &[2.0, 3.0]), (0.0, 1.0));
+        assert_eq!(welch_t_test(&[1.0, 2.0], &[3.0]), (0.0, 1.0));
+        assert_eq!(welch_t_test(&[], &[1.0, 2.0]), (0.0, 1.0));
+    }
+
+    /// Unequal variance samples: Welch should NOT require equal variance.
+    #[test]
+    fn welch_unequal_variance_valid() {
+        let a = (0..100).map(|_| 0.0).collect::<Vec<f64>>();
+        let mut b = vec![0.0; 100];
+        b[0] = 100.0; // large variance in b
+        let (t, p) = welch_t_test(&a, &b);
+        // t≈-1.0 because the single outlier shifts mean slightly negative
+        assert!((t + 1.0).abs() < 0.2, "t≈-1.0 for small shift in high-variance sample, t={t}");
+        assert!(p > 0.1, "high variance should yield non-significant p, p={p}");
+    }
+
+    // ── chi_squared ────────────────────────────────────────────────────────
+
+    /// Independent tables yield chi2 ≈ 0 and high p.
+    #[test]
+    fn chi2_independent_high_p() {
+        let table = vec![vec![50, 50], vec![50, 50]];
+        let (chi2, p, df) = chi_squared(&table);
+        assert!(chi2 < 1e-10, "chi2={chi2} near zero for uniform table");
+        assert!(p > 0.99, "p={p} near 1");
+        assert_eq!(df, 1);
+    }
+
+    /// Strong association yields large chi2 and low p.
+    #[test]
+    fn chi2_associated_low_p() {
+        let table = vec![vec![90, 10], vec![10, 90]];
+        let (chi2, p, _df) = chi_squared(&table);
+        assert!(chi2 > 50.0, "chi2={chi2} should be large");
+        assert!(p < 1e-6, "p={p} should be tiny");
+    }
+
+    /// Degenerate tables return (0.0, 1.0, 0).
+    #[test]
+    fn chi2_degenerate_edge_cases() {
+        assert_eq!(chi_squared(&[]), (0.0, 1.0, 0));
+        assert_eq!(chi_squared(&[vec![1]]), (0.0, 1.0, 0));
+        assert_eq!(chi_squared(&[vec![0, 0], vec![0, 0]]), (0.0, 1.0, 0));
+        assert_eq!(
+            chi_squared(&[vec![1, 2], vec![3]]),
+            (0.0, 1.0, 0)
+        );
+    }
+
+    /// 2×3 table hand-check: chi2 ≈ Σ(o-e)²/e.
+    #[test]
+    fn chi2_2x3_hand_check() {
+        let table = vec![vec![10, 20, 30], vec![40, 50, 60]];
+        let (chi2, p, df) = chi_squared(&table);
+        assert_eq!(df, 2);
+        // Hand: row totals 60, 150; col totals 50, 70, 90; total 210.
+        // chi2 = (10-14.2857)²/14.2857 + 0 + (30-25.7143)²/25.7143
+        //      + (40-35.7143)²/35.7143 + 0 + (60-64.2857)²/64.2857
+        //      ≈ 1.2857 + 0.7143 + 0.5143 + 0.2857 = 2.8
+        assert!(approx(chi2, 2.8, 0.01), "chi2={chi2} ≈ 2.8");
+        assert!(p > 0.1, "p={p} should be high (no association)");
+    }
+
+    // ── cohens_d ───────────────────────────────────────────────────────────
+
+    /// Identical samples ⇒ d = 0.
+    #[test]
+    fn cohens_d_identical_is_zero() {
+        let a = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let b = [1.0, 2.0, 3.0, 4.0, 5.0];
+        assert!(cohens_d(&a, &b).abs() < 1e-14);
+    }
+
+    /// 2σ separation ⇒ d ≈ 2.0 (large effect).
+    #[test]
+    fn cohens_d_two_sigma_separation() {
+        let a = vec![0.0; 100];
+        let b = vec![2.0; 100];
+        let d = cohens_d(&a, &b);
+        // both have zero variance → pooled std = 0 → d = 0 by convention
+        assert_eq!(d, 0.0);
+    }
+
+    /// Realistic 2σ separation with scatter.
+    #[test]
+    fn cohens_d_medium_effect() {
+        let a: Vec<f64> = (0..50).map(|i| i as f64 * 0.04).collect();
+        let b: Vec<f64> = (0..50).map(|i| i as f64 * 0.04 + 1.0).collect();
+        let d = cohens_d(&a, &b);
+        assert!((d.abs() - 1.71).abs() < 0.02, "|d|={} ≈ 1.715", d.abs());
+    }
+
+    /// Edge case: n < 2 ⇒ 0.0.
+    #[test]
+    fn cohens_d_single_sample_zero() {
+        assert_eq!(cohens_d(&[1.0], &[2.0, 3.0]), 0.0);
+        assert_eq!(cohens_d(&[1.0, 2.0], &[3.0]), 0.0);
+        assert_eq!(cohens_d(&[], &[1.0]), 0.0);
     }
 }

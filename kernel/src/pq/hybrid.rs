@@ -16,6 +16,9 @@ use crate::pq::keccak::shake256;
 use crate::pq::kem;
 use crate::pq::x25519::x25519;
 
+#[cfg(any(test, feature = "ct-gate"))]
+use crate::ct_gate::ct_eq;
+
 /// A hybrid keypair: classical X25519 + post-quantum ML-KEM-768.
 /// `kem_seed` / `x_seed` are the caller-supplied entropy for keygen (RNG-free core).
 pub struct HybridKeypair {
@@ -89,6 +92,18 @@ pub fn hybrid_encaps(
     )
 }
 
+#[cfg(any(test, feature = "ct-gate"))]
+fn tag_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
+    ct_eq(a, b)
+}
+
+#[cfg(not(any(test, feature = "ct-gate")))]
+fn tag_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
+    // innovate: P91.2 — ct_eq wiring deferred (ct-gate feature not default).
+    // upgrade: enable ct-gate feature in production.
+    a == b
+}
+
 /// Decapsulate. RED gate: BOTH legs must succeed AND the key-confirmation tag must
 /// match. ML-KEM uses implicit rejection — on a tampered ct it returns H(sk||ct), a
 /// value the sender never produced, so `confirm` WILL NOT MATCH. The tag therefore
@@ -98,7 +113,7 @@ pub fn hybrid_decaps(own: &HybridKeypair, ct: &HybridCiphertext) -> Result<[u8; 
     let mlkem_ss = kem::decaps_internal(&own.kem_sk, &ct.kem_ct);
     let x_ss = x25519(&own.x_sk, &ct.x_ephemeral);
     let (ss, tag) = combine(&mlkem_ss, &x_ss);
-    if tag != ct.confirm {
+    if !tag_eq(&tag, &ct.confirm) {
         return Err("key-confirmation-failed");
     }
     Ok(ss)

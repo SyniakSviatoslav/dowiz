@@ -60,6 +60,10 @@ impl Clock {
     }
 }
 
+fn route_send_scope() -> Scope {
+    Scope::single(Resource::Route, Action::Send)
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // §3 — predefined types & constants (named BEFORE implementation)
 // ═══════════════════════════════════════════════════════════════════════════
@@ -644,7 +648,7 @@ impl<T: TunnelProvider, V: VpsProvider> PoolManager<T, V> {
                 verifier,
                 &cls_seed,
                 &pq_seed,
-                Scope::single(Resource::Route, Action::Send),
+                route_send_scope(),
                 clock.now() + 90 * 24 * 3600,
             );
             let server = self.vps.create_from_image(&self.snapshot, &self.spec)?;
@@ -789,8 +793,8 @@ impl<T: TunnelProvider, V: VpsProvider> PoolManager<T, V> {
             owner_root.pq_pub.clone(),
             slot.hub_root.classical_pub,
             slot.hub_root.pq_pub.clone(),
-            Scope::single(Resource::Route, Action::Send),
-            Scope::single(Resource::Route, Action::Send),
+            route_send_scope(),
+            route_send_scope(),
             false, // may_delegate = false (single hop, P59 §2.4)
             AlgSuite::MlDsa65Ed25519,
             clock.now() + 24 * 3600,
@@ -1431,6 +1435,7 @@ mod tests {
         assert!(!receipt.child_cert.may_delegate);
         // Build a chain [child, grandchild] and verify it hits MaxDepthExceeded.
         let hub_party = Party::new(&v, 2);
+        // [test-fixture]
         let grandchild = CertDelegation::sign(
             &v,
             // The re-delegation issuer is the HUB (child_cert.subject), so it must be
@@ -1518,6 +1523,7 @@ mod tests {
         assert!(r_a.is_ok());
         // Owner B tries to present root A's pubkey but signed under B's secret → the
         // hub's enrolled anchor is A, and B's signature won't verify against A's key.
+        // [test-fixture]
         let forged = CertDelegation::sign(
             &v,
             &owner_b.cls_seed, // B's secret

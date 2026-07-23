@@ -125,6 +125,78 @@ impl ChannelLedger {
     }
 }
 
+/// Cohort retention tracking by acquisition week.
+///
+/// Each cohort is keyed by an opaque string (e.g. `"2026-W30"`).
+/// `record_acquisition` bumps the cohort size and marks the user active at week 0.
+/// `record_activity` marks a user active at a given number of weeks after acquisition.
+/// `retention_rate` returns `week_N_active / cohort_size`, or `None` if the cohort is absent.
+#[derive(Debug, Default)]
+pub struct CohortRetention {
+    /// cohort_key (e.g. "2026-W30") → [week0_active, week1_retained, week2_retained, ...]
+    pub cohorts: HashMap<String, Vec<u64>>,
+    /// Total users acquired per cohort
+    pub cohort_size: HashMap<String, u64>,
+}
+
+impl CohortRetention {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Increment the cohort's acquisition count and record the user as active at week 0.
+    pub fn record_acquisition(&mut self, cohort_key: &str) {
+        let key = cohort_key.to_string();
+        *self.cohort_size.entry(key.clone()).or_insert(0) += 1;
+        let weeks = self.cohorts.entry(key).or_default();
+        if weeks.is_empty() {
+            weeks.push(1);
+        } else {
+            weeks[0] = weeks[0].saturating_add(1);
+        }
+    }
+
+    /// Mark a user from `cohort_key` active `weeks_since_acquisition` weeks after acquisition.
+    /// The `weeks` vector is grown to fit if needed, filling intermediate weeks with 0.
+    pub fn record_activity(&mut self, cohort_key: &str, weeks_since_acquisition: usize) {
+        let weeks = self
+            .cohorts
+            .entry(cohort_key.to_string())
+            .or_default();
+        if weeks_since_acquisition >= weeks.len() {
+            weeks.resize(weeks_since_acquisition + 1, 0);
+        }
+        weeks[weeks_since_acquisition] = weeks[weeks_since_acquisition].saturating_add(1);
+    }
+
+    /// Retention rate at `week` for `cohort_key`: `active_at_week / cohort_size`, or `None` if unknown.
+    pub fn retention_rate(&self, cohort_key: &str, week: usize) -> Option<f64> {
+        let size = *self.cohort_size.get(cohort_key)?;
+        if size == 0 {
+            return None;
+        }
+        let weeks = self.cohorts.get(cohort_key)?;
+        let active = weeks.get(week).copied().unwrap_or(0);
+        Some(active as f64 / size as f64)
+    }
+
+    /// Compact text summary of every known cohort.
+    pub fn dashboard(&self) -> String {
+        let mut keys: Vec<&String> = self.cohorts.keys().collect();
+        keys.sort();
+        let mut out = String::new();
+        for key in keys {
+            let size = self.cohort_size.get(key).copied().unwrap_or(0);
+            let weeks = self.cohorts.get(key).map(|w| w.as_slice()).unwrap_or(&[]);
+            let _ = std::fmt::Write::write_fmt(
+                &mut out,
+                format_args!("cohort={key} size={size} weeks={weeks:?}\n"),
+            );
+        }
+        out
+    }
+}
+
 /// Reduce a raw `(order_id, status)` event stream into anomalies.
 ///
 /// Groups events per `order_id`, orders them by `at_ms`, then folds the status
@@ -308,5 +380,50 @@ mod tests {
             ("x".to_string(), Delivered, 6),
         ];
         assert_eq!(reduce_anomalies(&events), 0);
+    }
+
+    // ── CohortRetention tests ──
+
+    #[test]
+    fn cohort_basic_retention() {
+        let mut cr = CohortRetention::new();
+
+        // 2026-W30: 10 users acquired
+        for _ in 0..10 {
+            cr.record_acquisition("2026-W30");
+        }
+
+        // Week 0 retention = 10/10 = 1.0
+        assert_eq!(cr.retention_rate("2026-W30", 0), Some(1.0));
+
+        // Week 1: 7 users came back
+        for _ in 0..7 {
+            cr.record_activity("2026-W30", 1);
+        }
+        assert_eq!(cr.retention_rate("2026-W30", 1), Some(0.7));
+
+        // Week 2: 5 users came back
+        for _ in 0..5 {
+            cr.record_activity("2026-W30", 2);
+        }
+        assert_eq!(cr.retention_rate("2026-W30", 2), Some(0.5));
+
+        // Unknown cohort
+        assert_eq!(cr.retention_rate("2025-W01", 0), None);
+
+        // Unknown week (beyond recorded range)
+        assert_eq!(cr.retention_rate("2026-W30", 10), Some(0.0));
+    }
+
+    #[test]
+    fn cohort_dashboard_includes_both_cohorts() {
+        let mut cr = CohortRetention::new();
+        cr.record_acquisition("2026-W30");
+        cr.record_acquisition("2026-W31");
+        cr.record_activity("2026-W30", 1);
+        let d = cr.dashboard();
+        assert!(d.contains("cohort=2026-W30"));
+        assert!(d.contains("cohort=2026-W31"));
+        assert!(d.contains("size=1"));
     }
 }

@@ -25,6 +25,46 @@
 //! The whole arc is integer-domain ⇒ bit-identical across native/wasm32 (item 42
 //! cross-target proof). No new dependencies. Build model: `cargo test --offline --lib`.
 
+/// Compute a deterministic SHA3-256 model version identifier from `f64` weights.
+///
+/// Flattens each weight to its little-endian byte representation, concatenates,
+/// and hashes the result with `sha3_256`. Two models with identical `&[f64]`
+/// weights produce the same hash; any weight change flips the digest.
+pub fn model_version_hash(weights: &[f64]) -> [u8; 32] {
+    let mut bytes = Vec::with_capacity(weights.len() * 8);
+    for w in weights {
+        bytes.extend_from_slice(&w.to_le_bytes());
+    }
+    crate::event_log::sha3_256(&bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn model_version_hash_deterministic() {
+        let w = vec![1.0, 2.0, 3.0, -4.5, std::f64::consts::PI];
+        let h1 = model_version_hash(&w);
+        let h2 = model_version_hash(&w);
+        assert_eq!(h1, h2, "same weights must produce identical hash");
+    }
+
+    #[test]
+    fn model_version_hash_different_weights_differ() {
+        let a = vec![1.0, 2.0, 3.0];
+        let b = vec![1.0, 2.0, 3.0001];
+        assert_ne!(model_version_hash(&a), model_version_hash(&b));
+    }
+
+    #[test]
+    fn model_version_hash_empty_is_stable() {
+        let h = model_version_hash(&[]);
+        assert_eq!(h.len(), 32);
+        assert_eq!(model_version_hash(&[]), h);
+    }
+}
+
 pub mod fixed;
 pub mod golden;
 pub mod oracle;

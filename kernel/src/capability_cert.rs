@@ -948,6 +948,7 @@ mod tests {
             } else {
                 issuer.pq_pub.clone()
             };
+            // [test-fixture]
             let link = CertDelegation::sign(
                 v,
                 &issuer.cls_seed,
@@ -1023,6 +1024,7 @@ mod tests {
         let owner = Party::new(&v, 1);
         let hub = Party::new(&v, 2);
         let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        // [test-fixture]
         let mut link = CertDelegation::sign(
             &v,
             &owner.cls_seed,
@@ -1058,6 +1060,7 @@ mod tests {
         let owner = Party::new(&v, 1);
         let hub = Party::new(&v, 2);
         let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        // [test-fixture]
         let mut link = CertDelegation::sign(
             &v,
             &owner.cls_seed,
@@ -1167,6 +1170,7 @@ mod tests {
         let owner = Party::new(&v, 1);
         let hub = Party::new(&v, 2);
         let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        // [test-fixture]
         let link = CertDelegation::sign(
             &v,
             &owner.cls_seed,
@@ -1205,6 +1209,7 @@ mod tests {
         let owner = Party::new(&v, 1);
         let hub = Party::new(&v, 2);
         let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        // [test-fixture]
         let link = CertDelegation::sign(
             &v,
             &owner.cls_seed,
@@ -1243,6 +1248,7 @@ mod tests {
         let hub = Party::new(&v, 2);
         // Root already expired at mint time.
         let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 10);
+        // [test-fixture]
         let link = CertDelegation::sign(
             &v,
             &owner.cls_seed,
@@ -1324,6 +1330,7 @@ mod tests {
         // Owner mints its own self-signed root (no network, no dowiz).
         let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
         // Owner delegates a child hub cert (single hop, may_delegate=false).
+        // [test-fixture]
         let link = CertDelegation::sign(
             &v,
             &owner.cls_seed,
@@ -1358,6 +1365,7 @@ mod tests {
         let grandchild = Party::new(&v, 3);
         let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
         // Owner -> hub (may_delegate=false).
+        // [test-fixture]
         let l1 = CertDelegation::sign(
             &v,
             &owner.cls_seed,
@@ -1374,6 +1382,7 @@ mod tests {
             [1u8; 8],
         );
         // Hub tries to append a grandchild (forged, but structurally it would be a 2nd link).
+        // [test-fixture]
         let l2 = CertDelegation::sign(
             &v,
             &hub.cls_seed,
@@ -1413,6 +1422,7 @@ mod tests {
         let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
         // Child attempts a scope NOT subset of the root scope (Route:Send vs AgentBridge:AdmitAgent).
         let wide = Scope::single(Resource::Route, Action::Send);
+        // [test-fixture]
         let link = CertDelegation::sign(
             &v,
             &owner.cls_seed,
@@ -1446,6 +1456,7 @@ mod tests {
         let hub = Party::new(&v, 3);
         // Owner A's chain...
         let root_a = SelfSignedRoot::mint(&v, &owner_a.cls_seed, &owner_a.pq_seed, scope(), 9999);
+        // [test-fixture]
         let link_a = CertDelegation::sign(
             &v,
             &owner_a.cls_seed,
@@ -1678,6 +1689,7 @@ mod tests {
         let owner = Party::new(&v, 1);
         let hub = Party::new(&v, 2);
         let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        // [test-fixture]
         let link = CertDelegation::sign(
             &v,
             &owner.cls_seed,

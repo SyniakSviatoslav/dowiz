@@ -8,6 +8,27 @@
 //! `spectral`/`absorbing` convert at the boundary and stay for wasm/API compat.
 //!
 //! Zero-dep, plain `std`, deterministic. Small accessors are `#[inline]`.
+//!
+//! ## Cache-aware block size
+//!
+//! [`MAT_BLOCK_SIZE`] = 128 is tuned for the EPYC-Milan target (32 MB L3,
+//! 512 KB L2 per core). Rationale: three 128×128 f64 blocks (A, B, C) fit in
+//! L2: 128×128×8 bytes = 128 KiB per block; 3 blocks = 384 KiB < 512 KiB L2.
+//! Consumers using tiled/blocked matmul should use this constant as the tile
+//! dimension so the working set stays cache-resident and avoids L3 thrashing.
+//!
+//! innovate: default block tuned for EPYC-Milan 32MB L3 / 512KB L2 per core.
+//! Upgrade trigger: different CPU topology (different L2/L3 sizes) → recompute
+//! via `cpuid::detect()` and select at runtime from a small table of known sizes.
+
+/// Block size for tiled/blocked matrix multiply (cache-aware).
+///
+/// Tuned for EPYC-Milan: 128×128×8B = 128 KiB per block, 3 blocks (A, B, C)
+/// = 384 KiB < 512 KiB L2 per core. This keeps the tile working set in L2
+/// and avoids L3 thrash. Consumers that tile their matmul (e.g. blocked
+/// `matmul_contig` variants or spectral dgemm paths) should use this as
+/// the tile dimension.
+pub const MAT_BLOCK_SIZE: usize = 128;
 
 /// Row-major dense matrix backed by a single contiguous `Vec<f64>`.
 ///

@@ -229,6 +229,11 @@ pub mod metrics;
 #[cfg(any(test, miri))]
 mod miri_selftest;
 pub mod moderation;
+/// Numerical stability primitives: Kahan compensated summation, pairwise summation,
+/// stable softmax, and matrix condition-number estimation via power iteration.
+/// Zero-dep, pure-std. Guards every hot float-accumulation path against overflow
+/// and catastrophic cancellation.
+pub mod numerical_guard;
 /// P9 wave: deterministic seedable PRNG (SplitMix64 → PCG64), zero-dep,
 /// reproducible Monte-Carlo for the empirical causal joint.
 pub mod rng;
@@ -238,6 +243,10 @@ pub mod rng;
 /// prediction. Provides scalar f64 (`PidController`), quantized f32
 /// (`PidController32`), and vectorized N-channel (`PidArray`) variants.
 pub mod pid;
+/// Stability margin computation for PID controllers — gain margin (dB) and phase
+/// margin (degrees) from the discrete-time transfer function. Aid for closed-loop
+/// stability analysis without external tooling.
+pub mod math_guard;
 /// Self-similar crystalline lattice for O(1) nearest-neighbor retrieval.
 /// Extracted from `academia_p2p.rs` (NdCrystalLattice, NdSignature, CrystalMemory)
 /// into a general-purpose module. Enables fast similar-state lookup for the
@@ -427,6 +436,10 @@ pub mod markov;
 /// Contiguous row-major matrix helper — the single backing store / matmul impl
 /// the spectral + absorbing subsystems route through (DOD/SIMD prep).
 pub mod mat;
+/// SHA-256 hardware acceleration using SHA-NI (for fast integrity checks,
+/// not cryptographic MACs/signatures). Runtime-detected; scalar fallback
+/// included. SHA-NI accelerates SHA-1 and SHA-256 (NOT SHA3/Keccak).
+pub mod sha256_hw;
 /// RW-08 — messenger deep-link builders (pure string logic → kernel authority).
 pub mod messenger;
 /// Reverse-mode automatic differentiation (scalar tape engine) — the
@@ -590,6 +603,10 @@ pub mod research_ascii;
 /// CPU core topology + cache hierarchy + clock source detection.
 /// Probes /proc/cpuinfo and /sys at init. All pure data after init.
 pub mod hw_profile;
+/// Hardware feature-flag detection (AVX2, FMA, SHA-NI, AES-NI, BMI2, FSRM,
+/// L3 cache size, RAM total, core count). Zero-dep, reads /proc/cpuinfo +
+/// /proc/meminfo once; cached via OnceLock. Companion to hw_profile.
+pub mod cpuid;
 /// Deterministic time authority — stabilises raw clocks (kvm-clock/TSC/HPET)
 /// through a PLL corrector + PPMC predictor. Time never goes backwards.
 pub mod time_stabilizer;
