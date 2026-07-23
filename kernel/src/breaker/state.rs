@@ -294,16 +294,12 @@ pub fn manual_reset(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::breaker::thresholds::{default_weights, fit_from_rates, RateProfile};
+    use crate::breaker::testkit::{test_rate_profile, test_roc_bounds};
+    use crate::breaker::thresholds::{default_weights, fit_from_rates};
 
     fn tid() -> ThresholdId {
-        let p = RateProfile {
-            w_consec: 3,
-            w_kill: 5,
-            probes: 4,
-            cooldown_base: 8,
-            cooldown_cap: 1024,
-        };
+        let p = test_rate_profile();
+        let (normals, anomalies) = test_roc_bounds();
         // Separable ROC in the NORMALIZED [0,1] domain that `trip_score` (a clamped
         // weighted-sum of sat()-normalized components) actually lives in. Normals
         // occupy [0.0, 0.4], anomalies [0.6, 1.0] — cleanly separable, ALL ≤ 1.0, so
@@ -313,10 +309,10 @@ mod tests {
         // (The earlier fixture used raw scores up to 3.9, which fitted θ_open = 3.9 —
         // unreachable by a [0,1]-clamped trip_score — so the breaker could never trip.)
         let mut rates: Vec<(f32, bool)> = Vec::new();
-        for i in 0..20 {
+        for i in normals {
             rates.push(((i as f32) / 50.0, false)); // 0.00 .. 0.38 normal
         }
-        for i in 20..40 {
+        for i in anomalies {
             rates.push(((i as f32) / 40.0, true)); // 0.50 .. 0.975 anomaly
         }
         fit_from_rates(&rates, 0.05, p, default_weights()).unwrap()

@@ -15,6 +15,22 @@ use crate::breaker::state::{
 };
 use crate::breaker::thresholds::ThresholdId;
 
+#[cfg(test)]
+pub fn test_rate_profile() -> crate::breaker::thresholds::RateProfile {
+    crate::breaker::thresholds::RateProfile {
+        w_consec: 3,
+        w_kill: 5,
+        probes: 4,
+        cooldown_base: 8,
+        cooldown_cap: 1024,
+    }
+}
+
+#[cfg(test)]
+pub fn test_roc_bounds() -> (std::ops::Range<usize>, std::ops::Range<usize>) {
+    (0..20, 20..40)
+}
+
 /// A single attack-corpus row (Phase-3 pushes real rows here; item-9 leaves it
 /// inert — the harness drives only via `SignalVector`).
 #[derive(Debug, Clone, Copy)]

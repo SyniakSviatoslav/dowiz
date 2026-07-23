@@ -547,19 +547,7 @@ pub fn grant_courier<V: SignatureVerifier>(
     expiry: u64,
     nonce: [u8; 8],
 ) -> Delegation {
-    // Courier duty scope: deliver only. It deliberately EXCLUDES any Auth/Delegate
-    // action so the child can never mint a grandchild (may_delegate=false by shape).
-    let scope = Scope::single(Resource::Route, Action::Send);
-    Delegation::sign(
-        v,
-        owner_pk,
-        courier_pk,
-        scope.clone(),
-        scope,
-        expiry,
-        nonce,
-        owner_secret,
-    )
+    do_sign_delegation(v, owner_pk, owner_secret, courier_pk, expiry, nonce)
 }
 
 /// Whether a granted scope permits re-delegation. The W1 `Action` set has no
@@ -572,13 +560,31 @@ fn scope_allows_delegate(s: &Scope) -> bool {
         .any(|(r, a)| r.is_red_line() || a.is_red_line())
 }
 
-/// Verify a courier's child cert against the owner root pubkey ONLY (no network, no
-/// dowiz account — P59 `red_owner_mints_child_offline`). Honors the owner's
-/// `RevocationSet` so a revoked courier's next request is rejected (`Revoked`).
-pub fn verify_courier<V: SignatureVerifier>(
+fn do_sign_delegation<V: SignatureVerifier>(
+    v: &V,
+    owner_pk: [u8; 32],
+    owner_secret: &[u8; 32],
+    subject_pk: [u8; 32],
+    expiry: u64,
+    nonce: [u8; 8],
+) -> Delegation {
+    let scope = Scope::single(Resource::Route, Action::Send);
+    Delegation::sign(
+        v,
+        owner_pk,
+        subject_pk,
+        scope.clone(),
+        scope,
+        expiry,
+        nonce,
+        owner_secret,
+    )
+}
+
+fn do_verify_delegation<V: SignatureVerifier>(
+    child: &Delegation,
     v: &V,
     owner_pk: &[u8; 32],
-    child: &Delegation,
     now: u64,
     revoked: &RevocationSet,
 ) -> Result<(), OwnerSurfaceError> {
@@ -598,6 +604,19 @@ pub fn verify_courier<V: SignatureVerifier>(
         return Err(OwnerSurfaceError::ScopeViolation);
     }
     Ok(())
+}
+
+/// Verify a courier's child cert against the owner root pubkey ONLY (no network, no
+/// dowiz account — P59 `red_owner_mints_child_offline`). Honors the owner's
+/// `RevocationSet` so a revoked courier's next request is rejected (`Revoked`).
+pub fn verify_courier<V: SignatureVerifier>(
+    v: &V,
+    owner_pk: &[u8; 32],
+    child: &Delegation,
+    now: u64,
+    revoked: &RevocationSet,
+) -> Result<(), OwnerSurfaceError> {
+    do_verify_delegation(child, v, owner_pk, now, revoked)
 }
 
 /// Monotone, append-only courier revocation ledger (P59 §4.7 — `RevocationSet`
@@ -823,17 +842,7 @@ pub fn owner_root_mint_hub<V: SignatureVerifier>(
     expiry: u64,
     nonce: [u8; 8],
 ) -> HubConnection {
-    let scope = Scope::single(Resource::Route, Action::Send);
-    let child = Delegation::sign(
-        v,
-        owner_pk,
-        hub_pk,
-        scope.clone(),
-        scope,
-        expiry,
-        nonce,
-        owner_secret,
-    );
+    let child = do_sign_delegation(v, owner_pk, owner_secret, hub_pk, expiry, nonce);
     HubConnection {
         child_cert: child,
         endpoint,
@@ -850,22 +859,7 @@ pub fn verify_hub<V: SignatureVerifier>(
     now: u64,
     revoked: &CourierRevocationLedger,
 ) -> Result<(), OwnerSurfaceError> {
-    if revoked.is_revoked(&conn.child_cert.subject) {
-        return Err(OwnerSurfaceError::Revoked);
-    }
-    if !conn.child_cert.verify_signature(v) {
-        return Err(OwnerSurfaceError::BadSignature);
-    }
-    if conn.child_cert.issued_by != *owner_pk {
-        return Err(OwnerSurfaceError::UnknownIssuer);
-    }
-    if conn.child_cert.expiry <= now {
-        return Err(OwnerSurfaceError::Expired);
-    }
-    if scope_allows_delegate(&conn.child_cert.scope) {
-        return Err(OwnerSurfaceError::ScopeViolation);
-    }
-    Ok(())
+    do_verify_delegation(&conn.child_cert, v, owner_pk, now, &revoked.set)
 }
 
 /// P59 wiring — anchor-rooted, hybrid-signed capability-cert **chain** verification

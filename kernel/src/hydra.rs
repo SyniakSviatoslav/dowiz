@@ -318,7 +318,7 @@ impl<S: EventStore> Hydra<S> {
         E: std::fmt::Display,
     {
         self.verify_command(Some(cmd_bytes))?;
-        self.commit_inner(ev, delta, intervention, decide)
+        self.commit(ev, delta, intervention, decide)
     }
 
     #[inline]

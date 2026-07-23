@@ -416,15 +416,29 @@ fn parse_number_after(bytes: &[u8], start: usize) -> Option<f64> {
 mod tests {
     use super::*;
 
-    /// Test that a Damped mutation is accepted by the closed loop.
-    #[test]
-    fn closed_loop_accepts_damped_mutation() {
+    const TEST_BATCH_SIZE: usize = 1;
+    const TEST_LAMBDA_DECAY: f64 = 0.01;
+    const TEST_ENTROPY_WINDOW: usize = 5;
+    const TEST_ANNEAL_TEMP: f64 = 1.0;
+    const TEST_ANNEAL_COOL: f64 = 100.0;
+    const TEST_DISPERSION_WINDOW: usize = 10;
+    const TEST_LLM_TEMP: f64 = 0.7;
+    const TEST_LLM_TOP_P: f64 = 0.9;
+    const TEST_LLM_MAX_TOKENS: u32 = 512;
+
+    fn test_fixture() -> HydraClosedLoop<MemEventStore> {
         let store = MemEventStore::new();
         let base = vec![
             TopoEdge { from: 0, to: 1, weight: 1.0 },
             TopoEdge { from: 1, to: 2, weight: 1.0 },
         ];
-        let mut cl = HydraClosedLoop::new(store, 3, base, 1.0, None);
+        HydraClosedLoop::new(store, 3, base, 1.0, None)
+    }
+
+    /// Test that a Damped mutation is accepted by the closed loop.
+    #[test]
+    fn closed_loop_accepts_damped_mutation() {
+        let mut cl = test_fixture();
 
         let ev = MeshEvent {
             prev: [0u8; 32],
@@ -445,12 +459,7 @@ mod tests {
     /// Test that an Unstable mutation is rejected in DEFAULT regime.
     #[test]
     fn closed_loop_rejects_unstable_mutation() {
-        let store = MemEventStore::new();
-        let base = vec![
-            TopoEdge { from: 0, to: 1, weight: 1.0 },
-            TopoEdge { from: 1, to: 2, weight: 1.0 },
-        ];
-        let mut cl = HydraClosedLoop::new(store, 3, base, 1.0, None);
+        let mut cl = test_fixture();
 
         let ev = MeshEvent {
             prev: [0u8; 32],
@@ -469,12 +478,7 @@ mod tests {
     /// Test that intervention lifts ALL safeties (even Unstable).
     #[test]
     fn closed_loop_intervention_lifts_safeties() {
-        let store = MemEventStore::new();
-        let base = vec![
-            TopoEdge { from: 0, to: 1, weight: 1.0 },
-            TopoEdge { from: 1, to: 2, weight: 1.0 },
-        ];
-        let mut cl = HydraClosedLoop::new(store, 3, base, 1.0, None);
+        let mut cl = test_fixture();
 
         let ev = MeshEvent {
             prev: [0u8; 32],
@@ -492,12 +496,7 @@ mod tests {
     /// Test entropy budget tracks V = S + λ·ρ correctly.
     #[test]
     fn closed_loop_entropy_budget_tracks_lyapunov() {
-        let store = MemEventStore::new();
-        let base = vec![
-            TopoEdge { from: 0, to: 1, weight: 1.0 },
-            TopoEdge { from: 1, to: 2, weight: 1.0 },
-        ];
-        let mut cl = HydraClosedLoop::new(store, 3, base, 1.0, None);
+        let mut cl = test_fixture();
 
         let ev = MeshEvent {
             prev: [0u8; 32],
@@ -515,12 +514,7 @@ mod tests {
     /// Test Kalman filter tracks ρ measurements.
     #[test]
     fn closed_loop_kalman_tracks_rho() {
-        let store = MemEventStore::new();
-        let base = vec![
-            TopoEdge { from: 0, to: 1, weight: 1.0 },
-            TopoEdge { from: 1, to: 2, weight: 1.0 },
-        ];
-        let mut cl = HydraClosedLoop::new(store, 3, base, 1.0, None);
+        let mut cl = test_fixture();
 
         assert_eq!(cl.tracked_rho(), 0.0);
 
@@ -540,12 +534,7 @@ mod tests {
     /// Test M9 kill-switch forces Locked.
     #[test]
     fn closed_loop_kill_switch_locks_organism() {
-        let store = MemEventStore::new();
-        let base = vec![
-            TopoEdge { from: 0, to: 1, weight: 1.0 },
-            TopoEdge { from: 1, to: 2, weight: 1.0 },
-        ];
-        let mut cl = HydraClosedLoop::new(store, 3, base, 1.0, None);
+        let mut cl = test_fixture();
 
         assert_eq!(cl.state(), OrganismState::Live);
         let alert = cl.kill([7u8; 32], 4096).expect("kill should succeed");
@@ -591,12 +580,7 @@ mod tests {
     /// Standard Unstable mutations are rejected without entering Locked.
     #[test]
     fn closed_loop_locked_only_on_jailbreak() {
-        let store = MemEventStore::new();
-        let base = vec![
-            TopoEdge { from: 0, to: 1, weight: 1.0 },
-            TopoEdge { from: 1, to: 2, weight: 1.0 },
-        ];
-        let mut cl = HydraClosedLoop::new(store, 3, base, 1.0, None);
+        let mut cl = test_fixture();
 
         // Unstable self-loop must be rejected, NOT Locked.
         let ev_unstable = MeshEvent {

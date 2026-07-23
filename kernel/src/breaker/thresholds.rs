@@ -268,16 +268,11 @@ pub fn fit_weights(stats: &[ComponentStats; 6]) -> SignalWeights {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::breaker::testkit::{test_rate_profile, test_roc_bounds};
 
     #[test]
     fn fit_fails_on_empty_roc() {
-        let p = RateProfile {
-            w_consec: 3,
-            w_kill: 5,
-            probes: 4,
-            cooldown_base: 8,
-            cooldown_cap: 1024,
-        };
+        let p = test_rate_profile();
         assert_eq!(
             fit_from_rates(&[], 0.05, p, default_weights())
                 .err()
@@ -289,13 +284,7 @@ mod tests {
 
     #[test]
     fn fit_fails_on_single_class_roc() {
-        let p = RateProfile {
-            w_consec: 3,
-            w_kill: 5,
-            probes: 4,
-            cooldown_base: 8,
-            cooldown_cap: 1024,
-        };
+        let p = test_rate_profile();
         let only_normal: Vec<(f32, bool)> = (0..10).map(|i| (i as f32 * 0.1, false)).collect();
         assert_eq!(
             fit_from_rates(&only_normal, 0.05, p, default_weights())
@@ -313,18 +302,13 @@ mod tests {
         // (normals ≤ 0.38, anomalies 0.5 … 0.975). The fitter returns the LARGEST
         // t meeting the FPR budget, which for separable data is the top of the
         // anomaly cluster — strictly above every normal, hence separated.
-        let p = RateProfile {
-            w_consec: 3,
-            w_kill: 5,
-            probes: 4,
-            cooldown_base: 8,
-            cooldown_cap: 1024,
-        };
+        let p = test_rate_profile();
+        let (normals, anomalies) = test_roc_bounds();
         let mut rates: Vec<(f32, bool)> = Vec::new();
-        for i in 0..20 {
+        for i in normals {
             rates.push(((i as f32 / 50.0), false)); // 0.00 .. 0.38 normal
         }
-        for i in 20..40 {
+        for i in anomalies {
             rates.push(((i as f32 / 40.0), true)); // 0.50 .. 0.975 anomaly
         }
         let tid = fit_from_rates(&rates, 0.05, p, default_weights())
