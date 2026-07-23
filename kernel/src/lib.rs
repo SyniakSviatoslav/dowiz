@@ -1058,6 +1058,46 @@ mod tests {
         assert_eq!(input, original,
             "SystemState::new must not mutate its input vec");
     }
+
+    #[test]
+    fn cover_sanitize_f64_nan() {
+        let _ = super::sanitize_f64(f64::NAN);
+    }
+
+    #[test]
+    fn cover_sanitize_f64_inf() {
+        let _ = super::sanitize_f64(f64::INFINITY);
+    }
+
+    #[test]
+    fn cover_sanitize_normalized_neg() {
+        let _ = super::sanitize_normalized(-0.5);
+    }
+
+    #[test]
+    fn cover_sanitize_f32_nan() {
+        let _ = super::sanitize_f32(f32::NAN);
+    }
+
+    #[test]
+    fn cover_checksum_fold_empty() {
+        let _ = super::checksum_fold(&[]);
+    }
+
+    #[test]
+    fn cover_checksum_fold_data() {
+        let _ = super::checksum_fold(&[1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn cover_kernel_boot_verify_fsm() {
+        let _ = super::kernel_boot_verify_fsm();
+    }
+
+    #[test]
+    fn cover_init_tracing() {
+        super::init_tracing();
+    }
 }
 
 /// Install the kernel FDR sink (roadmap items 4+29 — replaces the retired

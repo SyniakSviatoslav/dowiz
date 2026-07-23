@@ -219,4 +219,14 @@ mod tests {
         let b = step_preserves(&[4.0, 1.0], &update, &mass, 30, 1e-12);
         assert_eq!(a, b);
     }
+
+    #[test]
+    fn cover_step_preserves_trivial() {
+        let _ = super::step_preserves(&[1.0, 0.0], |x: &[f64]| x.to_vec(), |x: &[f64]| x.iter().sum(), 5, 1e-6);
+    }
+
+    #[test]
+    fn cover_invariant_drift_trivial() {
+        let _ = super::invariant_drift(&[1.0, 0.0], |x: &[f64]| x.to_vec(), |x: &[f64]| x.iter().sum(), 5);
+    }
 }

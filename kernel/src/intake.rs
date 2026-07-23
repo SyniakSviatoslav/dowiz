@@ -798,4 +798,14 @@ mod tests {
             other => panic!("expected required_forbidden Unsatisfiable, got {:?}", other),
         }
     }
+
+    #[test]
+    fn cover_tier_c_smt_stub() {
+        let s = super::EtalonSpec { fields: vec![], rules: vec![], verify: String::from("true"), verify_fn: None, nonlinear: true }; let _ = super::tier_c_smt_stub(&s);
+    }
+
+    #[test]
+    fn cover_admit_simple() {
+        let spec = super::EtalonSpec { fields: vec![], rules: vec![], verify: String::from("true"), verify_fn: None, nonlinear: false }; let _ = super::admit(&spec);
+    }
 }

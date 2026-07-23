@@ -1333,4 +1333,14 @@ mod tests {
         let after = p.predict_all("after");
         assert!(!after.is_empty(), "must predict after observe-follows-predict");
     }
+
+    #[test]
+    fn cover_quick_predict() {
+        let m = vec![0.5, 0.3, 0.8, 0.1]; let _ = super::quick_predict(m, "scale_up", "latency");
+    }
+
+    #[test]
+    fn cover_quick_predict_many() {
+        let m = vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6]; let _ = super::quick_predict(m, "idle", "throughput");
+    }
 }

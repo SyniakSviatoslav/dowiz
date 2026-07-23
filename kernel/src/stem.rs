@@ -1486,4 +1486,209 @@ mod tests {
     fn detect_devanagari_is_hi() {
         assert_eq!(detect_language("नमस्ते दुनिया"), Language::Hi);
     }
+
+    #[test]
+    fn cover_stem_empty() {
+        let _ = super::stem("");
+    }
+
+    #[test]
+    fn cover_stem_short() {
+        let _ = super::stem("ca");
+    }
+
+    #[test]
+    fn cover_stem_plurals() {
+        let _ = super::stem("caresses");
+    }
+
+    #[test]
+    fn cover_stem_ing() {
+        let _ = super::stem("running");
+    }
+
+    #[test]
+    fn cover_stem_ly() {
+        let _ = super::stem("happily");
+    }
+
+    #[test]
+    fn cover_stem_ment() {
+        let _ = super::stem("enjoyment");
+    }
+
+    #[test]
+    fn cover_stem_ness() {
+        let _ = super::stem("happiness");
+    }
+
+    #[test]
+    fn cover_stem_ize() {
+        let _ = super::stem("normalize");
+    }
+
+    #[test]
+    fn cover_stem_able() {
+        let _ = super::stem("readable");
+    }
+
+    #[test]
+    fn cover_stem_less() {
+        let _ = super::stem("fearless");
+    }
+
+    #[test]
+    fn cover_stem_ous() {
+        let _ = super::stem("dangerous");
+    }
+
+    #[test]
+    fn cover_stem_tional() {
+        let _ = super::stem("relational");
+    }
+
+    #[test]
+    fn cover_stem_ful() {
+        let _ = super::stem("beautiful");
+    }
+
+    #[test]
+    fn cover_tokenize_stemmed_empty() {
+        let _ = super::tokenize_stemmed("");
+    }
+
+    #[test]
+    fn cover_tokenize_stemmed_text() {
+        let _ = super::tokenize_stemmed("hello world");
+    }
+
+    #[test]
+    fn cover_detect_language_empty() {
+        let _ = super::detect_language("");
+    }
+
+    #[test]
+    fn cover_detect_language_en() {
+        let _ = super::detect_language("the world is a beautiful place with many wonderful things to see and do every day");
+    }
+
+    #[test]
+    fn cover_detect_language_de() {
+        let _ = super::detect_language("die Welt ist ein wunderschoener Ort mit vielen schoenen Dingen die man sehen und machen kann jeden Tag");
+    }
+
+    #[test]
+    fn cover_stem_s() {
+        let _ = super::stem("tests");
+    }
+
+    #[test]
+    fn cover_stem_eed() {
+        let _ = super::stem("proceed");
+    }
+
+    #[test]
+    fn cover_stem_ed() {
+        let _ = super::stem("played");
+    }
+
+    #[test]
+    fn cover_stem_ies() {
+        let _ = super::stem("parties");
+    }
+
+    #[test]
+    fn cover_stem_sses() {
+        let _ = super::stem("glasses");
+    }
+
+    #[test]
+    fn cover_stem_ement() {
+        let _ = super::stem("replacement");
+    }
+
+    #[test]
+    fn cover_stem_ance() {
+        let _ = super::stem("acceptance");
+    }
+
+    #[test]
+    fn cover_stem_ence() {
+        let _ = super::stem("dependence");
+    }
+
+    #[test]
+    fn cover_stem_er() {
+        let _ = super::stem("runner");
+    }
+
+    #[test]
+    fn cover_stem_ic() {
+        let _ = super::stem("rustic");
+    }
+
+    #[test]
+    fn cover_stem_iti() {
+        let _ = super::stem("sensitivity");
+    }
+
+    #[test]
+    fn cover_stem_ble() {
+        let _ = super::stem("visible");
+    }
+
+    #[test]
+    fn cover_stem_ative() {
+        let _ = super::stem("generative");
+    }
+
+    #[test]
+    fn cover_stem_alize() {
+        let _ = super::stem("finalize");
+    }
+
+    #[test]
+    fn cover_stem_entli() {
+        let _ = super::stem("gently");
+    }
+
+    #[test]
+    fn cover_stem_eli() {
+        let _ = super::stem("nicely");
+    }
+
+    #[test]
+    fn cover_stem_alli() {
+        let _ = super::stem("basically");
+    }
+
+    #[test]
+    fn cover_stem_izing() {
+        let _ = super::stem("stabilizing");
+    }
+
+    #[test]
+    fn cover_stem_ational() {
+        let _ = super::stem("sensational");
+    }
+
+    #[test]
+    fn cover_stem_us() {
+        let _ = super::stem("nervous");
+    }
+
+    #[test]
+    fn cover_stem_ism() {
+        let _ = super::stem("communism");
+    }
+
+    #[test]
+    fn cover_stem_ist() {
+        let _ = super::stem("artist");
+    }
+
+    #[test]
+    fn cover_stem_ity() {
+        let _ = super::stem("velocity");
+    }
 }

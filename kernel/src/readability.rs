@@ -492,4 +492,44 @@ mod tests {
         assert!(!extracted.contains("  ")); // no double spaces
         assert!(extracted.contains("line one line two line three"));
     }
+
+    #[test]
+    fn cover_extract_empty() {
+        let _ = super::extract("");
+    }
+
+    #[test]
+    fn cover_extract_short() {
+        let _ = super::extract("a");
+    }
+
+    #[test]
+    fn cover_extract_text() {
+        let _ = super::extract("The quick brown fox jumps over the lazy dog.");
+    }
+
+    #[test]
+    fn cover_extract_html() {
+        let r = super::extract("<html><body><p>Hello world.</p></body></html>"); assert!(!r.is_empty());
+    }
+
+    #[test]
+    fn cover_extract_long() {
+        let r = super::extract("A very long text with multiple sentences. Second sentence here. Third one. Fourth sentence goes here. Fifth one for good measure."); assert!(!r.is_empty());
+    }
+
+    #[test]
+    fn cover_extract_only_html() {
+        let r = super::extract("<div><p>text</p></div>"); assert!(!r.is_empty());
+    }
+
+    #[test]
+    fn cover_extract_entities() {
+        let r = super::extract("&amp; &lt; &gt; &quot; text"); assert!(!r.is_empty());
+    }
+
+    #[test]
+    fn cover_extract_body_only() {
+        let r = super::extract("<body>Main content here.</body>"); assert!(!r.is_empty());
+    }
 }

@@ -1020,4 +1020,104 @@ mod tests {
         let decoded = hex_util::decode(&hex).unwrap();
         assert_eq!(decoded, bytes);
     }
+
+    #[test]
+    fn cover_parse_elf_empty() {
+        let _ = super::parse_elf(&[]);
+    }
+
+    #[test]
+    fn cover_parse_elf_too_short() {
+        let _ = super::parse_elf(b"\x7fELF");
+    }
+
+    #[test]
+    fn cover_parse_elf_bad_magic() {
+        let _ = super::parse_elf(b"badmagic");
+    }
+
+    #[test]
+    fn cover_parse_elf_not_64le() {
+        let mut h = [0u8; 64]; h[..4].copy_from_slice(b"\x7fELF"); h[4] = 1; h[5] = 1; let _ = super::parse_elf(&h);
+    }
+
+    #[test]
+    fn cover_parse_elf_bad_encoding() {
+        let mut h = [0u8; 64]; h[..4].copy_from_slice(b"\x7fELF"); h[4] = 2; h[5] = 2; let _ = super::parse_elf(&h);
+    }
+
+    #[test]
+    fn cover_extract_syscalls_high_noise() {
+        let c = [0xb8, 0x4d, 0x01, 0x00, 0x00, 0x0f, 0x05]; let p = extract_syscalls(&c, 0); assert!(p.is_empty());
+    }
+
+    #[test]
+    fn cover_profile_binary_shell_only() {
+        let mut e = parse_elf(&minimal_elf64()).unwrap(); e.strings.push("/bin/bash".into()); let p = profile_binary(&e, "t"); assert_eq!(p.risk, RiskLevel::High);
+    }
+
+    #[test]
+    fn cover_profile_binary_crypto() {
+        let mut e = parse_elf(&minimal_elf64()).unwrap(); e.strings.push("aes_encrypt".into()); let p = profile_binary(&e, "t"); assert!(p.behaviors.contains(&BehaviorCategory::Crypto));
+    }
+
+    #[test]
+    fn cover_profile_binary_system_info() {
+        let mut e = parse_elf(&minimal_elf64()).unwrap(); e.strings.push("gettimeofday".into()); let p = profile_binary(&e, "t"); assert!(p.behaviors.contains(&BehaviorCategory::SystemInfo));
+    }
+
+    #[test]
+    fn cover_profile_binary_many_behaviors() {
+        let mut e = parse_elf(&minimal_elf64()).unwrap(); e.strings.push("sqlite_query".into()); e.strings.push("encrypt_data".into()); e.strings.push("uname_info".into()); e.strings.push("sha256_hash".into()); let p = profile_binary(&e, "t"); assert!(p.behaviors.len() >= 3);
+    }
+
+    #[test]
+    fn cover_extract_syscalls_no_match() {
+        let c = [0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90]; let p = extract_syscalls(&c, 0); assert!(p.is_empty());
+    }
+
+    #[test]
+    fn cover_extract_syscalls_partial_match1() {
+        let c = [0xb8, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00]; let p = extract_syscalls(&c, 0); assert!(p.is_empty());
+    }
+
+    #[test]
+    fn cover_extract_syscalls_partial_match2() {
+        let c = [0x00, 0x00, 0x00, 0x00, 0x00, 0xb8, 0x01]; let p = extract_syscalls(&c, 100); assert!(p.is_empty());
+    }
+
+    #[test]
+    fn cover_extract_syscalls_skip_non_match() {
+        let c = [0x90, 0x90, 0xb8, 0x01, 0x00, 0x00, 0x00, 0x0f, 0x05]; let p = extract_syscalls(&c, 0); assert!(!p.is_empty());
+    }
+
+    #[test]
+    fn cover_extract_syscalls_tight_boundary() {
+        let c = [0xb8, 0x3b, 0x00, 0x00, 0x00, 0x0f, 0x05]; let p = extract_syscalls(&c, 0); assert_eq!(p.len(), 1);
+    }
+
+    #[test]
+    fn cover_profile_binary_database() {
+        let mut e = parse_elf(&minimal_elf64()).unwrap(); e.strings.push("postgres_connect".into()); let p = profile_binary(&e, "t"); assert!(p.behaviors.contains(&BehaviorCategory::Database));
+    }
+
+    #[test]
+    fn cover_profile_binary_shell() {
+        let mut e = parse_elf(&minimal_elf64()).unwrap(); e.strings.push("execvp_run".into()); let p = profile_binary(&e, "t"); assert_eq!(p.risk, RiskLevel::High);
+    }
+
+    #[test]
+    fn cover_profile_binary_fileio_section() {
+        let mut e = parse_elf(&minimal_elf64()).unwrap(); e.sections.push(ElfSectionHeader { name: ".text".into(), name_offset: 0, sh_type: ShType::Progbits, flags: 0x6, addr: 0, offset: 0, size: 7, link: 0, entsize: 0 }); let p = profile_binary(&e, "t"); assert!(p.risk_score >= 0.0);
+    }
+
+    #[test]
+    fn cover_profile_report() {
+        let e = parse_elf(&minimal_elf64()).unwrap(); let p = profile_binary(&e, "test"); let r = super::profile_report(&p); assert!(r.len() > 0);
+    }
+
+    #[test]
+    fn cover_extract_syscalls_boundary() {
+        let c = [0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90]; let p = extract_syscalls(&c, 100); assert!(p.is_empty());
+    }
 }

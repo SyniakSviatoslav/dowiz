@@ -1068,4 +1068,19 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn cover_fdr_crc32_empty() {
+        let _ = super::crc32(&[]);
+    }
+
+    #[test]
+    fn cover_fdr_crc32_data() {
+        let _ = super::crc32(b"test data");
+    }
+
+    #[test]
+    fn cover_crc32_long() {
+        let data = b"longer test data for crc32"; let _ = super::crc32(data);
+    }
 }

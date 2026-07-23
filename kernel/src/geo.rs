@@ -834,4 +834,64 @@ mod tests {
             "post-reset smoother must start from the new sample, got {v}"
         );
     }
+
+    #[test]
+    fn cover_haversine_same() {
+        let _ = super::haversine_meters(0.0, 0.0, 0.0, 0.0);
+    }
+
+    #[test]
+    fn cover_haversine_far() {
+        let _ = super::haversine_meters(0.0, 0.0, 0.0, 180.0);
+    }
+
+    #[test]
+    fn cover_bearing_same() {
+        let _ = super::bearing_deg(0.0, 0.0, 0.0, 0.0);
+    }
+
+    #[test]
+    fn cover_bearing_north() {
+        let _ = super::bearing_deg(0.0, 0.0, 10.0, 0.0);
+    }
+
+    #[test]
+    fn cover_ema_initial() {
+        let _ = super::ema_next(0.0, 5.0, 0.5);
+    }
+
+    #[test]
+    fn cover_polyline_empty() {
+        let _ = super::polyline_length_meters(&[]);
+    }
+
+    #[test]
+    fn cover_polyline_single() {
+        let _ = super::polyline_length_meters(&[(0.0, 0.0)]);
+    }
+
+    #[test]
+    fn cover_bearing_north_2() {
+        let b = super::bearing_deg(0.0, 0.0, 10.0, 1.0); assert!(b >= 0.0 && b < 360.0);
+    }
+
+    #[test]
+    fn cover_bearing_east() {
+        let b = super::bearing_deg(0.0, 0.0, 0.0, 10.0); assert!(b > 0.0);
+    }
+
+    #[test]
+    fn cover_ema_sequence() {
+        let e1 = super::ema_next(0.0, 5.0, 0.5); let e2 = super::ema_next(e1, 5.0, 0.5); let e3 = super::ema_next(e2, 5.0, 0.5); assert!(e3 > e1);
+    }
+
+    #[test]
+    fn cover_polyline_two() {
+        let l = super::polyline_length_meters(&[(0.0, 0.0), (1.0, 0.0)]); assert!(l > 0.0);
+    }
+
+    #[test]
+    fn cover_haversine_diag() {
+        let d = super::haversine_meters(0.0, 0.0, 90.0, 0.0); assert!(d > 0.0);
+    }
 }

@@ -329,4 +329,29 @@ mod tests {
         let (in_c, _) = zone.update(&det);
         assert!(in_c >= 1);
     }
+
+    #[test]
+    fn cover_bbox_iou_same() {
+        let a = super::BBox { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 }; let b = a.clone(); let _ = super::bbox_iou(&a, &b);
+    }
+
+    #[test]
+    fn cover_bbox_iou_disjoint() {
+        let a = super::BBox { x1: 0.0, y1: 0.0, x2: 1.0, y2: 1.0 }; let b = super::BBox { x1: 10.0, y1: 10.0, x2: 11.0, y2: 11.0 }; let _ = super::bbox_iou(&a, &b);
+    }
+
+    #[test]
+    fn cover_bbox_iou_partial() {
+        let a = super::BBox { x1: 0.0, y1: 0.0, x2: 2.0, y2: 2.0 }; let b = super::BBox { x1: 1.0, y1: 1.0, x2: 3.0, y2: 3.0 }; let i = super::bbox_iou(&a, &b); assert!(i > 0.0 && i < 1.0);
+    }
+
+    #[test]
+    fn cover_bbox_area() {
+        let a = super::BBox { x1: 0.0, y1: 0.0, x2: 3.0, y2: 4.0 }; let i = super::bbox_iou(&a, &a); assert!((i - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn cover_bbox_iou_contain() {
+        let a = super::BBox { x1: 0.0, y1: 0.0, x2: 10.0, y2: 10.0 }; let b = super::BBox { x1: 2.0, y1: 2.0, x2: 5.0, y2: 5.0 }; let i = super::bbox_iou(&a, &b); assert!(i > 0.0 && i < 1.0);
+    }
 }

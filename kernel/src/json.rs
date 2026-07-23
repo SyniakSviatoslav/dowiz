@@ -608,3 +608,77 @@ impl<'a> Parser<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cover_parse_null() { let _ = parse("null"); }
+    #[test]
+    fn cover_parse_bool_true() { let r = parse("true"); assert!(matches!(r, Ok(Value::Bool(true)))); }
+    #[test]
+    fn cover_parse_bool_false() { let r = parse("false"); assert!(matches!(r, Ok(Value::Bool(false)))); }
+    #[test]
+    fn cover_parse_int() { let r = parse("42"); assert!(r.is_ok()); }
+    #[test]
+    fn cover_parse_neg_int() { let r = parse("-42"); assert!(matches!(r, Ok(Value::Int(_)))); }
+    #[test]
+    fn cover_parse_float() { let r = parse("3.14"); assert!(matches!(r, Ok(Value::Float(_)))); }
+    #[test]
+    fn cover_parse_neg_float() { let r = parse("-3.14"); assert!(matches!(r, Ok(Value::Float(_)))); }
+    #[test]
+    fn cover_parse_exp() { let r = parse("1e10"); assert!(matches!(r, Ok(Value::Float(_)))); }
+    #[test]
+    fn cover_parse_neg_exp() { let r = parse("-1.5e-3"); assert!(r.is_ok()); }
+    #[test]
+    fn cover_parse_string_empty() { let r = parse("\"\""); assert!(r.is_ok()); }
+    #[test]
+    fn cover_parse_string_hello() { let r = parse("\"hello\""); assert!(r.is_ok()); }
+    #[test]
+    fn cover_parse_string_escape() { let r = parse("\"a\\\"b\\nc\""); assert!(r.is_ok()); }
+    #[test]
+    fn cover_parse_string_unicode() { let r = parse("\"\\u0041\""); assert!(r.is_ok()); }
+    #[test]
+    fn cover_parse_array_empty() { let r = parse("[]"); assert!(r.is_ok()); }
+    #[test]
+    fn cover_parse_array_single() { let r = parse("[42]"); assert!(r.is_ok()); }
+    #[test]
+    fn cover_parse_array_multi() { let r = parse("[1,2,3]"); assert!(r.is_ok()); }
+    #[test]
+    fn cover_parse_array_nested() { let r = parse("[1,[2,3],4]"); assert!(r.is_ok()); }
+    #[test]
+    fn cover_parse_object_empty() { let r = parse("{}"); assert!(r.is_ok()); }
+    #[test]
+    fn cover_parse_object_single() { let r = parse("{\"k\":1}"); assert!(r.is_ok()); }
+    #[test]
+    fn cover_parse_object_multi() { let r = parse("{\"a\":1,\"b\":2}"); assert!(r.is_ok()); }
+    #[test]
+    fn cover_parse_object_nested() { let r = parse("{\"a\":{\"b\":2}}"); assert!(r.is_ok()); }
+    #[test]
+    fn cover_parse_trailing_comma() { let r = parse("{\"a\":1,}"); assert!(r.is_err()); }
+    #[test]
+    fn cover_parse_empty() { let r = parse(""); assert!(r.is_err()); }
+    #[test]
+    fn cover_parse_bare_word() { let r = parse("hello"); assert!(r.is_err()); }
+    #[test]
+    fn cover_parse_bad_number() { let r = parse("01"); assert!(r.is_err()); }
+    #[test]
+    fn cover_parse_unclosed_array() { let r = parse("[1,2"); assert!(r.is_err()); }
+    #[test]
+    fn cover_parse_unclosed_object() { let r = parse("{\"a\":1"); assert!(r.is_err()); }
+    #[test]
+    fn cover_serialize_null() { let s = Value::Null.to_string(); assert_eq!(s, "null"); }
+    #[test]
+    fn cover_serialize_bool() { let s = Value::Bool(true).to_string(); assert_eq!(s, "true"); }
+    #[test]
+    fn cover_serialize_int() { let s = Value::Int(42).to_string(); assert_eq!(s, "42"); }
+    #[test]
+    fn cover_serialize_float() { let s = Value::Float(3.14).to_string(); assert!(s.contains("3.14")); }
+    #[test]
+    fn cover_serialize_string() { let s = Value::Str("hi".to_string()).to_string(); assert_eq!(s, "\"hi\""); }
+    #[test]
+    fn cover_serialize_array() { let s = Value::Array(vec![]).to_string(); assert_eq!(s, "[]"); }
+    #[test]
+    fn cover_serialize_object() { let s = Value::Object(vec![]).to_string(); assert_eq!(s, "{}"); }
+}

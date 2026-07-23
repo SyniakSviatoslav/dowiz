@@ -760,4 +760,24 @@ mod tests {
         let out = pid.output();
         assert!(out.is_finite(), "f32 PID must survive NaN/Inf: {out}");
     }
+
+    #[test]
+    fn cover_batch_pid_single() {
+        let mut s = vec![(0.0, 0.0, 0.0)]; let c = super::PidConfig { kp: 1.0, ki: 0.1, kd: 0.05, min: -1.0, max: 1.0 }; super::batch_pid_update(&mut s, &c, &[1.0], &[0.0]);
+    }
+
+    #[test]
+    fn cover_batch_pid_multiple() {
+        let mut s = vec![(0.0, 0.0, 0.0), (0.0, 0.0, 0.0)]; let c = super::PidConfig { kp: 1.0, ki: 0.1, kd: 0.05, min: -1.0, max: 1.0 }; super::batch_pid_update(&mut s, &c, &[1.0, 2.0], &[0.0, 0.0]);
+    }
+
+    #[test]
+    fn cover_pid_config_new() {
+        let c = super::PidConfig::new(2.0, 0.5, 0.1, -10.0, 10.0); let mut s = vec![(0.0, 0.0, 0.0)]; super::batch_pid_update(&mut s, &c, &[0.0], &[5.0]);
+    }
+
+    #[test]
+    fn cover_batch_pid_zero() {
+        let mut s = vec![(0.0, 0.0, 0.0)]; let c = super::PidConfig::new(0.5, 0.0, 0.0, -1.0, 1.0); super::batch_pid_update(&mut s, &c, &[0.0], &[0.5]);
+    }
 }

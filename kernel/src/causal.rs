@@ -2426,4 +2426,161 @@ mod tests {
             do_y[1]
         );
     }
+
+    #[test]
+    fn cover_backdoor_adjust_zero_nx() {
+        let _ = super::backdoor_adjust(&[], &[], &[], 0, 1);
+    }
+
+    #[test]
+    fn cover_backdoor_adjust_zero_nz() {
+        let _ = super::backdoor_adjust(&[], &[], &[], 1, 0);
+    }
+
+    #[test]
+    fn cover_backdoor_adjust_wrong_len() {
+        let _ = super::backdoor_adjust(&[], &[], &[], 1, 1);
+    }
+
+    #[test]
+    fn cover_backdoor_adjust_wrong_p_z_len() {
+        let _ = super::backdoor_adjust(&[0.5], &[0.0], &[0.5], 1, 2);
+    }
+
+    #[test]
+    fn cover_backdoor_adjust_wrong_p_xz_len() {
+        let _ = super::backdoor_adjust(&[0.5, 0.5], &[0.5, 0.5], &[0.5], 1, 2);
+    }
+
+    #[test]
+    fn cover_backdoor_adjust_oor() {
+        let _ = super::backdoor_adjust(&[1.5], &[1.0], &[1.0], 1, 1); let _ = super::backdoor_adjust(&[-0.5], &[1.0], &[1.0], 1, 1);
+    }
+
+    #[test]
+    fn cover_backdoor_adjust_p_z_not_sum_one() {
+        let _ = super::backdoor_adjust(&[0.5], &[0.5], &[1.0], 1, 1);
+    }
+
+    #[test]
+    fn cover_backdoor_adjust_p_xz_not_sum_one() {
+        let _ = super::backdoor_adjust(&[0.5], &[1.0], &[0.5], 1, 1);
+    }
+
+    #[test]
+    fn cover_backdoor_adjust_zero_prob() {
+        let _ = super::backdoor_adjust(&[0.5], &[1.0], &[0.0], 1, 1);
+    }
+
+    #[test]
+    fn cover_backdoor_adjust_happy() {
+        let _ = super::backdoor_adjust(&[0.5, 0.5], &[0.5, 0.5], &[0.5, 0.5], 1, 2);
+    }
+
+    #[test]
+    fn cover_frontdoor_adjust_zero_nx() {
+        let _ = super::frontdoor_adjust(&[], &[], &[], 0, 1);
+    }
+
+    #[test]
+    fn cover_frontdoor_adjust_zero_nm() {
+        let _ = super::frontdoor_adjust(&[], &[], &[], 1, 0);
+    }
+
+    #[test]
+    fn cover_frontdoor_adjust_wrong_p_m_x() {
+        let _ = super::frontdoor_adjust(&[], &[], &[1.0], 1, 1);
+    }
+
+    #[test]
+    fn cover_frontdoor_adjust_wrong_p_y_mx() {
+        let _ = super::frontdoor_adjust(&[0.5, 0.5], &[0.5], &[1.0], 1, 2);
+    }
+
+    #[test]
+    fn cover_frontdoor_adjust_wrong_p_x() {
+        let _ = super::frontdoor_adjust(&[0.5, 0.5], &[0.5, 0.5], &[1.0, 0.5], 1, 2);
+    }
+
+    #[test]
+    fn cover_frontdoor_adjust_oor() {
+        let _ = super::frontdoor_adjust(&[1.5, 0.5], &[0.5, 0.5], &[1.0], 1, 2);
+    }
+
+    #[test]
+    fn cover_frontdoor_adjust_p_x_not_sum_one() {
+        let _ = super::frontdoor_adjust(&[0.5, 0.5], &[0.5, 0.5], &[0.5], 1, 2);
+    }
+
+    #[test]
+    fn cover_frontdoor_adjust_row_not_sum_one() {
+        let _ = super::frontdoor_adjust(&[0.5, 0.3], &[0.5, 0.5], &[1.0], 1, 2);
+    }
+
+    #[test]
+    fn cover_frontdoor_adjust_happy() {
+        let _ = super::frontdoor_adjust(&[0.5, 0.5], &[0.5, 0.5], &[1.0], 1, 2);
+    }
+
+    #[test]
+    fn cover_instrumental_adjust_oor() {
+        let _ = super::instrumental_adjust(-0.1, 0.5, 0.5, 0.5, 0.5, 0.5);
+    }
+
+    #[test]
+    fn cover_instrumental_adjust_happy() {
+        let _ = super::instrumental_adjust(0.5, 0.5, 0.5, 0.5, 0.5, 0.5);
+    }
+
+    #[test]
+    fn cover_counterfactual_linear_alpha_zero() {
+        let _ = super::counterfactual_linear(0.0, 1.0, 1.0, 1.0, 1.0, 0.0);
+    }
+
+    #[test]
+    fn cover_counterfactual_linear_happy() {
+        let _ = super::counterfactual_linear(1.0, 2.0, 1.0, 0.5, 1.0, 0.0);
+    }
+
+    #[test]
+    fn cover_d_separated_x_eq_y() {
+        let _ = super::d_separated(&[], 0, 0, &[]);
+    }
+
+    #[test]
+    fn cover_d_separated_oob() {
+        let _ = super::d_separated(&[], 0, 1, &[]);
+    }
+
+    #[test]
+    fn cover_d_separated_single() {
+        let _ = super::d_separated(&[vec![1], vec![]], 0, 1, &[]);
+    }
+
+    #[test]
+    fn cover_backdoor_adjust_nx2_nz2() {
+        let r = super::backdoor_adjust(&[0.25, 0.25, 0.25, 0.25], &[0.5, 0.5], &[0.25, 0.25, 0.25, 0.25], 2, 2); let _ = r.unwrap();
+    }
+
+    #[test]
+    fn cover_frontdoor_adjust_nx2() {
+        let r = super::frontdoor_adjust(&[0.5, 0.5, 0.5, 0.5], &[0.5, 0.5, 0.5, 0.5], &[0.5, 0.5], 2, 2); let _ = r.unwrap();
+    }
+
+    #[test]
+    fn cover_backdoor_adjust_nx3_nz3() {
+        let p_y = vec![0.0f64; 9]; let p_z = vec![1.0/3.0; 3]; let p_xz = vec![1.0/9.0; 9]; let _ = super::backdoor_adjust(&p_y, &p_z, &p_xz, 3, 3);
+    }
+
+    #[test]
+    fn cover_frontdoor_adjust_nxm2() {
+        let p_m = vec![0.5, 0.5, 0.5, 0.5]; let p_y = vec![0.5, 0.5, 0.5, 0.5]; let p_x = vec![0.5, 0.5]; let _ = super::frontdoor_adjust(&p_m, &p_y, &p_x, 2, 2);
+    }
+
+    #[test]
+    fn cover_instrumental_all_edges() {
+        let _ = super::instrumental_adjust(0.2, 0.8, 0.3, 0.7, 0.6, 0.4);
+    }
+
+
 }

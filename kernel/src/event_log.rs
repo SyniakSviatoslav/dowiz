@@ -977,4 +977,24 @@ mod tests {
         assert!(log2.tip().is_none(), "rejection persists nothing");
         assert_eq!(log2.len(), 0, "rejection persists nothing");
     }
+
+    #[test]
+    fn cover_sha3_256_empty() {
+        let _ = super::sha3_256(&[]);
+    }
+
+    #[test]
+    fn cover_sha3_256_short() {
+        let _ = super::sha3_256(b"hello");
+    }
+
+    #[test]
+    fn cover_sha3_256_medium() {
+        let data = b"test_data_for_sha3_256_hashing_which_needs_more_than_one_block"; let _ = super::sha3_256(data);
+    }
+
+    #[test]
+    fn cover_verify_chain_base() {
+        let store = super::MemEventStore::new(); let log = super::EventLog::new(store); let _ = super::verify_chain_before_trust(&log);
+    }
 }

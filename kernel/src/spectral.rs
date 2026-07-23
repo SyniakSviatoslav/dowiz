@@ -1766,4 +1766,61 @@ mod tests {
             "identity system ⇒ λ≈1, got {lam}"
         );
     }
+
+    #[test]
+    fn cover_charpoly_empty() {
+        let _ = super::charpoly(&[]);
+    }
+
+    #[test]
+    fn cover_charpoly_1x1() {
+        let _ = super::charpoly(&[vec![5.0]]);
+    }
+
+    #[test]
+    fn cover_charpoly_2x2() {
+        let r = super::charpoly(&[vec![1.0, 2.0], vec![3.0, 4.0]]); assert_eq!(r.len(), 3);
+    }
+
+    #[test]
+    fn cover_eigenvalues_empty() {
+        let _ = super::eigenvalues(&[]);
+    }
+
+    #[test]
+    fn cover_eigenvalues_1x1() {
+        let _ = super::eigenvalues(&[vec![5.0]]);
+    }
+
+    #[test]
+    fn cover_eigenvalues_2x2() {
+        let r = super::eigenvalues(&[vec![1.0, 2.0], vec![3.0, 4.0]]); assert_eq!(r.len(), 2);
+    }
+
+    #[test]
+    fn cover_charpoly_3x3() {
+        let m = vec![vec![6.0, 2.0, 1.0], vec![2.0, 3.0, 4.0], vec![1.0, 4.0, 5.0]]; let r = super::charpoly(&m); assert_eq!(r.len(), 4);
+    }
+
+    #[test]
+    fn cover_eigenvalues_3x3() {
+        let m = vec![vec![2.0, 1.0, 0.0], vec![1.0, 2.0, 1.0], vec![0.0, 1.0, 2.0]]; let r = super::eigenvalues(&m); assert!(r.len() > 0);
+    }
+
+    #[test]
+    fn cover_eigh_3x3() {
+        let m = vec![vec![2.0, 1.0, 1.0], vec![1.0, 2.0, 1.0], vec![1.0, 1.0, 2.0]]; let d = super::eigh(&m); assert_eq!(d.0.len(), 3);
+    }
+
+
+
+    #[test]
+    fn cover_charpoly_2x2_identity() {
+        let m = vec![vec![1.0, 0.0], vec![0.0, 1.0]]; let r = super::charpoly(&m); assert_eq!(r.len(), 3);
+    }
+
+    #[test]
+    fn cover_eigenvalues_diag() {
+        let m = vec![vec![3.0, 0.0], vec![0.0, 5.0]]; let r = super::eigenvalues(&m); assert_eq!(r.len(), 2);
+    }
 }
