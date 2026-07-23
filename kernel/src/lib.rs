@@ -248,6 +248,11 @@ pub mod crystal;
 /// traffic, telemetry, throttle, friction, and error consequences of state
 /// changes and actions. Includes atomic sequencer for race-free access.
 pub mod predictor;
+/// Native prompt/skill enrichment engine — intent detection, crystal lattice
+/// storage, and prompt injection. Scrapes free prompt libraries (fabric,
+/// prompts.chat, opencode), stores 100k+ templates, reverse-engineers skills/
+/// tools/plugins, enriches every prompt based on detected intent.
+pub mod prompt_enrich;
 /// Resilience: backup/failover/dynamic-switching layer for production systems.
 /// Circuit breakers, bulkheads, cooldowns, automatic failover between
 /// prediction models, and race-condition avoidance via sequencer integration.
