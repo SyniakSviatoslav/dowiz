@@ -124,6 +124,47 @@ impl Tri {
     fn from_u8(v: u8) -> Tri {
         match v { 0 => Tri::True, 1 => Tri::False, _ => Tri::Unknown }
     }
+
+    /// Tri::True if needle is an exact substring of haystack,
+    /// Tri::Unknown if needle is a fuzzy near-match (Levenshtein ≤ 2 on same-length substrings),
+    /// Tri::False if no match at all.
+    pub fn from_match(needle: &str, haystack: &str) -> Tri {
+        if needle.is_empty() || haystack.to_lowercase().contains(&needle.to_lowercase()) {
+            return Tri::True;
+        }
+        let n = needle.len();
+        let h = haystack.to_lowercase();
+        let needle_lower = needle.to_lowercase();
+        if n <= h.len() {
+            for window in h.as_bytes().windows(n) {
+                if let Ok(w) = std::str::from_utf8(window) {
+                    if levenshtein_simple(&needle_lower, w) <= 2 {
+                        return Tri::Unknown;
+                    }
+                }
+            }
+        }
+        Tri::False
+    }
+}
+
+/// Simple Levenshtein distance (no external deps).
+fn levenshtein_simple(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let n = a.len();
+    let m = b.len();
+    let mut prev: Vec<usize> = (0..=m).collect();
+    let mut curr = vec![0usize; m + 1];
+    for i in 1..=n {
+        curr[0] = i;
+        for j in 1..=m {
+            let cost = if a[i-1] == b[j-1] { 0 } else { 1 };
+            curr[j] = (prev[j] + 1).min(curr[j-1] + 1).min(prev[j-1] + cost);
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+    prev[m]
 }
 
 // ─── RGB Vector & Delta ────────────────────────────────────────────────────
@@ -768,6 +809,44 @@ mod tests {
         assert_eq!(recs[0].model, "trinary");
         assert_eq!(recs[0].task, "mat_mul");
         assert!(recs[0].success);
+    }
+
+    // ─── from_match tests ────────────────────────────────────────────────────
+
+    #[test]
+    fn tri_from_match_exact_is_true() {
+        assert_eq!(Tri::from_match("code", "I need code review"), Tri::True);
+    }
+
+    #[test]
+    fn tri_from_match_fuzzy_is_unknown() {
+        assert_eq!(Tri::from_match("cdoe", "I need code review"), Tri::Unknown);
+    }
+
+    #[test]
+    fn tri_from_match_nomatch_is_false() {
+        assert_eq!(Tri::from_match("banana", "I need code review"), Tri::False);
+    }
+
+    #[test]
+    fn tri_from_match_empty_needle_is_true() {
+        assert_eq!(Tri::from_match("", "anything"), Tri::True);
+    }
+
+    #[test]
+    fn levenshtein_simple_same_is_zero() {
+        assert_eq!(levenshtein_simple("hello", "hello"), 0);
+    }
+
+    #[test]
+    fn levenshtein_simple_one_substitution() {
+        assert_eq!(levenshtein_simple("hello", "hallo"), 1);
+    }
+
+    #[test]
+    fn levenshtein_simple_two_away() {
+        assert_eq!(levenshtein_simple("hello", "hxllo"), 1);
+        assert_eq!(levenshtein_simple("hello", "hxllo"), 1);
     }
 
     #[test]

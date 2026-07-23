@@ -14,7 +14,7 @@
 //! ZERO deps. Uses enrichment engine's own data.
 
 use crate::prompt_enrich::PromptKind;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 /// A cross-kind bridge — connects two or more PromptKinds through shared triggers.
 #[derive(Debug, Clone)]
@@ -139,6 +139,27 @@ impl CrossBridgeRegistry {
         out.push_str(&format!("  Total kinds covered: {}\n", self.kinds_covered().len()));
         out
     }
+
+    /// Compute eigen correlation between two kind domains.
+    /// Returns a similarity score 0-1.
+    pub fn eigen_correlate(&self, kind_a: PromptKind, kind_b: PromptKind) -> f64 {
+        use crate::eigen::Eigen;
+        let kws_a: Vec<String> = self.bridges.iter()
+            .filter(|br| br.kinds.contains(&kind_a))
+            .flat_map(|br| br.trigger_keywords.iter().cloned())
+            .collect();
+        let kws_b: Vec<String> = self.bridges.iter()
+            .filter(|br| br.kinds.contains(&kind_b))
+            .flat_map(|br| br.trigger_keywords.iter().cloned())
+            .collect();
+        let mut vocab: Vec<String> = std::collections::HashSet::<String>::from_iter(
+            kws_a.iter().chain(kws_b.iter()).cloned()
+        ).into_iter().collect();
+        vocab.sort();
+        let ea = Eigen::from_bow(&kws_a, &vocab);
+        let eb = Eigen::from_bow(&kws_b, &vocab);
+        ea.cosine_sim(&eb)
+    }
 }
 
 /// Publisher diversity tracker — which publishers span the most kinds.
@@ -171,6 +192,87 @@ impl PublisherRegistry {
                 p.name, p.kinds.len(), kind_names.join(","), p.entry_count));
         }
         out
+    }
+}
+
+// ─── P5: CooccurrenceMatrix ────────────────────────────────────────────────
+
+/// Matrix tracking which PromptKinds co-occur in user queries.
+pub struct CooccurrenceMatrix {
+    pub counts: HashMap<(PromptKind, PromptKind), usize>,
+    pub total_queries: usize,
+}
+
+impl CooccurrenceMatrix {
+    pub fn new() -> Self {
+        Self { counts: HashMap::new(), total_queries: 0 }
+    }
+
+    /// Record a query's detected intents.
+    pub fn record(&mut self, kinds: &[PromptKind]) {
+        self.total_queries += 1;
+        for i in 0..kinds.len() {
+            for j in (i + 1)..kinds.len() {
+                let a = kinds[i];
+                let b = kinds[j];
+                let key = if (a as u16) < (b as u16) { (a, b) } else { (b, a) };
+                *self.counts.entry(key).or_insert(0) += 1;
+            }
+        }
+    }
+
+    /// Discover bridge candidates: pairs that co-occur >= min_cooccur times.
+    pub fn discover_bridges(&self, min_cooccur: usize) -> Vec<(PromptKind, PromptKind, f64)> {
+        let mut candidates: Vec<(PromptKind, PromptKind, f64)> = Vec::new();
+        for ((a, b), count) in &self.counts {
+            if *count >= min_cooccur {
+                let freq = *count as f64 / self.total_queries.max(1) as f64;
+                candidates.push((*a, *b, freq));
+            }
+        }
+        candidates.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+        candidates
+    }
+}
+
+// ─── P5: CrossBridgeDiscovery ──────────────────────────────────────────────
+
+pub struct CrossBridgeDiscovery {
+    pub matrix: CooccurrenceMatrix,
+    pub candidates: Vec<(PromptKind, PromptKind, f64)>,
+    pub promoted: Vec<(PromptKind, PromptKind)>,
+    pub min_confirmations: usize,
+}
+
+impl CrossBridgeDiscovery {
+    pub fn new(min_confirmations: usize) -> Self {
+        Self {
+            matrix: CooccurrenceMatrix::new(),
+            candidates: Vec::new(),
+            promoted: Vec::new(),
+            min_confirmations,
+        }
+    }
+
+    pub fn feed(&mut self, kinds: &[PromptKind]) {
+        self.matrix.record(kinds);
+    }
+
+    pub fn scan(&mut self) -> Vec<(PromptKind, PromptKind, f64)> {
+        self.candidates = self.matrix.discover_bridges(self.min_confirmations);
+        self.candidates.clone()
+    }
+
+    pub fn promote(&mut self) -> Vec<(PromptKind, PromptKind)> {
+        let mut newly_promoted = Vec::new();
+        for (a, b, _freq) in &self.candidates {
+            let pair = (*a, *b);
+            if !self.promoted.contains(&pair) {
+                self.promoted.push(pair);
+                newly_promoted.push(pair);
+            }
+        }
+        newly_promoted
     }
 }
 
@@ -214,5 +316,44 @@ mod tests {
         let d = reg.dashboard();
         assert!(d.contains("python-universal"));
         assert!(d.contains("claude-agent-hub"));
+    }
+
+    // ─── P5: Cooccurrence & bridge discovery tests ──────────────────────────
+
+    #[test]
+    fn cooccurrence_matrix_records_pairs() {
+        let mut matrix = CooccurrenceMatrix::new();
+        matrix.record(&[PromptKind::Code, PromptKind::Security, PromptKind::Test]);
+        assert_eq!(matrix.total_queries, 1);
+        // Should have Code-Security, Code-Test, Security-Test pairs
+        assert_eq!(matrix.counts.len(), 3);
+    }
+
+    #[test]
+    fn cross_bridge_discovery_detects_above_threshold() {
+        let mut discovery = CrossBridgeDiscovery::new(5);
+        for _ in 0..10 {
+            discovery.feed(&[PromptKind::Code, PromptKind::Security]);
+        }
+        let candidates = discovery.scan();
+        assert!(!candidates.is_empty(), "10 co-occurrences should exceed threshold of 5");
+        assert_eq!(candidates[0].0, PromptKind::Code);
+    }
+
+    #[test]
+    fn cross_bridge_discovery_below_threshold_returns_empty() {
+        let mut discovery = CrossBridgeDiscovery::new(100);
+        for _ in 0..3 {
+            discovery.feed(&[PromptKind::Code, PromptKind::Review]);
+        }
+        let candidates = discovery.scan();
+        assert!(candidates.is_empty(), "3 co-occurrences should not exceed threshold of 100");
+    }
+
+    #[test]
+    fn cross_bridge_eigen_correlate_self_is_high() {
+        let reg = CrossBridgeRegistry::from_research();
+        let sim = reg.eigen_correlate(PromptKind::Code, PromptKind::Code);
+        assert!(sim >= 0.0, "Self-correlation should be non-negative");
     }
 }

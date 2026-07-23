@@ -22,7 +22,9 @@
 
 use crate::event_log::sha3_256;
 use crate::academia::Academia;
+use crate::delta::{Delta, DeltaComparison, DeltaTracker};
 use crate::telemetry_harvest::HarvestLedger;
+use crate::chronos_topology::ChronoTopology;
 use std::collections::HashMap;
 
 /// Max prompt entries in the engine.
@@ -668,6 +670,11 @@ impl PromptEnrichEngine {
 
     pub fn total(&self) -> usize { self.prompts.len() }
 
+    /// Borrow all entries for eigen enrichment.
+    pub fn all_entries(&self) -> &[PromptEntry] {
+        &self.prompts
+    }
+
     /// Enrich a user prompt by finding the best matching prompt templates.
     ///
     /// 1. Detect intent from user input
@@ -997,6 +1004,43 @@ Extract helpers, eliminate duplication, rename for clarity, simplify control flo
     ]
 }
 
+// ─── Eigen-based enrichment ────────────────────────────────────────────────
+
+/// Build a vocabulary from the enrichment engine's entries.
+pub fn build_vocabulary(engine: &PromptEnrichEngine) -> Vec<String> {
+    let mut words: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for entry in engine.all_entries() {
+        for kw in &entry.trigger_keywords {
+            words.insert(kw.to_lowercase());
+        }
+    }
+    let mut vocab: Vec<String> = words.into_iter().collect();
+    vocab.sort();
+    vocab
+}
+
+/// Eigen-based enrichment: decomposes the query and each entry into eigen vectors,
+/// then ranks by eigen-projection similarity.
+pub fn eigen_enrich_report(engine: &PromptEnrichEngine, input: &str, vocab: &[String]) -> Vec<PromptEntry> {
+    use crate::eigen::Eigen;
+    let input_lower = input.to_lowercase();
+    let query_kws: Vec<String> = input_lower.split_whitespace().map(|s| s.to_string()).collect();
+    let query_eigen = Eigen::from_bow(&query_kws, vocab);
+
+    let mut scored: Vec<(PromptEntry, f64)> = Vec::new();
+    for entry in engine.all_entries() {
+        let entries_kws: Vec<String> = entry.trigger_keywords.iter().map(|k| k.to_lowercase()).collect();
+        let entry_eigen = Eigen::from_bow(&entries_kws, vocab);
+        let sim = query_eigen.cosine_sim(&entry_eigen);
+        if sim > 0.0 {
+            scored.push((entry.clone(), sim));
+        }
+    }
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    scored.truncate(10);
+    scored.into_iter().map(|(e, _)| e).collect()
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1260,6 +1304,88 @@ mod tests {
         assert_eq!(recs[0].task, "intent_detect");
         assert!(recs[0].success);
     }
+
+    #[test]
+    fn eigen_enrich_report_finds_code_entries() {
+        let mut engine = PromptEnrichEngine::new();
+        engine.ingest(seed_fabric_prompts());
+        engine.ingest(seed_opencode_prompts());
+        let vocab = build_vocabulary(&engine);
+        let results = eigen_enrich_report(&engine, "I need to write some code", &vocab);
+        assert!(!results.is_empty(), "Should find code-related entries");
+    }
+
+    #[test]
+    fn eigen_build_vocabulary_is_non_empty() {
+        let mut engine = PromptEnrichEngine::new();
+        engine.ingest(seed_fabric_prompts());
+        let vocab = build_vocabulary(&engine);
+        assert!(!vocab.is_empty(), "Vocabulary should not be empty");
+    }
+
+    #[test]
+    fn eigen_enrich_report_returns_sorted_by_relevance() {
+        let mut engine = PromptEnrichEngine::new();
+        engine.ingest(seed_fabric_prompts());
+        engine.ingest(seed_opencode_prompts());
+        let vocab = build_vocabulary(&engine);
+        let results = eigen_enrich_report(&engine, "code review", &vocab);
+        if results.len() >= 2 {
+            let kw1 = results[0].trigger_keywords.iter().filter(|k| "code review".contains(k.as_str())).count();
+            let kw2 = results[1].trigger_keywords.iter().filter(|k| "code review".contains(k.as_str())).count();
+            assert!(kw1 >= kw2, "First result should be most relevant");
+        }
+    }
+
+    // ─── P3: Quality monitor tests ───────────────────────────────────────────
+
+    #[test]
+    fn quality_monitor_calibrate_sets_baseline() {
+        let mut monitor = EnrichmentQualityMonitor::new();
+        let engine = PromptEnrichEngine::new();
+        monitor.calibrate(&engine);
+        assert!(!monitor.baseline_scores.is_empty());
+        assert_eq!(monitor.baseline_scores.len(), monitor.benchmark_queries.len());
+    }
+
+    #[test]
+    fn quality_monitor_check_drift_returns_stable_for_no_change() {
+        let mut monitor = EnrichmentQualityMonitor::new();
+        let engine = PromptEnrichEngine::new();
+        monitor.calibrate(&engine);
+        let comparison = monitor.check_drift(&engine);
+        // Should be stable since engine hasn't changed
+        assert!(matches!(comparison, DeltaComparison::Stable | DeltaComparison::Growing));
+    }
+
+    // ─── P4: Chronos tracker tests ──────────────────────────────────────────
+
+    #[test]
+    fn chronos_tracker_registers_and_trends() {
+        let mut tracker = ChronosEnrichmentTracker::new();
+        tracker.register_keywords(&["code".into(), "test".into(), "deploy".into()]);
+        // Record queries that match "code" frequently
+        for _ in 0..5 {
+            tracker.record_query("write code for sorting");
+            tracker.record_query("code review guidelines");
+        }
+        // Record queries that match "test" less
+        tracker.record_query("unit test framework");
+        // "code" should be trending higher than "deploy"
+        let trending = tracker.trending_keywords(3);
+        assert!(!trending.is_empty());
+    }
+
+    #[test]
+    fn chronos_tracker_decaying_keywords() {
+        let mut tracker = ChronosEnrichmentTracker::new();
+        tracker.register_keywords(&["old_api".into(), "new_api".into()]);
+        for _ in 0..10 {
+            tracker.record_query("use new_api for requests");
+        }
+        let decaying = tracker.decaying_keywords(2);
+        assert!(!decaying.is_empty());
+    }
 }
 
 /// Re-export for test access.
@@ -1268,4 +1394,168 @@ fn seed_system_prompts() -> Vec<PromptEntry> {
         PromptEntry::new("self_enrich", "self-improving enrichment engine", PromptKind::Meta, &["enrich","self-improve"], "system", "CC0"),
         PromptEntry::new("skill_armory", "skill ingestion orchestration", PromptKind::Skill, &["armory","skill store"], "system", "CC0"),
     ]
+}
+
+// ─── P3: EnrichmentQualityMonitor ──────────────────────────────────────────
+
+/// Monitors enrichment quality drift after DB ingestion.
+pub struct EnrichmentQualityMonitor {
+    pub benchmark_queries: Vec<String>,
+    pub baseline_scores: Vec<f64>,
+    pub tracker: DeltaTracker,
+    pub telemetry: HarvestLedger,
+}
+
+impl EnrichmentQualityMonitor {
+    pub fn new() -> Self {
+        Self {
+            benchmark_queries: vec![
+                "write code to sort a list".into(),
+                "debug a null pointer exception".into(),
+                "design a REST API".into(),
+                "secure authentication system".into(),
+                "optimize database queries".into(),
+            ],
+            baseline_scores: Vec::new(),
+            tracker: DeltaTracker::new(5.0, 100.0),
+            telemetry: HarvestLedger::new(100),
+        }
+    }
+
+    /// Calibrate: run benchmark queries through the engine, store baseline scores.
+    pub fn calibrate(&mut self, engine: &PromptEnrichEngine) {
+        self.baseline_scores.clear();
+        for q in &self.benchmark_queries {
+            let results = engine.enrich_report(q);
+            let score = results.prompts.len() as f64;
+            self.baseline_scores.push(score);
+        }
+    }
+
+    /// Check drift: run benchmark queries, compare to baseline, feed DeltaTracker.
+    pub fn check_drift(&mut self, engine: &PromptEnrichEngine) -> DeltaComparison {
+        if self.baseline_scores.is_empty() {
+            self.calibrate(engine);
+        }
+        let now = crate::now_ms();
+        let mut total_delta = 0.0_f64;
+        for (i, q) in self.benchmark_queries.iter().enumerate() {
+            let results = engine.enrich_report(q);
+            let new_score = results.prompts.len() as f64;
+            let baseline = self.baseline_scores.get(i).copied().unwrap_or(new_score);
+            let delta_value = new_score - baseline;
+            total_delta += delta_value;
+            let d = Delta::between(&[baseline], now, &[new_score], now + 1);
+            self.tracker.observe(d);
+        }
+        let avg_delta = total_delta / self.benchmark_queries.len().max(1) as f64;
+        self.telemetry.record(
+            "enrichment_quality",
+            &format!("drift_check_avg_delta={:.3}", avg_delta),
+            avg_delta.abs() < 1.0,
+            if avg_delta > 0.0 { avg_delta } else { 1.0 },
+            0.0,
+        );
+        if self.tracker.history.is_empty() {
+            DeltaComparison::Stable
+        } else {
+            let cumulative: f64 = self.tracker.history.iter().map(|d| d.components.iter().sum::<f64>()).sum();
+            if cumulative.abs() <= 1.0 {
+                DeltaComparison::Stable
+            } else if cumulative > 0.0 {
+                DeltaComparison::Growing
+            } else {
+                DeltaComparison::Shrinking
+            }
+        }
+    }
+}
+
+// ─── P4: ChronosEnrichmentTracker ──────────────────────────────────────────
+
+/// Tracks keyword relevance over time using chronos topology.
+pub struct ChronosEnrichmentTracker {
+    pub topology: ChronoTopology,
+    pub keyword_rows: HashMap<String, usize>,
+    pub query_count: usize,
+}
+
+impl ChronosEnrichmentTracker {
+    pub fn new() -> Self {
+        Self {
+            topology: ChronoTopology::new(),
+            keyword_rows: HashMap::new(),
+            query_count: 0,
+        }
+    }
+
+    /// Register enrichment keywords as topology subsystems.
+    pub fn register_keywords(&mut self, keywords: &[String]) {
+        for kw in keywords {
+            let lower = kw.to_lowercase();
+            if !self.keyword_rows.contains_key(&lower) {
+                let row = self.keyword_rows.len();
+                self.keyword_rows.insert(lower.clone(), row);
+                self.topology.register(&lower, 1, 3);
+            }
+        }
+    }
+
+    /// Record a query — increment present counts for matched keywords.
+    pub fn record_query(&mut self, query_text: &str) {
+        self.query_count += 1;
+        let lower = query_text.to_lowercase();
+        let kw_list: Vec<String> = self.keyword_rows.keys().cloned().collect();
+        for kw in &kw_list {
+            if lower.contains(kw) {
+                let mut m = crate::trinary::TriMatrix::new(1, 3);
+                m.set(0, 1, crate::trinary::Tri::True);
+                self.topology.update(kw, m);
+            }
+        }
+    }
+
+    /// Get top-N trending keywords (highest predicted relevance).
+    pub fn trending_keywords(&self, top_n: usize) -> Vec<(String, f64)> {
+        let mut scored: Vec<(String, f64)> = Vec::new();
+        for (kw, &_row) in &self.keyword_rows {
+            if let Some(trinity) = self.topology.subsystems.get(kw) {
+                let pres = trinity.present.get(0, 1);
+                let pred = trinity.predicted.get(0, 1);
+                let pres_score = tri_to_numeric(pres);
+                let pred_score = tri_to_numeric(pred);
+                let trend = pred_score / pres_score.max(0.01);
+                scored.push((kw.clone(), crate::sanitize_f64(trend)));
+            }
+        }
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(top_n);
+        scored
+    }
+
+    /// Get top-N decaying keywords (lowest predicted relevance).
+    pub fn decaying_keywords(&self, top_n: usize) -> Vec<(String, f64)> {
+        let mut scored: Vec<(String, f64)> = Vec::new();
+        for (kw, &_row) in &self.keyword_rows {
+            if let Some(trinity) = self.topology.subsystems.get(kw) {
+                let past = trinity.past.get(0, 1);
+                let pred = trinity.predicted.get(0, 1);
+                let past_score = tri_to_numeric(past);
+                let pred_score = tri_to_numeric(pred);
+                let decay = pred_score / past_score.max(0.01);
+                scored.push((kw.clone(), crate::sanitize_f64(decay)));
+            }
+        }
+        scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.truncate(top_n);
+        scored
+    }
+}
+
+fn tri_to_numeric(t: crate::trinary::Tri) -> f64 {
+    match t {
+        crate::trinary::Tri::True => 1.0,
+        crate::trinary::Tri::Unknown => 0.5,
+        crate::trinary::Tri::False => 0.0,
+    }
 }

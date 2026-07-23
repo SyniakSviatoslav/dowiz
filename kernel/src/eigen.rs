@@ -45,6 +45,49 @@ impl Eigen {
         self.lambda * dot
     }
 
+    /// Create an Eigen from a bag-of-words representation.
+    /// Maps each keyword in `keywords` to a sparse vector indexed by `vocabulary`,
+    /// then computes eigen decomposition from the resulting self-adjoint matrix.
+    pub fn from_bow(keywords: &[String], vocabulary: &[String]) -> Eigen {
+        let n = vocabulary.len();
+        if n == 0 || keywords.is_empty() {
+            return Eigen::new(0.0, Vec::new());
+        }
+        let mut counts = vec![0.0_f64; n];
+        for kw in keywords {
+            for (i, v) in vocabulary.iter().enumerate() {
+                if crate::stem::stem(v) == crate::stem::stem(kw) || v == kw {
+                    counts[i] += 1.0;
+                }
+            }
+        }
+        let norm: f64 = counts.iter().map(|c| c * c).sum::<f64>().sqrt();
+        let v: Vec<f64> = if norm > 0.0 { counts.iter().map(|c| c / norm).collect() } else { counts };
+        let lambda: f64 = v.iter().map(|vi| vi * vi).sum();
+        Eigen::new(crate::sanitize_f64(lambda), v)
+    }
+
+    /// Cosine similarity between two eigen representations.
+    /// Projects other's vector onto self's vector, weighted by eigen values.
+    pub fn cosine_sim(&self, other: &Eigen) -> f64 {
+        let n = self.vector.len().min(other.vector.len());
+        if n == 0 { return 0.0; }
+        let dot: f64 = self.vector.iter().zip(other.vector.iter()).take(n).map(|(a, b)| a * b).sum();
+        let self_norm: f64 = self.vector.iter().map(|vi| vi * vi).sum::<f64>().sqrt();
+        let other_norm: f64 = other.vector.iter().map(|vi| vi * vi).sum::<f64>().sqrt();
+        let raw = dot / (self_norm * other_norm).max(1e-12);
+        let weight = (self.lambda * other.lambda).max(0.0).sqrt();
+        crate::sanitize_f64(raw * weight)
+    }
+
+    /// Project self onto target Eigen: λ · (v · target)
+    pub fn project_eigen(&self, target: &Eigen) -> f64 {
+        let n = self.vector.len().min(target.vector.len());
+        if n == 0 { return 0.0; }
+        let dot: f64 = self.vector.iter().zip(target.vector.iter()).take(n).map(|(a, b)| a * b).sum();
+        crate::sanitize_f64(self.lambda * dot.abs())
+    }
+
     /// Magnitude: |λ|.
     pub fn mag(&self) -> f64 { self.lambda.abs() }
 
@@ -211,5 +254,54 @@ mod tests {
         let d = EigenDecomp::new(vec![]);
         assert_eq!(d.spectral_radius(), 0.0);
         assert_eq!(d.unstable_count(), 0);
+    }
+
+    #[test]
+    fn eigen_from_bow_identical_keywords_is_one() {
+        let vocab: Vec<String> = vec!["code".into(), "review".into(), "test".into()];
+        let kw1: Vec<String> = vec!["code".into(), "review".into()];
+        let kw2: Vec<String> = vec!["code".into(), "review".into()];
+        let e1 = Eigen::from_bow(&kw1, &vocab);
+        let e2 = Eigen::from_bow(&kw2, &vocab);
+        let sim = e1.cosine_sim(&e2);
+        assert!(sim > 0.5, "Identical keyword vectors should have high similarity, got {}", sim);
+    }
+
+    #[test]
+    fn eigen_from_bow_orthogonal_is_zero() {
+        let vocab: Vec<String> = vec!["code".into(), "banana".into(), "review".into(), "apple".into()];
+        let kw1: Vec<String> = vec!["code".into(), "review".into()];
+        let kw2: Vec<String> = vec!["banana".into(), "apple".into()];
+        let e1 = Eigen::from_bow(&kw1, &vocab);
+        let e2 = Eigen::from_bow(&kw2, &vocab);
+        let sim = e1.cosine_sim(&e2);
+        assert!(sim < 0.1, "Orthogonal keyword vectors should have low similarity, got {}", sim);
+    }
+
+    #[test]
+    fn eigen_from_bow_overlapping_is_partial() {
+        let vocab: Vec<String> = vec!["code".into(), "test".into(), "review".into(), "deploy".into()];
+        let kw1: Vec<String> = vec!["code".into(), "test".into()];
+        let kw2: Vec<String> = vec!["code".into(), "deploy".into()];
+        let e1 = Eigen::from_bow(&kw1, &vocab);
+        let e2 = Eigen::from_bow(&kw2, &vocab);
+        let sim = e1.cosine_sim(&e2);
+        assert!(sim > 0.0 && sim < 1.0, "Partial overlap should give intermediate similarity, got {}", sim);
+    }
+
+    #[test]
+    fn eigen_project_self_is_lambda() {
+        let vocab: Vec<String> = vec!["code".into(), "test".into()];
+        let kw: Vec<String> = vec!["code".into()];
+        let e = Eigen::from_bow(&kw, &vocab);
+        let proj = e.project_eigen(&e);
+        assert!(proj > 0.0, "Self-projection should be positive");
+    }
+
+    #[test]
+    fn eigen_from_bow_empty_returns_zero() {
+        let e = Eigen::from_bow(&[], &[]);
+        assert_eq!(e.lambda, 0.0);
+        assert!(e.vector.is_empty());
     }
 }
