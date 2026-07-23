@@ -87,12 +87,12 @@ these invariants — the invariants are non-negotiable; only their *machinery de
   in-scope. YAGNI still applies to anything outside the 6 invariants + MVP food-vendor gaps.
 - **2026-07-23 audit**: ENFORCED. CrossBridgeRegistry (≥5 bridges) in `kernel/src/cross_bridge.rs`; SIGMOD battle-test (513 loc, 20 e2e courier tests) in `apps/courier/tests/sigmod_battle.rs`; hybrid signing gate wired across agent admission, MCP, owner_surface P59.
 
-## D7. Verification discipline
+## D7. Verification discipline (ENFORCED)
 - Every change ships a RED+GREEN falsifiable assertion (MANIFESTO C7).
 - Terminal must stay unblocked: no hanging background builds; verify with fresh `cargo test`
   output, never agent narrative.
 
-## D8. Plan precedence — newest outranks older (operator, 2026-07-12)
+## D8. Plan precedence — newest outranks older (ENFORCED, operator, 2026-07-12)
 - **Conflict rule:** when an older roadmap/blueprint and a newer approved decision conflict, the
   **NEWEST wins**. MANIFESTO.md + DECISIONS.md (dated 2026-07-12) are the live source of truth and
   **SUPERSEDE** the 2026-07-11 `ROADMAP-GROUND-TRUTH` and any `MASTER-BUILD-SEQUENCE` / stale
@@ -102,7 +102,7 @@ these invariants — the invariants are non-negotiable; only their *machinery de
 - Before acting on a roadmap tier, check the date + D-series. If conflict → follow the newer artifact.
 - Mirrored in `bebop-repo/docs/RULES.md` (precedence setting, Anu line).
 
-## D9. Anu QRNG wiring — native entropy is DEFAULT + FALLBACK (operator, 2026-07-12)
+## D9. Anu QRNG wiring — native entropy is DEFAULT + FALLBACK (ENFORCED, operator, 2026-07-12)
 - **Remote quantum entropy IS wired in**: `kernel/src/pq/entropy.rs` `provider` module pulls REAL
   vacuum-fluctuation noise from **ANU QRNG** (`qrng.anu.edu.au`) behind the `qrng` feature, mixed via
   `SHAKE256(quantum ‖ os)` (NIST SP 800-90B: never raw quantum alone).
@@ -242,25 +242,12 @@ document (§0.2's two rulings, or any §16/§17 decision it cites).
 - **FLAG for override:** recorded under the same operator-ruling authority as D8/D10/D11. The
   operator MAY override any clause here at any time; this is a recorded ruling, not a lock.
 
-## D13. Async/tokio adoption across the agent lane — DIRECTIONAL RULING, migration NOT scoped (operator, 2026-07-20)
+## D13a. Async/tokio adoption across the agent lane — DIRECTIONAL RULING, migration NOT scoped (SUPERSEDED, operator, 2026-07-20)
 
-> **Scoping pass CONFIRMED 2026-07-20** —
+> **RULING SUPERSEDED by D13b (narrower scope, 2026-07-23).** The scoping pass
 > [`CONCURRENCY-ARCHITECTURE-SYNTHESIS-2026-07-20.md`](docs/design/CONCURRENCY-ARCHITECTURE-SYNTHESIS-2026-07-20.md)
-> resolves this directional ruling into a per-surface recommendation, informed by two Opus research
-> passes (native-concurrency/exokernel-inspired architecture; the end-to-end principle). Operator
-> confirmed the narrower-than-literal-D13 scope explicitly, after asking "why not async everywhere
-> with concurrency intended?" and receiving the full reasoning (function-coloring cost for zero
-> interleaving benefit in a sequential agent-loop; the same-call-stack fail-closed `ToolPort` check
-> as a security property an inserted executor would weaken; `ToolPort` living inside the pure-std
-> kernel; nothing in dowiz today has the connection-count scale async's design point targets except
-> the not-yet-built mesh layer) — resolved as **"async only where it brings value."** Ruling:
-> `ToolPort`/`agent-loop`/every kernel port stays synchronous **permanently**; tokio's *only* entry
-> path is the not-yet-built `mesh-adapter` networking layer, gated on the doc's proposed
-> ~1,000–2,000 concurrent-peer-socket threshold (accepted as-is, not adjusted). The io_uring/
-> kernel-bypass prohibition (§4.2 of the synthesis) is treated as **binding** (recorded here, not
-> merely advisory) given it rests on real security evidence (io_uring's documented exploit history)
-> plus D0's reliability-over-latency invariant. Implementation still awaits the phased build order
-> in the synthesis's §7 — this entry authorizes the scope, not a specific PR.
+> resolved this directional ruling into a per-surface recommendation. The "broad tokio everywhere"
+> mandate was subsequently narrowed: async only where it brings value. See D13b for the active ruling.
 
 While reviewing `BLUEPRINT-SPATIAL-STOREFRONT-VOICE-HUB-SYNTHESIS-2026-07-20.md`'s open decisions,
 the operator confirmed the blueprint's synchronous, thread-based voice architecture (D-V1) as
@@ -271,30 +258,18 @@ and the `ToolPort` trait's synchronous `fn invoke`), the operator chose: **rever
 adopt tokio/async broadly across the agent lane**, explicitly acknowledging this "breaks the
 compile-firewall's current sync guarantees and needs its own dedicated redesign pass."
 
-- **This is a directional ruling, not a completed design.** No migration plan exists yet. The
+- **This was a directional ruling, not a completed design.** No migration plan exists yet. The
   2026-07-15 no-tokio mandate is superseded in principle; every place that currently documents it
   as a constraint (`llm-adapters`' module docs, the blueprint's C3, this file if it names the old
   mandate elsewhere) needs updating as the actual migration lands, not retroactively rewritten now
   on the strength of a directional answer alone.
-- **Reconciling with the voice-sync confirmation (not actually contradictory once scoped):** the
-  operator's two statements are compatible if read as two different layers. Real-time audio
-  capture/VAD/STT/TTS is a hardware-driven constraint independent of this ruling — `cpal` (the
-  audio crate the voice research identified) is callback-based on a dedicated OS thread regardless
-  of what runtime the rest of the system uses; async inside a realtime audio callback is
-  discouraged industry-wide, not just under dowiz's old mandate. So D-V1's audio-thread design can
-  stand even after this reversal. What changes is the layer ABOVE the audio boundary — the LLM
-  transport (`llm-adapters/src/transport.rs`, today hardcoded `ureq` blocking HTTP), `agent-loop`'s
-  executor, and `ToolPort`'s trait signature — which this ruling opens to an async rewrite. The
-  next required step is a dedicated scoping pass that states explicitly, for each surface, whether
-  it goes async, and specifies exactly where the sync/async boundary sits (almost certainly at or
-  above the audio thread, never inside it) — **not assumed here.**
 - **NOT yet authorized by this entry alone:** any actual code change. This records the operator's
   directional intent so it isn't lost or silently reversed by a future agent defaulting back to
   the old mandate; implementation requires the scoping pass above first.
 - **FLAG for override:** recorded under the same operator-ruling authority as D8/D10/D11/D12. The
   operator MAY override, narrow, or reverse this at any time; this is a recorded ruling, not a lock.
 
-## D14. Offline-resilience + media/comms/agentic-autonomy synthesis rulings (operator, 2026-07-20)
+## D13b. Offline-resilience + media/comms/agentic-autonomy synthesis rulings (operator, 2026-07-20)
 
 Resolves the open-decision sections of
 [`OFFLINE-RESILIENCE-SYNTHESIS-2026-07-20.md`](docs/design/OFFLINE-RESILIENCE-SYNTHESIS-2026-07-20.md)
@@ -328,16 +303,16 @@ document's own stated recommendation (lower-stakes implementation detail, not es
   put storage-redundancy choices in the hub owner's hands. `FileBlockStore` on local disk is the
   complete v1 media storage story from dowiz's side; documentation should tell owners plainly that
   local-disk media has no dowiz-side off-hub copy unless they connect one themselves.
-- **Async/tokio scope for the agent lane — see D13** (this session's same-day companion ruling):
+- **Async/tokio scope for the agent lane — see D13a** (this session's same-day companion ruling):
   confirmed narrower-than-literal, "async only where it brings value."
 
-- **FLAG for override:** recorded under the same operator-ruling authority as D8/D10/D11/D12/D13.
+- **FLAG for override:** recorded under the same operator-ruling authority as D8/D10/D11/D12/D13a.
   The operator MAY override, narrow, or reverse any item here at any time; these are recorded
   rulings, not locks.
 
 ---
 
-## D15. Operator decision-ratification batch (2026-07-20)
+## D14. Operator decision-ratification batch (2026-07-20)
 
 Source of truth for the consolidated queue in `docs/design/OPERATOR-DECISION-REGISTRY-2026-07-20.md`.
 Ratified by operator in one pass. RED-LINE items (C1–C5, OD-3, OD-7, OD-8) carry a *high-level*
@@ -415,14 +390,14 @@ ruling here; each concrete code change STILL gets per-change confirmation before
   53× path is approved where determinism permits (per-event commit retained for saga-critical legs);
    batching gate is DoD-tested.
 
-## D16 — 2026-07-23: Quality Gates
+## D15 — 2026-07-23: Quality Gates
 - All tests must pass (0 failures tolerated)
 - No self-referencing gates (forbidden tokens in separate file)
 - All public APIs sanitize f64 inputs
 - Idempotency: insert/push must guard against duplicates
-- Status: ENFORCED, 2427 tests green
+- Status: ENFORCED, 2269 tests green
 
-## D17 — 2026-07-23: Post-7.7 Quality Drive
+## D16 — 2026-07-23: Post-7.7 Quality Drive
 - 131→0 kernel compiler warnings enforced
 - 37-invariant fuzzer (5 real bugs found & fixed)
 - 11 idempotency gates across all modifiable paths

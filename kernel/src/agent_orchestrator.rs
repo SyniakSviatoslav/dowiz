@@ -308,6 +308,7 @@ impl WaveOrchestrator {
 
         if let Some(core) = self.core_load.iter().position(|&l| l < max_per_core) {
             self.core_load[core] += 1;
+            crate::core_pinning::pin_to_core(core);
         }
     }
 

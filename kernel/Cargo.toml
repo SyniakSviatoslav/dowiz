@@ -149,6 +149,9 @@ speculative = []
 # unaffected — this is a feature GATE, not a dependency.
 optical = []
 
+[target.'cfg(target_os = "linux")'.dependencies]
+libc = "0.2"
+
 [dependencies]
 # WASM bindings — only compiled under the `wasm` feature (see
 # `#[cfg(feature = "wasm")] pub mod wasm;` in lib.rs). The kernel is pure Rust

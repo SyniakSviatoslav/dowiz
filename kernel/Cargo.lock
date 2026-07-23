@@ -521,6 +521,7 @@ dependencies = [
  "criterion",
  "curve25519-dalek",
  "eqc-rs",
+ "libc",
  "paste",
  "pollster",
  "proptest",
