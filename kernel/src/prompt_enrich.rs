@@ -128,7 +128,7 @@ pub type IntentPath = Vec<String>;
 /// Built once at compile-time, queried at runtime.
 pub static INTENT_TREE: &[IntentNode] = &[
     // ── Root nodes ───────────────────────────────────────────────────────
-    IntentNode { name: "code", kind: PromptKind::Code, keywords: &["code","implement","build","compile","function","struct","impl","mod","cargo","rustc","npm","pip","import","fix","patch","component","module","crate","type","trait","enum","api","endpoint","handler","route","service","async","await","concurrent"], children: &[1,2,3,4,5,6] },
+    IntentNode { name: "code", kind: PromptKind::Code, keywords: &["code","implement","build","compile","function","struct","impl","mod","cargo","rustc","npm","pip","import","fix","patch","component","module","crate","type","trait","enum","api","endpoint","handler","route","service","async","await","concurrent","код","реалізувати","реализовать","скомпілювати","функція","функция","виправити","исправить","модуль","білд","билд","створити","создать","писати","писать","розробка","разработка"], children: &[1,2,3,4,5,6] },
     IntentNode { name: "implement", kind: PromptKind::Code, keywords: &["implement","build","create","make","write","generate","scaffold","new","setup","init"], children: &[7,8,9,10,11] },
     IntentNode { name: "debug", kind: PromptKind::Code, keywords: &["debug","fix","troubleshoot","root","cause","broken","error","panic","crash","bug","why","doesn","incorrect","wrong","unexpected"], children: &[12,13,14,15] },
     IntentNode { name: "refactor", kind: PromptKind::Refactor, keywords: &["refactor","clean","up","simplify","dedup","extract","rename","restructure","reorganize","decouple","remove","dead","unused"], children: &[16,17,18,19] },
@@ -202,7 +202,7 @@ pub static INTENT_TREE: &[IntentNode] = &[
     IntentNode { name: "compliance", kind: PromptKind::Security, keywords: &["compliance","gdpr","soc2","iso","hipaa","pci","regulation","policy","governance","risk"], children: &[] },
     IntentNode { name: "exploit", kind: PromptKind::Security, keywords: &["exploit","attack","inject","xss","csrf","sqli","rce","lfi","bypass","hijack","spoof","phish"], children: &[] },
     // ── Meta ──────────────────────────────────────────────────────────────
-    IntentNode { name: "prompt-eng", kind: PromptKind::Meta, keywords: &["prompt","engineer","improve","optimize","enrich","enhance","augment","rewrite","refine","structure","framework","template","better"], children: &[] },
+    IntentNode { name: "meta", kind: PromptKind::Meta, keywords: &["prompt","engineer","improve","optimize","enrich","enhance","augment","rewrite","refine","structure","framework","template","better","автоматичний","автоматический","універсальний","универсальный","внутрішній","внутренний","без залежностей","без зависимостей","динамічний","динамический","енріч","энрич","нативно","нативно"], children: &[] },
     IntentNode { name: "skill-design", kind: PromptKind::Skill, keywords: &["skill","plugin","tool","extension","agent","capability","mcp","server","adapter","connector","bridge","integration"], children: &[] },
     IntentNode { name: "self-enrich", kind: PromptKind::Meta, keywords: &["enrich","self","improve","augment","enhance","upgrade","boost","amplify","level","up","meta"], children: &[] },
     // ── Other roots ───────────────────────────────────────────────────────
@@ -537,7 +537,12 @@ fn build_intent_map() -> IntentMap {
     }
     // Meta
     for k in &["prompt", "enrich", "improve prompt", "optimize prompt", "skill",
-        "plugin", "tool", "agent"] {
+        "plugin", "tool", "agent",
+        "автоматичний","автоматический","універсальний","универсальный",
+        "внутрішній","внутренний","без залежностей","без зависимостей",
+        "динамічний","динамический","енріч","энрич","нативно","нативно",
+        "скрізь","везде","завжди","всегда","показувати","показывать",
+        "використовувати","использовать","система","система"] {
         m.insert(*k, PromptKind::Meta);
     }
     // Refactor
