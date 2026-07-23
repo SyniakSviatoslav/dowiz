@@ -647,6 +647,10 @@ pub mod token_bucket;
 /// Deterministic n-gram (bigram + trigram) frequency extraction over a token
 /// stream — the self-improvement loop's pattern-surface primitive (P9 / T2-β).
 pub mod trigram;
+/// Light multilingual stemmer (EN/UK/RU) — zero-dep suffix stripping for
+/// inflected-language recall in BM25/trigram retrieval. Normalizes cases,
+/// conjugations, and plurals to a common root.
+pub mod stem;
 /// P08 — typed metrics pure core: `/proc/self` sampling (CPU/mem) + a
 /// deterministic, serde-free, parse-or-reject text schema for typed metric
 /// records. NO egress / signing change; GPU is typed-absent (`Option`) until

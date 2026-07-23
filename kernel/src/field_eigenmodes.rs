@@ -322,6 +322,13 @@ pub fn modal_advance(basis: &[Vec<f64>], values: &[f64], u0: &[f64], t: f64) -> 
 /// Modal one-step Euler advance `u ← u + dt·L u`, diagonalized: `c_k → c_k (1 + λ_k dt)`.
 /// Mathematically IDENTICAL to [`stencil_step`] (same operator, just diagonalized),
 /// so it matches the stencil to machine precision — the T3 evolution-equivalence proof.
+///
+/// innovate: G10 — `1.0 + λ·dt` is the forward-Euler approximation, which is sign-convention
+/// dependent and becomes unstable for large |λ|·dt. The correct exponential integrator is
+/// `exp(λ·dt)` which preserves sign and is unconditionally stable for non-positive eigenvalues.
+/// Both `modal_euler_advance` AND `stencil_step` must be upgraded together, and the T3
+/// equivalence proof signature must be re-pinned. upgrade: when field simulation time-step
+/// exceeds 0.05 or negative eigenvalues appear.
 pub fn modal_euler_advance(basis: &[Vec<f64>], values: &[f64], u0: &[f64], dt: f64) -> Vec<f64> {
     let r = basis.len().min(values.len());
     let n = u0.len();
