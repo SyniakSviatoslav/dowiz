@@ -1152,4 +1152,154 @@ mod tests {
             "roster still readable — admit took a shared borrow"
         );
     }
+
+    // ── additional coverage tests ────────────────────────────────────────────
+
+    #[test]
+    fn empty_capability_list_try_admit_fails() {
+        let limiter = AdmissionLimiter::new(0, 0.0, 0, 0, 0.0);
+        assert!(!limiter.try_admit(0));
+        assert!(!limiter.try_admit(42));
+    }
+
+    #[test]
+    fn shard_limiter_depleted_per_source_rejects() {
+        // 2 shards, each with capacity 0 → shard step fails even if global passes.
+        let limiter = AdmissionLimiter::new(100, 0.0, 2, 0, 0.0);
+        assert!(!limiter.try_admit(0));
+        assert!(!limiter.try_admit(1));
+    }
+
+    #[test]
+    fn expired_capability_rejected_before_gate_reached() {
+        let v = RefSigner;
+        let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
+        let scope = admit_scope();
+        let (mut frame, roster, chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
+        // Push the frame's capability expiry into the past.
+        let expired_cap = Capability::new_hybrid(
+            frame.capability.subject_key,
+            frame.capability.subject_key_pq.clone().unwrap_or_default(),
+            frame.capability.scope.clone(),
+            frame.capability.nonce,
+            10, // expired at tick 10
+        );
+        frame = SignedFrame::new(expired_cap, frame.payload);
+        let mut adm = admitter();
+        let mut log = EventLog::new(MemEventStore::new());
+        let res = adm.admit(
+            &frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 100,
+        );
+        assert!(matches!(res, Err(AdmissionError::Expired)));
+        assert_eq!(log.len(), 0);
+    }
+
+    #[test]
+    fn unknown_issuer_self_signed_root_rejected() {
+        let v = RefSigner;
+        let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
+        let scope = admit_scope();
+        let (frame, _roster, chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
+        // An empty roster — the issuer is not enrolled.
+        let empty_roster = AnchorRoster::new();
+        let mut adm = admitter();
+        let mut log = EventLog::new(MemEventStore::new());
+        let res = adm.admit(
+            &frame, &empty_roster, &chain, &RevocationSet::new(), &mut log, 0, 0,
+        );
+        assert!(matches!(res, Err(AdmissionError::UnknownIssuer)));
+    }
+
+    #[test]
+    fn broken_chain_incorrect_scope_attenuation() {
+        let v = RefSigner;
+        let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
+        let scope = admit_scope();
+        let anchor = v.classical_public(&anch);
+        // Build a chain link that grants a scope NOT subset of the anchor scope.
+        let bad_scope = Scope::single(Resource::Ledger, Action::SettlementRecorded);
+        let (frame, roster, _chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope.clone(), [7u8; 8]);
+        let bad_link = Delegation::sign(
+            &v,
+            anchor,
+            cls,
+            bad_scope.clone(),
+            bad_scope,
+            9999,
+            [7u8; 8],
+            &anch,
+        );
+        let mut adm = admitter();
+        let mut log = EventLog::new(MemEventStore::new());
+        let res = adm.admit(
+            &frame, &roster, &[bad_link], &RevocationSet::new(), &mut log, 0, 0,
+        );
+        // Wrong admission scope caught before chain, or chain scope violation.
+        assert!(res.is_err());
+        assert_eq!(log.len(), 0);
+    }
+
+    #[test]
+    fn revoked_subject_key_rejected() {
+        let v = RefSigner;
+        let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
+        let scope = admit_scope();
+        let (frame, roster, chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
+        let subject_pub = frame.capability.subject_key;
+        let mut revocations = RevocationSet::new();
+        revocations.revoke_key(subject_pub);
+        let mut adm = admitter();
+        let mut log = EventLog::new(MemEventStore::new());
+        let res = adm.admit(
+            &frame, &roster, &chain, &revocations, &mut log, 0, 0,
+        );
+        assert!(matches!(res, Err(AdmissionError::Revoked)));
+    }
+
+    #[test]
+    fn duplicate_nonce_rejected() {
+        let v = RefSigner;
+        let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        let manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
+        let scope = admit_scope();
+        let (frame, roster, chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope.clone(), [99u8; 8]);
+        let mut adm = admitter();
+        let mut log = EventLog::new(MemEventStore::new());
+        // First admission — succeeds.
+        adm.admit(&frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0).unwrap();
+        // Second admission with same nonce — nonce replay rejected.
+        let (frame2, _, chain2) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [99u8; 8]);
+        let res = adm.admit(
+            &frame2, &roster, &chain2, &RevocationSet::new(), &mut log, 0, 0,
+        );
+        assert!(matches!(res, Err(AdmissionError::NonceRejected)));
+    }
+
+    #[test]
+    fn identity_mismatch_missing_pq_key() {
+        let v = RefSigner;
+        let (cls, pq, anch) = ([1u8; 32], [2u8; 32], [3u8; 32]);
+        let mut manifest = build_manifest(&v, &cls, &pq, ExecutionModel::WasmComponent, false, 0);
+        // Swap the manifest PQ key to a different value — identity mismatch.
+        manifest.subject_key_pq = v.pq_public(&[99u8; 32]);
+        let scope = admit_scope();
+        let (frame, roster, chain) =
+            valid_frame(&v, &cls, &pq, &anch, &manifest, scope, [7u8; 8]);
+        let mut adm = admitter();
+        let mut log = EventLog::new(MemEventStore::new());
+        let res = adm.admit(
+            &frame, &roster, &chain, &RevocationSet::new(), &mut log, 0, 0,
+        );
+        assert!(matches!(res, Err(AdmissionError::IdentityMismatch)));
+    }
 }

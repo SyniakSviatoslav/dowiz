@@ -1501,4 +1501,147 @@ mod tests {
         assert_ne!(k1, k2);
         assert_eq!(k1, k1b);
     }
+
+    // ── payment processing edge-case tests ──────────────────────────────────
+
+    #[test]
+    fn zero_amount_transaction_accepted() {
+        let plan = one_leg_plan("Z0", 0);
+        let total = plan_total(&plan).unwrap();
+        assert_eq!(total.minor, 0);
+        let a = NoOpPaymentAdapter::new();
+        let key = IdempotencyKey(sha3_256(b"zero-amount"));
+        let result = a.create_with_key(&key, &plan);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn negative_amount_plan_total() {
+        let plan = NLegPlan {
+            order_id: "neg".to_string(),
+            currency: Currency::Eur,
+            legs: vec![
+                VendorLeg {
+                    leg: LegId(1),
+                    vendor_id: VendorId([1u8; 32]),
+                    amount: Money::new(-500, Currency::Eur),
+                    dest_account: ProviderAccountRef("acct_v".into()),
+                },
+                VendorLeg {
+                    leg: LegId(2),
+                    vendor_id: VendorId([2u8; 32]),
+                    amount: Money::new(-300, Currency::Eur),
+                    dest_account: ProviderAccountRef("acct_w".into()),
+                },
+            ],
+        };
+        let total = plan_total(&plan).unwrap();
+        assert_eq!(total.minor, -800);
+    }
+
+    #[test]
+    fn max_amount_overflow_rejected_in_plan_total() {
+        let plan = NLegPlan {
+            order_id: "overflow".to_string(),
+            currency: Currency::Eur,
+            legs: vec![
+                VendorLeg {
+                    leg: LegId(1),
+                    vendor_id: VendorId([1u8; 32]),
+                    amount: Money::new(i64::MAX, Currency::Eur),
+                    dest_account: ProviderAccountRef("acct".into()),
+                },
+                VendorLeg {
+                    leg: LegId(2),
+                    vendor_id: VendorId([2u8; 32]),
+                    amount: Money::new(1, Currency::Eur),
+                    dest_account: ProviderAccountRef("acct".into()),
+                },
+            ],
+        };
+        assert!(matches!(plan_total(&plan), Err(PayError::Provider(_))));
+    }
+
+    #[test]
+    fn empty_dest_account_accepted() {
+        let plan = NLegPlan {
+            order_id: "empty-acct".to_string(),
+            currency: Currency::Eur,
+            legs: vec![VendorLeg {
+                leg: LegId(1),
+                vendor_id: VendorId([1u8; 32]),
+                amount: Money::new(100, Currency::Eur),
+                dest_account: ProviderAccountRef(String::new()),
+            }],
+        };
+        let a = NoOpPaymentAdapter::new();
+        let key = IdempotencyKey(sha3_256(b"empty-acct"));
+        assert!(a.create_with_key(&key, &plan).is_ok());
+    }
+
+    #[test]
+    fn different_wallets_independent_idempotency_keys() {
+        let k1 = IdempotencyKey::derive("order-same", "wallet-A", b"n");
+        let k2 = IdempotencyKey::derive("order-same", "wallet-B", b"n");
+        assert_ne!(k1, k2);
+        let a = NoOpPaymentAdapter::new();
+        let plan = one_leg_plan("order-same", 500);
+        assert!(a.create_with_key(&k1, &plan).is_ok());
+        assert!(a.create_with_key(&k2, &plan).is_ok());
+        assert_eq!(
+            a.query_status_by_key(&k1).unwrap(),
+            PaymentStatus::IntentCreated
+        );
+        assert_eq!(
+            a.query_status_by_key(&k2).unwrap(),
+            PaymentStatus::IntentCreated
+        );
+    }
+
+    #[test]
+    fn capture_void_resilient_to_arbitrary_inputs() {
+        let a = NoOpPaymentAdapter::new();
+        assert!(a.capture_leg(&LegId(0), &ChargeHandle("any".into())).is_ok());
+        assert!(a
+            .capture_leg(&LegId(u32::MAX), &ChargeHandle(String::new()))
+            .is_ok());
+        assert!(a.void_leg(&LegId(42), &ChargeHandle("any".into())).is_ok());
+        let cash = CashAdapter::new();
+        assert!(cash.capture_leg(&LegId(9999), &ChargeHandle("".into())).is_ok());
+        assert!(cash.void_leg(&LegId(u32::MAX), &ChargeHandle("x".into())).is_ok());
+    }
+
+    #[test]
+    fn insufficient_funds_money_law_guard() {
+        let balance = Money::new(100, Currency::Eur);
+        let debit = Money::new(200, Currency::Eur);
+        // checked_sub does not reject negative results — it only guards overflow and
+        // cross-currency. A higher-level fold must check the result is non-negative.
+        let result = balance.checked_sub(debit).unwrap();
+        assert_eq!(result, Money::new(-100, Currency::Eur));
+        // Valid same-currency subtraction.
+        let valid = balance.checked_sub(Money::new(50, Currency::Eur));
+        assert_eq!(valid.unwrap(), Money::new(50, Currency::Eur));
+        // Cross-currency subtraction must fail.
+        let usd = Money::new(10, Currency::Usd);
+        assert!(balance.checked_sub(usd).is_err());
+        // Overflow guard: i64::MIN has no additive inverse when negated.
+        let min = Money::new(i64::MIN, Currency::Eur);
+        let one = Money::new(1, Currency::Eur);
+        assert!(min.checked_sub(one).is_err());
+    }
+
+    #[test]
+    fn invalid_currency_refund_rejected() {
+        let a = NoOpPaymentAdapter::new();
+        let req = RefundRequest {
+            charge: ChargeHandle("ch_1".into()),
+            amount: Money::new(100, Currency::Usd),
+            reason: RefundReason::CustomerRequest,
+        };
+        assert!(matches!(
+            a.refund(&req),
+            Err(PayError::CurrencyMismatch)
+        ));
+    }
 }

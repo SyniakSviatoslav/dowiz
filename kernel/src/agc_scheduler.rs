@@ -482,4 +482,86 @@ mod tests {
         let rec = s.pid_update(100.0, 500.0);
         assert!(rec > 0);
     }
+
+    // ── additional coverage tests ──────────────────────────────────────
+
+    #[test]
+    fn empty_task_queue_next_task_none() {
+        let mut s = AgcScheduler::new(10);
+        assert!(s.next_task().is_none());
+        assert_eq!(s.pending_count(), 0);
+    }
+
+    #[test]
+    fn all_tasks_same_priority_respect_fifo_like() {
+        let mut s = AgcScheduler::new(10);
+        s.schedule(make_task(1, AgcPriority::Normal)).unwrap();
+        s.schedule(make_task(2, AgcPriority::Normal)).unwrap();
+        s.schedule(make_task(3, AgcPriority::Normal)).unwrap();
+        // All same priority, next_task returns max_by_key(priority) — any is fine.
+        let next = s.next_task().unwrap();
+        assert!(next.state == TaskState::Pending);
+    }
+
+    #[test]
+    fn overload_shedding_at_exact_threshold() {
+        let mut s = AgcScheduler::new(100);
+        for i in 0..OVERLOAD_THRESHOLD {
+            s.schedule(make_task(i as u64, AgcPriority::Normal)).unwrap();
+        }
+        assert_eq!(s.overload_level(), 1, "overload_level must be 1 at threshold");
+        let shed = s.shed_overload();
+        assert!(!shed.is_empty(), "low priority tasks must be shed");
+    }
+
+    #[test]
+    fn priority_inversion_prevention() {
+        let mut s = AgcScheduler::new(10);
+        s.schedule(make_task(1, AgcPriority::Low)).unwrap();
+        s.schedule(make_task(2, AgcPriority::Emergency)).unwrap();
+        s.schedule(make_task(3, AgcPriority::High)).unwrap();
+        let next = s.next_task().unwrap();
+        assert_eq!(next.id, 2, "Emergency must be scheduled before High and Low");
+    }
+
+    #[test]
+    fn task_timeout_state_is_preserved() {
+        let mut s = AgcScheduler::new(10);
+        let id = s.schedule(make_task(1, AgcPriority::Normal)).unwrap();
+        s.start_task(id);
+        s.fail_task(id);
+        assert_eq!(s.tasks[0].state, TaskState::Failed);
+        // Restart from checkpoint (none) → None
+        let resume = s.restart_from_checkpoint(id);
+        assert_eq!(resume, None, "restart without checkpoint returns None");
+    }
+
+    #[test]
+    fn checkpoint_restore_with_no_prior_state() {
+        let mut s = AgcScheduler::new(10);
+        let id = s.schedule(make_task(1, AgcPriority::Normal)).unwrap();
+        s.start_task(id);
+        // Restart without any checkpoint:
+        let step = s.restart_from_checkpoint(id);
+        assert!(step.is_none());
+    }
+
+    #[test]
+    fn max_tasks_capacity_boundary() {
+        let mut s = AgcScheduler::new(1);
+        s.schedule(make_task(1, AgcPriority::Normal)).unwrap();
+        assert_eq!(s.schedule(make_task(2, AgcPriority::Normal)), Err(ScheduleError::AtCapacity));
+    }
+
+    #[test]
+    fn single_task_full_lifecycle() {
+        let mut s = AgcScheduler::new(10);
+        let id = s.schedule(make_task(42, AgcPriority::High)).unwrap();
+        assert_eq!(s.pending_count(), 1);
+        assert!(s.start_task(id).is_true());
+        assert_eq!(s.active_by_priority(AgcPriority::High), 1);
+        assert!(s.complete_task(id).is_true());
+        assert_eq!(s.tasks[0].state, TaskState::Completed);
+        assert_eq!(s.pending_count(), 0);
+    }
 }

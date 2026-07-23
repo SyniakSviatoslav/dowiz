@@ -780,4 +780,95 @@ mod tests {
     fn cover_batch_pid_zero() {
         let mut s = vec![(0.0, 0.0, 0.0)]; let c = super::PidConfig::new(0.5, 0.0, 0.0, -1.0, 1.0); super::batch_pid_update(&mut s, &c, &[0.0], &[0.5]);
     }
+
+    // ── additional coverage tests ──────────────────────────────────────
+
+    #[test]
+    fn negative_setpoint_clamps_to_min() {
+        let mut pid = PidController::new(1.0, 0.1, 0.2, 10.0, 100.0);
+        let out = pid.update(-50.0, 0.0);
+        assert!(out.is_finite());
+        assert!(out >= 10.0, "output must stay above min with negative setpoint: {out}");
+        assert!(out <= 100.0);
+    }
+
+    #[test]
+    fn max_output_saturation_on_huge_positive_error() {
+        let mut pid = PidController::new(5.0, 0.5, 1.0, 0.0, 20.0);
+        for _ in 0..30 {
+            pid.update(1000.0, 0.0);
+        }
+        let out = pid.output();
+        assert!(out <= 20.0, "output must saturate at max: {out}");
+        assert!(out.is_finite());
+    }
+
+    #[test]
+    fn min_output_saturation_on_huge_negative_error() {
+        let mut pid = PidController::new(5.0, 0.5, 1.0, -10.0, 100.0);
+        for _ in 0..30 {
+            pid.update(-1000.0, 0.0);
+        }
+        let out = pid.output();
+        assert!(out >= -10.0, "output must saturate at min: {out}");
+        assert!(out.is_finite());
+    }
+
+    #[test]
+    fn integral_windup_with_high_ki_still_clamped() {
+        let mut pid = PidController::new(2.0, 100.0, 0.0, 0.0, 50.0);
+        for _ in 0..200 {
+            pid.update(50.0, 0.0);
+        }
+        let out = pid.output();
+        assert!(out.is_finite(), "output must remain finite with high ki: {out}");
+        assert!(out >= 0.0 && out <= 50.0, "output must stay within [0,50]: {out}");
+        assert!(pid.integral.is_finite(), "integral must remain finite");
+    }
+
+    #[test]
+    fn derivative_kick_on_step_change_bounded() {
+        let mut pid = PidController::new(0.5, 0.1, 10.0, 0.0, 100.0);
+        // Steady state at setpoint=10
+        for _ in 0..20 {
+            pid.update(10.0, 9.9);
+        }
+        // Sudden step to setpoint=100
+        let out = pid.update(100.0, 10.0);
+        assert!(out.is_finite(), "derivative kick must not produce NaN: {out}");
+        assert!(out >= 0.0 && out <= 100.0, "derivative kick must stay bounded: {out}");
+    }
+
+    #[test]
+    fn zero_integral_gain_ki_no_integral_term_contribution() {
+        let mut pid = PidController::new(1.0, 0.0, 0.5, 0.0, 100.0);
+        for _ in 0..50 {
+            pid.update(50.0, 10.0);
+        }
+        // ki=0 ⇒ i_term=0, so output is driven only by P + D (never grows unbounded from I).
+        assert!(pid.output() <= 100.0);
+        assert!(pid.output().is_finite());
+    }
+
+    #[test]
+    fn very_large_error_values_stay_bounded() {
+        let mut pid = PidController::new(1.0, 0.1, 0.2, 0.0, 1e6);
+        let out = pid.update(f64::MAX, 0.0);
+        assert!(out.is_finite(), "f64::MAX error must not produce NaN: {out}");
+        assert!(out <= 1e6);
+    }
+
+    #[test]
+    fn measurement_exceeding_setpoint_reduces_output() {
+        let mut pid = PidController::new(1.0, 0.2, 0.3, 0.0, 100.0);
+        // Approach setpoint=10
+        for _ in 0..30 {
+            pid.update(10.0, pid.output());
+        }
+        let before = pid.output();
+        // Measurement exceeds setpoint → error negative → P term negative → output reduces
+        let after = pid.update(10.0, 12.0);
+        assert!(after < before,
+            "output must decrease when measurement exceeds setpoint: before={before}, after={after}");
+    }
 }

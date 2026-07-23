@@ -763,4 +763,206 @@ mod tests {
         );
         assert!(matches!(outcome, LoopOutcome::IterationCapExceeded { .. }));
     }
+
+    // ── edge-case tests ────────────────────────────────────────────────────
+
+    #[test]
+    fn empty_user_request_handled() {
+        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let reg = build_registry(inv.clone());
+        let budget = TokenBucket::new(16.0, 1.0);
+        let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
+        let reasoner = scripted(vec![AgentStep::Answer {
+            text: "empty input".to_string(),
+        }]);
+        let outcome = loop_.run(&reasoner, "");
+        match outcome {
+            LoopOutcome::Answer { text, .. } => assert_eq!(text, "empty input"),
+            other => panic!("expected Answer, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn immediate_answer_no_tool_calls() {
+        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let reg = build_registry(inv.clone());
+        let budget = TokenBucket::new(16.0, 1.0);
+        let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
+        let reasoner = scripted(vec![AgentStep::Answer {
+            text: "direct answer".to_string(),
+        }]);
+        let outcome = loop_.run(&reasoner, "hi");
+        match outcome {
+            LoopOutcome::Answer { text, log } => {
+                assert_eq!(text, "direct answer");
+                assert_eq!(inv.get(), 0, "no tool should be invoked");
+                assert_eq!(log.len(), 1);
+            }
+            other => panic!("expected Answer, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn recovery_after_tool_failure_to_answer() {
+        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let reg = build_registry(inv.clone());
+        let budget = TokenBucket::new(16.0, 1.0);
+        let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
+        // Unknown tool first, then a valid answer on recovery.
+        let reasoner = scripted(vec![
+            AgentStep::CallTool {
+                name: "nonexistent_tool".to_string(),
+                raw_arg: "{}".to_string(),
+            },
+            AgentStep::Answer {
+                text: "recovered after failure".to_string(),
+            },
+        ]);
+        let outcome = loop_.run(&reasoner, "try something");
+        match outcome {
+            LoopOutcome::Answer { text, log } => {
+                assert_eq!(text, "recovered after failure");
+                assert!(log
+                    .iter()
+                    .any(|e| matches!(e.event, LoopEventKind::ToolCallMalformed { .. })));
+            }
+            other => panic!("expected Answer after recovery, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn fanout_step_logs_all_subtasks() {
+        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let reg = build_registry(inv.clone());
+        let budget = TokenBucket::new(16.0, 1.0);
+        let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
+        let reasoner = scripted(vec![
+            AgentStep::FanOut {
+                tasks: vec![
+                    SubTask { id: 0, name: "search".to_string(), raw_arg: "q1".to_string() },
+                    SubTask { id: 1, name: "search".to_string(), raw_arg: "q2".to_string() },
+                    SubTask { id: 2, name: "fetch".to_string(), raw_arg: "url".to_string() },
+                ],
+            },
+            AgentStep::Answer { text: "done".to_string() },
+        ]);
+        let outcome = loop_.run(&reasoner, "fan out");
+        match outcome {
+            LoopOutcome::Answer { log, .. } => {
+                let parsed: Vec<_> = log
+                    .iter()
+                    .filter(|e| matches!(e.event, LoopEventKind::ToolCallParsed { .. }))
+                    .collect();
+                assert_eq!(parsed.len(), 3, "all 3 subtasks must be logged");
+            }
+            other => panic!("expected Answer, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn merge_step_logs_correctly() {
+        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let reg = build_registry(inv.clone());
+        let budget = TokenBucket::new(16.0, 1.0);
+        let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
+        let reasoner = scripted(vec![
+            AgentStep::Merge {
+                task_ids: vec![0, 1, 2],
+                strategy: MergeStrategy::BestFirst,
+            },
+            AgentStep::Answer { text: "merged".to_string() },
+        ]);
+        let outcome = loop_.run(&reasoner, "merge");
+        match outcome {
+            LoopOutcome::Answer { log, .. } => {
+                let merge_entry = log.iter().find(|e| {
+                    matches!(&e.event, LoopEventKind::ToolCallParsed { tool_name, .. } if tool_name == "merge")
+                });
+                assert!(merge_entry.is_some(), "merge must produce a log entry");
+                if let Some(e) = merge_entry {
+                    if let LoopEventKind::ToolCallParsed { raw_arg, .. } = &e.event {
+                        assert!(raw_arg.contains("BestFirst"), "strategy must appear in log");
+                    }
+                }
+            }
+            other => panic!("expected Answer, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn empty_registry_all_tools_rejected() {
+        let budget = TokenBucket::new(16.0, 1.0);
+        let empty_reg = StaticSkillRegistry::new(vec![]);
+        let loop_ = AgentLoop::new(empty_reg, covering_grant(), Surface::Owner, budget);
+        let reasoner = scripted(vec![
+            AgentStep::CallTool {
+                name: "any_tool".to_string(),
+                raw_arg: "{}".to_string(),
+            },
+            AgentStep::Answer {
+                text: "no tools available".to_string(),
+            },
+        ]);
+        let outcome = loop_.run(&reasoner, "use any tool");
+        match outcome {
+            LoopOutcome::Answer { text, log } => {
+                assert_eq!(text, "no tools available");
+                assert!(log
+                    .iter()
+                    .any(|e| matches!(e.event, LoopEventKind::ToolCallMalformed { .. })));
+            }
+            other => panic!("expected Answer, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn context_history_accumulates_over_iterations() {
+        struct HistoryReader {
+            captured: std::rc::Rc<RefCell<Vec<Vec<LoopLogEntry>>>>,
+            steps: Vec<AgentStep>,
+            idx: Cell<usize>,
+        }
+        impl AgentReasoner for HistoryReader {
+            fn next(&self, ctx: &ReasonerContext) -> AgentStep {
+                // Record the history the reasoner sees at each step.
+                self.captured.borrow_mut().push(ctx.history.to_vec());
+                let i = self.idx.get();
+                self.idx.set(i + 1);
+                self.steps.get(i).cloned().unwrap_or(AgentStep::Answer {
+                    text: "end".to_string(),
+                })
+            }
+        }
+
+        let captured = std::rc::Rc::new(RefCell::new(Vec::new()));
+        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let reg = build_registry(inv.clone());
+        let budget = TokenBucket::new(16.0, 1.0);
+        let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
+
+        let reasoner = HistoryReader {
+            captured: captured.clone(),
+            steps: vec![
+                AgentStep::CallTool {
+                    name: "read_order_status".to_string(),
+                    raw_arg: "ord-1".to_string(),
+                },
+                AgentStep::CallTool {
+                    name: "read_order_status".to_string(),
+                    raw_arg: "ord-2".to_string(),
+                },
+            ],
+            idx: Cell::new(0),
+        };
+        let _ = loop_.run(&reasoner, "check multiple");
+
+        let views = captured.borrow();
+        assert_eq!(views.len(), 3, "reasoner called 3 times (2 tools + auto answer)");
+        // First call sees empty history.
+        assert!(views[0].is_empty());
+        // Second call sees history from first iteration.
+        assert!(!views[1].is_empty());
+        // Third call sees history from both prior iterations.
+        assert!(views[2].len() > views[1].len());
+    }
 }

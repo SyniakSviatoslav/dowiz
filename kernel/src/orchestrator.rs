@@ -1300,4 +1300,125 @@ mod tests {
         assert!(dash.contains("Queue:"));
         assert!(dash.contains("Task Queue"));
     }
+
+    // ── edge-case tests ────────────────────────────────────────────────────
+
+    #[test]
+    fn dequeue_ready_on_empty_queue_returns_none() {
+        let mut orch = Orchestrator::new(test_budget());
+        assert_eq!(orch.queue_depth(), 0);
+        assert!(orch.dequeue_ready().is_none());
+    }
+
+    #[test]
+    fn priority_ties_ordered_by_lower_estimated_us() {
+        let mut orch = Orchestrator::new(test_budget());
+        orch.enqueue_task(ActionCategory::ToolRead, Priority::Normal, 1.0, vec![]);
+        // Manually set a second Normal-priority task with a lower estimated_us so it
+        // should sort first (ascending estimated_us within same priority).
+        let task_id = orch.enqueue_task(
+            ActionCategory::ToolWrite,
+            Priority::Normal,
+            1.0,
+            vec![],
+        );
+        // Override the predicted eta on the second task to be lower.
+        if let Some(t) = orch.task_queue.iter_mut().find(|t| t.task_id == task_id) {
+            t.estimated_us = 10;
+        }
+        let snap = orch.queue_snapshot();
+        assert_eq!(snap.len(), 2);
+        assert_eq!(snap[0].priority, Priority::Normal);
+        assert_eq!(snap[1].priority, Priority::Normal);
+        // The one with lower estimated_us should come first in the tie.
+        assert!(snap[0].estimated_us <= snap[1].estimated_us);
+    }
+
+    #[test]
+    fn start_task_blocks_on_budget_exhaustion() {
+        let empty_budget = TokenBucket::new(0.0, 0.0);
+        let mut orch = Orchestrator::new(empty_budget);
+        assert!(orch.start_task().is_err());
+        assert_eq!(orch.active_tasks(), 0);
+    }
+
+    #[test]
+    fn predict_schedule_empty_tasks_returns_empty() {
+        let engine = PredictiveEngine::new();
+        let schedule = engine.predict_schedule(&[], 4);
+        assert!(schedule.is_empty());
+    }
+
+    #[test]
+    fn predict_schedule_zero_concurrent_returns_empty() {
+        let engine = PredictiveEngine::new();
+        let tasks = vec![ScheduledTask {
+            task_id: 1,
+            category: ActionCategory::ToolRead,
+            priority: Priority::Normal,
+            estimated_us: 100,
+            created_us: 0,
+            budget_cost: 1.0,
+            depends_on: vec![],
+        }];
+        let schedule = engine.predict_schedule(&tasks, 0);
+        assert!(schedule.is_empty());
+    }
+
+    #[test]
+    fn schedule_respects_priority_ordering_all_ids_present() {
+        let engine = PredictiveEngine::new();
+        let tasks = vec![
+            ScheduledTask {
+                task_id: 1,
+                category: ActionCategory::ToolRead,
+                priority: Priority::Background,
+                estimated_us: 100,
+                created_us: 0,
+                budget_cost: 1.0,
+                depends_on: vec![],
+            },
+            ScheduledTask {
+                task_id: 2,
+                category: ActionCategory::Parse,
+                priority: Priority::Critical,
+                estimated_us: 200,
+                created_us: 0,
+                budget_cost: 1.0,
+                depends_on: vec![],
+            },
+            ScheduledTask {
+                task_id: 3,
+                category: ActionCategory::Skill,
+                priority: Priority::Normal,
+                estimated_us: 150,
+                created_us: 0,
+                budget_cost: 1.0,
+                depends_on: vec![],
+            },
+        ];
+        let schedule = engine.predict_schedule(&tasks, 1);
+        assert_eq!(schedule.len(), 3);
+        // With 1 concurrent slot, Critical (task_id=2) must start first.
+        assert_eq!(schedule[0].0, 2);
+        let ids: Vec<u64> = schedule.iter().map(|s| s.0).collect();
+        assert!(ids.contains(&1));
+        assert!(ids.contains(&2));
+        assert!(ids.contains(&3));
+    }
+
+    #[test]
+    fn predict_eta_no_history_returns_conservative_default() {
+        let engine = PredictiveEngine::new();
+        for cat in &[
+            ActionCategory::ToolRead,
+            ActionCategory::SwarmFanOut,
+            ActionCategory::Verification,
+            ActionCategory::AgentDispatch,
+        ] {
+            let (eta, ci) = engine.predict_eta(*cat);
+            assert_eq!(eta, 100_000, "no-history default for {:?}", cat);
+            assert_eq!(ci, 50_000, "no-history CI for {:?}", cat);
+        }
+    }
 }

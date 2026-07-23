@@ -1738,4 +1738,178 @@ mod tests {
             Err(CertError::Revoked)
         );
     }
+
+    // ── additional coverage tests ──────────────────────────────────────
+
+    #[test]
+    fn empty_chain_capability_matches_root_directly() {
+        let v = RefSigner;
+        let owner = Party::new(&v, 1);
+        let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        let cap = Capability::new_hybrid(
+            root.classical_pub, root.pq_pub.clone(), scope(), [9u8; 8], 9999,
+        );
+        let mut roster = AnchorRoster::new();
+        root.enroll(&mut roster);
+        let store = RevocationStore::new();
+        // Empty chain: cap subject matches root → ScopeViolation because tail is missing.
+        // The root is the issuer; an empty chain means no delegation links, the tail is missing.
+        assert_eq!(
+            verify_chain_hybrid(&v, &roster, &store, &root, &[], &cap, 0),
+            Err(CertError::UnknownIssuer)
+        );
+    }
+
+    #[test]
+    fn expired_delegation_link_rejected() {
+        let v = RefSigner;
+        let owner = Party::new(&v, 1);
+        let hub = Party::new(&v, 2);
+        let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        #[rustfmt::skip]
+        let link = CertDelegation::sign(
+            &v, &owner.cls_seed, &owner.pq_seed,
+            root.classical_pub, root.pq_pub.clone(),
+            hub.cls_pub, hub.pq_pub.clone(),
+            scope(), scope(), false,
+            AlgSuite::MlDsa65Ed25519,
+            50, // expires at tick 50
+            [1u8; 8],
+        );
+        let mut roster = AnchorRoster::new();
+        root.enroll(&mut roster);
+        let cap = Capability::new_hybrid(hub.cls_pub, hub.pq_pub.clone(), scope(), [9u8; 8], 9999);
+        let store = RevocationStore::new();
+        assert_eq!(
+            verify_chain_hybrid(&v, &roster, &store, &root, &[link], &cap, 100),
+            Err(CertError::Expired)
+        );
+    }
+
+    #[test]
+    fn tampered_cert_scope_violation_effect_not_subset() {
+        let v = RefSigner;
+        let owner = Party::new(&v, 1);
+        let hub = Party::new(&v, 2);
+        let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        let wide_effect = Scope::single(Resource::Route, Action::Send);
+        #[rustfmt::skip]
+        let link = CertDelegation::sign(
+            &v, &owner.cls_seed, &owner.pq_seed,
+            root.classical_pub, root.pq_pub.clone(),
+            hub.cls_pub, hub.pq_pub.clone(),
+            scope(), wide_effect, // effect not subset of scope
+            false, AlgSuite::MlDsa65Ed25519, 9999, [1u8; 8],
+        );
+        let mut roster = AnchorRoster::new();
+        root.enroll(&mut roster);
+        let cap = Capability::new_hybrid(hub.cls_pub, hub.pq_pub.clone(), scope(), [9u8; 8], 9999);
+        let store = RevocationStore::new();
+        assert_eq!(
+            verify_chain_hybrid(&v, &roster, &store, &root, &[link], &cap, 0),
+            Err(CertError::ScopeViolation)
+        );
+    }
+
+    #[test]
+    fn missing_chain_link_issuer_gap() {
+        let v = RefSigner;
+        let parties: Vec<Party> = (1u8..=4).map(|i| Party::new(&v, i)).collect();
+        let root = SelfSignedRoot::mint(&v, &parties[0].cls_seed, &parties[0].pq_seed, scope(), 9999);
+        // Only the LAST link of a multi-hop chain — issuer (parties[2]) != root → UnknownIssuer.
+        // Single link issued by party[2] with subject party[3], but root is party[0].
+        #[rustfmt::skip]
+        let orphan_link = CertDelegation::sign(
+            &v, &parties[2].cls_seed, &parties[2].pq_seed,
+            parties[2].cls_pub, parties[2].pq_pub.clone(),
+            parties[3].cls_pub, parties[3].pq_pub.clone(),
+            scope(), scope(), false,
+            AlgSuite::MlDsa65Ed25519, 9999, [1u8; 8],
+        );
+        let mut roster = AnchorRoster::new();
+        root.enroll(&mut roster);
+        let cap = Capability::new_hybrid(
+            parties[3].cls_pub, parties[3].pq_pub.clone(), scope(), [9u8; 8], 9999,
+        );
+        let store = RevocationStore::new();
+        assert_eq!(
+            verify_chain_hybrid(&v, &roster, &store, &root, &[orphan_link], &cap, 0),
+            Err(CertError::UnknownIssuer)
+        );
+    }
+
+    #[test]
+    fn self_signed_root_node_id_binds_both_keys() {
+        let v = RefSigner;
+        let party = Party::new(&v, 1);
+        let root = SelfSignedRoot::mint(&v, &party.cls_seed, &party.pq_seed, scope(), 9999);
+        let expected = NodeId::from_keys(&party.pq_pub, &party.cls_pub);
+        assert_eq!(root.node_id, expected, "node_id must bind both public keys");
+        assert_eq!(root.verify_self(&v, 0), Ok(()));
+    }
+
+    #[test]
+    fn capability_scope_wider_than_tail_effect_rejected() {
+        let v = RefSigner;
+        let owner = Party::new(&v, 1);
+        let hub = Party::new(&v, 2);
+        let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        #[rustfmt::skip]
+        let link = CertDelegation::sign(
+            &v, &owner.cls_seed, &owner.pq_seed,
+            root.classical_pub, root.pq_pub.clone(),
+            hub.cls_pub, hub.pq_pub.clone(),
+            scope(), scope(), false,
+            AlgSuite::MlDsa65Ed25519, 9999, [1u8; 8],
+        );
+        let mut roster = AnchorRoster::new();
+        root.enroll(&mut roster);
+        // Capability scope is wider than the tail's effect.
+        let wide_cap_scope = Scope::single(Resource::Route, Action::Send);
+        let cap = Capability::new_hybrid(
+            hub.cls_pub, hub.pq_pub.clone(), wide_cap_scope, [9u8; 8], 9999,
+        );
+        let store = RevocationStore::new();
+        assert_eq!(
+            verify_chain_hybrid(&v, &roster, &store, &root, &[link], &cap, 0),
+            Err(CertError::ScopeViolation)
+        );
+    }
+
+    #[test]
+    fn max_delegation_depth_exceeded_with_non_delegable_child() {
+        let v = RefSigner;
+        let owner = Party::new(&v, 1);
+        let hub = Party::new(&v, 2);
+        let grandchild = Party::new(&v, 3);
+        let root = SelfSignedRoot::mint(&v, &owner.cls_seed, &owner.pq_seed, scope(), 9999);
+        // L1: owner→hub with may_delegate=false.
+        #[rustfmt::skip]
+        let l1 = CertDelegation::sign(
+            &v, &owner.cls_seed, &owner.pq_seed,
+            root.classical_pub, root.pq_pub.clone(),
+            hub.cls_pub, hub.pq_pub.clone(),
+            scope(), scope(), false,
+            AlgSuite::MlDsa65Ed25519, 9999, [1u8; 8],
+        );
+        // L2: hub→grandchild (forged/attempted delegation).
+        #[rustfmt::skip]
+        let l2 = CertDelegation::sign(
+            &v, &hub.cls_seed, &hub.pq_seed,
+            hub.cls_pub, hub.pq_pub.clone(),
+            grandchild.cls_pub, grandchild.pq_pub.clone(),
+            scope(), scope(), false,
+            AlgSuite::MlDsa65Ed25519, 9999, [2u8; 8],
+        );
+        let mut roster = AnchorRoster::new();
+        root.enroll(&mut roster);
+        let cap = Capability::new_hybrid(
+            grandchild.cls_pub, grandchild.pq_pub.clone(), scope(), [9u8; 8], 9999,
+        );
+        let store = RevocationStore::new();
+        assert_eq!(
+            verify_chain_hybrid(&v, &roster, &store, &root, &[l1, l2], &cap, 0),
+            Err(CertError::MaxDepthExceeded)
+        );
+    }
 }

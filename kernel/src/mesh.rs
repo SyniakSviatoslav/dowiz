@@ -744,4 +744,104 @@ mod tests {
         assert!(!entry.sig_eq_ct(&other_sig));
         assert!(!crate::mesh::mesh_oracle::oracle_sig_eq(&entry, &other_sig));
     }
+
+    // ── mesh edge-case tests ───────────────────────────────────────────────
+
+    #[test]
+    fn empty_mesh_is_valid() {
+        let log = MeshLog::new();
+        assert_eq!(log.len(), 0);
+        assert!(log.is_empty());
+        assert!(log.entry(0).is_none());
+        assert_eq!(log.entries().len(), 0);
+        assert!(log.verify_chain().is_ok(), "empty chain must verify");
+    }
+
+    #[test]
+    fn single_entry_mesh_verifies() {
+        let mut log = MeshLog::new();
+        let s = signer(8);
+        log.append(b"single node", &s);
+        assert_eq!(log.len(), 1);
+        assert!(!log.is_empty());
+        assert!(log.entry(0).is_some());
+        assert!(log.verify_chain().is_ok());
+        // genesis entry must have zero prev_hash
+        assert_eq!(log.entry(0).unwrap().prev_hash, [0u8; 32]);
+    }
+
+    #[test]
+    fn node_addition_increments_len() {
+        let mut log = MeshLog::new();
+        let s = signer(9);
+        for i in 0..5 {
+            let payload = format!("entry-{}", i);
+            log.append(payload.as_bytes(), &s);
+        }
+        assert_eq!(log.len(), 5);
+        assert!(log.verify_chain().is_ok());
+    }
+
+    #[test]
+    fn multi_signer_chain_verifies() {
+        let s1 = signer(10);
+        let s2 = signer(11);
+        let s3 = signer(12);
+        let mut log = MeshLog::new();
+        log.append(b"by-s1", &s1);
+        log.append(b"by-s2", &s2);
+        log.append(b"by-s3", &s3);
+        // Each entry has a different pubkey; chain links still hold.
+        assert!(log.verify_chain().is_ok());
+        assert_eq!(log.entries()[0].pubkey, s1.pubkey_bytes());
+        assert_eq!(log.entries()[1].pubkey, s2.pubkey_bytes());
+        assert_eq!(log.entries()[2].pubkey, s3.pubkey_bytes());
+    }
+
+    #[test]
+    fn disconnected_logs_cannot_silently_merge() {
+        let s = signer(13);
+        let mut log_a = MeshLog::new();
+        log_a.append(b"a-genesis", &s);
+        log_a.append(b"a-second", &s);
+        let mut log_b = MeshLog::new();
+        log_b.append(b"b-genesis", &s);
+        // Splice log_b's genesis entry into log_a: the prev_hash link breaks.
+        let mut spliced = MeshLog::new();
+        spliced.entries.push(log_a.entries()[0].clone());
+        spliced.entries.push(log_b.entries()[0].clone());
+        assert!(spliced.verify_chain().is_err());
+        // The link error is a BrokenLink, not BadSignature.
+        assert!(matches!(
+            spliced.verify_chain(),
+            Err(MeshError::BrokenLink { .. })
+        ));
+    }
+
+    #[test]
+    fn many_entries_chain_integrity() {
+        let mut log = MeshLog::new();
+        let s = signer(14);
+        for i in 0..100 {
+            log.append(format!("entry-{:03}", i).as_bytes(), &s);
+        }
+        assert_eq!(log.len(), 100);
+        assert!(log.verify_chain().is_ok());
+        // Entries are reachable by index.
+        assert_eq!(log.entry(0).unwrap().payload, b"entry-000");
+        assert_eq!(log.entry(99).unwrap().payload, b"entry-099");
+        assert!(log.entry(100).is_none());
+    }
+
+    #[test]
+    fn empty_transport_recv_returns_empty_vec() {
+        struct NoHub;
+        impl HubTransport for NoHub {
+            fn send(&self, _e: &SignedEntry) -> Result<(), MeshError> { Ok(()) }
+            fn recv(&self) -> Result<Vec<SignedEntry>, MeshError> { Ok(vec![]) }
+        }
+        let gossip = GossipImport::new(NoHub);
+        let verified = gossip.receive_verified().unwrap();
+        assert!(verified.is_empty());
+    }
 }
