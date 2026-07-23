@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html lang="uk" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#C1121F">
+<meta name="description" content="Sushi Durrës — Sushi Delivery">
+<link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Sushi%20Durr%C3%ABs%22%2C%22short_name%22%3A%22Sushi%22%2C%22start_url%22%3A%22index.html%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23ffffff%22%2C%22theme_color%22%3A%22%23C1121F%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0OCIgZmlsbD0iI0MxMTIxRiIvPjx0ZXh0IHg9IjUwIiB5PSI2NSIgZm9udC1zaXplPSI0MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0id2hpdGUiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIj7wn42vPC90ZXh0Pjwvc3ZnPg%3D%3D%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fsvg%2Bxml%22%7D%5D%7D">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.47.0/tabler-icons.min.css">
+<title>Sushi Durrës</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --red:#C1121F;--red-dark:#9B0E18;--red-light:#FFD4D7;
+  --bg:#faf7f4;--card:#fff;--text:#1a1a1a;--text-secondary:#666;
+  --border:#e8e3de;--success:#2d8a4e;--warning:#e8a838;--info:#3b82f6;
+  --shadow:0 2px 8px rgba(0,0,0,.08);--shadow-lg:0 4px 24px rgba(0,0,0,.12);
+  --radius:12px;--radius-sm:8px;--radius-xs:4px;
+  --nav-h:64px;--bottom-h:60px;--header-h:56px;
+  --font-display:'DM Serif Display',serif;--font-sans:'DM Sans',sans-serif;
+}
+[dir="rtl"]{--font-display:'DM Serif Display',serif;}
+html{font-size:16px;-webkit-tap-highlight-color:transparent}
+body{
+  font-family:var(--font-sans);background:var(--bg);color:var(--text);
+  min-height:100vh;min-height:100dvh;overflow-x:hidden;
+  padding-bottom:calc(var(--bottom-h) + env(safe-area-inset-bottom,0px));
+}
+.hidden{display:none!important}
+.flex{display:flex}.flex-col{flex-direction:column}.items-center{align-items:center}
+.justify-between{justify-content:space-between}.gap-sm{gap:8px}.gap-md{gap:16px}
+.text-center{text-align:center}.mt-sm{margin-top:8px}.mt-md{margin-top:16px}.mb-md{margin-bottom:16px}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  padding:10px 20px;border:none;border-radius:var(--radius-sm);
+  font-family:var(--font-sans);font-size:.9rem;font-weight:600;
+  cursor:pointer;transition:all .2s;text-decoration:none;white-space:nowrap;
+}
+.btn-primary{background:var(--red);color:#fff}
+.btn-primary:hover{background:var(--red-dark)}
+.btn-outline{background:transparent;border:2px solid var(--red);color:var(--red)}
+.btn-outline:hover{background:var(--red-light)}
+.btn-success{background:var(--success);color:#fff}
+.btn-warning{background:var(--warning);color:#fff}
+.btn-sm{padding:6px 12px;font-size:.8rem}
+.btn-xs{padding:4px 8px;font-size:.7rem;border-radius:var(--radius-xs)}
+.btn-icon{width:40px;height:40px;padding:0;border-radius:50%;font-size:1.2rem}
+.badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:20px;height:20px;padding:0 6px;border-radius:10px;
+  background:var(--red);color:#fff;font-size:.7rem;font-weight:700;
+}
+.card{
+  background:var(--card);border-radius:var(--radius);padding:16px;
+  box-shadow:var(--shadow);
+}
+.section-title{
+  font-family:var(--font-display);font-size:1.5rem;margin-bottom:12px;
+}
+.category-label{
+  font-family:var(--font-display);font-size:1.25rem;margin:24px 0 12px;
+  padding-bottom:8px;border-bottom:2px solid var(--red);
+}
+
+/* splash */
+#splash{
+  position:fixed;inset:0;z-index:9999;background:var(--red);
+  display:flex;align-items:center;justify-content:center;
+  flex-direction:column;gap:16px;transition:opacity .4s;
+}
+#splash.fade-out{opacity:0;pointer-events:none}
+#splash .logo-text{font-family:var(--font-display);font-size:2.5rem;color:#fff}
+#splash .spinner{width:32px;height:32px;border:3px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* header */
+#header{
+  position:sticky;top:0;z-index:100;background:var(--card);
+  height:var(--header-h);display:flex;align-items:center;
+  padding:0 12px;box-shadow:var(--shadow);gap:8px;
+}
+#header .logo{font-family:var(--font-display);font-size:1.2rem;color:var(--red);margin-right:auto}
+[dir="rtl"] #header .logo{margin-right:0;margin-left:auto}
+.lang-btn,.curr-btn,.role-btn{
+  padding:4px 8px;border:1px solid var(--border);border-radius:var(--radius-xs);
+  background:transparent;cursor:pointer;font-size:.75rem;font-weight:600;
+  color:var(--text-secondary);transition:all .2s;
+}
+.lang-btn.active,.curr-btn.active,.role-btn.active{background:var(--red);color:#fff;border-color:var(--red)}
+.lang-btn:hover,.curr-btn:hover,.role-btn:hover{border-color:var(--red)}
+
+/* bottom nav */
+#bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:100;
+  height:var(--bottom-h);background:var(--card);box-shadow:0 -2px 8px rgba(0,0,0,.08);
+  display:flex;padding-bottom:env(safe-area-inset-bottom,0);
+}
+#bottom-nav button{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:2px;border:none;background:transparent;color:var(--text-secondary);
+  font-family:var(--font-sans);font-size:.65rem;cursor:pointer;transition:color .2s;
+}
+#bottom-nav button i{font-size:1.3rem}
+#bottom-nav button.active{color:var(--red)}
+
+/* customer view */
+#view-customer{max-width:960px;margin:0 auto;padding:12px}
+.menu-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.menu-item{
+  background:var(--card);border-radius:var(--radius);overflow:hidden;
+  box-shadow:var(--shadow);cursor:pointer;transition:transform .2s;
+}
+.menu-item:hover{transform:translateY(-2px)}
+.menu-item .item-photo{
+  width:100%;aspect-ratio:4/3;background:linear-gradient(135deg,var(--red-light),#fce4e4);
+  display:flex;align-items:center;justify-content:center;
+  font-size:2.5rem;
+}
+.menu-item .item-info{padding:10px}
+.menu-item .item-name{font-weight:600;font-size:.9rem;margin-bottom:4px}
+.menu-item .item-desc{font-size:.75rem;color:var(--text-secondary);margin-bottom:6px}
+.menu-item .item-bottom{display:flex;align-items:center;justify-content:space-between}
+.menu-item .item-price{font-weight:700;color:var(--red);font-size:.95rem}
+.menu-item .item-tags{display:flex;gap:4px;margin-top:4px}
+.menu-item .item-tag{
+  font-size:.6rem;padding:2px 6px;border-radius:10px;
+  background:var(--red-light);color:var(--red);font-weight:600;
+}
+.menu-item .item-tag.spicy{background:#fff0f0;color:#e53e3e}
+.menu-item .item-tag.veg{background:#f0fff4;color:var(--success)}
+
+@media(min-width:640px){.menu-grid{grid-template-columns:repeat(3,1fr)}}
+@media(min-width:900px){.menu-grid{grid-template-columns:repeat(4,1fr)}}
+
+/* cart */
+#cart-panel{
+  position:fixed;top:0;right:0;bottom:0;width:100%;max-width:400px;
+  background:var(--card);z-index:200;box-shadow:-4px 0 24px rgba(0,0,0,.15);
+  transform:translateX(100%);transition:transform .3s ease;
+  display:flex;flex-direction:column;
+}
+[dir="rtl"] #cart-panel{right:auto;left:0;transform:translateX(-100%);box-shadow:4px 0 24px rgba(0,0,0,.15)}
+#cart-panel.open{transform:translateX(0)}
+#cart-overlay{
+  position:fixed;inset:0;z-index:199;background:rgba(0,0,0,.4);
+  opacity:0;pointer-events:none;transition:opacity .3s;
+}
+#cart-overlay.open{opacity:1;pointer-events:auto}
+#cart-panel .cart-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px;border-bottom:1px solid var(--border);
+}
+#cart-panel .cart-items{flex:1;overflow-y:auto;padding:16px}
+.cart-item{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--border)}
+.cart-item .ci-name{flex:1;font-weight:500;font-size:.85rem}
+.cart-item .ci-qty{display:flex;align-items:center;gap:6px}
+.cart-item .ci-qty button{width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:transparent;cursor:pointer;font-size:1rem;display:flex;align-items:center;justify-content:center}
+.cart-item .ci-price{font-weight:600;font-size:.85rem;min-width:60px;text-align:right}
+[dir="rtl"] .cart-item .ci-price{text-align:left}
+#cart-panel .cart-footer{padding:16px;border-top:1px solid var(--border)}
+.cart-total{display:flex;justify-content:space-between;font-size:1.1rem;font-weight:700;margin-bottom:12px}
+
+/* checkout form */
+#checkout-form{max-width:500px;margin:0 auto;padding:16px}
+#checkout-form label{display:block;font-size:.8rem;font-weight:600;margin-bottom:4px;margin-top:12px}
+#checkout-form input,#checkout-form textarea{
+  width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);
+  font-family:var(--font-sans);font-size:.9rem;
+}
+#checkout-form textarea{min-height:80px;resize:vertical}
+.payment-methods{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.pm-option{flex:1;min-width:100px;padding:10px 8px;border:2px solid var(--border);border-radius:var(--radius-sm);text-align:center;cursor:pointer;font-size:.8rem;font-weight:500;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:4px}
+.pm-option:has(input:checked){border-color:var(--primary);background:var(--primary-light)}
+.pm-option input{display:none}
+.payment-detail{margin-top:12px;padding:12px;background:var(--surface);border-radius:var(--radius-sm);font-size:.85rem}
+.pm-crypto-qr{width:160px;height:160px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:center;background:#fff;margin:8px auto}
+.pm-crypto-qr canvas{width:150px;height:150px}
+.pm-card-input{padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:.9rem}
+#order-confirmation{max-width:500px;margin:40px auto;text-align:center}
+
+/* courier view */
+#view-courier{max-width:800px;margin:0 auto;padding:12px}
+#view-restaurant{max-width:800px;margin:0 auto;padding:12px}
+.order-card{
+  background:var(--card);border-radius:var(--radius);padding:16px;margin-bottom:12px;
+  box-shadow:var(--shadow);
+}
+.order-card .order-header{display:flex;justify-content:space-between;margin-bottom:8px}
+.order-card .order-status{
+  font-size:.75rem;font-weight:600;padding:4px 10px;border-radius:20px;
+}
+.status-new{background:#e3f2fd;color:#1565c0}
+.status-accepted{background:#fff3e0;color:#e65100}
+.status-preparing{background:#fff8e1;color:#f9a825}
+.status-ready{background:#e8f5e9;color:#2e7d32}
+.status-delivering{background:#f3e5f5;color:#7b1fa2}
+.status-delivered{background:#e8f5e9;color:#1b5e20}
+.order-card .order-items{font-size:.85rem;margin:8px 0}
+.order-card .order-actions{display:flex;gap:8px;margin-top:12px}
+
+/* restaurant view */
+.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:16px}
+.stat-card{background:var(--card);border-radius:var(--radius);padding:16px;text-align:center;box-shadow:var(--shadow)}
+.stat-card .stat-value{font-family:var(--font-display);font-size:1.8rem;color:var(--red)}
+.stat-card .stat-label{font-size:.75rem;color:var(--text-secondary);margin-top:4px}
+.menu-editor-item{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 0;border-bottom:1px solid var(--border);
+}
+.menu-editor-item .me-name{font-weight:500;font-size:.85rem}
+.menu-editor-item .me-toggle{
+  width:44px;height:24px;border-radius:12px;border:none;cursor:pointer;
+  position:relative;transition:background .2s;
+}
+.menu-editor-item .me-toggle.on{background:var(--success)}
+.menu-editor-item .me-toggle.off{background:#ccc}
+.menu-editor-item .me-toggle::after{
+  content:'';position:absolute;top:2px;width:20px;height:20px;border-radius:50%;
+  background:#fff;transition:transform .2s;
+}
+.me-toggle.on::after{transform:translateX(22px)}
+.me-toggle.off::after{transform:translateX(2px)}
+
+/* chat widget */
+#chat-widget{
+  position:fixed;bottom:calc(var(--bottom-h) + 16px + env(safe-area-inset-bottom,0px));
+  right:16px;z-index:300;
+}
+[dir="rtl"] #chat-widget{right:auto;left:16px}
+#chat-toggle{
+  width:48px;height:48px;border-radius:50%;background:var(--red);
+  color:#fff;border:none;cursor:pointer;font-size:1.4rem;
+  box-shadow:var(--shadow-lg);display:flex;align-items:center;justify-content:center;
+  transition:transform .2s;
+}
+#chat-toggle:hover{transform:scale(1.1)}
+#chat-popup{
+  position:absolute;bottom:60px;right:0;width:320px;max-height:400px;
+  background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow-lg);
+  display:flex;flex-direction:column;overflow:hidden;display:none;
+}
+[dir="rtl"] #chat-popup{right:auto;left:0}
+#chat-popup.open{display:flex}
+#chat-popup .chat-header{
+  background:var(--red);color:#fff;padding:12px;font-weight:600;
+  display:flex;justify-content:space-between;align-items:center;
+}
+#chat-popup .chat-messages{flex:1;overflow-y:auto;padding:12px;max-height:250px}
+.chat-msg{margin-bottom:8px;padding:8px 12px;border-radius:12px;font-size:.8rem;max-width:85%}
+.chat-msg.bot{background:var(--bg);margin-right:auto}
+.chat-msg.user{background:var(--red);color:#fff;margin-left:auto}
+[dir="rtl"] .chat-msg.bot{margin-right:0;margin-left:auto}
+[dir="rtl"] .chat-msg.user{margin-left:0;margin-right:auto}
+#chat-popup .chat-input-area{display:flex;padding:8px;border-top:1px solid var(--border)}
+#chat-popup .chat-input-area input{
+  flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:20px;
+  font-family:var(--font-sans);font-size:.8rem;outline:none;
+}
+#chat-popup .chat-input-area button{
+  width:36px;height:36px;border-radius:50%;background:var(--red);color:#fff;
+  border:none;cursor:pointer;margin-left:6px;font-size:1rem;
+}
+
+/* voice */
+#voice-btn{position:relative}
+#voice-btn.recording{animation:pulse 1.2s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(193,18,31,.4)}50%{box-shadow:0 0 0 12px rgba(193,18,31,0)}}
+#voice-text{
+  position:absolute;top:100%;right:0;background:var(--card);padding:4px 10px;
+  border-radius:var(--radius-xs);box-shadow:var(--shadow);font-size:.7rem;
+  white-space:nowrap;margin-top:4px;display:none;
+}
+#voice-text.visible{display:block}
+
+/* install prompt */
+#install-prompt{
+  position:fixed;top:0;left:0;right:0;z-index:500;
+  background:var(--card);padding:12px 16px;box-shadow:var(--shadow-lg);
+  display:flex;align-items:center;gap:12px;display:none;
+}
+#install-prompt.visible{display:flex}
+#install-prompt span{flex:1;font-size:.85rem;font-weight:500}
+
+/* enrich toast */
+.enrich-toast{
+  position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
+  background:var(--text);color:#fff;padding:8px 16px;border-radius:20px;
+  font-size:.75rem;z-index:400;animation:toastIn .3s,toastOut .3s 2.5s forwards;
+}
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@keyframes toastOut{from{opacity:1}to{opacity:0}}
+
+/* tabs */
+.view-tab{display:none}
+.view-tab.active{display:block}
+</style>
+</head>
+<body>
+
+<!-- splash -->
+<div id="splash"><div class="logo-text">🍣 Sushi Durrës</div><div class="spinner"></div></div>
+
+<!-- install prompt -->
+<div id="install-prompt">
+  <i class="ti ti-download" style="font-size:1.4rem"></i>
+  <span id="install-text">Install this app</span>
+  <button class="btn btn-sm btn-primary" id="install-btn">Install</button>
+  <button class="btn btn-sm btn-outline" id="install-dismiss">✕</button>
+</div>
+
+<!-- header -->
+<header id="header">
+  <div class="logo">🍣 Sushi Durrës</div>
+  <div id="lang-switcher" class="flex gap-sm">
+    <button class="lang-btn active" data-lang="uk">UA</button>
+    <button class="lang-btn" data-lang="sq">SQ</button>
+    <button class="lang-btn" data-lang="ar">AR</button>
+  </div>
+  <div id="curr-switcher" class="flex gap-sm">
+    <button class="curr-btn active" data-curr="ALL">Lek</button>
+    <button class="curr-btn" data-curr="EUR">€</button>
+    <button class="curr-btn" data-curr="USD">$</button>
+  </div>
+  <div class="flex gap-sm">
+    <button class="role-btn active" data-role="customer" id="role-customer-btn">🛒</button>
+    <button class="role-btn" data-role="courier" id="role-courier-btn">🏍</button>
+    <button class="role-btn" data-role="restaurant" id="role-restaurant-btn">🍣</button>
+  </div>
+  <button class="btn-icon btn" id="voice-btn" title="Voice"><i class="ti ti-microphone"></i></button>
+  <span id="voice-text"></span>
+</header>
+
+<!-- main content -->
+<main id="main-content">
+
+  <!-- customer -->
+  <div id="view-customer" class="view-tab active">
+    <div id="menu-container"></div>
+  </div>
+
+  <!-- courier -->
+  <div id="view-courier" class="view-tab">
+    <div id="courier-content"></div>
+  </div>
+
+  <!-- restaurant -->
+  <div id="view-restaurant" class="view-tab">
+    <div id="restaurant-content"></div>
+  </div>
+
+</main>
+
+<!-- cart overlay -->
+<div id="cart-overlay"></div>
+<!-- cart panel -->
+<div id="cart-panel">
+  <div class="cart-header">
+    <strong id="cart-title">Cart</strong>
+    <button class="btn-icon btn btn-outline" style="width:32px;height:32px;font-size:.8rem" id="cart-close">✕</button>
+  </div>
+  <div class="cart-items" id="cart-items-container"></div>
+  <div class="cart-footer">
+    <div class="cart-total"><span id="cart-total-label">Total</span><span id="cart-total-value">0 Lek</span></div>
+    <button class="btn btn-primary" style="width:100%" id="checkout-btn">Checkout</button>
+  </div>
+</div>
+
+<!-- chat widget -->
+<div id="chat-widget">
+  <button id="chat-toggle">💬</button>
+  <div id="chat-popup">
+    <div class="chat-header">
+      <span id="chat-title">Assistant</span>
+      <button id="chat-close-btn" style="background:transparent;border:none;color:#fff;cursor:pointer;font-size:1rem">✕</button>
+    </div>
+    <div class="chat-messages" id="chat-messages"></div>
+    <div class="chat-input-area">
+      <input type="text" id="chat-input" placeholder="Ask about menu...">
+      <button id="chat-send">▶</button>
+    </div>
+  </div>
+</div>
+
+<!-- bottom nav -->
+<nav id="bottom-nav">
+  <button class="active" data-tab="menu"><i class="ti ti-bowl"></i><span>Menu</span></button>
+  <button data-tab="cart"><i class="ti ti-shopping-cart"></i><span id="bottom-cart-label">Cart</span><span class="badge hidden" id="cart-count-badge">0</span></button>
+  <button data-tab="orders"><i class="ti ti-list-check"></i><span>Orders</span></button>
+  <button data-tab="profile"><i class="ti ti-user"></i><span>Profile</span></button>
+</nav>
+
+<script>
+// ═══════════════════════════════════════════
+// DATA
+// ═══════════════════════════════════════════
+
+const T = {
+  uk:{
+    appName:"Суші Дуррес",
+    menu:"Меню",cart:"Кошик",orders:"Замовлення",profile:"Профіль",
+    checkout:"Оформити",total:"Разом",addToCart:"Додати",
+    name:"Ім'я",phone:"Телефон",address:"Адреса",notes:"Примітки",
+    paymentMethod:"Спосіб оплати",payCash:"Готівка",payStripe:"Картка",
+    payGoogle:"Google Pay",payApple:"Apple Pay",payCrypto:"Крипта (P2P)",
+    payCashDesc:"Оплата готівкою при отриманні замовлення",
+    payCryptoAmount:"Сума до сплати",
+    payTestMode:"⚠️ Тестовий режим — реальний платіж не виконується",
+    orderPaid:"Оплачено",paymentStatus:"Статус оплати",payMethod:"Метод",
+    placeOrder:"Замовити",orderPlaced:"Замовлення прийнято!",
+    orderNumber:"Номер замовлення",
+    spicyTag:"Гостро",vegTag:"Веган",
+    categories:{rolls:"Роли",sets:"Сети",hot_rolls:"Гарячі роли",maki:"Макі",drinks:"Напої",desserts:"Десерти"},
+    assistant:"Помічник",assistantPlaceholder:"Запитайте про меню...",
+    assistantGreeting:"Вітаю! Я ваш помічник. Запитайте мене про меню, ціни, доставку або рекомендації.",
+    assistantNoMatch:"Вибачте, не зрозумів. Спробуйте інакше.",
+    assistantPartial:"Можливо, ви мали на увазі:",
+    status_new:"Новий",status_accepted:"Прийнято",status_preparing:"Готується",
+    status_ready:"Готово",status_delivering:"Доставляється",status_delivered:"Доставлено",
+    courierAvailable:"Доступні замовлення",courierEarnings:"Заробіток",
+    restaurantQueue:"Черга замовлень",restaurantStats:"Статистика",
+    restaurantMenuEditor:"Редактор меню",
+    voiceListening:"Слухаю...",
+    installPrompt:"Встановіть цей додаток",
+    accept:"Прийняти",reject:"Відхилити",available:"Доступно",unavailable:"Недоступно",
+    deliveryHours:"Години доставки: 10:00–22:00",
+    deliveryInfo:"Доставка по Дурресу безкоштовна від 2000 лек",
+    prev:"Назад",today:"Сьогодні",revenue:"Виручка",
+    emptyCart:"Кошик порожній",
+    searchPlaceholder:"Пошук...",
+  },
+  sq:{
+    appName:"Sushi Durrës",
+    menu:"Menu",cart:"Shporta",orders:"Porositë",profile:"Profili",
+    checkout:"Porosit",total:"Totali",addToCart:"Shto",
+    name:"Emri",phone:"Telefoni",address:"Adresa",notes:"Shënime",
+    paymentMethod:"Mënyra e pagesës",payCash:"Para në dorë",payStripe:"Kartë",
+    payGoogle:"Google Pay",payApple:"Apple Pay",payCrypto:"Kripto (P2P)",
+    payCashDesc:"Pagesë me para në dorë gjatë marrjes së porosisë",
+    payCryptoAmount:"Shuma për të paguar",
+    payTestMode:"⚠️ Modaliteti i testimit — pagesa reale nuk kryhet",
+    orderPaid:"Paguar",paymentStatus:"Statusi i pagesës",payMethod:"Metoda",
+    placeOrder:"Porosit",orderPlaced:"Porosia u regjistrua!",
+    orderNumber:"Numri i porosisë",
+    spicyTag:"Pikant",vegTag:"Vegan",
+    categories:{rolls:"Rrotulla",sets:"Sete",hot_rolls:"Rrotulla të nxehta",maki:"Maki",drinks:"Pije",desserts:"Ëmbëlsira"},
+    assistant:"Asistent",assistantPlaceholder:"Pyet për menunë...",
+    assistantGreeting:"Përshëndetje! Unë jam asistenti juaj. Më pyetni për menunë, çmimet, dërgesën ose rekomandime.",
+    assistantNoMatch:"Më vjen keq, nuk kuptova. Provo ndryshe.",
+    assistantPartial:"Ndoshta e kishe fjalën për:",
+    status_new:"I ri",status_accepted:"Pranuar",status_preparing:"Duke u përgatitur",
+    status_ready:"Gati",status_delivering:"Në rrugë",status_delivered:"Dorëzuar",
+    courierAvailable:"Porositë e disponueshme",courierEarnings:"Fitimet",
+    restaurantQueue:"Rradha e porosive",restaurantStats:"Statistika",
+    restaurantMenuEditor:"Redaktues i menusë",
+    voiceListening:"Po dëgjoj...",
+    installPrompt:"Instalo këtë aplikacion",
+    accept:"Prano",reject:"Refuzo",available:"E disponueshme",unavailable:"Jo e disponueshme",
+    deliveryHours:"Orari i dërgesës: 10:00–22:00",
+    deliveryInfo:"Dërgesa falas në Durrës për porosi mbi 2000 lekë",
+    prev:"Prapa",today:"Sot",revenue:"Të ardhurat",
+    emptyCart:"Shporta është bosh",
+    searchPlaceholder:"Kërko...",
+  },
+  ar:{
+    appName:"سوشي دوريس",
+    menu:"القائمة",cart:"السلة",orders:"الطلبات",profile:"الملف الشخصي",
+    checkout:"الدفع",total:"المجموع",addToCart:"أضف",
+    name:"الاسم",phone:"الهاتف",address:"العنوان",notes:"ملاحظات",
+    paymentMethod:"طريقة الدفع",payCash:"نقدًا",payStripe:"بطاقة",
+    payGoogle:"Google Pay",payApple:"Apple Pay",payCrypto:"عملات رقمية (P2P)",
+    payCashDesc:"الدفع نقدًا عند استلام الطلب",
+    payCryptoAmount:"المبلغ المستحق",
+    payTestMode:"⚠️ وضع الاختبار — لا يتم تنفيذ الدفع الحقيقي",
+    orderPaid:"مدفوع",paymentStatus:"حالة الدفع",payMethod:"الطريقة",
+    placeOrder:"اطلب",orderPlaced:"تم تسجيل الطلب!",
+    orderNumber:"رقم الطلب",
+    spicyTag:"حار",vegTag:"نباتي",
+    categories:{rolls:"رولات",sets:"مجموعات",hot_rolls:"رولات ساخنة",maki:"ماكي",drinks:"مشروبات",desserts:"حلويات"},
+    assistant:"المساعد",assistantPlaceholder:"اسأل عن القائمة...",
+    assistantGreeting:"مرحباً! أنا مساعدكم. اسألوني عن القائمة، الأسعار، التوصيل أو التوصيات.",
+    assistantNoMatch:"آسف، لم أفهم. حاول بطريقة أخرى.",
+    assistantPartial:"ربما كنت تقصد:",
+    status_new:"جديد",status_accepted:"مقبول",status_preparing:"قيد التحضير",
+    status_ready:"جاهز",status_delivering:"قيد التوصيل",status_delivered:"تم التوصيل",
+    courierAvailable:"الطلبات المتاحة",courierEarnings:"الأرباح",
+    restaurantQueue:"قائمة الطلبات",restaurantStats:"الإحصائيات",
+    restaurantMenuEditor:"محرر القائمة",
+    voiceListening:"جاري الاستماع...",
+    installPrompt:"تثبيت التطبيق",
+    accept:"قبول",reject:"رفض",available:"متاح",unavailable:"غير متاح",
+    deliveryHours:"ساعات التوصيل: 10:00–22:00",
+    deliveryInfo:"توصيل مجاني في دوريس للطلبات فوق 2000 ليك",
+    prev:"رجوع",today:"اليوم",revenue:"الإيرادات",
+    emptyCart:"السلة فارغة",
+    searchPlaceholder:"بحث...",
+  }
+};
+
+const RATES = { ALL:1, EUR:0.01, USD:1/92 };
+const CURR_SYMBOLS = { ALL:'Lek', EUR:'€', USD:'$' };
+
+const MENU = [
+  // rolls (15)
+  {id:1,name:{uk:"Філадельфія",sq:"Philadelphia",ar:"فيلادلفيا"},category:"rolls",price_all:650,desc:{uk:"Лосось, вершковий сир, огірок",sq:"Salmon, krem djathi, kastravec",ar:"سلمون، جبنة كريمية، خيار"},photo:"",spicy:false,vegetarian:false},
+  {id:2,name:{uk:"Каліфорнія",sq:"California",ar:"كاليفورنيا"},category:"rolls",price_all:580,desc:{uk:"Краб, авокадо, огірок, ікра",sq:"Krab, avokado, kastravec, havjar",ar:"كابوريا، أفوكادو، خيار، كافيار"},photo:"",spicy:false,vegetarian:false},
+  {id:3,name:{uk:"Аляска",sq:"Alaska",ar:"ألاسكا"},category:"rolls",price_all:620,desc:{uk:"Лосось, авокадо, вершковий сир",sq:"Salmon, avokado, krem djathi",ar:"سلمون، أفوكادو، جبنة كريمية"},photo:"",spicy:false,vegetarian:false},
+  {id:4,name:{uk:"Дракон",sq:"Dragon",ar:"دراغون"},category:"rolls",price_all:700,desc:{uk:"Вугор, авокадо, сир, соус унагі",sq:"Ngjala, avokado, djath, salcë unagi",ar:"أنقليس، أفوكادو، جبن، صوص يوناغي"},photo:"",spicy:false,vegetarian:false},
+  {id:5,name:{uk:"Райдуга",sq:"Rainbow",ar:"قوس قزح"},category:"rolls",price_all:720,desc:{uk:"Лосось, тунець, авокадо, краб",sq:"Salmon, ton, avokado, krab",ar:"سلمون، تونة، أفوكادو، كابوريا"},photo:"",spicy:false,vegetarian:false},
+  {id:6,name:{uk:"Темпура рол",sq:"Tempura Roll",ar:"تيمبورا رول"},category:"rolls",price_all:680,desc:{uk:"Креветка темпура, авокадо, соус",sq:"Karkalec tempura, avokado, salcë",ar:"جمبري تيمبورا، أفوكادو، صوص"},photo:"",spicy:false,vegetarian:false},
+  {id:7,name:{uk:"Вулкан",sq:"Vulcano",ar:"فولكانو"},category:"rolls",price_all:750,desc:{uk:"Тунець, гострий соус, огірок",sq:"Ton, salcë pikante, kastravec",ar:"تونة، صوص حار، خيار"},photo:"",spicy:true,vegetarian:false},
+  {id:8,name:{uk:"Спрінг рол",sq:"Spring Roll",ar:"سبرينغ رول"},category:"rolls",price_all:550,desc:{uk:"Овочі, лосось, рис, норі",sq:"Perime, salmon, oriz, nori",ar:"خضار، سلمون، أرز، نوري"},photo:"",spicy:false,vegetarian:false},
+  {id:9,name:{uk:"Кіото",sq:"Kyoto",ar:"كيوتو"},category:"rolls",price_all:600,desc:{uk:"Лосось, тунець, зелена цибуля",sq:"Salmon, ton, qepë e njomë",ar:"سلمون، تونة، بصل أخضر"},photo:"",spicy:false,vegetarian:false},
+  {id:10,name:{uk:"Осака",sq:"Osaka",ar:"أوساكا"},category:"rolls",price_all:640,desc:{uk:"Креветка, манго, вершковий сир",sq:"Karkalec, mango, krem djathi",ar:"جمبري، مانجو، جبنة كريمية"},photo:"",spicy:false,vegetarian:false},
+  {id:11,name:{uk:"Саке рол",sq:"Sake Roll",ar:"ساكي رول"},category:"rolls",price_all:500,desc:{uk:"Свіжий лосось, рис",sq:"Salmon i freskët, oriz",ar:"سلمون طازج، أرز"},photo:"",spicy:false,vegetarian:false},
+  {id:12,name:{uk:"Текка рол",sq:"Tekka Roll",ar:"تيكا رول"},category:"rolls",price_all:480,desc:{uk:"Тунець, рис",sq:"Ton, oriz",ar:"تونة، أرز"},photo:"",spicy:false,vegetarian:false},
+  {id:13,name:{uk:"Токіо",sq:"Tokyo",ar:"طوكيو"},category:"rolls",price_all:660,desc:{uk:"Вугор, вершковий сир, соус унагі",sq:"Ngjala, krem djathi, salcë unagi",ar:"أنقليس، جبنة كريمية، صوص يوناغي"},photo:"",spicy:false,vegetarian:false},
+  {id:14,name:{uk:"Спайсі тунець",sq:"Spicy Tuna",ar:"تونة حارة"},category:"rolls",price_all:690,desc:{uk:"Гострий тунець, огірок",sq:"Ton pikant, kastravec",ar:"تونة حارة، خيار"},photo:"",spicy:true,vegetarian:false},
+  {id:15,name:{uk:"Овочевий рол",sq:"Vegetarian Roll",ar:"رول نباتي"},category:"rolls",price_all:420,desc:{uk:"Огірок, авокадо, перець",sq:"Kastravec, avokado, spec",ar:"خيار، أفوكادو، فلفل"},photo:"",spicy:false,vegetarian:true},
+
+  // sets (5)
+  {id:16,name:{uk:"Сімейний сет",sq:"Set Familjar",ar:"طقم العائلة"},category:"sets",price_all:2800,desc:{uk:"40 шт: Філадельфія, Каліфорнія, Дракон, Аляска",sq:"40 copë: Philadelphia, California, Dragon, Alaska",ar:"40 قطعة: فيلادلفيا، كاليفورنيا، دراغون، ألاسكا"},photo:"",spicy:false,vegetarian:false},
+  {id:17,name:{uk:"Вечірка сет",sq:"Set Party",ar:"طقم الحفلة"},category:"sets",price_all:3600,desc:{uk:"56 шт: асорті ролів та макі",sq:"56 copë: asorti rolls dhe maki",ar:"56 قطعة: تشكيلة رولات وماكي"},photo:"",spicy:false,vegetarian:false},
+  {id:18,name:{uk:"Мікс сет",sq:"Set Mix",ar:"طقم مشكل"},category:"sets",price_all:2400,desc:{uk:"32 шт: мікс класичних ролів",sq:"32 copë: miks rolesh klasike",ar:"32 قطعة: مزيج رولات كلاسيكية"},photo:"",spicy:false,vegetarian:false},
+  {id:19,name:{uk:"Преміум сет",sq:"Set Premium",ar:"طقم ممتاز"},category:"sets",price_all:4200,desc:{uk:"60 шт: преміум роли та гарячі",sq:"60 copë: rolls premium dhe të nxehta",ar:"60 قطعة: رولات ممتازة وساخنة"},photo:"",spicy:false,vegetarian:false},
+  {id:20,name:{uk:"Вегетаріанський сет",sq:"Set Vegjetarian",ar:"طقم نباتي"},category:"sets",price_all:1800,desc:{uk:"28 шт: овочеві роли та макі",sq:"28 copë: rolls perimesh dhe maki",ar:"28 قطعة: رولات خضار وماكي"},photo:"",spicy:false,vegetarian:true},
+
+  // hot_rolls (5)
+  {id:21,name:{uk:"Гарячий вулкан",sq:"Volcano Hot",ar:"فولكانو ساخن"},category:"hot_rolls",price_all:780,desc:{uk:"Запечений тунець, гострий соус",sq:"Ton i pjekur, salcë pikante",ar:"تونة مخبوزة، صوص حار"},photo:"",spicy:true,vegetarian:false},
+  {id:22,name:{uk:"Гарячий дракон",sq:"Hot Dragon",ar:"دراغون ساخن"},category:"hot_rolls",price_all:820,desc:{uk:"Вугор темпура, соус унагі",sq:"Ngjala tempura, salcë unagi",ar:"أنقليس تيمبورا، صوص يوناغي"},photo:"",spicy:false,vegetarian:false},
+  {id:23,name:{uk:"Гаряча філадельфія",sq:"Hot Philadelphia",ar:"فيلادلفيا ساخنة"},category:"hot_rolls",price_all:720,desc:{uk:"Запечений лосось з сиром",sq:"Salmon i pjekur me djath",ar:"سلمون مخبوز مع الجبن"},photo:"",spicy:false,vegetarian:false},
+  {id:24,name:{uk:"Темпура креветка",sq:"Tempura Shrimp Roll",ar:"تيمبورا جمبري"},category:"hot_rolls",price_all:760,desc:{uk:"Креветка темпура, гострий майонез",sq:"Karkalec tempura, majonezë pikante",ar:"جمبري تيمبورا، مايونيز حار"},photo:"",spicy:true,vegetarian:false},
+  {id:25,name:{uk:"Смажений сет",sq:"Fried Set",ar:"طقم مقلي"},category:"hot_rolls",price_all:680,desc:{uk:"Асорті смажених ролів",sq:"Asorti rolesh të skuqura",ar:"تشكيلة رولات مقلية"},photo:"",spicy:false,vegetarian:false},
+
+  // maki (5)
+  {id:26,name:{uk:"Салмон макі",sq:"Salmon Maki",ar:"سلمون ماكي"},category:"maki",price_all:320,desc:{uk:"Лосось, рис, норі (6 шт)",sq:"Salmon, oriz, nori (6 copë)",ar:"سلمون، أرز، نوري (6 قطع)"},photo:"",spicy:false,vegetarian:false},
+  {id:27,name:{uk:"Туна макі",sq:"Tuna Maki",ar:"تونة ماكي"},category:"maki",price_all:300,desc:{uk:"Тунець, рис, норі (6 шт)",sq:"Ton, oriz, nori (6 copë)",ar:"تونة، أرز، نوري (6 قطع)"},photo:"",spicy:false,vegetarian:false},
+  {id:28,name:{uk:"Огірковий макі",sq:"Cucumber Maki",ar:"خيار ماكي"},category:"maki",price_all:240,desc:{uk:"Огірок, рис, норі (6 шт)",sq:"Kastravec, oriz, nori (6 copë)",ar:"خيار، أرز، نوري (6 قطع)"},photo:"",spicy:false,vegetarian:true},
+  {id:29,name:{uk:"Авокадо макі",sq:"Avocado Maki",ar:"أفوكادو ماكي"},category:"maki",price_all:260,desc:{uk:"Авокадо, рис, норі (6 шт)",sq:"Avokado, oriz, nori (6 copë)",ar:"أفوكادو، أرز، نوري (6 قطع)"},photo:"",spicy:false,vegetarian:true},
+  {id:30,name:{uk:"Каліфорнія макі",sq:"California Maki",ar:"كاليفورنيا ماكي"},category:"maki",price_all:380,desc:{uk:"Краб, авокадо, огірок (6 шт)",sq:"Krab, avokado, kastravec (6 copë)",ar:"كابوريا، أفوكادو، خيار (6 قطع)"},photo:"",spicy:false,vegetarian:false},
+
+  // drinks (5)
+  {id:31,name:{uk:"Кока-кола",sq:"Coca-Cola",ar:"كوكا كولا"},category:"drinks",price_all:150,desc:{uk:"0.33 л",sq:"0.33 l",ar:"0.33 لتر"},photo:"",spicy:false,vegetarian:true},
+  {id:32,name:{uk:"Фанта",sq:"Fanta",ar:"فانتا"},category:"drinks",price_all:150,desc:{uk:"0.33 л",sq:"0.33 l",ar:"0.33 لتر"},photo:"",spicy:false,vegetarian:true},
+  {id:33,name:{uk:"Вода",sq:"Ujë",ar:"ماء"},category:"drinks",price_all:80,desc:{uk:"0.5 л",sq:"0.5 l",ar:"0.5 لتر"},photo:"",spicy:false,vegetarian:true},
+  {id:34,name:{uk:"Зелений чай",sq:"Çaj jeshil",ar:"شاي أخضر"},category:"drinks",price_all:120,desc:{uk:"Гарячий / холодний",sq:"I nxehtë / i ftohtë",ar:"ساخن / بارد"},photo:"",spicy:false,vegetarian:true},
+  {id:35,name:{uk:"Лимонад",sq:"Limonadë",ar:"عصير ليمون"},category:"drinks",price_all:180,desc:{uk:"Домашній",sq:"Shtëpie",ar:"منزلي"},photo:"",spicy:false,vegetarian:true},
+
+  // desserts (5)
+  {id:36,name:{uk:"Мочі манго",sq:"Mochi Mango",ar:"موتشي مانجو"},category:"desserts",price_all:280,desc:{uk:"Японське тістечко з манго (2 шт)",sq:"Ëmbëlsirë japoneze me mango (2 copë)",ar:"حلوى يابانية بالمانجو (2 قطعة)"},photo:"",spicy:false,vegetarian:true},
+  {id:37,name:{uk:"Мочі матча",sq:"Mochi Matcha",ar:"موتشي ماتشا"},category:"desserts",price_all:280,desc:{uk:"Японське тістечко з матча (2 шт)",sq:"Ëmbëlsirë japoneze me matcha (2 copë)",ar:"حلوى يابانية بالماتشا (2 قطعة)"},photo:"",spicy:false,vegetarian:true},
+  {id:38,name:{uk:"Чізкейк",sq:"Cheesecake",ar:"تشيز كيك"},category:"desserts",price_all:350,desc:{uk:"Ніжний чізкейк Нью-Йорк",sq:"Cheesecake i butë New York",ar:"تشيز كيك نيويورك طري"},photo:"",spicy:false,vegetarian:true},
+  {id:39,name:{uk:"Морозиво матча",sq:"Akullore Matcha",ar:"آيس كريم ماتشا"},category:"desserts",price_all:220,desc:{uk:"Японське морозиво з матча",sq:"Akullore japoneze me matcha",ar:"آيس كريم ياباني بالماتشا"},photo:"",spicy:false,vegetarian:true},
+  {id:40,name:{uk:"Фруктовий салат",sq:"Sallatë Frutash",ar:"سلطة فواكه"},category:"desserts",price_all:300,desc:{uk:"Свіжі фрукти з медом",sq:"Fruta të freskëta me mjaltë",ar:"فواكه طازجة مع العسل"},photo:"",spicy:false,vegetarian:true},
+];
+
+// ═══════════════════════════════════════════
+// PHOTO PLACEHOLDERS (colored gradients)
+// ═══════════════════════════════════════════
+const PHOTO_PALETTE = [
+  'linear-gradient(135deg,#fce4e4,#f8d0d0)',
+  'linear-gradient(135deg,#fff0e6,#ffe0cc)',
+  'linear-gradient(135deg,#e8f5e9,#c8e6c9)',
+  'linear-gradient(135deg,#fff8e1,#fff3c4)',
+  'linear-gradient(135deg,#f3e5f5,#e1bee7)',
+  'linear-gradient(135deg,#e3f2fd,#bbdefb)',
+  'linear-gradient(135deg,#fce4ec,#f8bbd0)',
+  'linear-gradient(135deg,#e8eaf6,#c5cae9)',
+];
+const PHOTO_EMOJI = {rolls:'🍣',sets:'🍱',hot_rolls:'🔥',maki:'🍥',drinks:'🥤',desserts:'🍰'};
+
+// ═══════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════
+const state = {
+  lang: localStorage.getItem('sd_lang') || 'uk',
+  curr: localStorage.getItem('sd_curr') || 'ALL',
+  role: localStorage.getItem('sd_role') || 'customer',
+  cart: JSON.parse(localStorage.getItem('sd_cart') || '[]'),
+  orders: JSON.parse(localStorage.getItem('sd_orders') || '[]'),
+  courierOrders: JSON.parse(localStorage.getItem('sd_courier_orders') || '[]'),
+  restaurantOrders: JSON.parse(localStorage.getItem('sd_restaurant_orders') || '[]'),
+  courierEarnings: parseFloat(localStorage.getItem('sd_courier_earnings') || '0'),
+  menuAvailability: JSON.parse(localStorage.getItem('sd_menu_avail') || '{}'),
+  activeTab: 'menu',
+  chatOpen: false,
+  voiceListening: false,
+  deferredPrompt: null,
+};
+
+// ensure all menu items available by default
+MENU.forEach(m => { if (!(m.id in state.menuAvailability)) state.menuAvailability[m.id] = true; });
+
+function save() {
+  localStorage.setItem('sd_cart', JSON.stringify(state.cart));
+  localStorage.setItem('sd_orders', JSON.stringify(state.orders));
+  localStorage.setItem('sd_courier_orders', JSON.stringify(state.courierOrders));
+  localStorage.setItem('sd_restaurant_orders', JSON.stringify(state.restaurantOrders));
+  localStorage.setItem('sd_courier_earnings', state.courierEarnings.toString());
+  localStorage.setItem('sd_menu_avail', JSON.stringify(state.menuAvailability));
+  localStorage.setItem('sd_lang', state.lang);
+  localStorage.setItem('sd_curr', state.curr);
+  localStorage.setItem('sd_role', state.role);
+}
+
+function t(key) { return T[state.lang][key] || key; }
+
+function formatPrice(all) {
+  if (state.curr === 'ALL') return Math.round(all).toLocaleString() + ' Lek';
+  if (state.curr === 'EUR') return (all * RATES.EUR).toFixed(2) + ' €';
+  return (all * RATES.USD).toFixed(2) + ' $';
+}
+
+function getItemName(item) { return item.name[state.lang] || item.name.uk; }
+function getItemDesc(item) { return item.desc[state.lang] || item.desc.uk; }
+
+// ═══════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════
+function renderAll() {
+  updateDirection();
+  updateLangButtons();
+  updateCurrButtons();
+  updateRoleButtons();
+  renderCustomerView();
+  renderCart();
+  renderCourierView();
+  renderRestaurantView();
+  updateCartBadge();
+  updateBottomNav();
+  save();
+}
+
+function updateDirection() {
+  document.documentElement.lang = state.lang;
+  document.documentElement.dir = state.lang === 'ar' ? 'rtl' : 'ltr';
+}
+
+function updateLangButtons() {
+  document.querySelectorAll('.lang-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.lang === state.lang);
+  });
+}
+
+function updateCurrButtons() {
+  document.querySelectorAll('.curr-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.curr === state.curr);
+  });
+}
+
+function updateRoleButtons() {
+  document.querySelectorAll('.role-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.role === state.role);
+  });
+}
+
+function switchRole(role) {
+  state.role = role;
+  document.querySelectorAll('.view-tab').forEach(v => v.classList.remove('active'));
+  const viewMap = {customer:'view-customer',courier:'view-courier',restaurant:'view-restaurant'};
+  document.getElementById(viewMap[role]).classList.add('active');
+  save();
+  renderAll();
+  if (role === 'courier') renderCourierView();
+  if (role === 'restaurant') renderRestaurantView();
+}
+
+// ═══════════════════════════════════════════
+// CUSTOMER VIEW
+// ═══════════════════════════════════════════
+function renderCustomerView() {
+  const container = document.getElementById('menu-container');
+  if (!container || state.role !== 'customer') return;
+  const categories = ['rolls','sets','hot_rolls','maki','drinks','desserts'];
+  let html = '';
+  categories.forEach(cat => {
+    const items = MENU.filter(m => m.category === cat);
+    if (!items.length) return;
+    html += `<div class="category-label">${t('categories')[cat] || cat}</div>`;
+    html += '<div class="menu-grid">';
+    items.forEach(item => {
+      const name = getItemName(item);
+      const desc = getItemDesc(item);
+      const price = formatPrice(item.price_all);
+      const photo = `background:${PHOTO_PALETTE[(item.id-1)%PHOTO_PALETTE.length]}`;
+      const emoji = PHOTO_EMOJI[item.category] || '🍣';
+      let tags = '';
+      if (item.spicy) tags += `<span class="item-tag spicy">🌶 ${t('spicyTag')}</span>`;
+      if (item.vegetarian) tags += `<span class="item-tag veg">🥬 ${t('vegTag')}</span>`;
+      if (!state.menuAvailability[item.id]) tags += `<span class="item-tag" style="background:#eee;color:#999">🚫 ${t('unavailable')}</span>`;
+      html += `
+        <div class="menu-item" data-id="${item.id}">
+          <div class="item-photo" style="${photo}">${emoji}</div>
+          <div class="item-info">
+            <div class="item-name">${name}</div>
+            <div class="item-desc">${desc}</div>
+            <div class="item-bottom">
+              <span class="item-price">${price}</span>
+              <button class="btn btn-sm btn-primary add-to-cart-btn" data-id="${item.id}" ${!state.menuAvailability[item.id]?'disabled':''}>+</button>
+            </div>
+            ${tags ? `<div class="item-tags">${tags}</div>` : ''}
+          </div>
+        </div>`;
+    });
+    html += '</div>';
+  });
+  container.innerHTML = html;
+
+  // add to cart handlers
+  container.querySelectorAll('.add-to-cart-btn').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      const id = parseInt(btn.dataset.id);
+      addToCart(id);
+      enrich('add_to_cart', MENU.find(m => m.id === id));
+    });
+  });
+  container.querySelectorAll('.menu-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = parseInt(el.dataset.id);
+      addToCart(id);
+      enrich('add_to_cart', MENU.find(m => m.id === id));
+    });
+  });
+}
+
+// ═══════════════════════════════════════════
+// CART
+// ═══════════════════════════════════════════
+function addToCart(id) {
+  const existing = state.cart.find(c => c.id === id);
+  if (existing) existing.qty++;
+  else state.cart.push({id, qty:1});
+  save();
+  renderCart();
+  updateCartBadge();
+  showToast(getItemName(MENU.find(m=>m.id===id)) + ' → ' + t('cart'));
+}
+
+function removeFromCart(id) {
+  state.cart = state.cart.filter(c => c.id !== id);
+  save();
+  renderCart();
+  updateCartBadge();
+}
+
+function updateQty(id, delta) {
+  const item = state.cart.find(c => c.id === id);
+  if (!item) return;
+  item.qty += delta;
+  if (item.qty <= 0) state.cart = state.cart.filter(c => c.id !== id);
+  save();
+  renderCart();
+  updateCartBadge();
+}
+
+function cartTotal() {
+  return state.cart.reduce((sum, c) => {
+    const menu = MENU.find(m => m.id === c.id);
+    return menu ? sum + menu.price_all * c.qty : sum;
+  }, 0);
+}
+
+function cartCount() {
+  return state.cart.reduce((s, c) => s + c.qty, 0);
+}
+
+function updateCartBadge() {
+  const badge = document.getElementById('cart-count-badge');
+  const count = cartCount();
+  badge.textContent = count;
+  badge.classList.toggle('hidden', count === 0);
+}
+
+function renderCart() {
+  const container = document.getElementById('cart-items-container');
+  const title = document.getElementById('cart-title');
+  const totalLabel = document.getElementById('cart-total-label');
+  const totalValue = document.getElementById('cart-total-value');
+  const checkoutBtn = document.getElementById('checkout-btn');
+  const bottomCartLabel = document.getElementById('bottom-cart-label');
+
+  checkoutBtn.textContent = t('checkout');
+  title.textContent = t('cart');
+  totalLabel.textContent = t('total');
+  bottomCartLabel.textContent = t('cart');
+
+  if (state.cart.length === 0) {
+    container.innerHTML = `<div class="text-center" style="padding:40px;color:var(--text-secondary)">${t('emptyCart')}</div>`;
+    totalValue.textContent = '0 Lek';
+    checkoutBtn.disabled = true;
+    return;
+  }
+  checkoutBtn.disabled = false;
+  totalValue.textContent = formatPrice(cartTotal());
+
+  container.innerHTML = state.cart.map(c => {
+    const menu = MENU.find(m => m.id === c.id);
+    if (!menu) return '';
+    return `
+      <div class="cart-item">
+        <div class="ci-name">${getItemName(menu)}</div>
+        <div class="ci-qty">
+          <button onclick="updateQty(${c.id},-1)">−</button>
+          <span>${c.qty}</span>
+          <button onclick="updateQty(${c.id},1)">+</button>
+        </div>
+        <div class="ci-price">${formatPrice(menu.price_all * c.qty)}</div>
+        <button class="btn-icon btn btn-outline" style="width:24px;height:24px;font-size:.7rem" onclick="removeFromCart(${c.id})">✕</button>
+      </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════
+// CHECKOUT
+// ═══════════════════════════════════════════
+function checkout() {
+  if (state.cart.length === 0) return;
+  const container = document.getElementById('menu-container');
+  container.innerHTML = `
+    <div class="section-title">🛒 ${t('checkout')}</div>
+    <div id="checkout-form">
+      <label>${t('name')}</label>
+      <input type="text" id="co-name" placeholder="${t('name')}" required>
+      <label>${t('phone')} (WhatsApp)</label>
+      <input type="tel" id="co-phone" placeholder="+355..." required>
+      <label>${t('address')}</label>
+      <textarea id="co-address" placeholder="${t('address')}" required></textarea>
+      <label>${t('notes')}</label>
+      <textarea id="co-notes" placeholder="${t('notes')}"></textarea>
+      <label style="margin-top:16px">💳 ${t('paymentMethod')}</label>
+      <div class="payment-methods">
+        <label class="pm-option"><input type="radio" name="pm" value="cash" checked onchange="updatePaymentUI()"> 💵 ${t('payCash')}</label>
+        <label class="pm-option"><input type="radio" name="pm" value="stripe" onchange="updatePaymentUI()"> 💳 ${t('payStripe')}</label>
+        <label class="pm-option"><input type="radio" name="pm" value="googlepay" onchange="updatePaymentUI()"> <b>G</b> ${t('payGoogle')}</label>
+        <label class="pm-option"><input type="radio" name="pm" value="applepay" onchange="updatePaymentUI()">  ${t('payApple')}</label>
+        <label class="pm-option"><input type="radio" name="pm" value="crypto" onchange="updatePaymentUI()"> ₿ ${t('payCrypto')}</label>
+      </div>
+      <div id="payment-detail" class="payment-detail">💵 ${t('payCashDesc')}</div>
+      <div class="cart-total" style="margin-top:16px"><span>${t('total')}</span><span>${formatPrice(cartTotal())}</span></div>
+      <button class="btn btn-primary" style="width:100%;margin-top:12px" id="place-order-btn">${t('placeOrder')}</button>
+      <button class="btn btn-outline" style="width:100%;margin-top:8px" onclick="renderAll()">← ${t('prev')}</button>
+    </div>`;
+
+  document.getElementById('place-order-btn').addEventListener('click', placeOrder);
+}
+
+function updatePaymentUI() {
+  const pm = document.querySelector('input[name="pm"]:checked')?.value || 'cash';
+  const detail = document.getElementById('payment-detail');
+  const total = cartTotal();
+  const totalCrypto = (total / state.rates[state.curr]).toFixed(4);
+  const walletAddr = '0xSUSHI' + Math.random().toString(16).slice(2, 10);
+  
+  switch(pm) {
+    case 'cash':
+      detail.innerHTML = '💵 ' + t('payCashDesc');
+      break;
+    case 'stripe':
+      detail.innerHTML = `<div style="text-align:center">💳 <b>Stripe</b></div>
+        <div class="pm-card-input" style="margin-top:8px">
+          <div>💳 •••• •••• •••• 4242</div>
+          <div style="display:flex;gap:8px;margin-top:4px">
+            <input class="pm-card-input" placeholder="MM/YY" style="width:80px;text-align:center">
+            <input class="pm-card-input" placeholder="CVC" style="width:60px;text-align:center">
+          </div>
+        </div>
+        <p style="font-size:.75rem;color:var(--muted);margin-top:8px">${t('payTestMode')}</p>`;
+      break;
+    case 'googlepay':
+      detail.innerHTML = `<div style="text-align:center;padding:16px">
+        <button class="btn btn-dark" style="background:#000;color:#fff;width:100%;max-width:250px;font-size:1rem">
+          <b>G</b> Pay — ${formatPrice(total)}
+        </button>
+        <p style="font-size:.75rem;color:var(--muted);margin-top:8px">${t('payTestMode')}</p>
+      </div>`;
+      break;
+    case 'applepay':
+      detail.innerHTML = `<div style="text-align:center;padding:16px">
+        <button class="btn btn-dark" style="background:#000;color:#fff;width:100%;max-width:250px;border-radius:12px;font-size:1rem">
+           Pay — ${formatPrice(total)}
+        </button>
+        <p style="font-size:.75rem;color:var(--muted);margin-top:8px">${t('payTestMode')}</p>
+      </div>`;
+      break;
+    case 'crypto':
+      detail.innerHTML = `<div style="text-align:center">
+        <div class="pm-crypto-qr" id="crypto-qr"><span style="color:var(--muted)">QR</span></div>
+        <p style="font-size:.75rem;margin-top:4px"><code>${walletAddr}</code></p>
+        <p style="font-weight:700;margin-top:4px">${t('payCryptoAmount')}: <b>${totalCrypto} ${state.curr === 'all' ? 'ALL' : state.curr.toUpperCase()}</b></p>
+        <select id="crypto-coin" style="margin-top:8px;padding:6px 12px;border:1px solid var(--border);border-radius:8px;font-size:.85rem" onchange="updateCryptoQR()">
+          <option value="USDT">USDT (TRC-20)</option>
+          <option value="USDC">USDC (ERC-20)</option>
+          <option value="BTC">Bitcoin (BTC)</option>
+          <option value="ETH">Ethereum (ETH)</option>
+        </select>
+        <p style="font-size:.75rem;color:var(--muted);margin-top:8px">${t('payTestMode')}</p>
+      </div>`;
+      setTimeout(() => {
+        const qr = document.getElementById('crypto-qr');
+        if (qr) { const c = document.createElement('canvas'); c.width = 150; c.height = 150; const ctx = c.getContext('2d'); for(let i=0;i<30;i++) for(let j=0;j<30;j++) { ctx.fillStyle = Math.random()>0.5?'#000':'#fff'; ctx.fillRect(i*5,j*5,5,5); } qr.innerHTML=''; qr.appendChild(c); }
+      }, 100);
+      break;
+  }
+}
+
+function updateCryptoQR() {
+  // Re-render QR with selected coin
+  updatePaymentUI();
+}
+
+function placeOrder() {
+  const name = document.getElementById('co-name').value.trim();
+  const phone = document.getElementById('co-phone').value.trim();
+  const address = document.getElementById('co-address').value.trim();
+  const notes = document.getElementById('co-notes').value.trim();
+  if (!name || !phone || !address) { alert('Fill all fields'); return; }
+
+  const pm = document.querySelector('input[name="pm"]:checked')?.value || 'cash';
+  const order = {
+    id: Date.now(),
+    name, phone, address, notes,
+    items: [...state.cart],
+    total: cartTotal(),
+    status: 'new',
+    created: new Date().toISOString(),
+    currency: state.curr,
+    paymentMethod: pm,
+    paymentStatus: pm === 'cash' ? 'pending' : 'test_paid',
+  };
+
+  state.orders.push(order);
+  state.restaurantOrders.push({...order});
+  state.courierOrders.push({...order});
+  state.cart = [];
+  save();
+  enrich('place_order', order);
+
+  const container = document.getElementById('menu-container');
+  container.innerHTML = `
+    <div id="order-confirmation">
+      <div style="font-size:4rem;margin-bottom:16px">🎉</div>
+      <div class="section-title">${t('orderPlaced')}</div>
+      <p style="color:var(--text-secondary);margin:8px 0">${t('orderNumber')}: #${order.id}</p>
+      <p style="font-weight:600;font-size:1.2rem">${formatPrice(order.total)}</p>
+      <button class="btn btn-primary mt-md" onclick="renderAll()">${t('menu')}</button>
+    </div>`;
+  renderCart();
+  updateCartBadge();
+  updateBottomNav();
+}
+
+// ═══════════════════════════════════════════
+// COURIER VIEW
+// ═══════════════════════════════════════════
+function renderCourierView() {
+  const container = document.getElementById('courier-content');
+  if (!container || state.role !== 'courier') return;
+
+  const available = state.courierOrders.filter(o => !['delivered','rejected'].includes(o.status));
+  const earnings = state.courierEarnings;
+
+  container.innerHTML = `
+    <div class="section-title">🏍 ${t('courierAvailable')}</div>
+    <div class="stat-card" style="margin-bottom:16px">
+      <div class="stat-value">${formatPrice(earnings)}</div>
+      <div class="stat-label">${t('courierEarnings')}</div>
+    </div>
+    ${available.length === 0 ? `<p style="color:var(--text-secondary);text-align:center;padding:20px">No orders yet</p>` :
+    available.map(o => {
+      const statusClass = 'status-' + o.status;
+      return `
+        <div class="order-card">
+          <div class="order-header">
+            <strong>#${o.id} — ${o.name}</strong>
+            <span class="order-status ${statusClass}">${t('status_'+o.status)||o.status}</span>
+          </div>
+          <div style="font-size:.8rem;color:var(--text-secondary)">📞 ${o.phone} | 📍 ${o.address}</div>
+          <div class="order-items">
+            ${o.items.map(ci => {
+              const m = MENU.find(x => x.id === ci.id);
+              return m ? `<div>${ci.qty}× ${getItemName(m)}</div>` : '';
+            }).join('')}
+          </div>
+          <div style="font-weight:600;margin-top:4px">${t('total')}: ${formatPrice(o.total)}</div>
+          ${o.address ? `<a href="https://www.google.com/maps/search/${encodeURIComponent(o.address+' Durrës')}" target="_blank" rel="noopener" class="btn btn-sm btn-outline" style="margin-top:8px">🗺 Google Maps</a>` : ''}
+          <div class="order-actions">
+            ${o.status==='new' ? `<button class="btn btn-sm btn-success" onclick="updateCourierOrder(${o.id},'accepted')">${t('accept')}</button><button class="btn btn-sm btn-outline" onclick="updateCourierOrder(${o.id},'rejected')">${t('reject')}</button>` : ''}
+            ${o.status==='accepted' ? `<button class="btn btn-sm btn-primary" onclick="updateCourierOrder(${o.id},'delivering')">Picked Up → Delivering</button>` : ''}
+            ${o.status==='delivering' ? `<button class="btn btn-sm btn-success" onclick="updateCourierOrder(${o.id},'delivered')">Mark Delivered</button>` : ''}
+          </div>
+        </div>`;
+    }).join('')}`;
+}
+
+function updateCourierOrder(id, status) {
+  const order = state.courierOrders.find(o => o.id === id);
+  if (!order) return;
+  order.status = status;
+  if (status === 'delivered') state.courierEarnings += Math.round(order.total * 0.1);
+  if (status === 'rejected') order.status = 'rejected';
+  // sync with restaurant
+  const restoOrder = state.restaurantOrders.find(o => o.id === id);
+  if (restoOrder) restoOrder.status = status;
+  const custOrder = state.orders.find(o => o.id === id);
+  if (custOrder) custOrder.status = status;
+  save();
+  renderCourierView();
+  renderRestaurantView();
+}
+
+// ═══════════════════════════════════════════
+// RESTAURANT VIEW
+// ═══════════════════════════════════════════
+function renderRestaurantView() {
+  const container = document.getElementById('restaurant-content');
+  if (!container || state.role !== 'restaurant') return;
+
+  const incoming = state.restaurantOrders.filter(o => o.status === 'new');
+  const active = state.restaurantOrders.filter(o => ['accepted','preparing','ready'].includes(o.status));
+  const todayOrders = state.restaurantOrders.filter(o => {
+    const d = new Date(o.created);
+    const now = new Date();
+    return d.toDateString() === now.toDateString();
+  });
+  const todayRevenue = todayOrders.reduce((s, o) => s + o.total, 0);
+
+  container.innerHTML = `
+    <div class="section-title">🍣 ${t('restaurantQueue')}</div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-value">${todayOrders.length}</div><div class="stat-label">${t('orders')} — ${t('today')}</div></div>
+      <div class="stat-card"><div class="stat-value">${formatPrice(todayRevenue)}</div><div class="stat-label">${t('revenue')} — ${t('today')}</div></div>
+    </div>
+    ${incoming.length > 0 ? '<div class="category-label">New Orders</div>' : ''}
+    ${incoming.map(o => `
+      <div class="order-card">
+        <div class="order-header"><strong>#${o.id} — ${o.name}</strong></div>
+        <div>📞 ${o.phone} | 📍 ${o.address} | 🕐 ${new Date(o.created).toLocaleTimeString()}</div>
+        <div class="order-items">
+          ${o.items.map(ci => { const m = MENU.find(x=>x.id===ci.id); return m?`<div>${ci.qty}× ${getItemName(m)}</div>`:'';}).join('')}
+        </div>
+        <div style="font-weight:600">${t('total')}: ${formatPrice(o.total)}</div>
+        ${o.notes ? `<div style="font-size:.8rem;color:var(--text-secondary)">📝 ${o.notes}</div>` : ''}
+        <div class="order-actions">
+          <button class="btn btn-sm btn-success" onclick="updateRestaurantOrder(${o.id},'accepted')">${t('accept')}</button>
+          <button class="btn btn-sm btn-outline" onclick="updateRestaurantOrder(${o.id},'rejected')">${t('reject')}</button>
+        </div>
+      </div>`).join('')}
+    ${active.length > 0 ? '<div class="category-label">Active Orders</div>' : ''}
+    ${active.map(o => `
+      <div class="order-card">
+        <div class="order-header">
+          <strong>#${o.id} — ${o.name}</strong>
+          <span class="order-status status-${o.status}">${t('status_'+o.status)||o.status}</span>
+        </div>
+        <div class="order-actions">
+          ${o.status==='accepted' ? `<button class="btn btn-sm btn-warning" onclick="updateRestaurantOrder(${o.id},'preparing')">Start Preparing</button>` : ''}
+          ${o.status==='preparing' ? `<button class="btn btn-sm btn-success" onclick="updateRestaurantOrder(${o.id},'ready')">Mark Ready</button>` : ''}
+        </div>
+      </div>`).join('')}
+    <div class="category-label">${t('restaurantMenuEditor')}</div>
+    ${MENU.map(m => `
+      <div class="menu-editor-item">
+        <div class="me-name">${getItemName(m)} — ${formatPrice(m.price_all)}</div>
+        <button class="me-toggle ${state.menuAvailability[m.id] ? 'on' : 'off'}" onclick="toggleMenuItem(${m.id})"></button>
+        <span style="font-size:.7rem;margin-left:8px">${state.menuAvailability[m.id] ? t('available') : t('unavailable')}</span>
+      </div>`).join('')}`;
+}
+
+function updateRestaurantOrder(id, status) {
+  const order = state.restaurantOrders.find(o => o.id === id);
+  if (!order) return;
+  order.status = status;
+  const courierOrder = state.courierOrders.find(o => o.id === id);
+  if (courierOrder) courierOrder.status = status;
+  const custOrder = state.orders.find(o => o.id === id);
+  if (custOrder) custOrder.status = status;
+  save();
+  renderRestaurantView();
+  renderCourierView();
+}
+
+function toggleMenuItem(id) {
+  state.menuAvailability[id] = !state.menuAvailability[id];
+  save();
+  renderRestaurantView();
+  renderCustomerView();
+}
+
+// ═══════════════════════════════════════════
+// ASSISTANT (Keyword Matching)
+// ═══════════════════════════════════════════
+const ASSISTANT_KEYWORDS = {
+  uk: {
+    hello:['привіт','вітаю','добрий день','добрий вечір','здрастуй'],
+    hours:['години','працює','відкрито','коли','час роботи','графік'],
+    delivery:['доставка','доставляєте','привезете','безкоштовна','доставку'],
+    spicy:['гостре','гострого','гострих','пікантне','spicy'],
+    vegetarian:['веган','вегетаріанське','овочеві','без мʼяса','без риби'],
+    price:['ціна','коштує','вартість','скільки','ціни','прайс'],
+    sets:['сет','сети','набір','великий'],
+    recommendations:['рекомендуєте','популярне','найкраще','смачне','топ'],
+    contact:['телефон','номер','дзвінок','контакти','whatsapp'],
+    address:['адреса','де ви','локація','знаходитесь'],
+  },
+  sq: {
+    hello:['përshëndetje','tung','mirëdita','mirëmbrëma','çkemi'],
+    hours:['orari','hapet','mbyllet','kur','orët'],
+    delivery:['dërgesë','dërgesa','dorëzim','falas'],
+    spicy:['pikant','pikante','djegës'],
+    vegetarian:['vegan','vegjetarian','pa mish','pa peshk'],
+    price:['çmim','çmimi','kushton','sa','çmimet'],
+    sets:['set','sete','grup'],
+    recommendations:['rekomandon','popullore','më e mirë','top','shijshme'],
+    contact:['telefon','numër','kontakt','whatsapp'],
+    address:['adresë','adresa','ku jeni','lokacion'],
+  },
+  ar: {
+    hello:['مرحبا','السلام عليكم','صباح الخير','مساء الخير','أهلا'],
+    hours:['ساعات','تفتح','تغلق','متى','مواعيد'],
+    delivery:['توصيل','توصلون','توصل','مجاني'],
+    spicy:['حار','حارة','حارين'],
+    vegetarian:['نباتي','نباتية','خضار','بدون لحم'],
+    price:['سعر','سعرها','كم','بكم','الأسعار'],
+    sets:['طقم','مجموعة','مجموعات'],
+    recommendations:['توصي','شعبي','الأفضل','لذيذ','أحسن'],
+    contact:['هاتف','رقم','اتصال','whatsapp'],
+    address:['عنوان','مكانكم','موقعكم','أين'],
+  }
+};
+
+function detectIntent(text) {
+  const lang = state.lang;
+  const lower = text.toLowerCase();
+  const kw = ASSISTANT_KEYWORDS[lang];
+  if (!kw) return null;
+  const found = [];
+  for (const [intent, keywords] of Object.entries(kw)) {
+    for (const k of keywords) {
+      if (lower.includes(k)) {
+        found.push(intent);
+        break;
+      }
+    }
+  }
+  return found.length > 0 ? found : null;
+}
+
+function getAssistantResponse(text) {
+  const intents = detectIntent(text);
+  const lang = state.lang;
+  if (!intents || intents.length === 0) return t('assistantNoMatch');
+
+  let resp = '';
+  const t2 = T[lang];
+  if (intents.includes('hello')) {
+    if (lang==='uk') resp = 'Вітаю! Ласкаво просимо до Sushi Durrës!';
+    else if (lang==='sq') resp = 'Përshëndetje! Mirë se vini në Sushi Durrës!';
+    else resp = 'مرحباً! أهلاً بكم في سوشي دوريس!';
+  }
+  if (intents.includes('hours')) {
+    resp += (resp?'\n':'') + t('deliveryHours');
+  }
+  if (intents.includes('delivery')) {
+    resp += (resp?'\n':'') + t('deliveryInfo');
+  }
+  if (intents.includes('spicy')) {
+    const spicy = MENU.filter(m => m.spicy).map(m => getItemName(m)+' ('+formatPrice(m.price_all)+')').join(', ');
+    if (lang==='uk') resp += '\n🌶 Гострі страви: ' + spicy;
+    else if (lang==='sq') resp += '\n🌶 Pjata pikante: ' + spicy;
+    else resp += '\n🌶 الأطباق الحارة: ' + spicy;
+  }
+  if (intents.includes('vegetarian')) {
+    const veg = MENU.filter(m => m.vegetarian).map(m => getItemName(m)+' ('+formatPrice(m.price_all)+')').join(', ');
+    if (lang==='uk') resp += '\n🥬 Вегетаріанське: ' + veg;
+    else if (lang==='sq') resp += '\n🥬 Vegjetariane: ' + veg;
+    else resp += '\n🥬 نباتي: ' + veg;
+  }
+  if (intents.includes('price')) {
+    // search for specific item mentioned
+    let foundItems = [];
+    for (const item of MENU) {
+      const itemNameLower = getItemName(item).toLowerCase();
+      // simple partial match
+      for (const word of text.toLowerCase().split(/\s+/)) {
+        if (word.length > 2 && itemNameLower.includes(word)) {
+          foundItems.push(item);
+          break;
+        }
+      }
+    }
+    if (foundItems.length > 0) {
+      const list = foundItems.map(m => getItemName(m)+': '+formatPrice(m.price_all)).join(', ');
+      resp += '\n' + list;
+    } else {
+      if (lang==='uk') resp += '\nЦіни: роли від 420 лек, сети від 1800 лек, макі від 240 лек.';
+      else if (lang==='sq') resp += '\nÇmimet: rolls nga 420 lekë, sete nga 1800 lekë, maki nga 240 lekë.';
+      else resp += '\nالأسعار: رولات من 420 ليك، أطقم من 1800 ليك، ماكي من 240 ليك.';
+    }
+  }
+  if (intents.includes('sets')) {
+    const sets = MENU.filter(m => m.category==='sets').map(m => getItemName(m)+' ('+formatPrice(m.price_all)+')').join(', ');
+    if (lang==='uk') resp += '\n🍱 Сети: ' + sets;
+    else if (lang==='sq') resp += '\n🍱 Setet: ' + sets;
+    else resp += '\n🍱 الأطقم: ' + sets;
+  }
+  if (intents.includes('recommendations')) {
+    const top = MENU.filter(m => ['rolls','sets'].includes(m.category)).slice(0,3);
+    const list = top.map(m => getItemName(m)).join(', ');
+    if (lang==='uk') resp += '\n⭐ Рекомендуємо: ' + list;
+    else if (lang==='sq') resp += '\n⭐ Rekomandojmë: ' + list;
+    else resp += '\n⭐ نوصي: ' + list;
+  }
+  if (intents.includes('contact')) {
+    if (lang==='uk') resp += '\n📞 WhatsApp: +355 69 123 4567';
+    else if (lang==='sq') resp += '\n📞 WhatsApp: +355 69 123 4567';
+    else resp += '\n📞 واتساب: +355 69 123 4567';
+  }
+  return resp.trim() || t('assistantNoMatch');
+}
+
+// ═══════════════════════════════════════════
+// ENRICHMENT
+// ═══════════════════════════════════════════
+function enrich(action, data) {
+  const patterns = {
+    add_to_cart: { intent:'AddToCart', suggests:'Check related items in same category' },
+    place_order: { intent:'PlaceOrder', suggests:'Track your order in Orders tab' },
+    search_spicy: { intent:'SpicyFood', suggests:'Try Vulcano or Spicy Tuna rolls' },
+    ask_price: { intent:'PriceCheck', suggests:'Use currency switcher to compare prices' },
+  };
+  const pattern = patterns[action] || patterns[action] || { intent:action, suggests:'' };
+  if (action === 'add_to_cart') {
+    const item = data;
+    const related = MENU.filter(m => m.category===item.category && m.id!==item.id).slice(0,2);
+    pattern.suggests = related.map(m => getItemName(m)).join(' or ');
+  }
+  const toastText = `🧠 ${pattern.intent}: ${pattern.suggests}`;
+  showToast(toastText);
+}
+
+function showToast(msg) {
+  const el = document.createElement('div');
+  el.className = 'enrich-toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// ═══════════════════════════════════════════
+// VOICE
+// ═══════════════════════════════════════════
+let mediaRecorder = null;
+let audioChunks = [];
+
+function toggleVoice() {
+  if (state.voiceListening) {
+    stopVoice();
+    return;
+  }
+  startVoice();
+}
+
+async function startVoice() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('Voice not supported');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    mediaRecorder = new MediaRecorder(stream, {mimeType:'audio/webm'});
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = processVoiceChunk;
+    mediaRecorder.start();
+    state.voiceListening = true;
+    document.getElementById('voice-btn').classList.add('recording');
+    const vt = document.getElementById('voice-text');
+    vt.textContent = t('voiceListening');
+    vt.classList.add('visible');
+    setTimeout(() => { if(state.voiceListening) stopVoice(); }, 4000);
+  } catch(e) {
+    console.log('Mic error:', e);
+    alert('Please allow microphone access');
+  }
+}
+
+function stopVoice() {
+  if (mediaRecorder && state.voiceListening) {
+    mediaRecorder.stop();
+    mediaRecorder.stream.getTracks().forEach(t => t.stop());
+    state.voiceListening = false;
+    document.getElementById('voice-btn').classList.remove('recording');
+    document.getElementById('voice-text').classList.remove('visible');
+  }
+}
+
+function processVoiceChunk() {
+  // simple frequency-based detection (placeholder — no real STT)
+  // matching against simple keyword patterns
+  const blob = new Blob(audioChunks, {type:'audio/webm'});
+  const vt = document.getElementById('voice-text');
+
+  // simple: just show we processed it
+  // In a real app, this would send to a speech-to-text API
+  // For now, simulate keyword detection via audio context frequency analysis mock
+  const commands_uk = {add:['додай','додайте','додати'],order:['замов','замовлення','замовити'],price:['ціна','скільки'],help:['допоможи']};
+  const commands_sq = {add:['shto','shtoni'],order:['porosit','porosia'],price:['çmimi','sa'],help:['ndihmo']};
+  const commands_ar = {add:['أضف','أضيفي'],order:['اطلب','طلب'],price:['سعر','كم'],help:['ساعد']};
+
+  const langCmds = state.lang === 'uk' ? commands_uk : state.lang === 'sq' ? commands_sq : commands_ar;
+  vt.textContent = '□···□ Voice recorded (tap mic to try)';
+  vt.classList.add('visible');
+  setTimeout(() => vt.classList.remove('visible'), 2500);
+
+  // could not process actual speech in browser FFT easily, this is the hook
+  console.log('Voice chunk processed, size:', blob.size, 'bytes');
+}
+
+// ═══════════════════════════════════════════
+// CHAT WIDGET
+// ═══════════════════════════════════════════
+function toggleChat() {
+  state.chatOpen = !state.chatOpen;
+  const popup = document.getElementById('chat-popup');
+  popup.classList.toggle('open', state.chatOpen);
+  document.getElementById('chat-messages').innerHTML = `<div class="chat-msg bot">${t('assistantGreeting')}</div>`;
+}
+
+function sendChatMessage() {
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  const msgs = document.getElementById('chat-messages');
+  msgs.innerHTML += `<div class="chat-msg user">${text}</div>`;
+  const response = getAssistantResponse(text);
+  msgs.innerHTML += `<div class="chat-msg bot">${response.replace(/\n/g,'<br>')}</div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+  input.value = '';
+}
+
+// ═══════════════════════════════════════════
+// UI / NAVIGATION
+// ═══════════════════════════════════════════
+function updateBottomNav() {
+  const btns = document.querySelectorAll('#bottom-nav button[data-tab]');
+  btns.forEach(b => b.classList.toggle('active', b.dataset.tab === state.activeTab));
+  if (state.activeTab === 'cart') {
+    document.getElementById('cart-panel').classList.add('open');
+    document.getElementById('cart-overlay').classList.add('open');
+  } else {
+    document.getElementById('cart-panel').classList.remove('open');
+    document.getElementById('cart-overlay').classList.remove('open');
+  }
+}
+
+// ═══════════════════════════════════════════
+// SW / PWA
+// ═══════════════════════════════════════════
+function registerSW() {
+  if (!('serviceWorker' in navigator)) return;
+  const swCode = `
+self.addEventListener('install', e => self.skipWaiting());
+self.addEventListener('activate', e => e.waitUntil(clients.claim()));
+self.addEventListener('fetch', e => {
+  e.respondWith(
+    caches.match(e.request).then(r => r || fetch(e.request).then(resp => {
+      if(resp.ok){
+        const clone = resp.clone();
+        caches.open('sushi-v1').then(c => c.put(e.request, clone));
+      }
+      return resp;
+    }).catch(() => caches.match('/offline.html') || new Response('Offline', {status:503})))
+  );
+});
+`;
+  const blob = new Blob([swCode], {type:'application/javascript'});
+  const url = URL.createObjectURL(blob);
+  navigator.serviceWorker.register(url).catch(() => {});
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+function init() {
+  // splash
+  setTimeout(() => {
+    document.getElementById('splash').classList.add('fade-out');
+    setTimeout(() => document.getElementById('splash').remove(), 500);
+  }, 800);
+
+  // lang buttons
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.lang = btn.dataset.lang;
+      renderAll();
+    });
+  });
+
+  // currency buttons
+  document.querySelectorAll('.curr-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.curr = btn.dataset.curr;
+      renderAll();
+    });
+  });
+
+  // role buttons
+  document.getElementById('role-customer-btn').addEventListener('click', () => switchRole('customer'));
+  document.getElementById('role-courier-btn').addEventListener('click', () => switchRole('courier'));
+  document.getElementById('role-restaurant-btn').addEventListener('click', () => switchRole('restaurant'));
+
+  // bottom nav
+  document.querySelectorAll('#bottom-nav button[data-tab]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.activeTab = btn.dataset.tab;
+      if (state.activeTab === 'cart') {
+        document.getElementById('cart-panel').classList.add('open');
+        document.getElementById('cart-overlay').classList.add('open');
+      }
+      updateBottomNav();
+    });
+  });
+
+  // cart overlay
+  document.getElementById('cart-overlay').addEventListener('click', () => {
+    document.getElementById('cart-panel').classList.remove('open');
+    document.getElementById('cart-overlay').classList.remove('open');
+    state.activeTab = 'menu';
+    updateBottomNav();
+  });
+
+  // cart close
+  document.getElementById('cart-close').addEventListener('click', () => {
+    document.getElementById('cart-panel').classList.remove('open');
+    document.getElementById('cart-overlay').classList.remove('open');
+  });
+
+  // checkout button
+  document.getElementById('checkout-btn').addEventListener('click', checkout);
+
+  // voice
+  document.getElementById('voice-btn').addEventListener('click', toggleVoice);
+
+  // chat
+  document.getElementById('chat-toggle').addEventListener('click', toggleChat);
+  document.getElementById('chat-close-btn').addEventListener('click', toggleChat);
+  document.getElementById('chat-send').addEventListener('click', sendChatMessage);
+  document.getElementById('chat-input').addEventListener('keypress', e => {
+    if (e.key === 'Enter') sendChatMessage();
+  });
+
+  // install prompt
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    state.deferredPrompt = e;
+    document.getElementById('install-prompt').classList.add('visible');
+  });
+  document.getElementById('install-btn').addEventListener('click', async () => {
+    if (state.deferredPrompt) {
+      state.deferredPrompt.prompt();
+      const result = await state.deferredPrompt.userChoice;
+      console.log('Install:', result.outcome);
+      state.deferredPrompt = null;
+    }
+    document.getElementById('install-prompt').classList.remove('visible');
+  });
+  document.getElementById('install-dismiss').addEventListener('click', () => {
+    document.getElementById('install-prompt').classList.remove('visible');
+  });
+  window.addEventListener('appinstalled', () => {
+    document.getElementById('install-prompt').classList.remove('visible');
+  });
+
+  // SW
+  registerSW();
+
+  // initial render
+  renderAll();
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
