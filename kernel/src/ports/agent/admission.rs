@@ -534,7 +534,10 @@ impl<G: AdmissionGate> Admitter<G> {
             expiry: manifest.expiry,
             bucket: Arc::new(TokenBucket::new(granted_capacity as f64, refill)),
         };
-        self.admitted.insert(content_id, record.clone());
+        // Idempotency: if content_id already admitted, return existing record unchanged.
+        if let std::collections::hash_map::Entry::Vacant(e) = self.admitted.entry(content_id) {
+            e.insert(record.clone());
+        }
         Ok(record)
     }
 }

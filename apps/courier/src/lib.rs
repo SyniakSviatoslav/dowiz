@@ -28,6 +28,8 @@ pub mod render;
 pub mod surface;
 pub mod types;
 pub mod voice;
+/// Quality gates (no self-referencing — forbidden tokens live here, not in tested modules).
+mod gates;
 
 // Re-exports for ergonomic consumption by `tests/` and by future surfaces.
 pub use battery::*;
@@ -235,13 +237,18 @@ mod tests {
 
     #[test]
     fn render_no_dom_gate() {
+        use crate::gates::no_visible_dom_widget;
         assert!(no_visible_dom_widget(include_str!("lib.rs")));
         assert!(no_visible_dom_widget(include_str!("render.rs")));
+        assert!(no_visible_dom_widget(include_str!("surface.rs")));
+        // NEVER test gates.rs itself — that would be self-referencing
     }
 
     #[test]
     fn render_no_routing_gate() {
+        use crate::gates::no_routing_code;
         assert!(no_routing_code(include_str!("render.rs")));
         assert!(no_routing_code(include_str!("surface.rs")));
+        assert!(no_routing_code(include_str!("dispatch.rs")));
     }
 }

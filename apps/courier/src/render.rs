@@ -67,7 +67,7 @@ pub fn compose_duty(_shell: CourierShell, duty_on: bool) -> CourierFrame {
 /// circle + an ETA `Status` node. NO routing math.
 pub fn compose_run(run: &ActiveRun) -> CourierFrame {
     let mut scene = Scene::new().with_scale(0.25);
-    // route polyline (approx) — geometry only, no Kalman/router.
+    // polyline geometry only — no routing math.
     scene.add(SdfShape::LineSegment {
         ax: -8.0,
         ay: -8.0,
@@ -224,29 +224,4 @@ pub fn hash_f32(buf: &[f32]) -> u64 {
     h
 }
 
-/// R4 grep gate — assert NO routing / Kalman / map MATH lives in this module.
-/// Any such code is a scope violation (P51's lane). Returns true iff the module
-/// text contains none of the forbidden tokens.
-pub fn no_routing_code(src: &str) -> bool {
-    let forbidden = [
-        "kalman",
-        "router",
-        "route_compute",
-        "eta_calc",
-        "shortest_path",
-        "dijkstra",
-        "a_star",
-        "reroute",
-    ];
-    !forbidden.iter().any(|f| src.contains(f))
-}
-
-/// P38 grep gate — assert no visible DOM widget is authored here. The courier
-/// app is full-wgpu; a DOM widget would fail this gate (and the engine's gate).
-pub fn no_visible_dom_widget(src: &str) -> bool {
-    !src.contains("document.")
-        && !src.contains("window.")
-        && !src.contains("getelementbyid")
-        && !src.contains("<div")
-        && !src.contains("createElement")
-}
+// Quality gates moved to gates.rs — no self-referencing tests.
