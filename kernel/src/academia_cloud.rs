@@ -78,7 +78,7 @@ pub struct CfPidPool {
 impl CfPidPool {
     pub fn new(total_papers: u64) -> Self {
         CfPidPool {
-            pid: PidController::new(1, 10000), // kp=0.1, ki=1000
+            pid: PidController::new_min_max(1, 10000), // kp=0.1, ki=1000
             spawner: DynamicSpawner::new(SpawnBatchConfig {
                 min_batch: 1, max_batch: 100,
                 max_swarm_total: MAX_WORKERS as usize,
@@ -185,7 +185,7 @@ impl CfPidPool {
             self.target_workers, active, idle,
             self.extracted as f64, self.total_papers as f64,
             remaining as f64, self.eta(),
-            self.pid.kp, self.pid.ki, self.pid.output
+            self.pid.kp(), self.pid.ki(), self.pid.output()
         )
     }
 }
@@ -230,7 +230,7 @@ mod tests {
     #[test]
     fn decommission_idle_workers() {
         let mut pool = CfPidPool::new(1000);
-        pool.pid = PidController::new(0, 0); // Disable PID → no new spawns
+        pool.pid = PidController::new_min_max(0, 0); // Disable PID → no new spawns
         pool.update(1_000_000);
         // PID disabled, so worker count should be minimal
         let before = pool.workers.len();

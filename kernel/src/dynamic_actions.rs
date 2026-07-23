@@ -254,7 +254,7 @@ impl DynamicActionBatcher {
     pub fn new(config: BatchConfig) -> Self {
         let max_per_worker = config.max_batch;
         DynamicActionBatcher {
-            pid: PidController::new(config.min_batch, config.max_batch),
+            pid: PidController::new_min_max(config.min_batch, config.max_batch),
             pool: WorkerPool::new(config.worker_count, max_per_worker),
             config,
             category_latencies: std::collections::HashMap::new(),
@@ -268,8 +268,9 @@ impl DynamicActionBatcher {
     }
 
     pub fn with_pid_tuning(config: BatchConfig, kp: f64, ki: f64, kd: f64) -> Self {
+        let (min_batch, max_batch) = (config.min_batch, config.max_batch);
         let mut b = Self::new(config);
-        b.pid.kp = kp; b.pid.ki = ki; b.pid.kd = kd;
+        b.pid = PidController::new(kp, ki, kd, min_batch as f64, max_batch as f64);
         b
     }
 
@@ -290,7 +291,7 @@ impl DynamicActionBatcher {
         // Rate limit.
         if now_us.saturating_sub(self.last_recompute_us) < self.config.min_recompute_interval_us && !tasks.is_empty() {
             return ExecutionPlan {
-                batches: Vec::new(), assignments: Vec::new(), pid_batch_size: self.pid.output,
+                batches: Vec::new(), assignments: Vec::new(),                 pid_batch_size: self.pid.output(),
                 total_actions: 0, predicted_total_us: 0, predicted_parallel_us: 0,
                 idle_workers: self.pool.len(), computed_us: now_us, from_cache: TriState::False,
             };
@@ -301,7 +302,7 @@ impl DynamicActionBatcher {
             return ExecutionPlan {
                 batches: Vec::new(),
                 assignments: self.pool.workers().iter().map(|w| (w.id, Vec::new())).collect(),
-                pid_batch_size: self.pid.output, total_actions: 0, predicted_total_us: 0,
+                pid_batch_size: self.pid.output(), total_actions: 0, predicted_total_us: 0,
                 predicted_parallel_us: 0, idle_workers: self.pool.len(), computed_us: now_us, from_cache: TriState::False,
             };
         }
@@ -388,8 +389,8 @@ impl DynamicActionBatcher {
         out.push_str("DynamicActionBatcher Dashboard\n");
         out.push_str(&format!("  Workers:     {} total, {} idle\n", p.len(), self.pool.workers().iter().filter(|w| w.idle == TriState::True).count()));
         out.push_str(&format!("  In-flight:   {}/{}\n", p.total_in_flight(), self.config.max_in_flight));
-        out.push_str(&format!("  PID output:  {:.2} (target={}us)\n", self.pid.output, self.config.target_batch_latency_us));
-        out.push_str(&format!("  Batch size:  {:.0} (min={} max={})\n", self.pid.output, self.config.min_batch, self.config.max_batch));
+        out.push_str(&format!("  PID output:  {:.2} (target={}us)\n", self.pid.output(), self.config.target_batch_latency_us));
+        out.push_str(&format!("  Batch size:  {:.0} (min={} max={})\n", self.pid.output(), self.config.min_batch, self.config.max_batch));
         out.push_str(&format!("  Avg latency: {:.0} us\n", p.avg_latency_us()));
         out.push_str(&format!("  Throughput:   {:.1} actions/sec\n", p.avg_throughput()));
         out.push_str(&format!("  Categories:  {}\n", self.category_latencies.len()));
@@ -409,7 +410,7 @@ impl DynamicActionBatcher {
 
     pub fn pool(&self) -> &WorkerPool { &self.pool }
     pub fn pool_mut(&mut self) -> &mut WorkerPool { &mut self.pool }
-    pub fn pid_output(&self) -> f64 { self.pid.output }
+    pub fn pid_output(&self) -> f64 { self.pid.output() }
     pub fn pid_recommended(&self) -> usize { self.pid.recommended() }
     pub fn config(&self) -> &BatchConfig { &self.config }
     pub fn cache(&self) -> &ActionCache { &self.cache }
@@ -557,9 +558,9 @@ mod tests {
     #[test]
     fn custom_pid_tuning() {
         let b = DynamicActionBatcher::with_pid_tuning(BatchConfig::default(), 2.0, 0.5, 0.1);
-        assert_eq!(b.pid.kp, 2.0);
-        assert_eq!(b.pid.ki, 0.5);
-        assert_eq!(b.pid.kd, 0.1);
+        assert_eq!(b.pid.kp(), 2.0);
+        assert_eq!(b.pid.ki(), 0.5);
+        assert_eq!(b.pid.kd(), 0.1);
     }
 
     #[test]

@@ -74,7 +74,7 @@ pub struct TensorStore {
 
 impl TensorStore {
     pub fn new() -> Self {
-        TensorStore { matrix: Vec::with_capacity(MAX_TENSOR_PAPERS), papers: Vec::with_capacity(MAX_TENSOR_PAPERS), hash_index: HashMap::new(), pid: PidController::new(1, 16) }
+        TensorStore { matrix: Vec::with_capacity(MAX_TENSOR_PAPERS), papers: Vec::with_capacity(MAX_TENSOR_PAPERS), hash_index: HashMap::new(), pid: PidController::new_min_max(1, 16) }
     }
 
     pub fn insert(&mut self, pv: PaperVector) -> bool {

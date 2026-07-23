@@ -292,11 +292,13 @@ mod tests {
     #[test]
     fn healthy_events_classified_healthy() {
         let p = TemporalPredictor::new();
-        // Non-periodic chain: edit → probe/run_ok → edit → probe/run_ok
-        // Breaking the perfect 2-cycle so the chain mixes
+        // Mixed chain: occasional self-loops on "edit" break the perfect
+        // 3-cycle (edit→probe→run_ok→edit), giving a positive spectral gap.
+        // A pure 3-cycle has |λ₂|=1.0 → gap=0.0 → classified as Diverging,
+        // so we add transitions that mix the chain.
         let events = vec![
-            "edit", "probe", "run_ok", "edit", "probe", "run_ok",
-            "edit", "probe", "run_ok", "edit",
+            "edit", "edit", "probe", "run_ok", "edit",
+            "probe", "run_ok", "edit", "probe", "run_ok",
         ];
         let report = p.predict_next(&events);
         // With 3 states and non-periodic transitions, the Markov verdict is Healthy

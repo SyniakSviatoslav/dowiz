@@ -220,7 +220,7 @@ pub struct DynamicSpawner {
 impl DynamicSpawner {
     pub fn new(config: SpawnBatchConfig) -> Self {
         DynamicSpawner {
-            pid: PidController::new(0, config.max_batch),
+            pid: PidController::new_min_max(0, config.max_batch),
             config,
             metrics: SpawnMetrics::new(),
             cache: SpawnCache::new(),
@@ -230,10 +230,9 @@ impl DynamicSpawner {
     }
 
     pub fn with_pid_tuning(config: SpawnBatchConfig, kp: f64, ki: f64, kd: f64) -> Self {
+        let (min_batch, max_batch) = (config.min_batch, config.max_batch);
         let mut spawner = Self::new(config);
-        spawner.pid.kp = kp;
-        spawner.pid.ki = ki;
-        spawner.pid.kd = kd;
+        spawner.pid = PidController::new(kp, ki, kd, min_batch as f64, max_batch as f64);
         spawner
     }
 
@@ -285,7 +284,7 @@ impl DynamicSpawner {
         let actual = pending_tasks as f64;
         let pid_output = self.pid.update(target, actual);
 
-        let reason = if pid_output > self.pid.output + 0.1 {
+        let reason = if pid_output > self.pid.output() + 0.1 {
             SpawnReason::PidIncrease
         } else if pid_output < self.pid.output - 0.1 {
             SpawnReason::PidDecrease
@@ -324,8 +323,8 @@ impl DynamicSpawner {
         out.push_str("DynamicSpawner Dashboard\n");
         out.push_str(&format!("  Agents:      {}/{}\n", m.active_agents, self.config.max_swarm_total));
         out.push_str(&format!("  Queue:       {} pending\n", m.queue_depth));
-        out.push_str(&format!("  PID output:  {:.2} (setpoint={})\n", self.pid.output, self.config.target_queue_depth));
-        out.push_str(&format!("  Batch size:  {:.0} (min={} max={})\n", self.pid.output, self.config.min_batch, self.config.max_batch));
+        out.push_str(&format!("  PID output:  {:.2} (setpoint={})\n", self.pid.output(), self.config.target_queue_depth));
+        out.push_str(&format!("  Batch size:  {:.0} (min={} max={})\n", self.pid.output(), self.config.min_batch, self.config.max_batch));
         out.push_str(&format!("  Spawned:     {} total, {} failures\n", m.total_spawned, m.total_failures));
         out.push_str(&format!("  Latency EMA: {:.0} us/agent\n", m.avg_latency_us));
         out.push_str(&format!("  Success:     {:.1}%\n", m.success_rate * 100.0));
@@ -335,7 +334,7 @@ impl DynamicSpawner {
     }
 
     pub fn metrics(&self) -> &SpawnMetrics { &self.metrics }
-    pub fn pid_output(&self) -> f64 { self.pid.output }
+    pub fn pid_output(&self) -> f64 { self.pid.output() }
     pub fn pid_recommended(&self) -> usize { self.pid.recommended() }
     pub fn config(&self) -> &SpawnBatchConfig { &self.config }
     pub fn cache(&self) -> &SpawnCache { &self.cache }
@@ -348,12 +347,12 @@ impl DynamicSpawner {
     }
 
     fn make_batch(&self, count: usize, reason: SpawnReason, now_us: u64) -> SpawnBatch {
-        let hash_input = [count as u8, reason as u8, (self.pid.output as u64).to_le_bytes()[0]];
+        let hash_input = [count as u8, reason as u8, (self.pid.output() as u64).to_le_bytes()[0]];
         let batch_hash = crate::event_log::sha3_256(&hash_input);
         SpawnBatch {
             count,
             skills: Vec::new(),
-            pid_output: self.pid.output,
+            pid_output: self.pid.output(),
             pid_setpoint: self.config.target_queue_depth as f64,
             reason,
             computed_us: now_us,
@@ -363,12 +362,12 @@ impl DynamicSpawner {
     }
 
     fn make_batch_cached(&self, count: usize, reason: SpawnReason, now_us: u64) -> SpawnBatch {
-        let hash_input = [count as u8, reason as u8, (self.pid.output as u64).to_le_bytes()[0]];
+        let hash_input = [count as u8, reason as u8, (self.pid.output() as u64).to_le_bytes()[0]];
         let batch_hash = crate::event_log::sha3_256(&hash_input);
         SpawnBatch {
             count,
             skills: Vec::new(),
-            pid_output: self.pid.output,
+            pid_output: self.pid.output(),
             pid_setpoint: self.config.target_queue_depth as f64,
             reason,
             computed_us: now_us,
@@ -517,9 +516,9 @@ mod tests {
     #[test]
     fn custom_pid_tuning_applied() {
         let s = DynamicSpawner::with_pid_tuning(SpawnBatchConfig::default(), 2.0, 0.5, 0.1);
-        assert_eq!(s.pid.kp, 2.0);
-        assert_eq!(s.pid.ki, 0.5);
-        assert_eq!(s.pid.kd, 0.1);
+        assert_eq!(s.pid.kp(), 2.0);
+        assert_eq!(s.pid.ki(), 0.5);
+        assert_eq!(s.pid.kd(), 0.1);
     }
 
     #[test]

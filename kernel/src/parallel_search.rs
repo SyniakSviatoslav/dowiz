@@ -204,7 +204,7 @@ pub struct ParallelSearchEngine {
 impl ParallelSearchEngine {
     pub fn new(config: SearchConfig) -> Self {
         ParallelSearchEngine {
-            pid: PidController::new(1, config.worker_count),
+            pid: PidController::new_min_max(1, config.worker_count),
             cache: SearchCache::new(64),
             config,
             weights: IndexWeights::default(),
@@ -348,7 +348,7 @@ impl ParallelSearchEngine {
     pub fn metrics(&self) -> &SearchMetrics { &self.metrics }
     pub fn cache(&self) -> &SearchCache { &self.cache }
     pub fn cache_mut(&mut self) -> &mut SearchCache { &mut self.cache }
-    pub fn pid_output(&self) -> f64 { self.pid.output }
+    pub fn pid_output(&self) -> f64 { self.pid.output() }
 }
 
 /// A search task for a single index.

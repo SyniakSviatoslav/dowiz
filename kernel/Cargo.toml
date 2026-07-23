@@ -130,6 +130,12 @@ breaker-testkit = []
 # pure `std`. Gated so its symbols never reach the shipping binary.
 pprof = []
 
+# `speculative` — BLUEPRINT-ITEM-28 academia_p2p fractal mesh (5224 lines of
+# speculative physics-inspired P2P design, Ukrainian comments, NOT connected to
+# the delivery mesh). OFF by default so the shipping binary carries ZERO of this
+# module. Only enable for research/exploration.
+speculative = []
+
 # `optical` — BLUEPRINT-ITEM-28 optical/pixel archival compression. OFF by default
 # so the canonical order/money core stays pure-`std` and dependency-free. Behind
 # this flag, `kernel/src/optical.rs` compiles a ZERO-DEP type `OpticalCompressed`

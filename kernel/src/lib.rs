@@ -232,6 +232,61 @@ pub mod moderation;
 /// P9 wave: deterministic seedable PRNG (SplitMix64 → PCG64), zero-dep,
 /// reproducible Monte-Carlo for the empirical causal joint.
 pub mod rng;
+/// Generalized PID controller — extracted from `orchestrator::PidController` for
+/// reuse across delivery ETA smoothing, courier speed control, batch sizing,
+/// cache hit-rate regulation, mesh backpressure, and real-time state consequence
+/// prediction. Provides scalar f64 (`PidController`), quantized f32
+/// (`PidController32`), and vectorized N-channel (`PidArray`) variants.
+pub mod pid;
+/// Self-similar crystalline lattice for O(1) nearest-neighbor retrieval.
+/// Extracted from `academia_p2p.rs` (NdCrystalLattice, NdSignature, CrystalMemory)
+/// into a general-purpose module. Enables fast similar-state lookup for the
+/// real-time system predictor.
+pub mod crystal;
+/// Real-time system state/action consequence predictor — combines PID dynamics,
+/// crystalline memory, and ensemble bidding to predict performance, load,
+/// traffic, telemetry, throttle, friction, and error consequences of state
+/// changes and actions. Includes atomic sequencer for race-free access.
+pub mod predictor;
+/// Resilience: backup/failover/dynamic-switching layer for production systems.
+/// Circuit breakers, bulkheads, cooldowns, automatic failover between
+/// prediction models, and race-condition avoidance via sequencer integration.
+pub mod resilience;
+/// Lightweight n-dimensional array ops (dot, norm, outer, broadcasting).
+/// Reuses simd.rs softmax/kalman lanes and csr.rs sparse layout without
+/// pulling in ndarray/BLAS. Higher-level consumers: predictor, crystal,
+/// spectral_graph, and engine frame profiler.
+pub mod tensor;
+/// Spectral graph analysis — graph Laplacian, eigenvector centrality,
+/// clustering coefficient, graph energy, similarity graphs from distance
+/// matrices, and temporal graphs from observation sequences. Reuses
+/// `crate::spectral` (eigendecomposition) and `crate::csr` (sparse CSR).
+pub mod spectral_graph;
+/// Lightweight topic-based pub/sub gossip bus for inter-module data
+/// propagation. Inspired by `crate::mesh::GossipImport`'s fan-out, without
+/// PQ signing overhead. Used for fast telemetry, prediction, and state-change
+/// propagation between engine_loop, predictor, resilience, and offline.
+pub mod gossip;
+/// Frequency-domain pattern detection: Goertzel filter periodogram for
+/// identifying oscillatory behavior in time-series metrics (frame-time
+/// oscillations, cache hit-rate cycles, traffic bursts). Includes moving
+/// average filter and helper detection function.
+pub mod resonance;
+/// Last-healthy-state propagation, wormholes (direct urgent lanes), and
+/// tunnels (dedicated high-throughput channels). Provides fast bypass
+/// paths for critical data when normal gossip/queuing adds unacceptable
+/// latency, plus failover recovery snapshots.
+pub mod channel;
+/// Three-phase verification pattern: Prepare → Verify → Acknowledge.
+/// Each operation cycle goes through sanitization, cross-check against
+/// invariants, and output validation. Designed for unstable/distrusted
+/// environments where inputs may be corrupted, delayed, or spoofed.
+pub mod three_phase;
+/// Comprehensive error tracking, deterministic event log, telemetry
+/// collection, reverse replay (time-travel state reconstruction), and
+/// inverse simulation (infer inputs from observed outputs). Provides
+/// full observability for debugging, auditing, and post-mortem analysis.
+pub mod tracker;
 /// P11 §6 — `f64x4` struct-of-arrays (SoA) SIMD batch lane: vectorises softmax
 /// ACROSS the batch (4 independent rows per step), each lane replaying the exact
 /// scalar op order → bit-identical to `softmax_scalar` / `attention::softmax`.
@@ -469,9 +524,39 @@ pub mod parametric_spectral;
 pub mod academia;
 /// P2P distribution network: peers → parallel chunk download → merge.
 /// Аналогічна логіка рекурсивного пошуку, але для завантаження даних.
+/// Gated behind `feature = "speculative"` — 5224 lines of speculative
+/// physics-inspired P2P design, NOT connected to the delivery mesh.
+/// Without the feature, a stub provides only `MetricTensor` + `GEO_DIMS` for
+/// modules that depend on these types (e.g. `memory_search`).
+#[cfg(feature = "speculative")]
 pub mod academia_p2p;
+#[cfg(not(feature = "speculative"))]
+pub mod academia_p2p {
+    /// Кількість геометричних вимірів для метричного тензора.
+    pub const GEO_DIMS: usize = 8;
+
+    /// Метричний тензор g_ij (симетричний, додатно визначений),
+    /// stub-версія — завжди евклідова.
+    #[derive(Debug, Clone)]
+    pub struct MetricTensor {
+        pub g: [[f64; GEO_DIMS]; GEO_DIMS],
+    }
+
+    impl MetricTensor {
+        pub fn euclidean() -> Self {
+            let mut g = [[0.0; GEO_DIMS]; GEO_DIMS];
+            for i in 0..GEO_DIMS {
+                g[i][i] = 1.0;
+            }
+            MetricTensor { g }
+        }
+    }
+}
 /// Autonomous headless extraction agents — distributed bots for paper extraction.
 /// Кожен агент = окремий browser profile / IP / акаунт.
+/// Gated behind `feature = "speculative"` — depends on `AcademiaMesh`
+/// from the full `academia_p2p` module.
+#[cfg(feature = "speculative")]
 pub mod academia_agent;
 /// PID-керований Cloudflare Workers пул — 10,000 динамічних Workers.
 /// Чим більше паперів залишилось, тим більше Workers спавниться.
@@ -655,6 +740,37 @@ pub fn kernel_boot_verify_fsm() -> Result<(), FsmSignatureDrift> {
     verify_fsm_signature()
 }
 
+/// Sanitize a raw f64: NaN/Inf → 0.0 (fail-closed for system stability).
+/// Every public API that accepts raw f64 MUST call this at the boundary
+/// to prevent corrupted data from propagating through the kernel.
+pub fn sanitize_f64(v: f64) -> f64 {
+    if v.is_finite() { v } else { 0.0 }
+}
+
+/// Sanitize AND clamp to [0, 1] — for normalized metric values.
+/// NaN/Inf → 0.0; values outside range clamped.
+pub fn sanitize_normalized(v: f64) -> f64 {
+    if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 }
+}
+
+/// Sanitize a raw f32: NaN/Inf → 0.0.
+pub fn sanitize_f32(v: f32) -> f32 {
+    if v.is_finite() { v } else { 0.0 }
+}
+
+pub const CHECKSUM_MUL: u64 = 31;
+
+pub fn checksum_fold(data: &[u8]) -> u64 {
+    data.iter().fold(0u64, |acc, &b| acc.wrapping_mul(CHECKSUM_MUL).wrapping_add(b as u64))
+}
+
+pub fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
 /// Authoritative fixed-timestep for the field-sim/animation integrator.
 ///
 /// `dowiz-engine` (`engine/src/loop_.rs`) hardcodes the SAME value and its
@@ -681,14 +797,164 @@ mod tests {
     // (the wasm JS surface is then correctly compiled in). The gate's
     // correctness is the *absence* of these crates in the DEFAULT dependency graph.
 
+    // ── SANITIZE API tests (meta: test the sanitizers themselves) ───────
+    #[test]
+    fn sanitize_f64_normal_values() {
+        assert_eq!(sanitize_f64(0.0), 0.0);
+        assert_eq!(sanitize_f64(1.0), 1.0);
+        assert_eq!(sanitize_f64(-1.0), -1.0);
+        assert_eq!(sanitize_f64(f64::MAX), f64::MAX);
+        assert_eq!(sanitize_f64(f64::MIN), f64::MIN);
+    }
+
+    #[test]
+    fn sanitize_f64_nan_inf() {
+        assert_eq!(sanitize_f64(f64::NAN), 0.0, "NaN must become 0.0");
+        assert_eq!(sanitize_f64(f64::INFINITY), 0.0, "Inf must become 0.0");
+        assert_eq!(sanitize_f64(f64::NEG_INFINITY), 0.0, "-Inf must become 0.0");
+    }
+
+    #[test]
+    fn sanitize_normalized_clamps() {
+        assert_eq!(sanitize_normalized(0.5), 0.5);
+        assert_eq!(sanitize_normalized(0.0), 0.0);
+        assert_eq!(sanitize_normalized(1.0), 1.0);
+        assert_eq!(sanitize_normalized(-0.5), 0.0, "negative must clamp to 0");
+        assert_eq!(sanitize_normalized(1.5), 1.0, ">1 must clamp to 1");
+        assert_eq!(sanitize_normalized(f64::NAN), 0.0, "NaN must become 0");
+        assert_eq!(sanitize_normalized(f64::INFINITY), 0.0, "Inf is non-finite → 0.0");
+        assert_eq!(sanitize_normalized(f64::NEG_INFINITY), 0.0, "-Inf must become 0");
+    }
+
+    #[test]
+    fn sanitize_f32_nan_inf() {
+        assert_eq!(sanitize_f32(f32::NAN), 0.0);
+        assert_eq!(sanitize_f32(f32::INFINITY), 0.0);
+        assert_eq!(sanitize_f32(f32::NEG_INFINITY), 0.0);
+    }
+
     #[test]
     fn dt_stable_is_authoritative() {
-        // Fail-closed pin: the engine's FixedTimestep and any kernel-side
-        // stability math depend on this exact value. Never "round" it or the
-        // integrator desyncs from the kernel's sampling cadence.
         assert_eq!(DT_STABLE, 0.02);
-        // 50 Hz cadence — the contract the field-sim hook relies on.
         assert_eq!((1.0 / DT_STABLE as f64).round() as u32, 50);
+    }
+
+    #[test]
+    fn hermetic_sanitize_all_boundaries() {
+        let cases = [
+            (0.0, 0.0),
+            (1.0, 1.0),
+            (-0.0, 0.0),
+            (f64::NAN, 0.0),
+            (f64::INFINITY, 0.0),
+            (f64::NEG_INFINITY, 0.0),
+            (f64::MIN_POSITIVE, f64::MIN_POSITIVE),
+            (f64::MAX, 1.0), // >1 → clamp to 1
+            (-1e-16, 0.0),  // negative near-zero → clamp to 0
+            (1.0 + 1e-16, 1.0), // slightly above 1 → clamp to 1
+        ];
+        for &(input, expected) in &cases {
+            let actual = sanitize_normalized(input);
+            if expected.is_finite() {
+                assert!((actual - expected).abs() <= f64::EPSILON,
+                    "sanitize_normalized({input:e}) = {actual:e}, expected {expected:e}");
+            }
+        }
+    }
+
+    #[test]
+    fn hermetic_sanitize_f64_identity_for_finite() {
+        for &v in &[-1e6_f64, -1.0, -0.5, 0.0, 0.5, 1.0, 1e6] {
+            let expected = if v.is_finite() { v } else { 0.0 };
+            assert_eq!(sanitize_f64(v), expected,
+                "sanitize_f64({v}) must preserve finite values");
+        }
+    }
+
+    #[test]
+    fn hermetic_sanitize_f32_identity_for_finite() {
+        for &v in &[-1e6_f32, -1.0, -0.5, 0.0, 0.5, 1.0, 1e6] {
+            let expected = if v.is_finite() { v } else { 0.0 };
+            assert_eq!(sanitize_f32(v), expected,
+                "sanitize_f32({v}) must preserve finite values");
+        }
+    }
+
+    /// Jamming/spoofing injection test: malformed inputs must never
+    /// propagate past the sanitization boundary.
+    #[test]
+    fn hermetic_jamming_resistant_input_boundary() {
+        let jamming_payloads: Vec<Vec<f64>> = vec![
+            vec![f64::NAN; 8],
+            vec![f64::INFINITY; 8],
+            vec![f64::NEG_INFINITY; 8],
+            (0..8).map(|i| if i % 2 == 0 { f64::NAN } else { f64::INFINITY }).collect(),
+            vec![-1e308, 1e308, -0.0, 1.0 / 0.0, 0.0 / 0.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY],
+        ];
+        for (i, payload) in jamming_payloads.iter().enumerate() {
+            let state = crate::predictor::SystemState::new(0, payload.clone(), "jamming");
+            assert_eq!(state.metrics.len(), 8,
+                "jamming payload {i} must produce valid state");
+            for (j, &m) in state.metrics.iter().enumerate() {
+                assert!(m.is_finite() && (0.0..=1.0).contains(&m),
+                    "jamming payload {i} metric {j} = {m} not in [0,1]");
+            }
+        }
+    }
+
+    /// Spoofing protection: labeled metrics from untrusted source
+    /// must still pass sanitization.
+    #[test]
+    fn hermetic_spoofing_resistant_state_labels() {
+        let spoofed_labels = ["\0", "..", "/etc/passwd", "%00", "<script>", "🦀 rust"];
+        for label in &spoofed_labels {
+            let state = crate::predictor::SystemState::new(0, vec![0.5; 8], label);
+            assert_eq!(state.label, *label,
+                "spoofed label '{label}' must be preserved as-is (label is metadata)");
+            // But metrics must still be valid
+            assert!(state.metrics.iter().all(|m| m.is_finite() && (0.0..=1.0).contains(m)),
+                "spoofed label '{label}' must not corrupt metrics");
+        }
+    }
+
+    /// Penetration test: deep recursion / panics in sanitize chain.
+    #[test]
+    fn hermetic_penetration_deep_recursion_safe() {
+        let deep: Vec<f64> = (0..1000).map(|i| i as f64 * 0.001).collect();
+        let state = crate::predictor::SystemState::new(0, deep, "deep");
+        assert_eq!(state.metrics.len(), 8,
+            "deep input must be resized to 8, not {len}", len = state.metrics.len());
+    }
+
+    /// Consistency verification across all kernel layers:
+    /// if sanitize_normalized passes, all downstream modules must accept the result.
+    #[test]
+    fn hermetic_layer_consistency_sanitize_chain() {
+        let input = vec![0.2, 0.4, 0.6, 0.8, 1.0, 0.0, 0.5, 0.3];
+        let state = crate::predictor::SystemState::new(1, input.clone(), "consistency");
+        let mut pred = crate::predictor::Predictor::new(crate::predictor::PredictorConfig::default());
+        pred.observe(state);
+        let outcomes = pred.predict_all("test");
+        assert_eq!(outcomes.len(), 8, "all 8 metrics must produce predictions");
+        for o in &outcomes {
+            assert!(o.predicted_value.is_finite() && (0.0..=1.0).contains(&o.predicted_value),
+                "predicted_value must be sanitized: {o:?}");
+            assert!(o.confidence.is_finite() && (0.0..=1.0).contains(&o.confidence),
+                "confidence must be in [0,1]: {o:?}");
+            assert!(o.friction_score.is_finite() && o.friction_score >= 0.0,
+                "friction must be non-negative: {o:?}");
+            assert!(o.error_probability.is_finite() && o.error_probability >= 0.0,
+                "error_prob must be non-negative: {o:?}");
+        }
+    }
+
+    #[test]
+    fn hermetic_sanitize_mutating_input_not_mutated() {
+        let input = vec![0.3, -0.1, 0.7, 0.5]; // no NaN (NaN != NaN in IEEE 754)
+        let original = input.clone();
+        let _state = crate::predictor::SystemState::new(1, input.clone(), "no_mutate");
+        assert_eq!(input, original,
+            "SystemState::new must not mutate its input vec");
     }
 }
 

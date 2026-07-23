@@ -63,86 +63,10 @@ impl ActionCategory {
 
 /// PID (Proportional-Integral-Derivative) controller for dynamic concurrency.
 ///
-/// Tracks the error signal (target_concurrency - actual_performance) and
-/// adjusts the concurrency limit to minimize latency while maximizing throughput.
-/// Inspired by TCP congestion control but applied to task dispatch.
-#[derive(Debug, Clone)]
-pub struct PidController {
-    /// Proportional gain (reacts to current error).
-    pub kp: f64,
-    /// Integral gain (reacts to accumulated error).
-    pub ki: f64,
-    /// Derivative gain (reacts to error rate of change).
-    pub kd: f64,
-    /// Accumulated integral term (clamped to prevent windup).
-    pub integral: f64,
-    /// Previous error (for derivative term).
-    pub prev_error: f64,
-    /// Current output: recommended concurrency.
-    pub output: f64,
-    /// Minimum allowed concurrency.
-    pub min_concurrency: f64,
-    /// Maximum allowed concurrency.
-    pub max_concurrency: f64,
-}
-
-impl PidController {
-    /// Create a new PID controller with standard tuning.
-    pub fn new(min: usize, max: usize) -> Self {
-        PidController {
-            // Conservative gains: kp dominant (react quickly), ki small (slow integral),
-            // kd moderate (dampen oscillations).
-            kp: 0.8,
-            ki: 0.1,
-            kd: 0.3,
-            integral: 0.0,
-            prev_error: 0.0,
-            output: max as f64,
-            min_concurrency: min as f64,
-            max_concurrency: max as f64,
-        }
-    }
-
-    /// Update the PID controller with a new measurement.
-    ///
-    /// `setpoint` = ideal metric (e.g. target latency or throughput).
-    /// `measurement` = actual metric.
-    /// Returns the new recommended concurrency.
-    pub fn update(&mut self, setpoint: f64, measurement: f64) -> f64 {
-        let error = setpoint - measurement;
-
-        // Proportional.
-        let p_term = self.kp * error;
-
-        // Integral with clamping (anti-windup).
-        self.integral += error;
-        let max_integral = self.max_concurrency / self.ki.max(0.001);
-        self.integral = self.integral.clamp(-max_integral, max_integral);
-        let i_term = self.ki * self.integral;
-
-        // Derivative.
-        let derivative = error - self.prev_error;
-        let d_term = self.kd * derivative;
-        self.prev_error = error;
-
-        // Combine and clamp.
-        self.output += p_term + i_term + d_term;
-        self.output = self.output.clamp(self.min_concurrency, self.max_concurrency);
-
-        self.output
-    }
-
-    /// Current recommended concurrency.
-    pub fn recommended(&self) -> usize {
-        self.output.round().max(1.0) as usize
-    }
-
-    /// Reset integral and derivative state.
-    pub fn reset(&mut self) {
-        self.integral = 0.0;
-        self.prev_error = 0.0;
-    }
-}
+/// Re-exported from `crate::pid::PidController` for backward compatibility.
+/// The generalized version lives in `pid.rs` and supports f64, f32, and
+/// vectorized batch variants.
+pub use crate::pid::PidController as PidController;
 
 // ─── Priority Scheduler ───────────────────────────────────────────────────
 
@@ -466,7 +390,7 @@ impl Orchestrator {
             health_signals: Vec::new(),
             active_tasks: 0,
             chain_hash: [0u8; 32],
-            pid: PidController::new(1, MAX_CONCURRENT),
+            pid: PidController::new_min_max(1, MAX_CONCURRENT),
             task_queue: Vec::new(),
             next_task_id: 1,
             prediction: PredictiveEngine::new(),
@@ -1194,13 +1118,13 @@ mod tests {
 
     #[test]
     fn pid_controller_initial_output_is_max() {
-        let pid = PidController::new(1, 8);
+        let pid = PidController::new_min_max(1, 8);
         assert_eq!(pid.recommended(), 8);
     }
 
     #[test]
     fn pid_controller_reduces_concurrency_on_high_latency() {
-        let mut pid = PidController::new(1, 8);
+        let mut pid = PidController::new_min_max(1, 8);
         // Target: 100us. Actual: 500us (too slow).
         for _ in 0..20 {
             pid.update(100.0, 500.0);
@@ -1211,7 +1135,7 @@ mod tests {
 
     #[test]
     fn pid_controller_increases_concurrency_on_low_latency() {
-        let mut pid = PidController::new(1, 8);
+        let mut pid = PidController::new_min_max(1, 8);
         // Start at min.
         pid.output = 2.0;
         // Target: 100us. Actual: 10us (very fast — can afford more).
@@ -1223,12 +1147,12 @@ mod tests {
 
     #[test]
     fn pid_controller_respects_bounds() {
-        let mut pid = PidController::new(2, 6);
+        let mut pid = PidController::new_min_max(2, 6);
         for _ in 0..100 {
             pid.update(100.0, 0.0); // should push up
         }
         assert!(pid.recommended() <= 6);
-        let mut pid2 = PidController::new(2, 6);
+        let mut pid2 = PidController::new_min_max(2, 6);
         for _ in 0..100 {
             pid2.update(100.0, 10000.0); // should push down
         }

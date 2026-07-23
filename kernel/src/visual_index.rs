@@ -71,7 +71,7 @@ impl IvfIndex {
             n_cells,
             embedding_dim,
             total_tiles: 0,
-            pid: PidController::new(1, 16),
+            pid: PidController::new_min_max(1, 16),
         }
     }
 

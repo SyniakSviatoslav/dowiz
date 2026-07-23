@@ -36,7 +36,7 @@ pub struct PhysicsEngine {
 impl PhysicsEngine {
     pub fn new() -> Self {
         PhysicsEngine {
-            pid: PidController::new(1, 100_000),
+            pid: PidController::new_min_max(1, 100_000),
             pipeline_depth: 10,
             fanout: 20,
             velocity: 0.0,
@@ -99,7 +99,7 @@ impl PhysicsEngine {
             "Physics Engine\n  Velocity:    {:.0} ops/s\n  Processed:   {}\n  Energy:      {:.1} op·s\n  FanOut:      {}×\n  Pipeline:    {} stages\n  PID target:  {} ops/s\n  PID output:  {:.0}",
             self.velocity, self.processed, self.energy,
             self.fanout, self.pipeline_depth,
-            1000, self.pid.output
+            1000, self.pid.output()
         )
     }
 }

@@ -148,7 +148,7 @@ impl AgcScheduler {
         AgcScheduler {
             tasks: Vec::with_capacity(max_tasks),
             max_tasks,
-            pid: PidController::new(1, MAX_TASKS),
+            pid: PidController::new_min_max(1, MAX_TASKS),
             total_scheduled: 0,
             total_shed: 0,
             total_checkpoints: 0,
@@ -325,7 +325,7 @@ impl AgcScheduler {
         out.push_str(&format!("  Shed:        {} (overload protection)\n", self.total_shed));
         out.push_str(&format!("  Checkpoints: {} created, {} restarts\n",
             self.total_checkpoints, self.total_restarts));
-        out.push_str(&format!("  PID output:  {:.0} concurrency\n", self.pid.output));
+        out.push_str(&format!("  PID output:  {:.0} concurrency\n", self.pid.output()));
         // Priority breakdown.
         out.push_str("  Priority:\n");
         for p in 0..=7 {

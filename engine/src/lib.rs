@@ -69,6 +69,16 @@ pub mod voice;
 #[cfg(feature = "a11y_native")]
 pub mod a11y_native;
 pub mod ranker_academia; // P-ranker-academia — Academy quark-ranker for Ambiguous intents (AI seam, never consequential)
+pub mod mode; // ModeController — Атмосфера / Справа, перемикання без втрати стану
+pub mod environment; // EnvironmentSensor — погода, батарея, connectivity → render deltas
+pub mod offline; // OfflineQueue — локальне чергування, GPU persist, offline resilience
+pub mod order_arc; // OrderArcSystem — discovery arcs для кожного етапу замовлення
+pub mod hooks; // PostOrderHooks — відгуки, підписки, хуки на фіналі арки
+pub mod geo_map; // MapEngine — гео-обчислення, tile cache, підготовка WGSL-даних
+pub mod oracle; // OracleSystem — dead reckoning + ETA для кур'єра
+pub mod route_cache; // RouteCache — прегенерація та локальний бекап маршрутів
+pub mod approach; // Approach — кути огляду для останньої милі
+pub mod satellite; // Satellite — відкриті супутникові дані
 pub mod vendor; // P-vendor — real Dubin & Sushi menu (replaces Pizza Roma demo)
 pub mod vendor_assets; // P-vendor-asset — every vendor URI + brand palette + font faces
 pub mod widget_store;

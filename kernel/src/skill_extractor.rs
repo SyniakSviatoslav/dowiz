@@ -137,7 +137,7 @@ pub struct SkillExtractor {
 impl SkillExtractor {
     pub fn new(config: ExtractionConfig) -> Self {
         SkillExtractor {
-            pid: PidController::new(1, config.parallel_workers),
+            pid: PidController::new_min_max(1, config.parallel_workers),
             config,
             cache: std::collections::HashMap::new(),
         }
@@ -204,7 +204,7 @@ impl SkillExtractor {
     }
 
     /// PID output for parallel extraction tuning.
-    pub fn pid_output(&self) -> f64 { self.pid.output }
+    pub fn pid_output(&self) -> f64 { self.pid.output() }
     pub fn config(&self) -> &ExtractionConfig { &self.config }
 }
 
