@@ -300,6 +300,10 @@ pub static PATTERN_TREE: &[PatternNode] = &[
     // ── Cross-links: structure → process ──────────────────────────────────
     // ── DOMAIN: code (index 11-16) — inherits universals 0-4 ──────────────
     PatternNode { name: "code-core", category: "process", rule: "Follow repo conventions. Match existing patterns. Use existing primitives before adding deps.", children: &[12,13,19,20,21], cross_links: &[3] },
+    // SAFETY: this is a documentation-only reference to the concept of `unsafe`
+    // blocks, not a call into unsafe code. The word appears inside a string
+    // literal as a pattern-rule description for code-security best practices.
+    // No actual unsafe block or fn exists in this module.
     PatternNode { name: "code-security", category: "safety", rule: "Input validation on all public APIs. Sanitize f64: NaN→0.0. Bounds-check indices. No unsafe without SAFETY comment.", children: &[], cross_links: &[1,7] },
     PatternNode { name: "code-crypto", category: "safety", rule: "Never fake crypto. Real KAT-gated primitives only. No classical fallback for PQ.", children: &[], cross_links: &[1] },
     // ── idempotency children ──────────────────────────────────────────────

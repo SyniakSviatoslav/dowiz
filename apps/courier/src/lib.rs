@@ -36,3 +36,212 @@ pub use render::*;
 pub use surface::*;
 pub use types::*;
 pub use voice::*;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ME: CourierKey = [0u8; 32];
+    const OTHER: CourierKey = [1u8; 32];
+
+    #[test]
+    fn dispatch_session_offer_and_accept() {
+        let mut s = DispatchSession::new();
+        s.offer(ME, 100);
+        assert!(s.live_offer().is_some());
+        assert_eq!(s.live_offer().unwrap().courier, ME);
+        let events = s.tick(accept_input(ME), &[], 105);
+        assert!(events.iter().any(|e| matches!(e, DispatchEvent::Assigned { courier } if *courier == ME)));
+        assert_eq!(s.assigned(), Some(ME));
+    }
+
+    #[test]
+    fn dispatch_session_timed_out() {
+        let mut s = DispatchSession::new();
+        s.offer(ME, 100);
+        let events = s.tick(DispatchInput::Tick, &[], 200);
+        assert!(events.iter().any(|e| matches!(e, DispatchEvent::Advanced { .. })));
+        assert!(s.live_offer().is_none());
+    }
+
+    #[test]
+    fn dispatch_session_stale_accept_after_deadline() {
+        let mut s = DispatchSession::new();
+        s.offer(ME, 100);
+        let events = s.tick(accept_input(ME), &[], 200);
+        assert!(events.iter().any(|e| matches!(e, DispatchEvent::StaleAccept { .. })));
+        assert!(s.assigned().is_none());
+    }
+
+    #[test]
+    fn dispatch_session_decline_and_requeue() {
+        let mut s = DispatchSession::new();
+        s.offer(ME, 100);
+        let events = s.tick(decline_input(ME), &[], 105);
+        assert!(events.iter().any(|e| matches!(e, DispatchEvent::Advanced { .. })));
+        assert!(events.iter().any(|e| matches!(e, DispatchEvent::Requeued)));
+    }
+
+    #[test]
+    fn surface_new_is_idle() {
+        let surface = CourierSurface::new(ME);
+        assert!(matches!(surface.state, SurfaceOfferState::Idle));
+    }
+
+    #[test]
+    fn surface_on_offered_goes_live() {
+        let mut surface = CourierSurface::new(ME);
+        let consumed = surface.on_event(&DispatchEvent::Offered {
+            courier: ME,
+            deadline_ts: 200,
+        });
+        assert_eq!(consumed.len(), 1);
+        assert!(matches!(surface.state, SurfaceOfferState::Live { .. }));
+    }
+
+    #[test]
+    fn surface_accept_only_from_live() {
+        let mut surface = CourierSurface::new(ME);
+        assert!(surface.emit_accept().is_none());
+        surface.on_event(&DispatchEvent::Offered { courier: ME, deadline_ts: 200 });
+        let frame = surface.emit_accept();
+        assert!(frame.is_some());
+        assert_eq!(frame.unwrap().kind, DispatchInputKind::Accept);
+        assert!(surface.emit_accept().is_none());
+    }
+
+    #[test]
+    fn surface_decline_only_from_live() {
+        let mut surface = CourierSurface::new(ME);
+        assert!(surface.emit_decline().is_none());
+        surface.on_event(&DispatchEvent::Offered { courier: ME, deadline_ts: 200 });
+        let frame = surface.emit_decline();
+        assert!(frame.is_some());
+        assert_eq!(frame.unwrap().kind, DispatchInputKind::Decline);
+    }
+
+    #[test]
+    fn surface_ignores_other_courier_events() {
+        let mut surface = CourierSurface::new(ME);
+        let consumed = surface.on_event(&DispatchEvent::Offered {
+            courier: OTHER,
+            deadline_ts: 200,
+        });
+        assert!(consumed.is_empty());
+        assert!(matches!(surface.state, SurfaceOfferState::Idle));
+    }
+
+    #[test]
+    fn surface_assigned_creates_run() {
+        let mut surface = CourierSurface::new(ME);
+        surface.on_event(&DispatchEvent::Offered { courier: ME, deadline_ts: 200 });
+        let consumed = surface.on_event(&DispatchEvent::Assigned { courier: ME });
+        assert_eq!(consumed.len(), 1);
+        assert!(matches!(surface.state, SurfaceOfferState::Accepted { .. }));
+    }
+
+    #[test]
+    fn voice_classify_accept() {
+        let phrase = VoicePhrase { transcript: "accept".into(), confidence: 1.0, is_final: true };
+        assert_eq!(classify(&phrase), Classification::Resolved(Intent::Command));
+    }
+
+    #[test]
+    fn voice_classify_decline() {
+        let phrase = VoicePhrase { transcript: "decline".into(), confidence: 1.0, is_final: true };
+        assert_eq!(classify(&phrase), Classification::Resolved(Intent::Command));
+    }
+
+    #[test]
+    fn voice_classify_navigate() {
+        let phrase = VoicePhrase { transcript: "navigate".into(), confidence: 1.0, is_final: true };
+        assert_eq!(classify(&phrase), Classification::Resolved(Intent::Navigate));
+    }
+
+    #[test]
+    fn voice_classify_ambiguous_rejected() {
+        let phrase = VoicePhrase { transcript: "accept navigate".into(), confidence: 1.0, is_final: true };
+        assert_eq!(classify(&phrase), Classification::Rejected);
+    }
+
+    #[test]
+    fn voice_classify_low_confidence_rejected() {
+        let phrase = VoicePhrase { transcript: "accept".into(), confidence: 0.3, is_final: true };
+        assert_eq!(classify(&phrase), Classification::Rejected);
+    }
+
+    #[test]
+    fn voice_classify_not_final_rejected() {
+        let phrase = VoicePhrase { transcript: "accept".into(), confidence: 0.9, is_final: false };
+        assert_eq!(classify(&phrase), Classification::Rejected);
+    }
+
+    #[test]
+    fn voice_urgency_rises_to_deadline() {
+        let far = offer_urgency(100, 200);
+        assert_eq!(far.stake, 0.0);
+        let near = offer_urgency(195, 200);
+        assert!(near.stake > 0.0);
+        let at = offer_urgency(200, 200);
+        assert!((at.stake - 1.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn voice_ai_mode_off_works() {
+        assert!(voice_works_without_ai(AiMode::Off));
+        assert!(voice_works_without_ai(AiMode::On));
+    }
+
+    #[test]
+    fn battery_gate_blocked_is_owed() {
+        assert_eq!(evaluate_battery_gate(&default_sp5_verdict()), BatteryGate::Owed);
+    }
+
+    #[test]
+    fn battery_gate_emulator_rejected() {
+        let v = VerdictRecord::Confirms {
+            hw: HwClass::Emulator,
+            shift_hours: 6.0,
+            settled_drain_pct_hr: 2.0,
+            settle_saving_pct: 50.0,
+            thermal_sustain_ms: 30.0,
+        };
+        assert_eq!(evaluate_battery_gate(&v), BatteryGate::RejectedEmulator);
+    }
+
+    #[test]
+    fn battery_gate_measured_pass() {
+        let v = VerdictRecord::Confirms {
+            hw: HwClass::BudgetAndroid,
+            shift_hours: 6.0,
+            settled_drain_pct_hr: 2.0,
+            settle_saving_pct: 50.0,
+            thermal_sustain_ms: 30.0,
+        };
+        assert_eq!(evaluate_battery_gate(&v), BatteryGate::Pass);
+    }
+
+    #[test]
+    fn battery_gate_fails_high_drain() {
+        let v = VerdictRecord::Confirms {
+            hw: HwClass::BudgetAndroid,
+            shift_hours: 6.0,
+            settled_drain_pct_hr: 10.0,
+            settle_saving_pct: 50.0,
+            thermal_sustain_ms: 30.0,
+        };
+        assert_eq!(evaluate_battery_gate(&v), BatteryGate::Fail("settled_drain"));
+    }
+
+    #[test]
+    fn render_no_dom_gate() {
+        assert!(no_visible_dom_widget(include_str!("lib.rs")));
+        assert!(no_visible_dom_widget(include_str!("render.rs")));
+    }
+
+    #[test]
+    fn render_no_routing_gate() {
+        assert!(no_routing_code(include_str!("render.rs")));
+        assert!(no_routing_code(include_str!("surface.rs")));
+    }
+}
