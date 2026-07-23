@@ -44,6 +44,26 @@ pub const METRIC_NAMES: &[&str] = &[
     "throttle_level",
 ];
 
+pub const PREDICTOR_PID_KP: f64 = 0.6;
+pub const PREDICTOR_PID_KI: f64 = 0.15;
+pub const PREDICTOR_PID_KD: f64 = 0.2;
+pub const PREDICTOR_PID_MIN: f64 = 0.0;
+pub const PREDICTOR_PID_MAX: f64 = 1.0;
+pub const PREDICTOR_CRYSTAL_CAPACITY: usize = 10000;
+pub const PREDICTOR_K_SIMILAR: usize = 5;
+pub const PREDICTOR_MIN_CONFIDENCE: f64 = 0.3;
+pub const PREDICTOR_DEFAULT_HISTORY_CAP: usize = 1000;
+pub const PREDICTOR_MAX_HISTORY: usize = 10000;
+pub const PREDICTOR_BID_FRICTION_WEIGHT: f64 = 0.3;
+pub const PREDICTOR_DEGRADED_CONFIDENCE: f64 = 0.2;
+pub const PREDICTOR_NORMAL_CONFIDENCE: f64 = 0.6;
+pub const PREDICTOR_THROTTLE_LOW: f64 = 0.8;
+pub const PREDICTOR_THROTTLE_HIGH: f64 = 0.95;
+pub const PREDICTOR_SIM_HIGH_LATENCY: f64 = 1000.0;
+pub const PREDICTOR_SIM_HIGH_ERROR: f64 = 0.5;
+pub const PREDICTOR_SIM_THROTTLE_LATENCY: f64 = 500.0;
+pub const PREDICTOR_SIM_THROTTLE_ERROR: f64 = 0.3;
+
 // ─── SystemState ──────────────────────────────────────────────────────────
 
 /// A snapshot of system metrics at a moment in time.
@@ -200,10 +220,10 @@ impl Default for PredictorConfig {
     fn default() -> Self {
         PredictorConfig {
             n_metrics: DEFAULT_N_METRICS,
-            pid_config: PidConfig::new(0.6, 0.15, 0.2, 0.0, 1.0),
-            crystal_capacity: 10000,
-            k_similar: 5,
-            min_confidence: 0.3,
+            pid_config: PidConfig::new(PREDICTOR_PID_KP, PREDICTOR_PID_KI, PREDICTOR_PID_KD, PREDICTOR_PID_MIN, PREDICTOR_PID_MAX),
+            crystal_capacity: PREDICTOR_CRYSTAL_CAPACITY,
+            k_similar: PREDICTOR_K_SIMILAR,
+            min_confidence: PREDICTOR_MIN_CONFIDENCE,
             use_ensemble: true,
         }
     }
@@ -265,7 +285,7 @@ impl Predictor {
             pid,
             config,
             current_state: None,
-            history: Vec::with_capacity(1000),
+            history: Vec::with_capacity(PREDICTOR_DEFAULT_HISTORY_CAP),
             sequencer: AtomicU64::new(1),
             degraded: false,
         }
@@ -305,11 +325,18 @@ impl Predictor {
 
         // Store in history (bounded).
         self.history.push(state.clone());
-        if self.history.len() > 10000 {
+        if self.history.len() > PREDICTOR_MAX_HISTORY {
             self.history.remove(0);
         }
 
         self.current_state = Some(state);
+    }
+
+    /// Observe a batch of system states in sequence.
+    pub fn observe_batch(&mut self, states: &[SystemState]) {
+        for state in states {
+            self.observe(state.clone());
+        }
     }
 
     /// Predict consequences of an action on a specific metric.
@@ -335,15 +362,15 @@ impl Predictor {
             let pid_output = self.pid.output(metric_idx);
             // PID predicts where the metric is heading based on recent dynamics.
             let predicted = (pid_output + current_val * 0.5).min(1.0);
-            let confidence = if self.degraded { 0.2 } else { 0.6 };
-            let throttle = if predicted > 0.8 { 1 } else if predicted > 0.95 { 2 } else { 0 };
+            let confidence = if self.degraded { PREDICTOR_DEGRADED_CONFIDENCE } else { PREDICTOR_NORMAL_CONFIDENCE };
+            let throttle = if predicted > PREDICTOR_THROTTLE_LOW { 1 } else if predicted > PREDICTOR_THROTTLE_HIGH { 2 } else { 0 };
             bids.push(PredictionBid {
                 metric_index: metric_idx,
                 predicted_value: predicted,
                 confidence,
                 model: "pid",
                 throttle,
-                friction: predicted * 0.3,
+                friction: predicted * PREDICTOR_BID_FRICTION_WEIGHT,
                 error_prob: if predicted > 0.9 { predicted * 0.5 } else { predicted * 0.1 },
             });
         }
@@ -404,7 +431,7 @@ impl Predictor {
                 else if history_samples.len() >= 3 { 0.3 }
                 else { 0.1 };
 
-            let throttle = if trend_pred > 0.8 { 1 } else { 0 };
+            let throttle = if trend_pred > PREDICTOR_THROTTLE_LOW { 1 } else { 0 };
             bids.push(PredictionBid {
                 metric_index: metric_idx,
                 predicted_value: trend_pred,
@@ -412,14 +439,14 @@ impl Predictor {
                 model: "trend",
                 throttle,
                 friction: trend_pred * 0.35,
-                error_prob: if trend_pred > 0.95 { 0.8 } else { trend_pred * 0.12 },
+                error_prob: if trend_pred > PREDICTOR_THROTTLE_HIGH { 0.8 } else { trend_pred * 0.12 },
             });
         }
 
         // ── Degraded mode: cap all model confidences ──────────────────────
         if self.degraded {
             for bid in &mut bids {
-                bid.confidence = bid.confidence.min(0.6);
+                bid.confidence = bid.confidence.min(PREDICTOR_NORMAL_CONFIDENCE);
             }
         }
 
@@ -431,7 +458,7 @@ impl Predictor {
         let outcomes: Vec<PredictedOutcome> = bids.into_iter()
             .filter(|b| b.confidence >= self.config.min_confidence)
             .map(|b| {
-                let warning = b.error_prob > 0.5 || b.throttle >= 2 || b.predicted_value > 0.95;
+                let warning = b.error_prob > PREDICTOR_SIM_HIGH_ERROR || b.throttle >= 2 || b.predicted_value > PREDICTOR_THROTTLE_HIGH;
                 PredictedOutcome {
                     metric_index: b.metric_index,
                     metric_name: metric_name.clone(),
@@ -665,7 +692,7 @@ impl EventSimulator {
         for route in &self.routes {
             let latency = route.estimated_latency(event);
             let error_prob = route.error_probability(event);
-            let will_throttle = error_prob > 0.3 || latency > 500.0;
+            let will_throttle = error_prob > PREDICTOR_SIM_THROTTLE_ERROR || latency > PREDICTOR_SIM_THROTTLE_LATENCY;
 
             // Predict system response to this dispatch.
             let metric_name = match event.priority {
@@ -690,9 +717,9 @@ impl EventSimulator {
 
             let warning = if will_throttle {
                 format!("THROTTLE: {} exceeds safe threshold", route.name)
-            } else if error_prob > 0.5 {
+            } else if error_prob > PREDICTOR_SIM_HIGH_ERROR {
                 format!("HIGH_ERROR: {} unreliable ({:.0}%)", route.name, error_prob * 100.0)
-            } else if latency > 1000.0 {
+            } else if latency > PREDICTOR_SIM_HIGH_LATENCY {
                 format!("HIGH_LATENCY: {} too slow ({:.0}ms)", route.name, latency)
             } else {
                 String::new()

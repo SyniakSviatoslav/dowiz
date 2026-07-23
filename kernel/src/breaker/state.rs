@@ -12,6 +12,8 @@
 use crate::breaker::signal::SignalVector;
 use crate::breaker::thresholds::{SignalWeights, ThresholdId};
 
+pub const COOLDOWN_MULTIPLIER: u32 = 2;
+
 /// The four breaker states. **No `Ord`** — severity ordering is intentionally
 /// unrepresentable (you cannot write `Killed > Open` meaningfully; the routing
 /// discipline must come from `step`, not a total order).
@@ -247,7 +249,7 @@ pub fn cooldown_tick(rec: BreakerRecord) -> BreakerRecord {
 /// `checked_mul(2).map_or(cap, |v| v.min(cap))`. The native-exhaustive proof
 /// (`proof_cooldown_doubling_no_overflow`) asserts no reachable value overflows.
 pub fn checked_double_cap(cooldown_ticks: u32, cap: u32) -> u32 {
-    cooldown_ticks.checked_mul(2).map_or(cap, |v| v.min(cap))
+    cooldown_ticks.checked_mul(COOLDOWN_MULTIPLIER).map_or(cap, |v| v.min(cap))
 }
 
 /// **Manual reset for a non-red-line Killed record.** Provisions a FRESH

@@ -8,6 +8,8 @@
 //!
 //! Pure `std`, zero external dependencies.
 
+pub const EPSILON: f32 = 1e-6;
+
 /// A failed threshold fit (degenerate / empty labeled ROC, or an unmet FPR budget).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FitError {
@@ -191,7 +193,7 @@ pub fn fit_from_rates(
 
     // θ_kill = largest t meeting a 10× stricter budget (the kill threshold is
     // more conservative than the open threshold).
-    let kill_budget = (fpr_budget / 10.0).max(1e-6);
+    let kill_budget = (fpr_budget / 10.0).max(EPSILON);
     let mut theta_kill = None;
     for &t in &scores {
         if fpr_at(t) <= kill_budget {
@@ -247,7 +249,7 @@ pub fn fit_weights(stats: &[ComponentStats; 6]) -> SignalWeights {
     let raw: [f32; 6] = std::array::from_fn(|i| {
         let s = stats[i];
         let sep = (s.mean_anom - s.mean_clean).abs();
-        let spread = (s.var_clean + s.var_anom).max(1e-6);
+        let spread = (s.var_clean + s.var_anom).max(EPSILON);
         sep / spread
     });
     let sum: f32 = raw.iter().sum();

@@ -30,6 +30,12 @@
 
 use crate::TriState;
 
+pub const FALLBACK_DEFAULT_TIMEOUT_MS: u64 = 30_000;
+pub const FALLBACK_DEFAULT_MAX_RETRIES: u32 = 2;
+pub const FALLBACK_CONSECUTIVE_FAIL_LIMIT: u32 = 3;
+pub const FALLBACK_AVAILABILITY_FAIL_LIMIT: u32 = 5;
+pub const FALLBACK_EWMA_ALPHA: f64 = 0.9;
+
 // ─── Provider Kind ────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -139,8 +145,8 @@ impl ProviderInstance {
             base_url: kind.default_base_url().to_string(),
             api_key: None,
             model_override: None,
-            timeout_ms: 30_000,
-            max_retries: 2,
+            timeout_ms: FALLBACK_DEFAULT_TIMEOUT_MS,
+            max_retries: FALLBACK_DEFAULT_MAX_RETRIES,
             priority: kind.cost_rank() as u32,
             available: TriState::Unknown,
             avg_latency_ms: 0.0,
@@ -151,7 +157,7 @@ impl ProviderInstance {
     /// Mark as failed, increase failure count.
     pub fn record_failure(&mut self) {
         self.consecutive_failures = self.consecutive_failures.saturating_add(1);
-        if self.consecutive_failures >= 3 {
+        if self.consecutive_failures >= FALLBACK_CONSECUTIVE_FAIL_LIMIT {
             self.available = TriState::False;
         }
     }
@@ -163,12 +169,12 @@ impl ProviderInstance {
         self.avg_latency_ms = if self.avg_latency_ms == 0.0 {
             latency_ms
         } else {
-            self.avg_latency_ms * 0.9 + latency_ms * 0.1
+            self.avg_latency_ms * FALLBACK_EWMA_ALPHA + latency_ms * (1.0 - FALLBACK_EWMA_ALPHA)
         };
     }
 
     pub fn is_available(&self) -> TriState {
-        if self.consecutive_failures >= 5 { TriState::False }
+        if self.consecutive_failures >= FALLBACK_AVAILABILITY_FAIL_LIMIT { TriState::False }
         else { self.available }
     }
 }

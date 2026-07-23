@@ -12,6 +12,11 @@
 
 use std::fmt::Debug;
 
+pub const LLM_DEFAULT_TEMPERATURE: f64 = 0.0;
+pub const LLM_DEFAULT_TOP_P: f64 = 1.0;
+pub const LLM_DEFAULT_MAX_TOKENS: u32 = 1024;
+pub const LLM_DEFAULT_BASE_URL: &str = "http://127.0.0.1:11434";
+
 /// Fail-closed feature discovery for a backend. A capability the backend does not expose is `false`;
 /// the caller must NOT assume presence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -68,9 +73,9 @@ impl Default for ChatRequest {
         ChatRequest {
             model_id: String::new(),
             messages: Vec::new(),
-            temperature: 0.0,
-            top_p: 1.0,
-            max_tokens: 1024,
+            temperature: LLM_DEFAULT_TEMPERATURE as f32,
+            top_p: LLM_DEFAULT_TOP_P as f32,
+            max_tokens: LLM_DEFAULT_MAX_TOKENS,
             seed: None,
             task_class: TaskClass::General,
             cache_policy: CachePolicy::Exact,
@@ -312,7 +317,7 @@ impl BackendConfig {
                 // a non-loopback "local" is a lie the type refuses.
                 let base = read("DOWIZ_LLM_BASE_URL")
                     .filter(|s| !s.is_empty())
-                    .unwrap_or_else(|| "http://127.0.0.1:11434".to_string());
+                    .unwrap_or_else(|| LLM_DEFAULT_BASE_URL.to_string());
                 if !is_loopback(&base) {
                     return Err(ConfigError::NonLoopbackLocal(base));
                 }

@@ -25,6 +25,10 @@
 use crate::predictor::PredictedOutcome;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+pub const RESILIENCE_DEFAULT_COOLDOWN_MS: u64 = 5000;
+pub const RESILIENCE_DEFAULT_MAX_FAILURES: u32 = 3;
+pub const RESILIENCE_BACKUP_CAPACITY: usize = 100;
+
 // ─── DegradationLevel ─────────────────────────────────────────────────────
 
 /// How degraded the system is, based on predictor signals.
@@ -121,8 +125,8 @@ impl Default for ResiliencePolicy {
             strategy_critical: FailoverStrategy::StaticFallback,
             strategy_failed: FailoverStrategy::StaticFallback,
             use_circuit_breaker: true,
-            cooldown_ms: 5000,
-            max_consecutive_failures: 3,
+            cooldown_ms: RESILIENCE_DEFAULT_COOLDOWN_MS,
+            max_consecutive_failures: RESILIENCE_DEFAULT_MAX_FAILURES,
         }
     }
 }
@@ -139,24 +143,22 @@ pub struct BackupState {
     pub checksum: u64,
 }
 
+fn backup_checksum(metrics: &[f64]) -> u64 {
+    metrics.iter().fold(0u64, |acc, &m| acc.wrapping_add(m.to_bits()))
+}
+
 impl BackupState {
     pub fn new(metrics: Vec<f64>, label: &str) -> Self {
-        let ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let ts = crate::now_ms();
         let id = ts;
         // Sanitize all metrics: NaN/Inf → 0.0 so corrupted data never enters backups
         let metrics: Vec<f64> = metrics.into_iter().map(crate::sanitize_f64).collect();
-        let checksum = metrics.iter()
-            .fold(0u64, |acc, &m| acc.wrapping_add(m.to_bits()));
+        let checksum = backup_checksum(&metrics);
         BackupState { id, timestamp_ms: ts, metrics, label: label.to_string(), checksum }
     }
 
     pub fn verify(&self) -> bool {
-        let computed = self.metrics.iter()
-            .fold(0u64, |acc, &m| acc.wrapping_add(m.to_bits()));
-        computed == self.checksum
+        backup_checksum(&self.metrics) == self.checksum
     }
 }
 
@@ -218,7 +220,7 @@ pub struct ResilienceManager {
 impl ResilienceManager {
     pub fn new(policy: ResiliencePolicy) -> Self {
         ResilienceManager {
-            backups: BackupStore::new(100),
+            backups: BackupStore::new(RESILIENCE_BACKUP_CAPACITY),
             level: DegradationLevel::Normal,
             active_strategy: FailoverStrategy::EnsembleReduced,
             policy,
@@ -322,10 +324,7 @@ impl ResilienceManager {
 
     /// Record a failover event.
     pub fn record_failover(&mut self) {
-        self.last_failover_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        self.last_failover_ms = crate::now_ms();
     }
 
     /// Get the latest verified backup.
@@ -436,10 +435,7 @@ mod tests {
         let mut mgr = ResilienceManager::new(ResiliencePolicy::default());
         mgr.record_outcome(0.8, 0.7, 0.8); // Critical
         mgr.record_failover();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = crate::now_ms();
         // Should not recover immediately (cooldown_ms = 5000)
         assert!(!mgr.should_recover(now));
         // After cooldown + no failures
@@ -585,8 +581,7 @@ mod tests {
         assert!(mgr.should_open_circuit());
         mgr.record_failover();
         std::thread::sleep(std::time::Duration::from_millis(5));
-        assert!(mgr.should_recover(std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64),
+        assert!(mgr.should_recover(crate::now_ms()),
             "must allow recovery after cooldown");
     }
 
@@ -706,10 +701,7 @@ mod tests {
             mgr.record_outcome(0.99, 0.99, 0.99);
         }
         mgr.record_failover();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = crate::now_ms();
         assert!(mgr.should_recover(now + 100),
             "must allow recovery after 100ms (> 1ms cooldown)");
     }
@@ -724,10 +716,7 @@ mod tests {
             mgr.record_outcome(0.99, 0.99, 0.99);
         }
         mgr.record_failover();
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let now = crate::now_ms();
         // Should not recover immediately
         assert!(!mgr.should_recover(now),
             "must NOT recover immediately after failover");

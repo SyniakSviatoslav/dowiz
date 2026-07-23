@@ -25,6 +25,8 @@
 
 use std::collections::{HashMap, VecDeque};
 
+pub const GOSSIP_MAX_QUEUE: usize = 1000;
+
 /// A message topic in the gossip bus.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum GossipTopic {
@@ -69,10 +71,7 @@ pub struct GossipMessage {
 
 impl GossipMessage {
     pub fn new(topic: GossipTopic, payload: Vec<u8>, seq: u64) -> Self {
-        let ts = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_millis() as u64;
+        let ts = crate::now_ms();
         GossipMessage { topic, payload, timestamp_ms: ts, seq }
     }
 
@@ -143,7 +142,7 @@ impl GossipBus {
                 if let Some(queue) = self.queues.get_mut(&sid) {
                     queue.push_back(msg.clone());
                     // Bound queue size
-                    if queue.len() > 1000 {
+                    if queue.len() > GOSSIP_MAX_QUEUE {
                         queue.pop_front();
                     }
                 }

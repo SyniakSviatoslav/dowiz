@@ -15,6 +15,8 @@
 //! assert!(output > 0.0);
 //! ```
 
+const KI_EPSILON: f64 = 0.001;
+
 /// PID gains and limits (f64, full precision).
 #[derive(Debug, Clone, Copy)]
 pub struct PidConfig {
@@ -70,6 +72,68 @@ impl Default for PidConfig32 {
     fn default() -> Self {
         PidConfig32 { kp: 0.8, ki: 0.1, kd: 0.3, min: 1.0, max: 100.0 }
     }
+}
+
+fn pid_step_f64(
+    setpoint: f64,
+    measurement: f64,
+    kp: f64,
+    ki: f64,
+    kd: f64,
+    min: f64,
+    max: f64,
+    integral: &mut f64,
+    prev_error: &mut f64,
+    output: f64,
+) -> f64 {
+    let sp = crate::sanitize_f64(setpoint);
+    let mv = crate::sanitize_f64(measurement);
+    let error = sp - mv;
+    let p_term = kp * error;
+    *integral += error;
+    let max_i = max / ki.max(KI_EPSILON);
+    *integral = integral.clamp(-max_i, max_i);
+    let i_term = ki * *integral;
+    let derivative = error - *prev_error;
+    let d_term = kd * derivative;
+    *prev_error = error;
+    let mut out = output + p_term + i_term + d_term;
+    out = out.clamp(min, max);
+    if !out.is_finite() {
+        out = max;
+    }
+    out
+}
+
+fn pid_step_f32(
+    setpoint: f32,
+    measurement: f32,
+    kp: f32,
+    ki: f32,
+    kd: f32,
+    min: f32,
+    max: f32,
+    integral: &mut f32,
+    prev_error: &mut f32,
+    output: f32,
+) -> f32 {
+    let sp = crate::sanitize_f32(setpoint);
+    let mv = crate::sanitize_f32(measurement);
+    let error = sp - mv;
+    let p_term = kp * error;
+    *integral += error;
+    let max_i = max / ki.max(KI_EPSILON as f32);
+    *integral = integral.clamp(-max_i, max_i);
+    let i_term = ki * *integral;
+    let derivative = error - *prev_error;
+    let d_term = kd * derivative;
+    *prev_error = error;
+    let mut out = output + p_term + i_term + d_term;
+    out = out.clamp(min, max);
+    if !out.is_finite() {
+        out = max;
+    }
+    out
 }
 
 /// Scalar PID controller (f64 precision).
@@ -130,22 +194,18 @@ impl PidController {
     pub fn max_concurrency(&self) -> f64 { self.config.max }
 
     pub fn update(&mut self, setpoint: f64, measurement: f64) -> f64 {
-        let sp = crate::sanitize_f64(setpoint);
-        let mv = crate::sanitize_f64(measurement);
-        let error = sp - mv;
-        let p_term = self.config.kp * error;
-        self.integral += error;
-        let max_i = self.config.max / self.config.ki.max(0.001);
-        self.integral = self.integral.clamp(-max_i, max_i);
-        let i_term = self.config.ki * self.integral;
-        let derivative = error - self.prev_error;
-        let d_term = self.config.kd * derivative;
-        self.prev_error = error;
-        self.output += p_term + i_term + d_term;
-        self.output = self.output.clamp(self.config.min, self.config.max);
-        if !self.output.is_finite() {
-            self.output = self.config.max;
-        }
+        self.output = pid_step_f64(
+            setpoint,
+            measurement,
+            self.config.kp,
+            self.config.ki,
+            self.config.kd,
+            self.config.min,
+            self.config.max,
+            &mut self.integral,
+            &mut self.prev_error,
+            self.output,
+        );
         self.output
     }
 
@@ -199,22 +259,18 @@ impl PidController32 {
     }
 
     pub fn update(&mut self, setpoint: f32, measurement: f32) -> f32 {
-        let sp = crate::sanitize_f32(setpoint);
-        let mv = crate::sanitize_f32(measurement);
-        let error = sp - mv;
-        let p_term = self.config.kp * error;
-        self.integral += error;
-        let max_i = self.config.max / self.config.ki.max(0.001);
-        self.integral = self.integral.clamp(-max_i, max_i);
-        let i_term = self.config.ki * self.integral;
-        let derivative = error - self.prev_error;
-        let d_term = self.config.kd * derivative;
-        self.prev_error = error;
-        self.output += p_term + i_term + d_term;
-        self.output = self.output.clamp(self.config.min, self.config.max);
-        if !self.output.is_finite() {
-            self.output = self.config.max;
-        }
+        self.output = pid_step_f32(
+            setpoint,
+            measurement,
+            self.config.kp,
+            self.config.ki,
+            self.config.kd,
+            self.config.min,
+            self.config.max,
+            &mut self.integral,
+            &mut self.prev_error,
+            self.output,
+        );
         self.output
     }
 
@@ -303,22 +359,18 @@ impl PidArray {
         assert_eq!(setpoints.len(), self.n);
         assert_eq!(measurements.len(), self.n);
         for i in 0..self.n {
-            let sp = crate::sanitize_f64(setpoints[i]);
-            let mv = crate::sanitize_f64(measurements[i]);
-            let error = sp - mv;
-            let p_term = self.kp * error;
-            self.integrals[i] += error;
-            let max_i = self.max / self.ki.max(0.001);
-            self.integrals[i] = self.integrals[i].clamp(-max_i, max_i);
-            let i_term = self.ki * self.integrals[i];
-            let derivative = error - self.prev_errors[i];
-            let d_term = self.kd * derivative;
-            self.prev_errors[i] = error;
-            self.outputs[i] += p_term + i_term + d_term;
-            self.outputs[i] = self.outputs[i].clamp(self.min, self.max);
-            if !self.outputs[i].is_finite() {
-                self.outputs[i] = self.max;
-            }
+            self.outputs[i] = pid_step_f64(
+                setpoints[i],
+                measurements[i],
+                self.kp,
+                self.ki,
+                self.kd,
+                self.min,
+                self.max,
+                &mut self.integrals[i],
+                &mut self.prev_errors[i],
+                self.outputs[i],
+            );
         }
         &self.outputs
     }
@@ -352,22 +404,18 @@ pub fn batch_pid_update(
     assert_eq!(states.len(), setpoints.len());
     assert_eq!(states.len(), measurements.len());
     for (i, (integral, prev_error, output)) in states.iter_mut().enumerate() {
-        let sp = crate::sanitize_f64(setpoints[i]);
-        let mv = crate::sanitize_f64(measurements[i]);
-        let error = sp - mv;
-        let p_term = config.kp * error;
-        *integral += error;
-        let max_i = config.max / config.ki.max(0.001);
-        *integral = integral.clamp(-max_i, max_i);
-        let i_term = config.ki * *integral;
-        let derivative = error - *prev_error;
-        let d_term = config.kd * derivative;
-        *prev_error = error;
-        *output += p_term + i_term + d_term;
-        *output = output.clamp(config.min, config.max);
-        if !output.is_finite() {
-            *output = config.max;
-        }
+        *output = pid_step_f64(
+            setpoints[i],
+            measurements[i],
+            config.kp,
+            config.ki,
+            config.kd,
+            config.min,
+            config.max,
+            integral,
+            prev_error,
+            *output,
+        );
     }
 }
 
