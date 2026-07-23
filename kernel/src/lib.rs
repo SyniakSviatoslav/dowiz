@@ -686,6 +686,12 @@ pub mod chronos;
 /// writes TriMatrix snapshots indexed by timestamp. Three views: PAST,
 /// PRESENT, PREDICTED. 4D navigation between states. Global drift tracking.
 pub mod chronos_topology;
+/// Eigenvalue/eigenvector as the canonical data primitive. Replaces scalar
+/// f64 with (λ, v) pairs. Spectral decomposition IS the data representation.
+pub mod eigen;
+/// N-fractal self-similar data structure + ASCII encoding. Every node is
+/// a microcosm of the whole. ASCII visualization for human-readable state.
+pub mod fractal;
 /// P08 — typed metrics pure core: `/proc/self` sampling (CPU/mem) + a
 /// deterministic, serde-free, parse-or-reject text schema for typed metric
 /// records. NO egress / signing change; GPU is typed-absent (`Option`) until

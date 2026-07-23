@@ -76,41 +76,20 @@ impl TemporalTrinity {
         self.predict_next();
     }
 
-    /// Predict the next state: present + (present - past) with phase smoothing.
+    /// Predict the next state using Kalman-like update with adaptive gain.
+    ///
+    /// Gain is adapted based on prior prediction error: higher error → higher
+    /// gain (react faster to changes); lower error → lower gain (smoother).
     pub fn predict_next(&mut self) {
-        self.predicted = TriMatrix::new(self.present.rows, self.present.cols);
-        let mut error_sum = 0.0f64;
-        let mut count = 0usize;
+        // Adaptive gain: bounded sigmoid over prediction error.
+        let err = self.prediction_error();
+        let gain = 1.0 / (1.0 + (-10.0 * (err - 0.3)).exp()); // steep around 0.3 error
+        // Clamp into [0.05, 0.95] so extreme values don't lock the filter.
+        let gain = gain.clamp(0.05, 0.95);
 
-        for r in 0..self.present.rows {
-            for c in 0..self.present.cols {
-                let past_val = self.past.get(r, c);
-                let pres_val = self.present.get(r, c);
-
-                // Simple prediction: if stable → same, if changing → extrapolate trend.
-                let pred = if past_val == pres_val {
-                    pres_val // stable
-                } else if past_val == Tri::Unknown || pres_val == Tri::Unknown {
-                    Tri::Unknown
-                } else {
-                    // Trend: present dominated. If flipping, predict continuation.
-                    pres_val // conservative: stay at present
-                };
-
-                self.predicted.set(r, c, pred);
-
-                // Confidence: higher when past and present agree.
-                if past_val == pres_val {
-                    error_sum += 0.0; // perfect agreement
-                } else {
-                    error_sum += 1.0; // disagreement
-                }
-                count += 1;
-            }
-        }
-
+        self.predicted = self.present.kalman_predict(&self.past, gain);
         self.predicted_ts = self.present_ts + (self.present_ts - self.past_ts).max(100);
-        self.prediction_confidence = 1.0 - (error_sum / count.max(1) as f64);
+        self.prediction_confidence = 1.0 - err;
     }
 
     /// Delta between past and present (how much changed).

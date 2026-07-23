@@ -231,6 +231,115 @@ impl TriMatrix {
         }
         (t, f, u)
     }
+
+    /// Trinary element product: True×True=True, any False→False, else Unknown.
+    fn tri_mul(a: Tri, b: Tri) -> Tri {
+        match (a, b) {
+            (Tri::True, Tri::True) => Tri::True,
+            (Tri::False, _) | (_, Tri::False) => Tri::False,
+            _ => Tri::Unknown,
+        }
+    }
+
+    /// Matrix multiplication: True×True=True, any False→False, else Unknown.
+    /// Accumulates products with trinary OR (True wins, else Unknown, else False).
+    pub fn mul(&self, other: &TriMatrix) -> TriMatrix {
+        assert_eq!(self.cols, other.rows, "mul: cols({}) != rows({})", self.cols, other.rows);
+        let mut result = TriMatrix::new(self.rows, other.cols);
+        for r in 0..self.rows {
+            for c in 0..other.cols {
+                let mut acc = Tri::False;
+                for k in 0..self.cols {
+                    let p = Self::tri_mul(self.get(r, k), other.get(k, c));
+                    acc = acc.or(p);
+                }
+                result.set(r, c, acc);
+            }
+        }
+        result
+    }
+
+    /// Fraction of matching cells [0, 1].  Panics if dimensions differ.
+    pub fn dot(&self, other: &TriMatrix) -> f64 {
+        assert_eq!(self.rows, other.rows, "dot: rows differ");
+        assert_eq!(self.cols, other.cols, "dot: cols differ");
+        let total = self.data.len();
+        if total == 0 { return 0.0; }
+        let same = self.data.iter().zip(&other.data).filter(|(a, b)| a == b).count();
+        same as f64 / total as f64
+    }
+
+    /// Cell-by-cell diff: same→True, different→False, either Unknown→Unknown.
+    pub fn diff(&self, other: &TriMatrix) -> TriMatrix {
+        assert_eq!(self.rows, other.rows, "diff: rows differ");
+        assert_eq!(self.cols, other.cols, "diff: cols differ");
+        let mut m = TriMatrix::new(self.rows, self.cols);
+        for i in 0..self.data.len() {
+            let v = match (self.data[i], other.data[i]) {
+                (Tri::Unknown, _) | (_, Tri::Unknown) => Tri::Unknown,
+                (a, b) if a == b => Tri::True,
+                _ => Tri::False,
+            };
+            m.data[i] = v;
+        }
+        m
+    }
+
+    /// Spectral radius proxy: True count / total cells. Higher = more stable.
+    pub fn stability_index(&self) -> f64 {
+        let total = self.data.len();
+        if total == 0 { return 0.0; }
+        let trues = self.data.iter().filter(|v| v.is_true()).count();
+        trues as f64 / total as f64
+    }
+
+    /// Kalman-like filter: predicted = present + gain × (present - prev).
+    ///
+    /// Per cell: diff = present trinary_diff prev (True=same, False=changed, Unknown=uncertain).
+    /// Correction through gain: True→stay, Unknown→Unknown, False→flip if gain≥0.5 else stay.
+    pub fn kalman_predict(&self, prev: &TriMatrix, gain: f64) -> TriMatrix {
+        assert_eq!(self.rows, prev.rows, "kalman_predict: rows differ");
+        assert_eq!(self.cols, prev.cols, "kalman_predict: cols differ");
+        let mut m = TriMatrix::new(self.rows, self.cols);
+        for i in 0..self.data.len() {
+            let present = self.data[i];
+            let past = prev.data[i];
+            m.data[i] = match (present, past) {
+                (Tri::Unknown, _) | (_, Tri::Unknown) => Tri::Unknown,
+                (a, b) if a == b => a, // diff=True, stable — stay
+                _ if gain >= 0.5 => present.not(), // diff=False, high gain — flip
+                _ => present, // diff=False, low gain — stay conservative
+            };
+        }
+        m
+    }
+
+    /// Human-readable diff report.
+    pub fn debug_diff(&self, other: &TriMatrix) -> String {
+        let (tr, tc) = (self.rows, self.cols);
+        let (un_r, un_c) = (other.rows, other.cols);
+        if tr != un_r || tc != un_c {
+            return format!("⚠ dimension mismatch: ({tr}×{tc}) vs ({un_r}×{un_c})");
+        }
+        let d = self.diff(other);
+        let dt = d.data.iter().filter(|v| v.is_true()).count();
+        let df = d.data.iter().filter(|v| **v == Tri::False).count();
+        let du = d.data.len().saturating_sub(dt + df);
+        let mut out = format!(
+            "─── TriMatrix diff ({tr}×{tc}) ───\n  True (same): {dt}  False (changed): {df}  Unknown: {du}\n"
+        );
+        for r in 0..tr {
+            for c in 0..tc {
+                let dcell = d.get(r, c);
+                if dcell == Tri::False || dcell == Tri::Unknown {
+                    let from = self.get(r, c);
+                    let to = other.get(r, c);
+                    out.push_str(&format!("  [{r},{c}] {from:?} → {to:?}  ({dcell:?})\n"));
+                }
+            }
+        }
+        out
+    }
 }
 
 // ─── DeltaChain — sequence of RGB deltas for state transitions ─────────────
@@ -377,5 +486,189 @@ mod tests {
         let b = Rgb(50, 30, 10);
         assert_eq!(a + b, Rgb(150, 180, 210));
         assert_eq!(a - b, Rgb(50, 120, 190));
+    }
+
+    // ─── new TriMatrix ops ───
+
+    #[test]
+    fn tri_mul_2x2() {
+        // A = [[T, F], [U, T]]  (2×2)
+        // B = [[T, U], [F, T]]  (2×2)
+        let mut a = TriMatrix::new(2, 2);
+        a.set(0, 0, Tri::True); a.set(0, 1, Tri::False);
+        a.set(1, 0, Tri::Unknown); a.set(1, 1, Tri::True);
+        let mut b = TriMatrix::new(2, 2);
+        b.set(0, 0, Tri::True); b.set(0, 1, Tri::Unknown);
+        b.set(1, 0, Tri::False); b.set(1, 1, Tri::True);
+
+        let c = a.mul(&b);
+        // c[0][0] = (T×T)or(F×F) = T or F = True
+        assert_eq!(c.get(0, 0), Tri::True);
+        // c[0][1] = (T×U)or(F×T) = Unknown or False = Unknown
+        assert_eq!(c.get(0, 1), Tri::Unknown);
+    }
+
+    #[test]
+    fn tri_mul_1x1_identity() {
+        let mut a = TriMatrix::new(1, 1);
+        a.set(0, 0, Tri::True);
+        let mut b = TriMatrix::new(1, 1);
+        b.set(0, 0, Tri::True);
+        let c = a.mul(&b);
+        assert_eq!(c.get(0, 0), Tri::True);
+    }
+
+    #[test]
+    fn tri_mul_all_unknown() {
+        let a = TriMatrix::new(2, 2);
+        let b = TriMatrix::new(2, 2);
+        let c = a.mul(&b);
+        for r in 0..2 { for col in 0..2 { assert_eq!(c.get(r, col), Tri::Unknown); } }
+    }
+
+    #[test]
+    fn dot_perfect_match() {
+        let mut a = TriMatrix::new(2, 2);
+        a.set(0, 0, Tri::True); a.set(0, 1, Tri::False);
+        a.set(1, 0, Tri::Unknown); a.set(1, 1, Tri::True);
+        let b = a.clone();
+        let d = a.dot(&b);
+        assert!((d - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn dot_zero_match() {
+        let mut a = TriMatrix::new(1, 2);
+        a.set(0, 0, Tri::True); a.set(0, 1, Tri::True);
+        let mut b = TriMatrix::new(1, 2);
+        b.set(0, 0, Tri::False); b.set(0, 1, Tri::False);
+        let d = a.dot(&b);
+        assert!((d - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn dot_half_match() {
+        let mut a = TriMatrix::new(1, 4);
+        a.set(0, 0, Tri::True); a.set(0, 1, Tri::True);
+        a.set(0, 2, Tri::False); a.set(0, 3, Tri::Unknown);
+        let mut b = TriMatrix::new(1, 4);
+        b.set(0, 0, Tri::True); b.set(0, 1, Tri::False);
+        b.set(0, 2, Tri::False); b.set(0, 3, Tri::True); // 2nd cell matches True/False (no), 4th Unknown/True (no) → 2/4 = 0.5
+        let d = a.dot(&b);
+        assert!((d - 0.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn diff_same_vs_different() {
+        let mut a = TriMatrix::new(2, 2);
+        a.set(0, 0, Tri::True); a.set(0, 1, Tri::False);
+        a.set(1, 0, Tri::Unknown); a.set(1, 1, Tri::True);
+        let mut b = TriMatrix::new(2, 2);
+        b.set(0, 0, Tri::True); b.set(0, 1, Tri::True); // different from a[0][1]
+        b.set(1, 0, Tri::Unknown); b.set(1, 1, Tri::True);
+        let d = a.diff(&b);
+        assert_eq!(d.get(0, 0), Tri::True);  // same
+        assert_eq!(d.get(0, 1), Tri::False); // different
+        assert_eq!(d.get(1, 0), Tri::Unknown); // unknown on either side
+        assert_eq!(d.get(1, 1), Tri::True);  // same
+    }
+
+    #[test]
+    fn diff_either_unknown_is_unknown() {
+        let mut a = TriMatrix::new(1, 2);
+        a.set(0, 0, Tri::True);
+        // a[0][1] = Unknown (default)
+        let mut b = TriMatrix::new(1, 2);
+        b.set(0, 0, Tri::Unknown);
+        b.set(0, 1, Tri::False);
+        let d = a.diff(&b);
+        assert_eq!(d.get(0, 0), Tri::Unknown);
+        assert_eq!(d.get(0, 1), Tri::Unknown);
+    }
+
+    #[test]
+    fn stability_index_all_true() {
+        let mut m = TriMatrix::new(2, 2);
+        m.set(0, 0, Tri::True); m.set(0, 1, Tri::True);
+        m.set(1, 0, Tri::True); m.set(1, 1, Tri::True);
+        assert!((m.stability_index() - 1.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn stability_index_half_true() {
+        let mut m = TriMatrix::new(1, 4);
+        m.set(0, 0, Tri::True); m.set(0, 1, Tri::True);
+        m.set(0, 2, Tri::False); m.set(0, 3, Tri::Unknown);
+        assert!((m.stability_index() - 0.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn stability_index_empty() {
+        let m = TriMatrix::new(0, 3);
+        assert!((m.stability_index() - 0.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn kalman_predict_stable_low_gain() {
+        let mut present = TriMatrix::new(1, 2);
+        present.set(0, 0, Tri::True); present.set(0, 1, Tri::False);
+        let mut past = TriMatrix::new(1, 2);
+        past.set(0, 0, Tri::True); past.set(0, 1, Tri::True); // cell 1 changed
+        let pred = present.kalman_predict(&past, 0.2);
+        // Stable cell stays True; changed cell with low gain stays present
+        assert_eq!(pred.get(0, 0), Tri::True);
+        assert_eq!(pred.get(0, 1), Tri::False);
+    }
+
+    #[test]
+    fn kalman_predict_changing_high_gain() {
+        let mut present = TriMatrix::new(1, 2);
+        present.set(0, 0, Tri::True); present.set(0, 1, Tri::True);
+        let mut past = TriMatrix::new(1, 2);
+        past.set(0, 0, Tri::True); past.set(0, 1, Tri::False); // flipped
+        let pred = present.kalman_predict(&past, 0.8);
+        // Stable cell stays; flipped cell with high gain → flip again
+        assert_eq!(pred.get(0, 0), Tri::True);
+        assert_eq!(pred.get(0, 1), Tri::False);
+    }
+
+    #[test]
+    fn kalman_predict_unknown_propagates() {
+        let mut present = TriMatrix::new(1, 1);
+        present.set(0, 0, Tri::Unknown);
+        let past = TriMatrix::new(1, 1); // past[0][0] = Unknown
+        let pred = present.kalman_predict(&past, 0.5);
+        assert_eq!(pred.get(0, 0), Tri::Unknown);
+    }
+
+    #[test]
+    fn kalman_predict_one_unknown() {
+        let mut present = TriMatrix::new(1, 1);
+        present.set(0, 0, Tri::True);
+        let past = TriMatrix::new(1, 1); // Unknown
+        let pred = present.kalman_predict(&past, 0.9);
+        assert_eq!(pred.get(0, 0), Tri::Unknown);
+    }
+
+    #[test]
+    fn debug_diff_report() {
+        let mut a = TriMatrix::new(2, 2);
+        a.set(0, 0, Tri::True); a.set(0, 1, Tri::False);
+        a.set(1, 0, Tri::Unknown); a.set(1, 1, Tri::True);
+        let mut b = TriMatrix::new(2, 2);
+        b.set(0, 0, Tri::False); b.set(0, 1, Tri::False);
+        b.set(1, 0, Tri::Unknown); b.set(1, 1, Tri::True);
+        let report = a.debug_diff(&b);
+        assert!(report.contains("(2×2)"));
+        assert!(report.contains("False (changed)"));
+        assert!(report.contains("[0,0] True → False"));
+    }
+
+    #[test]
+    fn debug_diff_dimension_mismatch() {
+        let a = TriMatrix::new(2, 2);
+        let b = TriMatrix::new(3, 2);
+        let report = a.debug_diff(&b);
+        assert!(report.contains("dimension mismatch"));
     }
 }
