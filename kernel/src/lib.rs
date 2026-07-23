@@ -712,6 +712,9 @@ pub mod cross_bridge;
 /// Bebop protocol bridge — trinary auth, eigen envelopes, wave mesh sync,
 /// chronos DTN store-forward. Wires the new paradigm into the protocol layer.
 pub mod bebop_bridge;
+/// Code change prediction oracle — learns from past commits to predict
+/// ETA, impact, and eigen shift for future changes. Uses chronos snapshots.
+pub mod code_oracle;
 /// P08 — typed metrics pure core: `/proc/self` sampling (CPU/mem) + a
 /// deterministic, serde-free, parse-or-reject text schema for typed metric
 /// records. NO egress / signing change; GPU is typed-absent (`Option`) until
