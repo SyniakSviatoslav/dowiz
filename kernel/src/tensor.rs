@@ -117,6 +117,22 @@ impl Tensor1 {
         let norm_product = self.norm() * other.norm();
         if norm_product > 0.0 { dot / norm_product } else { 0.0 }
     }
+
+    /// Angle between two vectors, returned as a [`Phase`](crate::trig::Phase).
+    ///
+    /// Uses `acos(cosine_sim)` then wraps in `Phase::new(θ)`. This replaces
+    /// raw `f64` angle arithmetic with geometric phase encoding — the Phase
+    /// carries (cos, sin) on the unit circle, enabling stable interpolation
+    /// and delta comparison via `Phase::delta`/`Phase::distance`.
+    ///
+    /// When `|self|=0` or `|other|=0`, returns `Phase::uncertain()` (θ=π/2)
+    /// — the zero-vector has no direction, so the angle is indeterminate.
+    pub fn angle_with(&self, other: &Tensor1) -> crate::trig::Phase {
+        let cos_sim = self.cosine_sim(other);
+        let cos_clamped = cos_sim.clamp(-1.0, 1.0);
+        let theta = cos_clamped.acos();
+        crate::trig::Phase::new(theta)
+    }
 }
 
 /// 2-D tensor (matrix) with basic linear algebra.

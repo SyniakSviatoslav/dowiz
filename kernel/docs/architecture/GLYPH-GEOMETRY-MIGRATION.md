@@ -63,10 +63,20 @@ boot/memory/interrupt/toolchain stack exists.
 
 ## 2. Migration phases (ordered, each RED→GREEN)
 
-### Phase A — n(0) lookup table + branchless constants
-Adopt a single kernel pattern for constant-time, branchless access.
+### Phase A — n(0) lookup table + branchless constants ✅ DONE (2026-08-13)
 
-- [ ] A1. Add `src/lut.rs` (or extend `ktg2::cell`): a const lookup-table
+Delivered:
+- [x] A1. `src/lut.rs` — `Lut<K,V,N>` (O(1) branchless lookup via `#[repr(u8)]` discriminant),
+  `BinaryLut<V,FLAT_SIZE>` (flat truth table), `BitPack<BITS_PER,COUNT>` (shift-mask decode),
+  `FromU8`/`ToU8` (wire-code trait), branchless `popcount_u16`/`is_power_of_two`/`next_power_of_two`.
+- [x] A2. `src/constants.rs` — 60+ named constants: `ZERO=-64`, `CANONICAL_QUIET_NAN`,
+  `DRIFT_BAND=1e-6`, `MAT_BLOCK_SIZE=128`, `HYPERVECTOR_DIM=1024`, `FNV_PRIME_64`,
+  `DOT_OFFSET[8]`, etc. Single authority for every magic number.
+- [x] A3. `lib.rs` — `pub mod lut; pub mod constants;` wired into crate root.
+- [x] Done-check: `cargo check --lib` exit 0, 13 tests green (6 lut + 7 constants), 3059 total lib tests pass.
+- [x] Backing evidence: patterns from `order_machine::build_adjacency` (const-fn array gen),
+  `spectral::DriftClass::wire_code` (enum→u8 dispatch), `trinary::Tri` (repr(u8) + branchless counts[]),
+  `pixel_snapshot::DOT_OFFSET` (const array + bit→glyph).
       primitive — `const fn lut_index(key) -> usize` over a fixed table, and a
       `BitTable` for 2-bit/ternary operations implemented as 4×4 LUTs (truth
       tables as data, not if-chains). `State::and/or/not` already reduce to

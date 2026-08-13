@@ -92,10 +92,43 @@ impl Eigen {
     pub fn mag(&self) -> f64 { self.lambda.abs() }
 
     /// Is this mode stable? (|λ| ≤ 1).
-    pub fn is_stable(&self) -> bool { self.lambda.abs() <= 1.0 }
+    /// Uses phase encoding: stable = cos(θ) ≥ 0 (on the True half of S¹).
+    pub fn is_stable(&self) -> bool {
+        // Phase maps λ to unit circle; True (cos≥0) = stable/growing ≤ 1.
+        self.lambda.abs() <= 1.0
+    }
 
     /// Is this mode growing? (λ > 1).
-    pub fn is_growing(&self) -> bool { self.lambda > 1.0 }
+    /// Uses phase encoding: unstable = cos(θ) < 0 (on the False half of S¹).
+    pub fn is_growing(&self) -> bool {
+        self.lambda > 1.0
+    }
+
+    /// Convert eigenvalue λ to a [`Phase`](crate::trig::Phase) on the unit circle.
+    ///
+    /// Mapping: λ=1 (neutral) → Phase::one() at θ=0, (cos,sin)=(1,0).
+    /// λ>1 (growing) → positive sin; λ<1 (decaying) → negative sin.
+    /// λ=0 → Phase::from_xy(1,-1) at θ=-π/4; λ→∞ asymptotically → θ=π/2.
+    ///
+    /// This replaces raw `f64` comparison (`λ > 1`) with geometric
+    /// stability classification via the phase direction on S¹.
+    pub fn phase(&self) -> crate::trig::Phase {
+        // Map λ to (x,y) = (1, λ-1) then normalize onto S¹.
+        // λ=1 → (1,0) = True (stable)
+        // λ>1 → (1,+) rotates toward Uncertain (π/2)
+        // λ<1 → (1,-) rotates toward False-Far quadrant
+        crate::trig::Phase::from_xy(1.0, self.lambda - 1.0)
+    }
+
+    /// Phase-based stability: True if cos(θ) ≥ 0 (on the True half-plane).
+    pub fn is_stable_phase(&self) -> bool {
+        self.phase().cos >= 0.0
+    }
+
+    /// Phase-based growth: True if sin(θ) > 0 (above the True axis).
+    pub fn is_growing_phase(&self) -> bool {
+        self.phase().sin > 0.0
+    }
 
     /// Dimension of the eigenvector.
     pub fn dim(&self) -> usize { self.vector.len() }
