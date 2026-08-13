@@ -750,6 +750,10 @@ pub mod hypervector_index;
 /// Zero-dep compression (RLE / delta) for academy/diff/garbage artifacts —
 /// compress on write, decompress on use, byte-identity round-trip.
 pub mod squash;
+/// Radix-2 Cooley–Tukey FFT / IFFT (O(N log N), twiddle LUT, geometry-over-algebra).
+pub mod fft;
+/// Legendre / spherical harmonics / Lebedev quadrature / crystal structure factor S(k).
+pub mod spherical;
 /// Delta calculus — replaces classic comparisons (a>b, x==y) with vector
 /// delta analysis. Δv, ∂t, rate, acceleration, drift tracking. Eigen/Phase
 /// comparison via spectral distance. Oscillation detection.

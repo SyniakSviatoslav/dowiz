@@ -153,4 +153,34 @@ mod tests {
         let b = attention(&q, &k, &v).unwrap();
         assert_eq!(a, b);
     }
+
+    #[test]
+    fn positional_encoding_shape_and_orthogonality() {
+        let pe = positional_encoding(8, 16);
+        assert_eq!(pe.len(), 8);
+        assert!(pe.iter().all(|row| row.len() == 16));
+        // The 0th dimension is pure sin/cos in position; the 0th position's
+        // first two entries are (sin(0)=0, cos(0)=1) — but the formula uses
+        // pos in the numerator, so PE(0, 0) = sin(0) = 0 and PE(0, 1) = cos(0) = 1.
+        assert!(pe[0][0].abs() < 1e-12);
+        assert!((pe[0][1] - 1.0).abs() < 1e-12);
+        // Distinct positions yield distinct encodings.
+        assert_ne!(pe[0], pe[1]);
+    }
+}
+
+/// Sinusoidal positional encoding (Vaswani et al. 2017), the "geometry over
+/// algebra" primitive of the transformer. `PE(pos, 2i) = sin(pos / 10000^(2i/d))`
+/// and `PE(pos, 2i+1) = cos(pos / 10000^(2i/d))` — every position is a point on
+/// a set of unit circles, so relative offsets are linear maps (rotations), the
+/// same substrate as `trig::Phase`. Returns a `[seq_len][d_model]` matrix.
+pub fn positional_encoding(seq_len: usize, d_model: usize) -> Vec<Vec<f64>> {
+    let mut pe = vec![vec![0.0; d_model]; seq_len];
+    for pos in 0..seq_len {
+        for i in 0..d_model {
+            let angle = pos as f64 / 10000f64.powf((2 * (i / 2)) as f64 / d_model as f64);
+            pe[pos][i] = if i % 2 == 0 { angle.sin() } else { angle.cos() };
+        }
+    }
+    pe
 }
