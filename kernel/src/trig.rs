@@ -76,6 +76,18 @@ impl Phase {
 
     /// Magnitude (always 1.0 on unit circle, but preserved for chaining).
     pub fn mag(&self) -> f64 { 1.0 }
+
+    /// Build a `Phase` from a fractal bit (FMA geometry substrate).
+    ///
+    /// This is the reuse bridge: `ktg2::fractal_manchester::fractal_bit_to_geometry`
+    /// maps a logical bit at a fractal position to (cos, sin) on the unit circle
+    /// — the *same* "geometry over algebra" substrate as `Phase`. Wiring the two
+    /// keeps one geometry vocabulary across the kernel instead of two.
+    pub fn from_fractal_bit(bit: bool, position: i32) -> Phase {
+        let (cos, sin) =
+            crate::ktg2::fractal_manchester::fractal_bit_to_geometry(bit, position);
+        Phase::from_xy(cos, sin)
+    }
 }
 
 fn normalize_angle(theta: f64) -> f64 {
