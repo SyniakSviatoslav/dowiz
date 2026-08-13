@@ -12,6 +12,41 @@ use crate::delta::DeltaTracker;
 use crate::code_oracle::EtaOracle;
 use crate::trig::Xyz;
 
+/// Drift severity bucket — the rewrite-law replacement for a drift if/else chain.
+/// A decision is a table index (branchless bool-cast), not an if-chain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+enum DriftBucket {
+    Low = 0,
+    Med = 1,
+    High = 2,
+}
+
+impl crate::lut::LutKey for DriftBucket {
+    const LUT_SIZE: usize = 3;
+    fn discriminant(self) -> u8 {
+        self as u8
+    }
+}
+
+impl DriftBucket {
+    /// Branchless bucket from cumulative drift.
+    /// `(drift > 100.0) as usize + (drift > 10.0) as usize` yields
+    /// 0 = Low (≤10), 1 = Med (10..100], 2 = High (>100) — two bool casts,
+    /// one array index, zero branches.
+    const BUCKETS: [DriftBucket; 3] = [DriftBucket::Low, DriftBucket::Med, DriftBucket::High];
+
+    #[inline(always)]
+    fn from_drift(drift: f64) -> DriftBucket {
+        let idx = (drift > 100.0) as usize + (drift > 10.0) as usize;
+        Self::BUCKETS[idx]
+    }
+}
+
+/// Compile-time label table for drift buckets — the decision is data, not code.
+const DRIFT_LABEL_LUT: crate::lut::Lut<DriftBucket, &'static str, 3> =
+    crate::lut::Lut::new(["✓ LOW", "◈ MED", "⚠ HIGH"]);
+
 /// Complete system dashboard — one call, full state.
 pub fn render(
     test_count: usize,
@@ -56,10 +91,11 @@ pub fn render(
     }
 
     // ── Drift ──
-    let drift_level = if drift.cumulative_drift > 100.0 { "⚠ HIGH" }
-        else if drift.cumulative_drift > 10.0 { "◈ MED" }
-        else { "✓ LOW" };
-    out.push_str(&format!("│  Drift:    {:>6.1}  {}                    │\n", drift.cumulative_drift, drift_level));
+    let drift_level = DRIFT_LABEL_LUT.get(DriftBucket::from_drift(drift.cumulative_drift));
+    out.push_str(&format!(
+        "│  Drift:    {:>6.1}  {}                    │\n",
+        drift.cumulative_drift, drift_level
+    ));
 
     // ── Alarms ──
     let alarming = drift.is_alarming(5);
@@ -82,6 +118,13 @@ pub fn render(
     out.push_str("  patterns: quality safety minimal idempotency invariant\n");
 
     out
+}
+
+/// Render the drift history as a glyph sparkline (Phase C / F rewrite law:
+/// numeric series render via pixel glyphs, not raw ASCII bars).
+pub fn render_drift_sparkline(drift: &DeltaTracker) -> String {
+    let series: Vec<f64> = drift.history.iter().map(|d| d.magnitude).collect();
+    crate::glyph_dashboard::render_sparkline(&series)
 }
 
 /// Render a TriMatrix as a color-coded ASCII grid (using . for visual clarity).
@@ -128,5 +171,33 @@ mod tests {
         let d = render_trimatrix(&m, "test");
         assert!(d.contains("T:"));
         assert!(d.contains("stability"));
+    }
+
+    #[test]
+    fn drift_bucket_branchless_agrees_with_thresholds() {
+        // The LUT bucket must match the classic threshold semantics.
+        assert_eq!(DriftBucket::from_drift(5.0), DriftBucket::Low);
+        assert_eq!(DriftBucket::from_drift(10.0), DriftBucket::Low);
+        assert_eq!(DriftBucket::from_drift(50.0), DriftBucket::Med);
+        assert_eq!(DriftBucket::from_drift(100.0), DriftBucket::Med);
+        assert_eq!(DriftBucket::from_drift(100.5), DriftBucket::High);
+        assert_eq!(DriftBucket::from_drift(10_000.0), DriftBucket::High);
+
+        assert_eq!(DRIFT_LABEL_LUT.get(DriftBucket::Low), "✓ LOW");
+        assert_eq!(DRIFT_LABEL_LUT.get(DriftBucket::Med), "◈ MED");
+        assert_eq!(DRIFT_LABEL_LUT.get(DriftBucket::High), "⚠ HIGH");
+    }
+
+    #[test]
+    fn drift_sparkline_renders_block_glyphs() {
+        let mut drift = DeltaTracker::new(100.0, 10.0);
+        // Push a few deltas so the history is non-empty.
+        let a = vec![0.0, 1.0, 2.0];
+        let b = vec![0.1, 1.5, 2.5];
+        let d = crate::delta::Delta::between(&a, 0, &b, 1);
+        drift.observe(d);
+        let s = render_drift_sparkline(&drift);
+        assert!(!s.is_empty());
+        assert!(s.chars().any(|c| ('\u{2581}'..='\u{2588}').contains(&c)));
     }
 }
