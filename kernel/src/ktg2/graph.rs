@@ -1,6 +1,6 @@
 //! Packed graph-node state store. Four node states occupy one byte.
 
-use super::cell::LogicCell;
+use super::cell::State;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NodeId(pub u32);
@@ -27,6 +27,11 @@ impl NodeQuad {
             south_east,
         }
     }
+
+    /// Iteration order used by tiles: NW, NE, SW, SE.
+    pub const fn ids(&self) -> [NodeId; 4] {
+        [self.north_west, self.north_east, self.south_west, self.south_east]
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,13 +51,15 @@ impl Graph {
         let capacity = capacity.min(u32::MAX as usize) as u32;
         let bytes = (capacity as usize).saturating_add(3) / 4;
         Self {
+            // Unused slots carry `0b11` (the invalid-encoding sentinel), so an
+            // out-of-shape read can never look like a valid state.
             state_words: vec![0b11_11_11_11; bytes],
             node_count: 0,
             node_capacity: capacity,
         }
     }
 
-    pub fn add_node(&mut self, state: LogicCell) -> Result<NodeId, GraphError> {
+    pub fn add_node(&mut self, state: State) -> Result<NodeId, GraphError> {
         if self.node_count >= self.node_capacity {
             return Err(GraphError::CapacityExhausted);
         }
@@ -62,14 +69,14 @@ impl Graph {
         Ok(id)
     }
 
-    pub fn state(&self, id: NodeId) -> Option<LogicCell> {
+    pub fn state(&self, id: NodeId) -> Option<State> {
         if id.0 >= self.node_count {
             return None;
         }
         let index = id.0 as usize;
         let byte = self.state_words[index >> 2];
         let shift = (index & 3) << 1;
-        Some(LogicCell::from_bits((byte >> shift) & 0b11))
+        State::from_bits((byte >> shift) & 0b11).ok()
     }
 
     pub const fn node_count(&self) -> usize {
@@ -88,7 +95,7 @@ impl Graph {
         self.state_words.len()
     }
 
-    fn write_state(&mut self, id: NodeId, state: LogicCell) {
+    fn write_state(&mut self, id: NodeId, state: State) {
         let index = id.0 as usize;
         let shift = (index & 3) << 1;
         let mask = !(0b11u8 << shift);

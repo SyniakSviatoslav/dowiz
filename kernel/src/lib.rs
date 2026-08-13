@@ -724,6 +724,10 @@ pub mod eigen;
 /// N-fractal self-similar data structure + ASCII encoding. Every node is
 /// a microcosm of the whole. ASCII visualization for human-readable state.
 pub mod fractal;
+/// KTG-2: 2-bit graph dataflow core + Fractal Manchester Architecture.
+/// The execution center of the kernel (cell/graph/tile2x2/telemetry/exokernel/
+/// fractal/fractal_manchester).
+pub mod ktg2;
 /// Delta calculus — replaces classic comparisons (a>b, x==y) with vector
 /// delta analysis. Δv, ∂t, rate, acceleration, drift tracking. Eigen/Phase
 /// comparison via spectral distance. Oscillation detection.

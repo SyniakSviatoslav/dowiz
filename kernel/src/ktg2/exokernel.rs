@@ -4,7 +4,7 @@
 //! scheduling policy and graph construction; no high-level abstraction is
 //! forced into the privileged core.
 
-use super::telemetry::KernelTelemetry;
+use super::telemetry::TelemetryStats;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResourceKind {
@@ -42,20 +42,20 @@ struct LeaseSlot {
 
 pub struct ExoKernel {
     slots: Vec<LeaseSlot>,
-    telemetry: KernelTelemetry,
+    stats: TelemetryStats,
 }
 
 impl ExoKernel {
     pub const fn new() -> Self {
         Self {
             slots: Vec::new(),
-            telemetry: KernelTelemetry::new(),
+            stats: TelemetryStats::new(),
         }
     }
 
     pub fn lease(&mut self, kind: ResourceKind, units: u32) -> Result<Lease, LeaseError> {
         if units == 0 {
-            self.telemetry.record_lease_failure();
+            self.stats.record_lease_failure();
             return Err(LeaseError::ZeroUnits);
         }
         for (index, slot) in self.slots.iter_mut().enumerate() {
@@ -64,7 +64,7 @@ impl ExoKernel {
                 slot.kind = kind;
                 slot.units = units;
                 slot.generation = slot.generation.wrapping_add(1).max(1);
-                self.telemetry.record_lease();
+                self.stats.record_lease();
                 return Ok(Lease {
                     slot: index as u32,
                     generation: slot.generation,
@@ -80,7 +80,7 @@ impl ExoKernel {
             kind,
             units,
         });
-        self.telemetry.record_lease();
+        self.stats.record_lease();
         Ok(Lease {
             slot,
             generation,
@@ -90,20 +90,20 @@ impl ExoKernel {
 
     pub fn release(&mut self, lease: Lease) -> Result<(), LeaseError> {
         let Some(slot) = self.slots.get_mut(lease.slot as usize) else {
-            self.telemetry.record_lease_failure();
+            self.stats.record_lease_failure();
             return Err(LeaseError::StaleLease);
         };
         if !slot.active || slot.generation != lease.generation || slot.units != lease.units {
-            self.telemetry.record_lease_failure();
+            self.stats.record_lease_failure();
             return Err(LeaseError::StaleLease);
         }
         slot.active = false;
-        self.telemetry.record_release();
+        self.stats.record_release();
         Ok(())
     }
 
-    pub const fn telemetry(&self) -> &KernelTelemetry {
-        &self.telemetry
+    pub const fn stats(&self) -> &TelemetryStats {
+        &self.stats
     }
 }
 
