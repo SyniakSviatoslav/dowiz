@@ -134,11 +134,11 @@ All positive and negative consequences are stored in this MEMORY.md. The memory 
 
 ## File Reference
 | File | Purpose |
-|------|---------|
+|------|--------|
 | `kernel/src/fdr/schema.rs` | FDR event envelope, WorkloadKind, Work |
 | `kernel/src/fdr/mod.rs` | SpanHandle/SpanGuard, SPAN_SEQ, emit functions |
 | `kernel/src/fdr/pmu.rs` | PMU stamps, bracket, delta |
-| `kernel/src/hydra.rs` | Hydra organism (691 lines) |
+| `kernel/src/brain/hydra.rs` | Hydra organism (1742 lines) — **moved from kernel/src/hydra.rs** |
 | `kernel/src/agent/model_pair.rs` | P103 supervisor |
 | `kernel/src/agent/model_registry.rs` | P97/P101 registry |
 | `kernel/src/agent/loop.rs` | AgentLoop + FanOut/Merge step types |
@@ -215,7 +215,7 @@ Agent needs to extract structured data:
 
 ### Swarm Substrate (existing primitives)
 | Primitive | Swarm Role |
-|-----------|-----------|
+|-----------|------------|
 | `AgentLoop` | Per-executor loop |
 | `spool::Spool` | Task queue |
 | `token_bucket::child_bucket()` | Budget slicing |
@@ -251,6 +251,73 @@ SwarmCoordinator
 8. **Mesh swarm self-organization** — agents select skills from this memory, no hierarchy
 9. **Workflow gates mandatory** — research→synthesis→critique→plan→critique→work→verify→critique→commit
 10. **All consequences → living memory** — positive and negative, nothing lost
+
+### Hermes Agent Skills (kernel-first, 27 skills)
+Hermes Agent skills live in `~/.hermes/skills/kernel/`. Each skill is a markdown file describing a kernel module's API, usage, and patterns. Skills are selected dynamically by agents based on task context — no hierarchy, no 강제 loading.
+
+**Core kernel skills (27):**
+1. `kernel-organs.md` — Module index, all organs, commands
+2. `kernel-search.md` — BM25 + trigram + PPR code search
+3. `kernel-json.md` — Hand-rolled JSON parser (replaces serde_json)
+4. `kernel-predict.md` — TemporalPredictor (Markov + spectral + causal)
+5. `kernel-swarm.md` — SwarmCoordinator (DSU + executor selection)
+6. `kernel-security.md` — Hydra, P103, P97/P101, breach alarm
+7. `kernel-mesh.md` — Cross-repo gossip, signed-append
+8. `kernel-spectral.md` — Eigendecomposition, spectral gap
+9. `kernel-csr.md` — CSR graph, PageRank, PPR
+10. `kernel-retrieval.md` — BM25 + trigram + PPR fusion
+11. `kernel-event-log.md` — SHA3-256, MeshEvent, EventStore
+12. `kernel-spool.md` — Crash-safe async work queue
+13. `kernel-fsm.md` — State machine, transition rules
+14. `kernel-money.md` — Integer money, Money trait
+15. `kernel-order.md` — Order state machine
+16. `kernel-catalog.md` — Trusted price catalog
+17. `kernel-payment.md` — PaymentPort + CashAttestation
+18. `kernel-ports.md` — Kernel ports
+19. `kernel-geo.md` — Delivery zones, route kinematics
+20. `kernel-tensor.md` — Tensor operations
+21. `kernel-academia.md` — 8D crystal lattice, QuarkSig
+22. `kernel-academia-p2p.md` — Fractal mesh, split/merge
+23. `kernel-academia-agent.md` — 1000 agents, anti-detect
+24. `kernel-academy-store.md` — Append-only journal
+25. `kernel-parallel-patterns.md` — MapReduce, DivideConquer, Pipeline, ClientServer
+26. `kernel-cross-bridge.md` — Cross-domain patterns (P2P ↔ DL)
+27. `kernel-github-patterns.md` — 1302 parsing repos, super-projections
+
+**Extended kernel skills:**
+28. `kernel-research.md` — ResearchEngine (158 patterns, 706 cross-patterns)
+29. `kernel-oracle.md` — PatternOracle (Academia + Research + GitHub)
+30. `kernel-acausal.md` — 4D spacetime point, worldline sampling
+31. `kernel-chronos.md` — Timeline, chronological topological sort
+32. `kernel-meta-miner.md` — MetaMiner, genetic mining
+33. `kernel-physics.md` — PhysicsEngine (lab experiments)
+34. `kernel-crystal.md` — 8D crystal lattice, quark signatures
+35. `kernel-spectral-graph.md` — Graph Laplacian, eigenvector centrality
+36. `kernel-clock-stabilizer.md` — PLL-inspired tick stabilizer
+37. `kernel-orchestrator.md` — Tool/skill/agent orchestration
+38. `kernel-workflow-gate.md` — 9-phase workflow (SHA3-256 verified)
+39. `kernel-reverse-engineer.md` — ELF parser, syscall extractor
+40. `kernel-fdr.md` — Flight-Data Recorder
+41. `kernel-agent-facade.md` — LLM interface, model routing, dual-witness
+42. `kernel-intake.md` — Telegram adapter crate
+43. `kernel-tools.md` — native-spa-server, CLI helpers
+44. `kernel-frontend.md` — Tauri desktop, SPA
+45. `kernel-blueprints.md` — Blueprint-first development
+46. `kernel-vector-nav.md` — ripgrep/fd/tsx skills (vector navigation)
+47. `kernel-prompt-enrich.md` — Prompt enrichment + intent detection
+48. `kernel-flux-capacity.md` — Throughput & capacity analysis
+49. `kernel-operations.md` — Mesh swarm operating principles
+50. `kernel-parquet.md` — Parquet columnar storage (if exists)
+
+**Total: 50 kernel skills** (27 core + 23 extended)
+
+### Skills Integration Rules
+1. Skills are markdown files in `~/.hermes/skills/kernel/`
+2. Each skill describes ONE kernel module's API, types, functions, tests, and usage
+3. Agents read skills dynamically based on task context — no 강제 loading
+4. Skills are versioned with the kernel — when kernel changes, skills update
+5. New skills are added when new kernel modules are created
+6. Stale skills are marked with `DEPRECATED` header and replacement pointer
 
 ## PLL-Inspired Clock Stabilizer (Kernel Oscillator)
 
@@ -398,10 +465,6 @@ EXTERNAL-TOOL-KNOWLEDGE/
 │   ├── airflow ......... Python, DAG-based workflow orchestration
 │   ├── spark ........... Scala/Python, distributed data processing
 │   ├── kafka ........... Java, event streaming, pub/sub
-│   └── dbt ............. SQL, data transformation, testing
-└── KNOWLEDGE-GRAPH/
-    ├── neo4j ........... Java, property graph, Cypher query
-    └── graphrag ........ Python, Microsoft, knowledge graph + RAG
 ```
 
 ### Architecture Patterns Extracted
