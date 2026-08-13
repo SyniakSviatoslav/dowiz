@@ -85,6 +85,135 @@ fn half_block_glyph(top: u8, bottom: u8) -> char {
     }
 }
 
+// ─── f64 snapshots (lattice / eigen / tensor) ─────────────────────────
+
+/// Render a 1-D `f64` series as a vertical sparkline: one glyph per value,
+/// 8 intensity levels (` ▁▂▃▄▅▆▇█`). Values are min-max normalized, so a
+/// spectrum (eigenvalues, a tensor row, a lattice coordinate series) reads as
+/// a compact bar chart — ~1 token per value.
+pub fn sparkline(values: &[f64], width: usize) -> String {
+    const LEVELS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+    let width = width.max(1);
+    if values.is_empty() {
+        return String::new();
+    }
+    let (min, max) = minmax(values);
+    let span = (max - min).max(f64::EPSILON);
+    let mut out = String::with_capacity(values.len() + values.len() / width);
+    for (i, &v) in values.iter().enumerate() {
+        if i > 0 && i % width == 0 {
+            out.push('\n');
+        }
+        let t = ((v - min) / span).clamp(0.0, 1.0);
+        let level = (t * 7.999) as usize;
+        out.push(LEVELS[level]);
+    }
+    out
+}
+
+/// Render a 2-D `f64` matrix (row-major, `cols` columns) as a braille heatmap:
+/// one glyph per value, intensity = dot fill (8 levels). For tensors,
+/// eigenvector matrices, and lattice density maps.
+pub fn heatmap(values: &[f64], cols: usize, width: usize) -> String {
+    const DOTS: [u32; 8] = [0x01, 0x02, 0x04, 0x40, 0x08, 0x10, 0x20, 0x80];
+    let width = width.max(1);
+    if values.is_empty() {
+        return String::new();
+    }
+    let (min, max) = minmax(values);
+    let span = (max - min).max(f64::EPSILON);
+    let mut out = String::with_capacity(values.len() * 2 + values.len() / width);
+    for (i, &v) in values.iter().enumerate() {
+        if i > 0 {
+            if i % cols == 0 {
+                out.push('\n');
+            }
+        }
+        let t = ((v - min) / span).clamp(0.0, 1.0);
+        let fill = (t * 7.999) as usize; // 0..=7 dots lit
+        let mut code = 0u32;
+        for (d, &off) in DOTS.iter().enumerate() {
+            if d < fill {
+                code |= off;
+            }
+        }
+        out.push(char::from_u32(0x2800 + code).unwrap_or('�'));
+    }
+    out
+}
+
+/// Render a set of 2-D points `(x, y)` as a braille scatter plot.
+/// Coordinates are min-max normalized into a `(width*2) × (height*4)` dot grid;
+/// `width` cells wide, `height` cells tall. For lattice positions and
+/// eigenvector scatter.
+pub fn scatter(points: &[(f64, f64)], width: usize, height: usize) -> String {
+    // Braille dot → (col, row) within a 2×4 cell.
+    const DOT_XY: [(usize, usize); 8] = [
+        (0, 0), (0, 1), (0, 2), (1, 0), (1, 1), (1, 2), (0, 3), (1, 3),
+    ];
+    const DOT_CODE: [u32; 8] = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80];
+    let width = width.max(1);
+    let height = height.max(1);
+    let grid_w = width * 2;
+    let grid_h = height * 4;
+    let mut grid = vec![0u32; width * height];
+    if points.is_empty() {
+        return String::new();
+    }
+    let (min_x, max_x) = points.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(mn, mx), p| {
+        (mn.min(p.0), mx.max(p.0))
+    });
+    let (min_y, max_y) = points.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(mn, mx), p| {
+        (mn.min(p.1), mx.max(p.1))
+    });
+    let span_x = (max_x - min_x).max(f64::EPSILON);
+    let span_y = (max_y - min_y).max(f64::EPSILON);
+    for &(x, y) in points {
+        let gx = (((x - min_x) / span_x) * (grid_w as f64 - 1.0)).round() as usize;
+        // invert y so larger y is higher (screen-like)
+        let gy = grid_h - 1 - (((y - min_y) / span_y) * (grid_h as f64 - 1.0)).round() as usize;
+        let cell_x = gx / 2;
+        let cell_y = gy / 4;
+        let dot_col = gx % 2;
+        let dot_row = gy % 4;
+        for (d, &(dc, dr)) in DOT_XY.iter().enumerate() {
+            if dc == dot_col && dr == dot_row {
+                grid[cell_y * width + cell_x] |= DOT_CODE[d];
+            }
+        }
+    }
+    let mut out = String::with_capacity(width * height + height);
+    for r in 0..height {
+        if r > 0 {
+            out.push('\n');
+        }
+        for c in 0..width {
+            out.push(char::from_u32(0x2800 + grid[r * width + c]).unwrap_or('�'));
+        }
+    }
+    out
+}
+
+fn minmax(values: &[f64]) -> (f64, f64) {
+    let mut min = f64::INFINITY;
+    let mut max = f64::NEG_INFINITY;
+    for &v in values {
+        if v.is_finite() {
+            if v < min {
+                min = v;
+            }
+            if v > max {
+                max = v;
+            }
+        }
+    }
+    if min == f64::INFINITY {
+        (0.0, 0.0)
+    } else {
+        (min, max)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,5 +254,46 @@ mod tests {
         // col0: top=1,bottom=1 → █ ; col1: top=1,bottom=0 → ▀
         let s = half_block(&[1u8, 1u8, 1u8, 0u8], 2);
         assert_eq!(s, "█▀");
+    }
+
+    #[test]
+    fn sparkline_maps_values_to_8_levels() {
+        // min→▁, max→█; equal values → all same (█ after normalization to span)
+        let s = sparkline(&[0.0, 1.0], 2);
+        let chars: Vec<char> = s.chars().collect();
+        assert_eq!(chars[0], '▁');
+        assert_eq!(chars[1], '█');
+        // constant series → flat baseline ▁ (t = 0 after span clamp)
+        assert_eq!(sparkline(&[5.0, 5.0], 2), "▁▁");
+    }
+
+    #[test]
+    fn heatmap_one_glyph_per_value() {
+        let vals = [0.0, 0.5, 1.0];
+        let s = heatmap(&vals, 3, 3);
+        assert_eq!(s.chars().count(), 3);
+        // min value = empty cell (no dots) = U+2800
+        let chars: Vec<char> = s.chars().collect();
+        assert_eq!(chars[0], '\u{2800}');
+        // max value = nearly full → differs from empty
+        assert_ne!(chars[2], '\u{2800}');
+    }
+
+    #[test]
+    fn scatter_places_distinct_points() {
+        let points = [(0.0, 0.0), (1.0, 1.0)];
+        let s = scatter(&points, 4, 4);
+        // grid has 4 rows, 4 cells each
+        assert_eq!(s.lines().count(), 4);
+        assert!(s.lines().all(|l| l.chars().count() == 4));
+        // at least one dot is lit (not all-empty cells)
+        assert!(s.chars().any(|c| c != '\u{2800}' && c != '\n'));
+    }
+
+    #[test]
+    fn empty_series_are_empty() {
+        assert_eq!(sparkline(&[], 4), "");
+        assert_eq!(heatmap(&[], 2, 4), "");
+        assert_eq!(scatter(&[], 2, 2), "");
     }
 }
