@@ -191,6 +191,17 @@ impl TelemetryAggregator {
         out.push_str("\n=== End Report ===\n");
         out
     }
+
+    /// Glyph report — the value series rendered as a sparkline (Phase C/F:
+    /// numeric telemetry series render via pixel glyphs, not raw ASCII).
+    pub fn glyph_report(&self) -> String {
+        let series = self.harvest_ledger.value_series();
+        if series.is_empty() {
+            return String::from("(no telemetry events)");
+        }
+        let spark = crate::glyph_dashboard::render_sparkline(&series);
+        format!("value sparkline: {spark}")
+    }
 }
 
 impl Default for TelemetryAggregator {
@@ -214,6 +225,19 @@ mod tests {
         let mut agg = TelemetryAggregator::new(100);
         agg.record_event("test-model", "test-task", true, 1.0, 0.5, "success");
         assert_eq!(agg.event_count(), 1);
+    }
+
+    #[test]
+    fn glyph_report_empty_and_nonempty() {
+        let agg = TelemetryAggregator::new(100);
+        assert_eq!(agg.glyph_report(), "(no telemetry events)");
+
+        let mut agg2 = TelemetryAggregator::new(100);
+        agg2.record_event("m", "t1", true, 0.1, 0.2, "ok");
+        agg2.record_event("m", "t2", false, 0.9, 0.3, "fail");
+        let g = agg2.glyph_report();
+        assert!(g.contains("value sparkline:"));
+        assert!(g.chars().any(|c| ('\u{2581}'..='\u{2588}').contains(&c)));
     }
 
     #[test]

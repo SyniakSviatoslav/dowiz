@@ -157,6 +157,12 @@ impl HarvestLedger {
         self.records.len()
     }
 
+    /// Value series over recorded events (in insertion order), for glyph
+    /// rendering (sparkline). Empty when no records.
+    pub fn value_series(&self) -> Vec<f64> {
+        self.records.iter().map(|r| r.value).collect()
+    }
+
     pub fn is_empty(&self) -> bool {
         self.records.is_empty()
     }
