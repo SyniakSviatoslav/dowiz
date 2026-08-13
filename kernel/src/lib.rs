@@ -731,6 +731,9 @@ pub mod ktg2;
 /// Hypervector (VSA / hyperdimensional computing) — fixed-width bind/bundle
 /// vectors. Folds N-ary graphs into constant-width codes (no rank blow-up).
 pub mod hypervector;
+/// Pixel-format snapshot rendering (braille/half-block) — dense glyph grids
+/// so raw bytes can be "seen" in far fewer tokens than hex/raw text.
+pub mod pixel_snapshot;
 /// Delta calculus — replaces classic comparisons (a>b, x==y) with vector
 /// delta analysis. Δv, ∂t, rate, acceleration, drift tracking. Eigen/Phase
 /// comparison via spectral distance. Oscillation detection.
