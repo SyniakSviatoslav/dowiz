@@ -1,0 +1,645 @@
+{
+  "patterns": [
+    {
+      "name": "Phase point-on-S1 (cos/sin) instead of bool/f64",
+      "technique": "Newtype `Phase { theta, cos, sin }` replacing 0/1 scalars with unit-circle (cos θ, sin θ) encoding; geometry-over-algebra core atom",
+      "citations": [
+        "src/trig.rs:24-30",
+        "src/trig.rs:48-52"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "normalize_angle mod-TAU wrap",
+      "technique": "`theta % TAU` + two branch fold into (−π, π]; the single angle-normalization authority",
+      "citations": [
+        "src/trig.rs:81-86"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Xyz 3-D phase point with clamp",
+      "technique": "3-tuple (x,y,z) each clamped to [−1,1]; Euclidean distance + slerp/lerp with `w.clamp(0,1)`",
+      "citations": [
+        "src/trig.rs:92-102",
+        "src/trig.rs:128-136"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Spherical round-trip (r,θ,φ)",
+      "technique": "`to_spherical`/`from_spherical` (atan2 + acos) for rotation/azimuth geometry",
+      "citations": [
+        "src/trig.rs:143-157"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "PhaseVector rotate / phase-weighted dot",
+      "technique": "cos(θ_i−φ_i) sum as complex-free dot product; rotate-all-by-dθ",
+      "citations": [
+        "src/trig.rs:176-192"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Eigen (λ, vector, normalized) data atom",
+      "technique": "Eigen pair carrying magnitude+direction; `is_stable`/`is_growing` are λ-vs-1 threshold checks",
+      "citations": [
+        "src/eigen.rs:15-25",
+        "src/eigen.rs:95-98"
+      ],
+      "verdict": "REUSE-ADAPTED"
+    },
+    {
+      "name": "EigenDecomp top-k truncation (lossy compression)",
+      "technique": "sort_by |λ| desc (partial_cmp + unwrap_or) then `pairs.truncate(k)`",
+      "citations": [
+        "src/eigen.rs:118-127"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Rank-1 power-iteration decompose",
+      "technique": "repeated norm + residual projection `residual[i] -= λ·v[i]` (deflation)",
+      "citations": [
+        "src/eigen.rs:171-193"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "ASCII-bar glyph rendering (▬/▲ + repeat)",
+      "technique": "Unicode-bar glyph via `bar.repeat(width)` width-scaled by magnitude — the existing pixel/glyph idiom",
+      "citations": [
+        "src/eigen.rs:156-165"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Mat contiguous row-major flat Vec<f64>",
+      "technique": "struct-of-flat-array replacing Vec<Vec<f64>>; `data[i*ncols+j]` indexing; single backing store for cache-friendly matmul",
+      "citations": [
+        "src/mat.rs:38-42",
+        "src/mat.rs:88-96"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "MAT_BLOCK_SIZE cache-aware tile const",
+      "technique": "`pub const MAT_BLOCK_SIZE: usize = 128` tuned to L2 (128×128×8B×3 < 512KB); documented innovate: upgrade trigger",
+      "citations": [
+        "src/mat.rs:31"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "from_vecvec_checked fail-closed (Ragged/NonFinite)",
+      "technique": "Result<Mat, MatrixError> enum; rejects ragged + non-finite entries before any indexing",
+      "citations": [
+        "src/mat.rs:46-53",
+        "src/mat.rs:104-122"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "matmul_contig zero short-circuit",
+      "technique": "`if aik == 0.0 { continue; }` inner-loop skip preserving sparse-ish rows",
+      "citations": [
+        "src/mat.rs:153-172"
+      ],
+      "verdict": "REUSE-ADAPTED"
+    },
+    {
+      "name": "Arena-aware `_in` twin with heap fallback",
+      "technique": "`matmul_contig_in(a,b,arena)->Option<Mat>` serves scratch from BumpArena, degrades to heap twin on exhaustion (byte-identical)",
+      "citations": [
+        "src/mat.rs:182-206"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Kahan compensated summation",
+      "technique": "running low-bit compensation `c = (t−sum)−y`",
+      "citations": [
+        "src/numerical_guard.rs:151-161"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Pairwise (tree) summation",
+      "technique": "recursive split at mid; O(log n) error, vectorizable",
+      "citations": [
+        "src/numerical_guard.rs:166-176"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Stable softmax (subtract max)",
+      "technique": "x ← exp(x−max) / Σ exp(x−max), in-place",
+      "citations": [
+        "src/numerical_guard.rs:180-195"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Gaussian-elimination partial-pivot solve (fail-closed)",
+      "technique": "pivot swap + `vec![0.0;n]` sentinel on singular; power-iteration condition-number estimate",
+      "citations": [
+        "src/numerical_guard.rs:126-163"
+      ],
+      "verdict": "REUSE-ADAPTED"
+    },
+    {
+      "name": "CSR triple-array (row_ptr/col_idx/val)",
+      "technique": "single contiguous val + parallel col_idx + row_ptr offsets; col_idx sorted ascending per row (deterministic iteration order)",
+      "citations": [
+        "src/csr.rs:45-54",
+        "src/csr.rs:79-115"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "from_edges dedup by summing (no HashMap)",
+      "technique": "per-row bucket sort_by_key + adjacent merge summing duplicate (src,dst) weights — avoids iteration-order hazard",
+      "citations": [
+        "src/csr.rs:79-115"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "row_normalize dangling self-loop",
+      "technique": "row-stochastic normalize; zero-sum row installs deterministic self-loop (Â[i][i]=1)",
+      "citations": [
+        "src/csr.rs:125-152"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "spmv fixed-order left-vector product",
+      "technique": "out_j = Σ_i x_i·Â[i][j] with canonical row/column order for bit-reproducibility; `xi==0.0 continue`",
+      "citations": [
+        "src/csr.rs:268-287"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "personalized_pagerank fixed-iters Jacobi",
+      "technique": "fixed K iterations + fixed summation order ⇒ byte-deterministic PPR; `mem::swap` ping-pong buffers",
+      "citations": [
+        "src/csr.rs:330-366"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "LaplacianKind closed enum + matrix-free SpMV",
+      "technique": "3-variant enum (Unnormalized/Normalized/RandomWalk) dispatch; degree computed once O(n) then per-edge accumulation",
+      "citations": [
+        "src/csr.rs:524-537",
+        "src/csr.rs:561-594"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "FNV-1a consts + index-framed content hash",
+      "technique": "`FNV_OFFSET_64/FNV_PRIME_64` consts; row-index framing `h ^= (i as u64).wrapping_mul(0x9e37...)` to prevent cross-row collision",
+      "citations": [
+        "src/csr.rs:689-690",
+        "src/spectral_cache.rs:104-116"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "NormalizedTile type-encoded canonicalization invariant",
+      "technique": "private `csr` field + only constructors run row_normalize ⇒ non-canonical tile UNREPRESENTABLE (compile-time gate)",
+      "citations": [
+        "src/csr.rs:700-720"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "CGraph present:Vec<bool> subgraph without reindex",
+      "technique": "drop nodes by clearing `present[i]` flag so indices stay stable across recursion",
+      "citations": [
+        "src/cgraph.rs:37-51"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Bidirected symmetry enforced + sort_unstable+dedup",
+      "technique": "constructor mirrors i↔j both ways, then sort_unstable + dedup for deterministic c-component/d-sep",
+      "citations": [
+        "src/cgraph.rs:88-102"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "DSU delegation for connected components",
+      "technique": "c_components delegates to `crate::dsu::Dsu::union` over present nodes; byte-parity with flood-fill",
+      "citations": [
+        "src/cgraph.rs:184-197"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "d-separation BFS with (node,dir,via) tri-state",
+      "technique": "visited HashSet<(usize,u8,usize)> with dir=downstream/upstream and via; bidirected arc as open confounded case",
+      "citations": [
+        "src/cgraph.rs:344-411"
+      ],
+      "verdict": "REUSE-ADAPTED"
+    },
+    {
+      "name": "Result<Self,String> fail-closed index validation",
+      "technique": "constructors reject self-loops/reflexive/out-of-range with Err(format!) instead of panicking",
+      "citations": [
+        "src/cgraph.rs:60-109"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Sparse matrix as Vec<(row,col,val)> triples",
+      "technique": "COO-style triple emission for incidence/adjacency/Laplacian (dense twin for small n)",
+      "citations": [
+        "src/hypergraph.rs:188-196",
+        "src/hypergraph.rs:204-243"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Power-iteration centrality normalized to max=1",
+      "technique": "uniform start + sparse L·v iterate + renormalize; final abs/max normalize",
+      "citations": [
+        "src/hypergraph.rs:317-369"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "structural_hash (SHA3-256 over LE bytes)",
+      "technique": "canonical little-endian byte serialization hashed via `event_log::sha3_256` for integrity",
+      "citations": [
+        "src/hypergraph.rs:439-451"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Matrix32x32 stack-resident fixed [f64;1024]",
+      "technique": "fixed-size stack array with const N=32; fixed stride lets LLVM auto-vectorize; no heap on hot path",
+      "citations": [
+        "src/householder.rs:77-90"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "dot_fma runtime FMA detect + scalar fallback",
+      "technique": "`is_x86_feature_detected!(\"fma\")` → `_mm256_fmadd_pd` lane; scalar loop otherwise; math identical both paths",
+      "citations": [
+        "src/householder.rs:29-75"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "eig2x2 with Vieta debug_assert cross-check",
+      "technique": "closed-form 2×2 eigenvalues; `debug_assert!` validates r1+r2=trace and r1·r2=det via independent DAG (zero prod cost)",
+      "citations": [
+        "src/householder.rs:211-234"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Shifted-QR complex Givens on Hessenberg",
+      "technique": "deflation + Wilkinson shift + left/right Givens passes in Complex arithmetic to capture conjugate pairs",
+      "citations": [
+        "src/householder.rs:238-261",
+        "src/householder.rs:316-336"
+      ],
+      "verdict": "REUSE-ADAPTED"
+    },
+    {
+      "name": "sign-fix first-nonzero-component > 0",
+      "technique": "scan for first |x|>1e-300, negate vector if negative ⇒ byte-deterministic eigenvectors across runs/paths",
+      "citations": [
+        "src/householder.rs:455-474",
+        "src/spectral.rs:401-414"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "tridiag_ql_symmetric fixed sweeps",
+      "technique": "EISPACK TQL2-shape implicit QL; fixed max sweeps + fixed pair order ⇒ deterministic",
+      "citations": [
+        "src/householder.rs:267-280"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Minimal Complex const fn newtype (zero-dep)",
+      "technique": "hand-rolled Complex{re,im} with const fn new, add/sub/mul/div/sqrt — avoids num-complex dep",
+      "citations": [
+        "src/spectral.rs:42-105"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "charpoly Faddeev-LeVerrier O(n⁴)",
+      "technique": "recurrence M_k = A·M_{k-1} + c_{n-k+1}·I; legacy fallback + parity oracle only",
+      "citations": [
+        "src/spectral.rs:114-138"
+      ],
+      "verdict": "DROP"
+    },
+    {
+      "name": "roots Durand-Kerner deterministic seed",
+      "technique": "fixed complex seed 0.4+0.9i raised to powers (no RNG); fixed DK_ITERS=200",
+      "citations": [
+        "src/spectral.rs:171-217"
+      ],
+      "verdict": "DROP"
+    },
+    {
+      "name": "eigenvalues n≤32 fast-path dispatch",
+      "technique": "n≤32 → Householder (stack); n>32 → Faddeev fallback; nilpotent short-circuit (coeffs≈0 ⇒ all-zero spectrum)",
+      "citations": [
+        "src/spectral.rs:235-260"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "topk_symmetric power iteration + Hotelling deflation",
+      "technique": "fixed-seed LCG start vector, orthogonalize, per-spmv deflation `ax −= (vᵀax)v`, Rayleigh quotient; contiguous k·n evec buffer",
+      "citations": [
+        "src/spectral.rs:285-331"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "DriftClass closed enum + wire_code const fn",
+      "technique": "exhaustive match mapping Damped/Resonant/Unstable → 0/1/2 u8 wire code (single authority; new variant forces conscious code)",
+      "citations": [
+        "src/spectral.rs:696-704",
+        "src/spectral.rs:713-719"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "drift_band if-else classification (→ LUT candidate)",
+      "technique": "ρ vs 1±DRIFT_BAND branch ladder; ideal to convert to a 3-entry LUT/branchless constant in the rewrite",
+      "citations": [
+        "src/spectral.rs:558-567"
+      ],
+      "verdict": "REUSE-ADAPTED"
+    },
+    {
+      "name": "classify_drift fail-closed input guards",
+      "technique": "drift_guards_ok: non-finite + ragged + from_vecvec_checked before any indexing; shared by both drift entry points",
+      "citations": [
+        "src/spectral.rs:539-554"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "dominant_period const thresholds",
+      "technique": "PERIOD_MAG=0.85 / PERIOD_ARG=0.6 consts + arg-based period ℓ≈2π/|arg λ|",
+      "citations": [
+        "src/spectral.rs:620-633"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "DmdRank1Rls rank-1 RLS streaming estimator",
+      "technique": "Kalman-like gain + rank-1 covariance deflate, O(n²)/sample; forgetting factor λ",
+      "citations": [
+        "src/spectral.rs:659-698"
+      ],
+      "verdict": "REUSE-ADAPTED"
+    },
+    {
+      "name": "DecompCache content-address + AtomicU64 recompute counter",
+      "technique": "cache keyed on canonical content-address; monotonic `recomputes` AtomicU64 falsifier (exactly 0 on repeated hit, +1 on key change)",
+      "citations": [
+        "src/spectral_cache.rs:39-83"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "canonical_bits (−0.0→+0.0, NaN→CANONICAL_QUIET_NAN)",
+      "technique": "hashable-bit normalization via to_bits; CANONICAL_QUIET_NAN=0x7ff8000000000000 const; no transcendental on hash path",
+      "citations": [
+        "src/spectral_cache.rs:129-138"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "canonical_content_address global-pivot scale-invariant",
+      "technique": "divide all entries by |first nonzero| pivot before FNV-1a ⇒ uniform-scale family shares one key",
+      "citations": [
+        "src/spectral_cache.rs:173-201"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "RetainedBase type-encoded verify-before-persist",
+      "technique": "private fields + single `admit` constructor running classify_drift; Unstable retained base UNREPRESENTABLE",
+      "citations": [
+        "src/spectral_cache.rs:240-260"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "SoA batch lane f64x4 (vectorize ACROSS rows)",
+      "technique": "struct-of-arrays: 4 independent rows in one AVX2 register; per-lane replays exact scalar op order ⇒ bit-identity, never cross-lane reduction",
+      "citations": [
+        "src/simd.rs:51-156"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "kalman_lane4 bit-identical 1/s-then-mul replay",
+      "technique": "SoA Kalman lane re-multiplies `p * (1/s)` (not `p/s`) to match scalar to_bits; None = hold-prior fail-closed",
+      "citations": [
+        "src/simd.rs:220-275"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Delta (components/magnitude/rate) change primitive",
+      "technique": "v1−v0 vector + ‖Δ‖ + rate = mag/dt (saturating_sub timestamps); delta replaces comparison",
+      "citations": [
+        "src/delta.rs:28-50"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "DeltaComparison closed enum (Growing/Shrinking/Stable/Oscillating)",
+      "technique": "compare() maps magnitude + direction-sum to 4-state enum; is_oscillating sign-flip counting",
+      "citations": [
+        "src/delta.rs:220-250"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "DeltaTracker cumulative drift + window alarm",
+      "technique": "cumulative_drift += magnitude, max_rate fold, rev().take(window) recent alarm check",
+      "citations": [
+        "src/delta.rs:170-205"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "SpectralComponent damped oscillator at(t)",
+      "technique": "A·e^(−λt)·cos(ωt+φ); amplitude.clamp(0,1) + decay.max(0) in constructor",
+      "citations": [
+        "src/wave.rs:18-33"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "1/k harmonic-decay spectral fingerprint",
+      "technique": "8-component wave: freq=k, amp=intensity/k, decay=0.05k — LUT-like harmonic ladder",
+      "citations": [
+        "src/wave.rs:139-150"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "InterferenceField superposition + prune_decayed retain",
+      "technique": "sum over waves / n; `retain(|w| !w.is_decayed(...))` returns pruned count",
+      "citations": [
+        "src/wave.rs:81-136"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "Goertzel single-frequency DFT",
+      "technique": "2-pole IIR s0 = sample + coeff·s1 − s2 (coeff=2cos ω); power = s1²+s2²−coeff·s1·s2",
+      "citations": [
+        "src/resonance.rs:89-107"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "VecDeque bounded ring buffer",
+      "technique": "pop_front when ≥ capacity + push_back sanitized sample; 16 log-spaced default bins",
+      "citations": [
+        "src/resonance.rs:40-77"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "moving_average saturating_sub window",
+      "technique": "`i.saturating_sub(window-1)` + min(i+1) slice average (overflow-safe window)",
+      "citations": [
+        "src/resonance.rs:157-170"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "KalmanFilter built on Mat public API only",
+      "technique": "predict/update composed from Mat::zeros/identity/matmul_contig (mat.rs internals untouched); DOD invariant",
+      "citations": [
+        "src/kalman.rs:149-251"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "mat_inverse Gauss-Jordan partial pivot fail-closed",
+      "technique": "augmented [A|I], largest-magnitude pivot, `best < 1e-15 → None` singular",
+      "citations": [
+        "src/kalman.rs:91-139"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "innovation/surprise surfaced (not discarded)",
+      "technique": "cache last_innovation + last_surprise = ‖y‖/√tr(S) after update; read-only accessors",
+      "citations": [
+        "src/kalman.rs:162-166",
+        "src/kalman.rs:232-239"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "PID integral anti-windup clamp + KI_EPSILON",
+      "technique": "integral.clamp(−max/ki, max/ki) with `ki.max(KI_EPSILON)` guard; output.clamp + is_finite fallback",
+      "citations": [
+        "src/pid.rs:18",
+        "src/pid.rs:89-118"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "PidConfig.sanitize (clamp gains, min≤max)",
+      "technique": "ki/kp/kd max(0.0); min>max collapses to midpoint",
+      "citations": [
+        "src/pid.rs:41-52"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "PidArray struct-of-arrays (N parallel channels)",
+      "technique": "integrals/prev_errors/outputs as three parallel Vec<f64>; one shared config; SIMD-friendly batch update",
+      "citations": [
+        "src/pid.rs:317-394"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "PidController32 f32 quantized twin",
+      "technique": "identical algorithm in f32 (~2× mem savings); separate pid_step_f32",
+      "citations": [
+        "src/pid.rs:238-301"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "pid_stability_margin log-spaced frequency sweep",
+      "technique": "ω = ω_min·(ω_max/ω_min)^(i/n) geometric sweep over 4096 points; forward-Euler discrete PID freq response",
+      "citations": [
+        "src/math_guard.rs:17-55"
+      ],
+      "verdict": "REUSE-ADAPTED"
+    },
+    {
+      "name": "Tensor1/Tensor2 flat row-major data + sanitize-on-construct",
+      "technique": "contiguous Vec<f64> row-major (`data[r*cols+c]`) with `crate::sanitize_f64` applied to every entry in new()/set(); debug_assert bounds",
+      "citations": [
+        "src/tensor.rs:26-30",
+        "src/tensor.rs:124-129"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "norm_sq avoids sqrt; normalize returns original norm",
+      "technique": "squared-norm fast path; normalize() divides in place and returns the pre-normalization norm for chaining",
+      "citations": [
+        "src/tensor.rs:71-92"
+      ],
+      "verdict": "REUSE"
+    },
+    {
+      "name": "batch_dot / outer product free functions",
+      "technique": "thin zero-dep wrappers delegating to Tensor1::dot (SIMD lane available via simd.rs); outer builds row-major C[i][j]=a[i]·b[j]",
+      "citations": [
+        "src/tensor.rs:235-245"
+      ],
+      "verdict": "REUSE"
+    }
+  ],
+  "cross_patterns": [
+    "sanitize_f64 (NaN/Inf→0.0) at every input boundary — lib.rs:891; used by eigen, tensor, pid, kalman, resonance, simd, delta",
+    "f64::to_bits bit-identity parity tests — simd.rs:551-566, householder.rs:1040/1070, spectral_cache.rs:111/533, csr.rs:750-752",
+    "total_cmp for NaN-safe deterministic sort (replaces partial_cmp().unwrap()) — householder.rs:478/678, spectral.rs:1147-1154",
+    "fixed-seed LCG (wrapping_mul 6364136223846793005 + wrapping_add 1442695040888963407) for reproducible RNG — simd.rs:405-410, spectral.rs:108-113, csr.rs:1398-1404, hypergraph.rs:1176",
+    "sort_by_f64_desc/asc helper (partial_cmp+unwrap_or(Equal)) — lib.rs:923-950; spectral.rs, spectral_cache.rs, resonance.rs",
+    "saturating_add/saturating_sub overflow-safe counters/timestamps — delta.rs:48, resonance.rs:163, spectral.rs:172, householder.rs:136",
+    "`_in` arena-aware twins with clean heap fallback (byte-identical) — mat.rs:579, csr.rs:157/379/470, spectral.rs:240",
+    "type-encoded invariants via private field + single constructor — csr.rs:270 (NormalizedTile), spectral_cache.rs:240 (RetainedBase)",
+    "runtime feature detection is_x86_feature_detected! + #[target_feature] + scalar fallback — simd.rs:169-179, householder.rs:29-75",
+    "#[inline] small accessors (get/set/len) — mat.rs, csr.rs, tensor.rs, householder.rs, kalman.rs",
+    "fail-closed non-finite/ragged guards before indexing — mat.rs:501, spectral.rs:539 (drift_guards_ok), numerical_guard.rs:267",
+    "clamp(min,max) / clamp(0,1) for normalized values — trig.rs:101, wave.rs:508, delta.rs:143, pid.rs:113",
+    "debug_assert!/debug_assert_eq! trust-boundary invariants — mat.rs:530/554, householder.rs:385/407, kalman.rs:629, csr.rs:270",
+    "power iteration for dominant eigenvector (uniform/LU start) — eigen.rs:178, numerical_guard.rs:234, hypergraph.rs:1102, spectral.rs:285",
+    "closed enums with exhaustive match (no repr(u8) — codes via const fn/as_str instead) — DriftClass(spectral.rs:696), LaplacianKind(csr.rs:524), DeltaComparison(delta.rs:221), MatrixError(mat.rs:443), HypergraphError(hypergraph.rs:1240), SnapshotRejected(spectral_cache.rs:250)"
+  ],
+  "summary": "Mined 18 files (~11.8K lines) of the dowiz/kernel math/spectral/tensor/eigen core. Highest-value REUSE patterns for the n(0)+geometry+glyph rewrite: (1) trig.rs Phase/Xyz unit-circle geometry is the direct substrate for 'geometry over algebra'; (2) mat.rs/Matrix32x32/CSR contiguous flat-buffer layouts give O(1) index access; (3) simd.rs SoA batch-lane with bit-identity + runtime feature-detect + scalar fallback is the SIMD/geometry rendering template; (4) DriftClass::wire_code + drift_band is the only if-else ladder worth converting to a branchless LUT; (5) eigen.rs ascii() ▬/▲ + bar.repeat is the existing glyph-rendering idiom; (6) delta.rs/wave.rs are the delta-calculus + damped-oscillator primitives. DROP only the O(n⁴) Faddeev-LeVerrier charpoly + Durand-Kerner roots (superseded by Householder; retain solely as parity oracle). Recurring cross-patterns to preserve: sanitize_f64 at boundaries, to_bits parity tests, total_cmp sorting, fixed-seed LCG, arena `_in` twins, type-encoded invariants, and closed enums with const-fn wire codes (no repr(u8) anywhere — the rewrite should keep that convention)."
+}
