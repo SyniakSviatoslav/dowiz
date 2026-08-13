@@ -51,7 +51,7 @@ pub struct TelemetryAggregator {
     /// The harvest ledger for event recording.
     harvest_ledger: HarvestLedger,
     /// Tool outcome tokens for pattern surface (self-improvement loop).
-    outcome_tokens: Vec<String>,
+    outcome_tokens: std::collections::VecDeque<String>,
     /// Maximum outcome tokens to retain (sliding window).
     max_tokens: usize,
     /// Harvest ledger capacity, retained so the ledger can be reset.
@@ -64,7 +64,7 @@ impl TelemetryAggregator {
         let max_records = max_records.max(1);
         TelemetryAggregator {
             harvest_ledger: HarvestLedger::new(max_records),
-            outcome_tokens: Vec::new(),
+            outcome_tokens: std::collections::VecDeque::new(),
             max_tokens: 1000,
             max_records,
         }
@@ -87,10 +87,10 @@ impl TelemetryAggregator {
         self.harvest_ledger
             .record(model, task, success, value, cost);
 
-        // Track outcome token for pattern surface.
-        self.outcome_tokens.push(outcome_token.to_string());
+        // Track outcome token for pattern surface (O(1) ring eviction).
+        self.outcome_tokens.push_back(outcome_token.to_string());
         if self.outcome_tokens.len() > self.max_tokens {
-            self.outcome_tokens.remove(0);
+            self.outcome_tokens.pop_front();
         }
     }
 

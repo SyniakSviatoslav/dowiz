@@ -898,7 +898,7 @@ pub use evals::{
     RegressionGate, SelfAdaptator,
 };
 pub use money::{
-    apply_tax, assert_non_negative, compute_line_total, convert_all_to_eur_cents, to_minor_unit,
+    apply_tax, assert_non_negative, compute_line_total, convert_all_to_eur_cents,
 };
 pub use order_machine::{
     assert_transition, cyclomatic_number, fold_transitions, fsm_graph_report, has_cycle, reachable,

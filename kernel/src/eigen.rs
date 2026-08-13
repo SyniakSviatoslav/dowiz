@@ -22,6 +22,11 @@ pub struct Eigen {
 impl Eigen {
     pub fn new(lambda: f64, vector: Vec<f64>) -> Self {
         let n = Eigen::norm(&vector);
+        // Fail-closed: a non-finite eigenvalue is poison (e.g. NaN from a
+        // degenerate matrix); sanitize to 0.0 at the boundary instead of
+        // letting it propagate through stability classification.
+        let lambda = crate::sanitize_f64(lambda);
+        let vector: Vec<f64> = vector.into_iter().map(crate::sanitize_f64).collect();
         Eigen { lambda, vector, normalized: (n - 1.0).abs() < 1e-10 }
     }
 

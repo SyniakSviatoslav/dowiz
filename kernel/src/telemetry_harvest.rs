@@ -67,7 +67,7 @@ pub struct HarvestReport {
 /// JSONL output is gov_route-compatible (same field names as the dispatcher's
 /// `track_record.jsonl`).
 pub struct HarvestLedger {
-    records: Vec<HarvestRecord>,
+    records: std::collections::VecDeque<HarvestRecord>,
     max_records: usize,
 }
 
@@ -75,13 +75,14 @@ impl HarvestLedger {
     pub fn new(max_records: usize) -> Self {
         let init_cap = max_records.min(1024);
         HarvestLedger {
-            records: Vec::with_capacity(init_cap),
+            records: std::collections::VecDeque::with_capacity(init_cap),
             max_records: max_records.max(1),
         }
     }
 
     /// Record a telemetry event. Returns the created record.
-    /// The ledger acts as a ring buffer: once full, oldest records are evicted.
+    /// The ledger acts as a ring buffer: once full, oldest records are evicted
+    /// via O(1) `pop_front()` (a `VecDeque`, not a `Vec` O(n) `remove(0)` shift).
     pub fn record(
         &mut self,
         model: &str,
@@ -92,9 +93,9 @@ impl HarvestLedger {
     ) -> HarvestRecord {
         let rec = HarvestRecord::new(model, task, success, value, cost);
         if self.records.len() >= self.max_records {
-            self.records.remove(0);
+            self.records.pop_front();
         }
-        self.records.push(rec.clone());
+        self.records.push_back(rec.clone());
         rec
     }
 
@@ -167,7 +168,7 @@ impl HarvestLedger {
         self.records.is_empty()
     }
 
-    pub fn records(&self) -> &[HarvestRecord] {
+    pub fn records(&self) -> &std::collections::VecDeque<HarvestRecord> {
         &self.records
     }
 }

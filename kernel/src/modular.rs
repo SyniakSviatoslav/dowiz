@@ -42,6 +42,8 @@ impl Mobius {
     }
 
     /// Apply the transformation to a complex point.
+    /// Fail-closed: if `z` is (near) a pole of the transform (denominator
+    /// ~0), returns `z` unchanged instead of propagating NaN/Inf.
     pub fn apply(self, z: Complex) -> Complex {
         let num = Complex::new(
             (self.a as f64) * z.re + (self.b as f64),
@@ -51,6 +53,10 @@ impl Mobius {
             (self.c as f64) * z.re + (self.d as f64),
             (self.c as f64) * z.im,
         );
+        let dn = den.re * den.re + den.im * den.im;
+        if dn < 1e-15 {
+            return z; // pole (measure-zero): fail-closed, no NaN propagation
+        }
         num.div(den)
     }
 

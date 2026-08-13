@@ -12,12 +12,6 @@
 /// Reject non-integer amounts (money is integer minor units).
 ///
 /// NOTE (BP-17): the old code guarded `amount != amount` (a NaN check) — dead on `i64`,
-/// which can never be NaN. Removed. `i64` is already integer by type; this is a passthrough
-/// that exists for interface fidelity with the oracle's `toMinorUnit`.
-pub fn to_minor_unit(amount: i64, _currency: &str) -> Result<i64, String> {
-    Ok(amount)
-}
-
 // Single scale authority (promoted from private `SCALE`, BLUEPRINT-P-A §2/A3).
 pub const MONEY_SCALE_MICRO: i128 = 1_000_000;
 
