@@ -775,6 +775,8 @@ pub mod gboost;
 pub mod canonical;
 /// aarch64 NEON register-file kernels (f64 dot / matvec) for eigen/tensor/attention.
 pub mod neon;
+/// Deterministic, no_std-ready FxHash (replaces HashMap's OS-entropy RandomState).
+pub mod fxhash;
 /// Delta calculus — replaces classic comparisons (a>b, x==y) with vector
 /// delta analysis. Δv, ∂t, rate, acceleration, drift tracking. Eigen/Phase
 /// comparison via spectral distance. Oscillation detection.
