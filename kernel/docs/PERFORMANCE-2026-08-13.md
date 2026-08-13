@@ -88,6 +88,26 @@ Reported side-by-side for completeness; treat as informational only.
 energy number requires a bare-metal x86_64 host with RAPL or `perf stat`
 access. Honest status: energy delta is unmeasured, not "zero".
 
+## Re-measure (#22) — new modules (FFT / spherical) + LUT re-check
+
+| measurement | result |
+|---|---|
+| FFT real N=1024 | 29.2 µs/op |
+| FFT real N=4096 | 124.9 µs/op (≈4.3× for 4× N — O(N log N) holds) |
+| legendre P_8 | 0.97 ns/op |
+| spherical_harmonic Y_3^1 | 1.0 ns/op |
+| structure_factor S(k) (3 atoms) | 1.0 ns/op |
+| drift classification if/else (constant input) | 0.489 ns/op |
+| drift classification branchless LUT (constant input) | 0.491 ns/op |
+
+**Honest note on LUT vs if/else:** with a *constant* input the branch
+predictor is perfect, so if/else ≈ LUT (~1.00×). The branchless LUT's real
+win is *unpredictable* inputs (branch misprediction ≈ 50%), which a
+constant-input microbench cannot expose. The earlier 1.32× figure was
+same-arch but input-sensitive; the correct claim is "equal on predictable
+input, no branch to mispredict on unpredictable input" — not a flat speedup.
+A random-input sweep is the proper probe and is deferred.
+
 ## Rewrite summary (what shipped)
 
 Phases A–F of `docs/architecture/GLYPH-GEOMETRY-MIGRATION.md`:
