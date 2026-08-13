@@ -744,6 +744,9 @@ pub mod pixel_snapshot;
 /// Glyph-enhanced observability dashboard — sparkline/heatmap/scatter/braille
 /// bridge between pixel_snapshot and sys_dashboard/telemetry/fdr/event_log.
 pub mod glyph_dashboard;
+/// Hypervector (VSA) document index for academia + search — fixed-width codes,
+/// O(1) popcount similarity, parity-checked against a cosine baseline.
+pub mod hypervector_index;
 /// Delta calculus — replaces classic comparisons (a>b, x==y) with vector
 /// delta analysis. Δv, ∂t, rate, acceleration, drift tracking. Eigen/Phase
 /// comparison via spectral distance. Oscillation detection.
