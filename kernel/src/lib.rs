@@ -164,6 +164,7 @@ pub mod hub_provisioning;
 pub mod hub_supervisor;
 /// Воля АНУ — the hidden source of the self-evolving living organism. Single
 /// kernel-internal entry point for closed-loop self-evolution (G7 source-hiding).
+#[path = "brain/hydra.rs"]
 pub mod hydra;
 /// Fully-wired closed-loop self-evolution engine (Hydra + EntropyBudget + TAnnealing + Kalman + M9 + telemetry).
 pub mod hydra_closed_loop;
@@ -545,6 +546,19 @@ pub mod parametric_spectral;
 /// Академія Дмитра Євдокимова — quantized spectral library with P2P sync.
 /// Hash-only paper storage (32B/paper), bloom filter sync, snapshot serialization.
 pub mod academia;
+/// Standalone reference verifier for mesh crypto surface (§4 item-1 oracle).
+/// Differential target against production SignedEntry::verify_sig / sig_eq_ct.
+/// Requires `pq` feature (mesh crypto surface). Always available when pq is on.
+#[cfg(feature = "pq")]
+pub mod mesh_oracle;
+/// Kernel-native self-reproduction: inspect own source, analyze structure,
+/// derive artifacts (tests, diagnostics, docs), verify integrity.
+/// Replaces the conceptual gap where self-reproduction was described but not coded.
+pub mod self_reproduce;
+/// Full hypergraph data structure: vertices connected by hyperedges (any cardinality).
+/// Incidence matrix, Laplacian, spectral embedding, vertex centrality.
+/// Used for mesh topology, skill dependencies, citation networks.
+pub mod hypergraph;
 /// P2P distribution network: peers → parallel chunk download → merge.
 /// Аналогічна логіка рекурсивного пошуку, але для завантаження даних.
 /// Gated behind `feature = "speculative"` — 5224 lines of speculative
@@ -618,6 +632,10 @@ pub mod time_stabilizer;
 /// Weather + power grid load forecasting for clock drift prediction.
 /// Forecast feeds into TimeStabilizer's drift model.
 pub mod power_forecast;
+/// Unified telemetry aggregation — combines typed_metrics, telemetry (self-improvement
+/// pattern surface), telemetry_harvest (JSONL ledger), and span_metrics into one
+/// kernel-native interface. Replaces bash scripts like hydra_metrics_sender.sh.
+pub mod telemetry_aggregator;
 /// Per-call PQ ML-DSA-65 cryptographic signer for parse operations.
 /// Each parse call gets a fresh keypair; signature binds IP+timestamp+payload.
 /// Requires the `pq` feature for ML-DSA-65.
@@ -677,6 +695,11 @@ pub mod trigram;
 /// inflected-language recall in BM25/trigram retrieval. Normalizes cases,
 /// conjugations, and plurals to a common root.
 pub mod stem;
+/// Reconstruction memory — MemHarness reimplementation: memory as
+/// reconstruction, not replay. Critiques stored experience against current
+/// context and reconstructs adapted versions. Uses telemetry_harvest for
+/// storage, trigram for pattern surface, markov for verdict integration.
+pub mod reconstruction_memory;
 /// Three-valued logic + RGB/matrix encoding — trinary replaces binary
 /// everywhere: FSM states, auth decisions, enrichment scoring. Each
 /// Tri maps to an RGB color; matrices of Tri values produce visual
@@ -717,12 +740,35 @@ pub mod cross_bridge;
 /// Bebop protocol bridge — trinary auth, eigen envelopes, wave mesh sync,
 /// chronos DTN store-forward. Wires the new paradigm into the protocol layer.
 pub mod bebop_bridge;
+/// Endpoint visibility for AI agent actions — Numbat reimplementation.
+/// Detect, optionally block, and forensically reconstruct agent activity.
+/// Uses event_log (SHA3-256), fdr (flight data recorder), self_harness zones.
+pub mod numbat;
 /// Code change prediction oracle — learns from past commits to predict
 /// ETA, impact, and eigen shift for future changes. Uses chronos snapshots.
 pub mod code_oracle;
 /// System-wide ASCII dashboard — renders full system state as human-readable
 /// report. Uses all visualization primitives: trinary RGB, fractal, eigen, chronos.
 pub mod sys_dashboard;
+/// OpenObserve reimplementation — observability platform: logs, metrics, traces
+/// + columnar storage. Maps to kernel primitives: typed_metrics (MetricLine),
+/// telemetry_aggregator (TelemetryAggregator), event_log (MeshEvent/EventStore),
+/// json (JSON parsing for traces).
+pub mod openobserve;
+/// Memory-budgeted sparse MoE routing inspired by TurboFieldfare.
+pub mod turbofieldfare;
+/// Deterministic keyframe-to-interactive-motion pipeline inspired by Oil Motion.
+pub mod oil_motion;
+/// Spatial, tile-indexed collaborative reasoning canvas inspired by PenEcho.
+pub mod penecho;
+/// Lossless speculative block drafting and target verification inspired by DFlash.
+pub mod dflash;
+/// Tiny-device tool-calling agent state machine inspired by Needle 2.
+pub mod needle2;
+/// Local-first, auditable research workbench inspired by Open Science Desktop.
+pub mod open_science;
+/// Transport-neutral messaging/session core inspired by Evolution Go.
+pub mod evolution_go;
 /// Meta-tests (infrastructure self-check) + cross-tests (multi-module
 /// integration: trinary×eigen×chronos×delta×enrich full stack).
 #[cfg(test)]

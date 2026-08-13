@@ -632,6 +632,7 @@ mod tests {
     // The speedup number is printed and asserted >= 1.0x (proving the SIMD
     // path is at least as fast); the exact measured figure is recorded in
     // BLUEPRINT-P-E §13 and docs/regressions/REGRESSION-LEDGER.md.
+    #[cfg(all(target_arch = "x86_64", feature = "std"))]
     #[test]
     fn kalman_batch_benchmark_speedup_recorded() {
         use std::time::Instant;

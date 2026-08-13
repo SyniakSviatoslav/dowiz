@@ -1,6 +1,66 @@
 //! CorePinning — CPU-core affinity for agent dispatch.
-//! Linux: sched_setaffinity via libc
+//! Linux: minimal kernel-owned FFI for `sched_setaffinity(2)`
 //! Fallback: no-op on unsupported platforms
+
+#[cfg(target_os = "linux")]
+mod linux {
+    use std::ffi::c_int;
+
+    // Linux/glibc exposes a fixed 1024-bit cpu_set_t. Keep the ABI detail local
+    // instead of pulling the entire `libc` crate into the mandatory graph.
+    pub(super) const CPU_SETSIZE: usize = 1024;
+    const WORD_BITS: usize = usize::BITS as usize;
+
+    #[repr(C)]
+    struct CpuSet {
+        words: [usize; CPU_SETSIZE / WORD_BITS],
+    }
+
+    impl CpuSet {
+        fn one(cpu: usize) -> Option<Self> {
+            if cpu >= CPU_SETSIZE {
+                return None;
+            }
+            let mut set = Self {
+                words: [0; CPU_SETSIZE / WORD_BITS],
+            };
+            set.words[cpu / WORD_BITS] |= 1usize << (cpu % WORD_BITS);
+            Some(set)
+        }
+
+        #[cfg(test)]
+        fn contains(&self, cpu: usize) -> bool {
+            cpu < CPU_SETSIZE
+                && self.words[cpu / WORD_BITS] & (1usize << (cpu % WORD_BITS)) != 0
+        }
+    }
+
+    extern "C" {
+        fn sched_setaffinity(pid: c_int, cpusetsize: usize, mask: *const CpuSet) -> c_int;
+    }
+
+    pub(super) fn pin_current(cpu: usize) -> bool {
+        let Some(set) = CpuSet::one(cpu) else {
+            return false;
+        };
+        // SAFETY: `set` has the Linux cpu_set_t ABI, remains alive for the call,
+        // and pid 0 explicitly denotes the calling thread/process.
+        unsafe { sched_setaffinity(0, std::mem::size_of::<CpuSet>(), &set) == 0 }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn cpu_set_places_boundary_bits_without_aliasing() {
+            let set = CpuSet::one(WORD_BITS).expect("in range");
+            assert!(set.contains(WORD_BITS));
+            assert!(!set.contains(0));
+            assert!(CpuSet::one(CPU_SETSIZE).is_none());
+        }
+    }
+}
 
 /// Number of logical CPUs detected.
 pub fn cpu_count() -> usize {
@@ -14,17 +74,7 @@ pub fn cpu_count() -> usize {
 pub fn pin_to_core(core_id: usize) -> bool {
     #[cfg(target_os = "linux")]
     {
-        unsafe {
-            let mut set: libc::cpu_set_t = std::mem::zeroed();
-            libc::CPU_ZERO(&mut set);
-            libc::CPU_SET(core_id % cpu_count(), &mut set);
-            let result = libc::sched_setaffinity(
-                0, // current pid
-                std::mem::size_of::<libc::cpu_set_t>(),
-                &set,
-            );
-            result == 0
-        }
+        linux::pin_current(core_id % cpu_count().min(linux::CPU_SETSIZE))
     }
     #[cfg(not(target_os = "linux"))]
     {
@@ -43,7 +93,7 @@ pub fn optimal_layout(n_agents: usize) -> Vec<usize> {
 /// Pin a batch of agents to cores (round-robin).
 pub fn pin_agents(n_agents: usize) -> Vec<usize> {
     let layout = optimal_layout(n_agents);
-    for &core in &layout {
+    for &_core in &layout {
         // In production: each agent process gets pinned individually
         // Here we just return the layout for the orchestrator
     }
