@@ -754,6 +754,22 @@ pub mod squash;
 pub mod fft;
 /// Legendre / spherical harmonics / Lebedev quadrature / crystal structure factor S(k).
 pub mod spherical;
+/// Modular group PSL(2,Z) + Möbius action (item #6).
+pub mod modular;
+/// Fine-grained reactive signals (item #12).
+pub mod signal;
+/// Minimal clean semantic HTML emitter — "no div soup" (item #3).
+pub mod semantic;
+/// Procedural pattern generators rendered as glyphs (item #18).
+pub mod weave;
+/// Geometric landmark/keypoint primitives + Procrustes alignment (item #10).
+pub mod landmark;
+/// Deterministic scenario record/replay/resume + secret redaction (item #2 substrate).
+pub mod scenario;
+/// Support-ticket lifecycle FSM + conversation thread (item #13).
+pub mod support;
+/// Gradient boosting with regression stumps (item #15).
+pub mod gboost;
 /// Delta calculus — replaces classic comparisons (a>b, x==y) with vector
 /// delta analysis. Δv, ∂t, rate, acceleration, drift tracking. Eigen/Phase
 /// comparison via spectral distance. Oscillation detection.
