@@ -728,6 +728,10 @@ pub mod fractal;
 /// The execution center of the kernel (cell/graph/tile2x2/telemetry/exokernel/
 /// fractal/fractal_manchester).
 pub mod ktg2;
+/// Fractal Manchester Architecture (FMA) — canonical transport/geometry layer:
+/// Manchester self-synchronizing transitions, -64 absolute fractal zero,
+/// optical semiconductor-resistor channel, per-op IDs + epochs + telemetry.
+pub mod fractal_manchester;
 /// Hypervector (VSA / hyperdimensional computing) — fixed-width bind/bundle
 /// vectors. Folds N-ary graphs into constant-width codes (no rank blow-up).
 pub mod hypervector;
