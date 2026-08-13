@@ -79,6 +79,13 @@ impl CpuTopology {
             }
         }
         topo.physical_cores = core_ids.len();
+        // ARM64 (aarch64) /proc/cpuinfo has no `core id` field — each
+        // `processor` entry is one physical core (SMT is not exposed there).
+        // Fall back to 1:1 so the snapshot stays consistent instead of
+        // reporting 0 physical cores alongside N logical processors.
+        if topo.physical_cores == 0 && topo.logical_processors > 0 {
+            topo.physical_cores = topo.logical_processors;
+        }
         if topo.physical_cores > 0 && topo.logical_processors > 0 {
             topo.smt_threads_per_core = topo.logical_processors / topo.physical_cores;
         }

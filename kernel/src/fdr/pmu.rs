@@ -433,6 +433,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn tier_a_reads_real_nonzero_counters() {
         // rdtsc must advance across two reads, and the /proc fault/ctxt counters must parse
         // to real Values on this Linux x86_64 host — NOT stub zeros, NOT absences.
@@ -629,6 +630,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn bracket_runs_classifier_untouched_and_records_a_delta() {
         // Bracket a REAL markov classification. The verdict is exactly what the pure
         // function returns (bracketing must not change it), and the PMU delta records a
@@ -676,6 +678,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_arch = "x86_64")]
     fn drift_class_lane_bracket_preserves_verdict_and_records_pmu_delta() {
         // Blueprint §4.3 — DriftClass lane: bracket a REAL `classify_drift` call the same
         // way a verdict-emission point would. The `DriftClass` verdict must be EXACTLY what
