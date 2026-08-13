@@ -741,6 +741,9 @@ pub mod hypervector;
 /// Pixel-format snapshot rendering (braille/half-block) — dense glyph grids
 /// so raw bytes can be "seen" in far fewer tokens than hex/raw text.
 pub mod pixel_snapshot;
+/// Glyph-enhanced observability dashboard — sparkline/heatmap/scatter/braille
+/// bridge between pixel_snapshot and sys_dashboard/telemetry/fdr/event_log.
+pub mod glyph_dashboard;
 /// Delta calculus — replaces classic comparisons (a>b, x==y) with vector
 /// delta analysis. Δv, ∂t, rate, acceleration, drift tracking. Eigen/Phase
 /// comparison via spectral distance. Oscillation detection.
