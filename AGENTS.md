@@ -96,7 +96,7 @@ Source: [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) �
 
 ---
 
-## Integration Decart Rule — compare & probe before you adopt (operator, 2026-07-14)
+## Decart rule — compare & probe before you adopt (operator, 2026-07-14)
 
 **Agnostic, innovative, ethical — zero ideological attachments.** Any **new integration** (new
 dependency/crate/package · external service/API · transport/provider/backend/protocol · **or a swap of
