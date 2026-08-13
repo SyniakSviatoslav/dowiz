@@ -220,6 +220,81 @@ does not self-edit — per the standing governance gate-topology rule, that unlo
 
 ---
 
+## Tool Use (all agents — binding)
+- **Read before edit**: Never edit a file without reading the relevant section first. No blind writes.
+- **Existing files win**: Edit rather than create. Never make a new file when an existing one can be extended.
+- **One edit per turn**: Don't batch multiple file edits in a single step — confirm each before the next.
+- **Don't over-tool**: If the answer is already known or the task is trivial, respond directly without calling tools.
+- **Investigate before escalating**: Use search/read tools exhaustively before asking the user for information they didn't volunteer. Only ask when the information genuinely can't be found.
+- **Parallel when truly independent**: Batch tool calls only when they have zero ordering dependency. If B depends on A's result, run sequentially.
+
+## Planning
+- **Think before critical actions**: Pause before git commits, deployments, schema changes, or declaring a
+  task complete. State what you're about to do and why.
+- **Todos for 3+ step tasks only**: Don't create task lists for simple work. Exclude linting and type-checking
+  from todos — they're verification, not tasks.
+- **One task in_progress at a time**: Serialise execution; context thrashing from parallel active tasks causes mistakes.
+
+## Error Recovery
+- **Test failures = code is wrong**: When tests fail, assume the implementation is wrong unless explicitly
+  told otherwise. Don't rewrite tests to pass.
+- **Route around environment issues**: If a local tool is broken, use alternatives (CI, remote, different command)
+  rather than blocking on a fix. Report the environment issue separately.
+- **Fix before proceeding**: Any script, hook, or shell error stops the current task. Fix the root cause, then resume.
+
+## Code Standards
+- **Match the project's conventions**: Read existing patterns before generating new code. Don't impose your own style.
+- **No output of code unless requested**: Use edit tools silently. Keep chat focused on intent and decisions, not diffs.
+- **Non-interactive flags**: Always pass `--yes`, `--non-interactive`, etc. for automation-context commands.
+  Never assume a human can respond to a prompt.
+
+## Vendor/Model selection — global defaults (all agents)
+- **Preferred model (global):** `upstage/solar-pro4:free` via Nous inference API — primary reasoning model for
+  all agents in this project. Fallback chain if unavailable: `openai/gpt-4.1-mini` → `anthropic/claude-sonnet-4-20250514` →
+  `google/gemini-2.5-pro-preview-06-05` → `x-ai/grok-4-07092025` → ` DeepSeek/deepseek-r1-0528` →
+  `minimax/minimax-m2.5` → `qwen/qwen3-coder` → `mistral/mistral-large-2411` → `nousresearch/nous-hermes-3` →
+  `hyperbolic/llama-3.3-70b-instruct` → `perplexity/llama-3.1-sonar-large-128k-online` → `huggingface/claim-studio` →
+  `black-forest-labs/black-forest-labs-chatgpt-4o-latest` → `chatbase/chatbase` → ` AI21/ AI21-zero-chance` →
+  ` together/ together-ai-playground` → ` anyscale/ anyscale-endpoints` → ` fireworks/ fireworks-chat` →
+  ` sambanova/ sambanova-cloud` → ` cerebras/ cerebras-llama3.1-70b` → ` ai2/ ai2-math-length`.
+  Pick the **first available** in this chain; do not spend time hunting for a "better" one before failing over.
+- **Fallback model (user-facing output only):** `deepseek-r1-0528` — used only when the preferred model is genuinely
+  unreachable AND the agent is producing user-visible text (summaries, explanations, replies). Never use as a
+  substitute for the preferred model on code/spec/reasoning work — it is a communication fallback, not a reasoning
+  replacement.
+- **Cost discipline:** prefer the free/cheapest tier that meets the task. Do not upsell without a concrete reason.
+  Cache deterministic reads; batch tool calls; avoid re-reading large files already in context.
+
+## Research, Synthesis, Critique, Plan, Blueprints — the real spine
+Real work is not "write code." It is: research → synthesis → critique → plan → critique → work →
+verify → critique → commit. This is the spine every non-trivial task runs through, and skipping phases
+is how things break in ways that surface 3 weeks later as a rewrite.
+
+- **Research (R):** read the repo, the docs, the issues, the past decisions. Build a grounded picture of
+  what exists and what the constraints actually are — not what you assumed they were. Cite file paths and
+  line numbers; if you can't point to where a claim lives on disk, it's an assumption, not research.
+- **Synthesis (S):** combine the research into a coherent model — what's connected to what, where the
+  tension points are, what the actual shape of the problem is. This is where you stop being a search engine
+  and start being an engineer.
+- **Critique (C1):** attack your own synthesis. What are you missing? What did you gloss over? What would a
+  skeptical reviewer poke at? Surface the weak points before they become bugs.
+- **Plan (P):** produce a blueprint or step sequence with explicit dependencies, done-checks, and the
+  integration decart for any new dependency. A plan without a falsifiable done-check is a hope, not a plan.
+- **Critique (C2):** verify the plan against the live repo. Does it actually build on what exists? Are the
+  dependency edges real or assumed? Does it contradict another plan/doc? Fix before work starts.
+- **Work (W):** implement per the plan. TDD where the space is well-defined; spec-driven where it isn't.
+  One concrete step at a time, verified as you go.
+- **Verify (V):** a DIFFERENT agent/model/tool than the one that wrote it checks the work. Self-review is
+  not verification — it's optimism. The verifier has permission to reject, not just to nod.
+- **Critique (C3):** the verifier's findings get addressed, not defended. Edge cases, missing tests,
+  over-engineering, under-engineering — all fair game.
+- **Commit (C4):** evidence in the commit message, results written back to living memory. Done means
+  recorded, not just felt.
+
+This is not bureaucracy. It is the minimal sequence that keeps a codebase from decaying into a pile of
+assumptions. Skip it on typo fixes; run it on anything that touches architecture, dependencies, security,
+data, or the public contract.
+
 ## Global doctrine — Anu (logic) & Ananke (organization) (operator, 2026-07-16)
 
 **Honest provenance first, because it matters for how binding this is:** neither term was already
