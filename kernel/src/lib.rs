@@ -747,6 +747,9 @@ pub mod glyph_dashboard;
 /// Hypervector (VSA) document index for academia + search — fixed-width codes,
 /// O(1) popcount similarity, parity-checked against a cosine baseline.
 pub mod hypervector_index;
+/// Zero-dep compression (RLE / delta) for academy/diff/garbage artifacts —
+/// compress on write, decompress on use, byte-identity round-trip.
+pub mod squash;
 /// Delta calculus — replaces classic comparisons (a>b, x==y) with vector
 /// delta analysis. Δv, ∂t, rate, acceleration, drift tracking. Eigen/Phase
 /// comparison via spectral distance. Oscillation detection.
