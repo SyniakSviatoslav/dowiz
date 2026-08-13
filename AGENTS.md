@@ -228,12 +228,52 @@ does not self-edit — per the standing governance gate-topology rule, that unlo
 - **Investigate before escalating**: Use search/read tools exhaustively before asking the user for information they didn't volunteer. Only ask when the information genuinely can't be found.
 - **Parallel when truly independent**: Batch tool calls only when they have zero ordering dependency. If B depends on A's result, run sequentially.
 
-## Planning
-- **Think before critical actions**: Pause before git commits, deployments, schema changes, or declaring a
-  task complete. State what you're about to do and why.
-- **Todos for 3+ step tasks only**: Don't create task lists for simple work. Exclude linting and type-checking
-  from todos — they're verification, not tasks.
-- **One task in_progress at a time**: Serialise execution; context thrashing from parallel active tasks causes mistakes.
+## Swarm orchestration — multi-agent, multi-model, parallel-first
+
+**Every non-trivial task runs as a swarm, not a single agent.** The orchestrator decomposes work,
+selects executors (agents + models), dispatches in parallel when safe, monitors health, and aggregates
+results. Sequential gates (operator decisions, external validation, red-lines) run single-threaded and block.
+
+### Model pool (free/cheap, first-available in chain)
+All agents in this project use the first available model in this chain; do NOT spend time hunting for
+a "better" one before failing over:
+
+`upstage/solar-pro4:free` → `openai/gpt-4.1-mini` → `anthropic/claude-sonnet-4-20250514` →
+`google/gemini-2.5-pro-preview-06-05` → `x-ai/grok-4-07092025` → ` DeepSeek/deepseek-r1-0528` →
+`minimax/minimax-m2.5` → `qwen/qwen3-coder` → `mistral/mistral-large-2411` → `nousresearch/nous-hermes-3` →
+`hyperbolic/llama-3.3-70b-instruct` → `perplexity/llama-3.1-sonar-large-128k-online` →
+`huggingface/claim-studio` → `black-forest-labs/black-forest-labs-chatgpt-4o-latest` →
+`chatbase/chatbase` → `together/together-ai-playground` → `anyscale/anyscale-endpoints` →
+`fireworks/fireworks-chat` → `sambanova/sambanova-cloud` → `cerebras/cerebras-llama3.1-70b` →
+`ai2/ai2-math-length`
+
+**Fallback model (user-facing output only):** `deepseek-r1-0528` — used only when the preferred model is
+genuinely unreachable AND the agent is producing user-visible text. Never a substitute for reasoning work.
+
+### Swarm dispatch rules
+1. **Frame as parallel-safe first.** If subtasks have zero ordering dependency, dispatch them to separate
+   executors in parallel. Only sequential gates run single-threaded.
+2. **One task per agent per turn.** Don't overload an agent with multiple unrelated subtasks — split them.
+3. **Different model for verification.** The verifier MUST be a different model/agent than the implementer.
+   If the implementer used Solar-Pro4, the verifier uses a different model from the pool.
+4. **Cost discipline.** Prefer the free/cheapest tier that meets the task. Batch tool calls. Cache
+   deterministic reads. Don't re-read large files already in context.
+5. **Worktree isolation for code-writing agents.** Any subagent that writes code into this repo MUST use
+   `isolation: "worktree"` (own working dir + own `.git/index`). Planning/doc agents may skip it if
+   provably the sole writer, but default to worktree whenever in doubt.
+
+### When to use a swarm vs single agent
+- **Swarm:** research arcs, blueprint production, multi-file refactors, verification passes, cross-cutting
+  changes (security + API + tests), anything with 3+ independent subtasks.
+- **Single agent:** typo fixes, single-file edits, follow-up clarifications, trivial commits, responding to
+  user questions that don't require code changes.
+- **Judgement:** if you're not sure, frame it as a swarm with one agent doing research and one doing the
+  work — the overhead is lower than the cost of a serial mistake.
+
+### Result aggregation
+Each swarm executor writes its results back to MEMORY.md (or the relevant file) with a clear provenance
+tag (`[agent: model, task-id]`). The orchestrator aggregates, resolves conflicts by ground truth (live repo
+wins over narrative), and commits when all subtasks are verified or flagged.
 
 ## Error Recovery
 - **Test failures = code is wrong**: When tests fail, assume the implementation is wrong unless explicitly
@@ -242,11 +282,194 @@ does not self-edit — per the standing governance gate-topology rule, that unlo
   rather than blocking on a fix. Report the environment issue separately.
 - **Fix before proceeding**: Any script, hook, or shell error stops the current task. Fix the root cause, then resume.
 
-## Code Standards
-- **Match the project's conventions**: Read existing patterns before generating new code. Don't impose your own style.
-- **No output of code unless requested**: Use edit tools silently. Keep chat focused on intent and decisions, not diffs.
-- **Non-interactive flags**: Always pass `--yes`, `--non-interactive`, etc. for automation-context commands.
-  Never assume a human can respond to a prompt.
+## Code Standards — full battery (all agents, binding)
+
+### Research-first rule (MANDATORY)
+Before editing, adding, or removing any file, research what exists:
+1. Read the relevant source file(s) — at least the section you're touching.
+2. Search for related code (`rg`, `fd`) to find usages, tests, and callers.
+3. Read project conventions (this section) + MEMORY.md conventions + DECISIONS.md invariants.
+4. Check for existing tests — extend them, don't skip them.
+5. Record findings in MEMORY.md if they're new project knowledge.
+
+### Project conventions (HARD — from MEMORY.md §Conventions)
+1. **Zero external deps** — kernel compiles with no crates.io deps. `cargo tree -e no-dev` must be empty.
+2. **Named absence, not silent omission** — every counter/stamp uses `Reading::Value(u64)` or `Reading::Unavailable(Absence::Variant)`. Never fabricate a 0.
+3. **Optional-field discipline** — new fields on FdrEvent are `Option<T>`, present ONLY on their record class. Non-carrier records serialize byte-identical to before.
+4. **Closed enums** — `Absence`, `Kind`, `WorkloadKind` are closed. New variants = conscious edit + `as_str`.
+5. **P3 firewall** — span_id, parent_span_id, PMU, and work are forensic-plane. They NEVER feed hash, signature, idempotency, or replay surfaces.
+6. **No ratio fields** — work/cost are raw u64 pairs. Efficiency is a consumer concern, not a schema field.
+
+### Project invariants (HARD — from DECISIONS.md D0)
+**decentralized · local-first · post-quantum · crypto · mesh · reliability-over-latency.**
+If a change breaks any of these, it is rejected. They outrank roadmap sequencing, feature requests, and "MVP-first" pragmatism.
+
+### Rust code conventions
+- **Error handling:** use `thiserror`-style enum errors or `anyhow::Error` for apps; kernel stays `std`-only with custom error types. Never `unwrap()` in library code; `expect()` only with a clear message. Propagate errors, don't swallow.
+- **No `unwrap()` in library code.** `unwrap()` is for tests and `main` only. Library code returns `Result` or uses `?` propagation.
+- **Small functions.** Functions should do one thing. If a function needs a comment explaining "this part does X", split it.
+- **Explicit types on public APIs.** `pub fn foo() -> Result<Bar, Baz>` — no inferred return types on `pub` items.
+- **No dead code.** `#[allow(dead_code)]` only with a comment explaining why. CI should flag dead code.
+- **Clippy clean.** `cargo clippy --all-targets -- -D warnings` must pass. Allowed clippy ignores require a comment.
+- **Borrow checker discipline.** Prefer owned data at API boundaries; borrow internally. Return `Cow` when borrowing-or-owning is the right shape. Avoid `Rc`/`Arc` unless shared ownership is genuinely required.
+- **No `std::mem::transmute`** unless a comment cites the safety proof. Prefer `bytemuck` or explicit casts.
+- **SIMD:** use `std::arch` intrinsics with target feature guards. Fall back to scalar for non-SIMD targets. Never silently assume SIMD availability.
+
+### JavaScript/TypeScript conventions (from CONVENTIONS.md)
+- Single `App` object with method-per-feature pattern
+- camelCase for methods and variables
+- `_` prefix for internal/private state keys
+- async/await for all async operations
+- try/catch on all fallible operations (fetch, localStorage, AudioContext, WebGL)
+- Design tokens in `tokens.css` (CSS custom properties)
+- Components in `base.css`; animations in `animations.css`
+- BEM-lite naming: `.component-variant`
+- All app state in `App.state`; `persist()` → localStorage on every meaningful change; `restore()` on init
+- `pageXxx()` returns HTML string; `renderXxx()` sets innerHTML on existing elements
+- No framework — direct DOM manipulation
+
+### File conventions
+- **One concern per file.** If a file has two unrelated responsibilities, split it.
+- **Module organization:** `mod.rs` re-exports public API; implementation in separate files. Keep `mod.rs` thin.
+- **Test files:** co-located `#[cfg(test)]` module in the same file for unit tests; separate `tests/` for integration tests.
+- **Naming:** `snake_case` for Rust functions/variables/modules; `CamelCase` for types/traits/enums; `SCREAMING_SNAKE_CASE` for statics/consts. JavaScript: `camelCase` functions/vars, `PascalCase` components.
+- **Line length:** 100 chars soft limit for Rust; 120 for JS/TS. Break long chains onto separate lines.
+- **Imports:** grouped by origin (std → crates → local), sorted alphabetically within group. One import per line.
+
+### Commit conventions
+- **Format:** `type: description` — types: `feat`, `fix`, `docs`, `refactor`, `test`, `perf`, `build`, `ci`, `chore`, `revert`.
+- **Scope optional:** `feat(parser): add TSV column selection`.
+- **Body:** explain WHY, not WHAT. The diff shows what. Reference issues/blueprints if applicable.
+- **Evidence in body:** for code changes, paste `cargo test` output (pass/fail count) and clippy status. "tests green" is not evidence; numbers are.
+- **No typo-only commits without a body** — a one-liner for a typo is fine; for anything else, explain.
+
+### Security invariants (binding — from MEMORY.md §Security)
+- Hydra: closure=NEVER, kill-switch only, command-filter (SHA3-256), breach-alarm (G9)
+- P103 supervisor: dual-witness 2-of-2, drift-gated
+- P97/P101: locked pair + CPU-only
+- Intake firewall: `intake-adapters` produces `InboundMessage`, structurally cannot call `place_order`
+- No recovery keys on wallet self-custody
+- No `push --force` (worktree exception: force-with-lease allowed after fetch+ls-remote)
+- Post-quantum: hybrid KEM `X25519 + ML-KEM-768`, signatures ML-DSA-65, PQ envelope at protocol layer regardless of transport (DECISIONS D3/D4)
+- TriState everywhere — no boolean state without `Unknown` (MEMORY.md §TriState)
+- Named absence — never fabricate 0 (MEMORY.md §Conventions #2)
+
+### Testing discipline
+- TDD: write RED test first, then GREEN implementation.
+- Run `cargo clippy --all-targets` and `cargo test` before every commit.
+- Golden-string tests pin exact JSON output (FDR schema).
+- No external test frameworks (no proptest, no quickcheck) — kernel stays zero-dep.
+- Every new feature ships a runnable probe that FAILS if the capability broke.
+- Native telemetry + benchmarks for hot paths (criterion bench + `bench_track.py`).
+
+### Verification rules
+- Compile the touched crate, run its tests, run clippy — fresh evidence before claiming done.
+- Use a different model/agent to verify; self-verification is banned for correctness.
+- Record verification evidence in MEMORY.md (what ran, what passed, what failed).
+
+### Tech stack mandate — Kernel + Rust, GPU-native rendering, JS → 0
+**All new UI/rendering work goes through GPU: WebGPU / WebGL / Canvas.** The DOM is a fallback only
+when GPU is structurally unavailable (no browser, no GPU context). Zero new JS for rendering — JS is
+for glue/adapters only, never for presentation.
+
+- **Render path:** wgpu (`wgpu` crate on Rust side, or WebGPU via `webGpu` on JS side) is the primary
+  render target. Canvas2D (`Canvas` API) is the fallback if WebGPU context creation fails. WebGL is
+  acceptable for legacy interop but not for new features.
+- **DOM:** minimal to zero. No new DOM-manipulating JS. Existing composables (`compose_ui.rs`,
+  `compose.mjs`) are the transition surface; new features don't add DOM nodes they don't own.
+- **JS surface:** shrinks over time. New JS is only allowed for: (a) adapter glue between kernel and
+  external APIs, (b) tooling scripts, (c) CI/automation. Presentation/rendering logic does not live in JS.
+- **Rust-first:** any new capability is a Rust kernel module first, exposed to the render surface via the
+  existing FFI/port boundary. JS consumes the kernel's output; JS does not implement the capability.
+- **Zero-dep kernel:** `cargo tree -e no-dev` must be empty for kernel. GPU/render stack lives in the
+  render crate / workspace member, not in kernel. Kernel stays pure computation.
+
+Rationale: GPU-native rendering is the project's direction (agreed 2026-08-12). DOM-based rendering is
+legacy. Keeping JS to zero for presentation avoids the old TS-on-top-of-Rust duplication that the kernel
+rewrite was meant to eliminate.
+
+### Overengineering exception (EXPLICITLY ALLOWED)
+**Overengineering is allowed and favoured when it buys correctness, safety, or future-proofing.** The project's "innovating senior dev" spine says: "DO NOT stop at the first rung when a deeper correctness or capability win is available." This means:
+- If a simpler approach works now but a more robust approach prevents a whole class of future bugs, take the robust approach.
+- If adding a verification layer, a formal invariant check, or a typed state machine costs more now but prevents silent corruption later, do it.
+- "Fewest correct files" is the bar — not "fewest lines" or "least machinery." Correct-and-minimal beats clever-and-brittle.
+- The mesh swarm architecture itself is an overengineering win: no hierarchy, self-organizing agents, decentralized coordination. It's more complex than a central orchestrator, and that complexity is the point.
+- **Boundary:** overengineering must serve a named property (correctness, safety, decidability, observability, recoverability). If you can't name the property it buys, it's gold-plating, not overengineering.
+
+### Logic rules — MUST HAVE (all code must satisfy)
+
+#### L1: Every function has a stated contract
+- Preconditions (what must be true on entry) and postconditions (what's guaranteed on exit) are documented in a doc comment or evident from types. If the contract is conditional, the condition is named.
+
+#### L2: No implicit state
+- State is either passed explicitly as arguments, stored in a named struct, or documented as a module-level invariant. "This function assumes X is set elsewhere" is a bug, not a convention.
+
+#### L3: Invariants are checkable
+- Every invariant (enum validity, range bounds, structural properties) is either enforced by the type system or checked by a test. Unchecked invariants are assumptions, not invariants.
+
+#### L4: Errors propagate, they don't vanish
+- Every error path is either handled (returned, logged, recovered) or intentionally unreachable (with a named reason). Silent error swallowing is prohibited.
+
+#### L5: No side effects without a name
+- If a function mutates state, performs I/O, or has any observable effect beyond its return value, the effect is documented. Pure functions are documented as pure.
+
+#### L6: Decisions are recorded, not implied
+- Any non-obvious choice (algorithm, data structure, ordering, scoping) is documented with a one-line reason. "Why this way?" must have an answer in the code or a linked decision record.
+
+#### L7: Testable by construction
+- Code is structured so that each piece can be tested in isolation. If a function can only be tested by spinning up the whole system, it's too coarse — split it.
+
+#### L8: No magic numbers or strings without context
+- Constants are named. Configuration values are extracted. Hard-coded strings that appear more than once are centralized. A number in source code must have a name or a comment explaining its origin.
+
+#### L9: Forward compatibility is a default concern
+- New fields are `Option<T>`. Enums are closed with explicit `as_str`. Match arms cover all variants or have a named catch-all. Code that breaks when a new variant is added is a known failure mode, not a surprise.
+
+#### L10: Security is structural, not bolted-on
+- Security-relevant invariants (firewalls, capability checks, signature verification, input validation) are enforced at the type level or at a gate that cannot be bypassed. A "check somewhere else" is not a security model.
+
+### Quality programming rules — MUST HAVE (from code-quality audits, RED+GREEN discipline)
+
+These rules are derived from the operator's own quality audits (TORVALDS pass, HERZOG pass, OPUS perf/best-practices audits) and the project's RED+GREEN falsifiable-gate doctrine. They are binding on all agents.
+
+#### Q1: No code path lies about its state
+- Every user-facing surface must truthfully represent what it does. A page that claims to render live kernel state but renders dashes is a defect (HERZOD-01). A script that claims to boot the kernel but is a Node program that dies in the browser is a defect. Fix the claim or fix the code — never leave both lying.
+
+#### Q2: Old code dies only after the replacement is built, wired, and observed green
+- Never delete a running component before its replacement is compiled, started, supervised, and verified. Deleting the Python telemetry stack before any Rust replacement was built is the canonical anti-pattern (TORVALDS-01). The rule: replacement green → old code deleted → old code's callers updated. Any other order is demolition, not migration.
+
+#### Q3: Every daemon that matters is supervised
+- A process that matters (telemetry, heart, drainer, watcher) runs under a supervisor that restarts it on failure (systemd `Restart=always`, or equivalent). A `nohup` in a session that dies on reboot is not a daemon — it's a demo (TORVALDS-03). No supervised daemon = no durability expectation.
+
+#### Q4: No queue whose loss nobody notices
+- A message queue must have a dead-letter path, queue-depth monitoring, and delivery confirmation. A queue in `/tmp` that was deleted out from under the running system and reports success on append is not a queue — it's a wastebasket (TORVALDS-04/07). If you can't measure loss, you don't have a queue.
+
+#### Q5: No global lock across a retry loop without a timeout
+- A flock or mutex held across a multi-minute retry loop with no timeout convoys every sender on the box during any degradation (TORVALDS-08). Use `flock -w <timeout>` or equivalent. Lock timeout → spill to queue, don't stall the world.
+
+#### Q6: No undefined variables, no invoking an ELF through python3, no testing for a file stamped with the current second
+- Governance/sh/polyglot glue must pass `shellcheck` + a smoke invoke. An undefined variable under `set -u` is a runtime error waiting to happen. Running a compiled Rust binary through `python3` fails unconditionally. A jury-file path stamped with `date +%Y-%m-%dT%H:%M:%SZ` (current second) can never exist — the branch is dead by construction (TORVALDS-05). If a function's name claims it does X, verify it can actually do X before trusting its output.
+
+#### Q7: Every new capability ships a probe that fails if it broke
+- A capability without a failing probe is not done. The probe is a runnable check (unit test, integration test, or live `cargo test --test`) that FAILS if the capability is broken. No probe = not verifiable = not done (TORVALDS-01 evidence: zero callers for five Rust replacements).
+
+#### Q8: Money is integer minor-units, never float, never DECIMAL
+- Kernel money is integer-typed. No `f64` money. No `DECIMAL(10,2)`. Integer minor-units only. Any money path that introduces float is a correctness defect (OPUS-PERF-BESTPRACTICES §G-T1, REGRESSION-LEDGER §7b). Audit trails: append-only entries for every debit, derived balances from the log — not mutable state with no history.
+
+#### Q9: No ordering axis on capability/quality (no numeric rank field)
+- Capability routing is match, not rank. A type that could be ordered (derives `Ord`/`PartialOrd`) where ranking would re-create a banned courier-scoring axis is a defect (REGRESSION-LEDGER §34). `DomainTag` derives `PartialEq/Eq/Hash` ONLY — no `Ord`. If a field looks like a quality rank, it is one, and the architecture banned quality-ranking axes.
+
+#### Q10: RED before GREEN — every non-trivial change has a falsifiable gate
+- A change without a test that fails before the fix and passes after is not verified. "Looks right" is not evidence. Use `cargo test` output (pass/fail counts) as evidence, not narrative. A blueprint whose mandate has no lint/CI grep/test to guard it will be violated by the first agent who wires a click handler (HERZOG-09). Make the vow mechanical: a grep, a lint rule, a stub type, a failing test — something that turns red when violated.
+
+#### Q11: Simpler is the default — but correctness is the bar
+- The first rung is the simplest thing that works. The second rung is the simplest thing that is correct. Do not stop at the first rung when the second is available. Overengineering is allowed when it buys a named property (correctness, safety, observability, recoverability); gold-plating (complexity that buys nothing named) is not. KISS is a property of the solution's complexity relative to the problem — not a prohibition on robustness.
+
+#### Q12: No fabricated maturity — the repo must not claim what it doesn't have
+- Code, docs, README, blueprints, brand voice canon — everything must truthfully represent what exists. A canon that exists only in citations is not a canon (HERZOG-04). A README with an unexpanded `{{BRAND}}` template variable says nobody has read it. A design corpus that choreographs held beats for an interface that has never been drawn is a false impression (HERZOG-02). The honest sentence already exists in the codebase — promote it to the surfaces people read.
+
+### Self-verification ban — restated (structural)
+**The model and agent NEVER checks its own work.** Only a different model or different agent may verify. This is structural, not aspirational — the verification step is a hard gate, not a recommendation. If no other agent is available, the work is not done; it's pending verification.
 
 ## Vendor/Model selection — global defaults (all agents)
 - **Preferred model (global):** `upstage/solar-pro4:free` via Nous inference API — primary reasoning model for
