@@ -728,6 +728,9 @@ pub mod fractal;
 /// The execution center of the kernel (cell/graph/tile2x2/telemetry/exokernel/
 /// fractal/fractal_manchester).
 pub mod ktg2;
+/// Hypervector (VSA / hyperdimensional computing) — fixed-width bind/bundle
+/// vectors. Folds N-ary graphs into constant-width codes (no rank blow-up).
+pub mod hypervector;
 /// Delta calculus — replaces classic comparisons (a>b, x==y) with vector
 /// delta analysis. Δv, ∂t, rate, acceleration, drift tracking. Eigen/Phase
 /// comparison via spectral distance. Oscillation detection.
