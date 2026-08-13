@@ -770,6 +770,8 @@ pub mod scenario;
 pub mod support;
 /// Gradient boosting with regression stumps (item #15).
 pub mod gboost;
+/// Canonical (order-independent) JSON for LLM prompt-cache prefix stability.
+pub mod canonical;
 /// Delta calculus — replaces classic comparisons (a>b, x==y) with vector
 /// delta analysis. Δv, ∂t, rate, acceleration, drift tracking. Eigen/Phase
 /// comparison via spectral distance. Oscillation detection.

@@ -27,7 +27,10 @@ pub const D: usize = 1024;
 pub const WORDS: usize = D / 64;
 
 /// A fixed-width `D`-bit binary hypervector, packed into `u64` words.
+/// `#[repr(align(64))]`: 1024 bits = 128 bytes = exactly 2 cache lines, aligned
+/// to a line boundary so similarity/popcount never straddles an L1 line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(align(64))]
 pub struct Hypervector {
     words: [u64; WORDS],
 }
@@ -98,20 +101,28 @@ impl Hypervector {
     /// Normalized similarity in `[0,1]`: fraction of agreeing bits.
     /// 1.0 = identical, 0.5 = random/orthogonal (expected for unrelated codes).
     pub fn similarity(&self, other: &Self) -> f64 {
-        let mut same = 0u32;
-        for i in 0..WORDS {
-            same += (!(self.words[i] ^ other.words[i])).count_ones();
-        }
+        let same = D as u32 - self.hamming(other);
         same as f64 / D as f64
     }
 
-    /// Hamming distance (count of disagreeing bits).
+    /// Hamming distance (count of disagreeing bits). On aarch64 this runs in
+    /// the NEON register file: 8×128-bit EOR + CNT (popcount) + ADDV, so the
+    /// whole 1024-bit vector never leaves the vector registers.
     pub fn hamming(&self, other: &Self) -> u32 {
-        let mut diff = 0u32;
-        for i in 0..WORDS {
-            diff += (self.words[i] ^ other.words[i]).count_ones();
+        #[cfg(target_arch = "aarch64")]
+        {
+            // SAFETY: hamming_neon reads self.words/other.words via aligned
+            // 16-byte loads; `neon` is baseline on aarch64.
+            return unsafe { hamming_neon(&self.words, &other.words) };
         }
-        diff
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            let mut diff = 0u32;
+            for i in 0..WORDS {
+                diff += (self.words[i] ^ other.words[i]).count_ones();
+            }
+            diff
+        }
     }
 
     /// Permute (fixed rotation by `shift` bits) — encodes sequence/order.
@@ -138,10 +149,58 @@ impl Hypervector {
         Self { words: out }
     }
 
-    /// Count of set bits (population count over the whole vector).
+    /// Count of set bits (population count over the whole vector). NEON path
+    /// on aarch64 (8×128-bit CNT + ADDV in the register file).
     pub fn popcount(&self) -> u32 {
-        self.words.iter().map(|w| w.count_ones()).sum()
+        #[cfg(target_arch = "aarch64")]
+        {
+            // SAFETY: popcount_neon reads self.words via aligned 16-byte loads.
+            return unsafe { popcount_neon(&self.words) };
+        }
+        #[cfg(not(target_arch = "aarch64"))]
+        {
+            self.words.iter().map(|w| w.count_ones()).sum()
+        }
     }
+}
+
+// ─── aarch64 NEON register-file paths ──────────────────────────────────────
+// A 1024-bit hypervector is exactly 8 × 128-bit NEON registers (v0..v7). These
+// kernels load the whole vector into the register file and do XOR + popcount
+// with zero memory/L1 traffic after the loads — the register-level ceiling.
+
+/// NEON Hamming distance: 8× (EOR + CNT + ADDV) over 128-bit chunks.
+/// `#[inline(always)]` keeps the whole loop in the caller so LLVM can allocate
+/// the 8 live 128-bit vectors across the 32-register NEON file without spills.
+#[cfg(target_arch = "aarch64")]
+
+#[inline(always)]
+unsafe fn hamming_neon(a: &[u64; WORDS], b: &[u64; WORDS]) -> u32 {
+    use core::arch::aarch64::*;
+    let mut acc = 0u32;
+    let pa = a.as_ptr() as *const u8;
+    let pb = b.as_ptr() as *const u8;
+    for i in 0..(D / 128) {
+        let va = vld1q_u8(pa.add(i * 16));
+        let vb = vld1q_u8(pb.add(i * 16));
+        let cnt = vcntq_u8(veorq_u8(va, vb));
+        acc += vaddvq_u8(cnt) as u32;
+    }
+    acc
+}
+
+/// NEON popcount: 8× (CNT + ADDV) over the 1024-bit vector.
+#[cfg(target_arch = "aarch64")]
+
+#[inline(always)]
+unsafe fn popcount_neon(words: &[u64; WORDS]) -> u32 {
+    use core::arch::aarch64::*;
+    let mut acc = 0u32;
+    let p = words.as_ptr() as *const u8;
+    for i in 0..(D / 128) {
+        acc += vaddvq_u8(vcntq_u8(vld1q_u8(p.add(i * 16)))) as u32;
+    }
+    acc
 }
 
 impl core::ops::BitXor for Hypervector {
@@ -229,5 +288,36 @@ mod tests {
         let a = Hypervector::code(5);
         let b = Hypervector::code(6);
         assert_eq!(a.hamming(&b), (D as f64 * (1.0 - a.similarity(&b))).round() as u32);
+    }
+
+    /// Parity: the aarch64 NEON register-file path must agree bit-for-bit with
+    /// the scalar path (the same invariant the x86 SIMD lanes uphold).
+    #[cfg(target_arch = "aarch64")]
+    #[test]
+    fn neon_hamming_parity_with_scalar() {
+        for seed_a in [1u64, 2, 3, 999, 12345] {
+            let a = Hypervector::code(seed_a);
+            for seed_b in [10u64, 11, 12, 777, 54321] {
+                let hv = a.hamming(&Hypervector::code(seed_b)); // NEON path
+                // Scalar reference.
+                let mut scalar = 0u32;
+                let (wa, wb) = (a.as_words(), Hypervector::code(seed_b));
+                for i in 0..WORDS {
+                    scalar += (wa[i] ^ wb.as_words()[i]).count_ones();
+                }
+                assert_eq!(hv, scalar, "NEON vs scalar mismatch for {seed_a}/{seed_b}");
+            }
+        }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    #[test]
+    fn neon_popcount_parity_with_scalar() {
+        for seed in [0u64, 1, 42, 999999] {
+            let hv = Hypervector::code(seed);
+            let neon = unsafe { popcount_neon(hv.as_words()) };
+            let scalar: u32 = hv.as_words().iter().map(|w| w.count_ones()).sum();
+            assert_eq!(neon, scalar, "NEON popcount mismatch for {seed}");
+        }
     }
 }

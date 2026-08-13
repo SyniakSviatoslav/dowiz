@@ -38,7 +38,10 @@ pub fn term_code(term: &str) -> Hypervector {
 }
 
 /// A hypervector-indexed document: a fixed-width code plus its original terms.
+/// `#[repr(align(64))]`: the hot `code` (128 B = 2 lines) is line-aligned, so
+/// ranking scans touch a fixed number of full cache lines per document.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[repr(align(64))]
 pub struct HvDocument {
     pub id: usize,
     pub terms: Vec<String>,
