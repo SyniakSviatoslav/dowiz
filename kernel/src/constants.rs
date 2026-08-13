@@ -128,8 +128,9 @@ pub const DEFAULT_TOKEN_REFILL_RATE: u64 = 100;
 
 // ─── PID controller defaults ────────────────────────────────────────────
 
-/// Minimum allowed integral term to avoid division by zero.
-pub const KI_EPSILON: f64 = 1e-9;
+/// Minimum allowed integral term to avoid division by zero (PID anti-windup).
+/// Single authority — `pid.rs` reads this const instead of its own copy.
+pub const KI_EPSILON: f64 = 0.001;
 
 /// Default PID proportional gain.
 pub const PID_DEFAULT_KP: f64 = 1.0;

@@ -15,7 +15,8 @@
 //! assert!(output > 0.0);
 //! ```
 
-const KI_EPSILON: f64 = 0.001;
+// Single authority for the PID anti-windup epsilon lives in `constants`.
+use crate::constants::KI_EPSILON;
 
 /// PID gains and limits (f64, full precision).
 #[derive(Debug, Clone, Copy)]

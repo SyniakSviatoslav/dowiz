@@ -70,7 +70,7 @@ impl Tensor1 {
     /// Dot product with another tensor.
     pub fn dot(&self, other: &Tensor1) -> f64 {
         assert_eq!(self.len(), other.len());
-        self.data.iter().zip(&other.data).map(|(a, b)| a * b).sum()
+        crate::neon::dot_f64(&self.data, &other.data)
     }
 
     /// Euclidean norm (L2).

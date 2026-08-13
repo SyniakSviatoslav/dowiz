@@ -734,7 +734,8 @@ pub mod constants;
 /// Fractal Manchester Architecture (FMA) — canonical transport/geometry layer:
 /// Manchester self-synchronizing transitions, -64 absolute fractal zero,
 /// optical semiconductor-resistor channel, per-op IDs + epochs + telemetry.
-pub mod fractal_manchester;
+/// (Canonical copy lives at `ktg2::fractal_manchester`; the top-level copy was
+/// a byte-identical duplicate and has been removed.)
 /// Hypervector (VSA / hyperdimensional computing) — fixed-width bind/bundle
 /// vectors. Folds N-ary graphs into constant-width codes (no rank blow-up).
 pub mod hypervector;
@@ -772,6 +773,8 @@ pub mod support;
 pub mod gboost;
 /// Canonical (order-independent) JSON for LLM prompt-cache prefix stability.
 pub mod canonical;
+/// aarch64 NEON register-file kernels (f64 dot / matvec) for eigen/tensor/attention.
+pub mod neon;
 /// Delta calculus — replaces classic comparisons (a>b, x==y) with vector
 /// delta analysis. Δv, ∂t, rate, acceleration, drift tracking. Eigen/Phase
 /// comparison via spectral distance. Oscillation detection.
