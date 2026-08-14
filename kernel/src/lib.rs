@@ -19,64 +19,7 @@ pub const KERNEL_PROTO_VERSION: &str = "2026.07.0";
 /// Unknown means "we don't know yet" — measurement pending, observation
 /// insufficient, or system just booted. Code that acts on Unknown must
 /// treat it as "not safe to assume either way" — fail-closed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum TriState {
-    /// Confirmed positive / active / safe / stale / valid.
-    True,
-    /// Confirmed negative / inactive / unsafe / fresh / invalid.
-    False,
-    /// Unknown — observation pending or insufficient data.
-    /// Fail-closed: treat as "cannot confirm".
-    Unknown,
-}
-
-impl TriState {
-    pub fn is_true(&self) -> bool { *self == TriState::True }
-    pub fn is_false(&self) -> bool { *self == TriState::False }
-    pub fn is_unknown(&self) -> bool { *self == TriState::Unknown }
-    /// Resolve: True→true, False→false, Unknown→default.
-    pub fn resolve(&self, default: bool) -> bool {
-        match self {
-            TriState::True => true,
-            TriState::False => false,
-            TriState::Unknown => default,
-        }
-    }
-    /// Logical AND: True AND True = True, anything else = False.
-    pub fn and(self, other: TriState) -> TriState {
-        if self == TriState::True && other == TriState::True { TriState::True }
-        else if self == TriState::False || other == TriState::False { TriState::False }
-        else { TriState::Unknown }
-    }
-    /// Logical OR: False OR False = False, anything else = True.
-    pub fn or(self, other: TriState) -> TriState {
-        if self == TriState::True || other == TriState::True { TriState::True }
-        else if self == TriState::False && other == TriState::False { TriState::False }
-        else { TriState::Unknown }
-    }
-    /// Logical NOT: True→False, False→True, Unknown→Unknown.
-    pub fn not(self) -> TriState {
-        match self {
-            TriState::True => TriState::False,
-            TriState::False => TriState::True,
-            TriState::Unknown => TriState::Unknown,
-        }
-    }
-    /// From bool: true→True, false→False. Use when legacy code produces bool.
-    pub fn from_bool(v: bool) -> TriState {
-        if v { TriState::True } else { TriState::False }
-    }
-}
-
-impl core::fmt::Display for TriState {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            TriState::True => write!(f, "TRUE"),
-            TriState::False => write!(f, "FALSE"),
-            TriState::Unknown => write!(f, "UNKNOWN"),
-        }
-    }
-}
+pub use dowiz_core::TriState;
 
 /// OPT-IN post-quantum crypto core (ML-DSA-65 / ML-KEM-768 / X25519 / AES-GCM).
 /// KAT-gated byte-exact vs NIST ACVP vectors. Behind `pq` feature so the

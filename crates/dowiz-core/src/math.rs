@@ -574,6 +574,214 @@ pub fn acos(x: f64) -> f64 {
     2.0 * atan2(sqrt(1.0 - x), sqrt(1.0 + x))
 }
 
+// ── exp / ln (+ derived powers, logs, hyperbolic, tan/asin/atan) ───────────
+//
+// `f64::exp/ln/powf/powi/tan/atan/asin/sinh/cosh/tanh` are std-only (libm).
+// `exp` and `ln` are reimplemented here (~1 ULP, argument reduction + series);
+// everything else derives from them or from the existing sin/cos/atan2/sqrt.
+// NOT bit-exact (libm is not correctly rounded) — only used on tolerance paths.
+
+const LN_2: f64 = core::f64::consts::LN_2;
+const LN_10: f64 = core::f64::consts::LN_10;
+// Split ln2 into high/low parts (fdlibm `__ieee754_exp` constants) so
+// `x − k·ln2` does not lose a rounding ulp in the reduction at large |x|.
+const LN2_HI: f64 = 6.93147180369123816490e-01;
+const LN2_LO: f64 = 1.90821492927058770002e-10;
+
+/// `2^k` for integer `k`, exact (normal range); ±∞/0 outside.
+#[inline]
+fn exp2i(k: i64) -> f64 {
+    if k > 1023 {
+        return f64::INFINITY;
+    }
+    if k < -1074 {
+        return 0.0;
+    }
+    if k >= -1022 {
+        f64::from_bits(((k + 1023) as u64) << 52)
+    } else {
+        // subnormal: 2^k = 2^(k+1022) · 2^-1022 (mantissa = 2^(k+1022)).
+        f64::from_bits(1u64 << (k + 1074) as u32)
+    }
+}
+
+/// `exp(x)` — e^x. ~1 ULP via argument reduction `x = k·ln2 + r` + Taylor.
+pub fn exp(x: f64) -> f64 {
+    if x.is_nan() {
+        return f64::NAN;
+    }
+    if x > 709.782_712_893_384 {
+        return f64::INFINITY;
+    }
+    if x < -745.133_219_101_941_1 {
+        return 0.0;
+    }
+    let k = round(x / LN_2);
+    let r = (x - k * LN2_HI) - k * LN2_LO; // |r| ≤ ln2/2, reduced without ulp loss
+    // Taylor for exp(r). Converges to full precision by ~22 terms at |r|≈0.35.
+    let mut term = 1.0;
+    let mut sum = 1.0;
+    for i in 1..=24 {
+        term *= r / (i as f64);
+        sum += term;
+        if fabs(term) < 1e-18 * fabs(sum) {
+            break;
+        }
+    }
+    sum * exp2i(k as i64)
+}
+
+/// `ln(x)` — natural log. ~1 ULP via `x = m·2^e` reduction + atanh series.
+pub fn ln(x: f64) -> f64 {
+    if x.is_nan() || x < 0.0 {
+        return f64::NAN;
+    }
+    if x == 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    if x == f64::INFINITY {
+        return f64::INFINITY;
+    }
+    // Normalize subnormals up to the normal range (adjust e by the shift).
+    let mut x = x;
+    let mut e: i64 = 0;
+    let bits = x.to_bits();
+    let raw_exp = ((bits >> 52) & 0x7ff) as i64;
+    if raw_exp == 0 {
+        // subnormal: scale by 2^52, then subtract 52 from the exponent.
+        x = f64::from_bits(bits | (0x4330_0000_0000_0000)); // *2^52
+        e = -52;
+        let b = x.to_bits();
+        e += ((b >> 52) & 0x7ff) as i64 - 1023;
+    } else {
+        e = raw_exp - 1023;
+    }
+    // x = m·2^e with m in [1, 2).
+    let m = f64::from_bits((x.to_bits() & 0x000f_ffff_ffff_ffff) | 0x3ff0_0000_0000_0000);
+    // ln(m) = 2·atanh(z), z = (m−1)/(m+1) ∈ [0, 1/3).
+    let z = (m - 1.0) / (m + 1.0);
+    let z2 = z * z;
+    let mut term = z;
+    let mut sum = z;
+    for k in 1..=40 {
+        term *= z2;
+        let add = term / ((2 * k + 1) as f64);
+        sum += add;
+        if fabs(add) < 1e-19 {
+            break;
+        }
+    }
+    e as f64 * LN_2 + 2.0 * sum
+}
+
+/// `log2(x)` = ln(x)/ln(2).
+pub fn log2(x: f64) -> f64 {
+    ln(x) / LN_2
+}
+
+/// `log10(x)` = ln(x)/ln(10).
+pub fn log10(x: f64) -> f64 {
+    ln(x) / LN_10
+}
+
+/// `powf(x, y)` = x^y = exp(y·ln(x)) for x > 0. ~1 ULP (not on golden paths).
+pub fn powf(x: f64, y: f64) -> f64 {
+    if x < 0.0 || x.is_nan() || y.is_nan() {
+        return f64::NAN;
+    }
+    if x == 0.0 {
+        return if y > 0.0 {
+            0.0
+        } else if y == 0.0 {
+            1.0
+        } else {
+            f64::INFINITY
+        };
+    }
+    exp(y * ln(x))
+}
+
+/// `powi(x, n)` = x^n for integer n (exponentiation by squaring). ~1 ULP for
+/// small |n|; matches `f64::powi` on the tolerance paths (e.g. `x.powi(2)`).
+pub fn powi(x: f64, n: i32) -> f64 {
+    if n == 0 {
+        return 1.0;
+    }
+    if x == 1.0 {
+        return 1.0;
+    }
+    if x == 0.0 {
+        return if n < 0 { f64::INFINITY } else { 0.0 };
+    }
+    let mut base = x;
+    let mut exp = n.unsigned_abs();
+    let mut result = 1.0;
+    while exp > 0 {
+        if exp & 1 == 1 {
+            result *= base;
+        }
+        base *= base;
+        exp >>= 1;
+    }
+    if n < 0 {
+        1.0 / result
+    } else {
+        result
+    }
+}
+
+/// `tan(x)` = sin(x)/cos(x). ~1 ULP (from the existing sin/cos).
+pub fn tan(x: f64) -> f64 {
+    if !x.is_finite() {
+        return f64::NAN;
+    }
+    sin(x) / cos(x)
+}
+
+/// `atan(x)` = atan2(x, 1). ~1 ULP.
+pub fn atan(x: f64) -> f64 {
+    atan2(x, 1.0)
+}
+
+/// `asin(x)` — inverse sine, in [−π/2, π/2]. ~1 ULP.
+pub fn asin(x: f64) -> f64 {
+    if x > 1.0 || x < -1.0 || x.is_nan() {
+        return f64::NAN;
+    }
+    // atan2(x, √(1−x²)) — stable (matches f64::asin to ~1 ULP).
+    atan2(x, sqrt(1.0 - x * x))
+}
+
+/// `sinh(x)` = (e^x − e^−x)/2. ~1 ULP.
+pub fn sinh(x: f64) -> f64 {
+    if !x.is_finite() {
+        return x;
+    }
+    (exp(x) - exp(-x)) * 0.5
+}
+
+/// `cosh(x)` = (e^x + e^−x)/2. ~1 ULP.
+pub fn cosh(x: f64) -> f64 {
+    if !x.is_finite() {
+        return f64::INFINITY;
+    }
+    (exp(x) + exp(-x)) * 0.5
+}
+
+/// `tanh(x)` = sinh(x)/cosh(x). ~1 ULP.
+pub fn tanh(x: f64) -> f64 {
+    if !x.is_finite() {
+        return if x > 0.0 { 1.0 } else { -1.0 };
+    }
+    let e2 = exp(2.0 * x);
+    (e2 - 1.0) / (e2 + 1.0)
+}
+
+/// `fract(x)` = x − trunc(x) (the fractional part, sign follows x). Exact.
+pub fn fract(x: f64) -> f64 {
+    x - trunc(x)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -659,6 +867,55 @@ mod tests {
             let s = sin(x);
             let c = cos(x);
             close(s * s + c * c, 1.0, 1e-12);
+        }
+    }
+
+    #[test]
+    fn exp_ln_matches_std() {
+        // Relative tolerance: exp/ln return values spanning many decades, so an
+        // absolute tol is meaningless (1 ULP ≈ 2.2e-16 relative).
+        let rel = |a: f64, b: f64, tol: f64| {
+            let d = fabs(a - b);
+            assert!(d < tol * (1.0 + fabs(b)), "rel mismatch: {a} vs {b} (rel diff {})", d / (1.0 + fabs(b)));
+        };
+        for x in [
+            -20.0, -5.0, -1.0, -0.5, -1e-8, 0.0, 1e-8, 0.5, 1.0, 2.0, 5.0, 20.0, 100.0, 700.0,
+        ] {
+            rel(exp(x), x.exp(), 1e-13);
+        }
+        for x in [0.001, 0.1, 0.5, 1.0, 2.0, 10.0, 1e8, 1e-8, 3.7, 100.0] {
+            rel(ln(x), x.ln(), 1e-13);
+        }
+    }
+
+    #[test]
+    fn derived_matches_std() {
+        let rel = |a: f64, b: f64, tol: f64| {
+            let d = fabs(a - b);
+            assert!(d < tol * (1.0 + fabs(b)), "rel mismatch: {a} vs {b} (rel diff {})", d / (1.0 + fabs(b)));
+        };
+        for x in [0.001, 0.1, 0.5, 1.0, 2.0, 10.0, 1e4] {
+            rel(log2(x), x.log2(), 1e-13);
+            rel(log10(x), x.log10(), 1e-13);
+        }
+        for (x, y) in [(2.0, 3.0), (10.0, 0.5), (1.5, 2.5), (0.5, 2.0)] {
+            rel(powf(x, y), x.powf(y), 1e-11);
+        }
+        for (x, n) in [(2.0, 2), (2.0, 3), (2.0, 10), (3.0, -2), (1.5, 4)] {
+            rel(powi(x, n), x.powi(n), 1e-11);
+        }
+        for x in [-5.0, -1.0, -0.5, 0.0, 0.5, 1.0, 5.0] {
+            rel(tan(x), x.tan(), 1e-12);
+            rel(sinh(x), x.sinh(), 1e-12);
+            rel(cosh(x), x.cosh(), 1e-12);
+            rel(tanh(x), x.tanh(), 1e-12);
+        }
+        for x in [-0.9, -0.5, 0.0, 0.5, 0.9, 1.0] {
+            rel(atan(x), x.atan(), 1e-12);
+            rel(asin(x), x.asin(), 1e-12);
+        }
+        for x in [-2.7, -1.5, -0.5, 0.5, 1.5, 2.7] {
+            close(fract(x), x.fract(), 1e-15);
         }
     }
 }

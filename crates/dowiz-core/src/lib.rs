@@ -56,6 +56,7 @@ pub mod spool;
 pub mod squash;
 pub mod stem;
 pub mod swarm;
+pub mod tri_state;
 pub mod trig;
 pub mod trigram;
 pub mod verify_retrieval;
@@ -64,3 +65,7 @@ pub mod impedance;
 pub mod noether;
 pub mod absorbing;
 pub mod vendor;
+
+// Re-export TriState at the crate root so `dowiz_core::TriState` resolves —
+// the kernel mirrors this with `pub use dowiz_core::TriState;` at its root.
+pub use tri_state::TriState;
