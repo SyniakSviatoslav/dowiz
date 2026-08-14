@@ -106,18 +106,18 @@ geometry + delta where the value is a direction/phase/change.
   select λ ≤ 1 and `cos θ ≥ 1/√5` to select λ ≥ -1). Parity test
   `phase_classification_matches_algebraic_on_golden_fixtures` pins the two
   classifications to agree on golden fixtures λ ∈ {-3..3}.
-- [ ] B2. `spectral::{classify_drift, laplacian}`: replace raw drift thresholds
+- [x] B2. `spectral::{classify_drift, laplacian}`: replace raw drift thresholds
       with `EigenDelta::is_significant` / `PhaseDelta`.
   Done-check: parity test vs the current scalar classification on recorded
   fixtures (byte-identical class labels).
-  ⚠️ NEEDS CLARIFICATION (2026-08-14): `classify_drift` is an ABSOLUTE
-  ρ-vs-unit-circle classification (single operator, `drift_band(ρ)` vs
-  1.0±DRIFT_BAND — already fail-closed + single-rule), and `laplacian` is pure
-  linear algebra (L = D − A, no drift/delta at all). `EigenDelta`/`PhaseDelta`
-  are BETWEEN-two-states deltas (`EigenDelta::is_significant` /
-  `is_destabilizing` already exist in `delta.rs`). The literal "replace" does
-  not map — revisit with a clarified spec (e.g. a `classify_drift_delta(a0,a1)`
-  entry point, or a `Phase`-view of ρ), not a mechanical swap.
+  ✅ DONE (2026-08-14): `classify_drift_phase` (geometric twin — ρ → θ =
+  atan2(ρ-1,1), decision on `sin θ` vs ±DRIFT_BAND/√(1+DRIFT_BAND²)) pinned
+  byte-identical to `classify_drift` on diagonal fixtures by
+  `classify_drift_phase_matches_scalar`; plus the delta-calculus entry point
+  `spectral_drift(a0,a1) -> SpectralDrift` (Δρ, Δ#unstable, class transition,
+  `is_destabilizing`/`is_significant`) with fail-closed guards (ragged input →
+  Unstable, `spectral_drift_ill_formed_fails_closed`). `laplacian` is pure
+  L=D−A (no drift) — left as-is, confirmed correct.
 - [x] B3. `tensor::{dot, cosine_sim}`: keep algebra (dot is legitimately
       algebraic); add `trig`-based angle accessor for any pair already on the
       unit circle.

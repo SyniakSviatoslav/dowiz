@@ -711,6 +711,95 @@ pub fn classify_drift(a: &[Vec<f64>]) -> DriftClass {
     drift_band(spectral_radius(a))
 }
 
+/// Geometric form of [`drift_band`]: classify ρ via the phase θ = atan2(ρ-1, 1)
+/// instead of a raw `f64` comparison of ρ.
+///
+/// `sin θ = (ρ-1)/√(1+(ρ-1)²)` is strictly monotonic in `ρ-1`, so the ±DRIFT_BAND
+/// thresholds map exactly: `ρ = 1±ε ⟺ sin θ = ±ε/√(1+ε²)`. The decision is the
+/// sign/magnitude of the phase projection, mirroring `eigen::is_stable_phase`.
+#[inline]
+fn drift_band_phase(rho: f64) -> DriftClass {
+    let p = crate::trig::Phase::from_xy(1.0, rho - 1.0);
+    let band = DRIFT_BAND / crate::math::sqrt(1.0 + DRIFT_BAND * DRIFT_BAND);
+    if p.sin < -band {
+        DriftClass::Damped
+    } else if p.sin > band {
+        DriftClass::Unstable
+    } else {
+        DriftClass::Resonant
+    }
+}
+
+/// Phase-based drift classification — the geometric twin of [`classify_drift`].
+/// Same fail-closed guards; same class labels. Pinned byte-identical to
+/// `classify_drift` on well-separated fixtures by
+/// `classify_drift_phase_matches_scalar`.
+pub fn classify_drift_phase(a: &[Vec<f64>]) -> DriftClass {
+    if !drift_guards_ok(a) {
+        return DriftClass::Unstable;
+    }
+    drift_band_phase(spectral_radius(a))
+}
+
+/// Drift between two operators' spectra — the delta-calculus form of drift
+/// classification. Replaces the boolean "is THIS operator unstable?" with the
+/// first-class *change*: how far did the spectrum move (Δρ, Δ#unstable-modes,
+/// class transition) between `a0` and `a1`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SpectralDrift {
+    /// Signed Δρ = ρ(a1) − ρ(a0); `> 0` = moving toward instability.
+    pub rho_delta: f64,
+    /// |Δρ|.
+    pub rho_delta_magnitude: f64,
+    /// Change in the number of unstable modes (|λ| > 1).
+    pub unstable_count_delta: isize,
+    /// Drift class of the FROM operator (fail-closed).
+    pub from: DriftClass,
+    /// Drift class of the TO operator (fail-closed).
+    pub to: DriftClass,
+}
+
+impl SpectralDrift {
+    /// Is the system becoming less stable? (ρ grew, or new unstable modes).
+    pub fn is_destabilizing(&self) -> bool {
+        self.rho_delta > 0.0 || self.unstable_count_delta > 0
+    }
+
+    /// Is the spectral move significant? (|Δρ| above a caller threshold).
+    pub fn is_significant(&self, rho_threshold: f64) -> bool {
+        self.rho_delta_magnitude > rho_threshold
+    }
+}
+
+/// One eigenvalue pass per operator: `(spectral radius, #unstable modes, class)`.
+/// Fail-closed: ill-formed input (non-finite / ragged / unbuildable) short-circuits
+/// to `(0.0, 0, Unstable)` BEFORE `eigenvalues` is called (which would panic on a
+/// ragged matrix via `Mat::from_vecvec`'s assert) — same guard-then-compute order
+/// as [`classify_drift`].
+fn spectral_profile(a: &[Vec<f64>]) -> (f64, usize, DriftClass) {
+    if !drift_guards_ok(a) {
+        return (0.0, 0, DriftClass::Unstable);
+    }
+    let eigs = eigenvalues(a);
+    let rho = eigs.iter().map(|e| e.abs()).fold(0.0, f64::max);
+    let unstable = eigs.iter().filter(|e| e.abs() > 1.0).count();
+    (rho, unstable, drift_band(rho))
+}
+
+/// Delta between two operators: `SpectralDrift::between(a0, a1)`.
+pub fn spectral_drift(a0: &[Vec<f64>], a1: &[Vec<f64>]) -> SpectralDrift {
+    let (rho0, unstable0, from) = spectral_profile(a0);
+    let (rho1, unstable1, to) = spectral_profile(a1);
+    let rho_delta = rho1 - rho0;
+    SpectralDrift {
+        rho_delta,
+        rho_delta_magnitude: rho_delta.abs(),
+        unstable_count_delta: unstable1 as isize - unstable0 as isize,
+        from,
+        to,
+    }
+}
+
 /// Single-pass drift classification for callers that ALREADY hold ρ (e.g.
 /// [`graph_spectrum`], which computes the adjacency spectrum once). Applies the
 /// identical fail-closed guards as [`classify_drift`] — non-finite / ragged /
@@ -983,6 +1072,69 @@ mod tests {
         assert_eq!(DriftClass::Damped.wire_code(), 0);
         assert_eq!(DriftClass::Resonant.wire_code(), 1);
         assert_eq!(DriftClass::Unstable.wire_code(), 2);
+    }
+
+    /// Blueprint B2 done-check: the geometric (phase) drift classification must
+    /// agree with the scalar one on golden fixtures spanning Damped/Resonant/
+    /// Unstable. Diagonal matrices make the spectral radius exact (ρ = max|dᵢ|).
+    #[test]
+    fn classify_drift_phase_matches_scalar() {
+        let diag = |d: f64| vec![vec![d]];
+        let fixtures: &[(f64, DriftClass)] = &[
+            (0.0, DriftClass::Damped),
+            (0.5, DriftClass::Damped),
+            (-0.5, DriftClass::Damped),
+            (0.999, DriftClass::Damped),
+            (1.0, DriftClass::Resonant),
+            (1.001, DriftClass::Unstable),
+            (2.0, DriftClass::Unstable),
+            (-2.0, DriftClass::Unstable),
+        ];
+        for (d, expected) in fixtures {
+            let a = diag(*d);
+            assert_eq!(classify_drift(&a), *expected, "scalar classify_drift(ρ={d})");
+            assert_eq!(
+                classify_drift_phase(&a),
+                *expected,
+                "phase classify_drift_phase(ρ={d}) must match scalar"
+            );
+        }
+    }
+
+    /// Delta form: the *change* between two operators, not the boolean state.
+    #[test]
+    fn spectral_drift_detects_destabilization() {
+        let damped = vec![vec![0.5]];
+        let unstable = vec![vec![2.0]];
+        // 0.5 → 2.0: ρ grows by 1.5, class transitions Damped → Unstable.
+        let d = spectral_drift(&damped, &unstable);
+        assert_eq!(d.from, DriftClass::Damped);
+        assert_eq!(d.to, DriftClass::Unstable);
+        assert!(d.rho_delta > 0.0);
+        assert!(d.is_destabilizing());
+        assert!(d.is_significant(0.1));
+
+        // 2.0 → 0.5: ρ shrinks, no destabilization.
+        let back = spectral_drift(&unstable, &damped);
+        assert_eq!(back.from, DriftClass::Unstable);
+        assert_eq!(back.to, DriftClass::Damped);
+        assert!(back.rho_delta < 0.0);
+        assert!(!back.is_destabilizing());
+
+        // 0.5 → 0.5: no change.
+        let same = spectral_drift(&damped, &damped);
+        assert!(!same.is_destabilizing());
+        assert!(!same.is_significant(1e-9));
+    }
+
+    /// Fail-closed: a ragged operator classifies Unstable (never a silent Damped).
+    #[test]
+    fn spectral_drift_ill_formed_fails_closed() {
+        let ragged = vec![vec![1.0, 2.0], vec![1.0]];
+        let good = vec![vec![0.5]];
+        let d = spectral_drift(&ragged, &good);
+        assert_eq!(d.from, DriftClass::Unstable, "ragged input must be Unstable");
+        assert_eq!(d.to, DriftClass::Damped);
     }
 
     // ── ITEM 16 PROOF (single-computation collapse): the one-shot profile must
