@@ -24,6 +24,8 @@
 //!
 //! ZERO new dependencies.
 
+use alloc::vec::Vec;
+
 use crate::mat::Mat;
 
 // ── Mat algebra through the public api (mat.rs untouched) ──────────────────
@@ -231,9 +233,9 @@ impl KalmanFilter {
             .collect();
         // Cache the innovation so the eval layer can read novelty post-update.
         self.last_innovation = y.clone();
-        let y_norm: f64 = y.iter().map(|v| v * v).sum::<f64>().sqrt();
+        let y_norm: f64 = crate::math::sqrt(y.iter().map(|v| v * v).sum::<f64>());
         self.last_surprise = if s_trace > 0.0 {
-            y_norm / s_trace.sqrt()
+            y_norm / crate::math::sqrt(s_trace)
         } else {
             0.0
         };
@@ -292,41 +294,44 @@ impl KalmanFilter {
     }
 
     // ── §13 SoA batch-lane accessors (WAVE D / BLUEPRINT-P-E §13.2) ──────
-    // Crate-internal (`pub(crate)`, NOT part of the public API) helpers used by
-    // `simd::kalman_batch_step`. These do NOT bypass `predict`/`update`: the
-    // AVX2 lane in `simd.rs` replays the EXACT `predict`+`update` op order and
-    // only uses these to (read) the per-courier Q/R noise and (write back) the
-    // lane's already-computed `x`/`P` state and innovation/surprise signals.
-    // They are the SoA analog of `softmax_batch_lane` reading/writing scalar
-    // row buffers — same discipline, no new public surface (anti-scope §13.3-6).
+    // Cross-crate (`pub`) helpers used by `dowiz-kernel`'s
+    // `simd::kalman_batch_step` (the SoA AVX2 lane lives in the kernel crate,
+    // NOT dowiz-core). These do NOT bypass `predict`/`update`: the AVX2 lane
+    // in `simd.rs` replays the EXACT `predict`+`update` op order and only uses
+    // these to (read) the per-courier Q/R noise and (write back) the lane's
+    // already-computed `x`/`P` state and innovation/surprise signals. They are
+    // the SoA analog of `softmax_batch_lane` reading/writing scalar row buffers
+    // — same discipline, `pub` only because the consumer lives across the crate
+    // boundary (anti-scope §13.3-6).
     #[inline]
-    pub(crate) fn q_entry(&self) -> f64 {
+    pub fn q_entry(&self) -> f64 {
         self.q.get(0, 0)
     }
     #[inline]
-    pub(crate) fn r_entry(&self) -> f64 {
+    pub fn r_entry(&self) -> f64 {
         self.r.get(0, 0)
     }
     #[inline]
-    pub(crate) fn set_xp(&mut self, x: f64, p: f64) {
+    pub fn set_xp(&mut self, x: f64, p: f64) {
         self.x[0] = x;
         self.p.set(0, 0, p);
     }
     #[inline]
-    pub(crate) fn set_signals(&mut self, innovation: Vec<f64>, surprise: f64) {
+    pub fn set_signals(&mut self, innovation: Vec<f64>, surprise: f64) {
         self.last_innovation = innovation;
         self.last_surprise = surprise;
     }
-    /// Crate-internal read of the last innovation (used by `simd` parity tests).
+    /// Bit read of the last innovation (used by the kernel's `simd` parity tests
+    /// — cross-crate, so NOT `#[cfg(test)]`: that gate is per-crate and would
+    /// hide this from `dowiz-kernel`'s test build).
     #[inline]
-    #[cfg(test)]
-    pub(crate) fn innovation_bits(&self) -> Vec<u64> {
+    pub fn innovation_bits(&self) -> Vec<u64> {
         self.last_innovation.iter().map(|v| v.to_bits()).collect()
     }
-    /// Crate-internal read of the last surprise (used by `simd` parity tests).
+    /// Bit read of the last surprise (used by the kernel's `simd` parity tests;
+    /// see `innovation_bits` for the cross-crate `#[cfg(test)]` rationale).
     #[inline]
-    #[cfg(test)]
-    pub(crate) fn surprise_bits(&self) -> u64 {
+    pub fn surprise_bits(&self) -> u64 {
         self.last_surprise.to_bits()
     }
 }
@@ -383,7 +388,7 @@ mod tests {
         // Hand values: s = 0.105125, p* = 0.095125, k* = 0.086863.
         let q = 0.01_f64;
         let r = 1.0_f64;
-        let s = (q + (q * q + 4.0 * q * r).sqrt()) / 2.0;
+        let s = (q + crate::math::sqrt(q * q + 4.0 * q * r)) / 2.0;
         let p_star = s - q;
         let k_star = p_star / (p_star + r);
         assert!(close(k_star, 0.086863, 1e-5), "hand k* = {k_star}");
@@ -409,7 +414,7 @@ mod tests {
         // the posterior-form gain k* = p*/(p*+r).
         let q = 0.01_f64;
         let r = 1.0_f64;
-        let s = (q + (q * q + 4.0 * q * r).sqrt()) / 2.0;
+        let s = (q + crate::math::sqrt(q * q + 4.0 * q * r)) / 2.0;
         let k_star = (s - q) / (s - q + r);
 
         let mut kf = KalmanFilter::scalar(0.0, 1.0, 1.0, 1.0, q, r);
@@ -491,7 +496,7 @@ mod tests {
             close(kf.last_innovation()[0], 1.0, 1e-12),
             "innovation y = z − H·x must equal 1.0"
         );
-        let want_surprise = 1.0 / (2.01_f64).sqrt();
+        let want_surprise = 1.0 / crate::math::sqrt(2.01_f64);
         assert!(
             close(kf.last_surprise(), want_surprise, 1e-9),
             "surprise = ‖y‖/√tr(S) must be {}",

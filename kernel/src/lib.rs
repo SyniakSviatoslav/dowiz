@@ -47,7 +47,7 @@ pub mod bounded_drainer;
 /// `JobPort` / `BudgetedJobPort` seam (offline-err default; real adapter deferred).
 pub use dowiz_core::budget;
 /// RW-07 — cart state machine (consolidate 2 JS cart impls → kernel authority). Totals via money.
-pub mod cart;
+pub use dowiz_core::cart;
 /// M1/M2 — trusted price catalog: the single kernel authority on line-item prices.
 /// `place_order` re-derives `unit_price` from this, ignoring client-supplied prices.
 pub mod catalog;
@@ -79,7 +79,7 @@ pub use dowiz_core::entropy_budget;
 /// mesh-heal + Phase 13 partition-tolerant delivery consume it directly.
 pub use dowiz_core::dsu;
 /// MESH-06 — per-node content-addressed event-log (local-first + sync).
-pub mod event_log;
+pub use dowiz_core::event_log;
 /// `fdr` — the kernel's flight-data recorder: hand-rolled logger + durable post-mortem
 /// ring (roadmap items 4+29). The terminal state of the `tracing`/`tracing-subscriber`
 /// retirement. Compiled unconditionally (the hot-path spans in `domain`/`order_machine`
@@ -142,7 +142,7 @@ pub mod scheduler;
 /// Separate from `fdr::json` (serialize-only, fixed-schema). `serde_json` is retained only as a
 /// dev-dependency differential oracle (`tests/json_oracle.rs`), outside the zero-dep proof surface.
 pub use dowiz_core::json;
-pub mod kalman;
+pub use dowiz_core::kalman;
 /// Item 7 (space-grade roadmap §C): planted-fault self-test for the kani-gate.
 /// Compiled ONLY under `cfg(kani)` — zero footprint in every normal build.
 #[cfg(kani)]
@@ -153,7 +153,7 @@ pub mod landing;
 /// `#[cfg(test)]` so the SHIPPING lib build carries NO `eqc_rs` symbols / dep
 /// (eqc-rs is a DEV-dependency only — keeps `cargo tree -e no-dev` clean).
 #[cfg(test)]
-pub mod laplacian_eqc_parity;
+pub use dowiz_core::laplacian_eqc_parity;
 /// §3.3 Layer-B (semantic) leakage gate — cosine-0.9 near-duplicate rejection over an injected
 /// `&dyn LlmBackend` embedding model. Native, zero-dep; the live bridge lives in `llm-adapters`.
 pub mod leak_gate;
@@ -189,7 +189,7 @@ pub mod moderation;
 pub use dowiz_core::numerical_guard;
 /// P9 wave: deterministic seedable PRNG (SplitMix64 → PCG64), zero-dep,
 /// reproducible Monte-Carlo for the empirical causal joint.
-pub mod rng;
+pub use dowiz_core::rng;
 /// Generalized PID controller — extracted from `orchestrator::PidController` for
 /// reuse across delivery ETA smoothing, courier speed control, batch sizing,
 /// cache hit-rate regulation, mesh backpressure, and real-time state consequence
@@ -209,7 +209,7 @@ pub use dowiz_core::crystal;
 /// crystalline memory, and ensemble bidding to predict performance, load,
 /// traffic, telemetry, throttle, friction, and error consequences of state
 /// changes and actions. Includes atomic sequencer for race-free access.
-pub mod predictor;
+pub use dowiz_core::predictor;
 /// Native prompt/skill enrichment engine — intent detection, crystal lattice
 /// storage, and prompt injection. Scrapes free prompt libraries (fabric,
 /// prompts.chat, opencode), stores 100k+ templates, reverse-engineers skills/
@@ -223,7 +223,7 @@ pub mod resilience;
 /// Reuses simd.rs softmax/kalman lanes and csr.rs sparse layout without
 /// pulling in ndarray/BLAS. Higher-level consumers: predictor, crystal,
 /// spectral_graph, and engine frame profiler.
-pub mod tensor;
+pub use dowiz_core::tensor;
 /// Spectral graph analysis — graph Laplacian, eigenvector centrality,
 /// clustering coefficient, graph energy, similarity graphs from distance
 /// matrices, and temporal graphs from observation sequences. Reuses
@@ -385,7 +385,7 @@ pub mod inference;
 pub mod living_knowledge;
 #[cfg(feature = "wasm")]
 pub mod loops;
-pub mod markov;
+pub use dowiz_core::markov;
 /// Contiguous row-major matrix helper — the single backing store / matmul impl
 /// the spectral + absorbing subsystems route through (DOD/SIMD prep).
 /// (Extracted into dowiz-core; re-exported so `crate::mat` resolves unchanged.)
@@ -621,7 +621,7 @@ pub mod retrieval;
 /// P04 product-math: CSR-native Dijkstra / A* shortest path + Contraction-
 /// Hierarchy shortcuts + OSM road-graph ingestion. Ported from bebop
 /// `cost_estimate.rs`, zero-dep. Consumed by Phase 9/13/16/17 route work.
-pub mod router;
+pub use dowiz_core::router;
 /// Reverse-engineering loop #1 — general (non-symmetric) spectral engine: eigenvalues
 /// (Faddeev-LeVerrier + Durand-Kerner), spectral gap γ, Laplacian Fiedler λ₂, DMD drift class.
 /// Extracted to no_std `dowiz-core`; `crate::spectral::…` resolves unchanged here.
@@ -634,7 +634,7 @@ pub use dowiz_core::spectral_cache;
 /// `k` smallest-eigenvalue eigenpairs (Fourier modes / field-UI basis) of a CSR
 /// graph. New module; does not touch `spectral_cache`, `csr`, `householder`, or
 /// `spectral`'s existing code.
-pub mod spectral_laplacian;
+pub use dowiz_core::spectral_laplacian;
 /// Self-improvement loop: recurring-pattern surface over the tool-outcome
 /// token stream (W19 — consumes `trigram` into the loop's telemetry path).
 pub use dowiz_core::telemetry;
@@ -716,7 +716,7 @@ pub use dowiz_core::pixel_snapshot;
 pub use dowiz_core::glyph_dashboard;
 /// Hypervector (VSA) document index for academia + search — fixed-width codes,
 /// O(1) popcount similarity, parity-checked against a cosine baseline.
-pub mod hypervector_index;
+pub use dowiz_core::hypervector_index;
 /// Zero-dep compression (RLE / delta) for academy/diff/garbage artifacts —
 /// compress on write, decompress on use, byte-identity round-trip.
 /// Extracted to `no_std` `dowiz-core` (pure integer RLE/delta).
@@ -732,7 +732,7 @@ pub mod signal;
 /// Minimal clean semantic HTML emitter — "no div soup" (item #3).
 pub use dowiz_core::semantic;
 /// Procedural pattern generators rendered as glyphs (item #18).
-pub mod weave;
+pub use dowiz_core::weave;
 /// Geometric landmark/keypoint primitives + Procrustes alignment (item #10).
 pub use dowiz_core::landmark;
 /// Deterministic scenario record/replay/resume + secret redaction (item #2 substrate).
@@ -772,7 +772,7 @@ pub use dowiz_core::delta;
 /// detected, they propagate BACKWARDS through the causal chain. Each
 /// step identifies upstream responsibility. Results surface on the
 /// interface as corrective recommendations.
-pub mod invert;
+pub use dowiz_core::invert;
 /// Cross-kind pattern bridges — each research finding natively encoded.
 /// python(17 kinds), tool(14), llm(14), claude-code(12), security(11).
 /// Publisher diversity tracker: NVIDIA(9), anthropics(8), microsoft(8).
@@ -916,11 +916,7 @@ pub fn kernel_boot_verify_fsm() -> Result<(), FsmSignatureDrift> {
 /// keep resolving unchanged.
 pub use dowiz_core::sanitize::{sanitize_f64, sanitize_f32, sanitize_normalized};
 
-pub const CHECKSUM_MUL: u64 = 31;
-
-pub fn checksum_fold(data: &[u8]) -> u64 {
-    data.iter().fold(0u64, |acc, &b| acc.wrapping_mul(CHECKSUM_MUL).wrapping_add(b as u64))
-}
+pub use dowiz_core::checksum::{checksum_fold, CHECKSUM_MUL};
 
 pub fn now_ms() -> u64 {
     crate::clock::now_ms()

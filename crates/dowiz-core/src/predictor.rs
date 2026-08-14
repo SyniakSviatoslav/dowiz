@@ -23,6 +23,9 @@
 //! assert!(!results.is_empty());
 //! ```
 
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
 use crate::crystal::{CrystalIndex, CrystalLattice, StateSnapshot};
 use crate::pid::{PidArray, PidConfig};
 use core::sync::atomic::{AtomicU64, Ordering};

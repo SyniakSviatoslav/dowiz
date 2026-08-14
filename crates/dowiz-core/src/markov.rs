@@ -18,6 +18,10 @@
 //!                   k ≈ ln(1/tol)/ln(1/slem) — the master dial the research identified.
 //! ADVISORY (the harness gates decide). Float is fine — this is dynamics, never money.
 
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
+
 use crate::spectral;
 
 const MIN_EVENTS: usize = 8; // short window ⇒ stay quiet (cold start)
@@ -70,7 +74,7 @@ pub fn budget(slem: f64, tol: f64) -> f64 {
     if slem <= 0.0 || slem >= 1.0 || tol <= 0.0 {
         return f64::INFINITY;
     }
-    (1.0 / tol).ln() / (1.0 / slem).ln()
+    crate::math::ln(1.0 / tol) / crate::math::ln(1.0 / slem)
 }
 
 fn idx_of(alpha: &[&str], s: &str) -> usize {
@@ -183,7 +187,7 @@ pub fn analyze_detailed(states: &[&str]) -> DetailedReport {
         for j in 0..n {
             let p = a[i][j];
             if p > 0.0 {
-                row_h -= p * p.log2();
+                row_h -= p * crate::math::log2(p);
             }
         }
         h += pi[i] * row_h;

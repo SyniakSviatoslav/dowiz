@@ -7,6 +7,10 @@
 //! RED→GREEN GATE: one kernel cart, both wrappers become thin over it;
 //! Totals go through [`crate::money`] (integer minor units) — money red-line.
 
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
+
 /// A cart line: product id + option key + quantity (0 = remove).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CartLine {

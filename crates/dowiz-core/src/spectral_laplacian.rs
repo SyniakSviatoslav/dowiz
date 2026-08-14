@@ -29,6 +29,7 @@
 //!   `eigh`/`topk_symmetric` (fixed seed, fixed summation order, sign-fixed
 //!   basis). Pinned by [`tests::lap_modes_are_byte_deterministic`].
 
+use alloc::vec::Vec;
 use crate::csr::Csr;
 use crate::spectral_cache::Decomp;
 

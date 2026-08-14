@@ -17,3 +17,9 @@ crate-type = ["rlib"]
 # value: declare it so rustc's `unexpected_cfgs` lint stays quiet.
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("std"))'] }
+
+[dev-dependencies]
+# Differential oracle for the laplacian_eqc_parity test (pins the eqc-rs
+# IndexSum-emitted Laplacian against dense laplacian()). Dev-only, outside the
+# zero-dep proof surface (eqc-rs is itself a zero-dep crate).
+eqc-rs = { path = "../../tools/eqc-rs" }

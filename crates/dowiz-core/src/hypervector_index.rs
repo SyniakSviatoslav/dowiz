@@ -18,6 +18,8 @@
 //! Pure `std`. No external crates. Deterministic (same corpus + query ⇒ same
 //! ranking on any machine).
 
+use alloc::string::String;
+use alloc::vec::Vec;
 use crate::hypervector::Hypervector;
 
 /// FNV-1a 64-bit hash over a string, using the canonical kernel constants.
@@ -170,8 +172,8 @@ impl CosineBaseline {
 
     fn cosine(a: &[f64], b: &[f64]) -> f64 {
         let dot: f64 = a.iter().zip(b).map(|(x, y)| x * y).sum();
-        let na: f64 = a.iter().map(|x| x * x).sum::<f64>().sqrt();
-        let nb: f64 = b.iter().map(|x| x * x).sum::<f64>().sqrt();
+        let na: f64 = crate::math::sqrt(a.iter().map(|x| x * x).sum::<f64>());
+        let nb: f64 = crate::math::sqrt(b.iter().map(|x| x * x).sum::<f64>());
         if na == 0.0 || nb == 0.0 {
             return 0.0;
         }

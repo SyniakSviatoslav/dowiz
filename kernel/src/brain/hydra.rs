@@ -845,7 +845,7 @@ mod tests {
     /// not masked — closing the exact RC-3 fail-open the alarm exists to prevent.
     #[test]
     fn breach_alarm_surfaces_lost_witness_over_faulty_store() {
-        use crate::event_log::FaultyStore;
+        use crate::chaos::FaultyStore;
         let mut h = Hydra::new(FaultyStore::default(), 3, base());
         // Drive tamper detection so the alarm actually attempts a witness append
         // (a self-amplifying loop pushes ρ≥1 ⇒ Locked).

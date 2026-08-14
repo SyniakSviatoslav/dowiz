@@ -110,3 +110,18 @@ pub mod glyph_dashboard;
 pub mod neon;
 pub mod spinlock;
 pub mod parse;
+
+// --- wave 4: dependency-clean leaves ---
+pub mod cart;
+pub mod event_log;
+pub mod hypervector_index;
+pub mod invert;
+pub mod kalman;
+pub mod laplacian_eqc_parity;
+pub mod markov;
+pub mod predictor;
+pub mod router;
+pub mod spectral_laplacian;
+pub mod tensor;
+pub mod weave;
+pub mod checksum;

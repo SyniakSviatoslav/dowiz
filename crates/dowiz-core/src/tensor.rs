@@ -21,6 +21,8 @@
 //! assert!((a.dot(&b) - 32.0).abs() < 1e-12);
 //! ```
 
+use alloc::vec::Vec;
+
 /// 1-D tensor (vector) with basic linear algebra operations.
 #[derive(Debug, Clone)]
 pub struct Tensor1 {
@@ -75,7 +77,7 @@ impl Tensor1 {
 
     /// Euclidean norm (L2).
     pub fn norm(&self) -> f64 {
-        self.data.iter().map(|x| x * x).sum::<f64>().sqrt()
+        crate::math::sqrt(self.data.iter().map(|x| x * x).sum::<f64>())
     }
 
     /// Squared norm (avoids sqrt).
@@ -134,7 +136,7 @@ impl Tensor1 {
     pub fn angle_with(&self, other: &Tensor1) -> crate::trig::Phase {
         let cos_sim = self.cosine_sim(other);
         let cos_clamped = cos_sim.clamp(-1.0, 1.0);
-        let theta = cos_clamped.acos();
+        let theta = crate::math::acos(cos_clamped);
         crate::trig::Phase::new(theta)
     }
 }
@@ -229,7 +231,7 @@ impl Tensor2 {
 
     /// Frobenius norm.
     pub fn norm_fro(&self) -> f64 {
-        self.data.iter().map(|x| x * x).sum::<f64>().sqrt()
+        crate::math::sqrt(self.data.iter().map(|x| x * x).sum::<f64>())
     }
 
     /// Extract a row as Tensor1.

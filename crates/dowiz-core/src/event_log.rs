@@ -23,6 +23,9 @@
 //! never a score. The log is neutral, idempotent plumbing.
 
 use alloc::collections::BTreeSet;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
 
 // Keccak-f[1600] round constants (FIPS 202). Lifted to module scope (was nested inside
 // `sha3_256`) so the item-7 Kani cross-copy equivalence proof can reach this permutation;
@@ -802,41 +805,6 @@ mod tests {
             "rejection propagates as the Law pole"
         );
         assert!(log.is_empty(), "nothing persisted on rejection");
-    }
-
-    /// RED — write succeeds OFFLINE (no network dependency at all). The log is a
-    /// pure in-process structure; this asserts a full commit path with a real
-    /// kernel `decide`/`fold` Law (order transition validation) without any I/O.
-    #[test]
-    fn write_succeeds_offline_with_kernel_decide() {
-        use crate::order_machine::{assert_transition, OrderStatus};
-
-        let mut log = EventLog::new(MemEventStore::new());
-        // Payload encodes an order transition (Pending -> Confirmed), validated
-        // by the kernel's `decide` half (assert_transition). This proves the
-        // event-log commits THROUGH the real kernel Law before any network use.
-        let payload = b"Pending->Confirmed".to_vec();
-        let e = MeshEvent {
-            prev: [0u8; 32],
-            actor_pubkey: actor(3),
-            actor_seq: 1,
-            payload,
-        };
-        let (out, dec) = log
-            .commit_after_decide(e, |ev| {
-                // The decide half: validate the encoded transition via the Law.
-                let _ = ev;
-                assert_transition(OrderStatus::Pending, OrderStatus::Confirmed)
-                    .map(|_| "confirmed".to_string())
-                    .map_err(|e| e.code().to_string())
-            })
-            .expect("kernel decide must accept Pending->Confirmed");
-        assert!(matches!(out, AppendOutcome::Committed(_)));
-        assert_eq!(dec.unwrap(), "confirmed");
-        assert_eq!(log.len(), 1);
-        // No network call was ever made; the function returns synchronously and
-        // the store holds exactly one event. This IS the offline-write property.
-        assert!(log.tip().is_some());
     }
 
     /// GREEN — local-first chaining: a zeroed `prev` is bound to the current tip

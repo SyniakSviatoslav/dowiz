@@ -511,7 +511,7 @@ mod adversarial {
             "drift gate must reject as Law-pole, not store fault; got {res:?}"
         );
         assert_eq!(
-            log.store.insert_calls, 0,
+            log.store().insert_calls, 0,
             "drift gate fires BEFORE any store touch (A1 ordering invariant)"
         );
         assert!(log.is_empty(), "nothing persisted under drift rejection");

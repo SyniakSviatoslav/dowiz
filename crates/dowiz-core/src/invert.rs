@@ -15,6 +15,10 @@
 //!
 //! ZERO deps. Uses eigen, delta, trig, trinary.
 
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
+
 use crate::delta::{Delta, DeltaComparison};
 
 // ─── BackpropNode — one step in the backward chain ─────────────────────────

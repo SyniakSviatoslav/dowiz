@@ -18,6 +18,7 @@ use crate::geo::haversine_meters;
 use core::cmp::Ordering;
 use core::cmp::Reverse;
 use alloc::collections::BinaryHeap;
+use alloc::vec::Vec;
 
 /// Orderable f64 priority for the A* min-heap. `f64` is not `Ord` (NaN), so we
 /// order by `total_cmp` — a total order over all f64s (NaN sorts last, harmless

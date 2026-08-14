@@ -49,12 +49,18 @@ mod tests {
 
     /// `markov.rs:73` — mixing-time bound `budget = ln(1/tol)/ln(1/slem)`.
     /// Advisory metric; golden-pinned per ADR-046.
+    ///
+    /// Re-pinned 2026-08-14: `markov` moved to no_std `dowiz-core`, so this `ln`
+    /// site now routes through `crate::math::ln` (fdlibm hi/lo) instead of glibc
+    /// libm. fdlibm is cross-platform deterministic (~1 ULP from glibc libm on
+    /// this input), so the determinism guarantee is STRENGTHENED — the pin just
+    /// moves to the new canonical value.
     #[test]
     fn golden_markov_budget_ln_markov_rs_73() {
         let b = markov::budget(0.9_f64, 1e-3);
         assert_eq!(
             b.to_bits(),
-            4634314005443282009, // pinned 2026-07-19 (toolchain-pinned)
+            4634314005443282010, // re-pinned 2026-08-14 (fdlibm crate::math::ln post no_std extraction)
             "markov.rs:73 budget ln bit pattern drifted"
         );
     }
