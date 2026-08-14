@@ -114,7 +114,7 @@ const PIO2_LO: f64 = 6.123_233_995_736_766e-17;
 
 /// Reduce `x` to `(n, r)` with `x = n·(π/2) + r`, `r ∈ [-π/4, π/4]`.
 fn rem_pio2(x: f64) -> (i32, f64) {
-    let n = (x * core::f64::consts::FRAC_2_PI).round() as i32;
+    let n = round(x * core::f64::consts::FRAC_2_PI) as i32;
     let r = (x - n as f64 * PIO2_HI) - n as f64 * PIO2_LO;
     (n, r)
 }
