@@ -73,7 +73,7 @@ pub use dowiz_core::csr;
 pub mod domain;
 /// Foster-Lyapunov entropy budget, T-annealing, and BRANCH-dispersion detector
 /// for the hydra's closed-loop self-evolution control.
-pub mod entropy_budget;
+pub use dowiz_core::entropy_budget;
 /// P04 product-math: Disjoint-Set Union (union-find) + Kruskal MST — the single
 /// canonical DSU/MST primitive. `cgraph::c_components` delegates here; Phase 9
 /// mesh-heal + Phase 13 partition-tolerant delivery consume it directly.
@@ -90,7 +90,7 @@ pub mod fdr;
 /// `charge_legs` / `kitchen_tickets`. Pure Rust, no DOM, no float on money.
 pub mod foodcourt;
 /// RW-06 — geo / route kinematics (pure-logic port from geo-anim.ts + delivery-zone.ts). Kernel authority.
-pub mod geo;
+pub use dowiz_core::geo;
 /// Harmonic centrality H(v)=Σ 1/d(u,v) — the shared graph-ranking primitive the
 /// agent-kernel (HK-05/HK-06) uses for model routing + memory ranking. Ported
 /// here so the CANONICAL kernel and the agent-kernel share ONE graph-math
@@ -141,7 +141,7 @@ pub mod scheduler;
 /// parse-side home for the serde carriers being cut over (agent-facade, skillspector-rs).
 /// Separate from `fdr::json` (serialize-only, fixed-schema). `serde_json` is retained only as a
 /// dev-dependency differential oracle (`tests/json_oracle.rs`), outside the zero-dep proof surface.
-pub mod json;
+pub use dowiz_core::json;
 pub mod kalman;
 /// Item 7 (space-grade roadmap §C): planted-fault self-test for the kani-gate.
 /// Compiled ONLY under `cfg(kani)` — zero footprint in every normal build.
@@ -186,7 +186,7 @@ pub mod moderation;
 /// stable softmax, and matrix condition-number estimation via power iteration.
 /// Zero-dep, pure-std. Guards every hot float-accumulation path against overflow
 /// and catastrophic cancellation.
-pub mod numerical_guard;
+pub use dowiz_core::numerical_guard;
 /// P9 wave: deterministic seedable PRNG (SplitMix64 → PCG64), zero-dep,
 /// reproducible Monte-Carlo for the empirical causal joint.
 pub mod rng;
@@ -199,12 +199,12 @@ pub use dowiz_core::pid;
 /// Stability margin computation for PID controllers — gain margin (dB) and phase
 /// margin (degrees) from the discrete-time transfer function. Aid for closed-loop
 /// stability analysis without external tooling.
-pub mod math_guard;
+pub use dowiz_core::math_guard;
 /// Self-similar crystalline lattice for O(1) nearest-neighbor retrieval.
 /// Extracted from `academia_p2p.rs` (NdCrystalLattice, NdSignature, CrystalMemory)
 /// into a general-purpose module. Enables fast similar-state lookup for the
 /// real-time system predictor.
-pub mod crystal;
+pub use dowiz_core::crystal;
 /// Real-time system state/action consequence predictor — combines PID dynamics,
 /// crystalline memory, and ensemble bidding to predict performance, load,
 /// traffic, telemetry, throttle, friction, and error consequences of state
@@ -342,7 +342,7 @@ pub mod ct_gate;
 pub mod decision;
 /// C2 — DEPLOY CONFIG (roster + provider selection + default currency) is load-bearing
 /// deployment input, not compiled-in. Std-only, serde-free.
-pub mod deploy_config;
+pub use dowiz_core::deploy_config;
 /// Reverse-engineering loop #R1 — Markov attractor detector (ASCENDed from markov_attractor.py);
 /// reuses `spectral` as its eigen-core, killing the dual-authority hazard.
 /// Item 46 — float-determinism containment goldens (ADR-046: pin-under-golden).
@@ -405,7 +405,7 @@ pub use dowiz_core::money;
 pub use dowiz_core::noether;
 /// B3 — deterministic offline-on-node online learner (LinearSGD ridge +
 /// ScalarAdam), the self-adaptation substrate (E3). Local-first: no network.
-pub mod online;
+pub use dowiz_core::online;
 /// BLUEPRINT-ITEM-28 — optical/pixel archival compression. Feature-gated (`optical`)
 /// so the canonical order/money core stays pure-`std` and dependency-free. The
 /// `OpticalCompressed` type is structurally prevented from reaching ANY
@@ -419,7 +419,7 @@ pub use dowiz_core::optical;
 pub mod order_machine;
 /// Kernel-native structured data extraction (pure `std`). Replaces `awk`,
 /// `split('=')`, and `node -e JSON.parse` with deterministic, zero-dep parsers.
-pub mod parse;
+pub use dowiz_core::parse;
 /// Unified memory search engine — indexed vector (BM25 + trigram) + spectral
 /// navigation (PPR) over structured documents. Replaces all `grep -rn` extraction.
 pub mod memory_search;
@@ -587,7 +587,7 @@ pub mod cpuid;
 pub mod time_stabilizer;
 /// Weather + power grid load forecasting for clock drift prediction.
 /// Forecast feeds into TimeStabilizer's drift model.
-pub mod power_forecast;
+pub use dowiz_core::power_forecast;
 /// Unified telemetry aggregation — combines typed_metrics, telemetry (self-improvement
 /// pattern surface), telemetry_harvest (JSONL ledger), and span_metrics into one
 /// kernel-native interface. Replaces bash scripts like hydra_metrics_sender.sh.
@@ -629,7 +629,7 @@ pub use dowiz_core::spectral;
 /// P11 §2 — content-addressed spectral eigensolve cache (zero-dep); routes
 /// `spectral::eigenvalues` through a `&mut` cache with a recomputes-counter
 /// falsifier (no thrashing, no stale-cache).
-pub mod spectral_cache;
+pub use dowiz_core::spectral_cache;
 /// WAVE LAP — graph-Laplacian eigenmodes consumer of `spectral::eigh`: the
 /// `k` smallest-eigenvalue eigenpairs (Fourier modes / field-UI basis) of a CSR
 /// graph. New module; does not touch `spectral_cache`, `csr`, `householder`, or
@@ -644,7 +644,7 @@ pub use dowiz_core::telemetry;
 pub mod telemetry_harvest;
 /// F33 — deterministic compute-budget token bucket (monotonic-clock, atomic, degrade-closed).
 /// The `llm-adapters` `Dispatcher` reuses this to bound LLM-call concurrency.
-pub mod spinlock;
+pub use dowiz_core::spinlock;
 pub mod token_bucket;
 /// Deterministic n-gram (bigram + trigram) frequency extraction over a token
 /// stream — the self-improvement loop's pattern-surface primitive (P9 / T2-β).
@@ -713,7 +713,7 @@ pub use dowiz_core::hypervector;
 pub use dowiz_core::pixel_snapshot;
 /// Glyph-enhanced observability dashboard — sparkline/heatmap/scatter/braille
 /// bridge between pixel_snapshot and sys_dashboard/telemetry/fdr/event_log.
-pub mod glyph_dashboard;
+pub use dowiz_core::glyph_dashboard;
 /// Hypervector (VSA) document index for academia + search — fixed-width codes,
 /// O(1) popcount similarity, parity-checked against a cosine baseline.
 pub mod hypervector_index;
@@ -738,13 +738,13 @@ pub use dowiz_core::landmark;
 /// Deterministic scenario record/replay/resume + secret redaction (item #2 substrate).
 pub use dowiz_core::scenario;
 /// Support-ticket lifecycle FSM + conversation thread (item #13).
-pub mod support;
+pub use dowiz_core::support;
 /// Gradient boosting with regression stumps (item #15).
-pub mod gboost;
+pub use dowiz_core::gboost;
 /// Canonical (order-independent) JSON for LLM prompt-cache prefix stability.
 pub mod canonical;
 /// aarch64 NEON register-file kernels (f64 dot / matvec) for eigen/tensor/attention.
-pub mod neon;
+pub use dowiz_core::neon;
 /// Deterministic, no_std-ready FxHash (replaces BTreeMap's OS-entropy RandomState).
 pub mod fxhash;
 /// Single-authority time abstraction (Clock/WallClock) — std::time seam for kernel port.
@@ -767,7 +767,7 @@ pub mod vfs;
 /// Delta calculus — replaces classic comparisons (a>b, x==y) with vector
 /// delta analysis. Δv, ∂t, rate, acceleration, drift tracking. Eigen/Phase
 /// comparison via spectral distance. Oscillation detection.
-pub mod delta;
+pub use dowiz_core::delta;
 /// Inversion + backpropagation engine. When errors or deviations are
 /// detected, they propagate BACKWARDS through the causal chain. Each
 /// step identifies upstream responsibility. Results surface on the

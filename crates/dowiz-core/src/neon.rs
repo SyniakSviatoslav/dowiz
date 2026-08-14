@@ -11,6 +11,7 @@
 //! approximated by fixed unrolling; a parity test pins NEON == scalar within
 //! fp tolerance on this host.
 
+use alloc::vec::Vec;
 /// Dot product of two `f64` slices (truncates to the shorter length).
 pub fn dot_f64(a: &[f64], b: &[f64]) -> f64 {
     #[cfg(target_arch = "aarch64")]
@@ -105,8 +106,8 @@ mod tests {
         let mut a = Vec::new();
         let mut b = Vec::new();
         for i in 0..1000usize {
-            a.push((i as f64 * 0.37).sin());
-            b.push((i as f64 * 0.61).cos());
+            a.push(crate::math::sin((i as f64 * 0.37)));
+            b.push(crate::math::cos((i as f64 * 0.61)));
         }
         let neon = dot_f64(&a, &b); // NEON path
         let scalar = a.iter().zip(&b).map(|(x, y)| x * y).sum::<f64>();

@@ -8,6 +8,9 @@
 //! fdr, event_log) call into these functions to produce glyph output instead
 //! of raw ASCII bars or hex dumps.
 
+use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::string::ToString;
 use crate::pixel_snapshot;
 
 // ─── Series → sparkline ────────────────────────────────────────────────
@@ -34,7 +37,7 @@ pub fn render_histogram_sparkline(values: &[f64], bins: usize) -> String {
     let mut counts = vec![0u64; bins];
     for &v in values {
         if v.is_finite() {
-            let idx = ((v - min) / step).floor() as usize;
+            let idx = crate::math::floor(((v - min) / step)) as usize;
             if idx < bins {
                 counts[idx] += 1;
             }

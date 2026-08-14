@@ -730,6 +730,18 @@ pub fn powi(x: f64, n: i32) -> f64 {
     }
 }
 
+/// `rem_euclid(x, y)` = euclidean remainder, always non-negative for `y > 0`
+/// (the no_std replacement for `f64::rem_euclid`, which is std-only/libm).
+/// Matches `std::f64::rem_euclid` exactly: `r = x % y; if r < 0.0 { r + y.abs() } else { r }`.
+pub fn rem_euclid(x: f64, y: f64) -> f64 {
+    let r = x % y;
+    if r < 0.0 {
+        r + y.abs()
+    } else {
+        r
+    }
+}
+
 /// `tan(x)` = sin(x)/cos(x). ~1 ULP (from the existing sin/cos).
 pub fn tan(x: f64) -> f64 {
     if !x.is_finite() {

@@ -18,6 +18,7 @@
 //! Verified-by-Math: see `tests` — a noiseless line (`y = 2x + 1`) converges to
 //! w→2, b→1; ScalarAdam on x² descends monotonically and reaches the optimum.
 
+use alloc::vec::Vec;
 use crate::micrograd::Value;
 
 /// Online ridge-regularized linear regression via SGD.
@@ -121,9 +122,9 @@ impl ScalarAdam {
         let g = self.theta.grad();
         self.m = self.beta1 * self.m + (1.0 - self.beta1) * g;
         self.v = self.beta2 * self.v + (1.0 - self.beta2) * g * g;
-        let mhat = self.m / (1.0 - self.beta1.powi(self.t as i32));
-        let vhat = self.v / (1.0 - self.beta2.powi(self.t as i32));
-        let next = self.theta.data() - self.lr * mhat / (vhat.sqrt() + self.eps);
+        let mhat = self.m / (1.0 - crate::math::powi(self.beta1, self.t as i32));
+        let vhat = self.v / (1.0 - crate::math::powi(self.beta2, self.t as i32));
+        let next = self.theta.data() - self.lr * mhat / (crate::math::sqrt(vhat) + self.eps);
         self.theta.set_data(next);
         self.theta.zero_grad();
         loss.data()
@@ -145,9 +146,9 @@ impl ScalarAdam {
 /// negative `t` never overflows `e⁻ᵗ`.
 pub fn sigmoid(t: f64) -> f64 {
     if t >= 0.0 {
-        1.0 / (1.0 + (-t).exp())
+        1.0 / (1.0 + crate::math::exp((-t)))
     } else {
-        let e = t.exp();
+        let e = crate::math::exp(t);
         e / (1.0 + e)
     }
 }
@@ -226,12 +227,11 @@ impl NaturalLogistic {
         }
         self.theta -= self.lr * nat;
         // log-loss = -ln P(y|θ)
-        -(if y == 1 {
+        crate::math::ln(-(if y == 1 {
             p.max(1e-300)
         } else {
             (1.0 - p).max(1e-300)
-        })
-        .ln()
+        }))
     }
 }
 
@@ -453,21 +453,21 @@ mod tests {
     /// GREEN: fed a stationary Bernoulli target p*=0.8, the natural-gradient
     /// logistic learner converges to σ(θ)→0.8 (the MLE of a constant stream).
     ///
-    /// The stream is shuffled *deterministically per epoch* (Fisher–Yates with the
-    /// kernel's own Verified-by-Math `Rng`, seed 0xBEEF) so the per-epoch order
-    /// is decoupled — this removes the deterministic-block fixed-point bias of plain
-    /// SGD (the iterate-averaging effect) and lands the fixed point at p*. LOCAL-FIRST:
-    /// the shuffle state is in-process, seedable, no network.
+    /// The stream is shuffled *deterministically per epoch* (Fisher–Yates with
+    /// dowiz-core's Verified-by-Math `splitmix64`, seed 0xBEEF) so the per-epoch
+    /// order is decoupled — this removes the deterministic-block fixed-point bias of
+    /// plain SGD (the iterate-averaging effect) and lands the fixed point at p*.
+    /// LOCAL-FIRST: the shuffle state is in-process, seedable, no network.
     #[test]
     fn natural_logistic_converges_to_target_rate() {
         // Base stream with exactly 80% ones (8 of every 10 samples).
         let mut stream: Vec<u8> = (0..10).map(|i| if i < 8 { 1 } else { 0 }).collect();
-        let mut rng = crate::rng::Rng::new(0xBEEF, 1);
+        let mut rng_state: u64 = 0xBEEF;
         let mut lg = NaturalLogistic::new(0.01, 0.0); // start at p=0.5
         for _epoch in 0..40000 {
             // In-place Fisher–Yates shuffle (deterministic, seeded).
             for i in (1..stream.len()).rev() {
-                let j = rng.next_index(i + 1);
+                let j = (crate::rng::splitmix64(&mut rng_state) as usize) % (i + 1);
                 stream.swap(i, j);
             }
             for &y in stream.iter() {

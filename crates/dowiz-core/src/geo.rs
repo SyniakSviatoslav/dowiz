@@ -7,6 +7,7 @@
 //! RED→GREEN GATE: Rust output == TS on a fixture (parity within tolerance);
 //! ray-cast parity on known polygons.
 
+use alloc::vec::Vec;
 const EARTH_RADIUS_M: f64 = 6_371_000.0;
 const DEG2RAD: f64 = core::f64::consts::PI / 180.0;
 const RAD2DEG: f64 = 180.0 / core::f64::consts::PI;
@@ -16,8 +17,9 @@ pub fn haversine_meters(a_lat: f64, a_lng: f64, b_lat: f64, b_lng: f64) -> f64 {
     let (la1, la2) = (a_lat * DEG2RAD, b_lat * DEG2RAD);
     let dlat = (b_lat - a_lat) * DEG2RAD;
     let dlng = (b_lng - a_lng) * DEG2RAD;
-    let h = (dlat / 2.0).sin().powi(2) + la1.cos() * la2.cos() * (dlng / 2.0).sin().powi(2);
-    2.0 * EARTH_RADIUS_M * h.sqrt().asin()
+    let h = crate::math::powi(crate::math::sin((dlat / 2.0)), 2)
+        + crate::math::cos(la1) * crate::math::cos(la2) * crate::math::powi(crate::math::sin((dlng / 2.0)), 2);
+    2.0 * EARTH_RADIUS_M * crate::math::asin(crate::math::sqrt(h))
 }
 
 /// Linear interpolation between two lat/lng points (equirectangular approx for
@@ -30,9 +32,9 @@ pub fn lerp_lat_lng(a_lat: f64, a_lng: f64, b_lat: f64, b_lng: f64, t: f64) -> (
 pub fn bearing_deg(a_lat: f64, a_lng: f64, b_lat: f64, b_lng: f64) -> f64 {
     let (la1, la2) = (a_lat * DEG2RAD, b_lat * DEG2RAD);
     let dlng = (b_lng - a_lng) * DEG2RAD;
-    let y = dlng.sin() * la2.cos();
-    let x = la1.cos() * la2.sin() - la1.sin() * la2.cos() * dlng.cos();
-    (y.atan2(x) * RAD2DEG + 360.0) % 360.0
+    let y = crate::math::sin(dlng) * crate::math::cos(la2);
+    let x = crate::math::cos(la1) * crate::math::sin(la2) - crate::math::sin(la1) * crate::math::cos(la2) * crate::math::cos(dlng);
+    (crate::math::atan2(y, x) * RAD2DEG + 360.0) % 360.0
 }
 
 /// Exponential moving average step. Matches `emaNext`.
@@ -77,7 +79,7 @@ pub fn progress_along_route(poly: &[(f64, f64)], pos: (f64, f64)) -> RouteProgre
     }
     // Equirectangular scale at the mean latitude (city-scale approximation).
     let mean_lat = poly.iter().map(|p| p.0).sum::<f64>() / poly.len() as f64;
-    let kx = EARTH_RADIUS_M * DEG2RAD * mean_lat.to_radians().cos();
+    let kx = EARTH_RADIUS_M * DEG2RAD * crate::math::cos(mean_lat * DEG2RAD);
     let ky = EARTH_RADIUS_M * DEG2RAD;
     let px = pos.1 * kx;
     let py = pos.0 * ky;
@@ -100,7 +102,7 @@ pub fn progress_along_route(poly: &[(f64, f64)], pos: (f64, f64)) -> RouteProgre
         };
         let cx = ax + t * dx;
         let cy = ay + t * dy;
-        let dist2 = (px - cx).powi(2) + (py - cy).powi(2);
+        let dist2 = crate::math::powi((px - cx), 2) + crate::math::powi((py - cy), 2);
         if dist2 < best_dist2 {
             best_dist2 = dist2;
             best_seg = i + 1; // end-node index
@@ -132,7 +134,7 @@ pub fn progress_along_route(poly: &[(f64, f64)], pos: (f64, f64)) -> RouteProgre
         (((px - ax) * dx + (py - ay) * dy) / len2).clamp(0.0, 1.0)
     };
     // from snapped (at t on segment) to end node b
-    let seg_rem = (1.0 - t) * (dx * dx + dy * dy).sqrt();
+    let seg_rem = (1.0 - t) * crate::math::sqrt((dx * dx + dy * dy));
     remaining += seg_rem;
     for s in (best_seg + 1)..poly.len() {
         remaining += haversine_meters(poly[s - 1].0, poly[s - 1].1, poly[s].0, poly[s].1);
@@ -367,7 +369,7 @@ pub fn floor_slice_height_m(floor: u32, storey_h: f64) -> f64 {
 /// Smallest unsigned angular separation between two compass bearings, seam-
 /// correct across the 0°/360° wrap. Oracle: `angular_diff_deg(350, 10) == 20`.
 pub fn angular_diff_deg(a: f64, b: f64) -> f64 {
-    let d = (a - b).rem_euclid(360.0);
+    let d = crate::math::rem_euclid((a - b), 360.0);
     d.min(360.0 - d)
 }
 
@@ -376,7 +378,7 @@ pub fn angular_diff_deg(a: f64, b: f64) -> f64 {
 /// (`view_rotation = 0`) this is `facing` unchanged — one global frame; v1 does
 /// NOT rotate the view to straighten facades.
 pub fn arrow_screen_rotation_deg(facing_deg: f64, view_rotation_deg: f64) -> f64 {
-    (facing_deg - view_rotation_deg).rem_euclid(360.0)
+    crate::math::rem_euclid((facing_deg - view_rotation_deg), 360.0)
 }
 
 /// True when `target_bearing_deg` lies within the field of view centred on

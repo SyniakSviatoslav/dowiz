@@ -11,6 +11,9 @@
 //! assert_eq!(map.get("PORT"), Some(&"8080".to_string()));
 //! ```
 
+use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::string::ToString;
 use alloc::collections::BTreeMap;
 
 /// Maximum number of key-value pairs. Bounds memory on adversarial input.
@@ -146,7 +149,7 @@ impl core::fmt::Display for EnvParseError {
     }
 }
 
-impl std::error::Error for EnvParseError {}
+impl core::error::Error for EnvParseError {}
 
 #[cfg(test)]
 mod tests {

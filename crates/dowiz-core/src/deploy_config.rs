@@ -17,6 +17,9 @@
 //! `currency` is intentionally NOT hardcoded (see `payment_provider::currency_not_hardcoded`):
 //! the config selects it, proving it is deployment-driven.
 
+use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::string::ToString;
 use crate::money::Currency;
 use core::str::FromStr;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -9,6 +9,7 @@
 //! | `tsv`  | `awk -F'\t'` in 5+ scripts | `parse_rows(src, n_cols) -> Vec<Vec<&str>>` |
 //! | `env`  | `split('=')` in TS scripts | `parse_env(src) -> EnvMap` |
 
+use alloc::vec::Vec;
 /// Kernel-native parser combinator framework (inspired by nom/pest/chumsky).
 /// Features: SIMD structural byte classification, incremental error recovery,
 /// and composable parsers via `pair`, `alt`, `many`, `delimited`, `map`.

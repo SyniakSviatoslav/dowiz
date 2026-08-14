@@ -6,6 +6,8 @@
 //! is pure state-transition logic, the same discipline as `order_machine`.
 //! Closed enum + single transition table + wire codes, no floats, no I/O.
 
+use alloc::vec::Vec;
+use alloc::string::String;
 /// Support ticket lifecycle states.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]

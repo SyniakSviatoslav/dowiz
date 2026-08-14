@@ -1,4 +1,7 @@
 
+use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::string::ToString;
 #[derive(Debug, Clone, Copy)]
 pub struct Input<'a> {
     pub data: &'a [u8],

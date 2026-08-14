@@ -22,14 +22,14 @@ pub fn pid_stability_margin(kp: f64, ki: f64, kd: f64, dt: f64) -> (f64, f64) {
     let mut phase_margin_deg = 0.0;
 
     for i in 0..=n {
-        let omega = omega_min * (omega_max / omega_min).powf(i as f64 / n as f64);
+        let omega = omega_min * crate::math::powf((omega_max / omega_min), i as f64 / n as f64);
         let (mag, phase) = pid_freq_response(kp, ki, kd, dt, omega);
         let _phase_deg = phase * 180.0 / PI;
 
         // Gain margin: closest approach to -180° (Nyquist point)
         let phase_err = (phase + PI).abs();
         if phase_err < 1e-4 && mag > 1e-12 {
-            let margin = -20.0 * mag.log10();
+            let margin = -20.0 * crate::math::log10(mag);
             if margin.is_finite() && margin < gain_margin_db {
                 gain_margin_db = margin;
             }
@@ -57,8 +57,8 @@ pub fn pid_stability_margin(kp: f64, ki: f64, kd: f64, dt: f64) -> (f64, f64) {
 /// Evaluate the discrete-time PID transfer function at frequency ω.
 /// Returns (magnitude, phase_radians).
 fn pid_freq_response(kp: f64, ki: f64, kd: f64, dt: f64, omega: f64) -> (f64, f64) {
-    let cos_w = omega.cos();
-    let sin_w = omega.sin();
+    let cos_w = crate::math::cos(omega);
+    let sin_w = crate::math::sin(omega);
 
     // z = exp(jω), z−1 = (cos ω − 1) + j sin ω
     let z_minus_1_re = cos_w - 1.0;
@@ -88,8 +88,8 @@ fn pid_freq_response(kp: f64, ki: f64, kd: f64, dt: f64, omega: f64) -> (f64, f6
     let re = kp + i_re + d_re;
     let im = i_im + d_im;
 
-    let mag = (re * re + im * im).sqrt();
-    let phase = im.atan2(re);
+    let mag = crate::math::sqrt((re * re + im * im));
+    let phase = crate::math::atan2(im, re);
     (mag, phase)
 }
 

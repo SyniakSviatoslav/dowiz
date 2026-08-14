@@ -16,6 +16,10 @@
 //! `kernel/tests/json_oracle.rs`); it sits outside the `-e no-dev` zero-dep proof surface, so the
 //! kernel's empty allowlist stays empty.
 
+use alloc::borrow::ToOwned;
+use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::string::ToString;
 use core::fmt::Write as _;
 
 /// Maximum nesting depth the parser will descend before refusing (degrade-closed vs stack
@@ -56,7 +60,7 @@ impl core::fmt::Display for Error {
         write!(f, "json parse error at byte {}: {}", self.pos, self.msg)
     }
 }
-impl std::error::Error for Error {}
+impl core::error::Error for Error {}
 
 impl Value {
     /// Object member lookup (last-wins on duplicate keys). `None` for non-objects/missing keys.

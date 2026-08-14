@@ -19,6 +19,7 @@
 //!
 //! ZERO deps. Uses eigen, trig, trinary.
 
+use alloc::vec::Vec;
 use crate::eigen::{EigenDecomp, decompose};
 use crate::trig::{Xyz, PhaseVector};
 
@@ -44,7 +45,7 @@ impl Delta {
             components[i] = v1[i] - v0[i];
             mag_sq += components[i] * components[i];
         }
-        let magnitude = mag_sq.sqrt();
+        let magnitude = crate::math::sqrt(mag_sq);
         let dt = (ts1.saturating_sub(ts0) as f64).max(1.0);
         Delta { components, magnitude, ts_from: ts0, ts_to: ts1, rate: magnitude / dt }
     }
@@ -75,7 +76,7 @@ impl Delta {
             dir_norm += direction[i] * direction[i];
         }
         if dir_norm < 1e-15 { return 0.0; }
-        dot / dir_norm.sqrt()
+        dot / crate::math::sqrt(dir_norm)
     }
 }
 
@@ -106,7 +107,7 @@ impl EigenDelta {
                     nb += b.vector[i] * b.vector[i];
                 }
                 if na < 1e-15 || nb < 1e-15 { 0.0 }
-                else { (dot / (na.sqrt() * nb.sqrt())).acos() }
+                else { crate::math::acos((dot / (crate::math::sqrt(na) * crate::math::sqrt(nb)))) }
             }
             _ => 0.0,
         };

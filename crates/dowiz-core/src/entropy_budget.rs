@@ -20,6 +20,7 @@
 //! All operations are std-only, deterministic, zero-dep. Pure functions
 //! where possible; stateful structs for the online accumulators.
 
+use alloc::vec::Vec;
 // Shannon / Foster-Lyapunov / annealing / BRANCH — pure std, no spectral import.
 
 /// Shannon entropy of a discrete probability distribution (natural log).
@@ -38,7 +39,7 @@ pub fn shannon_entropy(weights: &[f64]) -> f64 {
             .filter(|&w| w > 0.0)
             .map(|w| {
                 let p = w / total;
-                if p <= 0.0 { 0.0 } else { p * p.ln() }
+                if p <= 0.0 { 0.0 } else { p * crate::math::ln(p) }
             })
             .sum::<f64>()
     )
@@ -182,12 +183,12 @@ impl TAnnealing {
         let delta_e = crate::sanitize_f64(delta_e);
         let t = self.t0 / (1.0 + ((self.k - 1) as f64) / self.tau);
         // Accept if cost is negative (improvement) or below the annealing threshold.
-        delta_e <= 0.0 || delta_e < t * 2.0_f64.ln()
+        delta_e <= 0.0 || delta_e < t * crate::math::ln(2.0_f64)
     }
 
     /// Peek at the acceptance threshold without advancing k.
     pub fn threshold(&self) -> f64 {
-        self.temperature() * 2.0_f64.ln()
+        self.temperature() * crate::math::ln(2.0_f64)
     }
 
     /// Current commit count.
@@ -236,7 +237,7 @@ impl BranchDispersion {
             return 0.0;
         }
         let mean = branch_values.iter().sum::<f64>() / (n as f64);
-        let variance = branch_values.iter().map(|&x| (x - mean).powi(2)).sum::<f64>() / (n as f64);
+        let variance = branch_values.iter().map(|&x| crate::math::powi((x - mean), 2)).sum::<f64>() / (n as f64);
         self.means[self.ptr] = variance;
         self.ptr = (self.ptr + 1) % self.window;
         if self.filled < self.window {
@@ -290,7 +291,7 @@ mod tests {
         // Uniform distribution over 4 elements: S = ln(4)
         let w = [0.25, 0.25, 0.25, 0.25];
         let s = shannon_entropy(&w);
-        assert!((s - 4.0_f64.ln()).abs() < 1e-12, "S(uniform-4) = ln(4)");
+        assert!((s - crate::math::ln(4.0_f64)).abs() < 1e-12, "S(uniform-4) = ln(4)");
     }
 
     #[test]
@@ -316,7 +317,7 @@ mod tests {
         // Weights don't need to sum to 1 — normalised internally.
         let w = [2.0, 2.0, 2.0, 2.0];
         let s = shannon_entropy(&w);
-        assert!((s - 4.0_f64.ln()).abs() < 1e-12, "normalised ⇒ same as uniform");
+        assert!((s - crate::math::ln(4.0_f64)).abs() < 1e-12, "normalised ⇒ same as uniform");
     }
 
     // ── Foster-Lyapunov entropy budget ──

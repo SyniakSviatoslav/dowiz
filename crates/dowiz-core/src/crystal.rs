@@ -23,8 +23,8 @@
 //!
 //! impl CrystalIndex for MyData {
 //!     fn crystal_hash(&self) -> [u8; 32] {
-//!         let h = std::hash::BuildHasher::hash_one(
-//!             &std::hash::RandomState::new(),
+//!         let h = core::hash::BuildHasher::hash_one(
+//!             &core::hash::RandomState::new(),
 //!             &self.id,
 //!         );
 //!         let mut output = [0u8; 32];
@@ -38,7 +38,11 @@
 //! assert_eq!(lattice.len(), 1);
 //! ```
 
-use std::hash::{Hash, Hasher};
+use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::collections::BTreeMap;
+use core::hash::{Hash, Hasher};
 
 /// Number of cells in the crystal lattice (65536 = 2^16).
 const CRYSTAL_CELLS: usize = 65536;

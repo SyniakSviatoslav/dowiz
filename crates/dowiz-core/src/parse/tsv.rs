@@ -11,6 +11,7 @@
 //! assert_eq!(rows, vec![vec!["a","b","c"], vec!["1","2","3"]]);
 //! ```
 
+use alloc::vec::Vec;
 /// Maximum number of columns per row. Bounds memory on adversarial input.
 pub const MAX_COLUMNS: usize = 1024;
 
@@ -104,7 +105,7 @@ impl core::fmt::Display for ParseError {
     }
 }
 
-impl std::error::Error for ParseError {}
+impl core::error::Error for ParseError {}
 
 #[cfg(test)]
 mod tests {

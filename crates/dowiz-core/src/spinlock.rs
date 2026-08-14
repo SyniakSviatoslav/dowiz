@@ -29,7 +29,7 @@ impl fmt::Display for Poisoned {
     }
 }
 
-impl std::error::Error for Poisoned {}
+impl core::error::Error for Poisoned {}
 
 /// A spinlock: test-and-set on an `AtomicBool`. `lock()` returns
 /// `Result<SpinLockGuard<T>, Poisoned>` so every `std::sync::Mutex` call site of
@@ -117,8 +117,9 @@ impl<T> DerefMut for SpinLockGuard<'_, T> {
 impl<T> Drop for SpinLockGuard<'_, T> {
     fn drop(&mut self) {
         // Poison on unwind (a panic while the lock was held), mirroring
-        // std::sync::Mutex. std-only detection — cfg-gate this line on no_std
-        // extraction (a no_std spinlock cannot observe unwind and would skip it).
+        // std::sync::Mutex. std-only detection — a no_std spinlock cannot
+        // observe unwind and skips it (std::thread is linked only under cfg(test)).
+        #[cfg(test)]
         if std::thread::panicking() {
             self.lock.poisoned.store(true, Ordering::Release);
         }

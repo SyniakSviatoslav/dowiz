@@ -4,6 +4,7 @@
 //! (spectral, absorbing, stats, online learners). Every primitive is pure-std,
 //! deterministic, and benchmarked under `spectral_math`.
 
+use alloc::vec::Vec;
 /// Kahan compensated summation — reduces floating-point error from O(n·ε) to O(ε).
 /// Sums the slice element-by-element with a running compensation term that recovers
 /// the low-order bits lost in each addition.
@@ -42,7 +43,7 @@ pub fn stable_softmax(xs: &mut [f64]) {
     }
     let max = xs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
     for x in xs.iter_mut() {
-        *x = (*x - max).exp();
+        *x = crate::math::exp((*x - max));
     }
     let sum: f64 = xs.iter().sum();
     if sum > 0.0 {
@@ -65,7 +66,7 @@ fn dot(x: &[f64], y: &[f64]) -> f64 {
 
 #[inline]
 fn norm(x: &[f64]) -> f64 {
-    dot(x, x).sqrt()
+    crate::math::sqrt(dot(x, x))
 }
 
 #[inline]
@@ -99,7 +100,7 @@ fn power_iteration_sigma_max(a: &[Vec<f64>], max_iter: usize, tol: f64) -> f64 {
     if m == 0 {
         return 0.0;
     }
-    let mut v = vec![1.0 / (n as f64).sqrt(); n];
+    let mut v = vec![1.0 / crate::math::sqrt((n as f64)); n];
     let mut av = vec![0.0; m];
     let mut atav = vec![0.0; n];
     let mut sigma = 0.0;
@@ -119,7 +120,7 @@ fn power_iteration_sigma_max(a: &[Vec<f64>], max_iter: usize, tol: f64) -> f64 {
             }
         }
     }
-    sigma.sqrt()
+    crate::math::sqrt(sigma)
 }
 
 /// Solve A x = b by Gaussian elimination with partial pivoting (square, fail-closed).
@@ -167,7 +168,7 @@ fn power_iteration_sigma_min(a: &[Vec<f64>], max_iter: usize, tol: f64) -> f64 {
     if n == 0 {
         return 1.0;
     }
-    let mut v = vec![1.0 / (n as f64).sqrt(); n];
+    let mut v = vec![1.0 / crate::math::sqrt((n as f64)); n];
     let mut av = vec![0.0; n];
     let mut lambda = 0.0;
     for _ in 0..max_iter {
@@ -190,7 +191,7 @@ fn power_iteration_sigma_min(a: &[Vec<f64>], max_iter: usize, tol: f64) -> f64 {
     if lambda < 1e-14 {
         1e14
     } else {
-        1.0 / lambda.sqrt()
+        1.0 / crate::math::sqrt(lambda)
     }
 }
 

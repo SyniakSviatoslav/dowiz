@@ -91,3 +91,22 @@ pub mod optical;
 pub mod budget;
 pub mod detection;
 pub mod cgraph;
+
+// --- wave 3: leaves + primitives ---
+pub mod power_forecast;
+pub mod crystal;
+pub mod deploy_config;
+pub mod support;
+pub mod json;
+pub mod spectral_cache;
+pub mod delta;
+pub mod geo;
+pub mod online;
+pub mod entropy_budget;
+pub mod math_guard;
+pub mod numerical_guard;
+pub mod gboost;
+pub mod glyph_dashboard;
+pub mod neon;
+pub mod spinlock;
+pub mod parse;

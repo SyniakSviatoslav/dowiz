@@ -132,6 +132,36 @@ All positive and negative consequences are stored in this MEMORY.md. The memory 
 7. Item 64: operator-gated decisions
 8. Items 4-12: await operator decisions (D1-D6)
 
+## no_std Migration Status (kernel-core → dowiz-core crate split)
+
+**Goal:** move the kernel's pure, dependency-free logic into the `no_std` crate
+`crates/dowiz-core`, leaving `kernel/` as the `std` shell that re-exports
+(`pub use dowiz_core::<mod>`). Zero external deps maintained (dowiz-core is `no_std`).
+
+**Verified counts (2026-08-14):**
+- `crates/dowiz-core`: **75** `pub mod` declarations
+- `kernel/src/lib.rs`: **145** `pub mod` still kernel-side (unmigrated), **71** `pub use dowiz_core::` re-exports
+- I/O ports ALL DONE: fs→VFS + held-handle seam, thread→kthread, process→kexec; net→sk_buff (N/A)
+- dowiz-core crate-root re-exports: `TriState`, `sanitize_f64/f32/normalized`, `sort_by_f64_desc/asc`
+- `math.rs` holds exp/ln (~1 ULP fdlibm hi/lo) + powf/powi/tan/atan/asin/log2/log10/sinh/cosh/tanh/fract + `rem_euclid` (no_std replacement for `f64::rem_euclid`)
+
+**Waves committed:**
+1. `77f3dad` — TriState + exp/ln/derived transcendentals
+2. `7e0bb36` — 16 kernel-core modules (swarm wave 2)
+3. (this commit) — 17 modules: power_forecast, crystal, deploy_config, support, json,
+   spectral_cache, delta, geo, online, entropy_budget, math_guard, numerical_guard,
+   gboost, glyph_dashboard, neon, spinlock, parse
+
+**Pitfalls / rules (binding):**
+- `f32::round` needs a cast: `round(self.output as f64)` (this rustc has no `f32::round`)
+- Hex float literals (`0x1p-600`) NOT supported by this rustc (1.97.1) → use `f64::from_bits()`
+- `determinism`, `kani_selftest`, `miri_selftest` are test-only golden-pin modules that MUST
+  stay kernel-side (pin std-libm bit patterns); `cfg(test)` is per-crate so they can't move
+- `std::hash::DefaultHasher` is std-only; tests needing it stay on the `std` side
+- `f64::rem_euclid` is std-only → use `crate::math::rem_euclid`
+- Migration protocol: `pub mod X;` → `pub use dowiz_core::X;` in kernel lib.rs, then delete
+  `kernel/src/X.rs`, add `pub mod X;` to dowiz-core lib.rs; verify `cargo test` for BOTH crates
+
 ## File Reference
 | File | Purpose |
 |------|--------|

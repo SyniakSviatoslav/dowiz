@@ -7,6 +7,7 @@
 //! production XGBoost — but the *algorithm* is real and the substrate (vector
 //! math over `Vec<f64>`) is the kernel's own.
 
+use alloc::vec::Vec;
 /// A regression stump: split on feature `j` at threshold `t`; predict
 /// `left` for x[j] ≤ t, else `right`.
 #[derive(Debug, Clone, PartialEq)]
@@ -126,7 +127,7 @@ impl GBoost {
     pub fn mse(&self, xs: &[Vec<f64>], y: &[f64]) -> f64 {
         let p = self.predict(xs);
         let n = y.len().max(1) as f64;
-        p.iter().zip(y).map(|(pi, yi)| (pi - yi).powi(2)).sum::<f64>() / n
+        p.iter().zip(y).map(|(pi, yi)| crate::math::powi((pi - yi), 2)).sum::<f64>() / n
     }
 
     pub fn num_trees(&self) -> usize {
@@ -174,7 +175,7 @@ mod tests {
         let mse = model.mse(&x, &y);
         // Baseline: predict the mean.
         let mean = y.iter().sum::<f64>() / y.len() as f64;
-        let base_mse = y.iter().map(|yi| (yi - mean).powi(2)).sum::<f64>() / y.len() as f64;
+        let base_mse = y.iter().map(|yi| crate::math::powi((yi - mean), 2)).sum::<f64>() / y.len() as f64;
         assert!(mse < base_mse * 0.2, "mse {mse} should be well below baseline {base_mse}");
     }
 

@@ -32,6 +32,8 @@
 //! innovate: ceiling — only EMA + linear trend forecast.
 //! upgrade: when >10^4 observations, enable seasonal ARIMA.
 
+use alloc::vec::Vec;
+use alloc::string::String;
 use crate::TriState;
 
 /// Minimum observations before forecast is reliable.
