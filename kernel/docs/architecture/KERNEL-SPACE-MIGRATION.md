@@ -44,6 +44,16 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
      `sin/cos/atan2/acos/floor/ceil/round` (the no_std libm replacement; the
      `eig2x2_bit_capture_oracle` golden signatures stay bit-exact — see
      `crates/dowiz-core/src/math.rs` + `tests/bitdiff.rs`).
+7. **`dowiz-core` crate split — sanitize + stem + eigen (2026-08-14)** — the
+   first tranche of the "no_std-READY but not moved" kernel-core modules:
+   - `sanitize` — `sanitize_f64`/`sanitize_f32`/`sanitize_normalized` (the
+     fail-closed boundary sanitizers; previously crate-root free fns).
+   - `stem` — the 50-language light stemmer (self-contained leaf, 114 tests).
+   - `eigen` — `Eigen`/`EigenDecomp`/`decompose` (26 tests); routes `sqrt`
+     through `crate::math`, stability classification through `trig::Phase`.
+   Kernel re-exports keep `crate::sanitize_f64` / `crate::stem` / `crate::eigen`
+   resolving unchanged. dowiz-core 222 lib tests + 4 bitdiff; kernel 2969 lib
+   tests green.
 
 ## REMAINING (architectural, dedicated sessions)
 
@@ -54,10 +64,11 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
    `crate::` cross-refs, add a no_std target (`thumbv7em-none-eabi` or
    `wasm32-unknown-unknown`), handle `format!`/prelude via `alloc::prelude`.
 2. **Transcendental modules still in-kernel (no_std-READY but not moved)** —
-   `eigen` (→ `stem`), `spectral` (→ `fdr`/`csr`/`spectral_cache`/`order_machine`),
-   `householder` (→ `fdr`). Their `f64` transcendental calls already route
-   through `crate::math`, but they reference non-transcendental kernel modules,
-   so moving them needs those dependencies extracted first.
+   `spectral` (→ `fdr`/`csr`/`spectral_cache`/`order_machine`/`mat`/`arena`),
+   `householder` (→ `spectral`/`fdr`). `eigen` + `stem` are DONE (item 7 above);
+   the remaining two form a mutual cycle (`spectral` ⇄ `householder`, and
+   `spectral` ⇄ `csr`) and reference `mat`/`arena`/`fdr`, so moving them needs
+   those non-transcendental dependencies extracted first.
 3. **Mutex → spinlock** (only for the 4 non-thread modules: breaker/audit,
    breaker/mod, ports/agent/admission, retrieval/memory_store) — a hand-rolled
    `SpinLock<T>` on `core::sync::atomic::AtomicBool` (zero-dep). The other 3
@@ -69,8 +80,9 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
 ## Honest scope note
 
 The mechanical tier (boundary) is **fully migrated**. The transcendental geometry
-layer is **fully extracted** to `dowiz-core`. The remaining items are
-architectural: the bulk crate split (move the rest of the 174 modules) and the
-43 I/O ports. Both are large, low-mechanical-effort, high-care efforts — not
-bulk-editable. This ledger marks the exact boundary so a future session resumes
-cleanly.
+layer is **fully extracted** to `dowiz-core`; the sanitize/stem/eigen tranche is
+**extracted**. The remaining items are architectural: the bulk crate split (move
+the rest of the 174 modules), the `spectral`⇄`householder` cycle, the 4
+Mutex→spinlock sites, and the 43 I/O ports. All are large, low-mechanical-effort,
+high-care efforts — not bulk-editable. This ledger marks the exact boundary so a
+future session resumes cleanly.

@@ -700,8 +700,9 @@ pub mod token_bucket;
 pub mod trigram;
 /// Light multilingual stemmer (EN/UK/RU) — zero-dep suffix stripping for
 /// inflected-language recall in BM25/trigram retrieval. Normalizes cases,
-/// conjugations, and plurals to a common root.
-pub mod stem;
+/// conjugations, and plurals to a common root. (Extracted into dowiz-core;
+/// re-exported so `crate::stem` resolves unchanged.)
+pub use dowiz_core::stem;
 /// Reconstruction memory — MemHarness reimplementation: memory as
 /// reconstruction, not replay. Critiques stored experience against current
 /// context and reconstructs adapted versions. Uses telemetry_harvest for
@@ -727,7 +728,8 @@ pub mod chronos;
 pub mod chronos_topology;
 /// Eigenvalue/eigenvector as the canonical data primitive. Replaces scalar
 /// f64 with (λ, v) pairs. Spectral decomposition IS the data representation.
-pub mod eigen;
+/// (Extracted into dowiz-core; re-exported so `crate::eigen` resolves unchanged.)
+pub use dowiz_core::eigen;
 /// N-fractal self-similar data structure + ASCII encoding. Every node is
 /// a microcosm of the whole. ASCII visualization for human-readable state.
 pub mod fractal;
@@ -943,23 +945,10 @@ pub fn kernel_boot_verify_fsm() -> Result<(), FsmSignatureDrift> {
     verify_fsm_signature()
 }
 
-/// Sanitize a raw f64: NaN/Inf → 0.0 (fail-closed for system stability).
-/// Every public API that accepts raw f64 MUST call this at the boundary
-/// to prevent corrupted data from propagating through the kernel.
-pub fn sanitize_f64(v: f64) -> f64 {
-    if v.is_finite() { v } else { 0.0 }
-}
-
-/// Sanitize AND clamp to [0, 1] — for normalized metric values.
-/// NaN/Inf → 0.0; values outside range clamped.
-pub fn sanitize_normalized(v: f64) -> f64 {
-    if v.is_finite() { v.clamp(0.0, 1.0) } else { 0.0 }
-}
-
-/// Sanitize a raw f32: NaN/Inf → 0.0.
-pub fn sanitize_f32(v: f32) -> f32 {
-    if v.is_finite() { v } else { 0.0 }
-}
+/// Fail-closed f64/f32 boundary sanitizers — extracted into dowiz-core and
+/// re-exported so `crate::sanitize_f64` / `sanitize_f32` / `sanitize_normalized`
+/// keep resolving unchanged.
+pub use dowiz_core::sanitize::{sanitize_f64, sanitize_f32, sanitize_normalized};
 
 pub const CHECKSUM_MUL: u64 = 31;
 

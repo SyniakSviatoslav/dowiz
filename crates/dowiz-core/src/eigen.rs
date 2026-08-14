@@ -1,4 +1,4 @@
-//! `kernel::eigen` — eigenvalue/eigenvector as the canonical data primitive.
+//! `dowiz_core::eigen` — eigenvalue/eigenvector as the canonical data primitive.
 //!
 //! Replaces scalar values (f64) with spectral pairs: every "value" is an
 //! (eigenvalue λ, eigenvector v) pair. The spectral decomposition IS the data.
@@ -9,7 +9,10 @@
 //! - Natural stability: λ > 1 = growing, λ < 1 = decaying, λ = 1 = stable.
 //! - Dimensionality reduction: truncate to top-k eigenvalues = lossy compression.
 //!
-//! ZERO deps. Pure std.
+//! ZERO deps. Pure `core` + `alloc` (no_std).
+
+use alloc::string::String;
+use alloc::vec::Vec;
 
 /// An eigen pair — eigenvalue + eigenvector. The canonical data atom.
 #[derive(Debug, Clone, PartialEq)]
@@ -25,8 +28,8 @@ impl Eigen {
         // Fail-closed: a non-finite eigenvalue is poison (e.g. NaN from a
         // degenerate matrix); sanitize to 0.0 at the boundary instead of
         // letting it propagate through stability classification.
-        let lambda = crate::sanitize_f64(lambda);
-        let vector: Vec<f64> = vector.into_iter().map(crate::sanitize_f64).collect();
+        let lambda = crate::sanitize::sanitize_f64(lambda);
+        let vector: Vec<f64> = vector.into_iter().map(crate::sanitize::sanitize_f64).collect();
         Eigen { lambda, vector, normalized: (n - 1.0).abs() < 1e-10 }
     }
 
@@ -69,7 +72,7 @@ impl Eigen {
         let norm: f64 = crate::math::sqrt(counts.iter().map(|c| c * c).sum::<f64>());
         let v: Vec<f64> = if norm > 0.0 { counts.iter().map(|c| c / norm).collect() } else { counts };
         let lambda: f64 = v.iter().map(|vi| vi * vi).sum();
-        Eigen::new(crate::sanitize_f64(lambda), v)
+        Eigen::new(crate::sanitize::sanitize_f64(lambda), v)
     }
 
     /// Cosine similarity between two eigen representations.
@@ -82,7 +85,7 @@ impl Eigen {
         let other_norm: f64 = crate::math::sqrt(other.vector.iter().map(|vi| vi * vi).sum::<f64>());
         let raw = dot / (self_norm * other_norm).max(1e-12);
         let weight = crate::math::sqrt((self.lambda * other.lambda).max(0.0));
-        crate::sanitize_f64(raw * weight)
+        crate::sanitize::sanitize_f64(raw * weight)
     }
 
     /// Project self onto target Eigen: λ · (v · target)
@@ -90,7 +93,7 @@ impl Eigen {
         let n = self.vector.len().min(target.vector.len());
         if n == 0 { return 0.0; }
         let dot: f64 = self.vector.iter().zip(target.vector.iter()).take(n).map(|(a, b)| a * b).sum();
-        crate::sanitize_f64(self.lambda * dot.abs())
+        crate::sanitize::sanitize_f64(self.lambda * dot.abs())
     }
 
     /// Magnitude: |λ|.

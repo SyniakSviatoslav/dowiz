@@ -1,13 +1,19 @@
 //! dowiz-core — the `no_std` core of dowiz.
 //!
-//! Zero dependencies, pure `core::` (no alloc, no std). The first modules to be
-//! extracted from `dowiz-kernel` for native/kernel-space embedding:
+//! Zero dependencies, pure `core::` + `alloc::` (no std). The modules extracted
+//! from `dowiz-kernel` for native/kernel-space embedding:
 //! - [`constants`] — branchless constants (PI, TAU, PHI, GOLDEN_ANGLE, …).
 //! - [`lut`] — O(1) branchless lookup tables (`Lut<K,V,N>`, `BinaryLut`).
+//! - [`sanitize`] — fail-closed f64/f32 boundary sanitizers.
+//! - [`stem`] — 50-language light stemmer.
+//! - [`eigen`] — eigenvalue/eigenvector data primitive.
+//! - [`math`] — bit-exact f64 `sqrt`/`fma`/`hypot` + ~1-ULP transcendentals.
+//! - [`trig`], [`complex`], [`modular`], [`fft`], [`spherical`] — geometry layer.
+//! - [`hypervector`], [`rng`], [`squash`] — VSA / PRNG / RLE+delta compression.
 //!
 //! This crate compiles under `#![no_std]`; `dowiz-kernel` depends on it and
-//! re-exports both modules so `crate::constants::…` / `crate::lut::…` keep
-//! working unchanged.
+//! re-exports the modules so `crate::constants::…` / `crate::stem::…` /
+//! `crate::eigen::…` keep working unchanged.
 #![cfg_attr(not(test), no_std)]
 // The test harness (`#[test]`) needs std; link it only under `cfg(test)`.
 #[cfg(test)]
@@ -19,12 +25,15 @@ extern crate alloc;
 
 pub mod complex;
 pub mod constants;
+pub mod eigen;
 pub mod fft;
 pub mod hypervector;
 pub mod lut;
 pub mod math;
 pub mod modular;
 pub mod rng;
+pub mod sanitize;
 pub mod spherical;
 pub mod squash;
+pub mod stem;
 pub mod trig;

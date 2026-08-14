@@ -3,7 +3,7 @@ name = "dowiz-core"
 version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-or-later"
-description = "dowiz no_std core: branchless LUT + constants. Zero dependencies (pure core). Extracted from dowiz-kernel."
+description = "dowiz no_std core: branchless LUT + constants + sanitize + stem + eigen + bit-exact math + geometry layer (complex/trig/modular/fft/spherical) + hypervector/rng/squash. Zero dependencies (pure core + alloc). Extracted from dowiz-kernel."
 
 [lib]
 crate-type = ["rlib"]

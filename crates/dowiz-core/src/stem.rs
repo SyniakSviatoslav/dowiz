@@ -1,10 +1,13 @@
-//! `kernel::stem` — zero-dep multilingual light stemmer.
+//! `dowiz_core::stem` — zero-dep multilingual light stemmer.
 //!
 //! Covers 50 languages: EN, UK, RU, DE, FR, ES, IT, PT, PL, NL, SV, NO, DA, TR, AR,
 //! ZH, JA, KO, HI, RO, HU, EL, CS, VI, HE,
 //! BN, CA, ET, EU, FA, FI, GL, GU, ID, IS, KN, LT, LV, ML, MR, MS, PA, SK, SL, SW,
 //! TA, TE, TH, TL, UR.
 //! Light suffix-stripping for inflectional languages. Used by retrieval layer.
+
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 /// Light stem: strip common inflectional suffixes for 50 languages.
 pub fn stem(word: &str) -> String {
