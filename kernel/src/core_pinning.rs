@@ -64,9 +64,7 @@ mod linux {
 
 /// Number of logical CPUs detected.
 pub fn cpu_count() -> usize {
-    std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(1)
+    crate::thread::available_parallelism()
 }
 
 /// Pin current process to specific CPU cores.

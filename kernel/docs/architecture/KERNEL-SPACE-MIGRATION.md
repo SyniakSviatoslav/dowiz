@@ -89,7 +89,10 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
    it. REMAINING under fs: the file-handle surface (`File`/`OpenOptions`/`Write`
    — append/fsync/held-handle) in 6 modules (`academy_store`, `evals`,
    `fdr/ring`, `pq/entropy`, `span_metrics/obs`, `brain/hydra`), plus net→sk_buff
-   (`pq/entropy` TcpStream), thread→kthread, process→kexec.
+   (`pq/entropy` TcpStream), thread→kthread, process→kexec. **thread→kthread is
+   PARTIAL (item 10):** `src/thread.rs` (`Thread` trait + `StdThread` + `sleep`/
+   `available_parallelism`) routes the chronos/core_pinning/span_metrics sites;
+   `spawn`/`scope` (budget.rs) stay std (need a `JoinHandle`-free design).
 5. **`dowiz-core` crate split — arena + mat (2026-08-14)** — extracted the two
    spectral-cycle leaves:
    - `arena` — `BumpArena` (bump/region allocator) + `HugePageHint`; the

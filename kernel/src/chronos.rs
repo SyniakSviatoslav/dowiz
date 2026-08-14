@@ -167,7 +167,7 @@ impl Chronos {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::thread;
+    use crate::thread;
     use std::time::Duration;
 
     fn make_values(x: f64, y: f64) -> BTreeMap<String, f64> {

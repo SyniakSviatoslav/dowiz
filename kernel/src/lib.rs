@@ -803,6 +803,11 @@ pub mod neon;
 pub mod fxhash;
 /// Single-authority time abstraction (Clock/WallClock) — std::time seam for kernel port.
 pub mod clock;
+/// Thread seam (ledger item 4: thread → kthread) — no_std-compatible
+/// [`crate::thread::Thread`] trait + `StdThread` impl + `sleep`/
+/// `available_parallelism` free functions. `spawn`/`scope` stay std (need a
+/// `JoinHandle`-free design).
+pub mod thread;
 /// Virtual filesystem seam (ledger item 4: fs → VFS) — no_std-compatible
 /// [`crate::vfs::Vfs`] trait + userspace `StdFs` impl + free functions
 /// (`read`/`write`/`read_dir`/…). Call sites route through `crate::vfs` so the
