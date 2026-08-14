@@ -31,25 +31,46 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
    swapped to alloc-clean, deterministic (sorted) maps. 13 key types gained
    `PartialOrd, Ord`. `laplacian_eqc_parity` reverted (calls external eqc-rs
    HashMap API).
+6. **`dowiz-core` crate split — transcendental geometry layer (2026-08-14)** —
+   the `no_std` `dowiz-core` crate now holds the self-contained geometry modules,
+   re-exported at the kernel root so `crate::{complex,fft,spherical,modular,trig}::…`
+   keep resolving unchanged:
+   - `complex` — `Complex` (extracted from `spectral.rs`).
+   - `trig` — `Phase`/`Xyz`/`PhaseVector`.
+   - `modular` — Möbius / PSL(2,Z).
+   - `fft` — radix-2 Cooley–Tukey.
+   - `spherical` — Legendre/spherical harmonics/Lebedev/structure factor.
+   - `math` — correctly-rounded `sqrt`/`fma` + bit-exact glibc `hypot` + ~1-ULP
+     `sin/cos/atan2/acos/floor/ceil/round` (the no_std libm replacement; the
+     `eig2x2_bit_capture_oracle` golden signatures stay bit-exact — see
+     `crates/dowiz-core/src/math.rs` + `tests/bitdiff.rs`).
 
 ## REMAINING (architectural, dedicated sessions)
 
-1. **`dowiz-core` crate split** — move the 174 kernel-core modules into a
-   `#![no_std]` + `extern crate alloc` workspace crate; `dowiz-kernel` depends
-   on it and re-exports. Requires: resolve `crate::` cross-refs, add a no_std
-   target (`thumbv7em-none-eabi` or `wasm32-unknown-unknown`), handle the
-   `format!`/prelude items via `alloc::prelude`.
-2. **Mutex → spinlock** (only for the 4 non-thread modules: breaker/audit,
+1. **`dowiz-core` crate split — remaining kernel-core modules** — move the rest
+   of the 174 kernel-core modules into `#![no_std]` `dowiz-core`. The
+   transcendental geometry layer is DONE (item 6 above); the remaining modules
+   are the bulk (order/money/domain, retrieval, etc.). Requires: resolve
+   `crate::` cross-refs, add a no_std target (`thumbv7em-none-eabi` or
+   `wasm32-unknown-unknown`), handle `format!`/prelude via `alloc::prelude`.
+2. **Transcendental modules still in-kernel (no_std-READY but not moved)** —
+   `eigen` (→ `stem`), `spectral` (→ `fdr`/`csr`/`spectral_cache`/`order_machine`),
+   `householder` (→ `fdr`). Their `f64` transcendental calls already route
+   through `crate::math`, but they reference non-transcendental kernel modules,
+   so moving them needs those dependencies extracted first.
+3. **Mutex → spinlock** (only for the 4 non-thread modules: breaker/audit,
    breaker/mod, ports/agent/admission, retrieval/memory_store) — a hand-rolled
    `SpinLock<T>` on `core::sync::atomic::AtomicBool` (zero-dep). The other 3
    (fdr/mod, span_metrics/obs, token_bucket) are thread-based → stay std.
-3. **43 user-space ports** — fs→VFS (`std::fs` → trait), net→sk_buff,
+4. **43 user-space ports** — fs→VFS (`std::fs` → trait), net→sk_buff,
    thread→kthread, process→kexec. These are NOT mechanical; each needs a trait
    seam like `Clock`.
 
 ## Honest scope note
 
-The mechanical tier (boundary) is **fully migrated**. The remaining two items
-are architectural: the crate split (move 174 modules) and the 43 I/O ports.
-Both are large, low-mechanical-effort, high-care efforts — not bulk-editable.
-This ledger marks the exact boundary so a future session resumes cleanly.
+The mechanical tier (boundary) is **fully migrated**. The transcendental geometry
+layer is **fully extracted** to `dowiz-core`. The remaining items are
+architectural: the bulk crate split (move the rest of the 174 modules) and the
+43 I/O ports. Both are large, low-mechanical-effort, high-care efforts — not
+bulk-editable. This ledger marks the exact boundary so a future session resumes
+cleanly.
