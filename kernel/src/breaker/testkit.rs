@@ -32,7 +32,7 @@ pub fn test_rate_profile() -> crate::breaker::thresholds::RateProfile {
 }
 
 #[cfg(test)]
-pub fn test_roc_bounds() -> (std::ops::Range<usize>, std::ops::Range<usize>) {
+pub fn test_roc_bounds() -> (core::ops::Range<usize>, core::ops::Range<usize>) {
     (0..20, 20..40)
 }
 

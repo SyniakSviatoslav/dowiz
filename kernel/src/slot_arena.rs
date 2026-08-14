@@ -163,7 +163,7 @@ impl<T> SlotArena<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::mem::size_of;
+    use core::mem::size_of;
 
     #[test]
     fn insert_get_get_mut_remove_roundtrip() {

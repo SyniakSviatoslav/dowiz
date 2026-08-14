@@ -578,7 +578,7 @@ mod tests {
         // Config-driven stub: holds entries in a Vec; "endpoint" is just the
         // struct's own memory, set entirely by the test — no baked-in URL/host.
         struct MemHub {
-            outbox: std::cell::RefCell<Vec<SignedEntry>>,
+            outbox: core::cell::RefCell<Vec<SignedEntry>>,
         }
         impl HubTransport for MemHub {
             fn send(&self, e: &SignedEntry) -> Result<(), MeshError> {
@@ -591,7 +591,7 @@ mod tests {
         }
 
         let hub = MemHub {
-            outbox: std::cell::RefCell::new(Vec::new()),
+            outbox: core::cell::RefCell::new(Vec::new()),
         };
         let mut log = MeshLog::new();
         let s = signer(4);
@@ -647,7 +647,7 @@ mod tests {
         forged.payload = b"forged-frame".to_vec(); // signature no longer matches
 
         struct FeedHub {
-            entries: std::cell::RefCell<Vec<SignedEntry>>,
+            entries: core::cell::RefCell<Vec<SignedEntry>>,
         }
         impl HubTransport for FeedHub {
             fn send(&self, _e: &SignedEntry) -> Result<(), MeshError> {
@@ -658,7 +658,7 @@ mod tests {
             }
         }
         let hub = FeedHub {
-            entries: std::cell::RefCell::new(vec![good, forged]),
+            entries: core::cell::RefCell::new(vec![good, forged]),
         };
         let gossip = GossipImport::new(hub);
         let verified = gossip.receive_verified().expect("transport recv ok");

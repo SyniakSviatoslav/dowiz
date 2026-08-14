@@ -389,7 +389,7 @@ pub fn aurc(prob: &[f64], outcome: &[u8]) -> f64 {
     idx.sort_by(|&a, &b| {
         prob[b]
             .partial_cmp(&prob[a])
-            .unwrap_or(std::cmp::Ordering::Equal)
+            .unwrap_or(core::cmp::Ordering::Equal)
     });
     let mut cum_err = 0usize;
     let mut aurc = 0.0;
@@ -650,7 +650,7 @@ pub struct RegressionGate {
     tol: f64,
     /// `true` = lower-is-better metric (e.g. eval-loss). A rise beyond tol is red.
     lower_is_better: bool,
-    history: std::collections::VecDeque<f64>,
+    history: alloc::collections::VecDeque<f64>,
     ema: EmaTracker,
 }
 
@@ -663,7 +663,7 @@ impl RegressionGate {
             window,
             tol,
             lower_is_better,
-            history: std::collections::VecDeque::new(),
+            history: alloc::collections::VecDeque::new(),
             ema: EmaTracker::new(0.3),
         }
     }

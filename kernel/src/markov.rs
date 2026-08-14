@@ -251,7 +251,7 @@ pub fn analyze_detailed(states: &[&str]) -> DetailedReport {
     eigs.sort_by(|a, b| {
         (b.0 * b.0 + b.1 * b.1)
             .partial_cmp(&(a.0 * a.0 + a.1 * a.1))
-            .unwrap_or(std::cmp::Ordering::Equal)
+            .unwrap_or(core::cmp::Ordering::Equal)
     });
     let stationary = alpha
         .iter()

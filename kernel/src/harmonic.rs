@@ -17,7 +17,7 @@
 //! DOD: adjacency built as `Vec<Vec<usize>>` (degree-bounded, no HashMap), one BFS
 //! (`VecDeque`) per source over a reused distance buffer. No `Vec<Vec<f64>>` matmul.
 
-use std::collections::VecDeque;
+use alloc::collections::VecDeque;
 
 /// Harmonic centrality for every node `0..n` of an undirected, unweighted graph.
 ///

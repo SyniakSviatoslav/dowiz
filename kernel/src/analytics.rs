@@ -188,7 +188,7 @@ impl CohortRetention {
         for key in keys {
             let size = self.cohort_size.get(key).copied().unwrap_or(0);
             let weeks = self.cohorts.get(key).map(|w| w.as_slice()).unwrap_or(&[]);
-            let _ = std::fmt::Write::write_fmt(
+            let _ = core::fmt::Write::write_fmt(
                 &mut out,
                 format_args!("cohort={key} size={size} weeks={weeks:?}\n"),
             );
@@ -207,7 +207,7 @@ impl CohortRetention {
 /// This reuses the kernel's canonical `decide/fold` Law rather than re-implementing
 /// a transition check — the measurement loop must agree with the source of truth.
 pub fn reduce_anomalies(events: &[(String, OrderStatus, i64)]) -> u64 {
-    use std::collections::BTreeMap;
+    use alloc::collections::BTreeMap;
 
     // order_id -> events sorted by at_ms (BTreeMap gives ascending key order).
     let mut by_order: HashMap<&str, BTreeMap<i64, OrderStatus>> = HashMap::new();

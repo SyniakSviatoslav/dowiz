@@ -217,7 +217,7 @@ impl AuditChain {
 
     /// Drain all in-memory events (consumed by the testkit `audit_drain` seam).
     pub fn drain(&mut self) -> Vec<AuditEvent> {
-        std::mem::take(&mut self.events)
+        core::mem::take(&mut self.events)
     }
 }
 

@@ -388,7 +388,7 @@ impl<S: EventStore> EventLog<S> {
     ) -> Result<(AppendOutcome, Option<T>), CommitError>
     where
         D: FnOnce(&MeshEvent) -> Result<T, E>,
-        E: std::fmt::Display,
+        E: core::fmt::Display,
     {
         // Idempotency first: dedup on the RAW content-id — the same id `append_raw`
         // stores under below — so a replay is caught regardless of how far the tip
@@ -443,7 +443,7 @@ impl<S: EventStore> EventLog<S> {
     ) -> Result<(AppendOutcome, Option<T>), CommitError>
     where
         D: FnOnce(&MeshEvent) -> Result<T, E>,
-        E: std::fmt::Display,
+        E: core::fmt::Display,
     {
         // Intervention mode: lift ALL safeties (operator directive §3).
         if !intervention {

@@ -28,7 +28,7 @@ pub fn ema_next_f64(prev: f64, sample: f64, alpha: f64) -> f64 {
 /// step checked. Returns Result<i64, &'static str> (Err on overflow/div-by-zero).
 #[inline(always)]
 pub fn apply_tax_exclusive_int(sub: i64, rate_micro: i64) -> Result<i64, &'static str> {
-    use std::convert::TryFrom;
+    use core::convert::TryFrom;
     i64::try_from({
         let b = 1000000i128;
         if b == 0i128 {
@@ -48,7 +48,7 @@ pub fn apply_tax_exclusive_int(sub: i64, rate_micro: i64) -> Result<i64, &'stati
 /// step checked. Returns Result<i64, &'static str> (Err on overflow/div-by-zero).
 #[inline(always)]
 pub fn apply_tax_inclusive_int(sub: i64, rate_micro: i64) -> Result<i64, &'static str> {
-    use std::convert::TryFrom;
+    use core::convert::TryFrom;
     // Mirror the law (apply_tax): a zero subtotal is tax-free regardless of
     // rate, checked BEFORE the non-positive-denominator guard below. Without
     // this short-circuit, sub=0 with a negative rate would diverge from the

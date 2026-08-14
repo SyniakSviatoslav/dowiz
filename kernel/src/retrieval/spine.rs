@@ -138,9 +138,9 @@ pub fn generate_map(entries: &[SpineEntry]) -> String {
         if a.1.is_empty() && b.1.is_empty() {
             a.0.path.cmp(&b.0.path)
         } else if a.1.is_empty() {
-            std::cmp::Ordering::Greater
+            core::cmp::Ordering::Greater
         } else if b.1.is_empty() {
-            std::cmp::Ordering::Less
+            core::cmp::Ordering::Less
         } else {
             a.1.cmp(&b.1)
         }

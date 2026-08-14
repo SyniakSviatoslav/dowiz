@@ -27,7 +27,7 @@
 //! shipping binary carries none of the timing harness (matches the "CI-time harness, not linked"
 //! constraint of §4 item 2).
 
-use std::hint::black_box;
+use core::hint::black_box;
 use std::time::Instant;
 
 /// The standard dudect acceptance threshold: |t| below this is indistinguishable-from-constant-time

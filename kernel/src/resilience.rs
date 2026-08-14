@@ -23,7 +23,7 @@
 //! ```
 
 use crate::predictor::PredictedOutcome;
-use std::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU64, Ordering};
 
 pub const RESILIENCE_DEFAULT_COOLDOWN_MS: u64 = 5000;
 pub const RESILIENCE_DEFAULT_MAX_FAILURES: u32 = 3;

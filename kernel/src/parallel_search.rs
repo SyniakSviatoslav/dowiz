@@ -179,7 +179,7 @@ impl SearchMetrics {
         self.avg_latency_us = (self.avg_latency_us * (n - 1.0) + latency_us as f64) / n;
         self.avg_results_per_query = (self.avg_results_per_query * (n - 1.0) + results as f64) / n;
         for (kind, count) in index_counts {
-            if let Some(entry) = self.index_hit_counts.iter_mut().find(|(k, _)| std::mem::discriminant(k) == std::mem::discriminant(kind)) {
+            if let Some(entry) = self.index_hit_counts.iter_mut().find(|(k, _)| core::mem::discriminant(k) == core::mem::discriminant(kind)) {
                 entry.1 += count;
             } else {
                 self.index_hit_counts.push((kind.clone(), *count));

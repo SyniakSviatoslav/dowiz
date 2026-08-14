@@ -137,7 +137,7 @@ impl Tri {
         let needle_lower = needle.to_lowercase();
         if n <= h.len() {
             for window in h.as_bytes().windows(n) {
-                if let Ok(w) = std::str::from_utf8(window) {
+                if let Ok(w) = core::str::from_utf8(window) {
                     if levenshtein_simple(&needle_lower, w) <= 2 {
                         return Tri::Unknown;
                     }
@@ -162,7 +162,7 @@ fn levenshtein_simple(a: &str, b: &str) -> usize {
             let cost = if a[i-1] == b[j-1] { 0 } else { 1 };
             curr[j] = (prev[j] + 1).min(curr[j-1] + 1).min(prev[j-1] + cost);
         }
-        std::mem::swap(&mut prev, &mut curr);
+        core::mem::swap(&mut prev, &mut curr);
     }
     prev[m]
 }

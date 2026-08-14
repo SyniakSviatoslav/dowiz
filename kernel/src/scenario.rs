@@ -125,7 +125,7 @@ pub fn redact(input: &str, secrets: &[&str]) -> String {
         return input.to_string();
     }
     let mut sorted: Vec<&str> = secrets.to_vec();
-    sorted.sort_by_key(|s| std::cmp::Reverse(s.len()));
+    sorted.sort_by_key(|s| core::cmp::Reverse(s.len()));
     let mut out = input.to_string();
     for secret in sorted {
         if secret.is_empty() {

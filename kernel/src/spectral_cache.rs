@@ -15,7 +15,7 @@
 //! initial population of an empty cache is not a "recompute"; only a change of
 //! key is. Two downstream tests below pin this invariant.
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU64, Ordering};
 
 use crate::csr::{Csr, NormalizedTile, TileAddress, FNV_OFFSET_64, FNV_PRIME_64};
 use crate::spectral::{classify_drift, DriftClass};

@@ -25,7 +25,7 @@
 
 use crate::crystal::{CrystalIndex, CrystalLattice, StateSnapshot};
 use crate::pid::{PidArray, PidConfig};
-use std::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU64, Ordering};
 
 // ─── Constants ─────────────────────────────────────────────────────────────
 

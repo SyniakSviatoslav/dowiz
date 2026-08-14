@@ -182,7 +182,7 @@ impl MemorySearchEngine {
         results.sort_by(|a, b| {
             b.score
                 .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
+                .unwrap_or(core::cmp::Ordering::Equal)
                 .then(a.section_id.cmp(&b.section_id))
         });
         results

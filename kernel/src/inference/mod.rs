@@ -44,7 +44,7 @@ mod tests {
 
     #[test]
     fn model_version_hash_deterministic() {
-        let w = vec![1.0, 2.0, 3.0, -4.5, std::f64::consts::PI];
+        let w = vec![1.0, 2.0, 3.0, -4.5, core::f64::consts::PI];
         let h1 = model_version_hash(&w);
         let h2 = model_version_hash(&w);
         assert_eq!(h1, h2, "same weights must produce identical hash");

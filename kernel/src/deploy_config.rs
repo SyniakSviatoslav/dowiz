@@ -18,7 +18,7 @@
 //! the config selects it, proving it is deployment-driven.
 
 use crate::money::Currency;
-use std::str::FromStr;
+use core::str::FromStr;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RosterKind {
     Courier,
@@ -142,7 +142,7 @@ fn parse_hex32(s: &str) -> Option<[u8; 32]> {
     }
     let mut out = [0u8; 32];
     for (i, chunk) in s.as_bytes().chunks(2).enumerate() {
-        let byte = u8::from_str_radix(std::str::from_utf8(chunk).ok()?, 16).ok()?;
+        let byte = u8::from_str_radix(core::str::from_utf8(chunk).ok()?, 16).ok()?;
         out[i] = byte;
     }
     Some(out)

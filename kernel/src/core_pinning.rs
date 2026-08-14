@@ -45,7 +45,7 @@ mod linux {
         };
         // SAFETY: `set` has the Linux cpu_set_t ABI, remains alive for the call,
         // and pid 0 explicitly denotes the calling thread/process.
-        unsafe { sched_setaffinity(0, std::mem::size_of::<CpuSet>(), &set) == 0 }
+        unsafe { sched_setaffinity(0, core::mem::size_of::<CpuSet>(), &set) == 0 }
     }
 
     #[cfg(test)]

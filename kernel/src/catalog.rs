@@ -13,7 +13,7 @@
 //! is kept but the order is marked `price_trusted = false` so downstream can refuse
 //! to charge it. `std`-only, integer minor units, no float on money.
 
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
 
 /// A trusted price entry for one product: base unit price + per-modifier surcharges.
 /// All amounts are integer minor units (matching `money.rs`).
@@ -206,8 +206,8 @@ pub enum CatalogError {
     DanglingParent(NodeId),
 }
 
-impl std::fmt::Display for CatalogError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for CatalogError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             CatalogError::NegativePrice => write!(f, "negative price rejected"),
             CatalogError::CrossCurrency => {
@@ -267,8 +267,8 @@ pub fn validate_tree(
     vendor: VendorId,
 ) -> Result<Vec<PriceableLeaf>, CatalogError> {
     // Index the vendor's own nodes by id for O(1) parent/child lookups.
-    let mut by_id: std::collections::BTreeMap<&NodeId, &CatalogNode> =
-        std::collections::BTreeMap::new();
+    let mut by_id: alloc::collections::BTreeMap<&NodeId, &CatalogNode> =
+        alloc::collections::BTreeMap::new();
     for n in nodes {
         if n.vendor_id == vendor {
             by_id.insert(&n.node_id, n);
@@ -387,7 +387,7 @@ mod tests {
     fn vendor_id_ordered_stable() {
         // A BTreeMap keyed on VendorId iterates in ascending id order — the
         // determinism charge_legs/kitchen_tickets rely on.
-        use std::collections::BTreeMap;
+        use alloc::collections::BTreeMap;
         let mut m: BTreeMap<crate::vendor::VendorId, u32> = BTreeMap::new();
         m.insert(crate::vendor::VendorId(3), 30);
         m.insert(crate::vendor::VendorId(1), 10);
@@ -400,7 +400,7 @@ mod tests {
     // no reserved sentinel (a sentinel would be a hidden special case, §1.4).
     #[test]
     fn vendor_id_extremes_keyable() {
-        use std::collections::BTreeMap;
+        use alloc::collections::BTreeMap;
         let mut m: BTreeMap<crate::vendor::VendorId, bool> = BTreeMap::new();
         m.insert(crate::vendor::VendorId(0), true);
         m.insert(crate::vendor::VendorId(u64::MAX), true);
@@ -787,7 +787,7 @@ pub struct ChargeLeg {
 /// Returns `Err` (never a partial plan). Each returned `ChargeLeg.amount` carries
 /// the order's single currency.
 pub fn charge_legs(order: &Order) -> Result<Vec<ChargeLeg>, CatalogError> {
-    use std::collections::BTreeMap;
+    use alloc::collections::BTreeMap;
     let mut currency: Option<Currency> = None;
     let mut by_vendor: BTreeMap<VendorId, (Money, usize)> = BTreeMap::new();
     for item in &order.items {
@@ -832,7 +832,7 @@ pub fn charge_legs(order: &Order) -> Result<Vec<ChargeLeg>, CatalogError> {
 /// Σ(line_count) across all tickets == order item count: nothing dropped,
 /// nothing duplicated.
 pub fn kitchen_tickets(order: &Order) -> BTreeMap<VendorId, Vec<&OrderItem>> {
-    use std::collections::BTreeMap;
+    use alloc::collections::BTreeMap;
     let mut tickets: BTreeMap<VendorId, Vec<&OrderItem>> = BTreeMap::new();
     for item in &order.items {
         tickets.entry(item.vendor_id).or_default().push(item);

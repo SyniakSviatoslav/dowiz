@@ -10,7 +10,7 @@
 //! recompile. This trait is the seam — `OllamaAdapter`, `VllmAdapter`, `ManagedApiAdapter` are
 //! all `&dyn LlmBackend` behind a config-selected constructor.
 
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 pub const LLM_DEFAULT_TEMPERATURE: f64 = 0.0;
 pub const LLM_DEFAULT_TOP_P: f64 = 1.0;
@@ -60,7 +60,7 @@ pub struct ChatRequest {
     pub cache_policy: CachePolicy,
     /// Backend-specific options surfaced verbatim (Ollama `keep_alive`/`num_ctx`/`think`, etc.).
     /// Passed through untouched; parsed per-adapter in the transport layer.
-    pub options: std::collections::BTreeMap<String, String>,
+    pub options: alloc::collections::BTreeMap<String, String>,
     /// Tool declarations for this call (OpenAI `tools` array). Empty for a plain
     /// chat. Extend-don't-rewrite: `Default` seeds `Vec::new()` so every existing
     /// call site compiles and behaves identically (no tool calls requested). The
@@ -79,7 +79,7 @@ impl Default for ChatRequest {
             seed: None,
             task_class: TaskClass::General,
             cache_policy: CachePolicy::Exact,
-            options: std::collections::BTreeMap::new(),
+            options: alloc::collections::BTreeMap::new(),
             tools: Vec::new(),
         }
     }
@@ -240,8 +240,8 @@ pub enum ConfigError {
 }
 
 #[cfg(feature = "std")]
-impl std::fmt::Display for ConfigError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for ConfigError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             ConfigError::UnknownMode(m) => write!(f, "unknown DOWIZ_AI_MODE value: {m:?}"),
             ConfigError::MissingBaseUrl => {

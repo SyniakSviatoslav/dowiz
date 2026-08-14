@@ -1,5 +1,5 @@
 use crate::predictor::SystemState;
-use std::collections::VecDeque;
+use alloc::collections::VecDeque;
 
 pub const DEFAULT_MAX_KEPT: usize = 3;
 pub const STUCK_SENSOR_EPSILON: f64 = 1e-12;

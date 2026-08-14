@@ -19,7 +19,7 @@
 pub mod import;
 
 use std::collections::HashMap;
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // §3 types (verbatim contract surface)
@@ -320,7 +320,7 @@ impl<I, O> DecisionUnit<I, O> {
         ring: Option<&mut crate::fdr::ring::FdrRing>,
     ) -> Decision<O>
     where
-        O: PartialEq + std::fmt::Debug,
+        O: PartialEq + core::fmt::Debug,
     {
         let d = self.decide(input); // D — the total, primary, deterministic decision.
         if let (Some(act), Some(r)) = (proposal, ring) {
@@ -445,7 +445,7 @@ impl DecisionRegistry {
 /// This is a join-semilattice, so gossip convergence is order-independent (§4.1).
 pub fn merge_meta(a: &DecisionUnitMeta, b: &DecisionUnitMeta) -> DecisionUnitMeta {
     debug_assert_eq!(a.domain, b.domain, "merge_meta called across domains");
-    use std::cmp::Ordering;
+    use core::cmp::Ordering;
     match a.epoch.0.cmp(&b.epoch.0) {
         Ordering::Greater => a.clone(),
         Ordering::Less => b.clone(),

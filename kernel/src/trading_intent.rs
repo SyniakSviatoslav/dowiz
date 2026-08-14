@@ -209,7 +209,7 @@ impl IntentPool {
         candidates.sort_by(|a, b| {
             let a_score = a.guaranteed_amount as f64 * (1.0 - a.fee_bps as f64 / 10_000.0);
             let b_score = b.guaranteed_amount as f64 * (1.0 - b.fee_bps as f64 / 10_000.0);
-            b_score.partial_cmp(&a_score).unwrap_or(std::cmp::Ordering::Equal)
+            b_score.partial_cmp(&a_score).unwrap_or(core::cmp::Ordering::Equal)
         });
         candidates.into_iter().next()
     }

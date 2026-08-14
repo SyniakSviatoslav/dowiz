@@ -234,7 +234,7 @@ impl FallbackChain {
             }
             FallbackStrategy::FastestFirst => {
                 candidates.sort_by(|a, b| {
-                    a.avg_latency_ms.partial_cmp(&b.avg_latency_ms).unwrap_or(std::cmp::Ordering::Equal)
+                    a.avg_latency_ms.partial_cmp(&b.avg_latency_ms).unwrap_or(core::cmp::Ordering::Equal)
                 });
             }
             FallbackStrategy::CheapestFirst => {

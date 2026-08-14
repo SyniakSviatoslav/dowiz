@@ -148,7 +148,7 @@ fn fusion_rank(bm: &Bm25, idx: &TrigramIndex, query: &str) -> Vec<usize> {
     let bm25_hits = bm.rank(&q_tokens);
     // Trigram candidate set: union of literal-trigram intersections per query token
     // (a doc must contain at least one query token's trigrams to be a candidate).
-    let mut cand: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+    let mut cand: alloc::collections::BTreeSet<u32> = alloc::collections::BTreeSet::new();
     for tok in &q_tokens {
         // Each token (len>=3) yields a trigram; intersect its postings.
         if tok.len() >= 3 {
@@ -178,10 +178,10 @@ fn fusion_rank(bm: &Bm25, idx: &TrigramIndex, query: &str) -> Vec<usize> {
     cand.sort_by(|&a, &b| {
         score_of(b)
             .partial_cmp(&score_of(a))
-            .unwrap_or(std::cmp::Ordering::Equal)
+            .unwrap_or(core::cmp::Ordering::Equal)
             .then(a.cmp(&b))
     });
-    let cand_set: std::collections::BTreeSet<usize> = cand.iter().copied().collect();
+    let cand_set: alloc::collections::BTreeSet<usize> = cand.iter().copied().collect();
     let rest: Vec<usize> = bm25_hits
         .iter()
         .map(|h| h.doc_id)

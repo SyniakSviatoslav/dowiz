@@ -18,7 +18,7 @@
 
 use crate::money::Currency;
 use crate::vendor::VendorId;
-use std::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 

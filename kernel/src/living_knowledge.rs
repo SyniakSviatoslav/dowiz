@@ -210,8 +210,8 @@ impl ChildStatus {
 /// bridge-exited error message reads identically on the raw-`wait4` path and the fallback
 /// `std::process` path.
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-impl std::fmt::Display for ChildStatus {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for ChildStatus {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         if (self.raw & 0x7f) == 0 {
             // WIFEXITED → WEXITSTATUS
             write!(f, "exit status: {}", (self.raw >> 8) & 0xff)

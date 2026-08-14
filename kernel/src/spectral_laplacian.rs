@@ -103,7 +103,7 @@ pub fn laplacian_eigenmodes(csr: &Csr, k: usize) -> Decomp {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::f64::consts::PI;
+    use core::f64::consts::PI;
 
     /// Undirected path graph P4: 0—1—2—3. Caller passes both edge directions so
     /// the adjacency is symmetric (required for a valid symmetric Laplacian).

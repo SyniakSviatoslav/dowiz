@@ -19,7 +19,7 @@
 //! signal: `is_full`). This is the kernel-native async channel reused by every
 //! subsystem (reporting, governance events, mesh sync), not just Telegram.
 
-use std::collections::VecDeque;
+use alloc::collections::VecDeque;
 
 /// A queued record. `id` is a monotonic producer sequence (ordering key);
 /// `payload` is opaque to the spool (the consumer interprets it).

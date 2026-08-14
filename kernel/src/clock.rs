@@ -102,7 +102,7 @@ mod tests {
         for i in 0..100_000 {
             acc = acc.wrapping_add(i);
         }
-        std::hint::black_box(acc);
+        core::hint::black_box(acc);
         let b = c.now_ns();
         assert!(b >= a, "monotonic clock must not run backwards: {a} -> {b}");
     }

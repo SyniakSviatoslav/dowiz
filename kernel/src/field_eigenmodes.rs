@@ -166,8 +166,8 @@ impl NeumannGrid {
             for q in 0..h {
                 let lam = 2.0
                     * (2.0
-                        - (std::f64::consts::PI * p as f64 / w as f64).cos()
-                        - (std::f64::consts::PI * q as f64 / h as f64).cos());
+                        - (core::f64::consts::PI * p as f64 / w as f64).cos()
+                        - (core::f64::consts::PI * q as f64 / h as f64).cos());
                 pairs.push((p, q, lam));
             }
         }
@@ -180,8 +180,8 @@ impl NeumannGrid {
             let mut ssq = 0.0;
             for y in 0..h {
                 for x in 0..w {
-                    let c = (std::f64::consts::PI * p as f64 * (x as f64 + 0.5) / w as f64).cos()
-                        * (std::f64::consts::PI * q as f64 * (y as f64 + 0.5) / h as f64).cos();
+                    let c = (core::f64::consts::PI * p as f64 * (x as f64 + 0.5) / w as f64).cos()
+                        * (core::f64::consts::PI * q as f64 * (y as f64 + 0.5) / h as f64).cos();
                     let idx = y * w + x;
                     v[idx] = c;
                     ssq += c * c;
@@ -408,8 +408,8 @@ pub fn seeded_smooth_field(grid: &NeumannGrid, seed: u64) -> Vec<f64> {
                     .wrapping_add(1_442_695_040_888_963_407);
                 let amp = ((rng >> 11) as f64) / ((1u64 << 52) as f64) - 0.5;
                 val += amp
-                    * (std::f64::consts::PI * a as f64 * x).cos()
-                    * (std::f64::consts::PI * b as f64 * y).cos();
+                    * (core::f64::consts::PI * a as f64 * x).cos()
+                    * (core::f64::consts::PI * b as f64 * y).cos();
             }
             out[i] = val;
         }
@@ -615,8 +615,8 @@ mod tests {
             for q in 0..4usize {
                 let lg = 2.0
                     * (2.0
-                        - (std::f64::consts::PI * p as f64 / 4.0).cos()
-                        - (std::f64::consts::PI * q as f64 / 4.0).cos());
+                        - (core::f64::consts::PI * p as f64 / 4.0).cos()
+                        - (core::f64::consts::PI * q as f64 / 4.0).cos());
                 target.push(lg);
             }
         }

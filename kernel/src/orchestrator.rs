@@ -744,7 +744,7 @@ impl Orchestrator {
             .filter(|(_, t)| t.depends_on.iter().all(|dep| completed.contains(dep)))
             .min_by_key(|(_, t)| {
                 // Sort by priority desc, then estimated duration asc.
-                std::cmp::Reverse((t.priority, std::cmp::Reverse(t.estimated_us)))
+                core::cmp::Reverse((t.priority, core::cmp::Reverse(t.estimated_us)))
             })
             .map(|(i, _)| i);
 

@@ -171,12 +171,12 @@ mod tests {
     #[test]
     fn procrustes_recovers_known_transform() {
         // Build dst by rotating src 90° and scaling 2×.
-        let t = Similarity { scale: 2.0, theta: std::f64::consts::FRAC_PI_2, tx: 5.0, ty: -3.0 };
+        let t = Similarity { scale: 2.0, theta: core::f64::consts::FRAC_PI_2, tx: 5.0, ty: -3.0 };
         let src = [(0.0, 0.0), (1.0, 0.0), (0.0, 1.0)];
         let dst: Vec<Point> = src.iter().map(|&p| t.apply(p)).collect();
         let rec = procrustes(&src, &dst).unwrap();
         assert!((rec.scale - 2.0).abs() < 1e-9, "scale {}", rec.scale);
-        assert!((rec.theta - std::f64::consts::FRAC_PI_2).abs() < 1e-9, "theta {}", rec.theta);
+        assert!((rec.theta - core::f64::consts::FRAC_PI_2).abs() < 1e-9, "theta {}", rec.theta);
         assert!((rec.tx - 5.0).abs() < 1e-9, "tx {}", rec.tx);
         assert!((rec.ty + 3.0).abs() < 1e-9, "ty {}", rec.ty);
     }

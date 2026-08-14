@@ -77,7 +77,7 @@ impl GossipMessage {
 
     /// Interpret payload as UTF-8 string (for inspection).
     pub fn as_str(&self) -> &str {
-        std::str::from_utf8(&self.payload).unwrap_or("<binary>")
+        core::str::from_utf8(&self.payload).unwrap_or("<binary>")
     }
 }
 
@@ -200,7 +200,7 @@ pub fn telemetry_payload(key: &str, value: f64) -> Vec<u8> {
 
 /// Convenience: parse a telemetry payload back into key + value.
 pub fn parse_telemetry(payload: &[u8]) -> Option<(&str, f64)> {
-    let s = std::str::from_utf8(payload).ok()?;
+    let s = core::str::from_utf8(payload).ok()?;
     let colon = s.find(':')?;
     let key = &s[..colon];
     let val: f64 = s[colon + 1..].parse().ok()?;

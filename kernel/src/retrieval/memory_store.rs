@@ -12,7 +12,7 @@
 //! trait boundary + a feature-gated stub ship so the SQL path is opt-in later
 //! (see [`PgStore`]).
 
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
 use std::sync::Mutex;
 
 /// Deterministic content-addressable living-memory contract.

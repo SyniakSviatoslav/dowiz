@@ -290,7 +290,7 @@ mod tests {
     // runs the tool body ZERO times on an unauthorized call.
     struct SpyTool {
         spec: ToolSpec,
-        invocations: std::cell::Cell<u32>,
+        invocations: core::cell::Cell<u32>,
     }
     impl ToolPort for SpyTool {
         fn spec(&self) -> &ToolSpec {
@@ -324,7 +324,7 @@ mod tests {
         };
         let tool = SpyTool {
             spec,
-            invocations: std::cell::Cell::new(0),
+            invocations: core::cell::Cell::new(0),
         };
         let card = SkillCard {
             name: "read_order_status",

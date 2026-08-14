@@ -297,7 +297,7 @@ impl<S: EventStore> Hydra<S> {
     ) -> Result<(crate::event_log::AppendOutcome, Option<T>), CommitError>
     where
         D: FnOnce(&MeshEvent) -> Result<T, E>,
-        E: std::fmt::Display,
+        E: core::fmt::Display,
     {
         self.commit_inner(ev, delta, intervention, decide)
     }
@@ -315,7 +315,7 @@ impl<S: EventStore> Hydra<S> {
     ) -> Result<(crate::event_log::AppendOutcome, Option<T>), CommitError>
     where
         D: FnOnce(&MeshEvent) -> Result<T, E>,
-        E: std::fmt::Display,
+        E: core::fmt::Display,
     {
         self.verify_command(Some(cmd_bytes))?;
         self.commit(ev, delta, intervention, decide)
@@ -341,7 +341,7 @@ impl<S: EventStore> Hydra<S> {
     ) -> Result<(crate::event_log::AppendOutcome, Option<T>), CommitError>
     where
         D: FnOnce(&MeshEvent) -> Result<T, E>,
-        E: std::fmt::Display,
+        E: core::fmt::Display,
     {
         // G9 — refuse if the core was tampered (attack, not evolution). This is
         // a Law-pole reject (never retry until re-seed / M9), NOT a store fault.

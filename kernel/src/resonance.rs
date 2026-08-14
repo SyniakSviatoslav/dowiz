@@ -21,7 +21,7 @@
 //! assert!(!peaks.is_empty());
 //! ```
 
-use std::collections::VecDeque;
+use alloc::collections::VecDeque;
 
 /// Detects resonant frequencies in a time-series signal.
 ///
@@ -91,7 +91,7 @@ impl ResonanceDetector {
         if n < 3 {
             return 0.0;
         }
-        let omega = 2.0 * std::f64::consts::PI * target_freq;
+        let omega = 2.0 * core::f64::consts::PI * target_freq;
         let coeff = 2.0 * omega.cos();
         let mut s0 = 0.0;
         let mut s1 = 0.0;
@@ -188,7 +188,7 @@ mod tests {
         let mut det = ResonanceDetector::new(128);
         // Generate a sine wave at normalized frequency 0.1
         for i in 0..256 {
-            let v = (i as f64 * 2.0 * std::f64::consts::PI * 0.1).sin();
+            let v = (i as f64 * 2.0 * core::f64::consts::PI * 0.1).sin();
             det.feed(v);
         }
         let (freq, _mag) = det.dominant_frequency().unwrap();
@@ -354,7 +354,7 @@ mod tests {
     fn resonance_goertzel_numerical_stability() {
         let mut det = ResonanceDetector::new(128);
         for i in 0..200 {
-            let v = (i as f64 * 2.0 * std::f64::consts::PI * 0.05).sin();
+            let v = (i as f64 * 2.0 * core::f64::consts::PI * 0.05).sin();
             det.feed(v);
         }
         let (freq, mag) = det.dominant_frequency().unwrap_or((0.0, 0.0));

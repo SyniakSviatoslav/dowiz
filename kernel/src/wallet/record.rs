@@ -483,7 +483,7 @@ impl<'a> Parser<'a> {
                 while self.i < self.b.len() && self.b[self.i] != b'"' && self.b[self.i] != b'\\' {
                     self.i += 1;
                 }
-                out.push_str(std::str::from_utf8(&self.b[start..self.i]).map_err(|_| ())?);
+                out.push_str(core::str::from_utf8(&self.b[start..self.i]).map_err(|_| ())?);
             }
         }
         Err(())
@@ -515,7 +515,7 @@ impl<'a> Parser<'a> {
         if self.i == start {
             return Err(());
         }
-        let s = std::str::from_utf8(&self.b[start..self.i]).map_err(|_| ())?;
+        let s = core::str::from_utf8(&self.b[start..self.i]).map_err(|_| ())?;
         s.parse::<i64>().map(Value::Num).map_err(|_| ())
     }
 }
@@ -653,8 +653,8 @@ mod tests {
     }
 
     // A mock TextField that records the last value set (and the last read).
-    use std::cell::RefCell;
-    use std::rc::Rc;
+    use core::cell::RefCell;
+    use alloc::rc::Rc;
 
     /// A mock TextField that records the last value set into a shared probe the test can read.
     struct MockField {

@@ -172,7 +172,7 @@ mod tests {
         let q = PhysicsEngine::quantize(&data);
         assert_eq!(q.len(), 100);
         // 100 strings → 100 u64 = 800 bytes vs ~1200 bytes
-        assert!(std::mem::size_of_val(&*q) < 2000);
+        assert!(core::mem::size_of_val(&*q) < 2000);
     }
 
     #[test]

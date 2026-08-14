@@ -1036,7 +1036,7 @@ pub fn eigen_enrich_report(engine: &PromptEnrichEngine, input: &str, vocab: &[St
             scored.push((entry.clone(), sim));
         }
     }
-    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(core::cmp::Ordering::Equal));
     scored.truncate(10);
     scored.into_iter().map(|(e, _)| e).collect()
 }
@@ -1826,7 +1826,7 @@ impl ChronosEnrichmentTracker {
                 scored.push((kw.clone(), crate::sanitize_f64(trend)));
             }
         }
-        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(core::cmp::Ordering::Equal));
         scored.truncate(top_n);
         scored
     }
@@ -1844,7 +1844,7 @@ impl ChronosEnrichmentTracker {
                 scored.push((kw.clone(), crate::sanitize_f64(decay)));
             }
         }
-        scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(core::cmp::Ordering::Equal));
         scored.truncate(top_n);
         scored
     }

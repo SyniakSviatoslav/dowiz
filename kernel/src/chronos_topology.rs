@@ -70,7 +70,7 @@ impl TemporalTrinity {
 
     /// Advance: present → past, predicted → present, new prediction computed.
     pub fn advance(&mut self, new_present: TriMatrix) {
-        self.past = std::mem::replace(&mut self.present, new_present);
+        self.past = core::mem::replace(&mut self.present, new_present);
         self.past_ts = self.present_ts;
         self.present_ts = crate::now_ms();
         self.predict_next();

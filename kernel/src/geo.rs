@@ -8,8 +8,8 @@
 //! ray-cast parity on known polygons.
 
 const EARTH_RADIUS_M: f64 = 6_371_000.0;
-const DEG2RAD: f64 = std::f64::consts::PI / 180.0;
-const RAD2DEG: f64 = 180.0 / std::f64::consts::PI;
+const DEG2RAD: f64 = core::f64::consts::PI / 180.0;
+const RAD2DEG: f64 = 180.0 / core::f64::consts::PI;
 
 /// Great-circle distance in meters (haversine). Matches `haversineMeters`.
 pub fn haversine_meters(a_lat: f64, a_lng: f64, b_lat: f64, b_lng: f64) -> f64 {

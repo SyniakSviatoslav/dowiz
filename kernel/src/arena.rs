@@ -32,7 +32,7 @@
 //! W5) runs this module's tests under Miri to confirm the soundness argument holds, not just
 //! that it reads plausibly.
 
-use std::cell::{Cell, UnsafeCell};
+use core::cell::{Cell, UnsafeCell};
 
 /// `Vec<u8>`-backed bump region. Fixed capacity (policy-as-data), pointer-bump
 /// allocation, `O(1)` reset. `!Sync` by construction (`Cell`) — one arena per
@@ -83,7 +83,7 @@ impl BumpArena {
     // (e.g. bumpalo) allows this lint for.
     #[allow(clippy::mut_from_ref)]
     pub fn alloc_slice<T: Copy + Default>(&self, len: usize) -> Option<&mut [T]> {
-        let alignment = std::mem::align_of::<T>();
+        let alignment = core::mem::align_of::<T>();
 
         // SAFETY: `buf` is exclusively owned via `UnsafeCell`; `&self` proves no other
         // reference to the region is currently handed out that aliases `start..end`, because the
@@ -104,7 +104,7 @@ impl BumpArena {
             alignment,
         ) - base_addr;
         let size = len
-            .checked_mul(std::mem::size_of::<T>())
+            .checked_mul(core::mem::size_of::<T>())
             .expect("BumpArena: element count overflows usize");
         let end = start
             .checked_add(size)
@@ -123,7 +123,7 @@ impl BumpArena {
         // We reinterpret as `&mut [T]` and zero it via `T::default()` (a `Copy` type ⇒ cheap,
         // no allocation, no panic for the kernel's numeric `T`s).
         let slice_ptr = unsafe { buf.as_mut_ptr().add(start) as *mut T };
-        let slice = unsafe { std::slice::from_raw_parts_mut(slice_ptr, len) };
+        let slice = unsafe { core::slice::from_raw_parts_mut(slice_ptr, len) };
         for slot in slice.iter_mut() {
             *slot = T::default();
         }
@@ -225,7 +225,7 @@ mod tests {
         let f: &mut [f64] = a.alloc_slice(1).unwrap();
         let f_addr = f.as_ptr() as usize;
         assert_eq!(
-            f_addr % std::mem::align_of::<f64>(),
+            f_addr % core::mem::align_of::<f64>(),
             0,
             "f64 slice must be aligned"
         );
@@ -287,8 +287,8 @@ mod tests {
 #[cfg(all(feature = "count-allocs", not(target_arch = "wasm32")))]
 pub mod counting_alloc {
     use std::alloc::{GlobalAlloc, Layout, System};
-    use std::cell::Cell;
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use core::cell::Cell;
+    use core::sync::atomic::{AtomicUsize, Ordering};
 
     /// Number of `alloc` calls routed through the global allocator since the
     /// last [`reset_count`]. Monotonic + cumulative; `dealloc` is NOT counted

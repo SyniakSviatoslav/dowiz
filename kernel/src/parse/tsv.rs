@@ -93,8 +93,8 @@ pub enum ParseError {
     ColumnOutOfRange,
 }
 
-impl std::fmt::Display for ParseError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for ParseError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             ParseError::InvalidColumns => write!(f, "invalid column count (0 or > {MAX_COLUMNS})"),
             ParseError::InputTooLarge => write!(f, "input exceeds {MAX_INPUT_LEN} bytes"),

@@ -62,7 +62,7 @@ pub struct ThresholdId {
     weights: SignalWeights,
 }
 
-impl std::ops::Deref for ThresholdId {
+impl core::ops::Deref for ThresholdId {
     type Target = Thresholds;
     fn deref(&self) -> &Thresholds {
         &self.t

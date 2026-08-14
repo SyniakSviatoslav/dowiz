@@ -138,7 +138,7 @@ impl SelfReproducer {
     /// Scans for `pub mod` declarations, module doc comments (`//!`), and
     /// extracts the module path, surface API, and purpose.
     fn discover_organs(source: &[u8]) -> Vec<KernelOrgan> {
-        let source_str = match std::str::from_utf8(source) {
+        let source_str = match core::str::from_utf8(source) {
             Ok(s) => s,
             Err(_) => return Vec::new(),
         };
@@ -429,8 +429,8 @@ pub struct SourceIntegrityError {
     pub actual: [u8; 32],
 }
 
-impl std::fmt::Display for SourceIntegrityError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for SourceIntegrityError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
             "source integrity check failed: expected {:?}, got {:?}",

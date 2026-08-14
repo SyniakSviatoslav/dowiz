@@ -47,7 +47,7 @@ const CRYSTAL_CELLS: usize = 65536;
 ///
 /// Implementors provide a 32-byte hash that determines cell placement
 /// (first 2 bytes → cell address) and similarity (remaining 30 bytes).
-pub trait CrystalIndex: Clone + std::fmt::Debug {
+pub trait CrystalIndex: Clone + core::fmt::Debug {
     /// Produce a 32-byte hash for crystal addressing.
     /// First 2 bytes select the cell; remaining 30 bytes are the similarity key.
     fn crystal_hash(&self) -> [u8; 32];

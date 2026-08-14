@@ -2,6 +2,11 @@
 //! Canonical kernel. The TS app (`/root/dowiz` apps/*) is the legacy oracle; this replaces it.
 //! No float on money, no I/O. Verified-by-Math: RED+GREEN tests per module.
 
+// Alloc is in scope explicitly (not via the std prelude) so collection types
+// can be spelled `alloc::…` — the no_std-readiness step that lets the pure
+// kernel-core modules compile under `#![no_std]` without std's HashMap/RandomState.
+extern crate alloc;
+
 /// In-code protocol/wire version for the kernel. Independent of the repo CalVer
 /// tag so a breaking kernel change (FSM-graph / `_js` export / ledger-layout) can
 /// be gated without a repo retag. Bump on any such change.
@@ -61,8 +66,8 @@ impl TriState {
     }
 }
 
-impl std::fmt::Display for TriState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for TriState {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             TriState::True => write!(f, "TRUE"),
             TriState::False => write!(f, "FALSE"),
@@ -961,14 +966,14 @@ pub fn now_ms() -> u64 {
 pub fn sort_by_f64_desc<T, K>(items: &mut [T], key: K)
 where K: Fn(&T) -> f64
 {
-    items.sort_by(|a, b| key(b).partial_cmp(&key(a)).unwrap_or(std::cmp::Ordering::Equal));
+    items.sort_by(|a, b| key(b).partial_cmp(&key(a)).unwrap_or(core::cmp::Ordering::Equal));
 }
 
 /// Sort ascending by a `f64` key (NaN/Inf → end of order).
 pub fn sort_by_f64_asc<T, K>(items: &mut [T], key: K)
 where K: Fn(&T) -> f64
 {
-    items.sort_by(|a, b| key(a).partial_cmp(&key(b)).unwrap_or(std::cmp::Ordering::Equal));
+    items.sort_by(|a, b| key(a).partial_cmp(&key(b)).unwrap_or(core::cmp::Ordering::Equal));
 }
 
 /// Authoritative fixed-timestep for the field-sim/animation integrator.
@@ -1035,7 +1040,7 @@ mod tests {
         let boundary_cases = &[
             f64::NAN, f64::INFINITY, f64::NEG_INFINITY,
             f64::MAX, f64::MIN, f64::MIN_POSITIVE,
-            0.0, -0.0, 1.0, -1.0, std::f64::consts::PI, std::f64::consts::E,
+            0.0, -0.0, 1.0, -1.0, core::f64::consts::PI, core::f64::consts::E,
         ];
         for &v in boundary_cases {
             let out = sanitize_f64(v);

@@ -37,7 +37,7 @@
 use crate::decision::{merge_meta, DecisionRegistry, DecisionUnit, DecisionUnitMeta, UnitState};
 use crate::event_log::{sha3_256, EventLog, EventStore, MeshEvent};
 use crate::metrics::DecisionImportRecord;
-use std::fmt::Debug;
+use core::fmt::Debug;
 
 /// The admission *source* of a unit entering the one import pipeline.
 ///

@@ -228,7 +228,7 @@ pub fn roots(coeffs: &[f64]) -> Vec<Complex> {
 // compiled out entirely in non-test builds (`#[cfg(test)]`).
 #[cfg(test)]
 thread_local! {
-    static EIGEN_CALLS: std::cell::Cell<u32> = std::cell::Cell::new(0);
+    static EIGEN_CALLS: core::cell::Cell<u32> = core::cell::Cell::new(0);
 }
 
 pub fn eigenvalues(a: &[Vec<f64>]) -> Vec<Complex> {
@@ -1151,7 +1151,7 @@ mod tests {
         // NaN is ordered greater than all finite values by total_cmp; just assert
         // the slice is now fully ordered (no panic is the real assertion).
         for w in vals.windows(2) {
-            assert!(w[0].total_cmp(&w[1]) != std::cmp::Ordering::Greater);
+            assert!(w[0].total_cmp(&w[1]) != core::cmp::Ordering::Greater);
         }
     }
 

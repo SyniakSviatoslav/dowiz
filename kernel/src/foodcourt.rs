@@ -26,7 +26,7 @@
 //! integrations owned by the out-of-kernel `payment-adapters` crate; this module
 //! is the provider-agnostic kernel that any of them plugs into via `run_nleg_saga`.
 
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
 
 use crate::catalog::{charge_legs, kitchen_tickets};
 use crate::domain::{Order, OrderItem};
@@ -252,7 +252,7 @@ pub fn exec_refund_vendor_leg(
 /// partial refund set (some vendors refunded, some not) returns `false` —
 /// never a phantom "all done".
 pub fn all_legs_refunded(capture_session: &NLegPlan, refunded: &[VendorId]) -> bool {
-    let set: std::collections::BTreeSet<VendorId> = refunded.iter().copied().collect();
+    let set: alloc::collections::BTreeSet<VendorId> = refunded.iter().copied().collect();
     capture_session
         .legs
         .iter()

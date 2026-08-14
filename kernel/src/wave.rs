@@ -35,7 +35,7 @@ impl SpectralComponent {
     /// XYZ encoding at time t: maps to 3D phase space.
     pub fn xyz_at(&self, t: f64) -> Xyz {
         let a = self.at(t);
-        let b = self.at(t + std::f64::consts::PI / 4.0); // 45° offset
+        let b = self.at(t + core::f64::consts::PI / 4.0); // 45° offset
         Xyz::new(a, b, (a + b) / 2.0)
     }
 }
@@ -109,7 +109,7 @@ impl InterferenceField {
         let mut sx = 0.0f64; let mut sy = 0.0f64; let mut sz = 0.0f64;
         for (i, w) in self.waves.iter().enumerate() {
             let t = (now - w.timestamp_ms) as f64 / 1000.0;
-            let offset = i as f64 * std::f64::consts::PI / 4.0;
+            let offset = i as f64 * core::f64::consts::PI / 4.0;
             sx += w.at((now - w.timestamp_ms) as f64);
             sy += w.at(((now - w.timestamp_ms) as f64) + 100.0 * offset);
             sz += w.at(((now - w.timestamp_ms) as f64) + 200.0 * offset);

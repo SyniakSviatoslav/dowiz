@@ -67,7 +67,7 @@ pub struct HarvestReport {
 /// JSONL output is gov_route-compatible (same field names as the dispatcher's
 /// `track_record.jsonl`).
 pub struct HarvestLedger {
-    records: std::collections::VecDeque<HarvestRecord>,
+    records: alloc::collections::VecDeque<HarvestRecord>,
     max_records: usize,
 }
 
@@ -75,7 +75,7 @@ impl HarvestLedger {
     pub fn new(max_records: usize) -> Self {
         let init_cap = max_records.min(1024);
         HarvestLedger {
-            records: std::collections::VecDeque::with_capacity(init_cap),
+            records: alloc::collections::VecDeque::with_capacity(init_cap),
             max_records: max_records.max(1),
         }
     }
@@ -168,7 +168,7 @@ impl HarvestLedger {
         self.records.is_empty()
     }
 
-    pub fn records(&self) -> &std::collections::VecDeque<HarvestRecord> {
+    pub fn records(&self) -> &alloc::collections::VecDeque<HarvestRecord> {
         &self.records
     }
 }

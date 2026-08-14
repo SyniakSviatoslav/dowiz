@@ -52,7 +52,7 @@ pub fn literal_trigrams(pattern: &str) -> Vec<Trigram> {
         );
         if is_meta {
             if !cur.is_empty() {
-                runs.push(std::mem::take(&mut cur));
+                runs.push(core::mem::take(&mut cur));
             }
         } else {
             cur.push(c);

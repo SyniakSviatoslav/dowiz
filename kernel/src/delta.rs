@@ -436,7 +436,7 @@ mod tests {
     #[test]
     fn phase_delta_drift_rate_positive() {
         let a = PhaseVector::from_scalars(&[0.0]);
-        let b = PhaseVector::from_scalars(&[std::f64::consts::PI]);
+        let b = PhaseVector::from_scalars(&[core::f64::consts::PI]);
         let pd = PhaseDelta::between_phases(&a, &b);
         let rate = pd.drift_rate(1000.0);
         assert!(rate > 0.0);

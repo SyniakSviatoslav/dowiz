@@ -207,7 +207,7 @@ pub fn open(
         .decrypt(Nonce::from_slice(&sealed.nonce), sealed.ct.as_slice())
         .map_err(|_| TransferError::AeadInvalid)?;
     crate::wallet::record::deserialize(
-        std::str::from_utf8(&plaintext).map_err(|_| TransferError::AeadInvalid)?,
+        core::str::from_utf8(&plaintext).map_err(|_| TransferError::AeadInvalid)?,
     )
     .map_err(|_| TransferError::AeadInvalid)
 }

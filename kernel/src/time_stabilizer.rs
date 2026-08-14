@@ -69,8 +69,8 @@ impl ClockSource {
     }
 }
 
-impl std::fmt::Display for ClockSource {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+impl core::fmt::Display for ClockSource {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
             ClockSource::KvmClock => write!(f, "kvm-clock"),
             ClockSource::Tsc => write!(f, "TSC"),

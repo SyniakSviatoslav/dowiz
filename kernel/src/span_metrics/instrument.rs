@@ -50,7 +50,7 @@ pub fn commit_after_decide<S, D, T, E>(
 where
     S: crate::event_log::EventStore,
     D: FnOnce(&crate::event_log::MeshEvent) -> Result<T, E>,
-    E: std::fmt::Display,
+    E: core::fmt::Display,
 {
     let _g = crate::fdr::info_span!("commit_after_decide").entered();
     log.commit_after_decide(ev, decide)

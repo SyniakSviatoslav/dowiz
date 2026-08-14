@@ -72,7 +72,7 @@ impl CpuTopology {
         topo.logical_processors = lines.iter().filter(|l| l.starts_with("processor")).count();
 
         // Count unique physical cores (core id).
-        let mut core_ids = std::collections::BTreeSet::new();
+        let mut core_ids = alloc::collections::BTreeSet::new();
         for l in &lines {
             if let Some(val) = l.strip_prefix("core id\t\t: ") {
                 core_ids.insert(val.trim());

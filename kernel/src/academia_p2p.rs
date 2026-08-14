@@ -102,8 +102,8 @@ pub struct FractalSubsystems {
     pub agent: Option<AgentOrchestrator>,
 }
 
-impl std::fmt::Debug for FractalSubsystems {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for FractalSubsystems {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("FractalSubsystems")
             .field("academia", &self.academia.is_some())
             .field("physics", &self.physics.is_some())
@@ -539,7 +539,7 @@ impl PhaseSpace {
         let idx = self.names.len();
         let mut coords = [0.0f64; GEO_DIMS];
         for i in 0..GEO_DIMS {
-            let angle = (idx as f64 * 2.0 * std::f64::consts::PI / 7.0).sin();
+            let angle = (idx as f64 * 2.0 * core::f64::consts::PI / 7.0).sin();
             coords[i] = (angle * (i as f64 + 1.0)).sin() * 10.0;
         }
         self.states.push(GeometricState::new(GeometricPoint { coords }));
@@ -671,8 +671,8 @@ impl Complex {
     pub fn scale(&self, s: f64) -> Complex { Complex { re: self.re * s, im: self.im * s } }
 }
 
-impl std::ops::Add for Complex { type Output = Complex; fn add(self, o: Complex) -> Complex { Complex::add(&self, &o) } }
-impl std::ops::Mul for Complex { type Output = Complex; fn mul(self, o: Complex) -> Complex { Complex::mul(&self, &o) } }
+impl core::ops::Add for Complex { type Output = Complex; fn add(self, o: Complex) -> Complex { Complex::add(&self, &o) } }
+impl core::ops::Mul for Complex { type Output = Complex; fn mul(self, o: Complex) -> Complex { Complex::mul(&self, &o) } }
 
 /// Квантовий стан одного кубіта: |psi> = alpha|0> + beta|1>.
 #[derive(Debug, Clone)]
@@ -877,7 +877,7 @@ impl Superposition {
     pub fn interfere(&self) -> Complex {
         let mut result = Complex::zero();
         for bs in &self.basis {
-            let phase = Complex::new((bs.time_offset * std::f64::consts::TAU).cos(), (bs.time_offset * std::f64::consts::TAU).sin());
+            let phase = Complex::new((bs.time_offset * core::f64::consts::TAU).cos(), (bs.time_offset * core::f64::consts::TAU).sin());
             result = result.add(&bs.amplitude.mul(&phase));
         }
         result
@@ -914,7 +914,7 @@ impl Spin {
     pub fn new(state: SpinState) -> Self {
         let (amplitude, phase) = match state {
             SpinState::Up => (1.0, 0.0),
-            SpinState::Down => (1.0, std::f64::consts::PI),
+            SpinState::Down => (1.0, core::f64::consts::PI),
             SpinState::Superposition { amplitude: a, phase: p } => (a, p),
         };
         Spin { state, amplitude, phase }
@@ -927,9 +927,9 @@ impl Spin {
 
     /// Обернути спін на кут θ (оператор повороту).
     pub fn rotate(&mut self, theta: f64) {
-        self.phase = (self.phase + theta) % (2.0 * std::f64::consts::PI);
+        self.phase = (self.phase + theta) % (2.0 * core::f64::consts::PI);
         if self.phase.abs() < 1e-9 { self.state = SpinState::Up; }
-        else if (self.phase - std::f64::consts::PI).abs() < 1e-9 { self.state = SpinState::Down; }
+        else if (self.phase - core::f64::consts::PI).abs() < 1e-9 { self.state = SpinState::Down; }
         else { self.state = SpinState::Superposition { amplitude: self.amplitude, phase: self.phase }; }
     }
 
@@ -1611,7 +1611,7 @@ mod tests {
     #[test]
     fn spin_rotate_changes_state() {
         let mut s = Spin::new(SpinState::Up);
-        s.rotate(std::f64::consts::PI);
+        s.rotate(core::f64::consts::PI);
         assert!((s.measure_up_probability() - 0.0).abs() < 0.01);
     }
 
@@ -3058,7 +3058,7 @@ impl SplitAlgebra {
     pub fn light_cone_points(&self, n: usize) -> Vec<SplitAlgebra> {
         let mut points = Vec::new();
         for i in 0..n {
-            let theta = std::f64::consts::TAU * (i as f64) / (n as f64);
+            let theta = core::f64::consts::TAU * (i as f64) / (n as f64);
             match self {
                 SplitAlgebra::SplitComplex { .. } => {
                     // |a² - b²| = 0 → a = ±b → null rays на 45°
@@ -3158,7 +3158,7 @@ impl LightFront {
         let n_points = (n_dims * 4).min(32);
         let mut surface = Vec::new();
         for i in 0..n_points {
-            let theta = std::f64::consts::TAU * (i as f64) / (n_points as f64);
+            let theta = core::f64::consts::TAU * (i as f64) / (n_points as f64);
             let mut coords = vec![0.0; n_dims];
             coords[0] = self.radius; // часова компонента
             for j in 1..n_dims.min(4) {
@@ -3524,8 +3524,8 @@ pub struct AutonomousLoop {
     pub cycle: u64,
 }
 
-impl std::fmt::Debug for AutonomousLoop {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for AutonomousLoop {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("AutonomousLoop").field("cycle", &self.cycle).field("swarm_executors", &self.swarm.executor_count()).finish()
     }
 }
@@ -3580,8 +3580,8 @@ pub struct MemoryPipeline {
     pub miner: crate::meta_miner::MetaMiner,
 }
 
-impl std::fmt::Debug for MemoryPipeline {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for MemoryPipeline {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("MemoryPipeline").field("records", &self.topo.labels.len()).finish()
     }
 }

@@ -17,7 +17,7 @@
 //!
 //! ZERO dependencies. Pure std f64 trigonometry.
 
-use std::f64::consts::{PI, TAU};
+use core::f64::consts::{PI, TAU};
 
 // ─── Phase — a point on S¹ (the unit circle) ──────────────────────────────
 

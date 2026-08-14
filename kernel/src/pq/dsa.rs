@@ -18,7 +18,7 @@
 #![allow(dead_code)]
 
 use std::vec;
-use std::vec::Vec;
+use alloc::vec::Vec;
 
 pub fn shake256(data: &[u8], out: &mut [u8]) {
     crate::pq::keccak::shake256(data, out)
@@ -1092,14 +1092,14 @@ mod tests {
     // Emits FIPS 204 intermediates as "STAGE <name> <values>" for byte-level diffing.
     // Run: cargo test -p bebop2-core --release mldsa_diff_probe -- --nocapture
     fn phex(name: &str, b: &[u8]) {
-        let mut s = std::string::String::new();
+        let mut s = alloc::string::String::new();
         for x in b {
             s.push_str(&std::format!("{:02x}", x));
         }
         std::println!("STAGE {} {}", name, s);
     }
     fn pnorm(name: &str, p: &Poly) {
-        let mut s = std::string::String::new();
+        let mut s = alloc::string::String::new();
         for i in 0..N {
             let v = ((p[i] as i64 % Q as i64) + Q as i64) % Q as i64;
             s.push_str(&std::format!(" {}", v));

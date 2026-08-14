@@ -155,7 +155,7 @@ impl EigenDecomp {
 
     /// Sort by |λ| descending (dominant modes first).
     pub fn sort(&mut self) {
-        self.pairs.sort_by(|a, b| b.mag().partial_cmp(&a.mag()).unwrap_or(std::cmp::Ordering::Equal));
+        self.pairs.sort_by(|a, b| b.mag().partial_cmp(&a.mag()).unwrap_or(core::cmp::Ordering::Equal));
     }
 
     /// Truncate to top-k eigenvalues (lossy compression).

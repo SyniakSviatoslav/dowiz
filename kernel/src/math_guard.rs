@@ -3,7 +3,7 @@
 //! Compute gain margin and phase margin from a discrete-time PID transfer function,
 //! aiding closed-loop stability analysis without external tooling.
 
-use std::f64::consts::PI;
+use core::f64::consts::PI;
 
 /// Compute gain margin (dB) and phase margin (degrees) for a discrete-time PID
 /// controller with sample interval `dt`.

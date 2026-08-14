@@ -9,8 +9,8 @@
 //! Zero-dep: `Rc` (alloc) + `RefCell` (core). Deterministic: effects run in
 //! subscription order; no threads, no interior randomness.
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use core::cell::RefCell;
+use alloc::rc::Rc;
 
 /// A single reactive value with subscribers.
 pub struct Signal<T> {
@@ -181,7 +181,7 @@ mod tests {
 
     #[test]
     fn effect_runs_once() {
-        use std::cell::Cell;
+        use core::cell::Cell;
         let count = Rc::new(Cell::new(0));
         let c2 = Rc::clone(&count);
         effect(move || {

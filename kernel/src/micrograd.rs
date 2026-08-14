@@ -19,8 +19,8 @@
 //! (product / quotient / chain / power / sin / cos / exp / ln / tanh / relu);
 //! see the `tests` module for hand-oracle checks.
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use core::cell::RefCell;
+use alloc::rc::Rc;
 
 /// A differentiable scalar node in the computational graph.
 ///

@@ -157,8 +157,8 @@ pub enum SchedulerError {
     SliceExhausted,
 }
 
-impl std::fmt::Display for SchedulerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for SchedulerError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             SchedulerError::SliceSumExceedsFrame => {
                 write!(f, "slice sum exceeds major frame length")

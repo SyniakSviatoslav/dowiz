@@ -597,8 +597,8 @@ pub struct HedgeWitness {
     pub note: String,
 }
 
-impl std::fmt::Display for HedgeWitness {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for HedgeWitness {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
             "hedge {{ roots={:?}, F={:?}, F'={:?}; {} }}",
@@ -647,8 +647,8 @@ pub struct IdFactor {
     pub sum_out: Vec<usize>,
 }
 
-impl std::fmt::Display for IdFormula {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for IdFormula {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let render = |factors: &[IdFactor]| -> String {
             let mut parts = Vec::new();
             for fac in factors {

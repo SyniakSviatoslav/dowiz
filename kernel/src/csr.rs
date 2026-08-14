@@ -352,7 +352,7 @@ impl Csr {
             for i in 0..n {
                 next[i] = alpha * e[i] + (1.0 - alpha) * next[i];
             }
-            std::mem::swap(&mut pi, &mut next);
+            core::mem::swap(&mut pi, &mut next);
         }
 
         // Final normalize (deterministic; guards tiny f64 drift).
@@ -619,7 +619,7 @@ fn rank_desc(scores: &[f64]) -> Vec<usize> {
     idx.sort_by(|&a, &b| {
         scores[b]
             .partial_cmp(&scores[a])
-            .unwrap_or(std::cmp::Ordering::Equal)
+            .unwrap_or(core::cmp::Ordering::Equal)
             .then(a.cmp(&b))
     });
     idx

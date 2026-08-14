@@ -141,7 +141,7 @@ pub trait ArchivalPersist {
 /// legal destination for [`OpticalCompressed`].
 #[derive(Default)]
 pub struct InMemoryArchive {
-    store: std::collections::VecDeque<ArchivalBlob>,
+    store: alloc::collections::VecDeque<ArchivalBlob>,
 }
 
 impl ArchivalPersist for InMemoryArchive {
@@ -241,7 +241,7 @@ mod tests {
             // and by relying on the absence of `.as_bytes_for_hashing()`. The
             // decisive check is the grep-proof below (no such method exists in
             // source), which is the authoritative §1.5 gate.
-            let _ = std::marker::PhantomData::<T>;
+            let _ = core::marker::PhantomData::<T>;
         }
         assert_not_hashable::<OpticalCompressed>();
 

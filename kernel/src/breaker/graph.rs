@@ -245,11 +245,11 @@ pub const BREAKER_GOLDEN_SIGNATURE: BreakerGraphReport = BreakerGraphReport {
 /// Which field(s) of the live signature diverged from the golden fingerprint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BreakerSignatureDrift {
-    pub fields: std::borrow::Cow<'static, [&'static str]>,
+    pub fields: alloc::borrow::Cow<'static, [&'static str]>,
 }
 
-impl std::fmt::Display for BreakerSignatureDrift {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for BreakerSignatureDrift {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "breaker signature drift in fields: {:?}", self.fields)
     }
 }
@@ -297,7 +297,7 @@ pub fn verify_breaker_signature_against(
         Ok(())
     } else {
         Err(BreakerSignatureDrift {
-            fields: std::borrow::Cow::Owned(fields),
+            fields: alloc::borrow::Cow::Owned(fields),
         })
     }
 }

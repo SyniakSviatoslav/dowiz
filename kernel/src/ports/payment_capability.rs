@@ -27,7 +27,7 @@
 //! never literally contains them (which would make the negation self-matching / vacuous).
 
 use std::fmt;
-use std::str::FromStr;
+use core::str::FromStr;
 
 /// The closed set of payment rails the platform may declare support for (P47 operator ruling).
 ///

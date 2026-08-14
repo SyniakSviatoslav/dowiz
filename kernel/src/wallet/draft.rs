@@ -391,7 +391,7 @@ mod tests {
     // A mock hub that ALREADY captured the intent (the dangerous case: socket
     // dropped after capture, before the client saw the ack).
     struct CapturedHub {
-        creates: std::cell::RefCell<usize>,
+        creates: core::cell::RefCell<usize>,
     }
     impl crate::ports::payment_provider::PaymentProvider for CapturedHub {
         fn id(&self) -> &str {
@@ -469,7 +469,7 @@ mod tests {
         draft.state = DraftState::PaymentInflight; // socket dropped after capture, before ack
 
         let hub = CapturedHub {
-            creates: std::cell::RefCell::new(0),
+            creates: core::cell::RefCell::new(0),
         };
 
         // The draft-level caller MUST delegate to outbox::reconnect_draft.

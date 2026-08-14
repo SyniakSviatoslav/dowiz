@@ -25,7 +25,7 @@
 //! preserved exactly: the ceiling is re-checked on every CAS retry, so it can never
 //! overshoot, and the check-then-debit is now a single atomic op (no check-then-act race).
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU64, Ordering};
 
 /// A submitted job's opaque handle (returned by a `JobPort` on success).
 ///
@@ -347,7 +347,7 @@ mod tests {
     /// concurrency proof the old single-threaded tests could not give.
     #[test]
     fn budget_atomic_never_over_grants() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
+        use core::sync::atomic::{AtomicUsize, Ordering};
         use std::sync::Arc;
 
         const GRANTS: usize = 10_000;

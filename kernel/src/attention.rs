@@ -103,7 +103,7 @@ mod tests {
     /// out = 2/3·1 + 1/3·0 = 2/3.
     #[test]
     fn attention_hand_oracle() {
-        let q = vec![vec![std::f64::consts::LN_2]];
+        let q = vec![vec![core::f64::consts::LN_2]];
         let k = vec![vec![1.0], vec![0.0]];
         let v = vec![vec![1.0], vec![0.0]];
         let out = attention(&q, &k, &v).unwrap();

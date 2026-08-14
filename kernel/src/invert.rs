@@ -100,7 +100,7 @@ impl BackpropChain {
 
         // Root cause = deepest node with highest responsibility.
         self.root_cause = self.nodes.iter()
-            .max_by(|a, b| a.responsibility.partial_cmp(&b.responsibility).unwrap_or(std::cmp::Ordering::Equal)
+            .max_by(|a, b| a.responsibility.partial_cmp(&b.responsibility).unwrap_or(core::cmp::Ordering::Equal)
                 .then_with(|| a.layer.cmp(&b.layer)))
             .map(|n| n.id.clone());
     }
@@ -139,7 +139,7 @@ pub trait Invertible {
         let input = self.inverse(output);
         let reconstructed = self.forward(&input);
         // Simple comparison — override for custom distance metrics.
-        std::mem::discriminant(&reconstructed) == std::mem::discriminant(output)
+        core::mem::discriminant(&reconstructed) == core::mem::discriminant(output)
     }
 }
 

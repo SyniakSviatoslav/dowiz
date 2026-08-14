@@ -32,7 +32,7 @@
 //! is the new, separately-tested type available for future positive-refill-rate call sites (the
 //! `llm-adapters`/`admission.rs` continuous rate-limit path this bench originally measured).
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::Instant;
 
@@ -537,7 +537,7 @@ mod gcra_oracle {
     /// real interleaving and proves the *window* bound holds regardless of how the CASes order.
     #[test]
     fn token_bucket_gcra_8thread_stress_no_over_grant() {
-        use std::sync::atomic::{AtomicU64, Ordering};
+        use core::sync::atomic::{AtomicU64, Ordering};
         use std::sync::Arc;
         use std::thread;
 

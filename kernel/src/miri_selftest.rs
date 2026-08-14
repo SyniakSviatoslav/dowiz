@@ -30,7 +30,7 @@ fn miri_selftest_planted_oob() {
     {
         // Intentionally empty — the real check only exists under Miri.
         let _sanity: u8 = 0;
-        std::hint::black_box(_sanity);
+        core::hint::black_box(_sanity);
     }
     // Miri interpreter: execute the planted UB. `slice` has length 1; index 99
     // is an out-of-bounds read that Miri is obligated to flag.
@@ -39,6 +39,6 @@ fn miri_selftest_planted_oob() {
         let slice: &[u8] = &[1u8];
         // SAFETY: intentionally ABSENT — this is the planted fault.
         let _val = unsafe { *slice.as_ptr().add(99) };
-        std::hint::black_box(_val);
+        core::hint::black_box(_val);
     }
 }

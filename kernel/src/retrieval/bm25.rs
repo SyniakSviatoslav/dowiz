@@ -90,7 +90,7 @@ pub fn tokenize(text: &str) -> Vec<String> {
         if ch.is_ascii_alphanumeric() {
             cur.extend(ch.to_lowercase());
         } else if !cur.is_empty() {
-            out.push(std::mem::take(&mut cur));
+            out.push(core::mem::take(&mut cur));
         }
     }
     if !cur.is_empty() {
@@ -457,7 +457,7 @@ impl Bm25 {
             // descending score, then ascending doc-id for a stable, deterministic tie-break
             b.score
                 .partial_cmp(&a.score)
-                .unwrap_or(std::cmp::Ordering::Equal)
+                .unwrap_or(core::cmp::Ordering::Equal)
                 .then(a.doc_id.cmp(&b.doc_id))
         });
         out

@@ -486,7 +486,7 @@ mod tests {
             assert_eq!(*x, 1.0 / 3.0);
         }
         // Hand oracle: ln2 → [2/3, 1/3].
-        let w = softmax_batch_lane(&[&[std::f64::consts::LN_2, 0.0][..]]);
+        let w = softmax_batch_lane(&[&[core::f64::consts::LN_2, 0.0][..]]);
         assert_eq!(w[0][0], 2.0 / 3.0);
         assert_eq!(w[0][1], 1.0 / 3.0);
     }
@@ -673,7 +673,7 @@ mod tests {
                 acc += sc[0].kf.x[0];
             }
             let scal_ns = t0.elapsed().as_nanos() as f64 / scal_runs as f64;
-            std::hint::black_box(acc);
+            core::hint::black_box(acc);
 
             // ── batched SoA timing ──
             let bat_runs = 200;
@@ -685,7 +685,7 @@ mod tests {
                 acc2 += bc[0].kf.x[0];
             }
             let bat_ns = t1.elapsed().as_nanos() as f64 / bat_runs as f64;
-            std::hint::black_box(acc2);
+            core::hint::black_box(acc2);
 
             let speedup = scal_ns / bat_ns;
             // Keep the lane honest: both paths must agree to the bit on x/P.

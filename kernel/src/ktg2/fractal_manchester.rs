@@ -114,7 +114,7 @@ impl FractalPosition {
     }
 
     pub fn as_unit_circle_coords(&self) -> (f64, f64) {
-        let angle = self.fraction() * std::f64::consts::PI;
+        let angle = self.fraction() * core::f64::consts::PI;
         (angle.cos(), angle.sin())
     }
 }
@@ -866,7 +866,7 @@ pub const fn fractal_distance(a: i32, b: i32) -> i32 {
 
 pub fn fractal_position_to_angle(position: i32) -> f64 {
     let normalized = (position + 64) as f64 / 128.0;
-    normalized * std::f64::consts::PI
+    normalized * core::f64::consts::PI
 }
 
 pub fn fractal_bit_to_geometry(bit: bool, position: i32) -> (f64, f64) {

@@ -130,8 +130,8 @@ pub enum LaunchRefused {
     ClockRewound { last_launch_ms: u64, now_ms: u64 },
 }
 
-impl std::fmt::Display for LaunchRefused {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for LaunchRefused {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             LaunchRefused::IntensityExceeded {
                 attempts_in_window,

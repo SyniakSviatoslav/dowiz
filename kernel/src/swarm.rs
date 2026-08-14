@@ -227,7 +227,7 @@ impl SwarmCoordinator {
             .max_by(|a, b| {
                 a.success_rate()
                     .partial_cmp(&b.success_rate())
-                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .unwrap_or(core::cmp::Ordering::Equal)
             })
             .map(|s| s.id)
     }

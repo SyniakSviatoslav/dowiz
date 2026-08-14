@@ -164,7 +164,7 @@ pub struct Journey {
     hub: HubStatus,
     /// The catalog leaves needed to price the cart + build the bot pack. The journey is a
     /// *consumer* of P62's leaves (§1.3); it holds a read-only view keyed by product id.
-    catalog: std::collections::BTreeMap<String, PriceableLeaf>,
+    catalog: alloc::collections::BTreeMap<String, PriceableLeaf>,
     /// The opaque [`ClientHandoff`] produced by `suspend`, for the shell to open. Intentionally a
     /// private field holding ONLY opaque handles — no card-shaped data can live here (F3).
     last_handoff: Option<ClientHandoff>,
@@ -178,7 +178,7 @@ impl Journey {
             step: JourneyStep::Storefront,
             cart: Cart::new(),
             hub: HubStatus::Online,
-            catalog: std::collections::BTreeMap::new(),
+            catalog: alloc::collections::BTreeMap::new(),
             last_handoff: None,
         }
     }

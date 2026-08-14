@@ -21,7 +21,7 @@
 
 use std::sync::OnceLock;
 
-use std::vec::Vec;
+use alloc::vec::Vec;
 
 use crate::pq::dsa::{keygen_bytes, sign_internal_bytes, verify_internal_bytes, SEEDBYTES};
 

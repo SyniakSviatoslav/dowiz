@@ -250,7 +250,7 @@ mod tests {
             let mut acc: u64 = 0;
             for i in 0..50_000_000u64 {
                 acc = acc.wrapping_add(i);
-                std::hint::black_box(acc);
+                core::hint::black_box(acc);
             }
 
             let s = ProcCpuSample::from_proc_self()

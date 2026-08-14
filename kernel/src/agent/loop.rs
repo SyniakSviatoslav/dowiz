@@ -343,14 +343,14 @@ mod tests {
         StaticSkillRegistry, ToolAction, ToolError, ToolInvocation, ToolOutput, ToolPort,
         ToolResource, ToolScope, ToolSpec,
     };
-    use std::cell::{Cell, RefCell};
+    use core::cell::{Cell, RefCell};
 
     // A spy tool: records invocation count so we can prove the fail-closed gate runs
     // the tool body ZERO times on an unauthorized / unknown call. Uses a shared
     // `Rc<Cell>`-style counter via `RefCell` so the test can read it after `run`.
     struct SpyTool {
         spec: ToolSpec,
-        invocations: std::rc::Rc<Cell<u32>>,
+        invocations: alloc::rc::Rc<Cell<u32>>,
         // Optional: return an error instead of success (for the typed-error path).
         fail: RefCell<Option<ToolError>>,
     }
@@ -380,7 +380,7 @@ mod tests {
         }
     }
 
-    fn build_registry(invocations: std::rc::Rc<Cell<u32>>) -> StaticSkillRegistry {
+    fn build_registry(invocations: alloc::rc::Rc<Cell<u32>>) -> StaticSkillRegistry {
         let spec = ToolSpec {
             name: "read_order_status",
             description: "Read the status of an order.",
@@ -441,7 +441,7 @@ mod tests {
 
     #[test]
     fn happy_path_tool_result_then_answer() {
-        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let inv = alloc::rc::Rc::new(Cell::new(0u32));
         let reg = build_registry(inv.clone());
         let budget = TokenBucket::new(16.0, 1.0);
         let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
@@ -469,7 +469,7 @@ mod tests {
     // times (the spy proves it).
     #[test]
     fn unknown_tool_is_rejected_and_runs_nothing() {
-        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let inv = alloc::rc::Rc::new(Cell::new(0u32));
         let reg = build_registry(inv.clone());
         let budget = TokenBucket::new(16.0, 1.0);
         let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
@@ -502,7 +502,7 @@ mod tests {
     // refused with ScopeDenied BEFORE the tool body runs — spy count stays 0.
     #[test]
     fn no_tool_runs_without_verified_capability() {
-        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let inv = alloc::rc::Rc::new(Cell::new(0u32));
         let reg = build_registry(inv.clone());
         let budget = TokenBucket::new(16.0, 1.0);
         // Empty grant: authorizes nothing.
@@ -548,7 +548,7 @@ mod tests {
     #[test]
     fn agent_turn_emits_timing_span_close() {
         use crate::fdr::SpanObserver;
-        use std::sync::atomic::{AtomicU64, Ordering};
+        use core::sync::atomic::{AtomicU64, Ordering};
         use std::sync::Arc;
 
         struct TurnObs {
@@ -569,7 +569,7 @@ mod tests {
             hits: hits.clone(),
         }));
 
-        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let inv = alloc::rc::Rc::new(Cell::new(0u32));
         let reg = build_registry(inv.clone());
         let budget = TokenBucket::new(16.0, 1.0);
         let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
@@ -592,7 +592,7 @@ mod tests {
 
     #[test]
     fn budget_exhaustion_terminates_loop() {
-        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let inv = alloc::rc::Rc::new(Cell::new(0u32));
         let reg = build_registry(inv.clone());
         // Capacity 0 → first debit fails.
         let budget = TokenBucket::new(0.0, 0.0);
@@ -617,7 +617,7 @@ mod tests {
     // A mid-run budget drain attaches the partial log rather than presenting an answer.
     #[test]
     fn budget_drain_midrun_attaches_partial_log() {
-        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let inv = alloc::rc::Rc::new(Cell::new(0u32));
         let reg = build_registry(inv.clone());
         // Capacity 2 → exactly 2 iterations succeed, 3rd is refused.
         let budget = TokenBucket::new(2.0, 0.0);
@@ -642,7 +642,7 @@ mod tests {
     // exactly at MAX_AGENT_ITERATIONS (never a silent truncation, never unbounded).
     #[test]
     fn iteration_cap_is_hard_invariant() {
-        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let inv = alloc::rc::Rc::new(Cell::new(0u32));
         let reg = build_registry(inv.clone());
         let budget = TokenBucket::new(1024.0, 1.0);
         let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
@@ -667,7 +667,7 @@ mod tests {
     // A typed tool error is a visible observation, never swallowed.
     #[test]
     fn tool_error_is_visible_observation() {
-        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let inv = alloc::rc::Rc::new(Cell::new(0u32));
         let _reg = build_registry(inv.clone());
         // Make the spy fail with NotFound on its first (only) call.
         // Reach into the registry is not possible; instead craft a failing tool
@@ -731,7 +731,7 @@ mod tests {
     // answering — it only refuses TOOL calls without a verified capability).
     #[test]
     fn answer_without_tools_under_empty_grant() {
-        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let inv = alloc::rc::Rc::new(Cell::new(0u32));
         let reg = build_registry(inv.clone());
         let budget = TokenBucket::new(16.0, 1.0);
         let loop_ = AgentLoop::new(reg, GrantSet::empty(), Surface::Owner, budget);
@@ -750,7 +750,7 @@ mod tests {
     // infinite budget terminates at the cap (no supervisor, no hang).
     #[test]
     fn always_tool_reasoner_terminates() {
-        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let inv = alloc::rc::Rc::new(Cell::new(0u32));
         let reg = build_registry(inv.clone());
         let budget = TokenBucket::new(f64::INFINITY, 0.0);
         let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
@@ -768,7 +768,7 @@ mod tests {
 
     #[test]
     fn empty_user_request_handled() {
-        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let inv = alloc::rc::Rc::new(Cell::new(0u32));
         let reg = build_registry(inv.clone());
         let budget = TokenBucket::new(16.0, 1.0);
         let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
@@ -784,7 +784,7 @@ mod tests {
 
     #[test]
     fn immediate_answer_no_tool_calls() {
-        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let inv = alloc::rc::Rc::new(Cell::new(0u32));
         let reg = build_registry(inv.clone());
         let budget = TokenBucket::new(16.0, 1.0);
         let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
@@ -804,7 +804,7 @@ mod tests {
 
     #[test]
     fn recovery_after_tool_failure_to_answer() {
-        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let inv = alloc::rc::Rc::new(Cell::new(0u32));
         let reg = build_registry(inv.clone());
         let budget = TokenBucket::new(16.0, 1.0);
         let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
@@ -832,7 +832,7 @@ mod tests {
 
     #[test]
     fn fanout_step_logs_all_subtasks() {
-        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let inv = alloc::rc::Rc::new(Cell::new(0u32));
         let reg = build_registry(inv.clone());
         let budget = TokenBucket::new(16.0, 1.0);
         let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
@@ -861,7 +861,7 @@ mod tests {
 
     #[test]
     fn merge_step_logs_correctly() {
-        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let inv = alloc::rc::Rc::new(Cell::new(0u32));
         let reg = build_registry(inv.clone());
         let budget = TokenBucket::new(16.0, 1.0);
         let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);
@@ -918,7 +918,7 @@ mod tests {
     #[test]
     fn context_history_accumulates_over_iterations() {
         struct HistoryReader {
-            captured: std::rc::Rc<RefCell<Vec<Vec<LoopLogEntry>>>>,
+            captured: alloc::rc::Rc<RefCell<Vec<Vec<LoopLogEntry>>>>,
             steps: Vec<AgentStep>,
             idx: Cell<usize>,
         }
@@ -934,8 +934,8 @@ mod tests {
             }
         }
 
-        let captured = std::rc::Rc::new(RefCell::new(Vec::new()));
-        let inv = std::rc::Rc::new(Cell::new(0u32));
+        let captured = alloc::rc::Rc::new(RefCell::new(Vec::new()));
+        let inv = alloc::rc::Rc::new(Cell::new(0u32));
         let reg = build_registry(inv.clone());
         let budget = TokenBucket::new(16.0, 1.0);
         let loop_ = AgentLoop::new(reg, covering_grant(), Surface::Owner, budget);

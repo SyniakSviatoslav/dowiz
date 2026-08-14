@@ -470,8 +470,8 @@ pub enum HypergraphError {
     EmptyHyperedge,
 }
 
-impl std::fmt::Display for HypergraphError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for HypergraphError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             HypergraphError::VertexOutOfBounds { requested, max } => {
                 write!(f, "vertex {} out of bounds (max {})", requested, max)

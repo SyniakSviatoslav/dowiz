@@ -136,7 +136,7 @@ impl Pattern {
                 // otherwise a single any-byte atom.
                 b'.' => {
                     if i + 1 < b.len() && b[i + 1] == b'*' {
-                        segments.push(std::mem::take(&mut cur));
+                        segments.push(core::mem::take(&mut cur));
                         i += 2;
                     } else {
                         cur.push(Atom::Any);

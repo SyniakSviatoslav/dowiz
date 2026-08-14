@@ -8,7 +8,7 @@
 //! - `ReverseReplay` — reconstruct past states from event history
 //! - `InverseSimulator` — given an observed outcome, infer probable input ranges
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use core::sync::atomic::{AtomicU64, Ordering};
 
 pub const DEFAULT_MAX_EVENTS_INITIAL: usize = 1024;
 pub const INVERSE_DEFAULT_CANDIDATES: usize = 20;
@@ -172,8 +172,8 @@ struct TelemetryCounter {
     value: AtomicU64,
 }
 
-impl std::fmt::Debug for TelemetryCollector {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for TelemetryCollector {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("TelemetryCollector")
             .field("count", &self.counters.len())
             .finish()
@@ -421,7 +421,7 @@ pub struct InverseResult {
 
 /// Simple deterministic RNG for inverse search (no std::rand dependency).
 fn fast_rng_f64() -> f64 {
-    use std::sync::atomic::Ordering;
+    use core::sync::atomic::Ordering;
     const XORSHIFT_MUL: u64 = 0x2545_F491_4F6C_DD1D;
     const SCALE: f64 = 5.421010862427522e-20;
     static SEED: AtomicU64 = AtomicU64::new(INVERSE_RNG_SEED);

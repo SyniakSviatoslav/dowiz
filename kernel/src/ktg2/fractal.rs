@@ -33,7 +33,7 @@ impl Bit {
     /// θ = (pos - ZERO) * π / 128.
     pub fn as_unit(&self) -> (f64, f64) {
         let d = (self.pos - ZERO) as f64;
-        let theta = d * std::f64::consts::PI / 128.0;
+        let theta = d * core::f64::consts::PI / 128.0;
         if self.bit == 1 {
             (theta.cos(), 0.0)
         } else {
@@ -72,7 +72,7 @@ impl Bit {
     }
 }
 
-impl std::ops::Not for Bit {
+impl core::ops::Not for Bit {
     type Output = Self;
     fn not(self) -> Self {
         self.invert()
@@ -129,7 +129,7 @@ impl Word {
     }
 }
 
-impl std::ops::Not for Word {
+impl core::ops::Not for Word {
     type Output = Self;
     fn not(self) -> Self {
         self.invert()

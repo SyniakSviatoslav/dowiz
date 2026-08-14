@@ -12,7 +12,7 @@
 //! `(weight, min(u,v), max(u,v))` so its output is reproducible regardless of
 //! input edge order. Pure `std`, zero external deps.
 
-use std::cmp::Ordering;
+use core::cmp::Ordering;
 
 /// Disjoint-set (union-find) with path compression + union by rank.
 #[derive(Debug, Clone)]
@@ -116,7 +116,7 @@ impl Dsu {
         order.sort_by_key(|&b| buckets[b][0]);
         order
             .into_iter()
-            .map(|b| std::mem::take(&mut buckets[b]))
+            .map(|b| core::mem::take(&mut buckets[b]))
             .collect()
     }
 }

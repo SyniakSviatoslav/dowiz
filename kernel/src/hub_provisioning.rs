@@ -119,8 +119,8 @@ impl PartialEq for TunnelToken {
     }
 }
 impl Eq for TunnelToken {}
-impl std::fmt::Debug for TunnelToken {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for TunnelToken {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str("TunnelToken(\"[redacted]\")")
     }
 }
@@ -935,9 +935,9 @@ pub fn check_tunnel_cap<T: TunnelProvider>(
 /// mutation log is appended BEFORE the CF call. `count_tunnels` is configurable.
 #[derive(Debug, Clone, Default)]
 pub struct MockTunnel {
-    pub call_order: std::cell::RefCell<Vec<String>>,
-    pub tunnel_count: std::cell::RefCell<u32>,
-    pub created: std::cell::RefCell<std::collections::HashMap<HubId, TunnelId>>,
+    pub call_order: core::cell::RefCell<Vec<String>>,
+    pub tunnel_count: core::cell::RefCell<u32>,
+    pub created: core::cell::RefCell<std::collections::HashMap<HubId, TunnelId>>,
 }
 
 impl MockTunnel {
@@ -946,7 +946,7 @@ impl MockTunnel {
     }
     pub fn with_count(n: u32) -> Self {
         MockTunnel {
-            tunnel_count: std::cell::RefCell::new(n),
+            tunnel_count: core::cell::RefCell::new(n),
             ..Default::default()
         }
     }
@@ -984,10 +984,10 @@ impl TunnelProvider for MockTunnel {
 /// `create_from_image` (M3 `red_claim_is_assignment_only`).
 #[derive(Debug, Clone, Default)]
 pub struct MockVps {
-    pub create_calls: std::cell::RefCell<u32>,
-    pub assigned: std::cell::RefCell<std::collections::HashMap<ServerId, OwnerId>>,
-    pub suspended: std::cell::RefCell<std::collections::HashMap<ServerId, ImageRef>>,
-    pub refusals: std::cell::RefCell<u32>,
+    pub create_calls: core::cell::RefCell<u32>,
+    pub assigned: core::cell::RefCell<std::collections::HashMap<ServerId, OwnerId>>,
+    pub suspended: core::cell::RefCell<std::collections::HashMap<ServerId, ImageRef>>,
+    pub refusals: core::cell::RefCell<u32>,
     /// When `Some`, `create_from_image` refuses a `server_type` that does not match
     /// (M3 `red_spec_mismatch_rejected`).
     pub allowed_type: Option<&'static str>,

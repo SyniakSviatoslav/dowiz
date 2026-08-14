@@ -269,7 +269,7 @@ impl<S: EventStore> HydraClosedLoop<S> {
             seed: Some(42), // deterministic
             task_class: TaskClass::General,
             cache_policy: CachePolicy::NoCache,
-            options: std::collections::BTreeMap::new(),
+            options: alloc::collections::BTreeMap::new(),
             tools: vec![],
         };
 
@@ -429,7 +429,7 @@ fn parse_number_after(bytes: &[u8], start: usize) -> Option<f64> {
     if i == num_start {
         return None;
     }
-    let s = std::str::from_utf8(&bytes[num_start..i]).ok()?;
+    let s = core::str::from_utf8(&bytes[num_start..i]).ok()?;
     s.parse::<f64>().ok()
 }
 

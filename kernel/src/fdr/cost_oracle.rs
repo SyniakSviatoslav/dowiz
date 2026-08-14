@@ -29,8 +29,8 @@
 use super::json::JsonWriter;
 use super::schema::{Kind, StampPolicy};
 use super::{ring, Level};
-use std::cell::RefCell;
-use std::sync::atomic::{AtomicU64, Ordering};
+use core::cell::RefCell;
+use core::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 
 /// The cost bucket for an operator-gated decision.

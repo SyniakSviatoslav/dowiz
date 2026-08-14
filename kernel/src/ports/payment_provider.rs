@@ -26,7 +26,7 @@
 //! (money.rs). The N-leg saga is event-sourced (decide/fold Law) — the fold is the only writer
 //! of capture truth, and the webhook is its SOLE source (§4.4).
 
-use std::cell::RefCell;
+use core::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
 use crate::event_log::sha3_256;
@@ -893,7 +893,7 @@ fn verify_webhook_local(
         return Err(PayError::SignatureInvalid);
     }
     // Parse the stub payload: "<provider_event_id>|<status>|<order_id>|<leg_idx>".
-    let s = std::str::from_utf8(raw).map_err(|_| PayError::Provider("bad utf8".into()))?;
+    let s = core::str::from_utf8(raw).map_err(|_| PayError::Provider("bad utf8".into()))?;
     let parts: Vec<&str> = s.split('|').collect();
     if parts.len() < 4 {
         return Err(PayError::Provider("bad payload".into()));

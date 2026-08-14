@@ -24,7 +24,7 @@
 /// by structure) — caps memory at O(n·|enum|) and prevents an adversarial
 /// `min:0, max:1_000_000_000` from allocating a multi-GB `Vec` (FEYNMAN-09).
 const MAX_ENUM_WIDTH: i64 = 4096;
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public surface
@@ -145,8 +145,8 @@ pub struct EtalonSpec {
     pub nonlinear: bool,
 }
 
-impl std::fmt::Debug for EtalonSpec {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for EtalonSpec {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("EtalonSpec")
             .field("fields", &self.fields)
             .field("rules", &self.rules)
@@ -342,7 +342,7 @@ fn supported(vi: i64, op: BinOp, dj: &[i64]) -> bool {
 /// infinite domain without an SMT solver — that is Tier C's job).
 fn tier_b_ac3(spec: &EtalonSpec, mut domains: Vec<Domain>) -> Result<Vec<Domain>, IntakeError> {
     // Arcs (a,b) for every rule a op b.
-    let mut queue: std::collections::VecDeque<(usize, usize, BinOp)> =
+    let mut queue: alloc::collections::VecDeque<(usize, usize, BinOp)> =
         spec.rules.iter().map(|r| (r.a, r.b, r.op)).collect();
 
     while let Some((i, j, op)) = queue.pop_front() {

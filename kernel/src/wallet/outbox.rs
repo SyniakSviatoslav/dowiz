@@ -132,16 +132,16 @@ mod tests {
     // A mock provider that decides status by `query_status_by_key` and RECORDS how many times
     // `create_with_key` was invoked (the double-charge probe).
     struct MockProvider {
-        ledger: std::cell::RefCell<IdemLedger>,
+        ledger: core::cell::RefCell<IdemLedger>,
         captured: bool,
-        creates: std::cell::RefCell<usize>,
+        creates: core::cell::RefCell<usize>,
     }
     impl MockProvider {
         fn new(captured: bool) -> Self {
             MockProvider {
-                ledger: std::cell::RefCell::new(IdemLedger::new()),
+                ledger: core::cell::RefCell::new(IdemLedger::new()),
                 captured,
-                creates: std::cell::RefCell::new(0),
+                creates: core::cell::RefCell::new(0),
             }
         }
     }

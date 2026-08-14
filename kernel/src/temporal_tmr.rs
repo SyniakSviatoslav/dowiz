@@ -305,7 +305,7 @@ mod tests {
     /// the fault-injection testkit hook: a slice of precomputed run values drives
     /// the vote deterministically, including seeded mismatches.
     fn replay<T: Copy + 'static>(runs: Vec<T>) -> impl Fn() -> T {
-        use std::rc::Rc;
+        use alloc::rc::Rc;
         let runs = Rc::new(runs);
         let k = Rc::new(core::cell::Cell::new(0usize));
         let kr = Rc::clone(&k);

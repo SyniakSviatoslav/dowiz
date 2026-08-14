@@ -964,7 +964,7 @@ mod tests {
 
     struct MockReleaseSource {
         latest_version: Version,
-        fetched_into: std::cell::Cell<Option<Slot>>,
+        fetched_into: core::cell::Cell<Option<Slot>>,
     }
     impl ReleaseSource for MockReleaseSource {
         fn latest(&self) -> Result<Version, UpdateError> {
@@ -1000,7 +1000,7 @@ mod tests {
     struct MockHealthProbe {
         real_path_ok: bool,
         ready_after: u32,
-        calls: std::cell::Cell<u32>,
+        calls: core::cell::Cell<u32>,
     }
     impl HealthProbe for MockHealthProbe {
         fn probe(&self, _slot: Slot) -> HealthResult {
@@ -1077,7 +1077,7 @@ mod tests {
         };
         let src = MockReleaseSource {
             latest_version: Version("2.0.0".into()),
-            fetched_into: std::cell::Cell::new(None),
+            fetched_into: core::cell::Cell::new(None),
         };
         // current is A → idle slot is B.
         src.fetch_verified(&Version("2.0.0".into()), Slot::B)
@@ -1176,7 +1176,7 @@ mod tests {
         let probe = MockHealthProbe {
             real_path_ok: true,
             ready_after: 2,
-            calls: std::cell::Cell::new(0),
+            calls: core::cell::Cell::new(0),
         };
         // WarmingUp → no HealthPassed, so no FlipSymlink.
         assert_eq!(probe.probe(Slot::B), HealthResult::WarmingUp);
@@ -1210,7 +1210,7 @@ mod tests {
         let probe = MockHealthProbe {
             real_path_ok: false,
             ready_after: 0,
-            calls: std::cell::Cell::new(0),
+            calls: core::cell::Cell::new(0),
         };
         assert!(matches!(probe.probe(Slot::B), HealthResult::Failed(_)));
         // decide_promote on SnapshotTaken still only yields RunHealthProbe (never FlipSymlink)
@@ -1253,7 +1253,7 @@ mod tests {
         };
         let src = MockReleaseSource {
             latest_version: Version("2.0.0".into()),
-            fetched_into: std::cell::Cell::new(None),
+            fetched_into: core::cell::Cell::new(None),
         };
         src.fetch_verified(&Version("2.0.0".into()), Slot::B)
             .unwrap();

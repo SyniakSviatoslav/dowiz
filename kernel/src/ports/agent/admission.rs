@@ -20,7 +20,7 @@
 //! mutators require.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::event_log::{AppendOutcome, CommitError, EventLog, EventStore, MeshEvent};
@@ -509,7 +509,7 @@ impl<G: AdmissionGate> Admitter<G> {
             payload,
         };
         let (outcome, _) = event_log
-            .commit_after_decide(ev, |_| Ok::<(), std::convert::Infallible>(()))
+            .commit_after_decide(ev, |_| Ok::<(), core::convert::Infallible>(()))
             .map_err(|e| match e {
                 CommitError::Store(s) => AdmissionError::StoreFault(format!("{s:?}")),
                 CommitError::Rejected(r) => AdmissionError::StoreFault(r.0),
@@ -573,7 +573,7 @@ mod tests {
         BudgetRequest, CostDenomination, ExecutionModel, QuirksProfile, ResourceNeed,
         ValidationPolicy,
     };
-    use std::sync::atomic::AtomicUsize;
+    use core::sync::atomic::AtomicUsize;
 
     fn admit_scope() -> Scope {
         Scope::single(Resource::AgentBridge, Action::AdmitAgent)

@@ -230,7 +230,7 @@ impl CooccurrenceMatrix {
                 candidates.push((*a, *b, freq));
             }
         }
-        candidates.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(std::cmp::Ordering::Equal));
+        candidates.sort_by(|a, b| b.2.partial_cmp(&a.2).unwrap_or(core::cmp::Ordering::Equal));
         candidates
     }
 }

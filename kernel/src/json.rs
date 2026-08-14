@@ -16,7 +16,7 @@
 //! `kernel/tests/json_oracle.rs`); it sits outside the `-e no-dev` zero-dep proof surface, so the
 //! kernel's empty allowlist stays empty.
 
-use std::fmt::Write as _;
+use core::fmt::Write as _;
 
 /// Maximum nesting depth the parser will descend before refusing (degrade-closed vs stack
 /// exhaustion on adversarial deep input). Comfortably above any real config/API/RPC shape.
@@ -51,8 +51,8 @@ pub struct Error {
     pub pos: usize,
 }
 
-impl std::fmt::Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "json parse error at byte {}: {}", self.pos, self.msg)
     }
 }
@@ -498,7 +498,7 @@ impl<'a> Parser<'a> {
                             break;
                         }
                     }
-                    s.push_str(std::str::from_utf8(&self.b[start..self.i]).unwrap());
+                    s.push_str(core::str::from_utf8(&self.b[start..self.i]).unwrap());
                 }
             }
         }
@@ -585,7 +585,7 @@ impl<'a> Parser<'a> {
                 self.i += 1;
             }
         }
-        let text = std::str::from_utf8(&self.b[start..self.i]).unwrap();
+        let text = core::str::from_utf8(&self.b[start..self.i]).unwrap();
         if !is_float {
             // Negative zero: `i64` has no -0, but the incumbent (serde_json) preserves the sign as
             // the float -0.0. Match it so the differential oracle is exact (the ONLY integer

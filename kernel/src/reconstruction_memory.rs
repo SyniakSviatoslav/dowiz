@@ -230,7 +230,7 @@ impl ReconstructionMemory {
         }
 
         // Sort by confidence descending.
-        results.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(std::cmp::Ordering::Equal));
+        results.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap_or(core::cmp::Ordering::Equal));
 
         results.truncate(limit);
         results
@@ -265,7 +265,7 @@ impl ReconstructionMemory {
         }).collect();
 
         // Sort by score descending (group-relative ranking).
-        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(core::cmp::Ordering::Equal));
 
         scored
     }

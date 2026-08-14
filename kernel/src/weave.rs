@@ -15,7 +15,7 @@ pub fn spiral_points(radius: f64, turns: f64, steps: usize) -> Vec<(f64, f64)> {
     for i in 0..steps {
         let t = i as f64 / (steps.max(1) - 1) as f64;
         let r = radius * t;
-        let theta = t * turns * 2.0 * std::f64::consts::PI;
+        let theta = t * turns * 2.0 * core::f64::consts::PI;
         pts.push((r * theta.cos(), r * theta.sin()));
     }
     pts

@@ -133,8 +133,8 @@ pub use crate::{
     fdr_info_span as info_span, fdr_trace as trace, fdr_warn as warn,
 };
 
-use std::cell::RefCell;
-use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
+use core::cell::RefCell;
+use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 
 // ── Level ────────────────────────────────────────────────────────────────────────────
@@ -586,7 +586,7 @@ mod sink {
     use super::schema::{FdrEvent, Kind, StampPolicy};
     use super::{ring, FdrConfig, Level, SINK_ACTIVE};
     use std::io::Write;
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use core::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{Mutex, OnceLock};
 
     pub struct Sink {
@@ -981,7 +981,7 @@ mod tests {
 
     #[test]
     fn scoped_observer_receives_span_close() {
-        use std::sync::atomic::{AtomicU64, Ordering};
+        use core::sync::atomic::{AtomicU64, Ordering};
         struct Obs(Arc<AtomicU64>);
         impl SpanObserver for Obs {
             fn on_span_close(&self, name: &'static str, _dur_us: u64) {
@@ -1015,7 +1015,7 @@ mod tests {
     // (blueprint §10 DESIGN NOTE, §5 step 1). A harness-installed hook must still fire.
     #[test]
     fn panic_hook_chains_to_prior_hook() {
-        use std::sync::atomic::{AtomicBool, Ordering};
+        use core::sync::atomic::{AtomicBool, Ordering};
         static PRIOR_FIRED: AtomicBool = AtomicBool::new(false);
         // Simulate a test harness's pre-existing hook.
         std::panic::set_hook(Box::new(|_| {
@@ -1188,7 +1188,7 @@ mod tests {
 
     #[test]
     fn observer_guard_restores_prev_on_drop() {
-        use std::sync::atomic::{AtomicU64, Ordering};
+        use core::sync::atomic::{AtomicU64, Ordering};
         struct Obs(Arc<AtomicU64>);
         impl SpanObserver for Obs {
             fn on_span_close(&self, _name: &'static str, _dur: u64) {
@@ -1220,7 +1220,7 @@ mod tests {
 
     #[test]
     fn global_observer_is_callable_when_set() {
-        use std::sync::atomic::{AtomicU64, Ordering};
+        use core::sync::atomic::{AtomicU64, Ordering};
         struct Obs(Arc<AtomicU64>);
         impl SpanObserver for Obs {
             fn on_span_close(&self, _name: &'static str, _dur: u64) {

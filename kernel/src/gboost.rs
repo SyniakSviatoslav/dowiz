@@ -41,7 +41,7 @@ pub fn fit_stump(x: &[Vec<f64>], y: &[f64]) -> Option<Stump> {
     for j in 0..d {
         // Candidate thresholds: midpoints between sorted unique values.
         let mut vals: Vec<f64> = x.iter().map(|r| r[j]).collect();
-        vals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        vals.sort_by(|a, b| a.partial_cmp(b).unwrap_or(core::cmp::Ordering::Equal));
         vals.dedup_by(|a, b| (*a - *b).abs() < 1e-12);
 
         for w in vals.windows(2) {

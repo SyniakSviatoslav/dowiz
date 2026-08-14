@@ -29,7 +29,7 @@
 //! observer is observability, not a trust boundary). State is plain `std`; no `Rng`, no
 //! network, no `serde`.
 
-use std::collections::BTreeMap;
+use alloc::collections::BTreeMap;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;

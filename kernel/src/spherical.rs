@@ -91,7 +91,7 @@ pub fn spherical_harmonic(l: usize, m: i64, theta: f64, phi: f64) -> Option<f64>
     // Normalization for real form (Condon–Shortley phase folded into P_l^m).
     let k = l - am;
     let norm = {
-        let mut n = ((2 * l + 1) as f64) / (4.0 * std::f64::consts::PI);
+        let mut n = ((2 * l + 1) as f64) / (4.0 * core::f64::consts::PI);
         for j in 0..am {
             n /= ((l + j + 1) * (l - j)) as f64;
         }
@@ -126,7 +126,7 @@ pub struct LebedevNode {
 /// tables — out of scope for a zero-dep seed; this rule integrates l ≤ 3
 /// spherical harmonics exactly.)
 pub fn lebedev_octahedral() -> Vec<LebedevNode> {
-    let w = 4.0 * std::f64::consts::PI / 6.0;
+    let w = 4.0 * core::f64::consts::PI / 6.0;
     let axes: [(f64, f64, f64); 6] = [
         (1.0, 0.0, 0.0), (-1.0, 0.0, 0.0),
         (0.0, 1.0, 0.0), (0.0, -1.0, 0.0),
@@ -170,7 +170,7 @@ pub fn structure_factor(
             form_factors[j.min(form_factors.len() - 1)]
         };
         let kdotr = k[0] * r[0] + k[1] * r[1] + k[2] * r[2];
-        let phase = -2.0 * std::f64::consts::PI * kdotr;
+        let phase = -2.0 * core::f64::consts::PI * kdotr;
         acc = acc.add(Complex::new(f * phase.cos(), f * phase.sin()));
     }
     acc
@@ -212,7 +212,7 @@ mod tests {
     fn y00_is_constant() {
         // Y_0^0 = 1/√(4π).
         let y = spherical_harmonic(0, 0, 0.7, 1.3).unwrap();
-        let expect = 1.0 / (4.0 * std::f64::consts::PI).sqrt();
+        let expect = 1.0 / (4.0 * core::f64::consts::PI).sqrt();
         assert!((y - expect).abs() < 1e-12, "got {y}, want {expect}");
     }
 
@@ -226,7 +226,7 @@ mod tests {
     fn lebedev_integrates_constant_to_4pi() {
         let grid = lebedev_octahedral();
         let s = integrate_sphere(|_, _| 1.0, &grid);
-        assert!((s - 4.0 * std::f64::consts::PI).abs() < 1e-12, "got {s}");
+        assert!((s - 4.0 * core::f64::consts::PI).abs() < 1e-12, "got {s}");
     }
 
     #[test]

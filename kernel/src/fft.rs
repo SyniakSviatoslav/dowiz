@@ -51,7 +51,7 @@ pub fn fft(x: &[Complex]) -> Option<Vec<Complex>> {
     // Twiddle LUT: W_n^k for k in [0, n/2). Precomputed once (n(0) access).
     let mut twiddle = Vec::with_capacity(n / 2);
     for k in 0..(n / 2) {
-        let theta = -2.0 * std::f64::consts::PI * (k as f64) / (n as f64);
+        let theta = -2.0 * core::f64::consts::PI * (k as f64) / (n as f64);
         twiddle.push(Complex::new(theta.cos(), theta.sin()));
     }
 
@@ -143,7 +143,7 @@ mod tests {
         let k0 = 2;
         let x: Vec<Complex> = (0..n)
             .map(|i| {
-                let v = (2.0 * std::f64::consts::PI * k0 as f64 * i as f64 / n as f64).cos();
+                let v = (2.0 * core::f64::consts::PI * k0 as f64 * i as f64 / n as f64).cos();
                 Complex::new(v, 0.0)
             })
             .collect();

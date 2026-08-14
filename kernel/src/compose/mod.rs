@@ -108,8 +108,8 @@ pub enum InitError {
     ChainBroken(ChainDefect),
 }
 
-impl std::fmt::Display for InitError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Display for InitError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             InitError::CyclicDependency(n) => write!(f, "cyclic init dependency at {n:?}"),
             InitError::CapabilityAbsent { node, capability } => {
@@ -233,8 +233,8 @@ impl ProductionRoot {
     }
 }
 
-impl std::fmt::Debug for ProductionRoot {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl core::fmt::Debug for ProductionRoot {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("ProductionRoot")
             .field("events", &self.log.len())
             .finish()

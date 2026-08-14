@@ -320,10 +320,10 @@ mod tests {
         use super::*;
         use crate::fdr::ring;
 
-        use std::cell::RefCell;
+        use core::cell::RefCell;
         /// A unique FDR ring for this test process. The fault's typed Alarm is written
         /// directly to it via [`self_check_all_into_ring`], so the entry is recoverable and
-        use std::sync::atomic::{AtomicU64, Ordering};
+        use core::sync::atomic::{AtomicU64, Ordering};
         thread_local! {
             static TDIR: RefCell<Option<std::path::PathBuf>> = const { RefCell::new(None) };
         }

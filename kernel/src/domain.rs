@@ -106,7 +106,7 @@ impl Order {
             amount: crate::money::Money::new(amount, currency),
             reverses: None,
         };
-        self.ledger = ledger_append(std::mem::take(&mut self.ledger), earn)?;
+        self.ledger = ledger_append(core::mem::take(&mut self.ledger), earn)?;
         Ok(())
     }
 

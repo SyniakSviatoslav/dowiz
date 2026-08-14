@@ -38,8 +38,8 @@ const MAX_HARMONIC_NODES: usize = 50_000;
 // `std::HashMap`'s per-instance random iteration order would leak into the
 // emitted JSON (breaks golden-tests / diffs / content-addressing). Same
 // determinism pattern as `retrieval/memory_store.rs`'s `BTreeMap` snapshot_root.
-use std::collections::BTreeMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use alloc::collections::BTreeMap;
+use core::sync::atomic::{AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
