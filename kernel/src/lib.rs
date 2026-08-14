@@ -36,7 +36,7 @@ pub mod analytics;
 pub mod arena;
 /// C-tier "attention lens": scaled dot-product attention as one learned-affinity
 /// diffusion step — same f(L) family as markov PPR / heat-kernel.
-pub mod attention;
+pub use dowiz_core::attention;
 /// B4 — native content-addressed backup organ: chunk (via `chunker`) → store
 /// unique blocks by sha3_256 id → restore byte-identically from a manifest.
 /// Dedups across small edits; fail-closed restore. Pure-Rust, no new deps.
@@ -45,7 +45,7 @@ pub mod blocklist;
 pub mod bounded_drainer;
 /// P11 §1 — compute budget accumulator (degrade-closed, zero-dep) + §4 Modal
 /// `JobPort` / `BudgetedJobPort` seam (offline-err default; real adapter deferred).
-pub mod budget;
+pub use dowiz_core::budget;
 /// RW-07 — cart state machine (consolidate 2 JS cart impls → kernel authority). Totals via money.
 pub mod cart;
 /// M1/M2 — trusted price catalog: the single kernel authority on line-item prices.
@@ -58,7 +58,7 @@ pub mod causal;
 /// bidirected arcs) — the structural backbone of the ID / IDC identification
 /// algorithms: ancestors, descendants, c-components, bidirected-aware
 /// d-separation, and the `G\X` / `G[V]` subgraph algebra.
-pub mod cgraph;
+pub use dowiz_core::cgraph;
 /// B4 — deterministic content-defined chunker (Buzhash) for the native Rust
 /// backup organ: content-addressed blocks that dedup across small edits.
 pub mod chunker;
@@ -127,8 +127,8 @@ pub use dowiz_core::impedance;
 /// CANONICAL reference Laplacian `L = BᵀWB` (+(D−A) convention). The small
 /// hand-oracle-tested reference every other Laplacian (dense/CSR/grid-stencil) is
 /// parity-bound against; retires the last unpinned mirror at the kernel↔engine seam.
-pub mod incidence;
-pub mod intake;
+pub use dowiz_core::incidence;
+pub use dowiz_core::intake;
 pub mod isolation;
 /// Item 11 (space-grade roadmap §E, Phase-1 code): ARINC-653-style two-level
 /// partitioning scheduler. Temporal partitioning (fixed cyclic major frame of
@@ -195,7 +195,7 @@ pub mod rng;
 /// cache hit-rate regulation, mesh backpressure, and real-time state consequence
 /// prediction. Provides scalar f64 (`PidController`), quantized f32
 /// (`PidController32`), and vectorized N-channel (`PidArray`) variants.
-pub mod pid;
+pub use dowiz_core::pid;
 /// Stability margin computation for PID controllers — gain margin (dB) and phase
 /// margin (degrees) from the discrete-time transfer function. Aid for closed-loop
 /// stability analysis without external tooling.
@@ -238,7 +238,7 @@ pub mod gossip;
 /// identifying oscillatory behavior in time-series metrics (frame-time
 /// oscillations, cache hit-rate cycles, traffic bursts). Includes moving
 /// average filter and helper detection function.
-pub mod resonance;
+pub use dowiz_core::resonance;
 /// Last-healthy-state propagation, wormholes (direct urgent lanes), and
 /// tunnels (dedicated high-throughput channels). Provides fast bypass
 /// paths for critical data when normal gossip/queuing adds unacceptable
@@ -398,8 +398,8 @@ pub mod sha256_hw;
 pub use dowiz_core::messenger;
 /// Reverse-mode automatic differentiation (scalar tape engine) — the
 /// kernel-side fitting primitive (Tier B2: capture-field SIREN/splat fits).
-pub mod micrograd;
-pub mod money;
+pub use dowiz_core::micrograd;
+pub use dowiz_core::money;
 /// P9 / C-tier "invariance note": executable Noether check — verify a conserved
 /// quantity survives a deterministic update (catches self-improvement drift).
 pub use dowiz_core::noether;
@@ -415,7 +415,7 @@ pub mod online;
 /// graph, mirroring `pq/entropy.rs`'s opt-in network provider. Absent local
 /// weights, the codec returns `Err(OpticalError::ModelUnavailable)`.
 #[cfg(feature = "optical")]
-pub mod optical;
+pub use dowiz_core::optical;
 pub mod order_machine;
 /// Kernel-native structured data extraction (pure `std`). Replaces `awk`,
 /// `split('=')`, and `node -e JSON.parse` with deterministic, zero-dep parsers.
@@ -446,7 +446,7 @@ pub mod agent_orchestrator;
 pub mod orchestrator;
 /// Kernel-native hex encode/decode primitive — single canonical implementation
 /// replacing 6+ redundant hand-rolled versions across the codebase.
-pub mod hex_util;
+pub use dowiz_core::hex_util;
 /// Kernel-native reverse engineering — ELF parsing, x86_64 syscall extraction,
 /// behavior profiling, and binary analysis. All pure Rust, zero deps.
 pub mod reverse_engineer;
@@ -473,7 +473,7 @@ pub mod skill_extractor;
 pub mod visual_index;
 /// Supervision native: universal detection format + NMS/NMM + zone analysis.
 /// Model-agnostic detection container, polygon/line zone counting.
-pub mod detection;
+pub use dowiz_core::detection;
 /// Automatic gap detection, enrichment, and correction for the prompt database.
 /// Monitors the enrichment engine: detects triggerless entries, low-count kinds,
 /// and empty text, then auto-heals via crystal-lattice synthesis and keyword extraction.
@@ -484,7 +484,7 @@ pub mod self_heal;
 pub mod self_harness;
 /// Reverse-engineered parsing patterns from top GitHub repos (1,302 parsing tools,
 /// 461 top repos, 43M+ combined stars). Integrates Rust-native parsing insights.
-pub mod github_patterns;
+pub use dowiz_core::github_patterns;
 /// Thunder parsing: tensor-accelerated paper extraction with vector geometry
 /// navigation. Papers stored as 256D vectors in CSR matrix, O(1) nearest-neighbor
 /// via spectral decomposition. FanOut parallelism across tensor dimensions.
@@ -637,7 +637,7 @@ pub mod spectral_cache;
 pub mod spectral_laplacian;
 /// Self-improvement loop: recurring-pattern surface over the tool-outcome
 /// token stream (W19 — consumes `trigram` into the loop's telemetry path).
-pub mod telemetry;
+pub use dowiz_core::telemetry;
 /// Deterministic, zero-dep harvest ledger — gov_route-compatible telemetry
 /// records for every hot path. `HarvestLedger` is the EV-scoring ring buffer;
 /// every new capability MUST be probe-able through it.
@@ -710,7 +710,7 @@ pub use dowiz_core::math;
 pub use dowiz_core::hypervector;
 /// Pixel-format snapshot rendering (braille/half-block) — dense glyph grids
 /// so raw bytes can be "seen" in far fewer tokens than hex/raw text.
-pub mod pixel_snapshot;
+pub use dowiz_core::pixel_snapshot;
 /// Glyph-enhanced observability dashboard — sparkline/heatmap/scatter/braille
 /// bridge between pixel_snapshot and sys_dashboard/telemetry/fdr/event_log.
 pub mod glyph_dashboard;
@@ -734,7 +734,7 @@ pub use dowiz_core::semantic;
 /// Procedural pattern generators rendered as glyphs (item #18).
 pub mod weave;
 /// Geometric landmark/keypoint primitives + Procrustes alignment (item #10).
-pub mod landmark;
+pub use dowiz_core::landmark;
 /// Deterministic scenario record/replay/resume + secret redaction (item #2 substrate).
 pub use dowiz_core::scenario;
 /// Support-ticket lifecycle FSM + conversation thread (item #13).

@@ -69,3 +69,25 @@ pub mod vendor;
 // Re-export TriState at the crate root so `dowiz_core::TriState` resolves —
 // the kernel mirrors this with `pub use dowiz_core::TriState;` at its root.
 pub use tri_state::TriState;
+
+// Mirror the kernel's crate-root re-exports so `crate::sanitize_f64` /
+// `crate::sort_by_f64_desc` resolve identically in dowiz-core (they live in
+// the `sanitize` / `sort` modules, but call sites spell them crate-root).
+pub use sanitize::{sanitize_f32, sanitize_f64, sanitize_normalized};
+pub use sort::{sort_by_f64_asc, sort_by_f64_desc};
+pub mod landmark;
+pub mod attention;
+pub mod micrograd;
+pub mod pixel_snapshot;
+pub mod resonance;
+pub mod pid;
+pub mod intake;
+pub mod money;
+pub mod hex_util;
+pub mod telemetry;
+pub mod github_patterns;
+pub mod incidence;
+pub mod optical;
+pub mod budget;
+pub mod detection;
+pub mod cgraph;
