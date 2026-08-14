@@ -44,3 +44,7 @@ pub mod spherical;
 pub mod squash;
 pub mod stem;
 pub mod trig;
+pub mod dsu;
+pub mod impedance;
+pub mod noether;
+pub mod absorbing;

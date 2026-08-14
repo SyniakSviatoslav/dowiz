@@ -86,7 +86,7 @@ pub mod pq;
 
 /// Reverse-engineering loop #R3 — absorbing Markov chain closed forms: fundamental matrix
 /// N=(I−Q)⁻¹ (exact finite sum for the DAG lifecycle), expected steps-to-terminal, absorption probs.
-pub mod absorbing;
+pub use dowiz_core::absorbing;
 pub mod analytics;
 /// P11 §7 — CorePinning trait seam (Trait-as-Port): pluggable CPU-core-affinity
 /// port with a zero-cost `NoOpCorePinning` default (NUMA crate DECART-deferred).
@@ -134,7 +134,7 @@ pub mod entropy_budget;
 /// P04 product-math: Disjoint-Set Union (union-find) + Kruskal MST — the single
 /// canonical DSU/MST primitive. `cgraph::c_components` delegates here; Phase 9
 /// mesh-heal + Phase 13 partition-tolerant delivery consume it directly.
-pub mod dsu;
+pub use dowiz_core::dsu;
 /// MESH-06 — per-node content-addressed event-log (local-first + sync).
 pub mod event_log;
 /// `fdr` — the kernel's flight-data recorder: hand-rolled logger + durable post-mortem
@@ -179,7 +179,7 @@ pub mod hydra;
 pub mod hydra_closed_loop;
 /// C-tier "impedance lens": circuit/impedance as a resource framework — flow
 /// reflection coefficient + backpressure gate (ρ<1 with margin, not power-match).
-pub mod impedance;
+pub use dowiz_core::impedance;
 /// BLUEPRINT-E1 — discrete gradient/divergence (oriented-edge incidence) and the
 /// CANONICAL reference Laplacian `L = BᵀWB` (+(D−A) convention). The small
 /// hand-oracle-tested reference every other Laplacian (dense/CSR/grid-stencil) is
@@ -459,7 +459,7 @@ pub mod micrograd;
 pub mod money;
 /// P9 / C-tier "invariance note": executable Noether check — verify a conserved
 /// quantity survives a deterministic update (catches self-improvement drift).
-pub mod noether;
+pub use dowiz_core::noether;
 /// B3 — deterministic offline-on-node online learner (LinearSGD ridge +
 /// ScalarAdam), the self-adaptation substrate (E3). Local-first: no network.
 pub mod online;
