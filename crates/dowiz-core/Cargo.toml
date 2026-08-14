@@ -1,0 +1,12 @@
+[package]
+name = "dowiz-core"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "dowiz no_std core: branchless LUT + constants. Zero dependencies (pure core). Extracted from dowiz-kernel."
+
+[lib]
+crate-type = ["rlib"]
+
+[dependencies]
+# zero deps — pure core::, no alloc, no std.

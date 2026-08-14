@@ -733,9 +733,10 @@ pub mod fractal;
 /// The execution center of the kernel (cell/graph/tile2x2/telemetry/exokernel/
 /// fractal/fractal_manchester).
 pub mod ktg2;
-/// Phase A: n(0) LUT + branchless constants (glyph-geometry rewrite law).
-pub mod lut;
-pub mod constants;
+/// Phase A: n(0) LUT + branchless constants — extracted to the `no_std`
+/// `dowiz-core` crate and re-exported here so `crate::{constants,lut}::…`
+/// paths keep working unchanged.
+pub use dowiz_core::{constants, lut};
 /// Fractal Manchester Architecture (FMA) — canonical transport/geometry layer:
 /// Manchester self-synchronizing transitions, -64 absolute fractal zero,
 /// optical semiconductor-resistor channel, per-op IDs + epochs + telemetry.

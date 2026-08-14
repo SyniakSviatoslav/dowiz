@@ -150,6 +150,8 @@ speculative = []
 optical = []
 
 [dependencies]
+# The no_std core (LUT + constants), extracted for native/kernel-space embedding.
+dowiz-core = { path = "../crates/dowiz-core" }
 # WASM bindings — only compiled under the `wasm` feature (see
 # `#[cfg(feature = "wasm")] pub mod wasm;` in lib.rs). The kernel is pure Rust
 # and usable headless + as a native rlib without this.
