@@ -157,8 +157,9 @@ pub mod harmonic;
 /// Householder QR + shifted-QR eigensolver (the dense-`n×n` "Ferrari"): all
 /// eigenvalues, real + complex, stack-only for n ≤ 32 (no heap; FMA inner
 /// product). Replaces the O(n⁴) Faddeev-LeVerrier path as the default for the
-/// dense operators this kernel diagonalizes.
-pub mod householder;
+/// dense operators this kernel diagonalizes. Extracted to no_std `dowiz-core`;
+/// `crate::householder::…` resolves unchanged through this re-export.
+pub use dowiz_core::householder;
 /// BLUEPRINT-P67 — hub provisioning & claim: provider-agnostic (generic over `TunnelProvider` +
 /// `VpsProvider`), in-module mock adapters + Wave-0 real adapters behind `p67-adapters`. Reuses
 /// P59 `capability_cert` + P70 `owner_surface`. No card data, no network endpoint in the default

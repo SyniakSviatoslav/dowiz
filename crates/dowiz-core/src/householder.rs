@@ -21,7 +21,8 @@
 //! (Ferrari-struct per operator spec: `Matrix32x32 { data: [f64; 32*32] }`,
 //! in-place, SIMD/FMA, loop-friendly fixed stride.)
 
-use crate::spectral::Complex;
+use alloc::vec::Vec;
+use crate::complex::Complex;
 
 // ── FMA-accelerated dot product (the "Ferrari" inner kernel) ────────────────
 // Portable fallback is plain scalar; on x86_64 with FMA we fuse multiply-add via
@@ -381,7 +382,7 @@ pub fn eigenvalues_contig(a: &mut [f64], n: usize) -> Vec<Complex> {
     // Item 61 (gap G7): the dense N≤32 eigensolve worker span. Workload-kind
     // `EigensolvesCompleted` (item 58 schema, absent in this worktree — see HOT-PATHS.tsv
     // gap: row). P3-plane; zero cost with no FDR sink/observer installed.
-    let _g = crate::fdr::info_span!("eigenvalues_contig").entered();
+    let _g = crate::span::info_span!("eigenvalues_contig").entered();
     debug_assert!(n <= 32);
     debug_assert!(a.len() >= n * n);
     reduce_hessenberg(a, n, None);
@@ -603,7 +604,7 @@ fn tridiag_ql_symmetric(d: &mut [f64; 32], e: &mut [f64; 32], n: usize, z: &mut 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::spectral::{charpoly, roots, Complex};
+    use crate::complex::Complex;
 
     fn close(a: f64, b: f64, tol: f64) -> bool {
         (a - b).abs() < tol
@@ -787,7 +788,7 @@ mod tests {
         let mut big = vec![vec![0.0f64; 8]; 8];
         for i in 0..8 {
             for j in 0..8 {
-                big[i][j] = ((i * 7 + j * 3) as f64).sin();
+                big[i][j] = crate::math::sin((i * 7 + j * 3) as f64);
             }
         }
         for i in 0..8 {
@@ -842,7 +843,7 @@ mod tests {
             let mut m = vec![vec![0.0f64; n]; n];
             for i in 0..n {
                 for j in 0..n {
-                    m[i][j] = ((i as f64 * 3.1 + j as f64 * 1.7 + seed) as f64).sin();
+                    m[i][j] = crate::math::sin((i as f64 * 3.1 + j as f64 * 1.7 + seed) as f64);
                 }
             }
             for i in 0..n {
@@ -884,33 +885,6 @@ mod tests {
         }
     }
 
-    // parity: Householder spectrum vs legacy Faddeev-LeVerrier, within tol.
-    fn parity(a: &[Vec<f64>], tol: f64) {
-        let n = a.len();
-        let mut buf = vec![0.0f64; n * n];
-        for i in 0..n {
-            for j in 0..n {
-                buf[i * n + j] = a[i][j];
-            }
-        }
-        let got = eigenvalues_contig(&mut buf, n);
-        let want = roots(&charpoly(a));
-        assert_eq!(got.len(), want.len(), "spectrum length mismatch");
-        // sort both by (re, im) for comparison
-        let mut g = got.clone();
-        g.sort_by(|x, y| x.re.total_cmp(&y.re).then(x.im.total_cmp(&y.im)));
-        let mut w = want.clone();
-        w.sort_by(|x, y| x.re.total_cmp(&y.re).then(x.im.total_cmp(&y.im)));
-        for (i, (x, y)) in g.iter().zip(w.iter()).enumerate() {
-            assert!(
-                cclose(*x, *y, tol),
-                "eig[{i}] mismatch: householder {:?} vs faddeev {:?}",
-                x,
-                y
-            );
-        }
-    }
-
     #[test]
     fn hand_rotation_90_is_plus_minus_i() {
         // R(90°) = [[0,-1],[1,0]] has eigenvalues ±i.
@@ -937,54 +911,6 @@ mod tests {
     }
 
     #[test]
-    fn hand_two_cycle_is_plus_minus_one() {
-        let c = vec![vec![0.0, 1.0], vec![1.0, 0.0]];
-        parity(&c, 1e-9);
-    }
-
-    #[test]
-    fn hand_diagonal_known_spectrum() {
-        let d = vec![
-            vec![2.0, 0.0, 0.0],
-            vec![0.0, 5.0, 0.0],
-            vec![0.0, 0.0, -3.0],
-        ];
-        parity(&d, 1e-9);
-    }
-
-    #[test]
-    fn hand_path_p3_laplacian_spectrum() {
-        // P₃ Laplacian = [[1,-1,0],[-1,2,-1],[0,-1,1]] → spectrum {0,1,3}.
-        let l = vec![
-            vec![1.0, -1.0, 0.0],
-            vec![-1.0, 2.0, -1.0],
-            vec![0.0, -1.0, 1.0],
-        ];
-        parity(&l, 1e-9);
-    }
-
-    #[test]
-    fn parity_general_3x3_asymmetric() {
-        let a = vec![
-            vec![1.0, 2.0, 3.0],
-            vec![0.0, 4.0, 5.0],
-            vec![0.0, 0.0, 6.0], // already upper-triangular, eigs 1,4,6
-        ];
-        parity(&a, 1e-9);
-    }
-
-    #[test]
-    fn parity_general_4x4_mixed() {
-        let a = vec![
-            vec![0.0, 1.0, 0.0, 0.0],
-            vec![1.0, 0.0, 1.0, 0.0],
-            vec![0.0, 1.0, 0.0, 1.0],
-            vec![0.0, 0.0, 1.0, 0.0],
-        ];
-        parity(&a, 1e-9);
-    }
-
-    #[test]
     fn matrix32x32_path_runs() {
         let mut m = Matrix32x32::zeros();
         // 4×4 path-graph adjacency embedded at top-left
@@ -1004,7 +930,7 @@ mod tests {
         let mut mags: Vec<f64> = e.iter().map(|x| x.abs()).collect();
         mags.sort_by(|x, y| x.total_cmp(y));
         // path P₄ adjacency eigenvalues 2cos(kπ/5), k=1..4 → max = 2cos(π/5) = φ
-        let phi = (1.0 + 5.0_f64.sqrt()) / 2.0;
+        let phi = (1.0 + crate::math::sqrt(5.0_f64)) / 2.0;
         assert!(close(mags[3], phi, 1e-9), "largest adjacency eig of P₄ = φ");
     }
 

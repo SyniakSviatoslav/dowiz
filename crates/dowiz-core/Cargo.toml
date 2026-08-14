@@ -10,3 +10,10 @@ crate-type = ["rlib"]
 
 [dependencies]
 # zero deps — pure core::, no alloc, no std.
+
+# The extracted SIMD hot paths (householder/simd) keep the kernel's
+# `cfg(feature = "std")` grammar for parity. dowiz-core never defines or enables
+# a `std` feature (it is always `#![no_std]`), so that cfg is a known-but-false
+# value: declare it so rustc's `unexpected_cfgs` lint stays quiet.
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("std"))'] }
