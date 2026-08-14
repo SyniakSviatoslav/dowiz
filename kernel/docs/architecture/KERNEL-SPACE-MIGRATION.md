@@ -69,10 +69,17 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
    the remaining two form a mutual cycle (`spectral` ⇄ `householder`, and
    `spectral` ⇄ `csr`) and reference `mat`/`arena`/`fdr`, so moving them needs
    those non-transcendental dependencies extracted first.
-3. **Mutex → spinlock** (only for the 4 non-thread modules: breaker/audit,
-   breaker/mod, ports/agent/admission, retrieval/memory_store) — a hand-rolled
-   `SpinLock<T>` on `core::sync::atomic::AtomicBool` (zero-dep). The other 3
-   (fdr/mod, span_metrics/obs, token_bucket) are thread-based → stay std.
+3. **Mutex → spinlock** (DONE 2026-08-14) — hand-rolled zero-dep
+   `SpinLock<T>` (`src/spinlock.rs`, test-and-set on
+   `core::sync::atomic::AtomicBool`) replaced `std::sync::Mutex` in the 4
+   non-thread modules: `breaker/audit`, `breaker`, `ports/agent/admission`,
+   `retrieval/memory_store`. Poisoning is preserved (`lock() ->
+   Result<SpinLockGuard<T>, Poisoned>`, set on unwind in the guard's `Drop`), so
+   every existing `.lock().map_err(|_| E::Poisoned)?` / `.ok()?` / `match …
+   Err(_)` call site compiled unchanged — zero error-enum changes. The only
+   std touch-point is `std::thread::panicking()` (cfg-gate it on no_std
+   extraction). The other 3 (fdr/mod, span_metrics/obs, token_bucket) are
+   thread-based → stay std.
 4. **43 user-space ports** — fs→VFS (`std::fs` → trait), net→sk_buff,
    thread→kthread, process→kexec. These are NOT mechanical; each needs a trait
    seam like `Clock`.

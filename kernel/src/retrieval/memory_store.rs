@@ -13,7 +13,7 @@
 //! (see [`PgStore`]).
 
 use alloc::collections::BTreeMap;
-use std::sync::Mutex;
+use crate::spinlock::SpinLock;
 
 /// Deterministic content-addressable living-memory contract.
 ///
@@ -43,14 +43,14 @@ pub trait MemoryStore {
 /// [`snapshot_root`](MemoryStore::snapshot_root) is reproducible. No network,
 /// no SQL, no new deps — satisfies the kernel's pure-`std` red line.
 pub struct InMemoryStore {
-    map: Mutex<BTreeMap<String, Vec<u8>>>,
+    map: SpinLock<BTreeMap<String, Vec<u8>>>,
 }
 
 impl InMemoryStore {
     /// Create an empty store.
     pub fn new() -> Self {
         Self {
-            map: Mutex::new(BTreeMap::new()),
+            map: SpinLock::new(BTreeMap::new()),
         }
     }
 }

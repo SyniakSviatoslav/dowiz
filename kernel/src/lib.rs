@@ -694,6 +694,7 @@ pub mod telemetry;
 pub mod telemetry_harvest;
 /// F33 — deterministic compute-budget token bucket (monotonic-clock, atomic, degrade-closed).
 /// The `llm-adapters` `Dispatcher` reuses this to bound LLM-call concurrency.
+pub mod spinlock;
 pub mod token_bucket;
 /// Deterministic n-gram (bigram + trigram) frequency extraction over a token
 /// stream — the self-improvement loop's pattern-surface primitive (P9 / T2-β).

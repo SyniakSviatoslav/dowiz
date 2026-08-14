@@ -88,13 +88,13 @@ pub struct AuditChain {
     events: Vec<AuditEvent>,
     tip_hash: [u8; 32],
     /// Optional durable FDR ring mirror (Tier-1). `None` ⇒ audit-only in memory.
-    ring: Option<std::sync::Mutex<crate::fdr::RingHandle>>,
+    ring: Option<crate::spinlock::SpinLock<crate::fdr::RingHandle>>,
     agent_id: [u8; 16],
 }
 
 impl AuditChain {
     /// Create a fresh chain (genesis tip_hash = zero).
-    pub fn new(agent_id: [u8; 16], ring: Option<std::sync::Mutex<crate::fdr::RingHandle>>) -> Self {
+    pub fn new(agent_id: [u8; 16], ring: Option<crate::spinlock::SpinLock<crate::fdr::RingHandle>>) -> Self {
         AuditChain {
             events: Vec::new(),
             tip_hash: [0u8; 32],
@@ -360,7 +360,7 @@ mod tests {
         let seg_b = dir.join("fdr.b.jsonl");
         let _ = std::fs::remove_file(&seg_b);
         std::os::unix::fs::symlink("/dev/full", &seg_b).expect("symlink seg B to /dev/full");
-        let ring = std::sync::Mutex::new(
+        let ring = crate::spinlock::SpinLock::new(
             crate::fdr::ring::FdrRing::open(dir.clone(), /*seg_cap=*/ 1).expect("open temp ring"),
         );
         let mut c = AuditChain::new([1u8; 16], Some(ring));

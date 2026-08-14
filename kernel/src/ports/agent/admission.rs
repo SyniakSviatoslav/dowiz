@@ -21,7 +21,8 @@
 
 use alloc::collections::BTreeMap;
 use core::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use crate::spinlock::SpinLock;
 
 use crate::event_log::{AppendOutcome, CommitError, EventLog, EventStore, MeshEvent};
 use crate::isolation::microvm::{register_adapter, SandboxTier};
@@ -157,7 +158,7 @@ pub struct ReferenceHybridGate<V: SignatureVerifier> {
     policy: HybridPolicy,
     redline: Option<RedLinePolicy>,
     verifier: V,
-    seen: Mutex<alloc::collections::BTreeSet<[u8; 8]>>,
+    seen: SpinLock<alloc::collections::BTreeSet<[u8; 8]>>,
     check_count: AtomicUsize,
 }
 
@@ -168,7 +169,7 @@ impl<V: SignatureVerifier> ReferenceHybridGate<V> {
             policy,
             redline: Some(redline),
             verifier,
-            seen: Mutex::new(alloc::collections::BTreeSet::new()),
+            seen: SpinLock::new(alloc::collections::BTreeSet::new()),
             check_count: AtomicUsize::new(0),
         }
     }
@@ -179,7 +180,7 @@ impl<V: SignatureVerifier> ReferenceHybridGate<V> {
             policy,
             redline: None,
             verifier,
-            seen: Mutex::new(alloc::collections::BTreeSet::new()),
+            seen: SpinLock::new(alloc::collections::BTreeSet::new()),
             check_count: AtomicUsize::new(0),
         }
     }

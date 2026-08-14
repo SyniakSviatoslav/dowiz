@@ -112,7 +112,7 @@ impl Breaker {
     pub fn with_ring(
         agent_id: AgentId,
         tid: ThresholdId,
-        ring: std::sync::Mutex<crate::fdr::RingHandle>,
+        ring: crate::spinlock::SpinLock<crate::fdr::RingHandle>,
     ) -> Self {
         debug_assert!(tid.open > 0.0, "Breaker::with_ring: θ_open must be > 0");
         debug_assert!(tid.kill >= tid.open, "Breaker::with_ring: θ_open ({}) must be <= θ_kill ({})", tid.open, tid.kill);
