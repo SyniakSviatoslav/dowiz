@@ -559,6 +559,14 @@ pub fn graph_energy(adj: &[Vec<f64>]) -> f64 {
     eigenvalues(adj).iter().map(|e| e.abs()).sum()
 }
 
+/// Graph energy of a CSR graph — `E = Σ|λᵢ|` of its adjacency matrix
+/// (Gutman–Adrić, 2001). Re-homed from `Csr::energy` so the `csr` module
+/// (extracted to no_std `dowiz-core`) has no `spectral` dependency — the energy
+/// computation needs [`eigenvalues`], which lives here.
+pub fn csr_energy(csr: &crate::csr::Csr) -> f64 {
+    graph_energy(&csr.to_adjacency())
+}
+
 /// One-shot spectral profile of a graph's adjacency matrix — the full
 /// vectorless signature the kernel exposes: stability (ρ), mixing (|λ₂|,
 /// gap), connectivity (λ₂-Laplacian), activity (energy), and drift class.

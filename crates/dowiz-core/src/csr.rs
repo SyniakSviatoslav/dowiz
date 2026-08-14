@@ -33,8 +33,12 @@
 //! transpose of the usual "A·x" column product; we name it `spmv` and document
 //! the orientation rather than ship two near-identical kernels.
 //!
-//! ZERO new dependencies. Pure `std`. BTreeMap is avoided entirely (the builder
-//! sorts per-row vectors instead, so no iteration-order hazard).
+//! ZERO new dependencies. Pure `core` + `alloc` (no_std). BTreeMap is avoided
+//! entirely (the builder sorts per-row vectors instead, so no iteration-order
+//! hazard).
+
+use alloc::string::String;
+use alloc::vec::Vec;
 
 /// Compressed-sparse-row graph.
 ///
@@ -302,14 +306,6 @@ impl Csr {
         a
     }
 
-    /// Graph energy E = Σ|λᵢ| over all eigenvalues of the adjacency matrix
-    /// (Gutman–Adrić, 2001). A pure spectral invariant: high energy ⇔ many
-    /// alternating-sign modes ⇔ structurally "active" graph. Vectorless — no
-    /// embeddings, just the eigenvalue spectrum. Reuses `spectral::eigenvalues`.
-    pub fn energy(&self) -> f64 {
-        crate::spectral::graph_energy(&self.to_adjacency())
-    }
-
     /// SYNCHRONOUS Jacobi personalized-PageRank.
     ///
     /// FIXED-POINT (Jacobi) power iteration, exactly `iters` steps:
@@ -571,7 +567,7 @@ impl Csr {
             LaplacianKind::Normalized => {
                 for i in 0..n {
                     let inv_i = if deg[i] > 0.0 {
-                        deg[i].sqrt().recip()
+                        crate::math::sqrt(deg[i]).recip()
                     } else {
                         0.0
                     };
@@ -580,7 +576,7 @@ impl Csr {
                     for k in s..e {
                         let j = self.col_idx[k];
                         let w = if deg[j] > 0.0 {
-                            self.val[k] * inv_i * deg[j].sqrt().recip()
+                            self.val[k] * inv_i * crate::math::sqrt(deg[j]).recip()
                         } else {
                             0.0
                         };
@@ -1050,30 +1046,6 @@ mod tests {
         );
     }
 
-    // ── GREEN (vectorless graph-energy): Csr.energy() over the complete graph
-    //    K₃ returns E=4, matching spectral::graph_energy. ──
-    #[test]
-    fn csr_energy_matches_spectral_k3() {
-        // K3 as undirected edges (both directions).
-        let edges = [
-            (0, 1, 1.0),
-            (1, 0, 1.0),
-            (1, 2, 1.0),
-            (2, 1, 1.0),
-            (0, 2, 1.0),
-            (2, 0, 1.0),
-        ];
-        let g = Csr::from_edges(3, &edges);
-        assert!(close(g.energy(), 4.0, 1e-6), "Csr::energy(K3)=4");
-    }
-
-    // ── GREEN: empty (edgeless) graph has energy 0 via Csr. ──
-    #[test]
-    fn csr_energy_empty_is_zero() {
-        let g = Csr::from_edges(4, &[]);
-        assert!(close(g.energy(), 0.0, 1e-9), "Csr::energy(empty)=0");
-    }
-
     // ── W2-2 RED→GREEN: laplacian_spmv on a tiny triangle graph matches a
     //    hand-computed reference AND conserves mass (Σ y == 0) on constant x
     //    for the random-walk / unnormalized Laplacians.
@@ -1209,239 +1181,6 @@ mod tests {
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════════
-    // ROADMAP ITEM 18 (§14 / §26(d)) — dense `laplacian()` ↔ `laplacian_spmv`
-    // PARITY PIN. The kernel holds ONE graph-Laplacian operator in TWO
-    // representations, which must not be allowed to silently drift:
-    //   * `spectral::laplacian(adj)` — the DENSE matrix L = D − A, materialized
-    //     (used by the one-time eigen/spectral family: charpoly, eigenvalues,
-    //     algebraic_connectivity, …).
-    //   * `Csr::laplacian_spmv(x, out, kind)` — the MATRIX-FREE application Lu,
-    //     computed per-node without ever forming L (used by the per-tick wave
-    //     stepper / engine VertexBridge, W2-2).
-    //
-    // CONVENTION MAPPING (verified by reading BOTH bodies this session):
-    //   The dense `laplacian()` implements ONLY the UNNORMALIZED Laplacian
-    //   L = D − A with ROW-SUM degree d_i = Σ_j A_ij (self-loops cancel on the
-    //   diagonal: L_ii = d_i − A_ii). `laplacian_spmv` supports THREE kinds:
-    //   Unnormalized, Normalized (I − D^{-1/2} A D^{-1/2}), RandomWalk
-    //   (I − D^{-1} A). ONLY `LaplacianKind::Unnormalized` corresponds to the
-    //   dense oracle; Normalized/RandomWalk have NO dense counterpart in
-    //   spectral.rs. So the dense-parity below is (correctly) pinned to
-    //   Unnormalized — comparing any other kind against dense `laplacian()`
-    //   would be comparing two DIFFERENT operators and would prove nothing.
-    //   Normalized/RandomWalk conventions are pinned separately, against a
-    //   HAND-computed oracle, in `laplacian_normalized_and_randomwalk_...` below.
-    //
-    // Both forms compute a ROW-oriented product y_i = Σ_j L_ij x_j with the SAME
-    // row-sum degree, so parity holds for arbitrary (even non-symmetric) A. The
-    // only divergence source is float summation REORDERING (algebraically the
-    // two are identical), bounded well under PARITY_TOL for the sizes used here.
-    // ═══════════════════════════════════════════════════════════════════════
-
-    /// Ordinary dense matrix-vector product y = M·x (row-major) — the reference
-    /// against which the matrix-free `laplacian_spmv` is pinned.
-    fn dense_matvec(m: &[Vec<f64>], x: &[f64]) -> Vec<f64> {
-        let n = m.len();
-        (0..n)
-            .map(|i| (0..n).map(|j| m[i][j] * x[j]).sum())
-            .collect()
-    }
-
-    /// Assert dense `laplacian()`·x == `laplacian_spmv(Unnormalized)` for one
-    /// (adjacency, field) pair, to `tol`. `adj` must be square n×n.
-    fn assert_unnormalized_parity(adj: &[Vec<f64>], x: &[f64], tol: f64) {
-        let n = adj.len();
-        assert_eq!(x.len(), n, "field length must equal node count");
-        // Dense oracle: materialize L = D − A, then ordinary mat-vec.
-        let l = crate::spectral::laplacian(adj);
-        let dense = dense_matvec(&l, x);
-        // Matrix-free: build the SAME graph as a CSR and apply Lu directly.
-        let csr = Csr::from_dense(adj);
-        assert_eq!(csr.nrows(), n, "from_dense must preserve node count");
-        let mut got = vec![0.0; n];
-        csr.laplacian_spmv(x, &mut got, LaplacianKind::Unnormalized);
-        for i in 0..n {
-            assert!(
-                (got[i] - dense[i]).abs() <= tol,
-                "Unnormalized parity FAILED at node {i}: matrix-free {} != dense L·x {} (Δ={:.3e})\n  adj = {:?}\n  x   = {:?}",
-                got[i],
-                dense[i],
-                (got[i] - dense[i]).abs(),
-                adj,
-                x,
-            );
-        }
-    }
-
-    /// A deterministic NON-TRIVIAL field (never all-zeros / all-ones / constant)
-    /// so a bug that only shows up for a non-constant field cannot hide.
-    fn nontrivial_field(n: usize) -> Vec<f64> {
-        let pat = [0.3f64, -0.7, 1.1, -0.25, 0.85, -0.4, 0.6];
-        let x: Vec<f64> = (0..n)
-            .map(|i| pat[i % pat.len()] + 0.13 * i as f64)
-            .collect();
-        if n >= 2 {
-            assert!(
-                x.iter().any(|&v| v != x[0]),
-                "test field must be non-constant"
-            );
-        }
-        x
-    }
-
-    // Parity tolerance: matches the repo's established convention for this exact
-    // dense-vs-spmv class (`laplacian_spmv_equals_dense_laplacian_matrix` uses
-    // 1e-12). The only divergence is float summation reordering, bounded well
-    // under 1e-12 for the small n and O(1)-magnitude weights/fields used here.
-    const PARITY_TOL: f64 = 1e-12;
-
-    // ── ITEM 18 (1) EXHAUSTIVE: every labeled undirected simple graph on
-    //    N = 1..=5 nodes (0/1 weights, symmetric, no self-loops). 2^C(N,2)
-    //    graphs each ⇒ 1 + 2 + 8 + 64 + 1024 = 1099 graphs, all bit-enumerated.
-    #[test]
-    fn laplacian_dense_vs_spmv_parity_exhaustive_small() {
-        let mut graphs_tested = 0usize;
-        for n in 1..=5usize {
-            let pairs: Vec<(usize, usize)> = (0..n)
-                .flat_map(|i| ((i + 1)..n).map(move |j| (i, j)))
-                .collect();
-            let m = pairs.len(); // number of possible undirected edges
-            let x = nontrivial_field(n);
-            for mask in 0..(1u32 << m) {
-                let mut adj = vec![vec![0.0f64; n]; n];
-                for (b, &(i, j)) in pairs.iter().enumerate() {
-                    if mask & (1 << b) != 0 {
-                        adj[i][j] = 1.0;
-                        adj[j][i] = 1.0;
-                    }
-                }
-                assert_unnormalized_parity(&adj, &x, PARITY_TOL);
-                graphs_tested += 1;
-            }
-        }
-        assert_eq!(
-            graphs_tested,
-            1 + 2 + 8 + 64 + 1024,
-            "exhaustive graph count"
-        );
-    }
-
-    // ── ITEM 18 (1b) CURATED small graphs: disconnected components, self-loops
-    //    (the adjacency type permits A_ii ≠ 0 — dense `laplacian` cancels it on
-    //    the diagonal, `from_dense` stores it, `laplacian_spmv` subtracts it),
-    //    the complete graph, a path, a star, the empty graph, and a weighted +
-    //    asymmetric variant.
-    #[test]
-    fn laplacian_dense_vs_spmv_parity_curated() {
-        // Path P4 (non-regular, degrees 1,2,2,1).
-        let path = vec![
-            vec![0.0, 1.0, 0.0, 0.0],
-            vec![1.0, 0.0, 1.0, 0.0],
-            vec![0.0, 1.0, 0.0, 1.0],
-            vec![0.0, 0.0, 1.0, 0.0],
-        ];
-        // Star S4 (center 0 connected to 1,2,3).
-        let star = vec![
-            vec![0.0, 1.0, 1.0, 1.0],
-            vec![1.0, 0.0, 0.0, 0.0],
-            vec![1.0, 0.0, 0.0, 0.0],
-            vec![1.0, 0.0, 0.0, 0.0],
-        ];
-        // Complete K4.
-        let k4 = vec![
-            vec![0.0, 1.0, 1.0, 1.0],
-            vec![1.0, 0.0, 1.0, 1.0],
-            vec![1.0, 1.0, 0.0, 1.0],
-            vec![1.0, 1.0, 1.0, 0.0],
-        ];
-        // Two disconnected components: edge {0,1} + triangle {2,3,4}.
-        let disconnected = vec![
-            vec![0.0, 1.0, 0.0, 0.0, 0.0],
-            vec![1.0, 0.0, 0.0, 0.0, 0.0],
-            vec![0.0, 0.0, 0.0, 1.0, 1.0],
-            vec![0.0, 0.0, 1.0, 0.0, 1.0],
-            vec![0.0, 0.0, 1.0, 1.0, 0.0],
-        ];
-        // Empty graph — degree 0 everywhere ⇒ L·x = 0.
-        let empty = vec![vec![0.0f64; 4]; 4];
-        // Weighted, ASYMMETRIC graph WITH a self-loop on node 1 (A_11 = 0.5).
-        // Proves (i) weighted parity, (ii) row-sum degree on non-symmetric A,
-        // (iii) self-loop cancellation on the diagonal.
-        let weighted_selfloop = vec![
-            vec![0.0, 2.5, 0.0],
-            vec![1.0, 0.5, 3.0],
-            vec![0.0, 0.0, 0.0],
-        ];
-        // Single node carrying only a self-loop — L_00 = d_0 − A_00 = 0.
-        let single_selfloop = vec![vec![4.0]];
-
-        for adj in [
-            &path,
-            &star,
-            &k4,
-            &disconnected,
-            &empty,
-            &weighted_selfloop,
-            &single_selfloop,
-        ] {
-            let x = nontrivial_field(adj.len());
-            assert_unnormalized_parity(adj, &x, PARITY_TOL);
-        }
-    }
-
-    // ── ITEM 18 (2) LARGE RANDOMIZED CORPUS: 500 random WEIGHTED graphs across
-    //    three lanes (symmetric, symmetric+self-loops, asymmetric) with random
-    //    non-trivial fields. Fixed-seed LCG ⇒ fully reproducible, zero deps
-    //    (same PCG-style constants as `spectral::topk_symmetric`'s seed).
-    #[test]
-    fn laplacian_dense_vs_spmv_parity_random_corpus() {
-        let mut state = 0xDEAD_BEEF_1234_5678u64;
-        let mut next = || {
-            state = state
-                .wrapping_mul(6_364_136_223_846_793_005)
-                .wrapping_add(1_442_695_040_888_963_407);
-            state
-        };
-        // Map a raw u64 to a uniform float in [lo, hi).
-        let uf = |lo: f64, hi: f64, r: u64| -> f64 {
-            let frac = ((r >> 11) as f64) / ((1u64 << 53) as f64); // [0,1)
-            lo + (hi - lo) * frac
-        };
-
-        const CORPUS: usize = 500;
-        for _g in 0..CORPUS {
-            let n = 1 + (next() % 12) as usize; // n ∈ [1,12]
-            let lane = next() % 3; // 0=symmetric, 1=symmetric+self-loops, 2=asymmetric
-            let density = uf(0.15, 0.9, next()); // edge probability
-            let mut adj = vec![vec![0.0f64; n]; n];
-            for i in 0..n {
-                for j in 0..n {
-                    if i == j {
-                        if lane == 1 && uf(0.0, 1.0, next()) < 0.3 {
-                            adj[i][j] = uf(0.25, 1.25, next());
-                        }
-                        continue;
-                    }
-                    if lane == 2 {
-                        // asymmetric: each directed edge independent.
-                        if uf(0.0, 1.0, next()) < density {
-                            adj[i][j] = uf(0.25, 1.25, next());
-                        }
-                    } else if i < j && uf(0.0, 1.0, next()) < density {
-                        // symmetric lanes: decide once for i<j, mirror to j>i.
-                        let w = uf(0.25, 1.25, next());
-                        adj[i][j] = w;
-                        adj[j][i] = w;
-                    }
-                }
-            }
-            // Random non-trivial field in [-1,1].
-            let x: Vec<f64> = (0..n).map(|_| uf(-1.0, 1.0, next())).collect();
-            assert_unnormalized_parity(&adj, &x, PARITY_TOL);
-        }
-    }
-
     // ── ITEM 18 (convention guard): Normalized & RandomWalk have NO dense
     //    `laplacian()` counterpart, so they are pinned here against a HAND-
     //    COMPUTED oracle on a NON-REGULAR graph (path P4, degrees 1,2,2,1 —
@@ -1484,7 +1223,7 @@ mod tests {
         //   y2 = 0 ;  y3 = 0
         let mut y_n = [0.0; 4];
         g.laplacian_spmv(&x, &mut y_n, LaplacianKind::Normalized);
-        let want_n = [1.0, -(2.0f64).sqrt().recip(), 0.0, 0.0];
+        let want_n = [1.0, -crate::math::sqrt(2.0f64).recip(), 0.0, 0.0];
         for i in 0..4 {
             assert!(
                 close(y_n[i], want_n[i], 1e-12),

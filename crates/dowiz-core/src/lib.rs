@@ -26,6 +26,7 @@ extern crate alloc;
 pub mod arena;
 pub mod complex;
 pub mod constants;
+pub mod csr;
 pub mod eigen;
 pub mod fft;
 pub mod hypervector;

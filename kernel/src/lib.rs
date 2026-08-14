@@ -124,8 +124,9 @@ pub mod chunker;
 pub mod compose;
 pub mod core_pinning;
 /// Deterministic CSR graph + synchronous Jacobi personalized-PageRank
-/// (retrieval-blueprint v2 diffusion/recall primitive).
-pub mod csr;
+/// (retrieval-blueprint v2 diffusion/recall primitive). Extracted to no_std
+/// `dowiz-core`; `crate::csr::Csr` resolves unchanged through this re-export.
+pub use dowiz_core::csr;
 pub mod domain;
 /// Foster-Lyapunov entropy budget, T-annealing, and BRANCH-dispersion detector
 /// for the hydra's closed-loop self-evolution control.
