@@ -13,7 +13,7 @@
 //! It carries two tiers of signal:
 //!   * **Tier A** — zero-permission, always-available: the `rdtsc` reference-cycle counter
 //!     (one stable intrinsic) plus page-fault and context-switch counters from `/proc`.
-//!     These read real data on any Linux x86_64 host with no capabilities.
+//!     These read real data on any Linux x86_64/aarch64 host with no capabilities.
 //!   * **Tier B** — true hardware PMU events (instructions, cpu-cycles, cache-misses,
 //!     branch-misses → IPC / miss-rates). The only zero-dependency access path is a
 //!     hand-rolled `perf_event_open(2)` raw syscall (no `libc`, no `perf-event` crate).
@@ -120,9 +120,10 @@ impl PmuStamp {
 
 // ── Tier A readers ──────────────────────────────────────────────────────────────────
 
-/// `rdtsc` reference-cycle counter. x86_64: a stable intrinsic that never faults in ring 3
-/// (CR4.TSD is unset in practice). Non-x86_64 builds have no equivalent zero-dep intrinsic
-/// here, so they report a named absence (`NoPmuInterface`) rather than a fake 0.
+/// `rdtsc`-equivalent reference-cycle counter. x86_64: the `_rdtsc` intrinsic; aarch64: the
+/// ARM generic-timer virtual counter (`CNTVCT_EL0`, the architectural analogue of rdtsc,
+/// readable from EL0 because Linux sets `CNTKCTL_EL1.EL0VTEN` for the VDSO). Other targets
+/// report a named absence (`NoPmuInterface`) rather than a fake 0.
 #[inline]
 pub fn read_tsc() -> Reading<u64> {
     #[cfg(target_arch = "x86_64")]
@@ -132,7 +133,17 @@ pub fn read_tsc() -> Reading<u64> {
         let v = unsafe { core::arch::x86_64::_rdtsc() };
         Reading::Value(v)
     }
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(target_arch = "aarch64")]
+    {
+        // SAFETY: `mrs cntvct_el0` reads the virtual counter register; no memory access and
+        // no fault path in user mode on Linux (EL0VTEN is set for the VDSO).
+        let v: u64;
+        unsafe {
+            core::arch::asm!("mrs {}, cntvct_el0", out(reg) v);
+        }
+        Reading::Value(v)
+    }
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
     {
         Reading::Unavailable(Absence::NoPmuInterface)
     }
@@ -229,7 +240,7 @@ fn io_absence(e: &std::io::Error) -> Absence {
 // takes the PermissionDenied branch — that is correct, tested behavior, not a bug.
 
 /// The four hardware events we open, in `PmuStamp` Tier-B field order.
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
 const HW_EVENTS: [u64; 4] = [
     1, // PERF_COUNT_HW_INSTRUCTIONS
     0, // PERF_COUNT_HW_CPU_CYCLES
@@ -239,7 +250,7 @@ const HW_EVENTS: [u64; 4] = [
 
 /// `perf_event_attr` to the VER0 (64-byte) ABI. Exactly 64 bytes; `size` is set to 64 so
 /// the running kernel treats trailing (zero) space as compatible.
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
 #[repr(C)]
 #[derive(Default)]
 struct PerfEventAttr {
@@ -254,6 +265,20 @@ struct PerfEventAttr {
     bp_type: u32,       // offset 52
     config1: u64,       // offset 56  (total 64)
 }
+
+/// Linux syscall numbers for the PMU path (differ per arch).
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+const SYS_PERF_EVENT_OPEN: i64 = 298;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+const SYS_READ: i64 = 0;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+const SYS_CLOSE: i64 = 3;
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+const SYS_PERF_EVENT_OPEN: i64 = 241;
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+const SYS_READ: i64 = 63;
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+const SYS_CLOSE: i64 = 57;
 
 /// Raw 5-argument `syscall` (x86_64 Linux): number in `rax`, args in
 /// `rdi/rsi/rdx/r10/r8`, result in `rax`; the kernel clobbers `rcx` and `r11`.
@@ -277,8 +302,27 @@ unsafe fn syscall5(n: i64, a1: i64, a2: i64, a3: i64, a4: i64, a5: i64) -> i64 {
     ret
 }
 
+/// Raw 5-argument `syscall` (aarch64 Linux): number in `x8`, args in `x0..=x4`,
+/// result in `x0`. Returns the raw kernel result (negative = `-errno`).
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+#[inline]
+unsafe fn syscall5(n: i64, a1: i64, a2: i64, a3: i64, a4: i64, a5: i64) -> i64 {
+    let ret: i64;
+    core::arch::asm!(
+        "svc #0",
+        in("x8") n,
+        inlateout("x0") a1 => ret,
+        in("x1") a2,
+        in("x2") a3,
+        in("x3") a4,
+        in("x4") a5,
+        options(nostack),
+    );
+    ret
+}
+
 /// Map a kernel `-errno` result to an `Absence` (blueprint §4.2 errno table).
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
 fn errno_absence(ret: i64) -> Absence {
     match -ret {
         1 | 13 => Absence::PermissionDenied, // EPERM / EACCES — perf_event_paranoid
@@ -288,24 +332,23 @@ fn errno_absence(ret: i64) -> Absence {
 }
 
 /// A live perf fd; closes on drop.
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
 struct PerfFd(i32);
 
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
 impl Drop for PerfFd {
     fn drop(&mut self) {
         // SAFETY: close(2) on our own fd.
         unsafe {
-            let _ = syscall5(3, self.0 as i64, 0, 0, 0, 0);
+            let _ = syscall5(SYS_CLOSE, self.0 as i64, 0, 0, 0, 0);
         }
     }
 }
 
 /// Open one hardware-event counter for THIS process (`pid=0`), any CPU (`cpu=-1`), no
 /// group (`group_fd=-1`), running (not disabled). `Ok(fd)` or the errno-derived `Absence`.
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
 fn perf_open_one(config: u64) -> Result<PerfFd, Absence> {
-    const SYS_PERF_EVENT_OPEN: i64 = 298;
     const PERF_FLAG_FD_CLOEXEC: i64 = 8;
     // exclude_kernel (bit5) | exclude_hv (bit6). `disabled` left 0 ⇒ counter runs at open.
     const FLAGS: u64 = (1 << 5) | (1 << 6);
@@ -336,9 +379,8 @@ fn perf_open_one(config: u64) -> Result<PerfFd, Absence> {
 }
 
 /// `read(2)` a running counter fd into a `u64`. Any short/failed read is a named absence.
-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+#[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
 fn perf_read(fd: &PerfFd) -> Reading<u64> {
-    const SYS_READ: i64 = 0;
     let mut val: u64 = 0;
     // SAFETY: read(2) into an 8-byte owned stack slot; `count = 8`.
     let n = unsafe { syscall5(SYS_READ, fd.0 as i64, &mut val as *mut u64 as i64, 8, 0, 0) };
@@ -356,20 +398,20 @@ fn perf_read(fd: &PerfFd) -> Reading<u64> {
 /// (cost + log-noise control, blueprint §4.2). On non-Linux / non-x86_64 builds every
 /// counter is a compile-time `NoPmuInterface`.
 pub struct PmuStation {
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
     fds: [Result<PerfFd, Absence>; 4],
 }
 
 impl PmuStation {
     /// Open the Tier-B counters once. Tier A needs no setup (sampled fresh each call).
     pub fn new() -> Self {
-        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
         {
             PmuStation {
                 fds: HW_EVENTS.map(perf_open_one),
             }
         }
-        #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+        #[cfg(not(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))))]
         {
             PmuStation {}
         }
@@ -378,14 +420,14 @@ impl PmuStation {
     /// Read one Tier-B counter (or its cached absence). Non-Linux/x86_64 ⇒ `NoPmuInterface`.
     #[allow(unused_variables)]
     fn tier_b(&self, i: usize) -> Reading<u64> {
-        #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+        #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
         {
             match &self.fds[i] {
                 Ok(fd) => perf_read(fd),
                 Err(a) => Reading::Unavailable(*a),
             }
         }
-        #[cfg(not(all(target_os = "linux", target_arch = "x86_64")))]
+        #[cfg(not(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64"))))]
         {
             Reading::Unavailable(Absence::NoPmuInterface)
         }
@@ -433,7 +475,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     fn tier_a_reads_real_nonzero_counters() {
         // rdtsc must advance across two reads, and the /proc fault/ctxt counters must parse
         // to real Values on this Linux x86_64 host — NOT stub zeros, NOT absences.
@@ -555,7 +597,7 @@ mod tests {
     /// (never a fabricated 0, never a missing key). This is the load-bearing property when
     /// the process is genuinely unprivileged (paranoid>=1 without CAP_PERFMON) — which this
     /// root+CAP_PERFMON agent process is NOT, so it is asserted here by construction.
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+    #[cfg(all(target_os = "linux", any(target_arch = "x86_64", target_arch = "aarch64")))]
     #[test]
     fn errno_maps_to_named_absence_and_serializes() {
         assert_eq!(errno_absence(-1), Absence::PermissionDenied, "EPERM");
@@ -630,7 +672,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     fn bracket_runs_classifier_untouched_and_records_a_delta() {
         // Bracket a REAL markov classification. The verdict is exactly what the pure
         // function returns (bracketing must not change it), and the PMU delta records a
@@ -678,7 +720,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
     fn drift_class_lane_bracket_preserves_verdict_and_records_pmu_delta() {
         // Blueprint §4.3 — DriftClass lane: bracket a REAL `classify_drift` call the same
         // way a verdict-emission point would. The `DriftClass` verdict must be EXACTLY what
