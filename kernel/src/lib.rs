@@ -744,7 +744,8 @@ pub use dowiz_core::{constants, lut};
 /// a byte-identical duplicate and has been removed.)
 /// Hypervector (VSA / hyperdimensional computing) — fixed-width bind/bundle
 /// vectors. Folds N-ary graphs into constant-width codes (no rank blow-up).
-pub mod hypervector;
+/// Extracted to `no_std` `dowiz-core` (pure integer bit-ops + SplitMix64).
+pub use dowiz_core::hypervector;
 /// Pixel-format snapshot rendering (braille/half-block) — dense glyph grids
 /// so raw bytes can be "seen" in far fewer tokens than hex/raw text.
 pub mod pixel_snapshot;

@@ -14,4 +14,6 @@
 extern crate std;
 
 pub mod constants;
+pub mod hypervector;
 pub mod lut;
+pub mod rng;
