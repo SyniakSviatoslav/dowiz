@@ -6,7 +6,7 @@
 //! fsm (state machine for agent lifecycle), orchestrator (tool/skill dispatch),
 //! swarm (parallel agent coordination).
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// Agent state — FSM-driven lifecycle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -105,7 +105,7 @@ pub struct Needle2Agent {
     /// Maximum tokens per response.
     max_tokens: u64,
     /// Tool mapping name → index.
-    tool_index: HashMap<String, usize>,
+    tool_index: BTreeMap<String, usize>,
 }
 
 impl Needle2Agent {
@@ -119,7 +119,7 @@ impl Needle2Agent {
             response_history: Vec::new(),
             system_prompt: "You are a helpful assistant.".to_string(),
             max_tokens: 4096,
-            tool_index: HashMap::new(),
+            tool_index: BTreeMap::new(),
         }
     }
 

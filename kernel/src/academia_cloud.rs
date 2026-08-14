@@ -266,7 +266,7 @@ mod tests {
 
     #[test]
     fn regions_are_distributed() {
-        let regions: std::collections::HashSet<String> = (0..100).map(|i| CfPidPool::region_for(i)).collect();
+        let regions: alloc::collections::BTreeSet<String> = (0..100).map(|i| CfPidPool::region_for(i)).collect();
         assert!(regions.len() >= 5); // At least 5 different regions
     }
 }

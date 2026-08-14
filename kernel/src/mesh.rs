@@ -859,8 +859,8 @@ mod tests {
     /// Helper: deduplicate a slice of entries by content_hash and return in
     /// chain order (walk from genesis).
     fn dedup_and_order(entries: &[SignedEntry]) -> Vec<SignedEntry> {
-        use std::collections::HashSet;
-        let mut seen = HashSet::new();
+        use alloc::collections::BTreeSet;
+        let mut seen = BTreeSet::new();
         let unique: Vec<&SignedEntry> =
             entries.iter().filter(|e| seen.insert(e.content_hash())).collect();
         let mut ordered = Vec::new();
@@ -1030,8 +1030,8 @@ mod tests {
         let canonical_tip = canonical.entries().last().unwrap().content_hash();
 
         // Scramble: E, C, A, D, B.
-        use std::collections::HashSet;
-        let mut seen = HashSet::new();
+        use alloc::collections::BTreeSet;
+        let mut seen = BTreeSet::new();
         let scrambled: Vec<SignedEntry> = [
             canonical.entries()[4].clone(),
             canonical.entries()[2].clone(),

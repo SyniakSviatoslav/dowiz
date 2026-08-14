@@ -6,7 +6,7 @@
 //! spectral (spectral gap for confidence thresholds),
 //! markov (Markov chains for token transition probabilities).
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// A draft token with its confidence score.
 #[derive(Debug, Clone)]
@@ -39,7 +39,7 @@ pub struct DFlash {
     /// Spectral confidence threshold (from spectral gap analysis).
     spectral_threshold: f64,
     /// Markov transition probabilities for token sequences.
-    transition_probs: HashMap<(String, String), f64>,
+    transition_probs: BTreeMap<(String, String), f64>,
     /// Accepted tokens (final output).
     accepted_tokens: Vec<String>,
 }
@@ -51,7 +51,7 @@ impl DFlash {
             drafts: Vec::new(),
             verifications: Vec::new(),
             spectral_threshold: 0.5,
-            transition_probs: HashMap::new(),
+            transition_probs: BTreeMap::new(),
             accepted_tokens: Vec::new(),
         }
     }

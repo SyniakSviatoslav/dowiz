@@ -1,7 +1,7 @@
 //! fxhash.rs — a deterministic, no_std-ready hasher (rustc's FxHash).
 //!
 //! The no_std audit found 85 "boundary" modules whose only `std` dependency is
-//! `std::collections::HashMap` with the *default* hasher. The default hasher is
+//! `alloc::collections::BTreeMap` with the *default* hasher. The default hasher is
 //! `RandomState` (SipHash seeded from OS entropy) — non-deterministic AND
 //! un-constructible without `std`. This module provides a fixed multiply-xor
 //! hasher with a seedable build-hasher, so those maps become:
@@ -10,7 +10,7 @@
 //!   - **no_std-ready** (no `RandomState`; the same hasher runs in a kernel
 //!     module).
 //!
-//! Usage: `HashMap::with_hasher(FxBuildHasher)` or `HashMap::with_hasher_and_hasher`.
+//! Usage: `BTreeMap::with_hasher(FxBuildHasher)` or `BTreeMap::with_hasher_and_hasher`.
 
 use core::hash::{BuildHasher, Hasher};
 
@@ -89,6 +89,9 @@ impl BuildHasher for FxBuildHasher {
 }
 
 /// Convenience: a `HashMap`/`HashSet` type alias with the deterministic hasher.
+/// (Intentionally `std::collections::HashMap` — `HashMap` itself is std-only;
+/// these aliases are for the *determinism* goal, not the no_std goal. For
+/// no_std, use `BTreeMap`/`BTreeSet` directly.)
 pub type FxHashMap<K, V> = std::collections::HashMap<K, V, FxBuildHasher>;
 pub type FxHashSet<K> = std::collections::HashSet<K, FxBuildHasher>;
 

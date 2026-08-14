@@ -4,7 +4,7 @@
 
 // Alloc is in scope explicitly (not via the std prelude) so collection types
 // can be spelled `alloc::…` — the no_std-readiness step that lets the pure
-// kernel-core modules compile under `#![no_std]` without std's HashMap/RandomState.
+// kernel-core modules compile under `#![no_std]` without std's BTreeMap/RandomState.
 extern crate alloc;
 
 /// In-code protocol/wire version for the kernel. Independent of the repo CalVer
@@ -780,7 +780,7 @@ pub mod gboost;
 pub mod canonical;
 /// aarch64 NEON register-file kernels (f64 dot / matvec) for eigen/tensor/attention.
 pub mod neon;
-/// Deterministic, no_std-ready FxHash (replaces HashMap's OS-entropy RandomState).
+/// Deterministic, no_std-ready FxHash (replaces BTreeMap's OS-entropy RandomState).
 pub mod fxhash;
 /// Single-authority time abstraction (Clock/WallClock) — std::time seam for kernel port.
 pub mod clock;

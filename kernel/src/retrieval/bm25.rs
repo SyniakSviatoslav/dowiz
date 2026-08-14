@@ -112,17 +112,17 @@ pub struct Scored {
 ///
 /// Building precomputes per-doc term-frequency maps, doc lengths, mean length,
 /// and document frequencies (`n_t`) so each query is O(|Q| · distinct posting
-/// work). Deterministic regardless of `HashMap` iteration order: all sums are
+/// work). Deterministic regardless of `BTreeMap` iteration order: all sums are
 /// reduced over a *sorted* term set.
 #[derive(Debug, Clone)]
 pub struct Bm25 {
     docs: Vec<Document>,
     /// doc-id -> owned term-frequency map (term -> count).
-    tf: Vec<std::collections::HashMap<String, u32>>,
+    tf: Vec<alloc::collections::BTreeMap<String, u32>>,
     /// mean document length (tokens).
     avgdl: f64,
     /// term -> document frequency `n_t`.
-    df: std::collections::HashMap<String, u32>,
+    df: alloc::collections::BTreeMap<String, u32>,
     params: Bm25Params,
     /// Retained total corpus token count (P95 §3.2) — exact `avgdl` maintenance
     /// for incremental `add_document` without re-tokenizing the corpus.
@@ -143,10 +143,10 @@ impl Bm25 {
     /// Build with explicit parameters.
     pub fn with_params(docs: Vec<Document>, params: Bm25Params) -> Self {
         let mut tf = Vec::with_capacity(docs.len());
-        let mut df: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+        let mut df: alloc::collections::BTreeMap<String, u32> = alloc::collections::BTreeMap::new();
         let mut total_len: usize = 0;
         for doc in &docs {
-            let mut m: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+            let mut m: alloc::collections::BTreeMap<String, u32> = alloc::collections::BTreeMap::new();
             for t in &doc.tokens {
                 *m.entry(t.clone()).or_insert(0) += 1;
             }
@@ -205,7 +205,7 @@ impl Bm25 {
     /// `docs`, `tf`, `df`, `avgdl`, `total_len` are all byte-identical to
     /// `Bm25::new([d0..dn])` built in the same order ⇒ `rank` output is identical.
     pub fn add_document(&mut self, doc: Document) -> usize {
-        let mut m: std::collections::HashMap<String, u32> = std::collections::HashMap::new();
+        let mut m: alloc::collections::BTreeMap<String, u32> = alloc::collections::BTreeMap::new();
         for t in &doc.tokens {
             *m.entry(t.clone()).or_insert(0) += 1;
         }
@@ -352,7 +352,7 @@ impl Bm25 {
             tombstoned.push(flag != 0);
         }
         let nd = u64_le(buf, &mut p)? as usize;
-        let mut df = std::collections::HashMap::new();
+        let mut df = alloc::collections::BTreeMap::new();
         for _ in 0..nd {
             let tl = u64_le(buf, &mut p)? as usize;
             let s = take(buf, &mut p, tl)?;
@@ -363,7 +363,7 @@ impl Bm25 {
         // Recompute tf + avgdl from docs (deterministic, identical to with_params).
         let mut tf = Vec::with_capacity(docs.len());
         for doc in &docs {
-            let mut m = std::collections::HashMap::new();
+            let mut m = alloc::collections::BTreeMap::new();
             for t in &doc.tokens {
                 *m.entry(t.clone()).or_insert(0) += 1;
             }
@@ -417,7 +417,7 @@ impl Bm25 {
         let denom_len = 1.0 - b + b * (dl / self.avgdl.max(1e-9));
         let mut s = 0.0f64;
         // Sort the query terms so summation order is deterministic
-        // (independent of HashMap iteration / caller ordering).
+        // (independent of BTreeMap iteration / caller ordering).
         let mut terms: Vec<&String> = query.iter().collect();
         terms.sort();
         terms.dedup();

@@ -9,9 +9,9 @@
 //! All ranking is deterministic: ties in count break lexicographically on the
 //! key, so the SAME input always yields the SAME top-k bytes.
 //!
-//! ZERO new dependencies (std `HashMap` only).
+//! ZERO new dependencies (std `BTreeMap` only).
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 type Bi = [String; 2];
 type Tri = [String; 3];
@@ -19,8 +19,8 @@ type Tri = [String; 3];
 /// All n-gram counts over a token stream.
 #[derive(Debug, Clone)]
 pub struct NGrams {
-    pub bigrams: HashMap<Bi, u64>,
-    pub trigrams: HashMap<Tri, u64>,
+    pub bigrams: BTreeMap<Bi, u64>,
+    pub trigrams: BTreeMap<Tri, u64>,
     /// Number of emitted trigram windows (= max(tokens.len().saturating_sub(2), 0)).
     pub trigram_total: u64,
 }
@@ -28,8 +28,8 @@ pub struct NGrams {
 /// Count bigrams + trigrams over `tokens` via a sliding window.
 /// `tokens.len() < 3` ⇒ no trigrams (trigram_total = 0), bigrams need ≥2.
 pub fn count(tokens: &[&str]) -> NGrams {
-    let mut bigrams: HashMap<Bi, u64> = HashMap::new();
-    let mut trigrams: HashMap<Tri, u64> = HashMap::new();
+    let mut bigrams: BTreeMap<Bi, u64> = BTreeMap::new();
+    let mut trigrams: BTreeMap<Tri, u64> = BTreeMap::new();
     let n = tokens.len();
     for w in 0..n.saturating_sub(1) {
         let key: Bi = [tokens[w].to_string(), tokens[w + 1].to_string()];

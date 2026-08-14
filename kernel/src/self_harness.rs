@@ -12,7 +12,7 @@
 //! - **Critical**: requires dual-witness (P103 supervisor, PQ primitives)
 //! - **Forbidden**: NEVER modify (Hydra kill-switch, command filter, G9 breach alarm)
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 use crate::TriState;
 
 /// Zone severity levels.
@@ -130,7 +130,7 @@ pub struct SelfHarness {
     pub files: Vec<FileEntry>,
     pub blueprints: Vec<RewriteBlueprint>,
     pub impacts: Vec<ImpactAnalysis>,
-    pub zone_counts: HashMap<Zone, usize>,
+    pub zone_counts: BTreeMap<Zone, usize>,
     pub total_risk: f64,
 }
 
@@ -140,7 +140,7 @@ impl SelfHarness {
             files: Vec::new(),
             blueprints: Vec::new(),
             impacts: Vec::new(),
-            zone_counts: HashMap::new(),
+            zone_counts: BTreeMap::new(),
             total_risk: 0.0,
         }
     }

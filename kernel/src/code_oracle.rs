@@ -80,7 +80,7 @@ impl EtaOracle {
         let delta = Delta::between(&prev_vals, 0, &new_vals, 1);
         self.delta_tracker.observe(delta);
 
-        let mut snap_values = std::collections::HashMap::new();
+        let mut snap_values = alloc::collections::BTreeMap::new();
         snap_values.insert("lines".into(), record.total_lines() as f64);
         snap_values.insert("eta".into(), record.actual_eta_minutes);
         snap_values.insert("modules".into(), record.modules_touched.len() as f64);

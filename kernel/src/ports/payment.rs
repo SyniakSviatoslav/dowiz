@@ -26,7 +26,7 @@
 //! `(Ledger, SettlementRecorded)` anchored by an operator `AnchorRoster`; settlement is
 //! authorized exactly like any other red-line capability. No new crypto.
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 use crate::event_log::sha3_256;
 use crate::ports::agent::cap::{
@@ -177,7 +177,7 @@ struct OrderSettle {
 /// written ONLY by [`fold_event`]; [`decide_settlement`] is pure (reads state, emits an outcome).
 #[derive(Debug, Clone, Default)]
 pub struct SettlementState {
-    orders: HashMap<String, OrderSettle>,
+    orders: BTreeMap<String, OrderSettle>,
     events: Vec<SettlementEvent>,
 }
 
@@ -665,7 +665,7 @@ mod tests {
             let port = CashOnDeliveryPort;
             let mut state = SettlementState::new();
             // remember placed totals so a legal Settle uses the EXACT amount.
-            let mut totals: std::collections::HashMap<u8, i64> = std::collections::HashMap::new();
+            let mut totals: alloc::collections::BTreeMap<u8, i64> = alloc::collections::BTreeMap::new();
 
             for op in &ops {
                 match op {

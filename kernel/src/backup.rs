@@ -16,7 +16,7 @@
 //! existing `crate::event_log::sha3_256` (via the chunker's `Block.id`). The
 //! store is behind a `BlockStore` trait so a real append-log / R2 backend can
 //! drop in later (product/infra scope). Two implementations ship today:
-//!   - `MemStore`            — in-memory `HashMap` (tests / single-node local).
+//!   - `MemStore`            — in-memory `BTreeMap` (tests / single-node local).
 //!   - `FileBlockStore`      — disk-backed, content-addressed (P12 §2): one file
 //!     per unique block under `<root>/blocks/<xx>/<yy>/<hex>`, crash-atomic
 //!     writes via `tmp/<id>.partial` + POSIX-rename, and an in-memory index so
@@ -26,7 +26,7 @@
 
 use crate::chunker::Chunker;
 use crate::event_log::sha3_256;
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -67,13 +67,13 @@ pub trait BlockStore {
 /// In-memory content-addressed store (for tests / single-node local-first use).
 #[derive(Default, Debug, Clone)]
 pub struct MemStore {
-    map: HashMap<Hash, Vec<u8>>,
+    map: BTreeMap<Hash, Vec<u8>>,
 }
 
 impl MemStore {
     pub fn new() -> Self {
         MemStore {
-            map: HashMap::new(),
+            map: BTreeMap::new(),
         }
     }
     /// Total bytes physically retained (sum of unique block sizes) — the real
@@ -116,7 +116,7 @@ impl BlockStore for MemStore {
 ///
 /// The on-disk `blocks/` tree is the durable source of truth. To satisfy the
 /// trait's borrowed-slice `get`/`len` contract (which a disk read cannot meet
-/// without interior mutability), an in-memory `cache: HashMap<Hash, Vec<u8>>`
+/// without interior mutability), an in-memory `cache: BTreeMap<Hash, Vec<u8>>`
 /// mirrors the bytes; `get_owned` always re-reads the on-disk file and
 /// re-hashes it against the filename — a mismatch (on-disk bit-rot /
 /// corruption) yields fail-closed `None`, never unverified bytes.
@@ -124,7 +124,7 @@ impl BlockStore for MemStore {
 /// No new dependency: `std::fs` only. M6/V2 zero-dep at the storage boundary.
 pub struct FileBlockStore {
     root: PathBuf,
-    cache: HashMap<Hash, Vec<u8>>,
+    cache: BTreeMap<Hash, Vec<u8>>,
 }
 
 impl FileBlockStore {
@@ -136,14 +136,14 @@ impl FileBlockStore {
         fs::create_dir_all(root.join("blocks"))?;
         fs::create_dir_all(root.join("manifests"))?;
         fs::create_dir_all(root.join("tmp"))?;
-        let mut cache = HashMap::new();
+        let mut cache = BTreeMap::new();
         Self::load(&root, &mut cache)?;
         Ok(FileBlockStore { root, cache })
     }
 
     /// Recursively walk `blocks/` and read every `<hex>` file's bytes into the
     /// cache. Files whose name is not a valid 32-byte hex id are skipped.
-    fn load(root: &PathBuf, cache: &mut HashMap<Hash, Vec<u8>>) -> std::io::Result<()> {
+    fn load(root: &PathBuf, cache: &mut BTreeMap<Hash, Vec<u8>>) -> std::io::Result<()> {
         let blocks_dir = root.join("blocks");
         if !blocks_dir.exists() {
             return Ok(());
@@ -373,7 +373,7 @@ impl<S: BlockStore> BackupOrgan<S> {
         let mut new_blocks = 0usize;
         let mut deduped = 0usize;
         // Guard against intra-stream repeats double-counting a physical write.
-        let mut written_this_call: HashMap<Hash, ()> = HashMap::new();
+        let mut written_this_call: BTreeMap<Hash, ()> = BTreeMap::new();
         for blk in &blocks {
             let already = self.store.get_owned(&blk.id).is_some();
             if already {

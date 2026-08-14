@@ -241,7 +241,7 @@ impl ParallelSearchEngine {
     /// Fan-in: fuse per-index results into ranked output.
     pub fn fan_in(&self, per_index_results: Vec<Vec<IndexHit>>, top_k: usize) -> Vec<FusedResult> {
         // Collect all unique doc_ids.
-        let mut doc_map: std::collections::HashMap<u32, Vec<(SearchIndexKind, f64)>> = std::collections::HashMap::new();
+        let mut doc_map: alloc::collections::BTreeMap<u32, Vec<(SearchIndexKind, f64)>> = alloc::collections::BTreeMap::new();
         for hits in &per_index_results {
             for hit in hits {
                 doc_map.entry(hit.doc_id).or_default().push((hit.index_kind.clone(), hit.score));

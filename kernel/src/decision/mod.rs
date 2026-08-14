@@ -18,7 +18,7 @@
 /// The import-time verify-before-persist gate (BLUEPRINT-P-F §4.2, rung-2).
 pub mod import;
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 use core::fmt::Debug;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ use core::fmt::Debug;
 /// NOTE: this enum intentionally derives only `PartialEq, Eq, Hash` — **not** `Ord`/`PartialOrd`.
 /// The absence of an order relation is the type-level enforcement of the no-courier-scoring law:
 /// a router cannot rank two families because the language gives it no `cmp` to call.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum DomainTag {
     Dispatch,
     EtaGeo,
@@ -401,11 +401,11 @@ impl AnyUnit {
 }
 
 /// Domain family registry. `register` is the reviewed code path — a unit is admitted by name, into
-/// the slot keyed by its `DomainTag`. Routing is a `HashMap` lookup + an exhaustive `match`
+/// the slot keyed by its `DomainTag`. Routing is a `BTreeMap` lookup + an exhaustive `match`
 /// (`route_live`), never a comparison of quality.
 #[derive(Default)]
 pub struct DecisionRegistry {
-    units: HashMap<DomainTag, Vec<AnyUnit>>,
+    units: BTreeMap<DomainTag, Vec<AnyUnit>>,
 }
 
 impl DecisionRegistry {

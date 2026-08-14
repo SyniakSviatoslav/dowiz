@@ -1,7 +1,7 @@
 //! lut.rs — n(0)/O(1) compile-time lookup table primitives.
 //!
 //! Phase A of the glyph-geometry rewrite law: replace runtime branching
-//! (if-else, match-iterator, HashMap scans) with const array indexing. Every
+//! (if-else, match-iterator, BTreeMap scans) with const array indexing. Every
 //! LUT is built at compile time via `const fn` — zero runtime cost, zero heap,
 //! branchless dispatch through `#[repr(u8)]` discriminants.
 //!

@@ -72,7 +72,7 @@ fn route_send_scope() -> Scope {
 /// from the P59 `NodeId` (the hash of the hub's keypair): `HubId` is the
 /// human/routing handle (`hub-<HubId>.hubs.dowiz.org`); `NodeId` is the crypto
 /// identity. Bound 1:1 at provision.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct HubId(pub [u8; 16]); // 128-bit random
 
 impl HubId {
@@ -170,7 +170,7 @@ pub enum PoolSlotState {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ImageRef(pub String); // hcloud snapshot id / equiv
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ServerId(pub String);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ServerSpec {
@@ -503,7 +503,7 @@ impl Heartbeat {
 /// `AnomalyFlag` after `HEARTBEAT_SILENCE_ALERT_TICKS` of silence (M8).
 #[derive(Debug, Clone, Default)]
 pub struct HeartbeatCollector {
-    last_seen: std::collections::HashMap<HubId, u64>,
+    last_seen: alloc::collections::BTreeMap<HubId, u64>,
     alerts: Vec<AnomalyFlag>,
 }
 
@@ -581,7 +581,7 @@ pub struct ClaimReceipt {
 /// names Cloudflare or Hetzner (M1). All mutation ops write-ahead-log to `mut_log`
 /// before touching the provider (M2/M5).
 pub struct PoolManager<T: TunnelProvider, V: VpsProvider> {
-    pub slots: std::collections::HashMap<HubId, PoolSlot>,
+    pub slots: alloc::collections::BTreeMap<HubId, PoolSlot>,
     pub tunnel: T,
     pub vps: V,
     pub mut_log: MutationLog,
@@ -607,7 +607,7 @@ impl<T: TunnelProvider, V: VpsProvider> PoolManager<T, V> {
         let svc_cls_pub = svc.classical_public(&svc_classical_seed);
         let svc_pq_pub = svc.pq_public(&svc_pq_seed);
         PoolManager {
-            slots: std::collections::HashMap::new(),
+            slots: alloc::collections::BTreeMap::new(),
             tunnel,
             vps,
             mut_log: MutationLog::new(svc_cls_pub, svc_pq_pub),
@@ -937,7 +937,7 @@ pub fn check_tunnel_cap<T: TunnelProvider>(
 pub struct MockTunnel {
     pub call_order: core::cell::RefCell<Vec<String>>,
     pub tunnel_count: core::cell::RefCell<u32>,
-    pub created: core::cell::RefCell<std::collections::HashMap<HubId, TunnelId>>,
+    pub created: core::cell::RefCell<alloc::collections::BTreeMap<HubId, TunnelId>>,
 }
 
 impl MockTunnel {
@@ -985,8 +985,8 @@ impl TunnelProvider for MockTunnel {
 #[derive(Debug, Clone, Default)]
 pub struct MockVps {
     pub create_calls: core::cell::RefCell<u32>,
-    pub assigned: core::cell::RefCell<std::collections::HashMap<ServerId, OwnerId>>,
-    pub suspended: core::cell::RefCell<std::collections::HashMap<ServerId, ImageRef>>,
+    pub assigned: core::cell::RefCell<alloc::collections::BTreeMap<ServerId, OwnerId>>,
+    pub suspended: core::cell::RefCell<alloc::collections::BTreeMap<ServerId, ImageRef>>,
     pub refusals: core::cell::RefCell<u32>,
     /// When `Some`, `create_from_image` refuses a `server_type` that does not match
     /// (M3 `red_spec_mismatch_rejected`).

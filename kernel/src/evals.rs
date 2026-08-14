@@ -77,7 +77,7 @@ fn fnv1a_seed(seed: u64, bytes: &[u8]) -> u64 {
 #[derive(Debug, Clone, Default)]
 pub struct MintLog {
     counter: u64,
-    seen: std::collections::HashSet<(u64, u64)>,
+    seen: alloc::collections::BTreeSet<(u64, u64)>,
 }
 
 impl MintLog {

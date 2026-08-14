@@ -26,7 +26,7 @@
 //! - Feeds into `spectral_graph` for eigenvector centrality
 //! - Exposed via `dowiz_kernel::hypergraph`
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// A hypergraph — a set of vertices connected by hyperedges (each hyperedge
 /// can connect any number of vertices).
@@ -285,7 +285,7 @@ impl Hypergraph {
     /// Returns a sparse adjacency matrix (vector of (row, col, value) triples).
     pub fn adjacency_sparse(&self) -> Vec<(usize, usize, f64)> {
         let mut adj = Vec::new();
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = alloc::collections::BTreeSet::new();
 
         for (e, vertices) in self.incidence.iter().enumerate() {
             for i in 0..vertices.len() {

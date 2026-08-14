@@ -297,7 +297,7 @@ mod tests {
     #[test]
     fn crystal_cell_distribution() {
         let mut c: CrystalLattice<TestItem> = CrystalLattice::new();
-        let mut addrs = std::collections::HashSet::new();
+        let mut addrs = alloc::collections::BTreeSet::new();
         for i in 0..500u64 {
             let addr = c.insert(TestItem { id: i, val: i as f64 * 0.7 });
             addrs.insert(addr);

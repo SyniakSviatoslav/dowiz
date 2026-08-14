@@ -27,7 +27,7 @@
 //! - Пошук: O(1) → 1 комірка + 26 сусідів = 27 комірок
 
 use crate::event_log::sha3_256;
-use std::collections::HashSet;
+use alloc::collections::BTreeSet;
 
 const DIMS: usize = 8;
 const LATTICE_SIZE: usize = 65536; // 2^16 (first 2 bytes as cell address)
@@ -147,7 +147,7 @@ impl Academia {
     }
 
     pub fn missing(&self, remote: &[QuarkSig]) -> Vec<QuarkSig> {
-        let local: HashSet<QuarkSig> = self.matrix.iter().copied().collect();
+        let local: BTreeSet<QuarkSig> = self.matrix.iter().copied().collect();
         remote.iter().copied().filter(|r| !local.contains(r)).collect()
     }
 

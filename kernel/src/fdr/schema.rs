@@ -666,8 +666,8 @@ mod tests {
         // Simulate "recovered ring" — a list of serialized records.
         let ring = vec![root.to_json(), child.to_json()];
         // Reconstruct: parse span_id + parent_span_id from each record.
-        let mut by_id: std::collections::HashMap<u64, (String, Option<u64>)> =
-            std::collections::HashMap::new();
+        let mut by_id: alloc::collections::BTreeMap<u64, (String, Option<u64>)> =
+            alloc::collections::BTreeMap::new();
         for line in &ring {
             let sid = parse_field_u64(line, "span_id").expect("span_id must be present");
             let pid = parse_parent_span_id(line);

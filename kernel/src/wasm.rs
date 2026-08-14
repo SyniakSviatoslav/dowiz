@@ -33,9 +33,9 @@
 const MAX_CHANNEL_EVENTS: usize = 100_000;
 const MAX_HARMONIC_NODES: usize = 50_000;
 
-// BTreeMap (not HashMap) so `LedgerOut.funnel` serializes in a deterministic,
+// BTreeMap (not BTreeMap) so `LedgerOut.funnel` serializes in a deterministic,
 // sorted key order — `serde_json::to_string` iterates the map in-order, and a
-// `std::HashMap`'s per-instance random iteration order would leak into the
+// `std::BTreeMap`'s per-instance random iteration order would leak into the
 // emitted JSON (breaks golden-tests / diffs / content-addressing). Same
 // determinism pattern as `retrieval/memory_store.rs`'s `BTreeMap` snapshot_root.
 use alloc::collections::BTreeMap;
@@ -119,7 +119,7 @@ struct LedgerOut {
     /// channel -> distinct order count
     orders_by_channel: Vec<(String, u64)>,
     /// channel -> [[status, count], ...] funnel stages in enum order.
-    /// `BTreeMap` (not `HashMap`) so the emitted JSON key order is deterministic
+    /// `BTreeMap` (not `BTreeMap`) so the emitted JSON key order is deterministic
     /// (sorted) — a pure function of the input, safe to golden-test / diff.
     funnel: BTreeMap<String, Vec<(String, u64)>>,
     /// number of orders whose status sequence contained an illegal transition
@@ -886,7 +886,7 @@ mod tests {
     // Determinism pin (bundled finding #12): `LedgerOut.funnel` is a `BTreeMap`,
     // so `serde_json::to_string` emits its keys in sorted order — a pure function
     // of the input. Two runs on the same events must be byte-identical, and the
-    // funnel keys must appear in ascending order in the raw JSON. A `HashMap`
+    // funnel keys must appear in ascending order in the raw JSON. A `BTreeMap`
     // would leak a per-instance random iteration order and fail this.
     #[test]
     fn channel_ledger_funnel_serialization_is_deterministic() {
@@ -903,7 +903,7 @@ mod tests {
         assert_eq!(a, b, "funnel JSON must be byte-identical across runs");
 
         // The funnel keys, as they appear in the raw JSON, are in ascending
-        // sorted order (the BTreeMap guarantee; a HashMap would not ensure this).
+        // sorted order (the BTreeMap guarantee; a BTreeMap would not ensure this).
         let funnel_seg = a
             .split("\"funnel\":")
             .nth(1)

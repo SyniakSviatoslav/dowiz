@@ -74,7 +74,7 @@ impl std::error::Error for OpticalError {}
 /// hash/signature/idempotency surface.
 ///
 /// `OpticalCompressed` deliberately does NOT derive `Hash` — you cannot even put
-/// it in a `HashSet`/`HashMap` key without first archiving it (which consumes it).
+/// it in a `BTreeSet`/`BTreeMap` key without first archiving it (which consumes it).
 /// It DOES derive `Debug`/`PartialEq`/`Eq` (structural equality of the wrapped
 /// bytes is harmless — it does not *expose* bytes to any sha3/content-id surface;
 /// only `Hash` and a `.as_bytes_for_hashing()` accessor would, and both are
@@ -224,8 +224,8 @@ mod tests {
     #[test]
     fn optical_compressed_cannot_reach_determinism_plane() {
         // (a) Structural: the type has no hashing accessor. We assert this two ways:
-        //   - it does NOT implement `std::hash::Hash` (so it cannot be a HashMap/
-        //     HashSet key, the most common idempotency/content-id sink), and
+        //   - it does NOT implement `std::hash::Hash` (so it cannot be a BTreeMap/
+        //     BTreeSet key, the most common idempotency/content-id sink), and
         //   - the only accessor is `archive_persist`, which routes to ArchivalPersist.
         fn assert_not_hashable<T>()
         where

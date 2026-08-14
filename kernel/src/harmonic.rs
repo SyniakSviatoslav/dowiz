@@ -14,7 +14,7 @@
 //!   high. Pure, deterministic, no RNG, no I/O. Verified-by-Math parity test below
 //!   asserts it matches the agent-kernel reference on a star + path + disconnected graph.
 //!
-//! DOD: adjacency built as `Vec<Vec<usize>>` (degree-bounded, no HashMap), one BFS
+//! DOD: adjacency built as `Vec<Vec<usize>>` (degree-bounded, no BTreeMap), one BFS
 //! (`VecDeque`) per source over a reused distance buffer. No `Vec<Vec<f64>>` matmul.
 
 use alloc::collections::VecDeque;

@@ -2,7 +2,7 @@ use crate::delta::{DeltaComparison, DeltaTracker};
 use crate::pid::PidController;
 use crate::telemetry_harvest::HarvestLedger;
 use crate::trinary::Tri;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AgentClass {
@@ -28,15 +28,15 @@ pub struct TaskSnapshot {
 
 pub struct TaskOracle {
     history: VecDeque<(String, AgentClass, AgentClass, bool)>,
-    accuracy_ema: HashMap<String, f64>,
-    class_rules: HashMap<String, AgentClass>,
+    accuracy_ema: BTreeMap<String, f64>,
+    class_rules: BTreeMap<String, AgentClass>,
     classifier_pid: PidController,
     telemetry: HarvestLedger,
 }
 
 impl TaskOracle {
     pub fn new() -> Self {
-        let mut class_rules = HashMap::new();
+        let mut class_rules = BTreeMap::new();
         for kw in &[
             "read", "analyze", "search", "grep", "query", "fetch", "lookup",
             "review", "audit", "document", "explain", "summarize", "translate",
@@ -57,7 +57,7 @@ impl TaskOracle {
 
         Self {
             history: VecDeque::with_capacity(1000),
-            accuracy_ema: HashMap::new(),
+            accuracy_ema: BTreeMap::new(),
             class_rules,
             classifier_pid,
             telemetry: HarvestLedger::new(500),
@@ -131,7 +131,7 @@ impl TaskOracle {
 }
 
 pub struct SnapshotCache {
-    snapshots: HashMap<String, TaskSnapshot>,
+    snapshots: BTreeMap<String, TaskSnapshot>,
     max_snapshots: usize,
     pub hits: usize,
     pub misses: usize,
@@ -140,7 +140,7 @@ pub struct SnapshotCache {
 impl SnapshotCache {
     pub fn new(max_snapshots: usize) -> Self {
         Self {
-            snapshots: HashMap::new(),
+            snapshots: BTreeMap::new(),
             max_snapshots,
             hits: 0,
             misses: 0,

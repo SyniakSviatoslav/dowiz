@@ -23,12 +23,12 @@
 //! assert!(!msgs.is_empty());
 //! ```
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 
 pub const GOSSIP_MAX_QUEUE: usize = 1000;
 
 /// A message topic in the gossip bus.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum GossipTopic {
     /// System telemetry (cpu, memory, frame time).
     Telemetry,
@@ -90,8 +90,8 @@ pub type SubscriberId = usize;
 /// For multi-threaded use, wrap in `Mutex` or use atomic sequencer.
 #[derive(Debug, Clone)]
 pub struct GossipBus {
-    subscribers: HashMap<GossipTopic, Vec<SubscriberId>>,
-    queues: HashMap<SubscriberId, VecDeque<GossipMessage>>,
+    subscribers: BTreeMap<GossipTopic, Vec<SubscriberId>>,
+    queues: BTreeMap<SubscriberId, VecDeque<GossipMessage>>,
     next_id: SubscriberId,
     seq: u64,
 }
@@ -99,8 +99,8 @@ pub struct GossipBus {
 impl GossipBus {
     pub fn new() -> Self {
         GossipBus {
-            subscribers: HashMap::new(),
-            queues: HashMap::new(),
+            subscribers: BTreeMap::new(),
+            queues: BTreeMap::new(),
             next_id: 0,
             seq: 0,
         }

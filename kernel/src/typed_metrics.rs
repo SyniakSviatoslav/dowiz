@@ -10,7 +10,7 @@
 //! Blueprint P08 §2/§3 (pure core only). This module does NOT touch
 //! `tools/telemetry` or any egress/signing path.
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 use std::sync::OnceLock;
 use std::time::Instant;
 
@@ -156,7 +156,7 @@ impl MetricLine {
         let s = s.trim();
         let mut it = s.split_whitespace();
         let tag = it.next().ok_or("empty line")?;
-        let mut kv: HashMap<&str, &str> = HashMap::new();
+        let mut kv: BTreeMap<&str, &str> = BTreeMap::new();
         for tok in it {
             let (k, v) = tok.split_once('=').ok_or("malformed key=val token")?;
             kv.insert(k, v);
@@ -206,7 +206,7 @@ impl MetricLine {
 /// Reject unless the key set equals `required` exactly: every required key
 /// must be present (missing key ⇒ `Err`) and no other key is allowed (unknown
 /// key ⇒ `Err`). This is the parse-or-reject property for the schema.
-fn check_keys(kv: &HashMap<&str, &str>, required: &[&str]) -> Result<(), &'static str> {
+fn check_keys(kv: &BTreeMap<&str, &str>, required: &[&str]) -> Result<(), &'static str> {
     for r in required {
         if !kv.contains_key(r) {
             return Err("missing required key");

@@ -33,7 +33,7 @@
 //! transpose of the usual "A·x" column product; we name it `spmv` and document
 //! the orientation rather than ship two near-identical kernels.
 //!
-//! ZERO new dependencies. Pure `std`. HashMap is avoided entirely (the builder
+//! ZERO new dependencies. Pure `std`. BTreeMap is avoided entirely (the builder
 //! sorts per-row vectors instead, so no iteration-order hazard).
 
 /// Compressed-sparse-row graph.
@@ -77,7 +77,7 @@ impl Csr {
     /// duplicate `(src, dst)` pairs are merged by SUMMING their weights, so the
     /// builder is idempotent w.r.t. parallel/duplicate edge submissions.
     pub fn from_edges(n: usize, edges: &[(usize, usize, f64)]) -> Self {
-        // Per-row buckets, then sort + merge. No HashMap ⇒ no iteration hazard.
+        // Per-row buckets, then sort + merge. No BTreeMap ⇒ no iteration hazard.
         let mut rows: Vec<Vec<(usize, f64)>> = vec![Vec::new(); n];
         for &(s, d, w) in edges {
             if s < n && d < n {
@@ -609,7 +609,7 @@ impl Csr {
 // E0 fix (VERIFIABLE-COGNITION §2 bug #3): there was NO in-kernel `recall@k`
 // scorer — scoring was delegated to the JS bridge. `personalized_pagerank` is
 // the diffusion; these pure functions score its ranking against a relevance
-// set, deterministically, with a stable tie-break. No HashMap (iteration-order
+// set, deterministically, with a stable tie-break. No BTreeMap (iteration-order
 // hazard); ranking is a sorted Vec with ascending-index tie-break.
 
 /// Rank `scores` descending with a *stable* tie-break by ascending node index

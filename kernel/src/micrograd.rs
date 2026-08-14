@@ -171,9 +171,9 @@ impl Value {
 
     /// Reverse-topological order over the subgraph rooted at `self`.
     fn topo(&self) -> Vec<Value> {
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = alloc::collections::BTreeSet::new();
         let mut order = Vec::new();
-        fn visit(v: &Value, seen: &mut std::collections::HashSet<usize>, order: &mut Vec<Value>) {
+        fn visit(v: &Value, seen: &mut alloc::collections::BTreeSet<usize>, order: &mut Vec<Value>) {
             let key = Rc::as_ptr(&v.0) as usize;
             if seen.contains(&key) {
                 return;

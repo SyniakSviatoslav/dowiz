@@ -11,7 +11,7 @@
 //!
 //! Pure Rust, zero external dependencies.
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 // ── Columnar metric store ──────────────────────────────────────────────────
 
@@ -152,8 +152,8 @@ impl ColumnarMetricStore {
     }
 
     /// Compute per-kind row counts (a columnar aggregation).
-    pub fn kind_histogram(&self) -> HashMap<String, usize> {
-        let mut hist: HashMap<String, usize> = HashMap::new();
+    pub fn kind_histogram(&self) -> BTreeMap<String, usize> {
+        let mut hist: BTreeMap<String, usize> = BTreeMap::new();
         for k in &self.kind {
             *hist.entry(k.clone()).or_default() += 1;
         }

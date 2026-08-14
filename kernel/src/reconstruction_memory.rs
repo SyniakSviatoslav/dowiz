@@ -21,7 +21,7 @@
 
 use crate::telemetry_harvest::{HarvestLedger, HarvestRecord};
 use crate::telemetry::surface_recurring_patterns;
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// A memory entry — stored experience that can be reconstructed.
 #[derive(Debug, Clone)]

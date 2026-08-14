@@ -4,7 +4,7 @@
 //! The TS app is the legacy oracle; this Rust kernel is the canonical core.
 //! WASM/headless safe. No float, no I/O.
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum OrderStatus {
     Pending,
     Confirmed,

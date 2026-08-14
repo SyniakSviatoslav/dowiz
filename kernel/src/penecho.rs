@@ -4,7 +4,7 @@
 //! Maps to kernel primitives: visual_index (PixelRAG tile management),
 //! memory_search (section-based spatial search), parse (formula/text extraction).
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// Canvas tile — a region of the collaborative canvas.
 #[derive(Debug, Clone)]
@@ -57,7 +57,7 @@ pub struct CanvasRegion {
 /// The collaborative canvas.
 pub struct PenEchoCanvas {
     /// Tiles indexed by tile ID.
-    tiles: HashMap<u64, CanvasTile>,
+    tiles: BTreeMap<u64, CanvasTile>,
     /// Regions on the canvas.
     regions: Vec<CanvasRegion>,
     /// Next tile ID.
@@ -71,7 +71,7 @@ impl PenEchoCanvas {
     /// Create a new canvas with given dimensions.
     pub fn new(width: u64, height: u64) -> Self {
         PenEchoCanvas {
-            tiles: HashMap::new(),
+            tiles: BTreeMap::new(),
             regions: Vec::new(),
             next_tile_id: 0,
             canvas_width: width,

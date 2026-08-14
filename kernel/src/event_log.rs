@@ -22,7 +22,7 @@
 //! CI GUARD: NO-COURIER-SCORING — events carry an `actor_pubkey` (identity),
 //! never a score. The log is neutral, idempotent plumbing.
 
-use std::collections::HashSet;
+use alloc::collections::BTreeSet;
 
 // Keccak-f[1600] round constants (FIPS 202). Lifted to module scope (was nested inside
 // `sha3_256`) so the item-7 Kani cross-copy equivalence proof can reach this permutation;
@@ -222,10 +222,10 @@ pub trait EventStore {
 /// In-memory [`EventStore`] — the offline pgrust stand-in (see module `innovate:`).
 #[derive(Debug, Clone, Default)]
 pub struct MemEventStore {
-    by_id: HashSet<[u8; 32]>,
+    by_id: BTreeSet<[u8; 32]>,
     /// Full event bodies, keyed by content-id, so the read-back walk
     /// (`EventLog::verify_chain`, P-H W-H4 F2) can detect corruption at rest.
-    by_event: std::collections::HashMap<[u8; 32], MeshEvent>,
+    by_event: alloc::collections::BTreeMap<[u8; 32], MeshEvent>,
     tip: Option<[u8; 32]>,
     count: usize,
 }
@@ -242,7 +242,7 @@ impl EventStore for MemEventStore {
         self.by_id.contains(id)
     }
     fn insert(&mut self, id: [u8; 32], ev: MeshEvent) -> Result<(), StoreError> {
-        // A HashSet insert does no IO; honest — it cannot fail.
+        // A BTreeSet insert does no IO; honest — it cannot fail.
         if self.by_id.insert(id) {
             self.count += 1;
         }

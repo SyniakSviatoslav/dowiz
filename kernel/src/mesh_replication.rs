@@ -52,7 +52,7 @@
 //!
 //! Egress-free: no network, no external crate, `std` only.
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 use crate::event_log::{sha3_256, EventStore, MeshEvent, StoreError};
 
@@ -64,7 +64,7 @@ use crate::event_log::{sha3_256, EventStore, MeshEvent, StoreError};
 #[derive(Debug, Clone, Default)]
 pub struct MerkleLog {
     leaves: Vec<[u8; 32]>,
-    seen: std::collections::HashSet<[u8; 32]>,
+    seen: alloc::collections::BTreeSet<[u8; 32]>,
 }
 
 impl MerkleLog {
@@ -142,7 +142,7 @@ impl MerkleLog {
 /// actor is unknown to the requester).
 #[derive(Debug, Clone, Default)]
 pub struct PullRequest {
-    pub watermark: HashMap<[u8; 32], u64>,
+    pub watermark: BTreeMap<[u8; 32], u64>,
 }
 
 impl PullRequest {
@@ -163,7 +163,7 @@ impl PullRequest {
     /// unknown" for every event, i.e. an effectively empty request — never a
     /// false/stale watermark).
     pub fn from_store<S: EventStore>(store: &S) -> Self {
-        let mut watermark: HashMap<[u8; 32], u64> = HashMap::new();
+        let mut watermark: BTreeMap<[u8; 32], u64> = BTreeMap::new();
         for id in store.ids() {
             if let Some(ev) = store.get(&id) {
                 let e = watermark.entry(ev.actor_pubkey).or_insert(0);

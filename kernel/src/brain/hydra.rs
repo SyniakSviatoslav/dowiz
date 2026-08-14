@@ -1091,14 +1091,14 @@ mod tests {
 /// innovate: this is the durable variant that replaces MemEventStore for the
 /// organism's persistent memory. pgrust remains the node-level SQL option; this
 /// is the kernel-internal, dependency-free, offline-safe default for the Hydra.
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 
 pub struct FileEventStore {
     path: std::path::PathBuf,
-    by_id: HashMap<[u8; 32], MeshEvent>,
+    by_id: BTreeMap<[u8; 32], MeshEvent>,
     tip: Option<[u8; 32]>,
     count: usize,
     /// Item 61 (gap G5): durability continuous counters — running totals the
@@ -1145,7 +1145,7 @@ impl FileEventStore {
     /// tolerant) — the chain tip is the last *valid* committed event.
     pub fn open<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
         let path = path.as_ref().to_path_buf();
-        let mut by_id = HashMap::new();
+        let mut by_id = BTreeMap::new();
         let mut tip = None;
         let mut count = 0;
         if path.exists() {

@@ -23,7 +23,7 @@
 //! self-loops / reflexive bidirected arcs (those would be degenerate or
 //! malformed); invalid input yields `Err`, never a panic.
 
-use std::collections::{BTreeSet, HashSet, VecDeque};
+use std::collections::{BTreeSet, VecDeque};
 
 /// A semi-Markovian causal diagram: observable nodes `0..n`, directed parent
 /// lists, and a bidirected-adjacency list (symmetric — `i↔j` appears in both
@@ -345,7 +345,7 @@ impl CGraph {
         //   dir = 0 start | 1 arrived downstream (from a parent) | 2 from a child
         //   via = node we came from (n = sentinel at start)
         // A trail is open iff every triple along it is open.
-        let mut visited: HashSet<(usize, u8, usize)> = HashSet::new();
+        let mut visited: BTreeSet<(usize, u8, usize)> = BTreeSet::new();
         let mut queue: VecDeque<(usize, u8, usize)> = VecDeque::new();
         for &c in &children[a] {
             queue.push_back((c, 1, a));

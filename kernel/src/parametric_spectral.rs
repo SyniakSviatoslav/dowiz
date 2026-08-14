@@ -34,7 +34,7 @@
 
 use crate::event_log::sha3_256;
 use crate::TriState;
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// Parametric surface grid resolution (32×32 = 1024 cells).
 pub const GRID_RES: usize = 32;
@@ -95,7 +95,7 @@ pub struct ParametricSurface {
     /// Grid cells: each cell contains spins whose (u,v) falls in that cell.
     pub grid: Vec<Vec<Spin>>,
     /// All spins indexed by hash.
-    spin_index: HashMap<[u8; 32], usize>,
+    spin_index: BTreeMap<[u8; 32], usize>,
     /// Total spins.
     pub count: usize,
     /// Whether surface is initialized.
@@ -107,7 +107,7 @@ impl ParametricSurface {
         ParametricSurface {
             ev0: Vec::new(), ev1: Vec::new(),
             grid: vec![Vec::new(); GRID_RES * GRID_RES],
-            spin_index: HashMap::new(),
+            spin_index: BTreeMap::new(),
             count: 0, initialized: TriState::False,
         }
     }

@@ -218,7 +218,7 @@ impl TwinExpr {
     }
 
     /// Independent tree-walking interpreter (the proof reference, as `eqc-rs::Expr::eval`).
-    pub fn eval(&self, env: &std::collections::HashMap<String, f64>) -> f64 {
+    pub fn eval(&self, env: &alloc::collections::BTreeMap<String, f64>) -> f64 {
         match self {
             TwinExpr::Num(v) => *v,
             TwinExpr::Sym(s) => *env.get(s).unwrap_or(&0.0),
@@ -284,7 +284,7 @@ impl TwinExpr {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::collections::HashMap;
+    use alloc::collections::BTreeMap;
 
     // Item 70 §70.4 (a): every decision surface resolves to a bucket (never Forbidden in this
     // closed set) and the cost-of answer carries a real evidence pointer.
@@ -387,7 +387,7 @@ mod tests {
         // EQUALITY is preserved and the form is well-defined.
         let e = TwinExpr::Mul(Box::new(TwinExpr::Sym("a".into())), Box::new(TwinExpr::Num(2.0)));
         let extracted = e.extract_cheaper();
-        let env = HashMap::from([("a".to_string(), 5.0)]);
+        let env = BTreeMap::from([("a".to_string(), 5.0)]);
         // `a*2` and `a+a` both eval to 10 at a=5.
         assert_eq!(e.eval(&env), 10.0);
         assert_eq!(extracted.eval(&env), 10.0);
@@ -413,7 +413,7 @@ mod tests {
         assert_eq!(e.op_count(), 3);
         let extracted = e.extract_cheaper();
         assert_eq!(extracted.op_count(), 2, "factoring strictly lowers op_count");
-        let env = HashMap::from([
+        let env = BTreeMap::from([
             ("a".to_string(), 2.0),
             ("b".to_string(), 3.0),
             ("c".to_string(), 4.0),
@@ -430,7 +430,7 @@ mod tests {
         assert_eq!(e.op_count(), 1);
         let extracted = e.extract_cheaper();
         assert_eq!(extracted.op_count(), 0, "folding removes the op node");
-        assert_eq!(extracted.eval(&HashMap::new()), 7.0);
+        assert_eq!(extracted.eval(&BTreeMap::new()), 7.0);
     }
 
     // Item 71 §71.4 (b): a no-rule-applies input emits byte-identical output to today (the

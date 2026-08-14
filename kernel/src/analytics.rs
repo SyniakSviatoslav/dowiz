@@ -13,11 +13,11 @@
 //! stream through [`order_machine::fold_transitions`] to detect illegal state
 //! sequences that would otherwise corrupt the funnel counts.
 //!
-//! Pure std only (HashMap). WASM/headless safe. No float, no I/O. No courier
+//! Pure std only (BTreeMap). WASM/headless safe. No float, no I/O. No courier
 //! scoring — this module only measures channel attribution, it does not rank
 //! couriers.
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 use crate::order_machine::{fold_transitions, OrderStatus};
 
@@ -39,11 +39,11 @@ pub struct ChannelEvent {
 #[derive(Debug, Default)]
 pub struct ChannelLedger {
     /// order_id -> (channel, current status)
-    orders: HashMap<String, (String, OrderStatus)>,
+    orders: BTreeMap<String, (String, OrderStatus)>,
     /// channel -> count of distinct orders
-    by_channel: HashMap<String, u64>,
+    by_channel: BTreeMap<String, u64>,
     /// (channel, status) -> count of orders currently in that status
-    funnel_counts: HashMap<(String, OrderStatus), u64>,
+    funnel_counts: BTreeMap<(String, OrderStatus), u64>,
 }
 
 impl ChannelLedger {
@@ -134,9 +134,9 @@ impl ChannelLedger {
 #[derive(Debug, Default)]
 pub struct CohortRetention {
     /// cohort_key (e.g. "2026-W30") → [week0_active, week1_retained, week2_retained, ...]
-    pub cohorts: HashMap<String, Vec<u64>>,
+    pub cohorts: BTreeMap<String, Vec<u64>>,
     /// Total users acquired per cohort
-    pub cohort_size: HashMap<String, u64>,
+    pub cohort_size: BTreeMap<String, u64>,
 }
 
 impl CohortRetention {
@@ -210,7 +210,7 @@ pub fn reduce_anomalies(events: &[(String, OrderStatus, i64)]) -> u64 {
     use alloc::collections::BTreeMap;
 
     // order_id -> events sorted by at_ms (BTreeMap gives ascending key order).
-    let mut by_order: HashMap<&str, BTreeMap<i64, OrderStatus>> = HashMap::new();
+    let mut by_order: BTreeMap<&str, BTreeMap<i64, OrderStatus>> = BTreeMap::new();
     for (id, status, at) in events {
         by_order
             .entry(id.as_str())
@@ -316,7 +316,7 @@ mod tests {
         }
 
         let by = ledger.orders_by_channel();
-        let map: HashMap<&str, u64> = by.iter().map(|(k, v)| (k.as_str(), *v)).collect();
+        let map: BTreeMap<&str, u64> = by.iter().map(|(k, v)| (k.as_str(), *v)).collect();
         assert_eq!(map["tiktok"], 3);
         assert_eq!(map["instagram"], 2);
         assert_eq!(map["organic"], 1);
@@ -324,7 +324,7 @@ mod tests {
 
         // tiktok funnel: 1 pending, 1 confirmed, 1 delivered.
         let tiktok = ledger.funnel("tiktok");
-        let tm: HashMap<OrderStatus, u64> = tiktok.iter().map(|(s, c)| (*s, *c)).collect();
+        let tm: BTreeMap<OrderStatus, u64> = tiktok.iter().map(|(s, c)| (*s, *c)).collect();
         assert_eq!(tm[&Pending], 1);
         assert_eq!(tm[&Confirmed], 1);
         assert_eq!(tm[&Delivered], 1);
@@ -332,7 +332,7 @@ mod tests {
 
         // instagram funnel: 1 pending, 1 rejected.
         let ig = ledger.funnel("instagram");
-        let igmap: HashMap<OrderStatus, u64> = ig.iter().map(|(s, c)| (*s, *c)).collect();
+        let igmap: BTreeMap<OrderStatus, u64> = ig.iter().map(|(s, c)| (*s, *c)).collect();
         assert_eq!(igmap[&Pending], 1);
         assert_eq!(igmap[&Rejected], 1);
 

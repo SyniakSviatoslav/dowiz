@@ -10,7 +10,7 @@
 //! - numbers are emitted via the shortest round-trip representation,
 //! - strings are escaped with a single authority (the `fdr::json` escaper).
 //!
-//! Zero-dep, deterministic (no HashMap iteration order anywhere).
+//! Zero-dep, deterministic (no BTreeMap iteration order anywhere).
 
 /// A canonical JSON value.
 #[derive(Debug, Clone, PartialEq)]

@@ -11,7 +11,7 @@
 //! Fail-closed: an empty token stream yields ZERO trigrams (never a synthetic
 //! or panicking result). Ranking is deterministic (count DESC, then key ASC).
 //!
-//! ZERO new dependencies (reuses `crate::trigram`, which is `std` HashMap only).
+//! ZERO new dependencies (reuses `crate::trigram`, which is `std` BTreeMap only).
 
 use crate::trigram::{count, most_common, NGrams};
 

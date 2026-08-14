@@ -24,7 +24,7 @@
 
 use crate::event_log::sha3_256;
 use crate::TriState;
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// Tensor dimensionality.
 pub const SPECTRAL_DIM: usize = 256;
@@ -88,7 +88,7 @@ pub struct SpectralIndex {
     /// Papers as tensor rows.
     pub papers: Vec<TensorAscii>,
     /// Hash → index map.
-    hash_index: HashMap<[u8; 32], usize>,
+    hash_index: BTreeMap<[u8; 32], usize>,
     /// Covariance eigenvectors (computed once, O(K×dim²) = O(1)).
     pub eigenvectors: Vec<Vec<f64>>,
     /// Projected coordinates of all papers in eigen-space.
@@ -101,7 +101,7 @@ impl SpectralIndex {
     pub fn new() -> Self {
         SpectralIndex {
             papers: Vec::with_capacity(MAX_SPECTRAL_PAPERS),
-            hash_index: HashMap::new(),
+            hash_index: BTreeMap::new(),
             eigenvectors: Vec::new(),
             projections: Vec::new(),
             trained: TriState::False,

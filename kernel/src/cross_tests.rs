@@ -18,7 +18,7 @@ mod tests {
     use crate::invert::backprop_from_deltas;
     use crate::cross_bridge::CrossBridgeRegistry;
     use crate::chronos_topology::TemporalTrinity;
-    use std::collections::HashMap;
+    use alloc::collections::BTreeMap;
 
     // ─── META-1: Enrichment engine self-consistency ──────────────────────
 
@@ -67,7 +67,7 @@ mod tests {
     #[test]
     fn cross_trinary_eigen_chronos_roundtrip() {
         let mut c = Chronos::new(100);
-        let mut values = HashMap::new();
+        let mut values = BTreeMap::new();
         values.insert("stability".into(), 0.8);
         values.insert("confidence".into(), 0.6);
         c.snapshot(values.clone());
@@ -364,7 +364,7 @@ mod tests {
         let reg = CrossBridgeRegistry::from_research();
 
         // Store bridge frames as snapshots at different logical timestamps
-        let mut frame0 = HashMap::new();
+        let mut frame0 = BTreeMap::new();
         for (_i, bridge) in reg.bridges.iter().enumerate() {
             frame0.insert(bridge.name.clone(), bridge.strength as f64);
         }

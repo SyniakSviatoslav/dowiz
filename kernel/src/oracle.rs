@@ -20,7 +20,7 @@
 use crate::academia::Academia;
 use crate::research::{ResearchEngine, CrossPattern, KnowledgeDomain};
 use crate::github_patterns::ParsingTech;
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// Максимум інсайтів.
 pub const MAX_INSIGHTS: usize = 10_000;
@@ -62,7 +62,7 @@ pub struct PatternOracle {
     /// Згенеровані інсайти.
     pub insights: Vec<Insight>,
     /// Карта: патерн → кількість згадувань.
-    pattern_freq: HashMap<String, u64>,
+    pattern_freq: BTreeMap<String, u64>,
     next_insight_id: u64,
 }
 
@@ -73,7 +73,7 @@ impl PatternOracle {
             research: ResearchEngine::new(),
             github_patterns: ParsingTech::top_parsers(),
             insights: Vec::new(),
-            pattern_freq: HashMap::new(),
+            pattern_freq: BTreeMap::new(),
             next_insight_id: 1,
         }
     }

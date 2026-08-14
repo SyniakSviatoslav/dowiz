@@ -146,7 +146,7 @@ impl TemporalTrinity {
 #[derive(Debug, Clone)]
 pub struct ChronoTopology {
     /// Named temporal trinities (one per subsystem: "orders", "security", "enrichment"...)
-    pub subsystems: std::collections::HashMap<String, TemporalTrinity>,
+    pub subsystems: alloc::collections::BTreeMap<String, TemporalTrinity>,
     /// Global delta chain (system-wide drift tracking).
     pub drift: DeltaChain,
     /// Interference field (spectral superposition of all waves).
@@ -158,7 +158,7 @@ pub struct ChronoTopology {
 impl ChronoTopology {
     pub fn new() -> Self {
         ChronoTopology {
-            subsystems: std::collections::HashMap::new(),
+            subsystems: alloc::collections::BTreeMap::new(),
             drift: DeltaChain::new(),
             field: InterferenceField::new(),
             nav_history: Vec::new(),

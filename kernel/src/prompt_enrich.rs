@@ -25,7 +25,7 @@ use crate::academia::Academia;
 use crate::delta::{Delta, DeltaComparison, DeltaTracker};
 use crate::telemetry_harvest::HarvestLedger;
 use crate::chronos_topology::ChronoTopology;
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// Max prompt entries in the engine.
 pub const MAX_PROMPTS: usize = 100_000;
@@ -36,7 +36,7 @@ pub const MAX_ENRICH_RESULTS: usize = 5;
 
 // ─── PromptKind ────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(u16)]
 pub enum PromptKind {
     /// Code generation, refactoring, explanation
@@ -260,7 +260,7 @@ pub fn detect_intent_tree(text: &str) -> Vec<IntentPath> {
     }
 
     // Dedup by path content.
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = alloc::collections::BTreeSet::new();
     paths.retain(|p| seen.insert(p.join("/")));
     paths.truncate(7);
     paths
@@ -310,7 +310,7 @@ pub static PATTERN_TREE: &[PatternNode] = &[
     PatternNode { name: "code-security", category: "safety", rule: "Input validation on all public APIs. Sanitize f64: NaN→0.0. Bounds-check indices. No unsafe without SAFETY comment.", children: &[], cross_links: &[1,7] },
     PatternNode { name: "code-crypto", category: "safety", rule: "Never fake crypto. Real KAT-gated primitives only. No classical fallback for PQ.", children: &[], cross_links: &[1] },
     // ── idempotency children ──────────────────────────────────────────────
-    PatternNode { name: "push-dup-guard", category: "safety", rule: "Before push: check contains. Use HashSet or dedup guard. Replayed events must be no-ops.", children: &[], cross_links: &[3,16] },
+    PatternNode { name: "push-dup-guard", category: "safety", rule: "Before push: check contains. Use BTreeSet or dedup guard. Replayed events must be no-ops.", children: &[], cross_links: &[3,16] },
     PatternNode { name: "state-guard", category: "safety", rule: "State transitions: first check 'already in this state?' before advancing. FSM must be idempotent.", children: &[], cross_links: &[15] },
     // ── invariant children ────────────────────────────────────────────────
     PatternNode { name: "ordering", category: "quality", rule: "Thresholds must be strictly ordered. elevated<warning<critical<failed. Validate in constructor, assert in debug.", children: &[], cross_links: &[4] },
@@ -340,7 +340,7 @@ pub static PATTERN_TREE: &[PatternNode] = &[
 /// Inherits from root (universal) → domain → sub-domain.
 pub fn inherit_patterns(path: &IntentPath) -> Vec<&'static PatternNode> {
     let mut result: Vec<&PatternNode> = Vec::new();
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = alloc::collections::BTreeSet::new();
 
     // Always include universals (indices 0-4).
     for i in 0..=4 {
@@ -486,10 +486,10 @@ impl EnrichmentReport {
 // ─── IntentKeywordMap ──────────────────────────────────────────────────────
 
 /// Maps keywords → PromptKind for intent detection.
-type IntentMap = HashMap<&'static str, PromptKind>;
+type IntentMap = BTreeMap<&'static str, PromptKind>;
 
 fn build_intent_map() -> IntentMap {
-    let mut m = HashMap::new();
+    let mut m = BTreeMap::new();
     // Code
     for k in &["code", "implement", "build", "refactor", "compile", "debug", "bug",
         "function", "struct", "impl", "mod", "cargo", "rustc", "npm", "pip", "import",
@@ -582,7 +582,7 @@ fn detect_intent(text: &str) -> (PromptKind, f64) {
 pub fn detect_all_intents(text: &str) -> Vec<(PromptKind, usize, f64)> {
     let lower = text.to_lowercase();
     let map = build_intent_map();
-    let mut scores: HashMap<PromptKind, usize> = HashMap::new();
+    let mut scores: BTreeMap<PromptKind, usize> = BTreeMap::new();
 
     for (keyword, kind) in &map {
         if lower.contains(*keyword) {
@@ -628,9 +628,9 @@ pub struct PromptEnrichEngine {
     /// 8D crystal lattice for O(1) neighbor lookup.
     pub lattice: Academia,
     /// Prompt index: kind → vec of prompt indices.
-    kind_index: HashMap<PromptKind, Vec<usize>>,
+    kind_index: BTreeMap<PromptKind, Vec<usize>>,
     /// Keyword index: keyword → vec of prompt indices.
-    keyword_index: HashMap<String, Vec<usize>>,
+    keyword_index: BTreeMap<String, Vec<usize>>,
     total_ingested: u64,
 }
 
@@ -639,8 +639,8 @@ impl PromptEnrichEngine {
         PromptEnrichEngine {
             prompts: Vec::with_capacity(MAX_PROMPTS),
             lattice: Academia::new(),
-            kind_index: HashMap::new(),
-            keyword_index: HashMap::new(),
+            kind_index: BTreeMap::new(),
+            keyword_index: BTreeMap::new(),
             total_ingested: 0,
         }
     }
@@ -734,7 +734,7 @@ impl PromptEnrichEngine {
 
         // Dedup + sort by score descending.
         candidates.sort_by(|a, b| b.1.cmp(&a.1));
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = alloc::collections::BTreeSet::new();
         let mut matches: Vec<PromptEntry> = Vec::new();
         for (idx, _) in candidates {
             if seen.insert(idx) && matches.len() < MAX_ENRICH_RESULTS {
@@ -761,7 +761,7 @@ impl PromptEnrichEngine {
 
         // Collect prompt matches across all detected intents (batch).
         let mut candidates: Vec<(usize, u32)> = Vec::new();
-        let mut seen_intents = std::collections::HashSet::new();
+        let mut seen_intents = alloc::collections::BTreeSet::new();
 
         for &(kind, _, _) in &intents {
             if !seen_intents.insert(kind) { continue; }
@@ -781,7 +781,7 @@ impl PromptEnrichEngine {
 
         // Dedup + sort.
         candidates.sort_by(|a, b| b.1.cmp(&a.1));
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = alloc::collections::BTreeSet::new();
         let mut prompts: Vec<PromptEntry> = Vec::new();
         for (idx, _) in candidates {
             if seen.insert(idx) && prompts.len() < MAX_ENRICH_RESULTS {
@@ -791,7 +791,7 @@ impl PromptEnrichEngine {
 
         // Collect skill names from matched prompts.
         let mut skills: Vec<String> = Vec::new();
-        let mut seen_skills = std::collections::HashSet::new();
+        let mut seen_skills = alloc::collections::BTreeSet::new();
         for p in &prompts {
             if (p.kind == PromptKind::Skill || p.kind == PromptKind::Meta)
                 && seen_skills.insert(p.title.clone())
@@ -1008,7 +1008,7 @@ Extract helpers, eliminate duplication, rename for clarity, simplify control flo
 
 /// Build a vocabulary from the enrichment engine's entries.
 pub fn build_vocabulary(engine: &PromptEnrichEngine) -> Vec<String> {
-    let mut words: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut words: alloc::collections::BTreeSet<String> = alloc::collections::BTreeSet::new();
     for entry in engine.all_entries() {
         for kw in &entry.trigger_keywords {
             words.insert(kw.to_lowercase());
@@ -1494,7 +1494,7 @@ mod tests {
     fn detect_intent_tree_dedup_identical_paths() {
         let paths = detect_intent_tree("compile error in rust function fix bug");
         let deduped: Vec<String> = paths.iter().map(|p| p.join("/")).collect();
-        let unique: std::collections::HashSet<_> = deduped.iter().collect();
+        let unique: alloc::collections::BTreeSet<_> = deduped.iter().collect();
         assert_eq!(deduped.len(), unique.len());
     }
 
@@ -1594,7 +1594,7 @@ mod tests {
         assert_eq!(v1, v2, "build_vocabulary must be deterministic");
         // Verify sorted + deduped
         assert!(v1.windows(2).all(|w| w[0] <= w[1]), "Vocabulary must be sorted");
-        let unique: std::collections::HashSet<_> = v1.iter().collect();
+        let unique: alloc::collections::BTreeSet<_> = v1.iter().collect();
         assert_eq!(unique.len(), v1.len(), "Vocabulary must be deduplicated");
     }
 
@@ -1672,7 +1672,7 @@ mod tests {
         for input in &queries {
             let scalar = engine.enrich_report(input);
             let eigen_results = eigen_enrich_report(&engine, input, &vocab);
-            let scalar_titles: std::collections::HashSet<&str> = scalar.prompts.iter()
+            let scalar_titles: alloc::collections::BTreeSet<&str> = scalar.prompts.iter()
                 .take(3).map(|p| p.title.as_str()).collect();
             let eigen_titles: Vec<&str> = eigen_results.iter()
                 .take(3).map(|p| p.title.as_str()).collect();
@@ -1774,7 +1774,7 @@ impl EnrichmentQualityMonitor {
 /// Tracks keyword relevance over time using chronos topology.
 pub struct ChronosEnrichmentTracker {
     pub topology: ChronoTopology,
-    pub keyword_rows: HashMap<String, usize>,
+    pub keyword_rows: BTreeMap<String, usize>,
     pub query_count: usize,
 }
 
@@ -1782,7 +1782,7 @@ impl ChronosEnrichmentTracker {
     pub fn new() -> Self {
         Self {
             topology: ChronoTopology::new(),
-            keyword_rows: HashMap::new(),
+            keyword_rows: BTreeMap::new(),
             query_count: 0,
         }
     }

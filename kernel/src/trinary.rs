@@ -1024,7 +1024,7 @@ mod tests {
     /// Both and, or, and not must be 100% deterministic (no hidden state, no RNG).
     #[test]
     fn red_line_deterministic_same_inputs_same_output() {
-        use std::collections::HashMap;
+        use alloc::collections::BTreeMap;
 
         // Every combination of inputs must produce the same output every time.
         let all: &[(Tri, Tri)] = &[

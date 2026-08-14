@@ -17,7 +17,7 @@
 //! Zero new dependencies: std-only, reusing the existing `EventLog`/`FileEventStore`
 //! primitives exactly as the binaries would have if they had wired the store.
 
-use std::collections::HashSet;
+use alloc::collections::BTreeSet;
 use std::path::PathBuf;
 
 use crate::event_log::{ChainDefect, EventLog};
@@ -42,7 +42,7 @@ pub enum NodeId {
 
 /// Capabilities a node PROVIDES on init, or REQUIRES before it may init. Closed
 /// enum — a capability no upstream node provides is a fail-closed startup error.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Capability {
     /// A live, durable `EventLog<FileEventStore>` exists.
     DurableEventLog,
@@ -185,7 +185,7 @@ pub fn init_order(dag: &[InitNode]) -> Result<Vec<NodeId>, InitError> {
 /// assert every node's `requires_caps` were `provides`-satisfied by an already
 /// initialized upstream node. Absence ⇒ `InitError::CapabilityAbsent`.
 pub fn check_capabilities(dag: &[InitNode], order: &[NodeId]) -> Result<(), InitError> {
-    let mut provided: HashSet<Capability> = HashSet::new();
+    let mut provided: BTreeSet<Capability> = BTreeSet::new();
     for &id in order {
         let node = &dag[index_of(dag, id)];
         for &cap in node.requires_caps {

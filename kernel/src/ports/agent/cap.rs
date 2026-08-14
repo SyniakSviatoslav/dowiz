@@ -21,7 +21,7 @@
 //! signature genuinely fails verification; only the holder of the secret can produce a
 //! valid one — forging requires a SHA3 preimage).
 
-use std::collections::HashSet;
+use alloc::collections::BTreeSet;
 
 use crate::event_log::sha3_256;
 
@@ -54,7 +54,7 @@ pub enum HybridPolicy {
 
 /// A mesh node identity: `NodeId = SHA3-256(pq_pub || classical_pub)` (ADR-0007).
 /// Changing EITHER public key changes the id — no CA, no assignable "owner".
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct NodeId(pub [u8; 32]);
 
 impl NodeId {
@@ -389,7 +389,7 @@ impl Delegation {
 /// per-use at-rest re-verify.
 #[derive(Debug, Clone, Default)]
 pub struct AnchorRoster {
-    anchors: HashSet<[u8; 32]>,
+    anchors: BTreeSet<[u8; 32]>,
     /// Stored CRC32 over the canonical (sorted) authority bytes. `0` only at default
     /// (empty) construction; always re-hashed by the mutators.
     crc: u32,
@@ -487,8 +487,8 @@ fn crc32_canonical_anchor(snapshot: &[[u8; 32]]) -> u32 {
 /// verify. Mutable — the merge/revoke path is the real re-hash site.
 #[derive(Debug, Clone, Default)]
 pub struct RevocationSet {
-    revoked_keys: HashSet<[u8; 32]>,
-    revoked_cap_hash: HashSet<[u8; 32]>,
+    revoked_keys: BTreeSet<[u8; 32]>,
+    revoked_cap_hash: BTreeSet<[u8; 32]>,
     /// Stored CRC32 over the canonical (sorted) authority bytes of both sets.
     crc: u32,
 }

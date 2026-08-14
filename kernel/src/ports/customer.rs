@@ -22,7 +22,7 @@
 //! Compile firewall (mirrors `ports/llm.rs`, `ports/agent/cap.rs`): ZERO
 //! network / HTTP / JSON / serde. Pure `std` only.
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 use crate::event_log::sha3_256;
 use crate::geo;
@@ -255,7 +255,7 @@ pub struct NotificationBinding {
 /// state change on order A MUST reach only A's channel, never B's (§4.5-4).
 #[derive(Debug, Clone, Default)]
 pub struct NotificationRouter {
-    bindings: HashMap<String, String>,
+    bindings: BTreeMap<String, String>,
 }
 
 impl NotificationRouter {
@@ -418,7 +418,7 @@ mod tests {
     fn adversarial_grant_handle_entropy_floor() {
         let mut rng = Rng::new(0xFEED, 1);
         // Mint many independent grants for distinct orders.
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = alloc::collections::BTreeSet::new();
         for i in 0..512u64 {
             let g = OrderTrackingGrant::mint(
                 &format!("ORD-{i}"),

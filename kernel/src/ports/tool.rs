@@ -211,7 +211,7 @@ impl StaticSkillRegistry {
     /// Build the catalog. PANICS on any malformed entry (see struct doc).
     pub fn new(entries: Vec<(SkillCard, Box<dyn ToolPort>)>) -> Self {
         // Uniqueness of names.
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = alloc::collections::BTreeSet::new();
         for (card, tool) in &entries {
             assert!(
                 card.description.len() <= MAX_CARD_DESCRIPTION_BYTES,

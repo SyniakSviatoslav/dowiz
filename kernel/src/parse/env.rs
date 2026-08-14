@@ -11,7 +11,7 @@
 //! assert_eq!(map.get("PORT"), Some(&"8080".to_string()));
 //! ```
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// Maximum number of key-value pairs. Bounds memory on adversarial input.
 pub const MAX_ENTRIES: usize = 4096;
@@ -20,11 +20,11 @@ pub const MAX_ENTRIES: usize = 4096;
 pub const MAX_INPUT_LEN: usize = 2 * 1024 * 1024;
 
 /// Ordered environment map. Keys preserve insertion order (Vec of pairs)
-/// with a HashMap for O(1) lookup.
+/// with a BTreeMap for O(1) lookup.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EnvMap {
     entries: Vec<(String, String)>,
-    index: HashMap<String, usize>,
+    index: BTreeMap<String, usize>,
 }
 
 impl EnvMap {
@@ -32,7 +32,7 @@ impl EnvMap {
     pub fn new() -> Self {
         EnvMap {
             entries: Vec::new(),
-            index: HashMap::new(),
+            index: BTreeMap::new(),
         }
     }
 

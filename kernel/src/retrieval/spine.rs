@@ -10,10 +10,10 @@
 //! corpus frontmatter that the BM25/trigram layers can later fuse with. Pure
 //! `std`, no new deps.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A parsed frontmatter block: flat key → value (both trimmed).
-pub type Frontmatter = HashMap<String, String>;
+pub type Frontmatter = BTreeMap<String, String>;
 
 /// Structured validation failure. Lists every required key that was absent so
 /// the caller can surface a single, complete error instead of one round-trip
@@ -189,8 +189,8 @@ pub fn parse_tags(raw: &str) -> Vec<String> {
 /// P2 — Build a deterministic `tag → [doc-id]` index from frontmatter docs.
 /// Each bucket is sorted ascending (byte order) and de-duplicated, so the map
 /// is reproducible regardless of input ordering.
-pub fn tag_index(docs: &[(String, &Frontmatter)]) -> HashMap<String, Vec<String>> {
-    let mut idx: HashMap<String, Vec<String>> = HashMap::new();
+pub fn tag_index(docs: &[(String, &Frontmatter)]) -> BTreeMap<String, Vec<String>> {
+    let mut idx: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for (id, fm) in docs {
         if let Some(raw) = fm.get("tags") {
             for tag in parse_tags(raw) {
@@ -207,12 +207,12 @@ pub fn tag_index(docs: &[(String, &Frontmatter)]) -> HashMap<String, Vec<String>
 
 /// P2 — Docs that share ≥1 tag with `id`, sorted ascending, excluding `id` itself.
 /// Cross-references are derived from the `tag_index` buckets that contain `id`.
-pub fn backlinks(id: &str, index: &HashMap<String, Vec<String>>) -> Vec<String> {
-    // P77 B2: a `HashSet` accumulator replaces the O(R) `Vec::contains` dedup
+pub fn backlinks(id: &str, index: &BTreeMap<String, Vec<String>>) -> Vec<String> {
+    // P77 B2: a `BTreeSet` accumulator replaces the O(R) `Vec::contains` dedup
     // (`:215` in the old impl) so accumulation is O(R) total, not O(R²). Membership
     // of `id` in a sorted bucket uses `binary_search` (O(log R)) — buckets are
     // sorted+deduped in `tag_index`/`build`. Result set+order is identical.
-    let mut seen: HashSet<String> = HashSet::new();
+    let mut seen: BTreeSet<String> = BTreeSet::new();
     for bucket in index.values() {
         if bucket.binary_search(&id.to_string()).is_ok() {
             for other in bucket {
@@ -234,12 +234,12 @@ pub fn backlinks(id: &str, index: &HashMap<String, Vec<String>>) -> Vec<String> 
 /// deterministically; docs with no tag fall under `## (untagged)`. A top
 /// `# Knowledge Map` header precedes the sections. Stable, no trailing-ws drift.
 pub fn build_map(docs: &[(String, String, Vec<String>, String)]) -> String {
-    // P77 B2: a `HashMap<tag, group-index>` replaces the O(distinct-tags) linear
+    // P77 B2: a `BTreeMap<tag, group-index>` replaces the O(distinct-tags) linear
     // `groups.iter_mut().find` inside the per-doc loop (`:239` old), so grouping
     // is O(docs) total instead of O(docs · distinct-tags). Final sort order is
     // unchanged → byte-identical MAP.md output.
     let mut groups: Vec<(String, Vec<usize>)> = Vec::new();
-    let mut group_of: HashMap<String, usize> = HashMap::new();
+    let mut group_of: BTreeMap<String, usize> = BTreeMap::new();
     for (i, (_, _, tags, _)) in docs.iter().enumerate() {
         let tag = tags
             .first()
@@ -277,22 +277,22 @@ pub fn build_map(docs: &[(String, String, Vec<String>, String)]) -> String {
 /// index lowercases them for case-insensitive tag queries.
 pub struct SpineIndex {
     docs: Vec<(String, String, Vec<String>, String)>,
-    tag_index: HashMap<String, Vec<String>>,
+    tag_index: BTreeMap<String, Vec<String>>,
     /// id → position in `docs`, built once in `SpineIndex::build`. Turns
     /// `lookup_by_id`/`related`'s O(docs) `docs.iter().find/any` into O(1). Ids
     /// are unique (doc comment on `lookup_by_id`). (P77 B2.)
-    id_index: HashMap<String, usize>,
+    id_index: BTreeMap<String, usize>,
 }
 
 impl SpineIndex {
     /// Build the index from `(id, title, tags, path)` records. Tag buckets are
     /// sorted + de-duplicated up front so tag lookups are deterministic and
-    /// amortized O(1) via the `HashMap`; id lookups use a linear scan
+    /// amortized O(1) via the `BTreeMap`; id lookups use a linear scan
     /// (`lookup_by_id`, O(n) in the number of docs). Deterministic, not O(1)
     /// for every access path.
     pub fn build(docs: Vec<(String, String, Vec<String>, String)>) -> SpineIndex {
-        let mut tag_index: HashMap<String, Vec<String>> = HashMap::new();
-        let mut id_index: HashMap<String, usize> = HashMap::with_capacity(docs.len());
+        let mut tag_index: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        let mut id_index: BTreeMap<String, usize> = BTreeMap::new();
         for (pos, (id, _, tags, _)) in docs.iter().enumerate() {
             id_index.insert(id.clone(), pos);
             for tag in tags {
@@ -339,10 +339,10 @@ impl SpineIndex {
             Some(&pos) => self.docs[pos].2.iter().map(|t| t.to_lowercase()).collect(),
             None => return Vec::new(),
         };
-        // P77 B2: `HashSet` accumulator replaces the O(R) `!out.contains(other)`
+        // P77 B2: `BTreeSet` accumulator replaces the O(R) `!out.contains(other)`
         // dedup (`:325` old) so accumulation is O(R) total, not O(R²). The result
         // set+order is identical (sorted ascending, self excluded).
-        let mut seen: HashSet<String> = HashSet::new();
+        let mut seen: BTreeSet<String> = BTreeSet::new();
         for tag in &my_tags {
             if let Some(bucket) = self.tag_index.get(tag) {
                 for other in bucket {
@@ -544,7 +544,7 @@ mod tests {
         );
         assert!(!bl.contains(&"b".to_string()), "self never returned");
         // A doc with no relations returns empty.
-        assert_eq!(backlinks("a", &HashMap::new()), Vec::<String>::new());
+        assert_eq!(backlinks("a", &BTreeMap::new()), Vec::<String>::new());
     }
 
     #[test]
@@ -673,8 +673,8 @@ mod tests {
     // ===== P77 B2 differential / adversarial tests =====
 
     /// Reference re-implementations of the OLD O(R²)/O(docs) semantics, used as
-    /// the byte-identical oracle for the HashSet/HashMap rewrite.
-    fn ref_backlinks(id: &str, index: &HashMap<String, Vec<String>>) -> Vec<String> {
+    /// the byte-identical oracle for the BTreeSet/BTreeMap rewrite.
+    fn ref_backlinks(id: &str, index: &BTreeMap<String, Vec<String>>) -> Vec<String> {
         let mut related: Vec<String> = Vec::new();
         for bucket in index.values() {
             if bucket.iter().any(|d| d == id) {
@@ -723,7 +723,7 @@ mod tests {
                 .collect();
             docs.push((id.clone(), format!("Title {i}"), t, format!("docs/{id}.md")));
         }
-        // Two copies in different insertion orders → HashMap iteration order must
+        // Two copies in different insertion orders → BTreeMap iteration order must
         // NOT leak into output (the final sort() is the only thing that binds it).
         let mut docs_shuffled = docs.clone();
         docs_shuffled.rotate_left(137);
@@ -781,7 +781,7 @@ mod tests {
     }
 
     // GREEN (P77 B2): a doc sharing the SAME other doc across multiple tags
-    // appears exactly once (HashSet dedup == old `!contains`).
+    // appears exactly once (BTreeSet dedup == old `!contains`).
     #[test]
     fn spine_duplicate_backlinks_deduped() {
         let mut fm_a = Frontmatter::new();
@@ -830,7 +830,7 @@ mod tests {
     }
 
     // GREEN (P77 B2): large corpus in two insertion orders → byte-identical
-    // backlinks/related/build_map (HashMap order must not leak).
+    // backlinks/related/build_map (BTreeMap order must not leak).
     #[test]
     fn spine_large_corpus_order_stable() {
         let mut docs: Vec<(String, String, Vec<String>, String)> = Vec::new();
@@ -857,7 +857,7 @@ mod tests {
     // GREEN (P77 B2): empty / isolated edge behavior unchanged.
     #[test]
     fn spine_empty_and_isolated() {
-        assert_eq!(backlinks("x", &HashMap::new()), Vec::<String>::new());
+        assert_eq!(backlinks("x", &BTreeMap::new()), Vec::<String>::new());
         let idx = SpineIndex::build(vec![(
             "alone".to_string(),
             "Alone".into(),

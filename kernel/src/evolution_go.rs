@@ -19,7 +19,7 @@
 //!   (SHA3-256 event storage), ports/hub_intake (inbound message vocab)
 
 use crate::event_log::{sha3_256, EventLog, MeshEvent};
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// WhatsApp message direction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -161,9 +161,9 @@ pub enum StoreError {
 /// In-memory message store — default implementation.
 #[derive(Debug, Clone, Default)]
 pub struct MemMessageStore {
-    messages: HashMap<[u8; 32], WhatsAppMessage>,
-    by_sender: HashMap<String, Vec<[u8; 32]>>,
-    by_recipient: HashMap<String, Vec<[u8; 32]>>,
+    messages: BTreeMap<[u8; 32], WhatsAppMessage>,
+    by_sender: BTreeMap<String, Vec<[u8; 32]>>,
+    by_recipient: BTreeMap<String, Vec<[u8; 32]>>,
 }
 
 impl MemMessageStore {
@@ -239,7 +239,7 @@ pub enum LicenseError {
 /// In-memory license manager — default implementation.
 #[derive(Debug, Clone, Default)]
 pub struct MemLicenseManager {
-    licenses: HashMap<String, LicenseState>,
+    licenses: BTreeMap<String, LicenseState>,
 }
 
 impl MemLicenseManager {
@@ -272,7 +272,7 @@ impl LicenseManager for MemLicenseManager {
 /// The WhatsApp API — core facade.
 pub struct EvolutionGo {
     /// Sessions indexed by session ID.
-    sessions: HashMap<u64, WhatsAppSession>,
+    sessions: BTreeMap<u64, WhatsAppSession>,
     /// Message store.
     message_store: Box<dyn MessageStore>,
     /// License manager.
@@ -321,7 +321,7 @@ impl EvolutionGo {
         let event_log = EventLog::new(event_store);
 
         EvolutionGo {
-            sessions: HashMap::new(),
+            sessions: BTreeMap::new(),
             message_store,
             license_manager,
             endpoints,

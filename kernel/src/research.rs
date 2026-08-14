@@ -32,7 +32,7 @@
 //! Cross-patterns are discovered by co-occurrence analysis across papers.
 
 use crate::TriState;
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// Maximum patterns in the library.
 pub const MAX_PATTERNS: usize = 10_000;
@@ -164,7 +164,7 @@ pub struct ResearchEngine {
     pub patterns: Vec<Pattern>,
     pub cross_patterns: Vec<CrossPattern>,
     /// Pattern index: paper_id → vec of pattern_ids
-    paper_patterns: HashMap<String, Vec<u64>>,
+    paper_patterns: BTreeMap<String, Vec<u64>>,
     /// Next pattern ID.
     next_pattern_id: u64,
     next_cross_id: u64,
@@ -176,7 +176,7 @@ impl ResearchEngine {
             papers: Vec::new(),
             patterns: Vec::new(),
             cross_patterns: Vec::new(),
-            paper_patterns: HashMap::new(),
+            paper_patterns: BTreeMap::new(),
             next_pattern_id: 1,
             next_cross_id: 1,
         }
@@ -252,7 +252,7 @@ impl ResearchEngine {
 
     /// Discover cross-patterns: pairs of patterns that co-occur in the same papers.
     fn discover_cross_patterns(&mut self) {
-        let mut co_occur: HashMap<(u64, u64), usize> = HashMap::new();
+        let mut co_occur: BTreeMap<(u64, u64), usize> = BTreeMap::new();
 
         for paper in &self.papers {
             if let Some(pids) = self.paper_patterns.get(&paper.id) {

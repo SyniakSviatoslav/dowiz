@@ -19,7 +19,7 @@
 //! guard: no capability-bearing input can obtain the `&mut` the anchor/revocation
 //! mutators require.
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 use core::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -157,7 +157,7 @@ pub struct ReferenceHybridGate<V: SignatureVerifier> {
     policy: HybridPolicy,
     redline: Option<RedLinePolicy>,
     verifier: V,
-    seen: Mutex<std::collections::HashSet<[u8; 8]>>,
+    seen: Mutex<alloc::collections::BTreeSet<[u8; 8]>>,
     check_count: AtomicUsize,
 }
 
@@ -168,7 +168,7 @@ impl<V: SignatureVerifier> ReferenceHybridGate<V> {
             policy,
             redline: Some(redline),
             verifier,
-            seen: Mutex::new(std::collections::HashSet::new()),
+            seen: Mutex::new(alloc::collections::BTreeSet::new()),
             check_count: AtomicUsize::new(0),
         }
     }
@@ -179,7 +179,7 @@ impl<V: SignatureVerifier> ReferenceHybridGate<V> {
             policy,
             redline: None,
             verifier,
-            seen: Mutex::new(std::collections::HashSet::new()),
+            seen: Mutex::new(alloc::collections::BTreeSet::new()),
             check_count: AtomicUsize::new(0),
         }
     }
@@ -261,7 +261,7 @@ impl<V: SignatureVerifier> AdmissionGate for ReferenceHybridGate<V> {
                 return Err(AdmissionError::NonceRejected);
             }
             if seen.len() > MAX_SEEN_NONCES {
-                let keep: std::collections::HashSet<[u8; 8]> =
+                let keep: alloc::collections::BTreeSet<[u8; 8]> =
                     seen.iter().take(MAX_SEEN_NONCES / 2).copied().collect();
                 *seen = keep;
             }
@@ -366,7 +366,7 @@ pub struct Admitter<G: AdmissionGate> {
     max_chain_links: usize,
     actor_pubkey: [u8; 32],
     actor_seq: u64,
-    admitted: HashMap<[u8; 32], AdmissionRecord>,
+    admitted: BTreeMap<[u8; 32], AdmissionRecord>,
 }
 
 impl<G: AdmissionGate> Admitter<G> {
@@ -385,7 +385,7 @@ impl<G: AdmissionGate> Admitter<G> {
             max_chain_links: MAX_VERIFY_CHAIN_LINKS,
             actor_pubkey,
             actor_seq: 0,
-            admitted: HashMap::new(),
+            admitted: BTreeMap::new(),
         }
     }
 
@@ -535,7 +535,7 @@ impl<G: AdmissionGate> Admitter<G> {
             bucket: Arc::new(TokenBucket::new(granted_capacity as f64, refill)),
         };
         // Idempotency: if content_id already admitted, return existing record unchanged.
-        if let std::collections::hash_map::Entry::Vacant(e) = self.admitted.entry(content_id) {
+        if let std::collections::btree_map::Entry::Vacant(e) = self.admitted.entry(content_id) {
             e.insert(record.clone());
         }
         Ok(record)

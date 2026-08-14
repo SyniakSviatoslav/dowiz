@@ -4,7 +4,7 @@
 //! Maps to kernel primitives: parallel_patterns (Pipeline for stages),
 //! agent_browser (anti-detect web rendering config), spectral (keyframe interpolation).
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// Animation keyframe — a snapshot of animation state at a point in time.
 #[derive(Debug, Clone)]
@@ -14,11 +14,11 @@ pub struct Keyframe {
     /// Time offset (milliseconds from start).
     pub time_ms: u64,
     /// Property values at this keyframe.
-    pub properties: HashMap<String, f64>,
+    pub properties: BTreeMap<String, f64>,
 }
 
 /// Animation action — what triggers the animation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum AnimationAction {
     Scroll,
     Drag,
@@ -28,7 +28,7 @@ pub enum AnimationAction {
 }
 
 /// Animation pipeline stage — one phase of the keyframe→motion→web pipeline.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PipelineStage {
     /// Keyframe extraction and validation.
     KeyframeExtraction,
@@ -43,39 +43,39 @@ pub struct OilMotionPipeline {
     /// Registered keyframes in order.
     keyframes: Vec<Keyframe>,
     /// Pipeline stage configurations.
-    stages: HashMap<PipelineStage, StageConfig>,
+    stages: BTreeMap<PipelineStage, StageConfig>,
     /// Action bindings — which actions trigger which animations.
-    action_bindings: HashMap<AnimationAction, Vec<String>>,
+    action_bindings: BTreeMap<AnimationAction, Vec<String>>,
 }
 
 /// Stage configuration.
 #[derive(Debug, Clone)]
 pub struct StageConfig {
     pub enabled: bool,
-    pub params: HashMap<String, String>,
+    pub params: BTreeMap<String, String>,
 }
 
 impl OilMotionPipeline {
     /// Create a new pipeline.
     pub fn new() -> Self {
-        let mut stages = HashMap::new();
+        let mut stages = BTreeMap::new();
         stages.insert(PipelineStage::KeyframeExtraction, StageConfig {
             enabled: true,
-            params: HashMap::new(),
+            params: BTreeMap::new(),
         });
         stages.insert(PipelineStage::MotionGeneration, StageConfig {
             enabled: true,
-            params: HashMap::new(),
+            params: BTreeMap::new(),
         });
         stages.insert(PipelineStage::WebCompilation, StageConfig {
             enabled: true,
-            params: HashMap::new(),
+            params: BTreeMap::new(),
         });
 
         OilMotionPipeline {
             keyframes: Vec::new(),
             stages,
-            action_bindings: HashMap::new(),
+            action_bindings: BTreeMap::new(),
         }
     }
 
@@ -99,7 +99,7 @@ impl OilMotionPipeline {
     }
 
     /// Interpolate between two keyframes at a given time.
-    pub fn interpolate(&self, t_ms: u64) -> Option<HashMap<String, f64>> {
+    pub fn interpolate(&self, t_ms: u64) -> Option<BTreeMap<String, f64>> {
         if self.keyframes.len() < 2 {
             return None;
         }
@@ -125,7 +125,7 @@ impl OilMotionPipeline {
         let ratio = (t_ms - prev.time_ms) as f64 / (next.time_ms - prev.time_ms) as f64;
         let clamped_ratio = ratio.max(0.0).min(1.0);
 
-        let mut result = HashMap::new();
+        let mut result = BTreeMap::new();
         for (key, &prev_val) in &prev.properties {
             if let Some(&next_val) = next.properties.get(key) {
                 result.insert(key.clone(), prev_val + (next_val - prev_val) * clamped_ratio);
@@ -228,7 +228,7 @@ mod tests {
         p.add_keyframe(Keyframe {
             index: 0,
             time_ms: 0,
-            properties: HashMap::from([("opacity".to_string(), 0.0)]),
+            properties: BTreeMap::from([("opacity".to_string(), 0.0)]),
         });
         assert_eq!(p.keyframe_count(), 1);
     }
@@ -236,9 +236,9 @@ mod tests {
     #[test]
     fn keyframes_sorted_by_index() {
         let mut p = make_pipeline();
-        p.add_keyframe(Keyframe { index: 2, time_ms: 200, properties: HashMap::new() });
-        p.add_keyframe(Keyframe { index: 0, time_ms: 0, properties: HashMap::new() });
-        p.add_keyframe(Keyframe { index: 1, time_ms: 100, properties: HashMap::new() });
+        p.add_keyframe(Keyframe { index: 2, time_ms: 200, properties: BTreeMap::new() });
+        p.add_keyframe(Keyframe { index: 0, time_ms: 0, properties: BTreeMap::new() });
+        p.add_keyframe(Keyframe { index: 1, time_ms: 100, properties: BTreeMap::new() });
 
         let kfs = p.keyframes();
         assert_eq!(kfs[0].index, 0);
@@ -252,12 +252,12 @@ mod tests {
         p.add_keyframe(Keyframe {
             index: 0,
             time_ms: 0,
-            properties: HashMap::from([("x".to_string(), 0.0), ("y".to_string(), 0.0)]),
+            properties: BTreeMap::from([("x".to_string(), 0.0), ("y".to_string(), 0.0)]),
         });
         p.add_keyframe(Keyframe {
             index: 1,
             time_ms: 1000,
-            properties: HashMap::from([("x".to_string(), 100.0), ("y".to_string(), 200.0)]),
+            properties: BTreeMap::from([("x".to_string(), 100.0), ("y".to_string(), 200.0)]),
         });
 
         let result = p.interpolate(500).unwrap();
@@ -271,12 +271,12 @@ mod tests {
         p.add_keyframe(Keyframe {
             index: 0,
             time_ms: 0,
-            properties: HashMap::from([("x".to_string(), 10.0)]),
+            properties: BTreeMap::from([("x".to_string(), 10.0)]),
         });
         p.add_keyframe(Keyframe {
             index: 1,
             time_ms: 1000,
-            properties: HashMap::from([("x".to_string(), 20.0)]),
+            properties: BTreeMap::from([("x".to_string(), 20.0)]),
         });
 
         let result = p.interpolate(0).unwrap();
@@ -289,12 +289,12 @@ mod tests {
         p.add_keyframe(Keyframe {
             index: 0,
             time_ms: 0,
-            properties: HashMap::from([("x".to_string(), 10.0)]),
+            properties: BTreeMap::from([("x".to_string(), 10.0)]),
         });
         p.add_keyframe(Keyframe {
             index: 1,
             time_ms: 1000,
-            properties: HashMap::from([("x".to_string(), 20.0)]),
+            properties: BTreeMap::from([("x".to_string(), 20.0)]),
         });
 
         let result = p.interpolate(1000).unwrap();
@@ -314,12 +314,12 @@ mod tests {
         p.add_keyframe(Keyframe {
             index: 0,
             time_ms: 0,
-            properties: HashMap::from([("opacity".to_string(), 0.0)]),
+            properties: BTreeMap::from([("opacity".to_string(), 0.0)]),
         });
         p.add_keyframe(Keyframe {
             index: 1,
             time_ms: 1000,
-            properties: HashMap::from([("opacity".to_string(), 1.0)]),
+            properties: BTreeMap::from([("opacity".to_string(), 1.0)]),
         });
 
         let css = p.generate_css("test-anim");
@@ -338,8 +338,8 @@ mod tests {
     #[test]
     fn clear_removes_all_keyframes() {
         let mut p = make_pipeline();
-        p.add_keyframe(Keyframe { index: 0, time_ms: 0, properties: HashMap::new() });
-        p.add_keyframe(Keyframe { index: 1, time_ms: 100, properties: HashMap::new() });
+        p.add_keyframe(Keyframe { index: 0, time_ms: 0, properties: BTreeMap::new() });
+        p.add_keyframe(Keyframe { index: 1, time_ms: 100, properties: BTreeMap::new() });
         p.bind_action(AnimationAction::Scroll, "anim");
 
         assert_eq!(p.keyframe_count(), 2);

@@ -289,10 +289,10 @@ impl MemorySearchEngine {
             .collect();
 
         // Build term -> section-ids inverted index
-        let mut term_index: std::collections::HashMap<String, Vec<u32>> =
-            std::collections::HashMap::new();
+        let mut term_index: alloc::collections::BTreeMap<String, Vec<u32>> =
+            alloc::collections::BTreeMap::new();
         for (sid, terms) in section_terms.iter().enumerate() {
-            let mut seen = std::collections::HashSet::new();
+            let mut seen = alloc::collections::BTreeSet::new();
             for t in terms {
                 if seen.insert(t.clone()) {
                     term_index
@@ -304,8 +304,8 @@ impl MemorySearchEngine {
         }
 
         // Compute shared-term counts for each pair
-        let mut edge_counts: std::collections::HashMap<(u32, u32), u32> =
-            std::collections::HashMap::new();
+        let mut edge_counts: alloc::collections::BTreeMap<(u32, u32), u32> =
+            alloc::collections::BTreeMap::new();
         for sids in term_index.values() {
             for i in 0..sids.len() {
                 for j in (i + 1)..sids.len() {

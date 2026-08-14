@@ -11,7 +11,7 @@
 
 use crate::event_log::sha3_256;
 use crate::trig::Xyz;
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// A single system state snapshot at a specific timestamp.
 #[derive(Debug, Clone)]
@@ -19,7 +19,7 @@ pub struct Snapshot {
     pub id: u64,
     pub timestamp_ms: u64,
     /// Named state dimensions (e.g. "order_count", "cpu_load", "confidence").
-    pub values: HashMap<String, f64>,
+    pub values: BTreeMap<String, f64>,
     /// XYZ encoding of the composite state.
     pub xyz: Xyz,
     /// SHA3-256 integrity hash of (timestamp + sorted values).
@@ -27,14 +27,14 @@ pub struct Snapshot {
 }
 
 impl Snapshot {
-    pub fn new(timestamp_ms: u64, values: HashMap<String, f64>) -> Self {
+    pub fn new(timestamp_ms: u64, values: BTreeMap<String, f64>) -> Self {
         let id = timestamp_ms; // monotonic (ms granularity)
         let xyz = Snapshot::compute_xyz(&values);
         let integrity = Snapshot::compute_hash(timestamp_ms, &values);
         Snapshot { id, timestamp_ms, values, xyz, integrity }
     }
 
-    fn compute_xyz(values: &HashMap<String, f64>) -> Xyz {
+    fn compute_xyz(values: &BTreeMap<String, f64>) -> Xyz {
         let mut keys: Vec<&String> = values.keys().collect();
         keys.sort();
         let mut x = 0.0f64; let mut y = 0.0f64; let mut z = 0.0f64;
@@ -49,7 +49,7 @@ impl Snapshot {
         Xyz::new(x, y, z)
     }
 
-    fn compute_hash(ts: u64, values: &HashMap<String, f64>) -> [u8; 32] {
+    fn compute_hash(ts: u64, values: &BTreeMap<String, f64>) -> [u8; 32] {
         let mut data = ts.to_le_bytes().to_vec();
         let mut keys: Vec<&String> = values.keys().collect();
         keys.sort();
@@ -73,16 +73,16 @@ pub struct Chronos {
     /// Max snapshots retained (sliding window).
     pub capacity: usize,
     /// Index: dimension name → last known values for interpolation.
-    pub dimensions: HashMap<String, Vec<f64>>,
+    pub dimensions: BTreeMap<String, Vec<f64>>,
 }
 
 impl Chronos {
     pub fn new(capacity: usize) -> Self {
-        Chronos { snapshots: Vec::with_capacity(capacity), capacity: capacity.max(1), dimensions: HashMap::new() }
+        Chronos { snapshots: Vec::with_capacity(capacity), capacity: capacity.max(1), dimensions: BTreeMap::new() }
     }
 
     /// Record a snapshot of current system state.
-    pub fn snapshot(&mut self, values: HashMap<String, f64>) -> &Snapshot {
+    pub fn snapshot(&mut self, values: BTreeMap<String, f64>) -> &Snapshot {
         let ts = crate::now_ms();
         let snap = Snapshot::new(ts, values.clone());
         self.snapshots.push(snap);
@@ -109,11 +109,11 @@ impl Chronos {
     }
 
     /// Delta between two timestamps: XYZ distance + per-dimension deltas.
-    pub fn delta(&self, t1: u64, t2: u64) -> Option<(f64, HashMap<String, f64>)> {
+    pub fn delta(&self, t1: u64, t2: u64) -> Option<(f64, BTreeMap<String, f64>)> {
         let s1 = self.at(t1)?;
         let s2 = self.at(t2)?;
         let xyz_delta = s1.xyz.distance(&s2.xyz);
-        let mut dim_deltas = HashMap::new();
+        let mut dim_deltas = BTreeMap::new();
         for k in s1.values.keys() {
             let v1 = s1.values.get(k).copied().unwrap_or(0.0);
             let v2 = s2.values.get(k).copied().unwrap_or(0.0);
@@ -136,7 +136,7 @@ impl Chronos {
     }
 
     /// Interpolate state between two nearest snapshots.
-    pub fn interpolate(&self, timestamp_ms: u64) -> Option<HashMap<String, f64>> {
+    pub fn interpolate(&self, timestamp_ms: u64) -> Option<BTreeMap<String, f64>> {
         if self.snapshots.is_empty() { return None; }
         // Find nearest before and after
         let before = self.snapshots.iter()
@@ -149,7 +149,7 @@ impl Chronos {
             (Some(b), Some(a)) if b.timestamp_ms != a.timestamp_ms => {
                 let w = (timestamp_ms - b.timestamp_ms) as f64
                     / (a.timestamp_ms - b.timestamp_ms) as f64;
-                let mut result = HashMap::new();
+                let mut result = BTreeMap::new();
                 for k in b.values.keys() {
                     let v1 = b.values.get(k).copied().unwrap_or(0.0);
                     let v2 = a.values.get(k).copied().unwrap_or(0.0);
@@ -170,8 +170,8 @@ mod tests {
     use std::thread;
     use std::time::Duration;
 
-    fn make_values(x: f64, y: f64) -> HashMap<String, f64> {
-        let mut m = HashMap::new();
+    fn make_values(x: f64, y: f64) -> BTreeMap<String, f64> {
+        let mut m = BTreeMap::new();
         m.insert("x".into(), x);
         m.insert("y".into(), y);
         m

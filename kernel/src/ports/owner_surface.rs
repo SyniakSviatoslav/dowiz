@@ -95,7 +95,7 @@ pub enum BrandEventKind {
 /// durable customer identity (P49 deferral) — the only stable handle is the
 /// channel-shaped address plus the order-ids that reference it. Erasure is scoped to
 /// this closure.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ChannelKind {
     Telegram,
     Sms,
@@ -737,11 +737,11 @@ pub fn publish_requires_owner_tap(_post: &MasterPost) -> DraftStatus {
 /// unrecoverable while the log's ciphertext + hashes stay intact (chain integrity).
 #[derive(Debug, Clone, Default)]
 pub struct ErasureLedger {
-    erased: std::collections::HashSet<(ChannelKind, String)>,
+    erased: alloc::collections::BTreeSet<(ChannelKind, String)>,
     pub events: Vec<ErasureEvent>,
     /// Per-customer data keys. On erase the entry is REMOVED (key destroyed) —
     /// the ciphertext stays in the log but is unrecoverable.
-    keys: std::collections::HashMap<(ChannelKind, String), Vec<u8>>,
+    keys: alloc::collections::BTreeMap<(ChannelKind, String), Vec<u8>>,
 }
 
 impl ErasureLedger {

@@ -88,8 +88,8 @@ impl SelfHeal {
             }
         }
 
-        let mut kind_counts: std::collections::HashMap<PromptKind, usize> =
-            std::collections::HashMap::new();
+        let mut kind_counts: alloc::collections::BTreeMap<PromptKind, usize> =
+            alloc::collections::BTreeMap::new();
         for entry in entries {
             *kind_counts.entry(entry.kind).or_insert(0) += 1;
         }
@@ -118,7 +118,7 @@ impl SelfHeal {
 
         let text = entry.prompt_text.to_lowercase();
         let mut extracted: Vec<String> = Vec::new();
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = alloc::collections::BTreeSet::new();
 
         for word in text.split(|c: char| !c.is_ascii_alphanumeric()) {
             let w = word.trim();

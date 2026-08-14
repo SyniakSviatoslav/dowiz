@@ -131,7 +131,7 @@ pub struct SkillExtractor {
     config: ExtractionConfig,
     pid: PidController,
     /// Cached extraction results.
-    cache: std::collections::HashMap<[u8; 32], ExtractedSkill>,
+    cache: alloc::collections::BTreeMap<[u8; 32], ExtractedSkill>,
 }
 
 impl SkillExtractor {
@@ -139,7 +139,7 @@ impl SkillExtractor {
         SkillExtractor {
             pid: PidController::new_min_max(1, config.parallel_workers),
             config,
-            cache: std::collections::HashMap::new(),
+            cache: alloc::collections::BTreeMap::new(),
         }
     }
 

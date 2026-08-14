@@ -29,7 +29,7 @@ use crate::rng::Rng;
 /// Closed set of injection points. Adding a variant is a spec change reviewed
 /// against the P-H blueprint (F32 closed-set discipline, mirroring P24's site
 /// table — these are INJECTION points, distinct from P24's MEASUREMENT sites).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ChaosSite {
     /// Inside `ChaosStore::insert` (seam A).
     StoreInsert,
@@ -83,7 +83,7 @@ pub struct FaultPlan {
     stream: u64,
     arms: Vec<(ChaosSite, FaultInjection, Trigger)>,
     /// Per-(site) call counter, so `OnCall`/`EveryNth` are reproducible.
-    counts: std::collections::HashMap<ChaosSite, u32>,
+    counts: alloc::collections::BTreeMap<ChaosSite, u32>,
 }
 
 impl FaultPlan {
@@ -93,7 +93,7 @@ impl FaultPlan {
             seed: 0,
             stream: 1,
             arms: Vec::new(),
-            counts: std::collections::HashMap::new(),
+            counts: alloc::collections::BTreeMap::new(),
         }
     }
 
@@ -104,7 +104,7 @@ impl FaultPlan {
             seed,
             stream,
             arms,
-            counts: std::collections::HashMap::new(),
+            counts: alloc::collections::BTreeMap::new(),
         }
     }
 
@@ -620,7 +620,7 @@ mod adversarial {
     // loss and strict FIFO among un-acked.
     #[test]
     fn a4_spool_crash_storm_zero_loss() {
-        use std::collections::HashSet;
+        use alloc::collections::BTreeSet;
         let n = 1000u64;
         let mut spool = Spool::new(n as usize);
         for i in 0..n {
@@ -628,7 +628,7 @@ mod adversarial {
                 .append(&format!("rec-{i}"))
                 .expect("append within capacity");
         }
-        let mut already_crashed = HashSet::new();
+        let mut already_crashed = BTreeSet::new();
         let mut reclaimed = 0u64;
         let mut delivered = 0u64;
         let mut acked = 0u64;

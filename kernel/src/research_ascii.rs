@@ -101,7 +101,7 @@ pub struct AsciiLibrary {
     /// Papers stored as ASCII lines.
     pub entries: Vec<String>,
     /// Hash → index map for dedup.
-    hash_index: std::collections::HashMap<[u8; 32], usize>,
+    hash_index: alloc::collections::BTreeMap<[u8; 32], usize>,
     /// Max entries (memory cap).
     max_entries: usize,
 }
@@ -110,7 +110,7 @@ impl AsciiLibrary {
     pub fn new(max_entries: usize) -> Self {
         AsciiLibrary {
             entries: Vec::with_capacity(max_entries.min(1000)),
-            hash_index: std::collections::HashMap::new(),
+            hash_index: alloc::collections::BTreeMap::new(),
             max_entries,
         }
     }

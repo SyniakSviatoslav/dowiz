@@ -170,7 +170,7 @@ mod tests {
         let c = Chunker::new(1024, 32 * 1024, 12);
         let blocks = c.chunk(&data);
         // every block id unique within one file
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = alloc::collections::BTreeSet::new();
         for blk in &blocks {
             assert!(seen.insert(blk.id), "duplicate block id within a file");
         }

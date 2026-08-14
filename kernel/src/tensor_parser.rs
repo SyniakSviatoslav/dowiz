@@ -17,7 +17,7 @@ use crate::orchestrator::PidController;
 use crate::parallel_patterns::FanOutPlan;
 use crate::orchestrator::Priority;
 use crate::TriState;
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// Tensor dimensionality (256D).
 pub const TENSOR_DIM: usize = 256;
@@ -68,14 +68,14 @@ impl PaperVector {
 pub struct TensorStore {
     pub matrix: Vec<Vec<f64>>,
     pub papers: Vec<PaperVector>,
-    hash_index: HashMap<[u8; 32], usize>,
+    hash_index: BTreeMap<[u8; 32], usize>,
     #[allow(dead_code)]
     pid: PidController,
 }
 
 impl TensorStore {
     pub fn new() -> Self {
-        TensorStore { matrix: Vec::with_capacity(MAX_TENSOR_PAPERS), papers: Vec::with_capacity(MAX_TENSOR_PAPERS), hash_index: HashMap::new(), pid: PidController::new_min_max(1, 16) }
+        TensorStore { matrix: Vec::with_capacity(MAX_TENSOR_PAPERS), papers: Vec::with_capacity(MAX_TENSOR_PAPERS), hash_index: BTreeMap::new(), pid: PidController::new_min_max(1, 16) }
     }
 
     pub fn insert(&mut self, pv: PaperVector) -> bool {

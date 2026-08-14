@@ -138,7 +138,7 @@ pub struct VisualIndex {
     pub documents: Vec<DocumentTiles>,
     pub total_tiles: usize,
     /// Search cache.
-    cache: std::collections::HashMap<[u8; 32], Vec<(u64, f64)>>,
+    cache: alloc::collections::BTreeMap<[u8; 32], Vec<(u64, f64)>>,
 }
 
 impl VisualIndex {
@@ -147,7 +147,7 @@ impl VisualIndex {
             ivf: IvfIndex::new(n_cells, EMBEDDING_DIM),
             documents: Vec::new(),
             total_tiles: 0,
-            cache: std::collections::HashMap::new(),
+            cache: alloc::collections::BTreeMap::new(),
         }
     }
 

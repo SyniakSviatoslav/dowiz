@@ -34,7 +34,7 @@
 
 use crate::event_log::sha3_256;
 use crate::TriState;
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// A single organ/module discovered in the kernel source.
 #[derive(Debug, Clone)]

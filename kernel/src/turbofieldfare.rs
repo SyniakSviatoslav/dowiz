@@ -15,7 +15,7 @@
 //!
 //! Zero new dependencies — pure `std`. Tested under `#[cfg(test)]` below.
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 // ─── Gating primitives ──────────────────────────────────────────────────────
 
@@ -209,7 +209,7 @@ pub enum ActivateResult {
 #[derive(Debug, Clone)]
 pub struct InferencePredictor {
     /// Per-expert EMA of activation duration (us).
-    pub expert_duration_ema: HashMap<usize, f64>,
+    pub expert_duration_ema: BTreeMap<usize, f64>,
     /// Global EMA of activations per inference step.
     pub activation_rate_ema: f64,
     /// EMA smoothing alpha (0..1).
@@ -222,7 +222,7 @@ impl InferencePredictor {
     /// Create a new predictor.
     pub fn new(alpha: f64) -> Self {
         InferencePredictor {
-            expert_duration_ema: HashMap::new(),
+            expert_duration_ema: BTreeMap::new(),
             activation_rate_ema: 0.0,
             alpha,
             observations: 0,

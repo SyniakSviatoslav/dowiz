@@ -27,7 +27,7 @@ use crate::TriState;
 const MAX_CONCURRENT: usize = 8;
 
 /// Action categories for metrics and load tracking.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum ActionCategory {
     /// Read-only tool invocation.
     ToolRead,
@@ -127,7 +127,7 @@ pub struct ScheduledTask {
 #[derive(Debug)]
 pub struct PredictiveEngine {
     /// EMA estimates per action category: (avg_us, avg_variance).
-    pub category_stats: std::collections::HashMap<ActionCategory, EmaEstimate>,
+    pub category_stats: alloc::collections::BTreeMap<ActionCategory, EmaEstimate>,
     /// Global load EMA (actions per second).
     pub load_ema: f64,
     /// Global latency EMA (microseconds).
@@ -153,7 +153,7 @@ impl PredictiveEngine {
     /// Create a new predictive engine.
     pub fn new() -> Self {
         PredictiveEngine {
-            category_stats: std::collections::HashMap::new(),
+            category_stats: alloc::collections::BTreeMap::new(),
             load_ema: 0.0,
             latency_ema: 0.0,
             alpha: 0.3, // responsive but not too twitchy
@@ -725,7 +725,7 @@ impl Orchestrator {
     /// `finish_task` when done.
     pub fn dequeue_ready(&mut self) -> Option<(ScheduledTask, u64)> {
         // Find tasks whose dependencies are all satisfied.
-        let completed: std::collections::HashSet<u64> = self
+        let completed: alloc::collections::BTreeSet<u64> = self
             .history
             .iter()
             .filter(|r| r.success.is_true())

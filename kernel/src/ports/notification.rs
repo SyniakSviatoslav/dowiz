@@ -15,7 +15,7 @@
 //! law); it adds no state, edge, or fulfillment discriminator.
 
 use crate::order_machine::OrderStatus;
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Transport value types (opaque, hub-local; never dowiz-central)
@@ -257,11 +257,11 @@ pub fn channel_coverage(set: &ChannelSet) -> Result<(), NoReachableChannel> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Hub-local registry. Binds at checkout, unbinds on terminal. Never serialized to a dowiz
-/// endpoint (no central host string exists in this module). A `HashMap` is correct: it holds the
+/// endpoint (no central host string exists in this module). A `BTreeMap` is correct: it holds the
 /// live orders on ONE hub — hundreds, not millions (§6.2).
 #[derive(Debug, Clone, Default)]
 pub struct ChannelRegistry {
-    sets: HashMap<String, ChannelSet>,
+    sets: BTreeMap<String, ChannelSet>,
 }
 
 impl ChannelRegistry {
@@ -633,7 +633,7 @@ mod tests {
     /// A push adapter whose behavior is scripted per endpoint.
     struct FakePush {
         /// Map endpoint → error to return (None = success).
-        fail: std::collections::HashMap<String, NotifyError>,
+        fail: alloc::collections::BTreeMap<String, NotifyError>,
     }
     impl PushPort for FakePush {
         fn send(&self, sub: &PushSub, _msg: &StatusMsg) -> Result<Receipt, NotifyError> {
@@ -969,7 +969,7 @@ mod tests {
                 messenger: vec![],
             },
         );
-        let mut fail = std::collections::HashMap::new();
+        let mut fail = alloc::collections::BTreeMap::new();
         fail.insert(
             "ep-2".to_string(),
             NotifyError::DeadToken(DeadReason::WebPush410Gone),
@@ -1014,7 +1014,7 @@ mod tests {
                 messenger: vec![],
             },
         );
-        let mut fail = std::collections::HashMap::new();
+        let mut fail = alloc::collections::BTreeMap::new();
         fail.insert(
             "ep-flaky".to_string(),
             NotifyError::Transient("503 unavailable".into()),

@@ -32,7 +32,7 @@
 //! are rejected fail-closed. Adding a suite = one code-point registration, never a
 //! wire-format fork.
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 use crate::event_log::sha3_256;
 use crate::ports::agent::cap::{
@@ -728,7 +728,7 @@ pub enum ApplyOutcome {
 #[derive(Debug, Clone, Default)]
 pub struct RevocationStore {
     set: RevocationSet,
-    seqs: HashMap<NodeId, u64>,
+    seqs: BTreeMap<NodeId, u64>,
 }
 
 impl RevocationStore {

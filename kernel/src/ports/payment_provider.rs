@@ -27,7 +27,7 @@
 //! of capture truth, and the webhook is its SOLE source (§4.4).
 
 use core::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::event_log::sha3_256;
 use crate::money::{assert_non_negative, Currency, Money};
@@ -109,7 +109,7 @@ pub struct VendorLeg {
     pub dest_account: ProviderAccountRef,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub struct LegId(pub u32);
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -262,12 +262,12 @@ pub const MAX_OUTSTANDING_INTENTS_PER_WALLET: usize = 1;
 pub struct ProviderHandles {
     pub checkout_url: String,
     pub session_token: [u8; 32],
-    pub leg_charges: HashMap<LegId, ChargeHandle>,
+    pub leg_charges: BTreeMap<LegId, ChargeHandle>,
 }
 
 impl ProviderHandles {
     fn from_plan(plan: &NLegPlan, token: [u8; 32]) -> Self {
-        let mut leg_charges = HashMap::new();
+        let mut leg_charges = BTreeMap::new();
         for leg in &plan.legs {
             leg_charges.insert(leg.leg, ChargeHandle(format!("ch_{}", leg.leg.0)));
         }
@@ -547,13 +547,13 @@ pub fn edge_challenge_ok(token: &Option<String>) -> bool {
 /// is refused a second. Event-sourced predicate over fold state; here a minimal hub-local count.
 #[derive(Default)]
 pub struct OutstandingIntentGate {
-    counts: HashMap<String, usize>,
+    counts: BTreeMap<String, usize>,
 }
 
 impl OutstandingIntentGate {
     pub fn new() -> Self {
         OutstandingIntentGate {
-            counts: HashMap::new(),
+            counts: BTreeMap::new(),
         }
     }
 
@@ -583,8 +583,8 @@ impl OutstandingIntentGate {
 pub struct NoOpPaymentAdapter {
     secret: [u8; 32],
     ledger: RefCell<IdemLedger>,
-    seen_events: RefCell<HashSet<String>>,
-    tokens: RefCell<HashMap<[u8; 32], TokenEntry>>,
+    seen_events: RefCell<BTreeSet<String>>,
+    tokens: RefCell<BTreeMap<[u8; 32], TokenEntry>>,
 }
 
 #[derive(Clone)]
@@ -599,8 +599,8 @@ impl NoOpPaymentAdapter {
         NoOpPaymentAdapter {
             secret: [7u8; 32],
             ledger: RefCell::new(IdemLedger::new()),
-            seen_events: RefCell::new(HashSet::new()),
-            tokens: RefCell::new(HashMap::new()),
+            seen_events: RefCell::new(BTreeSet::new()),
+            tokens: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -610,8 +610,8 @@ impl NoOpPaymentAdapter {
         NoOpPaymentAdapter {
             secret: [7u8; 32],
             ledger: RefCell::new(ledger),
-            seen_events: RefCell::new(HashSet::new()),
-            tokens: RefCell::new(HashMap::new()),
+            seen_events: RefCell::new(BTreeSet::new()),
+            tokens: RefCell::new(BTreeMap::new()),
         }
     }
 
@@ -880,7 +880,7 @@ fn verify_webhook_local(
     secret: &[u8; 32],
     raw: &[u8],
     headers: &WebhookHeaders,
-    seen: &mut HashSet<String>,
+    seen: &mut BTreeSet<String>,
 ) -> Result<PaymentEvent, PayError> {
     // Replay window: reject timestamps outside tolerance (no stale/forged delivery).
     let now = now_secs();
@@ -1338,7 +1338,7 @@ mod tests {
     fn adv_duplicate_authorized_webhook_folds_once() {
         // A duplicate LegCaptured webhook for an already-captured leg folds once, state unchanged.
         let ev = NLegEvent::LegCaptured { leg: LegId(1) };
-        let mut seen: HashSet<String> = HashSet::new();
+        let mut seen: BTreeSet<String> = BTreeSet::new();
         let key = |e: &NLegEvent| -> String {
             match e {
                 NLegEvent::LegCaptured { leg } => format!("captured:{:?}", leg),

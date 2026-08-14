@@ -357,8 +357,8 @@ pub fn d_separated(
     //   dir = 0 (start) | 1 (came from a PARENT, i.e. arrived downstream) | 2 (came from a CHILD, i.e. arrived upstream)
     //   via = the node we arrived from (n = sentinel at the start)
     // We never re-process a (node, dir, via) triple, bounding the search and preventing cycles.
-    use std::collections::HashSet;
-    let mut visited: HashSet<(usize, u8, usize)> = HashSet::new();
+    use alloc::collections::BTreeSet;
+    let mut visited: BTreeSet<(usize, u8, usize)> = BTreeSet::new();
     let mut queue: Vec<(usize, u8, usize)> = Vec::new();
     for &c in &children[x] {
         queue.push((c, 1, x));
@@ -703,7 +703,7 @@ fn id(y: &[usize], x: &[usize], g: &CGraph) -> Result<IdResult, String> {
     let topo_all = g
         .topological_order()
         .ok_or_else(|| "id: subgraph has a directed cycle".to_string())?;
-    let present_set: std::collections::HashSet<usize> = g.nodes().into_iter().collect();
+    let present_set: alloc::collections::BTreeSet<usize> = g.nodes().into_iter().collect();
     let v: Vec<usize> = topo_all
         .into_iter()
         .filter(|n| present_set.contains(n))
@@ -1185,8 +1185,8 @@ fn eval_formula(
 ) -> Result<Vec<f64>, String> {
     let n = joint.cards.len();
     // All nodes not in {query ∪ fixed} are summed out.
-    let fixed_set: std::collections::HashSet<usize> = fixed.iter().map(|&(k, _)| k).collect();
-    let query_set: std::collections::HashSet<usize> = query.iter().copied().collect();
+    let fixed_set: alloc::collections::BTreeSet<usize> = fixed.iter().map(|&(k, _)| k).collect();
+    let query_set: alloc::collections::BTreeSet<usize> = query.iter().copied().collect();
     let sum_nodes: Vec<usize> = (0..n)
         .filter(|i| !query_set.contains(i) && !fixed_set.contains(i))
         .collect();
@@ -1228,10 +1228,10 @@ fn eval_formula(
             let mut prod = 1.0f64;
             for (vi_list, cond) in factors {
                 let vi = vi_list[0]; // each factor is univariate P(v_i | ·)
-                let cond_set: std::collections::HashSet<usize> = cond.iter().copied().collect();
+                let cond_set: alloc::collections::BTreeSet<usize> = cond.iter().copied().collect();
                 // Variables that must be held at their current (enumerated) values
                 // when forming this conditional: v_i itself and its conditioning set.
-                let kept: std::collections::HashSet<usize> = cond_set
+                let kept: alloc::collections::BTreeSet<usize> = cond_set
                     .iter()
                     .copied()
                     .chain(std::iter::once(vi))

@@ -283,7 +283,7 @@ enum Value {
     Num(i64),
     String(String),
     Array(Vec<Value>),
-    Object(std::collections::HashMap<String, Value>),
+    Object(alloc::collections::BTreeMap<String, Value>),
 }
 
 impl Value {
@@ -317,16 +317,16 @@ impl Value {
     }
 }
 
-/// Helpers over the `HashMap` produced by `Value::Object`, so `deserialize` can read fields
+/// Helpers over the `BTreeMap` produced by `Value::Object`, so `deserialize` can read fields
 /// directly off an object map (the `get_*` methods live on `Value`; this trait mirrors them for
-/// the already-destructured `HashMap`).
+/// the already-destructured `BTreeMap`).
 trait Obj {
     fn get_u16(&self, k: &str) -> Option<u16>;
     fn get_u64(&self, k: &str) -> Option<u64>;
     fn get_str(&self, k: &str) -> Option<&str>;
     fn get_val(&self, k: &str) -> Option<&Value>;
 }
-impl Obj for std::collections::HashMap<String, Value> {
+impl Obj for alloc::collections::BTreeMap<String, Value> {
     fn get_u16(&self, k: &str) -> Option<u16> {
         match self.get(k) {
             Some(Value::Num(n)) => u16::try_from(*n).ok(),
@@ -395,7 +395,7 @@ impl<'a> Parser<'a> {
     }
     fn parse_object(&mut self) -> Result<Value, ()> {
         self.expect(b'{')?;
-        let mut o = std::collections::HashMap::new();
+        let mut o = alloc::collections::BTreeMap::new();
         self.skip_ws();
         if self.i < self.b.len() && self.b[self.i] == b'}' {
             self.i += 1;

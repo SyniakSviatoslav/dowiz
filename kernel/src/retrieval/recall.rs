@@ -530,7 +530,7 @@ mod tests {
 
     #[test]
     fn fusion_ranking_is_deterministic() {
-        // Same query twice ⇒ identical ranking (no HashMap-order dependence).
+        // Same query twice ⇒ identical ranking (no BTreeMap-order dependence).
         let (bm, idx) = build_fusion();
         let a = fusion_rank(&bm, &idx, "how is the order total calculated");
         let b = fusion_rank(&bm, &idx, "how is the order total calculated");

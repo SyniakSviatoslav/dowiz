@@ -14,13 +14,13 @@
 //! ZERO deps. Uses enrichment engine's own data.
 
 use crate::prompt_enrich::PromptKind;
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A cross-kind bridge — connects two or more PromptKinds through shared triggers.
 #[derive(Debug, Clone)]
 pub struct CrossBridge {
     pub name: String,
-    pub kinds: HashSet<PromptKind>,
+    pub kinds: BTreeSet<PromptKind>,
     pub trigger_keywords: Vec<String>,
     pub strength: usize,  // number of entries that form this bridge
 }
@@ -119,8 +119,8 @@ impl CrossBridgeRegistry {
     }
 
     /// Total kinds covered by all bridges combined.
-    pub fn kinds_covered(&self) -> HashSet<PromptKind> {
-        let mut all = HashSet::new();
+    pub fn kinds_covered(&self) -> BTreeSet<PromptKind> {
+        let mut all = BTreeSet::new();
         for br in &self.bridges {
             all.extend(&br.kinds);
         }
@@ -152,7 +152,7 @@ impl CrossBridgeRegistry {
             .filter(|br| br.kinds.contains(&kind_b))
             .flat_map(|br| br.trigger_keywords.iter().cloned())
             .collect();
-        let mut vocab: Vec<String> = std::collections::HashSet::<String>::from_iter(
+        let mut vocab: Vec<String> = alloc::collections::BTreeSet::<String>::from_iter(
             kws_a.iter().chain(kws_b.iter()).cloned()
         ).into_iter().collect();
         vocab.sort();
@@ -166,7 +166,7 @@ impl CrossBridgeRegistry {
 #[derive(Debug, Clone)]
 pub struct PublisherDiversity {
     pub name: String,
-    pub kinds: HashSet<PromptKind>,
+    pub kinds: BTreeSet<PromptKind>,
     pub entry_count: usize,
 }
 
@@ -199,13 +199,13 @@ impl PublisherRegistry {
 
 /// Matrix tracking which PromptKinds co-occur in user queries.
 pub struct CooccurrenceMatrix {
-    pub counts: HashMap<(PromptKind, PromptKind), usize>,
+    pub counts: BTreeMap<(PromptKind, PromptKind), usize>,
     pub total_queries: usize,
 }
 
 impl CooccurrenceMatrix {
     pub fn new() -> Self {
-        Self { counts: HashMap::new(), total_queries: 0 }
+        Self { counts: BTreeMap::new(), total_queries: 0 }
     }
 
     /// Record a query's detected intents.

@@ -55,7 +55,7 @@ pub struct Detection {
     pub confidence: f32,
     pub class_id: u32,
     pub tracker_id: Option<u32>,
-    pub data: std::collections::HashMap<String, String>,
+    pub data: alloc::collections::BTreeMap<String, String>,
 }
 
 // ─── Detections Container ────────────────────────────────────────────────
@@ -140,7 +140,7 @@ impl Detections {
                 confidence: conf,
                 class_id: self.detections[i].class_id,
                 tracker_id: None,
-                data: std::collections::HashMap::new(),
+                data: alloc::collections::BTreeMap::new(),
             });
         }
         self.detections = merged;
@@ -215,12 +215,12 @@ fn segments_intersect(a1: (f32, f32), a2: (f32, f32), b1: (f32, f32), b2: (f32, 
 pub struct PolygonZone {
     pub polygon: Vec<(f32, f32)>,
     pub in_count: usize,
-    pub prev_centers: std::collections::HashMap<u32, (f32, f32)>,
+    pub prev_centers: alloc::collections::BTreeMap<u32, (f32, f32)>,
 }
 
 impl PolygonZone {
     pub fn new(polygon: Vec<(f32, f32)>) -> Self {
-        PolygonZone { polygon, in_count: 0, prev_centers: std::collections::HashMap::new() }
+        PolygonZone { polygon, in_count: 0, prev_centers: alloc::collections::BTreeMap::new() }
     }
 
     pub fn update(&mut self, detections: &Detections) -> usize {
@@ -236,12 +236,12 @@ pub struct LineZone {
     pub end: (f32, f32),
     pub in_count: usize,
     pub out_count: usize,
-    pub prev_positions: std::collections::HashMap<u32, (f32, f32)>,
+    pub prev_positions: alloc::collections::BTreeMap<u32, (f32, f32)>,
 }
 
 impl LineZone {
     pub fn new(start: (f32, f32), end: (f32, f32)) -> Self {
-        LineZone { start, end, in_count: 0, out_count: 0, prev_positions: std::collections::HashMap::new() }
+        LineZone { start, end, in_count: 0, out_count: 0, prev_positions: alloc::collections::BTreeMap::new() }
     }
 
     pub fn update(&mut self, detections: &Detections) -> (usize, usize) {
@@ -279,8 +279,8 @@ mod tests {
     #[test]
     fn nms_removes_duplicates() {
         let mut det = Detections::new(100, 100);
-        det.detections.push(Detection { bbox: BBox::new(10.0, 10.0, 20.0, 20.0), confidence: 0.9, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
-        det.detections.push(Detection { bbox: BBox::new(11.0, 11.0, 21.0, 21.0), confidence: 0.8, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
+        det.detections.push(Detection { bbox: BBox::new(10.0, 10.0, 20.0, 20.0), confidence: 0.9, class_id: 0, tracker_id: None, data: alloc::collections::BTreeMap::new() });
+        det.detections.push(Detection { bbox: BBox::new(11.0, 11.0, 21.0, 21.0), confidence: 0.8, class_id: 0, tracker_id: None, data: alloc::collections::BTreeMap::new() });
         det.nms(0.5);
         assert_eq!(det.len(), 1);
     }
@@ -288,8 +288,8 @@ mod tests {
     #[test]
     fn nmm_merges_overlapping() {
         let mut det = Detections::new(100, 100);
-        det.detections.push(Detection { bbox: BBox::new(10.0, 10.0, 20.0, 20.0), confidence: 0.9, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
-        det.detections.push(Detection { bbox: BBox::new(11.0, 11.0, 21.0, 21.0), confidence: 0.8, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
+        det.detections.push(Detection { bbox: BBox::new(10.0, 10.0, 20.0, 20.0), confidence: 0.9, class_id: 0, tracker_id: None, data: alloc::collections::BTreeMap::new() });
+        det.detections.push(Detection { bbox: BBox::new(11.0, 11.0, 21.0, 21.0), confidence: 0.8, class_id: 0, tracker_id: None, data: alloc::collections::BTreeMap::new() });
         det.nmm(0.5);
         assert_eq!(det.len(), 1);
     }
@@ -305,8 +305,8 @@ mod tests {
     fn polygon_zone_counting() {
         let mut zone = PolygonZone::new(vec![(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)]);
         let mut det = Detections::new(200, 200);
-        det.detections.push(Detection { bbox: BBox::new(50.0, 50.0, 60.0, 60.0), confidence: 0.9, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
-        det.detections.push(Detection { bbox: BBox::new(150.0, 150.0, 160.0, 160.0), confidence: 0.9, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
+        det.detections.push(Detection { bbox: BBox::new(50.0, 50.0, 60.0, 60.0), confidence: 0.9, class_id: 0, tracker_id: None, data: alloc::collections::BTreeMap::new() });
+        det.detections.push(Detection { bbox: BBox::new(150.0, 150.0, 160.0, 160.0), confidence: 0.9, class_id: 0, tracker_id: None, data: alloc::collections::BTreeMap::new() });
         let count = zone.update(&det);
         assert_eq!(count, 1); // only first is inside
     }
@@ -314,8 +314,8 @@ mod tests {
     #[test]
     fn filter_confidence() {
         let mut det = Detections::new(100, 100);
-        det.detections.push(Detection { bbox: BBox::new(0.0, 0.0, 10.0, 10.0), confidence: 0.9, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
-        det.detections.push(Detection { bbox: BBox::new(0.0, 0.0, 10.0, 10.0), confidence: 0.3, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
+        det.detections.push(Detection { bbox: BBox::new(0.0, 0.0, 10.0, 10.0), confidence: 0.9, class_id: 0, tracker_id: None, data: alloc::collections::BTreeMap::new() });
+        det.detections.push(Detection { bbox: BBox::new(0.0, 0.0, 10.0, 10.0), confidence: 0.3, class_id: 0, tracker_id: None, data: alloc::collections::BTreeMap::new() });
         det.filter_confidence(0.5);
         assert_eq!(det.len(), 1);
     }
@@ -325,7 +325,7 @@ mod tests {
         let mut zone = LineZone::new((50.0, 0.0), (50.0, 100.0));
         let mut det = Detections::new(100, 100);
         // bbox center = (49.5, 50.0) → degenerate segment (49.5,50)→(49.51,50) straddles x=50
-        det.detections.push(Detection { bbox: BBox::new(44.0, 45.0, 55.0, 55.0), confidence: 0.9, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
+        det.detections.push(Detection { bbox: BBox::new(44.0, 45.0, 55.0, 55.0), confidence: 0.9, class_id: 0, tracker_id: None, data: alloc::collections::BTreeMap::new() });
         let (in_c, _) = zone.update(&det);
         assert!(in_c >= 1);
     }
@@ -383,7 +383,7 @@ mod tests {
     #[test]
     fn nms_single_detection_unchanged() {
         let mut det = Detections::new(100, 100);
-        det.detections.push(Detection { bbox: BBox::new(10.0, 10.0, 20.0, 20.0), confidence: 0.9, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
+        det.detections.push(Detection { bbox: BBox::new(10.0, 10.0, 20.0, 20.0), confidence: 0.9, class_id: 0, tracker_id: None, data: alloc::collections::BTreeMap::new() });
         det.nms(0.5);
         assert_eq!(det.len(), 1);
     }
@@ -391,8 +391,8 @@ mod tests {
     #[test]
     fn nmm_different_class_no_merge() {
         let mut det = Detections::new(100, 100);
-        det.detections.push(Detection { bbox: BBox::new(10.0, 10.0, 20.0, 20.0), confidence: 0.9, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
-        det.detections.push(Detection { bbox: BBox::new(11.0, 11.0, 21.0, 21.0), confidence: 0.8, class_id: 1, tracker_id: None, data: std::collections::HashMap::new() });
+        det.detections.push(Detection { bbox: BBox::new(10.0, 10.0, 20.0, 20.0), confidence: 0.9, class_id: 0, tracker_id: None, data: alloc::collections::BTreeMap::new() });
+        det.detections.push(Detection { bbox: BBox::new(11.0, 11.0, 21.0, 21.0), confidence: 0.8, class_id: 1, tracker_id: None, data: alloc::collections::BTreeMap::new() });
         det.nmm(0.5);
         assert_eq!(det.len(), 2);
     }
@@ -400,8 +400,8 @@ mod tests {
     #[test]
     fn filter_class_removes_others() {
         let mut det = Detections::new(100, 100);
-        det.detections.push(Detection { bbox: BBox::new(0.0, 0.0, 10.0, 10.0), confidence: 0.9, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
-        det.detections.push(Detection { bbox: BBox::new(0.0, 0.0, 10.0, 10.0), confidence: 0.8, class_id: 3, tracker_id: None, data: std::collections::HashMap::new() });
+        det.detections.push(Detection { bbox: BBox::new(0.0, 0.0, 10.0, 10.0), confidence: 0.9, class_id: 0, tracker_id: None, data: alloc::collections::BTreeMap::new() });
+        det.detections.push(Detection { bbox: BBox::new(0.0, 0.0, 10.0, 10.0), confidence: 0.8, class_id: 3, tracker_id: None, data: alloc::collections::BTreeMap::new() });
         det.filter_class(0);
         assert_eq!(det.len(), 1);
         assert_eq!(det.detections[0].class_id, 0);
@@ -412,7 +412,7 @@ mod tests {
         let det = Detections::new(100, 100);
         assert!(!det.is_empty().is_false());
         let mut det2 = Detections::new(100, 100);
-        det2.detections.push(Detection { bbox: BBox::new(0.0, 0.0, 10.0, 10.0), confidence: 0.5, class_id: 0, tracker_id: None, data: std::collections::HashMap::new() });
+        det2.detections.push(Detection { bbox: BBox::new(0.0, 0.0, 10.0, 10.0), confidence: 0.5, class_id: 0, tracker_id: None, data: alloc::collections::BTreeMap::new() });
         assert!(det2.is_empty().is_false());
     }
 

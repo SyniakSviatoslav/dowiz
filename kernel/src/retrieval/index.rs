@@ -4,7 +4,7 @@
 //! and cheap to hash/compare. Living-memory note names are ASCII, so byte
 //! trigrams are exact.
 
-use std::collections::HashMap;
+use alloc::collections::BTreeMap;
 
 /// A 3-byte key. `[u8;3]` is `Copy` + `Hash` + `Ord` ⇒ deterministic map keys.
 pub type Trigram = [u8; 3];
@@ -82,13 +82,13 @@ pub fn literal_trigrams(pattern: &str) -> Vec<Trigram> {
 pub struct TrigramIndex {
     docs: Vec<String>,
     /// trigram -> sorted-unique doc-ids that contain it.
-    postings: HashMap<Trigram, Vec<u32>>,
+    postings: BTreeMap<Trigram, Vec<u32>>,
 }
 
 impl TrigramIndex {
     /// Build the index over `docs` (doc-id = position in `docs`).
     pub fn new(docs: &[&str]) -> Self {
-        let mut postings: HashMap<Trigram, Vec<u32>> = HashMap::new();
+        let mut postings: BTreeMap<Trigram, Vec<u32>> = BTreeMap::new();
         for (id, doc) in docs.iter().enumerate() {
             let id = id as u32;
             let mut seen = trigrams(doc);
@@ -152,12 +152,12 @@ impl TrigramIndex {
     /// * a missing trigram ⇒ zero candidates (match impossible).
     ///
     /// Counting is order-independent ⇒ bitwise-deterministic regardless of
-    /// HashMap iteration order.
+    /// BTreeMap iteration order.
     fn candidates(&self, trigs: &[Trigram]) -> Vec<u32> {
         if trigs.is_empty() {
             return (0..self.docs.len() as u32).collect();
         }
-        let mut counts: HashMap<u32, u32> = HashMap::new();
+        let mut counts: BTreeMap<u32, u32> = BTreeMap::new();
         for t in trigs {
             match self.postings.get(t) {
                 None => return Vec::new(),
