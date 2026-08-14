@@ -28,6 +28,8 @@
 
 use crate::arena::BumpArena;
 use crate::mat::{matmul_contig, matmul_contig_in, Mat};
+use alloc::string::String;
+use alloc::vec::Vec;
 use core::f64::consts::PI;
 
 /// Thin `&[Vec<f64>]` wrapper over [`matmul_contig`] — kept so the wasm surface
@@ -42,7 +44,7 @@ fn matmul(a: &[Vec<f64>], b: &[Vec<f64>], _n: usize) -> Vec<Vec<f64>> {
 /// Minimal complex number — extracted to the `no_std` `dowiz-core` crate
 /// (`dowiz_core::complex`). Re-exported here so `crate::spectral::Complex` keeps
 /// resolving unchanged for the kernel modules that still live in this crate.
-pub use dowiz_core::complex::Complex;
+pub use crate::complex::Complex;
 
 fn trace(a: &[Vec<f64>], n: usize) -> f64 {
     (0..n).map(|i| a[i][i]).sum()
@@ -176,7 +178,7 @@ pub fn eigenvalues(a: &[Vec<f64>]) -> Vec<Complex> {
     // P3-plane FDR `span_close` record (or `SpanMetricsObserver` histogram), never a decision
     // input. Zero cost when no FDR sink/observer is installed (`fdr::info_span!` takes no clock
     // and never allocates until `.entered()` and only then under `span_active()`).
-    let _g = crate::fdr::info_span!("eigenvalues").entered();
+    let _g = crate::span::info_span!("eigenvalues").entered();
     #[cfg(test)]
     EIGEN_CALLS.with(|c| c.set(c.get() + 1));
     let n = a.len();
@@ -202,7 +204,7 @@ pub fn eigenvalues(a: &[Vec<f64>]) -> Vec<Complex> {
 /// n > 32 dense-symmetric has no consumer and no path: use [`topk_symmetric`]
 /// on a `Csr` instead. Returns `(basis, values) == crate::spectral_cache::Decomp`
 /// with `values` ascending and `basis[i]` the unit eigenvector for `values[i]`.
-pub fn eigh(a: &[Vec<f64>]) -> crate::spectral_cache::Decomp {
+pub fn eigh(a: &[Vec<f64>]) -> (Vec<Vec<f64>>, Vec<f64>) {
     let n = a.len();
     debug_assert!(n <= 32, "eigh: dense symmetric path supports n ≤ 32");
     let mut buf = vec![0.0f64; n * n];
@@ -224,7 +226,7 @@ pub fn topk_symmetric(
     a: &crate::csr::Csr,
     k: usize,
     iters: usize,
-) -> crate::spectral_cache::Decomp {
+) -> (Vec<Vec<f64>>, Vec<f64>) {
     let n = a.nrows();
     debug_assert!(n > 0, "topk_symmetric: empty matrix");
     let kk = k.min(n);
@@ -380,7 +382,7 @@ pub fn topk_symmetric_in(
     k: usize,
     iters: usize,
     arena: &BumpArena,
-) -> Option<crate::spectral_cache::Decomp> {
+) -> Option<(Vec<Vec<f64>>, Vec<f64>)> {
     let n = a.nrows();
     debug_assert!(n > 0, "topk_symmetric_in: empty matrix");
     let kk = k.min(n);
@@ -498,7 +500,7 @@ pub fn topk_symmetric_in(
         evecs.extend_from_slice(x);
     }
     let mut order: Vec<usize> = (0..evals.len()).collect();
-    crate::sort_by_f64_desc(&mut order, |&p| evals[p].abs());
+    crate::sort::sort_by_f64_desc(&mut order, |&p| evals[p].abs());
     let sorted_vals: Vec<f64> = order.iter().map(|&i| evals[i]).collect();
     // Reorder eigenvectors within the flat buffer (copy rows, no k-clone rebuild)
     // and re-slice into the `Vec<Vec<f64>>` the public `Decomp` type expects.
@@ -528,7 +530,7 @@ pub fn spectral_radius(a: &[Vec<f64>]) -> f64 {
 /// SLEM — second-largest eigenvalue modulus |λ₂| (the mixing / convergence rate).
 pub fn slem(a: &[Vec<f64>]) -> f64 {
     let mut mags: Vec<f64> = eigenvalues(a).iter().map(|e| e.abs()).collect();
-    crate::sort_by_f64_desc(&mut mags, |&m| m);
+    crate::sort::sort_by_f64_desc(&mut mags, |&m| m);
     if mags.len() > 1 {
         mags[1]
     } else {
@@ -586,12 +588,12 @@ pub struct GraphSpectrum {
 pub fn graph_spectrum(adj: &[Vec<f64>]) -> GraphSpectrum {
     let eigs = eigenvalues(adj);
     let mut mags: Vec<f64> = eigs.iter().map(|e| e.abs()).collect();
-    crate::sort_by_f64_desc(&mut mags, |&m| m);
+    crate::sort::sort_by_f64_desc(&mut mags, |&m| m);
     let rho = mags.first().copied().unwrap_or(0.0);
     let slem_v = if mags.len() > 1 { mags[1] } else { 0.0 };
     let l = laplacian(adj);
     let mut re: Vec<f64> = eigenvalues(&l).iter().map(|e| e.re).collect();
-    crate::sort_by_f64_asc(&mut re, |&r| r);
+    crate::sort::sort_by_f64_asc(&mut re, |&r| r);
     let fiedler = if re.len() > 1 { re[1] } else { 0.0 };
     let energy = mags.iter().sum();
     GraphSpectrum {
@@ -629,7 +631,7 @@ pub fn laplacian(adj: &[Vec<f64>]) -> Vec<Vec<f64>> {
 pub fn algebraic_connectivity(adj: &[Vec<f64>]) -> f64 {
     let l = laplacian(adj);
     let mut re: Vec<f64> = eigenvalues(&l).iter().map(|e| e.re).collect();
-    crate::sort_by_f64_asc(&mut re, |&r| r);
+    crate::sort::sort_by_f64_asc(&mut re, |&r| r);
     if re.len() > 1 {
         re[1]
     } else {
@@ -1323,13 +1325,6 @@ mod tests {
                 "every eigenvalue of a nilpotent matrix is 0"
             );
         }
-    }
-
-    // ── GREEN (VbM cross-check): the live lifecycle FSM is a DAG ⇒ ρ≈0, agreeing
-    //    with the independent `order_machine::spectral_radius()` power-iteration. ──
-    #[test]
-    fn green_crosscheck_live_fsm_is_acyclic() {
-        assert!(crate::order_machine::spectral_radius() < 1e-9);
     }
 
     // ── GREEN: diagonal matrix ⇒ eigenvalues are the diagonal (distinct). ──

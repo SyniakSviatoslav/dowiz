@@ -678,7 +678,8 @@ pub mod retrieval;
 pub mod router;
 /// Reverse-engineering loop #1 — general (non-symmetric) spectral engine: eigenvalues
 /// (Faddeev-LeVerrier + Durand-Kerner), spectral gap γ, Laplacian Fiedler λ₂, DMD drift class.
-pub mod spectral;
+/// Extracted to no_std `dowiz-core`; `crate::spectral::…` resolves unchanged here.
+pub use dowiz_core::spectral;
 /// P11 §2 — content-addressed spectral eigensolve cache (zero-dep); routes
 /// `spectral::eigenvalues` through a `&mut` cache with a recomputes-counter
 /// falsifier (no thrashing, no stale-cache).
@@ -967,19 +968,12 @@ pub fn now_ms() -> u64 {
 /// Sort descending by a `f64` key (NaN/Inf → end of order).
 ///
 /// Replaces the repeated `sort_by(|a,b| b.K.partial_cmp(&a.K).unwrap_or(Equal))`
-/// pattern found in 17+ call sites across the kernel.
-pub fn sort_by_f64_desc<T, K>(items: &mut [T], key: K)
-where K: Fn(&T) -> f64
-{
-    items.sort_by(|a, b| key(b).partial_cmp(&key(a)).unwrap_or(core::cmp::Ordering::Equal));
-}
+/// pattern found in 17+ call sites across the kernel. Extracted to no_std
+/// `dowiz-core`; re-exported so `crate::sort_by_f64_desc` resolves unchanged.
+pub use dowiz_core::sort::sort_by_f64_desc;
 
 /// Sort ascending by a `f64` key (NaN/Inf → end of order).
-pub fn sort_by_f64_asc<T, K>(items: &mut [T], key: K)
-where K: Fn(&T) -> f64
-{
-    items.sort_by(|a, b| key(a).partial_cmp(&key(b)).unwrap_or(core::cmp::Ordering::Equal));
-}
+pub use dowiz_core::sort::sort_by_f64_asc;
 
 /// Authoritative fixed-timestep for the field-sim/animation integrator.
 ///
