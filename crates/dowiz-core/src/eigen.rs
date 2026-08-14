@@ -99,15 +99,18 @@ impl Eigen {
     /// Magnitude: |λ|.
     pub fn mag(&self) -> f64 { self.lambda.abs() }
 
-    /// Is this mode stable? (|λ| ≤ 1).
-    /// Uses phase encoding: stable = cos(θ) ≥ 0 (on the True half of S¹).
+    /// Is this mode stable? (|λ| ≤ 1) — the algebraic reference.
+    ///
+    /// The geometric form is [`Eigen::is_stable_phase`] (phase θ = atan2(λ-1, 1));
+    /// the parity test `phase_classification_matches_algebraic_on_golden_fixtures`
+    /// pins the two to agree on golden fixtures.
     pub fn is_stable(&self) -> bool {
-        // Phase maps λ to unit circle; True (cos≥0) = stable/growing ≤ 1.
         self.lambda.abs() <= 1.0
     }
 
-    /// Is this mode growing? (λ > 1).
-    /// Uses phase encoding: unstable = cos(θ) < 0 (on the False half of S¹).
+    /// Is this mode growing? (λ > 1) — the algebraic reference.
+    ///
+    /// The geometric form is [`Eigen::is_growing_phase`] (sin θ > 0 ⟺ λ > 1).
     pub fn is_growing(&self) -> bool {
         self.lambda > 1.0
     }
@@ -128,9 +131,20 @@ impl Eigen {
         crate::trig::Phase::from_xy(1.0, self.lambda - 1.0)
     }
 
-    /// Phase-based stability: True if cos(θ) ≥ 0 (on the True half-plane).
+    /// Phase-based stability: True iff |λ| ≤ 1.
+    ///
+    /// `phase()` maps λ to θ = atan2(λ-1, 1), so `(cos θ, sin θ) = (1, λ-1)/r`
+    /// with `r = √(1+(λ-1)²)`. |λ| ≤ 1 ⟺ λ ∈ [-1, 1], which in that
+    /// parameterization is: λ ≤ 1 ⟺ sin θ ≤ 0, and λ ≥ -1 ⟺ |λ-1| ≤ 2 ⟺
+    /// cos θ ≥ 1/√5 (its value at λ = -1). This is the geometric form of
+    /// [`Eigen::is_stable`] — no raw `f64` comparison.
+    ///
+    /// cos alone is insufficient: it only encodes |λ-1| (symmetric about λ=1),
+    /// so the growing side λ ∈ (1, 3] would pass a bare `cos ≥ 1/√5` threshold.
+    /// The sin ≤ 0 clause selects the λ ≤ 1 half of that symmetric cone.
     pub fn is_stable_phase(&self) -> bool {
-        self.phase().cos >= 0.0
+        let p = self.phase();
+        p.sin <= 0.0 && p.cos >= 1.0 / crate::math::sqrt(5.0)
     }
 
     /// Phase-based growth: True if sin(θ) > 0 (above the True axis).
@@ -479,5 +493,25 @@ mod tests {
     fn eigen_mag_is_absolute() {
         let e = Eigen::new(-3.0, vec![1.0]);
         assert!((e.mag() - 3.0).abs() < 1e-10);
+    }
+
+    /// Blueprint B1 done-check: the geometric (phase) stability classification
+    /// must match the algebraic one (`is_stable` = |λ| ≤ 1, `is_growing` = λ > 1)
+    /// on golden fixtures spanning growing / stable / negative-unstable regimes.
+    #[test]
+    fn phase_classification_matches_algebraic_on_golden_fixtures() {
+        for lambda in [-3.0, -2.0, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 3.0] {
+            let e = Eigen::new(lambda, vec![1.0]);
+            assert_eq!(
+                e.is_stable_phase(),
+                e.is_stable(),
+                "λ={lambda}: phase stability must match algebraic stability"
+            );
+            assert_eq!(
+                e.is_growing_phase(),
+                e.is_growing(),
+                "λ={lambda}: phase growth must match algebraic growth"
+            );
+        }
     }
 }

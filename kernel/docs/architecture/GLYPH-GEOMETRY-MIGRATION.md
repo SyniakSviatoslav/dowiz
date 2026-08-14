@@ -93,12 +93,19 @@ Delivered:
 Replace scalar comparisons/calculus in the spectral/tensor/eigen stack with
 geometry + delta where the value is a direction/phase/change.
 
-- [ ] B1. `eigen::Eigen` (λ, v): expose a `Phase` view (argument of λ) and a
+- [x] B1. `eigen::Eigen` (λ, v): expose a `Phase` view (argument of λ) and a
       `Delta` view between two decompositions (already `EigenDelta`). Route
       `is_stable`/`is_growing` through `Phase`/delta sign, not raw `f64`
       comparison.
   Done-check: existing `eigen` tests stay green; new test asserts stability
   class == phase-quadrant class on the golden fixtures.
+  ✅ DONE (2026-08-14): `phase()` maps λ → θ = atan2(λ-1, 1);
+  `is_stable_phase`/`is_growing_phase` now correctly match
+  `is_stable`(=\|λ\|≤1)/`is_growing`(=λ>1) — fixed the degenerate `cos θ ≥ 0`
+  predicate (cos is symmetric about λ=1, so it needs the `sin θ ≤ 0` clause to
+  select λ ≤ 1 and `cos θ ≥ 1/√5` to select λ ≥ -1). Parity test
+  `phase_classification_matches_algebraic_on_golden_fixtures` pins the two
+  classifications to agree on golden fixtures λ ∈ {-3..3}.
 - [ ] B2. `spectral::{classify_drift, laplacian}`: replace raw drift thresholds
       with `EigenDelta::is_significant` / `PhaseDelta`.
   Done-check: parity test vs the current scalar classification on recorded
