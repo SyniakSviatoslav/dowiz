@@ -125,8 +125,12 @@ impl Tensor1 {
     /// carries (cos, sin) on the unit circle, enabling stable interpolation
     /// and delta comparison via `Phase::delta`/`Phase::distance`.
     ///
-    /// When `|self|=0` or `|other|=0`, returns `Phase::uncertain()` (θ=π/2)
-    /// — the zero-vector has no direction, so the angle is indeterminate.
+    /// When `|self|=0` or `|other|=0`, `cosine_sim` is 0 so `θ = acos(0) = π/2` —
+    /// the same angle as orthogonal vectors; the zero-vector's angle is genuinely
+    /// indeterminate but is encoded at θ=π/2. Note this is `Phase::new(π/2)`
+    /// (whose `cos` is the float `cos(π/2) ≈ 6.1e-17`), NOT the hardcoded
+    /// `Phase::uncertain()` (`cos = 0.0`) — see
+    /// `tensor1_angle_with_zero_vector_is_uncertain`.
     pub fn angle_with(&self, other: &Tensor1) -> crate::trig::Phase {
         let cos_sim = self.cosine_sim(other);
         let cos_clamped = cos_sim.clamp(-1.0, 1.0);
@@ -388,6 +392,42 @@ mod tests {
         let a = Tensor1::new(vec![1.0, 0.0, 0.0]);
         let b = Tensor1::new(vec![0.0, 1.0, 0.0]);
         assert!((a.cosine_sim(&b)).abs() < 1e-12, "orthogonal vectors must have cosine 0");
+    }
+
+    /// Blueprint B3 done-check: the geometric angle (a `Phase`) must agree with
+    /// the algebraic cosine similarity — `cosine_sim(a,b) == cos(angle_with(a,b))`.
+    #[test]
+    fn tensor1_angle_with_phase_matches_cosine_sim() {
+        let cases: Vec<(&[f64], &[f64])> = vec![
+            (&[1.0, 0.0, 0.0], &[1.0, 0.0, 0.0]),   // identical → θ=0
+            (&[1.0, 0.0, 0.0], &[0.0, 1.0, 0.0]),   // orthogonal → θ=π/2
+            (&[1.0, 0.0, 0.0], &[-1.0, 0.0, 0.0]),  // opposite → θ=π
+            (&[3.0, 4.0], &[4.0, -3.0]),             // generic orthogonal
+            (&[2.0, 1.0, 1.0], &[1.0, 2.0, 1.0]),    // generic acute
+        ];
+        for (va, vb) in cases {
+            let a = Tensor1::new(va.to_vec());
+            let b = Tensor1::new(vb.to_vec());
+            let phase = a.angle_with(&b);
+            let cos_sim = a.cosine_sim(&b);
+            assert!(
+                (phase.cos - cos_sim).abs() < 1e-9,
+                "cos(angle_with) must equal cosine_sim: phase.cos={} cos_sim={}",
+                phase.cos, cos_sim
+            );
+        }
+    }
+
+    #[test]
+    fn tensor1_angle_with_zero_vector_is_uncertain() {
+        let a = Tensor1::new(vec![1.0, 2.0, 3.0]);
+        let zero = Tensor1::new(vec![0.0, 0.0, 0.0]);
+        // A zero vector has no direction → the angle is indeterminate, encoded
+        // at θ = π/2. cos is the float cos(π/2) ≈ 6.1e-17, not exactly 0.0.
+        let p = a.angle_with(&zero);
+        assert!((p.theta - core::f64::consts::FRAC_PI_2).abs() < 1e-12);
+        assert!(p.cos.abs() < 1e-9, "cos(π/2) ≈ 6e-17, not exactly 0: {}", p.cos);
+        assert!((p.sin - 1.0).abs() < 1e-12);
     }
 
     #[test]

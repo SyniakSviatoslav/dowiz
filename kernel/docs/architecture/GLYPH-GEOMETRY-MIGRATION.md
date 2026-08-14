@@ -110,10 +110,23 @@ geometry + delta where the value is a direction/phase/change.
       with `EigenDelta::is_significant` / `PhaseDelta`.
   Done-check: parity test vs the current scalar classification on recorded
   fixtures (byte-identical class labels).
-- [ ] B3. `tensor::{dot, cosine_sim}`: keep algebra (dot is legitimately
+  ⚠️ NEEDS CLARIFICATION (2026-08-14): `classify_drift` is an ABSOLUTE
+  ρ-vs-unit-circle classification (single operator, `drift_band(ρ)` vs
+  1.0±DRIFT_BAND — already fail-closed + single-rule), and `laplacian` is pure
+  linear algebra (L = D − A, no drift/delta at all). `EigenDelta`/`PhaseDelta`
+  are BETWEEN-two-states deltas (`EigenDelta::is_significant` /
+  `is_destabilizing` already exist in `delta.rs`). The literal "replace" does
+  not map — revisit with a clarified spec (e.g. a `classify_drift_delta(a0,a1)`
+  entry point, or a `Phase`-view of ρ), not a mechanical swap.
+- [x] B3. `tensor::{dot, cosine_sim}`: keep algebra (dot is legitimately
       algebraic); add `trig`-based angle accessor for any pair already on the
       unit circle.
   Done-check: `cosine_sim(a,b) == cos(Phase::from_xy(...))` within tol.
+  ✅ DONE (2026-08-14): `Tensor1::angle_with` returns a `Phase` via
+  `acos(cosine_sim)`; parity test `tensor1_angle_with_phase_matches_cosine_sim`
+  pins `cos(angle_with) == cosine_sim` on 5 fixtures (identical/orthogonal/
+  opposite/generic). Zero-vector angle encoded at θ=π/2 (float `cos(π/2)≈6e-17`,
+  documented in `tensor1_angle_with_zero_vector_is_uncertain`).
 
 ### Phase C — glyph rendering wired into observability
 Every "show me" surface renders via `pixel_snapshot`, not raw dumps.
