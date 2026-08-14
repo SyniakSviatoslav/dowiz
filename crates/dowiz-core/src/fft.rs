@@ -19,7 +19,8 @@
 //! Reuses `crate::spectral::Complex` (the kernel's hand-rolled complex, no
 //! `num-complex`).
 
-use crate::spectral::Complex;
+use crate::complex::Complex;
+use alloc::vec::Vec;
 
 /// Bit-reversal permutation of `x` in place (length must be a power of two).
 fn bit_reverse_in_place(x: &mut [Complex]) {
@@ -52,7 +53,7 @@ pub fn fft(x: &[Complex]) -> Option<Vec<Complex>> {
     let mut twiddle = Vec::with_capacity(n / 2);
     for k in 0..(n / 2) {
         let theta = -2.0 * core::f64::consts::PI * (k as f64) / (n as f64);
-        twiddle.push(Complex::new(theta.cos(), theta.sin()));
+        twiddle.push(Complex::new(crate::math::cos(theta), crate::math::sin(theta)));
     }
 
     let mut len = 2usize;

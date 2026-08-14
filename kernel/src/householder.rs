@@ -139,7 +139,7 @@ fn reduce_hessenberg(a: &mut [f64], n: usize, mut q: Option<&mut [f64]>) {
         for i in (k + 1)..n {
             norm += a[i * n + k] * a[i * n + k];
         }
-        norm = norm.sqrt();
+        norm = crate::math::sqrt(norm);
         if norm == 0.0 {
             continue;
         }
@@ -563,11 +563,11 @@ fn tridiag_ql_symmetric(d: &mut [f64; 32], e: &mut [f64; 32], n: usize, z: &mut 
                 // Jacobi angle: smaller rotation for stability.
                 let theta = (aqq - app) / (2.0 * apq);
                 let t_small = if theta >= 0.0 {
-                    1.0 / (theta + (theta * theta + 1.0).sqrt())
+                    1.0 / (theta + crate::math::sqrt(theta * theta + 1.0))
                 } else {
-                    1.0 / (theta - (theta * theta + 1.0).sqrt())
+                    1.0 / (theta - crate::math::sqrt(theta * theta + 1.0))
                 };
-                let c = 1.0 / (1.0 + t_small * t_small).sqrt();
+                let c = 1.0 / crate::math::sqrt(1.0 + t_small * t_small);
                 let s = t_small * c;
                 // similarity A' = Gᵀ A G on the (p,q) block and coupled rows/cols.
                 t[p][p] = c * c * app - 2.0 * s * c * apq + s * s * aqq;
@@ -709,7 +709,7 @@ mod tests {
             assert!((got - want).abs() < 1e-9, "eigenvalue {got} != {want}");
         }
         // hand-derived vectors (sign-fixed): λ=0 → (1,1,1)/√3.
-        let one_third = (3.0_f64).sqrt().recip();
+        let one_third = crate::math::sqrt(3.0_f64).recip();
         let v0 = &basis[0];
         // find which index holds λ≈0
         let idx0 = values.iter().position(|x| (x - 0.0).abs() < 1e-9).unwrap();

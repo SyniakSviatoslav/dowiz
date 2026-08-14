@@ -14,11 +14,17 @@
 extern crate std;
 
 // squash + pixel_snapshot use Vec/String → alloc is needed for the no_std core.
+#[macro_use]
 extern crate alloc;
 
+pub mod complex;
 pub mod constants;
+pub mod fft;
 pub mod hypervector;
 pub mod lut;
 pub mod math;
+pub mod modular;
 pub mod rng;
+pub mod spherical;
 pub mod squash;
+pub mod trig;

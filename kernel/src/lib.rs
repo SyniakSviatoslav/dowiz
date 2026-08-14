@@ -5,7 +5,9 @@
 // Alloc is in scope explicitly (not via the std prelude) so collection types
 // can be spelled `alloc::…` — the no_std-readiness step that lets the pure
 // kernel-core modules compile under `#![no_std]` without std's BTreeMap/RandomState.
-extern crate alloc;
+// `pub` so `#[macro_export]` macros (fdr::event!) can spell `$crate::alloc::…`
+// and still expand correctly inside the `src/bin/*` crates.
+pub extern crate alloc;
 
 /// In-code protocol/wire version for the kernel. Independent of the repo CalVer
 /// tag so a breaking kernel change (FSM-graph / `_js` export / ledger-layout) can
@@ -712,7 +714,7 @@ pub mod reconstruction_memory;
 pub mod trinary;
 /// Trigonometric phase-space primitives — cos/sin pairs replace booleans.
 /// Phase encoding on S¹, xyz 3D phase space, phase vectors with dot product.
-pub mod trig;
+pub use dowiz_core::trig;
 /// Spectral wave propagation — states emit spectral fingerprints that
 /// propagate, interfere, and decay. InterferenceField = superposition.
 pub mod wave;
@@ -767,11 +769,11 @@ pub mod hypervector_index;
 /// Extracted to `no_std` `dowiz-core` (pure integer RLE/delta).
 pub use dowiz_core::squash;
 /// Radix-2 Cooley–Tukey FFT / IFFT (O(N log N), twiddle LUT, geometry-over-algebra).
-pub mod fft;
+pub use dowiz_core::fft;
 /// Legendre / spherical harmonics / Lebedev quadrature / crystal structure factor S(k).
-pub mod spherical;
+pub use dowiz_core::spherical;
 /// Modular group PSL(2,Z) + Möbius action (item #6).
-pub mod modular;
+pub use dowiz_core::modular;
 /// Fine-grained reactive signals (item #12).
 pub mod signal;
 /// Minimal clean semantic HTML emitter — "no div soup" (item #3).

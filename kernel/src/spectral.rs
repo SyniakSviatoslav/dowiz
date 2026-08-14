@@ -39,71 +39,10 @@ fn matmul(a: &[Vec<f64>], b: &[Vec<f64>], _n: usize) -> Vec<Vec<f64>> {
     matmul_contig(&am, &bm).into_vecvec()
 }
 
-/// Minimal complex number (avoids a `num-complex` dependency — kernel is zero-dep).
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct Complex {
-    pub re: f64,
-    pub im: f64,
-}
-
-impl Complex {
-    pub const fn new(re: f64, im: f64) -> Self {
-        Self { re, im }
-    }
-    /// Modulus |z|.
-    pub fn abs(self) -> f64 {
-        crate::math::hypot(self.re, self.im)
-    }
-    /// Argument arg(z) ∈ (−π, π].
-    pub fn arg(self) -> f64 {
-        crate::math::atan2(self.im, self.re)
-    }
-    /// Complex conjugate.
-    pub fn conj(self) -> Self {
-        Self::new(self.re, -self.im)
-    }
-    pub fn add(self, o: Complex) -> Complex {
-        Complex::new(self.re + o.re, self.im + o.im)
-    }
-    pub fn sub(self, o: Complex) -> Complex {
-        Complex::new(self.re - o.re, self.im - o.im)
-    }
-    pub fn mul(self, o: Complex) -> Complex {
-        Complex::new(
-            self.re * o.re - self.im * o.im,
-            self.re * o.im + self.im * o.re,
-        )
-    }
-    pub fn div(self, o: Complex) -> Complex {
-        let d = o.re * o.re + o.im * o.im;
-        Complex::new(
-            (self.re * o.re + self.im * o.im) / d,
-            (self.im * o.re - self.re * o.im) / d,
-        )
-    }
-    /// Complex square root (principal branch).
-    pub fn sqrt(self) -> Complex {
-        let r = self.abs();
-        let re = crate::math::sqrt((r + self.re) / 2.0);
-        let im = crate::math::sqrt((r - self.re) / 2.0);
-        // choose sign of im to match arg (so sqrt matches the half-angle)
-        if self.im < 0.0 {
-            Complex::new(re, -im)
-        } else {
-            Complex::new(re, im)
-        }
-    }
-    fn powu(self, k: u32) -> Complex {
-        let mut r = Complex::new(1.0, 0.0);
-        for _ in 0..k {
-            r = r.mul(self);
-        }
-        r
-    }
-    fn is_zero(self) -> bool {
-        self.re == 0.0 && self.im == 0.0
-    }
-}
+/// Minimal complex number — extracted to the `no_std` `dowiz-core` crate
+/// (`dowiz_core::complex`). Re-exported here so `crate::spectral::Complex` keeps
+/// resolving unchanged for the kernel modules that still live in this crate.
+pub use dowiz_core::complex::Complex;
 
 fn trace(a: &[Vec<f64>], n: usize) -> f64 {
     (0..n).map(|i| a[i][i]).sum()
@@ -314,7 +253,7 @@ pub fn topk_symmetric(
             x[i] = frac * 2.0 - 1.0; // [-1,1]
             norm += x[i] * x[i];
         }
-        norm = norm.sqrt();
+        norm = crate::math::sqrt(norm);
         for i in 0..n {
             x[i] /= norm;
         }
@@ -349,7 +288,7 @@ pub fn topk_symmetric(
             for i in 0..n {
                 nr += ax[i] * ax[i];
             }
-            nr = nr.sqrt();
+            nr = crate::math::sqrt(nr);
             if nr == 0.0 {
                 break;
             }
@@ -389,7 +328,7 @@ pub fn topk_symmetric(
         for i in 0..n {
             nx += x[i] * x[i];
         }
-        nx = nx.sqrt();
+        nx = crate::math::sqrt(nx);
         if nx == 0.0 {
             // degenerate / deflated away: fill a zero vector placeholder
             x = vec![0.0f64; n];
@@ -464,7 +403,7 @@ pub fn topk_symmetric_in(
             x[i] = frac * 2.0 - 1.0;
             norm += x[i] * x[i];
         }
-        norm = norm.sqrt();
+        norm = crate::math::sqrt(norm);
         for i in 0..n {
             x[i] /= norm;
         }
@@ -494,7 +433,7 @@ pub fn topk_symmetric_in(
             for i in 0..n {
                 nr += ax[i] * ax[i];
             }
-            nr = nr.sqrt();
+            nr = crate::math::sqrt(nr);
             if nr == 0.0 {
                 break;
             }
@@ -531,7 +470,7 @@ pub fn topk_symmetric_in(
         for i in 0..n {
             nx += x[i] * x[i];
         }
-        nx = nx.sqrt();
+        nx = crate::math::sqrt(nx);
         if nx == 0.0 {
             x.fill(0.0);
         } else {
@@ -981,8 +920,8 @@ impl DmdRank1Rls {
             return (0.0, vec![]);
         }
         // Fixed-seed start vector (deterministic, no RNG).
-        let mut v: Vec<f64> = (0..n).map(|i| ((i as f64) + 1.0).sqrt()).collect();
-        let norm: f64 = v.iter().map(|x| x * x).sum::<f64>().sqrt();
+        let mut v: Vec<f64> = (0..n).map(|i| crate::math::sqrt((i as f64) + 1.0)).collect();
+        let norm: f64 = crate::math::sqrt(v.iter().map(|x| x * x).sum::<f64>());
         for x in v.iter_mut() {
             *x /= norm;
         }
@@ -994,7 +933,7 @@ impl DmdRank1Rls {
                     av[i] += self.a_hat[i][j] * v[j];
                 }
             }
-            let norm: f64 = av.iter().map(|x| x * x).sum::<f64>().sqrt();
+            let norm: f64 = crate::math::sqrt(av.iter().map(|x| x * x).sum::<f64>());
             if norm < 1e-300 {
                 break;
             }

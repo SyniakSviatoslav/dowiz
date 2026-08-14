@@ -9,7 +9,7 @@
 //! transform is a composition of translations, rotations and inversions — the
 //! same substrate as `trig::Phase`, lifted to the upper half-plane.
 
-use crate::spectral::Complex;
+use crate::complex::Complex;
 
 /// An integer Möbius transformation (PSL(2,Z) matrix, det = ad−bc = 1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,7 +86,7 @@ pub fn reduce(z: Complex, max_iter: usize) -> Complex {
     let s = Mobius::s();
     for _ in 0..max_iter {
         // Translate into the strip |Re| ≤ 1/2.
-        let shift = z.re.round();
+        let shift = crate::math::round(z.re);
         if shift != 0.0 {
             let t = Mobius {
                 a: 1,

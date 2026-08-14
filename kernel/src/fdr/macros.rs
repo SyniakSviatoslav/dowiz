@@ -54,8 +54,8 @@ macro_rules! fdr_event {
     ($lvl:expr, $($rest:tt)*) => {{
         if $crate::fdr::event_enabled($lvl) {
             #[allow(unused_mut)]
-            let mut __fdr_v: ::alloc::vec::Vec<(&'static str, ::alloc::string::String)> =
-                ::alloc::vec::Vec::new();
+            let mut __fdr_v: $crate::alloc::vec::Vec<(&'static str, $crate::alloc::string::String)> =
+                $crate::alloc::vec::Vec::new();
             $crate::__fdr_munch!($lvl, __fdr_v, [$($rest)*]);
         }
     }};

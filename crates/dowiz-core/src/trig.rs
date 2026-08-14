@@ -18,6 +18,7 @@
 //! ZERO dependencies. Pure std f64 trigonometry.
 
 use core::f64::consts::{PI, TAU};
+use alloc::vec::Vec;
 
 // ─── Phase — a point on S¹ (the unit circle) ──────────────────────────────
 
@@ -33,13 +34,13 @@ impl Phase {
     /// Create from angle θ. Normalized to (-π, π].
     pub fn new(theta: f64) -> Self {
         let theta = normalize_angle(theta);
-        Phase { theta, cos: theta.cos(), sin: theta.sin() }
+        Phase { theta, cos: crate::math::cos(theta), sin: crate::math::sin(theta) }
     }
 
     /// Create from (x, y) coordinates. Normalizes to unit circle.
     pub fn from_xy(x: f64, y: f64) -> Self {
-        let theta = y.atan2(x);
-        let r = (x*x + y*y).sqrt();
+        let theta = crate::math::atan2(y, x);
+        let r = crate::math::sqrt(x*x + y*y);
         if r < 1e-15 { return Phase::zero(); }
         Phase { theta, cos: x / r, sin: y / r }
     }
@@ -76,18 +77,6 @@ impl Phase {
 
     /// Magnitude (always 1.0 on unit circle, but preserved for chaining).
     pub fn mag(&self) -> f64 { 1.0 }
-
-    /// Build a `Phase` from a fractal bit (FMA geometry substrate).
-    ///
-    /// This is the reuse bridge: `ktg2::fractal_manchester::fractal_bit_to_geometry`
-    /// maps a logical bit at a fractal position to (cos, sin) on the unit circle
-    /// — the *same* "geometry over algebra" substrate as `Phase`. Wiring the two
-    /// keeps one geometry vocabulary across the kernel instead of two.
-    pub fn from_fractal_bit(bit: bool, position: i32) -> Phase {
-        let (cos, sin) =
-            crate::ktg2::fractal_manchester::fractal_bit_to_geometry(bit, position);
-        Phase::from_xy(cos, sin)
-    }
 }
 
 fn normalize_angle(theta: f64) -> f64 {
@@ -129,7 +118,7 @@ impl Xyz {
         let dx = self.x - other.x;
         let dy = self.y - other.y;
         let dz = self.z - other.z;
-        (dx*dx + dy*dy + dz*dz).sqrt()
+        crate::math::sqrt(dx*dx + dy*dy + dz*dz)
     }
 
     /// Normalized distance [0, 1].
@@ -149,22 +138,22 @@ impl Xyz {
 
     /// Magnitude.
     pub fn mag(&self) -> f64 {
-        (self.x*self.x + self.y*self.y + self.z*self.z).sqrt()
+        crate::math::sqrt(self.x*self.x + self.y*self.y + self.z*self.z)
     }
 
     /// Round-trip through phase: (x,y,z) → (|v|, atan2(y,x), atan2(z,|v|)).
     pub fn to_spherical(&self) -> (f64, f64, f64) {
         let r = self.mag();
-        let theta = self.y.atan2(self.x); // azimuth
-        let phi = if r > 0.0 { self.z.acos() } else { 0.0 }; // polar
+        let theta = crate::math::atan2(self.y, self.x); // azimuth
+        let phi = if r > 0.0 { crate::math::acos(self.z) } else { 0.0 }; // polar
         (r, theta, phi)
     }
 
     pub fn from_spherical(r: f64, theta: f64, phi: f64) -> Self {
         Xyz {
-            x: r * phi.sin() * theta.cos(),
-            y: r * phi.sin() * theta.sin(),
-            z: r * phi.cos(),
+            x: r * crate::math::sin(phi) * crate::math::cos(theta),
+            y: r * crate::math::sin(phi) * crate::math::sin(theta),
+            z: r * crate::math::cos(phi),
         }
     }
 }
@@ -191,7 +180,7 @@ impl PhaseVector {
         if n == 0 { return 0.0; }
         let mut s = 0.0;
         for i in 0..n {
-            s += self.phases[i].distance(&other.phases[i]).cos();
+            s += crate::math::cos(self.phases[i].distance(&other.phases[i]));
         }
         s / n as f64
     }

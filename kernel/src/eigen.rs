@@ -40,7 +40,7 @@ impl Eigen {
         self
     }
 
-    fn norm(v: &[f64]) -> f64 { v.iter().map(|x| x*x).sum::<f64>().sqrt() }
+    fn norm(v: &[f64]) -> f64 { crate::math::sqrt(v.iter().map(|x| x*x).sum::<f64>()) }
 
     /// Project this eigen pair onto a target vector: result = λ · (v · target).
     pub fn project(&self, target: &[f64]) -> f64 {
@@ -66,7 +66,7 @@ impl Eigen {
                 }
             }
         }
-        let norm: f64 = counts.iter().map(|c| c * c).sum::<f64>().sqrt();
+        let norm: f64 = crate::math::sqrt(counts.iter().map(|c| c * c).sum::<f64>());
         let v: Vec<f64> = if norm > 0.0 { counts.iter().map(|c| c / norm).collect() } else { counts };
         let lambda: f64 = v.iter().map(|vi| vi * vi).sum();
         Eigen::new(crate::sanitize_f64(lambda), v)
@@ -78,10 +78,10 @@ impl Eigen {
         let n = self.vector.len().min(other.vector.len());
         if n == 0 { return 0.0; }
         let dot: f64 = self.vector.iter().zip(other.vector.iter()).take(n).map(|(a, b)| a * b).sum();
-        let self_norm: f64 = self.vector.iter().map(|vi| vi * vi).sum::<f64>().sqrt();
-        let other_norm: f64 = other.vector.iter().map(|vi| vi * vi).sum::<f64>().sqrt();
+        let self_norm: f64 = crate::math::sqrt(self.vector.iter().map(|vi| vi * vi).sum::<f64>());
+        let other_norm: f64 = crate::math::sqrt(other.vector.iter().map(|vi| vi * vi).sum::<f64>());
         let raw = dot / (self_norm * other_norm).max(1e-12);
-        let weight = (self.lambda * other.lambda).max(0.0).sqrt();
+        let weight = crate::math::sqrt((self.lambda * other.lambda).max(0.0));
         crate::sanitize_f64(raw * weight)
     }
 

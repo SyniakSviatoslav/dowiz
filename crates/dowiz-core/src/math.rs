@@ -558,6 +558,22 @@ pub fn atan2(y: f64, x: f64) -> f64 {
     }
 }
 
+/// `acos(x)` — inverse cosine, in [0, π]. ~1 ULP (not on any golden path).
+pub fn acos(x: f64) -> f64 {
+    if x > 1.0 || x < -1.0 || x.is_nan() {
+        return f64::NAN;
+    }
+    if x == 1.0 {
+        return 0.0;
+    }
+    if x == -1.0 {
+        return PI;
+    }
+    // 2·atan2(√(1−x), √(1+x)) — numerically stable across [−1, 1] (avoids the
+    // cancellation in `sqrt(1−x²)` near x = ±1).
+    2.0 * atan2(sqrt(1.0 - x), sqrt(1.0 + x))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -15,7 +15,8 @@
 //! not re-derived (n(0)-style reuse), and every function is deterministic and
 //! fail-closed at the boundary.
 
-use crate::spectral::Complex;
+use crate::complex::Complex;
+use alloc::vec::Vec;
 
 // ─── Legendre polynomials ──────────────────────────────────────────────
 
@@ -52,7 +53,7 @@ pub fn assoc_legendre(l: usize, m: usize, x: f64) -> Option<f64> {
         let somx2 = (1.0 - x) * (1.0 + x); // 1 − x² (stable near |x|≈1)
         let mut fact = 1.0;
         for _ in 0..m {
-            pmm *= -fact * somx2.sqrt();
+            pmm *= -fact * crate::math::sqrt(somx2);
             fact += 2.0;
         }
     }
@@ -87,7 +88,7 @@ pub fn spherical_harmonic(l: usize, m: i64, theta: f64, phi: f64) -> Option<f64>
     if am > l {
         return None;
     }
-    let p = assoc_legendre(l, am, theta.cos())?;
+    let p = assoc_legendre(l, am, crate::math::cos(theta))?;
     // Normalization for real form (Condon–Shortley phase folded into P_l^m).
     let k = l - am;
     let norm = {
@@ -97,12 +98,12 @@ pub fn spherical_harmonic(l: usize, m: i64, theta: f64, phi: f64) -> Option<f64>
         }
         // ε_m = 2 for m != 0 (real form), 1 for m == 0.
         let eps = if am == 0 { 1.0 } else { 2.0 };
-        (eps * n).sqrt()
+        crate::math::sqrt(eps * n)
     };
     let az = if m < 0 {
-        (am as f64 * phi).sin()
+        crate::math::sin(am as f64 * phi)
     } else {
-        (am as f64 * phi).cos()
+        crate::math::cos(am as f64 * phi)
     };
     // Fold the Condon–Shortley (−1)^m phase (geophysical real form).
     let phase = if am % 2 == 1 { -1.0 } else { 1.0 };
@@ -141,8 +142,8 @@ pub fn lebedev_octahedral() -> Vec<LebedevNode> {
 pub fn integrate_sphere(f: impl Fn(f64, f64) -> f64, grid: &[LebedevNode]) -> f64 {
     grid.iter()
         .map(|n| {
-            let phi = n.y.atan2(n.x);
-            let theta = n.z.acos();
+            let phi = crate::math::atan2(n.y, n.x);
+            let theta = crate::math::acos(n.z);
             f(theta, phi) * n.w
         })
         .sum()
@@ -171,7 +172,7 @@ pub fn structure_factor(
         };
         let kdotr = k[0] * r[0] + k[1] * r[1] + k[2] * r[2];
         let phase = -2.0 * core::f64::consts::PI * kdotr;
-        acc = acc.add(Complex::new(f * phase.cos(), f * phase.sin()));
+        acc = acc.add(Complex::new(f * crate::math::cos(phase), f * crate::math::sin(phase)));
     }
     acc
 }
