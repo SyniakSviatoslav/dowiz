@@ -287,6 +287,80 @@ pub fn metadata<P: AsRef<std::path::Path>>(path: P) -> Result<Metadata, VfsError
     StdFs.metadata(path_str(path.as_ref())?)
 }
 
+// ── Held file handle (open → write/read/sync → drop) ──
+//
+// The one-shot free functions above cover whole-file read/write/append. Three
+// durability modules need a *held* handle: `fdr/ring` (append + `sync_data` on
+// alarm/segment-switch), `brain/hydra` (lazy append handle + `sync_all` group
+// commit), `backup` (open + `sync_all` before atomic rename). This seam is the
+// held-handle analogue of the free functions: a no_std [`VfsFile`] trait (no
+// `std::fs::File` / `std::io`), a userspace [`StdFile`] impl, and an
+// [`open_file`] free function as the single authority. The kernel port maps
+// `open_file` to a block-device / ramfs inode handle; call sites are unchanged.
+
+/// Open mode for a held file handle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenMode {
+    /// Read-only (existing file).
+    Read,
+    /// Write + create + truncate (fresh writer session).
+    WriteTruncate,
+    /// Append + create (append-only log).
+    Append,
+}
+
+/// A held file handle. no_std-compatible signature (no `std::fs::File`).
+pub trait VfsFile {
+    fn write_all(&mut self, buf: &[u8]) -> Result<(), VfsError>;
+    fn flush(&mut self) -> Result<(), VfsError>;
+    /// `fdatasync`-style: file data durable, metadata may lag.
+    fn sync_data(&mut self) -> Result<(), VfsError>;
+    /// `fsync`-style: data + metadata durable.
+    fn sync_all(&mut self) -> Result<(), VfsError>;
+}
+
+/// The userspace held-handle impl (`std::fs::File`).
+pub struct StdFile {
+    inner: std::fs::File,
+}
+
+impl VfsFile for StdFile {
+    fn write_all(&mut self, buf: &[u8]) -> Result<(), VfsError> {
+        use std::io::Write;
+        self.inner.write_all(buf).map_err(|e| map_io_err(&e))
+    }
+    fn flush(&mut self) -> Result<(), VfsError> {
+        use std::io::Write;
+        self.inner.flush().map_err(|e| map_io_err(&e))
+    }
+    fn sync_data(&mut self) -> Result<(), VfsError> {
+        self.inner.sync_data().map_err(|e| map_io_err(&e))
+    }
+    fn sync_all(&mut self) -> Result<(), VfsError> {
+        self.inner.sync_all().map_err(|e| map_io_err(&e))
+    }
+}
+
+/// Open a held file handle in the given mode.
+pub fn open_file<P: AsRef<std::path::Path>>(path: P, mode: OpenMode) -> Result<StdFile, VfsError> {
+    let mut o = std::fs::OpenOptions::new();
+    match mode {
+        OpenMode::Read => {
+            o.read(true);
+        }
+        OpenMode::WriteTruncate => {
+            o.write(true).create(true).truncate(true);
+        }
+        OpenMode::Append => {
+            o.append(true).create(true);
+        }
+    }
+    let f = o
+        .open(path_str(path.as_ref())?)
+        .map_err(|e| map_io_err(&e))?;
+    Ok(StdFile { inner: f })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

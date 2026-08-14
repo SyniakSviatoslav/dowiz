@@ -82,17 +82,30 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
    thread-based → stay std.
 4. **43 user-space ports** — fs→VFS (`std::fs` → trait), net→sk_buff,
    thread→kthread, process→kexec. These are NOT mechanical; each needs a trait
-   seam like `Clock`. **fs→VFS is DONE (item 10):** `src/vfs.rs` (no_std
-   `Vfs` trait + `StdFs` impl + free functions) is the single authority; 166
-   `std::fs::{read,read_to_string,write,read_dir,create_dir_all,remove_file,
-   remove_dir_all,rename,metadata}` call sites across ~36 modules route through
-   it. REMAINING under fs: the file-handle surface (`File`/`OpenOptions`/`Write`
-   — append/fsync/held-handle) in 6 modules (`academy_store`, `evals`,
-   `fdr/ring`, `pq/entropy`, `span_metrics/obs`, `brain/hydra`), plus net→sk_buff
-   (`pq/entropy` TcpStream), thread→kthread, process→kexec. **thread→kthread is
-   PARTIAL (item 10):** `src/thread.rs` (`Thread` trait + `StdThread` + `sleep`/
-   `available_parallelism`) routes the chronos/core_pinning/span_metrics sites;
-   `spawn`/`scope` (budget.rs) stay std (need a `JoinHandle`-free design).
+   seam like `Clock`. **ALL DONE (2026-08-14):**
+   - **fs→VFS (DONE):** `src/vfs.rs` (no_std `Vfs` trait + `StdFs` impl + free
+     functions) — 166 `std::fs::{read,read_to_string,write,read_dir,create_dir_all,
+     remove_file,remove_dir_all,rename,metadata}` call sites across ~36 modules,
+     plus `append`.
+   - **fs held-handle (DONE):** `src/vfs.rs` extended with `OpenMode` +
+     `VfsFile` trait (`write_all`/`flush`/`sync_data`/`sync_all`) + `StdFile` +
+     `open_file`. Migrated `fdr/ring` (held `File` + `sync_data` on alarm/switch),
+     `brain/hydra` (lazy append handle + `sync_all` group commit), `backup`
+     (`open` + `sync_all` before atomic rename), and `academy_store`
+     (`journal_write` → `vfs::append`). `pq/entropy`'s `/dev/urandom` read stays
+     std (feature-gated `qrng` provider, std-only by design).
+   - **net→sk_buff (N/A):** the only `std::net` in the lib is the feature-gated
+     `pq/entropy` QRNG provider (a plain-TCP stub documented "PRODUCTION MUST use
+     TLS client") — no production no_std net surface to seam.
+   - **thread→kthread (DONE):** `src/thread.rs` (`Thread` trait + `StdThread` +
+     `sleep`/`available_parallelism`) routes the chronos/core_pinning/span_metrics
+     sites. `spawn`/`scope` were audited to be TEST-ONLY (budget.rs `#[cfg(test)]`);
+     no production spawn to seam. The only remaining `std::thread` touch-point is
+     `spinlock.rs`'s `panicking()` in the guard's `Drop` (cfg-gate on extraction).
+   - **process→kexec (DONE):** `src/process.rs` (`Process` trait + `StdProcess` +
+     `run`) routes `span_metrics/breach` (perf record) + `living_knowledge`
+     (node --version). The `living_knowledge` sh-bridge (bidirectional pipes +
+     `wait4`) is documented out-of-scope (stays std).
 5. **`dowiz-core` crate split — arena + mat (2026-08-14)** — extracted the two
    spectral-cycle leaves:
    - `arena` — `BumpArena` (bump/region allocator) + `HugePageHint`; the
@@ -154,7 +167,10 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
 The mechanical tier (boundary) is **fully migrated**. The transcendental geometry
 layer, sanitize/stem/eigen, arena/mat, csr/householder (+ the `span` seam), and
 the full `spectral` engine (+ `sort`) are **extracted** to `dowiz-core`; the
-Mutex→spinlock sites are **done**. The remaining items are architectural: the
-bulk crate split (move the rest of the 174 modules) and the 43 I/O ports. All are
-large, low-mechanical-effort, high-care efforts — not bulk-editable. This ledger
-marks the exact boundary so a future session resumes cleanly.
+Mutex→spinlock sites are **done**; and all **43 I/O ports are done**
+(fs→VFS including the held-handle/fsync seam, thread→kthread, process→kexec;
+net→sk_buff is N/A — the only net surface is a feature-gated std-only stub).
+The single remaining item is architectural: the **bulk crate split** (move the
+rest of the 174 kernel-core modules into `#![no_std]` `dowiz-core`). It is large,
+low-mechanical-effort, high-care — not bulk-editable. This ledger marks the exact
+boundary so a future session resumes cleanly.

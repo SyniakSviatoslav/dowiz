@@ -28,6 +28,7 @@ use crate::chunker::Chunker;
 use crate::event_log::sha3_256;
 use alloc::collections::BTreeMap;
 use crate::vfs as fs;
+use crate::vfs::VfsFile;
 use std::path::PathBuf;
 
 /// Content-address of a block: the chunker's sha3_256 id.
@@ -215,7 +216,7 @@ impl BlockStore for FileBlockStore {
             return false;
         }
         // fsync the partial so its bytes are durable before the atomic rename.
-        if let Ok(f) = std::fs::File::open(&partial) {
+        if let Ok(mut f) = fs::open_file(&partial, fs::OpenMode::Read) {
             let _ = f.sync_all();
         }
         if let Err(e) = fs::rename(&partial, &final_path) {

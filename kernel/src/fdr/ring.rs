@@ -22,9 +22,10 @@
 //!
 //! Non-wasm only: `wasm32` has no real filesystem and never installs an FDR sink.
 
-use std::fs::{File, OpenOptions};
-use std::io::{self, Read, Write};
+use std::io;
 use std::path::{Path, PathBuf};
+
+use crate::vfs::{open_file, OpenMode, StdFile, VfsFile};
 
 use super::schema::{FdrEvent, Kind, StampPolicy};
 use super::Level;
@@ -52,7 +53,7 @@ pub struct FdrRing {
     dir: PathBuf,
     seg_cap: u64,
     active: usize, // 0 => A, 1 => B
-    file: File,
+    file: StdFile,
     written: u64,
     seq: u64,
 }
@@ -65,11 +66,7 @@ impl FdrRing {
     /// Open a fresh writer session (truncates segment A). `seq` starts at 0.
     pub fn open(dir: PathBuf, seg_cap: u64) -> io::Result<Self> {
         crate::vfs::create_dir_all(&dir)?;
-        let file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(seg_path(&dir, 0))?;
+        let file = open_file(seg_path(&dir, 0), OpenMode::WriteTruncate)?;
         Ok(FdrRing {
             dir,
             seg_cap,
@@ -115,11 +112,7 @@ impl FdrRing {
     fn switch(&mut self) -> io::Result<()> {
         self.file.sync_data()?;
         let next = 1 - self.active;
-        self.file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(seg_path(&self.dir, next))?;
+        self.file = open_file(seg_path(&self.dir, next), OpenMode::WriteTruncate)?;
         self.active = next;
         self.written = 0;
         Ok(())
@@ -127,7 +120,8 @@ impl FdrRing {
 
     /// Force durable flush (power-loss safety) without a record. Not required for kill-9.
     pub fn sync(&mut self) -> io::Result<()> {
-        self.file.sync_data()
+        self.file.sync_data()?;
+        Ok(())
     }
 
     /// Write the orderly-shutdown marker (fsynced). Its presence as the tail record is
@@ -143,7 +137,8 @@ impl FdrRing {
             vec![],
         );
         self.append(&ev)?;
-        self.file.sync_data()
+        self.file.sync_data()?;
+        Ok(())
     }
 }
 
@@ -204,15 +199,10 @@ fn extract_str(line: &str, key: &str) -> Option<String> {
 pub fn recover(dir: &Path) -> Recovery {
     let mut out = Recovery::default();
     for idx in [0usize, 1usize] {
-        let mut data = Vec::new();
-        match File::open(seg_path(dir, idx)) {
-            Ok(mut f) => {
-                if f.read_to_end(&mut data).is_err() {
-                    continue;
-                }
-            }
+        let data = match crate::vfs::read(seg_path(dir, idx)) {
+            Ok(d) => d,
             Err(_) => continue,
-        }
+        };
         // Split on '\n'. A record line ends in '\n'; the element after the final '\n' is
         // "" (all records complete) or a partial (torn tail — process died mid-write).
         let text = String::from_utf8_lossy(&data);
@@ -290,10 +280,7 @@ pub fn emit_post_mortem(dir: &Path, rec: &Recovery) -> io::Result<()> {
     let payload = ev.to_json();
     let crc = crc32(payload.as_bytes());
     let line = format!("{payload}|{crc:08x}\n");
-    let mut f = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(dir.join(POSTMORTEM_LOG))?;
+    let mut f = open_file(dir.join(POSTMORTEM_LOG), OpenMode::Append)?;
     f.write_all(line.as_bytes())?;
     f.sync_data()?;
     Ok(())
@@ -391,10 +378,7 @@ mod tests {
         // Simulate a process dying mid-write: append a partial line with NO terminating
         // '\n' and a bogus/short CRC — exactly a torn last record.
         {
-            let mut f = OpenOptions::new()
-                .append(true)
-                .open(seg_path(&dir, 0))
-                .unwrap();
+            let mut f = open_file(seg_path(&dir, 0), OpenMode::Append).unwrap();
             f.write_all(b"{\"seq\":5,\"kind\":\"event\",\"name\":\"torn")
                 .unwrap();
         }
@@ -425,10 +409,7 @@ mod tests {
         }
         // Append a COMPLETE line (has '\n') whose CRC is wrong.
         {
-            let mut f = OpenOptions::new()
-                .append(true)
-                .open(seg_path(&dir, 0))
-                .unwrap();
+            let mut f = open_file(seg_path(&dir, 0), OpenMode::Append).unwrap();
             f.write_all(b"{\"seq\":1,\"kind\":\"event\",\"name\":\"bad\"}|deadbeef\n")
                 .unwrap();
         }

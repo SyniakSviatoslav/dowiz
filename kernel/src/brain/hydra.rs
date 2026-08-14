@@ -1092,9 +1092,9 @@ mod tests {
 /// organism's persistent memory. pgrust remains the node-level SQL option; this
 /// is the kernel-internal, dependency-free, offline-safe default for the Hydra.
 use alloc::collections::BTreeMap;
-use std::fs::{File, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
+
+use crate::vfs::{open_file, OpenMode, StdFile, VfsFile};
 
 pub struct FileEventStore {
     path: std::path::PathBuf,
@@ -1121,7 +1121,7 @@ pub struct FileEventStore {
     /// write + 1 close per event, only the fsync is load-bearing). This half
     /// is contract-neutral: it changes zero durability semantics, only removes
     /// redundant syscalls around the same barrier.
-    handle: Option<File>,
+    handle: Option<StdFile>,
     /// Item 26 group-commit: `sync_all` fires every `batch_size` inserts
     /// instead of every one. **OFF by default** (`batch_size = 1` — today's
     /// exact per-event-fsync behavior, byte-for-byte unchanged: with
@@ -1149,16 +1149,12 @@ impl FileEventStore {
         let mut tip = None;
         let mut count = 0;
         if path.exists() {
-            let file = File::open(&path)?;
-            for line in BufReader::new(file).lines() {
-                let line = match line {
-                    Ok(l) => l,
-                    Err(_) => continue, // skip unreadable line
-                };
+            let text = crate::vfs::read_to_string(&path)?;
+            for line in text.lines() {
                 if line.is_empty() {
                     continue;
                 }
-                match serde_json_like_parse(&line) {
+                match serde_json_like_parse(line) {
                     Some(ev) => {
                         let id = ev.event_id();
                         by_id.insert(id, ev.clone());
@@ -1335,10 +1331,7 @@ impl EventStore for FileEventStore {
         // tolerating a not-yet-existing file/parent; only an insert can ever
         // surface `StoreError::Open` (H1 §4 criterion 4, unchanged).
         if self.handle.is_none() {
-            let f = OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&self.path)
+            let f = open_file(&self.path, OpenMode::Append)
                 .map_err(|e| StoreError::Open(e.to_string()))?;
             self.handle = Some(f);
         }
