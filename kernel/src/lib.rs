@@ -777,6 +777,8 @@ pub mod canonical;
 pub mod neon;
 /// Deterministic, no_std-ready FxHash (replaces HashMap's OS-entropy RandomState).
 pub mod fxhash;
+/// Single-authority time abstraction (Clock/WallClock) — std::time seam for kernel port.
+pub mod clock;
 /// Delta calculus — replaces classic comparisons (a>b, x==y) with vector
 /// delta analysis. Δv, ∂t, rate, acceleration, drift tracking. Eigen/Phase
 /// comparison via spectral distance. Oscillation detection.
@@ -949,10 +951,7 @@ pub fn checksum_fold(data: &[u8]) -> u64 {
 }
 
 pub fn now_ms() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
+    crate::clock::now_ms()
 }
 
 /// Sort descending by a `f64` key (NaN/Inf → end of order).
