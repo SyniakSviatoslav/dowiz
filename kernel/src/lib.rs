@@ -231,7 +231,7 @@ pub mod mesh_replication;
 /// HALF: typed-metrics schema + closed `LogEvent` enum (§2/§3) and the
 /// claim-latency anomaly detector (§4). F40 ML-DSA signed envelope DEFERRED
 /// pending bebop2 C4b — see `metrics.rs` header. Fail-closed local sink.
-pub mod metrics;
+pub use dowiz_core::metrics;
 /// Item 52 (space-grade roadmap §J): planted-fault self-test for the `miri-gate`.
 /// Compiled under `cfg(test)` (so a plain `cargo test` proves it compiles and runs
 /// the no-op native branch — zero footprint in any non-test/shipping build) AND
@@ -348,7 +348,7 @@ pub mod spine;
 /// ack / reclaim). The I/O + drainer adapter lives outside the kernel
 /// (pure-std firewall); this owns the Verified-by-Math transitions. Reused by
 /// every async subsystem (reporting, governance, mesh sync).
-pub mod spool;
+pub use dowiz_core::spool;
 /// E2 — the kernel's single uncertainty primitive: mean SE / normal & Wilson
 /// intervals / the relocated CLT convergence envelope / a seeded bootstrap.
 /// Zero-dep leaf (sibling of `rng`/`money`/`noether`); every layer depends on it
@@ -485,7 +485,7 @@ pub mod memory_search;
 pub mod predict;
 /// Decentralized mesh swarm coordinator — task decomposition via DSU, executor
 /// selection via harmonic ranking, dynamic adaptation via spectral/Markov prediction.
-pub mod swarm;
+pub use dowiz_core::swarm;
 /// Structural enforcement of the mandatory agent workflow sequence
 /// (research -> synthesis -> critique -> plan -> critique -> work -> verify -> critique -> commit).
 /// Typed state machine: phases complete in strict order, no skipping, no repeats.
@@ -665,7 +665,7 @@ pub mod ports;
 /// from raw HTML (the fetch itself stays in `agent-facade`, this crate remains
 /// network-free). Reimplements the core Mozilla-Readability mechanism natively;
 /// explicitly NOT a browser — zero JS execution, that stays an external tool.
-pub mod readability;
+pub use dowiz_core::readability;
 /// P38 O18a — graphics unlock. Feature-gated GPU render backend (presentation
 /// only; the kernel remains the bit-deterministic state authority). Compiles to
 /// NOTHING without the `gpu` feature; behind it, a REAL headless wgpu bring-up.
@@ -861,7 +861,7 @@ pub mod penecho;
 /// Lossless speculative block drafting and target verification inspired by DFlash.
 pub mod dflash;
 /// Tiny-device tool-calling agent state machine inspired by Needle 2.
-pub mod needle2;
+pub use dowiz_core::needle2;
 /// Local-first, auditable research workbench inspired by Open Science Desktop.
 pub mod open_science;
 /// Transport-neutral messaging/session core inspired by Evolution Go.
