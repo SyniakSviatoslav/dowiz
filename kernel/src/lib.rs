@@ -757,7 +757,8 @@ pub mod glyph_dashboard;
 pub mod hypervector_index;
 /// Zero-dep compression (RLE / delta) for academy/diff/garbage artifacts —
 /// compress on write, decompress on use, byte-identity round-trip.
-pub mod squash;
+/// Extracted to `no_std` `dowiz-core` (pure integer RLE/delta).
+pub use dowiz_core::squash;
 /// Radix-2 Cooley–Tukey FFT / IFFT (O(N log N), twiddle LUT, geometry-over-algebra).
 pub mod fft;
 /// Legendre / spherical harmonics / Lebedev quadrature / crystal structure factor S(k).

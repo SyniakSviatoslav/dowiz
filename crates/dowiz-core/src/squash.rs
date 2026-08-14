@@ -20,6 +20,8 @@
 //! - Deterministic output (same input ⇒ same bytes).
 //! - No allocation on the `size_of`/`would_compress` decision path.
 
+use alloc::vec::Vec;
+
 /// Run-length encode a byte slice: `(count, byte)` pairs packed as varints.
 /// Each run is encoded as a varint count (1..=255 in one byte) followed by the
 /// literal byte. Counts above 255 split into multiple runs.
