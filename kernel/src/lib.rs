@@ -153,7 +153,7 @@ pub mod geo;
 /// here so the CANONICAL kernel and the agent-kernel share ONE graph-math
 /// vocabulary (unify-the-kernels directive). Parity-gated vs the agent-kernel
 /// reference in `harmonic::tests::parity_with_agent_kernel_reference`.
-pub mod harmonic;
+pub use dowiz_core::harmonic;
 /// Householder QR + shifted-QR eigensolver (the dense-`n×n` "Ferrari"): all
 /// eigenvalues, real + complex, stack-only for n ≤ 32 (no heap; FMA inner
 /// product). Replaces the O(n⁴) Faddeev-LeVerrier path as the default for the
@@ -793,7 +793,7 @@ pub mod weave;
 /// Geometric landmark/keypoint primitives + Procrustes alignment (item #10).
 pub mod landmark;
 /// Deterministic scenario record/replay/resume + secret redaction (item #2 substrate).
-pub mod scenario;
+pub use dowiz_core::scenario;
 /// Support-ticket lifecycle FSM + conversation thread (item #13).
 pub mod support;
 /// Gradient boosting with regression stumps (item #15).
@@ -855,11 +855,11 @@ pub mod openobserve;
 /// Memory-budgeted sparse MoE routing inspired by TurboFieldfare.
 pub mod turbofieldfare;
 /// Deterministic keyframe-to-interactive-motion pipeline inspired by Oil Motion.
-pub mod oil_motion;
+pub use dowiz_core::oil_motion;
 /// Spatial, tile-indexed collaborative reasoning canvas inspired by PenEcho.
-pub mod penecho;
+pub use dowiz_core::penecho;
 /// Lossless speculative block drafting and target verification inspired by DFlash.
-pub mod dflash;
+pub use dowiz_core::dflash;
 /// Tiny-device tool-calling agent state machine inspired by Needle 2.
 pub mod needle2;
 /// Local-first, auditable research workbench inspired by Open Science Desktop.
@@ -880,7 +880,7 @@ pub mod typed_metrics;
 pub mod vendor;
 /// C1 — verify-failure → retrieval-trigger: a claim check that, on failure,
 /// emits a bounded structured re-verify request (the "verify then learn" loop).
-pub mod verify_retrieval;
+pub use dowiz_core::verify_retrieval;
 /// WASM/JS bindings — the only place the kernel touches the browser boundary.
 /// Compiled ONLY under the `wasm` feature (see `#![cfg(feature = "wasm")]` in
 /// wasm.rs); native rlib builds exclude it and pull no wasm-bindgen/serde.
