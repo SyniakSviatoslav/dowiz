@@ -237,7 +237,7 @@ pub mod metrics;
 /// the no-op native branch — zero footprint in any non-test/shipping build) AND
 /// under `cfg(miri)` (where the planted-UB branch executes and Miri must flag it).
 #[cfg(any(test, miri))]
-mod miri_selftest;
+pub use dowiz_core::miri_selftest;
 pub mod moderation;
 /// Numerical stability primitives: Kahan compensated summation, pairwise summation,
 /// stable softmax, and matrix condition-number estimation via power iteration.
@@ -410,7 +410,7 @@ pub mod determinism;
 /// A2 (BLUEPRINT-P-A §3.1) — generated kernel "organs" committed from eqc-rs.
 /// Each fn is emitted by `tools/eqc-rs/src/bin/gen_kernel_organs.rs`; verify
 /// against the hand-written law with a bit-parity `#[test]`.
-pub mod eqc_gen;
+pub use dowiz_core::eqc_gen;
 /// E1 — verifiable-cognition benchmark generator: metamorphic MR items with
 /// kernel-primitive oracles, deterministic mint-log leakage gate, and
 /// calibration metrics (ECE/Brier/AURC). Pure-offline, zero-dep.
@@ -452,7 +452,7 @@ pub use dowiz_core::mat;
 /// included. SHA-NI accelerates SHA-1 and SHA-256 (NOT SHA3/Keccak).
 pub mod sha256_hw;
 /// RW-08 — messenger deep-link builders (pure string logic → kernel authority).
-pub mod messenger;
+pub use dowiz_core::messenger;
 /// Reverse-mode automatic differentiation (scalar tape engine) — the
 /// kernel-side fitting primitive (Tier B2: capture-field SIREN/splat fits).
 pub mod micrograd;
@@ -705,7 +705,7 @@ pub mod spinlock;
 pub mod token_bucket;
 /// Deterministic n-gram (bigram + trigram) frequency extraction over a token
 /// stream — the self-improvement loop's pattern-surface primitive (P9 / T2-β).
-pub mod trigram;
+pub use dowiz_core::trigram;
 /// Light multilingual stemmer (EN/UK/RU) — zero-dep suffix stripping for
 /// inflected-language recall in BM25/trigram retrieval. Normalizes cases,
 /// conjugations, and plurals to a common root. (Extracted into dowiz-core;
@@ -787,7 +787,7 @@ pub use dowiz_core::modular;
 /// Fine-grained reactive signals (item #12).
 pub mod signal;
 /// Minimal clean semantic HTML emitter — "no div soup" (item #3).
-pub mod semantic;
+pub use dowiz_core::semantic;
 /// Procedural pattern generators rendered as glyphs (item #18).
 pub mod weave;
 /// Geometric landmark/keypoint primitives + Procrustes alignment (item #10).
@@ -877,7 +877,7 @@ mod cross_tests;
 pub mod typed_metrics;
 /// P62 / M1 — the intra-hub vendor partition identity (`VendorId`). The fan-out
 /// key for `catalog::validate_tree` / `domain::charge_legs` / `domain::kitchen_tickets`.
-pub mod vendor;
+pub use dowiz_core::vendor;
 /// C1 — verify-failure → retrieval-trigger: a claim check that, on failure,
 /// emits a bounded structured re-verify request (the "verify then learn" loop).
 pub mod verify_retrieval;
