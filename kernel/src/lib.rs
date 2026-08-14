@@ -737,6 +737,13 @@ pub mod ktg2;
 /// `dowiz-core` crate and re-exported here so `crate::{constants,lut}::…`
 /// paths keep working unchanged.
 pub use dowiz_core::{constants, lut};
+/// `no_std` `f64` math — correctly-rounded `sqrt`/`fma` + bit-exact glibc
+/// `hypot` (see `crates/dowiz-core/src/math.rs`). Re-exported so the geometry
+/// modules (fft, spherical, modular, trig, eigen, spectral, householder) can
+/// call `crate::math::{sqrt,sin,cos,atan2,hypot,round,…}` instead of the
+/// std-only `f64` methods, keeping the `eig2x2_bit_capture_oracle` golden
+/// signatures bit-exact under `no_std`.
+pub use dowiz_core::math;
 /// Fractal Manchester Architecture (FMA) — canonical transport/geometry layer:
 /// Manchester self-synchronizing transitions, -64 absolute fractal zero,
 /// optical semiconductor-resistor channel, per-op IDs + epochs + telemetry.

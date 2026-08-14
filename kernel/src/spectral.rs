@@ -52,11 +52,11 @@ impl Complex {
     }
     /// Modulus |z|.
     pub fn abs(self) -> f64 {
-        self.re.hypot(self.im)
+        crate::math::hypot(self.re, self.im)
     }
     /// Argument arg(z) ∈ (−π, π].
     pub fn arg(self) -> f64 {
-        self.im.atan2(self.re)
+        crate::math::atan2(self.im, self.re)
     }
     /// Complex conjugate.
     pub fn conj(self) -> Self {
@@ -84,8 +84,8 @@ impl Complex {
     /// Complex square root (principal branch).
     pub fn sqrt(self) -> Complex {
         let r = self.abs();
-        let re = ((r + self.re) / 2.0).sqrt();
-        let im = ((r - self.re) / 2.0).sqrt();
+        let re = crate::math::sqrt((r + self.re) / 2.0);
+        let im = crate::math::sqrt((r - self.re) / 2.0);
         // choose sign of im to match arg (so sqrt matches the half-angle)
         if self.im < 0.0 {
             Complex::new(re, -im)
