@@ -23,7 +23,6 @@
 //! `init`/callers wire it into the engine/perf friction path per the operator).
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use super::obs::{normalized_load1, JsonlWriter, ALERT_JSONL, LOAD_BREACH_THRESHOLD};
 
@@ -131,33 +130,32 @@ fn try_perf(dir: &Option<PathBuf>) -> Option<BreachAction> {
     let load = normalized_load1().unwrap_or(f64::INFINITY);
     let sleep = format!("{}", PERF_CAPTURE_SECS);
     // -a system-wide, -g call-graph (dwarf), -F 99 sampling, time-bounded by `sleep`.
-    let mut cmd = Command::new(&perf);
-    cmd.arg("record")
-        .arg("-a")
-        .arg("-g")
-        .arg("-F")
-        .arg(format!("{}", PERF_FREQ))
-        .arg("--")
-        .arg("sleep")
-        .arg(&sleep);
+    let mut args: Vec<String> = vec![
+        "record".into(),
+        "-a".into(),
+        "-g".into(),
+        "-F".into(),
+        format!("{}", PERF_FREQ),
+        "--".into(),
+        "sleep".into(),
+        sleep,
+    ];
     if let Some(d) = dir {
         // Write perf.data next to the alert artifact.
         let _ = crate::vfs::create_dir_all(d);
-        cmd.arg("-o").arg(d.join("perf.data"));
+        args.push("-o".into());
+        args.push(d.join("perf.data").to_string_lossy().into_owned());
     }
-    // Time-bounded spawn: perf detaches after the `sleep N` window; stderr/stdout
-    // are nulled so it never pollutes the host log. Best-effort — failure ⇒
-    // captured=false (caller falls back to the no-op pprof marker).
-    let status = cmd
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .ok();
-    let captured = matches!(status, Some(s) if s.success());
-    let detail = match status {
-        Some(s) if s.success() => format!("perf record ran for {}s", PERF_CAPTURE_SECS),
-        Some(s) => format!("perf exited non-zero: {}", s),
-        None => "perf could not be spawned (no perms?)".to_string(),
+    // Time-bounded spawn: perf detaches after the `sleep N` window. Best-effort —
+    // failure ⇒ captured=false (caller falls back to the no-op pprof marker).
+    let out = crate::process::run(&perf.to_string_lossy(), &args);
+    let captured = out.success();
+    let detail = if out.success() {
+        format!("perf record ran for {}s", PERF_CAPTURE_SECS)
+    } else if out.code == -1 {
+        "perf could not be spawned (no perms?)".to_string()
+    } else {
+        format!("perf exited non-zero: code {}", out.code)
     };
     Some(BreachAction::Captured {
         load,
