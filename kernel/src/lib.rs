@@ -443,7 +443,8 @@ pub mod loops;
 pub mod markov;
 /// Contiguous row-major matrix helper — the single backing store / matmul impl
 /// the spectral + absorbing subsystems route through (DOD/SIMD prep).
-pub mod mat;
+/// (Extracted into dowiz-core; re-exported so `crate::mat` resolves unchanged.)
+pub use dowiz_core::mat;
 /// SHA-256 hardware acceleration using SHA-NI (for fast integrity checks,
 /// not cryptographic MACs/signatures). Runtime-detected; scalar fallback
 /// included. SHA-NI accelerates SHA-1 and SHA-256 (NOT SHA3/Keccak).

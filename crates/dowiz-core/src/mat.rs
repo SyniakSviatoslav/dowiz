@@ -7,7 +7,8 @@
 //! the ONE matmul implementation; the `&[Vec<f64>]` entry points in
 //! `spectral`/`absorbing` convert at the boundary and stay for wasm/API compat.
 //!
-//! Zero-dep, plain `std`, deterministic. Small accessors are `#[inline]`.
+//! Zero-dep, plain `core`+`alloc` (no_std), deterministic. Small accessors are
+//! `#[inline]`.
 //!
 //! ## Cache-aware block size
 //!
@@ -29,6 +30,8 @@
 /// `matmul_contig` variants or spectral dgemm paths) should use this as
 /// the tile dimension.
 pub const MAT_BLOCK_SIZE: usize = 128;
+
+use alloc::vec::Vec;
 
 /// Row-major dense matrix backed by a single contiguous `Vec<f64>`.
 ///

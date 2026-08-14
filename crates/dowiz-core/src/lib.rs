@@ -23,12 +23,14 @@ extern crate std;
 #[macro_use]
 extern crate alloc;
 
+pub mod arena;
 pub mod complex;
 pub mod constants;
 pub mod eigen;
 pub mod fft;
 pub mod hypervector;
 pub mod lut;
+pub mod mat;
 pub mod math;
 pub mod modular;
 pub mod rng;

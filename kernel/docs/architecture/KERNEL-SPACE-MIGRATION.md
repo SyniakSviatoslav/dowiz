@@ -64,11 +64,15 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
    `crate::` cross-refs, add a no_std target (`thumbv7em-none-eabi` or
    `wasm32-unknown-unknown`), handle `format!`/prelude via `alloc::prelude`.
 2. **Transcendental modules still in-kernel (no_std-READY but not moved)** —
-   `spectral` (→ `fdr`/`csr`/`spectral_cache`/`order_machine`/`mat`/`arena`),
-   `householder` (→ `spectral`/`fdr`). `eigen` + `stem` are DONE (item 7 above);
-   the remaining two form a mutual cycle (`spectral` ⇄ `householder`, and
-   `spectral` ⇄ `csr`) and reference `mat`/`arena`/`fdr`, so moving them needs
-   those non-transcendental dependencies extracted first.
+   `spectral` (→ `fdr`/`csr`/`spectral_cache`/`order_machine`),
+   `householder` (→ `spectral`/`fdr`). `eigen`+`stem` (item 7) and
+   `arena`+`mat` (item 8) are DONE. The remaining two form a mutual cycle
+   (`spectral` ⇄ `householder`, and `spectral` ⇄ `csr` via `csr::energy` →
+   `spectral::graph_energy` and `spectral::{laplacian,laplacian_spmv}(&Csr)`);
+   `csr` additionally uses `sqrt` (production, → `crate::math`) and
+   `fs/process/env` (TEST-only, PPR reread). Breaking the cycle needs either
+   `graph_energy` moved to dowiz-core (it needs `eigenvalues` → `householder`,
+   the cycle's core) or `csr::energy` re-homed.
 3. **Mutex → spinlock** (DONE 2026-08-14) — hand-rolled zero-dep
    `SpinLock<T>` (`src/spinlock.rs`, test-and-set on
    `core::sync::atomic::AtomicBool`) replaced `std::sync::Mutex` in the 4
@@ -83,6 +87,15 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
 4. **43 user-space ports** — fs→VFS (`std::fs` → trait), net→sk_buff,
    thread→kthread, process→kexec. These are NOT mechanical; each needs a trait
    seam like `Clock`.
+5. **`dowiz-core` crate split — arena + mat (2026-08-14)** — extracted the two
+   spectral-cycle leaves:
+   - `arena` — `BumpArena` (bump/region allocator) + `HugePageHint`; the
+     `count-allocs` counting-allocator harness stays kernel-side (it installs a
+     `#[global_allocator]`, std-only) as a thin wrapper
+     (`kernel/src/arena.rs` = `pub use dowiz_core::arena::*` + `counting_alloc`).
+   - `mat` — `Mat`/`MatrixError`/`matmul_contig(_in)`; pure `core`+`alloc`.
+   Kernel re-exports keep `crate::arena::BumpArena` / `crate::mat::Mat`
+   resolving unchanged. dowiz-core 230 lib tests (+7 arena); kernel 2971.
 
 ## Honest scope note
 
