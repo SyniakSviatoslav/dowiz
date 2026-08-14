@@ -64,14 +64,11 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
    `crate::` cross-refs, add a no_std target (`thumbv7em-none-eabi` or
    `wasm32-unknown-unknown`), handle `format!`/prelude via `alloc::prelude`.
 2. **Transcendental modules still in-kernel (no_std-READY but not moved)** —
-   `spectral` (→ `fdr`/`csr`/`spectral_cache`/`order_machine`),
-   `householder` (→ `spectral`/`fdr`). `eigen`+`stem` (item 7), `arena`+`mat`
-   (item 8), and **`csr` + `householder` (item 9)** are DONE. The remaining
-   `spectral` module still depends on `fdr` (span), `csr` (now dowiz-core),
-   `householder` (now dowiz-core), `spectral_cache`, `order_machine`, and DMD —
-   extracting its eigenvalue family (charpoly/roots/eigenvalues/graph_energy/
-   spectral_radius/laplacian/classify_drift) needs the `span` seam (done, item
-   9) plus breaking the `spectral_cache`/`order_machine` edges.
+   **DONE** (all extracted): `spectral`, `householder`, `csr`, `eigen`, `stem`,
+   `arena`, `mat` (items 6–10). The only remaining spectral-cluster modules in
+   the kernel are the std-coupled consumers (`spectral_cache` — a `&mut`
+   eigensolve cache; `order_machine` — power-iteration ρ) which stay kernel-side
+   by design (they depend on the kernel's cache/FSM machinery).
 3. **Mutex → spinlock** (DONE 2026-08-14) — hand-rolled zero-dep
    `SpinLock<T>` (`src/spinlock.rs`, test-and-set on
    `core::sync::atomic::AtomicBool`) replaced `std::sync::Mutex` in the 4
@@ -111,15 +108,29 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
    Cross-module parity tests (csr×spectral, householder×spectral) relocated to
    `kernel/tests/{csr,householder}_spectral_parity.rs`. dowiz-core 257 lib
    tests (+18 csr, +9 householder); kernel 2934; +2 integration tests (8 total).
+7. **`dowiz-core` crate split — spectral + sort (2026-08-14)** — extracted the
+   whole spectral engine (the last transcendental-cycle module) and the float-key
+   sort helpers:
+   - `spectral` — `charpoly`/`roots`/`eigenvalues` (Faddeev-LeVerrier +
+     Durand-Kerner), `eigh`/`topk_symmetric(_in)`, `spectral_radius`/`slem`/
+     `spectral_gap`/`graph_energy`/`csr_energy`/`graph_spectrum`/`laplacian`/
+     `algebraic_connectivity`/`classify_drift(_phase)`/`spectral_drift`/
+     `graph_energy_report`/`dominant_period` + `DmdRank1Rls`. Edge-breaks:
+     `eigh`/`topk_*` return `(Vec<Vec<f64>>, Vec<f64>)` instead of
+     `spectral_cache::Decomp` (a tuple alias), `fdr::info_span!` → `span::`,
+     `order_machine` cross-check test relocated to
+     `kernel/tests/order_machine_fsm_crosscheck.rs`. The std-coupled consumers
+     (`spectral_cache`, `order_machine`) stay kernel-side.
+   - `sort` — `sort_by_f64_desc`/`asc` (from the kernel crate root), re-exported
+     so all 17+ `crate::sort_by_f64_*` call sites resolve unchanged.
+   dowiz-core 317 lib tests (+60 spectral); kernel 2873; +3 integration tests.
 
 ## Honest scope note
 
 The mechanical tier (boundary) is **fully migrated**. The transcendental geometry
-layer, sanitize/stem/eigen, arena/mat, and csr/householder (+ the `span` seam) are
-**extracted** to `dowiz-core`; the Mutex→spinlock sites are **done**. The remaining
-items are architectural: the bulk crate split (move the rest of the 174 modules),
-the `spectral` eigenvalue-family extraction (unblocked now that `span`/`csr`/
-`householder` are in dowiz-core — only `spectral_cache`/`order_machine` edges
-remain), and the 43 I/O ports. All are large, low-mechanical-effort, high-care
-efforts — not bulk-editable. This ledger marks the exact boundary so a future
-session resumes cleanly.
+layer, sanitize/stem/eigen, arena/mat, csr/householder (+ the `span` seam), and
+the full `spectral` engine (+ `sort`) are **extracted** to `dowiz-core`; the
+Mutex→spinlock sites are **done**. The remaining items are architectural: the
+bulk crate split (move the rest of the 174 modules) and the 43 I/O ports. All are
+large, low-mechanical-effort, high-care efforts — not bulk-editable. This ledger
+marks the exact boundary so a future session resumes cleanly.
