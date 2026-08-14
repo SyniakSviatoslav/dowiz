@@ -155,7 +155,7 @@ pub fn read_tsc() -> Reading<u64> {
 /// minflt=field10→7, majflt=field12→9, nswap=field36→33). Any read/parse failure is a
 /// named absence, never a fabricated 0.
 fn read_proc_stat_faults() -> (Reading<u64>, Reading<u64>, Reading<u64>) {
-    let stat = match std::fs::read_to_string("/proc/self/stat") {
+    let stat = match crate::vfs::read_to_string("/proc/self/stat") {
         Ok(s) => s,
         Err(e) => {
             let a = io_absence(&e);
@@ -188,7 +188,7 @@ fn read_proc_stat_faults() -> (Reading<u64>, Reading<u64>, Reading<u64>) {
 
 /// `(voluntary, nonvoluntary)` context-switch counts from `/proc/self/status`.
 fn read_proc_ctxt_switches() -> (Reading<u64>, Reading<u64>) {
-    let status = match std::fs::read_to_string("/proc/self/status") {
+    let status = match crate::vfs::read_to_string("/proc/self/status") {
         Ok(s) => s,
         Err(e) => {
             let a = io_absence(&e);
@@ -221,11 +221,11 @@ fn read_proc_ctxt_switches() -> (Reading<u64>, Reading<u64>) {
     (vol, nonvol)
 }
 
-/// Map a filesystem `io::Error` to the closest `Absence`.
-fn io_absence(e: &std::io::Error) -> Absence {
-    match e.kind() {
-        std::io::ErrorKind::NotFound => Absence::NonLinuxHost, // no /proc ⇒ not Linux
-        std::io::ErrorKind::PermissionDenied => Absence::PermissionDenied,
+/// Map a filesystem [`crate::vfs::VfsError`] to the closest `Absence`.
+fn io_absence(e: &crate::vfs::VfsError) -> Absence {
+    match e {
+        crate::vfs::VfsError::NotFound => Absence::NonLinuxHost, // no /proc ⇒ not Linux
+        crate::vfs::VfsError::PermissionDenied => Absence::PermissionDenied,
         _ => Absence::ReadError,
     }
 }

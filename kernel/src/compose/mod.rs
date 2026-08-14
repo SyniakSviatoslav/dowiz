@@ -324,7 +324,7 @@ mod tests {
     #[test]
     fn production_composition_root_builds_durable_store() {
         let path = temp_store_path("prod");
-        let _ = std::fs::remove_file(&path); // start clean
+        let _ = crate::vfs::remove_file(&path); // start clean
         let cfg = BootConfig {
             store_path: path.clone(),
         };
@@ -375,7 +375,7 @@ mod tests {
             .verify_chain()
             .expect("replayed durable chain must verify");
 
-        let _ = std::fs::remove_file(&path);
+        let _ = crate::vfs::remove_file(&path);
     }
 
     /// Acceptance #1 — grep-verifiable: a production path constructs the store.
@@ -384,7 +384,7 @@ mod tests {
     #[test]
     fn boot_returns_concrete_event_log_type() {
         let path = temp_store_path("concrete");
-        let _ = std::fs::remove_file(&path);
+        let _ = crate::vfs::remove_file(&path);
         let root = boot(&BootConfig {
             store_path: path.clone(),
         })
@@ -392,7 +392,7 @@ mod tests {
         // Compile-time + run-time proof the value IS `EventLog<FileEventStore>`.
         fn assert_type(_: &EventLog<FileEventStore>) {}
         assert_type(root.log());
-        let _ = std::fs::remove_file(&path);
+        let _ = crate::vfs::remove_file(&path);
     }
 
     /// Acceptance #2 — a planted cyclic DAG must fail closed, not boot.

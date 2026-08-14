@@ -70,9 +70,9 @@ struct Files {
 fn cached_files() -> &'static Files {
     static CACHE: OnceLock<Files> = OnceLock::new();
     CACHE.get_or_init(|| {
-        let kg = std::fs::read_to_string(format!("{}key-gen.json", KAT_DIR)).unwrap();
-        let sg = std::fs::read_to_string(format!("{}sig-gen.json", KAT_DIR)).unwrap();
-        let sv = std::fs::read_to_string(format!("{}sig-ver.json", KAT_DIR)).unwrap();
+        let kg = crate::vfs::read_to_string(format!("{}key-gen.json", KAT_DIR)).unwrap();
+        let sg = crate::vfs::read_to_string(format!("{}sig-gen.json", KAT_DIR)).unwrap();
+        let sv = crate::vfs::read_to_string(format!("{}sig-ver.json", KAT_DIR)).unwrap();
         Files {
             kg: serde_json::from_str(&kg).unwrap(),
             sg: serde_json::from_str(&sg).unwrap(),

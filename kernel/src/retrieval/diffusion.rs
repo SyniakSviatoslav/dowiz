@@ -220,9 +220,9 @@ mod tests {
             "diffusion_ppr_reread_test_{}.txt",
             std::process::id()
         ));
-        std::fs::write(&path, &serialized).expect("write serialized diffusion scores");
-        let reread = std::fs::read_to_string(&path).expect("re-read serialized diffusion scores");
-        std::fs::remove_file(&path).ok();
+        crate::vfs::write(&path, &serialized).expect("write serialized diffusion scores");
+        let reread = crate::vfs::read_to_string(&path).expect("re-read serialized diffusion scores");
+        crate::vfs::remove_file(&path).ok();
 
         assert_eq!(
             reread, serialized,

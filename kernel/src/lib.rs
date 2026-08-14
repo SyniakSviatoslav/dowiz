@@ -803,6 +803,11 @@ pub mod neon;
 pub mod fxhash;
 /// Single-authority time abstraction (Clock/WallClock) — std::time seam for kernel port.
 pub mod clock;
+/// Virtual filesystem seam (ledger item 4: fs → VFS) — no_std-compatible
+/// [`crate::vfs::Vfs`] trait + userspace `StdFs` impl + free functions
+/// (`read`/`write`/`read_dir`/…). Call sites route through `crate::vfs` so the
+/// kernel port swaps the impl, not the call sites.
+pub mod vfs;
 /// Delta calculus — replaces classic comparisons (a>b, x==y) with vector
 /// delta analysis. Δv, ∂t, rate, acceleration, drift tracking. Eigen/Phase
 /// comparison via spectral distance. Oscillation detection.

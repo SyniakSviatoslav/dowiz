@@ -142,7 +142,7 @@ fn try_perf(dir: &Option<PathBuf>) -> Option<BreachAction> {
         .arg(&sleep);
     if let Some(d) = dir {
         // Write perf.data next to the alert artifact.
-        let _ = std::fs::create_dir_all(d);
+        let _ = crate::vfs::create_dir_all(d);
         cmd.arg("-o").arg(d.join("perf.data"));
     }
     // Time-bounded spawn: perf detaches after the `sleep N` window; stderr/stdout

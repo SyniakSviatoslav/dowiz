@@ -64,7 +64,7 @@ fn seg_path(dir: &Path, idx: usize) -> PathBuf {
 impl FdrRing {
     /// Open a fresh writer session (truncates segment A). `seq` starts at 0.
     pub fn open(dir: PathBuf, seg_cap: u64) -> io::Result<Self> {
-        std::fs::create_dir_all(&dir)?;
+        crate::vfs::create_dir_all(&dir)?;
         let file = OpenOptions::new()
             .create(true)
             .write(true)
@@ -310,7 +310,7 @@ mod tests {
             std::process::id(),
             crate::typed_metrics::mono_now_ns()
         ));
-        let _ = std::fs::create_dir_all(&d);
+        let _ = crate::vfs::create_dir_all(&d);
         d
     }
 
@@ -345,7 +345,7 @@ mod tests {
         assert_eq!(rec.torn_tail, 0);
         assert_eq!(rec.crc_failures, 0);
         assert!(!rec.clean, "no clean_shutdown marker was written");
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = crate::vfs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -367,7 +367,7 @@ mod tests {
         }
         let rec = recover(&dir);
         assert!(rec.clean, "clean_shutdown marker must make recovery clean");
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = crate::vfs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -404,7 +404,7 @@ mod tests {
             rec.torn_tail, 1,
             "the partial tail must be counted + dropped"
         );
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = crate::vfs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -435,7 +435,7 @@ mod tests {
         let rec = recover(&dir);
         assert_eq!(rec.records.len(), 1, "only the CRC-valid record survives");
         assert_eq!(rec.crc_failures, 1);
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = crate::vfs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -468,6 +468,6 @@ mod tests {
                 "recovered seqs must be strictly increasing"
             );
         }
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = crate::vfs::remove_dir_all(&dir);
     }
 }

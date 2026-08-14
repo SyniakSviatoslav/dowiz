@@ -54,7 +54,7 @@ impl ProcCpuSample {
     /// after the LAST `)`, then index the remaining whitespace-separated
     /// fields. `pid` is taken from the part before the first `(`.
     pub fn from_proc_self() -> Option<Self> {
-        let stat = std::fs::read_to_string("/proc/self/stat").ok()?;
+        let stat = crate::vfs::read_to_string("/proc/self/stat").ok()?;
         let pid: u32 = stat.split('(').next()?.trim().parse().ok()?;
         let after = stat.rsplit(')').next()?;
         // After `comm`, fields are 3..N (1-based from line start). Field 14 =
@@ -85,7 +85,7 @@ impl MemSample {
     /// Read `VmRSS` / `VmHWM` from `/proc/self/status`. Returns `None` when the
     /// file is unreadable (non-Linux) — typed absence.
     pub fn from_proc_self() -> Option<Self> {
-        let status = std::fs::read_to_string("/proc/self/status").ok()?;
+        let status = crate::vfs::read_to_string("/proc/self/status").ok()?;
         let mut vm_rss_kb: Option<u64> = None;
         let mut vm_hwm_kb: Option<u64> = None;
         for line in status.lines() {

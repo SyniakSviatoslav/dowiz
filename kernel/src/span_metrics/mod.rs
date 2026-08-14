@@ -90,7 +90,7 @@ mod tests {
     fn green_init_installs_observer_then_spans_are_recorded() {
         // Use a temp dir so metric.jsonl lands somewhere we can assert on.
         let dir = std::env::temp_dir().join(format!("p83_init_{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = crate::vfs::create_dir_all(&dir);
         // init may fail if a global observer is already set in this test binary; that's
         // fine — the observer is still constructed and reachable (proven below).
         let _ = init(Some(dir.clone()));
@@ -100,10 +100,10 @@ mod tests {
         obs.metrics().record("place_order", 42);
         obs.metrics().record("place_order", 7);
         let p = dir.join(obs::METRIC_JSONL);
-        let contents = std::fs::read_to_string(&p).unwrap();
+        let contents = crate::vfs::read_to_string(&p).unwrap();
         assert!(contents.contains("\"span\":\"place_order\""));
         assert!(contents.contains("\"count\":2"));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = crate::vfs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -344,7 +344,7 @@ mod tests {
         /// by another test in the same binary).
         fn fresh_ring() -> ring::FdrRing {
             let dir = ring_dir();
-            let _ = std::fs::create_dir_all(&dir);
+            let _ = crate::vfs::create_dir_all(&dir);
             ring::FdrRing::open(dir, 1 << 20).expect("open FDR ring")
         }
 
@@ -367,7 +367,7 @@ mod tests {
         /// §B5.4 — an uncorrupted run is checksum-SILENT (no false trip, no FDR entry).
         #[test]
         fn healthy_run_is_checksum_silent() {
-            let _ = std::fs::remove_dir_all(dir());
+            let _ = crate::vfs::remove_dir_all(dir());
             let r = fresh_ring();
             let res = self_check_all_into_ring(r, &Weights::spec(), None);
             assert!(res.is_ok(), "healthy run must not trip: {res:?}");
@@ -394,7 +394,7 @@ mod tests {
         /// fault, re-executed by CI on every run (proof B5.5).
         #[test]
         fn planted_weight_fault_hard_fails_and_writes_fdr() {
-            let _ = std::fs::remove_dir_all(dir());
+            let _ = crate::vfs::remove_dir_all(dir());
             let r = fresh_ring();
             // Single-bit corruption of one frozen weight (W1[0]: 2 → 3).
             let mut w1 = W1;
@@ -427,7 +427,7 @@ mod tests {
         /// IS the planted fault (proof B5.5).
         #[test]
         fn planted_activation_fault_hard_fails_and_writes_fdr() {
-            let _ = std::fs::remove_dir_all(dir());
+            let _ = crate::vfs::remove_dir_all(dir());
             let r = fresh_ring();
             // Single-bit activation corruption: vec 0's oracle hidden is all-zero; flip
             // bit 0 → 1. This is a corrupted *activation*, not a weight.

@@ -375,7 +375,7 @@ fn host_of(url: &str) -> Option<String> {
 /// (→ `ConfigError::MissingApiKey`); the key is never placed in the process env.
 #[cfg(feature = "std")]
 fn read_key_file(path: &str) -> Option<String> {
-    std::fs::read_to_string(path)
+    crate::vfs::read_to_string(path)
         .ok()
         .map(|s| s.trim().to_string())
 }
@@ -477,7 +477,7 @@ mod tests {
         // write a temp key file so the connected path is fully satisfied.
         let dir = std::env::temp_dir();
         let key_path = dir.join("p41_aimode_test_key.txt");
-        std::fs::write(&key_path, "  sk-test-123\n  ").unwrap();
+        crate::vfs::write(&key_path, "  sk-test-123\n  ").unwrap();
         let cfg = BackendConfig::from_env_get(env(&[
             ("DOWIZ_AI_MODE", "connected"),
             ("DOWIZ_LLM_BASE_URL", "https://api.example.com/v1"),
@@ -487,7 +487,7 @@ mod tests {
         assert_eq!(cfg.mode, AiMode::Connected);
         assert_eq!(cfg.base_url, "https://api.example.com/v1");
         assert_eq!(cfg.api_key.as_deref(), Some("sk-test-123"));
-        let _ = std::fs::remove_file(&key_path);
+        let _ = crate::vfs::remove_file(&key_path);
     }
 
     // ── fail-closed teeth: partial Connected ⇒ typed Err, NEVER a silent fallback ─
@@ -501,7 +501,7 @@ mod tests {
     fn connected_without_base_url_refused_never_local_fallback() {
         let dir = std::env::temp_dir();
         let key_path = dir.join("p41_aimode_test_key2.txt");
-        std::fs::write(&key_path, "sk-test-456").unwrap();
+        crate::vfs::write(&key_path, "sk-test-456").unwrap();
         let err = BackendConfig::from_env_get(env(&[
             ("DOWIZ_AI_MODE", "connected"),
             ("DOWIZ_LLM_API_KEY_FILE", key_path.to_str().unwrap()),
@@ -512,7 +512,7 @@ mod tests {
             ConfigError::MissingBaseUrl,
             "connected without base url must be refused, never fall back to local"
         );
-        let _ = std::fs::remove_file(&key_path);
+        let _ = crate::vfs::remove_file(&key_path);
     }
 
     #[test]

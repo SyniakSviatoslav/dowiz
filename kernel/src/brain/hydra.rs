@@ -1402,7 +1402,7 @@ impl EventStore for FileEventStore {
 mod file_store_tests {
     use super::*;
     use std::env::temp_dir;
-    use std::fs;
+    use crate::vfs as fs;
 
     fn tmp_path(tag: &str) -> std::path::PathBuf {
         let mut p = temp_dir();

@@ -27,7 +27,7 @@
 use crate::chunker::Chunker;
 use crate::event_log::sha3_256;
 use alloc::collections::BTreeMap;
-use std::fs;
+use crate::vfs as fs;
 use std::path::PathBuf;
 
 /// Content-address of a block: the chunker's sha3_256 id.
@@ -149,32 +149,22 @@ impl FileBlockStore {
             return Ok(());
         }
         for entry in fs::read_dir(&blocks_dir)? {
-            let e = entry?;
-            let p1 = e.path();
-            if !p1.is_dir() {
+            if !entry.is_dir() {
                 continue;
             }
-            for entry2 in fs::read_dir(&p1)? {
-                let e2 = entry2?;
-                let p2 = e2.path();
-                if !p2.is_dir() {
+            for entry2 in fs::read_dir(&entry.path)? {
+                if !entry2.is_dir() {
                     continue;
                 }
-                for entry3 in fs::read_dir(&p2)? {
-                    let e3 = entry3?;
-                    let file = e3.path();
-                    if !file.is_file() {
+                for entry3 in fs::read_dir(&entry2.path)? {
+                    if !entry3.is_file() {
                         continue;
                     }
-                    let name = match file.file_name().and_then(|n| n.to_str()) {
-                        Some(n) => n,
-                        None => continue,
-                    };
-                    let id = match parse_hex32(name) {
+                    let id = match parse_hex32(&entry3.name) {
                         Ok(id) => id,
                         Err(_) => continue,
                     };
-                    let bytes = match fs::read(&file) {
+                    let bytes = match fs::read(&entry3.path) {
                         Ok(b) => b,
                         Err(_) => continue,
                     };
@@ -225,7 +215,7 @@ impl BlockStore for FileBlockStore {
             return false;
         }
         // fsync the partial so its bytes are durable before the atomic rename.
-        if let Ok(f) = fs::File::open(&partial) {
+        if let Ok(f) = std::fs::File::open(&partial) {
             let _ = f.sync_all();
         }
         if let Err(e) = fs::rename(&partial, &final_path) {
@@ -599,7 +589,7 @@ mod tests {
     #[test]
     fn fileblockstore_restore_is_byte_identical() {
         let tmp = std::env::temp_dir().join(format!("fbs_rid_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = crate::vfs::remove_dir_all(&tmp);
         let data = sample(120_000);
         let mut organ = fbs_organ(&tmp);
         let (manifest, _stats) = organ.backup(&data);
@@ -615,14 +605,14 @@ mod tests {
         let organ2 = fbs_organ(&tmp);
         let restored2 = organ2.restore(&manifest).expect("restore from disk");
         assert_eq!(restored2, data, "FileBlockStore must restore after reopen");
-        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = crate::vfs::remove_dir_all(&tmp);
     }
 
     /// DEDUP across a 1-byte edit, disk-backed, mirrors the MemStore property.
     #[test]
     fn fileblockstore_one_byte_edit_dedups_over_90pct() {
         let tmp = std::env::temp_dir().join(format!("fbs_dedup_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = crate::vfs::remove_dir_all(&tmp);
         let file_a = sample(200_000);
         let mut file_b = file_a.clone();
         let mid = file_b.len() / 2;
@@ -652,14 +642,14 @@ mod tests {
             stored < (file_a.len() + file_b.len()) as u64,
             "store did not dedup"
         );
-        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = crate::vfs::remove_dir_all(&tmp);
     }
 
     /// Re-backing identical content is 100% dedup, disk-backed.
     #[test]
     fn fileblockstore_identical_rebackup_fully_dedups() {
         let tmp = std::env::temp_dir().join(format!("fbs_reback_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = crate::vfs::remove_dir_all(&tmp);
         let data = sample(60_000);
         let mut organ = fbs_organ(&tmp);
         let (_m1, _s1) = organ.backup(&data);
@@ -668,14 +658,14 @@ mod tests {
         assert_eq!(s2.new_blocks, 0, "re-backup must write no new blocks");
         assert_eq!(s2.dedup_ratio(), 1.0);
         assert_eq!(organ.store().len(), store_len_after_first);
-        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = crate::vfs::remove_dir_all(&tmp);
     }
 
     /// Fail-closed restore: a missing block yields Err, disk-backed.
     #[test]
     fn fileblockstore_missing_block_fails_closed() {
         let tmp = std::env::temp_dir().join(format!("fbs_missing_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = crate::vfs::remove_dir_all(&tmp);
         let data = sample(40_000);
         let mut organ = fbs_organ(&tmp);
         let (mut manifest, _s) = organ.backup(&data);
@@ -683,7 +673,7 @@ mod tests {
         manifest.total_len += 1;
         let err = organ.restore(&manifest).unwrap_err();
         assert_eq!(err, RestoreError::MissingBlock([0xAB; 32]));
-        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = crate::vfs::remove_dir_all(&tmp);
     }
 
     /// Content-address integrity: a 1-bit on-disk corruption makes `get_owned`
@@ -691,7 +681,7 @@ mod tests {
     #[test]
     fn fileblockstore_corrupt_block_rejected() {
         let tmp = std::env::temp_dir().join(format!("fbs_corrupt_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = crate::vfs::remove_dir_all(&tmp);
         // One fixed block so the id is deterministic and known.
         let block = vec![0x42u8; 4096];
         let id = crate::event_log::sha3_256(&block);
@@ -709,16 +699,16 @@ mod tests {
             .join(&hex[0..2])
             .join(&hex[2..4])
             .join(&hex);
-        let mut raw = std::fs::read(&path).expect("read block file");
+        let mut raw = crate::vfs::read(&path).expect("read block file");
         raw[0] ^= 0x01; // 1-bit flip
-        std::fs::write(&path, &raw).expect("rewrite corrupted");
+        crate::vfs::write(&path, &raw).expect("rewrite corrupted");
 
         // Corrupted block is rejected fail-closed.
         assert!(
             store.get_owned(&id).is_none(),
             "corrupted block must be rejected"
         );
-        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = crate::vfs::remove_dir_all(&tmp);
     }
 
     /// Crash-atomicity invariant: a `.partial` left behind (simulating a kill-9
@@ -727,14 +717,14 @@ mod tests {
     #[test]
     fn fileblockstore_partial_write_invisible() {
         let tmp = std::env::temp_dir().join(format!("fbs_partial_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = crate::vfs::remove_dir_all(&tmp);
         let block = vec![0x7u8; 2048];
         let id = crate::event_log::sha3_256(&block);
         let hex = hex_encode(&id);
         // Simulate an interrupted write: leave only a .partial, no final file.
         let tmp_dir = tmp.join("tmp");
-        std::fs::create_dir_all(&tmp_dir).expect("create tmp dir");
-        std::fs::write(tmp_dir.join(format!("{hex}.partial")), &block).expect("write partial");
+        crate::vfs::create_dir_all(&tmp_dir).expect("create tmp dir");
+        crate::vfs::write(tmp_dir.join(format!("{hex}.partial")), &block).expect("write partial");
         let store = FileBlockStore::open(&tmp).expect("open store");
         // The block must not be readable; get_owned sees only the final path.
         assert!(
@@ -743,7 +733,7 @@ mod tests {
         );
         // And the blocks/ tree stays empty (no half-written file leaked).
         assert_eq!(store.len(), 0);
-        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = crate::vfs::remove_dir_all(&tmp);
     }
 
     /// TORVALDS-14: the backup store must NOT panic when the underlying filesystem
@@ -754,7 +744,7 @@ mod tests {
     #[test]
     fn fileblockstore_put_fails_without_panic_on_io_error() {
         let tmp = std::env::temp_dir().join(format!("fbs_ro_{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
+        let _ = crate::vfs::remove_dir_all(&tmp);
         // A valid store.
         let mut store = FileBlockStore::open(&tmp).expect("open store");
         let block = vec![0x9u8; 512];
@@ -766,7 +756,7 @@ mod tests {
         // "filesystem write failed" path without depending on permissions.
         let hex = hex_encode(&id);
         let blocked = tmp.join("blocks").join(&hex[0..2]);
-        std::fs::write(&blocked, b"not-a-dir").expect("plant blocking file");
+        crate::vfs::write(&blocked, b"not-a-dir").expect("plant blocking file");
         let _guard = scopeguard_remove_all(&tmp);
         // Must return false (failure signalled), NOT panic.
         let ok = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| store.put(id, &block)));
@@ -781,7 +771,7 @@ mod tests {
         struct G<'a>(&'a std::path::Path);
         impl Drop for G<'_> {
             fn drop(&mut self) {
-                let _ = std::fs::remove_dir_all(self.0);
+                let _ = crate::vfs::remove_dir_all(self.0);
             }
         }
         G(path)

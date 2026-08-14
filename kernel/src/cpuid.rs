@@ -61,7 +61,7 @@ pub fn detect() -> &'static CpuCaps {
 }
 
 fn detect_fresh() -> CpuCaps {
-    let cpuinfo = std::fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
+    let cpuinfo = crate::vfs::read_to_string("/proc/cpuinfo").unwrap_or_default();
 
     let flags: &str = cpuinfo
         .lines()
@@ -76,7 +76,7 @@ fn detect_fresh() -> CpuCaps {
     let cores = cpuinfo.lines().filter(|l| l.starts_with("processor")).count();
 
     // ── L3 cache from /sys ──
-    let l3_cache_kb = std::fs::read_to_string(
+    let l3_cache_kb = crate::vfs::read_to_string(
         "/sys/devices/system/cpu/cpu0/cache/index3/size",
     )
     .ok()
@@ -85,7 +85,7 @@ fn detect_fresh() -> CpuCaps {
     .unwrap_or(0);
 
     // ── RAM from /proc/meminfo ──
-    let meminfo = std::fs::read_to_string("/proc/meminfo").unwrap_or_default();
+    let meminfo = crate::vfs::read_to_string("/proc/meminfo").unwrap_or_default();
     let ram_total_mb = meminfo
         .lines()
         .find(|l| l.starts_with("MemTotal:"))

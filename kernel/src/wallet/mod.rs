@@ -67,13 +67,12 @@ mod firewall {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(SELF_DIR);
         let mut stack = vec![root];
         while let Some(dir) = stack.pop() {
-            if let Ok(entries) = std::fs::read_dir(&dir) {
-                for e in entries.flatten() {
-                    let p = e.path();
-                    if p.is_dir() {
-                        stack.push(p);
-                    } else if p.extension().and_then(|s| s.to_str()) == Some("rs") {
-                        out.push(p.to_string_lossy().into_owned());
+            if let Ok(entries) = crate::vfs::read_dir(&dir) {
+                for e in entries {
+                    if e.is_dir() {
+                        stack.push(std::path::PathBuf::from(e.path));
+                    } else if e.extension() == Some("rs") {
+                        out.push(e.path);
                     }
                 }
             }
@@ -135,7 +134,7 @@ mod firewall {
         assert!(!files.is_empty(), "wallet src tree must be non-empty");
         let mut violations = Vec::new();
         for f in &files {
-            let src = match std::fs::read_to_string(f) {
+            let src = match crate::vfs::read_to_string(f) {
                 Ok(s) => s,
                 Err(_) => continue,
             };
@@ -159,7 +158,7 @@ mod firewall {
         let files = wallet_src_files();
         let mut violations = Vec::new();
         for f in &files {
-            let src = match std::fs::read_to_string(f) {
+            let src = match crate::vfs::read_to_string(f) {
                 Ok(s) => s,
                 Err(_) => continue,
             };

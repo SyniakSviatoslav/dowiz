@@ -354,11 +354,11 @@ mod tests {
         // which bypasses directory permission bits — only an actual write error
         // (ENOSPC via /dev/full) reliably stalls the append.
         let dir = std::env::temp_dir().join(format!("breaker-bp-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = crate::vfs::remove_dir_all(&dir);
+        let _ = crate::vfs::create_dir_all(&dir);
         // Segment B (the switch target) becomes a symlink to /dev/full so writes fail.
         let seg_b = dir.join("fdr.b.jsonl");
-        let _ = std::fs::remove_file(&seg_b);
+        let _ = crate::vfs::remove_file(&seg_b);
         std::os::unix::fs::symlink("/dev/full", &seg_b).expect("symlink seg B to /dev/full");
         let ring = crate::spinlock::SpinLock::new(
             crate::fdr::ring::FdrRing::open(dir.clone(), /*seg_cap=*/ 1).expect("open temp ring"),
@@ -388,6 +388,6 @@ mod tests {
             "backpressure must stall, not drop"
         );
         assert_eq!(c.len(), 1, "stalled append must not be committed");
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = crate::vfs::remove_dir_all(&dir);
     }
 }

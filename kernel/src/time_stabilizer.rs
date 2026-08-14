@@ -329,7 +329,7 @@ impl TimeStabilizer {
 
 /// Probe the current kernel clock source from /sys.
 fn probe_clock_source() -> ClockSource {
-    let src = std::fs::read_to_string(
+    let src = crate::vfs::read_to_string(
         "/sys/devices/system/clocksource/clocksource0/current_clocksource"
     ).unwrap_or_default();
     match src.trim() {

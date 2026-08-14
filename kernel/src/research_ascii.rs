@@ -143,7 +143,7 @@ impl AsciiLibrary {
 
     /// Open library: load from a file (one ASCII line per paper).
     pub fn open(path: &str) -> Result<Self, String> {
-        let content = std::fs::read_to_string(path).map_err(|e| format!("read error: {}", e))?;
+        let content = crate::vfs::read_to_string(path).map_err(|e| format!("read error: {}", e))?;
         let lines: Vec<&str> = content.lines().filter(|l| !l.trim().is_empty()).collect();
         let mut lib = AsciiLibrary::new(lines.len());
         for line in lines {
@@ -158,7 +158,7 @@ impl AsciiLibrary {
     /// Save library to a file (one ASCII line per paper).
     pub fn save(&self, path: &str) -> Result<(), String> {
         let content = self.entries.join("\n");
-        std::fs::write(path, &content).map_err(|e| format!("write error: {}", e))
+        crate::vfs::write(path, &content).map_err(|e| format!("write error: {}", e))
     }
 
     /// Number of unique papers.
@@ -260,7 +260,7 @@ mod tests {
         lib.save(path).unwrap();
         let loaded = AsciiLibrary::open(path).unwrap();
         assert_eq!(loaded.len(), 2);
-        let _ = std::fs::remove_file(path);
+        let _ = crate::vfs::remove_file(path);
     }
 
     #[test]

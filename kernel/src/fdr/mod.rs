@@ -1049,7 +1049,7 @@ mod tests {
     fn telemetry_observer_records_emitted_span_close() {
         use crate::span_metrics::obs::SpanMetricsObserver;
         let dir = std::env::temp_dir().join(format!("p83_emitspan_{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = crate::vfs::create_dir_all(&dir);
         // Scope the P83 telemetry observer onto THIS thread (reverts on guard drop).
         let _guard = crate::fdr::set_scoped_observer(std::sync::Arc::new(
             SpanMetricsObserver::new(Some(dir.clone())),
@@ -1060,13 +1060,13 @@ mod tests {
             let _g = crate::fdr::info_span!("eigenvalues").entered();
         }
         let p = dir.join(crate::span_metrics::obs::METRIC_JSONL);
-        let contents = std::fs::read_to_string(&p)
+        let contents = crate::vfs::read_to_string(&p)
             .expect("metric.jsonl must be written by the telemetry observer");
         assert!(
             contents.contains("\"span\":\"eigenvalues\""),
             "telemetry observer must record the span close emitted by fdr::info_span!"
         );
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = crate::vfs::remove_dir_all(&dir);
     }
 
     #[test]

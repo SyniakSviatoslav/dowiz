@@ -102,7 +102,7 @@ fn has_vmx_or_svm() -> bool {
     // `/proc/cpuinfo` is tiny and always present on Linux. We scan for the
     // virtualization flag token. This is a best-effort host probe; if the file
     // cannot be read we conservatively report "no virtualization".
-    match std::fs::read_to_string("/proc/cpuinfo") {
+    match crate::vfs::read_to_string("/proc/cpuinfo") {
         Ok(contents) => {
             // Flags appear as a space-separated list; check for whole tokens to
             // avoid matching substrings like "svmxyz".

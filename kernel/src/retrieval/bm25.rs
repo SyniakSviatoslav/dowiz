@@ -387,14 +387,14 @@ impl Bm25 {
 
     /// Persist the index to a std-only on-disk file (P95 Option A).
     pub fn save_to(&self, path: &std::path::Path) -> Result<(), String> {
-        std::fs::write(path, self.encode())
+        crate::vfs::write(path, self.encode())
             .map_err(|e| format!("Bm25::save_to {}: {e}", path.display()))
     }
 
     /// Load a persisted index from a std-only on-disk file (P95 Option A).
     pub fn load_from(path: &std::path::Path) -> Result<Bm25, String> {
         let buf =
-            std::fs::read(path).map_err(|e| format!("Bm25::load_from {}: {e}", path.display()))?;
+            crate::vfs::read(path).map_err(|e| format!("Bm25::load_from {}: {e}", path.display()))?;
         Bm25::decode(&buf)
             .ok_or_else(|| format!("Bm25::load_from {}: corrupt index", path.display()))
     }
@@ -731,7 +731,7 @@ mod tests {
             std::env::temp_dir().join(format!("bm25_persist_test_{}.bin", std::process::id()));
         bm.save_to(&path).expect("save_to");
         let loaded = Bm25::load_from(&path).expect("load_from");
-        std::fs::remove_file(&path).ok();
+        crate::vfs::remove_file(&path).ok();
         assert_eq!(
             loaded.encode(),
             bm.encode(),

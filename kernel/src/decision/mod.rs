@@ -663,7 +663,7 @@ mod shadow_telemetry_tests {
             std::process::id(),
             crate::typed_metrics::mono_now_ns()
         ));
-        let _ = std::fs::create_dir_all(&d);
+        let _ = crate::vfs::create_dir_all(&d);
         d
     }
 
@@ -731,7 +731,7 @@ mod shadow_telemetry_tests {
             let rec = crate::fdr::ring::recover(&dir);
             assert_eq!(rec.records.len(), 1, "exactly one shadow record written");
             assert_eq!(rec.records[0].kind, "shadow_divergence");
-            let _ = std::fs::remove_dir_all(&dir);
+            let _ = crate::vfs::remove_dir_all(&dir);
         }
     }
 
@@ -783,7 +783,7 @@ mod shadow_telemetry_tests {
         assert_eq!(d, Decision::Answer(HarnessOut { route_tier: 2 }));
         assert_eq!(rec.crc_failures, 0);
         assert_eq!(rec.torn_tail, 0);
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = crate::vfs::remove_dir_all(&dir);
     }
 
     /// Acceptance (write-only invariant, blueprint §5 #4): `ShadowDivergence` is recoverable
@@ -828,7 +828,7 @@ mod shadow_telemetry_tests {
         assert_eq!(shadow.len(), n, "one shadow record per decision call");
         assert_eq!(rec.crc_failures, 0);
         assert_eq!(rec.torn_tail, 0);
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = crate::vfs::remove_dir_all(&dir);
     }
 
     /// Acceptance (item-27 byte-identity): the `ShadowDivergence` variant is ADDITIVE — a plain

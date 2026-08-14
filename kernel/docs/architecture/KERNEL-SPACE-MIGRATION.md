@@ -82,7 +82,14 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
    thread-based → stay std.
 4. **43 user-space ports** — fs→VFS (`std::fs` → trait), net→sk_buff,
    thread→kthread, process→kexec. These are NOT mechanical; each needs a trait
-   seam like `Clock`.
+   seam like `Clock`. **fs→VFS is DONE (item 10):** `src/vfs.rs` (no_std
+   `Vfs` trait + `StdFs` impl + free functions) is the single authority; 166
+   `std::fs::{read,read_to_string,write,read_dir,create_dir_all,remove_file,
+   remove_dir_all,rename,metadata}` call sites across ~36 modules route through
+   it. REMAINING under fs: the file-handle surface (`File`/`OpenOptions`/`Write`
+   — append/fsync/held-handle) in 6 modules (`academy_store`, `evals`,
+   `fdr/ring`, `pq/entropy`, `span_metrics/obs`, `brain/hydra`), plus net→sk_buff
+   (`pq/entropy` TcpStream), thread→kthread, process→kexec.
 5. **`dowiz-core` crate split — arena + mat (2026-08-14)** — extracted the two
    spectral-cycle leaves:
    - `arena` — `BumpArena` (bump/region allocator) + `HugePageHint`; the
@@ -124,6 +131,19 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
    - `sort` — `sort_by_f64_desc`/`asc` (from the kernel crate root), re-exported
      so all 17+ `crate::sort_by_f64_*` call sites resolve unchanged.
    dowiz-core 317 lib tests (+60 spectral); kernel 2873; +3 integration tests.
+8. **`vfs` seam — fs→VFS (ledger item 4, first I/O port, 2026-08-14)** —
+   `src/vfs.rs`: no_std-compatible `Vfs` trait (`&str` paths + `VfsError`, no
+   `std::path::Path` / `std::io::Error`) + userspace `StdFs` impl + free
+   functions (`read`/`read_to_string`/`write`/`read_dir`/`create_dir_all`/
+   `remove_file`/`remove_dir_all`/`rename`/`metadata`) that take
+   `impl AsRef<Path>` so `&str`/`String`/`PathBuf`/`&Path` all pass unchanged.
+   `read_dir` returns eager `Vec<DirEntry>` (`path`/`name`/`kind` +
+   `is_dir`/`is_file`/`extension`); `metadata` reduced to `{len,is_dir}`.
+   `impl From<VfsError> for std::io::Error` + `impl std::error::Error` bridge
+   the migrated call sites that still return `io::Result`. 166 `std::fs::` call
+   sites across ~36 modules route through `crate::vfs`. kernel 2873→2877 lib
+   tests (+4 vfs). File-handle surface (`File`/`OpenOptions`/`Write`) is a
+   follow-up (6 modules).
 
 ## Honest scope note
 

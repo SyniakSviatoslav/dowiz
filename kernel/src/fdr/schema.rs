@@ -180,14 +180,14 @@ pub fn read_joules_uj() -> Reading<u64> {
     #[cfg(target_os = "linux")]
     {
         const PATH: &str = "/sys/class/powercap/intel-rapl:0/energy_uj";
-        match std::fs::read_to_string(PATH) {
+        match crate::vfs::read_to_string(PATH) {
             Ok(s) => match s.trim().parse::<u64>() {
                 Ok(v) => Reading::Value(v),
                 Err(_) => Reading::Unavailable(Absence::ReadError),
             },
-            Err(e) => match e.kind() {
-                std::io::ErrorKind::NotFound => Reading::Unavailable(Absence::NoRaplInterface),
-                std::io::ErrorKind::PermissionDenied => {
+            Err(e) => match e {
+                crate::vfs::VfsError::NotFound => Reading::Unavailable(Absence::NoRaplInterface),
+                crate::vfs::VfsError::PermissionDenied => {
                     Reading::Unavailable(Absence::PermissionDenied)
                 }
                 _ => Reading::Unavailable(Absence::ReadError),

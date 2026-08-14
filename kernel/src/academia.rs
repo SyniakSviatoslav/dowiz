@@ -153,7 +153,7 @@ impl Academia {
 
     /// Завантажити матричний снепшот та верифікувати lattice.
     pub fn load_snapshot(path: &str) -> Result<Self, String> {
-        let data = std::fs::read(path).map_err(|e| format!("read: {}", e))?;
+        let data = crate::vfs::read(path).map_err(|e| format!("read: {}", e))?;
         let lib = Self::from_snapshot(&data)?;
         Ok(lib)
     }

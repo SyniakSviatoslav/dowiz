@@ -277,7 +277,7 @@ mod tests {
     #[test]
     fn real_certified_card_from_disk_dispatches() {
         // error-fix-convergence.yaml is the one CERTIFIED card in loops/.
-        let src = std::fs::read_to_string(concat!(
+        let src = crate::vfs::read_to_string(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../loops/error-fix-convergence.yaml"
         ))

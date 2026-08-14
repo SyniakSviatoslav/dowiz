@@ -479,14 +479,14 @@ impl BulkSnapshot {
         if !status.success() {
             return Err(format!("curl exited with {:?}", status.code()));
         }
-        let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+        let size = crate::vfs::metadata(path).map(|m| m.len()).unwrap_or(0);
         Ok(size)
     }
 
     /// Process a snapshot file: read → byte-scan → spectral index.
     /// O(file size) for parse, O(1) per paper for spectral insert.
     pub fn process_file(&mut self, path: &str, parser: &mut SpectralParser) -> Result<u64, String> {
-        let data = std::fs::read(path).map_err(|e| format!("read error: {}", e))?;
+        let data = crate::vfs::read(path).map_err(|e| format!("read error: {}", e))?;
         let t0 = std::time::Instant::now();
         let n = parser.ingest_raw(&data);
         let elapsed = t0.elapsed().as_secs_f64();

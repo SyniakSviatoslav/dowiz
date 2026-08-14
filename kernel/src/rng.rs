@@ -203,9 +203,9 @@ mod tests {
             .join(",");
 
         let path = std::env::temp_dir().join(format!("rng_reread_test_{}.txt", std::process::id()));
-        std::fs::write(&path, &serialized).expect("write serialized rng stream");
-        let reread = std::fs::read_to_string(&path).expect("re-read serialized rng stream");
-        std::fs::remove_file(&path).ok();
+        crate::vfs::write(&path, &serialized).expect("write serialized rng stream");
+        let reread = crate::vfs::read_to_string(&path).expect("re-read serialized rng stream");
+        crate::vfs::remove_file(&path).ok();
 
         assert_eq!(
             reread, serialized,

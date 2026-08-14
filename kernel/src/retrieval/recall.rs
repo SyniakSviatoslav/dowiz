@@ -271,13 +271,11 @@ impl PrimaryRecall {
             ));
         }
         let mut paths: Vec<std::path::PathBuf> = Vec::new();
-        let entries = std::fs::read_dir(dir)
+        let entries = crate::vfs::read_dir(dir)
             .map_err(|e| format!("PrimaryRecall::from_dir: read_dir {}: {e}", dir.display()))?;
         for e in entries {
-            let e = e.map_err(|e| format!("PrimaryRecall::from_dir: read entry: {e}"))?;
-            let p = e.path();
-            if p.extension().and_then(|x| x.to_str()) == Some("md") {
-                paths.push(p);
+            if e.extension() == Some("md") {
+                paths.push(std::path::PathBuf::from(e.path));
             }
         }
         if paths.is_empty() {
@@ -290,7 +288,7 @@ impl PrimaryRecall {
         paths.sort();
         let texts: Vec<String> = paths
             .iter()
-            .map(|p| std::fs::read_to_string(p).unwrap_or_default())
+            .map(|p| crate::vfs::read_to_string(p).unwrap_or_default())
             .collect();
         let docs: Vec<Document> = texts.iter().map(|s| Document::from_text(s)).collect();
         let strs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
@@ -321,14 +319,11 @@ impl PrimaryRecall {
     /// The deterministic corpus stem list (sorted, matching `from_dir`'s sort).
     fn stem_list(dir: &std::path::Path) -> Result<Vec<String>, String> {
         let mut paths: Vec<std::path::PathBuf> = Vec::new();
-        for e in std::fs::read_dir(dir)
+        for e in crate::vfs::read_dir(dir)
             .map_err(|e| format!("PrimaryRecall::stem_list: read_dir {}: {e}", dir.display()))?
         {
-            let p = e
-                .map_err(|e| format!("PrimaryRecall::stem_list: read entry: {e}"))?
-                .path();
-            if p.extension().and_then(|x| x.to_str()) == Some("md") {
-                paths.push(p);
+            if e.extension() == Some("md") {
+                paths.push(std::path::PathBuf::from(e.path));
             }
         }
         paths.sort();
@@ -364,7 +359,7 @@ impl PrimaryRecall {
         out.extend_from_slice(&(stems.len() as u64).to_le_bytes());
         out.extend_from_slice(&stems);
         out.extend_from_slice(&blob);
-        std::fs::write(path, out)
+        crate::vfs::write(path, out)
             .map_err(|e| format!("PrimaryRecall::save_to {}: {e}", path.display()))
     }
 
@@ -372,7 +367,7 @@ impl PrimaryRecall {
     /// both `Bm25` and `TrigramIndex` byte-deterministically. Returns the index
     /// plus the stored stem list (the dirty fingerprint) so `load` can compare.
     pub fn load_from(path: &std::path::Path) -> Result<(PrimaryRecall, Vec<String>), String> {
-        let buf = std::fs::read(path)
+        let buf = crate::vfs::read(path)
             .map_err(|e| format!("PrimaryRecall::load_from {}: {e}", path.display()))?;
         let trig_len =
             u64::from_le_bytes(<[u8; 8]>::try_from(&buf[0..8]).map_err(|_| "corrupt header")?)
@@ -554,9 +549,9 @@ mod tests {
             "fusion_rank_reread_test_{}.txt",
             std::process::id()
         ));
-        std::fs::write(&path, &serialized).expect("write serialized ranking");
-        let reread = std::fs::read_to_string(&path).expect("re-read serialized ranking");
-        std::fs::remove_file(&path).ok();
+        crate::vfs::write(&path, &serialized).expect("write serialized ranking");
+        let reread = crate::vfs::read_to_string(&path).expect("re-read serialized ranking");
+        crate::vfs::remove_file(&path).ok();
 
         assert_eq!(
             reread, serialized,
@@ -598,7 +593,7 @@ mod tests {
     #[test]
     fn primary_recall_survives_kill9_restart() {
         let dir = std::env::temp_dir().join(format!("primary_recall_kill9_{}", std::process::id()));
-        std::fs::create_dir_all(&dir).expect("mk corpus dir");
+        crate::vfs::create_dir_all(&dir).expect("mk corpus dir");
         // Write a small deterministic corpus of .md docs (sorted stems).
         let docs = [
             (
@@ -620,7 +615,7 @@ mod tests {
             ),
         ];
         for (name, body) in docs {
-            std::fs::write(dir.join(name), body).expect("write corpus doc");
+            crate::vfs::write(dir.join(name), body).expect("write corpus doc");
         }
         // Build + save (simulates the running process persisting its index).
         let built = PrimaryRecall::from_dir(&dir).expect("from_dir");
@@ -644,7 +639,7 @@ mod tests {
         );
         // Dirty check: corrupt the corpus (add a doc) ⇒ load returns None (caller
         // must rebuild), proving the fingerprint actually detects change.
-        std::fs::write(
+        crate::vfs::write(
             dir.join("f_promo.md"),
             "promo code discount applied at checkout",
         )
@@ -655,6 +650,6 @@ mod tests {
             "load must detect a changed corpus and refuse a stale cache"
         );
         // Cleanup.
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = crate::vfs::remove_dir_all(&dir);
     }
 }

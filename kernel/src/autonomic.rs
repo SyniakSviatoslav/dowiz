@@ -507,7 +507,7 @@ mod tests {
         #[cfg(not(target_arch = "wasm32"))]
         {
             let dir = std::env::temp_dir().join("item21_autonomic_fdr_test");
-            let _ = std::fs::create_dir_all(&dir);
+            let _ = crate::vfs::create_dir_all(&dir);
             let mut ring = crate::fdr::ring::FdrRing::open(dir.clone(), 1 << 20).unwrap();
             for (class, verdict) in all_combos() {
                 let (_next, fdr) = schedule(class, verdict, BoundedRate::from_f64(50.0));
@@ -524,7 +524,7 @@ mod tests {
             // No record should have been dropped or corrupted.
             assert_eq!(rec.crc_failures, 0);
             assert_eq!(rec.torn_tail, 0);
-            let _ = std::fs::remove_dir_all(&dir);
+            let _ = crate::vfs::remove_dir_all(&dir);
         }
     }
 

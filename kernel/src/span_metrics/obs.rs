@@ -55,7 +55,7 @@ pub const ALERT_JSONL: &str = "alert.jsonl";
 /// `available_parallelism`; degrades-closed to `None` off-Linux or on read failure).
 #[cfg(target_os = "linux")]
 pub fn normalized_load1() -> Option<f64> {
-    let s = std::fs::read_to_string("/proc/loadavg").ok()?;
+    let s = crate::vfs::read_to_string("/proc/loadavg").ok()?;
     let l1: f64 = s.split_whitespace().next()?.parse().ok()?;
     let nproc = std::thread::available_parallelism()
         .map(|n| n.get())
@@ -333,29 +333,29 @@ mod tests {
     #[test]
     fn green_writer_appends_to_dir() {
         let dir = std::env::temp_dir().join(format!("p83_writer_{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = crate::vfs::create_dir_all(&dir);
         let w = JsonlWriter::new(Some(dir.clone()));
         assert!(w.append(METRIC_JSONL, "{\"a\":1}\n"));
         let p = dir.join(METRIC_JSONL);
-        let contents = std::fs::read_to_string(&p).unwrap();
+        let contents = crate::vfs::read_to_string(&p).unwrap();
         assert!(contents.contains("{\"a\":1}"));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = crate::vfs::remove_dir_all(&dir);
     }
 
     #[test]
     fn green_spanmetrics_records_and_flushes() {
         let dir = std::env::temp_dir().join(format!("p83_metrics_{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = crate::vfs::create_dir_all(&dir);
         let m = SpanMetrics::new(Some(dir.clone()));
         m.record("fold_transitions", 10);
         m.record("fold_transitions", 20);
         // flushes one row per known span
         assert_eq!(m.flush(), 1);
         let p = dir.join(METRIC_JSONL);
-        let contents = std::fs::read_to_string(&p).unwrap();
+        let contents = crate::vfs::read_to_string(&p).unwrap();
         assert!(contents.contains("\"span\":\"fold_transitions\""));
         assert!(contents.contains("\"count\":2"));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = crate::vfs::remove_dir_all(&dir);
     }
 
     /// The observer path (fdr::SpanObserver) records to metric.jsonl — proves the ported
@@ -364,12 +364,12 @@ mod tests {
     fn green_observer_records_span_close() {
         use crate::fdr::SpanObserver;
         let dir = std::env::temp_dir().join(format!("p83_obs_{}", std::process::id()));
-        let _ = std::fs::create_dir_all(&dir);
+        let _ = crate::vfs::create_dir_all(&dir);
         let obs = SpanMetricsObserver::new(Some(dir.clone()));
         obs.on_span_close("route", 33);
         let p = dir.join(METRIC_JSONL);
-        let contents = std::fs::read_to_string(&p).unwrap();
+        let contents = crate::vfs::read_to_string(&p).unwrap();
         assert!(contents.contains("\"span\":\"route\""));
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = crate::vfs::remove_dir_all(&dir);
     }
 }

@@ -1210,7 +1210,7 @@ mod tests {
         let dir = std::env::temp_dir();
         let path = dir.join("hermes-verify-evalrow.jsonl");
         let p = path.to_str().unwrap();
-        let _ = std::fs::remove_file(p); // clear any stale
+        let _ = crate::vfs::remove_file(p); // clear any stale
         let row = EvalRow {
             timestamp: EvalRow::timestamp_from_epoch(1_700_000_001),
             config_version: "1".into(),
@@ -1227,10 +1227,10 @@ mod tests {
             }],
         };
         row.append_to(p).expect("append must succeed (fail-closed)");
-        let contents = std::fs::read_to_string(p).expect("read back");
+        let contents = crate::vfs::read_to_string(p).expect("read back");
         assert!(contents.trim_end().ends_with('}'));
         assert!(serde_json::from_str::<serde_json::Value>(contents.trim_end()).is_ok());
-        let _ = std::fs::remove_file(p);
+        let _ = crate::vfs::remove_file(p);
     }
 
     // ── E3 tests ───────────────────────────────────────────────────────────

@@ -65,7 +65,7 @@ impl CpuTopology {
     pub fn probe() -> Self {
         let mut topo = CpuTopology::default();
 
-        let cpuinfo_raw = std::fs::read_to_string("/proc/cpuinfo").unwrap_or_default();
+        let cpuinfo_raw = crate::vfs::read_to_string("/proc/cpuinfo").unwrap_or_default();
         let lines: Vec<&str> = cpuinfo_raw.lines().collect();
 
         // Count logical processors.
@@ -92,14 +92,14 @@ impl CpuTopology {
 
         // Cache sizes from /sys.
         for idx in 0..8 {
-            let typ = std::fs::read_to_string(
+            let typ = crate::vfs::read_to_string(
                 format!("/sys/devices/system/cpu/cpu0/cache/index{idx}/type")
             ).unwrap_or_default();
-            let size_str = std::fs::read_to_string(
+            let size_str = crate::vfs::read_to_string(
                 format!("/sys/devices/system/cpu/cpu0/cache/index{idx}/size")
             ).unwrap_or_default();
             let size = parse_cache_size(&size_str);
-            let line = std::fs::read_to_string(
+            let line = crate::vfs::read_to_string(
                 format!("/sys/devices/system/cpu/cpu0/cache/index{idx}/coherency_line_size")
             ).unwrap_or_default();
             if topo.cache_line_size == 0 {
@@ -127,7 +127,7 @@ impl CpuTopology {
         }
 
         // NUMA nodes.
-        topo.numa_nodes = std::fs::read_to_string("/sys/devices/system/node/online")
+        topo.numa_nodes = crate::vfs::read_to_string("/sys/devices/system/node/online")
             .ok()
             .and_then(|s| {
                 let count = s.split(',').filter(|p| !p.is_empty()).count();

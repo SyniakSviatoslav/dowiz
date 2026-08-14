@@ -263,7 +263,7 @@ mod tests {
         //     actual source tree and assert that OpticalCompressed is NOT wired into
         //     any determinism-plane API, and that no hashing accessor exists.
         let manifest = env!("CARGO_MANIFEST_DIR");
-        let optical_src = std::fs::read_to_string(format!("{manifest}/src/optical.rs"))
+        let optical_src = crate::vfs::read_to_string(format!("{manifest}/src/optical.rs"))
             .expect("optical.rs readable in test");
         // No METHOD yields bytes for hashing/content-id — the unrepresentability core.
         // We scan ONLY the module body (before `mod tests`), so the grep cannot match
@@ -288,14 +288,14 @@ mod tests {
         // Determinism-plane sinks must NOT accept OpticalCompressed. event_log.rs
         // (sha3 content-id / idempotency) and spine.rs (hash-chain) are the canonical
         // determinism-plane APIs — neither may name OpticalCompressed.
-        let event_log_src = std::fs::read_to_string(format!("{manifest}/src/event_log.rs"))
+        let event_log_src = crate::vfs::read_to_string(format!("{manifest}/src/event_log.rs"))
             .expect("event_log.rs readable in test");
         assert!(
             !event_log_src.contains("OpticalCompressed"),
             "event_log (determinism plane) must NOT reference OpticalCompressed"
         );
         let spine_src =
-            std::fs::read_to_string(format!("{manifest}/src/spine.rs")).unwrap_or_default();
+            crate::vfs::read_to_string(format!("{manifest}/src/spine.rs")).unwrap_or_default();
         assert!(
             !spine_src.contains("OpticalCompressed"),
             "spine (hash-chain plane) must NOT reference OpticalCompressed"

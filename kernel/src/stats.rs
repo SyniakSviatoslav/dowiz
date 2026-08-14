@@ -535,9 +535,9 @@ mod tests {
 
         let path =
             std::env::temp_dir().join(format!("stats_boot_reread_{}.txt", std::process::id()));
-        std::fs::write(&path, &serialized).expect("write serialized bootstrap interval");
-        let reread = std::fs::read_to_string(&path).expect("re-read serialized interval");
-        std::fs::remove_file(&path).ok();
+        crate::vfs::write(&path, &serialized).expect("write serialized bootstrap interval");
+        let reread = crate::vfs::read_to_string(&path).expect("re-read serialized interval");
+        crate::vfs::remove_file(&path).ok();
         assert_eq!(
             reread, serialized,
             "byte content did not survive a disk round-trip"

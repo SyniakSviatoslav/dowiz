@@ -282,7 +282,7 @@ mod tests {
             std::process::id(),
             crate::typed_metrics::mono_now_ns()
         ));
-        let _ = std::fs::create_dir_all(&d);
+        let _ = crate::vfs::create_dir_all(&d);
         d
     }
 
@@ -420,7 +420,7 @@ mod tests {
                 "recovered payload must contain {needle}: {raw}"
             );
         }
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = crate::vfs::remove_dir_all(&dir);
         reset_counters();
     }
 
