@@ -237,7 +237,7 @@ pub use dowiz_core::metrics;
 /// the no-op native branch — zero footprint in any non-test/shipping build) AND
 /// under `cfg(miri)` (where the planted-UB branch executes and Miri must flag it).
 #[cfg(any(test, miri))]
-pub use dowiz_core::miri_selftest;
+mod miri_selftest;
 pub mod moderation;
 /// Numerical stability primitives: Kahan compensated summation, pairwise summation,
 /// stable softmax, and matrix condition-number estimation via power iteration.

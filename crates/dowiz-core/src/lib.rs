@@ -39,8 +39,6 @@ pub mod mat;
 pub mod math;
 pub mod messenger;
 pub mod metrics;
-#[cfg(any(test, miri))]
-pub mod miri_selftest;
 pub mod modular;
 pub mod needle2;
 pub mod oil_motion;
