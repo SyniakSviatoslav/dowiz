@@ -65,14 +65,13 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
    `wasm32-unknown-unknown`), handle `format!`/prelude via `alloc::prelude`.
 2. **Transcendental modules still in-kernel (no_std-READY but not moved)** —
    `spectral` (→ `fdr`/`csr`/`spectral_cache`/`order_machine`),
-   `householder` (→ `spectral`/`fdr`). `eigen`+`stem` (item 7) and
-   `arena`+`mat` (item 8) are DONE. The remaining two form a mutual cycle
-   (`spectral` ⇄ `householder`, and `spectral` ⇄ `csr` via `csr::energy` →
-   `spectral::graph_energy` and `spectral::{laplacian,laplacian_spmv}(&Csr)`);
-   `csr` additionally uses `sqrt` (production, → `crate::math`) and
-   `fs/process/env` (TEST-only, PPR reread). Breaking the cycle needs either
-   `graph_energy` moved to dowiz-core (it needs `eigenvalues` → `householder`,
-   the cycle's core) or `csr::energy` re-homed.
+   `householder` (→ `spectral`/`fdr`). `eigen`+`stem` (item 7), `arena`+`mat`
+   (item 8), and **`csr` + `householder` (item 9)** are DONE. The remaining
+   `spectral` module still depends on `fdr` (span), `csr` (now dowiz-core),
+   `householder` (now dowiz-core), `spectral_cache`, `order_machine`, and DMD —
+   extracting its eigenvalue family (charpoly/roots/eigenvalues/graph_energy/
+   spectral_radius/laplacian/classify_drift) needs the `span` seam (done, item
+   9) plus breaking the `spectral_cache`/`order_machine` edges.
 3. **Mutex → spinlock** (DONE 2026-08-14) — hand-rolled zero-dep
    `SpinLock<T>` (`src/spinlock.rs`, test-and-set on
    `core::sync::atomic::AtomicBool`) replaced `std::sync::Mutex` in the 4
@@ -96,13 +95,31 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
    - `mat` — `Mat`/`MatrixError`/`matmul_contig(_in)`; pure `core`+`alloc`.
    Kernel re-exports keep `crate::arena::BumpArena` / `crate::mat::Mat`
    resolving unchanged. dowiz-core 230 lib tests (+7 arena); kernel 2971.
+6. **`dowiz-core` crate split — csr + householder + span seam (2026-08-14)** —
+   broke the `csr`⇄`spectral` cycle and extracted the Householder eigensolver:
+   - `span` — the no_std no-op span seam (`info_span!` + `SpanHandle` +
+     `SpanGuard`, tracing-grammar parity). Replaces `fdr::info_span!` for the
+     eigenvalue family; its `Drop` reports nothing (no observer in kernel-space).
+     This is the "fdr span seam (like the Clock seam)" the ledger called for.
+   - `csr` — `Csr`/`LaplacianKind`/`recall_at_k`/`precision_at_k`/`NormalizedTile`
+     etc.; `sqrt` → `crate::math`; `Csr::energy()` dropped and re-homed as
+     `spectral::csr_energy(&Csr)` (the only production csr→spectral edge).
+   - `householder` — the dense QR eigensolver (`eigenvalues_contig`/`eigh_contig`/
+     `Matrix32x32`); `use crate::spectral::Complex` → `crate::complex`; FMA
+     runtime-detection stays `cfg(feature = "std")`-gated (known-but-false via
+     `check-cfg`). `eig2x2_bit_capture_oracle` golden signatures unchanged.
+   Cross-module parity tests (csr×spectral, householder×spectral) relocated to
+   `kernel/tests/{csr,householder}_spectral_parity.rs`. dowiz-core 257 lib
+   tests (+18 csr, +9 householder); kernel 2934; +2 integration tests (8 total).
 
 ## Honest scope note
 
 The mechanical tier (boundary) is **fully migrated**. The transcendental geometry
-layer is **fully extracted** to `dowiz-core`; the sanitize/stem/eigen tranche is
-**extracted**. The remaining items are architectural: the bulk crate split (move
-the rest of the 174 modules), the `spectral`⇄`householder` cycle, the 4
-Mutex→spinlock sites, and the 43 I/O ports. All are large, low-mechanical-effort,
-high-care efforts — not bulk-editable. This ledger marks the exact boundary so a
-future session resumes cleanly.
+layer, sanitize/stem/eigen, arena/mat, and csr/householder (+ the `span` seam) are
+**extracted** to `dowiz-core`; the Mutex→spinlock sites are **done**. The remaining
+items are architectural: the bulk crate split (move the rest of the 174 modules),
+the `spectral` eigenvalue-family extraction (unblocked now that `span`/`csr`/
+`householder` are in dowiz-core — only `spectral_cache`/`order_machine` edges
+remain), and the 43 I/O ports. All are large, low-mechanical-effort, high-care
+efforts — not bulk-editable. This ledger marks the exact boundary so a future
+session resumes cleanly.
