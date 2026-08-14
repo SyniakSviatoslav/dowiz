@@ -30,8 +30,6 @@
 //! network, no `serde`.
 
 use alloc::collections::BTreeMap;
-use std::fs::OpenOptions;
-use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
@@ -161,10 +159,7 @@ impl JsonlWriter {
             None => return false,
         };
         let path = dir.join(name);
-        match OpenOptions::new().create(true).append(true).open(&path) {
-            Ok(mut f) => f.write_all(line.as_bytes()).is_ok(),
-            Err(_) => false,
-        }
+        crate::vfs::append(&path, line.as_bytes()).is_ok()
     }
 }
 

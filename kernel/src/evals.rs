@@ -590,13 +590,8 @@ impl EvalRow {
     /// Append this row to a JSONL file. Fail-closed: any IO/serialization error
     /// is returned, never silently dropped (no amnesiac writes).
     pub fn append_to(&self, path: &str) -> Result<(), Box<dyn std::error::Error>> {
-        use std::io::Write;
         let line = self.to_jsonl()?;
-        let mut f = std::fs::OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(path)?;
-        writeln!(f, "{}", line)?;
+        crate::vfs::append(path, format!("{line}\n"))?;
         Ok(())
     }
 }

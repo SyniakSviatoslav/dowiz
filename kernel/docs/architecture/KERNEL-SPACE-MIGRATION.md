@@ -141,9 +141,10 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
    `is_dir`/`is_file`/`extension`); `metadata` reduced to `{len,is_dir}`.
    `impl From<VfsError> for std::io::Error` + `impl std::error::Error` bridge
    the migrated call sites that still return `io::Result`. 166 `std::fs::` call
-   sites across ~36 modules route through `crate::vfs`. kernel 2873→2877 lib
-   tests (+4 vfs). File-handle surface (`File`/`OpenOptions`/`Write`) is a
-   follow-up (6 modules).
+   sites across ~36 modules route through `crate::vfs`, plus `append` (evals +
+   span_metrics/obs). kernel 2873→2878 lib tests (+5 vfs). File-handle surface
+   (`File`/`OpenOptions` held-handle + `fsync`: `brain/hydra`, `fdr/ring`,
+   `backup` fsync) and net (`pq/entropy`) are follow-ups.
 
 ## Honest scope note
 

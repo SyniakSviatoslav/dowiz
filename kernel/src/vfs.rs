@@ -128,6 +128,7 @@ pub trait Vfs {
     fn read(&self, path: &str) -> Result<Vec<u8>, VfsError>;
     fn read_to_string(&self, path: &str) -> Result<String, VfsError>;
     fn write(&self, path: &str, contents: &[u8]) -> Result<(), VfsError>;
+    fn append(&self, path: &str, contents: &[u8]) -> Result<(), VfsError>;
     fn read_dir(&self, path: &str) -> Result<Vec<DirEntry>, VfsError>;
     fn create_dir_all(&self, path: &str) -> Result<(), VfsError>;
     fn remove_file(&self, path: &str) -> Result<(), VfsError>;
@@ -161,6 +162,15 @@ impl Vfs for StdFs {
     }
     fn write(&self, path: &str, contents: &[u8]) -> Result<(), VfsError> {
         std::fs::write(path, contents).map_err(|e| map_io_err(&e))
+    }
+    fn append(&self, path: &str, contents: &[u8]) -> Result<(), VfsError> {
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(path)
+            .map_err(|e| map_io_err(&e))?;
+        f.write_all(contents).map_err(|e| map_io_err(&e))
     }
     fn read_dir(&self, path: &str) -> Result<Vec<DirEntry>, VfsError> {
         let rd = std::fs::read_dir(path).map_err(|e| map_io_err(&e))?;
@@ -236,6 +246,14 @@ pub fn write<P: AsRef<std::path::Path>, C: AsRef<[u8]>>(
     StdFs.write(path_str(path.as_ref())?, contents.as_ref())
 }
 
+/// Append bytes to a file (creating it if absent).
+pub fn append<P: AsRef<std::path::Path>, C: AsRef<[u8]>>(
+    path: P,
+    contents: C,
+) -> Result<(), VfsError> {
+    StdFs.append(path_str(path.as_ref())?, contents.as_ref())
+}
+
 /// List a directory (eager; returns `(path, name, kind)` per entry).
 pub fn read_dir<P: AsRef<std::path::Path>>(path: P) -> Result<Vec<DirEntry>, VfsError> {
     StdFs.read_dir(path_str(path.as_ref())?)
@@ -280,6 +298,16 @@ mod tests {
         write(path, b"hello vfs").expect("write");
         let got = read_to_string(path).expect("read back");
         assert_eq!(got, "hello vfs");
+        remove_file(path).ok();
+    }
+
+    #[test]
+    fn append_adds_to_file() {
+        let path = std::env::temp_dir().join(format!("vfs_append_test_{}.txt", std::process::id()));
+        let path = path.to_str().unwrap();
+        write(path, "first\n").expect("write");
+        append(path, "second\n").expect("append");
+        assert_eq!(read_to_string(path).expect("read"), "first\nsecond\n");
         remove_file(path).ok();
     }
 
