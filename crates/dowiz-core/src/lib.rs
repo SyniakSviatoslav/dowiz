@@ -19,5 +19,6 @@ extern crate alloc;
 pub mod constants;
 pub mod hypervector;
 pub mod lut;
+pub mod math;
 pub mod rng;
 pub mod squash;
