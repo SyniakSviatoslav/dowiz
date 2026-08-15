@@ -122,7 +122,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let sum: f64 = intents.iter().map(|(_, _, s)| *s).sum();
             sum / intents.len() as f64
         };
-        ledger.record("enrich", "detect", success, value, query.len() as f64);
+        ledger.record("enrich", "detect", success, value, query.len() as f64, dowiz_kernel::now_ms());
         return Ok(());
     }
 
@@ -152,7 +152,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         sum / report.intents.len() as f64
     };
     let enrich_cost = query.len() as f64;
-    ledger.record("enrich", "lookup", enrich_success, enrich_value, enrich_cost);
+    ledger.record("enrich", "lookup", enrich_success, enrich_value, enrich_cost, dowiz_kernel::now_ms());
 
     match format {
         "json" => {

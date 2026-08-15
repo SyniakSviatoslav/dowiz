@@ -13,7 +13,7 @@ pub fn mul_with_telemetry(a: &TriMatrix, other: &TriMatrix, ledger: &mut Harvest
     let success = result.stability_index() > 0.0;
     let value = result.stability_index();
     let cost = (a.rows * a.cols * other.cols) as f64;
-    ledger.record("trinary", "mat_mul", success, value, cost);
+    ledger.record("trinary", "mat_mul", success, value, cost, crate::now_ms());
     result
 }
 
@@ -28,7 +28,7 @@ pub fn kalman_predict_with_telemetry(
     let success = result.stability_index() > 0.0;
     let value = result.stability_index();
     let cost = a.data.len() as f64;
-    ledger.record("trinary", "kalman_predict", success, value, cost);
+    ledger.record("trinary", "kalman_predict", success, value, cost, crate::now_ms());
     result
 }
 

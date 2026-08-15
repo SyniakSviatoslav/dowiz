@@ -202,3 +202,4 @@ pub mod tracker;
 pub mod resilience;
 pub mod meta_miner;
 pub mod open_science;
+pub mod telemetry_harvest;

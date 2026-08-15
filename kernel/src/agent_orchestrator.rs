@@ -118,6 +118,7 @@ impl TaskOracle {
             correct,
             if correct { 1.0 } else { 0.0 },
             0.0,
+            crate::now_ms(),
         );
     }
 

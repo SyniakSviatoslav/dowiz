@@ -616,7 +616,7 @@ pub fn detect_all_intents_with_telemetry(
         sum / intents.len() as f64
     };
     let cost = text.len() as f64;
-    ledger.record("prompt_enrich", "intent_detect", success, value, cost);
+    ledger.record("prompt_enrich", "intent_detect", success, value, cost, crate::now_ms());
     intents
 }
 
@@ -867,7 +867,7 @@ impl PromptEnrichEngine {
             sum / report.intents.len() as f64
         };
         let cost = user_input.len() as f64;
-        ledger.record("prompt_enrich", "intent_detect", success, value, cost);
+        ledger.record("prompt_enrich", "intent_detect", success, value, cost, crate::now_ms());
         report
     }
 }
@@ -1753,6 +1753,7 @@ impl EnrichmentQualityMonitor {
             avg_delta.abs() < 1.0,
             if avg_delta > 0.0 { avg_delta } else { 1.0 },
             0.0,
+            crate::now_ms(),
         );
         if self.tracker.history.is_empty() {
             DeltaComparison::Stable

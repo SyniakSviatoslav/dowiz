@@ -87,7 +87,7 @@ impl TelemetryAggregator {
         outcome_token: &str,
     ) {
         self.harvest_ledger
-            .record(model, task, success, value, cost);
+            .record(model, task, success, value, cost, crate::now_ms());
 
         // Track outcome token for pattern surface (O(1) ring eviction).
         self.outcome_tokens.push_back(outcome_token.to_string());
