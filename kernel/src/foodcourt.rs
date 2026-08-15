@@ -28,7 +28,7 @@
 
 use alloc::collections::BTreeMap;
 
-use crate::catalog::{charge_legs, kitchen_tickets};
+use crate::domain::{charge_legs, kitchen_tickets};
 use crate::domain::{Order, OrderItem};
 use crate::money::{Currency, Money};
 use crate::vendor::VendorId;

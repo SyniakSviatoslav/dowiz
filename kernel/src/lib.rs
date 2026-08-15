@@ -50,7 +50,7 @@ pub mod budget;
 pub use dowiz_core::cart;
 /// M1/M2 — trusted price catalog: the single kernel authority on line-item prices.
 /// `place_order` re-derives `unit_price` from this, ignoring client-supplied prices.
-pub mod catalog;
+pub use dowiz_core::catalog;
 /// P9 growth-substrate: causal inference — back-door adjustment / do-operator
 /// (Pearl). Provable causal effect from observational tables; fail-closed.
 pub use dowiz_core::causal;

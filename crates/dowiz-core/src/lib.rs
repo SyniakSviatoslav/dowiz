@@ -222,6 +222,7 @@ pub mod orchestrator;
 pub mod breaker;
 pub mod autonomic_pmu;
 pub mod temporal_tmr;
+pub mod catalog;
 pub mod tensor_parser;
 pub mod academia_cloud;
 pub mod agc_scheduler;
