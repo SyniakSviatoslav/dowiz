@@ -1,25 +1,17 @@
-//! `fdr/json.rs` — the kernel's single JSON *write* authority (blueprint §2).
+//! `fdr/json.rs` — the single JSON *write* authority (blueprint §2).
 //!
 //! ABSORBS the two escaping primitives that coexisted in the tree before this module
-//! (blueprint §2 / synthesis §10-P2 — a live "two different escapers" inconsistency):
-//!   1. `markov_attractor::esc()` — escaped `" \ \n \r \t`, everything else verbatim.
-//!   2. `span_metrics::obs::LogBucket::to_jsonl` — escaped the span name via Rust's
-//!      `{:?}` Debug formatting (a *second*, different escaper: `{:?}` also emits
-//!      `\u{..}` for other control chars).
-//! Both now route through `escape_into` here; each old call site is pinned
-//! byte-identical by a golden test (this file's tests + `markov_attractor`'s golden).
+//! (blueprint §2 / synthesis §10-P2): `markov_attractor::esc()` and the span-name
+//! `{:?}`-escaping in `span_metrics::obs`. Both now route through [`escape_into`] here;
+//! each old call site is pinned byte-identical by a golden test.
 //!
-//! Scope: this is the *serialize* side only. Parse-side JSON (`json_api.rs`, the serde
-//! carriers) is item 31's scope and is untouched.
-//!
-//! Pure `std` (String pushes only) — compiles on every target incl. `wasm32`.
+//! Scope: serialize side only. Pure `alloc` (String pushes only) — compiles on every
+//! target incl. `wasm32`.
+
+use alloc::string::{String, ToString};
 
 /// Escape `s` into `out` using the historical `esc()` semantics: only `" \ \n \r \t`
-/// are escaped; every other char (including other control chars) passes through
-/// verbatim. This is the ONE escaping authority — byte-compatible with the deleted
-/// `esc()` for every string the markov CLI can emit (golden-pinned in
-/// `bin/markov_attractor.rs` + here), and byte-compatible with the old `{:?}`
-/// span-name escaping for the 8 real span names (all `[a-z_]`, escaping never fires).
+/// are escaped; every other char passes through verbatim. The ONE escaping authority.
 pub fn escape_into(out: &mut String, s: &str) {
     for c in s.chars() {
         match c {
@@ -34,16 +26,13 @@ pub fn escape_into(out: &mut String, s: &str) {
 }
 
 /// Escape to a fresh `String` — the drop-in for the deleted `markov_attractor::esc()`.
-/// Byte-identical to it by construction (same match arms, same initial capacity).
 pub fn escape(s: &str) -> String {
     let mut o = String::with_capacity(s.len() + 2);
     escape_into(&mut o, s);
     o
 }
 
-/// Escape `s` as a quoted JSON string (`"..."`) into `out`. Used by [`JsonWriter`] and
-/// by any call site that needs the surrounding quotes (the old `to_jsonl` got these
-/// quotes "for free" from `{:?}` — this reproduces them exactly).
+/// Escape `s` as a quoted JSON string (`"..."`) into `out`.
 pub fn quote_into(out: &mut String, s: &str) {
     out.push('"');
     escape_into(out, s);
@@ -51,11 +40,8 @@ pub fn quote_into(out: &mut String, s: &str) {
 }
 
 /// A minimal, allocation-cheap JSON *object* builder. Field methods CANNOT emit an
-/// unescaped string byte (illegal-state-unrepresentable applied to serialization,
-/// synthesis §1.5): every string routes through [`escape_into`]. Field order is fixed
-/// by call order (no map iteration ⇒ deterministic output, mirroring
-/// `typed_metrics`'s determinism contract). This is the writer the FDR event schema
-/// and (post-cutover) `metric.jsonl`/`alert.jsonl`/the markov CLI all emit through.
+/// unescaped string byte: every string routes through [`escape_into`]. Field order is
+/// fixed by call order (no map iteration ⇒ deterministic output).
 pub struct JsonWriter {
     buf: String,
     started: bool,
@@ -102,9 +88,8 @@ impl JsonWriter {
         self
     }
 
-    /// `"k":<raw>` — the caller guarantees `raw` is already valid JSON (a nested object
-    /// built by another `JsonWriter`, or a `Reading`'s `{"unavailable":...}` form). The
-    /// ONLY method that does not escape, by contract; never pass user text here.
+    /// `"k":<raw>` — the caller guarantees `raw` is already valid JSON. The ONLY method
+    /// that does not escape, by contract.
     pub fn field_raw(mut self, k: &str, raw: &str) -> Self {
         self.key(k);
         self.buf.push_str(raw);
@@ -122,8 +107,7 @@ impl JsonWriter {
 mod tests {
     use super::*;
 
-    /// The pre-absorption `esc()` body, verbatim, as the golden oracle. `escape()` must
-    /// equal it byte-for-byte for every input (proves the absorption is lossless).
+    /// The pre-absorption `esc()` body, verbatim, as the golden oracle.
     fn old_esc(s: &str) -> String {
         let mut o = String::with_capacity(s.len() + 2);
         for c in s.chars() {
@@ -141,7 +125,6 @@ mod tests {
 
     #[test]
     fn golden_escape_matches_old_esc_byte_for_byte() {
-        // The markov CLI's selftest corpus tokens + adversarial escape strings.
         let corpus = [
             "edit",
             "run_ok",
@@ -149,21 +132,17 @@ mod tests {
             "HEALTHY",
             "analyzer error",
             "loop: edit→run_fail (k=3)",
-            "a\"b",             // quote
-            "a\\b",             // backslash
-            "line1\nline2",     // newline
-            "carriage\rreturn", // CR
-            "tab\there",        // tab
+            "a\"b",
+            "a\\b",
+            "line1\nline2",
+            "carriage\rreturn",
+            "tab\there",
             "mix \"\\\n\r\t end",
-            "unicode: café → ☕", // non-ascii passes through verbatim (both escapers agree)
+            "unicode: café → ☕",
             "",
         ];
         for s in corpus {
-            assert_eq!(
-                escape(s),
-                old_esc(s),
-                "escape() diverged from old esc() for {s:?}"
-            );
+            assert_eq!(escape(s), old_esc(s), "escape() diverged for {s:?}");
         }
     }
 

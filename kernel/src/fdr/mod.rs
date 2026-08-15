@@ -45,7 +45,8 @@
 //!   zero production callers; the byte-compat contract is the parsed artifacts only
 //!   (`metric.jsonl` / `alert.jsonl` / the markov CLI JSON), all golden-pinned.
 
-pub mod json;
+// `json` is pure (alloc-only) — re-exported from the no_std core.
+pub use dowiz_core::fdr::json;
 pub mod pmu;
 pub mod schema;
 
@@ -64,48 +65,10 @@ pub type RingHandle = ring::FdrRing;
 #[cfg(target_arch = "wasm32")]
 pub enum RingHandle {}
 
-// ── CRC32 (IEEE 802.3, reflected) — hand-rolled, table-on-first-use ──────────────────
-// ALWAYS COMPILED (NOT wasm-gated). Item 54's live-struct Sentinel runs on the kernel
-// decision plane that compiles to wasm32 (CLAUDE.md: "kernel … compiles to WASM"), so the
-// shared CRC32 primitive must be callable from a wasm-compiled path. Lifted here from the
-// wasm-gated `fdr::ring` (blueprint §3.2) — a behavior-preserving move; the KAT
-// `ring::crc32_matches_known_vector` stays green. One implementation shared by FDR ring
-// (at-rest per-line CRC), item 40 (weights), and item 54 (live-struct Sentinel).
-static CRC_TABLE: OnceLock<[u32; 256]> = OnceLock::new();
-
-fn crc_table() -> &'static [u32; 256] {
-    CRC_TABLE.get_or_init(|| {
-        let mut t = [0u32; 256];
-        let mut i = 0usize;
-        while i < 256 {
-            let mut c = i as u32;
-            let mut k = 0;
-            while k < 8 {
-                c = if c & 1 != 0 {
-                    0xEDB8_8320 ^ (c >> 1)
-                } else {
-                    c >> 1
-                };
-                k += 1;
-            }
-            t[i] = c;
-            i += 1;
-        }
-        t
-    })
-}
-
-/// CRC32 (IEEE, reflected, `0xFFFFFFFF` init/final-xor) over `data`. Shared by FDR ring
-/// (at-rest per-line CRC), item 40 (read-only weights), and item 54 (live-struct
-/// Sentinel). One implementation, always compiled.
-pub fn crc32(data: &[u8]) -> u32 {
-    let t = crc_table();
-    let mut crc = 0xFFFF_FFFFu32;
-    for &b in data {
-        crc = t[((crc ^ b as u32) & 0xFF) as usize] ^ (crc >> 8);
-    }
-    crc ^ 0xFFFF_FFFF
-}
+// ── Pure primitives re-exported from the no_std core ──────────────────────────────
+// The core owns [`Level`], the compile-time [`crc32`] table, the enable gates, and the
+// span-id minter. The kernel keeps only the std side (ring, sink, span timing, macros).
+pub use dowiz_core::fdr::{crc32, event_enabled, next_span_id, set_level, set_sink_active, sink_active, Level};
 
 /// Emit ONE `Alarm` FDR record (the fault-evidence kind; fsynced on append by the durable
 /// ring — power-loss durable, `ring.rs:134`). No-op unless an FDR sink is installed, so
@@ -134,90 +97,22 @@ pub use crate::{
 };
 
 use core::cell::RefCell;
-use core::sync::atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering};
+use core::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, OnceLock};
 
-// ── Level ────────────────────────────────────────────────────────────────────────────
-
-/// Severity level. Lower = more severe (so `lvl <= LEVEL` = "enabled at this threshold").
-#[repr(u8)]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub enum Level {
-    Error = 1,
-    Warn = 2,
-    Info = 3,
-    Debug = 4,
-    Trace = 5,
-}
-
-impl Level {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Level::Error => "error",
-            Level::Warn => "warn",
-            Level::Info => "info",
-            Level::Debug => "debug",
-            Level::Trace => "trace",
-        }
-    }
-
-    /// Parse the level-only `DOWIZ_LOG` grammar (mirrors the old `EnvFilter::new("info")`
-    /// fallback at `lib.rs:404`). Full `RUST_LOG` target-filtering is an accepted loss.
-    pub fn from_env_str(s: &str) -> Option<Level> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "error" => Some(Level::Error),
-            "warn" => Some(Level::Warn),
-            "info" => Some(Level::Info),
-            "debug" => Some(Level::Debug),
-            "trace" => Some(Level::Trace),
-            _ => None,
-        }
-    }
-}
-
-/// Global level threshold. Default `Info` (matches the incumbent `EnvFilter` default).
-static LEVEL: AtomicU8 = AtomicU8::new(Level::Info as u8);
-
-pub fn set_level(l: Level) {
-    LEVEL.store(l as u8, Ordering::Relaxed);
-}
-
-// ── Enable checks (the disabled fast path) ──────────────────────────────────────────
-
-/// True iff a sink is installed. One relaxed load — the disabled-path cost of an event
-/// macro (matching `tracing`'s dispatch-check cheapness).
-static SINK_ACTIVE: AtomicBool = AtomicBool::new(false);
-
-/// Is an event at `lvl` enabled? Requires a sink installed AND `lvl <= LEVEL`. On `wasm32`
-/// no sink is ever installed, so this is always `false` and no event is ever built.
-#[inline]
-pub fn event_enabled(lvl: Level) -> bool {
-    SINK_ACTIVE.load(Ordering::Relaxed) && (lvl as u8) <= LEVEL.load(Ordering::Relaxed)
-}
+// (Level, set_level, event_enabled, SINK_ACTIVE — re-exported from the no_std core above.)
 
 /// Is span timing active (an observer OR a sink is installed)? Governs whether
 /// `SpanHandle::entered` takes an `Instant`. Always `false` on `wasm32` (neither is ever
 /// installed there), so the hot-path span never touches the wasm-panicking clock.
 #[inline]
 pub fn span_active() -> bool {
-    SINK_ACTIVE.load(Ordering::Relaxed)
+    sink_active()
         || GLOBAL_OBSERVER.get().is_some()
         || TL_OBSERVER.with(|o| o.borrow().is_some())
 }
 
-// ── Item 62: per-process span id minter ─────────────────────────────────────────────
-
-/// Item 62 (FDR relational linkage): per-process monotone span id counter. Mirrors the
-/// `next_seq` pattern (`sink::Sink.seq`). Each span gets a unique `u64` id; child spans
-/// record their parent's id as `parent_span_id` on the P3 forensic plane.
-static SPAN_SEQ: AtomicU64 = AtomicU64::new(0);
-
-/// Mint the next span id. Call once per span entry. Monotone, per-process, wraps at u64::MAX
-/// (not a concern — 2^64 spans at 1 GHz = 584 years).
-#[inline]
-pub fn next_span_id() -> u64 {
-    SPAN_SEQ.fetch_add(1, Ordering::Relaxed)
-}
+// (next_span_id / SPAN_SEQ — re-exported from the no_std core above.)
 
 // ── Span observer (kernel-owned port of the tracing Layer hook) ─────────────────────
 
@@ -584,7 +479,7 @@ pub fn emit_shadow_divergence(
 #[cfg(not(target_arch = "wasm32"))]
 mod sink {
     use super::schema::{FdrEvent, Kind, StampPolicy};
-    use super::{ring, FdrConfig, Level, SINK_ACTIVE};
+    use super::{ring, FdrConfig, Level};
     use std::io::Write;
     use core::sync::atomic::{AtomicU64, Ordering};
     use std::sync::{Mutex, OnceLock};
@@ -618,7 +513,7 @@ mod sink {
         };
         match SINK.set(sink) {
             Ok(()) => {
-                SINK_ACTIVE.store(true, Ordering::Relaxed);
+                super::set_sink_active(true);
                 Ok(())
             }
             Err(_) => Err(()), // already installed.

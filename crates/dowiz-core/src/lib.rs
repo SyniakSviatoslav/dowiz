@@ -30,6 +30,7 @@ pub mod csr;
 pub mod dflash;
 pub mod eigen;
 pub mod eqc_gen;
+pub mod fdr;
 pub mod fft;
 pub mod harmonic;
 pub mod householder;
