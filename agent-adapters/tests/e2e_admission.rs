@@ -147,7 +147,7 @@ fn e2e_admits_valid_and_rejects_invalid_against_real_file_event_store() {
     // The minted envelope exists and has budget (do NOT drain it — the invoke below needs it).
     assert_eq!(rec.granted_capacity, 256);
     assert!(
-        rec.bucket.available() >= 4.0,
+        dowiz_kernel::token_bucket::token_bucket_available(&rec.bucket) >= 4.0,
         "minted bucket carries the granted envelope"
     );
 

@@ -112,7 +112,7 @@ impl<T: ClaimServicePort> ClaimClient<T> {
     /// FAST PATH with the single-outstanding-claim guard. A second call while one is "in flight"
     /// (the bucket has <1 token) is rate-limited WITHOUT touching the pool (§5.1).
     pub fn claim(&self, req: ClaimRequest) -> Result<ClaimOutcome, ClaimError> {
-        if !self.bucket.try_acquire(CLAIM_BUCKET_CAPACITY) {
+        if !crate::token_bucket::token_bucket_try_acquire(&self.bucket, CLAIM_BUCKET_CAPACITY) {
             return Err(ClaimError::RateLimited);
         }
         self.inner.claim_warm_pool_hub(req)

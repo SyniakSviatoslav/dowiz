@@ -70,7 +70,7 @@ impl BoundedDrainer {
     pub fn tick<F: FnMut()>(&mut self, bucket: &TokenBucket, mut run_unit: F) -> u32 {
         let mut ran = 0u32;
         while ran < self.k && self.remaining > 0 {
-            if !bucket.try_acquire(self.cost_per_unit) {
+            if !crate::token_bucket::token_bucket_try_acquire(&bucket, self.cost_per_unit) {
                 break; // degrade-closed: cannot pay → stop, do not run unpaid work
             }
             run_unit();
@@ -244,7 +244,7 @@ mod tests {
         let ran = d.tick(&bucket, || {});
         assert_eq!(ran, 7, "7 tokens ⇒ at most 7 units run");
         assert!(
-            bucket.available() < 1.0,
+            crate::token_bucket::token_bucket_available(&bucket) < 1.0,
             "budget fully spent on the 7 units"
         );
     }

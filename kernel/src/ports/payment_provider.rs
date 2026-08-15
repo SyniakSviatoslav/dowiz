@@ -1399,11 +1399,11 @@ mod tests {
     fn intent_burst_refused() {
         // The 4th intent in a burst (bucket capacity = 3) is refused.
         let b = TokenBucket::new(CHECKOUT_BURST, CHECKOUT_REFILL_PER_SEC);
-        assert!(b.try_acquire(1.0));
-        assert!(b.try_acquire(1.0));
-        assert!(b.try_acquire(1.0));
+        assert!(crate::token_bucket::token_bucket_try_acquire(&b, 1.0));
+        assert!(crate::token_bucket::token_bucket_try_acquire(&b, 1.0));
+        assert!(crate::token_bucket::token_bucket_try_acquire(&b, 1.0));
         assert!(
-            !b.try_acquire(1.0),
+            !crate::token_bucket::token_bucket_try_acquire(&b, 1.0),
             "4th burst intent must be refused (degrade-closed)"
         );
     }
@@ -1426,8 +1426,8 @@ mod tests {
         // grant). Its poison-recovery path is in token_bucket.rs; this asserts the contract the
         // adapter relies on — an exhausted bucket refuses rather than cascading.
         let b = TokenBucket::new(1.0, 0.0);
-        assert!(b.try_acquire(1.0));
-        assert!(!b.try_acquire(1.0));
+        assert!(b.try_acquire(1.0, 0));
+        assert!(!b.try_acquire(1.0, 0));
     }
 
     #[test]

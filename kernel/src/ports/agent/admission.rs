@@ -303,14 +303,14 @@ impl AdmissionLimiter {
     /// One O(1) integer decrement (+ optional shard decrement). `false` ⇒ drop the frame
     /// pre-crypto. Global is the ceiling; a shard denial is per-source fairness only.
     pub fn try_admit(&self, conn_id: u64) -> bool {
-        if !self.global.try_acquire(1.0) {
+        if !crate::token_bucket::token_bucket_try_acquire(&self.global, 1.0) {
             return false;
         }
         if self.shards.is_empty() {
             return true;
         }
         let idx = (conn_id as usize) % self.shards.len();
-        self.shards[idx].try_acquire(1.0)
+        crate::token_bucket::token_bucket_try_acquire(&self.shards[idx], 1.0)
     }
 }
 
@@ -844,8 +844,8 @@ mod tests {
         assert_eq!(log.len(), 1, "exactly one AgentAdmitted event");
         assert_eq!(rec.node_id.0, manifest.agent_node_id);
         // The minted bucket enforces the envelope.
-        assert!(rec.bucket.try_acquire(4096.0));
-        assert!(!rec.bucket.try_acquire(1.0), "budget envelope is real");
+        assert!(crate::token_bucket::token_bucket_try_acquire(&rec.bucket, 4096.0));
+        assert!(!crate::token_bucket::token_bucket_try_acquire(&rec.bucket, 1.0), "budget envelope is real");
     }
 
     // ── depth grant: delegate=false ⇒ granted_depth 0 ───────────────────────────

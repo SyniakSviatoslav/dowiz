@@ -379,7 +379,7 @@ impl TokenBudget {
         if self.exhausted {
             return false;
         }
-        let granted = self.bucket.try_acquire(self.cost_per_activation);
+        let granted = crate::token_bucket::token_bucket_try_acquire(&self.bucket, self.cost_per_activation);
         if !granted {
             self.exhausted = true;
         }
@@ -394,7 +394,7 @@ impl TokenBudget {
 
     /// Available tokens in the bucket (for telemetry).
     pub fn available(&self) -> f64 {
-        self.bucket.available()
+        crate::token_bucket::token_bucket_available(&self.bucket)
     }
 }
 

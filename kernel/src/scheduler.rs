@@ -131,7 +131,7 @@ impl Scheduler {
             .find(|(id, _)| *id == partition)
             .ok_or(SchedulerError::UnknownPartition)?;
 
-        if bucket.1.try_acquire(n) {
+        if crate::token_bucket::token_bucket_try_acquire(&bucket.1, n) {
             Ok(())
         } else {
             Err(SchedulerError::SliceExhausted)

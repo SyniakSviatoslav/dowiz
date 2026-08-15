@@ -92,8 +92,8 @@ struct ProbeSnap {
 impl ProbeSnap {
     fn from_env() -> Self {
         let tb = TokenBucket::new(10.0, 1.0);
-        let _ = tb.try_acquire(0.0);
-        let tokens = tb.available();
+        let _ = dowiz_kernel::token_bucket::token_bucket_try_acquire(&tb, 0.0);
+        let tokens = dowiz_kernel::token_bucket::token_bucket_available(&tb);
         let outcome = tmr(|| 42i64, 3);
         let tmr_voter_state = match outcome {
             VoteOutcome::Unanimous(_) => "Unanimous",

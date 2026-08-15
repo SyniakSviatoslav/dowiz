@@ -92,7 +92,7 @@ impl FuelTrancheRunner {
         let mut consumed_units = 0u64;
         loop {
             // Prepay the next tranche. On refusal: TERMINATE — do not load fuel again.
-            if !bucket.try_acquire(self.tranche_units as f64) {
+            if !dowiz_kernel::token_bucket::token_bucket_try_acquire(&bucket, self.tranche_units as f64) {
                 return Err(FuelError::BudgetExceeded { consumed_units });
             }
             self.set_fuel_calls.fetch_add(1, Ordering::SeqCst);

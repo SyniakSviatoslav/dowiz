@@ -38,8 +38,6 @@ pub enum ChaosSite {
     BetweenDecideAndInsert,
     /// Spool consumer work: between `claim_next` and `ack` (seam B, driver level).
     SpoolConsumerWork,
-    /// Inside a `Mutex` critical section (seam B), e.g. `token_bucket.rs`.
-    TokenBucketCritical,
 }
 
 /// Closed enum of injectable faults. THE deliverable type of this phase.
@@ -690,49 +688,5 @@ mod adversarial {
             );
             assert_eq!(log.len(), 0, "no in-memory advance on failed writes");
         }
-    }
-
-    // A6 — Poisoned-lock cascade (predicted REAL finding). The seam at
-    // `TokenBucketCritical` panics on an armed plan; the first call panics
-    // (caught), and the mutex is now poisoned. WITHOUT the into_inner recovery,
-    // every subsequent `try_acquire` would panic (DoS). WITH it, the next call
-    // recovers and degrades-closed (returns a bool, no panic).
-    #[test]
-    fn a6_poisoned_lock_recovers_degrade_closed() {
-        use crate::token_bucket::TokenBucket;
-        let bucket = TokenBucket::new(10.0, 1.0);
-        // Arm the panic seam inside the critical section.
-        let _g = install_plan(FaultPlan::new(
-            1,
-            1,
-            vec![(
-                ChaosSite::TokenBucketCritical,
-                FaultInjection::PanicMidTransaction,
-                Trigger::OnCall(1),
-            )],
-        ));
-        // First call hits the armed seam ⇒ panics. Catch it (simulates the crash
-        // that poisoned the mutex).
-        let first =
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| bucket.try_acquire(1.0)));
-        assert!(
-            first.is_err(),
-            "armed seam must panic on the first call (RED evidence)"
-        );
-        // After poisoning, the NEXT call must NOT panic — it recovers via
-        // `into_inner` and returns a bool (degrade-closed), proving the cascade
-        // is broken.
-        let recovered =
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| bucket.try_acquire(1.0)));
-        assert!(
-            recovered.is_ok(),
-            "post-poison try_acquire must recover (no cascade panic) — A6 fix holds"
-        );
-        // And it returns a real decision (here: grant, since capacity unspent).
-        assert_eq!(
-            recovered.unwrap(),
-            true,
-            "recovered bucket still grants when tokens available"
-        );
     }
 }

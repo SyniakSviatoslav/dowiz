@@ -114,7 +114,7 @@ fn bench_token_bucket(c: &mut Criterion) {
     c.bench_function("token_bucket/try_acquire_permit", |b| {
         // A typical chat permit is its max_tokens (8). Capacity 64, refill 8/s keeps it satisfied.
         let bucket = TokenBucket::new(64.0, 8.0);
-        b.iter(|| black_box(bucket.try_acquire(8.0)))
+        b.iter(|| black_box(dowiz_kernel::token_bucket::token_bucket_try_acquire(&bucket, 8.0)))
     });
 }
 

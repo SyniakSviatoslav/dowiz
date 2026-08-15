@@ -300,7 +300,7 @@ impl<B: LlmBackend + Send + Sync + 'static> Dispatcher<B> {
         // Hold the slot for the job's duration so in-flight is bounded at `workers`.
         thread::spawn(move || {
             let _guard = guard; // dropped at end of this closure ⇒ slot freed
-            let result = if bucket.try_acquire(cost) {
+            let result = if dowiz_kernel::token_bucket::token_bucket_try_acquire(&bucket, cost) {
                 let t0 = std::time::Instant::now();
                 let r = backend.chat(&req).map_err(DispatchError::Backend);
                 let ms = t0.elapsed().as_millis() as u64;

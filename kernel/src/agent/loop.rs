@@ -186,7 +186,7 @@ impl<R: SkillRegistry> AgentLoop<R> {
         for iteration in 1..=MAX_AGENT_ITERATIONS {
             // FAIL-CLOSED 3: budget exhaustion terminates the loop. Debit one unit;
             // on refusal, return the partial log (never present it as an answer).
-            if !self.budget.try_acquire(1.0) {
+            if !crate::token_bucket::token_bucket_try_acquire(&self.budget, 1.0) {
                 return LoopOutcome::AssistantUnavailable {
                     reason: "budget exhausted".to_string(),
                     log,

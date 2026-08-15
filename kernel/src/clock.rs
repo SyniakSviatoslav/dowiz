@@ -60,9 +60,18 @@ impl WallClock for SystemClock {
     }
 }
 
+/// Monotonic nanosecond counter anchored at process start — a single
+/// process-wide epoch, mirroring `typed_metrics::mono_now_ns`. `Instant::now()` is
+/// monotonic but has no absolute epoch, so we measure the delta from a
+/// lazily-captured process-start `Instant`. (A fresh `MonoClock` per call would
+/// return ~0 every time — the epoch MUST outlive the call site for the counter
+/// to advance.)
+static MONO_EPOCH: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
 /// Single authority for "now" (monotonic ns). Every hot path reads time here.
 pub fn now_ns() -> u64 {
-    MonoClock::new().now_ns()
+    let start = MONO_EPOCH.get_or_init(std::time::Instant::now);
+    std::time::Instant::now().duration_since(*start).as_nanos() as u64
 }
 
 /// Single authority for "now" in wall-clock epoch milliseconds (matches the

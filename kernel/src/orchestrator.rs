@@ -463,7 +463,7 @@ impl Orchestrator {
                 MAX_CONCURRENT
             ));
         }
-        if !self.budget.try_acquire(1.0) {
+        if !crate::token_bucket::token_bucket_try_acquire(&self.budget, 1.0) {
             return Err("budget exhausted".to_string());
         }
         self.active_tasks += 1;

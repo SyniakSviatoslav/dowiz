@@ -1,173 +1,29 @@
-//! token_bucket.rs — P11 §4 / F33 compute-budget `TokenBucket` (zero-dep, monotonic-clock).
+//! `token_bucket.rs` — std shim over the pure no_std core.
 //!
-//! Verified-by-math property (the falsifier): the total tokens granted across any window of
-//! `elapsed` seconds NEVER exceeds `capacity + refill_rate * elapsed`. Degrade-closed: when the
-//! bucket lacks `n` tokens, `try_acquire` returns `false` (the caller's typed `Err`) — never a
-//! partial grant, never a silent downgrade.
-//!
-//! This is the budget primitive the `llm-adapters` `Dispatcher` reuses to bound concurrency on
-//! LLM calls (§4.2). It is deliberately plain-`std` (no tokio, no time crate) so it can live in
-//! the kernel with zero new dependencies.
-//!
-//! Design: a `Mutex<Inner>` holds `tokens: f64` and `last_refill: Instant`. The mutex keeps
-//! refill+decrement a single atomic critical section (no lost sub-unit time, no CAS races), which
-//! is what the over-grant invariant needs. Refill is computed from MONOTONIC time (`Instant`),
-//! never wall-clock — so an NTP jump can never bypass the throttle.
-//!
-//! Atomicity (2026-07-18, contended-bench evidence — `benches/contention.rs`): the monotonic
-//! clock read is hoisted OUTSIDE the lock (see `refill_locked`), shrinking the critical section
-//! to a few float ops (~15% throughput at 8-way contention) WITHOUT changing the algorithm or the
-//! coupled (tokens,last_refill) over-grant invariant. The bench also measured a fully lock-free
-//! GCRA (single `AtomicU64` TAT) at ~2.5–3.6× under 2–8-way contention — a larger win, but a
-//! genuine ALGORITHM swap on a security/rate-limit primitive whose exact semantics the tests pin.
-//!
-//! Item 8 (space-grade roadmap §C, ruling: ADOPT, `BLUEPRINT-ITEM-07-kani-wiring-2026-07-19.md`
-//! §5) builds that swap as [`GcraTokenBucket`] — a pure, Kani-proven, differential-oracle-verified
-//! decision package — but does NOT cut over `TokenBucket`'s call sites. The differential oracle
-//! below (`gcra_oracle::token_bucket_gcra_matches_mutex_reference_positive_refill`) found a real
-//! non-equivalence: several live callers (`bounded_drainer.rs`, `agent-adapters/src/fuel.rs`) use
-//! `refill_rate = 0.0` as a one-shot drain-to-zero BUDGET, a pattern GCRA's continuous-refill model
-//! cannot represent (see `token_bucket_gcra_diverges_from_zero_refill_budget` — documented, not
-//! silently dropped). So `TokenBucket` stays the default for ALL existing callers; `GcraTokenBucket`
-//! is the new, separately-tested type available for future positive-refill-rate call sites (the
-//! `llm-adapters`/`admission.rs` continuous rate-limit path this bench originally measured).
+//! The pure budget primitives — [`gcra_decide`], [`GcraTokenBucket`] (lock-free `AtomicU64`
+//! TAT), and [`TokenBucket`] (a `SpinLock<Inner>`, `now_ns` injected) — live in
+//! `dowiz_core::token_bucket` and are re-exported here. This shim adds ONLY the std stamping
+//! free functions that inject `crate::clock::now_ns()`.
 
 use core::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
 use std::time::Instant;
 
-struct Inner {
-    tokens: f64,
-    last_refill: Instant,
+pub use dowiz_core::token_bucket::{gcra_decide, GcraTokenBucket, TokenBucket};
+
+/// Grant via [`TokenBucket`] stamped with the kernel's monotonic clock.
+pub fn token_bucket_try_acquire(b: &TokenBucket, n: f64) -> bool {
+    b.try_acquire(n, crate::clock::now_ns())
 }
 
-/// A monotonic-clock token bucket. `capacity` caps the burst; `refill_rate` is tokens/second.
-pub struct TokenBucket {
-    capacity: f64,
-    refill_rate: f64,
-    inner: Mutex<Inner>,
+/// Current available token count via [`TokenBucket`] stamped with the kernel's monotonic clock.
+pub fn token_bucket_available(b: &TokenBucket) -> f64 {
+    b.available(crate::clock::now_ns())
 }
 
-impl TokenBucket {
-    /// Create a full bucket (starts at `capacity` tokens).
-    pub fn new(capacity: f64, refill_rate: f64) -> Self {
-        TokenBucket {
-            capacity,
-            refill_rate,
-            inner: Mutex::new(Inner {
-                tokens: capacity,
-                last_refill: Instant::now(),
-            }),
-        }
-    }
-
-    /// Lazy monotonic refill: `tokens = min(capacity, tokens + refill_rate * elapsed_secs)`.
-    /// Advances `last_refill` to `now` so sub-unit time is never lost. Underflow clamped at 0.
-    /// Caller must hold the lock AND pass a `now` sampled from the monotonic clock.
-    ///
-    /// `now` is read by the caller BEFORE acquiring the lock (see `try_acquire`) so the
-    /// clock syscall is not serialized inside the critical section — the contended-bench
-    /// (`benches/contention.rs::contended_token_bucket`, `mutex_clock_outside`) shows this
-    /// shortens the lock hold and lifts throughput ~15% at 8-way contention. Over-grant
-    /// safety is preserved: a thread that waited for the lock holds a slightly-stale
-    /// `now`, so `saturating_duration_since` yields a SMALLER (never larger) elapsed →
-    /// conservative refill, degrade-closed. `saturating_*` also clamps the reverse case
-    /// (a later lock-holder with an earlier timestamp refills by zero) to 0.
-    fn refill_locked(&self, inner: &mut Inner, now: Instant) {
-        let elapsed = now
-            .saturating_duration_since(inner.last_refill)
-            .as_secs_f64();
-        if elapsed > 0.0 {
-            inner.tokens = (inner.tokens + self.refill_rate * elapsed).min(self.capacity);
-            if inner.tokens < 0.0 {
-                inner.tokens = 0.0;
-            }
-            inner.last_refill = now;
-        }
-    }
-
-    /// Refill lazily, then grant iff `tokens >= n` (decrement on success).
-    /// Returns `true` iff granted; `false` ⇒ caller must degrade-closed.
-    ///
-    /// A6 (P-H) — poison-cascade hardening: if a previous `try_acquire` panicked
-    /// while holding the lock (the bug class the chaos harness injects at
-    /// `ChaosSite::TokenBucketCritical`), `Mutex::lock` would otherwise return
-    /// `Err(PoisonError)` on EVERY subsequent call — a denial-of-service by
-    /// lock-poisoning. `Inner` is two POD fields (`f64`, `Instant`) with no
-    /// invariant spanning a panic point (no `Drop`, no cross-field coupling), so
-    /// `into_inner()` is sound: we recover the last-consistent state instead of
-    /// cascading the panic. A poisoned bucket degrades-closed (refuses) rather
-    /// than taking down the caller.
-    pub fn try_acquire(&self, n: f64) -> bool {
-        // Sample the monotonic clock BEFORE the lock so the syscall is not held inside
-        // the critical section (contended-bench evidence, see `refill_locked`).
-        let now = Instant::now();
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        // P-H W-H4 F4 seam (seam B): a chaos plan armed at `TokenBucketCritical`
-        // panics here to reproduce the poison-cascade bug class; the
-        // `unwrap_or_else(into_inner)` recovery above is what lets the NEXT call
-        // degrade-closed instead of cascading. Compiles to `()` without the
-        // `chaos` feature / outside tests.
-        #[cfg(any(test, feature = "chaos"))]
-        crate::chaos::chaos_point!(crate::chaos::ChaosSite::TokenBucketCritical);
-        self.refill_locked(&mut inner, now);
-        if inner.tokens >= n {
-            inner.tokens -= n;
-            true
-        } else {
-            false
-        }
-    }
-
-    /// Current available token count (refills lazily first). For telemetry/tests.
-    /// Same poison recovery as [`Self::try_acquire`] (A6).
-    pub fn available(&self) -> f64 {
-        let now = Instant::now();
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        self.refill_locked(&mut inner, now);
-        inner.tokens
-    }
-
-    /// Item 21 (roadmap §E): bounded refill-rate reconfiguration. Takes a
-    /// [`crate::autonomic::BoundedRate`] **by type** — a raw `f64` cannot be passed,
-    /// so an out-of-bound rate (outside the proven-stable `[MIN, MAX]`) is
-    /// unconstructible at the call site (§16(b)(i)). The mutex is held across the
-    /// write so the coupled `(tokens, last_refill)` over-grant invariant stays
-    /// intact: we re-sample the monotonic clock and re-run `refill_locked` with the
-    /// NEW rate BEFORE any subsequent acquire sees it, so no acquire can observe a
-    /// stale `last_refill` against the new rate (which would over-grant).
-    pub fn set_refill_rate(&mut self, r: crate::autonomic::BoundedRate) {
-        let now = Instant::now();
-        let mut inner = self.inner.lock().unwrap_or_else(|e| e.into_inner());
-        // Re-fill under the OLD rate rule up to `now`, then install the NEW rate.
-        // Holding the lock the whole time means no concurrent `try_acquire` can
-        // observe the new `refill_rate` with a `last_refill` from before `now`.
-        self.refill_locked(&mut inner, now);
-        // SAFETY/invariant: `BoundedRate` is unconstructible outside [MIN, MAX], so
-        // this assignment can never push the rate past the proven-stable bound.
-        self.refill_rate = r.get();
-    }
+/// Bounded refill-rate reconfiguration via [`TokenBucket`] stamped with the kernel clock.
+pub fn token_bucket_set_refill_rate(b: &mut TokenBucket, r: crate::autonomic::BoundedRate) {
+    b.set_refill_rate(r, crate::clock::now_ns())
 }
-
-/// Pure GCRA (Generic Cell Rate Algorithm) transition — item 8's decision package, the ONLY
-/// function the Kani proofs below reason about. Integer nanoseconds throughout: NO `f64`
-/// anywhere in this signature or body (item 7's inherited design requirement, `BLUEPRINT-
-/// ITEM-07-kani-wiring-2026-07-19.md` §5). The rejected bench prototype (`benches/contention.rs`
-/// `GcraBucket::try_acquire`) computed `limit = now as f64 + burst_nanos` and compared
-/// `new_tat as f64 > limit` — a CBMC cost-cliff AND a rounding-determinism hazard once `now_ns`
-/// exceeds f64's exact-integer range (2^53 ns ≈ 104 days of process uptime, well within a
-/// long-lived kernel's lifetime). This version compares `u64` to `u64` throughout.
-///
-/// `now_ns`/`tat_ns` are nanoseconds on some fixed monotonic base; `cost_ns` is this request's
-/// cost (tokens × nanos-per-token, converted ONCE by the caller — see [`GcraTokenBucket`]);
-/// `burst_ns` is the burst allowance (capacity × nanos-per-token). Returns the new TAT to store
-/// on grant, `None` on deny.
-///
-/// Total (never panics) and degrade-closed: any addition that would overflow `u64` is treated
-/// as "exceeds the burst limit" (`None`) via `checked_add`, never a wrapping/panicking result.
-// gcra_decide (pure integer GCRA) + GcraTokenBucket (lock-free, AtomicU64) — re-exported
-// from the no_std core. The std stamping free functions below inject `crate::clock::now_ns()`.
-pub use dowiz_core::token_bucket::{gcra_decide, GcraTokenBucket};
 
 /// Grant via [`GcraTokenBucket`] stamped with the kernel's monotonic clock.
 pub fn gcra_try_acquire(b: &GcraTokenBucket, n: f64) -> bool {
@@ -187,12 +43,12 @@ mod tests {
     #[test]
     fn token_bucket_grants_within_capacity() {
         let b = TokenBucket::new(10.0, 1.0);
-        assert!(b.try_acquire(3.0));
-        assert!(b.try_acquire(3.0));
-        assert!(b.try_acquire(3.0));
+        assert!(token_bucket_try_acquire(&b, 3.0));
+        assert!(token_bucket_try_acquire(&b, 3.0));
+        assert!(token_bucket_try_acquire(&b, 3.0));
         // Only ~1 token left (refill over these µs is negligible) → 4th grant of 3.0 refused.
         assert!(
-            !b.try_acquire(3.0),
+            !token_bucket_try_acquire(&b, 3.0),
             "4th acquire of 3.0 must fail with ~1 token left"
         );
     }
@@ -200,11 +56,11 @@ mod tests {
     #[test]
     fn token_bucket_refills_over_time() {
         let b = TokenBucket::new(1.0, 100.0); // 100 tokens/sec
-        assert!(b.try_acquire(1.0), "first acquire drains the full bucket");
-        assert!(!b.try_acquire(1.0), "bucket empty → refuse");
+        assert!(token_bucket_try_acquire(&b, 1.0), "first acquire drains the full bucket");
+        assert!(!token_bucket_try_acquire(&b, 1.0), "bucket empty → refuse");
         std::thread::sleep(Duration::from_millis(20)); // ~2 tokens refilled, capped at capacity=1
         assert!(
-            b.try_acquire(1.0),
+            token_bucket_try_acquire(&b, 1.0),
             "after ~20ms refill, one token granted again"
         );
     }
@@ -219,7 +75,7 @@ mod tests {
         let t0 = Instant::now();
         let mut granted = 0.0f64;
         for _ in 0..5000 {
-            if b.try_acquire(unit) {
+            if token_bucket_try_acquire(&b, unit) {
                 granted += unit;
             }
         }
@@ -282,9 +138,9 @@ mod tests {
             // Every ~500 steps, reconfigure the rate through the bounded setter.
             if i % 500 == 0 && i > 0 {
                 rate = if rate == 50.0 { 25.0 } else { 50.0 };
-                b.set_refill_rate(BoundedRate::from_f64(rate));
+                token_bucket_set_refill_rate(&mut b, BoundedRate::from_f64(rate));
             }
-            if b.try_acquire(unit) {
+            if token_bucket_try_acquire(&b, unit) {
                 granted += unit;
             }
         }
