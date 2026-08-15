@@ -19,6 +19,8 @@
 use crate::catalog::{CatalogError, PriceCatalog};
 use crate::kalman::KalmanFilter;
 use alloc::collections::BTreeMap;
+use alloc::string::String;
+use alloc::vec::Vec;
 use crate::money::{
     apply_tax, assert_non_negative, ledger_append, ledger_sum, reverse_transfer, Currency,
     EntryKind, LedgerEntry, Money,
@@ -173,15 +175,8 @@ pub fn place_order(
     channel: Option<String>,
     cash_pay_with: Option<String>,
 ) -> Result<Order, TransitionError> {
-    let _span = crate::fdr::info_span!(
-        "place_order",
-        id = %id,
-        n_items = items.len(),
-        channel = ?channel
-    )
-    .entered();
     let subtotal = Order::compute_subtotal(&items).map_err(TransitionError::Invalid)?;
-    crate::fdr::debug!(subtotal_cents = subtotal, "order subtotal computed");
+    crate::fdr::emit_event(crate::fdr::Level::Debug, "order subtotal computed", &[("subtotal_cents", format!("{}", subtotal))]);
     Ok(Order {
         id,
         customer_id,
@@ -217,13 +212,6 @@ pub fn place_order_priced(
     cash_pay_with: Option<String>,
     catalog: &PriceCatalog,
 ) -> Result<Order, TransitionError> {
-    let _span = crate::fdr::info_span!(
-        "place_order_priced",
-        id = %id,
-        n_items = items.len(),
-        channel = ?channel
-    )
-    .entered();
     // Re-derive every line price from the trusted catalog (ignore caller value).
     // `vendor_id` is preserved from the input item, which a trusted caller builds
     // from a `PriceableLeaf` (the catalog-authoritative source — P62 §4.4). The
@@ -237,10 +225,7 @@ pub fn place_order_priced(
         it.unit_price = trusted;
     }
     let subtotal = Order::compute_subtotal(&items).map_err(TransitionError::Invalid)?;
-    crate::fdr::debug!(
-        subtotal_cents = subtotal,
-        "order subtotal (catalog-authoritative)"
-    );
+    crate::fdr::emit_event(crate::fdr::Level::Debug, "order subtotal (catalog-authoritative)", &[("subtotal_cents", format!("{}", subtotal))]);
     Ok(Order {
         id,
         customer_id,

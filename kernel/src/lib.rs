@@ -70,7 +70,7 @@ pub mod core_pinning;
 /// (retrieval-blueprint v2 diffusion/recall primitive). Extracted to no_std
 /// `dowiz-core`; `crate::csr::Csr` resolves unchanged through this re-export.
 pub use dowiz_core::csr;
-pub mod domain;
+pub use dowiz_core::domain;
 /// Foster-Lyapunov entropy budget, T-annealing, and BRANCH-dispersion detector
 /// for the hydra's closed-loop self-evolution control.
 pub use dowiz_core::entropy_budget;
