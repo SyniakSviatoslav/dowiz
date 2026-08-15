@@ -23,6 +23,7 @@ extern crate std;
 #[macro_use]
 extern crate alloc;
 
+pub mod academy_store;
 pub mod arena;
 pub mod complex;
 pub mod constants;
