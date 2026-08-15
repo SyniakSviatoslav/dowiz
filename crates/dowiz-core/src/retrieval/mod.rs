@@ -7,6 +7,7 @@
 //! (`bm25`, `ppr`, `diffusion`, `recall`, `memory_store`, `spine`) stay in the
 //! kernel shim.
 
+pub mod bm25;
 pub mod diffusion;
 pub mod fixtures;
 pub mod index;
