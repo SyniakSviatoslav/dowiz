@@ -61,7 +61,7 @@ pub mod causal;
 pub use dowiz_core::cgraph;
 /// B4 — deterministic content-defined chunker (Buzhash) for the native Rust
 /// backup organ: content-addressed blocks that dedup across small edits.
-pub mod chunker;
+pub use dowiz_core::chunker;
 /// Item 64 — capability-secure declarative composition root (production wiring of
 /// the durable store). The single NON-test site that constructs `FileEventStore`.
 pub mod compose;
@@ -169,7 +169,7 @@ pub mod mesh;
 /// reference only (not a dependency) on bebop2's `proto-wire/sync_pull.rs`
 /// per the 2026-07-19 zero-dep mesh ruling — see module header for the split
 /// with `crate::mesh`'s signing and `mesh-adapter`'s transport anti-scope.
-pub mod mesh_replication;
+pub use dowiz_core::mesh_replication;
 /// P08 typed local-observability core — the pure-std, no-network, no-signing
 /// HALF: typed-metrics schema + closed `LogEvent` enum (§2/§3) and the
 /// claim-latency anomaly detector (§4). F40 ML-DSA signed envelope DEFERRED
@@ -228,7 +228,7 @@ pub use dowiz_core::tensor;
 /// clustering coefficient, graph energy, similarity graphs from distance
 /// matrices, and temporal graphs from observation sequences. Reuses
 /// `crate::spectral` (eigendecomposition) and `crate::csr` (sparse CSR).
-pub mod spectral_graph;
+pub use dowiz_core::spectral_graph;
 /// Lightweight topic-based pub/sub gossip bus for inter-module data
 /// propagation. Inspired by `crate::mesh::GossipImport`'s fan-out, without
 /// PQ signing overhead. Used for fast telemetry, prediction, and state-change
@@ -243,7 +243,7 @@ pub use dowiz_core::resonance;
 /// tunnels (dedicated high-throughput channels). Provides fast bypass
 /// paths for critical data when normal gossip/queuing adds unacceptable
 /// latency, plus failover recovery snapshots.
-pub mod channel;
+pub use dowiz_core::channel;
 /// Three-phase verification pattern: Prepare → Verify → Acknowledge.
 /// Each operation cycle goes through sanitization, cross-check against
 /// invariants, and output validation. Designed for unstable/distrusted
@@ -514,7 +514,7 @@ pub mod self_reproduce;
 /// Full hypergraph data structure: vertices connected by hyperedges (any cardinality).
 /// Incidence matrix, Laplacian, spectral embedding, vertex centrality.
 /// Used for mesh topology, skill dependencies, citation networks.
-pub mod hypergraph;
+pub use dowiz_core::hypergraph;
 /// P2P distribution network: peers → parallel chunk download → merge.
 /// Аналогічна логіка рекурсивного пошуку, але для завантаження даних.
 /// Gated behind `feature = "speculative"` — 5224 lines of speculative
@@ -563,7 +563,7 @@ pub use dowiz_core::trading_intent;
 pub use dowiz_core::trading_escrow;
 /// P2P direct delivery — no intermediaries, no central platform.
 /// Pure peer-to-peer delivery routing with cryptographic proof.
-pub mod p2p_delivery;
+pub use dowiz_core::p2p_delivery;
 /// Cooperation Protocol — atomic bridge between P2P trading and P2P delivery.
 /// Trade settlement triggers delivery; delivery confirmation releases funds.
 pub mod cooperation_protocol;
@@ -742,7 +742,7 @@ pub use dowiz_core::support;
 /// Gradient boosting with regression stumps (item #15).
 pub use dowiz_core::gboost;
 /// Canonical (order-independent) JSON for LLM prompt-cache prefix stability.
-pub mod canonical;
+pub use dowiz_core::canonical;
 /// aarch64 NEON register-file kernels (f64 dot / matvec) for eigen/tensor/attention.
 pub use dowiz_core::neon;
 /// Deterministic, no_std-ready FxHash (replaces BTreeMap's OS-entropy RandomState).
