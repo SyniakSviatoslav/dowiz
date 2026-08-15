@@ -442,7 +442,7 @@ pub use dowiz_core::clock_stabilizer;
 /// Kernel-native tool/skill/agent orchestrator — central hub for all action routing,
 /// parallel dispatch, health monitoring, load prediction, and audit trails. No grep,
 /// no scripts — everything through Rust structs and SHA3-256 verified state transitions.
-pub mod agent_orchestrator;
+pub use dowiz_core::agent_orchestrator;
 pub use dowiz_core::orchestrator;
 /// Kernel-native hex encode/decode primitive — single canonical implementation
 /// replacing 6+ redundant hand-rolled versions across the codebase.

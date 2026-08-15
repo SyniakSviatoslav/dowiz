@@ -182,6 +182,7 @@ pub mod token_bucket;
 pub mod kthread;
 pub mod core_pinning;
 pub mod prompt_enrich;
+pub mod agent_orchestrator;
 pub mod kprocess;
 
 // --- wave 6: batch-5 leaves (analytics / stats) ---

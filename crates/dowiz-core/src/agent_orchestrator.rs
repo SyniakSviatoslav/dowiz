@@ -2,7 +2,9 @@ use crate::delta::{DeltaComparison, DeltaTracker};
 use crate::pid::PidController;
 use crate::telemetry_harvest::HarvestLedger;
 use crate::trinary::Tri;
-use std::collections::{BTreeMap, VecDeque};
+use alloc::collections::{BTreeMap, VecDeque};
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AgentClass {
@@ -200,7 +202,7 @@ pub struct WaveOrchestrator {
 
 impl WaveOrchestrator {
     pub fn new() -> Self {
-        let n_cores = crate::cpuid::detect().cores.max(1);
+        let n_cores = crate::kthread::available_parallelism().max(1);
         Self {
             pending: VecDeque::new(),
             oracle: TaskOracle::new(),
