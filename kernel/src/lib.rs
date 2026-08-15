@@ -29,14 +29,14 @@ pub mod pq;
 
 /// Reverse-engineering loop #R3 — absorbing Markov chain closed forms: fundamental matrix
 /// N=(I−Q)⁻¹ (exact finite sum for the DAG lifecycle), expected steps-to-terminal, absorption probs.
-pub use dowiz_core::absorbing;
+pub mod absorbing;
 pub mod analytics;
 /// P11 §7 — CorePinning trait seam (Trait-as-Port): pluggable CPU-core-affinity
 /// port with a zero-cost `NoOpCorePinning` default (NUMA crate DECART-deferred).
 pub mod arena;
 /// C-tier "attention lens": scaled dot-product attention as one learned-affinity
 /// diffusion step — same f(L) family as markov PPR / heat-kernel.
-pub use dowiz_core::attention;
+pub mod attention;
 /// B4 — native content-addressed backup organ: chunk (via `chunker`) → store
 /// unique blocks by sha3_256 id → restore byte-identically from a manifest.
 /// Dedups across small edits; fail-closed restore. Pure-Rust, no new deps.
@@ -45,7 +45,7 @@ pub mod blocklist;
 pub mod bounded_drainer;
 /// P11 §1 — compute budget accumulator (degrade-closed, zero-dep) + §4 Modal
 /// `JobPort` / `BudgetedJobPort` seam (offline-err default; real adapter deferred).
-pub use dowiz_core::budget;
+pub mod budget;
 /// RW-07 — cart state machine (consolidate 2 JS cart impls → kernel authority). Totals via money.
 pub use dowiz_core::cart;
 /// M1/M2 — trusted price catalog: the single kernel authority on line-item prices.
@@ -58,10 +58,10 @@ pub mod causal;
 /// bidirected arcs) — the structural backbone of the ID / IDC identification
 /// algorithms: ancestors, descendants, c-components, bidirected-aware
 /// d-separation, and the `G\X` / `G[V]` subgraph algebra.
-pub use dowiz_core::cgraph;
+pub mod cgraph;
 /// B4 — deterministic content-defined chunker (Buzhash) for the native Rust
 /// backup organ: content-addressed blocks that dedup across small edits.
-pub use dowiz_core::chunker;
+pub mod chunker;
 /// Item 64 — capability-secure declarative composition root (production wiring of
 /// the durable store). The single NON-test site that constructs `FileEventStore`.
 pub mod compose;
@@ -77,7 +77,7 @@ pub use dowiz_core::entropy_budget;
 /// P04 product-math: Disjoint-Set Union (union-find) + Kruskal MST — the single
 /// canonical DSU/MST primitive. `cgraph::c_components` delegates here; Phase 9
 /// mesh-heal + Phase 13 partition-tolerant delivery consume it directly.
-pub use dowiz_core::dsu;
+pub mod dsu;
 /// MESH-06 — per-node content-addressed event-log (local-first + sync).
 pub use dowiz_core::event_log;
 /// `fdr` — the kernel's flight-data recorder: hand-rolled logger + durable post-mortem
@@ -96,7 +96,7 @@ pub use dowiz_core::geo;
 /// here so the CANONICAL kernel and the agent-kernel share ONE graph-math
 /// vocabulary (unify-the-kernels directive). Parity-gated vs the agent-kernel
 /// reference in `harmonic::tests::parity_with_agent_kernel_reference`.
-pub use dowiz_core::harmonic;
+pub mod harmonic;
 /// Householder QR + shifted-QR eigensolver (the dense-`n×n` "Ferrari"): all
 /// eigenvalues, real + complex, stack-only for n ≤ 32 (no heap; FMA inner
 /// product). Replaces the O(n⁴) Faddeev-LeVerrier path as the default for the
@@ -122,13 +122,13 @@ pub mod hydra;
 pub mod hydra_closed_loop;
 /// C-tier "impedance lens": circuit/impedance as a resource framework — flow
 /// reflection coefficient + backpressure gate (ρ<1 with margin, not power-match).
-pub use dowiz_core::impedance;
+pub mod impedance;
 /// BLUEPRINT-E1 — discrete gradient/divergence (oriented-edge incidence) and the
 /// CANONICAL reference Laplacian `L = BᵀWB` (+(D−A) convention). The small
 /// hand-oracle-tested reference every other Laplacian (dense/CSR/grid-stencil) is
 /// parity-bound against; retires the last unpinned mirror at the kernel↔engine seam.
-pub use dowiz_core::incidence;
-pub use dowiz_core::intake;
+pub mod incidence;
+pub mod intake;
 pub mod isolation;
 /// Item 11 (space-grade roadmap §E, Phase-1 code): ARINC-653-style two-level
 /// partitioning scheduler. Temporal partitioning (fixed cyclic major frame of
@@ -169,12 +169,12 @@ pub mod mesh;
 /// reference only (not a dependency) on bebop2's `proto-wire/sync_pull.rs`
 /// per the 2026-07-19 zero-dep mesh ruling — see module header for the split
 /// with `crate::mesh`'s signing and `mesh-adapter`'s transport anti-scope.
-pub use dowiz_core::mesh_replication;
+pub mod mesh_replication;
 /// P08 typed local-observability core — the pure-std, no-network, no-signing
 /// HALF: typed-metrics schema + closed `LogEvent` enum (§2/§3) and the
 /// claim-latency anomaly detector (§4). F40 ML-DSA signed envelope DEFERRED
 /// pending bebop2 C4b — see `metrics.rs` header. Fail-closed local sink.
-pub use dowiz_core::metrics;
+pub mod metrics;
 /// Item 52 (space-grade roadmap §J): planted-fault self-test for the `miri-gate`.
 /// Compiled under `cfg(test)` (so a plain `cargo test` proves it compiles and runs
 /// the no-op native branch — zero footprint in any non-test/shipping build) AND
@@ -195,7 +195,7 @@ pub use dowiz_core::rng;
 /// cache hit-rate regulation, mesh backpressure, and real-time state consequence
 /// prediction. Provides scalar f64 (`PidController`), quantized f32
 /// (`PidController32`), and vectorized N-channel (`PidArray`) variants.
-pub use dowiz_core::pid;
+pub mod pid;
 /// Stability margin computation for PID controllers — gain margin (dB) and phase
 /// margin (degrees) from the discrete-time transfer function. Aid for closed-loop
 /// stability analysis without external tooling.
@@ -228,7 +228,7 @@ pub use dowiz_core::tensor;
 /// clustering coefficient, graph energy, similarity graphs from distance
 /// matrices, and temporal graphs from observation sequences. Reuses
 /// `crate::spectral` (eigendecomposition) and `crate::csr` (sparse CSR).
-pub use dowiz_core::spectral_graph;
+pub mod spectral_graph;
 /// Lightweight topic-based pub/sub gossip bus for inter-module data
 /// propagation. Inspired by `crate::mesh::GossipImport`'s fan-out, without
 /// PQ signing overhead. Used for fast telemetry, prediction, and state-change
@@ -238,17 +238,17 @@ pub mod gossip;
 /// identifying oscillatory behavior in time-series metrics (frame-time
 /// oscillations, cache hit-rate cycles, traffic bursts). Includes moving
 /// average filter and helper detection function.
-pub use dowiz_core::resonance;
+pub mod resonance;
 /// Last-healthy-state propagation, wormholes (direct urgent lanes), and
 /// tunnels (dedicated high-throughput channels). Provides fast bypass
 /// paths for critical data when normal gossip/queuing adds unacceptable
 /// latency, plus failover recovery snapshots.
-pub use dowiz_core::channel;
+pub mod channel;
 /// Three-phase verification pattern: Prepare → Verify → Acknowledge.
 /// Each operation cycle goes through sanitization, cross-check against
 /// invariants, and output validation. Designed for unstable/distrusted
 /// environments where inputs may be corrupted, delayed, or spoofed.
-pub use dowiz_core::three_phase;
+pub mod three_phase;
 /// Comprehensive error tracking, deterministic event log, telemetry
 /// collection, reverse replay (time-travel state reconstruction), and
 /// inverse simulation (infer inputs from observed outputs). Provides
@@ -291,7 +291,7 @@ pub use dowiz_core::spine;
 /// ack / reclaim). The I/O + drainer adapter lives outside the kernel
 /// (pure-std firewall); this owns the Verified-by-Math transitions. Reused by
 /// every async subsystem (reporting, governance, mesh sync).
-pub use dowiz_core::spool;
+pub mod spool;
 /// E2 — the kernel's single uncertainty primitive: mean SE / normal & Wilson
 /// intervals / the relocated CLT convergence envelope / a seeded bootstrap.
 /// Zero-dep leaf (sibling of `rng`/`money`/`noether`); every layer depends on it
@@ -353,7 +353,7 @@ pub mod determinism;
 /// A2 (BLUEPRINT-P-A §3.1) — generated kernel "organs" committed from eqc-rs.
 /// Each fn is emitted by `tools/eqc-rs/src/bin/gen_kernel_organs.rs`; verify
 /// against the hand-written law with a bit-parity `#[test]`.
-pub use dowiz_core::eqc_gen;
+pub mod eqc_gen;
 /// E1 — verifiable-cognition benchmark generator: metamorphic MR items with
 /// kernel-primitive oracles, deterministic mint-log leakage gate, and
 /// calibration metrics (ECE/Brier/AURC). Pure-offline, zero-dep.
@@ -368,7 +368,7 @@ pub mod evals;
 /// the sign/domain with the field stencil's `−(D−A)` operator. The 3-path
 /// (modal / DCT / stencil) verdict bench lives in `kernel/benches/criterion.rs`
 /// under the `field_eigen/` group and is reported in `docs/p89-verdict.md`.
-pub use dowiz_core::field_eigenmodes;
+pub mod field_eigenmodes;
 /// §H toy-pilot inference arc (BLUEPRINT-ITEM-34/35/37/38/39/40/41/42/43/44) — a
 /// quantized, constant-time-gated, golden-checksum-guarded toy neural-network
 /// classifier. Always compiled (so the `None`-path / reject-path is always
@@ -395,14 +395,14 @@ pub use dowiz_core::mat;
 /// included. SHA-NI accelerates SHA-1 and SHA-256 (NOT SHA3/Keccak).
 pub use dowiz_core::sha256_hw;
 /// RW-08 — messenger deep-link builders (pure string logic → kernel authority).
-pub use dowiz_core::messenger;
+pub mod messenger;
 /// Reverse-mode automatic differentiation (scalar tape engine) — the
 /// kernel-side fitting primitive (Tier B2: capture-field SIREN/splat fits).
-pub use dowiz_core::micrograd;
-pub use dowiz_core::money;
+pub mod micrograd;
+pub mod money;
 /// P9 / C-tier "invariance note": executable Noether check — verify a conserved
 /// quantity survives a deterministic update (catches self-improvement drift).
-pub use dowiz_core::noether;
+pub mod noether;
 /// B3 — deterministic offline-on-node online learner (LinearSGD ridge +
 /// ScalarAdam), the self-adaptation substrate (E3). Local-first: no network.
 pub use dowiz_core::online;
@@ -415,8 +415,8 @@ pub use dowiz_core::online;
 /// graph, mirroring `pq/entropy.rs`'s opt-in network provider. Absent local
 /// weights, the codec returns `Err(OpticalError::ModelUnavailable)`.
 #[cfg(feature = "optical")]
-pub use dowiz_core::optical;
-pub mod order_machine;
+pub mod optical;
+pub use dowiz_core::order_machine;
 /// Kernel-native structured data extraction (pure `std`). Replaces `awk`,
 /// `split('=')`, and `node -e JSON.parse` with deterministic, zero-dep parsers.
 pub use dowiz_core::parse;
@@ -428,7 +428,7 @@ pub mod memory_search;
 pub mod predict;
 /// Decentralized mesh swarm coordinator — task decomposition via DSU, executor
 /// selection via harmonic ranking, dynamic adaptation via spectral/Markov prediction.
-pub use dowiz_core::swarm;
+pub mod swarm;
 /// Structural enforcement of the mandatory agent workflow sequence
 /// (research -> synthesis -> critique -> plan -> critique -> work -> verify -> critique -> commit).
 /// Typed state machine: phases complete in strict order, no skipping, no repeats.
@@ -446,13 +446,13 @@ pub mod agent_orchestrator;
 pub mod orchestrator;
 /// Kernel-native hex encode/decode primitive — single canonical implementation
 /// replacing 6+ redundant hand-rolled versions across the codebase.
-pub use dowiz_core::hex_util;
+pub mod hex_util;
 /// Kernel-native reverse engineering — ELF parsing, x86_64 syscall extraction,
 /// behavior profiling, and binary analysis. All pure Rust, zero deps.
 pub use dowiz_core::reverse_engineer;
 /// Anti-detect browser configuration and zero-trace policy for parse operations.
 /// Pure data structures: kernel = no browser/network, this defines HOW to parse.
-pub use dowiz_core::agent_browser;
+pub mod agent_browser;
 /// PID-controlled dynamic agent spawn batching with prediction cache.
 /// Adjusts parallelism based on real-time latency measurements.
 pub mod dynamic_spawner;
@@ -473,7 +473,7 @@ pub mod skill_extractor;
 pub mod visual_index;
 /// Supervision native: universal detection format + NMS/NMM + zone analysis.
 /// Model-agnostic detection container, polygon/line zone counting.
-pub use dowiz_core::detection;
+pub mod detection;
 /// Automatic gap detection, enrichment, and correction for the prompt database.
 /// Monitors the enrichment engine: detects triggerless entries, low-count kinds,
 /// and empty text, then auto-heals via crystal-lattice synthesis and keyword extraction.
@@ -484,7 +484,7 @@ pub mod self_heal;
 pub use dowiz_core::self_harness;
 /// Reverse-engineered parsing patterns from top GitHub repos (1,302 parsing tools,
 /// 461 top repos, 43M+ combined stars). Integrates Rust-native parsing insights.
-pub use dowiz_core::github_patterns;
+pub mod github_patterns;
 /// Thunder parsing: tensor-accelerated paper extraction with vector geometry
 /// navigation. Papers stored as 256D vectors in CSR matrix, O(1) nearest-neighbor
 /// via spectral decomposition. FanOut parallelism across tensor dimensions.
@@ -495,7 +495,7 @@ pub mod spectral_parser;
 /// Parametric Surface Spectral Library: papers projected onto 2D parametric
 /// surface via top-2 eigenvectors. Each paper = SPIN at (u,v) on surface.
 /// Grid-based navigation: O(1) cell lookup, ~32MB for 1M papers.
-pub use dowiz_core::parametric_spectral;
+pub mod parametric_spectral;
 /// Академія Дмитра Євдокимова — quantized spectral library with P2P sync.
 /// Hash-only paper storage (32B/paper), bloom filter sync, snapshot serialization.
 pub mod academia;
@@ -510,11 +510,11 @@ pub mod mesh_oracle;
 /// Kernel-native self-reproduction: inspect own source, analyze structure,
 /// derive artifacts (tests, diagnostics, docs), verify integrity.
 /// Replaces the conceptual gap where self-reproduction was described but not coded.
-pub use dowiz_core::self_reproduce;
+pub mod self_reproduce;
 /// Full hypergraph data structure: vertices connected by hyperedges (any cardinality).
 /// Incidence matrix, Laplacian, spectral embedding, vertex centrality.
 /// Used for mesh topology, skill dependencies, citation networks.
-pub use dowiz_core::hypergraph;
+pub mod hypergraph;
 /// P2P distribution network: peers → parallel chunk download → merge.
 /// Аналогічна логіка рекурсивного пошуку, але для завантаження даних.
 /// Gated behind `feature = "speculative"` — 5224 lines of speculative
@@ -563,14 +563,14 @@ pub use dowiz_core::trading_intent;
 pub use dowiz_core::trading_escrow;
 /// P2P direct delivery — no intermediaries, no central platform.
 /// Pure peer-to-peer delivery routing with cryptographic proof.
-pub use dowiz_core::p2p_delivery;
+pub mod p2p_delivery;
 /// Cooperation Protocol — atomic bridge between P2P trading and P2P delivery.
 /// Trade settlement triggers delivery; delivery confirmation releases funds.
-pub use dowiz_core::cooperation_protocol;
+pub mod cooperation_protocol;
 /// Research paper knowledge extraction and pattern analysis engine.
 /// Pure data structures for ingesting, pattern-extracting, and cross-pattern
 /// analysis of research papers from arXiv / Semantic Scholar / OpenAlex.
-pub use dowiz_core::research;
+pub mod research;
 /// Compact ASCII library for research papers — content-addressed, deduplicated,
 /// non-ASCII stripped. Each paper stored as one line (unit-separator delimited).
 /// ~20MB for 100K papers vs ~200MB in JSON (10x compression).
@@ -608,7 +608,7 @@ pub mod ports;
 /// from raw HTML (the fetch itself stays in `agent-facade`, this crate remains
 /// network-free). Reimplements the core Mozilla-Readability mechanism natively;
 /// explicitly NOT a browser — zero JS execution, that stays an external tool.
-pub use dowiz_core::readability;
+pub mod readability;
 /// P38 O18a — graphics unlock. Feature-gated GPU render backend (presentation
 /// only; the kernel remains the bit-deterministic state authority). Compiles to
 /// NOTHING without the `gpu` feature; behind it, a REAL headless wgpu bring-up.
@@ -637,7 +637,7 @@ pub use dowiz_core::spectral_cache;
 pub use dowiz_core::spectral_laplacian;
 /// Self-improvement loop: recurring-pattern surface over the tool-outcome
 /// token stream (W19 — consumes `trigram` into the loop's telemetry path).
-pub use dowiz_core::telemetry;
+pub mod telemetry;
 /// Deterministic, zero-dep harvest ledger — gov_route-compatible telemetry
 /// records for every hot path. `HarvestLedger` is the EV-scoring ring buffer;
 /// every new capability MUST be probe-able through it.
@@ -648,7 +648,7 @@ pub use dowiz_core::spinlock;
 pub mod token_bucket;
 /// Deterministic n-gram (bigram + trigram) frequency extraction over a token
 /// stream — the self-improvement loop's pattern-surface primitive (P9 / T2-β).
-pub use dowiz_core::trigram;
+pub mod trigram;
 /// Light multilingual stemmer (EN/UK/RU) — zero-dep suffix stripping for
 /// inflected-language recall in BM25/trigram retrieval. Normalizes cases,
 /// conjugations, and plurals to a common root. (Extracted into dowiz-core;
@@ -710,7 +710,7 @@ pub use dowiz_core::math;
 pub use dowiz_core::hypervector;
 /// Pixel-format snapshot rendering (braille/half-block) — dense glyph grids
 /// so raw bytes can be "seen" in far fewer tokens than hex/raw text.
-pub use dowiz_core::pixel_snapshot;
+pub mod pixel_snapshot;
 /// Glyph-enhanced observability dashboard — sparkline/heatmap/scatter/braille
 /// bridge between pixel_snapshot and sys_dashboard/telemetry/fdr/event_log.
 pub use dowiz_core::glyph_dashboard;
@@ -730,25 +730,25 @@ pub use dowiz_core::modular;
 /// Fine-grained reactive signals (item #12).
 pub mod signal;
 /// Minimal clean semantic HTML emitter — "no div soup" (item #3).
-pub use dowiz_core::semantic;
+pub mod semantic;
 /// Procedural pattern generators rendered as glyphs (item #18).
 pub use dowiz_core::weave;
 /// Geometric landmark/keypoint primitives + Procrustes alignment (item #10).
-pub use dowiz_core::landmark;
+pub mod landmark;
 /// Deterministic scenario record/replay/resume + secret redaction (item #2 substrate).
-pub use dowiz_core::scenario;
+pub mod scenario;
 /// Support-ticket lifecycle FSM + conversation thread (item #13).
 pub use dowiz_core::support;
 /// Gradient boosting with regression stumps (item #15).
 pub use dowiz_core::gboost;
 /// Canonical (order-independent) JSON for LLM prompt-cache prefix stability.
-pub use dowiz_core::canonical;
+pub mod canonical;
 /// aarch64 NEON register-file kernels (f64 dot / matvec) for eigen/tensor/attention.
 pub use dowiz_core::neon;
 /// Deterministic, no_std-ready FxHash (replaces BTreeMap's OS-entropy RandomState).
 pub mod fxhash;
 /// Single-authority time abstraction (Clock/WallClock) — std::time seam for kernel port.
-pub mod clock;
+pub use dowiz_core::clock;
 /// Thread seam (ledger item 4: thread → kthread) — no_std-compatible
 /// [`crate::thread::Thread`] trait + `StdThread` impl + `sleep`/
 /// `available_parallelism` free functions. `spawn`/`scope` stay std (need a
@@ -798,17 +798,17 @@ pub mod openobserve;
 /// Memory-budgeted sparse MoE routing inspired by TurboFieldfare.
 pub mod turbofieldfare;
 /// Deterministic keyframe-to-interactive-motion pipeline inspired by Oil Motion.
-pub use dowiz_core::oil_motion;
+pub mod oil_motion;
 /// Spatial, tile-indexed collaborative reasoning canvas inspired by PenEcho.
-pub use dowiz_core::penecho;
+pub mod penecho;
 /// Lossless speculative block drafting and target verification inspired by DFlash.
-pub use dowiz_core::dflash;
+pub mod dflash;
 /// Tiny-device tool-calling agent state machine inspired by Needle 2.
-pub use dowiz_core::needle2;
+pub mod needle2;
 /// Local-first, auditable research workbench inspired by Open Science Desktop.
 pub mod open_science;
 /// Transport-neutral messaging/session core inspired by Evolution Go.
-pub use dowiz_core::evolution_go;
+pub mod evolution_go;
 /// Meta-tests (infrastructure self-check) + cross-tests (multi-module
 /// integration: trinary×eigen×chronos×delta×enrich full stack).
 #[cfg(test)]
@@ -820,10 +820,10 @@ mod cross_tests;
 pub mod typed_metrics;
 /// P62 / M1 — the intra-hub vendor partition identity (`VendorId`). The fan-out
 /// key for `catalog::validate_tree` / `domain::charge_legs` / `domain::kitchen_tickets`.
-pub use dowiz_core::vendor;
+pub mod vendor;
 /// C1 — verify-failure → retrieval-trigger: a claim check that, on failure,
 /// emits a bounded structured re-verify request (the "verify then learn" loop).
-pub use dowiz_core::verify_retrieval;
+pub mod verify_retrieval;
 /// WASM/JS bindings — the only place the kernel touches the browser boundary.
 /// Compiled ONLY under the `wasm` feature (see `#![cfg(feature = "wasm")]` in
 /// wasm.rs); native rlib builds exclude it and pull no wasm-bindgen/serde.

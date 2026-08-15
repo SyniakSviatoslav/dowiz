@@ -152,3 +152,5 @@ pub mod self_reproduce;
 pub mod three_phase;
 pub mod evolution_go;
 pub mod field_eigenmodes;
+pub mod clock;
+pub mod order_machine;
