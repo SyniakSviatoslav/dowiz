@@ -9,6 +9,9 @@
 //! - Strategy × Pipeline: index strategy adapts to dataset size
 //! - Fan-out × Observer: parallel tile search, results fused
 
+use alloc::collections::BTreeMap;
+use alloc::string::String;
+use alloc::vec::Vec;
 use crate::orchestrator::PidController;
 
 /// Tile dimensions (PixelRAG standard).
@@ -188,8 +191,8 @@ impl VisualIndex {
 fn cosine_distance(a: &[f32], b: &[f32]) -> f64 {
     if a.len() != b.len() || a.is_empty() { return 1.0; }
     let dot: f64 = a.iter().zip(b.iter()).map(|(x, y)| (*x as f64) * (*y as f64)).sum();
-    let mag_a: f64 = a.iter().map(|x| (*x as f64).powi(2)).sum::<f64>().sqrt();
-    let mag_b: f64 = b.iter().map(|x| (*x as f64).powi(2)).sum::<f64>().sqrt();
+    let mag_a: f64 = crate::math::sqrt(a.iter().map(|x| crate::math::powi(*x as f64, 2)).sum::<f64>());
+    let mag_b: f64 = crate::math::sqrt(b.iter().map(|x| crate::math::powi(*x as f64, 2)).sum::<f64>());
     if mag_a == 0.0 || mag_b == 0.0 { return 1.0; }
     1.0 - (dot / (mag_a * mag_b))
 }

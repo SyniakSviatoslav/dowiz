@@ -8,6 +8,9 @@
 //! - Cache × Observer: predictions cached, invalidated on new observations
 //! - Fan-out × PID: parallel chapter extraction, PID controls concurrency
 
+use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use crate::orchestrator::PidController;
 
 /// Maximum chapters per skill.

@@ -9,6 +9,8 @@
 //! - State machine × Pipeline: checkpoint/restart flows through verify → restore → resume
 //! - Fan-out × PID: workload distributed across executors, PID adjusts concurrency
 
+use alloc::string::String;
+use alloc::vec::Vec;
 use crate::orchestrator::PidController;
 use crate::TriState;
 

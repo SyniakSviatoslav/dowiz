@@ -16,6 +16,9 @@
 //! +-- ascii_dashboard() -> live diagnostics
 //! ```
 
+use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use crate::orchestrator::PidController;
 
 /// EMA alpha for search latency tracking.

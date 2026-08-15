@@ -12,6 +12,8 @@
 //! - Priority-aware: higher-priority tasks get more resources
 //! - All patterns compose: pipeline contains fan-outs, fan-in reads pipeline output
 
+use alloc::string::String;
+use alloc::vec::Vec;
 use crate::event_log::sha3_256;
 use crate::orchestrator::Priority;
 use crate::TriState;
@@ -72,7 +74,7 @@ impl FanOutPlan {
         let items_per_worker = (input_count + worker_count - 1) / worker_count;
         let parallel_us = items_per_worker as u64 * per_item_us;
         // Merge overhead: O(items_per_worker * log2(worker_count)).
-        let merge_us = (input_count as f64 * (worker_count as f64).log2().ceil() as f64) as u64;
+        let merge_us = (input_count as f64 * crate::math::ceil(crate::math::log2(worker_count as f64)) as f64) as u64;
 
         FanOutPlan {
             input_count,
@@ -548,7 +550,7 @@ impl BatchedFanOut {
             let batch = if i == worker_count - 1 {
                 total_items.saturating_sub(assigned)
             } else {
-                ((total_items as f64 * weight).round() as usize)
+                (crate::math::round(total_items as f64 * weight) as usize)
                     .min(total_items.saturating_sub(assigned))
             };
             assigned += batch;

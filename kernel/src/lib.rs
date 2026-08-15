@@ -455,22 +455,22 @@ pub use dowiz_core::reverse_engineer;
 pub mod agent_browser;
 /// PID-controlled dynamic agent spawn batching with prediction cache.
 /// Adjusts parallelism based on real-time latency measurements.
-pub mod dynamic_spawner;
+pub use dowiz_core::dynamic_spawner;
 /// PID-controlled dynamic action batch execution with worker pool.
 /// Per-category latency prediction, work-stealing, and ASCII dashboard.
-pub mod dynamic_actions;
+pub use dowiz_core::dynamic_actions;
 /// Indexed parallel search across multiple search indexes (BM25, trigram, spectral).
 /// Weighted fusion, PID-controlled parallelism, search result caching.
-pub mod parallel_search;
+pub use dowiz_core::parallel_search;
 /// Apollo-11 inspired priority task scheduler with checkpoint/restart.
 /// Priority levels, overload shedding, dependency gating, PID concurrency.
-pub mod agc_scheduler;
+pub use dowiz_core::agc_scheduler;
 /// Book-to-skill native: on-demand knowledge extraction from documents.
 /// Frameworks, decision rules, anti-patterns, per-chapter loading.
-pub mod skill_extractor;
+pub use dowiz_core::skill_extractor;
 /// PixelRAG native: visual tile indexing + IVF approximate nearest-neighbor search.
 /// Screenshot tile management, tile embedding coordination.
-pub mod visual_index;
+pub use dowiz_core::visual_index;
 /// Supervision native: universal detection format + NMS/NMM + zone analysis.
 /// Model-agnostic detection container, polygon/line zone counting.
 pub mod detection;
@@ -604,7 +604,7 @@ pub use dowiz_core::crypto_signer;
 pub mod proxy_redirect;
 /// Reusable parallel execution pattern library (fan-out/fan-in, pipeline,
 /// work-stealing, dynamic batch). Patterns produce execution plans, not threads.
-pub mod parallel_patterns;
+pub use dowiz_core::parallel_patterns;
 pub mod ports;
 /// P40 `ToolResource::WebFetch` — native, pure-`std` readable-text extraction
 /// from raw HTML (the fetch itself stays in `agent-facade`, this crate remains

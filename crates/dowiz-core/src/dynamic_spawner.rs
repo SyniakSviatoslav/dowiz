@@ -16,6 +16,8 @@
 //! +-- ascii_dashboard() -> live diagnostics
 //! ```
 
+use alloc::string::String;
+use alloc::vec::Vec;
 use crate::orchestrator::PidController;
 use crate::TriState;
 

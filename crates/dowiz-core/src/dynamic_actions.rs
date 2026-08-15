@@ -15,6 +15,9 @@
 //! +-- compute_batches() -> ExecutionPlan
 //! +-- ascii_dashboard() -> live diagnostics
 //! ```
+use alloc::collections::BTreeMap;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 use crate::orchestrator::{ActionCategory, PidController, Priority, ScheduledTask};
 use crate::TriState;
@@ -377,7 +380,7 @@ impl DynamicActionBatcher {
     fn predict_batch_latency(&self, tasks: &[ScheduledTask]) -> u64 {
         tasks.iter().map(|t| {
             self.category_latencies.get(&t.category)
-                .map(|(avg, var)| { let ci = 1.96 * var.sqrt(); (*avg + ci) as u64 })
+                .map(|(avg, var)| { let ci = 1.96 * crate::math::sqrt(*var); (*avg + ci) as u64 })
                 .unwrap_or(t.estimated_us)
         }).sum()
     }
