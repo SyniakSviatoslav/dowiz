@@ -148,7 +148,7 @@ impl AuditChain {
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(ring) = &self.ring {
             // Mirror as a Kind::Alarm FDR record (the breaker's trips are alarms).
-            let fdr_ev = crate::fdr::schema::FdrEvent::stamp(
+            let fdr_ev = crate::fdr::schema::fdr_event_stamp(
                 seq,
                 crate::fdr::Level::Info,
                 crate::fdr::schema::Kind::Alarm,

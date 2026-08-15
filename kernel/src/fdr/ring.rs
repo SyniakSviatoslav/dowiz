@@ -27,7 +27,7 @@ use std::path::{Path, PathBuf};
 
 use crate::vfs::{open_file, OpenMode, StdFile, VfsFile};
 
-use super::schema::{FdrEvent, Kind, StampPolicy};
+use super::schema::{fdr_event_stamp, FdrEvent, Kind, StampPolicy};
 use super::Level;
 
 /// Default per-segment cap (1 MiB) — bounded size, last-N-seconds retention.
@@ -128,7 +128,7 @@ impl FdrRing {
     /// how [`recover`] distinguishes a clean stop from a crash.
     pub fn clean_shutdown(&mut self) -> io::Result<()> {
         let seq = self.next_seq();
-        let ev = FdrEvent::stamp(
+        let ev = fdr_event_stamp(
             seq,
             Level::Info,
             Kind::CleanShutdown,
@@ -253,7 +253,7 @@ pub fn recover(dir: &Path) -> Recovery {
 /// into the durable `EventLog` is DEFERRED behind item 2's composition-root fix.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn emit_post_mortem(dir: &Path, rec: &Recovery) -> io::Result<()> {
-    let ev = FdrEvent::stamp(
+    let ev = fdr_event_stamp(
         0,
         Level::Warn,
         Kind::PostMortem,
@@ -314,7 +314,7 @@ mod tests {
             let mut ring = FdrRing::open(dir.clone(), DEFAULT_SEG_CAP).unwrap();
             for i in 0..50 {
                 let seq = ring.next_seq();
-                let ev = FdrEvent::stamp(
+                let ev = fdr_event_stamp(
                     seq,
                     Level::Info,
                     Kind::Event,
@@ -341,7 +341,7 @@ mod tests {
         {
             let mut ring = FdrRing::open(dir.clone(), DEFAULT_SEG_CAP).unwrap();
             let seq = ring.next_seq();
-            let ev = FdrEvent::stamp(
+            let ev = fdr_event_stamp(
                 seq,
                 Level::Info,
                 Kind::Event,
@@ -364,7 +364,7 @@ mod tests {
             let mut ring = FdrRing::open(dir.clone(), DEFAULT_SEG_CAP).unwrap();
             for i in 0..5 {
                 let seq = ring.next_seq();
-                let ev = FdrEvent::stamp(
+                let ev = fdr_event_stamp(
                     seq,
                     Level::Info,
                     Kind::Event,
@@ -397,7 +397,7 @@ mod tests {
         {
             let mut ring = FdrRing::open(dir.clone(), DEFAULT_SEG_CAP).unwrap();
             let seq = ring.next_seq();
-            let ev = FdrEvent::stamp(
+            let ev = fdr_event_stamp(
                 seq,
                 Level::Info,
                 Kind::Event,
@@ -427,7 +427,7 @@ mod tests {
             let mut ring = FdrRing::open(dir.clone(), 512).unwrap();
             for i in 0..40 {
                 let seq = ring.next_seq();
-                let ev = FdrEvent::stamp(
+                let ev = fdr_event_stamp(
                     seq,
                     Level::Info,
                     Kind::Event,

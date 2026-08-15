@@ -28,7 +28,7 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 use dowiz_kernel::decision::{Decision, DecisionRegistry, DecisionUnitMeta, DomainTag, UnitEpoch};
 use dowiz_kernel::event_log::{sha3_256, EventLog, MemEventStore, MeshEvent};
 use dowiz_kernel::fdr::ring::FdrRing;
-use dowiz_kernel::fdr::schema::{FdrEvent, Kind, StampPolicy};
+use dowiz_kernel::fdr::schema::{fdr_event_stamp, FdrEvent, Kind, StampPolicy};
 use dowiz_kernel::fdr::Level;
 use dowiz_kernel::hydra::FileEventStore;
 
@@ -138,7 +138,7 @@ fn m2_fdr_ring(c: &mut Criterion) {
         let mut ring = FdrRing::open(dir.join("normal"), 1 << 20).expect("open ring");
         b.iter(|| {
             let seq = ring.next_seq();
-            let ev = FdrEvent::stamp(
+            let ev = fdr_event_stamp(
                 seq,
                 Level::Info,
                 Kind::Event,
@@ -156,7 +156,7 @@ fn m2_fdr_ring(c: &mut Criterion) {
         let mut ring = FdrRing::open(dir.join("alarm"), 1 << 20).expect("open ring");
         b.iter(|| {
             let seq = ring.next_seq();
-            let ev = FdrEvent::stamp(
+            let ev = fdr_event_stamp(
                 seq,
                 Level::Error,
                 Kind::Alarm,
@@ -175,7 +175,7 @@ fn m2_fdr_ring(c: &mut Criterion) {
         let mut ring = FdrRing::open(dir.join("switch"), 64).expect("open ring");
         b.iter(|| {
             let seq = ring.next_seq();
-            let ev = FdrEvent::stamp(
+            let ev = fdr_event_stamp(
                 seq,
                 Level::Info,
                 Kind::Event,
@@ -204,7 +204,7 @@ fn m2_fdr_ring(c: &mut Criterion) {
                 for i in 0..BURST {
                     let seq = ring.next_seq();
                     let _ = i;
-                    let ev = FdrEvent::stamp(
+                    let ev = fdr_event_stamp(
                         seq,
                         Level::Info,
                         Kind::Event,

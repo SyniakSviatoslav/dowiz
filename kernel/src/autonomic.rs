@@ -243,7 +243,7 @@ impl FdrAdjustment {
     /// sink so it needs no `fdr::init`).
     #[cfg(not(target_arch = "wasm32"))]
     pub fn write_to_ring(&self, ring: &mut crate::fdr::ring::FdrRing) {
-        let ev = crate::fdr::schema::FdrEvent::stamp(
+        let ev = crate::fdr::schema::fdr_event_stamp(
             0,
             crate::fdr::Level::Info,
             crate::fdr::schema::Kind::Tuning,

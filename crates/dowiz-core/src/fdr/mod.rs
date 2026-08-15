@@ -13,6 +13,8 @@
 //! load with zero std.
 
 pub mod json;
+pub mod pmu;
+pub mod schema;
 
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};
 

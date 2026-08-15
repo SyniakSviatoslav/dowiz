@@ -19,7 +19,7 @@ use dowiz_kernel::decision::import::Source;
 use dowiz_kernel::decision::{Decision, DecisionRegistry, DecisionUnitMeta, DomainTag, UnitEpoch};
 use dowiz_kernel::event_log::{sha3_256, EventLog, MemEventStore, MeshEvent};
 use dowiz_kernel::fdr::ring::FdrRing;
-use dowiz_kernel::fdr::schema::{FdrEvent, Kind, StampPolicy};
+use dowiz_kernel::fdr::schema::{fdr_event_stamp, FdrEvent, Kind, StampPolicy};
 use dowiz_kernel::fdr::Level;
 use dowiz_kernel::hydra::FileEventStore;
 
@@ -139,7 +139,7 @@ fn m2_fdr_ring_percentiles() {
         let start = Instant::now();
         for _ in 0..N {
             let seq = ring.next_seq();
-            let ev = FdrEvent::stamp(
+            let ev = fdr_event_stamp(
                 seq,
                 Level::Info,
                 Kind::Event,
@@ -161,7 +161,7 @@ fn m2_fdr_ring_percentiles() {
         let start = Instant::now();
         for _ in 0..N {
             let seq = ring.next_seq();
-            let ev = FdrEvent::stamp(
+            let ev = fdr_event_stamp(
                 seq,
                 Level::Error,
                 Kind::Alarm,
@@ -183,7 +183,7 @@ fn m2_fdr_ring_percentiles() {
         let start = Instant::now();
         for _ in 0..N {
             let seq = ring.next_seq();
-            let ev = FdrEvent::stamp(
+            let ev = fdr_event_stamp(
                 seq,
                 Level::Info,
                 Kind::Event,

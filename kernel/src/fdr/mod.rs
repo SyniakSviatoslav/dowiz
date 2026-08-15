@@ -478,7 +478,7 @@ pub fn emit_shadow_divergence(
 
 #[cfg(not(target_arch = "wasm32"))]
 mod sink {
-    use super::schema::{FdrEvent, Kind, StampPolicy};
+    use super::schema::{fdr_event_stamp, FdrEvent, Kind, StampPolicy};
     use super::{ring, FdrConfig, Level};
     use std::io::Write;
     use core::sync::atomic::{AtomicU64, Ordering};
@@ -532,7 +532,7 @@ mod sink {
         let seq = next_seq(s);
         // Event-kind records use the CHEAP hw policy (blueprint §4.2 cost control — high
         // frequency; joules-per-span is a consumer delta over the alarm-class stamps).
-        let ev = FdrEvent::stamp(
+        let ev = fdr_event_stamp(
             seq,
             level,
             Kind::Event,
@@ -561,7 +561,7 @@ mod sink {
             None => return,
         };
         let seq = next_seq(s);
-        let mut ev = FdrEvent::stamp(
+        let mut ev = fdr_event_stamp(
             seq,
             Level::Info,
             Kind::Event,
@@ -628,7 +628,7 @@ mod sink {
                     .unwrap_or_else(|| "null".into()),
             ),
         ];
-        let mut ev = FdrEvent::stamp(
+        let mut ev = fdr_event_stamp(
             seq,
             Level::Info,
             Kind::SpanClose,
@@ -656,7 +656,7 @@ mod sink {
             None => return,
         };
         let seq = next_seq(s);
-        let mut ev = FdrEvent::stamp(
+        let mut ev = fdr_event_stamp(
             seq,
             Level::Info,
             Kind::SpanClose,
@@ -687,7 +687,7 @@ mod sink {
             None => return,
         };
         let seq = next_seq(s);
-        let ev = FdrEvent::stamp(
+        let ev = fdr_event_stamp(
             seq,
             Level::Error,
             Kind::Alarm,
@@ -717,7 +717,7 @@ mod sink {
         };
         let seq = next_seq(s);
         // Alarms carry a FULL hw stamp (alarm-class, blueprint §4.2) for forensic value.
-        let ev = FdrEvent::stamp(
+        let ev = fdr_event_stamp(
             seq,
             Level::Error,
             Kind::Alarm,
@@ -751,7 +751,7 @@ mod sink {
             None => return,
         };
         let seq = next_seq(s);
-        let ev = FdrEvent::stamp(
+        let ev = fdr_event_stamp(
             seq,
             Level::Info,
             Kind::Tuning,
@@ -774,7 +774,7 @@ mod sink {
             Some(s) => s,
             None => return,
         };
-        let ev = FdrEvent::stamp(
+        let ev = fdr_event_stamp(
             seq,
             Level::Info,
             Kind::Heartbeat,
@@ -826,7 +826,7 @@ mod sink {
         let seq = next_seq(s);
         // Shadow-divergence records are high-frequency and advisory → CHEAP hw stamp
         // (blueprint §4.2 cost control, same rationale as `Event`/`Tuning`).
-        let ev = FdrEvent::stamp(
+        let ev = fdr_event_stamp(
             seq,
             Level::Info,
             Kind::ShadowDivergence,

@@ -338,7 +338,7 @@ impl<I, O> DecisionUnit<I, O> {
             // Digests ONLY — never the full payloads (blueprint §3.2 minimal-statistic rule).
             let d_digest = crate::fdr::shadow_digest(format!("{d:?}").as_bytes());
             let act_digest = crate::fdr::shadow_digest(format!("{act:?}").as_bytes());
-            let ev = crate::fdr::schema::FdrEvent::stamp(
+            let ev = crate::fdr::schema::fdr_event_stamp(
                 0,
                 crate::fdr::Level::Info,
                 crate::fdr::schema::Kind::ShadowDivergence,
@@ -845,7 +845,7 @@ mod shadow_telemetry_tests {
             level: crate::fdr::Level::Info,
             kind: Kind::Event,
             name: "place_order".into(),
-            hw: crate::fdr::schema::HwStamp::sample(crate::fdr::schema::StampPolicy::Cheap),
+            hw: crate::fdr::schema::hw_sample(crate::fdr::schema::StampPolicy::Cheap),
             pmu: None,
             span_id: None,
             parent_span_id: None,

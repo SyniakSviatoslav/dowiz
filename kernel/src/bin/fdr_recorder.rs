@@ -22,7 +22,7 @@ fn main() {}
 #[cfg(not(target_arch = "wasm32"))]
 use dowiz_kernel::fdr::ring::{self, FdrRing};
 #[cfg(not(target_arch = "wasm32"))]
-use dowiz_kernel::fdr::schema::{FdrEvent, Kind, StampPolicy};
+use dowiz_kernel::fdr::schema::{fdr_event_stamp, FdrEvent, Kind, StampPolicy};
 #[cfg(not(target_arch = "wasm32"))]
 use dowiz_kernel::fdr::{self, FdrConfig, Level};
 #[cfg(not(target_arch = "wasm32"))]
@@ -41,7 +41,7 @@ fn main() {
             let mut ring = FdrRing::open(dir, ring::DEFAULT_SEG_CAP).expect("open ring");
             for i in 0..n {
                 let seq = ring.next_seq();
-                let ev = FdrEvent::stamp(
+                let ev = fdr_event_stamp(
                     seq,
                     Level::Info,
                     Kind::Event,
@@ -64,7 +64,7 @@ fn main() {
             let mut ring = FdrRing::open(dir, ring::DEFAULT_SEG_CAP).expect("open ring");
             for i in 0..n {
                 let seq = ring.next_seq();
-                let ev = FdrEvent::stamp(
+                let ev = fdr_event_stamp(
                     seq,
                     Level::Info,
                     Kind::Event,
@@ -91,7 +91,7 @@ fn main() {
             let mut ring = FdrRing::open(dir, ring::DEFAULT_SEG_CAP).expect("open ring");
             for i in 0..n {
                 let seq = ring.next_seq();
-                let ev = FdrEvent::stamp(
+                let ev = fdr_event_stamp(
                     seq,
                     Level::Info,
                     Kind::Event,

@@ -196,7 +196,7 @@ fn fault(layer: Layer, ring: Option<&mut RingHandle>) -> Result<(), ChecksumFaul
     // `None` on wasm32 since nothing there can construct a `RingHandle` value.
     #[cfg(not(target_arch = "wasm32"))]
     if let Some(r) = ring {
-        let ev = crate::fdr::schema::FdrEvent::stamp(
+        let ev = crate::fdr::schema::fdr_event_stamp(
             0,
             crate::fdr::Level::Error,
             crate::fdr::schema::Kind::Alarm,
