@@ -5,6 +5,8 @@
 //! and only digest primitive. A FIPS 202 KAT is included so a single bit error in
 //! the sponge is caught before any scheme math touches it.
 
+use alloc::string::String;
+use alloc::vec::Vec;
 // ── Keccak-f[1600] ────────────────────────────────────────────────────────────
 // State = 25 lanes of u64. Round constants (RC) and rotation offsets (RHO) per
 // FIPS 202 §3.2.1 / §3.2.2.

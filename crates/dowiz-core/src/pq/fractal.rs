@@ -10,6 +10,8 @@
 //!      map only spreads it into a varied tag space).
 //! Neither output must EVER be fed back as key/entropy. They are read-only views.
 
+use alloc::string::String;
+use alloc::vec::Vec;
 use crate::pq::keccak::shake256;
 
 /// Render a compact visual fingerprint of `ss` as a fixed-size ASCII grid derived from

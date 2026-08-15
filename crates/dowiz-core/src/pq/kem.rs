@@ -18,6 +18,8 @@
 //!
 //! Zero external crates; all Keccak/SHAKE/SHA3 come from `crate::pq::keccak`.
 
+use alloc::string::String;
+use alloc::vec::Vec;
 use crate::pq::keccak::{prf, sha3_256, sha3_512, shake128, xof_h};
 
 // ─────────────────────────────────────────────────────────────────────────────

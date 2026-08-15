@@ -70,9 +70,9 @@ struct Files {
 fn cached_files() -> &'static Files {
     static CACHE: OnceLock<Files> = OnceLock::new();
     CACHE.get_or_init(|| {
-        let kg = crate::vfs::read_to_string(format!("{}key-gen.json", KAT_DIR)).unwrap();
-        let sg = crate::vfs::read_to_string(format!("{}sig-gen.json", KAT_DIR)).unwrap();
-        let sv = crate::vfs::read_to_string(format!("{}sig-ver.json", KAT_DIR)).unwrap();
+        let kg = std::fs::read_to_string(format!("{}key-gen.json", KAT_DIR)).unwrap();
+        let sg = std::fs::read_to_string(format!("{}sig-gen.json", KAT_DIR)).unwrap();
+        let sv = std::fs::read_to_string(format!("{}sig-ver.json", KAT_DIR)).unwrap();
         Files {
             kg: serde_json::from_str(&kg).unwrap(),
             sg: serde_json::from_str(&sg).unwrap(),
@@ -336,14 +336,14 @@ mod diag {
         let cases: Vec<_> = cases.into_iter().collect();
         for tc in [20u32, 21u32] {
             let (_, pk, msg, sig, want) = cases.iter().find(|c| c.0 == tc).unwrap();
-            std::eprintln!("=== tcId {} want={}", tc, want);
+            eprintln!("=== tcId {} want={}", tc, want);
             let (c_tilde, _z, _h) = unpack_sig_bytes(sig).unwrap();
-            std::eprintln!("ctilde={}", hx(c_tilde.as_slice()));
+            eprintln!("ctilde={}", hx(c_tilde.as_slice()));
             let (rho, _t1) = unpack_pk_bytes(&pk);
-            std::eprintln!("rho={}", hx(&rho));
+            eprintln!("rho={}", hx(&rho));
             let got = verify_internal_bytes(&pk, &msg, &sig);
-            std::eprintln!("got={} want={}", got, want);
-            std::eprintln!("msg={}", hx(&msg));
+            eprintln!("got={} want={}", got, want);
+            eprintln!("msg={}", hx(&msg));
         }
     }
 }

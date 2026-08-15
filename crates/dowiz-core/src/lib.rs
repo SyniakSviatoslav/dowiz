@@ -181,3 +181,6 @@ pub mod ct_gate;
 pub mod academia;
 pub mod hw_profile;
 pub mod slot_arena;
+
+// --- wave 8: post-quantum crypto primitives (FIPS 203/204) ---
+pub mod pq;

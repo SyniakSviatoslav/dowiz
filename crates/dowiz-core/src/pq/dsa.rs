@@ -17,7 +17,6 @@
 
 #![allow(dead_code)]
 
-use std::vec;
 use alloc::vec::Vec;
 
 pub fn shake256(data: &[u8], out: &mut [u8]) {
@@ -1094,17 +1093,17 @@ mod tests {
     fn phex(name: &str, b: &[u8]) {
         let mut s = alloc::string::String::new();
         for x in b {
-            s.push_str(&std::format!("{:02x}", x));
+            s.push_str(&format!("{:02x}", x));
         }
-        std::println!("STAGE {} {}", name, s);
+        println!("STAGE {} {}", name, s);
     }
     fn pnorm(name: &str, p: &Poly) {
         let mut s = alloc::string::String::new();
         for i in 0..N {
             let v = ((p[i] as i64 % Q as i64) + Q as i64) % Q as i64;
-            s.push_str(&std::format!(" {}", v));
+            s.push_str(&format!(" {}", v));
         }
-        std::println!("STAGE {}{}", name, s);
+        println!("STAGE {}{}", name, s);
     }
 
     #[test]
@@ -1130,8 +1129,8 @@ mod tests {
         pnorm("keygen.s1[0]", &s1);
         let (pk, sk) = keygen(&seed);
         phex("keygen.pk", &pk.bytes[..48]);
-        std::println!("STAGE keygen.pk.len {}", pk.bytes.len());
-        std::println!("STAGE keygen.sk.len {}", sk.bytes.len());
+        println!("STAGE keygen.pk.len {}", pk.bytes.len());
+        println!("STAGE keygen.sk.len {}", sk.bytes.len());
         // t1[0] from packed pk
         let (_r, t1) = unpack_pk_bytes(&pk.bytes);
         pnorm("keygen.t1[0]", &t1[0]);
@@ -1150,7 +1149,7 @@ mod tests {
         phex("sign.mu", &mu);
         let sig = sign_internal_bytes(&sk.bytes, msg, &rnd);
         phex("sign.ctilde", &sig[..48]);
-        std::println!("STAGE sign.sig.len {}", sig.len());
+        println!("STAGE sign.sig.len {}", sig.len());
     }
 
     // ── Item 7 (space-grade roadmap §C): native EXHAUSTIVE arithmetic contracts ──
