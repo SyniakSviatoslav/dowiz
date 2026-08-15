@@ -248,7 +248,7 @@ pub use dowiz_core::channel;
 /// Each operation cycle goes through sanitization, cross-check against
 /// invariants, and output validation. Designed for unstable/distrusted
 /// environments where inputs may be corrupted, delayed, or spoofed.
-pub mod three_phase;
+pub use dowiz_core::three_phase;
 /// Comprehensive error tracking, deterministic event log, telemetry
 /// collection, reverse replay (time-travel state reconstruction), and
 /// inverse simulation (infer inputs from observed outputs). Provides
@@ -368,7 +368,7 @@ pub mod evals;
 /// the sign/domain with the field stencil's `−(D−A)` operator. The 3-path
 /// (modal / DCT / stencil) verdict bench lives in `kernel/benches/criterion.rs`
 /// under the `field_eigen/` group and is reported in `docs/p89-verdict.md`.
-pub mod field_eigenmodes;
+pub use dowiz_core::field_eigenmodes;
 /// §H toy-pilot inference arc (BLUEPRINT-ITEM-34/35/37/38/39/40/41/42/43/44) — a
 /// quantized, constant-time-gated, golden-checksum-guarded toy neural-network
 /// classifier. Always compiled (so the `None`-path / reject-path is always
@@ -452,7 +452,7 @@ pub use dowiz_core::hex_util;
 pub use dowiz_core::reverse_engineer;
 /// Anti-detect browser configuration and zero-trace policy for parse operations.
 /// Pure data structures: kernel = no browser/network, this defines HOW to parse.
-pub mod agent_browser;
+pub use dowiz_core::agent_browser;
 /// PID-controlled dynamic agent spawn batching with prediction cache.
 /// Adjusts parallelism based on real-time latency measurements.
 pub mod dynamic_spawner;
@@ -495,7 +495,7 @@ pub mod spectral_parser;
 /// Parametric Surface Spectral Library: papers projected onto 2D parametric
 /// surface via top-2 eigenvectors. Each paper = SPIN at (u,v) on surface.
 /// Grid-based navigation: O(1) cell lookup, ~32MB for 1M papers.
-pub mod parametric_spectral;
+pub use dowiz_core::parametric_spectral;
 /// Академія Дмитра Євдокимова — quantized spectral library with P2P sync.
 /// Hash-only paper storage (32B/paper), bloom filter sync, snapshot serialization.
 pub mod academia;
@@ -510,7 +510,7 @@ pub mod mesh_oracle;
 /// Kernel-native self-reproduction: inspect own source, analyze structure,
 /// derive artifacts (tests, diagnostics, docs), verify integrity.
 /// Replaces the conceptual gap where self-reproduction was described but not coded.
-pub mod self_reproduce;
+pub use dowiz_core::self_reproduce;
 /// Full hypergraph data structure: vertices connected by hyperedges (any cardinality).
 /// Incidence matrix, Laplacian, spectral embedding, vertex centrality.
 /// Used for mesh topology, skill dependencies, citation networks.
@@ -566,11 +566,11 @@ pub use dowiz_core::trading_escrow;
 pub use dowiz_core::p2p_delivery;
 /// Cooperation Protocol — atomic bridge between P2P trading and P2P delivery.
 /// Trade settlement triggers delivery; delivery confirmation releases funds.
-pub mod cooperation_protocol;
+pub use dowiz_core::cooperation_protocol;
 /// Research paper knowledge extraction and pattern analysis engine.
 /// Pure data structures for ingesting, pattern-extracting, and cross-pattern
 /// analysis of research papers from arXiv / Semantic Scholar / OpenAlex.
-pub mod research;
+pub use dowiz_core::research;
 /// Compact ASCII library for research papers — content-addressed, deduplicated,
 /// non-ASCII stripped. Each paper stored as one line (unit-separator delimited).
 /// ~20MB for 100K papers vs ~200MB in JSON (10x compression).
@@ -808,7 +808,7 @@ pub use dowiz_core::needle2;
 /// Local-first, auditable research workbench inspired by Open Science Desktop.
 pub mod open_science;
 /// Transport-neutral messaging/session core inspired by Evolution Go.
-pub mod evolution_go;
+pub use dowiz_core::evolution_go;
 /// Meta-tests (infrastructure self-check) + cross-tests (multi-module
 /// integration: trinary×eigen×chronos×delta×enrich full stack).
 #[cfg(test)]
