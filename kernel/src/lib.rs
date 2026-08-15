@@ -808,7 +808,7 @@ pub mod dflash;
 /// Tiny-device tool-calling agent state machine inspired by Needle 2.
 pub mod needle2;
 /// Local-first, auditable research workbench inspired by Open Science Desktop.
-pub mod open_science;
+pub use dowiz_core::open_science;
 /// Transport-neutral messaging/session core inspired by Evolution Go.
 pub mod evolution_go;
 /// Meta-tests (infrastructure self-check) + cross-tests (multi-module
@@ -1224,5 +1224,5 @@ pub fn init_tracing() {
     let _ = crate::fdr::init(crate::fdr::FdrConfig::default());
 }
 pub use dowiz_core::oracle;
-pub mod meta_miner;
+pub use dowiz_core::meta_miner;
 pub mod physics;

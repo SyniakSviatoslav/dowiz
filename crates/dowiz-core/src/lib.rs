@@ -200,3 +200,5 @@ pub mod sys_dashboard;
 pub mod gossip;
 pub mod tracker;
 pub mod resilience;
+pub mod meta_miner;
+pub mod open_science;

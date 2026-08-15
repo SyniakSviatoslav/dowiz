@@ -1,3 +1,4 @@
+#![allow(unused)]
 //! `kernel::meta_miner` — Self-improving knowledge miner.
 //!
 //! Застосовує ВСІ виявлені патерни для покращення самого майнінгу:
@@ -15,6 +16,9 @@
 //! | ResNet              | ResNet        | Залишкові зв'язки в екстракції        |
 //! | MoE                 | Mixture Exp.  | Спеціалізовані експерти для доменів   |
 
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
 use crate::academia::Academia;
 use crate::oracle::{PatternOracle, Insight, InsightSource};
 use crate::research::KnowledgeDomain;
