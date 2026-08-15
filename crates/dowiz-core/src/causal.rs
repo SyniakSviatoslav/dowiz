@@ -1,3 +1,4 @@
+#![allow(unused)]
 //! causal.rs — causal inference on the growth substrate (P9 research queue).
 //!
 //! Next item on the self-development spine (roadmap P9 / Wave queue §2): the
@@ -35,6 +36,10 @@
 //!
 //! Pure `f64`, deterministic, fail-closed on malformed tables (trust boundary).
 //! Zero new dependencies.
+
+use alloc::collections::BTreeSet;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 /// Outcome of a back-door adjustment over a `k`-ary treatment `X`.
 #[derive(Debug, Clone, PartialEq)]
@@ -1234,7 +1239,7 @@ fn eval_formula(
                 let kept: alloc::collections::BTreeSet<usize> = cond_set
                     .iter()
                     .copied()
-                    .chain(std::iter::once(vi))
+                    .chain(core::iter::once(vi))
                     .collect();
                 // Others are summed out.
                 let free: Vec<usize> = (0..joint.cards.len())

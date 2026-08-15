@@ -1,3 +1,4 @@
+#![allow(unused)]
 //! `kernel::oracle` — Патерн-Оракул: найкраща система навчання та пошуку.
 //!
 //! # Архітектура
@@ -21,6 +22,9 @@ use crate::academia::Academia;
 use crate::research::{ResearchEngine, CrossPattern, KnowledgeDomain};
 use crate::github_patterns::ParsingTech;
 use alloc::collections::BTreeMap;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
 
 /// Максимум інсайтів.
 pub const MAX_INSIGHTS: usize = 10_000;

@@ -53,7 +53,7 @@ pub use dowiz_core::cart;
 pub mod catalog;
 /// P9 growth-substrate: causal inference — back-door adjustment / do-operator
 /// (Pearl). Provable causal effect from observational tables; fail-closed.
-pub mod causal;
+pub use dowiz_core::causal;
 /// P9 growth-substrate: semi-Markovian **causal graph** primitives (directed +
 /// bidirected arcs) — the structural backbone of the ID / IDC identification
 /// algorithms: ancestors, descendants, c-components, bidirected-aware
@@ -1223,6 +1223,6 @@ pub fn init_tracing() {
     // no-op, like the incumbent global subscriber).
     let _ = crate::fdr::init(crate::fdr::FdrConfig::default());
 }
-pub mod oracle;
+pub use dowiz_core::oracle;
 pub mod meta_miner;
 pub mod physics;
