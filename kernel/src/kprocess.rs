@@ -1,20 +1,24 @@
-//! process.rs — subprocess seam (ledger item 4: process → kexec).
-//!
-//! The no_std audit found a small set of `std::process::Command` call sites in
-//! otherwise no_std-ready modules (`span_metrics/breach`'s `perf record`,
-//! `living_knowledge`'s `node --version` availability check). A kernel module
-//! has no `std::process` — it execs via `kexec`/`call_usermodehelper`. This
-//! module is the single seam, in the same shape as [`crate::clock`]: a
-//! no_std-compatible [`Process`] trait (`&str` cmd + `String` args + i32 exit
-//! code — no `Command`/`Child`/`Stdio`), a userspace [`StdProcess`] impl, and a
-//! [`run`] free function that is the single authority. The kernel port swaps the
-//! impl, not the call sites.
-//!
-//! # Out of scope (documented follow-up)
-//! The `living_knowledge` sh-bridge (`spawn` + `stdin/stdout/stderr` pipes +
-//! `wait4(2)` rusage) is a *bidirectional pipe* pattern — a `kexec` port needs a
-//! different fd-passing design, so it stays std (it already uses a raw `wait4`
-//! syscall in the native path, the same style as `fdr::pmu`).
+/// held-handle shim — pure types from dowiz_core::kprocess, std-dependent impls stay here.
+
+pub use dowiz_core::kprocess::*;
+
+/// process.rs — subprocess seam (ledger item 4: process → kexec).
+///
+/// The no_std audit found a small set of `std::process::Command` call sites in
+/// otherwise no_std-ready modules (`span_metrics/breach`'s `perf record`,
+/// `living_knowledge`'s `node --version` availability check). A kernel module
+/// has no `std::process` — it execs via `kexec`/`call_usermodehelper`. This
+/// module is the single seam, in the same shape as [`crate::clock`]: a
+/// no_std-compatible [`Process`] trait (`&str` cmd + `String` args + i32 exit
+/// code — no `Command`/`Child`/`Stdio`), a userspace [`StdProcess`] impl, and a
+/// [`run`] free function that is the single authority. The kernel port swaps the
+/// impl, not the call sites.
+///
+/// # Out of scope (documented follow-up)
+/// The `living_knowledge` sh-bridge (`spawn` + `stdin/stdout/stderr` pipes +
+/// `wait4(2)` rusage) is a *bidirectional pipe* pattern — a `kexec` port needs a
+/// different fd-passing design, so it stays std (it already uses a raw `wait4`
+/// syscall in the native path, the same style as `fdr::pmu`).
 
 use alloc::string::String;
 use alloc::vec::Vec;

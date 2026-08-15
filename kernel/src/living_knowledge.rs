@@ -413,7 +413,7 @@ mod tests {
     /// True only when a working `node` runtime AND the bundled bridge script exist.
     /// Lets the bridge-dependent test skip cleanly on headless/kernel boxes.
     fn bridge_available() -> bool {
-        if !crate::process::run("node", &["--version".to_string()]).success() {
+        if !crate::kprocess::run("node", &["--version".to_string()]).success() {
             return false; // `node` not on PATH or non-zero exit
         }
         let here = env!("CARGO_MANIFEST_DIR");

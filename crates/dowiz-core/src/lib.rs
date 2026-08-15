@@ -156,3 +156,4 @@ pub mod clock;
 pub mod order_machine;
 pub mod vfs;
 pub mod kthread;
+pub mod kprocess;

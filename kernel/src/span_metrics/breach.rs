@@ -148,7 +148,7 @@ fn try_perf(dir: &Option<PathBuf>) -> Option<BreachAction> {
     }
     // Time-bounded spawn: perf detaches after the `sleep N` window. Best-effort —
     // failure ⇒ captured=false (caller falls back to the no-op pprof marker).
-    let out = crate::process::run(&perf.to_string_lossy(), &args);
+    let out = crate::kprocess::run(&perf.to_string_lossy(), &args);
     let captured = out.success();
     let detail = if out.success() {
         format!("perf record ran for {}s", PERF_CAPTURE_SECS)

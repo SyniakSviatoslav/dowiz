@@ -755,10 +755,10 @@ pub use dowiz_core::clock;
 /// `JoinHandle`-free design).
 pub mod kthread;
 /// Subprocess seam (ledger item 4: process → kexec) — no_std-compatible
-/// [`crate::process::Process`] trait + `StdProcess` impl + `run` free function.
+/// [`crate::kprocess::Process`] trait + `StdProcess` impl + `run` free function.
 /// The `living_knowledge` sh-bridge pipe pattern stays std (bidirectional
 /// pipes + `wait4`).
-pub mod process;
+pub mod kprocess;
 /// Virtual filesystem seam (ledger item 4: fs → VFS) — no_std-compatible
 /// [`crate::vfs::Vfs`] trait + userspace `StdFs` impl + free functions
 /// (`read`/`write`/`read_dir`/…). Call sites route through `crate::vfs` so the
