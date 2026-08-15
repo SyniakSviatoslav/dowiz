@@ -29,6 +29,7 @@
 /// event; the batched fn is only ever invoked from inside that ownership
 /// boundary (NO-COURIER-SCORING red line respected).
 use crate::domain::TrustEstimate;
+use alloc::vec::Vec;
 
 /// Scalar reference softmax — mirror of `attention.rs::softmax` *exactly* (same
 /// op order, same `exps.iter().sum()` left-to-right reduction). Used by the
@@ -43,7 +44,7 @@ pub fn softmax_scalar(xs: &[f64]) -> Vec<f64> {
             m = x;
         }
     }
-    let exps: Vec<f64> = xs.iter().map(|&x| (x - m).exp()).collect();
+    let exps: Vec<f64> = xs.iter().map(|&x| crate::math::exp(x - m)).collect();
     let sum: f64 = exps.iter().sum();
     exps.iter().map(|&e| e / sum).collect()
 }
@@ -120,7 +121,7 @@ unsafe fn softmax_lane4(rows: &[&[f64]]) -> Vec<Vec<f64>> {
         // exp is a per-element unary op (order-free); extract + call f64::exp.
         let mut exp_arr = [0.0f64; 4];
         for lane in 0..4 {
-            exp_arr[lane] = diff_arr[lane].exp();
+            exp_arr[lane] = crate::math::exp(diff_arr[lane]);
         }
         // Zero out short/inactive lanes so they add exactly 0.0 to their own
         // sum and are never written to output (keeps NaN-free + bit-clean).
@@ -336,7 +337,7 @@ pub fn kalman_batch_step(estimates: &mut [TrustEstimate], observations: &[Option
                         let s = pps[lane] + rs[lane]; // S = predicted P + R
                         estimates[i + lane]
                             .kf
-                            .set_signals(vec![y], if s > 0.0 { y.abs() / s.sqrt() } else { 0.0 });
+                            .set_signals(vec![y], if s > 0.0 { y.abs() / crate::math::sqrt(s) } else { 0.0 });
                     }
                 }
                 i += 4;

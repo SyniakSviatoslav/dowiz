@@ -258,7 +258,7 @@ pub mod tracker;
 /// ACROSS the batch (4 independent rows per step), each lane replaying the exact
 /// scalar op order → bit-identical to `softmax_scalar` / `attention::softmax`.
 /// AVX2 fast path with a scalar fallback (mirrors `householder.rs` runtime gate).
-pub mod simd;
+pub use dowiz_core::simd;
 /// OPT-IN generational-index slot arena — per-element sibling to `arena::BumpArena`.
 /// Thin dowiz wrapper over `thunderdome::Arena`: stable `Copy` handles whose stale
 /// (removed-then-recycled) form is a safe `None` (ABA / stale-index unrepresentable).
