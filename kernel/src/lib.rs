@@ -685,7 +685,7 @@ pub mod chronos_topology;
 pub use dowiz_core::eigen;
 /// N-fractal self-similar data structure + ASCII encoding. Every node is
 /// a microcosm of the whole. ASCII visualization for human-readable state.
-pub mod fractal;
+pub use dowiz_core::fractal;
 /// KTG-2: 2-bit graph dataflow core + Fractal Manchester Architecture.
 /// The execution center of the kernel (cell/graph/tile2x2/telemetry/exokernel/
 /// fractal/fractal_manchester).

@@ -1,3 +1,4 @@
+#![allow(unused)]
 //! `kernel::fractal` — N-fractal self-similar data structure + ASCII encoding.
 //!
 //! Replaces flat arrays and crystal lattice with an N-depth fractal tree where
@@ -16,6 +17,9 @@
 //! ZERO deps. Uses eigen for value representation.
 
 use crate::eigen::{EigenDecomp, decompose};
+use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::string::ToString;
 
 /// A node in the N-fractal tree. Every node = self-similar copy of the whole.
 #[derive(Debug, Clone)]

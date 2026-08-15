@@ -192,3 +192,4 @@ pub mod causal;
 pub mod predict;
 pub mod wave;
 pub mod trinary;
+pub mod fractal;
