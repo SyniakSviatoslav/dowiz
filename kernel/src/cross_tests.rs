@@ -53,7 +53,7 @@ mod tests {
         let mut oracle = crate::code_oracle::EtaOracle::new();
         let naive = oracle.predict_eta(3, 100);
         for i in 0..10 {
-            oracle.record(&["test.rs"], 10 + i * 5, 5 + i * 3, (i + 1) as f64 * 3.0);
+            crate::code_oracle::record_now(&mut oracle, &["test.rs"], 10 + i * 5, 5 + i * 3, (i + 1) as f64 * 3.0);
         }
         let trained = oracle.predict_eta(3, 100);
         // Trained prediction should differ from naive (oracle learned)
@@ -69,7 +69,7 @@ mod tests {
         let mut values = BTreeMap::new();
         values.insert("stability".into(), 0.8);
         values.insert("confidence".into(), 0.6);
-        c.snapshot(values.clone());
+        crate::chronos::snapshot_now(&mut c, values.clone());
 
         // Eigen decomposition of snapshot values
         let vals: Vec<f64> = values.values().copied().collect();
@@ -367,7 +367,7 @@ mod tests {
         for (_i, bridge) in reg.bridges.iter().enumerate() {
             frame0.insert(bridge.name.clone(), bridge.strength as f64);
         }
-        let snap0 = dt.snapshot(frame0.clone());
+        let snap0 = crate::chronos::snapshot_now(&mut dt, frame0.clone());
         let ts0 = snap0.timestamp_ms;
 
         // Simulate DTN forward: store, wait, forward
@@ -377,7 +377,7 @@ mod tests {
         if let Some(v) = frame1.get_mut("python-universal") {
             *v += 10.0; // strength increased after forwarding
         }
-        let snap1 = dt.snapshot(frame1);
+        let snap1 = crate::chronos::snapshot_now(&mut dt, frame1);
         let ts1 = snap1.timestamp_ms;
 
         // Verify store: both frames are retained

@@ -791,7 +791,7 @@ pub mod numbat;
 pub mod code_oracle;
 /// System-wide ASCII dashboard — renders full system state as human-readable
 /// report. Uses all visualization primitives: trinary RGB, fractal, eigen, chronos.
-pub mod sys_dashboard;
+pub use dowiz_core::sys_dashboard;
 /// OpenObserve reimplementation — observability platform: logs, metrics, traces
 /// + columnar storage. Maps to kernel primitives: typed_metrics (MetricLine),
 /// telemetry_aggregator (TelemetryAggregator), event_log (MeshEvent/EventStore),

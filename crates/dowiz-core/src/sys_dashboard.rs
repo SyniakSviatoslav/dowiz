@@ -1,4 +1,5 @@
-//! `kernel::sys_dashboard` — system-wide ASCII status dashboard.
+#![allow(unused)]
+//! `dowiz_core::sys_dashboard` — system-wide ASCII status dashboard (pure core).
 //!
 //! Renders the entire dowiz system state as a human-readable ASCII report.
 //! Uses all visualization primitives: trinary RGB, fractal ASCII, eigen ASCII,
@@ -11,6 +12,8 @@ use crate::fractal::ascii_matrix;
 use crate::delta::DeltaTracker;
 use crate::code_oracle::EtaOracle;
 use crate::trig::Xyz;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 /// Drift severity bucket — the rewrite-law replacement for a drift if/else chain.
 /// A decision is a table index (branchless bool-cast), not an if-chain.
@@ -155,9 +158,9 @@ mod tests {
     #[test]
     fn dashboard_with_oracle_shows_eta() {
         let mut oracle = EtaOracle::new();
-        oracle.record(&["a.rs"], 100, 50, 15.0);
-        oracle.record(&["b.rs"], 200, 100, 30.0);
-        oracle.record(&["c.rs"], 50, 25, 8.0);
+        oracle.record(&["a.rs"], 100, 50, 15.0, 1000);
+        oracle.record(&["b.rs"], 200, 100, 30.0, 2000);
+        oracle.record(&["c.rs"], 50, 25, 8.0, 3000);
         let drift = DeltaTracker::new(100.0, 10.0);
         let d = render(2128, 168, 13880, 19, &oracle, &drift, None, "Phase 3");
         assert!(d.contains("ETA"));

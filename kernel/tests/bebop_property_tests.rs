@@ -199,7 +199,7 @@ fn chronos_dtn_store_forward_preserves_order() {
         let mut values = BTreeMap::new();
         values.insert("seq".to_string(), i as f64);
         values.insert("payload_hash".to_string(), (i * 7 + 3) as f64);
-        chronos.snapshot(values);
+        dowiz_kernel::chronos::snapshot_now(&mut chronos, values);
     }
 
     assert_eq!(chronos.len(), 50, "all 50 frames stored");
@@ -229,7 +229,7 @@ fn chronos_dtn_capacity_respected() {
     for i in 0..30 {
         let mut values = BTreeMap::new();
         values.insert("x".to_string(), i as f64);
-        chronos.snapshot(values);
+        dowiz_kernel::chronos::snapshot_now(&mut chronos, values);
     }
 
     assert!(chronos.len() <= 10, "capacity must be respected");
