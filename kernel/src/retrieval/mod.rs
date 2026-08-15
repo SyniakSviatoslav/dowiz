@@ -18,8 +18,8 @@
 
 /// L2 lexical ranker — pure-`std` Okapi BM25 (M2).
 pub mod bm25;
-/// L3 RELATEDNESS — wikilink fixture graph + "what relates to X" diffusion.
-pub mod diffusion;
+/// L3 RELATEDNESS — wikilink fixture graph + "what relates to X" diffusion. Pure, from core.
+pub use dowiz_core::retrieval::diffusion;
 /// L0 exact-search corpus + synthetic generator (W1-3) — pure, re-exported from core.
 pub use dowiz_core::retrieval::fixtures;
 /// L0 deterministic trigram inverted index + exact verify (W1-3) — pure, re-exported from core.
@@ -30,8 +30,8 @@ pub mod memory_store;
 /// L0 kernel-owned restricted wildcard matcher ({literal, `.`, `.*`}) — the
 /// regex-retirement replacement for the `query_regex` verify step (item 5). Pure, from core.
 pub use dowiz_core::retrieval::pattern;
-/// L3 PPR power-iteration engine — mirrors `kernel/src/markov.rs` determinism.
-pub mod ppr;
+/// L3 PPR power-iteration engine — mirrors `kernel/src/markov.rs` determinism. Pure, from core.
+pub use dowiz_core::retrieval::ppr;
 /// L2+L0 fusion — BM25 + trigram index, living-knowledge recall@5=1.0
 /// (un-strands the spike engine's lexical capability into the kernel, M2/A2).
 ///

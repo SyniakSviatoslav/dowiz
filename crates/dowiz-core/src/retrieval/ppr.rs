@@ -15,6 +15,9 @@
 //!     the per-step `÷ sum` normalization that `markov.rs` needs for a stationary
 //!     distribution — removing the only divide and keeping the result bit-exact.
 
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+
 /// Row-stochastic transition matrix W (n·n), stored as dense `Vec<Vec<f64>>`,
 /// indexed by integer node id. Built by the caller (see `diffusion`).
 pub struct Ppr {
@@ -130,10 +133,9 @@ mod tests {
             .join(",");
 
         let path = std::env::temp_dir().join(format!("ppr_reread_test_{}.txt", std::process::id()));
-        crate::vfs::write(&path, &serialized).expect("write serialized ppr scores");
-        let reread = crate::vfs::read_to_string(&path).expect("re-read serialized ppr scores");
-        crate::vfs::remove_file(&path).ok();
-
+        std::fs::write(&path, &serialized).expect("write serialized ppr scores");
+        let reread = std::fs::read_to_string(&path).expect("re-read serialized ppr scores");
+        std::fs::remove_file(&path).ok();
         assert_eq!(
             reread, serialized,
             "byte content did not survive a disk round-trip"

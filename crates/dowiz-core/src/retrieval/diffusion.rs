@@ -15,8 +15,10 @@
 //! Determinism proof lives in `green_ppr_byte_identical_two_runs`: two runs with
 //! identical (seed, α, K) produce byte-identical score vectors.
 
-use super::fixtures::FIXTURE;
-use super::ppr::Ppr;
+use crate::retrieval::fixtures::FIXTURE;
+use crate::retrieval::ppr::Ppr;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 /// Number of article nodes in the fixture wikilink graph.
 pub const N: usize = 20;
@@ -220,9 +222,9 @@ mod tests {
             "diffusion_ppr_reread_test_{}.txt",
             std::process::id()
         ));
-        crate::vfs::write(&path, &serialized).expect("write serialized diffusion scores");
-        let reread = crate::vfs::read_to_string(&path).expect("re-read serialized diffusion scores");
-        crate::vfs::remove_file(&path).ok();
+        std::fs::write(&path, &serialized).expect("write serialized diffusion scores");
+        let reread = std::fs::read_to_string(&path).expect("re-read serialized diffusion scores");
+        std::fs::remove_file(&path).ok();
 
         assert_eq!(
             reread, serialized,
