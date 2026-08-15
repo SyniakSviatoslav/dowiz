@@ -1,3 +1,4 @@
+#![allow(unused)]
 //! `kernel::predict` — chronological-topological prediction engine.
 //!
 //! Composes the existing kernel prediction primitives (Markov attractor, spectral
@@ -25,6 +26,9 @@
 
 use crate::markov::{self, Verdict as MarkovVerdict};
 use crate::spectral;
+use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::string::ToString;
 
 /// Drift classification from the spectral engine.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -425,7 +425,7 @@ pub use dowiz_core::parse;
 pub mod memory_search;
 /// Chronological-topological prediction engine — composes Markov, spectral,
 /// absorbing, Noether, and causal primitives into a single prediction API.
-pub mod predict;
+pub use dowiz_core::predict;
 /// Decentralized mesh swarm coordinator — task decomposition via DSU, executor
 /// selection via harmonic ranking, dynamic adaptation via spectral/Markov prediction.
 pub mod swarm;

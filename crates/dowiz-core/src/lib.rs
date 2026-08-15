@@ -189,3 +189,5 @@ pub mod crypto_signer;
 // --- wave 9: P9 research leaves (oracle / causal inference) ---
 pub mod oracle;
 pub mod causal;
+pub mod predict;
+pub mod wave;
