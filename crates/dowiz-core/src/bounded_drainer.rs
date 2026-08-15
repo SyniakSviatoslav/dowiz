@@ -16,8 +16,8 @@
 //! early and no further units run (degrade-closed); (4) the units-run total is
 //! bounded by the tokens granted (each unit debits exactly one token).
 //!
-//! ZERO new dependencies (plain `std`), consumes only the existing kernel
-//! `TokenBucket`.
+//! ZERO new dependencies (pure `core` + `alloc`, no_std), consumes only the
+//! no_std `TokenBucket`.
 
 use crate::token_bucket::TokenBucket;
 
@@ -67,10 +67,10 @@ impl BoundedDrainer {
     /// it debits `cost_per_unit` from `bucket`; if the bucket refuses (empty),
     /// the tick STOPS EARLY (degrade-closed) — that unit does not run and no
     /// token is spent for it. Returns the number of units actually run this tick.
-    pub fn tick<F: FnMut()>(&mut self, bucket: &TokenBucket, mut run_unit: F) -> u32 {
+    pub fn tick<F: FnMut()>(&mut self, bucket: &TokenBucket, now_ns: u64, mut run_unit: F) -> u32 {
         let mut ran = 0u32;
         while ran < self.k && self.remaining > 0 {
-            if !crate::token_bucket::token_bucket_try_acquire(&bucket, self.cost_per_unit) {
+            if !bucket.try_acquire(self.cost_per_unit, now_ns) {
                 break; // degrade-closed: cannot pay → stop, do not run unpaid work
             }
             run_unit();
@@ -197,7 +197,7 @@ mod tests {
         // Huge budget so the cap, not the bucket, is what bounds the tick.
         let bucket = TokenBucket::new(1_000_000.0, 0.0);
         let mut d = BoundedDrainer::new(100, 5, 1.0);
-        let ran = d.tick(&bucket, || {});
+        let ran = d.tick(&bucket, 0, || {});
         assert_eq!(ran, 5, "tick must run exactly k=5 units, not more");
         assert_eq!(d.remaining(), 95);
     }
@@ -209,13 +209,13 @@ mod tests {
         let mut d = BoundedDrainer::new(23, 5, 1.0);
         let mut count = 0u64;
         while !d.is_done() {
-            d.tick(&bucket, || count += 1);
+            d.tick(&bucket, 0, || count += 1);
         }
         assert_eq!(count, 23, "closure must fire once per queued unit");
         assert_eq!(d.total_run(), 23);
         assert_eq!(d.remaining(), 0);
         // A further tick on an empty queue runs nothing.
-        assert_eq!(d.tick(&bucket, || count += 1), 0);
+        assert_eq!(d.tick(&bucket, 0, || count += 1), 0);
         assert_eq!(count, 23, "no over-run past the queued total");
     }
 
@@ -227,12 +227,12 @@ mod tests {
         let bucket = TokenBucket::new(3.0, 0.0);
         let mut d = BoundedDrainer::new(100, 10, 1.0);
         let mut count = 0u64;
-        let ran = d.tick(&bucket, || count += 1);
+        let ran = d.tick(&bucket, 0, || count += 1);
         assert_eq!(ran, 3, "only 3 units affordable → tick stops early at 3");
         assert_eq!(count, 3, "no unpaid unit ran");
         assert_eq!(d.remaining(), 97, "unaffordable units stay queued");
         // Next tick with the empty bucket runs nothing at all.
-        assert_eq!(d.tick(&bucket, || count += 1), 0);
+        assert_eq!(d.tick(&bucket, 0, || count += 1), 0);
         assert_eq!(count, 3);
     }
 
@@ -241,10 +241,10 @@ mod tests {
     fn units_run_bounded_by_tokens_debited() {
         let bucket = TokenBucket::new(7.0, 0.0);
         let mut d = BoundedDrainer::new(100, 100, 1.0);
-        let ran = d.tick(&bucket, || {});
+        let ran = d.tick(&bucket, 0, || {});
         assert_eq!(ran, 7, "7 tokens ⇒ at most 7 units run");
         assert!(
-            crate::token_bucket::token_bucket_available(&bucket) < 1.0,
+            bucket.available(0) < 1.0,
             "budget fully spent on the 7 units"
         );
     }

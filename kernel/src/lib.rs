@@ -42,7 +42,7 @@ pub mod attention;
 /// Dedups across small edits; fail-closed restore. Pure-Rust, no new deps.
 pub mod backup;
 pub mod blocklist;
-pub mod bounded_drainer;
+pub use dowiz_core::bounded_drainer;
 /// P11 §1 — compute budget accumulator (degrade-closed, zero-dep) + §4 Modal
 /// `JobPort` / `BudgetedJobPort` seam (offline-err default; real adapter deferred).
 pub mod budget;
@@ -136,7 +136,7 @@ pub mod isolation;
 /// admission maps onto the §1.5 structural-gate pattern. Slice-exhaustion trips
 /// the item-9 breaker. Phase-0 design + TLC model exist (`docs/formal/PartitionSchedule.tla`);
 /// this is the Phase-1 implementation, gated on the breaker existing.
-pub mod scheduler;
+pub use dowiz_core::scheduler;
 /// Item 31 §4 — hand-rolled, always-compiled JSON parse+serialize primitive (pure `std`). The
 /// parse-side home for the serde carriers being cut over (agent-facade, skillspector-rs).
 /// Separate from `fdr::json` (serialize-only, fixed-schema). `serde_json` is retained only as a
@@ -798,7 +798,7 @@ pub use dowiz_core::sys_dashboard;
 /// json (JSON parsing for traces).
 pub mod openobserve;
 /// Memory-budgeted sparse MoE routing inspired by TurboFieldfare.
-pub mod turbofieldfare;
+pub use dowiz_core::turbofieldfare;
 /// Deterministic keyframe-to-interactive-motion pipeline inspired by Oil Motion.
 pub mod oil_motion;
 /// Spatial, tile-indexed collaborative reasoning canvas inspired by PenEcho.

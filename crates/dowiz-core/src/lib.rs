@@ -213,3 +213,8 @@ pub mod resilience;
 pub mod meta_miner;
 pub mod open_science;
 pub mod telemetry_harvest;
+
+// --- wave 10: token_bucket-unblocked leaves (bounded_drainer / scheduler / turbofieldfare) ---
+pub mod bounded_drainer;
+pub mod scheduler;
+pub mod turbofieldfare;

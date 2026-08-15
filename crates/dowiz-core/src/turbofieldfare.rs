@@ -13,9 +13,10 @@
 //! via `TokenBucket`), and uses `PredictiveETA`-style rolling estimates to
 //! predict inference-time pressure for adaptive gating thresholds.
 //!
-//! Zero new dependencies — pure `std`. Tested under `#[cfg(test)]` below.
+//! Zero new dependencies — pure `core` + `alloc` (no_std). Tested under `#[cfg(test)]` below.
 
 use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 
 // ─── Gating primitives ──────────────────────────────────────────────────────
 
@@ -375,11 +376,11 @@ impl TokenBudget {
     }
 
     /// Try to spend tokens for one activation. Returns `true` if granted.
-    pub fn try_spend(&mut self) -> bool {
+    pub fn try_spend(&mut self, now_ns: u64) -> bool {
         if self.exhausted {
             return false;
         }
-        let granted = crate::token_bucket::token_bucket_try_acquire(&self.bucket, self.cost_per_activation);
+        let granted = self.bucket.try_acquire(self.cost_per_activation, now_ns);
         if !granted {
             self.exhausted = true;
         }
@@ -393,8 +394,8 @@ impl TokenBudget {
     }
 
     /// Available tokens in the bucket (for telemetry).
-    pub fn available(&self) -> f64 {
-        crate::token_bucket::token_bucket_available(&self.bucket)
+    pub fn available(&self, now_ns: u64) -> f64 {
+        self.bucket.available(now_ns)
     }
 }
 
@@ -477,6 +478,7 @@ impl TurboFieldfare {
         score: f64,
         expert_choice: usize,
         activation_duration_us: u64,
+        now_ns: u64,
     ) -> ProcessResult {
         self.tokens_processed += 1;
 
@@ -502,7 +504,7 @@ impl TurboFieldfare {
                 // Token budget check.
                 let mut token_granted = false;
                 if !matches!(mem_result, ActivateResult::RejectedFull) {
-                    token_granted = self.token_budget.try_spend();
+                    token_granted = self.token_budget.try_spend(now_ns);
                 }
 
                 if token_granted {
@@ -567,8 +569,8 @@ impl TurboFieldfare {
         self.memory_budget.is_full()
     }
 
-    pub fn token_budget_available(&self) -> f64 {
-        self.token_budget.available()
+    pub fn token_budget_available(&self, now_ns: u64) -> f64 {
+        self.token_budget.available(now_ns)
     }
 
     pub fn token_budget_exhausted(&self) -> bool {
@@ -650,7 +652,7 @@ mod tests {
     fn turbofieldfare_pass_through_below_threshold() {
         let mut ff = make_fieldfare(4, 2, MemoryPolicy::Reject);
         // Score 0.2 < base 0.3 → pass through.
-        let result = ff.process_token(1, 0.2, 0, 100);
+        let result = ff.process_token(1, 0.2, 0, 100, 0);
         assert!(matches!(result, ProcessResult::PassedThrough(_)));
         assert_eq!(ff.tokens_processed(), 1);
         assert_eq!(ff.activations(), 0);
@@ -662,7 +664,7 @@ mod tests {
     fn turbofieldfare_activate_above_threshold() {
         let mut ff = make_fieldfare(4, 2, MemoryPolicy::Reject);
         // Score 0.5 > base 0.3 → gate fires.
-        let result = ff.process_token(1, 0.5, 0, 100);
+        let result = ff.process_token(1, 0.5, 0, 100, 0);
         assert!(matches!(result, ProcessResult::Activated { .. }));
         assert_eq!(ff.activations(), 1);
         assert_eq!(ff.active_expert_count(), 1);
@@ -676,11 +678,11 @@ mod tests {
     fn turbofieldfare_memory_budget_rejects_on_full() {
         let mut ff = make_fieldfare(4, 2, MemoryPolicy::Reject);
         // Activate expert 0.
-        assert!(matches!(ff.process_token(1, 0.5, 0, 100), ProcessResult::Activated { .. }));
+        assert!(matches!(ff.process_token(1, 0.5, 0, 100, 0), ProcessResult::Activated { .. }));
         // Activate expert 1; the threshold has risen to 0.6 after expert 0.
-        assert!(matches!(ff.process_token(2, 0.9, 1, 100), ProcessResult::Activated { .. }));
+        assert!(matches!(ff.process_token(2, 0.9, 1, 100, 0), ProcessResult::Activated { .. }));
         // Memory full (cap=2). Third activation with different expert should be rejected.
-        let result = ff.process_token(3, 1.0, 2, 100);
+        let result = ff.process_token(3, 1.0, 2, 100, 0);
         assert!(matches!(result, ProcessResult::BudgetExhausted { .. } | ProcessResult::PassedThrough(_)));
         // Actually with Reject policy and memory full, try_activate returns RejectedFull,
         // but token_budget is also checked. Let's see: mem_result is RejectedFull,
@@ -697,11 +699,11 @@ mod tests {
     fn turbofieldfare_lru_eviction() {
         let mut ff = make_fieldfare(4, 2, MemoryPolicy::LruEvict);
         // Activate expert 0.
-        assert!(matches!(ff.process_token(1, 0.5, 0, 100), ProcessResult::Activated { .. }));
+        assert!(matches!(ff.process_token(1, 0.5, 0, 100, 0), ProcessResult::Activated { .. }));
         // Activate expert 1; the threshold has risen to 0.6 after expert 0.
-        assert!(matches!(ff.process_token(2, 0.9, 1, 100), ProcessResult::Activated { .. }));
+        assert!(matches!(ff.process_token(2, 0.9, 1, 100, 0), ProcessResult::Activated { .. }));
         // Activate expert 2 (should evict expert 0 via LRU).
-        let result = ff.process_token(3, 1.0, 2, 100);
+        let result = ff.process_token(3, 1.0, 2, 100, 0);
         assert!(matches!(result, ProcessResult::Activated { mem_result: ActivateResult::Activated, .. }));
         assert_eq!(ff.active_expert_count(), 2);
         // Active set should be [1, 2] (0 evicted).
@@ -714,11 +716,11 @@ mod tests {
         // Bucket has 100 tokens, cost = 1.0 per activation.
         // Activate 100 times → bucket exhausted.
         for i in 0..100 {
-            let result = ff.process_token(i, 1.0, (i % 4) as usize, 100);
+            let result = ff.process_token(i, 1.0, (i % 4) as usize, 100, 0);
             assert!(matches!(result, ProcessResult::Activated { .. }), "activation {i} should succeed");
         }
         // 101st activation should fail due to budget.
-        let result = ff.process_token(100, 1.0, 0, 100);
+        let result = ff.process_token(100, 1.0, 0, 100, 0);
         assert!(matches!(result, ProcessResult::BudgetExhausted { .. }));
         assert!(ff.token_budget_exhausted());
     }
@@ -729,11 +731,11 @@ mod tests {
         // Initially, threshold should be at base (0.3).
         assert!((ff.current_threshold() - 0.3).abs() < 1e-6);
         // Activate expert 0 → active count = 1, threshold rises halfway.
-        ff.process_token(1, 0.5, 0, 100);
+        ff.process_token(1, 0.5, 0, 100, 0);
         let mid = 0.3 + 0.5 * (0.9 - 0.3);
         assert!((ff.current_threshold() - mid).abs() < 1e-6);
         // Activate expert 1 → active count = 2 = cap, threshold at max (0.9).
-        ff.process_token(2, 0.9, 1, 100);
+        ff.process_token(2, 0.9, 1, 100, 0);
         assert!((ff.current_threshold() - 0.9).abs() < 1e-6);
     }
 
@@ -742,7 +744,7 @@ mod tests {
         let mut ff = make_fieldfare(4, 4, MemoryPolicy::Reject);
         // Process a few tokens with activations.
         for i in 0..10 {
-            ff.process_token(i, 1.0, (i % 4) as usize, 200);
+            ff.process_token(i, 1.0, (i % 4) as usize, 200, 0);
         }
         // Predictor should have observations.
         assert_eq!(ff.predictor().observations, 10);
@@ -758,14 +760,14 @@ mod tests {
     #[test]
     fn turbofieldfare_deactivate_releases_slot() {
         let mut ff = make_fieldfare(4, 2, MemoryPolicy::Reject);
-        ff.process_token(1, 0.5, 0, 100);
-        ff.process_token(2, 0.9, 1, 100);
+        ff.process_token(1, 0.5, 0, 100, 0);
+        ff.process_token(2, 0.9, 1, 100, 0);
         assert_eq!(ff.active_expert_count(), 2);
         // Deactivate expert 0.
         assert!(ff.deactivate_expert(0));
         assert_eq!(ff.active_expert_count(), 1);
         // Now we can activate again; one of two slots remains occupied.
-        let result = ff.process_token(3, 0.9, 2, 100);
+        let result = ff.process_token(3, 0.9, 2, 100, 0);
         assert!(matches!(result, ProcessResult::Activated { .. }));
         assert_eq!(ff.active_expert_count(), 2);
     }
@@ -774,13 +776,13 @@ mod tests {
     fn turbofieldfare_score_sanitization() {
         let mut ff = make_fieldfare(4, 2, MemoryPolicy::Reject);
         // NaN score → sanitized to 0.0 → pass through.
-        let result = ff.process_token(1, f64::NAN, 0, 100);
+        let result = ff.process_token(1, f64::NAN, 0, 100, 0);
         assert!(matches!(result, ProcessResult::PassedThrough(_)));
         // Inf score → sanitized to 0.0 → pass through.
-        let result = ff.process_token(2, f64::INFINITY, 0, 100);
+        let result = ff.process_token(2, f64::INFINITY, 0, 100, 0);
         assert!(matches!(result, ProcessResult::PassedThrough(_)));
         // Negative score → sanitized to itself (finite) → below threshold → pass through.
-        let result = ff.process_token(3, -0.5, 0, 100);
+        let result = ff.process_token(3, -0.5, 0, 100, 0);
         assert!(matches!(result, ProcessResult::PassedThrough(_)));
     }
 
@@ -789,7 +791,7 @@ mod tests {
         let mut ff = make_fieldfare(8, 4, MemoryPolicy::Reject);
         // Process enough to get predictor data.
         for i in 0..20 {
-            ff.process_token(i, 1.0, (i % 8) as usize, 1000);
+            ff.process_token(i, 1.0, (i % 8) as usize, 1000, 0);
         }
         // With 4 active slots, 20 activations, activation_rate ~ 1.0 (all fired),
         // estimate should be non-None.

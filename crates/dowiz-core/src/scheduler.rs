@@ -19,9 +19,11 @@
 //! (out of scope for Phase-1). The nearer-term approximation is process-per-partition
 //! with the kernel as supervisor.
 //!
-//! Zero external dependencies. Pure `std`. `cargo tree -e no-dev` unchanged.
+//! Zero external dependencies. Pure `core` + `alloc` (no_std).
 
 use crate::token_bucket::TokenBucket;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 /// A partition identifier within the major frame.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -124,14 +126,14 @@ impl Scheduler {
     /// Try to acquire `n` units of budget from a partition's slice.
     /// Returns `Ok(())` if granted, `Err(SliceExhausted)` if the partition's
     /// slice budget is depleted.
-    pub fn try_acquire(&mut self, partition: PartitionId, n: f64) -> Result<(), SchedulerError> {
+    pub fn try_acquire(&mut self, partition: PartitionId, n: f64, now_ns: u64) -> Result<(), SchedulerError> {
         let bucket = self
             .buckets
             .iter_mut()
             .find(|(id, _)| *id == partition)
             .ok_or(SchedulerError::UnknownPartition)?;
 
-        if crate::token_bucket::token_bucket_try_acquire(&bucket.1, n) {
+        if bucket.1.try_acquire(n, now_ns) {
             Ok(())
         } else {
             Err(SchedulerError::SliceExhausted)
@@ -176,7 +178,7 @@ impl core::fmt::Display for SchedulerError {
     }
 }
 
-impl std::error::Error for SchedulerError {}
+impl core::error::Error for SchedulerError {}
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -296,7 +298,7 @@ mod tests {
         };
         let budgets = [(PartitionId(0), 10.0, 1.0)];
         let mut sched = Scheduler::new(frame, &budgets).unwrap();
-        let err = sched.try_acquire(PartitionId(99), 1.0).unwrap_err();
+        let err = sched.try_acquire(PartitionId(99), 1.0, 0).unwrap_err();
         assert_eq!(err, SchedulerError::UnknownPartition);
     }
 
@@ -309,7 +311,7 @@ mod tests {
         };
         let budgets = [(PartitionId(0), 10.0, 1.0)];
         let mut sched = Scheduler::new(frame, &budgets).unwrap();
-        assert!(sched.try_acquire(PartitionId(0), 5.0).is_ok());
+        assert!(sched.try_acquire(PartitionId(0), 5.0, 0).is_ok());
     }
 
     /// `try_acquire` exhausts the budget and returns `SliceExhausted`.
@@ -321,8 +323,8 @@ mod tests {
         };
         let budgets = [(PartitionId(0), 1.0, 0.0)]; // capacity=1, rate=0 (one-shot drain)
         let mut sched = Scheduler::new(frame, &budgets).unwrap();
-        assert!(sched.try_acquire(PartitionId(0), 1.0).is_ok());
-        let err = sched.try_acquire(PartitionId(0), 1.0).unwrap_err();
+        assert!(sched.try_acquire(PartitionId(0), 1.0, 0).is_ok());
+        let err = sched.try_acquire(PartitionId(0), 1.0, 0).unwrap_err();
         assert_eq!(err, SchedulerError::SliceExhausted);
     }
 }
