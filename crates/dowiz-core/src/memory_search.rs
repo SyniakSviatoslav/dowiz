@@ -22,6 +22,8 @@
 //!     +-- score = w_bm25 * bm25_norm + w_ppr * ppr_norm + w_tri * tri_norm
 //! ```
 
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
 use crate::retrieval::bm25::{self, Bm25, Document};
 use crate::retrieval::index::TrigramIndex;
 use crate::retrieval::ppr::Ppr;
@@ -627,7 +629,7 @@ impl ParametricSurface {
             let dv = v - self.v_coords[i];
             let dist2 = du * du + dv * dv;
             if dist2 > 100.0 { continue; }
-            let w = self.weights[i] * (-dist2 * 0.5).exp();
+            let w = self.weights[i] * crate::math::exp(-dist2 * 0.5);
             total_weight += w;
             for j in 0..dims.min(self.control_points[i].len()) {
                 result[j] += w * self.control_points[i][j];
@@ -644,7 +646,7 @@ impl ParametricSurface {
     /// Геодезична відстань по поверхні (сума сегментів через найближчі точки).
     pub fn geodesic_distance(&self, u1: f64, v1: f64, u2: f64, v2: f64) -> f64 {
         let n = self.control_points.len();
-        if n < 2 { return ((u2 - u1).powi(2) + (v2 - v1).powi(2)).sqrt(); }
+        if n < 2 { return crate::math::sqrt(crate::math::powi(u2 - u1, 2) + crate::math::powi(v2 - v1, 2)); }
         // Знайти найближчі точки до (u1,v1) та (u2,v2)
         let mut dist = 0.0;
         let mut prev_u = u1;
@@ -653,16 +655,16 @@ impl ParametricSurface {
             let mut best = 0usize;
             let mut best_d = f64::MAX;
             for i in 0..n {
-                let d = (self.u_coords[i] - u2).powi(2) + (self.v_coords[i] - v2).powi(2);
+                let d = crate::math::powi(self.u_coords[i] - u2, 2) + crate::math::powi(self.v_coords[i] - v2, 2);
                 if d < best_d { best_d = d; best = i; }
             }
             let nu = self.u_coords[best];
             let nv = self.v_coords[best];
-            dist += ((nu - prev_u).powi(2) + (nv - prev_v).powi(2)).sqrt();
+            dist += crate::math::sqrt(crate::math::powi(nu - prev_u, 2) + crate::math::powi(nv - prev_v, 2));
             prev_u = nu; prev_v = nv;
             if best_d < 0.1 { break; }
         }
-        dist += ((u2 - prev_u).powi(2) + (v2 - prev_v).powi(2)).sqrt();
+        dist += crate::math::sqrt(crate::math::powi(u2 - prev_u, 2) + crate::math::powi(v2 - prev_v, 2));
         dist
     }
 
@@ -679,15 +681,15 @@ impl ParametricSurface {
         let duu: Vec<f64> = suu.iter().zip(&su).map(|(a, b)| a - b).collect();
         let dvv: Vec<f64> = svv.iter().zip(&sv).map(|(a, b)| a - b).collect();
         let e_f64: f64 = du.iter().map(|x| x * x).sum();
-        let e = e_f64.sqrt();
+        let e = crate::math::sqrt(e_f64);
         let f_f64: f64 = du.iter().zip(&dv).map(|(a, b)| a * b).sum();
         let g_f64: f64 = dv.iter().map(|x| x * x).sum();
-        let g = g_f64.sqrt();
+        let g = crate::math::sqrt(g_f64);
         let l_f64: f64 = duu.iter().map(|x| x * x).sum();
-        let l = l_f64.sqrt();
+        let l = crate::math::sqrt(l_f64);
         let m: f64 = 0.0;
         let n_f64: f64 = dvv.iter().map(|x| x * x).sum();
-        let n = n_f64.sqrt();
+        let n = crate::math::sqrt(n_f64);
         let denom: f64 = e * g - f_f64 * f_f64;
         let denom_abs: f64 = if denom < 0.0 { -denom } else { denom };
         if denom_abs < 1e-12 { 0.0 } else { (l * n - m * m) / denom_abs }
@@ -735,7 +737,7 @@ impl TopoChronoMemory {
         let mut scores: Vec<(usize, f64)> = (0..self.surface.control_points.len()).map(|i| {
             let du = topology - self.surface.u_coords[i];
             let dv = time - self.surface.v_coords[i];
-            (i, (-(du * du + dv * dv) * 0.5).exp())
+            (i, crate::math::exp(-(du * du + dv * dv) * 0.5))
         }).collect();
         crate::sort_by_f64_desc(&mut scores, |&(_, s)| s);
         scores.truncate(k);

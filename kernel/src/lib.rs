@@ -422,7 +422,7 @@ pub use dowiz_core::order_machine;
 pub use dowiz_core::parse;
 /// Unified memory search engine — indexed vector (BM25 + trigram) + spectral
 /// navigation (PPR) over structured documents. Replaces all `grep -rn` extraction.
-pub mod memory_search;
+pub use dowiz_core::memory_search;
 /// Chronological-topological prediction engine — composes Markov, spectral,
 /// absorbing, Noether, and causal primitives into a single prediction API.
 pub use dowiz_core::predict;
@@ -525,27 +525,7 @@ pub mod hypergraph;
 #[cfg(feature = "speculative")]
 pub mod academia_p2p;
 #[cfg(not(feature = "speculative"))]
-pub mod academia_p2p {
-    /// Кількість геометричних вимірів для метричного тензора.
-    pub const GEO_DIMS: usize = 8;
-
-    /// Метричний тензор g_ij (симетричний, додатно визначений),
-    /// stub-версія — завжди евклідова.
-    #[derive(Debug, Clone)]
-    pub struct MetricTensor {
-        pub g: [[f64; GEO_DIMS]; GEO_DIMS],
-    }
-
-    impl MetricTensor {
-        pub fn euclidean() -> Self {
-            let mut g = [[0.0; GEO_DIMS]; GEO_DIMS];
-            for i in 0..GEO_DIMS {
-                g[i][i] = 1.0;
-            }
-            MetricTensor { g }
-        }
-    }
-}
+pub use dowiz_core::academia_p2p;
 /// Autonomous headless extraction agents — distributed bots for paper extraction.
 /// Кожен агент = окремий browser profile / IP / акаунт.
 /// Gated behind `feature = "speculative"` — depends on `AcademiaMesh`

@@ -183,6 +183,8 @@ pub mod kthread;
 pub mod core_pinning;
 pub mod prompt_enrich;
 pub mod agent_orchestrator;
+pub mod academia_p2p;
+pub mod memory_search;
 pub mod kprocess;
 
 // --- wave 6: batch-5 leaves (analytics / stats) ---
