@@ -1225,4 +1225,4 @@ pub fn init_tracing() {
 }
 pub use dowiz_core::oracle;
 pub use dowiz_core::meta_miner;
-pub mod physics;
+pub use dowiz_core::physics;

@@ -15,7 +15,8 @@
 
 use crate::academia::Academia;
 use crate::orchestrator::PidController;
-use std::time::Instant;
+use alloc::string::String;
+use alloc::vec::Vec;
 
 /// Універсальний прискорювач.
 pub struct PhysicsEngine {
@@ -63,12 +64,16 @@ impl PhysicsEngine {
 
     /// Термодинаміка: квантування даних (мінімум ентропії).
     pub fn quantize(items: &[String]) -> Vec<u64> {
-        use std::collections::hash_map::DefaultHasher;
-        use std::hash::{Hash, Hasher};
+        // Deterministic no_std hash (splitmix64), replacing the std DefaultHasher.
+        // The exact bit pattern differs from DefaultHasher but is stable and
+        // platform-independent; the quantization contract only needs determinism.
         items.iter().map(|item| {
-            let mut h = DefaultHasher::new();
-            item.hash(&mut h);
-            h.finish()
+            let mut state: u64 = 0x9E37_79B9_7F4A_7C15;
+            for &b in item.as_bytes() {
+                state = state.wrapping_mul(31).wrapping_add(b as u64);
+                state = crate::rng::splitmix64(&mut state);
+            }
+            state
         }).collect()
     }
 
@@ -119,9 +124,7 @@ impl AcceleratedSystem {
     }
 
     /// Прискорити ВСІ операції з використанням найкращої фізики.
-    pub fn accelerate_all(&mut self, batch: &[String]) -> f64 {
-        let t0 = Instant::now();
-
+    pub fn accelerate_all(&mut self, batch: &[String], now_ns_start: u64, now_ns_end: u64) -> f64 {
         // 1. Термодинаміка: квантування в фундаментальні частинки
         let _quantized: Vec<u64> = PhysicsEngine::quantize(batch);
 
@@ -135,8 +138,8 @@ impl AcceleratedSystem {
             }
         }
 
-        // 3. Виміряти швидкість
-        let elapsed: f64 = t0.elapsed().as_secs_f64();
+        // 3. Виміряти швидкість (elapsed from the injected monotonic ns pair).
+        let elapsed: f64 = now_ns_end.saturating_sub(now_ns_start) as f64 / 1e9;
         self.physics.measure(batch.len(), elapsed)
     }
 
@@ -191,7 +194,7 @@ mod tests {
     fn accelerated_system_inserts() {
         let mut sys = AcceleratedSystem::new();
         let batch: Vec<String> = (0..100).map(|i| format!("Paper {}", i)).collect();
-        let v = sys.accelerate_all(&batch);
+        let v = sys.accelerate_all(&batch, 0, 1_000_000);
         assert!(v > 0.0);
         assert_eq!(sys.academia.len(), 100);
     }

@@ -225,6 +225,7 @@ pub mod temporal_tmr;
 pub mod catalog;
 pub mod domain;
 pub mod simd;
+pub mod physics;
 pub mod tensor_parser;
 pub mod academia_cloud;
 pub mod agc_scheduler;
