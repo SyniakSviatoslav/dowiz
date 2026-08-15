@@ -160,6 +160,16 @@ pub fn emit_event(level: Level, msg: &str, fields: &[(&'static str, String)]) {
     }
 }
 
+/// Emit an alarm record (fail-closed forensic side-effect). Routed through the
+/// same [`emit_event`] hook; a no-op unless a sink hook is installed.
+pub fn emit_alarm(struct_name: &str, detail: &str) {
+    let fields = [
+        ("struct_name", String::from(struct_name)),
+        ("detail", String::from(detail)),
+    ];
+    emit_event(Level::Error, "alarm", &fields);
+}
+
 // ── Item 62: per-process span id minter ─────────────────────────────────────────────
 
 /// Per-process monotone span id counter (FDR relational linkage).

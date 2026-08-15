@@ -40,6 +40,8 @@
 
 use crate::breaker::{Breaker, SignalVector, TripCause};
 use crate::fdr;
+use alloc::string::ToString;
+use alloc::vec::Vec;
 
 /// The outcome of a temporal-TMR vote over `n` sequential re-runs of `f`.
 ///

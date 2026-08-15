@@ -868,7 +868,7 @@ pub mod autonomic;
 /// enters ONLY as a quantized [`crate::autonomic_pmu::PmuBand`] (P6 determinism
 /// guard) — never a raw counter in the control-law arithmetic. Diagnostic-grade;
 /// no CI gate keys on any PMU value.
-pub mod autonomic_pmu;
+pub use dowiz_core::autonomic_pmu;
 /// Item 9 (space-grade roadmap §D "THE PIVOT") — the deterministic
 /// fault-containment circuit breaker. The `Result<Permit, Tripped>` gate is the
 /// single admission decision; alarm receiver `Breaker::on_commit_error` consumes
@@ -880,7 +880,7 @@ pub use dowiz_core::breaker;
 /// a non-unanimous outcome trips the item-9 breaker (`TripCause::VoteMismatch`) +
 /// writes a Tier-1 FDR `Alarm`. **PARTIAL** (catches transient compute flips only;
 /// no SEU-immunity claim — see the module's honest-limits doc). Zero new deps.
-pub mod temporal_tmr;
+pub use dowiz_core::temporal_tmr;
 pub use csr::{precision_at_k, recall_at_k, Csr};
 pub use domain::{apply_event, compute_order_total, place_order, Order, OrderItem};
 #[cfg(feature = "wasm")]
