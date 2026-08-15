@@ -349,7 +349,7 @@ pub use dowiz_core::deploy_config;
 /// Pins the exact IEEE-754 bit pattern of every in-plane transcendental float
 /// site under the pinned toolchain; a libm ULP drift turns the always-on
 /// `cargo test` suite RED. See `docs/audits/determinism/FLOAT-SITES-2026-07-19.md`.
-pub mod determinism;
+pub use dowiz_core::determinism;
 /// A2 (BLUEPRINT-P-A §3.1) — generated kernel "organs" committed from eqc-rs.
 /// Each fn is emitted by `tools/eqc-rs/src/bin/gen_kernel_organs.rs`; verify
 /// against the hand-written law with a bit-parity `#[test]`.

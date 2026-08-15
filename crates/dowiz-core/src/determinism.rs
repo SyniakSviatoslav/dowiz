@@ -1,3 +1,4 @@
+#![allow(unused)]
 //! determinism.rs — Item 46 float-determinism containment goldens (ADR-046:
 //! pin-under-golden, park the full fixed-point rewrite behind named triggers).
 //!

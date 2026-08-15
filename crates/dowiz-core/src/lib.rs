@@ -169,3 +169,6 @@ pub mod kprocess;
 // --- wave 6: batch-5 leaves (analytics / stats) ---
 pub mod analytics;
 pub mod stats;
+
+// --- wave 7: leaves (determinism goldens) ---
+pub mod determinism;

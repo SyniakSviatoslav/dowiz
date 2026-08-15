@@ -1,3 +1,4 @@
+#![allow(unused)]
 //! signal.rs — fine-grained reactive signals (the Dioxus/SolidJS reactivity
 //! concept, item #12), zero-dep.
 //!
