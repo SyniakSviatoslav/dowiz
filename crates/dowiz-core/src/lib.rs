@@ -199,3 +199,4 @@ pub mod code_oracle;
 pub mod sys_dashboard;
 pub mod gossip;
 pub mod tracker;
+pub mod resilience;
