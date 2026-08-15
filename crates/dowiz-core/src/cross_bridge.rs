@@ -14,7 +14,9 @@
 //! ZERO deps. Uses enrichment engine's own data.
 
 use crate::prompt_enrich::PromptKind;
-use std::collections::{BTreeMap, BTreeSet};
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
 
 /// A cross-kind bridge — connects two or more PromptKinds through shared triggers.
 #[derive(Debug, Clone)]

@@ -477,7 +477,7 @@ pub mod detection;
 /// Automatic gap detection, enrichment, and correction for the prompt database.
 /// Monitors the enrichment engine: detects triggerless entries, low-count kinds,
 /// and empty text, then auto-heals via crystal-lattice synthesis and keyword extraction.
-pub mod self_heal;
+pub use dowiz_core::self_heal;
 /// Self-harness with zone protection for safe project-wide rewrites.
 /// Zone mapping (green→yellow→red→critical→forbidden), Hydra protection,
 /// blueprint generation, dynamic rewrite prediction.
@@ -758,7 +758,7 @@ pub use dowiz_core::invert;
 /// Cross-kind pattern bridges — each research finding natively encoded.
 /// python(17 kinds), tool(14), llm(14), claude-code(12), security(11).
 /// Publisher diversity tracker: NVIDIA(9), anthropics(8), microsoft(8).
-pub mod cross_bridge;
+pub use dowiz_core::cross_bridge;
 /// Bebop protocol bridge — trinary auth, eigen envelopes, wave mesh sync,
 /// chronos DTN store-forward. Wires the new paradigm into the protocol layer.
 pub mod bebop_bridge;

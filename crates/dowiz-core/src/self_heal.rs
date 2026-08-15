@@ -7,6 +7,8 @@
 //! 3. Synthesizing enrichment from existing patterns
 //! 4. Injecting the correction back into the DB
 
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
 use crate::prompt_enrich::{PromptEntry, PromptKind};
 use crate::academia::Academia;
 
