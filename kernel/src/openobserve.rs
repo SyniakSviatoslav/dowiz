@@ -377,9 +377,16 @@ impl ObservabilityHub {
         Ok(span)
     }
 
-    /// Take a telemetry snapshot (delegates to the aggregator).
+    /// Take a telemetry snapshot (samples `/proc` + stamps the wall clock, then
+    /// delegates to the no_std aggregator core).
     pub fn snapshot(&mut self) -> crate::telemetry_aggregator::TelemetrySnapshot {
-        self.aggregator.snapshot()
+        let timestamp_us = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_micros() as u64;
+        let cpu = crate::typed_metrics::proc_cpu_sample_from_proc_self();
+        let mem = crate::typed_metrics::mem_sample_from_proc_self();
+        self.aggregator.snapshot(timestamp_us, cpu, mem)
     }
 
     /// Borrow the columnar metric store.

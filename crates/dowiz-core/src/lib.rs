@@ -89,6 +89,7 @@ pub mod intake;
 pub mod money;
 pub mod hex_util;
 pub mod telemetry;
+pub mod telemetry_aggregator;
 pub mod github_patterns;
 pub mod incidence;
 pub mod optical;
@@ -167,6 +168,7 @@ pub mod time_stabilizer;
 pub mod order_machine;
 pub mod vfs;
 pub mod typed_metrics;
+pub mod token_bucket;
 pub mod kthread;
 pub mod kprocess;
 

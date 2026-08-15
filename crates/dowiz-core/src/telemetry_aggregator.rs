@@ -24,9 +24,10 @@
 
 use crate::telemetry::{surface_recurring_patterns, PatternSurface};
 use crate::telemetry_harvest::{HarvestLedger, HarvestReport};
-use crate::typed_metrics::{
-    mem_sample_from_proc_self, proc_cpu_sample_from_proc_self, MemSample, ProcCpuSample,
-};
+use crate::typed_metrics::{MemSample, ProcCpuSample};
+use alloc::collections::VecDeque;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 /// A unified telemetry snapshot — aggregates all available kernel metrics
 /// into a single structured report.
@@ -72,11 +73,8 @@ impl TelemetryAggregator {
         }
     }
 
-    /// Record a tool outcome event in the harvest ledger.
-    ///
-    /// This replaces the bash script's JSONL append pattern with a kernel-native
-    /// call that goes through `HarvestLedger` (which writes gov_route-compatible
-    /// JSONL lines).
+    /// Record a tool outcome event in the harvest ledger. `now_ms` is caller-supplied
+    /// monotonic milliseconds (the no_std form — the host stamps its own clock).
     pub fn record_event(
         &mut self,
         model: &str,
@@ -85,9 +83,10 @@ impl TelemetryAggregator {
         value: f64,
         cost: f64,
         outcome_token: &str,
+        now_ms: u64,
     ) {
         self.harvest_ledger
-            .record(model, task, success, value, cost, crate::now_ms());
+            .record(model, task, success, value, cost, now_ms);
 
         // Track outcome token for pattern surface (O(1) ring eviction).
         self.outcome_tokens.push_back(outcome_token.to_string());
@@ -96,17 +95,14 @@ impl TelemetryAggregator {
         }
     }
 
-    /// Take a full telemetry snapshot — aggregates CPU/mem (from /proc),
-    /// harvest ledger summary, and recurring patterns into one report.
-    pub fn snapshot(&mut self) -> TelemetrySnapshot {
-        let timestamp_us = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_micros() as u64;
-
-        let cpu = proc_cpu_sample_from_proc_self();
-        let mem = mem_sample_from_proc_self();
-
+    /// Take a full telemetry snapshot from caller-supplied samples + timestamp (the
+    /// no_std form — the host samples `/proc` and stamps its own wall clock).
+    pub fn snapshot(
+        &mut self,
+        timestamp_us: u64,
+        cpu: Option<ProcCpuSample>,
+        mem: Option<MemSample>,
+    ) -> TelemetrySnapshot {
         let harvest_report = self.harvest_ledger.report();
         let pattern_surface = if self.outcome_tokens.is_empty() {
             None
@@ -225,7 +221,7 @@ mod tests {
     #[test]
     fn record_event_increments_count() {
         let mut agg = TelemetryAggregator::new(100);
-        agg.record_event("test-model", "test-task", true, 1.0, 0.5, "success");
+        agg.record_event("test-model", "test-task", true, 1.0, 0.5, "success", 0);
         assert_eq!(agg.event_count(), 1);
     }
 
@@ -235,8 +231,8 @@ mod tests {
         assert_eq!(agg.glyph_report(), "(no telemetry events)");
 
         let mut agg2 = TelemetryAggregator::new(100);
-        agg2.record_event("m", "t1", true, 0.1, 0.2, "ok");
-        agg2.record_event("m", "t2", false, 0.9, 0.3, "fail");
+        agg2.record_event("m", "t1", true, 0.1, 0.2, "ok", 0);
+        agg2.record_event("m", "t2", false, 0.9, 0.3, "fail", 0);
         let g = agg2.glyph_report();
         assert!(g.contains("value sparkline:"));
         assert!(g.chars().any(|c| ('\u{2581}'..='\u{2588}').contains(&c)));
@@ -245,10 +241,10 @@ mod tests {
     #[test]
     fn snapshot_contains_harvest_report() {
         let mut agg = TelemetryAggregator::new(100);
-        agg.record_event("m", "t", true, 2.0, 1.0, "ok");
-        agg.record_event("m", "t", false, 0.0, 1.0, "fail");
+        agg.record_event("m", "t", true, 2.0, 1.0, "ok", 0);
+        agg.record_event("m", "t", false, 0.0, 1.0, "fail", 0);
 
-        let snap = agg.snapshot();
+        let snap = agg.snapshot(0, None, None);
         assert!(snap.harvest_report.is_some());
         let report = snap.harvest_report.unwrap();
         assert_eq!(report.total, 2);
@@ -257,7 +253,7 @@ mod tests {
     #[test]
     fn clear_resets_state() {
         let mut agg = TelemetryAggregator::new(100);
-        agg.record_event("m", "t", true, 1.0, 0.5, "ok");
+        agg.record_event("m", "t", true, 1.0, 0.5, "ok", 0);
         assert_eq!(agg.event_count(), 1);
 
         agg.clear();
@@ -275,8 +271,8 @@ mod tests {
     #[test]
     fn snapshot_hash_is_computed() {
         let mut agg = TelemetryAggregator::new(100);
-        agg.record_event("m", "t", true, 1.0, 0.5, "ok");
-        let snap = agg.snapshot();
+        agg.record_event("m", "t", true, 1.0, 0.5, "ok", 0);
+        let snap = agg.snapshot(0, None, None);
 
         assert_eq!(snap.snapshot_hash.len(), 32);
         assert!(!snap.snapshot_hash.iter().all(|&b| b == 0));
@@ -293,6 +289,7 @@ mod tests {
                 1.0,
                 0.1,
                 "event",
+                0,
             );
         }
         assert_eq!(agg.event_count(), 10);

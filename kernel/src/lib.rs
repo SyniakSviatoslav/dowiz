@@ -593,7 +593,7 @@ pub use dowiz_core::power_forecast;
 /// Unified telemetry aggregation — combines typed_metrics, telemetry (self-improvement
 /// pattern surface), telemetry_harvest (JSONL ledger), and span_metrics into one
 /// kernel-native interface. Replaces bash scripts like hydra_metrics_sender.sh.
-pub mod telemetry_aggregator;
+pub use dowiz_core::telemetry_aggregator;
 /// Per-call PQ ML-DSA-65 cryptographic signer for parse operations.
 /// Each parse call gets a fresh keypair; signature binds IP+timestamp+payload.
 /// Requires the `pq` feature for ML-DSA-65.

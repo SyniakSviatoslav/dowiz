@@ -165,91 +165,18 @@ impl TokenBucket {
 ///
 /// Total (never panics) and degrade-closed: any addition that would overflow `u64` is treated
 /// as "exceeds the burst limit" (`None`) via `checked_add`, never a wrapping/panicking result.
-pub fn gcra_decide(now_ns: u64, tat_ns: u64, cost_ns: u64, burst_ns: u64) -> Option<u64> {
-    let allow_at = tat_ns.max(now_ns);
-    let new_tat = allow_at.checked_add(cost_ns)?;
-    let limit = now_ns.checked_add(burst_ns)?;
-    (new_tat <= limit).then_some(new_tat)
+// gcra_decide (pure integer GCRA) + GcraTokenBucket (lock-free, AtomicU64) — re-exported
+// from the no_std core. The std stamping free functions below inject `crate::clock::now_ns()`.
+pub use dowiz_core::token_bucket::{gcra_decide, GcraTokenBucket};
+
+/// Grant via [`GcraTokenBucket`] stamped with the kernel's monotonic clock.
+pub fn gcra_try_acquire(b: &GcraTokenBucket, n: f64) -> bool {
+    b.try_acquire(n, crate::clock::now_ns())
 }
 
-/// Lock-free GCRA token bucket — item 8's decision package promoted from the
-/// `benches/contention.rs` prototype into a real, tested type. A single `AtomicU64` holds the
-/// "theoretical arrival time" (TAT, nanoseconds since construction); the clock read happens
-/// OUTSIDE the CAS loop (same shape as `TokenBucket::try_acquire`'s clock-outside-lock design),
-/// so only the tiny integer CAS itself serializes under contention.
-///
-/// **Scope limit (verified, not assumed):** valid ONLY for `refill_rate > 0.0` — the continuous
-/// rate-limit case GCRA natively models. Constructing with `refill_rate <= 0.0` is NOT rejected
-/// (kept infallible, matching `TokenBucket::new`'s signature), but degrades to "grants at most
-/// once, ever" — see `token_bucket_gcra_diverges_from_zero_refill_budget`. Callers using
-/// `TokenBucket::new(_, 0.0)` as a one-shot drain-to-zero budget (`bounded_drainer.rs`,
-/// `agent-adapters/src/fuel.rs`) MUST keep using [`TokenBucket`]; this type is not a drop-in for
-/// that pattern.
-pub struct GcraTokenBucket {
-    /// Nanoseconds per token, computed ONCE here — never re-derived inside `try_acquire`'s CAS
-    /// retry loop (item 7's second design requirement: f64→u64 conversion happens once, at
-    /// construction or immediately before the loop, never repeated per-retry).
-    nanos_per_token: f64,
-    /// Burst allowance in nanoseconds (`capacity * nanos_per_token`, saturating to `u64::MAX`).
-    burst_nanos: u64,
-    tat: AtomicU64,
-    base: Instant,
-}
-
-impl GcraTokenBucket {
-    /// Create a full bucket. `capacity` caps the burst; `refill_rate` is tokens/second and MUST
-    /// be `> 0.0` for GCRA-equivalent semantics (see the type doc's scope limit).
-    pub fn new(capacity: f64, refill_rate: f64) -> Self {
-        let nanos_per_token = if refill_rate > 0.0 {
-            1e9 / refill_rate
-        } else {
-            f64::INFINITY
-        };
-        let burst_nanos = (capacity * nanos_per_token) as u64; // saturating f64->u64 cast
-        GcraTokenBucket {
-            nanos_per_token,
-            burst_nanos,
-            tat: AtomicU64::new(0),
-            base: Instant::now(),
-        }
-    }
-
-    /// Grant iff the pure [`gcra_decide`] transition allows it; CAS-retries on contention.
-    /// Returns `true` iff granted; `false` ⇒ caller must degrade-closed (same contract as
-    /// [`TokenBucket::try_acquire`]).
-    pub fn try_acquire(&self, n: f64) -> bool {
-        let now_ns = self.base.elapsed().as_nanos() as u64;
-        // f64->u64 conversion happens ONCE per call, before the CAS loop — never repeated on
-        // retry (item 7 §5's second design requirement).
-        let cost_ns = (n * self.nanos_per_token) as u64;
-        loop {
-            let tat = self.tat.load(Ordering::Relaxed);
-            match gcra_decide(now_ns, tat, cost_ns, self.burst_nanos) {
-                None => return false,
-                Some(new_tat) => {
-                    match self.tat.compare_exchange_weak(
-                        tat,
-                        new_tat,
-                        Ordering::Relaxed,
-                        Ordering::Relaxed,
-                    ) {
-                        Ok(_) => return true,
-                        Err(_) => continue,
-                    }
-                }
-            }
-        }
-    }
-
-    /// Current available token budget (derived from the TAT, no stored token count to refill).
-    /// For telemetry/tests; mirrors [`TokenBucket::available`]'s contract.
-    pub fn available(&self) -> f64 {
-        let now_ns = self.base.elapsed().as_nanos() as u64;
-        let tat = self.tat.load(Ordering::Relaxed);
-        let spent_ns = tat.saturating_sub(now_ns);
-        let available_ns = self.burst_nanos.saturating_sub(spent_ns);
-        available_ns as f64 / self.nanos_per_token
-    }
+/// Current available budget via [`GcraTokenBucket`] stamped with the kernel's monotonic clock.
+pub fn gcra_available(b: &GcraTokenBucket) -> f64 {
+    b.available(crate::clock::now_ns())
 }
 
 #[cfg(test)]
@@ -307,11 +234,11 @@ mod tests {
     #[test]
     fn token_bucket_gcra_grants_within_capacity() {
         let b = GcraTokenBucket::new(10.0, 1.0);
-        assert!(b.try_acquire(3.0));
-        assert!(b.try_acquire(3.0));
-        assert!(b.try_acquire(3.0));
+        assert!(gcra_try_acquire(&b, 3.0));
+        assert!(gcra_try_acquire(&b, 3.0));
+        assert!(gcra_try_acquire(&b, 3.0));
         assert!(
-            !b.try_acquire(3.0),
+            !gcra_try_acquire(&b, 3.0),
             "4th acquire of 3.0 must fail with ~1 token left"
         );
     }
@@ -327,7 +254,7 @@ mod tests {
         let t0 = Instant::now();
         let mut granted = 0.0f64;
         for _ in 0..5000 {
-            if b.try_acquire(unit) {
+            if gcra_try_acquire(&b, unit) {
                 granted += unit;
             }
         }
@@ -556,7 +483,7 @@ mod gcra_oracle {
             let granted_total = Arc::clone(&granted_total);
             handles.push(thread::spawn(move || {
                 for _ in 0..PER_THREAD {
-                    if bucket.try_acquire(unit) {
+                    if gcra_try_acquire(&bucket, unit) {
                         granted_total.fetch_add(1, Ordering::Relaxed);
                     }
                 }
