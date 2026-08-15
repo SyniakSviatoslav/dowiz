@@ -12,6 +12,9 @@
 //! flips it when it installs its sink, so the disabled fast path stays a single relaxed
 //! load with zero std.
 
+pub mod cost_oracle;
+pub mod digital_twin;
+pub mod footprint;
 pub mod json;
 pub mod pmu;
 pub mod schema;

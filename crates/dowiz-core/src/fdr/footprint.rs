@@ -16,7 +16,7 @@
 //!   * The module ships with the regional constants ABSENT (named-absence) and only lights up when
 //!     the operator supplies them. No new `HwStamp` field is added.
 
-use super::schema::{Absence, Reading};
+use crate::fdr::schema::{Absence, Reading};
 
 /// µJ per kWh (1 kWh = 3.6e9 J = 3.6e15 µJ). Used to convert the joules reading into a
 /// normalized energy unit before multiplying by the operator's regional constant.
@@ -52,6 +52,18 @@ impl RegionConstants {
     }
 }
 
+/// Round a non-negative `f64` to the nearest `u64` (half away from zero), matching
+/// `f64::round() as u64` for the bounded, non-negative values this module derives.
+/// (`f64::round` is unavailable in this no_std toolchain; the cast saturates.)
+fn round_nonneg_to_u64(x: f64) -> u64 {
+    let t = x as u64; // saturating truncation
+    if x - (t as f64) >= 0.5 {
+        t.saturating_add(1)
+    } else {
+        t
+    }
+}
+
 /// Item 69 (a): `co2e = joules × carbon-intensity`, in microgrammes.
 ///
 /// Degrades to a named absence when `joules_uj` is absent (the same reason) OR when the regional
@@ -68,7 +80,7 @@ pub fn co2e_ug(joules: Reading<u64>, carbon_g_per_kwh: Option<f64>) -> Reading<u
                 if !ug.is_finite() || ug < 0.0 {
                     Reading::Unavailable(Absence::ReadError)
                 } else {
-                    Reading::Value(ug.round() as u64)
+                    Reading::Value(round_nonneg_to_u64(ug))
                 }
             }
         },
@@ -88,7 +100,7 @@ pub fn offsite_water_ul(joules: Reading<u64>, wue_l_per_kwh: Option<f64>) -> Rea
                 if !ul.is_finite() || ul < 0.0 {
                     Reading::Unavailable(Absence::ReadError)
                 } else {
-                    Reading::Value(ul.round() as u64)
+                    Reading::Value(round_nonneg_to_u64(ul))
                 }
             }
         },

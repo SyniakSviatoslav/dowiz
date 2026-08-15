@@ -21,9 +21,12 @@
 //! The chosen form is cross-checked against `Expr::eval` on a sample set. Honestly "constant
 //! folding plus strength reduction with a proof" — NOT a superoptimizer.
 
-use super::cost_oracle::{self, CostBucket, DecisionSurface};
-use super::json::JsonWriter;
+use crate::fdr::cost_oracle::{self, CostBucket, DecisionSurface};
+use crate::fdr::json::JsonWriter;
 use crate::spectral::{classify_drift, spectral_radius, DriftClass};
+use alloc::boxed::Box;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════
 // Item 70 — the twin

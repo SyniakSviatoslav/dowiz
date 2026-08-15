@@ -45,8 +45,11 @@
 //!   zero production callers; the byte-compat contract is the parsed artifacts only
 //!   (`metric.jsonl` / `alert.jsonl` / the markov CLI JSON), all golden-pinned.
 
-// `json` is pure (alloc-only) — re-exported from the no_std core.
+// Pure (alloc-only) submodules re-exported from the no_std core.
+pub use dowiz_core::fdr::digital_twin;
+pub use dowiz_core::fdr::footprint;
 pub use dowiz_core::fdr::json;
+pub mod cost_oracle; // std shim: re-export + the recoverable-from-ring round-trip test
 pub mod pmu;
 pub mod schema;
 
