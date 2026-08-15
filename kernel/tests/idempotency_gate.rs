@@ -19,7 +19,7 @@ mod gate_tests {
     use dowiz_kernel::prompt_enrich::PromptEnrichEngine;
     use dowiz_kernel::dynamic_spawner::{DynamicSpawner, SpawnBatchConfig};
     use dowiz_kernel::backup::Manifest;
-    use dowiz_kernel::tracker::{EventLog, LoggedEvent, ReverseReplay};
+    use dowiz_kernel::tracker::{EventLog, ReverseReplay};
     use dowiz_kernel::retrieval::memory_store::{InMemoryStore, MemoryStore};
 
     // ─── 1: Predictor add_route idempotent ───────────────────────────────
@@ -71,7 +71,7 @@ mod gate_tests {
         );
 
         // Publish once, drain both subscribers
-        bus.publish(GossipTopic::Telemetry, b"hello".as_slice());
+        dowiz_kernel::gossip::publish_now(&mut bus, GossipTopic::Telemetry, b"hello".as_slice());
         let msgs1 = bus.drain(id1);
         let msgs2 = bus.drain(_id2);
         assert_eq!(msgs1.len(), 1, "first subscriber must receive the message");
@@ -134,12 +134,12 @@ mod gate_tests {
         let mut log = EventLog::new(1024);
 
         let payload = b"model=gpt-4|task=idempotent_gate|success=true|value=42|cost=7";
-        log.record(LoggedEvent::new("harvest", "dispatch", payload.to_vec()));
+        log.record(dowiz_kernel::tracker::logged_event_new("harvest", "dispatch", payload.to_vec()));
         let count1 = log.len();
         assert_eq!(count1, 1, "first record must produce 1 event");
 
         // Same payload again — raw EventLog preserves everything (tracing ledger)
-        log.record(LoggedEvent::new("harvest", "dispatch", payload.to_vec()));
+        log.record(dowiz_kernel::tracker::logged_event_new("harvest", "dispatch", payload.to_vec()));
         assert_eq!(log.len(), 2,
             "raw EventLog is a tracing ledger that preserves every event. \
              Idempotent dedup for the harvest path uses the content-addressed \
