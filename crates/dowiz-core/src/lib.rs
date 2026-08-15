@@ -81,6 +81,7 @@ pub use sanitize::{sanitize_f32, sanitize_f64, sanitize_normalized};
 pub use sort::{sort_by_f64_asc, sort_by_f64_desc};
 pub mod landmark;
 pub mod attention;
+pub mod autonomic;
 pub mod micrograd;
 pub mod pixel_snapshot;
 pub mod resonance;

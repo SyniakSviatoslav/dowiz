@@ -41,60 +41,8 @@ use crate::spectral::DriftClass;
 //     never be violated by an adjustment equation).
 //   * `try_from_f64` — *rejects* (returns `None`) out-of-bound values (the public
 //     fallible entry; the planted-fault self-test proves it rejects unsafe laws).
-const BOUND_MIN: f64 = 0.0;
-const BOUND_MAX: f64 = 100.0;
-
-/// A newtype over `f64` that **cannot** hold a value outside `[BOUND_MIN,
-/// BOUND_MAX]`. The field is private and the only constructors clamp/reject, so
-/// an out-of-bound `BoundedRate` is *inexpressible* — not merely avoided.
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub struct BoundedRate {
-    value: f64,
-}
-
-impl BoundedRate {
-    /// The proven-stable interval (named constants, not literals scattered in code).
-    pub const MIN: f64 = BOUND_MIN;
-    pub const MAX: f64 = BOUND_MAX;
-
-    /// Clamping constructor — the ONLY path `schedule` uses. An out-of-bound input
-    /// is brought back into `[MIN, MAX]`, so the over-grant invariant can never be
-    /// broken by an adjustment equation. This is why an out-of-bound `BoundedRate`
-    /// is inexpressible: any attempt to build one lands inside the bound.
-    #[inline]
-    pub fn from_f64(v: f64) -> Self {
-        let v = if v.is_nan() {
-            BOUND_MIN
-        } else if v < BOUND_MIN {
-            BOUND_MIN
-        } else if v > BOUND_MAX {
-            BOUND_MAX
-        } else {
-            v
-        };
-        debug_assert!(v >= BOUND_MIN && v <= BOUND_MAX, "BoundedRate clamp broke");
-        BoundedRate { value: v }
-    }
-
-    /// Rejecting constructor — returns `None` iff `v` is outside `[MIN, MAX]`.
-    /// This is the public fallible entry point and the proof surface for the
-    /// planted-fault self-test: an unsafe law that would produce an out-of-bound
-    /// rate is *rejected* here, never constructed.
-    #[inline]
-    pub fn try_from_f64(v: f64) -> Option<Self> {
-        if v < BOUND_MIN || v > BOUND_MAX || v.is_nan() {
-            None
-        } else {
-            Some(BoundedRate { value: v })
-        }
-    }
-
-    /// The rate as a raw `f64`. Always within `[MIN, MAX]` (the invariant).
-    #[inline]
-    pub fn get(self) -> f64 {
-        self.value
-    }
-}
+// BoundedRate (pure bounded-f64 newtype) — re-exported from the no_std core.
+pub use dowiz_core::autonomic::BoundedRate;
 
 /// One row of the explicit control-law table: a {classified-state → bounded
 /// adjustment} law. Each adjustment is a **checkable equation** — `rate *= mult`
@@ -274,20 +222,20 @@ pub fn schedule(
 
     // Checkable equation: `next = current * mult`, clamped into the proven-stable
     // bound by the inexpressible `BoundedRate` ctor.
-    let next = BoundedRate::from_f64(current.value * row.2.mult);
+    let next = BoundedRate::from_f64(current.get() * row.2.mult);
 
     // Item 3 (debug-differential): independent bound check cross-validating the
     // newtype's clamp on every schedule call.
     debug_assert!(
-        next.value >= BoundedRate::MIN && next.value <= BoundedRate::MAX,
+        next.get() >= BoundedRate::MIN && next.get() <= BoundedRate::MAX,
         "schedule produced an out-of-bound rate"
     );
 
     let fdr = FdrAdjustment {
         class,
         verdict,
-        from_rate: current.value,
-        to_rate: next.value,
+        from_rate: current.get(),
+        to_rate: next.get(),
         tag: row.2.tag,
         route_to_breaker: row.2.route_to_breaker,
     };
