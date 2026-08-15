@@ -16,7 +16,9 @@
 //! - Parallel dispatch: fan-out based on available resources
 //! - Cryptographic verification: SHA3-256 on all state transitions
 
-use std::fmt;
+use core::fmt;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 use crate::event_log::sha3_256;
 use crate::token_bucket::TokenBucket;
@@ -192,7 +194,7 @@ impl PredictiveEngine {
     pub fn predict_eta(&self, category: ActionCategory) -> (u64, u64) {
         match self.category_stats.get(&category) {
             Some(stats) if stats.count >= 3 => {
-                let ci_95 = (1.96 * stats.variance.sqrt() * 2.0) as u64; // 95% CI half-width
+                let ci_95 = (1.96 * crate::math::sqrt(stats.variance) * 2.0) as u64; // 95% CI half-width
                 (stats.value as u64, ci_95)
             }
             _ => {
@@ -381,13 +383,13 @@ pub struct Orchestrator {
 
 impl Orchestrator {
     /// Create a new orchestrator with a budget and workflow gate.
-    pub fn new(budget: TokenBucket) -> Self {
+    pub fn new(budget: TokenBucket, now_us: u64) -> Self {
         Orchestrator {
             history: Vec::with_capacity(64),
             max_history: 256,
             budget,
             gate: WorkflowGate::new(),
-            start_us: monotonic_us(),
+            start_us: now_us,
             health_signals: Vec::new(),
             active_tasks: 0,
             chain_hash: [0u8; 32],
@@ -407,8 +409,9 @@ impl Orchestrator {
         success: bool,
         error: &str,
         budget_consumed: f64,
+        now_us: u64,
     ) -> ActionRecord {
-        let ts = monotonic_us();
+        let ts = now_us;
         let hash = action_hash(category, name, ts);
 
         // Update hash chain.
@@ -456,14 +459,14 @@ impl Orchestrator {
     }
 
     /// Start a new task (increment active count, check budget).
-    pub fn start_task(&mut self) -> Result<(), String> {
+    pub fn start_task(&mut self, now_ns: u64) -> Result<(), String> {
         if self.active_tasks >= MAX_CONCURRENT {
             return Err(format!(
                 "max concurrent tasks ({}) reached",
                 MAX_CONCURRENT
             ));
         }
-        if !crate::token_bucket::token_bucket_try_acquire(&self.budget, 1.0) {
+        if !self.budget.try_acquire(1.0, now_ns) {
             return Err("budget exhausted".to_string());
         }
         self.active_tasks += 1;
@@ -699,6 +702,7 @@ impl Orchestrator {
         priority: Priority,
         budget_cost: f64,
         depends_on: Vec<u64>,
+        now_us: u64,
     ) -> u64 {
         let task_id = self.next_task_id;
         self.next_task_id += 1;
@@ -710,7 +714,7 @@ impl Orchestrator {
             category,
             priority,
             estimated_us,
-            created_us: monotonic_us(),
+            created_us: now_us,
             budget_cost,
             depends_on,
         };
@@ -851,14 +855,6 @@ impl Orchestrator {
     }
 }
 
-/// Get monotonic timestamp in microseconds (platform-specific).
-fn monotonic_us() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_micros() as u64)
-        .unwrap_or(0)
-}
-
 /// Build a health signal for a subsystem from recent action records.
 pub fn build_health_signal(subsystem: &str, records: &[ActionRecord]) -> HealthSignal {
     if records.is_empty() {
@@ -920,7 +916,7 @@ mod tests {
 
     #[test]
     fn new_orchestrator_starts_healthy_unknown() {
-        let orch = Orchestrator::new(test_budget());
+        let orch = Orchestrator::new(test_budget(), 0);
         assert_eq!(orch.health(), SystemHealth::Unknown);
         assert_eq!(orch.active_tasks(), 0);
         assert!(orch.can_parallel().is_true());
@@ -928,7 +924,7 @@ mod tests {
 
     #[test]
     fn record_action_emits_telemetry() {
-        let mut orch = Orchestrator::new(test_budget());
+        let mut orch = Orchestrator::new(test_budget(), 0);
         let record = orch.record_action(
             ActionCategory::ToolRead,
             "read_order",
@@ -936,7 +932,7 @@ mod tests {
             true,
             "",
             1.0,
-        );
+            0);
         assert_eq!(record.category, ActionCategory::ToolRead);
         assert_eq!(record.name, "read_order");
         assert_eq!(record.duration_us, 150);
@@ -947,27 +943,27 @@ mod tests {
 
     #[test]
     fn health_improves_with_successes() {
-        let mut orch = Orchestrator::new(test_budget());
+        let mut orch = Orchestrator::new(test_budget(), 0);
         for _ in 0..10 {
-            orch.record_action(ActionCategory::ToolRead, "test", 100, true, "", 0.5);
+            orch.record_action(ActionCategory::ToolRead, "test", 100, true, "", 0.5, 0);
         }
         assert_eq!(orch.health(), SystemHealth::Healthy);
     }
 
     #[test]
     fn health_degrades_with_failures() {
-        let mut orch = Orchestrator::new(test_budget());
+        let mut orch = Orchestrator::new(test_budget(), 0);
         for _ in 0..10 {
-            orch.record_action(ActionCategory::ToolRead, "test", 100, false, "error", 0.5);
+            orch.record_action(ActionCategory::ToolRead, "test", 100, false, "error", 0.5, 0);
         }
         assert_eq!(orch.health(), SystemHealth::Critical);
     }
 
     #[test]
     fn load_prediction_with_data() {
-        let mut orch = Orchestrator::new(test_budget());
+        let mut orch = Orchestrator::new(test_budget(), 0);
         for _ in 0..15 {
-            orch.record_action(ActionCategory::ToolRead, "test", 1000, true, "", 1.0);
+            orch.record_action(ActionCategory::ToolRead, "test", 1000, true, "", 1.0, 0);
         }
         let pred = orch.predict_load();
         assert!(pred.actions_per_sec > 0.0);
@@ -977,7 +973,7 @@ mod tests {
 
     #[test]
     fn load_prediction_empty_history() {
-        let orch = Orchestrator::new(test_budget());
+        let orch = Orchestrator::new(test_budget(), 0);
         let pred = orch.predict_load();
         assert_eq!(pred.actions_per_sec, 0.0);
         assert_eq!(pred.confidence, 0.0);
@@ -985,10 +981,10 @@ mod tests {
 
     #[test]
     fn start_finish_task_tracks_count() {
-        let mut orch = Orchestrator::new(test_budget());
-        orch.start_task().unwrap();
+        let mut orch = Orchestrator::new(test_budget(), 0);
+        orch.start_task(0).unwrap();
         assert_eq!(orch.active_tasks(), 1);
-        orch.start_task().unwrap();
+        orch.start_task(0).unwrap();
         assert_eq!(orch.active_tasks(), 2);
         orch.finish_task();
         assert_eq!(orch.active_tasks(), 1);
@@ -998,17 +994,17 @@ mod tests {
 
     #[test]
     fn max_concurrent_enforced() {
-        let mut orch = Orchestrator::new(test_budget());
+        let mut orch = Orchestrator::new(test_budget(), 0);
         for _ in 0..MAX_CONCURRENT {
-            orch.start_task().unwrap();
+            orch.start_task(0).unwrap();
         }
-        assert!(orch.start_task().is_err());
+        assert!(orch.start_task(0).is_err());
         assert_eq!(orch.parallel_capacity(), 0);
     }
 
     #[test]
     fn workflow_gate_integration() {
-        let mut orch = Orchestrator::new(test_budget());
+        let mut orch = Orchestrator::new(test_budget(), 0);
         assert!(orch.can_commit().is_false());
         orch.advance_gate(GatePhase::Research).unwrap();
         orch.advance_gate(GatePhase::Synthesis).unwrap();
@@ -1017,20 +1013,20 @@ mod tests {
 
     #[test]
     fn chain_hash_changes_with_actions() {
-        let mut orch = Orchestrator::new(test_budget());
+        let mut orch = Orchestrator::new(test_budget(), 0);
         let hash0 = orch.chain_hash();
-        orch.record_action(ActionCategory::ToolRead, "a", 10, true, "", 0.0);
+        orch.record_action(ActionCategory::ToolRead, "a", 10, true, "", 0.0, 0);
         let hash1 = orch.chain_hash();
         assert_ne!(hash0, hash1);
-        orch.record_action(ActionCategory::ToolWrite, "b", 20, true, "", 0.0);
+        orch.record_action(ActionCategory::ToolWrite, "b", 20, true, "", 0.0, 0);
         let hash2 = orch.chain_hash();
         assert_ne!(hash1, hash2);
     }
 
     #[test]
     fn ascii_dashboard_contains_sections() {
-        let mut orch = Orchestrator::new(test_budget());
-        orch.record_action(ActionCategory::ToolRead, "test", 100, true, "", 1.0);
+        let mut orch = Orchestrator::new(test_budget(), 0);
+        orch.record_action(ActionCategory::ToolRead, "test", 100, true, "", 1.0, 0);
         let dash = orch.ascii_dashboard();
         assert!(dash.contains("Orchestrator Health Dashboard"));
         assert!(dash.contains("Status:"));
@@ -1040,7 +1036,7 @@ mod tests {
 
     #[test]
     fn health_signal_registration() {
-        let mut orch = Orchestrator::new(test_budget());
+        let mut orch = Orchestrator::new(test_budget(), 0);
         let signal = HealthSignal {
             subsystem: "tool_executor".to_string(),
             status: SystemHealth::Healthy,
@@ -1068,7 +1064,7 @@ mod tests {
 
     #[test]
     fn aggregate_health_reflects_subsystems() {
-        let mut orch = Orchestrator::new(test_budget());
+        let mut orch = Orchestrator::new(test_budget(), 0);
         orch.register_health(HealthSignal {
             subsystem: "a".to_string(),
             status: SystemHealth::Healthy,
@@ -1172,9 +1168,9 @@ mod tests {
 
     #[test]
     fn enqueue_and_dequeue() {
-        let mut orch = Orchestrator::new(test_budget());
-        let id1 = orch.enqueue_task(ActionCategory::ToolRead, Priority::Normal, 1.0, vec![]);
-        let id2 = orch.enqueue_task(ActionCategory::Parse, Priority::Parse, 2.0, vec![]);
+        let mut orch = Orchestrator::new(test_budget(), 0);
+        let id1 = orch.enqueue_task(ActionCategory::ToolRead, Priority::Normal, 1.0, vec![], 0);
+        let id2 = orch.enqueue_task(ActionCategory::Parse, Priority::Parse, 2.0, vec![], 0);
         assert_eq!(id1, 1);
         assert_eq!(id2, 2);
         assert_eq!(orch.queue_depth(), 2);
@@ -1193,10 +1189,10 @@ mod tests {
 
     #[test]
     fn queue_snapshot_is_priority_sorted() {
-        let mut orch = Orchestrator::new(test_budget());
-        orch.enqueue_task(ActionCategory::ToolRead, Priority::Background, 1.0, vec![]);
-        orch.enqueue_task(ActionCategory::Parse, Priority::Critical, 1.0, vec![]);
-        orch.enqueue_task(ActionCategory::Skill, Priority::Normal, 1.0, vec![]);
+        let mut orch = Orchestrator::new(test_budget(), 0);
+        orch.enqueue_task(ActionCategory::ToolRead, Priority::Background, 1.0, vec![], 0);
+        orch.enqueue_task(ActionCategory::Parse, Priority::Critical, 1.0, vec![], 0);
+        orch.enqueue_task(ActionCategory::Skill, Priority::Normal, 1.0, vec![], 0);
 
         let snap = orch.queue_snapshot();
         assert_eq!(snap[0].priority, Priority::Critical);
@@ -1268,11 +1264,11 @@ mod tests {
 
     #[test]
     fn orchestrator_pid_and_prediction_integration() {
-        let mut orch = Orchestrator::new(test_budget());
+        let mut orch = Orchestrator::new(test_budget(), 0);
 
         // Simulate some actions.
         for _ in 0..5 {
-            orch.record_action(ActionCategory::Parse, "fetch", 500, true, "", 2.0);
+            orch.record_action(ActionCategory::Parse, "fetch", 500, true, "", 2.0, 0);
         }
 
         // PID update based on latency.
@@ -1291,9 +1287,9 @@ mod tests {
 
     #[test]
     fn orchestrator_full_dashboard_contains_all_sections() {
-        let mut orch = Orchestrator::new(test_budget());
-        orch.record_action(ActionCategory::Parse, "test", 100, true, "", 1.0);
-        orch.enqueue_task(ActionCategory::Parse, Priority::Parse, 1.0, vec![]);
+        let mut orch = Orchestrator::new(test_budget(), 0);
+        orch.record_action(ActionCategory::Parse, "test", 100, true, "", 1.0, 0);
+        orch.enqueue_task(ActionCategory::Parse, Priority::Parse, 1.0, vec![], 0);
         let dash = orch.ascii_dashboard_full();
         assert!(dash.contains("Orchestrator Health Dashboard"));
         assert!(dash.contains("PID recommends"));
@@ -1305,15 +1301,15 @@ mod tests {
 
     #[test]
     fn dequeue_ready_on_empty_queue_returns_none() {
-        let mut orch = Orchestrator::new(test_budget());
+        let mut orch = Orchestrator::new(test_budget(), 0);
         assert_eq!(orch.queue_depth(), 0);
         assert!(orch.dequeue_ready().is_none());
     }
 
     #[test]
     fn priority_ties_ordered_by_lower_estimated_us() {
-        let mut orch = Orchestrator::new(test_budget());
-        orch.enqueue_task(ActionCategory::ToolRead, Priority::Normal, 1.0, vec![]);
+        let mut orch = Orchestrator::new(test_budget(), 0);
+        orch.enqueue_task(ActionCategory::ToolRead, Priority::Normal, 1.0, vec![], 0);
         // Manually set a second Normal-priority task with a lower estimated_us so it
         // should sort first (ascending estimated_us within same priority).
         let task_id = orch.enqueue_task(
@@ -1321,7 +1317,7 @@ mod tests {
             Priority::Normal,
             1.0,
             vec![],
-        );
+            0);
         // Override the predicted eta on the second task to be lower.
         if let Some(t) = orch.task_queue.iter_mut().find(|t| t.task_id == task_id) {
             t.estimated_us = 10;
@@ -1337,8 +1333,8 @@ mod tests {
     #[test]
     fn start_task_blocks_on_budget_exhaustion() {
         let empty_budget = TokenBucket::new(0.0, 0.0);
-        let mut orch = Orchestrator::new(empty_budget);
-        assert!(orch.start_task().is_err());
+        let mut orch = Orchestrator::new(empty_budget, 0);
+        assert!(orch.start_task(0).is_err());
         assert_eq!(orch.active_tasks(), 0);
     }
 
