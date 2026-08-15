@@ -14,7 +14,7 @@
 //!
 //! ## Usage
 //! ```
-//! use dowiz_kernel::predictor::{Predictor, SystemState, Action, PredictorConfig};
+//! use dowiz_core::predictor::{Predictor, SystemState, Action, PredictorConfig};
 //!
 //! let mut pred = Predictor::new(PredictorConfig::default());
 //! let state = SystemState::new(1, vec![0.5, 0.3, 0.1, 0.8, 0.2, 0.6], "steady");

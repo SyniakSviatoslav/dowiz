@@ -30,7 +30,7 @@ pub mod pq;
 /// Reverse-engineering loop #R3 — absorbing Markov chain closed forms: fundamental matrix
 /// N=(I−Q)⁻¹ (exact finite sum for the DAG lifecycle), expected steps-to-terminal, absorption probs.
 pub mod absorbing;
-pub mod analytics;
+pub use dowiz_core::analytics;
 /// P11 §7 — CorePinning trait seam (Trait-as-Port): pluggable CPU-core-affinity
 /// port with a zero-cost `NoOpCorePinning` default (NUMA crate DECART-deferred).
 pub mod arena;
@@ -294,9 +294,9 @@ pub use dowiz_core::spine;
 pub mod spool;
 /// E2 — the kernel's single uncertainty primitive: mean SE / normal & Wilson
 /// intervals / the relocated CLT convergence envelope / a seeded bootstrap.
-/// Zero-dep leaf (sibling of `rng`/`money`/`noether`); every layer depends on it
-/// downward so a reported scalar can carry the check that would refute it.
-pub mod stats;
+/// (Extracted into no_std `dowiz-core`; re-exported so `crate::stats::…`
+/// resolves unchanged.)
+pub use dowiz_core::stats;
 /// BLUEPRINT-P66 — offline data wallet + single-writer LWW drafts + Signal-style QR transfer
 /// (self-custody, no dowiz account, query-before-replay reconnect). Pure client-side logic;
 /// `transfer` reuses the `pq` crypto primitives (x25519 / shake256 / aes-gcm) gated under `pq`.
@@ -490,8 +490,9 @@ pub mod github_patterns;
 /// via spectral decomposition. FanOut parallelism across tensor dimensions.
 pub mod tensor_parser;
 /// Spectral Parsing: O(n⁰) paper extraction. Raw OAI-PMH byte scanner (no XML DOM),
-/// tensor ASCII storage, spectral decomposition search, harmonic ranking.
-pub mod spectral_parser;
+/// tensor ASCII storage, spectral decomposition search, harmonic ranking. Extracted
+/// to no_std `dowiz-core`; `crate::spectral_parser::…` resolves unchanged via re-export.
+pub use dowiz_core::spectral_parser;
 /// Parametric Surface Spectral Library: papers projected onto 2D parametric
 /// surface via top-2 eigenvectors. Each paper = SPIN at (u,v) on surface.
 /// Grid-based navigation: O(1) cell lookup, ~32MB for 1M papers.
@@ -574,7 +575,7 @@ pub mod research;
 /// Compact ASCII library for research papers — content-addressed, deduplicated,
 /// non-ASCII stripped. Each paper stored as one line (unit-separator delimited).
 /// ~20MB for 100K papers vs ~200MB in JSON (10x compression).
-pub mod research_ascii;
+pub use dowiz_core::research_ascii;
 /// CPU core topology + cache hierarchy + clock source detection.
 /// Probes /proc/cpuinfo and /sys at init. All pure data after init.
 pub mod hw_profile;
@@ -584,7 +585,8 @@ pub mod hw_profile;
 pub mod cpuid;
 /// Deterministic time authority — stabilises raw clocks (kvm-clock/TSC/HPET)
 /// through a PLL corrector + PPMC predictor. Time never goes backwards.
-pub mod time_stabilizer;
+/// Extracted to the no_std core (see `crates/dowiz-core/src/time_stabilizer.rs`).
+pub use dowiz_core::time_stabilizer;
 /// Weather + power grid load forecasting for clock drift prediction.
 /// Forecast feeds into TimeStabilizer's drift model.
 pub use dowiz_core::power_forecast;
@@ -748,7 +750,7 @@ pub use dowiz_core::neon;
 /// Deterministic, no_std-ready FxHash (replaces BTreeMap's OS-entropy RandomState).
 pub mod fxhash;
 /// Single-authority time abstraction (Clock/WallClock) — std::time seam for kernel port.
-pub use dowiz_core::clock;
+pub mod clock;
 /// Thread seam (ledger item 4: thread → kthread) — no_std-compatible
 /// [`crate::kthread::Thread`] trait + `StdThread` impl + `sleep`/
 /// `available_parallelism` free functions. `spawn`/`scope` stay std (need a

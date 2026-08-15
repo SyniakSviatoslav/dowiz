@@ -11,12 +11,10 @@
 //!   `token_bucket` pattern: `now` sampled before the critical section).
 //! - All counters saturate (`saturating_sub`), never wrap/panic.
 
-/// Monotonic clock: nanoseconds since an arbitrary fixed epoch (monotone).
-/// Userspace = `std::time::Instant`; kernel = `ktime_get_ns`/jiffies (swap here).
-pub trait Clock {
-    /// Current monotonic time in nanoseconds.
-    fn now_ns(&self) -> u64;
-}
+// Pure trait + elapsed helper come from the no_std core; the std-dependent
+// clock implementations (MonoClock / SystemClock / now_*) are redefined here
+// so the kernel reads real time (shadowing the no_std fallbacks).
+pub use dowiz_core::clock::*;
 
 /// Wall clock: seconds since the Unix epoch. Kernel swap = `ktime_get_real_seconds`.
 pub trait WallClock {
@@ -81,12 +79,6 @@ pub fn now_ms() -> u64 {
 /// `canonical`).
 pub fn now_epoch_s() -> u64 {
     SystemClock.now_epoch_s()
-}
-
-/// Elapsed ns between two monotonic stamps (saturating, never negative).
-#[inline(always)]
-pub fn elapsed_ns(from_ns: u64, to_ns: u64) -> u64 {
-    to_ns.saturating_sub(from_ns)
 }
 
 #[cfg(test)]

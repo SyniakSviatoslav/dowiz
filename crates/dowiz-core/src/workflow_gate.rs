@@ -146,7 +146,7 @@ impl fmt::Display for GateError {
 ///
 /// # Usage
 /// ```
-/// use dowiz_kernel::workflow_gate::{WorkflowGate, GatePhase};
+/// use dowiz_core::workflow_gate::{WorkflowGate, GatePhase};
 ///
 /// let mut gate = WorkflowGate::new();
 ///

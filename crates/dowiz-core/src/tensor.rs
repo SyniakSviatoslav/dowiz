@@ -15,7 +15,7 @@
 //!
 //! ## Usage
 //! ```
-//! use dowiz_kernel::tensor::{Tensor1, Tensor2};
+//! use dowiz_core::tensor::{Tensor1, Tensor2};
 //! let a = Tensor1::new(vec![1.0, 2.0, 3.0]);
 //! let b = Tensor1::new(vec![4.0, 5.0, 6.0]);
 //! assert!((a.dot(&b) - 32.0).abs() < 1e-12);

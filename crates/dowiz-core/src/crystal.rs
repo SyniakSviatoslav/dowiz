@@ -16,7 +16,7 @@
 //!
 //! ## Usage
 //! ```
-//! use dowiz_kernel::crystal::{CrystalLattice, CrystalIndex};
+//! use dowiz_core::crystal::{CrystalLattice, CrystalIndex};
 //!
 //! #[derive(Clone, Debug)]
 //! struct MyData { id: u64, value: f64 }
@@ -24,7 +24,7 @@
 //! impl CrystalIndex for MyData {
 //!     fn crystal_hash(&self) -> [u8; 32] {
 //!         let h = core::hash::BuildHasher::hash_one(
-//!             &core::hash::RandomState::new(),
+//!             &std::collections::hash_map::RandomState::new(),
 //!             &self.id,
 //!         );
 //!         let mut output = [0u8; 32];

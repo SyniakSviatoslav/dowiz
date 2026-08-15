@@ -1,3 +1,4 @@
+#![allow(unused)]
 //! Channel analytics — closes the open attribution measurement loop.
 //!
 //! The oracle (`apps/api/src/routes/orders.ts`) captures order attribution via
@@ -18,6 +19,9 @@
 //! couriers.
 
 use alloc::collections::BTreeMap;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
 
 use crate::order_machine::{fold_transitions, OrderStatus};
 

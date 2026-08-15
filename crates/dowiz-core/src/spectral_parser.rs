@@ -1,4 +1,4 @@
-//! `kernel::spectral_parser` — Spectral Parsing: O(n⁰) paper extraction.
+//! `dowiz_core::spectral_parser` — Spectral Parsing: O(n⁰) paper extraction.
 //!
 //! # Architecture
 //! Snapshot download (O(1)) → raw byte scan (O(bytes), skip XML DOM) →
@@ -25,6 +25,9 @@
 use crate::event_log::sha3_256;
 use crate::TriState;
 use alloc::collections::BTreeMap;
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec::Vec;
 
 /// Tensor dimensionality.
 pub const SPECTRAL_DIM: usize = 256;
@@ -67,7 +70,7 @@ impl TensorAscii {
                 v.push(if (b >> bit) & 1 == 1 { 1.0 } else { -1.0 });
             }
         }
-        let n: f64 = v.iter().map(|x| x * x).sum::<f64>().sqrt();
+        let n: f64 = crate::math::sqrt(v.iter().map(|x| x * x).sum::<f64>());
         if n > 0.0 { for x in &mut v { *x /= n; } }
         v
     }
@@ -145,7 +148,7 @@ impl SpectralIndex {
                         val * v.get(j % dim).copied().unwrap_or(0.0)
                     }).sum::<f64>() / n.max(1) as f64
                 }).collect();
-                let norm: f64 = v_new.iter().map(|x| x * x).sum::<f64>().sqrt();
+                let norm: f64 = crate::math::sqrt(v_new.iter().map(|x| x * x).sum::<f64>());
                 if norm > 0.0 { v = v_new.iter().map(|x| x / norm).collect(); }
             }
             self.eigenvectors.push(v);
@@ -452,6 +455,8 @@ impl BulkSnapshot {
 
     /// Download a snapshot from HuggingFace/Kaggle/GitHub releases.
     /// Static URL = no rate limits = O(1) network operation.
+    /// std-gated: shells out to `curl` (no_std core has no network/process).
+    #[cfg(feature = "std")]
     pub fn download_snapshot(source: SnapshotSource, output_path: &str) -> Result<u64, String> {
         match source {
             SnapshotSource::ArxivBulkJson => {
@@ -472,6 +477,7 @@ impl BulkSnapshot {
     }
 
     /// Download a file from URL (single HTTP GET, no rate limits for static files).
+    #[cfg(feature = "std")]
     fn download_file(url: &str, path: &str) -> Result<u64, String> {
         let mut cmd = std::process::Command::new("curl");
         cmd.arg("-sL").arg("--max-time").arg("3600").arg("-o").arg(path).arg(url);
@@ -485,6 +491,8 @@ impl BulkSnapshot {
 
     /// Process a snapshot file: read → byte-scan → spectral index.
     /// O(file size) for parse, O(1) per paper for spectral insert.
+    /// std-gated: times via `std::time::Instant`.
+    #[cfg(feature = "std")]
     pub fn process_file(&mut self, path: &str, parser: &mut SpectralParser) -> Result<u64, String> {
         let data = crate::vfs::read(path).map_err(|e| format!("read error: {}", e))?;
         let t0 = std::time::Instant::now();
@@ -498,6 +506,8 @@ impl BulkSnapshot {
 
     /// Process OAI-PMH bulk: download all sets sequentially into ONE pass.
     /// Each set downloaded as a single stream, parsed on-the-fly.
+    /// std-gated: fetches over the network via `curl`.
+    #[cfg(feature = "std")]
     pub fn process_oai_pmh_bulk(&mut self, parser: &mut SpectralParser) -> Result<u64, String> {
         let sets = ["cs", "math", "stat", "q-bio", "eess"];
         let mut total = 0u64;
@@ -529,6 +539,7 @@ impl BulkSnapshot {
     }
 
     /// Fetch a URL and return raw bytes.
+    #[cfg(feature = "std")]
     fn fetch_url(url: &str) -> Result<Vec<u8>, String> {
         let mut cmd = std::process::Command::new("curl");
         cmd.arg("-sL").arg("--max-time").arg("30").arg(url);

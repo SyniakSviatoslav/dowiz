@@ -11,7 +11,7 @@
 //!
 //! ## Usage
 //! ```
-//! use dowiz_kernel::spectral_graph::{SpectralGraph, GraphEdge};
+//! use dowiz_core::spectral_graph::{SpectralGraph, GraphEdge};
 //!
 //! let edges = vec![
 //!     GraphEdge::new(0, 1, 1.0),

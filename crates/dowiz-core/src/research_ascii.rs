@@ -1,4 +1,4 @@
-//! `kernel::research_ascii` — Compact ASCII library for research papers.
+//! `dowiz_core::research_ascii` — Compact ASCII library for research papers.
 //!
 //! Converts Papers to compact ASCII format for memory/disk efficiency.
 //! Every paper is stored as a single line using ASCII unit separator (0x1F)
@@ -14,7 +14,15 @@
 //! ~200 bytes per paper in ASCII vs ~2000 bytes in JSON → 10x compression
 //! 100K papers ≈ 20MB in ASCII vs 200MB in JSON
 //! After dedup: ~15-18MB for 100K unique papers
+//!
+//! # no_std notes
+//! Pure `core::` + `alloc::` (no `std`). `AsciiLibrary::open`/`save` route
+//! through [`crate::vfs`], whose no_std build is a stub returning
+//! `Err(VfsError::NotFound)` — the on-disk round-trip test is therefore
+//! gated behind `feature = "std"`.
 
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use crate::event_log::sha3_256;
 use crate::research::Paper;
 use crate::TriState;
@@ -158,7 +166,7 @@ impl AsciiLibrary {
     /// Save library to a file (one ASCII line per paper).
     pub fn save(&self, path: &str) -> Result<(), String> {
         let content = self.entries.join("\n");
-        crate::vfs::write(path, &content).map_err(|e| format!("write error: {}", e))
+        crate::vfs::write(path, content.as_bytes()).map_err(|e| format!("write error: {}", e))
     }
 
     /// Number of unique papers.
@@ -186,6 +194,8 @@ impl AsciiLibrary {
 // ─── hex module (simple hex encode/decode, zero-dep) ───────────────────────
 
 mod hex {
+    use alloc::string::String;
+
     pub fn encode(bytes: &[u8]) -> String {
         const HEX_CHARS: &[u8; 16] = b"0123456789abcdef";
         let mut out = vec![0u8; bytes.len() * 2];
@@ -250,6 +260,10 @@ mod tests {
         assert_eq!(lib.len(), 1);
     }
 
+    // The on-disk round-trip needs a real filesystem. dowiz-core's no_std VFS
+    // is a stub (`Err(VfsError::NotFound)`), so this test only runs when the
+    // `std` feature is enabled (which dowiz-core does not do by default).
+    #[cfg(feature = "std")]
     #[test]
     fn library_save_load() {
         let mut lib = AsciiLibrary::new(100);

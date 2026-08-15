@@ -188,9 +188,9 @@ mod tests {
         let mut c = Chronos::new(100);
         let _t0 = crate::now_ms();
         c.snapshot(make_values(0.1, 0.2));
-        thread::sleep(Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis(10));
         c.snapshot(make_values(0.5, 0.8));
-        thread::sleep(Duration::from_millis(10));
+        std::thread::sleep(Duration::from_millis(10));
         let t2 = crate::now_ms();
         c.snapshot(make_values(0.9, 0.3));
         assert_eq!(c.len(), 3);

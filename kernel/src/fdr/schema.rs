@@ -155,7 +155,7 @@ impl HwStamp {
 /// utime+stime ticks, via the reused `typed_metrics` reader. `None` (non-Linux/unreadable)
 /// ⇒ `NonLinuxHost` (the reader only returns `None` when `/proc/self/stat` is unreadable).
 fn read_cpu_ticks() -> Reading<u64> {
-    match crate::typed_metrics::ProcCpuSample::from_proc_self() {
+    match crate::typed_metrics::proc_cpu_sample_from_proc_self() {
         Some(s) => Reading::Value(s.utime_ticks + s.stime_ticks),
         None => Reading::Unavailable(Absence::NonLinuxHost),
     }
@@ -163,7 +163,7 @@ fn read_cpu_ticks() -> Reading<u64> {
 
 /// VmRSS kB, via the reused `typed_metrics` reader.
 fn read_rss_kb() -> Reading<u64> {
-    match crate::typed_metrics::MemSample::from_proc_self() {
+    match crate::typed_metrics::mem_sample_from_proc_self() {
         Some(m) => Reading::Value(m.vm_rss_kb),
         None => Reading::Unavailable(Absence::NonLinuxHost),
     }

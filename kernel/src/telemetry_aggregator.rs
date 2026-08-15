@@ -24,7 +24,9 @@
 
 use crate::telemetry::{surface_recurring_patterns, PatternSurface};
 use crate::telemetry_harvest::{HarvestLedger, HarvestReport};
-use crate::typed_metrics::{MemSample, ProcCpuSample};
+use crate::typed_metrics::{
+    mem_sample_from_proc_self, proc_cpu_sample_from_proc_self, MemSample, ProcCpuSample,
+};
 
 /// A unified telemetry snapshot — aggregates all available kernel metrics
 /// into a single structured report.
@@ -102,8 +104,8 @@ impl TelemetryAggregator {
             .unwrap_or_default()
             .as_micros() as u64;
 
-        let cpu = ProcCpuSample::from_proc_self();
-        let mem = MemSample::from_proc_self();
+        let cpu = proc_cpu_sample_from_proc_self();
+        let mem = mem_sample_from_proc_self();
 
         let harvest_report = self.harvest_ledger.report();
         let pattern_surface = if self.outcome_tokens.is_empty() {

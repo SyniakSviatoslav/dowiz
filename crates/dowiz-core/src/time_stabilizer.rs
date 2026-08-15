@@ -1,4 +1,4 @@
-//! `kernel::time_stabilizer` — deterministic time authority.
+//! `time_stabilizer` — deterministic time authority.
 //!
 //! Pure Rust time stabilisation for virtualised environments where
 //! kvm-clock / host TSC can suffer from:
@@ -22,6 +22,9 @@
 //! innovate: ceiling — PPMC weight calibration is currently static.
 //! upgrade: when sufficient drift history accumulates (>10^4 samples),
 //! enable online EM calibration of all PPMC weights.
+
+use alloc::string::String;
+use alloc::vec::Vec;
 
 use crate::TriState;
 
@@ -222,9 +225,9 @@ impl PmcEngine {
 
         let mean: f64 = self.drift_history.iter().sum::<f64>() / n as f64;
         let variance: f64 = self.drift_history.iter()
-            .map(|d| (d - mean).powi(2))
+            .map(|d| crate::math::powi(d - mean, 2))
             .sum::<f64>() / n as f64;
-        let std_dev = variance.sqrt();
+        let std_dev = crate::math::sqrt(variance);
 
         let drift_rate = if n >= 2 {
             (self.drift_history[n - 1] - self.drift_history[0]) / (n as f64)
@@ -275,7 +278,6 @@ impl TimeStabilizer {
         }
     }
 
-    /// Feed a raw clock reading, get back stabilised, monotonic time.
     /// Feed a raw clock reading, get back stabilised, monotonic time.
     pub fn stabilize(&mut self, raw_ns: u64) -> u64 {
         let drift_ns = if self.last_raw_ns > 0 && raw_ns > self.last_raw_ns {

@@ -123,6 +123,11 @@ pub mod predictor;
 pub mod router;
 pub mod spectral_laplacian;
 pub mod tensor;
+/// Spectral Parsing: O(n⁰) paper extraction — raw OAI-PMH byte scanner (no XML
+/// DOM), tensor ASCII storage, spectral decomposition search, harmonic ranking.
+/// Extracted from the kernel; the network/process methods (`curl`, `Instant`) are
+/// std-gated behind `feature = "std"` so the no_std core stays process-free.
+pub mod spectral_parser;
 pub mod weave;
 pub mod checksum;
 
@@ -147,13 +152,20 @@ pub mod spectral_graph;
 pub mod cooperation_protocol;
 pub mod parametric_spectral;
 pub mod research;
+pub mod research_ascii;
 pub mod agent_browser;
 pub mod self_reproduce;
 pub mod three_phase;
 pub mod evolution_go;
 pub mod field_eigenmodes;
 pub mod clock;
+pub mod time_stabilizer;
 pub mod order_machine;
 pub mod vfs;
+pub mod typed_metrics;
 pub mod kthread;
 pub mod kprocess;
+
+// --- wave 6: batch-5 leaves (analytics / stats) ---
+pub mod analytics;
+pub mod stats;

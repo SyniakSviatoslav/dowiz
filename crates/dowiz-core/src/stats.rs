@@ -44,9 +44,11 @@
 //! correctly-rounded, so these are bit-identical cross-target (unlike the
 //! transcendental `ln`/`sin`/… paths the `rng.rs` doctrine flags). The seeded
 //! [`bootstrap_interval`] draws **only** through `crate::rng::Rng::next_index`;
-//! there is no `std::time`, no thread RNG, no ambient entropy anywhere here.
+/// there is no `std::time`, no thread RNG, no ambient entropy anywhere here.
 
-/// Bessel-corrected (n−1) sample standard deviation. Private helper shared by
+use alloc::vec::Vec;
+
+/// Bessel-corrected (n−1) sample standard deviation.
 /// [`mean_se`] and [`bootstrap_interval`]. Returns 0.0 for n < 2 (variance
 /// undefined for a single sample). Pure `+ − × ÷ √`.
 fn bessel_std(samples: &[f64]) -> f64 {
@@ -57,7 +59,7 @@ fn bessel_std(samples: &[f64]) -> f64 {
     let nf = n as f64;
     let mean = samples.iter().sum::<f64>() / nf;
     let ss = samples.iter().map(|x| (x - mean) * (x - mean)).sum::<f64>();
-    (ss / (nf - 1.0)).sqrt()
+    crate::math::sqrt(ss / (nf - 1.0))
 }
 
 /// Standard error of the mean: Bessel-corrected sample std ÷ √n.
@@ -72,7 +74,7 @@ pub fn mean_se(samples: &[f64]) -> f64 {
         return 0.0;
     }
     // se = std / √n  =  √( Σ(x−m)² / ((n−1)·n) ). One extra √; pure IEEE-754.
-    bessel_std(samples) / (n as f64).sqrt()
+    bessel_std(samples) / crate::math::sqrt(n as f64)
 }
 
 /// Symmetric normal (Wald) interval `point ± z·se`.
@@ -106,7 +108,7 @@ pub fn wilson_interval(k: u64, n: u64, z: f64) -> (f64, f64) {
     let z2 = z * z;
     let denom = 1.0 + z2 / nf;
     let center = (p + z2 / (2.0 * nf)) / denom;
-    let margin = (z / denom) * (p * (1.0 - p) / nf + z2 / (4.0 * nf * nf)).sqrt();
+    let margin = (z / denom) * crate::math::sqrt(p * (1.0 - p) / nf + z2 / (4.0 * nf * nf));
     let lo = center - margin;
     let hi = center + margin;
     // Wilson is analytically within [0,1]; clamp only against float slop.
@@ -131,7 +133,7 @@ pub fn wilson_interval(k: u64, n: u64, z: f64) -> (f64, f64) {
 /// test that swaps the inline compare for this call **cannot** drift numerically
 /// — that byte-identity is what makes the substitution regression-safe.
 pub fn within_clt_envelope(error: f64, n: usize, asymptotic_se: f64, z: f64) -> bool {
-    error * (n as f64).sqrt() < asymptotic_se * z
+    error * crate::math::sqrt(n as f64) < asymptotic_se * z
 }
 
 /// Seeded percentile-free (normal-approximation) bootstrap interval for a
@@ -203,7 +205,7 @@ pub fn welch_t_test(a: &[f64], b: &[f64]) -> (f64, f64) {
     let va = a.iter().map(|x| (x - ma) * (x - ma)).sum::<f64>() / (naf - 1.0);
     let vb = b.iter().map(|x| (x - mb) * (x - mb)).sum::<f64>() / (nbf - 1.0);
 
-    let se = (va / naf + vb / nbf).sqrt();
+    let se = crate::math::sqrt(va / naf + vb / nbf);
     if se == 0.0 {
         return (0.0, 1.0);
     }
@@ -299,7 +301,7 @@ pub fn cohens_d(a: &[f64], b: &[f64]) -> f64 {
     let vb = b.iter().map(|x| (x - mb) * (x - mb)).sum::<f64>() / (nbf - 1.0);
 
     let pooled = ((naf - 1.0) * va + (nbf - 1.0) * vb) / (naf + nbf - 2.0);
-    let s = pooled.sqrt();
+    let s = crate::math::sqrt(pooled);
     if s == 0.0 {
         return 0.0;
     }
@@ -319,7 +321,7 @@ fn erf(x: f64) -> f64 {
     let a4 = -1.453152027;
     let a5 = 1.061405429;
     let t = 1.0 / (1.0 + p * x);
-    let y = 1.0 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * (-x * x).exp();
+    let y = 1.0 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * crate::math::exp(-x * x);
     sign * y
 }
 
@@ -337,7 +339,7 @@ fn chi2_sf_approx(chi2: f64, df: usize) -> f64 {
     if df_f < 1.0 {
         return 1.0;
     }
-    let z = (2.0 * chi2).sqrt() - (2.0 * df_f - 1.0).sqrt();
+    let z = crate::math::sqrt(2.0 * chi2) - crate::math::sqrt(2.0 * df_f - 1.0);
     normal_sf(z)
 }
 
@@ -535,9 +537,9 @@ mod tests {
 
         let path =
             std::env::temp_dir().join(format!("stats_boot_reread_{}.txt", std::process::id()));
-        crate::vfs::write(&path, &serialized).expect("write serialized bootstrap interval");
-        let reread = crate::vfs::read_to_string(&path).expect("re-read serialized interval");
-        crate::vfs::remove_file(&path).ok();
+        std::fs::write(&path, &serialized).expect("write serialized bootstrap interval");
+        let reread = std::fs::read_to_string(&path).expect("re-read serialized interval");
+        std::fs::remove_file(&path).ok();
         assert_eq!(
             reread, serialized,
             "byte content did not survive a disk round-trip"
