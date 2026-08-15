@@ -95,11 +95,11 @@ impl WaveMeshSync {
     }
 
     pub fn mesh_state(&self) -> crate::trig::Xyz {
-        self.field.xyz_state()
+        crate::wave::field_xyz_state(&self.field)
     }
 
     pub fn cleanup(&mut self) -> usize {
-        self.field.prune_decayed(0.001)
+        crate::wave::field_prune_decayed(&mut self.field, 0.001)
     }
 
     pub fn dashboard(&self) -> String {

@@ -6,8 +6,10 @@
 //! the xyz phase space, interferes with other waves, and decays over time.
 //!
 //! The no_std core ships the pure types (`SpectralComponent`, `Wave`,
-//! `spectral_fingerprint`). `InterferenceField` — whose methods stamp/read the
-//! wall clock (`crate::now_ms`) — lives in the kernel held-handle shim.
+//! `spectral_fingerprint`, `InterferenceField`). The three `InterferenceField`
+//! methods that sample the wall clock (`composite`, `xyz_state`, `prune_decayed`)
+//! take `now_ms` as an explicit parameter; the kernel held-handle shim wraps them
+//! as free functions that stamp `crate::now_ms()`.
 
 use alloc::string::String;
 use alloc::string::ToString;
@@ -90,6 +92,63 @@ pub fn spectral_fingerprint(state_name: &str, intensity: f64, timestamp_ms: u64)
     wave
 }
 
+/// An interference field — superposition of multiple waves at the same point.
+///
+/// The wall-clock-sampling methods (`composite`, `xyz_state`, `prune_decayed`)
+/// take `now_ms` explicitly so this type stays `no_std`; the kernel shim wraps
+/// them as free functions that stamp `crate::now_ms()`. `new`/`add_wave`/
+/// `active_count` need no clock (each `Wave` already carries its own timestamp).
+#[derive(Debug, Clone)]
+pub struct InterferenceField {
+    pub waves: Vec<Wave>,
+}
+
+impl InterferenceField {
+    pub fn new() -> Self {
+        InterferenceField { waves: Vec::new() }
+    }
+
+    pub fn add_wave(&mut self, wave: Wave) {
+        self.waves.push(wave);
+    }
+
+    /// Composite value at time `now_ms` (superposition of all waves).
+    pub fn composite(&self, now_ms: u64) -> f64 {
+        if self.waves.is_empty() { return 0.0; }
+        let sum: f64 = self.waves.iter()
+            .map(|w| w.at((now_ms - w.timestamp_ms) as f64))
+            .sum();
+        sum / self.waves.len().max(1) as f64
+    }
+
+    /// XYZ state of the interference field at time `now_ms`.
+    pub fn xyz_state(&self, now_ms: u64) -> Xyz {
+        let mut sx = 0.0f64; let mut sy = 0.0f64; let mut sz = 0.0f64;
+        for (i, w) in self.waves.iter().enumerate() {
+            let offset = i as f64 * core::f64::consts::PI / 4.0;
+            sx += w.at((now_ms - w.timestamp_ms) as f64);
+            sy += w.at(((now_ms - w.timestamp_ms) as f64) + 100.0 * offset);
+            sz += w.at(((now_ms - w.timestamp_ms) as f64) + 200.0 * offset);
+        }
+        let n = self.waves.len().max(1) as f64;
+        Xyz::new(
+            (sx / n).clamp(-1.0, 1.0),
+            (sy / n).clamp(-1.0, 1.0),
+            (sz / n).clamp(-1.0, 1.0),
+        )
+    }
+
+    /// Clean up decayed waves at time `now_ms`.
+    pub fn prune_decayed(&mut self, threshold: f64, now_ms: u64) -> usize {
+        let before = self.waves.len();
+        self.waves.retain(|w| !w.is_decayed((now_ms - w.timestamp_ms) as f64, threshold));
+        before - self.waves.len()
+    }
+
+    /// Number of active waves.
+    pub fn active_count(&self) -> usize { self.waves.len() }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -117,5 +176,35 @@ mod tests {
     fn spectral_fingerprint_has_8_components() {
         let w = spectral_fingerprint("order_placed", 1.0, 1000);
         assert_eq!(w.components.len(), 8);
+    }
+
+    #[test]
+    fn interference_field_composite_bounded() {
+        let mut field = InterferenceField::new();
+        let now = 1000u64;
+        field.add_wave(Wave::simple("a", now, 1.0, 0.5, 0.0));
+        field.add_wave(Wave::simple("b", now, 2.0, 0.3, 0.0));
+        let c = field.composite(now);
+        assert!(c >= -1.0 && c <= 1.0);
+    }
+
+    #[test]
+    fn interference_field_prune_removes_decayed() {
+        let mut field = InterferenceField::new();
+        let now = 100000u64;
+        let old_wave = Wave::simple("old", now - 100000, 1.0, 0.5, 0.5);
+        field.add_wave(old_wave);
+        let pruned = field.prune_decayed(0.01, now);
+        assert!(pruned >= 1);
+        assert_eq!(field.active_count(), 0);
+    }
+
+    #[test]
+    fn interference_field_xyz_bounded() {
+        let mut field = InterferenceField::new();
+        let now = 1000u64;
+        field.add_wave(Wave::simple("a", now, 1.0, 0.8, 0.05));
+        let xyz = field.xyz_state(now);
+        assert!(xyz.x.abs() <= 1.0 && xyz.y.abs() <= 1.0 && xyz.z.abs() <= 1.0);
     }
 }

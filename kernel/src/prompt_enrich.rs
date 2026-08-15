@@ -1794,7 +1794,7 @@ impl ChronosEnrichmentTracker {
             if !self.keyword_rows.contains_key(&lower) {
                 let row = self.keyword_rows.len();
                 self.keyword_rows.insert(lower.clone(), row);
-                self.topology.register(&lower, 1, 3);
+                crate::chronos_topology::topology_register(&mut self.topology, &lower, 1, 3);
             }
         }
     }
@@ -1808,7 +1808,7 @@ impl ChronosEnrichmentTracker {
             if lower.contains(kw) {
                 let mut m = crate::trinary::TriMatrix::new(1, 3);
                 m.set(0, 1, crate::trinary::Tri::True);
-                self.topology.update(kw, m);
+                crate::chronos_topology::topology_update(&mut self.topology, kw, m);
             }
         }
     }

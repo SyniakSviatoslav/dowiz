@@ -18,7 +18,7 @@ use dowiz_kernel::pq::envelope;
 use dowiz_kernel::pq::hybrid::{hybrid_keygen, hybrid_encaps, hybrid_decaps};
 use dowiz_kernel::trinary::Tri;
 use dowiz_kernel::wave::{InterferenceField, Wave};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 const ENTROPY_LEN: usize = 32;
 
@@ -196,7 +196,7 @@ fn chronos_dtn_store_forward_preserves_order() {
     let mut chronos = Chronos::new(200);
 
     for i in 0u64..50 {
-        let mut values = HashMap::new();
+        let mut values = BTreeMap::new();
         values.insert("seq".to_string(), i as f64);
         values.insert("payload_hash".to_string(), (i * 7 + 3) as f64);
         chronos.snapshot(values);
@@ -227,7 +227,7 @@ fn chronos_dtn_capacity_respected() {
     let mut chronos = Chronos::new(10);
 
     for i in 0..30 {
-        let mut values = HashMap::new();
+        let mut values = BTreeMap::new();
         values.insert("x".to_string(), i as f64);
         chronos.snapshot(values);
     }

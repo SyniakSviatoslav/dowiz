@@ -17,7 +17,6 @@ mod tests {
     use crate::wave::spectral_fingerprint;
     use crate::invert::backprop_from_deltas;
     use crate::cross_bridge::CrossBridgeRegistry;
-    use crate::chronos_topology::TemporalTrinity;
     use alloc::collections::BTreeMap;
 
     // ─── META-1: Enrichment engine self-consistency ──────────────────────
@@ -109,16 +108,16 @@ mod tests {
 
     #[test]
     fn cross_chronos_topology_temporal_trinity() {
-        let mut tt = TemporalTrinity::new(2, 2);
+        let mut tt = crate::chronos_topology::trinity_new(2, 2);
         let mut m1 = TriMatrix::new(2, 2);
         m1.set(0, 0, Tri::True);
         m1.set(0, 1, Tri::Unknown);
-        tt.advance(m1.clone());
+        crate::chronos_topology::trinity_advance(&mut tt, m1.clone());
 
         let mut m2 = TriMatrix::new(2, 2);
         m2.set(0, 0, Tri::True);
         m2.set(0, 1, Tri::False);
-        tt.advance(m2);
+        crate::chronos_topology::trinity_advance(&mut tt, m2);
 
         // Past-present delta
         let (_delta, changes) = tt.delta_past_present();
@@ -341,7 +340,7 @@ mod tests {
         // Verify all 3 bridges contributed active waves
         assert_eq!(field.active_count(), 3, "all 3 bridges must have active waves");
 
-        let composite = field.composite();
+        let composite = crate::wave::field_composite(&field);
         assert!(composite >= -1.0 && composite <= 1.0, "wave interference must stay bounded");
 
         // Verify spectral fingerprint from combined wave field
@@ -349,7 +348,7 @@ mod tests {
         assert_eq!(fingerprint.components.len(), 8, "spectral fingerprint must encode wave mesh");
 
         // Xyz state from interference encodes the 3-bridge superposition
-        let xyz = field.xyz_state();
+        let xyz = crate::wave::field_xyz_state(&field);
         assert!(xyz.x.abs() <= 1.0 && xyz.y.abs() <= 1.0 && xyz.z.abs() <= 1.0,
             "wave mesh xyz must stay in unit cube");
     }
