@@ -1,22 +1,25 @@
-//! vfs.rs — virtual filesystem seam (ledger item 4: fs → VFS).
-//!
-//! The no_std audit found 36 lib modules whose only `std` dependency is the
-//! filesystem (`std::fs`). A kernel module has no `std::fs` — it routes through
-//! a ramfs / block-device / procfs VFS. This module is the single seam, in the
-//! same shape as [`crate::clock`]: a no_std-compatible [`Vfs`] trait (paths as
-//! `&str`, errors as [`VfsError`], no `std::path::Path` / `std::io::Error`), a
-//! userspace impl [`StdFs`] that bridges to `std::fs`, and free functions
-//! ([`read`], [`write`], …) that are the single authority call sites route
-//! through. The kernel port swaps the *impl* (StdFs → kernel VFS), never the
-//! call sites.
-//!
-//! # Accepted surface reduction
-//! - Paths are `&str` (no `Path`/`PathBuf`): 3 call sites that passed a
-//!   `PathBuf` (all `.join(...)` products) convert with `.to_str()`.
-//! - `read_dir` returns an eager `Vec<DirEntry>` (not a lazy `ReadDir`): the
-//!   kernel VFS has no lazy iterator; the 7 call sites iterate immediately.
-//! - `metadata` is reduced to `{ len, is_dir }` (the only field read anywhere
-//!   is `len`).
+/// held-handle shim — pure types from dowiz_core::vfs, std-dependent impls stay here.
+pub use dowiz_core::vfs::*;
+
+/// vfs.rs — virtual filesystem seam (ledger item 4: fs → VFS).
+///
+/// The no_std audit found 36 lib modules whose only `std` dependency is the
+/// filesystem (`std::fs`). A kernel module has no `std::fs` — it routes through
+/// a ramfs / block-device / procfs VFS. This module is the single seam, in the
+/// same shape as [`crate::clock`]: a no_std-compatible [`Vfs`] trait (paths as
+/// `&str`, errors as [`VfsError`], no `std::path::Path` / `std::io::Error`), a
+/// userspace impl [`StdFs`] that bridges to `std::fs`, and free functions
+/// ([`read`], [`write`], …) that are the single authority call sites route
+/// through. The kernel port swaps the *impl* (StdFs → kernel VFS), never the
+/// call sites.
+///
+/// # Accepted surface reduction
+/// - Paths are `&str` (no `Path`/`PathBuf`): 3 call sites that passed a
+///   `PathBuf` (all `.join(...)` products) convert with `.to_str()`.
+/// - `read_dir` returns an eager `Vec<DirEntry>` (not a lazy `ReadDir`): the
+///   kernel VFS has no lazy iterator; the 7 call sites iterate immediately.
+/// - `metadata` is reduced to `{ len, is_dir }` (the only field read anywhere
+///   is `len`).
 
 use alloc::string::String;
 use alloc::vec::Vec;

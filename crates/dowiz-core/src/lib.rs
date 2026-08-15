@@ -154,3 +154,5 @@ pub mod evolution_go;
 pub mod field_eigenmodes;
 pub mod clock;
 pub mod order_machine;
+pub mod vfs;
+pub mod thread;
