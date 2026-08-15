@@ -184,3 +184,4 @@ pub mod slot_arena;
 
 // --- wave 8: post-quantum crypto primitives (FIPS 203/204) ---
 pub mod pq;
+pub mod crypto_signer;

@@ -1,3 +1,4 @@
+#![allow(unused)]
 //! crypto_signer.rs — Per-call PQ ML-DSA-65 cryptographic signer for parse operations.
 //!
 //! # What this is
@@ -19,6 +20,7 @@
 //! - Deterministic signing (rnd=0 for testability, caller can supply rnd for randomness)
 
 use crate::event_log::sha3_256;
+use alloc::vec::Vec;
 
 /// A signed parse call — the full cryptographic attestation.
 #[derive(Debug, Clone)]

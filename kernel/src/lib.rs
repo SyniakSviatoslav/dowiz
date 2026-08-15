@@ -598,7 +598,7 @@ pub mod telemetry_aggregator;
 /// Each parse call gets a fresh keypair; signature binds IP+timestamp+payload.
 /// Requires the `pq` feature for ML-DSA-65.
 #[cfg(feature = "pq")]
-pub mod crypto_signer;
+pub use dowiz_core::crypto_signer;
 /// Proxy pool management, rotation strategies, and health tracking.
 /// Pure computation: kernel routes, external adapters connect.
 pub mod proxy_redirect;
