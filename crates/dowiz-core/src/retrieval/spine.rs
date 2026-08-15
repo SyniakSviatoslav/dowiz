@@ -10,7 +10,9 @@
 //! corpus frontmatter that the BM25/trigram layers can later fuse with. Pure
 //! `std`, no new deps.
 
-use std::collections::{BTreeMap, BTreeSet};
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 /// A parsed frontmatter block: flat key → value (both trimmed).
 pub type Frontmatter = BTreeMap<String, String>;

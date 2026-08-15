@@ -51,7 +51,7 @@ pub use crate::living_knowledge::LivingKnowledge as PrimaryRecallLivingKnowledge
 pub fn primary_recall_adapter() -> recall::PrimaryRecall {
     recall::PrimaryRecall::new()
 }
-/// W3-3 P1 — knowledge-spine frontmatter validator + MAP.md generator organ.
-pub mod spine;
+/// W3-3 P1 — knowledge-spine frontmatter validator + MAP.md generator organ. Pure, from core.
+pub use dowiz_core::retrieval::spine;
 /// L0 RED→GREEN exact-match / 0-false-positive tests (W1-3).
 pub mod tests;

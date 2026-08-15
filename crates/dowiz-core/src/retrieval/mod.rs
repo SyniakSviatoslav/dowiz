@@ -10,3 +10,4 @@
 pub mod fixtures;
 pub mod index;
 pub mod pattern;
+pub mod spine;
