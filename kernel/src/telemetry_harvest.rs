@@ -360,7 +360,7 @@ mod tests {
     /// Probe: trinary path MUST emit a record.
     #[test]
     fn probe_trinary_path_emits_record() {
-        use crate::trinary::{TriMatrix, Tri};
+        use crate::trinary::{mul_with_telemetry, TriMatrix, Tri};
         let mut ledger = HarvestLedger::new(100);
         let mut a = TriMatrix::new(2, 2);
         a.set(0, 0, Tri::True);
@@ -372,7 +372,7 @@ mod tests {
         b.set(0, 1, Tri::Unknown);
         b.set(1, 0, Tri::False);
         b.set(1, 1, Tri::True);
-        let _ = a.mul_with_telemetry(&b, &mut ledger);
+        let _ = mul_with_telemetry(&a, &b, &mut ledger);
         assert!(!ledger.is_empty(), "trinary path must emit at least one record");
         assert_eq!(ledger.len(), 1, "exactly one record for one mul call");
     }

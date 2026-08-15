@@ -191,3 +191,4 @@ pub mod oracle;
 pub mod causal;
 pub mod predict;
 pub mod wave;
+pub mod trinary;
