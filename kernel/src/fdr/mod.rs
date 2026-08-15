@@ -481,7 +481,7 @@ pub fn emit_shadow_divergence(
 
 #[cfg(not(target_arch = "wasm32"))]
 mod sink {
-    use super::schema::{fdr_event_stamp, FdrEvent, Kind, StampPolicy};
+    use super::schema::{fdr_event_stamp, Kind, StampPolicy};
     use super::{ring, FdrConfig, Level};
     use std::io::Write;
     use core::sync::atomic::{AtomicU64, Ordering};

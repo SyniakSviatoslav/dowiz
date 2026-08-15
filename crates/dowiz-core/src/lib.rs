@@ -26,6 +26,7 @@ extern crate alloc;
 pub mod arena;
 pub mod complex;
 pub mod constants;
+pub mod cpuid;
 pub mod csr;
 pub mod dflash;
 pub mod eigen;
