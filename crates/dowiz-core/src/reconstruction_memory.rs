@@ -19,9 +19,9 @@
 //! - Uses existing kernel primitives: telemetry_harvest, trigram, markov
 //! - Deterministic reconstruction (no RNG in the reconstruction path)
 
-use crate::telemetry_harvest::{HarvestLedger, HarvestRecord};
 use crate::telemetry::surface_recurring_patterns;
-use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 /// A memory entry — stored experience that can be reconstructed.
 #[derive(Debug, Clone)]
@@ -105,15 +105,11 @@ impl ReconstructionMemory {
         self.pattern_cache = None; // invalidate cache
     }
 
-    /// Add a memory entry.
-    pub fn remember(&mut self, topic: &str, content: &str, context_tags: Vec<String>, outcome: f64) -> u64 {
+    /// Add a memory entry. `timestamp_us` is caller-supplied wall-clock microseconds
+    /// (the no_std form — the host stamps its own clock).
+    pub fn remember(&mut self, topic: &str, content: &str, context_tags: Vec<String>, outcome: f64, timestamp_us: u64) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
-
-        let timestamp_us = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_micros() as u64;
 
         let mut entry = MemoryEntry {
             id,
@@ -363,7 +359,7 @@ mod tests {
     #[test]
     fn remember_adds_entry() {
         let mut mem = ReconstructionMemory::new();
-        let id = mem.remember("test", "some content", vec!["ctx1".to_string()], 1.0);
+        let id = mem.remember("test", "some content", vec!["ctx1".to_string()], 1.0, 12345);
         assert_eq!(id, 0);
         assert_eq!(mem.len(), 1);
         assert!(!mem.is_empty());
@@ -372,8 +368,8 @@ mod tests {
     #[test]
     fn remember_multiple_gets_incrementing_ids() {
         let mut mem = ReconstructionMemory::new();
-        let id1 = mem.remember("a", "c1", vec![], 0.5);
-        let id2 = mem.remember("b", "c2", vec![], 0.8);
+        let id1 = mem.remember("a", "c1", vec![], 0.5, 12345);
+        let id2 = mem.remember("b", "c2", vec![], 0.8, 12345);
         assert_eq!(id1, 0);
         assert_eq!(id2, 1);
         assert_eq!(mem.len(), 2);
@@ -383,7 +379,7 @@ mod tests {
     fn critique_rejects_irrelevant() {
         let mut mem = ReconstructionMemory::new();
         mem.set_context(vec!["ctx1".to_string(), "ctx2".to_string()]);
-        mem.remember("topic", "content", vec!["ctx3".to_string()], 1.0);
+        mem.remember("topic", "content", vec!["ctx3".to_string()], 1.0, 12345);
 
         let entry = mem.get(0).unwrap();
         let verdict = mem.critique(entry);
@@ -399,7 +395,7 @@ mod tests {
     fn critique_accepts_relevant() {
         let mut mem = ReconstructionMemory::new();
         mem.set_context(vec!["ctx1".to_string()]);
-        mem.remember("topic", "content", vec!["ctx1".to_string()], 1.0);
+        mem.remember("topic", "content", vec!["ctx1".to_string()], 1.0, 12345);
 
         let entry = mem.get(0).unwrap();
         let verdict = mem.critique(entry);
@@ -410,7 +406,7 @@ mod tests {
     fn reconstruct_passes_critique_for_relevant() {
         let mut mem = ReconstructionMemory::new();
         mem.set_context(vec!["ctx1".to_string()]);
-        mem.remember("topic", "original content", vec!["ctx1".to_string()], 1.0);
+        mem.remember("topic", "original content", vec!["ctx1".to_string()], 1.0, 12345);
 
         let entry = mem.get(0).unwrap();
         let recon = mem.reconstruct(entry);
@@ -423,7 +419,7 @@ mod tests {
     fn reconstruct_fails_critique_for_irrelevant() {
         let mut mem = ReconstructionMemory::new();
         mem.set_context(vec!["ctx1".to_string()]);
-        mem.remember("topic", "content", vec!["ctx2".to_string()], 1.0);
+        mem.remember("topic", "content", vec!["ctx2".to_string()], 1.0, 12345);
 
         let entry = mem.get(0).unwrap();
         let recon = mem.reconstruct(entry);
@@ -435,8 +431,8 @@ mod tests {
     fn recall_adapted_returns_only_passed() {
         let mut mem = ReconstructionMemory::new();
         mem.set_context(vec!["ctx1".to_string()]);
-        mem.remember("a", "content_a", vec!["ctx1".to_string()], 1.0); // relevant
-        mem.remember("b", "content_b", vec!["ctx2".to_string()], 1.0); // irrelevant
+        mem.remember("a", "content_a", vec!["ctx1".to_string()], 1.0, 12345); // relevant
+        mem.remember("b", "content_b", vec!["ctx2".to_string()], 1.0, 12345); // irrelevant
 
         let results = mem.recall_adapted(10);
         assert_eq!(results.len(), 1);
@@ -446,9 +442,9 @@ mod tests {
     #[test]
     fn group_compare_ranks_by_outcome() {
         let mut mem = ReconstructionMemory::new();
-        mem.remember("topic", "low", vec![], 0.3);
-        mem.remember("topic", "high", vec![], 0.9);
-        mem.remember("other", "skip", vec![], 1.0);
+        mem.remember("topic", "low", vec![], 0.3, 12345);
+        mem.remember("topic", "high", vec![], 0.9, 12345);
+        mem.remember("other", "skip", vec![], 1.0, 12345);
 
         let ranked = mem.group_compare("topic");
         assert_eq!(ranked.len(), 2);
@@ -465,8 +461,8 @@ mod tests {
     #[test]
     fn clear_resets_state() {
         let mut mem = ReconstructionMemory::new();
-        mem.remember("a", "c", vec![], 1.0);
-        mem.remember("b", "c", vec![], 1.0);
+        mem.remember("a", "c", vec![], 1.0, 12345);
+        mem.remember("b", "c", vec![], 1.0, 12345);
         assert_eq!(mem.len(), 2);
 
         mem.clear();
@@ -485,7 +481,7 @@ mod tests {
     #[test]
     fn memory_hash_is_computed() {
         let mut mem = ReconstructionMemory::new();
-        mem.remember("topic", "content", vec![], 1.0);
+        mem.remember("topic", "content", vec![], 1.0, 12345);
         let entry = mem.get(0).unwrap();
         assert_eq!(entry.hash.len(), 32);
         assert!(!entry.hash.iter().all(|&b| b == 0));

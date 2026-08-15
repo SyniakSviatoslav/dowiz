@@ -660,7 +660,7 @@ pub use dowiz_core::stem;
 /// reconstruction, not replay. Critiques stored experience against current
 /// context and reconstructs adapted versions. Uses telemetry_harvest for
 /// storage, trigram for pattern surface, markov for verdict integration.
-pub mod reconstruction_memory;
+pub use dowiz_core::reconstruction_memory;
 /// Three-valued logic + RGB/matrix encoding — trinary replaces binary
 /// everywhere: FSM states, auth decisions, enrichment scoring. Each
 /// Tri maps to an RGB color; matrices of Tri values produce visual

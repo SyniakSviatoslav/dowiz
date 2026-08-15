@@ -45,6 +45,7 @@ pub mod needle2;
 pub mod oil_motion;
 pub mod penecho;
 pub mod readability;
+pub mod reconstruction_memory;
 pub mod rng;
 pub mod sanitize;
 pub mod scenario;
