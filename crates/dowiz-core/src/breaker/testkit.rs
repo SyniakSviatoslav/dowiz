@@ -57,7 +57,7 @@ impl Harness {
     /// Build a harness around a fresh Closed record under `tid`.
     pub fn new(agent_id: [u8; 16], tid: ThresholdId) -> Self {
         let rec = crate::breaker::state::new_record(agent_id, 0, tid);
-        let audit = AuditChain::new(agent_id, None);
+        let audit = AuditChain::new(agent_id);
         Harness {
             rec,
             audit,

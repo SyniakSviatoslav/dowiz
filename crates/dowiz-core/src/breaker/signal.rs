@@ -12,6 +12,7 @@
 
 use crate::breaker::thresholds::SignalWeights;
 use crate::event_log::sha3_256;
+use alloc::vec::Vec;
 
 /// One per-agent-per-window signal sample fed to the breaker's `tick`.
 ///

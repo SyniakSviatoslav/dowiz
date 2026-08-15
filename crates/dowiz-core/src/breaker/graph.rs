@@ -11,6 +11,7 @@
 //! Pure `std`, zero external dependencies.
 
 use crate::breaker::state::BreakerState;
+use alloc::vec::Vec;
 
 /// Canonical index of a breaker state (matches `BREAKER_STATES` order).
 pub const fn idx_of(s: BreakerState) -> usize {
@@ -254,7 +255,7 @@ impl core::fmt::Display for BreakerSignatureDrift {
     }
 }
 
-impl std::error::Error for BreakerSignatureDrift {}
+impl core::error::Error for BreakerSignatureDrift {}
 
 /// Compare the *live* breaker graph against the golden fingerprint. `Ok(())` =
 /// no drift; `Err(drift)` lists the moved fields.

@@ -12,6 +12,7 @@
 //! Pure `std`, zero external dependencies.
 
 use crate::event_log::sha3_256;
+use alloc::vec::Vec;
 
 /// A golden input→output pair used as a replay probe. `key` is
 /// `sha3(input_bytes ‖ condition_bytes)`; a probe passes iff the freshly

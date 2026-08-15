@@ -874,7 +874,7 @@ pub mod autonomic_pmu;
 /// single admission decision; alarm receiver `Breaker::on_commit_error` consumes
 /// `CommitError::Store`. Golden-signature-pinned cyclic FSM, shares the Tier-1 FDR
 /// ring for audit, zero new dependencies (pure `std`).
-pub mod breaker;
+pub use dowiz_core::breaker;
 /// Item 12 (space-grade roadmap §E) — temporal triple-modular-redundancy (SIHFT)
 /// pilot. Re-runs 2–3 named µs-scale pure functions and votes with a trivial `==`;
 /// a non-unanimous outcome trips the item-9 breaker (`TripCause::VoteMismatch`) +

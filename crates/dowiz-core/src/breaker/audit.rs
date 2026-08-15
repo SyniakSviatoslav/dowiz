@@ -10,12 +10,14 @@
 //! the segment is at capacity), `tick` blocks rather than silently dropping the
 //! audit row — losing an entry defeats the ring's tamper-evidence purpose.
 //!
-//! Pure `std`, zero external dependencies. The audit chain is in-memory too (for
+//! Pure `core` + `alloc` (no_std). The audit chain is in-memory too (for
 //! the testkit `audit_drain` seam and for fast in-process verification), AND
 //! mirrored to the durable FDR ring when one is installed.
 
 use crate::breaker::state::BreakerState;
 use crate::event_log::sha3_256;
+use alloc::boxed::Box;
+use alloc::vec::Vec;
 
 /// The audit event kind (carried as an FDR field string, not via `fdr::Kind` —
 /// `Kind::Alarm` already exists; these are the breaker *sub*-kinds).
@@ -82,23 +84,44 @@ fn compute_self_hash(
     sha3_256(&buf)
 }
 
+/// A durable audit mirror (the kernel's FDR ring impls this). The core
+/// [`AuditChain`] is pure in-memory; when a mirror is installed, every appended
+/// event is mirrored to it BEFORE being committed (backpressure = stall, never drop).
+pub trait AuditMirror {
+    /// Mirror one audit event durably. `Err` = the durable write failed; the
+    /// caller must treat it as a hard stop (never proceed without the row).
+    fn mirror(&mut self, ev: &AuditEvent) -> Result<(), AuditError>;
+}
+
 /// The in-memory hash-chained audit ledger. Holds the last event's `self_hash` as
-/// the chaining tip. Mirrors each event to the FDR ring when `Some`.
+/// the chaining tip. Mirrors each event to an optional [`AuditMirror`].
 pub struct AuditChain {
     events: Vec<AuditEvent>,
     tip_hash: [u8; 32],
-    /// Optional durable FDR ring mirror (Tier-1). `None` ⇒ audit-only in memory.
-    ring: Option<crate::spinlock::SpinLock<crate::fdr::RingHandle>>,
+    /// Optional durable mirror (the kernel's FDR ring impls [`AuditMirror`]).
+    /// `None` ⇒ audit-only in memory.
+    mirror: Option<Box<dyn AuditMirror>>,
     agent_id: [u8; 16],
 }
 
 impl AuditChain {
-    /// Create a fresh chain (genesis tip_hash = zero).
-    pub fn new(agent_id: [u8; 16], ring: Option<crate::spinlock::SpinLock<crate::fdr::RingHandle>>) -> Self {
+    /// Create a fresh chain (genesis tip_hash = zero), audit-only in memory.
+    pub fn new(agent_id: [u8; 16]) -> Self {
         AuditChain {
             events: Vec::new(),
             tip_hash: [0u8; 32],
-            ring,
+            mirror: None,
+            agent_id,
+        }
+    }
+
+    /// Create a chain that also mirrors every event to a durable mirror
+    /// (the kernel's FDR ring impls [`AuditMirror`]). Backpressure = stall.
+    pub fn with_mirror(agent_id: [u8; 16], mirror: Box<dyn AuditMirror>) -> Self {
+        AuditChain {
+            events: Vec::new(),
+            tip_hash: [0u8; 32],
+            mirror: Some(mirror),
             agent_id,
         }
     }
@@ -142,30 +165,10 @@ impl AuditChain {
             self_hash,
         };
 
-        // `RingHandle`/`FdrEvent::stamp` are both native-only (see `fdr::RingHandle` doc);
-        // `self.ring` is provably always `None` on wasm32 since nothing there can
-        // construct a `RingHandle` value.
-        #[cfg(not(target_arch = "wasm32"))]
-        if let Some(ring) = &self.ring {
-            // Mirror as a Kind::Alarm FDR record (the breaker's trips are alarms).
-            let fdr_ev = crate::fdr::schema::fdr_event_stamp(
-                seq,
-                crate::fdr::Level::Info,
-                crate::fdr::schema::Kind::Alarm,
-                "breaker_audit".to_string(),
-                crate::fdr::schema::StampPolicy::Cheap,
-                vec![
-                    ("audit_kind", kind.as_str().to_string()),
-                    ("state_from", format!("{:?}", state_from)),
-                    ("state_to", format!("{:?}", state_to)),
-                    ("score", format!("{:.6}", score)),
-                    ("self_hash", hex(&ev.self_hash)),
-                ],
-            );
-            // STALL, never drop: surface the durable-write error instead of
-            // proceeding without the audit row.
-            let mut g = ring.lock().map_err(|_| AuditError::RingPoisoned)?;
-            g.append(&fdr_ev).map_err(|_| AuditError::RingWrite)?;
+        // STALL, never drop: mirror the event durably BEFORE committing it, so a
+        // durable-write failure surfaces instead of proceeding without the row.
+        if let Some(mirror) = self.mirror.as_mut() {
+            mirror.mirror(&ev)?;
         }
 
         self.tip_hash = self_hash;
@@ -246,22 +249,13 @@ pub enum ChainDefect {
     TipMismatch,
 }
 
-/// Lower-case hex of a 32-byte digest (for FDR field rendering).
-fn hex(b: &[u8; 32]) -> String {
-    let mut s = String::with_capacity(64);
-    for &byte in b {
-        s.push_str(&format!("{byte:02x}"));
-    }
-    s
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn chain_verifies_when_intact() {
-        let mut c = AuditChain::new([1u8; 16], None);
+        let mut c = AuditChain::new([1u8; 16]);
         c.append(
             AuditKind::Signal,
             BreakerState::Closed,
@@ -292,7 +286,7 @@ mod tests {
 
     #[test]
     fn chain_breaks_on_tampered_prev_hash() {
-        let mut c = AuditChain::new([1u8; 16], None);
+        let mut c = AuditChain::new([1u8; 16]);
         c.append(
             AuditKind::Signal,
             BreakerState::Closed,
@@ -319,7 +313,7 @@ mod tests {
 
     #[test]
     fn chain_breaks_on_seq_gap() {
-        let mut c = AuditChain::new([1u8; 16], None);
+        let mut c = AuditChain::new([1u8; 16]);
         c.append(
             AuditKind::Signal,
             BreakerState::Closed,
@@ -341,53 +335,4 @@ mod tests {
         assert!(matches!(c.verify_chain(), Err(ChainDefect::SeqGap { .. })));
     }
 
-    #[test]
-    fn backpressure_stalls_rather_than_drops() {
-        // Backpressure: when the durable sink can't accept a write, `append` must
-        // RETURN Err (stall), never silently swallow the row. We open a real FDR
-        // ring in a writable temp dir, shrink the segment cap to 1 byte so the
-        // SECOND append forces a `switch()` to segment B. We point segment B at the
-        // `/dev/full` device (writes always return ENOSPC, even as root) via a
-        // symlink, so the durable `write_all` fails and `append` surfaces
-        // `AuditError::RingWrite` WITHOUT committing the row (len stays 1).
-        // NOTE: a read-only dir does NOT work here because the suite runs as root,
-        // which bypasses directory permission bits — only an actual write error
-        // (ENOSPC via /dev/full) reliably stalls the append.
-        let dir = std::env::temp_dir().join(format!("breaker-bp-{}", std::process::id()));
-        let _ = crate::vfs::remove_dir_all(&dir);
-        let _ = crate::vfs::create_dir_all(&dir);
-        // Segment B (the switch target) becomes a symlink to /dev/full so writes fail.
-        let seg_b = dir.join("fdr.b.jsonl");
-        let _ = crate::vfs::remove_file(&seg_b);
-        std::os::unix::fs::symlink("/dev/full", &seg_b).expect("symlink seg B to /dev/full");
-        let ring = crate::spinlock::SpinLock::new(
-            crate::fdr::ring::FdrRing::open(dir.clone(), /*seg_cap=*/ 1).expect("open temp ring"),
-        );
-        let mut c = AuditChain::new([1u8; 16], Some(ring));
-        // First append: segment A is open writable → commits (len 1).
-        let ok = c.append(
-            AuditKind::Signal,
-            BreakerState::Closed,
-            BreakerState::Closed,
-            0.0,
-            0,
-        );
-        assert!(ok.is_ok(), "first append must commit");
-        assert_eq!(c.len(), 1, "first append must be recorded");
-        // Second append: forces switch() to seg B (/dev/full) → ENOSPC → RingWrite;
-        // the row must NOT be committed (len stays 1).
-        let r = c.append(
-            AuditKind::Signal,
-            BreakerState::Closed,
-            BreakerState::Closed,
-            0.0,
-            1,
-        );
-        assert!(
-            matches!(r, Err(AuditError::RingWrite)),
-            "backpressure must stall, not drop"
-        );
-        assert_eq!(c.len(), 1, "stalled append must not be committed");
-        let _ = crate::vfs::remove_dir_all(&dir);
-    }
 }

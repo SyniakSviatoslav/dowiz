@@ -219,6 +219,7 @@ pub mod bounded_drainer;
 pub mod scheduler;
 pub mod turbofieldfare;
 pub mod orchestrator;
+pub mod breaker;
 pub mod tensor_parser;
 pub mod academia_cloud;
 pub mod agc_scheduler;

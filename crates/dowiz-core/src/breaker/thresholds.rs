@@ -8,6 +8,8 @@
 //!
 //! Pure `std`, zero external dependencies.
 
+use alloc::vec::Vec;
+
 pub const EPSILON: f32 = 1e-6;
 
 /// A failed threshold fit (degenerate / empty labeled ROC, or an unmet FPR budget).
@@ -246,7 +248,7 @@ pub struct ComponentStats {
 /// This is the "weights fitted, not hand-tuned" discipline of Blueprint A §5.3 —
 /// no weight literal anywhere.
 pub fn fit_weights(stats: &[ComponentStats; 6]) -> SignalWeights {
-    let raw: [f32; 6] = std::array::from_fn(|i| {
+    let raw: [f32; 6] = core::array::from_fn(|i| {
         let s = stats[i];
         let sep = (s.mean_anom - s.mean_clean).abs();
         let spread = (s.var_clean + s.var_anom).max(EPSILON);
