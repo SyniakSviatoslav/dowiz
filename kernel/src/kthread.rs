@@ -1,6 +1,6 @@
 /// held-handle shim — pure types from dowiz_core::thread, std-dependent impls stay here.
 
-pub use dowiz_core::thread::*;
+pub use dowiz_core::kthread::*;
 
 /// thread.rs — thread seam (ledger item 4: thread → kthread).
 ///

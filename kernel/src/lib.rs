@@ -750,10 +750,10 @@ pub mod fxhash;
 /// Single-authority time abstraction (Clock/WallClock) — std::time seam for kernel port.
 pub use dowiz_core::clock;
 /// Thread seam (ledger item 4: thread → kthread) — no_std-compatible
-/// [`crate::thread::Thread`] trait + `StdThread` impl + `sleep`/
+/// [`crate::kthread::Thread`] trait + `StdThread` impl + `sleep`/
 /// `available_parallelism` free functions. `spawn`/`scope` stay std (need a
 /// `JoinHandle`-free design).
-pub mod thread;
+pub mod kthread;
 /// Subprocess seam (ledger item 4: process → kexec) — no_std-compatible
 /// [`crate::process::Process`] trait + `StdProcess` impl + `run` free function.
 /// The `living_knowledge` sh-bridge pipe pattern stays std (bidirectional
