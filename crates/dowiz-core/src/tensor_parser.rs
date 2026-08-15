@@ -18,6 +18,8 @@ use crate::parallel_patterns::FanOutPlan;
 use crate::orchestrator::Priority;
 use crate::TriState;
 use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 /// Tensor dimensionality (256D).
 pub const TENSOR_DIM: usize = 256;
@@ -51,7 +53,7 @@ impl PaperVector {
                 v.push(if (b >> bit) & 1 == 1 { 1.0 } else { -1.0 });
             }
         }
-        let n: f64 = v.iter().map(|x| x * x).sum::<f64>().sqrt();
+        let n: f64 = crate::math::sqrt(v.iter().map(|x| x * x).sum::<f64>());
         if n > 0.0 { for x in &mut v { *x /= n; } }
         v
     }
@@ -142,7 +144,7 @@ impl SpectralNavigator {
                         val * v.get(j % dim).copied().unwrap_or(0.0)
                     }).sum::<f64>() / n.max(1) as f64
                 }).collect();
-                let norm: f64 = v_new.iter().map(|x| x * x).sum::<f64>().sqrt();
+                let norm: f64 = crate::math::sqrt(v_new.iter().map(|x| x * x).sum::<f64>());
                 if norm > 0.0 { v = v_new.iter().map(|x| x / norm).collect(); }
             }
             let eigval: f64 = v.iter().map(|x| x * x).sum::<f64>();

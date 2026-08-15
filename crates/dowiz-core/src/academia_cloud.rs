@@ -22,6 +22,9 @@
 //! - 10,000 Workers × 1 MB = ~10 GB (Cloudflare, безкоштовно)
 //! - R2: 4.6 GB (free tier 10 GB)
 
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+
 use crate::dynamic_spawner::{DynamicSpawner, SpawnBatchConfig};
 use crate::orchestrator::PidController;
 use crate::parallel_patterns::FanOutPlan;

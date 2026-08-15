@@ -488,7 +488,7 @@ pub mod github_patterns;
 /// Thunder parsing: tensor-accelerated paper extraction with vector geometry
 /// navigation. Papers stored as 256D vectors in CSR matrix, O(1) nearest-neighbor
 /// via spectral decomposition. FanOut parallelism across tensor dimensions.
-pub mod tensor_parser;
+pub use dowiz_core::tensor_parser;
 /// Spectral Parsing: O(n⁰) paper extraction. Raw OAI-PMH byte scanner (no XML DOM),
 /// tensor ASCII storage, spectral decomposition search, harmonic ranking. Extracted
 /// to no_std `dowiz-core`; `crate::spectral_parser::…` resolves unchanged via re-export.
@@ -555,7 +555,7 @@ pub mod academia_agent;
 /// PID-керований Cloudflare Workers пул — 10,000 динамічних Workers.
 /// Чим більше паперів залишилось, тим більше Workers спавниться.
 /// Неактивні Workers поступово видаляються.
-pub mod academia_cloud;
+pub use dowiz_core::academia_cloud;
 /// Self-sovereign trading infrastructure — signed cryptographic intents
 /// for trustless, non-custodial, intermediary-free trading.
 pub use dowiz_core::trading_intent;
