@@ -2,9 +2,11 @@
 //! Linux: minimal kernel-owned FFI for `sched_setaffinity(2)`
 //! Fallback: no-op on unsupported platforms
 
+use alloc::vec::Vec;
+
 #[cfg(target_os = "linux")]
 mod linux {
-    use std::ffi::c_int;
+    use core::ffi::c_int;
 
     // Linux/glibc exposes a fixed 1024-bit cpu_set_t. Keep the ABI detail local
     // instead of pulling the entire `libc` crate into the mandatory graph.

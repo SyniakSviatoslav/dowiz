@@ -174,6 +174,7 @@ pub mod vfs;
 pub mod typed_metrics;
 pub mod token_bucket;
 pub mod kthread;
+pub mod core_pinning;
 pub mod kprocess;
 
 // --- wave 6: batch-5 leaves (analytics / stats) ---

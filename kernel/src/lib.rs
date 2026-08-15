@@ -65,7 +65,7 @@ pub mod chunker;
 /// Item 64 — capability-secure declarative composition root (production wiring of
 /// the durable store). The single NON-test site that constructs `FileEventStore`.
 pub mod compose;
-pub mod core_pinning;
+pub use dowiz_core::core_pinning;
 /// Deterministic CSR graph + synchronous Jacobi personalized-PageRank
 /// (retrieval-blueprint v2 diffusion/recall primitive). Extracted to no_std
 /// `dowiz-core`; `crate::csr::Csr` resolves unchanged through this re-export.
