@@ -129,6 +129,37 @@ pub fn event_enabled(lvl: Level) -> bool {
     sink_active() && (lvl as u8) <= LEVEL.load(Ordering::Relaxed)
 }
 
+// ── Event emission (sink hook) ─────────────────────────────────────────────────────
+// The kernel owns the actual sink (stderr + durable ring, both std). This no_std core
+// routes [`emit_event`] through a registered function-pointer hook (set once at `init`);
+// without a hook the call is a no-op, so the disabled path is allocation-free.
+
+use alloc::string::String;
+
+/// The sink's event-emission signature (`fn(level, msg, fields)`).
+pub type EmitEventFn = fn(Level, &str, &[(&'static str, String)]);
+
+static EMIT_EVENT_HOOK: crate::spinlock::SpinLock<Option<EmitEventFn>> =
+    crate::spinlock::SpinLock::new(None);
+
+/// Register the sink's event emitter (called by the kernel's `fdr::init`). Set-once in
+/// practice; a later call replaces the hook.
+pub fn set_emit_event_hook(f: EmitEventFn) {
+    if let Ok(mut g) = EMIT_EVENT_HOOK.lock() {
+        *g = Some(f);
+    }
+}
+
+/// Emit an event record. No-op unless a sink hook is installed — so callers may call
+/// unconditionally at zero default cost.
+pub fn emit_event(level: Level, msg: &str, fields: &[(&'static str, String)]) {
+    if let Ok(g) = EMIT_EVENT_HOOK.lock() {
+        if let Some(f) = *g {
+            f(level, msg, fields);
+        }
+    }
+}
+
 // ── Item 62: per-process span id minter ─────────────────────────────────────────────
 
 /// Per-process monotone span id counter (FDR relational linkage).

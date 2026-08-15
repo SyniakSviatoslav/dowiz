@@ -19,7 +19,10 @@
 //! - Deterministic detection (no ML — rule-based pattern matching)
 
 use crate::event_log::sha3_256;
-use crate::fdr::{self, Level};
+use crate::fdr::{emit_event, Level};
+use alloc::boxed::Box;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 /// Types of agent actions that can be monitored.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -175,14 +178,10 @@ impl AgentActivityMonitor {
         action_type: AgentActionType,
         description: &str,
         source: &str,
+        timestamp_us: u64,
     ) -> AgentAction {
         let event_id = self.next_id;
         self.next_id += 1;
-
-        let timestamp_us = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_micros() as u64;
 
         let action = AgentAction {
             event_id,
@@ -200,7 +199,7 @@ impl AgentActivityMonitor {
             let mut blocked_action = action.clone();
             blocked_action.blocked = true;
             // Record the block reason.
-            fdr::emit_event(
+            emit_event(
                 Level::Warn,
                 &format!("ACTION BLOCKED [#{}]: {} — {}", event_id, description, reason),
                 &[],
@@ -218,7 +217,7 @@ impl AgentActivityMonitor {
                 && action.description.contains(&rule.pattern)
             {
                 if rule.is_anomaly {
-                    fdr::emit_event(
+                    emit_event(
                         rule.severity,
                         &format!("ANOMALY DETECTED [#{}]: {} matched rule '{}'",
                             event_id, description, rule.name),
@@ -359,6 +358,7 @@ mod tests {
             AgentActionType::Read,
             "read file foo.txt",
             "agent-1",
+            12345,
         );
         assert_eq!(action.event_id, 0);
         assert!(!action.blocked);
@@ -368,8 +368,8 @@ mod tests {
     #[test]
     fn record_multiple_gets_incrementing_ids() {
         let mut monitor = AgentActivityMonitor::new(Box::new(AllowAllPolicy));
-        monitor.record_action(AgentActionType::Read, "r1", "s");
-        monitor.record_action(AgentActionType::Write, "w1", "s");
+        monitor.record_action(AgentActionType::Read, "r1", "s", 12345);
+        monitor.record_action(AgentActionType::Write, "w1", "s", 12345);
         assert_eq!(monitor.len(), 2);
     }
 
@@ -380,6 +380,7 @@ mod tests {
             AgentActionType::Write,
             "write dangerous file",
             "agent-1",
+            12345,
         );
         assert!(action.blocked);
     }
@@ -391,6 +392,7 @@ mod tests {
             AgentActionType::Read,
             "read file",
             "agent-1",
+            12345,
         );
         assert!(!action.blocked);
     }
@@ -404,6 +406,7 @@ mod tests {
             AgentActionType::Write,
             "write allowed_file.txt",
             "agent-1",
+            12345,
         );
         assert!(!action.blocked);
     }
@@ -419,7 +422,7 @@ mod tests {
             is_anomaly: true,
         });
 
-        monitor.record_action(AgentActionType::Execute, "run rm -rf /", "agent-1");
+        monitor.record_action(AgentActionType::Execute, "run rm -rf /", "agent-1", 12345);
         let anomalies = monitor.detect_anomalous();
         assert_eq!(anomalies.len(), 1);
     }
@@ -435,7 +438,7 @@ mod tests {
             is_anomaly: true,
         });
 
-        monitor.record_action(AgentActionType::Execute, "run safe command", "agent-1");
+        monitor.record_action(AgentActionType::Execute, "run safe command", "agent-1", 12345);
         let anomalies = monitor.detect_anomalous();
         assert_eq!(anomalies.len(), 0);
     }
@@ -443,8 +446,8 @@ mod tests {
     #[test]
     fn reconstruct_timeline_returns_all() {
         let mut monitor = AgentActivityMonitor::new(Box::new(AllowAllPolicy));
-        monitor.record_action(AgentActionType::Read, "r1", "s");
-        monitor.record_action(AgentActionType::Write, "w1", "s");
+        monitor.record_action(AgentActionType::Read, "r1", "s", 12345);
+        monitor.record_action(AgentActionType::Write, "w1", "s", 12345);
 
         let timeline = monitor.reconstruct_timeline();
         assert_eq!(timeline.len(), 2);
@@ -453,9 +456,9 @@ mod tests {
     #[test]
     fn actions_by_type_filters() {
         let mut monitor = AgentActivityMonitor::new(Box::new(AllowAllPolicy));
-        monitor.record_action(AgentActionType::Read, "r1", "s");
-        monitor.record_action(AgentActionType::Read, "r2", "s");
-        monitor.record_action(AgentActionType::Write, "w1", "s");
+        monitor.record_action(AgentActionType::Read, "r1", "s", 12345);
+        monitor.record_action(AgentActionType::Read, "r2", "s", 12345);
+        monitor.record_action(AgentActionType::Write, "w1", "s", 12345);
 
         let reads = monitor.actions_by_type(AgentActionType::Read);
         assert_eq!(reads.len(), 2);
@@ -464,8 +467,8 @@ mod tests {
     #[test]
     fn blocked_actions_filtered() {
         let mut monitor = AgentActivityMonitor::new(Box::new(StrictWritePolicy::new()));
-        monitor.record_action(AgentActionType::Read, "r1", "s");
-        monitor.record_action(AgentActionType::Write, "w1", "s");
+        monitor.record_action(AgentActionType::Read, "r1", "s", 12345);
+        monitor.record_action(AgentActionType::Write, "w1", "s", 12345);
 
         let blocked = monitor.blocked_actions();
         assert_eq!(blocked.len(), 1);
@@ -475,7 +478,7 @@ mod tests {
     #[test]
     fn clear_resets_state() {
         let mut monitor = AgentActivityMonitor::new(Box::new(AllowAllPolicy));
-        monitor.record_action(AgentActionType::Read, "r1", "s");
+        monitor.record_action(AgentActionType::Read, "r1", "s", 12345);
         assert_eq!(monitor.len(), 1);
 
         monitor.clear();
@@ -490,6 +493,7 @@ mod tests {
             AgentActionType::Read,
             "test action",
             "test-source",
+            12345,
         );
         assert_eq!(action.hash.len(), 32);
         assert!(!action.hash.iter().all(|&b| b == 0));
@@ -509,7 +513,7 @@ mod tests {
         for &at in &[AgentActionType::Read, AgentActionType::Write,
                       AgentActionType::Execute, AgentActionType::Network,
                       AgentActionType::ToolUse, AgentActionType::StateChange] {
-            monitor.record_action(at, "test", "s");
+            monitor.record_action(at, "test", "s", 12345);
         }
         assert_eq!(monitor.len(), 6);
     }

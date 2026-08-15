@@ -785,7 +785,7 @@ pub mod bebop_bridge;
 /// Endpoint visibility for AI agent actions — Numbat reimplementation.
 /// Detect, optionally block, and forensically reconstruct agent activity.
 /// Uses event_log (SHA3-256), fdr (flight data recorder), self_harness zones.
-pub mod numbat;
+pub use dowiz_core::numbat;
 /// Code change prediction oracle — learns from past commits to predict
 /// ETA, impact, and eigen shift for future changes. Uses chronos snapshots.
 pub mod code_oracle;

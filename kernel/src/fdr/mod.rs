@@ -71,7 +71,10 @@ pub enum RingHandle {}
 // ── Pure primitives re-exported from the no_std core ──────────────────────────────
 // The core owns [`Level`], the compile-time [`crc32`] table, the enable gates, and the
 // span-id minter. The kernel keeps only the std side (ring, sink, span timing, macros).
-pub use dowiz_core::fdr::{crc32, event_enabled, next_span_id, set_level, set_sink_active, sink_active, Level};
+pub use dowiz_core::fdr::{
+    crc32, emit_event, event_enabled, next_span_id, set_emit_event_hook, set_level,
+    set_sink_active, sink_active, Level,
+};
 
 /// Emit ONE `Alarm` FDR record (the fault-evidence kind; fsynced on append by the durable
 /// ring — power-loss durable, `ring.rs:134`). No-op unless an FDR sink is installed, so
@@ -266,17 +269,8 @@ impl Drop for SpanGuard {
 
 // ── Event / span-close emission (sink write path) ───────────────────────────────────
 
-/// Emit an event record (from `fdr::debug!`/`info!`/…). No-op unless a sink is installed;
-/// the real body is gated off `wasm32` (the FDR write path — `SystemTime`/`Instant` stamps
-/// + file I/O — is never reached on wasm, where no sink is installed).
-pub fn emit_event(level: Level, msg: &str, fields: &[(&'static str, String)]) {
-    #[cfg(not(target_arch = "wasm32"))]
-    sink::emit_event(level, msg, fields);
-    #[cfg(target_arch = "wasm32")]
-    {
-        let _ = (level, msg, fields);
-    }
-}
+// `emit_event` is re-exported from the no_std core (hook-routed). The sink registers its
+// emitter via `set_emit_event_hook` in `init` below; without a sink the call is a no-op.
 
 /// Emit a span-close FDR record to the ring sink (spans do NOT go to stderr — they go to
 /// the observer's `metric.jsonl` and, when durable, the ring).
@@ -364,6 +358,9 @@ impl Default for FdrConfig {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn init(config: FdrConfig) -> Result<(), ()> {
     let r = sink::init(config);
+    // Wire the no_std core's emit_event hook to this sink (set-once; the hook is what makes
+    // `crate::fdr::emit_event` / the `fdr_*!` macros reach stderr + the durable ring).
+    set_emit_event_hook(sink::emit_event);
     // Item 48 (closure a): install the panic hook on the FDR init path. Idempotent via the
     // guard inside `install_panic_hook` (a second `init` is a no-op for the sink, so the
     // hook is not re-chained). Harmless when no ring is configured (the Alarm append becomes

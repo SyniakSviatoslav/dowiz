@@ -66,6 +66,7 @@ pub mod verify_retrieval;
 pub mod dsu;
 pub mod impedance;
 pub mod noether;
+pub mod numbat;
 pub mod absorbing;
 pub mod vendor;
 
