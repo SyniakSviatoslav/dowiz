@@ -173,7 +173,8 @@ pub mod stats;
 // --- wave 7: leaves (determinism goldens) ---
 pub mod determinism;
 
-// --- wave 8: held-handle seams (fxhash / signal / proxy_redirect) ---
+// --- wave 8: held-handle seams (fxhash / signal / proxy_redirect / ct_gate) ---
 pub mod fxhash;
 pub mod signal;
 pub mod proxy_redirect;
+pub mod ct_gate;
