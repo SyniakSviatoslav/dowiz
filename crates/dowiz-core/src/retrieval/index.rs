@@ -5,6 +5,8 @@
 //! trigrams are exact.
 
 use alloc::collections::BTreeMap;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 /// A 3-byte key. `[u8;3]` is `Copy` + `Hash` + `Ord` ⇒ deterministic map keys.
 pub type Trigram = [u8; 3];
@@ -201,8 +203,8 @@ impl TrigramIndex {
     /// Falls back to scanning all docs when the pattern yields no literal
     /// trigrams. Unsupported metacharacters are rejected (typed `PatternError`,
     /// never a silent wrong answer) — degrade-closed.
-    pub fn query_pattern(&self, pattern: &str) -> Result<Vec<u32>, super::pattern::PatternError> {
-        let compiled = super::pattern::Pattern::compile(pattern)?;
+    pub fn query_pattern(&self, pattern: &str) -> Result<Vec<u32>, crate::retrieval::pattern::PatternError> {
+        let compiled = crate::retrieval::pattern::Pattern::compile(pattern)?;
         let cand = self.candidates(&literal_trigrams(pattern));
         Ok(cand
             .into_iter()

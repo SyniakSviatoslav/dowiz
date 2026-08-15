@@ -3,6 +3,9 @@
 //! 20 strings styled after living-memory note names. Used by the RED→GREEN
 //! test to prove candidate reduction + 0 false positives on a realistic corpus.
 
+use alloc::string::String;
+use alloc::vec::Vec;
+
 /// 20 living-memory note names. Deterministic, ASCII, good trigram spread.
 pub const FIXTURE: &[&str] = &[
     "MEMORY.md",

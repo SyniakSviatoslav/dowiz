@@ -110,6 +110,7 @@ pub mod delta;
 pub mod geo;
 pub mod online;
 pub mod openobserve;
+pub mod retrieval;
 pub mod entropy_budget;
 pub mod math_guard;
 pub mod numerical_guard;

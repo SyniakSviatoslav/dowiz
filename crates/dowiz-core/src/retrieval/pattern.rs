@@ -76,7 +76,9 @@
 //! `regex` as opt-in state (b), through the same procedure. Nothing else reopens
 //! it.
 
-use std::fmt;
+use alloc::string::String;
+use alloc::vec::Vec;
+use core::fmt;
 
 /// A pattern used a metacharacter outside the supported subset
 /// {literal byte, `.`, `.*`}. Degrade-closed: the matcher NEVER guesses a
@@ -100,7 +102,7 @@ impl fmt::Display for PatternError {
     }
 }
 
-impl std::error::Error for PatternError {}
+impl core::error::Error for PatternError {}
 
 /// A single fixed-width match atom within a segment.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
