@@ -413,7 +413,7 @@ impl StateStore for MemStateStore {
         self.restore_called = true;
         // Re-point the chain tip to the snapshot epoch (the anchor). Real impl also
         // re-folds the PgStore/W13 projection from the log under old code.
-        self.log.store.set_tip(snap.epoch.0);
+        self.log.set_tip(snap.epoch.0);
         Ok(snap.epoch.clone())
     }
     fn chain_tip(&self) -> EpochHash {

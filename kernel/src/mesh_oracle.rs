@@ -158,11 +158,10 @@ mod tests {
         let pk = MlDsa65Pk { bytes: vec![0u8; 1312] };
         let sig = MlDsa65Sig { bytes: vec![1u8; 3309] };
         SignedEntry {
-            sequence: 0,
-            pubkey: pk.bytes,
+            prev_hash: [0u8; 32],
+            payload: vec![42u8; 32],
             sig: sig.bytes,
-            signed_bytes: vec![42u8; 32],
-            next: None,
+            pubkey: pk.bytes,
         }
     }
 

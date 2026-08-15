@@ -25,7 +25,8 @@
 #![cfg(feature = "pq")]
 
 use crate::event_log::sha3_256;
-use crate::pq::dsa::{keygen, sign, verify, MlDsa65Pk, MlDsa65Sig, MlDsa65Sk, RNDBYTES, SEEDBYTES};
+use crate::pq::dsa::{keygen, sign, verify, MlDsa65Sk, RNDBYTES, SEEDBYTES};
+pub use crate::pq::dsa::{MlDsa65Pk, MlDsa65Sig};
 
 // Item 24 (§4 hardening sweep over the mesh crypto surface): the signature / chain
 // verification path is a crypto surface — the moment gossip touches a signature it

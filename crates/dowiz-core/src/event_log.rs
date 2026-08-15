@@ -317,6 +317,12 @@ impl<S: EventStore> EventLog<S> {
         &self.store
     }
 
+    /// Re-point the chain tip (restore/rollback seam). Delegates to the store's
+    /// `set_tip`; exposed because the backing store field is private to this crate.
+    pub fn set_tip(&mut self, id: [u8; 32]) {
+        self.store.set_tip(id);
+    }
+
     /// Append an event, chaining `prev` to the current tip if the caller left it
     /// zeroed (local-first hash-chain genesis/continuation). Idempotent: an
     /// event whose computed content-id already exists is a [`Duplicate`] no-op.
