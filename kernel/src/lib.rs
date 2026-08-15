@@ -214,7 +214,7 @@ pub use dowiz_core::predictor;
 /// storage, and prompt injection. Scrapes free prompt libraries (fabric,
 /// prompts.chat, opencode), stores 100k+ templates, reverse-engineers skills/
 /// tools/plugins, enriches every prompt based on detected intent.
-pub mod prompt_enrich;
+pub use dowiz_core::prompt_enrich;
 /// Resilience: backup/failover/dynamic-switching layer for production systems.
 /// Circuit breakers, bulkheads, cooldowns, automatic failover between
 /// prediction models, and race-condition avoidance via sequencer integration.

@@ -80,6 +80,12 @@ pub use tri_state::TriState;
 // the `sanitize` / `sort` modules, but call sites spell them crate-root).
 pub use sanitize::{sanitize_f32, sanitize_f64, sanitize_normalized};
 pub use sort::{sort_by_f64_asc, sort_by_f64_desc};
+
+// Mirror the kernel's crate-root `now_ms()` wrapper so `crate::now_ms()` resolves
+// identically in dowiz-core (the real monotonic clock lives in `clock`).
+pub fn now_ms() -> u64 {
+    crate::clock::now_ms()
+}
 pub mod landmark;
 pub mod attention;
 pub mod autonomic;
@@ -175,6 +181,7 @@ pub mod typed_metrics;
 pub mod token_bucket;
 pub mod kthread;
 pub mod core_pinning;
+pub mod prompt_enrich;
 pub mod kprocess;
 
 // --- wave 6: batch-5 leaves (analytics / stats) ---

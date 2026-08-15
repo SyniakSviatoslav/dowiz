@@ -26,6 +26,8 @@ use crate::delta::{Delta, DeltaComparison, DeltaTracker};
 use crate::telemetry_harvest::HarvestLedger;
 use crate::chronos_topology::ChronoTopology;
 use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
 
 /// Max prompt entries in the engine.
 pub const MAX_PROMPTS: usize = 100_000;
@@ -1795,7 +1797,7 @@ impl ChronosEnrichmentTracker {
             if !self.keyword_rows.contains_key(&lower) {
                 let row = self.keyword_rows.len();
                 self.keyword_rows.insert(lower.clone(), row);
-                crate::chronos_topology::topology_register(&mut self.topology, &lower, 1, 3);
+                self.topology.register(&lower, 1, 3, crate::now_ms());
             }
         }
     }
@@ -1809,7 +1811,7 @@ impl ChronosEnrichmentTracker {
             if lower.contains(kw) {
                 let mut m = crate::trinary::TriMatrix::new(1, 3);
                 m.set(0, 1, crate::trinary::Tri::True);
-                crate::chronos_topology::topology_update(&mut self.topology, kw, m);
+                self.topology.update(kw, m, crate::now_ms());
             }
         }
     }
