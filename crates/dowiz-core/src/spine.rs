@@ -19,6 +19,11 @@
 //! * [`KnowledgeSpine::query`] returns *only* records of the requested kind
 //!   (`query_by_kind_returns_only_that_kind`).
 
+use alloc::vec::Vec;
+use alloc::string::String;
+#[cfg(test)]
+use alloc::string::ToString;
+
 /// Sentinel `prev_hash` for the genesis (first) record — the empty hash.
 pub const GENESIS_PREV: [u8; 32] = [0u8; 32];
 

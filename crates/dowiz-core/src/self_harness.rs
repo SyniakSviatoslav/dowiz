@@ -12,6 +12,10 @@
 //! - **Critical**: requires dual-witness (P103 supervisor, PQ primitives)
 //! - **Forbidden**: NEVER modify (Hydra kill-switch, command filter, G9 breach alarm)
 
+use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::string::ToString;
+
 use alloc::collections::BTreeMap;
 use crate::TriState;
 

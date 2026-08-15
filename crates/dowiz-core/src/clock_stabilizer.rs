@@ -32,7 +32,10 @@
 //! - SHA3-256 byte-by-byte state verification (StabilizerVerifier)
 //! - Deterministic: same inputs always produce same outputs and same hash
 
-use std::fmt;
+use alloc::vec::Vec;
+use alloc::string::String;
+
+use core::fmt;
 
 use crate::event_log::sha3_256;
 

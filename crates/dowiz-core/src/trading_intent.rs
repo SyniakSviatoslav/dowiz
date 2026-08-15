@@ -17,6 +17,10 @@
 //! - **MEV-protected:** solver competition prevents frontrunning
 //! - **Atomic settlement:** all-or-nothing via smart contract
 
+use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::string::ToString;
+
 use crate::event_log::sha3_256;
 use crate::TriState;
 

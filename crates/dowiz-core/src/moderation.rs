@@ -31,8 +31,10 @@
 //! no dependency edge to this module, and `ReportTarget`/`ReportReason` carry no
 //! `score/rating/reputation/rank` field (the field-name CI guard).
 
+use alloc::vec::Vec;
+
 use crate::event_log::MeshEvent;
-use std::fmt;
+use core::fmt;
 
 /// Bounded free-text note on a report (opaque UTF-8). Scaling axis: report
 /// volume (event-log rows); this bound keeps one report O(constant)-sized.

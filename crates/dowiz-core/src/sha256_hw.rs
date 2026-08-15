@@ -16,6 +16,8 @@
 //! On non-x86_64 hosts it returns `false`. The `sha256_hw()` function
 //! internally chooses the SHA-NI path or the scalar fallback per-call.
 
+use alloc::vec::Vec;
+
 /// Check whether SHA-NI is available via CPUID.
 ///
 /// SHA-NI accelerates SHA-1 and SHA-256 (NOT SHA3/Keccak).

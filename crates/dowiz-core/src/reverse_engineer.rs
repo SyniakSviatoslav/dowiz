@@ -26,9 +26,14 @@
 //!   +---------+     +--------------------------------+   +---------------+
 //! ```
 
-use std::fmt;
+use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::string::ToString;
+
+use core::fmt;
 
 use crate::event_log::sha3_256;
+#[cfg(test)]
 use crate::hex_util;
 
 // ============================================================================

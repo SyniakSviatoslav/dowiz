@@ -125,3 +125,15 @@ pub mod spectral_laplacian;
 pub mod tensor;
 pub mod weave;
 pub mod checksum;
+
+// --- wave 5: dependency-clean leaves ---
+pub mod self_harness;
+pub mod sha256_hw;
+pub mod snapshot;
+pub mod spine;
+pub mod trading_intent;
+pub mod trading_escrow;
+pub mod clock_stabilizer;
+pub mod moderation;
+pub mod reverse_engineer;
+pub mod workflow_gate;

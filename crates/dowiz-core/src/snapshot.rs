@@ -17,6 +17,8 @@
 //! is retained so a caller can feed a retained `Csr` into `row_normalize_in(arena)` for downstream
 //! scratch reuse without a heap allocation; it is not required for the drift measurement itself.
 
+use alloc::vec::Vec;
+
 use crate::arena::BumpArena;
 use crate::csr::Csr;
 use crate::spectral::{classify_drift, DriftClass};

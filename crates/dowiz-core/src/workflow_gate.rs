@@ -19,7 +19,9 @@
 //! - `can_commit()` returns true only when ALL required phases are complete
 //! - The gate is deterministic (no RNG, no network) — pure stdlib
 
-use std::fmt;
+use alloc::string::String;
+
+use core::fmt;
 
 /// The 9 mandatory workflow phases, in order.
 /// This is a CLOSED enum — new phases require a conscious edit + gate update.

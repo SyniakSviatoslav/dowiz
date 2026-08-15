@@ -15,6 +15,10 @@
 //! 2. Update: off-chain signed balance updates (infinite speed)
 //! 3. Close: final state submitted to chain
 
+use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::string::ToString;
+
 use crate::event_log::sha3_256;
 use crate::TriState;
 

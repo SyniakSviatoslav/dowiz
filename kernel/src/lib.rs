@@ -181,7 +181,7 @@ pub use dowiz_core::metrics;
 /// under `cfg(miri)` (where the planted-UB branch executes and Miri must flag it).
 #[cfg(any(test, miri))]
 mod miri_selftest;
-pub mod moderation;
+pub use dowiz_core::moderation;
 /// Numerical stability primitives: Kahan compensated summation, pairwise summation,
 /// stable softmax, and matrix condition-number estimation via power iteration.
 /// Zero-dep, pure-std. Guards every hot float-accumulation path against overflow
@@ -271,7 +271,7 @@ pub mod slot_arena;
 /// consumer of `RetainedBase::admit`: retains admitted tiles, persists their source `Csr`,
 /// and `reconcile()` re-runs `classify_drift` on each retained raw dynamics to catch
 /// post-admit divergence. Pure-std; no money / red-line types.
-pub mod snapshot;
+pub use dowiz_core::snapshot;
 /// BLUEPRINT-P83 — kernel production observability (SYNTHESIS PERFORMANCE AUDIT 2026-07-18
 /// §3.3-C4). Feature-gated (`telemetry`) so the SHIPPING binary carries zero observability
 /// symbols and is behavior-/perf-neutral. Two layers: (1) a ZERO NEW DEP `SpanMetricsObserver`
@@ -286,7 +286,7 @@ pub mod span_metrics;
 /// W2-7 — event-sourced, tamper-evident hash-chain knowledge spine
 /// (Memory/Identity/Intent). Append-only record log; `verify_chain()` re-walks
 /// the chain to detect any mutation. Pure-std (reuses `event_log::sha3_256`).
-pub mod spine;
+pub use dowiz_core::spine;
 /// Spool — pure crash-safe async work-queue state machine (append / claim /
 /// ack / reclaim). The I/O + drainer adapter lives outside the kernel
 /// (pure-std firewall); this owns the Verified-by-Math transitions. Reused by
@@ -393,7 +393,7 @@ pub use dowiz_core::mat;
 /// SHA-256 hardware acceleration using SHA-NI (for fast integrity checks,
 /// not cryptographic MACs/signatures). Runtime-detected; scalar fallback
 /// included. SHA-NI accelerates SHA-1 and SHA-256 (NOT SHA3/Keccak).
-pub mod sha256_hw;
+pub use dowiz_core::sha256_hw;
 /// RW-08 — messenger deep-link builders (pure string logic → kernel authority).
 pub use dowiz_core::messenger;
 /// Reverse-mode automatic differentiation (scalar tape engine) — the
@@ -433,12 +433,12 @@ pub use dowiz_core::swarm;
 /// (research -> synthesis -> critique -> plan -> critique -> work -> verify -> critique -> commit).
 /// Typed state machine: phases complete in strict order, no skipping, no repeats.
 /// The kernel primitive that closes the "workflow gates are cultural" blind spot.
-pub mod workflow_gate;
+pub use dowiz_core::workflow_gate;
 /// PLL-inspired clock stabilizer — transforms irregular kernel ticks, timestamps,
 /// and event intervals into stable, aligned output via phase-locked feedback control.
 /// Maps PLL components (phase detector, loop filter, VCO) to kernel equivalents
 /// (tick differ, EMA smoother, adaptive rate generator).
-pub mod clock_stabilizer;
+pub use dowiz_core::clock_stabilizer;
 /// Kernel-native tool/skill/agent orchestrator — central hub for all action routing,
 /// parallel dispatch, health monitoring, load prediction, and audit trails. No grep,
 /// no scripts — everything through Rust structs and SHA3-256 verified state transitions.
@@ -449,7 +449,7 @@ pub mod orchestrator;
 pub use dowiz_core::hex_util;
 /// Kernel-native reverse engineering — ELF parsing, x86_64 syscall extraction,
 /// behavior profiling, and binary analysis. All pure Rust, zero deps.
-pub mod reverse_engineer;
+pub use dowiz_core::reverse_engineer;
 /// Anti-detect browser configuration and zero-trace policy for parse operations.
 /// Pure data structures: kernel = no browser/network, this defines HOW to parse.
 pub mod agent_browser;
@@ -481,7 +481,7 @@ pub mod self_heal;
 /// Self-harness with zone protection for safe project-wide rewrites.
 /// Zone mapping (green→yellow→red→critical→forbidden), Hydra protection,
 /// blueprint generation, dynamic rewrite prediction.
-pub mod self_harness;
+pub use dowiz_core::self_harness;
 /// Reverse-engineered parsing patterns from top GitHub repos (1,302 parsing tools,
 /// 461 top repos, 43M+ combined stars). Integrates Rust-native parsing insights.
 pub use dowiz_core::github_patterns;
@@ -557,10 +557,10 @@ pub mod academia_agent;
 pub mod academia_cloud;
 /// Self-sovereign trading infrastructure — signed cryptographic intents
 /// for trustless, non-custodial, intermediary-free trading.
-pub mod trading_intent;
+pub use dowiz_core::trading_intent;
 /// Trustless escrow + state channels — P2P settlements without centralized
 /// gateways, with off-chain balance updates and on-chain finality.
-pub mod trading_escrow;
+pub use dowiz_core::trading_escrow;
 /// P2P direct delivery — no intermediaries, no central platform.
 /// Pure peer-to-peer delivery routing with cryptographic proof.
 pub mod p2p_delivery;
