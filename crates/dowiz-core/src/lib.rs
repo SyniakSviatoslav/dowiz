@@ -46,6 +46,7 @@ pub mod modular;
 pub mod needle2;
 pub mod oil_motion;
 pub mod penecho;
+pub mod quantum;
 pub mod readability;
 pub mod reconstruction_memory;
 pub mod rng;
