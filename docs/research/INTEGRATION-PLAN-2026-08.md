@@ -35,8 +35,16 @@ Each repo → map to an existing dowiz module or a new `crates/dowiz-core/src/*.
 - [x] Persisted compendium + this plan to repo (`1e55259`).
 - [x] `quantum.rs` — Qubit/Bloch/Pauli/Hadamard/S/T/RX/RY/RZ, measurement, fidelity, CNOT+Bell (11 tests, `b5544be`).
 - [x] `krylov.rs` — CG, GMRES (Arnoldi+Givens), Arnoldi, Lanczos (7 tests, `f82d1f2`).
+- [x] Hermes token-optimization phase 0: memory compacted 96%→78%, `proactive_prune_tokens` 0→32000, memory limits 2200/1375 → 1800/1200.
+- [x] `QTri` — quantum tri-state (qutrit |ψ⟩=a|T⟩+b|F⟩+c|U⟩) generalizing TriState, 5 tests (`0a7f8a9`); re-exported at crate roots (`ed08c1b`).
+
+## Quantum-state-everywhere migration (user directive)
+Replace classical `TriState` (273 usages) with `QTri` superposition where partial
+information adds value. **Not a mechanical find-replace**: `QTri` is f64-based
+(`PartialEq` only — no `Eq`/`Hash`), so hash-map keys / Eq-comparisons must stay
+`TriState`. Strategy: QTri = storage/uncertainty representation; `TriState` =
+collapsed boundary + hash key. Migrate module-by-module (swarm, disjoint files).
 
 ## Next concrete step
-`quantize.rs` — turbovec-style product quantization (k-means codebook, 31GB→4GB class)
-reusing `hypervector` + `math::vec` + `squash`; then `graph_engine.rs` (typed-edge KAG).
-Hermes token-optimization phase 0 remains open (memory compaction started).
+Swarm-migrate high-value TriState → QTri sites (measurement/confidence/drift),
+keeping fail-closed boundaries on TriState; then `quantize.rs` (turbovec).
