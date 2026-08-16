@@ -284,6 +284,184 @@ impl LivingMemory {
     pub fn commands(&self) -> &[CommandEntry] {
         &self.commands
     }
+
+    /// Serialize the whole palace to a line-based text format (one record per
+    /// line, tab-separated, tab/newline/backslash escaped). Round-trips through
+    /// [`LivingMemory::from_lines`] so the palace persists across sessions.
+    pub fn to_lines(&self) -> String {
+        let mut out = String::new();
+        for r in &self.records {
+            let (ms, me) = r
+                .mentioned
+                .map_or((-1i64, -1i64), |(s, e)| (s as i64, e as i64));
+            out.push_str(&kind_idx(r.kind).to_string());
+            out.push('\t');
+            out.push_str(&esc(&r.wing));
+            out.push('\t');
+            out.push_str(&esc(&r.room));
+            out.push('\t');
+            out.push_str(&esc(&r.key));
+            out.push('\t');
+            out.push_str(&esc(&r.summary));
+            out.push('\t');
+            out.push_str(&esc(&r.content));
+            out.push('\t');
+            out.push_str(&r.stamp.to_string());
+            out.push('\t');
+            out.push_str(&ms.to_string());
+            out.push('\t');
+            out.push_str(&me.to_string());
+            out.push('\t');
+            let facets: Vec<String> = r
+                .facets
+                .iter()
+                .map(|f| {
+                    format!(
+                        "{}|{}|{}|{}",
+                        facet_idx(f.facet_type),
+                        esc(&f.search_text),
+                        f.aliases.join(","),
+                        esc(&f.description)
+                    )
+                })
+                .collect();
+            out.push_str(&facets.join(";"));
+            out.push('\n');
+        }
+        out
+    }
+
+    /// Load a palace from [`LivingMemory::to_lines`] output.
+    pub fn from_lines(text: &str) -> Self {
+        let mut m = Self::new();
+        for line in text.lines() {
+            if line.is_empty() {
+                continue;
+            }
+            let f: Vec<&str> = line.split('\t').collect();
+            if f.len() < 10 {
+                continue;
+            }
+            let kind = kind_from_idx(f[0].parse().unwrap_or(0));
+            let stamp: u64 = f[7].parse().unwrap_or(0);
+            let ms: i64 = f[8].parse().unwrap_or(-1);
+            let me: i64 = f[9].parse().unwrap_or(-1);
+            let mentioned = if ms < 0 || me < 0 {
+                None
+            } else {
+                Some((ms as u64, me as u64))
+            };
+            let id = m.remember_full(
+                kind,
+                &unesc(f[1]),
+                &unesc(f[2]),
+                &unesc(f[3]),
+                &unesc(f[4]),
+                &unesc(f[5]),
+                mentioned,
+            );
+            m.records[id].stamp = stamp;
+            // Restore facets.
+            for fs in f[10..].join("\t").split(';').filter(|s| !s.is_empty()) {
+                let parts: Vec<&str> = fs.split('|').collect();
+                if parts.len() >= 2 {
+                    let ft = facet_from_idx(parts[0].parse().unwrap_or(0));
+                    let rec = &mut m.records[id];
+                    rec.facets.push(Facet {
+                        facet_type: ft,
+                        search_text: unesc(parts[1]),
+                        aliases: if parts.len() > 2 {
+                            parts[2].split(',').map(String::from).collect()
+                        } else {
+                            Vec::new()
+                        },
+                        description: if parts.len() > 3 {
+                            unesc(parts[3])
+                        } else {
+                            String::new()
+                        },
+                    });
+                }
+            }
+        }
+        m
+    }
+}
+
+fn kind_idx(k: MemoryKind) -> u8 {
+    match k {
+        MemoryKind::Episodic => 0,
+        MemoryKind::Semantic => 1,
+        MemoryKind::Procedural => 2,
+        MemoryKind::ShortTerm => 3,
+        MemoryKind::LongTerm => 4,
+    }
+}
+
+fn kind_from_idx(i: u8) -> MemoryKind {
+    match i {
+        1 => MemoryKind::Semantic,
+        2 => MemoryKind::Procedural,
+        3 => MemoryKind::ShortTerm,
+        4 => MemoryKind::LongTerm,
+        _ => MemoryKind::Episodic,
+    }
+}
+
+fn facet_idx(t: FacetType) -> u8 {
+    match t {
+        FacetType::Decision => 0,
+        FacetType::Risk => 1,
+        FacetType::Outcome => 2,
+        FacetType::Metric => 3,
+        FacetType::Issue => 4,
+        FacetType::Plan => 5,
+        FacetType::Constraint => 6,
+        FacetType::Cause => 7,
+    }
+}
+
+fn facet_from_idx(i: u8) -> FacetType {
+    match i {
+        1 => FacetType::Risk,
+        2 => FacetType::Outcome,
+        3 => FacetType::Metric,
+        4 => FacetType::Issue,
+        5 => FacetType::Plan,
+        6 => FacetType::Constraint,
+        7 => FacetType::Cause,
+        _ => FacetType::Decision,
+    }
+}
+
+/// Escape tab/newline/backslash so a field stays on one line.
+fn esc(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('\t', "\\t")
+        .replace('\n', "\\n")
+}
+
+/// Reverse of [`esc`].
+fn unesc(s: &str) -> String {
+    let mut out = String::new();
+    let mut chars = s.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            match chars.next() {
+                Some('t') => out.push('\t'),
+                Some('n') => out.push('\n'),
+                Some('\\') => out.push('\\'),
+                Some(o) => {
+                    out.push('\\');
+                    out.push(o);
+                }
+                None => out.push('\\'),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -419,5 +597,33 @@ mod tests {
             m.dispatch_chain("mystery-cmd"),
             vec![String::from("mystery-cmd")]
         );
+    }
+
+    #[test]
+    fn persistence_round_trips() {
+        let mut m = LivingMemory::new();
+        let a = m.remember_full(
+            MemoryKind::Semantic,
+            "project",
+            "day-1",
+            "auth",
+            "auth\tuses\npq",
+            "verbatim content",
+            Some((100, 200)),
+        );
+        m.add_facet(a, FacetType::Decision, "retire serde_json");
+        m.add_facet(a, FacetType::Metric, "3463 tests");
+        let serialized = m.to_lines();
+        let loaded = LivingMemory::from_lines(&serialized);
+        assert_eq!(loaded.by_kind(MemoryKind::Semantic).len(), 1);
+        let r = loaded.recall_by_key("auth").unwrap();
+        assert_eq!(r.wing, "project");
+        assert_eq!(r.room, "day-1");
+        assert_eq!(r.summary, "auth\tuses\npq"); // escaped round-trip
+        assert_eq!(r.content, "verbatim content");
+        assert_eq!(r.mentioned, Some((100, 200)));
+        assert_eq!(r.facets.len(), 2);
+        assert_eq!(r.facets[0].facet_type, FacetType::Decision);
+        assert_eq!(r.facets[0].search_text, "retire serde_json");
     }
 }
