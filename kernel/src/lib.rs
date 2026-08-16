@@ -383,7 +383,9 @@ pub mod inference;
 /// module's own doc already calls this "unreachable... on wasm32"; this makes that true.
 #[cfg(all(feature = "wasm", not(target_arch = "wasm32")))]
 pub mod living_knowledge;
-#[cfg(feature = "wasm")]
+// `loops` (BP-20 orchestration card parsing) migrated to dowiz-core with a
+// hand-rolled YAML subset parser (no serde/serde_yaml) → no longer wasm-gated.
+// NOT part of the canonical order/money core (decide/order_machine/domain/money).
 pub mod loops;
 pub use dowiz_core::markov;
 /// Contiguous row-major matrix helper — the single backing store / matmul impl

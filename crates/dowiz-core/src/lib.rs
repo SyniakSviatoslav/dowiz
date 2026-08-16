@@ -192,6 +192,7 @@ pub mod blocklist;
 pub mod bebop_bridge;
 pub mod storefront;
 pub mod leak_gate;
+pub mod loops;
 pub mod mesh;
 pub mod mesh_oracle;
 pub mod foodcourt;
