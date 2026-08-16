@@ -7,3 +7,4 @@
 
 pub mod agent;
 pub mod payment_provider;
+pub mod llm;

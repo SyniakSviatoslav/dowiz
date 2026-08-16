@@ -11,6 +11,9 @@
 //! all `&dyn LlmBackend` behind a config-selected constructor.
 
 use core::fmt::Debug;
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
 
 pub const LLM_DEFAULT_TEMPERATURE: f64 = 0.0;
 pub const LLM_DEFAULT_TOP_P: f64 = 1.0;
@@ -239,7 +242,6 @@ pub enum ConfigError {
     NonLoopbackLocal(String),
 }
 
-#[cfg(feature = "std")]
 impl core::fmt::Display for ConfigError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
@@ -258,8 +260,7 @@ impl core::fmt::Display for ConfigError {
     }
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for ConfigError {}
+impl core::error::Error for ConfigError {}
 
 /// Backend-selection config (P41 C-b). Resolved once per process from the
 /// operator environment; the selected `LlmBackend` is built by the consumer
@@ -346,8 +347,8 @@ impl BackendConfig {
 }
 
 /// True iff `url` resolves to a loopback host (`127.0.0.1`, `localhost`, `::1`).
-/// Used to enforce the `LocalOffline` no-egress invariant without any DNS (pure std).
-#[cfg(feature = "std")]
+/// Used to enforce the `LocalOffline` no-egress invariant without any DNS (pure string
+/// parsing — no std dependency).
 fn is_loopback(url: &str) -> bool {
     match host_of(url) {
         Some(host) => {
@@ -359,7 +360,6 @@ fn is_loopback(url: &str) -> bool {
 
 /// Extract the host portion of a `scheme://host[:port][/...]` URL with no regex/crate.
 /// Returns `None` for malformed input (treated as "not loopback" → refused by caller).
-#[cfg(feature = "std")]
 fn host_of(url: &str) -> Option<String> {
     let without_scheme = url.split_once("://")?.1;
     let authority = without_scheme.split('/').next().unwrap_or("");
@@ -371,13 +371,30 @@ fn host_of(url: &str) -> Option<String> {
     }
 }
 
-/// Read a key from a file path. Fail-closed: an unreadable file yields `None`
-/// (→ `ConfigError::MissingApiKey`); the key is never placed in the process env.
-#[cfg(feature = "std")]
+/// Injected key-file reader. The kernel registers `vfs::read_to_string`; with no
+/// reader installed this fails closed to `None` (→ `ConfigError::MissingApiKey`).
+pub type KeyFileReaderFn = fn(&str) -> Option<String>;
+
+static KEY_FILE_READER: crate::spinlock::SpinLock<Option<KeyFileReaderFn>> =
+    crate::spinlock::SpinLock::new(None);
+
+/// Register the key-file reader (called once by the kernel). Idempotent.
+pub fn set_key_file_reader(f: KeyFileReaderFn) {
+    if let Ok(mut g) = KEY_FILE_READER.lock() {
+        *g = Some(f);
+    }
+}
+
+/// Read a key from a file path. Fail-closed: an unreadable file (or no reader
+/// installed) yields `None` (→ `ConfigError::MissingApiKey`); the key is never
+/// placed in the process env.
 fn read_key_file(path: &str) -> Option<String> {
-    crate::vfs::read_to_string(path)
-        .ok()
-        .map(|s| s.trim().to_string())
+    if let Ok(g) = KEY_FILE_READER.lock() {
+        if let Some(f) = *g {
+            return f(path);
+        }
+    }
+    None
 }
 
 /// The pluggable LLM backend port. Implemented by `OllamaAdapter`, `VllmAdapter`,
@@ -474,10 +491,17 @@ mod tests {
 
     #[test]
     fn explicit_connected_with_key_file_parses() {
+        // Register a real std file reader so the connected key-file path reads the
+        // temp file (the core seam has no reader installed by default).
+        set_key_file_reader(|p| {
+            std::fs::read_to_string(p)
+                .ok()
+                .map(|s| s.trim().to_string())
+        });
         // write a temp key file so the connected path is fully satisfied.
         let dir = std::env::temp_dir();
         let key_path = dir.join("p41_aimode_test_key.txt");
-        crate::vfs::write(&key_path, "  sk-test-123\n  ").unwrap();
+        std::fs::write(&key_path, "  sk-test-123\n  ").unwrap();
         let cfg = BackendConfig::from_env_get(env(&[
             ("DOWIZ_AI_MODE", "connected"),
             ("DOWIZ_LLM_BASE_URL", "https://api.example.com/v1"),
@@ -487,7 +511,7 @@ mod tests {
         assert_eq!(cfg.mode, AiMode::Connected);
         assert_eq!(cfg.base_url, "https://api.example.com/v1");
         assert_eq!(cfg.api_key.as_deref(), Some("sk-test-123"));
-        let _ = crate::vfs::remove_file(&key_path);
+        let _ = std::fs::remove_file(&key_path);
     }
 
     // ── fail-closed teeth: partial Connected ⇒ typed Err, NEVER a silent fallback ─
@@ -501,7 +525,7 @@ mod tests {
     fn connected_without_base_url_refused_never_local_fallback() {
         let dir = std::env::temp_dir();
         let key_path = dir.join("p41_aimode_test_key2.txt");
-        crate::vfs::write(&key_path, "sk-test-456").unwrap();
+        std::fs::write(&key_path, "sk-test-456").unwrap();
         let err = BackendConfig::from_env_get(env(&[
             ("DOWIZ_AI_MODE", "connected"),
             ("DOWIZ_LLM_API_KEY_FILE", key_path.to_str().unwrap()),
@@ -512,7 +536,7 @@ mod tests {
             ConfigError::MissingBaseUrl,
             "connected without base url must be refused, never fall back to local"
         );
-        let _ = crate::vfs::remove_file(&key_path);
+        let _ = std::fs::remove_file(&key_path);
     }
 
     #[test]

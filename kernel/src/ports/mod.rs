@@ -3,7 +3,7 @@
 //! `retrieval/mod.rs` / `isolation/mod.rs` convention in this crate.
 
 /// `LlmBackend` port — pluggable local/managed LLM backend trait + value types (zero HTTP/serde).
-pub mod llm;
+pub use dowiz_core::ports::llm;
 /// Multi-provider LLM fallback chain — configures routing across 9 free/open providers
 /// (Ollama, Groq, HuggingFace, DeepInfra, Fireworks, etc.). Pure data, no HTTP/serde.
 pub mod llm_fallback;
