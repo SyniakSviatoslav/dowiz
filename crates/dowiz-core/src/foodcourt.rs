@@ -27,6 +27,9 @@
 //! is the provider-agnostic kernel that any of them plugs into via `run_nleg_saga`.
 
 use alloc::collections::BTreeMap;
+use alloc::collections::BTreeSet;
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
 
 use crate::domain::{charge_legs, kitchen_tickets};
 use crate::domain::{Order, OrderItem};

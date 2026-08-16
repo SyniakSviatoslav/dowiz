@@ -22,8 +22,10 @@
 //! chain and re-checks every signature — tampered payloads and broken `prev`
 //! links are both rejected.
 
-#![cfg(feature = "pq")]
-
+use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::boxed::Box;
+use alloc::collections::BTreeSet;
 use crate::event_log::sha3_256;
 use crate::pq::dsa::{keygen, sign, verify, MlDsa65Sk, RNDBYTES, SEEDBYTES};
 pub use crate::pq::dsa::{MlDsa65Pk, MlDsa65Sig};
@@ -38,7 +40,7 @@ pub use crate::pq::dsa::{MlDsa65Pk, MlDsa65Sig};
 // (`mesh_oracle`, the dudect self-test) and the `ct_eq` dependency compile only under
 // `test`/`ct-gate`, exactly like `ct_gate` itself — zero footprint in a shipping build.
 #[cfg(any(test, feature = "ct-gate"))]
-use crate::ct_gate::{ct_eq, measure_leakage, T_THRESHOLD};
+use crate::ct_gate::{ct_eq, T_THRESHOLD};
 
 /// A single append-only, signed entry in the mesh log.
 ///
@@ -418,7 +420,7 @@ pub mod mesh_oracle {
     }
 }
 
-#[cfg(any(test, feature = "ct-gate"))]
+#[cfg(feature = "ct-gate")]
 mod mesh_dudect {
     //! §4 checklist item 2 — dudect-style gate over the mesh signature comparison,
     //! with the planted-leak self-test (SYNTHESIS §10/P7, the "verifier the author

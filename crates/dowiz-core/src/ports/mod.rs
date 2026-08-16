@@ -16,3 +16,4 @@ pub mod notification;
 pub mod payment;
 pub mod payment_capability;
 pub mod tool;
+pub mod owner_surface;

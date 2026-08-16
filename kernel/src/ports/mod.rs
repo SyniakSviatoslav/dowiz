@@ -55,7 +55,7 @@ pub use dowiz_core::ports::notification;
 /// owner-cap-cert-signed intent; confirm/cancel reuses the P48 facade (agent-invocable
 /// confirm/cancel is UNREPRESENTABLE — `no-agent-order-authority` grep gate). Reuse-first:
 /// consumes P62 catalog, P59 cap-certs, P48 orders, P58 a11y mirror. Zero network/HTTP/serde.
-pub mod owner_surface;
+pub use dowiz_core::ports::owner_surface;
 
 /// P48-INTAKE Phase 1 — channel-agnostic inbound-message vocabulary (zero-I/O firewall).
 /// Provider payload types die at the adapter boundary and never reach here. Mirrors the

@@ -29,6 +29,9 @@
 // The owner root is modeled as a classical RefSigner keypair (P59's `SelfSignedRoot`
 // is the operator's self-held credential; P70 only consumes its verify capability).
 
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
 use crate::catalog::{
     validate_tree, Availability, CatalogError, CatalogNode, LeafId, LeafKind,
     NodeId, PriceableLeaf,

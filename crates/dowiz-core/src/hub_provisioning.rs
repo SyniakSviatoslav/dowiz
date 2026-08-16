@@ -27,6 +27,9 @@
 //!   * `ClaimReceipt` / `ClaimService` hold ownership + routing authority only —
 //!     never keys, never card data, never hub application data.
 
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
 use crate::capability_cert::{
     AlgSuite, CertDelegation, CertError, DowizCoSign, HybridSig, SelfSignedRoot,
 };

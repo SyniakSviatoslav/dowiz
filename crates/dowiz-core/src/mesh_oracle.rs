@@ -15,6 +15,7 @@
 //! - `cross_check` — single-entry differential verification
 //! - `batch_cross_check` — batch differential verification for audit trails
 
+use alloc::string::String;
 use crate::mesh::{MlDsa65Pk, MlDsa65Sig, SignedEntry};
 use crate::pq::dsa::verify;
 

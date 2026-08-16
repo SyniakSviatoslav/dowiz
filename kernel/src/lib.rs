@@ -88,7 +88,7 @@ pub mod fdr;
 /// BLUEPRINT-P72 — food-court N-leg checkout spine. Composes P60 `run_nleg_saga` /
 /// `NLegPlan` / `VendorLeg` / `RefundRequest` with P62 vendor-partitioned
 /// `charge_legs` / `kitchen_tickets`. Pure Rust, no DOM, no float on money.
-pub mod foodcourt;
+pub use dowiz_core::foodcourt;
 /// RW-06 — geo / route kinematics (pure-logic port from geo-anim.ts + delivery-zone.ts). Kernel authority.
 pub use dowiz_core::geo;
 /// Harmonic centrality H(v)=Σ 1/d(u,v) — the shared graph-ranking primitive the
@@ -107,7 +107,7 @@ pub use dowiz_core::householder;
 /// `VpsProvider`), in-module mock adapters + Wave-0 real adapters behind `p67-adapters`. Reuses
 /// P59 `capability_cert` + P70 `owner_surface`. No card data, no network endpoint in the default
 /// build (grep-gate `no_endpoint_dependency`).
-pub mod hub_provisioning;
+pub use dowiz_core::hub_provisioning;
 /// BLUEPRINT-P68 — hub supervisor: update + backup. A/B-slot atomic-flip auto-update with a
 /// real-code-path health gate, owner-triggered rollback, mandatory age-snapshot-before-promote,
 /// and a sovereign encrypted backup envelope (X25519 → SHAKE256 → AES-256-GCM STREAM). Gated
@@ -163,7 +163,7 @@ pub use dowiz_core::leak_gate;
 /// reuses the kernel's ML-DSA-65 primitive for signing/verification (see
 /// `mesh.rs` header for the KAT-gated crypto rationale).
 #[cfg(feature = "pq")]
-pub mod mesh;
+pub use dowiz_core::mesh;
 /// Item 5 — MESH-07 parity: native, zero-dep pull anti-entropy + Merkle
 /// digest reconciliation over `event_log`'s `EventStore`/`MeshEvent`. Design
 /// reference only (not a dependency) on bebop2's `proto-wire/sync_pull.rs`
@@ -507,7 +507,7 @@ pub mod academy_store;
 /// Differential target against production SignedEntry::verify_sig / sig_eq_ct.
 /// Requires `pq` feature (mesh crypto surface). Always available when pq is on.
 #[cfg(feature = "pq")]
-pub mod mesh_oracle;
+pub use dowiz_core::mesh_oracle;
 /// Kernel-native self-reproduction: inspect own source, analyze structure,
 /// derive artifacts (tests, diagnostics, docs), verify integrity.
 /// Replaces the conceptual gap where self-reproduction was described but not coded.
