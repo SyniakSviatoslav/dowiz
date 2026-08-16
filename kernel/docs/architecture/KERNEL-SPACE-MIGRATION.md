@@ -1,7 +1,51 @@
 # Kernel-Space Migration — Progress Ledger
 
 Goal: move everything possible into the kernel (no_std / native). This file is
-the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
+the single source of truth for what is DONE vs REMAINING. Updated 2026-08-16.
+
+## FINAL STATE (2026-08-16) — migration COMPLETE
+
+The no_std migration is **architecturally complete**. Every kernel library module
+that can be `#![no_std]` now lives in `crates/dowiz-core` (3463 lib tests, 0
+failed); `dowiz-kernel` is a thin std host that re-exports the core (201 lib
+tests default / 205 under `wasm`, 0 failed) plus the genuinely-std remainder
+listed below. `serde_json`/`serde_yaml` are fully retired from the runtime graph
+(waves 58–59); `curve25519-dalek`/`aes-gcm` retired earlier (waves 52/54, replaced
+by hand-rolled KAT-gated `dowiz_core::pq::{x25519, aes_gcm}`).
+
+### Terminal remainder — kernel-only files (24), all std by nature
+
+1. **CLI entry points (12)** — `src/bin/*.rs`: `academia_seed`, `enrich`,
+   `fdr_recorder`, `hydra_golden_gate`, `hydra_runtime_probe`, `json_query`,
+   `lm`, `markov_attractor`, `research_ingest`, `skill_ingest`,
+   `spine_snapshot`, `telegram`. `fn main()` std host over the no_std lib
+   (`dowiz_kernel::…` → core). Correct architecture; not library modules.
+2. **Verification harnesses (5)** — `cross_tests.rs`, `kani_selftest.rs`,
+   `miri_selftest.rs`, `landing/tests.rs`, `retrieval/tests.rs`. `cfg(test)`/
+   `cfg(kani)`/`cfg(miri)` is per-crate; golden-pin/planted-fault harnesses stay
+   in the source crate by definition.
+3. **std shims over extracted core (4)** — `compose/mod.rs` (BootConfig +
+   ProductionRoot + `boot`, pure DAG core in `dowiz_core::compose`),
+   `brain/hydra.rs` (`FileEventStore` std-fs store, pure `Hydra` core in
+   `dowiz_core::hydra`), `fdr/ring.rs` (std file-I/O segment ring, pure
+   `ring_parse` in core), `fdr/macros.rs` (`#[macro_export]` macros — `$crate`
+   paths are crate-relative, cannot move).
+4. **GPU (2)** — `render/gpu.rs` + `render/mod.rs`: real headless `wgpu`
+   bring-up (`Instance→Adapter→Device→Queue`), `#[cfg(feature = "gpu")]`,
+   presentation-only (P38). `wgpu`/`pollster` are std+async; zero pure logic.
+5. **Telemetry/profiling (2)** — `span_metrics/instrument.rs` (the 8
+   `#[cfg(feature = "telemetry")]` span wrappers over `fdr::info_span!` +
+   `router`/`event_log`/`ports`/`pq::dsa`) + `span_metrics/pprof.rs`
+   (`#[cfg(feature = "pprof")]` fallback marker, std `PathBuf`). Feature-gated
+   presentation; the measured core (`obs.rs`) is already in core.
+6. **wasm glue (1)** — `wasm.rs`: `#[wasm_bindgen]` thin wrappers mapping
+   `String` errors onto `JsValue`; all `*_logic` bodies live in
+   `dowiz_core::json_api` / `dowiz_core::json_bridge`.
+
+Nothing above holds migratable pure logic — each is either a std host entry
+point, a per-crate verification harness, a std shim over an already-extracted
+core, feature-gated GPU/telemetry, or wasm-bindgen glue. The ledger below is the
+historical record of how we got here.
 
 ## Tier audit (subagent, exact)
 
@@ -164,13 +208,11 @@ the single source of truth for what is DONE vs REMAINING. Updated 2026-08-13.
 
 ## Honest scope note
 
-The mechanical tier (boundary) is **fully migrated**. The transcendental geometry
-layer, sanitize/stem/eigen, arena/mat, csr/householder (+ the `span` seam), and
-the full `spectral` engine (+ `sort`) are **extracted** to `dowiz-core`; the
-Mutex→spinlock sites are **done**; and all **43 I/O ports are done**
-(fs→VFS including the held-handle/fsync seam, thread→kthread, process→kexec;
-net→sk_buff is N/A — the only net surface is a feature-gated std-only stub).
-The single remaining item is architectural: the **bulk crate split** (move the
-rest of the 174 kernel-core modules into `#![no_std]` `dowiz-core`). It is large,
-low-mechanical-effort, high-care — not bulk-editable. This ledger marks the exact
-boundary so a future session resumes cleanly.
+**The migration is complete.** See the `FINAL STATE (2026-08-16)` section at the
+top of this file for the current truth: the full bulk crate split (waves 9–59)
+extracted every migratable module into `dowiz-core`, retiring `serde_json`/
+`serde_yaml`/`curve25519-dalek`/`aes-gcm` from the runtime graph along the way.
+The 24 kernel-only files that remain are terminal by nature (CLI entry points,
+verification harnesses, std shims over extracted core, feature-gated
+GPU/telemetry, wasm-bindgen glue) — none holds migratable pure logic. The
+historical record below documents each wave as it landed.
