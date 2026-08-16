@@ -11,8 +11,11 @@
 //!     `retrieval/ppr`/`diffusion` keep their disk round-trips in `std::fs`);
 //!   - the lazy `OnceLock`-backed global `PRIMARY` instance + `primary()` accessor
 //!     + the `recall_at_k` free function (the self-improvement loop's entry point);
-//!   - the `wasm`-gated `living_knowledge::LivingKnowledge` adapter impl;
 //!   - the std-only disk round-trip + kill-9 tests.
+//!
+//! NOTE: the `LivingKnowledge` adapter impl for `PrimaryRecall` now lives in the core
+//! (`dowiz_core::retrieval::recall`), since both the trait and the type are core items — an
+//! impl here would be an orphan-rule violation.
 
 pub use dowiz_core::retrieval::recall::*;
 
@@ -179,26 +182,6 @@ pub fn load(dir: &str) -> Result<Option<PrimaryRecall>, String> {
         Ok(Some(cached))
     } else {
         Ok(None)
-    }
-}
-
-/// W18 — the kernel-owned PRIMARY recall source is the lexical half of the
-/// `living_knowledge` recall path. Under the `wasm` feature, the
-/// `living_knowledge::LivingKnowledge` adapter is implemented for
-/// [`PrimaryRecall`] so the (formerly JS-stranded) recall loop runs through
-/// this deterministic, std-only Rust path.
-#[cfg(all(feature = "wasm", not(target_arch = "wasm32")))]
-impl crate::living_knowledge::LivingKnowledge for PrimaryRecall {
-    fn retrieve(
-        &self,
-        query: &str,
-        k: usize,
-    ) -> Result<Vec<crate::living_knowledge::Hit>, String> {
-        Ok(self
-            .recall_at_k(query, k)
-            .into_iter()
-            .map(|(id, score)| crate::living_knowledge::Hit { id, score })
-            .collect())
     }
 }
 

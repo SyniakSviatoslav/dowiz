@@ -236,6 +236,25 @@ impl Default for PrimaryRecall {
     }
 }
 
+/// W18 — the PRIMARY recall source is the lexical half of the `living_knowledge`
+/// recall path: implement the `LivingKnowledge` adapter contract for
+/// [`PrimaryRecall`] so the (formerly JS-stranded) recall loop runs through this
+/// deterministic, no_std path. (The `SubprocessLivingKnowledge` process bridge is
+/// the OTHER impl, kept in the kernel shim.)
+impl crate::living_knowledge::LivingKnowledge for PrimaryRecall {
+    fn retrieve(
+        &self,
+        query: &str,
+        k: usize,
+    ) -> Result<alloc::vec::Vec<crate::living_knowledge::Hit>, String> {
+        Ok(self
+            .recall_at_k(query, k)
+            .into_iter()
+            .map(|(id, score)| crate::living_knowledge::Hit { id, score })
+            .collect())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

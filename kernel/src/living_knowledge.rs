@@ -11,22 +11,19 @@
 //! Fail-closed: any spawn / I/O / protocol error returns `Err` — retrieval never silently
 //! degrades to "empty results".
 
-use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-/// A single retrieval hit.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Hit {
-    pub id: String,
-    pub score: f64,
-}
+use serde::{Deserialize, Serialize};
 
-/// Retrieval contract the rest of the kernel depends on.
-pub trait LivingKnowledge {
-    /// Rank `k` documents for `query`. Errors are explicit (fail-closed).
-    fn retrieve(&self, query: &str, k: usize) -> Result<Vec<Hit>, String>;
-}
+// The `no_std` contract (`Hit`, `DocInput`, `LivingKnowledge`) + the PRIMARY recall
+// surface (`recall_at_k`, `primary_recall_adapter`) live in `dowiz_core::living_knowledge`
+// and are re-exported here. This shim keeps ONLY the process-backed adapter
+// (`SubprocessLivingKnowledge` + the raw `wait4` reap machinery) and its JSON bridge
+// protocol (`BridgeRequest`/`BridgeResponse`).
+pub use dowiz_core::living_knowledge::{
+    primary_recall_adapter, recall_at_k, DocInput, Hit, LivingKnowledge,
+};
 
 /// Bridge stdin contract.
 #[derive(Serialize)]
@@ -34,14 +31,6 @@ struct BridgeRequest<'a> {
     files: &'a [DocInput],
     query: &'a str,
     k: usize,
-}
-
-/// A document handed to the bridge (path/title/text triple).
-#[derive(Debug, Clone, Serialize)]
-pub struct DocInput {
-    pub rel: String,
-    pub title: String,
-    pub text: String,
 }
 
 /// Bridge stdout contract (subset we depend on).
@@ -351,25 +340,6 @@ fn collect_child_output(child: &mut std::process::Child) -> std::io::Result<Chil
 struct ChildOutput {
     stdout: Vec<u8>,
     stderr: Vec<u8>,
-}
-
-/// W18 — std-only PRIMARY recall delegation from `living_knowledge` into the
-/// kernel-owned recall path.
-///
-/// The (formerly JS-stranded) `living_knowledge` recall loop no longer shells
-/// out to the purged JS engine: this thin wrapper delegates to the deterministic,
-/// std-only BM25+trigram fusion in `crate::retrieval::recall` (the PRIMARY recall
-/// source). No JS, no network. `doc_id` is `lk:<position>` into the kernel
-/// fixture corpus. This is the `recall_at_k` surface the blueprint requires
-/// `living_knowledge` to expose; the real ranking work lives in `retrieval::recall`.
-pub fn recall_at_k(query: &str, k: usize) -> Vec<(String, f64)> {
-    crate::retrieval::recall::recall_at_k(query, k)
-}
-
-/// W18 — build the `LivingKnowledge`-implementing PRIMARY recall adapter backed
-/// by the kernel-owned std-only recall path (not the node subprocess bridge).
-pub fn primary_recall_adapter() -> crate::retrieval::recall::PrimaryRecall {
-    crate::retrieval::recall::PrimaryRecall::new()
 }
 
 #[cfg(test)]

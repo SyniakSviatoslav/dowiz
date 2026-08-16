@@ -32,6 +32,7 @@
 
 use alloc::string::String;
 use alloc::vec::Vec;
+pub mod bot_pack;
 pub mod claim_client;
 pub mod form;
 pub mod journey;

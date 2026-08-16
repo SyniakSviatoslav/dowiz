@@ -28,7 +28,7 @@ std = []
 # kernel build stays serde-free (verified via `cargo tree -p dowiz-kernel
 # --no-default-features -e no-dev | grep -c serde` → 0). `wasm` becomes a
 # superset of `json-api` so the browser surface is unchanged.
-json-api = ["dep:serde", "dep:serde_json"]
+json-api = ["dep:serde", "dep:serde_json", "dowiz-core/json-api"]
 # `wasm` pulls the wasm-bindgen JS glue + the serde (de)serialization it needs.
 # OFF by default so a native rlib consumer (e.g. bebop-delivery-domain) links the
 # kernel WITHOUT wasm-bindgen / serde / serde_json / serde_yaml in its graph.

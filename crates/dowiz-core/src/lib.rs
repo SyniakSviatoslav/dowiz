@@ -136,6 +136,7 @@ pub mod hypervector_index;
 pub mod invert;
 pub mod kalman;
 pub mod laplacian_eqc_parity;
+pub mod living_knowledge;
 pub mod markov;
 pub mod predictor;
 pub mod router;
