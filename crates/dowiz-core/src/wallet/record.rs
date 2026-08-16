@@ -9,6 +9,10 @@
 //! The pure crate serializes with a hand-rolled serde-free codec so the DEFAULT
 //! kernel build stays serde-free (same discipline as `money`/`event_log`).
 
+use alloc::collections::BTreeMap;
+use alloc::boxed::Box;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 /// The on-device wallet schema version. Forward-compat gate on load.
 pub const WALLET_SCHEMA_VERSION: u16 = 1;
 

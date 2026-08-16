@@ -8,6 +8,8 @@
 //! (`DraftEvent`), mirroring the kernel `decide`/`fold` shape. Tests assert on the EVENT
 //! SEQUENCE (item 3), not just end-state. NO CRDT (R4 §3.1).
 
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use crate::event_log::sha3_256;
 use crate::money::{Currency, Money};
 use crate::ports::payment_provider::{IdempotencyKey, PaymentStatus};
