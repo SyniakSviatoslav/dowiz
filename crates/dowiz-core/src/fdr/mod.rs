@@ -17,6 +17,7 @@ pub mod digital_twin;
 pub mod footprint;
 pub mod json;
 pub mod pmu;
+pub mod ring_parse;
 pub mod schema;
 
 use core::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, Ordering};

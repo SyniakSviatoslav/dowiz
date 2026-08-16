@@ -173,25 +173,10 @@ impl Recovery {
     }
 }
 
-/// Minimal field extraction (kernel is serde-free). Finds `"<key>":<number>`.
-fn extract_u64(line: &str, key: &str) -> Option<u64> {
-    let pat = format!("\"{key}\":");
-    let i = line.find(&pat)? + pat.len();
-    let rest = &line[i..];
-    let end = rest
-        .find(|c: char| !c.is_ascii_digit())
-        .unwrap_or(rest.len());
-    rest[..end].parse().ok()
-}
-
-/// Finds `"<key>":"<string>"` (values here are simple `[a-z_-]` names — no escaping).
-fn extract_str(line: &str, key: &str) -> Option<String> {
-    let pat = format!("\"{key}\":\"");
-    let i = line.find(&pat)? + pat.len();
-    let rest = &line[i..];
-    let end = rest.find('"')?;
-    Some(rest[..end].to_string())
-}
+// Pure JSONL line-parsing helpers — lifted to the `no_std` core
+// (`dowiz_core::fdr::ring_parse`), re-exported here so the `fdr::ring::extract_u64` /
+// `fdr::ring::extract_str` call sites stay unchanged (seam shim).
+pub use dowiz_core::fdr::ring_parse::{extract_str, extract_u64};
 
 /// **READ-ONLY** recovery: reads both segments, validates each line's CRC, drops a torn
 /// tail, and returns the CRC-valid records ordered by `seq`. Never truncates — safe to

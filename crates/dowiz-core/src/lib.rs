@@ -54,6 +54,7 @@ pub mod scenario;
 pub mod semantic;
 pub mod sort;
 pub mod span;
+pub mod span_metrics;
 pub mod spectral;
 pub mod spherical;
 pub mod spool;

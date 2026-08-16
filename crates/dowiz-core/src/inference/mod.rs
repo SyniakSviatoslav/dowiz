@@ -17,7 +17,7 @@
 //! - `workspace`— item 38: static tensor workspace on the arena (const offsets, zero mid-inference alloc).
 //! - `spec`     — item 34: the toy-pilot architecture, D, weights, plane classification (the `f(x)=y` contract).
 //! - `simd_i8`  — item 39: AVX2 quantized dot/matmul kernels, oracle fallback + differential target.
-//! - `checksum` — item 40: per-layer golden CRC32 oracle + hard-fail to safe state.
+//! - `golden`   — item 40: per-layer golden CRC32 oracle + hard-fail to safe state.
 //! - `weights`  — item 41: embedded (committed Rust) weight pipeline, SHA3 self-check, ML-DSA codesign.
 //! - `scheduler`— item 42: fixed-sequence (cyclomatic-1) inference spine.
 //! - `plane`    — item 43: constant-time inference gate (plane-classified; dudect design owed).
@@ -67,6 +67,7 @@ mod tests {
 }
 
 pub mod fixed;
+pub mod golden;
 pub mod oracle;
 pub mod simd_i8;
 pub mod spec;

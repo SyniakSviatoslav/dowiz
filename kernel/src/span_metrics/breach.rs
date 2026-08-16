@@ -21,33 +21,17 @@
 //! The `load1/nproc >= 4` branch itself did NOT yet exist in the kernel — this
 //! module is its canonical home (the function `check_load_breach` is the branch;
 //! `init`/callers wire it into the engine/perf friction path per the operator).
+//!
+//! Pure no_std items (`BreachAction`, `PERF_CAPTURE_SECS`, `PERF_FREQ`) live in
+//! `dowiz_core::span_metrics::breach` and are re-exported below. This shim keeps
+//! only the std parts: `check_load_breach`, `trigger_perf`, `try_perf`, `which_perf`.
+
+// Re-export the pure no_std types from dowiz-core.
+pub use dowiz_core::span_metrics::breach::*;
 
 use std::path::{Path, PathBuf};
 
 use super::obs::{normalized_load1, JsonlWriter, ALERT_JSONL, LOAD_BREACH_THRESHOLD};
-
-/// Default wall-clock duration the system-wide `perf record` is allowed to run.
-/// Bounded so it can never hang the host (R6 "must not hang").
-pub const PERF_CAPTURE_SECS: u64 = 5;
-
-/// Default sampling frequency for `perf record -F` (SYNTHESIS §3.3-C4: `-F 99`).
-pub const PERF_FREQ: u64 = 99;
-
-/// The outcome of a breach evaluation — drives whether `perf` is invoked and
-/// what `alert.jsonl` records.
-pub enum BreachAction {
-    /// `normalized_load1()` was below threshold → no capture, no alert.
-    NoBreach { load: f64 },
-    /// Breach detected; `perf record -a -g -F 99 -- sleep N` ran (or was attempted).
-    /// `captured` = true if `perf.data` was produced; `fallback` = true if we took
-    /// the `pprof` feature-gated no-op path instead of shelling out.
-    Captured {
-        load: f64,
-        captured: bool,
-        fallback: bool,
-        detail: String,
-    },
-}
 
 /// Evaluate the `load1/nproc >= 4` friction branch and, on breach, trigger the
 /// system-wide profiler. `dir` is where `alert.jsonl` (+ `perf.data`) land;

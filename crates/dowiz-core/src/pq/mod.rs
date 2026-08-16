@@ -25,3 +25,4 @@ pub mod root_delegation;
 pub mod codesign;
 pub mod envelope;
 pub mod hybrid_signing;
+pub mod x25519;

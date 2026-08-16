@@ -6,10 +6,10 @@
 //! classical-only fallback: if either exchange fails to verify, the handshake is
 //! rejected outright (no downgrade).
 //!
-//! ponytail: X25519 uses `curve25519-dalek::MontgomeryPoint::mul_clamped` (audited,
-//! constant-time, pure-Rust, zero system deps) — KAT-gated vs RFC 7748 §6.1 (verified
-//! against OpenSSL `cryptography` + dalek, which agree; the RFC's published output values
-//! are typo'd and corrected in x25519.rs). The combine KDF is SHAKE256(mlkem_ss || x_ss).
+//! ponytail: X25519 uses the hand-rolled no_std `dowiz_core::pq::x25519` (Montgomery
+//! ladder over `p = 2^255 - 19`, KAT-gated vs RFC 7748 §6.1 and differential-tested
+//! vs `curve25519-dalek` in `kernel/src/pq/x25519.rs`). The combine KDF is
+//! SHAKE256(mlkem_ss || x_ss).
 //! ML-KEM correctness is KAT-gated in kem.rs.
 
 use crate::pq::keccak::shake256;

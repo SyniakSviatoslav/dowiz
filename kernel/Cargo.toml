@@ -66,9 +66,11 @@ pgrust = ["dep:sqlx", "dep:tokio"]
 # AES-GCM volume), zero external PQ crates, byte-exact vs NIST ACVP vectors.
 # OFF by default so the canonical order/money core stays pure-`std` and
 # serde-free; `pq` is an OPT-IN subsystem (mesh/transport identity seam), not
-# part of the decide/fold Law. `serde`/`aes-gcm`/`curve25519-dalek` ride ONLY
-# behind this feature (same discipline as `wasm`).
-pq = ["dep:serde", "dep:serde_json", "dep:aes-gcm", "dep:curve25519-dalek", "dowiz-core/json-api"]
+# part of the decide/fold Law. `serde`/`aes-gcm` ride ONLY behind this feature
+# (same discipline as `wasm`). `curve25519-dalek` was RETIRED from the runtime graph:
+# X25519 is now the hand-rolled no_std `dowiz_core::pq::x25519` (dalek survives only
+# as a `[dev-dependencies]` differential oracle).
+pq = ["dep:serde", "dep:serde_json", "dep:aes-gcm", "dowiz-core/json-api"]
 # `gpu` — P38 O18a graphics unlock. OFF by default so the canonical order/money
 # core and the wasm cdylib stay lean and GPU-free. Behind this flag,
 # `render/gpu.rs` compiles a REAL headless wgpu bring-up (Instance→Adapter→
@@ -162,7 +164,6 @@ sqlx = { version = "0.8", default-features = false, features = ["postgres", "run
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
 # PQ subsystem deps — OPTIONAL, only linked under the `pq` feature.
 aes-gcm = { version = "0.10.3", features = ["std"], optional = true }
-curve25519-dalek = { version = "4", optional = true }
 # RETIRED (roadmap items 4+29, dependency-replacement procedure — verdict (a) removed
 # outright): `tracing = "0.1"` + `tracing-subscriber = "0.3"` were deleted here. The kernel
 # now owns its logger/flight-data-recorder (`src/fdr/`); spans/events bind to `fdr::`, the
@@ -203,6 +204,12 @@ criterion = "0.5"
 serde_json = "1"
 # PQ KAT test macro expansion (dsa_acvp_tests.rs) — dev-only, not in any build path.
 paste = "1.0"
+# DEV-ONLY differential oracle for the hand-rolled no_std X25519 in dowiz_core
+# (kernel/src/pq/x25519.rs `kat_x25519_differential_vs_dalek`). The dalek RUNTIME
+# dependency was retired from the `pq` feature; it remains here purely as a
+# cross-check so `cargo test --features pq` still proves the zero-dep reimplementation
+# against the audited incumbent. `cargo tree -e no-dev --features pq` is dalek-free.
+curve25519-dalek = "4"
 # Property-test harness for the P47 reconciliation invariant (B3) — arbitrary order
 # sequences folded vs. settlement totals, exact-i64 equality. Cached offline (1.11.0),
 # dev-only, never linked into a production build path.
