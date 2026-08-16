@@ -149,6 +149,7 @@ impl EngineLoop {
         self.bus.publish(
             dowiz_kernel::gossip::GossipTopic::Telemetry,
             &dowiz_kernel::gossip::telemetry_payload("frame_metrics", frame_load),
+            dowiz_kernel::now_ms(),
         );
         // Also feed predictor directly for synchronous frame-level predictions.
         let state = dowiz_kernel::predictor::SystemState::new(
@@ -167,18 +168,20 @@ impl EngineLoop {
                 / predictions.len() as f64;
             let avg_error = predictions.iter().map(|p| p.error_probability).sum::<f64>()
                 / predictions.len() as f64;
-            let strategy = self.resilience.record_outcome(avg_val, avg_friction, avg_error);
+            let strategy = self.resilience.record_outcome(avg_val, avg_friction, avg_error, dowiz_kernel::now_ms());
 
             // Publish prediction results to gossip bus for offline and other modules.
             self.bus.publish(
                 dowiz_kernel::gossip::GossipTopic::Prediction,
                 &dowiz_kernel::gossip::telemetry_payload("avg_val", avg_val),
+                dowiz_kernel::now_ms(),
             );
             self.bus.publish(
                 dowiz_kernel::gossip::GossipTopic::Resilience,
                 &format!("deg={:?}|strat={:?}|consec={}",
                     self.resilience.level(), strategy, self.resilience.consecutive_failures())
                     .into_bytes(),
+                dowiz_kernel::now_ms(),
             );
         }
 

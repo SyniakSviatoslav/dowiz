@@ -179,7 +179,7 @@ impl PerIpLimiter {
             )
         });
         *seen = Instant::now();
-        bucket.try_acquire(1.0)
+        bucket.try_acquire(1.0, dowiz_kernel::clock::now_ns())
     }
 
     /// Evict entries idle past `IDLE_EVICT_AFTER` — bounds map growth from many

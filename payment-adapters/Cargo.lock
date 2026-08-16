@@ -85,8 +85,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "dowiz-core"
+version = "0.1.0"
+
+[[package]]
 name = "dowiz-kernel"
 version = "0.1.0"
+dependencies = [
+ "dowiz-core",
+]
 
 [[package]]
 name = "find-msvc-tools"

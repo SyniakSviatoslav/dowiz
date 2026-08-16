@@ -28,7 +28,8 @@ fn kernel_crypto_pq(c: &mut Criterion) {
 
     // ── ML-KEM-768 encaps / decaps ──
     let kem_seed = [9u8; 32];
-    let (kem_pk, kem_sk) = kem::keygen_internal(&kem_seed);
+    let kem_z = [11u8; 32];
+    let (kem_pk, kem_sk) = kem::keygen_internal(&kem_seed, &kem_z);
     let m = [3u8; 32];
     let (ct, _ss_enc) = kem::encaps_internal(&kem_pk, &m);
     group.bench_function("kem_encaps", |b| {

@@ -157,6 +157,7 @@ impl OfflineQueue {
             bus.publish(
                 dowiz_kernel::gossip::GossipTopic::StateSync,
                 &dowiz_kernel::gossip::telemetry_payload("queue_load", queue_load),
+                dowiz_kernel::now_ms(),
             );
         }
 
@@ -168,6 +169,7 @@ impl OfflineQueue {
             avg_metric,
             dowiz_kernel::sanitize_normalized(retry_ratio * 0.5),
             dowiz_kernel::sanitize_normalized(retry_ratio * 0.3),
+            dowiz_kernel::now_ms(),
         );
 
         let should_proceed =
