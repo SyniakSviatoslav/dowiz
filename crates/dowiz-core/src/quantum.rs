@@ -13,6 +13,7 @@
 
 use crate::complex::Complex;
 use crate::tri_state::TriState;
+use alloc::vec::Vec;
 
 /// Phase factor e^{iφ} = cos φ + i sin φ.
 fn phase(phi: f64) -> Complex {
@@ -434,6 +435,104 @@ impl QTri {
     }
 }
 
+/// N-level quantum superposition |ψ⟩ = Σ c_i |i⟩.
+///
+/// The "quantum state everywhere" primitive for prediction: holds every
+/// possible outcome simultaneously; an *oracle* (a boolean predicate marking
+/// predicted-good outcomes) phase-flips the marked states, amplitude
+/// amplification (Grover diffusion) boosts them, and measurement collapses to
+/// the predicted consequence. Used at all levels to foresee consequences,
+/// state changes, memory deltas, resource use, and time.
+#[derive(Debug, Clone, PartialEq)]
+pub struct QState {
+    amps: Vec<Complex>,
+}
+
+impl QState {
+    /// Uniform superposition |s⟩ = (1/√n) Σ |i⟩ over all n basis states.
+    pub fn uniform(n: usize) -> Self {
+        let a = Complex::new(1.0 / crate::math::sqrt(n as f64), 0.0);
+        QState { amps: vec![a; n] }
+    }
+
+    /// Pure basis state |i⟩.
+    pub fn basis(n: usize, i: usize) -> Self {
+        let mut amps = vec![Complex::new(0.0, 0.0); n];
+        amps[i] = Complex::new(1.0, 0.0);
+        QState { amps }
+    }
+
+    pub fn len(&self) -> usize {
+        self.amps.len()
+    }
+
+    /// Born probability of measuring outcome `i` = |c_i|².
+    pub fn prob(&self, i: usize) -> f64 {
+        let z = self.amps[i];
+        z.re * z.re + z.im * z.im
+    }
+
+    /// Most-probable outcome (deterministic prediction — argmax of |c_i|²).
+    pub fn argmax(&self) -> usize {
+        let mut best = 0;
+        let mut bp = self.prob(0);
+        for i in 1..self.amps.len() {
+            let p = self.prob(i);
+            if p > bp {
+                bp = p;
+                best = i;
+            }
+        }
+        best
+    }
+
+    /// Born-rule measurement: collapse to basis index `i` (deterministic via
+    /// the uniform sample `p ∈ [0, 1)`).
+    pub fn measure(&self, p: f64) -> usize {
+        let mut acc = 0.0;
+        for i in 0..self.amps.len() {
+            acc += self.prob(i);
+            if p < acc {
+                return i;
+            }
+        }
+        self.amps.len() - 1
+    }
+
+    /// One Grover iteration: oracle phase-flip on marked states, then diffusion
+    /// (reflection about the mean amplitude). `oracle(i) == true` marks state i.
+    pub fn grover_iterate<F: Fn(usize) -> bool>(&mut self, oracle: &F) {
+        let n = self.amps.len();
+        for i in 0..n {
+            if oracle(i) {
+                let z = self.amps[i];
+                self.amps[i] = Complex::new(-z.re, -z.im);
+            }
+        }
+        let (mut sr, mut si) = (0.0, 0.0);
+        for i in 0..n {
+            sr += self.amps[i].re;
+            si += self.amps[i].im;
+        }
+        let mr = 2.0 * sr / n as f64;
+        let mi = 2.0 * si / n as f64;
+        for i in 0..n {
+            let z = self.amps[i];
+            self.amps[i] = Complex::new(mr - z.re, mi - z.im);
+        }
+    }
+
+    /// Grover search: amplify the oracle-marked states over `iters` iterations
+    /// from a uniform superposition. Optimal iters ≈ π/4 · √(n / marked).
+    pub fn grover_search<F: Fn(usize) -> bool>(n: usize, oracle: &F, iters: usize) -> Self {
+        let mut s = QState::uniform(n);
+        for _ in 0..iters {
+            s.grover_iterate(oracle);
+        }
+        s
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -599,5 +698,41 @@ mod tests {
         assert_eq!(QTri::f().or(QTri::u()).collapse(), TriState::Unknown);
         assert_eq!(QTri::f().or(QTri::t()).collapse(), TriState::True);
         assert_eq!(QTri::u().not().collapse(), TriState::Unknown);
+    }
+
+    #[test]
+    fn qstate_uniform_is_normalized() {
+        let s = QState::uniform(4);
+        assert_eq!(s.len(), 4);
+        for i in 0..4 {
+            assert!(close(s.prob(i), 0.25));
+        }
+    }
+
+    #[test]
+    fn grover_amplifies_marked_state_to_certainty() {
+        // N=4, one marked state |2⟩: a single Grover iteration concentrates all
+        // amplitude on it (optimal iteration count for N=4, M=1 is 1).
+        let s = QState::grover_search(4, &|i| i == 2, 1);
+        assert!(close(s.prob(2), 1.0), "prob(2)={}", s.prob(2));
+        assert!(close(s.prob(0), 0.0));
+        assert!(close(s.prob(1), 0.0));
+        assert!(close(s.prob(3), 0.0));
+        assert_eq!(s.argmax(), 2);
+    }
+
+    #[test]
+    fn qstate_measurement_is_deterministic() {
+        assert_eq!(QState::basis(4, 1).measure(0.5), 1);
+        let u = QState::uniform(4);
+        assert_eq!(u.measure(0.1), 0);
+        assert_eq!(u.measure(0.6), 2);
+        assert_eq!(u.measure(0.9), 3);
+    }
+
+    #[test]
+    fn qstate_argmax_picks_dominant_outcome() {
+        let s = QState::basis(3, 2);
+        assert_eq!(s.argmax(), 2);
     }
 }
