@@ -9,6 +9,8 @@
 //! prediction (QState) attach as follow-on steps.
 
 use crate::code_graph::{CodeGraph, NodeKind};
+use crate::hypervector_index::HypervectorIndex;
+use crate::retrieval::bm25::tokenize;
 use alloc::string::String;
 use alloc::vec::Vec;
 
@@ -92,6 +94,8 @@ pub struct LivingMemory {
     records: Vec<MemoryRecord>,
     commands: Vec<CommandEntry>,
     code: CodeGraph,
+    /// Vector-navigation index (hypervector similarity over summary+content).
+    hv_index: HypervectorIndex,
     stamp: u64,
 }
 
@@ -133,6 +137,11 @@ impl LivingMemory {
             mentioned,
             code_node: None,
         });
+        // Vector navigation: index summary+content so `vector_search` can rank
+        // by hypervector similarity (hv doc id == record id, appended in order).
+        let mut terms = tokenize(summary);
+        terms.extend(tokenize(content));
+        self.hv_index.insert(terms);
         id
     }
 
@@ -217,6 +226,14 @@ impl LivingMemory {
             })
             .map(|r| r.id)
             .collect()
+    }
+
+    /// Semantic vector navigation: rank records by hypervector similarity to the
+    /// query, returning (record_id, score) pairs (most similar first).
+    pub fn vector_search(&self, query: &str, k: usize) -> Vec<(usize, f64)> {
+        let terms = tokenize(query);
+        let q = self.hv_index.encode_query(&terms);
+        self.hv_index.top_k(&q, k)
     }
 
     /// Anchor a memory record to a code node (memory co-located with code).
@@ -334,6 +351,21 @@ mod tests {
         assert!(m.search("quantum").contains(&id));
         assert!(m.search("oracle").contains(&id));
         assert!(!m.search("nonexistent").contains(&id));
+    }
+
+    #[test]
+    fn vector_search_ranks_by_similarity() {
+        let mut m = LivingMemory::new();
+        let a = m.remember(MemoryKind::Semantic, "quantum", "superposition and oracles");
+        let b = m.remember(MemoryKind::Semantic, "crypto", "post quantum keygen");
+        let c = m.remember(MemoryKind::Episodic, "meeting", "daily standup notes");
+        // "quantum superposition oracle" should rank the quantum record first.
+        let hits = m.vector_search("quantum superposition oracle", 1);
+        assert_eq!(hits[0].0, a);
+        // "keygen crypto" should rank the crypto record first.
+        let hits2 = m.vector_search("keygen crypto", 1);
+        assert_eq!(hits2[0].0, b);
+        let _ = c;
     }
 
     #[test]
