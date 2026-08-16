@@ -20,6 +20,7 @@ pub const KERNEL_PROTO_VERSION: &str = "2026.07.0";
 /// insufficient, or system just booted. Code that acts on Unknown must
 /// treat it as "not safe to assume either way" — fail-closed.
 pub use dowiz_core::TriState;
+pub use dowiz_core::QTri;
 
 /// OPT-IN post-quantum crypto core (ML-DSA-65 / ML-KEM-768 / X25519 / AES-GCM).
 /// KAT-gated byte-exact vs NIST ACVP vectors. Behind `pq` feature so the

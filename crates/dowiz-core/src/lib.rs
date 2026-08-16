@@ -78,6 +78,11 @@ pub mod vendor;
 // the kernel mirrors this with `pub use dowiz_core::TriState;` at its root.
 pub use tri_state::TriState;
 
+// Quantum tri-state (qutrit) — the superposition generalizing TriState, so the
+// kernel can hold partial information instead of a hard Unknown. Mirrored in
+// the kernel root as `pub use dowiz_core::QTri;`.
+pub use quantum::QTri;
+
 // Mirror the kernel's crate-root re-exports so `crate::sanitize_f64` /
 // `crate::sort_by_f64_desc` resolve identically in dowiz-core (they live in
 // the `sanitize` / `sort` modules, but call sites spell them crate-root).
