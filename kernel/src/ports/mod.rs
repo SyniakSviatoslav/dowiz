@@ -21,7 +21,7 @@ pub mod payment;
 /// the type-level no-card-data firewall (PCI red-line, structural). Compile firewall: kernel has
 /// NO payment-adapter dependency; the concrete Stripe adapter lives OUT-OF-KERNEL in the
 /// `payment-adapters` crate. No card-data type exists in core (no PAN / cvv / card_*).
-pub mod payment_provider;
+pub use dowiz_core::ports::payment_provider;
 
 /// `PaymentCapability` (P47 operator ruling) — pure CAPABILITY DECLARATION for the rail set
 /// { Fiat, Crypto, Stripe, Google/Apple Pay, OtherLater }. No client, no credentials, no

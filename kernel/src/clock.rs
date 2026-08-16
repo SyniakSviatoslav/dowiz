@@ -90,6 +90,11 @@ pub fn now_epoch_s() -> u64 {
     SystemClock.now_epoch_s()
 }
 
+/// Signed wall-clock epoch seconds (shadows the no_std core fallback of 0).
+pub fn now_epoch_secs() -> i64 {
+    SystemClock.now_epoch_s() as i64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

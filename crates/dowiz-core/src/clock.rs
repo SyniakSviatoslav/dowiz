@@ -87,6 +87,20 @@ pub fn now_epoch_s() -> u64 {
     std_impls::SystemClock::now_epoch_s()
 }
 
+/// Wall-clock epoch seconds as a signed count (for arithmetic like
+/// `now - tolerance - slack`). no_std fallback returns 0; the kernel shadows this
+/// with the real `SystemTime` clock (mirroring `now_ns` / `now_ms`).
+pub fn now_epoch_secs() -> i64 {
+    #[cfg(feature = "std")]
+    {
+        std_impls::SystemClock::now_epoch_s() as i64
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

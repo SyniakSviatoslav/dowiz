@@ -27,7 +27,10 @@
 //! of capture truth, and the webhook is its SOLE source (§4.4).
 
 use core::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
+use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
+use alloc::boxed::Box;
 
 use crate::event_log::sha3_256;
 use crate::money::{assert_non_negative, Currency, Money};
@@ -858,11 +861,7 @@ impl PaymentProvider for CashAdapter {
 
 // ── webhook verify/normalize (M4, local stand-in; real HMAC out-of-kernel) ─────
 fn now_secs() -> i64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
+    crate::clock::now_epoch_secs()
 }
 
 /// Local webhook "signature" stand-in (sha3 over `ts || payload || secret`). The REAL
@@ -1399,11 +1398,11 @@ mod tests {
     fn intent_burst_refused() {
         // The 4th intent in a burst (bucket capacity = 3) is refused.
         let b = TokenBucket::new(CHECKOUT_BURST, CHECKOUT_REFILL_PER_SEC);
-        assert!(crate::token_bucket::token_bucket_try_acquire(&b, 1.0));
-        assert!(crate::token_bucket::token_bucket_try_acquire(&b, 1.0));
-        assert!(crate::token_bucket::token_bucket_try_acquire(&b, 1.0));
+        assert!(b.try_acquire(1.0, crate::clock::now_ns()));
+        assert!(b.try_acquire(1.0, crate::clock::now_ns()));
+        assert!(b.try_acquire(1.0, crate::clock::now_ns()));
         assert!(
-            !crate::token_bucket::token_bucket_try_acquire(&b, 1.0),
+            !b.try_acquire(1.0, crate::clock::now_ns()),
             "4th burst intent must be refused (degrade-closed)"
         );
     }
