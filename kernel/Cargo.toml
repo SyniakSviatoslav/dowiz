@@ -66,11 +66,11 @@ pgrust = ["dep:sqlx", "dep:tokio"]
 # AES-GCM volume), zero external PQ crates, byte-exact vs NIST ACVP vectors.
 # OFF by default so the canonical order/money core stays pure-`std` and
 # serde-free; `pq` is an OPT-IN subsystem (mesh/transport identity seam), not
-# part of the decide/fold Law. `serde`/`aes-gcm` ride ONLY behind this feature
-# (same discipline as `wasm`). `curve25519-dalek` was RETIRED from the runtime graph:
-# X25519 is now the hand-rolled no_std `dowiz_core::pq::x25519` (dalek survives only
-# as a `[dev-dependencies]` differential oracle).
-pq = ["dep:serde", "dep:serde_json", "dep:aes-gcm", "dowiz-core/json-api"]
+# part of the decide/fold Law. `serde`/`serde_json` ride ONLY behind this feature
+# (same discipline as `wasm`). `curve25519-dalek` and `aes-gcm` were RETIRED from
+# the runtime graph: X25519 and AES-256-GCM are now hand-rolled in `dowiz_core::pq`
+# (both survive only as `[dev-dependencies]` differential oracles).
+pq = ["dep:serde", "dep:serde_json", "dowiz-core/json-api"]
 # `gpu` — P38 O18a graphics unlock. OFF by default so the canonical order/money
 # core and the wasm cdylib stay lean and GPU-free. Behind this flag,
 # `render/gpu.rs` compiles a REAL headless wgpu bring-up (Instance→Adapter→
@@ -162,8 +162,8 @@ serde_yaml = { version = "0.9", optional = true }
 # synchronous `MemoryStore` trait boundary.
 sqlx = { version = "0.8", default-features = false, features = ["postgres", "runtime-tokio-rustls"], optional = true }
 tokio = { version = "1", features = ["rt-multi-thread"], optional = true }
-# PQ subsystem deps — OPTIONAL, only linked under the `pq` feature.
-aes-gcm = { version = "0.10.3", features = ["std"], optional = true }
+# PQ subsystem deps — OPTIONAL, only linked under the `pq` feature. `aes-gcm` and
+# `curve25519-dalek` were RETIRED from the runtime graph (hand-rolled in dowiz_core).
 # RETIRED (roadmap items 4+29, dependency-replacement procedure — verdict (a) removed
 # outright): `tracing = "0.1"` + `tracing-subscriber = "0.3"` were deleted here. The kernel
 # now owns its logger/flight-data-recorder (`src/fdr/`); spans/events bind to `fdr::`, the
@@ -210,6 +210,12 @@ paste = "1.0"
 # cross-check so `cargo test --features pq` still proves the zero-dep reimplementation
 # against the audited incumbent. `cargo tree -e no-dev --features pq` is dalek-free.
 curve25519-dalek = "4"
+# DEV-ONLY differential oracle for the hand-rolled no_std AES-256-GCM in dowiz_core
+# (kernel/src/pq/aes_gcm.rs `kat_aes256gcm_differential_vs_aesgcm`). The aes-gcm RUNTIME
+# dependency was retired from the `pq` feature; it remains here purely as a cross-check
+# so `cargo test --features pq` still proves the zero-dep reimplementation against the
+# audited RustCrypto incumbent. `cargo tree -e no-dev --features pq` is aes-gcm-free.
+aes-gcm = { version = "0.10.3", features = ["std"] }
 # Property-test harness for the P47 reconciliation invariant (B3) — arbitrary order
 # sequences folded vs. settlement totals, exact-i64 equality. Cached offline (1.11.0),
 # dev-only, never linked into a production build path.

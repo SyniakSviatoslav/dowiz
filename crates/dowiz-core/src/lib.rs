@@ -131,6 +131,7 @@ pub mod parse;
 pub mod cart;
 pub mod event_log;
 pub mod evals;
+pub mod hub_supervisor;
 pub mod hypervector_index;
 pub mod invert;
 pub mod kalman;

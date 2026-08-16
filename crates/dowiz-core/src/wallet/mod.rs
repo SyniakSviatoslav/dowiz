@@ -22,6 +22,7 @@ use alloc::vec::Vec;
 pub mod draft;
 pub mod outbox;
 pub mod record;
+pub mod transfer;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Structural grep-gates (the PCI + self-custody red-line teeth).

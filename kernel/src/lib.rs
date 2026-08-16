@@ -110,10 +110,10 @@ pub use dowiz_core::householder;
 pub use dowiz_core::hub_provisioning;
 /// BLUEPRINT-P68 — hub supervisor: update + backup. A/B-slot atomic-flip auto-update with a
 /// real-code-path health gate, owner-triggered rollback, mandatory age-snapshot-before-promote,
-/// and a sovereign encrypted backup envelope (X25519 → SHAKE256 → AES-256-GCM STREAM). Gated
-/// behind `pq` because the envelope genuinely needs AES-256-GCM + X25519.
-#[cfg(feature = "pq")]
-pub mod hub_supervisor;
+/// and a sovereign encrypted backup envelope (X25519 → SHAKE256 → AES-256-GCM STREAM). Lives in
+/// the no_std core (`dowiz_core::hub_supervisor`) — the AES-GCM + X25519 are hand-rolled there,
+/// so it is no longer `pq`-gated.
+pub use dowiz_core::hub_supervisor;
 /// Воля АНУ — the hidden source of the self-evolving living organism. Single
 /// kernel-internal entry point for closed-loop self-evolution (G7 source-hiding).
 #[path = "brain/hydra.rs"]

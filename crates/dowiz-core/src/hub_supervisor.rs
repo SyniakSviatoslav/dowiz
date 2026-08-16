@@ -5,15 +5,13 @@
 //! sovereign encrypted backup envelope that dowiz can never decrypt.
 //!
 //! Scope (per the blueprint §2): the pure logic + the crypto that reuses the
-//! kernel's already-vendored primitives (`pq` feature: `x25519` + `keccak::shake256`
-//! + `aes-gcm`) and the event-log chain-tip epoch anchor (`event_log::sha3_256`).
-//! The platform deps (`self_update`, rclone, systemd, OsRng) live out-of-core
-//! behind the §3 ports in a separate adapters crate — they are NOT linked here,
-//! exactly per the P66/P60 firewall. This module is gated behind `pq` because the
-//! backup envelope genuinely needs AES-256-GCM + X25519; the kernel default build
-//! stays offline-clean (no `aes-gcm` in the default graph, verified via
-//! `cargo tree -p dowiz-kernel --no-default-features -e no-dev | grep -c aes-gcm`
-//! → 0). Acceptance is therefore run under `--features pq`.
+//! zero-dependency core's primitives (`x25519` + `keccak::shake256` + the
+//! hand-rolled `aes_gcm`) and the event-log chain-tip epoch anchor
+//! (`event_log::sha3_256`). The platform deps (`self_update`, rclone, systemd,
+//! OsRng) live out-of-core behind the §3 ports in a separate adapters crate —
+//! they are NOT linked here, exactly per the P66/P60 firewall. The whole module
+//! now lives in the no_std core (the backup envelope's AES-256-GCM + X25519 are
+//! hand-rolled there), so it is no longer `pq`-gated.
 //!
 //! §4-B closed (NO break-glass): `RecipientPubKey` has exactly one constructor —
 //! `from_vendor_config` — and `RecipientSet` is built only from those. The `seal`
@@ -25,13 +23,13 @@
 //! crate beyond what `pq` already vendors. The identifier-absence scan below
 //! asserts the forbidden tokens are absent from this source.
 
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+
 use crate::event_log::{AppendOutcome, EventLog, EventStore, MemEventStore, MeshEvent};
+use crate::pq::aes_gcm::Aes256Gcm;
 use crate::pq::keccak::shake256;
 use crate::pq::x25519::x25519;
-use aes_gcm::{
-    aead::{Aead, KeyInit},
-    Aes256Gcm, Nonce,
-};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // M1 — sovereign encrypted backup envelope (X25519 → SHAKE256 → AES-256-GCM
@@ -202,9 +200,7 @@ pub fn seal(
         let mut nonce = [0u8; STREAM_NONCE_LEN];
         rng.fill(&mut nonce);
         let cipher = Aes256Gcm::new_from_slice(&wrap_key).map_err(|_| BackupError::AeadInvalid)?;
-        let wrapped = cipher
-            .encrypt(Nonce::from_slice(&nonce), file_key.as_slice())
-            .map_err(|_| BackupError::AeadInvalid)?;
+        let wrapped = cipher.encrypt(&nonce, file_key.as_slice());
         let mut wrapped_file_key = [0u8; AEAD_KEY_LEN + AEAD_TAG_LEN];
         wrapped_file_key.copy_from_slice(&wrapped);
         stanzas.push(RecipientStanza {
@@ -239,9 +235,7 @@ fn stream_encrypt(plaintext: &[u8], file_key: &[u8; 32]) -> Vec<Vec<u8>> {
         let is_last = j + 1 == n_chunks;
         let flag = if is_last { STREAM_FINAL } else { STREAM_MORE };
         let nonce = stream_nonce(j as u64, flag);
-        let ct = cipher
-            .encrypt(Nonce::from_slice(&nonce), chunk)
-            .expect("aes-gcm encrypt cannot fail for valid key+nonce");
+        let ct = cipher.encrypt(&nonce, chunk);
         out.push(ct);
     }
     out
@@ -264,10 +258,7 @@ pub fn open(
         let shared = x25519(vendor_sec, &stanza.ephemeral_pub);
         let wrap_key = derive_wrap_key(&shared, &stanza.ephemeral_pub, vendor_pub);
         let cipher = Aes256Gcm::new_from_slice(&wrap_key).map_err(|_| BackupError::AeadInvalid)?;
-        if let Ok(wrapped) = cipher.decrypt(
-            Nonce::from_slice(&stanza.nonce),
-            stanza.wrapped_file_key.as_slice(),
-        ) {
+        if let Ok(wrapped) = cipher.decrypt(&stanza.nonce, stanza.wrapped_file_key.as_slice()) {
             if wrapped.len() == AEAD_KEY_LEN {
                 let mut fk = [0u8; AEAD_KEY_LEN];
                 fk.copy_from_slice(&wrapped);
@@ -301,22 +292,19 @@ fn stream_decrypt(chunks: &[Vec<u8>], file_key: &[u8; 32]) -> Result<Vec<u8>, Ba
         if is_last {
             // Try MORE first; if it opens, the stream ended without a FINAL ⇒ truncation.
             let nonce_more = stream_nonce(j as u64, STREAM_MORE);
-            if cipher
-                .decrypt(Nonce::from_slice(&nonce_more), ct.as_slice())
-                .is_ok()
-            {
+            if cipher.decrypt(&nonce_more, ct.as_slice()).is_ok() {
                 return Err(BackupError::Truncated);
             }
             let nonce_final = stream_nonce(j as u64, STREAM_FINAL);
             let pt = cipher
-                .decrypt(Nonce::from_slice(&nonce_final), ct.as_slice())
+                .decrypt(&nonce_final, ct.as_slice())
                 .map_err(|_| BackupError::AeadInvalid)?;
             out.extend_from_slice(&pt);
             saw_final = true;
         } else {
             let nonce = stream_nonce(j as u64, STREAM_MORE);
             let pt = cipher
-                .decrypt(Nonce::from_slice(&nonce), ct.as_slice())
+                .decrypt(&nonce, ct.as_slice())
                 .map_err(|_| BackupError::AeadInvalid)?;
             out.extend_from_slice(&pt);
         }

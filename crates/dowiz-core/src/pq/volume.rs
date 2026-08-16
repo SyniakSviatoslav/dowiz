@@ -19,17 +19,15 @@
 //! Opening requires (a) the recipient's hybrid secret key to recover `vk`
 //! (both KEM legs must verify — the RED gate), and (b) the ML-DSA signature.
 //!
-//! ponytail: AES-256-GCM is the `aes-gcm` crate (pure-Rust, zero system deps,
-//! feature `std` enabled). The volume key, nonces, and KEM entropy are all
+//! ponytail: AES-256-GCM is the hand-rolled no_std `dowiz_core::pq::aes_gcm`
+//! (KAT-gated + differential-tested vs the RustCrypto `aes-gcm` crate in
+//! `kernel/src/pq/aes_gcm.rs`). The volume key, nonces, and KEM entropy are all
 //! caller-supplied — no OS RNG is used anywhere. We do NOT touch money
 //! constants or the D0–D9 decision surface.
 
-use aes_gcm::{
-    aead::{Aead, KeyInit},
-    Aes256Gcm, Nonce,
-};
-use serde::{Deserialize, Serialize};
+use alloc::vec::Vec;
 
+use crate::pq::aes_gcm::Aes256Gcm;
 use crate::pq::envelope::{self, SignedEnvelope};
 use crate::pq::hybrid::{hybrid_decaps, hybrid_encaps, HybridCiphertext, HybridKeypair};
 use crate::pq::keccak::shake256;
@@ -59,7 +57,8 @@ pub enum VolumeError {
 /// shared-secret encaps) and then sealed under the derived DEM key (field
 /// `wrapped_vk`). `nonce` + `ciphertext` are the AES-256-GCM output of the
 /// plaintext under `vk`. The entire structure is ML-DSA-65 signed (field `seal`).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "json-api", derive(serde::Serialize, serde::Deserialize))]
 pub struct VolumeSeal {
     /// Hybrid encaps of the shared secret `ss` to the recipient's hybrid pubkey.
     pub wrapped: HybridCiphertext,
@@ -130,15 +129,11 @@ pub fn seal_volume(
 
     // 2. Wrap the volume key under the DEM key (the actual KEM "wrap").
     let wrap_cipher = Aes256Gcm::new_from_slice(&dk).expect("dk is exactly 32 bytes");
-    let wrapped_vk = wrap_cipher
-        .encrypt(Nonce::from_slice(wrap_nonce), vk.as_slice())
-        .expect("aes-gcm wrap cannot fail for valid key+nonce");
+    let wrapped_vk = wrap_cipher.encrypt(wrap_nonce, vk.as_slice());
 
     // 3. AES-256-GCM-encrypt the plaintext under the volume key.
     let blob_cipher = Aes256Gcm::new_from_slice(vk).expect("vk is exactly 32 bytes");
-    let ciphertext = blob_cipher
-        .encrypt(Nonce::from_slice(blob_nonce), plaintext)
-        .expect("aes-gcm encrypt cannot fail for valid key+nonce");
+    let ciphertext = blob_cipher.encrypt(blob_nonce, plaintext);
 
     // 4. Build the wire bytes and ML-DSA-sign the artifact.
     let mut seal = VolumeSeal {
@@ -174,10 +169,7 @@ pub fn open_volume(
     // (b) Unwrap the volume key under the DEM key. Fails if the wrap was not for us.
     let wrap_cipher = Aes256Gcm::new_from_slice(&dk).map_err(|_| VolumeError::DecryptFailed)?;
     let vk = wrap_cipher
-        .decrypt(
-            Nonce::from_slice(&seal.wrap_nonce),
-            seal.wrapped_vk.as_slice(),
-        )
+        .decrypt(&seal.wrap_nonce, seal.wrapped_vk.as_slice())
         .map_err(|_| VolumeError::DecryptFailed)?;
 
     // (c) Verify the ML-DSA envelope over the canonical wire bytes. envelope::open
@@ -193,7 +185,7 @@ pub fn open_volume(
     // (d) AES-256-GCM-decrypt the blob under the recovered volume key.
     let blob_cipher = Aes256Gcm::new_from_slice(&vk).map_err(|_| VolumeError::DecryptFailed)?;
     blob_cipher
-        .decrypt(Nonce::from_slice(&seal.nonce), seal.ciphertext.as_slice())
+        .decrypt(&seal.nonce, seal.ciphertext.as_slice())
         .map_err(|_| VolumeError::DecryptFailed)
 }
 

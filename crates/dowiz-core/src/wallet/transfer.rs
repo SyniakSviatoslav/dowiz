@@ -4,21 +4,23 @@
 //! ZERO new crypto deps:
 //!   * X25519 ECDH   → `crate::pq::x25519`
 //!   * SHAKE256 KDF  → `crate::pq::keccak::shake256` (sovereign HKDF-SHA256 substitute)
-//!   * AES-256-GCM   → the in-tree `aes-gcm` (already a kernel dep under `pq`)
+//!   * AES-256-GCM   → the hand-rolled no_std `crate::pq::aes_gcm` (KAT-gated +
+//!                     differential-tested vs the RustCrypto `aes-gcm` crate)
 //!
 //! The `TransferState` machine makes SEALING reachable ONLY through the confirmation gate
 //! (§4.6): sealing without an explicit user confirmation is unrepresentable (the anti-phishing
 //! invariant, R4 §6.4).
 //!
-//! Compiled only under the `pq` feature (the primitives it reuses are gated there).
+//! All crypto is in the zero-dependency core (`crate::pq`), so this module compiles without
+//! the kernel's `pq` feature.
 
+use alloc::string::String;
+use alloc::vec::Vec;
+
+use crate::pq::aes_gcm::Aes256Gcm;
 use crate::pq::keccak::shake256;
 use crate::pq::x25519::x25519;
 use crate::wallet::record::WalletRecord;
-use aes_gcm::{
-    aead::{Aead, KeyInit},
-    Aes256Gcm, Nonce,
-};
 
 /// Signal's ~1–2 min link-code window (R4 §6.1).
 pub const TRANSFER_QR_TTL_S: u32 = 120;
@@ -175,9 +177,7 @@ pub fn seal(
     let shared = x25519(&src_kp.secret, new_device_pub);
     let key = derive_key(&shared, new_device_pub, &src_kp.public);
     let cipher = Aes256Gcm::new_from_slice(&key).expect("key is exactly 32 bytes");
-    let ct = cipher
-        .encrypt(Nonce::from_slice(&nonce), plaintext.as_bytes())
-        .map_err(|_| TransferError::AeadInvalid)?;
+    let ct = cipher.encrypt(&nonce, plaintext.as_bytes());
     Ok(SealedWallet {
         version: TRANSFER_ENVELOPE_VERSION,
         src_ephemeral_pub: src_kp.public,
@@ -204,7 +204,7 @@ pub fn open(
     let key = derive_key(&shared, &new_kp.public, &sealed.src_ephemeral_pub);
     let cipher = Aes256Gcm::new_from_slice(&key).expect("key is exactly 32 bytes");
     let plaintext = cipher
-        .decrypt(Nonce::from_slice(&sealed.nonce), sealed.ct.as_slice())
+        .decrypt(&sealed.nonce, sealed.ct.as_slice())
         .map_err(|_| TransferError::AeadInvalid)?;
     crate::wallet::record::deserialize(
         core::str::from_utf8(&plaintext).map_err(|_| TransferError::AeadInvalid)?,
