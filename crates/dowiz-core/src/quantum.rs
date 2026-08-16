@@ -118,7 +118,10 @@ impl Qubit {
     pub fn bloch(self) -> (f64, f64) {
         let r = self.alpha.abs().min(1.0);
         let theta = 2.0 * crate::math::acos(r);
-        let phi = (self.beta.arg() - self.alpha.arg()).rem_euclid(2.0 * crate::constants::TAU);
+        let phi = crate::math::rem_euclid(
+            self.beta.arg() - self.alpha.arg(),
+            2.0 * crate::constants::TAU,
+        );
         (theta, phi)
     }
 

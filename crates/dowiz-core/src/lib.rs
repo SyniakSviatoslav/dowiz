@@ -37,6 +37,7 @@ pub mod fft;
 pub mod harmonic;
 pub mod householder;
 pub mod hypervector;
+pub mod krylov;
 pub mod lut;
 pub mod mat;
 pub mod math;
