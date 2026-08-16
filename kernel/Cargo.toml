@@ -353,3 +353,12 @@ path = "src/bin/fdr_recorder.rs"
 [profile.release]
 opt-level = 3
 lto = true
+
+# Optimize DEV builds too so debug navigation runs at ~release speed (opt-level
+# 2 globally, opt-level 3 for the hottest no_std core). Compile is slower than
+# opt-level 0 but execution is fast — no need to wait for --release.
+[profile.dev]
+opt-level = 2
+
+[profile.dev.package."dowiz-core"]
+opt-level = 3
