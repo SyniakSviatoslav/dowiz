@@ -202,6 +202,7 @@ pub mod ktg2;
 pub mod inference;
 pub mod landing;
 pub mod wallet;
+pub mod agent;
 pub mod kprocess;
 
 // --- wave 6: batch-5 leaves (analytics / stats) ---
