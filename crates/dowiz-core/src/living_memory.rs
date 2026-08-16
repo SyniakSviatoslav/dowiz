@@ -343,9 +343,9 @@ impl LivingMemory {
                 continue;
             }
             let kind = kind_from_idx(f[0].parse().unwrap_or(0));
-            let stamp: u64 = f[7].parse().unwrap_or(0);
-            let ms: i64 = f[8].parse().unwrap_or(-1);
-            let me: i64 = f[9].parse().unwrap_or(-1);
+            let stamp: u64 = f[6].parse().unwrap_or(0);
+            let ms: i64 = f[7].parse().unwrap_or(-1);
+            let me: i64 = f[8].parse().unwrap_or(-1);
             let mentioned = if ms < 0 || me < 0 {
                 None
             } else {
@@ -362,7 +362,7 @@ impl LivingMemory {
             );
             m.records[id].stamp = stamp;
             // Restore facets.
-            for fs in f[10..].join("\t").split(';').filter(|s| !s.is_empty()) {
+            for fs in f[9..].join("\t").split(';').filter(|s| !s.is_empty()) {
                 let parts: Vec<&str> = fs.split('|').collect();
                 if parts.len() >= 2 {
                     let ft = facet_from_idx(parts[0].parse().unwrap_or(0));
