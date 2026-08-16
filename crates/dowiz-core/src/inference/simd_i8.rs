@@ -32,6 +32,7 @@
 //! Runtime detection mirrors `simd.rs` / `householder.rs`: `is_x86_feature_detected!("avx2")`
 //! → AVX2 kernel; scalar-oracle fallback otherwise. No new dependency.
 
+use alloc::vec::Vec;
 use crate::inference::fixed::{check_overflow_bound, Q_MAX};
 use crate::inference::oracle::{
     oracle_argmax, oracle_matmul_i8, oracle_relu_i32, oracle_requantize,

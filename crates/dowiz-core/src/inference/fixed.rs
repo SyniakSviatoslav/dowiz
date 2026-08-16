@@ -27,6 +27,7 @@
 //!
 //! No new dependency — pure `std`, integer-only. No structural change to `Cargo.toml`.
 
+use alloc::vec::Vec;
 /// Restricted-symmetric activation/weight minimum (inclusive). Exact symmetry ⇒ no
 /// `−128` code.
 pub const Q_MIN: i8 = -127;
@@ -116,7 +117,7 @@ pub fn requantize_pow2(acc: i32, scale_shift: u32) -> i8 {
 /// `div_half_up`, still integer-exact. `s` is the real combined scale `(s_in·s_w)/s_out`.
 pub fn requantize_general(acc: i32, s: f64) -> i8 {
     // M = round(S · 2^31), fixed i32 multiplier.
-    let m = (s * (1i64 << 31) as f64).round() as i64;
+    let m = crate::math::round(s * (1i64 << 31) as f64) as i64;
     let q = div_half_up((acc as i64) * m, 1i64 << 31);
     saturating_clamp(q as i32)
 }

@@ -33,6 +33,7 @@
 //! inputs are synthetic) and **frozen** as committed constants. They are symmetric
 //! within the restricted range `[Q_MIN, Q_MAX]` (item 35 range decision).
 
+use alloc::vec::Vec;
 use crate::inference::fixed::Q_MAX;
 use crate::inference::fixed::Q_MIN;
 use crate::inference::oracle::{oracle_argmax, oracle_forward};

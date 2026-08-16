@@ -21,6 +21,7 @@
 //!    error, not a runtime grow).
 
 
+use alloc::vec::Vec;
 /// Tensor id — a compile-time-known index into the [`LAYOUT`] table.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TensorId(pub usize);

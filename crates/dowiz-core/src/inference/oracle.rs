@@ -20,6 +20,7 @@
 //! shape — re-typed into the integer domain (i8 in, i32 accumulate, i128 shadow). Not a new
 //! algorithm, a re-typing of a proven shape.
 
+use alloc::vec::Vec;
 use crate::inference::fixed::requantize_pow2;
 use crate::inference::workspace::{C, H, N};
 
