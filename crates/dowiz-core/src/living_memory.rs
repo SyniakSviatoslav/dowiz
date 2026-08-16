@@ -265,6 +265,22 @@ impl LivingMemory {
         self.commands.iter().find(|c| c.name == name)
     }
 
+    /// Full dispatch chain for a command: the primary name followed by its
+    /// alternatives in fallback order. This is the sole routing path — every
+    /// tool/command invocation resolves through living memory and tries each
+    /// entry in the chain until one succeeds. Unknown names pass through as-is.
+    pub fn dispatch_chain(&self, name: &str) -> Vec<String> {
+        match self.command(name) {
+            Some(c) => {
+                let mut v = Vec::with_capacity(1 + c.alternatives.len());
+                v.push(c.name.clone());
+                v.extend(c.alternatives.iter().cloned());
+                v
+            }
+            None => alloc::vec![String::from(name)],
+        }
+    }
+
     pub fn commands(&self) -> &[CommandEntry] {
         &self.commands
     }
@@ -383,5 +399,25 @@ mod tests {
         m.register_command("grep", "search files", &["rg", "ag", "git grep"]);
         assert_eq!(m.command("grep").unwrap().alternatives.len(), 3);
         assert!(m.command("nonexistent").is_none());
+    }
+
+    #[test]
+    fn dispatch_chain_orders_primary_then_alternatives() {
+        let mut m = LivingMemory::new();
+        m.register_command("grep", "search files", &["rg", "ag", "git grep"]);
+        assert_eq!(
+            m.dispatch_chain("grep"),
+            vec![
+                String::from("grep"),
+                String::from("rg"),
+                String::from("ag"),
+                String::from("git grep"),
+            ]
+        );
+        // Unknown command passes through unchanged.
+        assert_eq!(
+            m.dispatch_chain("mystery-cmd"),
+            vec![String::from("mystery-cmd")]
+        );
     }
 }
