@@ -156,7 +156,7 @@ pub mod landing;
 pub use dowiz_core::laplacian_eqc_parity;
 /// §3.3 Layer-B (semantic) leakage gate — cosine-0.9 near-duplicate rejection over an injected
 /// `&dyn LlmBackend` embedding model. Native, zero-dep; the live bridge lives in `llm-adapters`.
-pub mod leak_gate;
+pub use dowiz_core::leak_gate;
 /// P34 — cross-repo mesh kernel wiring: append-only signed-append log
 /// (`MeshLog`) + caller-supplied `HubTransport` trait (config-driven, NO
 /// hardcoded endpoint, NO real cross-repo push). Gated behind `pq` because it

@@ -8,6 +8,8 @@
 //! zero-dep; the live bridge is `OllamaAdapter::embed` in the `llm-adapters` crate. On a backend
 //! error the gate DOWNGRADES to exact-only (does not freeze generation) — fail-closed.
 
+use alloc::vec::Vec;
+use alloc::string::ToString;
 use crate::ports::llm::{EmbedRequest, LlmBackend};
 
 /// §3.3 Layer-B threshold: near-duplicate if cosine ≥ this.
@@ -30,16 +32,16 @@ impl LeakGate {
             return 0.0;
         }
         let dot: f64 = a.iter().zip(b).map(|(x, y)| *x as f64 * *y as f64).sum();
-        let na: f64 = a
-            .iter()
-            .map(|x| (*x as f64) * (*x as f64))
-            .sum::<f64>()
-            .sqrt();
-        let nb: f64 = b
-            .iter()
-            .map(|x| (*x as f64) * (*x as f64))
-            .sum::<f64>()
-            .sqrt();
+        let na: f64 = crate::math::sqrt(
+            a.iter()
+                .map(|x| (*x as f64) * (*x as f64))
+                .sum::<f64>(),
+        );
+        let nb: f64 = crate::math::sqrt(
+            b.iter()
+                .map(|x| (*x as f64) * (*x as f64))
+                .sum::<f64>(),
+        );
         if na == 0.0 || nb == 0.0 {
             return 0.0;
         }

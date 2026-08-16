@@ -191,6 +191,7 @@ pub mod capability_cert;
 pub mod blocklist;
 pub mod bebop_bridge;
 pub mod storefront;
+pub mod leak_gate;
 pub mod isolation;
 pub mod ports;
 pub mod kprocess;
