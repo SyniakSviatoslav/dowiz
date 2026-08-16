@@ -25,6 +25,14 @@ json-api = ["dep:serde"]
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(feature, values("std", "pq", "json-api", "ct-gate", "fma", "breaker-testkit", "count-allocs", "p67-adapters"))'] }
 
+# Optimize the TEST binary (not the dev lib): the compute-heavy suites (pq crypto
+# KAT, spectral/fft) run at ~release speed under `cargo test` (~9x), while
+# `cargo build`/`check` stay at dev opt-level 0 for fast iteration. This is how
+# the full 3500-test suite runs in ≤3s.
+[profile.test]
+opt-level = 3
+debug = false
+
 [dev-dependencies]
 # Differential oracle for the laplacian_eqc_parity test (pins the eqc-rs
 # IndexSum-emitted Laplacian against dense laplacian()). Dev-only, outside the

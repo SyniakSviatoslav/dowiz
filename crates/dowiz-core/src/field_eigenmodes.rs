@@ -249,7 +249,10 @@ pub fn field_eigenmodes_raw_sparse(grid: &NeumannGrid, k: usize) -> Decomp {
 /// simply undefined/wrong (it assumes the full rectangle), which is the whole
 /// point of path A's generality.
 pub fn field_eigenmodes_b(grid: &NeumannGrid) -> Decomp {
-    debug_assert!(
+    // Real contract, not a debug-only invariant: on a masked domain the DCT
+    // basis is wrong (it assumes the full rectangle), so path B must refuse in
+    // every build profile — not silently emit garbage under `--release`.
+    assert!(
         grid.mask.is_none(),
         "path B (DCT) only applies to a full rectangular Neumann grid"
     );
