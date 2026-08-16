@@ -28,6 +28,8 @@
 //! enforced: `hydra.rs` code paths carry no call into this module, so a dead supervisor
 //! only starves the model channel, never Hydra itself.
 
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use crate::csr::Csr;
 use crate::hydra::{candidate_drift, TopoEdge, INTEGRITY_BAND};
 use crate::spectral::DriftClass;
