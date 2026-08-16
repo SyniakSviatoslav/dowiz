@@ -12,6 +12,7 @@ use crate::code_graph::{CodeGraph, NodeKind};
 use crate::hypervector_index::HypervectorIndex;
 use crate::retrieval::bm25::tokenize;
 use alloc::string::String;
+use alloc::string::ToString;
 use alloc::vec::Vec;
 
 /// Memory taxonomy — every kind the system records.
@@ -291,41 +292,7 @@ impl LivingMemory {
     pub fn to_lines(&self) -> String {
         let mut out = String::new();
         for r in &self.records {
-            let (ms, me) = r
-                .mentioned
-                .map_or((-1i64, -1i64), |(s, e)| (s as i64, e as i64));
-            out.push_str(&kind_idx(r.kind).to_string());
-            out.push('\t');
-            out.push_str(&esc(&r.wing));
-            out.push('\t');
-            out.push_str(&esc(&r.room));
-            out.push('\t');
-            out.push_str(&esc(&r.key));
-            out.push('\t');
-            out.push_str(&esc(&r.summary));
-            out.push('\t');
-            out.push_str(&esc(&r.content));
-            out.push('\t');
-            out.push_str(&r.stamp.to_string());
-            out.push('\t');
-            out.push_str(&ms.to_string());
-            out.push('\t');
-            out.push_str(&me.to_string());
-            out.push('\t');
-            let facets: Vec<String> = r
-                .facets
-                .iter()
-                .map(|f| {
-                    format!(
-                        "{}|{}|{}|{}",
-                        facet_idx(f.facet_type),
-                        esc(&f.search_text),
-                        f.aliases.join(","),
-                        esc(&f.description)
-                    )
-                })
-                .collect();
-            out.push_str(&facets.join(";"));
+            out.push_str(&record_to_line(r));
             out.push('\n');
         }
         out
@@ -432,6 +399,48 @@ fn facet_from_idx(i: u8) -> FacetType {
         7 => FacetType::Cause,
         _ => FacetType::Decision,
     }
+}
+
+/// Serialize a single record to one line (the append-only unit for crash-safe
+/// persistence — see the kernel's `LivingMemoryStore`).
+pub fn record_to_line(r: &MemoryRecord) -> String {
+    let (ms, me) = r
+        .mentioned
+        .map_or((-1i64, -1i64), |(s, e)| (s as i64, e as i64));
+    let mut out = String::new();
+    out.push_str(&kind_idx(r.kind).to_string());
+    out.push('\t');
+    out.push_str(&esc(&r.wing));
+    out.push('\t');
+    out.push_str(&esc(&r.room));
+    out.push('\t');
+    out.push_str(&esc(&r.key));
+    out.push('\t');
+    out.push_str(&esc(&r.summary));
+    out.push('\t');
+    out.push_str(&esc(&r.content));
+    out.push('\t');
+    out.push_str(&r.stamp.to_string());
+    out.push('\t');
+    out.push_str(&ms.to_string());
+    out.push('\t');
+    out.push_str(&me.to_string());
+    out.push('\t');
+    let facets: Vec<String> = r
+        .facets
+        .iter()
+        .map(|f| {
+            format!(
+                "{}|{}|{}|{}",
+                facet_idx(f.facet_type),
+                esc(&f.search_text),
+                f.aliases.join(","),
+                esc(&f.description)
+            )
+        })
+        .collect();
+    out.push_str(&facets.join(";"));
+    out
 }
 
 /// Escape tab/newline/backslash so a field stays on one line.

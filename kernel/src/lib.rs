@@ -119,6 +119,9 @@ pub use dowiz_core::hub_supervisor;
 /// kernel-internal entry point for closed-loop self-evolution (G7 source-hiding).
 #[path = "brain/hydra.rs"]
 pub mod hydra;
+/// Crash-safe append-only persistence for the living-memory graph (reuses the
+/// FileEventStore durability pattern: append + flush + fsync, replay on open).
+pub mod living_memory_store;
 /// Fully-wired closed-loop self-evolution engine (Hydra + EntropyBudget + TAnnealing + Kalman + M9 + telemetry).
 pub mod hydra_closed_loop;
 /// C-tier "impedance lens": circuit/impedance as a resource framework — flow
