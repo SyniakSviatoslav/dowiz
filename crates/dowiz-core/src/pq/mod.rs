@@ -7,10 +7,12 @@
 //! - `entropy`: pure seed mixing/derivation (the std OS/QRNG provider is in the kernel shim).
 //! - `fractal`, `root_delegation`: supporting primitives.
 //!
-//! The serde/external-crate wire types (`envelope`, `hybrid`, `hybrid_signing`,
-//! `volume`, `codesign` — serde; `x25519` — curve25519-dalek) live in the kernel
-//! held-handle shim: they need (de)serialization / external crypto crates that the
-//! zero-dependency core cannot hold.
+//! The wire types that need serde derive impls (`codesign`, `envelope`, `hybrid`,
+//! `hybrid_signing`) live here too, with their `Serialize`/`Deserialize` derives
+//! gated behind the `json-api` feature (enabled transitively by the kernel's `pq`
+//! feature). The one remaining kernel-side wire type is `volume` (AES-256-GCM
+//! at-rest crypto) — it stays in the held-handle shim until the hand-rolled AES-GCM
+//! lands, because the zero-dependency core cannot hold the `aes-gcm` crate.
 //!
 //! All randomness must be supplied by the caller (`rng` fill closures) — no `rand`
 //! dependency. Bit-exactness vs the NIST reference is verified by KAT tests that
@@ -24,5 +26,6 @@ pub mod kem;
 pub mod root_delegation;
 pub mod codesign;
 pub mod envelope;
+pub mod hybrid;
 pub mod hybrid_signing;
 pub mod x25519;
