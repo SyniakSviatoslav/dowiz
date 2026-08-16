@@ -669,7 +669,7 @@ pub use dowiz_core::fractal;
 /// KTG-2: 2-bit graph dataflow core + Fractal Manchester Architecture.
 /// The execution center of the kernel (cell/graph/tile2x2/telemetry/exokernel/
 /// fractal/fractal_manchester).
-pub mod ktg2;
+pub use dowiz_core::ktg2;
 /// Phase A: n(0) LUT + branchless constants — extracted to the `no_std`
 /// `dowiz-core` crate and re-exported here so `crate::{constants,lut}::…`
 /// paths keep working unchanged.

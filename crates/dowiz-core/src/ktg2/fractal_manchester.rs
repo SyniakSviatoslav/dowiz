@@ -18,8 +18,8 @@
 //! metadata block per word, and there is no separate clone of the packed word across
 //! encode/decode/optical paths.
 
-use std::fmt;
-use std::time::{Duration, Instant};
+use core::fmt;
+use alloc::vec::Vec;
 
 // ─── Manchester Transition ──────────────────────────────────────────────
 
@@ -115,7 +115,7 @@ impl FractalPosition {
 
     pub fn as_unit_circle_coords(&self) -> (f64, f64) {
         let angle = self.fraction() * core::f64::consts::PI;
-        (angle.cos(), angle.sin())
+        (crate::math::cos(angle), crate::math::sin(angle))
     }
 }
 
@@ -541,12 +541,16 @@ impl OpticalManchesterSignal {
 }
 
 fn fast_rand_f32() -> f32 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .subsec_nanos();
-    (nanos % 1_000_000) as f32 / 1_000_000.0
+    // no_std xorshift32 noise source (deterministic, reproducible — replaces the
+    // wall-clock `SystemTime` subsec-nanos seed that the std build used).
+    use core::sync::atomic::{AtomicU32, Ordering};
+    static STATE: AtomicU32 = AtomicU32::new(0x9E37_79B9);
+    let mut x = STATE.load(Ordering::Relaxed);
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    STATE.store(x, Ordering::Relaxed);
+    (x % 1_000_000) as f32 / 1_000_000.0
 }
 
 // ─── Fractal Manchester Architecture ───────────────────────────────────
@@ -872,9 +876,9 @@ pub fn fractal_position_to_angle(position: i32) -> f64 {
 pub fn fractal_bit_to_geometry(bit: bool, position: i32) -> (f64, f64) {
     let angle = fractal_position_to_angle(position);
     if bit {
-        (angle.cos(), 0.0)
+        (crate::math::cos(angle), 0.0)
     } else {
-        (0.0, angle.sin())
+        (0.0, crate::math::sin(angle))
     }
 }
 

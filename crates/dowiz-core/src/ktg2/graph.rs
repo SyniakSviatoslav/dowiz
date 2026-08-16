@@ -1,5 +1,6 @@
 //! Packed graph-node state store. Four node states occupy one byte.
 
+use alloc::vec::Vec;
 use super::cell::State;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

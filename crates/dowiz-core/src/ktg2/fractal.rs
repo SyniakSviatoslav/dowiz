@@ -35,9 +35,9 @@ impl Bit {
         let d = (self.pos - ZERO) as f64;
         let theta = d * core::f64::consts::PI / 128.0;
         if self.bit == 1 {
-            (theta.cos(), 0.0)
+            (crate::math::cos(theta), 0.0)
         } else {
-            (0.0, theta.sin())
+            (0.0, crate::math::sin(theta))
         }
     }
 
@@ -104,7 +104,7 @@ impl Word {
     /// AND: логічний перетин — істинно лише якщо обидва біти True.
     /// (Геометрія cos/sin залишається проекцією через [`Bit::as_unit`].)
     pub fn and(&self, other: &Self) -> Self {
-        Self(std::array::from_fn(|i| {
+        Self(core::array::from_fn(|i| {
             let a = self.0[i];
             let b = other.0[i];
             let val = if a.is_true() && b.is_true() { 1u8 } else { 0u8 };
@@ -115,7 +115,7 @@ impl Word {
     /// OR: логічне об'єднання — істинно якщо хоча б один біт True.
     /// (Геометрія cos/sin залишається проекцією через [`Bit::as_unit`].)
     pub fn or(&self, other: &Self) -> Self {
-        Self(std::array::from_fn(|i| {
+        Self(core::array::from_fn(|i| {
             let a = self.0[i];
             let b = other.0[i];
             let val = if a.is_true() || b.is_true() { 1u8 } else { 0u8 };

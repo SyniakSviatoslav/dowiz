@@ -4,6 +4,7 @@
 //! scheduling policy and graph construction; no high-level abstraction is
 //! forced into the privileged core.
 
+use alloc::vec::Vec;
 use super::telemetry::TelemetryStats;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

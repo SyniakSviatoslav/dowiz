@@ -198,6 +198,7 @@ pub mod foodcourt;
 pub mod hub_provisioning;
 pub mod isolation;
 pub mod ports;
+pub mod ktg2;
 pub mod kprocess;
 
 // --- wave 6: batch-5 leaves (analytics / stats) ---
