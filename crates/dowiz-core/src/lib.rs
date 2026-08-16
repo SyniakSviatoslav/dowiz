@@ -41,6 +41,7 @@ pub mod householder;
 pub mod hypervector;
 pub mod krylov;
 pub mod lut;
+pub mod living_memory;
 pub mod mat;
 pub mod math;
 pub mod messenger;
