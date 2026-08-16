@@ -68,7 +68,7 @@ pgrust = ["dep:sqlx", "dep:tokio"]
 # serde-free; `pq` is an OPT-IN subsystem (mesh/transport identity seam), not
 # part of the decide/fold Law. `serde`/`aes-gcm`/`curve25519-dalek` ride ONLY
 # behind this feature (same discipline as `wasm`).
-pq = ["dep:serde", "dep:serde_json", "dep:aes-gcm", "dep:curve25519-dalek"]
+pq = ["dep:serde", "dep:serde_json", "dep:aes-gcm", "dep:curve25519-dalek", "dowiz-core/json-api"]
 # `gpu` — P38 O18a graphics unlock. OFF by default so the canonical order/money
 # core and the wasm cdylib stay lean and GPU-free. Behind this flag,
 # `render/gpu.rs` compiles a REAL headless wgpu bring-up (Instance→Adapter→

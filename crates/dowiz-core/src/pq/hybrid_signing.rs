@@ -25,6 +25,7 @@
 //! than a `todo!()` — it MUST reject cross-domain replays and MUST produce
 //! distinct keys from the same seed.
 
+use alloc::vec::Vec;
 use crate::pq::dsa;
 use crate::pq::dsa::{keygen_bytes, sign_internal_bytes, verify_internal_bytes, RNDBYTES, SEEDBYTES};
 use crate::pq::envelope::ENTROPY_LEN;
@@ -74,7 +75,8 @@ pub enum HybridPolicy {
 // ── hybrid signature data ─────────────────────────────────────────────────────
 
 /// A complete hybrid signature: classical + PQ over the same message.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "json-api", derive(serde::Serialize, serde::Deserialize))]
 pub struct HybridSignature {
     /// Classical (Ed25519) signature leg.
     pub classical: Vec<u8>,
@@ -83,7 +85,8 @@ pub struct HybridSignature {
 }
 
 /// A hybrid-signed envelope: the payload + a RequireBoth hybrid signature.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "json-api", derive(serde::Serialize, serde::Deserialize))]
 pub struct HybridEnvelope {
     /// The signed payload bytes.
     pub payload: Vec<u8>,

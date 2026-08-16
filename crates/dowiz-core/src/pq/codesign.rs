@@ -14,6 +14,7 @@
 //!
 //! RNG-free hot path (C10): all entropy is caller-supplied (`seed`, `rnd`).
 
+use alloc::vec::Vec;
 use crate::pq::envelope::ENTROPY_LEN;
 use crate::pq::envelope::{new_identity, open, seal, EnvelopeError, SignedEnvelope, HASH_LEN};
 

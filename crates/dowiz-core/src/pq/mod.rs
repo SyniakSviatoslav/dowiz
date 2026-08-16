@@ -22,3 +22,6 @@ pub mod fractal;
 pub mod keccak;
 pub mod kem;
 pub mod root_delegation;
+pub mod codesign;
+pub mod envelope;
+pub mod hybrid_signing;

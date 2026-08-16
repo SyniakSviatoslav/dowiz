@@ -7,10 +7,8 @@
 
 pub use dowiz_core::pq::*;
 
-pub mod codesign;
-pub mod envelope;
+pub use dowiz_core::pq::{codesign, envelope, hybrid_signing};
 pub mod hybrid;
-pub mod hybrid_signing;
 pub mod volume;
 pub mod x25519;
 

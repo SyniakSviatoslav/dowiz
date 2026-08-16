@@ -10,6 +10,7 @@
 //! ponytail: no seq/replay here — that is the transport's job (DTN lifetime +
 //! EID dedupe, RFC 9171). Envelope proves *integrity + authorship* only.
 
+use alloc::vec::Vec;
 use crate::pq::dsa::{keygen_bytes, sign_internal_bytes, verify_internal_bytes};
 use crate::pq::keccak::shake256;
 
@@ -40,7 +41,8 @@ pub enum EnvelopeError {
 }
 
 /// A PQ-signed, content-addressed envelope.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "json-api", derive(serde::Serialize, serde::Deserialize))]
 pub struct SignedEnvelope {
     pub payload: Vec<u8>,
     pub content_hash: [u8; HASH_LEN],

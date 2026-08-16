@@ -10,6 +10,13 @@ crate-type = ["rlib"]
 
 [dependencies]
 # zero deps — pure core::, no alloc, no std.
+serde = { version = "1", features = ["derive"], optional = true }
+
+[features]
+# `json-api` (default-off) adds serde derive impls to the pq wire types so the
+# kernel's `pq` feature (which needs to (de)serialize SignedEnvelope) can enable
+# them. The default no_std build stays serde-free.
+json-api = ["dep:serde"]
 
 # The extracted SIMD hot paths (householder/simd) keep the kernel's
 # `cfg(feature = "std")` grammar for parity. dowiz-core never defines or enables
