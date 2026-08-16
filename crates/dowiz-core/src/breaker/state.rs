@@ -236,6 +236,7 @@ pub fn step(rec: BreakerRecord, sig: &SignalVector, external: Option<TripCause>)
 
 /// Decrement the cooldown timer (called once per `tick` while in `Open`).
 /// Returns the decremented value. Saturates at 0 (do not underflow).
+#[cfg(test)]
 pub fn cooldown_tick(rec: BreakerRecord) -> BreakerRecord {
     let mut next = rec;
     if next.cooldown_ticks > 0 {

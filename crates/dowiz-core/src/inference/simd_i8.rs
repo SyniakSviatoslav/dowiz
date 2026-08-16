@@ -39,10 +39,6 @@ use crate::inference::oracle::{
 };
 use crate::inference::workspace::{C, H, N};
 
-/// Maximum `k` (reduction length) this module's column-gather buffer supports. The pilot's
-/// layers have `k ≤ 8`; the differential corpus uses `k ≤ 12`; the item-35 overflow lemma caps
-/// meaningful `k` far below this. A larger `k` is a programming error, caught by `debug_assert`.
-const MAX_K: usize = 64;
 
 /// Scalar i8·i8 dot product — the **fallback** path and the `debug_assert` reference.
 ///

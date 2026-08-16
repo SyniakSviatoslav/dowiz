@@ -49,6 +49,7 @@ impl RecordKind {
     }
 
     /// Parse the discriminant back into a kind (inverse of `discriminant`).
+#[cfg(test)]
     fn from_discriminant(b: u8) -> Option<Self> {
         match b {
             0 => Some(RecordKind::Memory),

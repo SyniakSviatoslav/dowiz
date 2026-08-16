@@ -551,6 +551,7 @@ impl BulkSnapshot {
     }
 
     /// Extract resumption token from raw OAI-PMH response bytes (no XML DOM).
+#[cfg(test)]
     fn extract_token(data: &[u8]) -> String {
         let tag = b"<resumptionToken>";
         let close = b"</resumptionToken>";

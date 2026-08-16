@@ -591,9 +591,13 @@ pub struct PoolManager<T: TunnelProvider, V: VpsProvider> {
     pub accounts: AccountPool,
     pub snapshot: ImageRef,
     pub spec: ServerSpec,
-    /// Provisioning-service signing seeds (for the mutation log sigs).
+    /// Provisioning-service signing seeds (for the mutation log sigs). Test-only
+    /// (read back by the pool-manager tests to verify the seed was stored).
+    #[cfg(test)]
     svc_cls_seed: [u8; 32],
+    #[cfg(test)]
     svc_pq_seed: [u8; 32],
+    #[cfg(test)]
     svc_actor: [u8; 32],
 }
 
@@ -617,8 +621,11 @@ impl<T: TunnelProvider, V: VpsProvider> PoolManager<T, V> {
             accounts: AccountPool::new(),
             snapshot,
             spec,
+            #[cfg(test)]
             svc_cls_seed: svc_classical_seed,
+            #[cfg(test)]
             svc_pq_seed,
+            #[cfg(test)]
             svc_actor: svc_cls_pub,
         }
     }
@@ -673,6 +680,7 @@ impl<T: TunnelProvider, V: VpsProvider> PoolManager<T, V> {
     /// Provision tunnel + DNS for a warm hub (the routing half of provisioning,
     /// write-ahead-logged). `§2.2` keeps this in the provisioning plane, never the
     /// claim hot path. Enforces the catch-all + cfargotunnel invariants (M2).
+#[cfg(test)]
     fn wire_tunnel(&mut self, hub: &HubId, clock: &Clock) -> Result<(), ProvisionError> {
         // Rollover guard: route to the next account past the critical watermark.
         let count = self.tunnel.count_tunnels().unwrap_or(0);

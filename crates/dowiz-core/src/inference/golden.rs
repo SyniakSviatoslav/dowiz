@@ -172,6 +172,7 @@ fn compute_layers(input: &[i8; N], hidden_override: Option<&[i8; H]>, wk: &Weigh
 /// Recompute the goldens from the oracle over the frozen weights + pinned vectors.
 /// Used by `golden_crcs_are_recomputed_from_oracle` to prove the committed constants ARE
 /// the item-37 oracle's outputs (a differential, not a magic number; proof B5.1/B5.5).
+#[cfg(test)]
 fn compute_goldens() -> ([u32; 4], [u32; 4], [u32; 4]) {
     let wk = Weights::spec();
     let mut l1 = [0u32; 4];

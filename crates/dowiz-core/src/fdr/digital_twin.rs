@@ -86,6 +86,7 @@ pub fn call_matrix_spectral_radius(a: &[Vec<f64>]) -> f64 {
 /// Item 70 §70.3 step 1 (red→green): a synthetic RECURSIVE call graph (self-loop weight > 0 with
 /// row-stochastic mass) diverges; a strictly contracting one converges. Built from real
 /// `classify_drift` inputs (reusing the same matrices hydra.rs tests use).
+#[cfg(test)]
 fn synthetic_divergent_matrix() -> Vec<Vec<f64>> {
     // Self-loop weight 1.0 on every node ⇒ ρ == 1 (Resonant) at minimum; add a 2-cycle to push
     // ρ > 1. K3 adjacency (E=4, ρ=2) is the canonical Unstable matrix from spectral.rs tests.
@@ -96,6 +97,7 @@ fn synthetic_divergent_matrix() -> Vec<Vec<f64>> {
     ]
 }
 
+#[cfg(test)]
 fn synthetic_convergent_matrix() -> Vec<Vec<f64>> {
     // Strictly contracting: each node sends a small mass to the next; ρ < 1 (Damped).
     vec![

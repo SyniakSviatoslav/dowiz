@@ -20,6 +20,7 @@ use alloc::vec::Vec;
 /// One oracle query: the natural-language question + the doc-id(s) that the
 /// fixture corpus declares relevant (the "ground truth" the spike's oracle
 /// hand-verified).
+#[cfg(test)]
 struct Oracle {
     query: &'static str,
     /// doc-ids in `FIXTURE_CORPUS` that answer the query.
@@ -60,6 +61,7 @@ const FIXTURE_CORPUS: &[&str] = &[
 /// Hand-verified oracle: 12 queries, each answered by exactly one fixture doc.
 /// Paraphrased (not keyword-copied) so the test proves genuine lexical recall,
 /// not string equality — mirroring the spike's paraphrase-hard oracle.
+#[cfg(test)]
 const ORACLE: &[Oracle] = &[
     Oracle { query: "how is the order total calculated", relevant: &[0] },
     Oracle { query: "when does the package get delivered", relevant: &[1] },

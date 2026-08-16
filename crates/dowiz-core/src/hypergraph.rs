@@ -254,11 +254,11 @@ impl Hypergraph {
     /// is for debugging and small examples.
     pub fn laplacian_dense(&self) -> Vec<Vec<f64>> {
         let n = self.num_vertices;
-        let mut L = vec![vec![0.0; n]; n];
+        let mut l = vec![vec![0.0; n]; n];
 
         // Diagonal: L[v,v] = degree(v)
         for v in 0..n {
-            L[v][v] = self.vertex_degrees[v] as f64;
+            l[v][v] = self.vertex_degrees[v] as f64;
         }
 
         // Off-diagonal contributions from each hyperedge
@@ -270,16 +270,16 @@ impl Hypergraph {
             let inv_size = 1.0 / size;
 
             for &u in vertices {
-                L[u][u] -= inv_size; // diagonal adjustment
+                l[u][u] -= inv_size; // diagonal adjustment
                 for &v in vertices {
                     if u != v {
-                        L[u][v] -= inv_size;
+                        l[u][v] -= inv_size;
                     }
                 }
             }
         }
 
-        L
+        l
     }
 
     /// Compute the vertex adjacency matrix (two vertices are adjacent if they
@@ -387,7 +387,7 @@ impl Hypergraph {
         }
 
         // Compute the Laplacian dense matrix for small hypergraphs
-        let L = self.laplacian_dense();
+        let l = self.laplacian_dense();
 
         // Power iteration to find the Fiedler vector (second smallest eigenvalue)
         // For simplicity, we use the vertex centrality as a proxy for the
@@ -554,9 +554,9 @@ mod tests {
         let incidence = vec![vec![0, 1], vec![1, 2]];
         let hg = Hypergraph::from_incidence(incidence);
 
-        let L = hg.laplacian_dense();
-        assert_eq!(L.len(), 3); // 3 vertices
-        assert_eq!(L[0].len(), 3);
+        let l = hg.laplacian_dense();
+        assert_eq!(l.len(), 3); // 3 vertices
+        assert_eq!(l[0].len(), 3);
     }
 
     #[test]
@@ -564,10 +564,10 @@ mod tests {
         let incidence = vec![vec![0, 1, 2]];
         let hg = Hypergraph::from_incidence(incidence);
 
-        let L = hg.laplacian_sparse();
-        assert!(!L.is_empty());
+        let l = hg.laplacian_sparse();
+        assert!(!l.is_empty());
         // Should have diagonal + off-diagonal entries
-        assert!(L.iter().any(|&(r, c, _)| r == c));
+        assert!(l.iter().any(|&(r, c, _)| r == c));
     }
 
     #[test]

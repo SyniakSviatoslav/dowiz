@@ -60,140 +60,15 @@ pub fn stable_softmax(xs: &mut [f64]) {
 /// values, estimated by power iteration on AᵀA and its inverse (via Gaussian solve).
 
 #[inline]
-fn dot(x: &[f64], y: &[f64]) -> f64 {
-    x.iter().zip(y.iter()).map(|(a, b)| a * b).sum()
-}
 
 #[inline]
-fn norm(x: &[f64]) -> f64 {
-    crate::math::sqrt(dot(x, x))
-}
 
 #[inline]
-fn mat_vec_mul(a: &[Vec<f64>], x: &[f64], out: &mut [f64]) {
-    let n = a.len();
-    for i in 0..n {
-        out[i] = dot(&a[i], x);
-    }
-}
 
 #[inline]
-fn mat_vec_mul_transpose(a: &[Vec<f64>], x: &[f64], out: &mut [f64]) {
-    let n = a.len();
-    let m = a.first().map_or(0, |r| r.len());
-    out[..m].fill(0.0);
-    for i in 0..n {
-        let row = &a[i];
-        let xi = x[i];
-        for j in 0..m {
-            out[j] += row[j] * xi;
-        }
-    }
-}
 
-fn power_iteration_sigma_max(a: &[Vec<f64>], max_iter: usize, tol: f64) -> f64 {
-    let n = a.len();
-    if n == 0 {
-        return 0.0;
-    }
-    let m = a[0].len();
-    if m == 0 {
-        return 0.0;
-    }
-    let mut v = vec![1.0 / crate::math::sqrt((n as f64)); n];
-    let mut av = vec![0.0; m];
-    let mut atav = vec![0.0; n];
-    let mut sigma = 0.0;
-    for _ in 0..max_iter {
-        mat_vec_mul(a, &v, &mut av);
-        mat_vec_mul_transpose(a, &av, &mut atav);
-        let new_sigma = norm(&atav);
-        if (new_sigma - sigma).abs() < tol * new_sigma.max(1e-12) {
-            sigma = new_sigma;
-            break;
-        }
-        sigma = new_sigma;
-        if sigma > 0.0 {
-            let inv = 1.0 / sigma;
-            for i in 0..n {
-                v[i] = atav[i] * inv;
-            }
-        }
-    }
-    crate::math::sqrt(sigma)
-}
 
-/// Solve A x = b by Gaussian elimination with partial pivoting (square, fail-closed).
-fn gaussian_solve(a: &[Vec<f64>], b: &[f64]) -> Vec<f64> {
-    let n = a.len();
-    let mut aug: Vec<Vec<f64>> = a.iter().zip(b.iter()).map(|(row, &bv)| {
-        let mut r = row.clone();
-        r.push(bv);
-        r
-    }).collect();
 
-    for col in 0..n {
-        let mut pivot_row = col;
-        let mut pivot_val = aug[col][col].abs();
-        for row in (col + 1)..n {
-            let v = aug[row][col].abs();
-            if v > pivot_val {
-                pivot_val = v;
-                pivot_row = row;
-            }
-        }
-        if pivot_val < 1e-14 {
-            return vec![0.0; n];
-        }
-        aug.swap(col, pivot_row);
-        let inv_pivot = 1.0 / aug[col][col];
-        for j in col..=n {
-            aug[col][j] *= inv_pivot;
-        }
-        for row in 0..n {
-            if row == col {
-                continue;
-            }
-            let factor = aug[row][col];
-            for j in col..=n {
-                aug[row][j] -= factor * aug[col][j];
-            }
-        }
-    }
-    aug.iter().map(|row| row[n]).collect()
-}
-
-fn power_iteration_sigma_min(a: &[Vec<f64>], max_iter: usize, tol: f64) -> f64 {
-    let n = a.len();
-    if n == 0 {
-        return 1.0;
-    }
-    let mut v = vec![1.0 / crate::math::sqrt((n as f64)); n];
-    let mut av = vec![0.0; n];
-    let mut lambda = 0.0;
-    for _ in 0..max_iter {
-        let x = gaussian_solve(a, &v);
-        mat_vec_mul_transpose(a, &x, &mut av);
-        let w = gaussian_solve(a, &av);
-        let new_lambda = norm(&w);
-        if (new_lambda - lambda).abs() < tol * new_lambda.max(1e-12) {
-            lambda = new_lambda;
-            break;
-        }
-        lambda = new_lambda;
-        if lambda > 0.0 {
-            let inv = 1.0 / lambda;
-            for i in 0..n {
-                v[i] = w[i] * inv;
-            }
-        }
-    }
-    if lambda < 1e-14 {
-        1e14
-    } else {
-        1.0 / crate::math::sqrt(lambda)
-    }
-}
 
 pub fn condition_estimate(a: &[Vec<f64>]) -> f64 {
     -1.0 /* ~ changed by cargo-mutants ~ */

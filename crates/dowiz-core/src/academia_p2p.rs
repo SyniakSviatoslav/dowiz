@@ -226,42 +226,8 @@ impl FractalASCII {
     pub fn as_str(&self) -> &str { &self.0 }
 }
 
-/// Кодувати спін в ASCII фрактал.
-fn spin_to_ascii(s: &Spin, node_id: &str) -> FractalASCII {
-    let state = match s.state {
-        SpinState::Up => "UP",
-        SpinState::Down => "DN",
-        SpinState::Superposition { .. } => "SU",
-    };
-    FractalASCII::new("SPIN", &[node_id, state, &format!("{:.4}", s.amplitude), &format!("{:.4}", s.phase)])
-}
 
-/// Кодувати хвилю в ASCII фрактал.
-fn wave_to_ascii(wave: &SpinWave) -> FractalASCII {
-    let code = "WAVE";
-    let lvl1 = format!("{}:{}:{}", wave.source_id, wave.target_id, wave.ttl);
-    let lvl2 = wave.spins.iter().map(|s| {
-        let state = match s.state {
-            SpinState::Up => "U", SpinState::Down => "D",
-            SpinState::Superposition { .. } => "S",
-        };
-        format!("{}{:.2}", state, s.phase)
-    }).collect::<Vec<_>>().join(",");
-    let lvl3 = wave.deltas.iter().map(|d| format!("{}:{}:{:.0}", d.node_id, d.kind as u32, d.value)).collect::<Vec<_>>().join(",");
-    FractalASCII::new(code, &[&lvl1, &lvl2, &lvl3])
-}
 
-/// Розкодувати ASCII фрактал назад у хвилю (частково, для тестів).
-fn ascii_to_wave(fa: &FractalASCII) -> Option<(String, String, u32)> {
-    if fa.code() != "WAVE" { return None; }
-    let lvl1 = fa.level(0)?;
-    let parts: Vec<&str> = lvl1.split(':').collect();
-    if parts.len() < 3 { return None; }
-    let source = parts[0].to_string();
-    let target = parts[1].to_string();
-    let ttl: u32 = parts[2].parse().ok()?;
-    Some((source, target, ttl))
-}
 
 // ─── Geometric Space + Forward/Backward Propagation ──────────────────────
 // Non-Euclidean геометрія: тензор метрики, символ Крістофеля, ріманова кривина.
@@ -389,7 +355,6 @@ impl RiemannTensor {
                 }
             }
         }
-        let mut denom = 0.0;
         let mut xx = 0.0;
         let mut yy = 0.0;
         let mut xy = 0.0;
@@ -400,7 +365,7 @@ impl RiemannTensor {
                 xy += g.g[i][j] * x[i] * y[j];
             }
         }
-        denom = xx * yy - xy * xy;
+        let denom = xx * yy - xy * xy;
         if denom.abs() < 1e-12 { 0.0 } else { num / denom }
     }
 }
@@ -425,11 +390,11 @@ impl SymplecticForm {
     }
 
     /// Коваріантний вектор Гамільтона: X_H = ω^{-1}·dH.
-    pub fn hamiltonian_vector(&self, dH: &[f64; GEO_DIMS]) -> [f64; GEO_DIMS] {
+    pub fn hamiltonian_vector(&self, d_h: &[f64; GEO_DIMS]) -> [f64; GEO_DIMS] {
         let mut v = [0.0; GEO_DIMS];
         for i in 0..GEO_DIMS {
             for j in 0..GEO_DIMS {
-                v[i] += self.omega[i][j] * dH[j];
+                v[i] += self.omega[i][j] * d_h[j];
             }
         }
         v
@@ -503,12 +468,12 @@ impl GeometricState {
     /// Update з гамільтоновою корекцією.
     pub fn update_hamiltonian(&mut self, observed: &GeometricPoint, symplectic: &SymplecticForm, gain: f64) {
         // Гамільтоніан = різниця між спостереженням і прогнозом
-        let mut dH = [0.0; GEO_DIMS];
+        let mut d_h = [0.0; GEO_DIMS];
         for i in 0..GEO_DIMS {
-            dH[i] = observed.coords[i] - self.position.coords[i];
+            d_h[i] = observed.coords[i] - self.position.coords[i];
         }
         // Гамільтонів вектор потоку
-        let flow = symplectic.hamiltonian_vector(&dH);
+        let flow = symplectic.hamiltonian_vector(&d_h);
         for i in 0..GEO_DIMS {
             self.position.coords[i] += gain * flow[i];
             self.velocity[i] += gain * flow[i];

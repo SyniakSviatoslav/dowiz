@@ -119,6 +119,7 @@ impl SignalWeights {
 /// A balanced uniform weight set (used by tests and as a sensible default when no
 /// fitted moments are available). It is still *fitted-shaped* (a `SignalWeights`
 /// value, never a literal θ in `state.rs`).
+#[cfg(test)]
 pub fn default_weights() -> SignalWeights {
     SignalWeights {
         conf: 1.0,

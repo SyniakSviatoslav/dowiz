@@ -644,7 +644,7 @@ pub fn ln(x: f64) -> f64 {
     }
     // Normalize subnormals up to the normal range (adjust e by the shift).
     let mut x = x;
-    let mut e: i64 = 0;
+    let mut e: i64;
     let bits = x.to_bits();
     let raw_exp = ((bits >> 52) & 0x7ff) as i64;
     if raw_exp == 0 {

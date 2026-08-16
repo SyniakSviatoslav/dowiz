@@ -1689,6 +1689,7 @@ mod tests {
 }
 
 /// Re-export for test access.
+#[cfg(test)]
 fn seed_system_prompts() -> Vec<PromptEntry> {
     vec![
         PromptEntry::new("self_enrich", "self-improving enrichment engine", PromptKind::Meta, &["enrich","self-improve"], "system", "CC0"),

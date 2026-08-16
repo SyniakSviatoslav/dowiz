@@ -277,7 +277,7 @@ fn kpke_encrypt(ek: &[u8], m: &[u8; 32], r: &[u8; 32]) -> MlKem768Ct {
 
     let mut y = [[0i32; N]; K];
     let mut e1 = [[0i32; N]; K];
-    let mut e2 = [0i32; N];
+    let e2;
     let mut n: u8 = 0;
     let mut prfbuf = [0u8; 128];
     for i in 0..K {

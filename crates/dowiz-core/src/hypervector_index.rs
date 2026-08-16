@@ -140,7 +140,6 @@ impl HypervectorIndex {
 /// ranking the hypervector index must agree with on top-k (see parity test).
 #[derive(Debug, Clone, Default)]
 pub struct CosineBaseline {
-    vocab: Vec<String>,
     term_vectors: Vec<Vec<f64>>,
 }
 
@@ -167,7 +166,7 @@ impl CosineBaseline {
                 v
             })
             .collect();
-        Self { vocab, term_vectors }
+        Self { term_vectors }
     }
 
     fn cosine(a: &[f64], b: &[f64]) -> f64 {

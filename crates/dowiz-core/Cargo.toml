@@ -23,7 +23,7 @@ json-api = ["dep:serde"]
 # a `std` feature (it is always `#![no_std]`), so that cfg is a known-but-false
 # value: declare it so rustc's `unexpected_cfgs` lint stays quiet.
 [lints.rust]
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(feature, values("std", "pq", "json-api"))'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(feature, values("std", "pq", "json-api", "ct-gate", "fma", "breaker-testkit", "count-allocs", "p67-adapters"))'] }
 
 [dev-dependencies]
 # Differential oracle for the laplacian_eqc_parity test (pins the eqc-rs

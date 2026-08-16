@@ -126,9 +126,8 @@ pub fn decode_delta(encoded: &[u8]) -> Vec<u8> {
     if encoded.is_empty() {
         return out;
     }
-    let mut cursor = 0usize;
     let first = encoded[0];
-    cursor = 1;
+    let mut cursor = 1usize;
     let mut prev = first as i64;
     out.push(first);
     while cursor < encoded.len() {

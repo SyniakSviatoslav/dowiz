@@ -31,10 +31,7 @@ use crate::pq::dsa::{keygen_bytes, sign_internal_bytes, verify_internal_bytes, R
 use crate::pq::envelope::ENTROPY_LEN;
 use crate::pq::keccak::shake256;
 
-// ── Domain separation tags ────────────────────────────────────────────────────
-const DOMAIN_MLDSA: &[u8] = b"dowiz.mldsa.v1";
 const DOMAIN_SLH: &[u8] = b"dowiz.slh.v1";
-const DOMAIN_CLASSICAL: &[u8] = b"dowiz.ed25519.v1";
 const DOMAIN_CLASSICAL_PUB: &[u8] = b"dowiz.ed25519.pub.v1";
 const DOMAIN_CLASSICAL_SIG: &[u8] = b"dowiz.ed25519.sig.v1";
 
@@ -395,29 +392,6 @@ fn domain_verify(domain: &[u8], pk: &[u8], msg: &[u8], sig: &[u8]) -> bool {
 
 // ── utility: extract public key from secret key bytes ─────────────────────────
 
-/// Recover the public key from the ML-DSA secret key. The secret key stores
-/// `rho || key || tr || s1 || s2 || t0` (FIPS 204 format); the first `SEEDBYTES`
-/// bytes are `rho`, which is also the first `SEEDBYTES` of the public key.
-/// We re-derive the full public key from the seed stored in the secret key.
-fn extract_public_from_secret(sk: &[u8]) -> Vec<u8> {
-    if sk.len() < dsa::SECRETKEYBYTES {
-        return Vec::new();
-    }
-    // The first SEEDBYTES of sk are rho; re-derive the pk from rho.
-    let mut seed = [0u8; SEEDBYTES];
-    seed.copy_from_slice(&sk[..SEEDBYTES]);
-    // Use the key seed (at offset SEEDBYTES) for deterministic regeneration.
-    let mut key = [0u8; SEEDBYTES];
-    key.copy_from_slice(&sk[SEEDBYTES..2 * SEEDBYTES]);
-    // Re-derive pk from the same seed used at keygen.
-    let mut combined = [0u8; SEEDBYTES];
-    let mut buf = Vec::with_capacity(2 * SEEDBYTES);
-    buf.extend_from_slice(&seed);
-    buf.extend_from_slice(&key);
-    shake256(&buf, &mut combined);
-    let (pk, _) = keygen_bytes(&combined);
-    pk
-}
 
 // ── tests ────────────────────────────────────────────────────────────────────
 

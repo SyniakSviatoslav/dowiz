@@ -81,7 +81,6 @@ pub enum FlowResult {
 #[derive(Debug, Clone, Copy)]
 pub struct Tile2x2 {
     nodes: NodeQuad,
-    weights: WeightQuad,
 }
 
 // East-neighbour map for the NW/NE/SW/SE iteration order: NW→NE, SW→SE;
@@ -89,8 +88,8 @@ pub struct Tile2x2 {
 const EAST: [Option<usize>; 4] = [Some(1), None, Some(3), None];
 
 impl Tile2x2 {
-    pub const fn new(nodes: NodeQuad, weights: WeightQuad) -> Self {
-        Self { nodes, weights }
+    pub const fn new(nodes: NodeQuad) -> Self {
+        Self { nodes }
     }
 
     pub const fn weight_payload_bytes(&self) -> usize {

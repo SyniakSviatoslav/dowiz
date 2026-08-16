@@ -93,6 +93,7 @@ pub struct OpticalCompressed {
 
 impl OpticalCompressed {
     /// Construct from already-compressed bytes (internal to the codec path).
+#[cfg(test)]
     fn from_compressed(payload: Vec<u8>, codec_tag: u8) -> Self {
         Self { payload, codec_tag }
     }
@@ -211,6 +212,7 @@ impl OpticalCodec for LocalGguf {
 }
 
 /// Codec tag written into [`ArchivalBlob::codec_tag`] for the LocalGguf backend.
+#[cfg(test)]
 const LOCALGGUF_CODEC_TAG: u8 = 0x01;
 
 #[cfg(test)]

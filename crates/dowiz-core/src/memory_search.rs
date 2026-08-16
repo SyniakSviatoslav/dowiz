@@ -82,6 +82,7 @@ pub struct MemorySearchEngine {
     /// Trigram inverted index over section texts.
     trigram: TrigramIndex,
     /// Section adjacency CSR graph (built from term co-occurrence).
+    #[cfg(test)]
     graph: crate::csr::Csr,
     /// Row-stochastic transition matrix for PPR (derived from CSR).
     transition: Vec<Vec<f64>>,
@@ -116,6 +117,7 @@ impl MemorySearchEngine {
             sections,
             bm25,
             trigram,
+            #[cfg(test)]
             graph,
             transition,
         }
