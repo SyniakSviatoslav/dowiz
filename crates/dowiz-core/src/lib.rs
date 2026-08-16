@@ -27,6 +27,7 @@ pub mod academy_store;
 pub mod arena;
 pub mod complex;
 pub mod constants;
+pub mod context_pruner;
 pub mod cpuid;
 pub mod csr;
 pub mod dflash;
