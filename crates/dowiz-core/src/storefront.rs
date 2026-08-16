@@ -30,6 +30,10 @@
 //!
 //! No card type, no `<input>`, no float money: this module adds none of those.
 
+use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
+use alloc::boxed::Box;
 use crate::cart::Cart;
 use crate::catalog::{Availability, LeafId, PriceableLeaf};
 use crate::money::{Currency, Money};
