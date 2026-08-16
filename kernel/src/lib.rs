@@ -518,20 +518,15 @@ pub mod self_reproduce;
 pub mod hypergraph;
 /// P2P distribution network: peers → parallel chunk download → merge.
 /// Аналогічна логіка рекурсивного пошуку, але для завантаження даних.
-/// Gated behind `feature = "speculative"` — 5224 lines of speculative
-/// physics-inspired P2P design, NOT connected to the delivery mesh.
-/// Without the feature, a stub provides only `MetricTensor` + `GEO_DIMS` for
-/// modules that depend on these types (e.g. `memory_search`).
-#[cfg(feature = "speculative")]
-pub mod academia_p2p;
-#[cfg(not(feature = "speculative"))]
+/// The FULL speculative physics-inspired P2P design now lives in the no_std
+/// core (`dowiz_core::academia_p2p`) — migrated whole in wave-57 (it was pure
+/// except one `std::iter::once`). Re-exported unconditionally; the `speculative`
+/// feature gate is retired (the module is always available and no_std).
 pub use dowiz_core::academia_p2p;
 /// Autonomous headless extraction agents — distributed bots for paper extraction.
 /// Кожен агент = окремий browser profile / IP / акаунт.
-/// Gated behind `feature = "speculative"` — depends on `AcademiaMesh`
-/// from the full `academia_p2p` module.
-#[cfg(feature = "speculative")]
-pub mod academia_agent;
+/// Also migrated to the no_std core in wave-57 (zero std usage).
+pub use dowiz_core::academia_agent;
 /// PID-керований Cloudflare Workers пул — 10,000 динамічних Workers.
 /// Чим більше паперів залишилось, тим більше Workers спавниться.
 /// Неактивні Workers поступово видаляються.

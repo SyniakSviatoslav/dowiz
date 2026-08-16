@@ -22,6 +22,9 @@
 //! - Всього: ~52 MB
 //! - Час: ~6 хв на сегмент (OAI-PMH)
 
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+
 use crate::academia_p2p::AcademiaMesh;
 use crate::TriState;
 

@@ -188,6 +188,7 @@ pub mod core_pinning;
 pub mod prompt_enrich;
 pub mod agent_orchestrator;
 pub mod academia_p2p;
+pub mod academia_agent;
 pub mod memory_search;
 pub mod cross_bridge;
 pub mod self_heal;
