@@ -129,6 +129,7 @@ pub mod parse;
 // --- wave 4: dependency-clean leaves ---
 pub mod cart;
 pub mod event_log;
+pub mod evals;
 pub mod hypervector_index;
 pub mod invert;
 pub mod kalman;

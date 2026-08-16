@@ -356,11 +356,9 @@ pub use dowiz_core::determinism;
 pub mod eqc_gen;
 /// E1 — verifiable-cognition benchmark generator: metamorphic MR items with
 /// kernel-primitive oracles, deterministic mint-log leakage gate, and
-/// calibration metrics (ECE/Brier/AURC). Pure-offline, zero-dep.
-/// Uses `serde_json` for the `analyze.mjs` JSONL bridge → gated behind `wasm`
-/// so the native rlib build stays serde-free. NOT part of the order/money core
-/// (decide/order_machine/domain/money).
-#[cfg(feature = "wasm")]
+/// calibration metrics (ECE/Brier/AURC). Pure-offline, zero-dep. Migrated to
+/// dowiz-core with a hand-rolled JSONL serializer (no serde_json) → no longer
+/// wasm-gated. NOT part of the order/money core.
 pub mod evals;
 /// P89 — field eigenmodes via the kernel's existing spectral infrastructure
 /// (`spectral.rs` / `spectral_laplacian.rs` consumed, never modified). Builds the
