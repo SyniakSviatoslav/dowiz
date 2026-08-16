@@ -200,6 +200,7 @@ pub mod isolation;
 pub mod ports;
 pub mod ktg2;
 pub mod inference;
+pub mod landing;
 pub mod kprocess;
 
 // --- wave 6: batch-5 leaves (analytics / stats) ---

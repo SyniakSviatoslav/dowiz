@@ -11,6 +11,7 @@
 //! layer, NEVER embedded in the wgpu canvas (same DOM tension as X3). It is opaque to P73; the
 //! claim service RE-verifies it (defense in depth) before touching a pool slot (§5.1).
 
+use alloc::string::{String, ToString};
 use super::{ChallengeToken, CONTACT_MAX_BYTES, NOTES_MAX_BYTES, VENUE_NAME_MAX_BYTES};
 
 /// The three signup fields (resolved Strings the render layer populates from P57 `TextField`s).

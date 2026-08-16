@@ -10,6 +10,8 @@
 //!
 //! The client-side rate limit (X11) reuses `kernel/src/token_bucket.rs` (`CLAIM_BUCKET_CAPACITY`).
 
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use super::{CLAIM_BUCKET_CAPACITY, CLAIM_BUCKET_REFILL};
 use crate::token_bucket::TokenBucket;
 
@@ -112,7 +114,7 @@ impl<T: ClaimServicePort> ClaimClient<T> {
     /// FAST PATH with the single-outstanding-claim guard. A second call while one is "in flight"
     /// (the bucket has <1 token) is rate-limited WITHOUT touching the pool (§5.1).
     pub fn claim(&self, req: ClaimRequest) -> Result<ClaimOutcome, ClaimError> {
-        if !crate::token_bucket::token_bucket_try_acquire(&self.bucket, CLAIM_BUCKET_CAPACITY) {
+        if !self.bucket.try_acquire(CLAIM_BUCKET_CAPACITY, crate::clock::now_ns()) {
             return Err(ClaimError::RateLimited);
         }
         self.inner.claim_warm_pool_hub(req)
