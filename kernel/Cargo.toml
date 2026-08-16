@@ -28,7 +28,7 @@ std = []
 # kernel build stays serde-free (verified via `cargo tree -p dowiz-kernel
 # --no-default-features -e no-dev | grep -c serde` → 0). `wasm` becomes a
 # superset of `json-api` so the browser surface is unchanged.
-json-api = ["dep:serde", "dep:serde_json", "dowiz-core/json-api"]
+json-api = ["dowiz-core/json-api"]
 # `wasm` pulls the wasm-bindgen JS glue + the serde (de)serialization it needs.
 # OFF by default so a native rlib consumer (e.g. bebop-delivery-domain) links the
 # kernel WITHOUT wasm-bindgen / serde / serde_json / serde_yaml in its graph.
@@ -36,7 +36,7 @@ json-api = ["dep:serde", "dep:serde_json", "dowiz-core/json-api"]
 # feature-independent. `loops` + `living_knowledge` are serde-dependent, so they
 # ride behind this feature (the only one that enables serde) to keep the native
 # build serde-free; neither is part of the canonical order/money core.
-wasm = ["json-api", "dep:wasm-bindgen", "dep:serde_yaml"]
+wasm = ["json-api", "dep:wasm-bindgen"]
 # `chaos` — the zero-dependency deterministic fault-injection harness (P-H W-H1).
 # OFF by default so production artifacts carry NO chaos symbols (the whole
 # `chaos` module is `#[cfg(any(test, feature = "chaos"))]`); a release build
@@ -70,7 +70,7 @@ pgrust = ["dep:sqlx", "dep:tokio"]
 # (same discipline as `wasm`). `curve25519-dalek` and `aes-gcm` were RETIRED from
 # the runtime graph: X25519 and AES-256-GCM are now hand-rolled in `dowiz_core::pq`
 # (both survive only as `[dev-dependencies]` differential oracles).
-pq = ["dep:serde", "dep:serde_json", "dowiz-core/json-api"]
+pq = ["dep:serde", "dowiz-core/json-api"]
 # `gpu` — P38 O18a graphics unlock. OFF by default so the canonical order/money
 # core and the wasm cdylib stay lean and GPU-free. Behind this flag,
 # `render/gpu.rs` compiles a REAL headless wgpu bring-up (Instance→Adapter→
@@ -143,13 +143,13 @@ dowiz-core = { path = "../crates/dowiz-core" }
 # `#[cfg(feature = "wasm")] pub mod wasm;` in lib.rs). The kernel is pure Rust
 # and usable headless + as a native rlib without this.
 wasm-bindgen = { version = "0.2", optional = true }
-# JSON/YAML (de)serialization for the wasm-bindgen JS glue + the serde-dependent
-# modules (`loops`, `living_knowledge`). Feature-gated (see `wasm` feature) so a
-# native rlib build pulls NONE of them. `pq` reuses `serde` (derive) under its
-# own feature flag.
+# `serde` (derive) is the ONLY remaining serde-family runtime dep — reused by the
+# `pq` wire types (`SignedEnvelope` in pq/hybrid.rs). `serde_json`/`serde_yaml`
+# were RETIRED from the runtime graph in waves 58–59 (order bridge + wasm bridges
+# + living_knowledge now use the hand-rolled `dowiz_core::json`; `loops` uses a
+# hand-rolled YAML subset). `serde_json` survives only as a [dev-dependencies]
+# differential oracle.
 serde = { version = "1", features = ["derive"], optional = true }
-serde_json = { version = "1", optional = true }
-serde_yaml = { version = "0.9", optional = true }
 # SQL adapter (Postgres) — ONLY compiled under the `pgrust` feature so the
 # default kernel stays pure-`std` / network-free. sqlx 0.8.6 is cached offline;
 # the runtime is Tokio (also gated) to drive the async pool from the

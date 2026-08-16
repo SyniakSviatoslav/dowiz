@@ -190,6 +190,7 @@ pub mod agent_orchestrator;
 pub mod academia_p2p;
 pub mod academia_agent;
 pub mod json_api;
+pub mod json_bridge;
 pub mod memory_search;
 pub mod cross_bridge;
 pub mod self_heal;

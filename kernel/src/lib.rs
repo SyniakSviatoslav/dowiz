@@ -813,6 +813,11 @@ pub mod wasm;
 /// order bridge is now serde-free and always available. This is the single order
 /// JSON authority for both surfaces (BLUEPRINT-P37 W37-1).
 pub use dowiz_core::json_api;
+/// JSON bridges behind the wasm JS surface (channel ledger, geo, spectral,
+/// harmonic, money estimate, FSM report) — migrated to the no_std core in
+/// wave-59 (serde-free, hand-rolled json). The `#[wasm_bindgen]` wrappers in
+/// `wasm.rs` call into these.
+pub use dowiz_core::json_bridge;
 
 /// `storefront` — P69 customer storefront & checkout journey state machine (BLUEPRINT-P69).
 /// Pure kernel logic (no serde / no wasm-bindgen); always compiled so the FSM is testable and

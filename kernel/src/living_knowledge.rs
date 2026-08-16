@@ -14,7 +14,7 @@
 use std::io::Write;
 use std::process::{Command, Stdio};
 
-use serde::{Deserialize, Serialize};
+use dowiz_core::json::{parse, Value};
 
 // The `no_std` contract (`Hit`, `DocInput`, `LivingKnowledge`) + the PRIMARY recall
 // surface (`recall_at_k`, `primary_recall_adapter`) live in `dowiz_core::living_knowledge`
@@ -25,20 +25,50 @@ pub use dowiz_core::living_knowledge::{
     primary_recall_adapter, recall_at_k, DocInput, Hit, LivingKnowledge,
 };
 
-/// Bridge stdin contract.
-#[derive(Serialize)]
-struct BridgeRequest<'a> {
-    files: &'a [DocInput],
-    query: &'a str,
-    k: usize,
+/// Serialize the bridge stdin contract (`{"files":[...],"query":"...","k":N}`),
+/// hand-rolled (wave-59): the last `serde_json` consumer in the kernel lib graph.
+fn request_to_json(files: &[DocInput], query: &str, k: usize) -> String {
+    let files_v: Vec<Value> = files
+        .iter()
+        .map(|d| {
+            Value::Object(vec![
+                ("rel".to_string(), Value::from(d.rel.clone())),
+                ("title".to_string(), Value::from(d.title.clone())),
+                ("text".to_string(), Value::from(d.text.clone())),
+            ])
+        })
+        .collect();
+    Value::Object(vec![
+        ("files".to_string(), Value::Array(files_v)),
+        ("query".to_string(), Value::from(query.to_string())),
+        ("k".to_string(), Value::from(k as i64)),
+    ])
+    .to_string()
 }
 
-/// Bridge stdout contract (subset we depend on).
-#[derive(Deserialize)]
-struct BridgeResponse {
-    results: Vec<Hit>,
-    #[serde(default)]
-    abs_confidence: f64,
+/// Parse the bridge stdout contract (`{"results":[{"id":..,"score":..},..]}`).
+fn parse_response(stdout: &[u8]) -> Result<Vec<Hit>, String> {
+    let s = std::str::from_utf8(stdout)
+        .map_err(|e| format!("living_knowledge: parse response: {e}"))?;
+    let v = parse(s).map_err(|e| format!("living_knowledge: parse response: {e}"))?;
+    let results = v
+        .get("results")
+        .and_then(Value::as_array)
+        .ok_or_else(|| "living_knowledge: parse response: missing results".to_string())?;
+    let mut hits = Vec::with_capacity(results.len());
+    for r in results {
+        let id = r
+            .get("id")
+            .and_then(Value::as_str)
+            .map(|s| s.to_string())
+            .ok_or_else(|| "living_knowledge: parse response: missing id".to_string())?;
+        let score = r
+            .get("score")
+            .and_then(Value::as_f64)
+            .ok_or_else(|| "living_knowledge: parse response: missing score".to_string())?;
+        hits.push(Hit { id, score });
+    }
+    Ok(hits)
 }
 
 /// Process-backed adapter. Spawns `bridge_cmd` (default: `LK_BRIDGE_CMD` env, else the
@@ -66,13 +96,7 @@ impl LivingKnowledge for SubprocessLivingKnowledge {
         if query.trim().is_empty() {
             return Err("living_knowledge: empty query".to_string());
         }
-        let req = BridgeRequest {
-            files: &self.corpus,
-            query,
-            k,
-        };
-        let payload = serde_json::to_string(&req)
-            .map_err(|e| format!("living_knowledge: serialize request: {e}"))?;
+        let payload = request_to_json(&self.corpus, query, k);
 
         let mut child = Command::new("sh")
             .arg("-c")
@@ -156,9 +180,7 @@ impl LivingKnowledge for SubprocessLivingKnowledge {
             ));
         }
 
-        let resp: BridgeResponse = serde_json::from_slice(&out.stdout)
-            .map_err(|e| format!("living_knowledge: parse response: {e}"))?;
-        Ok(resp.results)
+        parse_response(&out.stdout)
     }
 }
 
