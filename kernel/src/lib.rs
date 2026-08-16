@@ -807,13 +807,12 @@ pub mod verify_retrieval;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
-/// `json-api` — the JSON string boundary shared by the wasm JS surface AND the
-/// native HTTP adapter (P37 `native-spa-server`). Compiled ONLY under the
-/// `json-api` feature (and therefore under `wasm`, which enables it); the
-/// DEFAULT kernel build stays serde-free. This is the single order JSON
-/// authority for both surfaces (BLUEPRINT-P37 W37-1).
-#[cfg(feature = "json-api")]
-pub mod json_api;
+/// `json-api` — the JSON order bridge shared by the wasm JS surface AND the
+/// native HTTP adapter (P37 `native-spa-server`). Moved to the no_std core
+/// (wave-58): `serde_json` was replaced by the hand-rolled `crate::json`, so the
+/// order bridge is now serde-free and always available. This is the single order
+/// JSON authority for both surfaces (BLUEPRINT-P37 W37-1).
+pub use dowiz_core::json_api;
 
 /// `storefront` — P69 customer storefront & checkout journey state machine (BLUEPRINT-P69).
 /// Pure kernel logic (no serde / no wasm-bindgen); always compiled so the FSM is testable and
