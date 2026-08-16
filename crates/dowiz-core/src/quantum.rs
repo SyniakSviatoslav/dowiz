@@ -12,6 +12,7 @@
 //! measurement collapse, Bloch sphere, quantum circuit model.
 
 use crate::complex::Complex;
+use crate::tri_state::TriState;
 
 /// Phase factor e^{iφ} = cos φ + i sin φ.
 fn phase(phi: f64) -> Complex {
@@ -291,6 +292,148 @@ impl TwoQubit {
     }
 }
 
+/// Quantum tri-state (qutrit): |ψ⟩ = a|True⟩ + b|False⟩ + c|Unknown⟩.
+///
+/// Generalizes [`TriState`] from three discrete outcomes to a continuous
+/// superposition, so a system can hold *partial* information (e.g. 0.7|True⟩ +
+/// 0.3|Unknown⟩) instead of a hard "Unknown". Born-rule measurement collapses
+/// to one of the three classical outcomes; the logical operations (`not`, `and`,
+/// `or`) are non-unitary and therefore collapse first (the superposition is the
+/// storage/measurement representation, not a quantum circuit).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct QTri {
+    /// Amplitude of |True⟩.
+    pub a: Complex,
+    /// Amplitude of |False⟩.
+    pub b: Complex,
+    /// Amplitude of |Unknown⟩.
+    pub c: Complex,
+}
+
+impl QTri {
+    pub const fn new(a: Complex, b: Complex, c: Complex) -> Self {
+        Self { a, b, c }
+    }
+
+    /// Pure |True⟩ basis state.
+    pub fn t() -> Self {
+        Self::new(
+            Complex::new(1.0, 0.0),
+            Complex::new(0.0, 0.0),
+            Complex::new(0.0, 0.0),
+        )
+    }
+
+    /// Pure |False⟩ basis state.
+    pub fn f() -> Self {
+        Self::new(
+            Complex::new(0.0, 0.0),
+            Complex::new(1.0, 0.0),
+            Complex::new(0.0, 0.0),
+        )
+    }
+
+    /// Pure |Unknown⟩ basis state.
+    pub fn u() -> Self {
+        Self::new(
+            Complex::new(0.0, 0.0),
+            Complex::new(0.0, 0.0),
+            Complex::new(1.0, 0.0),
+        )
+    }
+
+    /// Embed a classical [`TriState`] as a pure basis state.
+    pub fn from_tri(t: TriState) -> Self {
+        match t {
+            TriState::True => Self::t(),
+            TriState::False => Self::f(),
+            TriState::Unknown => Self::u(),
+        }
+    }
+
+    /// Born probability of measuring |True⟩ = |a|².
+    pub fn prob_true(self) -> f64 {
+        self.a.re * self.a.re + self.a.im * self.a.im
+    }
+
+    /// Born probability of measuring |False⟩ = |b|².
+    pub fn prob_false(self) -> f64 {
+        self.b.re * self.b.re + self.b.im * self.b.im
+    }
+
+    /// Born probability of measuring |Unknown⟩ = |c|².
+    pub fn prob_unknown(self) -> f64 {
+        self.c.re * self.c.re + self.c.im * self.c.im
+    }
+
+    /// Euclidean norm √(|a|² + |b|² + |c|²).
+    pub fn norm(self) -> f64 {
+        let s = self.prob_true() + self.prob_false() + self.prob_unknown();
+        crate::math::sqrt(s)
+    }
+
+    /// Project onto the unit sphere.
+    pub fn normalize(mut self) -> Self {
+        let n = self.norm();
+        if n != 0.0 {
+            self.a = scale(self.a, 1.0 / n);
+            self.b = scale(self.b, 1.0 / n);
+            self.c = scale(self.c, 1.0 / n);
+        }
+        self
+    }
+
+    /// Born-rule measurement: collapse to a classical [`TriState`].
+    ///
+    /// `p` is a uniform sample in [0, 1) supplied by the caller (deterministic).
+    pub fn measure(self, p: f64) -> TriState {
+        let pt = self.prob_true();
+        let pf = self.prob_false();
+        if p < pt {
+            TriState::True
+        } else if p < pt + pf {
+            TriState::False
+        } else {
+            TriState::Unknown
+        }
+    }
+
+    /// Collapse to the dominant classical outcome (argmax of the probabilities).
+    pub fn collapse(self) -> TriState {
+        let pt = self.prob_true();
+        let pf = self.prob_false();
+        let pu = self.prob_unknown();
+        if pt >= pf && pt >= pu {
+            TriState::True
+        } else if pf >= pu {
+            TriState::False
+        } else {
+            TriState::Unknown
+        }
+    }
+
+    /// Fail-closed resolution (mirrors [`TriState::resolve`]).
+    pub fn resolve(self, default: bool) -> bool {
+        self.collapse().resolve(default)
+    }
+
+    /// Logical NOT (Pauli-X on the True/False subspace): swaps a ↔ b.
+    pub fn not(mut self) -> Self {
+        core::mem::swap(&mut self.a, &mut self.b);
+        self
+    }
+
+    /// Kleene AND: collapse both operands to classical, apply, re-embed.
+    pub fn and(self, o: Self) -> Self {
+        Self::from_tri(self.collapse().and(o.collapse()))
+    }
+
+    /// Kleene OR: collapse both operands to classical, apply, re-embed.
+    pub fn or(self, o: Self) -> Self {
+        Self::from_tri(self.collapse().or(o.collapse()))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -399,5 +542,62 @@ mod tests {
         let bell = TwoQubit::bell_phi_plus();
         assert_eq!(bell.measure(0.25), 0);
         assert_eq!(bell.measure(0.75), 3);
+    }
+
+    #[test]
+    fn qtri_round_trips_through_tristate() {
+        assert_eq!(QTri::t().collapse(), TriState::True);
+        assert_eq!(QTri::f().collapse(), TriState::False);
+        assert_eq!(QTri::u().collapse(), TriState::Unknown);
+        assert_eq!(QTri::from_tri(TriState::True).collapse(), TriState::True);
+        assert_eq!(
+            QTri::from_tri(TriState::Unknown).collapse(),
+            TriState::Unknown
+        );
+    }
+
+    #[test]
+    fn qtri_probabilities_are_born_squares() {
+        let q = QTri::new(
+            Complex::new(1.0, 0.0),
+            Complex::new(1.0, 0.0),
+            Complex::new(0.0, 0.0),
+        )
+        .normalize();
+        assert!(close(q.prob_true(), 0.5));
+        assert!(close(q.prob_false(), 0.5));
+        assert!(close(q.prob_unknown(), 0.0));
+        assert!(close(q.norm(), 1.0));
+    }
+
+    #[test]
+    fn qtri_measurement_is_deterministic() {
+        assert_eq!(QTri::t().measure(0.5), TriState::True);
+        assert_eq!(QTri::f().measure(0.5), TriState::False);
+        assert_eq!(QTri::u().measure(0.5), TriState::Unknown);
+        let q = QTri::new(
+            Complex::new(1.0, 0.0),
+            Complex::new(1.0, 0.0),
+            Complex::new(0.0, 0.0),
+        )
+        .normalize();
+        assert_eq!(q.measure(0.25), TriState::True);
+        assert_eq!(q.measure(0.75), TriState::False);
+    }
+
+    #[test]
+    fn qtri_not_swaps_true_false() {
+        assert_eq!(QTri::t().not().collapse(), TriState::False);
+        assert_eq!(QTri::f().not().collapse(), TriState::True);
+        assert_eq!(QTri::u().not().collapse(), TriState::Unknown);
+    }
+
+    #[test]
+    fn qtri_logic_matches_kleene() {
+        assert_eq!(QTri::t().and(QTri::u()).collapse(), TriState::Unknown);
+        assert_eq!(QTri::t().and(QTri::f()).collapse(), TriState::False);
+        assert_eq!(QTri::f().or(QTri::u()).collapse(), TriState::Unknown);
+        assert_eq!(QTri::f().or(QTri::t()).collapse(), TriState::True);
+        assert_eq!(QTri::u().not().collapse(), TriState::Unknown);
     }
 }
