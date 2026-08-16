@@ -32,6 +32,7 @@
 //! recommended cheap hedge — a negotiable version TLV added before ship — is an OPERATOR
 //! RULING, not decided in the numbered field list, so it is flagged here, not applied.
 
+use alloc::vec::Vec;
 use crate::event_log::sha3_256;
 
 use super::cap::{HybridPolicy, ML_DSA_65_PK_LEN};

@@ -22,6 +22,8 @@
 //! block) and are FLAGGED as pending that same ruling. The `discriminants_are_pinned`
 //! wire-stability test catches an accidental renumber mechanically.
 
+
+use alloc::vec::Vec;
 /// A protocol resource an agent capability may target. Closed set ⇒ the admission
 /// gate is exhaustively checkable; an unknown discriminant byte fails decode (fail-closed).
 #[cfg_attr(feature = "json-api", derive(serde::Serialize, serde::Deserialize))]

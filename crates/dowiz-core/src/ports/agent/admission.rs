@@ -20,8 +20,10 @@
 //! mutators require.
 
 use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+use alloc::string::String;
 use core::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use alloc::sync::Arc;
 use crate::spinlock::SpinLock;
 
 use crate::event_log::{AppendOutcome, CommitError, EventLog, EventStore, MeshEvent};
@@ -303,14 +305,14 @@ impl AdmissionLimiter {
     /// One O(1) integer decrement (+ optional shard decrement). `false` ⇒ drop the frame
     /// pre-crypto. Global is the ceiling; a shard denial is per-source fairness only.
     pub fn try_admit(&self, conn_id: u64) -> bool {
-        if !crate::token_bucket::token_bucket_try_acquire(&self.global, 1.0) {
+        if !self.global.try_acquire(1.0, crate::clock::now_ns()) {
             return false;
         }
         if self.shards.is_empty() {
             return true;
         }
         let idx = (conn_id as usize) % self.shards.len();
-        crate::token_bucket::token_bucket_try_acquire(&self.shards[idx], 1.0)
+        self.shards[idx].try_acquire(1.0, crate::clock::now_ns())
     }
 }
 
@@ -536,7 +538,7 @@ impl<G: AdmissionGate> Admitter<G> {
             bucket: Arc::new(TokenBucket::new(granted_capacity as f64, refill)),
         };
         // Idempotency: if content_id already admitted, return existing record unchanged.
-        if let std::collections::btree_map::Entry::Vacant(e) = self.admitted.entry(content_id) {
+        if let alloc::collections::btree_map::Entry::Vacant(e) = self.admitted.entry(content_id) {
             e.insert(record.clone());
         }
         Ok(record)
@@ -844,8 +846,8 @@ mod tests {
         assert_eq!(log.len(), 1, "exactly one AgentAdmitted event");
         assert_eq!(rec.node_id.0, manifest.agent_node_id);
         // The minted bucket enforces the envelope.
-        assert!(crate::token_bucket::token_bucket_try_acquire(&rec.bucket, 4096.0));
-        assert!(!crate::token_bucket::token_bucket_try_acquire(&rec.bucket, 1.0), "budget envelope is real");
+        assert!(rec.bucket.try_acquire(4096.0, crate::clock::now_ns()));
+        assert!(!rec.bucket.try_acquire(1.0, crate::clock::now_ns()), "budget envelope is real");
     }
 
     // ── depth grant: delegate=false ⇒ granted_depth 0 ───────────────────────────

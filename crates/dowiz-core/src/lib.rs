@@ -187,6 +187,8 @@ pub mod academia_p2p;
 pub mod memory_search;
 pub mod cross_bridge;
 pub mod self_heal;
+pub mod isolation;
+pub mod ports;
 pub mod kprocess;
 
 // --- wave 6: batch-5 leaves (analytics / stats) ---

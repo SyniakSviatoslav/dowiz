@@ -22,6 +22,8 @@
 //! valid one — forging requires a SHA3 preimage).
 
 use alloc::collections::BTreeSet;
+use alloc::vec::Vec;
+use alloc::string::String;
 
 use crate::event_log::sha3_256;
 

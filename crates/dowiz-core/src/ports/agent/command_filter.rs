@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use crate::event_log::sha3_256;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
