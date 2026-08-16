@@ -32,8 +32,11 @@ Each repo → map to an existing dowiz module or a new `crates/dowiz-core/src/*.
 
 ## Done in this session
 - [x] Lint cleanup: dowiz-core dead-code removal + `#[cfg(test)]` gating + check-cfg (commit `9c6a52b`).
-- [x] Persisted compendium + this plan to repo.
+- [x] Persisted compendium + this plan to repo (`1e55259`).
+- [x] `quantum.rs` — Qubit/Bloch/Pauli/Hadamard/S/T/RX/RY/RZ, measurement, fidelity, CNOT+Bell (11 tests, `b5544be`).
+- [x] `krylov.rs` — CG, GMRES (Arnoldi+Givens), Arnoldi, Lanczos (7 tests, `f82d1f2`).
 
 ## Next concrete step
-Implement `crates/dowiz-core/src/quantum.rs` (Qubit/Bloch/Pauli/Hadamard/CNOT/superposition/
-measurement) in no_std, reusing `crate::math` complex arithmetic, with unit tests.
+`quantize.rs` — turbovec-style product quantization (k-means codebook, 31GB→4GB class)
+reusing `hypervector` + `math::vec` + `squash`; then `graph_engine.rs` (typed-edge KAG).
+Hermes token-optimization phase 0 remains open (memory compaction started).
