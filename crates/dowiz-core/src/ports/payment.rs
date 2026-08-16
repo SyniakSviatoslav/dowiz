@@ -27,6 +27,9 @@
 //! authorized exactly like any other red-line capability. No new crypto.
 
 use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
+use alloc::boxed::Box;
 
 use crate::event_log::sha3_256;
 use crate::ports::agent::cap::{

@@ -16,6 +16,9 @@
 
 use crate::order_machine::OrderStatus;
 use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
+
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Transport value types (opaque, hub-local; never dowiz-central)

@@ -26,7 +26,10 @@
 //! trip a whole-file scan). The forbidden markers are assembled via `concat!` so the scan body
 //! never literally contains them (which would make the negation self-matching / vacuous).
 
-use std::fmt;
+use core::fmt;
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
+
 use core::str::FromStr;
 
 /// The closed set of payment rails the platform may declare support for (P47 operator ruling).
@@ -151,7 +154,7 @@ impl fmt::Display for PaymentError {
     }
 }
 
-impl std::error::Error for PaymentError {}
+impl core::error::Error for PaymentError {}
 
 /// A capability/feature declaration for one payment rail.
 ///

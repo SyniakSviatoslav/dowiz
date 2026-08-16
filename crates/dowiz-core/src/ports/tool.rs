@@ -19,6 +19,11 @@
 //! file-ownership coordination for P40/P42 parallel execution: P42 owns `tool.rs` +
 //! `mcp.rs`; P40 owns `agent/loop.rs` and imports `ToolPort` from here.
 
+
+use alloc::collections::BTreeSet;
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
+use alloc::boxed::Box;
 /// Closed resource enum. A tool target not listed here is UNREPRESENTABLE.
 /// Money/auth/RLS/migration resources are never added (red-line — see `mcp.rs`'s
 /// reachability argument).
@@ -356,7 +361,7 @@ mod tests {
             },
         };
         // 201-byte description.
-        let big: String = std::iter::repeat('x').take(201).collect();
+        let big: String = core::iter::repeat('x').take(201).collect();
         let c = card(
             "t",
             Box::leak(big.into_boxed_str()),

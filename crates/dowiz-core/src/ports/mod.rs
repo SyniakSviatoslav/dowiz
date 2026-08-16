@@ -8,3 +8,11 @@
 pub mod agent;
 pub mod payment_provider;
 pub mod llm;
+pub mod customer;
+pub mod hub_intake;
+pub mod llm_fallback;
+pub mod mcp;
+pub mod notification;
+pub mod payment;
+pub mod payment_capability;
+pub mod tool;

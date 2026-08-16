@@ -23,6 +23,9 @@
 //! network / HTTP / JSON / serde. Pure `std` only.
 
 use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
+
 
 use crate::event_log::sha3_256;
 use crate::geo;

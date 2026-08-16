@@ -41,6 +41,9 @@
 //! built (the catalog is construction-static in v1 — advertising change
 //! notifications would be a false capability claim).
 
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
+use alloc::boxed::Box;
 use crate::ports::agent::{
     verify_chain, AnchorRoster, Capability, Delegation, SignatureVerifier,
 };

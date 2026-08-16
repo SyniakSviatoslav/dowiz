@@ -28,6 +28,8 @@
 //! Each provider has a `max_retries`, `timeout_ms`, and `cost_weight` so
 //! the `LlmBackend` adapter can make informed fallback decisions.
 
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
 use crate::TriState;
 
 pub const FALLBACK_DEFAULT_TIMEOUT_MS: u64 = 30_000;

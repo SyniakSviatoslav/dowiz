@@ -14,7 +14,10 @@
 //! Guard: this is NOT `kernel/src/intake.rs` (unrelated constraint compiler —
 //! naming collision only, fact 0.10 in the blueprint).
 
-use std::fmt;
+use core::fmt;
+use alloc::vec::Vec;
+use alloc::string::{String, ToString};
+
 
 /// Channel identifier constant — the canonical string table for `Order.channel`
 /// (§4.5 in the blueprint). Pure metadata the kernel never branches on; the intake

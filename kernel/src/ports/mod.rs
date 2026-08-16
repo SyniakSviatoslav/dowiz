@@ -6,7 +6,7 @@
 pub use dowiz_core::ports::llm;
 /// Multi-provider LLM fallback chain — configures routing across 9 free/open providers
 /// (Ollama, Groq, HuggingFace, DeepInfra, Fireworks, etc.). Pure data, no HTTP/serde.
-pub mod llm_fallback;
+pub use dowiz_core::ports::llm_fallback;
 
 /// `AgentBridge` port (B1) — hybrid-signed, fail-closed agent-admission seam.
 pub mod agent;
@@ -14,7 +14,7 @@ pub mod agent;
 /// `PaymentPort` port (P47 Wave-0) — cash-on-delivery settlement rail seam. Compile firewall:
 /// kernel has NO payment-adapter dependency; the concrete adapter (if any future Wave needs
 /// one) lives outside the kernel, mirroring `LlmBackend` / `AgentBridge`.
-pub mod payment;
+pub use dowiz_core::ports::payment;
 
 /// `PaymentProvider` port (BLUEPRINT-P60, W1/P60) — provider-agnostic online-fiat rail seam
 /// (R2 §5.2 shape) + the idempotency contract (X6) + N-leg vendor-as-MoR atomicity (§0.2-1) +
@@ -28,25 +28,25 @@ pub use dowiz_core::ports::payment_provider;
 /// network: a feature flag only. `validate()` rejects `OtherLater` (`NotYetSupported`). The
 /// red-line (no real provider/secret refs) is proven by construction via the module test that
 /// greps this file's own source.
-pub mod payment_capability;
+pub use dowiz_core::ports::payment_capability;
 
 /// `ToolPort` firewall (P40/P42) — the closed tool authority (writes
 /// UNREPRESENTABLE) + the Skills-pattern discovery layer (P42).
-pub mod tool;
+pub use dowiz_core::ports::tool;
 
 /// MCP port + capability-scoped tool boundary (P42) — verify_chain-gated,
 /// fail-closed, Skill-discovering. Typed; the stdio/JSON framing lives downstream.
-pub mod mcp;
+pub use dowiz_core::ports::mcp;
 
 /// P49 — per-order customer identity (capability grant, privacy-minimal, no
 /// device/personal data). Reuses the proto-cap signing *convention* (domain-
 /// separated SHA3 commitment) over existing kernel math (geo/kalman/rng).
-pub mod customer;
+pub use dowiz_core::ports::customer;
 
 /// BLUEPRINT-P61 — notification fabric: `Notifier` fan-out over `PushPort`/`SmsPort`/`EmailPort`,
 /// hub-local `ChannelRegistry`, the proven X10 coverage matrix, and dead-token eviction. Compile
 /// firewall: ZERO network / HTTP / serde / tokio — the concrete adapters live in `notify-adapters`.
-pub mod notification;
+pub use dowiz_core::ports::notification;
 
 /// BLUEPRINT-P70 (W2) — Owner Surface: node-local management & configuration lanes for the
 /// hub owner. All panes are deterministic FOLDS of signed, content-addressed events (the
@@ -63,7 +63,7 @@ pub mod owner_surface;
 /// vocabulary. The intake service is the only component holding order-placement authority;
 /// adapters structurally cannot call `place_order`. Guard: NOT `kernel/src/intake.rs`
 /// (unrelated constraint compiler — naming collision only).
-pub mod hub_intake;
+pub use dowiz_core::ports::hub_intake;
 
 /// AgentBrowserPort — the kernel<->browser seam for anti-detect parse operations.
 /// Trait defines WHAT to fetch; adapters (outside kernel) execute the actual browser automation.
