@@ -13,6 +13,8 @@
 //!
 //! ZERO deps. Uses trinary, eigen, wave, chronos_topology, capability_cert.
 
+use alloc::vec::Vec;
+use alloc::string::String;
 use crate::trinary::Tri;
 use crate::eigen::{EigenDecomp, decompose};
 use crate::wave::InterferenceField;
@@ -95,11 +97,11 @@ impl WaveMeshSync {
     }
 
     pub fn mesh_state(&self) -> crate::trig::Xyz {
-        crate::wave::field_xyz_state(&self.field)
+        self.field.xyz_state(crate::now_ms())
     }
 
     pub fn cleanup(&mut self) -> usize {
-        crate::wave::field_prune_decayed(&mut self.field, 0.001)
+        self.field.prune_decayed(0.001, crate::now_ms())
     }
 
     pub fn dashboard(&self) -> String {

@@ -33,6 +33,7 @@
 //! wire-format fork.
 
 use alloc::collections::BTreeMap;
+use alloc::vec::Vec;
 
 use crate::event_log::sha3_256;
 use crate::ports::agent::cap::{

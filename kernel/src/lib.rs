@@ -41,7 +41,7 @@ pub mod attention;
 /// unique blocks by sha3_256 id → restore byte-identically from a manifest.
 /// Dedups across small edits; fail-closed restore. Pure-Rust, no new deps.
 pub mod backup;
-pub mod blocklist;
+pub use dowiz_core::blocklist;
 pub use dowiz_core::bounded_drainer;
 /// P11 §1 — compute budget accumulator (degrade-closed, zero-dep) + §4 Modal
 /// `JobPort` / `BudgetedJobPort` seam (offline-err default; real adapter deferred).
@@ -319,7 +319,7 @@ pub mod agent;
 /// downgrade binding, overlap rotation, and owner-signed gossip-able revocation blobs.
 /// Default-built (rides the default `RefSigner` seam so it verifies under `RequireBoth` even
 /// without the `pq` feature; production injects real bebop2 crypto at the seam).
-pub mod capability_cert;
+pub use dowiz_core::capability_cert;
 /// Deterministic, zero-dependency fault-injection harness (P-H W-H1). The whole
 /// module is `#[cfg(any(test, feature = "chaos"))]`; in a release build it
 /// compiles to `()`, so no chaos symbol reaches a production artifact. This
@@ -761,7 +761,7 @@ pub use dowiz_core::invert;
 pub use dowiz_core::cross_bridge;
 /// Bebop protocol bridge — trinary auth, eigen envelopes, wave mesh sync,
 /// chronos DTN store-forward. Wires the new paradigm into the protocol layer.
-pub mod bebop_bridge;
+pub use dowiz_core::bebop_bridge;
 /// Endpoint visibility for AI agent actions — Numbat reimplementation.
 /// Detect, optionally block, and forensically reconstruct agent activity.
 /// Uses event_log (SHA3-256), fdr (flight data recorder), self_harness zones.

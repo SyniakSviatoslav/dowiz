@@ -34,10 +34,11 @@
 //! §16.26/§16.59 red line becomes a hard boundary, not a code-review
 //! discipline. Nothing in the dispatch/matching path may call `is_flagged` (M4).
 
+use alloc::vec::Vec;
 use crate::capability_cert::{AlgSuite, HybridSig};
 use crate::moderation::ReportReason;
 use crate::ports::agent::cap::SignatureVerifier;
-use std::fmt;
+use core::fmt;
 
 /// Scaling axis: entry count K. Whole-list re-sign + re-fetch is O(K); beyond
 /// this bound a Merkle-delta sync would win — named future, NOT built (§5.4).
