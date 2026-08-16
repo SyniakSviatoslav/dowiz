@@ -33,21 +33,19 @@ Each repo → map to an existing dowiz module or a new `crates/dowiz-core/src/*.
 ## Done in this session
 - [x] Lint cleanup: dowiz-core dead-code removal + `#[cfg(test)]` gating + check-cfg (commit `9c6a52b`).
 - [x] Persisted compendium + this plan to repo (`1e55259`).
-- [x] `quantum.rs` — Qubit/Bloch/Pauli/Hadamard/S/T/RX/RY/RZ, measurement, fidelity, CNOT+Bell (11 tests, `b5544be`).
-- [x] `krylov.rs` — CG, GMRES (Arnoldi+Givens), Arnoldi, Lanczos (7 tests, `f82d1f2`).
+- [x] `quantum.rs` — Qubit/Bloch/Pauli/Hadamard/S/T/RX/RY/RZ, measurement, fidelity, CNOT+Bell (`b5544be`).
+- [x] `krylov.rs` — CG, GMRES (Arnoldi+Givens), Arnoldi, Lanczos (`f82d1f2`).
 - [x] Hermes token-optimization phase 0: memory compacted 96%→78%, `proactive_prune_tokens` 0→32000, memory limits 2200/1375 → 1800/1200.
-- [x] `QTri` — quantum tri-state (qutrit |ψ⟩=a|T⟩+b|F⟩+c|U⟩) generalizing TriState, 5 tests (`0a7f8a9`); re-exported at crate roots (`ed08c1b`).
-- [x] `QState` — N-level superposition + Grover oracle prediction (oracle phase-flip + amplitude amplification → Born measurement for consequences/changes/memory/resources/time), 4 tests (`cc0e481`).
+- [x] `QTri` — quantum tri-state (qutrit) generalizing TriState (`0a7f8a9`); re-exported (`ed08c1b`).
+- [x] `QState` — N-level superposition + Grover oracle prediction (`cc0e481`).
+- [x] `context_pruner.rs` — native headroom port (line-importance pruning) (`6bab945`).
+- [x] `.agents/rules/ponytail.md` — lazy-senior-dev ladder, always_on (`6bab945`).
+- [x] `code_graph.rs` — native graphify port (queryable knowledge graph) (`1a1dacb`).
+- [x] Test speedup: `[profile.test] opt-level=3` → full suite 25s→2.77s; release-only `debug_assert!` contract fix (`3ffdde1`).
 
-## Quantum-state-everywhere migration (user directive)
-One hybrid state everywhere, driven by quantum superposition + oracles that
-predict consequences, changes, memory, resource use, and time at all levels.
-Primitives in place: `QTri` (3-state) + `QState` (N-state) + Grover oracle
-search. **Not a mechanical find-replace**: `QTri` is f64-based (`PartialEq`
-only — no `Eq`/`Hash`), so hash-map keys / Eq-comparisons stay `TriState`.
-Strategy: quantum superposition = storage/prediction; `TriState` = collapsed
-boundary + hash key. Migrate module-by-module (swarm, disjoint files).
-
-## Next concrete step
-Swarm-migrate high-value TriState → QTri sites (measurement/confidence/drift),
-keeping fail-closed boundaries on TriState; then `quantize.rs` (turbovec).
+## Living-memory graph (priority #1, in progress)
+Unified no_std layer: `code_graph` (nav) + `context_pruner` (token saving) +
+`hypervector` (vector nav) + `pixel_snapshot` (compact viz) + `QState`/Grover
+(prediction of consequences/resources/time) + command registry w/ alternatives
++ PID parallel concurrency. Add mempalace best practices + all memory types
+(episodic/semantic/long/short/working). Replaces grep; used by Hermes + all agents.
