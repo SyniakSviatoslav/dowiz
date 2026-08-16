@@ -25,6 +25,7 @@ extern crate alloc;
 
 pub mod academy_store;
 pub mod arena;
+pub mod code_graph;
 pub mod complex;
 pub mod constants;
 pub mod context_pruner;
