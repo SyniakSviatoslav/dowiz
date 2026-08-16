@@ -14,3 +14,5 @@ pub mod index;
 pub mod pattern;
 pub mod ppr;
 pub mod spine;
+pub mod memory_store;
+pub mod recall;

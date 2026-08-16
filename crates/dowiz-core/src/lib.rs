@@ -206,6 +206,13 @@ pub mod agent;
 pub mod hydra;
 pub mod kprocess;
 
+// --- wave 49: category-C vfs/kthread-seam modules (std shims stay in kernel) ---
+pub mod backup;
+pub mod chaos;
+pub mod compose;
+pub mod decision;
+pub mod hydra_closed_loop;
+
 // --- wave 6: batch-5 leaves (analytics / stats) ---
 pub mod analytics;
 pub mod stats;

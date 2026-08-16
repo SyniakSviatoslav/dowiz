@@ -19,12 +19,12 @@
 //!
 //! ## Usage
 //! ```
-//! use dowiz_kernel::resilience::{
+//! use dowiz_core::resilience::{
 //!     ResilienceManager, ResiliencePolicy, FailoverStrategy, DegradationLevel,
 //! };
 //!
 //! let mut mgr = ResilienceManager::new(ResiliencePolicy::default());
-//! mgr.record_outcome(0.3, 0.1, 0.05); // cpu=0.3, friction=0.1, error=0.05
+//! mgr.record_outcome(0.3, 0.1, 0.05, 0); // cpu=0.3, friction=0.1, error=0.05
 //! assert_eq!(mgr.level(), DegradationLevel::Normal);
 //! ```
 

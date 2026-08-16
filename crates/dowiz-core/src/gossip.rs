@@ -20,11 +20,11 @@
 //!
 //! ## Usage
 //! ```
-//! use dowiz_kernel::gossip::{GossipBus, GossipTopic, GossipMessage};
+//! use dowiz_core::gossip::{GossipBus, GossipTopic, GossipMessage};
 //!
 //! let mut bus = GossipBus::new();
 //! let id = bus.subscribe(GossipTopic::Telemetry);
-//! bus.publish(GossipTopic::Telemetry, "cpu:0.5".as_bytes());
+//! bus.publish(GossipTopic::Telemetry, "cpu:0.5".as_bytes(), 0);
 //! let msgs = bus.drain(id);
 //! assert!(!msgs.is_empty());
 //! ```

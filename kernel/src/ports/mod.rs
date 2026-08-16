@@ -67,4 +67,4 @@ pub use dowiz_core::ports::hub_intake;
 
 /// AgentBrowserPort — the kernel<->browser seam for anti-detect parse operations.
 /// Trait defines WHAT to fetch; adapters (outside kernel) execute the actual browser automation.
-pub mod agent_browser;
+pub use dowiz_core::ports::agent_browser;

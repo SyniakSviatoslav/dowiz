@@ -343,7 +343,7 @@ mod resilience_fuzz {
         for &v0 in &mvals {
             for &v1 in &mvals {
                 let label = format!("BackupState::new([{:e},{:e}])", v0, v1);
-                let state = assert_no_panic(&label, || BackupState::new(vec![v0, v1], "test"));
+                let state = assert_no_panic(&label, || BackupState::new(vec![v0, v1], "test", 0));
                 for &v in &state.metrics {
                     assert_f64_finite(v, &label);
                 }

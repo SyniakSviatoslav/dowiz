@@ -13,6 +13,11 @@
 //!   the signing primitives via `crypto_signer`)
 //! - Failed connections degrade to `Err(BrowserError)` — never panic
 
+use alloc::string::String;
+use alloc::string::ToString;
+use alloc::vec;
+use alloc::vec::Vec;
+
 use crate::agent_browser::{AntiDetectConfig, ParseResult, ZeroTracePolicy};
 
 /// Errors from browser operations.

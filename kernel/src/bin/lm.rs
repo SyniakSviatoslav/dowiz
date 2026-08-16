@@ -10,7 +10,7 @@
 //!   lm --dir /root/.claude/projects/-root-dowiz/memory --query kalman --k 5
 //!   lm --selftest        # ingest a temp corpus + assert deterministic ranking
 
-use dowiz_kernel::retrieval::recall::PrimaryRecall;
+use dowiz_kernel::retrieval::recall::from_dir;
 use std::path::PathBuf;
 use std::process::exit;
 
@@ -73,7 +73,7 @@ fn main() {
         }
     };
 
-    let pr = match PrimaryRecall::from_dir(&dir) {
+    let pr = match from_dir(dir.to_str().unwrap()) {
         Ok(pr) => pr,
         Err(e) => {
             eprintln!("lm: {e}");
@@ -108,7 +108,7 @@ fn selftest_run() {
     )
     .unwrap();
 
-    let pr = PrimaryRecall::from_dir(&tmp).expect("ingest temp corpus");
+    let pr = from_dir(tmp.to_str().unwrap()).expect("ingest temp corpus");
     let a = pr.recall_at_k("kalman", 3);
     let b = pr.recall_at_k("kalman", 3);
     assert_eq!(a, b, "ranking must be deterministic");

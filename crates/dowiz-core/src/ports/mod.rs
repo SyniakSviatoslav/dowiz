@@ -17,3 +17,4 @@ pub mod payment;
 pub mod payment_capability;
 pub mod tool;
 pub mod owner_surface;
+pub mod agent_browser;
