@@ -30,6 +30,16 @@ static int utf8_len(unsigned char c) {
     return 1;
 }
 
+/* Morse identifier delimiters: ⟦ U+27E6, ⟧ U+27E7. */
+static int is_morse_open(const char *p) {
+    return (unsigned char)p[0] == 0xE2 && (unsigned char)p[1] == 0x9F &&
+           (unsigned char)p[2] == 0xA6;
+}
+static int is_morse_close(const char *p) {
+    return (unsigned char)p[0] == 0xE2 && (unsigned char)p[1] == 0x9F &&
+           (unsigned char)p[2] == 0xA7;
+}
+
 int bp_lex(const char *src, BpToken *out, size_t cap) {
     size_t n = 0;
     const char *p = src;
@@ -81,6 +91,23 @@ int bp_lex(const char *src, BpToken *out, size_t cap) {
             out[n].len = (size_t)(p - s);
             out[n].line = line;
             n++;
+            continue;
+        }
+        if (is_morse_open(p)) {
+            const char *start = p + 3;
+            const char *end = start;
+            while (*end && !is_morse_close(end)) {
+                end++;
+            }
+            if (n >= cap) {
+                return -1;
+            }
+            out[n].kind = BP_TOK_MORSE;
+            out[n].start = start;
+            out[n].len = (size_t)(end - start);
+            out[n].line = line;
+            n++;
+            p = (*end) ? end + 3 : end;
             continue;
         }
         if (c >= 0x80) {

@@ -22,6 +22,8 @@ test: $(BIN)
 	$(BIN) tokens ../samples/hello.bp
 	@echo "--- parse sample ---"
 	$(BIN) parse ../samples/hello.bp
+	@echo "--- parse morse sample ---"
+	$(BIN) parse ../samples/morse.bp
 	@echo "--- morse ---"
 	$(BIN) morse "ntt"
 	$(BIN) unmorse "... --- ..."

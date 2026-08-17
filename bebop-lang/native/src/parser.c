@@ -166,8 +166,11 @@ int bp_parse(const char *src, AstProgram *prog, BpParseError *err) {
 
         const char *name = NULL;
         size_t name_len = 0;
+        int name_morse = 0;
         if (!at_eof(&p) &&
-            (cur(&p).kind == BP_TOK_IDENT || cur(&p).kind == BP_TOK_GLYPH)) {
+            (cur(&p).kind == BP_TOK_IDENT || cur(&p).kind == BP_TOK_GLYPH ||
+             cur(&p).kind == BP_TOK_MORSE)) {
+            name_morse = (cur(&p).kind == BP_TOK_MORSE);
             name = cur(&p).start;
             name_len = cur(&p).len;
             advance(&p);
@@ -196,6 +199,7 @@ int bp_parse(const char *src, AstProgram *prog, BpParseError *err) {
             bp_program_free(prog);
             return -1;
         }
+        prog->items[prog->len - 1].name_morse = name_morse;
     }
 
     err->line = 0;

@@ -40,6 +40,8 @@ static const char *kind_name(BpTokKind k) {
             return "ident";
         case BP_TOK_GLYPH:
             return "glyph";
+        case BP_TOK_MORSE:
+            return "morse";
         case BP_TOK_NUMBER:
             return "number";
         case BP_TOK_PUNCT:
@@ -110,9 +112,20 @@ static void cmd_parse(const char *path) {
     }
     printf("parsed %zu items:\n", prog.len);
     for (size_t i = 0; i < prog.len; i++) {
-        const char *name = prog.items[i].name ? prog.items[i].name : "";
-        printf("  %-6s '%.*s'\n", ast_item_kind_name(prog.items[i].kind),
-               (int)prog.items[i].name_len, name);
+        const AstItem *it = &prog.items[i];
+        if (it->name_morse && it->name) {
+            char raw[256];
+            size_t l = it->name_len < sizeof raw - 1 ? it->name_len : sizeof raw - 1;
+            memcpy(raw, it->name, l);
+            raw[l] = '\0';
+            char decoded[256];
+            if (bp_morse_decode(raw, decoded, sizeof decoded) == 0) {
+                printf("  %-6s '%s' (Morse)\n", ast_item_kind_name(it->kind), decoded);
+                continue;
+            }
+        }
+        const char *name = it->name ? it->name : "";
+        printf("  %-6s '%.*s'\n", ast_item_kind_name(it->kind), (int)it->name_len, name);
     }
     bp_program_free(&prog);
     free(src);

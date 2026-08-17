@@ -1,0 +1,5 @@
+// morse.bp — Bebop sample with Morse identifiers (⟦ ⟧ delimited)
+module ⟦-.-. --- .-. .⟧ { }
+struct ⟦--- .-. -.. . .-.⟧ { id: i64, amount: i64 }
+const ⟦...- . .-. ... .. --- -.⟧: i64 = 1
+fn ⟦-. - -⟧(a: i64) -> i64 { a + 1 }
