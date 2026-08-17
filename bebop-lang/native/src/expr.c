@@ -110,49 +110,46 @@ static Term *parse_primary(P *p) {
     return NULL;
 }
 
-/* precedence: lowest first */
-static int prec(char c) {
-    switch (c) {
-        case '=': case '!': case '<': case '>': return 1;
-        case '+': case '-': return 2;
-        case '*': case '/': case '%': return 3;
-    }
+/* detect a binary operator at p; returns precedence, or -1 if none. */
+static int binop(P *p, BinOp *op, int *adv) {
+    char c = p->s[p->pos];
+    char d = p->s[p->pos + 1];
+    *adv = 1;
+    if (c == '=' && d == '=') { *op = BOP_EQ; *adv = 2; return 1; }
+    if (c == '!' && d == '=') { *op = BOP_NE; *adv = 2; return 1; }
+    if (c == '>' && d == '=') { *op = BOP_GE; *adv = 2; return 1; }
+    if (c == '<' && d == '=') { *op = BOP_LE; *adv = 2; return 1; }
+    if (c == '>') { *op = BOP_GT; return 1; }
+    if (c == '<') { *op = BOP_LT; return 1; }
+    if (c == '+') { *op = BOP_ADD; return 2; }
+    if (c == '-') { *op = BOP_SUB; return 2; }
+    if (c == '*') { *op = BOP_MUL; return 3; }
     return -1;
 }
 
 static Term *parse_bin(P *p, int min_prec) {
     Term *lhs = parse_primary(p);
-    if (!lhs) return NULL;
+    if (!lhs) {
+        return NULL;
+    }
     for (;;) {
         skip_ws(p);
-        char c = p->s[p->pos];
-        int pr = prec(c);
-        if (pr < min_prec || pr < 0) break;
-        /* handle == and != (two-char) */
         BinOp op;
-        int adv = 1;
-        if (c == '=') { op = BOP_EQ; p->pos++; if (p->s[p->pos] == '=') p->pos++; }
-        else if (c == '!') { op = BOP_EQ; p->pos++; if (p->s[p->pos] == '=') { op = BOP_EQ; p->pos++; } else { err(p, "expected '='"); return NULL; } }
-        else if (c == '<') { op = BOP_LT; p->pos++; }
-        else if (c == '>') { op = BOP_LT; p->pos++; } /* > treated as LT with swapped operands */
-        else if (c == '+') { op = BOP_ADD; p->pos++; }
-        else if (c == '-') { op = BOP_SUB; p->pos++; }
-        else if (c == '*') { op = BOP_MUL; p->pos++; }
-        else { break; }
-        (void)adv;
+        int adv;
+        int pr = binop(p, &op, &adv);
+        if (pr < 0 || pr < min_prec) {
+            break;
+        }
+        p->pos += adv;
         Term *rhs = parse_bin(p, pr + 1);
-        if (!rhs) return NULL;
+        if (!rhs) {
+            return NULL;
+        }
         Term *b = tnew();
         b->kind = TERM_BIN;
         b->op = op;
-        if (op == BOP_LT && c == '>') {
-            /* a > b == b < a */
-            b->a = rhs;
-            b->b = lhs;
-        } else {
-            b->a = lhs;
-            b->b = rhs;
-        }
+        b->a = lhs;
+        b->b = rhs;
         lhs = b;
     }
     return lhs;
@@ -205,8 +202,11 @@ static Term *parse_expr(P *p) {
     return parse_bin(p, 0);
 }
 
-int expr_parse(const char *s, Term **term, char *errbuf, size_t cap) {
+void expr_pool_reset(void) {
     pi = 0;
+}
+
+int expr_parse(const char *s, Term **term, char *errbuf, size_t cap) {
     P p = {s, 0, errbuf, cap};
     Term *t = parse_expr(&p);
     if (!t) {

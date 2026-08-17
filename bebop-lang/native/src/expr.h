@@ -9,4 +9,7 @@
  * on success (*term filled), -1 on error (err filled). */
 int expr_parse(const char *s, Term **term, char *err, size_t cap);
 
+/* Reset the static term pool (call before a fresh parse batch). */
+void expr_pool_reset(void);
+
 #endif /* BEBOP_EXPR_H */

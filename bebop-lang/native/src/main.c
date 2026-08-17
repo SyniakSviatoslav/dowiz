@@ -12,6 +12,7 @@
 #include "hyper.h"
 #include "mem.h"
 #include "expr.h"
+#include "verify.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -237,6 +238,7 @@ static void cmd_mem(void) {
 static void cmd_expr(const char *text) {
     Term *t = NULL;
     char err[256];
+    expr_pool_reset();
     if (expr_parse(text, &t, err, sizeof err) != 0) {
         fprintf(stderr, "parse error: %s\n", err);
         exit(1);
@@ -258,6 +260,14 @@ static void cmd_expr(const char *text) {
     } else {
         printf("%s = %s\n", ty, b ? "true" : "false");
     }
+}
+
+static void cmd_verify(void) {
+    char buf[4096];
+    int ok = verify_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("Verification self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
 }
 
 int main(int argc, char **argv) {
@@ -327,6 +337,10 @@ int main(int argc, char **argv) {
             return 2;
         }
         cmd_expr(argv[2]);
+        return 0;
+    }
+    if (strcmp(argv[1], "verify") == 0) {
+        cmd_verify();
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {

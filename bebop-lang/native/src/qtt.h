@@ -75,6 +75,10 @@ typedef enum {
     BOP_MUL,
     BOP_EQ,
     BOP_LT,
+    BOP_NE,
+    BOP_LE,
+    BOP_GE,
+    BOP_GT,
 } BinOp;
 
 typedef struct Term Term;
@@ -105,5 +109,15 @@ int qtt_eval(const Term *t, int *out_kind, long *out_i, int *out_b, char *err,
 
 /* Run the evaluator self-test. Returns 0 on success, -1 on failure. */
 int qtt_eval_test(char *out, size_t cap);
+
+/* A name → int binding, used to evaluate terms with free variables. */
+typedef struct {
+    const char *name;
+    long i;
+} QttBind;
+
+/* Evaluate a term with initial integer bindings (for contract checking). */
+int qtt_eval_bound(const Term *t, const QttBind *binds, int n, int *out_kind,
+                   long *out_i, int *out_b, char *err, size_t cap);
 
 #endif /* BEBOP_QTT_H */

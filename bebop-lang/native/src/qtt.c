@@ -271,7 +271,10 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
                 snprintf(err, cap, "binary op requires i64 operands");
                 return -1;
             }
-            *out = (t->op == BOP_EQ || t->op == BOP_LT) ? &BOOL_TY : &I64_TY;
+            *out = (t->op == BOP_EQ || t->op == BOP_LT || t->op == BOP_NE ||
+                    t->op == BOP_LE || t->op == BOP_GE || t->op == BOP_GT)
+                       ? &BOOL_TY
+                       : &I64_TY;
             return 0;
         }
         case TERM_ANN: {
@@ -490,7 +493,11 @@ static Value eval(const Term *t, Env *env) {
                 case BOP_SUB: v.i = l.i - r.i; break;
                 case BOP_MUL: v.i = l.i * r.i; break;
                 case BOP_EQ:  v.kind = 1; v.b = (l.i == r.i); break;
+                case BOP_NE:  v.kind = 1; v.b = (l.i != r.i); break;
                 case BOP_LT:  v.kind = 1; v.b = (l.i < r.i); break;
+                case BOP_LE:  v.kind = 1; v.b = (l.i <= r.i); break;
+                case BOP_GT:  v.kind = 1; v.b = (l.i > r.i); break;
+                case BOP_GE:  v.kind = 1; v.b = (l.i >= r.i); break;
             }
             return v;
         }
@@ -513,6 +520,28 @@ int qtt_eval(const Term *t, int *out_kind, long *out_i, int *out_b, char *err, s
     Value v = eval(t, NULL);
     if (v.kind < 0) {
         snprintf(err, cap, "evaluation error");
+        return -1;
+    }
+    *out_kind = v.kind;
+    *out_i = v.i;
+    *out_b = v.b;
+    return 0;
+}
+
+int qtt_eval_bound(const Term *t, const QttBind *binds, int n, int *out_kind,
+                   long *out_i, int *out_b, char *err, size_t cap) {
+    Env stack[64];
+    for (int i = 0; i < n && i < 64; i++) {
+        stack[i].name = binds[n - 1 - i].name;
+        stack[i].val.kind = 0;
+        stack[i].val.i = binds[n - 1 - i].i;
+        stack[i].val.b = 0;
+        stack[i].next = (i > 0) ? &stack[i - 1] : NULL;
+    }
+    Env *env = (n > 0) ? &stack[n - 1] : NULL;
+    Value v = eval(t, env);
+    if (v.kind < 0) {
+        snprintf(err, cap, "evaluation error (unbound variable?)");
         return -1;
     }
     *out_kind = v.kind;
