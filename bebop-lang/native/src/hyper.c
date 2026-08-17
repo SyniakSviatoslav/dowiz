@@ -310,6 +310,16 @@ int hv_benchmark(char *out, size_t cap) {
     clock_gettime(CLOCK_MONOTONIC, &t1);
     nb = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
 
+    double n2;
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    for (int i = 0; i < N; i++) {
+        v = hv_bind_neon2(&a, &b);
+        sink ^= v.words[0];
+        __asm__ __volatile__("" ::: "memory");
+    }
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    n2 = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
+
     clock_gettime(CLOCK_MONOTONIC, &t0);
     for (int i = 0; i < N; i++) {
         sink ^= hv_hamming(&a, &b);
@@ -328,7 +338,21 @@ int hv_benchmark(char *out, size_t cap) {
 
     (void)sink;
     return snprintf(out, cap,
-        "hypervector bind:   scalar %7.1f Mops/s | NEON %7.1f Mops/s\n"
+        "hypervector bind:   scalar %7.1f | NEON %7.1f | NEON2 %7.1f Mops/s\n"
         "hypervector hamming: scalar %7.1f Mops/s | NEON %7.1f Mops/s\n",
-        N / sb / 1e6, N / nb / 1e6, N / sh / 1e6, N / nh / 1e6);
+        N / sb / 1e6, N / nb / 1e6, N / n2 / 1e6, N / sh / 1e6, N / nh / 1e6);
+}
+
+/* 2x-unrolled NEON bind: 4 u64 (256-bit) per iteration via two 128-bit vectors. */
+Hypervector hv_bind_neon2(const Hypervector *a, const Hypervector *b) {
+    Hypervector v;
+    for (int i = 0; i < BEBOP_HV_WORDS; i += 4) {
+        uint64x2_t va0 = vld1q_u64(&a->words[i]);
+        uint64x2_t va1 = vld1q_u64(&a->words[i + 2]);
+        uint64x2_t vb0 = vld1q_u64(&b->words[i]);
+        uint64x2_t vb1 = vld1q_u64(&b->words[i + 2]);
+        vst1q_u64(&v.words[i], veorq_u64(va0, vb0));
+        vst1q_u64(&v.words[i + 2], veorq_u64(va1, vb1));
+    }
+    return v;
 }

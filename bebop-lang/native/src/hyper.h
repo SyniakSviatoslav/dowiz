@@ -30,6 +30,7 @@ double hv_shift_invariant_similarity(const Hypervector *a, const Hypervector *b)
 /* NEON SIMD variants (AArch64 eor + cnt) — faster bind/hamming. */
 Hypervector hv_bind_neon(const Hypervector *a, const Hypervector *b);
 uint32_t hv_hamming_neon(const Hypervector *a, const Hypervector *b);
+Hypervector hv_bind_neon2(const Hypervector *a, const Hypervector *b);
 
 /* Benchmark: scalar vs NEON bind/hamming, reports Mops/s. */
 int hv_benchmark(char *out, size_t cap);
