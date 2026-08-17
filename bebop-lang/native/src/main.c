@@ -25,6 +25,11 @@
 #include "token_bucket.h"
 #include "checksum.h"
 #include "hex_util.h"
+#include "trig.h"
+#include "rng.h"
+#include "stats.h"
+#include "pid.h"
+#include "markov.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -419,6 +424,46 @@ static void cmd_hex(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_trig(void) {
+    char buf[8192];
+    int ok = trig_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("Trig self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
+static void cmd_rng(void) {
+    char buf[8192];
+    int ok = rng_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("RNG self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
+static void cmd_stats(void) {
+    char buf[8192];
+    int ok = stats_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("Stats self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
+static void cmd_pid(void) {
+    char buf[8192];
+    int ok = pid_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("PID self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
+static void cmd_markov(void) {
+    char buf[8192];
+    int ok = markov_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("Markov self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -554,6 +599,26 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "hex") == 0) {
         cmd_hex();
+        return 0;
+    }
+    if (strcmp(argv[1], "trig") == 0) {
+        cmd_trig();
+        return 0;
+    }
+    if (strcmp(argv[1], "rng") == 0) {
+        cmd_rng();
+        return 0;
+    }
+    if (strcmp(argv[1], "stats") == 0) {
+        cmd_stats();
+        return 0;
+    }
+    if (strcmp(argv[1], "pid") == 0) {
+        cmd_pid();
+        return 0;
+    }
+    if (strcmp(argv[1], "markov") == 0) {
+        cmd_markov();
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {
