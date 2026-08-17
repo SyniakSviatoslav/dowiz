@@ -35,6 +35,7 @@
 #include "bench_all.h"
 #include "vir.h"
 #include "smt.h"
+#include "gt.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -806,6 +807,13 @@ int main(int argc, char **argv) {
         int ok = smt_self_test(buf, sizeof buf);
         fputs(buf, stdout);
         printf("SMT (DPLL) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "gt") == 0) {
+        char buf[1024];
+        int ok = gt_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Green threads self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "bench") == 0) {
