@@ -1,0 +1,17 @@
+[package]
+name = "bebop-lang"
+version = "0.1.0"
+edition = "2021"
+description = "Bebop — a systems language with dependent types, linearity, contracts, and pixel-vector glyphs (front-end, Phase 1)"
+license = "AGPL-3.0-or-later"
+
+[lib]
+name = "bebop_lang"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bebopc"
+path = "src/bin/bebopc.rs"
+
+[profile.release]
+lto = "thin"
