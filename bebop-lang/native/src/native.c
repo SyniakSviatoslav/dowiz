@@ -359,6 +359,19 @@ static int emit_expr(const Term *t) {
                 emit_push();
                 return 0;
             }
+        case TERM_ARRAY_GET:
+            /* immediate-offset: x2=base, use known lit index for offset */
+            if (emit_expr(t->a) != 0) return -1;
+            emit_pop(0);
+            em(0xAA0003E2u);                   /* mov x2, x0 */
+            if (t->b && t->b->kind == TERM_LIT && t->b->ival >= 0) {
+                int off = (int)(t->b->ival * 8);
+                em(0xF9400040u | ((unsigned)(off >> 3) << 10)); /* ldr x0,[x2,#off] */
+            } else {
+                return -1; /* dynamic index not yet supported */
+            }
+            emit_push();
+            return 0;
         case TERM_SYSCALL:
             /* raw AArch64 svc #0: t->ival = syscall nr, t->a = optional first arg */
             if (t->a) {
@@ -643,6 +656,18 @@ int native_self_test(char *out, size_t cap) {
         e.kind = TERM_LIT; e.ival = 99; f.val = &e; t.fields = &f;
         long ar = native_eval(&t, err, sizeof err);
         N(ar != 0 && ar != 99, "native alloc [99] returns ptr");
+    }
+    /* native array indexing (immediate offset) */
+    {
+        static Term ap[6]; static TermField af[2];
+        Term *e1 = &ap[0]; memset(e1, 0, 64); e1->kind = TERM_LIT; e1->ival = 10;
+        Term *e2 = &ap[1]; memset(e2, 0, 64); e2->kind = TERM_LIT; e2->ival = 20;
+        af[0].val = e1; af[1].val = e2;
+        Term *arr = &ap[2]; memset(arr, 0, 64); arr->kind = TERM_ARRAY; arr->fields = af; arr->nfields = 2;
+        Term *i1 = &ap[3]; memset(i1, 0, 64); i1->kind = TERM_LIT; i1->ival = 1;
+        Term *get = &ap[4]; memset(get, 0, 64); get->kind = TERM_ARRAY_GET; get->a = arr; get->b = i1;
+        long g = native_eval(get, err, sizeof err);
+        N(g == 20, "native [10,20][1] == 20");
     }
     return all_ok ? 0 : -1;
 }
