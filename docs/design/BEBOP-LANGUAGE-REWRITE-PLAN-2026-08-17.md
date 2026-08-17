@@ -106,6 +106,9 @@ Total ASCII fallback (agents tokenize without vision), contracts as machine-chec
 ### 3.13 Morse identifiers (density)
 Names are written in Morse (ITU codebook), translatable back to ASCII — ~2–3× shorter than ASCII, symbolically compact. `.`/`-` dot/dash, space = letter sep, `/` = word sep.
 
+### 3.14 Architectural profile (operator decisions)
+Memory: pure affine/linear (QTT quantity-1). Runtime: no_std first, no runtime. Proof: mandatory for critical fns (search/indexing/convolution). Syntax: Lean 4 Unicode (`∀` `∃` `∈` `→`) + glyphs + Morse. Meta: Lean tactics/macros (comptime). Effects: **algebraic effects**. Concurrency: lock-free arenas + atomics (Send/Sync proven). Errors: dependent types → unrepresentable states. Builtins: hypervector bitsets + NTT polynomial rings. Ecosystem: Mathlib. Codegen: own SIMD/WASM/GPU(Vulkan) backends. Verify: **strict** (no compile until proofs converge).
+
 ---
 
 ## 4. Backends (native, not Rust, not LLVM; mandatory compilation, all optimizations)

@@ -45,6 +45,25 @@ canonical form is the δ-outline, and the terminal fallback is the ASCII name.
 
 ---
 
+## 1.5 Architectural profile (operator decisions)
+
+| Dimension | Decision |
+|---|---|
+| Memory | Pure **affine/linear typing**, auto-managed at the Lean-compiler level (QTT quantity-1) |
+| Runtime | **no_std first** — full rejection of a runtime; direct → LLVM IR or machine code |
+| Verification × speed | **Mandatory proof** for every critical function (search, indexing, convolution/NTT) |
+| Syntax | **Lean 4 Unicode math notation** (`∀`, `∃`, `∈`, `→`) + glyphs + Morse identifiers |
+| Metaprogramming | **Lean-style tactics + macros** at compile time (meta/comptime code evolution) |
+| Side effects | **Algebraic Effects** for controlled state and I/O |
+| Concurrency | **Lock-free arenas + atomics**; Send/Sync guarantees formally proven |
+| Errors | **Dependent types** — error states unrepresentable at compile time |
+| Built-in types | **Native primitives**: fixed bitsets (D-dim hypervectors) + polynomial rings (NTT) |
+| Ecosystem | **Own minimal ecosystem** + Lean **Mathlib** + formal repos |
+| Codegen | **Own hardware backends**: SIMD, WebAssembly, GPU Compute Shaders (Vulkan) |
+| Verification philosophy | **Strict**: code does not compile until all proofs converge |
+
+---
+
 ## 2. Surface: glyphs, not words
 
 ### 2.1 The glyph is the token
