@@ -171,18 +171,19 @@ static int emit_expr(const Term *t) {
             emit_push();
             return 0;
         case TERM_IF: {
-            if (emit_expr(t->a) != 0) return -1;
-            emit_pop(0); /* pop condition value into x0 (cbz reads x0) */
-            size_t cbz_pos = em_len;
-            em(0xB4000000u);
-            if (emit_expr(t->b) != 0) return -1;
-            size_t b_pos = em_len;
-            em(0x14000000u);
-            size_t else_pos = em_len;
-            if (emit_expr(t->c) != 0) return -1;
-            size_t end_pos = em_len;
-            em_code[cbz_pos] = 0xB4000000u | ((unsigned)(else_pos - cbz_pos) << 5);
-            em_code[b_pos] = 0x14000000u | ((unsigned)(end_pos - b_pos) & 0x3FFFFFFu);
+            /* Branchless ⤫ (#30, spec ⤫): evaluate cond + BOTH branches, then
+             * csel picks the result. All native terms are pure (no IO), so
+             * speculating both branches is always sound and removes a
+             * mispredictable cbz/b branch. */
+            if (emit_expr(t->a) != 0) return -1; /* cond pushed */
+            if (emit_expr(t->b) != 0) return -1; /* then pushed */
+            if (emit_expr(t->c) != 0) return -1; /* else pushed */
+            emit_pop(2);   /* else -> x2 */
+            emit_pop(1);   /* then -> x1 */
+            emit_pop(0);   /* cond -> x0 */
+            em(0xF100001Fu); /* cmp x0, #0 */
+            em(0x9A821020u); /* csel x0, x1, x2, ne — x0 = (x0!=0) ? x1 : x2 */
+            emit_push();
             return 0;
         }
         default:
@@ -216,14 +217,22 @@ long native_eval(const Term *t, char *err, size_t cap) {
     em(0xD65F03C0u); /* ret */
 
     size_t sz = em_len * sizeof(unsigned int);
-    void *mem = mmap(NULL, sz, PROT_READ | PROT_WRITE | PROT_EXEC,
-                     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    /* W^X (#21 / 2B): two-step — map writeable (NOT executable), emit the
+     * code, then flip to executable (NOT writeable). Never W+X at once, so a
+     * code-injection write cannot land in an executable page. */
+    void *mem = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS,
+                     -1, 0);
     if (mem == MAP_FAILED) {
         snprintf(err, cap, "mmap failed");
         return 0;
     }
     memcpy(mem, em_code, sz);
     __builtin___clear_cache((char *)mem, (char *)mem + sz);
+    if (mprotect(mem, sz, PROT_READ | PROT_EXEC) != 0) {
+        munmap(mem, sz);
+        snprintf(err, cap, "mprotect W^X failed");
+        return 0;
+    }
     long (*fn)(void);
     memcpy(&fn, &mem, sizeof(fn));
     long result = fn();
@@ -271,9 +280,11 @@ int native_self_test(char *out, size_t cap) {
         snprintf(label, sizeof label, "native '%s' == %ld", cmps[i], cwants[i]);
         N(got == cwants[i], label);
     }
-    const char *ifs[] = {"if (1 == 1) then 10 else 20", "if (3 > 5) then 1 else 2"};
-    long iwants[] = {10, 2};
-    for (int i = 0; i < 2; i++) {
+    const char *ifs[] = {"if (1 == 1) then 10 else 20", "if (3 > 5) then 1 else 2",
+                         "if (1 == 1) then (let x = 5 in x * 2) else 99",
+                         "if (2 > 3) then 99 else (let y = 3 in y * 3)"};
+    long iwants[] = {10, 2, 10, 9};
+    for (int i = 0; i < 4; i++) {
         expr_pool_reset();
         Term *t = NULL;
         if (expr_parse(ifs[i], &t, err, sizeof err) != 0) {

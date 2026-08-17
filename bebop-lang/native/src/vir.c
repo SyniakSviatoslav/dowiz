@@ -69,7 +69,8 @@ int vir_binop(VirOp op, Vir128 a, Vir128 b, Vir128 *out, char *err,
     e(0xD65F03C0u);          /* ret */
 
     size_t sz = clen * sizeof(unsigned int);
-    void *mem = mmap(NULL, sz, PROT_READ | PROT_WRITE | PROT_EXEC,
+    /* W^X: writeable → emit → executable (never W+X). */
+    void *mem = mmap(NULL, sz, PROT_READ | PROT_WRITE,
                      MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (mem == MAP_FAILED) {
         snprintf(err, cap_err, "vir: mmap failed");
@@ -77,6 +78,11 @@ int vir_binop(VirOp op, Vir128 a, Vir128 b, Vir128 *out, char *err,
     }
     memcpy(mem, code, sz);
     __builtin___clear_cache((char *)mem, (char *)mem + sz);
+    if (mprotect(mem, sz, PROT_READ | PROT_EXEC) != 0) {
+        munmap(mem, sz);
+        snprintf(err, cap_err, "vir: mprotect W^X failed");
+        return -1;
+    }
     void (*fn)(const uint64_t *, const uint64_t *, uint64_t *);
     memcpy(&fn, &mem, sizeof(fn));
     fn((const uint64_t *)&a, (const uint64_t *)&b, (uint64_t *)out);
