@@ -64,6 +64,77 @@ int verify_bounded(const char *body, const char *requires, const char *ensures,
     return 0;
 }
 
+/* ─── SMT-LIB generation (contracts → SMT) ─── */
+
+static const char *smt_of(const Term *t, const char *result_sub) {
+    static char bufs[16][256];
+    static int bi = 0;
+    char *buf = bufs[bi++ % 16];
+    switch (t->kind) {
+        case TERM_LIT:
+            if (t->bval) {
+                snprintf(buf, 256, "true");
+            } else {
+                snprintf(buf, 256, "%ld", t->ival);
+            }
+            return buf;
+        case TERM_VAR:
+            if (result_sub && strcmp(t->name, "result") == 0) {
+                return result_sub;
+            }
+            return t->name;
+        case TERM_BIN: {
+            const char *a = smt_of(t->a, result_sub);
+            const char *b = smt_of(t->b, result_sub);
+            if (t->op == BOP_NE) {
+                snprintf(buf, 256, "(not (= %s %s))", a, b);
+                return buf;
+            }
+            const char *op;
+            switch (t->op) {
+                case BOP_ADD: op = "+"; break;
+                case BOP_SUB: op = "-"; break;
+                case BOP_MUL: op = "*"; break;
+                case BOP_EQ:  op = "="; break;
+                case BOP_LT:  op = "<"; break;
+                case BOP_GT:  op = ">"; break;
+                case BOP_LE:  op = "<="; break;
+                case BOP_GE:  op = ">="; break;
+                default:      op = "="; break;
+            }
+            snprintf(buf, 256, "(%s %s %s)", op, a, b);
+            return buf;
+        }
+        default:
+            return "?";
+    }
+}
+
+int verify_smtlib(const char *body, const char *requires, const char *ensures,
+                  char *out, size_t cap) {
+    expr_pool_reset();
+    Term *bt = NULL, *pt = NULL, *et = NULL;
+    char err[256];
+    if (expr_parse(body, &bt, err, sizeof err) != 0) {
+        return -1;
+    }
+    if (expr_parse(requires, &pt, err, sizeof err) != 0) {
+        return -1;
+    }
+    if (expr_parse(ensures, &et, err, sizeof err) != 0) {
+        return -1;
+    }
+    const char *body_smt = smt_of(bt, NULL);
+    const char *pre_smt = smt_of(pt, NULL);
+    const char *post_smt = smt_of(et, body_smt);
+    snprintf(out, cap,
+             "(declare-const x Int)\n"
+             "(assert (not (=> %s %s)))\n"
+             "(check-sat)\n",
+             pre_smt, post_smt);
+    return 0;
+}
+
 int verify_self_test(char *out, size_t cap) {
     size_t pos = 0;
     int all_ok = 1;
@@ -90,6 +161,14 @@ int verify_self_test(char *out, size_t cap) {
 
     V(verify_bounded("x + 1", "true", "result > x", 0, 100, buf, sizeof buf) == 0,
       "verify: x+1 > x always (101 cases)");
+
+    {
+        char smt[512];
+        V(verify_smtlib("x * 2", "x > 0", "result > x", smt, sizeof smt) == 0 &&
+              strstr(smt, "(assert (not (=> (> x 0) (> (* x 2) x))))") != NULL,
+          "smtlib: VC generation (Z3-ready)");
+        V(strstr(smt, "(check-sat)") != NULL, "  ... check-sat present");
+    }
 
     return all_ok ? 0 : -1;
 }

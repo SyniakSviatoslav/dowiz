@@ -13,6 +13,11 @@
 int verify_bounded(const char *body, const char *requires, const char *ensures,
                    long lo, long hi, char *out, size_t cap);
 
+/* Generate the SMT-LIB verification condition for a contract (for Z3/CVC5).
+ * Returns 0 on success; the SMT-LIB is written to `out`. */
+int verify_smtlib(const char *body, const char *requires, const char *ensures,
+                  char *out, size_t cap);
+
 int verify_self_test(char *out, size_t cap);
 
 #endif /* BEBOP_VERIFY_H */
