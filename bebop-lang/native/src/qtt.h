@@ -101,6 +101,13 @@ typedef enum {
     TERM_NAT_S,   /* S n : Nat (successor, .a = the predecessor) */
     TERM_NAT_REC, /* nat_rec : P -> (Nat -> P -> P) -> Nat -> P
                    *   .a = base, .b = step, .c = target */
+    TERM_NAT_IND, /* nat_ind : (n. motive) -> motive Z
+                   *         -> ((k. motive k -> motive (S k))) -> (n. motive n)
+                   *   .ty = motive LAM, .a = base, .b = step, .c = target */
+    TERM_CONG,    /* congr : (a = b) -> (f a = f b)
+                   *   .a = f (a function), .b = the equality proof */
+    TERM_EQ_TYPE, /* "a = b" as a TERM of type Type (the motive's body).
+                   *   .a = left, .b = right */
 } TermKind;
 
 typedef enum {
@@ -135,6 +142,7 @@ struct Term {
     BinOp op;         /* BIN operator */
     Ty *ty;           /* LAM domain / ANN type / STRUCT type / ENUM type */
     Term *a, *b, *c;  /* APP/LAM/ANN/BIN/IF/LET/FIELD(base)/ENUM_CTOR(payload)/MATCH(scrut) */
+    Term *d;          /* NAT_IND motive (4th subterm slot) */
     TermField *fields; /* TERM_STRUCT: field name → value */
     int nfields;
     MatchArm *arms;   /* TERM_MATCH: arms */

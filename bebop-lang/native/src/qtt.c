@@ -648,6 +648,123 @@ static Ty *rewrite_eq_ty(Ty *h, Term *from, Term *to) {
     return out;
 }
 
+/* ═══ Persistent term pool (for substitution results stored in TY_EQ types) ═══
+ * qtt_conv resets the kernel scratch pool (kpool) every call, so terms that
+ * must outlive a conversion — e.g. the `f n` / `g n` sides of an induction
+ * motive — are substituted into THIS pool instead, reset only per proof batch. */
+static Term ppool[512];
+static int ppi = 0;
+
+static Term *pnew(void) {
+    if (ppi >= (int)(sizeof ppool / sizeof ppool[0])) {
+        return NULL;
+    }
+    Term *t = &ppool[ppi++];
+    memset(t, 0, sizeof *t);
+    return t;
+}
+
+/* Capture-avoiding substitution into the persistent pool (same semantics as
+ * qtt_subst, different allocator). */
+static Term *subst_p(const Term *t, const char *name, const Term *v) {
+    if (!t) {
+        return NULL;
+    }
+    Term *o = pnew();
+    if (!o) {
+        return NULL;
+    }
+    *o = *t;
+    switch (t->kind) {
+        case TERM_VAR:
+            if (t->name && name && strcmp(t->name, name) == 0) {
+                *o = *v;
+            }
+            return o;
+        case TERM_LIT:
+        case TERM_TYPE:
+        case TERM_IO:
+        case TERM_NAT_Z:
+            return o;
+        case TERM_LAM:
+            if (t->name && name && strcmp(t->name, name) != 0) {
+                o->a = subst_p(t->a, name, v);
+            }
+            return o;
+        case TERM_APP:
+        case TERM_BIN:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            return o;
+        case TERM_NAT_S:
+        case TERM_FIELD:
+        case TERM_ENUM_CTOR:
+            o->a = subst_p(t->a, name, v);
+            return o;
+        case TERM_NAT_REC:
+        case TERM_SUBST:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            o->c = subst_p(t->c, name, v);
+            return o;
+        case TERM_NAT_IND:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            o->c = subst_p(t->c, name, v);
+            o->d = subst_p(t->d, name, v);
+            return o;
+        case TERM_CONG:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            return o;
+        case TERM_EQ_TYPE:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            return o;
+        case TERM_REFL:
+            o->a = subst_p(t->a, name, v);
+            return o;
+        case TERM_IF:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            o->c = subst_p(t->c, name, v);
+            return o;
+        case TERM_LET:
+            o->a = subst_p(t->a, name, v);
+            if (t->name && name && strcmp(t->name, name) != 0) {
+                o->b = subst_p(t->b, name, v);
+            }
+            return o;
+        case TERM_ANN:
+            o->a = subst_p(t->a, name, v);
+            return o;
+        case TERM_MATCH:
+        case TERM_STRUCT:
+            return o; /* not needed for Nat motives; shallow copy */
+    }
+    return o;
+}
+
+/* Apply an induction motive LAM (λn. TERM_EQ_TYPE(f n, g n)) to a Nat argument,
+ * producing the TY_EQ proposition `f arg = g arg`. NULL on malformed motive or
+ * pool exhaustion. */
+static Ty *motive_apply(const Term *motive, const Term *arg) {
+    if (!motive || motive->kind != TERM_LAM || !motive->a ||
+        motive->a->kind != TERM_EQ_TYPE) {
+        return NULL;
+    }
+    Term *l = subst_p(motive->a->a, motive->name, arg);
+    Term *r = subst_p(motive->a->b, motive->name, arg);
+    Ty *eq = ty_alloc(TY_EQ);
+    if (!eq) {
+        return NULL;
+    }
+    eq->eq_a = &NAT_TY;
+    eq->eq_l = l;
+    eq->eq_r = r;
+    return eq;
+}
+
 static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
     switch (t->kind) {
         case TERM_VAR: {
@@ -809,6 +926,119 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
                 return -1;
             }
             *out = p;
+            return 0;
+        }
+        case TERM_EQ_TYPE:
+            /* "a = b" is a proposition: a term of the universe Type. Its
+             * interpretation as an actual proposition type is done by
+             * motive_apply (nat_ind). */
+            *out = &TYPE_TY;
+            return 0;
+        case TERM_CONG: {
+            /* congr f p : f a = f b, from p : a = b and f : A -> B. */
+            Ty *ft = NULL;
+            if (infer(c, t->a, &ft, err, cap) != 0) {
+                return -1;
+            }
+            if (ft->kind != TY_FN && ft->kind != TY_PI) {
+                snprintf(err, cap, "congr needs a function");
+                return -1;
+            }
+            Ty *pt = NULL;
+            if (infer(c, t->b, &pt, err, cap) != 0) {
+                return -1;
+            }
+            if (pt->kind != TY_EQ || !ty_eq(pt->eq_a, ft->dom)) {
+                snprintf(err, cap, "congr equality domain mismatch");
+                return -1;
+            }
+            Term *fa = pnew();
+            Term *fb = pnew();
+            Ty *eq = ty_alloc(TY_EQ);
+            if (!fa || !fb || !eq) {
+                snprintf(err, cap, "pool exhausted");
+                return -1;
+            }
+            fa->kind = TERM_APP;
+            fa->a = t->a;
+            fa->b = pt->eq_l;
+            fb->kind = TERM_APP;
+            fb->a = t->a;
+            fb->b = pt->eq_r;
+            eq->eq_a = ft->cod;
+            eq->eq_l = fa;
+            eq->eq_r = fb;
+            *out = eq;
+            return 0;
+        }
+        case TERM_NAT_IND: {
+            /* nat_ind motive base step target : motive target, where
+             *   motive : λn. (f n = g n)  (a LAM body = TERM_EQ_TYPE)
+             *   base   : motive Z
+             *   step   : (k : Nat) -> motive k -> motive (S k)
+             *   target : Nat */
+            const Term *motive = t->d;
+            if (!motive || motive->kind != TERM_LAM || !motive->a ||
+                motive->a->kind != TERM_EQ_TYPE) {
+                snprintf(err, cap, "nat_ind motive must be λn. (f n = g n)");
+                return -1;
+            }
+            Term *zterm = pnew();
+            if (!zterm) {
+                snprintf(err, cap, "pool exhausted");
+                return -1;
+            }
+            zterm->kind = TERM_NAT_Z;
+            Ty *mot_z = motive_apply(motive, zterm);
+            if (!mot_z || check(c, t->a, mot_z, err, cap) != 0) {
+                if (mot_z) {
+                    return -1;
+                }
+                snprintf(err, cap, "nat_ind base type error");
+                return -1;
+            }
+            if (t->b->kind != TERM_LAM || !ty_eq(t->b->ty, &NAT_TY)) {
+                snprintf(err, cap, "nat_ind step must be λk:Nat. ...");
+                return -1;
+            }
+            Term *kvar = pnew();
+            Term *sk = pnew();
+            if (!kvar || !sk) {
+                snprintf(err, cap, "pool exhausted");
+                return -1;
+            }
+            kvar->kind = TERM_VAR;
+            kvar->name = t->b->name;
+            sk->kind = TERM_NAT_S;
+            sk->a = kvar;
+            Ty *mot_k = motive_apply(motive, kvar);
+            Ty *mot_sk = motive_apply(motive, sk);
+            Ty *cod = ty_alloc(TY_FN);
+            if (!mot_k || !mot_sk || !cod) {
+                snprintf(err, cap, "pool exhausted");
+                return -1;
+            }
+            cod->dom = mot_k;
+            cod->cod = mot_sk;
+            c->b[c->len].name = t->b->name;
+            c->b[c->len].q = t->b->q;
+            c->b[c->len].ty = &NAT_TY;
+            c->b[c->len].used = 0;
+            c->len++;
+            int r = check(c, t->b->a, cod, err, cap);
+            c->len--;
+            if (r != 0) {
+                return r;
+            }
+            if (check(c, t->c, &NAT_TY, err, cap) != 0) {
+                return -1;
+            }
+            Ty *res = motive_apply(motive, t->c);
+            if (!res) {
+                snprintf(err, cap, "pool exhausted");
+                return -1;
+            }
+            *out = res;
             return 0;
         }
         case TERM_ANN: {
@@ -1501,6 +1731,20 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             o->b = qtt_subst(t->b, name, v);
             o->c = qtt_subst(t->c, name, v);
             return o;
+        case TERM_NAT_IND:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            o->c = qtt_subst(t->c, name, v);
+            o->d = qtt_subst(t->d, name, v);
+            return o;
+        case TERM_CONG:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            return o;
+        case TERM_EQ_TYPE:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            return o;
     }
     return o;
 }
@@ -1529,6 +1773,20 @@ static Term *norm_rec(const Term *t) {
             return o; /* already normal */
         case TERM_NAT_S:
             o->a = norm_rec(t->a);
+            return o;
+        case TERM_NAT_IND:
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
+            o->c = norm_rec(t->c);
+            o->d = norm_rec(t->d);
+            return o;
+        case TERM_CONG:
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
+            return o;
+        case TERM_EQ_TYPE:
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
             return o;
         case TERM_NAT_REC: {
             /* definitional reduction of the recursor:
@@ -1671,6 +1929,13 @@ static int conv_rec(const Term *a, const Term *b) {
         case TERM_NAT_REC:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) &&
                    conv_rec(a->c, b->c);
+        case TERM_NAT_IND:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) &&
+                   conv_rec(a->c, b->c) && conv_rec(a->d, b->d);
+        case TERM_CONG:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
+        case TERM_EQ_TYPE:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
         case TERM_LAM:
             return a->name && b->name && strcmp(a->name, b->name) == 0 &&
                    conv_rec(a->a, b->a);
@@ -1954,6 +2219,59 @@ int qtt_nat_test(char *out, size_t cap) {
     goalD->eq_a = &NAT_TY; goalD->eq_l = double2; goalD->eq_r = four;
     A(qtt_prove(reflD, goalD, ty, sizeof ty, err, sizeof err) == 0,
       "prove refl (double 2) : double 2 = S(S(S(S Z)))");
+
+    /* 3. INDUCTION: prove add 2 Z = 2, where add m n = nat_rec n (λk acc. S acc) m.
+     *    motive = λn. (nat_rec Z step n = n);  base = refl Z;
+     *    step = λk. λih. congr (λx. S x) ih;   target = S(S Z). */
+    ppi = 0;
+    pi = 0;
+    ty_len = 0;
+    Term *accv = &pool[pi++]; memset(accv, 0, sizeof *accv); accv->kind = TERM_VAR; accv->name = "acc";
+    Term *sacc = &pool[pi++]; memset(sacc, 0, sizeof *sacc); sacc->kind = TERM_NAT_S; sacc->a = accv;
+    Term *lamacc = &pool[pi++]; memset(lamacc, 0, sizeof *lamacc);
+    lamacc->kind = TERM_LAM; lamacc->name = "acc"; lamacc->q = Q_MANY; lamacc->ty = &NAT_TY; lamacc->a = sacc;
+    Term *add_step = &pool[pi++]; memset(add_step, 0, sizeof *add_step);
+    add_step->kind = TERM_LAM; add_step->name = "k"; add_step->q = Q_MANY; add_step->ty = &NAT_TY; add_step->a = lamacc;
+    /* motive = λn. (nat_rec Z add_step n = n) */
+    Term *fz = &pool[pi++]; memset(fz, 0, sizeof *fz); fz->kind = TERM_NAT_Z;
+    Term *nvar = &pool[pi++]; memset(nvar, 0, sizeof *nvar); nvar->kind = TERM_VAR; nvar->name = "n";
+    Term *f_n = &pool[pi++]; memset(f_n, 0, sizeof *f_n);
+    f_n->kind = TERM_NAT_REC; f_n->a = fz; f_n->b = add_step; f_n->c = nvar;
+    Term *g_n = &pool[pi++]; memset(g_n, 0, sizeof *g_n); g_n->kind = TERM_VAR; g_n->name = "n";
+    Term *eqty = &pool[pi++]; memset(eqty, 0, sizeof *eqty);
+    eqty->kind = TERM_EQ_TYPE; eqty->a = f_n; eqty->b = g_n;
+    Term *motive = &pool[pi++]; memset(motive, 0, sizeof *motive);
+    motive->kind = TERM_LAM; motive->name = "n"; motive->q = Q_MANY; motive->ty = &NAT_TY; motive->a = eqty;
+    /* base = refl Z */
+    Term *zbase = &pool[pi++]; memset(zbase, 0, sizeof *zbase); zbase->kind = TERM_NAT_Z;
+    Term *ind_base = &pool[pi++]; memset(ind_base, 0, sizeof *ind_base); ind_base->kind = TERM_REFL; ind_base->a = zbase;
+    /* succ = λx. S x */
+    Term *xv = &pool[pi++]; memset(xv, 0, sizeof *xv); xv->kind = TERM_VAR; xv->name = "x";
+    Term *sx = &pool[pi++]; memset(sx, 0, sizeof *sx); sx->kind = TERM_NAT_S; sx->a = xv;
+    Term *succ = &pool[pi++]; memset(succ, 0, sizeof *succ);
+    succ->kind = TERM_LAM; succ->name = "x"; succ->q = Q_MANY; succ->ty = &NAT_TY; succ->a = sx;
+    /* step = λk. λih. congr succ ih */
+    Term *ihv = &pool[pi++]; memset(ihv, 0, sizeof *ihv); ihv->kind = TERM_VAR; ihv->name = "ih";
+    Term *cong = &pool[pi++]; memset(cong, 0, sizeof *cong); cong->kind = TERM_CONG; cong->a = succ; cong->b = ihv;
+    Term *lamih = &pool[pi++]; memset(lamih, 0, sizeof *lamih);
+    lamih->kind = TERM_LAM; lamih->name = "ih"; lamih->q = Q_MANY; lamih->ty = NULL; lamih->a = cong;
+    Term *ind_step = &pool[pi++]; memset(ind_step, 0, sizeof *ind_step);
+    ind_step->kind = TERM_LAM; ind_step->name = "k"; ind_step->q = Q_MANY; ind_step->ty = &NAT_TY; ind_step->a = lamih;
+    /* target = S(S Z) = 2 */
+    Term *z2t = &pool[pi++]; memset(z2t, 0, sizeof *z2t); z2t->kind = TERM_NAT_Z;
+    Term *s1t = &pool[pi++]; memset(s1t, 0, sizeof *s1t); s1t->kind = TERM_NAT_S; s1t->a = z2t;
+    Term *s2t = &pool[pi++]; memset(s2t, 0, sizeof *s2t); s2t->kind = TERM_NAT_S; s2t->a = s1t;
+    /* proof = nat_ind motive base step target */
+    Term *proof = &pool[pi++]; memset(proof, 0, sizeof *proof);
+    proof->kind = TERM_NAT_IND; proof->d = motive; proof->a = ind_base; proof->b = ind_step; proof->c = s2t;
+    /* goal = add 2 Z = 2  =  nat_rec Z add_step (S(S Z)) = S(S Z) */
+    Term *gfz = &pool[pi++]; memset(gfz, 0, sizeof *gfz); gfz->kind = TERM_NAT_Z;
+    Term *gadd = &pool[pi++]; memset(gadd, 0, sizeof *gadd);
+    gadd->kind = TERM_NAT_REC; gadd->a = gfz; gadd->b = add_step; gadd->c = s2t;
+    Ty *goalInd = ty_alloc(TY_EQ);
+    goalInd->eq_a = &NAT_TY; goalInd->eq_l = gadd; goalInd->eq_r = s2t;
+    A(qtt_prove(proof, goalInd, ty, sizeof ty, err, sizeof err) == 0,
+      "prove nat_ind (add 2 Z = 2) by induction");
 
     return all_ok ? 0 : -1;
 }
