@@ -40,6 +40,7 @@
 #include "jittable.h"
 #include "supervise.h"
 #include "session.h"
+#include "syscall.h"
 #include "smt.h"
 #include "gt.h"
 
@@ -865,6 +866,13 @@ int main(int argc, char **argv) {
         int ok = session_self_test(buf, sizeof buf);
         fputs(buf, stdout);
         printf("Session types (duality) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "syscall") == 0) {
+        char buf[1024];
+        int ok = syscall_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Raw syscall (no libc) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "atomicjit") == 0) {
