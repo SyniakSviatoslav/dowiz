@@ -35,6 +35,7 @@
 #include "bench_all.h"
 #include "vir.h"
 #include "theorem.h"
+#include "pac.h"
 #include "smt.h"
 #include "gt.h"
 
@@ -825,6 +826,13 @@ int main(int argc, char **argv) {
         int ok = vir_self_test(buf, sizeof buf);
         fputs(buf, stdout);
         printf("VIR (NEON lowering) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "pac") == 0) {
+        char buf[1024];
+        int ok = pac_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("PAC (pointer auth) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "atomicjit") == 0) {

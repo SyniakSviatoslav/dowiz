@@ -6,6 +6,7 @@
 #include <sys/mman.h>
 
 #include "expr.h"
+#include "pac.h"
 
 /* emitter state */
 static unsigned int em_code[512];
@@ -355,6 +356,7 @@ long native_eval(const Term *t, char *err, size_t cap) {
     nregs = 0;
     nspill = 0;
     qtt_term_pool_reset(); /* fresh kernel pool for compile-time β-reduction */
+    if (pac_available()) em(PAC_PACIASP); /* sign LR (ROP mitigation, 16B) */
     em(0xD10803FFu); /* sub sp, sp, #512 — allocate the frame */
     emit_stp_sp(19, 20, 0); /* save x19..x28 (callee-saved locals) */
     emit_stp_sp(21, 22, 16);
@@ -374,6 +376,7 @@ long native_eval(const Term *t, char *err, size_t cap) {
     emit_ldp_sp(25, 26, 48);
     emit_ldp_sp(27, 28, 64);
     em(0x910803FFu); /* add sp, sp, #512 — free the frame */
+    if (pac_available()) em(PAC_AUTIASP); /* authenticate LR before ret */
     em(0xD65F03C0u); /* ret */
 
     size_t sz = em_len * sizeof(unsigned int);
