@@ -282,3 +282,89 @@ int codegen_self_test(char *out, size_t cap) {
 
     return all_ok ? 0 : -1;
 }
+
+int codegen_wasm_fn(const Term *lam, unsigned char *out, size_t cap, char *err,
+                    size_t cap_err) {
+    if (!lam || lam->kind != TERM_LAM) {
+        snprintf(err, cap_err, "codegen: expected lambda");
+        return -1;
+    }
+    char ty[64];
+    if (qtt_check_closed(lam, ty, sizeof ty, err, cap_err) != 0) {
+        return -1;
+    }
+    const char *arrow = strrchr(ty, '>');
+    int result_i64 = 1;
+    if (arrow && strstr(arrow, "bool") != NULL) {
+        result_i64 = 0;
+    }
+    int param_i64 = (lam->ty && lam->ty->kind == TY_I64) ? 1 : 0;
+
+    size_t n = 0;
+    out[n++] = 0x00; out[n++] = 0x61; out[n++] = 0x73; out[n++] = 0x6d;
+    out[n++] = 0x01; out[n++] = 0x00; out[n++] = 0x00; out[n++] = 0x00;
+
+    unsigned char ts[8];
+    size_t tn = 0;
+    ts[tn++] = 0x01;
+    ts[tn++] = 0x60;
+    ts[tn++] = 0x01;
+    ts[tn++] = (unsigned char)(param_i64 ? 0x7e : 0x7f);
+    ts[tn++] = 0x01;
+    ts[tn++] = (unsigned char)(result_i64 ? 0x7e : 0x7f);
+    out[n++] = 0x01;
+    n += uleb(out + n, tn);
+    memcpy(out + n, ts, tn);
+    n += tn;
+
+    unsigned char fs[] = {0x01, 0x00};
+    out[n++] = 0x03;
+    n += uleb(out + n, sizeof fs);
+    memcpy(out + n, fs, sizeof fs);
+    n += sizeof fs;
+
+    unsigned char es[] = {0x01, 0x04, 'm', 'a', 'i', 'n', 0x00, 0x00};
+    out[n++] = 0x07;
+    n += uleb(out + n, sizeof es);
+    memcpy(out + n, es, sizeof es);
+    n += sizeof es;
+
+    int nlets = count_lets(lam->a);
+    unsigned char body[1024];
+    size_t bn = 0;
+    body[bn++] = (unsigned char)(nlets > 0 ? 1 : 0);
+    if (nlets > 0) {
+        bn += uleb(body + bn, (unsigned long)nlets);
+        body[bn++] = 0x7e;
+    }
+    CodeCtx ctx;
+    memset(&ctx, 0, sizeof ctx);
+    ctx.names[0] = lam->name;
+    ctx.idxs[0] = 0;
+    ctx.n = 1;
+    ctx.next = 1;
+    int en = emit_expr(body + bn, lam->a, result_i64, &ctx);
+    if (en < 0) {
+        snprintf(err, cap_err, "codegen: unsupported term in fn body");
+        return -1;
+    }
+    bn += (size_t)en;
+    body[bn++] = 0x0b;
+
+    unsigned char cs[1024];
+    size_t cn = 0;
+    cs[cn++] = 0x01;
+    cn += uleb(cs + cn, bn);
+    memcpy(cs + cn, body, bn);
+    cn += bn;
+
+    out[n++] = 0x0a;
+    n += uleb(out + n, cn);
+    if (n + cn > cap) {
+        snprintf(err, cap_err, "codegen buffer overflow");
+        return -1;
+    }
+    memcpy(out + n, cs, cn);
+    n += cn;
+    return (int)n;
+}

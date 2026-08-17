@@ -523,14 +523,22 @@ static void cmd_check(const char *path) {
     for (size_t i = 0; i < prog.len; i++) {
         const AstItem *it = &prog.items[i];
         if (it->kind == AST_ITEM_FN && it->text && it->text_len > 0) {
+            char fname[64];
+            if (it->name && it->name_len > 0) {
+                size_t fl = it->name_len < 63 ? it->name_len : 63;
+                memcpy(fname, it->name, fl);
+                fname[fl] = '\0';
+            } else {
+                fname[0] = '?';
+                fname[1] = '\0';
+            }
             char *txt = malloc(it->text_len + 1);
             memcpy(txt, it->text, it->text_len);
             txt[it->text_len] = '\0';
             Term *fn_term = NULL;
             Ty *fn_ty = NULL;
             if (bp_parse_fn_decl(txt, &reg, &fn_term, &fn_ty, err, sizeof err) != 0) {
-                fprintf(stderr, "fn parse error %s: %s\n",
-                        it->name ? it->name : "?", err);
+                fprintf(stderr, "fn parse error %s: %s\n", fname, err);
                 free(txt);
                 bp_program_free(&prog);
                 free(src);
@@ -539,13 +547,24 @@ static void cmd_check(const char *path) {
             free(txt);
             char ty[128];
             if (qtt_check_closed(fn_term, ty, sizeof ty, err, sizeof err) != 0) {
-                fprintf(stderr, "fn '%s' type error: %s\n",
-                        it->name ? it->name : "?", err);
+                fprintf(stderr, "fn '%s' type error: %s\n", fname, err);
                 bp_program_free(&prog);
                 free(src);
                 exit(1);
             }
-            printf("fn '%s' : %s  ok\n", it->name ? it->name : "?", ty);
+            unsigned char wasm[2048];
+            int wl = codegen_wasm_fn(fn_term, wasm, sizeof wasm, err, sizeof err);
+            if (wl > 0) {
+                char wpath[256];
+                snprintf(wpath, sizeof wpath, "/tmp/%s.wasm", fname);
+                FILE *wf = fopen(wpath, "wb");
+                if (wf) {
+                    fwrite(wasm, 1, (size_t)wl, wf);
+                    fclose(wf);
+                    printf("  compiled %s (%d bytes)\n", wpath, wl);
+                }
+            }
+            printf("fn '%s' : %s  ok\n", fname, ty);
             fns++;
         }
     }

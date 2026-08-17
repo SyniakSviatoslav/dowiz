@@ -13,6 +13,11 @@
 int codegen_wasm(const Term *t, unsigned char *out, size_t cap, char *err,
                  size_t cap_err);
 
+/* Compile a lambda (fn) to a WASM module: a `main` function with the lambda's
+ * parameter as a WASM param and the body as its result. */
+int codegen_wasm_fn(const Term *lam, unsigned char *out, size_t cap, char *err,
+                    size_t cap_err);
+
 int codegen_self_test(char *out, size_t cap);
 
 #endif /* BEBOP_CODEGEN_H */
