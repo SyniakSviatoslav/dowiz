@@ -5,7 +5,7 @@
 
 **Goal:** Build **Bebop** — a native, glyphic, **agentic** systems language fusing **C's** low-level control, **Rust's** ownership, **Lean 4's** dependent types, **SPARK/Ada's** contracts, first-class SIMD/NTT, an FPGA/ASIC synthesis path, and vector-glyph source (not emoji) — then rewrite **all of dowiz** in it, bit-identical to the Rust reference.
 
-**Architecture:** One **glyphic** surface (no words, ordinary lexicon, vector glyphs not emoji) → **QTT** kernel → **verification-first** (Lean 4 kernel: every statement proven; evaluated directly, no compile phase) → optional **native machine code** (direct aarch64+NEON / x86_64+AVX emission, no LLVM) + **Calyx/CIRCT** (silicon). Contracts → SMT. Built-in methods: NTT, hypervector, living-memory, hybrid quantum state. Atomic & branchless. **Agentic** (agents + humans, one surface).
+**Architecture:** One **glyphic** surface (no words, ordinary lexicon, vector glyphs not emoji) → **QTT** kernel → **verification** (Lean 4 kernel: every statement proven) + **mandatory compilation, all optimizations** (direct aarch64+NEON / x86_64+AVX-512 machine code, **WebAssembly** for browser, **GPU** compute, no LLVM) + **Calyx/CIRCT** (silicon). Contracts → SMT. Built-in methods: NTT, hypervector, living-memory, hybrid quantum state. Atomic & branchless. **Agentic** (agents + humans, one surface).
 
 **Stack:** QTT (Idris-2 model), direct native codegen, Calyx/CIRCT, Z3/CVC5, **C (bootstrap) → self-host in Bebop**, 12-way swarm.
 
@@ -105,10 +105,13 @@ Total ASCII fallback (agents tokenize without vision), contracts as machine-chec
 
 ---
 
-## 4. Backends (native, not Rust, not LLVM)
-1. **v1 — direct machine code** — the backend emits aarch64 (**NEON**) + x86_64 (**AVX**) instructions directly. Zero runtime, zero external dependencies, `no_std` freestanding. No LLVM.
-2. **v2 — Calyx/CIRCT** (FPGA/ASIC). `⚛ hardware` items → synthesizable Verilog (hypervector bundling, NTT butterfly, SHA-3 round).
-3. **Bootstrap in C, self-host in Bebop** — Stage 0 `bebopc` is a minimal native C core; Stage 1 rewrites it in Bebop.
+## 4. Backends (native, not Rust, not LLVM; mandatory compilation, all optimizations)
+1. **v1 — direct machine code** — aarch64 (**NEON**) + x86_64 (**AVX-512**), zero runtime, zero deps, `no_std`. Compilation is **mandatory**; all optimizations mandatory.
+2. **v2 — WebAssembly** — browser rendering with no extra compilers: Bebop → `.wasm` directly.
+3. **v3 — GPU compute** — Vulkan/Metal/WebGPU shaders (hypervector bundling, NTT convolution, mass search).
+4. **v4 — Calyx/CIRCT** (FPGA/ASIC). `⚛ hardware` items → synthesizable Verilog.
+5. **v5 — physical ceiling** — PIM/Compute-SRAM + photonic (speed-of-light NTT/FFT). Targets, not blockers.
+6. **Bootstrap in C, self-host in Bebop** — Stage 0 `bebopc` is a minimal native C core; Stage 1 rewrites it in Bebop.
 
 ---
 

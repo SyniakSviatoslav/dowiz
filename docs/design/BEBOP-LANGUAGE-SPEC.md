@@ -34,12 +34,14 @@ canonical form is the δ-outline, and the terminal fallback is the ASCII name.
 - **Rust** — ownership/borrowing, traits, no_std, zero-cost abstractions, const-eval, macros, unsafe scoping.
 - **Lean 4** — dependent types, inductive + quotient types, proof terms, termination, universe hierarchy, and **mathematical verification of every statement**: any definition or record in Bebop is a theorem checked by the kernel — nothing is taken on trust.
 
-**Bebop does not require compilation.** Its primary operation is **verification** — the
-kernel checks every statement, and a program is *evaluated directly* (no compile phase).
-Compilation to native machine code is an **optional optimization**, not a prerequisite:
-the bootstrap is a minimal native C core (self-hosts in Bebop); when compilation is
-wanted, the backend emits machine code directly (aarch64+NEON, x86_64+AVX), zero
-runtime, zero external dependencies (no LLVM).
+**Bebop has two mandatory paths — verification and compilation.**
+
+- **Verification is mandatory and direct**: the Lean 4 kernel checks every statement with
+  no compile phase — any definition or record is a theorem checked by the kernel.
+- **Compilation to machine code is mandatory** (not optional), with **all optimizations
+  mandatory**: the backend emits machine code directly (aarch64+NEON, x86_64+AVX-512),
+  zero runtime, zero external dependencies (no LLVM). The bootstrap is a minimal native
+  C core that self-hosts in Bebop.
 
 ---
 
@@ -202,11 +204,21 @@ cold-start, no daemon needed.
 
 ---
 
-## 9. Backends (native)
+## 9. Backends (native, mandatory compilation, all optimizations)
 
-1. **Direct machine code** — aarch64 (**NEON**) + x86_64 (**AVX**), zero runtime, zero deps, `no_std`.
-2. **Calyx/CIRCT** — `⚛ hardware` items → synthesizable Verilog (hypervector bundling, NTT butterfly, SHA-3 round).
-3. **Bootstrap in C, self-host in Bebop** — Stage 0 `bebopc` is a minimal native C core.
+1. **Direct machine code** — aarch64 (**NEON**) + x86_64 (**AVX-512**), zero runtime, zero
+   deps, `no_std`. Compilation is **mandatory**; every optimization (branchless `⤫`,
+   atomic `⚛`, SIMD vectorization, compile-time baking) is **mandatory**, not optional.
+2. **WebAssembly** — browser rendering with **no additional compilers**: a Bebop program
+   compiles straight to `.wasm` and runs in the browser VM. Same source, same proof.
+3. **GPU compute** — Vulkan / Metal / WebGPU compute shaders for hypervector bundling,
+   NTT convolutions, and mass semantic search (O(N) → hardware O(1) across parallel
+   lanes). Not CPU-only: the hot path lowers to GPU.
+4. **Calyx/CIRCT** — `⚛ hardware` items → synthesizable Verilog (hypervector bundling,
+   NTT butterfly, SHA-3 round). FPGA/ASIC spatial computing.
+5. **Physical ceiling (targets, not blockers)** — PIM/Compute-SRAM (compute inside memory)
+   and photonic/optical NTT/FFT (speed-of-light convolution).
+6. **Bootstrap in C, self-host in Bebop** — Stage 0 `bebopc` is a minimal native C core.
 
 ---
 
