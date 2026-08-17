@@ -5,9 +5,9 @@
 
 **Goal:** Build **Bebop** — a systems language fusing Rust's ownership, Lean 4's dependent types, SPARK/Ada's contracts, first-class SIMD/NTT, an FPGA/ASIC synthesis path, and pixel-vector-glyph source — then rewrite **all of dowiz** in it, bit-identical to the Rust reference.
 
-**Architecture:** One surface language → **QTT** (Quantitative Type Theory) kernel → **LLVM** (machine code) + **MLIR→Calyx/CIRCT** (silicon). Contracts → SMT (Z3/CVC5).
+**Architecture:** One **glyphic** surface (no words, cosmic lexicon) → **QTT** kernel → **native machine code** (direct aarch64+NEON / x86_64+AVX emission, no LLVM) + **Calyx/CIRCT** (silicon). Contracts → SMT. Built-in methods: NTT, hypervector, living-memory, hybrid quantum state. Atomic & branchless.
 
-**Stack:** QTT (Idris-2 model), LLVM, MLIR + Calyx/CIRCT, Z3/CVC5, Rust (bootstrap host), 12-way swarm.
+**Stack:** QTT (Idris-2 model), direct native codegen, Calyx/CIRCT, Z3/CVC5, **C (bootstrap) → self-host in Bebop**, 12-way swarm.
 
 ---
 
@@ -85,15 +85,27 @@ fn ntt(x: &[Fp<P>; n]) -> &[Fp<P>; n]
 ### 3.6 Compile-time baking (Zig comptime parity)
 `comptime` + pervasive `const fn`. Living-memory index, NTT twiddle factors, code-graph baked into `.rodata` — runtime = pointer deref. Subsumes the daemon (zero cold-start, no daemon needed).
 
-### 3.7 Pixel-vector-glyph surface
-Every keyword/operator/type has a δ-encoded vector glyph on a pixel grid, built on `pixel_snapshot.rs`. Bounded, independently-shippable. The language's identity.
+### 3.7 Glyphic surface (no words)
+The surface is **glyphs only** — no keywords, no words. Every symbol is a vector glyph (δ-outline); ASCII is a terminal fallback, never the source. **Cosmic lexicon**: star `★`=fn, diamond `◇`=struct, constellation `△`=data, halo `⊙`=contract. Full alphabet + calculus in spec v0.2 §2.
+
+### 3.8 Concurrency & deep parallelism (first-class)
+`∥` parallel composition, `⋉`/`⋊` fork/join, PID-dynamic spawner (dowiz `dynamic_spawner`) as built-in scheduler. Vector/hypervector ops implicitly parallel + `⚛ bit_identical`.
+
+### 3.9 Core methods (dowiz algorithms = Bebop methods)
+NTT `⟲⟳`, hypervector `⧉⊕⊗`, FFT/modular `ωₙℤₘ`, living-memory `⌾⤳⋈`, quantum `ψ`, arena (linear regions), money `◉no_float`, event-sourced `△fold`. All **O(n) zero-overhead**.
+
+### 3.10 Atomic & branchless
+`⚛` atomic primitives (CAS/LDADD), `⤫` branchless predication (CSEL/CMOV) for the hot path. no_std native + **NEON** reference target.
+
+### 3.11 Self-prediction (hybrid quantum state + relational memory)
+`ψ` hybrid state ⊗ living-memory `⌾⤳⋈` relations let a program predict + prefetch its own next hot path — deterministic, RNG-free (C10).
 
 ---
 
-## 4. Backends
-1. **v1 — LLVM** (aarch64 + x86_64, machine code, `no_std`/freestanding).
-2. **v2 — MLIR "Bebop dialect"** → LLVM IR (CPU) + **Calyx/CIRCT** (FPGA/ASIC). `#[hardware]` functions → synthesizable Verilog (hypervector bundling, NTT butterfly, SHA-3 round).
-3. **Zero-dep / zero-runtime** — mirror of dowiz-core `#![no_std]`.
+## 4. Backends (native, not Rust, not LLVM)
+1. **v1 — direct machine code** — the backend emits aarch64 (**NEON**) + x86_64 (**AVX**) instructions directly. Zero runtime, zero external dependencies, `no_std` freestanding. No LLVM.
+2. **v2 — Calyx/CIRCT** (FPGA/ASIC). `⚛ hardware` items → synthesizable Verilog (hypervector bundling, NTT butterfly, SHA-3 round).
+3. **Bootstrap in C, self-host in Bebop** — Stage 0 `bebopc` is a minimal native C core; Stage 1 rewrites it in Bebop.
 
 ---
 
@@ -106,7 +118,9 @@ Every keyword/operator/type has a δ-encoded vector glyph on a pixel grid, built
 | `hypervector` | `Hypervector` + `#[bit_identical]` |
 | `ntt`/`fft`/`modular` | `Field<P>` + verified NTT round-trip |
 | `pq` (x25519/aes_gcm/ML-DSA) | KAT-gated, `#[hardware]` targets |
-| `living_memory`/`code_graph` | compile-time-baked index |
+| `living_memory`/`code_graph` | compile-time-baked index + relational memory (`⌾⤳⋈`) |
+| `quantum` (hybrid state) | `ψ` self-prediction + relational memory |
+| `dynamic_spawner`/`parallel_patterns` | `∥`/`⋉`/`⋊` deep parallelism |
 | `arena`/`slot_arena` | linear-region allocation (quantity-1) |
 | `simd` | portable vectors + bit-identity contract |
 
@@ -116,11 +130,11 @@ Every keyword/operator/type has a δ-encoded vector glyph on a pixel grid, built
 
 **Phase 0 — Spec (2–3 days).** `BEBOP-LANGUAGE-SPEC.md`: EBNF grammar, QTT typing rules, contract semantics, effect system, glyph map. Verify on paper: a hand-written NTT example type-checks.
 
-**Phase 1 — Front-end + glyph font (3–5 days).** `bebop-lang/`: lexer, recursive-descent parser → AST, vector-glyph font (δ-encoded outlines) + renderer on `pixel_snapshot.rs`, `bebopc fmt`. Verify: fmt round-trips; full alphabet renders.
+**Phase 1 — Glyphic front-end + font (3–5 days).** Native `bebopc` (C bootstrap): glyphic lexer, recursive-descent parser → AST, 300-glyph cosmic alphabet (δ-outlines) + braille/vector renderer, `bebopc fmt` on `.bp`. Verify: fmt round-trips; full alphabet renders. (The Rust `bebop-lang/` scaffold is reference-only, superseded by the native C bootstrap.)
 
 **Phase 2 — QTT kernel (1–2 weeks, critical path).** Elaborator, quantitative resource analysis, dependent elaboration, termination checker, quotient types. Verify: NTT example from Phase 0 type-checks for real.
 
-**Phase 3 — LLVM codegen + contracts (1–2 weeks, critical path).** QTT→LLVM lowering (monomorphisation, quantity-0 erasure), `no_std`, contract extraction → SMT-LIB → Z3/CVC5, `#[bit_identical]`. **Milestone:** `bebopc build ntt.bp` → binary bit-identical to Rust NTT, `ensures` discharges in Z3.
+**Phase 3 — Native codegen + contracts (1–2 weeks, critical path).** QTT → **direct aarch64(NEON)/x86_64(AVX) machine code** (monomorphisation, quantity-0 erasure, branchless `⤫` + atomic `⚛` lowering, register allocator), `no_std`, contract extraction → SMT-LIB → Z3/CVC5, `⚛ bit_identical`. **Milestone:** `bebopc build ntt.bp` → binary bit-identical to Rust NTT, `ensures` discharges in Z3.
 
 **Phase 4 — SIMD + stdlib core (3–5 days).** `Vector`, `Hypervector`, `Field<P>`; port `hypervector.rs` + `ntt.rs` + `modular.rs` + `money.rs`. Verify: differential vs Rust, 10k random inputs, bit-for-bit.
 
@@ -139,7 +153,7 @@ Every keyword/operator/type has a δ-encoded vector glyph on a pixel grid, built
 ## 7. Files to create
 
 - `docs/design/BEBOP-LANGUAGE-SPEC.md`
-- `bebop-lang/` — compiler (lexer/parser/elab/core/codegen/contracts/simd/glyphs/hls)
+- `bebop-lang/` — native compiler (C bootstrap → self-hosted Bebop): glyphic lexer/parser/elab/core/native-codegen/contracts/glyphs/hls
 - `bebop-lang/glyphs/` — vector-glyph font + renderer
 - `crates/bebop-std/` — stdlib (hypervector, ntt, money, …) mirrored from dowiz-core
 - `crates/dowiz-core/src/*.bp` — ported modules (alongside Rust `.rs` during transition)
@@ -171,7 +185,7 @@ Every keyword/operator/type has a δ-encoded vector glyph on a pixel grid, built
 2. **SMT coverage** — not every contract auto-proves; the "verifiable subset" is a deliberate inner language.
 3. **Trait system** — Rust coherence vs Lean typeclasses vs both; decided in Phase 0 spec.
 4. **FPGA synthesis** — HLS backend writable + simulable without hardware; real silicon gated on equipment only.
-5. **Bootstrap** — first `bebopc` is in Rust (host); self-hosting is a later milestone, not a blocker.
+5. **Bootstrap** — first `bebopc` is in C (native); self-hosting in Bebop is Stage 1, a milestone not a blocker.
 
 ---
 
