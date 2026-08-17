@@ -37,6 +37,7 @@
 #include "theorem.h"
 #include "pac.h"
 #include "effect.h"
+#include "jittable.h"
 #include "smt.h"
 #include "gt.h"
 
@@ -841,6 +842,13 @@ int main(int argc, char **argv) {
         int ok = effect_self_test(buf, sizeof buf);
         fputs(buf, stdout);
         printf("Effect (pure/io) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "jittable") == 0) {
+        char buf[1024];
+        int ok = jittable_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("JIT table (atomic swap) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "atomicjit") == 0) {
