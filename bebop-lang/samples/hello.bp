@@ -1,0 +1,4 @@
+// hello.bp — minimal Bebop sample (glyphic surface + ASCII fallback)
+◇ △ ⊙ ◉ → ◈
+struct data contract val mod fn
+42 1337
