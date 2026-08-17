@@ -21,6 +21,8 @@
 #include "arena.h"
 #include "event.h"
 #include "modular.h"
+#include "sort.h"
+#include "token_bucket.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -383,6 +385,22 @@ static void cmd_modular(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_sort(void) {
+    char buf[4096];
+    int ok = sort_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("Sort self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
+static void cmd_token_bucket(void) {
+    char buf[4096];
+    int ok = token_bucket_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("TokenBucket self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -502,6 +520,14 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "modular") == 0) {
         cmd_modular();
+        return 0;
+    }
+    if (strcmp(argv[1], "sort") == 0) {
+        cmd_sort();
+        return 0;
+    }
+    if (strcmp(argv[1], "token") == 0) {
+        cmd_token_bucket();
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {
