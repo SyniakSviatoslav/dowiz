@@ -1,0 +1,14 @@
+[package]
+name = "bebop-rust-bench"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+dowiz-core = { path = "../../crates/dowiz-core" }
+
+[profile.release]
+opt-level = 3
+debug = false
+lto = "fat"
+codegen-units = 1

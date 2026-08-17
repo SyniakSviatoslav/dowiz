@@ -32,6 +32,7 @@
 #include "markov.h"
 #include "typereg.h"
 #include "atomic.h"
+#include "bench_all.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -591,6 +592,7 @@ static void cmd_bench(void) {
     char buf[1024];
     hv_benchmark(buf, sizeof buf);
     fputs(buf, stdout);
+    bench_all_run();
 }
 
 int main(int argc, char **argv) {
