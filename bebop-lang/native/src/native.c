@@ -11,25 +11,45 @@
 static unsigned int em_code[512];
 static size_t em_len;
 
-/* ─── Local-variable frame (foundation of the register allocator) ───
- * `let`-bound locals live in a fixed stack frame above `sp` (positive
- * offsets); the evaluation stack grows below `sp` (push/pop). Slots are
- * 8-byte, up to 64 locals. Later slices promote hot locals to x-registers. */
+/* ─── Local-variable frame + register allocation (7B) ───
+ * `let`-bound locals are register-resident in x19..x28 (10 callee-saved
+ * registers) while any are free; the 11th+ local spills to a frame slot.
+ * x15 = frame base (sp + SAVED_REGS), the evaluation stack grows below sp. */
 #define FRAME_BYTES 512
+#define SAVED_REGS 80 /* 5 stp pairs: x19..x28 */
+#define N_LOCAL_REGS 10
 static struct {
     const char *name;
-    int slot;
+    int reg;  /* 19..28 if register-resident, else -1 */
+    int slot; /* frame offset from x15 if spilled, else -1 */
 } vars[64];
 static int nvars = 0;
+static int nregs = 0;  /* registers allocated so far (0..N_LOCAL_REGS) */
+static int nspill = 0; /* spilled locals so far */
 
-static int var_slot(const char *name) {
-    /* backward search: most-recent binding wins (shadowing-correct) */
+/* Look up a let-bound local (most-recent binding wins). On success exactly one
+ * of *reg / *slot is >= 0; both < 0 on a miss. */
+static void var_lookup(const char *name, int *reg, int *slot) {
     for (int i = nvars - 1; i >= 0; i--) {
         if (strcmp(vars[i].name, name) == 0) {
-            return vars[i].slot;
+            *reg = vars[i].reg;
+            *slot = vars[i].slot;
+            return;
         }
     }
-    return -1;
+    *reg = -1;
+    *slot = -1;
+}
+
+/* stp/ldp xRt,xRt2,[sp,#imm] — imm a multiple of 8. */
+static void em(unsigned int ins);
+static void emit_stp_sp(int rt, int rt2, int imm) {
+    em(0xA9000000u | ((unsigned)(imm >> 3) << 15) | ((unsigned)rt2 << 10) |
+       (31u << 5) | (unsigned)rt);
+}
+static void emit_ldp_sp(int rt, int rt2, int imm) {
+    em(0xA9400000u | ((unsigned)(imm >> 3) << 15) | ((unsigned)rt2 << 10) |
+       (31u << 5) | (unsigned)rt);
 }
 
 static void em(unsigned int ins) {
@@ -93,18 +113,23 @@ static int emit_expr(const Term *t) {
             emit_push();
             return 0;
         case TERM_VAR: {
-            /* load a let-bound local from its frame slot (x15 = frame base) */
-            int slot = var_slot(t->name);
-            if (slot < 0) {
+            /* load a let-bound local: register-resident (mov x0, xr) or spilled
+             * (ldr x0, [x15, #slot]); push as the result */
+            int reg, slot;
+            var_lookup(t->name, &reg, &slot);
+            if (reg >= 0) {
+                em(0xAA0003E0u | ((unsigned)reg << 16)); /* mov x0, x<reg> */
+            } else if (slot >= 0) {
+                em(0xF9400000u | ((unsigned)(slot >> 3) << 10) | (15u << 5) | 0u); /* ldr x0,[x15,#slot] */
+            } else {
                 return -1; /* unbound variable: not a closed i64 term */
             }
-            em(0xF9400000u | ((unsigned)(slot >> 3) << 10) | (15u << 5) | 0u); /* ldr x0,[x15,#slot] */
             emit_push();
             return 0;
         }
         case TERM_LET: {
-            /* bind t->name := value, then evaluate the body. Value is popped
-             * into x0 and stored to a fresh frame slot (x15 = frame base). */
+            /* bind t->name := value (in x0). Register-allocate while x19..x28
+             * are free; the 11th+ local spills to the frame. Then eval body. */
             if (emit_expr(t->a) != 0) {
                 return -1;
             }
@@ -112,11 +137,21 @@ static int emit_expr(const Term *t) {
             if (nvars >= 64) {
                 return -1;
             }
-            int slot = nvars * 8;
+            if (nregs < N_LOCAL_REGS) {
+                int reg = 19 + nregs;
+                nregs++;
+                vars[nvars].reg = reg;
+                vars[nvars].slot = -1;
+                em(0xAA0003E0u | (unsigned)reg); /* mov x<reg>, x0 */
+            } else {
+                int slot = nspill * 8;
+                nspill++;
+                vars[nvars].reg = -1;
+                vars[nvars].slot = slot;
+                em(0xF9000000u | ((unsigned)(slot >> 3) << 10) | (15u << 5) | 0u); /* str x0,[x15,#slot] */
+            }
             vars[nvars].name = t->name;
-            vars[nvars].slot = slot;
             nvars++;
-            em(0xF9000000u | ((unsigned)(slot >> 3) << 10) | (15u << 5) | 0u); /* str x0,[x15,#slot] */
             if (emit_expr(t->b) != 0) {
                 return -1;
             }
@@ -158,13 +193,25 @@ static int emit_expr(const Term *t) {
 long native_eval(const Term *t, char *err, size_t cap) {
     em_len = 0;
     nvars = 0;
-    em(0xD10803FFu); /* sub sp, sp, #512 — allocate the local-variable frame */
-    em(0x910003EFu); /* add x15, sp, #0 — frame base (caller-saved scratch) */
+    nregs = 0;
+    nspill = 0;
+    em(0xD10803FFu); /* sub sp, sp, #512 — allocate the frame */
+    emit_stp_sp(19, 20, 0); /* save x19..x28 (callee-saved locals) */
+    emit_stp_sp(21, 22, 16);
+    emit_stp_sp(23, 24, 32);
+    emit_stp_sp(25, 26, 48);
+    emit_stp_sp(27, 28, 64);
+    em(0x910143EFu); /* add x15, sp, #80 — frame base for spilled locals */
     if (emit_expr(t) != 0) {
         snprintf(err, cap, "native: unsupported term");
         return 0;
     }
     emit_pop(0);
+    emit_ldp_sp(19, 20, 0); /* restore x19..x28 */
+    emit_ldp_sp(21, 22, 16);
+    emit_ldp_sp(23, 24, 32);
+    emit_ldp_sp(25, 26, 48);
+    emit_ldp_sp(27, 28, 64);
     em(0x910803FFu); /* add sp, sp, #512 — free the frame */
     em(0xD65F03C0u); /* ret */
 
@@ -252,6 +299,24 @@ int native_self_test(char *out, size_t cap) {
         char label[64];
         snprintf(label, sizeof label, "native '%s' == %ld", lets[i], lwants[i]);
         N(got == lwants[i], label);
+    }
+    /* register-pressure spill: 12 nested lets (11th+ spill to the frame).
+     * sum 1..12 == 78. */
+    {
+        char spill[512];
+        size_t sp_ = 0;
+        for (int v = 1; v <= 12; v++) {
+            sp_ += (size_t)snprintf(spill + sp_, sizeof spill - sp_, "let v%d = %d in ", v, v);
+        }
+        sp_ += (size_t)snprintf(spill + sp_, sizeof spill - sp_, "v1+v2+v3+v4+v5+v6+v7+v8+v9+v10+v11+v12");
+        expr_pool_reset();
+        Term *t = NULL;
+        if (expr_parse(spill, &t, err, sizeof err) != 0) {
+            N(0, "spill parse");
+        } else {
+            long got = native_eval(t, err, sizeof err);
+            N(got == 78, "native 12-let spill sum == 78");
+        }
     }
     return all_ok ? 0 : -1;
 }
