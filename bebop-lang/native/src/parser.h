@@ -18,7 +18,6 @@ typedef struct {
     AstItemKind kind;
     const char *name; /* into the source buffer */
     size_t name_len;
-    int name_morse;   /* 1 if the name is a Morse identifier */
     const char *text; /* full source span of the item */
     size_t text_len;
 } AstItem;

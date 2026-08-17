@@ -8,7 +8,6 @@ typedef enum {
     BP_TOK_EOF,
     BP_TOK_IDENT, /* ASCII fallback identifier (fn, struct, …) */
     BP_TOK_GLYPH, /* glyph (non-ASCII UTF-8 sequence) */
-    BP_TOK_MORSE, /* Morse identifier ⟦...⟧ */
     BP_TOK_NUMBER,
     BP_TOK_PUNCT, /* ASCII operator / delimiter */
 } BpTokKind;

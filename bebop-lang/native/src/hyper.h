@@ -27,6 +27,12 @@ int hv_to_hex(const Hypervector *v, char *out, size_t cap);
 int hv_from_hex(const char *s, Hypervector *out);
 double hv_shift_invariant_similarity(const Hypervector *a, const Hypervector *b);
 
+/* djb2 string hash (seed for hv_code). */
+uint64_t hv_hash(const char *s);
+
+/* VSA text encoding: bundle of trigram codes (fuzzy/semantic identity). */
+Hypervector hv_encode_text(const char *text);
+
 int hyper_self_test(char *out, size_t cap);
 
 #endif /* BEBOP_HYPER_H */

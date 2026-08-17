@@ -4,31 +4,6 @@
 #include <stdio.h>
 #include <string.h>
 
-static uint64_t djb2(const char *s) {
-    uint64_t h = 5381;
-    while (*s) {
-        h = ((h << 5) + h) + (unsigned char)*s++;
-    }
-    return h;
-}
-
-/* Encode text as a bundle of its character trigrams (VSA n-gram code). */
-static Hypervector hv_encode_text(const char *text) {
-    size_t len = strlen(text);
-    Hypervector trigrams[256];
-    size_t n = 0;
-    for (size_t i = 0; i + 3 <= len && n < 256; i++) {
-        char tri[4];
-        memcpy(tri, text + i, 3);
-        tri[3] = '\0';
-        trigrams[n++] = hv_code(djb2(tri));
-    }
-    if (n == 0) {
-        return hv_code(djb2(text));
-    }
-    return hv_bundle(trigrams, n);
-}
-
 void mem_init(Memory *m) {
     memset(m, 0, sizeof *m);
 }

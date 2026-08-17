@@ -103,11 +103,11 @@ NTT `⟲⟳`, hypervector `⧉⊕⊗`, FFT/modular `ωₙℤₘ`, living-memory 
 ### 3.12 Agentic (agents + humans, one surface)
 Total ASCII fallback (agents tokenize without vision), contracts as machine-checkable specs, living-memory `⌾⤳⋈⇝` semantic navigation, deterministic no_std semantics. Built for AI agents as first-class users.
 
-### 3.13 Morse identifiers (density)
-Names are written in Morse (ITU codebook), translatable back to ASCII — ~2–3× shorter than ASCII, symbolically compact. `.`/`-` dot/dash, space = letter sep, `/` = word sep.
+### 3.13 VSA identifiers (hypervector embeddings)
+Names are hypervector embeddings (trigram bundling); similar names → similar vectors (fuzzy identity), codebook decode. Native primitives: bind/bundle/permute.
 
 ### 3.14 Architectural profile (operator decisions)
-Memory: pure affine/linear (QTT quantity-1). Runtime: no_std first, no runtime. Proof: mandatory for critical fns (search/indexing/convolution). Syntax: Lean 4 Unicode (`∀` `∃` `∈` `→`) + glyphs + Morse. Meta: Lean tactics/macros (comptime). Effects: **algebraic effects**. Concurrency: lock-free arenas + atomics (Send/Sync proven). Errors: dependent types → unrepresentable states. Builtins: hypervector bitsets + NTT polynomial rings. Ecosystem: Mathlib. Codegen: own SIMD/WASM/GPU(Vulkan) backends. Verify: **strict** (no compile until proofs converge).
+Memory: pure affine/linear (QTT quantity-1). Runtime: no_std first, no runtime. Proof: mandatory for critical fns (search/indexing/convolution). Syntax: Lean 4 Unicode (`∀` `∃` `∈` `→`) + glyphs + VSA identifiers. Meta: Lean tactics/macros (comptime). Effects: **algebraic effects**. Concurrency: lock-free arenas + atomics (Send/Sync proven). Errors: dependent types → unrepresentable states. Builtins: hypervector bitsets + NTT polynomial rings. Ecosystem: Mathlib. Codegen: own SIMD/WASM/GPU(Vulkan) backends. Verify: **strict** (no compile until proofs converge).
 
 ### 3.15 Agentic primitives (5 foundational concepts)
 1. Transactional snapshots (CoW arena, nanosecond rollback). 2. Fuzzy hypervector types (type = hypervector invariant, NTT-checked). 3. Self-Healing SMT (JIT-check of agent code → math counterexample). 4. Living Memory primitive (`memory`, mmap + NTT index + timestamps). 5. Zero-copy token streams (token-scene I/O, spectral filtering on the fly). 6. Automatic tactics + SMT solvers (routine proofs — bounds/overflow/invariants — auto-discharged by the solver).

@@ -13,6 +13,7 @@
 #include "mem.h"
 #include "expr.h"
 #include "verify.h"
+#include "vsa.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -46,8 +47,6 @@ static const char *kind_name(BpTokKind k) {
             return "ident";
         case BP_TOK_GLYPH:
             return "glyph";
-        case BP_TOK_MORSE:
-            return "morse";
         case BP_TOK_NUMBER:
             return "number";
         case BP_TOK_PUNCT:
@@ -119,19 +118,9 @@ static void cmd_parse(const char *path) {
     printf("parsed %zu items:\n", prog.len);
     for (size_t i = 0; i < prog.len; i++) {
         const AstItem *it = &prog.items[i];
-        if (it->name_morse && it->name) {
-            char raw[256];
-            size_t l = it->name_len < sizeof raw - 1 ? it->name_len : sizeof raw - 1;
-            memcpy(raw, it->name, l);
-            raw[l] = '\0';
-            char decoded[256];
-            if (bp_morse_decode(raw, decoded, sizeof decoded) == 0) {
-                printf("  %-6s '%s' (Morse)\n", ast_item_kind_name(it->kind), decoded);
-                continue;
-            }
-        }
         const char *name = it->name ? it->name : "";
-        printf("  %-6s '%.*s'\n", ast_item_kind_name(it->kind), (int)it->name_len, name);
+        printf("  %-6s '%.*s'\n", ast_item_kind_name(it->kind), (int)it->name_len,
+               name);
     }
     bp_program_free(&prog);
     free(src);
@@ -270,6 +259,14 @@ static void cmd_verify(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_vsa(void) {
+    char buf[4096];
+    int ok = vsa_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("VSA self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -341,6 +338,10 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "verify") == 0) {
         cmd_verify();
+        return 0;
+    }
+    if (strcmp(argv[1], "vsa") == 0) {
+        cmd_vsa();
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {

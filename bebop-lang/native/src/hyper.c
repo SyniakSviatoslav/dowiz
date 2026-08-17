@@ -29,6 +29,30 @@ Hypervector hv_code(uint64_t seed) {
     return v;
 }
 
+uint64_t hv_hash(const char *s) {
+    uint64_t h = 5381;
+    while (*s) {
+        h = ((h << 5) + h) + (unsigned char)*s++;
+    }
+    return h;
+}
+
+Hypervector hv_encode_text(const char *text) {
+    size_t len = strlen(text);
+    Hypervector trigrams[256];
+    size_t n = 0;
+    for (size_t i = 0; i + 3 <= len && n < 256; i++) {
+        char tri[4];
+        memcpy(tri, text + i, 3);
+        tri[3] = '\0';
+        trigrams[n++] = hv_code(hv_hash(tri));
+    }
+    if (n == 0) {
+        return hv_code(hv_hash(text));
+    }
+    return hv_bundle(trigrams, n);
+}
+
 Hypervector hv_bind(const Hypervector *a, const Hypervector *b) {
     Hypervector v;
     for (int i = 0; i < BEBOP_HV_WORDS; i++) {
