@@ -1,0 +1,15 @@
+// selfhost/count-l.bp — Bebop self-hosting demo: count 'l' letters in "hello"
+// Usage: bebopc jit "let src=[104,101,108,108,111] in let n=5 in let i=0 in let c=0 in while i<n { let ch=src[i] in if ch==108 then c+1 else c; i+1 } c"
+
+// The JIT expression version:
+let src = [104, 101, 108, 108, 111] in  // "hello" as ASCII
+let n = 5 in
+let i = 0 in
+let c = 0 in
+while (i < n) {
+  let ch = src[i] in
+  let c = if (ch == 108) then c + 1 else c in
+  let i = i + 1 in
+  0
+}
+c
