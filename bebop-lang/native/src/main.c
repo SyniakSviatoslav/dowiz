@@ -15,6 +15,7 @@
 #include "verify.h"
 #include "vsa.h"
 #include "codegen.h"
+#include "native.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -307,6 +308,36 @@ static void cmd_codegen_test(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_jit(const char *text) {
+    Term *t = NULL;
+    char err[256];
+    expr_pool_reset();
+    if (expr_parse(text, &t, err, sizeof err) != 0) {
+        fprintf(stderr, "parse error: %s\n", err);
+        exit(1);
+    }
+    char ty[128];
+    if (qtt_check_closed(t, ty, sizeof ty, err, sizeof err) != 0) {
+        fprintf(stderr, "type error: %s\n", err);
+        exit(1);
+    }
+    err[0] = '\0';
+    long result = native_eval(t, err, sizeof err);
+    if (err[0]) {
+        fprintf(stderr, "native error: %s\n", err);
+        exit(1);
+    }
+    printf("%s = %ld\n", ty, result);
+}
+
+static void cmd_native_test(void) {
+    char buf[4096];
+    int ok = native_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("Native self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -394,6 +425,18 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "codegen") == 0) {
         cmd_codegen_test();
+        return 0;
+    }
+    if (strcmp(argv[1], "jit") == 0) {
+        if (argc < 3) {
+            usage();
+            return 2;
+        }
+        cmd_jit(argv[2]);
+        return 0;
+    }
+    if (strcmp(argv[1], "native") == 0) {
+        cmd_native_test();
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {
