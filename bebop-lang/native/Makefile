@@ -82,6 +82,10 @@ test: $(BIN)
 	$(BIN) check ../samples/hello.bp
 	@echo "--- atomic (lock-free) ---"
 	$(BIN) atomic
+	@echo "--- proof kernel (conversion) ---"
+	$(BIN) conv
+	@echo "--- proof kernel (equality / refl) ---"
+	$(BIN) proof
 
 clean:
 	rm -rf $(BUILD)

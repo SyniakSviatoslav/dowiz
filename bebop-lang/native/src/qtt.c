@@ -116,6 +116,11 @@ int qtt_ty_print(const Ty *t, char *out, size_t cap) {
             return snprintf(out, cap, "(%s :^%s %s -> %s)", t->x ? t->x : "_",
                             qtt_q_name(t->q), d, c);
         }
+        case TY_EQ: {
+            char a[128];
+            qtt_ty_print(t->eq_a, a, sizeof a);
+            return snprintf(out, cap, "= %s", a);
+        }
     }
     return snprintf(out, cap, "?");
 }
@@ -604,12 +609,40 @@ static int ty_eq(const Ty *a, const Ty *b) {
             }
             return 1;
         }
+        case TY_EQ:
+            /* Propositional equality: A l₁ = A l₂ are definitionally equal
+             * iff the ambient types match and both sides are β-convertible. */
+            return ty_eq(a->eq_a, b->eq_a) &&
+                   qtt_conv(a->eq_l, b->eq_l) &&
+                   qtt_conv(a->eq_r, b->eq_r);
     }
     return 0;
 }
 
 static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap);
 static int check(Ctx *c, const Term *t, const Ty *want, char *err, size_t cap);
+
+/* Transport: rewrite `from` → `to` in the term sides of a type. Only TY_EQ
+ * embeds terms, so this is the complete term-rewrite over types. Returns the
+ * (possibly unchanged) type, or NULL on pool exhaustion. */
+static Ty *rewrite_eq_ty(Ty *h, Term *from, Term *to) {
+    if (!h || h->kind != TY_EQ) {
+        return h; /* non-equality motive: transport is the identity */
+    }
+    Term *l = qtt_conv(h->eq_l, from) ? to : h->eq_l;
+    Term *r = qtt_conv(h->eq_r, from) ? to : h->eq_r;
+    if (l == h->eq_l && r == h->eq_r) {
+        return h;
+    }
+    Ty *out = ty_alloc(TY_EQ);
+    if (!out) {
+        return NULL;
+    }
+    out->eq_a = h->eq_a;
+    out->eq_l = l;
+    out->eq_r = r;
+    return out;
+}
 
 static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
     switch (t->kind) {
@@ -695,6 +728,47 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
                     t->op == BOP_LE || t->op == BOP_GE || t->op == BOP_GT)
                        ? &BOOL_TY
                        : &I64_TY;
+            return 0;
+        }
+        case TERM_REFL: {
+            /* refl : a = a — the sole constructor of propositional equality.
+             * infers the ambient type of `a`, then forms `a = a`. */
+            Ty *a_ty = NULL;
+            if (infer(c, t->a, &a_ty, err, cap) != 0) {
+                return -1;
+            }
+            Ty *eq = ty_alloc(TY_EQ);
+            if (!eq) {
+                snprintf(err, cap, "type pool exhausted");
+                return -1;
+            }
+            eq->eq_a = a_ty;
+            eq->eq_l = t->a;
+            eq->eq_r = t->a;
+            *out = eq;
+            return 0;
+        }
+        case TERM_SUBST: {
+            /* subst : l = r -> H[l] -> H[r]  (the equality eliminator).
+             * t->a : proof of (l = r); t->b : inhabitant of H (which mentions
+             * l); the result is H with l rewritten to r. */
+            Ty *eq_ty = NULL;
+            if (infer(c, t->a, &eq_ty, err, cap) != 0) {
+                return -1;
+            }
+            if (eq_ty->kind != TY_EQ) {
+                snprintf(err, cap, "subst needs an equality proof");
+                return -1;
+            }
+            Ty *h_ty = NULL;
+            if (infer(c, t->b, &h_ty, err, cap) != 0) {
+                return -1;
+            }
+            *out = rewrite_eq_ty(h_ty, eq_ty->eq_l, eq_ty->eq_r);
+            if (!*out) {
+                snprintf(err, cap, "type pool exhausted");
+                return -1;
+            }
             return 0;
         }
         case TERM_ANN: {
@@ -1288,6 +1362,426 @@ int qtt_effect_test(char *out, size_t cap) {
     Term *nested = &pool[pi++]; memset(nested, 0, sizeof *nested);
     nested->kind = TERM_BIN; nested->op = BOP_ADD; nested->a = l1; nested->b = io;
     A(qtt_term_has_io(nested), "nested IO detected");
+
+    return all_ok ? 0 : -1;
+}
+
+/* ═══ Proof kernel: definitional equality (conversion) ═══
+ *
+ * The Lean-4-style kernel is SMALL on purpose: a bounded term pool, one
+ * capture-avoiding substitution, one β-normalizer, one conversion check.
+ * Every proof term the checker accepts is checked against exactly this core.
+ */
+#define KERNEL_POOL 4096
+static Term kpool[KERNEL_POOL];
+static int kpi = 0;
+
+void qtt_term_pool_reset(void) { kpi = 0; }
+
+static Term *knew(void) {
+    if (kpi >= KERNEL_POOL) return NULL;
+    Term *t = &kpool[kpi++];
+    memset(t, 0, sizeof *t);
+    return t;
+}
+
+/* Capture-avoiding substitution: [v/name]t. A binder shadowing `name` blocks
+ * the substitution (no capture). Returns a fresh kernel term or NULL. */
+Term *qtt_subst(const Term *t, const char *name, const Term *v) {
+    if (!t) return NULL;
+    Term *o = knew();
+    if (!o) return NULL;
+    *o = *t; /* shallow copy, children overwritten below */
+    switch (t->kind) {
+        case TERM_VAR:
+            if (t->name && name && strcmp(t->name, name) == 0) *o = *v;
+            return o;
+        case TERM_LIT:
+        case TERM_TYPE:
+        case TERM_IO:
+            return o;
+        case TERM_LAM:
+            if (t->name && name && strcmp(t->name, name) != 0) {
+                o->a = qtt_subst(t->a, name, v);
+            }
+            return o;
+        case TERM_APP:
+        case TERM_BIN:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            return o;
+        case TERM_ANN:
+            o->a = qtt_subst(t->a, name, v);
+            return o;
+        case TERM_IF:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            o->c = qtt_subst(t->c, name, v);
+            return o;
+        case TERM_LET:
+            o->a = qtt_subst(t->a, name, v);
+            if (t->name && name && strcmp(t->name, name) != 0) {
+                o->b = qtt_subst(t->b, name, v);
+            }
+            return o;
+        case TERM_FIELD:
+            o->a = qtt_subst(t->a, name, v);
+            return o;
+        case TERM_ENUM_CTOR:
+            o->a = qtt_subst(t->a, name, v);
+            return o;
+        case TERM_MATCH:
+            o->a = qtt_subst(t->a, name, v);
+            for (int i = 0; i < t->narms; i++) {
+                if (t->arms[i].var && name && strcmp(t->arms[i].var, name) != 0) {
+                    o->arms[i].body = qtt_subst(t->arms[i].body, name, v);
+                }
+            }
+            return o;
+        case TERM_STRUCT:
+            for (int i = 0; i < t->nfields; i++) {
+                o->fields[i].val = qtt_subst(t->fields[i].val, name, v);
+            }
+            return o;
+        case TERM_REFL:
+            o->a = qtt_subst(t->a, name, v);
+            return o;
+        case TERM_SUBST:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            o->c = qtt_subst(t->c, name, v);
+            return o;
+    }
+    return o;
+}
+
+/* β-normalizer: weak-head reduce applications, recurse into subterms. */
+static Term *norm_rec(const Term *t) {
+    if (!t) return NULL;
+    Term *o = knew();
+    if (!o) return NULL;
+    *o = *t;
+    switch (t->kind) {
+        case TERM_LIT:
+        case TERM_VAR:
+        case TERM_TYPE:
+        case TERM_IO:
+            return o;
+        case TERM_REFL:
+            o->a = norm_rec(t->a);
+            return o;
+        case TERM_SUBST:
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
+            o->c = norm_rec(t->c);
+            return o;
+        case TERM_APP: {
+            Term *f = norm_rec(t->a);
+            if (!f) return NULL;
+            if (f->kind == TERM_LAM) {
+                /* β: (λx.body) arg → body[arg/x], re-normalize */
+                Term *s = qtt_subst(f->a, f->name, t->b);
+                return norm_rec(s);
+            }
+            o->a = f;
+            o->b = norm_rec(t->b);
+            return o;
+        }
+        case TERM_LAM:
+            o->a = norm_rec(t->a);
+            return o;
+        case TERM_BIN: {
+            Term *la = norm_rec(t->a);
+            Term *lb = norm_rec(t->b);
+            /* δ-reduction: constant-fold closed arithmetic (the kernel's
+             * definitional reduction of primitive operators, as Lean does for
+             * closed numerals). Only when both sides are integer literals. */
+            if (la && lb && la->kind == TERM_LIT && lb->kind == TERM_LIT &&
+                !la->bval && !lb->bval) {
+                long l = la->ival, r = lb->ival;
+                /* Reset `o` to a scalar literal: constant-folding collapses a
+                 * BIN node into a LIT node (δ-reduction produces a value). */
+                o->kind = TERM_LIT;
+                o->op = 0;
+                o->a = o->b = o->c = NULL;
+                o->ival = 0;
+                o->bval = 0;
+                switch (t->op) {
+                    case BOP_ADD: o->ival = l + r; return o;
+                    case BOP_SUB: o->ival = l - r; return o;
+                    case BOP_MUL: o->ival = l * r; return o;
+                    case BOP_EQ:  o->bval = (l == r); return o;
+                    case BOP_NE:  o->bval = (l != r); return o;
+                    case BOP_LT:  o->bval = (l < r);  return o;
+                    case BOP_LE:  o->bval = (l <= r); return o;
+                    case BOP_GT:  o->bval = (l > r);  return o;
+                    case BOP_GE:  o->bval = (l >= r); return o;
+                }
+            }
+            o->a = la;
+            o->b = lb;
+            return o;
+        }
+        case TERM_ANN:
+            o->a = norm_rec(t->a);
+            return o;
+        case TERM_IF:
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
+            o->c = norm_rec(t->c);
+            return o;
+        case TERM_LET:
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
+            return o;
+        case TERM_FIELD:
+            o->a = norm_rec(t->a);
+            return o;
+        case TERM_ENUM_CTOR:
+            o->a = norm_rec(t->a);
+            return o;
+        case TERM_MATCH:
+            o->a = norm_rec(t->a);
+            for (int i = 0; i < t->narms; i++) {
+                o->arms[i].body = norm_rec(t->arms[i].body);
+            }
+            return o;
+        case TERM_STRUCT:
+            for (int i = 0; i < t->nfields; i++) {
+                o->fields[i].val = norm_rec(t->fields[i].val);
+            }
+            return o;
+    }
+    return o;
+}
+
+Term *qtt_norm(const Term *t) { return norm_rec(t); }
+
+/* Structural equality on normalized terms (α by identical binder names). */
+static int conv_rec(const Term *a, const Term *b) {
+    if (!a || !b) return a == b;
+    if (a->kind != b->kind) return 0;
+    switch (a->kind) {
+        case TERM_LIT:
+            return a->ival == b->ival && a->bval == b->bval;
+        case TERM_VAR:
+            return a->name && b->name && strcmp(a->name, b->name) == 0;
+        case TERM_TYPE:
+        case TERM_IO:
+            return 1;
+        case TERM_REFL:
+            return conv_rec(a->a, b->a);
+        case TERM_SUBST:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) &&
+                   conv_rec(a->c, b->c);
+        case TERM_LAM:
+            return a->name && b->name && strcmp(a->name, b->name) == 0 &&
+                   conv_rec(a->a, b->a);
+        case TERM_APP:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
+        case TERM_BIN:
+            return a->op == b->op && conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
+        case TERM_ANN:
+            return conv_rec(a->a, b->a);
+        case TERM_IF:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) &&
+                   conv_rec(a->c, b->c);
+        case TERM_LET:
+            return a->name && b->name && strcmp(a->name, b->name) == 0 &&
+                   conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
+        case TERM_FIELD:
+            return a->name && b->name && strcmp(a->name, b->name) == 0 &&
+                   conv_rec(a->a, b->a);
+        case TERM_ENUM_CTOR:
+            return a->name && b->name && strcmp(a->name, b->name) == 0 &&
+                   conv_rec(a->a, b->a);
+        case TERM_MATCH:
+            if (a->narms != b->narms || !conv_rec(a->a, b->a)) return 0;
+            for (int i = 0; i < a->narms; i++) {
+                if (!a->arms[i].ctor || !b->arms[i].ctor ||
+                    strcmp(a->arms[i].ctor, b->arms[i].ctor) != 0) return 0;
+                if (!conv_rec(a->arms[i].body, b->arms[i].body)) return 0;
+            }
+            return 1;
+        case TERM_STRUCT:
+            if (a->nfields != b->nfields) return 0;
+            for (int i = 0; i < a->nfields; i++) {
+                if (!conv_rec(a->fields[i].val, b->fields[i].val)) return 0;
+            }
+            return 1;
+    }
+    return 0;
+}
+
+int qtt_conv(const Term *a, const Term *b) {
+    qtt_term_pool_reset();
+    Term *na = qtt_norm(a);
+    Term *nb = qtt_norm(b);
+    return conv_rec(na, nb);
+}
+
+int qtt_conv_test(char *out, size_t cap) {
+    size_t pos = 0;
+    int all_ok = 1;
+#undef A
+#define A(cond, name)                                                          \
+    do {                                                                       \
+        int c_ = (int)(cond);                                                  \
+        int r_ = snprintf(out + pos, cap - pos, "[%s] %s\n",                  \
+                          c_ ? "ok" : "FAIL", name);                           \
+        if (r_ > 0) pos += (size_t)r_;                                         \
+        if (!c_) all_ok = 0;                                                   \
+    } while (0)
+
+    static Term pool[64];
+    static int pi = 0;
+
+    /* (λx. x) 5 ≡ 5 */
+    pi = 0;
+    Term *xv = &pool[pi++]; memset(xv, 0, sizeof *xv); xv->kind = TERM_VAR; xv->name = "x";
+    Term *id = &pool[pi++]; memset(id, 0, sizeof *id);
+    id->kind = TERM_LAM; id->name = "x"; id->q = Q_MANY; id->ty = &I64_TY; id->a = xv;
+    Term *five = &pool[pi++]; memset(five, 0, sizeof *five); five->kind = TERM_LIT; five->ival = 5;
+    Term *app = &pool[pi++]; memset(app, 0, sizeof *app);
+    app->kind = TERM_APP; app->a = id; app->b = five;
+    A(qtt_conv(app, five), "conv ((λx.x) 5) ≡ 5");
+
+    /* (λx. x + 1) 4 ≡ 5 */
+    pi = 0;
+    Term *x2 = &pool[pi++]; memset(x2, 0, sizeof *x2); x2->kind = TERM_VAR; x2->name = "x";
+    Term *one = &pool[pi++]; memset(one, 0, sizeof *one); one->kind = TERM_LIT; one->ival = 1;
+    Term *add = &pool[pi++]; memset(add, 0, sizeof *add);
+    add->kind = TERM_BIN; add->op = BOP_ADD; add->a = x2; add->b = one;
+    Term *lam = &pool[pi++]; memset(lam, 0, sizeof *lam);
+    lam->kind = TERM_LAM; lam->name = "x"; lam->q = Q_MANY; lam->ty = &I64_TY; lam->a = add;
+    Term *four = &pool[pi++]; memset(four, 0, sizeof *four); four->kind = TERM_LIT; four->ival = 4;
+    Term *app2 = &pool[pi++]; memset(app2, 0, sizeof *app2);
+    app2->kind = TERM_APP; app2->a = lam; app2->b = four;
+    Term *five2 = &pool[pi++]; memset(five2, 0, sizeof *five2); five2->kind = TERM_LIT; five2->ival = 5;
+    A(qtt_conv(app2, five2), "conv ((λx.x+1) 4) ≡ 5");
+
+    /* nested β: (λx.x) ((λy.y) 7) ≡ 7 */
+    pi = 0;
+    Term *y = &pool[pi++]; memset(y, 0, sizeof *y); y->kind = TERM_VAR; y->name = "y";
+    Term *idy = &pool[pi++]; memset(idy, 0, sizeof *idy);
+    idy->kind = TERM_LAM; idy->name = "y"; idy->q = Q_MANY; idy->ty = &I64_TY; idy->a = y;
+    Term *seven = &pool[pi++]; memset(seven, 0, sizeof *seven); seven->kind = TERM_LIT; seven->ival = 7;
+    Term *inner = &pool[pi++]; memset(inner, 0, sizeof *inner);
+    inner->kind = TERM_APP; inner->a = idy; inner->b = seven;
+    Term *xid = &pool[pi++]; memset(xid, 0, sizeof *xid); xid->kind = TERM_VAR; xid->name = "x";
+    Term *idx = &pool[pi++]; memset(idx, 0, sizeof *idx);
+    idx->kind = TERM_LAM; idx->name = "x"; idx->q = Q_MANY; idx->ty = &I64_TY; idx->a = xid;
+    Term *outer = &pool[pi++]; memset(outer, 0, sizeof *outer);
+    outer->kind = TERM_APP; outer->a = idx; outer->b = inner;
+    A(qtt_conv(outer, seven), "conv ((λx.x)((λy.y)7)) ≡ 7");
+
+    /* non-equal: 5 ≢ 6 (fresh literals, pool already reset) */
+    pi = 0;
+    Term *fv = &pool[pi++]; memset(fv, 0, sizeof *fv); fv->kind = TERM_LIT; fv->ival = 5;
+    Term *six = &pool[pi++]; memset(six, 0, sizeof *six); six->kind = TERM_LIT; six->ival = 6;
+    A(!qtt_conv(fv, six), "5 ≢ 6");
+
+    return all_ok ? 0 : -1;
+}
+
+/* ═══ Proof kernel: propositional equality (refl) ═══ */
+
+int qtt_prove(const Term *proof, const Ty *goal, char *out_ty, size_t cap_ty,
+              char *err, size_t cap_err) {
+    Ctx c;
+    memset(&c, 0, sizeof c);
+    /* NOTE: does NOT reset ty_len — the caller owns the goal type's storage
+     * (ty_alloc'd below); resetting here would let infer() clobber it. */
+    if (check(&c, proof, goal, err, cap_err) != 0) {
+        return -1;
+    }
+    qtt_ty_print(goal, out_ty, cap_ty);
+    return 0;
+}
+
+int qtt_proof_test(char *out, size_t cap) {
+    size_t pos = 0;
+    int all_ok = 1;
+    char err[256], ty[128];
+#undef A
+#define A(cond, name)                                                          \
+    do {                                                                       \
+        int c_ = (int)(cond);                                                  \
+        int r_ = snprintf(out + pos, cap - pos, "[%s] %s\n",                  \
+                          c_ ? "ok" : "FAIL", name);                           \
+        if (r_ > 0) pos += (size_t)r_;                                         \
+        if (!c_) all_ok = 0;                                                   \
+    } while (0)
+
+    static Term pool[64];
+    static int pi = 0;
+    ty_len = 0; /* fresh type pool for this proof batch */
+
+    /* 1. refl 5 : 5 = 5 */
+    pi = 0;
+    Term *five = &pool[pi++]; memset(five, 0, sizeof *five);
+    five->kind = TERM_LIT; five->ival = 5;
+    Term *refl5 = &pool[pi++]; memset(refl5, 0, sizeof *refl5);
+    refl5->kind = TERM_REFL; refl5->a = five;
+    Ty *goal55 = ty_alloc(TY_EQ);
+    goal55->eq_a = &I64_TY; goal55->eq_l = five; goal55->eq_r = five;
+    A(qtt_prove(refl5, goal55, ty, sizeof ty, err, sizeof err) == 0 &&
+          strcmp(ty, "= i64") == 0,
+      "prove refl 5 : 5 = 5");
+
+    /* 2. refl ((λx.x+1) 4) : ((λx.x+1) 4) = 5  (via β+δ conversion) */
+    pi = 0;
+    Term *x = &pool[pi++]; memset(x, 0, sizeof *x); x->kind = TERM_VAR; x->name = "x";
+    Term *one = &pool[pi++]; memset(one, 0, sizeof *one); one->kind = TERM_LIT; one->ival = 1;
+    Term *add = &pool[pi++]; memset(add, 0, sizeof *add);
+    add->kind = TERM_BIN; add->op = BOP_ADD; add->a = x; add->b = one;
+    Term *lam = &pool[pi++]; memset(lam, 0, sizeof *lam);
+    lam->kind = TERM_LAM; lam->name = "x"; lam->q = Q_MANY; lam->ty = &I64_TY; lam->a = add;
+    Term *four = &pool[pi++]; memset(four, 0, sizeof *four); four->kind = TERM_LIT; four->ival = 4;
+    Term *app = &pool[pi++]; memset(app, 0, sizeof *app);
+    app->kind = TERM_APP; app->a = lam; app->b = four;
+    Term *five2 = &pool[pi++]; memset(five2, 0, sizeof *five2); five2->kind = TERM_LIT; five2->ival = 5;
+    Term *reflApp = &pool[pi++]; memset(reflApp, 0, sizeof *reflApp);
+    reflApp->kind = TERM_REFL; reflApp->a = app;
+    Ty *goalApp = ty_alloc(TY_EQ);
+    goalApp->eq_a = &I64_TY; goalApp->eq_l = app; goalApp->eq_r = five2;
+    A(qtt_prove(reflApp, goalApp, ty, sizeof ty, err, sizeof err) == 0,
+      "prove refl ((λx.x+1) 4) : ((λx.x+1) 4) = 5");
+
+    /* 3. refl 5 : 5 = 6  must FAIL (no conversion can bridge 5 and 6) */
+    pi = 0;
+    Term *five3 = &pool[pi++]; memset(five3, 0, sizeof *five3); five3->kind = TERM_LIT; five3->ival = 5;
+    Term *six3 = &pool[pi++]; memset(six3, 0, sizeof *six3); six3->kind = TERM_LIT; six3->ival = 6;
+    Term *reflBad = &pool[pi++]; memset(reflBad, 0, sizeof *reflBad);
+    reflBad->kind = TERM_REFL; reflBad->a = five3;
+    Ty *goalBad = ty_alloc(TY_EQ);
+    goalBad->eq_a = &I64_TY; goalBad->eq_l = five3; goalBad->eq_r = six3;
+    A(qtt_prove(reflBad, goalBad, ty, sizeof ty, err, sizeof err) != 0,
+      "reject refl 5 : 5 = 6");
+
+    /* 4. subst (transport) with hypothesis H : (1+1) = 2.
+     *   subst H H : 2 = 2  (rewrites (1+1) → 2 in H's type) */
+    pi = 0;
+    Term *oneL = &pool[pi++]; memset(oneL, 0, sizeof *oneL); oneL->kind = TERM_LIT; oneL->ival = 1;
+    Term *oneR = &pool[pi++]; memset(oneR, 0, sizeof *oneR); oneR->kind = TERM_LIT; oneR->ival = 1;
+    Term *addH = &pool[pi++]; memset(addH, 0, sizeof *addH);
+    addH->kind = TERM_BIN; addH->op = BOP_ADD; addH->a = oneL; addH->b = oneR;
+    Term *twoH = &pool[pi++]; memset(twoH, 0, sizeof *twoH); twoH->kind = TERM_LIT; twoH->ival = 2;
+    Term *hvar = &pool[pi++]; memset(hvar, 0, sizeof *hvar); hvar->kind = TERM_VAR; hvar->name = "H";
+    Ty *hypTy = ty_alloc(TY_EQ);
+    hypTy->eq_a = &I64_TY; hypTy->eq_l = addH; hypTy->eq_r = twoH;
+    Term *substTerm = &pool[pi++]; memset(substTerm, 0, sizeof *substTerm);
+    substTerm->kind = TERM_SUBST; substTerm->a = hvar; substTerm->b = hvar;
+    Term *twoL = &pool[pi++]; memset(twoL, 0, sizeof *twoL); twoL->kind = TERM_LIT; twoL->ival = 2;
+    Term *twoR = &pool[pi++]; memset(twoR, 0, sizeof *twoR); twoR->kind = TERM_LIT; twoR->ival = 2;
+    Ty *goal22 = ty_alloc(TY_EQ);
+    goal22->eq_a = &I64_TY; goal22->eq_l = twoL; goal22->eq_r = twoR;
+    Ctx hc;
+    memset(&hc, 0, sizeof hc);
+    hc.b[0].name = "H"; hc.b[0].q = Q_MANY; hc.b[0].ty = hypTy; hc.b[0].used = 0;
+    hc.len = 1;
+    A(check(&hc, substTerm, goal22, err, sizeof err) == 0,
+      "prove subst H H : 2 = 2  (H : (1+1) = 2)");
 
     return all_ok ? 0 : -1;
 }

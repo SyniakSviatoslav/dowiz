@@ -764,6 +764,20 @@ int main(int argc, char **argv) {
         cmd_atomic();
         return 0;
     }
+    if (strcmp(argv[1], "conv") == 0) {
+        char buf[1024];
+        int ok = qtt_conv_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Proof kernel (conversion) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "proof") == 0) {
+        char buf[1024];
+        int ok = qtt_proof_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Proof kernel (equality) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
     if (strcmp(argv[1], "bench") == 0) {
         cmd_bench();
         return 0;

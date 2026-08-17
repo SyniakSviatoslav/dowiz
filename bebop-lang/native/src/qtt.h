@@ -40,6 +40,7 @@ typedef enum {
     TY_ENUM,     /* sum: named ctors (.ctors / .nctors) */
     TY_TYPE,     /* universe: the type of types (Type₀) */
     TY_VAR,      /* type variable (name in .x) */
+    TY_EQ,       /* propositional equality: a = b (Eq A a b) */
 } TyKind;
 
 typedef struct Ty Ty;
@@ -64,6 +65,9 @@ struct Ty {
     int nfields;
     Ctor *ctors;   /* TY_ENUM: constructors */
     int nctors;
+    Ty *eq_a;      /* TY_EQ: the type A (both sides live in A) */
+    struct Term *eq_l; /* TY_EQ: left side term */
+    struct Term *eq_r; /* TY_EQ: right side term */
 };
 
 /* Pretty-print a type into `out` (NUL-terminated). Returns bytes written. */
@@ -90,6 +94,8 @@ typedef enum {
     TERM_MATCH,
     TERM_TYPE,
     TERM_IO,
+    TERM_REFL,    /* refl : a = a (propositional equality intro) */
+    TERM_SUBST,   /* subst : a = b -> P a -> P b (equality elim / transport) */
 } TermKind;
 
 typedef enum {
@@ -178,5 +184,38 @@ int qtt_term_has_io(const Term *t);
 
 /* Run the effect (pure/io) analysis self-test. */
 int qtt_effect_test(char *out, size_t cap);
+
+/* ═══ Proof kernel: definitional equality (conversion) ═══
+ * Lean-4-like mathematical proof rests on a *small* trustworthy core: a
+ * term normalizer (β-reduction) + a conversion check (α-equivalence up to
+ * normalization). These three primitives are that core. */
+
+/* Reset the kernel's term scratch pool (call before a fresh proof batch). */
+void qtt_term_pool_reset(void);
+
+/* Substitute `v` for free occurrences of `name` in `t` (capture-avoiding —
+ * a binder shadowing `name` blocks the substitution). Returns a fresh term
+ * from the kernel pool, or NULL on pool exhaustion. */
+Term *qtt_subst(const Term *t, const char *name, const Term *v);
+
+/* β-normalize a term to normal form (call-by-name weak-head reduction +
+ * structural recursion). Returns a fresh term, or NULL on exhaustion. */
+Term *qtt_norm(const Term *t);
+
+/* Definitional equality: are `a` and `b` β-convertible? Normalizes both and
+ * compares structurally (α-equivalence on binder names). */
+int qtt_conv(const Term *a, const Term *b);
+
+/* Run the proof-kernel (conversion) self-test. */
+int qtt_conv_test(char *out, size_t cap);
+
+/* Prove: check `proof : goal` in the empty context (the kernel's judgement
+ * for a completed theorem). Returns 0 on success (goal type printed into
+ * out_ty), -1 if `proof` does not inhabit `goal`. */
+int qtt_prove(const Term *proof, const Ty *goal, char *out_ty, size_t cap_ty,
+              char *err, size_t cap_err);
+
+/* Run the propositional-equality (refl / conversion) proof self-test. */
+int qtt_proof_test(char *out, size_t cap);
 
 #endif /* BEBOP_QTT_H */
