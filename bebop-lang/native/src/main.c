@@ -9,6 +9,7 @@
 #include "morse.h"
 #include "qtt.h"
 #include "ntt.h"
+#include "hyper.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -215,6 +216,14 @@ static void cmd_ntt(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_hyper(void) {
+    char buf[4096];
+    int ok = hyper_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("Hypervector self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -266,6 +275,10 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "ntt") == 0) {
         cmd_ntt();
+        return 0;
+    }
+    if (strcmp(argv[1], "hyper") == 0) {
+        cmd_hyper();
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {
