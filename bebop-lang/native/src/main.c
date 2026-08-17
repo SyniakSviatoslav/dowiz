@@ -31,6 +31,7 @@
 #include "pid.h"
 #include "markov.h"
 #include "typereg.h"
+#include "atomic.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -574,6 +575,14 @@ static void cmd_check(const char *path) {
     free(src);
 }
 
+static void cmd_atomic(void) {
+    char buf[4096];
+    int ok = atomic_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("Atomic self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -737,6 +746,10 @@ int main(int argc, char **argv) {
             return 2;
         }
         cmd_check(argv[2]);
+        return 0;
+    }
+    if (strcmp(argv[1], "atomic") == 0) {
+        cmd_atomic();
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {
