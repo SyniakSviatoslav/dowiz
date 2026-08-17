@@ -345,6 +345,29 @@ static int emit_expr(const Term *t) {
             }
             return -1;
         }
+        case TERM_WHILE: {
+            /* Label-based while loop: evaluate cond, cbz to exit, eval body,
+             * jump back. Uses 4 labels: start, body_after_cond, end, cbz_patch */
+            size_t start = em_len;  /* top of loop */
+            if (emit_expr(t->a) != 0) return -1; /* cond → x0 (pushed) */
+            emit_pop(0);                          /* x0 = cond */
+            /* cbz x0, <patch>: placeholder — will fix up after we know end */
+            size_t cbz_at = em_len;
+            em(0xB4000000u);                      /* cbz x0, 0 (placeholder, 64-bit) */
+            if (emit_expr(t->b) != 0) return -1;  /* body → x0 (pushed) */
+            emit_pop(0);                          /* discard body result */
+            /* b start */
+            int back = (int)(start - em_len);
+            em(0x14000000u | ((unsigned)back & 0x3FFFFFFu)); /* b <start> */
+            size_t end = em_len;
+            /* Patch cbz to jump to end */
+            int fwd = (int)(end - cbz_at);
+            em_code[cbz_at] = 0xB4000000u | (((unsigned)fwd & 0x7FFFFu) << 5);
+            /* while evaluates to void → push 0 */
+            em(0xD2800000u);                      /* mov x0, #0 */
+            emit_push();
+            return 0;
+        }
         default:
             return -1;
     }
@@ -563,5 +586,20 @@ int native_self_test(char *out, size_t cap) {
             N(got == 78, "native 12-let spill sum == 78");
         }
     }
+    /* native while loop: while (0) { 42 } — condition false, body never runs. */
+
+    {
+        static Term wpool[4];
+        int pi = 0;
+        Term *zero = &wpool[pi++]; memset(zero, 0, sizeof *zero);
+        zero->kind = TERM_LIT; zero->ival = 0;
+        Term *body42 = &wpool[pi++]; memset(body42, 0, sizeof *body42);
+        body42->kind = TERM_LIT; body42->ival = 42;
+        Term *wh = &wpool[pi++]; memset(wh, 0, sizeof *wh);
+        wh->kind = TERM_WHILE; wh->a = zero; wh->b = body42;
+        long got = native_eval(wh, err, sizeof err);
+        N(got == 0, "native while (0) { 42 } == 0 (void)");
+    }
+
     return all_ok ? 0 : -1;
 }
