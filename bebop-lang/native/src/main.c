@@ -587,6 +587,12 @@ static void cmd_atomic(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_bench(void) {
+    char buf[1024];
+    hv_benchmark(buf, sizeof buf);
+    fputs(buf, stdout);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -754,6 +760,10 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "atomic") == 0) {
         cmd_atomic();
+        return 0;
+    }
+    if (strcmp(argv[1], "bench") == 0) {
+        cmd_bench();
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {

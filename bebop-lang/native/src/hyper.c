@@ -1,4 +1,5 @@
 /* Bebop Hypervector — implementation (port of dowiz hypervector.rs). */
+#define _POSIX_C_SOURCE 199309L
 #include "hyper.h"
 
 #include <limits.h>
@@ -242,5 +243,92 @@ int hyper_self_test(char *out, size_t cap) {
     double sun = hv_shift_invariant_similarity(&h1, &h2);
     H(sun > 0.45 && sun < 0.55, "shift-invariant unrelated ~0.5");
 
+    Hypervector nb = hv_bind_neon(&a, &b);
+    H(memcmp(&nb, &bound, sizeof nb) == 0, "NEON bind == scalar bind");
+    H(hv_hamming_neon(&a, &b) == hv_hamming(&a, &b), "NEON hamming == scalar hamming");
+
     return all_ok ? 0 : -1;
+}
+
+/* ─── NEON SIMD (AArch64) ─── */
+#ifdef __aarch64__
+#include <arm_neon.h>
+
+Hypervector hv_bind_neon(const Hypervector *a, const Hypervector *b) {
+    Hypervector v;
+    for (int i = 0; i < BEBOP_HV_WORDS; i += 2) {
+        uint64x2_t va = vld1q_u64(&a->words[i]);
+        uint64x2_t vb = vld1q_u64(&b->words[i]);
+        vst1q_u64(&v.words[i], veorq_u64(va, vb));
+    }
+    return v;
+}
+
+uint32_t hv_hamming_neon(const Hypervector *a, const Hypervector *b) {
+    uint32_t total = 0;
+    for (int i = 0; i < BEBOP_HV_WORDS; i += 2) {
+        uint64x2_t vx = veorq_u64(vld1q_u64(&a->words[i]),
+                                  vld1q_u64(&b->words[i]));
+        total += (uint32_t)vaddvq_u8(vcntq_u8(vreinterpretq_u8_u64(vx)));
+    }
+    return total;
+}
+#else
+Hypervector hv_bind_neon(const Hypervector *a, const Hypervector *b) {
+    return hv_bind(a, b);
+}
+uint32_t hv_hamming_neon(const Hypervector *a, const Hypervector *b) {
+    return hv_hamming(a, b);
+}
+#endif
+
+#include <time.h>
+
+int hv_benchmark(char *out, size_t cap) {
+    Hypervector a = hv_code(1), b = hv_code(2);
+    const int N = 5000000;
+    volatile uint64_t sink = 0;
+    struct timespec t0, t1;
+    double sb, nb, sh, nh;
+
+    Hypervector v = hv_zero();
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    for (int i = 0; i < N; i++) {
+        v = hv_bind(&a, &b);
+        sink ^= v.words[0];
+        __asm__ __volatile__("" ::: "memory");
+    }
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    sb = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
+
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    for (int i = 0; i < N; i++) {
+        v = hv_bind_neon(&a, &b);
+        sink ^= v.words[0];
+        __asm__ __volatile__("" ::: "memory");
+    }
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    nb = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
+
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    for (int i = 0; i < N; i++) {
+        sink ^= hv_hamming(&a, &b);
+        __asm__ __volatile__("" ::: "memory");
+    }
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    sh = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
+
+    clock_gettime(CLOCK_MONOTONIC, &t0);
+    for (int i = 0; i < N; i++) {
+        sink ^= hv_hamming_neon(&a, &b);
+        __asm__ __volatile__("" ::: "memory");
+    }
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    nh = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
+
+    (void)sink;
+    return snprintf(out, cap,
+        "hypervector bind:   scalar %7.1f Mops/s | NEON %7.1f Mops/s\n"
+        "hypervector hamming: scalar %7.1f Mops/s | NEON %7.1f Mops/s\n",
+        N / sb / 1e6, N / nb / 1e6, N / sh / 1e6, N / nh / 1e6);
 }

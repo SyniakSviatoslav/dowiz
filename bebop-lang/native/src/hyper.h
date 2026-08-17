@@ -27,6 +27,13 @@ int hv_to_hex(const Hypervector *v, char *out, size_t cap);
 int hv_from_hex(const char *s, Hypervector *out);
 double hv_shift_invariant_similarity(const Hypervector *a, const Hypervector *b);
 
+/* NEON SIMD variants (AArch64 eor + cnt) — faster bind/hamming. */
+Hypervector hv_bind_neon(const Hypervector *a, const Hypervector *b);
+uint32_t hv_hamming_neon(const Hypervector *a, const Hypervector *b);
+
+/* Benchmark: scalar vs NEON bind/hamming, reports Mops/s. */
+int hv_benchmark(char *out, size_t cap);
+
 /* djb2 string hash (seed for hv_code). */
 uint64_t hv_hash(const char *s);
 
