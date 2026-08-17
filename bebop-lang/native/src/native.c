@@ -279,6 +279,71 @@ static int emit_expr(const Term *t) {
             emit_push();
             return 0;
         }
+        case TERM_ENUM_CTOR: {
+            /* allocate a 16-byte block [tag, payload] in the struct heap */
+            int tag = -1;
+            if (t->ty && t->ty->kind == TY_ENUM) {
+                for (int i = 0; i < t->ty->nctors; i++) {
+                    if (strcmp(t->ty->ctors[i].name, t->name) == 0) {
+                        tag = i;
+                        break;
+                    }
+                }
+            }
+            if (tag < 0) {
+                return -1;
+            }
+            emit_mov64((unsigned long)tag, 0); /* x0 = tag */
+            em(0xF90001C0u); /* str x0, [x14] */
+            if (t->a) {
+                if (emit_expr(t->a) != 0) {
+                    return -1;
+                }
+                emit_pop(0); /* x0 = payload */
+                em(0xF90005C0u); /* str x0, [x14, #8] */
+            }
+            em(0xAA0E03E0u); /* mov x0, x14 */
+            em(0x910042EEu); /* add x14, x14, #16 */
+            emit_push();
+            return 0;
+        }
+        case TERM_MATCH: {
+            /* literal enum scrutinee: select the arm at compile time */
+            if (t->a->kind != TERM_ENUM_CTOR) {
+                return -1; /* runtime tag dispatch needs type propagation */
+            }
+            const char *ctor = t->a->name;
+            for (int j = 0; j < t->narms; j++) {
+                if (strcmp(t->arms[j].ctor, ctor) == 0) {
+                    if (t->arms[j].var && t->a->a) {
+                        if (emit_expr(t->a->a) != 0) {
+                            return -1;
+                        }
+                        emit_pop(0);
+                        if (nvars >= 64) {
+                            return -1;
+                        }
+                        if (nregs < N_LOCAL_REGS) {
+                            int reg = 19 + nregs;
+                            nregs++;
+                            vars[nvars].reg = reg;
+                            vars[nvars].slot = -1;
+                            em(0xAA0003E0u | (unsigned)reg);
+                        } else {
+                            int slot = nspill * 8;
+                            nspill++;
+                            vars[nvars].reg = -1;
+                            vars[nvars].slot = slot;
+                            em(0xF9000000u | ((unsigned)(slot >> 3) << 10) | (15u << 5) | 0u);
+                        }
+                        vars[nvars].name = t->arms[j].var;
+                        nvars++;
+                    }
+                    return emit_expr(t->arms[j].body);
+                }
+            }
+            return -1;
+        }
         default:
             return -1;
     }
@@ -445,6 +510,37 @@ int native_self_test(char *out, size_t cap) {
         muls->kind = TERM_BIN; muls->op = BOP_MUL; muls->a = fx; muls->b = fy;
         long got2 = native_eval(muls, err, sizeof err);
         N(got2 == 12, "native struct{x:3,y:4}.x * .y == 12");
+    }
+    /* enum + match (built directly) */
+    {
+        static Ctor opt_ctors[2];
+        opt_ctors[0].name = "None"; opt_ctors[0].payload = NULL;
+        opt_ctors[1].name = "Some"; opt_ctors[1].payload = NULL;
+        static Ty opt_ty = {.kind = TY_ENUM, .ctors = opt_ctors, .nctors = 2};
+        static Term pool[16];
+        int pi = 0;
+        Term *lit42 = &pool[pi++]; memset(lit42, 0, sizeof *lit42); lit42->kind = TERM_LIT; lit42->ival = 42;
+        Term *some = &pool[pi++]; memset(some, 0, sizeof *some);
+        some->kind = TERM_ENUM_CTOR; some->name = "Some"; some->ty = &opt_ty; some->a = lit42;
+        Term *xvar = &pool[pi++]; memset(xvar, 0, sizeof *xvar); xvar->kind = TERM_VAR; xvar->name = "x";
+        Term *zero = &pool[pi++]; memset(zero, 0, sizeof *zero); zero->kind = TERM_LIT; zero->ival = 0;
+        static MatchArm arms[2];
+        arms[0].ctor = "None"; arms[0].var = NULL; arms[0].body = zero;
+        arms[1].ctor = "Some"; arms[1].var = "x"; arms[1].body = xvar;
+        Term *m = &pool[pi++]; memset(m, 0, sizeof *m);
+        m->kind = TERM_MATCH; m->a = some; m->arms = arms; m->narms = 2;
+        long got = native_eval(m, err, sizeof err);
+        N(got == 42, "native match Some(42) { None=>0, Some(x)=>x } == 42");
+        Term *none = &pool[pi++]; memset(none, 0, sizeof *none);
+        none->kind = TERM_ENUM_CTOR; none->name = "None"; none->ty = &opt_ty; none->a = NULL;
+        Term *n99 = &pool[pi++]; memset(n99, 0, sizeof *n99); n99->kind = TERM_LIT; n99->ival = 99;
+        static MatchArm arms2[2];
+        arms2[0].ctor = "None"; arms2[0].var = NULL; arms2[0].body = n99;
+        arms2[1].ctor = "Some"; arms2[1].var = "x"; arms2[1].body = xvar;
+        Term *m2 = &pool[pi++]; memset(m2, 0, sizeof *m2);
+        m2->kind = TERM_MATCH; m2->a = none; m2->arms = arms2; m2->narms = 2;
+        long got2 = native_eval(m2, err, sizeof err);
+        N(got2 == 99, "native match None { None=>99, Some(x)=>x } == 99");
     }
     /* register-pressure spill: 12 nested lets (11th+ spill to the frame).
      * sum 1..12 == 78. */
