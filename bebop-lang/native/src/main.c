@@ -33,6 +33,7 @@
 #include "typereg.h"
 #include "atomic.h"
 #include "bench_all.h"
+#include "vir.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -776,6 +777,13 @@ int main(int argc, char **argv) {
         int ok = qtt_proof_test(buf, sizeof buf);
         fputs(buf, stdout);
         printf("Proof kernel (equality) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "vir") == 0) {
+        char buf[2048];
+        int ok = vir_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("VIR (NEON lowering) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "bench") == 0) {
