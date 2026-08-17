@@ -186,6 +186,47 @@ static int emit_expr(const Term *t) {
             emit_push();
             return 0;
         }
+        case TERM_APP: {
+            /* First-order call: reduce the callee to weak-head-normal form
+             * (unwinds curried (λx.λy.…) a b chains to a LAM), then inline:
+             * (λx. body) arg ≡ let x = arg in body. */
+            Term *callee = t->a;
+            while (callee->kind == TERM_APP && callee->a->kind == TERM_LAM) {
+                callee = qtt_subst(callee->a->a, callee->a->name, callee->b);
+                if (!callee) {
+                    return -1;
+                }
+            }
+            if (callee->kind != TERM_LAM) {
+                return -1; /* higher-order / unknown callee not yet supported */
+            }
+            if (emit_expr(t->b) != 0) {
+                return -1;
+            }
+            emit_pop(0); /* x0 = arg */
+            if (nvars >= 64) {
+                return -1;
+            }
+            if (nregs < N_LOCAL_REGS) {
+                int reg = 19 + nregs;
+                nregs++;
+                vars[nvars].reg = reg;
+                vars[nvars].slot = -1;
+                em(0xAA0003E0u | (unsigned)reg); /* mov x<reg>, x0 */
+            } else {
+                int slot = nspill * 8;
+                nspill++;
+                vars[nvars].reg = -1;
+                vars[nvars].slot = slot;
+                em(0xF9000000u | ((unsigned)(slot >> 3) << 10) | (15u << 5) | 0u); /* str x0,[x15,#slot] */
+            }
+            vars[nvars].name = callee->name;
+            nvars++;
+            if (emit_expr(callee->a) != 0) {
+                return -1;
+            }
+            return 0;
+        }
         default:
             return -1;
     }
@@ -196,6 +237,7 @@ long native_eval(const Term *t, char *err, size_t cap) {
     nvars = 0;
     nregs = 0;
     nspill = 0;
+    qtt_term_pool_reset(); /* fresh kernel pool for compile-time β-reduction */
     em(0xD10803FFu); /* sub sp, sp, #512 — allocate the frame */
     emit_stp_sp(19, 20, 0); /* save x19..x28 (callee-saved locals) */
     emit_stp_sp(21, 22, 16);
@@ -310,6 +352,22 @@ int native_self_test(char *out, size_t cap) {
         char label[64];
         snprintf(label, sizeof label, "native '%s' == %ld", lets[i], lwants[i]);
         N(got == lwants[i], label);
+    }
+    /* function application (compile-time β-reduction) */
+    const char *apps[] = {"(\\x:i64. x + 1)(41)", "(\\x:i64. x * x)(7)",
+                          "(\\x:i64. \\y:i64. x + y)(3)(4)"};
+    long awants[] = {42, 49, 7};
+    for (int i = 0; i < 3; i++) {
+        expr_pool_reset();
+        Term *t = NULL;
+        if (expr_parse(apps[i], &t, err, sizeof err) != 0) {
+            N(0, "app parse");
+            continue;
+        }
+        long got = native_eval(t, err, sizeof err);
+        char label[64];
+        snprintf(label, sizeof label, "native '%s' == %ld", apps[i], awants[i]);
+        N(got == awants[i], label);
     }
     /* register-pressure spill: 12 nested lets (11th+ spill to the frame).
      * sum 1..12 == 78. */
