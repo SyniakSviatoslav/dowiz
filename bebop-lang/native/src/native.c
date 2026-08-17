@@ -360,16 +360,28 @@ static int emit_expr(const Term *t) {
                 return 0;
             }
         case TERM_ARRAY_GET:
-            /* immediate-offset: x2=base, use known lit index for offset */
+            /* Load all elems via immediate-offset, csel-chain by idx */
             if (emit_expr(t->a) != 0) return -1;
             emit_pop(0);
             em(0xAA0003E2u);                   /* mov x2, x0 */
-            if (t->b && t->b->kind == TERM_LIT && t->b->ival >= 0) {
-                int off = (int)(t->b->ival * 8);
-                em(0xF9400040u | ((unsigned)(off >> 3) << 10)); /* ldr x0,[x2,#off] */
-            } else {
-                return -1; /* dynamic index not yet supported */
-            }
+            if (emit_expr(t->b) != 0) return -1;
+            emit_pop(1);
+            if (t->a && t->a->kind == TERM_ARRAY && t->a->nfields > 0) {
+                int n = t->a->nfields;
+                if (n > 0) { em(0xF9400040u | (0u << 10)); em(0xAA0003E3u); }
+                if (n > 1) { em(0xF9400040u | (1u << 10)); em(0xAA0003E4u); }
+                if (n > 2) { em(0xF9400040u | (2u << 10)); em(0xAA0003E5u); }
+                if (n > 3) { em(0xF9400040u | (3u << 10)); em(0xAA0003E6u); }
+                if (n > 4) { em(0xF9400040u | (4u << 10)); em(0xAA0003E7u); }
+                if (n > 5) { em(0xF9400040u | (5u << 10)); em(0xAA0003E8u); }
+                if (n > 6) { em(0xF9400040u | (6u << 10)); em(0xAA0003E9u); }
+                if (n > 7) { em(0xF9400040u | (7u << 10)); em(0xAA0003EAu); }
+                em(0xAA0303E0u); /* x0 = x3 (assume idx 0) */
+                for (int j = 1; j < n; j++) {
+                    em(0x7100003Fu | ((unsigned)(j) << 10)); /* cmp x1, #j */
+                    em(0x9A800000u | ((unsigned)(j+3) << 5)); /* csel x0, x(j+3), x0, eq */
+                }
+            } else { return -1; }
             emit_push();
             return 0;
         case TERM_SYSCALL:
