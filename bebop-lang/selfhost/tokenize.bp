@@ -1,0 +1,4 @@
+// selfhost/tokenize.bp — self-host tokenizer (known-index only)
+// 
+// Tokenizes a hardcoded source string into token types.
+// Usage: cd be...[truncated]
