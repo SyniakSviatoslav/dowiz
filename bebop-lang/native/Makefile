@@ -5,12 +5,12 @@ CFLAGS  ?= -O2 -std=c11 -Wall -Wextra -Wpedantic
 BUILD   ?= build
 BIN     := $(BUILD)/bebopc
 
-SRC := src/main.c src/glyph.c src/lexer.c src/parser.c src/morse.c src/qtt.c src/ntt.c src/hyper.c src/mem.c src/expr.c src/verify.c src/vsa.c src/codegen.c src/native.c src/money.c src/fft.c src/arena.c src/event.c src/complex.c src/modular.c src/sort.c src/token_bucket.c src/checksum.c src/hex_util.c src/trig.c src/rng.c src/stats.c src/pid.c src/markov.c src/typereg.c src/atomic.c src/bench_all.c src/vir.c src/theorem.c src/pac.c src/effect.c src/jittable.c src/smt.c src/gt.c src/gt_switch.S
+SRC := src/main.c src/glyph.c src/lexer.c src/parser.c src/morse.c src/qtt.c src/ntt.c src/hyper.c src/mem.c src/expr.c src/verify.c src/vsa.c src/codegen.c src/native.c src/money.c src/fft.c src/arena.c src/event.c src/complex.c src/modular.c src/sort.c src/token_bucket.c src/checksum.c src/hex_util.c src/trig.c src/rng.c src/stats.c src/pid.c src/markov.c src/typereg.c src/atomic.c src/bench_all.c src/vir.c src/theorem.c src/pac.c src/effect.c src/jittable.c src/supervise.c src/smt.c src/gt.c src/gt_switch.S
 LDLIBS := -lm -lpthread
 
 all: $(BIN)
 
-$(BIN): $(SRC) src/glyph.h src/lexer.h src/parser.h src/morse.h src/qtt.h src/ntt.h src/hyper.h src/mem.h src/expr.h src/verify.h src/vsa.h src/codegen.h src/native.h src/money.h src/fft.h src/arena.h src/event.h src/complex.h src/modular.h src/sort.h src/token_bucket.h src/checksum.h src/hex_util.h src/trig.h src/rng.h src/stats.h src/pid.h src/markov.h src/typereg.h src/atomic.h src/bench_all.h src/vir.h src/theorem.h src/pac.h src/effect.h src/jittable.h src/smt.h src/gt.h
+$(BIN): $(SRC) src/glyph.h src/lexer.h src/parser.h src/morse.h src/qtt.h src/ntt.h src/hyper.h src/mem.h src/expr.h src/verify.h src/vsa.h src/codegen.h src/native.h src/money.h src/fft.h src/arena.h src/event.h src/complex.h src/modular.h src/sort.h src/token_bucket.h src/checksum.h src/hex_util.h src/trig.h src/rng.h src/stats.h src/pid.h src/markov.h src/typereg.h src/atomic.h src/bench_all.h src/vir.h src/theorem.h src/pac.h src/effect.h src/jittable.h src/supervise.h src/smt.h src/gt.h
 	@mkdir -p $(BUILD)
 	$(CC) $(CFLAGS) -o $@ $(SRC) $(LDLIBS)
 
@@ -99,6 +99,8 @@ test: $(BIN)
 	$(BIN) effect
 	@echo "--- JIT table (atomic swap) ---"
 	$(BIN) jittable
+	@echo "--- supervision tree (CoW rollback) ---"
+	$(BIN) supervise
 	@echo "--- atomic machine-code (⚛) ---"
 	$(BIN) atomicjit
 	@echo "--- SMT (native DPLL) ---"

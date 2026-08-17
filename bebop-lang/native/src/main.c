@@ -38,6 +38,7 @@
 #include "pac.h"
 #include "effect.h"
 #include "jittable.h"
+#include "supervise.h"
 #include "smt.h"
 #include "gt.h"
 
@@ -849,6 +850,13 @@ int main(int argc, char **argv) {
         int ok = jittable_self_test(buf, sizeof buf);
         fputs(buf, stdout);
         printf("JIT table (atomic swap) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "supervise") == 0) {
+        char buf[1024];
+        int ok = supervise_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Supervision tree (CoW rollback) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "atomicjit") == 0) {
