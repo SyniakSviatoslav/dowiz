@@ -36,9 +36,29 @@ static size_t sleb(unsigned char *out, long v) {
     return n;
 }
 
+/* Count nested let-bindings (for local declaration). */
+static int count_lets(const Term *t) {
+    if (!t) {
+        return 0;
+    }
+    int n = (t->kind == TERM_LET) ? 1 : 0;
+    n += count_lets(t->a);
+    n += count_lets(t->b);
+    n += count_lets(t->c);
+    return n;
+}
+
+typedef struct {
+    const char *names[64];
+    int idxs[64];
+    int n;    /* active bindings */
+    int next; /* next local index */
+} CodeCtx;
+
 /* Emit instructions for a term. want_i64: 1 if the context expects i64,
  * 0 if it expects i32 (bool). Returns byte count, or -1 on unsupported term. */
-static int emit_expr(unsigned char *out, const Term *t, int want_i64) {
+static int emit_expr(unsigned char *out, const Term *t, int want_i64,
+                     CodeCtx *ctx) {
     switch (t->kind) {
         case TERM_LIT:
             if (t->bval) {
@@ -47,52 +67,79 @@ static int emit_expr(unsigned char *out, const Term *t, int want_i64) {
             }
             out[0] = 0x42; /* i64.const */
             return 1 + (int)sleb(out + 1, t->ival);
+        case TERM_VAR: {
+            for (int i = 0; i < ctx->n; i++) {
+                if (strcmp(ctx->names[i], t->name) == 0) {
+                    out[0] = 0x20; /* local.get */
+                    return 1 + (int)uleb(out + 1, (unsigned long)ctx->idxs[i]);
+                }
+            }
+            return -1;
+        }
         case TERM_BIN: {
-            int l = emit_expr(out, t->a, 1);
+            int l = emit_expr(out, t->a, 1, ctx);
             if (l < 0) {
                 return -1;
             }
-            int r = emit_expr(out + l, t->b, 1);
+            int r = emit_expr(out + l, t->b, 1, ctx);
             if (r < 0) {
                 return -1;
             }
             unsigned char op;
             switch (t->op) {
-                case BOP_ADD: op = 0x7c; break; /* i64.add */
-                case BOP_SUB: op = 0x7d; break; /* i64.sub */
-                case BOP_MUL: op = 0x7e; break; /* i64.mul */
-                case BOP_EQ:  op = 0x51; break; /* i64.eq  -> i32 */
-                case BOP_NE:  op = 0x52; break; /* i64.ne  -> i32 */
-                case BOP_LT:  op = 0x53; break; /* i64.lt_s -> i32 */
-                case BOP_GT:  op = 0x55; break; /* i64.gt_s -> i32 */
-                case BOP_LE:  op = 0x57; break; /* i64.le_s -> i32 */
-                case BOP_GE:  op = 0x59; break; /* i64.ge_s -> i32 */
+                case BOP_ADD: op = 0x7c; break;
+                case BOP_SUB: op = 0x7d; break;
+                case BOP_MUL: op = 0x7e; break;
+                case BOP_EQ:  op = 0x51; break;
+                case BOP_NE:  op = 0x52; break;
+                case BOP_LT:  op = 0x53; break;
+                case BOP_GT:  op = 0x55; break;
+                case BOP_LE:  op = 0x57; break;
+                case BOP_GE:  op = 0x59; break;
                 default:      op = 0x7c; break;
             }
             out[l + r] = op;
             return l + r + 1;
         }
         case TERM_IF: {
-            int c = emit_expr(out, t->a, 0); /* condition → i32 */
+            int c = emit_expr(out, t->a, 0, ctx);
             if (c < 0) {
                 return -1;
             }
-            out[c] = 0x04;                   /* if */
-            out[c + 1] = want_i64 ? 0x7e : 0x7f; /* blocktype */
-            int th = emit_expr(out + c + 2, t->b, want_i64);
+            out[c] = 0x04;
+            out[c + 1] = want_i64 ? 0x7e : 0x7f;
+            int th = emit_expr(out + c + 2, t->b, want_i64, ctx);
             if (th < 0) {
                 return -1;
             }
-            out[c + 2 + th] = 0x05; /* else */
-            int el = emit_expr(out + c + 3 + th, t->c, want_i64);
+            out[c + 2 + th] = 0x05;
+            int el = emit_expr(out + c + 3 + th, t->c, want_i64, ctx);
             if (el < 0) {
                 return -1;
             }
-            out[c + 3 + th + el] = 0x0b; /* end */
+            out[c + 3 + th + el] = 0x0b;
             return c + 4 + th + el;
         }
+        case TERM_LET: {
+            int v = emit_expr(out, t->a, 1, ctx);
+            if (v < 0) {
+                return -1;
+            }
+            int idx = ctx->next++;
+            out[v] = 0x21; /* local.set */
+            v += 1 + (int)uleb(out + v + 1, (unsigned long)idx);
+            ctx->names[ctx->n] = t->name;
+            ctx->idxs[ctx->n] = idx;
+            ctx->n++;
+            int body = emit_expr(out + v, t->b, want_i64, ctx);
+            ctx->n--;
+            if (body < 0) {
+                return -1;
+            }
+            return v + body;
+        }
         default:
-            return -1; /* let/lambda/app/var/ann not yet in codegen */
+            return -1; /* lambda/app/ann not yet in codegen */
     }
 }
 
@@ -131,12 +178,19 @@ int codegen_wasm(const Term *t, unsigned char *out, size_t cap, char *err,
     n += sizeof es;
 
     /* code section: 1 body */
+    int nlets = count_lets(t);
     unsigned char body[1024];
     size_t bn = 0;
-    body[bn++] = 0x00; /* local decl count = 0 */
-    int en = emit_expr(body + bn, t, want_i64);
+    body[bn++] = nlets > 0 ? 1 : 0; /* local decl group count */
+    if (nlets > 0) {
+        bn += uleb(body + bn, (unsigned long)nlets);
+        body[bn++] = 0x7e; /* i64 */
+    }
+    CodeCtx ctx;
+    memset(&ctx, 0, sizeof ctx);
+    int en = emit_expr(body + bn, t, want_i64, &ctx);
     if (en < 0) {
-        snprintf(err, cap_err, "codegen: term not yet supported (let/lambda/app)");
+        snprintf(err, cap_err, "codegen: term not yet supported (lambda/app)");
         return -1;
     }
     bn += (size_t)en;
@@ -216,6 +270,14 @@ int codegen_self_test(char *out, size_t cap) {
     if (expr_parse("5 > 3", &b, err, sizeof err) == 0) {
         int m = codegen_wasm(b, buf, sizeof buf, err, sizeof err);
         C(m > 0, "emit WASM for bool expression");
+    }
+
+    /* let expression compiles */
+    Term *lt = NULL;
+    expr_pool_reset();
+    if (expr_parse("let x = 5 in (x + 3) * 2", &lt, err, sizeof err) == 0) {
+        int m = codegen_wasm(lt, buf, sizeof buf, err, sizeof err);
+        C(m > 0, "emit WASM for let expression");
     }
 
     return all_ok ? 0 : -1;
