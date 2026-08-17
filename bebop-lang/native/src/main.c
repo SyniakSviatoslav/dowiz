@@ -149,6 +149,48 @@ static void cmd_unmorse(const char *morse) {
     printf("%s\n", buf);
 }
 
+static void cmd_fmt(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        fprintf(stderr, "cannot open %s\n", path);
+        exit(1);
+    }
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *src = malloc((size_t)sz + 1);
+    if (!src) {
+        fclose(f);
+        exit(1);
+    }
+    size_t rd = fread(src, 1, (size_t)sz, f);
+    src[rd] = '\0';
+    fclose(f);
+
+    AstProgram prog;
+    BpParseError err;
+    if (bp_parse(src, &prog, &err) != 0) {
+        fprintf(stderr, "parse error at line %u: %s\n", err.line, err.msg);
+        free(src);
+        exit(1);
+    }
+    /* Canonical form: trim each item's span, one blank line between items. */
+    for (size_t i = 0; i < prog.len; i++) {
+        const AstItem *it = &prog.items[i];
+        const char *s = it->text;
+        const char *e = it->text + it->text_len;
+        while (s < e && (*s == ' ' || *s == '\t' || *s == '\n' || *s == '\r')) {
+            s++;
+        }
+        while (e > s && (e[-1] == ' ' || e[-1] == '\t' || e[-1] == '\n' || e[-1] == '\r')) {
+            e--;
+        }
+        printf("%.*s\n\n", (int)(e - s), s);
+    }
+    bp_program_free(&prog);
+    free(src);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -184,6 +226,14 @@ int main(int argc, char **argv) {
             return 2;
         }
         cmd_parse(argv[2]);
+        return 0;
+    }
+    if (strcmp(argv[1], "fmt") == 0) {
+        if (argc < 3) {
+            usage();
+            return 2;
+        }
+        cmd_fmt(argv[2]);
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {
