@@ -32,11 +32,14 @@ canonical form is the δ-outline, and the terminal fallback is the ASCII name.
 **Bebop carries all the methods of C, Rust, and Lean 4:**
 - **C** — pointers, manual memory, bit-level control, freestanding/no-runtime, ABI, `volatile`, inline asm.
 - **Rust** — ownership/borrowing, traits, no_std, zero-cost abstractions, const-eval, macros, unsafe scoping.
-- **Lean 4** — dependent types, inductive + quotient types, proof terms, termination, universe hierarchy.
+- **Lean 4** — dependent types, inductive + quotient types, proof terms, termination, universe hierarchy, and **mathematical verification of every statement**: any definition or record in Bebop is a theorem checked by the kernel — nothing is taken on trust.
 
-Bebop is written **natively, not in Rust**: the bootstrap compiler is a minimal native
-C core; the compiler self-hosts in Bebop; the backend emits **machine code directly**
-(aarch64+NEON, x86_64+AVX) with zero runtime, zero external dependencies (no LLVM).
+**Bebop does not require compilation.** Its primary operation is **verification** — the
+kernel checks every statement, and a program is *evaluated directly* (no compile phase).
+Compilation to native machine code is an **optional optimization**, not a prerequisite:
+the bootstrap is a minimal native C core (self-hosts in Bebop); when compilation is
+wanted, the backend emits machine code directly (aarch64+NEON, x86_64+AVX), zero
+runtime, zero external dependencies (no LLVM).
 
 ---
 

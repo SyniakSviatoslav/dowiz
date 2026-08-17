@@ -5,7 +5,7 @@
 
 **Goal:** Build **Bebop** — a native, glyphic, **agentic** systems language fusing **C's** low-level control, **Rust's** ownership, **Lean 4's** dependent types, **SPARK/Ada's** contracts, first-class SIMD/NTT, an FPGA/ASIC synthesis path, and vector-glyph source (not emoji) — then rewrite **all of dowiz** in it, bit-identical to the Rust reference.
 
-**Architecture:** One **glyphic** surface (no words, ordinary lexicon, vector glyphs not emoji) → **QTT** kernel → **native machine code** (direct aarch64+NEON / x86_64+AVX emission, no LLVM) + **Calyx/CIRCT** (silicon). Contracts → SMT. Built-in methods: NTT, hypervector, living-memory, hybrid quantum state. Atomic & branchless. **Agentic** (agents + humans, one surface).
+**Architecture:** One **glyphic** surface (no words, ordinary lexicon, vector glyphs not emoji) → **QTT** kernel → **verification-first** (Lean 4 kernel: every statement proven; evaluated directly, no compile phase) → optional **native machine code** (direct aarch64+NEON / x86_64+AVX emission, no LLVM) + **Calyx/CIRCT** (silicon). Contracts → SMT. Built-in methods: NTT, hypervector, living-memory, hybrid quantum state. Atomic & branchless. **Agentic** (agents + humans, one surface).
 
 **Stack:** QTT (Idris-2 model), direct native codegen, Calyx/CIRCT, Z3/CVC5, **C (bootstrap) → self-host in Bebop**, 12-way swarm.
 
