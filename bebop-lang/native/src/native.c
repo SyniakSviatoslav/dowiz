@@ -44,6 +44,26 @@ static unsigned op_enc(BinOp op) {
     }
 }
 
+/* comparison condition codes (AArch64): EQ=1, NE=0, LT=A, GE=B, LE=C, GT=D */
+static int cmp_cond(BinOp op) {
+    switch (op) {
+        case BOP_EQ: return 0x1;
+        case BOP_NE: return 0x0;
+        case BOP_LT: return 0xA;
+        case BOP_GT: return 0xD;
+        case BOP_LE: return 0xC;
+        case BOP_GE: return 0xB;
+        default:     return -1;
+    }
+}
+
+/* cmp x0, x1 ; cset x0, cond  (boolean result 0/1 in x0) */
+static size_t emit_cmp(unsigned int *out, BinOp op) {
+    out[0] = 0xEB01001Fu;                              /* cmp x0, x1 */
+    out[1] = 0x9A9F07E0u | ((unsigned)cmp_cond(op) << 12); /* cset x0, cond */
+    return 2;
+}
+
 /* Emit a stack-machine evaluation of a term (i64 arithmetic only). Returns the
  * instruction count, or 0 if the term is unsupported. */
 static size_t emit_expr(unsigned int *out, const Term *t) {
@@ -65,7 +85,11 @@ static size_t emit_expr(unsigned int *out, const Term *t) {
             n += m;
             n += emit_pop(out + n, 1); /* x1 = rhs */
             n += emit_pop(out + n, 0); /* x0 = lhs */
-            out[n++] = op_enc(t->op);
+            if (cmp_cond(t->op) >= 0) {
+                n += emit_cmp(out + n, t->op);
+            } else {
+                out[n++] = op_enc(t->op);
+            }
             n += emit_push(out + n);
             return n;
         }
@@ -130,6 +154,21 @@ int native_self_test(char *out, size_t cap) {
         char label[64];
         snprintf(label, sizeof label, "native '%s' == %ld", exprs[i], wants[i]);
         N(got == wants[i], label);
+    }
+    /* comparisons (boolean result 0/1) */
+    const char *cmps[] = {"5 > 3", "1 == 1", "3 < 2", "4 <= 4", "5 != 5"};
+    long cwants[] = {1, 1, 0, 1, 0};
+    for (int i = 0; i < 5; i++) {
+        expr_pool_reset();
+        Term *t = NULL;
+        if (expr_parse(cmps[i], &t, err, sizeof err) != 0) {
+            N(0, "cmp parse");
+            continue;
+        }
+        long got = native_eval(t, err, sizeof err);
+        char label[64];
+        snprintf(label, sizeof label, "native '%s' == %ld", cmps[i], cwants[i]);
+        N(got == cwants[i], label);
     }
     return all_ok ? 0 : -1;
 }
