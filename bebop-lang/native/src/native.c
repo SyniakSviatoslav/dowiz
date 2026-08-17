@@ -366,8 +366,14 @@ static int emit_expr(const Term *t) {
             em(0xAA0003E2u);                   /* mov x2, x0 */
             if (emit_expr(t->b) != 0) return -1;
             emit_pop(1);
-            if (t->a && t->a->kind == TERM_ARRAY && t->a->nfields > 0) {
-                int n = t->a->nfields;
+            /* Resolve through let/var chains to find the TERM_ARRAY */
+            const Term *arr = t->a;
+            while (arr && (arr->kind == TERM_VAR || arr->kind == TERM_LET)) {
+                if (arr->kind == TERM_LET) arr = arr->a;
+                else break; /* TERM_VAR: can't resolve at compile time */
+            }
+            if (arr && arr->kind == TERM_ARRAY && arr->nfields > 0) {
+                int n = arr->nfields;
                 if (n > 0) { em(0xF9400040u | (0u << 10)); em(0xAA0003E3u); }
                 if (n > 1) { em(0xF9400040u | (1u << 10)); em(0xAA0003E4u); }
                 if (n > 2) { em(0xF9400040u | (2u << 10)); em(0xAA0003E5u); }
