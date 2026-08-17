@@ -43,12 +43,29 @@ fn main() {
                 exit(2);
             }
             let store = LivingMemoryStore::open(&args[2]).expect("open store");
-            let q = &args[3];
-            println!("== keyword ==");
+            let q = args[3].as_str();
+            // 1. Symbols — name match against the code-graph nodes (kind-tagged).
+            println!("== symbols ==");
+            {
+                let g = store.memory().code_graph();
+                let mut shown = 0;
+                for (i, n) in g.nodes().iter().enumerate() {
+                    if n.name.as_str() == q || n.name.contains(q) {
+                        println!("  [{i}] {:?} {}", n.kind, n.name);
+                        shown += 1;
+                        if shown >= 20 {
+                            break;
+                        }
+                    }
+                }
+            }
+            // 2. Patterns — substring match on the pre-lowered search blob.
+            println!("== patterns ==");
             for id in store.memory().search(q) {
                 let r = store.memory().recall(id).unwrap();
                 println!("  [{id}] {} :: {}", r.key, r.summary);
             }
+            // 3. Graph — hypervector semantic navigation (ranked).
             println!("== vector ==");
             for (id, score) in store.memory().vector_search(q, 5) {
                 let r = store.memory().recall(id).unwrap();

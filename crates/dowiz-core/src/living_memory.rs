@@ -8,7 +8,7 @@
 //! alternatives for every tool. Vector navigation (hypervector) and quantum
 //! prediction (QState) attach as follow-on steps.
 
-use crate::code_graph::{CodeGraph, NodeKind};
+use crate::code_graph::{CodeGraph, EdgeKind, NodeKind};
 use crate::hypervector::Hypervector;
 use crate::hypervector_index::HypervectorIndex;
 use crate::retrieval::bm25::tokenize;
@@ -337,7 +337,7 @@ impl LivingMemory {
     pub fn to_binary_full(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(16 + self.records.len() * 160);
         out.extend_from_slice(b"LMFB");
-        put_u32(&mut out, 1); // version
+        put_u32(&mut out, 2); // version
         put_u32(&mut out, self.records.len() as u32);
         for r in &self.records {
             let code = self.hv_index.code_of(r.id).unwrap_or_else(Hypervector::zero);
@@ -367,6 +367,20 @@ impl LivingMemory {
                 put_str(&mut out, &f.description);
             }
         }
+        // Code-graph nodes + edges — navigation (neighbours/paths/nodes) survives
+        // persistence, so "the graph of the whole project" is not lost on reopen.
+        let g = &self.code;
+        put_u32(&mut out, g.node_count() as u32);
+        for n in g.nodes() {
+            put_str(&mut out, &n.name);
+            out.push(node_kind_u8(n.kind));
+        }
+        put_u32(&mut out, g.edge_count() as u32);
+        for e in g.edges() {
+            put_u64(&mut out, e.from as u64);
+            put_u64(&mut out, e.to as u64);
+            out.push(edge_kind_u8(e.kind));
+        }
         out
     }
 
@@ -379,7 +393,7 @@ impl LivingMemory {
         }
         let mut r = Reader::new(bytes, 4);
         let version = r.u32()?;
-        if version != 1 {
+        if version != 2 {
             return None;
         }
         let count = r.u32()? as usize;
@@ -443,6 +457,20 @@ impl LivingMemory {
                     description,
                 });
             }
+        }
+        // Code-graph nodes + edges (navigation survives persistence).
+        let nc = r.u32()? as usize;
+        for _ in 0..nc {
+            let name = r.str()?;
+            let kind = node_kind_from_u8(r.u8()?);
+            m.code.add_node(&name, kind);
+        }
+        let ec = r.u32()? as usize;
+        for _ in 0..ec {
+            let from = r.u64()? as usize;
+            let to = r.u64()? as usize;
+            let kind = edge_kind_from_u8(r.u8()?);
+            m.code.add_edge(from, to, kind);
         }
         Some(m)
     }
@@ -791,6 +819,52 @@ fn put_str(out: &mut Vec<u8>, s: &str) {
     out.extend_from_slice(s.as_bytes());
 }
 
+fn node_kind_u8(k: NodeKind) -> u8 {
+    match k {
+        NodeKind::Function => 0,
+        NodeKind::Struct => 1,
+        NodeKind::Enum => 2,
+        NodeKind::Module => 3,
+        NodeKind::Trait => 4,
+        NodeKind::Concept => 5,
+        NodeKind::File => 6,
+        NodeKind::Other => 7,
+    }
+}
+
+fn node_kind_from_u8(v: u8) -> NodeKind {
+    match v {
+        0 => NodeKind::Function,
+        1 => NodeKind::Struct,
+        2 => NodeKind::Enum,
+        3 => NodeKind::Module,
+        4 => NodeKind::Trait,
+        5 => NodeKind::Concept,
+        6 => NodeKind::File,
+        _ => NodeKind::Other,
+    }
+}
+
+fn edge_kind_u8(k: EdgeKind) -> u8 {
+    match k {
+        EdgeKind::Calls => 0,
+        EdgeKind::References => 1,
+        EdgeKind::Contains => 2,
+        EdgeKind::Imports => 3,
+        EdgeKind::Uses => 4,
+    }
+}
+
+fn edge_kind_from_u8(v: u8) -> EdgeKind {
+    match v {
+        0 => EdgeKind::Calls,
+        1 => EdgeKind::References,
+        2 => EdgeKind::Contains,
+        3 => EdgeKind::Imports,
+        _ => EdgeKind::Uses,
+    }
+}
+
 /// Bounds-checked cursor over a byte slice. Every read returns `None` on
 /// truncation, so a corrupt sidecar fails closed instead of panicking.
 struct Reader<'a> {
@@ -1125,5 +1199,23 @@ mod tests {
         // Corruption fails closed.
         assert!(LivingMemory::from_binary_full(b"XXXX").is_none());
         assert!(LivingMemory::from_binary_full(&blob[..blob.len() - 3]).is_none());
+    }
+
+    #[test]
+    fn codegraph_survives_binary_round_trip() {
+        let mut m = LivingMemory::new();
+        m.code_graph_mut().add_node("foo", NodeKind::Function);
+        m.code_graph_mut().add_node("bar", NodeKind::Struct);
+        m.code_graph_mut().add_edge(0, 1, EdgeKind::Calls);
+        let blob = m.to_binary_full();
+        let loaded = LivingMemory::from_binary_full(&blob).expect("valid binary");
+        assert_eq!(loaded.code_graph().node_count(), 2);
+        assert_eq!(loaded.code_graph().edge_count(), 1);
+        let n = loaded.code_graph().nodes();
+        assert_eq!(n[0].name, "foo");
+        assert_eq!(n[0].kind, NodeKind::Function);
+        assert_eq!(n[1].name, "bar");
+        assert_eq!(n[1].kind, NodeKind::Struct);
+        assert_eq!(loaded.code_graph().neighbors(0), vec![1]);
     }
 }
