@@ -20,7 +20,7 @@
 
 use alloc::string::String;
 use alloc::vec::Vec;
-use crate::hypervector::Hypervector;
+use crate::hypervector::{Hypervector, WORDS};
 
 /// FNV-1a 64-bit hash over a string, using the canonical kernel constants.
 /// Same hash powers `memory_store` snapshot roots and `csr` content addresses.
@@ -118,6 +118,75 @@ impl HypervectorIndex {
         let mut ranked = self.rank(query);
         ranked.truncate(k);
         ranked
+    }
+
+    /// Index a pre-computed code directly (no term re-hashing, no re-bundling).
+    /// This is the cold-start killer: a persisted index is rebuilt by feeding
+    /// its stored codes here — O(128-byte copy) per doc instead of O(D·|terms|)
+    /// re-bundling. `id` is assigned in insertion order, matching [`insert`].
+    pub fn insert_with_code(&mut self, code: Hypervector) -> usize {
+        let id = self.docs.len();
+        self.docs.push(HvDocument {
+            id,
+            terms: Vec::new(),
+            code,
+        });
+        id
+    }
+
+    /// The code of the document at `id` (copy), or `None` if out of range.
+    pub fn code_of(&self, id: usize) -> Option<Hypervector> {
+        self.docs.get(id).map(|d| d.code)
+    }
+
+    /// Serialize to a compact binary blob: an 8-byte header (magic `"HVXI"` +
+    /// count) followed by fixed 132-byte records (`id` u32 LE + 16 × `u64` LE
+    /// code words). Codes only — no terms — so loading this re-hashes nothing.
+    pub fn to_binary(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(8 + self.docs.len() * 132);
+        out.extend_from_slice(b"HVXI");
+        out.extend_from_slice(&(self.docs.len() as u32).to_le_bytes());
+        for d in &self.docs {
+            out.extend_from_slice(&(d.id as u32).to_le_bytes());
+            for w in d.code.as_words() {
+                out.extend_from_slice(&w.to_le_bytes());
+            }
+        }
+        out
+    }
+
+    /// Deserialize [`Self::to_binary`]. Returns `None` on a bad magic, a short
+    /// or over-long buffer, or a length mismatch (fail-closed: a torn sidecar
+    /// never yields a garbage index — the caller rebuilds from the text WAL).
+    pub fn from_binary(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() < 8 || &bytes[0..4] != b"HVXI" {
+            return None;
+        }
+        let count = u32::from_le_bytes([bytes[4], bytes[5], bytes[6], bytes[7]]) as usize;
+        let expected = 8 + count * 132;
+        if bytes.len() != expected {
+            return None;
+        }
+        let mut docs = Vec::with_capacity(count);
+        let mut off = 8usize;
+        for _ in 0..count {
+            let id = u32::from_le_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]])
+                as usize;
+            off += 4;
+            let mut words = [0u64; WORDS];
+            for w in words.iter_mut() {
+                let mut arr = [0u8; 8];
+                arr.copy_from_slice(&bytes[off..off + 8]);
+                *w = u64::from_le_bytes(arr);
+                off += 8;
+            }
+            docs.push(HvDocument {
+                id,
+                terms: Vec::new(),
+                code: Hypervector::from_words(words),
+            });
+        }
+        Some(Self { docs })
     }
 
     /// Similarity matrix (row-major, len × len) for glyph rendering.
@@ -357,5 +426,43 @@ mod tests {
         let spark = render_popcount_sparkline(&idx);
         assert!(!heat.is_empty());
         assert!(!spark.is_empty());
+    }
+
+    #[test]
+    fn binary_round_trips_codes_exactly() {
+        let docs = corpus();
+        let mut idx = HypervectorIndex::new();
+        for d in &docs {
+            idx.insert(d.clone());
+        }
+        let blob = idx.to_binary();
+        let loaded = HypervectorIndex::from_binary(&blob).expect("valid blob");
+        assert_eq!(loaded.len(), idx.len());
+        // Codes must be bit-identical; ranking parity follows.
+        for i in 0..idx.len() {
+            assert_eq!(
+                loaded.code_of(i),
+                idx.code_of(i),
+                "code {i} must round-trip"
+            );
+        }
+        // A loaded index ranks identically to the source.
+        let q = idx.encode_query(&docs[2]);
+        assert_eq!(loaded.top_k(&q, 4), idx.top_k(&q, 4));
+    }
+
+    #[test]
+    fn binary_rejects_corruption() {
+        let mut idx = HypervectorIndex::new();
+        idx.insert(vec!["a".into()]);
+        let blob = idx.to_binary();
+        // Bad magic.
+        assert!(HypervectorIndex::from_binary(b"XXXX").is_none());
+        // Truncated body.
+        assert!(HypervectorIndex::from_binary(&blob[..blob.len() - 3]).is_none());
+        // Over-long buffer.
+        let mut long = blob.clone();
+        long.push(0);
+        assert!(HypervectorIndex::from_binary(&long).is_none());
     }
 }

@@ -21,10 +21,18 @@
 //!
 //! Zero external crates. Pure `std`. Deterministic (seeded via [`splitmix64`]).
 
+use alloc::string::String;
+use alloc::vec::Vec;
+
 /// Default hypervector width in bits. Power of two, word-aligned.
 pub const D: usize = 1024;
 /// Number of `u64` words per hypervector.
 pub const WORDS: usize = D / 64;
+
+/// Hex digit lookup for [`Hypervector::to_hex`].
+const HEX: [char; 16] = [
+    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f',
+];
 
 /// A fixed-width `D`-bit binary hypervector, packed into `u64` words.
 /// `#[repr(align(64))]`: 1024 bits = 128 bytes = exactly 2 cache lines, aligned
@@ -161,6 +169,94 @@ impl Hypervector {
         {
             self.words.iter().map(|w| w.count_ones()).sum()
         }
+    }
+
+    /// Owned copy of the raw words (for serialization / binary index).
+    pub fn to_words(&self) -> [u64; WORDS] {
+        self.words
+    }
+
+    /// Serialize to a compact hex string: 16 hex digits per word, zero-padded,
+    /// `WORDS * 16 = 256` chars total. Round-trips through [`Self::from_hex`].
+    pub fn to_hex(&self) -> String {
+        let mut s = String::with_capacity(WORDS * 16);
+        for w in &self.words {
+            for shift in (0..64).step_by(4).rev() {
+                let nibble = ((w >> shift) & 0xf) as u8;
+                s.push(HEX[nibble as usize]);
+            }
+        }
+        s
+    }
+
+    /// Parse the output of [`Self::to_hex`]. Returns `None` on a length or hex
+    /// error (fail-closed: a malformed code never yields a garbage vector).
+    pub fn from_hex(s: &str) -> Option<Self> {
+        if s.len() != WORDS * 16 {
+            return None;
+        }
+        let mut words = [0u64; WORDS];
+        let bytes = s.as_bytes();
+        for (i, w) in words.iter_mut().enumerate() {
+            let mut v = 0u64;
+            for j in 0..16 {
+                let b = bytes[i * 16 + j];
+                let d = match b {
+                    b'0'..=b'9' => (b - b'0') as u64,
+                    b'a'..=b'f' => (b - b'a' + 10) as u64,
+                    b'A'..=b'F' => (b - b'A' + 10) as u64,
+                    _ => return None,
+                };
+                v = (v << 4) | d;
+            }
+            *w = v;
+        }
+        Some(Self { words })
+    }
+
+    /// Shift-invariant similarity: the maximum Hamming similarity over **all
+    /// cyclic shifts** of `other` relative to `self`, in `[0,1]`. 1.0 = `other`
+    /// is a pure rotation of `self`; 0.5 = unrelated (orthogonal) under every
+    /// alignment.
+    ///
+    /// Computed with the exact-integer NTT (`crate::ntt`): the circular
+    /// cross-correlation of the two ±1-encoded bit patterns is a circular
+    /// convolution, O(D log D) instead of the O(D²) shift-by-shift scan. For
+    /// D = 1024 (a power of two) this is a single length-1024 NTT triplet with
+    /// zero padding and zero float error.
+    pub fn shift_invariant_similarity(&self, other: &Self) -> f64 {
+        use crate::ntt::{centered, circular_convolve, MOD};
+        // ±1 encoding in F_p: bit 1 → +1, bit 0 → −1 (MOD−1).
+        let mut a = Vec::with_capacity(D);
+        for w in &self.words {
+            for b in 0..64 {
+                a.push(if (w >> b) & 1 == 1 { 1u64 } else { MOD - 1 });
+            }
+        }
+        let mut b = Vec::with_capacity(D);
+        for w in &other.words {
+            for bit in 0..64 {
+                b.push(if (w >> bit) & 1 == 1 { 1u64 } else { MOD - 1 });
+            }
+        }
+        // corr[k] = Σ_i a[i]·b[(i+k) mod D] == (a_rev ⊛ b)[k], where a_rev is the
+        // reversal-with-first-fixed of a.
+        let mut a_rev = vec![0u64; D];
+        a_rev[0] = a[0];
+        for i in 1..D {
+            a_rev[i] = a[D - i];
+        }
+        let corr = circular_convolve(&a_rev, &b);
+        let mut best = i64::MIN;
+        for &v in &corr {
+            let c = centered(v);
+            if c > best {
+                best = c;
+            }
+        }
+        // similarity = (corr + D) / (2D): corr=D → 1.0, corr=0 → 0.5, corr=−D → 0.0.
+        let sim = (best as f64 + D as f64) / (2.0 * D as f64);
+        sim.clamp(0.0, 1.0)
     }
 }
 
@@ -319,5 +415,56 @@ mod tests {
             let scalar: u32 = hv.as_words().iter().map(|w| w.count_ones()).sum();
             assert_eq!(neon, scalar, "NEON popcount mismatch for {seed}");
         }
+    }
+
+    #[test]
+    fn hex_round_trips() {
+        for seed in [0u64, 1, 42, u64::MAX, 0xdead_beef_cafe_babe] {
+            let hv = Hypervector::code(seed);
+            let hex = hv.to_hex();
+            assert_eq!(hex.len(), WORDS * 16);
+            assert_eq!(Hypervector::from_hex(&hex), Some(hv), "hex round-trip {seed}");
+        }
+        // Rejects wrong length / non-hex.
+        assert_eq!(Hypervector::from_hex(""), None);
+        assert_eq!(Hypervector::from_hex("zz"), None);
+        assert_eq!(Hypervector::from_hex(&"0".repeat(WORDS * 16 - 1)), None);
+    }
+
+    #[test]
+    fn hex_is_deterministic() {
+        let a = Hypervector::code(123);
+        assert_eq!(a.to_hex(), a.to_hex());
+        assert_eq!(Hypervector::from_hex(&a.to_hex()), Hypervector::from_hex(&a.to_hex()));
+    }
+
+    #[test]
+    fn shift_invariant_similarity_finds_rotations() {
+        let v = Hypervector::code(2024);
+        // A pure rotation of itself is a perfect match under some shift.
+        for shift in [1usize, 37, 512, 1000, 1023] {
+            let r = v.permute(shift);
+            let sim = v.shift_invariant_similarity(&r);
+            assert!((sim - 1.0).abs() < 1e-9, "rotated {shift} should be identical, got {sim}");
+        }
+        // Self is trivially 1.0.
+        assert!((v.shift_invariant_similarity(&v) - 1.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn shift_invariant_similarity_unrelated_is_near_half() {
+        let a = Hypervector::code(1);
+        let b = Hypervector::code(2);
+        let sim = a.shift_invariant_similarity(&b);
+        assert!(sim > 0.45 && sim < 0.55, "unrelated ~0.5, got {sim}");
+    }
+
+    #[test]
+    fn shift_invariant_agrees_with_hamming_at_shift_zero_for_similar() {
+        // For two non-shifted vectors, shift-invariant sim ≥ plain Hamming sim
+        // (it maximizes over shifts, so it can only be higher or equal).
+        let a = Hypervector::code(7);
+        let b = Hypervector::code(8);
+        assert!(a.shift_invariant_similarity(&b) >= a.similarity(&b) - 1e-12);
     }
 }

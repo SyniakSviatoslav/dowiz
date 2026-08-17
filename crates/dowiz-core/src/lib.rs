@@ -48,6 +48,7 @@ pub mod messenger;
 pub mod metrics;
 pub mod modular;
 pub mod needle2;
+pub mod ntt;
 pub mod oil_motion;
 pub mod penecho;
 pub mod quantum;

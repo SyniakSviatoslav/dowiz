@@ -1,10 +1,12 @@
 //! `lm_graph` — build a living-memory graph from a Rust source tree, persist it
-//! crash-safely, and query it (keyword + vector navigation). The native runtime
-//! for "use living memory instead of grep".
+//! crash-safely (Markdown `.md` + binary `.idx` code sidecar), and query it
+//! (keyword + vector navigation + shift-invariant NTT convolution). The native
+//! runtime for "use living memory instead of grep".
 //!
-//!   lm_graph build SRC_DIR STORE    # extract symbols -> living memory, persist
-//!   lm_graph search STORE TEXT      # keyword + vector top-k over the palace
-//!   lm_graph nodes STORE            # list symbols (name + kind) in the graph
+//!   lm_graph build SRC_DIR STORE      # extract symbols -> living memory, persist
+//!   lm_graph search STORE TEXT        # keyword + vector top-k over the palace
+//!   lm_graph conv STORE TEXT          # shift-invariant (NTT) re-rank, top-k
+//!   lm_graph nodes STORE              # list symbols (name + kind) in the graph
 
 use dowiz_core::code_graph::{CodeGraph, NodeKind};
 use dowiz_core::living_memory::MemoryKind;
@@ -15,7 +17,9 @@ use std::process::exit;
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
-        eprintln!("usage: lm_graph build SRC_DIR STORE | search STORE TEXT | nodes STORE");
+        eprintln!(
+            "usage: lm_graph build SRC_DIR STORE | search STORE TEXT | conv STORE TEXT | nodes STORE"
+        );
         exit(2);
     }
     match args[1].as_str() {
@@ -42,6 +46,19 @@ fn main() {
             }
             println!("== vector ==");
             for (id, score) in store.memory().vector_search(q, 5) {
+                let r = store.memory().recall(id).unwrap();
+                println!("  [{id}] {:.4} {} :: {}", score, r.key, r.summary);
+            }
+        }
+        "conv" => {
+            if args.len() < 4 {
+                eprintln!("lm_graph conv STORE TEXT");
+                exit(2);
+            }
+            let store = LivingMemoryStore::open(&args[2]).expect("open store");
+            let q = &args[3];
+            println!("== convolution (shift-invariant NTT) ==");
+            for (id, score) in store.memory().convolution_search(q, 5) {
                 let r = store.memory().recall(id).unwrap();
                 println!("  [{id}] {:.4} {} :: {}", score, r.key, r.summary);
             }
