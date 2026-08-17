@@ -354,11 +354,16 @@ path = "src/bin/fdr_recorder.rs"
 opt-level = 3
 lto = true
 
-# Optimize DEV builds too so debug navigation runs at ~release speed (opt-level
-# 2 globally, opt-level 3 for the hottest no_std core). Compile is slower than
-# opt-level 0 but execution is fast — no need to wait for --release.
+# Fast DEV iteration: opt-level 0 so `cargo build`/`cargo test` compile in
+# seconds (the old opt-level-2/3 here made debug builds ~2min). For fast RUNTIME
+# binaries (lm_graph/lm navigation), build with `--profile fast` instead.
 [profile.dev]
-opt-level = 2
+opt-level = 0
 
-[profile.dev.package."dowiz-core"]
+# Fast RUNTIME profile for the lm_graph/lm navigation binaries: release-level
+# optimization WITHOUT the slow LTO pass, so it compiles much faster than
+# `--release` but runs at ~release speed.
+[profile.fast]
+inherits = "release"
 opt-level = 3
+lto = false

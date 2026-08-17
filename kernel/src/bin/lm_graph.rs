@@ -10,6 +10,11 @@
 
 use dowiz_core::code_graph::{CodeGraph, NodeKind};
 use dowiz_core::living_memory::MemoryKind;
+use dowiz_core::prompt_enrich::{
+    seed_fabric_prompts, seed_opencode_prompts, PromptEnrichEngine, PromptKind,
+};
+use dowiz_core::agent_orchestrator::TaskOracle;
+use dowiz_core::dynamic_spawner::{DynamicSpawner, SpawnBatchConfig};
 use dowiz_kernel::living_memory_store::LivingMemoryStore;
 use std::path::PathBuf;
 use std::process::exit;
@@ -18,7 +23,7 @@ fn main() {
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 2 {
         eprintln!(
-            "usage: lm_graph build SRC_DIR STORE | search STORE TEXT | conv STORE TEXT | nodes STORE"
+            "usage: lm_graph build SRC STORE | search STORE TEXT | conv STORE TEXT | enrich TEXT | armory | seed-armory STORE | serve STORE | nodes STORE"
         );
         exit(2);
     }
@@ -74,6 +79,172 @@ fn main() {
                 println!("{i}\t{:?}\t{}", n.kind, n.name);
             }
         }
+        "serve" => {
+            // In-memory query server: load once, answer many queries in-process.
+            // Each query after the first is ~microseconds (no cold-start, no
+            // re-parse) — the "100x faster than cold-start" runtime path.
+            if args.len() < 3 {
+                eprintln!("lm_graph serve STORE");
+                exit(2);
+            }
+            let store = LivingMemoryStore::open(&args[2]).expect("open store");
+            eprintln!(
+                "lm_graph: serving {} records — 'search TEXT' | 'vector TEXT' | 'conv TEXT' | 'quit'",
+                store.memory().record_count()
+            );
+            use std::io::BufRead;
+            let stdin = std::io::stdin();
+            for line in stdin.lock().lines() {
+                let line = line.expect("read stdin");
+                let t = line.trim();
+                if t.is_empty() {
+                    continue;
+                }
+                if t == "quit" || t == "exit" {
+                    break;
+                }
+                let mut parts = t.splitn(2, ' ');
+                let cmd = parts.next().unwrap_or("");
+                let arg = parts.next().unwrap_or("");
+                match cmd {
+                    "search" => {
+                        for id in store.memory().search(arg) {
+                            let r = store.memory().recall(id).unwrap();
+                            println!("[{id}] {} :: {}", r.key, r.summary);
+                        }
+                    }
+                    "vector" => {
+                        for (id, score) in store.memory().vector_search(arg, 5) {
+                            let r = store.memory().recall(id).unwrap();
+                            println!("[{id}] {score:.4} {} :: {}", r.key, r.summary);
+                        }
+                    }
+                    "conv" => {
+                        for (id, score) in store.memory().convolution_search(arg, 5) {
+                            let r = store.memory().recall(id).unwrap();
+                            println!("[{id}] {score:.4} {} :: {}", r.key, r.summary);
+                        }
+                    }
+                    "read" => {
+                        for id in store.memory().search(arg).into_iter().take(1) {
+                            let r = store.memory().recall(id).unwrap();
+                            println!("=== [{id}] {} ({} / {}) ===", r.key, r.wing, r.room);
+                            println!("{}", r.content);
+                        }
+                    }
+                    other => eprintln!("lm_graph serve: unknown command `{other}`"),
+                }
+            }
+        }
+        "enrich" => {
+            // Runtime armory: intent detection + enriched prompts/skills from
+            // the seed corpus (fabric patterns + opencode skills/agents).
+            if args.len() < 3 {
+                eprintln!("lm_graph enrich TEXT");
+                exit(2);
+            }
+            let engine = build_armory_engine();
+            let report = engine.enrich_report(&args[2]);
+            println!("== intents ==");
+            for (kind, hits, score) in &report.intents {
+                println!("  {} ({} hits, {:.2})", kind.as_str(), hits, score);
+            }
+            println!("== intent paths ==");
+            for p in &report.intent_paths {
+                println!("  {}", p.join(" -> "));
+            }
+            println!("== enriched prompts ==");
+            for p in &report.prompts {
+                println!("  [{}] {}  <{} / {}>", p.kind.as_str(), p.title, p.source, p.license);
+            }
+            println!("== skills ==");
+            for s in &report.skills {
+                println!("  - {s}");
+            }
+            println!(
+                "armory: {} prompts, {} skills matched",
+                report.total_prompts, report.total_skills
+            );
+        }
+        "armory" => {
+            // List the in-memory armory (seed corpus) by kind.
+            let engine = build_armory_engine();
+            println!("{}", engine.dashboard());
+        }
+        "seed-armory" => {
+            // Persist the armory (agents/skills/enriched prompts) INTO living
+            // memory so it is searchable, crash-safe, and survives sessions.
+            if args.len() < 3 {
+                eprintln!("lm_graph seed-armory STORE");
+                exit(2);
+            }
+            let engine = build_armory_engine();
+            let mut store = LivingMemoryStore::open(&args[2]).expect("open store");
+            let mut n = 0usize;
+            for p in engine.all_entries() {
+                let room = match p.kind {
+                    PromptKind::Skill => "skills",
+                    PromptKind::Plugin => "plugins",
+                    PromptKind::Tool => "tools",
+                    PromptKind::Meta => "dynamic-skills",
+                    _ => "prompts",
+                };
+                let summary = format!("{} — {}", p.kind.as_str(), p.trigger_keywords.join(", "));
+                store.memory_mut().remember_full(
+                    MemoryKind::Procedural,
+                    "armory",
+                    room,
+                    &p.title,
+                    &summary,
+                    &p.prompt_text,
+                    None,
+                );
+                n += 1;
+            }
+            store.persist().expect("persist armory");
+            println!("armory seeded: {n} entries -> {}", args[2]);
+        }
+        "read" => {
+            // Read via living memory: return full content of the best matches.
+            if args.len() < 4 {
+                eprintln!("lm_graph read STORE QUERY");
+                exit(2);
+            }
+            let store = LivingMemoryStore::open(&args[2]).expect("open store");
+            let q = args[3..].join(" ");
+            let ids = store.memory().search(&q);
+            for id in ids.iter().take(3) {
+                let r = store.memory().recall(*id).unwrap();
+                println!("=== [{id}] {} ({} / {}) ===", r.key, r.wing, r.room);
+                println!("{}", r.content);
+                println!();
+            }
+        }
+        "dispatch" => {
+            // Runtime orchestration: intent -> skills -> specialized agent ->
+            // spawn batch, all chained from one prompt.
+            if args.len() < 3 {
+                eprintln!("lm_graph dispatch PROMPT");
+                exit(2);
+            }
+            let prompt = args[2..].join(" ");
+            let engine = build_armory_engine();
+            let report = engine.enrich_report(&prompt);
+            let oracle = TaskOracle::new();
+            let (class, conf) = oracle.predict(&prompt);
+            let mut spawner = DynamicSpawner::new(SpawnBatchConfig::default());
+            let batch = spawner.compute_batch(0, 1);
+            println!("== intent ==  {}", report.primary_intent.as_str());
+            for (kind, hits, score) in &report.intents {
+                println!("  {} ({} hits, {:.2})", kind.as_str(), hits, score);
+            }
+            println!("== skills ==");
+            for s in &report.skills {
+                println!("  - {s}");
+            }
+            println!("== agent ==  class={class:?} confidence={conf:.2}");
+            println!("== spawn ==  count={} reason={:?}", batch.count, batch.reason);
+        }
         other => {
             eprintln!("lm_graph: unknown subcommand `{other}`");
             exit(2);
@@ -110,6 +281,19 @@ fn extract(dir: &str, store: &mut LivingMemoryStore) -> usize {
                 count += 1;
             }
         }
+        // File record: full source content, so "read" goes through living
+        // memory too (navigation + search + read share one graph).
+        let rel = path.to_string_lossy().to_string();
+        let lines = text.lines().count();
+        store.memory_mut().remember_full(
+            MemoryKind::LongTerm,
+            "source",
+            "files",
+            &rel,
+            &format!("{file} · {lines} lines"),
+            &text,
+            None,
+        );
     }
     // One durable snapshot at the end (not per-symbol — that was O(n²)).
     store.persist().expect("persist");
@@ -121,6 +305,11 @@ fn collect_rs(dir: PathBuf, out: &mut Vec<PathBuf>) {
         for e in entries.flatten() {
             let p = e.path();
             if p.is_dir() {
+                let name = p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
+                // Skip generated/build/hidden trees — only real source.
+                if name == "target" || name == ".git" || name == "node_modules" {
+                    continue;
+                }
                 collect_rs(p, out);
             } else if p.extension().map_or(false, |x| x == "rs") {
                 out.push(p);
@@ -129,28 +318,60 @@ fn collect_rs(dir: PathBuf, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// Match a line to (symbol name, node kind), or `None`.
+/// Match a line to (symbol name, node kind), or `None`. Covers pub AND non-pub
+/// declarations (`fn`/`struct`/`enum`/`trait`/`mod`/`const`/`static`/`type`/
+/// `impl`), so the living-memory store is a grep-complete index of the source
+/// tree, not just the public API surface.
 fn match_symbol(line: &str) -> (Option<String>, NodeKind) {
     let t = line.trim();
-    for (prefix, kind) in [
+    const PREFIXES: &[(&str, NodeKind)] = &[
+        ("pub async fn ", NodeKind::Function),
         ("pub const fn ", NodeKind::Function),
         ("pub fn ", NodeKind::Function),
         ("pub struct ", NodeKind::Struct),
         ("pub enum ", NodeKind::Enum),
         ("pub trait ", NodeKind::Trait),
         ("pub mod ", NodeKind::Module),
+        ("pub static ", NodeKind::Other),
+        ("pub type ", NodeKind::Other),
         ("pub const ", NodeKind::Other),
-    ] {
+        ("async fn ", NodeKind::Function),
+        ("const fn ", NodeKind::Function),
+        ("fn ", NodeKind::Function),
+        ("struct ", NodeKind::Struct),
+        ("enum ", NodeKind::Enum),
+        ("trait ", NodeKind::Trait),
+        ("impl ", NodeKind::Struct),
+        ("mod ", NodeKind::Module),
+        ("static ", NodeKind::Other),
+        ("type ", NodeKind::Other),
+        ("const ", NodeKind::Other),
+    ];
+    for &(prefix, kind) in PREFIXES {
         if let Some(rest) = t.strip_prefix(prefix) {
             let name = rest
                 .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
                 .next()
                 .unwrap_or("")
                 .to_string();
-            if !name.is_empty() && name != "fn" && name != "struct" {
+            // Skip bare keywords (e.g. `impl` with no name, `fn` with no name).
+            const KEYWORDS: &[&str] = &[
+                "fn", "struct", "enum", "trait", "impl", "mod", "const", "static", "type", "async",
+                "use", "where", "for", "let",
+            ];
+            if !name.is_empty() && !KEYWORDS.contains(&name.as_str()) {
                 return (Some(name), kind);
             }
         }
     }
     (None, NodeKind::Other)
+}
+
+/// Build the in-memory armory engine: fabric patterns (MIT) + opencode
+/// skills/agents (MIT), ingested into the crystal-lattice prompt engine.
+fn build_armory_engine() -> PromptEnrichEngine {
+    let mut engine = PromptEnrichEngine::new();
+    engine.ingest(seed_fabric_prompts());
+    engine.ingest(seed_opencode_prompts());
+    engine
 }

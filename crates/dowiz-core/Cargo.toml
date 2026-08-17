@@ -27,10 +27,12 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(feature, valu
 
 # Optimize the TEST binary (not the dev lib): the compute-heavy suites (pq crypto
 # KAT, spectral/fft) run at ~release speed under `cargo test` (~9x), while
-# `cargo build`/`check` stay at dev opt-level 0 for fast iteration. This is how
-# the full 3500-test suite runs in ≤3s.
+# Fast iteration: opt-level 0 so `cargo test` compiles the test harness in
+# seconds (opt-level 3 made the harness ~90s to compile). Targeted module tests
+# (`cargo test --lib <module>`) are the iteration loop; the full suite is a CI
+# gate, not a per-edit cost.
 [profile.test]
-opt-level = 3
+opt-level = 0
 debug = false
 
 [dev-dependencies]
