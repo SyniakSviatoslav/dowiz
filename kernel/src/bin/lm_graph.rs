@@ -97,16 +97,17 @@ fn main() {
             }
         }
         "serve" => {
-            // In-memory query server: load once, answer many queries in-process.
+            // Interactive stdin REPL: load once, answer many queries in-process.
             // Each query after the first is ~microseconds (no cold-start, no
-            // re-parse) — the "100x faster than cold-start" runtime path.
+            // re-parse) — the "instant command" runtime path. For a persistent
+            // daemon reachable from other processes, use `daemon` + `ask`.
             if args.len() < 3 {
                 eprintln!("lm_graph serve STORE");
                 exit(2);
             }
             let store = LivingMemoryStore::open(&args[2]).expect("open store");
             eprintln!(
-                "lm_graph: serving {} records — 'search TEXT' | 'vector TEXT' | 'conv TEXT' | 'quit'",
+                "lm_graph: serving {} records — 'search TEXT' | 'vector TEXT' | 'conv TEXT' | 'read TEXT' | 'quit'",
                 store.memory().record_count()
             );
             use std::io::BufRead;
@@ -120,38 +121,83 @@ fn main() {
                 if t == "quit" || t == "exit" {
                     break;
                 }
-                let mut parts = t.splitn(2, ' ');
-                let cmd = parts.next().unwrap_or("");
-                let arg = parts.next().unwrap_or("");
-                match cmd {
-                    "search" => {
-                        for id in store.memory().search(arg) {
-                            let r = store.memory().recall(id).unwrap();
-                            println!("[{id}] {} :: {}", r.key, r.summary);
-                        }
+                let (cmd, arg) = t.split_once(' ').unwrap_or((t, ""));
+                print!("{}", exec(&store, cmd, arg));
+            }
+        }
+        "daemon" => {
+            // Persistent query server over a Unix domain socket: the store is
+            // loaded ONCE and every later query — from any process — is answered
+            // in-process in ~microseconds (no re-load of the 5524-record store, no
+            // index rebuild per call). This is the "run commands at runtime with
+            // zero delay" path, replacing per-call cold-start. Protocol: one
+            // request line per connection, response written back, then close.
+            if args.len() < 4 {
+                eprintln!("lm_graph daemon STORE SOCKET_PATH");
+                exit(2);
+            }
+            let store = LivingMemoryStore::open(&args[2]).expect("open store");
+            let path = &args[3];
+            let _ = std::fs::remove_file(path);
+            let listener = std::os::unix::net::UnixListener::bind(path).expect("bind socket");
+            eprintln!(
+                "lm_graph daemon: {} records listening on {path} — query via 'lm_graph ask {path} <cmd> <arg>'",
+                store.memory().record_count()
+            );
+            use std::io::{BufRead, BufReader, Write};
+            for conn in listener.incoming() {
+                let Ok(mut stream) = conn else { continue };
+                let Ok(reader_stream) = stream.try_clone() else { continue };
+                let mut r = BufReader::new(reader_stream);
+                let mut line = String::new();
+                // Multi-query per connection (persistent stream): serve until the
+                // client closes (EOF). Each response is terminated by a lone NUL
+                // byte so a resident client can frame replies without reconnecting.
+                loop {
+                    line.clear();
+                    let n = match r.read_line(&mut line) {
+                        Ok(n) => n,
+                        Err(_) => break,
+                    };
+                    if n == 0 {
+                        break; // EOF — client done
                     }
-                    "vector" => {
-                        for (id, score) in store.memory().vector_search(arg, 5) {
-                            let r = store.memory().recall(id).unwrap();
-                            println!("[{id}] {score:.4} {} :: {}", r.key, r.summary);
-                        }
+                    let t = line.trim();
+                    if t.is_empty() {
+                        continue;
                     }
-                    "conv" => {
-                        for (id, score) in store.memory().convolution_search(arg, 5) {
-                            let r = store.memory().recall(id).unwrap();
-                            println!("[{id}] {score:.4} {} :: {}", r.key, r.summary);
-                        }
+                    if t == "quit" || t == "exit" {
+                        break;
                     }
-                    "read" => {
-                        for id in store.memory().search(arg).into_iter().take(1) {
-                            let r = store.memory().recall(id).unwrap();
-                            println!("=== [{id}] {} ({} / {}) ===", r.key, r.wing, r.room);
-                            println!("{}", r.content);
-                        }
+                    let (cmd, arg) = t.split_once(' ').unwrap_or((t, ""));
+                    let out = exec(&store, cmd, arg);
+                    if stream.write_all(out.as_bytes()).is_err()
+                        || stream.write_all(b"\0").is_err()
+                        || stream.flush().is_err()
+                    {
+                        break;
                     }
-                    other => eprintln!("lm_graph serve: unknown command `{other}`"),
                 }
             }
+        }
+        "ask" => {
+            // One-shot client for a running `daemon`: connect, send a query,
+            // print the response. ~microseconds instead of a fresh cold-start.
+            if args.len() < 4 {
+                eprintln!("lm_graph ask SOCKET_PATH CMD [ARG]");
+                exit(2);
+            }
+            use std::io::{Read, Write};
+            let mut stream =
+                std::os::unix::net::UnixStream::connect(&args[2]).expect("connect socket");
+            let q = args[3..].join(" ");
+            stream.write_all(q.as_bytes()).expect("write query");
+            stream.write_all(b"\n").expect("write newline");
+            let _ = stream.shutdown(std::net::Shutdown::Write);
+            let mut buf = Vec::new();
+            stream.read_to_end(&mut buf).expect("read response");
+            let text = String::from_utf8_lossy(&buf);
+            print!("{}", text.trim_end_matches('\0'));
         }
         "enrich" => {
             // Runtime armory: intent detection + enriched prompts/skills from
@@ -404,4 +450,47 @@ fn build_armory_engine() -> PromptEnrichEngine {
     engine.ingest(seed_fabric_prompts());
     engine.ingest(seed_opencode_prompts());
     engine
+}
+
+/// Execute one query command against an in-memory store and return the result
+/// as a `String`. Shared by the stdin REPL (`serve`) and the Unix-socket
+/// daemon (`daemon`), so both paths get the same fast, cold-start-free answer.
+fn exec(store: &LivingMemoryStore, cmd: &str, arg: &str) -> String {
+    use std::fmt::Write as _;
+    let mut out = String::new();
+    match cmd {
+        "search" => {
+            for id in store.memory().search(arg) {
+                if let Some(r) = store.memory().recall(id) {
+                    let _ = writeln!(out, "[{id}] {} :: {}", r.key, r.summary);
+                }
+            }
+        }
+        "vector" => {
+            for (id, score) in store.memory().vector_search(arg, 5) {
+                if let Some(r) = store.memory().recall(id) {
+                    let _ = writeln!(out, "[{id}] {score:.4} {} :: {}", r.key, r.summary);
+                }
+            }
+        }
+        "conv" => {
+            for (id, score) in store.memory().convolution_search(arg, 5) {
+                if let Some(r) = store.memory().recall(id) {
+                    let _ = writeln!(out, "[{id}] {score:.4} {} :: {}", r.key, r.summary);
+                }
+            }
+        }
+        "read" => {
+            for id in store.memory().search(arg).into_iter().take(1) {
+                if let Some(r) = store.memory().recall(id) {
+                    let _ = writeln!(out, "=== [{id}] {} ({} / {}) ===", r.key, r.wing, r.room);
+                    let _ = writeln!(out, "{}", r.content);
+                }
+            }
+        }
+        other => {
+            let _ = writeln!(out, "unknown command `{other}`");
+        }
+    }
+    out
 }

@@ -1,0 +1,5 @@
+# Faster builds: link with LLD (mold not available in this environment; LLD is
+# ~5-40x faster than the default GNU ld, and it's already present). Applies to
+# every cargo build/test in this tree.
+[build]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
