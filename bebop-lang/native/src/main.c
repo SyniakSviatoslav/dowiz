@@ -8,6 +8,7 @@
 #include "parser.h"
 #include "morse.h"
 #include "qtt.h"
+#include "ntt.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -206,6 +207,14 @@ static void cmd_qtt(void) {
     exit((ok1 == 0 && ok2 == 0 && ok3 == 0) ? 0 : 1);
 }
 
+static void cmd_ntt(void) {
+    char buf[4096];
+    int ok = ntt_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("NTT self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -253,6 +262,10 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "qtt") == 0) {
         cmd_qtt();
+        return 0;
+    }
+    if (strcmp(argv[1], "ntt") == 0) {
+        cmd_ntt();
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {

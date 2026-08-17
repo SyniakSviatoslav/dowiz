@@ -81,6 +81,11 @@ canonical form is the δ-outline, and the terminal fallback is the ASCII name.
    the language manipulates tokens as numeric arrays with on-the-fly spectral filtering and
    hypervector bundling.
 
+**Automatic tactics + SMT solvers** — routine proof obligations (array bounds,
+overflow absence, basic invariants) are discharged automatically by built-in SMT
+solvers (Z3-style). The agent writes the contract; the solver writes the routine
+proof — no hand-written proofs for boilerplate.
+
 ---
 
 ## 2. Surface: glyphs, not words
