@@ -224,7 +224,11 @@ static void cmd_qtt(void) {
     int ok6 = qtt_dep_test(buf, sizeof buf);
     fputs(buf, stdout);
     printf("QTT dependent: %s\n", ok6 == 0 ? "PASS" : "FAIL");
-    exit((ok1 == 0 && ok2 == 0 && ok3 == 0 && ok4 == 0 && ok5 == 0 && ok6 == 0) ? 0 : 1);
+    int ok7 = qtt_effect_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("QTT effects: %s\n", ok7 == 0 ? "PASS" : "FAIL");
+    exit((ok1 == 0 && ok2 == 0 && ok3 == 0 && ok4 == 0 && ok5 == 0 &&
+          ok6 == 0 && ok7 == 0) ? 0 : 1);
 }
 
 static void cmd_ntt(void) {

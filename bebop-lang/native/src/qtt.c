@@ -170,6 +170,7 @@ int qtt_self_test(char *out, size_t cap) {
 static Ty I64_TY = {.kind = TY_I64};
 static Ty BOOL_TY = {.kind = TY_BOOL};
 static Ty TYPE_TY = {.kind = TY_TYPE};
+static Ty VOID_TY = {.kind = TY_VOID};
 
 Ty *qtt_i64(void) {
     return &I64_TY;
@@ -186,6 +187,7 @@ Ty *qtt_type(void) {
 int qtt_struct_test(char *out, size_t cap) {
     size_t pos = 0;
     int all_ok = 1;
+#undef A
 #define A(cond, name)                                                          \
     do {                                                                       \
         int c_ = (int)(cond);                                                  \
@@ -290,6 +292,7 @@ int qtt_struct_test(char *out, size_t cap) {
 int qtt_enum_test(char *out, size_t cap) {
     size_t pos = 0;
     int all_ok = 1;
+#undef A
 #define A(cond, name)                                                          \
     do {                                                                       \
         int c_ = (int)(cond);                                                  \
@@ -397,6 +400,7 @@ int qtt_enum_test(char *out, size_t cap) {
 int qtt_dep_test(char *out, size_t cap) {
     size_t pos = 0;
     int all_ok = 1;
+#undef A
 #define A(cond, name)                                                          \
     do {                                                                       \
         int c_ = (int)(cond);                                                  \
@@ -863,6 +867,10 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             *out = &TYPE_TY;
             return 0;
         }
+        case TERM_IO: {
+            *out = &VOID_TY;
+            return 0;
+        }
     }
     snprintf(err, cap, "unknown term");
     return -1;
@@ -1118,6 +1126,10 @@ static Value eval(const Term *t, Env *env) {
             v.kind = -1;
             return v;
         }
+        case TERM_IO:
+            v.kind = 0; /* unit */
+            v.i = 0;
+            return v;
         default:
             v.kind = -1;
             return v;
@@ -1220,6 +1232,62 @@ int qtt_eval_test(char *out, size_t cap) {
     E(qtt_check_closed(papp, ty, sizeof ty, err, sizeof err) == 0 &&
       qtt_eval(papp, &k, &i, &b, err, sizeof err) == 0 && i == 42,
       "typecheck + eval ((λx:^1 i64. x+1) 41) == 42");
+
+    return all_ok ? 0 : -1;
+}
+
+int qtt_term_has_io(const Term *t) {
+    if (!t) {
+        return 0;
+    }
+    if (t->kind == TERM_IO) {
+        return 1;
+    }
+    if (qtt_term_has_io(t->a) || qtt_term_has_io(t->b) ||
+        qtt_term_has_io(t->c)) {
+        return 1;
+    }
+    for (int i = 0; i < t->nfields; i++) {
+        if (qtt_term_has_io(t->fields[i].val)) {
+            return 1;
+        }
+    }
+    for (int i = 0; i < t->narms; i++) {
+        if (qtt_term_has_io(t->arms[i].body)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int qtt_effect_test(char *out, size_t cap) {
+    size_t pos = 0;
+    int all_ok = 1;
+#undef A
+#define A(cond, name)                                                          \
+    do {                                                                       \
+        int c_ = (int)(cond);                                                  \
+        int r_ = snprintf(out + pos, cap - pos, "[%s] %s\n",                  \
+                          c_ ? "ok" : "FAIL", name);                           \
+        if (r_ > 0) pos += (size_t)r_;                                         \
+        if (!c_) all_ok = 0;                                                   \
+    } while (0)
+
+    static Term pool[16];
+    static int pi = 0;
+    pi = 0;
+    Term *l1 = &pool[pi++]; memset(l1, 0, sizeof *l1); l1->kind = TERM_LIT; l1->ival = 1;
+    Term *l2 = &pool[pi++]; memset(l2, 0, sizeof *l2); l2->kind = TERM_LIT; l2->ival = 2;
+    Term *add = &pool[pi++]; memset(add, 0, sizeof *add);
+    add->kind = TERM_BIN; add->op = BOP_ADD; add->a = l1; add->b = l2;
+    A(!qtt_term_has_io(add), "pure term (1+2) has no IO");
+
+    Term *io = &pool[pi++]; memset(io, 0, sizeof *io); io->kind = TERM_IO;
+    A(qtt_term_has_io(io), "TERM_IO has IO");
+
+    Term *nested = &pool[pi++]; memset(nested, 0, sizeof *nested);
+    nested->kind = TERM_BIN; nested->op = BOP_ADD; nested->a = l1; nested->b = io;
+    A(qtt_term_has_io(nested), "nested IO detected");
 
     return all_ok ? 0 : -1;
 }

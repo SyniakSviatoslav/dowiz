@@ -89,6 +89,7 @@ typedef enum {
     TERM_ENUM_CTOR,
     TERM_MATCH,
     TERM_TYPE,
+    TERM_IO,
 } TermKind;
 
 typedef enum {
@@ -171,5 +172,11 @@ int qtt_enum_test(char *out, size_t cap);
 
 /* Run the dependent-type (universe + type substitution) self-test. */
 int qtt_dep_test(char *out, size_t cap);
+
+/* Effect analysis: does the term contain an I/O side effect (TERM_IO)? */
+int qtt_term_has_io(const Term *t);
+
+/* Run the effect (pure/io) analysis self-test. */
+int qtt_effect_test(char *out, size_t cap);
 
 #endif /* BEBOP_QTT_H */
