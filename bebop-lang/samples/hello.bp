@@ -1,4 +1,7 @@
 // hello.bp — minimal Bebop sample (glyphic surface + ASCII fallback)
-◇ △ ⊙ ◉ → ◈
-struct data contract val mod fn
-42 1337
+module core { }
+struct order { id: i64, amount: i64 }
+const VERSION: i64 = 1
+fn ntt(a: i64) -> i64 { a + 1 }
+use core::math
+type Amount = i64

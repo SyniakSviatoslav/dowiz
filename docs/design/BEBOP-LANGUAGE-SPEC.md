@@ -206,6 +206,8 @@ cold-start, no daemon needed.
 
 ## 9. Backends (native, mandatory compilation, all optimizations)
 
+**CPU, WebAssembly, and GPU are all mandatory targets** — Bebop is not CPU-only.
+
 1. **Direct machine code** — aarch64 (**NEON**) + x86_64 (**AVX-512**), zero runtime, zero
    deps, `no_std`. Compilation is **mandatory**; every optimization (branchless `⤫`,
    atomic `⚛`, SIMD vectorization, compile-time baking) is **mandatory**, not optional.
