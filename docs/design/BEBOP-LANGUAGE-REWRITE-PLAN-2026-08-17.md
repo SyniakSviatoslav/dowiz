@@ -3,9 +3,9 @@
 > **Author:** Sviatoslav Syniak · **License:** AGPL-3.0-or-later · **Date:** 2026-08-17
 > **Doctrine:** Over-engineering is the #1 ally (MANIFESTO C8, amended). No slices, no gating — full language + full rewrite, at maximum speed.
 
-**Goal:** Build **Bebop** — a systems language fusing Rust's ownership, Lean 4's dependent types, SPARK/Ada's contracts, first-class SIMD/NTT, an FPGA/ASIC synthesis path, and pixel-vector-glyph source — then rewrite **all of dowiz** in it, bit-identical to the Rust reference.
+**Goal:** Build **Bebop** — a native, glyphic, **agentic** systems language fusing **C's** low-level control, **Rust's** ownership, **Lean 4's** dependent types, **SPARK/Ada's** contracts, first-class SIMD/NTT, an FPGA/ASIC synthesis path, and vector-glyph source (not emoji) — then rewrite **all of dowiz** in it, bit-identical to the Rust reference.
 
-**Architecture:** One **glyphic** surface (no words, cosmic lexicon) → **QTT** kernel → **native machine code** (direct aarch64+NEON / x86_64+AVX emission, no LLVM) + **Calyx/CIRCT** (silicon). Contracts → SMT. Built-in methods: NTT, hypervector, living-memory, hybrid quantum state. Atomic & branchless.
+**Architecture:** One **glyphic** surface (no words, ordinary lexicon, vector glyphs not emoji) → **QTT** kernel → **native machine code** (direct aarch64+NEON / x86_64+AVX emission, no LLVM) + **Calyx/CIRCT** (silicon). Contracts → SMT. Built-in methods: NTT, hypervector, living-memory, hybrid quantum state. Atomic & branchless. **Agentic** (agents + humans, one surface).
 
 **Stack:** QTT (Idris-2 model), direct native codegen, Calyx/CIRCT, Z3/CVC5, **C (bootstrap) → self-host in Bebop**, 12-way swarm.
 
@@ -86,7 +86,7 @@ fn ntt(x: &[Fp<P>; n]) -> &[Fp<P>; n]
 `comptime` + pervasive `const fn`. Living-memory index, NTT twiddle factors, code-graph baked into `.rodata` — runtime = pointer deref. Subsumes the daemon (zero cold-start, no daemon needed).
 
 ### 3.7 Glyphic surface (no words)
-The surface is **glyphs only** — no keywords, no words. Every symbol is a vector glyph (δ-outline); ASCII is a terminal fallback, never the source. **Cosmic lexicon**: star `★`=fn, diamond `◇`=struct, constellation `△`=data, halo `⊙`=contract. Full alphabet + calculus in spec v0.2 §2.
+The surface is **glyphs only** — no keywords, no words. Every symbol is a vector glyph (δ-outline); ASCII is a terminal fallback, never the source. **Ordinary lexicon**: `★`=fn, `◇`=struct, `△`=data, `⊙`=contract. Glyphs are vector δ-outlines, **not emoji**. Full alphabet in `BEBOP-GLYPH-ALPHABET.md`.
 
 ### 3.8 Concurrency & deep parallelism (first-class)
 `∥` parallel composition, `⋉`/`⋊` fork/join, PID-dynamic spawner (dowiz `dynamic_spawner`) as built-in scheduler. Vector/hypervector ops implicitly parallel + `⚛ bit_identical`.
@@ -99,6 +99,9 @@ NTT `⟲⟳`, hypervector `⧉⊕⊗`, FFT/modular `ωₙℤₘ`, living-memory 
 
 ### 3.11 Self-prediction (hybrid quantum state + relational memory)
 `ψ` hybrid state ⊗ living-memory `⌾⤳⋈` relations let a program predict + prefetch its own next hot path — deterministic, RNG-free (C10).
+
+### 3.12 Agentic (agents + humans, one surface)
+Total ASCII fallback (agents tokenize without vision), contracts as machine-checkable specs, living-memory `⌾⤳⋈⇝` semantic navigation, deterministic no_std semantics. Built for AI agents as first-class users.
 
 ---
 
@@ -130,7 +133,7 @@ NTT `⟲⟳`, hypervector `⧉⊕⊗`, FFT/modular `ωₙℤₘ`, living-memory 
 
 **Phase 0 — Spec (2–3 days).** `BEBOP-LANGUAGE-SPEC.md`: EBNF grammar, QTT typing rules, contract semantics, effect system, glyph map. Verify on paper: a hand-written NTT example type-checks.
 
-**Phase 1 — Glyphic front-end + font (3–5 days).** Native `bebopc` (C bootstrap): glyphic lexer, recursive-descent parser → AST, 300-glyph cosmic alphabet (δ-outlines) + braille/vector renderer, `bebopc fmt` on `.bp`. Verify: fmt round-trips; full alphabet renders. (The Rust `bebop-lang/` scaffold is reference-only, superseded by the native C bootstrap.)
+**Phase 1 — Glyphic front-end + font (3–5 days).** Native `bebopc` (C bootstrap): glyphic lexer, recursive-descent parser → AST, 300-glyph alphabet, ordinary lexicon (δ-outlines) + braille/vector renderer, `bebopc fmt` on `.bp`. Verify: fmt round-trips; full alphabet renders. (The Rust `bebop-lang/` scaffold is reference-only, superseded by the native C bootstrap.)
 
 **Phase 2 — QTT kernel (1–2 weeks, critical path).** Elaborator, quantitative resource analysis, dependent elaboration, termination checker, quotient types. Verify: NTT example from Phase 0 type-checks for real.
 

@@ -1,4 +1,4 @@
-# Bebop Language Specification — v0.2
+# Bebop Language Specification — v0.3
 
 > Phase 0 deliverable (revised). Authoritative design reference.
 > Author: Sviatoslav Syniak · License: AGPL-3.0-or-later · 2026-08-17
@@ -8,217 +8,207 @@
 
 ## 1. Identity
 
-Bebop is a **native, glyphic systems language**. There are **no words** in its surface — only **glyphs and calculus**. A program is a geometric composition of vector symbols; the terminal renders each glyph as pixels (braille/half-block), an editor renders it as a δ-outline. ASCII is only a *fallback rendering* of a glyph, never the source of truth.
+Bebop is a **native, glyphic, agentic systems language**. There are **no words** in
+its surface — only **glyphs and calculus**. A program is a geometric composition of
+vector symbols; the terminal renders each glyph as pixels (braille/half-block), an
+editor renders it as a δ-outline. ASCII is only a *fallback rendering* of a glyph,
+never the source of truth.
 
-The lexicon is **cosmic**: types are constellations, functions are stars, values are worlds, memory is a galaxy.
+**Glyphs are vector outlines, not emoji.** Every symbol is a hand-drawn δ-outline on a
+pixel grid (spec §2.4); Unicode pictographs/emoji are never the canonical form — the
+canonical form is the δ-outline, and the terminal fallback is the ASCII name.
 
-Bebop is written **natively, not in Rust**: the bootstrap compiler is a minimal native C core; the compiler self-hosts in Bebop; the backend emits **machine code directly** (aarch64+NEON, x86_64+AVX) with **zero runtime, zero external dependencies** (no LLVM).
+**The lexicon is ordinary** — technical terms (`module`, `function`, `record`, `sum`,
+`contract`, …), not metaphor.
+
+**Bebop is agentic** — a first-class surface for AI agents *and* humans:
+- a complete, stable ASCII fallback so agents tokenize unambiguously;
+- contracts are machine-checkable specs an agent verifies against its own output;
+- deterministic, no_std semantics an agent can reason about;
+- living-memory relational navigation (`⌾⤳⋈`) — an agent asks the codebase, it answers;
+- hybrid-quantum self-prediction (`ψ`) lets an agent (and the runtime) prefetch its next
+  hot path. Agents and humans share one surface, one grammar, one type system.
+
+**Bebop carries all the methods of C, Rust, and Lean 4:**
+- **C** — pointers, manual memory, bit-level control, freestanding/no-runtime, ABI, `volatile`, inline asm.
+- **Rust** — ownership/borrowing, traits, no_std, zero-cost abstractions, const-eval, macros, unsafe scoping.
+- **Lean 4** — dependent types, inductive + quotient types, proof terms, termination, universe hierarchy.
+
+Bebop is written **natively, not in Rust**: the bootstrap compiler is a minimal native
+C core; the compiler self-hosts in Bebop; the backend emits **machine code directly**
+(aarch64+NEON, x86_64+AVX) with zero runtime, zero external dependencies (no LLVM).
 
 ---
 
 ## 2. Surface: glyphs, not words
 
 ### 2.1 The glyph is the token
-A program is a sequence of **glyphs**. Each glyph is a named vector symbol (δ-encoded outline on a pixel grid, §2.4 of v0.1). There is no `fn`/`struct`/`match` — there is `★`/`◇`/`△`.
+A program is a sequence of **glyphs**. Each glyph is a named vector symbol (δ-encoded
+outline on a pixel grid). There is no `fn`/`struct`/`match` keyword — there is a glyph;
+its ASCII name is the fallback token. The full alphabet is in
+`BEBOP-GLYPH-ALPHABET.md` (closed: every glyph parses, every construct has a glyph).
 
-### 2.2 Cosmic lexicon (core glyph alphabet)
+### 2.2 Glyph lexicon (core, ordinary)
 
-**Structure (the "sky"):**
-| Glyph | Meaning | Cosmic name |
+| Glyph | Name | Meaning |
 |---|---|---|
-| `◈` | module / namespace | star-system |
-| `★` | function definition | star |
-| `◇` | record / struct | diamond |
-| `△` | inductive / data (sum) | constellation |
-| `◉` | value / term | world |
-| `⊙` | contract / invariant | halo |
-| `◎` | quotient type | eclipse |
+| `◈` | `mod` | module / namespace |
+| `★` | `fn` | function definition |
+| `◇` | `struct` | record / product |
+| `△` | `data` | inductive / sum |
+| `◉` | `val` | value / term |
+| `⊙` | `contract` | pre/post/invariant |
+| `◎` | `quotient` | quotient type |
+| `✦` | `trait` | interface / typeclass |
+| `♁` | `impl` | implementation |
+| `⌘` | `type` | type alias |
+| `⇐` | `use` | import |
+| `¤` | `const` | constant |
+| `◐` | `let` | let-binding |
+| `◑` | `mut` | mutable binding |
+| `❖` | `match` | pattern match |
+| `◒` | `if` | conditional |
+| `↻` | `loop` | loop |
+| `↺` | `while` | while |
+| `♒` | `for` | for-each |
+| `↯` | `return` | return |
 
-**Calculus (the "orbits"):**
-| Glyph | Meaning |
-|---|---|
-| `λ` | abstraction |
-| `→` | function type / arrow |
-| `∏` | dependent product (Π-type) |
-| `∑` | dependent sum (Σ-type) |
-| `:` | type annotation |
-| `≡` | definitional equality |
-| `≅` | quotient equivalence |
-| `≈` | propositional equality |
-| `⊢` | typing judgement |
-| `⊨` | contract obligation (entails) |
+**Calculus:** `λ` lambda · `→` arrow · `∏` pi · `∑` sigma · `:` colon · `::` cons ·
+`≡` definitional-equality · `≅` quotient-equivalence · `≈` propositional-equality ·
+`⊢` typing · `⊨` obligation · `=` assign · `.` field · `;`/`,` separator.
 
-**Quantities (QTT rig `0/1/ω`):**
-| Glyph | Quantity | Meaning |
-|---|---|---|
-| `∅` | 0 | erased (proof / type) |
-| `·` | 1 | linear (exactly once) |
-| `∞` | ω | unrestricted |
+**Quantities (QTT rig):** `∅` = 0 (erased) · `·` = 1 (linear) · `∞` = ω (unrestricted).
 
-**Fields & NTT (dowiz core):**
-| Glyph | Meaning |
-|---|---|
-| `𝔽ₚ` | prime field mod p |
-| `ℤₘ` | ring mod m |
-| `ωₙ` | primitive n-th root of unity |
-| `⟲` | NTT / forward transform |
-| `⟳` | inverse NTT |
-| `⊛` | circular convolution |
-| `⧉` | hypervector (1024-bit) |
-| `⊕` | hypervector bundling |
-| `⊗` | hypervector binding |
+**Numeric tower:** `ℤ` ints · `ℕ` naturals · `𝔽ₚ` prime field · `ℤₘ` ring mod m ·
+`i64`/`u64`/`f64` (float gated) · `♾` infinity.
 
-**Quantum (hybrid state):**
-| Glyph | Meaning |
-|---|---|
-| `ψ` | quantum state |
-| `|ψ⟩` | ket |
-| `⟨ψ|` | bra |
-| `⨁` | superposition |
-| `⨂` | entanglement |
-| `𝐇` | Hadamard |
-| `𝐌` | measurement |
+**NTT & fields:** `ωₙ` root-of-unity · `⟲` ntt · `⟳` intt · `⊛` convolution ·
+`×` `＋` `−` `÷` `∤` · `≪` `≫` shifts.
 
-**Memory & relations (living-memory foundations):**
-| Glyph | Meaning |
-|---|---|
-| `⌾` | node |
-| `⤳` | edge |
-| `⋈` | relational join |
-| `⊑` | containment |
-| `≺` | precedence |
+**Hypervector (1024-bit):** `⧉` hypervector · `⊕` bundle · `⊗` bind · `⊖` unbind ·
+`∘` shift · `⊚` similarity · `⋔` xor · `⋏` majority.
 
-**Parallelism & atomics:**
-| Glyph | Meaning |
-|---|---|
-| `∥` | parallel composition |
-| `⋉` | fork |
-| `⋊` | join |
-| `⚛` | atomic |
-| `⤫` | branchless (predicated) |
+**Quantum (hybrid state):** `ψ` state · `|⟩` ket · `⟨|` bra · `⨁` superposition ·
+`⨂` tensor · `𝐇` Hadamard · `𝐌` measure.
 
-**Logic:**
-| Glyph | Meaning |
-|---|---|
-| `∧` `∨` `¬` | and / or / not |
-| `∀` `∃` | forall / exists |
+**Memory & relations (living-memory):** `⌾` node · `⤳` edge · `⋈` join · `⊑` subset ·
+`≺` precede · `⤴` neighbor · `⇝` search.
 
-### 2.3 The glyphic program
-A Bebop function is written as a glyph composition:
+**Parallelism & atomics:** `∥` par · `⋉` fork · `⋊` join · `⚛` atomic ·
+`⤫` branchless · `⟕` spawn · `⟖` sync · `⧗` barrier.
+
+**Logic:** `∧` and · `∨` or · `¬` not · `∀` forall · `∃` exists · `⊃` implies ·
+`⊥` bottom · `⊤` top.
+
+**Effects (capabilities):** `⏱` clock · `⚄` rng · `⬡` env · `⟡` float · `⌁` net ·
+`⚙` io · `∅` pure.
+
+> The glyph in the left column is the terminal-render placeholder for the vector
+> δ-outline (the canonical form). ASCII names are the fallback tokens an agent parses.
+
+---
+
+## 3. Core calculus — QTT
+
+The core is **Quantitative Type Theory** (Atkey 2018; McBride 2016; Idris 2, Brady 2021):
+a single type theory that fuses **Rust's ownership** (linearity) and **Lean 4's dependent
+types** (erasure/proofs) via quantity annotations `0`/`1`/`ω`.
+
+Quantities form the rig `{0,1,ω}`:
+- `0 + p = p`, `1 + 1 = ω`, `ω + p = ω` (join)
+- `0 · p = 0`, `1 · p = p`, `ω · p = ω` (tensor)
+
+Judgements (`Γ ⊢ t : A`, usage-tracked):
 ```
-◈ dowiz·ntt
+────────── VAR     x :ᵖ A ∈ Γ,  p ≠ 0
+Γ ⊢ x : A
 
-★ ⟲ ◉(xs: 𝔽ₚ*) → 𝔽ₚ*
-⊙  requires  (◉ n) ≡ 2ᵏ
-⊙  ensures  ⟳(⟲(xs)) ≈ xs
-{
-  △ n { 1 → xs · n → ◉ let (e,o) = decimate(xs) ⋈ butterflies(⟲ e, ⟲ o, ωₙ) }
-}
-```
-(ASCII shown only because the terminal renders glyphs as pixels; the true source is the glyph sequence.)
+Γ, x :ᵖ A ⊢ t : B
+────────────────── LAM
+Γ ⊢ λx. t : (x :ᵖ A) → B
 
----
+Γ ⊢ f : (x :ᵖ A) → B    Γ ⊢ s : A
+───────────────────────────────── APP
+Γ ⊢ f s : B[s/x]
 
-## 3. Core calculus (QTT) — unchanged, glyph-notated
+Γ ⊢ A : Typeᵢ    Γ, x :ᵖ A ⊢ B : Typeⱼ
+────────────────────────────────────── PI
+Γ ⊢ (x :ᵖ A) → B : Type₍ᵢ⊔ⱼ₎
 
-The calculus of v0.1 §4 stands, rendered in glyphs: `∏(x:ᵍ A) → B` for dependent products with quantity `ᵍ ∈ {∅,·,∞}`. Linear = `·`, erased = `∅`, unrestricted = `∞`. The borrow checker is the quantitative analysis; erasure deletes `∅`-terms at runtime.
-
----
-
-## 4. Contracts (SPARK/Ada model) — glyph-notated
-
-`⊙ requires` / `⊙ ensures` / `⊙ invariant` / `⊙ decreases`, plus `ghost` (`∅`-quantified, erased). VCs lower to SMT. `⚛ bit_identical` proves SIMD ≡ scalar.
-
----
-
-## 5. Native execution model
-
-1. **no_std, zero-runtime** — Bebop core emits freestanding object code; no allocator unless `·`-linear regions demand it (arena).
-2. **Direct machine code** — the backend emits aarch64 (with **NEON**) and x86_64 (with AVX) instructions directly; **no LLVM, no third-party backend**. NEON is the reference vector target (the host is aarch64).
-3. **`⚛ atomic`** — primitives are indivisible: single-instruction where the ISA provides it (CAS, LDADD), else lock-free sequences.
-4. **`⤫ branchless`** — the hot path (NTT butterflies, hypervector bundling/binding, field mul) compiles to **predicated/select** code (CSEL/CMOV), no conditional branches. The compiler emits branchless lowering by default for the Bebop subset.
-
----
-
-## 6. Concurrency & deep parallelism (first-class)
-
-- `∥` composes two computations in parallel (data-parallel / task-parallel).
-- `⋉ e` forks `e`; `⋊` joins; a **PID-dynamic spawner** (dowiz `dynamic_spawner`) is the built-in scheduler — the language's parallelism is depth-first by default, width-adaptive under load.
-- `Vector<W,T>` + `⧉` hypervector operations are **implicitly parallel** across lanes (NEON/SVE/AVX) and **bit-identical** to the scalar path.
-
----
-
-## 7. Core methods — dowiz's best algorithms are Bebop's methods
-
-The most valuable dowiz modules become **built-in methods**, not libraries:
-
-| dowiz algorithm | Bebop method |
-|---|---|
-| `hypervector.rs` (1024-bit, bundling/binding, shift-invariant similarity) | `⧉` type + `⊕` `⊗` `·` methods |
-| `ntt.rs` (exact integer NTT/INTT, convolution) | `⟲` `⟳` `⊛` on `𝔽ₚ`/`ℤₘ` |
-| `fft.rs` / `modular.rs` | `ωₙ` root synthesis, `ℤₘ` ring ops |
-| `living_memory.rs` (code-graph, vector search, persistence) | `⌾`/`⤳`/`⋈` relational memory |
-| `quantum.rs` (hybrid quantum state) | `ψ` hybrid state, self-prediction (§8) |
-| `arena` / `slot_arena` | `·`-linear regions (no heap) |
-| `money.rs` (i64 minor units, no-float) | `◉ Money` with `∅float` effect law |
-| `order_machine.rs` / `causal.rs` (event-sourced, fold) | `△` state machine, `Σ = fold(events)` |
-| `simd.rs` (bit-identical SoA lanes) | `Vector<W,T>` with `⚛ bit_identical` |
-
-**Every Bebop method is `O(n)` zero-overhead**: linear time where linear is the floor, no hidden `O(n²)`, no allocation, no bounds-check cost on the subset (proved out by contracts).
-
----
-
-## 8. Self-prediction: hybrid quantum state + relational memory
-
-Bebop programs **predict themselves**. Two coupled mechanisms:
-
-1. **Hybrid quantum state (`ψ`)** — every Bebop item carries a hybrid classical+quantum state (dowiz `quantum.rs`). The quantum part holds a superposition over likely next-actions; measurement collapses it. This is *not* AI — it is a deterministic `ψ` with caller-supplied entropy (MANIFESTO C10: RNG-free hot path).
-
-2. **Relational memory (`⌾`/`⤳`/`⋈`)** — living-memory's code-graph is a built-in relation: nodes are items, edges are call/data-dependency, `⋈` joins them. The program **queries its own past** (`⌾ path`, `⤳ neighbors`, `⋈ join`) to predict the next hot path, prefetch hypervectors, and re-rank.
-
-Together: `ψ ⊗ ⌾` predicts the next branch/lookup **branchlessly** (§5.4) and prefetches it before it is demanded — the language's own `comptime` baking (§9) plus its runtime relational memory.
-
----
-
-## 9. Compile-time baking (zero cold-start)
-
-`comptime` + pervasive `const fn` bake the living-memory index, NTT twiddle factors, and code-graph into `.rodata`. Runtime = pointer deref. Combined with `ψ`-prediction, the daemon's cold-start disappears **by construction**.
-
----
-
-## 10. Bootstrap & backend (native, not Rust)
-
-- **Stage 0 (bootstrap):** `bebopc` written in **C** (native, minimal) — glyphic lexer → parser → QTT elaborator → **direct aarch64/x86_64 codegen**. No Rust, no LLVM.
-- **Stage 1 (self-host):** `bebopc` rewritten in **Bebop** (`◈ bebopc ★ compile`), once Bebop compiles itself.
-- **Stage 2 (silicon):** `⚛ hardware` items → Calyx/CIRCT → Verilog (NTT butterfly, hypervector bundling, SHA-3 round).
-
----
-
-## 11. Appendix — worked example (glyphic, ASCII-rendered)
-
-```
-◈ dowiz·ntt
-
-★ ⟲ ◉(xs: ⧉ 𝔽ₚ) → ⧉ 𝔽ₚ
-⊙  requires  n ≡ 2ᵏ
-⊙  ensures  ⟳(⟲ xs) ≈ xs
-⊙  decreases n
-{
-  △ n {
-    1     → xs
-    n     → ◉ let (e, o) = decimate xs ⋈
-              butterflies(⟲ e ∥ ⟲ o, ωₙ)        ⚛ · ⤫
-  }
-}
+──────────── TYPE
+Γ ⊢ Typeᵢ : Typeᵢ₊₁
 ```
 
-Notes: `∥` runs the two sub-transforms in parallel; `⚛` marks the butterfly atomic; `⤫` forces branchless predication; the round-trip `ensures` is discharged by SMT for fixed `n`.
+- `1` (linear) = move/ownership (Rust's affine discipline).
+- `ω` (unrestricted) = shared borrow / `Copy`.
+- `0` (erased) = proof / type-level only (Lean's `Prop`).
+- Termination: structural recursion + a `decreases` well-founded measure (Lean parity).
 
 ---
 
-## 12. Open items (carried forward)
-1. Full glyph outline set (Phase 1) — format fixed in v0.1 §2.6; the 300-glyph cosmic alphabet is drawn in Phase 1.
-2. `ψ` collapse semantics (measurement basis) — Phase 4.
-3. Direct codegen register allocator (aarch64/x86_64) — Phase 3.
-4. `⤫` branchless guarantee for arbitrary user code vs the Bebop subset only — Phase 3.
-5. Self-host ordering — post-Phase-3.
+## 4. Contracts (Spark/Ada parity)
+
+```
+⊙ fn add(a: i64, b: i64) → i64
+  requires a ≥ 0 ∧ b ≥ 0
+  ensures  result = a + b ∧ result ≥ 0
+  invariant ...
+```
+
+- `requires` (precondition), `ensures` (postcondition), `invariant` (data + loop),
+  `ghost` (verification-only code), `decreases` (termination measure).
+- Verification conditions (VC) are generated weakest-precondition style, then discharged
+  to **SMT** (Z3/CVC5). The verifiable subset mirrors SPARK: no unbounded recursion
+  without a measure, explicit frame (`reads`/`writes`).
+- `⚛ bit_identical` — a contract that SIMD and scalar paths emit identical bits
+  (dowiz `simd.rs` design rule, made a compiler-checked law).
+- `◉ no_float` — a type-level guarantee that a float never reaches money (dowiz C5).
+
+---
+
+## 5. Effects & capabilities
+
+A `pure` function has an empty capability set. Capabilities (`⏱` clock, `⚄` rng,
+`⬡` env, `⟡` float, `⌁` net, `⚙` io) are tracked like regions: a `pure` fn cannot call
+anything needing a capability it lacks. This is MANIFESTO C2 (pure core: no
+clock/RNG/env/float/network vocabulary) as a type-level effect.
+
+---
+
+## 6. Concurrency, atomics, branchless
+
+- `∥` parallel composition, `⋉`/`⋊` fork/join, `⟕` spawn (PID-dynamic scheduler from
+  dowiz `dynamic_spawner`), `⚛` atomics (CAS/LDADD), `⤫` branchless predication
+  (CSEL/CMOV). O(n) zero-overhead methods; deep parallelism is a first-class effect.
+
+---
+
+## 7. Core methods (dowiz algorithms = Bebop methods)
+
+NTT `⟲⟳`, hypervector `⧉⊕⊗`, FFT/modular `ωₙℤₘ`, living-memory `⌾⤳⋈`, quantum `ψ`,
+arena (linear regions), money `◉ no_float`, event-sourced `△ fold`. All are **built-in
+methods** of the language, O(n) zero-overhead, no_std-native, NEON/AVX-lowered.
+
+---
+
+## 8. Compile-time evaluation
+
+`comptime` + pervasive `const fn`. Living-memory index, NTT twiddle factors, code-graph
+are baked into `.rodata` at compile time — runtime is a pointer dereference. Zero
+cold-start, no daemon needed.
+
+---
+
+## 9. Backends (native)
+
+1. **Direct machine code** — aarch64 (**NEON**) + x86_64 (**AVX**), zero runtime, zero deps, `no_std`.
+2. **Calyx/CIRCT** — `⚛ hardware` items → synthesizable Verilog (hypervector bundling, NTT butterfly, SHA-3 round).
+3. **Bootstrap in C, self-host in Bebop** — Stage 0 `bebopc` is a minimal native C core.
+
+---
+
+## 10. Open items (for Phase 1+)
+
+1. Full glyph outline corpus (300 glyphs) — drawn as δ-outlines in Phase 1.
+2. Trait coherence model (Rust vs Lean typeclasses) — Phase 2.
+3. SMT solver integration (Z3/CVC5 FFI vs embedded) — Phase 3.
