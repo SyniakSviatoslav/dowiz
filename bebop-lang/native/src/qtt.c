@@ -131,6 +131,13 @@ int qtt_self_test(char *out, size_t cap) {
 static Ty I64_TY = {TY_I64, 0, Q_ZERO, 0, 0, 0, 0};
 static Ty BOOL_TY = {TY_BOOL, 0, Q_ZERO, 0, 0, 0, 0};
 
+Ty *qtt_i64(void) {
+    return &I64_TY;
+}
+Ty *qtt_bool(void) {
+    return &BOOL_TY;
+}
+
 /* Bump-allocated type pool (types live for the self-test lifetime). */
 static Ty ty_pool[256];
 static int ty_len = 0;

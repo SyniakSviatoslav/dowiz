@@ -52,20 +52,85 @@ static int match_kw(P *p, const char *kw) {
 
 static Term *parse_expr(P *p);
 
+static Term *parse_lambda(P *p) {
+    /* after consuming '\', parse: NAME [ : [^q] TYPE ] . body */
+    int start = p->pos;
+    while (is_ident_cont(p->s[p->pos])) {
+        p->pos++;
+    }
+    static char names[256][32];
+    static int ni = 0;
+    int len = p->pos - start;
+    if (len >= 32) {
+        len = 31;
+    }
+    char *name = names[ni++ % 256];
+    memcpy(name, p->s + start, (size_t)len);
+    name[len] = '\0';
+    skip_ws(p);
+    Quantity q = Q_ONE;
+    Ty *dom = qtt_i64();
+    if (p->s[p->pos] == ':') {
+        p->pos++;
+        skip_ws(p);
+        if (p->s[p->pos] == '^') {
+            p->pos++;
+            if (p->s[p->pos] == '0') {
+                q = Q_ZERO;
+                p->pos++;
+            } else if (p->s[p->pos] == '1') {
+                q = Q_ONE;
+                p->pos++;
+            } else if (p->s[p->pos] == 'w') {
+                q = Q_MANY;
+                p->pos++;
+            }
+            skip_ws(p);
+        }
+        if (match_kw(p, "i64")) {
+            dom = qtt_i64();
+        } else if (match_kw(p, "bool")) {
+            dom = qtt_bool();
+        } else {
+            err(p, "expected type (i64/bool)");
+            return NULL;
+        }
+    }
+    skip_ws(p);
+    if (p->s[p->pos] != '.') {
+        err(p, "expected '.' in lambda");
+        return NULL;
+    }
+    p->pos++;
+    Term *body = parse_expr(p);
+    if (!body) {
+        return NULL;
+    }
+    Term *t = tnew();
+    t->kind = TERM_LAM;
+    t->name = name;
+    t->q = q;
+    t->ty = dom;
+    t->a = body;
+    return t;
+}
+
 static Term *parse_primary(P *p) {
     skip_ws(p);
+    Term *atom = NULL;
     if (p->s[p->pos] == '(') {
         p->pos++;
-        Term *e = parse_expr(p);
+        atom = parse_expr(p);
         skip_ws(p);
         if (p->s[p->pos] != ')') {
             err(p, "expected ')'");
             return NULL;
         }
         p->pos++;
-        return e;
-    }
-    if (isdigit((unsigned char)p->s[p->pos])) {
+    } else if (p->s[p->pos] == '\\') {
+        p->pos++;
+        atom = parse_lambda(p);
+    } else if (isdigit((unsigned char)p->s[p->pos])) {
         long v = 0;
         while (isdigit((unsigned char)p->s[p->pos])) {
             v = v * 10 + (p->s[p->pos] - '0');
@@ -74,21 +139,18 @@ static Term *parse_primary(P *p) {
         Term *t = tnew();
         t->kind = TERM_LIT;
         t->ival = v;
-        return t;
-    }
-    if (match_kw(p, "true")) {
+        atom = t;
+    } else if (match_kw(p, "true")) {
         Term *t = tnew();
         t->kind = TERM_LIT;
         t->bval = 1;
-        return t;
-    }
-    if (match_kw(p, "false")) {
+        atom = t;
+    } else if (match_kw(p, "false")) {
         Term *t = tnew();
         t->kind = TERM_LIT;
         t->bval = 0;
-        return t;
-    }
-    if (is_ident_start(p->s[p->pos])) {
+        atom = t;
+    } else if (is_ident_start(p->s[p->pos])) {
         int start = p->pos;
         while (is_ident_cont(p->s[p->pos])) {
             p->pos++;
@@ -104,10 +166,31 @@ static Term *parse_primary(P *p) {
         Term *t = tnew();
         t->kind = TERM_VAR;
         t->name = buf;
-        return t;
+        atom = t;
+    } else {
+        err(p, "unexpected token");
+        return NULL;
     }
-    err(p, "unexpected token");
-    return NULL;
+    if (!atom) {
+        return NULL;
+    }
+    /* postfix application: atom(arg) */
+    while (p->s[p->pos] == '(') {
+        p->pos++;
+        Term *arg = parse_expr(p);
+        skip_ws(p);
+        if (p->s[p->pos] != ')') {
+            err(p, "expected ')'");
+            return NULL;
+        }
+        p->pos++;
+        Term *app = tnew();
+        app->kind = TERM_APP;
+        app->a = atom;
+        app->b = arg;
+        atom = app;
+    }
+    return atom;
 }
 
 /* detect a binary operator at p; returns precedence, or -1 if none. */

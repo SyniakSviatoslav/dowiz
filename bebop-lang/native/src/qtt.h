@@ -120,4 +120,8 @@ typedef struct {
 int qtt_eval_bound(const Term *t, const QttBind *binds, int n, int *out_kind,
                    long *out_i, int *out_b, char *err, size_t cap);
 
+/* Public type singletons (for building terms from the parser). */
+Ty *qtt_i64(void);
+Ty *qtt_bool(void);
+
 #endif /* BEBOP_QTT_H */

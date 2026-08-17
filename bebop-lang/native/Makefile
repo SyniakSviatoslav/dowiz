@@ -40,6 +40,7 @@ test: $(BIN)
 	$(BIN) expr "1 + 2 * 3"
 	$(BIN) expr "let y = 2 in y * y"
 	$(BIN) expr "if (1 == 1) then 10 else 20"
+	$(BIN) expr '(\x:i64. x + 1)(41)'
 	@echo "--- verify (bounded contracts) ---"
 	$(BIN) verify
 	@echo "--- vsa identifiers ---"
