@@ -64,6 +64,21 @@ int qtt_ty_print(const Ty *t, char *out, size_t cap) {
             qtt_ty_print(t->elem, e, sizeof e);
             return snprintf(out, cap, "Vector<%ld,%s>", t->n, e);
         }
+        case TY_STRUCT: {
+            int n = snprintf(out, cap, "struct{");
+            for (int i = 0; i < t->nfields; i++) {
+                char ft[64];
+                qtt_ty_print(t->fields[i].ty, ft, sizeof ft);
+                if ((size_t)n < cap) {
+                    n += snprintf(out + n, cap - (size_t)n, "%s%s: %s",
+                                  i ? ", " : "", t->fields[i].name, ft);
+                }
+            }
+            if ((size_t)n < cap) {
+                n += snprintf(out + n, cap - (size_t)n, "}");
+            }
+            return n;
+        }
         case TY_FN: {
             char d[128], c[128];
             qtt_ty_print(t->dom, d, sizeof d);
@@ -109,10 +124,10 @@ int qtt_self_test(char *out, size_t cap) {
     CHECK(qtt_mul(Q_MANY, Q_MANY) == Q_MANY, "mul(ω,ω) == ω");
 
     /* Type pretty-printing round-trip sanity. */
-    Ty i64 = {TY_I64, 0, Q_ZERO, 0, 0, 0, 0};
-    Ty f = {TY_FIELD, 0xFFFFFFFF00000001ULL, Q_ZERO, 0, 0, 0, 0};
-    Ty hv = {TY_HYPERVEC, 1024, Q_ZERO, 0, 0, 0, 0};
-    Ty fn = {TY_FN, 0, Q_ZERO, 0, &i64, &i64, 0};
+    Ty i64 = {TY_I64, 0, Q_ZERO, 0, 0, 0, 0, 0, 0};
+    Ty f = {TY_FIELD, 0xFFFFFFFF00000001ULL, Q_ZERO, 0, 0, 0, 0, 0, 0};
+    Ty hv = {TY_HYPERVEC, 1024, Q_ZERO, 0, 0, 0, 0, 0, 0};
+    Ty fn = {TY_FN, 0, Q_ZERO, 0, &i64, &i64, 0, 0, 0};
     char b[128];
     qtt_ty_print(&i64, b, sizeof b);
     CHECK(b[0] == 'i' && b[1] == '6' && b[2] == '4', "print i64");
@@ -128,14 +143,118 @@ int qtt_self_test(char *out, size_t cap) {
 
 /* ═══ Terms + bidirectional typechecker (linear/affine) ═══ */
 
-static Ty I64_TY = {TY_I64, 0, Q_ZERO, 0, 0, 0, 0};
-static Ty BOOL_TY = {TY_BOOL, 0, Q_ZERO, 0, 0, 0, 0};
+static Ty I64_TY = {TY_I64, 0, Q_ZERO, 0, 0, 0, 0, 0, 0};
+static Ty BOOL_TY = {TY_BOOL, 0, Q_ZERO, 0, 0, 0, 0, 0, 0};
 
 Ty *qtt_i64(void) {
     return &I64_TY;
 }
 Ty *qtt_bool(void) {
     return &BOOL_TY;
+}
+
+/* ─── Struct (record) self-test ─── */
+int qtt_struct_test(char *out, size_t cap) {
+    size_t pos = 0;
+    int all_ok = 1;
+#define A(cond, name)                                                          \
+    do {                                                                       \
+        int c_ = (int)(cond);                                                  \
+        int r_ = snprintf(out + pos, cap - pos, "[%s] %s\n",                  \
+                          c_ ? "ok" : "FAIL", name);                           \
+        if (r_ > 0) {                                                          \
+            pos += (size_t)r_;                                                 \
+        }                                                                      \
+        if (!c_) {                                                             \
+            all_ok = 0;                                                        \
+        }                                                                      \
+    } while (0)
+
+    static Term pool[64];
+    static int pi = 0;
+    pi = 0;
+    Term *lx = &pool[pi++];
+    memset(lx, 0, sizeof *lx);
+    lx->kind = TERM_LIT;
+    lx->ival = 3;
+    Term *ly = &pool[pi++];
+    memset(ly, 0, sizeof *ly);
+    ly->kind = TERM_LIT;
+    ly->ival = 4;
+    Term *ltrue = &pool[pi++];
+    memset(ltrue, 0, sizeof *ltrue);
+    ltrue->kind = TERM_LIT;
+    ltrue->bval = 1;
+
+    static TyField pt_fields[2] = {{"x", &I64_TY}, {"y", &I64_TY}};
+    static Ty pt_ty = {TY_STRUCT, 0, Q_ZERO, 0, 0, 0, 0, pt_fields, 2};
+
+    static TermField lit_fields[2];
+    lit_fields[0].name = "x";
+    lit_fields[0].val = lx;
+    lit_fields[1].name = "y";
+    lit_fields[1].val = ly;
+    Term *lit = &pool[pi++];
+    memset(lit, 0, sizeof *lit);
+    lit->kind = TERM_STRUCT;
+    lit->ty = &pt_ty;
+    lit->fields = lit_fields;
+    lit->nfields = 2;
+
+    Term *fx = &pool[pi++];
+    memset(fx, 0, sizeof *fx);
+    fx->kind = TERM_FIELD;
+    fx->name = "x";
+    fx->a = lit;
+
+    char ty[128], err[256];
+    A(qtt_check_closed(lit, ty, sizeof ty, err, sizeof err) == 0 &&
+          strcmp(ty, "struct{x: i64, y: i64}") == 0,
+      "struct literal typechecks");
+    A(qtt_check_closed(fx, ty, sizeof ty, err, sizeof err) == 0 &&
+          strcmp(ty, "i64") == 0,
+      "field access typechecks");
+
+    int k;
+    long i;
+    int b;
+    A(qtt_eval(fx, &k, &i, &b, err, sizeof err) == 0 && i == 3, "eval field x == 3");
+
+    static TermField bad_fields[1];
+    bad_fields[0].name = "x";
+    bad_fields[0].val = lx;
+    Term *badlit = &pool[pi++];
+    memset(badlit, 0, sizeof *badlit);
+    badlit->kind = TERM_STRUCT;
+    badlit->ty = &pt_ty;
+    badlit->fields = bad_fields;
+    badlit->nfields = 1;
+    A(qtt_check_closed(badlit, ty, sizeof ty, err, sizeof err) != 0,
+      "missing field rejected");
+
+    static TermField wt_fields[2];
+    wt_fields[0].name = "x";
+    wt_fields[0].val = ltrue;
+    wt_fields[1].name = "y";
+    wt_fields[1].val = ly;
+    Term *wtlit = &pool[pi++];
+    memset(wtlit, 0, sizeof *wtlit);
+    wtlit->kind = TERM_STRUCT;
+    wtlit->ty = &pt_ty;
+    wtlit->fields = wt_fields;
+    wtlit->nfields = 2;
+    A(qtt_check_closed(wtlit, ty, sizeof ty, err, sizeof err) != 0,
+      "wrong field type rejected");
+
+    Term *ns = &pool[pi++];
+    memset(ns, 0, sizeof *ns);
+    ns->kind = TERM_FIELD;
+    ns->name = "x";
+    ns->a = lx;
+    A(qtt_check_closed(ns, ty, sizeof ty, err, sizeof err) != 0,
+      "field on non-struct rejected");
+
+    return all_ok ? 0 : -1;
 }
 
 /* Bump-allocated type pool (types live for the self-test lifetime). */
@@ -194,6 +313,20 @@ static int ty_eq(const Ty *a, const Ty *b) {
             return ty_eq(a->dom, b->dom) && ty_eq(a->cod, b->cod);
         case TY_VEC:
             return a->n == b->n && ty_eq(a->elem, b->elem);
+        case TY_STRUCT: {
+            if (a->nfields != b->nfields) {
+                return 0;
+            }
+            for (int i = 0; i < a->nfields; i++) {
+                if (strcmp(a->fields[i].name, b->fields[i].name) != 0) {
+                    return 0;
+                }
+                if (!ty_eq(a->fields[i].ty, b->fields[i].ty)) {
+                    return 0;
+                }
+            }
+            return 1;
+        }
     }
     return 0;
 }
@@ -328,6 +461,52 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             c->len--;
             return r;
         }
+        case TERM_STRUCT: {
+            if (!t->ty || t->ty->kind != TY_STRUCT) {
+                snprintf(err, cap, "struct literal needs a struct type");
+                return -1;
+            }
+            if (t->nfields != t->ty->nfields) {
+                snprintf(err, cap, "struct literal field count mismatch");
+                return -1;
+            }
+            for (int i = 0; i < t->ty->nfields; i++) {
+                Term *val = NULL;
+                for (int j = 0; j < t->nfields; j++) {
+                    if (strcmp(t->fields[j].name, t->ty->fields[i].name) == 0) {
+                        val = t->fields[j].val;
+                        break;
+                    }
+                }
+                if (!val) {
+                    snprintf(err, cap, "missing field '%s'", t->ty->fields[i].name);
+                    return -1;
+                }
+                if (check(c, val, t->ty->fields[i].ty, err, cap) != 0) {
+                    return -1;
+                }
+            }
+            *out = t->ty;
+            return 0;
+        }
+        case TERM_FIELD: {
+            Ty *bt = NULL;
+            if (infer(c, t->a, &bt, err, cap) != 0) {
+                return -1;
+            }
+            if (bt->kind != TY_STRUCT) {
+                snprintf(err, cap, "field access on non-struct");
+                return -1;
+            }
+            for (int i = 0; i < bt->nfields; i++) {
+                if (strcmp(bt->fields[i].name, t->name) == 0) {
+                    *out = bt->fields[i].ty;
+                    return 0;
+                }
+            }
+            snprintf(err, cap, "no field '%s'", t->name);
+            return -1;
+        }
     }
     snprintf(err, cap, "unknown term");
     return -1;
@@ -447,12 +626,19 @@ int qtt_check_test(char *out, size_t cap) {
 typedef struct Value Value;
 typedef struct Env Env;
 struct Value {
-    int kind; /* 0=int, 1=bool, 2=closure, -1=error */
+    int kind; /* 0=int, 1=bool, 2=closure, 3=struct, -1=error */
     long i;
     int b;
     const Term *lam; /* closure */
     Env *env;        /* closure env */
+    const Ty *sty;          /* struct: the struct type */
+    struct FieldValue *fv;  /* struct: field values */
+    int nfv;
 };
+typedef struct FieldValue {
+    const char *name;
+    Value val;
+} FieldValue;
 struct Env {
     const char *name;
     Value val;
@@ -516,6 +702,32 @@ static Value eval(const Term *t, Env *env) {
             Value x = eval(t->a, env);
             Env e = {t->name, x, env};
             return eval(t->b, &e);
+        }
+        case TERM_STRUCT: {
+            static FieldValue fvs[64];
+            v.kind = 3;
+            v.sty = t->ty;
+            v.fv = fvs;
+            v.nfv = t->nfields;
+            for (int i = 0; i < t->nfields; i++) {
+                fvs[i].name = t->fields[i].name;
+                fvs[i].val = eval(t->fields[i].val, env);
+            }
+            return v;
+        }
+        case TERM_FIELD: {
+            Value base = eval(t->a, env);
+            if (base.kind != 3) {
+                v.kind = -1;
+                return v;
+            }
+            for (int i = 0; i < base.nfv; i++) {
+                if (strcmp(base.fv[i].name, t->name) == 0) {
+                    return base.fv[i].val;
+                }
+            }
+            v.kind = -1;
+            return v;
         }
         default:
             v.kind = -1;

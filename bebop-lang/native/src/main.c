@@ -213,7 +213,10 @@ static void cmd_qtt(void) {
     int ok3 = qtt_eval_test(buf, sizeof buf);
     fputs(buf, stdout);
     printf("QTT evaluator: %s\n", ok3 == 0 ? "PASS" : "FAIL");
-    exit((ok1 == 0 && ok2 == 0 && ok3 == 0) ? 0 : 1);
+    int ok4 = qtt_struct_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("QTT structs: %s\n", ok4 == 0 ? "PASS" : "FAIL");
+    exit((ok1 == 0 && ok2 == 0 && ok3 == 0 && ok4 == 0) ? 0 : 1);
 }
 
 static void cmd_ntt(void) {

@@ -36,9 +36,15 @@ typedef enum {
     TY_FIELD,    /* finite field F_p for NTT (p = .n) */
     TY_HYPERVEC, /* D-dim hypervector, D = .n (1024) */
     TY_VEC,      /* fixed-width SIMD vector: width = .n, elem = .elem */
+    TY_STRUCT,   /* record: named fields (.fields / .nfields) */
 } TyKind;
 
 typedef struct Ty Ty;
+typedef struct {
+    const char *name;
+    Ty *ty;
+} TyField;
+
 struct Ty {
     TyKind kind;
     long n;        /* field prime / hypervector dim / vector width */
@@ -47,6 +53,8 @@ struct Ty {
     Ty *dom;       /* FN / PI domain */
     Ty *cod;       /* FN / PI codomain */
     Ty *elem;      /* VEC element type */
+    TyField *fields; /* TY_STRUCT: named fields */
+    int nfields;
 };
 
 /* Pretty-print a type into `out` (NUL-terminated). Returns bytes written. */
@@ -67,6 +75,8 @@ typedef enum {
     TERM_BIN,
     TERM_IF,
     TERM_LET,
+    TERM_STRUCT,
+    TERM_FIELD,
 } TermKind;
 
 typedef enum {
@@ -82,15 +92,22 @@ typedef enum {
 } BinOp;
 
 typedef struct Term Term;
+typedef struct {
+    const char *name;
+    Term *val;
+} TermField;
+
 struct Term {
     TermKind kind;
-    const char *name; /* VAR name / LAM binder */
+    const char *name; /* VAR name / LAM binder / FIELD name */
     Quantity q;       /* LAM binder quantity */
     long ival;        /* LIT int value */
     int bval;         /* LIT bool value (0/1) */
     BinOp op;         /* BIN operator */
-    Ty *ty;           /* LAM domain / ANN type */
-    Term *a, *b, *c;  /* APP(f,arg)/LAM(body)/ANN(term)/BIN(l,r)/IF(cond,then,else)/LET(val,body) */
+    Ty *ty;           /* LAM domain / ANN type / STRUCT type */
+    Term *a, *b, *c;  /* APP/LAM/ANN/BIN/IF/LET/FIELD(base) */
+    TermField *fields; /* TERM_STRUCT: field name → value */
+    int nfields;
 };
 
 /* Typecheck a closed term (empty context). Returns 0 on success (type printed
@@ -123,5 +140,8 @@ int qtt_eval_bound(const Term *t, const QttBind *binds, int n, int *out_kind,
 /* Public type singletons (for building terms from the parser). */
 Ty *qtt_i64(void);
 Ty *qtt_bool(void);
+
+/* Run the struct (record) typecheck + eval self-test. */
+int qtt_struct_test(char *out, size_t cap);
 
 #endif /* BEBOP_QTT_H */
