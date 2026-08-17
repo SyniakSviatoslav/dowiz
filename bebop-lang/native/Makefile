@@ -86,6 +86,8 @@ test: $(BIN)
 	$(BIN) conv
 	@echo "--- proof kernel (equality / refl) ---"
 	$(BIN) proof
+	@echo "--- proof kernel (Nat / recursor) ---"
+	$(BIN) nat
 	@echo "--- VIR (NEON lowering) ---"
 	$(BIN) vir
 

@@ -55,6 +55,8 @@ int qtt_ty_print(const Ty *t, char *out, size_t cap) {
             return snprintf(out, cap, "bool");
         case TY_VOID:
             return snprintf(out, cap, "void");
+        case TY_NAT:
+            return snprintf(out, cap, "Nat");
         case TY_TYPE:
             return snprintf(out, cap, "Type");
         case TY_VAR:
@@ -176,6 +178,7 @@ static Ty I64_TY = {.kind = TY_I64};
 static Ty BOOL_TY = {.kind = TY_BOOL};
 static Ty TYPE_TY = {.kind = TY_TYPE};
 static Ty VOID_TY = {.kind = TY_VOID};
+static Ty NAT_TY = {.kind = TY_NAT};
 
 Ty *qtt_i64(void) {
     return &I64_TY;
@@ -568,6 +571,7 @@ static int ty_eq(const Ty *a, const Ty *b) {
         case TY_F64:
         case TY_BOOL:
         case TY_VOID:
+        case TY_NAT:
             return 1;
         case TY_FIELD:
         case TY_HYPERVEC:
@@ -769,6 +773,42 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
                 snprintf(err, cap, "type pool exhausted");
                 return -1;
             }
+            return 0;
+        }
+        case TERM_NAT_Z:
+            *out = &NAT_TY;
+            return 0;
+        case TERM_NAT_S:
+            if (check(c, t->a, &NAT_TY, err, cap) != 0) {
+                return -1;
+            }
+            *out = &NAT_TY;
+            return 0;
+        case TERM_NAT_REC: {
+            /* nat_rec base step target : P, where
+             *   base : P,  step : Nat -> P -> P,  target : Nat */
+            Ty *p = NULL;
+            if (infer(c, t->a, &p, err, cap) != 0) {
+                return -1;
+            }
+            Ty *st = NULL;
+            if (infer(c, t->b, &st, err, cap) != 0) {
+                return -1;
+            }
+            if ((st->kind != TY_FN && st->kind != TY_PI) ||
+                !ty_eq(st->dom, &NAT_TY)) {
+                snprintf(err, cap, "nat_rec step must be Nat -> P -> P");
+                return -1;
+            }
+            if ((st->cod->kind != TY_FN && st->cod->kind != TY_PI) ||
+                !ty_eq(st->cod->dom, p) || !ty_eq(st->cod->cod, p)) {
+                snprintf(err, cap, "nat_rec step type mismatch");
+                return -1;
+            }
+            if (check(c, t->c, &NAT_TY, err, cap) != 0) {
+                return -1;
+            }
+            *out = p;
             return 0;
         }
         case TERM_ANN: {
@@ -1451,6 +1491,16 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             o->b = qtt_subst(t->b, name, v);
             o->c = qtt_subst(t->c, name, v);
             return o;
+        case TERM_NAT_Z:
+            return o;
+        case TERM_NAT_S:
+            o->a = qtt_subst(t->a, name, v);
+            return o;
+        case TERM_NAT_REC:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            o->c = qtt_subst(t->c, name, v);
+            return o;
     }
     return o;
 }
@@ -1475,6 +1525,46 @@ static Term *norm_rec(const Term *t) {
             o->b = norm_rec(t->b);
             o->c = norm_rec(t->c);
             return o;
+        case TERM_NAT_Z:
+            return o; /* already normal */
+        case TERM_NAT_S:
+            o->a = norm_rec(t->a);
+            return o;
+        case TERM_NAT_REC: {
+            /* definitional reduction of the recursor:
+             *   nat_rec b s Z      → b
+             *   nat_rec b s (S k)  → (s k) (nat_rec b s k)  */
+            Term *tg = norm_rec(t->c);
+            if (!tg) {
+                return NULL;
+            }
+            if (tg->kind == TERM_NAT_Z) {
+                return norm_rec(t->a);
+            }
+            if (tg->kind == TERM_NAT_S) {
+                Term *rec = knew();
+                if (!rec) return NULL;
+                rec->kind = TERM_NAT_REC;
+                rec->a = t->a;
+                rec->b = t->b;
+                rec->c = tg->a;
+                Term *app1 = knew();
+                if (!app1) return NULL;
+                app1->kind = TERM_APP;
+                app1->a = t->b; /* step */
+                app1->b = tg->a; /* k */
+                Term *app2 = knew();
+                if (!app2) return NULL;
+                app2->kind = TERM_APP;
+                app2->a = app1;
+                app2->b = rec;
+                return norm_rec(app2);
+            }
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
+            o->c = tg;
+            return o;
+        }
         case TERM_APP: {
             Term *f = norm_rec(t->a);
             if (!f) return NULL;
@@ -1572,6 +1662,13 @@ static int conv_rec(const Term *a, const Term *b) {
         case TERM_REFL:
             return conv_rec(a->a, b->a);
         case TERM_SUBST:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) &&
+                   conv_rec(a->c, b->c);
+        case TERM_NAT_Z:
+            return 1;
+        case TERM_NAT_S:
+            return conv_rec(a->a, b->a);
+        case TERM_NAT_REC:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) &&
                    conv_rec(a->c, b->c);
         case TERM_LAM:
@@ -1782,6 +1879,81 @@ int qtt_proof_test(char *out, size_t cap) {
     hc.len = 1;
     A(check(&hc, substTerm, goal22, err, sizeof err) == 0,
       "prove subst H H : 2 = 2  (H : (1+1) = 2)");
+
+    return all_ok ? 0 : -1;
+}
+
+/* ═══ Proof kernel: Nat + recursor (definitional computation) ═══ */
+
+int qtt_nat_test(char *out, size_t cap) {
+    size_t pos = 0;
+    int all_ok = 1;
+    char err[256], ty[128];
+#undef A
+#define A(cond, name)                                                          \
+    do {                                                                       \
+        int c_ = (int)(cond);                                                  \
+        int r_ = snprintf(out + pos, cap - pos, "[%s] %s\n",                  \
+                          c_ ? "ok" : "FAIL", name);                           \
+        if (r_ > 0) pos += (size_t)r_;                                         \
+        if (!c_) all_ok = 0;                                                   \
+    } while (0)
+
+    static Term pool[64];
+    static int pi = 0;
+
+    /* 1. Z : Nat, and S(S Z) : Nat */
+    pi = 0;
+    ty_len = 0;
+    Term *z = &pool[pi++]; memset(z, 0, sizeof *z); z->kind = TERM_NAT_Z;
+    A(qtt_check_closed(z, ty, sizeof ty, err, sizeof err) == 0 &&
+          strcmp(ty, "Nat") == 0,
+      "check Z : Nat");
+
+    pi = 0;
+    ty_len = 0;
+    Term *z2 = &pool[pi++]; memset(z2, 0, sizeof *z2); z2->kind = TERM_NAT_Z;
+    Term *s1 = &pool[pi++]; memset(s1, 0, sizeof *s1); s1->kind = TERM_NAT_S; s1->a = z2;
+    Term *s2 = &pool[pi++]; memset(s2, 0, sizeof *s2); s2->kind = TERM_NAT_S; s2->a = s1;
+    A(qtt_check_closed(s2, ty, sizeof ty, err, sizeof err) == 0 &&
+          strcmp(ty, "Nat") == 0,
+      "check S(S Z) : Nat");
+
+    /* 2. double = nat_rec Z (λk. λacc. S(S acc)) : Nat -> Nat.
+     *    double 2 = nat_rec Z step (S(S Z))  reduces definitionally to S^4 Z,
+     *    so `refl` proves  double 2 = 4  (Lean's `rfl` on a closed computation). */
+    pi = 0;
+    ty_len = 0;
+    Term *base = &pool[pi++]; memset(base, 0, sizeof *base); base->kind = TERM_NAT_Z;
+    Term *acc = &pool[pi++]; memset(acc, 0, sizeof *acc); acc->kind = TERM_VAR; acc->name = "acc";
+    Term *sa = &pool[pi++]; memset(sa, 0, sizeof *sa); sa->kind = TERM_NAT_S; sa->a = acc;
+    Term *ssa = &pool[pi++]; memset(ssa, 0, sizeof *ssa); ssa->kind = TERM_NAT_S; ssa->a = sa;
+    Term *lam_acc = &pool[pi++]; memset(lam_acc, 0, sizeof *lam_acc);
+    lam_acc->kind = TERM_LAM; lam_acc->name = "acc"; lam_acc->q = Q_MANY;
+    lam_acc->ty = &NAT_TY; lam_acc->a = ssa;
+    Term *step = &pool[pi++]; memset(step, 0, sizeof *step);
+    step->kind = TERM_LAM; step->name = "k"; step->q = Q_MANY; step->ty = &NAT_TY; step->a = lam_acc;
+    Term *z3 = &pool[pi++]; memset(z3, 0, sizeof *z3); z3->kind = TERM_NAT_Z;
+    Term *t1 = &pool[pi++]; memset(t1, 0, sizeof *t1); t1->kind = TERM_NAT_S; t1->a = z3;
+    Term *t2 = &pool[pi++]; memset(t2, 0, sizeof *t2); t2->kind = TERM_NAT_S; t2->a = t1;
+    Term *double2 = &pool[pi++]; memset(double2, 0, sizeof *double2);
+    double2->kind = TERM_NAT_REC; double2->a = base; double2->b = step; double2->c = t2;
+    A(qtt_check_closed(double2, ty, sizeof ty, err, sizeof err) == 0 &&
+          strcmp(ty, "Nat") == 0,
+      "check nat_rec (double) 2 : Nat");
+
+    /* S^4 Z — the numeral 4 (built in the SAME pool, so double2 stays alive) */
+    Term *z4 = &pool[pi++]; memset(z4, 0, sizeof *z4); z4->kind = TERM_NAT_Z;
+    Term *n1 = &pool[pi++]; memset(n1, 0, sizeof *n1); n1->kind = TERM_NAT_S; n1->a = z4;
+    Term *n2 = &pool[pi++]; memset(n2, 0, sizeof *n2); n2->kind = TERM_NAT_S; n2->a = n1;
+    Term *n3 = &pool[pi++]; memset(n3, 0, sizeof *n3); n3->kind = TERM_NAT_S; n3->a = n2;
+    Term *four = &pool[pi++]; memset(four, 0, sizeof *four); four->kind = TERM_NAT_S; four->a = n3;
+    Term *reflD = &pool[pi++]; memset(reflD, 0, sizeof *reflD);
+    reflD->kind = TERM_REFL; reflD->a = double2;
+    Ty *goalD = ty_alloc(TY_EQ);
+    goalD->eq_a = &NAT_TY; goalD->eq_l = double2; goalD->eq_r = four;
+    A(qtt_prove(reflD, goalD, ty, sizeof ty, err, sizeof err) == 0,
+      "prove refl (double 2) : double 2 = S(S(S(S Z)))");
 
     return all_ok ? 0 : -1;
 }

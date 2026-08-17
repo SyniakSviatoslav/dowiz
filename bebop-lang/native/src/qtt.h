@@ -41,6 +41,7 @@ typedef enum {
     TY_TYPE,     /* universe: the type of types (Type₀) */
     TY_VAR,      /* type variable (name in .x) */
     TY_EQ,       /* propositional equality: a = b (Eq A a b) */
+    TY_NAT,      /* natural numbers: Z | S Nat */
 } TyKind;
 
 typedef struct Ty Ty;
@@ -96,6 +97,10 @@ typedef enum {
     TERM_IO,
     TERM_REFL,    /* refl : a = a (propositional equality intro) */
     TERM_SUBST,   /* subst : a = b -> P a -> P b (equality elim / transport) */
+    TERM_NAT_Z,   /* Z : Nat (zero constructor) */
+    TERM_NAT_S,   /* S n : Nat (successor, .a = the predecessor) */
+    TERM_NAT_REC, /* nat_rec : P -> (Nat -> P -> P) -> Nat -> P
+                   *   .a = base, .b = step, .c = target */
 } TermKind;
 
 typedef enum {
@@ -217,5 +222,8 @@ int qtt_prove(const Term *proof, const Ty *goal, char *out_ty, size_t cap_ty,
 
 /* Run the propositional-equality (refl / conversion) proof self-test. */
 int qtt_proof_test(char *out, size_t cap);
+
+/* Run the Nat + recursor (definitional computation) proof self-test. */
+int qtt_nat_test(char *out, size_t cap);
 
 #endif /* BEBOP_QTT_H */

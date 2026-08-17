@@ -779,6 +779,13 @@ int main(int argc, char **argv) {
         printf("Proof kernel (equality) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
+    if (strcmp(argv[1], "nat") == 0) {
+        char buf[1024];
+        int ok = qtt_nat_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Proof kernel (Nat/recursor) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
     if (strcmp(argv[1], "vir") == 0) {
         char buf[2048];
         int ok = vir_self_test(buf, sizeof buf);
