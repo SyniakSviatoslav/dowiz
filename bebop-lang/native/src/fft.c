@@ -8,25 +8,6 @@
 
 #define FFT_PI 3.14159265358979323846
 
-static Complex c_add(Complex a, Complex b) {
-    Complex r;
-    r.re = a.re + b.re;
-    r.im = a.im + b.im;
-    return r;
-}
-static Complex c_sub(Complex a, Complex b) {
-    Complex r;
-    r.re = a.re - b.re;
-    r.im = a.im - b.im;
-    return r;
-}
-static Complex c_mul(Complex a, Complex b) {
-    Complex r;
-    r.re = a.re * b.re - a.im * b.im;
-    r.im = a.re * b.im + a.im * b.re;
-    return r;
-}
-
 static void bit_reverse(Complex *a, size_t n) {
     size_t j = 0;
     for (size_t i = 1; i < n; i++) {

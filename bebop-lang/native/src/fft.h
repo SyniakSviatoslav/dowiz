@@ -6,9 +6,7 @@
 
 #include <stddef.h>
 
-typedef struct {
-    double re, im;
-} Complex;
+#include "complex.h"
 
 /* In-place radix-2 FFT (invert=0) or normalized IFFT (invert=1). Returns 0 on
  * success, -1 if n is not a power of two (or zero). */
