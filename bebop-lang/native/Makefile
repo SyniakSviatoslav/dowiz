@@ -90,6 +90,8 @@ test: $(BIN)
 	$(BIN) nat
 	@echo "--- VIR (NEON lowering) ---"
 	$(BIN) vir
+	@echo "--- atomic machine-code (⚛) ---"
+	$(BIN) atomicjit
 
 clean:
 	rm -rf $(BUILD)

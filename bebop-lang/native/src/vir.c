@@ -90,6 +90,76 @@ int vir_binop(VirOp op, Vir128 a, Vir128 b, Vir128 *out, char *err,
     return 0;
 }
 
+/* ═══ Atomic machine-code ops (⚛) — hand-encoded LSE, W^X ═══ */
+
+uint64_t vir_atomic_add(uint64_t *ptr, uint64_t delta) {
+    unsigned int code[2];
+    code[0] = 0xF8E10000u; /* ldaddal x1, x0, [x0]: *x0 += x1, x0 = old */
+    code[1] = 0xD65F03C0u; /* ret */
+    size_t sz = sizeof code;
+    void *mem = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (mem == MAP_FAILED) return 0;
+    memcpy(mem, code, sz);
+    __builtin___clear_cache((char *)mem, (char *)mem + sz);
+    mprotect(mem, sz, PROT_READ | PROT_EXEC);
+    uint64_t (*fn)(uint64_t *, uint64_t);
+    memcpy(&fn, &mem, sizeof(fn));
+    uint64_t old = fn(ptr, delta);
+    munmap(mem, sz);
+    return old;
+}
+
+uint64_t vir_atomic_cas(uint64_t *ptr, uint64_t expected, uint64_t desired) {
+    unsigned int code[3];
+    code[0] = 0xC8E1FC02u; /* casal x1, x2, [x0]: if *x0==x1 then *x0=x2; x1=old */
+    code[1] = 0xAA0103E0u; /* mov x0, x1 — return old */
+    code[2] = 0xD65F03C0u; /* ret */
+    size_t sz = sizeof code;
+    void *mem = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (mem == MAP_FAILED) return 0;
+    memcpy(mem, code, sz);
+    __builtin___clear_cache((char *)mem, (char *)mem + sz);
+    mprotect(mem, sz, PROT_READ | PROT_EXEC);
+    uint64_t (*fn)(uint64_t *, uint64_t, uint64_t);
+    memcpy(&fn, &mem, sizeof(fn));
+    uint64_t old = fn(ptr, expected, desired);
+    munmap(mem, sz);
+    return old;
+}
+
+int vir_atomic_self_test(char *out, size_t cap) {
+    size_t pos = 0;
+    int all_ok = 1;
+#define W(cond, name)                                                      \
+    do {                                                                   \
+        int c_ = (int)(cond);                                              \
+        int r_ = snprintf(out + pos, cap - pos, "[%s] %s\n",               \
+                          c_ ? "ok" : "FAIL", name);                       \
+        if (r_ > 0) pos += (size_t)r_;                                     \
+        if (!c_) all_ok = 0;                                               \
+    } while (0)
+
+    /* atomic fetch-add: 10 + 5 = 15, returns old 10 */
+    {
+        static uint64_t cell = 10;
+        uint64_t old = vir_atomic_add(&cell, 5);
+        W(old == 10 && cell == 15, "atomic_add 10+5 → old=10, cell=15");
+    }
+    /* CAS success: cell==15 → 99 */
+    {
+        static uint64_t cell = 15;
+        uint64_t old = vir_atomic_cas(&cell, 15, 99);
+        W(old == 15 && cell == 99, "cas(15→99) success → old=15, cell=99");
+    }
+    /* CAS failure: expected mismatch leaves cell untouched */
+    {
+        static uint64_t cell = 99;
+        uint64_t old = vir_atomic_cas(&cell, 7, 1);
+        W(old == 99 && cell == 99, "cas(7→1) fails → old=99, cell=99");
+    }
+    return all_ok ? 0 : -1;
+}
+
 int vir_self_test(char *out, size_t cap) {
     size_t pos = 0;
     int all_ok = 1;

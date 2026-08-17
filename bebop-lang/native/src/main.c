@@ -793,6 +793,13 @@ int main(int argc, char **argv) {
         printf("VIR (NEON lowering) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
+    if (strcmp(argv[1], "atomicjit") == 0) {
+        char buf[1024];
+        int ok = vir_atomic_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Atomic machine-code (⚛) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
     if (strcmp(argv[1], "bench") == 0) {
         cmd_bench();
         return 0;

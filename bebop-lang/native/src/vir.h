@@ -34,6 +34,12 @@ typedef struct {
 int vir_binop(VirOp op, Vir128 a, Vir128 b, Vir128 *out, char *err,
               size_t cap_err);
 
+/* Atomic machine-code ops (⚛): hand-encoded LSE atomics — no libatomic, no
+ * compiler intrinsic. Each returns the OLD value at *ptr. */
+uint64_t vir_atomic_add(uint64_t *ptr, uint64_t delta);
+uint64_t vir_atomic_cas(uint64_t *ptr, uint64_t expected, uint64_t desired);
+
 int vir_self_test(char *out, size_t cap);
+int vir_atomic_self_test(char *out, size_t cap);
 
 #endif /* BEBOP_VIR_H */
