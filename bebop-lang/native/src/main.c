@@ -34,6 +34,7 @@
 #include "atomic.h"
 #include "bench_all.h"
 #include "vir.h"
+#include "smt.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -798,6 +799,13 @@ int main(int argc, char **argv) {
         int ok = vir_atomic_self_test(buf, sizeof buf);
         fputs(buf, stdout);
         printf("Atomic machine-code (⚛) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "smt") == 0) {
+        char buf[2048];
+        int ok = smt_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("SMT (DPLL) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "bench") == 0) {
