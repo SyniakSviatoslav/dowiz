@@ -1,3 +1,2 @@
 module core { }
-fn sum(x: i64) -> i64 { let a = [x, x+1, x+2] in a[0] + a[1] + a[2] }
-fn count(n: i64) -> i64 { while n { n - 1 } n }
+fn sum(x: i64) -> i64 { x + 1 }
