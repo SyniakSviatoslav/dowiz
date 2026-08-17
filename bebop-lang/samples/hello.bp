@@ -1,7 +1,16 @@
-// hello.bp — minimal Bebop sample (glyphic surface + ASCII fallback)
+// hello.bp — canonical "Hello world" for Bebop (ASCII fallback surface)
+// Bebop is glyphic + VSA: this is the tokenizer-facing form; the human-facing
+// surface renders the same program as glyphs (see BEBOP-GLYPH-ALPHABET.md).
+
 module core { }
+
 struct order { id: i64, amount: i64 }
+
 const VERSION: i64 = 1
+
+// the minimal program: a function returning a value (Bebop has no string I/O
+// in the core — "hello world" is the smallest verifiable program)
 fn ntt(a: i64) -> i64 { a + 1 }
+
 use core::math
 type Amount = i64
