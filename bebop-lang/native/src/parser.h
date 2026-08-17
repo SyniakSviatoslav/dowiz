@@ -43,6 +43,11 @@ int bp_parse(const char *src, AstProgram *prog, BpParseError *err);
 int bp_parse_struct_decl(const char *src, TyRegistry *reg, char *err,
                          size_t cap);
 
+/* Parse a function definition (e.g. "ntt(a: i64) -> i64 { a + 1 }") produces
+ * an elaborated core Term (lambda) + its Pi type. Returns 0 on success. */
+int bp_parse_fn_decl(const char *src, TyRegistry *reg, Term **out,
+                     Ty **out_ty, char *err, size_t cap);
+
 void bp_program_free(AstProgram *prog);
 
 const char *ast_item_kind_name(AstItemKind k);

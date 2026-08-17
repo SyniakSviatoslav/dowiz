@@ -6,6 +6,7 @@
 #include "parser.h"
 #include "lexer.h"
 #include "qtt.h"
+#include "expr.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -320,5 +321,80 @@ int bp_parse_struct_decl(const char *src, TyRegistry *reg, char *err,
                  name);
         return -1;
     }
+    return 0;
+}
+
+int bp_parse_fn_decl(const char *src, TyRegistry *reg, Term **out,
+                     Ty **out_ty, char *err, size_t cap) {
+    BpToken toks[256];
+    int n = bp_lex(src, toks, 256);
+    if (n < 0) { snprintf(err, cap, "too many tokens"); return -1; }
+    int pos = 0;
+    while (pos < n && toks[pos].kind != BP_TOK_IDENT) pos++;
+    if (pos >= n) { snprintf(err, cap, "expected fn name"); return -1; }
+    pos++; /* skip name */
+    while (pos < n && !(toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == '(')) pos++;
+    if (pos >= n) { snprintf(err, cap, "expected '('"); return -1; }
+    pos++;
+    if (pos >= n || toks[pos].kind != BP_TOK_IDENT) { snprintf(err, cap, "expected param name"); return -1; }
+    static char pname[64]; size_t pl = toks[pos].len < 63 ? toks[pos].len : 63;
+    memcpy(pname, toks[pos].start, pl); pname[pl] = '\0'; pos++;
+    if (pos >= n || toks[pos].kind != BP_TOK_PUNCT || toks[pos].start[0] != ':') { snprintf(err, cap, "expected ':'"); return -1; }
+    pos++;
+    Ty *pty = NULL;
+    if (toks[pos].kind == BP_TOK_IDENT) {
+        char tn[32]; size_t tl = toks[pos].len < 31 ? toks[pos].len : 31;
+        memcpy(tn, toks[pos].start, tl); tn[tl] = '\0';
+        pty = typereg_get(reg, tn);
+        if (!pty) {
+            if (strcmp(tn, "i64") == 0) pty = qtt_i64();
+            else if (strcmp(tn, "bool") == 0) pty = qtt_bool();
+        }
+    }
+    if (!pty) { snprintf(err, cap, "unknown param type"); return -1; }
+    pos++;
+    while (pos < n && !(toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == ')')) pos++;
+    if (pos >= n) { snprintf(err, cap, "expected ')'"); return -1; }
+    pos++;
+    while (pos < n && !(toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == '-')) pos++;
+    if (pos + 1 >= n || toks[pos + 1].kind != BP_TOK_PUNCT || toks[pos + 1].start[0] != '>') { snprintf(err, cap, "expected '->'"); return -1; }
+    pos += 2;
+    Ty *rty = NULL;
+    if (toks[pos].kind == BP_TOK_IDENT) {
+        char tn[32]; size_t tl = toks[pos].len < 31 ? toks[pos].len : 31;
+        memcpy(tn, toks[pos].start, tl); tn[tl] = '\0';
+        rty = typereg_get(reg, tn);
+        if (!rty) {
+            if (strcmp(tn, "i64") == 0) rty = qtt_i64();
+            else if (strcmp(tn, "bool") == 0) rty = qtt_bool();
+        }
+    }
+    if (!rty) { snprintf(err, cap, "unknown return type"); return -1; }
+    pos++;
+    while (pos < n && !(toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == '{')) pos++;
+    if (pos >= n) { snprintf(err, cap, "expected '{'"); return -1; }
+    int bstart = pos + 1, depth = 1; pos++;
+    while (pos < n && depth > 0) {
+        if (toks[pos].kind == BP_TOK_PUNCT) {
+            if (toks[pos].start[0] == '{') depth++;
+            else if (toks[pos].start[0] == '}') depth--;
+        }
+        pos++;
+    }
+    int bend = pos - 1;
+    if (bend <= bstart) { snprintf(err, cap, "empty body"); return -1; }
+    const char *bt = toks[bstart].start;
+    size_t bl = (size_t)(toks[bend].start - bt);
+    char *bs = malloc(bl + 1); memcpy(bs, bt, bl); bs[bl] = '\0';
+    expr_pool_reset();
+    Term *body = NULL;
+    if (expr_parse(bs, &body, err, cap) != 0) { free(bs); return -1; }
+    free(bs);
+    static Term lam; memset(&lam, 0, sizeof lam);
+    lam.kind = TERM_LAM; lam.name = pname; lam.q = Q_ONE; lam.ty = pty; lam.a = body;
+    *out = &lam;
+    static Ty pi; memset(&pi, 0, sizeof pi);
+    pi.kind = TY_PI; pi.q = Q_ONE; pi.x = pname; pi.dom = pty; pi.cod = rty;
+    *out_ty = &pi;
     return 0;
 }

@@ -519,8 +519,38 @@ static void cmd_check(const char *path) {
             structs++;
         }
     }
-    printf("parsed %d struct declarations (%d types in registry)\n",
-           structs, reg.len);
+    int fns = 0;
+    for (size_t i = 0; i < prog.len; i++) {
+        const AstItem *it = &prog.items[i];
+        if (it->kind == AST_ITEM_FN && it->text && it->text_len > 0) {
+            char *txt = malloc(it->text_len + 1);
+            memcpy(txt, it->text, it->text_len);
+            txt[it->text_len] = '\0';
+            Term *fn_term = NULL;
+            Ty *fn_ty = NULL;
+            if (bp_parse_fn_decl(txt, &reg, &fn_term, &fn_ty, err, sizeof err) != 0) {
+                fprintf(stderr, "fn parse error %s: %s\n",
+                        it->name ? it->name : "?", err);
+                free(txt);
+                bp_program_free(&prog);
+                free(src);
+                exit(1);
+            }
+            free(txt);
+            char ty[128];
+            if (qtt_check_closed(fn_term, ty, sizeof ty, err, sizeof err) != 0) {
+                fprintf(stderr, "fn '%s' type error: %s\n",
+                        it->name ? it->name : "?", err);
+                bp_program_free(&prog);
+                free(src);
+                exit(1);
+            }
+            printf("fn '%s' : %s  ok\n", it->name ? it->name : "?", ty);
+            fns++;
+        }
+    }
+    printf("parsed %d struct declarations (%d types in registry), %d functions\n",
+           structs, reg.len, fns);
     bp_program_free(&prog);
     free(src);
 }
