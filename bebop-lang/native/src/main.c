@@ -216,7 +216,10 @@ static void cmd_qtt(void) {
     int ok4 = qtt_struct_test(buf, sizeof buf);
     fputs(buf, stdout);
     printf("QTT structs: %s\n", ok4 == 0 ? "PASS" : "FAIL");
-    exit((ok1 == 0 && ok2 == 0 && ok3 == 0 && ok4 == 0) ? 0 : 1);
+    int ok5 = qtt_enum_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("QTT enums: %s\n", ok5 == 0 ? "PASS" : "FAIL");
+    exit((ok1 == 0 && ok2 == 0 && ok3 == 0 && ok4 == 0 && ok5 == 0) ? 0 : 1);
 }
 
 static void cmd_ntt(void) {

@@ -79,6 +79,26 @@ int qtt_ty_print(const Ty *t, char *out, size_t cap) {
             }
             return n;
         }
+        case TY_ENUM: {
+            int n = snprintf(out, cap, "enum{");
+            for (int i = 0; i < t->nctors; i++) {
+                if ((size_t)n < cap) {
+                    if (t->ctors[i].payload) {
+                        char pt[64];
+                        qtt_ty_print(t->ctors[i].payload, pt, sizeof pt);
+                        n += snprintf(out + n, cap - (size_t)n, "%s%s(%s)",
+                                      i ? ", " : "", t->ctors[i].name, pt);
+                    } else {
+                        n += snprintf(out + n, cap - (size_t)n, "%s%s",
+                                      i ? ", " : "", t->ctors[i].name);
+                    }
+                }
+            }
+            if ((size_t)n < cap) {
+                n += snprintf(out + n, cap - (size_t)n, "}");
+            }
+            return n;
+        }
         case TY_FN: {
             char d[128], c[128];
             qtt_ty_print(t->dom, d, sizeof d);
@@ -124,10 +144,10 @@ int qtt_self_test(char *out, size_t cap) {
     CHECK(qtt_mul(Q_MANY, Q_MANY) == Q_MANY, "mul(ω,ω) == ω");
 
     /* Type pretty-printing round-trip sanity. */
-    Ty i64 = {TY_I64, 0, Q_ZERO, 0, 0, 0, 0, 0, 0};
-    Ty f = {TY_FIELD, 0xFFFFFFFF00000001ULL, Q_ZERO, 0, 0, 0, 0, 0, 0};
-    Ty hv = {TY_HYPERVEC, 1024, Q_ZERO, 0, 0, 0, 0, 0, 0};
-    Ty fn = {TY_FN, 0, Q_ZERO, 0, &i64, &i64, 0, 0, 0};
+    Ty i64 = {.kind = TY_I64};
+    Ty f = {.kind = TY_FIELD, .n = 0xFFFFFFFF00000001ULL};
+    Ty hv = {.kind = TY_HYPERVEC, .n = 1024};
+    Ty fn = {.kind = TY_FN, .dom = &i64, .cod = &i64};
     char b[128];
     qtt_ty_print(&i64, b, sizeof b);
     CHECK(b[0] == 'i' && b[1] == '6' && b[2] == '4', "print i64");
@@ -143,8 +163,8 @@ int qtt_self_test(char *out, size_t cap) {
 
 /* ═══ Terms + bidirectional typechecker (linear/affine) ═══ */
 
-static Ty I64_TY = {TY_I64, 0, Q_ZERO, 0, 0, 0, 0, 0, 0};
-static Ty BOOL_TY = {TY_BOOL, 0, Q_ZERO, 0, 0, 0, 0, 0, 0};
+static Ty I64_TY = {.kind = TY_I64};
+static Ty BOOL_TY = {.kind = TY_BOOL};
 
 Ty *qtt_i64(void) {
     return &I64_TY;
@@ -187,7 +207,7 @@ int qtt_struct_test(char *out, size_t cap) {
     ltrue->bval = 1;
 
     static TyField pt_fields[2] = {{"x", &I64_TY}, {"y", &I64_TY}};
-    static Ty pt_ty = {TY_STRUCT, 0, Q_ZERO, 0, 0, 0, 0, pt_fields, 2};
+    static Ty pt_ty = {.kind = TY_STRUCT, .fields = pt_fields, .nfields = 2};
 
     static TermField lit_fields[2];
     lit_fields[0].name = "x";
@@ -257,6 +277,113 @@ int qtt_struct_test(char *out, size_t cap) {
     return all_ok ? 0 : -1;
 }
 
+/* ─── Enum (sum) + match self-test ─── */
+int qtt_enum_test(char *out, size_t cap) {
+    size_t pos = 0;
+    int all_ok = 1;
+#define A(cond, name)                                                          \
+    do {                                                                       \
+        int c_ = (int)(cond);                                                  \
+        int r_ = snprintf(out + pos, cap - pos, "[%s] %s\n",                  \
+                          c_ ? "ok" : "FAIL", name);                           \
+        if (r_ > 0) {                                                          \
+            pos += (size_t)r_;                                                 \
+        }                                                                      \
+        if (!c_) {                                                             \
+            all_ok = 0;                                                        \
+        }                                                                      \
+    } while (0)
+
+    static Term pool[64];
+    static int pi = 0;
+    pi = 0;
+
+    static Ctor opt_ctors[2] = {{"None", NULL}, {"Some", &I64_TY}};
+    static Ty opt_ty = {.kind = TY_ENUM, .ctors = opt_ctors, .nctors = 2};
+
+    Term *none = &pool[pi++];
+    memset(none, 0, sizeof *none);
+    none->kind = TERM_ENUM_CTOR;
+    none->name = "None";
+    none->ty = &opt_ty;
+
+    Term *n42 = &pool[pi++];
+    memset(n42, 0, sizeof *n42);
+    n42->kind = TERM_LIT;
+    n42->ival = 42;
+    Term *some42 = &pool[pi++];
+    memset(some42, 0, sizeof *some42);
+    some42->kind = TERM_ENUM_CTOR;
+    some42->name = "Some";
+    some42->ty = &opt_ty;
+    some42->a = n42;
+
+    Term *z = &pool[pi++];
+    memset(z, 0, sizeof *z);
+    z->kind = TERM_LIT;
+    z->ival = 0;
+    Term *xvar = &pool[pi++];
+    memset(xvar, 0, sizeof *xvar);
+    xvar->kind = TERM_VAR;
+    xvar->name = "x";
+    static MatchArm arms[2];
+    arms[0].ctor = "None";
+    arms[0].var = NULL;
+    arms[0].body = z;
+    arms[1].ctor = "Some";
+    arms[1].var = "x";
+    arms[1].body = xvar;
+    Term *m = &pool[pi++];
+    memset(m, 0, sizeof *m);
+    m->kind = TERM_MATCH;
+    m->a = some42;
+    m->arms = arms;
+    m->narms = 2;
+
+    char ty[128], err[256];
+    A(qtt_check_closed(some42, ty, sizeof ty, err, sizeof err) == 0 &&
+          strcmp(ty, "enum{None, Some(i64)}") == 0,
+      "ctor typechecks");
+    A(qtt_check_closed(m, ty, sizeof ty, err, sizeof err) == 0 &&
+          strcmp(ty, "i64") == 0,
+      "match typechecks");
+
+    int k;
+    long i;
+    int b;
+    A(qtt_eval(m, &k, &i, &b, err, sizeof err) == 0 && i == 42,
+      "eval match Some(42) == 42");
+
+    Term *mn = &pool[pi++];
+    memset(mn, 0, sizeof *mn);
+    mn->kind = TERM_MATCH;
+    mn->a = none;
+    mn->arms = arms;
+    mn->narms = 2;
+    A(qtt_eval(mn, &k, &i, &b, err, sizeof err) == 0 && i == 0,
+      "eval match None == 0");
+
+    Term *m2 = &pool[pi++];
+    memset(m2, 0, sizeof *m2);
+    m2->kind = TERM_MATCH;
+    m2->a = some42;
+    m2->arms = arms;
+    m2->narms = 1;
+    A(qtt_check_closed(m2, ty, sizeof ty, err, sizeof err) != 0,
+      "missing arm rejected");
+
+    Term *badct = &pool[pi++];
+    memset(badct, 0, sizeof *badct);
+    badct->kind = TERM_ENUM_CTOR;
+    badct->name = "None";
+    badct->ty = &opt_ty;
+    badct->a = n42;
+    A(qtt_check_closed(badct, ty, sizeof ty, err, sizeof err) != 0,
+      "unit ctor payload rejected");
+
+    return all_ok ? 0 : -1;
+}
+
 /* Bump-allocated type pool (types live for the self-test lifetime). */
 static Ty ty_pool[256];
 static int ty_len = 0;
@@ -322,6 +449,24 @@ static int ty_eq(const Ty *a, const Ty *b) {
                     return 0;
                 }
                 if (!ty_eq(a->fields[i].ty, b->fields[i].ty)) {
+                    return 0;
+                }
+            }
+            return 1;
+        }
+        case TY_ENUM: {
+            if (a->nctors != b->nctors) {
+                return 0;
+            }
+            for (int i = 0; i < a->nctors; i++) {
+                if (strcmp(a->ctors[i].name, b->ctors[i].name) != 0) {
+                    return 0;
+                }
+                if ((a->ctors[i].payload == NULL) != (b->ctors[i].payload == NULL)) {
+                    return 0;
+                }
+                if (a->ctors[i].payload &&
+                    !ty_eq(a->ctors[i].payload, b->ctors[i].payload)) {
                     return 0;
                 }
             }
@@ -507,6 +652,82 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             snprintf(err, cap, "no field '%s'", t->name);
             return -1;
         }
+        case TERM_ENUM_CTOR: {
+            if (!t->ty || t->ty->kind != TY_ENUM) {
+                snprintf(err, cap, "enum ctor needs an enum type");
+                return -1;
+            }
+            for (int i = 0; i < t->ty->nctors; i++) {
+                Ctor *ct = &t->ty->ctors[i];
+                if (strcmp(ct->name, t->name) == 0) {
+                    if (ct->payload) {
+                        if (check(c, t->a, ct->payload, err, cap) != 0) {
+                            return -1;
+                        }
+                    } else if (t->a) {
+                        snprintf(err, cap, "unit ctor takes no payload");
+                        return -1;
+                    }
+                    *out = t->ty;
+                    return 0;
+                }
+            }
+            snprintf(err, cap, "no ctor '%s'", t->name);
+            return -1;
+        }
+        case TERM_MATCH: {
+            Ty *st = NULL;
+            if (infer(c, t->a, &st, err, cap) != 0) {
+                return -1;
+            }
+            if (st->kind != TY_ENUM) {
+                snprintf(err, cap, "match scrutinee must be an enum");
+                return -1;
+            }
+            Ty *result = NULL;
+            for (int i = 0; i < st->nctors; i++) {
+                MatchArm *arm = NULL;
+                for (int j = 0; j < t->narms; j++) {
+                    if (strcmp(t->arms[j].ctor, st->ctors[i].name) == 0) {
+                        arm = &t->arms[j];
+                        break;
+                    }
+                }
+                if (!arm) {
+                    snprintf(err, cap, "match missing arm for '%s'", st->ctors[i].name);
+                    return -1;
+                }
+                Ty *bt = NULL;
+                if (st->ctors[i].payload) {
+                    if (!arm->var) {
+                        snprintf(err, cap, "arm needs a bound var");
+                        return -1;
+                    }
+                    c->b[c->len].name = arm->var;
+                    c->b[c->len].q = Q_MANY;
+                    c->b[c->len].ty = st->ctors[i].payload;
+                    c->b[c->len].used = 0;
+                    c->len++;
+                    int r = infer(c, arm->body, &bt, err, cap);
+                    c->len--;
+                    if (r != 0) {
+                        return r;
+                    }
+                } else {
+                    if (infer(c, arm->body, &bt, err, cap) != 0) {
+                        return -1;
+                    }
+                }
+                if (!result) {
+                    result = bt;
+                } else if (!ty_eq(result, bt)) {
+                    snprintf(err, cap, "match arms differ in type");
+                    return -1;
+                }
+            }
+            *out = result;
+            return 0;
+        }
     }
     snprintf(err, cap, "unknown term");
     return -1;
@@ -626,14 +847,17 @@ int qtt_check_test(char *out, size_t cap) {
 typedef struct Value Value;
 typedef struct Env Env;
 struct Value {
-    int kind; /* 0=int, 1=bool, 2=closure, 3=struct, -1=error */
+    int kind; /* 0=int, 1=bool, 2=closure, 3=struct, 4=enum, -1=error */
     long i;
     int b;
     const Term *lam; /* closure */
     Env *env;        /* closure env */
-    const Ty *sty;          /* struct: the struct type */
+    const Ty *sty;          /* struct/enum: the type */
     struct FieldValue *fv;  /* struct: field values */
     int nfv;
+    const char *ctor; /* enum: constructor name */
+    Value *payload;   /* enum: payload value (pointer) */
+    int has_payload;  /* enum: 1 if payload present */
 };
 typedef struct FieldValue {
     const char *name;
@@ -724,6 +948,36 @@ static Value eval(const Term *t, Env *env) {
             for (int i = 0; i < base.nfv; i++) {
                 if (strcmp(base.fv[i].name, t->name) == 0) {
                     return base.fv[i].val;
+                }
+            }
+            v.kind = -1;
+            return v;
+        }
+        case TERM_ENUM_CTOR: {
+            static Value payload_storage;
+            v.kind = 4;
+            v.sty = t->ty;
+            v.ctor = t->name;
+            v.has_payload = (t->a != NULL);
+            if (t->a) {
+                payload_storage = eval(t->a, env);
+                v.payload = &payload_storage;
+            }
+            return v;
+        }
+        case TERM_MATCH: {
+            Value scrut = eval(t->a, env);
+            if (scrut.kind != 4) {
+                v.kind = -1;
+                return v;
+            }
+            for (int j = 0; j < t->narms; j++) {
+                if (strcmp(t->arms[j].ctor, scrut.ctor) == 0) {
+                    if (scrut.has_payload) {
+                        Env e = {t->arms[j].var, *scrut.payload, env};
+                        return eval(t->arms[j].body, &e);
+                    }
+                    return eval(t->arms[j].body, env);
                 }
             }
             v.kind = -1;

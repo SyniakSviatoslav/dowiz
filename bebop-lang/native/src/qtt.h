@@ -37,6 +37,7 @@ typedef enum {
     TY_HYPERVEC, /* D-dim hypervector, D = .n (1024) */
     TY_VEC,      /* fixed-width SIMD vector: width = .n, elem = .elem */
     TY_STRUCT,   /* record: named fields (.fields / .nfields) */
+    TY_ENUM,     /* sum: named ctors (.ctors / .nctors) */
 } TyKind;
 
 typedef struct Ty Ty;
@@ -44,6 +45,10 @@ typedef struct {
     const char *name;
     Ty *ty;
 } TyField;
+typedef struct {
+    const char *name;
+    Ty *payload; /* NULL for unit constructors */
+} Ctor;
 
 struct Ty {
     TyKind kind;
@@ -55,6 +60,8 @@ struct Ty {
     Ty *elem;      /* VEC element type */
     TyField *fields; /* TY_STRUCT: named fields */
     int nfields;
+    Ctor *ctors;   /* TY_ENUM: constructors */
+    int nctors;
 };
 
 /* Pretty-print a type into `out` (NUL-terminated). Returns bytes written. */
@@ -77,6 +84,8 @@ typedef enum {
     TERM_LET,
     TERM_STRUCT,
     TERM_FIELD,
+    TERM_ENUM_CTOR,
+    TERM_MATCH,
 } TermKind;
 
 typedef enum {
@@ -96,18 +105,25 @@ typedef struct {
     const char *name;
     Term *val;
 } TermField;
+typedef struct {
+    const char *ctor; /* constructor name */
+    const char *var;  /* bound variable (NULL for unit ctor) */
+    Term *body;
+} MatchArm;
 
 struct Term {
     TermKind kind;
-    const char *name; /* VAR name / LAM binder / FIELD name */
+    const char *name; /* VAR name / LAM binder / FIELD name / ctor name */
     Quantity q;       /* LAM binder quantity */
     long ival;        /* LIT int value */
     int bval;         /* LIT bool value (0/1) */
     BinOp op;         /* BIN operator */
-    Ty *ty;           /* LAM domain / ANN type / STRUCT type */
-    Term *a, *b, *c;  /* APP/LAM/ANN/BIN/IF/LET/FIELD(base) */
+    Ty *ty;           /* LAM domain / ANN type / STRUCT type / ENUM type */
+    Term *a, *b, *c;  /* APP/LAM/ANN/BIN/IF/LET/FIELD(base)/ENUM_CTOR(payload)/MATCH(scrut) */
     TermField *fields; /* TERM_STRUCT: field name → value */
     int nfields;
+    MatchArm *arms;   /* TERM_MATCH: arms */
+    int narms;
 };
 
 /* Typecheck a closed term (empty context). Returns 0 on success (type printed
@@ -143,5 +159,8 @@ Ty *qtt_bool(void);
 
 /* Run the struct (record) typecheck + eval self-test. */
 int qtt_struct_test(char *out, size_t cap);
+
+/* Run the enum (sum) + match typecheck + eval self-test. */
+int qtt_enum_test(char *out, size_t cap);
 
 #endif /* BEBOP_QTT_H */
