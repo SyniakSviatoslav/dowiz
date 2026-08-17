@@ -150,6 +150,60 @@ static Term *parse_primary(P *p) {
         t->kind = TERM_LIT;
         t->bval = 0;
         atom = t;
+    } else if (match_kw(p, "while")) {
+        /* while cond { body } */
+        Term *cond = parse_expr(p);
+        if (!cond) return NULL;
+        skip_ws(p);
+        if (p->s[p->pos] != '{') { err(p, "expected '{'"); return NULL; }
+        p->pos++;
+        Term *body = parse_expr(p);
+        if (!body) return NULL;
+        skip_ws(p);
+        if (p->s[p->pos] != '}') { err(p, "expected '}'"); return NULL; }
+        p->pos++;
+        Term *w = tnew();
+        w->kind = TERM_WHILE;
+        w->a = cond;
+        w->b = body;
+        atom = w;
+    } else if (p->s[p->pos] == '[') {
+        /* array literal [e1, e2, ...] */
+        p->pos++;
+        static TermField af[64];
+        int na = 0;
+        skip_ws(p);
+        if (p->s[p->pos] != ']') {
+            for (;;) {
+                Term *el = parse_expr(p);
+                if (!el) return NULL;
+                af[na].name = "";
+                af[na].val = el;
+                na++;
+                skip_ws(p);
+                if (p->s[p->pos] == ',') { p->pos++; skip_ws(p); continue; }
+                if (p->s[p->pos] == ']') break;
+                err(p, "expected ',' or ']'"); return NULL;
+            }
+        }
+        p->pos++;
+        Term *arr = tnew();
+        arr->kind = TERM_ARRAY;
+        arr->fields = af;
+        arr->nfields = na;
+        atom = arr;
+    } else if (p->s[p->pos] == '"') {
+        int start_pos = ++p->pos;
+        while (p->s[p->pos] && p->s[p->pos] != '"') p->pos++;
+        int slen = p->pos - start_pos;
+        static char sbuf[256];
+        memcpy(sbuf, p->s + start_pos, (size_t)slen);
+        sbuf[slen] = '\0';
+        if (p->s[p->pos] == '"') p->pos++;
+        Term *st = tnew();
+        st->kind = TERM_STR;
+        st->name = sbuf;
+        atom = st;
     } else if (is_ident_start(p->s[p->pos])) {
         int start = p->pos;
         while (is_ident_cont(p->s[p->pos])) {
@@ -174,8 +228,22 @@ static Term *parse_primary(P *p) {
     if (!atom) {
         return NULL;
     }
-    /* postfix application: atom(arg) */
-    while (p->s[p->pos] == '(') {
+    /* postfix: application atom(arg) and indexing atom[i] */
+    while (p->s[p->pos] == '(' || p->s[p->pos] == '[') {
+        if (p->s[p->pos] == '[') {
+            p->pos++;
+            Term *idx = parse_expr(p);
+            if (!idx) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ']') { err(p, "expected ']'"); return NULL; }
+            p->pos++;
+            Term *get = tnew();
+            get->kind = TERM_ARRAY_GET;
+            get->a = atom;
+            get->b = idx;
+            atom = get;
+            continue;
+        }
         p->pos++;
         Term *arg = parse_expr(p);
         skip_ws(p);

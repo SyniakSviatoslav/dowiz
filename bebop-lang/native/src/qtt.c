@@ -944,8 +944,14 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             *out = &STR_TY;
             return 0;
         case TERM_WHILE:
-            if (check(c, t->a, &BOOL_TY, err, cap) != 0) {
-                return -1;
+            /* accept bool or i64 as condition (C semantics: 0=false, !=0=true) */
+            {
+                Ty *ct = NULL;
+                if (infer(c, t->a, &ct, err, cap) != 0) return -1;
+                if (ct->kind != TY_BOOL && ct->kind != TY_I64) {
+                    snprintf(err, cap, "while condition must be bool or i64");
+                    return -1;
+                }
             }
             if (infer(c, t->b, out, err, cap) != 0) {
                 return -1;
@@ -1578,8 +1584,11 @@ static Value eval(const Term *t, Env *env) {
             for (;;) {
                 if (iter++ >= 1000) { v.kind = -1; return v; }
                 Value cond = eval(t->a, env);
-                if (cond.kind != 1) { v.kind = -1; return v; }
-                if (!cond.b) break;
+                int is_true = 0;
+                if (cond.kind == 1) is_true = cond.b;
+                else if (cond.kind == 0) is_true = (cond.i != 0);
+                else { v.kind = -1; return v; }
+                if (!is_true) break;
                 eval(t->b, env);
             }
             v.kind = 0; /* unit */
