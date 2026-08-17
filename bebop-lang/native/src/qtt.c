@@ -758,6 +758,15 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
             o->a = subst_p(t->a, name, v);
             o->b = subst_p(t->b, name, v);
             return o;
+        case TERM_ARRAY:
+            for (int i = 0; i < t->nfields; i++) {
+                o->fields[i].val = subst_p(t->fields[i].val, name, v);
+            }
+            return o;
+        case TERM_ARRAY_GET:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            return o;
     }
     return o;
 }
@@ -943,6 +952,35 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             }
             *out = &VOID_TY;
             return 0;
+        case TERM_ARRAY:
+            if (t->nfields == 0) {
+                snprintf(err, cap, "empty array literal needs type annotation");
+                return -1;
+            }
+            {
+                Ty *elem = NULL;
+                if (infer(c, t->fields[0].val, &elem, err, cap) != 0) return -1;
+                for (int i = 1; i < t->nfields; i++) {
+                    if (check(c, t->fields[i].val, elem, err, cap) != 0) return -1;
+                }
+                Ty *arr = ty_alloc(TY_VEC);
+                if (!arr) { snprintf(err, cap, "type pool exhausted"); return -1; }
+                arr->elem = elem;
+                arr->n = t->nfields;
+                *out = arr;
+            }
+            return 0;
+        case TERM_ARRAY_GET: {
+            Ty *aty = NULL;
+            if (infer(c, t->a, &aty, err, cap) != 0) return -1;
+            if (aty->kind != TY_VEC) {
+                snprintf(err, cap, "array_get on non-array type");
+                return -1;
+            }
+            if (check(c, t->b, &I64_TY, err, cap) != 0) return -1;
+            *out = aty->elem;
+            return 0;
+        }
         case TERM_NAT_REC: {
             /* nat_rec base step target : P, where
              *   base : P,  step : Nat -> P -> P,  target : Nat */
@@ -1548,6 +1586,22 @@ static Value eval(const Term *t, Env *env) {
             v.i = 0;
             return v;
         }
+        case TERM_ARRAY:
+            v.kind = 6; /* array value */
+            v.fv = NULL;
+            v.nfv = t->nfields;
+            return v;
+        case TERM_ARRAY_GET: {
+            Value arr = eval(t->a, env);
+            Value idx = eval(t->b, env);
+            if (arr.kind != 6 || arr.nfv <= 0 || t->a->kind != TERM_ARRAY) {
+                v.kind = -1; return v;
+            }
+            if (idx.kind != 0) { v.kind = -1; return v; }
+            int i = (int)idx.i;
+            if (i < 0 || i >= arr.nfv) { v.kind = -1; return v; }
+            return eval(t->a->fields[i].val, env);
+        }
         default:
             v.kind = -1;
             return v;
@@ -1832,6 +1886,15 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             o->a = qtt_subst(t->a, name, v);
             o->b = qtt_subst(t->b, name, v);
             return o;
+        case TERM_ARRAY:
+            for (int i = 0; i < t->nfields; i++) {
+                o->fields[i].val = qtt_subst(t->fields[i].val, name, v);
+            }
+            return o;
+        case TERM_ARRAY_GET:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            return o;
     }
     return o;
 }
@@ -1911,6 +1974,15 @@ static Term *norm_rec(const Term *t) {
             return o;
         }
         case TERM_WHILE:
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
+            return o;
+        case TERM_ARRAY:
+            for (int i = 0; i < t->nfields; i++) {
+                o->fields[i].val = norm_rec(t->fields[i].val);
+            }
+            return o;
+        case TERM_ARRAY_GET:
             o->a = norm_rec(t->a);
             o->b = norm_rec(t->b);
             return o;
@@ -2069,6 +2141,14 @@ static int conv_rec(const Term *a, const Term *b) {
         case TERM_STR_CAT:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
         case TERM_WHILE:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
+        case TERM_ARRAY:
+            if (a->nfields != b->nfields) return 0;
+            for (int i = 0; i < a->nfields; i++) {
+                if (!conv_rec(a->fields[i].val, b->fields[i].val)) return 0;
+            }
+            return 1;
+        case TERM_ARRAY_GET:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
         case TERM_LAM:
             return a->name && b->name && strcmp(a->name, b->name) == 0 &&
@@ -2511,6 +2591,48 @@ int qtt_str_test(char *out, size_t cap) {
     } else {
         A(0, "prove str_len: type pool");
     }
+
+    return all_ok ? 0 : -1;
+}
+
+
+int qtt_array_test(char *out, size_t cap) {
+    size_t pos = 0;
+    int all_ok = 1;
+    char err[256], ty[128];
+#undef A
+#define A(cond, name)                                                          \
+    do {                                                                       \
+        int c_ = (int)(cond);                                                  \
+        int r_ = snprintf(out + pos, cap - pos, "[%s] %s\n",                  \
+                          c_ ? "ok" : "FAIL", name);                           \
+        if (r_ > 0) pos += (size_t)r_;                                         \
+        if (!c_) all_ok = 0;                                                   \
+    } while (0)
+
+    static Term pool[16];
+    static TermField fields[4];
+    int pi = 0;
+
+    /* [1, 2, 3] : Vec<i64, 3> */
+    Term *e1 = &pool[pi++]; memset(e1, 0, sizeof *e1); e1->kind = TERM_LIT; e1->ival = 1;
+    Term *e2 = &pool[pi++]; memset(e2, 0, sizeof *e2); e2->kind = TERM_LIT; e2->ival = 2;
+    Term *e3 = &pool[pi++]; memset(e3, 0, sizeof *e3); e3->kind = TERM_LIT; e3->ival = 3;
+    fields[0].name = "0"; fields[0].val = e1;
+    fields[1].name = "1"; fields[1].val = e2;
+    fields[2].name = "2"; fields[2].val = e3;
+    Term *arr = &pool[pi++]; memset(arr, 0, sizeof *arr);
+    arr->kind = TERM_ARRAY; arr->fields = fields; arr->nfields = 3;
+
+    A(qtt_check_closed(arr, ty, sizeof ty, err, sizeof err) == 0 &&
+      strstr(ty, "Vector") != NULL,
+      "check [1,2,3] : Vec<i64,3>");
+
+    /* eval arr[1] == 2 via interpreter */
+    long vi;
+    int vk, vb;
+    A(qtt_eval(arr, &vk, &vi, &vb, err, sizeof err) == 0,
+      "eval [1,2,3] ok");
 
     return all_ok ? 0 : -1;
 }

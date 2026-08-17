@@ -834,6 +834,13 @@ int main(int argc, char **argv) {
         printf("QTT strings (check/conv/prove) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
+    if (strcmp(argv[1], "array") == 0) {
+        char buf[4096];
+        int ok = qtt_array_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Arrays (literal/index) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
     if (strcmp(argv[1], "vir") == 0) {
         char buf[2048];
         int ok = vir_self_test(buf, sizeof buf);

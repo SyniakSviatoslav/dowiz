@@ -93,6 +93,8 @@ test: $(BIN)
 	$(BIN) nat
 	@echo "--- QTT strings (check/conv/prove) ---"
 	$(BIN) str
+	@echo "--- arrays (literal/index) ---"
+	$(BIN) array
 	@echo "--- VIR (NEON lowering) ---"
 	$(BIN) vir
 	@echo "--- PAC (pointer auth) ---"

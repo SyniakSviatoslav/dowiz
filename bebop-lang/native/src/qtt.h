@@ -113,6 +113,8 @@ typedef enum {
     TERM_STR_LEN, /* length of a string (t->a) : i64 */
     TERM_STR_CAT, /* concatenation of two strings (t->a, t->b) : str */
     TERM_WHILE,   /* while loop: a = cond, b = body; evaluates to void */
+    TERM_ARRAY,   /* array literal: fields/nfields hold indexed elements */
+    TERM_ARRAY_GET, /* array indexing: a = array, b = index (i64) */
 } TermKind;
 
 typedef enum {
@@ -247,5 +249,8 @@ int qtt_nat_test(char *out, size_t cap);
 
 /* Run the string (literal / length / concat) self-test. */
 int qtt_str_test(char *out, size_t cap);
+
+/* Run the array (literal / indexing) self-test. */
+int qtt_array_test(char *out, size_t cap);
 
 #endif /* BEBOP_QTT_H */
