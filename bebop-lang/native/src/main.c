@@ -200,7 +200,10 @@ static void cmd_qtt(void) {
     int ok2 = qtt_check_test(buf, sizeof buf);
     fputs(buf, stdout);
     printf("QTT typechecker: %s\n", ok2 == 0 ? "PASS" : "FAIL");
-    exit((ok1 == 0 && ok2 == 0) ? 0 : 1);
+    int ok3 = qtt_eval_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("QTT evaluator: %s\n", ok3 == 0 ? "PASS" : "FAIL");
+    exit((ok1 == 0 && ok2 == 0 && ok3 == 0) ? 0 : 1);
 }
 
 int main(int argc, char **argv) {

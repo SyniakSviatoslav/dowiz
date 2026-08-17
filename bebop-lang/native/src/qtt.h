@@ -25,6 +25,9 @@ const char *qtt_q_name(Quantity q);
 /* Core types. */
 typedef enum {
     TY_I64,
+    TY_U8,
+    TY_U32,
+    TY_U64,
     TY_F64,
     TY_BOOL,
     TY_VOID,
@@ -62,6 +65,8 @@ typedef enum {
     TERM_APP,
     TERM_ANN,
     TERM_BIN,
+    TERM_IF,
+    TERM_LET,
 } TermKind;
 
 typedef enum {
@@ -81,7 +86,7 @@ struct Term {
     int bval;         /* LIT bool value (0/1) */
     BinOp op;         /* BIN operator */
     Ty *ty;           /* LAM domain / ANN type */
-    Term *a, *b;      /* APP(f,arg) / LAM(body) / ANN(term) / BIN(l,r) */
+    Term *a, *b, *c;  /* APP(f,arg)/LAM(body)/ANN(term)/BIN(l,r)/IF(cond,then,else)/LET(val,body) */
 };
 
 /* Typecheck a closed term (empty context). Returns 0 on success (type printed
@@ -91,5 +96,14 @@ int qtt_check_closed(const Term *t, char *out_ty, size_t cap_ty, char *err,
 
 /* Run the typechecker self-test. Returns 0 on success, -1 on failure. */
 int qtt_check_test(char *out, size_t cap);
+
+/* Evaluate a closed term (call-by-value, environment-based). Returns 0 on
+ * success; the result is in *out_i (when *out_kind==0) or *out_b (when
+ * *out_kind==1). Returns -1 on error (err filled). */
+int qtt_eval(const Term *t, int *out_kind, long *out_i, int *out_b, char *err,
+             size_t cap);
+
+/* Run the evaluator self-test. Returns 0 on success, -1 on failure. */
+int qtt_eval_test(char *out, size_t cap);
 
 #endif /* BEBOP_QTT_H */

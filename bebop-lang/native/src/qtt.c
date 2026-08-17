@@ -43,6 +43,12 @@ int qtt_ty_print(const Ty *t, char *out, size_t cap) {
     switch (t->kind) {
         case TY_I64:
             return snprintf(out, cap, "i64");
+        case TY_U8:
+            return snprintf(out, cap, "u8");
+        case TY_U32:
+            return snprintf(out, cap, "u32");
+        case TY_U64:
+            return snprintf(out, cap, "u64");
         case TY_F64:
             return snprintf(out, cap, "f64");
         case TY_BOOL:
@@ -166,6 +172,9 @@ static int ty_eq(const Ty *a, const Ty *b) {
     }
     switch (a->kind) {
         case TY_I64:
+        case TY_U8:
+        case TY_U32:
+        case TY_U64:
         case TY_F64:
         case TY_BOOL:
         case TY_VOID:
@@ -271,6 +280,43 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             }
             *out = t->ty;
             return 0;
+        }
+        case TERM_IF: {
+            Ty *ct = NULL;
+            if (infer(c, t->a, &ct, err, cap) != 0) {
+                return -1;
+            }
+            if (ct->kind != TY_BOOL) {
+                snprintf(err, cap, "if condition must be bool");
+                return -1;
+            }
+            Ty *tt = NULL, *et = NULL;
+            if (infer(c, t->b, &tt, err, cap) != 0) {
+                return -1;
+            }
+            if (infer(c, t->c, &et, err, cap) != 0) {
+                return -1;
+            }
+            if (!ty_eq(tt, et)) {
+                snprintf(err, cap, "if branches have different types");
+                return -1;
+            }
+            *out = tt;
+            return 0;
+        }
+        case TERM_LET: {
+            Ty *vt = NULL;
+            if (infer(c, t->a, &vt, err, cap) != 0) {
+                return -1;
+            }
+            c->b[c->len].name = t->name;
+            c->b[c->len].q = Q_MANY;
+            c->b[c->len].ty = vt;
+            c->b[c->len].used = 0;
+            c->len++;
+            int r = infer(c, t->b, out, err, cap);
+            c->len--;
+            return r;
         }
     }
     snprintf(err, cap, "unknown term");
@@ -382,6 +428,161 @@ int qtt_check_test(char *out, size_t cap) {
     Term *wlam = NEW(); wlam->kind = TERM_LAM; wlam->name = "x"; wlam->q = Q_MANY; wlam->ty = &I64_TY; wlam->a = wadd;
     T(qtt_check_closed(wlam, ty, sizeof ty, err, sizeof err) == 0,
       "ω binder used twice is OK");
+
+    return all_ok ? 0 : -1;
+}
+
+/* ═══ Evaluator (call-by-value, environment + closures) ═══ */
+
+typedef struct Value Value;
+typedef struct Env Env;
+struct Value {
+    int kind; /* 0=int, 1=bool, 2=closure, -1=error */
+    long i;
+    int b;
+    const Term *lam; /* closure */
+    Env *env;        /* closure env */
+};
+struct Env {
+    const char *name;
+    Value val;
+    Env *next;
+};
+
+static Value eval(const Term *t, Env *env) {
+    Value v;
+    memset(&v, 0, sizeof v);
+    switch (t->kind) {
+        case TERM_LIT:
+            v.kind = t->bval ? 1 : 0;
+            v.i = t->ival;
+            v.b = t->bval;
+            return v;
+        case TERM_VAR:
+            for (Env *e = env; e; e = e->next) {
+                if (strcmp(e->name, t->name) == 0) {
+                    return e->val;
+                }
+            }
+            v.kind = -1;
+            return v;
+        case TERM_LAM:
+            v.kind = 2;
+            v.lam = t;
+            v.env = env;
+            return v;
+        case TERM_APP: {
+            Value f = eval(t->a, env);
+            Value arg = eval(t->b, env);
+            if (f.kind != 2) {
+                v.kind = -1;
+                return v;
+            }
+            Env e = {f.lam->name, arg, f.env};
+            return eval(f.lam->a, &e);
+        }
+        case TERM_BIN: {
+            Value l = eval(t->a, env);
+            Value r = eval(t->b, env);
+            v.kind = 0;
+            switch (t->op) {
+                case BOP_ADD: v.i = l.i + r.i; break;
+                case BOP_SUB: v.i = l.i - r.i; break;
+                case BOP_MUL: v.i = l.i * r.i; break;
+                case BOP_EQ:  v.kind = 1; v.b = (l.i == r.i); break;
+                case BOP_LT:  v.kind = 1; v.b = (l.i < r.i); break;
+            }
+            return v;
+        }
+        case TERM_IF: {
+            Value c = eval(t->a, env);
+            return eval(c.b ? t->b : t->c, env);
+        }
+        case TERM_LET: {
+            Value x = eval(t->a, env);
+            Env e = {t->name, x, env};
+            return eval(t->b, &e);
+        }
+        default:
+            v.kind = -1;
+            return v;
+    }
+}
+
+int qtt_eval(const Term *t, int *out_kind, long *out_i, int *out_b, char *err, size_t cap) {
+    Value v = eval(t, NULL);
+    if (v.kind < 0) {
+        snprintf(err, cap, "evaluation error");
+        return -1;
+    }
+    *out_kind = v.kind;
+    *out_i = v.i;
+    *out_b = v.b;
+    return 0;
+}
+
+int qtt_eval_test(char *out, size_t cap) {
+    size_t pos = 0;
+    int all_ok = 1;
+    char err[128];
+    long i;
+    int b, k;
+#define E(cond, name)                                                \
+    do {                                                             \
+        int r = snprintf(out + pos, cap - pos, "[%s] %s\n",          \
+                         (cond) ? "ok" : "FAIL", name);              \
+        if (r > 0) pos += (size_t)r;                                 \
+        if (!(cond)) all_ok = 0;                                     \
+    } while (0)
+
+    static Term pool[64];
+    static int pi = 0;
+#define NEW() (&pool[pi++])
+
+    /* 1. (λx:^ω i64. x + x) 21  →  42 */
+    pi = 0;
+    Term *x1 = NEW(); x1->kind = TERM_VAR; x1->name = "x";
+    Term *x2 = NEW(); x2->kind = TERM_VAR; x2->name = "x";
+    Term *add = NEW(); add->kind = TERM_BIN; add->op = BOP_ADD; add->a = x1; add->b = x2;
+    Term *lam = NEW(); lam->kind = TERM_LAM; lam->name = "x"; lam->q = Q_MANY; lam->ty = &I64_TY; lam->a = add;
+    Term *n21 = NEW(); n21->kind = TERM_LIT; n21->ival = 21;
+    Term *app = NEW(); app->kind = TERM_APP; app->a = lam; app->b = n21;
+    E(qtt_eval(app, &k, &i, &b, err, sizeof err) == 0 && i == 42,
+      "eval ((λx.x+x) 21) == 42");
+
+    /* 2. if (1 == 1) 10 else 20  →  10 */
+    pi = 0;
+    Term *e1 = NEW(); e1->kind = TERM_LIT; e1->ival = 1;
+    Term *e2 = NEW(); e2->kind = TERM_LIT; e2->ival = 1;
+    Term *eq = NEW(); eq->kind = TERM_BIN; eq->op = BOP_EQ; eq->a = e1; eq->b = e2;
+    Term *t10 = NEW(); t10->kind = TERM_LIT; t10->ival = 10;
+    Term *t20 = NEW(); t20->kind = TERM_LIT; t20->ival = 20;
+    Term *iff = NEW(); iff->kind = TERM_IF; iff->a = eq; iff->b = t10; iff->c = t20;
+    E(qtt_eval(iff, &k, &i, &b, err, sizeof err) == 0 && i == 10,
+      "eval (if (1==1) 10 else 20) == 10");
+
+    /* 3. let y = 2 in y * y  →  4 */
+    pi = 0;
+    Term *n2 = NEW(); n2->kind = TERM_LIT; n2->ival = 2;
+    Term *y1 = NEW(); y1->kind = TERM_VAR; y1->name = "y";
+    Term *y2 = NEW(); y2->kind = TERM_VAR; y2->name = "y";
+    Term *mul = NEW(); mul->kind = TERM_BIN; mul->op = BOP_MUL; mul->a = y1; mul->b = y2;
+    Term *let = NEW(); let->kind = TERM_LET; let->name = "y"; let->a = n2; let->b = mul;
+    E(qtt_eval(let, &k, &i, &b, err, sizeof err) == 0 && i == 4,
+      "eval (let y=2 in y*y) == 4");
+
+    /* 4. typecheck + eval agreement: (λx:^1 i64. x + 1) 41  →  42 */
+    pi = 0;
+    Term *p1 = NEW(); p1->kind = TERM_VAR; p1->name = "x";
+    Term *p2 = NEW(); p2->kind = TERM_LIT; p2->ival = 1;
+    Term *padd = NEW(); padd->kind = TERM_BIN; padd->op = BOP_ADD; padd->a = p1; padd->b = p2;
+    Term *plam = NEW(); plam->kind = TERM_LAM; plam->name = "x"; plam->q = Q_ONE; plam->ty = &I64_TY; plam->a = padd;
+    Term *p41 = NEW(); p41->kind = TERM_LIT; p41->ival = 41;
+    Term *papp = NEW(); papp->kind = TERM_APP; papp->a = plam; papp->b = p41;
+    char ty[64];
+    E(qtt_check_closed(papp, ty, sizeof ty, err, sizeof err) == 0 &&
+      qtt_eval(papp, &k, &i, &b, err, sizeof err) == 0 && i == 42,
+      "typecheck + eval ((λx:^1 i64. x+1) 41) == 42");
 
     return all_ok ? 0 : -1;
 }
