@@ -5,13 +5,14 @@ CFLAGS  ?= -O2 -std=c11 -Wall -Wextra -Wpedantic
 BUILD   ?= build
 BIN     := $(BUILD)/bebopc
 
-SRC := src/main.c src/glyph.c src/lexer.c src/parser.c src/morse.c src/qtt.c src/ntt.c src/hyper.c src/mem.c src/expr.c src/verify.c src/vsa.c src/codegen.c src/native.c src/money.c
+SRC := src/main.c src/glyph.c src/lexer.c src/parser.c src/morse.c src/qtt.c src/ntt.c src/hyper.c src/mem.c src/expr.c src/verify.c src/vsa.c src/codegen.c src/native.c src/money.c src/fft.c
+LDLIBS := -lm
 
 all: $(BIN)
 
-$(BIN): $(SRC) src/glyph.h src/lexer.h src/parser.h src/morse.h src/qtt.h src/ntt.h src/hyper.h src/mem.h src/expr.h src/verify.h src/vsa.h src/codegen.h src/native.h src/money.h
+$(BIN): $(SRC) src/glyph.h src/lexer.h src/parser.h src/morse.h src/qtt.h src/ntt.h src/hyper.h src/mem.h src/expr.h src/verify.h src/vsa.h src/codegen.h src/native.h src/money.h src/fft.h
 	@mkdir -p $(BUILD)
-	$(CC) $(CFLAGS) -o $@ $(SRC)
+	$(CC) $(CFLAGS) -o $@ $(SRC) $(LDLIBS)
 
 test: $(BIN)
 	$(BIN) version
@@ -51,6 +52,8 @@ test: $(BIN)
 	$(BIN) native
 	@echo "--- money (integer, overflow-safe) ---"
 	$(BIN) money
+	@echo "--- fft (radix-2, float) ---"
+	$(BIN) fft
 
 clean:
 	rm -rf $(BUILD)
