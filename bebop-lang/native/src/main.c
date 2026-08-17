@@ -6,6 +6,7 @@
 #include "glyph.h"
 #include "lexer.h"
 #include "parser.h"
+#include "morse.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -117,6 +118,24 @@ static void cmd_parse(const char *path) {
     free(src);
 }
 
+static void cmd_morse(const char *text) {
+    char buf[1024];
+    if (bp_morse_encode(text, buf, sizeof buf) != 0) {
+        fprintf(stderr, "cannot encode (unsupported char)\n");
+        exit(1);
+    }
+    printf("%s\n", buf);
+}
+
+static void cmd_unmorse(const char *morse) {
+    char buf[1024];
+    if (bp_morse_decode(morse, buf, sizeof buf) != 0) {
+        fprintf(stderr, "cannot decode (unknown code)\n");
+        exit(1);
+    }
+    printf("%s\n", buf);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -152,6 +171,22 @@ int main(int argc, char **argv) {
             return 2;
         }
         cmd_parse(argv[2]);
+        return 0;
+    }
+    if (strcmp(argv[1], "morse") == 0) {
+        if (argc < 3) {
+            usage();
+            return 2;
+        }
+        cmd_morse(argv[2]);
+        return 0;
+    }
+    if (strcmp(argv[1], "unmorse") == 0) {
+        if (argc < 3) {
+            usage();
+            return 2;
+        }
+        cmd_unmorse(argv[2]);
         return 0;
     }
     usage();

@@ -103,6 +103,9 @@ NTT `⟲⟳`, hypervector `⧉⊕⊗`, FFT/modular `ωₙℤₘ`, living-memory 
 ### 3.12 Agentic (agents + humans, one surface)
 Total ASCII fallback (agents tokenize without vision), contracts as machine-checkable specs, living-memory `⌾⤳⋈⇝` semantic navigation, deterministic no_std semantics. Built for AI agents as first-class users.
 
+### 3.13 Morse identifiers (density)
+Names are written in Morse (ITU codebook), translatable back to ASCII — ~2–3× shorter than ASCII, symbolically compact. `.`/`-` dot/dash, space = letter sep, `/` = word sep.
+
 ---
 
 ## 4. Backends (native, not Rust, not LLVM; mandatory compilation, all optimizations)

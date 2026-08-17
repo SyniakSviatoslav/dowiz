@@ -53,7 +53,18 @@ outline on a pixel grid). There is no `fn`/`struct`/`match` keyword — there is
 its ASCII name is the fallback token. The full alphabet is in
 `BEBOP-GLYPH-ALPHABET.md` (closed: every glyph parses, every construct has a glyph).
 
-### 2.2 Glyph lexicon (core, ordinary)
+### 2.2 Morse identifiers (density)
+Identifiers (names of modules, functions, records, values) are written in **Morse code**
+instead of ASCII letters: `.` = dot, `-` = dash, letters separated by a space, words by
+`/`. The ITU codebook maps Morse ↔ ASCII, so any identifier is **translatable back**
+(deterministic, reversible).
+
+Density: Morse is a variable-length prefix code (E = `.`, T = `-`, common letters 2–3
+symbols), so identifiers are ~2–3× shorter than ASCII. Combined with single-glyph
+structure, the surface is symbolically compact. (Not bit-optimal — Huffman is denser —
+but simple, human-readable, and reversible.)
+
+### 2.3 Glyph lexicon (core, ordinary)
 
 | Glyph | Name | Meaning |
 |---|---|---|
