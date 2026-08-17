@@ -46,6 +46,8 @@ size_t type_size(const Ty *t) {
             return 8; /* function pointer */
         case TY_NAT:
             return 8; /* machine word (unary Peano is erased to u64) */
+        case TY_STR:
+            return 8; /* borrowed pointer */
         case TY_EQ:
             return 0; /* proof — erased at runtime (QTT 0) */
         case TY_TYPE:
@@ -70,6 +72,7 @@ size_t type_align(const Ty *t) {
         case TY_FN:
         case TY_PI:
         case TY_NAT:
+        case TY_STR:
             return 8;
         case TY_HYPERVEC:
             return 64; /* cache-line aligned (dowiz best practice) */

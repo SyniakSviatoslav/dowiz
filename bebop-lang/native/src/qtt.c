@@ -57,6 +57,8 @@ int qtt_ty_print(const Ty *t, char *out, size_t cap) {
             return snprintf(out, cap, "void");
         case TY_NAT:
             return snprintf(out, cap, "Nat");
+        case TY_STR:
+            return snprintf(out, cap, "Str");
         case TY_TYPE:
             return snprintf(out, cap, "Type");
         case TY_VAR:
@@ -179,6 +181,7 @@ static Ty BOOL_TY = {.kind = TY_BOOL};
 static Ty TYPE_TY = {.kind = TY_TYPE};
 static Ty VOID_TY = {.kind = TY_VOID};
 static Ty NAT_TY = {.kind = TY_NAT};
+static Ty STR_TY = {.kind = TY_STR};
 
 Ty *qtt_i64(void) {
     return &I64_TY;
@@ -572,6 +575,7 @@ static int ty_eq(const Ty *a, const Ty *b) {
         case TY_BOOL:
         case TY_VOID:
         case TY_NAT:
+        case TY_STR:
             return 1;
         case TY_FIELD:
         case TY_HYPERVEC:
@@ -741,6 +745,15 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
         case TERM_MATCH:
         case TERM_STRUCT:
             return o; /* not needed for Nat motives; shallow copy */
+        case TERM_STR:
+            return o;
+        case TERM_STR_LEN:
+            o->a = subst_p(t->a, name, v);
+            return o;
+        case TERM_STR_CAT:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            return o;
     }
     return o;
 }
@@ -900,6 +913,22 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
                 return -1;
             }
             *out = &NAT_TY;
+            return 0;
+        case TERM_STR:
+            *out = &STR_TY;
+            return 0;
+        case TERM_STR_LEN:
+            if (check(c, t->a, &STR_TY, err, cap) != 0) {
+                return -1;
+            }
+            *out = &I64_TY;
+            return 0;
+        case TERM_STR_CAT:
+            if (check(c, t->a, &STR_TY, err, cap) != 0 ||
+                check(c, t->b, &STR_TY, err, cap) != 0) {
+                return -1;
+            }
+            *out = &STR_TY;
             return 0;
         case TERM_NAT_REC: {
             /* nat_rec base step target : P, where
@@ -1334,7 +1363,7 @@ int qtt_check_test(char *out, size_t cap) {
 typedef struct Value Value;
 typedef struct Env Env;
 struct Value {
-    int kind; /* 0=int, 1=bool, 2=closure, 3=struct, 4=enum, -1=error */
+    int kind; /* 0=int, 1=bool, 2=closure, 3=struct, 4=enum, 5=string, -1=error */
     long i;
     int b;
     const Term *lam; /* closure */
@@ -1468,6 +1497,29 @@ static Value eval(const Term *t, Env *env) {
                 }
             }
             v.kind = -1;
+            return v;
+        }
+        case TERM_STR:
+            v.kind = 5;      /* string value */
+            v.ctor = t->name; /* borrowed literal content */
+            return v;
+        case TERM_STR_LEN: {
+            Value s = eval(t->a, env);
+            if (s.kind != 5) { v.kind = -1; return v; }
+            v.kind = 0;
+            v.i = (long)strlen(s.ctor);
+            return v;
+        }
+        case TERM_STR_CAT: {
+            Value a = eval(t->a, env);
+            Value b = eval(t->b, env);
+            if (a.kind != 5 || b.kind != 5) { v.kind = -1; return v; }
+            static char catbuf[4][256];
+            static int ci = 0;
+            char *buf = catbuf[ci++ & 3];
+            snprintf(buf, 256, "%s%s", a.ctor, b.ctor);
+            v.kind = 5;
+            v.ctor = buf;
             return v;
         }
         case TERM_IO:
@@ -1745,6 +1797,15 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             o->a = qtt_subst(t->a, name, v);
             o->b = qtt_subst(t->b, name, v);
             return o;
+        case TERM_STR:
+            return o;
+        case TERM_STR_LEN:
+            o->a = qtt_subst(t->a, name, v);
+            return o;
+        case TERM_STR_CAT:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            return o;
     }
     return o;
 }
@@ -1788,6 +1849,41 @@ static Term *norm_rec(const Term *t) {
             o->a = norm_rec(t->a);
             o->b = norm_rec(t->b);
             return o;
+        case TERM_STR:
+            return o;
+        case TERM_STR_LEN: {
+            Term *sa = norm_rec(t->a);
+            if (!sa) return NULL;
+            if (sa->kind == TERM_STR && sa->name) {
+                o->kind = TERM_LIT;
+                o->ival = (long)strlen(sa->name);
+                o->op = 0;
+                o->a = o->b = o->c = NULL;
+                o->name = NULL;
+                return o;
+            }
+            o->a = sa;
+            return o;
+        }
+        case TERM_STR_CAT: {
+            Term *sa = norm_rec(t->a);
+            Term *sb = norm_rec(t->b);
+            if (!sa || !sb) return NULL;
+            if (sa->kind == TERM_STR && sa->name && sb->kind == TERM_STR && sb->name) {
+                static char catnorm[4][256];
+                static int cni = 0;
+                char *buf = catnorm[cni++ & 3];
+                snprintf(buf, 256, "%s%s", sa->name, sb->name);
+                o->kind = TERM_STR;
+                o->name = buf;
+                o->op = 0;
+                o->a = o->b = o->c = NULL;
+                return o;
+            }
+            o->a = sa;
+            o->b = sb;
+            return o;
+        }
         case TERM_NAT_REC: {
             /* definitional reduction of the recursor:
              *   nat_rec b s Z      → b
@@ -1935,6 +2031,12 @@ static int conv_rec(const Term *a, const Term *b) {
         case TERM_CONG:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
         case TERM_EQ_TYPE:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
+        case TERM_STR:
+            return a->name && b->name && strcmp(a->name, b->name) == 0;
+        case TERM_STR_LEN:
+            return conv_rec(a->a, b->a);
+        case TERM_STR_CAT:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
         case TERM_LAM:
             return a->name && b->name && strcmp(a->name, b->name) == 0 &&
@@ -2290,6 +2392,93 @@ int qtt_nat_test(char *out, size_t cap) {
     goalInd->eq_a = &NAT_TY; goalInd->eq_l = gadd; goalInd->eq_r = s2t;
     A(qtt_prove(proof, goalInd, ty, sizeof ty, err, sizeof err) == 0,
       "prove nat_ind (add 2 Z = 2) by induction");
+
+    return all_ok ? 0 : -1;
+}
+
+int qtt_str_test(char *out, size_t cap) {
+    size_t pos = 0;
+    int all_ok = 1;
+    char err[256], ty[128];
+#undef A
+#define A(cond, name)                                                          \
+    do {                                                                       \
+        int c_ = (int)(cond);                                                  \
+        int r_ = snprintf(out + pos, cap - pos, "[%s] %s\n",                  \
+                          c_ ? "ok" : "FAIL", name);                           \
+        if (r_ > 0) pos += (size_t)r_;                                         \
+        if (!c_) all_ok = 0;                                                   \
+    } while (0)
+
+    static Term pool[32];
+    static int pi = 0;
+    pi = 0;
+
+    /* --- string literal --- */
+    Term *hello = &pool[pi++];
+    memset(hello, 0, sizeof *hello);
+    hello->kind = TERM_STR; hello->name = "hello"; hello->ty = &STR_TY;
+
+    A(qtt_check_closed(hello, ty, sizeof ty, err, sizeof err) == 0 &&
+      strcmp(ty, "Str") == 0,
+      "check \"hello\" : Str");
+
+    /* --- str_len --- */
+    Term *slen = &pool[pi++];
+    memset(slen, 0, sizeof *slen);
+    slen->kind = TERM_STR_LEN; slen->a = hello;
+
+    int r2 = qtt_check_closed(slen, ty, sizeof ty, err, sizeof err);
+    A(r2 == 0 && strcmp(ty, "i64") == 0,
+      "check str_len(\"hello\") : i64");
+
+    /* --- str_cat --- */
+    Term *ab = &pool[pi++];
+    memset(ab, 0, sizeof *ab);
+    ab->kind = TERM_STR; ab->name = "ab";
+    Term *cd = &pool[pi++];
+    memset(cd, 0, sizeof *cd);
+    cd->kind = TERM_STR; cd->name = "cd";
+    Term *cat = &pool[pi++];
+    memset(cat, 0, sizeof *cat);
+    cat->kind = TERM_STR_CAT; cat->a = ab; cat->b = cd;
+
+    A(qtt_check_closed(cat, ty, sizeof ty, err, sizeof err) == 0 &&
+      strcmp(ty, "Str") == 0,
+      "check (\"ab\" ++ \"cd\") : Str");
+
+    /* --- conv: str_len("hello") = 5 --- */
+    Term *five = &pool[pi++];
+    memset(five, 0, sizeof *five);
+    five->kind = TERM_LIT; five->ival = 5;
+
+    A(qtt_conv(slen, five),
+      "conv str_len(\"hello\") = 5");
+
+    /* --- conv: ("ab" ++ "cd") = "abcd" --- */
+    Term *abcd = &pool[pi++];
+    memset(abcd, 0, sizeof *abcd);
+    abcd->kind = TERM_STR; abcd->name = "abcd";
+
+    A(qtt_conv(cat, abcd),
+      "conv (\"ab\" ++ \"cd\") = \"abcd\"");
+
+    /* --- prove: refl (str_len "hello") : str_len "hello" = 5 --- */
+    ty_len = 0;
+    Term *refl_strlen = &pool[pi++];
+    memset(refl_strlen, 0, sizeof *refl_strlen);
+    refl_strlen->kind = TERM_REFL; refl_strlen->a = slen;
+
+    Ty *goal_strlen = ty_alloc(TY_EQ);
+    if (goal_strlen) {
+        goal_strlen->eq_a = &I64_TY;
+        goal_strlen->eq_l = slen;
+        goal_strlen->eq_r = five;
+        A(qtt_prove(refl_strlen, goal_strlen, ty, sizeof ty, err, sizeof err) == 0,
+          "prove refl (str_len \"hello\") : str_len \"hello\" = 5");
+    } else {
+        A(0, "prove str_len: type pool");
+    }
 
     return all_ok ? 0 : -1;
 }

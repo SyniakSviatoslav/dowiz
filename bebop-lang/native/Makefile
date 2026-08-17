@@ -91,6 +91,8 @@ test: $(BIN)
 	@if $(BIN) check ../samples/theorem-false.bp 2>/dev/null; then echo "FAIL: false theorem was accepted"; exit 1; else echo "theorem rejection: ok"; fi
 	@echo "--- proof kernel (Nat / recursor) ---"
 	$(BIN) nat
+	@echo "--- QTT strings (check/conv/prove) ---"
+	$(BIN) str
 	@echo "--- VIR (NEON lowering) ---"
 	$(BIN) vir
 	@echo "--- PAC (pointer auth) ---"

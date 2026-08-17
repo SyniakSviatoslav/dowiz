@@ -41,7 +41,8 @@ typedef enum {
     TY_TYPE,     /* universe: the type of types (Type₀) */
     TY_VAR,      /* type variable (name in .x) */
     TY_EQ,       /* propositional equality: a = b (Eq A a b) */
-    TY_NAT,      /* natural numbers: Z | S Nat */
+    TY_NAT,      /* natural numbers (Peano): Z | S n */
+    TY_STR,      /* string literal (immutable byte sequence) */
 } TyKind;
 
 typedef struct Ty Ty;
@@ -108,6 +109,9 @@ typedef enum {
                    *   .a = f (a function), .b = the equality proof */
     TERM_EQ_TYPE, /* "a = b" as a TERM of type Type (the motive's body).
                    *   .a = left, .b = right */
+    TERM_STR,     /* string literal — content is borrowed in t->name */
+    TERM_STR_LEN, /* length of a string (t->a) : i64 */
+    TERM_STR_CAT, /* concatenation of two strings (t->a, t->b) : str */
 } TermKind;
 
 typedef enum {
@@ -239,5 +243,8 @@ int qtt_proof_test(char *out, size_t cap);
 
 /* Run the Nat + recursor (definitional computation) proof self-test. */
 int qtt_nat_test(char *out, size_t cap);
+
+/* Run the string (literal / length / concat) self-test. */
+int qtt_str_test(char *out, size_t cap);
 
 #endif /* BEBOP_QTT_H */
