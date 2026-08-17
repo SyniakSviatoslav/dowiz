@@ -1,124 +1,214 @@
-# BEBOP — Тотальний архітектурний каталог: 100 стратегічних рекомендацій
+# Bebop Architecture Catalog — 100 Design Decisions (10 domains × 10)
 
-**Статус:** специфікація-беклог (roadmap). 100 фундаментальних архітектурних рішень у 10 доменах.
-Філософія: максимальна залізна ефективність, формальна верифікація, агентна автономія.
+> Status: living document. Each decision is immutable once ratified.
+> Format: `D#N. Decision` — `Rationale` — `Tradeoffs`
 
-## Домен 1: Модель пам'яті та управління аренами (1–10)
-1. Арени з лінійними типами (QTT): автоматичне детерміноване знищення арен на основі використання лінійних типів (1) без рантайм-кошту.
-2. Багатопоколінні блокові пули (O(1)): швидке перероблення фіксованих блоків для запобігання фрагментації.
-3. Copy-on-Write (CoW) снепшоти: фіксація станів пам'яті для миттєвих транзакційних відкатів і реплеїв.
-4. Нульове вирівнювання за кеш-лініями: розміщення структур строго за межами кеш-ліній для мінімізації промахів L1/L2.
-5. Бездисковий embedded-старт: ініціалізація глобальних арен із вбудованих у бінарник структур без ОС.
-6. Append-only лог станів: послідовність CoW-снепшотів як незмінний лог — «машина часу».
-7. Статичний аналіз витоків арен: перевірка відсутності живих посилань поза ареною на етапі елаборації.
-8. Абсолютний no_std режим: відмова від stdlib ОС на користь власних примітивів виділення.
-9. Ізольовані простори арен: логічні бар'єри між модулями без важких процесів ОС.
-10. Апаратний зріз стану (Memory Dumps): миттєва серіалізація активної арени в бінарний потік.
+---
 
-## Домен 2: Система типів та формальна верифікація (11–20)
-11. Інтеграція SMT-солверів (Z3/CVC5): автоматична перевірка VC під час елаборації.
-12. Лінійні типи сесій (Session Types): статичне доведення коректності протоколів без дедлоків.
-13. Залежна тип-рефлексія: метапрограмування на рівні типів для маніпуляції розмірностями.
-14. Строгий IEEE 754 детермінізм: відмова від fast-math заради ідентичності результатів на будь-якому залізі.
-15. Ефект-аналіз (Pure vs IO): трекінг побічних ефектів у сигнатурах функцій.
-16. Нульові витрати на абстракції: монади/ефекти — лише шаблони, стираються на стадії кодогенерації.
-17. Статична інваріантна валідація: перевірка меж і діапазонів числових типів компілятором.
-18. Формальні контракти функцій (Pre/Post): договірне програмування через SMT-ядро.
-19. Елімінація невизначеної поведінки (UB): повна заборона невизначених станів на рівні AST.
-20. Контекстно-залежне виведення типів: Гіндлі-Мілнер, розширений для лінійних та ефектних типів.
+## Domain 1: QTT Core Calculus
 
-## Домен 3: JIT-компіляція та кодогенерація (21–30)
-21. Безпечні W^X буфери (mprotect): двокроковий захист динамічно згенерованого коду на AArch64.
-22. Регістровий алокатор (Linear Scan): заміна стекової машини на розподіл регістрів.
-23. Проміжне векторне представлення (VIR): абстрактний шар для мапування на NEON та simd128.
-24. Атомарна заміна вказівників (Hot-Swapping): оновлення логіки функцій у JIT-таблиці без зупинки ноди.
-25. Трансляційна валідація бекенду: математичне підтвердження еквівалентності машинного коду AST.
-26. Фонове PGO (Profile-Guided Optimization): адаптація та перекомпіляція гарячих шляхів.
-27. Мікроінтринсики NPU/GPU: пряме мапування матоперацій на нейроморфні прискорювачі.
-28. Інкрементний самохостінг: поетапний перенос модулів компілятора з C на Bebop.
-29. Мікро-вхід _start: власний ініціалізатор бінарника без crt0.
-30. Елімінація зайвих розгалужень: оптимізація кодогенератора під предікативні інструкції.
+1. **Single calculus (QTT).** One typed calculus delivers ownership (Rust) + dependent types (Lean). Rationale: avoids two type systems, two compilers. Tradeoff: steep learning curve.
 
-## Домен 4: Конкурентність та планування (31–40)
-31. Детермінований кооперативний евент-луп: прив'язка легких потоків до ядер без планувальника ОС.
-32. Lock-free структури (Treiber stack): неблокована конкурентність на C11 атоміках та CAS.
-33. Зелені потоки в аренах: легковагі корутини у фіксованих блоках пам'яті.
-34. Ієрархія нагляду (Supervision Trees): автоматичний перехват і відкат збоїв дочірніх агентів через CoW.
-35. Абсолютна відсутність блокувань (Deadlock-free): гарантія лінійною семантикою.
-36. Асинхронний ефект-роут: прокидання станів помилок на флаги процесора без розкрутки стека.
-37. Легковагий контекстний перемикач: передача керування між корутинами за кілька тактів.
-38. Ізоляція ядер (Core Pinning): закріплення критичних агентних потоків за фізичними ядрами.
-39. Безконфліктна черга повідомлень: канали під однонаправлені потоки даних.
-40. Пріоритезація завдань у реальному часі: детермінований облік дедлайнів мікрозадач.
+2. **Quantities 0/1/ω.** 1=move/linear, ω=shared, 0=erased/proof. Rationale: Idris 2 proved this is enough. Tradeoff: no fractional quantities (linear logic purism rejected).
 
-## Домен 5: Гіпервекторні обчислення та VSA (41–50)
-41. Суперпозиція гіпервекторів: прямі матоперації злиття ембедингів у меш-мережі.
-42. Zero-copy бінарні потоки: передача векторів без маршалінгу та копіювання буферів.
-43. Динамічний Pruning розмірності: зменшення розміру векторів при просіданні пропускної здатності.
-44. SIMD-векторизація математики: NEON для прискорення тригонометрії та матриць.
-45. Апаратні лічильники телеметрії (PMU): метрики процесора, загорнуті у VSA-потоки.
-46. Швидкісні VSA-примітиви: бібліотека (BIND, BUNDLE, PERMUTE) на рівні байткоду.
-47. Компактні упаковані структури: щільне пакування векторів для передачі.
-48. Просторова адресація пам'яті: звернення через асоціативні вектори замість вказівників.
-49. Ембединг логіки в геометрію: AST-вузли як просторові гіпервектори.
-50. Апаратна оптимізація скалярних добутків: максимальне використання векторних регістрів.
+3. **No η-conversion in kernel.** Only βδ-reduction. Rationale: keeps normalizer simple, proofs smaller. Tradeoff: some definitional equalities need explicit `refl`.
 
-## Домен 6: Безпека та ізоляція заліза (51–60)
-51. Апаратне підписання вказівників (PAC): захист від ROP на рівні інструкцій ARM AArch64.
-52. Модулі захисту пам'яті (MPU): апаратне обмеження доступу арен на мікроконтролерах без ОС.
-53. Гібридна пісочниця (JIT + WASM): нативне виконання довіреного коду + ізоляція сторонніх скриптів.
-54. Криптографічна ідентифікація Ed25519: прив'язка ключів до структур арен.
-55. Нульова довіра у меш-мережі (Zero Trust): криптоперевірка кожного пакету та ноди.
-56. Захист від переповнення стека: фіксовані розміри та перевірка меж під час елаборації.
-57. Запобігання ін'єкціям коду: контроль динамічної генерації через статичні інваріанти.
-58. Апаратний контроль цілісності (Secure Boot): запуск лише за верифікації образу.
-59. Ізоляція середовищ (Isolation Domains): відокремлення мережевого IO від чистих обчислень.
-60. Захист від side-channel атак: константний час криптопримітивів.
+4. **δ-reduction for primitives.** Strings, Nat, Vec all compute definitionally. Rationale: `str_len("hello") ≡ 5` without induction. Tradeoff: normalizer grows with primitive count.
 
-## Домен 7: Мережа та децентралізований зв'язок (61–70)
-61. CAS-залежності (Content-Addressable Storage): пакети за криптографічними хешами без реєстрів.
-62. Агентні меш-протоколи: децентралізований обмін без брокерів.
-63. Стійкість до втрати пакетів: надлишковість VSA-потоків для нестабільних радіомереж.
-64. Мінімальний мережевий оверхед: сирі бінарні фрейми без зайвих заголовків.
-65. Автономна реконфігурація рою: самовідновлення зв'язків при виході вузлів з ладу.
-66. Пряме бідірекціональне FFI: інтеграція з нативним C (dowiz) без маршалінгу.
-67. Децентралізоване узгодження станів: синхронізація рою без Raft.
-68. Шифрування каналів «на льоту»: апаратне шифрування трафіку між аренами.
-69. Оптимізація під радіоканали FPV: профілі передачі для обмеженого зв'язку.
-70. Синхронізація годинника нод: апаратне узгодження таймстампів для детермінованого логування.
+5. **Cumulative universes postponed.** Type₀ only for bootstrap. Rationale: don't need Type₁ for self-host. Tradeoff: can't encode `Type : Type` paradoxes (which is good).
 
-## Домен 8: Ергономіка, синтаксис та LLM-оптимізація (71–80)
-71. Гібридний синтаксис (гліфи + ASCII): ультракомпактна токен-щільність + читабельність.
-72. Мінімалістична граматика: без синтаксичного сміття.
-73. Агентно-орієнтовані нотації: оператори для роїв, векторів та ефектів.
-74. Детермінований форматтер: єдиний стандарт стилю.
-75. Підтримка токенізаторів LLM: лексеми під контекстні вікна нейромереж.
-76. Семантична підсвітка та лінтинг: миттєва перевірка інваріантів на елабораторі.
-77. Вбудовані документаційні контракти: генерація специфікацій з SMT-інваріантів.
-78. Двонаправлена трансляція синтаксису: гліфи ↔ текст без втрат.
-79. Мінімальний розмір компілятора: bebopc для мікрокомп'ютерів.
-80. Інтеграція з сучасними IDE: плагіни з семантичною навігацією.
+6. **Inductive types via W-types.** All ADTs desugar to W. Rationale: single eliminator (`nat_rec`/`nat_ind`) pattern. Tradeoff: encoding is verbose.
 
-## Домен 9: Надійність, реплей та налагодження (81–90)
-81. Реплей-рушій часу: відтворення збоїв за логом снепшотів.
-82. Ізольоване тестове середовище: детермінована віртуальна пісочниця для юніт-тестів.
-83. Апаратні дампи помилок: запис стану арен у flash при критичному збої.
-84. Транзакційний відкат тестів: скидання змін після тесту через CoW.
-85. Статичний аналіз покриття контрактами: повнота SMT-умов для кожної функції.
-86. Мікросекундний профайлер: лічильники тактів для пошуку вузьких місць.
-87. Детермінований RNG: криптостійкий з фіксованим сідом для симуляцій.
-88. Моніторинг фрагментації пам'яті: метрики здоров'я аренових пулів.
-89. Символьне виконання: дослідження всіх гілок виконання компілятором.
-90. Автентифікація логів телеметрії: підписання записів ключем агента.
+7. **No quotient types yet.** Postponed to QTT-full phase. Rationale: self-host doesn't need them. Tradeoff: can't model `ℤ` from `ℕ × ℕ / ~`.
 
-## Домен 10: Еволюція, екосистема та майбутнє платформи (91–100)
-91. Версіонування мови без ламання сумісності: еволюція AST через семантичні контракти.
-92. Спільне навчання рою (Swarm Learning): обмін гіпервекторними вагами на льоту.
-93. Апаратна незалежність бекенду: розширення на RISC-V, RISC-V Vector.
-94. Зелена енергоефективність: мінімізація енергоспоживання через відсутність абстракцій.
-95. Автоматична оптимізація пайплайнів зв'язку: адаптація протоколів під якість каналу.
-96. Спільні репозиторії пакетів: децентралізовані CAS без єдиної точки відмови.
-97. Вбудована підтримка симуляцій фізики: примітиви просторових переміщень.
-98. Крос-компіляція в один клік: бінарники для будь-якої цільової архітектури.
-99. Самоадаптивні системи безпеки: динамічне посилення інваріантів при атаках.
-100. Повна формальна закритість мови: доведена коректність від лексера до машинного коду.
+8. **Termination checker postponed.** Recursion guarded by `nat_rec` only. Rationale: structural recursion sufficient for bootstrap. Tradeoff: no general `fix`.
+
+9. **No implicit arguments.** All args explicit. Rationale: simpler elaboration. Tradeoff: more typing in source.
+
+10. **Unification: first-order only.** Pattern unification (Miller). Rationale: decidable, predictable. Tradeoff: can't infer higher-order patterns.
+
+---
+
+## Domain 2: Type System
+
+11. **No subtyping.** All type equality is definitional. Rationale: simplifies kernel. Tradeoff: no implicit upcasting.
+
+12. **Type reflection.** `type_size`/`type_align` at elaboration time. Rationale: layout computed once. Tradeoff: can't reflect at runtime.
+
+13. **Nat as machine word (erased).** Peano in proofs, u64 at runtime. Rationale: zero overhead. Tradeoff: large Nat proofs may overflow u64.
+
+14. **String as immutable byte sequence.** Borrowed pointer, never owned. Rationale: no allocation in kernel. Tradeoff: can't mutate strings.
+
+15. **Array = Vec<T,n>** (fixed size). Rationale: predictable layout. Tradeoff: no growable arrays.
+
+16. **Struct = named-product.** Fields accessed by name. Rationale: self-documenting. Tradeoff: no structural subtyping.
+
+17. **Enum = tagged-union.** u8 tag + payload. Rationale: compact. Tradeoff: max 256 constructors.
+
+18. **Proof terms erased (QTT 0).** `refl`, `nat_ind` compiled to no-ops. Rationale: zero runtime cost. Tradeoff: can't reflect on proofs.
+
+19. **No `null` or `Option` built-in.** Use `enum {None, Some(T)}`. Rationale: explicit, safe. Tradeoff: extra indirection.
+
+20. **I64 as default integer.** No implicit conversions. Rationale: predictable. Tradeoff: verbose for u8 arithmetic.
+
+---
+
+## Domain 3: Parser + Lexer
+
+21. **Recursive-descent parser.** No parser generators. Rationale: debuggable, no dependencies. Tradeoff: manual precedence handling.
+
+22. **Glyphs as UTF-8 identifiers.** Non-ASCII treated as `BP_TOK_GLYPH`. Rationale: source can be pure glyphs. Tradeoff: ASCII fallback always available.
+
+23. **Keywords via `match_kw`.** Not lexer tokens — parser discriminates. Rationale: can add keywords without changing lexer. Tradeoff: slightly slower.
+
+24. **Error recovery: fail-fast.** No error recovery in bootstrap. Rationale: simple. Tradeoff: one error per compilation.
+
+25. **Expression parser: Pratt.** Precedence via `parse_bin(min_prec)`. Rationale: handles all binary ops uniformly. Tradeoff: less flexible for mixfix.
+
+26. **Let-in chains via recursive parsing.** `let x=e1 in e2` desugars to `(λx.e2) e1`. Rationale: no special AST node. Tradeoff: can't typecheck let-polymorphism.
+
+27. **If-then-else via CSEL.** No branch divergence in JIT. Rationale: branchless for hot paths. Tradeoff: evaluates both branches always.
+
+28. **While via actual branches.** cbz + b for loops. Rationale: can't unroll infinite loops. Tradeoff: pipeline bubbles on mispredict.
+
+29. **Array indexing via CSEL-chain.** Immediate-offset loads + cmp+csel. Rationale: avoids broken register-offset ldr. Tradeoff: O(n) code size per access.
+
+30. **No module system in bootstrap.** Flat namespace. Rationale: self-host doesn't need modules. Tradeoff: name collisions possible.
+
+---
+
+## Domain 4: Native Codegen (AArch64)
+
+31. **Direct AArch64 encoding.** No assembler, hardcoded opcodes. Rationale: zero dependencies. Tradeoff: fragile, hand-verified.
+
+32. **W^X memory.** Write → mprotect → execute. Rationale: no W+X pages ever. Tradeoff: can't JIT-patch running code.
+
+33. **Register allocation: x19-x28.** 10 callee-saved for locals. Rationale: survives calls. Tradeoff: only 10 locals in registers.
+
+34. **Heap: bump pointer in x14.** sp+256 as heap base, x14 tracks bump. Rationale: simple, fast. Tradeoff: no GC, no free.
+
+35. **Eval stack: push/pop via sp.** sub sp,#16 / add sp,#16. Rationale: uses hardware stack. Tradeoff: stack and heap share 512B frame.
+
+36. **Frame: 512 bytes.** sp-512 for JIT execution. Rationale: enough for small programs. Tradeoff: large programs overflow.
+
+37. **CSEL for branchless if.** Both branches evaluated, result selected. Rationale: no branch mispredict. Tradeoff: wasted work for expensive branches.
+
+38. **cbz/b for while.** Label-based backward branch. Rationale: minimal encoding. Tradeoff: 19-bit branch range.
+
+39. **svc #0 for syscalls.** TERM_SYSCALL with ival=nr. Rationale: direct Linux syscall. Tradeoff: Linux-only.
+
+40. **mov-imm for constants.** 16-bit immediate with mov/movk. Rationale: handles any u16. Tradeoff: multi-instruction for u64.
+
+---
+
+## Domain 5: Proof Kernel
+
+41. **`refl` as sole equality constructor.** All proofs reduce to `refl`. Rationale: simple, trusted. Tradeoff: no `sym`/`trans` needed in kernel.
+
+42. **`nat_ind` for induction.** Dependent eliminator. Rationale: one rule for all Nat proofs. Tradeoff: manual motive construction.
+
+43. **No `cong`/`subst` axioms.** Derived from `nat_ind`. Rationale: minimal trusted base. Tradeoff: larger proof terms.
+
+44. **Theorem surface via `theorem` keyword.** Parsed, elaborated, checked. Rationale: concrete syntax for proofs. Tradeoff: limited expressivity.
+
+45. **`ty_eq` with convertibility check.** `a = b` true iff `qtt_conv(a,b)`. Rationale: definitional equality. Tradeoff: no propositional equality without proof.
+
+46. **Type pool bounded.** 64 type allocations max. Rationale: predictable memory. Tradeoff: complex types exhaust pool.
+
+47. **No tactics.** All proofs explicit terms. Rationale: bootstrap is small. Tradeoff: writing proofs by hand.
+
+48. **`extern pure`/`extern io` effect tracking.** Call-graph analysis. Rationale: purity guarantees. Tradeoff: all externs must be annotated.
+
+49. **Proof erasure.** QTT 0 terms emitted as no-ops. Rationale: zero runtime cost. Tradeoff: can't `printf`-debug proofs.
+
+50. **Self-test macro.** All modules have `_test` functions. Rationale: continuous verification. Tradeoff: test code in production binary.
+
+---
+
+## Domain 6: Effect System
+
+51. **Two effects: pure/io.** No effect lattice. Rationale: bootstrap needs only these. Tradeoff: no `log`/`network` tracking.
+
+52. **Transitive effect propagation.** Caller inherits callee's effect. Rationale: sound. Tradeoff: false positives (unused callee).
+
+53. **`extern` declarations.** Must specify `pure` or `io`. Rationale: explicit, grepable. Tradeoff: verbose.
+
+54. **No effect polymorphism.** Functions are pure OR io, not parametric. Rationale: simpler typechecking. Tradeoff: code duplication.
+
+55. **No effect handlers.** Bootstrap doesn't need them. Rationale: less is more. Tradeoff: can't implement custom effects.
+
+---
+
+## Domain 7: Memory Model
+
+56. **Arena-based allocation.** CoW log for time-travel. Rationale: predictable, no GC. Tradeoff: manual lifetime management.
+
+57. **Append-only CoW log.** O(1) snapshot/rollback. Rationale: supervision tree needs it. Tradeoff: unbounded log growth.
+
+58. **No heap in kernel.** All kernel terms are stack/static. Rationale: no allocation in typechecker. Tradeoff: limited term count.
+
+59. **Borrowed pointers for strings.** Never owned. Rationale: no allocation. Tradeoff: lifetime tied to source.
+
+60. **No `Box`/`Rc`/`Arc`.** Bootstrap doesn't need heap types. Rationale: simplicity. Tradeoff: can't write general data structures.
+
+---
+
+## Domain 8: Concurrency
+
+61. **Green threads (stackful coroutines).** Yield via `gt_yield()`. Rationale: cooperative, no OS threads. Tradeoff: no preemption.
+
+62. **Round-robin scheduler.** Fixed order, no priorities. Rationale: simple. Tradeoff: no fairness guarantees.
+
+63. **No channels yet.** Postponed to post-bootstrap. Rationale: self-host doesn't need them. Tradeoff: threads can't communicate.
+
+64. **Atomic intrinsics (CAS/LDADD).** Via machine-code emission. Rationale: lock-free data structures. Tradeoff: AArch64 only.
+
+65. **No `async`/`await`.** Green threads simpler. Rationale: less syntax. Tradeoff: can't compose with OS I/O.
+
+---
+
+## Domain 9: Tooling
+
+66. **No debugger.** GDB can attach to JIT code. Rationale: works today. Tradeoff: no source-level debugging.
+
+67. **No profiler.** `perf` can sample JIT code. Rationale: works today. Tradeoff: no flame graphs from Bebop.
+
+68. **No LSP (yet).** Postponed to Phase 2. Rationale: self-host first. Tradeoff: no IDE support.
+
+69. **Error messages: single-line.** One error per compilation. Rationale: simple. Tradeoff: multiple errors need multiple passes.
+
+70. **No formatter.** `bebopc fmt` planned but not built. Rationale: glyphs need special handling. Tradeoff: inconsistent style.
+
+---
+
+## Domain 10: Self-Host Philosophy
+
+71. **C bootstrap → self-host in Bebop.** C compiler compiles Bebop compiler. Rationale: bootstrapping trust. Tradeoff: C code exists forever.
+
+72. **No external compilers.** Own AArch64 backend, no LLVM/GCC. Rationale: full control. Tradeoff: no x86_64 yet.
+
+73. **All optimizations mandatory.** No `-O0`. Rationale: `#[bit_identical]` requires consistent opts. Tradeoff: slow debug builds.
+
+74. **Self-test on every commit.** All modules have `_test` in `make test`. Rationale: never regress. Tradeoff: longer CI.
+
+75. **No unsafe blocks.** All code is safe by construction. Rationale: kernel is the escape hatch. Tradeoff: some expressivity lost.
+
+76. **Line-count budgets.** Modules ≤500 lines each. Rationale: human-auditable. Tradeoff: more files.
+
+77. **Zero dead code.** Every line reachable from `main`. Rationale: no cruft. Tradeoff: aggressive pruning.
+
+78. **No dynamic dispatch.** All calls static. Rationale: predictable. Tradeoff: no trait objects.
+
+79. **Source = truth.** No generated code committed. Rationale: auditable. Tradeoff: verbose.
+
+80. **One binary.** `bebopc` does everything. Rationale: simple deployment. Tradeoff: large binary.
+
+---
+
+## Remaining 20 (abbreviated)
+
+81-90: **Security**
+- PAC (pointer auth), W^X, CoW rollback, fail-closed syscalls, no `unsafe`, bounded loops, stack canaries (via PAC), no format strings, deterministic memory
+
+91-100: **Future**
+- WASM backend, GPU backend, FPGA/ASIC HLS, x86_64 backend, LSP, formatter, module system, package manager, stdlib, dowiz rewrite
