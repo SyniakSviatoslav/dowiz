@@ -212,7 +212,20 @@ fn main() {
             }
             let store = LivingMemoryStore::open(&args[2]).expect("open store");
             let q = args[3..].join(" ");
-            let ids = store.memory().search(&q);
+            // Rank matches by relevance: a key/path hit first (exact file), then a
+            // summary hit, then a content-only hit. `search` returns insertion
+            // order, which is wrong for "read the file named X".
+            let mut ids = store.memory().search(&q);
+            ids.sort_by_key(|id| {
+                let r = store.memory().recall(*id).unwrap();
+                if r.key.contains(&q) {
+                    0
+                } else if r.summary.contains(&q) {
+                    1
+                } else {
+                    2
+                }
+            });
             for id in ids.iter().take(3) {
                 let r = store.memory().recall(*id).unwrap();
                 println!("=== [{id}] {} ({} / {}) ===", r.key, r.wing, r.room);

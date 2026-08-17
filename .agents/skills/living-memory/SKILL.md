@@ -14,10 +14,15 @@ navigation, and reading — the single access layer for the codebase.
 
 Living memory (`lm_graph`) is the **only** permitted access layer for the dowiz
 codebase. **Every** search, navigation, and read goes through it — always, for
-every command, for every task. `grep`/`rg`/`search_files`/`read_file` on dowiz
-source are **forbidden unconditionally**. This is NOT a recommendation and NOT
-opt-in. If something is missing, extend the store (`lm_graph build`); never fall
-back to grep or a direct file read.
+every command and task. `grep`/`rg`/`search_files`/`read_file` on dowiz source are
+**forbidden unconditionally**. This is NOT a recommendation and NOT opt-in.
+
+If a symbol/pattern is **missing** from a query result, you **MUST add/index it**
+(extend `match_symbol`, or index more source dirs, then `lm_graph build`) — a miss
+is a coverage bug to fix, never a reason to fall back to grep or a direct file read.
+
+Avoid bash/shell for living-memory operations: use the native `lm_graph` binary
+(zero interpreter, zero subprocess) — it IS the fast variant.
 
 ## Store location (persistent)
 
