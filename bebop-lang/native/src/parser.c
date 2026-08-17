@@ -180,6 +180,10 @@ int bp_parse(const char *src, AstProgram *prog, BpParseError *err) {
             advance(&p);
         }
 
+        /* for fn items: skip signature (params + return type) until '{' */
+        if (kind == AST_ITEM_FN) {
+            while (!at_eof(&p) && !peek_punct(&p, '{')) advance(&p);
+        }
         /* body: brace block for module/fn/struct, else statement */
         int ok = 0;
         if (peek_punct(&p, '{')) {
@@ -395,10 +399,10 @@ int bp_parse_fn_decl(const char *src, TyRegistry *reg, Term **out,
     if (expr_parse(bs, &body, err, cap) != 0) { free(bs); return -1; }
     free(bs);
     static Term lam; memset(&lam, 0, sizeof lam);
-    lam.kind = TERM_LAM; lam.name = pname; lam.q = Q_ONE; lam.ty = pty; lam.a = body;
+    lam.kind = TERM_LAM; lam.name = pname; lam.q = Q_MANY; lam.ty = pty; lam.a = body;
     *out = &lam;
     static Ty pi; memset(&pi, 0, sizeof pi);
-    pi.kind = TY_PI; pi.q = Q_ONE; pi.x = pname; pi.dom = pty; pi.cod = rty;
+    pi.kind = TY_PI; pi.q = Q_MANY; pi.x = pname; pi.dom = pty; pi.cod = rty;
     *out_ty = &pi;
     return 0;
 }
