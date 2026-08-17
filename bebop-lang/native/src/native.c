@@ -11,6 +11,27 @@
 static unsigned int em_code[512];
 static size_t em_len;
 
+/* ─── Local-variable frame (foundation of the register allocator) ───
+ * `let`-bound locals live in a fixed stack frame above `sp` (positive
+ * offsets); the evaluation stack grows below `sp` (push/pop). Slots are
+ * 8-byte, up to 64 locals. Later slices promote hot locals to x-registers. */
+#define FRAME_BYTES 512
+static struct {
+    const char *name;
+    int slot;
+} vars[64];
+static int nvars = 0;
+
+static int var_slot(const char *name) {
+    /* backward search: most-recent binding wins (shadowing-correct) */
+    for (int i = nvars - 1; i >= 0; i--) {
+        if (strcmp(vars[i].name, name) == 0) {
+            return vars[i].slot;
+        }
+    }
+    return -1;
+}
+
 static void em(unsigned int ins) {
     if (em_len < sizeof em_code / sizeof em_code[0]) {
         em_code[em_len] = ins;
@@ -71,6 +92,36 @@ static int emit_expr(const Term *t) {
             emit_mov64((unsigned long)t->ival, 0);
             emit_push();
             return 0;
+        case TERM_VAR: {
+            /* load a let-bound local from its frame slot (x15 = frame base) */
+            int slot = var_slot(t->name);
+            if (slot < 0) {
+                return -1; /* unbound variable: not a closed i64 term */
+            }
+            em(0xF9400000u | ((unsigned)(slot >> 3) << 10) | (15u << 5) | 0u); /* ldr x0,[x15,#slot] */
+            emit_push();
+            return 0;
+        }
+        case TERM_LET: {
+            /* bind t->name := value, then evaluate the body. Value is popped
+             * into x0 and stored to a fresh frame slot (x15 = frame base). */
+            if (emit_expr(t->a) != 0) {
+                return -1;
+            }
+            emit_pop(0); /* x0 = value */
+            if (nvars >= 64) {
+                return -1;
+            }
+            int slot = nvars * 8;
+            vars[nvars].name = t->name;
+            vars[nvars].slot = slot;
+            nvars++;
+            em(0xF9000000u | ((unsigned)(slot >> 3) << 10) | (15u << 5) | 0u); /* str x0,[x15,#slot] */
+            if (emit_expr(t->b) != 0) {
+                return -1;
+            }
+            return 0;
+        }
         case TERM_BIN:
             if (emit_expr(t->a) != 0) return -1;
             if (emit_expr(t->b) != 0) return -1;
@@ -106,12 +157,16 @@ static int emit_expr(const Term *t) {
 
 long native_eval(const Term *t, char *err, size_t cap) {
     em_len = 0;
+    nvars = 0;
+    em(0xD10803FFu); /* sub sp, sp, #512 — allocate the local-variable frame */
+    em(0x910003EFu); /* add x15, sp, #0 — frame base (caller-saved scratch) */
     if (emit_expr(t) != 0) {
         snprintf(err, cap, "native: unsupported term");
         return 0;
     }
     emit_pop(0);
-    em(0xD65F03C0u);
+    em(0x910803FFu); /* add sp, sp, #512 — free the frame */
+    em(0xD65F03C0u); /* ret */
 
     size_t sz = em_len * sizeof(unsigned int);
     void *mem = mmap(NULL, sz, PROT_READ | PROT_WRITE | PROT_EXEC,
@@ -182,6 +237,21 @@ int native_self_test(char *out, size_t cap) {
         char label[64];
         snprintf(label, sizeof label, "native '%s' == %ld", ifs[i], iwants[i]);
         N(got == iwants[i], label);
+    }
+    const char *lets[] = {"let x = 5 in x + 1", "let x = 5 in let y = 3 in x * y + 1",
+                          "let x = 10 in x - 4", "let x = 1 in let x = 5 in x"};
+    long lwants[] = {6, 16, 6, 5};
+    for (int i = 0; i < 4; i++) {
+        expr_pool_reset();
+        Term *t = NULL;
+        if (expr_parse(lets[i], &t, err, sizeof err) != 0) {
+            N(0, "let parse");
+            continue;
+        }
+        long got = native_eval(t, err, sizeof err);
+        char label[64];
+        snprintf(label, sizeof label, "native '%s' == %ld", lets[i], lwants[i]);
+        N(got == lwants[i], label);
     }
     return all_ok ? 0 : -1;
 }
