@@ -227,6 +227,58 @@ static int emit_expr(const Term *t) {
             }
             return 0;
         }
+        case TERM_FIELD: {
+            /* base must be a struct literal (its ty carries the field layout);
+             * load the field at its byte offset from the struct pointer. */
+            int off = -1;
+            if (t->a->kind == TERM_STRUCT && t->a->ty) {
+                for (int i = 0; i < t->a->ty->nfields; i++) {
+                    if (strcmp(t->a->ty->fields[i].name, t->name) == 0) {
+                        off = i * 8;
+                        break;
+                    }
+                }
+            }
+            if (off < 0) {
+                return -1; /* need a literal struct to resolve the offset */
+            }
+            if (emit_expr(t->a) != 0) {
+                return -1;
+            }
+            emit_pop(0); /* x0 = struct pointer */
+            em(0xF9400000u | ((unsigned)(off >> 3) << 10) | (0u << 5) | 0u); /* ldr x0,[x0,#off] */
+            emit_push();
+            return 0;
+        }
+        case TERM_STRUCT: {
+            /* allocate an 8·n block in the struct heap (x14 bump pointer),
+             * store each field in TYPE order, result = the block pointer. */
+            int n = t->ty ? t->ty->nfields : 0;
+            for (int i = 0; i < n; i++) {
+                const char *fname = t->ty->fields[i].name;
+                const Term *val = NULL;
+                for (int j = 0; j < t->nfields; j++) {
+                    if (strcmp(t->fields[j].name, fname) == 0) {
+                        val = t->fields[j].val;
+                        break;
+                    }
+                }
+                if (!val) {
+                    return -1;
+                }
+                if (emit_expr(val) != 0) {
+                    return -1;
+                }
+                emit_pop(0); /* x0 = field value */
+                em(0xF9000000u | ((unsigned)i << 10) | (14u << 5) | 0u); /* str x0,[x14,#i*8] */
+            }
+            em(0xAA0E03E0u); /* mov x0, x14 — the struct pointer */
+            if (n) {
+                em(0x91000000u | ((unsigned)(n * 8) << 10) | (14u << 5) | 14u); /* add x14,x14,#8n */
+            }
+            emit_push();
+            return 0;
+        }
         default:
             return -1;
     }
@@ -245,6 +297,7 @@ long native_eval(const Term *t, char *err, size_t cap) {
     emit_stp_sp(25, 26, 48);
     emit_stp_sp(27, 28, 64);
     em(0x910143EFu); /* add x15, sp, #80 — frame base for spilled locals */
+    em(0x910403EEu); /* add x14, sp, #256 — struct heap bump pointer */
     if (emit_expr(t) != 0) {
         snprintf(err, cap, "native: unsupported term");
         return 0;
@@ -368,6 +421,30 @@ int native_self_test(char *out, size_t cap) {
         char label[64];
         snprintf(label, sizeof label, "native '%s' == %ld", apps[i], awants[i]);
         N(got == awants[i], label);
+    }
+    /* struct + field access (built directly — expr parser doesn't emit TERM_STRUCT) */
+    {
+        static TyField pt_fields[2] = {{"x", NULL}, {"y", NULL}};
+        static Ty pt_ty = {.kind = TY_STRUCT, .fields = pt_fields, .nfields = 2};
+        static Term pool[16];
+        int pi = 0;
+        Term *lx = &pool[pi++]; memset(lx, 0, sizeof *lx); lx->kind = TERM_LIT; lx->ival = 3;
+        Term *ly = &pool[pi++]; memset(ly, 0, sizeof *ly); ly->kind = TERM_LIT; ly->ival = 4;
+        static TermField sf[2];
+        sf[0].name = "x"; sf[0].val = lx;
+        sf[1].name = "y"; sf[1].val = ly;
+        Term *st = &pool[pi++]; memset(st, 0, sizeof *st);
+        st->kind = TERM_STRUCT; st->ty = &pt_ty; st->fields = sf; st->nfields = 2;
+        Term *fx = &pool[pi++]; memset(fx, 0, sizeof *fx); fx->kind = TERM_FIELD; fx->name = "x"; fx->a = st;
+        Term *fy = &pool[pi++]; memset(fy, 0, sizeof *fy); fy->kind = TERM_FIELD; fy->name = "y"; fy->a = st;
+        Term *adds = &pool[pi++]; memset(adds, 0, sizeof *adds);
+        adds->kind = TERM_BIN; adds->op = BOP_ADD; adds->a = fx; adds->b = fy;
+        long got = native_eval(adds, err, sizeof err);
+        N(got == 7, "native struct{x:3,y:4}.x + .y == 7");
+        Term *muls = &pool[pi++]; memset(muls, 0, sizeof *muls);
+        muls->kind = TERM_BIN; muls->op = BOP_MUL; muls->a = fx; muls->b = fy;
+        long got2 = native_eval(muls, err, sizeof err);
+        N(got2 == 12, "native struct{x:3,y:4}.x * .y == 12");
     }
     /* register-pressure spill: 12 nested lets (11th+ spill to the frame).
      * sum 1..12 == 78. */
