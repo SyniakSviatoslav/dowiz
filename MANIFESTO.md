@@ -18,7 +18,7 @@ each with a **local database**, running a **NON-AI, post-quantum-secure** delive
 | C5 | **Integer-only money** (`i64` minor units, no `From<f64>`) — single money surface | no float drift on money |
 | C6 | **Open-source destination** — AGPLv3 + trademark + DCO, gated on secrets scrub | commons, not captive |
 | C7 | **Verified-by-Math / falsifiable proof** — every change needs a RED+GREEN assertion | no false-green |
-| C8 | **Over-engineering is the #1 enemy** — PQ/mesh is roadmap, hard-gated behind MVP seams | YAGNI |
+| C8 | **Over-engineering is the #1 ally** — the deep stack (Bebop language, PQ/mesh, spatial/ASIC tiers) is built first-class, not gated | maximalism |
 | C9 | **Ethics charter** — no AI for warfare; AI is a commons, never captured | operator red-line |
 | C10 | **Crypto from-scratch, zero-dep, NON-AI, RNG-free hot path** — caller-supplied entropy only | trust-minimized |
 | C11 | **Reliability > latency** — transport must be store-and-forward / delay-tolerant, retransmit-until-ack, custody-transfer. NOT low-latency gossip. Satellite/ lab-grade durability. | operator mandate 2026-07-12 |
