@@ -11,9 +11,11 @@
 #define BEBOP_HV_D 1024
 #define BEBOP_HV_WORDS 16
 
+/* dowiz best practice: #[repr(align(64))] — 1024 bits = 128 bytes = exactly 2
+ * cache lines, aligned so popcount/similarity never straddles an L1 line. */
 typedef struct {
     uint64_t words[BEBOP_HV_WORDS];
-} Hypervector;
+} __attribute__((aligned(64))) Hypervector;
 
 Hypervector hv_zero(void);
 Hypervector hv_code(uint64_t seed);
