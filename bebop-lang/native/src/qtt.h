@@ -53,4 +53,43 @@ int qtt_ty_print(const Ty *t, char *out, size_t cap);
  * success, -1 on failure; appends human-readable results to `out`. */
 int qtt_self_test(char *out, size_t cap);
 
+/* ─── Terms (core) ─── */
+
+typedef enum {
+    TERM_VAR,
+    TERM_LIT,
+    TERM_LAM,
+    TERM_APP,
+    TERM_ANN,
+    TERM_BIN,
+} TermKind;
+
+typedef enum {
+    BOP_ADD,
+    BOP_SUB,
+    BOP_MUL,
+    BOP_EQ,
+    BOP_LT,
+} BinOp;
+
+typedef struct Term Term;
+struct Term {
+    TermKind kind;
+    const char *name; /* VAR name / LAM binder */
+    Quantity q;       /* LAM binder quantity */
+    long ival;        /* LIT int value */
+    int bval;         /* LIT bool value (0/1) */
+    BinOp op;         /* BIN operator */
+    Ty *ty;           /* LAM domain / ANN type */
+    Term *a, *b;      /* APP(f,arg) / LAM(body) / ANN(term) / BIN(l,r) */
+};
+
+/* Typecheck a closed term (empty context). Returns 0 on success (type printed
+ * into out_ty via qtt_ty_print), -1 on error (err filled). */
+int qtt_check_closed(const Term *t, char *out_ty, size_t cap_ty, char *err,
+                     size_t cap_err);
+
+/* Run the typechecker self-test. Returns 0 on success, -1 on failure. */
+int qtt_check_test(char *out, size_t cap);
+
 #endif /* BEBOP_QTT_H */

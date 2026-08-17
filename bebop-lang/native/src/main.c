@@ -193,11 +193,14 @@ static void cmd_fmt(const char *path) {
 }
 
 static void cmd_qtt(void) {
-    char buf[4096];
-    int ok = qtt_self_test(buf, sizeof buf);
+    char buf[8192];
+    int ok1 = qtt_self_test(buf, sizeof buf);
     fputs(buf, stdout);
-    printf("QTT self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
-    exit(ok == 0 ? 0 : 1);
+    printf("QTT semiring: %s\n", ok1 == 0 ? "PASS" : "FAIL");
+    int ok2 = qtt_check_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("QTT typechecker: %s\n", ok2 == 0 ? "PASS" : "FAIL");
+    exit((ok1 == 0 && ok2 == 0) ? 0 : 1);
 }
 
 int main(int argc, char **argv) {
