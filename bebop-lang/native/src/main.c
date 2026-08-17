@@ -16,6 +16,7 @@
 #include "vsa.h"
 #include "codegen.h"
 #include "native.h"
+#include "money.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -338,6 +339,14 @@ static void cmd_native_test(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_money(void) {
+    char buf[4096];
+    int ok = money_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("Money self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -437,6 +446,10 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "native") == 0) {
         cmd_native_test();
+        return 0;
+    }
+    if (strcmp(argv[1], "money") == 0) {
+        cmd_money();
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {
