@@ -7,6 +7,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "morse.h"
+#include "qtt.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -191,6 +192,14 @@ static void cmd_fmt(const char *path) {
     free(src);
 }
 
+static void cmd_qtt(void) {
+    char buf[4096];
+    int ok = qtt_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("QTT self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -234,6 +243,10 @@ int main(int argc, char **argv) {
             return 2;
         }
         cmd_fmt(argv[2]);
+        return 0;
+    }
+    if (strcmp(argv[1], "qtt") == 0) {
+        cmd_qtt();
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {

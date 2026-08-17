@@ -5,11 +5,11 @@ CFLAGS  ?= -O2 -std=c11 -Wall -Wextra -Wpedantic
 BUILD   ?= build
 BIN     := $(BUILD)/bebopc
 
-SRC := src/main.c src/glyph.c src/lexer.c src/parser.c src/morse.c
+SRC := src/main.c src/glyph.c src/lexer.c src/parser.c src/morse.c src/qtt.c
 
 all: $(BIN)
 
-$(BIN): $(SRC) src/glyph.h src/lexer.h src/parser.h src/morse.h
+$(BIN): $(SRC) src/glyph.h src/lexer.h src/parser.h src/morse.h src/qtt.h
 	@mkdir -p $(BUILD)
 	$(CC) $(CFLAGS) -o $@ $(SRC)
 
@@ -31,6 +31,8 @@ test: $(BIN)
 	$(BIN) morse "ntt"
 	$(BIN) unmorse "... --- ..."
 	$(BIN) unmorse "$$($(BIN) morse 'quantum hypervector')"
+	@echo "--- qtt semiring ---"
+	$(BIN) qtt
 
 clean:
 	rm -rf $(BUILD)
