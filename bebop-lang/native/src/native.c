@@ -345,6 +345,20 @@ static int emit_expr(const Term *t) {
             }
             return -1;
         }
+        case TERM_ARRAY:
+            /* allocate n*8 on heap bump (x14), store elements, return ptr, bump */
+            {
+                int n = t->nfields;
+                for (int j = 0; j < n; j++) {
+                    if (emit_expr(t->fields[j].val) != 0) return -1;
+                    emit_pop(0);
+                    em(0xF9000000u | ((unsigned)(j) << 10) | (14u << 5) | 0u);
+                }
+                em(0xAA0E03E0u);
+                if (n > 0) em(0x91000000u | ((unsigned)(n * 8) << 10) | (14u << 5) | 14u);
+                emit_push();
+                return 0;
+            }
         case TERM_SYSCALL:
             /* raw AArch64 svc #0: t->ival = syscall nr, t->a = optional first arg */
             if (t->a) {
@@ -621,5 +635,14 @@ int native_self_test(char *out, size_t cap) {
         N(pid > 0, "native getpid() > 0 (syscall svc #0)");
     }
 
+    /* native array alloc */
+    {
+        static Term t; static TermField f; static Term e;
+        memset(&t, 0, sizeof t); memset(&e, 0, sizeof e);
+        t.kind = TERM_ARRAY; t.nfields = 1;
+        e.kind = TERM_LIT; e.ival = 99; f.val = &e; t.fields = &f;
+        long ar = native_eval(&t, err, sizeof err);
+        N(ar != 0 && ar != 99, "native alloc [99] returns ptr");
+    }
     return all_ok ? 0 : -1;
 }

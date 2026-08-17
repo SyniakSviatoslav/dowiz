@@ -1,0 +1,5 @@
+/* selfhost/lexer.bp — Bebop lexer, first self-hosting module.
+   Compiles with: bebopc check selfhost/lexer.bp        (typecheck)
+                 bebopc build selfhost/lexer.bp -o .    (native binary) */
+
+/* ---- types -...[truncated]

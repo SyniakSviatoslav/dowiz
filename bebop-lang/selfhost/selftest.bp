@@ -1,0 +1,18 @@
+// selftest.bp — test while + arrays + syscalls in Bebop surface
+module core { }
+
+fn sum_first_3(x: i64) -> i64 {
+  let arr = [x, x+1, x+2] in
+  arr[0] + arr[1] + arr[2]
+}
+
+fn countdown(n: i64) -> i64 {
+  let x = n in
+  while (x) { x - 1 }
+  x
+}
+
+fn hello() -> i64 {
+  write(42)
+  0
+}
