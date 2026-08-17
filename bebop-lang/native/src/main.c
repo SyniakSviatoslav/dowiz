@@ -14,6 +14,7 @@
 #include "expr.h"
 #include "verify.h"
 #include "vsa.h"
+#include "codegen.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -267,6 +268,45 @@ static void cmd_vsa(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_codegen(const char *text, const char *outfile) {
+    Term *t = NULL;
+    char err[256];
+    expr_pool_reset();
+    if (expr_parse(text, &t, err, sizeof err) != 0) {
+        fprintf(stderr, "parse error: %s\n", err);
+        exit(1);
+    }
+    unsigned char buf[2048];
+    int n = codegen_wasm(t, buf, sizeof buf, err, sizeof err);
+    if (n < 0) {
+        fprintf(stderr, "codegen error: %s\n", err);
+        exit(1);
+    }
+    if (outfile) {
+        FILE *f = fopen(outfile, "wb");
+        if (!f) {
+            fprintf(stderr, "cannot open %s\n", outfile);
+            exit(1);
+        }
+        fwrite(buf, 1, (size_t)n, f);
+        fclose(f);
+        printf("wrote %d bytes to %s\n", n, outfile);
+    } else {
+        for (int i = 0; i < n; i++) {
+            printf("%02x", buf[i]);
+        }
+        printf("\n");
+    }
+}
+
+static void cmd_codegen_test(void) {
+    char buf[4096];
+    int ok = codegen_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("Codegen self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -342,6 +382,18 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "vsa") == 0) {
         cmd_vsa();
+        return 0;
+    }
+    if (strcmp(argv[1], "compile") == 0) {
+        if (argc < 3) {
+            usage();
+            return 2;
+        }
+        cmd_codegen(argv[2], argc >= 4 ? argv[3] : NULL);
+        return 0;
+    }
+    if (strcmp(argv[1], "codegen") == 0) {
+        cmd_codegen_test();
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {
