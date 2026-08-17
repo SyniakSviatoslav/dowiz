@@ -754,6 +754,10 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
             o->a = subst_p(t->a, name, v);
             o->b = subst_p(t->b, name, v);
             return o;
+        case TERM_WHILE:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            return o;
     }
     return o;
 }
@@ -929,6 +933,15 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
                 return -1;
             }
             *out = &STR_TY;
+            return 0;
+        case TERM_WHILE:
+            if (check(c, t->a, &BOOL_TY, err, cap) != 0) {
+                return -1;
+            }
+            if (infer(c, t->b, out, err, cap) != 0) {
+                return -1;
+            }
+            *out = &VOID_TY;
             return 0;
         case TERM_NAT_REC: {
             /* nat_rec base step target : P, where
@@ -1522,10 +1535,19 @@ static Value eval(const Term *t, Env *env) {
             v.ctor = buf;
             return v;
         }
-        case TERM_IO:
+        case TERM_WHILE: {
+            int iter = 0;
+            for (;;) {
+                if (iter++ >= 1000) { v.kind = -1; return v; }
+                Value cond = eval(t->a, env);
+                if (cond.kind != 1) { v.kind = -1; return v; }
+                if (!cond.b) break;
+                eval(t->b, env);
+            }
             v.kind = 0; /* unit */
             v.i = 0;
             return v;
+        }
         default:
             v.kind = -1;
             return v;
@@ -1806,6 +1828,10 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             o->a = qtt_subst(t->a, name, v);
             o->b = qtt_subst(t->b, name, v);
             return o;
+        case TERM_WHILE:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            return o;
     }
     return o;
 }
@@ -1884,6 +1910,10 @@ static Term *norm_rec(const Term *t) {
             o->b = sb;
             return o;
         }
+        case TERM_WHILE:
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
+            return o;
         case TERM_NAT_REC: {
             /* definitional reduction of the recursor:
              *   nat_rec b s Z      → b
@@ -2037,6 +2067,8 @@ static int conv_rec(const Term *a, const Term *b) {
         case TERM_STR_LEN:
             return conv_rec(a->a, b->a);
         case TERM_STR_CAT:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
+        case TERM_WHILE:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
         case TERM_LAM:
             return a->name && b->name && strcmp(a->name, b->name) == 0 &&

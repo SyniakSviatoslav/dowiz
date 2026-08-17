@@ -112,6 +112,7 @@ typedef enum {
     TERM_STR,     /* string literal — content is borrowed in t->name */
     TERM_STR_LEN, /* length of a string (t->a) : i64 */
     TERM_STR_CAT, /* concatenation of two strings (t->a, t->b) : str */
+    TERM_WHILE,   /* while loop: a = cond, b = body; evaluates to void */
 } TermKind;
 
 typedef enum {
