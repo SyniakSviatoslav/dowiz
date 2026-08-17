@@ -62,6 +62,25 @@ canonical form is the δ-outline, and the terminal fallback is the ASCII name.
 | Codegen | **Own hardware backends**: SIMD, WebAssembly, GPU Compute Shaders (Vulkan) |
 | Verification philosophy | **Strict**: code does not compile until all proofs converge |
 
+## 1.6 Agentic primitives (5 foundational concepts)
+
+1. **Transactional snapshots (time-travel / state rollback)** — copy-on-write arena
+   state; an agent's action chain runs in an isolated transactional branch; rollback in
+   nanoseconds, no GC overhead (mirrors dowiz's arena + event-sourced state machine).
+2. **Semantic (fuzzy) hypervector types** — a type may be a *hypervector invariant* rather
+   than a concrete struct name; a semantically-matching structure (checked via NTT
+   convolution / vector proximity at call time) is auto-adapted by the compiler/runtime,
+   while SMT contracts stay strict.
+3. **Self-Healing SMT (JIT-verification)** — every agent-generated code fragment / tool
+   call passes through a lightweight runtime SMT-checker; on error it returns a
+   formalized mathematical *counterexample* (not a stack trace), so the agent self-corrects.
+4. **Living Memory as a primitive (`memory`)** — a native graph-register; auto-persisted in
+   mmap-arenas, indexed via built-in NTT convolutions, timestamped; accessed like an
+   array/hash-table with instant semantic search at hardware-cache level.
+5. **Zero-copy token streams** — the base I/O type is a vectorized *token-scene*, not bytes;
+   the language manipulates tokens as numeric arrays with on-the-fly spectral filtering and
+   hypervector bundling.
+
 ---
 
 ## 2. Surface: glyphs, not words
