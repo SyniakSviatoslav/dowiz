@@ -5,7 +5,9 @@
  */
 #include "parser.h"
 #include "lexer.h"
+#include "qtt.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -204,8 +206,119 @@ int bp_parse(const char *src, AstProgram *prog, BpParseError *err) {
 }
 
 void bp_program_free(AstProgram *prog) {
-    free(prog->items);
-    prog->items = NULL;
-    prog->len = 0;
-    prog->cap = 0;
+    if (prog->items) {
+        free(prog->items);
+    }
+    memset(prog, 0, sizeof *prog);
+}
+
+int bp_parse_struct_decl(const char *src, TyRegistry *reg, char *err,
+                         size_t cap) {
+    BpToken toks[256];
+    int n = bp_lex(src, toks, 256);
+    if (n < 0) {
+        snprintf(err, cap, "too many tokens");
+        return -1;
+    }
+    /* skip comments / glyphs to first ident */
+    int pos = 0;
+    while (pos < n && toks[pos].kind != BP_TOK_IDENT) {
+        pos++;
+    }
+    if (pos >= n) {
+        snprintf(err, cap, "expected struct name");
+        return -1;
+    }
+    char name[64];
+    size_t nl = toks[pos].len < 63 ? toks[pos].len : 63;
+    memcpy(name, toks[pos].start, nl);
+    name[nl] = '\0';
+    pos++;
+    /* skip to '{' */
+    while (pos < n && !(toks[pos].kind == BP_TOK_PUNCT &&
+                        toks[pos].start[0] == '{')) {
+        pos++;
+    }
+    if (pos >= n) {
+        snprintf(err, cap, "expected '{'");
+        return -1;
+    }
+    pos++;
+
+
+    static TyField fields[32];
+    static char fnames[32][64];
+    int nf = 0;
+    while (pos < n && nf < 32) {
+        if (toks[pos].kind == BP_TOK_PUNCT &&
+            toks[pos].start[0] == '}') {
+            break;
+        }
+        if (toks[pos].kind != BP_TOK_IDENT) {
+            snprintf(err, cap, "expected field name");
+            return -1;
+        }
+        size_t fl =
+            toks[pos].len < 63 ? toks[pos].len : 63;
+        memcpy(fnames[nf], toks[pos].start, fl);
+        fnames[nf][fl] = '\0';
+        pos++;
+        if (pos >= n || toks[pos].kind != BP_TOK_PUNCT ||
+            toks[pos].start[0] != ':') {
+            snprintf(err, cap, "expected ':'");
+            return -1;
+        }
+        pos++;
+        /* type name (built-in or user-defined) */
+        Ty *ft = NULL;
+        if (toks[pos].kind == BP_TOK_IDENT) {
+            char tname[32];
+            size_t tl =
+                toks[pos].len < 31 ? toks[pos].len : 31;
+            memcpy(tname, toks[pos].start, tl);
+            tname[tl] = '\0';
+            /* user-registered type */
+            ft = typereg_get(reg, tname);
+            if (!ft) {
+                if (strcmp(tname, "i64") == 0) {
+                    ft = qtt_i64();
+                } else if (strcmp(tname, "bool") == 0) {
+                    ft = qtt_bool();
+                } else if (strcmp(tname, "Type") == 0) {
+                    ft = qtt_type();
+                }
+            }
+            if (!ft) {
+                snprintf(err, cap, "unknown type '%s'",
+                         tname);
+                return -1;
+            }
+            pos++;
+        } else {
+            snprintf(err, cap, "expected type name");
+            return -1;
+        }
+        fields[nf].name = fnames[nf];
+        fields[nf].ty = ft;
+        nf++;
+        if (pos < n && toks[pos].kind == BP_TOK_PUNCT &&
+            toks[pos].start[0] == ',') {
+            pos++;
+        }
+    }
+    if (nf == 0) {
+        snprintf(err, cap, "empty struct");
+        return -1;
+    }
+    static Ty st;
+    memset(&st, 0, sizeof st);
+    st.kind = TY_STRUCT;
+    st.fields = fields;
+    st.nfields = nf;
+    if (typereg_put(reg, name, &st) != 0) {
+        snprintf(err, cap, "type '%s' already declared",
+                 name);
+        return -1;
+    }
+    return 0;
 }

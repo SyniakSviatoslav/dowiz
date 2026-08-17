@@ -4,6 +4,8 @@
 
 #include <stddef.h>
 
+#include "typereg.h"
+
 typedef enum {
     AST_ITEM_MODULE,
     AST_ITEM_FN,
@@ -35,6 +37,12 @@ typedef struct {
 
 /* Parse source into items. Returns 0 on success, -1 on error (`err` filled). */
 int bp_parse(const char *src, AstProgram *prog, BpParseError *err);
+
+/* Parse a struct declaration from raw source text (e.g. "Point { x: i64, y:
+ * i64 }") into the type registry. Returns 0 on success, -1 on error. */
+int bp_parse_struct_decl(const char *src, TyRegistry *reg, char *err,
+                         size_t cap);
+
 void bp_program_free(AstProgram *prog);
 
 const char *ast_item_kind_name(AstItemKind k);

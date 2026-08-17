@@ -160,6 +160,9 @@ int qtt_eval_bound(const Term *t, const QttBind *binds, int n, int *out_kind,
 Ty *qtt_i64(void);
 Ty *qtt_bool(void);
 
+/* Accessor for the Type universe singleton. */
+Ty *qtt_type(void);
+
 /* Run the struct (record) typecheck + eval self-test. */
 int qtt_struct_test(char *out, size_t cap);
 

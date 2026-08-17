@@ -30,6 +30,7 @@
 #include "stats.h"
 #include "pid.h"
 #include "markov.h"
+#include "typereg.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -473,6 +474,57 @@ static void cmd_markov(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_check(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        fprintf(stderr, "cannot open %s\n", path);
+        exit(1);
+    }
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *src = malloc((size_t)sz + 1);
+    if (!src) { fclose(f); exit(1); }
+    size_t rd = fread(src, 1, (size_t)sz, f);
+    src[rd] = '\0';
+    fclose(f);
+
+    AstProgram prog;
+    BpParseError perr;
+    if (bp_parse(src, &prog, &perr) != 0) {
+        fprintf(stderr, "parse error at %u: %s\n", perr.line, perr.msg);
+        free(src);
+        exit(1);
+    }
+
+    TyRegistry reg;
+    typereg_init(&reg);
+    char err[256];
+    int structs = 0;
+    for (size_t i = 0; i < prog.len; i++) {
+        const AstItem *it = &prog.items[i];
+        if (it->kind == AST_ITEM_STRUCT && it->text && it->text_len > 0) {
+            char *txt = malloc(it->text_len + 1);
+            memcpy(txt, it->text, it->text_len);
+            txt[it->text_len] = '\0';
+            if (bp_parse_struct_decl(txt, &reg, err, sizeof err) != 0) {
+                fprintf(stderr, "struct parse error '%s': %s\n",
+                        it->name ? it->name : "?", err);
+                free(txt);
+                bp_program_free(&prog);
+                free(src);
+                exit(1);
+            }
+            free(txt);
+            structs++;
+        }
+    }
+    printf("parsed %d struct declarations (%d types in registry)\n",
+           structs, reg.len);
+    bp_program_free(&prog);
+    free(src);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -628,6 +680,14 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "markov") == 0) {
         cmd_markov();
+        return 0;
+    }
+    if (strcmp(argv[1], "check") == 0) {
+        if (argc < 3) {
+            usage();
+            return 2;
+        }
+        cmd_check(argv[2]);
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {

@@ -178,6 +178,10 @@ Ty *qtt_bool(void) {
     return &BOOL_TY;
 }
 
+Ty *qtt_type(void) {
+    return &TYPE_TY;
+}
+
 /* ─── Struct (record) self-test ─── */
 int qtt_struct_test(char *out, size_t cap) {
     size_t pos = 0;
