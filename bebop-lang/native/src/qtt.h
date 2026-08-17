@@ -38,6 +38,8 @@ typedef enum {
     TY_VEC,      /* fixed-width SIMD vector: width = .n, elem = .elem */
     TY_STRUCT,   /* record: named fields (.fields / .nfields) */
     TY_ENUM,     /* sum: named ctors (.ctors / .nctors) */
+    TY_TYPE,     /* universe: the type of types (Type₀) */
+    TY_VAR,      /* type variable (name in .x) */
 } TyKind;
 
 typedef struct Ty Ty;
@@ -86,6 +88,7 @@ typedef enum {
     TERM_FIELD,
     TERM_ENUM_CTOR,
     TERM_MATCH,
+    TERM_TYPE,
 } TermKind;
 
 typedef enum {
@@ -162,5 +165,8 @@ int qtt_struct_test(char *out, size_t cap);
 
 /* Run the enum (sum) + match typecheck + eval self-test. */
 int qtt_enum_test(char *out, size_t cap);
+
+/* Run the dependent-type (universe + type substitution) self-test. */
+int qtt_dep_test(char *out, size_t cap);
 
 #endif /* BEBOP_QTT_H */

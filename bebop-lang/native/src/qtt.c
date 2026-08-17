@@ -55,6 +55,10 @@ int qtt_ty_print(const Ty *t, char *out, size_t cap) {
             return snprintf(out, cap, "bool");
         case TY_VOID:
             return snprintf(out, cap, "void");
+        case TY_TYPE:
+            return snprintf(out, cap, "Type");
+        case TY_VAR:
+            return snprintf(out, cap, "%s", t->x ? t->x : "_");
         case TY_FIELD:
             return snprintf(out, cap, "F_%ld", t->n);
         case TY_HYPERVEC:
@@ -165,6 +169,7 @@ int qtt_self_test(char *out, size_t cap) {
 
 static Ty I64_TY = {.kind = TY_I64};
 static Ty BOOL_TY = {.kind = TY_BOOL};
+static Ty TYPE_TY = {.kind = TY_TYPE};
 
 Ty *qtt_i64(void) {
     return &I64_TY;
@@ -384,6 +389,80 @@ int qtt_enum_test(char *out, size_t cap) {
     return all_ok ? 0 : -1;
 }
 
+/* ─── Dependent types (universe + type substitution) self-test ─── */
+int qtt_dep_test(char *out, size_t cap) {
+    size_t pos = 0;
+    int all_ok = 1;
+#define A(cond, name)                                                          \
+    do {                                                                       \
+        int c_ = (int)(cond);                                                  \
+        int r_ = snprintf(out + pos, cap - pos, "[%s] %s\n",                  \
+                          c_ ? "ok" : "FAIL", name);                           \
+        if (r_ > 0) {                                                          \
+            pos += (size_t)r_;                                                 \
+        }                                                                      \
+        if (!c_) {                                                             \
+            all_ok = 0;                                                        \
+        }                                                                      \
+    } while (0)
+
+    static Term pool[64];
+    static int pi = 0;
+    pi = 0;
+
+    static Ty tyvar_A = {.kind = TY_VAR, .x = "A"};
+
+    Term *xvar = &pool[pi++];
+    memset(xvar, 0, sizeof *xvar);
+    xvar->kind = TERM_VAR;
+    xvar->name = "x";
+    Term *inner = &pool[pi++];
+    memset(inner, 0, sizeof *inner);
+    inner->kind = TERM_LAM;
+    inner->name = "x";
+    inner->q = Q_ONE;
+    inner->ty = &tyvar_A;
+    inner->a = xvar;
+    Term *id = &pool[pi++];
+    memset(id, 0, sizeof *id);
+    id->kind = TERM_LAM;
+    id->name = "A";
+    id->q = Q_ZERO;
+    id->ty = &TYPE_TY;
+    id->a = inner;
+
+    Term *ti64 = &pool[pi++];
+    memset(ti64, 0, sizeof *ti64);
+    ti64->kind = TERM_TYPE;
+    ti64->ty = &I64_TY;
+    Term *app = &pool[pi++];
+    memset(app, 0, sizeof *app);
+    app->kind = TERM_APP;
+    app->a = id;
+    app->b = ti64;
+
+    char ty[128], err[256];
+    A(qtt_check_closed(id, ty, sizeof ty, err, sizeof err) == 0,
+      "polymorphic id typechecks");
+    A(qtt_check_closed(app, ty, sizeof ty, err, sizeof err) == 0 &&
+          strstr(ty, "i64") != NULL,
+      "id(i64) : i64 -> i64 (dependent substitution)");
+
+    Term *n5 = &pool[pi++];
+    memset(n5, 0, sizeof *n5);
+    n5->kind = TERM_LIT;
+    n5->ival = 5;
+    Term *bad = &pool[pi++];
+    memset(bad, 0, sizeof *bad);
+    bad->kind = TERM_APP;
+    bad->a = id;
+    bad->b = n5;
+    A(qtt_check_closed(bad, ty, sizeof ty, err, sizeof err) != 0,
+      "id(5) rejected (not a type)");
+
+    return all_ok ? 0 : -1;
+}
+
 /* Bump-allocated type pool (types live for the self-test lifetime). */
 static Ty ty_pool[256];
 static int ty_len = 0;
@@ -396,6 +475,47 @@ static Ty *ty_alloc(TyKind kind) {
     memset(t, 0, sizeof *t);
     t->kind = kind;
     return t;
+}
+
+/* Capture-avoiding-free substitution of a type variable (var → repl). */
+static Ty *ty_subst(Ty *t, const char *var, Ty *repl) {
+    if (!t) {
+        return NULL;
+    }
+    switch (t->kind) {
+        case TY_VAR:
+            if (t->x && strcmp(t->x, var) == 0) {
+                return repl;
+            }
+            return t;
+        case TY_FN:
+        case TY_PI: {
+            Ty *d = ty_subst(t->dom, var, repl);
+            Ty *c = ty_subst(t->cod, var, repl);
+            if (d == t->dom && c == t->cod) {
+                return t;
+            }
+            Ty *r = ty_alloc(t->kind);
+            r->n = t->n;
+            r->q = t->q;
+            r->x = t->x;
+            r->dom = d;
+            r->cod = c;
+            return r;
+        }
+        case TY_VEC: {
+            Ty *e = ty_subst(t->elem, var, repl);
+            if (e == t->elem) {
+                return t;
+            }
+            Ty *r = ty_alloc(TY_VEC);
+            r->n = t->n;
+            r->elem = e;
+            return r;
+        }
+        default:
+            return t;
+    }
 }
 
 typedef struct {
@@ -424,6 +544,10 @@ static int ty_eq(const Ty *a, const Ty *b) {
         return 0;
     }
     switch (a->kind) {
+        case TY_TYPE:
+            return 1;
+        case TY_VAR:
+            return (a->x && b->x) ? strcmp(a->x, b->x) == 0 : a->x == b->x;
         case TY_I64:
         case TY_U8:
         case TY_U32:
@@ -541,7 +665,10 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             if (check(c, t->b, ft->dom, err, cap) != 0) {
                 return -1;
             }
-            *out = ft->cod; /* non-dependent substitution for now */
+            *out = ft->cod;
+            if (t->b->kind == TERM_TYPE && ft->kind == TY_PI && ft->x) {
+                *out = ty_subst(ft->cod, ft->x, t->b->ty);
+            }
             return 0;
         }
         case TERM_BIN: {
@@ -726,6 +853,10 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
                 }
             }
             *out = result;
+            return 0;
+        }
+        case TERM_TYPE: {
+            *out = &TYPE_TY;
             return 0;
         }
     }
