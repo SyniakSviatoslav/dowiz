@@ -11,6 +11,7 @@
 #include "ntt.h"
 #include "hyper.h"
 #include "mem.h"
+#include "expr.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -233,6 +234,32 @@ static void cmd_mem(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_expr(const char *text) {
+    Term *t = NULL;
+    char err[256];
+    if (expr_parse(text, &t, err, sizeof err) != 0) {
+        fprintf(stderr, "parse error: %s\n", err);
+        exit(1);
+    }
+    char ty[128];
+    if (qtt_check_closed(t, ty, sizeof ty, err, sizeof err) != 0) {
+        fprintf(stderr, "type error: %s\n", err);
+        exit(1);
+    }
+    int kind;
+    long i;
+    int b;
+    if (qtt_eval(t, &kind, &i, &b, err, sizeof err) != 0) {
+        fprintf(stderr, "eval error: %s\n", err);
+        exit(1);
+    }
+    if (kind == 0) {
+        printf("%s = %ld\n", ty, i);
+    } else {
+        printf("%s = %s\n", ty, b ? "true" : "false");
+    }
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -292,6 +319,14 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "mem") == 0) {
         cmd_mem();
+        return 0;
+    }
+    if (strcmp(argv[1], "expr") == 0) {
+        if (argc < 3) {
+            usage();
+            return 2;
+        }
+        cmd_expr(argv[2]);
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {
