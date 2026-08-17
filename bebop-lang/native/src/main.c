@@ -23,6 +23,8 @@
 #include "modular.h"
 #include "sort.h"
 #include "token_bucket.h"
+#include "checksum.h"
+#include "hex_util.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -401,6 +403,22 @@ static void cmd_token_bucket(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_checksum(void) {
+    char buf[4096];
+    int ok = checksum_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("Checksum self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
+static void cmd_hex(void) {
+    char buf[4096];
+    int ok = hex_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("HexUtil self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -528,6 +546,14 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "token") == 0) {
         cmd_token_bucket();
+        return 0;
+    }
+    if (strcmp(argv[1], "checksum") == 0) {
+        cmd_checksum();
+        return 0;
+    }
+    if (strcmp(argv[1], "hex") == 0) {
+        cmd_hex();
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {
