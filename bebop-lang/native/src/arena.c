@@ -49,6 +49,17 @@ size_t arena_peak(const BumpArena *a) {
     return a->peak;
 }
 
+ArenaSnapshot arena_snapshot_take(BumpArena *a) {
+    ArenaSnapshot s;
+    s.arena = a;
+    s.offset = a->offset;
+    return s;
+}
+
+void arena_snapshot_restore(ArenaSnapshot s) {
+    s.arena->offset = s.offset; /* O(1) rollback */
+}
+
 int arena_self_test(char *out, size_t cap) {
     size_t pos = 0;
     int all_ok = 1;
@@ -90,6 +101,22 @@ int arena_self_test(char *out, size_t cap) {
     }
     A(exhausted, "exhaustion -> NULL (degrade-closed)");
     A(arena_peak(&small) == 64, "peak == 64 (4 x 16-aligned)");
+
+    /* transactional snapshot: rollback frees everything after the snapshot */
+    {
+        BumpArena t;
+        unsigned char tbuf[4096];
+        arena_init(&t, tbuf, sizeof tbuf);
+        arena_alloc(&t, 32);
+        ArenaSnapshot snap = arena_snapshot_take(&t);
+        arena_alloc(&t, 32);
+        arena_alloc(&t, 32);
+        A(arena_used(&t) == 96, "snapshot: allocs after snapshot advance offset");
+        arena_snapshot_restore(snap);
+        A(arena_used(&t) == 32, "snapshot: rollback returns to snapshot offset");
+        void *r2 = arena_alloc(&t, 32);
+        A((unsigned char *)r2 == tbuf + 32, "snapshot: rollback reuses freed region");
+    }
 
     return all_ok ? 0 : -1;
 }

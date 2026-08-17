@@ -24,6 +24,17 @@ void *arena_alloc_zero(BumpArena *a, size_t n);
 size_t arena_used(const BumpArena *a);
 size_t arena_peak(const BumpArena *a);
 
+/* ─── Transactional snapshot (agentic #1) ───
+ * take: record the current offset. restore: roll the offset back (O(1)), so
+ * everything allocated after the snapshot is freed — nanosecond rollback. */
+typedef struct {
+    BumpArena *arena;
+    size_t offset;
+} ArenaSnapshot;
+
+ArenaSnapshot arena_snapshot_take(BumpArena *a);
+void arena_snapshot_restore(ArenaSnapshot s);
+
 int arena_self_test(char *out, size_t cap);
 
 #endif /* BEBOP_ARENA_H */
