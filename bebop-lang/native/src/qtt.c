@@ -767,6 +767,9 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
             o->a = subst_p(t->a, name, v);
             o->b = subst_p(t->b, name, v);
             return o;
+        case TERM_SYSCALL:
+            o->a = subst_p(t->a, name, v);
+            return o;
     }
     return o;
 }
@@ -942,6 +945,9 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
                 return -1;
             }
             *out = &STR_TY;
+            return 0;
+        case TERM_SYSCALL:
+            *out = &I64_TY;  /* syscall returns i64 (or -errno) */
             return 0;
         case TERM_WHILE:
             /* accept bool or i64 as condition (C semantics: 0=false, !=0=true) */
@@ -1595,6 +1601,10 @@ static Value eval(const Term *t, Env *env) {
             v.i = 0;
             return v;
         }
+        case TERM_SYSCALL:
+            v.kind = 0; /* interpreter: syscall returns 0 */
+            v.i = 0;
+            return v;
         case TERM_ARRAY:
             v.kind = 6; /* array value */
             v.fv = NULL;
@@ -1904,6 +1914,9 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             o->a = qtt_subst(t->a, name, v);
             o->b = qtt_subst(t->b, name, v);
             return o;
+        case TERM_SYSCALL:
+            o->a = qtt_subst(t->a, name, v);
+            return o;
     }
     return o;
 }
@@ -1994,6 +2007,9 @@ static Term *norm_rec(const Term *t) {
         case TERM_ARRAY_GET:
             o->a = norm_rec(t->a);
             o->b = norm_rec(t->b);
+            return o;
+        case TERM_SYSCALL:
+            o->a = norm_rec(t->a);
             return o;
         case TERM_NAT_REC: {
             /* definitional reduction of the recursor:
@@ -2159,6 +2175,8 @@ static int conv_rec(const Term *a, const Term *b) {
             return 1;
         case TERM_ARRAY_GET:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
+        case TERM_SYSCALL:
+            return a->ival == b->ival && conv_rec(a->a, b->a);
         case TERM_LAM:
             return a->name && b->name && strcmp(a->name, b->name) == 0 &&
                    conv_rec(a->a, b->a);

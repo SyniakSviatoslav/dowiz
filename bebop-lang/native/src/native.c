@@ -345,6 +345,18 @@ static int emit_expr(const Term *t) {
             }
             return -1;
         }
+        case TERM_SYSCALL:
+            /* raw AArch64 svc #0: t->ival = syscall nr, t->a = optional first arg */
+            if (t->a) {
+                if (emit_expr(t->a) != 0) return -1;
+                emit_pop(0);
+            } else {
+                em(0xD2800000u);  /* mov x0, #0 — no arg */
+            }
+            em(0xD2800000u | ((unsigned)(t->ival & 0xFFFF) << 5) | 8u); /* mov x8, #nr */
+            em(0xD4000001u);                      /* svc #0 */
+            emit_push();
+            return 0;
         case TERM_WHILE: {
             /* Label-based while loop: evaluate cond, cbz to exit, eval body,
              * jump back. Uses 4 labels: start, body_after_cond, end, cbz_patch */
@@ -599,6 +611,14 @@ int native_self_test(char *out, size_t cap) {
         wh->kind = TERM_WHILE; wh->a = zero; wh->b = body42;
         long got = native_eval(wh, err, sizeof err);
         N(got == 0, "native while (0) { 42 } == 0 (void)");
+    }
+    /* native syscall: getpid() (nr=172, argless) */
+    {
+        static Term sc;
+        memset(&sc, 0, sizeof sc);
+        sc.kind = TERM_SYSCALL; sc.ival = 172; sc.a = NULL;
+        long pid = native_eval(&sc, err, sizeof err);
+        N(pid > 0, "native getpid() > 0 (syscall svc #0)");
     }
 
     return all_ok ? 0 : -1;
