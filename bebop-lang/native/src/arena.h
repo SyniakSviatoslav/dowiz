@@ -35,6 +35,19 @@ typedef struct {
 ArenaSnapshot arena_snapshot_take(BumpArena *a);
 void arena_snapshot_restore(ArenaSnapshot s);
 
+/* ─── Append-only CoW log (24B / #6) ───
+ * The "time machine": an immutable sequence of arena offsets. Each append is
+ * append-only (history is never mutated); replay rolls the arena back to any
+ * recorded state in O(1), so a crash can be reproduced from the snapshot log. */
+typedef struct {
+    size_t offsets[64];
+    int len;
+} CowLog;
+
+void cowlog_init(CowLog *l);
+int cowlog_append(CowLog *l, const BumpArena *a); /* record current offset */
+int cowlog_replay(const CowLog *l, int index, BumpArena *a); /* roll back to i */
+
 int arena_self_test(char *out, size_t cap);
 
 #endif /* BEBOP_ARENA_H */

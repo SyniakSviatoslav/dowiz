@@ -60,6 +60,26 @@ void arena_snapshot_restore(ArenaSnapshot s) {
     s.arena->offset = s.offset; /* O(1) rollback */
 }
 
+void cowlog_init(CowLog *l) {
+    l->len = 0;
+}
+
+int cowlog_append(CowLog *l, const BumpArena *a) {
+    if (l->len >= (int)(sizeof l->offsets / sizeof l->offsets[0])) {
+        return -1;
+    }
+    l->offsets[l->len++] = a->offset;
+    return 0;
+}
+
+int cowlog_replay(const CowLog *l, int index, BumpArena *a) {
+    if (index < 0 || index >= l->len) {
+        return -1;
+    }
+    a->offset = l->offsets[index]; /* O(1) jump to the recorded state */
+    return 0;
+}
+
 int arena_self_test(char *out, size_t cap) {
     size_t pos = 0;
     int all_ok = 1;
@@ -116,6 +136,31 @@ int arena_self_test(char *out, size_t cap) {
         A(arena_used(&t) == 32, "snapshot: rollback returns to snapshot offset");
         void *r2 = arena_alloc(&t, 32);
         A((unsigned char *)r2 == tbuf + 32, "snapshot: rollback reuses freed region");
+    }
+
+    /* append-only CoW log (24B): record a history, replay to any state */
+    {
+        BumpArena t;
+        unsigned char tbuf[4096];
+        arena_init(&t, tbuf, sizeof tbuf);
+        CowLog log;
+        cowlog_init(&log);
+        cowlog_append(&log, &t); /* state 0: offset 0 */
+        arena_alloc(&t, 32);
+        cowlog_append(&log, &t); /* state 1: offset 32 */
+        arena_alloc(&t, 32);
+        cowlog_append(&log, &t); /* state 2: offset 64 */
+        A(log.len == 3, "cowlog records 3 snapshots");
+        A(cowlog_replay(&log, 1, &t) == 0 && arena_used(&t) == 32,
+          "cowlog replay to state 1 == 32");
+        A(cowlog_replay(&log, 0, &t) == 0 && arena_used(&t) == 0,
+          "cowlog replay to state 0 == 0");
+        A(cowlog_replay(&log, 2, &t) == 0 && arena_used(&t) == 64,
+          "cowlog replay forward to state 2 == 64");
+        A(cowlog_replay(&log, 3, &t) != 0, "cowlog out-of-range replay rejected");
+        /* immutability: replaying never mutates the recorded offsets */
+        A(log.offsets[0] == 0 && log.offsets[1] == 32 && log.offsets[2] == 64,
+          "cowlog history is immutable across replays");
     }
 
     return all_ok ? 0 : -1;
