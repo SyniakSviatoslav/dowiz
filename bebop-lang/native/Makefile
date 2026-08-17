@@ -5,11 +5,11 @@ CFLAGS  ?= -O2 -std=c11 -Wall -Wextra -Wpedantic
 BUILD   ?= build
 BIN     := $(BUILD)/bebopc
 
-SRC := src/main.c src/glyph.c src/lexer.c src/parser.c src/morse.c src/qtt.c src/ntt.c src/hyper.c
+SRC := src/main.c src/glyph.c src/lexer.c src/parser.c src/morse.c src/qtt.c src/ntt.c src/hyper.c src/mem.c
 
 all: $(BIN)
 
-$(BIN): $(SRC) src/glyph.h src/lexer.h src/parser.h src/morse.h src/qtt.h src/ntt.h src/hyper.h
+$(BIN): $(SRC) src/glyph.h src/lexer.h src/parser.h src/morse.h src/qtt.h src/ntt.h src/hyper.h src/mem.h
 	@mkdir -p $(BUILD)
 	$(CC) $(CFLAGS) -o $@ $(SRC)
 
@@ -37,6 +37,8 @@ test: $(BIN)
 	$(BIN) ntt
 	@echo "--- hypervector ---"
 	$(BIN) hyper
+	@echo "--- memory ---"
+	$(BIN) mem
 
 clean:
 	rm -rf $(BUILD)
