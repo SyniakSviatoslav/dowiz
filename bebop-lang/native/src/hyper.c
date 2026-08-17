@@ -5,6 +5,9 @@
 #include <limits.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
+
+#include <arm_neon.h>
 
 #include "ntt.h"
 

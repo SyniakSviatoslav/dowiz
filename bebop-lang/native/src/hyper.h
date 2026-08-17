@@ -23,6 +23,14 @@ Hypervector hv_bind(const Hypervector *a, const Hypervector *b);
 Hypervector hv_bundle(const Hypervector *items, size_t n);
 uint32_t hv_hamming(const Hypervector *a, const Hypervector *b);
 double hv_similarity(const Hypervector *a, const Hypervector *b);
+
+/* NEON-accelerated bind (XOR) + hamming (popcount) — 128-bit per instruction. */
+Hypervector hv_bind_neon(const Hypervector *a, const Hypervector *b);
+uint32_t hv_hamming_neon(const Hypervector *a, const Hypervector *b);
+Hypervector hv_bind_neon2(const Hypervector *a, const Hypervector *b);
+
+/* Benchmark: binds/sec (scalar vs NEON). Returns chars written (snprintf-style). */
+int hv_benchmark(char *out, size_t cap);
 Hypervector hv_permute(const Hypervector *v, uint32_t shift);
 uint32_t hv_popcount(const Hypervector *v);
 int hv_to_hex(const Hypervector *v, char *out, size_t cap);
