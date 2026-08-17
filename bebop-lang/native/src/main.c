@@ -34,6 +34,7 @@
 #include "atomic.h"
 #include "bench_all.h"
 #include "vir.h"
+#include "theorem.h"
 #include "smt.h"
 #include "gt.h"
 
@@ -579,6 +580,37 @@ static void cmd_check(const char *path) {
     }
     printf("parsed %d struct declarations (%d types in registry), %d functions\n",
            structs, reg.len, fns);
+    int thms = 0;
+    for (size_t i = 0; i < prog.len; i++) {
+        const AstItem *it = &prog.items[i];
+        if (it->kind == AST_ITEM_THEOREM && it->text && it->text_len > 0) {
+            char tname[64];
+            if (it->name && it->name_len > 0) {
+                size_t tl = it->name_len < 63 ? it->name_len : 63;
+                memcpy(tname, it->name, tl);
+                tname[tl] = '\0';
+            } else {
+                strcpy(tname, "?");
+            }
+            char *txt = malloc(it->text_len + 1);
+            memcpy(txt, it->text, it->text_len);
+            txt[it->text_len] = '\0';
+            char out[128];
+            if (theorem_prove(txt, out, sizeof out, err, sizeof err) != 0) {
+                fprintf(stderr, "theorem '%s' proof error: %s\n", tname, err);
+                free(txt);
+                bp_program_free(&prog);
+                free(src);
+                exit(1);
+            }
+            free(txt);
+            printf("theorem '%s' : %s  proven\n", tname, out);
+            thms++;
+        }
+    }
+    if (thms > 0) {
+        printf("%d theorem(s) verified\n", thms);
+    }
     bp_program_free(&prog);
     free(src);
 }

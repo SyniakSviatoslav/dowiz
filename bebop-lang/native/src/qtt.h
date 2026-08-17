@@ -228,6 +228,12 @@ int qtt_conv_test(char *out, size_t cap);
 int qtt_prove(const Term *proof, const Ty *goal, char *out_ty, size_t cap_ty,
               char *err, size_t cap_err);
 
+/* Prove a definitional equality `l = r` by refl: builds Eq(i64, l, r) and
+ * checks `refl l` against it (the conversion check accepts when l ≡ r up to
+ * β+δ). Returns 0 on success, -1 if l and r are not definitionally equal. */
+int qtt_prove_refl(const Term *l, const Term *r, char *out, size_t cap,
+                   char *err, size_t cap_err);
+
 /* Run the propositional-equality (refl / conversion) proof self-test. */
 int qtt_proof_test(char *out, size_t cap);
 

@@ -1,0 +1,14 @@
+// theorem-sample.bp — formal theorems, proved in the kernel at elaboration.
+// A theorem is checked by the proof kernel: `refl` proves `l = r` exactly
+// when l ≡ r up to β+δ conversion (the same judgement Lean uses for rfl).
+
+module core { }
+
+// β-reduction + constant-folding: (λx.x+1)(4) reduces to 5.
+theorem plus_one : (\x:i64. x + 1)(4) = 5 := refl
+
+// closed arithmetic folds definitionally.
+theorem arith : 1 + 2 * 3 = 7 := refl
+
+// nested β: (λx.x)((λy.y)(7)) ≡ 7.
+theorem beta_nested : (\x:i64. x)((\y:i64. y)(7)) = 7 := refl

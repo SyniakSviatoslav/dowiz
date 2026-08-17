@@ -1,0 +1,6 @@
+// theorem-false.bp — a FALSE theorem. The kernel must reject it at elaboration
+// and stop the build (exit 1). `1 + 1` folds to 2, not 3.
+
+module core { }
+
+theorem bad : 1 + 1 = 3 := refl

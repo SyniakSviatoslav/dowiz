@@ -26,6 +26,8 @@ const char *ast_item_kind_name(AstItemKind k) {
             return "use";
         case AST_ITEM_TYPE:
             return "type";
+        case AST_ITEM_THEOREM:
+            return "theorem";
         case AST_ITEM_UNKNOWN:
             return "unknown";
     }
@@ -157,9 +159,11 @@ int bp_parse(const char *src, AstProgram *prog, BpParseError *err) {
             kind = AST_ITEM_USE;
         } else if (peek_ident(&p, "type")) {
             kind = AST_ITEM_TYPE;
+        } else if (peek_ident(&p, "theorem")) {
+            kind = AST_ITEM_THEOREM;
         } else {
             err->line = cur(&p).line;
-            err->msg = "expected an item (module/fn/struct/const/use/type)";
+            err->msg = "expected an item (module/fn/struct/const/use/type/theorem)";
             bp_program_free(prog);
             return -1;
         }

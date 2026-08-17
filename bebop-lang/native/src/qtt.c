@@ -2061,6 +2061,24 @@ int qtt_prove(const Term *proof, const Ty *goal, char *out_ty, size_t cap_ty,
     return 0;
 }
 
+int qtt_prove_refl(const Term *l, const Term *r, char *out, size_t cap,
+                   char *err, size_t cap_err) {
+    ty_len = 0; /* fresh type pool per proof (bounded, fail-closed) */
+    static Term refl;
+    memset(&refl, 0, sizeof refl);
+    refl.kind = TERM_REFL;
+    refl.a = (Term *)l;
+    Ty *goal = ty_alloc(TY_EQ);
+    if (!goal) {
+        snprintf(err, cap_err, "type pool exhausted");
+        return -1;
+    }
+    goal->eq_a = &I64_TY;
+    goal->eq_l = (Term *)l;
+    goal->eq_r = (Term *)r;
+    return qtt_prove(&refl, goal, out, cap, err, cap_err);
+}
+
 int qtt_proof_test(char *out, size_t cap) {
     size_t pos = 0;
     int all_ok = 1;

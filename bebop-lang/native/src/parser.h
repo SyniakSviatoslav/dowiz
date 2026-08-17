@@ -13,6 +13,7 @@ typedef enum {
     AST_ITEM_CONST,
     AST_ITEM_USE,
     AST_ITEM_TYPE,
+    AST_ITEM_THEOREM,
     AST_ITEM_UNKNOWN,
 } AstItemKind;
 
