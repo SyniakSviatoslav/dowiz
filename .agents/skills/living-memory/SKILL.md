@@ -10,12 +10,14 @@ Native-kernel living-memory graph: a Markdown `.md` store of every
 **full source content** of every file in the dowiz tree. One graph serves search,
 navigation, and reading — the single access layer for the codebase.
 
-## HARD RULE (binding)
+## MANDATORY RULE — ALWAYS, NO EXCEPTIONS
 
-**NEVER use `grep`/`rg`/`search_files`/`read_file` for dowiz codebase access.**
-All navigation, search, AND reading goes through `lm_graph` (living memory). If
-something is missing, extend the store (`lm_graph build`), do not reach for grep
-or direct file reads.
+Living memory (`lm_graph`) is the **only** permitted access layer for the dowiz
+codebase. **Every** search, navigation, and read goes through it — always, for
+every command, for every task. `grep`/`rg`/`search_files`/`read_file` on dowiz
+source are **forbidden unconditionally**. This is NOT a recommendation and NOT
+opt-in. If something is missing, extend the store (`lm_graph build`); never fall
+back to grep or a direct file read.
 
 ## Store location (persistent)
 
