@@ -18,6 +18,7 @@
 #include "native.h"
 #include "money.h"
 #include "fft.h"
+#include "arena.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -356,6 +357,14 @@ static void cmd_fft(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_arena(void) {
+    char buf[4096];
+    int ok = arena_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("Arena self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -463,6 +472,10 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "fft") == 0) {
         cmd_fft();
+        return 0;
+    }
+    if (strcmp(argv[1], "arena") == 0) {
+        cmd_arena();
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {
