@@ -19,6 +19,7 @@
 #include "money.h"
 #include "fft.h"
 #include "arena.h"
+#include "event.h"
 
 static void usage(void) {
     fprintf(stderr,
@@ -365,6 +366,14 @@ static void cmd_arena(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_event(void) {
+    char buf[4096];
+    int ok = event_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("Event self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage();
@@ -476,6 +485,10 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "arena") == 0) {
         cmd_arena();
+        return 0;
+    }
+    if (strcmp(argv[1], "event") == 0) {
+        cmd_event();
         return 0;
     }
     if (strcmp(argv[1], "morse") == 0) {
