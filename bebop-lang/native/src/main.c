@@ -17,6 +17,8 @@
 #include "verify.h"
 #include "vsa.h"
 #include "codegen.h"
+#include "graph.h"
+#include "chain.h"
 #include "native.h"
 #include "money.h"
 #include "fft.h"
@@ -36,6 +38,7 @@
 #include "spectral.h"
 #include "autonomic.h"
 #include "noether.h"
+#include "oracle.h"
 #include "typereg.h"
 #include "atomic.h"
 #include "bench_all.h"
@@ -1174,6 +1177,27 @@ int main(int argc, char **argv) {
         int ok = math_self_test(buf, sizeof buf);
         fputs(buf, stdout);
         printf("Math self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "graph") == 0) {
+        char buf[8192];
+        int ok = graph_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Graph self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "chain") == 0) {
+        char buf[1024];
+        int ok = chain_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Chain self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "oracle") == 0) {
+        char buf[8192];
+        int ok = oracle_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Oracle self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "mesh") == 0) {
