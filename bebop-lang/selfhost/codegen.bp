@@ -8,5 +8,11 @@ fn ldr_imm(dst:i64,src:i64,byte_off:i64)->i64 { 4177526784 + (byte_off*128) + (s
 fn str_imm(src_reg:i64,dst_base:i64,byte_off:i64)->i64 { 4179656704 + (byte_off*128) + (dst_base*32) + src_reg }
 fn mov_reg(dst:i64,src:i64)->i64 { 2852126720 + (src*16) + dst }
 
-fn emit_prologue()->i64 { movz(0, 5) }
-fn test(x:i64)->i64 { add_imm(0, 0, 3) }
+fn emit_expr(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
+  let k=ek[i];
+  let mz=if k==0 then movz(0,ev[i]) else 0;
+  let ad=if k==2 then emit_expr(ek,ev,ea,eb,ea[i])+emit_expr(ek,ev,ea,eb,eb[i]) else 0;
+  mz+ad
+}
+
+fn test(x:i64)->i64 { let ek=[0];let ev=[5];let ea=[0];let eb=[0]; emit_expr(ek,ev,ea,eb,0) }
