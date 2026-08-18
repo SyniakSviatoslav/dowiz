@@ -19,6 +19,7 @@ bool noether_step_preserves(
     noether_invariant_fn invariant, void *inv_ctx,
     size_t steps, double tol)
 {
+    (void)x0; /* caller copies into update_ctx before calling */
     double *x = (double *)update_ctx;
     double i_prev = invariant(x, n, inv_ctx);
 
@@ -44,6 +45,7 @@ double noether_invariant_drift(
     noether_invariant_fn invariant, void *inv_ctx,
     size_t steps)
 {
+    (void)x0;
     double *x = (double *)update_ctx;
     double i_prev = invariant(x, n, inv_ctx);
     double total = 0.0;
@@ -68,6 +70,7 @@ bool noether_lyapunov_nonincreasing(
     noether_invariant_fn potential, void *pot_ctx,
     size_t steps, double tol)
 {
+    (void)x0;
     double *x = (double *)update_ctx;
     double v_prev = potential(x, n, pot_ctx);
 

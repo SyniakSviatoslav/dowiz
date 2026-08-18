@@ -20,10 +20,8 @@ static uint64_t pcg_step(uint64_t state, uint64_t inc) {
     return state * RNG_PCG_MUL + inc;
 }
 
-/* Right-rotate by rot in [0, 63]. Branchless — compiles to a single ROR/EXTR. */
-static uint64_t rotate_right64(uint64_t x, unsigned rot) {
-    return (x >> rot) | (x << ((64 - rot) & 63));
-}
+/* Right-rotate idiom inlined in rng_next_u64 (compiles to a single ROR/EXTR). */
+/* (xorshifted >> rot) | (xorshifted << ((-(uint64_t)rot) & 63)) */
 
 Rng rng_new(uint64_t seed, uint64_t stream) {
     Rng r;
