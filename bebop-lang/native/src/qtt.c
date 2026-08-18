@@ -509,7 +509,7 @@ static Ty *ty_alloc(TyKind kind) {
 
 Ty *qtt_vec(Ty *elem) {
     Ty *v = ty_alloc(TY_VEC);
-    v->n = 1;
+    v->n = 0; /* dynamic size — compatible with any fixed-size array literal */
     v->elem = elem;
     return v;
 }
@@ -602,7 +602,8 @@ static int ty_eq(const Ty *a, const Ty *b) {
         case TY_PI:
             return ty_eq(a->dom, b->dom) && ty_eq(a->cod, b->cod);
         case TY_VEC:
-            return a->n == b->n && ty_eq(a->elem, b->elem);
+            /* ignore n (dynamic size — compatible with any fixed-size literal) */
+            return ty_eq(a->elem, b->elem);
         case TY_STRUCT: {
             if (a->nfields != b->nfields) {
                 return 0;
@@ -650,6 +651,10 @@ static int ty_eq(const Ty *a, const Ty *b) {
 static int ty_leq(const Ty *a, const Ty *b) {
     if (a->kind == TY_TYPE && b->kind == TY_TYPE) {
         return a->n <= b->n;
+    }
+    /* Vec<N> ~ Vec<M>: compare elems only, ignore element count. */
+    if (a->kind == TY_VEC && b->kind == TY_VEC) {
+        return ty_leq(a->elem, b->elem);
     }
     return ty_eq(a, b);
 }
