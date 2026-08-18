@@ -23,4 +23,12 @@ fn subst(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64,vi:i64,v:i64,env:[i64])->i64 
   let s_add=if k==2 then subst(ek,ev,ea,eb,ea[i],vi,v,env)+subst(ek,ev,ea,eb,eb[i],vi,v,env) else 0;
   s_lit+s_add
 }
+fn norm(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
+  let k=ek[i];
+  let n_lit=if k==0 then ev[i] else 0;
+  let n_add=if k==2 then norm(ek,ev,ea,eb,ea[i])+norm(ek,ev,ea,eb,eb[i]) else 0;
+  let n_sub=if k==3 then norm(ek,ev,ea,eb,ea[i])-norm(ek,ev,ea,eb,eb[i]) else 0;
+  let n_mul=if k==4 then norm(ek,ev,ea,eb,ea[i])*norm(ek,ev,ea,eb,eb[i]) else 0;
+  n_lit+n_add+n_sub+n_mul
+}
 fn test(x:i64)->i64 { let ek=[0];let ev=[5];let ea=[0];let eb=[0];let env=[0]; eval(ek,ev,ea,eb,0,env) }
