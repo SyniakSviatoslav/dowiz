@@ -30,6 +30,7 @@
 #include "stats.h"
 #include "pid.h"
 #include "markov.h"
+#include "spectral.h"
 #include "autonomic.h"
 #include "noether.h"
 #include "typereg.h"
@@ -619,6 +620,14 @@ static void cmd_autonomic(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_spectral(void) {
+    char buf[8192];
+    int ok = spectral_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("Spectral self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 static void cmd_noether(void) {
     char buf[8192];
     int ok = noether_self_test(buf, sizeof buf);
@@ -963,6 +972,10 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "autonomic") == 0) {
         cmd_autonomic();
+        return 0;
+    }
+    if (strcmp(argv[1], "spectral") == 0) {
+        cmd_spectral();
         return 0;
     }
     if (strcmp(argv[1], "noether") == 0) {
