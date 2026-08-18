@@ -390,7 +390,7 @@ static Term *parse_primary(P *p) {
             if (p->s[p->pos] != ']') { err(p, "expected ']'"); return NULL; }
             p->pos++;
             skip_ws(p);
-            if (p->s[p->pos] == '=') {
+            if (p->s[p->pos] == '=' && p->s[p->pos+1] != '=') {
                 /* array mutation: arr[i] = v */
                 p->pos++;
                 Term *val = parse_expr(p);

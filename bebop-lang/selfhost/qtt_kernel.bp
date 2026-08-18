@@ -15,4 +15,12 @@ fn eval(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64,env:[i64])->i64 {
   let app=if k==6 then eval(ek,ev,ea,eb,ea[i],env)+eval(ek,ev,ea,eb,eb[i],env) else 0;
   lit+add+sub+mul+var+app
 }
+fn subst(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64,vi:i64,v:i64,env:[i64])->i64 {
+  let k=ek[i];
+  let m=if ev[i]==vi then 1 else 0;
+  let r=(m*v)+((1-m)*ev[i]);
+  let s_lit=if k==0 then r else 0;
+  let s_add=if k==2 then subst(ek,ev,ea,eb,ea[i],vi,v,env)+subst(ek,ev,ea,eb,eb[i],vi,v,env) else 0;
+  s_lit+s_add
+}
 fn test(x:i64)->i64 { let ek=[0];let ev=[5];let ea=[0];let eb=[0];let env=[0]; eval(ek,ev,ea,eb,0,env) }
