@@ -478,6 +478,16 @@ static void cmd_run(const char *path, const char *arg) {
             }
             free(txt);
         }
+        if (it->kind == AST_ITEM_ENUM && it->text && it->text_len > 0) {
+            char *txt = malloc(it->text_len + 1);
+            memcpy(txt, it->text, it->text_len);
+            txt[it->text_len] = '\0';
+            if (bp_parse_enum_decl(txt, &reg, err, sizeof err) != 0) {
+                fprintf(stderr, "enum parse error: %s\n", err);
+                free(txt); bp_program_free(&prog); free(src); exit(1);
+            }
+            free(txt);
+        }
     }
     /* Collect all fns so later fns can call earlier ones (closures). */
     enum { MAX_FNS = 64 };
@@ -635,6 +645,21 @@ static void cmd_check(const char *path) {
             txt[it->text_len] = '\0';
             if (bp_parse_struct_decl(txt, &reg, err, sizeof err) != 0) {
                 fprintf(stderr, "struct parse error '%s': %s\n",
+                        it->name ? it->name : "?", err);
+                free(txt);
+                bp_program_free(&prog);
+                free(src);
+                exit(1);
+            }
+            free(txt);
+            structs++;
+        }
+        if (it->kind == AST_ITEM_ENUM && it->text && it->text_len > 0) {
+            char *txt = malloc(it->text_len + 1);
+            memcpy(txt, it->text, it->text_len);
+            txt[it->text_len] = '\0';
+            if (bp_parse_enum_decl(txt, &reg, err, sizeof err) != 0) {
+                fprintf(stderr, "enum parse error '%s': %s\n",
                         it->name ? it->name : "?", err);
                 free(txt);
                 bp_program_free(&prog);

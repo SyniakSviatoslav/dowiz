@@ -13,6 +13,20 @@ static int pi = 0;
 static TyRegistry *g_reg = NULL;
 void expr_set_registry(TyRegistry *reg) { g_reg = reg; }
 
+/* find the TY_ENUM that has a constructor `name`; returns NULL if none */
+static Ty *enum_ctor_lookup(const char *name) {
+    if (!g_reg) return NULL;
+    for (int i = 0; i < g_reg->len; i++) {
+        Ty *ty = g_reg->entries[i].ty;
+        if (ty && ty->kind == TY_ENUM) {
+            for (int j = 0; j < ty->nctors; j++) {
+                if (strcmp(ty->ctors[j].name, name) == 0) return ty;
+            }
+        }
+    }
+    return NULL;
+}
+
 static Term *tnew(void) {
     memset(&pool[pi], 0, sizeof(Term));
     return &pool[pi++];
@@ -237,6 +251,9 @@ static Term *parse_primary(P *p) {
             t->kind = TERM_CHR; /* placeholder: one arg parsed in postfix */
         } else if (strcmp(buf, "str_len") == 0) {
             t->kind = TERM_STR_LEN; /* placeholder: one arg parsed in postfix */
+        } else if (g_reg && enum_ctor_lookup(buf)) {
+            t->kind = TERM_ENUM_CTOR;
+            t->ty = enum_ctor_lookup(buf);
         }
         /* struct construction: Name{ f: e, ... } */
         if (g_reg) {
@@ -341,6 +358,16 @@ static Term *parse_primary(P *p) {
             p->pos++;
             atom->a = sa;
             atom->b = sb;
+            continue;
+        }
+        if (atom->kind == TERM_ENUM_CTOR && p->s[p->pos] == '(') {
+            p->pos++;
+            Term *pl = parse_expr(p);
+            if (!pl) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
+            p->pos++;
+            atom->a = pl;
             continue;
         }
         if (atom->kind == TERM_SYSCALL && p->s[p->pos] == '(') {
@@ -517,6 +544,56 @@ static Term *parse_expr(P *p) {
         t->a = val;
         t->b = body;
         return t;
+    }
+    if (match_kw(p, "match")) {
+        Term *scrut = parse_expr(p);
+        if (!scrut) return NULL;
+        skip_ws(p);
+        if (p->s[p->pos] != '{') { err(p, "expected '{' after match"); return NULL; }
+        p->pos++;
+        static MatchArm arms[32];
+        static char acname[32][64];
+        static char avname[32][64];
+        int na = 0;
+        for (;;) {
+            skip_ws(p);
+            if (p->s[p->pos] == '}') { p->pos++; break; }
+            if (!is_ident_start(p->s[p->pos])) { err(p, "expected ctor in match arm"); return NULL; }
+            int cs = p->pos;
+            while (is_ident_cont(p->s[p->pos])) p->pos++;
+            int cl = p->pos - cs; if (cl >= 64) cl = 63;
+            memcpy(acname[na], p->s + cs, (size_t)cl); acname[na][cl] = '\0';
+            arms[na].ctor = acname[na];
+            arms[na].var = NULL;
+            skip_ws(p);
+            if (p->s[p->pos] == '(') {
+                p->pos++;
+                if (!is_ident_start(p->s[p->pos])) { err(p, "expected var name"); return NULL; }
+                int vs = p->pos;
+                while (is_ident_cont(p->s[p->pos])) p->pos++;
+                int vl = p->pos - vs; if (vl >= 64) vl = 63;
+                memcpy(avname[na], p->s + vs, (size_t)vl); avname[na][vl] = '\0';
+                arms[na].var = avname[na];
+                skip_ws(p);
+                if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
+                p->pos++;
+            }
+            skip_ws(p);
+            if (p->s[p->pos] != '=' || p->s[p->pos + 1] != '>') { err(p, "expected '=>'"); return NULL; }
+            p->pos += 2;
+            Term *body = parse_expr(p);
+            if (!body) return NULL;
+            arms[na].body = body;
+            na++;
+            skip_ws(p);
+            if (p->s[p->pos] == ',') { p->pos++; continue; }
+        }
+        Term *m = tnew();
+        m->kind = TERM_MATCH;
+        m->a = scrut;
+        m->arms = arms;
+        m->narms = na;
+        return m;
     }
     if (match_kw(p, "if")) {
         Term *cond = parse_expr(p);

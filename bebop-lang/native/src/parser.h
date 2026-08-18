@@ -10,6 +10,7 @@ typedef enum {
     AST_ITEM_MODULE,
     AST_ITEM_FN,
     AST_ITEM_STRUCT,
+    AST_ITEM_ENUM,
     AST_ITEM_CONST,
     AST_ITEM_USE,
     AST_ITEM_TYPE,
@@ -41,6 +42,7 @@ int bp_parse(const char *src, AstProgram *prog, BpParseError *err);
 
 /* Parse a struct declaration from raw source text (e.g. "Point { x: i64, y:
  * i64 }") into the type registry. Returns 0 on success, -1 on error. */
+int bp_parse_enum_decl(const char *src, TyRegistry *reg, char *err, size_t cap);
 int bp_parse_struct_decl(const char *src, TyRegistry *reg, char *err,
                          size_t cap);
 

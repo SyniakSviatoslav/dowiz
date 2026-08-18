@@ -1622,7 +1622,9 @@ static Value eval(const Term *t, Env *env) {
             return eval(t->b, e);
         }
         case TERM_STRUCT: {
-            static FieldValue fvs[64];
+            static FieldValue fv_pool[64][64];
+            static int fv_i = 0;
+            FieldValue *fvs = fv_pool[fv_i++ % 64];
             v.kind = 3;
             v.sty = t->ty;
             v.fv = fvs;
@@ -1648,14 +1650,15 @@ static Value eval(const Term *t, Env *env) {
             return v;
         }
         case TERM_ENUM_CTOR: {
-            static Value payload_storage;
+            static Value payload_pool[256];
+            static int pl_i = 0;
             v.kind = 4;
             v.sty = t->ty;
             v.ctor = t->name;
             v.has_payload = (t->a != NULL);
             if (t->a) {
-                payload_storage = eval(t->a, env);
-                v.payload = &payload_storage;
+                payload_pool[pl_i % 256] = eval(t->a, env);
+                v.payload = &payload_pool[pl_i++ % 256];
             }
             return v;
         }
@@ -1668,8 +1671,8 @@ static Value eval(const Term *t, Env *env) {
             for (int j = 0; j < t->narms; j++) {
                 if (strcmp(t->arms[j].ctor, scrut.ctor) == 0) {
                     if (scrut.has_payload) {
-                        Env e = {t->arms[j].var, *scrut.payload, env};
-                        return eval(t->arms[j].body, &e);
+                        Env *e = env_new(t->arms[j].var, *scrut.payload, env);
+                        return eval(t->arms[j].body, e);
                     }
                     return eval(t->arms[j].body, env);
                 }

@@ -20,6 +20,8 @@ const char *ast_item_kind_name(AstItemKind k) {
             return "fn";
         case AST_ITEM_STRUCT:
             return "struct";
+        case AST_ITEM_ENUM:
+            return "enum";
         case AST_ITEM_CONST:
             return "const";
         case AST_ITEM_USE:
@@ -153,6 +155,8 @@ int bp_parse(const char *src, AstProgram *prog, BpParseError *err) {
             kind = AST_ITEM_FN;
         } else if (peek_ident(&p, "struct")) {
             kind = AST_ITEM_STRUCT;
+        } else if (peek_ident(&p, "enum")) {
+            kind = AST_ITEM_ENUM;
         } else if (peek_ident(&p, "const")) {
             kind = AST_ITEM_CONST;
         } else if (peek_ident(&p, "use")) {
@@ -345,6 +349,67 @@ int bp_parse_struct_decl(const char *src, TyRegistry *reg, char *err,
                  name);
         return -1;
     }
+    return 0;
+}
+
+static Ty *resolve_ty(TyRegistry *reg, const BpToken *tok);
+
+int bp_parse_enum_decl(const char *src, TyRegistry *reg, char *err, size_t cap) {
+    BpToken toks[256];
+    int n = bp_lex(src, toks, 256);
+    if (n < 0) { snprintf(err, cap, "too many tokens"); return -1; }
+    int pos = 0;
+    while (pos < n && toks[pos].kind != BP_TOK_IDENT) pos++;
+    if (pos < n) {
+        if (toks[pos].len == 4 && strncmp(toks[pos].start, "enum", 4) == 0) pos++;
+    }
+    while (pos < n && toks[pos].kind != BP_TOK_IDENT) pos++;
+    if (pos >= n) { snprintf(err, cap, "expected enum name"); return -1; }
+    static char name_pool[64][64];
+    static int name_i = 0;
+    char *name = name_pool[name_i++ % 64];
+    size_t nl = toks[pos].len < 63 ? toks[pos].len : 63;
+    memcpy(name, toks[pos].start, nl); name[nl] = '\0'; pos++;
+    while (pos < n && !(toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == '{')) pos++;
+    if (pos >= n) { snprintf(err, cap, "expected '{'"); return -1; }
+    pos++;
+    static Ctor ctors_pool[64][16];
+    static char cnames_pool[64][16][64];
+    static int ce_i = 0;
+    Ctor *ctors = ctors_pool[ce_i % 64];
+    char (*cnames)[64] = cnames_pool[ce_i % 64];
+    ce_i++;
+    int nc = 0;
+    while (pos < n && nc < 16) {
+        if (toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == '}') { pos++; break; }
+        if (toks[pos].kind != BP_TOK_IDENT) { snprintf(err, cap, "expected ctor name"); return -1; }
+        size_t cl = toks[pos].len < 63 ? toks[pos].len : 63;
+        memcpy(cnames[nc], toks[pos].start, cl); cnames[nc][cl] = '\0';
+        ctors[nc].name = cnames[nc];
+        pos++;
+        Ty *payload = NULL;
+        if (pos < n && toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == '(') {
+            pos++;
+            if (pos < n && toks[pos].kind == BP_TOK_IDENT) {
+                payload = resolve_ty(reg, &toks[pos]);
+                if (!payload) { snprintf(err, cap, "unknown ctor payload type"); return -1; }
+                pos++;
+            }
+            if (pos < n && toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == ')') pos++;
+        }
+        ctors[nc].payload = payload;
+        nc++;
+        if (pos < n && toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == ',') { pos++; continue; }
+    }
+    if (nc == 0) { snprintf(err, cap, "empty enum"); return -1; }
+    static Ty en_pool[64];
+    static int en_i = 0;
+    Ty *en = &en_pool[en_i++ % 64];
+    memset(en, 0, sizeof *en);
+    en->kind = TY_ENUM;
+    en->ctors = ctors;
+    en->nctors = nc;
+    if (typereg_put(reg, name, en) != 0) { snprintf(err, cap, "type '%s' already declared", name); return -1; }
     return 0;
 }
 
