@@ -332,6 +332,18 @@ int bp_parse_struct_decl(const char *src, TyRegistry *reg, char *err,
     return 0;
 }
 
+static Ty *resolve_ty(TyRegistry *reg, const BpToken *tok) {
+    if (tok->kind != BP_TOK_IDENT) return NULL;
+    char tn[32]; size_t tl = tok->len < 31 ? tok->len : 31;
+    memcpy(tn, tok->start, tl); tn[tl] = '\0';
+    Ty *t = typereg_get(reg, tn);
+    if (t) return t;
+    if (strcmp(tn, "i64") == 0) return qtt_i64();
+    if (strcmp(tn, "bool") == 0) return qtt_bool();
+    if (strcmp(tn, "str") == 0) return qtt_str();
+    return NULL;
+}
+
 int bp_parse_fn_decl(const char *src, TyRegistry *reg, Term **out,
                      Ty **out_ty, char *err, size_t cap) {
     BpToken toks[256];
@@ -344,44 +356,45 @@ int bp_parse_fn_decl(const char *src, TyRegistry *reg, Term **out,
     while (pos < n && !(toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == '(')) pos++;
     if (pos >= n) { snprintf(err, cap, "expected '('"); return -1; }
     pos++;
-    if (pos >= n || toks[pos].kind != BP_TOK_IDENT) { snprintf(err, cap, "expected param name"); return -1; }
-    static char pname_pool[64][64];
-    static int pname_i = 0;
-    char *pname = pname_pool[pname_i++ % 64];
-    size_t pl = toks[pos].len < 63 ? toks[pos].len : 63;
-    memcpy(pname, toks[pos].start, pl); pname[pl] = '\0'; pos++;
-    if (pos >= n || toks[pos].kind != BP_TOK_PUNCT || toks[pos].start[0] != ':') { snprintf(err, cap, "expected ':'"); return -1; }
-    pos++;
-    Ty *pty = NULL;
-    if (toks[pos].kind == BP_TOK_IDENT) {
-        char tn[32]; size_t tl = toks[pos].len < 31 ? toks[pos].len : 31;
-        memcpy(tn, toks[pos].start, tl); tn[tl] = '\0';
-        pty = typereg_get(reg, tn);
-        if (!pty) {
-            if (strcmp(tn, "i64") == 0) pty = qtt_i64();
-            else if (strcmp(tn, "bool") == 0) pty = qtt_bool();
-            else if (strcmp(tn, "str") == 0) pty = qtt_str();
+    /* parse params: name : type (',' name : type)* */
+    static char pname_pool[256][64];
+    static int pname_cnt = 0;
+    const char *pnames[16];
+    Ty *ptys[16];
+    int nparams = 0;
+    while (pos < n && toks[pos].kind == BP_TOK_IDENT && nparams < 16) {
+        char *pname = pname_pool[pname_cnt++ % 256];
+        size_t pl = toks[pos].len < 63 ? toks[pos].len : 63;
+        memcpy(pname, toks[pos].start, pl); pname[pl] = '\0'; pos++;
+        pnames[nparams] = pname;
+        if (pos >= n || toks[pos].kind != BP_TOK_PUNCT || toks[pos].start[0] != ':') {
+            snprintf(err, cap, "expected ':'"); return -1;
         }
+        pos++;
+        Ty *pty = NULL;
+        if (toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == '[') {
+            pos++;
+            Ty *elem = resolve_ty(reg, &toks[pos]);
+            if (elem) { pty = qtt_vec(elem); pos++; }
+            if (pos < n && toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == ']') pos++;
+        } else {
+            pty = resolve_ty(reg, &toks[pos]);
+            if (pty) pos++;
+        }
+        if (!pty) { snprintf(err, cap, "unknown param type"); return -1; }
+        ptys[nparams] = pty;
+        nparams++;
+        if (pos < n && toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == ',') {
+            pos++;
+            continue;
+        }
+        break;
     }
-    if (!pty) { snprintf(err, cap, "unknown param type"); return -1; }
-    pos++;
-    while (pos < n && !(toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == ')')) pos++;
-    if (pos >= n) { snprintf(err, cap, "expected ')'"); return -1; }
-    pos++;
+    if (pos < n && toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == ')') pos++;
     while (pos < n && !(toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == '-')) pos++;
     if (pos + 1 >= n || toks[pos + 1].kind != BP_TOK_PUNCT || toks[pos + 1].start[0] != '>') { snprintf(err, cap, "expected '->'"); return -1; }
     pos += 2;
-    Ty *rty = NULL;
-    if (toks[pos].kind == BP_TOK_IDENT) {
-        char tn[32]; size_t tl = toks[pos].len < 31 ? toks[pos].len : 31;
-        memcpy(tn, toks[pos].start, tl); tn[tl] = '\0';
-        rty = typereg_get(reg, tn);
-        if (!rty) {
-            if (strcmp(tn, "i64") == 0) rty = qtt_i64();
-            else if (strcmp(tn, "bool") == 0) rty = qtt_bool();
-            else if (strcmp(tn, "str") == 0) rty = qtt_str();
-        }
-    }
+    Ty *rty = resolve_ty(reg, &toks[pos]);
     if (!rty) { snprintf(err, cap, "unknown return type"); return -1; }
     pos++;
     while (pos < n && !(toks[pos].kind == BP_TOK_PUNCT && toks[pos].start[0] == '{')) pos++;
@@ -399,22 +412,30 @@ int bp_parse_fn_decl(const char *src, TyRegistry *reg, Term **out,
     const char *bt = toks[bstart].start;
     size_t bl = (size_t)(toks[bend].start - bt);
     char *bs = malloc(bl + 1); memcpy(bs, bt, bl); bs[bl] = '\0';
-    /* NOTE: do NOT reset the expr pool here — the caller parses multiple fns
-     * into the same growing pool so their bodies stay distinct. */
     Term *body = NULL;
     if (expr_parse(bs, &body, err, cap) != 0) { free(bs); return -1; }
     free(bs);
+    /* build nested lambdas (currying) */
     static Term lam_pool[64];
     static int lam_i = 0;
-    Term *lam = &lam_pool[lam_i++ % 64];
-    memset(lam, 0, sizeof *lam);
-    lam->kind = TERM_LAM; lam->name = pname; lam->q = Q_MANY; lam->ty = pty; lam->a = body;
+    Term *lam = body;
+    for (int k = nparams - 1; k >= 0; k--) {
+        Term *l = &lam_pool[lam_i++ % 64];
+        memset(l, 0, sizeof *l);
+        l->kind = TERM_LAM; l->name = pnames[k]; l->q = Q_MANY; l->ty = ptys[k]; l->a = lam;
+        lam = l;
+    }
     *out = lam;
+    /* build nested Pi types */
     static Ty pi_pool[64];
     static int pi_i = 0;
-    Ty *pi = &pi_pool[pi_i++ % 64];
-    memset(pi, 0, sizeof *pi);
-    pi->kind = TY_PI; pi->q = Q_MANY; pi->x = pname; pi->dom = pty; pi->cod = rty;
+    Ty *pi = rty;
+    for (int k = nparams - 1; k >= 0; k--) {
+        Ty *p = &pi_pool[pi_i++ % 64];
+        memset(p, 0, sizeof *p);
+        p->kind = TY_PI; p->q = Q_MANY; p->x = pnames[k]; p->dom = ptys[k]; p->cod = pi;
+        pi = p;
+    }
     *out_ty = pi;
     return 0;
 }

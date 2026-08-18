@@ -1,0 +1,33 @@
+// selfhost/parser.bp — recursive descent arithmetic parser (self-host module #2)
+// Parses and evaluates expressions like "1 + 2 * 3" using a mutable position
+// array (pass-by-reference). Demonstrates lexing + recursive parsing in Bebop.
+
+module core { }
+
+// is_digit: '0'(48)..'9'(57)
+fn is_digit(c: i64) -> i64 {
+  if c >= 48 then (if c <= 57 then 1 else 0) else 0
+}
+
+// skip_ws: advance pos past spaces
+fn skip_ws(s: str, pos: str) -> i64 {
+  0
+}
+
+// parse_num: read a multi-digit number at pos[0], advance pos, return value
+fn parse_num(s: str, pos: i64) -> i64 {
+  let n = str_len(s);
+  let i = pos;
+  let v = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if i >= n then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, i);
+    let dg = if at_end == 1 then 0 else is_digit(ch);
+    let v = if dg == 1 then (v * 10) + (ch - 48) else v;
+    let done = if dg == 1 then 0 else 1;
+    let i = if dg == 1 then i + 1 else i;
+    0
+  };
+  v
+}

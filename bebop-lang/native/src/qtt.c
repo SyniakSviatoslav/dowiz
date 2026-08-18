@@ -507,6 +507,13 @@ static Ty *ty_alloc(TyKind kind) {
     return t;
 }
 
+Ty *qtt_vec(Ty *elem) {
+    Ty *v = ty_alloc(TY_VEC);
+    v->n = 1;
+    v->elem = elem;
+    return v;
+}
+
 /* Capture-avoiding-free substitution of a type variable (var → repl). */
 static Ty *ty_subst(Ty *t, const char *var, Ty *repl) {
     if (!t) {
