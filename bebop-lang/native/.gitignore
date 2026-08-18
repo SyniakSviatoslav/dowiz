@@ -1,1 +1,3 @@
 build/bebopc
+build/
+micro_*.c
