@@ -5,7 +5,7 @@ CFLAGS  ?= -O2 -std=c11 -Wall -Wextra -Wpedantic
 BUILD   ?= build
 BIN     := $(BUILD)/bebopc
 
-SRC := src/main.c src/glyph.c src/lexer.c src/parser.c src/morse.c src/qtt.c src/ntt.c src/hyper.c src/mem.c src/expr.c src/verify.c src/vsa.c src/codegen.c src/native.c src/money.c src/fft.c src/arena.c src/event.c src/complex.c src/modular.c src/sort.c src/token_bucket.c src/checksum.c src/hex_util.c src/trig.c src/rng.c src/stats.c src/pid.c src/markov.c src/typereg.c src/atomic.c src/bench_all.c src/vir.c src/theorem.c src/pac.c src/effect.c src/jittable.c src/supervise.c src/session.c src/syscall.c src/typereflect.c src/termination.c src/smt.c src/contract.c src/comptime.c src/fmt.c src/gt.c src/gt_switch.S
+SRC := src/main.c src/glyph.c src/lexer.c src/parser.c src/morse.c src/qtt.c src/ntt.c src/hyper.c src/mem.c src/expr.c src/verify.c src/vsa.c src/codegen.c src/native.c src/money.c src/fft.c src/arena.c src/event.c src/complex.c src/modular.c src/sort.c src/token_bucket.c src/checksum.c src/hex_util.c src/trig.c src/rng.c src/stats.c src/pid.c src/markov.c src/typereg.c src/atomic.c src/bench_all.c src/vir.c src/theorem.c src/pac.c src/effect.c src/jittable.c src/supervise.c src/session.c src/syscall.c src/typereflect.c src/termination.c src/smt.c src/contract.c src/comptime.c src/fmt.c src/power.c src/gt.c src/gt_switch.S
 LDLIBS := -lm -lpthread
 
 all: $(BIN)
@@ -125,6 +125,8 @@ test: $(BIN)
 	$(BIN) comptime
 	@echo "--- formatter (bp_fmt) ---"
 	$(BIN) fmttest
+	@echo "--- power (WFI/WFE + PMU) ---"
+	$(BIN) power
 	@echo "--- green threads (stackful coroutines) ---"
 	$(BIN) gt
 

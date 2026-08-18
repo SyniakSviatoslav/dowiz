@@ -47,6 +47,7 @@
 #include "contract.h"
 #include "comptime.h"
 #include "fmt.h"
+#include "power.h"
 #include "gt.h"
 
 static void usage(void) {
@@ -836,6 +837,13 @@ int main(int argc, char **argv) {
         int ok = qtt_str_test(buf, sizeof buf);
         fputs(buf, stdout);
         printf("QTT strings (check/conv/prove) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "power") == 0) {
+        char buf[4096];
+        int ok = power_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Power (WFI/WFE + PMU) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "fmttest") == 0) {
