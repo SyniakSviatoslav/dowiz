@@ -48,6 +48,7 @@
 #include "comptime.h"
 #include "fmt.h"
 #include "power.h"
+#include "x86_64.h"
 #include "gt.h"
 
 static void usage(void) {
@@ -837,6 +838,13 @@ int main(int argc, char **argv) {
         int ok = qtt_str_test(buf, sizeof buf);
         fputs(buf, stdout);
         printf("QTT strings (check/conv/prove) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "x86_64") == 0) {
+        char buf[4096];
+        int ok = x86_64_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("x86_64 (encoder) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "power") == 0) {
