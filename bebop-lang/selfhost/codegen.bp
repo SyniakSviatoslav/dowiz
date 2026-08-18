@@ -1,0 +1,38 @@
+// selfhost/codegen.bp — Bebop AArch64 codegen (self-host module #4)
+// Hand-encodes AArch64 instructions as u32 (returned as i64). No assembler.
+// Encodings match native.c. Runs via `bebopc run`.
+
+module core { }
+
+// movz Xd, #imm16 : 0xD2800000 | (imm16 << 5) | Rd
+fn movz(dst: i64, imm: i64) -> i64 {
+  3531603968 + (imm * 32) + dst
+}
+
+// add Xd, Xn, #imm12 : 0x91000000 | (imm12 << 10) | (Rn << 5) | Rd
+fn add_imm(dst: i64, src: i64, imm: i64) -> i64 {
+  2432696320 + (imm * 1024) + (src * 32) + dst
+}
+
+// ret : 0xD65F03C0
+fn ret() -> i64 {
+  3596551104
+}
+
+// sub Xd, Xn, #imm12 : 0xD1000000 | (imm12 << 10) | (Rn << 5) | Rd
+fn sub_imm(dst: i64, src: i64, imm: i64) -> i64 {
+  3506438144 + (imm * 1024) + (src * 32) + dst
+}
+
+// codegen: emit "mov x0,#5; ret" and return the mov encoding (first instr)
+fn emit_prologue() -> i64 {
+  movz(0, 5)
+}
+
+// encode_sum: build machine code for "x0 = imm1 + imm2" (mov + add + ret),
+// return the ADD instruction encoding (the second instruction).
+fn encode_sum(imm1: i64, imm2: i64) -> i64 {
+  let m1 = movz(0, imm1);
+  let a = add_imm(0, 0, imm2);
+  a
+}
