@@ -1486,6 +1486,7 @@ struct Env {
     Value val;
     Env *next;
 };
+static int in_while = 0;
 
 static Value eval(const Term *t, Env *env) {
     Value v;
@@ -1543,6 +1544,17 @@ static Value eval(const Term *t, Env *env) {
         }
         case TERM_LET: {
             Value x = eval(t->a, env);
+            if (in_while) {
+                /* mutate the FIRST matching binding in place so the loop
+                 * variable persists across iterations. */
+                for (Env *e = env; e; e = e->next) {
+                    if (e->name && strcmp(e->name, t->name) == 0) {
+                        e->val = x;
+                        return eval(t->b, env);
+                    }
+                }
+                /* not pre-bound: create a scoped binding (won't persist) */
+            }
             Env e = {t->name, x, env};
             return eval(t->b, &e);
         }
@@ -1642,18 +1654,22 @@ static Value eval(const Term *t, Env *env) {
             return v;
         case TERM_WHILE: {
             int iter = 0;
+            int saved_in_while = in_while;
+            in_while = 1;
             for (;;) {
-                if (iter++ >= 1000) { v.kind = -1; return v; }
+                if (iter++ >= 1000) { v.kind = -1; goto while_done; }
                 Value cond = eval(t->a, env);
                 int is_true = 0;
                 if (cond.kind == 1) is_true = cond.b;
                 else if (cond.kind == 0) is_true = (cond.i != 0);
-                else { v.kind = -1; return v; }
+                else { v.kind = -1; goto while_done; }
                 if (!is_true) break;
                 eval(t->b, env);
             }
             v.kind = 0; /* unit */
             v.i = 0;
+        while_done:
+            in_while = saved_in_while;
             return v;
         }
         case TERM_SYSCALL:
