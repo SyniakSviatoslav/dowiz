@@ -178,7 +178,9 @@ int qtt_self_test(char *out, size_t cap) {
 
 static Ty I64_TY = {.kind = TY_I64};
 static Ty BOOL_TY = {.kind = TY_BOOL};
-static Ty TYPE_TY = {.kind = TY_TYPE};
+static Ty TYPE_TY = {.kind = TY_TYPE, .n = 0};
+static Ty TYPE1_TY = {.kind = TY_TYPE, .n = 1};
+static Ty TYPE2_TY = {.kind = TY_TYPE, .n = 2};
 static Ty VOID_TY = {.kind = TY_VOID};
 static Ty NAT_TY = {.kind = TY_NAT};
 static Ty STR_TY = {.kind = TY_STR};
@@ -625,6 +627,15 @@ static int ty_eq(const Ty *a, const Ty *b) {
                    qtt_conv(a->eq_r, b->eq_r);
     }
     return 0;
+}
+
+/* Cumulativity: a can be used where b is expected. Universes are cumulative
+ * (Type_k <= Type_j iff k <= j); everything else requires definitional equality. */
+static int ty_leq(const Ty *a, const Ty *b) {
+    if (a->kind == TY_TYPE && b->kind == TY_TYPE) {
+        return a->n <= b->n;
+    }
+    return ty_eq(a, b);
 }
 
 static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap);
@@ -1300,7 +1311,11 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             return 0;
         }
         case TERM_TYPE: {
-            *out = &TYPE_TY;
+            /* universe level in t->ival: 0=Type0, 1=Type1, 2=Type2 */
+            if (t->ival == 0) *out = &TYPE_TY;
+            else if (t->ival == 1) *out = &TYPE1_TY;
+            else if (t->ival == 2) *out = &TYPE2_TY;
+            else { snprintf(err, cap, "universe level %ld out of range (0..2)", t->ival); return -1; }
             return 0;
         }
         case TERM_IO: {
@@ -1332,7 +1347,7 @@ static int check(Ctx *c, const Term *t, const Ty *want, char *err, size_t cap) {
     if (infer(c, t, &got, err, cap) != 0) {
         return -1;
     }
-    if (!ty_eq(got, want)) {
+    if (!ty_leq(got, want)) {
         snprintf(err, cap, "type mismatch");
         return -1;
     }
@@ -2663,3 +2678,56 @@ int qtt_array_test(char *out, size_t cap) {
 
     return all_ok ? 0 : -1;
 }
+
+int qtt_universe_test(char *out, size_t cap) {
+    size_t pos = 0;
+    int all_ok = 1;
+    char err[256], ty[128];
+#undef A
+#define A(cond, name)                                                          \
+    do {                                                                       \
+        int c_ = (int)(cond);                                                  \
+        int r_ = snprintf(out + pos, cap - pos, "[%s] %s\n",                  \
+                          c_ ? "ok" : "FAIL", name);                           \
+        if (r_ > 0) pos += (size_t)r_;                                         \
+        if (!c_) all_ok = 0;                                                   \
+    } while (0)
+
+    static Term pool[8];
+    int pi = 0;
+    ty_len = 0;
+
+    /* Type0 : Type1 (cumulative) */
+    Term *t0 = &pool[pi++]; memset(t0, 0, sizeof *t0);
+    t0->kind = TERM_TYPE; t0->ival = 0;
+    Ctx c0; memset(&c0, 0, sizeof c0);
+    Ty *got = NULL;
+    int r0 = infer(&c0, t0, &got, err, sizeof err);
+    A(r0 == 0 && got && got->kind == TY_TYPE && got->n == 0, "infer Type0 : Type1 (level 0)");
+
+    /* Type0 usable where Type1 expected: build (Type0 : Type1) via check */
+    Ty *want1 = &TYPE1_TY;
+    Ctx c1; memset(&c1, 0, sizeof c1);
+    A(check(&c1, t0, want1, err, sizeof err) == 0, "Type0 <= Type1 (cumulative)");
+
+    /* Type1 usable where Type2 expected */
+    Term *t1 = &pool[pi++]; memset(t1, 0, sizeof *t1);
+    t1->kind = TERM_TYPE; t1->ival = 1;
+    Ctx c2; memset(&c2, 0, sizeof c2);
+    A(check(&c2, t1, &TYPE2_TY, err, sizeof err) == 0, "Type1 <= Type2 (cumulative)");
+
+    /* Type1 NOT usable where Type0 expected (no lowering) */
+    Ctx c3; memset(&c3, 0, sizeof c3);
+    A(check(&c3, t1, &TYPE_TY, err, sizeof err) != 0, "Type1 !<= Type0 (rejected)");
+
+    /* type universe round-trip: (\A: Type1. A) : Type1 -> Type1  */
+    Term *a_var = &pool[pi++]; memset(a_var, 0, sizeof *a_var);
+    a_var->kind = TERM_VAR; a_var->name = "A";
+    Term *lam = &pool[pi++]; memset(lam, 0, sizeof *lam);
+    lam->kind = TERM_LAM; lam->name = "A"; lam->q = Q_MANY; lam->ty = &TYPE1_TY; lam->a = a_var;
+    A(qtt_check_closed(lam, ty, sizeof ty, err, sizeof err) == 0,
+      "check (\\A:Type1. A) : Type1 -> Type1");
+
+    return all_ok ? 0 : -1;
+}
+

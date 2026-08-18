@@ -254,4 +254,7 @@ int qtt_str_test(char *out, size_t cap);
 /* Run the array (literal / indexing) self-test. */
 int qtt_array_test(char *out, size_t cap);
 
+/* Run the universe (cumulativity) self-test. */
+int qtt_universe_test(char *out, size_t cap);
+
 #endif /* BEBOP_QTT_H */
