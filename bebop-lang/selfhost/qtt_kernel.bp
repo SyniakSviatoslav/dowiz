@@ -49,12 +49,4 @@ fn check(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64,want:i64)->i64 {
   let t=infer(ek,ev,ea,eb,i);
   if t==want then 1 else 0
 }
-fn eval_cmp(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64,env:[i64])->i64 {
-  let k=ek[i];
-  let eq=if k==7 then (if eval(ek,ev,ea,eb,ea[i],env)==eval(ek,ev,ea,eb,eb[i],env) then 1 else 0) else 0;
-  let lt=if k==8 then (if eval(ek,ev,ea,eb,ea[i],env)<eval(ek,ev,ea,eb,eb[i],env) then 1 else 0) else 0;
-  let gt=if k==9 then (if eval(ek,ev,ea,eb,ea[i],env)>eval(ek,ev,ea,eb,eb[i],env) then 1 else 0) else 0;
-  eq+lt+gt
-}
-
 fn test(x:i64)->i64 { let ek=[0];let ev=[5];let ea=[0];let eb=[0];let env=[0]; eval(ek,ev,ea,eb,0,env) }
