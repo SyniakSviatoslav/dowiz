@@ -17,6 +17,7 @@
 #include "hydra.h"
 #include "expr.h"
 #include "verify.h"
+#include "verifier.h"
 #include "vsa.h"
 #include "codegen.h"
 #include "graph.h"
@@ -899,6 +900,13 @@ int main(int argc, char **argv) {
         }
         cmd_expr(argv[2]);
         return 0;
+    }
+    if (strcmp(argv[1], "verifier") == 0) {
+        char buf[8192];
+        int ok = verifier_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Verifier self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "verify") == 0) {
         cmd_verify();
