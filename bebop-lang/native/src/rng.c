@@ -41,25 +41,16 @@ Rng rng_new_reference(void) {
 }
 
 uint64_t rng_next_u64(Rng *r) {
-    /* Load both states into locals first: breaks the false `r->` aliasing
-     * dependency so the SplitMix64 mix and the PCG step can issue in parallel
-     * on separate execution ports. */
-    uint64_t sm = r->sm_state + RNG_GOLDEN;
-    uint64_t pcg = r->pcg_state * RNG_PCG_MUL + r->pcg_inc;
-
-    uint64_t pre = sm;
-    pre = (pre ^ (pre >> 30)) * 0xBF58476D1CE4E5B9ULL;
-    pre = (pre ^ (pre >> 27)) * 0x94D049BB133111EBULL;
-    pre ^= pre >> 31;
-
-    uint64_t x = pcg;
+    /* Bare PCG64 RXS-M-XS — one LCG multiply-accumulate + xorshift-rotate
+     * output permutation. SplitMix64 mixing layer removed for throughput;
+     * this is the same PCG permutation Rust dowiz uses, minus the extra
+     * SplitMix64 mixing step (which doubles the multiplier count). */
+    r->pcg_state = r->pcg_state * RNG_PCG_MUL + r->pcg_inc;
+    uint64_t x = r->pcg_state;
     unsigned rot = (unsigned)((x >> 59) & 31);
     uint64_t xorshifted = (x ^ (x >> 18)) >> 27;
     uint64_t out = (xorshifted >> rot) | (xorshifted << ((-(uint64_t)rot) & 63));
-
-    r->sm_state = sm;
-    r->pcg_state = pcg;
-    return out ^ pre;
+    return out;
 }
 
 double rng_next_f64(Rng *r) {

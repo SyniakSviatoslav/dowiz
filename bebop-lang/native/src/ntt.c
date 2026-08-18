@@ -14,19 +14,11 @@
 /* Barrett constant: floor(2^64 / MOD). Verified against MOD = 998244353. */
 #define NTT_MU 18479187002ULL
 
-/* r = x % MOD for x < 2^64, using Barrett reduction (one umulh + mul + sub). */
-static inline uint64_t ntt_reduce(uint64_t x) {
-    uint64_t q = (uint64_t)(((__uint128_t)x * (__uint128_t)NTT_MU) >> 64);
-    uint64_t r = x - q * BEBOP_NTT_MOD;
-    if (r >= BEBOP_NTT_MOD) {
-        r -= BEBOP_NTT_MOD;
-    }
-    return r;
-}
-
-/* (a * b) % MOD for a, b < MOD (product < 2^60, no overflow). */
+/* (a * b) % MOD — let the compiler emit umulh (GCC -O2 auto-converts
+ * constant-divisor mod to Barrett). Explicit Barrett was interfering
+ * with loop-level instruction scheduling. */
 static inline uint64_t ntt_mulmod(uint64_t a, uint64_t b) {
-    return ntt_reduce(a * b);
+    return (a * b) % BEBOP_NTT_MOD;
 }
 
 uint64_t ntt_mod_pow(uint64_t base, uint64_t exp, uint64_t m) {
@@ -48,7 +40,7 @@ uint64_t ntt_mod_inv(uint64_t a, uint64_t m) {
 
 /* Fast mod_pow for the fixed BEBOP_NTT_MOD (Barrett mulmod). */
 static uint64_t ntt_pow_fast(uint64_t base, uint64_t exp) {
-    base = ntt_reduce(base);
+    base = base % BEBOP_NTT_MOD;
     uint64_t result = 1;
     while (exp > 0) {
         if (exp & 1) {
@@ -71,7 +63,7 @@ static uint64_t ntt_inv_fast(uint64_t a) {
 __attribute__((optimize("O2")))
 void ntt_transform(uint64_t *a, size_t n, int invert) {
     for (size_t i = 0; i < n; i++) {
-        a[i] = ntt_reduce(a[i]);
+        a[i] = a[i] % BEBOP_NTT_MOD;
     }
 
     /* bit-reversal permutation */
@@ -131,10 +123,8 @@ void ntt_transform(uint64_t *a, size_t n, int invert) {
     }
 }
 
-/* Pointwise multiply + inverse NTT for convolution runs inside the
- * ntt_convolve body where the multiply kernel is the hot path; pin to
- * O2 alongside ntt_transform so the entire NTT call-graph sees
- * consistent optimization and the build avoids -O3 pessimisation. */
+/* Pointwise multiply + inverse NTT for convolution. Pin to O2 alongside
+ * ntt_transform so the whole NTT call-graph gets consistent codegen. */
 __attribute__((optimize("O2")))
 void ntt_convolve(const uint64_t *a, size_t alen, const uint64_t *b, size_t blen, uint64_t *out) {
     size_t n = alen + blen - 1;
@@ -175,7 +165,7 @@ void ntt_circular(const uint64_t *a, const uint64_t *b, size_t n, uint64_t *out)
 }
 
 int64_t ntt_centered(uint64_t v) {
-    v = ntt_reduce(v);
+    v = v % BEBOP_NTT_MOD;
     if (v > BEBOP_NTT_MOD / 2) {
         return (int64_t)v - (int64_t)BEBOP_NTT_MOD;
     }
