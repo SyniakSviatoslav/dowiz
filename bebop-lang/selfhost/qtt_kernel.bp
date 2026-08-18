@@ -12,7 +12,6 @@ fn eval(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64,env:[i64])->i64 {
   let mul=if k==4 then eval(ek,ev,ea,eb,ea[i],env)*eval(ek,ev,ea,eb,eb[i],env) else 0;
   let sub=if k==3 then eval(ek,ev,ea,eb,ea[i],env)-eval(ek,ev,ea,eb,eb[i],env) else 0;
   let var=if k==5 then env[ev[i]] else 0;
-  let app=if k==6 then eval(ek,ev,ea,eb,ea[i],env)+eval(ek,ev,ea,eb,eb[i],env) else 0;
-  lit+add+mul+sub+var+app
+  lit+add+mul+sub+var
 }
 fn test(x:i64)->i64 { let ek=[0];let ev=[5];let ea=[0];let eb=[0];let env=[0]; eval(ek,ev,ea,eb,0,env) }
