@@ -30,6 +30,7 @@
 #include "stats.h"
 #include "pid.h"
 #include "markov.h"
+#include "noether.h"
 #include "typereg.h"
 #include "atomic.h"
 #include "bench_all.h"
@@ -609,6 +610,14 @@ static void cmd_markov(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_noether(void) {
+    char buf[8192];
+    int ok = noether_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("Noether self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 static void cmd_check(const char *path) {
     FILE *f = fopen(path, "rb");
     if (!f) {
@@ -941,6 +950,10 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "markov") == 0) {
         cmd_markov();
+        return 0;
+    }
+    if (strcmp(argv[1], "noether") == 0) {
+        cmd_noether();
         return 0;
     }
     if (strcmp(argv[1], "check") == 0) {
