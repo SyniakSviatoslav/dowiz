@@ -14,7 +14,9 @@ fn eval(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64,env:[i64])->i64 {
   let var=if k==5 then env[ev[i]] else 0;
   let app=if k==6 then eval(ek,ev,ea,eb,ea[i],env)+eval(ek,ev,ea,eb,eb[i],env) else 0;
   let eq=if k==7 then (if eval(ek,ev,ea,eb,ea[i],env)==eval(ek,ev,ea,eb,eb[i],env) then 1 else 0) else 0;
-  lit+add+sub+mul+var+app+eq
+  let lt=if k==8 then (if eval(ek,ev,ea,eb,ea[i],env)<eval(ek,ev,ea,eb,eb[i],env) then 1 else 0) else 0;
+  let gt=if k==9 then (if eval(ek,ev,ea,eb,ea[i],env)>eval(ek,ev,ea,eb,eb[i],env) then 1 else 0) else 0;
+  lit+add+sub+mul+var+app+eq+lt+gt
 }
 fn subst(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64,vi:i64,v:i64,env:[i64])->i64 {
   let k=ek[i];let m=if ev[i]==vi then 1 else 0;
