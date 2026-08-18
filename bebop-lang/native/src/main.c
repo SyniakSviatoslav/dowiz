@@ -464,7 +464,13 @@ static void cmd_run(const char *path, const char *arg) {
     typereg_init(&reg);
     char err[256];
     expr_pool_reset();
-    for (size_t i = 0; i < prog.len; i++) {
+    /* Collect all fns so later fns can call earlier ones (closures). */
+    enum { MAX_FNS = 64 };
+    const char *fn_names[MAX_FNS];
+    const Ty *fn_tys[MAX_FNS];
+    Term *fn_terms[MAX_FNS];
+    int fn_count = 0;
+    for (size_t i = 0; i < prog.len && fn_count < MAX_FNS; i++) {
         const AstItem *it = &prog.items[i];
         if (it->kind == AST_ITEM_FN && it->text && it->text_len > 0) {
             char *txt = malloc(it->text_len + 1);
@@ -477,36 +483,49 @@ static void cmd_run(const char *path, const char *arg) {
                 free(txt); bp_program_free(&prog); free(src); exit(1);
             }
             free(txt);
-            /* apply the lambda: dispatch arg type by param domain */
-            static Term argterm;
-            memset(&argterm, 0, sizeof argterm);
-            if (fn_ty && fn_ty->kind == TY_PI && fn_ty->dom && fn_ty->dom->kind == TY_I64) {
-                argterm.kind = TERM_LIT;
-                argterm.ival = atoll(arg);
-            } else {
-                argterm.kind = TERM_STR;
-                argterm.name = arg;
-            }
-            static Term app;
-            memset(&app, 0, sizeof app);
-            app.kind = TERM_APP;
-            app.a = fn_term;
-            app.b = &argterm;
-            int vk; long vi; int vb;
-            if (qtt_eval(&app, &vk, &vi, &vb, err, sizeof err) != 0) {
-                fprintf(stderr, "eval error: %s\n", err);
-                bp_program_free(&prog); free(src); exit(1);
-            }
-            printf("%ld\n", vi);
-            bp_program_free(&prog);
-            free(src);
-            return;
+            static char fnbuf[MAX_FNS][64];
+            size_t fl = it->name_len < 63 ? it->name_len : 63;
+            memcpy(fnbuf[fn_count], it->name ? it->name : "?", fl);
+            fnbuf[fn_count][fl] = '\0';
+            fn_names[fn_count] = fnbuf[fn_count];
+            fn_tys[fn_count] = fn_ty;
+            fn_terms[fn_count] = fn_term;
+            fn_count++;
         }
     }
-    fprintf(stderr, "no function found\n");
+    if (fn_count == 0) {
+        fprintf(stderr, "no function found\n");
+        bp_program_free(&prog);
+        free(src);
+        exit(1);
+    }
+    /* Entry point = last fn defined. */
+    int ei = fn_count - 1;
+    Term *target = fn_terms[ei];
+    const Ty *tt = fn_tys[ei];
+    static Term argterm;
+    memset(&argterm, 0, sizeof argterm);
+    if (tt && tt->kind == TY_PI && tt->dom && tt->dom->kind == TY_I64) {
+        argterm.kind = TERM_LIT;
+        argterm.ival = atoll(arg);
+    } else {
+        argterm.kind = TERM_STR;
+        argterm.name = arg;
+    }
+    static Term app;
+    memset(&app, 0, sizeof app);
+    app.kind = TERM_APP;
+    app.a = target;
+    app.b = &argterm;
+    int vk; long vi; int vb;
+    if (qtt_eval_binds(&app, fn_names, fn_terms, fn_count,
+                       &vk, &vi, &vb, err, sizeof err) != 0) {
+        fprintf(stderr, "eval error: %s\n", err);
+        bp_program_free(&prog); free(src); exit(1);
+    }
+    printf("%ld\n", vi);
     bp_program_free(&prog);
     free(src);
-    exit(1);
 }
 
 static void cmd_checksum(void) {

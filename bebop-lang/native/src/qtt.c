@@ -1760,6 +1760,30 @@ int qtt_eval(const Term *t, int *out_kind, long *out_i, int *out_b, char *err, s
     return 0;
 }
 
+int qtt_eval_binds(const Term *t, const char **names, Term *const *lams, int n,
+                   int *out_kind, long *out_i, int *out_b, char *err, size_t cap) {
+    Env fb[64];
+    Env *env = NULL;
+    int cnt = n < 64 ? n : 64;
+    for (int i = 0; i < cnt; i++) {
+        fb[i].name = names[i];
+        fb[i].val.kind = 2;
+        fb[i].val.lam = lams[i];
+        fb[i].val.env = env; /* closures see earlier fns */
+        fb[i].next = env;
+        env = &fb[i];
+    }
+    Value v = eval(t, env);
+    if (v.kind < 0) {
+        snprintf(err, cap, "evaluation error");
+        return -1;
+    }
+    if (out_kind) *out_kind = v.kind;
+    if (out_i) *out_i = v.i;
+    if (out_b) *out_b = v.b;
+    return 0;
+}
+
 int qtt_eval_bound(const Term *t, const QttBind *binds, int n, int *out_kind,
                    long *out_i, int *out_b, char *err, size_t cap) {
     Env stack[64];

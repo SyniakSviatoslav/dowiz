@@ -171,6 +171,9 @@ int qtt_check_binds(const Term *t, const char **names, const Ty **tys,
 /* Save the current type-pool position as the reuse floor (so pre-bound types
  * from a prior pass are not overwritten by later allocations). */
 void qtt_ty_checkpoint(void);
+/* Evaluate a closed term with `n` function names pre-bound to lambdas (closures). */
+int qtt_eval_binds(const Term *t, const char **names, Term *const *lams, int n,
+                   int *out_kind, long *out_i, int *out_b, char *err, size_t cap);
 
 /* Run the typechecker self-test. Returns 0 on success, -1 on failure. */
 int qtt_check_test(char *out, size_t cap);
