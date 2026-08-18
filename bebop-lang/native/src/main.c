@@ -41,6 +41,7 @@
 #include "autonomic.h"
 #include "noether.h"
 #include "oracle.h"
+#include "tensor.h"
 #include "typereg.h"
 #include "atomic.h"
 #include "bench_all.h"
@@ -1207,6 +1208,13 @@ int main(int argc, char **argv) {
         int ok = chain_self_test(buf, sizeof buf);
         fputs(buf, stdout);
         printf("Chain self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "tensor") == 0) {
+        char buf[8192];
+        int ok = tensor_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Tensor self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "oracle") == 0) {
