@@ -189,7 +189,9 @@ static Term *parse_primary(P *p) {
     } else if (p->s[p->pos] == '[') {
         /* array literal [e1, e2, ...] */
         p->pos++;
-        static TermField af[64];
+        static TermField af_pool[64][64];
+        static int af_i = 0;
+        TermField *af = af_pool[af_i++ % 64];
         int na = 0;
         skip_ws(p);
         if (p->s[p->pos] != ']') {

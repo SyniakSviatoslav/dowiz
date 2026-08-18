@@ -1,17 +1,3 @@
 module core { }
-
-fn ty_eq(ty_kind: [i64], ty_a: [i64], ty_b: [i64], i: i64, j: i64) -> i64 {
-  let ki = ty_kind[i];
-  let kj = ty_kind[j];
-  let k_eq = if ki == kj then 1 else 0;
-  if k_eq == 1 then
-    (if ki == 0 then 1 else 0)
-  else 0
-}
-
-fn build_pool(x: i64) -> i64 {
-  let ty_kind = [0, 5, 8];
-  let ty_a    = [0, 0, 0];
-  let ty_b    = [0, 0, 0];
-  ty_eq(ty_kind, ty_a, ty_b, ty_a[2], ty_a[0])
-}
+fn ty_eq(ty_kind:[i64],ty_a:[i64],ty_b:[i64],i:i64,j:i64)->i64 { let x = i in ty_kind[x] }
+fn test(x:i64)->i64 { let k=[0,5,8]; let a=[0,0,0]; let b=[0,0,0]; ty_eq(k,a,b,1,0) }
