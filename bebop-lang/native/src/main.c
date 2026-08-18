@@ -441,6 +441,73 @@ static void cmd_token_bucket(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+/* run: execute a .bp function with a string argument (interpreter). */
+static void cmd_run(const char *path, const char *arg) {
+    FILE *f = fopen(path, "rb");
+    if (!f) { fprintf(stderr, "cannot open %s\n", path); exit(1); }
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *src = malloc((size_t)sz + 1);
+    if (!src) { fclose(f); exit(1); }
+    size_t rd = fread(src, 1, (size_t)sz, f);
+    src[rd] = '\0';
+    fclose(f);
+
+    AstProgram prog;
+    BpParseError perr;
+    if (bp_parse(src, &prog, &perr) != 0) {
+        fprintf(stderr, "parse error at %u: %s\n", perr.line, perr.msg);
+        free(src); exit(1);
+    }
+    TyRegistry reg;
+    typereg_init(&reg);
+    char err[256];
+    for (size_t i = 0; i < prog.len; i++) {
+        const AstItem *it = &prog.items[i];
+        if (it->kind == AST_ITEM_FN && it->text && it->text_len > 0) {
+            char *txt = malloc(it->text_len + 1);
+            memcpy(txt, it->text, it->text_len);
+            txt[it->text_len] = '\0';
+            Term *fn_term = NULL;
+            Ty *fn_ty = NULL;
+            if (bp_parse_fn_decl(txt, &reg, &fn_term, &fn_ty, err, sizeof err) != 0) {
+                fprintf(stderr, "fn parse error: %s\n", err);
+                free(txt); bp_program_free(&prog); free(src); exit(1);
+            }
+            free(txt);
+            /* apply the lambda: dispatch arg type by param domain */
+            static Term argterm;
+            memset(&argterm, 0, sizeof argterm);
+            if (fn_ty && fn_ty->kind == TY_PI && fn_ty->dom && fn_ty->dom->kind == TY_I64) {
+                argterm.kind = TERM_LIT;
+                argterm.ival = atoll(arg);
+            } else {
+                argterm.kind = TERM_STR;
+                argterm.name = arg;
+            }
+            static Term app;
+            memset(&app, 0, sizeof app);
+            app.kind = TERM_APP;
+            app.a = fn_term;
+            app.b = &argterm;
+            int vk; long vi; int vb;
+            if (qtt_eval(&app, &vk, &vi, &vb, err, sizeof err) != 0) {
+                fprintf(stderr, "eval error: %s\n", err);
+                bp_program_free(&prog); free(src); exit(1);
+            }
+            printf("%ld\n", vi);
+            bp_program_free(&prog);
+            free(src);
+            return;
+        }
+    }
+    fprintf(stderr, "no function found\n");
+    bp_program_free(&prog);
+    free(src);
+    exit(1);
+}
+
 static void cmd_checksum(void) {
     char buf[4096];
     int ok = checksum_self_test(buf, sizeof buf);
@@ -839,6 +906,11 @@ int main(int argc, char **argv) {
         fputs(buf, stdout);
         printf("QTT strings (check/conv/prove) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "run") == 0) {
+        if (argc < 4) { usage(); return 2; }
+        cmd_run(argv[2], argv[3]);
+        return 0;
     }
     if (strcmp(argv[1], "x86_64") == 0) {
         char buf[4096];
