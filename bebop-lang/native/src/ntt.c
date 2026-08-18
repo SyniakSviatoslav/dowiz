@@ -1,9 +1,33 @@
-/* Bebop NTT — implementation (port of dowiz ntt.rs). Zero dependencies. */
+/* Bebop NTT — implementation (port of dowiz ntt.rs). Zero dependencies.
+ *
+ * Fast path: Barrett reduction (umulh-based, no udiv) + a precomputed twiddle
+ * table (breaks the serial `w = w*wlen` dependency in the butterfly loop,
+ * letting the inner loop run with full instruction-level parallelism).
+ */
 #include "ntt.h"
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Barrett constant: floor(2^64 / MOD). Verified against MOD = 998244353. */
+#define NTT_MU 18479187002ULL
+
+/* r = x % MOD for x < 2^64, using Barrett reduction (one umulh + mul + sub). */
+static inline uint64_t ntt_reduce(uint64_t x) {
+    uint64_t q = (uint64_t)(((__uint128_t)x * (__uint128_t)NTT_MU) >> 64);
+    uint64_t r = x - q * BEBOP_NTT_MOD;
+    if (r >= BEBOP_NTT_MOD) {
+        r -= BEBOP_NTT_MOD;
+    }
+    return r;
+}
+
+/* (a * b) % MOD for a, b < MOD (product < 2^60, no overflow). */
+static inline uint64_t ntt_mulmod(uint64_t a, uint64_t b) {
+    return ntt_reduce(a * b);
+}
 
 uint64_t ntt_mod_pow(uint64_t base, uint64_t exp, uint64_t m) {
     base %= m;
@@ -22,9 +46,27 @@ uint64_t ntt_mod_inv(uint64_t a, uint64_t m) {
     return ntt_mod_pow(a, m - 2, m);
 }
 
+/* Fast mod_pow for the fixed BEBOP_NTT_MOD (Barrett mulmod). */
+static uint64_t ntt_pow_fast(uint64_t base, uint64_t exp) {
+    base = ntt_reduce(base);
+    uint64_t result = 1;
+    while (exp > 0) {
+        if (exp & 1) {
+            result = ntt_mulmod(result, base);
+        }
+        base = ntt_mulmod(base, base);
+        exp >>= 1;
+    }
+    return result;
+}
+
+static uint64_t ntt_inv_fast(uint64_t a) {
+    return ntt_pow_fast(a, BEBOP_NTT_MOD - 2);
+}
+
 void ntt_transform(uint64_t *a, size_t n, int invert) {
     for (size_t i = 0; i < n; i++) {
-        a[i] %= BEBOP_NTT_MOD;
+        a[i] = ntt_reduce(a[i]);
     }
 
     /* bit-reversal permutation */
@@ -43,25 +85,43 @@ void ntt_transform(uint64_t *a, size_t n, int invert) {
         }
     }
 
+    /* Precompute twiddles: roots[k] = w^k for w = primitive n-th root.
+     * For stage `len`, the k-th twiddle is wlen^k = w^(k * n/len) = roots[k*n/len].
+     * This removes the serial `w = w*wlen` chain from the butterfly loop.
+     * Static buffer covers the hot sizes (n <= 8192); malloc fallback for larger. */
+    static uint64_t roots_static[4096];
+    uint64_t *roots = (n / 2 <= 4096) ? roots_static
+                                      : malloc((n / 2) * sizeof(uint64_t));
+    uint64_t wprim = ntt_pow_fast(BEBOP_NTT_ROOT, (BEBOP_NTT_MOD - 1) / n);
+    if (invert) {
+        wprim = ntt_inv_fast(wprim);
+    }
+    roots[0] = 1;
+    for (size_t k = 1; k < n / 2; k++) {
+        roots[k] = ntt_mulmod(roots[k - 1], wprim);
+    }
+
     for (size_t len = 2; len <= n; len <<= 1) {
-        uint64_t root = ntt_mod_pow(BEBOP_NTT_ROOT, (BEBOP_NTT_MOD - 1) / len, BEBOP_NTT_MOD);
-        uint64_t wlen = invert ? ntt_mod_inv(root, BEBOP_NTT_MOD) : root;
+        size_t half = len / 2;
+        size_t step = n / len;
         for (size_t i = 0; i < n; i += len) {
-            uint64_t w = 1;
-            for (size_t k = 0; k < len / 2; k++) {
+            for (size_t k = 0; k < half; k++) {
+                uint64_t w = roots[k * step];
                 uint64_t u = a[i + k];
-                uint64_t v = a[i + k + len / 2] * w % BEBOP_NTT_MOD;
+                uint64_t v = ntt_mulmod(a[i + k + half], w);
                 a[i + k] = (u + v >= BEBOP_NTT_MOD) ? (u + v - BEBOP_NTT_MOD) : (u + v);
-                a[i + k + len / 2] = (u >= v) ? (u - v) : (u + BEBOP_NTT_MOD - v);
-                w = w * wlen % BEBOP_NTT_MOD;
+                a[i + k + half] = (u >= v) ? (u - v) : (u + BEBOP_NTT_MOD - v);
             }
         }
     }
+    if (roots != roots_static) {
+        free(roots);
+    }
 
     if (invert) {
-        uint64_t inv_n = ntt_mod_inv((uint64_t)n, BEBOP_NTT_MOD);
+        uint64_t inv_n = ntt_inv_fast((uint64_t)n);
         for (size_t i = 0; i < n; i++) {
-            a[i] = a[i] * inv_n % BEBOP_NTT_MOD;
+            a[i] = ntt_mulmod(a[i], inv_n);
         }
     }
 }
@@ -79,7 +139,7 @@ void ntt_convolve(const uint64_t *a, size_t alen, const uint64_t *b, size_t blen
     ntt_transform(fa, size, 0);
     ntt_transform(fb, size, 0);
     for (size_t i = 0; i < size; i++) {
-        fa[i] = fa[i] * fb[i] % BEBOP_NTT_MOD;
+        fa[i] = ntt_mulmod(fa[i], fb[i]);
     }
     ntt_transform(fa, size, 1);
     memcpy(out, fa, n * sizeof(uint64_t));
@@ -95,7 +155,7 @@ void ntt_circular(const uint64_t *a, const uint64_t *b, size_t n, uint64_t *out)
     ntt_transform(fa, n, 0);
     ntt_transform(fb, n, 0);
     for (size_t i = 0; i < n; i++) {
-        fa[i] = fa[i] * fb[i] % BEBOP_NTT_MOD;
+        fa[i] = ntt_mulmod(fa[i], fb[i]);
     }
     ntt_transform(fa, n, 1);
     memcpy(out, fa, n * sizeof(uint64_t));
@@ -104,7 +164,7 @@ void ntt_circular(const uint64_t *a, const uint64_t *b, size_t n, uint64_t *out)
 }
 
 int64_t ntt_centered(uint64_t v) {
-    v %= BEBOP_NTT_MOD;
+    v = ntt_reduce(v);
     if (v > BEBOP_NTT_MOD / 2) {
         return (int64_t)v - (int64_t)BEBOP_NTT_MOD;
     }
