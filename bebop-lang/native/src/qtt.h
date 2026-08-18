@@ -43,6 +43,7 @@ typedef enum {
     TY_EQ,       /* propositional equality: a = b (Eq A a b) */
     TY_NAT,      /* natural numbers (Peano): Z | S n */
     TY_STR,      /* string literal (immutable byte sequence) */
+    TY_PTR,      /* pointer to elem: t->elem = pointee type */
 } TyKind;
 
 typedef struct Ty Ty;
@@ -119,6 +120,10 @@ typedef enum {
     TERM_ARRAY_SET, /* array mutation: a = array, b = index, c = value -> void */
     TERM_SYSCALL,  /* raw syscall: t->ival = syscall number, t->a = first arg */
     TERM_CHR,      /* chr(i64) -> single-char string; t->a = the i64 */
+    TERM_SPAWN,    /* spawn fn(arg): t->a = fn expr (must be closure/lambda) */
+    TERM_AWAIT,   /* await expr: t->a = expr (must be spawn handle, i64) */
+    TERM_ADDR_OF, /* &e: t->a = expr, returns pointer-to-type-of-e */
+    TERM_DEREF_PTR, /* *e: t->a = pointer expr, returns pointee */
 } TermKind;
 
 typedef enum {

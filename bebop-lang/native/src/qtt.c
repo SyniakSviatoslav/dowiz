@@ -656,6 +656,9 @@ static int ty_leq(const Ty *a, const Ty *b) {
     if (a->kind == TY_VEC && b->kind == TY_VEC) {
         return ty_leq(a->elem, b->elem);
     }
+    if (a->kind == TY_PTR && b->kind == TY_PTR) {
+        return ty_leq(a->elem, b->elem);
+    }
     return ty_eq(a, b);
 }
 
@@ -788,6 +791,10 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
             o->b = subst_p(t->b, name, v);
             return o;
         case TERM_CHR:
+        case TERM_SPAWN:
+        case TERM_AWAIT:
+        case TERM_ADDR_OF:
+        case TERM_DEREF_PTR:
             o->a = subst_p(t->a, name, v);
             return o;
         case TERM_ARRAY_SET:
@@ -997,6 +1004,10 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             *out = &I64_TY;
             return 0;
         case TERM_CHR:
+        case TERM_SPAWN:
+        case TERM_AWAIT:
+        case TERM_ADDR_OF:
+        case TERM_DEREF_PTR:
             if (check(c, t->a, &I64_TY, err, cap) != 0) return -1;
             *out = &STR_TY;
             return 0;
@@ -1720,7 +1731,9 @@ static Value eval(const Term *t, Env *env) {
             v.i = (unsigned char)s.ctor[idx];
             return v;
         }
-        case TERM_CHR: {
+        case TERM_CHR:
+        case TERM_SPAWN:
+        case TERM_AWAIT: {
             Value i = eval(t->a, env);
             static char cbuf[2];
             cbuf[0] = (char)(i.i & 0xFF);
@@ -2111,6 +2124,10 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             o->b = qtt_subst(t->b, name, v);
             return o;
         case TERM_CHR:
+        case TERM_SPAWN:
+        case TERM_AWAIT:
+        case TERM_ADDR_OF:
+        case TERM_DEREF_PTR:
             o->a = qtt_subst(t->a, name, v);
             return o;
         case TERM_ARRAY_SET:
@@ -2232,6 +2249,10 @@ static Term *norm_rec(const Term *t) {
             return o;
         }
         case TERM_CHR:
+        case TERM_SPAWN:
+        case TERM_AWAIT:
+        case TERM_ADDR_OF:
+        case TERM_DEREF_PTR:
             o->a = norm_rec(t->a);
             return o;
         case TERM_WHILE:
@@ -2412,6 +2433,10 @@ static int conv_rec(const Term *a, const Term *b) {
         case TERM_STR_CHAR:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
         case TERM_CHR:
+        case TERM_SPAWN:
+        case TERM_AWAIT:
+        case TERM_ADDR_OF:
+        case TERM_DEREF_PTR:
             return conv_rec(a->a, b->a);
         case TERM_WHILE:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);

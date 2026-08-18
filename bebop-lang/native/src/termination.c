@@ -49,6 +49,10 @@ int qtt_termination_check(const Term *t, char *err, size_t cap) {
         case TERM_STR_CAT:
         case TERM_STR_CHAR:
         case TERM_CHR:
+        case TERM_SPAWN:
+        case TERM_AWAIT:
+        case TERM_ADDR_OF:
+        case TERM_DEREF_PTR:
         case TERM_ARRAY_GET:
         case TERM_CONG:
         case TERM_SUBST:
