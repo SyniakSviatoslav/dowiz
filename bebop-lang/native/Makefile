@@ -1,7 +1,7 @@
 # Bebop native compiler — Phase 1 (C bootstrap)
 # Native, not Rust. Zero external dependencies (libc only). Self-hosts later.
 CC      ?= cc
-CFLAGS  ?= -O2 -std=c11 -Wall -Wextra -Wpedantic
+CFLAGS  ?= -O3 -flto -std=c11 -Wall -Wextra -Wpedantic
 BUILD   ?= build
 BIN     := $(BUILD)/bebopc
 

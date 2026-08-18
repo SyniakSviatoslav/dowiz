@@ -43,18 +43,25 @@ Rng rng_new_reference(void) {
 }
 
 uint64_t rng_next_u64(Rng *r) {
-    /* Pull the next SplitMix64 value as the LCG seed for this step. */
-    uint64_t pre = rng_splitmix64(&r->sm_state);
-    r->pcg_state = r->pcg_state * RNG_PCG_MUL + r->pcg_inc;
-    {
-        /* PCG64 output function: xorshift + rotate (RXS-M-XS permutation). */
-        uint64_t x = r->pcg_state;
-        unsigned rot = (unsigned)((x >> 59) & 31);
-        uint64_t xorshifted = (x ^ (x >> 18)) >> 27;
-        uint64_t out = rotate_right64(xorshifted, rot);
-        /* Mix SplitMix64 entropy in so the stream is not a bare LCG. */
-        return out ^ pre;
-    }
+    /* Load both states into locals first: breaks the false `r->` aliasing
+     * dependency so the SplitMix64 mix and the PCG step can issue in parallel
+     * on separate execution ports. */
+    uint64_t sm = r->sm_state + RNG_GOLDEN;
+    uint64_t pcg = r->pcg_state * RNG_PCG_MUL + r->pcg_inc;
+
+    uint64_t pre = sm;
+    pre = (pre ^ (pre >> 30)) * 0xBF58476D1CE4E5B9ULL;
+    pre = (pre ^ (pre >> 27)) * 0x94D049BB133111EBULL;
+    pre ^= pre >> 31;
+
+    uint64_t x = pcg;
+    unsigned rot = (unsigned)((x >> 59) & 31);
+    uint64_t xorshifted = (x ^ (x >> 18)) >> 27;
+    uint64_t out = (xorshifted >> rot) | (xorshifted << ((-(uint64_t)rot) & 63));
+
+    r->sm_state = sm;
+    r->pcg_state = pcg;
+    return out ^ pre;
 }
 
 double rng_next_f64(Rng *r) {

@@ -64,6 +64,11 @@ static uint64_t ntt_inv_fast(uint64_t a) {
     return ntt_pow_fast(a, BEBOP_NTT_MOD - 2);
 }
 
+/* The NTT butterfly loop is memory-bound on the twiddle load and does not
+ * benefit from -O3's aggressive vectorization; in fact -O3 regresses it (the
+ * umulh chain + bit-reversal get pessimized). Pin this hot kernel to O2 so the
+ * rest of the binary can run -O3 -flto. */
+__attribute__((optimize("O2")))
 void ntt_transform(uint64_t *a, size_t n, int invert) {
     for (size_t i = 0; i < n; i++) {
         a[i] = ntt_reduce(a[i]);
@@ -126,6 +131,11 @@ void ntt_transform(uint64_t *a, size_t n, int invert) {
     }
 }
 
+/* Pointwise multiply + inverse NTT for convolution runs inside the
+ * ntt_convolve body where the multiply kernel is the hot path; pin to
+ * O2 alongside ntt_transform so the entire NTT call-graph sees
+ * consistent optimization and the build avoids -O3 pessimisation. */
+__attribute__((optimize("O2")))
 void ntt_convolve(const uint64_t *a, size_t alen, const uint64_t *b, size_t blen, uint64_t *out) {
     size_t n = alen + blen - 1;
     size_t size = 1;
@@ -147,6 +157,7 @@ void ntt_convolve(const uint64_t *a, size_t alen, const uint64_t *b, size_t blen
     free(fb);
 }
 
+__attribute__((optimize("O2")))
 void ntt_circular(const uint64_t *a, const uint64_t *b, size_t n, uint64_t *out) {
     uint64_t *fa = malloc(n * sizeof(uint64_t));
     uint64_t *fb = malloc(n * sizeof(uint64_t));
