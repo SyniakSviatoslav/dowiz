@@ -1,5 +1,6 @@
-// selfhost/lexer.bp — Bebop self-hosting lexer (module #1, functional)
-// Character classification + token counting. Runs via `bebopc run`.
+// selfhost/lexer.bp — Bebop self-hosting lexer (module #1)
+// Char classification + token counting + token-type classification.
+// Runs via `bebopc run` (interpreter) or `bebopc check` (typecheck).
 
 module core { }
 
@@ -33,4 +34,23 @@ fn count_tokens(s: str) -> i64 {
     0
   };
   c + 1
+}
+
+// count_numbers: tokens that START with a digit.
+// A token starts at position 0 or after a space; classify by first char.
+fn count_numbers(s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  let c = 0;
+  let prev_space = 1;
+  while i < n {
+    let ch = char(s, i);
+    let sp = is_space(ch);
+    let dg = is_digit(ch);
+    let c = c + (prev_space * dg);
+    let prev_space = sp;
+    let i = i + 1;
+    0
+  };
+  c
 }
