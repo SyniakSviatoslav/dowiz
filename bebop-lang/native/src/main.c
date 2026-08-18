@@ -9,6 +9,7 @@
 #include "morse.h"
 #include "qtt.h"
 #include "ntt.h"
+#include "ntt32.h"
 #include "hyper.h"
 #include "mem.h"
 #include "expr.h"
@@ -53,6 +54,7 @@
 #include "power.h"
 #include "x86_64.h"
 #include "gt.h"
+
 
 static void usage(void) {
     fprintf(stderr,
@@ -628,6 +630,14 @@ static void cmd_spectral(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_ntt32(void) {
+    char buf[8192];
+    int ok = ntt32_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("NTT32 (uint32 quantized) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 static void cmd_noether(void) {
     char buf[8192];
     int ok = noether_self_test(buf, sizeof buf);
@@ -977,6 +987,13 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "spectral") == 0) {
         cmd_spectral();
         return 0;
+    }
+    if (strcmp(argv[1], "ntt32") == 0) {
+        char buf[8192];
+        int ok = ntt32_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("NTT32 (uint32 quantized) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "noether") == 0) {
         cmd_noether();

@@ -15,6 +15,7 @@
 #include "bench_all.h"
 
 #include "ntt.h"
+#include "ntt32.h"
 #include "hyper.h"
 #include "fft.h"
 #include "modular.h"
@@ -114,6 +115,33 @@ static void bench_ntt(void) {
     free(a);
     free(b);
     free(out);
+}
+
+/* ─── NTT32 (uint32 quantized) ─────────────────────────────────────────── */
+static void bench_ntt32(void) {
+    int n = 1024;
+    uint32_t *a = calloc((size_t)n, sizeof *a);
+    uint32_t *b = calloc((size_t)n, sizeof *b);
+    uint32_t *out = calloc((size_t)(2 * n - 1), sizeof *out);
+    for (int i = 0; i < n; i++) {
+        a[i] = (uint32_t)(i * 2654435761u % 1000000);
+        b[i] = (uint32_t)((i * 7) % 1000000);
+    }
+    const long inner = 16;
+    double t[BENCH_REPS];
+    for (int w = 0; w < WARMUP; w++)
+        ntt32_convolve(a, (size_t)n, b, (size_t)n, out);
+    for (int r = 0; r < BENCH_REPS; r++) {
+        double t0 = now_ns();
+        for (long k = 0; k < inner; k++)
+            ntt32_convolve(a, (size_t)n, b, (size_t)n, out);
+        bench_barrier();
+        double t1 = now_ns();
+        bench_sink += out[(size_t)n / 2];
+        t[r] = t1 - t0;
+    }
+    report("ntt32_convolve n=1024", t, inner);
+    free(a); free(b); free(out);
 }
 
 /* ─── Hypervector ──────────────────────────────────────────────────────── */
@@ -608,6 +636,7 @@ int bench_all_run(void) {
     printf("=== Bebop native benchmark (%d reps, inner-batched, compiler barriers) ===\n",
            BENCH_REPS);
     bench_ntt();
+    bench_ntt32();
     bench_hyper();
     bench_fft();
     bench_modular();
