@@ -891,7 +891,9 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             if (infer(c, t->b, &r, err, cap) != 0) {
                 return -1;
             }
-            if (l->kind != TY_I64 || r->kind != TY_I64) {
+            int str_eq = (l->kind == TY_STR && r->kind == TY_STR &&
+                          (t->op == BOP_EQ || t->op == BOP_NE));
+            if (!str_eq && (l->kind != TY_I64 || r->kind != TY_I64)) {
                 snprintf(err, cap, "binary op requires i64 operands");
                 return -1;
             }
@@ -1528,7 +1530,14 @@ static Value eval(const Term *t, Env *env) {
                 case BOP_ADD: v.i = l.i + r.i; break;
                 case BOP_SUB: v.i = l.i - r.i; break;
                 case BOP_MUL: v.i = l.i * r.i; break;
-                case BOP_EQ:  v.kind = 1; v.b = (l.i == r.i); break;
+                case BOP_EQ:
+                    if (l.kind == 5 && r.kind == 5) {
+                        v.kind = 1;
+                        v.b = (l.ctor && r.ctor && strcmp(l.ctor, r.ctor) == 0);
+                    } else {
+                        v.kind = 1; v.b = (l.i == r.i);
+                    }
+                    break;
                 case BOP_NE:  v.kind = 1; v.b = (l.i != r.i); break;
                 case BOP_LT:  v.kind = 1; v.b = (l.i < r.i); break;
                 case BOP_LE:  v.kind = 1; v.b = (l.i <= r.i); break;
@@ -2182,7 +2191,7 @@ static Term *norm_rec(const Term *t) {
                     case BOP_ADD: o->ival = l + r; return o;
                     case BOP_SUB: o->ival = l - r; return o;
                     case BOP_MUL: o->ival = l * r; return o;
-                    case BOP_EQ:  o->bval = (l == r); return o;
+                    case BOP_EQ:  o->bval = (l == r); return o; /* i64 path; str eq handled by norm */
                     case BOP_NE:  o->bval = (l != r); return o;
                     case BOP_LT:  o->bval = (l < r);  return o;
                     case BOP_LE:  o->bval = (l <= r); return o;

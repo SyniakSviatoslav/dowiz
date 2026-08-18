@@ -197,13 +197,15 @@ static Term *parse_primary(P *p) {
         int start_pos = ++p->pos;
         while (p->s[p->pos] && p->s[p->pos] != '"') p->pos++;
         int slen = p->pos - start_pos;
-        static char sbuf[256];
-        memcpy(sbuf, p->s + start_pos, (size_t)slen);
-        sbuf[slen] = '\0';
+        static char sbuf[64][256];
+        static int sbuf_i = 0;
+        char *dst = sbuf[sbuf_i++ % 64];
+        memcpy(dst, p->s + start_pos, (size_t)slen);
+        dst[slen] = '\0';
         if (p->s[p->pos] == '"') p->pos++;
         Term *st = tnew();
         st->kind = TERM_STR;
-        st->name = sbuf;
+        st->name = dst;
         atom = st;
     } else if (is_ident_start(p->s[p->pos])) {
         int start = p->pos;
