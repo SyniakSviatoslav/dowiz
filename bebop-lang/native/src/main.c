@@ -989,11 +989,8 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (strcmp(argv[1], "ntt32") == 0) {
-        char buf[8192];
-        int ok = ntt32_self_test(buf, sizeof buf);
-        fputs(buf, stdout);
-        printf("NTT32 (uint32 quantized) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
-        return ok == 0 ? 0 : 1;
+        cmd_ntt32();
+        return 0;
     }
     if (strcmp(argv[1], "noether") == 0) {
         cmd_noether();
