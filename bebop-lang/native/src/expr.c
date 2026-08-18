@@ -412,6 +412,12 @@ static Term *parse_primary(P *p) {
         }
         p->pos++;
         for (;;) {
+            skip_ws(p);
+            /* zero-arg call: ret() */
+            if (p->s[p->pos] == ')') {
+                p->pos++;
+                break;
+            }
             Term *arg = parse_expr(p);
             if (!arg) return NULL;
             skip_ws(p);

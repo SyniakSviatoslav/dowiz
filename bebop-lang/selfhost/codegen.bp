@@ -32,4 +32,7 @@ fn checksum(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
   let c_mul=if k==4 then checksum(ek,ev,ea,eb,ea[i])+checksum(ek,ev,ea,eb,eb[i])+add_imm(0,0,0) else 0;
   c_lit+c_add+c_sub+c_mul
 }
+fn emit_entry(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
+  let cs=checksum(ek,ev,ea,eb,i); cs+ret()
+}
 fn test(x:i64)->i64 { let ek=[0,0,2];let ev=[3,2,0];let ea=[0,0,0];let eb=[0,0,1]; checksum(ek,ev,ea,eb,2) }
