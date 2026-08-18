@@ -118,6 +118,7 @@ typedef enum {
     TERM_STR_CHAR,  /* string char access: a = str, b = index (i64) -> i64 */
     TERM_ARRAY_SET, /* array mutation: a = array, b = index, c = value -> void */
     TERM_SYSCALL,  /* raw syscall: t->ival = syscall number, t->a = first arg */
+    TERM_CHR,      /* chr(i64) -> single-char string; t->a = the i64 */
 } TermKind;
 
 typedef enum {

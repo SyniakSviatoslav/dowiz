@@ -770,6 +770,9 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
             o->a = subst_p(t->a, name, v);
             o->b = subst_p(t->b, name, v);
             return o;
+        case TERM_CHR:
+            o->a = subst_p(t->a, name, v);
+            return o;
         case TERM_ARRAY_SET:
             o->a = subst_p(t->a, name, v);
             o->b = subst_p(t->b, name, v);
@@ -975,6 +978,10 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
                 return -1;
             }
             *out = &I64_TY;
+            return 0;
+        case TERM_CHR:
+            if (check(c, t->a, &I64_TY, err, cap) != 0) return -1;
+            *out = &STR_TY;
             return 0;
         case TERM_ARRAY_SET:
             /* a: vec, b: i64 index, c: elem value -> void */
@@ -1656,6 +1663,15 @@ static Value eval(const Term *t, Env *env) {
             v.i = (unsigned char)s.ctor[idx];
             return v;
         }
+        case TERM_CHR: {
+            Value i = eval(t->a, env);
+            static char cbuf[2];
+            cbuf[0] = (char)(i.i & 0xFF);
+            cbuf[1] = '\0';
+            v.kind = 5;
+            v.ctor = cbuf;
+            return v;
+        }
         case TERM_ARRAY_SET:
             /* interpreter: arrays are immutable, mutation is a no-op (void) */
             v.kind = 0;
@@ -1982,6 +1998,9 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             o->a = qtt_subst(t->a, name, v);
             o->b = qtt_subst(t->b, name, v);
             return o;
+        case TERM_CHR:
+            o->a = qtt_subst(t->a, name, v);
+            return o;
         case TERM_ARRAY_SET:
             o->a = qtt_subst(t->a, name, v);
             o->b = qtt_subst(t->b, name, v);
@@ -2100,6 +2119,9 @@ static Term *norm_rec(const Term *t) {
             o->b = sb;
             return o;
         }
+        case TERM_CHR:
+            o->a = norm_rec(t->a);
+            return o;
         case TERM_WHILE:
             o->a = norm_rec(t->a);
             o->b = norm_rec(t->b);
@@ -2277,6 +2299,8 @@ static int conv_rec(const Term *a, const Term *b) {
         case TERM_STR_CAT:
         case TERM_STR_CHAR:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
+        case TERM_CHR:
+            return conv_rec(a->a, b->a);
         case TERM_WHILE:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
         case TERM_ARRAY:
