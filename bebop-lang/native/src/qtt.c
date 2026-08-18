@@ -1763,17 +1763,19 @@ int qtt_eval(const Term *t, int *out_kind, long *out_i, int *out_b, char *err, s
 int qtt_eval_binds(const Term *t, const char **names, Term *const *lams, int n,
                    int *out_kind, long *out_i, int *out_b, char *err, size_t cap) {
     Env fb[64];
-    Env *env = NULL;
     int cnt = n < 64 ? n : 64;
     for (int i = 0; i < cnt; i++) {
         fb[i].name = names[i];
         fb[i].val.kind = 2;
         fb[i].val.lam = lams[i];
-        fb[i].val.env = env; /* closures see earlier fns */
-        fb[i].next = env;
-        env = &fb[i];
+        fb[i].val.env = NULL; /* fixed below so all fns (incl. self) are visible */
+        fb[i].next = (i > 0) ? &fb[i - 1] : NULL;
     }
-    Value v = eval(t, env);
+    Env *head = (cnt > 0) ? &fb[cnt - 1] : NULL;
+    for (int i = 0; i < cnt; i++) {
+        fb[i].val.env = head; /* mutual + self recursion: every closure sees all fns */
+    }
+    Value v = eval(t, head);
     if (v.kind < 0) {
         snprintf(err, cap, "evaluation error");
         return -1;
