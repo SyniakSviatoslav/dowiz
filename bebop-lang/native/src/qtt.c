@@ -196,6 +196,10 @@ Ty *qtt_type(void) {
     return &TYPE_TY;
 }
 
+Ty *qtt_str(void) {
+    return &STR_TY;
+}
+
 /* ─── Struct (record) self-test ─── */
 int qtt_struct_test(char *out, size_t cap) {
     size_t pos = 0;

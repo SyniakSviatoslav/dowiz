@@ -225,6 +225,10 @@ static Term *parse_primary(P *p) {
         if (strcmp(buf, "write") == 0 || strcmp(buf, "exit") == 0) {
             t->kind = TERM_SYSCALL;
             t->ival = strcmp(buf, "write") == 0 ? 64 : 93;
+        } else if (strcmp(buf, "char") == 0) {
+            t->kind = TERM_STR_CHAR; /* placeholder: two args parsed in postfix */
+        } else if (strcmp(buf, "str_len") == 0) {
+            t->kind = TERM_STR_LEN; /* placeholder: one arg parsed in postfix */
         }
     } else {
         err(p, "unexpected token");
@@ -235,6 +239,32 @@ static Term *parse_primary(P *p) {
     }
     /* postfix: application atom(arg) and indexing atom[i] */
     while (p->s[p->pos] == '(' || p->s[p->pos] == '[') {
+        if (atom->kind == TERM_STR_LEN && p->s[p->pos] == '(') {
+            p->pos++;
+            Term *sa = parse_expr(p);
+            if (!sa) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
+            p->pos++;
+            atom->a = sa;
+            continue;
+        }
+        if (atom->kind == TERM_STR_CHAR && p->s[p->pos] == '(') {
+            p->pos++;
+            Term *sa = parse_expr(p);
+            if (!sa) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ',') { err(p, "expected ',' in char"); return NULL; }
+            p->pos++;
+            Term *sb = parse_expr(p);
+            if (!sb) return NULL;
+            skip_ws(p);
+            if (p->s[p->pos] != ')') { err(p, "expected ')'"); return NULL; }
+            p->pos++;
+            atom->a = sa;
+            atom->b = sb;
+            continue;
+        }
         if (atom->kind == TERM_SYSCALL && p->s[p->pos] == '(') {
             p->pos++;
             Term *sa = parse_expr(p);

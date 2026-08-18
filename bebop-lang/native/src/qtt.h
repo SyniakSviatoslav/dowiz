@@ -191,6 +191,7 @@ Ty *qtt_bool(void);
 
 /* Accessor for the Type universe singleton. */
 Ty *qtt_type(void);
+Ty *qtt_str(void);
 
 /* Run the struct (record) typecheck + eval self-test. */
 int qtt_struct_test(char *out, size_t cap);

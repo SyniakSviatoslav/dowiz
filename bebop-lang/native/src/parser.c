@@ -357,6 +357,7 @@ int bp_parse_fn_decl(const char *src, TyRegistry *reg, Term **out,
         if (!pty) {
             if (strcmp(tn, "i64") == 0) pty = qtt_i64();
             else if (strcmp(tn, "bool") == 0) pty = qtt_bool();
+            else if (strcmp(tn, "str") == 0) pty = qtt_str();
         }
     }
     if (!pty) { snprintf(err, cap, "unknown param type"); return -1; }
@@ -375,6 +376,7 @@ int bp_parse_fn_decl(const char *src, TyRegistry *reg, Term **out,
         if (!rty) {
             if (strcmp(tn, "i64") == 0) rty = qtt_i64();
             else if (strcmp(tn, "bool") == 0) rty = qtt_bool();
+            else if (strcmp(tn, "str") == 0) rty = qtt_str();
         }
     }
     if (!rty) { snprintf(err, cap, "unknown return type"); return -1; }
