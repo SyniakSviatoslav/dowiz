@@ -6,14 +6,12 @@ fn ty_eq(tk:[i64],ta:[i64],tb:[i64],i:i64,j:i64)->i64 {
   let pic=if ki==8 then ty_eq(tk,ta,tb,tb[i],tb[j]) else 0;
   if keq==1 then sc+pid*pic else 0
 }
-fn eval(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
+fn eval(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64,env:[i64])->i64 {
   let k=ek[i];
   let lit=if k==0 then ev[i] else 0;
-  let add=if k==2 then eval(ek,ev,ea,eb,ea[i])+eval(ek,ev,ea,eb,eb[i]) else 0;
-  let mul=if k==4 then eval(ek,ev,ea,eb,ea[i])*eval(ek,ev,ea,eb,eb[i]) else 0;
-  let var=if k==5 then ev[i] else 0;
-  let lam=if k==1 then ev[i] else 0;
-  let app=if k==6 then(eval(ek,ev,ea,eb,ea[i])+eval(ek,ev,ea,eb,eb[i])) else 0;
-  lit+add+mul+var+lam+app
+  let add=if k==2 then eval(ek,ev,ea,eb,ea[i],env)+eval(ek,ev,ea,eb,eb[i],env) else 0;
+  let mul=if k==4 then eval(ek,ev,ea,eb,ea[i],env)+eval(ek,ev,ea,eb,eb[i],env) else 0;
+  let var=if k==5 then env[ev[i]] else 0;
+  lit+add+mul+var
 }
-fn test(x:i64)->i64 { let ek=[5,0,6];let ev=[3,2,0];let ea=[0,0,0];let eb=[0,0,1]; eval(ek,ev,ea,eb,2) }
+fn test(x:i64)->i64 { let ek=[0];let ev=[5];let ea=[0];let eb=[0];let env=[0]; eval(ek,ev,ea,eb,0,env) }
