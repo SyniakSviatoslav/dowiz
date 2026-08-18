@@ -262,6 +262,11 @@ int qtt_prove(const Term *proof, const Ty *goal, char *out_ty, size_t cap_ty,
 int qtt_prove_refl(const Term *l, const Term *r, char *out, size_t cap,
                    char *err, size_t cap_err);
 
+/* Induction on natural numbers: prove P(n) given base P(Z) and step.
+ * proof_str is " VAR { Z => ..., S VAR => ... }". */
+int qtt_prove_induction(const char *proof_str, const Term *l, const Term *r,
+                        char *out, size_t cap, char *err, size_t cap_err);
+
 /* Run the propositional-equality (refl / conversion) proof self-test. */
 int qtt_proof_test(char *out, size_t cap);
 

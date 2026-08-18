@@ -104,8 +104,9 @@ int theorem_prove(const char *decl, char *out, size_t cap, char *err,
     }
     memcpy(pbuf, proof, plen);
     pbuf[plen] = '\0';
-    if (strcmp(pbuf, "refl") != 0) {
-        snprintf(err, cap_err, "theorem: only 'refl' proof is supported here");
+    if (strcmp(pbuf, "refl") != 0 &&
+        strncmp(pbuf, "induction", 9) != 0) {
+        snprintf(err, cap_err, "theorem: only 'refl' or 'induction' proofs are supported");
         return -1;
     }
 
@@ -119,5 +120,11 @@ int theorem_prove(const char *decl, char *out, size_t cap, char *err,
     if (expr_parse(rbuf, &r, err, cap_err) != 0) {
         return -1;
     }
-    return qtt_prove_refl(l, r, out, cap, err, cap_err);
+
+    if (strcmp(pbuf, "refl") == 0) {
+        return qtt_prove_refl(l, r, out, cap, err, cap_err);
+    }
+    if (strncmp(pbuf, "induction", 9) == 0) {
+        return qtt_prove_induction(pbuf + 9, l, r, out, cap, err, cap_err);
+    }
 }
