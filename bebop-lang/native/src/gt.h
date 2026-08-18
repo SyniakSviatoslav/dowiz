@@ -23,6 +23,7 @@ typedef struct {
     GtContext ctx;
     unsigned char *stack; /* base of the owned stack (for diagnostics) */
     int done;
+    void *result;         /* async return value (set by fn via gt_return) */
 } GtCoroutine;
 
 /* Switch context: save *from, restore *to. Does not return to the caller's
@@ -43,5 +44,16 @@ void gt_sched_run(void);
 void gt_sched_reset(void);
 
 int gt_self_test(char *out, size_t cap);
+
+/* ─── async/await ──────────────────────────────────────────────────────── */
+
+/* Set the current coroutine's return value (call from within coroutine fn). */
+void gt_return(void *val);
+
+/* Yield until coroutine at index completes, return its result. */
+void *gt_await(int co_idx);
+
+/* Non-blocking: has coroutine finished? */
+int gt_async_done(int co_idx);
 
 #endif /* BEBOP_GT_H */

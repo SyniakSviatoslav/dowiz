@@ -89,7 +89,22 @@ void gt_sched_run(void) {
     gt_sched_reset();
 }
 
-/* ─── self-test ─── */
+/* ─── async/await ───────────────────────────────────────────────────────── */
+
+void gt_return(void *val) {
+    if (gt_current) gt_current->result = val;
+}
+
+void *gt_await(int co_idx) {
+    while (co_idx < GT_MAX && !gt_cos[co_idx].done) {
+        gt_yield();
+    }
+    return (co_idx < GT_MAX) ? gt_cos[co_idx].result : NULL;
+}
+
+int gt_async_done(int co_idx) {
+    return (co_idx < GT_MAX && gt_cos[co_idx].done) ? 1 : 0;
+}
 
 static int gt_order[16];
 static int gt_total = 0;
