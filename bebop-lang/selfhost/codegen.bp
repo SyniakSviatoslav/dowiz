@@ -14,7 +14,16 @@ fn emit_expr(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
   let ad=if k==2 then emit_expr(ek,ev,ea,eb,ea[i])+emit_expr(ek,ev,ea,eb,eb[i]) else 0;
   let mu=if k==4 then emit_expr(ek,ev,ea,eb,ea[i])+emit_expr(ek,ev,ea,eb,eb[i]) else 0;
   let va=if k==5 then ev[i] else 0;
-  mz+ad+mu+va
+  let ap=if k==6 then emit_expr(ek,ev,ea,eb,ea[i])+emit_expr(ek,ev,ea,eb,eb[i]) else 0;
+  mz+ad+mu+va+ap
 }
 
-fn test(x:i64)->i64 { let ek=[0];let ev=[5];let ea=[0];let eb=[0]; emit_expr(ek,ev,ea,eb,0) }
+fn count_instrs(ek:[i64],i:i64)->i64 {
+  let k=ek[i];
+  let lit=if k==0 then 1 else 0;
+  let bin=if k==2 then count_instrs(ek,ea[i])+count_instrs(ek,eb[i])+1 else 0;
+  let mu=if k==4 then count_instrs(ek,ea[i])+count_instrs(ek,eb[i])+1 else 0;
+  lit+bin+mu
+}
+
+fn test(x:i64)->i64 { let ek=[0,0,2];let ev=[3,2,0];let ea=[0,0,0];let eb=[0,0,1]; count_instrs(ek,2) }
