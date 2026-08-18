@@ -317,6 +317,7 @@ static int binop(P *p, BinOp *op, int *adv) {
     if (c == '<' && d == '=') { *op = BOP_LE; *adv = 2; return 1; }
     if (c == '>') { *op = BOP_GT; return 1; }
     if (c == '<') { *op = BOP_LT; return 1; }
+    if (c == '+' && d == '+') { *op = BOP_CAT; *adv = 2; return 2; }
     if (c == '+') { *op = BOP_ADD; return 2; }
     if (c == '-') { *op = BOP_SUB; return 2; }
     if (c == '*') { *op = BOP_MUL; return 3; }
@@ -342,8 +343,12 @@ static Term *parse_bin(P *p, int min_prec) {
             return NULL;
         }
         Term *b = tnew();
-        b->kind = TERM_BIN;
-        b->op = op;
+        if (op == BOP_CAT) {
+            b->kind = TERM_STR_CAT;
+        } else {
+            b->kind = TERM_BIN;
+            b->op = op;
+        }
         b->a = lhs;
         b->b = rhs;
         lhs = b;
