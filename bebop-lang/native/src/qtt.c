@@ -1697,11 +1697,26 @@ static Value eval(const Term *t, Env *env) {
             v.ctor = cbuf;
             return v;
         }
-        case TERM_ARRAY_SET:
-            /* interpreter: arrays are immutable, mutation is a no-op (void) */
+        case TERM_ARRAY_SET: {
+            /* t->a names the array variable; mutate its fv in place. */
+            if (!t->a || t->a->kind != TERM_VAR) { v.kind = -1; return v; }
+            Env *target = NULL;
+            for (Env *e = env; e; e = e->next) {
+                if (e->name && strcmp(e->name, t->a->name) == 0) { target = e; break; }
+            }
+            if (!target || target->val.kind != 6 || !target->val.fv) {
+                v.kind = -1; return v;
+            }
+            Value idx = eval(t->b, env);
+            Value nv = eval(t->c, env);
+            if (idx.kind != 0) { v.kind = -1; return v; }
+            int i = (int)idx.i;
+            if (i < 0 || i >= target->val.nfv) { v.kind = -1; return v; }
+            target->val.fv[i].val = nv; /* mutate in place */
             v.kind = 0;
             v.i = 0;
             return v;
+        }
         case TERM_WHILE: {
             int iter = 0;
             int saved_in_while = in_while;
@@ -1726,21 +1741,34 @@ static Value eval(const Term *t, Env *env) {
             v.kind = 0; /* interpreter: syscall returns 0 */
             v.i = 0;
             return v;
-        case TERM_ARRAY:
+        case TERM_ARRAY: {
+            static FieldValue afv_pool[16][64];
+            static int afv_i = 0;
+            FieldValue *fvs = afv_pool[afv_i++ % 16];
             v.kind = 6; /* array value */
-            v.fv = NULL;
+            v.fv = fvs;
             v.nfv = t->nfields;
+            for (int i = 0; i < t->nfields && i < 64; i++) {
+                fvs[i].name = NULL;
+                fvs[i].val = eval(t->fields[i].val, env);
+            }
             return v;
+        }
         case TERM_ARRAY_GET: {
             Value arr = eval(t->a, env);
             Value idx = eval(t->b, env);
-            if (arr.kind != 6 || arr.nfv <= 0 || t->a->kind != TERM_ARRAY) {
-                v.kind = -1; return v;
-            }
+            if (arr.kind != 6) { v.kind = -1; return v; }
             if (idx.kind != 0) { v.kind = -1; return v; }
             int i = (int)idx.i;
             if (i < 0 || i >= arr.nfv) { v.kind = -1; return v; }
-            return eval(t->a->fields[i].val, env);
+            if (arr.fv) {
+                return arr.fv[i].val; /* runtime (possibly mutated) value */
+            }
+            /* fallback: literal array (direct term) */
+            if (t->a->kind == TERM_ARRAY && t->a->fields) {
+                return eval(t->a->fields[i].val, env);
+            }
+            v.kind = -1; return v;
         }
         default:
             v.kind = -1;
