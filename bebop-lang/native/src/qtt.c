@@ -491,6 +491,11 @@ int qtt_dep_test(char *out, size_t cap) {
 /* Bump-allocated type pool (types live for the self-test lifetime). */
 static Ty ty_pool[256];
 static int ty_len = 0;
+static int ty_floor = 0;
+
+void qtt_ty_checkpoint(void) {
+    ty_floor = ty_len;
+}
 
 static Ty *ty_alloc(TyKind kind) {
     if (ty_len >= (int)(sizeof ty_pool / sizeof ty_pool[0])) {
@@ -1391,6 +1396,26 @@ int qtt_check_closed(const Term *t, char *out_ty, size_t cap_ty, char *err, size
     Ctx c;
     memset(&c, 0, sizeof c);
     ty_len = 0;
+    Ty *got = NULL;
+    if (infer(&c, t, &got, err, cap_err) != 0) {
+        return -1;
+    }
+    qtt_ty_print(got, out_ty, cap_ty);
+    return 0;
+}
+
+int qtt_check_binds(const Term *t, const char **names, const Ty **tys,
+                    int n, char *out_ty, size_t cap_ty, char *err, size_t cap_err) {
+    Ctx c;
+    memset(&c, 0, sizeof c);
+    ty_len = ty_floor;
+    for (int i = 0; i < n && c.len < 64; i++) {
+        c.b[c.len].name = names[i];
+        c.b[c.len].q = Q_MANY;
+        c.b[c.len].ty = (Ty *)tys[i];
+        c.b[c.len].used = 0;
+        c.len++;
+    }
     Ty *got = NULL;
     if (infer(&c, t, &got, err, cap_err) != 0) {
         return -1;

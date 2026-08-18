@@ -463,6 +463,7 @@ static void cmd_run(const char *path, const char *arg) {
     TyRegistry reg;
     typereg_init(&reg);
     char err[256];
+    expr_pool_reset();
     for (size_t i = 0; i < prog.len; i++) {
         const AstItem *it = &prog.items[i];
         if (it->kind == AST_ITEM_FN && it->text && it->text_len > 0) {
@@ -610,53 +611,68 @@ static void cmd_check(const char *path) {
         }
     }
     int fns = 0;
-    for (size_t i = 0; i < prog.len; i++) {
+    expr_pool_reset();
+    /* First pass: parse all fns and collect their types for cross-fn binding. */
+    enum { MAX_FNS = 64 };
+    const char *fn_names[MAX_FNS];
+    const Ty *fn_tys[MAX_FNS];
+    Term *fn_terms[MAX_FNS];
+    int fn_count = 0;
+    for (size_t i = 0; i < prog.len && fn_count < MAX_FNS; i++) {
         const AstItem *it = &prog.items[i];
         if (it->kind == AST_ITEM_FN && it->text && it->text_len > 0) {
-            char fname[64];
-            if (it->name && it->name_len > 0) {
-                size_t fl = it->name_len < 63 ? it->name_len : 63;
-                memcpy(fname, it->name, fl);
-                fname[fl] = '\0';
-            } else {
-                fname[0] = '?';
-                fname[1] = '\0';
-            }
             char *txt = malloc(it->text_len + 1);
             memcpy(txt, it->text, it->text_len);
             txt[it->text_len] = '\0';
             Term *fn_term = NULL;
             Ty *fn_ty = NULL;
             if (bp_parse_fn_decl(txt, &reg, &fn_term, &fn_ty, err, sizeof err) != 0) {
-                fprintf(stderr, "fn parse error %s: %s\n", fname, err);
+                fprintf(stderr, "fn parse error: %s\n", err);
                 free(txt);
                 bp_program_free(&prog);
                 free(src);
                 exit(1);
             }
             free(txt);
-            char ty[128];
-            if (qtt_check_closed(fn_term, ty, sizeof ty, err, sizeof err) != 0) {
-                fprintf(stderr, "fn '%s' type error: %s\n", fname, err);
-                bp_program_free(&prog);
-                free(src);
-                exit(1);
-            }
-            unsigned char wasm[2048];
-            int wl = codegen_wasm_fn(fn_term, wasm, sizeof wasm, err, sizeof err);
-            if (wl > 0) {
-                char wpath[256];
-                snprintf(wpath, sizeof wpath, "/tmp/%s.wasm", fname);
-                FILE *wf = fopen(wpath, "wb");
-                if (wf) {
-                    fwrite(wasm, 1, (size_t)wl, wf);
-                    fclose(wf);
-                    printf("  compiled %s (%d bytes)\n", wpath, wl);
-                }
-            }
-            printf("fn '%s' : %s  ok\n", fname, ty);
-            fns++;
+            static char fnbuf[MAX_FNS][64];
+            size_t fl = it->name_len < 63 ? it->name_len : 63;
+            memcpy(fnbuf[fn_count], it->name ? it->name : "?", fl);
+            fnbuf[fn_count][fl] = '\0';
+            fn_names[fn_count] = fnbuf[fn_count];
+            fn_tys[fn_count] = fn_ty;
+            fn_terms[fn_count] = fn_term;
+            fn_count++;
         }
+    }
+    /* Protect the fn types from later type-pool allocations. */
+    qtt_ty_checkpoint();
+    /* Second pass: typecheck each fn with all earlier fns bound. */
+    for (int k = 0; k < fn_count; k++) {
+        const char *fname = fn_names[k] ? fn_names[k] : "?";
+        Term *fn_term = fn_terms[k];
+        char ty[128];
+        /* Bind all fns (including self) so cross-references resolve. */
+        if (qtt_check_binds(fn_term, fn_names, fn_tys, fn_count,
+                            ty, sizeof ty, err, sizeof err) != 0) {
+            fprintf(stderr, "fn '%s' type error: %s\n", fname, err);
+            bp_program_free(&prog);
+            free(src);
+            exit(1);
+        }
+        unsigned char wasm[2048];
+        int wl = codegen_wasm_fn(fn_term, wasm, sizeof wasm, err, sizeof err);
+        if (wl > 0) {
+            char wpath[256];
+            snprintf(wpath, sizeof wpath, "/tmp/%s.wasm", fname);
+            FILE *wf = fopen(wpath, "wb");
+            if (wf) {
+                fwrite(wasm, 1, (size_t)wl, wf);
+                fclose(wf);
+                printf("  compiled %s (%d bytes)\n", wpath, wl);
+            }
+        }
+        printf("fn '%s' : %s  ok\n", fname, ty);
+        fns++;
     }
     printf("parsed %d struct declarations (%d types in registry), %d functions\n",
            structs, reg.len, fns);

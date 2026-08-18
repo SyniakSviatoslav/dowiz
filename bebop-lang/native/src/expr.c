@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-static Term pool[256];
+static Term pool[1024];
 static int pi = 0;
 
 static Term *tnew(void) {

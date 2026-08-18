@@ -165,6 +165,12 @@ struct Term {
  * into out_ty via qtt_ty_print), -1 on error (err filled). */
 int qtt_check_closed(const Term *t, char *out_ty, size_t cap_ty, char *err,
                      size_t cap_err);
+/* Typecheck a term in a context pre-bound with named types (e.g. earlier fns). */
+int qtt_check_binds(const Term *t, const char **names, const Ty **tys,
+                    int n, char *out_ty, size_t cap_ty, char *err, size_t cap_err);
+/* Save the current type-pool position as the reuse floor (so pre-bound types
+ * from a prior pass are not overwritten by later allocations). */
+void qtt_ty_checkpoint(void);
 
 /* Run the typechecker self-test. Returns 0 on success, -1 on failure. */
 int qtt_check_test(char *out, size_t cap);

@@ -345,7 +345,10 @@ int bp_parse_fn_decl(const char *src, TyRegistry *reg, Term **out,
     if (pos >= n) { snprintf(err, cap, "expected '('"); return -1; }
     pos++;
     if (pos >= n || toks[pos].kind != BP_TOK_IDENT) { snprintf(err, cap, "expected param name"); return -1; }
-    static char pname[64]; size_t pl = toks[pos].len < 63 ? toks[pos].len : 63;
+    static char pname_pool[64][64];
+    static int pname_i = 0;
+    char *pname = pname_pool[pname_i++ % 64];
+    size_t pl = toks[pos].len < 63 ? toks[pos].len : 63;
     memcpy(pname, toks[pos].start, pl); pname[pl] = '\0'; pos++;
     if (pos >= n || toks[pos].kind != BP_TOK_PUNCT || toks[pos].start[0] != ':') { snprintf(err, cap, "expected ':'"); return -1; }
     pos++;
@@ -396,15 +399,22 @@ int bp_parse_fn_decl(const char *src, TyRegistry *reg, Term **out,
     const char *bt = toks[bstart].start;
     size_t bl = (size_t)(toks[bend].start - bt);
     char *bs = malloc(bl + 1); memcpy(bs, bt, bl); bs[bl] = '\0';
-    expr_pool_reset();
+    /* NOTE: do NOT reset the expr pool here — the caller parses multiple fns
+     * into the same growing pool so their bodies stay distinct. */
     Term *body = NULL;
     if (expr_parse(bs, &body, err, cap) != 0) { free(bs); return -1; }
     free(bs);
-    static Term lam; memset(&lam, 0, sizeof lam);
-    lam.kind = TERM_LAM; lam.name = pname; lam.q = Q_MANY; lam.ty = pty; lam.a = body;
-    *out = &lam;
-    static Ty pi; memset(&pi, 0, sizeof pi);
-    pi.kind = TY_PI; pi.q = Q_MANY; pi.x = pname; pi.dom = pty; pi.cod = rty;
-    *out_ty = &pi;
+    static Term lam_pool[64];
+    static int lam_i = 0;
+    Term *lam = &lam_pool[lam_i++ % 64];
+    memset(lam, 0, sizeof *lam);
+    lam->kind = TERM_LAM; lam->name = pname; lam->q = Q_MANY; lam->ty = pty; lam->a = body;
+    *out = lam;
+    static Ty pi_pool[64];
+    static int pi_i = 0;
+    Ty *pi = &pi_pool[pi_i++ % 64];
+    memset(pi, 0, sizeof *pi);
+    pi->kind = TY_PI; pi->q = Q_MANY; pi->x = pname; pi->dom = pty; pi->cod = rty;
+    *out_ty = pi;
     return 0;
 }
