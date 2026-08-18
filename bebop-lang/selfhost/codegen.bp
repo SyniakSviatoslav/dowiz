@@ -38,4 +38,10 @@ fn emit_entry(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
 fn emit_byte_size(ek:[i64],i:i64)->i64 {
   count_instrs(ek,i)*4
 }
-fn test(x:i64)->i64 { let ek=[0,0,2];let ev=[3,2,0];let ea=[0,0,0];let eb=[0,0,1]; emit_byte_size(ek,2) }
+fn const_fold(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
+  let k=ek[i];
+  let c_lit=if k==0 then ev[i] else 0;
+  let c_add=if k==2 then const_fold(ek,ev,ea,eb,ea[i])+const_fold(ek,ev,ea,eb,eb[i]) else 0;
+  c_lit+c_add
+}
+fn test(x:i64)->i64 { let ek=[0,0,2];let ev=[3,2,0];let ea=[0,0,0];let eb=[0,0,1]; const_fold(ek,ev,ea,eb,2) }
