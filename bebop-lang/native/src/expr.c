@@ -51,6 +51,7 @@ static int match_kw(P *p, const char *kw) {
 }
 
 static Term *parse_expr(P *p);
+static Term *parse_seq(P *p);
 
 static Term *parse_lambda(P *p) {
     /* after consuming '\', parse: NAME [ : [^q] TYPE ] . body */
@@ -157,7 +158,7 @@ static Term *parse_primary(P *p) {
         skip_ws(p);
         if (p->s[p->pos] != '{') { err(p, "expected '{'"); return NULL; }
         p->pos++;
-        Term *body = parse_expr(p);
+        Term *body = parse_seq(p);
         if (!body) return NULL;
         skip_ws(p);
         if (p->s[p->pos] != '}') { err(p, "expected '}'"); return NULL; }
@@ -320,6 +321,30 @@ static Term *parse_bin(P *p, int min_prec) {
     return lhs;
 }
 
+/* Sequence: expr (';' expr)*  — desugars to nested let (_sN = e in rest).
+ * This is the statement-level surface for multi-line fn bodies. */
+static Term *parse_seq(P *p) {
+    Term *first = parse_expr(p);
+    if (!first) return NULL;
+    skip_ws(p);
+    while (p->s[p->pos] == ';') {
+        p->pos++;
+        Term *next = parse_expr(p);
+        if (!next) return NULL;
+        Term *l = tnew();
+        static char tmp[24];
+        static int ti = 0;
+        snprintf(tmp, sizeof tmp, "_s%d", ti++);
+        l->kind = TERM_LET;
+        l->name = tmp;
+        l->a = first;
+        l->b = next;
+        first = l;
+        skip_ws(p);
+    }
+    return first;
+}
+
 static Term *parse_expr(P *p) {
     skip_ws(p);
     if (match_kw(p, "let")) {
@@ -339,8 +364,17 @@ static Term *parse_expr(P *p) {
         Term *val = parse_expr(p);
         if (!val) return NULL;
         skip_ws(p);
-        if (!match_kw(p, "in")) { err(p, "expected 'in'"); return NULL; }
-        Term *body = parse_expr(p);
+        skip_ws(p);
+        Term *body = NULL;
+        if (match_kw(p, "in")) {
+            body = parse_seq(p);
+        } else if (p->s[p->pos] == ';') {
+            p->pos++;
+            body = parse_seq(p);
+        } else {
+            err(p, "expected 'in' or ';' after let");
+            return NULL;
+        }
         if (!body) return NULL;
         Term *t = tnew();
         t->kind = TERM_LET;
@@ -373,7 +407,7 @@ void expr_pool_reset(void) {
 
 int expr_parse(const char *s, Term **term, char *errbuf, size_t cap) {
     P p = {s, 0, errbuf, cap};
-    Term *t = parse_expr(&p);
+    Term *t = parse_seq(&p);
     if (!t) {
         return -1;
     }
