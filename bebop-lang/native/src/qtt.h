@@ -115,6 +115,7 @@ typedef enum {
     TERM_WHILE,   /* while loop: a = cond, b = body; evaluates to void */
     TERM_ARRAY,   /* array literal: fields/nfields hold indexed elements */
     TERM_ARRAY_GET, /* array indexing: a = array, b = index (i64) */
+    TERM_STR_CHAR,  /* string char access: a = str, b = index (i64) -> i64 */
     TERM_SYSCALL,  /* raw syscall: t->ival = syscall number, t->a = first arg */
 } TermKind;
 

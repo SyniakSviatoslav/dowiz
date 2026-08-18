@@ -47,6 +47,7 @@ int qtt_termination_check(const Term *t, char *err, size_t cap) {
         case TERM_BIN:
         case TERM_EQ_TYPE:
         case TERM_STR_CAT:
+        case TERM_STR_CHAR:
         case TERM_ARRAY_GET:
         case TERM_CONG:
         case TERM_SUBST:

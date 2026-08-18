@@ -762,6 +762,7 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
             o->a = subst_p(t->a, name, v);
             return o;
         case TERM_STR_CAT:
+        case TERM_STR_CHAR:
             o->a = subst_p(t->a, name, v);
             o->b = subst_p(t->b, name, v);
             return o;
@@ -956,6 +957,13 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
                 return -1;
             }
             *out = &STR_TY;
+            return 0;
+        case TERM_STR_CHAR:
+            if (check(c, t->a, &STR_TY, err, cap) != 0 ||
+                check(c, t->b, &I64_TY, err, cap) != 0) {
+                return -1;
+            }
+            *out = &I64_TY;
             return 0;
         case TERM_SYSCALL:
             *out = &I64_TY;  /* syscall returns i64 (or -errno) */
@@ -1600,6 +1608,16 @@ static Value eval(const Term *t, Env *env) {
             v.ctor = buf;
             return v;
         }
+        case TERM_STR_CHAR: {
+            Value s = eval(t->a, env);
+            Value i = eval(t->b, env);
+            if (s.kind != 5 || i.kind != 0) { v.kind = -1; return v; }
+            long idx = i.i;
+            if (idx < 0 || (unsigned long)idx >= strlen(s.ctor)) { v.kind = -1; return v; }
+            v.kind = 0;
+            v.i = (unsigned char)s.ctor[idx];
+            return v;
+        }
         case TERM_WHILE: {
             int iter = 0;
             for (;;) {
@@ -1648,9 +1666,9 @@ int qtt_eval(const Term *t, int *out_kind, long *out_i, int *out_b, char *err, s
         snprintf(err, cap, "evaluation error");
         return -1;
     }
-    *out_kind = v.kind;
-    *out_i = v.i;
-    *out_b = v.b;
+    if (out_kind) *out_kind = v.kind;
+    if (out_i) *out_i = v.i;
+    if (out_b) *out_b = v.b;
     return 0;
 }
 
@@ -1913,6 +1931,7 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             o->a = qtt_subst(t->a, name, v);
             return o;
         case TERM_STR_CAT:
+        case TERM_STR_CHAR:
             o->a = qtt_subst(t->a, name, v);
             o->b = qtt_subst(t->b, name, v);
             return o;
@@ -2005,6 +2024,25 @@ static Term *norm_rec(const Term *t) {
                 o->op = 0;
                 o->a = o->b = o->c = NULL;
                 return o;
+            }
+            o->a = sa;
+            o->b = sb;
+            return o;
+        }
+        case TERM_STR_CHAR: {
+            Term *sa = norm_rec(t->a);
+            Term *sb = norm_rec(t->b);
+            if (!sa || !sb) return NULL;
+            if (sa->kind == TERM_STR && sa->name && sb->kind == TERM_LIT) {
+                long idx = sb->ival;
+                if (idx >= 0 && (unsigned long)idx < strlen(sa->name)) {
+                    o->kind = TERM_LIT;
+                    o->ival = (unsigned char)sa->name[idx];
+                    o->op = 0;
+                    o->a = o->b = o->c = NULL;
+                    o->name = NULL;
+                    return o;
+                }
             }
             o->a = sa;
             o->b = sb;
@@ -2179,6 +2217,7 @@ static int conv_rec(const Term *a, const Term *b) {
         case TERM_STR_LEN:
             return conv_rec(a->a, b->a);
         case TERM_STR_CAT:
+        case TERM_STR_CHAR:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
         case TERM_WHILE:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
@@ -2632,6 +2671,21 @@ int qtt_str_test(char *out, size_t cap) {
           "prove refl (str_len \"hello\") : str_len \"hello\" = 5");
     } else {
         A(0, "prove str_len: type pool");
+    }
+
+    /* str_char: str_char("hello", 1) == 101 ('e') */
+    {
+        Term *hi2 = &pool[pi++]; memset(hi2, 0, sizeof *hi2);
+        hi2->kind = TERM_STR; hi2->name = "hello";
+        Term *one2 = &pool[pi++]; memset(one2, 0, sizeof *one2);
+        one2->kind = TERM_LIT; one2->ival = 1;
+        Term *ch2 = &pool[pi++]; memset(ch2, 0, sizeof *ch2);
+        ch2->kind = TERM_STR_CHAR; ch2->a = hi2; ch2->b = one2;
+        A(qtt_check_closed(ch2, ty, sizeof ty, err, sizeof err) == 0 &&
+          strcmp(ty, "i64") == 0, "check str_char : i64");
+        int vk2; long vi2;
+        A(qtt_eval(ch2, &vk2, &vi2, NULL, err, sizeof err) == 0 && vi2 == 101,
+          "eval str_char(hello,1) == 101");
     }
 
     return all_ok ? 0 : -1;
