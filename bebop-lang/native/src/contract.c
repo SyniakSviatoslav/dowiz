@@ -163,6 +163,17 @@ int bp_contract_check(const char *requires, const char *ensures, char *err, size
     return 1;                /* SAT: counterexample exists */
 }
 
+int bp_contract_invariant(const char *invariant, const char *requires,
+                          const char *step, const char *done_cond,
+                          char *err, size_t cap) {
+    (void)step;
+    (void)done_cond;
+    /* Simplified: verify requires → invariant.
+     * Full version would use step/done_cond for loop invariant checking
+     * via weakest precondition computation. */
+    return bp_contract_check(requires, invariant, err, cap);
+}
+
 int contract_self_test(char *out, size_t cap) {
     size_t pos = 0;
     int all_ok = 1;
