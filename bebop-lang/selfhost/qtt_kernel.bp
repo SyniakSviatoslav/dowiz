@@ -1,0 +1,27 @@
+module core { }
+
+// ty_eq: compare two types from a global-ish pool passed as params
+fn ty_eq(ki: i64, kj: i64) -> i64 {
+  let k_eq = if ki == kj then 1 else 0;
+  let chk_i64 = if ki == 0 then 1 else 0;
+  let chk_bool = if ki == 5 then 1 else 0;
+  let chk_void = if ki == 6 then 1 else 0;
+  let chk_str = if ki == 16 then 1 else 0;
+  let base = chk_i64 + chk_bool + chk_void + chk_str;
+  if k_eq == 1 then base else 0
+}
+
+// type inference for arithmetic: 1 = i64 expression, 0 = type error
+fn infer_arith(kind: i64, left_ty: i64, right_ty: i64) -> i64 {
+  let is_bin = if kind == 0 then 1 else 0;
+  let is_cmp = if kind == 1 then 1 else 0;
+  let is_num = if kind == 2 then 1 else 0;
+  let bin_ok = is_bin * left_ty * right_ty;
+  let cmp_ok = is_cmp * left_ty * right_ty;
+  let num_ok = is_num;
+  bin_ok + cmp_ok + num_ok
+}
+
+fn test_infer(x: i64) -> i64 {
+  infer_arith(0, 1, 1)
+}
