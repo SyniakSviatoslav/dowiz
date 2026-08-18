@@ -1,33 +1,98 @@
-// selfhost/parser.bp — recursive descent arithmetic parser (self-host module #2)
-// Parses and evaluates expressions like "1 + 2 * 3" using a mutable position
-// array (pass-by-reference). Demonstrates lexing + recursive parsing in Bebop.
+// selfhost/parser.bp — recursive descent arithmetic parser (self-host #2)
+// parse_expr evaluates "1 + 2 * 3" = 7 using a mutable position array.
+// Demonstrates: multi-param fns, pass-by-reference (mutable array), mutual recursion.
 
 module core { }
 
-// is_digit: '0'(48)..'9'(57)
 fn is_digit(c: i64) -> i64 {
   if c >= 48 then (if c <= 57 then 1 else 0) else 0
 }
 
-// skip_ws: advance pos past spaces
-fn skip_ws(s: str, pos: str) -> i64 {
+// skip_ws: advance pos[0] past spaces
+fn skip_ws(s: str, pos: [i64]) -> i64 {
+  let n = str_len(s);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= n then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_sp = if at_end == 1 then 0 else (if ch == 32 then 1 else 0);
+    let pos_next = pos[0] + is_sp;
+    let _ = pos[0] = pos_next;
+    let done = if is_sp == 1 then 0 else 1;
+    0
+  };
   0
 }
 
-// parse_num: read a multi-digit number at pos[0], advance pos, return value
-fn parse_num(s: str, pos: i64) -> i64 {
+// parse_num: read digits at pos[0], advance, return value
+fn parse_num(s: str, pos: [i64]) -> i64 {
   let n = str_len(s);
-  let i = pos;
   let v = 0;
   let done = 0;
   while done == 0 {
-    let at_end = if i >= n then 1 else 0;
-    let ch = if at_end == 1 then 0 else char(s, i);
+    let at_end = if pos[0] >= n then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
     let dg = if at_end == 1 then 0 else is_digit(ch);
     let v = if dg == 1 then (v * 10) + (ch - 48) else v;
+    let adv = if dg == 1 then 1 else 0;
+    let _ = pos[0] = pos[0] + adv;
     let done = if dg == 1 then 0 else 1;
-    let i = if dg == 1 then i + 1 else i;
     0
   };
   v
+}
+
+// parse_expr: expr = term (('+'|'-') term)*
+fn parse_expr(s: str, pos: [i64]) -> i64 {
+  let acc = parse_term(s, pos);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let n = str_len(s);
+    let ch = if pos[0] >= n then 0 else char(s, pos[0]);
+    let is_plus = if ch == 43 then 1 else 0;
+    let is_minus = if ch == 45 then 1 else 0;
+    let is_op = if is_plus == 1 then 1 else is_minus;
+    let acc = if is_op == 1 then (let _ = pos[0] = pos[0] + 1 in (let t = parse_term(s, pos) in (if is_plus == 1 then acc + t else acc - t))) else acc;
+    let done = if is_op == 1 then 0 else 1;
+    0
+  };
+  acc
+}
+
+// parse_term: term = factor ('*' factor)*
+fn parse_term(s: str, pos: [i64]) -> i64 {
+  let acc = parse_factor(s, pos);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let n = str_len(s);
+    let ch = if pos[0] >= n then 0 else char(s, pos[0]);
+    let is_mul = if ch == 42 then 1 else 0;
+    let acc = if is_mul == 1 then (let _ = pos[0] = pos[0] + 1 in (let t = parse_factor(s, pos) in acc * t)) else acc;
+    let done = if is_mul == 1 then 0 else 1;
+    0
+  };
+  acc
+}
+
+// parse_factor: factor = number | '(' expr ')'
+fn parse_factor(s: str, pos: [i64]) -> i64 {
+  let _ = skip_ws(s, pos);
+  let n = str_len(s);
+  let ch = if pos[0] >= n then 0 else char(s, pos[0]);
+  let is_lparen = if ch == 40 then 1 else 0;
+  if is_lparen == 1 then
+    (let _ = pos[0] = pos[0] + 1 in
+     (let v = parse_expr(s, pos) in
+      (let _ = skip_ws(s, pos) in
+       (let _ = pos[0] = pos[0] + 1 in v))))
+  else
+    parse_num(s, pos)
+}
+
+// eval: entry — parse an arithmetic expression from a string
+fn eval(s: str) -> i64 {
+  let pos = [0];
+  parse_expr(s, pos)
 }

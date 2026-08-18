@@ -318,18 +318,26 @@ static Term *parse_primary(P *p) {
             continue;
         }
         p->pos++;
-        Term *arg = parse_expr(p);
-        skip_ws(p);
-        if (p->s[p->pos] != ')') {
-            err(p, "expected ')'");
-            return NULL;
+        for (;;) {
+            Term *arg = parse_expr(p);
+            if (!arg) return NULL;
+            skip_ws(p);
+            Term *app = tnew();
+            app->kind = TERM_APP;
+            app->a = atom;
+            app->b = arg;
+            atom = app;
+            if (p->s[p->pos] == ',') {
+                p->pos++;
+                continue;
+            }
+            if (p->s[p->pos] != ')') {
+                err(p, "expected ')'");
+                return NULL;
+            }
+            p->pos++;
+            break;
         }
-        p->pos++;
-        Term *app = tnew();
-        app->kind = TERM_APP;
-        app->a = atom;
-        app->b = arg;
-        atom = app;
     }
     return atom;
 }

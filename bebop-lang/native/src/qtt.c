@@ -1402,7 +1402,7 @@ static int check(Ctx *c, const Term *t, const Ty *want, char *err, size_t cap) {
 int qtt_check_closed(const Term *t, char *out_ty, size_t cap_ty, char *err, size_t cap_err) {
     Ctx c;
     memset(&c, 0, sizeof c);
-    ty_len = 0;
+    ty_len = ty_floor; /* reuse floor so pre-bound types are not clobbered */
     Ty *got = NULL;
     if (infer(&c, t, &got, err, cap_err) != 0) {
         return -1;
@@ -1529,6 +1529,21 @@ struct Env {
 };
 static int in_while = 0;
 
+/* Env pool: closures capture Env nodes, which must outlive the eval frame that
+ * created them (curried application). Stack-allocated Env would dangle. */
+static Env env_pool[16384];
+static int env_i = 0;
+static Env *env_new(const char *name, Value val, Env *next) {
+    if (env_i >= (int)(sizeof env_pool / sizeof env_pool[0])) {
+        env_i = 0; /* safety wrap (should not happen in bounded eval) */
+    }
+    Env *e = &env_pool[env_i++];
+    e->name = name;
+    e->val = val;
+    e->next = next;
+    return e;
+}
+
 static Value eval(const Term *t, Env *env) {
     Value v;
     memset(&v, 0, sizeof v);
@@ -1558,8 +1573,8 @@ static Value eval(const Term *t, Env *env) {
                 v.kind = -1;
                 return v;
             }
-            Env e = {f.lam->name, arg, f.env};
-            return eval(f.lam->a, &e);
+            Env *e = env_new(f.lam->name, arg, f.env);
+            return eval(f.lam->a, e);
         }
         case TERM_BIN: {
             Value l = eval(t->a, env);
@@ -1603,8 +1618,8 @@ static Value eval(const Term *t, Env *env) {
                 }
                 /* not pre-bound: create a scoped binding (won't persist) */
             }
-            Env e = {t->name, x, env};
-            return eval(t->b, &e);
+            Env *e = env_new(t->name, x, env);
+            return eval(t->b, e);
         }
         case TERM_STRUCT: {
             static FieldValue fvs[64];
@@ -1784,6 +1799,7 @@ static Value eval(const Term *t, Env *env) {
 }
 
 int qtt_eval(const Term *t, int *out_kind, long *out_i, int *out_b, char *err, size_t cap) {
+    env_i = 0;
     Value v = eval(t, NULL);
     if (v.kind < 0) {
         snprintf(err, cap, "evaluation error");
@@ -1797,6 +1813,7 @@ int qtt_eval(const Term *t, int *out_kind, long *out_i, int *out_b, char *err, s
 
 int qtt_eval_binds(const Term *t, const char **names, Term *const *lams, int n,
                    int *out_kind, long *out_i, int *out_b, char *err, size_t cap) {
+    env_i = 0;
     Env fb[64];
     int cnt = n < 64 ? n : 64;
     for (int i = 0; i < cnt; i++) {
@@ -1823,6 +1840,7 @@ int qtt_eval_binds(const Term *t, const char **names, Term *const *lams, int n,
 
 int qtt_eval_bound(const Term *t, const QttBind *binds, int n, int *out_kind,
                    long *out_i, int *out_b, char *err, size_t cap) {
+    env_i = 0;
     Env stack[64];
     for (int i = 0; i < n && i < 64; i++) {
         stack[i].name = binds[n - 1 - i].name;
