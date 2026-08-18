@@ -131,8 +131,8 @@ static int push_item(AstProgram *prog, AstItemKind kind, const char *name,
 int bp_parse(const char *src, AstProgram *prog, BpParseError *err) {
     memset(prog, 0, sizeof *prog);
 
-    BpToken toks[4096];
-    int n = bp_lex(src, toks, 4096);
+    BpToken toks[32768];
+    int n = bp_lex(src, toks, 32768);
     if (n < 0) {
         err->line = 0;
         err->msg = "too many tokens";
@@ -227,8 +227,8 @@ void bp_program_free(AstProgram *prog) {
 
 int bp_parse_struct_decl(const char *src, TyRegistry *reg, char *err,
                          size_t cap) {
-    BpToken toks[256];
-    int n = bp_lex(src, toks, 256);
+    BpToken toks[32768];
+    int n = bp_lex(src, toks, 32768);
     if (n < 0) {
         snprintf(err, cap, "too many tokens");
         return -1;
@@ -355,8 +355,8 @@ int bp_parse_struct_decl(const char *src, TyRegistry *reg, char *err,
 static Ty *resolve_ty(TyRegistry *reg, const BpToken *tok);
 
 int bp_parse_enum_decl(const char *src, TyRegistry *reg, char *err, size_t cap) {
-    BpToken toks[256];
-    int n = bp_lex(src, toks, 256);
+    BpToken toks[32768];
+    int n = bp_lex(src, toks, 32768);
     if (n < 0) { snprintf(err, cap, "too many tokens"); return -1; }
     int pos = 0;
     while (pos < n && toks[pos].kind != BP_TOK_IDENT) pos++;
@@ -427,8 +427,8 @@ static Ty *resolve_ty(TyRegistry *reg, const BpToken *tok) {
 
 int bp_parse_fn_decl(const char *src, TyRegistry *reg, Term **out,
                      Ty **out_ty, char *err, size_t cap) {
-    BpToken toks[256];
-    int n = bp_lex(src, toks, 256);
+    BpToken toks[32768];
+    int n = bp_lex(src, toks, 32768);
     if (n < 0) { snprintf(err, cap, "too many tokens"); return -1; }
     int pos = 0;
     while (pos < n && toks[pos].kind != BP_TOK_IDENT) pos++;
