@@ -13,6 +13,8 @@
 #include "ntt32.h"
 #include "hyper.h"
 #include "mem.h"
+#include "lmem.h"
+#include "hydra.h"
 #include "expr.h"
 #include "verify.h"
 #include "vsa.h"
@@ -1177,6 +1179,20 @@ int main(int argc, char **argv) {
         int ok = math_self_test(buf, sizeof buf);
         fputs(buf, stdout);
         printf("Math self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "lmem") == 0) {
+        char buf[8192];
+        int ok = lmem_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Living memory self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "hydra") == 0) {
+        char buf[8192];
+        int ok = hydra_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Hydra self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "graph") == 0) {
