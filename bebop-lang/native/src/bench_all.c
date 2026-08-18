@@ -657,3 +657,5 @@ int bench_all_run(void) {
            (unsigned long long)bench_sink);
     return 0;
 }
+
+/* ─── Batched parallel benchmark ───────────────────────────────────────...[truncated]
