@@ -462,8 +462,23 @@ static void cmd_run(const char *path, const char *arg) {
     }
     TyRegistry reg;
     typereg_init(&reg);
+    expr_set_registry(&reg);
     char err[256];
     expr_pool_reset();
+    /* Parse struct declarations into the registry first. */
+    for (size_t i = 0; i < prog.len; i++) {
+        const AstItem *it = &prog.items[i];
+        if (it->kind == AST_ITEM_STRUCT && it->text && it->text_len > 0) {
+            char *txt = malloc(it->text_len + 1);
+            memcpy(txt, it->text, it->text_len);
+            txt[it->text_len] = '\0';
+            if (bp_parse_struct_decl(txt, &reg, err, sizeof err) != 0) {
+                fprintf(stderr, "struct parse error: %s\n", err);
+                free(txt); bp_program_free(&prog); free(src); exit(1);
+            }
+            free(txt);
+        }
+    }
     /* Collect all fns so later fns can call earlier ones (closures). */
     enum { MAX_FNS = 64 };
     const char *fn_names[MAX_FNS];
@@ -609,6 +624,7 @@ static void cmd_check(const char *path) {
 
     TyRegistry reg;
     typereg_init(&reg);
+    expr_set_registry(&reg);
     char err[256];
     int structs = 0;
     for (size_t i = 0; i < prog.len; i++) {

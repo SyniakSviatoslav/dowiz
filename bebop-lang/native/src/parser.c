@@ -229,8 +229,16 @@ int bp_parse_struct_decl(const char *src, TyRegistry *reg, char *err,
         snprintf(err, cap, "too many tokens");
         return -1;
     }
-    /* skip comments / glyphs to first ident */
+    /* skip comments / glyphs + the struct/enum keyword, then take the name */
     int pos = 0;
+    while (pos < n && toks[pos].kind != BP_TOK_IDENT) {
+        pos++;
+    }
+    if (pos < n) {
+        /* the first ident is the 'struct'/'enum' keyword — skip it */
+        if (toks[pos].len == 6 && strncmp(toks[pos].start, "struct", 6) == 0) pos++;
+        else if (toks[pos].len == 4 && strncmp(toks[pos].start, "enum", 4) == 0) pos++;
+    }
     while (pos < n && toks[pos].kind != BP_TOK_IDENT) {
         pos++;
     }
@@ -238,7 +246,9 @@ int bp_parse_struct_decl(const char *src, TyRegistry *reg, char *err,
         snprintf(err, cap, "expected struct name");
         return -1;
     }
-    char name[64];
+    static char name_pool[64][64];
+    static int name_i = 0;
+    char *name = name_pool[name_i++ % 64];
     size_t nl = toks[pos].len < 63 ? toks[pos].len : 63;
     memcpy(name, toks[pos].start, nl);
     name[nl] = '\0';
@@ -255,8 +265,12 @@ int bp_parse_struct_decl(const char *src, TyRegistry *reg, char *err,
     pos++;
 
 
-    static TyField fields[32];
-    static char fnames[32][64];
+    static TyField fields_pool[64][32];
+    static char fnames_pool[64][32][64];
+    static int sf_i = 0;
+    TyField *fields = fields_pool[sf_i % 64];
+    char (*fnames)[64] = fnames_pool[sf_i % 64];
+    sf_i++;
     int nf = 0;
     while (pos < n && nf < 32) {
         if (toks[pos].kind == BP_TOK_PUNCT &&
@@ -319,12 +333,14 @@ int bp_parse_struct_decl(const char *src, TyRegistry *reg, char *err,
         snprintf(err, cap, "empty struct");
         return -1;
     }
-    static Ty st;
-    memset(&st, 0, sizeof st);
-    st.kind = TY_STRUCT;
-    st.fields = fields;
-    st.nfields = nf;
-    if (typereg_put(reg, name, &st) != 0) {
+    static Ty st_pool[64];
+    static int st_i = 0;
+    Ty *st = &st_pool[st_i++ % 64];
+    memset(st, 0, sizeof *st);
+    st->kind = TY_STRUCT;
+    st->fields = fields;
+    st->nfields = nf;
+    if (typereg_put(reg, name, st) != 0) {
         snprintf(err, cap, "type '%s' already declared",
                  name);
         return -1;

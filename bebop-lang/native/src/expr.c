@@ -9,6 +9,10 @@
 static Term pool[1024];
 static int pi = 0;
 
+/* Registry (set by cmd_check/cmd_run) for struct construction + field access. */
+static TyRegistry *g_reg = NULL;
+void expr_set_registry(TyRegistry *reg) { g_reg = reg; }
+
 static Term *tnew(void) {
     memset(&pool[pi], 0, sizeof(Term));
     return &pool[pi++];
@@ -234,12 +238,72 @@ static Term *parse_primary(P *p) {
         } else if (strcmp(buf, "str_len") == 0) {
             t->kind = TERM_STR_LEN; /* placeholder: one arg parsed in postfix */
         }
+        /* struct construction: Name{ f: e, ... } */
+        if (g_reg) {
+            int save = p->pos;
+            skip_ws(p);
+            if (p->s[p->pos] == '{') {
+                Ty *sty = typereg_get(g_reg, buf);
+                if (sty && sty->kind == TY_STRUCT) {
+                    p->pos++; /* skip '{' */
+                    static TermField sf[32];
+                    static char sfname[32][64];
+                    int nf = 0;
+                    for (;;) {
+                        skip_ws(p);
+                        if (p->s[p->pos] == '}') { p->pos++; break; }
+                        if (!is_ident_start(p->s[p->pos])) { err(p, "expected field name"); return NULL; }
+                        int fs = p->pos;
+                        while (is_ident_cont(p->s[p->pos])) p->pos++;
+                        int fl = p->pos - fs; if (fl >= 64) fl = 63;
+                        memcpy(sfname[nf], p->s + fs, (size_t)fl);
+                        sfname[nf][fl] = '\0';
+                        skip_ws(p);
+                        if (p->s[p->pos] != ':') { err(p, "expected ':' in struct"); return NULL; }
+                        p->pos++;
+                        Term *fv = parse_expr(p);
+                        if (!fv) return NULL;
+                        sf[nf].name = sfname[nf];
+                        sf[nf].val = fv;
+                        nf++;
+                        skip_ws(p);
+                        if (p->s[p->pos] == ',') { p->pos++; continue; }
+                    }
+                    t->kind = TERM_STRUCT;
+                    t->ty = sty;
+                    t->fields = sf;
+                    t->nfields = nf;
+                } else {
+                    p->pos = save;
+                }
+            } else {
+                p->pos = save;
+            }
+        }
     } else {
         err(p, "unexpected token");
         return NULL;
     }
     if (!atom) {
         return NULL;
+    }
+    /* field access: atom.field */
+    while (p->s[p->pos] == '.') {
+        p->pos++;
+        if (!is_ident_start(p->s[p->pos])) { err(p, "expected field name after '.'"); return NULL; }
+        int fs = p->pos;
+        while (is_ident_cont(p->s[p->pos])) p->pos++;
+        static char fbuf[256][32];
+        static int fi = 0;
+        int fl = p->pos - fs; if (fl >= 32) fl = 31;
+        char *fn = fbuf[fi++ % 256];
+        memcpy(fn, p->s + fs, (size_t)fl);
+        fn[fl] = '\0';
+        Term *fld = tnew();
+        fld->kind = TERM_FIELD;
+        fld->a = atom;
+        fld->name = fn;
+        atom = fld;
     }
     /* postfix: application atom(arg) and indexing atom[i] */
     while (p->s[p->pos] == '(' || p->s[p->pos] == '[') {
