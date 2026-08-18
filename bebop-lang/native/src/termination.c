@@ -53,6 +53,10 @@ int qtt_termination_check(const Term *t, char *err, size_t cap) {
         case TERM_SUBST:
             return qtt_termination_check(t->a, err, cap) ||
                    qtt_termination_check(t->b, err, cap);
+        case TERM_ARRAY_SET:
+            return qtt_termination_check(t->a, err, cap) ||
+                   qtt_termination_check(t->b, err, cap) ||
+                   qtt_termination_check(t->c, err, cap);
         case TERM_LET:
             return qtt_termination_check(t->a, err, cap) ||
                    qtt_termination_check(t->b, err, cap);

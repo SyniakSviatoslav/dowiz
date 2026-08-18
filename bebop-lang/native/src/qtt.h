@@ -116,6 +116,7 @@ typedef enum {
     TERM_ARRAY,   /* array literal: fields/nfields hold indexed elements */
     TERM_ARRAY_GET, /* array indexing: a = array, b = index (i64) */
     TERM_STR_CHAR,  /* string char access: a = str, b = index (i64) -> i64 */
+    TERM_ARRAY_SET, /* array mutation: a = array, b = index, c = value -> void */
     TERM_SYSCALL,  /* raw syscall: t->ival = syscall number, t->a = first arg */
 } TermKind;
 

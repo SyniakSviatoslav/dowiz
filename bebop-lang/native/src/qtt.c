@@ -770,6 +770,11 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
             o->a = subst_p(t->a, name, v);
             o->b = subst_p(t->b, name, v);
             return o;
+        case TERM_ARRAY_SET:
+            o->a = subst_p(t->a, name, v);
+            o->b = subst_p(t->b, name, v);
+            o->c = subst_p(t->c, name, v);
+            return o;
         case TERM_WHILE:
             o->a = subst_p(t->a, name, v);
             o->b = subst_p(t->b, name, v);
@@ -968,6 +973,13 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
                 return -1;
             }
             *out = &I64_TY;
+            return 0;
+        case TERM_ARRAY_SET:
+            /* a: vec, b: i64 index, c: elem value -> void */
+            if (t->a && infer(c, t->a, out, err, cap) != 0) return -1;
+            if (t->b && check(c, t->b, &I64_TY, err, cap) != 0) return -1;
+            if (t->c && infer(c, t->c, out, err, cap) != 0) return -1;
+            *out = &VOID_TY;
             return 0;
         case TERM_SYSCALL:
             *out = &I64_TY;  /* syscall returns i64 (or -errno) */
@@ -1521,6 +1533,7 @@ static Value eval(const Term *t, Env *env) {
                 case BOP_LE:  v.kind = 1; v.b = (l.i <= r.i); break;
                 case BOP_GT:  v.kind = 1; v.b = (l.i > r.i); break;
                 case BOP_GE:  v.kind = 1; v.b = (l.i >= r.i); break;
+                case BOP_CAT: break; /* handled as TERM_STR_CAT, not TERM_BIN */
             }
             return v;
         }
@@ -1622,6 +1635,11 @@ static Value eval(const Term *t, Env *env) {
             v.i = (unsigned char)s.ctor[idx];
             return v;
         }
+        case TERM_ARRAY_SET:
+            /* interpreter: arrays are immutable, mutation is a no-op (void) */
+            v.kind = 0;
+            v.i = 0;
+            return v;
         case TERM_WHILE: {
             int iter = 0;
             for (;;) {
@@ -1939,6 +1957,11 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             o->a = qtt_subst(t->a, name, v);
             o->b = qtt_subst(t->b, name, v);
             return o;
+        case TERM_ARRAY_SET:
+            o->a = qtt_subst(t->a, name, v);
+            o->b = qtt_subst(t->b, name, v);
+            o->c = qtt_subst(t->c, name, v);
+            return o;
         case TERM_WHILE:
             o->a = qtt_subst(t->a, name, v);
             o->b = qtt_subst(t->b, name, v);
@@ -2065,6 +2088,11 @@ static Term *norm_rec(const Term *t) {
             o->a = norm_rec(t->a);
             o->b = norm_rec(t->b);
             return o;
+        case TERM_ARRAY_SET:
+            o->a = norm_rec(t->a);
+            o->b = norm_rec(t->b);
+            o->c = norm_rec(t->c);
+            return o;
         case TERM_SYSCALL:
             o->a = norm_rec(t->a);
             return o;
@@ -2144,6 +2172,7 @@ static Term *norm_rec(const Term *t) {
                     case BOP_LE:  o->bval = (l <= r); return o;
                     case BOP_GT:  o->bval = (l > r);  return o;
                     case BOP_GE:  o->bval = (l >= r); return o;
+                    case BOP_CAT: break; /* not a TERM_BIN op */
                 }
             }
             o->a = la;
@@ -2233,6 +2262,8 @@ static int conv_rec(const Term *a, const Term *b) {
             return 1;
         case TERM_ARRAY_GET:
             return conv_rec(a->a, b->a) && conv_rec(a->b, b->b);
+        case TERM_ARRAY_SET:
+            return conv_rec(a->a, b->a) && conv_rec(a->b, b->b) && conv_rec(a->c, b->c);
         case TERM_SYSCALL:
             return a->ival == b->ival && conv_rec(a->a, b->a);
         case TERM_LAM:

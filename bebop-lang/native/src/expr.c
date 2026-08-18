@@ -282,6 +282,20 @@ static Term *parse_primary(P *p) {
             skip_ws(p);
             if (p->s[p->pos] != ']') { err(p, "expected ']'"); return NULL; }
             p->pos++;
+            skip_ws(p);
+            if (p->s[p->pos] == '=') {
+                /* array mutation: arr[i] = v */
+                p->pos++;
+                Term *val = parse_expr(p);
+                if (!val) return NULL;
+                Term *set = tnew();
+                set->kind = TERM_ARRAY_SET;
+                set->a = atom;
+                set->b = idx;
+                set->c = val;
+                atom = set;
+                continue;
+            }
             Term *get = tnew();
             get->kind = TERM_ARRAY_GET;
             get->a = atom;
