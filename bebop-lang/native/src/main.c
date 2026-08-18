@@ -7,6 +7,7 @@
 #include "lexer.h"
 #include "parser.h"
 #include "morse.h"
+#include "mesh.h"
 #include "qtt.h"
 #include "ntt.h"
 #include "ntt32.h"
@@ -31,6 +32,7 @@
 #include "stats.h"
 #include "pid.h"
 #include "markov.h"
+#include "math_native.h"
 #include "spectral.h"
 #include "autonomic.h"
 #include "noether.h"
@@ -1165,6 +1167,20 @@ int main(int argc, char **argv) {
         int ok = smt_self_test(buf, sizeof buf);
         fputs(buf, stdout);
         printf("SMT (DPLL) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "math") == 0) {
+        char buf[8192];
+        int ok = math_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Math self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "mesh") == 0) {
+        char buf[8192];
+        int ok = mesh_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Mesh self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "gt") == 0) {
