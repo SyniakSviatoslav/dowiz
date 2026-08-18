@@ -1,8 +1,8 @@
 module core { }
-fn ty_eq(tk:[i64],ta:[i64],tb:[i64],i:i64,j:i64)->i64 {
-  let ki=tk[i];let kj=tk[j];let keq=if ki==kj then 1 else 0;
+fn ty_eq(tka:[i64],taa:[i64],tba:[i64],ia:i64,ja:i64)->i64 {
+  let ki=tka[ia];let kj=tka[ja];let keq=if ki==kj then 1 else 0;
   let sc=if ki==0 then 1 else 0;
-  let pid=if ki==8 then ty_eq(tk,ta,tb,ta[i],ta[j]) else 0;
+  let pid=if ki==8 then ty_eq(tka,taa,tba,taa[ia],taa[ja]) else 0;
   if keq==1 then sc+pid else 0
 }
 fn eval(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64,env:[i64])->i64 {
@@ -37,16 +37,5 @@ fn conv(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64,j:i64)->i64 {
   let lit=if ki==0 then veq else 0;
   let add=if ki==2 then conv(ek,ev,ea,eb,ea[i],ea[j])*conv(ek,ev,ea,eb,eb[i],eb[j]) else 0;
   keq*(lit+add)
-}
-fn infer(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
-  let k=ek[i];
-  let t_lit=if k==0 then 0 else 0;
-  let t_add=if k==2 then 0 else 0;
-  let t_eq=if k==7 then 5 else 0;
-  t_lit+t_add+t_eq
-}
-fn check(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64,want:i64)->i64 {
-  let t=infer(ek,ev,ea,eb,i);
-  if t==want then 1 else 0
 }
 fn test(x:i64)->i64 { let ek=[0];let ev=[5];let ea=[0];let eb=[0];let env=[0]; eval(ek,ev,ea,eb,0,env) }

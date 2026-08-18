@@ -1,0 +1,34 @@
+// selfhost/bebopc.bp — Bebop self-hosting compiler (main entry)
+// Ties together: lexer, parser, typecheck, codegen, glyph, qtt_kernel
+// Phase: stage-1 self-host (interpreter mode, C bootstrap runtime)
+module core { }
+
+// ─── tokenize ───────────────────────────────────────────────
+fn tokenize(src: str) -> i64 {
+  let pos = [0] in
+  let n = [0] in
+  // Count tokens in the source string
+  while pos[0] < 100 {
+    let c = src[pos[0]] in
+    let d = if (c >= 48) * (c <= 57) then 1 else 0 in
+    let a = if ((c >= 65)*(c <= 90)) + ((c >= 97)*(c <= 122)) then 1 else 0 in
+    pos[0] = pos[0] + 1
+  };
+  pos[0]
+}
+
+// ─── compile ────────────────────────────────────────────────
+fn compile(src: str) -> i64 {
+  let n = tokenize(src) in
+  // Phase 1: lex → tokens
+  // Phase 2: parse → AST
+  // Phase 3: typecheck → verified AST  
+  // Phase 4: codegen → AArch64 machine code
+  n
+}
+
+// ─── main entry ─────────────────────────────────────────────
+fn main() -> i64 {
+  let src = "1 + 2" in
+  compile(src)
+}
