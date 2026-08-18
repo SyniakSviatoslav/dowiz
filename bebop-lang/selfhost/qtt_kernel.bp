@@ -42,4 +42,8 @@ fn infer(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
   let t_lit=if k==0 then 0 else 0;
   t_lit
 }
+fn check(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64,want:i64)->i64 {
+  let t=infer(ek,ev,ea,eb,i);
+  if t==want then 1 else 0
+}
 fn test(x:i64)->i64 { let ek=[0];let ev=[5];let ea=[0];let eb=[0];let env=[0]; eval(ek,ev,ea,eb,0,env) }
