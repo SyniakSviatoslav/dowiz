@@ -43,7 +43,6 @@
 #include "rng.h"
 #include "stats.h"
 #include "pid.h"
-#include "pool.h"
 #include "markov.h"
 #include "math_native.h"
 #include "spectral.h"
@@ -873,31 +872,11 @@ int main(int argc, char **argv) {
         printf("Compute (NEON+multi-core) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
-        if (strcmp(argv[1], "memristor") == 0) {
-        char buf[8192];
-        int ok = memristor_self_test(buf, sizeof buf);
+            if (strcmp(argv[1], "pool") == 0) {
+        char buf[2048];
+        int ok = pool_self_test(buf, sizeof buf);
         fputs(buf, stdout);
-        printf("Memristor self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
-        return ok == 0 ? 0 : 1;
-    }
-    if (strcmp(argv[1], "adc") == 0) {
-        char buf[8192];
-        int ok = adc_self_test(buf, sizeof buf);
-        fputs(buf, stdout);
-        printf("ADC (sensor) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
-        return ok == 0 ? 0 : 1;
-    }
-    if (strcmp(argv[1], "complex") == 0) {
-        char buf[2048]; int ok=complex_self_test(buf,sizeof buf); fputs(buf,stdout);
-        printf("Complex self-test: %s\n",ok?"FAIL":"PASS"); return ok; }
-    if (strcmp(argv[1], "pool") == 0) {
-        char buf[2048]; int ok=pool_self_test(buf,sizeof buf); fputs(buf,stdout);
-        printf("Pool self-test: %s\n",ok?"FAIL":"PASS"); return ok; }
-    if (strcmp(argv[1], "arena") == 0) {
-        char buf[8192];
-        int ok = arena_self_test(buf, sizeof buf);
-        fputs(buf, stdout);
-        printf("Arena self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        printf("Pool self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "memristor") == 0) {
@@ -914,12 +893,34 @@ int main(int argc, char **argv) {
         printf("ADC (sensor) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
-    if (strcmp(argv[1], "complex") == 0) {
-        char buf[2048]; int ok=complex_self_test(buf,sizeof buf); fputs(buf,stdout);
-        printf("Complex self-test: %s\n",ok?"FAIL":"PASS"); return ok; }
-    if (strcmp(argv[1], "pool") == 0) {
-        char buf[2048]; int ok=pool_self_test(buf,sizeof buf); fputs(buf,stdout);
-        printf("Pool self-test: %s\n",ok?"FAIL":"PASS"); return ok; }
+    if (strcmp(argv[1], "arena") == 0) {
+        char buf[8192];
+        int ok = arena_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Arena self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+        if (strcmp(argv[1], "pool") == 0) {
+        char buf[2048];
+        int ok = pool_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Pool self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "memristor") == 0) {
+        char buf[8192];
+        int ok = memristor_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Memristor self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "adc") == 0) {
+        char buf[8192];
+        int ok = adc_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("ADC (sensor) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
     if (strcmp(argv[1], "arena") == 0) {
         char buf[8192];
         int ok = arena_self_test(buf, sizeof buf);
@@ -1037,7 +1038,14 @@ int main(int argc, char **argv) {
         cmd_fft();
         return 0;
     }
-        if (strcmp(argv[1], "memristor") == 0) {
+            if (strcmp(argv[1], "pool") == 0) {
+        char buf[2048];
+        int ok = pool_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Pool self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "memristor") == 0) {
         char buf[8192];
         int ok = memristor_self_test(buf, sizeof buf);
         fputs(buf, stdout);
@@ -1051,12 +1059,6 @@ int main(int argc, char **argv) {
         printf("ADC (sensor) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
-    if (strcmp(argv[1], "complex") == 0) {
-        char buf[2048]; int ok=complex_self_test(buf,sizeof buf); fputs(buf,stdout);
-        printf("Complex self-test: %s\n",ok?"FAIL":"PASS"); return ok; }
-    if (strcmp(argv[1], "pool") == 0) {
-        char buf[2048]; int ok=pool_self_test(buf,sizeof buf); fputs(buf,stdout);
-        printf("Pool self-test: %s\n",ok?"FAIL":"PASS"); return ok; }
     if (strcmp(argv[1], "arena") == 0) {
         cmd_arena();
         return 0;
