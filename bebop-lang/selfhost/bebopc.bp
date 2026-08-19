@@ -1,3 +1,40 @@
 module core { }
-fn compile(src: i64) -> i64 { src }
-fn main() -> i64 { compile(42) }
+fn lex_skip(s: str, pos: [i64]) -> i64 {
+  let n = str_len(s);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= n then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_sp = if ch == 32 then 1 else 0;
+    let _ = pos[0] = pos[0] + is_sp;
+    let done = if is_sp == 1 then 0 else 1;
+    0
+  };
+  0
+}
+fn lex_num(s: str, pos: [i64]) -> i64 {
+  let n = str_len(s);
+  let v = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= n then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_d = if ch >= 48 then (if ch <= 57 then 1 else 0) else 0;
+    let v = if is_d == 1 then v * 10 + (ch - 48) else v;
+    let _ = pos[0] = pos[0] + is_d;
+    let done = if is_d == 1 then 0 else 1;
+    0
+  };
+  v
+}
+fn parse_literal(s: str, pos: [i64]) -> i64 {
+  let _ = lex_skip(s, pos);
+  lex_num(s, pos)
+}
+fn emit_movz(imm: i64) -> i64 { imm * 32 }
+fn compile(s: str) -> i64 {
+  let pos = [0];
+  let v = parse_literal(s, pos);
+  emit_movz(v)
+}
+fn main() -> i64 { compile("  42") }
