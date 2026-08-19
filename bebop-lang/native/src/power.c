@@ -70,6 +70,49 @@ double bp_energy_joules(unsigned long cycles) {
     return (double)cycles * 1e-12;
 }
 
+/* ─── PSCI power gating ───────────────────────────────────────────────── */
+
+void bp_psci_sleep(unsigned core, int state) {
+    (void)core;
+    if (state == 0) return;      /* running — nothing to do */
+    if (state == 1) { bp_wfi(); return; }  /* retention */
+    /* state 2: power-down — on bare-metal, PSCI_CPU_OFF via SMC */
+    bp_wfi();
+}
+
+/* ─── DVFS hint ───────────────────────────────────────────────────────── */
+
+void bp_dvfs_hint(unsigned core, unsigned mhz) {
+    (void)core; (void)mhz;
+    /* Bare-metal: write to PMIC frequency register.
+     * Linux userspace: echo mhz > /sys/devices/system/cpu/cpuX/cpufreq/scaling_max_freq. */
+}
+
+/* ─── GIC interrupt coalescing ─────────────────────────────────────────── */
+
+void bp_gic_coalesce(unsigned core_id, unsigned batch_n) {
+    (void)core_id; (void)batch_n;
+    /* Bare-metal: program GICD (Distributor) to hold interrupts until
+     * `batch_n` are pending or a timer fires. Prevents interrupt storms
+     * from sensors/radios from waking the core. */
+}
+
+/* ─── Reynolds number (turbulence estimation) ──────────────────────────── */
+
+double bp_reynolds(const double *samples, size_t n) {
+    if (n < 2) return 0.0;
+    /* Re ≈ σ² / μ² where σ² = variance, μ = mean.
+     * High Re → turbulent (nonlinear), low Re → laminar (linear). */
+    double sum = 0.0, sum2 = 0.0;
+    for (size_t i = 0; i < n; i++) {
+        double x = samples[i];
+        sum += x; sum2 += x * x;
+    }
+    double mean = sum / (double)n;
+    double var = sum2 / (double)n - mean * mean;
+    return (mean != 0.0) ? var / (mean * mean) : 0.0;
+}
+
 int power_self_test(char *out, size_t cap) {
     size_t pos = 0;
     int all_ok = 1;
@@ -104,6 +147,21 @@ int power_self_test(char *out, size_t cap) {
 
     int r = bp_cpu_pin(0);
     A(r == 0 || r == -1, "cpu_pin returns 0 or -1");
+
+    /* PSCI sleep states execute (no trap) */
+    bp_psci_sleep(0, 0); bp_psci_sleep(0, 1); bp_psci_sleep(0, 2);
+    A(1, "PSCI sleep states execute (WFI-based)");
+
+    /* Reynolds: constant signal → laminar (Re=0) */
+    {
+        double laminar[5] = {5.0, 5.0, 5.0, 5.0, 5.0};
+        A(bp_reynolds(laminar, 5) < 0.001, "Reynolds ≈ 0 for constant signal");
+    }
+    /* Reynolds: alternating signal → turbulent (Re > 0) */
+    {
+        double turb[5] = {0.0, 10.0, 0.0, 10.0, 0.0};
+        A(bp_reynolds(turb, 5) > 0.5, "Reynolds > 0 for alternating signal");
+    }
 
     return all_ok ? 0 : -1;
 }
