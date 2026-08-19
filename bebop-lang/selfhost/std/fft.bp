@@ -1,0 +1,38 @@
+module core { }
+fn fsin(x: f64) -> f64 {
+  let xr = x;
+  while xr > 3.141592653589793 { let xr = xr - 6.283185307179586; 0 };
+  while xr < 0.0 - 3.141592653589793 { let xr = xr + 6.283185307179586; 0 };
+  let x2 = xr * xr;
+  let t1 = xr;
+  let t3 = 0.0 - xr * x2 / 6.0;
+  let t5 = xr * x2 * x2 / 120.0;
+  let t7 = 0.0 - xr * x2 * x2 * x2 / 5040.0;
+  t1 + t3 + t5 + t7
+}
+fn fcos(x: f64) -> f64 { fsin(x + 1.5707963267948966) }
+fn c_mul_re(ar: f64, ai: f64, br: f64, bi: f64) -> f64 { ar * br - ai * bi }
+fn c_mul_im(ar: f64, ai: f64, br: f64, bi: f64) -> f64 { ar * bi + ai * br }
+fn dft(re: [f64], im: [f64], n: i64) -> i64 {
+  let k = 0;
+  while k < n {
+    let accr = 0.0;
+    let acci = 0.0;
+    let j = 0;
+    while j < n {
+      let th = 0.0 - 6.283185307179586 * (j * k) / (n + 0.0);
+      let c = fcos(th);
+      let s = fsin(th);
+      let accr = accr + re[j] * c - im[j] * s;
+      let acci = acci + re[j] * s + im[j] * c;
+      let j = j + 1;
+      0
+    };
+    re[k] = accr;
+    im[k] = acci;
+    let k = k + 1;
+    0
+  };
+  0
+}
+fn main() -> f64 { fsin(1.5707963267948966) }
