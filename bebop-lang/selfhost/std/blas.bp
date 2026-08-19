@@ -1,0 +1,62 @@
+// selfhost/std/blas.bp — BLAS-1 kernels over [f64].
+// Port of native/src/compute.c (compute_saxpy / compute_dot / compute_nrm2).
+// Full f64 arithmetic throughout. There is no array-length builtin, so every
+// array-taking fn carries an explicit n: i64 length and loops i < n (mirrors
+// the C (data, n) signatures).
+//
+// nrm2 needs a square root; Bebop has no libm and a .bp module is a single
+// self-contained file, so sqrt is defined in-module (Newton iteration, same
+// shape as fmath.bp).
+
+module core { }
+
+// sqrt: Newton iteration r = 0.5 * (r + x / r), 20 rounds (x > 0; else 0.0).
+fn sqrt(x: f64) -> f64 {
+  if x <= 0.0 then 0.0 else (
+    let r = x;
+    let i = 0;
+    while i < 20 { let r = 0.5 * (r + x / r); let i = i + 1; 0 };
+    r
+  )
+}
+
+// saxpy: y[i] += alpha * x[i] for i in [0, n). Mutates y in place; returns 0.
+fn saxpy(alpha: f64, x: [f64], y: [f64], n: i64) -> i64 {
+  let i = 0;
+  let done = 0;
+  while done == 0 {
+    let _ = y[i] = y[i] + alpha * x[i];
+    let i = i + 1;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  0
+}
+
+// dot: sum of x[i] * y[i] for i in [0, n).
+fn dot(x: [f64], y: [f64], n: i64) -> f64 {
+  let i = 0;
+  let s = 0.0;
+  let done = 0;
+  while done == 0 {
+    let s = s + x[i] * y[i];
+    let i = i + 1;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  s
+}
+
+// nrm2: Euclidean norm sqrt(sum x[i]^2) for i in [0, n).
+fn nrm2(x: [f64], n: i64) -> f64 {
+  let i = 0;
+  let s = 0.0;
+  let done = 0;
+  while done == 0 {
+    let s = s + x[i] * x[i];
+    let i = i + 1;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  sqrt(s)
+}
