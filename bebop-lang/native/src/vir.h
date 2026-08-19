@@ -23,6 +23,7 @@ typedef enum {
     VIR_FADD_2D, /* 2×f64 element-wise add  */
     VIR_FSUB_2D, /* 2×f64 element-wise sub  */
     VIR_FMUL_2D, /* 2×f64 element-wise mul  */
+    VIR_UMULH_2D, /* 2×u64 multiply-high (Barrett NTT) */
 } VirOp;
 
 /* A 128-bit SIMD register image (2×u64 or 2×f64 or 4×u32 lanes). */
