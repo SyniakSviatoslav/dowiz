@@ -1,4 +1,6 @@
 module core { }
+fn tag(n: i64) -> i64 { n - (n / 8) * 8 }
+fn is_lit(n: i64) -> i64 { if tag(n) == 0 then 1 else 0 }
 fn mk_lit(v: i64) -> i64 { v * 8 }
-fn is_lit(n: i64) -> i64 { if n >= 0 then 1 else 0 }
-fn main() -> i64 { mk_lit(42) }
+fn lit_val(n: i64) -> i64 { n / 8 }
+fn main() -> i64 { lit_val(mk_lit(42)) }
