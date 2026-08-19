@@ -441,13 +441,13 @@ int bp_parse_fn_decl(const char *src, TyRegistry *reg, Term **out,
     if (pos >= n) { snprintf(err, cap, "expected '('"); return -1; }
     pos++;
     /* parse params: name : type (',' name : type)* */
-    static char pname_pool[256][64];
+    static char pname_pool[1024][64];
     static int pname_cnt = 0;
     const char *pnames[16];
     Ty *ptys[16];
     int nparams = 0;
     while (pos < n && toks[pos].kind == BP_TOK_IDENT && nparams < 16) {
-        char *pname = pname_pool[pname_cnt++ % 256];
+        char *pname = pname_pool[pname_cnt++ % 1024];
         size_t pl = toks[pos].len < 63 ? toks[pos].len : 63;
         memcpy(pname, toks[pos].start, pl); pname[pl] = '\0'; pos++;
         pnames[nparams] = pname;
@@ -502,22 +502,22 @@ int bp_parse_fn_decl(const char *src, TyRegistry *reg, Term **out,
     if (expr_parse(bs, &body, err, cap) != 0) { free(bs); return -1; }
     free(bs);
     /* build nested lambdas (currying) */
-    static Term lam_pool[64];
+    static Term lam_pool[1024];
     static int lam_i = 0;
     Term *lam = body;
     for (int k = nparams - 1; k >= 0; k--) {
-        Term *l = &lam_pool[lam_i++ % 64];
+        Term *l = &lam_pool[lam_i++ % 1024];
         memset(l, 0, sizeof *l);
         l->kind = TERM_LAM; l->name = pnames[k]; l->q = Q_MANY; l->ty = ptys[k]; l->a = lam;
         lam = l;
     }
     *out = lam;
     /* build nested Pi types */
-    static Ty pi_pool[64];
+    static Ty pi_pool[1024];
     static int pi_i = 0;
     Ty *pi = rty;
     for (int k = nparams - 1; k >= 0; k--) {
-        Ty *p = &pi_pool[pi_i++ % 64];
+        Ty *p = &pi_pool[pi_i++ % 1024];
         memset(p, 0, sizeof *p);
         p->kind = TY_PI; p->q = Q_MANY; p->x = pnames[k]; p->dom = ptys[k]; p->cod = pi;
         pi = p;

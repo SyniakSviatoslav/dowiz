@@ -6,7 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-static Term pool[1024];
+#define TERM_POOL 16384
+static Term pool[TERM_POOL];
 static int pi = 0;
 
 /* Registry (set by cmd_check/cmd_run) for struct construction + field access. */
@@ -28,6 +29,10 @@ static Ty *enum_ctor_lookup(const char *name) {
 }
 
 static Term *tnew(void) {
+    if (pi >= TERM_POOL) {
+        fprintf(stderr, "expr: term pool exhausted (%d terms)\n", TERM_POOL);
+        exit(1);
+    }
     memset(&pool[pi], 0, sizeof(Term));
     return &pool[pi++];
 }
