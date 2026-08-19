@@ -1,0 +1,31 @@
+module core { }
+
+// WASM opcode byte emitter — decimal values
+// Single-byte opcodes returned as i64 (decimal)
+
+// i64.const: 0x42=66, value packed as next byte (single-byte LEB128 range 0..127)
+fn wasm_i64_const(v: i64) -> i64 { 66 + v * 256 }
+fn wasm_i64_add() -> i64 { 124 }
+fn wasm_i64_sub() -> i64 { 125 }
+fn wasm_i64_mul() -> i64 { 126 }
+fn wasm_i64_div_s() -> i64 { 127 }
+fn wasm_i64_eq() -> i64 { 81 }
+fn wasm_i64_ne() -> i64 { 82 }
+fn wasm_i64_lt_s() -> i64 { 83 }
+fn wasm_i64_gt_s() -> i64 { 85 }
+fn wasm_i64_le_s() -> i64 { 87 }
+fn wasm_i64_ge_s() -> i64 { 89 }
+fn wasm_end() -> i64 { 11 }
+fn wasm_return() -> i64 { 15 }
+fn wasm_drop() -> i64 { 26 }
+fn wasm_local_get(idx: i64) -> i64 { 32 + idx * 256 }
+fn wasm_local_set(idx: i64) -> i64 { 33 + idx * 256 }
+fn wasm_i32_const(v: i64) -> i64 { 65 + v * 256 }
+
+// WASM section/type bytes (LEB128 sizes omitted for simplicity)
+fn wasm_i64_type() -> i64 { 126 }
+fn wasm_func_type() -> i64 { 96 }
+fn wasm_empty_type() -> i64 { 64 }
+
+// Helper: pack two bytes into one i64 (lo + hi*256)
+fn pack2(lo: i64, hi: i64) -> i64 { lo + hi * 256 }

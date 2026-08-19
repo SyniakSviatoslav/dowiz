@@ -1,0 +1,32 @@
+// selfhost/std/automaton.bp — deterministic finite automaton runner, i64 only.
+// Flat row-major transition matrix: trans[state * n_symbols + symbol] = next state.
+// accepting[] is the set of accepting (final) states; n_accept is its length.
+// dfa_accept returns 1 iff the input drives start into an accepting state.
+
+module core { }
+
+// dfa_accept: run input[0..n_input) through the DFA; 1 = accept, 0 = reject.
+fn dfa_accept(trans: [i64], n_states: i64, n_symbols: i64, start: i64,
+              accepting: [i64], n_accept: i64, input: [i64], n_input: i64) -> i64 {
+  let state = start;
+  let i = 0;
+  let done = if i >= n_input then 1 else 0;
+  while done == 0 {
+    let sym = input[i];
+    let state = trans[state * n_symbols + sym];
+    let i = i + 1;
+    let done = if i >= n_input then 1 else 0;
+    0
+  };
+  let j = 0;
+  let acc = 0;
+  let sdone = if j >= n_accept then 1 else 0;
+  while sdone == 0 {
+    let hit = if accepting[j] == state then 1 else 0;
+    let acc = if hit == 1 then 1 else acc;
+    let j = j + 1;
+    let sdone = if hit == 1 then 1 else (if j >= n_accept then 1 else 0);
+    0
+  };
+  acc
+}

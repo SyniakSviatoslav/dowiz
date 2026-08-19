@@ -1,0 +1,64 @@
+// selfhost/std/statistics.bp — float statistics over [f64].
+// mean, variance (population), stddev (Newton sqrt), min, max.
+// f64 companion to stats.bp (which is i64-only). No structs, no %,
+// no scientific notation, no unary minus (use 0.0 - x). Empty input
+// (n <= 0) returns 0.0 as the sentinel.
+
+module core { }
+
+// mean: arithmetic mean of a[0..n). 0.0 if n <= 0.
+fn mean(a: [f64], n: i64) -> f64 {
+  if n <= 0 then 0.0 else (
+    let s = 0.0;
+    let i = 0;
+    while i < n { let s = s + a[i]; let i = i + 1; 0 };
+    s / n
+  )
+}
+
+// variance: population variance (divide by n, not n-1). 0.0 if n <= 0.
+fn variance(a: [f64], n: i64) -> f64 {
+  if n <= 0 then 0.0 else (
+    let m = mean(a, n);
+    let ss = 0.0;
+    let i = 0;
+    while i < n { let d = a[i] - m; let ss = ss + d * d; let i = i + 1; 0 };
+    ss / n
+  )
+}
+
+// sqrt: Newton iteration r = 0.5 * (r + x / r), 20 rounds (x > 0; else 0.0).
+fn sqrt(x: f64) -> f64 {
+  if x <= 0.0 then 0.0 else (
+    let r = x;
+    let i = 0;
+    while i < 20 { let r = 0.5 * (r + x / r); let i = i + 1; 0 };
+    r
+  )
+}
+
+// stddev: population standard deviation = sqrt(variance). 0.0 if n <= 0.
+fn stddev(a: [f64], n: i64) -> f64 {
+  let v = variance(a, n);
+  sqrt(v)
+}
+
+// min: smallest element of a[0..n). 0.0 if n <= 0.
+fn min(a: [f64], n: i64) -> f64 {
+  if n <= 0 then 0.0 else (
+    let m = a[0];
+    let i = 1;
+    while i < n { let m = if a[i] < m then a[i] else m; let i = i + 1; 0 };
+    m
+  )
+}
+
+// max: largest element of a[0..n). 0.0 if n <= 0.
+fn max(a: [f64], n: i64) -> f64 {
+  if n <= 0 then 0.0 else (
+    let m = a[0];
+    let i = 1;
+    while i < n { let m = if a[i] > m then a[i] else m; let i = i + 1; 0 };
+    m
+  )
+}

@@ -1,0 +1,53 @@
+// selfhost/std/geometry3d.bp — 3D integer geometry over i64: squared distance,
+// dot product, cross product components, and collinearity. Points are separate
+// i64 coordinate arguments (no structs); vectors are separate i64 component args.
+
+module core { }
+
+// dist3_sq: squared Euclidean distance between 3D points (x1,y1,z1) and (x2,y2,z2).
+fn dist3_sq(x1: i64, y1: i64, z1: i64, x2: i64, y2: i64, z2: i64) -> i64 {
+  let dx = x1 - x2;
+  let dy = y1 - y2;
+  let dz = z1 - z2;
+  (dx * dx) + (dy * dy) + (dz * dz)
+}
+
+// dot3: dot product of vectors (a,b,c) and (d,e,f).
+fn dot3(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64) -> i64 {
+  (a * d) + (b * e) + (c * f)
+}
+
+// cross3_x: x-component of the cross product (ax,ay,az) x (bx,by,bz).
+fn cross3_x(ax: i64, ay: i64, az: i64, bx: i64, by: i64, bz: i64) -> i64 {
+  (ay * bz) - (az * by)
+}
+
+// cross3_y: y-component of the cross product (ax,ay,az) x (bx,by,bz).
+fn cross3_y(ax: i64, ay: i64, az: i64, bx: i64, by: i64, bz: i64) -> i64 {
+  (az * bx) - (ax * bz)
+}
+
+// cross3_z: z-component of the cross product (ax,ay,az) x (bx,by,bz).
+fn cross3_z(ax: i64, ay: i64, az: i64, bx: i64, by: i64, bz: i64) -> i64 {
+  (ax * by) - (ay * bx)
+}
+
+// is_collinear: 1 if the three 3D points are collinear, else 0. Points (x1,y1,z1),
+// (x2,y2,z2), (x3,y3,z3) are collinear iff the cross product of (x2-x1,..) and
+// (x3-x1,..) is the zero vector — checked per component via a flat let-shadow AND
+// (no squaring, so no overflow false-positive).
+fn is_collinear(x1: i64, y1: i64, z1: i64, x2: i64, y2: i64, z2: i64, x3: i64, y3: i64, z3: i64) -> i64 {
+  let ux = x2 - x1;
+  let uy = y2 - y1;
+  let uz = z2 - z1;
+  let vx = x3 - x1;
+  let vy = y3 - y1;
+  let vz = z3 - z1;
+  let cx = cross3_x(ux, uy, uz, vx, vy, vz);
+  let cy = cross3_y(ux, uy, uz, vx, vy, vz);
+  let cz = cross3_z(ux, uy, uz, vx, vy, vz);
+  let ok = if cx == 0 then 1 else 0;
+  let ok = if cy == 0 then ok else 0;
+  let ok = if cz == 0 then ok else 0;
+  ok
+}

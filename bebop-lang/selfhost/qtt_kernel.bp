@@ -39,3 +39,40 @@ fn conv(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64,j:i64)->i64 {
   keq*(lit+add)
 }
 fn test(x:i64)->i64 { let ek=[0];let ev=[5];let ea=[0];let eb=[0];let env=[0]; eval(ek,ev,ea,eb,0,env) }
+
+// Type rules (tagged i64): 0=i64 1=f64 2=bool 3=str 4=unit 5=arrow 6=array, -1=type-error.
+// Binop op codes: 0=+ 1=- 2=* 3=/ (arithmetic); 4== 5!= 6< 7> 8<= 9>= (comparison).
+fn is_num(t:i64)->i64 {
+  let i=if t==0 then 1 else 0;
+  let f=if t==1 then 1 else 0;
+  i+f
+}
+fn ty_unify(a:i64,b:i64)->i64 {
+  if a==b then a else 0 - 1
+}
+fn ty_if(ct:i64,tt:i64,et:i64)->i64 {
+  ty_unify(tt,et)
+}
+fn ty_binop(lt:i64,op:i64,rt:i64)->i64 {
+  let isar=if op<=3 then 1 else 0;
+  let iscmp=if op>=4 then 1 else 0;
+  let both=is_num(lt)*is_num(rt);
+  let mixed=if lt+rt>0 then 1 else 0;
+  let ar=both*mixed+both-1;
+  let cmp=if iscmp==1 then 2 else 0;
+  isar*ar+iscmp*cmp
+}
+fn self_check()->i64 {
+  let c1=if ty_unify(0,0)==0 then 0 else 1;
+  let c2=if ty_unify(0,1)==0-1 then 0 else 1;
+  let c3=if ty_if(2,1,1)==1 then 0 else 1;
+  let c4=if ty_if(2,1,0)==0-1 then 0 else 1;
+  let c5=if ty_binop(0,0,0)==0 then 0 else 1;
+  let c6=if ty_binop(0,0,1)==1 then 0 else 1;
+  let c7=if ty_binop(1,1,1)==1 then 0 else 1;
+  let c8=if ty_binop(0,4,1)==2 then 0 else 1;
+  let c9=if ty_binop(2,0,0)==0-1 then 0 else 1;
+  let c10=if is_num(0)==1 then 0 else 1;
+  let c11=if is_num(2)==0 then 0 else 1;
+  c1+c2+c3+c4+c5+c6+c7+c8+c9+c10+c11
+}

@@ -1,0 +1,33 @@
+// selfhost/std/uuid.bp — UUID v4 generation helpers (i64 arithmetic, no bitwise ops).
+//
+// A UUID is 128 bits = 32 nibbles = 16 bytes. i64 holds 16 nibbles (8 bytes), so a
+// UUID is packed nibble-wise into i64 words (two i64 words per UUID). Bebop lacks
+// << >> & | ^ ~, so fields are set with pure arithmetic: a nibble is base-16, and a
+// low field is extracted via x - (x/16)*16.
+//
+// RFC 4122 v4 layout (nibble indices 0..31):
+//   time_low(8) time_mid(4) time_hi(4) clock_seq(4) node(12)
+//   version = nibble 12 (all 4 bits -> 4 for v4)
+//   variant = high 2 bits of nibble 16 -> 10xx (RFC 4122)
+
+module core { }
+
+// lcg_next: one linear-congruential step — state = state*6364136223846793005 + 1442695040888963407.
+// A full-period LCG mod 2^64; the caller tracks the state externally (s = lcg_next(s)).
+fn lcg_next(state: i64) -> i64 {
+  let mul = 6364136223846793005;
+  let inc = 1442695040888963407;
+  state * mul + inc
+}
+
+// uuid_version: force the version nibble to 4 (binary 0100) for UUID v4.
+// The version field occupies all 4 bits of its nibble, so it is replaced wholesale.
+fn uuid_version(nibble: i64) -> i64 {
+  4
+}
+
+// uuid_variant: set the RFC 4122 variant bits to 10xx, preserving the low 2 random bits.
+// Result is in 8..11 (0x8 .. 0xb).
+fn uuid_variant(nibble: i64) -> i64 {
+  8 + (nibble - (nibble / 4) * 4)
+}
