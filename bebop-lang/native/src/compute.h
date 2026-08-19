@@ -63,6 +63,16 @@ int compute_gemv(double alpha, const double *a, const double *x,
 int compute_gemm(double alpha, const double *a, const double *b,
                  double beta, double *c, size_t m, size_t k, size_t n);
 
+/* ─── Signal processing kernels ─────────────────────────────────────────── */
+
+/* 1D convolution: out[i] = sum_j kernel[j] * signal[i+j], j in [0,klen-1].
+ * Returns number of output samples (= sn − klen + 1). */
+int compute_conv1d(const double *signal, size_t sn, const double *kernel,
+                   size_t klen, double *out);
+
+/* 2D stencil convolution (3×3 box blur): out[y][x] = mean of 3×3 neighbourhood. */
+int compute_box_blur(const double *img, int w, int h, double *out);
+
 int compute_self_test(char *out, size_t cap);
 
 #endif

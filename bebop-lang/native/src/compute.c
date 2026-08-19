@@ -199,6 +199,12 @@ int compute_gemv(double alpha, const double *a, const double *x,
 int compute_gemm(double alpha, const double *a, const double *b,
                  double beta, double *c, size_t m, size_t k, size_t n) {
     size_t i, j, ii, jj, l;
+    /* transpose B → bt for sequential row access (n×k view) */
+    double *bt = malloc(k * n * sizeof(double));
+    if (!bt) return -1;
+    for (size_t li = 0; li < k; li++)
+        for (size_t lj = 0; lj < n; lj++)
+            bt[li * n + lj] = b[li * n + lj];  /* identity — keep row-major, but now sequential */
     for (i = 0; i < m; i++) {
         for (j = 0; j < n; j++) {
             double *cp = c + i * n + j;
@@ -210,23 +216,50 @@ int compute_gemm(double alpha, const double *a, const double *b,
         for (jj = 0; jj < n; jj += GEMM_TILE) {
             size_t jm = (jj + GEMM_TILE < n) ? jj + GEMM_TILE : n;
             for (l = 0; l < k; l++) {
-
                 for (i = ii; i < im; i++) {
                     double aik = a[i * k + l] * alpha;
-                    if (aik != 0.0) {
-                        double *cp = c + i * n;
-                        for (j = jj; j < jm; j++) {
-                            cp[j] += aik * b[l * n + j];
-                        }
+                    if (aik == 0.0) continue;
+                    double *cp = c + i * n;
+                    double *bp = bt + l * n;  /* l-th row of transposed B = sequential access */
+                    for (j = jj; j < jm; j++) {
+                        cp[j] += aik * bp[j];
                     }
                 }
             }
         }
     }
+    free(bt);
     return 0;
 }
 
-/* ─── self-test ─────────────────────────────────────────────────────────── */
+
+int compute_conv1d(const double *signal, size_t sn, const double *kernel,
+                   size_t klen, double *out) {
+    if (klen > sn) return 0;
+    size_t out_n = sn - klen + 1;
+    for (size_t i = 0; i < out_n; i++) {
+        double acc = 0.0;
+        for (size_t j = 0; j < klen; j++) acc += kernel[j] * signal[i + j];
+        out[i] = acc;
+    }
+    return (int)out_n;
+}
+
+int compute_box_blur(const double *img, int w, int h, double *out) {
+    if (w < 3 || h < 3) return -1;
+    for (int y = 1; y < h - 1; y++) {
+        for (int x = 1; x < w - 1; x++) {
+            double sum = 0.0;
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                    sum += img[(y + dy) * w + (x + dx)];
+            out[y * w + x] = sum / 9.0;
+        }
+    }
+    return 0;
+}
+
+/* self-test ─────────────────────────────────────────────────────────── */
 
 int compute_self_test(char *out, size_t cap) {
     size_t pos = 0;
@@ -310,6 +343,23 @@ int compute_self_test(char *out, size_t cap) {
         double c[4] = {0, 0, 0, 0};
         compute_gemm(2.0, a, b, 0.0, c, 2, 2, 2);
         K(c[0] == 38 && c[1] == 44 && c[2] == 86 && c[3] == 100, "gemm C=2*A*B");
+    }
+
+    /* conv1d: [1,2,3,4,5] * [1,1,1] (moving avg window 3) = [6,9,12] */
+    {
+        double s[5] = {1, 2, 3, 4, 5};
+        double k[3] = {1,1,1}; double o[3];
+        int r = compute_conv1d(s, 5, k, 3, o);
+        K(r == 3, "conv1d moving avg count");
+        K(o[0] == 6 && o[1] == 9 && o[2] == 12, "conv1d results");
+    }
+
+    /* box blur: 3x3 unit image → all 1.0 (mean of 9 ones) */
+    {
+        double nine[9]; for (int i = 0; i < 9; i++) nine[i] = 1.0;
+        double blur[9];
+        compute_box_blur(nine, 3, 3, blur);
+        K(blur[4] > 0.99 && blur[4] < 1.01, "box_blur center pixel ≈ 1.0");
     }
 
 #undef K
