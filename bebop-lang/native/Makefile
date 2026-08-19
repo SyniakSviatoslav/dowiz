@@ -5,7 +5,7 @@ CFLAGS  ?= -O3 -flto -std=c11 -Wall -Wextra -Wpedantic -Werror -Wshadow -Wstrict
 BUILD   ?= build
 BIN     := $(BUILD)/bebopc
 
-SRC := src/main.c src/glyph.c src/calyx.c src/memristor.c src/adc.c src/power_telemetry.c src/compute.c src/lexer.c src/parser.c src/morse.c src/mesh.c src/qtt.c src/ntt.c src/ntt32.c src/hyper.c src/mem.c src/lmem.c src/hydra.c src/expr.c src/verify.c src/verifier.c src/vsa.c src/codegen.c src/graph.c src/chain.c src/native.c src/money.c src/fft.c src/arena.c src/event.c src/complex.c src/modular.c src/sort.c src/token_bucket.c src/checksum.c src/hex_util.c src/trig.c src/rng.c src/stats.c src/pid.c src/markov.c src/math_native.c src/spectral.c src/autonomic.c src/typereg.c src/atomic.c src/bench_all.c src/vir.c src/vir_umulh2.c src/theorem.c src/pac.c src/effect.c src/jittable.c src/supervise.c src/session.c src/syscall.c src/typereflect.c src/termination.c src/smt.c src/contract.c src/comptime.c src/fmt.c src/power.c src/x86_64.c src/gt.c src/gt_switch.S src/noether.c src/oracle.c src/tensor.c src/pool.c src/scale.c src/startup.c src/pq.c src/zlib.c src/x25519.c src/sha256.c src/aes_gcm.c src/tls.c
+SRC := src/main.c src/glyph.c src/calyx.c src/memristor.c src/adc.c src/power_telemetry.c src/compute.c src/lexer.c src/parser.c src/morse.c src/mesh.c src/qtt.c src/ntt.c src/ntt32.c src/hyper.c src/mem.c src/lmem.c src/hydra.c src/expr.c src/verify.c src/verifier.c src/vsa.c src/codegen.c src/graph.c src/chain.c src/native.c src/money.c src/fft.c src/arena.c src/event.c src/complex.c src/modular.c src/sort.c src/token_bucket.c src/checksum.c src/hex_util.c src/trig.c src/rng.c src/stats.c src/pid.c src/markov.c src/math_native.c src/spectral.c src/autonomic.c src/typereg.c src/atomic.c src/bench_all.c src/vir.c src/vir_umulh2.c src/theorem.c src/pac.c src/effect.c src/jittable.c src/supervise.c src/session.c src/syscall.c src/typereflect.c src/termination.c src/smt.c src/contract.c src/comptime.c src/fmt.c src/power.c src/x86_64.c src/gt.c src/gt_switch.S src/noether.c src/oracle.c src/tensor.c src/pool.c src/scale.c src/startup.c src/wcet.c src/coremark.c src/energy.c src/pq.c src/zlib.c src/x25519.c src/sha256.c src/aes_gcm.c src/tls.c
 LDLIBS := -lm -lpthread
 
 # Fuzz target: full compiler minus the CLI driver, plus the fuzz harness main.
@@ -20,7 +20,7 @@ $(FUZZ_BIN): src/fuzz.c $(FUZZ_SRC)
 	@mkdir -p $(BUILD)
 	$(CC) $(CFLAGS) -o $@ src/fuzz.c $(FUZZ_SRC) $(LDLIBS)
 
-$(BIN): $(SRC) src/glyph.h src/calyx.h src/arena.h src/memristor.h src/adc.h src/power_telemetry.h src/compute.h src/lexer.h src/parser.h src/morse.h src/mesh.h src/qtt.h src/ntt.h src/ntt32.h src/hyper.h src/mem.h src/lmem.h src/hydra.h src/expr.h src/verify.h src/verifier.h src/vsa.h src/codegen.h src/graph.h src/chain.h src/native.h src/money.h src/fft.h src/arena.h src/event.h src/complex.h src/modular.h src/sort.h src/token_bucket.h src/checksum.h src/hex_util.h src/trig.h src/rng.h src/stats.h src/pid.h src/markov.h src/math_native.h src/spectral.h src/autonomic.h src/typereg.h src/atomic.h src/bench_all.h src/vir.h src/theorem.h src/pac.h src/effect.h src/jittable.h src/supervise.h src/session.h src/syscall.h src/typereflect.h src/smt.h src/gt.h src/noether.h src/oracle.h src/tensor.h src/pool.h src/scale.h src/pq.h src/zlib.h src/sha256.h src/x25519.h src/aes_gcm.h src/tls.h src/startup.h
+$(BIN): $(SRC) src/glyph.h src/calyx.h src/arena.h src/memristor.h src/adc.h src/power_telemetry.h src/compute.h src/lexer.h src/parser.h src/morse.h src/mesh.h src/qtt.h src/ntt.h src/ntt32.h src/hyper.h src/mem.h src/lmem.h src/hydra.h src/expr.h src/verify.h src/verifier.h src/vsa.h src/codegen.h src/graph.h src/chain.h src/native.h src/money.h src/fft.h src/arena.h src/event.h src/complex.h src/modular.h src/sort.h src/token_bucket.h src/checksum.h src/hex_util.h src/trig.h src/rng.h src/stats.h src/pid.h src/markov.h src/math_native.h src/spectral.h src/autonomic.h src/typereg.h src/atomic.h src/bench_all.h src/vir.h src/theorem.h src/pac.h src/effect.h src/jittable.h src/supervise.h src/session.h src/syscall.h src/typereflect.h src/smt.h src/gt.h src/noether.h src/oracle.h src/tensor.h src/pool.h src/scale.h src/wcet.h src/coremark.h src/energy.h src/pq.h src/zlib.h src/sha256.h src/x25519.h src/aes_gcm.h src/tls.h src/startup.h
 	@mkdir -p $(BUILD)
 	$(CC) $(CFLAGS) -o $@ $(SRC) $(LDLIBS)
 
@@ -149,6 +149,12 @@ test: $(BIN)
 	$(BIN) scale
 	@echo "--- startup telemetry (binary size + per-module timing) ---"
 	$(BIN) size
+	@echo "--- WCET / jitter / determinism (checklist §6) ---"
+	$(BIN) wcettest
+	@echo "--- CoreMark (checklist §12) ---"
+	$(BIN) coremarktest
+	@echo "--- energy-per-op (checklist §11) ---"
+	$(BIN) energytest
 	@echo "--- zlib (deflate/inflate + crc32/adler32) ---"
 	$(BIN) zlib
 

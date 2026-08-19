@@ -80,6 +80,9 @@
 #include "aes_gcm.h"
 #include "tls.h"
 #include "startup.h"
+#include "wcet.h"
+#include "coremark.h"
+#include "energy.h"
 
 
 static void usage(void) {
@@ -997,6 +1000,36 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "scale") == 0) {
         return scale_run();
+    }
+    if (strcmp(argv[1], "wcet") == 0) {
+        return wcet_run();
+    }
+    if (strcmp(argv[1], "coremark") == 0) {
+        return coremark_run();
+    }
+    if (strcmp(argv[1], "energy") == 0) {
+        return energy_run();
+    }
+    if (strcmp(argv[1], "wcettest") == 0) {
+        char buf[4096];
+        int ok = wcet_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("WCET self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "coremarktest") == 0) {
+        char buf[4096];
+        int ok = coremark_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("CoreMark self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "energytest") == 0) {
+        char buf[4096];
+        int ok = energy_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Energy self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "memristor") == 0) {
         char buf[8192];
