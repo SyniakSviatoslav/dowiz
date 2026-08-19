@@ -127,4 +127,6 @@ int theorem_prove(const char *decl, char *out, size_t cap, char *err,
     if (strncmp(pbuf, "induction", 9) == 0) {
         return qtt_prove_induction(pbuf + 9, l, r, out, cap, err, cap_err);
     }
+    snprintf(err, cap_err, "theorem: unsupported proof");
+    return -1;
 }

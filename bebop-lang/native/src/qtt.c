@@ -61,6 +61,8 @@ int qtt_ty_print(const Ty *t, char *out, size_t cap) {
             return snprintf(out, cap, "Nat");
         case TY_STR:
             return snprintf(out, cap, "Str");
+        case TY_PTR:
+            return snprintf(out, cap, "*%s", t->elem ? "" : "");
         case TY_TYPE:
             return snprintf(out, cap, "Type");
         case TY_VAR:
@@ -605,6 +607,8 @@ static int ty_eq(const Ty *a, const Ty *b) {
             return ty_eq(a->dom, b->dom) && ty_eq(a->cod, b->cod);
         case TY_VEC:
             /* ignore n (dynamic size — compatible with any fixed-size literal) */
+            return ty_eq(a->elem, b->elem);
+        case TY_PTR:
             return ty_eq(a->elem, b->elem);
         case TY_STRUCT: {
             if (a->nfields != b->nfields) {

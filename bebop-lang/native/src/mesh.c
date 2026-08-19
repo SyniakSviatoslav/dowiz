@@ -114,7 +114,7 @@ int mesh_self_test(char *out, size_t cap) {
     T(m.n_bundles == 1, "send enqueued");
     T(m.bundles[0].len == 5, "payload length");
 
-    MeshBundle recv;
+    MeshBundle recv; memset(&recv, 0, sizeof recv);
     T(mesh_recv(&m, &recv) == 0, "bundle not addressed to us");
 
     mesh_send(&m, m.self_id.hi, m.self_id.lo, (const uint8_t*)"self", 4, 0);
@@ -128,7 +128,6 @@ int mesh_self_test(char *out, size_t cap) {
     int pruned = mesh_prune(&m, 0);
     T(pruned == 1, "neighbour pruned after timeout");
 
-    MeshBundle fb;
     mesh_send(&m, 0xFFFF, 0x0001, (const uint8_t*)"flood", 5, 2);
     T(m.bundles[0].custody == 1, "urgency >= 2 gets custody");
 

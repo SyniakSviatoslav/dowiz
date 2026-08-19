@@ -53,7 +53,6 @@ int tensor_self_test(char *out, size_t cap) {
     double dd[] = {1,0,0,0,1,0,0,0,1};
     size_t sh2[] = {3,3};
     Tensor eye = tensor_new(dd, sh2, 2);
-    double so[] = {0,0,0};
     tensor_softmax(&eye);
     T(tensor_sum(&eye) > 0.99 && tensor_sum(&eye) < 1.01, "softmax of [1,0,0;0,1,0;0,0,1] sums to 1 per row");
 

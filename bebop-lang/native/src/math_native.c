@@ -91,6 +91,7 @@ double calc_integral(double (*f)(double), double a, double b, int n) {
 
 double calc_gradient_descent(double (*f)(double), double (*df)(double),
                              double x0, double lr, int steps) {
+    (void)f;
     double x = x0;
     for (int i = 0; i < steps; i++) x -= lr * df(x);
     return x;
