@@ -255,9 +255,12 @@ fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
   let is_f = if ch1 == 102 then 1 else 0;
   let is_ifkw = is_i * is_f;
   let is_letter = is_alpha(ch);
+  let is_lp_next = if ch1 == 40 then 1 else 0;
+  let is_call = is_letter * is_lp_next;
   let reg = 19 + (ch - 97);
   if is_lparen == 1 then emit_paren(s, pos, insns, n)
   else if is_ifkw == 1 then emit_cond(s, pos, insns, n)
+  else if is_call == 1 then emit_call(s, ch, pos, insns, n)
   else if is_letter == 1 then (let _ = pos[0] = pos[0] + 1 in emit_var(insns, n, reg))
   else emit_num(s, pos, insns, n)
 }
@@ -384,6 +387,67 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
   n[0]
 }
 
+// Scan s for the definition "fn <fname>(" (single-letter fn name); record the
+// position of its 'fn' in out[0], return 1 if found.
+fn find_fn(s: str, fname: i64, out: [i64]) -> i64 {
+  let strn = str_len(s);
+  let j = 0;
+  let found = 0;
+  let best = 0;
+  while j < strn {
+    let e1 = if j + 1 >= strn then 1 else 0;
+    let e2 = if j + 2 >= strn then 1 else 0;
+    let e3 = if j + 3 >= strn then 1 else 0;
+    let c0 = char(s, j);
+    let c1 = if e1 == 1 then 0 else char(s, j + 1);
+    let c2 = if e2 == 1 then 0 else char(s, j + 2);
+    let c3 = if e3 == 1 then 0 else char(s, j + 3);
+    let isf = if c0 == 102 then 1 else 0;
+    let isn = if c1 == 110 then 1 else 0;
+    let issp = if c2 == 32 then 1 else 0;
+    let isnm = if c3 == fname then 1 else 0;
+    let hit = isf * isn * issp * isnm;
+    let best = if hit == 1 then j else best;
+    let found = if hit == 1 then 1 else found;
+    let j = j + 1;
+    0
+  };
+  let _ = out[0] = best;
+  found
+}
+
+// Inline a function call: find fname's def, bind args to its params (a->x19,
+// b->x20, ...), emit the callee body from its source position, restore pos.
+fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64]) -> i64 {
+  let fnpos = [0];
+  let _ = find_fn(s, fname, fnpos);
+  let ppos = [fnpos[0] + 4];
+  let pcnt = count_params(s, ppos);
+  let _ = skip_to(s, ppos, 123);
+  let body = ppos[0] + 1;
+  let _ = pos[0] = pos[0] + 2;
+  let i = 0;
+  while i < pcnt {
+    let _ = emit_cmp(s, pos, insns, n);
+    let _ = pop(insns, n, 0);
+    let _ = em(insns, n, 2852127712 + 19 + i);
+    let _ = skip_ws(s, pos);
+    let strn = str_len(s);
+    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let i = i + 1;
+    0
+  };
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let after = pos[0];
+  let _ = pos[0] = body;
+  let _ = emit_body(s, pos, insns, n);
+  let _ = pos[0] = after;
+  n[0]
+}
+
 // Compile a complete function: fn name(a,b,...) { body }.
 // Params are moved x0->x19, x1->x20, ... in the prologue; body references
 // single-letter params a->x19, b->x20, ... Returns the checksum of the words.
@@ -436,5 +500,8 @@ fn self_check() -> i64 {
   let c16 = if compile("5==2+3") == 94552386487 then 0 else 1;
   let c17 = if compile_fn("fn f() { let a = 1; a + 2 }") == 84002883299 then 0 else 1;
   let c18 = if compile_fn("fn f(a) { let b = a + 1; b * 2 }") == 120905853492 then 0 else 1;
-  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18
+  let c19 = if compile_fn("fn main() { f(41) } fn f(a) { a + 1 }") == 84002884547 then 0 else 1;
+  let c20 = if compile_fn("fn main() { s(6) } fn s(a) { a * a }") == 83593119523 then 0 else 1;
+  let c21 = if compile_fn("fn main() { g(3,4) } fn g(a,b) { a + b }") == 104006868725 then 0 else 1;
+  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20 + c21
 }
