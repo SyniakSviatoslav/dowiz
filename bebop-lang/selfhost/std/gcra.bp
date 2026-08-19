@@ -1,0 +1,17 @@
+// selfhost/std/gcra.bp — GCRA rate limiter, i64 only.
+// Port of native/src/token_bucket.c gcra_decide, integer-only.
+// gcra_decide(tat, now, period, limit) → 0 (denied) or 1 (granted).
+
+module core { }
+
+// GCRA: Generic Cell Rate Algorithm.
+//   tat    — theoretical arrival time
+//   now    — current timestamp
+//   period — emission interval (cost of one request)
+//   limit  — burst tolerance (max allowed lead)
+// Returns 1 if request may pass, 0 otherwise.
+fn gcra_decide(tat: i64, now: i64, period: i64, limit: i64) -> i64 {
+  let allow_at = if tat > now then tat else now;
+  let new_tat = allow_at + period;
+  if new_tat > now + limit then 0 else 1
+}

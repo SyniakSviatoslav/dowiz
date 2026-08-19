@@ -1,0 +1,61 @@
+// selfhost/std/bits.bp — bit utilities (popcount / clz / rotate) over i64.
+// Bebop has no << >> & | ^ ~, so every operation is expressed with only
+// + - * / and comparisons. Values are treated as non-negative 64-bit
+// patterns (x >= 0, i.e. < 2^63); rotate may wrap negative (two's
+// complement) to preserve the correct bit pattern.
+
+module core { }
+
+// pow2: 2^n by repeated doubling (n >= 0). 2^63 wraps negative but keeps
+// the correct bit pattern; 2^64 wraps to 0.
+fn pow2(n: i64) -> i64 {
+  let p = 1;
+  let i = 0;
+  while i < n {
+    let p = p * 2;
+    let i = i + 1;
+    0
+  };
+  p
+}
+
+// popcount: number of set bits in x (x >= 0). Extracts the low bit as
+// r - (r/2)*2 and halves r each step.
+fn popcount(x: i64) -> i64 {
+  let n = 0;
+  let r = x;
+  while r > 0 {
+    let n = n + (r - (r / 2) * 2);
+    let r = r / 2;
+    0
+  };
+  n
+}
+
+// bit_length: position of the highest set bit + 1 (x > 0); 0 for x == 0.
+fn bit_length(x: i64) -> i64 {
+  let n = 0;
+  let r = x;
+  while r > 0 {
+    let n = n + 1;
+    let r = r / 2;
+    0
+  };
+  n
+}
+
+// clz: count leading zeros in the 64-bit word (x >= 0). clz(0) = 64.
+fn clz(x: i64) -> i64 {
+  if x == 0 then 64 else (64 - bit_length(x))
+}
+
+// rotate: rotate the 64-bit pattern of x left by n positions
+// (x >= 0, 0 <= n < 64). Arithmetic identity:
+//   rotl(x,n) = (x mod 2^(64-n)) * 2^n + (x / 2^(64-n))
+fn rotate(x: i64, n: i64) -> i64 {
+  let p = pow2(n);
+  let q = pow2(64 - n);
+  let hi = x / q;
+  let lo = x - (hi * q);
+  (lo * p) + hi
+}

@@ -1,0 +1,18 @@
+// selfhost/std/token_bucket.bp — token bucket rate limiter (integer, i64).
+// Port of native/src/token_bucket.c (tb_try_acquire), integer-only.
+// decide returns 1 if one token is available after refilling, else 0.
+
+module core { }
+
+// decide: 1 if a token can be acquired, else 0.
+//   tokens = current token count
+//   last   = timestamp of the last refill
+//   now    = current timestamp
+//   rate   = refill rate (tokens per unit time)
+//   burst  = bucket capacity (max tokens)
+fn decide(tokens: i64, last: i64, now: i64, rate: i64, burst: i64) -> i64 {
+  let elapsed = if now > last then now - last else 0;
+  let refilled = tokens + elapsed * rate;
+  let capped = if refilled > burst then burst else refilled;
+  if capped >= 1 then 1 else 0
+}

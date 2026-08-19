@@ -1,0 +1,59 @@
+// selfhost/std/session.bp — session type duality (catalog #12), i64-encoded.
+//
+// A session type is a linear protocol: Send(T, S) | Recv(T, S) | End. Duality
+// swaps send<->recv recursively so two endpoints running a protocol and its
+// dual compose into a deadlock-free conversation (pi-calculus discipline).
+//
+// Encoding (single small int, no division needed to build):
+//   End = 0, Send(i64) = 1, Send(bool) = 2, Recv(i64) = 3, Recv(bool) = 4.
+// The protocol is a base-5 number, least-significant step first, terminated
+// by the End digit (0). The dual flips a digit 1<->3, 2<->4 (d +/- 2), keeping
+// the payload, and leaves End (0) fixed — so dual is an involution.
+
+module core { }
+
+// mod5(x): x modulo 5 via repeated subtraction (Bebop has no division).
+fn mod5(x: i64) -> i64 {
+  let r = x;
+  while r >= 5 { let r = r - 5; 0 };
+  r
+}
+
+// div5(x): floor(x / 5) via repeated subtraction.
+fn div5(x: i64) -> i64 {
+  let q = 0;
+  let r = x;
+  while r >= 5 { let r = r - 5; let q = q + 1; 0 };
+  q
+}
+
+// flip_step(d): swap Send<->Recv, preserve payload; End stays End.
+fn flip_step(d: i64) -> i64 {
+  if d == 0 then 0 else (if d <= 2 then d + 2 else d - 2)
+}
+
+// dual(st): the dual session type of st. Involution: dual(dual(st)) == st.
+fn dual(st: i64) -> i64 {
+  let acc = 0;
+  let place = 1;
+  let r = st;
+  while r > 0 {
+    let d = mod5(r);
+    let acc = acc + (flip_step(d) * place);
+    let place = place * 5;
+    let r = div5(r);
+    0
+  };
+  acc
+}
+
+// is_dual(a, b): 1 if b is the dual of a (the other endpoint's view of the
+// same protocol), else 0.
+fn is_dual(a: i64, b: i64) -> i64 {
+  if dual(a) == b then 1 else 0
+}
+
+// is_self_dual(st): 1 only for End (its own dual); any Send/Recv protocol is not.
+fn is_self_dual(st: i64) -> i64 {
+  if st == 0 then 1 else 0
+}

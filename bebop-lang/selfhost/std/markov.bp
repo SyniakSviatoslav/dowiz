@@ -1,0 +1,43 @@
+// selfhost/std/markov.bp — first-order Markov chain, i64 only.
+// Port of native/src/markov.c: integer weights, flat row-major transition
+// matrix, and discrete next-state sampling via a cumulative distribution array.
+
+module core { }
+
+// transition: pick the next state index from a cumulative distribution array.
+// cdf[j] = sum_{k<=j} weight[k] (inclusive; cdf[n-1] = total).
+// Given a draw r in [0, cdf[n-1]), returns the first j with cdf[j] > r.
+fn transition(cdf: [i64], n: i64, r: i64) -> i64 {
+  let j = 0;
+  let done = 0;
+  while done == 0 {
+    let hit = if cdf[j] > r then 1 else 0;
+    let j = if hit == 1 then j else j + 1;
+    let done = if hit == 1 then 1 else (if j >= n then 1 else 0);
+    0
+  };
+  j
+}
+
+// markov_step: one chain step for distribution pi over n states.
+// out[j] = sum_{i} pi[i] * a[i*n + j] (flat row-major transition matrix).
+fn markov_step(pi: [i64], a: [i64], n: i64, out: [i64]) -> i64 {
+  let j = 0;
+  let done = 0;
+  while done == 0 {
+    let i = 0;
+    let acc = 0;
+    let inner = 0;
+    while inner == 0 {
+      let acc = acc + (pi[i] * a[i * n + j]);
+      let i = i + 1;
+      let inner = if i >= n then 1 else 0;
+      0
+    };
+    let _ = out[j] = acc;
+    let j = j + 1;
+    let done = if j >= n then 1 else 0;
+    0
+  };
+  0
+}

@@ -1,0 +1,18 @@
+// selfhost/std/pac.bp — pointer authentication via arithmetic mixing (i64).
+// Port of native/src/pac.c. Software PAC: sign/verify with large-prime mixing.
+
+module core { }
+
+// pac_sign: arithmetic MAC over (ptr, key). Mixes with 64-bit golden-ratio
+// constant for good bit avalanche. Returns the authentication code.
+fn pac_sign(ptr: i64, key: i64) -> i64 {
+  let h = ptr * 11400714819323198485 + key;
+  h * 11400714819323198485 + ptr
+}
+
+// pac_verify: returns 1 if mac matches the expected code for (ptr, key),
+// 0 otherwise.
+fn pac_verify(ptr: i64, key: i64, mac: i64) -> i64 {
+  let good = if pac_sign(ptr, key) == mac then 1 else 0;
+  good
+}

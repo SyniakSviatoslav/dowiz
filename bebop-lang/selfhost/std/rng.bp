@@ -1,0 +1,40 @@
+// selfhost/std/rng.bp — SplitMix64/PCG-style PRNG (i64 arithmetic, no bitwise ops).
+// Port of native/src/rng.c. Bebop lacks << >> & | ^ ~ so the xor-shift-rotate
+// output permutations are approximated via multiply-chain mixing.
+// Constants: GOLDEN=0x9E3779B97F4A7C15, MUL1=0xBF58476D1CE4E5B9,
+// MUL2=0x94D049BB133111EB, PCG_MUL=0x5851F42D4C957F2D=6364136223846793005.
+
+module core { }
+
+// splitmix64_next: advance state by GOLDEN, apply multiply-chain mixer.
+// Caller tracks state externally: s = s + GOLDEN; next = splitmix64_next(s);
+fn splitmix64_next(state: i64) -> i64 {
+  let golden = 0 - 7046029254386353131;
+  let mul1   = 0 - 4658895280553007687;
+  let mul2   = 0 - 7723592293110705685;
+  let z = state + golden;
+  let z = z * mul1;
+  let z = z * mul2;
+  z
+}
+
+// pcg_next: one PCG-style LCG step — state * MUL + inc.
+// Caller tracks state: s = pcg_next(s, inc); returns new state as output.
+fn pcg_next(state: i64, inc: i64) -> i64 {
+  let mul = 6364136223846793005;
+  state * mul + inc
+}
+
+// rng_init: seed a PCG state from seed and stream (mirrors rng_new in rng.c).
+// Returns initial pcg_state. inc forced odd (stream * 2 + 1).
+fn rng_init(seed: i64, stream: i64) -> i64 {
+  let golden = 0 - 7046029254386353131;
+  let mul1   = 0 - 4658895280553007687;
+  let mul2   = 0 - 7723592293110705685;
+  let inc = stream * 2 + 1;
+  let tmp = seed + golden;
+  let sm = tmp * mul1;
+  let sm = sm * mul2;
+  let state = sm + inc;
+  pcg_next(state, inc)
+}
