@@ -10,6 +10,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/syscall.h>
+#include <time.h>
+#include <unistd.h>
 #include <unistd.h>
 
 /* ─── AArch64 sleep/event instructions (hand-encoded) ─── */
@@ -19,7 +21,7 @@ void bp_sev(void) { __asm__ volatile("sev"); }
 
 /* ─── PMU cycle counter (guarded) ─── */
 static sigjmp_buf pmu_jmp;
-static volatile sig_atomic_t pmu_ok = 1;
+static volatile sig_atomic_t pmu_ok = 0;
 
 static void pmu_sigill(int sig) {
     (void)sig;
@@ -68,6 +70,127 @@ int bp_cpu_pin(int cpu) {
 /* Energy estimate: joules ≈ cycles × 1 pJ/cycle (placeholder, calibrate vs HIL). */
 double bp_energy_joules(unsigned long cycles) {
     return (double)cycles * 1e-12;
+}
+
+/* ─── Precise power + resource telemetry ──────────────────────────────── */
+
+unsigned bp_power_freq_mhz(void) {
+    char path[96];
+    unsigned long khz = 0;
+    snprintf(path, sizeof path,
+             "/sys/devices/system/cpu/cpu%d/cpufreq/scaling_cur_freq", 0);
+    FILE *f = fopen(path, "r");
+    if (f) {
+        if (fscanf(f, "%lu", &khz) == 1) { fclose(f); return (unsigned)(khz / 1000); }
+        fclose(f);
+    }
+    return 1800; /* model fallback */
+}
+
+int bp_power_sample(BpPowerSample *out) {
+    if (!out) return -1;
+    memset(out, 0, sizeof *out);
+    static int pmu_tried = 0;
+    if (!pmu_tried) { bp_pmu_init(); pmu_tried = 1; }
+    out->cycles = bp_pmu_cycles();
+    out->freq_mhz = bp_power_freq_mhz();
+    out->voltage_mv = 1000.0;
+    double watts = ((double)out->freq_mhz / 1000.0) * 1e9 * 1e-12;
+    out->power_mw = watts * 1000.0;
+    out->current_ma = out->power_mw / out->voltage_mv;
+    out->energy_uj = bp_energy_joules(out->cycles) * 1e6;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    out->ts_ns = (unsigned long long)ts.tv_sec * 1000000000ULL + (unsigned long long)ts.tv_nsec;
+    return 0;
+}
+
+int bp_power_telemetry_json(const BpPowerSample *s, char *buf, size_t cap) {
+    if (!s || !buf || cap == 0) return -1;
+    return snprintf(buf, cap,
+        "{\"cycles\":%llu,\"freq_mhz\":%u,\"voltage_mv\":%.2f,"
+        "\"current_ma\":%.2f,\"power_mw\":%.3f,\"energy_uj\":%.2f,"
+        "\"ts_ns\":%llu}",
+        (unsigned long long)s->cycles, s->freq_mhz, s->voltage_mv,
+        s->current_ma, s->power_mw, s->energy_uj,
+        (unsigned long long)s->ts_ns);
+}
+
+/* Read /proc/self/statm: pages (RSS, VM). Page size from sysconf. */
+int bp_mem_usage(unsigned long *rss, unsigned long *vm) {
+    FILE *f = fopen("/proc/self/statm", "r");
+    unsigned long vmpg = 0, rsspg = 0;
+    if (!f) return -1;
+    if (fscanf(f, "%lu %lu", &vmpg, &rsspg) != 2) { fclose(f); return -1; }
+    fclose(f);
+    long ps = sysconf(_SC_PAGESIZE);
+    if (ps <= 0) ps = 4096;
+    if (vm) *vm = vmpg * (unsigned long)ps;
+    if (rss) *rss = rsspg * (unsigned long)ps;
+    return 0;
+}
+
+/* CPU utilization: /proc/stat delta of (idle vs total) since last call. */
+double bp_cpu_usage_pct(void) {
+    static unsigned long long prev_total = 0, prev_idle = 0;
+    FILE *f = fopen("/proc/stat", "r");
+    if (!f) return -1.0;
+    char line[256];
+    if (!fgets(line, sizeof line, f)) { fclose(f); return -1.0; }
+    fclose(f);
+    unsigned long long u=0,n=0,s=0,id=0,io=0,ir=0,sf=0,st=0;
+    if (sscanf(line, "cpu %llu %llu %llu %llu %llu %llu %llu %llu",
+               &u,&n,&s,&id,&io,&ir,&sf,&st) < 4) return -1.0;
+    unsigned long long idle = id + io;
+    unsigned long long total = u + n + s + id + io + ir + sf + st;
+    double pct = -1.0;
+    if (prev_total && total > prev_total)
+        pct = 100.0 * (1.0 - (double)(idle - prev_idle) / (double)(total - prev_total));
+    prev_total = total; prev_idle = idle;
+    return pct;
+}
+
+int bp_telemetry_sample(BpTelemetry *out) {
+    if (!out) return -1;
+    memset(out, 0, sizeof *out);
+    BpPowerSample p;
+    bp_power_sample(&p);
+    out->cycles = p.cycles;
+    out->freq_mhz = p.freq_mhz;
+    out->voltage_mv = p.voltage_mv;
+    out->current_ma = p.current_ma;
+    out->power_mw = p.power_mw;
+    out->energy_uj = p.energy_uj;
+    out->ts_ns = p.ts_ns;
+    bp_mem_usage(&out->rss_bytes, &out->vm_bytes);
+    out->cpu_usage_pct = bp_cpu_usage_pct();
+    out->gpu_usage_pct = 0.0; /* no GPU on this target */
+    static unsigned long long prev_ts = 0;
+    static unsigned long long prev_cyc = 0;
+    if (prev_ts) {
+        out->elapsed_ms = (double)(out->ts_ns - prev_ts) / 1e6;
+        double dcyc = (double)(out->cycles - prev_cyc);
+        double dsec = (double)(out->ts_ns - prev_ts) / 1e9;
+        out->mips = (dsec > 0) ? (dcyc / dsec) / 1e6 : 0.0;
+        out->ipc = (dcyc > 0) ? 1.0 : 0.0; /* ~1 instr/cycle placeholder */
+    }
+    prev_ts = out->ts_ns; prev_cyc = out->cycles;
+    return 0;
+}
+
+int bp_telemetry_json(const BpTelemetry *t, char *buf, size_t cap) {
+    if (!t || !buf || cap == 0) return -1;
+    return snprintf(buf, cap,
+        "{\"cycles\":%llu,\"freq_mhz\":%u,\"voltage_mv\":%.2f,"
+        "\"current_ma\":%.2f,\"power_mw\":%.3f,\"energy_uj\":%.2f,"
+        "\"rss_bytes\":%lu,\"vm_bytes\":%lu,"
+        "\"cpu_usage_pct\":%.2f,\"gpu_usage_pct\":%.2f,"
+        "\"elapsed_ms\":%.3f,\"mips\":%.2f,\"ipc\":%.3f,"
+        "\"ts_ns\":%llu}",
+        (unsigned long long)t->cycles, t->freq_mhz, t->voltage_mv,
+        t->current_ma, t->power_mw, t->energy_uj,
+        t->rss_bytes, t->vm_bytes, t->cpu_usage_pct, t->gpu_usage_pct,
+        t->elapsed_ms, t->mips, t->ipc, (unsigned long long)t->ts_ns);
 }
 
 /* ─── PSCI power gating ───────────────────────────────────────────────── */

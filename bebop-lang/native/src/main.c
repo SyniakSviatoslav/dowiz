@@ -1248,6 +1248,19 @@ int main(int argc, char **argv) {
         printf("Power (WFI/WFE + PMU) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
+    if (strcmp(argv[1], "telemetry") == 0) {
+        BpTelemetry t1, t2;
+        bp_telemetry_sample(&t1);
+        /* burn a little time so the second sample has a delta */
+        volatile unsigned long spin = 0;
+        for (volatile int i = 0; i < 1000000; i++) spin += i;
+        bp_telemetry_sample(&t2);
+        char buf[512];
+        bp_telemetry_json(&t2, buf, sizeof buf);
+        fputs(buf, stdout);
+        putchar('\n');
+        return 0;
+    }
     if (strcmp(argv[1], "fmttest") == 0) {
         char buf[4096];
         int ok = fmt_self_test(buf, sizeof buf);
