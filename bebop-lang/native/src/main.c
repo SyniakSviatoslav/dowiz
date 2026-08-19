@@ -6,6 +6,8 @@
 #include "glyph.h"
 #include "calyx.h"
 #include "arena.h"
+#include "memristor.h"
+#include "adc.h"
 #include "compute.h"
 #include "lexer.h"
 #include "parser.h"
@@ -29,6 +31,8 @@
 #include "money.h"
 #include "fft.h"
 #include "arena.h"
+#include "memristor.h"
+#include "adc.h"
 #include "event.h"
 #include "modular.h"
 #include "sort.h"
@@ -868,6 +872,20 @@ int main(int argc, char **argv) {
         printf("Compute (NEON+multi-core) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
+        if (strcmp(argv[1], "memristor") == 0) {
+        char buf[8192];
+        int ok = memristor_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Memristor self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "adc") == 0) {
+        char buf[8192];
+        int ok = adc_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("ADC (sensor) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
     if (strcmp(argv[1], "arena") == 0) {
         char buf[8192];
         int ok = arena_self_test(buf, sizeof buf);
@@ -876,7 +894,21 @@ int main(int argc, char **argv) {
 ", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
-        if (strcmp(argv[1], "arena") == 0) {
+    if (strcmp(argv[1], "memristor") == 0) {
+        char buf[8192];
+        int ok = memristor_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Memristor self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "adc") == 0) {
+        char buf[8192];
+        int ok = adc_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("ADC (sensor) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "arena") == 0) {
         char buf[8192];
         int ok = arena_self_test(buf, sizeof buf);
         fputs(buf, stdout);
@@ -992,6 +1024,20 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "fft") == 0) {
         cmd_fft();
         return 0;
+    }
+        if (strcmp(argv[1], "memristor") == 0) {
+        char buf[8192];
+        int ok = memristor_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Memristor self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "adc") == 0) {
+        char buf[8192];
+        int ok = adc_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("ADC (sensor) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "arena") == 0) {
         cmd_arena();
