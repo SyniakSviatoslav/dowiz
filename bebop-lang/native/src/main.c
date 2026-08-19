@@ -75,6 +75,7 @@
 #include "zlib.h"
 #include "sha256.h"
 #include "x25519.h"
+#include "aes_gcm.h"
 
 
 static void usage(void) {
@@ -1418,6 +1419,14 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "x25519") == 0) {
         cmd_x25519();
         return 0;
+    }
+    if (strcmp(argv[1], "aes_gcm") == 0) {
+        char buf[8192];
+        int ok = aes_gcm_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("AES-GCM (AES-128 + GHASH, SP 800-38D) self-test: %s\n",
+               ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
     }
     usage();
     return 2;
