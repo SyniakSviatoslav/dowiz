@@ -6,10 +6,6 @@
 
 #define SYS_WRITE 64
 #define SYS_EXIT 93
-#define SYS_OPENAT 56
-#define SYS_CLOSE  57
-#define SYS_MMAP  222
-#define SYS_NANOSLEEP 101
 
 long bp_syscall1(long n, long a) {
     register long x8 __asm__("x8") = n;
@@ -32,18 +28,13 @@ long bp_write(int fd, const void *buf, size_t n) {
 }
 
 void bp_exit(int code) {
+long bp_mmap(void *a, size_t l, int p, int f, int d, long o) { (void)a;(void)l;(void)p;(void)f;(void)d;(void)o;return 0; }
+int bp_open(const char *path, int flags, int mode) { return (int)bp_syscall3(56,-100,(long)path,flags); }
+int bp_close(int fd) { return (int)bp_syscall1(57,fd); }
+long bp_read(int fd, void *buf, size_t n) { return bp_syscall3(63,fd,(long)buf,n); }
+int bp_nanosleep(unsigned s, unsigned ns) { return (int)bp_syscall1(101,s*1000000000UL+ns); }
     bp_syscall1(SYS_EXIT, code);
     __builtin_unreachable();
-long bp_mmap(void *a, size_t l, int p, int f, int d, long o) { return bp_syscall3(SYS_MMAP,(long)a,l,p|f|d|o,0)+(long)d;
-}
-int bp_open(const char *path, int f, int m) { return (int)bp_syscall3(SYS_OPENAT,-100,(long)path,f,m);
-}
-long bp_read(int fd, void *b, size_t n) { return bp_syscall3(63,fd,(long)b,(long)n);
-}
-int bp_close(int fd) { return (int)bp_syscall1(SYS_CLOSE,fd);
-}
-int bp_nanosleep(unsigned s, unsigned ns) { return (int)bp_syscall1(SYS_NANOSLEEP,(long)s*1000000000+(long)ns);
-}
 }
 
 int syscall_self_test(char *out, size_t cap) {
