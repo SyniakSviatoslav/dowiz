@@ -12,6 +12,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* ─── AArch64 cache control (In-Memory Computing simulation) ─────────────── */
+
+/* Prefetch memory into L1 cache: hides DRAM latency under computation.
+ * prfm PLDL1KEEP (0x00): prefetch load, keep in L1. */
+#define PREFETCH_R(p) ((void)(p))
+/* On AArch64 bare-metal, replace with: __asm__ volatile('prfm pldl1keep,[%0]'::'r'(p)); */
+
 /* A compute kernel: pure elementwise fn in (const T*, size_t idx) -> T. */
 typedef double (*ComputeFn)(const double *a, size_t i);
 
