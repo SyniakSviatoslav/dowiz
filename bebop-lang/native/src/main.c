@@ -839,6 +839,52 @@ static void cmd_check(const char *path) {
     free(src);
 }
 
+/* Strict mode: enforce Bebop DESIGN LAWS at the source level.
+ * Law #1 (branchless): no nested if-else in fn bodies.
+ * Heuristic: track if-depth (if=+1, else=-1); depth>1 means nested if. */
+static void cmd_strict(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) { fprintf(stderr, "cannot open %s\n", path); exit(1); }
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *src = malloc((size_t)sz + 1);
+    if (!src) { fclose(f); exit(1); }
+    size_t rd = fread(src, 1, (size_t)sz, f);
+    src[rd] = '\0';
+    fclose(f);
+
+    int violations = 0, in_fn = 0, depth = 0, brace = 0;
+    for (size_t i = 0; i < rd; i++) {
+        char c = src[i];
+        if (!in_fn) {
+            if (c == 'f' && src[i+1] == 'n' && src[i+2] == ' ') { in_fn = 1; depth = 0; brace = 0; }
+            continue;
+        }
+        if (c == '{') brace++;
+        else if (c == '}') { brace--; if (brace == 0) in_fn = 0; continue; }
+        if (!brace) continue;
+        if (c == 'i' && src[i+1] == 'f' && (src[i+2] == ' ' || src[i+2] == '(')) {
+            depth++;
+            if (depth > 1) {
+                fprintf(stderr, "strict: nested if (branchless law) at byte %zu\n", i);
+                violations++;
+                depth = 1; /* don't re-flag the same nesting */
+            }
+        } else if (c == 'e' && src[i+1] == 'l' && src[i+2] == 's' && src[i+3] == 'e') {
+            if (depth > 0) depth--;
+        }
+    }
+    free(src);
+    if (violations > 0) {
+        fprintf(stderr, "strict: %d branchless violation(s)\n", violations);
+        exit(1);
+    }
+    /* Run normal check as the typecheck gate */
+    cmd_check(path);
+    printf("strict: PASS (no branchless violations)\n");
+}
+
 static void cmd_atomic(void) {
     char buf[4096];
     int ok = atomic_self_test(buf, sizeof buf);
@@ -1087,6 +1133,14 @@ int main(int argc, char **argv) {
             return 2;
         }
         cmd_check(argv[2]);
+        return 0;
+    }
+    if (strcmp(argv[1], "strict") == 0) {
+        if (argc < 3) {
+            usage();
+            return 2;
+        }
+        cmd_strict(argv[2]);
         return 0;
     }
     if (strcmp(argv[1], "atomic") == 0) {
