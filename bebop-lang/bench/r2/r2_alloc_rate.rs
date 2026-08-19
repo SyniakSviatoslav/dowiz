@@ -3,6 +3,7 @@
 // Compile: rustc -O -o bench file.rs
 
 use std::alloc::{alloc, dealloc, Layout};
+use std::hint::black_box;
 use std::time::Instant;
 
 const ALLOC_SIZE: usize = 1024;
@@ -53,6 +54,7 @@ fn main() {
 
     for _run in 0..n_runs {
         let t0 = Instant::now();
+        let mut acc: u64 = 0;
         for _ in 0..N_ITERS {
             let ptr = unsafe { alloc(layout) };
             if ptr.is_null() {
@@ -61,9 +63,16 @@ fn main() {
             }
             unsafe {
                 std::ptr::write_bytes(ptr, 0xAB, ALLOC_SIZE);
+                // read the written bytes through a black_box so LLVM cannot
+                // dead-store-eliminate the write (previous version measured
+                // malloc+free only, an upper bound, not real alloc+write+free).
+                let b0 = std::ptr::read_volatile(ptr as *const u8);
+                let b1 = std::ptr::read_volatile(ptr.add(ALLOC_SIZE - 1) as *const u8);
+                acc = acc.wrapping_add(black_box(b0 as u64) ^ black_box(b1 as u64));
                 dealloc(ptr, layout);
             }
         }
+        black_box(acc);
         let elapsed_s = t0.elapsed().as_secs_f64();
         let rate = N_ITERS as f64 / elapsed_s;
         if rate > best_rate {

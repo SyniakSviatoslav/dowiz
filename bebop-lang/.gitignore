@@ -10,10 +10,13 @@ bench/r5/cov/
 
 # compiled benchmark probes (built from the committed .c / .rs sources)
 bench/r2/r2_peak_rss
+bench/r2/r2_peak_rss_c
 bench/r2/r2_peak_rss_rs
 bench/r2/r2_overhead
+bench/r2/r2_overhead_c
 bench/r2/r2_overhead_rs
 bench/r2/r2_alloc_rate
+bench/r2/r2_alloc_rate_c
 bench/r2/r2_alloc_rate_rs
 bench/r8/stream
 bench/r8/stream_o3

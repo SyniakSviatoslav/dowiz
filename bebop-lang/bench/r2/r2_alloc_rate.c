@@ -10,6 +10,11 @@
 #define ALLOC_SIZE 1024
 #define N_ITERS     500000
 
+/* Volatile sink: forces the alloc+write to be observable so GCC cannot
+ * dead-code-eliminate the malloc/memset/free loop (the previous version
+ * reported 'inf' because -O2 removed the whole loop). */
+static volatile unsigned long long g_sink;
+
 static long get_us(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -26,6 +31,10 @@ int main(void) {
             void *p = malloc(ALLOC_SIZE);
             if (!p) { printf("malloc fail at i=%d\n", i); return 1; }
             memset(p, 0xAB, ALLOC_SIZE);
+            /* volatile reads of the written bytes: the write must happen and
+             * the pointer must be live, so malloc/memset/free all survive. */
+            g_sink += *(volatile unsigned char *)p;
+            g_sink += *(volatile unsigned char *)((char *)p + ALLOC_SIZE - 1);
             free(p);
         }
         long t1 = get_us();
@@ -39,5 +48,6 @@ int main(void) {
 
     printf("alloc_rate_per_sec: %.0f\n", best_rate);
     printf("peak_rss_kb: %ld\n", ru.ru_maxrss);
+    printf("sink: %llu\n", (unsigned long long)g_sink);
     return 0;
 }
