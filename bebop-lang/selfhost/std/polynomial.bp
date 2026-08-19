@@ -1,0 +1,36 @@
+// selfhost/std/polynomial.bp — polynomial evaluation via Horner's method,
+// plus first derivative, over an integer coefficient array.
+
+module core { }
+
+// poly_eval: evaluate p(x) where coeffs[i] is the coefficient of x^i and
+// n is the number of coefficients (coeffs[0..n-1]). Horner's method:
+//   result = coeffs[n-1]; repeat: result = result * x + coeffs[i].
+fn poly_eval(coeffs: [i64], n: i64, x: i64) -> i64 {
+  let result = 0;
+  let i = n - 1;
+  let done = 0;
+  while done == 0 {
+    let result = (result * x) + coeffs[i];
+    let i = i - 1;
+    let done = if i < 0 then 1 else 0;
+    0
+  };
+  result
+}
+
+// poly_derivative: evaluate p'(x), the first derivative of the polynomial
+// whose coefficients are coeffs[0..n-1]. Derivative coefficient of x^j is
+// (j+1)*coeffs[j+1], so Horner runs from j = n-2 down to 0.
+fn poly_derivative(coeffs: [i64], n: i64, x: i64) -> i64 {
+  let result = 0;
+  let i = n - 2;
+  let done = 0;
+  while done == 0 {
+    let result = (result * x) + ((i + 1) * coeffs[i + 1]);
+    let i = i - 1;
+    let done = if i < 0 then 1 else 0;
+    0
+  };
+  result
+}

@@ -315,9 +315,9 @@ int compute_self_test(char *out, size_t cap) {
 
     /* scal: [1,2,3] *= 10 → [10,20,30] */
     {
-        double s[3] = {1, 2, 3};
-        compute_scal(10.0, s, 3);
-        K(s[0] == 10 && s[1] == 20 && s[2] == 30, "scal 10×[1,2,3]=[10,20,30]");
+        double sig3[3] = {1, 2, 3};
+        compute_scal(10.0, sig3, 3);
+        K(sig3[0] == 10 && sig3[1] == 20 && sig3[2] == 30, "scal 10×[1,2,3]=[10,20,30]");
     }
 
     /* copy: y = x */
@@ -347,9 +347,9 @@ int compute_self_test(char *out, size_t cap) {
 
     /* conv1d: [1,2,3,4,5] * [1,1,1] (moving avg window 3) = [6,9,12] */
     {
-        double s[5] = {1, 2, 3, 4, 5};
+        double sig5[5] = {1, 2, 3, 4, 5};
         double k[3] = {1,1,1}; double o[3];
-        int r = compute_conv1d(s, 5, k, 3, o);
+        int r = compute_conv1d(sig5, 5, k, 3, o);
         K(r == 3, "conv1d moving avg count");
         K(o[0] == 6 && o[1] == 9 && o[2] == 12, "conv1d results");
     }

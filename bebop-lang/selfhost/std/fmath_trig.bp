@@ -1,0 +1,122 @@
+// selfhost/std/fmath_trig.bp — elementary trig functions over f64.
+// sin/cos via Cody-Waite range reduction + Taylor series.
+// atan2 via angle-halving + Taylor series.
+// Port of native/src/trig.c.
+
+module core { }
+
+// f64_abs: absolute value of a f64.
+fn f64_abs(x: f64) -> f64 { if x < 0.0 then 0.0 - x else x }
+
+// f64_sqrt: square root via Newton's method.
+fn f64_sqrt(x: f64) -> f64 {
+  if x <= 0.0 then 0.0 else (
+    let guess = x;
+    let next = (guess + x / guess) * 0.5;
+    while next < guess {
+      let guess = next;
+      let next = (guess + x / guess) * 0.5;
+      0.0
+    };
+    guess
+  )
+}
+
+// f64_round: round to nearest integer via "magic number" trick.
+fn f64_round(x: f64) -> f64 {
+  let MAGIC = 6755399441055744.0;
+  if x >= 0.0 then (x + MAGIC) - MAGIC else (0.0 - ((0.0 - x + MAGIC) - MAGIC))
+}
+
+// sin_poly: Taylor series for sin on [-pi/4, pi/4].
+fn sin_poly(x: f64) -> f64 {
+  let x2 = x * x;
+  let x3 = x2 * x;
+  let x5 = x3 * x2;
+  let x7 = x5 * x2;
+  let x9 = x7 * x2;
+  let x11 = x9 * x2;
+  let x13 = x11 * x2;
+  x - x3 / 6.0 + x5 / 120.0 - x7 / 5040.0 + x9 / 362880.0 - x11 / 39916800.0 + x13 / 6227020800.0
+}
+
+// cos_poly: Taylor series for cos on [-pi/4, pi/4].
+fn cos_poly(x: f64) -> f64 {
+  let x2 = x * x;
+  let x4 = x2 * x2;
+  let x6 = x4 * x2;
+  let x8 = x6 * x2;
+  let x10 = x8 * x2;
+  let x12 = x10 * x2;
+  1.0 - x2 / 2.0 + x4 / 24.0 - x6 / 720.0 + x8 / 40320.0 - x10 / 3628800.0 + x12 / 479001600.0
+}
+
+// sin: sine of x (radians). Cody-Waite range reduction + Taylor.
+fn sin(x: f64) -> f64 {
+  let xn = x * 0.6366197723675814;
+  let n = f64_round(xn);
+  let r = (x - n * 1.5707963267948966) - n * 0.000000000000000061232;
+  let q = n - 4.0 * f64_round(n * 0.25);
+  let q = if q < 0.0 then q + 4.0 else q;
+  let sp = sin_poly(r);
+  let cp = cos_poly(r);
+  let result = 0.0;
+  let result = if q == 0.0 then sp else result;
+  let result = if q == 1.0 then cp else result;
+  let result = if q == 2.0 then 0.0 - sp else result;
+  let result = if q == 3.0 then 0.0 - cp else result;
+  result
+}
+
+// cos: cosine of x (radians). Cody-Waite range reduction + Taylor.
+fn cos(x: f64) -> f64 {
+  let xn = x * 0.6366197723675814;
+  let n = f64_round(xn);
+  let r = (x - n * 1.5707963267948966) - n * 0.000000000000000061232;
+  let q = n - 4.0 * f64_round(n * 0.25);
+  let q = if q < 0.0 then q + 4.0 else q;
+  let sp = sin_poly(r);
+  let cp = cos_poly(r);
+  let result = 0.0;
+  let result = if q == 0.0 then cp else result;
+  let result = if q == 1.0 then 0.0 - sp else result;
+  let result = if q == 2.0 then 0.0 - cp else result;
+  let result = if q == 3.0 then sp else result;
+  result
+}
+
+// atan_pos: arctan of x (angle-halving reduction + Taylor series).
+fn atan_pos(x: f64) -> f64 {
+  if x > 1.0 then 1.5707963267948966 - atan_pos(1.0 / x) else (
+    let mult = 1.0;
+    let done = 0;
+    while done == 0 {
+      let abs_x = if x < 0.0 then 0.0 - x else x;
+      let done = if abs_x > 0.01 then 0 else 1;
+      let x = if done == 0 then x / (1.0 + f64_sqrt(1.0 + x * x)) else x;
+      let mult = if done == 0 then mult * 2.0 else mult;
+      0
+    };
+    let x2 = x * x;
+    let x3 = x2 * x;
+    let x5 = x3 * x2;
+    let x7 = x5 * x2;
+    let x9 = x7 * x2;
+    let x11 = x9 * x2;
+    let x13 = x11 * x2;
+    let sum = x - x3 / 3.0 + x5 / 5.0 - x7 / 7.0 + x9 / 9.0 - x11 / 11.0 + x13 / 13.0;
+    mult * sum
+  )
+}
+
+// atan2: 2-argument arctangent, returns angle in [-pi, pi].
+fn atan2(y: f64, x: f64) -> f64 {
+  let x_pos = x > 0.0;
+  let x_neg = x < 0.0;
+  let y_nneg = y >= 0.0;
+  let result = 0.0;
+  let result = if x_pos then atan_pos(y / x) else result;
+  let result = if x_neg then (if y_nneg then atan_pos(y / x) + 3.141592653589793 else atan_pos(y / x) - 3.141592653589793) else result;
+  let result = if x == 0.0 then (if y > 0.0 then 1.5707963267948966 else (if y < 0.0 then 0.0 - 1.5707963267948966 else 0.0)) else result;
+  result
+}

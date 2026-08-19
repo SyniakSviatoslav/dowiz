@@ -1566,11 +1566,11 @@ static int in_while = 0;
 
 /* Env pool: closures capture Env nodes, which must outlive the eval frame that
  * created them (curried application). Stack-allocated Env would dangle. */
-static Env env_pool[16384];
+static Env env_pool[262144];
 static int env_i = 0;
 static Env *env_new(const char *name, Value val, Env *next) {
     if (env_i >= (int)(sizeof env_pool / sizeof env_pool[0])) {
-        env_i = 0; /* safety wrap (should not happen in bounded eval) */
+        return NULL; /* pool exhausted (bounded eval) */
     }
     Env *e = &env_pool[env_i++];
     e->name = name;
@@ -1616,6 +1616,7 @@ static Value eval(const Term *t, Env *env) {
             }
             if (!f.lam->name) { v.kind = -1; return v; }
             Env *e = env_new(f.lam->name, arg, f.env);
+            if (!e) { v.kind = -1; return v; }
             return eval(f.lam->a, e);
         }
         case TERM_BIN: {
@@ -1682,6 +1683,7 @@ static Value eval(const Term *t, Env *env) {
                 /* not pre-bound: create a scoped binding (won't persist) */
             }
             Env *e = env_new(t->name, x, env);
+            if (!e) { v.kind = -1; return v; }
             return eval(t->b, e);
         }
         case TERM_STRUCT: {

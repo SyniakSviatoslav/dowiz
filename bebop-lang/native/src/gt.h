@@ -36,6 +36,7 @@ int gt_spawn(GtCoroutine *co, GtFn fn, void *arg);
 
 /* Yield control back to the scheduler. */
 void gt_yield(void);
+void gt_finish(void);
 
 /* Run all spawned coroutines round-robin until every one finishes. */
 void gt_sched_run(void);

@@ -1,0 +1,104 @@
+// selfhost/std/geometry.bp — 2D/3D integer geometry over i64.
+// Points are passed as separate i64 coordinates (no structs); midpoint and
+// other multi-value results are written into a caller-provided [i64] out
+// buffer. Distances are exact Euclidean distances floored to the nearest
+// integer via isqrt (no floats). Squared distances (dist2_*) are exact and
+// are what is_right_triangle_* compares against, so no rounding is involved
+// in the right-angle test.
+
+module core { }
+
+// isqrt: floor of the integer square root of n (n >= 0; 0 for n < 1).
+fn isqrt(n: i64) -> i64 {
+  if n < 1 then 0 else (
+    let x = n;
+    let y = (x + n / x) / 2;
+    while y < x {
+      let x = y;
+      let y = (x + n / x) / 2;
+      0
+    };
+    x
+  )
+}
+
+// dist2_2d: squared Euclidean distance between 2D points (x1,y1) and (x2,y2).
+fn dist2_2d(x1: i64, y1: i64, x2: i64, y2: i64) -> i64 {
+  let dx = x1 - x2;
+  let dy = y1 - y2;
+  (dx * dx) + (dy * dy)
+}
+
+// dist2_3d: squared Euclidean distance between 3D points (x1,y1,z1) and (x2,y2,z2).
+fn dist2_3d(x1: i64, y1: i64, z1: i64, x2: i64, y2: i64, z2: i64) -> i64 {
+  let dx = x1 - x2;
+  let dy = y1 - y2;
+  let dz = z1 - z2;
+  (dx * dx) + (dy * dy) + (dz * dz)
+}
+
+// dist_2d: integer Euclidean distance (floor of sqrt) between two 2D points.
+fn dist_2d(x1: i64, y1: i64, x2: i64, y2: i64) -> i64 {
+  isqrt(dist2_2d(x1, y1, x2, y2))
+}
+
+// dist_3d: integer Euclidean distance (floor of sqrt) between two 3D points.
+fn dist_3d(x1: i64, y1: i64, z1: i64, x2: i64, y2: i64, z2: i64) -> i64 {
+  isqrt(dist2_3d(x1, y1, z1, x2, y2, z2))
+}
+
+// midpoint_2d: write the integer midpoint of (x1,y1) and (x2,y2) into out[0..1].
+// Division truncates toward zero. Returns 0.
+fn midpoint_2d(x1: i64, y1: i64, x2: i64, y2: i64, out: [i64]) -> i64 {
+  let _ = out[0] = (x1 + x2) / 2;
+  let _ = out[1] = (y1 + y2) / 2;
+  0
+}
+
+// midpoint_3d: write the integer midpoint of (x1,y1,z1) and (x2,y2,z2) into
+// out[0..2]. Division truncates toward zero. Returns 0.
+fn midpoint_3d(x1: i64, y1: i64, z1: i64, x2: i64, y2: i64, z2: i64, out: [i64]) -> i64 {
+  let _ = out[0] = (x1 + x2) / 2;
+  let _ = out[1] = (y1 + y2) / 2;
+  let _ = out[2] = (z1 + z2) / 2;
+  0
+}
+
+// line_len_2d: integer length of the line segment from (x1,y1) to (x2,y2).
+fn line_len_2d(x1: i64, y1: i64, x2: i64, y2: i64) -> i64 {
+  dist_2d(x1, y1, x2, y2)
+}
+
+// line_len_3d: integer length of the line segment from (x1,y1,z1) to (x2,y2,z2).
+fn line_len_3d(x1: i64, y1: i64, z1: i64, x2: i64, y2: i64, z2: i64) -> i64 {
+  dist_3d(x1, y1, z1, x2, y2, z2)
+}
+
+// is_right_triangle_2d: 1 if the three 2D points form a right triangle, else 0.
+// Compares squared side lengths (Pythagoras), so the test is exact; degenerate
+// triangles (any zero-length side) return 0.
+fn is_right_triangle_2d(x1: i64, y1: i64, x2: i64, y2: i64, x3: i64, y3: i64) -> i64 {
+  let a = dist2_2d(x1, y1, x2, y2);
+  let b = dist2_2d(x2, y2, x3, y3);
+  let c = dist2_2d(x3, y3, x1, y1);
+  if a == 0 then 0 else
+  if b == 0 then 0 else
+  if c == 0 then 0 else
+  if a + b == c then 1 else
+  if a + c == b then 1 else
+  if b + c == a then 1 else 0
+}
+
+// is_right_triangle_3d: 1 if the three 3D points form a right triangle, else 0.
+// Same exact squared-length Pythagorean test as the 2D version.
+fn is_right_triangle_3d(x1: i64, y1: i64, z1: i64, x2: i64, y2: i64, z2: i64, x3: i64, y3: i64, z3: i64) -> i64 {
+  let a = dist2_3d(x1, y1, z1, x2, y2, z2);
+  let b = dist2_3d(x2, y2, z2, x3, y3, z3);
+  let c = dist2_3d(x3, y3, z3, x1, y1, z1);
+  if a == 0 then 0 else
+  if b == 0 then 0 else
+  if c == 0 then 0 else
+  if a + b == c then 1 else
+  if a + c == b then 1 else
+  if b + c == a then 1 else 0
+}

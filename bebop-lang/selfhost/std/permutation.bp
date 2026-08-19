@@ -1,0 +1,173 @@
+// selfhost/std/permutation.bp — permutation ops over [i64] arrays of size n.
+// Conventions match sort.bp/heap.bp: arrays are caller-owned, a[0..n) holds the data,
+// and functions mutate the array in place. next_permutation/rank/unrank treat a
+// permutation as an arrangement of the distinct values 0..n-1 in lexicographic
+// (dictionary) order; rank is the 0-based index in [0, n!-1].
+
+module core { }
+
+// fact: k! = 1*2*...*k for k >= 0 (fact(0) = 1); 0 for k < 0 (never used).
+fn fact(k: i64) -> i64 {
+  if k < 0 then 0 else (
+    let i = 1;
+    let r = 1;
+    let done = if i > k then 1 else 0;
+    while done == 0 {
+      let r = r * i;
+      let i = i + 1;
+      let done = if i > k then 1 else 0;
+      0
+    };
+    r
+  )
+}
+
+// reverse_range: reverse a[lo..hi) in place; returns 0.
+fn reverse_range(a: [i64], lo: i64, hi: i64) -> i64 {
+  let l = lo;
+  let r = hi - 1;
+  let done = if l < r then 0 else 1;
+  while done == 0 {
+    let tmp = a[l];
+    let _ = a[l] = a[r];
+    let _ = a[r] = tmp;
+    let l = l + 1;
+    let r = r - 1;
+    let done = if l < r then 0 else 1;
+    0
+  };
+  0
+}
+
+// next_permutation: advance a[0..n) to the next lexicographic permutation.
+// Returns 1 and mutates a when a larger permutation exists; returns 0 and resets a to
+// ascending order when a is already the last (descending) permutation.
+fn next_permutation(a: [i64], n: i64) -> i64 {
+  // find the largest i with a[i] < a[i+1] (the pivot).
+  let i = n - 2;
+  let found = 0;
+  let done = if i >= 0 then 0 else 1;
+  while done == 0 {
+    let lt = if a[i] < a[i + 1] then 1 else 0;
+    let found = if lt == 1 then 1 else found;
+    let i = if lt == 1 then i else i - 1;
+    let done = if lt == 1 then 1 else (if i >= 0 then 0 else 1);
+    0
+  };
+  if found == 0 then (
+    let _ = reverse_range(a, 0, n);
+    0
+  ) else (
+    // find the largest j > i with a[j] > a[i], swap, then reverse the suffix.
+    let j = n - 1;
+    let jdone = 0;
+    while jdone == 0 {
+      let gt = if a[j] > a[i] then 1 else 0;
+      let j = if gt == 1 then j else j - 1;
+      let jdone = if gt == 1 then 1 else 0;
+      0
+    };
+    let tmp = a[i];
+    let _ = a[i] = a[j];
+    let _ = a[j] = tmp;
+    let _ = reverse_range(a, i + 1, n);
+    1
+  )
+}
+
+// rank: 0-based lexicographic rank of permutation a[0..n) of 0..n-1, in [0, n!-1].
+fn rank(a: [i64], n: i64) -> i64 {
+  let r = 0;
+  let i = 0;
+  let idone = if i >= n then 1 else 0;
+  while idone == 0 {
+    let c = 0;
+    let j = i + 1;
+    let jdone = if j >= n then 1 else 0;
+    while jdone == 0 {
+      let lt = if a[j] < a[i] then 1 else 0;
+      let c = c + lt;
+      let j = j + 1;
+      let jdone = if j >= n then 1 else 0;
+      0
+    };
+    let r = r + c * fact(n - 1 - i);
+    let i = i + 1;
+    let idone = if i >= n then 1 else 0;
+    0
+  };
+  r
+}
+
+// unrank: write the permutation of 0..n-1 at 0-based rank r (0 <= r < n!) into a[0..n).
+// Reads r's factorial-number-system digits (Lehmer code), selects from a shrinking
+// "available" list kept in the leading slots, and parks each pick in the freed trailing
+// slot (so the result is assembled back-to-front), then reverses the array.
+fn unrank(a: [i64], n: i64, r: i64) -> i64 {
+  // available list = [0..n-1] in a[0..n).
+  let i = 0;
+  let fdone = if i >= n then 1 else 0;
+  while fdone == 0 {
+    let _ = a[i] = i;
+    let i = i + 1;
+    let fdone = if i >= n then 1 else 0;
+    0
+  };
+  let rr = r;
+  let i = 0;
+  let idone = if i >= n then 1 else 0;
+  while idone == 0 {
+    let f = fact(n - 1 - i);
+    let idx = rr / f;
+    let rr = rr - idx * f;
+    let pick = a[idx];
+    let k = idx;
+    let sdone = if k < n - 1 - i then 0 else 1;
+    while sdone == 0 {
+      let _ = a[k] = a[k + 1];
+      let k = k + 1;
+      let sdone = if k < n - 1 - i then 0 else 1;
+      0
+    };
+    let _ = a[n - 1 - i] = pick;
+    let i = i + 1;
+    let idone = if i >= n then 1 else 0;
+    0
+  };
+  let _ = reverse_range(a, 0, n);
+  0
+}
+
+// is_permutation: 1 if a[0..n) is a permutation of 0..n-1 (each value appears exactly
+// once), else 0. Range-check first, then mark each seen value in place by adding n to
+// a[v]; a second hit on an already-marked slot means a duplicate. Requires 2*n < 2^63.
+fn is_permutation(a: [i64], n: i64) -> i64 {
+  let ok = 1;
+  let i = 0;
+  let done = if i >= n then 1 else 0;
+  while done == 0 {
+    let v = a[i];
+    let bad = if v < 0 then 1 else (if v >= n then 1 else 0);
+    let ok = if bad == 1 then 0 else ok;
+    let i = i + 1;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  if ok == 0 then 0 else (
+    let i = 0;
+    let res = 1;
+    let done = if i >= n then 1 else 0;
+    while done == 0 {
+      let raw = a[i];
+      let v = if raw >= n then raw - n else raw;
+      let marked = if a[v] >= n then 1 else 0;
+      let res = if marked == 1 then 0 else res;
+      let add = if marked == 1 then 0 else n;
+      let _ = a[v] = a[v] + add;
+      let i = i + 1;
+      let done = if i >= n then 1 else 0;
+      0
+    };
+    res
+  )
+}

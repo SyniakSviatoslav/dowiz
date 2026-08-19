@@ -1,0 +1,45 @@
+// selfhost/std/pid.bp — PID controller step, f64.
+// Port of native/src/pid.c (pid_step), the core control law: proportional +
+// integral (clamped anti-windup) + derivative terms, output clamped to
+// [min, max]. Full f64 precision throughout.
+//
+// State threading: Bebop functions are pure and return a single value, so the
+// two mutable scalars from the C signature (`double *integral, double
+// *prev_error`) are packed into the `st` array:
+//   st[0] = integral   (in/out, anti-windup clamped)
+//   st[1] = prev_error (in/out, set to this step's error)
+// `output` stays a plain scalar in (matching pid_update's `pid->output`).
+//
+// Not ported: the NaN/Inf sanitize + is_finite fail-closed guards (they need
+// IEEE-754 bit inspection, which Bebop has no primitive for). Callers that
+// feed finite inputs get bit-for-bit-identical results to native/src/pid.c.
+
+module core { }
+
+// pid_step: one control step; returns (and does not store) the clamped output.
+//   setpoint     = desired target
+//   measurement  = current observed value
+//   kp, ki, kd   = proportional / integral / derivative gains
+//   min, max     = output clamp bounds
+//   st           = [integral, prev_error] mutable state (updated in place)
+//   output       = previous output (the value this step builds on)
+fn pid_step(setpoint: f64, measurement: f64, kp: f64, ki: f64, kd: f64,
+            min: f64, max: f64, st: [f64], output: f64) -> f64 {
+  let error = setpoint - measurement;
+  let p_term = kp * error;
+  let new_integral = st[0] + error;
+  let ki_eff = if ki > 0.001 then ki else 0.001;
+  let max_i = max / ki_eff;
+  let bound = if max_i < 0.0 then 0.0 - max_i else max_i;
+  let clamped = if new_integral > bound then bound else new_integral;
+  let clamped = if clamped < 0.0 - bound then 0.0 - bound else clamped;
+  let i_term = ki * clamped;
+  let derivative = error - st[1];
+  let d_term = kd * derivative;
+  let out = output + p_term + i_term + d_term;
+  let out = if out < min then min else out;
+  let out = if out > max then max else out;
+  let _ = st[0] = clamped;
+  let _ = st[1] = error;
+  out
+}

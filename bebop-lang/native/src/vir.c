@@ -93,13 +93,13 @@ int vir_binop(VirOp op, Vir128 a, Vir128 b, Vir128 *out, char *err,
 /* ═══ Atomic machine-code ops (⚛) — hand-encoded LSE, W^X ═══ */
 
 uint64_t vir_atomic_add(uint64_t *ptr, uint64_t delta) {
-    unsigned int code[2];
-    code[0] = 0xF8E10000u; /* ldaddal x1, x0, [x0]: *x0 += x1, x0 = old */
-    code[1] = 0xD65F03C0u; /* ret */
-    size_t sz = sizeof code;
+    unsigned int jc[2];
+    jc[0] = 0xF8E10000u; /* ldaddal x1, x0, [x0]: *x0 += x1, x0 = old */
+    jc[1] = 0xD65F03C0u; /* ret */
+    size_t sz = sizeof jc;
     void *mem = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (mem == MAP_FAILED) return 0;
-    memcpy(mem, code, sz);
+    memcpy(mem, jc, sz);
     __builtin___clear_cache((char *)mem, (char *)mem + sz);
     mprotect(mem, sz, PROT_READ | PROT_EXEC);
     uint64_t (*fn)(uint64_t *, uint64_t);
@@ -110,14 +110,14 @@ uint64_t vir_atomic_add(uint64_t *ptr, uint64_t delta) {
 }
 
 uint64_t vir_atomic_cas(uint64_t *ptr, uint64_t expected, uint64_t desired) {
-    unsigned int code[3];
-    code[0] = 0xC8E1FC02u; /* casal x1, x2, [x0]: if *x0==x1 then *x0=x2; x1=old */
-    code[1] = 0xAA0103E0u; /* mov x0, x1 — return old */
-    code[2] = 0xD65F03C0u; /* ret */
-    size_t sz = sizeof code;
+    unsigned int jc[3];
+    jc[0] = 0xC8E1FC02u; /* casal x1, x2, [x0]: if *x0==x1 then *x0=x2; x1=old */
+    jc[1] = 0xAA0103E0u; /* mov x0, x1 — return old */
+    jc[2] = 0xD65F03C0u; /* ret */
+    size_t sz = sizeof jc;
     void *mem = mmap(NULL, sz, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if (mem == MAP_FAILED) return 0;
-    memcpy(mem, code, sz);
+    memcpy(mem, jc, sz);
     __builtin___clear_cache((char *)mem, (char *)mem + sz);
     mprotect(mem, sz, PROT_READ | PROT_EXEC);
     uint64_t (*fn)(uint64_t *, uint64_t, uint64_t);
