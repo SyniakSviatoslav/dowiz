@@ -273,9 +273,11 @@ static Term *parse_primary(P *p) {
         t->kind = TERM_VAR;
         t->name = buf;
         atom = t;
-        if (strcmp(buf, "write") == 0 || strcmp(buf, "exit") == 0) {
+        if (strcmp(buf, "write") == 0 || strcmp(buf, "exit") == 0 ||
+            strcmp(buf, "power") == 0) {
             t->kind = TERM_SYSCALL;
-            t->ival = strcmp(buf, "write") == 0 ? 64 : 93;
+            t->ival = strcmp(buf, "write") == 0 ? 64
+                    : strcmp(buf, "exit") == 0 ? 93 : 300;
         } else if (strcmp(buf, "char") == 0) {
             t->kind = TERM_STR_CHAR; /* placeholder: two args parsed in postfix */
         } else if (strcmp(buf, "chr") == 0) {

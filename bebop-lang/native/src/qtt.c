@@ -1,6 +1,7 @@
 /* Bebop QTT core — implementation. Zero dependencies. */
 #include "qtt.h"
 #include "syscall.h"
+#include "power_telemetry.h"
 #include <unistd.h>
 
 #include <stdio.h>
@@ -1847,6 +1848,10 @@ static Value eval(const Term *t, Env *env) {
             } else if (t->ival == 93) {
                 /* exit(code) */
                 _exit((int)sa.i);
+            } else if (t->ival == 300) {
+                /* power(op): read telemetry (scaled integer) */
+                v.kind = 0;
+                v.i = bp_power_get((int)sa.i);
             } else {
                 v.kind = 0; v.i = 0;
             }
