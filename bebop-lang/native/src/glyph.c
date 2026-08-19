@@ -14,7 +14,7 @@ typedef struct {
     const char *rows[7];
 } BpBitmap;
 
-static const BpBitmap FN_BM = {{
+static const BpBitmap FN_BM = {{ /* → */
     "...#...",
     "...#...",
     ".####..",
@@ -314,7 +314,207 @@ static const BpBitmap EQ_BM = {{ /* = */
     ".......",
 }};
 
-#define N_GLYPHS 30
+static const BpBitmap AND_BM = {{ /* ∧ */
+    ".......",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    ".......",
+}};
+
+static const BpBitmap OR_BM = {{ /* ∨ */
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    "...#...",
+    "...#...",
+    ".......",
+}};
+
+static const BpBitmap NOT_BM = {{ /* ¬ */
+    ".......",
+    ".......",
+    ".......",
+    "#####..",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap ARROW_BM = {{ /* → */
+    "...#...",
+    "....#..",
+    "#####..",
+    "....#..",
+    "...#...",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap ASSIGN_BM = {{ /* ≔ */
+    ".......",
+    ".......",
+    "#####..",
+    ".......",
+    "..###..",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap LT_BM = {{ /* < */
+    ".......",
+    "...#...",
+    "..#....",
+    ".#.....",
+    "..#....",
+    "...#...",
+    ".......",
+}};
+
+static const BpBitmap GT_BM = {{ /* > */
+    ".......",
+    "...#...",
+    "....#..",
+    ".....#.",
+    "....#..",
+    "...#...",
+    ".......",
+}};
+
+static const BpBitmap LE_BM = {{ /* ≤ */
+    ".......",
+    "...#...",
+    "..#....",
+    ".#.....",
+    "..#....",
+    "...#...",
+    "#####..",
+}};
+
+static const BpBitmap GE_BM = {{ /* ≥ */
+    ".......",
+    "...#...",
+    "....#..",
+    ".....#.",
+    "....#..",
+    "...#...",
+    "#####..",
+}};
+
+static const BpBitmap PIPE_BM = {{ /* | */
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+}};
+
+static const BpBitmap COLON_BM = {{ /* : */
+    ".......",
+    "...#...",
+    "...#...",
+    ".......",
+    "...#...",
+    "...#...",
+    ".......",
+}};
+
+static const BpBitmap COMMA_BM = {{ /* , */
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    "...#...",
+    "..#....",
+    ".......",
+}};
+
+static const BpBitmap SEMI_BM = {{ /* ; */
+    ".......",
+    "...#...",
+    "...#...",
+    ".......",
+    "...#...",
+    "..#....",
+    ".......",
+}};
+
+static const BpBitmap UNIT_BM = {{ /* () */
+    ".......",
+    ".......",
+    "..###..",
+    "..###..",
+    "..###..",
+    "..###..",
+    ".......",
+}};
+
+static const BpBitmap LIST_BM = {{ /* [] */
+    ".......",
+    "#####..",
+    "#.....#",
+    "#.....#",
+    "#.....#",
+    "#####..",
+    ".......",
+}};
+
+static const BpBitmap PAIR_BM = {{ /* × */
+    ".......",
+    ".#...#.",
+    "..#.#..",
+    "...#...",
+    "..#.#..",
+    ".#...#.",
+    ".......",
+}};
+
+static const BpBitmap OPTION_BM = {{ /* ?+ */
+    "..###..",
+    ".#...#.",
+    "#.....#",
+    "#.....#",
+    "#.....#",
+    ".#...#.",
+    "..###..",
+}};
+
+static const BpBitmap RESULT_BM = {{ /* ✓✗ */
+    "#.....#",
+    ".#...#.",
+    "..#..#.",
+    "...#...",
+    "..#..#.",
+    ".#...#.",
+    "#.....#",
+}};
+
+static const BpBitmap STREAM_BM = {{ /* ~ */
+    ".......",
+    ".......",
+    "#.....#",
+    ".#...#.",
+    "..#..#.",
+    "...#...",
+    ".......",
+}};
+
+static const BpBitmap FNPTR_BM = {{ /* λ */
+    "#......",
+    "#......",
+    "##.....",
+    "#.#....",
+    "#..#...",
+    "#...#..",
+    "#.....#",
+}};
+
+#define N_GLYPHS 50
 
 static BpDelta FN_OUT[64];
 static BpDelta STRUCT_OUT[64];
@@ -322,6 +522,26 @@ static BpDelta DATA_OUT[64];
 static BpDelta CONTRACT_OUT[64];
 static BpDelta VAL_OUT[64];
 static BpDelta MOD_OUT[64];
+static BpDelta AND_OUT[64];
+static BpDelta OR_OUT[64];
+static BpDelta NOT_OUT[64];
+static BpDelta ARROW_OUT[64];
+static BpDelta ASSIGN_OUT[64];
+static BpDelta LT_OUT[64];
+static BpDelta GT_OUT[64];
+static BpDelta LE_OUT[64];
+static BpDelta GE_OUT[64];
+static BpDelta PIPE_OUT[64];
+static BpDelta COLON_OUT[64];
+static BpDelta COMMA_OUT[64];
+static BpDelta SEMI_OUT[64];
+static BpDelta UNIT_OUT[64];
+static BpDelta LIST_OUT[64];
+static BpDelta PAIR_OUT[64];
+static BpDelta OPTION_OUT[64];
+static BpDelta RESULT_OUT[64];
+static BpDelta STREAM_OUT[64];
+static BpDelta FNPTR_OUT[64];
 static BpDelta LET_OUT[64];
 static BpDelta IF_OUT[64];
 static BpDelta THEN_OUT[64];
@@ -389,7 +609,12 @@ static void init_glyphs(void) {
         return;
     }
     static const BpBitmap *bms[N_GLYPHS] = {
-        &FN_BM, &STRUCT_BM, &DATA_BM, &CONTRACT_BM, &VAL_BM, &MOD_BM,
+        &FN_BM,
+        &STRUCT_BM,
+        &DATA_BM,
+        &CONTRACT_BM,
+        &VAL_BM,
+        &MOD_BM,
         &LET_BM,
         &IF_BM,
         &THEN_BM,
@@ -414,9 +639,34 @@ static void init_glyphs(void) {
         &MUL_BM,
         &DIV_BM,
         &EQ_BM,
+        &AND_BM,
+        &OR_BM,
+        &NOT_BM,
+        &ARROW_BM,
+        &ASSIGN_BM,
+        &LT_BM,
+        &GT_BM,
+        &LE_BM,
+        &GE_BM,
+        &PIPE_BM,
+        &COLON_BM,
+        &COMMA_BM,
+        &SEMI_BM,
+        &UNIT_BM,
+        &LIST_BM,
+        &PAIR_BM,
+        &OPTION_BM,
+        &RESULT_BM,
+        &STREAM_BM,
+        &FNPTR_BM
     };
     static const char *names[N_GLYPHS] = {
-        "fn", "struct", "data", "contract", "val", "mod",
+        "fn",
+        "struct",
+        "data",
+        "contract",
+        "val",
+        "mod",
         "let",
         "if",
         "then",
@@ -441,9 +691,34 @@ static void init_glyphs(void) {
         "mul",
         "div",
         "eq",
+        "and",
+        "or",
+        "not",
+        "arrow",
+        "assign",
+        "lt",
+        "gt",
+        "le",
+        "ge",
+        "pipe",
+        "colon",
+        "comma",
+        "semi",
+        "unit",
+        "list",
+        "pair",
+        "option",
+        "result",
+        "stream",
+        "fnptr"
     };
     static const char *ph[N_GLYPHS] = {
-        "→", "◇", "△", "⊙", "◉", "◈",
+        "→",
+        "diamond ◇",
+        "triangle △",
+        "circle ⊙",
+        "filled circle ◉",
+        "square ◈",
         "≡",
         "?",
         "⇒",
@@ -468,9 +743,34 @@ static void init_glyphs(void) {
         "×",
         "÷",
         "=",
+        "∧",
+        "∨",
+        "¬",
+        "→",
+        "≔",
+        "<",
+        ">",
+        "≤",
+        "≥",
+        "|",
+        ":",
+        ",",
+        ";",
+        "()",
+        "[]",
+        "×",
+        "?+",
+        "✓✗",
+        "~",
+        "λ"
     };
     static BpDelta *outs[N_GLYPHS] = {
-        FN_OUT, STRUCT_OUT, DATA_OUT, CONTRACT_OUT, VAL_OUT, MOD_OUT,
+        FN_OUT,
+        STRUCT_OUT,
+        DATA_OUT,
+        CONTRACT_OUT,
+        VAL_OUT,
+        MOD_OUT,
         LET_OUT,
         IF_OUT,
         THEN_OUT,
@@ -495,6 +795,26 @@ static void init_glyphs(void) {
         MUL_OUT,
         DIV_OUT,
         EQ_OUT,
+        AND_OUT,
+        OR_OUT,
+        NOT_OUT,
+        ARROW_OUT,
+        ASSIGN_OUT,
+        LT_OUT,
+        GT_OUT,
+        LE_OUT,
+        GE_OUT,
+        PIPE_OUT,
+        COLON_OUT,
+        COMMA_OUT,
+        SEMI_OUT,
+        UNIT_OUT,
+        LIST_OUT,
+        PAIR_OUT,
+        OPTION_OUT,
+        RESULT_OUT,
+        STREAM_OUT,
+        FNPTR_OUT
     };
     for (int i = 0; i < N_GLYPHS; i++) {
         size_t n = bp_bitmap_to_outline(bms[i]->rows, 7, outs[i], 64);
