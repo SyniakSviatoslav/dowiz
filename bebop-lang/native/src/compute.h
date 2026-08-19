@@ -41,6 +41,15 @@ double compute_dot(const double *restrict x, const double *restrict y, size_t n)
 int compute_matmul(const double *restrict a, const double *restrict b, double *restrict c,
                    size_t m, size_t n, size_t k);
 
+/* nrm2: √(Σ x[i]²)  (BLAS-1 2-norm, 4 accumulators). */
+double compute_nrm2(const double *restrict x, size_t n);
+
+/* scal: x[i] *= alpha  (BLAS-1 scale, 4× unroll). */
+int compute_scal(double alpha, double *restrict x, size_t n);
+
+/* copy: y[i] = x[i]  (BLAS-1, memcpy-width vectorizable). */
+int compute_copy(const double *restrict x, double *restrict y, size_t n);
+
 int compute_self_test(char *out, size_t cap);
 
 #endif

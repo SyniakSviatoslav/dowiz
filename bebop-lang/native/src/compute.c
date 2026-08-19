@@ -1,6 +1,7 @@
 /* Bebop compute — implementation. */
 #include "compute.h"
 #include "pool.h"
+#include "math_native.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -138,6 +139,37 @@ int compute_matmul(const double *restrict a, const double *restrict b, double *r
     return 0;
 }
 
+double compute_nrm2(const double *restrict x, size_t n) {
+    double acc0 = 0.0, acc1 = 0.0, acc2 = 0.0, acc3 = 0.0;
+    size_t i = 0;
+    for (; i + 3 < n; i += 4) {
+        acc0 += x[i]     * x[i];
+        acc1 += x[i + 1] * x[i + 1];
+        acc2 += x[i + 2] * x[i + 2];
+        acc3 += x[i + 3] * x[i + 3];
+    }
+    for (; i < n; i++) acc0 += x[i] * x[i];
+    double s = (acc0 + acc1) + (acc2 + acc3);
+    return math_sqrt(s);
+}
+
+int compute_scal(double alpha, double *restrict x, size_t n) {
+    size_t i = 0;
+    for (; i + 3 < n; i += 4) {
+        x[i]     *= alpha;
+        x[i + 1] *= alpha;
+        x[i + 2] *= alpha;
+        x[i + 3] *= alpha;
+    }
+    for (; i < n; i++) x[i] *= alpha;
+    return 0;
+}
+
+int compute_copy(const double *restrict x, double *restrict y, size_t n) {
+    for (size_t i = 0; i < n; i++) y[i] = x[i];
+    return 0;
+}
+
 /* ─── self-test ─────────────────────────────────────────────────────────── */
 
 int compute_self_test(char *out, size_t cap) {
@@ -186,6 +218,24 @@ int compute_self_test(char *out, size_t cap) {
         compute_matmul(a, b, c, 2, 2, 2);
         K(c[0] == 19 && c[1] == 22 && c[2] == 43 && c[3] == 50,
           "matmul 2×2 @ 2×2 = [[19,22],[43,50]]");
+    }
+
+    /* nrm2: √(3²+4²) = 5 */
+    K(compute_nrm2((double[]){3, 4}, 2) > 4.99 &&
+      compute_nrm2((double[]){3, 4}, 2) < 5.01, "nrm2(3,4)=5");
+
+    /* scal: [1,2,3] *= 10 → [10,20,30] */
+    {
+        double s[3] = {1, 2, 3};
+        compute_scal(10.0, s, 3);
+        K(s[0] == 10 && s[1] == 20 && s[2] == 30, "scal 10×[1,2,3]=[10,20,30]");
+    }
+
+    /* copy: y = x */
+    {
+        double x[3] = {7, 8, 9}, y[3] = {0, 0, 0};
+        compute_copy(x, y, 3);
+        K(y[0] == 7 && y[1] == 8 && y[2] == 9, "copy y=x");
     }
 
 #undef K
