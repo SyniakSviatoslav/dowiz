@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "glyph.h"
+#include "calyx.h"
 #include "lexer.h"
 #include "parser.h"
 #include "morse.h"
@@ -857,6 +858,13 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "glyphs") == 0) {
         cmd_glyphs();
         return 0;
+    }
+    if (strcmp(argv[1], "calyx") == 0) {
+        char buf[8192];
+        int ok = calyx_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Calyx (FPGA/ASIC) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "glyph") == 0) {
         if (argc < 3) {
