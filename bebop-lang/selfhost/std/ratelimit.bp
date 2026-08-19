@@ -1,0 +1,28 @@
+// selfhost/std/ratelimit.bp — rate limiting: token bucket + GCRA (integer, i64).
+// Port of native/src/token_bucket.c (gcra_decide + token bucket), integer-only.
+
+module core { }
+
+// token_bucket_decide: 1 if one token is available after refilling, else 0.
+//   tokens      = current token count
+//   last_refill = timestamp of the last refill
+//   now         = current timestamp
+//   rate        = refill rate (tokens per unit time)
+//   burst       = bucket capacity (max tokens)
+fn token_bucket_decide(tokens: i64, last_refill: i64, now: i64, rate: i64, burst: i64) -> i64 {
+  let elapsed = if now > last_refill then now - last_refill else 0;
+  let refilled = tokens + elapsed * rate;
+  let capped = if refilled > burst then burst else refilled;
+  if capped >= 1 then 1 else 0
+}
+
+// gcra_decide: generic cell rate algorithm — 1 if a request may pass, else 0.
+//   tat    = theoretical arrival time of the next request
+//   now    = current timestamp
+//   period = emission interval (cost of one request)
+//   limit  = burst tolerance (max allowed lead over now)
+fn gcra_decide(tat: i64, now: i64, period: i64, limit: i64) -> i64 {
+  let allow_at = if tat > now then tat else now;
+  let new_tat = allow_at + period;
+  if new_tat > now + limit then 0 else 1
+}

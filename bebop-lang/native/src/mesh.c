@@ -129,7 +129,7 @@ int mesh_self_test(char *out, size_t cap) {
     T(pruned == 1, "neighbour pruned after timeout");
 
     mesh_send(&m, 0xFFFF, 0x0001, (const uint8_t*)"flood", 5, 2);
-    T(m.bundles[0].custody == 1, "urgency >= 2 gets custody");
+    T(m.bundles[m.n_bundles - 1].custody == 1, "urgency >= 2 gets custody");
 
 #undef T
     return fail;

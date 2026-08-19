@@ -76,6 +76,7 @@
 #include "sha256.h"
 #include "x25519.h"
 #include "aes_gcm.h"
+#include "tls.h"
 
 
 static void usage(void) {
@@ -425,14 +426,6 @@ static void cmd_fft(void) {
     int ok = fft_self_test(buf, sizeof buf);
     fputs(buf, stdout);
     printf("FFT self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
-    exit(ok == 0 ? 0 : 1);
-}
-
-static void cmd_arena(void) {
-    char buf[4096];
-    int ok = arena_self_test(buf, sizeof buf);
-    fputs(buf, stdout);
-    printf("Arena self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
     exit(ok == 0 ? 0 : 1);
 }
 
@@ -887,35 +880,7 @@ int main(int argc, char **argv) {
         printf("Compute (NEON+multi-core) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
-            if (strcmp(argv[1], "pool") == 0) {
-        char buf[2048];
-        int ok = pool_self_test(buf, sizeof buf);
-        fputs(buf, stdout);
-        printf("Pool self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
-        return ok == 0 ? 0 : 1;
-    }
-    if (strcmp(argv[1], "memristor") == 0) {
-        char buf[8192];
-        int ok = memristor_self_test(buf, sizeof buf);
-        fputs(buf, stdout);
-        printf("Memristor self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
-        return ok == 0 ? 0 : 1;
-    }
-    if (strcmp(argv[1], "adc") == 0) {
-        char buf[8192];
-        int ok = adc_self_test(buf, sizeof buf);
-        fputs(buf, stdout);
-        printf("ADC (sensor) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
-        return ok == 0 ? 0 : 1;
-    }
-    if (strcmp(argv[1], "arena") == 0) {
-        char buf[8192];
-        int ok = arena_self_test(buf, sizeof buf);
-        fputs(buf, stdout);
-        printf("Arena self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
-        return ok == 0 ? 0 : 1;
-    }
-        if (strcmp(argv[1], "pool") == 0) {
+    if (strcmp(argv[1], "pool") == 0) {
         char buf[2048];
         int ok = pool_self_test(buf, sizeof buf);
         fputs(buf, stdout);
@@ -1051,31 +1016,6 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "fft") == 0) {
         cmd_fft();
-        return 0;
-    }
-            if (strcmp(argv[1], "pool") == 0) {
-        char buf[2048];
-        int ok = pool_self_test(buf, sizeof buf);
-        fputs(buf, stdout);
-        printf("Pool self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
-        return ok == 0 ? 0 : 1;
-    }
-    if (strcmp(argv[1], "memristor") == 0) {
-        char buf[8192];
-        int ok = memristor_self_test(buf, sizeof buf);
-        fputs(buf, stdout);
-        printf("Memristor self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
-        return ok == 0 ? 0 : 1;
-    }
-    if (strcmp(argv[1], "adc") == 0) {
-        char buf[8192];
-        int ok = adc_self_test(buf, sizeof buf);
-        fputs(buf, stdout);
-        printf("ADC (sensor) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
-        return ok == 0 ? 0 : 1;
-    }
-    if (strcmp(argv[1], "arena") == 0) {
-        cmd_arena();
         return 0;
     }
     if (strcmp(argv[1], "event") == 0) {
@@ -1419,6 +1359,12 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "x25519") == 0) {
         cmd_x25519();
         return 0;
+    }
+    if (strcmp(argv[1], "tls") == 0) {
+        char buf[8192]; int ok = tls_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("TLS (ChaCha20-Poly1305) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "aes_gcm") == 0) {
         char buf[8192];

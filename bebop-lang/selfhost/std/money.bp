@@ -1,0 +1,41 @@
+// selfhost/std/money.bp — integer money (minor units), overflow-safe.
+// Port of native/src/money.c (dowiz money.rs): checked i64 add/sub/mul with
+// overflow detection (returns -1 on overflow, never wraps), plus
+// cents <-> major-unit conversion (scale = 100 minor units per major unit).
+// RED LINE (C5): zero float arithmetic on money. All amounts are i64 minor units.
+//
+// Overflow checks compare against i64::MAX/i64::MIN so that no overflowing
+// (UB) arithmetic is ever performed. MIN is written as (0 - MAX - 1) because
+// Bebop has no unary minus.
+
+module core { }
+
+// checked_add(a, b): a + b, or -1 on i64 overflow.
+fn checked_add(a: i64, b: i64) -> i64 {
+  let mx = 9223372036854775807;
+  let mn = 0 - 9223372036854775807 - 1;
+  let ov = if b > 0 then (if a > mx - b then 1 else 0) else (if b < 0 then (if a < mn - b then 1 else 0) else 0);
+  if ov == 1 then (0 - 1) else a + b
+}
+
+// checked_sub(a, b): a - b, or -1 on i64 overflow.
+fn checked_sub(a: i64, b: i64) -> i64 {
+  let mx = 9223372036854775807;
+  let mn = 0 - 9223372036854775807 - 1;
+  let ov = if b < 0 then (if a > mx + b then 1 else 0) else (if b > 0 then (if a < mn + b then 1 else 0) else 0);
+  if ov == 1 then (0 - 1) else a - b
+}
+
+// checked_mul(a, b): a * b, or -1 on i64 overflow (0 * x == 0, never overflows).
+fn checked_mul(a: i64, b: i64) -> i64 {
+  let mx = 9223372036854775807;
+  let mn = 0 - 9223372036854775807 - 1;
+  let ov = if a == 0 then 0 else (if b == 0 then 0 else (if a > 0 then (if b > 0 then (if a > mx / b then 1 else 0) else (if b < mn / a then 1 else 0)) else (if b > 0 then (if a < mn / b then 1 else 0) else (if a < mx / b then 1 else 0))));
+  if ov == 1 then (0 - 1) else a * b
+}
+
+// to_cents(major): whole units -> minor units (cents), checked (overflow -> -1).
+fn to_cents(major: i64) -> i64 { checked_mul(major, 100) }
+
+// from_cents(cents): minor units (cents) -> whole units (truncating division).
+fn from_cents(cents: i64) -> i64 { cents / 100 }

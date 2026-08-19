@@ -8,7 +8,7 @@
 typedef struct {
     double x;     /* internal state [0,1] */
     double Ron, Roff; /* resistance bounds (ohms) */
-    double D;     /* device thickness (nm, e.g. 10) */
+    double D;     /* device thickness (cm; 10 nm = 1e-6) */
     double mu;    /* ion mobility (e.g. 1e-10 cm2/Vs) */
 } Memristor;
 

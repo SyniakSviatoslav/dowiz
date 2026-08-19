@@ -15,7 +15,7 @@ void memristor_init(Memristor *m, double x0) {
     m->x = (x0 < 0) ? 0 : ((x0 > 1) ? 1 : x0);
     m->Ron = 100.0;   /* 100 ohm ON resistance */
     m->Roff = 16000.0; /* 16 kohm OFF resistance (TiO2 typical) */
-    m->D = 10.0;       /* 10 nm */
+    m->D = 1e-6;       /* 10 nm = 1e-6 cm (consistent with mu in cm2/Vs) */
     m->mu = 1e-10;     /* ion mobility cm2/Vs */
 }
 

@@ -152,9 +152,10 @@ static void bench_hyper(void) {
 
     for (int r = 0; r < BENCH_REPS; r++) {
         double t0 = now_ns();
-        Hypervector c = a;
+        Hypervector c = a, x = a;
         for (long k = 0; k < inner; k++) {
-            c = hv_bind(&a, &b);
+            x.words[0] = a.words[0] + (uint64_t)k; /* vary input: defeat hoist/DCE */
+            c = hv_bind(&x, &b);
             bench_sink ^= c.words[0];
         }
         bench_barrier();
@@ -165,9 +166,10 @@ static void bench_hyper(void) {
 
     for (int r = 0; r < BENCH_REPS; r++) {
         double t0 = now_ns();
-        Hypervector c = a;
+        Hypervector c = a, x = a;
         for (long k = 0; k < inner; k++) {
-            c = hv_bind_neon2(&a, &b);
+            x.words[0] = a.words[0] + (uint64_t)k;
+            c = hv_bind_neon2(&x, &b);
             bench_sink ^= c.words[0];
         }
         bench_barrier();
@@ -179,8 +181,10 @@ static void bench_hyper(void) {
     for (int r = 0; r < BENCH_REPS; r++) {
         double t0 = now_ns();
         uint32_t h = 0;
+        Hypervector x = a;
         for (long k = 0; k < inner; k++) {
-            h += hv_hamming(&a, &b);
+            x.words[0] = a.words[0] + (uint64_t)k;
+            h += hv_hamming(&x, &b);
         }
         bench_barrier();
         double t1 = now_ns();
@@ -192,8 +196,10 @@ static void bench_hyper(void) {
     for (int r = 0; r < BENCH_REPS; r++) {
         double t0 = now_ns();
         uint32_t h = 0;
+        Hypervector x = a;
         for (long k = 0; k < inner; k++) {
-            h += hv_hamming_neon(&a, &b);
+            x.words[0] = a.words[0] + (uint64_t)k;
+            h += hv_hamming_neon(&x, &b);
         }
         bench_barrier();
         double t1 = now_ns();
@@ -211,7 +217,9 @@ static void bench_hyper(void) {
         double t0 = now_ns();
         Hypervector c = a;
         for (long k = 0; k < inner_b; k++) {
+            items[0].words[0] = 10 + (uint64_t)k;
             c = hv_bundle(items, 4);
+            bench_sink ^= c.words[0];
         }
         bench_barrier();
         double t1 = now_ns();
@@ -222,9 +230,10 @@ static void bench_hyper(void) {
 
     for (int r = 0; r < BENCH_REPS; r++) {
         double t0 = now_ns();
-        Hypervector c = a;
+        Hypervector c = a, x = a;
         for (long k = 0; k < inner; k++) {
-            c = hv_permute(&a, 37);
+            x.words[0] = a.words[0] + (uint64_t)k;
+            c = hv_permute(&x, 37);
             bench_sink ^= c.words[0];
         }
         bench_barrier();
@@ -308,13 +317,16 @@ static void bench_modular(void) {
     const long inner_r = 256;
     for (int r = 0; r < BENCH_REPS; r++) {
         double t0 = now_ns();
-        Complex w = z;
+        double acc = 0;
         for (long k = 0; k < inner_r; k++) {
-            w = mobius_reduce(z, 20); /* reset from z: full reduction each iter */
+            /* vary z each iter so every reduction is real work (no hoist) */
+            Complex zk = c_new(z.re + (double)k * 1e-9, z.im);
+            Complex w = mobius_reduce(zk, 20);
+            acc += w.re + w.im;
         }
         bench_barrier();
         double t1 = now_ns();
-        bench_sink += (uint64_t)(w.re * 1e9);
+        bench_sink += (uint64_t)(acc * 1e9);
         t[r] = t1 - t0;
     }
     report("mobius_reduce(20)", t, inner_r);
@@ -377,6 +389,7 @@ static void bench_checksum(void) {
         double t0 = now_ns();
         uint64_t h = 0;
         for (long k = 0; k < inner; k++) {
+            buf[0] = (uint8_t)k; /* vary input: defeat hoist of stack-buf fold */
             h += checksum_fold(buf, sizeof buf);
         }
         bench_barrier();
@@ -395,7 +408,8 @@ static void bench_trig(void) {
         double t0 = now_ns();
         double acc = 0;
         for (long k = 0; k < inner; k++) {
-            acc += trig_sin(0.7) + trig_cos(0.7) + trig_atan2(3.0, 4.0);
+            double a = 0.7 + (double)k * 1e-9; /* vary angle: no constant-fold/hoist */
+            acc += trig_sin(a) + trig_cos(a) + trig_atan2(3.0 + a, 4.0);
         }
         bench_barrier();
         double t1 = now_ns();
@@ -516,13 +530,14 @@ static void bench_gcra(void) {
     double t[BENCH_REPS];
     for (int r = 0; r < BENCH_REPS; r++) {
         double t0 = now_ns();
-        uint64_t out = 0;
+        uint64_t out = 0, acc = 0;
         for (long k = 0; k < inner; k++) {
             gcra_decide((uint64_t)k * 1000, 0, 1000, 5000, &out);
+            acc += out; /* read out each iter → defeat loop collapse */
         }
         bench_barrier();
         double t1 = now_ns();
-        bench_sink += out;
+        bench_sink += acc;
         t[r] = t1 - t0;
     }
     report("gcra_decide", t, inner);

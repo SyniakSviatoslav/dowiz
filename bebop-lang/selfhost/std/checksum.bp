@@ -1,0 +1,22 @@
+// selfhost/std/checksum.bp — integer fold checksum (polynomial, base 31).
+// Port of native/src/checksum.c (checksum_fold) with i64 arithmetic
+// (no u64/structs in Bebop).
+
+module core { }
+
+// fold_hash: one fold step — h * 31 + x (matches C: acc = acc * 31 + data[i]).
+fn fold_hash(h: i64, x: i64) -> i64 { h * 31 + x }
+
+// checksum_arr: fold fold_hash over a[0..n), starting from 0.
+fn checksum_arr(a: [i64], n: i64) -> i64 {
+  let i = 0;
+  let acc = 0;
+  let done = 0;
+  while done == 0 {
+    let acc = fold_hash(acc, a[i]);
+    let i = i + 1;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  acc
+}

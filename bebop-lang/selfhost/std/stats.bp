@@ -1,0 +1,42 @@
+// selfhost/std/stats.bp — integer statistics over [i64].
+// Port of native/src/stats.c (mean/variance) with i64 arithmetic and
+// integer division (no floats/u64/structs in Bebop).
+
+module core { }
+
+// sum: total of a[0..n).
+fn sum(a: [i64], n: i64) -> i64 {
+  let i = 0;
+  let s = 0;
+  let done = 0;
+  while done == 0 {
+    let s = s + a[i];
+    let i = i + 1;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  s
+}
+
+// mean: integer average (truncating division); 0 if n == 0.
+fn mean(a: [i64], n: i64) -> i64 {
+  if n == 0 then 0 else (sum(a, n) / n)
+}
+
+// variance: two-pass integer sample variance (Bessel n-1); 0 if n < 2.
+fn variance(a: [i64], n: i64) -> i64 {
+  if n < 2 then 0 else (
+    let m = mean(a, n);
+    let i = 0;
+    let ss = 0;
+    let done = 0;
+    while done == 0 {
+      let d = a[i] - m;
+      let ss = ss + (d * d);
+      let i = i + 1;
+      let done = if i >= n then 1 else 0;
+      0
+    };
+    ss / (n - 1)
+  )
+}

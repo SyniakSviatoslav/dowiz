@@ -1,0 +1,35 @@
+// selfhost/std/hex.bp — hex nibble encode/decode over i64.
+//
+// A byte is packed into a single i64 "2-digit" value as hi_ascii*256 + lo_ascii,
+// where hi_ascii/lo_ascii are the ASCII codes of the two hex digits.
+
+module core { }
+
+// hex_val: map an ASCII char code to its nibble value (0-15), or -1 if not hex.
+fn hex_val(c: i64) -> i64 {
+  let is_digit = if c >= 48 then (if c <= 57 then 1 else 0) else 0;
+  let is_lower = if c >= 97 then (if c <= 102 then 1 else 0) else 0;
+  let is_upper = if c >= 65 then (if c <= 70 then 1 else 0) else 0;
+  if is_digit == 1 then (c - 48)
+  else (if is_lower == 1 then (c - 97 + 10)
+  else (if is_upper == 1 then (c - 65 + 10) else (0 - 1)))
+}
+
+// nibble_to_hex: map a nibble (0-15) to its lowercase hex ASCII code.
+fn nibble_to_hex(v: i64) -> i64 {
+  if v < 10 then (v + 48) else (v - 10 + 97)
+}
+
+// hex_encode_byte: encode a byte (0-255) as packed ASCII digits hi*256 + lo.
+fn hex_encode_byte(b: i64) -> i64 {
+  let hi = nibble_to_hex(b / 16);
+  let lo = nibble_to_hex(b - (b / 16) * 16);
+  (hi * 256) + lo
+}
+
+// hex_decode_byte: decode a packed 2-digit value back to a byte, or -1 if invalid.
+fn hex_decode_byte(pair: i64) -> i64 {
+  let hi = hex_val(pair / 256);
+  let lo = hex_val(pair - (pair / 256) * 256);
+  if hi < 0 then (0 - 1) else (if lo < 0 then (0 - 1) else ((hi * 16) + lo))
+}

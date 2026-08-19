@@ -19,6 +19,9 @@
 /* ------------------------------------------------------------------ */
 typedef uint64_t fe[5];
 
+/* 128-bit product — __extension__ silences -Wpedantic (aarch64 64×64→128 mul). */
+__extension__ typedef unsigned __int128 u128;
+
 /* 2^51 - 1 */
 #define MASK_51  UINT64_C(0x7ffffffffffff)
 
@@ -151,8 +154,8 @@ static void fe_to_bytes(uint8_t out[32], const fe a_in) {
 /* ------------------------------------------------------------------ */
 
 /* Reduce a 10-limb u128 product into canonical [0, p). */
-static void fe_reduce(fe out, const unsigned __int128 c[10]) {
-    unsigned __int128 t[10];
+static void fe_reduce(fe out, const u128 c[10]) {
+    u128 t[10];
     int i, j;
 
     for (i = 0; i < 10; i++) t[i] = c[i];
@@ -179,11 +182,11 @@ static void fe_reduce(fe out, const unsigned __int128 c[10]) {
 
 /* Multiply: a * b → fully-reduced result. */
 static void fe_mul(fe out, const fe a, const fe b) {
-    unsigned __int128 c[10] = {0};
+    u128 c[10] = {0};
     int i, j;
     for (i = 0; i < 5; i++)
         for (j = 0; j < 5; j++)
-            c[i + j] += (unsigned __int128)a[i] * (unsigned __int128)b[j];
+            c[i + j] += (u128)a[i] * (u128)b[j];
     fe_reduce(out, c);
 }
 

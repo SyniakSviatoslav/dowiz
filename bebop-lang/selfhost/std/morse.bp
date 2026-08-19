@@ -1,0 +1,77 @@
+// selfhost/std/morse.bp — ITU Morse codebook (encode side), i64 only.
+//
+// Each symbol is a base-4 digit: dot = 1, dash = 3. A letter's pattern is
+// encoded as the base-4 integer built left-to-right (leftmost symbol = most
+// significant digit). Lengths are folded into one code value = value*8 + len
+// (len <= 5 < 8), so the two public accessors recover value and length with a
+// single division each.
+//
+// Codebook (dot '.', dash '-'):
+//   a .-      b -...    c -.-.    d -..     e .
+//   f ..-.    g --.     h ....    i ..      j .---
+//   k -.-     l .-..    m --      n -.      o ---
+//   p .--.    q --.-    r .-.     s ...     t -
+//   u ..-     v ...-    w .--     x -..-    y -.--
+//   z --..
+//   0 -----   1 .----   2 ..---   3 ...--   4 ....-
+//   5 .....   6 -....   7 --...   8 ---..   9 ----.
+
+module core { }
+
+// morse_dot: the dot symbol value.
+fn morse_dot() -> i64 { 1 }
+
+// morse_dash: the dash symbol value.
+fn morse_dash() -> i64 { 3 }
+
+// morse_code: internal — normalize to lowercase, return value*8 + len.
+fn morse_code(c: i64) -> i64 {
+  let c = if c >= 65 then (if c <= 90 then c + 32 else c) else c;
+  let v = 0;
+  let v = if c == 97  then 58   else v;
+  let v = if c == 98  then 1708 else v;
+  let v = if c == 99  then 1772 else v;
+  let v = if c == 100 then 427  else v;
+  let v = if c == 101 then 9    else v;
+  let v = if c == 102 then 748  else v;
+  let v = if c == 103 then 491  else v;
+  let v = if c == 104 then 684  else v;
+  let v = if c == 105 then 42   else v;
+  let v = if c == 106 then 1020 else v;
+  let v = if c == 107 then 443  else v;
+  let v = if c == 108 then 940  else v;
+  let v = if c == 109 then 122  else v;
+  let v = if c == 110 then 106  else v;
+  let v = if c == 111 then 507  else v;
+  let v = if c == 112 then 1004 else v;
+  let v = if c == 113 then 1980 else v;
+  let v = if c == 114 then 235  else v;
+  let v = if c == 115 then 171  else v;
+  let v = if c == 116 then 25   else v;
+  let v = if c == 117 then 187  else v;
+  let v = if c == 118 then 700  else v;
+  let v = if c == 119 then 251  else v;
+  let v = if c == 120 then 1724 else v;
+  let v = if c == 121 then 1788 else v;
+  let v = if c == 122 then 1964 else v;
+  let v = if c == 48  then 8189 else v;
+  let v = if c == 49  then 4093 else v;
+  let v = if c == 50  then 3069 else v;
+  let v = if c == 51  then 2813 else v;
+  let v = if c == 52  then 2749 else v;
+  let v = if c == 53  then 2733 else v;
+  let v = if c == 54  then 6829 else v;
+  let v = if c == 55  then 7853 else v;
+  let v = if c == 56  then 8109 else v;
+  let v = if c == 57  then 8173 else v;
+  v
+}
+
+// morse_letter_val: the base-4 encoded pattern for a letter's ASCII code.
+fn morse_letter_val(c: i64) -> i64 { morse_code(c) / 8 }
+
+// morse_code_len: the number of symbols (dots + dashes) in the pattern.
+fn morse_code_len(c: i64) -> i64 {
+  let k = morse_code(c);
+  k - ((k / 8) * 8)
+}
