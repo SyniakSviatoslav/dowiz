@@ -871,6 +871,17 @@ static void cmd_strict(const char *path) {
         if (c == '{') brace++;
         else if (c == '}') { brace--; if (brace == 0) in_fn = 0; continue; }
         if (!brace) continue;
+        /* Skip string literals and line comments so 'if'/'else' inside them
+         * are not miscounted (the scan is otherwise raw-bytes). */
+        if (c == '"') {
+            i++;
+            while (i < rd && src[i] != '"') i++;
+            continue;
+        }
+        if (c == '/' && i + 1 < rd && src[i+1] == '/') {
+            while (i < rd && src[i] != '\n') i++;
+            continue;
+        }
         if (c == 'i' && src[i+1] == 'f' && (src[i+2] == ' ' || src[i+2] == '(')) {
             depth++;
             if (depth > 1) {

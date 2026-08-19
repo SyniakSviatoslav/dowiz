@@ -40,8 +40,18 @@ typedef struct {
 } P;
 
 static void skip_ws(P *p) {
-    while (p->s[p->pos] == ' ' || p->s[p->pos] == '\t' || p->s[p->pos] == '\n') {
-        p->pos++;
+    for (;;) {
+        while (p->s[p->pos] == ' ' || p->s[p->pos] == '\t' || p->s[p->pos] == '\n') {
+            p->pos++;
+        }
+        /* Strip // line comments too: fn-body text is sliced from token spans
+         * and can include comment bytes between statements, which the raw
+         * expression parser otherwise misreads as '/' '/' operators. */
+        if (p->s[p->pos] == '/' && p->s[p->pos + 1] == '/') {
+            while (p->s[p->pos] && p->s[p->pos] != '\n') p->pos++;
+        } else {
+            break;
+        }
     }
 }
 
