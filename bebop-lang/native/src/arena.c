@@ -3,10 +3,18 @@
 #include <stdio.h>
 #include <string.h>
 #define ARENA_ALIGN 64
-void arena_init(Arena *a, void *mem, size_t cap) { memset(a,0,sizeof *a); a->mem=mem; a->cap=cap; }
+void arena_init(Arena *a, void *mem, size_t cap) {
+    memset(a, 0, sizeof *a);
+    /* Align the base pointer to 64 so arena_alloc returns cache-line-aligned
+     * addresses regardless of the caller's buffer alignment (e.g. stack). */
+    uintptr_t base = (uintptr_t)mem;
+    uintptr_t aligned = (base + ARENA_ALIGN - 1) & ~(uintptr_t)(ARENA_ALIGN - 1);
+    a->mem = (unsigned char *)aligned;
+    a->cap = cap - (size_t)(aligned - base);
+}
 void *arena_alloc(Arena *a, size_t n) {
     if (a->used + n > a->cap) return NULL;
-    size_t off = (a->used + ARENA_ALIGN - 1)  & ~(size_t)(ARENA_ALIGN - 1);
+    size_t off = (a->used + ARENA_ALIGN - 1) & ~(size_t)(ARENA_ALIGN - 1);
     if (off + n > a->cap) return NULL;
     void *p = a->mem + off; a->used = off + n; return p;
 }
@@ -49,7 +57,7 @@ int arena_self_test(char *out, size_t cap) {
     size_t p=0; int ok=1;
     unsigned char mem[4096]; Arena aa; arena_init(&aa,mem,4096);
     void *x=arena_alloc(&aa,128);
-    if (x==mem+64) { ok=1; } else { ok=0; }
+    if (((uintptr_t)x & 63) == 0) { ok=1; } else { ok=0; }
     snprintf(out+p,cap-p,"[%s] arena 64B align\n",ok?"ok":"FAIL"); p=strlen(out);
     Vec v; vec_init(&v,&aa,4,2); int a=42,b=99;
     vec_push(&v,4,&a); vec_push(&v,4,&b);
