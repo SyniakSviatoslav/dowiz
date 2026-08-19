@@ -1,6 +1,9 @@
 // selfhost/lexer.bp — Bebop self-hosting lexer (module #1)
-// Char classification + token counting + token-type classification.
-// Runs via `bebopc run` (interpreter) or `bebopc check` (typecheck).
+// Char classification + token-type classification + keyword lookup (tagged i64).
+// No structs/enums in .bp: token kinds and keyword tags are plain i64 tags.
+//   tok_kind:  0=EOF, 1=ident, 2=int, 3=float, 4=keyword, 5=op, 6=punct
+//   keyword:   fn=1, let=2, if=3, then=4, else=5, while=6, module=7, type=8, theorem=9
+// Runs via `bebopc check` (typecheck) or `bebopc run` (interpreter).
 
 module core { }
 
@@ -14,6 +17,38 @@ fn is_alpha(c: i64) -> i64 {
   let lower = if c >= 97 then (if c <= 122 then 1 else 0) else 0;
   let upper = if c >= 65 then (if c <= 90 then 1 else 0) else 0;
   lower + upper
+}
+
+// is_ident_char: alpha + digit + underscore '_' (95)
+fn is_ident_char(c: i64) -> i64 {
+  let a = is_alpha(c);
+  let d = is_digit(c);
+  let u = if c == 95 then 1 else 0;
+  if a + d + u > 0 then 1 else 0
+}
+
+// is_op_char: operator chars — + (43) - (45) * (42) / (47)
+//   = (61) ! (33) < (60) > (62) : (58). The arrow '->' is '-' then '>',
+//   both already operator chars.
+fn is_op_char(c: i64) -> i64 {
+  let op = 0;
+  let op = if c == 43 then 1 else op;
+  let op = if c == 45 then 1 else op;
+  let op = if c == 42 then 1 else op;
+  let op = if c == 47 then 1 else op;
+  let op = if c == 61 then 1 else op;
+  let op = if c == 33 then 1 else op;
+  let op = if c == 60 then 1 else op;
+  let op = if c == 62 then 1 else op;
+  let op = if c == 58 then 1 else op;
+  op
+}
+
+// lex_ident_start: alpha + underscore (a digit may not start an identifier)
+fn lex_ident_start(c: i64) -> i64 {
+  let a = is_alpha(c);
+  let u = if c == 95 then 1 else 0;
+  if a + u > 0 then 1 else 0
 }
 
 // is_space: ' ' (32)
@@ -77,4 +112,20 @@ fn count_ifs(s: str) -> i64 {
     0
   };
   c
+}
+
+// keyword_tag: map a keyword identifier to its tag (0 = not a keyword).
+//   fn=1, let=2, if=3, then=4, else=5, while=6, module=7, type=8, theorem=9
+fn keyword_tag(s: str) -> i64 {
+  let tag = 0;
+  let tag = if s == "fn" then 1 else tag;
+  let tag = if s == "let" then 2 else tag;
+  let tag = if s == "if" then 3 else tag;
+  let tag = if s == "then" then 4 else tag;
+  let tag = if s == "else" then 5 else tag;
+  let tag = if s == "while" then 6 else tag;
+  let tag = if s == "module" then 7 else tag;
+  let tag = if s == "type" then 8 else tag;
+  let tag = if s == "theorem" then 9 else tag;
+  tag
 }

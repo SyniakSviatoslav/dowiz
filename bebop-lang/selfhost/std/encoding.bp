@@ -7,16 +7,19 @@
 module core { }
 
 // url_safe_char: 1 if c is an RFC 3986 unreserved char code, else 0.
+// Each class is a flat 0/1 flag; classes are OR-ed via a sum (branchless).
 fn url_safe_char(c: i64) -> i64 {
-  let s = 0;
-  let s = if c >= 65 then (if c <= 90 then 1 else s) else s;
-  let s = if c >= 97 then (if c <= 122 then 1 else s) else s;
-  let s = if c >= 48 then (if c <= 57 then 1 else s) else s;
-  let s = if c == 45 then 1 else s;
-  let s = if c == 46 then 1 else s;
-  let s = if c == 95 then 1 else s;
-  let s = if c == 126 then 1 else s;
-  s
+  let upper = if c >= 65 then 1 else 0;
+  let upper = if c <= 90 then upper else 0;
+  let lower = if c >= 97 then 1 else 0;
+  let lower = if c <= 122 then lower else 0;
+  let digit = if c >= 48 then 1 else 0;
+  let digit = if c <= 57 then digit else 0;
+  let dash = if c == 45 then 1 else 0;
+  let dot = if c == 46 then 1 else 0;
+  let under = if c == 95 then 1 else 0;
+  let tilde = if c == 126 then 1 else 0;
+  if upper + lower + digit + dash + dot + under + tilde > 0 then 1 else 0
 }
 
 // hex_digit: map a nibble (0-15) to its UPPERCASE hex ASCII code (0-9 A-F).

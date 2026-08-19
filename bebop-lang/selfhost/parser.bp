@@ -96,3 +96,58 @@ fn eval(s: str) -> i64 {
   let pos = [0];
   parse_expr(s, pos)
 }
+
+// ---- AST node encoding: tagged i64 (tag in low 3 bits) ----
+// tag: 0=lit 1=var 2=bin 3=if 4=let 5=app 6=lam 7=array
+// op codes: + 43, - 45, * 42, / 47; comparisons (any other) -> precedence 3
+
+// mk_lit: literal node -> payload (value) << 3
+fn mk_lit(v: i64) -> i64 {
+  v * 8
+}
+
+// mk_var: variable node -> payload (name index) << 3 | 1
+fn mk_var(n: i64) -> i64 {
+  (n * 8) + 1
+}
+
+// mk_bin: binary-op node -> payload (op) << 3 | 2 (payload-only demo, full tree later)
+fn mk_bin(op: i64, a: i64, b: i64) -> i64 {
+  (op * 8) + 2
+}
+
+// node_tag: low 3 bits of the tagged node
+fn node_tag(t: i64) -> i64 {
+  t - (t / 8) * 8
+}
+
+// node_payload: upper bits (value, name index, or op code)
+fn node_payload(t: i64) -> i64 {
+  t / 8
+}
+
+fn is_lit(t: i64) -> i64 {
+  if node_tag(t) == 0 then 1 else 0
+}
+
+fn is_var(t: i64) -> i64 {
+  if node_tag(t) == 1 then 1 else 0
+}
+
+fn is_bin(t: i64) -> i64 {
+  if node_tag(t) == 2 then 1 else 0
+}
+
+fn is_if(t: i64) -> i64 {
+  if node_tag(t) == 3 then 1 else 0
+}
+
+// precedence: 1 = + -, 2 = * /, 3 = comparison
+fn precedence(op: i64) -> i64 {
+  let p = 3;
+  let p = if op == 42 then 2 else p;
+  let p = if op == 47 then 2 else p;
+  let p = if op == 43 then 1 else p;
+  let p = if op == 45 then 1 else p;
+  p
+}

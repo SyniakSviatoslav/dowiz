@@ -1,94 +1,128 @@
-// selfhost/typecheck.bp — Bebop typechecker (self-host module #3)
-// Typechecks arithmetic + comparison expressions. Type codes: 0=i64, 1=bool.
-// Returns 0 on type error, 1 on well-typed. Runs via `bebopc run`.
+// selfhost/typecheck.bp — full type-propagation typechecker (self-host module #3)
+//
+// Typechecks a full expression tree encoded as *tagged i64* (the scheme
+// established by ast.bp / parser.bp). The AST is a flat pre-order array of
+// nodes; each node is one i64 whose low 4 bits are the node *tag* and whose
+// high bits are the *payload*.
+//
+//   AST node tags (node % 16):
+//     0 = LIT   payload = literal type code (0=i64 1=f64 2=bool 3=str)
+//     1 = VAR   payload = de Bruijn index (0 = innermost binder)
+//     2 = BINOP payload = op code (0:+ 1:- 2:* 3:/ 4:== 5:!= 6:< 7:> 8:<= 9:>=)
+//     3 = LET   children: value, body            (binds a name in the env)
+//     4 = IF    children: cond, then, else       (cond must be bool; branches unify)
+//     5 = WHILE children: cond, body             -> unit (cond must be bool)
+//     6 = ARRAY payload = element count; then `count` child nodes
+//     7 = GET   children: array, index           -> element type (index must be i64)
+//     8 = SET   children: array, index, value    -> unit
+//
+//   Types are tagged i64 too (type % 8):
+//     0=i64 1=f64 2=bool 3=str 4=unit 5=arrow 6=array
+//     array-of-T is encoded T*8+6 (element type in the payload).
+//
+// infer() walks the tree in pre-order, threading an environment (a stack of
+// variable types) through let-bindings. It returns the result type, or -1 on
+// a type error.
 
 module core { }
 
-fn is_digit(c: i64) -> i64 {
-  if c >= 48 then (if c <= 57 then 1 else 0) else 0
-}
+// ---- type codes (tagged i64, tag = t % 8) --------------------------------
+fn t_i64() -> i64 { 0 }
+fn t_f64() -> i64 { 1 }
+fn t_bool() -> i64 { 2 }
+fn t_str() -> i64 { 3 }
+fn t_unit() -> i64 { 4 }
+fn t_arr(e: i64) -> i64 { e * 8 + 6 }
+fn ty_tag(t: i64) -> i64 { t - (t / 8) * 8 }
+fn arr_elem(t: i64) -> i64 { t / 8 }
 
-fn skip_ws(s: str, pos: [i64]) -> i64 {
-  let n = str_len(s);
-  let done = 0;
-  while done == 0 {
-    let at_end = if pos[0] >= n then 1 else 0;
-    let ch = if at_end == 1 then 0 else char(s, pos[0]);
-    let is_sp = if at_end == 1 then 0 else (if ch == 32 then 1 else 0);
-    let _ = pos[0] = pos[0] + is_sp;
-    let done = if is_sp == 1 then 0 else 1;
-    0
-  };
-  0
-}
+// ---- AST node constructors (tagged i64, tag = n % 16) --------------------
+fn lit(ty: i64) -> i64 { ty * 16 }        // tag 0
+fn varn(i: i64) -> i64 { i * 16 + 1 }     // tag 1
+fn bop(op: i64) -> i64 { op * 16 + 2 }    // tag 2
+fn letn() -> i64 { 3 }                     // tag 3
+fn ifn() -> i64 { 4 }                      // tag 4
+fn whln() -> i64 { 5 }                     // tag 5
+fn arrn(c: i64) -> i64 { c * 16 + 6 }     // tag 6
+fn getn() -> i64 { 7 }                     // tag 7
+fn setn() -> i64 { 8 }                     // tag 8
+fn node_tag(n: i64) -> i64 { n - (n / 16) * 16 }
+fn node_val(n: i64) -> i64 { n / 16 }
 
-// skip_num: advance past a number literal, return 0 (i64 type)
-fn skip_num(s: str, pos: [i64]) -> i64 {
-  let n = str_len(s);
-  let done = 0;
-  while done == 0 {
-    let at_end = if pos[0] >= n then 1 else 0;
-    let ch = if at_end == 1 then 0 else char(s, pos[0]);
-    let dg = if at_end == 1 then 0 else is_digit(ch);
-    let _ = pos[0] = pos[0] + dg;
-    let done = if dg == 1 then 0 else 1;
-    0
-  };
-  0
-}
-
-// parse_expr_type: returns the type (0=i64) of an arithmetic expression.
-// Reports type errors via *ok (0 = error). Grammar: expr := term (('+'|'-') term)*
-fn parse_expr_type(s: str, pos: [i64], ok: [i64]) -> i64 {
-  let t1 = parse_term_type(s, pos, ok);
-  let done = 0;
-  while done == 0 {
-    let _ = skip_ws(s, pos);
-    let n = str_len(s);
-    let ch = if pos[0] >= n then 0 else char(s, pos[0]);
-    let is_op = if ch == 43 then 1 else (if ch == 45 then 1 else 0);
-    let t1 = if is_op == 1 then (let _ = pos[0] = pos[0] + 1 in (let t2 = parse_term_type(s, pos, ok) in (if t1 == 0 then (if t2 == 0 then 0 else (let _ = ok[0] = 0 in 0)) else (let _ = ok[0] = 0 in 0)))) else t1;
-    let done = if is_op == 1 then 0 else 1;
-    0
-  };
-  t1
-}
-
-// parse_term_type: term := factor ('*' factor)*
-fn parse_term_type(s: str, pos: [i64], ok: [i64]) -> i64 {
-  let t1 = parse_factor_type(s, pos, ok);
-  let done = 0;
-  while done == 0 {
-    let _ = skip_ws(s, pos);
-    let n = str_len(s);
-    let ch = if pos[0] >= n then 0 else char(s, pos[0]);
-    let is_mul = if ch == 42 then 1 else 0;
-    let t1 = if is_mul == 1 then (let _ = pos[0] = pos[0] + 1 in (let t2 = parse_factor_type(s, pos, ok) in (if t1 == 0 then (if t2 == 0 then 0 else (let _ = ok[0] = 0 in 0)) else (let _ = ok[0] = 0 in 0)))) else t1;
-    let done = if is_mul == 1 then 0 else 1;
-    0
-  };
-  t1
-}
-
-// parse_factor_type: factor := number | '(' expr ')'
-fn parse_factor_type(s: str, pos: [i64], ok: [i64]) -> i64 {
-  let _ = skip_ws(s, pos);
-  let n = str_len(s);
-  let ch = if pos[0] >= n then 0 else char(s, pos[0]);
-  let is_lparen = if ch == 40 then 1 else 0;
-  if is_lparen == 1 then
-    (let _ = pos[0] = pos[0] + 1 in
-     (let t = parse_expr_type(s, pos, ok) in
-      (let _ = skip_ws(s, pos) in
-       (let _ = pos[0] = pos[0] + 1 in t))))
+// ---- binary operator result type -----------------------------------------
+fn binop_type(op: i64, l: i64, r: i64) -> i64 {
+  let cmp = if op >= 4 then 1 else 0;
+  let eq = if op == 4 then 1 else (if op == 5 then 1 else 0);
+  let ln = if l == 0 then 1 else (if l == 1 then 1 else 0);
+  let rn = if r == 0 then 1 else (if r == 1 then 1 else 0);
+  let both = if ln == 1 then (if rn == 1 then 1 else 0) else 0;
+  let seq = if eq == 1 then (if l == 3 then (if r == 3 then 1 else 0) else 0) else 0;
+  if both == 1 then
+    (if cmp == 1 then 2 else (if l == 1 then 1 else (if r == 1 then 1 else 0)))
   else
-    (let _ = skip_num(s, pos) in 0)
+    (if seq == 1 then 2 else 0 - 1)
 }
 
-// typecheck: entry — 1 if the expression is well-typed, 0 otherwise
-fn typecheck(s: str) -> i64 {
-  let pos = [0];
-  let ok = [1];
-  let t = parse_expr_type(s, pos, ok);
-  ok[0]
+// ---- unify the element types of an array literal -------------------------
+fn array_elems(ast: [i64], p: [i64], env: [i64], depth: [i64], count: i64) -> i64 {
+  let i = [0];
+  let elem = 0 - 1;
+  let seen = 0;
+  let bad = 0;
+  while i[0] < count {
+    let e = infer(ast, p, env, depth);
+    let elem = if seen == 0 then e else elem;
+    let bad = if seen == 0 then 0 else (if e == elem then 0 else 1);
+    let seen = 1;
+    let _ = i[0] = i[0] + 1;
+    0
+  };
+  if seen == 0 then 0 - 1 else (if bad == 1 then 0 - 1 else elem)
+}
+
+// ---- infer: recursive type propagation over the tagged tree --------------
+fn infer(ast: [i64], p: [i64], env: [i64], depth: [i64]) -> i64 {
+  let node = ast[p[0]];
+  let _ = p[0] = p[0] + 1;
+  let tg = node_tag(node);
+  let vl = node_val(node);
+  if tg == 0 then vl
+  else if tg == 1 then (if vl < depth[0] then env[depth[0] - 1 - vl] else 0 - 1)
+  else if tg == 2 then (let lt = infer(ast, p, env, depth) in (let rt = infer(ast, p, env, depth) in binop_type(vl, lt, rt)))
+  else if tg == 3 then (let vt = infer(ast, p, env, depth) in (let _ = env[depth[0]] = vt in (let _ = depth[0] = depth[0] + 1 in (let bt = infer(ast, p, env, depth) in (let _ = depth[0] = depth[0] - 1 in bt)))))
+  else if tg == 4 then (let ct = infer(ast, p, env, depth) in (let th = infer(ast, p, env, depth) in (let el = infer(ast, p, env, depth) in (if ct == 2 then (if th == el then th else 0 - 1) else 0 - 1))))
+  else if tg == 5 then (let ct = infer(ast, p, env, depth) in (let bt = infer(ast, p, env, depth) in (if ct == 2 then 4 else 0 - 1)))
+  else if tg == 6 then (let et = array_elems(ast, p, env, depth, vl) in (if et == 0 - 1 then 0 - 1 else et * 8 + 6))
+  else if tg == 7 then (let at = infer(ast, p, env, depth) in (let it = infer(ast, p, env, depth) in (if ty_tag(at) == 6 then (if it == 0 then arr_elem(at) else 0 - 1) else 0 - 1)))
+  else if tg == 8 then (let at = infer(ast, p, env, depth) in (let it = infer(ast, p, env, depth) in (let vt = infer(ast, p, env, depth) in (if ty_tag(at) == 6 then (if it == 0 then (if vt == arr_elem(at) then 4 else 0 - 1) else 0 - 1) else 0 - 1))))
+  else 0 - 1
+}
+
+// ---- public entry: typecheck a whole expression tree ---------------------
+fn typecheck(ast: [i64]) -> i64 {
+  let p = [0];
+  let env = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+  let depth = [0];
+  infer(ast, p, env, depth)
+}
+
+// ---- self test: returns 0 when every case typechecks correctly ------------
+fn selftest() -> i64 {
+  let f1 = if typecheck([bop(0), lit(0), lit(0)]) == 0 then 0 else 1;
+  let f2 = if typecheck([bop(0), lit(0), lit(1)]) == 1 then 0 else 1;
+  let f3 = if typecheck([bop(6), lit(1), lit(1)]) == 2 then 0 else 1;
+  let f4 = if typecheck([letn(), lit(0), bop(0), varn(0), lit(0)]) == 0 then 0 else 1;
+  let f5 = if typecheck([letn(), lit(1), bop(0), varn(0), lit(0)]) == 1 then 0 else 1;
+  let f6 = if typecheck([ifn(), bop(6), lit(0), lit(0), lit(0), lit(0)]) == 0 then 0 else 1;
+  let f7 = if typecheck([ifn(), bop(6), lit(0), lit(0), lit(0), lit(1)]) == 0 - 1 then 0 else 1;
+  let f8 = if typecheck([ifn(), lit(0), lit(0), lit(0)]) == 0 - 1 then 0 else 1;
+  let f9 = if typecheck([getn(), arrn(3), lit(0), lit(0), lit(0), lit(0)]) == 0 then 0 else 1;
+  let f10 = if typecheck([getn(), arrn(2), lit(1), lit(1), lit(0)]) == 1 then 0 else 1;
+  let f11 = if typecheck([bop(4), lit(3), lit(3)]) == 2 then 0 else 1;
+  let f12 = if typecheck([bop(0), lit(3), lit(0)]) == 0 - 1 then 0 else 1;
+  let f13 = if typecheck([getn(), lit(0), lit(0)]) == 0 - 1 then 0 else 1;
+  let f14 = if typecheck([getn(), arrn(2), lit(0), lit(0), lit(2)]) == 0 - 1 then 0 else 1;
+  let f15 = if typecheck([whln(), bop(6), lit(0), lit(0), lit(0)]) == 4 then 0 else 1;
+  let f16 = if typecheck([letn(), lit(0), letn(), lit(0), bop(0), varn(0), varn(1)]) == 0 then 0 else 1;
+  f1 + f2 + f3 + f4 + f5 + f6 + f7 + f8 + f9 + f10 + f11 + f12 + f13 + f14 + f15 + f16
 }

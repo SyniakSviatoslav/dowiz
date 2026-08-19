@@ -1,6 +1,91 @@
-// selfhost/std/matrix.bp — 2x2/3x3 matrices as flat row-major [i64].
+// selfhost/std/matrix.bp — BLAS-3 matrix kernels over flat row-major [f64],
+// plus fixed 2x2/3x3 integer-matrix helpers ([i64]).
+//
+// BLAS-3 (f64): matvec (matrix-vector product), matmul (matrix-matrix product
+// C = A*B), transpose (A^T). Matrices are flat row-major: element (i, j) of an
+// r-by-c matrix lives at flat index i*c + j. There is no array-length builtin,
+// so every array-taking fn carries explicit dims and loops i < dim (mirrors the
+// C (data, rows, cols) signatures). Full f64 arithmetic throughout.
 
 module core { }
+
+// matvec: out[i] = sum_j a[i*n + j] * x[j] for i in [0, m). Mutates out in
+// place; returns 0.
+fn matvec(a: [f64], x: [f64], m: i64, n: i64, out: [f64]) -> i64 {
+  let i = 0;
+  let di = 0;
+  while di == 0 {
+    let j = 0;
+    let acc = 0.0;
+    let dj = 0;
+    while dj == 0 {
+      let acc = acc + a[i * n + j] * x[j];
+      let j = j + 1;
+      let dj = if j >= n then 1 else 0;
+      0
+    };
+    let _ = out[i] = acc;
+    let i = i + 1;
+    let di = if i >= m then 1 else 0;
+    0
+  };
+  0
+}
+
+// matmul: out = a * b for an (m x k) matrix a and a (k x n) matrix b, writing
+// an (m x n) result. out[i*n + j] = sum_p a[i*k + p] * b[p*n + j]. n is capped
+// at 8 by callers (small fixed inner dim). Mutates out in place; returns 0.
+fn matmul(a: [f64], b: [f64], m: i64, k: i64, n: i64, out: [f64]) -> i64 {
+  let i = 0;
+  let di = 0;
+  while di == 0 {
+    let j = 0;
+    let dj = 0;
+    while dj == 0 {
+      let p = 0;
+      let acc = 0.0;
+      let dp = 0;
+      while dp == 0 {
+        let acc = acc + a[i * k + p] * b[p * n + j];
+        let p = p + 1;
+        let dp = if p >= k then 1 else 0;
+        0
+      };
+      let _ = out[i * n + j] = acc;
+      let j = j + 1;
+      let dj = if j >= n then 1 else 0;
+      0
+    };
+    let i = i + 1;
+    let di = if i >= m then 1 else 0;
+    0
+  };
+  0
+}
+
+// transpose: out[j*m + i] = a[i*n + j] for i in [0, m), j in [0, n). Writes the
+// (n x m) transpose of an (m x n) matrix a into out. Mutates out in place;
+// returns 0.
+fn transpose(a: [f64], m: i64, n: i64, out: [f64]) -> i64 {
+  let i = 0;
+  let di = 0;
+  while di == 0 {
+    let j = 0;
+    let dj = 0;
+    while dj == 0 {
+      let _ = out[j * m + i] = a[i * n + j];
+      let j = j + 1;
+      let dj = if j >= n then 1 else 0;
+      0
+    };
+    let i = i + 1;
+    let di = if i >= m then 1 else 0;
+    0
+  };
+  0
+}
+
+// ── fixed 2x2/3x3 integer matrices ([i64]) ──────────────────────────────
 
 // mat2_mul: out = a * b for 2x2 matrices (out must be length 4).
 fn mat2_mul(a: [i64], b: [i64], out: [i64]) -> i64 {
