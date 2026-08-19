@@ -1,0 +1,28 @@
+// selfhost/std/nat.bp — Peano natural arithmetic (successor/pred recursion).
+// Naturals are encoded as i64 counts of successors.
+
+module core { }
+
+// succ: the successor of n.
+fn succ(n: i64) -> i64 { n + 1 }
+
+// pred: the predecessor of n, clamped at zero.
+fn pred(n: i64) -> i64 { if n == 0 then 0 else n - 1 }
+
+// is_zero: 1 if n is zero, else 0.
+fn is_zero(n: i64) -> i64 { if n == 0 then 1 else 0 }
+
+// add: addition by induction on the second argument.
+fn add(a: i64, b: i64) -> i64 {
+  if b == 0 then a else succ(add(a, pred(b)))
+}
+
+// mul: multiplication by induction on the second argument.
+fn mul(a: i64, b: i64) -> i64 {
+  if b == 0 then 0 else add(a, mul(a, pred(b)))
+}
+
+// exp: exponentiation by induction on the exponent.
+fn exp(a: i64, b: i64) -> i64 {
+  if b == 0 then 1 else mul(a, exp(a, pred(b)))
+}

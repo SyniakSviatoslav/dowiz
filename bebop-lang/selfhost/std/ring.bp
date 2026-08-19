@@ -1,0 +1,41 @@
+// selfhost/std/ring.bp — fixed-capacity ring buffer via a mutable array.
+// State is a 3-slot array st = [head, tail, count]; buf holds the data.
+
+module core { }
+
+// ring_init: reset head/tail/count to zero.
+fn ring_init(st: [i64]) -> i64 {
+  let _ = st[0] = 0;
+  let _ = st[1] = 0;
+  let _ = st[2] = 0;
+  0
+}
+
+// ring_size: number of elements currently buffered.
+fn ring_size(st: [i64]) -> i64 { st[2] }
+
+// ring_push: append v; returns 1 on success, 0 if the buffer is full.
+fn ring_push(buf: [i64], cap: i64, st: [i64], v: i64) -> i64 {
+  let full = if st[2] >= cap then 1 else 0;
+  if full == 1 then 0 else
+    (let _ = buf[st[1]] = v in
+     (let nt = if st[1] + 1 >= cap then 0 else st[1] + 1 in
+      (let _ = st[1] = nt in
+       (let _ = st[2] = st[2] + 1 in 1))))
+}
+
+// ring_pop: remove and return the oldest element; 0 if empty.
+fn ring_pop(buf: [i64], cap: i64, st: [i64]) -> i64 {
+  let empty = if st[2] == 0 then 1 else 0;
+  if empty == 1 then 0 else
+    (let v = buf[st[0]] in
+     (let nh = if st[0] + 1 >= cap then 0 else st[0] + 1 in
+      (let _ = st[0] = nh in
+       (let _ = st[2] = st[2] - 1 in v))))
+}
+
+// ring_peek: return the oldest element without removing it; -1 if empty.
+fn ring_peek(buf: [i64], st: [i64]) -> i64 {
+  let empty = if st[2] == 0 then 1 else 0;
+  if empty == 1 then (0 - 1) else buf[st[0]]
+}

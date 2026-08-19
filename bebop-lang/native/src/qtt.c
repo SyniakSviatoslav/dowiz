@@ -1609,6 +1609,7 @@ static Value eval(const Term *t, Env *env) {
                 case BOP_ADD: v.i = l.i + r.i; break;
                 case BOP_SUB: v.i = l.i - r.i; break;
                 case BOP_MUL: v.i = l.i * r.i; break;
+                case BOP_DIV: v.i = (r.i != 0) ? l.i / r.i : 0; break;
                 case BOP_EQ:
                     if (l.kind == 5 && r.kind == 5) {
                         v.kind = 1;
@@ -2366,6 +2367,7 @@ static Term *norm_rec(const Term *t) {
                     case BOP_ADD: o->ival = l + r; return o;
                     case BOP_SUB: o->ival = l - r; return o;
                     case BOP_MUL: o->ival = l * r; return o;
+                    case BOP_DIV: o->ival = (r != 0) ? l / r : 0; return o;
                     case BOP_EQ:  o->bval = (l == r); return o; /* i64 path; str eq handled by norm */
                     case BOP_NE:  o->bval = (l != r); return o;
                     case BOP_LT:  o->bval = (l < r);  return o;

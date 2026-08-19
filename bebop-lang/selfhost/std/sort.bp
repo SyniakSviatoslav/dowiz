@@ -1,0 +1,81 @@
+// selfhost/std/sort.bp — in-place integer sorting over [i64].
+
+module core { }
+
+// is_sorted: 1 if a[0..n) is sorted ascending, else 0.
+fn is_sorted(a: [i64], n: i64) -> i64 {
+  let i = 0;
+  let ok = 1;
+  let done = 0;
+  while done == 0 {
+    let first = if i == 0 then 1 else 0;
+    let bad = if first == 1 then 0 else (if a[i] < a[i - 1] then 1 else 0);
+    let ok = if bad == 1 then 0 else ok;
+    let i = i + 1;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  ok
+}
+
+// find_min_idx: index of the smallest element in a[start..n).
+fn find_min_idx(a: [i64], n: i64, start: i64) -> i64 {
+  let j = start;
+  let m = a[start];
+  let mi = start;
+  let done = 0;
+  while done == 0 {
+    let v = a[j];
+    let less = if v < m then 1 else 0;
+    let m = if less == 1 then v else m;
+    let mi = if less == 1 then j else mi;
+    let j = j + 1;
+    let done = if j >= n then 1 else 0;
+    0
+  };
+  mi
+}
+
+// selection_sort: sort a[0..n) in place, return the number of swaps.
+fn selection_sort(a: [i64], n: i64) -> i64 {
+  let i = 0;
+  let swaps = 0;
+  let done = 0;
+  while done == 0 {
+    let mi = find_min_idx(a, n, i);
+    let tmp = a[i];
+    let _ = a[i] = a[mi];
+    let _ = a[mi] = tmp;
+    let swaps = if mi == i then swaps else swaps + 1;
+    let i = i + 1;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  swaps
+}
+
+// insertion_sort: sort a[0..n) in place, return the number of shifts.
+fn insertion_sort(a: [i64], n: i64) -> i64 {
+  let i = 1;
+  let moves = 0;
+  let done = 0;
+  while done == 0 {
+    let key = a[i];
+    let j = i - 1;
+    let inner = 0;
+    while inner == 0 {
+      let can = if j >= 0 then 1 else 0;
+      let gt = if can == 1 then (if a[j] > key then 1 else 0) else 0;
+      let _ = if gt == 1 then (let _ = a[j + 1] = a[j] in 0) else 0;
+      let moves = moves + gt;
+      let j = j - gt;
+      let inner = if gt == 1 then 0 else 1;
+      0
+    };
+    let _ = a[j + 1] = key;
+    let i = i + 1;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  moves
+}

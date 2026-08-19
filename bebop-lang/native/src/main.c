@@ -74,6 +74,7 @@
 #include "pq.h"
 #include "zlib.h"
 #include "sha256.h"
+#include "x25519.h"
 
 
 static void usage(void) {
@@ -849,6 +850,15 @@ static void cmd_atomic(void) {
     exit(ok == 0 ? 0 : 1);
 }
 
+static void cmd_x25519(void) {
+    char buf[8192];
+    int ok = x25519_self_test(buf, sizeof buf);
+    fputs(buf, stdout);
+    printf("X25519 (Curve25519 / RFC 7748) self-test: %s\n",
+           ok == 0 ? "PASS" : "FAIL");
+    exit(ok == 0 ? 0 : 1);
+}
+
 static void cmd_bench(void) {
     char buf[1024];
     hv_benchmark(buf, sizeof buf);
@@ -1404,6 +1414,10 @@ int main(int argc, char **argv) {
         printf("SHA-256 / SHA-224 / HMAC-SHA256 self-test: %s\n",
                ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "x25519") == 0) {
+        cmd_x25519();
+        return 0;
     }
     usage();
     return 2;

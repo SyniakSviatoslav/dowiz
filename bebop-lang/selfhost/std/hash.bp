@@ -1,0 +1,45 @@
+// selfhost/std/hash.bp — simple string hashes (pure arithmetic, no tables).
+
+module core { }
+
+// hash_djb2: classic djb2 hash (h = h*33 + c), seeded with 5381.
+fn hash_djb2(s: str) -> i64 {
+  let n = str_len(s);
+  let h = 5381;
+  let i = 0;
+  while i < n {
+    let h = (h * 33) + char(s, i);
+    let i = i + 1;
+    0
+  };
+  h
+}
+
+// hash_sum: sum of all character codes (weak but trivial).
+fn hash_sum(s: str) -> i64 {
+  let n = str_len(s);
+  let h = 0;
+  let i = 0;
+  while i < n {
+    let h = h + char(s, i);
+    let i = i + 1;
+    0
+  };
+  h
+}
+
+// hash_poly: rolling polynomial hash h = h*base + c.
+fn hash_poly(s: str, base: i64) -> i64 {
+  let n = str_len(s);
+  let h = 0;
+  let i = 0;
+  while i < n {
+    let h = (h * base) + char(s, i);
+    let i = i + 1;
+    0
+  };
+  h
+}
+
+// hash_len: the string length as a (weak) hash.
+fn hash_len(s: str) -> i64 { str_len(s) }

@@ -1,0 +1,34 @@
+// selfhost/std/matrix.bp — 2x2/3x3 matrices as flat row-major [i64].
+
+module core { }
+
+// mat2_mul: out = a * b for 2x2 matrices (out must be length 4).
+fn mat2_mul(a: [i64], b: [i64], out: [i64]) -> i64 {
+  let _ = out[0] = (a[0] * b[0]) + (a[1] * b[2]);
+  let _ = out[1] = (a[0] * b[1]) + (a[1] * b[3]);
+  let _ = out[2] = (a[2] * b[0]) + (a[3] * b[2]);
+  let _ = out[3] = (a[2] * b[1]) + (a[3] * b[3]);
+  0
+}
+
+// mat2_det: determinant of a 2x2 matrix.
+fn mat2_det(a: [i64]) -> i64 { (a[0] * a[3]) - (a[1] * a[2]) }
+
+// mat2_trace: trace of a 2x2 matrix.
+fn mat2_trace(a: [i64]) -> i64 { a[0] + a[3] }
+
+// mat2_identity: write the 2x2 identity into out.
+fn mat2_identity(out: [i64]) -> i64 {
+  let _ = out[0] = 1;
+  let _ = out[1] = 0;
+  let _ = out[2] = 0;
+  let _ = out[3] = 1;
+  0
+}
+
+// mat3_det: determinant of a 3x3 matrix (cofactor expansion on row 0).
+fn mat3_det(a: [i64]) -> i64 {
+  (a[0] * ((a[4] * a[8]) - (a[5] * a[7])))
+    - (a[1] * ((a[3] * a[8]) - (a[5] * a[6])))
+    + (a[2] * ((a[3] * a[7]) - (a[4] * a[6])))
+}

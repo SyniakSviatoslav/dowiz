@@ -1,0 +1,91 @@
+// selfhost/std/list.bp — singly-linked list encoded as two parallel arrays:
+// val[i] is the value at node i, next[i] is the index of the next node,
+// and (0 - 1) is the null/end sentinel.
+
+module core { }
+
+// list_len: count nodes reachable from head.
+fn list_len(head: i64, next: [i64]) -> i64 {
+  let i = head;
+  let n = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if i == (0 - 1) then 1 else 0;
+    let n = n + (1 - at_end);
+    let i = if at_end == 1 then i else next[i];
+    let done = at_end;
+    0
+  };
+  n
+}
+
+// list_sum: sum of values along the list.
+fn list_sum(head: i64, val: [i64], next: [i64]) -> i64 {
+  let i = head;
+  let s = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if i == (0 - 1) then 1 else 0;
+    let v = if at_end == 1 then 0 else val[i];
+    let s = s + v;
+    let i = if at_end == 1 then i else next[i];
+    let done = at_end;
+    0
+  };
+  s
+}
+
+// list_max: maximum value along the list (assumes non-negative values).
+fn list_max(head: i64, val: [i64], next: [i64]) -> i64 {
+  let i = head;
+  let m = if head == (0 - 1) then 0 else val[head];
+  let done = 0;
+  while done == 0 {
+    let at_end = if i == (0 - 1) then 1 else 0;
+    let v = if at_end == 1 then 0 else val[i];
+    let more = if v > m then 1 else 0;
+    let m = if more == 1 then v else m;
+    let i = if at_end == 1 then i else next[i];
+    let done = at_end;
+    0
+  };
+  m
+}
+
+// list_find: index of the first node holding x, or -1 if absent.
+fn list_find(head: i64, val: [i64], next: [i64], x: i64) -> i64 {
+  let i = head;
+  let idx = 0;
+  let found = 0 - 1;
+  let done = 0;
+  while done == 0 {
+    let at_end = if i == (0 - 1) then 1 else 0;
+    let v = if at_end == 1 then 0 else val[i];
+    let hit = if v == x then 1 else 0;
+    let found = if hit == 1 then idx else found;
+    let i = if at_end == 1 then i else next[i];
+    let idx = idx + (1 - at_end);
+    let done = if hit == 1 then 1 else at_end;
+    0
+  };
+  found
+}
+
+// list_nth: value at the k-th node (0-based), or -1 if k is out of range.
+fn list_nth(head: i64, val: [i64], next: [i64], k: i64) -> i64 {
+  let i = head;
+  let pos = 0;
+  let result = 0 - 1;
+  let done = 0;
+  while done == 0 {
+    let at_end = if i == (0 - 1) then 1 else 0;
+    let v = if at_end == 1 then 0 else val[i];
+    let at_k = if pos == k then 1 else 0;
+    let result = if at_k == 1 then v else result;
+    let i = if at_end == 1 then i else next[i];
+    let pos = pos + (1 - at_end);
+    let done = if at_k == 1 then 1 else at_end;
+    0
+  };
+  result
+}

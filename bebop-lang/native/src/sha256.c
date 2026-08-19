@@ -289,7 +289,7 @@ int sha256_self_test(char *out, size_t cap) {
         uint8_t d[32];
         const char *msg = "abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq";
         sha256((const uint8_t *)msg, 56, d);
-        A(hex_eq(d, 32, "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecdedd419db06c1"),
+        A(hex_eq(d, 32, "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"),
           "SHA-256(448-bit) NIST FIPS 180-4");
     }
     {

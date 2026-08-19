@@ -470,6 +470,7 @@ static int binop(P *p, BinOp *op, int *adv) {
     if (c == '+') { *op = BOP_ADD; return 2; }
     if (c == '-') { *op = BOP_SUB; return 2; }
     if (c == '*') { *op = BOP_MUL; return 3; }
+    if (c == '/' && d != '/') { *op = BOP_DIV; return 3; }
     return -1;
 }
 

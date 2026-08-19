@@ -116,6 +116,18 @@ static void bw_flush(BitWriter *bw) {
     }
 }
 
+/* Reverse the low `n` bits of `v`. Huffman codes are packed MSB-first into the
+ * DEFLATE bit stream, but bw_write emits LSB-first, so code values are reversed
+ * before being written. (Extra length/distance bits are already LSB-first.) */
+static uint32_t reverse_bits(uint32_t v, int n) {
+    uint32_t r = 0;
+    for (int i = 0; i < n; i++) {
+        r = (r << 1) | (v & 1);
+        v >>= 1;
+    }
+    return r;
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
  * Fixed-Huffman code lookup (RFC 1951 §3.2.6)
  * ────────────────────────────────────────────────────────────────────────── */
@@ -294,11 +306,11 @@ static int deflate_fixed(const uint8_t *in, size_t in_len, BitWriter *bw) {
             uint32_t code;
             int nbits;
             fixed_lit_code(lsym, &code, &nbits);
-            bw_write(bw, code, nbits);
+            bw_write(bw, reverse_bits(code, nbits), nbits);
             if (lbits > 0) {
                 bw_write(bw, lval, (int)lbits);
             }
-            bw_write(bw, dsym, 5); /* fixed distance codes are 5 bits */
+            bw_write(bw, reverse_bits(dsym, 5), 5); /* fixed distance code */
             if (dbits > 0) {
                 bw_write(bw, dval, (int)dbits);
             }
@@ -317,7 +329,7 @@ static int deflate_fixed(const uint8_t *in, size_t in_len, BitWriter *bw) {
             uint32_t code;
             int nbits;
             fixed_lit_code(in[pos], &code, &nbits);
-            bw_write(bw, code, nbits);
+            bw_write(bw, reverse_bits(code, nbits), nbits);
 
             if (pos + 2 < in_len) {
                 prev[pos] = head[h];
@@ -889,6 +901,24 @@ int zlib_self_test(char *out, size_t cap) {
             m = (stored_out[i] == stored_plain[i]);
         }
         A(m, "stored-block inflate content");
+    }
+    {
+        /* zlib.compress(..., strategy=Z_FIXED) — fixed-Huffman block. */
+        static const uint8_t fixed[] = {
+            0x78, 0x01, 0x4b, 0x4c, 0x4c, 0x4c, 0x54, 0x48,
+            0x02, 0x02, 0x85, 0x64, 0x20, 0x50, 0x48, 0x01,
+            0x02, 0x00, 0x40, 0xff, 0x06, 0x89
+        };
+        static const uint8_t fixed_plain[] = "aaaa bbbb cccc dddd";
+        uint8_t fixed_out[64];
+        size_t fixed_len = sizeof fixed_out;
+        int64_t d = zlib_inflate(fixed, sizeof fixed, fixed_out, &fixed_len);
+        A(d == (int64_t)(sizeof fixed_plain - 1), "fixed-huffman inflate size");
+        int m = (fixed_len == sizeof fixed_plain - 1);
+        for (size_t i = 0; m && i < fixed_len; i++) {
+            m = (fixed_out[i] == fixed_plain[i]);
+        }
+        A(m, "fixed-huffman inflate content");
     }
 
     /* ── Overflow safety: tiny output buffer must fail, not corrupt ── */

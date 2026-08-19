@@ -1,0 +1,72 @@
+// selfhost/std/string.bp — string helpers built on str_len/char/chr.
+
+module core { }
+
+// str_count: count occurrences of character code c in s.
+fn str_count(s: str, c: i64) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  let cnt = 0;
+  while i < n {
+    let hit = if char(s, i) == c then 1 else 0;
+    let cnt = cnt + hit;
+    let i = i + 1;
+    0
+  };
+  cnt
+}
+
+// str_find: index of the first occurrence of c, or -1 if absent.
+fn str_find(s: str, c: i64) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  let found = 0 - 1;
+  let done = 0;
+  while done == 0 {
+    let at_end = if i >= n then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, i);
+    let hit = if ch == c then 1 else 0;
+    let found = if hit == 1 then i else found;
+    let i = i + (1 - at_end);
+    let done = if hit == 1 then 1 else at_end;
+    0
+  };
+  found
+}
+
+// str_cmp: lexicographic compare — 0 equal, -1 if a<b, 1 if a>b.
+fn str_cmp(a: str, b: str) -> i64 {
+  let na = str_len(a);
+  let nb = str_len(b);
+  let i = 0;
+  let result = 0;
+  let done = 0;
+  while done == 0 {
+    let ea = if i >= na then 1 else 0;
+    let eb = if i >= nb then 1 else 0;
+    let ca = if ea == 1 then 0 else char(a, i);
+    let cb = if eb == 1 then 0 else char(b, i);
+    let less = if ca < cb then 1 else 0;
+    let more = if ca > cb then 1 else 0;
+    let result = if less == 1 then (0 - 1) else (if more == 1 then 1 else result);
+    let decided = if less == 1 then 1 else (if more == 1 then 1 else (if ea == 1 then 1 else (if eb == 1 then 1 else 0)));
+    let i = i + 1;
+    let done = decided;
+    0
+  };
+  if result == 0 then (if na > nb then 1 else (if na < nb then (0 - 1) else 0)) else result
+}
+
+// str_rev: return the reversed string.
+fn str_rev(s: str) -> str {
+  let n = str_len(s);
+  let out = "";
+  let i = 0;
+  while i < n {
+    let c = char(s, n - 1 - i);
+    let out = out ++ chr(c);
+    let i = i + 1;
+    0
+  };
+  out
+}
