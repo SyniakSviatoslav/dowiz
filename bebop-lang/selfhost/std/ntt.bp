@@ -1,0 +1,116 @@
+// selfhost/std/ntt.bp — Number-Theoretic Transform (NTT) forward/inverse over i64.
+// Port of native/src/ntt.c ntt_transform (and dowiz ntt.rs ntt). Field arithmetic
+// modulo the NTT-friendly prime MOD = 998244353 = 2^23 * 119 + 1, primitive root 3.
+// Every intermediate product stays < MOD^2 (~9.96e17), which fits i64 (~9.22e18).
+// No u64/floats/structs/bitwise ops: division truncates toward zero, so `rem`
+// re-adds m for negative inputs; the bit-reversal permutation and the butterfly
+// stages use only + - * / and low-bit extraction (x - (x/2)*2). n must be a power
+// of two. convolve/circular are omitted: they need dynamic next-power-of-two
+// allocation, which the fixed-size [i64] literal-array surface cannot express.
+
+module core { }
+
+// rem: least non-negative residue of x modulo m (m > 0). Result in [0, m).
+fn rem(x: i64, m: i64) -> i64 {
+  let r = x - (x / m) * m;
+  if r < 0 then r + m else r
+}
+
+// mod_mul: (a * b) mod m. Operands are reduced first; (m-1)^2 must fit i64.
+fn mod_mul(a: i64, b: i64, m: i64) -> i64 {
+  rem(rem(a, m) * rem(b, m), m)
+}
+
+// mod_pow: base^exp mod m via square-and-multiply (exp >= 0). Result in [0, m).
+fn mod_pow(base: i64, exp: i64, m: i64) -> i64 {
+  let b = rem(base, m);
+  let e = exp;
+  let r = 1;
+  while e != 0 {
+    let r = if e - (e / 2) * 2 == 1 then rem(r * b, m) else r;
+    let b = rem(b * b, m);
+    let e = e / 2;
+    0
+  };
+  r
+}
+
+// mod_inv: multiplicative inverse of a modulo m via Fermat's little theorem
+// (m prime): a^(m-2) mod m. Returns 0 when a == 0 (never used for the roots).
+fn mod_inv(a: i64, m: i64) -> i64 {
+  mod_pow(a, m - 2, m)
+}
+
+// ntt: in-place iterative NTT (invert == 0) or inverse NTT (invert == 1) over
+// MOD. a[0..n) holds the data, n must be a power of two; elements are reduced
+// into [0, MOD) on input and the inverse result is scaled by n^-1. Returns 0.
+fn ntt(a: [i64], n: i64, invert: i64) -> i64 {
+  let m = 998244353;
+  let i = 0;
+  while i < n {
+    let _ = a[i] = rem(a[i], m);
+    let i = i + 1;
+    0
+  };
+  let i = 1;
+  while i < n {
+    let x = i;
+    let rev = 0;
+    let place = n / 2;
+    while place > 0 {
+      let lb = x - (x / 2) * 2;
+      let rev = if lb == 1 then rev + place else rev;
+      let x = x / 2;
+      let place = place / 2;
+      0
+    };
+    let _ = if i < rev then (let t = a[i]; let _ = a[i] = a[rev]; let _ = a[rev] = t; 0) else 0;
+    let i = i + 1;
+    0
+  };
+  let len = 2;
+  while len <= n {
+    let root = mod_pow(3, (m - 1) / len, m);
+    let wlen = if invert == 1 then mod_inv(root, m) else root;
+    let i = 0;
+    while i < n {
+      let w = 1;
+      let j = 0;
+      let half = len / 2;
+      while j < half {
+        let u = a[i + j];
+        let v = mod_mul(a[i + j + half], w, m);
+        let uv = u + v;
+        let x0 = if uv >= m then uv - m else uv;
+        let _ = a[i + j] = x0;
+        let x1 = if u >= v then u - v else u + m - v;
+        let _ = a[i + j + half] = x1;
+        let w = mod_mul(w, wlen, m);
+        let j = j + 1;
+        0
+      };
+      let i = i + len;
+      0
+    };
+    let len = len * 2;
+    0
+  };
+  if invert == 1 then (
+    let invn = mod_inv(n, m);
+    let i = 0;
+    while i < n {
+      let _ = a[i] = mod_mul(a[i], invn, m);
+      let i = i + 1;
+      0
+    };
+    0
+  ) else 0
+}
+
+// centered: map a residue in [0, MOD) back to the signed range (-MOD/2, MOD/2],
+// so a correlation result round-trips its sign through the NTT.
+fn centered(v: i64) -> i64 {
+  let m = 998244353;
+  let r = rem(v, m);
+  if r > m / 2 then r - m else r
+}
