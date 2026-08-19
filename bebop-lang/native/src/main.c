@@ -5,6 +5,7 @@
 
 #include "glyph.h"
 #include "calyx.h"
+#include "arena.h"
 #include "compute.h"
 #include "lexer.h"
 #include "parser.h"
@@ -865,6 +866,14 @@ int main(int argc, char **argv) {
         int ok = compute_self_test(buf, sizeof buf);
         fputs(buf, stdout);
         printf("Compute (NEON+multi-core) self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "arena") == 0) {
+        char buf[8192];
+        int ok = arena_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Arena self-test: %s
+", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "calyx") == 0) {
