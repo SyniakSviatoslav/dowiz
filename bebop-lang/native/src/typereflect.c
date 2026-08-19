@@ -8,7 +8,6 @@ size_t type_size(const Ty *t) {
     switch (t->kind) {
         case TY_U8:
         case TY_BOOL:
-        case TY_PTR:
             return 1;
         case TY_U32:
             return 4;
@@ -23,6 +22,7 @@ size_t type_size(const Ty *t) {
         case TY_HYPERVEC:
             return (size_t)t->n / 8; /* D bits → bytes */
         case TY_PTR:
+            return 8; /* pointer = address, 8 bytes on 64-bit */
         case TY_VEC:
             return (size_t)t->n * type_size(t->elem);
         case TY_STRUCT: {
