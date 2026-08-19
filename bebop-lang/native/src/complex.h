@@ -1,3 +1,4 @@
+#include <stddef.h>
 /* Bebop Complex — shared complex number primitive (used by fft, modular,
  * spectral, …). */
 #ifndef BEBOP_COMPLEX_H
@@ -15,5 +16,5 @@ Complex c_div(Complex a, Complex b);
 Complex c_conj(Complex a);
 double c_abs(Complex a);
 
-#endif /* BEBOP_COMPLEX_H */
 int complex_self_test(char *out, size_t cap);
+#endif /* BEBOP_COMPLEX_H */

@@ -1,3 +1,4 @@
+#include <stdio.h>
 /* Bebop worker pool — implementation.
  *
  * Design: N persistent pthreads, each with its own chunk of work.
