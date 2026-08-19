@@ -1,5 +1,7 @@
 /* Bebop QTT core — implementation. Zero dependencies. */
 #include "qtt.h"
+#include "syscall.h"
+#include <unistd.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -1783,10 +1785,23 @@ static Value eval(const Term *t, Env *env) {
             in_while = saved_in_while;
             return v;
         }
-        case TERM_SYSCALL:
-            v.kind = 0; /* interpreter: syscall returns 0 */
-            v.i = 0;
+        case TERM_SYSCALL: {
+            /* t->ival = syscall nr (64=write, 93=exit), t->a = arg */
+            Value sa = t->a ? eval(t->a, env) : (Value){0};
+            if (t->ival == 64) {
+                /* write(1, str, len) */
+                const char *s = (sa.kind == 5 && sa.ctor) ? sa.ctor : "";
+                size_t sl = 0; while (s[sl]) sl++;
+                v.kind = 0;
+                v.i = bp_write(1, s, sl);
+            } else if (t->ival == 93) {
+                /* exit(code) */
+                _exit((int)sa.i);
+            } else {
+                v.kind = 0; v.i = 0;
+            }
             return v;
+        }
         case TERM_ARRAY: {
             FieldValue *fvs = afv_pool[afv_i++ % 64];
             v.kind = 6; /* array value */
