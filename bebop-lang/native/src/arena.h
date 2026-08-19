@@ -29,7 +29,5 @@ int  ring_empty(const Ring *r);
 
 int arena_self_test(char *out, size_t cap);
 #endif
-/* Compatibility aliases for supervise.h */
+/* Compatibility alias for supervise.h */
 typedef Arena BumpArena;
-typedef struct { size_t offset; } ArenaSnapshot;
-typedef int (*ChildFn)(void *arg);
