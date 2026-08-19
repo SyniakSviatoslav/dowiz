@@ -1,0 +1,41 @@
+// selfhost/std/quicksort.bp — in-place quicksort over [i64].
+// Lomuto partition (pivot = a[hi]) + recursive qsort on the two halves.
+
+module core { }
+
+// partition: Lomuto-partition a[lo..hi] around pivot a[hi]. Every element
+// a[lo..p) ends up <= a[p] and every a[p+1..hi] >= a[p]; returns p, the
+// pivot's final sorted position.
+fn partition(a: [i64], lo: i64, hi: i64) -> i64 {
+  let pivot = a[hi];
+  let i = lo - 1;
+  let j = lo;
+  while j < hi {
+    let lt = if a[j] < pivot then 1 else 0;
+    let i = if lt == 1 then i + 1 else i;
+    let tmp = if lt == 1 then a[i] else 0;
+    let _ = if lt == 1 then (let _ = a[i] = a[j] in 0) else 0;
+    let _ = if lt == 1 then (let _ = a[j] = tmp in 0) else 0;
+    let j = j + 1;
+    0
+  };
+  let p = i + 1;
+  let tmp2 = a[p];
+  let _ = a[p] = a[hi];
+  let _ = a[hi] = tmp2;
+  p
+}
+
+// qsort: recursive quicksort of the inclusive range a[lo..hi]; returns 0.
+fn qsort(a: [i64], lo: i64, hi: i64) -> i64 {
+  if lo >= hi then 0 else
+  let p = partition(a, lo, hi);
+  let _ = qsort(a, lo, p - 1);
+  let _ = qsort(a, p + 1, hi);
+  0
+}
+
+// quicksort: sort a[0..n) in place; returns 0 (no-op when n <= 1).
+fn quicksort(a: [i64], n: i64) -> i64 {
+  if n <= 1 then 0 else qsort(a, 0, n - 1)
+}

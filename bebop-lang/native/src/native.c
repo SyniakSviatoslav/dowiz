@@ -102,6 +102,7 @@ static void emit_arith(BinOp op) {
         case BOP_ADD: em(0x8B010000u); break;
         case BOP_SUB: em(0xCB010000u); break;
         case BOP_MUL: em(0x9B017C00u); break;
+        case BOP_DIV: em(0x9AC00C00u); break; /* sdiv x0,x0,x1 (÷0 traps) */
         default:      em(0x8B010000u); break;
     }
 }
