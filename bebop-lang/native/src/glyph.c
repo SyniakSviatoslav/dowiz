@@ -8,11 +8,11 @@
 
 #include <string.h>
 
-/* ─── built-in corpus: 7×7 bitmaps ('#'=set, '.'=unset) ─────────────── */
-
 typedef struct {
     const char *rows[7];
 } BpBitmap;
+
+/* ─── built-in corpus: 7×7 bitmaps ('#'=set, '.'=unset) ─────────────── */
 
 static const BpBitmap FN_BM = {{ /* → */
     "...#...",
@@ -23,7 +23,6 @@ static const BpBitmap FN_BM = {{ /* → */
     "...#...",
     "...#...",
 }};
-
 static const BpBitmap STRUCT_BM = {{ /* diamond ◇ */
     "...#...",
     "..###..",
@@ -33,7 +32,6 @@ static const BpBitmap STRUCT_BM = {{ /* diamond ◇ */
     "..###..",
     "...#...",
 }};
-
 static const BpBitmap DATA_BM = {{ /* triangle △ */
     "...#...",
     "..###..",
@@ -43,7 +41,6 @@ static const BpBitmap DATA_BM = {{ /* triangle △ */
     "#######",
     "#######",
 }};
-
 static const BpBitmap CONTRACT_BM = {{ /* circle ⊙ */
     "..###..",
     ".#####.",
@@ -53,7 +50,6 @@ static const BpBitmap CONTRACT_BM = {{ /* circle ⊙ */
     ".#####.",
     "..###..",
 }};
-
 static const BpBitmap VAL_BM = {{ /* filled circle ◉ */
     "..###..",
     ".#####.",
@@ -63,7 +59,6 @@ static const BpBitmap VAL_BM = {{ /* filled circle ◉ */
     ".#####.",
     "..###..",
 }};
-
 static const BpBitmap MOD_BM = {{ /* square ◈ */
     "#######",
     "#.....#",
@@ -73,7 +68,6 @@ static const BpBitmap MOD_BM = {{ /* square ◈ */
     "#.....#",
     "#######",
 }};
-
 static const BpBitmap LET_BM = {{ /* ≡ */
     "#......",
     "#......",
@@ -83,7 +77,6 @@ static const BpBitmap LET_BM = {{ /* ≡ */
     "#......",
     "#######",
 }};
-
 static const BpBitmap IF_BM = {{ /* ? */
     "..###..",
     ".#####.",
@@ -93,7 +86,6 @@ static const BpBitmap IF_BM = {{ /* ? */
     "..###..",
     "...#...",
 }};
-
 static const BpBitmap THEN_BM = {{ /* ⇒ */
     "##.....",
     ".##....",
@@ -103,7 +95,6 @@ static const BpBitmap THEN_BM = {{ /* ⇒ */
     ".....##",
     "......#",
 }};
-
 static const BpBitmap ELSE_BM = {{ /* ∨ */
     ".......",
     ".......",
@@ -113,7 +104,6 @@ static const BpBitmap ELSE_BM = {{ /* ∨ */
     ".#####.",
     "...#...",
 }};
-
 static const BpBitmap WHILE_BM = {{ /* ∞ */
     ".#####.",
     "#.....#",
@@ -123,7 +113,6 @@ static const BpBitmap WHILE_BM = {{ /* ∞ */
     "#.....#",
     ".#####.",
 }};
-
 static const BpBitmap MATCH_BM = {{ /* ⊕ */
     ".......",
     "...#...",
@@ -133,7 +122,6 @@ static const BpBitmap MATCH_BM = {{ /* ⊕ */
     "...#...",
     ".......",
 }};
-
 static const BpBitmap TYPE_BM = {{ /* τ */
     ".......",
     "#######",
@@ -143,7 +131,6 @@ static const BpBitmap TYPE_BM = {{ /* τ */
     "....#..",
     ".....#.",
 }};
-
 static const BpBitmap THEOREM_BM = {{ /* ∎ */
     "#######",
     "#######",
@@ -153,7 +140,6 @@ static const BpBitmap THEOREM_BM = {{ /* ∎ */
     "#######",
     "#######",
 }};
-
 static const BpBitmap PROOF_BM = {{ /* ⊢ */
     "..#....",
     "...#...",
@@ -163,7 +149,6 @@ static const BpBitmap PROOF_BM = {{ /* ⊢ */
     "...#...",
     "..#....",
 }};
-
 static const BpBitmap ENUM_BM = {{ /* ⋃ */
     ".......",
     "#.....#",
@@ -173,7 +158,6 @@ static const BpBitmap ENUM_BM = {{ /* ⋃ */
     "#.....#",
     ".#####.",
 }};
-
 static const BpBitmap I64_BM = {{ /* ℤ */
     ".......",
     "#######",
@@ -183,7 +167,6 @@ static const BpBitmap I64_BM = {{ /* ℤ */
     ".#.....",
     "#......",
 }};
-
 static const BpBitmap U64_BM = {{ /* ℕ */
     ".......",
     "#.....#",
@@ -193,7 +176,6 @@ static const BpBitmap U64_BM = {{ /* ℕ */
     "#.....#",
     "#######",
 }};
-
 static const BpBitmap F64_BM = {{ /* ℝ */
     ".......",
     ".......",
@@ -203,7 +185,6 @@ static const BpBitmap F64_BM = {{ /* ℝ */
     "#######",
     ".......",
 }};
-
 static const BpBitmap BOOL_BM = {{ /* 𝔹 */
     "#######",
     "#.....#",
@@ -213,7 +194,6 @@ static const BpBitmap BOOL_BM = {{ /* 𝔹 */
     "#.....#",
     "#######",
 }};
-
 static const BpBitmap STR_BM = {{ /* S */
     "..###..",
     ".#...#.",
@@ -223,7 +203,6 @@ static const BpBitmap STR_BM = {{ /* S */
     "#....#.",
     ".###...",
 }};
-
 static const BpBitmap NAT_BM = {{ /* N */
     "#.....#",
     "##....#",
@@ -233,7 +212,6 @@ static const BpBitmap NAT_BM = {{ /* N */
     "#....##",
     "#.....#",
 }};
-
 static const BpBitmap VEC_BM = {{ /* V */
     "#.....#",
     "#.....#",
@@ -243,7 +221,6 @@ static const BpBitmap VEC_BM = {{ /* V */
     ".#...#.",
     "...#...",
 }};
-
 static const BpBitmap SPAWN_BM = {{ /* ≫ */
     "#......",
     ".#.....",
@@ -253,7 +230,6 @@ static const BpBitmap SPAWN_BM = {{ /* ≫ */
     ".....##",
     "......#",
 }};
-
 static const BpBitmap AWAIT_BM = {{ /* ⏸ */
     ".#####.",
     "#.....#",
@@ -263,7 +239,6 @@ static const BpBitmap AWAIT_BM = {{ /* ⏸ */
     "#.....#",
     ".#####.",
 }};
-
 static const BpBitmap ADD_BM = {{ /* + */
     ".......",
     "...#...",
@@ -273,7 +248,6 @@ static const BpBitmap ADD_BM = {{ /* + */
     "...#...",
     ".......",
 }};
-
 static const BpBitmap SUB_BM = {{ /* − */
     ".......",
     ".......",
@@ -283,7 +257,6 @@ static const BpBitmap SUB_BM = {{ /* − */
     ".......",
     ".......",
 }};
-
 static const BpBitmap MUL_BM = {{ /* × */
     ".......",
     ".#...#.",
@@ -293,7 +266,6 @@ static const BpBitmap MUL_BM = {{ /* × */
     ".#...#.",
     ".......",
 }};
-
 static const BpBitmap DIV_BM = {{ /* ÷ */
     ".......",
     "...#...",
@@ -303,7 +275,6 @@ static const BpBitmap DIV_BM = {{ /* ÷ */
     "...#...",
     ".......",
 }};
-
 static const BpBitmap EQ_BM = {{ /* = */
     ".......",
     ".......",
@@ -313,7 +284,6 @@ static const BpBitmap EQ_BM = {{ /* = */
     ".......",
     ".......",
 }};
-
 static const BpBitmap AND_BM = {{ /* ∧ */
     ".......",
     "...#...",
@@ -323,7 +293,6 @@ static const BpBitmap AND_BM = {{ /* ∧ */
     "...#...",
     ".......",
 }};
-
 static const BpBitmap OR_BM = {{ /* ∨ */
     ".......",
     ".......",
@@ -333,7 +302,6 @@ static const BpBitmap OR_BM = {{ /* ∨ */
     "...#...",
     ".......",
 }};
-
 static const BpBitmap NOT_BM = {{ /* ¬ */
     ".......",
     ".......",
@@ -343,7 +311,6 @@ static const BpBitmap NOT_BM = {{ /* ¬ */
     ".......",
     ".......",
 }};
-
 static const BpBitmap ARROW_BM = {{ /* → */
     "...#...",
     "....#..",
@@ -353,7 +320,6 @@ static const BpBitmap ARROW_BM = {{ /* → */
     ".......",
     ".......",
 }};
-
 static const BpBitmap ASSIGN_BM = {{ /* ≔ */
     ".......",
     ".......",
@@ -363,7 +329,6 @@ static const BpBitmap ASSIGN_BM = {{ /* ≔ */
     ".......",
     ".......",
 }};
-
 static const BpBitmap LT_BM = {{ /* < */
     ".......",
     "...#...",
@@ -373,7 +338,6 @@ static const BpBitmap LT_BM = {{ /* < */
     "...#...",
     ".......",
 }};
-
 static const BpBitmap GT_BM = {{ /* > */
     ".......",
     "...#...",
@@ -383,7 +347,6 @@ static const BpBitmap GT_BM = {{ /* > */
     "...#...",
     ".......",
 }};
-
 static const BpBitmap LE_BM = {{ /* ≤ */
     ".......",
     "...#...",
@@ -393,7 +356,6 @@ static const BpBitmap LE_BM = {{ /* ≤ */
     "...#...",
     "#####..",
 }};
-
 static const BpBitmap GE_BM = {{ /* ≥ */
     ".......",
     "...#...",
@@ -403,7 +365,6 @@ static const BpBitmap GE_BM = {{ /* ≥ */
     "...#...",
     "#####..",
 }};
-
 static const BpBitmap PIPE_BM = {{ /* | */
     "...#...",
     "...#...",
@@ -413,7 +374,6 @@ static const BpBitmap PIPE_BM = {{ /* | */
     "...#...",
     "...#...",
 }};
-
 static const BpBitmap COLON_BM = {{ /* : */
     ".......",
     "...#...",
@@ -423,7 +383,6 @@ static const BpBitmap COLON_BM = {{ /* : */
     "...#...",
     ".......",
 }};
-
 static const BpBitmap COMMA_BM = {{ /* , */
     ".......",
     ".......",
@@ -433,7 +392,6 @@ static const BpBitmap COMMA_BM = {{ /* , */
     "..#....",
     ".......",
 }};
-
 static const BpBitmap SEMI_BM = {{ /* ; */
     ".......",
     "...#...",
@@ -443,7 +401,6 @@ static const BpBitmap SEMI_BM = {{ /* ; */
     "..#....",
     ".......",
 }};
-
 static const BpBitmap UNIT_BM = {{ /* () */
     ".......",
     ".......",
@@ -453,7 +410,6 @@ static const BpBitmap UNIT_BM = {{ /* () */
     "..###..",
     ".......",
 }};
-
 static const BpBitmap LIST_BM = {{ /* [] */
     ".......",
     "#####..",
@@ -463,7 +419,6 @@ static const BpBitmap LIST_BM = {{ /* [] */
     "#####..",
     ".......",
 }};
-
 static const BpBitmap PAIR_BM = {{ /* × */
     ".......",
     ".#...#.",
@@ -473,7 +428,6 @@ static const BpBitmap PAIR_BM = {{ /* × */
     ".#...#.",
     ".......",
 }};
-
 static const BpBitmap OPTION_BM = {{ /* ?+ */
     "..###..",
     ".#...#.",
@@ -483,7 +437,6 @@ static const BpBitmap OPTION_BM = {{ /* ?+ */
     ".#...#.",
     "..###..",
 }};
-
 static const BpBitmap RESULT_BM = {{ /* ✓✗ */
     "#.....#",
     ".#...#.",
@@ -493,7 +446,6 @@ static const BpBitmap RESULT_BM = {{ /* ✓✗ */
     ".#...#.",
     "#.....#",
 }};
-
 static const BpBitmap STREAM_BM = {{ /* ~ */
     ".......",
     ".......",
@@ -503,7 +455,6 @@ static const BpBitmap STREAM_BM = {{ /* ~ */
     "...#...",
     ".......",
 }};
-
 static const BpBitmap FNPTR_BM = {{ /* λ */
     "#......",
     "#......",
@@ -513,8 +464,188 @@ static const BpBitmap FNPTR_BM = {{ /* λ */
     "#...#..",
     "#.....#",
 }};
+static const BpBitmap CHECK_BM = {{ /* ⊢ */
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+    "#######",
+}};
+static const BpBitmap INFER_BM = {{ /* ⊣ */
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    "#######",
+}};
+static const BpBitmap EVAL_BM = {{ /* ⇓ */
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "#######",
+    ".####..",
+    "..##...",
+}};
+static const BpBitmap NORM_BM = {{ /* ↓ */
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "#####..",
+    ".......",
+}};
+static const BpBitmap REFL_BM = {{ /* ≡r */
+    "#######",
+    ".......",
+    "#######",
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+}};
+static const BpBitmap UNIVERSE_BM = {{ /* U */
+    "#.....#",
+    "#.....#",
+    "#.....#",
+    "#.....#",
+    "#.....#",
+    "#.....#",
+    ".#####.",
+}};
+static const BpBitmap EFFECT_BM = {{ /* ⚡ */
+    "...#...",
+    "...#...",
+    "..###..",
+    ".#####.",
+    "#######",
+    "..###..",
+    "...#...",
+}};
+static const BpBitmap SESSION_BM = {{ /* ⇄ */
+    "#.....#",
+    "#.....#",
+    ".#####.",
+    "#######",
+    ".#####.",
+    "#.....#",
+    "#.....#",
+}};
+static const BpBitmap QUANTITY_BM = {{ /* ω */
+    ".......",
+    ".......",
+    ".#####.",
+    "#.....#",
+    "#.....#",
+    "#.....#",
+    ".......",
+}};
+static const BpBitmap ONE_BM = {{ /* 1 */
+    "...#...",
+    "..##...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "#####..",
+}};
+static const BpBitmap MANY_BM = {{ /* ω */
+    ".......",
+    ".##.##.",
+    ".##.##.",
+    ".##.##.",
+    ".##.##.",
+    ".##.##.",
+    ".......",
+}};
+static const BpBitmap PURE_BM = {{ /* ○ */
+    "..###..",
+    ".#...#.",
+    "#.....#",
+    "#.....#",
+    "#.....#",
+    ".#...#.",
+    "..###..",
+}};
+static const BpBitmap IO_BM = {{ /* ⇢ */
+    "..#....",
+    "...#...",
+    "#######",
+    "...#...",
+    "..#....",
+    ".......",
+    ".......",
+}};
+static const BpBitmap STATE_BM = {{ /* ⧉ */
+    "#.....#",
+    "#.....#",
+    "#######",
+    "#######",
+    "#######",
+    "#.....#",
+    "#.....#",
+}};
+static const BpBitmap SEND_BM = {{ /* ⇑ */
+    "...#...",
+    "..###..",
+    ".#####.",
+    "#######",
+    "...#...",
+    "...#...",
+    "...#...",
+}};
+static const BpBitmap RECV_BM = {{ /* ⇓ */
+    "...#...",
+    "...#...",
+    "...#...",
+    "#######",
+    ".#####.",
+    "..###..",
+    "...#...",
+}};
+static const BpBitmap DUAL_BM = {{ /* ⇿ */
+    "#.....#",
+    ".#...#.",
+    "..#.#..",
+    "...#...",
+    "..#.#..",
+    ".#...#.",
+    "#.....#",
+}};
+static const BpBitmap EXTERN_BM = {{ /* ↗ */
+    ".....#.",
+    "....##.",
+    "...##..",
+    "..##...",
+    ".##....",
+    "##.....",
+    "#......",
+}};
+static const BpBitmap COMPTIME_BM = {{ /* ⏱ */
+    ".#####.",
+    "#.....#",
+    "#..##.#",
+    "#.#.#.#",
+    "#..##.#",
+    "#.....#",
+    ".#####.",
+}};
+static const BpBitmap ASM_BM = {{ /* ⌬ */
+    "..###..",
+    ".#####.",
+    "#######",
+    "#######",
+    "#######",
+    ".#####.",
+    "..###..",
+}};
 
-#define N_GLYPHS 50
+#define N_GLYPHS 70
 
 static BpDelta FN_OUT[64];
 static BpDelta STRUCT_OUT[64];
@@ -522,26 +653,6 @@ static BpDelta DATA_OUT[64];
 static BpDelta CONTRACT_OUT[64];
 static BpDelta VAL_OUT[64];
 static BpDelta MOD_OUT[64];
-static BpDelta AND_OUT[64];
-static BpDelta OR_OUT[64];
-static BpDelta NOT_OUT[64];
-static BpDelta ARROW_OUT[64];
-static BpDelta ASSIGN_OUT[64];
-static BpDelta LT_OUT[64];
-static BpDelta GT_OUT[64];
-static BpDelta LE_OUT[64];
-static BpDelta GE_OUT[64];
-static BpDelta PIPE_OUT[64];
-static BpDelta COLON_OUT[64];
-static BpDelta COMMA_OUT[64];
-static BpDelta SEMI_OUT[64];
-static BpDelta UNIT_OUT[64];
-static BpDelta LIST_OUT[64];
-static BpDelta PAIR_OUT[64];
-static BpDelta OPTION_OUT[64];
-static BpDelta RESULT_OUT[64];
-static BpDelta STREAM_OUT[64];
-static BpDelta FNPTR_OUT[64];
 static BpDelta LET_OUT[64];
 static BpDelta IF_OUT[64];
 static BpDelta THEN_OUT[64];
@@ -566,11 +677,49 @@ static BpDelta SUB_OUT[64];
 static BpDelta MUL_OUT[64];
 static BpDelta DIV_OUT[64];
 static BpDelta EQ_OUT[64];
+static BpDelta AND_OUT[64];
+static BpDelta OR_OUT[64];
+static BpDelta NOT_OUT[64];
+static BpDelta ARROW_OUT[64];
+static BpDelta ASSIGN_OUT[64];
+static BpDelta LT_OUT[64];
+static BpDelta GT_OUT[64];
+static BpDelta LE_OUT[64];
+static BpDelta GE_OUT[64];
+static BpDelta PIPE_OUT[64];
+static BpDelta COLON_OUT[64];
+static BpDelta COMMA_OUT[64];
+static BpDelta SEMI_OUT[64];
+static BpDelta UNIT_OUT[64];
+static BpDelta LIST_OUT[64];
+static BpDelta PAIR_OUT[64];
+static BpDelta OPTION_OUT[64];
+static BpDelta RESULT_OUT[64];
+static BpDelta STREAM_OUT[64];
+static BpDelta FNPTR_OUT[64];
+static BpDelta CHECK_OUT[64];
+static BpDelta INFER_OUT[64];
+static BpDelta EVAL_OUT[64];
+static BpDelta NORM_OUT[64];
+static BpDelta REFL_OUT[64];
+static BpDelta UNIVERSE_OUT[64];
+static BpDelta EFFECT_OUT[64];
+static BpDelta SESSION_OUT[64];
+static BpDelta QUANTITY_OUT[64];
+static BpDelta ONE_OUT[64];
+static BpDelta MANY_OUT[64];
+static BpDelta PURE_OUT[64];
+static BpDelta IO_OUT[64];
+static BpDelta STATE_OUT[64];
+static BpDelta SEND_OUT[64];
+static BpDelta RECV_OUT[64];
+static BpDelta DUAL_OUT[64];
+static BpDelta EXTERN_OUT[64];
+static BpDelta COMPTIME_OUT[64];
+static BpDelta ASM_OUT[64];
 
 static BpGlyph GLYPHS[N_GLYPHS];
 static int initialized = 0;
-
-/* ─── δ-outline derivation (row-major runs) ─────────────────────────── */
 
 size_t bp_bitmap_to_outline(const char *const *rows, unsigned char height,
                             BpDelta *out, size_t cap) {
@@ -658,7 +807,27 @@ static void init_glyphs(void) {
         &OPTION_BM,
         &RESULT_BM,
         &STREAM_BM,
-        &FNPTR_BM
+        &FNPTR_BM,
+        &CHECK_BM,
+        &INFER_BM,
+        &EVAL_BM,
+        &NORM_BM,
+        &REFL_BM,
+        &UNIVERSE_BM,
+        &EFFECT_BM,
+        &SESSION_BM,
+        &QUANTITY_BM,
+        &ONE_BM,
+        &MANY_BM,
+        &PURE_BM,
+        &IO_BM,
+        &STATE_BM,
+        &SEND_BM,
+        &RECV_BM,
+        &DUAL_BM,
+        &EXTERN_BM,
+        &COMPTIME_BM,
+        &ASM_BM
     };
     static const char *names[N_GLYPHS] = {
         "fn",
@@ -710,7 +879,27 @@ static void init_glyphs(void) {
         "option",
         "result",
         "stream",
-        "fnptr"
+        "fnptr",
+        "check",
+        "infer",
+        "eval",
+        "norm",
+        "refl",
+        "universe",
+        "effect",
+        "session",
+        "quantity",
+        "one",
+        "many",
+        "pure",
+        "io",
+        "state",
+        "send",
+        "recv",
+        "dual",
+        "extern",
+        "comptime",
+        "asm"
     };
     static const char *ph[N_GLYPHS] = {
         "→",
@@ -762,7 +951,27 @@ static void init_glyphs(void) {
         "?+",
         "✓✗",
         "~",
-        "λ"
+        "λ",
+        "⊢",
+        "⊣",
+        "⇓",
+        "↓",
+        "≡r",
+        "U",
+        "⚡",
+        "⇄",
+        "ω",
+        "1",
+        "ω",
+        "○",
+        "⇢",
+        "⧉",
+        "⇑",
+        "⇓",
+        "⇿",
+        "↗",
+        "⏱",
+        "⌬"
     };
     static BpDelta *outs[N_GLYPHS] = {
         FN_OUT,
@@ -814,7 +1023,27 @@ static void init_glyphs(void) {
         OPTION_OUT,
         RESULT_OUT,
         STREAM_OUT,
-        FNPTR_OUT
+        FNPTR_OUT,
+        CHECK_OUT,
+        INFER_OUT,
+        EVAL_OUT,
+        NORM_OUT,
+        REFL_OUT,
+        UNIVERSE_OUT,
+        EFFECT_OUT,
+        SESSION_OUT,
+        QUANTITY_OUT,
+        ONE_OUT,
+        MANY_OUT,
+        PURE_OUT,
+        IO_OUT,
+        STATE_OUT,
+        SEND_OUT,
+        RECV_OUT,
+        DUAL_OUT,
+        EXTERN_OUT,
+        COMPTIME_OUT,
+        ASM_OUT
     };
     for (int i = 0; i < N_GLYPHS; i++) {
         size_t n = bp_bitmap_to_outline(bms[i]->rows, 7, outs[i], 64);
@@ -827,8 +1056,6 @@ static void init_glyphs(void) {
     }
     initialized = 1;
 }
-
-/* ─── rasterize outline → grid ───────────────────────────────────────── */
 
 static void rasterize(const BpGlyph *g, unsigned char *grid) {
     short pen_x = 0, pen_y = 0;
@@ -912,6 +1139,7 @@ int bp_glyph_render_braille(const BpGlyph *g, char *out, size_t cap) {
     out[pos] = '\0';
     return (int)pos;
 }
+
 
 const BpGlyph *bp_glyph_by_name(const char *name) {
     init_glyphs();
