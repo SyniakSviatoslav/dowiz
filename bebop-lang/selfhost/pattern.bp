@@ -1,0 +1,7 @@
+module core { }
+fn ctor_tag(x: i64) -> i64 { x / 8 }
+fn ctor_none() -> i64 { 0 }
+fn ctor_some(v: i64) -> i64 { v * 8 + 1 }
+fn is_some(x: i64) -> i64 { if ctor_tag(x) == 1 then 1 else 0 }
+fn unwrap(x: i64) -> i64 { x / 8 }
+fn main() -> i64 { unwrap(ctor_some(7)) }

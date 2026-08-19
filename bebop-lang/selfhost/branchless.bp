@@ -1,0 +1,5 @@
+module core { }
+fn max_abs(a: i64, b: i64) -> i64 { let x = if a >= 0 then a else 0 - a; let y = if b >= 0 then b else 0 - b; if x > y then x else y }
+fn sel(p: i64, t: i64, f: i64) -> i64 { if p == 0 then f else t }
+fn clamp(x: i64, lo: i64, hi: i64) -> i64 { if x < lo then lo else (if x > hi then hi else x) }
+fn main() -> i64 { max_abs(0 - 5, 3) }
