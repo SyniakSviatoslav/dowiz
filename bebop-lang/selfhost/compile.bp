@@ -1,0 +1,22 @@
+module core { }
+fn lex_num(s: str, pos: [i64]) -> i64 {
+  let n = str_len(s);
+  let acc = 0;
+  while pos[0] < n {
+    let c = char(s, pos[0]);
+    let isd = if c >= 48 then (if c <= 57 then 1 else 0) else 0;
+    if isd == 0 then 0 else 0;
+    let acc2 = acc * 10 + c - 48;
+    let acc = acc2;
+    pos[0] = pos[0] + 1;
+    0
+  };
+  acc
+}
+fn movz_imm(imm: i64) -> i64 { 3523215360 + imm * 32 }
+fn compile(src: str) -> i64 {
+  let p = [0];
+  let v = lex_num(src, p);
+  movz_imm(v)
+}
+fn main() -> i64 { compile("42") }
