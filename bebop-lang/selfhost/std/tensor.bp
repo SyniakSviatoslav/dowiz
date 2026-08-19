@@ -1,0 +1,82 @@
+// selfhost/std/tensor.bp — tensor ops over [f64]: dot product, matrix-vector,
+// element-wise sum, and mean-squared error.
+// Port of native/src/tensor.c (tensor_dot / tensor_matmul / tensor_sum /
+// tensor_mse) with f64 arrays. Matrices are flat row-major; there is no
+// array-length builtin, so every array-taking fn carries explicit length
+// params and loops i < n (mirrors the C (data, shape, ndim) signature).
+//
+// matvec: out[i] = sum_j a[i*n + j] * x[j] for an m-by-n matrix a, a
+// length-n vector x, and a length-m output out (the tensor_matmul
+// specialization with a length-n column vector on the right).
+//
+// Not ported: relu/sigmoid/tanh/softmax (need libm exp, which a single-file
+// .bp module cannot import), and tensor_new/zero/get/set/add/sub/mul/scale
+// (raw buffer plumbing; the elementwise kernels are trivial).
+
+module core { }
+
+// dot: sum of a[i] * b[i] for i in [0, n).
+fn dot(a: [f64], b: [f64], n: i64) -> f64 {
+  let i = 0;
+  let s = 0.0;
+  let done = 0;
+  while done == 0 {
+    let s = s + a[i] * b[i];
+    let i = i + 1;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  s
+}
+
+// matvec: out[i] = sum_j a[i*n + j] * x[j] for i in [0, m). Mutates out in
+// place; returns 0.
+fn matvec(a: [f64], x: [f64], m: i64, n: i64, out: [f64]) -> i64 {
+  let i = 0;
+  let done = 0;
+  while done == 0 {
+    let j = 0;
+    let acc = 0.0;
+    let inner = 0;
+    while inner == 0 {
+      let acc = acc + a[i * n + j] * x[j];
+      let j = j + 1;
+      let inner = if j >= n then 1 else 0;
+      0
+    };
+    let _ = out[i] = acc;
+    let i = i + 1;
+    let done = if i >= m then 1 else 0;
+    0
+  };
+  0
+}
+
+// sum: total of a[0..n).
+fn sum(a: [f64], n: i64) -> f64 {
+  let i = 0;
+  let s = 0.0;
+  let done = 0;
+  while done == 0 {
+    let s = s + a[i];
+    let i = i + 1;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  s
+}
+
+// mse: mean of (a[i] - b[i])^2 over i in [0, n); 0.0 when n == 0.
+fn mse(a: [f64], b: [f64], n: i64) -> f64 {
+  let i = 0;
+  let s = 0.0;
+  let done = 0;
+  while done == 0 {
+    let d = a[i] - b[i];
+    let s = s + d * d;
+    let i = i + 1;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  s / n
+}
