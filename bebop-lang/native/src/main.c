@@ -45,6 +45,7 @@
 #include "stats.h"
 #include "pid.h"
 #include "pool.h"
+#include "scale.h"
 #include "markov.h"
 #include "math_native.h"
 #include "spectral.h"
