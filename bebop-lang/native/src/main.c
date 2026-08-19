@@ -43,6 +43,7 @@
 #include "rng.h"
 #include "stats.h"
 #include "pid.h"
+#include "pool.h"
 #include "markov.h"
 #include "math_native.h"
 #include "spectral.h"

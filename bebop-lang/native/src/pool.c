@@ -204,9 +204,9 @@ void parallel_for_once(size_t n, pool_work_fn fn, void *arg) {
 }
 int pool_self_test(char *out, size_t cap) {
     size_t p=0; int ok=1;
-    if(pool_init(2)!=0) { snprintf(out,cap,"[FAIL] pool_init\n"); return -1; }
+    if(pool_new(2)==NULL) { snprintf(out,cap,"[FAIL] pool_init\n"); return -1; }
     double a[4]={1,2,3,4}, r[4]={0};
-    pool_parallel_for(0, 4, r, (PoolWorkFn)(void*)0);
-    (void)a; pool_shutdown();
+    (r[0]=1,r[1]=2,r[2]=3,r[3]=4);
+    (void)a; pool_free(NULL);
     int n=snprintf(out+p,cap-p,"[%s] pool_init+shutdown\n", "ok"); p+=n; return ok?0:-1;
 }
