@@ -1,0 +1,45 @@
+// selfhost/std/bitset.bp — bitset over [i64] words via powers of 2.
+// Each word holds 64 bits (one bit per value, bit 0 = least significant).
+// Bebop has no << >> & | ^ ~, so everything is expressed with + - * / only.
+// Value idx maps to word index idx/64, bit position idx - (idx/64)*64, and
+// bit mask 2^(idx - (idx/64)*64). The caller owns the [i64] word array and
+// its length; keeping idx/64 in bounds is the caller's responsibility.
+
+module core { }
+
+// pow2: 2^n by repeated doubling (n >= 0). 2^63 wraps negative but keeps
+// the correct bit pattern; 2^64 wraps to 0.
+fn pow2(n: i64) -> i64 {
+  let p = 1;
+  let i = 0;
+  while i < n {
+    let p = p * 2;
+    let i = i + 1;
+    0
+  };
+  p
+}
+
+// bitset_word: the bit at position `bit` of a single word — 0 or 1.
+fn bitset_word(word: i64, bit: i64) -> i64 {
+  let s = word / pow2(bit);
+  s - (s / 2) * 2
+}
+
+// bitset_test: whether value idx is present in the bitset — 0 or 1.
+// Word index = idx/64, bit position = idx - (idx/64)*64.
+fn bitset_test(words: [i64], idx: i64) -> i64 {
+  let wi = idx / 64;
+  bitset_word(words[wi], idx - wi * 64)
+}
+
+// bitset_set: the new value of word idx/64 with bit idx - (idx/64)*64 set
+// to 1. Does not mutate words; the caller writes it back, e.g.
+//   let _ = words[wi] = bitset_set(words, idx);
+fn bitset_set(words: [i64], idx: i64) -> i64 {
+  let wi = idx / 64;
+  let bp = idx - wi * 64;
+  let cur = words[wi];
+  let b = bitset_word(cur, bp);
+  cur + (1 - b) * pow2(bp)
+}

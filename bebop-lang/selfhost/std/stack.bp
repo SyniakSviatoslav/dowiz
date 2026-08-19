@@ -1,0 +1,23 @@
+// selfhost/std/stack.bp — LIFO stack over [i64] with an explicit top index.
+// Elements live in stk[0..top); `top` is the count of pushed elements, so the
+// next free slot is stk[top] and the top-of-stack element is stk[top - 1].
+// stack_push writes stk[top] = x and returns the new top (top + 1);
+// stack_pop / stack_peek read stk[top - 1], returning (0 - 1) when empty.
+
+module core { }
+
+// stack_push: store x on top of the stack, return the new top index.
+fn stack_push(stk: [i64], top: i64, x: i64) -> i64 {
+  let _ = stk[top] = x;
+  top + 1
+}
+
+// stack_pop: return the top element (stk[top-1]); (0 - 1) if empty.
+fn stack_pop(stk: [i64], top: i64) -> i64 {
+  if top < 1 then (0 - 1) else stk[top - 1]
+}
+
+// stack_peek: return the top element without removing it; (0 - 1) if empty.
+fn stack_peek(stk: [i64], top: i64) -> i64 {
+  if top < 1 then (0 - 1) else stk[top - 1]
+}

@@ -1,0 +1,65 @@
+// selfhost/string_ops.bp — string operations: prefix test, char membership,
+// and full equality. Built on str_len / char loops, i64 0/1 results.
+
+module core { }
+
+// str_starts_with: 1 if p is a prefix of s, else 0. Empty p matches any s.
+fn str_starts_with(s: str, p: str) -> i64 {
+  let ns = str_len(s);
+  let np = str_len(p);
+  let ok = 1;
+  let i = 0;
+  let done = 0;
+  while done == 0 {
+    let ppast = if i >= np then 1 else 0;
+    let spast = if i >= ns then 1 else 0;
+    let sc = if spast == 1 then 0 else char(s, i);
+    let pc = if ppast == 1 then 0 else char(p, i);
+    let bad = if sc == pc then 0 else 1;
+    let bad = if ppast == 1 then 0 else bad;
+    let ok = if bad == 1 then 0 else ok;
+    let i = i + 1;
+    let done = if (ppast + bad) > 0 then 1 else 0;
+    0
+  };
+  ok
+}
+
+// str_contains: 1 if character code c occurs anywhere in s, else 0.
+fn str_contains(s: str, c: i64) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  let found = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if i >= n then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, i);
+    let hit = if ch == c then 1 else 0;
+    let found = if hit == 1 then 1 else found;
+    let i = i + 1;
+    let done = if (hit + at_end) > 0 then 1 else 0;
+    0
+  };
+  found
+}
+
+// str_eq: 1 if s1 and s2 are identical strings (same length, same chars), else 0.
+fn str_eq(s1: str, s2: str) -> i64 {
+  let n1 = str_len(s1);
+  let n2 = str_len(s2);
+  let i = 0;
+  let ok = 1;
+  let done = 0;
+  while done == 0 {
+    let e1 = if i >= n1 then 1 else 0;
+    let e2 = if i >= n2 then 1 else 0;
+    let c1 = if e1 == 1 then 0 else char(s1, i);
+    let c2 = if e2 == 1 then 0 else char(s2, i);
+    let bad = if c1 == c2 then 0 else 1;
+    let ok = if bad == 1 then 0 else ok;
+    let i = i + 1;
+    let done = if (e1 + e2 + bad) > 0 then 1 else 0;
+    0
+  };
+  if ok == 0 then 0 else (if n1 == n2 then 1 else 0)
+}

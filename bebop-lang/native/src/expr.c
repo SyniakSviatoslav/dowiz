@@ -442,9 +442,14 @@ static Term *parse_primary(P *p) {
         p->pos++;
         for (;;) {
             skip_ws(p);
-            /* zero-arg call: ret() */
+            /* zero-arg call: f() — wrap in APP(f, unit) so the call applies */
             if (p->s[p->pos] == ')') {
                 p->pos++;
+                Term *unit = tnew();
+                unit->kind = TERM_LIT; unit->ival = 0; unit->bval = 0;
+                Term *app = tnew();
+                app->kind = TERM_APP; app->a = atom; app->b = unit;
+                atom = app;
                 break;
             }
             Term *arg = parse_expr(p);

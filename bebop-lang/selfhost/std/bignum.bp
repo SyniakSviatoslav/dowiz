@@ -1,0 +1,58 @@
+// selfhost/std/bignum.bp — little-endian limb arithmetic over [i64] arrays.
+// A bignum is an array a[0..n) of limbs in base 10^9 (1e9), least
+// significant limb first (a[0] is the units limb). Each limb is in
+// [0, 10^9), so the caller must keep limbs normalized. n is small (<= 8).
+// No % operator in Bebop: "x mod 10^9" is written x - (x / 10^9) * 10^9.
+
+module core { }
+
+// bignum_add: add b into a in place (a += b, little-endian base-10^9 limbs).
+// Returns the carry out of the top limb (0 or 1). Because each limb is
+// < 10^9 and carry <= 1, the per-limb sum is < 2 * 10^9, far inside i64.
+fn bignum_add(a: [i64], b: [i64], n: i64) -> i64 {
+  let carry = 0;
+  let i = 0;
+  while i < n {
+    let s = a[i] + b[i] + carry;
+    let q = s / 1000000000;
+    let _ = a[i] = s - q * 1000000000;
+    let carry = q;
+    let i = i + 1;
+    0
+  };
+  carry
+}
+
+// bignum_mul_small: multiply a in place by a small k (a *= k, base-10^9
+// limbs). Returns the carry out of the top limb. Caller keeps k < 10^9 so
+// the intermediate a[i] * k + carry stays < 10^18, comfortably inside i64.
+fn bignum_mul_small(a: [i64], n: i64, k: i64) -> i64 {
+  let carry = 0;
+  let i = 0;
+  while i < n {
+    let t = a[i] * k + carry;
+    let q = t / 1000000000;
+    let _ = a[i] = t - q * 1000000000;
+    let carry = q;
+    let i = i + 1;
+    0
+  };
+  carry
+}
+
+// bignum_cmp: compare a and b (little-endian base-10^9 limbs, most
+// significant limb at index n-1). Returns -1 if a < b, 0 if a == b,
+// 1 if a > b. Scans from the top limb down and stops at the first
+// difference.
+fn bignum_cmp(a: [i64], b: [i64], n: i64) -> i64 {
+  let i = n - 1;
+  let r = 0;
+  while i >= 0 {
+    let gt = if a[i] > b[i] then 1 else 0;
+    let lt = if a[i] < b[i] then 1 else 0;
+    let r = if r != 0 then r else (if gt == 1 then 1 else (if lt == 1 then (0 - 1) else 0));
+    let i = i - 1;
+    0
+  };
+  r
+}

@@ -1,0 +1,33 @@
+// selfhost/std/queue.bp — circular queue over a fixed [i64] buffer.
+// Head and tail are bare i64 indices into buf[0..cap); the caller owns the
+// buffer and the two indices. One slot is kept empty so that "empty" and
+// "full" are distinguishable from head/tail alone: the queue is empty when
+// head == tail, and full when (tail + 1) % cap == head, so the usable
+// capacity is cap - 1 elements.
+//
+//   queue_push  -> new tail, or -1 if the queue is full
+//   queue_pop   -> value at the front, or -1 if the queue is empty
+//   queue_size  -> number of elements currently buffered
+
+module core { }
+
+// queue_size: number of buffered elements = (tail - head) mod cap.
+fn queue_size(head: i64, tail: i64, cap: i64) -> i64 {
+  let d = tail - head + cap;
+  d - (d / cap) * cap
+}
+
+// queue_push: append x at the tail slot; returns the advanced tail index,
+// or -1 if the queue is already full (the slot past tail wraps onto head).
+fn queue_push(buf: [i64], cap: i64, head: i64, tail: i64, x: i64) -> i64 {
+  let nt = tail + 1;
+  let nt = if nt >= cap then 0 else nt;
+  let full = if nt == head then 1 else 0;
+  if full == 1 then (0 - 1) else
+    (let _ = buf[tail] = x in nt)
+}
+
+// queue_pop: return the element at the front (head) slot, or -1 if empty.
+fn queue_pop(buf: [i64], cap: i64, head: i64, tail: i64) -> i64 {
+  if head == tail then (0 - 1) else buf[head]
+}

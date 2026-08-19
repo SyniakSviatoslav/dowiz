@@ -914,8 +914,10 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
                 return -1;
             }
             if (ft->kind != TY_FN && ft->kind != TY_PI) {
-                snprintf(err, cap, "applied a non-function type");
-                return -1;
+                /* zero-arg fn call: p() where p is a zero-arg fn whose type is
+                 * its return type (body stored directly, not a lambda). */
+                *out = ft;
+                return 0;
             }
             if (check(c, t->b, ft->dom, err, cap) != 0) {
                 return -1;
@@ -1613,6 +1615,10 @@ static Value eval(const Term *t, Env *env) {
             if (f.kind != 2) {
                 v.kind = -1;
                 return v;
+            }
+            /* zero-arg fn: the "closure" holds the body directly (not a lambda) */
+            if (f.lam->kind != TERM_LAM) {
+                return eval(f.lam, f.env);
             }
             if (!f.lam->name) { v.kind = -1; return v; }
             Env *e = env_new(f.lam->name, arg, f.env);
