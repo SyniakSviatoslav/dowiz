@@ -126,6 +126,57 @@ fn emit_apply_mul(s: str, pos: [i64], insns: [i64], n: [i64], is_div: i64) -> i6
   n[0]
 }
 
+// Emit a comparison (cond: eq=1 ne=0 lt=10 gt=13 le=12 ge=11): pop b->x1,
+// pop a->x0, cmp x0,x1, cset x0,<cond>, push.
+fn emit_cmp_op(insns: [i64], n: [i64], cond: i64) -> i64 {
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 3942711327);
+  let _ = em(insns, n, 2594113504 + cond * 4096);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// Consume one comparison operator + right operand, then fold (branchless).
+fn emit_apply_cmp(s: str, pos: [i64], insns: [i64], n: [i64], cond: i64, adv: i64) -> i64 {
+  let _ = pos[0] = pos[0] + adv;
+  let _ = emit_expr(s, pos, insns, n);
+  let _ = emit_cmp_op(insns, n, cond);
+  n[0]
+}
+
+// cmp = expr (('=='|'!='|'<'|'>'|'<='|'>=') expr)*
+fn emit_cmp(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
+  let _ = emit_expr(s, pos, insns, n);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let strn = str_len(s);
+    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let e1 = if pos[0] + 1 >= strn then 1 else 0;
+    let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
+    let is_eq = if ch == 61 then 1 else 0;
+    let is_bang = if ch == 33 then 1 else 0;
+    let is_lt = if ch == 60 then 1 else 0;
+    let is_gt = if ch == 62 then 1 else 0;
+    let is_e2 = if ch1 == 61 then 1 else 0;
+    let is_eqop = is_eq * is_e2;
+    let is_neop = is_bang * is_e2;
+    let not_e2 = 1 - is_e2;
+    let is_ltop = is_lt * not_e2;
+    let is_gtop = is_gt * not_e2;
+    let is_leop = is_lt * is_e2;
+    let is_geop = is_gt * is_e2;
+    let is_op = is_eqop + is_neop + is_ltop + is_gtop + is_leop + is_geop;
+    let cond = is_eqop + is_ltop * 10 + is_gtop * 13 + is_leop * 12 + is_geop * 11;
+    let adv = 1 + is_eqop + is_neop + is_leop + is_geop;
+    let _ = if is_op == 1 then emit_apply_cmp(s, pos, insns, n, cond, adv) else 0;
+    let done = if is_op == 1 then 0 else 1;
+    0
+  };
+  0
+}
+
 // expr = term ((+|-) term)*
 fn emit_expr(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
   let _ = emit_term(s, pos, insns, n);
@@ -165,7 +216,7 @@ fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
 // Consume ( expr ).
 fn emit_paren(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
-  let _ = emit_expr(s, pos, insns, n);
+  let _ = emit_cmp(s, pos, insns, n);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   n[0]
@@ -176,13 +227,13 @@ fn emit_paren(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
 // branches is sound and removes a mispredictable branch.
 fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 2;
-  let _ = emit_expr(s, pos, insns, n);
+  let _ = emit_cmp(s, pos, insns, n);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 4;
-  let _ = emit_expr(s, pos, insns, n);
+  let _ = emit_cmp(s, pos, insns, n);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 4;
-  let _ = emit_expr(s, pos, insns, n);
+  let _ = emit_cmp(s, pos, insns, n);
   let _ = pop(insns, n, 2);
   let _ = pop(insns, n, 1);
   let _ = pop(insns, n, 0);
@@ -228,7 +279,7 @@ fn compile(s: str) -> i64 {
   let insns = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
   let n = [0];
   let pos = [0];
-  let _ = emit_expr(s, pos, insns, n);
+  let _ = emit_cmp(s, pos, insns, n);
   let _ = pop(insns, n, 0);
   let _ = em(insns, n, 3596551104);
   sum_words(insns, n[0])
@@ -308,7 +359,7 @@ fn compile_fn(s: str) -> i64 {
     let mvdone = if i[0] >= nparams then 1 else 0;
     0
   };
-  let _ = emit_expr(s, pos, insns, n);
+  let _ = emit_cmp(s, pos, insns, n);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = pop(insns, n, 0);
@@ -330,5 +381,10 @@ fn self_check() -> i64 {
   let c9 = if compile("if 1 then 1+2 else 3*4") == 147210112852 then 0 else 1;
   let c10 = if compile_fn("fn f(a) { a + 1 }") == 66172860133 then 0 else 1;
   let c11 = if compile_fn("fn f(a,b) { a + b }") == 68346887833 then 0 else 1;
-  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11
+  let c12 = if compile("1<2") == 60091882330 then 0 else 1;
+  let c13 = if compile("3==3") == 60091845562 then 0 else 1;
+  let c14 = if compile("2>3") == 60091894682 then 0 else 1;
+  let c15 = if compile("1+2<4") == 94552423255 then 0 else 1;
+  let c16 = if compile("5==2+3") == 94552386487 then 0 else 1;
+  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16
 }
