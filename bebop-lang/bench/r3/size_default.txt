@@ -1,0 +1,2 @@
+   text	   data	    bss	    dec	    hex	filename
+ 512197	  34976	36131096	36678269	22faa7d	build/bebopc

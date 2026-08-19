@@ -207,7 +207,7 @@ static size_t gen_spliced(char *buf, size_t cap) {
 
 /* a token bomb: enough single-char tokens to trip the lexer's token cap */
 static size_t gen_token_bomb(char *buf, size_t cap) {
-    size_t len = 50000u;
+    size_t len = 33000u; /* > 32768 token cap, but cheap to lex */
     if (len > cap) {
         len = cap - 1;
     }

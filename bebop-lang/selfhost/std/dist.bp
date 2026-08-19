@@ -1,0 +1,54 @@
+// selfhost/std/dist.bp — random distributions over i64: uniform, bernoulli, binomial.
+// Built on a 64-bit linear congruential generator (LCG): state = state * MUL + inc,
+// MUL = 6364136223846793005 (the PCG multiplier, cf. rng.bp pcg_next). Bebop has no
+// bitwise ops, no modulo operator, and no unary minus, so the LCG relies on wrapping
+// multiply/add (two's-complement mod 2^64) and reduction to [0, n) uses the arithmetic
+// residue `x - (x / n) * n`, re-adding n for negative residues.
+//
+// Generator state is threaded through a caller-owned [i64] array st = [state, inc]:
+// st[0] is the LCG state, st[1] the (odd) increment / stream selector. Every draw
+// advances st[0] in place, so state persists across calls (the pid.bp mutable-state
+// idiom). A uniform draw over [lo, hi] is lo + uniform(st, hi - lo + 1).
+
+module core { }
+
+// lcg_next: one LCG step — new_state = state * MUL + inc (wraps mod 2^64).
+fn lcg_next(state: i64, inc: i64) -> i64 {
+  state * 6364136223846793005 + inc
+}
+
+// rem: least non-negative residue of x modulo m (m > 0), in [0, m).
+fn rem(x: i64, m: i64) -> i64 {
+  let r = x - (x / m) * m;
+  if r < 0 then r + m else r
+}
+
+// uniform: uniform integer in [0, n) via one LCG step of st. n <= 1 returns 0
+// without advancing the state (no divide-by-zero, no empty range).
+fn uniform(st: [i64], n: i64) -> i64 {
+  if n <= 1 then 0 else (
+    let s = lcg_next(st[0], st[1]);
+    let _ = st[0] = s;
+    rem(s, n)
+  )
+}
+
+// bernoulli: 1 with probability p_num / p_den, else 0 (requires p_den > 0).
+// p_num <= 0 gives always 0; p_num >= p_den gives always 1.
+fn bernoulli(st: [i64], p_num: i64, p_den: i64) -> i64 {
+  let u = uniform(st, p_den);
+  if u < p_num then 1 else 0
+}
+
+// binomial: number of successes in n independent Bernoulli(p_num / p_den) trials.
+// n <= 0 returns 0 (no draws).
+fn binomial(st: [i64], n: i64, p_num: i64, p_den: i64) -> i64 {
+  let count = 0;
+  let i = 0;
+  while i < n {
+    let count = count + bernoulli(st, p_num, p_den);
+    let i = i + 1;
+    0
+  };
+  count
+}

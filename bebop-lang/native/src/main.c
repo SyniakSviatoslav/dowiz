@@ -79,11 +79,13 @@
 #include "x25519.h"
 #include "aes_gcm.h"
 #include "tls.h"
+#include "startup.h"
 
 
 static void usage(void) {
     fprintf(stderr,
-            "usage: bebopc version | glyphs | glyph NAME | tokens FILE\n");
+            "usage: bebopc version | glyphs | glyph NAME | tokens FILE\n"
+            "       bebopc size     (binary size + startup + per-module timing)\n");
 }
 
 static void cmd_glyphs(void) {
@@ -962,6 +964,7 @@ static void cmd_bench(void) {
 }
 
 int main(int argc, char **argv) {
+    bp_startup_mark_main();
     if (argc < 2) {
         usage();
         return 2;
@@ -969,6 +972,10 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "version") == 0) {
         printf("bebopc 0.1.0 (native C bootstrap)\n");
         return 0;
+    }
+    if (strcmp(argv[1], "size") == 0) {
+        int fails = bp_startup_report();
+        return fails == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "glyphs") == 0) {
         cmd_glyphs();
@@ -987,6 +994,9 @@ int main(int argc, char **argv) {
         fputs(buf, stdout);
         printf("Pool self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "scale") == 0) {
+        return scale_run();
     }
     if (strcmp(argv[1], "memristor") == 0) {
         char buf[8192];

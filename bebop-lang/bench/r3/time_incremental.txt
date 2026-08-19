@@ -1,0 +1,3 @@
+lto-wrapper: warning: using serial compilation of 6 LTRANS jobs
+lto-wrapper: note: see the ‘-flto’ option documentation for more information
+223.839 real 70.938 user 9.510 sys

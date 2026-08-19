@@ -1,0 +1,86 @@
+// selfhost/std/rle.bp — run-length encoding over [i64] arrays.
+//
+// Encodes maximal runs of equal values as flat (value, count) pairs:
+//   out = [ v0, c0, v1, c1, ..., v_{r-1}, c_{r-1} ]
+// where every count c_k >= 1 and consecutive values v_k differ. Encoding n
+// input elements that collapse to r runs writes exactly 2*r output elements;
+// decoding is the exact inverse. The caller owns both buffers and passes the
+// output length back from each function's return value (the number of
+// elements written), so allocation is always 2 * rle_runs(src, n) for an
+// encode and the sum of the counts for a decode.
+
+module core { }
+
+// rle_runs: number of maximal runs of equal values in src[0..n).
+// A new run begins at index 0 or wherever src[i] != src[i-1].
+fn rle_runs(src: [i64], n: i64) -> i64 {
+  let runs = 0;
+  let i = 0;
+  let done = if i >= n then 1 else 0;
+  while done == 0 {
+    let first = if i == 0 then 1 else 0;
+    let newrun = if first == 1 then 1 else (if src[i] == src[i - 1] then 0 else 1);
+    let runs = runs + newrun;
+    let i = i + 1;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  runs
+}
+
+// rle_encode: compress src[0..n) into (value, count) pairs written to out.
+// Returns the number of elements written (2 * number of runs); 0 for empty
+// input. Each run is scanned forward with a branchless advance (j and count
+// both move by `same`, which is 1 only while the value is unchanged).
+fn rle_encode(src: [i64], n: i64, out: [i64]) -> i64 {
+  let i = 0;
+  let w = 0;
+  let done = if i >= n then 1 else 0;
+  while done == 0 {
+    let v = src[i];
+    let j = i + 1;
+    let count = 1;
+    let scanning = 0;
+    while scanning == 0 {
+      let inb = if j < n then 1 else 0;
+      let same = if inb == 1 then (if src[j] == v then 1 else 0) else 0;
+      let count = count + same;
+      let j = j + same;
+      let scanning = if same == 1 then 0 else 1;
+      0
+    };
+    let _ = out[w] = v;
+    let _ = out[w + 1] = count;
+    let w = w + 2;
+    let i = j;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  w
+}
+
+// rle_decode: expand the (value, count) pairs in enc[0..n) back into out.
+// enc is expected to hold an even number of elements (pairs), each count
+// >= 1. Returns the total number of elements written (sum of the counts).
+fn rle_decode(enc: [i64], n: i64, out: [i64]) -> i64 {
+  let i = 0;
+  let w = 0;
+  let done = if i >= n then 1 else 0;
+  while done == 0 {
+    let v = enc[i];
+    let count = enc[i + 1];
+    let k = 0;
+    let inner = 0;
+    while inner == 0 {
+      let _ = out[w] = v;
+      let w = w + 1;
+      let k = k + 1;
+      let inner = if k >= count then 1 else 0;
+      0
+    };
+    let i = i + 2;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  w
+}

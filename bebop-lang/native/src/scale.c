@@ -30,6 +30,24 @@
 
 static atomic_uint_fast64_t scale_sink;
 
+/* 64-bit mix (MurmurHash3 finalizer) so the XOR accumulation cannot cancel to
+ * zero.  The ramp input [1..K·N] has DC = (i·N² + N(N+1)/2) mod p, which XORs
+ * to exactly 0 over all rows — a degenerate gate that a broken parallel split
+ * would also pass.  Mixing each sample first makes the gate non-vacuous. */
+static inline uint64_t scale_mix(uint64_t x) {
+    x ^= x >> 30;
+    x *= 0xbf58476d1ce4e5b9ULL;
+    x ^= x >> 27;
+    x *= 0x94d049bb133111ebULL;
+    x ^= x >> 31;
+    return x;
+}
+
+static inline uint64_t scale_row_sig(const uint64_t *row, size_t n) {
+    return scale_mix(row[0]) ^ scale_mix(row[n / 2]) ^ scale_mix(row[n - 1])
+         ^ scale_mix(row[(n * 3) / 4]);
+}
+
 typedef struct {
     uint64_t *buf;   /* K*N elements, one transform per N-run */
     size_t    n;     /* NTT size                              */
@@ -49,7 +67,7 @@ static void scale_work(size_t start, size_t end, void *arg) {
     for (size_t i = start; i < end; i++) {
         uint64_t *row = &w->buf[i * n];
         ntt_transform(row, n, 0);
-        acc ^= row[0] ^ row[n / 2] ^ row[n - 1] ^ row[(n * 3) / 4];
+        acc ^= scale_row_sig(row, n);
     }
     atomic_fetch_xor_explicit(&scale_sink, acc, memory_order_relaxed);
 }
@@ -67,7 +85,7 @@ static uint64_t scale_checksum(ScaleWork *w) {
     for (size_t i = 0; i < SCALE_K; i++) {
         uint64_t *row = &w->buf[i * w->n];
         ntt_transform(row, w->n, 0);
-        acc ^= row[0] ^ row[w->n / 2] ^ row[w->n - 1] ^ row[(w->n * 3) / 4];
+        acc ^= scale_row_sig(row, w->n);
     }
     return acc;
 }

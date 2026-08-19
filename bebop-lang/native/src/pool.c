@@ -39,18 +39,20 @@ struct Pool {
 
 static void *pool_worker(void *arg) {
     Pool *p = (Pool *)arg;
-    int tid = -1;
 
-    /* Assign thread id: find our slot. */
-    pthread_mutex_lock(&p->mtx);
+    /* Discover our worker index by pthread identity.  p->threads[i] is
+     * visible to worker i (pthread_create synchronizes-with the new thread),
+     * and we match at our own index before reading any later, not-yet-written
+     * entry — so this is race-free and needs no slot-claim handshake. */
+    pthread_t self = pthread_self();
+    int tid = -1;
     for (int i = 0; i < p->nthreads; i++) {
-        if (!p->work[i].done) {
+        if (pthread_equal(p->threads[i], self)) {
             tid = i;
-            p->work[i].done = 0;
             break;
         }
     }
-    pthread_mutex_unlock(&p->mtx);
+    if (tid < 0) return NULL; /* misconfigured pool; never happen in practice */
 
     for (;;) {
         pthread_mutex_lock(&p->mtx);
@@ -93,10 +95,8 @@ Pool *pool_new(int nthreads) {
     pthread_cond_init(&p->cond, NULL);
     pthread_cond_init(&p->done_cond, NULL);
 
-    /* Mark all slots as initially empty (done=2 means unused slot). */
-    for (int i = 0; i < nthreads; i++) {
-        p->work[i].done = 2;
-    }
+    /* Slots start with fn==NULL (calloc), so every worker blocks on its
+     * first cond_wait until parallel_for installs real work. */
 
     for (int i = 0; i < nthreads; i++) {
         pthread_create(&p->threads[i], NULL, pool_worker, p);

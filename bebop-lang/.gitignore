@@ -1,0 +1,22 @@
+# Bebop benchmark experiment artifacts — commit sources + text results only.
+# Compiled probes and coverage data are machine-local build products.
+
+# gcov coverage output
+*.gcno
+*.gcda
+
+# coverage working tree
+bench/r5/cov/
+
+# compiled benchmark probes (built from the committed .c / .rs sources)
+bench/r2/r2_peak_rss
+bench/r2/r2_peak_rss_rs
+bench/r2/r2_overhead
+bench/r2/r2_overhead_rs
+bench/r2/r2_alloc_rate
+bench/r2/r2_alloc_rate_rs
+bench/r8/stream
+bench/r8/stream_o3
+bench/r10/clockprobe
+bench/r10/resprobe
+bench/r10/timing
