@@ -1,0 +1,17 @@
+// selfhost/std/effect.bp — effect registry (pure / io / state as small ints).
+// Effect codes: 0 = Pure, 1 = IO, 2 = State. i64 only.
+
+module core { }
+
+// is_pure: 1 when effect is Pure (0), else 0.
+fn is_pure(eff: i64) -> i64 { if eff == 0 then 1 else 0 }
+
+// effect_apply: dispatch by effect code, returns transformed val.
+// Pure (0): identity. IO (1): sign flip. State (2): val*10+2 tag.
+fn effect_apply(eff: i64, val: i64) -> i64 {
+  let v0 = if eff == 0 then val else 0;
+  let v1 = if eff == 1 then (0 - val) else 0;
+  let v2 = if eff == 2 then (val * 10 + 2) else 0;
+  let rest = if eff > 2 then val else 0;
+  v0 + v1 + v2 + rest
+}

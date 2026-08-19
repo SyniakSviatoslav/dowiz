@@ -1,0 +1,39 @@
+// selfhost/std/numeric.bp — integer numeric helpers over i64.
+// isqrt (integer square root via Newton), parity, and gcd (Euclidean).
+// No floats/u64/structs in Bebop: everything is + - * / and comparisons.
+
+module core { }
+
+// is_even: 1 if n is even, else 0 (parity via low bit = n - (n/2)*2).
+fn is_even(n: i64) -> i64 { if n - (n / 2) * 2 == 0 then 1 else 0 }
+
+// is_odd: 1 if n is odd, else 0.
+fn is_odd(n: i64) -> i64 { 1 - is_even(n) }
+
+// gcd: greatest common divisor via Euclidean algorithm (non-negative result).
+fn gcd(a: i64, b: i64) -> i64 {
+  let x = if a >= 0 then a else 0 - a;
+  let y = if b >= 0 then b else 0 - b;
+  while y != 0 {
+    let t = x - (x / y) * y;
+    let x = y;
+    let y = t;
+    0
+  };
+  x
+}
+
+// isqrt: floor of the integer square root of n (n >= 0; 0 for n < 1).
+// Newton iteration x_{k+1} = (x_k + n / x_k) / 2, starting from n.
+fn isqrt(n: i64) -> i64 {
+  if n < 1 then 0 else (
+    let x = n;
+    let y = (x + n / x) / 2;
+    while y < x {
+      let x = y;
+      let y = (x + n / x) / 2;
+      0
+    };
+    x
+  )
+}

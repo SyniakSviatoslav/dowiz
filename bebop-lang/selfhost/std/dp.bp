@@ -1,0 +1,27 @@
+// selfhost/std/dp.bp — dynamic programming (Fibonacci) over i64.
+// fib is bottom-up iterative (O(1) space, two rolling accumulators);
+// fib_rec is the naive recursive form (recursion typechecks in `check`).
+
+module core { }
+
+// fib: n-th Fibonacci number, iterative. fib(0)=0, fib(1)=1,
+// fib(n)=fib(n-1)+fib(n-2). No array needed — rolling accumulators.
+fn fib(n: i64) -> i64 {
+  let a = 0;
+  let b = 1;
+  let i = 0;
+  while i < n {
+    let t = a + b;
+    let a = b;
+    let b = t;
+    let i = i + 1;
+    0
+  };
+  a
+}
+
+// fib_rec: n-th Fibonacci number, recursive (naive). fib_rec(0)=0,
+// fib_rec(1)=1.
+fn fib_rec(n: i64) -> i64 {
+  if n < 2 then n else (fib_rec(n - 1) + fib_rec(n - 2))
+}

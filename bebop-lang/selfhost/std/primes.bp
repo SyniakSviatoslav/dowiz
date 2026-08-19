@@ -1,0 +1,40 @@
+// selfhost/std/primes.bp — prime test and generation over i64.
+// Trial division up to sqrt(n). i64-only.
+
+module core { }
+
+// is_prime: 1 if n is prime, 0 otherwise (n <= 1 => 0).
+fn is_prime(n: i64) -> i64 {
+  if n <= 1 then 0 else
+  let i = 2;
+  let result = 1;
+  while i * i <= n {
+    let result = if n - (n / i) * i == 0 then 0 else result;
+    let i = i + 1;
+    0
+  };
+  result
+}
+
+// next_prime: smallest prime > n.
+fn next_prime(n: i64) -> i64 {
+  let p = n + 1;
+  while is_prime(p) == 0 {
+    let p = p + 1;
+    0
+  };
+  p
+}
+
+// nth_prime: the k-th prime (1-indexed; k <= 0 => 0).
+fn nth_prime(k: i64) -> i64 {
+  if k <= 0 then 0 else
+  let count = 0;
+  let p = 1;
+  while count < k {
+    let p = next_prime(p);
+    let count = count + 1;
+    0
+  };
+  p
+}

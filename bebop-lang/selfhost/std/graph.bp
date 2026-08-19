@@ -1,0 +1,24 @@
+// selfhost/std/graph.bp — adjacency-matrix graph ops over a flat row-major [i64].
+// Vertex i connects to vertex j iff adj[(i * n) + j] is nonzero.
+
+module core { }
+
+// graph_has_edge: 1 if there is an edge i -> j, else 0.
+fn graph_has_edge(adj: [i64], n: i64, i: i64, j: i64) -> i64 {
+  if adj[(i * n) + j] == 0 then 0 else 1
+}
+
+// graph_degree: out-degree of vertex i (number of set entries in row i).
+fn graph_degree(adj: [i64], n: i64, i: i64) -> i64 {
+  let k = 0;
+  let d = 0;
+  let done = 0;
+  while done == 0 {
+    let v = adj[(i * n) + k];
+    let d = if v == 0 then d else d + 1;
+    let k = k + 1;
+    let done = if k >= n then 1 else 0;
+    0
+  };
+  d
+}

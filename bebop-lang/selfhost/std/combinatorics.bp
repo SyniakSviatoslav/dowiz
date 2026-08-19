@@ -1,0 +1,56 @@
+// selfhost/std/combinatorics.bp — factorial, binomial, permutations, combinations.
+// i64 arithmetic only, no floats/u64/structs.
+
+module core { }
+
+// factorial: n! = 1*2*...*n. factorial(0) = 1.
+fn factorial(n: i64) -> i64 {
+  let i = 1;
+  let r = 1;
+  let done = 0;
+  while done == 0 {
+    let r = r * i;
+    let i = i + 1;
+    let done = if i > n then 1 else 0;
+    0
+  };
+  r
+}
+
+// binomial: C(n,k) = n!/(k!*(n-k)!). Multiplicative formula avoids huge intermediates.
+fn binomial(n: i64, k: i64) -> i64 {
+  if k < 0 then 0 else (if k > n then 0 else (
+    let kx = if k + k > n then n - k else k;
+    let i = 1;
+    let r = 1;
+    let done = if i > kx then 1 else 0;
+    while done == 0 {
+      let r = r * (n - kx + i) / i;
+      let i = i + 1;
+      let done = if i > kx then 1 else 0;
+      0
+    };
+    r
+  ))
+}
+
+// permutations: P(n,r) = n!/(n-r)! = n*(n-1)*...*(n-r+1).
+fn permutations(n: i64, r: i64) -> i64 {
+  if r < 0 then 0 else (if r > n then 0 else (
+    let i = 0;
+    let res = 1;
+    let done = if i >= r then 1 else 0;
+    while done == 0 {
+      let res = res * (n - i);
+      let i = i + 1;
+      let done = if i >= r then 1 else 0;
+      0
+    };
+    res
+  ))
+}
+
+// combinations: C(n,r) — same as binomial.
+fn combinations(n: i64, r: i64) -> i64 {
+  binomial(n, r)
+}

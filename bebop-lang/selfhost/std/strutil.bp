@@ -1,0 +1,76 @@
+// selfhost/std/strutil.bp — string char helpers + i64<->str conversion.
+// Char classification (digit/alpha), char access, length, and decimal
+// integer<->string round-trip (no floats/u64/structs in Bebop).
+
+module core { }
+
+// strlen: length of s in chars (delegates to the str_len builtin).
+fn strlen(s: str) -> i64 {
+  str_len(s)
+}
+
+// is_digit_char: 1 if c is an ASCII digit '0'(48)..'9'(57), else 0.
+fn is_digit_char(c: i64) -> i64 {
+  if c >= 48 then (if c <= 57 then 1 else 0) else 0
+}
+
+// is_alpha_char: 1 if c is 'a'(97)..'z'(122) or 'A'(65)..'Z'(90), else 0.
+fn is_alpha_char(c: i64) -> i64 {
+  let lower = if c >= 97 then (if c <= 122 then 1 else 0) else 0;
+  let upper = if c >= 65 then (if c <= 90 then 1 else 0) else 0;
+  lower + upper
+}
+
+// char_code: ASCII code of the i-th char of s (delegates to the char builtin).
+fn char_code(s: str, i: i64) -> i64 {
+  char(s, i)
+}
+
+// int_to_str: decimal string of n (leading '-' if negative). Builds digits
+// least-significant-first into a reversed string, then reverses it.
+fn int_to_str(n: i64) -> str {
+  let neg = if n < 0 then 1 else 0;
+  let m = if n < 0 then (0 - n) else n;
+  let rev = "";
+  let t = m;
+  let done = 0;
+  while done == 0 {
+    let d = t - (t / 10) * 10;
+    let rev = rev ++ chr(48 + d);
+    let t = t / 10;
+    let done = if t == 0 then 1 else 0;
+    0
+  };
+  let rl = str_len(rev);
+  let out = "";
+  let j = 0;
+  while j < rl {
+    let out = out ++ chr(char(rev, rl - 1 - j));
+    let j = j + 1;
+    0
+  };
+  if neg == 1 then ("-" ++ out) else out
+}
+
+// str_to_int: parse an optional leading '-' then decimal digits. Non-digit
+// chars are ignored; an empty string or lone '-' yields 0.
+fn str_to_int(s: str) -> i64 {
+  let n = str_len(s);
+  let i = 0;
+  let neg = 0;
+  let val = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if i >= n then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, i);
+    let minus = if ch == 45 then 1 else 0;
+    let dg = if ch >= 48 then (if ch <= 57 then 1 else 0) else 0;
+    let sign = if i == 0 then minus else 0;
+    let neg = if sign == 1 then 1 else neg;
+    let val = if dg == 1 then (val * 10 + (ch - 48)) else val;
+    let i = i + 1;
+    let done = if at_end == 1 then 1 else 0;
+    0
+  };
+  if neg == 1 then (0 - val) else val
+}
