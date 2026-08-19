@@ -70,6 +70,70 @@ double compute_dispatch(const double *a, size_t n, size_t workgroups,
 
 static double compute_sum_fn(double acc, double x) { return acc + x; }
 
+/* ─── BLAS-style kernels ──────────────────────────────────────────────── */
+
+int compute_saxpy(double alpha, const double *restrict x, double *restrict y, size_t n) {
+    size_t i = 0;
+    for (; i + 1 < n; i += 2) { /* 2×f64 NEON-vectorizable */
+        y[i]     += alpha * x[i];
+        y[i + 1] += alpha * x[i + 1];
+    }
+    for (; i < n; i++) {
+        y[i] += alpha * x[i];
+    }
+    return 0;
+}
+
+double compute_dot(const double *restrict x, const double *restrict y, size_t n) {
+    /* 4 independent accumulators break the loop-carried FP dependency chain
+     * (pipeline latency 3-5 cycles → 4-way ILP hides it). */
+    double acc0 = 0.0, acc1 = 0.0, acc2 = 0.0, acc3 = 0.0;
+    size_t i = 0;
+    for (; i + 3 < n; i += 4) {
+        acc0 += x[i]     * y[i];
+        acc1 += x[i + 1] * y[i + 1];
+        acc2 += x[i + 2] * y[i + 2];
+        acc3 += x[i + 3] * y[i + 3];
+    }
+    for (; i < n; i++) {
+        acc0 += x[i] * y[i];
+    }
+    return (acc0 + acc1) + (acc2 + acc3);
+}
+
+int compute_matmul(const double *restrict a, const double *restrict b, double *restrict c,
+                   size_t m, size_t n, size_t k) {
+    /* C[i][j] = Σ_l A[i][l] * B[l][j]  (row-major).
+     * Transpose B → Bt (k×n) so the inner loop walks memory sequentially
+     * (no column-stride cache misses). */
+    double *bt = calloc(n * k, sizeof(double));
+    if (!bt) return -1;
+    for (size_t l = 0; l < n; l++) {
+        for (size_t j = 0; j < k; j++) {
+            bt[j * n + l] = b[l * k + j];
+        }
+    }
+    for (size_t i = 0; i < m; i++) {
+        const double *arow = a + i * n;
+        double *crow = c + i * k;
+        for (size_t j = 0; j < k; j++) {
+            double acc0 = 0.0, acc1 = 0.0;
+            const double *btrow = bt + j * n;
+            size_t l = 0;
+            for (; l + 1 < n; l += 2) { /* 2-way unroll, both rows sequential */
+                acc0 += arow[l]     * btrow[l];
+                acc1 += arow[l + 1] * btrow[l + 1];
+            }
+            for (; l < n; l++) {
+                acc0 += arow[l] * btrow[l];
+            }
+            crow[j] = acc0 + acc1;
+        }
+    }
+    free(bt);
+    return 0;
+}
+
 /* ─── self-test ─────────────────────────────────────────────────────────── */
 
 int compute_self_test(char *out, size_t cap) {
@@ -98,6 +162,27 @@ int compute_self_test(char *out, size_t cap) {
 
     /* dispatch with 0 elements returns init */
     K(compute_dispatch(arr, 0, 4, compute_sum_fn, 42.0) == 42.0, "dispatch empty returns init");
+
+    /* saxpy: y += 2*x  →  [1,2,3] + 2*[10,20,30] = [21,42,63] */
+    {
+        double x[3] = {10, 20, 30};
+        double y[3] = {1, 2, 3};
+        compute_saxpy(2.0, x, y, 3);
+        K(y[0] == 21 && y[1] == 42 && y[2] == 63, "saxpy y += 2x");
+    }
+
+    /* dot: [1,2,3]·[4,5,6] = 32 */
+    K(compute_dot((double[]){1,2,3}, (double[]){4,5,6}, 3) == 32.0, "dot(1,2,3)·(4,5,6)=32");
+
+    /* matmul: [[1,2],[3,4]] × [[5,6],[7,8]] = [[19,22],[43,50]] */
+    {
+        double a[4] = {1, 2, 3, 4};
+        double b[4] = {5, 6, 7, 8};
+        double c[4];
+        compute_matmul(a, b, c, 2, 2, 2);
+        K(c[0] == 19 && c[1] == 22 && c[2] == 43 && c[3] == 50,
+          "matmul 2×2 @ 2×2 = [[19,22],[43,50]]");
+    }
 
 #undef K
     return all_ok ? 0 : 1;

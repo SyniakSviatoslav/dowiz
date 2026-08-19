@@ -23,7 +23,6 @@
 #define NEON_FADD_2D 0x4E60D400u
 #define NEON_FSUB_2D 0x4EE0D400u
 #define NEON_FMUL_2D 0x6E60DC00u
-#define NEON_UMULH_2D 0x6EE0E400u
 #define NEON_LD1_2D  0x4C407C00u
 #define NEON_ST1_2D  0x4C007C00u
 #define NEON_LD1_4S  0x4C407800u
@@ -55,7 +54,6 @@ int vir_binop(VirOp op, Vir128 a, Vir128 b, Vir128 *out, char *err,
         case VIR_ADD_4S:  three = NEON_ADD_4S;  is_4s = 1; break;
         case VIR_SUB_4S:  three = NEON_SUB_4S;  is_4s = 1; break;
         case VIR_MUL_4S:  three = NEON_MUL_4S;  is_4s = 1; break;
-        case VIR_UMULH_2D: three = NEON_UMULH_2D; break;
         default:
             snprintf(err, cap_err, "vir: unknown op %d", (int)op);
             return -1;
@@ -159,6 +157,7 @@ int vir_atomic_self_test(char *out, size_t cap) {
         uint64_t old = vir_atomic_cas(&cell, 7, 1);
         W(old == 99 && cell == 99, "cas(7→1) fails → old=99, cell=99");
     }
+
     return all_ok ? 0 : -1;
 }
 
@@ -228,5 +227,7 @@ int vir_self_test(char *out, size_t cap) {
         V(rl.f == 12.0 && rh.f == 4.0, "VIR fmul.2d (3.0,0.5)*(4.0,8.0)=(12.0,4.0)");
     }
 
-    return all_ok ? 0 : -1;
+
+    
+return all_ok ? 0 : -1;
 }

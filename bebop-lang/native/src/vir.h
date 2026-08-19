@@ -23,7 +23,6 @@ typedef enum {
     VIR_FADD_2D, /* 2×f64 element-wise add  */
     VIR_FSUB_2D, /* 2×f64 element-wise sub  */
     VIR_FMUL_2D, /* 2×f64 element-wise mul  */
-    VIR_UMULH_2D, /* 2×u64 multiply-high (Barrett NTT) */
 } VirOp;
 
 /* A 128-bit SIMD register image (2×u64 or 2×f64 or 4×u32 lanes). */
@@ -34,6 +33,10 @@ typedef struct {
 /* JIT v0 = op(v1, v2) with hand-encoded NEON. Returns 0, or -1 (err filled). */
 int vir_binop(VirOp op, Vir128 a, Vir128 b, Vir128 *out, char *err,
               size_t cap_err);
+
+/* Synthesized 2×64 multiply-high (hi64 of a⊗b per lane). NEON has no native
+ * vector umulh; this decomposes via UMULL. Scalars are the fallback. */
+int vir_umulh2(Vir128 a, Vir128 b, Vir128 *out, char *err, size_t cap_err);
 
 /* Atomic machine-code ops (⚛): hand-encoded LSE atomics — no libatomic, no
  * compiler intrinsic. Each returns the OLD value at *ptr. */

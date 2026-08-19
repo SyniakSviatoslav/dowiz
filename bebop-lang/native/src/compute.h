@@ -28,6 +28,19 @@ double compute_reduce(const double *a, size_t n, double (*fn)(double, double),
 double compute_dispatch(const double *a, size_t n, size_t workgroups,
                         double (*fn)(double, double), double init);
 
+/* ─── BLAS-style kernels (the canonical GPU workloads) ────────────────── */
+
+/* saxpy: y[i] += alpha * x[i]  (BLAS-1, NEON-vectorizable 2×f64). */
+int compute_saxpy(double alpha, const double *restrict x, double *restrict y, size_t n);
+
+/* dot: Σ x[i] * y[i]  (BLAS-1 dot product). */
+double compute_dot(const double *restrict x, const double *restrict y, size_t n);
+
+/* matmul: C(M×K) = A(M×N) × B(N×K), row-major. The canonical GPU kernel.
+ * Inner k-loop is FMA-friendly (auto-vectorizes to 2×f64 NEON). */
+int compute_matmul(const double *restrict a, const double *restrict b, double *restrict c,
+                   size_t m, size_t n, size_t k);
+
 int compute_self_test(char *out, size_t cap);
 
 #endif
