@@ -77,20 +77,47 @@ static double median(double *v, int n) {
     return v[n / 2];
 }
 
+static double percentile(const double *v, int n, double p) {
+    double tmp[64];
+    for (int i = 0; i < n; i++) tmp[i] = v[i];
+    for (int i = 1; i < n; i++) {
+        double key = tmp[i];
+        int j = i - 1;
+        while (j >= 0 && tmp[j] > key) { tmp[j + 1] = tmp[j]; j--; }
+        tmp[j + 1] = key;
+    }
+    int idx = (int)(p * (n - 1));
+    if (idx < 0) idx = 0;
+    if (idx >= n) idx = n - 1;
+    return tmp[idx];
+}
+
+static double stdev(const double *v, int n, double mean) {
+    double s = 0;
+    for (int i = 0; i < n; i++) { double d = v[i] - mean; s += d * d; }
+    return (n > 1) ? __builtin_sqrt(s / (double)(n - 1)) : 0.0;
+}
+
 /* Report: ns/op (min+median) + Mops/s. `total` is the per-rep span; divide by
  * `inner` to get per-op. */
 static void report(const char *name, double *times_ns, long inner) {
     double mn = times_ns[0];
-    for (int i = 1; i < BENCH_REPS; i++) {
-        if (times_ns[i] < mn) {
-            mn = times_ns[i];
-        }
+    double mx = times_ns[0];
+    double sum = 0;
+    for (int i = 0; i < BENCH_REPS; i++) {
+        if (times_ns[i] < mn) mn = times_ns[i];
+        if (times_ns[i] > mx) mx = times_ns[i];
+        sum += times_ns[i];
     }
     double md = median(times_ns, BENCH_REPS);
-    double ns_op_min = mn / (double)inner;
-    double ns_op_med = md / (double)inner;
-    printf("%-26s %9.2f ns/op   med %9.2f ns/op   %9.2f Mops/s\n",
-           name, ns_op_min, ns_op_med, 1000.0 / ns_op_med);
+    double mean = sum / (double)BENCH_REPS;
+    double p95 = percentile(times_ns, BENCH_REPS, 0.95);
+    double p99 = percentile(times_ns, BENCH_REPS, 0.99);
+    double sd = stdev(times_ns, BENCH_REPS, mean);
+    printf("%-24s %8.2f ns/op  med %8.2f  p95 %8.2f  p99 %8.2f  WCET %8.2f  sd %.2f  %8.2f Mops/s\n",
+           name, mn / (double)inner, md / (double)inner, p95 / (double)inner,
+           p99 / (double)inner, mx / (double)inner, sd / (double)inner,
+           1000.0 / (md / (double)inner));
 }
 
 /* ─── NTT ──────────────────────────────────────────────────────────────── */
