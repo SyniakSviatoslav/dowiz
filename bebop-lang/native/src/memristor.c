@@ -42,7 +42,8 @@ int memristor_crossbar(const double *x, size_t rows, size_t cols,
     double Gon = 1.0/Ron, Goff = 1.0/Roff;
     for (size_t i = 0; i < rows * cols; i++) {
         double s = x[i];
-        if (s > 1.0) s = 1.0; if (s < 0.0) s = 0.0;
+        if (s > 1.0) { s = 1.0; }
+        if (s < 0.0) { s = 0.0; }
         G[i] = s * Gon + (1.0 - s) * Goff;
     }
     return 0;

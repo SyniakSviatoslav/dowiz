@@ -49,7 +49,7 @@ int ring_deq(Ring *r, size_t es, void *e) {
     if (r->head == r->tail) return -1;
     memcpy(e, r->buf+r->tail*es, es);
     size_t nxt = (r->tail+1) % r->cap;
-    __atomic_store_n(&r->tail, nxt, __ATOMIC_ACQUIRE);
+    __atomic_store_n(&r->tail, nxt, __ATOMIC_RELEASE);
     return 0;
 }
 int ring_empty(const Ring *r) { return r->head == r->tail; }

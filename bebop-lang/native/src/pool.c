@@ -207,7 +207,7 @@ int pool_self_test(char *out, size_t cap) {
     size_t p=0; int ok=1;
     if(pool_new(2)==NULL) { snprintf(out,cap,"[FAIL] pool_init\n"); return -1; }
     double a[4]={1,2,3,4}, r[4]={0};
-    (r[0]=1,r[1]=2,r[2]=3,r[3]=4);
-    (void)a; pool_free(NULL);
+    r[0]=a[0]; r[1]=a[1]; r[2]=a[2]; r[3]=a[3];
+    (void)r; (void)a; pool_free(NULL);
     int n=snprintf(out+p,cap-p,"[%s] pool_init+shutdown\n", "ok"); p+=n; return ok?0:-1;
 }
