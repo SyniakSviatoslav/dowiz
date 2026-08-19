@@ -645,7 +645,1797 @@ static const BpBitmap ASM_BM = {{ /* ⌬ */
     "..###..",
 }};
 
-#define N_GLYPHS 121
+static const BpBitmap G121_BM = {{ /* g121 */
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+}};
+
+static const BpBitmap G122_BM = {{ /* g122 */
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+}};
+
+static const BpBitmap G123_BM = {{ /* g123 */
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+}};
+
+static const BpBitmap G124_BM = {{ /* g124 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G125_BM = {{ /* g125 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G126_BM = {{ /* g126 */
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G127_BM = {{ /* g127 */
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+}};
+
+static const BpBitmap G128_BM = {{ /* g128 */
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+}};
+
+static const BpBitmap G129_BM = {{ /* g129 */
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+}};
+
+static const BpBitmap G130_BM = {{ /* g130 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G131_BM = {{ /* g131 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G132_BM = {{ /* g132 */
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+}};
+
+static const BpBitmap G133_BM = {{ /* g133 */
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+}};
+
+static const BpBitmap G134_BM = {{ /* g134 */
+    ".#.....",
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+}};
+
+static const BpBitmap G135_BM = {{ /* g135 */
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+    "..#....",
+}};
+
+static const BpBitmap G136_BM = {{ /* g136 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G137_BM = {{ /* g137 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G138_BM = {{ /* g138 */
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+    ".......",
+}};
+
+static const BpBitmap G139_BM = {{ /* g139 */
+    "......#",
+    "......#",
+    "......#",
+    "......#",
+    "......#",
+    "......#",
+    "......#",
+}};
+
+static const BpBitmap G140_BM = {{ /* g140 */
+    "#......",
+    ".#.....",
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+}};
+
+static const BpBitmap G141_BM = {{ /* g141 */
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+    "..#....",
+    ".#.....",
+}};
+
+static const BpBitmap G142_BM = {{ /* g142 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G143_BM = {{ /* g143 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G144_BM = {{ /* g144 */
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G145_BM = {{ /* g145 */
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+}};
+
+static const BpBitmap G146_BM = {{ /* g146 */
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+}};
+
+static const BpBitmap G147_BM = {{ /* g147 */
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+}};
+
+static const BpBitmap G148_BM = {{ /* g148 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G149_BM = {{ /* g149 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G150_BM = {{ /* g150 */
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G151_BM = {{ /* g151 */
+    "....#..",
+    "....#..",
+    "....#..",
+    "....#..",
+    "....#..",
+    "....#..",
+    "....#..",
+}};
+
+static const BpBitmap G152_BM = {{ /* g152 */
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+    "...#...",
+    "....#..",
+}};
+
+static const BpBitmap G153_BM = {{ /* g153 */
+    ".....#.",
+    "....#..",
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+}};
+
+static const BpBitmap G154_BM = {{ /* g154 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G155_BM = {{ /* g155 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G156_BM = {{ /* g156 */
+    ".......",
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G157_BM = {{ /* g157 */
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+}};
+
+static const BpBitmap G158_BM = {{ /* g158 */
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+    "...#...",
+}};
+
+static const BpBitmap G159_BM = {{ /* g159 */
+    "....#..",
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+}};
+
+static const BpBitmap G160_BM = {{ /* g160 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G161_BM = {{ /* g161 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G162_BM = {{ /* g162 */
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G163_BM = {{ /* g163 */
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+}};
+
+static const BpBitmap G164_BM = {{ /* g164 */
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+}};
+
+static const BpBitmap G165_BM = {{ /* g165 */
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+}};
+
+static const BpBitmap G166_BM = {{ /* g166 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G167_BM = {{ /* g167 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G168_BM = {{ /* g168 */
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G169_BM = {{ /* g169 */
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+}};
+
+static const BpBitmap G170_BM = {{ /* g170 */
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+}};
+
+static const BpBitmap G171_BM = {{ /* g171 */
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+}};
+
+static const BpBitmap G172_BM = {{ /* g172 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G173_BM = {{ /* g173 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G174_BM = {{ /* g174 */
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+}};
+
+static const BpBitmap G175_BM = {{ /* g175 */
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+}};
+
+static const BpBitmap G176_BM = {{ /* g176 */
+    ".#.....",
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+}};
+
+static const BpBitmap G177_BM = {{ /* g177 */
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+    "..#....",
+}};
+
+static const BpBitmap G178_BM = {{ /* g178 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G179_BM = {{ /* g179 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G180_BM = {{ /* g180 */
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+    ".......",
+}};
+
+static const BpBitmap G181_BM = {{ /* g181 */
+    "......#",
+    "......#",
+    "......#",
+    "......#",
+    "......#",
+    "......#",
+    "......#",
+}};
+
+static const BpBitmap G182_BM = {{ /* g182 */
+    "#......",
+    ".#.....",
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+}};
+
+static const BpBitmap G183_BM = {{ /* g183 */
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+    "..#....",
+    ".#.....",
+}};
+
+static const BpBitmap G184_BM = {{ /* g184 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G185_BM = {{ /* g185 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G186_BM = {{ /* g186 */
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G187_BM = {{ /* g187 */
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+}};
+
+static const BpBitmap G188_BM = {{ /* g188 */
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+}};
+
+static const BpBitmap G189_BM = {{ /* g189 */
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+}};
+
+static const BpBitmap G190_BM = {{ /* g190 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G191_BM = {{ /* g191 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G192_BM = {{ /* g192 */
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G193_BM = {{ /* g193 */
+    "....#..",
+    "....#..",
+    "....#..",
+    "....#..",
+    "....#..",
+    "....#..",
+    "....#..",
+}};
+
+static const BpBitmap G194_BM = {{ /* g194 */
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+    "...#...",
+    "....#..",
+}};
+
+static const BpBitmap G195_BM = {{ /* g195 */
+    ".....#.",
+    "....#..",
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+}};
+
+static const BpBitmap G196_BM = {{ /* g196 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G197_BM = {{ /* g197 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G198_BM = {{ /* g198 */
+    ".......",
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G199_BM = {{ /* g199 */
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+}};
+
+static const BpBitmap G200_BM = {{ /* g200 */
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+    "...#...",
+}};
+
+static const BpBitmap G201_BM = {{ /* g201 */
+    "....#..",
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+}};
+
+static const BpBitmap G202_BM = {{ /* g202 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G203_BM = {{ /* g203 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G204_BM = {{ /* g204 */
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G205_BM = {{ /* g205 */
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+}};
+
+static const BpBitmap G206_BM = {{ /* g206 */
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+}};
+
+static const BpBitmap G207_BM = {{ /* g207 */
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+}};
+
+static const BpBitmap G208_BM = {{ /* g208 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G209_BM = {{ /* g209 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G210_BM = {{ /* g210 */
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G211_BM = {{ /* g211 */
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+}};
+
+static const BpBitmap G212_BM = {{ /* g212 */
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+}};
+
+static const BpBitmap G213_BM = {{ /* g213 */
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+}};
+
+static const BpBitmap G214_BM = {{ /* g214 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G215_BM = {{ /* g215 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G216_BM = {{ /* g216 */
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+}};
+
+static const BpBitmap G217_BM = {{ /* g217 */
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+}};
+
+static const BpBitmap G218_BM = {{ /* g218 */
+    ".#.....",
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+}};
+
+static const BpBitmap G219_BM = {{ /* g219 */
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+    "..#....",
+}};
+
+static const BpBitmap G220_BM = {{ /* g220 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G221_BM = {{ /* g221 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G222_BM = {{ /* g222 */
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+    ".......",
+}};
+
+static const BpBitmap G223_BM = {{ /* g223 */
+    "......#",
+    "......#",
+    "......#",
+    "......#",
+    "......#",
+    "......#",
+    "......#",
+}};
+
+static const BpBitmap G224_BM = {{ /* g224 */
+    "#......",
+    ".#.....",
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+}};
+
+static const BpBitmap G225_BM = {{ /* g225 */
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+    "..#....",
+    ".#.....",
+}};
+
+static const BpBitmap G226_BM = {{ /* g226 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G227_BM = {{ /* g227 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G228_BM = {{ /* g228 */
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G229_BM = {{ /* g229 */
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+}};
+
+static const BpBitmap G230_BM = {{ /* g230 */
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+}};
+
+static const BpBitmap G231_BM = {{ /* g231 */
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+}};
+
+static const BpBitmap G232_BM = {{ /* g232 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G233_BM = {{ /* g233 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G234_BM = {{ /* g234 */
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G235_BM = {{ /* g235 */
+    "....#..",
+    "....#..",
+    "....#..",
+    "....#..",
+    "....#..",
+    "....#..",
+    "....#..",
+}};
+
+static const BpBitmap G236_BM = {{ /* g236 */
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+    "...#...",
+    "....#..",
+}};
+
+static const BpBitmap G237_BM = {{ /* g237 */
+    ".....#.",
+    "....#..",
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+}};
+
+static const BpBitmap G238_BM = {{ /* g238 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G239_BM = {{ /* g239 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G240_BM = {{ /* g240 */
+    ".......",
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G241_BM = {{ /* g241 */
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+}};
+
+static const BpBitmap G242_BM = {{ /* g242 */
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+    "...#...",
+}};
+
+static const BpBitmap G243_BM = {{ /* g243 */
+    "....#..",
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+}};
+
+static const BpBitmap G244_BM = {{ /* g244 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G245_BM = {{ /* g245 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G246_BM = {{ /* g246 */
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G247_BM = {{ /* g247 */
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+}};
+
+static const BpBitmap G248_BM = {{ /* g248 */
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+}};
+
+static const BpBitmap G249_BM = {{ /* g249 */
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+}};
+
+static const BpBitmap G250_BM = {{ /* g250 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G251_BM = {{ /* g251 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G252_BM = {{ /* g252 */
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G253_BM = {{ /* g253 */
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+}};
+
+static const BpBitmap G254_BM = {{ /* g254 */
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+}};
+
+static const BpBitmap G255_BM = {{ /* g255 */
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+}};
+
+static const BpBitmap G256_BM = {{ /* g256 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G257_BM = {{ /* g257 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G258_BM = {{ /* g258 */
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+}};
+
+static const BpBitmap G259_BM = {{ /* g259 */
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+    "#......",
+}};
+
+static const BpBitmap G260_BM = {{ /* g260 */
+    ".#.....",
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+}};
+
+static const BpBitmap G261_BM = {{ /* g261 */
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+    "..#....",
+}};
+
+static const BpBitmap G262_BM = {{ /* g262 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G263_BM = {{ /* g263 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G264_BM = {{ /* g264 */
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+    ".......",
+}};
+
+static const BpBitmap G265_BM = {{ /* g265 */
+    "......#",
+    "......#",
+    "......#",
+    "......#",
+    "......#",
+    "......#",
+    "......#",
+}};
+
+static const BpBitmap G266_BM = {{ /* g266 */
+    "#......",
+    ".#.....",
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+}};
+
+static const BpBitmap G267_BM = {{ /* g267 */
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+    "..#....",
+    ".#.....",
+}};
+
+static const BpBitmap G268_BM = {{ /* g268 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G269_BM = {{ /* g269 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G270_BM = {{ /* g270 */
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G271_BM = {{ /* g271 */
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+    ".....#.",
+}};
+
+static const BpBitmap G272_BM = {{ /* g272 */
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+}};
+
+static const BpBitmap G273_BM = {{ /* g273 */
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+}};
+
+static const BpBitmap G274_BM = {{ /* g274 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G275_BM = {{ /* g275 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G276_BM = {{ /* g276 */
+    ".......",
+    ".......",
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G277_BM = {{ /* g277 */
+    "....#..",
+    "....#..",
+    "....#..",
+    "....#..",
+    "....#..",
+    "....#..",
+    "....#..",
+}};
+
+static const BpBitmap G278_BM = {{ /* g278 */
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+    "...#...",
+    "....#..",
+}};
+
+static const BpBitmap G279_BM = {{ /* g279 */
+    ".....#.",
+    "....#..",
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+}};
+
+static const BpBitmap G280_BM = {{ /* g280 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G281_BM = {{ /* g281 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G282_BM = {{ /* g282 */
+    ".......",
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G283_BM = {{ /* g283 */
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+    "...#...",
+}};
+
+static const BpBitmap G284_BM = {{ /* g284 */
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+    "...#...",
+}};
+
+static const BpBitmap G285_BM = {{ /* g285 */
+    "....#..",
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+}};
+
+static const BpBitmap G286_BM = {{ /* g286 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G287_BM = {{ /* g287 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G288_BM = {{ /* g288 */
+    ".......",
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G289_BM = {{ /* g289 */
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+    "..#....",
+}};
+
+static const BpBitmap G290_BM = {{ /* g290 */
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+    "..#....",
+}};
+
+static const BpBitmap G291_BM = {{ /* g291 */
+    "...#...",
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+}};
+
+static const BpBitmap G292_BM = {{ /* g292 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G293_BM = {{ /* g293 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G294_BM = {{ /* g294 */
+    "#######",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+static const BpBitmap G295_BM = {{ /* g295 */
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+    ".#.....",
+}};
+
+static const BpBitmap G296_BM = {{ /* g296 */
+    "..#....",
+    "...#...",
+    "....#..",
+    ".....#.",
+    "......#",
+    "#......",
+    ".#.....",
+}};
+
+static const BpBitmap G297_BM = {{ /* g297 */
+    "..#....",
+    ".#.....",
+    "#......",
+    "......#",
+    ".....#.",
+    "....#..",
+    "...#...",
+}};
+
+static const BpBitmap G298_BM = {{ /* g298 */
+    ".......",
+    ".#####.",
+    ".#...#.",
+    ".#...#.",
+    ".#...#.",
+    ".#####.",
+    ".......",
+}};
+
+static const BpBitmap G299_BM = {{ /* g299 */
+    "####...",
+    "####...",
+    "####...",
+    "####...",
+    ".......",
+    ".......",
+    ".......",
+}};
+
+#define N_GLYPHS 300
 
 static BpDelta FN_OUT[64];
 static BpDelta STRUCT_OUT[64];
@@ -717,6 +2507,237 @@ static BpDelta DUAL_OUT[64];
 static BpDelta EXTERN_OUT[64];
 static BpDelta COMPTIME_OUT[64];
 static BpDelta ASM_OUT[64];
+
+static BpDelta EXCL_OUT[64];
+static BpDelta AT_SIGN_OUT[64];
+static BpDelta HASH_SYM_OUT[64];
+static BpDelta DOLLAR_OUT[64];
+static BpDelta PERCENT_OUT[64];
+static BpDelta CARET_OUT[64];
+static BpDelta AMPERSAND_OUT[64];
+static BpDelta STAR_OP_OUT[64];
+static BpDelta LPAREN_OUT[64];
+static BpDelta RPAREN_OUT[64];
+static BpDelta LBRACK_OUT[64];
+static BpDelta RBRACK_OUT[64];
+static BpDelta LBRACE_OUT[64];
+static BpDelta RBRACE_OUT[64];
+static BpDelta TILDE_OUT[64];
+static BpDelta BACKTICK_OUT[64];
+static BpDelta UNDERSCORE_OUT[64];
+static BpDelta INFINITY_OUT[64];
+static BpDelta PARTIAL_OUT[64];
+static BpDelta INTEGRAL_OUT[64];
+static BpDelta SUM_SYM_OUT[64];
+static BpDelta PROD_SYM_OUT[64];
+static BpDelta RESISTOR_OUT[64];
+static BpDelta CAPACITOR_OUT[64];
+static BpDelta INDUCTOR_OUT[64];
+static BpDelta DIODE_OUT[64];
+static BpDelta TRANSISTOR_OUT[64];
+static BpDelta GROUND_OUT[64];
+static BpDelta ANTENNA_OUT[64];
+static BpDelta TF_BLOCK_OUT[64];
+static BpDelta SUMMING_JN_OUT[64];
+static BpDelta INTEGRATOR_OUT[64];
+static BpDelta DOT_OP_OUT[64];
+static BpDelta CROSS_OP_OUT[64];
+static BpDelta TENSOR_OP_OUT[64];
+static BpDelta WEDGE_OP_OUT[64];
+static BpDelta VEE_OP_OUT[64];
+static BpDelta NEG_OP_OUT[64];
+static BpDelta FORALL_OUT[64];
+static BpDelta EXISTS_OUT[64];
+static BpDelta LAMBDA_OUT[64];
+static BpDelta MU_OUT[64];
+static BpDelta SIGMA_OUT[64];
+static BpDelta PI_OUT[64];
+static BpDelta TAU_OUT[64];
+static BpDelta PHI_OUT[64];
+static BpDelta PSI_OUT[64];
+static BpDelta OMEGA_OUT[64];
+static BpDelta BRA_A_OUT[64];
+static BpDelta BRA_B_OUT[64];
+static BpDelta BRA_C_OUT[64];
+static BpDelta G121_OUT[64];
+static BpDelta G122_OUT[64];
+static BpDelta G123_OUT[64];
+static BpDelta G124_OUT[64];
+static BpDelta G125_OUT[64];
+static BpDelta G126_OUT[64];
+static BpDelta G127_OUT[64];
+static BpDelta G128_OUT[64];
+static BpDelta G129_OUT[64];
+static BpDelta G130_OUT[64];
+static BpDelta G131_OUT[64];
+static BpDelta G132_OUT[64];
+static BpDelta G133_OUT[64];
+static BpDelta G134_OUT[64];
+static BpDelta G135_OUT[64];
+static BpDelta G136_OUT[64];
+static BpDelta G137_OUT[64];
+static BpDelta G138_OUT[64];
+static BpDelta G139_OUT[64];
+static BpDelta G140_OUT[64];
+static BpDelta G141_OUT[64];
+static BpDelta G142_OUT[64];
+static BpDelta G143_OUT[64];
+static BpDelta G144_OUT[64];
+static BpDelta G145_OUT[64];
+static BpDelta G146_OUT[64];
+static BpDelta G147_OUT[64];
+static BpDelta G148_OUT[64];
+static BpDelta G149_OUT[64];
+static BpDelta G150_OUT[64];
+static BpDelta G151_OUT[64];
+static BpDelta G152_OUT[64];
+static BpDelta G153_OUT[64];
+static BpDelta G154_OUT[64];
+static BpDelta G155_OUT[64];
+static BpDelta G156_OUT[64];
+static BpDelta G157_OUT[64];
+static BpDelta G158_OUT[64];
+static BpDelta G159_OUT[64];
+static BpDelta G160_OUT[64];
+static BpDelta G161_OUT[64];
+static BpDelta G162_OUT[64];
+static BpDelta G163_OUT[64];
+static BpDelta G164_OUT[64];
+static BpDelta G165_OUT[64];
+static BpDelta G166_OUT[64];
+static BpDelta G167_OUT[64];
+static BpDelta G168_OUT[64];
+static BpDelta G169_OUT[64];
+static BpDelta G170_OUT[64];
+static BpDelta G171_OUT[64];
+static BpDelta G172_OUT[64];
+static BpDelta G173_OUT[64];
+static BpDelta G174_OUT[64];
+static BpDelta G175_OUT[64];
+static BpDelta G176_OUT[64];
+static BpDelta G177_OUT[64];
+static BpDelta G178_OUT[64];
+static BpDelta G179_OUT[64];
+static BpDelta G180_OUT[64];
+static BpDelta G181_OUT[64];
+static BpDelta G182_OUT[64];
+static BpDelta G183_OUT[64];
+static BpDelta G184_OUT[64];
+static BpDelta G185_OUT[64];
+static BpDelta G186_OUT[64];
+static BpDelta G187_OUT[64];
+static BpDelta G188_OUT[64];
+static BpDelta G189_OUT[64];
+static BpDelta G190_OUT[64];
+static BpDelta G191_OUT[64];
+static BpDelta G192_OUT[64];
+static BpDelta G193_OUT[64];
+static BpDelta G194_OUT[64];
+static BpDelta G195_OUT[64];
+static BpDelta G196_OUT[64];
+static BpDelta G197_OUT[64];
+static BpDelta G198_OUT[64];
+static BpDelta G199_OUT[64];
+static BpDelta G200_OUT[64];
+static BpDelta G201_OUT[64];
+static BpDelta G202_OUT[64];
+static BpDelta G203_OUT[64];
+static BpDelta G204_OUT[64];
+static BpDelta G205_OUT[64];
+static BpDelta G206_OUT[64];
+static BpDelta G207_OUT[64];
+static BpDelta G208_OUT[64];
+static BpDelta G209_OUT[64];
+static BpDelta G210_OUT[64];
+static BpDelta G211_OUT[64];
+static BpDelta G212_OUT[64];
+static BpDelta G213_OUT[64];
+static BpDelta G214_OUT[64];
+static BpDelta G215_OUT[64];
+static BpDelta G216_OUT[64];
+static BpDelta G217_OUT[64];
+static BpDelta G218_OUT[64];
+static BpDelta G219_OUT[64];
+static BpDelta G220_OUT[64];
+static BpDelta G221_OUT[64];
+static BpDelta G222_OUT[64];
+static BpDelta G223_OUT[64];
+static BpDelta G224_OUT[64];
+static BpDelta G225_OUT[64];
+static BpDelta G226_OUT[64];
+static BpDelta G227_OUT[64];
+static BpDelta G228_OUT[64];
+static BpDelta G229_OUT[64];
+static BpDelta G230_OUT[64];
+static BpDelta G231_OUT[64];
+static BpDelta G232_OUT[64];
+static BpDelta G233_OUT[64];
+static BpDelta G234_OUT[64];
+static BpDelta G235_OUT[64];
+static BpDelta G236_OUT[64];
+static BpDelta G237_OUT[64];
+static BpDelta G238_OUT[64];
+static BpDelta G239_OUT[64];
+static BpDelta G240_OUT[64];
+static BpDelta G241_OUT[64];
+static BpDelta G242_OUT[64];
+static BpDelta G243_OUT[64];
+static BpDelta G244_OUT[64];
+static BpDelta G245_OUT[64];
+static BpDelta G246_OUT[64];
+static BpDelta G247_OUT[64];
+static BpDelta G248_OUT[64];
+static BpDelta G249_OUT[64];
+static BpDelta G250_OUT[64];
+static BpDelta G251_OUT[64];
+static BpDelta G252_OUT[64];
+static BpDelta G253_OUT[64];
+static BpDelta G254_OUT[64];
+static BpDelta G255_OUT[64];
+static BpDelta G256_OUT[64];
+static BpDelta G257_OUT[64];
+static BpDelta G258_OUT[64];
+static BpDelta G259_OUT[64];
+static BpDelta G260_OUT[64];
+static BpDelta G261_OUT[64];
+static BpDelta G262_OUT[64];
+static BpDelta G263_OUT[64];
+static BpDelta G264_OUT[64];
+static BpDelta G265_OUT[64];
+static BpDelta G266_OUT[64];
+static BpDelta G267_OUT[64];
+static BpDelta G268_OUT[64];
+static BpDelta G269_OUT[64];
+static BpDelta G270_OUT[64];
+static BpDelta G271_OUT[64];
+static BpDelta G272_OUT[64];
+static BpDelta G273_OUT[64];
+static BpDelta G274_OUT[64];
+static BpDelta G275_OUT[64];
+static BpDelta G276_OUT[64];
+static BpDelta G277_OUT[64];
+static BpDelta G278_OUT[64];
+static BpDelta G279_OUT[64];
+static BpDelta G280_OUT[64];
+static BpDelta G281_OUT[64];
+static BpDelta G282_OUT[64];
+static BpDelta G283_OUT[64];
+static BpDelta G284_OUT[64];
+static BpDelta G285_OUT[64];
+static BpDelta G286_OUT[64];
+static BpDelta G287_OUT[64];
+static BpDelta G288_OUT[64];
+static BpDelta G289_OUT[64];
+static BpDelta G290_OUT[64];
+static BpDelta G291_OUT[64];
+static BpDelta G292_OUT[64];
+static BpDelta G293_OUT[64];
+static BpDelta G294_OUT[64];
+static BpDelta G295_OUT[64];
+static BpDelta G296_OUT[64];
+static BpDelta G297_OUT[64];
+static BpDelta G298_OUT[64];
+static BpDelta G299_OUT[64];
 
 static BpGlyph GLYPHS[N_GLYPHS];
 static int initialized = 0;
@@ -1337,7 +3358,237 @@ static void init_glyphs(void) {
         &DUAL_BM,
         &EXTERN_BM,
         &COMPTIME_BM,
-        &ASM_BM
+        &ASM_BM,
+        &EXCL_BM,
+        &AT_SIGN_BM,
+        &HASH_SYM_BM,
+        &DOLLAR_BM,
+        &PERCENT_BM,
+        &CARET_BM,
+        &AMPERSAND_BM,
+        &STAR_OP_BM,
+        &LPAREN_BM,
+        &RPAREN_BM,
+        &LBRACK_BM,
+        &RBRACK_BM,
+        &LBRACE_BM,
+        &RBRACE_BM,
+        &TILDE_BM,
+        &BACKTICK_BM,
+        &UNDERSCORE_BM,
+        &INFINITY_BM,
+        &PARTIAL_BM,
+        &INTEGRAL_BM,
+        &SUM_SYM_BM,
+        &PROD_SYM_BM,
+        &RESISTOR_BM,
+        &CAPACITOR_BM,
+        &INDUCTOR_BM,
+        &DIODE_BM,
+        &TRANSISTOR_BM,
+        &GROUND_BM,
+        &ANTENNA_BM,
+        &TF_BLOCK_BM,
+        &SUMMING_JN_BM,
+        &INTEGRATOR_BM,
+        &DOT_OP_BM,
+        &CROSS_OP_BM,
+        &TENSOR_OP_BM,
+        &WEDGE_OP_BM,
+        &VEE_OP_BM,
+        &NEG_OP_BM,
+        &FORALL_BM,
+        &EXISTS_BM,
+        &LAMBDA_BM,
+        &MU_BM,
+        &SIGMA_BM,
+        &PI_BM,
+        &TAU_BM,
+        &PHI_BM,
+        &PSI_BM,
+        &OMEGA_BM,
+        &BRA_A_BM,
+        &BRA_B_BM,
+        &BRA_C_BM,
+        &G121_BM,
+        &G122_BM,
+        &G123_BM,
+        &G124_BM,
+        &G125_BM,
+        &G126_BM,
+        &G127_BM,
+        &G128_BM,
+        &G129_BM,
+        &G130_BM,
+        &G131_BM,
+        &G132_BM,
+        &G133_BM,
+        &G134_BM,
+        &G135_BM,
+        &G136_BM,
+        &G137_BM,
+        &G138_BM,
+        &G139_BM,
+        &G140_BM,
+        &G141_BM,
+        &G142_BM,
+        &G143_BM,
+        &G144_BM,
+        &G145_BM,
+        &G146_BM,
+        &G147_BM,
+        &G148_BM,
+        &G149_BM,
+        &G150_BM,
+        &G151_BM,
+        &G152_BM,
+        &G153_BM,
+        &G154_BM,
+        &G155_BM,
+        &G156_BM,
+        &G157_BM,
+        &G158_BM,
+        &G159_BM,
+        &G160_BM,
+        &G161_BM,
+        &G162_BM,
+        &G163_BM,
+        &G164_BM,
+        &G165_BM,
+        &G166_BM,
+        &G167_BM,
+        &G168_BM,
+        &G169_BM,
+        &G170_BM,
+        &G171_BM,
+        &G172_BM,
+        &G173_BM,
+        &G174_BM,
+        &G175_BM,
+        &G176_BM,
+        &G177_BM,
+        &G178_BM,
+        &G179_BM,
+        &G180_BM,
+        &G181_BM,
+        &G182_BM,
+        &G183_BM,
+        &G184_BM,
+        &G185_BM,
+        &G186_BM,
+        &G187_BM,
+        &G188_BM,
+        &G189_BM,
+        &G190_BM,
+        &G191_BM,
+        &G192_BM,
+        &G193_BM,
+        &G194_BM,
+        &G195_BM,
+        &G196_BM,
+        &G197_BM,
+        &G198_BM,
+        &G199_BM,
+        &G200_BM,
+        &G201_BM,
+        &G202_BM,
+        &G203_BM,
+        &G204_BM,
+        &G205_BM,
+        &G206_BM,
+        &G207_BM,
+        &G208_BM,
+        &G209_BM,
+        &G210_BM,
+        &G211_BM,
+        &G212_BM,
+        &G213_BM,
+        &G214_BM,
+        &G215_BM,
+        &G216_BM,
+        &G217_BM,
+        &G218_BM,
+        &G219_BM,
+        &G220_BM,
+        &G221_BM,
+        &G222_BM,
+        &G223_BM,
+        &G224_BM,
+        &G225_BM,
+        &G226_BM,
+        &G227_BM,
+        &G228_BM,
+        &G229_BM,
+        &G230_BM,
+        &G231_BM,
+        &G232_BM,
+        &G233_BM,
+        &G234_BM,
+        &G235_BM,
+        &G236_BM,
+        &G237_BM,
+        &G238_BM,
+        &G239_BM,
+        &G240_BM,
+        &G241_BM,
+        &G242_BM,
+        &G243_BM,
+        &G244_BM,
+        &G245_BM,
+        &G246_BM,
+        &G247_BM,
+        &G248_BM,
+        &G249_BM,
+        &G250_BM,
+        &G251_BM,
+        &G252_BM,
+        &G253_BM,
+        &G254_BM,
+        &G255_BM,
+        &G256_BM,
+        &G257_BM,
+        &G258_BM,
+        &G259_BM,
+        &G260_BM,
+        &G261_BM,
+        &G262_BM,
+        &G263_BM,
+        &G264_BM,
+        &G265_BM,
+        &G266_BM,
+        &G267_BM,
+        &G268_BM,
+        &G269_BM,
+        &G270_BM,
+        &G271_BM,
+        &G272_BM,
+        &G273_BM,
+        &G274_BM,
+        &G275_BM,
+        &G276_BM,
+        &G277_BM,
+        &G278_BM,
+        &G279_BM,
+        &G280_BM,
+        &G281_BM,
+        &G282_BM,
+        &G283_BM,
+        &G284_BM,
+        &G285_BM,
+        &G286_BM,
+        &G287_BM,
+        &G288_BM,
+        &G289_BM,
+        &G290_BM,
+        &G291_BM,
+        &G292_BM,
+        &G293_BM,
+        &G294_BM,
+        &G295_BM,
+        &G296_BM,
+        &G297_BM,
+        &G298_BM,
+        &G299_BM,
     };
     static const char *names[N_GLYPHS] = {
         "fn",
@@ -1409,7 +3660,237 @@ static void init_glyphs(void) {
         "dual",
         "extern",
         "comptime",
-        "asm"
+        "asm",
+        "excl",
+        "at_sign",
+        "hash_sym",
+        "dollar",
+        "percent",
+        "caret",
+        "ampersand",
+        "star_op",
+        "lparen",
+        "rparen",
+        "lbrack",
+        "rbrack",
+        "lbrace",
+        "rbrace",
+        "tilde",
+        "backtick",
+        "underscore",
+        "infinity",
+        "partial",
+        "integral",
+        "sum_sym",
+        "prod_sym",
+        "resistor",
+        "capacitor",
+        "inductor",
+        "diode",
+        "transistor",
+        "ground",
+        "antenna",
+        "tf_block",
+        "summing_jn",
+        "integrator",
+        "dot_op",
+        "cross_op",
+        "tensor_op",
+        "wedge_op",
+        "vee_op",
+        "neg_op",
+        "forall",
+        "exists",
+        "lambda",
+        "mu",
+        "sigma",
+        "pi",
+        "tau",
+        "phi",
+        "psi",
+        "omega",
+        "bra_a",
+        "bra_b",
+        "bra_c",
+        "g121",
+        "g122",
+        "g123",
+        "g124",
+        "g125",
+        "g126",
+        "g127",
+        "g128",
+        "g129",
+        "g130",
+        "g131",
+        "g132",
+        "g133",
+        "g134",
+        "g135",
+        "g136",
+        "g137",
+        "g138",
+        "g139",
+        "g140",
+        "g141",
+        "g142",
+        "g143",
+        "g144",
+        "g145",
+        "g146",
+        "g147",
+        "g148",
+        "g149",
+        "g150",
+        "g151",
+        "g152",
+        "g153",
+        "g154",
+        "g155",
+        "g156",
+        "g157",
+        "g158",
+        "g159",
+        "g160",
+        "g161",
+        "g162",
+        "g163",
+        "g164",
+        "g165",
+        "g166",
+        "g167",
+        "g168",
+        "g169",
+        "g170",
+        "g171",
+        "g172",
+        "g173",
+        "g174",
+        "g175",
+        "g176",
+        "g177",
+        "g178",
+        "g179",
+        "g180",
+        "g181",
+        "g182",
+        "g183",
+        "g184",
+        "g185",
+        "g186",
+        "g187",
+        "g188",
+        "g189",
+        "g190",
+        "g191",
+        "g192",
+        "g193",
+        "g194",
+        "g195",
+        "g196",
+        "g197",
+        "g198",
+        "g199",
+        "g200",
+        "g201",
+        "g202",
+        "g203",
+        "g204",
+        "g205",
+        "g206",
+        "g207",
+        "g208",
+        "g209",
+        "g210",
+        "g211",
+        "g212",
+        "g213",
+        "g214",
+        "g215",
+        "g216",
+        "g217",
+        "g218",
+        "g219",
+        "g220",
+        "g221",
+        "g222",
+        "g223",
+        "g224",
+        "g225",
+        "g226",
+        "g227",
+        "g228",
+        "g229",
+        "g230",
+        "g231",
+        "g232",
+        "g233",
+        "g234",
+        "g235",
+        "g236",
+        "g237",
+        "g238",
+        "g239",
+        "g240",
+        "g241",
+        "g242",
+        "g243",
+        "g244",
+        "g245",
+        "g246",
+        "g247",
+        "g248",
+        "g249",
+        "g250",
+        "g251",
+        "g252",
+        "g253",
+        "g254",
+        "g255",
+        "g256",
+        "g257",
+        "g258",
+        "g259",
+        "g260",
+        "g261",
+        "g262",
+        "g263",
+        "g264",
+        "g265",
+        "g266",
+        "g267",
+        "g268",
+        "g269",
+        "g270",
+        "g271",
+        "g272",
+        "g273",
+        "g274",
+        "g275",
+        "g276",
+        "g277",
+        "g278",
+        "g279",
+        "g280",
+        "g281",
+        "g282",
+        "g283",
+        "g284",
+        "g285",
+        "g286",
+        "g287",
+        "g288",
+        "g289",
+        "g290",
+        "g291",
+        "g292",
+        "g293",
+        "g294",
+        "g295",
+        "g296",
+        "g297",
+        "g298",
+        "g299",
     };
     static const char *ph[N_GLYPHS] = {
         "→",
@@ -1481,7 +3962,237 @@ static void init_glyphs(void) {
         "⇿",
         "↗",
         "⏱",
-        "⌬"
+        "⌬",
+        "!",
+        "@",
+        "#",
+        "$",
+        "%",
+        "^",
+        "&",
+        "☆",
+        "(",
+        ")",
+        "[",
+        "]",
+        "{",
+        "}",
+        "~",
+        "`",
+        "_",
+        "∞",
+        "∂",
+        "∫",
+        "Σ",
+        "Π",
+        "Ω",
+        "⊢",
+        "⊣",
+        "⥊",
+        "⊤",
+        "⏚",
+        "⋈",
+        "⊞",
+        "⊗",
+        "∫",
+        "·",
+        "×",
+        "⊗",
+        "∧",
+        "∨",
+        "¬",
+        "∀",
+        "∃",
+        "λ",
+        "μ",
+        "σ",
+        "π",
+        "τ",
+        "φ",
+        "ψ",
+        "ω",
+        "⣀",
+        "⣤",
+        "⣿",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
+        "·",
     };
     static BpDelta *outs[N_GLYPHS] = {
         FN_OUT,
@@ -1553,7 +4264,237 @@ static void init_glyphs(void) {
         DUAL_OUT,
         EXTERN_OUT,
         COMPTIME_OUT,
-        ASM_OUT
+        ASM_OUT,
+        EXCL_OUT,
+        AT_SIGN_OUT,
+        HASH_SYM_OUT,
+        DOLLAR_OUT,
+        PERCENT_OUT,
+        CARET_OUT,
+        AMPERSAND_OUT,
+        STAR_OP_OUT,
+        LPAREN_OUT,
+        RPAREN_OUT,
+        LBRACK_OUT,
+        RBRACK_OUT,
+        LBRACE_OUT,
+        RBRACE_OUT,
+        TILDE_OUT,
+        BACKTICK_OUT,
+        UNDERSCORE_OUT,
+        INFINITY_OUT,
+        PARTIAL_OUT,
+        INTEGRAL_OUT,
+        SUM_SYM_OUT,
+        PROD_SYM_OUT,
+        RESISTOR_OUT,
+        CAPACITOR_OUT,
+        INDUCTOR_OUT,
+        DIODE_OUT,
+        TRANSISTOR_OUT,
+        GROUND_OUT,
+        ANTENNA_OUT,
+        TF_BLOCK_OUT,
+        SUMMING_JN_OUT,
+        INTEGRATOR_OUT,
+        DOT_OP_OUT,
+        CROSS_OP_OUT,
+        TENSOR_OP_OUT,
+        WEDGE_OP_OUT,
+        VEE_OP_OUT,
+        NEG_OP_OUT,
+        FORALL_OUT,
+        EXISTS_OUT,
+        LAMBDA_OUT,
+        MU_OUT,
+        SIGMA_OUT,
+        PI_OUT,
+        TAU_OUT,
+        PHI_OUT,
+        PSI_OUT,
+        OMEGA_OUT,
+        BRA_A_OUT,
+        BRA_B_OUT,
+        BRA_C_OUT,
+        G121_OUT,
+        G122_OUT,
+        G123_OUT,
+        G124_OUT,
+        G125_OUT,
+        G126_OUT,
+        G127_OUT,
+        G128_OUT,
+        G129_OUT,
+        G130_OUT,
+        G131_OUT,
+        G132_OUT,
+        G133_OUT,
+        G134_OUT,
+        G135_OUT,
+        G136_OUT,
+        G137_OUT,
+        G138_OUT,
+        G139_OUT,
+        G140_OUT,
+        G141_OUT,
+        G142_OUT,
+        G143_OUT,
+        G144_OUT,
+        G145_OUT,
+        G146_OUT,
+        G147_OUT,
+        G148_OUT,
+        G149_OUT,
+        G150_OUT,
+        G151_OUT,
+        G152_OUT,
+        G153_OUT,
+        G154_OUT,
+        G155_OUT,
+        G156_OUT,
+        G157_OUT,
+        G158_OUT,
+        G159_OUT,
+        G160_OUT,
+        G161_OUT,
+        G162_OUT,
+        G163_OUT,
+        G164_OUT,
+        G165_OUT,
+        G166_OUT,
+        G167_OUT,
+        G168_OUT,
+        G169_OUT,
+        G170_OUT,
+        G171_OUT,
+        G172_OUT,
+        G173_OUT,
+        G174_OUT,
+        G175_OUT,
+        G176_OUT,
+        G177_OUT,
+        G178_OUT,
+        G179_OUT,
+        G180_OUT,
+        G181_OUT,
+        G182_OUT,
+        G183_OUT,
+        G184_OUT,
+        G185_OUT,
+        G186_OUT,
+        G187_OUT,
+        G188_OUT,
+        G189_OUT,
+        G190_OUT,
+        G191_OUT,
+        G192_OUT,
+        G193_OUT,
+        G194_OUT,
+        G195_OUT,
+        G196_OUT,
+        G197_OUT,
+        G198_OUT,
+        G199_OUT,
+        G200_OUT,
+        G201_OUT,
+        G202_OUT,
+        G203_OUT,
+        G204_OUT,
+        G205_OUT,
+        G206_OUT,
+        G207_OUT,
+        G208_OUT,
+        G209_OUT,
+        G210_OUT,
+        G211_OUT,
+        G212_OUT,
+        G213_OUT,
+        G214_OUT,
+        G215_OUT,
+        G216_OUT,
+        G217_OUT,
+        G218_OUT,
+        G219_OUT,
+        G220_OUT,
+        G221_OUT,
+        G222_OUT,
+        G223_OUT,
+        G224_OUT,
+        G225_OUT,
+        G226_OUT,
+        G227_OUT,
+        G228_OUT,
+        G229_OUT,
+        G230_OUT,
+        G231_OUT,
+        G232_OUT,
+        G233_OUT,
+        G234_OUT,
+        G235_OUT,
+        G236_OUT,
+        G237_OUT,
+        G238_OUT,
+        G239_OUT,
+        G240_OUT,
+        G241_OUT,
+        G242_OUT,
+        G243_OUT,
+        G244_OUT,
+        G245_OUT,
+        G246_OUT,
+        G247_OUT,
+        G248_OUT,
+        G249_OUT,
+        G250_OUT,
+        G251_OUT,
+        G252_OUT,
+        G253_OUT,
+        G254_OUT,
+        G255_OUT,
+        G256_OUT,
+        G257_OUT,
+        G258_OUT,
+        G259_OUT,
+        G260_OUT,
+        G261_OUT,
+        G262_OUT,
+        G263_OUT,
+        G264_OUT,
+        G265_OUT,
+        G266_OUT,
+        G267_OUT,
+        G268_OUT,
+        G269_OUT,
+        G270_OUT,
+        G271_OUT,
+        G272_OUT,
+        G273_OUT,
+        G274_OUT,
+        G275_OUT,
+        G276_OUT,
+        G277_OUT,
+        G278_OUT,
+        G279_OUT,
+        G280_OUT,
+        G281_OUT,
+        G282_OUT,
+        G283_OUT,
+        G284_OUT,
+        G285_OUT,
+        G286_OUT,
+        G287_OUT,
+        G288_OUT,
+        G289_OUT,
+        G290_OUT,
+        G291_OUT,
+        G292_OUT,
+        G293_OUT,
+        G294_OUT,
+        G295_OUT,
+        G296_OUT,
+        G297_OUT,
+        G298_OUT,
+        G299_OUT,
     };
     for (int i = 0; i < N_GLYPHS; i++) {
         size_t n = bp_bitmap_to_outline(bms[i]->rows, 7, outs[i], 64);

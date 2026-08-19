@@ -1,0 +1,7 @@
+module core { }
+fn z() -> i64 { 0 }
+fn s(n: i64) -> i64 { n + 1 }
+fn is_zero(n: i64) -> i64 { if n == 0 then 1 else 0 }
+fn pred(n: i64) -> i64 { n - 1 }
+fn add(a: i64, b: i64) -> i64 { a + b }
+fn main() -> i64 { add(s(z()), s(s(z()))) }
