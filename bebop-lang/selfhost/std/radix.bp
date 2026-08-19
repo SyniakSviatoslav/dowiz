@@ -1,6 +1,9 @@
 // selfhost/std/radix.bp — base conversion (i64 <-> string) for bases 2..36.
 // Digits are '0'-'9' then 'a'-'z' (values 0..35). No floats/u64/structs in
 // Bebop; division is supported, remainder is expressed as x - (x/b)*b.
+// to_base builds digits most-significant-first (single pass), mirroring
+// fmt.bp's int_to_str, so it stays correct under the interpreter's small
+// rotating string pool.
 
 module core { }
 
@@ -31,30 +34,33 @@ fn radix_len(n: i64, b: i64) -> i64 {
   count
 }
 
+// radix_digit: the b-ary digit (0..b-1) of |n| at position p (0 = least significant).
+fn radix_digit(n: i64, b: i64, p: i64) -> i64 {
+  let m = if n < 0 then (0 - n) else n;
+  let x = m;
+  let i = 0;
+  while i < p {
+    let x = x / b;
+    let i = i + 1;
+    0
+  };
+  x - (x / b) * b
+}
+
 // to_base: string of n in base b (2..36); leading '-' if negative.
-// Builds digits least-significant-first into a reversed string, then reverses.
 fn to_base(n: i64, b: i64) -> str {
   let neg = if n < 0 then 1 else 0;
   let m = if n < 0 then (0 - n) else n;
-  let rev = "";
-  let t = m;
-  let done = 0;
-  while done == 0 {
-    let d = t - (t / b) * b;
-    let rev = rev ++ chr(digit_char(d));
-    let t = t / b;
-    let done = if t == 0 then 1 else 0;
+  let len = radix_len(m, b);
+  let out = if neg == 1 then "-" else "";
+  let i = 0;
+  while i < len {
+    let d = radix_digit(m, b, len - 1 - i);
+    let out = out ++ chr(digit_char(d));
+    let i = i + 1;
     0
   };
-  let rl = str_len(rev);
-  let out = "";
-  let j = 0;
-  while j < rl {
-    let out = out ++ chr(char(rev, rl - 1 - j));
-    let j = j + 1;
-    0
-  };
-  if neg == 1 then ("-" ++ out) else out
+  out
 }
 
 // from_base: parse s in base b (2..36) into i64. Optional leading '-'.

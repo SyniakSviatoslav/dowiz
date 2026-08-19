@@ -551,7 +551,7 @@ static void cmd_run(const char *path, const char *fn_name, const char *arg) {
     }
     Term *target = fn_terms[ei];
     const Ty *tt = fn_tys[ei];
-    int vk; long vi; int vb;
+    int vk; long vi; int vb; double vf = 0.0;
     if (tt && tt->kind == TY_PI) {
         /* function takes an argument: apply it */
         static Term argterm;
@@ -559,6 +559,9 @@ static void cmd_run(const char *path, const char *fn_name, const char *arg) {
         if (tt->dom && tt->dom->kind == TY_I64) {
             argterm.kind = TERM_LIT;
             argterm.ival = atoll(arg);
+        } else if (tt->dom && tt->dom->kind == TY_F64) {
+            argterm.kind = TERM_FLIT;
+            argterm.fval = atof(arg);
         } else {
             argterm.kind = TERM_STR;
             argterm.name = arg;
@@ -569,19 +572,19 @@ static void cmd_run(const char *path, const char *fn_name, const char *arg) {
         app.a = target;
         app.b = &argterm;
         if (qtt_eval_binds(&app, fn_names, fn_terms, fn_count,
-                           &vk, &vi, &vb, err, sizeof err) != 0) {
+                           &vk, &vi, &vb, &vf, err, sizeof err) != 0) {
             fprintf(stderr, "eval error: %s\n", err);
             bp_program_free(&prog); free(src); exit(1);
         }
     } else {
         /* zero-arg function: evaluate directly */
         if (qtt_eval_binds(target, fn_names, fn_terms, fn_count,
-                           &vk, &vi, &vb, err, sizeof err) != 0) {
+                           &vk, &vi, &vb, &vf, err, sizeof err) != 0) {
             fprintf(stderr, "eval error: %s\n", err);
             bp_program_free(&prog); free(src); exit(1);
         }
     }
-    printf("%ld\n", vi);
+    if (vk == 6) printf("%g\n", vf); else printf("%ld\n", vi);
     bp_program_free(&prog);
     free(src);
 }

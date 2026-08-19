@@ -16,6 +16,7 @@ int qtt_termination_check(const Term *t, char *err, size_t cap) {
     switch (t->kind) {
         case TERM_VAR:
         case TERM_LIT:
+        case TERM_FLIT:
         case TERM_TYPE:
         case TERM_IO:
         case TERM_STR:

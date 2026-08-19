@@ -1,0 +1,45 @@
+// selfhost/std/date.bp — Gregorian calendar date arithmetic over i64.
+// is_leap, days_in_month, day_of_week (Sakamoto's algorithm).
+// No floats/u64/structs in Bebop: everything is + - * / and comparisons.
+// `%` is unavailable; remainder is expressed as x - (x / b) * b.
+// day_of_week returns 0=Sunday, 1=Monday, ..., 6=Saturday.
+
+module core { }
+
+// is_leap: 1 if year y is a Gregorian leap year, else 0.
+// Rule: divisible by 4, except centuries (divisible by 100), except
+// centuries divisible by 400. Later overrides are applied after earlier,
+// so the more specific rule (400) wins over the general one (4).
+fn is_leap(y: i64) -> i64 {
+  let d4 = y - (y / 4) * 4;
+  let d100 = y - (y / 100) * 100;
+  let d400 = y - (y / 400) * 400;
+  let r = if d4 == 0 then 1 else 0;
+  let r = if d100 == 0 then 0 else r;
+  let r = if d400 == 0 then 1 else r;
+  r
+}
+
+// days_in_month: number of days in month m (1..12) of year y.
+// February is 28 or 29 depending on is_leap(y). Assumes m in 1..12;
+// months outside that range fall through to 31.
+fn days_in_month(y: i64, m: i64) -> i64 {
+  let feb = 28 + is_leap(y);
+  let r = 31;
+  let r = if m == 2 then feb else r;
+  let r = if m == 4 then 30 else r;
+  let r = if m == 6 then 30 else r;
+  let r = if m == 9 then 30 else r;
+  let r = if m == 11 then 30 else r;
+  r
+}
+
+// day_of_week: weekday of the proleptic-Gregorian date (y, m, d),
+// 0=Sunday .. 6=Saturday, via Sakamoto's algorithm.
+// Assumes m in 1..12 and d in 1..31; y >= 0 keeps the sum non-negative.
+fn day_of_week(y: i64, m: i64, d: i64) -> i64 {
+  let t = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4];
+  let yy = if m < 3 then y - 1 else y;
+  let s = yy + yy / 4 - yy / 100 + yy / 400 + t[m - 1] + d;
+  s - (s / 7) * 7
+}

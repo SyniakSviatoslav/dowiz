@@ -111,6 +111,7 @@ typedef enum {
     TERM_EQ_TYPE, /* "a = b" as a TERM of type Type (the motive's body).
                    *   .a = left, .b = right */
     TERM_STR,     /* string literal — content is borrowed in t->name */
+    TERM_FLIT,    /* f64 literal — value in t->fval */
     TERM_STR_LEN, /* length of a string (t->a) : i64 */
     TERM_STR_CAT, /* concatenation of two strings (t->a, t->b) : str */
     TERM_WHILE,   /* while loop: a = cond, b = body; evaluates to void */
@@ -156,6 +157,7 @@ struct Term {
     const char *name; /* VAR name / LAM binder / FIELD name / ctor name */
     Quantity q;       /* LAM binder quantity */
     long ival;        /* LIT int value */
+    double fval;      /* FLIT float value */
     int bval;         /* LIT bool value (0/1) */
     BinOp op;         /* BIN operator */
     Ty *ty;           /* LAM domain / ANN type / STRUCT type / ENUM type */
@@ -179,7 +181,8 @@ int qtt_check_binds(const Term *t, const char **names, const Ty **tys,
 void qtt_ty_checkpoint(void);
 /* Evaluate a closed term with `n` function names pre-bound to lambdas (closures). */
 int qtt_eval_binds(const Term *t, const char **names, Term *const *lams, int n,
-                   int *out_kind, long *out_i, int *out_b, char *err, size_t cap);
+                   int *out_kind, long *out_i, int *out_b, double *out_f,
+                   char *err, size_t cap);
 
 /* Run the typechecker self-test. Returns 0 on success, -1 on failure. */
 int qtt_check_test(char *out, size_t cap);
@@ -210,6 +213,7 @@ Ty *qtt_bool(void);
 /* Accessor for the Type universe singleton. */
 Ty *qtt_type(void);
 Ty *qtt_str(void);
+Ty *qtt_f64(void);
 Ty *qtt_vec(Ty *elem);
 
 /* Run the struct (record) typecheck + eval self-test. */

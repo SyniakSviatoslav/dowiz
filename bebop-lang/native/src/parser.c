@@ -309,6 +309,8 @@ int bp_parse_struct_decl(const char *src, TyRegistry *reg, char *err,
             if (!ft) {
                 if (strcmp(tname, "i64") == 0) {
                     ft = qtt_i64();
+                } else if (strcmp(tname, "f64") == 0) {
+                    ft = qtt_f64();
                 } else if (strcmp(tname, "bool") == 0) {
                     ft = qtt_bool();
                 } else if (strcmp(tname, "Type") == 0) {
@@ -420,6 +422,7 @@ static Ty *resolve_ty(TyRegistry *reg, const BpToken *tok) {
     Ty *t = typereg_get(reg, tn);
     if (t) return t;
     if (strcmp(tn, "i64") == 0) return qtt_i64();
+    if (strcmp(tn, "f64") == 0) return qtt_f64();
     if (strcmp(tn, "bool") == 0) return qtt_bool();
     if (strcmp(tn, "str") == 0) return qtt_str();
     return NULL;

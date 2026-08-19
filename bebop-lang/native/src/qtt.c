@@ -188,6 +188,7 @@ static Ty TYPE2_TY = {.kind = TY_TYPE, .n = 2};
 static Ty VOID_TY = {.kind = TY_VOID};
 static Ty NAT_TY = {.kind = TY_NAT};
 static Ty STR_TY = {.kind = TY_STR};
+static Ty F64_TY = {.kind = TY_F64};
 
 Ty *qtt_i64(void) {
     return &I64_TY;
@@ -202,6 +203,10 @@ Ty *qtt_type(void) {
 
 Ty *qtt_str(void) {
     return &STR_TY;
+}
+
+Ty *qtt_f64(void) {
+    return &F64_TY;
 }
 
 /* ─── Struct (record) self-test ─── */
@@ -727,6 +732,7 @@ static Term *subst_p(const Term *t, const char *name, const Term *v) {
             }
             return o;
         case TERM_LIT:
+        case TERM_FLIT:
         case TERM_TYPE:
         case TERM_IO:
         case TERM_NAT_Z:
@@ -870,6 +876,10 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             *out = t->bval ? &BOOL_TY : &I64_TY;
             return 0;
         }
+        case TERM_FLIT: {
+            *out = &F64_TY;
+            return 0;
+        }
         case TERM_LAM: {
             if (!t->ty) {
                 snprintf(err, cap, "lambda requires a domain annotation");
@@ -926,14 +936,16 @@ static int infer(Ctx *c, const Term *t, Ty **out, char *err, size_t cap) {
             }
             int str_eq = (l->kind == TY_STR && r->kind == TY_STR &&
                           (t->op == BOP_EQ || t->op == BOP_NE));
-            if (!str_eq && (l->kind != TY_I64 || r->kind != TY_I64)) {
-                snprintf(err, cap, "binary op requires i64 operands");
+            int f64_ops = (l->kind == TY_F64 || r->kind == TY_F64) &&
+                           (l->kind != TY_STR && r->kind != TY_STR);
+            int i64_ok = (l->kind == TY_I64 && r->kind == TY_I64);
+            if (!str_eq && !f64_ops && !i64_ok) {
+                snprintf(err, cap, "binary op requires i64/f64 operands");
                 return -1;
             }
-            *out = (t->op == BOP_EQ || t->op == BOP_LT || t->op == BOP_NE ||
-                    t->op == BOP_LE || t->op == BOP_GE || t->op == BOP_GT)
-                       ? &BOOL_TY
-                       : &I64_TY;
+            int is_cmp = (t->op == BOP_EQ || t->op == BOP_LT || t->op == BOP_NE ||
+                          t->op == BOP_LE || t->op == BOP_GE || t->op == BOP_GT);
+            *out = is_cmp ? &BOOL_TY : (f64_ops ? &F64_TY : &I64_TY);
             return 0;
         }
         case TERM_REFL: {
@@ -1528,9 +1540,10 @@ int qtt_check_test(char *out, size_t cap) {
 typedef struct Value Value;
 typedef struct Env Env;
 struct Value {
-    int kind; /* 0=int, 1=bool, 2=closure, 3=struct, 4=enum, 5=string, -1=error */
+    int kind; /* 0=int, 1=bool, 2=closure, 3=struct, 4=enum, 5=string, 6=float, -1=error */
     long i;
     int b;
+    double f;
     const Term *lam; /* closure */
     Env *env;        /* closure env */
     const Ty *sty;          /* struct/enum: the type */
@@ -1577,6 +1590,10 @@ static Value eval(const Term *t, Env *env) {
             v.i = t->ival;
             v.b = t->bval;
             return v;
+        case TERM_FLIT:
+            v.kind = 6;
+            v.f = t->fval;
+            return v;
         case TERM_VAR:
             for (Env *e = env; e; e = e->next) {
                 if (strcmp(e->name, t->name) == 0) {
@@ -1605,6 +1622,26 @@ static Value eval(const Term *t, Env *env) {
             Value l = eval(t->a, env);
             Value r = eval(t->b, env);
             v.kind = 0;
+            /* float arithmetic when either operand is f64 */
+            if (l.kind == 6 || r.kind == 6) {
+                double lf = (l.kind == 6) ? l.f : (double)l.i;
+                double rf = (r.kind == 6) ? r.f : (double)r.i;
+                v.kind = 6;
+                switch (t->op) {
+                    case BOP_ADD: v.f = lf + rf; break;
+                    case BOP_SUB: v.f = lf - rf; break;
+                    case BOP_MUL: v.f = lf * rf; break;
+                    case BOP_DIV: v.f = (rf != 0.0) ? lf / rf : 0.0; break;
+                    case BOP_EQ:  v.kind = 1; v.b = (lf == rf); break;
+                    case BOP_NE:  v.kind = 1; v.b = (lf != rf); break;
+                    case BOP_LT:  v.kind = 1; v.b = (lf < rf); break;
+                    case BOP_GT:  v.kind = 1; v.b = (lf > rf); break;
+                    case BOP_LE:  v.kind = 1; v.b = (lf <= rf); break;
+                    case BOP_GE:  v.kind = 1; v.b = (lf >= rf); break;
+                    default: v.kind = -1; break;
+                }
+                return v;
+            }
             switch (t->op) {
                 case BOP_ADD: v.i = l.i + r.i; break;
                 case BOP_SUB: v.i = l.i - r.i; break;
@@ -1854,7 +1891,8 @@ int qtt_eval(const Term *t, int *out_kind, long *out_i, int *out_b, char *err, s
 }
 
 int qtt_eval_binds(const Term *t, const char **names, Term *const *lams, int n,
-                   int *out_kind, long *out_i, int *out_b, char *err, size_t cap) {
+                   int *out_kind, long *out_i, int *out_b, double *out_f,
+                   char *err, size_t cap) {
     env_i = 0;
     Env fb[64];
     int cnt = n < 64 ? n : 64;
@@ -1877,6 +1915,7 @@ int qtt_eval_binds(const Term *t, const char **names, Term *const *lams, int n,
     if (out_kind) *out_kind = v.kind;
     if (out_i) *out_i = v.i;
     if (out_b) *out_b = v.b;
+    if (out_f) *out_f = v.f;
     return 0;
 }
 
@@ -2056,6 +2095,7 @@ Term *qtt_subst(const Term *t, const char *name, const Term *v) {
             if (t->name && name && strcmp(t->name, name) == 0) *o = *v;
             return o;
         case TERM_LIT:
+        case TERM_FLIT:
         case TERM_TYPE:
         case TERM_IO:
             return o;
@@ -2184,6 +2224,7 @@ static Term *norm_rec(const Term *t) {
     *o = *t;
     switch (t->kind) {
         case TERM_LIT:
+        case TERM_FLIT:
         case TERM_VAR:
         case TERM_TYPE:
         case TERM_IO:
@@ -2423,6 +2464,8 @@ static int conv_rec(const Term *a, const Term *b) {
     switch (a->kind) {
         case TERM_LIT:
             return a->ival == b->ival && a->bval == b->bval;
+        case TERM_FLIT:
+            return a->fval == b->fval;
         case TERM_VAR:
             return a->name && b->name && strcmp(a->name, b->name) == 0;
         case TERM_TYPE:

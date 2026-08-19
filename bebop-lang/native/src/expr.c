@@ -155,10 +155,25 @@ static Term *parse_primary(P *p) {
             v = v * 10 + (p->s[p->pos] - '0');
             p->pos++;
         }
-        Term *t = tnew();
-        t->kind = TERM_LIT;
-        t->ival = v;
-        atom = t;
+        /* f64 literal if '.' followed by a digit */
+        if (p->s[p->pos] == '.' && isdigit((unsigned char)p->s[p->pos + 1])) {
+            p->pos++; /* consume '.' */
+            double fv = (double)v, scale = 0.1;
+            while (isdigit((unsigned char)p->s[p->pos])) {
+                fv += (p->s[p->pos] - '0') * scale;
+                scale *= 0.1;
+                p->pos++;
+            }
+            Term *t = tnew();
+            t->kind = TERM_FLIT;
+            t->fval = fv;
+            atom = t;
+        } else {
+            Term *t = tnew();
+            t->kind = TERM_LIT;
+            t->ival = v;
+            atom = t;
+        }
     } else if (match_kw(p, "true")) {
         Term *t = tnew();
         t->kind = TERM_LIT;
