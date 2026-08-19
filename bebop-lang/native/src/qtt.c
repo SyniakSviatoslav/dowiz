@@ -573,7 +573,7 @@ typedef struct {
 } Binding;
 
 typedef struct {
-    Binding b[64];
+    Binding b[256];
     int len;
 } Ctx;
 
@@ -1453,7 +1453,7 @@ int qtt_check_binds(const Term *t, const char **names, const Ty **tys,
     Ctx c;
     memset(&c, 0, sizeof c);
     ty_len = ty_floor;
-    for (int i = 0; i < n && c.len < 64; i++) {
+    for (int i = 0; i < n && c.len < 256; i++) {
         c.b[c.len].name = names[i];
         c.b[c.len].q = Q_MANY;
         c.b[c.len].ty = (Ty *)tys[i];
