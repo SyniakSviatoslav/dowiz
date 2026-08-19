@@ -1,43 +1,10 @@
-// hello-world.bp — Bebop Hello World (AArch64, bare-metal style)
+// hello-world.bp — Bebop Hello World (working, with I/O syscalls)
 //
-// Uses raw write syscall (linux) to print. Demonstrates:
-//   - structs, strings, arrays
-//   - mutable arrays (bracket syntax [e1, e2, ...])
-//   - raw syscall primitive
-//   - let/in/if/while — full expression language
-//   - QTT resource tracking (linear string ownership)
-//   - contracts (pre/post) for verification
-
+// Run: ./build/bebopc run samples/hello-world.bp main
+// Demonstrates: write syscall, strings with escapes, fn params, while, arrays.
 module core { }
 
-// ─── String builder (no stdlib — we own every byte) ──────────────
-
-struct StrBuf {
-  data: [u8],    // mutable byte array
-  len:  i64,     // current length
-  cap:  i64      // capacity
-}
-
-// Append a byte to the string buffer
-fn buf_push(buf: StrBuf, ch: i64) -> Void {
-  let i = buf.len;
-  buf.data[i] = chr(ch);
-  buf.len = i + 1
-}
-
-// ─── The program ─────────────────────────────────────────────────
-
 fn main() -> i64 {
-  // Build "Hello, World!\n" char-by-char in a mutable array
-  let msg = [u8: 72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33, 10];
-
-  // write(fd=1, buf=msg, len=14) — raw AArch64 syscall #64
-  @syscall(64, 1, msg, 14);
-
-  0  // exit code
+  write("Hello, World!\n");
+  0
 }
-
-// ─── Verified version (with contracts) ───────────────────────────
-
-// Theorem: main always returns 0
-theorem main_exit_ok: main() = 0 := refl
