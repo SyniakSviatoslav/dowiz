@@ -1,0 +1,41 @@
+// selfhost/std/event.bp — event-sourced finite state machine (i64 + arrays).
+// Events are small ints; applying an event deterministically transitions the
+// state. A fold replays a sequence of events to reconstruct the state history.
+
+module core { }
+
+// Event alphabet (deterministic transitions):
+//   0 = INC    (state + 1)
+//   1 = DEC    (state - 1)
+//   2 = RESET  (state -> 0)
+//   3 = DOUBLE (state * 2)
+// Any other event is ignored (state unchanged).
+
+// is_valid_event: 1 if e is a recognized event (0..3), else 0.
+fn is_valid_event(e: i64) -> i64 {
+  if e >= 0 then (if e <= 3 then 1 else 0) else 0
+}
+
+// event_apply: pure transition function state x event -> new state.
+fn event_apply(state: i64, event: i64) -> i64 {
+  if event == 0 then state + 1 else
+    (if event == 1 then state - 1 else
+      (if event == 2 then 0 else
+        (if event == 3 then state * 2 else state)))
+}
+
+// event_fold: replay events[0..n) over the state, writing the running state
+// history into states_arr (length n+1; states_arr[0] is the initial state).
+// Returns the final state states_arr[n].
+fn event_fold(states_arr: [i64], events_arr: [i64], n: i64) -> i64 {
+  let i = 0;
+  let done = 0;
+  while done == 0 {
+    let next = event_apply(states_arr[i], events_arr[i]);
+    let _ = states_arr[i + 1] = next;
+    let i = i + 1;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  states_arr[n]
+}
