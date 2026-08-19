@@ -71,6 +71,9 @@
 #include "power.h"
 #include "x86_64.h"
 #include "gt.h"
+#include "pq.h"
+#include "zlib.h"
+#include "sha256.h"
 
 
 static void usage(void) {
@@ -1358,6 +1361,14 @@ int main(int argc, char **argv) {
         printf("Green threads self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
+    if (strcmp(argv[1], "pq") == 0) {
+        char buf[8192];
+        int ok = pq_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("PQ (Keccak-f[1600] + SHAKE/SHA3) self-test: %s\n",
+               ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
     if (strcmp(argv[1], "bench") == 0) {
         cmd_bench();
         return 0;
@@ -1377,6 +1388,22 @@ int main(int argc, char **argv) {
         }
         cmd_unmorse(argv[2]);
         return 0;
+    }
+    if (strcmp(argv[1], "zlib") == 0) {
+        char buf[8192];
+        int ok = zlib_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("zlib (deflate/inflate + crc32/adler32) self-test: %s\n",
+               ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "sha256") == 0) {
+        char buf[8192];
+        int ok = sha256_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("SHA-256 / SHA-224 / HMAC-SHA256 self-test: %s\n",
+               ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
     }
     usage();
     return 2;

@@ -1,0 +1,4 @@
+module core { }
+fn mk_lit(v: i64) -> i64 { v * 8 }
+fn is_lit(n: i64) -> i64 { if n >= 0 then 1 else 0 }
+fn main() -> i64 { mk_lit(42) }
