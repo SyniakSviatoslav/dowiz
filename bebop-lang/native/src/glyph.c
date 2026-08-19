@@ -645,7 +645,107 @@ static const BpBitmap ASM_BM = {{ /* ⌬ */
     "..###..",
 }};
 
-#define N_GLYPHS 70
+static const BpBitmap DMA_BM = {{ /* D */
+    ".......",
+    "..####.",
+    ".#...#.",
+    "#.....#",
+    ".......",
+    ".......",
+    ".......",
+}}};
+
+static const BpBitmap KERNEL_BM = {{ /* K */
+    ".......",
+    "...#...",
+    "...#...",
+    ".#####.",
+    "...#...",
+    ".......",
+    ".......",
+}}};
+
+static const BpBitmap INVOKE_BM = {{ /* I */
+    ".......",
+    "...###.",
+    "...#...",
+    "...#...",
+    "...###.",
+    ".......",
+    ".......",
+}}};
+
+static const BpBitmap BUNDLE_BM = {{ /* B */
+    ".......",
+    "#.....#",
+    "..#.#..",
+    ".#...#.",
+    "..#.#..",
+    ".......",
+    ".......",
+}}};
+
+static const BpBitmap FLOOD_BM = {{ /* F */
+    ".......",
+    "...#...",
+    "..####.",
+    ".#...#.",
+    ".......",
+    ".......",
+    ".......",
+}}};
+
+static const BpBitmap ROUTE_BM = {{ /* R */
+    ".......",
+    "#.....#",
+    "..#.#..",
+    ".#...#.",
+    "......#",
+    ".......",
+    ".......",
+}}};
+
+static const BpBitmap KEY_BM = {{ /* K */
+    ".......",
+    "#.....#",
+    "...##..",
+    ".#..#..",
+    "#.....#",
+    ".......",
+    ".......",
+}}};
+
+static const BpBitmap VERIFY_BM = {{ /* V */
+    ".......",
+    "#.....#",
+    ".#...#.",
+    "..#.#..",
+    "...#...",
+    ".......",
+    ".......",
+}}};
+
+static const BpBitmap SIGN_BM = {{ /* ~ */
+    ".......",
+    "..#####",
+    "......#",
+    "..###..",
+    ".#...#.",
+    "#.....#",
+    ".......",
+}}};
+
+static const BpBitmap HASH_BM = {{ /* # */
+    ".......",
+    "..####.",
+    ".....#.",
+    "...##..",
+    ".##....",
+    ".......",
+    ".......",
+}}};
+
+#define N_GLYPHS 90
 
 static BpDelta FN_OUT[64];
 static BpDelta STRUCT_OUT[64];
@@ -980,6 +1080,16 @@ static void init_glyphs(void) {
         CONTRACT_OUT,
         VAL_OUT,
         MOD_OUT,
+    HASH_OUT,
+    SIGN_OUT,
+    VERIFY_OUT,
+    KEY_OUT,
+    ROUTE_OUT,
+    FLOOD_OUT,
+    BUNDLE_OUT,
+    INVOKE_OUT,
+    KERNEL_OUT,
+    DMA_OUT,
         LET_OUT,
         IF_OUT,
         THEN_OUT,
