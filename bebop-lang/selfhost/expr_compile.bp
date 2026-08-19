@@ -1,22 +1,17 @@
-// selfhost/expr_compile.bp - real expression compiler (self-host codegen).
+// selfhost/expr_compile.bp - real expression + function compiler (self-host).
 //
-// Parses an arithmetic expression (digits, + - * /, parentheses, precedence,
-// and a branchless conditional) and emits REAL AArch64 stack-machine machine
-// code into a growable [i64] instruction buffer - a faithful port of
-// native/src/native.c emit_expr for the LIT + BIN arith + conditional subset.
-// This advances self-hosting from a single literal (one MOVZ) to a full
-// expression (a real instruction sequence).
+// Two stages toward a self-hosting compiler:
+//   1. compile(s)    - an arithmetic expression (digits, + - * /, parens,
+//                      precedence, branchless conditional) to a stack-machine
+//                      instruction sequence.
+//   2. compile_fn(s) - a complete function (fn name(a,b,...) { body }) to a
+//                      full AArch64 function (prologue + param moves + body +
+//                      epilogue). Params map a->x19, b->x20, ... (moved from
+//                      x0, x1, ... in the prologue; the stack machine only
+//                      clobbers x0/x1, so params live in callee-saved regs).
 //
-// Stack machine (matches native.c):
-//   literal      -> movz x0,#imm ; sub sp,#16 ; str x0,[sp]   (push)
-//   binop        -> ldr x1,[sp] ; add sp,#16 ;                 (pop b)
-//                   ldr x0,[sp] ; add sp,#16 ;                 (pop a)
-//                   add/sub/mul/sdiv x0,x0,x1 ; push           (op)
-//   conditional  -> eval cond + BOTH branches, then csel ne   (branchless)
-//   final        -> ldr x0,[sp] ; add sp,#16 ; ret             (return x0)
-//
-// AArch64 words are decimal (Bebop has no hex literals); each is verified
-// against the native emitter's encodings below.
+// A faithful port of native/src/native.c emit_expr for the LIT + BIN arith +
+// conditional subset. AArch64 words are decimal (Bebop has no hex literals).
 
 module core { }
 
@@ -24,6 +19,12 @@ fn is_digit(c: i64) -> i64 {
   let ge48 = if c >= 48 then 1 else 0;
   let le57 = if c <= 57 then 1 else 0;
   ge48 * le57
+}
+
+fn is_alpha(c: i64) -> i64 {
+  let ge97 = if c >= 97 then 1 else 0;
+  let le122 = if c <= 122 then 1 else 0;
+  ge97 * le122
 }
 
 fn skip_ws(s: str, pos: [i64]) -> i64 {
@@ -77,6 +78,13 @@ fn emit_binop(insns: [i64], n: [i64], op: i64) -> i64 {
   let wmul = if op == 4 then 2600565760 else 0;
   let wdiv = if op == 5 then 2596342784 else 0;
   let _ = em(insns, n, wadd + wsub + wmul + wdiv);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// Emit a variable load: mov x0, x<reg> ; push.
+fn emit_var(insns: [i64], n: [i64], reg: i64) -> i64 {
+  let _ = em(insns, n, 2852127712 + reg * 65536);
   let _ = push(insns, n);
   n[0]
 }
@@ -184,15 +192,22 @@ fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
   n[0]
 }
 
-// factor = number | ( expr ) | cond expr then expr else expr
+// factor = number | letter | ( expr ) | cond expr then expr else expr
 fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
   let _ = skip_ws(s, pos);
   let strn = str_len(s);
   let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let e1 = if pos[0] + 1 >= strn then 1 else 0;
+  let ch1 = if e1 == 1 then 0 else char(s, pos[0] + 1);
   let is_lparen = if ch == 40 then 1 else 0;
   let is_i = if ch == 105 then 1 else 0;
+  let is_f = if ch1 == 102 then 1 else 0;
+  let is_ifkw = is_i * is_f;
+  let is_letter = is_alpha(ch);
+  let reg = 19 + (ch - 97);
   if is_lparen == 1 then emit_paren(s, pos, insns, n)
-  else if is_i == 1 then emit_cond(s, pos, insns, n)
+  else if is_ifkw == 1 then emit_cond(s, pos, insns, n)
+  else if is_letter == 1 then (let _ = pos[0] = pos[0] + 1 in emit_var(insns, n, reg))
   else emit_num(s, pos, insns, n)
 }
 
@@ -219,6 +234,88 @@ fn compile(s: str) -> i64 {
   sum_words(insns, n[0])
 }
 
+// Advance pos to just before the first occurrence of `target`.
+fn skip_to(s: str, pos: [i64], target: i64) -> i64 {
+  let strn = str_len(s);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let hit = if ch == target then 1 else 0;
+    let adv = if hit == 1 then 0 else 1;
+    let _ = pos[0] = pos[0] + adv;
+    let at_end_done = if at_end == 1 then 1 else 0;
+    let done = if hit == 1 then 1 else at_end_done;
+    0
+  };
+  0
+}
+
+// Count params in the ( ... ) list (commas + 1); advances pos past ')'.
+fn count_params(s: str, pos: [i64]) -> i64 {
+  let strn = str_len(s);
+  let _ = pos[0] = pos[0] + 1;
+  let count = 1;
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rp = if ch == 41 then 1 else 0;
+    let is_comma = if ch == 44 then 1 else 0;
+    let count = if is_comma == 1 then count + 1 else count;
+    let _ = pos[0] = pos[0] + 1;
+    let done = if is_rp == 1 then 1 else 0;
+    0
+  };
+  count
+}
+
+// Prologue: stp x29,x30,[sp,#-16]! ; mov x29,sp.
+fn emit_prologue(insns: [i64], n: [i64]) -> i64 {
+  let _ = em(insns, n, 2847898621);
+  let _ = em(insns, n, 2432697341);
+  n[0]
+}
+
+// Epilogue: ldp x29,x30,[sp],#16 ; ret.
+fn emit_epilogue(insns: [i64], n: [i64]) -> i64 {
+  let _ = em(insns, n, 2831252477);
+  let _ = em(insns, n, 3596551104);
+  n[0]
+}
+
+// Compile a complete function: fn name(a,b,...) { body }.
+// Params are moved x0->x19, x1->x20, ... in the prologue; body references
+// single-letter params a->x19, b->x20, ... Returns the checksum of the words.
+fn compile_fn(s: str) -> i64 {
+  let insns = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+  let n = [0];
+  let pos = [0];
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 2;
+  let _ = skip_ws(s, pos);
+  let _ = skip_to(s, pos, 40);
+  let nparams = count_params(s, pos);
+  let _ = skip_to(s, pos, 123);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_prologue(insns, n);
+  let i = [0];
+  let mvdone = 0;
+  while mvdone == 0 {
+    let _ = em(insns, n, 2852127712 + i[0] * 65536 + 19 + i[0]);
+    let _ = i[0] = i[0] + 1;
+    let mvdone = if i[0] >= nparams then 1 else 0;
+    0
+  };
+  let _ = emit_expr(s, pos, insns, n);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = pop(insns, n, 0);
+  let _ = emit_epilogue(insns, n);
+  sum_words(insns, n[0])
+}
+
 // Verify the emitted machine code against known-good checksums (computed from
 // the native emitter's exact AArch64 encodings). 0 = pass.
 fn self_check() -> i64 {
@@ -231,5 +328,7 @@ fn self_check() -> i64 {
   let c7 = if compile("if 0 then 10 else 20") == 78020564666 then 0 else 1;
   let c8 = if compile("1 + if 2 then 3 else 4") == 112481104823 then 0 else 1;
   let c9 = if compile("if 1 then 1+2 else 3*4") == 147210112852 then 0 else 1;
-  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9
+  let c10 = if compile_fn("fn f(a) { a + 1 }") == 66172860133 then 0 else 1;
+  let c11 = if compile_fn("fn f(a,b) { a + b }") == 68346887833 then 0 else 1;
+  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11
 }
