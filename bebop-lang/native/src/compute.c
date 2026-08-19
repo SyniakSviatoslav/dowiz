@@ -170,6 +170,62 @@ int compute_copy(const double *restrict x, double *restrict y, size_t n) {
     return 0;
 }
 
+/* ─── BLAS-2: matrix-vector ───────────────────────────────────────────── */
+
+
+
+int compute_gemv(double alpha, const double *a, const double *x,
+                 double beta, double *y, size_t m, size_t n) {
+    if (beta == 0.0) { for (size_t i = 0; i < m; i++) y[i] = 0.0; }
+    else if (beta != 1.0) { for (size_t i = 0; i < m; i++) y[i] *= beta; }
+    for (size_t i = 0; i < m; i++) {
+        double acc0 = 0.0, acc1 = 0.0, acc2 = 0.0, acc3 = 0.0;
+        const double *arow = a + i * n;
+        size_t j = 0;
+        for (; j + 3 < n; j += 4) {
+            acc0 += arow[j]     * x[j];
+            acc1 += arow[j + 1] * x[j + 1];
+            acc2 += arow[j + 2] * x[j + 2];
+            acc3 += arow[j + 3] * x[j + 3];
+        }
+        for (; j < n; j++) acc0 += arow[j] * x[j];
+        y[i] += alpha * ((acc0 + acc1) + (acc2 + acc3));
+    }
+    return 0;
+}
+
+#define GEMM_TILE 64
+
+int compute_gemm(double alpha, const double *a, const double *b,
+                 double beta, double *c, size_t m, size_t k, size_t n) {
+    size_t i, j, ii, jj, l;
+    for (i = 0; i < m; i++) {
+        for (j = 0; j < n; j++) {
+            double *cp = c + i * n + j;
+            *cp *= beta;
+        }
+    }
+    for (ii = 0; ii < m; ii += GEMM_TILE) {
+        size_t im = (ii + GEMM_TILE < m) ? ii + GEMM_TILE : m;
+        for (jj = 0; jj < n; jj += GEMM_TILE) {
+            size_t jm = (jj + GEMM_TILE < n) ? jj + GEMM_TILE : n;
+            for (l = 0; l < k; l++) {
+
+                for (i = ii; i < im; i++) {
+                    double aik = a[i * k + l] * alpha;
+                    if (aik != 0.0) {
+                        double *cp = c + i * n;
+                        for (j = jj; j < jm; j++) {
+                            cp[j] += aik * b[l * n + j];
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return 0;
+}
+
 /* ─── self-test ─────────────────────────────────────────────────────────── */
 
 int compute_self_test(char *out, size_t cap) {
@@ -236,6 +292,24 @@ int compute_self_test(char *out, size_t cap) {
         double x[3] = {7, 8, 9}, y[3] = {0, 0, 0};
         compute_copy(x, y, 3);
         K(y[0] == 7 && y[1] == 8 && y[2] == 9, "copy y=x");
+    }
+
+    /* gemv: y = 2*[[1,2],[3,4]]·[5,6]^T = 2*[17,39] = [34,78] */
+    {
+        double a[4] = {1, 2, 3, 4};
+        double x[2] = {5, 6};
+        double y[2];
+        compute_gemv(2.0, a, x, 0.0, y, 2, 2);
+        K(y[0] == 34 && y[1] == 78, "gemv y=2*A*x");
+    }
+
+    /* gemm: C = 2*[[1,2],[3,4]]×[[5,6],[7,8]] = 2*[[19,22],[43,50]] */
+    {
+        double a[4] = {1, 2, 3, 4};
+        double b[4] = {5, 6, 7, 8};
+        double c[4] = {0, 0, 0, 0};
+        compute_gemm(2.0, a, b, 0.0, c, 2, 2, 2);
+        K(c[0] == 38 && c[1] == 44 && c[2] == 86 && c[3] == 100, "gemm C=2*A*B");
     }
 
 #undef K

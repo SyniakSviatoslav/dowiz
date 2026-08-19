@@ -50,6 +50,19 @@ int compute_scal(double alpha, double *restrict x, size_t n);
 /* copy: y[i] = x[i]  (BLAS-1, memcpy-width vectorizable). */
 int compute_copy(const double *restrict x, double *restrict y, size_t n);
 
+/* ─── BLAS-2 (matrix-vector) ──────────────────────────────────────────── */
+
+/* y = alpha * A*x + beta * y.  A is m×n row-major. */
+int compute_gemv(double alpha, const double *a, const double *x,
+                 double beta, double *y, size_t m, size_t n);
+
+/* ─── BLAS-3 (matrix-matrix) ──────────────────────────────────────────── */
+
+/* C = alpha * A*B + beta * C.  A=m×k, B=k×n, C=m×n, all row-major.
+ * Loop-tiled for L1 cache (64×64 blocks), 4 accumulators per tile. */
+int compute_gemm(double alpha, const double *a, const double *b,
+                 double beta, double *c, size_t m, size_t k, size_t n);
+
 int compute_self_test(char *out, size_t cap);
 
 #endif
