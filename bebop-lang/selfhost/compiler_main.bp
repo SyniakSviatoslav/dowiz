@@ -13,7 +13,9 @@ fn lex_num(s: str, pos: [i64]) -> i64 {
   while done == 0 {
     let at_end = if pos[0] >= n then 1 else 0;
     let c = if at_end == 1 then 0 else char(s, pos[0]);
-    let isd = if c >= 48 then (if c <= 57 then 1 else 0) else 0;
+    let ge48 = if c >= 48 then 1 else 0;
+    let le57 = if c <= 57 then 1 else 0;
+    let isd = ge48 * le57;
     let acc2 = acc * 10 + c - 48;
     let acc = if isd == 1 then acc2 else acc;
     let adv = if isd == 1 then 1 else 0;

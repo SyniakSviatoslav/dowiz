@@ -8,9 +8,9 @@ fn lex_skip(s: str, pos: [i64]) -> i64 {
   while done == 0 {
     let at_end = if pos[0] >= n then 1 else 0;
     let ch = if at_end == 1 then 0 else char(s, pos[0]);
-    let is_sp = if at_end == 1 then 0 else (if ch == 32 then 1 else 0);
-    let is_tab = if at_end == 1 then 0 else (if ch == 9 then 1 else 0);
-    let is_nl = if at_end == 1 then 0 else (if ch == 10 then 1 else 0);
+    let is_sp = if ch == 32 then 1 else 0;
+    let is_tab = if ch == 9 then 1 else 0;
+    let is_nl = if ch == 10 then 1 else 0;
     let adv = is_sp + is_tab + is_nl;
     let _ = pos[0] = pos[0] + adv;
     let done = if adv == 1 then 0 else 1;
@@ -28,7 +28,9 @@ fn lex_num(s: str, pos: [i64]) -> i64 {
   while done == 0 {
     let at_end = if pos[0] >= n then 1 else 0;
     let ch = if at_end == 1 then 0 else char(s, pos[0]);
-    let is_d = if at_end == 1 then 0 else (if ch >= 48 then (if ch <= 57 then 1 else 0) else 0);
+    let ge48 = if ch >= 48 then 1 else 0;
+    let le57 = if ch <= 57 then 1 else 0;
+    let is_d = ge48 * le57;
     let v = if is_d == 1 then v * 10 + (ch - 48) else v;
     let _ = pos[0] = pos[0] + is_d;
     let done = if is_d == 1 then 0 else 1;
@@ -50,7 +52,8 @@ fn parse_num(s: str, pos: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + is_sign;
   let mag = lex_num(s, pos);
   let n2 = str_len(s);
-  let dot = if pos[0] >= n2 then 0 else (if char(s, pos[0]) == 46 then 1 else 0);
+  let chd = if pos[0] >= n2 then 0 else char(s, pos[0]);
+  let dot = if chd == 46 then 1 else 0;
   let _ = pos[0] = pos[0] + dot;
   let _ = lex_num(s, pos);
   if is_minus == 1 then (0 - mag) else mag
