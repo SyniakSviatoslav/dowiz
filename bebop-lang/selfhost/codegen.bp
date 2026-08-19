@@ -16,12 +16,12 @@ fn emit_expr(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
   let ap=if k==6 then emit_expr(ek,ev,ea,eb,ea[i])+emit_expr(ek,ev,ea,eb,eb[i]) else 0;
   mz+ad+su+mu+va+ap
 }
-fn count_instrs(ek:[i64],i:i64)->i64 {
+fn count_instrs(ek:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
   let k=ek[i];
   let lit=if k==0 then 1 else 0;
-  let ad=if k==2 then count_instrs(ek,ea[i])+count_instrs(ek,eb[i])+1 else 0;
-  let su=if k==3 then count_instrs(ek,ea[i])+count_instrs(ek,eb[i])+1 else 0;
-  let mu=if k==4 then count_instrs(ek,ea[i])+count_instrs(ek,eb[i])+1 else 0;
+  let ad=if k==2 then count_instrs(ek,ea,eb,ea[i])+count_instrs(ek,ea,eb,eb[i])+1 else 0;
+  let su=if k==3 then count_instrs(ek,ea,eb,ea[i])+count_instrs(ek,ea,eb,eb[i])+1 else 0;
+  let mu=if k==4 then count_instrs(ek,ea,eb,ea[i])+count_instrs(ek,ea,eb,eb[i])+1 else 0;
   lit+ad+su+mu
 }
 fn checksum(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
@@ -35,8 +35,8 @@ fn checksum(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
 fn emit_entry(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
   let cs=checksum(ek,ev,ea,eb,i); cs+ret()
 }
-fn emit_byte_size(ek:[i64],i:i64)->i64 {
-  count_instrs(ek,i)*4
+fn emit_byte_size(ek:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
+  count_instrs(ek,ea,eb,i)*4
 }
 fn const_fold(ek:[i64],ev:[i64],ea:[i64],eb:[i64],i:i64)->i64 {
   let k=ek[i];
