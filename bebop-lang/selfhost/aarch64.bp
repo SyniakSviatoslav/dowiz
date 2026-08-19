@@ -1,0 +1,5 @@
+module core { }
+fn movz_imm(d: i64, imm: i64) -> i64 { 3523215360 + d + imm * 32 }
+fn ret() -> i64 { 3596556224 }
+fn add_reg(d: i64, n: i64, m: i64) -> i64 { 2332033024 + d + n * 32 + m * 4096 }
+fn main() -> i64 { movz_imm(0, 42) }
