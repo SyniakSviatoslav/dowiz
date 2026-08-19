@@ -34,8 +34,8 @@ typedef struct {
 int vir_binop(VirOp op, Vir128 a, Vir128 b, Vir128 *out, char *err,
               size_t cap_err);
 
-/* Synthesized 2×64 multiply-high (hi64 of a⊗b per lane). NEON has no native
- * vector umulh; this decomposes via UMULL. Scalars are the fallback. */
+/* 2×64 multiply-high (synthesized vector umulh). AArch64 NEON has no native
+ * vector umulh, so we build it from UMULL decomposition. Returns 0 or -1. */
 int vir_umulh2(Vir128 a, Vir128 b, Vir128 *out, char *err, size_t cap_err);
 
 /* Atomic machine-code ops (⚛): hand-encoded LSE atomics — no libatomic, no

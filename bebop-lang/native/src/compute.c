@@ -74,9 +74,11 @@ static double compute_sum_fn(double acc, double x) { return acc + x; }
 
 int compute_saxpy(double alpha, const double *restrict x, double *restrict y, size_t n) {
     size_t i = 0;
-    for (; i + 1 < n; i += 2) { /* 2×f64 NEON-vectorizable */
+    for (; i + 3 < n; i += 4) { /* 4× unroll → 2×f64 NEON FMLA pairs, full ILP */
         y[i]     += alpha * x[i];
         y[i + 1] += alpha * x[i + 1];
+        y[i + 2] += alpha * x[i + 2];
+        y[i + 3] += alpha * x[i + 3];
     }
     for (; i < n; i++) {
         y[i] += alpha * x[i];
@@ -117,17 +119,19 @@ int compute_matmul(const double *restrict a, const double *restrict b, double *r
         const double *arow = a + i * n;
         double *crow = c + i * k;
         for (size_t j = 0; j < k; j++) {
-            double acc0 = 0.0, acc1 = 0.0;
+            double acc0 = 0.0, acc1 = 0.0, acc2 = 0.0, acc3 = 0.0;
             const double *btrow = bt + j * n;
             size_t l = 0;
-            for (; l + 1 < n; l += 2) { /* 2-way unroll, both rows sequential */
+            for (; l + 3 < n; l += 4) { /* 4 accumulators, all rows sequential */
                 acc0 += arow[l]     * btrow[l];
                 acc1 += arow[l + 1] * btrow[l + 1];
+                acc2 += arow[l + 2] * btrow[l + 2];
+                acc3 += arow[l + 3] * btrow[l + 3];
             }
             for (; l < n; l++) {
                 acc0 += arow[l] * btrow[l];
             }
-            crow[j] = acc0 + acc1;
+            crow[j] = (acc0 + acc1) + (acc2 + acc3);
         }
     }
     free(bt);

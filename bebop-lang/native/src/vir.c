@@ -226,6 +226,19 @@ int vir_self_test(char *out, size_t cap) {
         rl.u = r.lo; rh.u = r.hi;
         V(rl.f == 12.0 && rh.f == 4.0, "VIR fmul.2d (3.0,0.5)*(4.0,8.0)=(12.0,4.0)");
     }
+    /* synthesized 2×64 umulh: hi64(2^63 · 2^63) = 2^62 per lane */
+    {
+        Vir128 a = {0x8000000000000000ULL, 0x8000000000000000ULL};
+        Vir128 b = {0x8000000000000000ULL, 0x8000000000000000ULL};
+        Vir128 r;
+        V(vir_umulh2(a, b, &r, err, sizeof err) == 0, "VIR umulh2 (vector) executes");
+        V(r.lo == 0x4000000000000000ULL && r.hi == 0x4000000000000000ULL,
+          "VIR umulh2 2^63·2^63 hi = 2^62");
+        /* small: umulh(2^32, 2^32) = hi64(2^64) = 1 */
+        Vir128 c = {0x100000000ULL, 0x5}, d = {0x100000000ULL, 0x7}, r2;
+        V(vir_umulh2(c, d, &r2, err, sizeof err) == 0, "VIR umulh2 small executes");
+        V(r2.lo == 1 && r2.hi == 0, "VIR umulh2 (2^32·2^32)=1, (5·7)=0");
+    }
 
 
     
