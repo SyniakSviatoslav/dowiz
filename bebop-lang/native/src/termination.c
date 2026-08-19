@@ -4,7 +4,6 @@
  * Zero dependencies. */
 #include "qtt.h"
 #include "termination.h"
-#include "termination.h"
 
 #include <stdio.h>
 #include <string.h>

@@ -43,7 +43,6 @@ fn reverse_range(a: [i64], lo: i64, hi: i64) -> i64 {
 // Returns 1 and mutates a when a larger permutation exists; returns 0 and resets a to
 // ascending order when a is already the last (descending) permutation.
 fn next_permutation(a: [i64], n: i64) -> i64 {
-  // find the largest i with a[i] < a[i+1] (the pivot).
   let i = n - 2;
   let found = 0;
   let done = if i >= 0 then 0 else 1;
@@ -58,7 +57,6 @@ fn next_permutation(a: [i64], n: i64) -> i64 {
     let _ = reverse_range(a, 0, n);
     0
   ) else (
-    // find the largest j > i with a[j] > a[i], swap, then reverse the suffix.
     let j = n - 1;
     let jdone = 0;
     while jdone == 0 {
@@ -104,7 +102,6 @@ fn rank(a: [i64], n: i64) -> i64 {
 // "available" list kept in the leading slots, and parks each pick in the freed trailing
 // slot (so the result is assembled back-to-front), then reverses the array.
 fn unrank(a: [i64], n: i64, r: i64) -> i64 {
-  // available list = [0..n-1] in a[0..n).
   let i = 0;
   let fdone = if i >= n then 1 else 0;
   while fdone == 0 {
