@@ -1,7 +1,1 @@
-// selfhost/std/vec.bp — Bebop standard library: arena vector
-module core { }
-
-// Vec type: [data_ptr, len, cap] encoded as 3-element i64 array
-fn vec_new() -> [i64] { [0, 0, 0] }
-
-fn vec_push(v: [i64], x: i64) -> ...[truncated]
+module core { } fn vec_new() -> i64 { 0 }

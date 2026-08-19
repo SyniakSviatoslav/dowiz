@@ -1,4 +1,1 @@
-module core { }
-fn sq(x: i64) -> i64 { x * x }
-fn abs(x: i64) -> i64 { if x >= 0 then x else 0 - x }
-fn min(a: i64, b: i64) -> i64 { ...[truncated]
+module core { } fn sq(x: i64) -> i64 { x * x } fn abs(x: i64) -> i64 { if x >= 0 then x else 0 - x } fn min(a: i64, b: i64) -> i64 { if a < b then a else b } fn max(a: i64, b: i64) -> i64 { if a > b then a else b }
