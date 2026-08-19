@@ -220,8 +220,22 @@ static Term *parse_primary(P *p) {
         static char sbuf[64][256];
         static int sbuf_i = 0;
         char *dst = sbuf[sbuf_i++ % 64];
-        memcpy(dst, p->s + start_pos, (size_t)slen);
-        dst[slen] = '\0';
+        /* process escape sequences: \n \t \\ \" */
+        int di = 0;
+        for (int si = 0; si < slen && di < 255; si++) {
+            char ch = p->s[start_pos + si];
+            if (ch == '\\' && si + 1 < slen) {
+                char nx = p->s[start_pos + si + 1];
+                if (nx == 'n') { dst[di++] = '\n'; si++; }
+                else if (nx == 't') { dst[di++] = '\t'; si++; }
+                else if (nx == '\\') { dst[di++] = '\\'; si++; }
+                else if (nx == '"') { dst[di++] = '"'; si++; }
+                else { dst[di++] = ch; }
+            } else {
+                dst[di++] = ch;
+            }
+        }
+        dst[di] = '\0';
         if (p->s[p->pos] == '"') p->pos++;
         Term *st = tnew();
         st->kind = TERM_STR;
