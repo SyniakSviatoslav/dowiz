@@ -1,0 +1,58 @@
+// selfhost/std/modular.bp — modular arithmetic (i64): add, mul, pow, inverse.
+// Port of the native modular helpers (cf. native/src/ntt.c mod_pow/mod_inv),
+// lifted to i64 with no u64/structs/floats. `rem` normalizes to [0, m) so the
+// results are canonical non-negative residues. Bebop division truncates toward
+// zero, so `rem` re-adds m for negative inputs. Assumes m > 0 and (m-1)^2 fits
+// in i64 (true for the NTT modulus 998244353 and any m < ~3e9).
+
+module core { }
+
+// rem: least non-negative residue of x modulo m. Result in [0, m).
+fn rem(x: i64, m: i64) -> i64 {
+  let r = x - (x / m) * m;
+  if r < 0 then r + m else r
+}
+
+// mod_add: (a + b) mod m, canonical residue in [0, m).
+fn mod_add(a: i64, b: i64, m: i64) -> i64 {
+  rem(rem(a, m) + rem(b, m), m)
+}
+
+// mod_mul: (a * b) mod m, canonical residue in [0, m).
+fn mod_mul(a: i64, b: i64, m: i64) -> i64 {
+  rem(rem(a, m) * rem(b, m), m)
+}
+
+// mod_pow: base^exp mod m via square-and-multiply (exp >= 0). Result in [0, m).
+fn mod_pow(base: i64, exp: i64, m: i64) -> i64 {
+  let b = rem(base, m);
+  let e = exp;
+  let r = 1;
+  while e != 0 {
+    let r = if e - (e / 2) * 2 == 1 then rem(r * b, m) else r;
+    let b = rem(b * b, m);
+    let e = e / 2;
+    0
+  };
+  r
+}
+
+// mod_inv: multiplicative inverse of a modulo m via the extended Euclidean
+// algorithm. Returns x in [0, m) with (a*x) mod m == 1, or 0 if gcd(a, m) != 1.
+fn mod_inv(a: i64, m: i64) -> i64 {
+  let r = m;
+  let nr = rem(a, m);
+  let t = 0;
+  let nt = 1;
+  while nr != 0 {
+    let q = r / nr;
+    let tmp = t - q * nt;
+    let t = nt;
+    let nt = tmp;
+    let tmp2 = r - q * nr;
+    let r = nr;
+    let nr = tmp2;
+    0
+  };
+  if r == 1 then rem(t, m) else 0
+}
