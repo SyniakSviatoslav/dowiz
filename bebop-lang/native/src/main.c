@@ -456,7 +456,7 @@ static void cmd_token_bucket(void) {
 }
 
 /* run: execute a .bp function with a string argument (interpreter). */
-static void cmd_run(const char *path, const char *arg) {
+static void cmd_run(const char *path, const char *fn_name, const char *arg) {
     FILE *f = fopen(path, "rb");
     if (!f) { fprintf(stderr, "cannot open %s\n", path); exit(1); }
     fseek(f, 0, SEEK_END);
@@ -538,29 +538,42 @@ static void cmd_run(const char *path, const char *arg) {
         free(src);
         exit(1);
     }
-    /* Entry point = last fn defined. */
+    /* Entry point = the named fn, or the last fn if name not found. */
     int ei = fn_count - 1;
+    for (int i = 0; i < fn_count; i++) {
+        if (strcmp(fn_names[i], fn_name) == 0) { ei = i; break; }
+    }
     Term *target = fn_terms[ei];
     const Ty *tt = fn_tys[ei];
-    static Term argterm;
-    memset(&argterm, 0, sizeof argterm);
-    if (tt && tt->kind == TY_PI && tt->dom && tt->dom->kind == TY_I64) {
-        argterm.kind = TERM_LIT;
-        argterm.ival = atoll(arg);
-    } else {
-        argterm.kind = TERM_STR;
-        argterm.name = arg;
-    }
-    static Term app;
-    memset(&app, 0, sizeof app);
-    app.kind = TERM_APP;
-    app.a = target;
-    app.b = &argterm;
     int vk; long vi; int vb;
-    if (qtt_eval_binds(&app, fn_names, fn_terms, fn_count,
-                       &vk, &vi, &vb, err, sizeof err) != 0) {
-        fprintf(stderr, "eval error: %s\n", err);
-        bp_program_free(&prog); free(src); exit(1);
+    if (tt && tt->kind == TY_PI) {
+        /* function takes an argument: apply it */
+        static Term argterm;
+        memset(&argterm, 0, sizeof argterm);
+        if (tt->dom && tt->dom->kind == TY_I64) {
+            argterm.kind = TERM_LIT;
+            argterm.ival = atoll(arg);
+        } else {
+            argterm.kind = TERM_STR;
+            argterm.name = arg;
+        }
+        static Term app;
+        memset(&app, 0, sizeof app);
+        app.kind = TERM_APP;
+        app.a = target;
+        app.b = &argterm;
+        if (qtt_eval_binds(&app, fn_names, fn_terms, fn_count,
+                           &vk, &vi, &vb, err, sizeof err) != 0) {
+            fprintf(stderr, "eval error: %s\n", err);
+            bp_program_free(&prog); free(src); exit(1);
+        }
+    } else {
+        /* zero-arg function: evaluate directly */
+        if (qtt_eval_binds(target, fn_names, fn_terms, fn_count,
+                           &vk, &vi, &vb, err, sizeof err) != 0) {
+            fprintf(stderr, "eval error: %s\n", err);
+            bp_program_free(&prog); free(src); exit(1);
+        }
     }
     printf("%ld\n", vi);
     bp_program_free(&prog);
@@ -1054,7 +1067,7 @@ int main(int argc, char **argv) {
     }
     if (strcmp(argv[1], "run") == 0) {
         if (argc < 4) { usage(); return 2; }
-        cmd_run(argv[2], argv[3]);
+        cmd_run(argv[2], argv[3], argc > 4 ? argv[4] : "0");
         return 0;
     }
     if (strcmp(argv[1], "x86_64") == 0) {

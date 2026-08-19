@@ -1591,6 +1591,7 @@ static Value eval(const Term *t, Env *env) {
                 v.kind = -1;
                 return v;
             }
+            if (!f.lam->name) { v.kind = -1; return v; }
             Env *e = env_new(f.lam->name, arg, f.env);
             return eval(f.lam->a, e);
         }

@@ -491,7 +491,9 @@ int bp_parse_fn_decl(const char *src, TyRegistry *reg, Term **out,
     int bend = pos - 1;
     if (bend <= bstart) { snprintf(err, cap, "empty body"); return -1; }
     const char *bt = toks[bstart].start;
-    size_t bl = (size_t)(toks[bend].start - bt);
+    /* bend is the closing '}' index; last body token is bend-1 */
+    const char *be = (bend > bstart) ? toks[bend-1].start + toks[bend-1].len : bt;
+    size_t bl = (size_t)(be - bt);
     char *bs = malloc(bl + 1); memcpy(bs, bt, bl); bs[bl] = '\0';
     Term *body = NULL;
     if (expr_parse(bs, &body, err, cap) != 0) { free(bs); return -1; }
