@@ -1,15 +1,24 @@
-// selfhost/count-l.bp — Bebop self-hosting demo: count 'l' letters in "hello"
-// Usage: bebopc jit "let src=[104,101,108,108,111] in let n=5 in let i=0 in let c=0 in while i<n { let ch=src[i] in if ch==108 then c+1 else c; i+1 } c"
+// selfhost/count-l.bp — count 'l' letters in "hello" (self-hosting demo).
+// Bebop modules have no string-literal indexing, so "hello" is an [i64] of
+// ASCII codes: h=104 e=101 l=108 l=108 o=111. Two 'l's -> main() == 2.
+// run: bebopc run selfhost/count-l.bp main
 
-// The JIT expression version:
-let src = [104, 101, 108, 108, 111] in  // "hello" as ASCII
-let n = 5 in
-let i = 0 in
-let c = 0 in
-while (i < n) {
-  let ch = src[i] in
-  let c = if (ch == 108) then c + 1 else c in
-  let i = i + 1 in
-  0
+module core { }
+
+fn count_l(src: [i64], n: i64) -> i64 {
+  let i = 0;
+  let c = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if i >= n then 1 else 0;
+    let ch = if at_end == 1 then 0 else src[i];
+    let is_l = if ch == 108 then 1 else 0;
+    let c = c + is_l;
+    let i = i + 1;
+    let done = if i >= n then 1 else 0;
+    0
+  };
+  c
 }
-c
+
+fn main() -> i64 { count_l([104, 101, 108, 108, 111], 5) }
