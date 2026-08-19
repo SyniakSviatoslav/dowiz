@@ -1,0 +1,8 @@
+module core { }
+fn norm(k:[i64],v:[i64],a:[i64],b:[i64],i:i64)->i64 {
+  let kd=k[i];
+  let n_lit=if kd==0 then v[i] else 0;
+  let n_add=if kd==2 then norm(k,v,a,b,a[i])+norm(k,v,a,b,b[i]) else 0;
+  let n_mul=if kd==4 then norm(k,v,a,b,a[i])*norm(k,v,a,b,b[i]) else 0;
+  n_lit+n_add+n_mul
+}

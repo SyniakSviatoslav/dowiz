@@ -1,0 +1,27 @@
+// selfhost/proof.bp — proof rules for the Bebop QTT proof kernel.
+//
+// Each rule is an i64 witness: 1 = proof holds, 0 = does not hold.
+// These are the primitive equality combinators (refl/sym/trans) plus
+// substitution. Everything is i64; no structs/pointers/%/bitwise.
+
+module core { }
+
+// refl: reflexivity — a = a is always true.
+fn refl(a: i64) -> i64 {
+  if a == a then 1 else 0
+}
+
+// sym: symmetry — if a = b then b = a; the witness passes through unchanged.
+fn sym(eq: i64) -> i64 {
+  eq
+}
+
+// trans: transitivity — if a = b and b = c then a = c; holds iff both hold.
+fn trans(eq1: i64, eq2: i64) -> i64 {
+  if eq1 == 1 then (if eq2 == 1 then 1 else 0) else 0
+}
+
+// subst_basic: substitution — if x = y (eq holds) replace x with y.
+fn subst_basic(x: i64, y: i64, eq: i64) -> i64 {
+  if eq == 1 then y else x
+}
