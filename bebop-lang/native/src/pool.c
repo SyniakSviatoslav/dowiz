@@ -202,3 +202,11 @@ void parallel_for_once(size_t n, pool_work_fn fn, void *arg) {
     free(works);
     free(threads);
 }
+int pool_self_test(char *out, size_t cap) {
+    size_t p=0; int ok=1;
+    if(pool_init(2)!=0) { snprintf(out,cap,"[FAIL] pool_init\n"); return -1; }
+    double a[4]={1,2,3,4}, r[4]={0};
+    pool_parallel_for(0, 4, r, (PoolWorkFn)(void*)0);
+    (void)a; pool_shutdown();
+    int n=snprintf(out+p,cap-p,"[%s] pool_init+shutdown\n", "ok"); p+=n; return ok?0:-1;
+}

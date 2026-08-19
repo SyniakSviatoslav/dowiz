@@ -73,6 +73,3 @@ ArenaSnapshot arena_snapshot_take(Arena *a) { ArenaSnapshot s={a,a->used}; retur
 void arena_snapshot_restore(ArenaSnapshot snap) { snap.arena->used=snap.offset;
 }
 size_t arena_used(const Arena *a) { return a->used; }
-ArenaSnapshot arena_snapshot_take(Arena *a) { ArenaSnapshot s={a,a->used}; return s; }
-void arena_snapshot_restore(ArenaSnapshot snap) { snap.arena->used=snap.offset; }
-size_t arena_used(const Arena *a) { return a->used; }

@@ -35,4 +35,4 @@ int  pool_nthreads(const Pool *p);
  * overhead per call. */
 void parallel_for_once(size_t n, pool_work_fn fn, void *arg);
 
-#endif /* BEBOP_POOL_H */
+#endif /* BEBOP_POOL_H */int pool_self_test(char *out, size_t cap);
