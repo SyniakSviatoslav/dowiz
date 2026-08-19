@@ -19,6 +19,8 @@ test: $(BIN)
 	$(BIN) glyphs
 	$(BIN) glyph fn
 	$(BIN) glyph struct
+	$(BIN) metatest
+	$(BIN) strict ../selfhost/std/dp.bp
 	@echo "--- tokenize sample ---"
 	$(BIN) tokens ../samples/hello.bp
 	@echo "--- parse sample ---"

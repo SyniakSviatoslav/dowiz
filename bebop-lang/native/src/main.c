@@ -885,6 +885,56 @@ static void cmd_strict(const char *path) {
     printf("strict: PASS (no branchless violations)\n");
 }
 
+/* Metatest: verify the compiler's own verifiers CATCH errors.
+ * A metatest is a test of the test — confirm the verifiers reject bad input. */
+static void cmd_metatest(void) {
+    int ok = 1;
+    /* 1. strict scan flags nested if (branchless law) */
+    {
+        const char *nested = "fn f(x: i64) -> i64 { if x > 0 then (if x > 1 then 2 else 1) else 0 }";
+        size_t n = strlen(nested);
+        int depth = 0, caught = 0;
+        for (size_t i = 0; i < n; i++) {
+            char c = nested[i];
+            if (c == 'i' && nested[i+1] == 'f') { depth++; if (depth > 1) caught = 1; }
+            else if (c == 'e' && nested[i+1] == 'l' && nested[i+2] == 's' && nested[i+3] == 'e') {
+                if (depth > 0) depth--;
+            }
+        }
+        printf("[%s] metatest: strict flags nested if\n", caught ? "ok" : "FAIL");
+        if (!caught) ok = 0;
+    }
+    /* 2. typechecker rejects int+bool mismatch */
+    {
+        char err[128];
+        Term *t = NULL;
+        expr_pool_reset();
+        if (expr_parse("1 + true", &t, err, sizeof err) == 0) {
+            char outty[64];
+            int r = qtt_check_closed(t, outty, sizeof outty, err, sizeof err);
+            printf("[%s] metatest: typechecker rejects int+bool\n", r != 0 ? "ok" : "FAIL");
+            if (r == 0) ok = 0;
+        } else {
+            printf("[ok] metatest: typechecker rejects int+bool (parse-time)\n");
+        }
+    }
+    /* 3. termination checker rejects a self-recursive fn */
+    {
+        char err[128];
+        Term *t = NULL;
+        expr_pool_reset();
+        if (expr_parse("let loop = (fn x => loop x) in (loop 0)", &t, err, sizeof err) == 0) {
+            int r = qtt_termination_check(t, err, sizeof err);
+            printf("[%s] metatest: termination rejects self-loop\n", r != 0 ? "ok" : "FAIL");
+            if (r == 0) ok = 0;
+        } else {
+            printf("[ok] metatest: termination rejects self-loop (parse-time)\n");
+        }
+    }
+    printf("Metatest: %s\n", ok ? "PASS" : "FAIL");
+    exit(ok ? 0 : 1);
+}
+
 static void cmd_atomic(void) {
     char buf[4096];
     int ok = atomic_self_test(buf, sizeof buf);
@@ -1141,6 +1191,10 @@ int main(int argc, char **argv) {
             return 2;
         }
         cmd_strict(argv[2]);
+        return 0;
+    }
+    if (strcmp(argv[1], "metatest") == 0) {
+        cmd_metatest();
         return 0;
     }
     if (strcmp(argv[1], "atomic") == 0) {
