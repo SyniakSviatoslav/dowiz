@@ -18,7 +18,9 @@ fn sym(eq: i64) -> i64 {
 
 // trans: transitivity — if a = b and b = c then a = c; holds iff both hold.
 fn trans(eq1: i64, eq2: i64) -> i64 {
-  if eq1 == 1 then (if eq2 == 1 then 1 else 0) else 0
+  let a = if eq1 == 1 then 1 else 0;
+  let b = if eq2 == 1 then 1 else 0;
+  a * b
 }
 
 // subst_basic: substitution — if x = y (eq holds) replace x with y.

@@ -2,13 +2,18 @@
 // type codes: 0=i64, 1=f64, 2=bool, 3=str, 4=unit, -1=error
 module core { }
 
-fn is_num(t: i64) -> i64 { if t == 0 then 1 else (if t == 1 then 1 else 0) }
+fn is_num(t: i64) -> i64 {
+  let a = if t == 0 then 1 else 0;
+  let b = if t == 1 then 1 else 0;
+  a + b
+}
 
 // add: i64+i64=i64, f64+f64=f64, mixed->f64, else error
 fn infer_add(lt: i64, rt: i64) -> i64 {
   let ln = is_num(lt);
   let rn = is_num(rt);
-  if ln + rn == 2 then (if (lt + rt) > 0 then 1 else 0) else 0 - 1
+  let pos = if (lt + rt) > 0 then 1 else 0;
+  if ln + rn == 2 then pos else (0 - 1)
 }
 
 // cmp: bool if both numeric, else error
