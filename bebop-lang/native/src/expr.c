@@ -77,13 +77,13 @@ static Term *parse_lambda(P *p) {
     while (is_ident_cont(p->s[p->pos])) {
         p->pos++;
     }
-    static char names[256][32];
+    static char names[32768][32];
     static int ni = 0;
     int len = p->pos - start;
     if (len >= 32) {
         len = 31;
     }
-    char *name = names[ni++ % 256];
+    char *name = names[ni++ % 32768];
     memcpy(name, p->s + start, (size_t)len);
     name[len] = '\0';
     skip_ws(p);
@@ -262,11 +262,11 @@ static Term *parse_primary(P *p) {
             p->pos++;
         }
         /* copy the name into a static buffer (identifiers live for pool lifetime) */
-        static char names[256][32];
+        static char names[32768][32];
         static int ni = 0;
         int len = p->pos - start;
         if (len >= 32) len = 31;
-        char *buf = names[ni++ % 256];
+        char *buf = names[ni++ % 32768];
         memcpy(buf, p->s + start, (size_t)len);
         buf[len] = '\0';
         Term *t = tnew();
@@ -551,11 +551,11 @@ static Term *parse_expr(P *p) {
         /* let NAME = expr in expr */
         int start = p->pos;
         while (is_ident_cont(p->s[p->pos])) p->pos++;
-        static char names[256][32];
+        static char names[32768][32];
         static int ni = 0;
         int len = p->pos - start;
         if (len >= 32) len = 31;
-        char *name = names[ni++ % 256];
+        char *name = names[ni++ % 32768];
         memcpy(name, p->s + start, (size_t)len);
         name[len] = '\0';
         skip_ws(p);
