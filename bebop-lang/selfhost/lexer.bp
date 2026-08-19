@@ -9,13 +9,19 @@ module core { }
 
 // is_digit: '0' (48) .. '9' (57)
 fn is_digit(c: i64) -> i64 {
-  if c >= 48 then (if c <= 57 then 1 else 0) else 0
+  let ge48 = if c >= 48 then 1 else 0;
+  let le57 = if c <= 57 then 1 else 0;
+  ge48 * le57
 }
 
 // is_alpha: 'a'(97)..'z'(122) or 'A'(65)..'Z'(90)
 fn is_alpha(c: i64) -> i64 {
-  let lower = if c >= 97 then (if c <= 122 then 1 else 0) else 0;
-  let upper = if c >= 65 then (if c <= 90 then 1 else 0) else 0;
+  let ge97 = if c >= 97 then 1 else 0;
+  let le122 = if c <= 122 then 1 else 0;
+  let lower = ge97 * le122;
+  let ge65 = if c >= 65 then 1 else 0;
+  let le90 = if c <= 90 then 1 else 0;
+  let upper = ge65 * le90;
   lower + upper
 }
 
@@ -102,7 +108,8 @@ fn count_ifs(s: str) -> i64 {
     let sp = is_space(ch);
     let i1 = if ch == 105 then 1 else 0;
     let next_end = if i + 1 == n then 1 else 0;
-    let f2 = if next_end == 1 then 0 else (if char(s, i + 1) == 102 then 1 else 0);
+    let ch2 = if next_end == 1 then 0 else char(s, i + 1);
+    let f2 = if ch2 == 102 then 1 else 0;
     let after_end = if i + 2 >= n then 1 else 0;
     let after_sp = if after_end == 1 then 1 else is_space(char(s, i + 2));
     let is_if = prev_space * i1 * f2 * after_sp;

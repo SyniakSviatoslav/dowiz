@@ -5,7 +5,9 @@
 module core { }
 
 fn is_digit(c: i64) -> i64 {
-  if c >= 48 then (if c <= 57 then 1 else 0) else 0
+  let ge48 = if c >= 48 then 1 else 0;
+  let le57 = if c <= 57 then 1 else 0;
+  ge48 * le57
 }
 
 // skip_ws: advance pos[0] past spaces
@@ -15,7 +17,7 @@ fn skip_ws(s: str, pos: [i64]) -> i64 {
   while done == 0 {
     let at_end = if pos[0] >= n then 1 else 0;
     let ch = if at_end == 1 then 0 else char(s, pos[0]);
-    let is_sp = if at_end == 1 then 0 else (if ch == 32 then 1 else 0);
+    let is_sp = if ch == 32 then 1 else 0;
     let pos_next = pos[0] + is_sp;
     let _ = pos[0] = pos_next;
     let done = if is_sp == 1 then 0 else 1;
@@ -42,6 +44,14 @@ fn parse_num(s: str, pos: [i64]) -> i64 {
   v
 }
 
+// apply_op: consume one ('+'|'-') term and fold it into acc. Helper keeps the
+// parse_expr loop branchless (no if inside the then-branch of another if).
+fn apply_op(s: str, pos: [i64], acc: i64, is_plus: i64) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let t = parse_term(s, pos);
+  if is_plus == 1 then acc + t else acc - t
+}
+
 // parse_expr: expr = term (('+'|'-') term)*
 fn parse_expr(s: str, pos: [i64]) -> i64 {
   let acc = parse_term(s, pos);
@@ -53,7 +63,7 @@ fn parse_expr(s: str, pos: [i64]) -> i64 {
     let is_plus = if ch == 43 then 1 else 0;
     let is_minus = if ch == 45 then 1 else 0;
     let is_op = if is_plus == 1 then 1 else is_minus;
-    let acc = if is_op == 1 then (let _ = pos[0] = pos[0] + 1 in (let t = parse_term(s, pos) in (if is_plus == 1 then acc + t else acc - t))) else acc;
+    let acc = if is_op == 1 then apply_op(s, pos, acc, is_plus) else acc;
     let done = if is_op == 1 then 0 else 1;
     0
   };

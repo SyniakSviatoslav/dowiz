@@ -25,6 +25,13 @@ fn eval_let(k: [i64], v: [i64], a: [i64], b: [i64], i: i64, env: [i64]) -> i64 {
   eval(k, v, a, b, b[i], env)
 }
 
+// eval_ifnode: kind==7 (if node) — cond a[i] ? b[i] : v[i]. Helper keeps the
+// eval_node dispatch branchless (no if nested inside the kind==7 branch).
+fn eval_ifnode(k: [i64], v: [i64], a: [i64], b: [i64], i: i64, env: [i64]) -> i64 {
+  let cond = eval(k, v, a, b, a[i], env);
+  if cond != 0 then eval(k, v, a, b, b[i], env) else eval(k, v, a, b, v[i], env)
+}
+
 fn eval_node(k: [i64], v: [i64], a: [i64], b: [i64], i: i64, env: [i64]) -> i64 {
   let kind = k[i];
   let lit = if kind == 0 then v[i] else 0;
@@ -34,7 +41,7 @@ fn eval_node(k: [i64], v: [i64], a: [i64], b: [i64], i: i64, env: [i64]) -> i64 
   let mul = if kind == 4 then eval(k, v, a, b, a[i], env) * eval(k, v, a, b, b[i], env) else 0;
   let dv  = if kind == 5 then eval(k, v, a, b, a[i], env) / eval(k, v, a, b, b[i], env) else 0;
   let vr  = if kind == 6 then env[v[i]] else 0;
-  let iff = if kind == 7 then (if eval(k, v, a, b, a[i], env) != 0 then eval(k, v, a, b, b[i], env) else eval(k, v, a, b, v[i], env)) else 0;
+  let iff = if kind == 7 then eval_ifnode(k, v, a, b, i, env) else 0;
   let le  = if kind == 8 then eval_let(k, v, a, b, i, env) else 0;
   lit + flt + add + sub + mul + dv + vr + iff + le
 }
