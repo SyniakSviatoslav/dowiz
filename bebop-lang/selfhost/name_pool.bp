@@ -1,0 +1,26 @@
+// selfhost/name_pool.bp — interned-name pool over [i64].
+// pool[0] = count (number of interned names).
+// pool[1..count+1] = name hashes.
+// name_intern: linear scan for name_hash, returns 0-based index or -1.
+// name_count: returns pool[0] (current count).
+
+module core { }
+
+// name_intern: scan pool[1..] for name_hash; return index (0-based) if found, -1 if not.
+fn name_intern(pool: [i64], count: i64, name_hash: i64) -> i64 {
+  let i = 1;
+  let found = 0 - 1;
+  let done = 0;
+  while done == 0 {
+    let eq = if pool[i] == name_hash then 1 else 0;
+    let found = if eq == 1 then i - 1 else found;
+    let done = if eq == 1 then 1 else done;
+    let done = if i >= count then 1 else done;
+    let i = i + 1;
+    0
+  };
+  found
+}
+
+// name_count: return the number of interned names (pool[0]).
+fn name_count(pool: [i64]) -> i64 { pool[0] }

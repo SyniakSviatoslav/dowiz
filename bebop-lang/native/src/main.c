@@ -8,6 +8,7 @@
 #include "arena.h"
 #include "memristor.h"
 #include "adc.h"
+#include "power_telemetry.h"
 #include "compute.h"
 #include "lexer.h"
 #include "parser.h"
@@ -991,6 +992,13 @@ int main(int argc, char **argv) {
         int ok = memristor_self_test(buf, sizeof buf);
         fputs(buf, stdout);
         printf("Memristor self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
+        return ok == 0 ? 0 : 1;
+    }
+    if (strcmp(argv[1], "pt") == 0) {
+        char buf[2048];
+        int ok = pt_self_test(buf, sizeof buf);
+        fputs(buf, stdout);
+        printf("Power telemetry self-test: %s\n", ok == 0 ? "PASS" : "FAIL");
         return ok == 0 ? 0 : 1;
     }
     if (strcmp(argv[1], "adc") == 0) {

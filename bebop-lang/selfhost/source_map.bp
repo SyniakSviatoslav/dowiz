@@ -1,0 +1,25 @@
+// selfhost/source_map.bp — source-map line/column tracking over [i64].
+// Each entry encodes (line, col) as a single i64: line*1000 + col, so a
+// flat [i64] array doubles as the map and the caller owns its buffer + a
+// running `count` index. smap_add appends one entry at map[count] and
+// returns the next free index (count + 1); smap_line / smap_col decode an
+// entry by index. ast_id is carried in the signature for call-site symmetry
+// (the id that produced this entry) but is not encoded into the value.
+
+module core { }
+
+// smap_add: write line*1000 + col at map[count]; return the next index.
+fn smap_add(map: [i64], count: i64, ast_id: i64, line: i64, col: i64) -> i64 {
+  let _ = map[count] = line * 1000 + col;
+  count + 1
+}
+
+// smap_line: the line component of the entry at idx.
+fn smap_line(map: [i64], idx: i64) -> i64 {
+  map[idx] / 1000
+}
+
+// smap_col: the column component of the entry at idx.
+fn smap_col(map: [i64], idx: i64) -> i64 {
+  map[idx] - (map[idx] / 1000) * 1000
+}

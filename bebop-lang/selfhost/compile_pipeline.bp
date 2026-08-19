@@ -1,0 +1,35 @@
+module core { }
+
+// Staged compiler pipeline: lex -> parse -> typecheck -> codegen -> emit.
+// Each stage is a passthrough wrapper except codegen, which encodes an
+// AArch64 MOVZ X0, #imm16 instruction word from the typed id.
+
+// stage_lex: passthrough — the source length is the token count.
+fn stage_lex(src_len: i64) -> i64 { src_len }
+
+// stage_parse: token count -> ast id (passthrough).
+fn stage_parse(tok_count: i64) -> i64 { tok_count }
+
+// stage_typecheck: ast id -> typed id (passthrough).
+fn stage_typecheck(ast_id: i64) -> i64 { ast_id }
+
+// stage_codegen: typed id -> MOVZ X0, #typed_id instruction word
+// (0xD2800000 | (imm16 << 5)).
+fn stage_codegen(typed_id: i64) -> i64 { 3531603968 + typed_id * 32 }
+
+// stage_emit: emit the encoded instruction word (passthrough).
+fn stage_emit(word: i64) -> i64 { word }
+
+// compile_all: chain the five stages — source length -> instruction word.
+fn compile_all(src_len: i64) -> i64 {
+  let tok_count = stage_lex(src_len);
+  let ast_id = stage_parse(tok_count);
+  let typed_id = stage_typecheck(ast_id);
+  let word = stage_codegen(typed_id);
+  stage_emit(word)
+}
+
+// self_check: runtime proof — compile_all(42) == MOVZ X0, #42 == 3531605312.
+fn self_check() -> i64 {
+  if compile_all(42) == 3531605312 then 0 else 1
+}
