@@ -27,6 +27,107 @@ fn is_alpha(c: i64) -> i64 {
   ge97 * le122
 }
 
+// Read a multi-char identifier (letters/digits/underscore) starting at pos[0];
+// return its polynomial hash (h = h*131 + c, i64-wrapping), advance pos past it.
+fn read_ident(s: str, pos: [i64]) -> i64 {
+  let strn = str_len(s);
+  let h = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_us = if ch == 95 then 1 else 0;
+    let is_id = is_alpha(ch) + is_digit(ch) + is_us;
+    let h = if is_id == 1 then (h * 131 + ch) else h;
+    let _ = pos[0] = pos[0] + is_id;
+    let done = if is_id == 1 then 0 else 1;
+    0
+  };
+  h
+}
+
+// Symbol table: stab[0] = count; pairs (name, reg) at stab[1+2i], stab[2+2i].
+// Lookup name -> register (or -1 if unbound).
+fn sym_lookup(stab: [i64], name: i64) -> i64 {
+  let cnt = stab[0];
+  let i = 0;
+  let reg = 0 - 1;
+  while i < cnt {
+    let nm = stab[1 + 2 * i];
+    let rg = stab[2 + 2 * i];
+    let is_match = if nm == name then 1 else 0;
+    let reg = if is_match == 1 then rg else reg;
+    let i = i + 1;
+    0
+  };
+  reg
+}
+
+// Bind name to the next free register (x19+cnt); return the register.
+fn sym_bind(stab: [i64], name: i64) -> i64 {
+  let cnt = stab[0];
+  let reg = 19 + cnt;
+  let _ = stab[1 + 2 * cnt] = name;
+  let _ = stab[2 + 2 * cnt] = reg;
+  let _ = stab[0] = cnt + 1;
+  reg
+}
+
+// Skip over a param's type annotation up to the next ',' or ')'.
+fn skip_to_delim(s: str, pos: [i64]) -> i64 {
+  let strn = str_len(s);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_comma = if ch == 44 then 1 else 0;
+    let is_rp = if ch == 41 then 1 else 0;
+    let is_delim = is_comma + is_rp;
+    let _ = pos[0] = pos[0] + (1 - is_delim);
+    let done = if is_delim == 1 then 1 else 0;
+    0
+  };
+  0
+}
+
+// Parse a param list (pos at '('): read each param name hash into pnames,
+// advance pos past ')', return the count.
+fn parse_params(s: str, pos: [i64], pnames: [i64]) -> i64 {
+  let strn = str_len(s);
+  let _ = pos[0] = pos[0] + 1;
+  let pcnt = 0;
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rp = if ch == 41 then 1 else 0;
+    let is_letter = is_alpha(ch);
+    let name = read_ident(s, pos);
+    let _ = pnames[pcnt] = name;
+    let pcnt = pcnt + is_letter;
+    let _ = skip_to_delim(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch2 == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if is_rp == 1 then 1 else 0;
+    0
+  };
+  let _ = pos[0] = pos[0] + 1;
+  pcnt
+}
+
+// Identifier: a function call name(args) or a variable reference.
+fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
+  let name = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let strn = str_len(s);
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let is_lp = if ch == 40 then 1 else 0;
+  if is_lp == 1 then emit_call(s, name, pos, insns, n, stab)
+  else emit_var(insns, n, sym_lookup(stab, name))
+}
+
 fn skip_ws(s: str, pos: [i64]) -> i64 {
   let n = str_len(s);
   let done = 0;
@@ -109,18 +210,18 @@ fn emit_num(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
 }
 
 // Consume one (+ or -) term, then fold (branchless helper).
-fn emit_apply_op(s: str, pos: [i64], insns: [i64], n: [i64], is_minus: i64) -> i64 {
+fn emit_apply_op(s: str, pos: [i64], insns: [i64], n: [i64], is_minus: i64, stab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
-  let _ = emit_term(s, pos, insns, n);
+  let _ = emit_term(s, pos, insns, n, stab);
   let op = if is_minus == 1 then 3 else 2;
   let _ = emit_binop(insns, n, op);
   n[0]
 }
 
 // Consume one (* or /) factor, then fold (branchless helper).
-fn emit_apply_mul(s: str, pos: [i64], insns: [i64], n: [i64], is_div: i64) -> i64 {
+fn emit_apply_mul(s: str, pos: [i64], insns: [i64], n: [i64], is_div: i64, stab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
-  let _ = emit_factor(s, pos, insns, n);
+  let _ = emit_factor(s, pos, insns, n, stab);
   let op = if is_div == 1 then 5 else 4;
   let _ = emit_binop(insns, n, op);
   n[0]
@@ -138,16 +239,16 @@ fn emit_cmp_op(insns: [i64], n: [i64], cond: i64) -> i64 {
 }
 
 // Consume one comparison operator + right operand, then fold (branchless).
-fn emit_apply_cmp(s: str, pos: [i64], insns: [i64], n: [i64], cond: i64, adv: i64) -> i64 {
+fn emit_apply_cmp(s: str, pos: [i64], insns: [i64], n: [i64], cond: i64, adv: i64, stab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + adv;
-  let _ = emit_expr(s, pos, insns, n);
+  let _ = emit_expr(s, pos, insns, n, stab);
   let _ = emit_cmp_op(insns, n, cond);
   n[0]
 }
 
 // cmp = expr (('=='|'!='|'<'|'>'|'<='|'>=') expr)*
-fn emit_cmp(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
-  let _ = emit_expr(s, pos, insns, n);
+fn emit_cmp(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
+  let _ = emit_expr(s, pos, insns, n, stab);
   let done = 0;
   while done == 0 {
     let _ = skip_ws(s, pos);
@@ -169,8 +270,8 @@ fn emit_cmp(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
     let is_geop = is_gt * is_e2;
     let is_op = is_eqop + is_neop + is_ltop + is_gtop + is_leop + is_geop;
     let cond = is_eqop + is_ltop * 10 + is_gtop * 13 + is_leop * 12 + is_geop * 11;
-    let adv = 1 + is_eqop + is_neop + is_leop + is_geop;
-    let _ = if is_op == 1 then emit_apply_cmp(s, pos, insns, n, cond, adv) else 0;
+    let avv = 1 + is_eqop + is_neop + is_leop + is_geop;
+    let _ = if is_op == 1 then emit_apply_cmp(s, pos, insns, n, cond, avv, stab) else 0;
     let done = if is_op == 1 then 0 else 1;
     0
   };
@@ -178,8 +279,8 @@ fn emit_cmp(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
 }
 
 // expr = term ((+|-) term)*
-fn emit_expr(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
-  let _ = emit_term(s, pos, insns, n);
+fn emit_expr(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
+  let _ = emit_term(s, pos, insns, n, stab);
   let done = 0;
   while done == 0 {
     let _ = skip_ws(s, pos);
@@ -188,7 +289,7 @@ fn emit_expr(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
     let is_plus = if ch == 43 then 1 else 0;
     let is_minus = if ch == 45 then 1 else 0;
     let is_op = is_plus + is_minus;
-    let _ = if is_op == 1 then emit_apply_op(s, pos, insns, n, is_minus) else 0;
+    let _ = if is_op == 1 then emit_apply_op(s, pos, insns, n, is_minus, stab) else 0;
     let done = if is_op == 1 then 0 else 1;
     0
   };
@@ -196,8 +297,8 @@ fn emit_expr(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
 }
 
 // term = factor ((*|/) factor)*
-fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
-  let _ = emit_factor(s, pos, insns, n);
+fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
+  let _ = emit_factor(s, pos, insns, n, stab);
   let done = 0;
   while done == 0 {
     let _ = skip_ws(s, pos);
@@ -206,7 +307,7 @@ fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
     let is_mul = if ch == 42 then 1 else 0;
     let is_div = if ch == 47 then 1 else 0;
     let is_op = is_mul + is_div;
-    let _ = if is_op == 1 then emit_apply_mul(s, pos, insns, n, is_div) else 0;
+    let _ = if is_op == 1 then emit_apply_mul(s, pos, insns, n, is_div, stab) else 0;
     let done = if is_op == 1 then 0 else 1;
     0
   };
@@ -214,9 +315,9 @@ fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
 }
 
 // Consume ( expr ).
-fn emit_paren(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
+fn emit_paren(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
-  let _ = emit_cmp(s, pos, insns, n);
+  let _ = emit_cmp(s, pos, insns, n, stab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   n[0]
@@ -225,15 +326,15 @@ fn emit_paren(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
 // Branchless conditional - evaluate cond + BOTH branches, then csel picks the
 // result (native.c TERM_IF). cond/then/else are pure, so speculating both
 // branches is sound and removes a mispredictable branch.
-fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
+fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 2;
-  let _ = emit_cmp(s, pos, insns, n);
+  let _ = emit_cmp(s, pos, insns, n, stab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 4;
-  let _ = emit_cmp(s, pos, insns, n);
+  let _ = emit_cmp(s, pos, insns, n, stab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 4;
-  let _ = emit_cmp(s, pos, insns, n);
+  let _ = emit_cmp(s, pos, insns, n, stab);
   let _ = pop(insns, n, 2);
   let _ = pop(insns, n, 1);
   let _ = pop(insns, n, 0);
@@ -244,7 +345,7 @@ fn emit_cond(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
 }
 
 // factor = number | letter | ( expr ) | cond expr then expr else expr
-fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
+fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
   let _ = skip_ws(s, pos);
   let strn = str_len(s);
   let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
@@ -255,15 +356,12 @@ fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
   let is_f = if ch1 == 102 then 1 else 0;
   let is_ifkw = is_i * is_f;
   let is_letter = is_alpha(ch);
-  let is_lp_next = if ch1 == 40 then 1 else 0;
-  let is_call = is_letter * is_lp_next;
-  let reg = 19 + (ch - 97);
-  if is_lparen == 1 then emit_paren(s, pos, insns, n)
-  else if is_ifkw == 1 then emit_cond(s, pos, insns, n)
-  else if is_call == 1 then emit_call(s, ch, pos, insns, n)
-  else if is_letter == 1 then (let _ = pos[0] = pos[0] + 1 in emit_var(insns, n, reg))
+  if is_lparen == 1 then emit_paren(s, pos, insns, n, stab)
+  else if is_ifkw == 1 then emit_cond(s, pos, insns, n, stab)
+  else if is_letter == 1 then emit_ident(s, pos, insns, n, stab)
   else emit_num(s, pos, insns, n)
 }
+
 
 // Checksum of the emitted buffer (Bebop has no bitwise xor).
 fn sum_words(insns: [i64], count: i64) -> i64 {
@@ -282,11 +380,13 @@ fn compile(s: str) -> i64 {
   let insns = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
   let n = [0];
   let pos = [0];
-  let _ = emit_cmp(s, pos, insns, n);
+  let stab = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+  let _ = emit_cmp(s, pos, insns, n, stab);
   let _ = pop(insns, n, 0);
   let _ = em(insns, n, 3596551104);
   sum_words(insns, n[0])
 }
+
 
 // Advance pos to just before the first occurrence of `target`.
 fn skip_to(s: str, pos: [i64], target: i64) -> i64 {
@@ -346,26 +446,25 @@ fn emit_epilogue(insns: [i64], n: [i64]) -> i64 {
 
 // Emit one 'let x = value;' statement: emit value, pop x0, mov x<reg>,x0
 // (bind the single-letter var x to reg 19+(x-'a')).
-fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
+fn emit_let_stmt(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 3;
   let _ = skip_ws(s, pos);
-  let strn = str_len(s);
-  let name = if pos[0] >= strn then 0 else char(s, pos[0]);
-  let _ = pos[0] = pos[0] + 1;
+  let name = read_ident(s, pos);
+  let reg = sym_bind(stab, name);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
-  let _ = emit_cmp(s, pos, insns, n);
+  let _ = emit_cmp(s, pos, insns, n, stab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = pop(insns, n, 0);
-  let reg = 19 + (name - 97);
   let _ = em(insns, n, 2852127712 + reg);
   n[0]
 }
 
+
 // Emit a function body: zero or more 'let x = v;' statements, then the result
 // expression.
-fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
+fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
   let done = 0;
   while done == 0 {
     let _ = skip_ws(s, pos);
@@ -379,34 +478,33 @@ fn emit_body(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
     let is_e = if ch1 == 101 then 1 else 0;
     let is_t = if ch2 == 116 then 1 else 0;
     let is_let = is_l * is_e * is_t;
-    let _ = if is_let == 1 then emit_let_stmt(s, pos, insns, n) else 0;
+    let _ = if is_let == 1 then emit_let_stmt(s, pos, insns, n, stab) else 0;
     let done = if is_let == 1 then 0 else 1;
     0
   };
-  let _ = emit_cmp(s, pos, insns, n);
+  let _ = emit_cmp(s, pos, insns, n, stab);
   n[0]
 }
 
 // Scan s for the definition "fn <fname>(" (single-letter fn name); record the
 // position of its 'fn' in out[0], return 1 if found.
-fn find_fn(s: str, fname: i64, out: [i64]) -> i64 {
+fn find_fn(s: str, name: i64, out: [i64]) -> i64 {
   let strn = str_len(s);
   let j = 0;
   let found = 0;
   let best = 0;
-  while j < strn {
-    let e1 = if j + 1 >= strn then 1 else 0;
-    let e2 = if j + 2 >= strn then 1 else 0;
-    let e3 = if j + 3 >= strn then 1 else 0;
+  while j + 2 < strn {
     let c0 = char(s, j);
-    let c1 = if e1 == 1 then 0 else char(s, j + 1);
-    let c2 = if e2 == 1 then 0 else char(s, j + 2);
-    let c3 = if e3 == 1 then 0 else char(s, j + 3);
+    let c1 = char(s, j + 1);
+    let c2 = char(s, j + 2);
     let isf = if c0 == 102 then 1 else 0;
     let isn = if c1 == 110 then 1 else 0;
     let issp = if c2 == 32 then 1 else 0;
-    let isnm = if c3 == fname then 1 else 0;
-    let hit = isf * isn * issp * isnm;
+    let is_fn = isf * isn * issp;
+    let tpos = [j + 3];
+    let h = read_ident(s, tpos);
+    let is_match = if h == name then 1 else 0;
+    let hit = is_fn * is_match;
     let best = if hit == 1 then j else best;
     let found = if hit == 1 then 1 else found;
     let j = j + 1;
@@ -416,21 +514,26 @@ fn find_fn(s: str, fname: i64, out: [i64]) -> i64 {
   found
 }
 
+
 // Inline a function call: find fname's def, bind args to its params (a->x19,
 // b->x20, ...), emit the callee body from its source position, restore pos.
-fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64]) -> i64 {
+fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
   let fnpos = [0];
   let _ = find_fn(s, fname, fnpos);
-  let ppos = [fnpos[0] + 4];
-  let pcnt = count_params(s, ppos);
+  let pnames = [0,0,0,0,0,0,0,0,0,0];
+  let ppos = [fnpos[0] + 3];
+  let _ = read_ident(s, ppos);
+  let _ = skip_ws(s, ppos);
+  let pcnt = parse_params(s, ppos, pnames);
   let _ = skip_to(s, ppos, 123);
   let body = ppos[0] + 1;
-  let _ = pos[0] = pos[0] + 2;
+  let _ = pos[0] = pos[0] + 1;
   let i = 0;
   while i < pcnt {
-    let _ = emit_cmp(s, pos, insns, n);
+    let _ = emit_cmp(s, pos, insns, n, stab);
     let _ = pop(insns, n, 0);
-    let _ = em(insns, n, 2852127712 + 19 + i);
+    let reg = sym_bind(stab, pnames[i]);
+    let _ = em(insns, n, 2852127712 + reg);
     let _ = skip_ws(s, pos);
     let strn = str_len(s);
     let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
@@ -443,10 +546,11 @@ fn emit_call(s: str, fname: i64, pos: [i64], insns: [i64], n: [i64]) -> i64 {
   let _ = pos[0] = pos[0] + 1;
   let after = pos[0];
   let _ = pos[0] = body;
-  let _ = emit_body(s, pos, insns, n);
+  let _ = emit_body(s, pos, insns, n, stab);
   let _ = pos[0] = after;
   n[0]
 }
+
 
 // Compile a complete function: fn name(a,b,...) { body }.
 // Params are moved x0->x19, x1->x20, ... in the prologue; body references
@@ -455,29 +559,41 @@ fn compile_fn(s: str) -> i64 {
   let insns = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
   let n = [0];
   let pos = [0];
+  let stab = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 2;
   let _ = skip_ws(s, pos);
-  let _ = skip_to(s, pos, 40);
-  let nparams = count_params(s, pos);
-  let _ = skip_to(s, pos, 123);
-  let _ = pos[0] = pos[0] + 1;
-  let _ = emit_prologue(insns, n);
+  let _ = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let pnames = [0,0,0,0,0,0,0,0,0,0];
+  let nparams = parse_params(s, pos, pnames);
   let i = [0];
   let mvdone = if nparams == 0 then 1 else 0;
   while mvdone == 0 {
-    let _ = em(insns, n, 2852127712 + i[0] * 65536 + 19 + i[0]);
+    let _ = sym_bind(stab, pnames[i[0]]);
     let _ = i[0] = i[0] + 1;
     let mvdone = if i[0] >= nparams then 1 else 0;
     0
   };
-  let _ = emit_body(s, pos, insns, n);
+  let _ = skip_to(s, pos, 123);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_prologue(insns, n);
+  let j = [0];
+  let mv2 = if nparams == 0 then 1 else 0;
+  while mv2 == 0 {
+    let _ = em(insns, n, 2852127712 + j[0] * 65536 + 19 + j[0]);
+    let _ = j[0] = j[0] + 1;
+    let mv2 = if j[0] >= nparams then 1 else 0;
+    0
+  };
+  let _ = emit_body(s, pos, insns, n, stab);
   let _ = skip_ws(s, pos);
   let _ = pos[0] = pos[0] + 1;
   let _ = pop(insns, n, 0);
   let _ = emit_epilogue(insns, n);
   sum_words(insns, n[0])
 }
+
 
 // Verify the emitted machine code against known-good checksums (computed from
 // the native emitter's exact AArch64 encodings). 0 = pass.
@@ -503,5 +619,9 @@ fn self_check() -> i64 {
   let c19 = if compile_fn("fn main() { f(41) } fn f(a) { a + 1 }") == 84002884547 then 0 else 1;
   let c20 = if compile_fn("fn main() { s(6) } fn s(a) { a * a }") == 83593119523 then 0 else 1;
   let c21 = if compile_fn("fn main() { g(3,4) } fn g(a,b) { a + b }") == 104006868725 then 0 else 1;
-  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20 + c21
+  let c22 = if compile_fn("fn main() { foo(41) } fn foo(x) { x + 1 }") == 84002884547 then 0 else 1;
+  let c23 = if compile_fn("fn main() { let acc = 10; let delta = 5; acc + delta }") == 104006868981 then 0 else 1;
+  let c24 = if compile_fn("fn main() { foo(3,4) } fn foo(a,b) { a + b }") == 104006868725 then 0 else 1;
+  let c25 = if compile_fn("fn main() { let total = 0; let extra = 7; total + extra * 2 }") == 138735876786 then 0 else 1;
+  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20 + c21 + c22 + c23 + c24 + c25
 }
