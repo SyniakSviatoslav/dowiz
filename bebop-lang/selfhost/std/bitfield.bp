@@ -1,0 +1,56 @@
+// selfhost/std/bitfield.bp — bit field extraction and manipulation over i64.
+// Bebop has no << >> & | ^ ~, so every operation is expressed with only
+// + - * / and comparisons. x is treated as a NON-NEGATIVE 64-bit pattern
+// (x >= 0, i.e. < 2^63): a bit field is `len` bits starting at bit position
+// `pos` (pos = 0 is the least significant bit). The caller guarantees
+// 0 <= pos < 64, 0 <= len <= 64, and pos + len <= 64 (no range checks).
+
+module core { }
+
+// pow2: 2^n by repeated doubling (n >= 0). 2^64 wraps to 0.
+fn pow2(n: i64) -> i64 {
+  let p = 1;
+  let i = 0;
+  while i < n {
+    let p = p * 2;
+    let i = i + 1;
+    0
+  };
+  p
+}
+
+// get_bit: the single bit at position pos — 0 or 1 (x >= 0).
+fn get_bit(x: i64, pos: i64) -> i64 {
+  let s = x / pow2(pos);
+  s - (s / 2) * 2
+}
+
+// extract: the `len`-bit field starting at position pos (x >= 0).
+//   extract(x, pos, len) = (x / 2^pos) mod 2^len
+// len == 64 makes pow2(len) == 0; the divide-by-zero guard yields x / 2^pos
+// unchanged, which is the correct full-width field (valid only when pos == 0).
+fn extract(x: i64, pos: i64, len: i64) -> i64 {
+  let s = x / pow2(pos);
+  let m = pow2(len);
+  s - (s / m) * m
+}
+
+// set_bit: return x with the bit at position pos set to 1 (x >= 0).
+fn set_bit(x: i64, pos: i64) -> i64 {
+  let b = get_bit(x, pos);
+  x + (1 - b) * pow2(pos)
+}
+
+// clear_bit: return x with the bit at position pos cleared to 0 (x >= 0).
+fn clear_bit(x: i64, pos: i64) -> i64 {
+  let b = get_bit(x, pos);
+  x - b * pow2(pos)
+}
+
+// set_field: return x with the `len`-bit field at position pos set to v
+// (x >= 0, 0 <= v < 2^len). Clears the field, then adds v shifted up.
+fn set_field(x: i64, pos: i64, len: i64, v: i64) -> i64 {
+  let cur = extract(x, pos, len);
+  let cleared = x - cur * pow2(pos);
+  cleared + v * pow2(pos)
+}

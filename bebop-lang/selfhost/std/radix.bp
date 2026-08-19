@@ -1,0 +1,79 @@
+// selfhost/std/radix.bp — base conversion (i64 <-> string) for bases 2..36.
+// Digits are '0'-'9' then 'a'-'z' (values 0..35). No floats/u64/structs in
+// Bebop; division is supported, remainder is expressed as x - (x/b)*b.
+
+module core { }
+
+// digit_char: map a digit value (0-35) to its lowercase ASCII char code, -1 if invalid.
+fn digit_char(d: i64) -> i64 {
+  if d < 10 then (if d >= 0 then (d + 48) else (0 - 1)) else (if d < 36 then (d - 10 + 97) else (0 - 1))
+}
+
+// char_digit: map an ASCII char code to its digit value (0-35), -1 if not a
+// valid alphanumeric digit. Accepts '0'-'9', 'a'-'z', and 'A'-'Z'.
+fn char_digit(c: i64) -> i64 {
+  let v = 0 - 1;
+  let v = if c >= 48 then (if c <= 57 then (c - 48) else v) else v;
+  let v = if c >= 97 then (if c <= 122 then (c - 97 + 10) else v) else v;
+  let v = if c >= 65 then (if c <= 90 then (c - 65 + 10) else v) else v;
+  v
+}
+
+// radix_len: number of digits of |n| in base b (0 counts as 1 digit).
+fn radix_len(n: i64, b: i64) -> i64 {
+  let m = if n < 0 then (0 - n) else n;
+  let count = 1;
+  while m >= b {
+    let m = m / b;
+    let count = count + 1;
+    0
+  };
+  count
+}
+
+// to_base: string of n in base b (2..36); leading '-' if negative.
+// Builds digits least-significant-first into a reversed string, then reverses.
+fn to_base(n: i64, b: i64) -> str {
+  let neg = if n < 0 then 1 else 0;
+  let m = if n < 0 then (0 - n) else n;
+  let rev = "";
+  let t = m;
+  let done = 0;
+  while done == 0 {
+    let d = t - (t / b) * b;
+    let rev = rev ++ chr(digit_char(d));
+    let t = t / b;
+    let done = if t == 0 then 1 else 0;
+    0
+  };
+  let rl = str_len(rev);
+  let out = "";
+  let j = 0;
+  while j < rl {
+    let out = out ++ chr(char(rev, rl - 1 - j));
+    let j = j + 1;
+    0
+  };
+  if neg == 1 then ("-" ++ out) else out
+}
+
+// from_base: parse s in base b (2..36) into i64. Optional leading '-'.
+// Digits >= b or non-alphanumeric chars are skipped.
+fn from_base(s: str, b: i64) -> i64 {
+  let n = str_len(s);
+  let neg = if n > 0 then (if char(s, 0) == 45 then 1 else 0) else 0;
+  let i = neg;
+  let val = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if i >= n then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, i);
+    let d = char_digit(ch);
+    let valid = if d >= 0 then (if d < b then 1 else 0) else 0;
+    let val = if valid == 1 then (val * b + d) else val;
+    let i = i + 1;
+    let done = at_end;
+    0
+  };
+  if neg == 1 then (0 - val) else val
+}

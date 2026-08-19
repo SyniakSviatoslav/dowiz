@@ -1,0 +1,51 @@
+// selfhost/std/decimal.bp — fixed-point decimal arithmetic (i64, no floats).
+// A fixed-point value v is stored as the i64 integer (v * SCALE), where
+// SCALE = 10^6 (six decimal places). All arithmetic is integer-only
+// (RED LINE: zero float arithmetic, cf. money.c C5 integer money).
+// add/sub/mul are overflow-safe: they return -1 on i64 overflow and never
+// wrap. mul truncates toward zero after scaling back down (same convention
+// as money.bp from_cents). Overflow checks compare against i64::MAX/i64::MIN
+// so that no overflowing (UB) arithmetic is ever performed. MIN is written as
+// (0 - MAX - 1) because Bebop has no unary minus.
+
+module core { }
+
+// dec_scale(): the fixed-point scale = 10^6.
+fn dec_scale() -> i64 { 1000000 }
+
+// mul_ov(a, b): 1 if a * b overflows i64, else 0 (0 * x == 0, never overflows).
+fn mul_ov(a: i64, b: i64) -> i64 {
+  let mx = 9223372036854775807;
+  let mn = 0 - 9223372036854775807 - 1;
+  if a == 0 then 0 else (if b == 0 then 0 else (if a > 0 then (if b > 0 then (if a > mx / b then 1 else 0) else (if b < mn / a then 1 else 0)) else (if b > 0 then (if a < mn / b then 1 else 0) else (if a < mx / b then 1 else 0))))
+}
+
+// dec_from_int(n): integer n -> fixed-point (n * SCALE), or -1 on overflow.
+fn dec_from_int(n: i64) -> i64 {
+  if mul_ov(n, 1000000) == 1 then (0 - 1) else n * 1000000
+}
+
+// dec_add(a, b): (a + b) at the same scale, or -1 on i64 overflow.
+fn dec_add(a: i64, b: i64) -> i64 {
+  let mx = 9223372036854775807;
+  let mn = 0 - 9223372036854775807 - 1;
+  let ov = if b > 0 then (if a > mx - b then 1 else 0) else (if b < 0 then (if a < mn - b then 1 else 0) else 0);
+  if ov == 1 then (0 - 1) else a + b
+}
+
+// dec_sub(a, b): (a - b) at the same scale, or -1 on i64 overflow.
+fn dec_sub(a: i64, b: i64) -> i64 {
+  let mx = 9223372036854775807;
+  let mn = 0 - 9223372036854775807 - 1;
+  let ov = if b < 0 then (if a > mx + b then 1 else 0) else (if b > 0 then (if a < mn + b then 1 else 0) else 0);
+  if ov == 1 then (0 - 1) else a - b
+}
+
+// dec_mul(a, b): (a * b) / SCALE, truncating toward zero; -1 on i64 overflow
+// of the intermediate product a * b.
+fn dec_mul(a: i64, b: i64) -> i64 {
+  if mul_ov(a, b) == 1 then (0 - 1) else (a * b) / 1000000
+}
+
+// dec_to_int(a): fixed-point -> integer (truncating division by SCALE).
+fn dec_to_int(a: i64) -> i64 { a / 1000000 }

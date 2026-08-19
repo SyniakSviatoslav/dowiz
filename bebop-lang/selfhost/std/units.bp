@@ -1,0 +1,130 @@
+// selfhost/std/units.bp — integer unit conversion over i64.
+// No floats/u64/structs in Bebop: fractional conversion factors are carried
+// as a numerator/denominator pair applied as (x * NUM) / DEN (C-style
+// truncation-toward-zero integer division). Exact integer relations (time,
+// metric length, mass within a scale, data, temperature offsets) are direct.
+//
+// Fixed-point scale conventions: length imperial<->metric uses 100 (cm) and
+// 1000000 (km/mi); mass uses 100000000 (kg) and 1000000 (g); volume uses
+// 1000000000 (L). All results truncate toward zero.
+
+module core { }
+
+// ---- temperature (exact affine integer relations) ----
+
+// c_to_f: Celsius -> Fahrenheit. F = C*9/5 + 32.
+fn c_to_f(c: i64) -> i64 { c * 9 / 5 + 32 }
+
+// f_to_c: Fahrenheit -> Celsius. C = (F-32)*5/9 (truncating).
+fn f_to_c(f: i64) -> i64 { (f - 32) * 5 / 9 }
+
+// c_to_k: Celsius -> Kelvin (whole-Kelvin integer offset; K = C + 273.15).
+fn c_to_k(c: i64) -> i64 { c + 273 }
+
+// k_to_c: Kelvin -> Celsius. C = K - 273.
+fn k_to_c(k: i64) -> i64 { k - 273 }
+
+// f_to_k: Fahrenheit -> Kelvin (via Celsius).
+fn f_to_k(f: i64) -> i64 { f_to_c(f) + 273 }
+
+// k_to_f: Kelvin -> Fahrenheit (via Celsius).
+fn k_to_f(k: i64) -> i64 { c_to_f(k - 273) }
+
+// ---- time (exact integer relations) ----
+
+fn h_to_min(h: i64) -> i64 { h * 60 }
+fn min_to_h(m: i64) -> i64 { m / 60 }
+fn min_to_s(m: i64) -> i64 { m * 60 }
+fn s_to_min(s: i64) -> i64 { s / 60 }
+fn s_to_ms(s: i64) -> i64 { s * 1000 }
+fn ms_to_s(ms: i64) -> i64 { ms / 1000 }
+fn h_to_s(h: i64) -> i64 { h * 3600 }
+fn s_to_h(s: i64) -> i64 { s / 3600 }
+fn day_to_h(d: i64) -> i64 { d * 24 }
+fn h_to_day(h: i64) -> i64 { h / 24 }
+fn day_to_min(d: i64) -> i64 { d * 1440 }
+fn day_to_s(d: i64) -> i64 { d * 86400 }
+
+// ---- length: metric (exact powers of 10) ----
+
+fn km_to_m(km: i64) -> i64 { km * 1000 }
+fn m_to_km(m: i64) -> i64 { m / 1000 }
+fn m_to_cm(m: i64) -> i64 { m * 100 }
+fn cm_to_m(cm: i64) -> i64 { cm / 100 }
+fn cm_to_mm(cm: i64) -> i64 { cm * 10 }
+fn mm_to_cm(mm: i64) -> i64 { mm / 10 }
+fn km_to_cm(km: i64) -> i64 { km * 100000 }
+fn cm_to_km(cm: i64) -> i64 { cm / 100000 }
+
+// ---- length: imperial + imperial<->metric (fixed-point) ----
+
+// in_to_cm: inches -> centimeters (1 in = 2.54 cm). x*254/100.
+fn in_to_cm(in: i64) -> i64 { in * 254 / 100 }
+// cm_to_in: centimeters -> inches (1 cm = 0.3937 in). x*100/254.
+fn cm_to_in(cm: i64) -> i64 { cm * 100 / 254 }
+// ft_to_in: feet -> inches (1 ft = 12 in).
+fn ft_to_in(ft: i64) -> i64 { ft * 12 }
+// in_to_ft: inches -> feet.
+fn in_to_ft(in: i64) -> i64 { in / 12 }
+// yd_to_ft: yards -> feet (1 yd = 3 ft).
+fn yd_to_ft(yd: i64) -> i64 { yd * 3 }
+// ft_to_yd: feet -> yards.
+fn ft_to_yd(ft: i64) -> i64 { ft / 3 }
+// mi_to_ft: miles -> feet (1 mi = 5280 ft).
+fn mi_to_ft(mi: i64) -> i64 { mi * 5280 }
+// ft_to_cm: feet -> centimeters (1 ft = 30.48 cm). x*3048/100.
+fn ft_to_cm(ft: i64) -> i64 { ft * 3048 / 100 }
+// cm_to_ft: centimeters -> feet. x*100/3048.
+fn cm_to_ft(cm: i64) -> i64 { cm * 100 / 3048 }
+// mi_to_km: miles -> kilometers (1 mi = 1.609344 km). x*1609344/1000000.
+fn mi_to_km(mi: i64) -> i64 { mi * 1609344 / 1000000 }
+// km_to_mi: kilometers -> miles. x*1000000/1609344.
+fn km_to_mi(km: i64) -> i64 { km * 1000000 / 1609344 }
+
+// ---- mass ----
+
+fn kg_to_g(kg: i64) -> i64 { kg * 1000 }
+fn g_to_kg(g: i64) -> i64 { g / 1000 }
+fn t_to_kg(t: i64) -> i64 { t * 1000 }
+fn kg_to_t(kg: i64) -> i64 { kg / 1000 }
+// lb_to_kg: pounds -> kilograms (1 lb = 0.45359237 kg). x*45359237/100000000.
+fn lb_to_kg(lb: i64) -> i64 { lb * 45359237 / 100000000 }
+// kg_to_lb: kilograms -> pounds. x*100000000/45359237.
+fn kg_to_lb(kg: i64) -> i64 { kg * 100000000 / 45359237 }
+// oz_to_g: ounces -> grams (1 oz = 28.349523125 g). x*28349523/1000000.
+fn oz_to_g(oz: i64) -> i64 { oz * 28349523 / 1000000 }
+// g_to_oz: grams -> ounces. x*1000000/28349523.
+fn g_to_oz(g: i64) -> i64 { g * 1000000 / 28349523 }
+// lb_to_oz: pounds -> ounces (1 lb = 16 oz).
+fn lb_to_oz(lb: i64) -> i64 { lb * 16 }
+// oz_to_lb: ounces -> pounds.
+fn oz_to_lb(oz: i64) -> i64 { oz / 16 }
+
+// ---- volume ----
+
+fn l_to_ml(l: i64) -> i64 { l * 1000 }
+fn ml_to_l(ml: i64) -> i64 { ml / 1000 }
+// gal_to_l: US gallons -> liters (1 gal = 3.785411784 L). x*3785411784/1000000000.
+fn gal_to_l(gal: i64) -> i64 { gal * 3785411784 / 1000000000 }
+// l_to_gal: liters -> US gallons. x*1000000000/3785411784.
+fn l_to_gal(l: i64) -> i64 { l * 1000000000 / 3785411784 }
+
+// ---- data (binary, 1024-based) ----
+
+fn kb_to_b(kb: i64) -> i64 { kb * 1024 }
+fn b_to_kb(b: i64) -> i64 { b / 1024 }
+fn mb_to_kb(mb: i64) -> i64 { mb * 1024 }
+fn kb_to_mb(kb: i64) -> i64 { kb / 1024 }
+fn gb_to_mb(gb: i64) -> i64 { gb * 1024 }
+fn mb_to_gb(mb: i64) -> i64 { mb / 1024 }
+fn tb_to_gb(tb: i64) -> i64 { tb * 1024 }
+fn gb_to_tb(gb: i64) -> i64 { gb / 1024 }
+fn mb_to_b(mb: i64) -> i64 { mb * 1048576 }
+fn b_to_mb(b: i64) -> i64 { b / 1048576 }
+
+// ---- speed ----
+
+// kmh_to_mps: km/h -> m/s. x*1000/3600.
+fn kmh_to_mps(kmh: i64) -> i64 { kmh * 1000 / 3600 }
+// mps_to_kmh: m/s -> km/h. x*3600/1000.
+fn mps_to_kmh(mps: i64) -> i64 { mps * 3600 / 1000 }

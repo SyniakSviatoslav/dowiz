@@ -1,0 +1,46 @@
+// selfhost/std/version.bp — semantic version (semver) comparison, i64 only.
+//
+// A version is major.minor.patch (non-negative components). Precedence per
+// semver: compare major, then minor, then patch. Result is -1 (a < b),
+// 0 (equal), or 1 (a > b). No floats/u64/structs — everything is i64.
+//
+// Two encodings are offered:
+//   * explicit: ver_cmp(am, amin, ap, bm, bmin, bp)
+//   * packed:   ver_pack(major, minor, patch) folds a version into ONE i64
+//     as major*1000000 + minor*1000 + patch, so each component must fit in
+//     [0, 999]. ver_cmp_packed(a, b) compares two packed versions.
+// innovate: pre-release identifiers (1.0.0-alpha) and build metadata
+// (1.0.0+build) are out of scope; add them when string parsing lands.
+
+module core { }
+
+// cmp_i64: three-way compare of two integers, -1/0/1.
+// Direct comparison (no subtraction) so it never overflows.
+fn cmp_i64(x: i64, y: i64) -> i64 {
+  if x > y then 1 else (if x < y then (0 - 1) else 0)
+}
+
+// ver_cmp: semver precedence compare of (am.amin.ap) vs (bm.bmin.bp).
+fn ver_cmp(am: i64, amin: i64, ap: i64, bm: i64, bmin: i64, bp: i64) -> i64 {
+  let r = cmp_i64(am, bm);
+  let r = if r == 0 then cmp_i64(amin, bmin) else r;
+  let r = if r == 0 then cmp_i64(ap, bp) else r;
+  r
+}
+
+// ver_pack: fold major.minor.patch into one i64 (base-1000 packing).
+fn ver_pack(major: i64, minor: i64, patch: i64) -> i64 {
+  major * 1000000 + minor * 1000 + patch
+}
+
+// ver_major / ver_minor / ver_patch: unpack a packed version.
+fn ver_major(v: i64) -> i64 { v / 1000000 }
+
+fn ver_minor(v: i64) -> i64 { (v / 1000) - (v / 1000000) * 1000 }
+
+fn ver_patch(v: i64) -> i64 { v - (v / 1000) * 1000 }
+
+// ver_cmp_packed: compare two packed versions.
+fn ver_cmp_packed(a: i64, b: i64) -> i64 {
+  ver_cmp(ver_major(a), ver_minor(a), ver_patch(a), ver_major(b), ver_minor(b), ver_patch(b))
+}

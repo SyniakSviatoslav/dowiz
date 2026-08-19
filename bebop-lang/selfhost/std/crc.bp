@@ -1,0 +1,72 @@
+// selfhost/std/crc.bp — CRC-32 (IEEE 802.3, reflected polynomial 0xEDB88320).
+// Port of native/src/zlib.c zlib_crc32 (table-driven, check value 0xCBF43926
+// for "123456789"), re-expressed in pure i64 arithmetic because Bebop has no
+// bitwise operators (& | ^ ~ << >>). Bit-exact: XOR is computed bit-by-bit,
+// shift-right is /2, low-bit is x - (x/2)*2, and ~x on a 32-bit pattern is
+// 4294967295 - x. All 32-bit patterns are non-negative (< 2^32), so /2 and
+// the low-bit trick are exact (bits.bp style).
+
+module core { }
+
+// xor32(a, b): bitwise XOR of two 32-bit patterns (0 <= a, b < 2^32),
+// accumulated LSB-first with place value p = 2^i over i in [0, 32).
+fn xor32(a: i64, b: i64) -> i64 {
+  let aa = a;
+  let bb = b;
+  let r = 0;
+  let p = 1;
+  let i = 0;
+  while i < 32 {
+    let ba = aa - (aa / 2) * 2;
+    let bv = bb - (bb / 2) * 2;
+    let bx = ba + bv - (2 * (ba * bv));
+    let r = r + (p * bx);
+    let aa = aa / 2;
+    let bb = bb / 2;
+    let p = p * 2;
+    let i = i + 1;
+    0
+  };
+  r
+}
+
+// crc32_update(crc, b): one reflected CRC-32 step for byte b (0 <= b <= 255).
+// crc is the running 32-bit register (0 <= crc < 2^32), already complemented.
+// Equivalent to the table-driven crc = table[(crc ^ b) & 0xFF] ^ (crc >> 8).
+fn crc32_update(crc: i64, b: i64) -> i64 {
+  let c = xor32(crc, b);
+  let i = 0;
+  while i < 8 {
+    let low = c - (c / 2) * 2;
+    let c = if low == 1 then xor32(c / 2, 3988292384) else c / 2;
+    let i = i + 1;
+    0
+  };
+  c
+}
+
+// crc32_arr(data, n): CRC-32 of the n bytes data[0..n). Init ~0, final ~.
+// Matches zlib_crc32(0, data, n) and zlib.crc32(bytes).
+fn crc32_arr(data: [i64], n: i64) -> i64 {
+  let crc = 4294967295;
+  let i = 0;
+  while i < n {
+    let crc = crc32_update(crc, data[i]);
+    let i = i + 1;
+    0
+  };
+  4294967295 - crc
+}
+
+// crc32_str(s): CRC-32 of the bytes of string s.
+fn crc32_str(s: str) -> i64 {
+  let n = str_len(s);
+  let crc = 4294967295;
+  let i = 0;
+  while i < n {
+    let crc = crc32_update(crc, char(s, i));
+    let i = i + 1;
+    0
+  };
+  4294967295 - crc
+}

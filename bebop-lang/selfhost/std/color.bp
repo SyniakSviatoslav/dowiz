@@ -1,0 +1,29 @@
+// selfhost/std/color.bp — RGB24 pack/unpack over i64.
+//
+// A 24-bit color is stored in one i64 as  r*65536 + g*256 + b, where
+// r/g/b are the red/green/blue channels (0-255). Bebop has no bitwise
+// << >> | &, so pack is a weighted sum and unpack is plain integer
+// division (/ is truncation-toward-zero) plus subtraction — exact on these
+// non-negative values.
+
+module core { }
+
+// rgb_clamp: clamp a channel value into [0, 255].
+fn rgb_clamp(v: i64) -> i64 {
+  if v < 0 then 0 else (if v > 255 then 255 else v)
+}
+
+// rgb_pack: pack three 8-bit channels into one 24-bit color value.
+// r/g/b are assumed already in [0,255] (clamp first via rgb_clamp).
+fn rgb_pack(r: i64, g: i64, b: i64) -> i64 {
+  (r * 65536) + (g * 256) + b
+}
+
+// rgb_unpack_r: red channel (most significant byte) of a packed color.
+fn rgb_unpack_r(c: i64) -> i64 { c / 65536 }
+
+// rgb_unpack_g: green channel of a packed color.
+fn rgb_unpack_g(c: i64) -> i64 { (c / 256) - (c / 65536) * 256 }
+
+// rgb_unpack_b: blue channel (least significant byte) of a packed color.
+fn rgb_unpack_b(c: i64) -> i64 { c - (c / 256) * 256 }

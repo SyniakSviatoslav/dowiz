@@ -1,0 +1,58 @@
+// selfhost/std/heap.bp — binary min-heap over [i64] with an explicit size n.
+// Elements live in a[0..n); the caller owns the array and the count n.
+// Min-heap invariant (0-indexed): a[i] <= a[2i+1] and a[i] <= a[2i+2], so
+// a[0] is always the minimum. heap_push inserts and returns the new size n+1;
+// heap_pop removes and returns the minimum; heap_peek returns it in place.
+
+module core { }
+
+// heap_peek: smallest element without removing it; -1 if the heap is empty.
+fn heap_peek(a: [i64], n: i64) -> i64 {
+  if n < 1 then (0 - 1) else a[0]
+}
+
+// heap_push: insert x into a heap of size n, sift up to restore the invariant;
+// returns the new size n + 1.
+fn heap_push(a: [i64], n: i64, x: i64) -> i64 {
+  let _ = a[n] = x;
+  let i = n;
+  let done = 0;
+  while done == 0 {
+    let p = (i - 1) / 2;
+    let at_root = if i == 0 then 1 else 0;
+    let swap = if at_root == 1 then 0 else (if a[i] < a[p] then 1 else 0);
+    let tmp = a[i];
+    let _ = if swap == 1 then (let _ = a[i] = a[p] in 0) else 0;
+    let _ = if swap == 1 then (let _ = a[p] = tmp in 0) else 0;
+    let i = if swap == 1 then p else i;
+    let done = if swap == 1 then 0 else 1;
+    0
+  };
+  n + 1
+}
+
+// heap_pop: remove and return the smallest element; -1 if the heap is empty.
+fn heap_pop(a: [i64], n: i64) -> i64 {
+  if n < 1 then (0 - 1) else
+    let top = a[0];
+    let m = n - 1;
+    let _ = a[0] = a[m];
+    let i = 0;
+    let done = 0;
+    while done == 0 {
+      let l = i * 2 + 1;
+      let r = i * 2 + 2;
+      let has_l = if l < m then 1 else 0;
+      let has_r = if r < m then 1 else 0;
+      let s = if has_l == 1 then l else i;
+      let s = if has_r == 1 then (if a[r] < a[s] then r else s) else s;
+      let swap = if has_l == 1 then (if a[s] < a[i] then 1 else 0) else 0;
+      let tmp = a[i];
+      let _ = if swap == 1 then (let _ = a[i] = a[s] in 0) else 0;
+      let _ = if swap == 1 then (let _ = a[s] = tmp in 0) else 0;
+      let i = if swap == 1 then s else i;
+      let done = if swap == 1 then 0 else 1;
+      0
+    };
+    top
+}
