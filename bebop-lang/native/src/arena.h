@@ -31,3 +31,4 @@ int arena_self_test(char *out, size_t cap);
 #endif
 /* Compatibility alias for supervise.h */
 typedef Arena BumpArena;
+typedef struct { Arena *arena; size_t offset; } ArenaSnapshot;

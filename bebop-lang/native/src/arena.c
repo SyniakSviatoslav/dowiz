@@ -68,3 +68,8 @@ int arena_self_test(char *out, size_t cap) {
     snprintf(out+p,cap-p,"[%s] ring enq/deq/empty\n",(re1&&re2&&re3)?"ok":"FAIL");
     return ok?0:-1;
 }
+ArenaSnapshot arena_snapshot_take(Arena *a) { ArenaSnapshot s={a,a->offset}; return s;
+}
+void arena_snapshot_restore(ArenaSnapshot snap) { snap.arena->offset=snap.offset;
+}
+size_t arena_used(const Arena *a) { return a->offset; }
