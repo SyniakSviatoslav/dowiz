@@ -130,7 +130,13 @@ uint64_t bp_exec_ns(void) {
     if (hz <= 0) hz = 100;
     unsigned long long start_ns =
         ticks * (1000000000ULL / (unsigned long long)hz);
-    uint64_t now = bp_mono_ns();
+    /* Compare against CLOCK_BOOTTIME, not CLOCK_MONOTONIC: /proc starttime is
+     * in jiffies since boot (including suspend), matching BOOTTIME semantics.
+     * On virtualised/proot hosts MONOTONIC lags BOOTTIME by the accumulated
+     * suspend time, so starttime appears "in the future" and yields a bogus 0. */
+    struct timespec bt;
+    clock_gettime(CLOCK_BOOTTIME, &bt);
+    uint64_t now = (uint64_t)bt.tv_sec * 1000000000ULL + (uint64_t)bt.tv_nsec;
     if (now <= start_ns) return 0;
     return now - start_ns;
 }
