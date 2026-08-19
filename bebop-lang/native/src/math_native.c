@@ -19,10 +19,14 @@ double math_exp(double x) {
 
 double math_ln(double x) {
     if (x <= 0) return -1e308;
+    double ln2 = 0.6931471805599453;
+    int k = 0;
+    while (x > 1.5) { x *= 0.5; k++; }
+    while (x < 0.5) { x *= 2.0; k--; }
     double r = x - 1.0;
     double t = r, s = r;
     for (int i = 2; i < 40; i++) { t *= -r; s += t / i; }
-    return s;
+    return s + k * ln2;
 }
 
 double math_sin(double x) {
