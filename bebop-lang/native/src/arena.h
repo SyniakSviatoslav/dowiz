@@ -27,8 +27,14 @@ int  ring_enq(Ring *r, size_t elem_sz, const void *e); /* producer (ISR) */
 int  ring_deq(Ring *r, size_t elem_sz, void *e);       /* consumer (main) */
 int  ring_empty(const Ring *r);
 
-int arena_self_test(char *out, size_t cap);
-#endif
-/* Compatibility alias for supervise.h */
+/* Compat for supervise.h */
 typedef Arena BumpArena;
 typedef struct { Arena *arena; size_t offset; } ArenaSnapshot;
+
+/* Snapshot: copy used, restore: rollback to saved offset */
+ArenaSnapshot arena_snapshot_take(Arena *a);
+void arena_snapshot_restore(ArenaSnapshot snap);
+size_t arena_used(const Arena *a);
+
+int arena_self_test(char *out, size_t cap);
+#endif
