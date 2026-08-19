@@ -9,4 +9,4 @@ fn emit(insns: [i64], count: i64, word: i64) -> i64 {
 
 fn emit_buf(insns: [i64], count: i64) -> i64 { count }
 
-fn movz(d: i64, imm: i64) -> i64 { 3523215360 + d + imm * 32 }
+fn movz(d: i64, imm: i64) -> i64 { 3531603968 + d + imm * 32 }

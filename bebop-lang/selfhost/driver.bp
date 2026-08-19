@@ -13,9 +13,9 @@ fn parse_int_lit(nd: i64, lit_val: i64) -> i64 {
   if nd > 0 then lit_val else 0
 }
 
-// codegen_movz: AArch64 MOVZ Xd, #imm16 (LSL #0) — 3523215360 + d + imm*32.
+// codegen_movz: AArch64 MOVZ Xd, #imm16 (LSL #0) — 3531603968 + d + imm*32.
 fn codegen_movz(d: i64, imm: i64) -> i64 {
-  3523215360 + d + imm * 32
+  3531603968 + d + imm * 32
 }
 
 // emit: append an instruction word to the output buffer and return the word.

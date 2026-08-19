@@ -13,7 +13,7 @@ fn lex_num(s: str, pos: [i64]) -> i64 {
   };
   acc
 }
-fn movz_imm(imm: i64) -> i64 { 3523215360 + imm * 32 }
+fn movz_imm(imm: i64) -> i64 { 3531603968 + imm * 32 }
 fn compile(src: str) -> i64 {
   let p = [0];
   let v = lex_num(src, p);
