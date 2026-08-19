@@ -51,6 +51,13 @@ static inline void bench_barrier(void) {
     __asm__ __volatile__("" ::: "memory");
 }
 
+/* black_box: empty asm reads+writes *x, so the compiler treats x as unknown
+ * and cannot hoist loop-invariant hypervector work (the C equivalent of
+ * Rust's std::hint::black_box). */
+static inline void bench_black_box(Hypervector *x) {
+    __asm__ __volatile__("" : "+m"(*x) : : "memory");
+}
+
 /* volatile sink: prevents DCE of the measured body. */
 static volatile uint64_t bench_sink;
 
@@ -155,6 +162,7 @@ static void bench_hyper(void) {
         Hypervector c = a, x = a;
         for (long k = 0; k < inner; k++) {
             x.words[0] = a.words[0] + (uint64_t)k; /* vary input: defeat hoist/DCE */
+            bench_black_box(&x);
             c = hv_bind(&x, &b);
             bench_sink ^= c.words[0];
         }
@@ -169,6 +177,7 @@ static void bench_hyper(void) {
         Hypervector c = a, x = a;
         for (long k = 0; k < inner; k++) {
             x.words[0] = a.words[0] + (uint64_t)k;
+            bench_black_box(&x);
             c = hv_bind_neon2(&x, &b);
             bench_sink ^= c.words[0];
         }
@@ -184,6 +193,7 @@ static void bench_hyper(void) {
         Hypervector x = a;
         for (long k = 0; k < inner; k++) {
             x.words[0] = a.words[0] + (uint64_t)k;
+            bench_black_box(&x);
             h += hv_hamming(&x, &b);
         }
         bench_barrier();
@@ -199,6 +209,7 @@ static void bench_hyper(void) {
         Hypervector x = a;
         for (long k = 0; k < inner; k++) {
             x.words[0] = a.words[0] + (uint64_t)k;
+            bench_black_box(&x);
             h += hv_hamming_neon(&x, &b);
         }
         bench_barrier();
@@ -218,6 +229,7 @@ static void bench_hyper(void) {
         Hypervector c = a;
         for (long k = 0; k < inner_b; k++) {
             items[0].words[0] = 10 + (uint64_t)k;
+            bench_black_box(&items[0]);
             c = hv_bundle(items, 4);
             bench_sink ^= c.words[0];
         }
@@ -233,6 +245,7 @@ static void bench_hyper(void) {
         Hypervector c = a, x = a;
         for (long k = 0; k < inner; k++) {
             x.words[0] = a.words[0] + (uint64_t)k;
+            bench_black_box(&x);
             c = hv_permute(&x, 37);
             bench_sink ^= c.words[0];
         }
