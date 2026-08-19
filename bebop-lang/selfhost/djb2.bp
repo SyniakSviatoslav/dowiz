@@ -1,0 +1,18 @@
+module core { }
+fn djb2_init() -> i64 { 5381 }
+fn djb2_step(h: i64, c: i64) -> i64 { h * 33 + c }
+fn hash_str(s: str) -> i64 {
+  let n = str_len(s);
+  let h = djb2_init();
+  let pos = 0;
+  while pos < n {
+    let ch = char(s, pos);
+    let h2 = djb2_step(h, ch);
+    let h = h2;
+    let pos2 = pos + 1;
+    let pos = pos2;
+    0
+  };
+  h
+}
+fn main() -> i64 { hash_str("bebop") }
