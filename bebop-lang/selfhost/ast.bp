@@ -1,6 +1,34 @@
 module core { }
+
+// Bebop self-host AST: every node is a tagged i64.
+// Encoding: low 3 bits = node-kind tag, upper 61 bits = single payload.
+//   tag 0 = lit int   payload = integer value
+//   tag 1 = var       payload = interned name id
+//   tag 2 = binop     payload = op id        (operands a,b deferred)
+//   tag 3 = if        payload = 0            (c,t,e deferred)
+//   tag 4 = let       payload = 0            (name,val,body deferred)
+//   tag 5 = app       payload = 0            (f,arg deferred)
+//   tag 6 = lam       payload = 0            (name,body deferred)
+//   tag 7 = array     payload = length       (elements deferred)
+//
+// A lone i64 holds one payload, so compound nodes (binop/if/let/app/lam/array)
+// with multiple children cannot be packed directly. For now each mk_* returns
+// the bare tag; the child graph is deferred to a later pass (registry array).
+
 fn tag(n: i64) -> i64 { n - (n / 8) * 8 }
-fn is_lit(n: i64) -> i64 { if tag(n) == 0 then 1 else 0 }
+fn node_tag(n: i64) -> i64 { n - (n / 8) * 8 }
+fn node_payload(n: i64) -> i64 { n / 8 }
+
 fn mk_lit(v: i64) -> i64 { v * 8 }
-fn lit_val(n: i64) -> i64 { n / 8 }
+fn mk_var(name: i64) -> i64 { 1 }
+fn mk_bin(op: i64, a: i64, b: i64) -> i64 { 2 }
+fn mk_if(c: i64, t: i64, e: i64) -> i64 { 3 }
+fn mk_let(name: i64, val: i64, body: i64) -> i64 { 4 }
+fn mk_app(f: i64, arg: i64) -> i64 { 5 }
+fn mk_lam(name: i64, body: i64) -> i64 { 6 }
+fn mk_array(n: i64) -> i64 { 7 }
+
+fn is_lit(n: i64) -> i64 { if node_tag(n) == 0 then 1 else 0 }
+fn lit_val(n: i64) -> i64 { node_payload(n) }
+
 fn main() -> i64 { lit_val(mk_lit(42)) }

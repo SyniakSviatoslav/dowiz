@@ -1,0 +1,33 @@
+// selfhost/std/encoding.bp — URL percent-encoding over i64.
+//
+// RFC 3986 unreserved chars (A-Z a-z 0-9 - . _ ~) pass through unchanged;
+// any other byte is percent-encoded as "%XX" (uppercase hex) and packed into a
+// single i64 as 37*65536 + hi*256 + lo  (base-256 positional encoding; '%' == 37).
+
+module core { }
+
+// url_safe_char: 1 if c is an RFC 3986 unreserved char code, else 0.
+fn url_safe_char(c: i64) -> i64 {
+  let s = 0;
+  let s = if c >= 65 then (if c <= 90 then 1 else s) else s;
+  let s = if c >= 97 then (if c <= 122 then 1 else s) else s;
+  let s = if c >= 48 then (if c <= 57 then 1 else s) else s;
+  let s = if c == 45 then 1 else s;
+  let s = if c == 46 then 1 else s;
+  let s = if c == 95 then 1 else s;
+  let s = if c == 126 then 1 else s;
+  s
+}
+
+// hex_digit: map a nibble (0-15) to its UPPERCASE hex ASCII code (0-9 A-F).
+fn hex_digit(v: i64) -> i64 {
+  if v < 10 then (v + 48) else (v - 10 + 65)
+}
+
+// url_encode_char: safe chars return themselves; otherwise the "%XX" triple
+// packed as 37*65536 + hi*256 + lo (uppercase hex digits).
+fn url_encode_char(c: i64) -> i64 {
+  let hi = hex_digit(c / 16);
+  let lo = hex_digit(c - (c / 16) * 16);
+  if url_safe_char(c) == 1 then c else (37 * 65536) + (hi * 256) + lo
+}

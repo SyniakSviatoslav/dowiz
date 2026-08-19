@@ -1,17 +1,26 @@
 module core { }
+
+// lex_skip: tokenize past whitespace (' '=32, '\t'=9, '\n'=10).
+// Advances pos[0] over leading whitespace; returns 0.
 fn lex_skip(s: str, pos: [i64]) -> i64 {
   let n = str_len(s);
   let done = 0;
   while done == 0 {
     let at_end = if pos[0] >= n then 1 else 0;
     let ch = if at_end == 1 then 0 else char(s, pos[0]);
-    let is_sp = if ch == 32 then 1 else 0;
-    let _ = pos[0] = pos[0] + is_sp;
-    let done = if is_sp == 1 then 0 else 1;
+    let is_sp = if at_end == 1 then 0 else (if ch == 32 then 1 else 0);
+    let is_tab = if at_end == 1 then 0 else (if ch == 9 then 1 else 0);
+    let is_nl = if at_end == 1 then 0 else (if ch == 10 then 1 else 0);
+    let adv = is_sp + is_tab + is_nl;
+    let _ = pos[0] = pos[0] + adv;
+    let done = if adv == 1 then 0 else 1;
     0
   };
   0
 }
+
+// lex_num: tokenize a run of ASCII digits ('0'=48 .. '9'=57).
+// Advances pos[0] over the digits; returns their integer value.
 fn lex_num(s: str, pos: [i64]) -> i64 {
   let n = str_len(s);
   let v = 0;
@@ -19,7 +28,7 @@ fn lex_num(s: str, pos: [i64]) -> i64 {
   while done == 0 {
     let at_end = if pos[0] >= n then 1 else 0;
     let ch = if at_end == 1 then 0 else char(s, pos[0]);
-    let is_d = if ch >= 48 then (if ch <= 57 then 1 else 0) else 0;
+    let is_d = if at_end == 1 then 0 else (if ch >= 48 then (if ch <= 57 then 1 else 0) else 0);
     let v = if is_d == 1 then v * 10 + (ch - 48) else v;
     let _ = pos[0] = pos[0] + is_d;
     let done = if is_d == 1 then 0 else 1;
@@ -27,14 +36,35 @@ fn lex_num(s: str, pos: [i64]) -> i64 {
   };
   v
 }
-fn parse_literal(s: str, pos: [i64]) -> i64 {
+
+// parse_num: parse an integer OR float literal with optional leading +/- sign
+// and surrounding whitespace. A trailing '.' + fractional digits are consumed
+// (truncated toward zero, since the movz immediate is an integer).
+fn parse_num(s: str, pos: [i64]) -> i64 {
   let _ = lex_skip(s, pos);
-  lex_num(s, pos)
+  let n = str_len(s);
+  let ch = if pos[0] >= n then 0 else char(s, pos[0]);
+  let is_plus = if ch == 43 then 1 else 0;
+  let is_minus = if ch == 45 then 1 else 0;
+  let is_sign = if is_plus == 1 then 1 else is_minus;
+  let _ = pos[0] = pos[0] + is_sign;
+  let mag = lex_num(s, pos);
+  let n2 = str_len(s);
+  let dot = if pos[0] >= n2 then 0 else (if char(s, pos[0]) == 46 then 1 else 0);
+  let _ = pos[0] = pos[0] + dot;
+  let _ = lex_num(s, pos);
+  if is_minus == 1 then (0 - mag) else mag
 }
-fn emit_movz(imm: i64) -> i64 { imm * 32 }
-fn compile(s: str) -> i64 {
+
+// emit_movz: AArch64 MOVZ X0, #imm16 (LSL #0) — 0xD2800000 | (imm16 << 5).
+fn emit_movz(imm: i64) -> i64 { 3531603968 + imm * 32 }
+
+// compile: end-to-end driver — lex -> parse -> emit movz.
+fn compile(src: str) -> i64 {
   let pos = [0];
-  let v = parse_literal(s, pos);
+  let v = parse_num(src, pos);
   emit_movz(v)
 }
-fn main() -> i64 { compile("  42") }
+
+// main: compile a signed float literal to exercise the full pipeline.
+fn main() -> i64 { compile("  +42.5") }

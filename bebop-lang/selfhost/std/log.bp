@@ -1,0 +1,33 @@
+// selfhost/std/log.bp — log2/log10 over f64 via the natural log.
+// log2(x) = ln(x) / ln(2), log10(x) = ln(x) / ln(10). ln range-reduces
+// into [0.5, 1.5] by powers of two before a Taylor series around 1 (plus the
+// k·ln2 correction). Bebop has no NaN/±Inf, so domain errors are sentinels:
+// ln(x<=0) = -1e18 (stands in for -inf), which log2/log10 propagate.
+
+module core { }
+
+// ln: natural log via range reduction + Taylor series around 1.
+fn ln(x: f64) -> f64 {
+  if x <= 0.0 then (0.0 - 1000000000000000000.0) else (
+    let k = 0;
+    let y = x;
+    while y > 1.5 { let y = y * 0.5; let k = k + 1; 0 };
+    while y < 0.5 { let y = y * 2.0; let k = k - 1; 0 };
+    let r = y - 1.0;
+    let t = r;
+    let s = r;
+    let i = 2;
+    while i < 40 { let t = t * (0.0 - r); let s = s + t / i; let i = i + 1; 0 };
+    s + k * 0.6931471805599453
+  )
+}
+
+// log2: base-2 logarithm, log2(x) = ln(x) / ln(2).
+fn log2(x: f64) -> f64 {
+  ln(x) / 0.6931471805599453
+}
+
+// log10: base-10 logarithm, log10(x) = ln(x) / ln(10).
+fn log10(x: f64) -> f64 {
+  ln(x) / 2.302585092994046
+}
