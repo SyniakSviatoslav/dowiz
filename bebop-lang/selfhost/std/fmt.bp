@@ -1,0 +1,46 @@
+// selfhost/std/fmt.bp — integer digit count + digit extraction over i64.
+// Port of the integer-formatting core (no floats/u64/structs in Bebop).
+// Division is supported; remainder is expressed as x - (x / 10) * 10.
+
+module core { }
+
+// int_len: number of decimal digits in |n| (0 counts as 1, sign ignored).
+fn int_len(n: i64) -> i64 {
+  let m = if n < 0 then (0 - n) else n;
+  let count = 1;
+  while m >= 10 {
+    let m = m / 10;
+    let count = count + 1;
+    0
+  };
+  count
+}
+
+// int_digit: the decimal digit (0-9) of |n| at position p (0 = least significant).
+fn int_digit(n: i64, p: i64) -> i64 {
+  let m = if n < 0 then (0 - n) else n;
+  let x = m;
+  let i = 0;
+  while i < p {
+    let x = x / 10;
+    let i = i + 1;
+    0
+  };
+  x - (x / 10) * 10
+}
+
+// int_to_str: decimal string of n (leading '-' if negative), digits via 48 + d.
+fn int_to_str(n: i64) -> str {
+  let neg = if n < 0 then 1 else 0;
+  let m = if n < 0 then (0 - n) else n;
+  let len = int_len(m);
+  let out = if neg == 1 then "-" else "";
+  let i = 0;
+  while i < len {
+    let d = int_digit(m, len - 1 - i);
+    let out = out ++ chr(48 + d);
+    let i = i + 1;
+    0
+  };
+  out
+}

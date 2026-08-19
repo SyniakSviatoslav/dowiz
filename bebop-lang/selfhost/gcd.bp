@@ -1,0 +1,13 @@
+module core { }
+fn gcd(a: i64, b: i64) -> i64 {
+  let x = if a >= 0 then a else 0 - a;
+  let y = if b >= 0 then b else 0 - b;
+  while y != 0 {
+    let t = x - (x / y) * y;
+    let x = y;
+    let y = t;
+    0
+  };
+  x
+}
+fn main() -> i64 { gcd(48, 36) }
