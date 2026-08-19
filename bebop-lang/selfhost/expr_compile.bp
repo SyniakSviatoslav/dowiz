@@ -1,0 +1,199 @@
+// selfhost/expr_compile.bp — real expression compiler (self-host codegen).
+//
+// Parses an arithmetic expression (digits, + - * /, parentheses, precedence)
+// and emits REAL AArch64 stack-machine machine code into a growable [i64]
+// instruction buffer — a faithful port of native/src/native.c emit_expr for
+// the LIT + BIN arith subset. This advances self-hosting from "a literal
+// compiles to one MOVZ" to "an expression compiles to a real instruction
+// sequence".
+//
+// Stack machine (matches native.c):
+//   literal          -> movz x0,#imm ; sub sp,#16 ; str x0,[sp]   (push)
+//   binop            -> ldr x1,[sp] ; add sp,#16 ;                 (pop b)
+//                       ldr x0,[sp] ; add sp,#16 ;                 (pop a)
+//                       add/sub/mul/sdiv x0,x0,x1 ; push           (op)
+//   final            -> ldr x0,[sp] ; add sp,#16 ; ret             (return x0)
+//
+// AArch64 words are decimal (Bebop has no hex literals); each is verified
+// against the native emitter's encodings below.
+
+module core { }
+
+fn is_digit(c: i64) -> i64 {
+  let ge48 = if c >= 48 then 1 else 0;
+  let le57 = if c <= 57 then 1 else 0;
+  ge48 * le57
+}
+
+fn skip_ws(s: str, pos: [i64]) -> i64 {
+  let n = str_len(s);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= n then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_sp = if ch == 32 then 1 else 0;
+    let _ = pos[0] = pos[0] + is_sp;
+    let done = if is_sp == 1 then 0 else 1;
+    0
+  };
+  0
+}
+
+// em: append one instruction word, advance the count.
+fn em(insns: [i64], n: [i64], w: i64) -> i64 {
+  let _ = insns[n[0]] = w;
+  let _ = n[0] = n[0] + 1;
+  n[0]
+}
+
+// push x0 (sub sp,#16 ; str x0,[sp]).
+fn push(insns: [i64], n: [i64]) -> i64 {
+  let _ = em(insns, n, 3506455551);
+  let _ = em(insns, n, 4177527776);
+  n[0]
+}
+
+// pop into x<rd> (ldr x<rd>,[sp] ; add sp,#16).
+fn pop(insns: [i64], n: [i64], rd: i64) -> i64 {
+  let _ = em(insns, n, 4181722080 + rd);
+  let _ = em(insns, n, 2432713727);
+  n[0]
+}
+
+// emit a literal: movz x0,#imm ; push.
+fn emit_lit(insns: [i64], n: [i64], imm: i64) -> i64 {
+  let _ = em(insns, n, 3531603968 + imm * 32);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// emit a binary op (2=add 3=sub 4=mul 5=div): pop b->x1, pop a->x0, op, push.
+fn emit_binop(insns: [i64], n: [i64], op: i64) -> i64 {
+  let _ = pop(insns, n, 1);
+  let _ = pop(insns, n, 0);
+  let wadd = if op == 2 then 2332098560 else 0;
+  let wsub = if op == 3 then 3405840384 else 0;
+  let wmul = if op == 4 then 2600565760 else 0;
+  let wdiv = if op == 5 then 2596342784 else 0;
+  let _ = em(insns, n, wadd + wsub + wmul + wdiv);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// emit_num: read digits, emit their literal; returns the parsed value.
+fn emit_num(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
+  let strn = str_len(s);
+  let v = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let dg = if at_end == 1 then 0 else is_digit(ch);
+    let v = if dg == 1 then (v * 10) + (ch - 48) else v;
+    let adv = if dg == 1 then 1 else 0;
+    let _ = pos[0] = pos[0] + adv;
+    let done = if dg == 1 then 0 else 1;
+    0
+  };
+  let _ = emit_lit(insns, n, v);
+  n[0]
+}
+
+// emit_apply_op: consume one ('+'|'-') term, then fold (branchless helper).
+fn emit_apply_op(s: str, pos: [i64], insns: [i64], n: [i64], is_minus: i64) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_term(s, pos, insns, n);
+  let op = if is_minus == 1 then 3 else 2;
+  let _ = emit_binop(insns, n, op);
+  n[0]
+}
+
+// emit_apply_mul: consume one ('*'|'/') factor, then fold (branchless helper).
+fn emit_apply_mul(s: str, pos: [i64], insns: [i64], n: [i64], is_div: i64) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = emit_factor(s, pos, insns, n);
+  let op = if is_div == 1 then 5 else 4;
+  let _ = emit_binop(insns, n, op);
+  n[0]
+}
+
+// emit_expr: expr = term (('+'|'-') term)*
+fn emit_expr(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
+  let _ = emit_term(s, pos, insns, n);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let strn = str_len(s);
+    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_plus = if ch == 43 then 1 else 0;
+    let is_minus = if ch == 45 then 1 else 0;
+    let is_op = is_plus + is_minus;
+    let _ = if is_op == 1 then emit_apply_op(s, pos, insns, n, is_minus) else 0;
+    let done = if is_op == 1 then 0 else 1;
+    0
+  };
+  0
+}
+
+// emit_term: term = factor (('*'|'/') factor)*
+fn emit_term(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
+  let _ = emit_factor(s, pos, insns, n);
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let strn = str_len(s);
+    let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_mul = if ch == 42 then 1 else 0;
+    let is_div = if ch == 47 then 1 else 0;
+    let is_op = is_mul + is_div;
+    let _ = if is_op == 1 then emit_apply_mul(s, pos, insns, n, is_div) else 0;
+    let done = if is_op == 1 then 0 else 1;
+    0
+  };
+  0
+}
+
+// emit_factor: factor = number | '(' expr ')'
+fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64]) -> i64 {
+  let _ = skip_ws(s, pos);
+  let strn = str_len(s);
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let is_lparen = if ch == 40 then 1 else 0;
+  let _ = if is_lparen == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = emit_expr(s, pos, insns, n) in (let _ = skip_ws(s, pos) in (let _ = pos[0] = pos[0] + 1 in 0)))) else emit_num(s, pos, insns, n);
+  n[0]
+}
+
+// sum_words: checksum of the emitted buffer (Bebop has no bitwise xor).
+fn sum_words(insns: [i64], count: i64) -> i64 {
+  let i = 0;
+  let acc = 0;
+  while i < count {
+    let acc = acc + insns[i];
+    let i = i + 1;
+    0
+  };
+  acc
+}
+
+// compile: parse + emit an expression, then return the checksum of the
+// emitted instruction words (deterministic; verified against native.c).
+fn compile(s: str) -> i64 {
+  let insns = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0];
+  let n = [0];
+  let pos = [0];
+  let _ = emit_expr(s, pos, insns, n);
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 3596551104);
+  sum_words(insns, n[0])
+}
+
+// self_check: verify the emitted machine code against known-good checksums
+// (computed from the native emitter's exact AArch64 encodings). 0 = pass.
+fn self_check() -> i64 {
+  let c1 = if compile("42") == 21426575550 then 0 else 1;
+  let c2 = if compile("1+2") == 55887115099 then 0 else 1;
+  let c3 = if compile("1+2*3") == 90616123192 then 0 else 1;
+  let c4 = if compile("2*(3+4)") == 90616123288 then 0 else 1;
+  let c5 = if compile("8/2-1") == 91685642200 then 0 else 1;
+  c1 + c2 + c3 + c4 + c5
+}
