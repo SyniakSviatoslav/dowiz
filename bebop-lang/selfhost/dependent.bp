@@ -1,0 +1,37 @@
+// selfhost/dependent.bp — dependent-type PI/Sigma pack (tagged i64 encoding).
+//
+// Dependent types (PI = dependent product/function, Sigma = dependent sum/pair)
+// are encoded as a single tagged i64 so they can flow through the self-host
+// typechecker's flat array encoding (no structs/tuples in Bebop).
+//
+// Packing scheme:
+//   PI    = 1000*dom + cod        (tag region [1000, 2000))
+//   Sigma = 2000 + dom*100 + cod  (tag region [2000, ...))
+// The tag regions are disjoint, so is_pi/is_sigma are pure range tests.
+//
+// dom/cod are themselves type codes (0=i64, 1=f64, 2=bool, 3=str, 4=unit,
+// -1=error written as 0-1), so dom*100 + cod keeps a two-digit cod field.
+
+module core { }
+
+// pi_type: pack a PI type (dom -> cod) as 1000*dom + cod.
+fn pi_type(dom: i64, cod: i64) -> i64 {
+  1000 * dom + cod
+}
+
+// sigma_type: pack a Sigma type (dom, cod) as 2000 + dom*100 + cod.
+fn sigma_type(dom: i64, cod: i64) -> i64 {
+  2000 + dom * 100 + cod
+}
+
+// is_pi: 1 if t is a PI tag (1000 <= t < 2000), else 0.
+fn is_pi(t: i64) -> i64 {
+  let r = if t >= 1000 then 1 else 0;
+  let r = if t < 2000 then r else 0;
+  r
+}
+
+// is_sigma: 1 if t is a Sigma tag (t >= 2000), else 0.
+fn is_sigma(t: i64) -> i64 {
+  if t >= 2000 then 1 else 0
+}

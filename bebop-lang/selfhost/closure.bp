@@ -1,0 +1,5 @@
+module core { }
+fn mk_closure(body_id: i64, n_captures: i64) -> i64 { body_id * 1024 + n_captures }
+fn closure_body(c: i64) -> i64 { c / 1024 }
+fn closure_ncaptures(c: i64) -> i64 { c - (c / 1024) * 1024 }
+fn main() -> i64 { closure_ncaptures(mk_closure(7, 3)) }

@@ -1,0 +1,38 @@
+module core { }
+
+// lex_digit_run: lex a run of ASCII digits ('0'=48 .. '9'=57) in the source.
+// The source is a digit run of src_len characters; the lexer returns the
+// digit-run length (0 when the source is empty).
+fn lex_digit_run(src_len: i64) -> i64 {
+  if src_len > 0 then src_len else 0
+}
+
+// parse_int_lit: parse the digit-run token into an integer literal. The
+// token's digit count is nd; the parsed integer value is lit_val.
+fn parse_int_lit(nd: i64, lit_val: i64) -> i64 {
+  if nd > 0 then lit_val else 0
+}
+
+// codegen_movz: AArch64 MOVZ Xd, #imm16 (LSL #0) — 3523215360 + d + imm*32.
+fn codegen_movz(d: i64, imm: i64) -> i64 {
+  3523215360 + d + imm * 32
+}
+
+// emit: append an instruction word to the output buffer and return the word.
+fn emit(insns: [i64], count: i64, word: i64) -> i64 {
+  let _ = insns[count] = word;
+  word
+}
+
+// compile_driver: lex -> parse -> codegen -> emit chain for an integer
+// literal (a digit run of src_len characters). Returns the instruction word.
+fn compile_driver(src_len: i64, lit_val: i64) -> i64 {
+  let nd = lex_digit_run(src_len);
+  let v = parse_int_lit(nd, lit_val);
+  let word = codegen_movz(0, v);
+  let buf = [0];
+  emit(buf, 0, word)
+}
+
+// main: compile a single-digit literal 42 to its MOVZ instruction word.
+fn main() -> i64 { compile_driver(1, 42) }

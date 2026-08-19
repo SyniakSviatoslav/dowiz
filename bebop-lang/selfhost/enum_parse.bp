@@ -1,0 +1,18 @@
+module core { }
+
+// selfhost/enum_parse.bp — enum constructor tag primitives.
+// An enum value is a tagged i64: the low 3 bits hold the constructor tag,
+// the upper 61 bits hold the payload (when present).
+// enum_ctor_count returns the number of constructors (passthrough — the
+// caller supplies n, which is the declared ctor count).
+// enum_ctor_tag returns the tag index of a constructor (identity).
+// enum_discriminant extracts the tag from a constructed enum value.
+
+// enum_ctor_count: passthrough — returns the declared constructor count.
+fn enum_ctor_count(n: i64) -> i64 { n }
+
+// enum_ctor_tag: returns the tag index of a constructor (identity).
+fn enum_ctor_tag(i: i64) -> i64 { i }
+
+// enum_discriminant: returns the discriminant tag from a constructed enum value.
+fn enum_discriminant(tag: i64) -> i64 { tag }

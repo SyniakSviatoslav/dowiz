@@ -1,0 +1,27 @@
+// selfhost/struct_parse.bp — struct declaration parsing (field count + size).
+// A struct decl is encoded as a pair (n_fields, total_size): the field count
+// and the summed byte size of its fields. Two accessors build that encoding
+// from a parsed body — no structs/pointers needed in the self-host language.
+
+module core { }
+
+// struct_field_count: number of fields in a parsed struct body.
+// body_len is the length of the body region (reserved for a future pass that
+// actually walks the body); for now the field count is threaded through
+// unchanged (passthrough).
+fn struct_field_count(body_len: i64, n_fields: i64) -> i64 {
+  n_fields
+}
+
+// struct_size: total byte size of a struct = sum of its field sizes.
+// field_sizes[0 .. n_fields) are summed; n_fields <= 0 yields 0.
+fn struct_size(n_fields: i64, field_sizes: [i64]) -> i64 {
+  let i = 0;
+  let total = 0;
+  while i < n_fields {
+    let total = total + field_sizes[i];
+    let i = i + 1;
+    0
+  };
+  total
+}

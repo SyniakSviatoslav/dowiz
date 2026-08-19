@@ -1,0 +1,21 @@
+// selfhost/universes.bp — universe levels for the type universe hierarchy.
+// A universe level is a natural number encoding a universe's position in the
+// cumulative hierarchy: ty0 is the base universe, ty1/ty2 the next levels.
+// universe_max is the join (least upper bound) of two levels; universe_leq is
+// the subtyping preorder test (a is at least as small as b).
+
+module core { }
+
+fn ty0() -> i64 { 0 }
+
+fn ty1() -> i64 { 1 }
+
+fn ty2() -> i64 { 2 }
+
+fn universe_max(a: i64, b: i64) -> i64 {
+  if a > b then a else b
+}
+
+fn universe_leq(a: i64, b: i64) -> i64 {
+  if a <= b then 1 else 0
+}

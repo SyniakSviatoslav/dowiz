@@ -1,0 +1,24 @@
+// selfhost/type_registry.bp — flat type registry over a single [i64] array.
+// types[i] = type tag stored in slot i; count = number of live entries.
+// Lookup is a linear scan (small registries; no hash needed).
+
+module core { }
+
+// treg_add: append type t at index count, return new count.
+fn treg_add(types: [i64], count: i64, t: i64) -> i64 {
+  let _ = types[count] = t;
+  count + 1
+}
+
+// treg_lookup: linear scan for t, returns index (0..count-1) or -1.
+fn treg_lookup(types: [i64], count: i64, t: i64) -> i64 {
+  let i = 0;
+  let result = 0 - 1;
+  while i < count {
+    let v = types[i];
+    let result = if v == t then i else result;
+    let i = i + 1;
+    0
+  };
+  result
+}

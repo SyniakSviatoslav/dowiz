@@ -1,0 +1,28 @@
+// selfhost/field_access.bp — struct field offset/get over a flat [i64] buffer.
+// A struct is laid out as a contiguous [i64] "byte" array where field i starts
+// at the running sum of the sizes of fields 0..i. field_offset computes that
+// starting index; field_get reads the buffer at that index (single-cell fields
+// here, so the field value is struct_buf[offset]).
+//
+//   field_offset(field_idx, field_sizes) = sum field_sizes[0 .. field_idx)
+//   field_get(struct_buf, field_idx, field_sizes) = struct_buf[field_offset(...)]
+
+module core { }
+
+// field_offset: byte offset of field `field_idx` = sum of preceding field sizes.
+fn field_offset(field_idx: i64, field_sizes: [i64]) -> i64 {
+  let offset = 0;
+  let i = 0;
+  while i < field_idx {
+    let offset = offset + field_sizes[i];
+    let i = i + 1;
+    0
+  };
+  offset
+}
+
+// field_get: read struct_buf at field `field_idx`'s offset.
+fn field_get(struct_buf: [i64], field_idx: i64, field_sizes: [i64]) -> i64 {
+  let offset = field_offset(field_idx, field_sizes);
+  struct_buf[offset]
+}

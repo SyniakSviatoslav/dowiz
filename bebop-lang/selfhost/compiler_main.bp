@@ -1,0 +1,63 @@
+// selfhost/compiler_main.bp — lex -> parse -> emit driver.
+// Chain: lex_num (digit run) -> parse_num (skip ws, sign, digits)
+//        -> emit_movz (AArch64 MOVZ) -> compile -> main.
+
+module core { }
+
+// lex_num: read a run of ASCII digits ('0'=48 .. '9'=57) starting at pos[0],
+// advancing pos[0] past the run. Returns the accumulated integer value.
+fn lex_num(s: str, pos: [i64]) -> i64 {
+  let n = str_len(s);
+  let acc = 0;
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= n then 1 else 0;
+    let c = if at_end == 1 then 0 else char(s, pos[0]);
+    let isd = if c >= 48 then (if c <= 57 then 1 else 0) else 0;
+    let acc2 = acc * 10 + c - 48;
+    let acc = if isd == 1 then acc2 else acc;
+    let adv = if isd == 1 then 1 else 0;
+    pos[0] = pos[0] + adv;
+    let done = if (at_end + (1 - isd)) > 0 then 1 else 0;
+    0
+  };
+  acc
+}
+
+// parse_num: skip leading whitespace, consume an optional sign, then lex the
+// digit run. Returns the signed integer value.
+fn parse_num(s: str) -> i64 {
+  let pos = [0];
+  let n = str_len(s);
+  let done = 0;
+  while done == 0 {
+    let at_end = if pos[0] >= n then 1 else 0;
+    let c = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_sp = if c == 32 then 1 else 0;
+    let is_tb = if c == 9 then 1 else 0;
+    let is_nl = if c == 10 then 1 else 0;
+    let is_cr = if c == 13 then 1 else 0;
+    let is_ws = if (is_sp + is_tb + is_nl + is_cr) > 0 then 1 else 0;
+    pos[0] = pos[0] + is_ws;
+    let done = if (at_end + (1 - is_ws)) > 0 then 1 else 0;
+    0
+  };
+  let at_end2 = if pos[0] >= n then 1 else 0;
+  let c2 = if at_end2 == 1 then 0 else char(s, pos[0]);
+  let is_minus = if c2 == 45 then 1 else 0;
+  let is_plus = if c2 == 43 then 1 else 0;
+  let has_sign = is_minus + is_plus;
+  pos[0] = pos[0] + has_sign;
+  let sign = if is_minus == 1 then 0 - 1 else 1;
+  let mag = lex_num(s, pos);
+  sign * mag
+}
+
+// emit_movz: encode AArch64 MOVZ x{d}, #imm (LSL #0) — 3523215360 + d + imm*32.
+fn emit_movz(d: i64, imm: i64) -> i64 { 3523215360 + d + imm * 32 }
+
+// compile: parse a numeric literal from source and emit it into x0.
+fn compile(s: str) -> i64 { emit_movz(0, parse_num(s)) }
+
+// main: compile a literal source string to its MOVZ instruction word.
+fn main() -> i64 { compile("42") }
