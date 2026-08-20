@@ -1915,7 +1915,7 @@ static Value eval(const Term *t, Env *env) {
         }
         case TERM_ARRAY: {
             int n = t->nfields;
-            if (n < 0 || n > 4096) { v.kind = -1; return v; }
+            if (n < 0 || n > 16384) { v.kind = -1; return v; }
             if (afv_pos + (size_t)n > sizeof afv_arena / sizeof afv_arena[0]) {
                 v.kind = -1; return v; /* arena exhausted */
             }

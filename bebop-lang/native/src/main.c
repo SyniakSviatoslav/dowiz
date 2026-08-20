@@ -596,6 +596,110 @@ static void cmd_run(const char *path, const char *fn_name, const char *arg) {
     free(src);
 }
 
+/* selfcompile: read a .bp file, load its functions, then feed the file's own
+ * source text to its `compile_program` (self-hosting: the compiler compiles
+ * itself). Prints the emitted-machine-code checksum. */
+static void cmd_selfcompile(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) { fprintf(stderr, "cannot open %s\n", path); exit(1); }
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *src = malloc((size_t)sz + 1);
+    if (!src) { fclose(f); exit(1); }
+    size_t rd = fread(src, 1, (size_t)sz, f);
+    src[rd] = '\0';
+    fclose(f);
+
+    AstProgram prog;
+    BpParseError perr;
+    if (bp_parse(src, &prog, &perr) != 0) {
+        fprintf(stderr, "parse error at %u: %s\n", perr.line, perr.msg);
+        free(src); exit(1);
+    }
+    TyRegistry reg;
+    typereg_init(&reg);
+    expr_set_registry(&reg);
+    char err[256];
+    expr_pool_reset();
+    for (size_t i = 0; i < prog.len; i++) {
+        const AstItem *it = &prog.items[i];
+        if (it->kind == AST_ITEM_STRUCT && it->text && it->text_len > 0) {
+            char *txt = malloc(it->text_len + 1);
+            memcpy(txt, it->text, it->text_len);
+            txt[it->text_len] = '\0';
+            if (bp_parse_struct_decl(txt, &reg, err, sizeof err) != 0) {
+                fprintf(stderr, "struct parse error: %s\n", err);
+                free(txt); bp_program_free(&prog); free(src); exit(1);
+            }
+            free(txt);
+        }
+        if (it->kind == AST_ITEM_ENUM && it->text && it->text_len > 0) {
+            char *txt = malloc(it->text_len + 1);
+            memcpy(txt, it->text, it->text_len);
+            txt[it->text_len] = '\0';
+            if (bp_parse_enum_decl(txt, &reg, err, sizeof err) != 0) {
+                fprintf(stderr, "enum parse error: %s\n", err);
+                free(txt); bp_program_free(&prog); free(src); exit(1);
+            }
+            free(txt);
+        }
+    }
+    enum { MAX_FNS = 256 };
+    const char *fn_names[MAX_FNS];
+    Term *fn_terms[MAX_FNS];
+    int fn_count = 0;
+    for (size_t i = 0; i < prog.len && fn_count < MAX_FNS; i++) {
+        const AstItem *it = &prog.items[i];
+        if (it->kind == AST_ITEM_FN && it->text && it->text_len > 0) {
+            char *txt = malloc(it->text_len + 1);
+            memcpy(txt, it->text, it->text_len);
+            txt[it->text_len] = '\0';
+            Term *fn_term = NULL;
+            Ty *fn_ty = NULL;
+            if (bp_parse_fn_decl(txt, &reg, &fn_term, &fn_ty, err, sizeof err) != 0) {
+                fprintf(stderr, "fn parse error: %s\n", err);
+                free(txt); bp_program_free(&prog); free(src); exit(1);
+            }
+            free(txt);
+            static char fnbuf[MAX_FNS][64];
+            size_t fl = it->name_len < 63 ? it->name_len : 63;
+            memcpy(fnbuf[fn_count], it->name ? it->name : "?", fl);
+            fnbuf[fn_count][fl] = '\0';
+            fn_names[fn_count] = fnbuf[fn_count];
+            (void)fn_ty;
+            fn_terms[fn_count] = fn_term;
+            fn_count++;
+        }
+    }
+    int ei = -1;
+    for (int i = 0; i < fn_count; i++) {
+        if (strcmp(fn_names[i], "compile_program") == 0) { ei = i; break; }
+    }
+    if (ei < 0) {
+        fprintf(stderr, "no compile_program function found\n");
+        bp_program_free(&prog); free(src); exit(1);
+    }
+    static Term argterm;
+    memset(&argterm, 0, sizeof argterm);
+    argterm.kind = TERM_STR;
+    argterm.name = src; /* borrowed; src stays alive through eval */
+    static Term app;
+    memset(&app, 0, sizeof app);
+    app.kind = TERM_APP;
+    app.a = fn_terms[ei];
+    app.b = &argterm;
+    int vk; long vi; int vb; double vf = 0.0;
+    if (qtt_eval_binds(&app, fn_names, fn_terms, fn_count,
+                       &vk, &vi, &vb, &vf, err, sizeof err) != 0) {
+        fprintf(stderr, "eval error: %s\n", err);
+        bp_program_free(&prog); free(src); exit(1);
+    }
+    printf("%ld\n", vi);
+    bp_program_free(&prog);
+    free(src);
+}
+
 static void cmd_checksum(void) {
     char buf[4096];
     int ok = checksum_self_test(buf, sizeof buf);
@@ -1295,6 +1399,11 @@ int main(int argc, char **argv) {
     if (strcmp(argv[1], "run") == 0) {
         if (argc < 4) { usage(); return 2; }
         cmd_run(argv[2], argv[3], argc > 4 ? argv[4] : "0");
+        return 0;
+    }
+    if (strcmp(argv[1], "selfcompile") == 0) {
+        if (argc < 3) { usage(); return 2; }
+        cmd_selfcompile(argv[2]);
         return 0;
     }
     if (strcmp(argv[1], "x86_64") == 0) {

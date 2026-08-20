@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define TERM_POOL 16384
+#define TERM_POOL 65536
 static Term pool[TERM_POOL];
 static int pi = 0;
 
@@ -17,6 +17,13 @@ static int pi = 0;
 #define STR_ARENA (1 << 20)
 static char str_arena[STR_ARENA];
 static size_t str_pos = 0;
+
+/* Array-literal field arena: flat bump allocator for TERM_ARRAY's TermField
+ * arrays (the old 128×512 ring capped literals at 512 elements and overflowed
+ * at 128 literals). Sized for the self-host compiler's large insns buffers. */
+#define AF_ARENA (1 << 20)
+static TermField af_arena[AF_ARENA];
+static size_t af_pos = 0;
 
 /* Registry (set by cmd_check/cmd_run) for struct construction + field access. */
 static TyRegistry *g_reg = NULL;
@@ -227,17 +234,18 @@ static Term *parse_primary(P *p) {
     } else if (p->s[p->pos] == '[') {
         /* array literal [e1, e2, ...] */
         p->pos++;
-        static TermField af_pool[128][512];
-        static int af_i = 0;
-        TermField *af = af_pool[af_i++ % 128];
+        size_t af_start = af_pos;
         int na = 0;
         skip_ws(p);
         if (p->s[p->pos] != ']') {
             for (;;) {
                 Term *el = parse_expr(p);
                 if (!el) return NULL;
-                af[na].name = "";
-                af[na].val = el;
+                if (af_start + (size_t)na >= AF_ARENA) {
+                    err(p, "array literal too large"); return NULL;
+                }
+                af_arena[af_start + na].name = "";
+                af_arena[af_start + na].val = el;
                 na++;
                 skip_ws(p);
                 if (p->s[p->pos] == ',') { p->pos++; skip_ws(p); continue; }
@@ -246,9 +254,10 @@ static Term *parse_primary(P *p) {
             }
         }
         p->pos++;
+        af_pos = af_start + (size_t)na;
         Term *arr = tnew();
         arr->kind = TERM_ARRAY;
-        arr->fields = af;
+        arr->fields = &af_arena[af_start];
         arr->nfields = na;
         atom = arr;
     } else if (p->s[p->pos] == '\"') {
@@ -711,6 +720,7 @@ static Term *parse_expr(P *p) {
 void expr_pool_reset(void) {
     pi = 0;
     str_pos = 0;
+    af_pos = 0;
 }
 
 int expr_parse(const char *s, Term **term, char *errbuf, size_t cap) {
