@@ -125,10 +125,11 @@ fn emit_ident(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
   let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
   let is_lp = if ch == 40 then 1 else 0;
   let is_br = if ch == 123 then 1 else 0;
-  if is_lp == 1 then emit_call(s, name, pos, insns, n, stab)
+  if is_lp == 1 then emit_call_or_ctor(s, name, pos, insns, n, stab)
   else if is_br == 1 then emit_struct_lit(s, pos, insns, n, stab)
-  else emit_var(insns, n, sym_lookup(stab, name))
+  else emit_var_or_ctor(s, name, insns, n, stab)
 }
+
 
 
 // Skip over a struct field's type annotation up to the next ',' or '}'.
@@ -259,6 +260,105 @@ fn emit_field_access(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) ->
   let _ = em(insns, n, 4181721088 + idx * 1024);
   let _ = push(insns, n);
   n[0]
+}
+
+// Scan for the first enum declaration ("enum "); record pos in out[0].
+fn find_enum(s: str, out: [i64]) -> i64 {
+  let strn = str_len(s);
+  let j = 0;
+  let found = 0;
+  let best = strn;
+  while j + 4 < strn {
+    let c0 = char(s, j);
+    let c1 = char(s, j + 1);
+    let c2 = char(s, j + 2);
+    let c3 = char(s, j + 3);
+    let c4 = char(s, j + 4);
+    let is_e = if c0 == 101 then 1 else 0;
+    let is_n = if c1 == 110 then 1 else 0;
+    let is_u = if c2 == 117 then 1 else 0;
+    let is_m = if c3 == 109 then 1 else 0;
+    let is_sp = if c4 == 32 then 1 else 0;
+    let hit = is_e * is_n * is_u * is_m * is_sp;
+    let best = if hit == 1 then j else best;
+    let found = if hit == 1 then 1 else found;
+    let j = j + 1;
+    0
+  };
+  let _ = out[0] = best;
+  found
+}
+
+// Tag (0-based) of ctor name in the enum decl, or -1 if absent / no enum.
+fn ctor_index(s: str, name: i64) -> i64 {
+  let strn = str_len(s);
+  let epos = [0];
+  let found = find_enum(s, epos);
+  let pos = [epos[0] + 5];
+  let _ = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let i = 0;
+  let tag = 0 - 1;
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rb = if ch == 125 then 1 else 0;
+    let cname = read_ident(s, pos);
+    let is_match = if cname == name then 1 else 0;
+    let tag = if is_match == 1 then i else tag;
+    let i = i + 1;
+    let _ = skip_ws(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch2 == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if is_rb + at_end >= 1 then 1 else 0;
+    0
+  };
+  if found == 1 then tag else (0 - 1)
+}
+
+// Emit an enum ctor with a payload: ctor(expr) -> [tag, payload] block.
+fn emit_enum_ctor(s: str, tag: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
+  let _ = pos[0] = pos[0] + 1;
+  let _ = em(insns, n, 3531603968 + tag * 32);
+  let _ = em(insns, n, 4177527232);
+  let _ = emit_cmp(s, pos, insns, n, stab);
+  let _ = pop(insns, n, 0);
+  let _ = em(insns, n, 4177528256);
+  let _ = pos[0] = pos[0] + 1;
+  let _ = em(insns, n, 2853045216);
+  let _ = em(insns, n, 2432713166);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// Emit a nullary enum ctor: ctor -> [tag] block (no payload).
+fn emit_enum_ctor_nullary(insns: [i64], n: [i64], tag: i64) -> i64 {
+  let _ = em(insns, n, 3531603968 + tag * 32);
+  let _ = em(insns, n, 4177527232);
+  let _ = em(insns, n, 2853045216);
+  let _ = em(insns, n, 2432713166);
+  let _ = push(insns, n);
+  n[0]
+}
+
+// Dispatch name( ... ): enum ctor (with payload) or a function call.
+fn emit_call_or_ctor(s: str, name: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
+  let tag = ctor_index(s, name);
+  let is_ctor = if tag >= 0 then 1 else 0;
+  if is_ctor == 1 then emit_enum_ctor(s, tag, pos, insns, n, stab)
+  else emit_call(s, name, pos, insns, n, stab)
+}
+
+// Dispatch a bare name: nullary enum ctor or a variable reference.
+fn emit_var_or_ctor(s: str, name: i64, insns: [i64], n: [i64], stab: [i64]) -> i64 {
+  let tag = ctor_index(s, name);
+  let is_ctor = if tag >= 0 then 1 else 0;
+  if is_ctor == 1 then emit_enum_ctor_nullary(insns, n, tag)
+  else emit_var(insns, n, sym_lookup(stab, name))
 }
 
 fn skip_ws(s: str, pos: [i64]) -> i64 {
@@ -771,5 +871,7 @@ fn self_check() -> i64 {
   let c26 = if compile_fn("fn main() { let p = pt { x: 1, y: 2 }; p.x + p.y } struct pt { x: i64, y: i64 }") == 166054189801 then 0 else 1;
   let c27 = if compile_fn("fn main() { pt { x: 1, y: 2 } } struct pt { x: i64, y: i64 }") == 75307678847 then 0 else 1;
   let c28 = if compile_fn("fn main(p) { p.x + p.y } struct pt { x: i64, y: i64 }") == 102454910497 then 0 else 1;
-  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20 + c21 + c22 + c23 + c24 + c25 + c26 + c27 + c28
+  let c29 = if compile_fn("fn main() { some(5) } enum opt { none, some }") == 61009259809 then 0 else 1;
+  let c30 = if compile_fn("fn main() { none } enum opt { none, some }") == 39001708259 then 0 else 1;
+  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20 + c21 + c22 + c23 + c24 + c25 + c26 + c27 + c28 + c29 + c30
 }
