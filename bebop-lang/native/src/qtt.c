@@ -1569,6 +1569,7 @@ struct Value {
     const char *ctor; /* enum: constructor name */
     Value *payload;   /* enum: payload value (pointer) */
     int has_payload;  /* enum: 1 if payload present */
+    long slen;        /* string: cached length (str_len memo) */
 };
 typedef struct FieldValue {
     const char *name;
@@ -1594,6 +1595,8 @@ static size_t afv_pos = 0;
 static Env *env_new(const char *name, Value val, Env *next) {
     if (env_i >= (int)(sizeof env_pool / sizeof env_pool[0])) {
         return NULL; /* pool exhausted (bounded eval) */
+    }
+    if ((env_i & 0xFFFFF) == 0) {
     }
     Env *e = &env_pool[env_i++];
     e->name = name;
@@ -1696,6 +1699,12 @@ static Value eval(const Term *t, Env *env) {
         }
         case TERM_LET: {
             Value x = eval(t->a, env);
+            /* `let _ = v` discards the value (sequencing); skip the env node
+             * entirely — "_" is never looked up, so this is sound and avoids
+             * unbounded env-pool growth in statement-heavy self-host code. */
+            if (t->name && strcmp(t->name, "_") == 0) {
+                return eval(t->b, env);
+            }
             if (in_while) {
                 /* mutate the FIRST matching binding in place so the loop
                  * variable persists across iterations. */
@@ -1778,12 +1787,13 @@ static Value eval(const Term *t, Env *env) {
         case TERM_STR:
             v.kind = 5;      /* string value */
             v.ctor = t->name; /* borrowed literal content */
+            v.slen = (long)strlen(t->name);
             return v;
         case TERM_STR_LEN: {
             Value s = eval(t->a, env);
             if (s.kind != 5) { v.kind = -1; return v; }
             v.kind = 0;
-            v.i = (long)strlen(s.ctor);
+            v.i = s.slen;
             return v;
         }
         case TERM_STR_CAT: {
@@ -1796,6 +1806,7 @@ static Value eval(const Term *t, Env *env) {
             snprintf(buf, 256, "%s%s", a.ctor, b.ctor);
             v.kind = 5;
             v.ctor = buf;
+            v.slen = (long)strlen(buf);
             return v;
         }
         case TERM_STR_CHAR: {
@@ -1803,7 +1814,7 @@ static Value eval(const Term *t, Env *env) {
             Value i = eval(t->b, env);
             if (s.kind != 5 || i.kind != 0) { v.kind = -1; return v; }
             long idx = i.i;
-            if (idx < 0 || (unsigned long)idx >= strlen(s.ctor)) { v.kind = -1; return v; }
+            if (idx < 0 || (unsigned long)idx >= (unsigned long)s.slen) { v.kind = -1; return v; }
             v.kind = 0;
             v.i = (unsigned char)s.ctor[idx];
             return v;
@@ -1817,6 +1828,7 @@ static Value eval(const Term *t, Env *env) {
             cbuf[1] = '\0';
             v.kind = 5;
             v.ctor = cbuf;
+            v.slen = 1;
             return v;
         }
         case TERM_ARRAY_SET: {
@@ -1833,7 +1845,9 @@ static Value eval(const Term *t, Env *env) {
             Value nv = eval(t->c, env);
             if (idx.kind != 0) { v.kind = -1; return v; }
             int i = (int)idx.i;
-            if (i < 0 || i >= target->val.nfv) { v.kind = -1; return v; }
+            if (i < 0 || i >= target->val.nfv) {
+                v.kind = -1; return v;
+            }
             target->val.fv[i].val = nv; /* mutate in place */
             v.kind = 0;
             v.i = 0;
@@ -1844,7 +1858,7 @@ static Value eval(const Term *t, Env *env) {
             int saved_in_while = in_while;
             in_while = 1;
             for (;;) {
-                if (iter++ >= 1000) { v.kind = -1; goto while_done; }
+                if (iter++ >= 100000000) { v.kind = -1; goto while_done; }
                 Value cond = eval(t->a, env);
                 int is_true = 0;
                 if (cond.kind == 1) is_true = cond.b;
@@ -1939,7 +1953,9 @@ static Value eval(const Term *t, Env *env) {
             if (arr.kind != 6) { v.kind = -1; return v; }
             if (idx.kind != 0) { v.kind = -1; return v; }
             int i = (int)idx.i;
-            if (i < 0 || i >= arr.nfv) { v.kind = -1; return v; }
+            if (i < 0 || i >= arr.nfv) {
+                v.kind = -1; return v;
+            }
             if (arr.fv) {
                 return arr.fv[i].val; /* runtime (possibly mutated) value */
             }
