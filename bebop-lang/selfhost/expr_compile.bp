@@ -361,6 +361,57 @@ fn emit_var_or_ctor(s: str, name: i64, insns: [i64], n: [i64], stab: [i64]) -> i
   else emit_var(insns, n, sym_lookup(stab, name))
 }
 
+// Emit a matching match-arm: bind the payload var (if any) then emit the arm body.
+fn emit_match_arm(s: str, ppos: i64, has_var: i64, vname: i64, bodypos: i64, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
+  let saved = pos[0];
+  let _ = if has_var == 1 then (let _ = pos[0] = ppos in (let _ = emit_cmp(s, pos, insns, n, stab) in (let _ = pop(insns, n, 0) in (let _ = em(insns, n, 2852127712 + sym_bind(stab, vname)) in 0)))) else 0;
+  let _ = pos[0] = bodypos;
+  let _ = emit_cmp(s, pos, insns, n, stab);
+  let _ = pos[0] = saved;
+  n[0]
+}
+
+// Compile-time match on a literal enum scrutinee: match ctor(payload) { arm, ... }.
+fn emit_match(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
+  let strn = str_len(s);
+  let _ = pos[0] = pos[0] + 5;
+  let _ = skip_ws(s, pos);
+  let cname = read_ident(s, pos);
+  let _ = skip_ws(s, pos);
+  let ch = if pos[0] >= strn then 0 else char(s, pos[0]);
+  let is_lp = if ch == 40 then 1 else 0;
+  let ppos = [0];
+  let _ = if is_lp == 1 then (let _ = pos[0] = pos[0] + 1 in (let _ = ppos[0] = pos[0] in (let _ = skip_to(s, pos, 41) in (let _ = pos[0] = pos[0] + 1 in 0)))) else 0;
+  let _ = skip_ws(s, pos);
+  let _ = pos[0] = pos[0] + 1;
+  let done = 0;
+  while done == 0 {
+    let _ = skip_ws(s, pos);
+    let at_end = if pos[0] >= strn then 1 else 0;
+    let ch0 = if at_end == 1 then 0 else char(s, pos[0]);
+    let is_rb = if ch0 == 125 then 1 else 0;
+    let aname = read_ident(s, pos);
+    let _ = skip_ws(s, pos);
+    let ch2 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_lp2 = if ch2 == 40 then 1 else 0;
+    let vname = if is_lp2 == 1 then (let _ = pos[0] = pos[0] + 1 in read_ident(s, pos)) else 0;
+    let _ = if is_lp2 == 1 then (let _ = skip_ws(s, pos) in (let _ = pos[0] = pos[0] + 1 in 0)) else 0;
+    let _ = skip_ws(s, pos);
+    let _ = pos[0] = pos[0] + 2;
+    let bodypos = pos[0];
+    let _ = skip_to_field_delim(s, pos);
+    let is_match = if aname == cname then 1 else 0;
+    let has_var = is_lp * is_lp2;
+    let _ = if is_match == 1 then emit_match_arm(s, ppos[0], has_var, vname, bodypos, pos, insns, n, stab) else 0;
+    let ch3 = if pos[0] >= strn then 0 else char(s, pos[0]);
+    let is_comma = if ch3 == 44 then 1 else 0;
+    let _ = if is_comma == 1 then (let _ = pos[0] = pos[0] + 1 in 0) else 0;
+    let done = if is_rb == 1 then 1 else 0;
+    0
+  };
+  n[0]
+}
+
 fn skip_ws(s: str, pos: [i64]) -> i64 {
   let n = str_len(s);
   let done = 0;
@@ -588,9 +639,22 @@ fn emit_factor(s: str, pos: [i64], insns: [i64], n: [i64], stab: [i64]) -> i64 {
   let is_i = if ch == 105 then 1 else 0;
   let is_f = if ch1 == 102 then 1 else 0;
   let is_ifkw = is_i * is_f;
+  let e2 = if pos[0] + 2 >= strn then 1 else 0;
+  let e3 = if pos[0] + 3 >= strn then 1 else 0;
+  let e4 = if pos[0] + 4 >= strn then 1 else 0;
+  let ch2 = if e2 == 1 then 0 else char(s, pos[0] + 2);
+  let ch3 = if e3 == 1 then 0 else char(s, pos[0] + 3);
+  let ch4 = if e4 == 1 then 0 else char(s, pos[0] + 4);
+  let is_m = if ch == 109 then 1 else 0;
+  let is_a = if ch1 == 97 then 1 else 0;
+  let is_t = if ch2 == 116 then 1 else 0;
+  let is_c = if ch3 == 99 then 1 else 0;
+  let is_h = if ch4 == 104 then 1 else 0;
+  let is_matchkw = is_m * is_a * is_t * is_c * is_h;
   let is_letter = is_alpha(ch);
   let _ = if is_lparen == 1 then emit_paren(s, pos, insns, n, stab)
     else if is_ifkw == 1 then emit_cond(s, pos, insns, n, stab)
+    else if is_matchkw == 1 then emit_match(s, pos, insns, n, stab)
     else if is_letter == 1 then emit_ident(s, pos, insns, n, stab)
     else emit_num(s, pos, insns, n);
   let fd = 0;
@@ -873,5 +937,7 @@ fn self_check() -> i64 {
   let c28 = if compile_fn("fn main(p) { p.x + p.y } struct pt { x: i64, y: i64 }") == 102454910497 then 0 else 1;
   let c29 = if compile_fn("fn main() { some(5) } enum opt { none, some }") == 61009259809 then 0 else 1;
   let c30 = if compile_fn("fn main() { none } enum opt { none, some }") == 39001708259 then 0 else 1;
-  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20 + c21 + c22 + c23 + c24 + c25 + c26 + c27 + c28 + c29 + c30
+  let c31 = if compile_fn("fn main() { match some(5) { none => 0, some(x) => x + 1 } } enum opt { none, some }") == 84002883395 then 0 else 1;
+  let c32 = if compile_fn("fn main() { match none { none => 0, some(x) => x + 1 } } enum opt { none, some }") == 29538422645 then 0 else 1;
+  c1 + c2 + c3 + c4 + c5 + c6 + c7 + c8 + c9 + c10 + c11 + c12 + c13 + c14 + c15 + c16 + c17 + c18 + c19 + c20 + c21 + c22 + c23 + c24 + c25 + c26 + c27 + c28 + c29 + c30 + c31 + c32
 }
