@@ -45,8 +45,7 @@ static Ty *enum_ctor_lookup(const char *name) {
 
 static Term *tnew(void) {
     if (pi >= TERM_POOL) {
-        fprintf(stderr, "expr: term pool exhausted (%d terms)\n", TERM_POOL);
-        exit(1);
+        return NULL; /* pool exhausted (bounded parse) */
     }
     memset(&pool[pi], 0, sizeof(Term));
     return &pool[pi++];
@@ -156,6 +155,7 @@ static Term *parse_lambda(P *p) {
         return NULL;
     }
     Term *t = tnew();
+    if (!t) { err(p, "term pool exhausted"); return NULL; }
     t->kind = TERM_LAM;
     t->name = name;
     t->q = q;
@@ -195,22 +195,26 @@ static Term *parse_primary(P *p) {
                 p->pos++;
             }
             Term *t = tnew();
+            if (!t) { err(p, "term pool exhausted"); return NULL; }
             t->kind = TERM_FLIT;
             t->fval = fv;
             atom = t;
         } else {
             Term *t = tnew();
+            if (!t) { err(p, "term pool exhausted"); return NULL; }
             t->kind = TERM_LIT;
             t->ival = v;
             atom = t;
         }
     } else if (match_kw(p, "true")) {
         Term *t = tnew();
+        if (!t) { err(p, "term pool exhausted"); return NULL; }
         t->kind = TERM_LIT;
         t->bval = 1;
         atom = t;
     } else if (match_kw(p, "false")) {
         Term *t = tnew();
+        if (!t) { err(p, "term pool exhausted"); return NULL; }
         t->kind = TERM_LIT;
         t->bval = 0;
         atom = t;
@@ -227,6 +231,7 @@ static Term *parse_primary(P *p) {
         if (p->s[p->pos] != '}') { err(p, "expected '}'"); return NULL; }
         p->pos++;
         Term *w = tnew();
+        if (!w) { err(p, "term pool exhausted"); return NULL; }
         w->kind = TERM_WHILE;
         w->a = cond;
         w->b = body;
@@ -256,6 +261,7 @@ static Term *parse_primary(P *p) {
         p->pos++;
         af_pos = af_start + (size_t)na;
         Term *arr = tnew();
+        if (!arr) { err(p, "term pool exhausted"); return NULL; }
         arr->kind = TERM_ARRAY;
         arr->fields = &af_arena[af_start];
         arr->nfields = na;
@@ -264,6 +270,12 @@ static Term *parse_primary(P *p) {
         int start_pos = ++p->pos;
         while (p->s[p->pos] && p->s[p->pos] != '\"') p->pos++;
         int slen = p->pos - start_pos;
+        /* Reject before writing: escaped output is at most `slen` bytes (escapes
+         * only shrink), plus one NUL. Pre-check avoids overflowing the arena. */
+        if (str_pos + (size_t)slen + 1 > STR_ARENA) {
+            err(p, "string literal too long");
+            return NULL;
+        }
         char *dst = str_arena + str_pos;
         /* process escape sequences: \n \t \\ \" */
         int di = 0;
@@ -282,12 +294,9 @@ static Term *parse_primary(P *p) {
         }
         dst[di] = '\0';
         str_pos += (size_t)di + 1;
-        if (str_pos >= STR_ARENA) {
-            fprintf(stderr, "expr: string arena exhausted\n");
-            exit(1);
-        }
         if (p->s[p->pos] == '\"') p->pos++;
         Term *st = tnew();
+        if (!st) { err(p, "term pool exhausted"); return NULL; }
         st->kind = TERM_STR;
         st->name = dst;
         atom = st;
@@ -305,6 +314,7 @@ static Term *parse_primary(P *p) {
         memcpy(buf, p->s + start, (size_t)len);
         buf[len] = '\0';
         Term *t = tnew();
+        if (!t) { err(p, "term pool exhausted"); return NULL; }
         t->kind = TERM_VAR;
         t->name = buf;
         atom = t;
@@ -387,6 +397,7 @@ static Term *parse_primary(P *p) {
         memcpy(fn, p->s + fs, (size_t)fl);
         fn[fl] = '\0';
         Term *fld = tnew();
+        if (!fld) { err(p, "term pool exhausted"); return NULL; }
         fld->kind = TERM_FIELD;
         fld->a = atom;
         fld->name = fn;
@@ -486,6 +497,7 @@ static Term *parse_primary(P *p) {
                 Term *val = parse_expr(p);
                 if (!val) return NULL;
                 Term *set = tnew();
+                if (!set) { err(p, "term pool exhausted"); return NULL; }
                 set->kind = TERM_ARRAY_SET;
                 set->a = atom;
                 set->b = idx;
@@ -494,6 +506,7 @@ static Term *parse_primary(P *p) {
                 continue;
             }
             Term *get = tnew();
+            if (!get) { err(p, "term pool exhausted"); return NULL; }
             get->kind = TERM_ARRAY_GET;
             get->a = atom;
             get->b = idx;
@@ -507,8 +520,10 @@ static Term *parse_primary(P *p) {
             if (p->s[p->pos] == ')') {
                 p->pos++;
                 Term *unit = tnew();
+                if (!unit) { err(p, "term pool exhausted"); return NULL; }
                 unit->kind = TERM_LIT; unit->ival = 0; unit->bval = 0;
                 Term *app = tnew();
+                if (!app) { err(p, "term pool exhausted"); return NULL; }
                 app->kind = TERM_APP; app->a = atom; app->b = unit;
                 atom = app;
                 break;
@@ -517,6 +532,7 @@ static Term *parse_primary(P *p) {
             if (!arg) return NULL;
             skip_ws(p);
             Term *app = tnew();
+            if (!app) { err(p, "term pool exhausted"); return NULL; }
             app->kind = TERM_APP;
             app->a = atom;
             app->b = arg;
@@ -574,6 +590,7 @@ static Term *parse_bin(P *p, int min_prec) {
             return NULL;
         }
         Term *b = tnew();
+        if (!b) { err(p, "term pool exhausted"); return NULL; }
         if (op == BOP_CAT) {
             b->kind = TERM_STR_CAT;
         } else {
@@ -598,6 +615,7 @@ static Term *parse_seq(P *p) {
         Term *next = parse_expr(p);
         if (!next) return NULL;
         Term *l = tnew();
+        if (!l) { err(p, "term pool exhausted"); return NULL; }
         static char tmp[24];
         static int ti = 0;
         snprintf(tmp, sizeof tmp, "_s%d", ti++);
@@ -643,6 +661,7 @@ static Term *parse_expr(P *p) {
         }
         if (!body) return NULL;
         Term *t = tnew();
+        if (!t) { err(p, "term pool exhausted"); return NULL; }
         t->kind = TERM_LET;
         t->name = name;
         t->a = val;
@@ -693,6 +712,7 @@ static Term *parse_expr(P *p) {
             if (p->s[p->pos] == ',') { p->pos++; continue; }
         }
         Term *m = tnew();
+        if (!m) { err(p, "term pool exhausted"); return NULL; }
         m->kind = TERM_MATCH;
         m->a = scrut;
         m->arms = arms;
@@ -708,6 +728,7 @@ static Term *parse_expr(P *p) {
         if (!match_kw(p, "else")) { err(p, "expected 'else'"); return NULL; }
         Term *el = parse_expr(p);
         Term *t = tnew();
+        if (!t) { err(p, "term pool exhausted"); return NULL; }
         t->kind = TERM_IF;
         t->a = cond;
         t->b = th;

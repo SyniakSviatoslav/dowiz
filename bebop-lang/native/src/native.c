@@ -12,6 +12,16 @@
 static unsigned int em_code[512];
 static size_t em_len;
 
+/* Trailing string data region (see TERM_STR). String bytes are emitted here
+ * (NOT into em_code) and placed AFTER the code words in the single mmap'd
+ * buffer, so adr (PC-relative) can load their address. Each string is aligned
+ * to a 4-byte boundary (adr encodes offsets in units of 4 bytes). */
+static unsigned char em_str[2048];
+static size_t em_strlen;       /* bytes used in em_str */
+static size_t em_adr_at[128];  /* word index of each adr instruction to patch */
+static size_t em_adr_off[128]; /* em_str byte offset each adr loads */
+static int em_adr_n;           /* number of pending adr fixups */
+
 /* ─── Local-variable frame + register allocation (7B) ───
  * `let`-bound locals are register-resident in x19..x28 (10 callee-saved
  * registers) while any are free; the 11th+ local spills to a frame slot.
@@ -361,34 +371,89 @@ static int emit_expr(const Term *t) {
                 return 0;
             }
         case TERM_ARRAY_GET:
-            /* Load all elems via immediate-offset, csel-chain by idx */
+            /* a = array, b = index. eval array → x0 (push), eval index → x0;
+             * pop index→x1, pop base→x2; ldr x0,[x2,x1,lsl 3]; push.
+             * Register-offset load: Rm=index bits[20:16], Rn=base bits[9:5],
+             * Rt=dest bits[4:0]. */
+            if (emit_expr(t->a) != 0) return -1;
+            if (emit_expr(t->b) != 0) return -1;
+            emit_pop(1); /* index → x1 */
+            emit_pop(2); /* base  → x2 */
+            em(0xF8607800u | (1u << 16) | (2u << 5) | 0u); /* ldr x0,[x2,x1,lsl 3] */
+            emit_push();
+            return 0;
+        case TERM_ARRAY_SET:
+            /* a = array, b = index, c = value. eval all three (each → x0, push);
+             * pop value→x0, pop index→x1, pop base→x2;
+             * str x0,[x2,x1,lsl 3] (Rm=index, Rn=base, Rt=value); result 0. */
+            if (emit_expr(t->a) != 0) return -1;
+            if (emit_expr(t->b) != 0) return -1;
+            if (emit_expr(t->c) != 0) return -1;
+            emit_pop(0); /* value → x0 */
+            emit_pop(1); /* index → x1 */
+            emit_pop(2); /* base  → x2 */
+            em(0xF8207800u | (1u << 16) | (2u << 5) | 0u); /* str x0,[x2,x1,lsl 3] */
+            em(0xD2800000u); /* mov x0, #0 — array set evaluates to void */
+            emit_push();
+            return 0;
+        case TERM_STR:
+            /* String literal: emit the bytes into the trailing data region and
+             * load their address with adr (PC-relative). Layout of the single
+             * mmap'd region (base = mmap return, mem):
+             *   [0, em_len*4)            = code words (em_code)
+             *   [em_len*4, em_len*4+em_strlen) = string bytes (em_str)
+             * The adr instruction is at word index `at` (PC = mem + at*4); the
+             * string data sits at mem + em_len*4 + off. The offset it encodes
+             * is (em_len*4 + off) - at*4, always a multiple of 4, patched in
+             * native_eval once em_len is final. */
+            {
+                const char *s = t->name ? t->name : "";
+                size_t len = strlen(s);
+                while ((em_strlen & 3u) != 0u) em_str[em_strlen++] = 0u; /* 4B align */
+                size_t off = em_strlen;
+                for (size_t k = 0; k <= len && em_strlen < sizeof em_str; k++) {
+                    em_str[em_strlen++] = (unsigned char)s[k];
+                }
+                if (em_adr_n < (int)(sizeof em_adr_at / sizeof em_adr_at[0])) {
+                    em_adr_at[em_adr_n] = em_len;
+                    em_adr_off[em_adr_n] = off;
+                    em_adr_n++;
+                }
+                em(0x10000000u | 0u); /* adr x0, #imm (patched in native_eval) */
+                emit_push();
+                return 0;
+            }
+        case TERM_STR_LEN: {
+            /* a = string. eval → x0 (push); pop → x0 = ptr; x2 = count; scan:
+             * ldrb w1,[x0,x2]; cbz w1,end; add x2,#1; b loop; end: mov x0,x2. */
             if (emit_expr(t->a) != 0) return -1;
             emit_pop(0);
-            em(0xAA0003E2u);                   /* mov x2, x0 */
+            em(0xD2800002u); /* mov x2, #0 — count */
+            size_t loop = em_len;
+            /* ldrb w1,[x0,x2]: Rm=count bits[20:16], Rn=ptr bits[9:5], Rt=w1. */
+            em(0x38606800u | (2u << 16) | (0u << 5) | 1u);
+            size_t cbz_at = em_len;
+            em(0x34000000u | 1u); /* cbz w1, <end> (patched) */
+            em(0x91000442u);       /* add x2, x2, #1 */
+            int back = (int)(loop - em_len);
+            em(0x14000000u | ((unsigned)back & 0x3FFFFFFu)); /* b loop */
+            size_t end = em_len;
+            int fwd = (int)(end - cbz_at);
+            em_code[cbz_at] = 0x34000000u | (((unsigned)fwd & 0x7FFFFu) << 5) | 1u;
+            em(0xAA0203E0u); /* mov x0, x2 — return count */
+            emit_push();
+            return 0;
+        }
+        case TERM_STR_CHAR:
+            /* a = string, b = index. eval string → x0 (push), eval index → x0;
+             * pop index→x1, pop base→x2; ldrb w0,[x2,x1] (byte, zero-extended
+             * into x0); push. */
+            if (emit_expr(t->a) != 0) return -1;
             if (emit_expr(t->b) != 0) return -1;
-            emit_pop(1);
-            /* Resolve through let/var chains to find the TERM_ARRAY */
-            const Term *arr = t->a;
-            while (arr && (arr->kind == TERM_VAR || arr->kind == TERM_LET)) {
-                if (arr->kind == TERM_LET) arr = arr->a;
-                else break; /* TERM_VAR: can't resolve at compile time */
-            }
-            if (arr && arr->kind == TERM_ARRAY && arr->nfields > 0) {
-                int n = arr->nfields;
-                if (n > 0) { em(0xF9400040u | (0u << 10)); em(0xAA0003E3u); }
-                if (n > 1) { em(0xF9400040u | (1u << 10)); em(0xAA0003E4u); }
-                if (n > 2) { em(0xF9400040u | (2u << 10)); em(0xAA0003E5u); }
-                if (n > 3) { em(0xF9400040u | (3u << 10)); em(0xAA0003E6u); }
-                if (n > 4) { em(0xF9400040u | (4u << 10)); em(0xAA0003E7u); }
-                if (n > 5) { em(0xF9400040u | (5u << 10)); em(0xAA0003E8u); }
-                if (n > 6) { em(0xF9400040u | (6u << 10)); em(0xAA0003E9u); }
-                if (n > 7) { em(0xF9400040u | (7u << 10)); em(0xAA0003EAu); }
-                em(0xAA0303E0u); /* x0 = x3 (assume idx 0) */
-                for (int j = 1; j < n; j++) {
-                    em(0x7100003Fu | ((unsigned)(j) << 10)); /* cmp x1, #j */
-                    em(0x9A800000u | ((unsigned)(j+3) << 5)); /* csel x0, x(j+3), x0, eq */
-                }
-            } else { return -1; }
+            emit_pop(1); /* index → x1 */
+            emit_pop(2); /* base  → x2 */
+            /* ldrb w0,[x2,x1]: Rm=index bits[20:16], Rn=base bits[9:5], Rt=w0. */
+            em(0x38606800u | (1u << 16) | (2u << 5) | 0u);
             emit_push();
             return 0;
         case TERM_SYSCALL:
@@ -436,6 +501,8 @@ long native_eval(const Term *t, char *err, size_t cap) {
     nvars = 0;
     nregs = 0;
     nspill = 0;
+    em_strlen = 0;
+    em_adr_n = 0;
     qtt_term_pool_reset(); /* fresh kernel pool for compile-time β-reduction */
     if (pac_available()) em(PAC_PACIASP); /* sign LR (ROP mitigation, 16B) */
     em(0xD10803FFu); /* sub sp, sp, #512 — allocate the frame */
@@ -460,7 +527,20 @@ long native_eval(const Term *t, char *err, size_t cap) {
     if (pac_available()) em(PAC_AUTIASP); /* authenticate LR before ret */
     em(0xD65F03C0u); /* ret */
 
-    size_t sz = em_len * sizeof(unsigned int);
+    /* Patch the adr fixups for trailing string data. The code occupies
+     * [0, em_len*4); each string lives at em_len*4 + em_adr_off[i] within the
+     * same buffer. adr loads PC + (imm21<<2), so the offset from the adr
+     * instruction (word index em_adr_at[i]) to the string byte is
+     * (em_len*4 + off) - at*4 — always a multiple of 4. */
+    size_t code_bytes = em_len * sizeof(unsigned int);
+    for (int i = 0; i < em_adr_n; i++) {
+        long off = (long)(code_bytes + em_adr_off[i]) -
+                   (long)(em_adr_at[i] * sizeof(unsigned int));
+        unsigned imm21 = (unsigned)(off >> 2) & 0x1FFFFFu;
+        em_code[em_adr_at[i]] = 0x10000000u | (imm21 << 5) | 0u; /* adr x0, #off */
+    }
+
+    size_t sz = code_bytes + em_strlen;
     /* W^X (#21 / 2B): two-step — map writeable (NOT executable), emit the
      * code, then flip to executable (NOT writeable). Never W+X at once, so a
      * code-injection write cannot land in an executable page. */
@@ -470,7 +550,8 @@ long native_eval(const Term *t, char *err, size_t cap) {
         snprintf(err, cap, "mmap failed");
         return 0;
     }
-    memcpy(mem, em_code, sz);
+    memcpy(mem, em_code, code_bytes);
+    if (em_strlen) memcpy((char *)mem + code_bytes, em_str, em_strlen);
     __builtin___clear_cache((char *)mem, (char *)mem + sz);
     if (mprotect(mem, sz, PROT_READ | PROT_EXEC) != 0) {
         munmap(mem, sz);
@@ -676,7 +757,7 @@ int native_self_test(char *out, size_t cap) {
         long ar = native_eval(&t, err, sizeof err);
         N(ar != 0 && ar != 99, "native alloc [99] returns ptr");
     }
-    /* native array indexing (immediate offset) */
+    /* native array indexing (register offset) */
     {
         static Term ap[6]; static TermField af[2];
         Term *e1 = &ap[0]; memset(e1, 0, 64); e1->kind = TERM_LIT; e1->ival = 10;
@@ -687,6 +768,61 @@ int native_self_test(char *out, size_t cap) {
         Term *get = &ap[4]; memset(get, 0, 64); get->kind = TERM_ARRAY_GET; get->a = arr; get->b = i1;
         long g = native_eval(get, err, sizeof err);
         N(g == 20, "native [10,20][1] == 20");
+    }
+    /* native array set + get (mutation, via let-bound array) */
+    {
+        static Term pool[16]; static TermField fields[3];
+        int pi = 0;
+        Term *e1 = &pool[pi++]; memset(e1, 0, sizeof *e1); e1->kind = TERM_LIT; e1->ival = 10;
+        Term *e2 = &pool[pi++]; memset(e2, 0, sizeof *e2); e2->kind = TERM_LIT; e2->ival = 20;
+        Term *e3 = &pool[pi++]; memset(e3, 0, sizeof *e3); e3->kind = TERM_LIT; e3->ival = 30;
+        fields[0].name = "0"; fields[0].val = e1;
+        fields[1].name = "1"; fields[1].val = e2;
+        fields[2].name = "2"; fields[2].val = e3;
+        Term *arr = &pool[pi++]; memset(arr, 0, sizeof *arr);
+        arr->kind = TERM_ARRAY; arr->fields = fields; arr->nfields = 3;
+        Term *avar = &pool[pi++]; memset(avar, 0, sizeof *avar); avar->kind = TERM_VAR; avar->name = "a";
+        Term *idx = &pool[pi++]; memset(idx, 0, sizeof *idx); idx->kind = TERM_LIT; idx->ival = 1;
+        Term *val = &pool[pi++]; memset(val, 0, sizeof *val); val->kind = TERM_LIT; val->ival = 99;
+        Term *set = &pool[pi++]; memset(set, 0, sizeof *set);
+        set->kind = TERM_ARRAY_SET; set->a = avar; set->b = idx; set->c = val;
+        Term *get = &pool[pi++]; memset(get, 0, sizeof *get);
+        get->kind = TERM_ARRAY_GET; get->a = avar; get->b = idx;
+        Term *add = &pool[pi++]; memset(add, 0, sizeof *add);
+        add->kind = TERM_BIN; add->op = BOP_ADD; add->a = set; add->b = get;
+        Term *let = &pool[pi++]; memset(let, 0, sizeof *let);
+        let->kind = TERM_LET; let->name = "a"; let->a = arr; let->b = add;
+        long got = native_eval(let, err, sizeof err);
+        N(got == 99, "native let a=[10,20,30] in (a[1]=99)+a[1] == 99");
+    }
+    /* native string literals: str_len / str_char */
+    {
+        static Term pool[12];
+        int pi = 0;
+        Term *hello = &pool[pi++]; memset(hello, 0, sizeof *hello);
+        hello->kind = TERM_STR; hello->name = "hello";
+        Term *slen = &pool[pi++]; memset(slen, 0, sizeof *slen);
+        slen->kind = TERM_STR_LEN; slen->a = hello;
+        long n = native_eval(slen, err, sizeof err);
+        N(n == 5, "native str_len(\"hello\") == 5");
+
+        Term *empty = &pool[pi++]; memset(empty, 0, sizeof *empty);
+        empty->kind = TERM_STR; empty->name = "";
+        Term *elen = &pool[pi++]; memset(elen, 0, sizeof *elen);
+        elen->kind = TERM_STR_LEN; elen->a = empty;
+        long e = native_eval(elen, err, sizeof err);
+        N(e == 0, "native str_len(\"\") == 0");
+
+        Term *idx0 = &pool[pi++]; memset(idx0, 0, sizeof *idx0); idx0->kind = TERM_LIT; idx0->ival = 0;
+        Term *idx1 = &pool[pi++]; memset(idx1, 0, sizeof *idx1); idx1->kind = TERM_LIT; idx1->ival = 1;
+        Term *sc0 = &pool[pi++]; memset(sc0, 0, sizeof *sc0);
+        sc0->kind = TERM_STR_CHAR; sc0->a = hello; sc0->b = idx0;
+        long c0 = native_eval(sc0, err, sizeof err);
+        N(c0 == 'h', "native char(\"hello\",0) == 'h' (104)");
+        Term *sc1 = &pool[pi++]; memset(sc1, 0, sizeof *sc1);
+        sc1->kind = TERM_STR_CHAR; sc1->a = hello; sc1->b = idx1;
+        long c1 = native_eval(sc1, err, sizeof err);
+        N(c1 == 'e', "native char(\"hello\",1) == 'e' (101)");
     }
     return all_ok ? 0 : -1;
 }

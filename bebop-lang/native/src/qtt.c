@@ -1766,6 +1766,7 @@ static Value eval(const Term *t, Env *env) {
                 if (strcmp(t->arms[j].ctor, scrut.ctor) == 0) {
                     if (scrut.has_payload) {
                         Env *e = env_new(t->arms[j].var, *scrut.payload, env);
+                        if (!e) { v.kind = -1; return v; }
                         return eval(t->arms[j].body, e);
                     }
                     return eval(t->arms[j].body, env);
@@ -1886,8 +1887,10 @@ static Value eval(const Term *t, Env *env) {
             Value cntv = t->b ? eval(t->b, env) : (Value){0};
             Value arg = t->c ? eval(t->c, env) : (Value){0};
             if (arr.kind != 6 || !arr.fv || arr.nfv <= 0) { v.kind = -1; return v; }
-            int n = (int)cntv.i;
-            if (n <= 0 || n > arr.nfv || n > 4096) { v.kind = -1; return v; }
+            if (cntv.kind != 0) { v.kind = -1; return v; }
+            long cnt = cntv.i;
+            if (cnt <= 0 || cnt > arr.nfv || cnt > 4096) { v.kind = -1; return v; }
+            int n = (int)cnt;
             size_t sz = (size_t)n * 4u;
             unsigned int *code = malloc(sz);
             if (!code) { v.kind = -1; return v; }

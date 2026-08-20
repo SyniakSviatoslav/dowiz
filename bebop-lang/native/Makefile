@@ -11,14 +11,23 @@ LDLIBS := -lm -lpthread
 # Fuzz target: full compiler minus the CLI driver, plus the fuzz harness main.
 FUZZ_SRC := $(filter-out src/main.c,$(SRC))
 FUZZ_BIN := $(BUILD)/fuzz
+# Fuzz target for the SELF-HOST .bp compiler (selfhost/expr_compile.bp):
+# loads the compiler once, then stress-tests compile_program/compile/compile_fn.
+FUZZ_SELF_BIN := $(BUILD)/fuzz_selfhost
 
 all: $(BIN)
 
 fuzz: $(FUZZ_BIN)
 
+fuzz-selfhost: $(FUZZ_SELF_BIN)
+
 $(FUZZ_BIN): src/fuzz.c $(FUZZ_SRC)
 	@mkdir -p $(BUILD)
 	$(CC) $(CFLAGS) -o $@ src/fuzz.c $(FUZZ_SRC) $(LDLIBS)
+
+$(FUZZ_SELF_BIN): src/fuzz_selfhost.c $(FUZZ_SRC)
+	@mkdir -p $(BUILD)
+	$(CC) $(CFLAGS) -o $@ src/fuzz_selfhost.c $(FUZZ_SRC) $(LDLIBS)
 
 $(BIN): $(SRC) src/glyph.h src/calyx.h src/arena.h src/memristor.h src/adc.h src/power_telemetry.h src/compute.h src/lexer.h src/parser.h src/morse.h src/mesh.h src/qtt.h src/ntt.h src/ntt32.h src/hyper.h src/mem.h src/lmem.h src/hydra.h src/expr.h src/verify.h src/verifier.h src/vsa.h src/codegen.h src/graph.h src/chain.h src/native.h src/money.h src/fft.h src/arena.h src/event.h src/complex.h src/modular.h src/sort.h src/token_bucket.h src/checksum.h src/hex_util.h src/trig.h src/rng.h src/stats.h src/pid.h src/markov.h src/math_native.h src/spectral.h src/autonomic.h src/typereg.h src/atomic.h src/bench_all.h src/vir.h src/theorem.h src/pac.h src/effect.h src/jittable.h src/supervise.h src/session.h src/syscall.h src/typereflect.h src/smt.h src/gt.h src/noether.h src/oracle.h src/tensor.h src/pool.h src/scale.h src/wcet.h src/coremark.h src/energy.h src/pq.h src/zlib.h src/sha256.h src/x25519.h src/aes_gcm.h src/tls.h src/startup.h
 	@mkdir -p $(BUILD)
@@ -161,4 +170,4 @@ test: $(BIN)
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all test clean fuzz
+.PHONY: all test clean fuzz fuzz-selfhost
